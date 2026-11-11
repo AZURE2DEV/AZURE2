@@ -3,6 +3,9 @@
 
 #include <string>
 #include <fstream>
+#include <memory>
+#include <mutex>
+#include <set>
 
 /// A structure holding the reaction rate calculation configuration
 
@@ -113,6 +116,13 @@ class Config {
   int nloptAlgorithm;
   /// Use hybrid Coulomb method with nuclear potential
   bool useHybridMethod;
+  /// Extra MIGRAD passes after re-freezing the model of relvector data-covariance terms at the
+  /// fitted parameters (--refreeze-covariance[=N]); 0 = none.  The final outputs always use the
+  /// model re-frozen at the fitted parameters, so they match a calculation from param.sav.
+  int refreezeCovariance;
+  /// Function-call limit of a MIGRAD or NLopt fit (--max-calls=N); 0 = none, so MIGRAD's EDM criterion (or NLopt's
+  /// tolerances) ends the fit.  Before 2026-10-31 a fixed 50,000 that a fit of ~100+ free parameters reached silently.
+  unsigned int maxCalls;
   /// Use adaptive integration grid for target effects (false = uniform grid)
   bool useAdaptiveGrid;
   /// Take P, S and the hard-sphere phase of charged channels from the universal Coulomb
@@ -153,12 +163,40 @@ class Config {
   /// Key of the particle pair whose E(s) = (s - m0^2)/(2 m0) relativistic.out uses (the LANL/EDA
   /// level-energy convention); "relativisticReferencePair=<key>" in <config>, 0 = the first pair.
   int relativisticReferencePair;
+  /// Prior parameter covariance (PriorCovariance.h): "priorCovariance=<path>" in the <config> block, the path relative
+  /// to the .azr's directory; empty (the default) = none.  A multivariate Gaussian prior on the listed parameters,
+  /// (p - mu)^T C^-1 (p - mu) added to chi-squared (Total-Prior-Covariance-Chi-Squared).
+  std::string priorCovariance;
+  /// The Notes a session has printed (see Note()).  Null -- the CLI and the GUI -- prints every Note; a pyazr
+  /// session (AZUREAPI) sets one so that the setup Notes of its rebuilds are printed once: a channel-radius
+  /// scan rebuilds the model on every likelihood call, and before 2026-11-04 each rebuild printed every Note
+  /// again (the 3H+d free-radius MCMC, 2026-11-03).  Not touched by Reset().
+  struct NoteLog {
+    std::mutex mutex;
+    std::set<std::string> printed;
+  };
+  std::shared_ptr<NoteLog> noteLog;
+  /// Prints one informational line ("Note: ...") to outStream, unless noteLog is set and has already seen
+  /// exactly this text.  Warnings and errors are not routed through here: they print every time.
+  void Note(const std::string &line) const;
+  /// Read input files (the .azr, data, covariance and target-effect files) through InputFiles, which keeps
+  /// their contents in memory and reads a file again only when it changes on disk.  Set by AZUREAPI: a
+  /// rebuild there (SetRadius, a potential change, a mode switch) used to re-read every file, which on
+  /// /groups stalled 16 forked MCMC workers (2026-11-03).  False -- read from disk -- for the CLI and GUI.
+  /// Not touched by Reset().
+  bool cacheInputFiles = false;
   /// A constant indicating the maximum order of the Legendre polynomials to calculate.
   static const int maxLOrder = 20;
   /// Read the <config> block, then the optional <potential> block. -1 if the file cannot be read.
   int ReadConfigFile();
   /// Reads the <potential> block of the configuration file, if it has one.
   int ReadPotentialBlock();
+  /// The R-matrix route (<config> first line false) implements neither IGNORE_ZERO_WIDTHS (the A-matrix route leaves
+  /// the levels whose internal width is zero out of the channel-capture term; RMatrixFunc keeps them) nor Park's
+  /// parametrization (RMatrixFunc would read the Park amplitudes as Brune's: tests/13N up to 9x off).  When either is
+  /// on with the R-matrix route, switch to the A-matrix with a warning and return true.  Called by the CLI, pyazr
+  /// (Session) and the GUI's run thread (AZUREMainThread).
+  bool ResolveMatrixRoute();
 #ifndef NO_STAT
   /// Check that the output and checks directories exist.
   int CheckForInputFiles();

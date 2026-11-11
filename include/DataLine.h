@@ -17,7 +17,7 @@ class DataLine {
   /*!
    * Constructor fills the DataLine object from an input stream.
    */
-  DataLine(std::ifstream &stream) {
+  DataLine(std::istream &stream) {
     // One physical line per DataLine, parsed from its own string stream.
     //
     // The old form read four numbers straight off the file stream inside a

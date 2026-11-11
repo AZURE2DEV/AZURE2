@@ -131,6 +131,9 @@ class ALevel {
   /// computed, so CNuc::CalcShiftFunctions can skip a level that has not
   /// moved; NaN means "never".
   bool ShiftFunctionsValidAt(double) const;
+  /// dS/dE held at this energy (Park, or a level coincident with another of its group).
+  bool ShiftDerivativesValidAt(double) const;
+  void SetShiftDerivativesEnergy(double);
   /*!
    * A number that changes whenever the fitted energy, a fitted width, a shift
    * function or the Park overlap of the level is set, unique over all levels
@@ -165,6 +168,7 @@ class ALevel {
   double transform_e_;
   double park_norm_ = 1.0;
   double shift_cache_energy_ = std::numeric_limits<double>::quiet_NaN();
+  double shift_d1_energy_ = std::numeric_limits<double>::quiet_NaN();
   double shift_d2_energy_ = std::numeric_limits<double>::quiet_NaN();
   std::vector<bool> channelfixed_;
   vector_r gammas_;

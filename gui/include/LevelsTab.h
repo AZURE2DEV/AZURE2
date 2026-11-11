@@ -5,6 +5,7 @@
 #include <QMap>
 #include <QSet>
 #include <QStringList>
+#include "ChannelRadiiModel.h"
 #include <QItemSelection>
 #include <QLineEdit>
 #include <QSpinBox>
@@ -36,6 +37,8 @@ class LevelsTab : public QWidget {
  public:
   LevelsTab(QWidget *parent = 0);
   void setPairsModel(PairsModel *);
+  /// The per-channel radii (<channelRadii>): the channel details and Wigner limit use a channel's own radius.
+  void setChannelRadiiModel(ChannelRadiiModel *model) { channelRadiiModel = model; }
   void updateChannelsLevelAdded(int levelIndex);
   void updateChannelsLevelDeleted(int levelIndex);
   void updateChannelsLevelEdited(int levelIndex);
@@ -126,6 +129,7 @@ class LevelsTab : public QWidget {
   QPushButton *exportLatexButton;
   QComboBox *nucleusFilterCombo;
   PairsModel *pairsModel;
+  ChannelRadiiModel *channelRadiiModel = nullptr;
   LevelsModel *levelsModel;
   ChannelsModel *channelsModel;
   QTableView *levelsView;

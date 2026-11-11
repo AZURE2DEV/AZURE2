@@ -65,22 +65,46 @@ Spin (J)
 Parity
    The parity of the particle, selected from the drop-down menu: **+** or **-**.
 
+Isotope
+   Optional. An isotope name (``12C``, ``C12``, ``7Li``) or a shorthand
+   (``p``, ``n``, ``d``, ``t``, ``a``, ``helion``) fills **Z** and **M** from
+   the AME2020 atomic mass table when you leave the field. The field is off for
+   the photon of a (Particle, Gamma) pair.
+
 Proton Number (Z)
    The number of protons in the particle.
 
 Mass (M)
-   The mass number of the particle.
+   The **atomic** mass of the particle in u (electrons included, so 1.007825 u
+   for the proton, not the bare 1.007276 u). The engine rounds it to a mass
+   number wherever it needs one.
 
 Pair Properties
 ^^^^^^^^^^^^^^^
 
-Excitation Energy
+Heavy Excitation
    The excitation energy of the heavy particle (in MeV). This is non-zero for
-   transitions to excited states rather than the ground state.
+   transitions to excited states rather than the ground state. For a
+   (Particle, Gamma) pair it is the energy of the final level the photon feeds.
+
+Light Excitation
+   The excitation energy of the light particle (in MeV), for a (Particle,
+   Particle) pair only (see `Particles in Excited States`_ below). Zero for a
+   light particle in its ground state, which is the usual case.
 
 Separation Energy
    The energy required to separate the compound system (in its ground state) into
    the constituent particle pair (in MeV).
+
+**Fill masses and S from AME2020**
+   Sets both atomic masses and the separation energy
+   :math:`S = m_1 + m_2 - M` of the compound nucleus from the AME2020 table.
+   The particles are identified by Z and by M rounded to a mass number, so a
+   pair typed with mass numbers works too. For a (Particle, Gamma) or Beta
+   Decay pair, only the heavy particle's mass is filled. The line under the
+   button compares what is entered with the table as you type. It turns orange
+   when S differs by more than 1 keV, and it also reports masses that differ
+   from the table.
 
 Channel Radius
    The R-matrix channel radius (in fm). Different particle pairs need not share
@@ -97,18 +121,97 @@ Channel Radius
       re-running the calculation with different values. The channel radius
       **cannot** currently be used as a fit parameter.
 
+   The radius in this table applies to every channel of the pair unless the
+   **Per-channel radii** box below gives some of them their own
+   (:ref:`per-channel-radii`).
+
 External Capture Multipolarities
    For **(Particle, Gamma)** pairs only. Select **E1** and/or **E2**
    multipolarities. The code automatically determines the allowed intrinsic and
    angular momentum combinations based on the defined resonances.
 
+.. _per-channel-radii:
+
+Per-channel radii
+-----------------
+
+The formal theory allows a different radius for every channel
+:math:`c = (\alpha, l, s, J)`; elastic-scattering fits in particular can want
+one partial wave matched at a different surface from the others. The
+**Per-channel radii** box under the pairs table lists rows that give some
+channels of a particle pair a radius of their own; every other channel keeps
+the pair's radius from the table above.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 85
+
+   * - Column
+     - Meaning
+   * - Pair
+     - The pair key (the row number of the pairs table). Only particle pairs
+       have channel radii.
+   * - l
+     - The orbital angular momentum of the channels.
+   * - s
+     - The channel spin (``1/2``, ``3/2`` ...), or blank (``any``) for every
+       channel spin.
+   * - J
+     - The total spin of the level's :math:`J^\pi` group, or blank for every
+       J. With l and the pair, J fixes the parity.
+   * - Radius [fm]
+     - The radius of the channels the row matches.
+
+**+** adds a row for the selected pair (l = 0, at the pair's radius); edit l,
+s, J and the radius in the table. **-** removes the selected row.
+
+The most specific row wins: one naming l, s and J over one naming l and J,
+over one naming l and s, over one naming l alone. A channel matched by an
+"s" row and a "J" row but no row naming all three is refused (which one was
+meant is not clear); give it a row naming l, s and J. A row that matches no
+channel of the model draws a warning.
+
+Everything that is evaluated at the channel radius follows the channel: the
+penetrability, shift function and hard-sphere phase, the boundary condition,
+the Wigner limit (and so :math:`\theta^2`), the transformation between formal
+and observed parameters, the ANC conversion and :math:`N_f` integral of an
+external-capture final state, the external-capture radial integrals, and the
+s-wave scattering length (the l = 0 channel's radius). The level and channel
+details in the Levels tab show the channel's radius. The β-decay Fermi
+function keeps the pair's radius.
+
+.. warning::
+
+   **External capture needs one radius per transition.** The capture integral
+   runs from the channel radius outward, and the ANC is defined at the final
+   channel's radius. If the initial partial wave of a transition and its final
+   bound-state channel had different radii, where the external region starts
+   would not be defined, so AZURE2 refuses such a model with an ERROR naming the
+   two channels. Give the channels that capture connects the same radius, or
+   switch external capture off.
+
+As with the pair radius, a reduced width means something different at a
+different radius: after changing one, refit before reading anything off the
+result. The cached external-capture integrals (``intEC.dat``) carry the
+per-channel radii in their signature, so a changed radius is never served from
+an old cache.
+
+The rows are written to the project file as the ``<channelRadii>`` block
+(:doc:`../reference/data_formats`). AZURE2 builds before November 2026 ignore
+the block silently, and their GUI drops it when it saves the project.
+
 Identical Particles
 -------------------
 
-A (Particle, Particle) pair whose two members have the same Z, mass, spin and
-parity, with the heavy one in its ground state, is treated as a pair of
-identical particles (:math:`\alpha+\alpha`, p+p, d+d, :math:`^3`\ He+\ :math:`^3`\ He,
-:math:`^{12}`\ C+\ :math:`^{12}`\ C, ...). Nothing has to be switched on.
+A (Particle, Particle) pair whose two members have the same per-particle
+inputs -- Z, mass, spin, parity, g-factor **and excitation energy** -- is
+treated as a pair of identical particles (:math:`\alpha+\alpha`, p+p, d+d,
+:math:`^3`\ He+\ :math:`^3`\ He, :math:`^{12}`\ C+\ :math:`^{12}`\ C, and
+mutual-excitation channels such as
+:math:`^{12}\mathrm{C}(2^+)+{}^{12}\mathrm{C}(2^+)`, see below). Nothing has to
+be switched on. Before November 2026 the light particle had no excitation
+energy and the rule required the heavy one to be in its ground state, so a
+pair of two excited nuclei could not be identical.
 
 Allowed channels
    Exchange symmetry admits only channels with :math:`\ell + s` **even**, for
@@ -145,6 +248,48 @@ What is not symmetrized
    only the channel rule above; no exchange factor is applied to their cross
    sections, the same convention as for spin-0 pairs. The vector analyzing
    power is defined for a spin-1/2 beam only (it is zero for d+d).
+
+Particles in Excited States
+---------------------------
+
+Either particle of a (Particle, Particle) pair may be in an excited state: the
+heavy one through **Heavy Excitation** (column 17 of a ``<levels>`` line, as
+always), the light one through **Light Excitation** (the optional 32nd column,
+since November 2026; see :doc:`../reference/data_formats`). This covers
+scattering and reactions of particles in excited states -- in a hot stellar
+plasma, say -- and mutual-excitation channels.
+
+* Give each particle the spin and parity **of the state it is in**: an
+  :math:`\alpha` + :math:`^{12}`\ C(2\ :sup:`+`) channel has heavy
+  :math:`J^\pi = 2^+`; the same channel entered as the excited particle being
+  the light one has light :math:`J^\pi = 2^+`.
+* The masses stay the **ground-state** masses, for either particle (as they
+  always have for the heavy one); the excitation enters through the
+  threshold only.
+* The channel opens at :math:`S + E^*_\text{light} + E^*_\text{heavy}`: every
+  threshold, Q-value and lab/c.m. conversion uses the sum. The R-matrix
+  depends only on that threshold and on the channel spins, so the same
+  excitation on either partner gives the same cross sections when the channel
+  spins are the same (``tests/light_excitation``).
+* A gamma or beta pair cannot have a light excitation (the engine refuses one),
+  nor can a negative value be given. A pair's columns are read from the
+  first line that names it; a different light excitation on another line of
+  the same pair is refused rather than ignored.
+* A secondary-gamma (UPOS) segment describes the decay of the **heavy**
+  partner of its exit pair; it is refused when that pair's light particle is
+  excited.
+
+**Mutual excitation.** Two :math:`^{12}`\ C nuclei both in the 4.439 MeV
+2\ :sup:`+` state form a pair of identical spin-2 bosons. Enter it as light and
+heavy :math:`J^\pi = 2^+`, both masses 12 u, and **both** excitations
+4.43891 MeV (separation energy that of :math:`^{12}`\ C + :math:`^{12}`\ C in
+:math:`^{24}`\ Mg, 13.933 MeV). It is then identical: only channels with
+:math:`\ell + s` even, and an elastic cross section symmetric about
+90\ :sup:`o` c.m. Entered the old way, with the whole 8.878 MeV on the heavy
+particle, it has the same threshold but is **not** identical, and gets the
+:math:`\ell + s` odd channels and the unsymmetrized cross section of two
+distinguishable nuclei. :math:`^{12}`\ C + :math:`^{12}`\ C(2\ :sup:`+`) (one
+particle excited) is never identical.
 
 Several Compound Nuclei in One Project
 --------------------------------------
@@ -200,12 +345,68 @@ single-nucleus ones.
    (:sup:`22`\ Ne). Every label shows both; the parameter name uses the
    compound nucleus, ``abundance_10_23``.
 
+Masses and separation energies
+------------------------------
+
+A pair carries both its two masses and its separation energy, and the two are
+linked: for two particle pairs of the same compound nucleus,
+:math:`S_b - S_a = (m_{1b} + m_{2b} - m_{1a} - m_{2a})\,c^2`. AZURE2 takes the
+thresholds (and so the whole energy scale) from the separation energies and
+uses the masses only in the kinematics (reduced masses, lab-to-c.m.
+conversions), so a mismatch does not change a calculation by more than the
+mass error itself (1e-4 u on a mass of 12 u is 1e-5). It is, however, how a
+typo or a mixed mass convention shows up, and since October 2026 the engine
+reports one when it reads the pairs:
+
+.. code-block:: text
+
+   **WARNING: separation energies and masses disagree: pair 2 (S = 18.8943 MeV,
+   m1 + m2 = 8.025593633 u) and pair 1 (S = 17.2551 MeV, m1 + m2 = 8.023828466 u):
+   the separation energies differ by 1.6392 MeV, the masses by 1.6442 MeV (-5.0 keV). ...
+
+Each particle pair is compared with the first particle pair of its compound
+nucleus; mismatches above 1 keV are listed (the first three, then a count). A
+mismatch within 5 keV of a multiple of the electron mass adds a hint that atomic
+and nuclear masses are mixed, typically a bare-proton mass (1.00728 u) next to
+atomic masses for the rest. Gamma and beta pairs are not compared: their heavy
+mass is only a label. A project that uses mass numbers as masses (12, 4, ...)
+gets one note instead, since its masses carry no Q value. The cure is to take
+the masses from one mass table (AME, atomic masses throughout) and the
+separation energies from the same table: :math:`S = m_1 + m_2 - M` of the
+compound nucleus.
+
+The GUI and pyazr both carry the AME2020 table (``pyazr/data/mass_1.mas20``,
+the Atomic Mass Data Center's file; the GUI embeds the same copy). In the GUI:
+
+- The **Separation Energy** column of the pairs table has a tooltip with the
+  table's S for each particle pair. It turns orange when the pair's S differs
+  by more than 1 keV.
+- **Masses from AME2020...** below the table lists every pair with its masses,
+  its S, the table's S and the difference. Accepting fills the ticked pairs:
+  their atomic masses and, with **Also set the separation energies**, their S.
+  Pairs that differ from the table start ticked. A pair whose particles the
+  table does not know cannot be ticked.
+
+In pyazr, ``pyazr.masses`` gives the table (``atomic_mass("12C")``,
+``separation_energy("p", "12C")``, ``pair_masses("a", "12C")``), and
+``AzrModel.mass_check()`` / ``AzrModel.fill_masses()`` do what the dialog does
+for a file (see the pyazr page).
+
+Filling S moves that pair's threshold, and with it the energy scale of every
+channel of the pair. A typical archive mismatch is a few keV, so compare the
+fit before and after, and refit when the shift matters next to a narrow
+resonance. Filling the masses alone changes results by about the relative mass
+change, which is 1e-5 for 1e-4 u at mass 12.
+
+.. _relativistic-kinematics:
+
 Relativistic Kinematics
 -----------------------
 
-The **Relativistic kinematics** check box below the pairs table (``relativistic=1``
-in the ``<config>`` block, so command-line and pyazr runs of the project use it
-too) takes every channel's kinematics from the invariant mass :math:`s` instead
+The **Relativistic kinematics** check box under **Configure → Runtime Options**
+(``relativistic=1`` in the ``<config>`` block, so command-line and pyazr runs of
+the project use it too; before November 2026 the check box sat below the pairs
+table) takes every channel's kinematics from the invariant mass :math:`s` instead
 of the non-relativistic relations.  It follows the prescription of the LANL code
 EDA (Haeck, Hale, Paris and Thompson, LA-UR-19-31084, the ENDF ``KRL=1`` flag).
 For a pair of masses :math:`m_1, m_2` (:math:`m = m_1 + m_2`) at centre-of-mass
@@ -222,7 +423,19 @@ so the penetrabilities, shift functions, hard-sphere and Coulomb phases, the
 use these, and a data point's :math:`T` comes from its lab energy through
 :math:`s` (and, for a beta-delayed particle, from the decay at rest).  Particle
 lab angles and differential cross sections are converted with the exact Lorentz
-boost (:math:`\gamma`-ray data already were).  At low energy everything reduces
+boost (:math:`\gamma`-ray data already were). Where two c.m. angles reach one
+lab angle (just above the threshold of an endothermic exit, or a projectile
+heavier than the target) the forward root is taken, and the lab angle has a
+maximum, :math:`\sin\theta_\text{max} = \gamma_3^*/(\gamma\, g)` with
+:math:`g = \beta/\beta_3^*`. That maximum is smaller than the
+non-relativistic one, by 0.3 to 0.6° just above the 7Li(p,n) and 12C(α,p)
+thresholds, and a point beyond it, or below the relativistic threshold, is
+refused (before October 2026 the non-relativistic limits decided, so a point
+between the two maxima was converted with the non-relativistic angle and
+Jacobian without a warning). The conversions agree with the independent
+reaction-kinematics calculator (det-lab) to 1e-7° in angle and 4e-9 in
+:math:`d\Omega_\text{lab}/d\Omega_\text{cm}` for 7Li(p,n), t(d,n)α,
+12C(α,p), p + 4He and 12C + p (inverse kinematics) up to 200 MeV.  At low energy everything reduces
 to the familiar :math:`k^2 = 2\mu T`; threshold quantities (scattering lengths,
 the Wigner limit, ANCs) keep the reduced mass.
 
@@ -248,7 +461,9 @@ chooses the reference pair (default: the first particle pair).
 
 Limits.  The hybrid nuclear-potential Coulomb functions (a ``<potential>``
 block) solve a Schrödinger equation inside the channel radius and are refused
-with ``relativistic=1``.  Target effects (beam spread, target thickness, sub-point
+with ``relativistic=1``; they bend the scattering functions only, not the
+bound-state tail, ANC conversion or NF integral of external capture
+(:doc:`pyazr`, "What the potential does not touch").  Target effects (beam spread, target thickness, sub-point
 grids) and energy shifts convert lab energy intervals to the c.m. frame with the
 constant ratio :math:`m_2/m`; the exact ratio :math:`m_2/\sqrt{s}` differs by
 :math:`T/m` of the interval (0.4 % of a few-keV shift at 20 MeV).  Photon

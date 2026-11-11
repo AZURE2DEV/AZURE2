@@ -1,4 +1,5 @@
 #include "AZURECalc.h"
+#include "PriorCovariance.h"
 #include "Profile.h"
 #include "ScatteringLength.h"
 #include <algorithm>
@@ -123,7 +124,8 @@ double SegmentLocalChi2(ESegment *segment, CNuc *lc, const Config &config,
 // that needs a penalty's derivatives rather than its value: d/dx = 2 (x - nominal)
 // / sigma^2, curvature 2 / sigma^2.  Exactly the terms ESegment::AddShiftPenalty
 // adds, so the gradient, G2 and the least-squares priors stay consistent with
-// chi^2.
+// chi^2.  The nominal is 0 for every shift term since 2026-10-25 (the file's value
+// is only the start).
 template <class F>
 void ForEachShiftPenalty(EData *data, const ParamIndexMap &pmap, F f) {
   for (int s = 1; s <= data->NumSegments(); s++) {
@@ -131,14 +133,14 @@ void ForEachShiftPenalty(EData *data, const ParamIndexMap &pmap, F f) {
     if (!seg) continue;
     int idx;
     if (seg->IsVaryEnergyShift() && seg->GetEnergyShiftError() != 0.0 && (idx = pmap.EnergyShiftIndex(s)) >= 0)
-      f(idx, seg->GetNominalEnergyShift(), seg->GetEnergyShiftError());
+      f(idx, 0.0, seg->GetEnergyShiftError());
     if (seg->IsVaryEnergyShiftSqrt() && seg->GetEnergyShiftSqrtError() != 0.0 &&
         (idx = pmap.EnergyShiftSqrtIndex(s)) >= 0)
-      f(idx, seg->GetNominalEnergyShiftSqrt(), seg->GetEnergyShiftSqrtError());
+      f(idx, 0.0, seg->GetEnergyShiftSqrtError());
     if (seg->OwnsShiftFn() && seg->HasShiftFn())
       for (int j = 0; j < seg->NumShiftFnParams(); j++)
         if (seg->IsVaryShiftFn(j) && seg->GetShiftFnErrors()[j] != 0.0 && (idx = pmap.EnergyShiftFnIndex(s, j)) >= 0)
-          f(idx, seg->GetNominalShiftFnValues()[j], seg->GetShiftFnErrors()[j]);
+          f(idx, 0.0, seg->GetShiftFnErrors()[j]);
   }
 }
 
@@ -151,6 +153,43 @@ void ForEachScreeningPrior(EData *data, const ParamIndexMap &pmap, F f) {
     if (te->GetScreeningSigma() <= 0.0) continue;
     const int idx = pmap.ScreeningIndex(k);
     if (idx >= 0) f(idx, te->GetScreeningNominal(), te->GetScreeningSigma());
+  }
+}
+
+// The fitted-density priors ((N - N0)/sigma)^2, N in atoms/cm^2: f(full index, nominal, sigma) for each density
+// parameter with sigma > 0 (EData::DensityPenalty is their sum).
+template <class F>
+void ForEachDensityPrior(EData *data, const ParamIndexMap &pmap, F f) {
+  for (int k = 1; k <= data->NumDensityParams(); k++) {
+    const TargetEffect *te = data->GetTargetEffect(data->GetDensityEffect(k));
+    if (te->GetDensitySigma() <= 0.0) continue;
+    const int idx = pmap.DensityIndex(k);
+    if (idx >= 0) f(idx, te->GetDensityNominal(), te->GetDensitySigma());
+  }
+}
+
+// The fitted-Doppler-temperature priors ((T - T0)/sigma)^2, T in K: f(full index, nominal, sigma) for each Doppler
+// parameter with sigma > 0 (EData::DopplerPenalty is their sum).
+template <class F>
+void ForEachDopplerPrior(EData *data, const ParamIndexMap &pmap, F f) {
+  for (int k = 1; k <= data->NumDopplerParams(); k++) {
+    const TargetEffect *te = data->GetTargetEffect(data->GetDopplerEffect(k));
+    if (te->GetDopplerSigma() <= 0.0) continue;
+    const int idx = pmap.DopplerIndex(k);
+    if (idx >= 0) f(idx, te->GetDopplerNominal(), te->GetDopplerSigma());
+  }
+}
+
+// The fitted-sample-thickness priors ((n - n0)/sigma)^2, n in atoms/barn: f(full index, nominal, sigma) for each
+// thickness parameter with sigma > 0 that owns its value (EData::ThicknessPenalty is their sum; a thickness-group
+// follower's parameter is fixed and carries no prior).
+template <class F>
+void ForEachThicknessPrior(EData *data, const ParamIndexMap &pmap, F f) {
+  for (int k = 1; k <= data->NumThicknessParams(); k++) {
+    const ESegment *seg = data->GetSegment(data->GetThicknessSegment(k));
+    if (seg->GetThicknessSigma() <= 0.0 || seg->IsThicknessGroupFollower()) continue;
+    const int idx = pmap.ThicknessIndex(k);
+    if (idx >= 0) f(idx, seg->GetNominalThickness(), seg->GetThicknessSigma());
   }
 }
 
@@ -236,6 +275,189 @@ bool MappingConfined(const std::vector<std::vector<int>> &partners, const std::v
 }
 
 }  // namespace
+
+ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, const Config &config, const ParamIndexMap &pmap,
+                                  const std::vector<bool> &fixed, const vector_r &full,
+                                  const std::vector<char> *skipPacked, size_t nRes, int nCols, vector_r &jac) {
+  ShiftColumnCount count;
+
+  // A shift of a self-contained segment (no components, not a total-capture
+  // sum, no point mapping onto other segments) moves only that segment's rows, so
+  // its column is differenced on those rows alone; every other row of a full
+  // re-evaluation would difference to exactly zero.  With 55 free shifts on
+  // 11B+a the full path took over an hour per gradient.  Same criterion as the
+  // segment-local shift gradient in Gradient().
+  bool rowLayoutUnknown = false;
+  const std::vector<std::vector<int>> partners = CrossSegmentPartners(ld);
+  std::vector<int> rowStart(ld->NumSegments() + 2, 0);
+  std::vector<ESegment *> segments;
+  {
+    int row = 0;
+    for (int s = 1; s <= ld->NumSegments(); s++) {
+      rowStart[s] = row;
+      ESegment *seg = ld->GetSegment(s);
+      if (!seg) continue;
+      segments.push_back(seg);
+      for (int pid = 0; pid < seg->NumPoints(); pid++) {
+        EPoint *pt = seg->GetPoint(pid + 1);
+        if (!pt) continue;
+        row++;
+      }
+    }
+    rowStart[ld->NumSegments() + 1] = row;
+    if ((size_t)row != nRes) rowLayoutUnknown = true;  // row layout not understood: use the full path
+  }
+  // Residuals of one segment's rows, in row order, exactly as
+  // ComputeResidualJacobian forms them.
+  auto segmentResiduals = [&](ESegment *seg, vector_r &out, bool parallel) {
+    const int nPts = seg->NumPoints();
+    const double norm = seg->GetNorm();
+    std::vector<double> byPoint(nPts, 0.0);
+    std::vector<char> present(nPts, 0);
+    auto one = [&](int pid) {
+      EPoint *pt = seg->GetPoint(pid + 1);
+      if (!pt) return;
+      present[pid] = 1;
+      const double model = seg->CalculateTheoreticalCrossSection(pid, lc, config, ld);
+      const double denom = pt->GetCMCrossSectionError() * norm;
+      byPoint[pid] = (denom != 0.0) ? (model - pt->GetCMCrossSection() * norm) / denom : 0.0;
+    };
+    // No parallel construct inside an enclosing parallel region (see
+    // CoulFuncCache::localCache).  In parallel each point is calculated on
+    // its own, without point mapping (ScopedPointMappingOff, as in the
+    // AZUREGrad.cpp loops): a mapped point would otherwise read a value its
+    // host may not have calculated yet.  Serially, index order puts every
+    // host first and the sharing is kept.
+    if (parallel && !InParallelRegion()) {
+#pragma omp parallel for schedule(dynamic)
+      for (int pid = 0; pid < nPts; pid++) {
+        ScopedPointMappingOff noPointMapping;
+        one(pid);
+      }
+    } else {
+      for (int pid = 0; pid < nPts; pid++) one(pid);
+    }
+    out.clear();
+    for (int pid = 0; pid < nPts; pid++)
+      if (present[pid]) out.push_back(byPoint[pid]);
+  };
+  // Every row, forward only: one parallel pass over the points (as a
+  // chi-squared evaluation), then the residuals in row order.  If a point
+  // failed in the pass, the combination recalculates point by point.
+  auto allResiduals = [&](vector_r &out) {
+    const bool pre = EData::CalculatePointsInParallel(segments, lc, config) == 0;
+    out.clear();
+    for (ESegment *seg : segments) {
+      const double norm = seg->GetNorm();
+      for (int pid = 0; pid < seg->NumPoints(); pid++) {
+        EPoint *pt = seg->GetPoint(pid + 1);
+        if (!pt) continue;
+        const double model = seg->CalculateTheoreticalCrossSection(pid, lc, config, ld, pre);
+        const double denom = pt->GetCMCrossSectionError() * norm;
+        out.push_back((denom != 0.0) ? (model - pt->GetCMCrossSection() * norm) / denom : 0.0);
+      }
+    }
+  };
+
+  // Local shift columns: a parameter whose segments (its own, plus its shift
+  // group's followers for a group's constant shift or a shift-function
+  // parameter) are all self-contained is differenced on their rows alone.
+  struct LocalShift { int f, packed; ShiftParamTarget target; };
+  std::vector<LocalShift> localCols;
+  std::vector<int> fullShifts;
+  for (int f = 0; f < pmap.NumFull() && f < (int)full.size() && f < (int)fixed.size(); f++) {
+    if (fixed[f]) continue;
+    const ParamKind kind = pmap.Desc(f).kind;
+    if (kind != ParamKind::EnergyShift && kind != ParamKind::EnergyShiftSqrt && kind != ParamKind::EnergyShiftFn &&
+        kind != ParamKind::Density) continue;
+    const int packed = pmap.FullToPacked(f);
+    if (packed < 0 || packed >= nCols) continue;
+    // Columns the caller holds fixed: not differenced.
+    if (skipPacked && packed < (int)skipPacked->size() && (*skipPacked)[packed]) continue;
+    // A fitted target density moves the depth window of every point of its lines: full re-evaluation.
+    if (kind == ParamKind::Density) {
+      fullShifts.push_back(f);
+      continue;
+    }
+    const int sNum = pmap.Desc(f).segment;
+    if (!rowLayoutUnknown && sNum >= 1 && sNum <= ld->NumSegments()) {
+      const ShiftParamTarget target = ShiftTargets(ld, pmap.Desc(f));
+      // Mapping across segments keeps the column local while it stays among
+      // the parameter's segments (MappingConfined): they are all moved, then
+      // all evaluated, below.
+      if (target.Local(ld) && MappingConfined(partners, target.segs)) {
+        localCols.push_back({f, packed, target});
+        continue;
+      }
+    }
+    fullShifts.push_back(f);
+  }
+  // Segments in sequence, each one's points in parallel: re-energising a
+  // point (UpdatePointEnergyWithShift) and evaluating it touch only that
+  // point.  (Parallel over segments instead left the largest segment running
+  // alone at the end.)
+  auto updateSegment = [&](ESegment *seg) {
+    if (!InParallelRegion()) {
+#pragma omp parallel for schedule(dynamic, 1)
+      for (int pid = 0; pid < seg->NumPoints(); pid++) seg->UpdatePointGroupEnergyWithShift(pid, lc, &config);
+    } else {
+      seg->UpdatePointEnergiesWithShift(lc, &config);
+    }
+  };
+  for (const LocalShift &ls : localCols) {
+    AZUREProfile::Timer profileColumn(AZUREProfile::kShiftLocal);
+    const std::vector<int> &segs = ls.target.segs;
+    std::vector<vector_r> rP(segs.size()), rM(segs.size());
+    const double x0 = full[ls.f];
+    const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
+    const double d0 = ls.target.Get(ld);
+    ls.target.Set(ld, x0 + h);
+    for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
+    for (size_t m = 0; m < segs.size(); m++) segmentResiduals(ld->GetSegment(segs[m]), rP[m], true);
+    ls.target.Set(ld, x0 - h);
+    for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
+    for (size_t m = 0; m < segs.size(); m++) segmentResiduals(ld->GetSegment(segs[m]), rM[m], true);
+    ls.target.Set(ld, d0);
+    for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
+    for (size_t m = 0; m < segs.size(); m++) {
+      const int sNum = segs[m];
+      const size_t r0 = (size_t)rowStart[sNum], nSegRows = (size_t)(rowStart[sNum + 1] - rowStart[sNum]);
+      if (rP[m].size() == nSegRows && rM[m].size() == nSegRows)
+        for (size_t r = 0; r < nSegRows; r++)
+          jac[(r0 + r) * (size_t)nCols + (size_t)ls.packed] = (rP[m][r] - rM[m][r]) / (2.0 * h);
+    }
+  }
+  count.local = (int)localCols.size();
+
+  vector_r rPlus, rMinus;
+  for (int f : fullShifts) {
+    AZUREProfile::Timer profileColumn(AZUREProfile::kShiftFull);
+    const int packed = pmap.FullToPacked(f);
+    const double x0 = full[f];
+    // A few eV: far inside any quoted beam-energy calibration uncertainty,
+    // far outside the noise of the forward model.
+    const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
+    count.full++;
+    auto residualsAt = [&](double value, vector_r &out) {
+      vector_r fk = full;
+      fk[f] = value;
+      lc->FillCompoundFromParams(fk);
+      ld->FillNormsFromParams(fk);
+      ld->FillEnergyShiftsFromParams(fk, ld, lc, &config);
+      allResiduals(out);
+    };
+    residualsAt(x0 + h, rPlus);
+    residualsAt(x0 - h, rMinus);
+    if (rPlus.size() == nRes && rMinus.size() == nRes)
+      for (size_t r = 0; r < nRes; r++)
+        jac[r * (size_t)nCols + (size_t)packed] = (rPlus[r] - rMinus[r]) / (2.0 * h);
+  }
+  // Leave the model at the parameters that were asked for.
+  lc->FillCompoundFromParams(full);
+  ld->FillNormsFromParams(full);
+  ld->FillEnergyShiftsFromParams(full, ld, lc, &config);
+  return count;
+}
 
 /*!
  * AZURE_DUMP_NONFINITE=1 (optional threshold: AZURE_DUMP_NONFINITE=<chi2>, default 1e10): whenever a
@@ -441,8 +663,11 @@ double AZURECalc::operator()(const vector_r &p) const {
     chiSquared += parkPenalty;
     localData->SetParkPenalty(parkPenalty);
   }
-  // Electron-screening potentials: their priors.
+  // Electron-screening potentials and fitted target densities: their priors.
   chiSquared += localData->ScreeningPenalty();
+  chiSquared += localData->DensityPenalty();
+  chiSquared += localData->DopplerPenalty();
+  chiSquared += localData->ThicknessPenalty();
   // Isotopic abundances: their priors and the sum-to-one term.
   if (localCompound->HasAbundanceBlock()) {
     double abundancePenalty = localCompound->AbundancePenalty(configure().abundanceSumSigma);
@@ -460,6 +685,12 @@ double AZURECalc::operator()(const vector_r &p) const {
     double slChi2 = ScatteringLength::Chi2(localCompound, configure(), localCompound->ScatteringLengthConstraints());
     chiSquared += slChi2;
     localData->SetScatteringLengthChi2(slChi2);
+  }
+  // Prior parameter covariance (<config> priorCovariance=): (p - mu)^T C^-1 (p - mu).
+  if (const PriorCovariance *pc = localData->GetPriorCovariance()) {
+    const double pcChi2 = pc->Chi2(p);
+    chiSquared += pcChi2;
+    localData->SetPriorCovarianceChi2(pcChi2);
   }
 
   if (std::getenv("AZURE_DUMP_NONFINITE")) DumpNonFinite(p, chiSquared, localCompound, localData);
@@ -552,52 +783,9 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
 }
 
 bool AZURECalc::PrecalculatePoints(CNuc *lc, EData *ld) const {
-#ifdef _OPENMP
-  if (omp_in_parallel()) return false;
-#else
-  return false;
-#endif
-  if (std::getenv("AZURE_SERIAL_CHI2")) return false;
-  std::vector<EPoint *> work;
-  std::set<ESegment *> seen;
-  auto add = [&](ESegment *seg) {
-    if (!seg || !seen.insert(seg).second) return;
-    for (int p = 1; p <= seg->NumPoints(); p++) {
-      EPoint *pt = seg->GetPoint(p);
-      if (pt && !pt->IsMapped()) work.push_back(pt);
-    }
-  };
-  for (int i = 1; i <= ld->NumSegments(); i++) {
-    ESegment *seg = ld->GetSegment(i);
-    if (!seg) continue;
-    add(seg);
-    for (ESegment *comp : seg->GetComponentSegments()) add(comp);
-  }
-  // A host also calculates every point mapped onto it (EData::MapData), so
-  // its work grows with that number: one Fowler-type angular distribution at
-  // a single energy is one item.  Largest items first, one at a time, so such
-  // an item does not end up last on one thread.  Each item is calculated the
-  // same way whatever the order.
-  std::vector<double> cost(work.size());
-  for (size_t k = 0; k < work.size(); k++)
-    cost[k] = (1.0 + work[k]->NumSubPoints()) * (1.0 + work[k]->NumLocalMappedPoints());
-  std::vector<size_t> order(work.size());
-  for (size_t k = 0; k < order.size(); k++) order[k] = k;
-  std::stable_sort(order.begin(), order.end(), [&cost](size_t a, size_t b) { return cost[a] > cost[b]; });
-  std::vector<EPoint *> sorted(work.size());
-  for (size_t k = 0; k < order.size(); k++) sorted[k] = work[order[k]];
-  work.swap(sorted);
-  const Config &cfg = configure();
-  AZUREProfile::Timer profileTimer(AZUREProfile::kPoints);
-#pragma omp parallel for schedule(dynamic, 1)
-  for (int k = 0; k < (int)work.size(); k++) {
-    try {
-      work[k]->Calculate(lc, cfg);
-    } catch (...) {
-      work[k]->SetFitCrossSection(0.0);  // as the per-point path, which returns 0 on failure
-    }
-  }
-  return true;
+  std::vector<ESegment *> segments;
+  for (int i = 1; i <= ld->NumSegments(); i++) segments.push_back(ld->GetSegment(i));
+  return EData::CalculatePointsInParallel(segments, lc, configure()) >= 0;
 }
 
 double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<double> *segChis) const {
@@ -644,6 +832,10 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<dou
   if (lc->HasScatteringLengthConstraints())
     chiSquared += ScatteringLength::Chi2(lc, configure(), lc->ScatteringLengthConstraints());
   chiSquared += ld->ScreeningPenalty();
+  chiSquared += ld->DensityPenalty();
+  chiSquared += ld->DopplerPenalty();
+  chiSquared += ld->ThicknessPenalty();
+  if (const PriorCovariance *pc = ld->GetPriorCovariance()) chiSquared += pc->Chi2(p);
   return chiSquared;
 }
 
@@ -825,6 +1017,12 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     ForEachScreeningPrior(ld, pmap, [&](int idx, double nominal, double e) {  // screening priors
       if (idx < (int)grad.size()) grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
     });
+    ForEachDopplerPrior(ld, pmap, [&](int idx, double nominal, double e) {  // Doppler-temperature priors
+      if (idx < (int)grad.size()) grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
+    });
+    ForEachThicknessPrior(ld, pmap, [&](int idx, double nominal, double e) {  // sample-thickness priors
+      if (idx < (int)grad.size()) grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
+    });
     for (int s = 1; s <= ld->NumSegments(); s++) {  // normalizations
       ESegment *seg = ld->GetSegment(s);
       if (!seg || !seg->IsVaryNorm() || seg->IsNormGroupFollower()) continue;  // a follower's norm is fixed
@@ -854,6 +1052,9 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   // global chi^2, so disable the local path when one is active.
   const std::vector<std::vector<int>> partners = CrossSegmentPartners(ld);
   const bool localShiftOk = !HasNuisanceParameters();
+  // Components taken by a finite difference of the whole chi2 (Chi2Value) already hold the prior-covariance term;
+  // every other one (analytic, or a segment-local shift difference) gets its gradient added below.
+  std::vector<char> fdWhole(p.size(), 0);
 
   // --- Finite differences only for what is left: non-fixed energy shifts, and
   //     (if the analytic path bailed) the energy/gamma and norm blocks too. ---
@@ -861,7 +1062,9 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     if (idx < nMn && fp.GetMinuitParams().Parameter(idx).IsFixed()) continue;
     ParamKind kind = pmap.Desc(idx).kind;
     if (eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm ||
-               kind == ParamKind::Screening || kind == ParamKind::Isospin)) continue;  // analytic (isospin: chain rule in Scatter)
+               kind == ParamKind::Screening || kind == ParamKind::Doppler || kind == ParamKind::Thickness ||
+               kind == ParamKind::Isospin))
+      continue;  // analytic (isospin: chain rule in Scatter)
     double x0 = p[idx];
     double h = FdStep(kind, x0, 1.0e-6);
 
@@ -919,6 +1122,14 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     vector_r pm = p;
     pm[idx] = x0 - h;
     grad[idx] = (Chi2Value(pp) - Chi2Value(pm)) / (2.0 * h);
+    fdWhole[idx] = 1;
+  }
+  // Prior parameter covariance: 2 C^-1 (p - mu) on its parameters.
+  if (const PriorCovariance *pc = ld->GetPriorCovariance()) {
+    std::vector<double> pg(p.size(), 0.0);
+    pc->AddGradient(p, pg);
+    for (size_t i = 0; i < grad.size() && i < pg.size(); i++)
+      if (!fdWhole[i]) grad[i] += pg[i];
   }
 
   const auto tg2 = std::chrono::steady_clock::now();
@@ -932,7 +1143,9 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
         if (idx < nMn && fp.GetMinuitParams().Parameter(idx).IsFixed()) continue;
         ParamKind kind = pmap.Desc(idx).kind;
         if (!(eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm ||
-                     kind == ParamKind::Screening || kind == ParamKind::Isospin))) nfd++;
+                     kind == ParamKind::Screening || kind == ParamKind::Doppler || kind == ParamKind::Thickness ||
+                     kind == ParamKind::Isospin)))
+          nfd++;
       }
       std::cerr << "[grad-timing] call " << c << ": setup+adjoint " << ms(tg0, tg1) << " ms (analytic " << (eg ? "ok" : "BAILED")
                 << "), finite-difference part " << ms(tg1, tg2) << " ms for " << nfd << " parameters" << std::endl;
@@ -947,7 +1160,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   if (const char *gc = std::getenv("AZURE_GRAD_CHECK")) {
     if (!gradChecked.exchange(true)) {
       static const char *kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt", "shift_fn", "abundance", "screening",
-                                       "isospin"};
+                                       "density", "doppler", "thickness", "isospin"};
       struct Row { double score, g, fd; int idx; ParamDesc d; double gj, scoreJ; };
       std::vector<Row> rows;
       constexpr int kNumKinds = sizeof(kindName) / sizeof(kindName[0]);  // one per ParamKind
@@ -1103,6 +1316,21 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
     grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
     g2[idx] += 2.0 / (e * e);
   });
+  ForEachDensityPrior(data(), pmap, [&](int idx, double nominal, double e) {
+    if (idx >= (int)p.size()) return;
+    grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
+    g2[idx] += 2.0 / (e * e);
+  });
+  ForEachDopplerPrior(data(), pmap, [&](int idx, double nominal, double e) {
+    if (idx >= (int)p.size()) return;
+    grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
+    g2[idx] += 2.0 / (e * e);
+  });
+  ForEachThicknessPrior(data(), pmap, [&](int idx, double nominal, double e) {
+    if (idx >= (int)p.size()) return;
+    grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
+    g2[idx] += 2.0 / (e * e);
+  });
   compound()->Isospin().ForEachPrior([&](int idx, double nominal, double e) {
     if (idx >= (int)p.size()) return;
     grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
@@ -1180,6 +1408,15 @@ std::vector<double> AZURECalc::G2(const std::vector<double> &p) const {
   ForEachScreeningPrior(data(), pmap, [&](int idx, double, double e) {
     if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
   });
+  ForEachDensityPrior(data(), pmap, [&](int idx, double, double e) {
+    if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
+  });
+  ForEachDopplerPrior(data(), pmap, [&](int idx, double, double e) {
+    if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
+  });
+  ForEachThicknessPrior(data(), pmap, [&](int idx, double, double e) {
+    if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
+  });
   compound()->Isospin().ForEachPrior([&](int idx, double, double e) {
     if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
   });
@@ -1226,7 +1463,8 @@ bool AZURECalc::HasNuisanceParameters() const {
     if (mp.IsFixed() && name.find("segment") == std::string::npos) continue;
     const bool inert = name.find("norm") != std::string::npos || name.find("shift") != std::string::npos ||
                        name.find("abundance") != std::string::npos || name.find("screening") != std::string::npos ||
-                       name.find("isospin") != std::string::npos;
+                       name.find("density_") == 0 || name.find("doppler_") == 0 ||
+                       name.find("_thickness") != std::string::npos || name.find("isospin") != std::string::npos;
     if (!inert && limitsManager_->IsNuisanceParameterByIndex(nf)) {
       if (std::getenv("AZURE_GRAD_DEBUG"))
         std::cerr << "[grad] analytic G2 off: nuisance prior on '" << name << "'" << std::endl;
@@ -1278,162 +1516,16 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
   const auto tj1 = std::chrono::steady_clock::now();
   int nShiftLocal = 0, nShiftFull = 0;
 
-  // Energy-shift columns by central differences, as AZUREAPI::
-  // CalculateResidualJacobianRWA does for pyazr.  The adjoint does not cover a
+  // Energy-shift columns by central differences (FillShiftColumns, shared with
+  // AZUREAPI::CalculateResidualJacobianRWA).  The adjoint does not cover a
   // shift (it moves the energy of every quantity of the segment), and left as
   // zero the Levenberg-Marquardt and GSL drivers flag the shifts as
-  // data-insensitive and never move them.  Differencing the residual vector
-  // of the same function keeps the rows aligned.
+  // data-insensitive and never move them.
   if (ok) {
-    const size_t nRes = residuals.size();
-    vector_r rPlus, rMinus, jTmp;
-    int nc = 0;
-
-    // A shift of a self-contained segment (no components, not a total-capture
-    // sum, no point mapping onto other segments) moves only that segment's rows, so
-    // its column is differenced on those rows alone; every other row of the
-    // full re-evaluation below would difference to exactly zero.  The full
-    // path re-solved the WHOLE Jacobian, adjoints included, twice per shift:
-    // with 55 free shifts on 11B+a one gradient took over an hour.  Same
-    // criterion as the segment-local shift gradient in Gradient().
-    bool rowLayoutUnknown = false;
-    const std::vector<std::vector<int>> partners = CrossSegmentPartners(ld);
-    std::vector<int> rowStart(ld->NumSegments() + 2, 0);
-    {
-      int row = 0;
-      for (int s = 1; s <= ld->NumSegments(); s++) {
-        rowStart[s] = row;
-        ESegment *seg = ld->GetSegment(s);
-        if (!seg) continue;
-        for (int pid = 0; pid < seg->NumPoints(); pid++) {
-          EPoint *pt = seg->GetPoint(pid + 1);
-          if (!pt) continue;
-          row++;
-        }
-      }
-      rowStart[ld->NumSegments() + 1] = row;
-      if ((size_t)row != nRes) rowLayoutUnknown = true;  // row layout not understood: use the full path
-    }
-    // Residuals of one segment's rows, in row order, exactly as
-    // ComputeResidualJacobian forms them.
-    auto segmentResiduals = [&](ESegment *seg, vector_r &out, bool parallel) {
-      const int nPts = seg->NumPoints();
-      const double norm = seg->GetNorm();
-      std::vector<double> byPoint(nPts, 0.0);
-      std::vector<char> present(nPts, 0);
-      auto one = [&](int pid) {
-        EPoint *pt = seg->GetPoint(pid + 1);
-        if (!pt) return;
-        present[pid] = 1;
-        const double model = seg->CalculateTheoreticalCrossSection(pid, lc, configure(), ld);
-        const double denom = pt->GetCMCrossSectionError() * norm;
-        byPoint[pid] = (denom != 0.0) ? (model - pt->GetCMCrossSection() * norm) / denom : 0.0;
-      };
-      // No parallel construct inside an enclosing parallel region (see
-      // CoulFuncCache::localCache).  In parallel each point is calculated on
-      // its own, without point mapping (ScopedPointMappingOff, as in the
-      // AZUREGrad.cpp loops): a mapped point would otherwise read a value its
-      // host may not have calculated yet.  Serially, index order puts every
-      // host first and the sharing is kept.
-      if (parallel && !InParallelRegion()) {
-#pragma omp parallel for schedule(dynamic)
-        for (int pid = 0; pid < nPts; pid++) {
-          ScopedPointMappingOff noPointMapping;
-          one(pid);
-        }
-      } else {
-        for (int pid = 0; pid < nPts; pid++) one(pid);
-      }
-      out.clear();
-      for (int pid = 0; pid < nPts; pid++)
-        if (present[pid]) out.push_back(byPoint[pid]);
-    };
-
-    // Local shift columns: a parameter whose segments (its own, plus its shift
-    // group's followers for a group's constant shift or a shift-function
-    // parameter) are all self-contained is differenced on their rows alone.
-    struct LocalShift { int f, packed; ShiftParamTarget target; };
-    std::vector<LocalShift> localCols;
-    std::vector<int> fullShifts;
-    for (int f = 0; f < pmap.NumFull() && f < (int)full.size(); f++) {
-      if (fixed[f]) continue;
-      const ParamKind kind = pmap.Desc(f).kind;
-      if (kind != ParamKind::EnergyShift && kind != ParamKind::EnergyShiftSqrt && kind != ParamKind::EnergyShiftFn) continue;
-      const int packed = pmap.FullToPacked(f);
-      if (packed < 0 || packed >= nCols) continue;
-      const int sNum = pmap.Desc(f).segment;
-      if (!rowLayoutUnknown && sNum >= 1 && sNum <= ld->NumSegments()) {
-        const ShiftParamTarget target = ShiftTargets(ld, pmap.Desc(f));
-        // Mapping across segments keeps the column local while it stays among
-        // the parameter's segments (MappingConfined): they are all moved, then
-        // all evaluated, below.
-        if (target.Local(ld) && MappingConfined(partners, target.segs)) {
-          localCols.push_back({f, packed, target});
-          continue;
-        }
-      }
-      fullShifts.push_back(f);
-    }
-    // Segments in sequence, each one's points in parallel: re-energising a
-    // point (UpdatePointEnergyWithShift) and evaluating it touch only that
-    // point.  (Parallel over segments instead left the largest segment running
-    // alone at the end.)
-    auto updateSegment = [&](ESegment *seg) {
-      if (!InParallelRegion()) {
-#pragma omp parallel for schedule(dynamic, 1)
-        for (int pid = 0; pid < seg->NumPoints(); pid++) seg->UpdatePointGroupEnergyWithShift(pid, lc, &configure());
-      } else {
-        seg->UpdatePointEnergiesWithShift(lc, &configure());
-      }
-    };
-    for (const LocalShift &ls : localCols) {
-      const std::vector<int> &segs = ls.target.segs;
-      std::vector<vector_r> rP(segs.size()), rM(segs.size());
-      const double x0 = full[ls.f];
-      const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
-      const double d0 = ls.target.Get(ld);
-      ls.target.Set(ld, x0 + h);
-      for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
-      for (size_t m = 0; m < segs.size(); m++) segmentResiduals(ld->GetSegment(segs[m]), rP[m], true);
-      ls.target.Set(ld, x0 - h);
-      for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
-      for (size_t m = 0; m < segs.size(); m++) segmentResiduals(ld->GetSegment(segs[m]), rM[m], true);
-      ls.target.Set(ld, d0);
-      for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
-      for (size_t m = 0; m < segs.size(); m++) {
-        const int sNum = segs[m];
-        const size_t r0 = (size_t)rowStart[sNum], nSegRows = (size_t)(rowStart[sNum + 1] - rowStart[sNum]);
-        if (rP[m].size() == nSegRows && rM[m].size() == nSegRows)
-          for (size_t r = 0; r < nSegRows; r++)
-            jac[(r0 + r) * (size_t)nCols + (size_t)ls.packed] = (rP[m][r] - rM[m][r]) / (2.0 * h);
-      }
-    }
-    nShiftLocal = (int)localCols.size();
-
-    for (int f : fullShifts) {
-      const int packed = pmap.FullToPacked(f);
-      const double x0 = full[f];
-      const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
-      nShiftFull++;
-      auto residualsAt = [&](double value, vector_r &out) -> bool {
-        vector_r fk = full;
-        fk[f] = value;
-        lc->FillCompoundFromParams(fk);
-        ld->FillNormsFromParams(fk);
-        ld->FillEnergyShiftsFromParams(fk, ld, lc, &configure());
-        out.clear();
-        jTmp.clear();
-        return ComputeResidualJacobian(lc, ld, configure(), pmap, sdp, out, jTmp, nc);
-      };
-      const bool okp = residualsAt(x0 + h, rPlus);
-      const bool okm = residualsAt(x0 - h, rMinus);
-      if (okp && okm && rPlus.size() == nRes && rMinus.size() == nRes)
-        for (size_t r = 0; r < nRes; r++)
-          jac[r * (size_t)nCols + (size_t)packed] = (rPlus[r] - rMinus[r]) / (2.0 * h);
-    }
-    lc->FillCompoundFromParams(full);
-    ld->FillNormsFromParams(full);
-    ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
+    const ShiftColumnCount cols = FillShiftColumns(lc, ld, configure(), pmap, fixed, full, nullptr,
+                                                   residuals.size(), nCols, jac);
+    nShiftLocal = cols.local;
+    nShiftFull = cols.full;
   }
   if (std::getenv("AZURE_GRAD_TIMING")) {
     static std::atomic<int> rjCalls{0};
@@ -1477,6 +1569,13 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
     }
   }
 
+  // Prior parameter covariance: its n whitened rows L^-1 (p - mu) last, Jacobian L^-1 on its parameters' columns.
+  // The least-squares drivers (LM, GSL), the Jacobian-path gradient and G2 take the prior from these rows.
+  if (ok)
+    if (const PriorCovariance *pc = ld->GetPriorCovariance())
+      pc->AppendRows(full, [&](int f) { return f < pmap.NumFull() ? pmap.FullToPacked(f) : -1; }, nCols, residuals,
+                     &jac);
+
   packedToFull.resize(pmap.NumPacked());
   for (int a = 0; a < pmap.NumPacked(); a++) packedToFull[a] = pmap.PackedToFull(a);
 
@@ -1505,6 +1604,9 @@ double AZURECalc::RunLevenbergMarquardt(AZUREParams &params, int maxIter,
   double lambda = 1.0e-3;
 
   std::vector<double> H(nFree * nFree), g(nFree), Hl(nFree * nFree), dx(nFree);
+  std::vector<double> gScale(nFree, 1.0);  // see the convergence test
+  for (int a = 0; a < nFree; a++)
+    if (mp.GetName(p2f[a]).rfind("density_", 0) == 0) gScale[a] = std::max(std::fabs(x[a]), 1.0);
 
   for (int iter = 0; iter < maxIter; iter++) {
     if (iter > 0 && !ResidualJacobian(full, r, J, p2f)) break;
@@ -1535,9 +1637,11 @@ double AZURECalc::RunLevenbergMarquardt(AZUREParams &params, int maxIter,
       }
     }
 
-    // Convergence on the (projected) gradient.
+    // Convergence on the (projected) gradient.  A fitted target density (atoms/cm^2, ~1e17) is judged per
+    // relative change, |g| N: per atom/cm^2 its gradient is ~1e-16 and the absolute test stopped LM before
+    // its first step.  Every other parameter keeps the absolute test.
     double gmax = 0.0;
-    for (int a = 0; a < nFree; a++) gmax = std::max(gmax, std::fabs(g[a]));
+    for (int a = 0; a < nFree; a++) gmax = std::max(gmax, std::fabs(g[a]) * gScale[a]);
     if (gmax < 1.0e-8) break;
 
     // Inner loop: damp until a step decreases the cost.
@@ -1670,6 +1774,36 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
         if (te->GetScreeningSigma() > 0.0) {
           pen_nom[a] = te->GetScreeningNominal();
           pen_inv2[a] = 1.0 / (te->GetScreeningSigma() * te->GetScreeningSigma());
+        }
+      }
+    } else if (name.find("density_") == 0) {
+      // Fitted target density: its prior is a diagonal penalty row.
+      for (int k = 1; k <= data()->NumDensityParams(); k++) {
+        if (name != "density_" + std::to_string(data()->GetDensityEffect(k))) continue;
+        const TargetEffect *te = data()->GetTargetEffect(data()->GetDensityEffect(k));
+        if (te->GetDensitySigma() > 0.0) {
+          pen_nom[a] = te->GetDensityNominal();
+          pen_inv2[a] = 1.0 / (te->GetDensitySigma() * te->GetDensitySigma());
+        }
+      }
+    } else if (name.find("segment_") == 0 && name.size() > 10 && name.compare(name.size() - 10, 10, "_thickness") == 0) {
+      // Fitted sample thickness: its prior is a diagonal penalty row (none for a thickness-group follower).
+      for (int k = 1; k <= data()->NumThicknessParams(); k++) {
+        const ESegment *seg = data()->GetSegment(data()->GetThicknessSegment(k));
+        if (name != "segment_" + std::to_string(seg->GetSegmentKey()) + "_thickness") continue;
+        if (seg->GetThicknessSigma() > 0.0 && !seg->IsThicknessGroupFollower()) {
+          pen_nom[a] = seg->GetNominalThickness();
+          pen_inv2[a] = 1.0 / (seg->GetThicknessSigma() * seg->GetThicknessSigma());
+        }
+      }
+    } else if (name.find("doppler_") == 0) {
+      // Fitted Doppler temperature: its prior is a diagonal penalty row.
+      for (int k = 1; k <= data()->NumDopplerParams(); k++) {
+        if (name != "doppler_" + std::to_string(data()->GetDopplerEffect(k))) continue;
+        const TargetEffect *te = data()->GetTargetEffect(data()->GetDopplerEffect(k));
+        if (te->GetDopplerSigma() > 0.0) {
+          pen_nom[a] = te->GetDopplerNominal();
+          pen_inv2[a] = 1.0 / (te->GetDopplerSigma() * te->GetDopplerSigma());
         }
       }
     } else if (name.find("isospin_mix_") == 0) {
@@ -1901,6 +2035,9 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
   // Measured scattering lengths, as the last rows of ResidualJacobian.
   if (lc->HasScatteringLengthConstraints())
     ScatteringLength::Residuals(lc, configure(), lc->ScatteringLengthConstraints(), residuals);
+  // Prior parameter covariance, as the last rows of ResidualJacobian.
+  if (const PriorCovariance *pc = ld->GetPriorCovariance())
+    pc->AppendRows(full, [](int) { return -1; }, 0, residuals, nullptr);
   ReturnPooledCNuc(lc);
   ReturnPooledEData(ld);
   return true;
@@ -2104,13 +2241,16 @@ void AZURECalc::AddNuisanceGradient(const vector_r &p, std::vector<double> &grad
     // Norms, shifts and abundances carry their own priors (segment errors, the <abundances> sigma).
     if (paramName.find("norm") != std::string::npos || paramName.find("shift") != std::string::npos ||
         paramName.find("abundance") != std::string::npos || paramName.find("screening") != std::string::npos ||
-        paramName.find("isospin") != std::string::npos) continue;
+        paramName.find("density_") == 0 || paramName.find("doppler_") == 0 ||
+        paramName.find("_thickness") != std::string::npos || paramName.find("isospin") != std::string::npos) continue;
     if (!limitsManager_->IsNuisanceParameterByIndex(nf)) continue;
     double nominalValue = limitsManager_->GetConvertedNominalValueByIndex(nf);
     double paramError = limitsManager_->GetConvertedErrorByIndex(nf);
-    if (paramError > 0.0) {
-      // d/d p[nf] of ((p[nf]-nominal)/error)^2.
-      grad[nf] += 2.0 * (p[nf] - nominalValue) / (paramError * paramError);
+    if (paramError > 0.0 && actualIndex < (int)p.size() && actualIndex < (int)grad.size()) {
+      // p and grad are the FULL Minuit vectors (fixed parameters included); nf is the limits manager's index among
+      // the non-fixed ones.  Before 2026-10-27 this read p[nf] and wrote grad[nf], the wrong parameter as soon
+      // as a fixed level parameter preceded the one with the prior (audit item 14).
+      grad[actualIndex] += 2.0 * (p[actualIndex] - nominalValue) / (paramError * paramError);
     }
   }
 }
@@ -2139,7 +2279,8 @@ double AZURECalc::CalculateNuisanceChiSquared(const vector_r &p) const {
     // If norm, shift or abundance in param name, skip: those carry their own priors
     if (paramName.find("norm") != std::string::npos || paramName.find("shift") != std::string::npos ||
         paramName.find("abundance") != std::string::npos || paramName.find("screening") != std::string::npos ||
-        paramName.find("isospin") != std::string::npos) {
+        paramName.find("density_") == 0 || paramName.find("doppler_") == 0 ||
+        paramName.find("_thickness") != std::string::npos || paramName.find("isospin") != std::string::npos) {
       continue;
     }
 
@@ -2153,8 +2294,12 @@ double AZURECalc::CalculateNuisanceChiSquared(const vector_r &p) const {
     double paramError = limitsManager_->GetConvertedErrorByIndex(nonFixedIndex);
 
     // If we got valid values (non-zero error means this parameter has valid nuisance settings)
-    if (paramError > 0.0) {
-      double paramValue = p[nonFixedIndex];
+    if (paramError > 0.0 && actualIndex < (int)p.size()) {
+      // p is the FULL Minuit vector (fixed parameters included): index it with the parameter's actual position,
+      // not with the limits manager's non-fixed index.  Before 2026-10-27 this read p[nonFixedIndex], so a prior
+      // on a level parameter preceded by any fixed level parameter penalized a different parameter (13N: the prior
+      // on energy_3 was evaluated on width_1_1; audit item 14).
+      double paramValue = p[actualIndex];
       double deviation = (paramValue - nominalValue) / paramError;
       nuisanceChiSquared += deviation * deviation;
     }
@@ -2253,6 +2398,14 @@ void AZURECalc::WriteParameters(AZUREParams &params, const Config &configure) co
   out.open(filename);
   if (out) {
     out.precision(7);
+    // The same first line as param.par/param.sav: which amplitudes the file
+    // holds.  Before 2026-11-04 param.fit had none, so a --use-park fit
+    // resumed from it took its Park amplitudes for Brune's and converted
+    // them again (every amplitude times sqrt(J), fixed ones included;
+    // 11B+a 11-04-26_park_gpSM, chi2 10733 -> 49532 after three resumes).
+    out << std::setw(20) << "#parametrization"
+        << std::scientific << std::setw(20) << (double)AZUREParams::BasisForConfig(configure)
+        << std::scientific << std::setw(20) << 0.0 << std::endl;
     for (int i = 0; i < params.GetMinuitParams().Params().size(); i++) {
       out << std::setw(20) << params.GetMinuitParams().GetName(i)
           << std::scientific << std::setw(20) << params.GetMinuitParams().Value(i)
@@ -2262,4 +2415,52 @@ void AZURECalc::WriteParameters(AZUREParams &params, const Config &configure) co
     out.close();
   } else
     configure.outStream << "Could not save param.fit file." << std::endl;
+}
+
+std::vector<int> AZURECalc::IndicesWithOwnPrior() const {
+  // The parameters that carry a diagonal prior of their own, as the objective adds them: a norm's normError (on the
+  // group leader), the energy-shift / sqrt / shift-function errors, screening, density, Doppler and thickness sigmas,
+  // the <abundances> sigma, and a nuisance prior of the limits manager (CalculateNuisanceChiSquared's indexing).
+  std::vector<int> out;
+  ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), std::vector<bool>());
+  for (int s = 1; s <= data()->NumSegments(); s++) {
+    ESegment *seg = data()->GetSegment(s);
+    if (!seg || !seg->IsVaryNorm() || seg->IsNormGroupFollower()) continue;
+    const int idx = pmap.NormIndex(s);
+    if (idx >= 0 && seg->GetNominalNorm() / 100.0 * seg->GetNormError() != 0.0) out.push_back(idx);
+  }
+  auto add = [&](int idx, double, double) { out.push_back(idx); };
+  ForEachShiftPenalty(data(), pmap, add);
+  ForEachScreeningPrior(data(), pmap, add);
+  ForEachDensityPrior(data(), pmap, add);
+  ForEachDopplerPrior(data(), pmap, add);
+  ForEachThicknessPrior(data(), pmap, add);
+  for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
+    int sample, nucleus;
+    compound()->AbundanceOf(k, sample, nucleus);
+    const int idx = pmap.AbundanceIndex(k);
+    if (idx >= 0 && compound()->GetSample(sample)->entries[nucleus - 1].sigma > 0.0) out.push_back(idx);
+  }
+  if (limitsManager_) {
+    AZUREParams tp;
+    compound()->FillMnParams(tp.GetMinuitParams(), &configure());
+    data()->FillMnParams(tp.GetMinuitParams());
+    int nonFixed = 0;
+    for (int i = 0; i < (int)tp.GetMinuitParams().Params().size(); i++) {
+      const ROOT::Minuit2::MinuitParameter &mp = tp.GetMinuitParams().Parameter(i);
+      if (mp.IsFixed() && mp.GetName().find("segment") == std::string::npos) continue;
+      const std::string &name = mp.GetName();
+      const bool own = name.find("norm") != std::string::npos || name.find("shift") != std::string::npos ||
+                       name.find("abundance") != std::string::npos || name.find("screening") != std::string::npos ||
+                       name.find("density_") == 0 || name.find("doppler_") == 0 ||
+                       name.find("_thickness") != std::string::npos;
+      if (!own && limitsManager_->IsNuisanceParameterByIndex(nonFixed) &&
+          limitsManager_->GetConvertedErrorByIndex(nonFixed) > 0.0)
+        out.push_back(i);
+      nonFixed++;
+    }
+  }
+  std::sort(out.begin(), out.end());
+  out.erase(std::unique(out.begin(), out.end()), out.end());
+  return out;
 }

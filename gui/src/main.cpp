@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include "AZURESetup.h"
 #include "AzureTheme.h"
+#include "FileDialogPolicy.h"
 #include <QTimer>
 #include <QIcon>
 #include <QDir>
@@ -23,6 +24,10 @@ int start_gui(int argc, char *argv[]) {
   QFont::insertSubstitution(".AppleSystemUIFont", "Helvetica Neue");
   QFont::insertSubstitution(".SF NS Text", "Helvetica Neue");
 #endif
+
+  // Qt's own file dialogs on macOS, where the native ones failed (FileDialogPolicy.h). Set before the
+  // application exists, independent of the theme (AZURE2_THEME=system keeps it).
+  applyFileDialogPolicy();
 
   QApplication app(argc, argv);
 

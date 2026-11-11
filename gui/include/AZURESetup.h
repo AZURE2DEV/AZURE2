@@ -29,6 +29,7 @@ class QMenu;
 class QAction;
 class QActionGroup;
 class QTextEdit;
+class QToolButton;
 
 QT_END_NAMESPACE
 
@@ -116,13 +117,23 @@ class AZURESetup : public QMainWindow {
   bool writeFile(QString filename);
   bool writeConfig(QTextStream &outStream, QString directory);
   bool readLastRun(QTextStream &inStream);
+  /// After open(): a non-modal warning (object name "gslCoulombWarning") when the project's last run used the
+  /// GSL Coulomb functions (bit USE_GSL_COULOMB_FUNC in <lastRun>).
+  void warnIfGSLCoulomb();
+  static QString gslCoulombWarningText();
   bool writeLastRun(QTextStream &outStream);
   void createActions();
   void createMenus();
   void updateRecent();
   void updateNuclearPotentialTabVisibility();  // Show/hide Nuclear Potential tab based on config
+  /// The logo with the polarization arrow while a data or test segment is a polarization observable
+  /// (analyzing power), the plain logo otherwise: logo button, window and application icon.
+  void updateLogo();
+  QToolButton *logoButton_ = nullptr;
+  bool polarizedLogo_ = false;
 
   Config config;
+  bool loadedGSLCoulomb_ = false;
 
   QAction *aboutAction;
   QAction *resetAction;

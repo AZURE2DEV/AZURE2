@@ -132,7 +132,7 @@ alongside the file.
 
 ## Verifying a newly built file
 
-1. **CLI mode 3 first.** `printf '3\n\nn\n' | AZURE2 --no-gui new.azr` needs no
+1. **CLI mode 3 first.** `printf '3\nn\n\n\n7\n' | AZURE2 --no-gui --no-readline new.azr` needs no
    data and prints the compound-nucleus construction, the boundary conditions
    and the parameter transformation. It is the fastest way to see the real
    error message; the pyazr exception only says "could not initialize".

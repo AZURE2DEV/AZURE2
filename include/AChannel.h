@@ -31,9 +31,12 @@ class AChannel {
   /// Radiation type: 'P' particle, 'E'/'M' electric/magnetic multipole, 'F'/'G' beta decay.
   char GetRadType() const;
   void SetBoundaryCondition(double);
-  /// Compute the Wigner limit from the pair's reduced mass (u) and channel radius (fm).
-  /// Deferred until the PPair is known; a zero radius leaves the limit zero.
-  void SetWignerLimit(double reducedMass, double channelRadius);
+  /// Set the channel's radius (fm) and, from it and the pair's reduced mass (u), its Wigner limit.
+  /// Deferred until the PPair is known (CNuc::SetChannelRadius); a zero radius leaves the limit zero.
+  void SetRadius(double channelRadius, double reducedMass);
+  /// Channel radius (fm): the pair's radius unless a <channelRadii> line gives this channel its own.  Zero
+  /// until SetRadius has been called.  Every channel quantity is taken at it.
+  double GetRadius() const;
   /// Wigner limit on the *reduced width* \f$\gamma^2\f$ in MeV, i.e.
   /// \f$\hbar^2 / (m_{red} a^2)\f$ -- not a bound on the partial width.
   /// Zero until SetWignerLimit has been called.
@@ -45,6 +48,7 @@ class AChannel {
   double s_;
   char radtype_;
   double boundary_condition_;
+  double radius_;
   double wigner_limit_;
 };
 

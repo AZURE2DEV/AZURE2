@@ -1,11 +1,13 @@
 #ifndef ADDSEGDATADIALOG_H
 #define ADDSEGDATADIALOG_H
 
+#include "SampleRow.h"
 #include <QDialog>
 #include <QShowEvent>
 #include <QLineEdit>
 #include <QSpinBox>
 #include "PairKeyCombo.h"
+#include "ScatteringLengthsModel.h"
 #include <QComboBox>
 #include <QLabel>
 #include <QCheckBox>
@@ -58,15 +60,36 @@ class AddSegDataDialog : public QDialog {
   /*! True when the multipolarity drop-down applies: Angle Integrated with a gamma exit pair. */
   bool multipolarityApplies() const;
 
+  /*! Data Type "Scattering Length": not a segment line but a line of the <scatteringLengths> block (pair, channel
+   *  spin, Re a0 +- sigma, optional Im a0 +- sigma); SegmentsTab lists those under the data segments. */
+  static const int ScatteringLengthCode = 100;
+  bool isScatteringLength() const { return observableCode() == ScatteringLengthCode; }
+  ScatteringLengthEntry scatteringLength() const;
+  /*! Edit mode for a scattering length: the type is fixed and the fields filled from \p entry. */
+  void setScatteringLength(const ScatteringLengthEntry &entry);
+  /*! Edit mode for a segment line: drop the "Scattering Length" type (a segment cannot become one). */
+  void disallowScatteringLength();
+  QGroupBox *scatLenBox;
+  QComboBox *scatLenSpinCombo;
+  QLineEdit *scatLenValueText;
+  QLineEdit *scatLenSigmaText;
+  QLineEdit *scatLenImValueText;
+  QLineEdit *scatLenImSigmaText;
+
   QLineEdit *dataFileText;
+  /*! Optional data covariance file (keyword block "covariance <file>"): every data segment naming the same
+   *  file shares one covariance matrix.  Empty = uncorrelated errors (no block). */
+  QLineEdit *covarianceFileText;
   QLineEdit *dataNormText;
   QLineEdit *dataNormErrorText;
   QLabel *dataNormErrorLabel;
   QCheckBox *varyNormCheck;
   QLineEdit *phaseJValueText;
-  QLineEdit *spinText;  //!< isDiff 9 observable token
+  QLineEdit *spinText;  //!< isDiff 10 observable token
   QLabel *spinLabel;
   QLineEdit *phaseLValueText;
+  QLineEdit *phaseSValueText;   ///< channel spin of a phase-shift segment ("spin <s>"), empty = not given
+  QLabel *phaseSValueLabel;
   QLabel *phaseLValueLabel;
   QLabel *phaseJValueLabel;
   QLineEdit *energyShiftText;
@@ -74,6 +97,29 @@ class AddSegDataDialog : public QDialog {
   QLineEdit *energyShiftErrorText;
   QLabel *energyShiftErrorLabel;
   QCheckBox *varyEnergyShiftCheck;
+
+  /*! Tied systematics, the "normgroup <label>", "shiftgroup <label>" and "shiftfngroup <label>" blocks of the line:
+   *  editable drop-downs listing the labels the project already uses (empty = no group).  Every active segment with
+   *  the same label shares the normalization / constant energy shift / shift function of the group's first active
+   *  segment in file order.  A label is one token (no blank, no double quote). */
+  QLabel *groupsLabel;
+  QWidget *groupsBox;
+  QComboBox *normGroupCombo;
+  QComboBox *shiftGroupCombo;
+  QComboBox *shiftFnGroupCombo;
+  /*! Fill the drop-down of \p keyword ("normgroup", "shiftgroup", "shiftfngroup") with the project's labels; the
+   *  text typed or set stays. */
+  void setGroupChoices(const QString &keyword, const QStringList &labels);
+  /*! The label chosen for \p keyword, trimmed; "" = none. */
+  QString groupLabel(const QString &keyword) const;
+  void setGroupLabel(const QString &keyword, const QString &label);
+  QComboBox *groupCombo(const QString &keyword) const;
+  /*! The transmission / self-shielded-yield block of the line and its thickness group ("Sample:" row, SampleRow.h);
+   *  the group is the "thicknessgroup" keyword of setGroupChoices / groupLabel.  Shown where the engine allows the
+   *  block (an angle-integrated or total-capture observable of a neutral entrance pair) or the line has one. */
+  SampleRow *sampleRow = nullptr;
+  /*! Fill the Sample row from a line's block (and show it if the line has one). */
+  void setSampleBlock(const SegmentKeywords::SampleBlock &b);
 
   /*! "Natural target": the term and each component are weighted by the isotopic abundance of their
    *  entrance pair's compound nucleus in one sample of the <abundances> block (keyword tail
@@ -113,6 +159,7 @@ class AddSegDataDialog : public QDialog {
 
  public slots:
   void setChooseFile();
+  void setChooseCovarianceFile();
   void dataTypeChanged(int);
   void exitPairChanged(int key);
   void varyNormChanged(int);
@@ -123,12 +170,28 @@ class AddSegDataDialog : public QDialog {
   void addComponent();
   void removeComponent();
   void uposChanged(int);
+  void fillScatteringLengthSpins();
+  /*! A segment is in a shift group or a shift-function group, not both (EData::ResolveShiftFunctions): while one
+   *  is set the other is disabled. */
+  void updateGroupCombos();
 
  protected:
   /*! Sized to the content within the screen on every opening (DialogScrollArea.h). */
   void showEvent(QShowEvent *event) override;
 
  private:
+  /*! Show the scattering-length fields and hide the segment ones, or the reverse (restoring the sections the
+   *  check boxes and the observable decide). */
+  void applyScatteringLengthMode(bool on);
+  QList<QWidget *> segmentOnly;
+  QLabel *sampleLabel = nullptr;
+  /*! Show the Sample row where the block can apply (updateSampleRow's rule above), hide it otherwise. */
+  void updateSampleRow();
+  QLabel *entrancePairLabel;
+  QLabel *exitPairLabel;
+  bool scatLenMode = false;
+  bool scatLenActive = true;
+  PairsModel *pairs = nullptr;
   QPushButton *okButton;
   QPushButton *cancelButton;
 };

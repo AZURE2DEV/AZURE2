@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# isDiff 9 in a reaction, checked by time reversal.  The 4He toy has p+t (pair 1) and n+3He (pair 2);
+# isDiff 10 in a reaction, checked by time reversal.  The 4He toy has p+t (pair 1) and n+3He (pair 2);
 # the same nine spin observables are computed for t(p,n)3He (segments 2-10) and 3He(n,p)t (segments 12-20)
 # on matching grids (equal excitation energy, equal c.m. angle).  Time reversal (Ohlsen 1972) requires
 #   forward b:y      = inverse e1:y      forward t:y      = inverse e2:y
@@ -67,9 +67,9 @@ else
 fi
 
 # --- start-up refusals ---
-refuse() {  # label, sed expression applied to the first isDiff 9 line, expected message fragment
+refuse() {  # label, sed expression applied to the first isDiff 10 line, expected message fragment
   local d="$WORK/bad_$1"; mkdir -p "$d"
-  sed "0,/ 9 b:y /s// 9 $2 /" "$HERE/spin_observables_reaction.azr" > "$d/m.azr"
+  sed "0,/ 10 b:y /s// 10 $2 /" "$HERE/spin_observables_reaction.azr" > "$d/m.azr"
   run "$d" m.azr
   if grep -q "ERROR: Data segment #2: .*$3" "$d/run.log"; then ok "refused $2 ($3)"
   else bad "token $2 was not refused with \"$3\""; sed 's/^/    /' "$d/run.log" | grep -i error | head -3

@@ -49,11 +49,8 @@ detailed-balance check and nothing else.
 
 ### One number worth knowing
 
-The profile weight agrees with the closed form only to 5.7e-10, not to machine
-precision, and the test says so in a named tolerance. `include/Constants.h`
-defines `pi = 3.141592650` — the true value truncated at ten digits, a relative
-error of 1.14e-9 — and the weight carries `1/(omega sqrt(2 pi))`, so it inherits
-half of that. It cancels in the fold itself, where numerator and denominator
-share it, which is why the identity checks hold to 1e-12. Giving the constant
-its full precision would let the tolerance go to 1e-12 too, at the cost of
-moving every recorded chi-squared in the suite very slightly.
+The profile weight agrees with the closed form to 1e-12 (the named tolerance
+`kPiTolerance`). Until 2026-11-05 `include/Constants.h` defined
+`pi = 3.141592650`, the true value truncated at ten digits (1.14e-9 low); the
+weight carries `1/(omega sqrt(2 pi))` and inherited half of that, so the
+tolerance was 5e-9. The constants are CODATA 2018 at full precision since then.

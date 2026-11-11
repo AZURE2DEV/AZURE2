@@ -72,14 +72,41 @@ Selecting **Runtime Options...** opens a dialog with the following settings:
    * - **Use GSL Coulomb functions**
      - Use the GNU Scientific Library routines for Coulomb function calculations.
        Faster but potentially less accurate than the default method of N. Michel,
-       *Computer Physics Communications* **176**, 232 (2007).
-   * - **Use Brune formalism**
-     - Use the Brune parameterization for R-matrix parameters
-       (C.R. Brune, *Physical Review C* **66**, 044611, 2002). Recommended and
-       enabled by default. More numerically stable than the classical approach.
+       *Computer Physics Communications* **176**, 232 (2007): :math:`P` and
+       :math:`S` can be wrong by several percent, and the shift function is NaN
+       just above a charged-particle threshold. Saved in the project
+       (``<lastRun>``); since 2026-11-06 the GUI warns when it opens a project
+       with this option set and offers to switch to the default functions.
+   * - **Parametrization** (drop-down)
+     - The R-matrix parametrization, one of three:
+
+       * **Formal**: the standard Lane-Thomas parameters (pole energies and
+         reduced-width amplitudes for fixed boundary conditions).  The physical
+         parameters of the project are transformed to formal ones per
+         :math:`J^\pi` group; since 2026-10-27 that transformation keeps each
+         level's identity whatever the order the levels are listed in (see the
+         note in :doc:`levels_channels`).
+       * **Brune** (default, recommended): Brune's alternative parametrization
+         (C.R. Brune, *Physical Review C* **66**, 044611, 2002), with observed
+         level energies and reduced widths and no boundary-condition constants.
+         More numerically stable than the formal one.
+       * **Brune-Park**: Park's rescaled amplitudes on Brune's level matrix
+         (:math:`\gamma_\mathrm{Park} = \gamma_\mathrm{Brune}\sqrt{J}`); the
+         command line's ``--use-park`` (see :doc:`../reference/command_line`).
+         The name keeps Brune's part in it visible.
+
+       Before November 2026 these were two check boxes, **Use Brune formalism**
+       and **Use Park parametrization** (the second implying the first).  The
+       choice is kept with the GUI's other run settings in ``<lastRun>``;
+       command-line runs take it from ``--use-brune`` / ``--no-brune`` /
+       ``--use-park``.
    * - **Ignore external width if internal width is zeroed**
      - When enabled, the external gamma-ray width of a level is set to zero if
-       no total gamma-ray width is specified.
+       no total gamma-ray width is specified.  The R-matrix formalism does not
+       implement it (nor the Brune-Park parametrization): the two cannot be selected
+       together, and a calculation with the R-matrix and either option runs
+       the A-matrix with a warning (as the command line and pyazr do; see
+       :doc:`../reference/command_line`).
    * - **Use RMC capture formalism**
      - Enable the Reich-Moore capture formalism. Currently only supported for
        (n, gamma) reactions. Do not use for other reaction types.
@@ -89,7 +116,11 @@ Selecting **Runtime Options...** opens a dialog with the following settings:
        calculation. Note that formal parameters are radius and boundary-condition
        dependent.
    * - **Use Wigner limits for parameter limits**
-     - Automatically apply Wigner limit bounds on fit parameters.
+     - Automatically apply Wigner limit bounds on fit parameters: the
+       reduced-width amplitude of every particle channel is bounded by
+       :math:`\pm\sqrt{3\hbar^2/(2\mu a^2)}`. Photon and beta channels have
+       no such limit (before October 2026 a photon pair with a nonzero channel
+       radius would have produced an infinite one).
    * - **Use Hybrid Coulomb method**
      - Use a hybrid method for Coulomb function calculations that includes a
        nuclear potential (Woods-Saxon or Gaussian). This is the master switch;
@@ -97,10 +128,19 @@ Selecting **Runtime Options...** opens a dialog with the following settings:
        to, one at a time. Enables the Nuclear Potential
        tab.
 
+Below these, a **Kinematics** box holds the **Relativistic kinematics** check
+box: channel wave numbers, Sommerfeld parameters and lab ↔ c.m. conversions
+from the invariant mass (see :ref:`relativistic-kinematics`).  Unlike the
+options above it is part of the project (``relativistic=1`` in ``<config>``),
+so command-line and pyazr runs of the project use it as well; nothing has to be
+passed on the command line.  Before November 2026 it was a check box below the
+Particle Pairs table.
+
 .. note::
 
-   The **Brune formalism** and **RMC capture formalism** are mutually exclusive.
-   Enabling one will automatically disable the other.
+   The **RMC capture formalism** needs the **Formal** parametrization.
+   Ticking it sets the drop-down to Formal and locks it; choosing Brune or
+   Brune-Park unticks and disables it.
 
 .. note::
 

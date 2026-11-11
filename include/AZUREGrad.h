@@ -40,6 +40,9 @@ enum class ParamKind {
   EnergyShiftFn,    ///< parameter aj of a segment's shift function ("shiftfn")
   Abundance,        ///< isotopic abundance of a compound nucleus (projects with an <abundances> block)
   Screening,        ///< electron-screening potential U_e (eV) of a <targetInt> line with a screening block
+  Density,          ///< fitted areal density (atoms/cm^2) of a <targetInt> line or density group (densityfit)
+  Doppler,          ///< fitted free-gas Doppler temperature (K) of a <targetInt> line ('doppler T vary sigma')
+  Thickness,        ///< fitted sample thickness (atoms/barn) of a transmission / yield segment ('transmission n vary sigma')
   Isospin           ///< internal Coulomb shift or isospin-forbidden amplitude (projects with an <isospin> block)
 };
 
@@ -55,6 +58,9 @@ struct ParamDesc {
   int sample = -1;   ///< 1-based sample of the <abundances> block (Abundance only, else -1)
   int fnTerm = -1;  ///< j of a shift-function parameter aj (EnergyShiftFn only, else -1)
   int screening = -1;  ///< 1-based screening parameter (EData::GetScreeningEffect), Screening only, else -1
+  int density = -1;    ///< 1-based density parameter (EData::GetDensityEffect), Density only, else -1
+  int doppler = -1;    ///< 1-based Doppler parameter (EData::GetDopplerEffect), Doppler only, else -1
+  int thickness = -1;  ///< 1-based thickness parameter (EData::GetThicknessSegment), Thickness only, else -1
   int isospin = -1; ///< 0-based isospin parameter: shifts, then mixes (Isospin only, else -1)
 };
 
@@ -97,6 +103,21 @@ class ParamIndexMap {
     auto it = screeningIndex_.find(k);
     return (it == screeningIndex_.end()) ? -1 : it->second;
   }
+  /// Full index of the 1-based density parameter k, or -1.
+  int DensityIndex(int k) const {
+    auto it = densityIndex_.find(k);
+    return (it == densityIndex_.end()) ? -1 : it->second;
+  }
+  /// Full index of the 1-based Doppler-temperature parameter k, or -1.
+  int DopplerIndex(int k) const {
+    auto it = dopplerIndex_.find(k);
+    return (it == dopplerIndex_.end()) ? -1 : it->second;
+  }
+  /// Full index of the 1-based sample-thickness parameter k, or -1.
+  int ThicknessIndex(int k) const {
+    auto it = thicknessIndex_.find(k);
+    return (it == thicknessIndex_.end()) ? -1 : it->second;
+  }
   /// Full index of isospin parameter k (0-based), or -1.
   int IsospinIndex(int k) const;
   /// Derived isospin slots as linear functions of free ones (empty without an <isospin> block).
@@ -138,6 +159,9 @@ class ParamIndexMap {
   std::map<int, int> abundanceIndex_;                    ///< abundance ordinal -> full idx
   std::map<std::pair<int, int>, int> fnShiftIndex_;      ///< (segment, j) -> full idx
   std::map<int, int> screeningIndex_;                    ///< screening parameter k -> full idx
+  std::map<int, int> densityIndex_;                      ///< density parameter k -> full idx
+  std::map<int, int> dopplerIndex_;                      ///< Doppler parameter k -> full idx
+  std::map<int, int> thicknessIndex_;                    ///< thickness parameter k -> full idx
   std::map<int, int> isospinIndex_;                      ///< isospin parameter k -> full idx
   std::vector<IsospinTie> isospinTies_;
   std::vector<int> fullToPacked_;
@@ -171,6 +195,10 @@ struct GradAccum {
   std::vector<double> abundance;
   // screening[k-1]          -> d/dU_e (eV) of screening parameter k (grows on first use)
   std::vector<double> screening;
+  // doppler[k-1]            -> d/dT (K) of Doppler-temperature parameter k (grows on first use)
+  std::vector<double> doppler;
+  // thickness[k-1]          -> d/dn (atoms/barn) of sample-thickness parameter k (grows on first use)
+  std::vector<double> thickness;
   /*!
    * Cotangents of the formal energies and widths of the Brune and Park level
    * matrices, fe[j-1][k] and fgamma[j-1][k][ch-1] for formal level k
@@ -227,6 +255,18 @@ struct GradAccum {
     if (k < 1) return;
     if (k > (int)screening.size()) screening.resize(k, 0.0);
     screening[k - 1] += v;
+  }
+  /// Add a contribution to d/dT (K) of Doppler-temperature parameter k (1-based, EData::DopplerParamOfEffect).
+  void AddDoppler(int k, double v) {
+    if (k < 1) return;
+    if (k > (int)doppler.size()) doppler.resize(k, 0.0);
+    doppler[k - 1] += v;
+  }
+  /// Add a contribution to d/dn (atoms/barn) of sample-thickness parameter k (1-based, EData::ThicknessParamOfSegment).
+  void AddThickness(int k, double v) {
+    if (k < 1) return;
+    if (k > (int)thickness.size()) thickness.resize(k, 0.0);
+    thickness[k - 1] += v;
   }
   /// Add a contribution by full parameter index (the soft-tie penalty).
   void AddSlot(int fullIndex, double v) { slot.push_back({fullIndex, v}); }
@@ -320,6 +360,39 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
                              const ParamIndexMap &pmap,
                              const vector_matrix_r *shiftDeriv,
                              vector_r &residuals, vector_r &jacobian, int &nCols);
+
+/// How many energy-shift columns FillShiftColumns differenced, and how.
+struct ShiftColumnCount {
+  int local = 0;  ///< on their own segments' rows
+  int full = 0;   ///< on every row
+};
+
+/*!
+ * \brief The energy-shift, sqrt(E)-shift, shift-function and target-density
+ *        columns of a residual Jacobian, by central differences.
+ *
+ * The adjoint of ComputeResidualJacobian does not cover these (a shift moves
+ * the energy of every quantity of its segments; a density moves the depth
+ * window of every point of its target's lines), so they are differenced,
+ * forward only, on the residual rows ComputeResidualJacobian lays out:
+ * - a shift whose segments are self-contained (no components, not a
+ *   total-capture sum, no point mapping outside them) on those segments' rows
+ *   alone, every other row being exactly zero;
+ * - any other column on every row, with one parallel pass over the points
+ *   (EData::CalculatePointsInParallel) per side.
+ * Neither side solves an adjoint: up to 2026-10-30 pyazr re-solved the whole
+ * Jacobian twice per column and threw it away.
+ *
+ * `compound`/`data` are filled at `full` (full parameter order, as `pmap`);
+ * `fixed` is the full fixed mask.  `skipPacked` (may be null) marks packed
+ * columns not to difference; they are left as they are.  `nRes` data rows
+ * (before any whitening), row-major `jac` with `nCols` columns.  The model is
+ * left at `full`.  Defined in AZURECalc.cpp, beside the shift helpers the
+ * analytic gradient shares.
+ */
+ShiftColumnCount FillShiftColumns(CNuc *compound, EData *data, const Config &config, const ParamIndexMap &pmap,
+                                  const std::vector<bool> &fixed, const vector_r &full,
+                                  const std::vector<char> *skipPacked, size_t nRes, int nCols, vector_r &jac);
 
 /*!
  * \brief Per-point d(model)/d(theta) for analytic covariance bands, keyed by

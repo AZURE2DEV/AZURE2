@@ -58,8 +58,10 @@ r="$(maxrel "$(out tgt_fixed)" "$(out tgt_lab_const)")";    if le "$r" 1e-12; th
 r="$(maxrel "$(out tgt_fixed)" "$(out tgt_legacy_const)")"; if le "$r" 1e-9;  then ok "under target integration: constant == legacy c.m. ($r)"; else bad "target + constant vs target + legacy c.m. differ ($r)"; fi
 
 # 2. what did not change. The references were recorded on Linux; another platform's libm differs
-#    from it at ~1e-11, so these are held to 1e-8 -- five orders below the smallest change in part 3.
-r="$(maxrel "$(out bare)" "$HERE/reference_old/bare.extrap")"; if le "$r" 1e-8; then ok "no effect: unchanged ($r)"; else bad "bare calculation moved ($r)"; fi
+#    from it at ~1e-11, so these were held to 1e-8 -- five orders below the smallest change in part 3.  Since
+#    2026-11-05 the CODATA 2018 constants (include/Constants.h) move the bare calculation by 1.2e-7 against
+#    these pre-unification references, so it is held to 1e-6, still three orders below part 3.
+r="$(maxrel "$(out bare)" "$HERE/reference_old/bare.extrap")"; if le "$r" 1e-6; then ok "no effect: unchanged ($r)"; else bad "bare calculation moved ($r)"; fi
 #    Plain target integration is held to 1e-4 instead: the graded resonance tails of the sub-point grid
 #    (2026-10-22, tests/reference/adaptive_grid_reference_test) moved it by up to 6.1e-5, all of it the
 #    old grid's quadrature error (against 2000 sub-points: old 6.1e-5, new 5.2e-8).

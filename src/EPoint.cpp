@@ -1,4 +1,5 @@
 #include "AMatrixFunc.h"
+#include <memory>
 #include "Profile.h"
 #include "AngCoeff.h"
 #include "CNuc.h"
@@ -15,13 +16,19 @@
 #include "ScatteringLength.h"
 #include "ShftFunc.h"
 #include "TargetEffect.h"
-#include "Straggling.h"
 #include "IntegratedFermiFunc.h"
 #include <iostream>
+#include <map>
+#include <cmath>
+#include <sstream>
 #include <assert.h>
 #include <fstream>
 #include <memory>
 #include <mutex>
+#include <limits>
+#include <atomic>
+#include <stdexcept>
+#include <algorithm>
 
 /*!
  * This constructor is used if the data point is to be created from a line in a data file.
@@ -62,9 +69,10 @@ EPoint::EPoint(DataLine dataLine, ESegment *parent) {
   sfactorconv_ = 0.;
   is_differential_ = parent->IsDifferential();
   is_phase_ = parent->IsPhase();
-  is_ang_dist_ = parent->IsAngularDist();
+  is_ang_dist_ = parent->IsAngularDist() || parent->IsCoefficients();
   max_ang_dist_order_ = parent->GetMaxAngDistOrder();
   j_value_ = parent->GetJ();
+  phase_s_value_ = parent->GetPhaseS();
   l_value_ = parent->GetL();
   isUPOS_ = parent->IsUPOS();
   secondaryDecayL_ = parent->GetSecondaryDecayL();
@@ -106,9 +114,10 @@ EPoint::EPoint(double angle, double energy, ESegment *parent) {
   sfactorconv_ = 0.;
   is_differential_ = parent->IsDifferential();
   is_phase_ = parent->IsPhase();
-  is_ang_dist_ = parent->IsAngularDist();
+  is_ang_dist_ = parent->IsAngularDist() || parent->IsCoefficients();
   max_ang_dist_order_ = parent->GetMaxAngDistOrder();
   j_value_ = parent->GetJ();
+  phase_s_value_ = parent->GetPhaseS();
   l_value_ = parent->GetL();
   isUPOS_ = parent->IsUPOS();
   secondaryDecayL_ = parent->GetSecondaryDecayL();
@@ -268,7 +277,7 @@ int EPoint::GetExitKey() const {
  */
 
 int EPoint::GetMaxLOrder() const {
-  return legendreP_.size() - 1;
+  return legendreP_ ? (int)legendreP_->size() - 1 : -1;
 }
 
 /*!
@@ -370,7 +379,7 @@ double EPoint::GetOriginalEnergy() const {
  */
 
 double EPoint::GetLegendreP(int lOrder) const {
-  return legendreP_[lOrder];
+  return (*legendreP_)[lOrder];
 }
 
 /*!
@@ -443,7 +452,7 @@ double EPoint::GetSFactorConversion() const {
  */
 
 double EPoint::GetSqrtPenetrability(int jGroupNum, int channelNum) const {
-  return penetrabilities_[jGroupNum - 1][channelNum - 1];
+  return edep_->penetrabilities[edep_->At(jGroupNum, channelNum)];
 }
 
 /*!
@@ -501,7 +510,7 @@ double EPoint::GetCrossSectionKinFactor() const {
  */
 
 complex EPoint::GetLoElement(int jGroupNum, int channelNum) const {
-  return lo_elements_[jGroupNum - 1][channelNum - 1];
+  return edep_->lo_elements[edep_->At(jGroupNum, channelNum)];
 }
 
 /*!
@@ -511,7 +520,7 @@ complex EPoint::GetLoElement(int jGroupNum, int channelNum) const {
  */
 
 complex EPoint::GetExpCoulombPhase(int jGroupNum, int channelNum) const {
-  return coulombphase_[jGroupNum - 1][channelNum - 1];
+  return edep_->coulombphase[edep_->At(jGroupNum, channelNum)];
 }
 
 /*!
@@ -521,7 +530,7 @@ complex EPoint::GetExpCoulombPhase(int jGroupNum, int channelNum) const {
  */
 
 complex EPoint::GetExpHardSpherePhase(int jGroupNum, int channelNum) const {
-  return hardspherephase_[jGroupNum - 1][channelNum - 1];
+  return edep_->hardspherephase[edep_->At(jGroupNum, channelNum)];
 }
 
 /*!
@@ -688,14 +697,14 @@ void EPoint::ConvertLabEnergy(PPair *pPair) {
     // T = sqrt(s) - m1 - m2 with s = (m1 + m2)^2 + 2 m2 E_lab (Kinematics.h)
     const double m1 = pPair->GetM(1) * uconv, m2 = pPair->GetM(2) * uconv;
     cm_energy_ = Kinematics::CMFromLab(m1, m2, this->GetLabEnergy());
-    excitation_energy_ = cm_energy_ + pPair->GetSepE();
+    excitation_energy_ = cm_energy_ + pPair->GetSepE() + pPair->GetExE();  // E_x = E_cm + S + E* of the pair (audit 01 B3, 2026-10-28)
     bin_low_cm_ = Kinematics::CMFromLab(m1, m2, bin_low_lab_);
     bin_high_cm_ = Kinematics::CMFromLab(m1, m2, bin_high_lab_);
     return;
   }
   double factor = (pPair->GetM(2)) / (pPair->GetM(1) + pPair->GetM(2));
   cm_energy_ = this->GetLabEnergy() * factor;
-  excitation_energy_ = cm_energy_ + pPair->GetSepE();
+  excitation_energy_ = cm_energy_ + pPair->GetSepE() + pPair->GetExE();  // E_x = E_cm + S + E* of the pair (audit 01 B3, 2026-10-28)
   bin_low_cm_ = bin_low_lab_ * factor;
   bin_high_cm_ = bin_high_lab_ * factor;
 }
@@ -706,7 +715,7 @@ void EPoint::ConvertLabEnergy(PPair *pPair) {
  */
 
 void EPoint::ConvertExcitationEnergy(PPair *pPair) {
-  excitation_energy_ = cm_energy_ + pPair->GetSepE();
+  excitation_energy_ = cm_energy_ + pPair->GetSepE() + pPair->GetExE();  // E_x = E_cm + S + E* of the pair (audit 01 B3, 2026-10-28)
 }
 
 /*!
@@ -720,13 +729,13 @@ void EPoint::ConvertDecayEnergy(PPair *pPair) {
   if (Kinematics::Relativistic()) {
     // two-body decay at rest: equal momenta, T = E1 + sqrt(m2^2 + p^2) - m2
     cm_energy_ = Kinematics::CMFromDecay(pPair->GetM(1) * uconv, pPair->GetM(2) * uconv, this->GetLabEnergy());
-    excitation_energy_ = cm_energy_ + pPair->GetSepE();
+    excitation_energy_ = cm_energy_ + pPair->GetSepE() + pPair->GetExE();  // E_x = E_cm + S + E* of the pair (audit 01 B3, 2026-10-28)
     return;
   }
   cm_energy_ = this->GetLabEnergy() /
       (pPair->GetM(2)) *
       (pPair->GetM(1) + pPair->GetM(2));
-  excitation_energy_ = cm_energy_ + pPair->GetSepE();
+  excitation_energy_ = cm_energy_ + pPair->GetSepE() + pPair->GetExE();  // E_x = E_cm + S + E* of the pair (audit 01 B3, 2026-10-28)
 }
 
 /*!
@@ -751,6 +760,14 @@ bool EPoint::RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nr
   const double m3 = exitPair->GetM(1) * uconv, m4 = exitPair->GetM(2) * uconv;
   const double ti = this->GetCMEnergy();
   const double tf = ti + entrancePair->GetSepE() + entrancePair->GetExE() - exitPair->GetSepE() - exitPair->GetExE();
+  if (!(tf > 0.0) || !(ti > 0.0)) {  // below the exit threshold (relativistic): no ejectile (K would take |k^2|)
+    std::ostringstream why;
+    why << "below the threshold of the exit pair (relativistic kinematics, c.m. energy in the exit channel " << tf
+        << " MeV): the lab angle cannot be converted; give the point as c.m. (code 4 / 5) or drop it";
+    labAngleWhy_ = why.str();
+    labAngleMax_ = 0.0;
+    return false;
+  }
   const double e1 = Kinematics::LabFromCM(m1, m2, ti);
   const double sqrtS = m1 + m2 + ti, eTot = e1 + m1 + m2;
   const double pLab = sqrt(e1 * (e1 + 2.0 * m1));
@@ -758,6 +775,18 @@ bool EPoint::RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nr
   const double pf = Kinematics::K(m3, m4, tf) * hbarc, e3 = sqrt(m3 * m3 + pf * pf);
   const double g = beta / (pf / e3);
   const double thl = this->GetLabAngle() * pi / 180.;
+  // Where two c.m. angles reach one lab angle (g > 1) the lab angle has a maximum, sin theta_max = gamma_3* /
+  // (gamma g) with gamma_3* = E_3*/m_3 (the same as reaction-kinematics' p*/(m_3 sinh y)).  It is SMALLER than
+  // the non-relativistic Marion-Young maximum, by 0.3-0.6 deg just above the 7Li(p,n) and 12C(a,p) thresholds.
+  auto beyond = [&]() {
+    labAngleMax_ = (g > 1.0 && m3 > 0.0) ? asin(std::min(1.0, e3 / (m3 * gam * g))) * 180. / pi : 180.;
+    std::ostringstream why;
+    why << "beyond the kinematic maximum " << labAngleMax_ << " deg at this energy (relativistic kinematics; two c.m. "
+        << "angles reach every lab angle below it and only the forward branch is modelled; give the point as c.m., "
+        << "code 4 / 5, or drop it)";
+    labAngleWhy_ = why.str();
+    return false;
+  };
   double x;  // cos theta*
   if (fabs(sin(thl)) < 1e-12) {
     x = cos(thl) > 0 ? 1.0 : -1.0;
@@ -765,7 +794,7 @@ bool EPoint::RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nr
   } else {
     const double t2 = pow(tan(thl), 2.0), gt2 = gam * gam * t2;
     const double disc = 1.0 + gt2 * (1.0 - g * g);
-    if (disc < 0.0) return false;
+    if (disc < 0.0) return beyond();
     const double r1 = (-gt2 * g + sqrt(disc)) / (1.0 + gt2), r2 = (-gt2 * g - sqrt(disc)) / (1.0 + gt2);
     // a root is valid if cos theta* + g has the sign of cos theta_l
     const bool v1 = (r1 + g) * cos(thl) > 0.0 && fabs(r1) <= 1.0, v2 = (r2 + g) * cos(thl) > 0.0 && fabs(r2) <= 1.0;
@@ -773,7 +802,7 @@ bool EPoint::RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nr
     if (v1 && v2) x = (fabs(r1 - nrX) <= fabs(r2 - nrX)) ? r1 : r2;
     else if (v1) x = r1;
     else if (v2) x = r2;
-    else return false;
+    else return beyond();
   }
   x = std::max(-1.0, std::min(1.0, x));
   cmAngle = acos(x) * 180. / pi;
@@ -781,10 +810,25 @@ bool EPoint::RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nr
   return true;
 }
 
-void EPoint::ConvertLabAngle(PPair *pPair) {
-  cm_angle_ = this->GetLabAngle() + 180. / pi * asin(pPair->GetM(1) / pPair->GetM(2) * sin(pi / 180. * this->GetLabAngle()));
+bool EPoint::ConvertLabAngle(PPair *pPair) {
+  const double ratio = pPair->GetM(1) / pPair->GetM(2);
+  if (ratio > 1.0) {
+    labAngleMax_ = 180. / pi * asin(1.0 / ratio);
+    if (ratio * sin(pi / 180. * this->GetLabAngle()) > 1.0) {
+      std::ostringstream why;
+      why << "beyond the kinematic maximum " << labAngleMax_ << " deg of elastic scattering with a projectile heavier than "
+          << "the target (only the forward branch is modelled; give the point as c.m., code 4 / 5, or drop it)";
+      labAngleWhy_ = why.str();
+      return false;
+    }
+  }
+  cm_angle_ = this->GetLabAngle() + 180. / pi * asin(ratio * sin(pi / 180. * this->GetLabAngle()));
   double cmAngle, factor;
-  if (Kinematics::Relativistic() && this->RelativisticLabToCM(pPair, pPair, cm_angle_, cmAngle, factor)) cm_angle_ = cmAngle;
+  if (Kinematics::Relativistic()) {
+    if (!this->RelativisticLabToCM(pPair, pPair, cm_angle_, cmAngle, factor)) return false;  // why: set by the map
+    cm_angle_ = cmAngle;
+  }
+  return true;
 }
 
 /*!
@@ -794,20 +838,60 @@ void EPoint::ConvertLabAngle(PPair *pPair) {
  * overloaded function is for non-elastic particle channels.
  */
 
-void EPoint::ConvertLabAngle(PPair *entrancePair, PPair *exitPair, const Config &configure) {
+bool EPoint::ConvertLabAngle(PPair *entrancePair, PPair *exitPair, const Config &configure) {
+  // relativistic=1: the relativistic map (RelativisticLabToCM) decides whether the lab angle is reached and gives
+  // the c.m. angle; the Marion-Young angle below only picks the branch.  Until 2026-10-29 its non-relativistic
+  // limits decided, so a point between the two maxima was converted with the NON-relativistic angle and Jacobian
+  // without a word (7Li(p,n) at 1.90 MeV, 44.9 deg: c.m. angle off by 0.3 deg, Jacobian by 9.5 %).
+  if (Kinematics::Relativistic()) {
+    const bool nrOk = this->ConvertLabAngleNR(entrancePair, exitPair);
+    double relAngle, relFactor;
+    // no non-relativistic angle (beyond its maximum or threshold): the forward root
+    if (!this->RelativisticLabToCM(entrancePair, exitPair, nrOk ? cm_angle_ : 0.0, relAngle, relFactor)) return false;
+    cm_angle_ = relAngle;
+    angleKinFactor_ = this->GetLabAngle() / cm_angle_;
+    this->SetAngleKinFactor(angleKinFactor_);
+    return true;
+  }
+  if (!this->ConvertLabAngleNR(entrancePair, exitPair)) return false;
+  angleKinFactor_ = this->GetLabAngle() / cm_angle_;
+  this->SetAngleKinFactor(angleKinFactor_);
+  return true;
+}
+
+/*!
+ * The non-relativistic (Marion-Young) lab -> c.m. angle of a reaction exit; false below the exit threshold or
+ * beyond the maximum lab angle (labAngleWhy_, labAngleMax_), cm_angle_ otherwise.
+ */
+bool EPoint::ConvertLabAngleNR(PPair *entrancePair, PPair *exitPair) {
   double qValue = entrancePair->GetSepE() + entrancePair->GetExE() - exitPair->GetSepE() - exitPair->GetExE();
   double a13 = (entrancePair->GetM(1) * exitPair->GetM(1)) * this->GetLabEnergy() / (this->GetLabEnergy() + qValue) /
       (entrancePair->GetM(1) + entrancePair->GetM(2)) / (exitPair->GetM(1) + exitPair->GetM(2));
   double a24 = (entrancePair->GetM(2) * exitPair->GetM(2)) * (1 + entrancePair->GetM(1) / entrancePair->GetM(2) * qValue / (this->GetLabEnergy() + qValue)) /
       (entrancePair->GetM(1) + entrancePair->GetM(2)) / (exitPair->GetM(1) + exitPair->GetM(2));
 
+  // Below the threshold of the exit pair (classically E_lab + Q <= 0 in the c.m. share, i.e. a24 <= 0) there is
+  // no ejectile; the Marion-Young map then has no meaning and the sqrt below went NaN with no message.
+  if (!(this->GetLabEnergy() + qValue > 0.0) || !(a24 > 0.0)) {
+    std::ostringstream why;
+    why << "below the threshold of the exit pair (Q = " << qValue << " MeV): the lab angle cannot be converted; give "
+        << "the point as c.m. (code 4 / 5) or drop it";
+    labAngleWhy_ = why.str();
+    labAngleMax_ = 0.0;
+    return false;
+  }
   if (a13 > a24) {
-    double thetaMax = asin(sqrt(a24 / a13)) * 180. / pi;
-    if (thetaMax < this->GetLabAngle()) configure.outStream << std::endl
-                                                            << "Lab Angle (" << this->GetLabAngle()
-                                                            << " degrees) is not kinematically possible.  Maximum angle is "
-                                                            << thetaMax << " degrees." << std::endl;
-    assert(thetaMax >= this->GetLabAngle());
+    // Two c.m. angles reach every lab angle below thetaMax and none above it; only the forward branch is
+    // modelled.  The caller reports the point and stops (before 2026-10-27: a message, an assert that
+    // release builds compile out, and NaN from the sqrt below).
+    labAngleMax_ = asin(sqrt(a24 / a13)) * 180. / pi;
+    if (labAngleMax_ < this->GetLabAngle()) {
+      std::ostringstream why;
+      why << "beyond the kinematic maximum " << labAngleMax_ << " deg at this energy (two c.m. angles reach every lab "
+          << "angle below it and only the forward branch is modelled; give the point as c.m., code 4 / 5, or drop it)";
+      labAngleWhy_ = why.str();
+      return false;
+    }
   }
 
   double E3PerEt = a13 * pow(cos(this->GetLabAngle() * pi / 180.) + sqrt(a24 / a13 - pow(sin(this->GetLabAngle() * pi / 180.), 2.0)), 2.0);
@@ -818,12 +902,7 @@ void EPoint::ConvertLabAngle(PPair *entrancePair, PPair *exitPair, const Config 
 
   cm_angle_ = 180. / pi * asin(sqrt(E3PerEt / a24) * sin(this->GetLabAngle() * pi / 180.));
   if (switchDomain) cm_angle_ = 180. - cm_angle_;
-  double relAngle, relFactor;
-  if (Kinematics::Relativistic() && this->RelativisticLabToCM(entrancePair, exitPair, cm_angle_, relAngle, relFactor))
-    cm_angle_ = relAngle;
-  // define angle kin factor to convert back to lab frame
-  angleKinFactor_ = this->GetLabAngle() / cm_angle_;
-  this->SetAngleKinFactor(angleKinFactor_);
+  return true;
 }
 
 /*!
@@ -871,10 +950,13 @@ void EPoint::ConvertLabAngleGammas(PPair *entrancePair) {
 void EPoint::ConvertCrossSection(PPair *entrancePair, PPair *exitPair) {
   double conversionFactor;
   double relAngle;
-  if (Kinematics::Relativistic() && this->RelativisticLabToCM(entrancePair, exitPair, this->GetCMAngle(), relAngle, conversionFactor)) {
-    cm_crosssection_ = this->GetLabCrossSection() * conversionFactor;
-    cm_dcrosssection_ = this->GetLabCrossSectionError() * conversionFactor;
-    crossSectionKinFactor_ = conversionFactor;
+  if (Kinematics::Relativistic()) {
+    // Unreached only for a point an energy shift moved past the kinematic limit mid-fit (the angle converter
+    // warned and kept the last valid angle): keep the last valid factor too rather than a non-relativistic one.
+    if (this->RelativisticLabToCM(entrancePair, exitPair, this->GetCMAngle(), relAngle, conversionFactor))
+      crossSectionKinFactor_ = conversionFactor;
+    cm_crosssection_ = this->GetLabCrossSection() * crossSectionKinFactor_;
+    cm_dcrosssection_ = this->GetLabCrossSectionError() * crossSectionKinFactor_;
     this->SetCrossSectionKinFactor(crossSectionKinFactor_);
     return;
   }
@@ -939,8 +1021,7 @@ void EPoint::ConvertCrossSectionGammas(PPair *entrancePair) {
   //                      = (1 - beta cos theta_lab)^2 / (1 - beta^2).
   // (Before 2026-10-23 this was (1 - beta)^2/(1 - beta cos theta_lab), wrong at first order in beta: an overall
   // -2 beta and a P1-shaped 3 beta cos(theta) -- -1.9 % at 90 deg and -4.8 % at 167 deg for 12C(a,g) at 3 MeV.)
-  double beta = CMVelocity(this->GetLabEnergy(), entrancePair);
-  double conversionFactor = pow(1.0 - beta * cos(this->GetLabAngle() * pi / 180.0), 2.0) / (1.0 - beta * beta);
+  double conversionFactor = this->CalculateCrossSectionGammaConversionFactor(entrancePair);
   cm_crosssection_ = this->GetLabCrossSection() * conversionFactor;
   cm_dcrosssection_ = this->GetLabCrossSectionError() * conversionFactor;
   // the output files take the fitted c.m. cross section back to the lab with this factor (EData::WriteOutputFiles)
@@ -948,51 +1029,24 @@ void EPoint::ConvertCrossSectionGammas(PPair *entrancePair) {
   this->SetCrossSectionKinFactor(crossSectionKinFactor_);
 }
 
-/* Calculates the conversion factor for gamma rays */
+/*!
+ * The lab-to-c.m. conversion factor for gamma rays (the one ConvertCrossSectionGammas stores; also the
+ * RATIO path of ESegment::CalculateTheoreticalCrossSection).  Until 2026-10-26 this copy still had the
+ * pre-2026-10-23 formula (1 - beta)^2 / (1 - beta cos theta_lab); a gamma RATIO of one entrance pair was
+ * unaffected (the same wrong factor in numerator and denominator).
+ */
 
 double EPoint::CalculateCrossSectionGammaConversionFactor(PPair *entrancePair) {
-  double conversionFactor;
-
-  double beta = sqrt(this->GetLabEnergy() * (this->GetLabEnergy() + 2.0 * entrancePair->GetM(1) * uconv)) /
-      ((entrancePair->GetM(1) + entrancePair->GetM(2)) * uconv + this->GetLabEnergy());
-
-  conversionFactor = pow(1.0 - beta, 2.0) / (1 - beta * cos(this->GetLabAngle() * pi / 180.0));
-  return conversionFactor;
+  double beta = CMVelocity(this->GetLabEnergy(), entrancePair);
+  return pow(1.0 - beta * cos(this->GetLabAngle() * pi / 180.0), 2.0) / (1.0 - beta * beta);
 }
-
-/*!
- * Calculates Legendre polynomial coefficient reference frame correction up to a maximum order.  The factors are added, in order, to a vector.
- */
-/*
-void EPoint::ConvertLabQCoeff(int maxL, TargetEffect* targetEffect, PPair *entrancePair, PPair *exitPair) {
-  double m1=entrancePair->GetM(1);
-  double m2=entrancePair->GetM(2);
-  double m3=exitPair->GetM(1);
-  double m4=exitPair->GetM(2);
-  double e1=this->GetLabEnergy();
-  double qValue=entrancePair->GetSepE()+entrancePair->GetExE()-exitPair->GetSepE()-exitPair->GetExE();
-  double gamma = m1*m3/m2/m4*e1/(e1+qValue);
-  for (int L=0;L<=maxL;lOrder++){
-    double U=0;
-    for (int L_p=0;L_p<=maxL;L_p++){
-      if(L==L_p) U = 1.0-gamma*gamma*L_p*(L_p+1.0)*(2.0*L_p*L_p+2.0*L_p-3.0)/2.0/(2.0*L_p-1)/(2.0*L_p+3.0);
-      else if (L_p == L+1) U = 1.0*gamma*L_p*(L_p-1.0)/(2.0*L_p-1.0);
-      else if (L_p == L-1) U = -1.0*gamma*(L_p+1.0)*(L_p+2.0)/(2.0*L_p+3.0);
-      else if (L_p == L-2) U = gamma*gamma*(L_p+1.0)*(L_p+2.0)*(L_p+3.0)*(L_p+3.0)/2.0/(2.0*L_p+3.0)/(2.0*L_p+5.0);
-      else if (L_p == L+2) U = gamma*gamma*L_p*(L_p-1)*(L_p-2)*(L_p-2)/2/(2*L_p-1)/(2*L_p-3);
-    }
-    U = U*(2.0*L+1.0)/(2.0*L_p+1.0);
-    std::cout<<U<<std::endl;
-  }
-}
-*/
 
 /*!
  * Adds a Legendre polynomial to the vector.  Polynomials are added to the vector in the order as L=0,1,2,...
  */
 
 void EPoint::AddLegendreP(double polynomial) {
-  legendreP_.push_back(polynomial);
+  MutableLegendre().push_back(polynomial);
 }
 
 /*!
@@ -1001,7 +1055,11 @@ void EPoint::AddLegendreP(double polynomial) {
  */
 
 void EPoint::ClearLegendrePolynomials() {
-  legendreP_.clear();
+  // An empty list needs no copy of a shared one.
+  if (legendreP_ && legendreP_.use_count() > 1)
+    legendreP_.reset();
+  else if (legendreP_)
+    MutableLegendre().clear();
 }
 
 /*!
@@ -1108,92 +1166,132 @@ void EPoint::SetCrossSectionKinFactor(double crosssectionkinfactor) {
 }
 
 /*!
+ * Gauss-Legendre nodes and weights on [-1, 1] (Newton iteration on P_n), built once.
+ */
+namespace {
+struct GaussLegendreRule {
+  std::vector<double> x, w;
+  explicit GaussLegendreRule(int n) : x(n), w(n) {
+    for (int i = 0; i < (n + 1) / 2; i++) {
+      double z = cos(pi * (i + 0.75) / (n + 0.5)), dp = 1.0;
+      for (int it = 0; it < 100; it++) {
+        double p0 = 1.0, p1 = z;
+        for (int k = 2; k <= n; k++) {
+          const double p2 = ((2.0 * k - 1.0) * z * p1 - (k - 1.0) * p0) / k;
+          p0 = p1;
+          p1 = p2;
+        }
+        dp = n * (z * p1 - p0) / (z * z - 1.0);
+        const double dz = p1 / dp;
+        z -= dz;
+        if (fabs(dz) < 1e-15) break;
+      }
+      x[i] = -z;
+      x[n - 1 - i] = z;
+      w[i] = w[n - 1 - i] = 2.0 / ((1.0 - z * z) * dp * dp);
+    }
+  }
+};
+
+const GaussLegendreRule &QTransformRule() {
+  static const GaussLegendreRule rule(96);
+  return rule;
+}
+
+/// P_0(x) .. P_n(x) into p (size n + 1).
+void LegendreSeries(int n, double x, double *p) {
+  p[0] = 1.0;
+  if (n >= 1) p[1] = x;
+  for (int l = 2; l <= n; l++) p[l] = (2.0 * l - 1.0) / l * x * p[l - 1] - (l - 1.0) / l * p[l - 2];  // as before 2026-10-25
+}
+}  // namespace
+
+/*!
+ * Lab-frame motion of the detected particle (particle 1 of the exit pair) for the finite-geometry attenuation
+ * coefficients: with cos theta* the c.m. angle, cos theta_lab = gb (x + g) / sqrt(gb^2 (x + g)^2 + 1 - x^2) and
+ * dOmega_lab/dOmega_cm = gb (1 + g x) / (gb^2 (g + x)^2 + 1 - x^2)^(3/2).  Non-relativistic: gb = 1 and
+ * g^2 = m1 m3 E / (m2 m4 (E + Q)) (E the c.m. energy; the same g as ConvertLabAngle's a13/a24); relativistic=1:
+ * the c.m. boost gamma and beta / beta_3* of RelativisticLabToCM.  Returns false where the transform is not used.
+ */
+bool EPoint::QLabBoost(PPair *entrancePair, PPair *exitPair, double &g, double &gb) const {
+  const double ti = this->GetCMEnergy();
+  const double tf = ti + entrancePair->GetSepE() + entrancePair->GetExE() - exitPair->GetSepE() - exitPair->GetExE();
+  if (ti <= 0.0 || tf <= 0.0) return false;
+  if (Kinematics::Relativistic()) {
+    const double m1 = entrancePair->GetM(1) * uconv, m2 = entrancePair->GetM(2) * uconv;
+    const double m3 = exitPair->GetM(1) * uconv, m4 = exitPair->GetM(2) * uconv;
+    const double e1 = Kinematics::LabFromCM(m1, m2, ti);
+    const double sqrtS = m1 + m2 + ti, eTot = e1 + m1 + m2;
+    const double beta = sqrt(e1 * (e1 + 2.0 * m1)) / eTot;
+    const double pf = Kinematics::K(m3, m4, tf) * hbarc, e3 = sqrt(m3 * m3 + pf * pf);
+    g = beta / (pf / e3);
+    gb = eTot / sqrtS;
+  } else {
+    g = sqrt(entrancePair->GetM(1) * exitPair->GetM(1) * ti / (entrancePair->GetM(2) * exitPair->GetM(2) * tf));
+    gb = 1.0;
+  }
+  return std::isfinite(g) && g < 1.0;
+}
+
+/*!
  * Calculates Legendre polynomials up to a maximum order.  The polynomials are added, in order, to a vector.
+ *
+ * With attenuation coefficients Q_K (finite detector geometry, M. E. Rose, Phys. Rev. 91, 610 (1953)) the stored
+ * factors become the coefficients of the R-matrix's c.m. Legendre coefficients c_L in the measured quantity:
+ * - photon exits, UPOS (the detected radiation is the secondary gamma ray), analyzing powers, non-particle entrances
+ *   and charged-particle elastic scattering: P_L(x) Q_L, Q as entered (for elastic scattering the Coulomb amplitude is
+ *   not a finite Legendre series, so the lab transform below does not apply; Q on such data stays an approximation);
+ * - a particle exit otherwise: the detector averages the LAB angular distribution, so Q_K multiplies its LAB Legendre
+ *   coefficients b_K = sum_L M_KL c_L, M_KL = (2K+1)/2 int dx P_K(x_lab(x)) P_L(x) (x the c.m. cosine; the lab and c.m.
+ *   solid-angle elements cancel).  Back at the point's c.m. angle, with J = dOmega_lab/dOmega_cm,
+ *     factor_L = P_L(x) + J sum_{K < nQ} (Q_K - 1) M_KL P_K(x_lab),
+ *   exact for Q_K = 1 beyond the coefficients given; Q_K = 1 for every K gives P_L(x).
+ * Before 2026-10-25 the particle-exit case multiplied P_L by B = U Q, U an O(gamma^2) lab -> c.m. coefficient matrix
+ * evaluated at gamma^2 instead of gamma: B is not the attenuation of the lab distribution (it changed the result even
+ * with every Q_K = 1), a non-particle entrance gave every factor 0, and more than maxL coefficients read past the end.
  */
 
 void EPoint::CalcLegendreP(int maxL, CNuc *theCNuc, TargetEffect *targetEffect) {
-  std::vector<double> Qcm(maxL, 0.0);
-  // double Qcm[maxL]={1.0};
-  if (targetEffect && targetEffect->NumQCoefficients() > 0 && theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()))->GetPType() == 0) {
-    PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
-    PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
-    double m1 = entrancePair->GetM(1);
-    double m2 = entrancePair->GetM(2);
-    double m3 = exitPair->GetM(1);
-    double m4 = exitPair->GetM(2);
-    double e1 = this->GetLabEnergy();
-    double qValue = entrancePair->GetSepE() + entrancePair->GetExE() - exitPair->GetSepE() - exitPair->GetExE();
-    double gamma = m1 * m3 / m2 / m4 * e1 / (e1 + qValue);
-    // UPOS: the detected radiation is the secondary gamma ray, not the exit particle, so the exit particle's
-    // lab -> c.m. transformation of the attenuation coefficients does not apply; Q is used as given.
-    if (this->IsUPOS()) gamma = 0.0;
-    int numQ = targetEffect->NumQCoefficients();
-    std::vector<std::vector<double>> U(numQ, std::vector<double>(numQ, 0.0));
-    // double U[numQ][numQ]={0.0};
-    for (int lOrder = 0; lOrder < numQ; lOrder++) {
-      for (int lOrder_p = 0; lOrder_p < numQ; lOrder_p++) {
-        double tempU = 0.0;
-        if (lOrder_p == lOrder)
-          tempU = 1.0 - gamma * gamma * lOrder_p * (lOrder_p + 1.0) * (2.0 * lOrder_p * lOrder_p + 2.0 * lOrder_p - 3.0) / 2.0 / (2.0 * lOrder_p - 1) / (2.0 * lOrder_p + 3.0);
-        else if (lOrder_p == lOrder + 1)
-          tempU = 1.0 * gamma * lOrder_p * (lOrder_p - 1.0) / (2.0 * lOrder_p - 1.0);
-        else if (lOrder_p == lOrder - 1)
-          tempU = -1.0 * gamma * (lOrder_p + 1.0) * (lOrder_p + 2.0) / (2.0 * lOrder_p + 3.0);
-        else if (lOrder_p == lOrder - 2)
-          tempU = gamma * gamma * (lOrder_p + 1.0) * (lOrder_p + 2.0) * (lOrder_p + 3.0) * (lOrder_p + 3.0) / 2.0 / (2.0 * lOrder_p + 3.0) / (2.0 * lOrder_p + 5.0);
-        else if (lOrder_p == lOrder + 2)
-          tempU = gamma * gamma * lOrder_p * (lOrder_p - 1.0) * (lOrder_p - 2.0) * (lOrder_p - 2.0) / 2.0 / (2.0 * lOrder_p - 1.0) / (2.0 * lOrder_p - 3.0);
-        else
-          tempU = 0.0;
-        U[lOrder][lOrder_p] = tempU * (2.0 * lOrder + 1.0) / (2.0 * lOrder_p + 1.0);
-        //        std::cout<<"test"<<std::endl;
-      }
-    }
-    std::vector<double> B(numQ, 0.0);
-    // double B[numQ] = {0.0};
-    for (int lOrder = 0; lOrder < numQ; lOrder++) {
-      for (int lOrder_p = 0; lOrder_p < numQ; lOrder_p++) {
-        B[lOrder] += U[lOrder][lOrder_p] * targetEffect->GetQCoefficient(lOrder_p);
-      }
-      //      std::cout<<"B = " << B[lOrder] <<", Q = "<<targetEffect->GetQCoefficient(lOrder)<<" numQ = "<<numQ<<std::endl;
-    }
-    for (int lOrder = 0; lOrder < maxL; lOrder++) {
-      if (lOrder < numQ) {
-        Qcm[lOrder] = B[lOrder];
-        // std::cout<<Qcm[lOrder]<<std::endl;
-      } else {
-        Qcm[lOrder] = 1.;
-        // std::cout<<Qcm[lOrder]<<std::endl;
-      }
-    }
-  }
-
-  double x = cos(this->GetCMAngle() * pi / 180.0);
   if (maxL >= 0) {
-    if (targetEffect && targetEffect->NumQCoefficients() > 0)
-      this->AddLegendreP(Qcm[0]);
-    else
-      this->AddLegendreP(1.0);
-    double polyMinusTwo = 1.0;
-    if (maxL >= 1) {
-      if (targetEffect && targetEffect->NumQCoefficients() > 1)
-        this->AddLegendreP(x * Qcm[1]);
-      else
-        this->AddLegendreP(x);
-      double polyMinusOne = x;
-      if (maxL >= 2) {
-        for (int lOrder = 2; lOrder <= maxL; lOrder++) {
-          double poly = (2.0 * lOrder - 1.0) / lOrder * x * polyMinusOne -
-              (lOrder - 1.0) / lOrder * polyMinusTwo;
-          if (targetEffect && targetEffect->NumQCoefficients() > lOrder)
-            this->AddLegendreP(poly * Qcm[lOrder]);
-          else
-            this->AddLegendreP(poly);
-          polyMinusTwo = polyMinusOne;
-          polyMinusOne = poly;
+    std::vector<double> p(maxL + 1);
+    const double x = cos(this->GetCMAngle() * pi / 180.0);
+    LegendreSeries(maxL, x, p.data());
+    const int numQ = targetEffect ? targetEffect->NumQCoefficients() : 0;
+    if (numQ > 0) {
+      PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
+      PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
+      const bool elastic = this->GetEntranceKey() == this->GetExitKey();
+      const bool charged = entrancePair->GetZ(1) != 0 && entrancePair->GetZ(2) != 0;
+      double g = 0.0, gb = 1.0;
+      const bool labTransform = entrancePair->GetPType() == 0 && exitPair->GetPType() == 0 && !this->IsUPOS() &&
+          !this->IsAnalyzingPower() && !(elastic && charged) && this->QLabBoost(entrancePair, exitPair, g, gb);
+      if (!labTransform) {
+        for (int l = 0; l <= maxL && l < numQ; l++) p[l] *= targetEffect->GetQCoefficient(l);
+      } else {
+        const GaussLegendreRule &rule = QTransformRule();
+        const int n = static_cast<int>(rule.x.size());
+        auto toLab = [g, gb](double c) { return gb * (c + g) / sqrt(gb * gb * (c + g) * (c + g) + 1.0 - c * c); };
+        const double jac = gb * (1.0 + g * x) / pow(gb * gb * (g + x) * (g + x) + 1.0 - x * x, 1.5);
+        std::vector<double> pc((maxL + 1) * n), pl(numQ * n), pK(numQ);
+        for (int i = 0; i < n; i++) {
+          LegendreSeries(maxL, rule.x[i], &pc[i * (maxL + 1)]);
+          LegendreSeries(numQ - 1, toLab(rule.x[i]), &pl[i * numQ]);
         }
+        LegendreSeries(numQ - 1, toLab(x), pK.data());
+        std::vector<double> add(maxL + 1, 0.0);
+        for (int K = 0; K < numQ; K++) {
+          const double dq = targetEffect->GetQCoefficient(K) - 1.0;
+          if (dq == 0.0) continue;
+          const double f = jac * dq * pK[K] * (2.0 * K + 1.0) / 2.0;
+          for (int i = 0; i < n; i++) {
+            const double wk = f * rule.w[i] * pl[i * numQ + K];
+            for (int l = 0; l <= maxL; l++) add[l] += wk * pc[i * (maxL + 1) + l];
+          }
+        }
+        for (int l = 0; l <= maxL; l++) p[l] += add[l];
       }
     }
+    for (int l = 0; l <= maxL; l++) this->AddLegendreP(p[l]);
   }
   for (int i = 1; i <= this->NumSubPoints(); i++) {
     this->GetSubPoint(i)->CalcLegendreP(maxL, theCNuc, targetEffect);
@@ -1208,7 +1306,7 @@ void EPoint::CalcLegendreP(int maxL, CNuc *theCNuc, TargetEffect *targetEffect) 
  * and hard sphere phase shfits.
  */
 
-void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool includeSubPoints) {
+void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool includeSubPoints, bool shareWithMapped) {
   AZUREProfile::Timer profileTimer(AZUREProfile::kEDependent);
   PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
   PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
@@ -1251,13 +1349,13 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
             // Exactly at the channel's threshold (the entrance channel of a scattering length):
             // the E -> 0 limit, P = 0 and S_l(0) from the zero-energy Coulomb solutions, in
             // place of the Whittaker log-derivative at zero binding, which is ill-conditioned.
-            complex loElement(ScatteringLength::ZeroEnergyShift(thePair, lValue) - theChannel->GetBoundaryCondition(), 0.0);
+            complex loElement(ScatteringLength::ZeroEnergyShift(thePair, theChannel->GetRadius(), lValue) - theChannel->GetBoundaryCondition(), 0.0);
             this->AddLoElement(j, ch, loElement);
             this->AddSqrtPenetrability(j, ch, 0.0);
             this->AddExpCoulombPhase(j, ch, 1.0);
             this->AddExpHardSpherePhase(j, ch, 1.0);
           } else if (localEnergy < 0.0) {
-            ShftFunc theShiftFunction(thePair);
+            ShftFunc theShiftFunction(thePair, theChannel->GetRadius());
             double localShift = theShiftFunction(lValue, inEnergy);
             double boundary = theChannel->GetBoundaryCondition();
             complex loElement(localShift - boundary, 0.0);
@@ -1274,7 +1372,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
             //	    }
           } else {
             CoulFunc theCoulombFunction(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-            double radius = thePair->GetChRad();
+            double radius = theChannel->GetRadius();
             double localPene = theCoulombFunction.Penetrability(lValue, radius, localEnergy);
             double localShift = theCoulombFunction.PEShift(lValue, radius, localEnergy);
             double boundary = theChannel->GetBoundaryCondition();
@@ -1312,7 +1410,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
           this->AddLoElement(j, ch, loElement);
           IntegratedFermiFunc fermiFunc(thePair->GetZ(1));
           double endPointE = thePair->GetSepE() - inEnergy;
-          double sqrtPene = (1. + endPointE / 0.510998903 <= 1.) ? 0. : sqrt(fermiFunc(1. + endPointE / 0.510998903, exitPair->GetZ(1) + exitPair->GetZ(2), thePair->GetChRad()));
+          double sqrtPene = (1. + endPointE / 0.510998903 <= 1.) ? 0. : sqrt(fermiFunc(1. + endPointE / 0.510998903, exitPair->GetZ(1) + exitPair->GetZ(2), thePair->GetPairRadius()));
           this->AddSqrtPenetrability(j, ch, sqrtPene);
           this->AddExpCoulombPhase(j, ch, 1.0);
           this->AddExpHardSpherePhase(j, ch, 1.0);
@@ -1320,30 +1418,41 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
       }
     }
   }
+  // The rows grew channel by channel (push_back): give back the spare capacity,
+  // about a quarter of the tables' memory (natural neon: 2.3 GB of 9.6 GB).  A
+  // point is filled here once per energy (setup, grid re-placement); the shift
+  // step refills its rows in place every evaluation and keeps their capacity.
+  if (edep_ && edep_.use_count() == 1) {
+    EDependentTables &t = MutableEDep();
+    t.ShrinkToFit();
+  }
   if (includeSubPoints) {
     for (int i = 1; i <= this->NumSubPoints(); i++) {
       this->GetSubPoint(i)->CalcEDependentValues(theCNuc, configure);
     }
   }
-  for (int i = 1; i <= this->NumLocalMappedPoints(); i++) {
+  // The points mapped onto this one share its tables -- at setup and on a grid
+  // re-placement, where nothing else writes them meanwhile.  Not on an energy
+  // shift (RecalcEDependentValues, shareWithMapped false): there every mapped
+  // point is re-energised by its own segment, a point mapped from another
+  // segment possibly on another thread at the same moment
+  // (EData::FillEnergyShiftsFromParams), and two threads assigning the same
+  // shared_ptr freed the tables under the other's copy-on-write
+  // (heap-use-after-free, AddressSanitizer 2026-11-06; macOS CI aborts).
+  for (int i = 1; shareWithMapped && i <= this->NumLocalMappedPoints(); i++) {
     EPoint *mappedPoint = this->GetLocalMappedPoint(i);
+    if (mappedPoint->OwnsEDependentValues()) continue;
     mappedPoint->geofactor_ = geofactor_;
     mappedPoint->sfactorconv_ = sfactorconv_;
     mappedPoint->screen_k_ = screen_k_;
-    mappedPoint->lo_elements_ = lo_elements_;
-    mappedPoint->penetrabilities_ = penetrabilities_;
-    mappedPoint->coulombphase_ = coulombphase_;
-    mappedPoint->hardspherephase_ = hardspherephase_;
+    mappedPoint->edep_ = edep_;  // shared; either point copies before it writes
     if (!includeSubPoints) continue;
     for (int ii = 1; ii <= this->NumSubPoints(); ii++) {
       EPoint *subMappedPoint = mappedPoint->GetSubPoint(ii);
       subMappedPoint->geofactor_ = this->GetSubPoint(ii)->geofactor_;
       subMappedPoint->sfactorconv_ = this->GetSubPoint(ii)->sfactorconv_;
       subMappedPoint->screen_k_ = this->GetSubPoint(ii)->screen_k_;
-      subMappedPoint->lo_elements_ = this->GetSubPoint(ii)->lo_elements_;
-      subMappedPoint->penetrabilities_ = this->GetSubPoint(ii)->penetrabilities_;
-      subMappedPoint->coulombphase_ = this->GetSubPoint(ii)->coulombphase_;
-      subMappedPoint->hardspherephase_ = this->GetSubPoint(ii)->hardspherephase_;
+      subMappedPoint->edep_ = this->GetSubPoint(ii)->edep_;
     }
   }
   eDependentEnergy_ = this->GetCMEnergy();
@@ -1354,10 +1463,20 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
  * Empties the per-JGroup rows of the energy-dependent arrays, keeping their storage.
  */
 void EPoint::ClearEDependentRows() {
-  for (auto &row : lo_elements_) row.clear();
-  for (auto &row : penetrabilities_) row.clear();
-  for (auto &row : coulombphase_) row.clear();
-  for (auto &row : hardspherephase_) row.clear();
+  if (!edep_) return;
+  if (edep_.use_count() > 1) {
+    // Shared with another point: start a table of our own with the same rows,
+    // empty, rather than copying values that are about to be replaced.
+    auto own = std::make_shared<EDependentTables>();
+    own->rowStart.reserve(edep_->rowStart.size());
+    own->lo_elements.reserve(edep_->lo_elements.size());
+    own->penetrabilities.reserve(edep_->penetrabilities.size());
+    own->coulombphase.reserve(edep_->coulombphase.size());
+    own->hardspherephase.reserve(edep_->hardspherephase.size());
+    edep_ = std::move(own);
+    return;
+  }
+  MutableEDep().Clear();  // our own: emptied in place, keeping its storage
 }
 
 /*!
@@ -1392,11 +1511,84 @@ void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config &configure, bool
   if (includeSubPoints)
     for (int i = 1; i <= this->NumSubPoints(); i++) this->GetSubPoint(i)->ClearEDependentRows();
 
-  // Recalculate with current energy
-  this->CalcEDependentValues(theCNuc, configure, includeSubPoints);
+  // Recalculate with current energy.  The points mapped onto this one are not
+  // touched: each is re-energised itself, from its host's values
+  // (CopyEDependentValuesFrom) or anew (ESegment::UpdatePointEnergyWithShift).
+  this->CalcEDependentValues(theCNuc, configure, includeSubPoints, false);
 
   // Also recalculate Coulomb amplitude with current energy
   this->CalcCoulombAmplitude(theCNuc, includeSubPoints);
+}
+
+/*!
+ * This point's energy-dependent tables, writable.  The tables are shared
+ * between copies of the point (EData clones, the points mapped onto it); if
+ * another point still holds them, this point gets its own copy first, so a
+ * write never changes what another point -- another thread's clone -- reads.
+ * The object behind edep_ is always created non-const here, so the const_cast
+ * below is well defined.
+ */
+
+EPoint::EDependentTables &EPoint::MutableEDep() {
+  if (!edep_)
+    edep_ = std::make_shared<EDependentTables>();
+  else if (edep_.use_count() > 1)
+    edep_ = std::make_shared<EDependentTables>(*edep_);
+  return const_cast<EDependentTables &>(*edep_);
+}
+
+/*!
+ * This point's Legendre polynomials, writable (copy-on-write, as MutableEDep).
+ */
+
+vector_r &EPoint::MutableLegendre() {
+  if (!legendreP_)
+    legendreP_ = std::make_shared<vector_r>();
+  else if (legendreP_.use_count() > 1)
+    legendreP_ = std::make_shared<vector_r>(*legendreP_);
+  return const_cast<vector_r &>(*legendreP_);
+}
+
+/*!
+ * The point's energy-dependent values (CalcEDependentValues, CalcLegendreP) as
+ * a share: the tables by pointer, the scalars by value.
+ */
+
+EPoint::EDependentShare EPoint::ShareEDependentValues() const {
+  EDependentShare share;
+  share.energy = this->GetCMEnergy();
+  share.angle = this->GetCMAngle();
+  share.entranceKey = this->GetEntranceKey();
+  share.exitKey = this->GetExitKey();
+  share.geofactor = geofactor_;
+  share.sfactorconv = sfactorconv_;
+  share.screen_k = screen_k_;
+  if (eDependentValid_ && eDependentEnergy_ == this->GetCMEnergy()) {  // else empty: AdoptEDependentValues refuses it
+    share.tables = edep_;
+    share.legendre = legendreP_;
+  }
+  return share;
+}
+
+/*!
+ * Takes the values of a share made by a point at exactly the same c.m. energy,
+ * c.m. angle and pairs -- what CalcEDependentValues and CalcLegendreP would have
+ * computed here.  Returns false, and changes nothing, if any of them differ or
+ * the share is empty.
+ */
+
+bool EPoint::AdoptEDependentValues(const EDependentShare &share) {
+  if (!share.tables || !share.legendre || share.energy != this->GetCMEnergy() || share.angle != this->GetCMAngle() ||
+      share.entranceKey != this->GetEntranceKey() || share.exitKey != this->GetExitKey())
+    return false;
+  geofactor_ = share.geofactor;
+  sfactorconv_ = share.sfactorconv;
+  screen_k_ = share.screen_k;
+  edep_ = share.tables;
+  legendreP_ = share.legendre;
+  eDependentEnergy_ = this->GetCMEnergy();
+  eDependentValid_ = true;
+  return true;
 }
 
 /*!
@@ -1415,10 +1607,7 @@ bool EPoint::CopyEDependentValuesFrom(const EPoint &other) {
   geofactor_ = other.geofactor_;
   sfactorconv_ = other.sfactorconv_;
   screen_k_ = other.screen_k_;
-  lo_elements_ = other.lo_elements_;
-  penetrabilities_ = other.penetrabilities_;
-  coulombphase_ = other.coulombphase_;
-  hardspherephase_ = other.hardspherephase_;
+  edep_ = other.edep_;  // shared; either point copies before it writes
   eDependentEnergy_ = other.eDependentEnergy_;
   eDependentValid_ = true;
   return true;
@@ -1430,10 +1619,8 @@ bool EPoint::CopyEDependentValuesFrom(const EPoint &other) {
  */
 
 void EPoint::AddLoElement(int jGroupNum, int channelNum, complex loElement) {
-  vector_c d;
-  while (jGroupNum > lo_elements_.size()) lo_elements_.push_back(d);
-  lo_elements_[jGroupNum - 1].push_back(loElement);
-  assert(channelNum = lo_elements_[jGroupNum - 1].size());
+  EDependentTables &t = MutableEDep();
+  EDependentTables::Put(t.lo_elements, t.Slot(jGroupNum, channelNum), loElement);
 }
 
 /*!
@@ -1442,10 +1629,8 @@ void EPoint::AddLoElement(int jGroupNum, int channelNum, complex loElement) {
  */
 
 void EPoint::AddSqrtPenetrability(int jGroupNum, int channelNum, double sqrtPene) {
-  vector_r d;
-  while (jGroupNum > penetrabilities_.size()) penetrabilities_.push_back(d);
-  penetrabilities_[jGroupNum - 1].push_back(sqrtPene);
-  assert(channelNum = penetrabilities_[jGroupNum - 1].size());
+  EDependentTables &t = MutableEDep();
+  EDependentTables::Put(t.penetrabilities, t.Slot(jGroupNum, channelNum), sqrtPene);
 }
 
 /*!
@@ -1454,10 +1639,8 @@ void EPoint::AddSqrtPenetrability(int jGroupNum, int channelNum, double sqrtPene
  */
 
 void EPoint::AddExpCoulombPhase(int jGroupNum, int channelNum, complex expShift) {
-  vector_c d;
-  while (jGroupNum > coulombphase_.size()) coulombphase_.push_back(d);
-  coulombphase_[jGroupNum - 1].push_back(expShift);
-  assert(channelNum = coulombphase_[jGroupNum - 1].size());
+  EDependentTables &t = MutableEDep();
+  EDependentTables::Put(t.coulombphase, t.Slot(jGroupNum, channelNum), expShift);
 }
 
 /*!
@@ -1466,10 +1649,8 @@ void EPoint::AddExpCoulombPhase(int jGroupNum, int channelNum, complex expShift)
  */
 
 void EPoint::AddExpHardSpherePhase(int jGroupNum, int channelNum, complex expShift) {
-  vector_c d;
-  while (jGroupNum > hardspherephase_.size()) hardspherephase_.push_back(d);
-  hardspherephase_[jGroupNum - 1].push_back(expShift);
-  assert(channelNum = hardspherephase_[jGroupNum - 1].size());
+  EDependentTables &t = MutableEDep();
+  EDependentTables::Put(t.hardspherephase, t.Slot(jGroupNum, channelNum), expShift);
 }
 
 /*!
@@ -1550,7 +1731,9 @@ static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, PPair 
   for (int ll = 1; ll <= theECMGroup->GetL(); ll++)
     expCP *= complex((double)ll / sqrt(pow((double)ll, 2.0) + pow(eta, 2.0)),
                      eta / sqrt(pow((double)ll, 2.0) + pow(eta, 2.0)));
-  complex expHSP = theCoulombFunction.HardSpherePhase(theECMGroup->GetL(), entrancePair->GetChRad(), cmEnergy);
+  // the entrance channel's own hard-sphere phase: its radius may differ from the pair's (<channelRadii>)
+  complex expHSP = theCoulombFunction.HardSpherePhase(
+      theECMGroup->GetL(), entrancePair->GetChRad(theECMGroup->GetL(), theKGroup->GetS(), theECMGroup->GetJ()), cmEnergy);
 
   double sqrtGammaPene = pow((inEnergy - levelEnergy) / hbarc, theECMGroup->GetMult() + 0.5);
 
@@ -1569,13 +1752,14 @@ static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, PPair 
 
   complex integrals;
   if (configure.useECTable) {
-    integrals = ECTable::Integral(theFinalPair, configure, theInitialLValue, theFinalChannel->GetL(),
+    // initial and final channel share the radius (CNuc::CheckChannelRadii refuses otherwise)
+    integrals = ECTable::Integral(theFinalPair, theFinalChannel->GetRadius(), configure, theInitialLValue, theFinalChannel->GetL(),
                                   theInitialSValue, theFinalChannel->GetS(),
                                   theECMGroup->GetJ(), theCNuc->GetJGroup(j)->GetJ(),
                                   theECMGroup->GetMult(), theECMGroup->GetRadType(),
                                   inEnergy, levelEnergy, theECMGroup->IsChannelCapture());
   } else {
-    ECIntegral theECIntegral(theFinalPair, configure);
+    ECIntegral theECIntegral(theFinalPair, theFinalChannel->GetRadius(), configure);
     integrals = theECIntegral(theInitialLValue, theFinalChannel->GetL(),
                               theInitialSValue, theFinalChannel->GetS(),
                               theECMGroup->GetJ(), theCNuc->GetJGroup(j)->GetJ(),
@@ -1652,8 +1836,9 @@ void EPoint::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude,
     key.segmentKey = segment_key_;
     g_ecAmplitudeCache->AddAmplitude(key, energy, ecAmplitude);
 
-    // Now get the interpolated amplitude from the cache to replace the stored value if ecAmplitudes is 0 or NaN
-    if (std::isnan(std::real(ecAmplitude)) || std::isnan(std::imag(ecAmplitude))) {
+    // A non-finite amplitude (never cached, see ECAmplitudeCache::AddAmplitude) is replaced by the value
+    // interpolated from the neighbouring cached energies.
+    if (!std::isfinite(std::real(ecAmplitude)) || !std::isfinite(std::imag(ecAmplitude))) {
       std::cout << "WARNING: Replacing EC Amplitude with interpolated value from cache for kGroup "
                 << kGroupNum << ", ecMGroup " << ecMGroupNum
                 << " at energy " << energy << " MeV." << std::endl;
@@ -1692,7 +1877,35 @@ ScopedPointMappingOff::ScopedPointMappingOff() : previous_(tlPointMappingOff) { 
 ScopedPointMappingOff::~ScopedPointMappingOff() { tlPointMappingOff = previous_; }
 bool ScopedPointMappingOff::Active() { return tlPointMappingOff; }
 
+void EPoint::MarkFailed(const char *role, const Config &configure, const char *why) {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  this->SetFitCrossSection(nan);
+  this->SetFitE1CrossSection(nan);
+  this->SetFitE2CrossSection(nan);
+  for (int i = 1; i <= this->NumLocalMappedPoints(); i++) {
+    EPoint *mapped = this->GetLocalMappedPoint(i);
+    mapped->SetFitCrossSection(nan);
+    mapped->SetFitE1CrossSection(nan);
+    mapped->SetFitE2CrossSection(nan);
+  }
+  static std::atomic<bool> reported(false);
+  if (!reported.exchange(true)) {
+#pragma omp critical(azure_failed_point)
+    configure.outStream << "WARNING: the calculation failed at segment " << this->GetSegmentKey() << " (" << role
+                        << "), E_lab " << this->GetLabEnergy() << " MeV, angle " << this->GetLabAngle() << " deg: " << why
+                        << "  The point is NaN (further failures are not reported)." << std::endl;
+  }
+}
+
 void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, int subPointNum) {
+  // Test hook (tests/pyazr/failed_point_test.py): AZURE_TEST_FAIL_E=<lab energy, MeV> makes the calculation of a
+  // data or test point at that energy throw, AZURE_TEST_FAIL_EXIT=<pair key> only for that exit pair, so the
+  // handling of a failed point (ESegment::CalculateTheoreticalCrossSection) can be exercised.
+  static const double testFailE = [] { const char *v = std::getenv("AZURE_TEST_FAIL_E"); return v ? std::atof(v) : -1.0; }();
+  static const int testFailExit = [] { const char *v = std::getenv("AZURE_TEST_FAIL_EXIT"); return v ? std::atoi(v) : 0; }();
+  if (testFailE >= 0.0 && !parent && std::fabs(this->GetLabEnergy() - testFailE) <= 1e-9 * std::max(1.0, testFailE) &&
+      (testFailExit == 0 || this->GetExitKey() == testFailExit))
+    throw std::runtime_error("injected failure (AZURE_TEST_FAIL_E).");
   // Points mapped onto this one (EData::MapData), unless mapping is switched
   // off on this thread (ScopedPointMappingOff).
   const int numMapped = ScopedPointMappingOff::Active() ? 0 : this->NumLocalMappedPoints();
@@ -1719,20 +1932,30 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
     theMatrixFunc->InvertMatrices();
     theMatrixFunc->CalculateTMatrix(this);
     theMatrixFunc->CalculateCrossSection(this);
+    // A mapped point may have another exit pair (a component of a SUM, RATIO or total-capture segment, EData::MapData):
+    // the solved level matrix is the same, only its T-matrix is built anew.  Mapped points are ordered by exit, so
+    // each exit's T-matrix is built once.
+    int tExitKey = this->GetExitKey();
+    auto mappedCrossSection = [&](EPoint *mapped) {
+      if (mapped->GetExitKey() != tExitKey) {
+        theMatrixFunc->RecalculateTMatrix(mapped);
+        tExitKey = mapped->GetExitKey();
+      }
+      theMatrixFunc->CalculateCrossSection(mapped);
+    };
     if (subPointNum && parent) {
       const int numParentMapped = ScopedPointMappingOff::Active() ? 0 : parent->NumLocalMappedPoints();
-      for (int i = 1; i <= numParentMapped; i++) {
-        EPoint *mappedSubPoint = parent->GetLocalMappedPoint(i)->GetSubPoint(subPointNum);
-        theMatrixFunc->CalculateCrossSection(mappedSubPoint);
-      }
+      for (int i = 1; i <= numParentMapped; i++)
+        mappedCrossSection(parent->GetLocalMappedPoint(i)->GetSubPoint(subPointNum));
     } else {
-      for (int i = 1; i <= numMapped; i++) {
-        EPoint *mappedPoint = this->GetLocalMappedPoint(i);
-        theMatrixFunc->CalculateCrossSection(mappedPoint);
-      }
+      for (int i = 1; i <= numMapped; i++) mappedCrossSection(this->GetLocalMappedPoint(i));
     }
   } else {
     TargetEffect *effect = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
+    if (effect->IsTargetIntegration() && !effect->IsThickTarget()) {
+      this->CalculateThinTarget(theCNuc, configure, effect);
+      return;
+    }
     const double blend = this->GetTargetBlendWeight();
     const double autoTol = effect->GetAutoTolerance();
     const bool hasMapped = numMapped > 0;
@@ -1838,6 +2061,76 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
 }
 
 /*!
+ * The sub-point stage of a thin-target integration.  Unlike the other kernels it falls back to sigma at the
+ * depth-averaged energy E_bar = E - D (IsTargetFallbackOnly), never to a plain point at the data energy: the data
+ * of a target integration carry the beam energy, and sigma(E_beam) is off by the centroid shift ~Delta/2 (13C+a
+ * ND2021r with windows around the narrow levels: chi2 420,221 against 402,111 integrated everywhere, 2026-11-05).
+ *  - outside every window: the one to three fallback sub-points, then the kernel (which returns sigma(E_bar));
+ *  - at a window edge: the full grid, blended with sigma(E_bar) inside the kernel;
+ *  - automatic tolerance: the first and last sub-points and the two around E_bar first; if the chord between
+ *    the end nodes stays within the tolerance of sigma(E_bar) (a curvature bound, about three times the error of
+ *    sigma(E_bar) for a box), sigma(E_bar) is used and no other sub-point is evaluated.
+ */
+void EPoint::CalculateThinTarget(CNuc *theCNuc, const Config &configure, TargetEffect *effect) {
+  const int numMapped = ScopedPointMappingOff::Active() ? 0 : this->NumLocalMappedPoints();
+  const bool hasMapped = numMapped > 0;
+  const int n = this->NumSubPoints();
+  auto calcSub = [&](int i) {
+    EPoint *subPoint = this->GetSubPoint(i);
+    if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) subPoint->RecalcEDependentValues(theCNuc, configure);
+    if (hasMapped)
+      subPoint->Calculate(theCNuc, configure, this, i);
+    else
+      subPoint->Calculate(theCNuc, configure);
+  };
+  auto integrateAll = [&]() {
+    this->IntegrateTargetEffectForObservable(configure);
+    for (int m = 1; m <= numMapped; m++) this->GetLocalMappedPoint(m)->IntegrateTargetEffectForObservable(configure);
+  };
+  const double autoTol = effect->GetAutoTolerance();
+  if (autoTol > 0. && !target_fallback_only_ && n >= 4) {
+    const double eBar = this->GetCMEnergy() - target_fallback_depth_;
+    int jb = 1;  // the sub-points jb, jb + 1 bracket E_bar (descending energies)
+    for (int j = 1; j < n; j++)
+      if (this->GetSubPoint(j + 1)->GetCMEnergy() <= eBar) { jb = j; break; }
+    if (eBar <= this->GetSubPoint(n)->GetCMEnergy()) jb = n - 1;
+    const int probes[4] = {1, jb, jb + 1, n};
+    std::vector<bool> done(n + 1, false);
+    for (int k = 0; k < 4; k++)
+      if (!done[probes[k]]) { calcSub(probes[k]); done[probes[k]] = true; }
+    const double eF = this->GetSubPoint(1)->GetCMEnergy(), eL = this->GetSubPoint(n)->GetCMEnergy();
+    const double ea = this->GetSubPoint(jb)->GetCMEnergy(), eb = this->GetSubPoint(jb + 1)->GetCMEnergy();
+    const double tChord = (eF > eL) ? (eF - eBar) / (eF - eL) : 0.0;
+    const double tBar = (ea > eb) ? std::min(std::max((ea - eBar) / (ea - eb), 0.0), 1.0) : 0.0;
+    bool allPass = true;
+    for (int m = 0; m <= numMapped && allPass; m++) {
+      EPoint *host = (m == 0) ? this : this->GetLocalMappedPoint(m);
+      const double sF = host->GetSubPoint(1)->GetFitCrossSection(), sL = host->GetSubPoint(n)->GetFitCrossSection();
+      const double sBar = (1.0 - tBar) * host->GetSubPoint(jb)->GetFitCrossSection() +
+                          tBar * host->GetSubPoint(jb + 1)->GetFitCrossSection();
+      const double chord = (1.0 - tChord) * sF + tChord * sL;
+      if (std::fabs(chord - sBar) > autoTol * std::max(std::fabs(sBar), 1e-300)) allPass = false;
+    }
+    if (allPass) {
+      // sigma(E_bar) from the two bracketing sub-points, through the one integrator (A_y, coefficients and
+      // capture components keep their own combinations)
+      EPoint::TargetFallbackScope self(this);
+      std::vector<std::unique_ptr<EPoint::TargetFallbackScope>> mapped;
+      for (int m = 1; m <= numMapped; m++)
+        mapped.emplace_back(new EPoint::TargetFallbackScope(this->GetLocalMappedPoint(m)));
+      integrateAll();
+      return;
+    }
+    for (int i = 1; i <= n; i++)
+      if (!done[i]) calcSub(i);
+    integrateAll();
+    return;
+  }
+  for (int i = 1; i <= n; i++) calcSub(i);
+  integrateAll();
+}
+
+/*!
  * A segment compared against the E1 or E2 component of an angle-integrated
  * capture cross section (isDiff 5/6) reads that component off the parent
  * point, which a sub-point integration never filled: only the total was
@@ -1882,6 +2175,27 @@ void EPoint::IntegrateTargetEffectComponents(const Config &configure) {
  * only one integration scheme to maintain.
  */
 void EPoint::IntegrateTargetEffectForObservable(const Config &configure) {
+  if (this->IsCoefficient() && !this->GetCoefficientAbsolute()) {
+    // A normalised Legendre coefficient is a ratio like A_y: the absolute A_k = a_k A_0
+    // and A_0 are each folded with the integrator (linear in the cross section), then
+    // divided -- averaging the ratio itself would be wrong.  An absolute A_k is a
+    // cross-section-like quantity and takes the plain path (its slot holds a_k A_0).
+    const int n = this->NumSubPoints();
+    std::vector<double> ak(n), a0(n);
+    for (int i = 1; i <= n; i++) {
+      ak[i - 1] = this->GetSubPoint(i)->GetFitCrossSection();
+      a0[i - 1] = this->GetSubPoint(i)->GetAngDistA0();
+    }
+    for (int i = 1; i <= n; i++) this->GetSubPoint(i)->SetFitCrossSection(a0[i - 1]);
+    this->IntegrateTargetEffect(configure);
+    const double denominator = this->GetFitCrossSection();
+    for (int i = 1; i <= n; i++) this->GetSubPoint(i)->SetFitCrossSection(ak[i - 1] * a0[i - 1]);
+    this->IntegrateTargetEffect(configure);
+    const double numerator = this->GetFitCrossSection();
+    for (int i = 1; i <= n; i++) this->GetSubPoint(i)->SetFitCrossSection(ak[i - 1]);
+    this->SetFitCrossSection(std::fabs(denominator) > 0.0 ? numerator / denominator : 0.0);
+    return;
+  }
   if (!this->IsAnalyzingPower()) {
     this->IntegrateTargetEffect(configure);
     this->IntegrateTargetEffectComponents(configure);
@@ -1924,6 +2238,7 @@ void EPoint::SetMap(int segmentNum, int pointNum) {
 
 void EPoint::ClearMapping() {
   is_mapped_ = false;
+  own_e_dependent_ = false;
   energy_map_.segment = 0;
   energy_map_.point = 0;
 }
@@ -1963,6 +2278,7 @@ void EPoint::AddSubPoint(EPoint subPoint) {
   // section, and A_y is never computed at all.
   subPoint.is_analyzing_power_ = this->is_analyzing_power_;
   subPoint.spin_observable_ = this->spin_observable_;
+  subPoint.is_total_ = this->is_total_;
   subPoint.is_sub_point_ = true;
   subPoint.screen_ue_ = this->screen_ue_;
   subPoint.screen_param_ = this->screen_param_;
@@ -2024,9 +2340,158 @@ void GridQuadrature(EPoint *point, Read rd, double lo, double hi, bool divideByS
 
 template <class V, class Read>
 V EPoint::IntegrateTargetEffectImpl(const Config &configure, Read rd) {
+  TargetEffect *targetEffect = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
+  if (!targetEffect->IsDoppler() || doppler_applied_) return this->IntegrateKernelsImpl<V>(configure, rd);
+  // Free-gas Doppler broadening first (SAMMY's order), then the line's kernel on the broadened values.
+  const int n = this->NumSubPoints();
+  if (n < 2) return V(0.0);
+  std::vector<std::pair<int, double>> w;
+  auto broaden = [&](double e) {
+    this->DopplerWeights(e, w);
+    V s = 0.0;
+    for (const auto &t : w) s += t.second * rd(t.first);
+    return s;
+  };
+  if (!targetEffect->HasResolutionStage()) return broaden(this->GetCMEnergy());
+  std::vector<V> b(n);
+  for (int j = 1; j <= n; j++) b[j - 1] = broaden(this->GetSubPoint(j)->GetCMEnergy());
+  return this->IntegrateKernelsImpl<V>(configure, [&b](int j) { return b[j - 1]; });
+}
+
+void EPoint::DopplerWeights(double eCM, std::vector<std::pair<int, double>> &w,
+                            std::vector<std::pair<int, double>> *dwdT) const {
+  w.clear();
+  if (dwdT) dwdT->clear();
+  const TargetEffect *te = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
+  const int n = this->NumSubPoints();
+  const double c = cm_factor_;
+  const double u = te->DopplerU(c);
+  if (n < 2 || !(u > 0.0) || !(eCM > 0.0)) return;
+  // The window (layout temperature) and the pieces (nominal temperature) do not move with T: only the kernel
+  // values below do, so sigma_D is smooth in a fitted T.  For a fixed line both are the line's T.
+  const double u0 = te->DopplerUAt(c, te->GetDopplerNominal());
+  double lo, hi;
+  te->DopplerWindow(eCM, c, lo, hi);
+  const double v = std::sqrt(eCM / c);
+  const double norm = 1.0 / (u * std::sqrt(M_PI) * v * v);
+  // 4-point Gauss-Legendre on [-1, 1]
+  static const double gx[4] = {-0.8611363115940526, -0.3399810435848563, 0.3399810435848563, 0.8611363115940526};
+  static const double gw[4] = {0.3478548451374538, 0.6521451548625461, 0.6521451548625461, 0.3478548451374538};
+  auto energy = [this](int j) { return const_cast<EPoint *>(this)->GetSubPoint(j)->GetCMEnergy(); };
+  // sub-points run from high to low energy: the first interval (j, j+1) whose lower end lies below hi
+  int first = 1, last = n - 1;
+  {
+    int a = 1, b = n;  // energy(a) >= ... >= energy(b)
+    while (b - a > 1) {
+      const int m = (a + b) / 2;
+      (energy(m) > hi ? a : b) = m;
+    }
+    first = a;
+  }
+  std::map<int, double> acc, dacc;
+  // d(norm k)/dT = norm [-k/u + dk/du] du/dT, du/dT = u/(2T)
+  const double T = te->GetDopplerTemperature();
+  const double dudT = (T > 0.0) ? 0.5 * u / T : 0.0;
+  const double u2 = u * u, u3 = u2 * u;
+  for (int j = first; j <= last; j++) {
+    const double Ea = energy(j), Eb = energy(j + 1);
+    if (Ea <= lo) break;
+    if (Eb >= hi) continue;
+    const double a = std::min(Ea, hi), b = std::max(Eb, lo);
+    if (!(a > b) || !(Ea > Eb)) continue;
+    const double wa = std::sqrt(a / c), wb = std::sqrt(b / c);
+    const int pieces = std::max(1, static_cast<int>(std::ceil((wa - wb) / (0.25 * u0))));
+    const double hw = (wa - wb) / pieces;
+    double toA = 0.0, toB = 0.0, dToA = 0.0, dToB = 0.0;
+    for (int p = 0; p < pieces; p++) {
+      const double mid = wb + (p + 0.5) * hw, half = 0.5 * hw;
+      for (int g = 0; g < 4; g++) {
+        const double x = mid + half * gx[g];
+        const double k = (std::exp(-(v - x) * (v - x) / (u * u)) - std::exp(-(v + x) * (v + x) / (u * u))) * x * x;
+        const double frac = (Ea - c * x * x) / (Ea - Eb);  // 0 at sub-point j, 1 at sub-point j + 1
+        toA += half * gw[g] * k * (1.0 - frac);
+        toB += half * gw[g] * k * frac;
+        if (dwdT) {
+          const double dm2 = (v - x) * (v - x), dp2 = (v + x) * (v + x);
+          const double dk = -k / u + x * x * 2.0 * (dm2 * std::exp(-dm2 / u2) - dp2 * std::exp(-dp2 / u2)) / u3;
+          dToA += half * gw[g] * dk * (1.0 - frac);
+          dToB += half * gw[g] * dk * frac;
+        }
+      }
+    }
+    acc[j] += norm * toA;
+    acc[j + 1] += norm * toB;
+    if (dwdT) {
+      dacc[j] += norm * dToA * dudT;
+      dacc[j + 1] += norm * dToB * dudT;
+    }
+  }
+  w.assign(acc.begin(), acc.end());
+  if (dwdT) dwdT->assign(dacc.begin(), dacc.end());
+}
+
+double EPoint::DopplerTemperatureDerivative(const Config &configure, const std::vector<double> &values) {
+  TargetEffect *targetEffect = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
+  if (!targetEffect->IsDoppler() || doppler_applied_) return 0.0;
+  const int n = this->NumSubPoints();
+  if (n < 2 || (int)values.size() < n) return 0.0;
+  std::vector<std::pair<int, double>> w, dw;
+  auto dBroaden = [&](double e) {
+    this->DopplerWeights(e, w, &dw);
+    double s = 0.0;
+    for (const auto &t : dw) s += t.second * values[t.first - 1];
+    return s;
+  };
+  if (!targetEffect->HasResolutionStage()) return dBroaden(this->GetCMEnergy());
+  // The kernel after the Doppler step is linear in its sub-point values: apply it to d(sigma_D)/dT.
+  std::vector<double> b(n);
+  for (int j = 1; j <= n; j++) b[j - 1] = dBroaden(this->GetSubPoint(j)->GetCMEnergy());
+  return this->IntegrateKernelsImpl<double>(configure, [&b](int j) { return b[j - 1]; });
+}
+
+template <class V, class Read>
+V EPoint::TargetFallbackImpl(Read rd) {
+  const int n = this->NumSubPoints();
+  if (n <= 0) return V(0.0);
+  if (n == 1) return rd(1);
+  const double e = this->GetCMEnergy() - target_fallback_depth_;
+  if (target_fallback_only_ && n == 3) {
+    // three fallback nodes spanning the E_bar a fitted density can reach: the quadratic through them
+    double x[3];
+    for (int k = 0; k < 3; k++) x[k] = this->GetSubPoint(k + 1)->GetCMEnergy();
+    const double lo = std::min(x[0], x[2]), hi = std::max(x[0], x[2]);
+    const double ec = std::min(std::max(e, lo), hi);
+    V v = 0.0;
+    for (int k = 0; k < 3; k++) {
+      double l = 1.0;
+      for (int m = 0; m < 3; m++)
+        if (m != k) l *= (ec - x[m]) / (x[k] - x[m]);
+      v += l * rd(k + 1);
+    }
+    return v;
+  }
+  // a full grid (descending energies): linear between the two nodes around E_bar, the end node outside it
+  if (e >= this->GetSubPoint(1)->GetCMEnergy()) return rd(1);
+  if (e <= this->GetSubPoint(n)->GetCMEnergy()) return rd(n);
+  for (int j = 1; j < n; j++) {
+    const double Ea = this->GetSubPoint(j)->GetCMEnergy(), Eb = this->GetSubPoint(j + 1)->GetCMEnergy();
+    if (e <= Ea && e >= Eb) {
+      const double frac = (Ea > Eb) ? (Ea - e) / (Ea - Eb) : 0.0;
+      return (1.0 - frac) * rd(j) + frac * rd(j + 1);
+    }
+  }
+  return rd(n);
+}
+
+template <class V, class Read>
+V EPoint::IntegrateKernelsImpl(const Config &configure, Read rd) {
   V yield = 0.0;
   TargetEffect *targetEffect = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
   const int numPoints = this->NumSubPoints();
+  // A thin-target point outside the windows of an energy-restricted integration, or one the automatic
+  // tolerance let off: sigma at the depth-averaged energy E_bar (IsTargetFallbackOnly, TargetFallbackScope).
+  const bool thinTarget = targetEffect->IsTargetIntegration() && !targetEffect->IsThickTarget();
+  if (thinTarget && (target_fallback_only_ || target_fallback_now_)) return this->TargetFallbackImpl<V>(rd);
   if (numPoints < 2) return V(0.0);
   const double eHigh = this->GetSubPoint(1)->GetCMEnergy();
   const double eLow = this->GetSubPoint(numPoints)->GetCMEnergy();
@@ -2046,6 +2511,32 @@ V EPoint::IntegrateTargetEffectImpl(const Config &configure, Read rd) {
     }
     return V(0.0);
   };
+  // Areal density (atoms/cm^2) of target traversed from the grid's top node down to c.m. energy e, int dE / epsilon
+  // over the sub-points (trapezoid in 1/epsilon; epsilon in c.m. units as the sub-points carry it, and dE_cm /
+  // eps_cm = dE_lab / eps_lab).  For Bohr straggling.  A node with a non-positive stopping power contributes nothing.
+  std::vector<double> arealCum;
+  auto invEps = [](double eps) { return (eps > 0.0) ? 1.0 / eps : 0.0; };
+  if (targetEffect->IsBohrStraggling()) {
+    arealCum.assign(numPoints + 1, 0.0);
+    for (int j = 1; j < numPoints; j++) {
+      double Ea = this->GetSubPoint(j)->GetCMEnergy(), Eb = this->GetSubPoint(j + 1)->GetCMEnergy();
+      double ia = invEps(this->GetSubPoint(j)->GetStoppingPower()), ib = invEps(this->GetSubPoint(j + 1)->GetStoppingPower());
+      arealCum[j + 1] = arealCum[j] + 0.5 * (ia + ib) * (Ea - Eb);
+    }
+  }
+  auto arealTo = [&](double e) {
+    if (arealCum.empty() || e >= eHigh) return 0.0;
+    for (int j = 1; j < numPoints; j++) {
+      double Ea = this->GetSubPoint(j)->GetCMEnergy(), Eb = this->GetSubPoint(j + 1)->GetCMEnergy();
+      if (e <= Ea && e >= Eb) {
+        double frac = (Ea - e) / (Ea - Eb);
+        double ia = invEps(this->GetSubPoint(j)->GetStoppingPower()), ib = invEps(this->GetSubPoint(j + 1)->GetStoppingPower());
+        double ie = (1.0 - frac) * ia + frac * ib;
+        return arealCum[j] + 0.5 * (ia + ie) * (Ea - e);
+      }
+    }
+    return arealCum[numPoints];
+  };
 
   if (targetEffect->IsTargetIntegration()) {
     const double surface = centroid;
@@ -2055,8 +2546,11 @@ V EPoint::IntegrateTargetEffectImpl(const Config &configure, Read rd) {
       // The grid was built to span the target (EData::GridExtent), so it is integrated whole, as it
       // always was: clipping it to [E0 - T, E0] here would drop a point whose segment energy shift
       // moved E0 away from the grid's own centre (13N, segment 1, lowest point).
+      // A fitted density (TargetEffect::HasDensityFit) lays the grid out for the largest density the fit may
+      // reach, so the depth integral is cut at the back of the target, E0 - T(N): smooth in N, grid unchanged.
       double unused = 0.0;
-      GridQuadrature<V>(this, rd, eLow, eHigh, true, one, one, outer, unused);
+      const double lo = targetEffect->HasDensityFit() ? std::max(eLow, back) : eLow;
+      GridQuadrature<V>(this, rd, lo, eHigh, true, one, one, outer, unused);
     } else {
       const double x1 = -1.0 / sqrt(3.0), x2 = 1.0 / sqrt(3.0);
       for (int i = 1; i < numPoints; i++) {
@@ -2067,9 +2561,11 @@ V EPoint::IntegrateTargetEffectImpl(const Config &configure, Read rd) {
         if (half < 1.0e-10) continue;
         for (int gp = 0; gp < 2; gp++) {
           double eDepth = mid + half * (gp == 0 ? x1 : x2);
-          double beam = targetEffect->IsGaussian() ? targetEffect->SigmaCM(eDepth, configure) : 0.0;
+          double beam = targetEffect->IsGaussian() ? targetEffect->SigmaCM(eDepth, configure, cm_factor_) : 0.0;
           if (!(beam > 0.)) beam = 0.0;
-          double straggle = targetEffect->StragglingSigma(surface - eDepth);
+          double straggle = targetEffect->IsBohrStraggling()
+                                ? targetEffect->BohrStragglingSigma(arealTo(eDepth) - arealTo(surface), cm_factor_, bohr_z1_, bohr_z2_)
+                                : targetEffect->StragglingSigma(surface - eDepth);
           double sigmaEff = std::sqrt(beam * beam + straggle * straggle);
           V inner = 0.0;
           if (sigmaEff > 1.0e-10) {
@@ -2084,9 +2580,14 @@ V EPoint::IntegrateTargetEffectImpl(const Config &configure, Read rd) {
         }
       }
     }
-    yield = outer / (targetEffect->GetDensity() * 1.0e-24);
+    // a thick target (density 0) is the yield per incident particle, not divided by a density
+    yield = targetEffect->IsThickTarget() ? outer : outer / (targetEffect->GetDensity() * 1.0e-24);
+    // The smooth edge of a window: blend with sigma(E_bar), not with sigma at the beam energy.  Done here, in
+    // the linear kernel, so the gradient weights (TargetEffectWeights) carry it too.
+    if (thinTarget && target_blend_weight_ < 1.0)
+      yield = target_blend_weight_ * yield + (1.0 - target_blend_weight_) * this->TargetFallbackImpl<V>(rd);
   } else if (targetEffect->IsGaussian()) {
-    const double s = targetEffect->SigmaCM(centroid, configure);
+    const double s = targetEffect->SigmaCM(centroid, configure, cm_factor_);
     if (!(s > 0.)) {
       // no spread: the bare value at the point, interpolated on the grid
       for (int j = 1; j < numPoints; j++) {
@@ -2117,9 +2618,12 @@ V EPoint::IntegrateTargetEffectImpl(const Config &configure, Read rd) {
     // Simpson's rule evaluates it exactly.
     const UdrKernel *kernel = this->GetUdrKernel();
     int numPoints = this->NumSubPoints();
-    if (!kernel || kernel->tau.size() < 2 || numPoints < 2) {
+    if (!kernel || kernel->tau.size() < 2 || numPoints < 1) {
       return V(0.0);
     }
+    // A window the grid could not split (the kernel narrower than the grid's
+    // resolution) is the point itself, not zero.
+    if (numPoints == 1) return rd(1);
     const double mass = this->GetUdrProjectileMass();
     const double path = targetEffect->GetUdrFlightPath();
     const double cmPerLab = (lab_energy_ != 0.0) ? cm_energy_ / lab_energy_ : 1.0;
@@ -2186,7 +2690,7 @@ V EPoint::IntegrateTargetEffectImpl(const Config &configure, Read rd) {
     //    numerator only: in the denominator too it would replace f_db(E0) by
     //    its beam average and cancel its own normalisation (a 1-5 % error
     //    when the kernel's centroid is tens of keV off the point energy).
-    const double s = targetEffect->GetBeamTpcSigma();
+    const double s = cm_factor_ * targetEffect->GetBeamTpcSigma();  // the line's lab sigma, this pair's frame
     const bool window = this->HasBinWindow();
     // The energy shift moved the point (and the sub-point grid); the window
     // is stored unshifted, so shift it by the same c.m. amount.
@@ -2207,7 +2711,7 @@ V EPoint::IntegrateTargetEffectImpl(const Config &configure, Read rd) {
     };
     double dbNorm = photo ? dbWeight(originalCM) : 1.0;
     auto kernel = [&](double e) {
-      double k = targetEffect->BeamProfileWeight(e);
+      double k = targetEffect->BeamProfileWeight(e / cm_factor_);  // the profile is lab; e is c.m.
       if (window) {
         if (s > 0.0)
           k *= 0.5 * (std::erf((b - e) / (s * std::sqrt(2.0))) - std::erf((a - e) / (s * std::sqrt(2.0))));

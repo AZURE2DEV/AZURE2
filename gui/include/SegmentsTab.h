@@ -19,6 +19,7 @@ class InfoDialog;
 class PairsModel;
 class AbundancesModel;
 class ScatteringLengthsModel;
+class ScatteringLengthRowsModel;
 
 /*!
  * The Segments tab: the data segments the fit runs against and the test segments an extrapolation is evaluated on, held in two separate models.
@@ -47,6 +48,9 @@ class SegmentsTab : public QWidget {
   void addSegDataLine(SegmentsDataData line);
   void addSegTestLine();
   void addSegTestLine(SegmentsTestData line);
+  /// Append a line without the duplicate check (file reader).
+  void appendSegDataLine(SegmentsDataData line);
+  void appendSegTestLine(SegmentsTestData line);
   void editSegDataLine();
   void editSegTestLine();
   void deleteSegDataLine();
@@ -61,9 +65,8 @@ class SegmentsTab : public QWidget {
   void uncheckAllSegData();
   void getDataFromExfor();
   void filterSegDataByPairs();
-  void addScatteringLength();
-  void deleteScatteringLength();
-  void updateScatteringLengthButtons();
+  void editScatteringLength();
+  void updateScatteringLengthRows();
   /*void openSegDataFile();
   void openSegDataFile(QString filename);
   void saveSegDataFile();
@@ -115,9 +118,12 @@ class SegmentsTab : public QWidget {
   QPushButton *segTestUpButton;
   QPushButton *segTestDownButton;
   ScatteringLengthsModel *scatteringLengthsModel;
-  QTableView *scatteringLengthsView;
-  QPushButton *scatLenAddButton;
-  QPushButton *scatLenDeleteButton;
+  ScatteringLengthRowsModel *scatteringLengthRows;
+  QAbstractItemModel *segmentsDataRows;  ///< the data segments, then the scattering lengths (one table)
+  /*! The scattering-length row a row of the data table shows, or -1 for a data segment. */
+  int scatteringLengthRowOf(int viewRow) const;
+  /*! The selected row of the data table, or -1. */
+  int selectedSegDataRow() const;
   QSignalMapper *mapper;
   QPushButton *infoButton[5];
   static const std::vector<QString> infoText;

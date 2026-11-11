@@ -11,6 +11,9 @@
 
 // Base URL of the IAEA EXFOR Web API (see https://nds.iaea.org/exfor/x4guide/API/)
 static const char *kExforBase = "https://nds.iaea.org/exfor";
+// The user-agent the IAEA Nuclear Data Section gave AZURE2 for this API (2026-11-09), which sits behind a
+// firewall that refuses many clients. pyazr/nds.py sends the same string.
+static const char *kExforUserAgent = "Exfor-Azure2/1.0";
 
 // Physical constants kept identical to AZURE2's include/Constants.h so the
 // astrophysical S-factor <-> cross-section conversion matches what AZURE2 does
@@ -18,10 +21,11 @@ static const char *kExforBase = "https://nds.iaea.org/exfor";
 // the Rutherford-ratio conversion below; AZURE2 itself has no native "ratio
 // to Rutherford" data mode, so that conversion is new functionality here,
 // not a port of existing behaviour.
-static const double kPi = 3.141592650;
-static const double kUconv = 931.4940880;
-static const double kFstruc = 1.00 / 137.0359996790;
-static const double kHbarc = 197.32696310;
+// The engine's CODATA 2018 values (include/Constants.h).
+static const double kPi = 3.14159265358979323846;
+static const double kUconv = 931.49410242;
+static const double kFstruc = 1.00 / 137.035999084;
+static const double kHbarc = 197.3269804;
 
 // Coulomb (Rutherford) differential cross section in the c.m. frame, for
 // point charges z1/z2 at c.m. energy eCm (MeV) and c.m. angle angleDeg
@@ -62,8 +66,7 @@ void ExforData::searchDatasets(const QString &target, const QString &reaction,
   pending_ = SearchRequest;
   lastError_.clear();
   QNetworkRequest request(url);
-  request.setHeader(QNetworkRequest::UserAgentHeader,
-                    "AZURE2-EXFOR-client/1.0");
+  request.setHeader(QNetworkRequest::UserAgentHeader, kExforUserAgent);
   manager_->get(request);
 }
 
@@ -86,8 +89,7 @@ void ExforData::downloadDataset(const QString &datasetId,
   pending_ = DownloadRequest;
   lastError_.clear();
   QNetworkRequest request(url);
-  request.setHeader(QNetworkRequest::UserAgentHeader,
-                    "AZURE2-EXFOR-client/1.0");
+  request.setHeader(QNetworkRequest::UserAgentHeader, kExforUserAgent);
   manager_->get(request);
 }
 
@@ -280,6 +282,7 @@ bool ExforData::parseCsv(const QString &csv, QList<ExforPoint> &out,
   int eCol = -1, eCmCol = -1, dataCol = -1, angCol = -1;
   int errAbsCol = -1, errPctCol = -1;  // absolute (barn) and percent error cols
   bool angIsCosine = false;
+  bool angIsCm = false;        // ANG-CM / COS-CM: the angle column is centre-of-mass
   bool absIsTotal = false, pctIsTotal = false;
   bool isSFactor = false;      // data column is an astrophysical S-factor
   bool isRTH = false;          // data column is a ratio to Rutherford scattering
@@ -334,9 +337,11 @@ bool ExforData::parseCsv(const QString &csv, QList<ExforPoint> &out,
     if (angCol < 0 && up.startsWith("ANG") && unit.contains("DEG")) {
       angCol = i;
       angIsCosine = false;
+      angIsCm = up.startsWith("ANG-CM");
     } else if (angCol < 0 && up.startsWith("COS")) {
       angCol = i;
       angIsCosine = true;
+      angIsCm = up.startsWith("COS-CM");
     }
 
     // Error columns: keep the best absolute (in barn) and percent candidate,
@@ -387,6 +392,12 @@ bool ExforData::parseCsv(const QString &csv, QList<ExforPoint> &out,
             "(quantity code ...,,RTH) -- set the entrance-channel charges "
             "(projectile 1 / target 2) to convert it to an absolute cross "
             "section.";
+    return false;
+  }
+  if (isRTH && angCol >= 0 && !angIsCm && (cm1_ <= 0.0 || cm2_ <= 0.0)) {
+    error = "This dataset is a ratio to the Rutherford cross section with LAB "
+            "angles (ANG) -- the entrance-channel masses (projectile 1 / target 2) "
+            "are needed to take the angle to the centre of mass.";
     return false;
   }
   differential = (angCol >= 0);
@@ -449,7 +460,23 @@ bool ExforData::parseCsv(const QString &csv, QList<ExforPoint> &out,
       crossConv = sFactor * sigmaPerS;
       errConv = sFactor * sigmaPerS;  // abs error assumed in same S-factor units
     } else if (isRTH) {
-      double rutherford = rutherfordBarnPerSr(cz1_, cz2_, eCm, p.angle);
+      // The ratio is frame-independent; the cross section written is in the frame
+      // of the angle column.  A lab angle goes to the c.m. frame with the elastic
+      // kinematics (EPoint::ConvertLabAngle) and the c.m. Rutherford value is
+      // divided by the lab-to-c.m. factor AZURE2 applies to a lab data value
+      // (EPoint::ConvertCrossSection), so the engine reads back ratio x
+      // sigma_R,cm(theta_cm).  Until 2026-10-27 the c.m. Rutherford at the LAB
+      // angle was used (audit item 8; pyazr.nds had the same, fixed 2026-10-26).
+      double thetaCm = p.angle, jac = 1.0;
+      if (!angIsCm) {
+        const double g = cm1_ / cm2_;
+        const double t = p.angle * kPi / 180.0;
+        const double tc = t + std::asin(qBound(-1.0, g * std::sin(t), 1.0));
+        const double c = std::cos(tc);
+        thetaCm = tc * 180.0 / kPi;
+        jac = std::fabs(1.0 + g * c) / std::pow(1.0 + g * g + 2.0 * g * c, 1.5);
+      }
+      double rutherford = rutherfordBarnPerSr(cz1_, cz2_, eCm, thetaCm) / jac;
       if (std::isnan(rutherford)) continue;
       crossConv = rutherford;
       if (errAbsIsRatio) errConv = rutherford;  // error column is itself a ratio

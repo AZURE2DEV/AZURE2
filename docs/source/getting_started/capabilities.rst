@@ -84,11 +84,11 @@ Scripting
 ---------
 
 Everything above is reachable from Python through :doc:`../user_guide/pyazr`,
-which runs headless AZURE2 processes and talks to them over a socket. That
-covers custom minimizers, external samplers (``emcee``, ``zeus``, ``dynesty``),
-parameter scans, cross-section decomposition into individual level and
-interference contributions, dimensionless widths, and programmatic editing of
-the model itself.
+which runs the AZURE2 engine in-process as a compiled extension module: no
+subprocess, no socket. That covers custom minimizers, external samplers
+(``emcee``, ``zeus``, ``dynesty``), parameter scans, cross-section
+decomposition into individual level and interference contributions,
+dimensionless widths, and programmatic editing of the model itself.
 
 Performance
 -----------

@@ -4,6 +4,7 @@
 #include "ESegment.h"
 #include "TargetEffect.h"
 #include "EDataIterator.h"
+#include "NodeTableCache.h"
 #include <deque>
 #include <map>
 #include "DataCovariance.h"
@@ -11,6 +12,7 @@
 #include <ios>
 
 class CNuc;
+class PriorCovariance;
 struct BandData;
 namespace ROOT {
 namespace Minuit2 {
@@ -62,6 +64,61 @@ class EData {
   void FillScreeningFromParams(const vector_r &);
   /// Sum of the screening priors ((U_e - nominal)/sigma)^2.
   double ScreeningPenalty() const;
+  /*!
+   * Fitted target densities (TargetEffect::HasDensityFit).  One parameter `density_<n>` (atoms/cm^2) per
+   * ungrouped `densityfit` line and per `densitygroup`, n = the effect number of the line (of the group's first
+   * line), after the screening parameters.  None without a densityfit block.
+   */
+  int NumDensityParams() const { return (int)densityEffects_.size(); }
+  /// Effect number of density parameter k (1-based): the line, or the first line of its group.
+  int GetDensityEffect(int k) const { return densityEffects_[k - 1]; }
+  int GetDensityParamOffset() const { return densityParamOffset_; }
+  /// The density parameter (1-based) effect \p n follows, 0 if its density is not fitted.
+  int DensityParamOfEffect(int n) const {
+    return (n >= 1 && n <= (int)densityParamOfEffect_.size()) ? densityParamOfEffect_[n - 1] : 0;
+  }
+  /// Set the fitted densities from a parameter vector and recompute the target thickness of every point of
+  /// their lines (called by FillEnergyShiftsFromParams, so every evaluation sees the vector's values).
+  void FillDensitiesFromParams(const vector_r &, const Config &);
+  /// Sum of the density priors ((N - N0)/sigma)^2.
+  double DensityPenalty() const;
+  /*!
+   * Fitted Doppler temperatures (TargetEffect::HasDopplerFit, `doppler T vary sigma [Tmax]`).  One parameter
+   * `doppler_<n>` (K) per such line, n = the effect number of the line (its place among the active <targetInt>
+   * lines, as screening_<n>), after the density parameters.  None without the fit form.
+   */
+  int NumDopplerParams() const { return (int)dopplerEffects_.size(); }
+  /// Effect number of Doppler parameter k (1-based).
+  int GetDopplerEffect(int k) const { return dopplerEffects_[k - 1]; }
+  int GetDopplerParamOffset() const { return dopplerParamOffset_; }
+  /// The Doppler parameter (1-based) of effect \p n, 0 if its temperature is not a fit parameter.
+  int DopplerParamOfEffect(int n) const;
+  /// Set the fitted temperatures from a parameter vector (clamped to [T0/4, layout temperature], with a warning
+  /// printed once), called by FillEnergyShiftsFromParams so every evaluation sees the vector's values.
+  void FillDopplerFromParams(const vector_r &, const Config *configure);
+  /// Sum of the Doppler priors ((T - T0)/sigma)^2.
+  double DopplerPenalty() const;
+  /*!
+   * Fitted sample thicknesses (ESegment::HasThicknessFit, `transmission n vary sigma` / `yield n vary sigma`).  One
+   * parameter `segment_<key>_thickness` (atoms/barn) per data segment whose line has the fit form, in segment order,
+   * after the Doppler temperatures; a thickness-group follower's is fixed at its leader's value.  None without the
+   * fit form.
+   */
+  int NumThicknessParams() const { return (int)thicknessSegments_.size(); }
+  /// Position (1-based, as GetSegment) of the segment owning thickness parameter k (1-based).
+  int GetThicknessSegment(int k) const { return thicknessSegments_[k - 1]; }
+  int GetThicknessParamOffset() const { return thicknessParamOffset_; }
+  /// The thickness parameter (1-based) whose value segment \p pos (1-based) uses: its own, its group leader's for a
+  /// follower; 0 when that thickness is no parameter.
+  int ThicknessParamOfSegment(int pos) const;
+  /// Set the fitted thicknesses from a parameter vector (a value below 0 is taken as 0); thickness-group followers
+  /// take their leader's.  Called by FillEnergyShiftsFromParams.
+  void FillThicknessFromParams(const vector_r &);
+  /// Sum of the thickness priors ((n - n0)/sigma)^2.
+  double ThicknessPenalty() const;
+  /// Link the thicknessgroup members to the group's first segment in file order; -1 (with an ERROR) when a member has
+  /// no transmission / yield block.  Also lays out the thickness parameters (NumThicknessParams).
+  int ResolveThicknessGroups(const Config &);
   /// Read the target-effects input file and build the TargetEffect objects.
   int ReadTargetEffectsFile(const Config &, CNuc *);
   /// Is this a fit? AZURECalc clones the compound nucleus and data per thread only when it is.
@@ -105,6 +162,13 @@ class EData {
   /// chi2 of the measured scattering lengths (<scatteringLengths>) at the last evaluation.
   void SetScatteringLengthChi2(double chi2) { scatteringLengthChi2_ = chi2; }
   double GetScatteringLengthChi2() const { return scatteringLengthChi2_; }
+  /// The prior parameter covariance of the run (<config> priorCovariance=, PriorCovariance.h), shared by every copy
+  /// (Clone); null without one.  Set by the CLI (AZUREMain) and pyazr (AZUREAPI) once the parameters are known.
+  void SetPriorCovariance(std::shared_ptr<const PriorCovariance> prior) { priorCov_ = std::move(prior); }
+  const PriorCovariance *GetPriorCovariance() const { return priorCov_.get(); }
+  /// Its chi2 term at the last evaluation, reported in chiSquared.out (Total-Prior-Covariance-Chi-Squared).
+  void SetPriorCovarianceChi2(double chi2) { priorCovChi2_ = chi2; }
+  double GetPriorCovarianceChi2() const { return priorCovChi2_; }
   /// External-capture amplitudes for every point that has an EC component.
   int CalculateECAmplitudes(CNuc *, const Config &);
   /// How many external-capture amplitudes this model expects in an intEC file.
@@ -121,10 +185,16 @@ class EData {
   /// Validates a component's pair keys (both present, one compound nucleus) and flags its entrance pair; false with the error printed otherwise.
   bool CheckComponentPairs(CNuc *, const ESegment &baseSegment, int entranceKey, int exitKey, const Config &);
   ESegment *CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey);
+  /// A transmission or yield segment after its components exist: checks, plain components, the yield's total term.
+  bool FinishTransformedSegment(CNuc *, ESegment *, int key, bool isTest, const Config &);
+  /// Every term of a transmission or yield segment on the base point's sub-point grid (after the target effects).
+  bool CheckTransformedSegments(const Config &);
   ESegment *CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey, double fixedAngle);
   /// Map points at equal energies onto one another, so a shared energy is calculated once.
   /// The compound nucleus tells which segments have a particle exit; null is conservative.
   void MapData(CNuc *theCNuc = nullptr);
+  /// The mapping inside segments with components (MapData calls it last).
+  void MapComponentSegments(CNuc *theCNuc);
   /// Append a target-effect definition.
   void AddTargetEffect(TargetEffect);
   void SetNormParamOffset(int);
@@ -147,6 +217,8 @@ class EData {
   /// ERROR printed and SetCovarianceError) if it cannot be read.
   std::shared_ptr<DataCovariance::File> CovarianceFileFor(const std::string &path, const Config &);
   void SetCovarianceError() { covarianceError_ = true; }
+  /// A data point beyond the kinematic maximum lab angle (ESegment::Fill): the run stops instead of dropping the segment.
+  void SetKinematicsError() { kinematicsError_ = true; }
   /// Gather the points of the segments carrying "covariance <file>" into one group per
   /// file and factor each group's matrix (called by Fill).  Returns -1 on an error.
   int ResolveCovarianceGroups(const Config &);
@@ -167,6 +239,8 @@ class EData {
   void WriteCovarianceSummary(const Config &);
   /// Forget the frozen model of the relvector terms; the next evaluation freezes it again.
   void RefreezeCovariance();
+  /// True when any data-covariance group has relvector terms (a model frozen at the first evaluation).
+  bool HasRelativeCovariance() const;
   /// Calculate the covariance segments' points at the current parameters and set their
   /// seeds, for a gradient pass that needs (M^-1 r) before it reaches the points.
   void PrepareCovarianceSeeds(CNuc *, const Config &);
@@ -197,6 +271,18 @@ class EData {
   EDataIterator begin();
   EDataIterator end();
   std::vector<ESegment> &GetSegments();
+  /*!
+   * Calculates every point of \p segments and of their component segments in
+   * one OpenMP pass, largest items first.  A host point also fills the points
+   * mapped onto it, so mapped points are not items of their own.  A point whose
+   * calculation throws gets a fit cross section of 0.  Returns the number of
+   * such points, or -1 when nothing was calculated: no OpenMP, already inside a
+   * parallel region, point mapping switched off on this thread, or
+   * AZURE_SERIAL_CHI2 set.  The caller then reads the points with
+   * ESegment::CalculateTheoreticalCrossSection(..., precalculated = true).
+   */
+  static int CalculatePointsInParallel(const std::vector<ESegment *> &segments, CNuc *theCNuc,
+                                       const Config &configure);
 
  private:
   std::vector<TargetEffect> targetEffects_;
@@ -206,6 +292,7 @@ class EData {
   std::map<std::string, std::shared_ptr<DataCovariance::File>> covFiles_;  // only while filling
   std::vector<std::shared_ptr<DataCovariance::Group>> covGroups_;         // shared by every copy
   bool covarianceError_ = false;              // a component failed CheckComponentPairs
+  bool kinematicsError_ = false;              // a lab angle beyond the kinematic maximum (audit 2026-10-25, item 31)
   int iterations_;
   int normParamOffset_;
   int energyShiftParamOffset_;
@@ -213,6 +300,15 @@ class EData {
   int energyShiftFnParamOffset_ = 0;
   int screeningParamOffset_ = -1;  // -1 until FillMnParams has laid the vector out
   std::vector<int> screeningEffects_;  // effect numbers with a screening block, in order
+  int densityParamOffset_ = -1;        // -1 until FillMnParams has laid the vector out
+  std::vector<int> densityEffects_;    // effect number holding each density parameter, in order
+  std::vector<int> densityParamOfEffect_;  // per effect (0-based): its density parameter, 0 = none
+  int dopplerParamOffset_ = -1;        // -1 until FillMnParams has laid the vector out
+  std::vector<int> dopplerEffects_;    // effect numbers with a fitted Doppler temperature, in order
+  int thicknessParamOffset_ = -1;      // -1 until FillMnParams has laid the vector out
+  std::vector<int> thicknessSegments_;  // positions (1-based) of the segments with a thickness parameter, in order
+  /// Group the densityfit / densitygroup lines into parameters (ReadTargetEffectsFile); -1 on an error.
+  int SetUpDensityParams(const Config &);
   bool isFit_;
   bool isErrorAnalysis_;
   std::streampos ecReadPos_;  // File offset where component-segment EC integrals begin in the intEC file
@@ -226,6 +322,8 @@ class EData {
   double isospinPenalty_ = 0.0;
   bool hasIsospinPenalty_ = false;
   double scatteringLengthChi2_ = 0.0;
+  std::shared_ptr<const PriorCovariance> priorCov_;  // shared by every copy (read-only once set up)
+  double priorCovChi2_ = 0.0;
   std::vector<std::string> nucleusLabels_;   // one per compound nucleus, for the natural decomposition file
   // A copy of the compound nucleus that holds the observed level parameters the
   // sub-point grids are laid out from (ReplaceSubPointGrids).  Never shared: a
@@ -238,6 +336,8 @@ class EData {
     ~GridNucleus();
   };
   GridNucleus gridNuc_;
+  // The tables of re-placed sub-point nodes, shared by this EData and its copies (NodeTableCache.h).
+  std::shared_ptr<NodeTableCache> nodeCache_ = std::make_shared<NodeTableCache>();
 };
 
 #endif

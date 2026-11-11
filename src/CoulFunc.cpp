@@ -49,8 +49,11 @@ CoulFunc::CoulFunc(PPair *pPair, bool useGSLFunctions) :
   dEShiftParams_.coulFunc = this;
 
   // This pair's potential, falling back to the manager's default when the pair
-  // has no setting of its own.
-  nuclearPotential_ = NuclearPotentialManager::instance().getPotential(pairKey_);
+  // has no setting of its own.  Fetched only for the hybrid method, the only user
+  // of it: a CoulFunc is built per channel and point, and copying the shared_ptr
+  // increments one reference count from every thread -- a contended atomic that
+  // was 15 % of a natural_neon calculation on 12 threads, with no potential in use.
+  if (useHybridMethod_) nuclearPotential_ = NuclearPotentialManager::instance().getPotential(pairKey_);
 
   // The table holds plain Coulomb functions of charged channels: not neutral
   // pairs (eta = 0, already cheap) and not pairs with a nuclear potential.
@@ -260,6 +263,10 @@ double CoulFunc::Penetrability(int l, double radius, double energy) {
 
 double CoulFunc::PEShift(int l, double radius, double energy) {
   if (table_ && TableLookup(l, radius, energy)) return tS_;
+  return PEShiftExact(l, radius, energy);
+}
+
+double CoulFunc::PEShiftExact(int l, double radius, double energy) {
   struct CoulWaves coul = this->operator()(l, radius, energy);
   double rho = kin_.Rho(radius, energy);
   double shift;
@@ -308,7 +315,13 @@ double CoulFunc::PEShift_dE(int l, double radius, double energy) {
   static const bool richardson = (std::getenv("AZURE_SHIFT_DE_1EV") == nullptr);
   if (richardson && energy > 0.0) {
     const double h = 1e-3 * energy;
-    auto cd = [&](double hh) { return (PEShift(l, radius, energy + hh) - PEShift(l, radius, energy - hh)) / (2.0 * hh); };
+    // One route for the whole stencil: when a point of it falls outside the Coulomb table, every point is
+    // taken from the exact routine.  Mixing the table (~1e-7 interpolation error) with the exact value across
+    // the table's edge put a jump of order 1e-7 / (2 h) into the derivative (audit 2026-10-25, item 32).
+    const bool viaTable = table_ && TableLookup(l, radius, energy + h) && TableLookup(l, radius, energy - h) &&
+                          TableLookup(l, radius, energy + 0.5 * h) && TableLookup(l, radius, energy - 0.5 * h);
+    auto s = [&](double e) { return viaTable ? PEShift(l, radius, e) : PEShiftExact(l, radius, e); };
+    auto cd = [&](double hh) { return (s(energy + hh) - s(energy - hh)) / (2.0 * hh); };
     return (4.0 * cd(0.5 * h) - cd(h)) / 3.0;
   }
 
@@ -365,10 +378,12 @@ double CoulFunc::PEShift_d2E(int l, double radius, double energy) {
 CoulWaves CoulFunc::computeHybrid(int l, double radius, double energy) {
   struct CoulWaves result = {0.0, 0.0, 0.0, 0.0};
 
-  // Physical constants (consistent with pycoulomb implementation)
-  const double UCONV = 931.494;      // MeV/amu
-  const double FSTRUC = 0.00729735;  // fine structure constant * hc (MeV*fm)
-  const double HBARC = 197.327;      // hbar*c in MeV*fm
+  // The engine's constants (Constants.h), as the plain Coulomb path uses them.
+  // Before 2026-10-27 this function had its own rounded copies (931.494,
+  // 0.00729735, 197.327; audit item 16).
+  const double UCONV = uconv;    // MeV/u
+  const double FSTRUC = fstruc;  // the fine-structure constant
+  const double HBARC = hbarc;    // hbar c in MeV fm
 
   try {
     // Validate inputs
@@ -434,16 +449,25 @@ CoulWaves CoulFunc::computeHybrid(int l, double radius, double energy) {
       return std::sqrt(2.0 * redmass_MeV) / HBARC * r * std::sqrt(energy);
     };
 
-    // Create grid and set boundary conditions
-    int nmax = static_cast<int>((rMatch_ - r_min) / drNumerov_) + 1;
-    if (nmax % 4 != 0) nmax = nmax - (nmax % 4) + 4;
-    int npts = nmax + 1;
+    // The grid: a step close to drNumerov_ chosen so that the requested radius
+    // is a node, n_a = radius / dr, and the two nodes beyond the matching
+    // radius carry the Coulomb boundary conditions.  The value is then the
+    // Numerov node value and the derivative a five-point central difference,
+    // both O(dr^4).  Before 2026-10-27 the grid was fixed, the value was a
+    // linear interpolation between the bracketing nodes and the derivative the
+    // chord slope of that cell, an O(dr) quantity that put ~2e-3 to 2e-2 into
+    // the shift function (a+12C, a = 5.5 fm on a node: S off by 0.023; audit
+    // item 16).
+    const int n_a = std::max(2, static_cast<int>(std::lround(radius / drNumerov_)));
+    const double dr = radius / n_a;
+    const int n_top = static_cast<int>(std::ceil((rMatch_ - r_min) / dr));
+    const int npts = std::max(n_top + 3, n_a + 3);
 
     std::vector<double> r_grid(npts);
     std::vector<std::complex<double>> u(npts);
 
     for (int i = 0; i < npts; ++i) {
-      r_grid[i] = r_min + i * drNumerov_;
+      r_grid[i] = r_min + i * dr;
       if (i >= npts - 2) {
         u[i] = compute_H_plus(r_to_rho(r_grid[i]));
       }
@@ -468,7 +492,7 @@ CoulWaves CoulFunc::computeHybrid(int l, double radius, double energy) {
     }
 
     // Numerov backward integration from matching radius inward
-    double dr2 = drNumerov_ * drNumerov_;
+    double dr2 = dr * dr;
     for (int i = npts - 3; i >= 0; --i) {
       double denom = 1.0 + (dr2 / 12.0) * g[i];
       if (std::abs(denom) > 1e-20) {
@@ -480,18 +504,11 @@ CoulWaves CoulFunc::computeHybrid(int l, double radius, double energy) {
       }
     }
 
-    // Linear interpolation at requested radius
-    int idx_lower = 0;
-    for (int i = 0; i < npts - 1; ++i) {
-      if (r_grid[i] <= radius && radius <= r_grid[i + 1]) {
-        idx_lower = i;
-        break;
-      }
-    }
-
-    double frac = (radius - r_grid[idx_lower]) / (r_grid[idx_lower + 1] - r_grid[idx_lower]);
-    std::complex<double> H_plus = u[idx_lower] + frac * (u[idx_lower + 1] - u[idx_lower]);
-    std::complex<double> dH_dr = (u[idx_lower + 1] - u[idx_lower]) / drNumerov_;
+    // H+ at the requested radius (a node) and its derivative: the five-point
+    // central difference, O(dr^4).  n_a >= 2 and n_a + 2 <= npts - 1 by
+    // construction.
+    std::complex<double> H_plus = u[n_a];
+    std::complex<double> dH_dr = (u[n_a - 2] - 8.0 * u[n_a - 1] + 8.0 * u[n_a + 1] - u[n_a + 2]) / (12.0 * dr);
 
     // Extract F, G and their derivatives from H+ = G + iF
     result.G = H_plus.real();

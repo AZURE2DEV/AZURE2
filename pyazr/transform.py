@@ -57,10 +57,10 @@ import mpmath as _mp
 
 # Verbatim from include/Constants.h -- do not "improve" these to CODATA values,
 # the point is to agree with AZURE2 digit for digit.
-HBARC = 197.32696310
-UCONV = 931.4940880
-FSTRUC = 1.00 / 137.0359996790
-NUCLEAR_MAGNETON = 0.105155
+HBARC = 197.3269804              # CODATA 2018, as the engine (include/Constants.h)
+UCONV = 931.49410242
+FSTRUC = 1.00 / 137.035999084
+NUCLEAR_MAGNETON = 0.1051544551
 
 # Energy step for dS/dE.  AZURE2 hands gsl_deriv_central h = 1e-6 MeV, which is
 # small enough that the difference of two shift-function values is dominated by
@@ -768,6 +768,16 @@ def levels_from_azr(model, gammas: Optional[Dict[Tuple[int, int], Sequence[float
     counter: Dict[int, int] = {}
     levels: List[Level] = []
 
+    # <channelRadii> entries (AZURE2 dev 2026-11-10) override a channel's pair radius
+    entries = model.channel_radius_entries() if hasattr(model, "channel_radius_entries") else []
+
+    def radius_of(c, J):
+        best = None
+        for e in entries:
+            if e.matches(c.pair, c.L, c.S, J) and (best is None or e.rank > best.rank):
+                best = e
+        return best.radius if best is not None else c.channel_radius
+
     for azr_level in model.levels:
         if active_only and not any(c.active for c in azr_level.channels):
             continue
@@ -784,7 +794,7 @@ def levels_from_azr(model, gammas: Optional[Dict[Tuple[int, int], Sequence[float
                 L=c.L, S=c.S, pair=c.pair,
                 radiation_type=_radiation_type(c),
                 Z1=c.Z1, Z2=c.Z2, M1=c.M1, M2=c.M2,
-                channel_radius=c.channel_radius,
+                channel_radius=(radius_of(c, azr_level.J) if not c.is_photon else c.channel_radius),
                 sep_energy=c.sep_energy, excitation=c.excitation,
                 pair_J2=c.J2, pair_parity2=c.parity2))
 
@@ -820,7 +830,7 @@ def levels_from_scheme(scheme, gammas=None) -> List[Level]:
                 L=c.L, S=c.S, pair=c.pair,
                 radiation_type=c.radiation_type or "P",
                 Z1=p.Z1, Z2=p.Z2, M1=p.M1, M2=p.M2,
-                channel_radius=p.channel_radius,
+                channel_radius=(c.radius if getattr(c, "radius", None) else p.channel_radius),
                 sep_energy=p.sep_energy, excitation=p.excitation,
                 pair_J2=p.J2, pair_parity2=p.parity2))
         level = Level(energy=lv.energy, channels=chans, J=lv.J,

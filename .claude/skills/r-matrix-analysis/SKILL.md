@@ -313,6 +313,23 @@ AZURE2's segment machinery (see `azure2-eval`).
 - **Treating the channel radius as a physical radius**, or changing it without
   re-examining the background poles.
 - **Overlooking that γ widths set peak height, not total width.**
+- **Judging a fit per data set instead of per point.** A total `χ²/N` alone does not
+  say how well a data set is reproduced: a large value is often carried by a few
+  isolated points (an outlier, one energy off at every angle, the edge of a sharp
+  resonance where a small energy offset gives a big residual) while most of the set
+  is described well. Before writing "fits poorly" or "described roughly", look at the
+  residuals `r = (model − data)/σ` point by point: the fraction within 1σ and 2σ, the
+  median `|r|`, and how many points carry most of the `χ²` and where they sit. Report
+  it in that form, e.g. "most points described well; 15 of 75 points carry 89 % of
+  the `χ²` (the edge of the 7/2⁻ resonance, one Boykin energy at two angles, the two
+  highest Hardy energies at 79°)", and flag possible outliers, leaving any exclusion
+  to the evaluator. The residuals come straight from `output/AZUREOut_*.out`:
+  columns 4, 6 and 7 are the fit value, the data value and its error, and `Σ r²`
+  over a segment's rows equals its entry in `chiSquared.out` (check that sum
+  first). In pyazr, use the per-segment model, data and error arrays. (DeBoer
+  2026-11-01, on the 7Be A_y fit: "you often just look at the total chi2, not the
+  chi2 of each point"; worked example `R-matrix/presentations/7Be_CSEWG_2026/readme`,
+  entry of 11-01.)
 
 ## 11. Connecting to AZURE2 inputs
 

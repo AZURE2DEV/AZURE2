@@ -13,11 +13,14 @@
 
 #include <QApplication>
 #include <QTextStream>
+#include <QTimer>
+#include <QWidget>
 #include <QString>
 #include <QStringList>
 #include <iostream>
 #include "SegmentKeywords.h"
 #include "SegmentsTab.h"
+#include "AddSegDataDialog.h"
 #include "SegmentsDataModel.h"
 #include "SegmentsTestModel.h"
 #include "PairsModel.h"
@@ -75,14 +78,18 @@ int main(int argc, char** argv) {
       "1 1 1 0.5 3 0 180 1 1 0 5 0 0.01 1 data/g.dat 0 0 shiftgroup G shiftfn \"a0*(sqrt(x)-sqrt(1.7))\" 1 0 0.02 1\n"
       "1 1 1 0.5 3 0 180 1 1 1 10 0 0 0 data/n.dat 0 0 normgroup D sample 1\n"
       "1 1 1 0.5 3 0 180 1 1 0 0 0 0 0 data/c.dat 0 0 covariance cov/c.txt normgroup D\n"
+      "1 1 1 0.5 3 0 180 1 1 0 0 0 0.01 1 data/f.dat 0 0 shiftfngroup F normgroup D\n"
       "</segmentsData>\n";
   {
     QString in(dataBlock);
     QTextStream inStream(&in);
     ok("data block read", tab.readSegDataFile(inStream));
     QList<SegmentsDataData> lines = tab.getSegmentsDataModel()->getLines();
-    ok("seven data lines", lines.size() == 7, QString::number(lines.size()));
-    if (lines.size() == 7) {
+    ok("eight data lines", lines.size() == 8, QString::number(lines.size()));
+    if (lines.size() == 8) {
+      ok("shiftfngroup block (first in the tail) kept", lines[7].extraTokens == "shiftfngroup F normgroup D",
+         lines[7].extraTokens);
+      ok("data file of the shiftfngroup row", lines[7].dataFile == "data/f.dat", lines[7].dataFile);
       ok("covariance block (first in the tail) kept", lines[6].extraTokens == "covariance cov/c.txt normgroup D",
          lines[6].extraTokens);
       ok("data file of the covariance row", lines[6].dataFile == "data/c.dat", lines[6].dataFile);
@@ -148,6 +155,166 @@ int main(int argc, char** argv) {
          << "1 2 2 0 2.5 0.01 0 180 0 0 1 0 2 2 1 -999 2 3 -999 natural 1"
          << "1 1 1 1.5 3 0.002 120 120 1 1 0";
     ok("test lines written back with their blocks last", got == want, got.join(" | "));
+  }
+
+  // ---- covariance file field (AddSegDataDialog "Covariance File:") ---------
+  {
+    using namespace SegmentKeywords;
+    ok("covariance file read from the tail", covarianceFile("covariance cov/c.txt normgroup D") == "cov/c.txt",
+       covarianceFile("covariance cov/c.txt normgroup D"));
+    ok("no covariance block -> empty", covarianceFile("normgroup D sample 1").isEmpty());
+    ok("quoted path with a space read without quotes",
+       covarianceFile("normgroup D covariance \"my cov/c.txt\" sample 1") == "my cov/c.txt",
+       covarianceFile("normgroup D covariance \"my cov/c.txt\" sample 1"));
+    ok("block replaced where it stands", withCovarianceFile("covariance a.txt normgroup D", "b.txt") ==
+       "covariance b.txt normgroup D", withCovarianceFile("covariance a.txt normgroup D", "b.txt"));
+    ok("new block before the sample block", withCovarianceFile("normgroup D sample 1", "c.txt") ==
+       "normgroup D covariance c.txt sample 1", withCovarianceFile("normgroup D sample 1", "c.txt"));
+    ok("new block on an empty tail", withCovarianceFile(QString(), "c.txt") == "covariance c.txt",
+       withCovarianceFile(QString(), "c.txt"));
+    ok("block removed with an empty file", withCovarianceFile("shiftgroup G covariance c.txt sample 1", "") ==
+       "shiftgroup G sample 1", withCovarianceFile("shiftgroup G covariance c.txt sample 1", ""));
+    ok("a path with a space written in quotes", withCovarianceFile("", "my cov/c.txt") ==
+       "covariance \"my cov/c.txt\"", withCovarianceFile("", "my cov/c.txt"));
+    ok("quoted shift-function expression kept",
+       withCovarianceFile("shiftfn \"a0*(sqrt(x)-1)\" 1 0 0.02 1", "c.txt") ==
+       "shiftfn \"a0*(sqrt(x)-1)\" 1 0 0.02 1 covariance c.txt",
+       withCovarianceFile("shiftfn \"a0*(sqrt(x)-1)\" 1 0 0.02 1", "c.txt"));
+    // written and read back through the data model as a segment line
+    QString line = "1 1 1 0.5 3 0 180 1 1 0 0 0 0 0 data/c.dat 0 0 " +
+                   withCovarianceFile(withNatural(QString(), true), "cov/c.txt") + "\n</segmentsData>\n";
+    QTextStream inStream(&line);
+    SegmentsTab tab2;
+    tab2.setPairsModel(&pairs);
+    ok("line with a covariance field read", tab2.readSegDataFile(inStream));
+    QList<SegmentsDataData> lines = tab2.getSegmentsDataModel()->getLines();
+    ok("covariance file of the read line", lines.size() == 1 && covarianceFile(lines[0].extraTokens) == "cov/c.txt",
+       lines.isEmpty() ? QString() : lines[0].extraTokens);
+    ok("sample token still read with the covariance block before it",
+       lines.size() == 1 && naturalSample(lines[0].extraTokens) == "1");
+  }
+  {
+    AddSegDataDialog dialog;
+    ok("dialog has the covariance file field", dialog.findChild<QLineEdit *>("covarianceFileText") != nullptr &&
+       dialog.findChild<QPushButton *>("chooseCovarianceButton") != nullptr);
+    ok("covariance field empty by default", dialog.covarianceFileText->text().isEmpty());
+  }
+  // ---- showing and hiding a section returns the dialog to its size (fitDialogToContent) -----
+  // Before 2026-10-25 a section hidden inside a nested grid layout left the dialog at its taller size and the
+  // spare height went to the energy and angle boxes (Advanced Settings and UPOS on, then off).
+  {
+    AddSegDataDialog d;
+    d.show();
+    auto settle = [] { for (int k = 0; k < 20; k++) QApplication::processEvents(); };
+    settle();
+    const int h0 = d.height(), box0 = d.angleBox->height();
+    d.advancedModeCheck->setChecked(true); settle();
+    ok("Advanced Settings shown: the dialog grows", d.height() > h0, QString::number(d.height()));
+    d.advancedModeCheck->setChecked(false); settle();
+    ok("Advanced Settings hidden: dialog back to its height", d.height() == h0,
+       QString("%1 vs %2").arg(d.height()).arg(h0));
+    ok("Advanced Settings hidden: energy/angle boxes not stretched", d.angleBox->height() == box0,
+       QString("%1 vs %2").arg(d.angleBox->height()).arg(box0));
+    d.uposCheck->setChecked(true); settle();
+    d.uposCheck->setChecked(false); settle();
+    ok("UPOS hidden: dialog back to its height", d.height() == h0 && d.angleBox->height() == box0,
+       QString("%1 vs %2").arg(d.height()).arg(h0));
+  }
+
+  // ---- lines that differ only in components, UPOS or keyword blocks are not duplicates ------------------------
+  // Before 2026-10-31 the duplicate check ignored those fields, and the file reader went through it: tests/natural_neon's
+  // test lines 1 and 2 (a natural SUM of three terms and the 20Ne term alone) were "Duplicate Line", the second was
+  // dropped behind a modal message box (the screenshot mode hung on it), and every later segment key moved by one.
+  {
+    int boxes = 0;
+    QTimer watchdog;  // closes any message box so a regression fails instead of hanging
+    QObject::connect(&watchdog, &QTimer::timeout, [&boxes] {
+      if (QWidget *w = QApplication::activeModalWidget()) { boxes++; w->close(); }
+    });
+    watchdog.start(20);
+    SegmentsTab t;
+    t.setPairsModel(&pairs);
+    const QString neon =
+        "1 2 2 0.03 0.8 0.002 0 0 0 0 1 0 6 2 1 -999 2 3 -999 4 4 -999 4 5 -999 6 6 -999 6 7 -999 natural 1\n"
+        "1 2 2 0.03 0.8 0.002 0 0 0 0 1 0 2 2 1 -999 2 3 -999\n"
+        "1 2 2 0.03 0.8 0.002 0 0 0 0 1 0 2 2 1 -999 2 3 -999 natural 1\n"
+        "1 2 2 0.03 0.8 0.002 0 0 0 0 0\n"
+        "1 2 2 0.03 0.8 0.002 0 0 0 0 0\n"  // an exact duplicate in the file is kept too
+        "</segmentsTest>\n";
+    QString in(neon);
+    QTextStream inStream(&in);
+    ok("natural_neon-like test block read", t.readSegTestFile(inStream));
+    QList<SegmentsTestData> tl = t.getSegmentsTestModel()->getLines();
+    ok("every test line of the file kept", tl.size() == 5, QString::number(tl.size()));
+    ok("no message box while reading the test block", boxes == 0, QString::number(boxes));
+    const QString data =
+        "1 1 1 0.5 3 0 180 1 1 0 0 0 0 0 data/x.dat 0 0\n"
+        "1 1 1 0.5 3 0 180 1 1 0 0 0 0 0 data/x.dat 0 0 natural 1\n"
+        "1 1 1 0.5 3 0 180 1 1 0 0 0 0 0 data/x.dat 1 0 1 1 1 -999 0\n"
+        "1 1 1 0.5 3 0 180 1 1 0 0 0 0 0 data/x.dat 1 0 2 1 1 -999 1 2 -999 0\n"
+        "1 1 1 0.5 3 0 180 1 1 0 0 0 0 0 data/x.dat 0 1 2 1.5 0.1\n"
+        "1 1 1 0.5 3 0 180 1 1 0 0 0 0 0 data/x.dat 0 1 1 1.5 0.1\n"
+        "1 1 1 0.5 3 0 180 1 1 0 0 0 0 0 data/x.dat 0 0\n"
+        "</segmentsData>\n";
+    QString din(data);
+    QTextStream dStream(&din);
+    ok("data block read", t.readSegDataFile(dStream));
+    QList<SegmentsDataData> dl = t.getSegmentsDataModel()->getLines();
+    ok("every data line of the file kept", dl.size() == 7, QString::number(dl.size()));
+    ok("no message box while reading the data block", boxes == 0, QString::number(boxes));
+    if (tl.size() == 5 && dl.size() == 7) {
+      SegmentsTestModel *tm = t.getSegmentsTestModel();
+      SegmentsDataModel *dm = t.getSegmentsDataModel();
+      ok("test lines 1 and 2 differ (components)", tm->isSegTestLine(tl[1]) == 1, QString::number(tm->isSegTestLine(tl[1])));
+      ok("test lines 2 and 3 differ (keyword block)", tm->isSegTestLine(tl[2]) == 2, QString::number(tm->isSegTestLine(tl[2])));
+      ok("test lines 4 and 5 are duplicates", tm->isSegTestLine(tl[4]) == 3, QString::number(tm->isSegTestLine(tl[4])));
+      ok("data lines differ (keyword block)", dm->isSegDataLine(dl[1]) == 1, QString::number(dm->isSegDataLine(dl[1])));
+      ok("data lines differ (components)", dm->isSegDataLine(dl[3]) == 3, QString::number(dm->isSegDataLine(dl[3])));
+      ok("data lines differ (UPOS)", dm->isSegDataLine(dl[4]) == 4 && dm->isSegDataLine(dl[5]) == 5,
+         QString("%1 %2").arg(dm->isSegDataLine(dl[4])).arg(dm->isSegDataLine(dl[5])));
+      // The dialog's path still refuses an identical line, with the message box.
+      t.addSegTestLine(tl[1]);
+      ok("identical test line from the dialog refused", tm->getLines().size() == 5 && boxes == 1,
+         QString("%1 lines, %2 boxes").arg(tm->getLines().size()).arg(boxes));
+      SegmentsTestData other = tl[1];
+      other.componentsList = tl[0].componentsList;
+      other.extraTokens = "";
+      t.addSegTestLine(other);
+      ok("test line differing in its tail from the dialog added", tm->getLines().size() == 6 && boxes == 1,
+         QString("%1 lines, %2 boxes").arg(tm->getLines().size()).arg(boxes));
+      t.addSegDataLine(dl[3]);
+      ok("identical data line from the dialog refused", dm->getLines().size() == 7 && boxes == 2,
+         QString("%1 lines, %2 boxes").arg(dm->getLines().size()).arg(boxes));
+    }
+    QString out;
+    QTextStream outStream(&out);
+    outStream.setFieldAlignment(QTextStream::AlignLeft);
+    t.writeSegDataFile(outStream);
+    QStringList got = tokens(out), want = tokens(data);
+    want.removeLast();
+    ok("data lines written back token for token", got == want, got.join(" | "));
+  }
+
+  // Component angles and scalings keep every digit.  Before 2026-11-01 the reader formatted them with QString::arg
+  // and the writer with QTextStream, both six significant digits: a scaling of 0.00012345678 was saved as
+  // 0.000123457, an angle of 37.1234567 as 37.1235.
+  {
+    SegmentsTab t;
+    t.setPairsModel(&pairs);
+    const QString data =
+        "1 1 1 0.5 3 0 180 1 1 0 0 0 0 0 data/x.dat 1 0 -1 2 1 1 37.1234567 0.00012345678 1 2 -999 1.5e-07 0\n"
+        "</segmentsData>\n";
+    QString din(data);
+    QTextStream dStream(&din);
+    ok("scaled SUM line read", t.readSegDataFile(dStream));
+    QString out;
+    QTextStream outStream(&out);
+    outStream.setFieldAlignment(QTextStream::AlignLeft);
+    t.writeSegDataFile(outStream);
+    QStringList got = tokens(out).join(" ").split(' ', Qt::SkipEmptyParts);
+    ok("component angle 37.1234567 written with every digit", got.contains("37.1234567"), got.join(" "));
+    ok("component scaling 0.00012345678 written with every digit", got.contains("0.00012345678"), got.join(" "));
+    ok("component scaling 1.5e-07 written", got.contains("1.5e-07"), got.join(" "));
   }
 
   std::cout << (fails ? "FAILED" : "PASSED") << std::endl;

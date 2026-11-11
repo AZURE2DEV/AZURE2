@@ -41,25 +41,25 @@ maxOrbitalMomentum=3
 </levels>
 <segmentsData>
 1 1 2 0.0 20.0 0 180 4 1 0 0 0 0 0 data/grid1.dat
-1 1 2 0.0 20.0 0 180 9 b:y 1 0 0 0 0 0 data/grid1.dat
-1 1 2 0.0 20.0 0 180 9 t:y 1 0 0 0 0 0 data/grid1.dat
-1 1 2 0.0 20.0 0 180 9 e1:y 1 0 0 0 0 0 data/grid1.dat
-1 1 2 0.0 20.0 0 180 9 e2:y 1 0 0 0 0 0 data/grid1.dat
-1 1 2 0.0 20.0 0 180 9 b:y>e1:y 1 0 0 0 0 0 data/grid1.dat
-1 1 2 0.0 20.0 0 180 9 b:y>e2:y 1 0 0 0 0 0 data/grid1.dat
-1 1 2 0.0 20.0 0 180 9 t:y>e1:y 1 0 0 0 0 0 data/grid1.dat
-1 1 2 0.0 20.0 0 180 9 t:y>e2:y 1 0 0 0 0 0 data/grid1.dat
-1 1 2 0.0 20.0 0 180 9 b:y*t:y 1 0 0 0 0 0 data/grid1.dat
+1 1 2 0.0 20.0 0 180 10 b:y 1 0 0 0 0 0 data/grid1.dat
+1 1 2 0.0 20.0 0 180 10 t:y 1 0 0 0 0 0 data/grid1.dat
+1 1 2 0.0 20.0 0 180 10 e1:y 1 0 0 0 0 0 data/grid1.dat
+1 1 2 0.0 20.0 0 180 10 e2:y 1 0 0 0 0 0 data/grid1.dat
+1 1 2 0.0 20.0 0 180 10 b:y>e1:y 1 0 0 0 0 0 data/grid1.dat
+1 1 2 0.0 20.0 0 180 10 b:y>e2:y 1 0 0 0 0 0 data/grid1.dat
+1 1 2 0.0 20.0 0 180 10 t:y>e1:y 1 0 0 0 0 0 data/grid1.dat
+1 1 2 0.0 20.0 0 180 10 t:y>e2:y 1 0 0 0 0 0 data/grid1.dat
+1 1 2 0.0 20.0 0 180 10 b:y*t:y 1 0 0 0 0 0 data/grid1.dat
 1 2 1 0.0 20.0 0 180 4 1 0 0 0 0 0 data/grid2.dat
-1 2 1 0.0 20.0 0 180 9 b:y 1 0 0 0 0 0 data/grid2.dat
-1 2 1 0.0 20.0 0 180 9 t:y 1 0 0 0 0 0 data/grid2.dat
-1 2 1 0.0 20.0 0 180 9 e1:y 1 0 0 0 0 0 data/grid2.dat
-1 2 1 0.0 20.0 0 180 9 e2:y 1 0 0 0 0 0 data/grid2.dat
-1 2 1 0.0 20.0 0 180 9 b:y>e1:y 1 0 0 0 0 0 data/grid2.dat
-1 2 1 0.0 20.0 0 180 9 b:y>e2:y 1 0 0 0 0 0 data/grid2.dat
-1 2 1 0.0 20.0 0 180 9 t:y>e1:y 1 0 0 0 0 0 data/grid2.dat
-1 2 1 0.0 20.0 0 180 9 t:y>e2:y 1 0 0 0 0 0 data/grid2.dat
-1 2 1 0.0 20.0 0 180 9 b:y*t:y 1 0 0 0 0 0 data/grid2.dat
+1 2 1 0.0 20.0 0 180 10 b:y 1 0 0 0 0 0 data/grid2.dat
+1 2 1 0.0 20.0 0 180 10 t:y 1 0 0 0 0 0 data/grid2.dat
+1 2 1 0.0 20.0 0 180 10 e1:y 1 0 0 0 0 0 data/grid2.dat
+1 2 1 0.0 20.0 0 180 10 e2:y 1 0 0 0 0 0 data/grid2.dat
+1 2 1 0.0 20.0 0 180 10 b:y>e1:y 1 0 0 0 0 0 data/grid2.dat
+1 2 1 0.0 20.0 0 180 10 b:y>e2:y 1 0 0 0 0 0 data/grid2.dat
+1 2 1 0.0 20.0 0 180 10 t:y>e1:y 1 0 0 0 0 0 data/grid2.dat
+1 2 1 0.0 20.0 0 180 10 t:y>e2:y 1 0 0 0 0 0 data/grid2.dat
+1 2 1 0.0 20.0 0 180 10 b:y*t:y 1 0 0 0 0 0 data/grid2.dat
 </segmentsData>
 <segmentsTest>
 </segmentsTest>

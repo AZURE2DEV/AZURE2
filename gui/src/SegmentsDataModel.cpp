@@ -160,6 +160,13 @@ QVariant SegmentsDataModel::data(const QModelIndex &index, int role) const {
     } else if (index.column() == 6)
       return QVariant();
     else if (index.column() == 7) {
+      // a transmission / self-shielded-yield segment: the observable, its thickness and whether it is fitted
+      const SegmentKeywords::SampleBlock sb = SegmentKeywords::sampleBlock(line.extraTokens);
+      if (!sb.kind.isEmpty()) {
+        const QString fit = !sb.fit ? QString() : sb.vary ? tr(", fitted") : tr(", fixed parameter");
+        return QString("<center>%1<br><small>n = %2 atoms/b%3</small></center>")
+            .arg(sb.kind == "transmission" ? tr("Transmission") : tr("Self-Shielded Yield"), sb.n, fit);
+      }
       if (line.dataType == 2) {
         QChar orbital;
         switch (line.phaseL) {
@@ -206,12 +213,17 @@ QVariant SegmentsDataModel::data(const QModelIndex &index, int role) const {
       else if (line.dataType == 7)
         return QString(tr("<center>Analyzing Power</center>"));
       else if (line.dataType == 9)
+        return QString(tr("<center>Angular Coefficients</center>"));
+      else if (line.dataType == 10)
         return QString(tr("<center>Spin: %1</center>")).arg(line.spinObservable);
       else
         return QString(tr("<center>Angle Integrated</center>"));
     } else if (index.column() == 8)
       return line.dataFile;
     else if (index.column() == 9) {
+      // a normalization-group member's own norm is not used: grey (its leader's is, see the tooltip)
+      if (groupLeader(index.row(), "normgroup") >= 0)
+        return QString("<center><font style='color:gray;'>%1</font></center>").arg(line.dataNorm, 0, 'g', 2);
       if (line.varyNorm == 1)
         return QString("<center><font style='color:red;font-weight:bold;'>%1</font></center>").arg(line.dataNorm, 0, 'g', 2);
       else
@@ -228,6 +240,8 @@ QVariant SegmentsDataModel::data(const QModelIndex &index, int role) const {
     } else if (index.column() == 13) {
       return QVariant();
     } else if (index.column() == 14) {
+      if (groupLeader(index.row(), "shiftgroup") >= 0)
+        return QString("<center><font style='color:gray;'>%1</font></center>").arg(line.energyShift, 0, 'g', 2);
       if (line.varyEnergyShift == 1)
         return QString("<center><font style='color:red;font-weight:bold;'>%1</font></center>").arg(line.energyShift, 0, 'g', 2);
       else
@@ -236,7 +250,23 @@ QVariant SegmentsDataModel::data(const QModelIndex &index, int role) const {
       return line.energyShiftError;
     } else if (index.column() == 16) {
       return line.varyEnergyShift;
+    } else if (index.column() == GroupsColumn) {
+      return groupsText(index.row());
     }
+  } else if (role == Qt::ToolTipRole) {
+    if (index.column() == GroupsColumn) {
+      const QString tip = groupsToolTip(index.row());
+      return tip.isEmpty() ? QVariant() : QVariant(tip);
+    }
+    const QString keyword = index.column() == 9 ? QString("normgroup") : index.column() == 14 ? QString("shiftgroup") : QString();
+    const int leader = keyword.isEmpty() ? -1 : groupLeader(index.row(), keyword);
+    if (leader >= 0)
+      return tr("Not used: segment %1 takes the %2 of segment %3 (%4 %5).")
+          .arg(index.row() + 1)
+          .arg(keyword == "normgroup" ? tr("normalization") : tr("energy shift"))
+          .arg(leader + 1)
+          .arg(keyword)
+          .arg(SegmentKeywords::groupLabel(segDataLineList.at(index.row()).extraTokens, keyword));
   } else if (role == Qt::EditRole) {
     SegmentsDataData line = segDataLineList.at(index.row());
     if (index.column() == 1)
@@ -335,6 +365,8 @@ QVariant SegmentsDataModel::headerData(int section, Qt::Orientation orientation,
         return tr("Energy Shift\nError [MeV]");
       case 16:
         return tr("Vary\nEnergy Shift?");
+      case GroupsColumn:
+        return tr("Groups");
       default:
         return QVariant();
     }
@@ -413,6 +445,7 @@ bool SegmentsDataModel::setData(const QModelIndex &index, const QVariant &value,
 
     segDataLineList.replace(row, tempData);
     emit(dataChanged(index, index));
+    if (index.column() == 0) emitGroupCellsChanged();  // an inactive segment leaves its groups
     return true;
   } else if (role == Qt::CheckStateRole) {
     int row = index.row();
@@ -426,6 +459,7 @@ bool SegmentsDataModel::setData(const QModelIndex &index, const QVariant &value,
       return false;
     segDataLineList.replace(row, tempData);
     emit(dataChanged(index, index));
+    emitGroupCellsChanged();
     return true;
   }
   return false;
@@ -436,9 +470,89 @@ void SegmentsDataModel::setLineSpin(int row, const QString &token) {
   segDataLineList[row].spinObservable = token;
 }
 
+void SegmentsDataModel::emitGroupCellsChanged() {
+  if (segDataLineList.isEmpty()) return;
+  bool any = false;
+  for (const SegmentsDataData &line : segDataLineList)
+    for (const QString &keyword : SegmentKeywords::groupKeywords())
+      if (!SegmentKeywords::groupLabel(line.extraTokens, keyword).isEmpty()) any = true;
+  if (any) emit dataChanged(index(0, 0), index(segDataLineList.size() - 1, SegmentsDataData::SIZE - 1));
+}
+
 void SegmentsDataModel::setLineExtras(int row, const QString &tokens) {
   if (row < 0 || row >= segDataLineList.size()) return;
   segDataLineList[row].extraTokens = tokens;
+  // The tail shows in the reaction (sample) and Groups columns of this row, and a group block changes which row
+  // leads its group, so every row's norm, shift and Groups cells may change.
+  emit dataChanged(index(0, 0), index(segDataLineList.size() - 1, SegmentsDataData::SIZE - 1));
+}
+
+int SegmentsDataModel::groupLeader(int row, const QString &keyword) const {
+  if (row < 0 || row >= segDataLineList.size() || segDataLineList.at(row).isActive != 1) return -1;
+  const QString label = SegmentKeywords::groupLabel(segDataLineList.at(row).extraTokens, keyword);
+  if (label.isEmpty()) return -1;
+  for (int i = 0; i < row; i++)
+    if (segDataLineList.at(i).isActive == 1 && SegmentKeywords::groupLabel(segDataLineList.at(i).extraTokens, keyword) == label)
+      return i;
+  return -1;
+}
+
+QStringList SegmentsDataModel::groupLabels(const QString &keyword) const {
+  QStringList labels;
+  for (const SegmentsDataData &line : segDataLineList) {
+    const QString label = SegmentKeywords::groupLabel(line.extraTokens, keyword);
+    if (!label.isEmpty() && !labels.contains(label)) labels << label;
+  }
+  labels.sort();
+  return labels;
+}
+
+static QString groupShortName(const QString &keyword) {
+  if (keyword == "normgroup") return QObject::tr("norm");
+  if (keyword == "shiftgroup") return QObject::tr("shift");
+  if (keyword == "thicknessgroup") return QObject::tr("thickness");
+  return QObject::tr("shift fn");
+}
+
+QString SegmentsDataModel::groupsText(int row) const {
+  if (row < 0 || row >= segDataLineList.size()) return QString();
+  QStringList parts;
+  for (const QString &keyword : SegmentKeywords::groupKeywords()) {
+    const QString label = SegmentKeywords::groupLabel(segDataLineList.at(row).extraTokens, keyword);
+    if (!label.isEmpty()) parts << groupShortName(keyword) + ": " + label;
+  }
+  return parts.join(", ");
+}
+
+QString SegmentsDataModel::groupsToolTip(int row) const {
+  if (row < 0 || row >= segDataLineList.size()) return QString();
+  QStringList lines;
+  for (const QString &keyword : SegmentKeywords::groupKeywords()) {
+    const QString label = SegmentKeywords::groupLabel(segDataLineList.at(row).extraTokens, keyword);
+    if (label.isEmpty()) continue;
+    const QString what = keyword == "normgroup"        ? tr("normalization")
+                         : keyword == "shiftgroup"     ? tr("constant energy shift")
+                         : keyword == "thicknessgroup" ? tr("sample thickness")
+                                                       : tr("shift function (each member keeps its own constant shift)");
+    if (segDataLineList.at(row).isActive != 1) {
+      lines << tr("%1 %2: inactive, not in the group").arg(keyword, label);
+      continue;
+    }
+    const int leader = groupLeader(row, keyword);
+    if (leader >= 0) {
+      lines << tr("%1 %2: uses the %3 of segment %4").arg(keyword, label, what).arg(leader + 1);
+      continue;
+    }
+    QStringList members;
+    for (int i = row + 1; i < segDataLineList.size(); i++)
+      if (groupLeader(i, keyword) == row) members << QString::number(i + 1);
+    if (members.isEmpty())
+      lines << tr("%1 %2: the only active segment of the group, nothing shared").arg(keyword, label);
+    else
+      lines << tr("%1 %2: first segment of the group; its %3 is used by segment%4 %5")
+                   .arg(keyword, label, what, members.size() > 1 ? "s" : "", members.join(", "));
+  }
+  return lines.join("\n");
 }
 
 bool SegmentsDataModel::insertRows(int position, int rows, const QModelIndex &index) {
@@ -472,6 +586,8 @@ Qt::ItemFlags SegmentsDataModel::flags(const QModelIndex &index) const {
   return QAbstractTableModel::flags(index);
 }
 
+// Row of a line equal to this one in every field (components, UPOS and keyword blocks included; not the active
+// flag), or -1.  Before 2026-10-31 the components, UPOS fields and keyword blocks were not compared.
 int SegmentsDataModel::isSegDataLine(const SegmentsDataData &line) const {
   int foundLine = -1;
   for (int i = 0; i < segDataLineList.size(); i++) {
@@ -492,7 +608,15 @@ int SegmentsDataModel::isSegDataLine(const SegmentsDataData &line) const {
         tempLine.spinObservable == line.spinObservable &&
         tempLine.energyShift == line.energyShift &&
         tempLine.energyShiftError == line.energyShiftError &&
-        tempLine.varyEnergyShift == line.varyEnergyShift) {
+        tempLine.varyEnergyShift == line.varyEnergyShift &&
+        tempLine.isAdvanced == line.isAdvanced &&
+        tempLine.operationType == line.operationType &&
+        tempLine.componentsList == line.componentsList &&
+        tempLine.isUPOS == line.isUPOS &&
+        tempLine.secondaryDecayL == line.secondaryDecayL &&
+        tempLine.finalJ == line.finalJ &&
+        tempLine.delta == line.delta &&
+        tempLine.extraTokens.simplified() == line.extraTokens.simplified()) {
       foundLine = i;
       break;
     }

@@ -76,3 +76,35 @@ set_tests_properties(parameter_file_reference PROPERTIES TIMEOUT 10)
 add_executable(adaptive_grid_reference_test adaptive_grid_reference_test.cpp)
 target_link_libraries(adaptive_grid_reference_test PRIVATE AZURE2Core)
 add_test(NAME adaptive_grid_reference COMMAND adaptive_grid_reference_test)
+
+# Wigner limit of a channel: the particle formula, and no limit for photon, beta and
+# radius-less channels (a photon pair's mu = 0 gave inf before 2026-10-27, audit item 32).
+add_executable(wigner_limit_reference_test wigner_limit_reference_test.cpp)
+target_link_libraries(wigner_limit_reference_test PRIVATE AZURE2Core)
+add_test(NAME wigner_limit_reference COMMAND wigner_limit_reference_test)
+
+# The integrated Fermi function stays finite down to the beta end point (it was NaN within ~0.2 keV of it).
+add_executable(fermi_endpoint_reference_test fermi_endpoint_reference_test.cpp)
+target_link_libraries(fermi_endpoint_reference_test PRIVATE AZURE2Core)
+add_test(NAME fermi_endpoint_reference COMMAND fermi_endpoint_reference_test)
+
+# InputFiles' cache must not serve a same-size rewrite whose stamp did not change (the Windows CI failure of
+# pyazr_natural_target, 2026-11-05), and must still serve an old, unchanged file from memory.
+add_executable(input_files_cache_test input_files_cache_test.cpp)
+target_link_libraries(input_files_cache_test PRIVATE AZURE2Core)
+add_test(NAME input_files_cache COMMAND input_files_cache_test)
+
+# CoulFuncCache::TransientScope opened and closed on several threads at once:
+# every thread must find its own transient entries until its scope ends
+# (until 2026-11-05 the end of any thread's scope cleared every thread's
+# scratch memo, corrupting the heap in multithreaded fits).
+add_executable(coulfunc_transient_scope_test coulfunc_transient_scope_test.cpp)
+target_link_libraries(coulfunc_transient_scope_test PRIVATE AZURE2Core)
+add_test(NAME coulfunc_transient_scope COMMAND coulfunc_transient_scope_test)
+set_tests_properties(coulfunc_transient_scope PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=4")
+
+# Coulomb functions just above a charged-particle threshold against the exact zero-energy (Bessel) limit,
+# 12C+12C, 16O+16O, alpha+12C (2026-11-06; the heavy-ion fallback used to cancel to nonsense).
+add_executable(coulomb_threshold_reference_test coulomb_threshold_reference_test.cpp)
+target_link_libraries(coulomb_threshold_reference_test PRIVATE AZURE2Core)
+add_test(NAME coulomb_threshold_reference COMMAND coulomb_threshold_reference_test)

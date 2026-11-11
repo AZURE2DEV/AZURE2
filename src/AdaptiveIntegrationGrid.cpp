@@ -46,9 +46,12 @@ std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, do
     std::swap(startEnergy, endEnergy);
   }
 
-  // Handle trivial case
+  // Handle trivial case.  The threshold is RELATIVE: a time-of-flight kernel at a
+  // thermal point (25 meV) spans nano-eV in energy and still needs a grid; an
+  // absolute 1 eV floor returned one point there and the fold came out zero
+  // (UDR, 2026-11-07).
   double totalRange = startEnergy - endEnergy;
-  if (totalRange <= 0.0 || totalRange < 1.0e-6) {
+  if (totalRange <= 0.0 || totalRange < 1.0e-9 * startEnergy) {
     grid.push_back(startEnergy);
     return grid;
   }
@@ -61,7 +64,7 @@ std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, do
   std::vector<double> grid;
   if (startEnergy < endEnergy) std::swap(startEnergy, endEnergy);
   double totalRange = startEnergy - endEnergy;
-  if (totalRange <= 0.0 || totalRange < 1.0e-6) {
+  if (totalRange <= 0.0 || totalRange < 1.0e-9 * startEnergy) {
     grid.push_back(startEnergy);
     return grid;
   }
@@ -141,9 +144,13 @@ std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, do
       nextEnergy = currentEnergy - stepSize;
       // Safety check to avoid infinite loops in the smooth/background regime;
       // the anchored branch above always advances to a node strictly below,
-      // so it cannot stall and does not need this guard.
-      if (stepSize < 1.0e-10) {
-        if (nextEnergy < endEnergy) nextEnergy = endEnergy;
+      // so it cannot stall and does not need this guard.  The threshold is
+      // RELATIVE to the energy (an absolute 1e-10 MeV cut off every grid
+      // narrower than that, e.g. a time-of-flight kernel at a thermal point,
+      // after its first node, 2026-11-07), and the grid then finishes at the
+      // window's end rather than one tiny step below the start.
+      if (stepSize < 1.0e-13 * currentEnergy || grid.size() > 1000000) {
+        nextEnergy = endEnergy;
         grid.push_back(nextEnergy);
         break;
       }
@@ -204,7 +211,11 @@ std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, do
       if (candidateTol > 0.0 && candidateTol < tolerance) tolerance = candidateTol;
     }
   }
-  if (tolerance < 1.0e-14) tolerance = 1.0e-14;
+  // A window narrower than the default tolerance (a TOF kernel at a thermal
+  // point) must keep its own points too: never collapse more than 1e-4 of the
+  // window, and floor the tolerance relative to the energy, not absolutely.
+  tolerance = std::min(tolerance, 1.0e-4 * totalRange);
+  if (tolerance < 1.0e-13 * startEnergy) tolerance = 1.0e-13 * startEnergy;
 
   std::vector<double> uniqueGrid;
   if (!grid.empty()) {
@@ -458,7 +469,7 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
         if (localEnergy <= 0.0) continue;  // sub-threshold channel
         double gamma = std::abs(level->GetGamma(ch));
         if (gamma <= 0.0) continue;
-        double radius = chPair->GetChRad();
+        double radius = channel->GetRadius();
         CoulFunc coulFunc(chPair, false);
         double pene = coulFunc.Penetrability(channel->GetL(), radius, localEnergy);
         double dSdE = coulFunc.PEShift_dE(channel->GetL(), radius, localEnergy);
@@ -487,7 +498,7 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
         if (gamma <= 0.0) continue;
         double localEnergy = level->GetE() - chPair->GetExE() - chPair->GetSepE();
         double pene;
-        if (std::abs(level->GetE() - chPair->GetExE()) < 1.0e-3 &&
+        if (std::abs(level->GetE() - chPair->GetHeavyExE()) < 1.0e-3 &&
             jgroup->GetJ() == chPair->GetJ(2) &&
             jgroup->GetPi() == chPair->GetPi(2)) {
           double jValue = jgroup->GetJ();

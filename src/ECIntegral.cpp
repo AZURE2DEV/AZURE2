@@ -282,8 +282,34 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
 
   double sepEnergy = pair()->GetSepE() + pair()->GetExE();
   double outEnergy = inEnergy - sepEnergy;
-  double chanRad = pair()->GetChRad();
+  double chanRad = chanrad_;
   double redMass = pair()->GetRedMass();
+
+  // Just above a charged-particle threshold the open-channel form fails: with eta >~ 110 the penetrability
+  // underflows while G overflows, and sqrt(P) * int (G + iF) W came out as 0, as an overflow, as NaN or (from
+  // eta ~ 300) finite but 30 % wrong -- found as NaN in a fold of 16O(n,g) data whose sub-point sat 0.2 keV above
+  // the alpha + 13C threshold of 17O (13C+a/10-20-26_merged_ancprior_ng, HOLT RESOLUTION CHECK).  The physical
+  // amplitude is smooth through the threshold, so between the threshold and the energy E_c where eta reaches
+  // kMaxOpenChannelEta, channel capture is interpolated linearly between its threshold value (the closed-channel,
+  // Whittaker-ratio form just below) and the open form at E_c: continuous at both ends (alpha + 13C: E_c = 1 keV,
+  // amplitude slope 6e-5 per keV relative).  Direct capture from such an entrance channel is suppressed by
+  // ~exp(-pi eta) < exp(-300): zero.
+  if (outEnergy > 0.0 && pair()->GetZ(1) * pair()->GetZ(2) != 0) {
+    const double eta = Kinematics::Channel(pair()).Eta(outEnergy);
+    if (eta > kMaxOpenChannelEta) {
+      if (!isChannelCapture) return complex(0.0, 0.0);
+      const double eCut = outEnergy * pow(eta / kMaxOpenChannelEta, 2.0) * 1.001;  // eta just below the limit
+      const double eBelow = -1e-2 * eCut;  // the threshold value: closer, the Whittaker tail runs to ~1e4 fm and its quadrature fails
+      complex atCut = CalculateDirect(theInitialLValue, theFinalLValue, theInitialSValue, theFinalSValue,
+                                      theInitialJValue, theFinalJValue, theLMult, radType, sepEnergy + eCut,
+                                      levelEnergy, isChannelCapture);
+      complex atThreshold = CalculateDirect(theInitialLValue, theFinalLValue, theInitialSValue, theFinalSValue,
+                                            theInitialJValue, theFinalJValue, theLMult, radType, sepEnergy + eBelow,
+                                            levelEnergy, isChannelCapture);
+      const double t = (outEnergy - eBelow) / (eCut - eBelow);
+      return atThreshold + t * (atCut - atThreshold);
+    }
+  }
 
   // The convection-current term needs the orbital momenta of this term (electric, exact form only).
   bool convection = configure_ && configure_->ecConvectionCurrent && radType == 'E';
@@ -398,15 +424,27 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
         AngCoeff::ClebGord(theInitialLValue, theLMult, theFinalLValue, 0, 0, 0) * sqrt(2. * theInitialLValue + 1.) * sqrt(2. * theFinalJValue + 1.) *
         AngCoeff::Racah(theLMult, theFinalLValue, theInitialJValue, theInitialSValue, theInitialLValue, theFinalJValue);
   } else {
-    complex orbitalTerm = effectiveCharge *
-        sqrt((2. * theInitialLValue + 1.) * (theInitialLValue + 1.) * theInitialLValue) *
-        AngCoeff::Racah(1., theInitialLValue, theInitialJValue, theInitialSValue, theInitialLValue, theFinalJValue);
+    // <(l s_f)J_f||L||(l s_i)J_i> is diagonal in the channel spin: L acts on the orbital part only, so the
+    // orbital term exists for s_f = s_i alone.  Before 2026-10-26 it was also added on the spin-flip pathways
+    // (s_f != s_i, which CNuc::SortPathways builds for M1), where only g1 S1 + g2 S2 can act.  tests/ec_m1_exact
+    // cases (n), (o).
+    complex orbitalTerm(0.0, 0.0);
+    if (fabs(theFinalSValue - theInitialSValue) < 1e-6)
+      orbitalTerm = effectiveCharge *
+          sqrt((2. * theInitialLValue + 1.) * (theInitialLValue + 1.) * theInitialLValue) *
+          AngCoeff::Racah(1., theInitialLValue, theInitialJValue, theInitialSValue, theInitialLValue, theFinalJValue);
+    // <(j1 j2)s_f||g1 S1 + g2 S2||(j1 j2)s_i> (Edmonds 7.1.7, 7.1.8).  Racah(a,b,c,d,e,f) = (-1)^(a+b+c+d) {a b e; d c f}
+    // leaves an extra (-1)^(2 j1) in the g1 term and (-1)^(2 j2) in the g2 term; parityJ2 and parityJ1 remove it.
+    // Before 2026-10-25 they were missing: a cluster's moment flipped sign whenever the OTHER cluster had
+    // half-integer spin (p+14N s-wave: sigma_M1 x3.3 or x0.56).  tests/ec_m1_exact cases (k), (l).
+    const double parityJ1 = (lround(2. * pair()->GetJ(1)) % 2) ? -1. : 1.;
+    const double parityJ2 = (lround(2. * pair()->GetJ(2)) % 2) ? -1. : 1.;
     complex tau = pow(std::complex<double>(-1., 0.), pair()->GetJ(1) + pair()->GetJ(2)) *
-        (pow(complex(-1., 0.), theFinalSValue) *
+        (parityJ2 * pow(complex(-1., 0.), theFinalSValue) *
              sqrt(pair()->GetJ(1) * (pair()->GetJ(1) + 1.) * (2. * pair()->GetJ(1) + 1.)) *
              AngCoeff::Racah(theFinalSValue, pair()->GetJ(1), theInitialSValue, pair()->GetJ(1), pair()->GetJ(2), 1.) *
              pair()->GetG(1) +
-         pow(complex(-1., 0.), theInitialSValue) *
+         parityJ1 * pow(complex(-1., 0.), theInitialSValue) *
              sqrt(pair()->GetJ(2) * (pair()->GetJ(2) + 1.) * (2. * pair()->GetJ(2) + 1.)) *
              AngCoeff::Racah(theFinalSValue, pair()->GetJ(2), theInitialSValue, pair()->GetJ(2), pair()->GetJ(1), 1.) *
              pair()->GetG(2));

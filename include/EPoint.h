@@ -3,7 +3,9 @@
 #include <cmath>
 #include <limits>
 #include <vector>
+#include <string>
 #include <utility>
+#include <cassert>
 #include <memory>
 
 #include <cstring>
@@ -109,6 +111,64 @@ class ScopedPointMappingOff {
 
 class EPoint {
  public:
+  /// The energy-dependent channel tables of a point (one row per J group); see edep_.
+  /// Packed: one flat array per kind and one row index, five allocations a point
+  /// instead of four per J group (natural neon: ~60 a sub-point).  Row j (from 1)
+  /// holds the channels of J group j, at slots [rowStart[j-1], rowStart[j]).
+  struct EDependentTables {
+    std::vector<int> rowStart{0};
+    vector_c lo_elements;
+    vector_r penetrabilities;
+    vector_c coulombphase;
+    vector_c hardspherephase;
+    /// Slot of (J group, channel); rows and channels are filled in order and extended here.
+    int Slot(int jGroupNum, int channelNum) {
+      while ((int)rowStart.size() < jGroupNum + 1) rowStart.push_back(rowStart.back());
+      const int slot = rowStart[jGroupNum - 1] + channelNum - 1;
+      if (slot >= rowStart[jGroupNum]) {
+        assert(jGroupNum + 1 == (int)rowStart.size() && slot == rowStart[jGroupNum]);
+        rowStart[jGroupNum] = slot + 1;
+      }
+      return slot;
+    }
+    int At(int jGroupNum, int channelNum) const { return rowStart[jGroupNum - 1] + channelNum - 1; }
+    template <class V, class T>
+    static void Put(V &v, int slot, const T &x) {
+      if ((int)v.size() <= slot) v.resize(slot + 1);
+      v[slot] = x;
+    }
+    void Clear() {
+      rowStart.assign(1, 0);
+      lo_elements.clear();
+      penetrabilities.clear();
+      coulombphase.clear();
+      hardspherephase.clear();
+    }
+    void ShrinkToFit() {
+      rowStart.shrink_to_fit();
+      lo_elements.shrink_to_fit();
+      penetrabilities.shrink_to_fit();
+      coulombphase.shrink_to_fit();
+      hardspherephase.shrink_to_fit();
+    }
+  };
+  /// Everything CalcEDependentValues and CalcLegendreP compute for a point, by
+  /// reference: the tables are shared, not copied.  These depend only on the
+  /// point's c.m. energy, angle and pairs, never on a fit parameter, so a
+  /// re-placed sub-point at an unchanged node takes them from the sub-point it
+  /// replaces (EData::ReplaceSubPointGrids).
+  struct EDependentShare {
+    double energy = 0.0;
+    double angle = 0.0;
+    int entranceKey = 0, exitKey = 0;
+    double geofactor = 0.0, sfactorconv = 0.0, screen_k = 0.0;
+    std::shared_ptr<const EDependentTables> tables;
+    std::shared_ptr<const vector_r> legendre;
+  };
+  /// The point's energy-dependent values, for another point at the same energy (requires them to be valid).
+  EDependentShare ShareEDependentValues() const;
+  /// Takes a share made at exactly this point's energy, angle and pairs; returns false and changes nothing otherwise.
+  bool AdoptEDependentValues(const EDependentShare &);
   /// Build from a line of a data file, taking its conventions from the parent segment.
   EPoint(DataLine, ESegment *);
   /// Build at a given energy and angle, for a segment generated from a grid.
@@ -128,11 +188,14 @@ class EPoint {
   //! Vector analyzing power point; the fit value is A_y, not a cross section.
   bool IsAnalyzingPower() const { return is_analyzing_power_; };
   void SetIsAnalyzingPower(bool v) { is_analyzing_power_ = v; };
+  /// The total cross section of the entrance pair (optical theorem), ESegment::IsTotalTerm.
+  bool IsTotal() const { return is_total_; };
+  void SetIsTotal(bool v) { is_total_ = v; };
   //! A_y is kept beside the cross section rather than replacing it, because
   //! target-effect integration needs the cross section as the weight.
   double GetAnalyzingPower() const { return analyzing_power_; };
   void SetAnalyzingPower(double v) { analyzing_power_ = v; };
-  //! The spin observable of an isDiff 9 point (null: isDiff 7 A_y, or not a spin point).
+  //! The spin observable of an isDiff 10 point (null: isDiff 7 A_y, or not a spin point).
   const SpinObservable *GetSpinObservable() const { return spin_observable_.get(); };
   void SetSpinObservable(std::shared_ptr<const SpinObservable> v) { spin_observable_ = v; };
   //! The user-defined resolution kernel built for this point (shared, so
@@ -156,6 +219,12 @@ class EPoint {
   };
   void SetSubGridSpec(const SubGridSpec &spec) { sub_grid_spec_ = spec; };
   const SubGridSpec &GetSubGridSpec() const { return sub_grid_spec_; };
+  /// The point's own lab -> c.m. factor and entrance-pair charges, with which every target-effect kernel
+  /// converts the line's lab energies (beam sigma, beam profile, Bohr straggling).  Set by
+  /// EData::ReadTargetEffectsFile for each point and component point; a line shared by several pairs
+  /// used to be converted once with the first pair's factor (2026-10-27).
+  void SetTargetKinematics(double cmFactor, int z1, int z2) { cm_factor_ = cmFactor; bohr_z1_ = z1; bohr_z2_ = z2; }
+  double GetCMFactor() const { return cm_factor_; }
   /// Is this one of the sub-points a target-effect integral is built from?
   bool IsSubPoint() const { return is_sub_point_; };
   /*!
@@ -192,8 +261,40 @@ class EPoint {
   /// 1 everywhere unless the effect declares energy ranges.
   double GetTargetBlendWeight() const { return target_blend_weight_; };
   void SetTargetBlendWeight(double w) { target_blend_weight_ = w; };
+  /// Thin-target integration restricted to energy windows (2026-11-05): outside the windows (blend weight 0) the
+  /// point is evaluated at the single depth-averaged energy E_bar = E - D of its own target instead of being a
+  /// plain point at its data (beam) energy, which was off by the centroid shift ~Delta/2.  Such a point carries
+  /// one sub-point at E_bar (fixed density) or three spanning the range of E_bar a fitted density can reach,
+  /// and IsTargetFallbackOnly() is true.  D (c.m. MeV, TargetEffect::MeanEnergyLoss) is set on every thin-target
+  /// point: edge blending and the automatic decision fall back to sigma(E_bar) as well.
+  bool IsTargetFallbackOnly() const { return target_fallback_only_; }
+  void SetTargetFallbackOnly(bool f) { target_fallback_only_ = f; }
+  double GetTargetFallbackDepth() const { return target_fallback_depth_; }
+  void SetTargetFallbackDepth(double d) { target_fallback_depth_ = d; }
+  /// While alive, the target integration of the point returns sigma(E_bar) from its sub-points (an automatic
+  /// tolerance decided the integration is not needed at this point).
+  class TargetFallbackScope {
+   public:
+    explicit TargetFallbackScope(EPoint *p) : p_(p), prev_(p->target_fallback_now_) { p_->target_fallback_now_ = true; }
+    ~TargetFallbackScope() { p_->target_fallback_now_ = prev_; }
+    TargetFallbackScope(const TargetFallbackScope &) = delete;
+    TargetFallbackScope &operator=(const TargetFallbackScope &) = delete;
+   private:
+    EPoint *p_;
+    bool prev_;
+  };
   /// Highest Legendre order. Angular-distribution points only.
   int GetMaxAngDistOrder() const;
+  /// An angular-coefficient data point (segment isDiff 9): the fit value is the Legendre
+  /// coefficient of this order, a_k = A_k / A_0 (or A_k itself, b/sr, when absolute).
+  bool IsCoefficient() const { return coefficient_order_ >= 0; };
+  int GetCoefficientOrder() const { return coefficient_order_; };
+  bool GetCoefficientAbsolute() const { return coefficient_absolute_; };
+  void SetCoefficientOrder(int k) { coefficient_order_ = k; };
+  void SetCoefficientAbsolute(bool a) { coefficient_absolute_ = a; };
+  /// A_0 = sigma_int / 4 pi (b/sr) of an angular-distribution point, set with its coefficients.
+  double GetAngDistA0() const { return ang_dist_a0_; };
+  void SetAngDistA0(double a0) { ang_dist_a0_ = a0; };
   /// Number of stored angular-distribution coefficients.
   int GetNumAngularDists() const;
   /// Angular momentum of the secondary decay. UPOS points only.
@@ -241,10 +342,16 @@ class EPoint {
   double GetSqrtPenetrability(int, int) const;
   /// Total spin. Phase-shift points only.
   double GetJ() const;
+  /// Channel spin of a phase-shift point (< 0: the segment gave none, so a single spin must match).
+  double GetPhaseS() const { return phase_s_value_; }
   /// Stopping cross section at this sub-point, for a yield-curve target integration.
   double GetStoppingPower() const;
   /// Beam energy loss across the target at this point.
   double GetTargetThickness() const;
+  /// The lab energy the target thickness was computed at (EData::ReadTargetEffectsFile, unshifted), so a
+  /// fitted density recomputes it at the same energy (EData::FillDensitiesFromParams).
+  double GetTargetLabEnergy() const { return targetLabEnergy_; }
+  void SetTargetLabEnergy(double e) { targetLabEnergy_ = e; }
   /// Angular-distribution coefficient of the given order.
   double GetAngularDist(int) const;
   /// Jacobian converting the angle from lab to centre of mass.
@@ -289,10 +396,20 @@ class EPoint {
   void ConvertExcitationEnergy(PPair *);
   /// Total decay energy from the light particle's, with the parent at rest.
   void ConvertDecayEnergy(PPair *);
-  /// Fill the centre-of-mass angle from the lab angle.
-  void ConvertLabAngle(PPair *);
-  /// As above for a reaction with different entrance and exit pairs.
-  void ConvertLabAngle(PPair *, PPair *, const Config &);
+  /// Fill the centre-of-mass angle from the lab angle (elastic).  False when the lab angle is beyond the
+  /// kinematic maximum (m1 > m2: asin(m2/m1)); GetLabAngleMax() then holds that maximum.  Only the forward
+  /// branch is modelled.  Until 2026-10-27 the angle silently became NaN (audit 2026-10-25, item 31).
+  bool ConvertLabAngle(PPair *);
+  /// As above for a reaction with different entrance and exit pairs: false beyond the maximum lab angle where
+  /// two c.m. angles reach one lab angle (near the threshold of an endothermic exit); before, a message and an
+  /// assert that release builds compile out, then NaN.
+  bool ConvertLabAngle(PPair *, PPair *, const Config &);
+  /// The non-relativistic (Marion-Young) part of the above: cm_angle_, or false with labAngleWhy_ set.
+  bool ConvertLabAngleNR(PPair *, PPair *);
+  /// The kinematic maximum lab angle (degrees) found by the last ConvertLabAngle that returned false.
+  double GetLabAngleMax() const { return labAngleMax_; };
+  /// Why the last ConvertLabAngle returned false (a sentence for the error message).
+  const std::string &GetLabAngleWhy() const { return labAngleWhy_; };
   /// Centre-of-mass angle by the relativistic form, Iliadis C.37-C.38.
   void ConvertCMAngle(PPair *, PPair *, const Config &);
   /// Fill the centre-of-mass cross section and uncertainty from the lab ones.
@@ -304,6 +421,8 @@ class EPoint {
   double CalculateCrossSectionConversionFactor(PPair *, PPair *);
   /// Relativistic lab -> c.m. angle and dOmega_lab/dOmega_cm of the detected particle (relativistic=1).
   bool RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nrCMAngle, double &cmAngle, double &factor) const;
+  /// Lab motion (g, boost gamma) of the detected exit particle for the attenuation coefficients; false: Q as entered.
+  bool QLabBoost(PPair *entrancePair, PPair *exitPair, double &g, double &gb) const;
   double CalculateCrossSectionGammaConversionFactor(PPair *);
   /// Append the next Legendre polynomial; they are stored in order L = 0, 1, 2, ...
   void AddLegendreP(double);
@@ -319,6 +438,12 @@ class EPoint {
   void SetNaturalTerms(const std::vector<double> &terms) { natural_terms_ = terms; }
   void SetFitE1CrossSection(double);
   void SetFitE2CrossSection(double);
+  /// A calculation that threw: NaN cross sections (total, E1, E2) on this point and on every point mapped onto it,
+  /// and a warning naming the segment, the role of the point, its energy and the error, the first time in a run.
+  /// Used by ESegment::CalculateTheoreticalCrossSection and EData::CalculatePointsInParallel (before 2026-11-01
+  /// both gave 0 or left the term out, silently).
+  void MarkFailed(const char *role, const Config &configure, const char *why);
+  int GetSegmentKey() const { return segment_key_; }
   /// Set the cross-section to S-factor conversion.
   void SetSFactorConversion(double);
   void SetLabEnergy(double);
@@ -332,8 +457,12 @@ class EPoint {
   void CalcLegendreP(int, CNuc *, TargetEffect *);
   /// Compute the geometrical factor, S-factor conversion, \f$L_o\f$ elements, penetrabilities and phases together.
   /// With includeSubPoints false the sub-points are left alone (their energies are updated, and their values recomputed, separately).
-  void CalcEDependentValues(CNuc *, const Config &, bool includeSubPoints = true);
-  /// Recompute those at the current, possibly shifted, energy.
+  /// With shareWithMapped true (setup, grid re-placement) the points mapped onto this one (EData::MapData) are given
+  /// the same tables; RecalcEDependentValues passes false (see there).
+  void CalcEDependentValues(CNuc *, const Config &, bool includeSubPoints = true, bool shareWithMapped = true);
+  /// Recompute those at the current, possibly shifted, energy.  Writes this point (and its sub-points) only, never the
+  /// points mapped onto it: on an energy shift each of those is re-energised on its own (ESegment::
+  /// UpdatePointEnergyWithShift), possibly at the same time on another thread.
   void RecalcEDependentValues(CNuc *, const Config &, bool includeSubPoints = true);
   /// Take the energy-dependent values (not the angle-dependent Coulomb amplitude) from a point at the same energy; false if the energies differ.
   bool CopyEDependentValuesFrom(const EPoint &);
@@ -357,13 +486,52 @@ class EPoint {
   void AddECAmplitude(int, int, complex, double);
   void ClearECAmplitudes();
   void Calculate(CNuc *, const Config &configure, EPoint *parent = NULL, int subPointNum = 0);
+  /// The sub-point stage of a thin-target integration, with its sigma(E_bar) fallback (see the .cpp).
+  void CalculateThinTarget(CNuc *, const Config &configure, TargetEffect *effect);
   void SetMap(int, int);
   void ClearMapping();
+  /// A mapped point that keeps its own energy-dependent values: a component of a SUM, RATIO or total-capture segment
+  /// mapped onto a point of its base segment (EData::MapData).  Its segment re-energises it on an energy shift, in
+  /// parallel with the host, so the host must not copy its values into it (CalcEDependentValues).
+  bool OwnsEDependentValues() const { return own_e_dependent_; }
+  void SetOwnsEDependentValues(bool own) { own_e_dependent_ = own; }
   void AddLocalMappedPoint(EPoint *);
   void ClearLocalMappedPoints();
   void SetTargetEffectNum(int);
   void AddSubPoint(EPoint);
   void IntegrateTargetEffect(const Config &);
+  /*!
+   * Free-gas Doppler broadening on this point's sub-point grid (TargetEffect::IsDoppler): the weights w with
+   * sigma_D(eCM) = sum w.second * sigma(sub-point w.first), sigma linear in E between sub-points, from the
+   * velocity-space integral of TargetEffect::IsDoppler (4-point Gauss-Legendre on pieces no wider than u/4).
+   * Empty when the effect has no Doppler step or the point no grid.  The integration window is the one at the
+   * layout temperature and the pieces are those of the nominal temperature (TargetEffect::HasDopplerFit), so
+   * only the kernel values depend on the current T; \p dwdT, if given, receives dw/dT (per K) on the same nodes.
+   */
+  void DopplerWeights(double eCM, std::vector<std::pair<int, double>> &w,
+                      std::vector<std::pair<int, double>> *dwdT = nullptr) const;
+  /*!
+   * d/dT of the integrated value (IntegrateTargetEffect) for the sub-point values \p values (0-based): the
+   * line's kernel applied to the T-derivatives of the Doppler-broadened values, or the derivative of sigma_D
+   * at the point for a line without a kernel.  0 when the line has no Doppler step or it is applied elsewhere
+   * (DopplerAppliedScope).  For the analytic gradient of a fitted temperature (doppler_<n>).
+   */
+  double DopplerTemperatureDerivative(const Config &, const std::vector<double> &values);
+  /*!
+   * While alive, IntegrateTargetEffect (and TargetEffectWeights) skip the Doppler step: for the
+   * transmission/yield assembly (ESegment::TransformedValue), which broadens the terms itself before the
+   * transform and only then hands the sub-point values to the kernel.
+   */
+  class DopplerAppliedScope {
+   public:
+    explicit DopplerAppliedScope(EPoint *p) : p_(p), prev_(p->doppler_applied_) { p_->doppler_applied_ = true; }
+    ~DopplerAppliedScope() { p_->doppler_applied_ = prev_; }
+    DopplerAppliedScope(const DopplerAppliedScope &) = delete;
+    DopplerAppliedScope &operator=(const DopplerAppliedScope &) = delete;
+   private:
+    EPoint *p_;
+    bool prev_;
+  };
   /// Exact weights c (0-based, one per sub-point) of IntegrateTargetEffect:
   /// yield = sum_i c[i] * (sub-point i's cross-section slot).  False if the
   /// integrator is not a pure linear form for this point.
@@ -407,12 +575,23 @@ class EPoint {
   /// rd(j) supplies sub-point j's value.
   template <class V, class Read>
   V IntegrateTargetEffectImpl(const Config &, Read rd);
+  /// The line's kernels (Gaussian, target integration, UDR, beam profile) on sub-point values rd(j).
+  template <class V, class Read>
+  V IntegrateKernelsImpl(const Config &, Read rd);
+  /// sigma at E_bar = E - D from the sub-point values: the single node, a quadratic through three fallback
+  /// nodes, or a linear interpolation on a full grid.
+  template <class V, class Read>
+  V TargetFallbackImpl(Read rd);
+  bool doppler_applied_ = false;  ///< see DopplerAppliedScope
   bool is_differential_;
   bool is_phase_;
   bool is_mapped_;
   bool is_ang_dist_;
   bool is_analyzing_power_ = false;
   bool is_sub_point_ = false;
+  double cm_factor_ = 1.0;   ///< c.m./lab energy factor of the point's entrance pair (SetTargetKinematics)
+  int bohr_z1_ = 0;          ///< beam charge of the entrance pair, for Bohr straggling
+  int bohr_z2_ = 0;          ///< target charge of the entrance pair
   SubGridSpec sub_grid_spec_;
   double analyzing_power_ = 0.0;
   std::shared_ptr<const SpinObservable> spin_observable_;
@@ -423,6 +602,9 @@ class EPoint {
   int targetEffectNum_;
   int fileRecord_ = 0;
   double target_blend_weight_ = 1.0;
+  bool target_fallback_only_ = false;   ///< see IsTargetFallbackOnly
+  bool target_fallback_now_ = false;    ///< see TargetFallbackScope
+  double target_fallback_depth_ = 0.0;  ///< D = E - E_bar, c.m. MeV (see IsTargetFallbackOnly)
   int max_ang_dist_order_;
   double cm_angle_;
   double lab_angle_;
@@ -446,9 +628,13 @@ class EPoint {
   double screen_ue_ = 0.0;
   int screen_param_ = 0;
   double j_value_;
+  double phase_s_value_ = -1.0;
   double stoppingPower_;
   double targetThickness_;
+  double targetLabEnergy_ = 0.0;
   double angleKinFactor_;
+  mutable double labAngleMax_ = 180.;  ///< kinematic maximum lab angle of the last failed conversion
+  mutable std::string labAngleWhy_;    ///< the reason of the last failed conversion (set by the const relativistic map too)
   double crossSectionKinFactor_;
   // Beam-profile effect: per-point energy window (lab as read, c.m. after
   // conversion; NaN when the data file has no such columns) and the inverse
@@ -470,17 +656,34 @@ class EPoint {
   bool spinDependentCoulomb_ = false;
   complex coulombdirect_ = complex(0., 0.);
   complex coulombexchange_ = complex(0., 0.);
-  vector_r legendreP_;
+  // The Legendre polynomials P_l(cos theta) of the point, by order.  Filled at
+  // setup and on an energy shift; shared between EData clones (see
+  // EDependentTables below) and written only through MutableLegendre().
+  std::shared_ptr<const vector_r> legendreP_;
   vector_r angularDists_;
-  matrix_c lo_elements_;
-  matrix_r penetrabilities_;
-  matrix_c coulombphase_;
-  matrix_c hardspherephase_;
+  int coefficient_order_ = -1;
+  bool coefficient_absolute_ = false;
+  double ang_dist_a0_ = 0.0;
+  // The energy-dependent channel tables, one row per J group: L_o elements,
+  // square roots of the penetrabilities, Coulomb and hard-sphere phase factors.
+  // They are filled at setup and rewritten only when the point's energy or grid
+  // changes, so the EData clones of a fit (AZURECalc::InitializePools, one per
+  // thread) share them instead of deep-copying them: a clone of a folded
+  // project with ~10^6 sub-points held ~7 GB of these rows.  Copying an EPoint
+  // copies the pointer; every writer goes through MutableEDep(), which gives
+  // the point its own copy first if the tables are shared (copy-on-write).
+  std::shared_ptr<const EDependentTables> edep_;
+  /// This point's own, writable tables (copied first if shared with another point).
+  EDependentTables &MutableEDep();
+  /// This point's own, writable Legendre polynomials (copied first if shared).
+  vector_r &MutableLegendre();
   // Energy at which CalcEDependentValues last ran: RecalcEDependentValues is
   // a no-op while the point's energy is unchanged (its values depend only on
   // the energy, the angle and the channel radii).
   double eDependentEnergy_ = 0.0;
   bool eDependentValid_ = false;
+  bool own_e_dependent_ = false;  // OwnsEDependentValues
+  bool is_total_ = false;         // IsTotal
   matrix_c ec_amplitudes_;
   matrix_r ec_energies_;  // Energies at which EC amplitudes were calculated
   /// The amplitude at the last shifted energy of each pathway (GetECAmplitudeWithShift).

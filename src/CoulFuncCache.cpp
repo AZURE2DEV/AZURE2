@@ -32,6 +32,12 @@ CoulFuncCache *g_coulFuncCache = nullptr;
 static const std::size_t kMaxEntriesPerKey = 32768;
 static const long kMinQueriesBeforeJudging = 4096;
 static const double kMinUsefulHitRate = 0.05;
+// The guards above are per key, and the key holds the channel radius: a pyazr session that samples a radius
+// opened a new key per l at every new radius and never let one go (3H+d free-radius MCMC, 2026-11-03: ~96 kB
+// per call, 239 GB over 16 workers).  AZUREAPI clears the memo at every rebuild; this caps the number of keys a
+// thread holds in case anything else multiplies them.  A legitimate model has (pairs x l x potentials) keys,
+// far below it.
+static const std::size_t kMaxKeysPerThread = 4096;
 
 CoulFuncCache::CoulFuncCache() {
 #ifdef _OPENMP
@@ -41,12 +47,39 @@ CoulFuncCache::CoulFuncCache() {
 #endif
   if (n < 1) n = 1;
   threadCaches_.resize(n);
+  scratchCaches_.resize(n);
 }
 
 /*!
  * Returns the calling thread's private cache map (no locking required).
  */
+std::map<CoulFuncCache::CoulFuncKey, CoulFuncCache::CoulFuncData> &CoulFuncCache::localScratch() const {
+  return scratchCaches_[threadIndex()];
+}
+
+// The depth of TransientScope on THIS thread.  A scope and everything it
+// calculates stay on the thread that opened it (CNuc::TransformOut has no
+// parallel region), so each thread decides for itself and clears only its own
+// scratch.  Until 2026-11-05 the depth was one counter for all threads and the
+// end of the last scope on ANY thread cleared EVERY thread's scratch while the
+// other threads were reading or inserting into theirs: heap corruption whenever
+// several pooled copies transformed at once (grid re-placement calls
+// TransformOut on every evaluation: natural neon fits at 4 threads).
+static thread_local int tlsTransientDepth = 0;
+
+CoulFuncCache::TransientScope::TransientScope() {
+  ++tlsTransientDepth;
+}
+
+CoulFuncCache::TransientScope::~TransientScope() {
+  if (--tlsTransientDepth == 0 && g_coulFuncCache) g_coulFuncCache->localScratch().clear();
+}
+
 std::map<CoulFuncCache::CoulFuncKey, CoulFuncCache::CoulFuncData> &CoulFuncCache::localCache() const {
+  return threadCaches_[threadIndex()];
+}
+
+int CoulFuncCache::threadIndex() const {
 #ifdef _OPENMP
   // The thread's number in the innermost ACTIVE team.  omp_get_thread_num()
   // is the number in the innermost team, and a parallel construct that does
@@ -60,7 +93,7 @@ std::map<CoulFuncCache::CoulFuncKey, CoulFuncCache::CoulFuncData> &CoulFuncCache
   int tid = 0;
 #endif
   if (tid < 0 || tid >= (int)threadCaches_.size()) tid = 0;
-  return threadCaches_[tid];
+  return tid;
 }
 
 /*!
@@ -87,8 +120,19 @@ void CleanupCoulFuncCache() {
  * sorted.  Subject to the two guards described at the top of this file.
  */
 void CoulFuncCache::AddCoulWaves(const CoulFuncKey &key, double energy, const CoulWaves &waves) {
+  if (tlsTransientDepth > 0) {  // TransientScope: keep it for this calculation only
+    CoulFuncData &scratch = localScratch()[key];
+    auto it = std::lower_bound(scratch.energies.begin(), scratch.energies.end(), energy);
+    if (it != scratch.energies.end() && fabs(*it - energy) < 1e-12) return;
+    const size_t idx = std::distance(scratch.energies.begin(), it);
+    scratch.energies.insert(it, energy);
+    scratch.coulwaves.insert(scratch.coulwaves.begin() + idx, waves);
+    return;
+  }
   // Get or create the data structure for this key
-  CoulFuncData &data = localCache()[key];
+  std::map<CoulFuncKey, CoulFuncData> &cache = localCache();
+  if (cache.size() >= kMaxKeysPerThread && cache.find(key) == cache.end()) cache.clear();
+  CoulFuncData &data = cache[key];
 
   if (data.disabled) return;
 
@@ -140,6 +184,18 @@ void CoulFuncCache::AddCoulWaves(const CoulFuncKey &key, double energy, const Co
  * AddCoulWaves() uses to decide whether this key's memo is worth maintaining.
  */
 bool CoulFuncCache::TryGetCoulWaves(const CoulFuncKey &key, double energy, CoulWaves &out) const {
+  if (TryGetPermanent(key, energy, out)) return true;
+  if (tlsTransientDepth == 0) return false;
+  std::map<CoulFuncKey, CoulFuncData> &scratch = localScratch();
+  auto sk = scratch.find(key);
+  if (sk == scratch.end()) return false;
+  auto si = std::lower_bound(sk->second.energies.begin(), sk->second.energies.end(), energy);
+  if (si == sk->second.energies.end() || fabs(*si - energy) >= 1e-12) return false;
+  out = sk->second.coulwaves[std::distance(sk->second.energies.begin(), si)];
+  return true;
+}
+
+bool CoulFuncCache::TryGetPermanent(const CoulFuncKey &key, double energy, CoulWaves &out) const {
   std::map<CoulFuncKey, CoulFuncData> &cache = localCache();
   auto it = cache.find(key);
   if (it == cache.end()) return false;

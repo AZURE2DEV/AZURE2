@@ -1,4 +1,4 @@
-# spin_observables_p3He — isDiff 9 on spin-1/2 x spin-1/2 (p + 3He)
+# spin_observables_p3He — isDiff 10 on spin-1/2 x spin-1/2 (p + 3He)
 
 Fifteen spin observables of a p + 3He toy with l-mixing (2-, 1+) and singlet-triplet mixing (1-, 2+):
 beam and target analyzing powers (`b:y`, `t:y`, `b:iT11`, `t:iT11`), spin correlations (`b:y*t:y`,

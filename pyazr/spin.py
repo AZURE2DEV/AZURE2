@@ -1,4 +1,4 @@
-"""Spin observables (isDiff 9 segments): token grammar and literature aliases.
+"""Spin observables (isDiff 10 segments): token grammar and literature aliases.
 
 A spin-observable segment names its observable with one token (the engine's grammar,
 ``include/SpinObservable.h``)::

@@ -108,23 +108,38 @@ this time with an absolute rather than a percentage error:
 .. math::
 
    \chi^2_{\text{shift},s} =
-   \left(\frac{\Delta E_s - \Delta E_s^{\text{nom}}}{\delta(\Delta E_s)}\right)^2
+   \left(\frac{\Delta E_s}{\delta(\Delta E_s)}\right)^2
 
-A segment whose :math:`\sqrt{E}` shift coefficient :math:`b_s` is free (the
-``sqrtshift`` block, see :doc:`segments`) adds the same kind of term,
-:math:`((b_s - b_s^{\text{nom}})/\delta b_s)^2`, with :math:`\delta b_s` in
-MeV\ :sup:`1/2`, and so does each free parameter :math:`a_j` of an
-energy-shift function (the ``shiftfn`` block), once, on the segment that
-declares the function: :math:`((a_j - a_j^{\text{nom}})/\delta a_j)^2`, with
-the nominal value the one in the input file. A free shift term with no
-uncertainty has no penalty.
+measured from **zero**, i.e. from no shift: the value of :math:`\Delta E_s` in
+the input file is only where the fit starts. A segment whose :math:`\sqrt{E}`
+shift coefficient :math:`b_s` is free (the ``sqrtshift`` block, see
+:doc:`segments`) adds the same kind of term, :math:`(b_s/\delta b_s)^2`, with
+:math:`\delta b_s` in MeV\ :sup:`1/2`, and so does each free parameter
+:math:`a_j` of an energy-shift function (the ``shiftfn`` block), once, on the
+segment that declares the function: :math:`(a_j/\delta a_j)^2`. A free shift
+term with no uncertainty has no penalty.
+
+.. note::
+
+   Before 25 October 2026 these terms were measured from the value in the input
+   file, :math:`((\Delta E_s - \Delta E_s^{\text{file}})/\delta(\Delta E_s))^2`
+   and likewise for :math:`b_s` and :math:`a_j`. A file whose shifts were seeded
+   from an earlier fit therefore centred the penalty on that fit's shifts. Such
+   files now give a larger :math:`\chi^2` (the shift part changes; the data part
+   does not). The normalization penalty is unchanged.
 
 Nuisance parameters
 -------------------
 
 Level energies and widths flagged **Use as Nuisance** in the Fitting tab add a
 Gaussian term of the same shape, using the **Error** column as the width. This
-is how prior knowledge of a resonance energy enters a least-squares fit.
+is how prior knowledge of a resonance energy enters a least-squares fit. The
+term is evaluated on the flagged parameter itself; before 2026-10-27 it was
+evaluated on the wrong parameter whenever a fixed level parameter preceded the
+flagged one in the parameter list (a fixed ground-state energy was enough),
+so MIGRAD pulled another parameter toward the nominal value and a parameter
+sitting at its nominal value still paid a penalty. The least-squares drivers
+were not affected.
 
 What ``chiSquared.out`` actually reports
 ----------------------------------------
@@ -151,6 +166,15 @@ The file separates the two contributions::
 - **Total-Screening-Chi-Squared**, when an electron-screening potential has a
   prior (:doc:`experimental_effects`), is the sum of
   :math:`((U_e - U_e^{0})/\sigma)^2`.
+- **Total-Density-Chi-Squared**, when a fitted target density has a prior
+  (:doc:`experimental_effects`), is the sum of :math:`((N - N_0)/\sigma)^2`.
+- **Total-Doppler-Chi-Squared**, when a fitted Doppler temperature has a prior
+  (``doppler T vary sigma``, :doc:`experimental_effects`), is the sum of
+  :math:`((T - T_0)/\sigma)^2`.
+- **Total-Thickness-Chi-Squared**, when a fitted sample thickness has a prior
+  (``transmission n vary sigma`` or ``yield n vary sigma``,
+  :doc:`segments`), is the sum of :math:`((n - n_0)/\sigma)^2` (a
+  ``thicknessgroup`` counts once, with its first segment's prior).
 - **Total-Scattering-Length-Chi-Squared**, when the project has a
   ``<scatteringLengths>`` block, is the sum over its active lines of
   :math:`((a_0 - a_{\mathrm{exp}})/\sigma)^2` (real and, if given, imaginary
@@ -158,6 +182,10 @@ The file separates the two contributions::
   (:doc:`../theory/scattering_length`).  ``scatteringLengths.out`` lists each
   line's model value and contribution.  The term is part of every fitter's
   objective and of the MCMC likelihood.
+- **Total-Prior-Covariance-Chi-Squared**, whenever the ``<config>`` block names
+  a prior covariance file (``priorCovariance=<file>``, see below), is
+  :math:`(\mathbf{p}-\boldsymbol{\mu})^T C^{-1} (\mathbf{p}-\boldsymbol{\mu})`,
+  written with 15 significant digits.
 
 The quantity the minimizer actually descends is the sum of all of them. Quoting
 ``Total-Chi-Squared`` as "the χ²" of a fit with free normalizations understates
@@ -167,6 +195,121 @@ the objective.
 
    ``Total-N`` counts data points, not degrees of freedom. Subtract the number
    of free parameters yourself before forming a reduced χ².
+
+Prior parameter covariance
+--------------------------
+
+The priors above are diagonal: each acts on one parameter. A *prior parameter
+covariance* is a multivariate Gaussian on a set of parameters, so a fit can start
+from an earlier evaluation's parameters **and their correlations** -- the
+sequential Bayesian update of SAMMY's "PUP" option. Fit A of data set 1 gives
+parameters :math:`\boldsymbol{\mu}` and a covariance :math:`C`; fit B of data
+set 2 then minimises
+
+.. math::
+
+   \chi^2_B = \chi^2_{\text{data 2}} + \ldots +
+   (\mathbf{p}-\boldsymbol{\mu})^T C^{-1} (\mathbf{p}-\boldsymbol{\mu}),
+
+which (for Gaussian errors and a model linear over the uncertainties) has the
+minimum and the covariance of a joint fit of both data sets, without refitting
+data set 1. The term acts on the parameters as the fit's parameter vector holds
+them, the values ``param.sav`` lists: level energies in MeV, reduced-width
+amplitudes of the run's parametrization (Brune by default; the
+``#parametrization`` tag of ``param.sav`` says which), normalizations, energy
+shifts and the other nuisance parameters in their own units.
+
+**Switching it on.** One line in the ``<config>`` block
+(:doc:`../reference/data_formats`), with a path relative to the ``.azr``'s
+directory (an absolute path also works)::
+
+    priorCovariance=prior_from_A.txt
+
+The GUI has the field under **Configure > Runtime Options** ("Prior Parameter
+Covariance", with a **Choose...** button); it is saved in the project, so the
+command line and pyazr use it too. Removing the line switches it off.
+
+**The file.** Plain text; ``#`` starts a comment. An optional
+``#parametrization <0|1|2>`` line (``param.sav``'s tag: 0 standard, 1 Brune,
+2 Park) before the names, then the parameter **names** on one line (as in
+``param.sav``), their **means** on the next, and the :math:`n` rows of the
+symmetric :math:`n \times n` **covariance** in the same order::
+
+    #parametrization 1
+    # widths of the 2- and 3- levels and the normalization of segment 4, from fit A
+    width_2_1 width_3_1 segment_4_norm
+    0.8206 0.8080 1.05
+    5.0e-5 -2.1e-5 0
+    -2.1e-5 2.1e-5 0
+    0 0 4.0e-4
+
+AZURE2 refuses the file, with an ``ERROR`` and before anything is written, when a
+name is not a parameter of the model, the matrix is not symmetric (to
+:math:`10^{-10}` of :math:`\sqrt{C_{ii}C_{jj}}`) or not positive definite (its
+Cholesky factorization fails), the counts disagree (names, means, rows, entries
+per row), or the tag names another parametrization than the run's: a Brune
+prior's amplitudes are not Park's, and nothing is converted -- rerun the fit the
+prior comes from in this run's parametrization (an untagged file is taken as it
+is).
+
+**Fixed parameters are marginalized.** A listed parameter that is fixed in the
+run has its row and column dropped, with a Note naming it. That is the correct
+prior on the others: the marginal of a multivariate Gaussian is the Gaussian of
+the remaining block.
+
+**Overlap with the diagonal priors.** A listed parameter can also carry a prior
+of its own -- a normalization with an error on its segment line, a free energy
+shift with an error, a screening, density, Doppler or thickness sigma, an
+abundance sigma, a nuisance flag. A fit applies **both**, and the run prints a
+Note listing such parameters. If the covariance already contains that
+information (a normalization fitted in A with its own penalty, say), it is
+counted twice: set the segment's error to 0 in B, or leave the parameter out of
+the prior file.
+
+**How it is computed.** The matrix is factored once, :math:`C = L L^T`; every
+evaluation forms the whitened residuals :math:`\mathbf{r} = L^{-1}
+(\mathbf{p}-\boldsymbol{\mu})` and adds :math:`\mathbf{r}\cdot\mathbf{r}`.
+MIGRAD's analytic gradient adds :math:`2 C^{-1}(\mathbf{p}-\boldsymbol{\mu})`;
+``--use-lm``, ``--use-gsl-lm`` and the Jacobian-path gradient append the
+:math:`n` rows :math:`\mathbf{r}` with the constant Jacobian :math:`L^{-1}` to the
+data rows, so the fitted covariance (``covariance.dat``, parameter errors)
+includes the prior's information. Parameter limits act as they do for every
+other term (the prior is evaluated on Minuit's external values). In the MCMC the
+multivariate Gaussian, :math:`-\tfrac12\mathbf{r}\cdot\mathbf{r} -
+\tfrac12\ln\det(2\pi C)`, is part of the log prior and **replaces** the diagonal
+(automatic or user) prior of each of its parameters (a Note lists them); a chain
+over physical parameters refuses a prior on a level energy or width, since the
+prior is on the reduced-width amplitudes.
+
+**Workflow: fit A, then B.**
+
+1. Fit A with the uncertainty band on (``--covariance-band``, or "y" at the
+   band prompt): the fit writes ``output/param.sav`` and ``output/covariance.dat``.
+   ``covariance.dat`` holds the covariance of the **free level energies and
+   reduced-width amplitudes** only (normalizations, shifts and the other nuisance
+   parameters are not in it), in ``param.sav`` order and space; since
+   2026-11-05 its first line ``#columns <names>`` names the columns. A fit with
+   ``--scale-covariance`` (or "y" at the scaling prompt) multiplied it by the
+   reduced χ² when that exceeded 1 (a ``#scaled`` line says by how much).
+2. Write the prior file with pyazr (no engine needed)::
+
+       from pyazr import prior_from_fit
+       prior_from_fit("A/output/param.sav", "A/output/covariance.dat",
+                      "B/prior_from_A.txt")                    # all of A's free level parameters
+       prior_from_fit(..., names=["width_2_1", "width_3_1"])  # or a subset: the marginal block
+
+   The file carries ``param.sav``'s ``#parametrization`` tag. For a
+   ``covariance.dat`` written before 2026-11-05 (no ``#columns`` line), pass
+   ``columns=[...]``, the free ``energy_*`` / ``width_*`` names of fit A in
+   ``param.sav`` order -- ``param.sav`` alone does not say which were free.
+3. In B's ``<config>``: ``priorCovariance=prior_from_A.txt``, and fit. B's level
+   scheme must use the same parameter names (the same levels and channels in the
+   same order); a name B does not have is refused. With B's data identical to
+   A's, B returns A's parameters, the same data χ² and a prior term of ~0
+   (``tests/prior_covariance``).
+
+A prior from a fit of *other* data is the point of the method; a prior built from
+the very data fit B also uses counts those data twice.
 
 Consistency with the MCMC
 -------------------------
@@ -188,7 +331,8 @@ matches the fit objective term for term, and a posterior mode coincides with a
 χ² minimum. See :doc:`mcmc`.
 
 The same distinction applies to :doc:`pyazr`: ``calculate_chi2_rwa`` and
-``residual_jacobian`` return the **data** χ² only. A least-squares fit driven
+``residual_jacobian`` return the **data** χ² only (``residual_jacobian`` plus the
+rows of a prior parameter covariance, when the project has one). A least-squares fit driven
 from Python that minimises those residuals alone will let the normalizations
 drift to absorb every discrepancy, reaching a "better" χ² that AZURE2 itself
 would never find. Append the penalty rows explicitly — the recipe is in the

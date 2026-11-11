@@ -23,7 +23,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 M1, M2 = 1.00782, 6.0151                            # p + 6Li in the evaluation's pair lines
-UCONV, FSTRUC = 931.4940880, 1.0 / 137.0359996790   # include/Constants.h
+UCONV, FSTRUC = 931.49410242, 1.0 / 137.035999084   # include/Constants.h
 
 # EXFOR O1282005 (Li metal), 006 (Li2WO4), 007 (PdLi): E (keV, c.m. -- EXFOR tags the column EN, but the paper's
 # 30-100 keV proton beam and its S(E_cm) figures make it c.m.; read as lab, the metals come out 26-27 % below the

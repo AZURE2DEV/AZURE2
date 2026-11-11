@@ -1,3 +1,4 @@
+#include <cmath>
 #include "AZURECalc.h"
 #include "AZUREMain.h"
 #include "ScatteringLength.h"
@@ -5,6 +6,7 @@
 #include "AZUREParams.h"
 #include "Config.h"
 #include "CovarianceBand.h"
+#include "PriorCovariance.h"
 #include "ReactionRate.h"
 #include "ParameterLimitsManager.h"
 #include "ECAmplitudeCache.h"
@@ -18,6 +20,9 @@
 #include <fstream>
 #include <sstream>
 #include <map>
+#include <algorithm>
+#include <cstdio>
+#include <iomanip>
 
 #ifdef USE_NLOPT
 #include <nlopt.h>
@@ -104,8 +109,10 @@ int AZUREMain::operator()() {
 
     // Cache will be populated dynamically as integrals are calculated
   } else {
-    if (!compound()->IsPairKey(configure().rateParams.entrancePair) || !compound()->IsPairKey(configure().rateParams.exitPair)) {
-      configure().outStream << "Reaction rate pairs do not exist in compound nucleus." << std::endl;
+    const std::string rateProblem =
+        compound()->RatePairsProblem(configure().rateParams.entrancePair, configure().rateParams.exitPair);
+    if (!rateProblem.empty()) {
+      configure().outStream << rateProblem << std::endl;
       return -1;
     } else {
       compound()->GetPair(compound()->GetPairNumFromKey(configure().rateParams.entrancePair))->SetEntrance();
@@ -126,16 +133,34 @@ int AZUREMain::operator()() {
   AZUREParams params;
   compound()->FillMnParams(params.GetMinuitParams(), &configure());
   data()->FillMnParams(params.GetMinuitParams());
-  if (!(configure().paramMask & Config::USE_PREVIOUS_PARAMETERS)) {
-    configure().outStream << "Creating New param.par File..." << std::endl;
-    params.WriteUserParameters(configure(), false);
-  } else {
+  if (configure().paramMask & Config::USE_PREVIOUS_PARAMETERS) {
     configure().outStream << "Reading User Parameter File..." << std::endl;
     params.ReadUserParameters(configure());
     if (!params.ReconcileBasis(compound(), configure())) return -1;
   }
   // A parameter file may hold values (or a free flag) for derived isospin slots.
   compound()->SyncIsospinParams(params.GetMinuitParams());
+  // Prior parameter covariance (<config> priorCovariance=): matched onto the parameter vector as it stands now (a
+  // parameter file can fix or free level parameters), before anything is written, so a refused file leaves no
+  // output.  Only a run with data has a chi-squared to add it to.
+  std::shared_ptr<const PriorCovariance> priorCov;
+  if ((configure().paramMask & Config::CALCULATE_WITH_DATA) &&
+      !(configure().paramMask & Config::CALCULATE_REACTION_RATE) && !configure().priorCovariance.empty()) {
+    const ROOT::Minuit2::MnUserParameters &mp = params.GetMinuitParams();
+    std::vector<std::string> names;
+    std::vector<bool> fixedFlags;
+    for (unsigned int i = 0; i < mp.Params().size(); i++) {
+      names.push_back(mp.GetName(i));
+      fixedFlags.push_back(mp.Parameter(i).IsFixed());
+    }
+    if (PriorCovariance::Load(configure(), names, fixedFlags, AZUREParams::BasisForConfig(configure()), priorCov) < 0)
+      return -1;
+  }
+  data()->SetPriorCovariance(priorCov);
+  if (!(configure().paramMask & Config::USE_PREVIOUS_PARAMETERS)) {
+    configure().outStream << "Creating New param.par File..." << std::endl;
+    params.WriteUserParameters(configure(), false);
+  }
 
   if (!(configure().paramMask & Config::CALCULATE_REACTION_RATE)) {
     // Initialize shared EC amplitude cache for interpolation
@@ -168,6 +193,19 @@ int AZUREMain::operator()() {
 
     // Declare a new instance of FCNBase
     AZURECalc theFunc(data(), compound(), configure(), &limitsManager);
+    // A prior-covariance parameter that also carries a diagonal prior of its own gets both (on purpose or not).
+    if (priorCov && priorCov->Size() > 0) {
+      const std::vector<int> own = theFunc.IndicesWithOwnPrior();
+      std::string list;
+      for (int f : priorCov->FullIndex())
+        if (std::binary_search(own.begin(), own.end(), f))
+          list += (list.empty() ? "" : ", ") + params.GetMinuitParams().GetName(f);
+      if (!list.empty())
+        configure().Note("Note: prior covariance: " + list + " also carr" +
+                         (list.find(',') == std::string::npos ? "ies" : "y") +
+                         " a prior of its own (normalization error, shift error, sigma or nuisance prior); both are "
+                         "applied, which counts the same information twice if the covariance already holds it.");
+    }
     // theFunc.InitializePools();
     theFunc.SetErrorDef(1.0);
 
@@ -235,7 +273,63 @@ int AZUREMain::operator()() {
     };
 
 
+    // Call limit of a MIGRAD or NLopt fit: --max-calls=N, or none, so that MIGRAD's EDM criterion (NLopt: its
+    // tolerances) ends the fit.  Before 2026-10-31 it was a fixed 50,000: the 19F (15N+a) refit, 145 free
+    // parameters, stopped there with no message, and its chiSquared.out and param.sav looked like a converged fit.
+    // Minuit2 scales the limit by 1.3 in an int, so "none" is 10^9 calls.
+    const unsigned int noCallLimit = 1000000000u;
+    const unsigned int migradCalls = configure().maxCalls > 0 ? std::min(configure().maxCalls, noCallLimit) : noCallLimit;
+    const std::string callLimitText =
+        configure().maxCalls > 0 ? std::to_string(migradCalls) + " (--max-calls)" : std::string("none");
+    const std::string fitStatusFile = configure().outputdir + "fitStatus.out";
+    // fitStatus.out: how the minimizer ended, for scripts and for anyone who reads only the output files.
+    auto writeFitStatus = [&](const std::string &minimizer, const std::string &status, bool valid, double edm,
+                              double edmGoal, long calls) {
+      std::ofstream out(fitStatusFile.c_str());
+      if (!out) return;
+      out << "minimizer   " << minimizer << std::endl
+          << "status      " << status << std::endl
+          << "valid       " << (valid ? 1 : 0) << std::endl;
+      if (edmGoal > 0.0) out << "edm         " << edm << std::endl << "edm_goal    " << edmGoal << std::endl;
+      out << "calls       " << calls << std::endl
+          << "call_limit  " << callLimitText << std::endl;
+    };
+    // Say how MIGRAD ended; a fit that stopped at the call limit or with an invalid minimum is flagged.
+    auto reportMigrad = [&](const ROOT::Minuit2::FunctionMinimum &m) {
+      const double goal = 0.002 * 0.1 * m.Up();  // MnMigrad's default tolerance 0.1 (VariableMetricBuilder)
+      std::string status;
+      std::ostringstream why;
+      why << std::scientific << std::setprecision(3);
+      if (m.IsValid()) {
+        status = "converged";
+        configure().outStream << std::endl << "MIGRAD converged: valid minimum, EDM " << std::scientific << std::setprecision(3)
+                              << m.Edm() << " (goal " << goal << ")" << std::defaultfloat << std::setprecision(6)
+                              << ", " << m.NFcn() << " function calls, call limit " << callLimitText << "."
+                              << std::endl;
+      } else {
+        if (m.HasReachedCallLimit()) {
+          status = "call_limit";
+          why << "stopped at the call limit (" << m.NFcn() << " function calls, limit " << callLimitText << ")";
+        } else {
+          status = "invalid";
+          why << "invalid minimum";
+          if (m.IsAboveMaxEdm()) why << ", EDM above its goal";
+          if (!m.HasValidCovariance()) why << ", no valid covariance";
+          if (m.HasMadePosDefCovar()) why << ", covariance forced positive definite";
+          if (m.HesseFailed()) why << ", HESSE failed";
+          why << "; " << m.NFcn() << " function calls";
+        }
+        why << "; EDM " << m.Edm() << " (goal " << goal << ")";
+        configure().outStream << std::endl << "WARNING: MIGRAD did NOT converge: " << why.str()
+                              << ".  The parameters and outputs written are its last point, not a minimum; rerun"
+                              << " the fit from param.sav" << (status == "call_limit" ? " or raise --max-calls" : "")
+                              << "." << std::endl;
+      }
+      writeFitStatus("MIGRAD", status, m.IsValid(), m.Edm(), goal, m.NFcn());
+    };
+
     if (configure().paramMask & Config::PERFORM_FIT) {
+      std::remove(fitStatusFile.c_str());  // a stale file from an earlier fit must not describe this one
       // Call minimizer for function minimization, write minimized parameters to params
       if (configure().paramMask & Config::USE_AMATRIX)
         configure().outStream << "Performing A-Matrix Fit..." << std::endl;
@@ -318,7 +412,7 @@ int AZUREMain::operator()() {
         nlopt_set_upper_bounds(opt, ub.data());
 
         // Set stopping criteria
-        nlopt_set_maxeval(opt, 50000);
+        nlopt_set_maxeval(opt, configure().maxCalls > 0 ? static_cast<int>(migradCalls) : 0);  // 0: no limit
         nlopt_set_ftol_rel(opt, 1e-8);
         nlopt_set_xtol_rel(opt, 1e-8);
 
@@ -326,11 +420,21 @@ int AZUREMain::operator()() {
         double minf;
         nlopt_result result = nlopt_optimize(opt, x.data(), &minf);
 
-        if (result < 0) {
+        const long nloptCalls = nlopt_get_numevals(opt);
+        if (result == NLOPT_MAXEVAL_REACHED) {
+          configure().outStream << std::endl
+                                << "WARNING: NLopt did NOT converge: stopped at the call limit (" << nloptCalls
+                                << " function calls, limit " << callLimitText << "); final chi-squared " << minf
+                                << ".  Rerun the fit from param.sav or raise --max-calls." << std::endl;
+          writeFitStatus("NLopt", "call_limit", false, 0.0, 0.0, nloptCalls);
+        } else if (result < 0) {
           configure().outStream << std::endl;
           configure().outStream << "NLopt optimization failed: "
                                 << nlopt_result_to_string(result) << std::endl;
+          writeFitStatus("NLopt", std::string("failed_") + nlopt_result_to_string(result), false, 0.0, 0.0, nloptCalls);
         } else {
+          writeFitStatus("NLopt", std::string("converged_") + nlopt_result_to_string(result), true, 0.0, 0.0,
+                         nloptCalls);
           configure().outStream << std::endl;
           configure().outStream << "NLopt optimization succeeded: "
                                 << nlopt_result_to_string(result) << std::endl;
@@ -373,7 +477,8 @@ int AZUREMain::operator()() {
                                   << std::endl;
             const ROOT::Minuit2::FCNBase &fb = theFunc;
             ROOT::Minuit2::MnMigrad migrad(fb, params.GetMinuitParams());
-            ROOT::Minuit2::FunctionMinimum min = migrad(50000);
+            ROOT::Minuit2::FunctionMinimum min = migrad(migradCalls);
+            reportMigrad(min);
             params.GetMinuitParams() = min.UserParameters();
             captureMinuitCov(min.UserCovariance().Data());
           } else if (wantBand && !bandCov.empty()) {
@@ -397,7 +502,8 @@ int AZUREMain::operator()() {
                                   << std::endl;
             const ROOT::Minuit2::FCNBase &fb = theFunc;
             ROOT::Minuit2::MnMigrad migrad(fb, params.GetMinuitParams());
-            ROOT::Minuit2::FunctionMinimum min = migrad(50000);
+            ROOT::Minuit2::FunctionMinimum min = migrad(migradCalls);
+            reportMigrad(min);
             params.GetMinuitParams() = min.UserParameters();
             captureMinuitCov(min.UserCovariance().Data());
           } else if (wantBand && !bandCov.empty()) {
@@ -412,22 +518,53 @@ int AZUREMain::operator()() {
           // gradient runtime option is on, pass theFunc as an FCNGradientBase so
           // Migrad uses AZURECalc::Gradient; otherwise pass it as a plain FCNBase
           // so Minuit falls back to its own numerical gradient.
-          ROOT::Minuit2::FunctionMinimum min = [&]() {
+          auto runMigrad = [&](const ROOT::Minuit2::MnUserParameters &start) {
             if (configure().paramMask & Config::USE_ANALYTIC_GRADIENT) {
               configure().outStream << "Using analytic gradient for Minuit2." << std::endl;
-              std::vector<double> p0 = params.GetMinuitParams().Params();
+              std::vector<double> p0 = start.Params();
               if (theFunc.EnableG2(p0))
                 configure().outStream << "Seeding MIGRAD with the analytic Gauss-Newton G2." << std::endl;
               else
                 configure().outStream << "Analytic G2 unavailable for this model; MIGRAD seeds numerically." << std::endl;
-              ROOT::Minuit2::MnMigrad migrad(theFunc, params.GetMinuitParams());
-              return migrad(50000);
+              ROOT::Minuit2::MnMigrad migrad(theFunc, start);
+              return migrad(migradCalls);
             } else {
               const ROOT::Minuit2::FCNBase &fb = theFunc;
-              ROOT::Minuit2::MnMigrad migrad(fb, params.GetMinuitParams());
-              return migrad(50000);
+              ROOT::Minuit2::MnMigrad migrad(fb, start);
+              return migrad(migradCalls);
             }
-          }();
+          };
+          ROOT::Minuit2::FunctionMinimum min = runMigrad(params.GetMinuitParams());
+          reportMigrad(min);
+          // relvector data-covariance terms use the model frozen at the FIRST evaluation of the run,
+          // i.e. at the starting parameters, so MIGRAD minimized a chi^2 whose covariance belongs to
+          // the start.  Re-freeze it at the fitted parameters: the outputs (chiSquared.out, ...) then
+          // match a calculation from the param.sav written below; with --refreeze-covariance[=N]
+          // MIGRAD is rerun with the re-frozen covariance until the objective stops changing.
+          // (12C+a_onefile 10-29-26: fits that started 15k-90k above their minimum reported a chi^2
+          // 50-600 away from a mode-1 calculation of their own param.sav.)
+          if (data()->HasRelativeCovariance()) {
+            for (int pass = 0;; pass++) {
+              const double frozen = min.Fval();
+              data()->RefreezeCovariance();
+              const double refrozen = theFunc(min.UserParameters().Params());
+              configure().outStream << "Data covariance: relvector model re-frozen at the fitted parameters; objective "
+                                    << frozen << " (model frozen at the start of this pass) -> " << refrozen << "."
+                                    << std::endl;
+              if (std::fabs(refrozen - frozen) < 0.5) break;
+              if (pass >= configure().refreezeCovariance) {
+                configure().outStream << "WARNING: the fitted parameters minimize the chi^2 with the start's covariance "
+                                         "model, not with their own"
+                                      << (configure().refreezeCovariance > 0 ? " (pass limit reached)" : "")
+                                      << "; rerun from param.sav or use --refreeze-covariance." << std::endl;
+                break;
+              }
+              configure().outStream << "Refitting with the re-frozen covariance (pass " << pass + 1 << " of at most "
+                                    << configure().refreezeCovariance << ")..." << std::endl;
+              min = runMigrad(min.UserParameters());
+              reportMigrad(min);
+            }
+          }
           // MIGRAD's error matrix is approximate; refine it with HESSE for the band,
           // falling back to the MIGRAD matrix if HESSE gives no valid covariance.
           if (configure().paramMask & Config::CALCULATE_COVARIANCE_BAND) {
@@ -637,11 +774,24 @@ int AZUREMain::operator()() {
             const int nMat = bandCov.size();
             for (int a = 0; a < nMat; a++)
               for (int b = 0; b < nMat; b++) bandCov.M[a][b] *= factor;
+            bandCov.scale = factor;
             configure().outStream << "Covariance scaled by " << factor << "." << std::endl;
           } else {
             configure().outStream << "Reduced chi-squared <= 1; covariance left unscaled."
                                   << std::endl;
           }
+        }
+        // Name the columns ("#columns" header, which LoadBandCovariance and numpy.loadtxt skip): the free level
+        // energies and reduced-width amplitudes in parameter order, as param.sav holds them (pyazr.prior_from_fit).
+        {
+          const ROOT::Minuit2::MnUserParameters &mp = params.GetMinuitParams();
+          std::vector<std::string> names;
+          for (unsigned int i = 0; i < mp.Params().size(); i++) {
+            const std::string &nm = mp.GetName(i);
+            if (!mp.Parameter(i).IsFixed() && (nm.rfind("energy_", 0) == 0 || nm.rfind("width_", 0) == 0))
+              names.push_back(nm);
+          }
+          if ((int)names.size() == bandCov.size()) bandCov.names = names;
         }
         if (SaveBandCovariance(covPath, bandCov))
           configure().outStream << "Saved parameter covariance for cross-section bands." << std::endl;
@@ -683,12 +833,14 @@ int AZUREMain::operator()() {
     }
     data()->WriteOutputFiles(configure(), false, bandPtr);
     // s-wave scattering lengths of every particle pair at the parameters just written, and the
-    // measured ones of the <scatteringLengths> block.
+    // measured ones of the <scatteringLengths> block: the table goes to scatteringLengths.out only,
+    // the run log (GUI execution screen) names the file.
     try {
       std::string report = ScatteringLength::Report(compound(), configure(), compound()->ScatteringLengthConstraints());
       std::ofstream slOut((configure().outputdir + "scatteringLengths.out").c_str());
       slOut << report;
-      configure().outStream << std::endl << report << std::endl;
+      configure().outStream << "Scattering lengths written to " << configure().outputdir << "scatteringLengths.out"
+                            << std::endl;
     } catch (const std::exception &e) {
       configure().outStream << "Scattering lengths not calculated: " << e.what() << std::endl;
     }

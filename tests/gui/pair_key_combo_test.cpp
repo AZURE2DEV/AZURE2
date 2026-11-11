@@ -18,6 +18,7 @@
 #include "PairsModel.h"
 #include "AddSegDataDialog.h"
 #include "AddSegTestDialog.h"
+#include "RunTab.h"
 #include "Config.h"
 struct SegPairs {int firstPair; int secondPair;};
 
@@ -124,6 +125,27 @@ int main(int argc, char** argv) {
     dialog.exitPairCombo->setKey(4);
     ok("test dialog: keys read back", dialog.entrancePairCombo->key() == 2 && dialog.exitPairCombo->key() == 4);
     ok("test dialog: 14N(n,g)15N", dialog.exitPairCombo->currentText() == "4: " + sup("14") + "N(n," + g + ")" + sup("15") + "N [0.000 MeV]", dialog.exitPairCombo->currentText());
+  }
+
+  // 7. the Run tab's reaction-rate exit box offers the total radiative capture (key -1; 2026-11-04).
+  // The tab's combos are private; find them in the widget tree.
+  {
+    RunTab tab;
+    QList<PairKeyCombo*> combos = tab.findChildren<PairKeyCombo*>();
+    PairKeyCombo* rateExit = nullptr;
+    int withTotal = 0;
+    for (PairKeyCombo* c : combos) {
+      c->setPairsModel(&pairs);
+      c->refresh();
+      if (c->findData(PairKeyCombo::TotalCapture) != -1) { rateExit = c; withTotal++; }
+    }
+    ok("rate box: two pair combos, one of them offering 'Total capture (all g pairs)'",
+       combos.size() == 2 && withTotal == 1, QString("%1 combos, %2 with total capture").arg(combos.size()).arg(withTotal));
+    if (rateExit) {
+      rateExit->setKey(PairKeyCombo::TotalCapture);
+      ok("rate exit: setKey(-1) -> key() -1", rateExit->key() == -1, QString::number(rateExit->key()));
+      ok("rate exit: the item reads 'Total capture'", rateExit->currentText().startsWith("Total capture"), rateExit->currentText());
+    }
   }
 
   std::cout << (fails ? "FAILED" : "PASSED") << " (" << fails << " failures)" << std::endl;

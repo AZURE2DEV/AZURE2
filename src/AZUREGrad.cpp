@@ -57,12 +57,12 @@ vector_matrix_r BuildShiftDerivTable(CNuc *compound, const Config &configure) {
         double resonanceEnergy = levelEnergy - (pair->GetSepE() + pair->GetExE());
         double dS;
         if (resonanceEnergy < 0.0) {
-          ShftFunc theShiftFunction(pair);
+          ShftFunc theShiftFunction(pair, channel->GetRadius());
           dS = theShiftFunction.EnergyDerivative(l, levelEnergy);
         } else {
           CoulFunc theCoulombFunction(pair,
                                       !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-          double radius = pair->GetChRad();
+          double radius = channel->GetRadius();
           dS = theCoulombFunction.PEShift_dE(l, radius, resonanceEnergy);
         }
         tab[j - 1][la - 1][ch - 1] = dS;
@@ -152,6 +152,8 @@ void GradAccum::Init(CNuc *compound) {
   lmUsed.assign(nJ, 0);
   abundance.assign(compound->NumAbundanceParams(), 0.0);
   screening.clear();
+  doppler.clear();
+  thickness.clear();
   isospin.assign(compound->Isospin().NumParams(), 0.0);
   slot.clear();
 }
@@ -165,6 +167,8 @@ void GradAccum::Zero() {
     for (auto &row : lev) std::fill(row.begin(), row.end(), 0.0);
   std::fill(abundance.begin(), abundance.end(), 0.0);
   std::fill(screening.begin(), screening.end(), 0.0);
+  std::fill(doppler.begin(), doppler.end(), 0.0);
+  std::fill(thickness.begin(), thickness.end(), 0.0);
   if (formalUsed) {
     for (auto &row : fe) std::fill(row.begin(), row.end(), 0.0);
     for (auto &lev : fgamma)
@@ -195,6 +199,10 @@ void GradAccum::Add(const GradAccum &o) {
   for (int k = 0; k < (int)abundance.size() && k < (int)o.abundance.size(); k++) abundance[k] += o.abundance[k];
   if (o.screening.size() > screening.size()) screening.resize(o.screening.size(), 0.0);
   for (int k = 0; k < (int)o.screening.size(); k++) screening[k] += o.screening[k];
+  if (o.doppler.size() > doppler.size()) doppler.resize(o.doppler.size(), 0.0);
+  for (int k = 0; k < (int)o.doppler.size(); k++) doppler[k] += o.doppler[k];
+  if (o.thickness.size() > thickness.size()) thickness.resize(o.thickness.size(), 0.0);
+  for (int k = 0; k < (int)o.thickness.size(); k++) thickness[k] += o.thickness[k];
   for (size_t j = 0; j < o.lmUsed.size() && j < lmUsed.size(); j++)
     if (o.lmUsed[j]) {
       if (lmK[j].size() != o.lmK[j].size()) {
@@ -241,6 +249,14 @@ void GradAccum::Scatter(const ParamIndexMap &map, vector_r &gradFull) const {
   for (int k = 0; k < (int)screening.size(); k++) {
     int si = map.ScreeningIndex(k + 1);
     if (si >= 0 && si < (int)gradFull.size()) gradFull[si] += screening[k];
+  }
+  for (int k = 0; k < (int)doppler.size(); k++) {
+    int di = map.DopplerIndex(k + 1);
+    if (di >= 0 && di < (int)gradFull.size()) gradFull[di] += doppler[k];
+  }
+  for (int k = 0; k < (int)thickness.size(); k++) {
+    int ti = map.ThicknessIndex(k + 1);
+    if (ti >= 0 && ti < (int)gradFull.size()) gradFull[ti] += thickness[k];
   }
   for (int k = 0; k < (int)isospin.size(); k++) {
     int ii = map.IsospinIndex(k);
@@ -444,6 +460,42 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
     }
   }
 
+  // --- Fitted target densities: one per densityfit line or density group (EData::FillMnParams). ---
+  // No analytic derivative: the target thickness enters through the depth window, finite differences.
+  if (data) {
+    for (int k = 1; k <= data->NumDensityParams(); k++) {
+      map.densityIndex_[k] = i;
+      ParamDesc d{ParamKind::Density, -1, -1, -1, -1, false};
+      d.density = k;
+      map.desc_.push_back(d);
+      i++;
+    }
+  }
+
+  // --- Fitted Doppler temperatures: one per 'doppler T vary sigma' line (EData::FillMnParams). ---
+  // Analytic: d/dT through the Doppler weights (EPoint::DopplerWeights), GradAccum::AddDoppler.
+  if (data) {
+    for (int k = 1; k <= data->NumDopplerParams(); k++) {
+      map.dopplerIndex_[k] = i;
+      ParamDesc d{ParamKind::Doppler, -1, -1, -1, -1, false};
+      d.doppler = k;
+      map.desc_.push_back(d);
+      i++;
+    }
+  }
+
+  // --- Fitted sample thicknesses: one per transmission / yield line with the fit form (EData::FillMnParams). ---
+  // Analytic: d/dn of the transform (GradTransformedPoint), GradAccum::AddThickness.
+  if (data) {
+    for (int k = 1; k <= data->NumThicknessParams(); k++) {
+      map.thicknessIndex_[k] = i;
+      ParamDesc d{ParamKind::Thickness, -1, -1, -1, data->GetThicknessSegment(k), false};
+      d.thickness = k;
+      map.desc_.push_back(d);
+      i++;
+    }
+  }
+
   // --- Apply the fixed mask and build packed<->full lookups. ---
   const int nFull = (int)map.desc_.size();
   map.fullToPacked_.assign(nFull, -1);
@@ -499,11 +551,24 @@ bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
   // differences.
   {
     TargetEffect *te = point->GetParentData()->GetTargetEffect(point->GetTargetEffectNum());
-    if (point->GetTargetBlendWeight() < 1.0) return false;
+    // A thin-target integration blends with sigma(E_bar) inside its linear kernel (EPoint::TargetFallbackImpl),
+    // so its window edges and the points outside its windows are linear in the sub-point values (2026-11-05).
+    const bool thinTarget = te && te->IsTargetIntegration() && !te->IsThickTarget();
+    if (point->GetTargetBlendWeight() < 1.0 && !thinTarget) return false;
     if (te && te->GetAutoTolerance() > 0.) return false;
   }
 
   const bool isAy = point->IsAnalyzingPower();
+  // A normalised Legendre coefficient under a target effect is the same ratio structure as A_y, with A_0 = sigma_int / 4 pi
+  // in place of the differential cross section:  <a_k> = sum c_i A0_i a_i / sum c_i A0_i  (EPoint::IntegrateTargetEffectForObservable),
+  //   d<a_k> = sum c_i [ A0_i da_i + (a_i - <a_k>) dA0_i ] / D,
+  // an a_k cotangent fitBar c_i A0_i / D (PointTBar's coefficient form) and an A_0 cotangent fitBar c_i (a_i - <a_k>) / D
+  // (PointTBar with xsComponent -1).  An absolute A_k is linear in the sub-point values and takes the plain route.
+  const bool isCoefNorm = point->IsCoefficient() && !point->GetCoefficientAbsolute();
+  if (isCoefNorm) {
+    if (xsComponent != 0) return false;
+    if (!ScopedPointMappingOff::Active() && (point->IsMapped() || point->NumLocalMappedPoints() > 0)) return false;
+  }
   if (isAy) {
     // Supported: particle-exit A_y, full observable, no point mapping in
     // effect (a mapped point's sub-points would be written by another point's
@@ -583,8 +648,46 @@ bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
       return true;
     }
     avg = num / den;
+  } else if (isCoefNorm) {
+    for (int i = 1; i <= nsp; i++) point->GetSubPoint(i)->SetFitCrossSection(point->GetSubPoint(i)->GetAngDistA0());
+    point->IntegrateTargetEffect(config);
+    den = point->GetFitCrossSection();
+    for (int i = 1; i <= nsp; i++)
+      point->GetSubPoint(i)->SetFitCrossSection(sigma[i - 1] * point->GetSubPoint(i)->GetAngDistA0());
+    point->IntegrateTargetEffect(config);
+    const double num = point->GetFitCrossSection();
+    for (int i = 1; i <= nsp; i++) point->GetSubPoint(i)->SetFitCrossSection(sigma[i - 1]);
+    if (!(std::fabs(den) > 0.0)) {
+      point->SetFitCrossSection(model);
+      return true;
+    }
+    avg = num / den;
   }
   point->SetFitCrossSection(model);
+  // A fitted Doppler temperature (doppler_<n>): d/dT through the Doppler weights, the sub-point values fixed.  The
+  // ratios (A_y, a normalised coefficient) take d(N/D) = (dN - <A> dD)/D on the same integrator.
+  if (const int dk = point->GetParentData()->DopplerParamOfEffect(point->GetTargetEffectNum())) {
+    std::vector<double> vals(nsp);
+    double dT = 0.0;
+    if (isAy || isCoefNorm) {
+      std::vector<double> weight(nsp);
+      for (int i = 1; i <= nsp; i++)
+        weight[i - 1] = isAy ? sigma[i - 1] : point->GetSubPoint(i)->GetAngDistA0();
+      for (int i = 1; i <= nsp; i++)
+        vals[i - 1] = weight[i - 1] * (isAy ? point->GetSubPoint(i)->GetAnalyzingPower() : sigma[i - 1]);
+      const double dN = point->DopplerTemperatureDerivative(config, vals);
+      const double dD = point->DopplerTemperatureDerivative(config, weight);
+      dT = (dN - avg * dD) / den;
+    } else {
+      for (int i = 1; i <= nsp; i++) {
+        EPoint *sp = point->GetSubPoint(i);
+        vals[i - 1] = (xsComponent == 1) ? sp->GetFitE1CrossSection()
+                      : (xsComponent == 2) ? sp->GetFitE2CrossSection() : sigma[i - 1];
+      }
+      dT = point->DopplerTemperatureDerivative(config, vals);
+    }
+    accum.AddDoppler(dk, fitBar * dT);
+  }
   const auto tc1 = std::chrono::steady_clock::now();
   g_teCombinerNs += std::chrono::duration_cast<std::chrono::nanoseconds>(tc1 - tc0).count();
 
@@ -597,8 +700,16 @@ bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
     amf.FillMatrices(sp);
     amf.InvertMatrices();
     amf.CalculateTMatrix(sp);
-    if (!isAy) {
+    if (!isAy && !isCoefNorm) {
       if (!amf.PointAdjoint(sp, fitBar * c[i - 1], accum, shiftDeriv, xsComponent)) ok = false;
+      continue;
+    }
+    if (isCoefNorm) {
+      const double a0 = sp->GetAngDistA0();
+      const double akBar = fitBar * c[i - 1] * a0 / den;
+      const double a0Bar = fitBar * c[i - 1] * (sigma[i - 1] - avg) / den;
+      if (akBar != 0.0 && !amf.PointAdjoint(sp, akBar, accum, shiftDeriv, 0)) ok = false;
+      if (ok && a0Bar != 0.0 && !amf.PointAdjoint(sp, a0Bar, accum, shiftDeriv, -1)) ok = false;
       continue;
     }
     const double ayBar = fitBar * c[i - 1] * sigma[i - 1] / den;
@@ -628,6 +739,133 @@ bool GradAdjointPoint(EPoint *point, int xsComponent, double fitBar, GradAccum &
   return amf.PointAdjoint(point, fitBar, accum, shiftDeriv, xsComponent);
 }
 
+// Forward + adjoint for one point of a transmission or yield segment (ESegment::IsTransformed).  The model is
+// F(s, s_t) of the weighted sum s of the segment's terms (and, for a yield, its total s_t), at the point or -- under a
+// sub-point target effect -- at every sub-point before the kernel: Y = sum_j c_j F(s_j, s_t,j), c_j the kernel's
+// exact weights (EPoint::TargetEffectWeights).  Each term's point or sub-point is back-propagated with the cotangent
+// fitBar c_j dF/d(its sum) times its weight, and a sample's abundance gets fitBar c_j dF/ds times its unweighted terms.
+bool GradTransformedPoint(ESegment *segment, EData *data, int i, int pointIdx, CNuc *compound, const Config &config,
+                          const vector_matrix_r *shiftDeriv, const FitBarFn &fitBarFn, GradAccum &accum,
+                          double &outModel) {
+  outModel = segment->CalculateTheoreticalCrossSection(pointIdx, compound, config, data);
+  const double fitBar = fitBarFn(segment, i, pointIdx, outModel);
+  if (fitBar == 0.0) return true;
+  std::vector<ESegment::TransformTerm> terms;
+  if (!segment->TransformTerms(pointIdx, compound, terms)) return false;
+  const double n = segment->GetSampleThickness();
+  const bool yield = segment->IsYield();
+  const bool natural = segment->IsNatural();
+  const int sample = segment->GetNaturalSample();
+  // A fitted sample thickness (segment_<key>_thickness, its group leader's for a follower): dF/dn at the same values,
+  // dT/dn = -s exp(-n s), dY0/dn = s exp(-n s_t), with the kernel weight c of each (sub-)point.
+  const int thicknessParam = data ? data->ThicknessParamOfSegment(i) : 0;
+  auto valueOf = [](EPoint *p, int c) {
+    return (c == 1) ? p->GetFitE1CrossSection() : (c == 2) ? p->GetFitE2CrossSection() : p->GetFitCrossSection();
+  };
+  std::vector<double> v(terms.size());
+  // fitBar c dF/d(term q) for the values v, one term's point or sub-point at a time
+  auto backProp = [&](double c, auto pointOf) {
+    double sum = 0.0, total = 0.0, dS = 0.0, dT = 0.0, dN = 0.0;
+    for (size_t q = 0; q < terms.size(); q++) (terms[q].total ? total : sum) += terms[q].weight * v[q];
+    if (yield)
+      ESegment::YieldY0(n, sum, total, &dS, &dT, &dN);
+    else
+      ESegment::Transmission(n, sum, &dS, &dN);
+    if (thicknessParam > 0) accum.AddThickness(thicknessParam, fitBar * c * dN);
+    for (size_t q = 0; q < terms.size(); q++) {
+      const double d = fitBar * c * (terms[q].total ? dT : dS);
+      if (natural && !terms[q].total)
+        accum.AddAbundance(compound->AbundanceOrdinal(sample, terms[q].nucleus), d * terms[q].scale * v[q]);
+      const double cot = d * terms[q].weight;
+      if (cot != 0.0 && !pointOf(q, cot)) return false;
+    }
+    return true;
+  };
+  EPoint *base = terms[0].point;
+  if (!ESegment::HasSubPointIntegration(base)) {
+    for (size_t q = 0; q < terms.size(); q++) v[q] = valueOf(terms[q].point, terms[q].xsComponent);
+    return backProp(1.0, [&](size_t q, double cot) {
+      return GradAdjointPoint(terms[q].point, terms[q].xsComponent, cot, accum, shiftDeriv, compound, config);
+    });
+  }
+  const int nsp = base->NumSubPoints();
+  const TargetEffect *effect = base->GetParentData()->GetTargetEffect(base->GetTargetEffectNum());
+  if (effect && effect->IsDoppler()) {
+    // Doppler before the transform: Y = sum_J c_J F(sigma_D at J), sigma_D(J) = sum_k D_Jk sigma_k, J the kernel's
+    // sub-points (c_J its weights without the Doppler step) or, with no kernel after the Doppler step, the point
+    // itself (c = 1).  Term q's sub-point k gets the cotangent sum_J fitBar c_J dF/d(sum) weight_q D_Jk.
+    std::vector<std::vector<double>> raw(terms.size(), std::vector<double>(nsp));
+    for (size_t q = 0; q < terms.size(); q++) {
+      if (terms[q].point->NumSubPoints() != nsp) return false;
+      for (int k = 1; k <= nsp; k++) raw[q][k - 1] = valueOf(terms[q].point->GetSubPoint(k), terms[q].xsComponent);
+    }
+    std::vector<std::pair<double, double>> stage;  // (c.m. energy, kernel weight)
+    if (!effect->HasResolutionStage()) {
+      stage.emplace_back(base->GetCMEnergy(), 1.0);
+    } else {
+      std::vector<double> c;
+      EPoint::DopplerAppliedScope dopplerDone(base);
+      if (!base->TargetEffectWeights(config, c)) return false;
+      for (int j = 1; j <= nsp; j++)
+        if (c[j - 1] != 0.0) stage.emplace_back(base->GetSubPoint(j)->GetCMEnergy(), c[j - 1]);
+    }
+    std::vector<std::vector<double>> cot(terms.size(), std::vector<double>(nsp, 0.0));
+    std::vector<std::pair<int, double>> dw, dwdT;
+    // A fitted temperature (doppler_<n>): dY/dT = sum_J c_J sum_q dF/d(term q) weight_q sum_k dD_Jk/dT sigma_qk,
+    // the same cotangents cq applied to the T-derivatives of the Doppler weights.
+    const int dk = base->GetParentData()->DopplerParamOfEffect(base->GetTargetEffectNum());
+    for (const auto &st : stage) {
+      base->DopplerWeights(st.first, dw, dk > 0 ? &dwdT : nullptr);
+      for (size_t q = 0; q < terms.size(); q++) {
+        double s = 0.0;
+        for (const auto &t : dw) s += t.second * raw[q][t.first - 1];
+        v[q] = s;
+      }
+      backProp(st.second, [&](size_t q, double cq) {
+        for (const auto &t : dw) cot[q][t.first - 1] += cq * t.second;
+        if (dk > 0) {
+          double ds = 0.0;
+          for (const auto &t : dwdT) ds += t.second * raw[q][t.first - 1];
+          accum.AddDoppler(dk, cq * ds);
+        }
+        return true;
+      });
+    }
+    for (size_t q = 0; q < terms.size(); q++)
+      for (int k = 1; k <= nsp; k++) {
+        if (cot[q][k - 1] == 0.0) continue;
+        EPoint *sp = terms[q].point->GetSubPoint(k);
+        AMatrixFunc amf(compound, config);
+        amf.ClearMatrices();
+        amf.FillMatrices(sp);
+        amf.InvertMatrices();
+        amf.CalculateTMatrix(sp);
+        if (!amf.PointAdjoint(sp, cot[q][k - 1], accum, shiftDeriv, terms[q].xsComponent)) return false;
+      }
+    return true;
+  }
+  std::vector<double> c;
+  if (!base->TargetEffectWeights(config, c)) return false;  // not a pure linear kernel: finite differences
+  for (int j = 1; j <= nsp; j++) {
+    if (c[j - 1] == 0.0) continue;
+    for (size_t q = 0; q < terms.size(); q++) {
+      if (terms[q].point->NumSubPoints() != nsp) return false;
+      v[q] = valueOf(terms[q].point->GetSubPoint(j), terms[q].xsComponent);
+    }
+    const bool ok = backProp(c[j - 1], [&](size_t q, double cot) {
+      EPoint *sp = terms[q].point->GetSubPoint(j);
+      AMatrixFunc amf(compound, config);
+      amf.ClearMatrices();
+      amf.FillMatrices(sp);
+      amf.InvertMatrices();
+      amf.CalculateTMatrix(sp);
+      return amf.PointAdjoint(sp, cot, accum, shiftDeriv, terms[q].xsComponent);
+    });
+    if (!ok) return false;
+  }
+  return true;
+}
+
 // Forward + adjoint for one (segment, point): returns the combined model in
 // `outModel` and accumulates fitBar * d(model)/d(E,gamma) into `accum`, where
 // fitBar = fitBarFn(segment, i, pointIdx, model).  Handles plain points (single
@@ -643,6 +881,8 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
   EPoint *point = segment->GetPoint(pointIdx + 1);
   outModel = 0.0;
   if (!point) return true;
+  if (segment->IsTransformed())
+    return GradTransformedPoint(segment, data, i, pointIdx, compound, config, shiftDeriv, fitBarFn, accum, outModel);
 
   int baseComp = segment->GetCrossSectionComponent();
   bool hasComp = segment->HasComponents();
@@ -687,6 +927,99 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
     return true;
   }
 
+  // A SUM or RATIO segment whose components share the base point's energy (EData::MapComponentSegments): one
+  // level-matrix solution for every term, each term's T-matrix and cotangent in turn, and one back-propagation of
+  // the merged cotangents (TBarAdjointMany).  Before 2026-10-24 each term was calculated twice on its own (forward,
+  // then forward + adjoint).  AZURE_NO_COMPONENT_MAPPING=1 keeps the per-term route below.
+  static const bool componentMappingOff = [] {
+    const char *e = std::getenv("AZURE_NO_COMPONENT_MAPPING");
+    return e && *e && std::string(e) != "0";
+  }();
+  if (hasComp && !subpointTE && !componentMappingOff) {
+    std::vector<EPoint *> pts{point};
+    std::vector<int> xsComp{baseComp};
+    std::vector<ESegment *> termSeg{segment};
+    bool shared = true;
+    for (ESegment *comp : segment->GetComponentSegments()) {
+      if (!comp || pointIdx >= comp->NumPoints()) continue;
+      EPoint *cp = comp->GetPoint(pointIdx + 1);
+      if (!cp) continue;
+      if (cp->GetEntranceKey() != point->GetEntranceKey() || cp->GetCMEnergy() != point->GetCMEnergy() ||
+          cp->NumSubPoints() != 0)
+        shared = false;
+      pts.push_back(cp);
+      xsComp.push_back(comp->GetCrossSectionComponent());
+      termSeg.push_back(comp);
+    }
+    if (segment->GetOperationType() != SUM && pts.size() < 2) shared = false;
+    if (shared) {
+      AMatrixFunc amf(compound, config);
+      amf.ClearMatrices();
+      amf.FillMatrices(point);
+      amf.InvertMatrices();
+      int tExit = point->GetExitKey();
+      amf.CalculateTMatrix(point);
+      auto useExitOf = [&](EPoint *p) {
+        if (p->GetExitKey() == tExit) return;
+        amf.RecalculateTMatrix(p);
+        tExit = p->GetExitKey();
+      };
+      for (EPoint *p : pts) {
+        useExitOf(p);
+        amf.GenMatrixFunc::CalculateCrossSection(p);
+      }
+      // The combined model from the values the points now hold, exactly as the forward calculation forms it.
+      double model = segment->CalculateTheoreticalCrossSection(pointIdx, compound, config, data, true);
+      outModel = model;
+      double fitBar = fitBarFn(segment, i, pointIdx, model);
+      if (fitBar == 0.0) return true;
+      auto valueOf = [](EPoint *p, int c) {
+        return (c == 1) ? p->GetFitE1CrossSection() : (c == 2) ? p->GetFitE2CrossSection() : p->GetFitCrossSection();
+      };
+      // d(model)/d(term q)
+      std::vector<double> coef(pts.size(), 0.0);
+      if (segment->GetOperationType() == SUM) {
+        for (size_t q = 0; q < pts.size(); q++) {
+          const double v = valueOf(pts[q], xsComp[q]);
+          if (q > 0 && (std::isnan(v) || std::isinf(v))) continue;
+          // the term's scaling and its frame factor into the base point's frame (ESegment::TermFrameFactor)
+          const double s = q > 0 ? termSeg[q]->GetComponentScaling() * ESegment::TermFrameFactor(point, pts[q]) : 1.0;
+          double w = 1.0;
+          if (natural) {
+            const int nucleus = abundanceOf(termSeg[q]->GetEntranceKey());
+            w = compound->GetAbundance(sample, nucleus);
+            accum.AddAbundance(compound->AbundanceOrdinal(sample, nucleus), fitBar * s * v);
+          }
+          coef[q] = s * w;
+        }
+      } else {  // RATIO: base / first component
+        const double baseVal = valueOf(pts[0], xsComp[0]);
+        const double denomVal = pts[1]->GetFitCrossSection();
+        if (natural) {
+          const int nucleus = abundanceOf(segment->GetEntranceKey());
+          accum.AddAbundance(compound->AbundanceOrdinal(sample, nucleus), fitBar * baseVal);
+        }
+        if (baseVal != 0.0 && denomVal != 0.0) {
+          coef[0] = model / baseVal;
+          coef[1] = -model / denomVal;
+          xsComp[1] = 0;
+        }
+      }
+      std::vector<EPoint *> barPts;
+      std::vector<TMatrixCotangent> bars;
+      for (size_t q = 0; q < pts.size(); q++) {
+        if (coef[q] == 0.0) continue;
+        useExitOf(pts[q]);
+        TMatrixCotangent bar;
+        if (!amf.PointTBar(pts[q], fitBar * coef[q], bar, xsComp[q])) return false;
+        barPts.push_back(pts[q]);
+        bars.push_back(std::move(bar));
+      }
+      amf.TBarAdjointMany(barPts, bars, accum, shiftDeriv);
+      return true;
+    }
+  }
+
   // Combined model (components and/or target-effect integration).
   double model = segment->CalculateTheoreticalCrossSection(pointIdx, compound, config, data);
   outModel = model;
@@ -714,14 +1047,15 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
       if (!cp) continue;
       double cv = cp->GetFitCrossSection();
       if (std::isnan(cv) || std::isinf(cv)) continue;
+      // the term's scaling and its frame factor into the base point's frame (ESegment::TermFrameFactor)
+      const double s = comp->GetComponentScaling() * ESegment::TermFrameFactor(point, cp);
       double compWeight = 1.0;
       if (natural) {
         const int nucleus = abundanceOf(comp->GetEntranceKey());
         compWeight = compound->GetAbundance(sample, nucleus);
-        accum.AddAbundance(compound->AbundanceOrdinal(sample, nucleus), fitBar * comp->GetComponentScaling() * cv);
+        accum.AddAbundance(compound->AbundanceOrdinal(sample, nucleus), fitBar * s * cv);
       }
-      if (!GradAdjointPoint(cp, comp->GetCrossSectionComponent(),
-                            fitBar * comp->GetComponentScaling() * compWeight, accum,
+      if (!GradAdjointPoint(cp, comp->GetCrossSectionComponent(), fitBar * s * compWeight, accum,
                             shiftDeriv, compound, config))
         return false;
     }
@@ -769,7 +1103,7 @@ struct GradItem {
 // A point whose gradient can be taken from a shared T-matrix: no components
 // (SUM/RATIO) and no sub-point target effect.  The others keep GradOnePoint.
 bool Groupable(ESegment *seg, EPoint *pt) {
-  if (seg->HasComponents()) return false;
+  if (seg->HasComponents() || seg->IsTransformed()) return false;
   if (pt->IsTargetEffect()) {
     TargetEffect *te = pt->GetParentData()->GetTargetEffect(pt->GetTargetEffectNum());
     if (te && te->IsSubPointEffect()) return false;

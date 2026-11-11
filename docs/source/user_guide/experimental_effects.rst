@@ -195,14 +195,37 @@ target. The yield is computed as
 .. math::
 
    Y(E_0) = \frac{1}{N} \int_{E_0 - \Delta}^{E_0} \frac{\sigma(E')}{\epsilon(E')}\, dE',
-   \qquad \Delta = \epsilon(E_0)\, N ,
+   \qquad \int_{E_0 - \Delta}^{E_0} \frac{dE'}{\epsilon(E')} = N ,
 
 where :math:`N` is the areal density entered below and :math:`\epsilon(E)` the
-stopping cross section entered below.
+stopping cross section entered below. The energy loss :math:`\Delta` is the
+exact range integral: the energy at which the beam has crossed the areal
+density :math:`N`, so a constant cross section is reproduced exactly. (Before
+October 2026 the first-order :math:`\Delta = \epsilon(E_0)\,N` was used; with
+a stopping cross section that rises through the target, as it does for every
+ion above the Bragg peak, that put the back edge 2-8 % too shallow for
+targets of 5-20 % energy loss and gave a flat cross section a yield low by
+the same fraction, a distortion that grows towards low energy.)
 
 **Active Density** (atoms/cm\ :sup:`2`)
    The areal density of the active target material (the nuclei producing the
    reactions of interest in a mixed-material target).
+
+   A density of **0** means an infinitely *thick* target: the yield per
+   incident particle,
+
+   .. math::
+
+      Y(E_0) = \int_{0}^{E_0} \frac{\sigma(E')}{\epsilon(E')}\, dE' ,
+
+   with no division by :math:`N`; every point integrates down to 1 keV, and a
+   beam spread or straggling on the same line is folded in as for a thin
+   target. (Before October 2026 the thick-target case was handled by
+   overwriting the line's density at its first point, which left that point
+   with a yield of exactly 0 whenever a beam spread or straggling was on the
+   line; a thin target whose stopping cross section evaluated to zero or
+   below at some energy silently became thick from that point on. The latter
+   is now an error.)
 
 **Stopping Cross Section**
    The effective stopping cross section must be entered as a continuous function
@@ -272,20 +295,29 @@ be normalized to the same thing the density counts.**
    If the experiment reports the energy loss in the target directly (for
    example "the target thickness corresponded to 1.5 keV at the resonance"),
    that number is more reliable than a stoichiometry and a nominal thickness:
-   choose :math:`N` so that :math:`\epsilon(E_0)\,N` reproduces the quoted
-   loss at the energy of interest.
+   choose :math:`N` so that the energy loss reproduces the quoted value at
+   the energy of interest (:math:`N \approx \Delta/\epsilon(E_0)` for a thin
+   target; a few per cent more for a target of 10-20 % energy loss, since
+   :math:`\epsilon` rises through it).
 
 .. note::
 
    **Energy shifts under target integration.** A segment's energy shift
-   (constant, :math:`\sqrt{E}` or shift function, :doc:`segments`) moves
-   every sub-point by the shift evaluated at that sub-point's own original
-   energy, so a constant shift translates the sub-point grid rigidly and an
-   energy-dependent one stretches it. The target thickness, the stopping
+   (constant, :math:`\sqrt{E}` or shift function, :doc:`segments`) is a
+   calibration of the measured beam energy, so it moves every sub-point
+   rigidly with its data point, by the shift evaluated at the data point's
+   original energy. The target thickness, the beam profile, the stopping
    powers and the resolution kernels stay those computed for the unshifted
-   energy. This is a first-order approximation in
+   energy, and the resonance-anchored fine grid is laid out at the shifted
+   position of each resonance. This is a first-order approximation in
    :math:`\Delta E\,\mathrm{d}\epsilon/\mathrm{d}E`, accurate while the shift
    is small compared with the energy over which the stopping power changes.
+   (Until October 2026 each sub-point moved by the shift at its own energy,
+   which for a :math:`\sqrt{E}` shift or a shift function stretched the
+   integration window by :math:`1 + \mathrm{d}s/\mathrm{d}E` -- a yield factor
+   of order 1 % for :math:`b = 0.02` at 0.3 MeV -- and left the fine grid off a
+   narrow resonance deep in the target by :math:`s' \times` depth; a constant
+   shift was never affected.)
 
 Restricting an Effect to Energy Ranges
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -296,7 +328,8 @@ this without splitting the data into artificial segments:
 
 - **Apply in Energy Ranges** -- a comma-separated list of laboratory-energy
   windows, for example ``0.42-0.61,1.20-1.35`` (MeV).  Points outside every
-  window are computed as ordinary points; leave the field empty to cover the
+  window are computed as ordinary points at their own energy -- except under a
+  thin-target integration, see below; leave the field empty to cover the
   whole segment.
 - **Blend Width** -- the width (MeV) of a smooth transition at each window
   edge.  With a hard edge (``0``) the modelled curve can show a small step
@@ -308,6 +341,108 @@ this without splitting the data into artificial segments:
   tolerance.  Any discontinuity this introduces is bounded by the tolerance,
   and smooth regions stop paying for integration they do not need.  It can be
   combined with explicit ranges or used on its own.
+
+**Target integration: the effective energy outside the windows.**  The data
+of a target integration carry the *beam* energy :math:`E_0`, and the cross section
+there is not the target average: it is off by the centroid shift, about half the
+energy loss.  So under a thin-target integration a point outside every window is
+evaluated at the depth-averaged energy of its own target,
+
+.. math::
+
+   \bar E = \frac{\int_{E_0-\Delta}^{E_0} E\,dE/\epsilon(E)}{\int_{E_0-\Delta}^{E_0} dE/\epsilon(E)},
+
+one cross-section evaluation instead of the whole sub-point grid.
+:math:`\sigma(\bar E)` equals the target average exactly for a cross section that is
+linear across the target; the rest is about
+:math:`|\sigma''(\bar E)|\,\Delta^2/24` (relative to :math:`\sigma`: the
+:math:`(\Delta/\lambda)^2/24` of a cross section that changes by a factor *e* every
+:math:`\lambda`), and the beam spread and straggling are ignored there (they shift
+nothing to first order).  Put the windows where that is not small: around narrow
+resonances, and wherever the target is thick compared with the scale on which the
+cross section bends (low energies under a Coulomb barrier).  Window edges blend
+with :math:`\sigma(\bar E)`, and the automatic tolerance falls back to it, deciding
+from the curvature alone.  :math:`\bar E` follows a fitted density
+(``densityfit``), and the analytic gradient covers windows and blends.  Refused:
+windows on a thick target (density 0, no single equivalent energy), and windows
+or a tolerance on a line with ``doppler``.  Before November 2026 such a point was
+computed at :math:`E_0`: on the 13C+α ND 2021 data (16 lines, windows around the
+narrow levels) that made the windowed model worse than none, χ² 421,432 against
+400,616 integrated everywhere; with :math:`\bar E` it is 401,435.
+
+**Automatic windows from the level scheme.**  The windows token ``"auto"``
+lets AZURE2 place the windows itself, segment by segment from the segment's own
+entrance pair (the components of a composite segment from theirs):
+
+- around every resonance narrow enough for :math:`\sigma(\bar E)` to miss its
+  peak by more than a tolerance.  For a resonance of total width
+  :math:`\Gamma` under a target of thickness :math:`\Delta` (the energy loss
+  plus twice the beam spread) that error is :math:`\Delta^2/(3\Gamma^2)`, so
+  a level is narrow when :math:`\Gamma < \Delta/\sqrt{3\,\mathrm{tol}}`;
+- around every particle threshold of the same compound nucleus: a target that
+  straddles a threshold sees the cusp of the channel opening, which no single
+  energy reproduces (15 % at the 16O(6.05 MeV) n\ :sub:`1` threshold in the
+  13C+α data);
+- over the steep end of a charged-particle cross section below the Coulomb
+  barrier.  Locally :math:`\sigma \propto e^{g(E)}`, and the depth average
+  exceeds :math:`\sigma(\bar E)` by :math:`(g'' + g'^2)\Delta^2/24`; with the
+  Gamow factor of the entrance pair, :math:`\sigma \propto e^{-2\pi\eta}/E`,
+  :math:`g' = (\pi\eta - 1)/E` and :math:`g'' = (1 - 1.5\pi\eta)/E^2`.  Every
+  point where this exceeds the tolerance is integrated (the 13C+α ND 2021
+  thick target at :math:`E_\alpha` = 0.675 MeV: :math:`\sigma(\bar E)` was 5-8 %
+  low).  The estimate covers the Gamow factor only, so a resonance tail can
+  make the true error larger; the Note gives the points as "sub-barrier
+  curvature".
+
+A point at :math:`E_0` samples :math:`[E_0-\Delta, E_0]`; its window reaches
+*margin* × max(:math:`\Gamma`, :math:`\Delta`) beyond the points whose target
+holds the resonance or threshold, i.e. :math:`[E_R - w, E_R + \Delta + w]`.
+``"auto:<tol>"`` and ``"auto:<tol>:<margin>"`` set the two numbers (defaults
+0.01 and max(3, 1/(2√tol)) = 5: a window edge at a distance *d* leaves the
+fallback a relative error of about :math:`\Delta^2/(4d^2)` in the resonance's
+tail, so :math:`d \ge \Delta/(2\sqrt{\mathrm{tol}})` keeps it within the
+tolerance; on the 13C+α ND 2021 data margin 3 left 120 points more than 1 %
+off just outside the edges, margin 5 63, for 20 % more integrated points); explicit ranges in the same token are added (``"auto,1.20-1.35"``),
+and the blend width that follows the token applies to every edge.  A Note per
+segment lists the levels, thresholds, windows and the number of points
+integrated.  The widths are the observed total widths the sub-point grids are
+laid out with, from the parameters the session starts from; the windows stay
+fixed for the session, so a fit that moves a narrow level by more than *w*
+leaves it outside, and a new session from the fitted file places them again.
+Only a thin-target integration takes ``"auto"`` (a thick target or a line
+without a target integration is refused).  On the 13C+α ND 2021 data:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 20 25 25
+
+   * - windows
+     - χ²
+     - points integrated
+     - largest point shift
+   * - none (full integration)
+     - 400,616
+     - 100 %
+     - —
+   * - by hand (30 October)
+     - 401,435
+     - 48 %
+     - —
+   * - ``"auto"``
+     - 400,881
+     - 58 %
+     - 0.42 σ
+   * - ``"auto:0.003"``
+     - 400,656
+     - 81 %
+     - 0.20 σ
+   * - ``"auto:0.001:5"``
+     - 400,621
+     - 99 %
+     - 0.03 σ
+
+An engine from before November 2026 reads no range from ``"auto"`` and
+integrates every point: the right answer, at the full cost.
 
 In the ``.azr`` file these appear as optional tokens at the end of the
 ``targetInt`` line, for example ``"1.95-2.55" 0.12 0.002``; files that do not
@@ -469,6 +604,116 @@ the flight path, the burst and channel widths and the centring choice.
 udr_burst=, udr_channel=, udr_centred=)`` writes the same line from a
 script.
 
+Free-Gas Doppler Broadening
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The atoms of a target are not at rest: their thermal motion spreads the
+relative velocity of beam and target, and a narrow resonance looks wider and
+lower than it is. AZURE2 applies SAMMY's free-gas model (SAMMY manual,
+"Free-Gas Model of Doppler Broadening"), which is exact for a gas and, with
+an *effective* temperature, the standard approximation for a solid:
+
+.. math::
+
+   \sigma_D(E) = \frac{1}{u\sqrt{\pi}\,v^2} \int_0^\infty
+   \left[e^{-(v-w)^2/u^2} - e^{-(v+w)^2/u^2}\right] w^2\,\sigma(w^2)\,dw ,
+   \qquad u^2 = kT\,\frac{m}{M},
+
+with :math:`v=\sqrt{E}` and :math:`w=\sqrt{E'}` in laboratory-equivalent
+energies (the centre-of-mass energy divided by the pair's c.m./lab factor),
+:math:`m` and :math:`M` the beam and target masses of the entrance pair, and
+:math:`T` the effective temperature. The second exponential makes the model
+exact down to zero energy; well above the Doppler width it is a Gaussian of
+full width :math:`\Delta_D = \sqrt{4 m E kT/M}` in energy. For n + :sup:`12`\ C
+at 300 K and 0.46 MeV, :math:`\Delta_D \approx 63` eV: negligible for a
+resonance tens of keV wide, a large effect on one a few hundred eV wide.
+
+Write it as ``doppler <T>`` at the end of a ``<targetInt>`` line, :math:`T` in
+kelvin. The broadening is applied **first**, to the cross section of every
+sub-point, and only then come a ``transmission``/``yield`` transform of the
+segment (see :doc:`segments`) and the line's resolution kernel (Gaussian, UDR,
+target integration, beam profile), in SAMMY's order:
+
+.. code-block:: text
+
+   1 "1,2" 400 0 0 0 0 "" 0 0 0 0 "" 0 doppler 293.6           Doppler only
+   1 "3,4" 1000 1 0.0001 0 0 "" 0 0 0 0 "" 0 doppler 293.6     Doppler, then a 100 eV Gaussian
+
+A line with ``doppler`` alone evaluates :math:`\sigma_D` at each data point (and
+the transform of :math:`\sigma_D` for a transmission or yield segment). The
+sub-point grid of each point is widened by the Doppler window at both ends, so
+every sub-point the resolution kernel reaches has its whole Doppler integral
+inside the grid. Give the line enough sub-points to resolve the narrowest
+structure across that wider window: in the test below, a 200 eV resonance under
+a 100 eV Gaussian needs about 1000 (400 leaves an error of 4 × 10\ :sup:`-4` in
+the interference dip).
+
+Notes:
+
+* Any particle entrance pair (``pType`` 0) may be broadened: neutrons, and
+  charged beams on a gas target. A segment whose entrance pair is a photon or
+  beta-decay pair is refused with an ERROR.
+* The temperature is fixed unless the line uses the fit form below, and the
+  grids do not reach below 1 keV (c.m.), as for every sub-point effect.
+* The analytic gradient (``--use-gradient``) covers it, with or without a
+  transform and a kernel.
+* An engine older than this feature refuses the whole ``<targetInt>`` block
+  ("Could not fill data object from file") rather than ignoring the keyword; a
+  GUI older than it drops the keyword on save.
+
+In the GUI, check **Include Free-Gas Doppler Broadening** in the
+*Add/Edit Experimental Effect* dialog and give the temperature in kelvin.
+``tests/doppler_fgm`` compares every combination with an independent
+free-gas integral of a 1 eV grid of unbroadened cross sections (to 2 × 10\ :sup:`-4`).
+
+**A fitted temperature.** The effective temperature of a solid is known only
+roughly (Lamb's effective temperature is above the room temperature by an amount
+that depends on the Debye temperature), and a narrow resonance measured with good
+resolution constrains it. The fit form
+
+.. code-block:: text
+
+   doppler <T> <vary> <sigma> [<Tmax>]
+
+makes :math:`T` the parameter ``doppler_<n>`` (kelvin; :math:`n` the line's place
+among the active ``<targetInt>`` lines, as for ``screening_<n>``), started at the
+line's :math:`T_0`. ``vary`` is 1 (fitted) or 0 (a fixed parameter); ``sigma`` > 0
+adds the Gaussian prior :math:`((T - T_0)/\sigma)^2`, reported as
+``Total-Doppler-Chi-Squared`` in ``chiSquared.out`` (0 = no prior).
+
+.. code-block:: text
+
+   1 "1,2" 400 0 0 0 0 "" 0 0 0 0 "" 0 doppler 300 1 0 900     T free from 300 K, no prior, grids for 900 K
+   1 "3,4" 1000 1 0.0001 0 0 "" 0 0 0 0 "" 0 doppler 300 1 20  a 20 K prior, grids for 363 K
+
+The sub-point grids, and the velocity window of every Doppler integral, are laid
+out **once**, for the *layout temperature* :math:`T_{\mathrm{layout}}`: ``Tmax`` if
+given, else :math:`\max(T_0 + 3\sigma,\ 1.21\,T_0)` with a prior, or
+:math:`2\,T_0` without one. The Gauss-Legendre pieces of the integral are laid out
+for :math:`T_0` (each at most a quarter of :math:`u(T_0)` wide). Neither moves
+when :math:`T` does: only the values of the kernel change, so the broadened cross
+section is smooth in :math:`T` and its analytic derivative is exact (the gradient
+and the residual Jacobian take :math:`\partial\sigma_D/\partial T` through the
+Doppler weights, with or without a transform and a kernel). MIGRAD keeps
+:math:`T` within :math:`[T_0/4,\ T_{\mathrm{layout}}]`; a value outside it (an
+MCMC step, a pyazr vector) is computed at the nearest end, with a warning printed
+once -- give ``Tmax`` when the fit should be free to go higher. Below
+:math:`T_0/4` the pieces would be wider than half the kernel. A plain ``doppler T``
+line has :math:`T_{\mathrm{layout}} = T_0 = T` and computes exactly as before
+the fit form existed.
+
+Malformed fit forms are refused with an ERROR: ``vary`` other than 0 or 1, a
+missing or negative ``sigma``, a ``Tmax`` not above :math:`T`. Like a screening
+potential, the fitted :math:`T` travels in ``param.sav`` and the line's value is
+the prior's centre; the MCMC takes its prior from the line. In the GUI, the
+Doppler box of the dialog has **Temperature Is a Fit Parameter**, **Fit T**,
+**Prior Sigma [K]** and **Grid Maximum [K]** (blank = the default, shown beside
+it), and the Fitting tab lists the parameter under *Doppler Temperatures*
+(:doc:`fitting`). ``pyazr``: kind ``"doppler"``, ``penalties()["doppler"]``,
+``AzrModel.dopplers`` / ``set_doppler`` (:doc:`pyazr`). ``tests/doppler_fgm``
+recovers 450 K from 300 K (MIGRAD and ``--use-lm``) and checks the gradient, the
+prior and the refusals.
+
 Electron Screening
 ^^^^^^^^^^^^^^^^^^
 
@@ -536,11 +781,118 @@ With one screening line per target and the normalizations free it finds
 :math:`U_e` = 323 ± 98, 1211 ± 65 and 3433 ± 231 eV, against the published
 320 ± 110, 1320 ± 70 and 3760 ± 260 eV.
 
+Fitted Target Density
+^^^^^^^^^^^^^^^^^^^^^
+
+The areal density :math:`N` of a thin target (target integration with a density
+above 0) can be a fit parameter, so that a resonance profile measured with the
+target constrains its thickness. Add to the ``<targetInt>`` line
+
+.. code-block:: text
+
+   densityfit <vary> <sigma> [<max>]
+   densitygroup <label>
+
+``densityfit`` makes :math:`N` the parameter ``density_<n>`` (atoms/cm²; :math:`n`
+the line's place among the *active* experimental-effect lines), free when
+``vary`` is 1. ``sigma`` > 0 adds the prior :math:`((N - N_0)/\sigma)^2` about the
+line's density :math:`N_0`, reported as ``Total-Density-Chi-Squared`` in
+``chiSquared.out``; it is given in atoms/cm² or as a percentage of :math:`N_0`
+(``2.3%``). ``densitygroup`` shares one parameter between lines: the same target
+seen by several detectors is one line per detector, and every line of a group
+follows the parameter of its first line, which must carry the ``densityfit``
+block. A member's own density is replaced by the group's (the run says so).
+
+:math:`N` sets the energy loss :math:`\Delta E` through
+:math:`\int_{E-\Delta E}^{E} dE'/\epsilon(E') = N` and nothing else: the window of
+the depth integral and the straggling with depth move, but the yield is that
+integral divided by the same :math:`N`, so the result is the depth average of the
+(beam-spread, straggled) cross section and carries no factor of :math:`N`.
+
+The sub-point grids are laid out once, for the largest density the fit is
+expected to reach, and the depth integral is cut at :math:`E_0 - \Delta E(N)`, so
+the yield moves smoothly with :math:`N` and no grid is rebuilt during a fit. That
+largest density is ``max`` when given, otherwise :math:`N_0 + 3\sigma` (at least
+:math:`1.1\,N_0`), or :math:`1.5\,N_0` without a prior. MIGRAD has it as the
+parameter's upper limit; a density asked for beyond it (pyazr, rmfit) is computed
+at ``max``, with a warning printed once, so give a larger ``max`` if a fit
+presses against it. Every fitter (MIGRAD, ``--use-gradient``, ``--use-lm``,
+``--use-gsl-lm``) moves the density, and MCMC samples it with the prior above;
+its derivative is taken by finite differences. ``densityfit`` is refused on a
+line without target integration, on a thick target (density 0) and beside a
+beam profile or a UDR kernel.
+
+In the GUI, the *Add/Edit Experimental Effect* dialog shows a **Fitted Target
+Density** box when **Include Target Integration** is checked:
+
+- **Density Is a Fit Parameter** writes the ``densityfit`` block, with the
+  **Active Density** as :math:`N_0`; **Fit Density** frees it (unchecked, the
+  parameter stays fixed).
+- **Prior Sigma** is the prior width in atoms/cm² or as a percentage
+  (``2.3%``); 0 means no prior.
+- **Grid Maximum** is ``max``; left blank, the engine's default is used and shown
+  beside the field.
+- **Density Group** is the ``densitygroup`` label. Give every line of the target
+  the same label and check **Density Is a Fit Parameter** on its first line
+  only.
+
+The dialog refuses a fitted or grouped density on a thick target (density 0), next to a
+beam profile or a UDR kernel, a prior it cannot read and a maximum below the
+density. The table's summary column names the fitted density and its group. The
+Fitting tab lists each parameter on its **Target Densities** sub-tab
+(:doc:`fitting`).
+
+The fitted :math:`N` is written to ``param.sav`` and read back from it, like a
+normalization; the density on the line stays the prior's centre.
+``pyazr.AzrModel.set_target_density`` writes the blocks from a script, and
+``AzrModel.target_densities`` lists them.
+
 Straggling
 ^^^^^^^^^^
 
 Check **Include Straggling** to account for energy straggling of beam particles
-in the target. Enter the straggling coefficient in the provided field.
+in the target. At each depth the cross section is averaged over a Gaussian
+whose width grows with the energy already lost,
+
+.. math::
+
+   \sigma_\text{straggling} = c_s \sqrt{\Delta E_\text{c.m.}\,[\text{keV}]}
+   \quad\text{keV},
+
+combined in quadrature with the beam spread. **The coefficient** :math:`c_s`
+(keV\ :sup:`1/2`) **is a centre-of-mass quantity**: the energy loss it
+multiplies and the width it gives are both c.m., with no frame factor (every
+other number on the line, the beam sigma and the stopping cross section, is
+laboratory). A coefficient that describes the beam in the laboratory,
+:math:`\sigma_\text{lab} = c_\text{lab}\sqrt{\Delta E_\text{lab}}`, is entered
+as :math:`c_s = c_\text{lab}\sqrt{m_2/(m_1+m_2)}` (0.96 for p + ¹²C, 0.85 for
+α + ¹¹B).
+
+**A coefficient of 0** (the default) means Bohr straggling, computed from the
+charges of the entrance pair and the stopping cross section instead of a
+coefficient,
+
+.. math::
+
+   \sigma_\text{straggling} = \frac{m_2}{m_1+m_2}
+   \sqrt{4\pi Z_1^2 e^4 Z_2\, N x}, \qquad
+   N x = \int_{E_d}^{E_0} \frac{dE}{\epsilon(E)},
+
+with :math:`N x` the areal density of target atoms the beam has crossed.
+Bohr's value, :math:`c_s \approx \sqrt{(m_2/(m_1+m_2))\,4\pi Z_1^2 Z_2 e^4 /
+\epsilon}`, is 0.3-0.5 keV\ :sup:`1/2` for light ions in light targets at a
+few MeV (p + ¹⁴N at 270 keV: 0.31); it is the high-velocity limit and an
+underestimate below about 1 MeV/u, where Lindhard-Scharff straggling is
+smaller than Bohr. :math:`Z_2` is the charge of the target nucleus of the
+entrance pair, so for a **compound target** (a stopping cross section per
+molecule or per active atom, see above) the electrons of the other
+constituents are not counted: enter the coefficient yourself,
+:math:`c_s = \sqrt{(m_2/(m_1+m_2))\,4\pi Z_1^2 e^4 Z_\text{entity}/\epsilon}`
+with :math:`Z_\text{entity}` the electrons per entity the density counts and
+:math:`\epsilon` in MeV cm², :math:`e^2 = 1.44\times10^{-13}` MeV cm. Before
+October 2026 the default was a fixed 0.04 keV\ :sup:`1/2`, several times below
+Bohr: a line that kept it had essentially no straggling. Lines in existing
+files keep whatever coefficient is written in them.
 
 Attenuation Coefficients (Q-Coefficients)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -555,7 +907,59 @@ The angular distribution is corrected as:
 
    W(\theta) = \sum_{i=0}^{\infty} a_i \, Q_i \, P_i(\cos\theta)
 
-where :math:`Q_i` are the attenuation coefficients.
+where :math:`Q_i` are the attenuation coefficients.  They are a property of
+the detector, so they act on the angular distribution in the **laboratory**
+frame, where the detector sits.  Orders not given are taken as
+:math:`Q_i = 1`.
+
+How AZURE2 applies them depends on the exit pair:
+
+- **Photon exits** (capture), **secondary gamma rays** (UPOS segments),
+  **analyzing powers**, and **charged-particle elastic scattering**: each
+  c.m. Legendre term is multiplied by :math:`Q_i` as entered.  For capture
+  and UPOS data the frame difference is of order the c.m. velocity
+  (:math:`\beta \approx 1\%`) times :math:`1 - Q_i`, and is neglected.  For charged-particle
+  elastic scattering it is an approximation: the Coulomb amplitude is not a
+  finite Legendre series, so the frame transform below cannot be used.
+- **Particle exits otherwise** (reactions such as (α,n) or (p,α), and
+  neutron elastic scattering): the lab distribution
+  :math:`W_\mathrm{lab} = W^* \, d\Omega^*/d\Omega_\mathrm{lab}` is
+  expanded in lab Legendre polynomials, :math:`Q_K` multiplies its
+  coefficients :math:`b_K`, and the result is taken back to the point's
+  c.m. angle:
+
+  .. math::
+
+     W_Q(\theta^*) = W^*(\theta^*) + \frac{d\Omega_\mathrm{lab}}{d\Omega^*}
+     \sum_K (Q_K - 1)\, b_K\, P_K(\cos\theta_\mathrm{lab}),
+     \qquad
+     b_K = \frac{2K+1}{2} \int_{-1}^{1} P_K(\cos\theta_\mathrm{lab}(x^*))\,
+     W^*(x^*)\, dx^*.
+
+  This is exact for the coefficients given.  The lab angle follows from
+  :math:`g = v_\mathrm{cm}/v_3^*`, the c.m. velocity over the detected
+  particle's c.m. speed, which also makes it energy dependent; with
+  ``relativistic=1`` the relativistic boost is used.  Where
+  :math:`g \ge 1` the lab angle has two c.m. solutions, and the
+  coefficients are applied as entered.
+
+The lab distribution of a particle exit contains Legendre orders above the
+highest c.m. order, of size about :math:`g^{K}`.  For a detector with a
+large opening angle, or a large :math:`g` (near threshold, light targets),
+give coefficients beyond the highest c.m. order.  The default for the orders
+not given is 1, which is "no attenuation" for those orders.
+
+.. note::
+
+   Before 2026-10-25 a particle exit multiplied each c.m. term by
+   :math:`\sum_{L'} U_{LL'}(\gamma) Q_{L'}` instead.  This was a truncated
+   frame-transform matrix evaluated at about :math:`g^2` rather than
+   :math:`g`, and it changed the result even with every :math:`Q_i = 1`.
+   It was off by a few per cent for archive cases such as
+   :sup:`13`\ C(α,n) and :sup:`15`\ N(p,α).  In addition, a non-particle
+   entrance pair set every term to zero, and more than 20 coefficients read
+   past the end of an array.  Fits with coefficients on particle-exit data
+   made before then should be re-evaluated (``tests/q_attenuation``).
 
 Set the number of coefficients using the spinner and enter the :math:`Q_i`
 values in the table (default value is 1.0 for each).

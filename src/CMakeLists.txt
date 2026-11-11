@@ -1,5 +1,5 @@
 # Core sources, shared by the AZURE2 executable and the _azure2 Python module.
-set(AZURE2_CORE_SOURCES AChannel.cpp CoulFunc.cpp CoulFuncCache.cpp GenMatrixFunc.cpp
+set(AZURE2_CORE_SOURCES AChannel.cpp CoulFunc.cpp CoulFuncCache.cpp InputFiles.cpp GenMatrixFunc.cpp
 KLGroup.cpp ALevel.cpp Decay.cpp AngCoeff.cpp MGroup.cpp
 AMatrixFunc.cpp  DoubleFactorial.cpp EigenFunc.cpp  NFIntegral.cpp
 ECIntegral.cpp ECTable.cpp ECAmplitudeCache.cpp MatrixInv.cpp LevelMatrixSolver.cpp Profile.cpp ChannelSpace.cpp
@@ -8,9 +8,9 @@ ECMGroup.cpp ReactionRate.cpp AZUREMain.cpp EData.cpp DataCovariance.cpp ShftFun
 RMatrixFunc.cpp AZUREOutput.cpp  EDataIterator.cpp   TargetEffect.cpp
 AZUREParams.cpp EPoint.cpp Interference.cpp CNuc.cpp IsospinLevels.cpp Equation.cpp
 JGroup.cpp Config.cpp ESegment.cpp KGroup.cpp IntegratedFermiFunc.cpp
-EffectiveCharge.cpp  GSLException.cpp ParameterLimitsManager.cpp Straggling.cpp
+EffectiveCharge.cpp  GSLException.cpp ParameterLimitsManager.cpp
 AdaptiveIntegrationGrid.cpp NuclearPotentialManager.cpp AZUREGrad.cpp
-CovarianceBand.cpp ParameterLabel.cpp PolarizationFunc.cpp SpinObservable.cpp CoulombTable.cpp)
+CovarianceBand.cpp PriorCovariance.cpp ParameterLabel.cpp PolarizationFunc.cpp SpinObservable.cpp CoulombTable.cpp)
 
 # Add GUI stub when GUI is not enabled
 if(NOT BUILD_GUI)

@@ -1,5 +1,6 @@
 #include <QTextEdit>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QScrollBar>
 #include <QFileDialog>
 #include <QMenu>
@@ -13,6 +14,9 @@
 #include <QProgressDialog>
 #include <algorithm>
 #include <QCoreApplication>
+#include <QApplication>
+#include <QAbstractItemModel>
+#include <QToolButton>
 #include <QFileInfo>
 #include <QElapsedTimer>
 #include <atomic>
@@ -76,7 +80,8 @@ AZURESetup::AZURESetup() :
 
   tabWidget = new QTabWidget();
   // The logo at the right end of the tab bar; clicking it opens the About box.
-  QToolButton *logoButton = new QToolButton;
+  QToolButton *logoButton = logoButton_ = new QToolButton;
+  logoButton->setObjectName("logoButton");
   logoButton->setIcon(QIcon(":/azure-icon.png"));
   logoButton->setIconSize(QSize(26, 26));
   logoButton->setText("AZURE2");
@@ -86,13 +91,14 @@ AZURESetup::AZURESetup() :
   logoButton->setToolTip(tr("AZURE2 -- about this program"));
   logoButton->setStyleSheet("QToolButton { border: none; padding: 0 8px; color: #1f4f8f; font-weight: bold; }"
                             "QToolButton:hover { background: #e3edf8; border-radius: 4px; }");
-  connect(logoButton, &QToolButton::clicked, this, [this]() { AboutAZURE2Dialog about(this); about.exec(); });
+  connect(logoButton, &QToolButton::clicked, this, [this]() { AboutAZURE2Dialog about(this, polarizedLogo_); about.exec(); });
   tabWidget->setCornerWidget(logoButton, Qt::TopRightCorner);
 
   pairsTab = new PairsTab;
 
   levelsTab = new LevelsTab;
   levelsTab->setPairsModel(pairsTab->getPairsModel());
+  levelsTab->setChannelRadiiModel(pairsTab->getChannelRadiiModel());
   connect(pairsTab, SIGNAL(pairAdded(int)), levelsTab, SLOT(updateChannelsPairAddedEdited()));
   connect(pairsTab, SIGNAL(pairEdited(int)), levelsTab, SLOT(updateChannelsPairAddedEdited()));
   connect(pairsTab, SIGNAL(pairRemoved(int)), levelsTab, SLOT(updateChannelsPairRemoved(int)));
@@ -105,6 +111,15 @@ AZURESetup::AZURESetup() :
 
   targetIntTab = new TargetIntTab;
   targetIntTab->setModels(segmentsTab->getSegmentsDataModel(), pairsTab->getPairsModel());
+  // The logo follows the segments: with the polarization arrow while any of them is an analyzing power.
+  for (QAbstractItemModel *m : {static_cast<QAbstractItemModel *>(segmentsTab->getSegmentsDataModel()),
+                                static_cast<QAbstractItemModel *>(segmentsTab->getSegmentsTestModel())}) {
+    connect(m, &QAbstractItemModel::rowsInserted, this, &AZURESetup::updateLogo);
+    connect(m, &QAbstractItemModel::rowsRemoved, this, &AZURESetup::updateLogo);
+    connect(m, &QAbstractItemModel::dataChanged, this, &AZURESetup::updateLogo);
+    connect(m, &QAbstractItemModel::modelReset, this, &AZURESetup::updateLogo);
+    connect(m, &QAbstractItemModel::layoutChanged, this, &AZURESetup::updateLogo);
+  }
 
   nuclearPotentialTab = new NuclearPotentialTab();
   // The tab edits one particle pair at a time, so it needs the pair list.  The
@@ -288,6 +303,8 @@ void AZURESetup::open() {
       QMessageBox::information(this,
                                tr("Can't Access File"),
                                tr("An error was encountered while reading the file."));
+    } else {
+      warnIfGSLCoulomb();
     }
   }
 }
@@ -299,8 +316,68 @@ void AZURESetup::open(QString filename) {
       QMessageBox::information(this,
                                tr("Can't Access File"),
                                tr("An error was encountered while reading the file."));
+    } else {
+      warnIfGSLCoulomb();
     }
   }
+}
+
+/*!
+ * The logo follows the project (2026-11-06): the plain logo by default, the one with the polarization
+ * vector over the A while any data or test segment is a polarization observable.  Data type 7 (analyzing
+ * power, particle or capture) is the only one on this branch; the spin observables of the A = 4 work
+ * (feature/spin-observables) belong here when they are merged.
+ */
+void AZURESetup::updateLogo() {
+  auto polarization = [](int dataType) { return dataType == 7; };
+  bool polarized = false;
+  for (const SegmentsDataData &line : segmentsTab->getSegmentsDataModel()->getLines())
+    if (polarization(line.dataType)) polarized = true;
+  for (const SegmentsTestData &line : segmentsTab->getSegmentsTestModel()->getLines())
+    if (polarization(line.dataType)) polarized = true;
+  if (polarized == polarizedLogo_) return;
+  polarizedLogo_ = polarized;
+  const QIcon icon(polarized ? ":/azure-icon-polarized.png" : ":/azure-icon.png");
+  if (logoButton_) logoButton_->setIcon(icon);
+  setWindowIcon(icon);
+  qApp->setWindowIcon(icon);  // the dock / task bar
+}
+
+QString AZURESetup::gslCoulombWarningText() {
+  return tr("This project was last run with the GSL Coulomb functions "
+            "(Configure > Runtime Options > Use GSL Coulomb functions), and the GUI will use them again.\n\n"
+            "They are faster but less accurate than the default functions: penetrabilities and shift "
+            "functions can be wrong by several percent for 0.1 < eta < 10 and 1 < rho < 10, and just above a "
+            "charged-particle threshold the shift function can be NaN. The default functions (with the "
+            "Coulomb table) are accurate to about 1e-10.\n\n"
+            "The command line uses the default functions unless --gsl-coul is given, so a GUI calculation "
+            "of this project can differ from a command-line one.");
+}
+
+/*!
+ * After a project is opened: a non-modal warning when its last run used the GSL Coulomb functions
+ * (2026-11-06; older projects often have the option set, as a speed compromise before the Coulomb
+ * table and the threaded engine).  "Use the default functions" clears the option (saved with the
+ * project); "Keep GSL" leaves it.  Non-modal, so a headless or screenshot run is not blocked.
+ */
+void AZURESetup::warnIfGSLCoulomb() {
+  if (!loadedGSLCoulomb_) return;
+  if (QMessageBox *old = findChild<QMessageBox *>("gslCoulombWarning")) old->close();
+  QMessageBox *box = new QMessageBox(QMessageBox::Warning, tr("GSL Coulomb Functions"), gslCoulombWarningText(),
+                                     QMessageBox::NoButton, this);
+  box->setObjectName("gslCoulombWarning");
+  box->setAttribute(Qt::WA_DeleteOnClose);
+  box->setModal(false);
+  QPushButton *useDefault = box->addButton(tr("Use the default functions"), QMessageBox::AcceptRole);
+  useDefault->setObjectName("gslCoulombUseDefault");
+  QPushButton *keep = box->addButton(tr("Keep GSL"), QMessageBox::RejectRole);
+  keep->setObjectName("gslCoulombKeep");
+  box->setDefaultButton(useDefault);
+  connect(useDefault, &QPushButton::clicked, this, [this]() {
+    GetConfig().paramMask &= ~Config::USE_GSL_COULOMB_FUNC;
+    loadedGSLCoulomb_ = false;
+  });
+  box->show();
 }
 
 void AZURESetup::openRecent() {
@@ -323,6 +400,7 @@ bool AZURESetup::readFile(QString filename) {
   QString directory = info.absolutePath();
 
   reset();
+  loadedGSLCoulomb_ = false;
 
   QTextStream in(&file);
   QString line("");
@@ -350,21 +428,25 @@ bool AZURESetup::readFile(QString filename) {
   GetConfig().hardSphereMaxL = levelsTab->maxL();
   pairsTab->setAbundanceSumSigma(fileAbundanceSumSigma);
   GetConfig().abundanceSumSigma = fileAbundanceSumSigma;
-  pairsTab->setRelativistic(fileRelativistic);
   GetConfig().relativistic = fileRelativistic;
   GetConfig().relativisticReferencePair = fileRelativisticReferencePair;
 
-  // The optional <abundances> and <isospin> blocks sit between </levels> and <segmentsData>.
+  // The optional <channelRadii> (2026-11-10), <abundances> and <isospin> blocks sit between </levels> and <segmentsData>, in
+  // either order.  Before 2026-11-10 a <channelRadii> block was skipped here and dropped on save.
   line = QString("");
-  while (line.trimmed() != QString("<segmentsData>") && !in.atEnd()) {
+  while (!in.atEnd()) {
     line = in.readLine();
-    if (line.trimmed() == QString("<abundances>")) {
+    const QString tag = line.trimmed();
+    if (tag == QString("<segmentsData>")) break;
+    if (tag == QString("<abundances>")) {
       if (!pairsTab->readAbundances(in)) return false;
-    } else if (line.trimmed() == QString("<isospin>")) {
+    } else if (tag == QString("<channelRadii>")) {
+      if (!pairsTab->readChannelRadii(in)) return false;
+    } else if (tag == QString("<isospin>")) {
       if (!levelsTab->readIsospinBlock(in)) return false;
     }
   }
-  if (in.atEnd()) return false;
+  if (in.atEnd() && line.trimmed() != QString("<segmentsData>")) return false;
   if (!segmentsTab->readSegDataFile(in)) return false;
 
   line = QString("");
@@ -450,8 +532,9 @@ bool AZURESetup::readFile(QString filename) {
 bool AZURESetup::readLastRun(QTextStream &inStream) {
   unsigned int paramMask;
   unsigned int useTempFile;
-  unsigned int rateEntrancePair;
-  unsigned int rateExitPair;
+  // Signed: the exit key -1 is the total radiative capture rate.
+  int rateEntrancePair = 0;
+  int rateExitPair = 0;
   QString paramFile;
   QString integralsFile;
   QString temperatureFile;
@@ -519,6 +602,7 @@ bool AZURESetup::readLastRun(QTextStream &inStream) {
     GetConfig().paramMask |= Config::USE_GSL_COULOMB_FUNC;
   else
     GetConfig().paramMask &= ~Config::USE_GSL_COULOMB_FUNC;
+  loadedGSLCoulomb_ = (paramMask & Config::USE_GSL_COULOMB_FUNC) != 0;
 
   if (paramMask & Config::USE_BRUNE_FORMALISM)
     GetConfig().paramMask |= Config::USE_BRUNE_FORMALISM;
@@ -645,6 +729,7 @@ bool AZURESetup::readConfig(QTextStream &inStream) {
   fileAbundanceSumSigma = 0.0;
   fileRelativistic = false;
   fileRelativisticReferencePair = 0;
+  GetConfig().priorCovariance.clear();  // a project without the key has no prior covariance
   QString line("");
   while (line.trimmed() != QString("</config>") && !inStream.atEnd()) {
     line = inStream.readLine();
@@ -662,6 +747,8 @@ bool AZURESetup::readConfig(QTextStream &inStream) {
       fileRelativistic = (value == "1" || value == "true");
     else if (key == "relativisticReferencePair")
       fileRelativisticReferencePair = value.toInt();
+    else if (key == "priorCovariance")
+      GetConfig().priorCovariance = value.toStdString();
   }
   if (line.trimmed() != QString("</config>")) return false;
 
@@ -757,13 +844,18 @@ bool AZURESetup::writeFile(QString filename) {
   GetConfig().abundanceSumSigma = pairsTab->abundanceSumSigma();
   if (pairsTab->abundanceSumSigma() > 0.0)
     out << "abundanceSumSigma=" << pairsTab->abundanceSumSigma() << " #Sum-to-one prior on the isotopic abundances" << Qt::endl;
-  // Relativistic kinematics: written only when on, so non-relativistic projects are unchanged.
-  GetConfig().relativistic = pairsTab->relativistic();
-  if (pairsTab->relativistic()) {
+  // Relativistic kinematics (Configure > Runtime Options): written only when on, so non-relativistic projects are
+  // unchanged.  Unlike the other runtime options it is read from the file by the command line and pyazr as well.
+  if (GetConfig().relativistic) {
     out << "relativistic=1 #Relativistic two-body kinematics (k, eta, lab <-> c.m. from the invariant mass)" << Qt::endl;
     if (GetConfig().relativisticReferencePair > 0)
       out << "relativisticReferencePair=" << GetConfig().relativisticReferencePair << " #Reference pair of relativistic.out" << Qt::endl;
   }
+  // Prior parameter covariance (Configure > Runtime Options): written only when set.
+  if (!GetConfig().priorCovariance.empty())
+    out << "priorCovariance=" << QString::fromStdString(GetConfig().priorCovariance)
+        << " #Prior parameter covariance file (names, means, covariance), relative to this file's directory"
+        << Qt::endl;
   out << "</config>" << Qt::endl;
 
   // Write potential section after config.  A pair may be switched on while the
@@ -780,6 +872,13 @@ bool AZURESetup::writeFile(QString filename) {
   out << "<levels>" << Qt::endl;
   if (!levelsTab->writeNuclearFile(out)) return false;
   out << "</levels>" << Qt::endl;
+
+  // Per-channel radii, only for a project that has some (older files are written as before).
+  if (pairsTab->hasChannelRadii()) {
+    out << "<channelRadii>" << Qt::endl;
+    if (!pairsTab->writeChannelRadii(out)) return false;
+    out << "</channelRadii>" << Qt::endl;
+  }
 
   // Isotopic abundances, one line per compound nucleus, only for a project
   // that needs them (several nuclei, or a non-default entry).
@@ -1219,15 +1318,7 @@ void AZURESetup::editOptions() {
   else
     aDialog.useGSLCoulCheck->setChecked(false);
 
-  if (GetConfig().paramMask & Config::USE_BRUNE_FORMALISM)
-    aDialog.useBruneCheck->setChecked(true);
-  else
-    aDialog.useBruneCheck->setChecked(false);
-
-  if (GetConfig().paramMask & Config::USE_PARK_FORMALISM)
-    aDialog.useParkCheck->setChecked(true);
-  else
-    aDialog.useParkCheck->setChecked(false);
+  aDialog.setParametrization(EditOptionsDialog::parametrizationFromMask(GetConfig().paramMask));
 
   if (GetConfig().paramMask & Config::IGNORE_ZERO_WIDTHS)
     aDialog.ignoreExternalsCheck->setChecked(true);
@@ -1250,6 +1341,10 @@ void AZURESetup::editOptions() {
     aDialog.useHybridMethodCheck->setChecked(false);
 
   aDialog.useAdaptiveGridCheck->setChecked(GetConfig().useAdaptiveGrid);
+  aDialog.relativisticCheck->setChecked(GetConfig().relativistic);
+  aDialog.priorCovarianceEdit->setText(QString::fromStdString(GetConfig().priorCovariance));
+  if (!GetConfig().configfile.empty())
+    aDialog.setProjectDirectory(QFileInfo(QString::fromStdString(GetConfig().configfile)).absolutePath());
 
   // if(!(GetConfig().paramMask & Config::USE_LONGWAVELENGTH_APPROX)) aDialog.noLongWavelengthCheck->setChecked(true);
   // else aDialog.noLongWavelengthCheck->setChecked(false);
@@ -1260,15 +1355,7 @@ void AZURESetup::editOptions() {
     else
       GetConfig().paramMask &= ~Config::USE_GSL_COULOMB_FUNC;
 
-    if (aDialog.useBruneCheck->isChecked())
-      GetConfig().paramMask |= Config::USE_BRUNE_FORMALISM;
-    else
-      GetConfig().paramMask &= ~Config::USE_BRUNE_FORMALISM;
-
-    if (aDialog.useParkCheck->isChecked())
-      GetConfig().paramMask |= (Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM);
-    else
-      GetConfig().paramMask &= ~Config::USE_PARK_FORMALISM;
+    GetConfig().paramMask = EditOptionsDialog::maskWithParametrization(GetConfig().paramMask, aDialog.parametrization());
 
     if (aDialog.ignoreExternalsCheck->isChecked()) {
       GetConfig().paramMask |= Config::IGNORE_ZERO_WIDTHS;
@@ -1297,6 +1384,8 @@ void AZURESetup::editOptions() {
     }
 
     GetConfig().useAdaptiveGrid = aDialog.useAdaptiveGridCheck->isChecked();
+    GetConfig().relativistic = aDialog.relativisticCheck->isChecked();
+    GetConfig().priorCovariance = aDialog.priorCovarianceEdit->text().trimmed().toStdString();
 
     // Update tab visibility based on hybrid method setting
     updateNuclearPotentialTabVisibility();
@@ -1689,6 +1778,7 @@ void AZURESetup::reset() {
 #endif
   setWindowTitle(tr("AZURE2 -- untitled"));
   GetConfig().configfile = "";
+  GetConfig().priorCovariance.clear();
 }
 
 void AZURESetup::showTabInfo() {

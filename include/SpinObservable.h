@@ -7,7 +7,7 @@
 #include "Constants.h"
 
 /*!
- * A spin observable named on an isDiff 9 segment line.
+ * A spin observable named on an isDiff 10 segment line.
  *
  * Grammar (one whitespace-free token):
  *

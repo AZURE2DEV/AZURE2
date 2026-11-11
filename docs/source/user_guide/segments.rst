@@ -2,16 +2,23 @@ Segments Tab
 ============
 
 The **Segments** tab defines the energies and angles at which cross sections are
-calculated. It is divided into two halves, with a small table below them:
+calculated. It is divided into two halves:
 
 - **Segments From Data** (upper) -- for calculations that reference experimental
-  data files.
+  data files, and measured scattering lengths (listed after the data segments).
 - **Segments Without Data** (lower) -- for pure calculations and extrapolations.
-- **Measured Scattering Lengths** (bottom) -- optional constraints on the s-wave
-  scattering lengths of the particle pairs.
 
 Each segment is automatically assigned a numerical key that is referenced in the
 **Experimental Effects** tab.
+
+A line added with **+** is refused ("Duplicate Line") only when its table already
+holds an identical line: every field, the components of a composite segment and
+the keyword blocks at the end of the line included. Opening a project keeps
+every line of the file as written, so the keys are the file's. (Before
+2026-10-31 the check ignored the components and keyword blocks and also ran when
+a file was opened: a natural-target sum and its single-isotope term, for
+example, were taken for duplicates, the second line was dropped behind a message
+box and every later key moved by one.)
 
 Segments From Data
 ------------------
@@ -75,16 +82,41 @@ appears with the following fields:
           Most low-energy capture measurements publish lab values.
       * - **Phase Shift**
         - Phase shift data. Requires specifying the total angular momentum (*J*)
-          and orbital angular momentum (*l*). The convention is
+          and orbital angular momentum (*l*), and, when the target has spin so
+          that several channel spins *s* share that (*J*, *l*), the channel
+          spin (the **s** field, written as ``spin <s>`` on the line): a phase
+          shift belongs to one (*J*, *l*, *s*) partial wave, and an ambiguous
+          segment is refused with the spins listed. The convention is
           :math:`-90° < \theta_\text{lab} < 90°`.
       * - **Analyzing Power**
-        - Vector analyzing power :math:`A_y` for a spin-1/2 projectile, in the
-          Madison convention, for a **particle or a capture** exit channel.
+        - Vector analyzing power :math:`A_y` for a spin-1/2 projectile (any
+          other projectile spin is refused), in the Madison convention, for a
+          **particle or a capture** exit channel.
           Angles are centre-of-mass, as for a C.M. differential cross section,
           and the data file carries ``E_lab  theta_cm  A_y  dA_y``. Because
           :math:`A_y` is a ratio, **Vary Norm?** is disabled for it -- a
           normalization factor has no meaning for a quantity that is already
           normalized. See :doc:`../theory/polarization_theory`.
+      * - **Angular Coefficients**
+        - Legendre coefficients of a reaction's centre-of-mass angular
+          distribution, :math:`d\sigma/d\Omega_\text{cm} = A_0\,[1 + \sum_k
+          a_k P_k(\cos\theta_\text{cm})]`, as data: the file carries
+          ``E_lab  k  a_k  da_k`` with the Legendre order :math:`k` in the
+          angle column, and the fit value of each point is the model's
+          coefficient of that order -- the same coefficients a test segment of
+          type **Angular Distribution** computes. Legendre orders are computed
+          up to 20, so a particle channel with :math:`l > 10` truncates every
+          differential cross section it enters (the run log warns for each
+          such channel; angle-integrated values are complete). The trailing keyword
+          ``absolute 1`` makes the data the absolute :math:`A_k` in b/sr
+          (:math:`A_0 = \sigma/4\pi`). Target integration and resolution
+          folding act on the absolute :math:`A_k`, which are linear in the
+          cross section, and the ratio is formed afterwards. A normalised
+          coefficient has no scale, so **Vary Norm?** is refused for it; an
+          elastic pair (the expansion leaves the Coulomb amplitude out), total
+          capture, composites and UPOS segments are refused. Energy shifts and
+          the analytic gradient work as for any segment. Since October 2026
+          (for the 11B(α,p)14C coefficients of Wang 1991 and Dayras 1976).
       * - **Spin Observable**
         - A general spin observable named by a token in the **Observable**
           field: ``t:y`` (target analyzing power :math:`A_{0y}`), ``b:y*t:y``
@@ -133,8 +165,11 @@ appears with the following fields:
       * - Analyzing Power
         - 7
         - the exit pair
-      * - Spin Observable (token in the **Observable** field)
+      * - Angular Coefficients
         - 9
+        - the exit pair
+      * - Spin Observable (token in the **Observable** field)
+        - 10
         - the exit pair
 
    Editing a segment restores these controls from its code.
@@ -160,7 +195,7 @@ appears with the following fields:
    Check this box to allow the normalization factor to be varied as a free
    parameter during fitting.
 
-   **Shared normalization (normalization groups, input file only).** Segments
+   **Shared normalization (normalization groups).** Segments
    that come from one measurement often share one absolute scale -- an
    excitation function and the angular distributions it was integrated from,
    or one data set split into per-angle segments. Ending their lines with the
@@ -180,11 +215,16 @@ appears with the following fields:
    on the groups. ``chiSquared.out`` lists every member's (shared)
    normalization and the penalty on the first member only. The run log notes
    each group and its members. The keyword may be combined with
-   ``shiftgroup``; writers put it before a ``sample`` block. The GUI preserves
-   the block but does not edit it, and its Fitting tab still lists a member's
-   own vary flag.
+   ``shiftgroup``; writers put it before a ``sample`` block. Only active
+   segments are members: the first *active* segment with the label carries
+   the group's value. In the GUI the label is the **Normalization** field of
+   **Groups** in the data segment dialog (below); the table's **Groups**
+   column lists each line's groups, a member's own (unused) normalization is
+   shown in grey, and the Fitting tab shows the member's normalization as
+   tied to the first segment rather than as a parameter of its own
+   (:doc:`fitting`).
 
-   **Correlated uncertainties (covariance matrices, input file only).** A
+   **Correlated uncertainties (covariance matrices).** A
    line ending with the keyword block ``covariance <file>`` attaches its
    points to the data covariance matrix in ``<file>``; all segments naming
    the same file share it, and their points enter :math:`\chi^2` as
@@ -198,14 +238,43 @@ appears with the following fields:
    may be split into several segments (here by angle window) and the energy
    and angle limits may change without a new matrix. The block may be
    combined with ``normgroup``, ``shiftgroup`` and the energy-shift blocks,
-   and only data segments take it. The GUI preserves the block but does not
-   edit it.
+   and only data segments take it. In the GUI it is the **Covariance File**
+   field of the data segment dialog (below).
+
+**Covariance File**
+   Optional. A data covariance file (the ``covariance <file>`` block above):
+   every data segment that names the same file shares one covariance matrix.
+   Type the path or use **Choose...**; the path is resolved like the data
+   file's. Leave the field empty for uncorrelated errors (no block is
+   written). Editing a segment shows the file of its line, and clearing the
+   field removes the block.
 
 **Energy Shift**
    An energy calibration shift applied to the data (in MeV).
 
 **Vary Energy Shift?**
    Check this box to allow the energy shift to be varied during fitting.
+
+**Groups** (Normalization, Energy Shift, Shift Function)
+   Ties this segment's normalization, constant energy shift or energy-shift
+   function to other segments: the ``normgroup <label>``,
+   ``shiftgroup <label>`` and ``shiftfngroup <label>`` blocks described
+   under **Vary Norm?** above and the shift entries below. Each field is a
+   drop-down listing the labels the project already uses; pick one, type a
+   new label, or leave the field empty for no group. Every active segment
+   with the same label uses the value of the group's **first active segment
+   in file order** (for a shift-function group: its function, while each
+   segment keeps its own constant shift), so set the shared value, vary flag
+   and uncertainty on that segment. A label is a single word: blanks and
+   double quotes are refused as they are typed. **Energy Shift** and **Shift
+   Function** exclude each other (the engine refuses a segment in both), so
+   while one holds a label the other is disabled. Editing a segment shows the
+   labels of its line; changing or clearing a field rewrites or removes that
+   block only, and every other block at the end of the line (``sqrtshift``,
+   ``shiftfn``, ``covariance``, ``sample``, ...) is written back as read. The
+   **Groups** column of the table lists each line's groups (e.g.
+   ``norm: D, shift: A``); its tooltip names the segment whose value a
+   member uses, or the members that use the first segment's.
 
 **sqrt(E) energy shift** (input file only)
    A second, optional shift term that grows with the beam energy. With it a
@@ -252,8 +321,9 @@ appears with the following fields:
    ``segment_<key>_energy_shift`` entry in ``param.sav`` (fixed, written with
    the shared value), so parameter files stay compatible. The
    :math:`\sqrt{E}` term is not shared (use a shift function for that, below).
-   The run log notes each group and its members. The GUI preserves the block
-   but does not edit it.
+   The run log notes each group and its members. In the GUI the label is the
+   **Energy Shift** field of **Groups** in the data segment dialog (below),
+   and the Fitting tab shows a member's shift as tied to the first segment.
 
 **Energy-shift function** (input file only)
    Different calibration errors shift the energy scale in different ways: an
@@ -293,6 +363,28 @@ appears with the following fields:
    (10 keV penalty) and the :math:`\sqrt{E}` coefficient (0.02
    MeV\ :sup:`1/2`).
 
+   When the segments of one experiment need their own constant shifts (each
+   angle digitized from a separate figure carries its own offset) but share
+   one energy-dependent calibration, use ``shiftfngroup <label>`` instead of
+   ``shiftgroup``: every segment with the label applies the function declared
+   on the first of them, with that segment's parameters, and keeps its own
+   constant :math:`\Delta E`, value, uncertainty and vary flag::
+
+      1 3 3 0 10  90  90 4 1 1 0 -0.0047 0.01 1 data/pp.dat 0 0 shiftfngroup H shiftfn "a0*(sqrt(x)-sqrt(1.5))" 1 0 0.02 1
+      1 3 3 0 10 125 125 4 1 1 0 -0.0009 0.01 1 data/pp.dat 0 0 shiftfngroup H
+      1 3 3 0 10 141 141 4 1 1 0 -0.0117 0.01 1 data/pp.dat 0 0 shiftfngroup H
+      1 3 3 0 10 165 165 4 1 1 0 -0.0183 0.01 1 data/pp.dat 0 0 shiftfngroup H
+
+   fits four constants and one :math:`\sqrt{E}` coefficient; each
+   constant is then that segment's shift at :math:`E_0` = 1.5 MeV. A segment
+   may be in a ``shiftgroup`` or a ``shiftfngroup``, not both, and only the
+   first member declares the ``shiftfn``. In the GUI the label is the
+   **Shift Function** field of **Groups** in the data segment dialog (below);
+   the ``shiftfn`` block itself is written in the input file (the GUI keeps
+   it as read). Members that are single-energy
+   angular distributions add nothing to the coefficient: their own constants
+   absorb it.
+
    *Centre the function inside the data.* The constant :math:`\Delta E` and
    its penalty refer to the energy where :math:`f` vanishes. Written as
    ``a0*sqrt(x)``, that is :math:`E = 0`, far below the data, and the 10 keV
@@ -327,7 +419,8 @@ appears with the following fields:
    ``param.sav`` (``<key>`` the segment declaring the function) and come after
    every other parameter, so files without a function keep their parameters
    exactly. Each free :math:`a_j` with a nonzero uncertainty adds a penalty
-   (:doc:`chi_squared`). The function is evaluated at every point and every
+   :math:`(a_j/\delta a_j)^2`, measured from zero; the value on the line is
+   only the starting value (:doc:`chi_squared`). The function is evaluated at every point and every
    target-integration or convolution sub-point at its own original energy;
    the target thickness and stopping powers stay those of the unshifted
    energy, as for every shift (:doc:`experimental_effects`).
@@ -363,6 +456,53 @@ appears with the following fields:
    - **Sum** -- sum cross sections from multiple entrance/exit pair combinations.
    - **Ratio** -- compute the ratio of cross sections from different channels.
 
+   Frames: a lab-frame differential **Sum** (Data Type "Differential", lab
+   angles) is the sum of the terms' *lab* cross sections. Each term is
+   evaluated in the c.m. frame of its own pair, so a component to another exit
+   pair (a different Q value, or another compound nucleus of a natural target)
+   carries its own lab-to-c.m. Jacobian; the engine applies the ratio of the
+   base pair's Jacobian to the term's when it adds the term (since October
+   2026; before, the c.m. values were added as they were, which for
+   :math:`^{13}`\ C(α,n\ :sub:`1`\ +n\ :sub:`2`) at 6 MeV was −3 % at 0° and
+   +6 % at 150°). A c.m. **Sum**, an angle-integrated one, a component of the
+   same pair, or gamma terms of one entrance pair are unaffected. A target
+   effect on a composite integrates each term at that term's own c.m. angle
+   (its sub-points follow the component's conversion; before October 2026 a
+   component to another pair, or a fixed-angle **Ratio** denominator, was
+   integrated at the base pair's angle).
+
+   A lab-frame differential **Ratio** is the ratio of the two terms' *lab*
+   cross sections: each term is taken to the lab with the Jacobian of its own
+   pair and exit type (photon or particle), so a denominator to another exit
+   pair, at a fixed angle, or of the other kind (a capture yield over an
+   elastic one) is compared in the right frame. Before October 2026 the
+   denominator's Jacobian was computed with the base segment's pairs: right
+   for a denominator of the same pair and for another particle pair at a
+   general angle without ``relativistic=1``, but 3 % off for another exit pair
+   with ``relativistic=1`` or at 0° / 180°, and 30 % off for a capture over an
+   elastic ratio. A c.m. or angle-integrated **Ratio** carries no frame factor.
+   The lab output (``kinflag.dat`` = 1) of a **Ratio** test segment prints the
+   ratio itself.  Where the denominator's cross section is exactly zero (e.g.
+   its exit channel is closed at that energy) no ratio exists: the point is NaN
+   and a warning naming the segment and energy is printed once.  Before
+   November 2026 it was 0, which a fit compared with the datum as if it had
+   been calculated.
+
+   A **Sum** component can carry a **Scaling** factor, which multiplies that
+   term.  It is written to the project file with all its digits (before
+   November 2026 the GUI kept six significant digits and the engine read the
+   factor with six decimals, so 1.5e-7 became 0 and 0.00012345678 became
+   0.000123), and a factor that is not a number now stops the project from
+   loading with an error naming the segment and component (it was taken as 1).
+
+   Project files written by old GUI versions list each component as its
+   entrance and exit keys only, without an angle.  Since November 2026 the
+   engine reads them as the GUI does; older engines took the next component's
+   entrance key for an angle and dropped the last component without a word
+   (e.g. the 2025 11B+α and 13C+α neutron totals, whose sum lost its last term).
+   A component count with too few numbers after it gives a warning, and the
+   line is read as a plain segment.
+
 **Unobserved Primary, Observed Secondary (UPOS)**
    For a particle exit pair :math:`b+B` whose residual nucleus :math:`B` is
    left in an excited state, the segment describes the **secondary gamma ray**
@@ -375,7 +515,12 @@ appears with the following fields:
    **Secondary Decay L** is the multipolarity :math:`L` of the gamma ray,
    **Final State J (Ic)** the spin of :math:`C`, and **Mixing Ratio (δ)**
    :math:`\delta = g_{L+1}/g_L` of an :math:`L`/:math:`L+1` mixture (0 for a
-   pure multipole), in the convention of Eqs. (4)-(7) of the paper. In the
+   pure multipole), in the convention of Eqs. (4)-(7) of the paper; the
+   mixed radiation parameter :math:`(R_k^{LL} + 2\delta R_k^{LL'} + \delta^2
+   R_k^{L'L'})/(1+\delta^2)` is applied at every order :math:`k` (before
+   October 2026 it was skipped at an order where :math:`R_k^{L'L'}` happened
+   to vanish, such as :math:`k = 2` of a :math:`3/2 \to 3/2` M1/E2 decay,
+   which dropped the interference term and the normalization there). In the
    file the four fields follow the data file (and any composite fields) as
    ``isUPOS L Ic delta``, e.g. ``... data/n2g.dat 0 1 3 0 0`` for the E3 decay
    of :math:`^{16}`\ O(6.13, :math:`3^-`) to its :math:`0^+` ground state.
@@ -457,6 +602,203 @@ block does not define. Each sample segment also gets an output file
 ``AZUREOut_sample_seg=<key>.out`` (``.extrap`` for a test segment) with the
 total and one column per nucleus (:doc:`../reference/output_files`).
 
+Neutron Total Cross Sections (``total 1``)
+-------------------------------------------
+
+A neutron total cross section can be given as a **Sum** composite of the
+elastic channel and every reaction channel of the compound nucleus, but it is
+cheaper, and cannot miss a channel, to take it from the optical theorem: the
+keyword ``total 1`` at the end of the segment line makes the segment's term the
+total cross section of its entrance pair,
+
+.. math::
+
+   \sigma_\mathrm{tot} = \frac{\pi}{k^2}\,\frac{1}{(2i_1+1)(2i_2+1)}
+   \sum_J (2J+1) \sum_{c} 2\,\mathrm{Re}\,T_{cc}
+   = \frac{2\pi}{k^2}\, g \sum_J (2J+1) \sum_c (1 - \mathrm{Re}\,U_{cc}),
+
+summed over the entrance channels :math:`c`. Every channel of a
+:math:`J^\pi` group is in its level matrix, so :math:`U` is unitary and
+:math:`\sum_{c'} |T_{cc'}|^2 = 2\,\mathrm{Re}\,T_{cc}` over all exit
+channels: the result equals the sum over every particle exit pair of the
+compound nucleus (to :math:`10^{-11}` on the 13C+alpha neutron data), from one
+T-matrix per point instead of one per exit pair. Photon channels have no width
+in the level matrix and external capture is outside it, so capture is not
+included; where it matters, keep the capture pair as a **Sum** component (a
+component whose exit pair differs from its entrance pair stays what it is).
+
+The segment must be angle-integrated (data type 0), its exit pair its entrance
+pair, and the pair neutral (the total cross section of charged particles
+diverges) and not of identical particles; the R-matrix-for-capture formalism
+is refused. In a **Sum** composite every term whose exit pair is its entrance
+pair is a total, so a natural-target total is one line, e.g.::
+
+   1 2 2 0 2.33 0 180 0 1 0 5 0 0 0 data/ntot.dat 1 0 2 4 4 -999 6 6 -999 0 sample 1 total 1
+
+for :math:`\sigma_\mathrm{tot}(\mathrm{n}+{}^{20}\mathrm{Ne})`,
+:math:`\sigma_\mathrm{tot}(\mathrm{n}+{}^{22}\mathrm{Ne})` and
+:math:`\sigma_\mathrm{tot}(\mathrm{n}+{}^{21}\mathrm{Ne})` weighted by the
+abundances. The keyword applies to test segments (Segments Without Data) as
+well. The GUI keeps it through a load and save but has no control for it yet.
+
+.. warning::
+
+   An engine older than October 2026 does not know the keyword and ignores
+   it silently: it computes the elastic cross section alone.
+
+Since October 2026 the terms of a **Sum**, **Ratio** or total-capture segment
+also share one level-matrix solution per energy (each term still gets its own
+T-matrix), in the calculation and in the analytic gradient; the results are
+unchanged.
+
+Sample Transmission and Self-Shielded Yield (``transmission``, ``yield``)
+-------------------------------------------------------------------------
+
+A neutron time-of-flight measurement does not measure a cross section. A
+transmission experiment measures the fraction of the beam that crosses a sample
+of :math:`n` atoms/barn,
+
+.. math::
+
+   T = e^{-n\,\sigma_\mathrm{tot}},
+
+and a capture (or reaction) experiment measures a yield that the sample itself
+attenuates (self-shielding),
+
+.. math::
+
+   Y_0 = \frac{\sigma}{\sigma_\mathrm{tot}}\left(1 - e^{-n\,\sigma_\mathrm{tot}}\right),
+
+the first term of SAMMY's capture yield (SAMMY manual, Sec. III.D.1;
+:math:`Y_0 \to n\sigma` for a thin sample). The keywords
+``transmission <n>`` and ``yield <n>`` at the end of a segment line, with
+:math:`n` in atoms/barn, make the segment that observable, and the data in its
+file are then transmissions or yields (dimensionless):
+
+.. code-block:: text
+
+   1 1 1 0.29 0.66 0 180 0 1 0 0 0 0 0 data/trans.dat 0 0 total 1 transmission 0.15
+   1 1 2 0.29 0.66 0 180 0 1 0 0 0 0 0 data/capt.dat 0 0 yield 0.15
+
+The order with resolution matters. A transmission or yield segment under a
+sub-point target effect (Gaussian beam spread, a user-defined resolution
+function, ...) is transformed at every sub-point *before* the kernel, as SAMMY
+does: what the detector averages is :math:`T(E)`, not :math:`\sigma(E)`, and
+:math:`\langle e^{-n\sigma}\rangle \neq e^{-n\langle\sigma\rangle}`.
+Exponentiating a broadened cross section fills in the dips: on the test model
+(an s-wave resonance with :math:`\Gamma_n = 34` keV, :math:`n\sigma \approx 1`
+at the peak, a 15 keV beam spread) the two differ by 6 % at the resonance.
+Fitting transmission data rather than a total cross section reduced from them
+avoids the problem altogether. Free-gas Doppler broadening (``doppler T`` on the
+``<targetInt>`` line, :doc:`experimental_effects`) acts on the cross section
+itself, so it comes first: Doppler, then the transform, then the resolution
+kernel.
+
+``transmission``
+   The segment's value -- its own term, a **Sum** of terms, or an
+   abundance-weighted **sample** sum -- is :math:`\sigma` in
+   :math:`e^{-n\sigma}`. Write ``total 1`` for the total cross section by the
+   optical theorem (Neutron Total Cross Sections, above). A natural sample is
+   one line, the sample sum of the nuclides' totals,
+   :math:`T = e^{-n \sum_i w_i \sigma_{\mathrm{tot},i}}`.
+``yield``
+   The segment is a reaction of its entrance pair (a capture pair, another
+   particle pair, a total capture with exit key ``-1``, or a **Sum** of such
+   exits of the same entrance pair); :math:`\sigma_\mathrm{tot}` is the total
+   cross section of the entrance pair by the optical theorem, computed from the
+   same level-matrix solution.
+
+Both need a neutral entrance pair and an angle-integrated cross section (data
+type 0, or 3 for total capture); neither is allowed on a **Ratio**, and a line
+cannot carry both. Not implemented yet, and refused with an error rather than
+computed wrongly: ``yield`` on a sample segment (the total of a mixture), a
+sample transmission under a sub-point target effect (the nuclides' terms sit on
+different sub-point grids), and a target effect that is blended in at range
+edges or has an automatic tolerance. The optical-theorem total leaves capture
+out (photon channels have no width in the level matrix), which matters only
+where capture is not small against the total; for a transmission add the
+capture pairs as **Sum** components if it does. The multiple-scattering terms
+of a capture yield (SAMMY's :math:`Y_1`, :math:`Y_2`, ...), which need the
+sample geometry, are not included: correct the data for multiple scattering.
+
+The keywords apply to test segments as well (a calculated transmission or
+yield curve), work in pyazr, and have an analytic gradient. A sample
+segment's decomposition file (``AZUREOut_sample_seg=<key>.out``) notes that
+its total column is the transmission while the nucleus columns stay cross
+sections.
+
+Fitted Sample Thickness
+^^^^^^^^^^^^^^^^^^^^^^^
+
+The thickness can be a fit parameter. The fit form of the block adds a vary
+flag and a prior width to it:
+
+.. code-block:: text
+
+   transmission <n> <vary> <sigma>
+   yield <n> <vary> <sigma>
+
+``vary`` is 0 or 1 and ``sigma`` is the width, in atoms/barn, of a Gaussian
+prior about the line's :math:`n` (0 = no prior). The line then has the
+parameter ``segment_<key>_thickness`` (atoms/barn; ``<key>`` the segment's
+number, as in ``segment_<key>_norm``). It is fixed for ``vary 0``. Its lower
+limit is 0, where :math:`T = 1` and :math:`Y_0 = 0`. With a prior the fit adds
+:math:`\left((n - n_0)/\sigma\right)^2`. chiSquared.out reports the sum of
+these terms as ``Total-Thickness-Chi-Squared``. A plain ``transmission <n>``
+has no parameter and gives exactly the output it gave before the fit form
+existed.
+
+.. code-block:: text
+
+   1 1 1 0.29 0.66 0 180 0 1 0 0 0 0 0 data/trans.dat 0 0 total 1 transmission 0.15 1 0.01
+
+A transmission and a capture yield measured on the same sample share one
+thickness through a **thickness group**, ``thicknessgroup <label>``. It works as
+``normgroup`` does for normalizations: every active segment with the label
+uses the thickness of the group's *first* active segment in file order, that
+is its :math:`n`, vary flag and prior. A later member keeps no free parameter
+of its own. If its line has the fit form, its ``segment_<key>_thickness`` is
+fixed at the leader's value, and param.sav records it so. Each member needs
+its own ``transmission`` or ``yield`` block; a ``thicknessgroup`` on a line
+without one is refused with an error.
+
+.. code-block:: text
+
+   1 1 1 0.29 0.66 0 180 0 1 0 0 0 0 0 data/trans.dat 0 0 total 1 transmission 0.15 1 0 thicknessgroup s
+   1 1 2 0.29 0.66 0 180 0 1 0 0 0 0 0 data/capt.dat 0 0 yield 0.15 thicknessgroup s
+
+The derivative of the observable with respect to :math:`n` is analytic,
+:math:`\partial T/\partial n = -\sigma e^{-n\sigma}` and
+:math:`\partial Y_0/\partial n = \sigma\, e^{-n\sigma_\mathrm{tot}}`. It is
+taken through the resolution kernel and the Doppler step exactly as the cross
+sections' derivatives are, so ``--use-gradient`` and the least-squares drivers
+(``--use-lm``) handle it like any other parameter, and an MCMC run takes the
+line's prior as the parameter's prior. Malformed fit forms are refused with an
+error naming the segment: ``vary`` not 0 or 1, ``sigma`` missing or negative,
+:math:`n \le 0`, or a ``thicknessgroup`` without a label.
+
+On a test segment (mode 3) the fit form is read but has no effect: a test
+segment has no fit parameters, uses its own :math:`n`, and prints a note. A
+``thicknessgroup`` there is skipped the same way. To extrapolate with a fitted
+thickness, copy the fitted value into the test line.
+
+In the GUI, the **Sample** row of the segment dialog sets the block. It holds
+a choice of None, Transmission or Self-shielded yield, the thickness in
+atoms/b, **Fit**, the prior sigma and the thickness group. The Segments table
+shows the observable and :math:`n` in the data-type column and the group in
+the Groups column. The Fitting tab lists the parameters under **Sample
+Thicknesses**, and a thickness-group follower is shown tied to its leader.
+
+.. warning::
+
+   An engine older than November 2026 does not know the keywords and ignores
+   them silently: it compares the cross section itself with the
+   transmission or yield data. The engines of early November 2026 that know
+   ``transmission <n>`` but not its fit form (up to and including the one with
+   the fitted Doppler temperature) read :math:`n` and silently ignore the fit
+   form and ``thicknessgroup``: their keyword loop stops at the first token it
+   does not know, so the thickness stays at :math:`n` and is not fitted.
+
 Segments Without Data
 ---------------------
 
@@ -498,7 +840,7 @@ segment dialog but includes:
      coefficients, code 3. Requires specifying the polynomial order.
    - **Analyzing Power** -- the vector analyzing power on the chosen energy and
      angle grid, in the centre-of-mass frame, code 7.
-   - **Spin Observable** -- any observable of the isDiff 9 grammar (target
+   - **Spin Observable** -- any observable of the isDiff 10 grammar (target
      analyzing powers, spin correlations, tensor analyzing powers, outgoing
      polarization, transfer) on the chosen grid, in the centre-of-mass frame, code 9.
 
@@ -507,6 +849,32 @@ segment dialog but includes:
    Errors may occur if you specify an energy or angular range that is not
    kinematically allowed, or if the energy is too low and the penetrability
    becomes vanishingly small.
+
+Kinematic limits of the lab frame
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The lab-to-c.m. conversion of a differential segment (data or test, code 1)
+covers the forward branch only, and the lab angle is always that of the light
+ejectile (particle 1 of the exit pair):
+
+- Where two c.m. angles reach the same lab angle (a reaction near the
+  threshold of an endothermic exit, e.g. 7Li(p,n)7Be below about 2 MeV,
+  or elastic scattering with a projectile heavier than the target), AZURE2
+  models the forward c.m. angle. A lab angle beyond the kinematic maximum
+  of that point's energy is refused: ``ERROR: ... beyond the kinematic
+  maximum``. Before October 2026 such a point became NaN silently (one line
+  in the log for a reaction, none for elastic scattering) and the run went
+  on with ``nan`` in ``chiSquared.out`` and the extrapolation files.
+  A lab-differential point below the threshold of its exit pair is refused
+  for the same reason (no ejectile, nothing to convert).
+- Recoil detection is not an option: data taken on the heavy recoil must be
+  converted by hand (elastic scattering: :math:`\theta_{c.m.} = 180^\circ -
+  2\theta_{recoil}`) and given as c.m. (code 5 / 4).
+- Analyzing-power angles (code 7) are c.m.; lab-angle :math:`A_y` data need
+  converting first (the value needs no Jacobian, the angle does).
+- A UPOS secondary-gamma segment given as lab differential is converted with
+  the kinematics of particle b (see UPOS below); the run says so with a
+  warning.
 
 .. note::
 
@@ -528,32 +896,46 @@ Measured Scattering Lengths
 
 AZURE2 computes the s-wave scattering length :math:`a_0` of every particle pair
 at the pair's threshold after each calculation or fit and writes it to
-``output/scatteringLengths.out``. The **Measured Scattering Lengths** table at
-the bottom of the tab adds measured values to the fit: each active row adds
+``output/scatteringLengths.out``. Measured values enter the fit as the data
+type **Scattering Length** of **Segments From Data**: each active one adds
 :math:`((a_0 - \text{value})/\sigma)^2` to :math:`\chi^2`, so a scattering
 length counts like one more data point. The definition and how the R-matrix
 parameters determine :math:`a_0` are in :doc:`../theory/scattering_length`.
 
-Click **+** to add a row and **-** to remove the selected one; double-click a
-cell to edit it. The columns are: the check box (whether the row enters
-:math:`\chi^2`); **Pair**, a drop-down of the particle pairs (gamma and beta
-pairs are not offered); **Spin s (J**\ :math:`\pi`\ **)**, the channel spin
-:math:`s`, which for :math:`l = 0` is the :math:`J^\pi` of the channel, chosen
-from the values the pair allows (:math:`|j_1 - j_2|` to :math:`j_1 + j_2`, only
-even ones for a pair of identical particles), or **coherent**, the
-spin-weighted combination
+Click **+** under **Segments From Data** and choose the Data Type **Scattering
+Length**. The dialog then shows **Pair** (the particle pair; gamma and beta pairs
+have no channel spins), **Channel Spin**, the channel spin :math:`s`, which for
+:math:`l = 0` is the :math:`J^\pi` of the channel, chosen from the values the
+pair allows (:math:`|j_1 - j_2|` to :math:`j_1 + j_2`, only even ones for a pair
+of identical particles), or **coherent**, the spin-weighted combination
 :math:`\sum_s (2s+1)\,a_s / ((2j_1+1)(2j_2+1))` that a neutron measurement on
 an unpolarized target usually gives (not defined for identical particles);
-**Re a0** and **Re** :math:`\sigma` in fm; and, optionally, **Im a0** and
-**Im** :math:`\sigma` for a pair with open reaction channels at its threshold.
-A :math:`\sigma` of 0 leaves that part unconstrained; blank imaginary cells
-mean no imaginary part.
+**Re a0** and its uncertainty in fm; and, optionally, **Im a0** and its
+uncertainty for a pair with open reaction channels at its threshold. An
+uncertainty of 0 leaves that part unconstrained; blank imaginary fields mean no
+imaginary part. The other fields of a data segment (energies, angles, data file,
+normalization, shifts) do not apply and are hidden.
+
+The scattering lengths are rows of the **Segments From Data** table, after the
+last data segment and numbered on from it: the reaction column names the pair
+(**a**\ :math:`_0` of ...), the energy column reads *threshold*, the angle column
+the channel spin, the data-type column *Scattering Length* and the data-file
+column the measured value. The check box, **Check All**, **Uncheck All** and the
+pair filters act on them as on the segments; select one and click **-** to remove
+it, or double-click it to edit it (its type cannot be changed to a segment, nor a
+segment's to a scattering length; the arrow buttons do not move it among the
+segments). In the file they are not segments but the ``<scatteringLengths>``
+block, written after all the segments: their row numbers are display only, and
+adding or removing one never renumbers the segments that **Experimental
+Effects** and the parameter names refer to (adding a segment moves the
+scattering lengths down by one). Before October 2026 they had a table of their
+own, at the bottom of the tab and then under the segment table.
 
 A row refers to its pair by the pair's key, the row number on the **Particle
 Pairs** tab. When a pair is deleted or edited, rows whose pair no longer exists,
 is no longer a particle pair, or no longer allows the row's channel spin are
 not removed: they turn red, and the tooltip says why. They are saved as they
 are, and the calculation stops with an error naming the line until they are
-corrected. The table is saved as a ``<scatteringLengths>`` block after
-``</segmentsTest>``, and only when it has at least one row; comments in a block
+corrected. They are saved as a ``<scatteringLengths>`` block after
+``</segmentsTest>``, and only when there is at least one; comments in a block
 written by hand are not kept when the GUI saves the file.

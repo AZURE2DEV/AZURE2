@@ -109,6 +109,8 @@ class CoulFunc {
   /// The nuclear potential these waves are computed under (0 = plain Coulomb);
   /// part of the ECTable term key.
   long hybridTag() const { return hybridTag_; }
+  /// Whether P, S and the phase come from the universal Coulomb table.
+  bool UsesTable() const { return table_ != nullptr; }
 
   // The global (radius-keyed, mutex-protected) Coulomb cache only helps when the
   // same radius is queried across many energies (e.g. penetrabilities at the
@@ -152,6 +154,8 @@ class CoulFunc {
   // point asks for P, S and the phase of the same (l, radius, energy) in turn.
   const CoulombTable *table_ = nullptr;
   bool TableLookup(int l, double radius, double energy);
+  /// PEShift by the exact routine (never the table): one route for every point of a difference stencil.
+  double PEShiftExact(int l, double radius, double energy);
   int tLastL_ = -1;
   double tLastR_ = 0.0, tLastE_ = 0.0, tP_ = 0.0, tS_ = 0.0, tPhi_ = 0.0;
   bool tOk_ = false;

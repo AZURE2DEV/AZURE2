@@ -1,10 +1,10 @@
+#include "InputFiles.h"
 #include "TargetEffect.h"
 #include <sstream>
 #include <iostream>
 #include <cctype>
 #include <cstdlib>
 #include <algorithm>
-#include "Straggling.h"
 #include <cmath>
 
 /*!
@@ -14,9 +14,9 @@
  */
 
 TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
-  // Initialize straggling to safe defaults
+  // Straggling off; a coefficient of 0 means Bohr straggling when it is on (0.04 keV^1/2 before 2026-10-27)
   isStraggling_ = false;
-  stragglingCoefficient_ = 0.04;
+  stragglingCoefficient_ = 0.0;
 
   // Initialize adaptive grid parameters to defaults
   // See AdaptiveIntegrationGrid::GridConfig for why this is 20 rather than 5.
@@ -91,7 +91,7 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
       // Try to read coefficient if available
       if (stream.good()) stream >> std::ws;
       if (stream.good() && stream.peek() != '<' && (std::isdigit(stream.peek()) || stream.peek() == '.' || stream.peek() == '-')) {
-        double stragglingCoeff = 0.04;
+        double stragglingCoeff = 0.0;
         stream >> stragglingCoeff;
         stragglingCoefficient_ = stragglingCoeff;
 
@@ -131,6 +131,17 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
         std::istringstream rs(rangesToken);
         std::string item;
         while (std::getline(rs, item, ',')) {
+          if (item.compare(0, 4, "auto") == 0) {
+            // "auto", "auto:<tol>", "auto:<tol>:<margin>": windows from the level scheme (IsAutoWindows)
+            autoWindows_ = true;
+            std::istringstream as(item.substr(4));
+            char colon = 0;
+            double v = 0.0;
+            if (as >> colon && colon == ':' && as >> v && v > 0.) autoWindowTolerance_ = v;
+            colon = 0;
+            if (as >> colon && colon == ':' && as >> v && v > 0.) autoWindowMargin_ = v;
+            continue;
+          }
           size_t dash = item.find('-', 1);  // energies are positive; skip a leading sign
           if (dash == std::string::npos) continue;
           double lo = atof(item.substr(0, dash).c_str());
@@ -160,6 +171,17 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
     //   beamprofile N {xi omega alpha weight}xN tpcSigma nCut dbFlag
     //   udr "<file>" flightPath_m burstFWHM_ns channel_ns centred
     //   screening Ue_eV vary sigma_eV
+    //   densityfit vary sigma [max]    (sigma in atoms/cm^2, or "<p>%" of the line's density; max: the largest
+    //                                   density the sub-point grids must span, atoms/cm^2)
+    //   densitygroup <label>
+    //   doppler T_K                    (free-gas Doppler broadening, effective temperature in kelvin)
+    //   doppler T_K vary sigma_K [Tmax_K]   (a fitted temperature: parameter doppler_<n>, prior sigma about T,
+    //                                        Tmax the largest temperature the sub-point grids must span)
+    std::string densitySigmaToken;
+    bool densityFitRead = false;
+    double densityMaxRead = 0.0;
+    std::string dopplerVaryToken, dopplerSigmaToken, dopplerMaxToken;
+    bool dopplerFitRead = false;
     while (stream.good()) {
       stream >> std::ws;
       if (!(stream.good() && std::isalpha(stream.peek()))) break;
@@ -191,6 +213,63 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
           hasScreening_ = true;
           screeningVary_ = (vary != 0);
           screeningUe_ = screeningNominal_;
+        }
+      } else if (keyword == "densityfit") {
+        int vary = 0;
+        stream >> vary >> densitySigmaToken;
+        if (stream.fail() || densitySigmaToken.empty()) {
+          densityFitError_ = true;
+          densityFitErrorText_ = "a densityfit block is 'densityfit vary sigma' (sigma in atoms/cm^2 or a percentage, \"2.3%\")";
+          stream.setstate(std::ios_base::failbit);
+        } else {
+          densityFitRead = true;
+          densityVary_ = (vary != 0);
+          // optional: the largest density the grids must span (atoms/cm^2)
+          if (stream.good()) stream >> std::ws;
+          if (stream.good() && (std::isdigit(stream.peek()) || stream.peek() == '.')) {
+            stream >> densityMaxRead;
+            if (stream.fail()) {
+              densityFitError_ = true;
+              densityFitErrorText_ = "the optional densityfit maximum is not a number";
+            }
+          }
+        }
+      } else if (keyword == "densitygroup") {
+        stream >> densityGroup_;
+        if (stream.fail() || densityGroup_.empty()) {
+          densityFitError_ = true;
+          densityFitErrorText_ = "a densitygroup block is 'densitygroup <label>'";
+          stream.setstate(std::ios_base::failbit);
+        }
+      } else if (keyword == "doppler") {
+        stream >> dopplerTemperature_;
+        if (stream.fail() || !(dopplerTemperature_ > 0.0)) {
+          dopplerError_ = true;  // flagged as well as failed: at the end of the line the fail bit is cleared below
+          dopplerErrorText_ = "a doppler block is 'doppler T' or 'doppler T vary sigma [Tmax]' with the effective"
+                              " temperature T > 0 in kelvin";
+          stream.setstate(std::ios_base::failbit);
+        } else {
+          isDoppler_ = true;
+          // optional fit form: vary sigma [Tmax], numbers (a following keyword starts with a letter)
+          auto numberToken = [&](std::string &tok) {
+            if (stream.good()) stream >> std::ws;
+            if (!stream.good()) return false;
+            const int c = stream.peek();
+            if (!(std::isdigit(c) || c == '.' || c == '-' || c == '+')) return false;
+            stream >> tok;
+            return !stream.fail();
+          };
+          if (numberToken(dopplerVaryToken)) {
+            dopplerFitRead = true;
+            if (!numberToken(dopplerSigmaToken)) {
+              dopplerError_ = true;
+              dopplerErrorText_ = "a doppler block is 'doppler T' or 'doppler T vary sigma [Tmax]': the fit form needs"
+                                  " both vary (0 or 1) and sigma (the prior width in K, 0 = none)";
+              stream.setstate(std::ios_base::failbit);
+            } else {
+              numberToken(dopplerMaxToken);
+            }
+          }
         }
       } else if (keyword == "udr") {
         stream >> std::ws;
@@ -246,6 +325,69 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
     else
       isTargetIntegration_ = false;
     density_ = density;
+    // density 0 (or negative) with target integration = an infinitely thick target (IsThickTarget)
+    isThickTarget_ = isTargetIntegration_ && !(density_ > 0.0);
+    if (densityFitRead || (!densityGroup_.empty() && !densityFitError_)) {
+      if (!isTargetIntegration_ || isThickTarget_) {
+        densityFitError_ = true;
+        densityFitErrorText_ = "densityfit / densitygroup need target integration with a density > 0 (a thin target)";
+      } else if (isBeamProfile_ || isUdr_) {
+        densityFitError_ = true;
+        densityFitErrorText_ = "densityfit / densitygroup cannot be combined with a beam profile or a UDR kernel";
+      }
+    }
+    if (densityFitRead && !densityFitError_) {
+      const bool percent = densitySigmaToken.back() == '%';
+      const std::string number = percent ? densitySigmaToken.substr(0, densitySigmaToken.size() - 1) : densitySigmaToken;
+      char *end = nullptr;
+      const double s = std::strtod(number.c_str(), &end);
+      if (number.empty() || end == number.c_str() || *end != '\0' || !(s >= 0.0)) {
+        densityFitError_ = true;
+        densityFitErrorText_ = "the densityfit sigma \"" + densitySigmaToken + "\" is not a non-negative number or percentage";
+      } else {
+        hasDensityFit_ = true;
+        densityNominal_ = density_;
+        densitySigma_ = percent ? s / 100.0 * density_ : s;
+        // the grids span the largest density the fit is expected to reach (see HasDensityFit)
+        layoutDensity_ = (densitySigma_ > 0.0) ? std::max(density_ + 3.0 * densitySigma_, 1.1 * density_) : 1.5 * density_;
+        if (densityMaxRead > 0.0) {
+          if (!(densityMaxRead > density_)) {
+            densityFitError_ = true;
+            densityFitErrorText_ = "the densityfit maximum must be above the line's density";
+          }
+          layoutDensity_ = densityMaxRead;
+        }
+      }
+    }
+    if (dopplerFitRead && !dopplerError_) {
+      auto number = [](const std::string &tok, double &v) {
+        char *end = nullptr;
+        v = std::strtod(tok.c_str(), &end);
+        return !tok.empty() && end != tok.c_str() && *end == '\0' && std::isfinite(v);
+      };
+      const std::string form = "a doppler block is 'doppler T' or 'doppler T vary sigma [Tmax]': ";
+      double vary = -1.0, sigma = -1.0, tmax = 0.0;
+      if (!number(dopplerVaryToken, vary) || !(vary == 0.0 || vary == 1.0)) {
+        dopplerError_ = true;
+        dopplerErrorText_ = form + "vary \"" + dopplerVaryToken + "\" is not 0 or 1";
+      } else if (!number(dopplerSigmaToken, sigma) || !(sigma >= 0.0)) {
+        dopplerError_ = true;
+        dopplerErrorText_ = form + "sigma \"" + dopplerSigmaToken + "\" is not a non-negative number (K)";
+      } else if (!dopplerMaxToken.empty() && (!number(dopplerMaxToken, tmax) || !(tmax > dopplerTemperature_))) {
+        dopplerError_ = true;
+        dopplerErrorText_ = form + "Tmax \"" + dopplerMaxToken + "\" must be a temperature above T (K)";
+      } else {
+        dopplerFit_ = true;
+        dopplerVary_ = (vary == 1.0);
+        dopplerNominal_ = dopplerTemperature_;
+        dopplerSigma_ = sigma;
+        // the grids span the largest temperature the fit is expected to reach (see HasDopplerFit)
+        dopplerLayout_ = (sigma > 0.0) ? std::max(dopplerNominal_ + 3.0 * sigma, 1.21 * dopplerNominal_)
+                                       : 2.0 * dopplerNominal_;
+        if (tmax > 0.0) dopplerLayout_ = tmax;
+      }
+    }
+    if (dopplerError_) isDoppler_ = false;
     if (isTargetIntegration_) {
       stoppingPowerEq_.Initialize(stoppingPowerEq, numParameters, configure);
       for (int i = 0; i < numParameters; i++) {
@@ -303,7 +445,25 @@ bool TargetEffect::IsBeamProfile() const {
  */
 
 bool TargetEffect::IsSubPointEffect() const {
-  return isConvolution_ || isTargetIntegration_ || isConvCoefficients_ || isBeamProfile_ || isUdr_;
+  return isConvolution_ || isTargetIntegration_ || isConvCoefficients_ || isBeamProfile_ || isUdr_ || isDoppler_;
+}
+
+double TargetEffect::DopplerU(double cmFactor) const { return this->DopplerUAt(cmFactor, dopplerTemperature_); }
+
+double TargetEffect::DopplerUAt(double cmFactor, double temperature) const {
+  if (!isDoppler_ || !(cmFactor > 0.0) || !(cmFactor < 1.0)) return 0.0;
+  const double kT = 8.617333262e-11 * temperature;     // MeV
+  return std::sqrt(kT * (1.0 - cmFactor) / cmFactor);  // m/M = (1 - c)/c for c = M/(m+M)
+}
+
+void TargetEffect::DopplerWindow(double eCM, double cmFactor, double &lo, double &hi) const {
+  lo = hi = eCM;
+  const double u = this->DopplerUAt(cmFactor, this->GetDopplerLayoutTemperature());
+  if (!(u > 0.0) || !(eCM > 0.0)) return;
+  // the kernel is a Gaussian in velocity, exp(-(v-w)^2/u^2): standard deviation u/sqrt(2)
+  const double v = std::sqrt(eCM / cmFactor), dv = convolutionRange * u / std::sqrt(2.0);
+  hi = cmFactor * (v + dv) * (v + dv);
+  lo = (v > dv) ? cmFactor * (v - dv) * (v - dv) : 0.0;
 }
 
 bool TargetEffect::IsUdr() const { return isUdr_; }
@@ -322,13 +482,14 @@ bool TargetEffect::IsUdrCentred() const { return udrCentred_; }
  * 600 energies over twelve decades with 9000 points each.
  */
 
-bool TargetEffect::LoadUdrTable(double eMinLab, double eMaxLab, std::ostream &log) {
+bool TargetEffect::LoadUdrTable(double eMinLab, double eMaxLab, std::ostream &log, bool cached) {
   if (!isUdr_) return false;
   const double keepMin = eMinLab / 10.0, keepMax = eMaxLab * 10.0;
   if (udrTable_ && udrTable_->file == udrFile_ && !udrTable_->energy.empty() &&
       udrTable_->loadedMin <= keepMin && udrTable_->loadedMax >= keepMax)
     return true;
-  std::ifstream in(udrFile_.c_str());
+  std::unique_ptr<std::istream> inStream = InputFiles::Open(udrFile_, cached);
+  std::istream &in = *inStream;
   if (!in) {
     log << "ERROR: cannot open the user-defined resolution file " << udrFile_ << std::endl;
     return false;
@@ -495,6 +656,13 @@ std::shared_ptr<const UdrKernel> TargetEffect::BuildUdrKernel(double eLab, doubl
   size_t a = 0, b = k->r.size() - 1;
   while (a < b && k->r[a] <= 1.0e-9 * peak) a++;
   while (b > a && k->r[b] <= 1.0e-9 * peak) b--;
+  // The kernel is piecewise linear: it is nonzero up to the zero-valued nodes
+  // that bracket the first and last significant ones, so the support includes
+  // them.  Without this a narrow tabulated function (a one-node spike) had
+  // tauMin == tauMax, the sub-point window fell back to +-1e-4 of the energy
+  // and the weights were all zero (2026-11-07).
+  if (a > 0) a--;
+  if (b + 1 < k->r.size()) b++;
   k->tauMin = k->tau[a];
   k->tauMax = k->tau[b];
   double norm = 0.0;
@@ -562,41 +730,20 @@ bool TargetEffect::IsBeamPhotodissociation() const {
 }
 
 /*!
- * Converts the beam-profile energies from the frame of the input file (lab)
- * to the centre of mass, exactly once, however many segments share the effect.
+ * The c.m. beam-spread sigma at c.m. energy eCM for a point whose entrance pair has the c.m./lab factor
+ * cmFactor.  The sigma and a `sigmalab` expression are kept in the lab frame of the input file and
+ * converted here, per point: every segment listed on a <targetInt> line, and every component of an
+ * advanced (SUM/RATIO or natural-target) segment, points to the same TargetEffect, and up to 2026-10-27
+ * the sigma was converted once with the factor of the first segment on the line (and before 2026-10-01
+ * once per segment), wrong for the other pairs by the ratio of their mass ratios.
  */
 
-void TargetEffect::ConvertBeamProfileToCM(double factor) {
-  if (beamProfileConverted_) return;
-  for (std::vector<BeamProfileComponent>::iterator c = beamProfile_.begin(); c != beamProfile_.end(); c++) {
-    c->xi *= factor;
-    c->omega *= factor;
-  }
-  beamTpcSigma_ *= factor;
-  beamProfileConverted_ = true;
-}
-
-/*!
- * Converts the fixed convolution sigma from the frame of the input file (lab)
- * to the centre of mass, exactly once, however many segments share the effect.
- * Every segment listed on a <targetInt> line, and every component of an
- * advanced (SUM/RATIO) segment, points to the same TargetEffect; converting it
- * once per segment shrank the kernel by the mass ratio for each extra one.
- */
-
-void TargetEffect::ConvertSigmaToCM(double factor) {
-  if (sigmaConverted_) return;
-  sigma_ *= factor;
-  cmFactor_ = factor;
-  sigmaConverted_ = true;
-}
-
-double TargetEffect::SigmaCM(double eCM, const Config &configure) const {
+double TargetEffect::SigmaCM(double eCM, const Config &configure, double cmFactor) const {
   if (isConvCoefficients_ && convolutionEq_.GetEquation() != "") {
-    if (sigmaLab_) return cmFactor_ * convolutionEq_.Evaluate(configure, eCM / cmFactor_);
+    if (sigmaLab_) return cmFactor * convolutionEq_.Evaluate(configure, eCM / cmFactor);
     return convolutionEq_.Evaluate(configure, eCM);
   }
-  return sigma_;
+  return cmFactor * sigma_;
 }
 
 double TargetEffect::GaussianKernel(double e, double centroid, double sigma) {
@@ -609,6 +756,22 @@ double TargetEffect::StragglingSigma(double deltaE) const {
 }
 
 /*!
+ * Bohr's energy straggling after traversing an areal density N x (atoms/cm^2) of the target:
+ * Omega_lab^2 = 4 pi Z1^2 e^4 Z2 N x (N. Bohr, Phil. Mag. 30 (1915) 581), a lab width converted to the
+ * c.m. with the entrance pair's mass ratio.  e^2 = alpha hbar c in MeV fm, 1 fm = 1e-13 cm.  Z2 is the
+ * charge of the target nucleus: for a compound target whose stopping cross section is per molecule or per
+ * active atom (see the user guide) the electrons of the other constituents are not counted, and an
+ * explicit coefficient should be entered instead.
+ */
+
+double TargetEffect::BohrStragglingSigma(double arealDensity, double cmFactor, int z1, int z2) const {
+  if (!this->IsBohrStraggling() || !(arealDensity > 0.0) || z1 == 0 || z2 <= 0) return 0.0;
+  const double e2 = fstruc * hbarc * 1.0e-13;  // MeV cm
+  const double omega2 = 4.0 * pi * z1 * z1 * z2 * e2 * e2 * arealDensity;  // lab MeV^2
+  return cmFactor * std::sqrt(omega2);
+}
+
+/*!
  * The sub-point grid of a point reaches forwardDepth above and backwardDepth below its energy. A
  * Gaussian beam spread needs convolutionRange sigma on each side; target integration needs the target
  * thickness below, and with a beam spread the window is padded by a further factor 5 (kept from the
@@ -617,14 +780,25 @@ double TargetEffect::StragglingSigma(double deltaE) const {
  * eight times in EData.cpp.
  */
 
-void TargetEffect::GridExtent(double eCM, double thicknessCM, const Config &configure, double &forward, double &backward) const {
+void TargetEffect::GridExtent(double eCM, double thicknessCM, const Config &configure, double cmFactor, int z1, int z2, double &forward, double &backward) const {
   forward = 0.0;
   backward = 0.0;
-  double beam = this->IsGaussian() ? convolutionRange * this->SigmaCM(eCM, configure) : 0.0;
+  double beam = this->IsGaussian() ? convolutionRange * this->SigmaCM(eCM, configure, cmFactor) : 0.0;
   if (this->IsTargetIntegration()) {
     backward = thicknessCM + (this->IsGaussian() ? 5.0 * beam : 0.0);
     forward = this->IsGaussian() ? 5.0 * beam : 0.0;
-    backward += convolutionRange * this->StragglingSigma(thicknessCM);
+    if (this->IsBohrStraggling()) {
+      // the whole target: its areal density (the largest a fitted density is laid out for), or for a thick
+      // target the thickness over the surface stopping power
+      double areal = this->GetLayoutDensity();
+      if (isThickTarget_) {
+        const double eps = cmFactor * stoppingPowerEq_.Evaluate(configure, eCM / cmFactor);
+        areal = (eps > 0.0) ? thicknessCM / eps : 0.0;
+      }
+      backward += convolutionRange * this->BohrStragglingSigma(areal, cmFactor, z1, z2);
+    } else {
+      backward += convolutionRange * this->StragglingSigma(thicknessCM);
+    }
   } else if (this->IsGaussian()) {
     backward = beam;
     forward = beam;
@@ -698,12 +872,83 @@ double TargetEffect::GetDensity() const {
 }
 
 /*!
- * Calculates the Target thickness from the stopping cross section and
- * the target density as a function of energy.
+ * The energy loss Delta (lab MeV) of the beam across the target at lab energy E: the solution of
+ *   int_{E - Delta}^{E} dE' / epsilon(E') = N,
+ * the areal density N (atoms/cm^2) being reached when the beam has crossed the whole target.  Up to
+ * 2026-10-27 this was the first-order epsilon(E) N, which with a stopping cross section that rises through
+ * the target (every ion above the Bragg peak) misplaces the back edge by 2-8 % for targets of 5-20 % energy
+ * loss and, with 1/epsilon in the yield integrand, under-weights a flat cross section by the same amount
+ * (audit 2026-10-25, tier 3 entry 2).  Newton on A(Delta) = int - N with A' = 1/epsilon(E - Delta), the
+ * integral by Simpson's rule on 16 intervals, from the first-order estimate (exact for a constant epsilon).
+ * A non-positive epsilon(E) is returned as epsilon(E) N, i.e. <= 0, so the caller's error check fires as
+ * before; a target the beam cannot cross returns E itself (the caller floors the grid at 1 keV).
  */
 
 double TargetEffect::TargetThickness(double energy, const Config &configure) {
-  return this->GetStoppingPowerEq()->Evaluate(configure, energy) * this->GetDensity();
+  return this->TargetThickness(energy, configure, this->GetDensity());
+}
+
+double TargetEffect::TargetThickness(double energy, const Config &configure, double density) {
+  const double eps0 = stoppingPowerEq_.Evaluate(configure, energy);
+  if (!(eps0 > 0.0) || !(density > 0.0) || !(energy > 0.0)) return eps0 * density;
+  auto invEps = [&](double e) {
+    const double eps = stoppingPowerEq_.Evaluate(configure, e);
+    return (eps > 0.0) ? 1.0 / eps : 0.0;
+  };
+  double delta = eps0 * density;
+  for (int iter = 0; iter < 30; iter++) {
+    if (!(delta < energy)) return energy;
+    const int n = 16;
+    const double h = delta / n;
+    double sum = invEps(energy) + invEps(energy - delta);
+    for (int k = 1; k < n; k++) sum += ((k % 2) ? 4.0 : 2.0) * invEps(energy - k * h);
+    const double residual = sum * h / 3.0 - density;
+    const double slope = invEps(energy - delta);
+    if (!(slope > 0.0)) break;
+    double step = residual / slope;
+    // never jump past the beam energy or below a tenth of the current estimate
+    if (delta - step > energy) step = delta - energy;
+    if (delta - step < 0.1 * delta) step = 0.9 * delta;
+    delta -= step;
+    if (std::fabs(step) <= 1.0e-7 * delta) break;
+  }
+  return delta;
+}
+
+double TargetEffect::MeanEnergyLoss(double energy, const Config &configure, double density) {
+  if (isThickTarget_) return 0.0;
+  const double delta = this->TargetThickness(energy, configure, density);
+  if (!(delta > 0.0) || !(delta <= energy)) return 0.0;
+  auto invEps = [&](double e) {
+    const double eps = stoppingPowerEq_.Evaluate(configure, e);
+    return (eps > 0.0) ? 1.0 / eps : 0.0;
+  };
+  // Simpson on 32 panels: int (E - e)/epsilon de / int 1/epsilon de over [E - Delta, E]
+  const int n = 32;
+  const double h = delta / n;
+  double num = 0.0, den = 0.0;
+  for (int k = 0; k <= n; k++) {
+    const double w = (k == 0 || k == n) ? 1.0 : ((k % 2) ? 4.0 : 2.0);
+    const double depth = k * h;
+    const double ie = invEps(energy - depth);
+    num += w * depth * ie;
+    den += w * ie;
+  }
+  return (den > 0.0) ? num / den : 0.5 * delta;
+}
+
+/*!
+ * Makes this line a member of a density group whose first line is \p leader: its density, prior and layout
+ * density become the leader's (the group has one parameter, held by the leader).
+ */
+
+void TargetEffect::JoinDensityGroup(const TargetEffect &leader) {
+  hasDensityFit_ = true;
+  densityVary_ = leader.densityVary_;
+  density_ = leader.density_;
+  densityNominal_ = leader.densityNominal_;
+  densitySigma_ = leader.densitySigma_;
+  layoutDensity_ = leader.layoutDensity_;
 }
 
 /*!
@@ -816,8 +1061,7 @@ bool TargetEffect::IsStraggling() const {
 }
 
 /*!
- * Returns the straggling coefficient for the target effect.
- * Typical value is 0.04 keV^0.5 per keV^0.5 of energy loss.
+ * Returns the straggling coefficient c_s (keV^1/2, c.m.): sigma_cm = c_s sqrt(dE_cm [keV]); 0 = Bohr straggling.
  */
 
 double TargetEffect::GetStragglingCoefficient() const {
@@ -878,8 +1122,13 @@ double TargetEffect::GetAutoTolerance() const {
 
 double TargetEffect::BlendWeight(double labEnergy) const {
   if (ranges_.empty()) return 1.0;
+  return BlendWeight(labEnergy, ranges_);
+}
+
+double TargetEffect::BlendWeight(double labEnergy, const std::vector<std::pair<double, double> > &windows) const {
+  if (windows.empty()) return autoWindows_ ? 0.0 : 1.0;
   double weight = 0.0;
-  for (std::vector<std::pair<double, double> >::const_iterator r = ranges_.begin(); r != ranges_.end(); r++) {
+  for (std::vector<std::pair<double, double> >::const_iterator r = windows.begin(); r != windows.end(); r++) {
     double w;
     if (transitionWidth_ <= 0.) {
       w = (labEnergy >= r->first && labEnergy <= r->second) ? 1.0 : 0.0;

@@ -191,6 +191,13 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   void AddNuisanceGradient(const vector_r &p, std::vector<double> &grad) const;
 
   /*!
+   * Full-vector indices of the parameters that carry a diagonal prior of their own (normError, shift errors,
+   * screening / density / Doppler / thickness / abundance sigmas, nuisance priors).  A prior parameter covariance
+   * that also lists one of them applies on top (the run notes the overlap).
+   */
+  std::vector<int> IndicesWithOwnPrior() const;
+
+  /*!
    * Object pool management methods
    */
   void InitializePools() const;

@@ -11,8 +11,9 @@ ECAmplitudeCache *g_ecAmplitudeCache = nullptr;
 void ECAmplitudeCache::AddAmplitude(const AmplitudeKey &key, double energy, complex amplitude) {
   std::lock_guard<std::mutex> lock(cache_mutex_);
 
-  // If amplitude 0 or NaN, do not cache
-  if (amplitude == complex(0.0, 0.0) || std::isnan(amplitude.real()) || std::isnan(amplitude.imag())) {
+  // If amplitude 0 or not finite, do not cache: an infinite amplitude passed the old NaN test and every point
+  // interpolated through it came out infinite or NaN.
+  if (amplitude == complex(0.0, 0.0) || !std::isfinite(amplitude.real()) || !std::isfinite(amplitude.imag())) {
     return;
   }
 

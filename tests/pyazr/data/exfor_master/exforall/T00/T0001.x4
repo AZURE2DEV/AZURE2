@@ -49,4 +49,30 @@ MEV        MB         MB
         2.0        7.0        8.0
 ENDDATA              4
 ENDSUBENT           12
-ENDENTRY             3
+SUBENT        T0001004     20261026
+BIB                  1          1
+REACTION   (6-C-12(P,EL)6-C-12,,DA,,RTH)
+ENDBIB               1
+NOCOMMON             0          0
+DATA                 4          3
+EN         ANG        DATA       ERR-S      
+MEV        ADEG       NO-DIM     NO-DIM     
+        2.0       30.0        0.9       0.02
+        2.0       90.0        1.2       0.03
+        2.0      150.0        1.5       0.04
+ENDDATA              5
+ENDSUBENT           11
+SUBENT        T0001005     20261026
+BIB                  1          1
+REACTION   (6-C-12(P,EL)6-C-12,,DA,,RTH)
+ENDBIB               1
+NOCOMMON             0          0
+DATA                 4          3
+EN         ANG-CM     DATA       ERR-S      
+MEV        ADEG       NO-DIM     NO-DIM     
+        2.0       30.0        0.9       0.02
+        2.0       90.0        1.2       0.03
+        2.0      150.0        1.5       0.04
+ENDDATA              5
+ENDSUBENT           11
+ENDENTRY             5

@@ -40,8 +40,10 @@ class Config;
  */
 class ECTable {
  public:
-  /// The integral ECIntegral(finalPair, configure)(...) returns, from the table.
-  static complex Integral(PPair *finalPair, const Config &configure,
+  /// The integral ECIntegral(finalPair, radius, configure)(...) returns, from the table.  \p radius is the
+  /// channel radius the integral starts at: the final channel's (CNuc refuses a transition whose initial and
+  /// final channels have different radii).
+  static complex Integral(PPair *finalPair, double radius, const Config &configure,
                           int li, int lf, double si, double sf, double ji, double jf,
                           int multL, char radType, double inEnergy, double levelEnergy,
                           bool isChannelCapture);

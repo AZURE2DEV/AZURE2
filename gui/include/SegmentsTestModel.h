@@ -26,7 +26,7 @@ struct SegmentsTestData {
   QString componentsList;
   // Trailing keyword blocks ("mixture ..."), verbatim; see SegmentsDataData.
   QString extraTokens;
-  // isDiff 9: the spin-observable token (SpinObservable.h).  Not a table column: set with setLineSpin().
+  // isDiff 10: the spin-observable token (SpinObservable.h).  Not a table column: set with setLineSpin().
   QString spinObservable;
 };
 

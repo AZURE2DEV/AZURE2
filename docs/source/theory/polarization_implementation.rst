@@ -555,13 +555,13 @@ What is not done
 ----------------
 
 * **Tensor observables in capture.** For particle channels they are done
-  (isDiff 9, below). For capture, Seyler and Weller's Eqs. (22)–(25) give the
+  (isDiff 10, below). For capture, Seyler and Weller's Eqs. (22)–(25) give the
   :math:`c_k`, :math:`d_k` and :math:`e_k` coefficients in the same notation as
   the :math:`b_k` already coded.
 * **In-plane outgoing components** (:math:`P_{x'}`, :math:`K_x^{x'}`,
   :math:`K_z^{z'}` ...). They need the exit frame (:math:`z'` along
   :math:`\mathbf k_\text{out}`) pinned; only normal (*y*) exit operators are
-  meaningful in isDiff 9 today.
+  meaningful in isDiff 10 today.
 * **Attenuation coefficients for the capture** :math:`A_y`. When a segment
   carries target effects, ``EPoint::CalcLegendreP`` folds the geometric
   attenuation :math:`Q_k` into :math:`P_k`, but there is no :math:`Q_k^1` for
@@ -576,8 +576,8 @@ What is not done
 * **Photon polarization** (linear or circular) for capture exits. The capture
   analyzing power is the only capture polarization observable implemented.
 
-General spin observables (isDiff 9)
------------------------------------
+General spin observables (isDiff 10)
+------------------------------------
 
 The amplitude matrix of the previous sections holds :math:`M(s'\nu';s\nu)` in
 the channel-spin basis. Decomposing both indices with the Lane–Thomas

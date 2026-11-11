@@ -163,7 +163,7 @@ class CoulombNuclearPotential : public NuclearPotential {
   CoulombNuclearPotential(int Z1, int Z2,
                           const NuclearPotential &nuclear_potential,
                           int l = 0,
-                          double redmass_MeV = 931.494,
+                          double redmass_MeV = 931.49410242,
                           double Rc = 3.5,
                           double hbarc = 197.3269804) :
     Z1_(Z1),

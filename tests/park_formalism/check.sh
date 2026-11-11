@@ -14,6 +14,8 @@
 #   1. mode-1 calculate: same chi2 from the same .azr, different param.par;
 #   2. mode-2 fit (p+p): same minimum and same parameters.out, from
 #      independent MIGRAD runs in each mode's own amplitudes;
+#   2b. param.fit (the mid-fit snapshot a resumed job starts from) is tagged,
+#      and a Park run resumed from it reproduces the chi2 at the snapshot;
 #   3. parameter files: a Brune-mode param.sav read by a Park-mode run (and
 #      the other way round) is converted on read and reproduces the chi2;
 #   4. a width above the J > 0 bound is reported, and the penalty makes the
@@ -113,6 +115,25 @@ paste <(width_column "$WORK/fit.brune/output/parameters.out") \
   awk 'BEGIN { bad = 0 } { d = $1 - $2; if (d < 0) d = -d; if (d > 1e-3 * ($1 < 0 ? -$1 : $1)) { bad++; print "        width " $1 " vs " $2 } } END { exit bad }'
 [ $? -eq 0 ] && ok "p+p fit: physical widths agree to 1e-3 in both modes" || bad "p+p fit: physical widths differ between the modes"
 grep -q "^ *#parametrization *2\." "$WORK/fit.park/output/param.sav" && ok "p+p fit: param.sav tagged Park" || bad "p+p fit: param.sav not tagged"
+
+# ---- 2b. a Park fit resumed from its own param.fit --------------------------
+# param.fit is the snapshot a fit writes every 100 objective calls, the file an
+# evicted or interrupted job restarts from.  Before 2026-11-04 it carried no
+# #parametrization line, so a Park run reading it took its Park amplitudes for
+# Brune's and converted them again (here chi2 1696 instead of 103; 11B+a
+# 11-04-26_park_gpSM, 10733 -> 49532).  The resumed calculation must give the
+# chi2 the fit logged at the snapshot's call, with no conversion.
+grep -q "^ *#parametrization *2\." "$WORK/fit.park/output/param.fit" && ok "p+p fit: param.fit tagged Park" || bad "p+p fit: param.fit not tagged"
+snap="$(tr '\r' '\n' < "$WORK/fit.park/run.log" | awk '$1 == "Iteration:" && $2 % 100 == 0 { c = $4 } END { print c }')"
+stage identical_pp_res fit.resume
+cp "$WORK/fit.park/output/param.fit" "$WORK/fit.resume/resume.fit"
+fr="$(run fit.resume identical_pp_res calc resume.fit --use-park)"
+if grep -qE "Converted the parameter file|no parametrization tag" "$WORK/fit.resume/run.log"; then
+  bad "p+p resume: Park run converted its own param.fit"
+else ok "p+p resume: Park run read its own param.fit without conversion"; fi
+if [ -z "$snap" ] || [ -z "$fr" ]; then bad "p+p resume: no chi-squared (snapshot '$snap', resumed '$fr')"
+elif close "$snap" "$fr" 1e-5; then ok "p+p resume: chi2 $fr = the fit's at the last snapshot ($snap)"
+else bad "p+p resume: chi2 $fr, the fit logged $snap at the last snapshot"; fi
 
 # ---- 4. the J > 0 wall ------------------------------------------------------
 # Multiply the p+p 0+ level's width by 170 (300 keV -> 51 MeV, past the bound

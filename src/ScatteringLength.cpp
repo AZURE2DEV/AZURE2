@@ -17,15 +17,15 @@
 
 namespace ScatteringLength {
 
-double CoulombX(const PPair *pair) {
+double CoulombX(const PPair *pair, double radius) {
   const double z1z2 = (double)pair->GetZ(1) * pair->GetZ(2);
   if (z1z2 <= 0.0) return 0.0;
   // x^2 = 8 Z1 Z2 e^2 mu a / hbar^2 = 8 Z1 Z2 alpha (mu c^2) a / (hbar c)
-  return sqrt(8.0 * z1z2 * fstruc * pair->GetRedMass() * uconv * pair->GetChRad() / hbarc);
+  return sqrt(8.0 * z1z2 * fstruc * pair->GetRedMass() * uconv * radius / hbarc);
 }
 
-double ZeroEnergyShift(const PPair *pair, int l) {
-  const double x = CoulombX(pair);
+double ZeroEnergyShift(const PPair *pair, double radius, int l) {
+  const double x = CoulombX(pair, radius);
   if (x <= 0.0) return -(double)l;
   // The zero-energy irregular solution is sqrt(r) K_{2l+1}(x), x = sqrt(8 r / a_B); r d/dr = (x/2) d/dx
   // and K_nu' = -K_{nu-1} - (nu/x) K_nu give S_l(0) = -l - (x/2) K_{2l}/K_{2l+1}.  Scaled Bessel
@@ -35,15 +35,20 @@ double ZeroEnergyShift(const PPair *pair, int l) {
   return -(double)l - 0.5 * x * kNum / kDen;
 }
 
-Coefficients FormulaCoefficients(const PPair *pair) {
-  const double a = pair->GetChRad();
-  const double x = CoulombX(pair);
+Coefficients FormulaCoefficients(const PPair *pair, double radius) {
+  const double a = radius;
+  const double x = CoulombX(pair, radius);
   if (x <= 0.0) return {-a, a};  // a0 = a (1 - M)
   // a0 = -a [ M / (x^2 K1^2) - 2 I1 / (x^2 K1) ] with K1 = e^-x K1s, I1 = e^x I1s.
   const double k1s = gsl_sf_bessel_K1_scaled(x);
   const double i1s = gsl_sf_bessel_I1_scaled(x);
   const double e2x = exp(2.0 * x);
   return {-a * e2x / (x * x * k1s * k1s), 2.0 * a * e2x * i1s / (x * x * k1s)};
+}
+
+double ChannelRadius(CNuc *compound, const Channel &ch) {
+  // the s-wave channel (l = 0, s, J = s) of the pair: its own radius when <channelRadii> gives one
+  return compound->GetPair(ch.pairNum)->GetChRad(0, ch.s, ch.s);
 }
 
 std::vector<Channel> Channels(CNuc *compound, int pairKey) {
@@ -99,7 +104,7 @@ Value Evaluate(CNuc *compound, const Config &configure, const Channel &ch) {
     ThresholdMatrices(compound, configure, point, f);
     v.M = f.GetUBilinear(ch.jGroup, ch.channel, ch.channel);
   }
-  const Coefficients c = FormulaCoefficients(compound->GetPair(ch.pairNum));
+  const Coefficients c = FormulaCoefficients(compound->GetPair(ch.pairNum), ChannelRadius(compound, ch));
   v.a0 = c.c1 * v.M + c.c0;
   return v;
 }
@@ -110,7 +115,7 @@ bool Adjoint(CNuc *compound, const Config &configure, const Channel &ch, complex
   EPoint point(0.0, 0.0, ch.pairKey, ch.pairKey, false, false, false, 0.0, 0, 0);
   AMatrixFunc f(compound, configure);
   ThresholdMatrices(compound, configure, point, f);
-  const Coefficients c = FormulaCoefficients(compound->GetPair(ch.pairNum));
+  const Coefficients c = FormulaCoefficients(compound->GetPair(ch.pairNum), ChannelRadius(compound, ch));
   return f.BilinearAdjoint(&point, ch.jGroup, ch.channel, c.c1 * aBar, accum, shiftDeriv);
 }
 
@@ -267,7 +272,7 @@ std::string Report(CNuc *compound, const Config &configure, const std::vector<Co
       Value v = Evaluate(compound, configure, ch);
       out << std::setw(6) << ch.pairKey << "  " << std::left << std::setw(14) << AZURELabel::Pair(compound, aa)
           << std::setw(6) << AZURELabel::JPi(ch.s, ch.parity) << std::right << std::fixed << std::setprecision(4)
-          << std::setw(10) << CoulombX(pair) << std::scientific << std::setprecision(6) << std::setw(16)
+          << std::setw(10) << CoulombX(pair, ChannelRadius(compound, ch)) << std::scientific << std::setprecision(6) << std::setw(16)
           << std::real(v.a0) << std::setw(16) << std::imag(v.a0);
       if (!ch.hasLevels) out << "  no level in this channel (hard sphere)";
       out << std::defaultfloat << std::endl;

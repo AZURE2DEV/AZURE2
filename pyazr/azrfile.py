@@ -23,7 +23,9 @@ writing a file and launching a fresh instance from it::
 
 The 31 fields of a channel line match ``NucLine`` in the AZURE2 source
 (``include/NucLine.h``); note the file stores ``2*S`` and ``2*L`` as integers,
-which the ``S`` / ``L`` properties convert.
+which the ``S`` / ``L`` properties convert.  An optional 32nd field ``e1`` is the
+light particle's excitation energy (MeV, since 2026-11-05); a 31-field line means
+``e1 = 0`` and is kept at 31 fields.
 """
 
 import os
@@ -37,9 +39,12 @@ _FIELDS = [
     "levelID", "isActive", "channelFix", "gamma", "j1", "pi1", "j2", "pi2",
     "e2", "m1", "m2", "z1", "z2", "entranceSepE", "sepE", "j3", "pi3", "e3",
     "pType", "chRad", "g1", "g2", "ecMultMask",
+    "e1",           # optional: the light particle's excitation energy (MeV)
 ]
 _IDX = {name: i for i, name in enumerate(_FIELDS)}
 _NFIELDS = len(_FIELDS)
+#: A line without the optional 32nd column (e1 = 0) -- every file before 2026-11-05.
+_NFIELDS_MIN = _NFIELDS - 1
 
 
 def _token_spans(line):
@@ -73,7 +78,8 @@ def _fmt(x):
 
 
 class AzrChannel:
-    """One channel line (31 fields).  Level fields are shared by a level's lines.
+    """One channel line (31 fields, or 32 with the light particle's excitation
+    energy).  Level fields are shared by a level's lines.
 
     Keeps the line exactly as it was read, so an untouched channel round-trips
     byte for byte; typed accessors parse on demand and mutators rewrite only the
@@ -81,10 +87,10 @@ class AzrChannel:
     """
 
     def __init__(self, tokens, raw=None):
-        if len(tokens) != _NFIELDS:
+        if len(tokens) not in (_NFIELDS_MIN, _NFIELDS):
             raise ValueError(
-                f"a <levels> line needs {_NFIELDS} fields, got {len(tokens)}: "
-                f"{tokens}")
+                f"a <levels> line needs {_NFIELDS_MIN} fields (or {_NFIELDS} with the "
+                f"light particle's excitation energy), got {len(tokens)}: {tokens}")
         self.tokens = list(tokens)
         #: The line as read, or None for a channel built from tokens alone.
         self._raw = raw
@@ -94,13 +100,23 @@ class AzrChannel:
     # -- typed field access ---------------------------------------------------
 
     def _get(self, name, cast):
-        return cast(self.tokens[_IDX[name]])
+        i = _IDX[name]
+        if i >= len(self.tokens):       # the optional e1 column, absent: 0
+            return cast("0")
+        return cast(self.tokens[i])
 
     def _set(self, name, value):
         formatted = _fmt(value)
-        if self.tokens[_IDX[name]] == formatted:
+        i = _IDX[name]
+        if i >= len(self.tokens):       # the optional e1 column, absent
+            if float(value) == 0.0:
+                return                  # absent already means 0
+            self.tokens.append(formatted)
+            self._dirty.add(name)
+            return
+        if self.tokens[i] == formatted:
             return                      # unchanged: do not disturb the raw line
-        self.tokens[_IDX[name]] = formatted
+        self.tokens[i] = formatted
         self._dirty.add(name)
 
     # channel identity
@@ -189,10 +205,16 @@ class AzrChannel:
         """Mass of the light particle, in u."""
         return self._get("m1", float)
 
+    @M1.setter
+    def M1(self, v):       self._set("m1", float(v))
+
     @property
     def M2(self):
         """Mass of the heavy particle, in u."""
         return self._get("m2", float)
+
+    @M2.setter
+    def M2(self, v):       self._set("m2", float(v))
 
     @property
     def J1(self):
@@ -216,17 +238,53 @@ class AzrChannel:
 
     @property
     def excitation(self):
-        """Excitation energy of the pair's residual nucleus (MeV).
+        """Total excitation energy of the pair, light + heavy particle (MeV):
+        the channel opens at ``sep_energy + excitation``.
 
-        Zero for a ground-state pair; this is what distinguishes the capture
-        channels of a multi-transition model (gamma_0, gamma_1, ...).
+        Zero for a ground-state pair.  For a gamma pair it is the energy of the
+        final level (``heavy_excitation``), which is what distinguishes the
+        capture channels of a multi-transition model (gamma_0, gamma_1, ...).
         """
+        return self.heavy_excitation + self.light_excitation
+
+    @property
+    def heavy_excitation(self):
+        """Excitation energy of the heavy particle (MeV), column 17 (``e2``)."""
         return self._get("e2", float)
+
+    @property
+    def light_excitation(self):
+        """Excitation energy of the light particle (MeV), the optional 32nd
+        column (``e1``; 0 when the line has 31 fields).  Setting it to 0 drops
+        the column again; the engine refuses a nonzero value on a gamma or beta
+        pair, a negative one, and different values on lines of one pair."""
+        return self._get("e1", float)
+
+    @light_excitation.setter
+    def light_excitation(self, v):
+        v = float(v)
+        if v == 0.0 and len(self.tokens) > _IDX["e1"]:
+            del self.tokens[_IDX["e1"]:]      # written only when nonzero
+            self._dirty.add("e1")
+            return
+        self._set("e1", v)
 
     @property
     def sep_energy(self):
         """Separation energy of the pair, in MeV."""
         return self._get("sepE", float)
+
+    @sep_energy.setter
+    def sep_energy(self, v): self._set("sepE", float(v))
+
+    @property
+    def entrance_sep_energy(self):
+        """The line's copy of the entrance pair's separation energy (MeV).  The
+        engine does not read it; the GUI writes pair 1's value on every line."""
+        return self._get("entranceSepE", float)
+
+    @entrance_sep_energy.setter
+    def entrance_sep_energy(self, v): self._set("entranceSepE", float(v))
 
     # level fields (shared across a level's channel lines)
 
@@ -286,10 +344,18 @@ class AzrChannel:
         if not self._dirty:
             return self._raw
         spans = _token_spans(self._raw)
-        if len(spans) != _NFIELDS:      # not the line we parsed; do not guess
+        if len(spans) not in (_NFIELDS_MIN, _NFIELDS):  # not the line we parsed; do not guess
             return " ".join(self.tokens)
         out = self._raw
+        # the optional last column first (it only appends or cuts at the end)
+        if len(self.tokens) > len(spans):
+            end = spans[-1][1]
+            out = out[:end] + " " + " ".join(self.tokens[len(spans):]) + out[end:]
+        elif len(self.tokens) < len(spans):
+            out = out[:spans[len(self.tokens) - 1][1]] + out[spans[-1][1]:]
         for name in sorted(self._dirty, key=lambda n: -_IDX[n]):
+            if _IDX[name] >= min(len(spans), len(self.tokens)):
+                continue                # appended or cut above
             start, end = spans[_IDX[name]]
             new = self.tokens[_IDX[name]]
             width = end - start
@@ -407,6 +473,134 @@ def _nuclei_module():
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         return mod
+
+
+def _masses_module():
+    """``pyazr.masses``, also when this file is loaded standalone by path."""
+    try:
+        from . import masses
+        return masses
+    except ImportError:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "pyazr_masses_standalone", os.path.join(os.path.dirname(os.path.abspath(__file__)), "masses.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+
+#: A mass this far from the table (u) is flagged by :meth:`PairMassCheck.describe`: about 1 MeV, beyond any
+#: rounding or older evaluation, so a mass number or a typo (1.08664 for the neutron's 1.00866).
+MASS_FLAG_U = 1e-3
+
+
+class PairMassCheck(NamedTuple):
+    """One pair of a model against the mass table (:meth:`AzrModel.mass_check`).
+
+    ``light`` / ``heavy`` are the table rows the pair's columns identify (by
+    charge and mass rounded to a mass number), ``None`` for a photon, an
+    electron or a nuclide the table lacks.  ``S_table`` is the separation
+    energy from the table, for particle pairs only (a gamma pair's 0 and a
+    beta pair's value are conventions, not checked).  ``dS_kev`` is the file's
+    S minus the table's, in keV.
+    """
+    pair: int
+    ptype: int
+    light: object
+    heavy: object
+    M1: float
+    M2: float
+    S: float
+    M1_table: Optional[float]
+    M2_table: Optional[float]
+    S_table: Optional[float]
+    dS_kev: Optional[float]
+
+    @property
+    def mass_offset(self):
+        """Largest |file mass - table mass| of the pair, in u (0 when nothing was identified)."""
+        d = [abs(m - t) for m, t in ((self.M1, self.M1_table), (self.M2, self.M2_table)) if t is not None]
+        return max(d) if d else 0.0
+
+    def describe(self, tol_kev=1.0):
+        """One line: the pair, its masses and S against the table."""
+        lab = lambda e: e.label if e is not None else "-"
+        parts = [f"pair {self.pair} ({lab(self.light)} + {lab(self.heavy)}, type {self.ptype})"]
+        for name, m, t in (("M1", self.M1, self.M1_table), ("M2", self.M2, self.M2_table)):
+            if t is not None:
+                text = f"{name} {m!r} u" + ("" if abs(m - t) < 5e-10 else f" (table {t!r})")
+                if abs(m - t) > MASS_FLAG_U:
+                    text += "  <-- mass"
+                parts.append(text)
+        if self.S_table is not None:
+            flag = "" if abs(self.dS_kev) <= tol_kev else "  <-- differs"
+            parts.append(f"S {self.S:.6f} MeV (table {self.S_table:.6f}, {self.dS_kev:+.2f} keV){flag}")
+        return ", ".join(parts)
+
+
+class ChannelRadiusEntry(NamedTuple):
+    """One line of the ``<channelRadii>`` block (AZURE2 dev 2026-11-10): channels
+    ``(pair, L)`` -- and, when given, only channel spin ``S`` and/or total spin
+    ``J`` -- take ``radius`` (fm) instead of their pair's radius."""
+    pair: int
+    L: int
+    radius: float
+    S: Optional[float] = None
+    J: Optional[float] = None
+
+    def matches(self, pair, L, S, J):
+        """Does this entry apply to channel (pair, L, S, J)?"""
+        return (self.pair == int(pair) and self.L == int(L)
+                and (self.S is None or abs(self.S - S) < 1e-6)
+                and (self.J is None or abs(self.J - J) < 1e-6))
+
+    @property
+    def rank(self):
+        """Precedence, as the engine has it: L+S+J 4 > L+J 3 > L+S 2 > L 1."""
+        return 1 + (self.S is not None) + 2 * (self.J is not None)
+
+    def line(self):
+        """The block line this entry is written as."""
+        out = f"{self.pair} {self.L} {_fmt(float(self.radius))}"
+        if self.S is not None:
+            out += f" s={_fmt_half(self.S)}"
+        if self.J is not None:
+            out += f" J={_fmt_half(self.J)}"
+        return out
+
+
+def _fmt_half(x):
+    """``0.5 -> "1/2"``, ``1.0 -> "1"``."""
+    twice = int(round(2 * float(x)))
+    return str(twice // 2) if twice % 2 == 0 else f"{twice}/2"
+
+
+def _parse_half(text):
+    """``"3/2"`` or ``"1.5"`` -> 1.5; ValueError unless a non-negative multiple of 1/2."""
+    if "/" in text:
+        num, den = text.split("/", 1)
+        v = float(num) / float(den)
+    else:
+        v = float(text)
+    if v < 0 or abs(2 * v - round(2 * v)) > 1e-9:
+        raise ValueError(f"{text!r} is not a non-negative multiple of 1/2")
+    return round(2 * v) / 2
+
+
+def _parse_channel_radius_line(line):
+    """A ``<channelRadii>`` line (comment stripped) as a ChannelRadiusEntry."""
+    t = line.split("#", 1)[0].split()
+    if len(t) < 3:
+        raise ValueError(f"<channelRadii> line {line!r} is not '<pair key> <l> <radius> [s=<s>] [J=<J>]'")
+    S = J = None
+    for tok in t[3:]:
+        if tok.startswith("s=") and S is None:
+            S = _parse_half(tok[2:])
+        elif tok.startswith("J=") and J is None:
+            J = _parse_half(tok[2:])
+        else:
+            raise ValueError(f"<channelRadii> line {line!r}: {tok!r} is not s=<s> or J=<J>")
+    return ChannelRadiusEntry(int(t[0]), int(t[1]), float(t[2]), S, J)
 
 
 class ScatteringLengthLine(NamedTuple):
@@ -690,7 +884,7 @@ class AzrModel:
                     out[c.pair] = c.channel_radius
         return dict(sorted(out.items()))
 
-    def set_channel_radius(self, pair, radius):
+    def _set_pair_radius(self, pair, radius):
         """Set the channel radius (fm) of one particle pair, on every line.
 
         AZURE2 stores the radius per channel line, so it must be written to all
@@ -728,6 +922,219 @@ class AzrModel:
                 f"(radii: {self.channel_radii()}).")
         return changed
 
+    # -- per-channel radii (<channelRadii>, AZURE2 dev 2026-11-10) -------------
+
+    def channel_radius_entries(self):
+        """The ``<channelRadii>`` block as a list of :class:`ChannelRadiusEntry`
+        (empty without the block).  :meth:`channel_radii` gives the pair radii;
+        these entries override them for single channels."""
+        return [_parse_channel_radius_line(ln) for ln in self._channel_radius_lines()]
+
+    def _channel_radius_lines(self):
+        lines = self._suffix.splitlines()
+        if "<channelRadii>" not in lines or "</channelRadii>" not in lines:
+            return []
+        a, b = lines.index("<channelRadii>"), lines.index("</channelRadii>")
+        return [ln for ln in lines[a + 1:b] if ln.split("#", 1)[0].strip()]
+
+    def _write_channel_radius_lines(self, new_lines):
+        lines = self._suffix.splitlines()
+        if "<channelRadii>" in lines and "</channelRadii>" in lines:
+            a, b = lines.index("<channelRadii>"), lines.index("</channelRadii>")
+            del lines[a:b + 1]
+            at = a
+        else:
+            at = lines.index("</levels>") + 1 if "</levels>" in lines else 0
+        if new_lines:
+            lines[at:at] = ["<channelRadii>"] + list(new_lines) + ["</channelRadii>"]
+        self._suffix = "\n".join(lines) + "\n"
+
+    def channel_radius_of(self, pair, L, S, J):
+        """The radius (fm) the engine gives channel ``(pair, L, S, J)``: the most
+        specific matching ``<channelRadii>`` entry, else the pair's radius."""
+        best = None
+        for e in self.channel_radius_entries():
+            if e.matches(pair, L, S, J) and (best is None or e.rank > best.rank):
+                best = e
+        if best is not None:
+            return best.radius
+        return self.channel_radii()[int(pair)]
+
+    def set_channel_radius(self, pair, radius, L=None, S=None, J=None):
+        """Set a channel radius (fm).
+
+        Without ``L`` it is the pair's radius, written on every line of the pair
+        (the number of lines changed is returned).  With ``L`` it gives the
+        pair's channels of that orbital angular momentum -- only channel spin
+        ``S`` and/or total spin ``J`` when those are given -- a radius of their
+        own in the ``<channelRadii>`` block (created after ``</levels>``; a line
+        for the same ``(pair, L, S, J)`` is replaced).  The engine takes the
+        most specific entry (L+S+J > L+J > L+S > L) and refuses a channel that
+        an S entry and a J entry match without an L+S+J one, and an external-
+        capture transition whose initial and final channels end up at different
+        radii.  Older engines (before dev 2026-11-10) ignore the block silently.
+
+        Everything said below about refitting holds for one channel's radius as
+        for the pair's.
+
+        The radius is the matching surface between the internal R-matrix region
+        and the external Coulomb solutions, so changing it changes the
+        penetrabilities, shift functions, boundary conditions, Wigner limits and
+        the lower limit of every external-capture integral. A reduced width
+        therefore *means* something different afterwards, and the level scheme
+        is no longer fitted -- **refit before reading anything off the result**.
+        Delete ``output/intEC.dat`` / ``output/intEC.extrap`` (or write the new
+        model into its own output directory) so the cached external-capture
+        integrals, which belong to the old radius, cannot be reused.
+
+        >>> mdl = AzrModel.from_file("7Be.azr")
+        >>> mdl.channel_radii()                 # {1: 4.24151, 2: 3.94396, 3: 3.94396}
+        >>> mdl.set_channel_radius(1, 5.0)      # 3He+alpha, every channel
+        >>> mdl.set_channel_radius(1, 4.5, L=1) # its l = 1 channels only
+        >>> path = mdl.write("a5.0.azr")
+        """
+        if L is None:
+            if S is not None or J is not None:
+                raise ValueError("S and J narrow an L entry: give L as well.")
+            return self._set_pair_radius(pair, radius)
+        radius = float(radius)
+        if not radius > 0:
+            raise ValueError(f"channel radius must be positive, got {radius}.")
+        pair, L = int(pair), int(L)
+        if L < 0:
+            raise ValueError(f"L must be >= 0, got {L}.")
+        if pair not in self.channel_radii():
+            raise KeyError(f"pair {pair} has no particle channel in this model "
+                           f"(radii: {self.channel_radii()}).")
+        entry = ChannelRadiusEntry(pair, L, radius,
+                                   None if S is None else _parse_half(str(S)),
+                                   None if J is None else _parse_half(str(J)))
+        out, replaced = [], False
+        for ln in self._channel_radius_lines():
+            e = _parse_channel_radius_line(ln)
+            if (e.pair, e.L, e.S, e.J) == (entry.pair, entry.L, entry.S, entry.J):
+                out.append(entry.line())
+                replaced = True
+            else:
+                out.append(ln)
+        if not replaced:
+            out.append(entry.line())
+        self._write_channel_radius_lines(out)
+        return entry
+
+    def remove_channel_radius(self, pair, L, S=None, J=None):
+        """Remove the ``<channelRadii>`` line for ``(pair, L, S, J)`` (the block
+        goes when it is empty); KeyError if there is none."""
+        key = (int(pair), int(L), None if S is None else _parse_half(str(S)),
+               None if J is None else _parse_half(str(J)))
+        kept = [ln for ln in self._channel_radius_lines()
+                if (lambda e: (e.pair, e.L, e.S, e.J))(_parse_channel_radius_line(ln)) != key]
+        if len(kept) == len(self._channel_radius_lines()):
+            raise KeyError(f"no <channelRadii> line for pair {key[0]}, L={key[1]}, S={key[2]}, J={key[3]}")
+        self._write_channel_radius_lines(kept)
+        return self
+
+    # -- pair masses and separation energies (AME mass table) -----------------
+
+    def pair_lines(self):
+        """``{pair key: first channel line naming it}`` -- the line the engine
+        reads the pair's columns from (inactive lines included)."""
+        out = {}
+        for lv in self.levels:
+            for c in lv.channels:
+                out.setdefault(c.pair, c)
+        return dict(sorted(out.items()))
+
+    def mass_check(self):
+        """Every pair against the mass table (``pyazr.masses``, AME2020):
+        a list of :class:`PairMassCheck`, by pair key.
+
+        >>> for row in AzrModel.from_file("13N.azr").mass_check():
+        ...     print(row.describe())
+        pair 1 (1H + 12C, type 0), M1 1.00728 u (table 1.007825031898), M2 12.0 u, S 1.943510 MeV (table 1.943490, +0.02 keV)
+        pair 2 (- + 13N, type 10), M2 13.0057 u (table 13.005738609)
+        """
+        m = _masses_module()
+        rows = []
+        for key, c in self.pair_lines().items():
+            ptype = c.ptype
+            light = m.identify(c.Z1, c.M1) if ptype == 0 else None
+            heavy = m.identify(c.Z2, c.M2)
+            s_table = None
+            if ptype == 0 and light is not None and heavy is not None:
+                try:
+                    s_table = m.separation_energy((light.Z, light.A), (heavy.Z, heavy.A))
+                except KeyError:
+                    s_table = None
+            rows.append(PairMassCheck(
+                pair=key, ptype=ptype, light=light, heavy=heavy,
+                M1=c.M1, M2=c.M2, S=c.sep_energy,
+                M1_table=light.atomic_mass if light is not None else None,
+                M2_table=heavy.atomic_mass if heavy is not None else None,
+                S_table=s_table,
+                dS_kev=(c.sep_energy - s_table) * 1e3 if s_table is not None else None))
+        return rows
+
+    def fill_masses(self, pairs=None, separation=True):
+        """Set pair masses -- and, with ``separation``, particle-pair separation
+        energies -- from the mass table, on every line of each pair.
+
+        ``pairs`` is an iterable of pair keys (default: every pair).  A particle
+        is identified by its charge and its mass rounded to a mass number, so a
+        file with mass numbers (12, 4) or a bare-proton mass (1.00728) gets the
+        atomic masses of 12C, 4He and 1H.  A gamma pair gets the compound
+        nucleus's mass (its S stays 0), a beta pair its parent's mass; the
+        photon and electron columns are left alone.  With ``separation`` a
+        particle pair's S becomes the table's ``D1 + D2 - Dc``, and the lines
+        whose entrance pair it is get the same value in their entrance-S copy.
+
+        Moving S moves the pair's threshold and therefore the energy scale of
+        every channel of that pair: compare the fit before and after, and refit
+        if the shift matters (more than a few keV next to a narrow resonance).
+        With ``separation=False`` only the masses change, which moves results by
+        about the relative mass change (1e-5 for 1e-4 u at mass 12).
+
+        Returns the list of changes, ``(pair, column, old, new)``; a pair the
+        table cannot identify is skipped and reported as ``(pair, "skipped",
+        reason, None)``.
+        """
+        want = None if pairs is None else {int(p) for p in pairs}
+        checks = {r.pair: r for r in self.mass_check()}
+        if want is not None:
+            missing = sorted(want - set(checks))
+            if missing:
+                raise KeyError(f"no pair with key(s) {missing} in this model (pairs: {sorted(checks)})")
+        changes, new_m1, new_m2, new_s = [], {}, {}, {}
+        for key, r in checks.items():
+            if want is not None and key not in want:
+                continue
+            if r.ptype == 0 and (r.light is None or r.heavy is None):
+                changes.append((key, "skipped", "a particle is not in the mass table", None))
+                continue
+            if r.ptype != 0 and r.heavy is None:
+                changes.append((key, "skipped", "the heavy particle is not in the mass table", None))
+                continue
+            if r.M1_table is not None and r.M1_table != r.M1:
+                new_m1[key] = r.M1_table
+                changes.append((key, "M1", r.M1, r.M1_table))
+            if r.M2_table is not None and r.M2_table != r.M2:
+                new_m2[key] = r.M2_table
+                changes.append((key, "M2", r.M2, r.M2_table))
+            if separation and r.S_table is not None and r.S_table != r.S:
+                new_s[key] = r.S_table
+                changes.append((key, "S", r.S, r.S_table))
+        for lv in self.levels:
+            for c in lv.channels:
+                if c.pair in new_m1:
+                    c.M1 = new_m1[c.pair]
+                if c.pair in new_m2:
+                    c.M2 = new_m2[c.pair]
+                if c.pair in new_s:
+                    c.sep_energy = new_s[c.pair]
+                if c.entrance_key in new_s:
+                    c.entrance_sep_energy = new_s[c.entrance_key]
+        return changes
+
     # -- level activation -----------------------------------------------------
 
     def deactivate_level(self, jpi=None, energy=None, index=None, tol=1e-3):
@@ -760,10 +1167,10 @@ class AzrModel:
         # Vector analyzing power A_y. Differential in the centre-of-mass frame
         # like code 5, but the quantity is a dimensionless ratio, not a cross
         # section.
-        "analyzing-power": 7,
+        "analyzing-power": 7, "angular-coefficients": 9,
         # General spin observable (target analyzing power, spin correlation, tensor
         # analyzing power, outgoing polarization, transfer), named by spin=.
-        "spin": 9,
+        "spin": 10,
     }
 
     def _splice_segments_test(self, new_lines):
@@ -785,7 +1192,7 @@ class AzrModel:
                                  + lines[end:])
 
     def _spin_token(self, spin, entrance):
-        """The isDiff 9 token for ``spin`` (token or literature name), resolved with the
+        """The isDiff 10 token for ``spin`` (token or literature name), resolved with the
         entrance pair's spins so that e.g. ``"Ayy"`` cannot be misread."""
         from . import spin as _spin
         if spin is None:
@@ -845,7 +1252,7 @@ class AzrModel:
                 raise ValueError("an angular-distribution extrapolation needs "
                                  "order.")
             toks += [int(order)]
-        elif isDiff == 9:                     # spin observable carries its token
+        elif isDiff == 10:                     # spin observable carries its token
             toks += [self._spin_token(spin, entrance)]
         toks += [0]                           # trailing isAdvanced flag
         if natural:
@@ -1062,6 +1469,30 @@ class AzrModel:
         if value and float(value) > 0:
             end = next(i for i, ln in enumerate(lines) if ln.strip() == "</config>")
             lines.insert(end, f"abundanceSumSigma={float(value):g}\n")
+        self._prefix = "".join(lines)
+
+    @property
+    def prior_covariance(self):
+        """The ``priorCovariance`` config key: the prior parameter covariance file (path relative to the .azr's
+        directory, see :mod:`pyazr.priors`), or None without one."""
+        for line in self._prefix.splitlines():
+            if line.strip().startswith("priorCovariance="):
+                value = line.split("=", 1)[1].split("#")[0].strip()
+                return value or None
+        return None
+
+    @prior_covariance.setter
+    def prior_covariance(self, path):
+        """Set (a path) or remove (None or "") the ``priorCovariance`` config key.  The path is written as given;
+        AZURE2 resolves a relative one against the .azr's directory."""
+        if path and ("#" in str(path) or "\n" in str(path) or str(path) != str(path).strip()):
+            raise ValueError(f"priorCovariance path {path!r}: no '#', line break or leading/trailing blank (the "
+                             f"<config> line is cut there)")
+        lines = self._prefix.splitlines(keepends=True)
+        lines = [ln for ln in lines if not ln.strip().startswith("priorCovariance=")]
+        if path:
+            end = next(i for i, ln in enumerate(lines) if ln.strip() == "</config>")
+            lines.insert(end, f"priorCovariance={path}\n")
         self._prefix = "".join(lines)
 
     @property
@@ -1473,6 +1904,97 @@ class AzrModel:
             raise KeyError(f"no <segmentsData> line matches {file_substr!r}.")
         return changed
 
+    # ---- sample thickness of transmission / yield segments ---------------------------------------------------
+
+    @staticmethod
+    def _thickness_block(kind, n, vary=None, sigma=None):
+        """The text of a ``transmission`` / ``yield`` block, checked as the engine checks it: ``kind n`` without
+        ``vary`` / ``sigma``, else the fit form ``kind n vary sigma``."""
+        if kind not in ("transmission", "yield"):
+            raise ValueError("the sample block is 'transmission' or 'yield'")
+        n = float(n)
+        if not n > 0:
+            raise ValueError("the sample thickness n must be > 0 (atoms/barn)")
+        if vary is None and sigma is None:
+            return f"{kind} {_fmt(n)}"
+        sigma = 0.0 if sigma is None else float(sigma)
+        if not sigma >= 0:
+            raise ValueError("the thickness prior sigma must be >= 0 (atoms/barn; 0 = no prior)")
+        return f"{kind} {_fmt(n)} {1 if vary else 0} {_fmt(sigma)}"
+
+    _THICKNESS_RE = re.compile(r"(?<!\S)(transmission|yield)\s+(\S+)(?:\s+([-+]?[0-9.][0-9.eE+-]*)"
+                               r"(?:\s+([-+]?[0-9.][0-9.eE+-]*))?)?(?!\S)")
+    _THICKNESSGROUP_RE = re.compile(r"(?<!\S)thicknessgroup\s+(\S+)")
+
+    def _data_segment_lines(self):
+        """(index into the suffix lines, line) of every non-blank <segmentsData> line; its place is the segment key."""
+        lines = self._suffix.splitlines()
+        if "<segmentsData>" not in lines:
+            return lines, []
+        a, b = lines.index("<segmentsData>"), lines.index("</segmentsData>")
+        return lines, [(i, lines[i]) for i in range(a + 1, b) if lines[i].strip()]
+
+    @property
+    def sample_thicknesses(self):
+        """The transmission / self-shielded-yield segments: ``{key: dict}`` for every data segment line (key = its
+        place among the ``<segmentsData>`` lines, as in ``segment_<key>_thickness``) with a ``transmission`` or
+        ``yield`` block.  Each dict holds ``kind`` ("transmission" / "yield"), ``n`` (atoms/barn), ``fit`` (the
+        fit form ``n vary sigma``, i.e. a parameter ``segment_<key>_thickness``), ``vary``, ``sigma`` (prior
+        width, 0 = none), ``group`` (the ``thicknessgroup`` label or ``None``) and ``active``."""
+        _, dl = self._data_segment_lines()
+        out = {}
+        for key, (_, line) in enumerate(dl, start=1):
+            m = self._THICKNESS_RE.search(line)
+            if not m:
+                continue
+            fit = m.group(3) is not None and m.group(4) is not None
+            g = self._THICKNESSGROUP_RE.search(line)
+            out[key] = dict(kind=m.group(1), n=float(m.group(2)), fit=fit,
+                            vary=fit and int(float(m.group(3))) == 1, sigma=float(m.group(4)) if fit else 0.0,
+                            group=g.group(1) if g else None, active=line.split()[0] == "1")
+        return out
+
+    def set_sample_thickness(self, key, n=None, vary=None, sigma=None, group=None, kind=None):
+        """Set the sample block of data segment ``key`` (its place among the ``<segmentsData>`` lines).
+
+        ``kind`` ("transmission" or "yield") adds the block to a line without one (with ``n``) or changes it;
+        ``n`` is the thickness (atoms/barn).  Giving ``vary`` or ``sigma`` writes the fit form ``kind n vary
+        sigma`` (the parameter ``segment_<key>_thickness``; ``sigma`` the prior width, 0 = none); ``vary=None``
+        and ``sigma=None`` on a fit-form line keep its values, and a plain line stays plain.  ``group`` sets the
+        ``thicknessgroup`` label ("" removes it).  Only these blocks change; every other character of the line is
+        kept.  Returns ``self``.
+        """
+        lines, dl = self._data_segment_lines()
+        if not 1 <= key <= len(dl):
+            raise ValueError(f"no data segment {key} ({len(dl)} segment lines)")
+        i, line = dl[key - 1]
+        old = self.sample_thicknesses.get(key)
+        if old is None and (kind is None or n is None):
+            raise ValueError(f"segment {key} has no transmission / yield block: give kind and n")
+        kind = old["kind"] if kind is None else kind
+        n = old["n"] if n is None else float(n)
+        fit = (old is not None and old["fit"]) or vary is not None or sigma is not None
+        if fit:
+            v = (old["vary"] if old else False) if vary is None else bool(vary)
+            sg = (old["sigma"] if old else 0.0) if sigma is None else float(sigma)
+            block = self._thickness_block(kind, n, v, sg)
+        else:
+            block = self._thickness_block(kind, n)
+        m = self._THICKNESS_RE.search(line)
+        line = (line[:m.start()] + block + line[m.end():]) if m else line.rstrip() + "  " + block
+        if group is not None:
+            label = str(group).strip()
+            if any(c.isspace() or c == '"' for c in label):
+                raise ValueError("thickness group: one token, no blank or quote.")
+            g = self._THICKNESSGROUP_RE.search(line)
+            if g:
+                line = (line[:g.start()] + (f"thicknessgroup {label}" if label else "") + line[g.end():]).rstrip()
+            elif label:
+                line = line.rstrip() + "  thicknessgroup " + label
+        lines[i] = line
+        self._suffix = "\n".join(lines)
+        return self
+
     def engine_level_keys(self):
         """``{(jgroup, level): AzrLevel}`` -- the numbering AZURE2 itself uses.
 
@@ -1765,7 +2287,8 @@ class AzrModel:
     _DATA_CODE = {
         "angle-integrated": 0, "differential": 1, "phase-shift": 2,
         "total-capture": 3, "differential-cm": 4, "angle-integrated-E1": 5,
-        "angle-integrated-E2": 6, "analyzing-power": 7, "spin": 9,
+        "angle-integrated-E2": 6, "analyzing-power": 7,
+        "angular-coefficients": 9, "spin": 10,
     }
 
     def add_data_segment(self, data_file, entrance, exit,
@@ -1778,7 +2301,9 @@ class AzrModel:
                          active=True, energy_shift_sqrt=0.0,
                          energy_shift_sqrt_error=0.0, vary_shift_sqrt=False,
                          shift_group=None, shift_fn=None, shift_fn_params=(),
-                         natural=False, norm_group=None, covariance=None, spin=None):
+                         natural=False, norm_group=None, covariance=None,
+                         shift_fn_group=None, absolute=False, transmission=None,
+                         yield_=None, thickness_group=None, spin=None):
         """Append one data segment (a ``<segmentsData>`` line).
 
         ``data_file`` is the data file path (relative to the run directory,
@@ -1787,7 +2312,11 @@ class AzrModel:
         summed/total observable).  ``observable`` is one of
         ``angle-integrated``, ``differential``, ``differential-cm``,
         ``total-capture``, ``phase-shift``, ``angle-integrated-E1``,
-        ``angle-integrated-E2``.
+        ``angle-integrated-E2``, ``analyzing-power``, ``angular-coefficients``
+        (rows ``E_lab  k  a_k  error``: the Legendre coefficients a_k = A_k/A_0 of
+        the c.m. angular distribution of a reaction, order k in the angle
+        column; ``absolute=True`` writes ``absolute 1`` and the rows are the
+        absolute A_k in b/sr; normalised coefficients cannot carry a free norm).
 
         ``norm`` is the normalization applied to the data, ``norm_error`` its
         systematic error (percent, as stored in the file), ``energy_shift``
@@ -1797,7 +2326,9 @@ class AzrModel:
         b*sqrt(E/MeV) (b in MeV^1/2), with its ``_error`` and
         ``vary_shift_sqrt``; the block is written only when one of the three
         is set, so a plain segment line is unchanged.  ``shift_group`` (a
-        label) writes a ``shiftgroup`` block and ``norm_group`` a ``normgroup``
+        label) writes a ``shiftgroup`` block, ``shift_fn_group`` a ``shiftfngroup``
+        block (the segments with one label apply the first one's ``shiftfn``, each
+        keeping its own constant shift) and ``norm_group`` a ``normgroup``
         block (segments with one label share the first one's normalization), ``covariance`` (a
         file name) a ``covariance`` block (the segments naming one file share its data
         covariance matrix; format in the data-formats reference); ``shift_fn`` (an expression in
@@ -1805,7 +2336,12 @@ class AzrModel:
         ``(value, sigma, vary)`` per parameter a0, a1, ..., writes a
         ``shiftfn`` block: E' = E + shift + f(x).  ``natural=True`` (or a
         sample name) writes a ``sample`` block: every term is weighted by the
-        abundance of its entrance pair's compound nucleus.
+        abundance of its entrance pair's compound nucleus.  ``transmission`` /
+        ``yield_`` (n in atoms/barn, or ``(n, vary, sigma)`` for the fit form: n
+        the parameter ``segment_<key>_thickness``, sigma its prior width, 0 =
+        none) make the segment a sample transmission or self-shielded yield, and
+        ``thickness_group`` (a label) writes a ``thicknessgroup`` block: the
+        segments with one label share the first one's thickness.
 
         Returns ``self`` so calls chain.
         """
@@ -1821,7 +2357,7 @@ class AzrModel:
                 raise ValueError("a phase-shift data segment needs phase_J "
                                  "and phase_L.")
             toks += [_fmt(phase_J), int(phase_L)]
-        elif isDiff == 9:                     # spin observable carries its token
+        elif isDiff == 10:                     # spin observable carries its token
             toks += [self._spin_token(spin, entrance)]
         toks += [_fmt(norm), 1 if vary_norm else 0, _fmt(norm_error),
                  _fmt(energy_shift), _fmt(energy_shift_error),
@@ -1831,6 +2367,11 @@ class AzrModel:
                      _fmt(energy_shift_sqrt_error), 1 if vary_shift_sqrt else 0]
         if shift_group:
             toks += ["shiftgroup", str(shift_group)]
+        if shift_fn_group:
+            if shift_group:
+                raise ValueError("shift_group and shift_fn_group: use one of them "
+                                 "(shiftgroup also shares the constant shift).")
+            toks += ["shiftfngroup", str(shift_fn_group)]
         if norm_group:
             toks += ["normgroup", str(norm_group)]
         if covariance:
@@ -1844,6 +2385,25 @@ class AzrModel:
             toks += ["shiftfn", '"' + shift_fn + '"', len(shift_fn_params)]
             for v, sig, vary in shift_fn_params:
                 toks += [_fmt(v), _fmt(sig), 1 if vary else 0]
+        if absolute:
+            if observable != "angular-coefficients":
+                raise ValueError("absolute=True belongs to angular-coefficients segments.")
+            toks += ["absolute", 1]
+        if transmission is not None and yield_ is not None:
+            raise ValueError("transmission and yield_: a segment is one or the other.")
+        for kw, spec in (("transmission", transmission), ("yield", yield_)):
+            if spec is None:
+                continue
+            spec = tuple(spec) if isinstance(spec, (tuple, list)) else (spec,)
+            if len(spec) not in (1, 3):
+                raise ValueError(f"{kw}: give n or (n, vary, sigma).")
+            toks += self._thickness_block(kw, *spec).split()
+        if thickness_group:
+            if transmission is None and yield_ is None:
+                raise ValueError("thickness_group needs the segment's own transmission or yield_.")
+            if any(c.isspace() or c == '"' for c in str(thickness_group)):
+                raise ValueError("thickness_group: one token, no blank or quote.")
+            toks += ["thicknessgroup", str(thickness_group)]
         if natural:                           # writers put the sample block last
             toks += ["sample", natural if isinstance(natural, str) else 1]
         line = "  ".join(t if isinstance(t, str) else _fmt(t) for t in toks)
@@ -1932,7 +2492,8 @@ class AzrModel:
                           photodissociation=False, q_coefficients=None,
                           resonance_width_multiplier=20.0, points_per_width=50.0,
                           udr_file=None, flight_path=None, udr_burst=0.0,
-                          udr_channel=0.0, udr_centred=True, screening=None, active=True):
+                          udr_channel=0.0, udr_centred=True, screening=None, doppler=None,
+                          active=True):
         """Append one experimental effect (a ``<targetInt>`` line).
 
         ``segments`` is the segment-key list as AZURE2 writes it (``"3"``,
@@ -1958,7 +2519,9 @@ class AzrModel:
         inverse reaction of a photodissociation measurement,
         ``photodissociation=True`` to weight the average with the
         detailed-balance factor.  ``q_coefficients`` are the finite-geometry
-        attenuation coefficients Q_0..Q_n.
+        attenuation coefficients Q_0..Q_n of the detector, i.e. in the LAB frame
+        (for a particle exit AZURE2 applies them to the lab angular distribution
+        since 2026-10-25; user guide, "Attenuation Coefficients").
 
         ``udr_file`` is a user-defined numerical resolution function in
         SAMMY's UDR format (time-of-flight delay distributions, microseconds
@@ -1975,6 +2538,16 @@ class AzrModel:
         ``vary`` U_e is a fit parameter (``screening_<n>``), with a Gaussian prior
         of width ``sigma`` about the value given when ``sigma > 0``.  A line may
         carry screening alone (no other option).
+
+        ``doppler`` is free-gas Doppler broadening at that effective temperature
+        (kelvin, > 0): the cross section of every sub-point is broadened first,
+        then any transmission/yield transform and the kernel above are applied
+        (user guide, "Free-Gas Doppler Broadening").  A line may carry it alone;
+        engines older than November 2026 refuse such a line.  A tuple
+        ``(T, vary, sigma[, tmax])`` makes T the fit parameter ``doppler_<n>``
+        (``doppler T vary sigma [Tmax]``): a Gaussian prior of width ``sigma`` K
+        about T when ``sigma > 0``, and the sub-point grids laid out for ``tmax``
+        (default T + 3 sigma but at least 1.21 T, or 2 T without a prior).
         Returns ``self``.
         """
         if not isinstance(segments, str):
@@ -2014,6 +2587,8 @@ class AzrModel:
             if sigma < 0:
                 raise ValueError("the screening prior sigma must be >= 0")
             toks += ["screening", _fmt(ue), 1 if vary else 0, _fmt(sigma)]
+        if doppler is not None:
+            toks += self._doppler_block(*(doppler if isinstance(doppler, (tuple, list)) else (doppler,))).split()
         line = "  ".join(t if isinstance(t, str) else _fmt(t) for t in toks)
         lines = self._suffix.splitlines()
         if "<targetInt>" in lines:
@@ -2067,6 +2642,178 @@ class AzrModel:
             raise ValueError("the screening prior sigma must be >= 0")
         block = f"screening {_fmt(ue)} {1 if vary else 0} {_fmt(sigma)}"
         lines[i] = self._SCREENING_RE.sub(block, line) if m else line.rstrip() + "  " + block
+        self._suffix = "\n".join(lines)
+        return self
+
+    # "doppler T" or "doppler T vary sigma [Tmax]" (the numbers; a following keyword starts with a letter)
+    _DOPPLER_RE = re.compile(r"\bdoppler(?:\s+([-+0-9.]\S*))?(?:\s+([-+0-9.]\S*)\s+([-+0-9.]\S*)(?:\s+([-+0-9.]\S*))?)?")
+
+    @staticmethod
+    def _doppler_block(T, vary=None, sigma=None, tmax=None):
+        """The text of a ``doppler`` block, checked as the engine checks it: ``doppler T`` without ``vary`` /
+        ``sigma``, else ``doppler T vary sigma [Tmax]``."""
+        T = float(T)
+        if not T > 0:
+            raise ValueError("the doppler temperature must be > 0 kelvin")
+        if vary is None and sigma is None and tmax is None:
+            return f"doppler {_fmt(T)}"
+        sigma = 0.0 if sigma is None else float(sigma)
+        if sigma < 0:
+            raise ValueError("the doppler prior sigma must be >= 0 (kelvin; 0 = no prior)")
+        block = f"doppler {_fmt(T)} {1 if vary else 0} {_fmt(sigma)}"
+        if tmax:
+            if not float(tmax) > T:
+                raise ValueError("the doppler grid maximum Tmax must be above T")
+            block += f" {_fmt(float(tmax))}"
+        return block
+
+    @property
+    def dopplers(self):
+        """Free-gas Doppler broadening of the <targetInt> lines, as AZURE2 reads it: ``{effect: dict}`` for every
+        ACTIVE line with a ``doppler`` block, keyed by its effect number (place among the active lines, as in
+        ``doppler_<effect>``).  Each dict holds ``temperature`` (K), ``fit`` (the line has the fit form
+        ``doppler T vary sigma [Tmax]``, i.e. a parameter ``doppler_<effect>``), ``vary``, ``sigma`` (prior width in
+        K, 0 = none), ``tmax`` (the optional Tmax field, else ``None``) and ``max`` (the layout temperature its
+        sub-point grids span: Tmax, else T + 3 sigma but at least 1.21 T, or 2 T without a prior; T for a fixed
+        line)."""
+        _, tl = self._target_int_lines()
+        out, n = {}, 0
+        for _, line in tl:
+            if line.split()[0] != "1":
+                continue
+            n += 1
+            m = self._DOPPLER_RE.search(line)
+            if not m or m.group(1) is None:
+                continue
+            T = float(m.group(1))
+            fit = m.group(2) is not None
+            vary = fit and int(float(m.group(2))) != 0
+            sigma = float(m.group(3)) if fit else 0.0
+            tmax = float(m.group(4)) if fit and m.group(4) else None
+            layout = (tmax if tmax else (max(T + 3.0 * sigma, 1.21 * T) if sigma > 0 else 2.0 * T)) if fit else T
+            out[n] = dict(temperature=T, fit=fit, vary=vary, sigma=sigma, tmax=tmax, max=layout)
+        return out
+
+    def set_doppler(self, effect, T=None, vary=None, sigma=None, tmax=None):
+        """Set (or add) free-gas Doppler broadening on active <targetInt> line ``effect`` (1-based among the
+        active lines, as in ``doppler_<effect>``).  ``T`` is the temperature (K; required for a line without a
+        ``doppler`` block).  Giving ``vary``, ``sigma`` or ``tmax`` writes the fit form ``doppler T vary sigma
+        [Tmax]`` (a parameter ``doppler_<effect>``; ``sigma`` K the prior width, 0 = none; ``tmax`` the largest
+        temperature the grids span, 0 removes it); arguments left ``None`` keep the line's values, and a plain
+        ``doppler T`` stays plain.  Returns ``self``."""
+        lines, tl = self._target_int_lines()
+        active = [(i, line) for i, line in tl if line.split()[0] == "1"]
+        if not 1 <= effect <= len(active):
+            raise ValueError(f"no active <targetInt> line {effect} ({len(active)} active)")
+        i, line = active[effect - 1]
+        m = self._DOPPLER_RE.search(line)
+        old = self.dopplers.get(effect) if m else None
+        if old is None and T is None:
+            raise ValueError(f"<targetInt> effect {effect} has no doppler block: give T")
+        T = old["temperature"] if T is None else float(T)
+        fit = (old is not None and old["fit"]) or vary is not None or sigma is not None or bool(tmax)
+        if fit:
+            v = (old["vary"] if old else False) if vary is None else bool(vary)
+            sg = (old["sigma"] if old else 0.0) if sigma is None else float(sigma)
+            tm = (old["tmax"] if old else None) if tmax is None else (float(tmax) if tmax else None)
+            block = self._doppler_block(T, v, sg, tm)
+        else:
+            block = self._doppler_block(T)
+        lines[i] = (line[:m.start()] + block + line[m.end():]) if m else line.rstrip() + "  " + block
+        self._suffix = "\n".join(lines)
+        return self
+
+    _DENSITYFIT_RE = re.compile(r"\bdensityfit\s+(\S+)\s+(\S+)(?:\s+([0-9.][0-9.eE+-]*))?")
+    _DENSITYGROUP_RE = re.compile(r"\bdensitygroup\s+(\S+)")
+
+    @staticmethod
+    def _density_sigma(token, density):
+        """A densityfit sigma token, "2.3%" or atoms/cm^2, in atoms/cm^2."""
+        token = str(token)
+        if token.endswith("%"):
+            return float(token[:-1]) / 100.0 * density
+        return float(token)
+
+    @property
+    def target_densities(self):
+        """Fitted target densities of the <targetInt> lines (``densityfit`` / ``densitygroup`` blocks), as
+        AZURE2 reads them: ``{effect: dict}`` for every ACTIVE line that has either block, keyed by its effect
+        number (place among the active lines, as in ``density_<effect>``).  Each dict holds ``density`` (the
+        line's areal density, atoms/cm^2), ``vary``, ``sigma`` (prior width in atoms/cm^2, a percentage already
+        converted; 0 = none), ``max`` (the largest density the sub-point grids span: the optional fourth field,
+        else N0 + 3 sigma but at least 1.1 N0, or 1.5 N0 without a prior), ``group`` (label or ``None``) and
+        ``leader`` (the effect holding the parameter: itself, or its group's first line, whose density, prior
+        and maximum the group shares)."""
+        _, tl = self._target_int_lines()
+        out, n, leader_of = {}, 0, {}
+        for _, line in tl:
+            tok = line.split()
+            if tok[0] != "1":
+                continue
+            n += 1
+            fit = self._DENSITYFIT_RE.search(line)
+            grp = self._DENSITYGROUP_RE.search(line)
+            if not fit and not grp:
+                continue
+            density = float(tok[6])
+            group = grp.group(1) if grp else None
+            if group is not None and group in leader_of:
+                lead = out[leader_of[group]]
+                out[n] = dict(lead, density=lead["density"], group=group, leader=leader_of[group])
+                continue
+            if not fit:
+                raise ValueError(f"<targetInt> effect {n}: density group {group} starts without a densityfit block")
+            sigma = self._density_sigma(fit.group(2), density)
+            dmax = (float(fit.group(3)) if fit.group(3) else
+                    max(density + 3.0 * sigma, 1.1 * density) if sigma > 0 else 1.5 * density)
+            out[n] = dict(density=density, vary=int(float(fit.group(1))) != 0, sigma=sigma, max=dmax,
+                          group=group, leader=n)
+            if group is not None:
+                leader_of[group] = n
+        return out
+
+    def set_target_density(self, effect, density=None, vary=None, sigma=None, max=None, group=None):
+        """Set the areal density of active <targetInt> line ``effect`` (1-based among the active lines) and its
+        ``densityfit`` block: ``vary``, ``sigma`` (atoms/cm^2, or a string such as ``"2.3%"`` of the line's
+        density), ``max`` (the largest density the grids span; ``None`` keeps the line's, 0 removes it) and
+        ``group`` (a ``densitygroup`` label; ``""`` removes it).  A line without a densityfit block gets one
+        (fixed, no prior) when ``vary``, ``sigma`` or ``max`` is given.  Returns ``self``."""
+        lines, tl = self._target_int_lines()
+        active = [(i, line) for i, line in tl if line.split()[0] == "1"]
+        if not 1 <= effect <= len(active):
+            raise ValueError(f"no active <targetInt> line {effect} ({len(active)} active)")
+        i, line = active[effect - 1]
+        tok = line.split()
+        if tok[5] != "1":
+            raise ValueError(f"<targetInt> effect {effect} has no target integration")
+        if density is not None:
+            if not float(density) > 0:
+                raise ValueError("a fitted density must be > 0 (0 is the thick-target flag)")
+            # the positional density is the 7th field; rewrite it in place, keeping the line's spacing
+            parts = re.split(r"(\s+)", line)
+            words = [k for k, w in enumerate(parts) if w and not w.isspace()]
+            parts[words[6]] = _fmt(float(density))
+            line = "".join(parts)
+        fit = self._DENSITYFIT_RE.search(line)
+        if fit or vary is not None or sigma is not None or max is not None:
+            old_vary = int(float(fit.group(1))) != 0 if fit else False
+            old_sigma = fit.group(2) if fit else "0"
+            old_max = fit.group(3) if fit else None
+            v = old_vary if vary is None else bool(vary)
+            s = old_sigma if sigma is None else (sigma if isinstance(sigma, str) else _fmt(float(sigma)))
+            if (s.endswith("%") and float(s[:-1]) < 0) or (not s.endswith("%") and float(s) < 0):
+                raise ValueError("the density prior sigma must be >= 0")
+            mx = old_max if max is None else (None if not max else _fmt(float(max)))
+            block = f"densityfit {1 if v else 0} {s}" + (f" {mx}" if mx else "")
+            line = self._DENSITYFIT_RE.sub(block, line) if fit else line.rstrip() + "  " + block
+        if group is not None:
+            grp = self._DENSITYGROUP_RE.search(line)
+            if group == "":
+                line = self._DENSITYGROUP_RE.sub("", line).rstrip() if grp else line
+            else:
+                block = f"densitygroup {group}"
+                line = self._DENSITYGROUP_RE.sub(block, line) if grp else line.rstrip() + "  " + block
+        lines[i] = line
         self._suffix = "\n".join(lines)
         return self
 

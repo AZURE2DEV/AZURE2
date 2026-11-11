@@ -63,6 +63,17 @@ Normalization Parameters
 Lists the normalization factors for each data segment that has **Vary Norm?**
 enabled. These parameters scale the data yield during fitting.
 
+A member of a normalization group (``normgroup <label>``, set in the
+**Groups** field of the data segment dialog, :doc:`segments`) that is not the
+group's first active segment has no normalization of its own: the engine uses
+the first segment's. Its row is greyed and read-only, has no **Use as
+Nuisance** check box, shows the first segment's value and reads, e.g.,
+"tied to segment 1 (normgroup D)". To fit or fix the shared normalization,
+change the first segment's row; to give the member its own, clear its group in
+the Segments tab. The engine still carries a varied member's
+``segment_<key>_norm`` parameter, fixed at the shared value, so parameter
+numbering does not depend on the groups.
+
 Energy Shift Parameters
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -71,6 +82,12 @@ Shift?** enabled. A segment's :math:`\sqrt{E}` shift coefficient (the
 ``sqrtshift`` block in the input file, see :doc:`segments`) is fitted by the
 engine under the name ``segment_<key>_energy_shift_sqrt`` but is not listed
 here.
+
+A member of a shift group (``shiftgroup <label>``) other than the group's
+first active segment is shown tied to that segment in the same way as a
+normalization-group member above ("tied to segment 1 (shiftgroup A)"). A
+shift-function group (``shiftfngroup``) shares the function only, so its
+members' constant shifts stay parameters of their own.
 
 A shifted capture segment evaluates its external-capture amplitudes at the
 shifted energies, from the same energy tables as every other point
@@ -96,6 +113,62 @@ AZURE2's parameter vector the screening potentials come after the energy-shift
 parameters; one that is not fitted takes no slot. **Load from .sav** sets the
 value to the fitted :math:`U_e`, which is also the centre of its prior.
 
+Target Density Parameters
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Shown only when an experimental-effect line has a fitted target density (see
+:doc:`experimental_effects`). One row per parameter, named ``density_<n>`` as in
+``param.sav``: one per line with **Density Is a Fit Parameter** checked, a density
+group counting once, under the number of its first line. **Value** is the density
+in atoms/cm², **Error** the sigma of its prior in atoms/cm² (0 = none) and **Use as
+Nuisance** whether it is fitted. They are the line's **Active Density**, **Prior
+Sigma** and **Fit Density**, and an edit in either tab shows in the other; a new
+value goes to every line of the group. A prior given on the line as a percentage
+stays a percentage unless **Error** is edited here. In AZURE2's parameter vector
+the densities come after the screening potentials; one that is not fitted takes no
+slot. **Load from .sav** sets the density to the fitted value, which is also the
+centre of its prior.
+
+Doppler Temperature Parameters
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Shown only when an experimental-effect line has a fitted free-gas Doppler
+temperature (``doppler T vary sigma [Tmax]``, see :doc:`experimental_effects`).
+One row per such line, named ``doppler_<n>`` as in ``param.sav``, :math:`n` the
+line's place among the active lines; a plain ``doppler T`` line has none.
+**Value** is the temperature in K, **Error** the sigma of its prior in K (0 =
+none) and **Use as Nuisance** whether it is fitted: the line's **Effective
+Temperature T**, **Prior Sigma** and **Fit T**, synced both ways with the
+Experimental Effects tab. In AZURE2's parameter vector the temperatures come after
+the target densities; one that is not fitted takes no slot. **Load from .sav**
+sets the temperature to the fitted value, which is also the centre of its prior.
+
+Sample Thickness Parameters
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Shown only when a transmission or self-shielded-yield segment has the fit form
+of its block (``transmission n vary sigma``, see :doc:`segments`). One row per
+such active line, named ``segment_<k>_thickness`` as in ``param.sav``. **Value**
+is :math:`n` in atoms/barn, **Error** the sigma of its prior (0 = none) and **Use
+as Nuisance** whether it is fitted: the **Sample** row of the segment dialog
+(n, Prior sigma, Fit), synced both ways with the Segments tab. A
+``thicknessgroup`` follower's row is tied to its leader, as a normalization-group
+follower's is: greyed, without a check box, showing the leader's value. As an
+energy shift, a thickness parameter takes a slot in AZURE2's parameter vector
+whether it is fitted or not. **Load from .sav** sets :math:`n` to the fitted value,
+which is also the centre of its prior.
+
+Prior Parameter Covariance
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The **Error** columns above are diagonal priors, one parameter at a time. A
+multivariate Gaussian prior on several parameters at once -- an earlier
+evaluation's parameters and their correlations, SAMMY's sequential update -- is a
+file named under **Configure > Runtime Options** ("Prior Parameter Covariance",
+``priorCovariance=<file>`` in ``<config>``); it has no table here. See
+:doc:`chi_squared`, "Prior parameter covariance", for the file, the workflow with
+``pyazr.prior_from_fit`` and how it combines with the priors of this tab.
+
 Controls
 --------
 
@@ -104,9 +177,9 @@ Refresh from Current
    levels, segments).
 
 Load from .sav File
-   Import parameters from a ``param.sav`` file generated by a previous fit.
-   The normalization file (``normalizations.out``) from the same directory is
-   loaded automatically.
+   Import parameters from a ``param.sav`` file generated by a previous fit,
+   fitted normalizations included (``normalizations.out`` is a report of them,
+   not an input).
 
 Populate Wigner Limits
    Automatically set upper and lower limits based on the Wigner limit
@@ -121,3 +194,26 @@ Clear Limits
    Using the **Populate Wigner Limits** feature is a good starting point for
    constraining fits, especially for initial explorations of parameter space.
    Limits can then be adjusted manually as needed.
+
+How a Fit Ends
+--------------
+
+MIGRAD (the default minimizer) stops when the estimated distance to the minimum
+(EDM) falls below its goal, :math:`2\times10^{-4}` times the error definition
+(1 for a :math:`\chi^2` fit).  There is no limit on the number of function
+calls unless the command-line option ``--max-calls=N`` sets one (see
+:doc:`../reference/command_line`).  At the end of every fit the run says how
+MIGRAD ended:
+
+- ``MIGRAD converged: valid minimum, EDM ... (goal ...), N function calls``;
+- ``WARNING: MIGRAD did NOT converge: stopped at the call limit ...`` or
+  ``... invalid minimum ...`` (EDM above its goal, no valid covariance, HESSE
+  failed).
+
+The same is written to ``fitStatus.out`` in the output directory (see
+:doc:`../reference/output_files`).  A fit that did not converge still writes
+``param.sav``, ``chiSquared.out`` and the other outputs, from MIGRAD's last
+point: rerun the fit from ``param.sav``.  Before 2026-10-31 MIGRAD and NLopt
+stopped at a fixed 50,000 function calls without a message, which fits with
+roughly a hundred or more free parameters could reach; their outputs looked
+like a converged fit's.

@@ -23,7 +23,7 @@ except ImportError as e:  # as the other pyazr tests: a missing package dependen
     print(f"pyazr not importable ({e}); nothing to test")
     sys.exit(0)
 
-U, HBARC = 931.4940880, 197.32696310
+U, HBARC = 931.49410242, 197.3269804
 MN, MA = 1.00866491595, 4.00260325413
 
 

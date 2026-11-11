@@ -1,4 +1,4 @@
-# spin_observables_reaction — isDiff 9 in a reaction, checked by time reversal
+# spin_observables_reaction — isDiff 10 in a reaction, checked by time reversal
 
 A 4He toy with p + t (pair 1) and n + 3He (pair 2). Nine spin observables are computed for
 t(p,n)3He (segments 2-10) and for 3He(n,p)t (segments 12-20) at matching excitation energies and c.m.

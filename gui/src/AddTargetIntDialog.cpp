@@ -17,6 +17,8 @@
 
 #include "AddTargetIntDialog.h"
 #include <QRegularExpression>
+#include <QRegularExpressionValidator>
+#include "TargetIntModel.h"
 #include <QScrollBar>
 #include <QHeaderView>
 #include <algorithm>
@@ -50,7 +52,7 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   segmentsListText = new QLineEdit;
   applyRangesText = new QLineEdit;
   applyRangesText->setPlaceholderText(tr("empty = whole segment"));
-  applyRangesText->setToolTip(tr("Optional lab-energy windows the effect is applied in, e.g. 0.42-0.61,1.20-1.35 (MeV). Leave empty to apply it to the whole segment."));
+  applyRangesText->setToolTip(tr("Optional lab-energy windows the effect is applied in, e.g. 0.42-0.61,1.20-1.35 (MeV). Leave empty to apply it to the whole segment. \"auto\" places the windows from the level scheme around narrow resonances and particle thresholds (\"auto:<tolerance>:<margin>\", defaults 0.01 and 3; explicit ranges may follow, \"auto,1.20-1.35\"); thin-target integrations only. Outside the windows a thin-target integration evaluates each point once, at the depth-averaged energy of its target (the data carry the beam energy); other effects leave the point at its own energy. Not allowed on a thick target or with Doppler broadening."));
   transitionWidthText = new QLineEdit;
   transitionWidthText->setText("0");
   transitionWidthText->setToolTip(tr("Width (MeV) of the smooth blend between the convolved and the bare curve at each range edge. 0 switches the effect on and off abruptly."));
@@ -119,8 +121,11 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   isStraggling = new QCheckBox(tr("Include Energy Straggling"));
   isStraggling->setChecked(false);
   stragglingCoefficientText = new QLineEdit;
-  stragglingCoefficientText->setText("0.04");  // Default straggling coefficient
-  stragglingCoefficientText->setToolTip("Straggling coefficient (keV^0.5 per keV^0.5 of energy loss). Typical value: 0.04 for protons in Al.");
+  stragglingCoefficientText->setText("0");  // 0 = Bohr straggling from the charges and the stopping power
+  stragglingCoefficientText->setToolTip(
+      "Straggling coefficient c (keV^1/2): the c.m. width is c sqrt(c.m. energy loss in keV).\n"
+      "0 (default) = Bohr straggling, computed from the beam and target charges and the stopping power.\n"
+      "Enter a value for a compound target or a measured straggling (the pre-2026 default 0.04 is far below Bohr).");
   stragglingCoefficientText->setEnabled(false);
   connect(isStraggling, SIGNAL(toggled(bool)), stragglingCoefficientText, SLOT(setEnabled(bool)));
 
@@ -403,6 +408,51 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   stoppingPowerBox->setLayout(stoppingPowerLayout);
   stoppingPowerBox->hide();
 
+  // Fitted target density: the areal density above as a fit parameter (density_<n>), with a prior, and lines
+  // that see one target sharing it through a group label.
+  isDensityFitCheck = new QCheckBox(tr("Density Is a Fit Parameter"));
+  isDensityFitCheck->setObjectName("densityFitCheck");
+  isDensityFitCheck->setToolTip(tr("Make the Active Density the fit parameter density_<n> (n = this line's place among the "
+                                   "active lines). It moves only the energy-loss window and the straggling with depth: the "
+                                   "yield is divided by the same density, so the result is the depth average of the cross "
+                                   "section, without a factor of the density."));
+  connect(isDensityFitCheck, SIGNAL(toggled(bool)), this, SLOT(densityFitCheckChanged(bool)));
+  densityVaryCheck = new QCheckBox(tr("Fit Density"));
+  densityVaryCheck->setObjectName("densityVaryCheck");
+  densityVaryCheck->setToolTip(tr("Free in the fit; unchecked keeps the parameter fixed at the density above."));
+  densitySigmaText = new QLineEdit("0");
+  densitySigmaText->setObjectName("densitySigmaText");
+  densitySigmaText->setToolTip(tr("Width of a Gaussian prior about the density above, in atoms/cm^2 or as a percentage of it "
+                                  "(\"2.3%\"); 0 = no prior. Reported as Total-Density-Chi-Squared."));
+  densityMaxText = new QLineEdit;
+  densityMaxText->setObjectName("densityMaxText");
+  densityMaxText->setToolTip(tr("The largest density the integration grids are laid out for (atoms/cm^2). Blank = the default: "
+                                "density + 3 sigma, at least 1.1 x the density, or 1.5 x without a prior. A fit asking for "
+                                "more is computed at this value, with a warning."));
+  densityDefaultLabel = new QLabel;
+  densityGroupText = new QLineEdit;
+  densityGroupText->setObjectName("densityGroupText");
+  densityGroupText->setValidator(new QRegularExpressionValidator(QRegularExpression("\\S*"), densityGroupText));
+  densityGroupText->setToolTip(tr("Lines with the same label share one density parameter (one target seen by several detectors). "
+                                  "The group's first line holds the parameter and must have Density Is a Fit Parameter checked; "
+                                  "the others need only the label, and their own density is replaced by the group's."));
+  connect(densitySigmaText, SIGNAL(textChanged(QString)), this, SLOT(updateDensityDefault()));
+  connect(densityText, SIGNAL(textChanged(QString)), this, SLOT(updateDensityDefault()));
+  densityBox = new QGroupBox(tr("Fitted Target Density"));
+  QGridLayout *densityLayout = new QGridLayout;
+  densityLayout->addWidget(isDensityFitCheck, 0, 0, 1, 2);
+  densityLayout->addWidget(densityVaryCheck, 0, 2, 1, 2);
+  densityLayout->addWidget(new QLabel(tr("Prior Sigma [atoms/cm^2 or %]:")), 1, 0, Qt::AlignRight);
+  densityLayout->addWidget(densitySigmaText, 1, 1);
+  densityLayout->addWidget(new QLabel(tr("Grid Maximum [atoms/cm^2]:")), 1, 2, Qt::AlignRight);
+  densityLayout->addWidget(densityMaxText, 1, 3);
+  densityLayout->addWidget(densityDefaultLabel, 2, 2, 1, 2, Qt::AlignRight);
+  densityLayout->addWidget(new QLabel(tr("Density Group:")), 3, 0, Qt::AlignRight);
+  densityLayout->addWidget(densityGroupText, 3, 1);
+  densityBox->setLayout(densityLayout);
+  densityBox->hide();
+  densityFitCheckChanged(false);
+
   QGridLayout *qCoefficientCheckBoxLayout = new QGridLayout;
   qCoefficientCheckBoxLayout->addWidget(isQCoefficientCheck, 0, 0);
   qCoefficientCheckBoxLayout->addItem(new QSpacerItem(1, 20), 0, 1);
@@ -502,6 +552,62 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   screeningBox->setLayout(screeningLayout);
   screeningBox->hide();
 
+  // Free-gas Doppler broadening (`doppler T`): the cross section broadened by the thermal motion of the target
+  // atoms before anything else on the line.  It integrates over sub-points, so it keeps the integration-point
+  // count and the adaptive grid enabled even on a line with no convolution or target integration.
+  isDopplerCheck = new QCheckBox(tr("Include Free-Gas Doppler Broadening"));
+  isDopplerCheck->setObjectName("dopplerCheck");
+  isDopplerCheck->setChecked(false);
+  isDopplerCheck->setToolTip(tr("Broaden the cross section of these segments for the thermal motion of the target atoms, "
+                                "taken as a free gas at an effective temperature T (the free-gas model, as in SAMMY). "
+                                "It is applied to the cross section first, before any transmission/yield transform and "
+                                "before the line's resolution kernel (Gaussian, user-defined resolution, target integration, "
+                                "beam profile). A line may carry it alone."));
+  connect(isDopplerCheck, SIGNAL(toggled(bool)), this, SLOT(dopplerCheckChanged(bool)));
+  dopplerTemperatureText = new QLineEdit;
+  dopplerTemperatureText->setObjectName("dopplerTemperature");
+  dopplerTemperatureText->setText("");
+  dopplerTemperatureText->setToolTip(tr("Effective temperature T of the target atoms in kelvin (> 0); "
+                                        "293.6 K is room temperature."));
+  dopplerBox = new QGroupBox(tr("Free-Gas Doppler Broadening"));
+  dopplerBox->setObjectName("dopplerBox");
+  // Fitted temperature: T as the fit parameter doppler_<n>, with a prior and the largest T the grids span.
+  dopplerFitCheck = new QCheckBox(tr("Temperature Is a Fit Parameter"));
+  dopplerFitCheck->setObjectName("dopplerFitCheck");
+  dopplerFitCheck->setToolTip(tr("Make T the fit parameter doppler_<n> (n = this line's place among the active lines), "
+                                 "written as 'doppler T vary sigma [Tmax]'. The integration grids are laid out once for "
+                                 "the grid maximum and only the kernel moves with T, so the fit is smooth in T."));
+  connect(dopplerFitCheck, SIGNAL(toggled(bool)), this, SLOT(dopplerFitCheckChanged(bool)));
+  dopplerVaryCheck = new QCheckBox(tr("Fit T"));
+  dopplerVaryCheck->setObjectName("dopplerVaryCheck");
+  dopplerVaryCheck->setToolTip(tr("Free in the fit; unchecked keeps the parameter fixed at the temperature above."));
+  dopplerSigmaText = new QLineEdit("0");
+  dopplerSigmaText->setObjectName("dopplerSigmaText");
+  dopplerSigmaText->setToolTip(tr("Width of a Gaussian prior about the temperature above, in kelvin; 0 = no prior. "
+                                  "Reported as Total-Doppler-Chi-Squared."));
+  dopplerMaxText = new QLineEdit;
+  dopplerMaxText->setObjectName("dopplerMaxText");
+  dopplerMaxText->setToolTip(tr("The largest temperature the integration grids are laid out for (K). Blank = the default: "
+                                "T + 3 sigma, at least 1.21 T, or 2 T without a prior. A fit asking for more (or for less "
+                                "than T/4) is computed at the nearest end, with a warning."));
+  dopplerDefaultLabel = new QLabel;
+  connect(dopplerSigmaText, SIGNAL(textChanged(QString)), this, SLOT(updateDopplerDefault()));
+  connect(dopplerTemperatureText, SIGNAL(textChanged(QString)), this, SLOT(updateDopplerDefault()));
+  QGridLayout *dopplerLayout = new QGridLayout;
+  dopplerLayout->addWidget(new QLabel(tr("Effective Temperature T [K]:")), 0, 0, Qt::AlignRight);
+  dopplerLayout->addWidget(dopplerTemperatureText, 0, 1);
+  dopplerLayout->addWidget(dopplerFitCheck, 1, 0, 1, 2);
+  dopplerLayout->addWidget(dopplerVaryCheck, 1, 2, 1, 2);
+  dopplerLayout->addWidget(new QLabel(tr("Prior Sigma [K]:")), 2, 0, Qt::AlignRight);
+  dopplerLayout->addWidget(dopplerSigmaText, 2, 1);
+  dopplerLayout->addWidget(new QLabel(tr("Grid Maximum [K]:")), 2, 2, Qt::AlignRight);
+  dopplerLayout->addWidget(dopplerMaxText, 2, 3);
+  dopplerLayout->addWidget(dopplerDefaultLabel, 3, 2, 1, 2, Qt::AlignRight);
+  dopplerLayout->setColumnStretch(4, 1);
+  dopplerBox->setLayout(dopplerLayout);
+  dopplerFitCheckChanged(false);
+  dopplerBox->hide();
+
   QHBoxLayout *buttonBox = new QHBoxLayout;
   buttonBox->addWidget(cancelButton);
   buttonBox->addWidget(okButton);
@@ -513,6 +619,7 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   mainLayout->addWidget(convCoefficientBox);
   mainLayout->addLayout(checkBoxLayout);
   mainLayout->addWidget(stoppingPowerBox);
+  mainLayout->addWidget(densityBox);
   mainLayout->addLayout(qCoefficientCheckBoxLayout);
   mainLayout->addWidget(qCoefficientBox);
   mainLayout->addLayout(beamProfileCheckBoxLayout);
@@ -521,6 +628,8 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   mainLayout->addWidget(udrBox);
   mainLayout->addWidget(isScreeningCheck);
   mainLayout->addWidget(screeningBox);
+  mainLayout->addWidget(isDopplerCheck);
+  mainLayout->addWidget(dopplerBox);
   mainLayout->addLayout(buttonBox);
 
   setLayout(mainLayout);
@@ -606,9 +715,9 @@ void AddTargetIntDialog::beamProfileCheckChanged(bool checked) {
   } else {
     beamProfileBox->hide();
     numBeamComponentSpin->setEnabled(false);
-    if (!isConvolutionCheck->isChecked() && !isTargetIntegrationCheck->isChecked())
+    if (!isConvolutionCheck->isChecked() && !isTargetIntegrationCheck->isChecked() && !isDopplerCheck->isChecked())
       numPointsSpin->setEnabled(false);
-    if (!isTargetIntegrationCheck->isChecked()) {
+    if (!isTargetIntegrationCheck->isChecked() && !isDopplerCheck->isChecked()) {
       resonanceWidthMultiplierSpin->setEnabled(false);
       pointsPerWidthSpin->setEnabled(false);
     }
@@ -638,7 +747,7 @@ void AddTargetIntDialog::convolutionCheckChanged(bool checked) {
   sigmaText->setEnabled(checked);
   if (checked)
     numPointsSpin->setEnabled(true);
-  else if (!isTargetIntegrationCheck->isChecked())
+  else if (!isTargetIntegrationCheck->isChecked() && !isDopplerCheck->isChecked())
     numPointsSpin->setEnabled(false);
   sigmaModeChanged();
 }
@@ -684,6 +793,7 @@ void AddTargetIntDialog::convertExpressionToLab() {
 }
 
 void AddTargetIntDialog::targetIntCheckChanged(bool checked) {
+  densityBox->setVisible(checked);
   if (checked) {
     stoppingPowerBox->show();
     densityText->setEnabled(true);
@@ -698,9 +808,9 @@ void AddTargetIntDialog::targetIntCheckChanged(bool checked) {
     energyText->setEnabled(false);
     deltaEText->clear();
     calculateDeltaEButton->setEnabled(false);
-    if (!isConvolutionCheck->isChecked() && !isBeamProfileCheck->isChecked())
+    if (!isConvolutionCheck->isChecked() && !isBeamProfileCheck->isChecked() && !isDopplerCheck->isChecked())
       numPointsSpin->setEnabled(false);
-    if (!isBeamProfileCheck->isChecked()) {
+    if (!isBeamProfileCheck->isChecked() && !isDopplerCheck->isChecked()) {
       resonanceWidthMultiplierSpin->setEnabled(false);
       pointsPerWidthSpin->setEnabled(false);
     }
@@ -833,13 +943,150 @@ void AddTargetIntDialog::udrCheckChanged(bool checked) {
     pointsPerWidthSpin->setEnabled(true);
   } else {
     udrBox->hide();
-    if (!isConvolutionCheck->isChecked() && !isTargetIntegrationCheck->isChecked() && !isBeamProfileCheck->isChecked())
+    if (!isConvolutionCheck->isChecked() && !isTargetIntegrationCheck->isChecked() && !isBeamProfileCheck->isChecked() &&
+        !isDopplerCheck->isChecked())
       numPointsSpin->setEnabled(false);
   }
 }
 
 void AddTargetIntDialog::setAdiabaticProvider(std::function<double(const QString &)> provider) {
   adiabaticProvider_ = provider;
+}
+
+void AddTargetIntDialog::densityFitCheckChanged(bool checked) {
+  densityVaryCheck->setEnabled(checked);
+  densitySigmaText->setEnabled(checked);
+  densityMaxText->setEnabled(checked);
+  updateDensityDefault();
+}
+
+void AddTargetIntDialog::updateDensityDefault() {
+  const double n = densityText->text().trimmed().toDouble();
+  const double s = densitySigmaValue(densitySigmaText->text(), n);
+  if (isDensityFitCheck->isChecked() && n > 0.0 && s >= 0.0) {
+    const QString def = QString::number(defaultDensityMax(n, s), 'g', 6);
+    densityDefaultLabel->setText(tr("blank = %1").arg(def));
+    densityMaxText->setPlaceholderText(def);
+  } else {
+    densityDefaultLabel->clear();
+    densityMaxText->setPlaceholderText(QString());
+  }
+}
+
+void AddTargetIntDialog::setDensityFit(bool fit, bool vary, const QString &sigma, double densityMax, const QString &group) {
+  densityVaryCheck->setChecked(vary);
+  densitySigmaText->setText(sigma.trimmed().isEmpty() ? QString("0") : sigma.trimmed());
+  densityMaxText->setText(densityMax > 0.0 ? QString::number(densityMax, 'g', 12) : QString());
+  densityGroupText->setText(group);
+  isDensityFitCheck->setChecked(fit);
+  densityFitCheckChanged(fit);
+}
+
+QString AddTargetIntDialog::densityFitProblem() const {
+  if (!isTargetIntegrationCheck->isChecked()) return QString();
+  const bool fit = isDensityFitCheck->isChecked();
+  const bool grouped = !densityGroupText->text().trimmed().isEmpty();
+  if (!fit && !grouped) return QString();
+  const double n = densityText->text().trimmed().toDouble();
+  if (!(n > 0.0))
+    return tr("A fitted or grouped density needs a thin target: an Active Density above 0 (0 is an infinitely thick target).");
+  if (isBeamProfileCheck->isChecked() || isUdrCheck->isChecked())
+    return tr("A fitted or grouped density cannot be combined with a beam profile or a user-defined resolution function.");
+  if (fit) {
+    if (densitySigmaValue(densitySigmaText->text(), n) < 0.0)
+      return tr("The density prior sigma \"%1\" is not a number >= 0 in atoms/cm^2 or a percentage such as 2.3%.")
+          .arg(densitySigmaText->text().trimmed());
+    const QString mx = densityMaxText->text().trimmed();
+    if (!mx.isEmpty()) {
+      bool ok = false;
+      const double m = mx.toDouble(&ok);
+      if (!ok || !(m > n)) return tr("The grid maximum must be a density above the Active Density, or blank for the default.");
+    }
+  }
+  return QString();
+}
+
+QString AddTargetIntDialog::dopplerProblem() const {
+  if (!isDopplerCheck->isChecked()) return QString();
+  bool ok = false;
+  const double t = dopplerTemperatureText->text().trimmed().toDouble(&ok);
+  if (!ok || !(t > 0.0) || !std::isfinite(t))
+    return tr("The Doppler temperature \"%1\" is not a number above 0 in kelvin.").arg(dopplerTemperatureText->text().trimmed());
+  if (dopplerFitCheck->isChecked()) {
+    const double sg = dopplerSigmaText->text().trimmed().toDouble(&ok);
+    if (!ok || !(sg >= 0.0) || !std::isfinite(sg))
+      return tr("The Doppler prior sigma \"%1\" is not a number >= 0 in kelvin.").arg(dopplerSigmaText->text().trimmed());
+    const QString mx = dopplerMaxText->text().trimmed();
+    if (!mx.isEmpty()) {
+      const double m = mx.toDouble(&ok);
+      if (!ok || !(m > t)) return tr("The Doppler grid maximum must be a temperature above T, or blank for the default.");
+    }
+  }
+  return QString();
+}
+
+void AddTargetIntDialog::dopplerFitCheckChanged(bool checked) {
+  dopplerVaryCheck->setEnabled(checked);
+  dopplerSigmaText->setEnabled(checked);
+  dopplerMaxText->setEnabled(checked);
+  updateDopplerDefault();
+}
+
+void AddTargetIntDialog::updateDopplerDefault() {
+  bool okT = false, okS = false;
+  const double t = dopplerTemperatureText->text().trimmed().toDouble(&okT);
+  const double sg = dopplerSigmaText->text().trimmed().toDouble(&okS);
+  if (dopplerFitCheck->isChecked() && okT && t > 0.0 && okS && sg >= 0.0) {
+    const QString def = QString::number(defaultDopplerMax(t, sg), 'g', 6);
+    dopplerDefaultLabel->setText(tr("blank = %1").arg(def));
+    dopplerMaxText->setPlaceholderText(def);
+  } else {
+    dopplerDefaultLabel->clear();
+    dopplerMaxText->setPlaceholderText(QString());
+  }
+}
+
+void AddTargetIntDialog::setDopplerFit(bool fit, bool vary, double sigma, double dopplerMax) {
+  dopplerVaryCheck->setChecked(vary);
+  dopplerSigmaText->setText(QString::number(std::max(0.0, sigma), 'g', 12));
+  dopplerMaxText->setText(dopplerMax > 0.0 ? QString::number(dopplerMax, 'g', 12) : QString());
+  dopplerFitCheck->setChecked(fit);
+  dopplerFitCheckChanged(fit);
+}
+
+void AddTargetIntDialog::accept() {
+  const QString problem = densityFitProblem();
+  if (!problem.isEmpty()) {
+    QMessageBox::warning(this, tr("Fitted Target Density"), problem);
+    return;
+  }
+  const QString dProblem = dopplerProblem();
+  if (!dProblem.isEmpty()) {
+    QMessageBox::warning(this, tr("Free-Gas Doppler Broadening"), dProblem);
+    return;
+  }
+  QDialog::accept();
+}
+
+void AddTargetIntDialog::dopplerCheckChanged(bool checked) {
+  dopplerBox->setVisible(checked);
+  if (checked) {
+    // A new Doppler entry starts at room temperature; an edited line sets its T before the check.
+    if (dopplerTemperatureText->text().trimmed().isEmpty()) dopplerTemperatureText->setText("293.6");
+    // The broadening is an integral over sub-points on the adaptive grid, with or without a kernel after it.
+    numPointsSpin->setEnabled(true);
+    resonanceWidthMultiplierSpin->setEnabled(true);
+    pointsPerWidthSpin->setEnabled(true);
+  } else {
+    if (!isConvolutionCheck->isChecked() && !isTargetIntegrationCheck->isChecked() && !isBeamProfileCheck->isChecked() &&
+        !isUdrCheck->isChecked())
+      numPointsSpin->setEnabled(false);
+    if (!isTargetIntegrationCheck->isChecked() && !isBeamProfileCheck->isChecked() && !isUdrCheck->isChecked()) {
+      resonanceWidthMultiplierSpin->setEnabled(false);
+      pointsPerWidthSpin->setEnabled(false);
+    }
+  }
+  this->adjustSize();
 }
 
 void AddTargetIntDialog::screeningCheckChanged(bool checked) {

@@ -138,6 +138,19 @@ void TargetIntTab::addLine() {
     newLine.screeningVary = aDialog.screeningVaryCheck->isChecked();
     newLine.screeningSigma = std::max(0.0, aDialog.screeningSigmaText->text().toDouble());
 
+    newLine.densityFit = newLine.isTargetIntegration && aDialog.isDensityFitCheck->isChecked();
+    newLine.densityVary = aDialog.densityVaryCheck->isChecked();
+    newLine.densitySigma = aDialog.densitySigmaText->text().trimmed().isEmpty() ? QString("0") : aDialog.densitySigmaText->text().trimmed();
+    newLine.densityMax = aDialog.densityMaxText->text().trimmed().toDouble();
+    newLine.densityGroup = newLine.isTargetIntegration ? aDialog.densityGroupText->text().trimmed() : QString();
+
+    newLine.isDoppler = aDialog.isDopplerCheck->isChecked();
+    newLine.dopplerTemperature = newLine.isDoppler ? aDialog.dopplerTemperatureText->text().trimmed().toDouble() : 0.0;
+    newLine.dopplerFit = newLine.isDoppler && aDialog.dopplerFitCheck->isChecked();
+    newLine.dopplerVary = aDialog.dopplerVaryCheck->isChecked();
+    newLine.dopplerSigma = std::max(0.0, aDialog.dopplerSigmaText->text().trimmed().toDouble());
+    newLine.dopplerMax = aDialog.dopplerMaxText->text().trimmed().toDouble();
+
     addLine(newLine);
   }
 }
@@ -223,6 +236,17 @@ void TargetIntTab::addLine(TargetIntData line) {
   targetIntModel->setData(index, line.screeningVary, Qt::EditRole);
   index = targetIntModel->index(lines.size(), 38, QModelIndex());
   targetIntModel->setData(index, line.screeningSigma, Qt::EditRole);
+  targetIntModel->setData(targetIntModel->index(lines.size(), 39), line.densityFit, Qt::EditRole);
+  targetIntModel->setData(targetIntModel->index(lines.size(), 40), line.densityVary, Qt::EditRole);
+  targetIntModel->setData(targetIntModel->index(lines.size(), 41), line.densitySigma, Qt::EditRole);
+  targetIntModel->setData(targetIntModel->index(lines.size(), 42), line.densityMax, Qt::EditRole);
+  targetIntModel->setData(targetIntModel->index(lines.size(), 43), line.densityGroup, Qt::EditRole);
+  targetIntModel->setData(targetIntModel->index(lines.size(), 44), line.isDoppler, Qt::EditRole);
+  targetIntModel->setData(targetIntModel->index(lines.size(), 45), line.dopplerTemperature, Qt::EditRole);
+  targetIntModel->setData(targetIntModel->index(lines.size(), 46), line.dopplerFit, Qt::EditRole);
+  targetIntModel->setData(targetIntModel->index(lines.size(), 47), line.dopplerVary, Qt::EditRole);
+  targetIntModel->setData(targetIntModel->index(lines.size(), 48), line.dopplerSigma, Qt::EditRole);
+  targetIntModel->setData(targetIntModel->index(lines.size(), 49), line.dopplerMax, Qt::EditRole);
 
   targetIntView->resizeRowsToContents();
 }
@@ -339,6 +363,17 @@ void TargetIntTab::editLine() {
   const double screeningUe = targetIntModel->data(targetIntModel->index(index.row(), 36), Qt::EditRole).toDouble();
   const bool screeningVary = targetIntModel->data(targetIntModel->index(index.row(), 37), Qt::EditRole).toBool();
   const double screeningSigma = targetIntModel->data(targetIntModel->index(index.row(), 38), Qt::EditRole).toDouble();
+  const bool densityFit = targetIntModel->data(targetIntModel->index(index.row(), 39), Qt::EditRole).toBool();
+  const bool densityVary = targetIntModel->data(targetIntModel->index(index.row(), 40), Qt::EditRole).toBool();
+  const QString densitySigma = targetIntModel->data(targetIntModel->index(index.row(), 41), Qt::EditRole).toString();
+  const double densityMax = targetIntModel->data(targetIntModel->index(index.row(), 42), Qt::EditRole).toDouble();
+  const QString densityGroup = targetIntModel->data(targetIntModel->index(index.row(), 43), Qt::EditRole).toString();
+  const bool isDoppler = targetIntModel->data(targetIntModel->index(index.row(), 44), Qt::EditRole).toBool();
+  const double dopplerTemperature = targetIntModel->data(targetIntModel->index(index.row(), 45), Qt::EditRole).toDouble();
+  const bool dopplerFit = targetIntModel->data(targetIntModel->index(index.row(), 46), Qt::EditRole).toBool();
+  const bool dopplerVary = targetIntModel->data(targetIntModel->index(index.row(), 47), Qt::EditRole).toBool();
+  const double dopplerSigma = targetIntModel->data(targetIntModel->index(index.row(), 48), Qt::EditRole).toDouble();
+  const double dopplerMax = targetIntModel->data(targetIntModel->index(index.row(), 49), Qt::EditRole).toDouble();
 
   AddTargetIntDialog aDialog;
   aDialog.setAdiabaticProvider([this](const QString &segs) { return adiabaticScreeningFor(segs); });
@@ -401,6 +436,13 @@ void TargetIntTab::editLine() {
   aDialog.screeningVaryCheck->setChecked(screeningVary);
   aDialog.screeningSigmaText->setText(QString::number(screeningSigma, 'g', 10));
   aDialog.isScreeningCheck->setChecked(isScreening);
+
+  aDialog.setDensityFit(densityFit, densityVary, densitySigma, densityMax, densityGroup);
+
+  // T is set before the check, so switching the box on does not replace it with the room-temperature default.
+  if (isDoppler) aDialog.dopplerTemperatureText->setText(QString::number(dopplerTemperature, 'g', 12));
+  aDialog.isDopplerCheck->setChecked(isDoppler);
+  aDialog.setDopplerFit(dopplerFit, dopplerVary, dopplerSigma, dopplerMax);
 
   if (aDialog.exec()) {
     QString newSegmentsList = aDialog.segmentsListText->text();
@@ -598,6 +640,24 @@ void TargetIntTab::editLine() {
     targetIntModel->setData(targetIntModel->index(index.row(), 37), aDialog.screeningVaryCheck->isChecked(), Qt::EditRole);
     targetIntModel->setData(targetIntModel->index(index.row(), 38),
                             std::max(0.0, aDialog.screeningSigmaText->text().toDouble()), Qt::EditRole);
+    const bool ti = aDialog.isTargetIntegrationCheck->isChecked();
+    targetIntModel->setData(targetIntModel->index(index.row(), 39), ti && aDialog.isDensityFitCheck->isChecked(), Qt::EditRole);
+    targetIntModel->setData(targetIntModel->index(index.row(), 40), aDialog.densityVaryCheck->isChecked(), Qt::EditRole);
+    targetIntModel->setData(targetIntModel->index(index.row(), 41), aDialog.densitySigmaText->text(), Qt::EditRole);
+    targetIntModel->setData(targetIntModel->index(index.row(), 42), aDialog.densityMaxText->text().trimmed().toDouble(), Qt::EditRole);
+    targetIntModel->setData(targetIntModel->index(index.row(), 43), ti ? aDialog.densityGroupText->text().trimmed() : QString(),
+                            Qt::EditRole);
+    const bool doppler = aDialog.isDopplerCheck->isChecked();
+    targetIntModel->setData(targetIntModel->index(index.row(), 44), doppler, Qt::EditRole);
+    targetIntModel->setData(targetIntModel->index(index.row(), 45),
+                            doppler ? aDialog.dopplerTemperatureText->text().trimmed().toDouble() : 0.0, Qt::EditRole);
+    targetIntModel->setData(targetIntModel->index(index.row(), 46), doppler && aDialog.dopplerFitCheck->isChecked(),
+                            Qt::EditRole);
+    targetIntModel->setData(targetIntModel->index(index.row(), 47), aDialog.dopplerVaryCheck->isChecked(), Qt::EditRole);
+    targetIntModel->setData(targetIntModel->index(index.row(), 48),
+                            std::max(0.0, aDialog.dopplerSigmaText->text().trimmed().toDouble()), Qt::EditRole);
+    targetIntModel->setData(targetIntModel->index(index.row(), 49), aDialog.dopplerMaxText->text().trimmed().toDouble(),
+                            Qt::EditRole);
   }
 }
 
@@ -683,6 +743,26 @@ bool TargetIntTab::writeFile(QTextStream &outStream) {
     if (lines.at(i).isScreening)
       outStream << " screening " << QString::number(lines.at(i).screeningUe, 'g', 12) << " "
                 << (lines.at(i).screeningVary ? 1 : 0) << " " << QString::number(lines.at(i).screeningSigma, 'g', 12);
+    // Fitted target density (thin-target integration only), keyword-introduced, before the blocks that run to
+    // the end of the line.
+    if (lines.at(i).isTargetIntegration && lines.at(i).densityFit) {
+      outStream << " densityfit " << (lines.at(i).densityVary ? 1 : 0) << " " << lines.at(i).densitySigma.trimmed();
+      if (lines.at(i).densityMax > 0.) outStream << " " << QString::number(lines.at(i).densityMax, 'g', 12);
+    }
+    if (lines.at(i).isTargetIntegration && !lines.at(i).densityGroup.trimmed().isEmpty())
+      outStream << " densitygroup " << lines.at(i).densityGroup.trimmed();
+    // Free-gas Doppler broadening, keyword-introduced, before the blocks that run to the end of the line; only a
+    // positive temperature is a valid block (the engine refuses anything else), so a line without one gains nothing.
+    // The fit form 'doppler T vary sigma [Tmax]' when T is a fit parameter (doppler_<n>), else the plain 'doppler T'.
+    if (lines.at(i).isDoppler && lines.at(i).dopplerTemperature > 0.) {
+      outStream << " doppler " << QString::number(lines.at(i).dopplerTemperature, 'g', 12);
+      if (lines.at(i).dopplerFit) {
+        outStream << " " << (lines.at(i).dopplerVary ? 1 : 0) << " "
+                  << QString::number(std::max(0.0, lines.at(i).dopplerSigma), 'g', 12);
+        if (lines.at(i).dopplerMax > lines.at(i).dopplerTemperature)
+          outStream << " " << QString::number(lines.at(i).dopplerMax, 'g', 12);
+      }
+    }
     // Optional beam-profile kernel, last on the line and introduced by its own
     // keyword: every older reader probes for a digit or a quote here, so an
     // alphabetic token stops it cleanly and the rest of the line is ignored
@@ -804,7 +884,7 @@ bool TargetIntTab::readFile(QTextStream &inStream) {
 
       // Try to read straggling flag and coefficient (optional for backward compatibility)
       isStraggling = 0;                       // Default to false
-      stragglingCoefficient = 0.04;           // Default coefficient
+      stragglingCoefficient = 0.0;            // Default coefficient: 0 = Bohr straggling
       double resonanceWidthMultiplier = 20.0;  // Default; see AdaptiveIntegrationGrid
       double pointsPerWidth = 50.0;           // Default
 
@@ -838,6 +918,55 @@ bool TargetIntTab::readFile(QTextStream &inStream) {
           screeningSigma = sm.captured(4).toDouble(&ok3);
           tempIsScreening = ok1 && ok2 && ok3;
           remaining = (remaining.left(sm.capturedStart()) + " " + remaining.mid(sm.capturedEnd())).simplified();
+        }
+      }
+      // Fitted target density: `densityfit vary sigma [max]` and `densitygroup <label>`, wherever on the line.
+      bool densityFit = false, densityVary = false;
+      QString densitySigma("0"), densityGroup;
+      double densityMax = 0.;
+      {
+        QRegularExpression fitKeyword("(^|\\s)densityfit\\s+(\\S+)\\s+(\\S+)(\\s+([0-9.][0-9.eE+-]*))?(?=\\s|$)");
+        QRegularExpressionMatch fm = fitKeyword.match(remaining);
+        if (fm.hasMatch()) {
+          densityFit = true;
+          densityVary = fm.captured(2).toDouble() != 0.0;
+          densitySigma = fm.captured(3);
+          if (!fm.captured(5).isEmpty()) densityMax = fm.captured(5).toDouble();
+          remaining = (remaining.left(fm.capturedStart()) + " " + remaining.mid(fm.capturedEnd())).simplified();
+        }
+        QRegularExpression groupKeyword("(^|\\s)densitygroup\\s+(\\S+)(?=\\s|$)");
+        QRegularExpressionMatch gm = groupKeyword.match(remaining);
+        if (gm.hasMatch()) {
+          densityGroup = gm.captured(2);
+          remaining = (remaining.left(gm.capturedStart()) + " " + remaining.mid(gm.capturedEnd())).simplified();
+        }
+      }
+      // Free-gas Doppler broadening: `doppler <T>` or the fit form `doppler <T> <vary> <sigma> [<Tmax>]`, T in
+      // kelvin, wherever on the line.  A block without a positive temperature is the engine's error; it is dropped
+      // here rather than written back as something else.
+      bool tempIsDoppler = false, dopplerFit = false, dopplerVary = false;
+      double dopplerTemperature = 0., dopplerSigma = 0., dopplerMax = 0.;
+      {
+        // The numbers are optional in the pattern so that a bare or malformed keyword is still removed and
+        // cannot derail the numeric straggling/adaptive-grid chain below.
+        const QString num("([-+0-9.][0-9.eE+-]*)");
+        QRegularExpression dopplerKeyword("(^|\\s)doppler(\\s+" + num + ")?(\\s+" + num + "\\s+" + num + "(\\s+" + num +
+                                          ")?)?(?=\\s|$)");
+        QRegularExpressionMatch dm = dopplerKeyword.match(remaining);
+        if (dm.hasMatch()) {
+          bool okT = false;
+          const double t = dm.captured(3).toDouble(&okT);
+          if (okT && t > 0.) {
+            tempIsDoppler = true;
+            dopplerTemperature = t;
+            if (!dm.captured(4).isEmpty()) {
+              dopplerFit = true;
+              dopplerVary = dm.captured(5).toDouble() != 0.0;
+              dopplerSigma = std::max(0.0, dm.captured(6).toDouble());
+              if (!dm.captured(8).isEmpty()) dopplerMax = dm.captured(8).toDouble();
+            }
+          }
+          remaining = (remaining.left(dm.capturedStart()) + " " + remaining.mid(dm.capturedEnd())).simplified();
         }
       }
       bool tempIsUdr = false;
@@ -943,6 +1072,17 @@ bool TargetIntTab::readFile(QTextStream &inStream) {
       if (isTargetIntegration == 1) tempIsTargetIntegration = true;
 
       TargetIntData newLine = {isActive, segmentsList.remove('\"'), numPoints, tempIsConvolution, sigma, tempIsTargetIntegration, density, stoppingPowerEq.remove('\"'), numParameters, parameters, tempIsQCoefficient, qCoefficients, tempIsConvCoefficient, convCoefficients, convolutionEq.remove('\"'), tempIsStraggling, stragglingCoefficient, resonanceWidthMultiplier, pointsPerWidth, applyRanges, transitionWidth, autoTolerance, tempIsBeamProfile, beamProfile, beamTpcSigma, beamTruncation, beamPhotodissociation == 1, tempIsUdr, udrFile, udrFlightPath, udrBurst, udrChannel, udrCentred != 0, tempSigmaLab, tempIsScreening, screeningUe, screeningVary != 0, screeningSigma};
+      newLine.densityFit = densityFit;
+      newLine.densityVary = densityVary;
+      newLine.densitySigma = densitySigma;
+      newLine.densityMax = densityMax;
+      newLine.densityGroup = densityGroup;
+      newLine.isDoppler = tempIsDoppler;
+      newLine.dopplerTemperature = dopplerTemperature;
+      newLine.dopplerFit = dopplerFit;
+      newLine.dopplerVary = dopplerVary;
+      newLine.dopplerSigma = dopplerSigma;
+      newLine.dopplerMax = dopplerMax;
       addLine(newLine);
     }
   }

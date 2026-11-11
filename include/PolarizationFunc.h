@@ -112,7 +112,7 @@ class AmplitudeMatrix {
                          const std::vector<complex> &bar) const;
 
   /*!
-   * General spin observable (isDiff 9):  Re(c Tr(F A F^dagger B)) / Tr(F F^dagger),  with F the amplitude
+   * General spin observable (isDiff 10):  Re(c Tr(F A F^dagger B)) / Tr(F F^dagger),  with F the amplitude
    * in the product basis of the particles' spin projections (both channel spins decomposed with the
    * Lane-Thomas coefficients ParticleCG uses), A the entrance and B the exit operator of \p obs.
    * \c SpinObservableBar is its reverse mode, 2 dO/dM* per amplitude slot, for \c PathwayAdjoint.

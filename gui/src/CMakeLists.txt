@@ -69,12 +69,12 @@ set(AZURESETUP_SOURCES
     TargetIntModel.cpp ChannelsModel.cpp main.cpp TargetIntTab.cpp FittingTab.cpp
     AboutAZURE2Dialog.cpp InfoDialog.cpp InTabDocs.cpp
     IAEALevelData.cpp IAEALevelDialog.cpp NuclearPotentialTab.cpp
-    ExforData.cpp ExforDialog.cpp PairKeyCombo.cpp AzureTheme.cpp AbundancesModel.cpp
-    ScatteringLengthsModel.cpp
+    ExforData.cpp ExforDialog.cpp PairKeyCombo.cpp AzureTheme.cpp FileDialogPolicy.cpp AbundancesModel.cpp ChannelRadiiModel.cpp
+    ScatteringLengthsModel.cpp MassTable.cpp MassCheckDialog.cpp
 )
 
 set(AZURESETUP_HEADERS
-    ../include/AddLevelDialog.h ../include/AddPairDialog.h ../include/AddSegDataDialog.h ../include/PairKeyCombo.h ../include/AzureTheme.h
+    ../include/AddLevelDialog.h ../include/AddPairDialog.h ../include/AddSegDataDialog.h ../include/PairKeyCombo.h ../include/AzureTheme.h ../include/FileDialogPolicy.h
     ../include/AddSegTestDialog.h ../include/AddTargetIntDialog.h ../include/AZUREMainThread.h
     ../include/AZURESetup.h ../include/ChannelDetails.h ../include/ChannelsModel.h
     ../include/ChooseFileButton.h ../include/EditChecksDialog.h ../include/EditDirsDialog.h
@@ -85,8 +85,8 @@ set(AZURESETUP_HEADERS
     ../include/TargetIntModel.h ../include/TargetIntTab.h ../include/FittingTab.h
     ../include/TextEditBuffer.h ../include/AboutAZURE2Dialog.h ../include/InfoDialog.h
     ../include/IAEALevelData.h ../include/IAEALevelDialog.h ../include/NuclearPotentialTab.h
-    ../include/ExforData.h ../include/ExforDialog.h ../include/DialogScrollArea.h ../include/AbundancesModel.h
-    ../include/ScatteringLengthsModel.h
+    ../include/ExforData.h ../include/ExforDialog.h ../include/DialogScrollArea.h ../include/AbundancesModel.h ../include/ChannelRadiiModel.h
+    ../include/ScatteringLengthsModel.h ../include/MassTable.h ../include/MassCheckDialog.h
 )
 
 set(AZURESETUP_RCCS AZURESetup.qrc)

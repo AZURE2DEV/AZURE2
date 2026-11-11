@@ -35,6 +35,8 @@ enum Stage {
   kGradBackprop,     ///< T-matrix cotangents -> parameters (TBarAdjoint, bilinear basis)
   kGradLevelMatrix,  ///< structural level-matrix adjoint (inside kGradBackprop)
   kGradRows,         ///< per-member rows: basis combination, scatter into the Jacobian
+  kShiftLocal,       ///< energy-shift Jacobian columns differenced on their own segments' rows
+  kShiftFull,        ///< energy-shift / density Jacobian columns differenced on every row (forward only)
   kNumStages
 };
 

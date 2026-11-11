@@ -121,7 +121,7 @@ struct LevelArrays {
   std::vector<double> G;    ///< fitted widths, n x nch
   std::vector<double> S;    ///< shift functions at the level energies, n x nch
   std::vector<double> SG;   ///< S times G
-  std::vector<double> inv;  ///< 1/(E_r - E_c) off the diagonal, n x n
+  std::vector<double> inv;  ///< 1/(E_r - E_c) off the diagonal, 0 for coincident levels (LevelsCoincide), n x n
 };
 
 /*!

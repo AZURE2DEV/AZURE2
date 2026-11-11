@@ -1,6 +1,10 @@
 <!DOCTYPE RCC><RCC version="1.0">
  <qresource>
      <file alias="azure-icon.png">../images/azure2_icon.png</file>
+     <!-- shown instead while the project holds a polarization segment (AZURESetup::updateLogo) -->
+     <file alias="azure-icon-polarized.png">../images/azure2_icon_polarized.png</file>
      <file alias="azuma-background.png">../images/azuma_background.png</file>
+     <!-- the AME2020 mass table, the same file pyazr.masses reads (MassTable) -->
+     <file alias="ame/mass_1.mas20">../../pyazr/data/mass_1.mas20</file>
  </qresource>
  </RCC>

@@ -4,7 +4,7 @@
 
 #include "AboutAZURE2Dialog.h"
 
-AboutAZURE2Dialog::AboutAZURE2Dialog(QWidget *parent) :
+AboutAZURE2Dialog::AboutAZURE2Dialog(QWidget *parent, bool polarized) :
   QDialog(parent) {
   setWindowTitle(tr("About AZURE2"));
 
@@ -16,11 +16,13 @@ AboutAZURE2Dialog::AboutAZURE2Dialog(QWidget *parent) :
 #endif
   QString version = QString("v%1").arg(AZURE2_VERSION_STRING);
   if (QString(AZURE2_GIT_VERSION).length() > 0) version += QString(" (%1)").arg(AZURE2_GIT_VERSION);
-  QLabel *label = new QLabel(QString("<center><img src=\":/azure-icon.png\" width=\"128\" height=\"128\" /><br/>"
+  const QString logo = polarized ? ":/azure-icon-polarized.png" : ":/azure-icon.png";
+  QLabel *label = new QLabel(QString("<center><img src=\"%2\" width=\"128\" height=\"128\" /><br/>"
                                      "<b>AZURE2</b><br/>%1<br/><br/>"
                                      "J. Skowronski, E. Uberseder, R.J. deBoer, R.E. Azuma<br/>"
-                                     "Joint Institute For Nuclear Astrophysics (JINA)</center>").arg(version),
+                                     "Joint Institute For Nuclear Astrophysics (JINA)</center>").arg(version, logo),
                              this);
+  label->setObjectName("aboutLabel");
   QPushButton *okButton = new QPushButton(tr("OK"), this);
   okButton->setMaximumSize(80, 30);
 

@@ -32,21 +32,21 @@ maxOrbitalMomentum=3
 
 </levels>
 <segmentsData>
-1 1 1 1.9 10.1 0 180 9 b:y 1 0 0 0 0 0 data/by.dat
-1 1 1 1.9 10.1 0 180 9 t:y 1 0 0 0 0 0 data/ty.dat
-1 1 1 1.9 10.1 0 180 9 b:y*t:y 1 0 0 0 0 0 data/by_x_ty.dat
-1 1 1 1.9 10.1 0 180 9 b:x*t:x 1 0 0 0 0 0 data/bx_x_tx.dat
-1 1 1 1.9 10.1 0 180 9 b:z*t:z 1 0 0 0 0 0 data/bz_x_tz.dat
-1 1 1 1.9 10.1 0 180 9 b:x*t:z 1 0 0 0 0 0 data/bx_x_tz.dat
-1 1 1 1.9 10.1 0 180 9 b:z*t:x 1 0 0 0 0 0 data/bz_x_tx.dat
-1 1 1 1.9 10.1 0 180 9 b:x*t:y 1 0 0 0 0 0 data/bx_x_ty.dat
-1 1 1 1.9 10.1 0 180 9 e1:y 1 0 0 0 0 0 data/e1y.dat
-1 1 1 1.9 10.1 0 180 9 e2:y 1 0 0 0 0 0 data/e2y.dat
-1 1 1 1.9 10.1 0 180 9 b:y>e1:y 1 0 0 0 0 0 data/by_to_e1y.dat
-1 1 1 1.9 10.1 0 180 9 t:y>e2:y 1 0 0 0 0 0 data/ty_to_e2y.dat
-1 1 1 1.9 10.1 0 180 9 b:y>e2:y 1 0 0 0 0 0 data/by_to_e2y.dat
-1 1 1 1.9 10.1 0 180 9 b:iT11 1 0 0 0 0 0 data/biT11.dat
-1 1 1 1.9 10.1 0 180 9 t:iT11 1 0 0 0 0 0 data/tiT11.dat
+1 1 1 1.9 10.1 0 180 10 b:y 1 0 0 0 0 0 data/by.dat
+1 1 1 1.9 10.1 0 180 10 t:y 1 0 0 0 0 0 data/ty.dat
+1 1 1 1.9 10.1 0 180 10 b:y*t:y 1 0 0 0 0 0 data/by_x_ty.dat
+1 1 1 1.9 10.1 0 180 10 b:x*t:x 1 0 0 0 0 0 data/bx_x_tx.dat
+1 1 1 1.9 10.1 0 180 10 b:z*t:z 1 0 0 0 0 0 data/bz_x_tz.dat
+1 1 1 1.9 10.1 0 180 10 b:x*t:z 1 0 0 0 0 0 data/bx_x_tz.dat
+1 1 1 1.9 10.1 0 180 10 b:z*t:x 1 0 0 0 0 0 data/bz_x_tx.dat
+1 1 1 1.9 10.1 0 180 10 b:x*t:y 1 0 0 0 0 0 data/bx_x_ty.dat
+1 1 1 1.9 10.1 0 180 10 e1:y 1 0 0 0 0 0 data/e1y.dat
+1 1 1 1.9 10.1 0 180 10 e2:y 1 0 0 0 0 0 data/e2y.dat
+1 1 1 1.9 10.1 0 180 10 b:y>e1:y 1 0 0 0 0 0 data/by_to_e1y.dat
+1 1 1 1.9 10.1 0 180 10 t:y>e2:y 1 0 0 0 0 0 data/ty_to_e2y.dat
+1 1 1 1.9 10.1 0 180 10 b:y>e2:y 1 0 0 0 0 0 data/by_to_e2y.dat
+1 1 1 1.9 10.1 0 180 10 b:iT11 1 0 0 0 0 0 data/biT11.dat
+1 1 1 1.9 10.1 0 180 10 t:iT11 1 0 0 0 0 0 data/tiT11.dat
 </segmentsData>
 <segmentsTest>
 </segmentsTest>

@@ -2,6 +2,7 @@
 #define NUCLINE_H
 
 #include <iostream>
+#include <istream>
 
 /// A class to read and store a line from a nuclear input file.
 
@@ -17,6 +18,14 @@ class NucLine {
    */
   NucLine(std::istream &stream) {
     stream >> levelJ_ >> levelPi_ >> levelE_ >> levelFix_ >> aa_ >> ir_ >> s_ >> l_ >> levelID_ >> isActive_ >> channelFix_ >> gamma_ >> j1_ >> pi1_ >> j2_ >> pi2_ >> e2_ >> m1_ >> m2_ >> z1_ >> z2_ >> entranceSepE_ >> sepE_ >> j3_ >> pi3_ >> e3_ >> pType_ >> chRad_ >> g1_ >> g2_ >> ecMultMask_;
+    // Optional 32nd column (2026-11-05): the light particle's excitation energy e1 (MeV).  A 31-field line
+    // means e1 = 0, and leaves the stream's state as it was before the column existed (eof, not fail), so
+    // every older file reads exactly as before.  A 32nd token that is not a number sets failbit.
+    e1_ = 0.;
+    if (!stream.fail() && !stream.eof()) {
+      stream >> std::ws;
+      if (!stream.eof()) stream >> e1_;
+    }
     s_ /= 2.;
     l_ /= 2;
   };
@@ -152,6 +161,11 @@ class NucLine {
    * Returns the external capture multiplicity mask for the corresponding pair.
    */
   double ecMultMask() const { return ecMultMask_; };
+  /*!
+   * Returns the excitation energy (MeV) of the light particle in the
+   * corresponding pair: the optional 32nd column, 0 when it is absent.
+   */
+  double e1() const { return e1_; };
 
  private:
   double levelJ_;
@@ -185,6 +199,7 @@ class NucLine {
   double g1_;
   double g2_;
   unsigned int ecMultMask_;
+  double e1_;
 };
 
 #endif

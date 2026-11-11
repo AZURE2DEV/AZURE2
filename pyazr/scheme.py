@@ -36,6 +36,7 @@ class SchemeChannel:
     fixed: bool
     wigner_limit: Optional[float]
     free_index: Optional[int]
+    radius: Optional[float] = None  # the channel's radius (fm): its pair's unless <channelRadii> gives one
 
     @property
     def is_photon(self) -> bool:
@@ -126,6 +127,14 @@ class LevelScheme:
                     fixed=p.fixed, wigner_limit=p.wigner_limit,
                     free_index=p.free_index))
 
+        # per-channel radii from the engine (dev 2026-11-10; older builds: the pair's)
+        radii = {}
+        if hasattr(azr, "channel_radius_table"):
+            for r in azr.channel_radius_table():
+                radii[(r.jgroup, r.pair, r.L, r.S)] = r.radius
+        for lvl in by_key.values():
+            for c in lvl.channels:
+                c.radius = radii.get((lvl.jgroup, c.pair, c.L, c.S))
         levels = [by_key[k] for k in order]
         return cls(levels, pairs, name=name or getattr(azr, "file", None))
 
@@ -166,6 +175,9 @@ class LevelScheme:
             kind = "photon  " if p.is_photon else "particle"
             flags = " [entrance]" if p.is_entrance else ""
             nucleus = ""
+            # an excited light particle (column 32); the pair opens at Sep + both excitations
+            light = (f"   E*(light)={p.light_excitation:.4g} MeV"
+                     if getattr(p, "light_excitation", 0.0) else "")
             if several:
                 from .nuclei import Nucleus
                 nucleus = f"   -> {Nucleus(p.nucleus_Z, p.nucleus_A).label}"
@@ -175,7 +187,7 @@ class LevelScheme:
                 f" & {_fmt_spin(p.J2)}{'+' if p.parity2 > 0 else '-'}"
                 f"   Z={p.Z1}+{p.Z2}"
                 f"   Sep={p.sep_energy:.4g} MeV   r={p.channel_radius:g} fm"
-                f"{nucleus}{flags}")
+                f"{light}{nucleus}{flags}")
         return lines
 
     def format(self, widths=True):

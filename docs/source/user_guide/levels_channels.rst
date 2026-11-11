@@ -134,6 +134,25 @@ Fix Width
    line. Before 2026-10-17 the widths were stored in line order, so a reordered
    or shortened level silently got the wrong widths.
 
+   Lines belong to one level when they carry the same level ID (the ninth
+   column) within 1 keV, or the identical energy. Two levels of one
+   :math:`J^\pi` closer than 1 keV with different IDs (a narrow level on top of
+   a broad one) stay two levels, with a ``WARNING: level ID ... is within 1 keV``
+   line. Before 2026-10-24 any lines within 1 keV were read as one level
+   whatever their IDs: the later level's widths replaced the earlier one's and
+   its parameters disappeared from the fit, with only a "lists channel ... twice"
+   warning.
+
+   The levels of a :math:`J^\pi` group may also be listed in any energy order
+   (a background pole first, say). Before 2026-10-27 this mattered in the
+   standard (non-Brune) parametrization: the transformation to formal
+   parameters handed its ascending eigenvalues to the levels in file order, so
+   the first-listed level carried the lowest formal energy, ``parameters.out``
+   listed the group in ascending order rather than the file's, and a fit that
+   fixed the pole's energy varied the low level instead. The cross sections
+   were never affected (the set of levels is the same whatever the labels).
+   The Brune parametrization, the default, never had the problem.
+
 Channel Configuration
 ---------------------
 
@@ -188,7 +207,9 @@ shifts of a :math:`J^\pi` that had no level was a **dummy level**: a level at an
 arbitrary (usually high) energy with that :math:`J^\pi`, its energy fixed and
 all partial widths set to zero. Such levels are easily confused with background
 poles, which do carry widths. With the option on, dummy levels are harmless (a
-zero-width level adds nothing to the level sum) and can be deleted; the
+zero-width level adds nothing to the level sum, also at a data point exactly at
+its energy since 2026-10-31; before, such a point lost its whole
+:math:`J^\pi` group) and can be deleted; the
 ``tests/hard_sphere`` check of the source tree verifies that a model with a
 dummy level per :math:`J^\pi` and the same model with the option on give
 identical cross sections.
@@ -200,4 +221,10 @@ For gamma-ray calculations, the user should define a level corresponding to each
 gamma-ray particle pair defined in the **Particle Pairs** tab. This allows
 setting the ANCs and gamma-ray decay widths for each bound state. The energies
 of these levels must match the excitation energies of the gamma-ray particle
-pairs.
+pairs: the pair's final state is the level of its :math:`J^\pi` whose energy
+lies within 1 keV of the pair's excitation energy. A pair with no such level
+is refused when a segment uses it (warned about otherwise), and one whose
+window holds two or more levels of that :math:`J^\pi` is refused as
+ambiguous (before October 2026 the first one in the file was taken silently):
+move the extra level by more than 1 keV, or give the pair the energy of the
+level it decays to.

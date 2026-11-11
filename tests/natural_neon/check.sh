@@ -13,6 +13,10 @@
 #     up to the total.
 # The <targetInt> lines are switched off for this run: they fold the test
 # segments with the same numbers as the data segments they name.
+# And on the data segments, folded (23 component segments, about 960,000 sub-point
+# energies): every output file of a calculation on 1 and on 4 threads is
+# byte-identical.  The component segments' energy-dependent values are computed in
+# parallel since 2026-11-05, and a point written by two threads would show here.
 #
 #   ./tests/natural_neon/check.sh path/to/AZURE2
 
@@ -93,6 +97,38 @@ if [ -s "$dec" ]; then
   fi
 else
   bad "no decomposition file AZUREOut_sample_seg=1.extrap"; ls "$dir/output"
+fi
+
+# Data segments with target integration on, calculated on 1 and on 4 threads: the outputs must not
+# depend on the thread count (component segments are set up in parallel).
+for t in 1 4; do
+  d="$WORK/threads$t"
+  mkdir -p "$d/output" "$d/checks"
+  ln -s "$HERE/data" "$d/data"
+  cp "$HERE/natural_neon.azr" "$d/"
+  (cd "$d" && printf '1\n\n\n7\n' | OMP_NUM_THREADS=$t run_limited 900 "$AZURE2_BIN" --no-gui --no-readline natural_neon.azr > run.log 2>&1)
+done
+if [ -s "$WORK/threads1/output/chiSquared.out" ] && [ -s "$WORK/threads4/output/chiSquared.out" ]; then
+  # Compared without diff/cmp (neither is in every MSYS2 image: the Windows runner has neither, 2026-11-05):
+  # the same file names under both, and each file's content equal (\r stripped, as tests/angle_mapping).
+  same_file() { [ -f "$2" ] && [ "$(tr -d '\r' < "$1")" = "$(tr -d '\r' < "$2")" ]; }
+  names1="$(cd "$WORK/threads1/output" && find . -type f | sort)"
+  names4="$(cd "$WORK/threads4/output" && find . -type f | sort)"
+  differ=""
+  if [ "$names1" != "$names4" ]; then
+    differ="the file lists differ"
+  else
+    while IFS= read -r f; do
+      same_file "$WORK/threads1/output/$f" "$WORK/threads4/output/$f" || { differ="$f"; break; }
+    done <<< "$names1"
+  fi
+  if [ -z "$differ" ]; then
+    ok "folded data segments: all $(echo "$names1" | grep -c .) output files identical on 1 and 4 threads"
+  else
+    bad "folded data segments: outputs differ between 1 and 4 threads ($differ)"
+  fi
+else
+  bad "folded data segments: a run on 1 or 4 threads wrote no chiSquared.out"; tail -5 "$WORK/threads1/run.log" "$WORK/threads4/run.log"
 fi
 
 if [ "$failures" -eq 0 ]; then echo "PASS: natural neon"; else echo "FAIL: $failures check(s)"; exit 1; fi

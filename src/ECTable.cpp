@@ -65,11 +65,11 @@ bool RateMode(const Config &configure) {
 }
 
 /// Everything the integral depends on besides the energy.
-std::vector<double> TermKey(PPair *pair, const Config &configure, const CoulFunc &coul, int li, int lf,
+std::vector<double> TermKey(PPair *pair, double radius, const Config &configure, const CoulFunc &coul, int li, int lf,
                             double si, double sf, double ji, double jf, int multL, char radType,
                             double levelEnergy, bool isChannelCapture, int nodesPerDecade) {
   return {(double)pair->GetZ(1), (double)pair->GetZ(2), pair->GetM(1), pair->GetM(2), pair->GetRedMass(),
-          pair->GetJ(1), pair->GetJ(2), pair->GetG(1), pair->GetG(2), pair->GetChRad(),
+          pair->GetJ(1), pair->GetJ(2), pair->GetG(1), pair->GetG(2), radius,
           pair->GetSepE() + pair->GetExE(),
           (double)li, (double)lf, si, sf, ji, jf, (double)multL, (double)radType, levelEnergy,
           isChannelCapture ? 1.0 : 0.0,
@@ -79,7 +79,10 @@ std::vector<double> TermKey(PPair *pair, const Config &configure, const CoulFunc
           (configure.ecConvectionCurrent && !(configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX)) ? 1.0 : 0.0,
           configure.useCoulombTable ? 1.0 : 0.0,
           (double)coul.hybridTag(),  // the nuclear potential of a hybrid pair
-          (double)nodesPerDecade};
+          (double)nodesPerDecade,
+          // relativistic kinematics change eta, rho and the flux factor of every node; the table lives for the
+          // whole process, so a pyazr session alternating the switch must not share nodes (checklist t3-25)
+          configure.relativistic ? 1.0 : 0.0};
 }
 
 /*!
@@ -89,11 +92,11 @@ std::vector<double> TermKey(PPair *pair, const Config &configure, const CoulFunc
  * carries it, and it turns with energy).  Both are exact and cheap (the
  * Coulomb table answers them at the channel radius).
  */
-bool Reduction(PPair *pair, CoulFunc &coul, int li, double outEnergy, bool isChannelCapture, complex &n) {
+bool Reduction(double radius, CoulFunc &coul, int li, double outEnergy, bool isChannelCapture, complex &n) {
   if (isChannelCapture)
-    n = coul.HardSpherePhase(li, pair->GetChRad(), outEnergy);
+    n = coul.HardSpherePhase(li, radius, outEnergy);
   else
-    n = complex(sqrt(coul.Penetrability(li, pair->GetChRad(), outEnergy)), 0.0);
+    n = complex(sqrt(coul.Penetrability(li, radius, outEnergy)), 0.0);
   return std::isfinite(n.real()) && std::isfinite(n.imag()) && std::abs(n) > 0.0;
 }
 
@@ -102,29 +105,29 @@ bool Reduction(PPair *pair, CoulFunc &coul, int li, double outEnergy, bool isCha
 /// them would inherit.  Nodes are few, so they are converged instead.
 const double kNodeTolerance = 1e-10;
 
-complex Direct(PPair *pair, const Config &configure, int li, int lf, double si, double sf, double ji,
+complex Direct(PPair *pair, double radius, const Config &configure, int li, int lf, double si, double sf, double ji,
                double jf, int multL, char radType, double inEnergy, double levelEnergy, bool isChannelCapture) {
-  ECIntegral integral(pair, configure);
+  ECIntegral integral(pair, radius, configure);
   return integral(li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy, isChannelCapture);
 }
 
 /// The integral converged to kNodeTolerance, or at the direct integrals' own
 /// tolerance where the quadrature cannot reach it (a GSL error or status).
-complex Converged(PPair *pair, const Config &configure, int li, int lf, double si, double sf, double ji,
+complex Converged(PPair *pair, double radius, const Config &configure, int li, int lf, double si, double sf, double ji,
                   double jf, int multL, char radType, double inEnergy, double levelEnergy, bool isChannelCapture) {
   try {
-    ECIntegral integral(pair, configure);
+    ECIntegral integral(pair, radius, configure);
     integral.SetRelativeTolerance(kNodeTolerance);
     complex v = integral(li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy, isChannelCapture);
     if (integral.Status() == 0) return v;
   } catch (...) {
   }
-  return Direct(pair, configure, li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy, isChannelCapture);
+  return Direct(pair, radius, configure, li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy, isChannelCapture);
 }
 
 }  // namespace
 
-complex ECTable::Integral(PPair *finalPair, const Config &configure,
+complex ECTable::Integral(PPair *finalPair, double radius, const Config &configure,
                           int li, int lf, double si, double sf, double ji, double jf,
                           int multL, char radType, double inEnergy, double levelEnergy,
                           bool isChannelCapture) {
@@ -133,9 +136,9 @@ complex ECTable::Integral(PPair *finalPair, const Config &configure,
   CoulFunc coul(finalPair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
   if (RateMode(configure)) coul.SetUseGlobalCache(false);  // rate energies never recur
   complex reduction;
-  if (!(outEnergy > 0.0) || !Reduction(finalPair, coul, li, outEnergy, isChannelCapture, reduction)) {
+  if (!(outEnergy > 0.0) || !Reduction(radius, coul, li, outEnergy, isChannelCapture, reduction)) {
     ++g_direct;
-    return Direct(finalPair, configure, li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy,
+    return Direct(finalPair, radius, configure, li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy,
                   isChannelCapture);
   }
 
@@ -143,7 +146,7 @@ complex ECTable::Integral(PPair *finalPair, const Config &configure,
   const double h = log(10.0) / perDecade;
   Term *term;
   {
-    std::vector<double> key = TermKey(finalPair, configure, coul, li, lf, si, sf, ji, jf, multL, radType,
+    std::vector<double> key = TermKey(finalPair, radius, configure, coul, li, lf, si, sf, ji, jf, multL, radType,
                                       levelEnergy, isChannelCapture, perDecade);
     std::lock_guard<std::mutex> lock(g_termsMutex);
     std::unique_ptr<Term> &slot = g_terms[key];
@@ -180,8 +183,8 @@ complex ECTable::Integral(PPair *finalPair, const Config &configure,
     const double nodeOut = exp((double)(first + s) * h);
     try {
       complex n;
-      if (Reduction(finalPair, coul, li, nodeOut, isChannelCapture, n)) {
-        complex v = Converged(finalPair, configure, li, lf, si, sf, ji, jf, multL, radType, nodeOut + threshold,
+      if (Reduction(radius, coul, li, nodeOut, isChannelCapture, n)) {
+        complex v = Converged(finalPair, radius, configure, li, lf, si, sf, ji, jf, multL, radType, nodeOut + threshold,
                               levelEnergy, isChannelCapture) / n;
         node.ok = std::isfinite(v.real()) && std::isfinite(v.imag());
         node.value = v;
@@ -208,14 +211,14 @@ complex ECTable::Integral(PPair *finalPair, const Config &configure,
   }
   if (!ok) {
     ++g_direct;
-    return Direct(finalPair, configure, li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy,
+    return Direct(finalPair, radius, configure, li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy,
                   isChannelCapture);
   }
   ++g_lookups;
   complex result = sum * reduction;
 
   if (CheckMode()) {
-    complex exact = Converged(finalPair, configure, li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy,
+    complex exact = Converged(finalPair, radius, configure, li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy,
                               isChannelCapture);
     if (std::abs(exact) > 0.0) {
       double dev = std::abs(result - exact) / std::abs(exact);

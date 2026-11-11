@@ -3,6 +3,7 @@
 
 #include "IsospinLevels.h"
 #include <string>
+#include <vector>
 #include <map>
 #include "JGroup.h"
 #include "PPair.h"
@@ -116,6 +117,16 @@ class CNuc {
   int GetPairNumFromKey(int);
   /// Pair \p i, 1-based.
   PPair *GetPair(int);
+  /// The pair with this key, or nullptr when no pair has it (a total-capture exit key -1, a typo): the
+  /// GetPair(GetPairNumFromKey(key)) idiom read pairs_[-1] for those (audit 2026-10-25, item 32).
+  PPair *GetPairFromKey(int key);
+  /// Keys of the capture (gamma, pair type 10) pairs of the compound nucleus of the pair with key
+  /// \p entranceKey, in pair order: what the exit key -1 (total capture) stands for.  Empty when the
+  /// entrance key is unknown or the nucleus has no capture pair.
+  std::vector<int> CapturePairKeys(int entranceKey);
+  /// Why a reaction rate cannot be calculated for these keys ("" when it can).  The exit key -1 is the
+  /// total radiative capture: the sum over CapturePairKeys(entranceKey).
+  std::string RatePairsProblem(int entranceKey, int exitKey);
   /// \f$J^\pi\f$ group \p i, 1-based.
   JGroup *GetJGroup(int);
   void AddPair(PPair);
@@ -125,10 +136,22 @@ class CNuc {
   void SetMaxLValue(int);
 
   // -- building -------------------------------------------------------------
+  /// A radius for one channel or a set of channels (l, and optionally s and J; negative = any) of the pair with
+  /// 1-based number \p pair: the API's SetChannelRadius.  Applied after the file's <channelRadii> block.
+  struct ChannelRadiusOverride {
+    int pair;
+    int l;
+    double s;
+    double J;
+    double radius;
+  };
   /// Build the whole object from the nuclear and external-capture input files.
-  /// Returns -1 if a file cannot be read. \p radii optionally overrides one
-  /// pair's channel radius, as SetRadius does.
-  int Fill(const Config &, std::pair<int, double> radii = std::pair<int, double>(0, 0.0));
+  /// Returns -1 if a file cannot be read. \p radii overrides pair radii, pair number (1-based) -> fm, as the
+  /// API's SetRadius does; it holds every override of the session, so a rebuild keeps them all.
+  /// \p channelRadii does the same for the per-channel radii (SetChannelRadius); they win over the file's
+  /// <channelRadii> lines, and a pair radius override leaves every per-channel radius as it is.
+  int Fill(const Config &, const std::map<int, double> &radii = std::map<int, double>(),
+           const std::vector<ChannelRadiusOverride> &channelRadii = std::vector<ChannelRadiusOverride>());
   /// Adds a level-less J^pi group, with its particle channels, for every J^pi the particle pairs allow up to
   /// \p maxL that no active level provides. Such a group contributes hard-sphere scattering only.
   int AddHardSphereGroups(const Config &, int maxL);
@@ -136,12 +159,20 @@ class CNuc {
   int CheckIdenticalChannels(const Config &);
   /// Read the external-capture file into the ECLevel vector and check each
   /// final state against the nuclear file.
-  void ParseExternalCapture(const Config &, std::map<int, int> &);
+  int ParseExternalCapture(const Config &, std::map<int, int> &);
   /// Boundary conditions, the physical-to-formal transformation, the reaction
   /// pathways and the angular-distribution coefficients -- everything derived
   /// that a calculation needs. Run after Fill, and again after anything that
   /// changes the Coulomb functions.
   void Initialize(const Config &);
+  /*!
+   * Warn where the separation energies and the masses of a compound nucleus's particle pairs disagree:
+   * S_b - S_a should equal (m1b + m2b - m1a - m2a) c^2.  Thresholds come from the separation energies and the
+   * kinematics from the masses, so a mismatch is never an error in the calculation, but it is how typos and mixed
+   * mass conventions show up.  Returns the number of warnings printed (tolerance kMassCheckTolerance).
+   */
+  int CheckMassSeparationConsistency(const Config &) const;
+  static constexpr double kMassCheckTolerance = 1.0e-3;  ///< MeV
 
   // -- derived quantities ---------------------------------------------------
   /// Boundary condition per channel, evaluated at the energy of the group's
@@ -181,6 +212,8 @@ class CNuc {
   /// Observed widths and energies to formal R-matrix parameters. Returns false
   /// if a level could not be transformed.
   bool TransformIn(const Config &);
+  /// Why the last TransformIn returned false (empty if it did not).
+  const std::string &TransformError() const { return transformError_; }
   /// Has TransformIn run on the current level scheme?  Until it has, the
   /// level gammas are the input values (partial widths in eV, ANCs, gamma
   /// widths in eV), not reduced width amplitudes -- consumers that need to
@@ -220,11 +253,21 @@ class CNuc {
   CNuc *Clone() const;
 
  private:
+  std::string transformError_;
   /// 1-based index of the nucleus with this (Z, A), appending it if new.
   int FindOrAddNucleus(int z, int a);
   /// Reads the optional <abundances> block of the project file into samples_.
   /// Returns -1 on a malformed line.
   int ReadAbundances(const Config &);
+  /// Reads the optional <channelRadii> block into the pairs (PPair::SetChannelRadius).  Returns -1 on a
+  /// malformed line, an unknown pair key, a gamma or beta pair, or a repeated (pair, l, s, J).
+  int ReadChannelRadii(const Config &);
+  /// Sets channel \p ch of group \p group to its radius, PPair::GetChRad(l, s, J), and its Wigner limit.
+  void SetChannelRadius(JGroup *group, AChannel *ch);
+  /// After the groups are complete: refuses a channel that two <channelRadii> lines match with equal claim
+  /// (one naming s, one naming J), refuses an external-capture transition whose initial and final channels have
+  /// different radii, and warns about a <channelRadii> line that matches no channel.
+  int CheckChannelRadii(const Config &);
   std::vector<PPair> pairs_;
   std::vector<JGroup> jgroups_;
   std::vector<CompoundNucleus> nuclei_;

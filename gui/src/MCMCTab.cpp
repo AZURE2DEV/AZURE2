@@ -208,7 +208,8 @@ bool MCMCTab::isAutoPriorCategory(const QString &category) {
   // Normalizations and energy shifts carry an experimental error in the
   // segment definition, so AZURECalcMCMC::BuildAutoPriors() derives their
   // priors from the data and overrides whatever this table holds.
-  return category == "norm" || category == "shift" || category == "abundance" || category == "screening";
+  return category == "norm" || category == "shift" || category == "abundance" || category == "screening" ||
+         category == "density" || category == "doppler" || category == "thickness";
 }
 
 QString MCMCTab::categoryFromStoredName(const QString &name) {
@@ -218,6 +219,9 @@ QString MCMCTab::categoryFromStoredName(const QString &name) {
   // (segment_N_norm)"; all of them are recognised here.
   if (name.startsWith("abundance", Qt::CaseInsensitive)) return "abundance";
   if (name.contains("screening", Qt::CaseInsensitive)) return "screening";
+  if (name.contains("target density", Qt::CaseInsensitive) || name.startsWith("density_")) return "density";
+  if (name.contains("doppler", Qt::CaseInsensitive)) return "doppler";
+  if (name.contains("thickness", Qt::CaseInsensitive)) return "thickness";
   if (name.contains("norm", Qt::CaseInsensitive)) return "norm";
   if (name.contains("shift", Qt::CaseInsensitive)) return "shift";
   return "loaded";
@@ -631,9 +635,8 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
         const double nominalNorm = segments[s].GetNominalNorm();
         autoNormPrior[key] = qMakePair(
             nominalNorm, nominalNorm / 100.0 * segments[s].GetNormError());
-        autoShiftPrior[key] = qMakePair(
-            segments[s].GetNominalEnergyShift(),
-            segments[s].GetEnergyShiftError());
+        // centred on no shift, as the fit's penalty (ESegment::AddShiftPenalty, since 2026-10-25)
+        autoShiftPrior[key] = qMakePair(0.0, segments[s].GetEnergyShiftError());
       }
     }
 
@@ -669,6 +672,12 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
           param.category = "abundance";
         } else if (paramName.startsWith("screening_")) {
           param.category = "screening";  // its prior comes from the <targetInt> line (BuildAutoPriors)
+        } else if (paramName.startsWith("density_")) {
+          param.category = "density";  // likewise (densityfit sigma)
+        } else if (paramName.startsWith("doppler_")) {
+          param.category = "doppler";  // likewise (the doppler block's sigma)
+        } else if (paramName.startsWith("segment_") && paramName.endsWith("_thickness")) {
+          param.category = "thickness";  // likewise (the transmission / yield block's sigma)
         } else if (paramName.contains("norm", Qt::CaseInsensitive)) {
           param.category = "norm";
         } else if (paramName.contains("shift", Qt::CaseInsensitive)) {
@@ -690,8 +699,10 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
             param.useGaussianPrior = (param.priorStd > 0.0);
             param.autoPrior = true;
           }
-        } else if (param.category == "screening") {
-          // The engine takes U_e's prior from its <targetInt> line (AZURECalcMCMC::BuildAutoPriors).
+        } else if (param.category == "screening" || param.category == "density" || param.category == "doppler" ||
+                   param.category == "thickness") {
+          // The engine takes U_e's, a density's and a Doppler temperature's prior from its <targetInt> line, and a
+          // sample thickness's from its segment line (AZURECalcMCMC::BuildAutoPriors).
           param.useGaussianPrior = false;
           param.autoPrior = true;
         } else if (isAutoPriorCategory(param.category)) {

@@ -60,12 +60,22 @@ struct ConfigScope {
   // silently, for as long as the process lived (8Be+alpha, 2026-10-07).
   // `slot` is the session's cache pointer; whatever the call leaves in the
   // global (Initialize re-creates it) is captured back into the slot on exit.
-  ConfigScope(Config *c, ECAmplitudeCache **slot) :
-    previous_(g_config), previousCache_(g_ecAmplitudeCache), slot_(slot) {
+  // And the session's hybrid nuclear potentials: NuclearPotentialManager is a
+  // process singleton that Config::ReadPotentialBlock and set_potential
+  // rewrite, so until 2026-10-27 the last session to do either silently
+  // reconfigured every other live session (audit 2026-10-25, item 30).  The
+  // call installs the session's state and captures back whatever it left
+  // (ReadPotentialBlock and set_potential change it) on exit.
+  ConfigScope(Config *c, ECAmplitudeCache **slot, NuclearPotentialManager::State *potentials) :
+    previous_(g_config), previousCache_(g_ecAmplitudeCache), slot_(slot), potentials_(potentials),
+    previousPotentials_(NuclearPotentialManager::instance().exportState()) {
     g_config = c;
     g_ecAmplitudeCache = *slot_;
+    NuclearPotentialManager::instance().importState(*potentials_);
   }
   ~ConfigScope() {
+    *potentials_ = NuclearPotentialManager::instance().exportState();
+    NuclearPotentialManager::instance().importState(previousPotentials_);
     *slot_ = g_ecAmplitudeCache;
     g_ecAmplitudeCache = previousCache_;
     g_config = previous_;
@@ -77,6 +87,8 @@ struct ConfigScope {
   Config *previous_;
   ECAmplitudeCache *previousCache_;
   ECAmplitudeCache **slot_;
+  NuclearPotentialManager::State *potentials_;
+  NuclearPotentialManager::State previousPotentials_;
 };
 
 // Convert a std::vector<double> to a new float64 numpy array (a copy, so the
@@ -164,7 +176,7 @@ class Session {
     config_->paramMask |= Config::USE_API;  // silence the "Calculating ..." chatter
     apply_options(*config_, opt);
 
-    ConfigScope guard(config_, &ecCache_);
+    ConfigScope guard(config_, &ecCache_, &potentials_);
 
     // The API stub used to guard the CLI's reads against --use-api; the binding
     // is the API, so mirror the checks main() performed for a headless run.
@@ -172,6 +184,10 @@ class Session {
       std::string msg = "Could not open " + configfile + " or no <config> block found.";
       fail(msg);
     }
+    // R-matrix route + ignore_externals (the default): A-matrix with a warning, as the CLI and the GUI.  Before
+    // 2026-11-01 pyazr ran the R-matrix route and silently kept the internal-capture term ignore_externals drops
+    // (13N capture 3e-5 off the A-matrix route).
+    config_->ResolveMatrixRoute();
 
     InitializeCoulFuncCache();
     InitializeECAmplitudeCache();
@@ -218,21 +234,21 @@ class Session {
   // -- lifecycle -----------------------------------------------------------
 
   bool rebuild() {
-    ConfigScope guard(config_, &ecCache_);
+    ConfigScope guard(config_, &ecCache_, &potentials_);
     return api_->Rebuild();
   }
 
   bool write_output_files() {
-    ConfigScope guard(config_, &ecCache_);
+    ConfigScope guard(config_, &ecCache_, &potentials_);
     return api_->WriteOutputFiles();
   }
 
   bool initialize() {
-    ConfigScope guard(config_, &ecCache_);
+    ConfigScope guard(config_, &ecCache_, &potentials_);
     return api_->Initialize() == 0;
   }
   bool calculate_external_capture() {
-    ConfigScope guard(config_, &ecCache_);
+    ConfigScope guard(config_, &ecCache_, &potentials_);
     return api_->CalculateExternalCapture();
   }
 
@@ -241,9 +257,14 @@ class Session {
   void set_data() { api_->SetData(); }
   void set_extrap() { api_->SetExtrap(); }
   bool set_radius(int idx, double radius) {
-    ConfigScope guard(config_, &ecCache_);
+    ConfigScope guard(config_, &ecCache_, &potentials_);
     return api_->SetRadius(idx, radius);
   }
+  bool set_channel_radius(int idx, int l, double s, double J, double radius) {
+    ConfigScope guard(config_, &ecCache_, &potentials_);
+    return api_->SetChannelRadius(idx, l, s, J, radius);
+  }
+  py::array_t<double> channel_radii() const { return to_array(api_->GetChannelRadii()); }
 
   // -- hybrid nuclear potential, per particle pair ---------------------------
   //
@@ -256,6 +277,7 @@ class Session {
   // pair = 0 addresses the default that every unnamed pair falls back to.
   void set_potential(int pair, const std::string &type, bool enabled,
                      double V0, double R, double a, double r0) {
+    ConfigScope guard(config_, &ecCache_, &potentials_);
     NuclearPotentialSetting s;
     s.enabled = enabled;
     s.type = type;
@@ -285,6 +307,7 @@ class Session {
   }
 
   void clear_potential(int pair) {
+    ConfigScope guard(config_, &ecCache_, &potentials_);
     NuclearPotentialManager &mgr = NuclearPotentialManager::instance();
     if (pair)
       mgr.clearPairSetting(pair);
@@ -302,21 +325,23 @@ class Session {
 
   // (enabled, type, V0, R, a, r0, has_own_setting) for the given pair,
   // resolved against the default.
-  py::tuple get_potential(int pair) const {
+  py::tuple get_potential(int pair) {
+    ConfigScope guard(config_, &ecCache_, &potentials_);
     const NuclearPotentialManager &mgr = NuclearPotentialManager::instance();
     NuclearPotentialSetting s = pair ? mgr.getSetting(pair) : mgr.getDefaultSetting();
     bool own = pair ? mgr.hasPairSetting(pair) : true;
     return py::make_tuple(s.enabled, s.type, s.V0, s.R, s.a, s.r0, own);
   }
 
-  std::vector<int> configured_potential_pairs() const {
+  std::vector<int> configured_potential_pairs() {
+    ConfigScope guard(config_, &ecCache_, &potentials_);
     return NuclearPotentialManager::instance().configuredPairs();
   }
 
   // -- data bookkeeping ------------------------------------------------------
 
   int update_data() {
-    ConfigScope guard(config_, &ecCache_);
+    ConfigScope guard(config_, &ecCache_, &potentials_);
     return api_->UpdateData();
   }
   void update_norms() { api_->UpdateNorms(); }
@@ -390,25 +415,25 @@ class Session {
   // -- segment updates (return the number of segments) ------------------------
 
   int update_segments(const py::array_t<double, py::array::forcecast> &p) {
-    ConfigScope guard(config_, &ecCache_);
+    ConfigScope guard(config_, &ecCache_, &potentials_);
     vector_r v = to_vector(p);
     expect_free(v, "update_segments");
     return api_->UpdateSegments(v);
   }
   int update_segments_rwa(const py::array_t<double, py::array::forcecast> &p) {
-    ConfigScope guard(config_, &ecCache_);
+    ConfigScope guard(config_, &ecCache_, &potentials_);
     vector_r v = to_vector(p);
     expect_free(v, "update_segments_rwa");
     return api_->UpdateSegmentsRWA(v);
   }
   void set_params_all_rwa(const py::array_t<double, py::array::forcecast> &p) {
-    ConfigScope guard(config_, &ecCache_);
+    ConfigScope guard(config_, &ecCache_, &potentials_);
     vector_r v = to_vector(p);
     expect_all(v, "set_params_all_rwa");
     api_->SetParamsAllRWA(v);
   }
   int update_segments_all_rwa(const py::array_t<double, py::array::forcecast> &p) {
-    ConfigScope guard(config_, &ecCache_);
+    ConfigScope guard(config_, &ecCache_, &potentials_);
     vector_r v = to_vector(p);
     expect_all(v, "update_segments_all_rwa");
     return api_->UpdateSegmentsAllRWA(v);
@@ -420,7 +445,7 @@ class Session {
     vector_r v = to_vector(p), out;
     {
       py::gil_scoped_release release;
-      ConfigScope guard(config_, &ecCache_);
+      ConfigScope guard(config_, &ecCache_, &potentials_);
       out = api_->TransformRWAParameters(v);
     }
     return to_array(out);
@@ -430,7 +455,7 @@ class Session {
     expect_all(v, "transform_all_rwa");
     {
       py::gil_scoped_release release;
-      ConfigScope guard(config_, &ecCache_);
+      ConfigScope guard(config_, &ecCache_, &potentials_);
       out = api_->TransformAllRWAParameters(v);
     }
     return to_array(out);
@@ -449,7 +474,7 @@ class Session {
     expect_all(v, "transform_all_rwa_full");
     {
       py::gil_scoped_release release;
-      ConfigScope guard(config_, &ecCache_);
+      ConfigScope guard(config_, &ecCache_, &potentials_);
       out = api_->TransformAllRWAParametersFull(v);
     }
     return to_array(out);
@@ -458,31 +483,41 @@ class Session {
   // -- chi-squared and derivatives -------------------------------------------
 
   double calculate_chi2_rwa(const py::array_t<double, py::array::forcecast> &p) {
-    ConfigScope guard(config_, &ecCache_);
+    ConfigScope guard(config_, &ecCache_, &potentials_);
     vector_r v = to_vector(p);
     expect_free(v, "calculate_chi2_rwa");
     return api_->CalculateChi2RWA(v);
   }
   double calculate_chi2_physical(const py::array_t<double, py::array::forcecast> &p) {
-    ConfigScope guard(config_, &ecCache_);
+    ConfigScope guard(config_, &ecCache_, &potentials_);
     vector_r v = to_vector(p);
     expect_free(v, "calculate_chi2_physical");
     return api_->CalculateChi2Physical(v);
   }
   py::array_t<double> scattering_lengths_rwa(const py::array_t<double, py::array::forcecast> &p) {
-    ConfigScope guard(config_, &ecCache_);
+    ConfigScope guard(config_, &ecCache_, &potentials_);
     vector_r v = to_vector(p);
     expect_free(v, "scattering_lengths_rwa");
     return to_array(api_->CalculateScatteringLengthsRWA(v));
   }
   py::array_t<double> park_norms(const py::array_t<double, py::array::forcecast> &p) {
-    ConfigScope guard(config_, &ecCache_);
+    ConfigScope guard(config_, &ecCache_, &potentials_);
     vector_r v = to_vector(p);
     expect_free(v, "park_norms");
     return to_array(api_->ParkNorms(v));
   }
+  py::array_t<double> prior_covariance_residuals(const py::array_t<double, py::array::forcecast> &p) {
+    ConfigScope guard(config_, &ecCache_, &potentials_);
+    vector_r v = to_vector(p);
+    expect_free(v, "prior_covariance_residuals");
+    return to_array(api_->PriorCovarianceResidualsRWA(v));
+  }
+  std::vector<std::string> prior_covariance_names() {
+    ConfigScope guard(config_, &ecCache_, &potentials_);
+    return api_->PriorCovarianceNames();
+  }
   int refreeze_covariance() {
-    ConfigScope guard(config_, &ecCache_);
+    ConfigScope guard(config_, &ecCache_, &potentials_);
     return api_->RefreezeCovariance();
   }
   py::array_t<double> calculate_chi2_grad_rwa(const py::array_t<double, py::array::forcecast> &p) {
@@ -490,18 +525,23 @@ class Session {
     expect_free(v, "calculate_chi2_grad_rwa");
     {
       py::gil_scoped_release release;
-      ConfigScope guard(config_, &ecCache_);
+      ConfigScope guard(config_, &ecCache_, &potentials_);
       out = api_->CalculateChi2GradRWA(v);
     }
     return to_array(out);
   }
-  py::array_t<double> calculate_residual_jacobian_rwa(const py::array_t<double, py::array::forcecast> &p) {
+  py::array_t<double> calculate_residual_jacobian_rwa(const py::array_t<double, py::array::forcecast> &p,
+                                                      const std::vector<int> &skip) {
     vector_r v = to_vector(p), out;
     expect_free(v, "calculate_residual_jacobian_rwa");
+    for (int c : skip)
+      if (c < 0 || c >= (int)v.size())
+        throw AZURE2Error("calculate_residual_jacobian_rwa: skip column " + std::to_string(c) + " is outside the " +
+                          std::to_string(v.size()) + " free parameters.");
     {
       py::gil_scoped_release release;
-      ConfigScope guard(config_, &ecCache_);
-      out = api_->CalculateResidualJacobianRWA(v);
+      ConfigScope guard(config_, &ecCache_, &potentials_);
+      out = api_->CalculateResidualJacobianRWA(v, skip);
     }
     return to_array(out);
   }
@@ -510,7 +550,7 @@ class Session {
     expect_free(v, "calculate_model_gradients_rwa");
     {
       py::gil_scoped_release release;
-      ConfigScope guard(config_, &ecCache_);
+      ConfigScope guard(config_, &ecCache_, &potentials_);
       out = api_->CalculateModelGradientsRWA(v);
     }
     return to_array(out);
@@ -522,7 +562,7 @@ class Session {
     vector_r v = to_vector(request), out;
     {
       py::gil_scoped_release release;
-      ConfigScope guard(config_, &ecCache_);
+      ConfigScope guard(config_, &ecCache_, &potentials_);
       out = api_->GetCoulombFunctions(v);
     }
     return to_array(out);
@@ -531,7 +571,7 @@ class Session {
     vector_r v = to_vector(request), out;
     {
       py::gil_scoped_release release;
-      ConfigScope guard(config_, &ecCache_);
+      ConfigScope guard(config_, &ecCache_, &potentials_);
       out = api_->GetECIntegrals(v);
     }
     return to_array(out);
@@ -548,6 +588,7 @@ class Session {
  private:
   Config *config_;
   ECAmplitudeCache *ecCache_ = nullptr;  // this session's external-capture amplitude cache
+  NuclearPotentialManager::State potentials_;  // this session's hybrid potentials (ConfigScope)
   AZUREAPI *api_;
 };
 
@@ -605,6 +646,11 @@ PYBIND11_MODULE(_azure2, m) {
       .def("set_radius", &Session::set_radius, py::arg("pair"), py::arg("radius"),
            py::call_guard<py::gil_scoped_release>(),
            "Rebuild the model with one pair's channel radius changed (fm).")
+      .def("set_channel_radius", &Session::set_channel_radius, py::arg("pair"), py::arg("l"), py::arg("s"),
+           py::arg("J"), py::arg("radius"), py::call_guard<py::gil_scoped_release>(),
+           "Rebuild the model with channels (pair, l, s, J; s or J < 0: any) at their own radius (fm).")
+      .def("channel_radii", &Session::channel_radii,
+           "Every channel's radius: rows [jgroup, channel, pair, l, s, J, parity, radius].")
       .def("set_potential", &Session::set_potential, py::arg("pair"),
            py::arg("type"), py::arg("enabled"), py::arg("V0"), py::arg("R"),
            py::arg("a"), py::arg("r0"),
@@ -671,6 +717,11 @@ PYBIND11_MODULE(_azure2, m) {
            "(pair key, channel spin, parity, Re a0 fm, Im a0 fm, has-levels flag).")
       .def("park_norms", &Session::park_norms, py::arg("params"),
            "Park overlap J of every R-matrix level (1 in Brune mode).")
+      .def("prior_covariance_residuals", &Session::prior_covariance_residuals, py::arg("params"),
+           "Prior parameter covariance (<config> priorCovariance=): the whitened residuals L^-1 (p - mu) at the free "
+           "RWA parameters (empty without one); their squared sum is the prior's chi2 term.")
+      .def("prior_covariance_names", &Session::prior_covariance_names,
+           "The prior covariance's parameter names, in its row order (fixed ones marginalized); empty without one.")
       .def("refreeze_covariance", &Session::refreeze_covariance,
            "Data covariances: forget the model frozen for the relvector terms; the next chi2 evaluation "
            "freezes it at its parameters.  Returns the number of covariance groups with relvector terms.")
@@ -679,7 +730,8 @@ PYBIND11_MODULE(_azure2, m) {
       .def("calculate_chi2_grad_rwa", &Session::calculate_chi2_grad_rwa,
            py::arg("params"))
       .def("calculate_residual_jacobian_rwa", &Session::calculate_residual_jacobian_rwa,
-           py::arg("params"))
+           py::arg("params"), py::arg("skip") = std::vector<int>(),
+           "Residuals and Jacobian; the free columns listed in skip are not finite-differenced (left zero).")
       .def("calculate_model_gradients_rwa", &Session::calculate_model_gradients_rwa,
            py::arg("params"))
       .def("coulomb_functions", &Session::coulomb_functions, py::arg("request"))

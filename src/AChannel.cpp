@@ -13,6 +13,7 @@ AChannel::AChannel(NucLine nucLine, int pairNum) {
   l_ = nucLine.l();
   s_ = nucLine.s();
   pair_ = pairNum;
+  radius_ = 0.0;        // set with the Wigner limit by CNuc::SetChannelRadius once the PPair is known
   wigner_limit_ = 0.0;  // Initialize to zero, will be calculated later when PPair info is available
   if (nucLine.pType() == 0) {
     radtype_ = 'P';
@@ -38,6 +39,7 @@ AChannel::AChannel(int lValue, double sValue, int pairNum, char radType) {
   s_ = sValue;
   pair_ = pairNum;
   radtype_ = radType;
+  radius_ = 0.0;        // set with the Wigner limit by CNuc::SetChannelRadius once the PPair is known
   wigner_limit_ = 0.0;  // Initialize to zero, will be calculated later when PPair info is available
 };
 
@@ -91,22 +93,31 @@ void AChannel::SetBoundaryCondition(double boundaryCondition) {
   boundary_condition_ = boundaryCondition;
 }
 
+double AChannel::GetRadius() const {
+  return radius_;
+}
+
 /*!
- * This function is used to set the Wigner Limit for the channel.
+ * Sets the channel radius and, from it, the Wigner Limit for the channel.
  * The Wigner Limit (single-particle/sum-rule reduced width) is the standard
  * Lane & Thomas (1958) result: gamma_W^2 = 3 * hbar^2 / (2 * reduced_mass * channel_radius^2).
  */
-void AChannel::SetWignerLimit(double reducedMass, double channelRadius) {
+void AChannel::SetRadius(double channelRadius, double reducedMass) {
+  radius_ = channelRadius;
   // Wigner Limit: gamma_W^2 = 3 hbar^2 / (2 mu a^2)
   //
   // Constants:
-  // hbarc = 197.32696310 MeV·fm (from Constants.h)
-  // uconv = 931.4940880 MeV/c² per u (from Constants.h)
+  // hbarc = 197.3269804 MeV·fm (from Constants.h, CODATA 2018)
+  // uconv = 931.49410242 MeV/c² per u (from Constants.h, CODATA 2018)
   //
   // reduced_mass comes in atomic mass units (u), convert to MeV/c² by multiplying by uconv
   // channel_radius is in fm
   // Result will be in MeV
-  if (channelRadius == 0) {
+  // No limit (0, skipped by CNuc::FillMnParams) for a channel without a radius, and for a photon or beta
+  // channel: a photon pair has mu = 0, so the formula gave infinity whenever its radius was nonzero, and
+  // FillMnParams then set Minuit limits (-inf, inf), which its sine transform turns into NaN (audit
+  // 2026-10-25, item 32).  The Wigner limit is a statement about particle channels.
+  if (channelRadius == 0 || !(reducedMass > 0.0) || radtype_ != 'P') {
     wigner_limit_ = 0;
     return;
   }

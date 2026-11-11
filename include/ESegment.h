@@ -52,7 +52,7 @@ class ESegment {
    * dimensionless and bounded by one.
    */
   bool IsAnalyzingPower() const { return isAnalyzingPower_; };
-  //! The spin observable of an isDiff 9 segment; null for every other segment (isDiff 7 included).
+  //! The spin observable of an isDiff 10 segment; null for every other segment (isDiff 7 included).
   std::shared_ptr<const SpinObservable> GetSpinObservable() const { return spinObservable_; };
   bool IsSpinSegment() const { return !spinToken_.empty() || !spinParseError_.empty(); };
   const std::string &GetSpinToken() const { return spinToken_; };
@@ -98,6 +98,8 @@ class ESegment {
   double GetAStep() const;
   /// Total spin. Phase-shift segments only.
   double GetJ() const;
+  /// Channel spin of a phase-shift segment ("spin <s>"), or -1 when the line gives none; see EData::Initialize.
+  double GetPhaseS() const { return phaseS_; }
   /// Current normalization applied to the data.
   double GetNorm() const;
   /// Normalization as declared in the input file, the value the fit penalty pulls towards.
@@ -141,6 +143,9 @@ class ESegment {
   /// shift stops being a fit parameter and starts at the given value.
   void SetShiftGroupFollower(int pos, double shift);
   void SetHasShiftGroupFollowers(bool);
+  /// Shift-function-group label ("" if none): segments with one label apply the shift
+  /// function of the first of them but keep their own constant shifts.
+  std::string GetShiftFnGroup() const;
   /// Normalization-group label ("" if none): segments with one label share one norm.
   std::string GetNormGroup() const;
   /// Position (0-based, in EData's segment vector) of the group member whose norm this
@@ -276,6 +281,91 @@ class ESegment {
   /// line, resolved to a 1-based sample of the <abundances> block by
   /// EData::Fill; 0 = not a natural segment).
   bool IsNatural() const { return naturalSample_ > 0; }
+  /// "total 1" on the line: every term of the segment whose exit pair is its entrance pair is the total cross
+  /// section of that pair, from the optical theorem (GenMatrixFunc::CalculateBareCrossSection); a term to another
+  /// exit pair (a SUM component adding capture, say) stays what it is.  Neutral entrance pairs only.
+  bool IsTotal() const { return isTotal_; }
+  /// An angular-coefficient data segment (isDiff 9): rows E_lab, k, value, error; the value
+  /// is the Legendre coefficient a_k = A_k / A_0 of dsigma/dOmega_cm = A_0 [1 + sum_k a_k P_k]
+  /// (or the absolute A_k with "absolute 1").  The points are angular-distribution points
+  /// whose fit value is their own order's coefficient.
+  bool IsCoefficients() const { return isCoefficients_; }
+  bool IsCoefficientAbsolute() const { return coefficientsAbsolute_; }
+  /// "transmission <n>": the segment is the transmission T = exp(-n s) of a sample n atoms/barn thick, s the
+  /// segment's (assembled) cross section in barns -- the total cross section of the entrance pair.  "yield <n>":
+  /// the self-shielded capture or reaction yield Y0 = (s / s_t)(1 - exp(-n s_t)) (SAMMY's Y0, manual III.D.1), s the
+  /// segment's cross section and s_t the total cross section of the entrance pair, from a hidden "total 1"
+  /// component (IsYieldTotalTerm).  With a sub-point target effect (resolution, Gaussian spread) the transform is
+  /// applied at every sub-point before the kernel, as SAMMY does: broadening a cross section and then
+  /// exponentiating fills in the dips of a thick sample.  ESegment::CalculateTheoreticalCrossSection; the points
+  /// keep the plain cross sections, so they can still share calculations with other segments.
+  bool IsTransmission() const { return transmission_ > 0.0; }
+  bool IsYield() const { return yield_ > 0.0; }
+  bool IsTransformed() const { return transmission_ > 0.0 || yield_ > 0.0; }
+  /// n in atoms/barn of a transmission or yield segment, 0 otherwise: the value the transform uses -- the line's n,
+  /// a thickness group's leader's (EData::ResolveThicknessGroups), or the fit parameter segment_<key>_thickness
+  /// (EData::FillThicknessFromParams).
+  double GetSampleThickness() const { return IsTransformed() ? thickness_ : 0.0; }
+  void SetSampleThickness(double n) { thickness_ = n; }
+  /// The line's own n (the prior centre of the fit form), 0 for a segment without the transform.
+  double GetNominalThickness() const { return transmission_ > 0.0 ? transmission_ : yield_; }
+  /// The fit form "transmission n vary sigma" / "yield n vary sigma": the line has a parameter
+  /// segment_<key>_thickness (fixed for vary 0, and for a thickness-group follower), sigma its prior width (0 = none).
+  bool HasThicknessFit() const { return thicknessFit_; }
+  bool IsThicknessVaried() const { return thicknessFit_ && thicknessVary_ == 1 && thicknessLeaderPos_ < 0; }
+  double GetThicknessSigma() const { return thicknessSigma_; }
+  /// "thicknessgroup <label>" ("" = none); the follower's leader position in EData's segment list (-1: none).
+  const std::string &GetThicknessGroup() const { return thicknessGroup_; }
+  int GetThicknessLeaderPos() const { return thicknessLeaderPos_; }
+  bool IsThicknessGroupFollower() const { return thicknessLeaderPos_ >= 0; }
+  void SetThicknessGroupFollower(int pos, double n) {
+    thicknessLeaderPos_ = pos;
+    thickness_ = n;
+  }
+  /// The prior ((n - n0)/sigma)^2 of a thickness parameter that owns its value (no follower), 0 otherwise.
+  double ThicknessPenalty() const {
+    if (!thicknessFit_ || thicknessLeaderPos_ >= 0 || !(thicknessSigma_ > 0.0)) return 0.0;
+    const double d = (thickness_ - GetNominalThickness()) / thicknessSigma_;
+    return d * d;
+  }
+  /// Components are plain cross sections (the base segment applies the transform).
+  void ClearTransform() {
+    transmission_ = 0.0;
+    yield_ = 0.0;
+    thickness_ = 0.0;
+    thicknessFit_ = false;
+    thicknessGroup_.clear();
+  }
+  /// The total-cross-section term of a yield segment (entrance pair to itself, "total 1"): it enters Y0 as s_t and
+  /// is not part of the segment's sum (EData::AddYieldTotalComponent).
+  bool IsYieldTotalTerm() const { return yieldTotalTerm_; }
+  void SetYieldTotalTerm() { yieldTotalTerm_ = true; isTotal_ = true; }
+  /// The value the fit compares with the data is formed by the segment, not read off its points: components, a
+  /// sample's abundance weights or a transmission / yield transform.
+  bool NeedsAssembly() const { return HasComponents() || IsNatural() || IsTransformed(); }
+  /// The transforms and their derivatives (n in atoms/barn, cross sections in barns).
+  /// dTdn / dYdn: the derivatives with respect to the thickness n (the parameter segment_<key>_thickness).
+  static double Transmission(double n, double s, double *dTds = nullptr, double *dTdn = nullptr);
+  static double YieldY0(double n, double s, double st, double *dYds = nullptr, double *dYdst = nullptr,
+                        double *dYdn = nullptr);
+  /// One term of a transmission or yield segment at a point: its point, its weight in the segment's sum (component
+  /// scaling, frame factor, abundance), its compound nucleus, whether it is the yield's s_t, its E1/E2 selector.
+  struct TransformTerm {
+    EPoint *point;
+    const ESegment *segment;
+    double weight;  // scale times the abundance of a sample segment's term
+    double scale;   // component scaling times frame factor (1 for the base and the yield's total)
+    int nucleus;
+    bool total;
+    int xsComponent;
+  };
+  /// The terms of a transmission or yield segment at a point (base first); false if a term point is missing.
+  bool TransformTerms(int pointIndex, CNuc *cnuc, std::vector<TransformTerm> &terms);
+  /// True when the point is integrated over sub-points (EPoint::IntegrateTargetEffect).
+  static bool HasSubPointIntegration(EPoint *point);
+  /// IsTotal for this term: the segment is "total" and its exit pair is its entrance pair.
+  bool IsTotalTerm() const { return isTotal_ && this->GetExitKey() == this->GetEntranceKey(); }
+  void ApplyTotalToPoints();
   int GetNaturalSample() const { return naturalSample_; }
   void SetNaturalSample(int sample) { naturalSample_ = sample; }
   /// The token as read ("0", "1" or a sample name), before resolution.
@@ -293,6 +383,25 @@ class ESegment {
   void SetComponentScaling(double scaling);
   /// Scale factor as a component; 1.0 unless it is one.
   double GetComponentScaling() const;
+  /// The factor that takes a SUM term's c.m. cross section into the frame of
+  /// the base point: the base point's lab-to-c.m. conversion factor over the
+  /// term's.  A lab-frame differential segment is compared in the base pair's
+  /// c.m. frame (sigma_cm = J_base sigma_lab, ESegment::Fill), while a
+  /// component to another exit pair is evaluated in its own c.m. frame with its
+  /// own Jacobian J_term, so the lab-frame sum  sum_i s_i sigma_cm,i / J_i
+  /// reads  sum_i s_i (J_base / J_i) sigma_cm,i  there.  1 when the frames
+  /// agree: c.m. or angle-integrated segments, a component of the same pair,
+  /// gamma terms of one entrance pair.
+  static double TermFrameFactor(const EPoint *basePoint, const EPoint *termPoint);
+
+  /// The lab-to-c.m. factor of one RATIO term (sigma_cm = J sigma_lab) at a point,
+  /// with the TERM's own entrance and exit pair and the Jacobian of its own exit
+  /// type (photon or particle).  1 unless the ratio is a lab-frame differential
+  /// one (the term's points were then never converted, so nothing is stored on
+  /// them: the RATIO data value is dimensionless and ESegment::Fill skips the
+  /// cross-section conversion).  Before 2026-10-27 the denominator's factor was
+  /// computed with the BASE segment's pairs (audit item 15).
+  static double RatioTermFrameFactor(EPoint *point, const ESegment *term, CNuc *cnuc);
 
   // Calculate theoretical cross section including components
   /// Theoretical value at a point, combining the components if this is a composite segment.
@@ -301,6 +410,8 @@ class ESegment {
    * has already been Calculate()d for the current parameters (AZURECalc does
    * that in one parallel pass), so only the combination is done here.
    */
+  /// The value of a transmission or yield segment at a point (IsTransformed).
+  double TransformedValue(int pointIndex, CNuc *cnuc, const Config &configure, bool precalculated);
   double CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, const Config &configure, EData *edata,
                                           bool precalculated = false);
 
@@ -308,6 +419,7 @@ class ESegment {
   bool isdifferential_;
   bool iscmdifferential_;
   bool isphase_;
+  double phaseS_ = -1.0;
   /// Which cross section component to compare against: 0 = full, 1 = E1 only, 2 = E2 only.
   int crossSectionComponent_;
   bool isTargetEffect_;
@@ -340,18 +452,19 @@ class ESegment {
   double dataNormNominal_;
   double dataNormError_;
   double energyShift_;
-  double lastEnergyShift_;  // To track last applied energy shift
+  double lastEnergyShift_;  // the shift the points carry; NaN until the first FillEnergyShiftsFromParams applies one
   double energyShiftNominal_;
   double energyShiftError_;
   bool varyEnergyShift_;
   double energyShiftSqrt_;
-  double lastEnergyShiftSqrt_;  // To track last applied sqrt(E) coefficient
+  double lastEnergyShiftSqrt_;  // likewise for the sqrt(E) coefficient
   double energyShiftSqrtNominal_;
   double energyShiftSqrtError_;
   bool varyEnergyShiftSqrt_;
   std::string shiftGroup_;
   int shiftLeaderPos_;
   bool hasShiftGroupFollowers_;
+  std::string shiftFnGroup_;
   std::string normGroup_;
   int normLeaderPos_;
   bool hasNormGroupFollowers_;
@@ -376,6 +489,18 @@ class ESegment {
   int operationType_;
   std::string naturalToken_ = "0";
   int naturalSample_ = 0;
+  bool isTotal_ = false;  // IsTotal
+  double transmission_ = 0.0;  // IsTransmission
+  double yield_ = 0.0;         // IsYield
+  double thickness_ = 0.0;     // GetSampleThickness
+  bool thicknessFit_ = false;  // HasThicknessFit
+  int thicknessVary_ = 0;
+  double thicknessSigma_ = 0.0;
+  std::string thicknessGroup_;
+  int thicknessLeaderPos_ = -1;  // IsThicknessGroupFollower
+  bool yieldTotalTerm_ = false;  // IsYieldTotalTerm
+  bool isCoefficients_ = false;
+  bool coefficientsAbsolute_ = false;
   std::string componentsList_;
   std::string datafile_;
   std::vector<EPoint> points_;

@@ -1,3 +1,4 @@
+#include <QLocale>
 #include "AddSegTestDialog.h"
 
 #include <QPushButton>
@@ -43,11 +44,11 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
   dataTypeCombo->addItem(tr("Phase Shift"), 2);
   dataTypeCombo->addItem(tr("Angular Distribution Coefficients"), 3);
   dataTypeCombo->addItem(tr("Analyzing Power"), 7);
-  dataTypeCombo->addItem(tr("Spin Observable"), 9);
+  dataTypeCombo->addItem(tr("Spin Observable"), 10);
   spinText = new QLineEdit;
   spinText->setVisible(false);
   spinText->setMinimumWidth(110);
-  spinText->setToolTip(tr("Spin observable token (isDiff 9):\n"
+  spinText->setToolTip(tr("Spin observable token (isDiff 10):\n"
                             "  b:y  beam A_y      t:y  target A_0y      b:y*t:y  spin correlation C_yy\n"
                             "  b:yy b:xx b:zz b:xz  spin-1 tensor powers      b:iT11 b:T20 b:T21 b:T22  spherical\n"
                             "  e1:y e2:y  outgoing polarization      b:y>e1:y  polarization transfer\n"
@@ -74,6 +75,15 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
   phaseLValueText->setValidator(intValidator);
   phaseLValueText->setVisible(false);
   phaseLValueText->setMaximumWidth(50);
+  phaseSValueText = new QLineEdit;
+  phaseSValueText->setObjectName("phaseSValueText");
+  phaseSValueText->setValidator(spinValidator);
+  phaseSValueText->setVisible(false);
+  phaseSValueText->setMaximumWidth(50);
+  phaseSValueText->setPlaceholderText(tr("s"));
+  phaseSValueText->setToolTip(tr("Channel spin of the partial wave (\"spin <s>\" on the segment line).\n"
+                                 "Required when the level scheme has several channel spins with this J and l\n"
+                                 "(a target with spin); may be left empty when only one exists."));
 
   advancedModeCheck = new QCheckBox(tr("Advanced Mode (Sum/Ratio)"));
   connect(advancedModeCheck, SIGNAL(stateChanged(int)), this, SLOT(advancedModeChanged(int)));
@@ -176,6 +186,10 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
   phaseLValueLabel->setVisible(false);
   phaseLayout->addWidget(phaseLValueLabel);
   phaseLayout->addWidget(phaseLValueText);
+  phaseSValueLabel = new QLabel(tr("s:"));
+  phaseSValueLabel->setVisible(false);
+  phaseLayout->addWidget(phaseSValueLabel);
+  phaseLayout->addWidget(phaseSValueText);
   angDistLabel = new QLabel(tr("Maximum Order"));
   angDistSpin = new QSpinBox;
   angDistSpin->setMinimum(0);
@@ -225,6 +239,12 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
   lowerLayout->addWidget(advancedModeBox, 2, 0, 1, 4);
   lowerLayout->addWidget(naturalLabel, 3, 0, Qt::AlignRight);
   lowerLayout->addWidget(naturalCombo, 3, 1, 1, 3);
+  sampleRow = new SampleRow(false);
+  sampleRow->setObjectName("sampleRow");
+  QLabel *sampleLabel = new QLabel(tr("Sample:"));
+  sampleLabel->setToolTip(sampleRow->kindCombo->toolTip());
+  lowerLayout->addWidget(sampleLabel, 4, 0, Qt::AlignRight);
+  lowerLayout->addWidget(sampleRow, 4, 1, 1, 3);
 
   valueLayout->addLayout(lowerLayout, 2, 0, 1, 2);
   valueBox->setLayout(valueLayout);
@@ -295,17 +315,19 @@ void AddSegTestDialog::dataTypeChanged(int) {
   phaseLValueLabel->setVisible(phase);
   phaseJValueText->setVisible(phase);
   phaseLValueText->setVisible(phase);
+  phaseSValueLabel->setVisible(phase);
+  phaseSValueText->setVisible(phase);
   angDistLabel->setVisible(angDist);
   angDistSpin->setVisible(angDist);
-  // lab or C.M. differential, A_y or a spin observable (isDiff 9, its token in the Observable field)
-  const bool angles = (code == 1 || code == 5 || code == 7 || code == 9);
-  spinLabel->setVisible(code == 9);
-  spinText->setVisible(code == 9);
+  // lab or C.M. differential, A_y or a spin observable (isDiff 10, its token in the Observable field)
+  const bool angles = (code == 1 || code == 5 || code == 7 || code == 10);
+  spinLabel->setVisible(code == 10);
+  spinText->setVisible(code == 10);
   lowAngleText->setEnabled(angles);
   highAngleText->setEnabled(angles);
   angleStepText->setEnabled(angles);
   // C.M. differential, A_y and spin observables take centre-of-mass angles
-  angleBox->setTitle((code == 5 || code == 7 || code == 9) ? tr("C.M. Angle [degrees]") : tr("Lab Angle [degrees]"));
+  angleBox->setTitle((code == 5 || code == 7 || code == 10) ? tr("C.M. Angle [degrees]") : tr("Lab Angle [degrees]"));
   frameLabel->setVisible(observable == 1);
   frameCombo->setVisible(observable == 1);
   // With "Total capture" as the exit pair only the angle-integrated observable is offered.
@@ -381,7 +403,7 @@ void AddSegTestDialog::addComponent() {
     // For ratio, this is the denominator (only one component needed)
     if (useFixedAngle) {
       double angle = fixedAngleText->text().toDouble();
-      component += QString(", Angle: %1").arg(angle);
+      component += QString(", Angle: %1").arg(QString::number(angle, 'g', QLocale::FloatingPointShortest));
     }
 
     // Only allow one component for ratio
@@ -394,7 +416,7 @@ void AddSegTestDialog::addComponent() {
     bool scalingOk = false;
     double scaling = componentScalingText->text().toDouble(&scalingOk);
     if (scalingOk && scaling != 1.0) {
-      component += QString(", Scaling: %1").arg(scaling);
+      component += QString(", Scaling: %1").arg(QString::number(scaling, 'g', QLocale::FloatingPointShortest));
     }
   }
 
@@ -411,7 +433,7 @@ void AddSegTestDialog::removeComponent() {
 bool AddSegTestDialog::naturalAllowed() const {
   // The engine's NaturalAllowed: a weighted sum is only meaningful for additive observables.
   int code = dataTypeCode();
-  if (code == 2 || code == 3 || code == 7 || code == 9) return false;
+  if (code == 2 || code == 3 || code == 7 || code == 10) return false;
   if (advancedModeCheck->isChecked() && operationCombo->currentIndex() == 1) return false;  // ratio
   return true;
 }

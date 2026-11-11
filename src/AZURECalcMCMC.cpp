@@ -6,6 +6,7 @@
 #include "EData.h"
 #include "ParameterLimitsManager.h"
 #include "AZUREParams.h"
+#include "PriorCovariance.h"
 #include "GSLException.h"
 #include <iostream>
 #include <iomanip>
@@ -176,6 +177,12 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
   localCompound->FillMnParams(params.GetMinuitParams(), &configure());
   localData->FillMnParams(params.GetMinuitParams());
   localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
+  // The tail of the physical vector (normalizations, energy shifts, screening)
+  // is the same in both bases.  The norms were never copied out of it, so the
+  // pooled EData kept its starting norms: the sampler moved the norm
+  // parameters under their priors while the likelihood never saw them (norm
+  // posterior = prior, R-matrix posterior at frozen norms; 2026-10-26).
+  localData->FillNormsFromParams(params_);
   // After the compound: the sub-point grids are laid out from its fit values.
   localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
 
@@ -398,6 +405,9 @@ void AZURECalcMCMC::BuildAutoPriors() const {
   //   one sqrt(E) energy-shift coefficient per segment (all segments)
   //   the shift-function parameters of each segment declaring a "shiftfn" block
   //   one electron-screening potential per <targetInt> line with a screening block
+  //   one fitted target density per <targetInt> line with a densityfit block or per density group
+  //   one fitted Doppler temperature per <targetInt> line with 'doppler T vary sigma'
+  //   one fitted sample thickness per data segment with 'transmission n vary sigma' / 'yield n vary sigma' 
   // AZUREAPI::GetParameterInfo() walks the same sequence.
   std::vector<int> allKinds;
   std::vector<double> allAutoMean;
@@ -453,14 +463,14 @@ void AZURECalcMCMC::BuildAutoPriors() const {
   // Energy shifts, one per segment whether it varies or not.
   for (size_t s = 0; s < segments.size(); ++s) {
     allKinds.push_back(PARAM_SHIFT);
-    allAutoMean.push_back(segments[s].GetNominalEnergyShift());
+    allAutoMean.push_back(0.0);  // shift priors are centred on no shift (ESegment::AddShiftPenalty)
     allAutoStd.push_back(segments[s].GetEnergyShiftError());
   }
 
   // sqrt(E) energy-shift coefficients, one per segment, same prior rule.
   for (size_t s = 0; s < segments.size(); ++s) {
     allKinds.push_back(PARAM_SHIFT);
-    allAutoMean.push_back(segments[s].GetNominalEnergyShiftSqrt());
+    allAutoMean.push_back(0.0);
     allAutoStd.push_back(segments[s].GetEnergyShiftSqrtError());
   }
 
@@ -469,7 +479,7 @@ void AZURECalcMCMC::BuildAutoPriors() const {
     if (!segments[s].OwnsShiftFn() || !segments[s].HasShiftFn()) continue;
     for (int j = 0; j < segments[s].NumShiftFnParams(); ++j) {
       allKinds.push_back(PARAM_SHIFT);
-      allAutoMean.push_back(segments[s].GetNominalShiftFnValues()[j]);
+      allAutoMean.push_back(0.0);
       allAutoStd.push_back(segments[s].GetShiftFnErrors()[j]);
     }
   }
@@ -481,6 +491,32 @@ void AZURECalcMCMC::BuildAutoPriors() const {
     allKinds.push_back(PARAM_SCREENING);
     allAutoMean.push_back(te->GetScreeningNominal());
     allAutoStd.push_back(te->GetScreeningSigma());
+  }
+
+  // Fitted target densities (atoms/cm^2), one per densityfit line or density group: the line's density and
+  // sigma are the prior, as the fit uses them.
+  for (int k = 1; k <= data()->NumDensityParams(); ++k) {
+    const TargetEffect *te = data()->GetTargetEffect(data()->GetDensityEffect(k));
+    allKinds.push_back(PARAM_DENSITY);
+    allAutoMean.push_back(te->GetDensityNominal());
+    allAutoStd.push_back(te->GetDensitySigma());
+  }
+
+  // Fitted Doppler temperatures (K), one per 'doppler T vary sigma' line: the line's T and sigma are the prior.
+  for (int k = 1; k <= data()->NumDopplerParams(); ++k) {
+    const TargetEffect *te = data()->GetTargetEffect(data()->GetDopplerEffect(k));
+    allKinds.push_back(PARAM_DOPPLER);
+    allAutoMean.push_back(te->GetDopplerNominal());
+    allAutoStd.push_back(te->GetDopplerSigma());
+  }
+
+  // Fitted sample thicknesses (atoms/barn), one per transmission / yield line with the fit form: the line's n and
+  // sigma are the prior (none for a thickness-group follower, whose parameter is fixed).
+  for (int k = 1; k <= data()->NumThicknessParams(); ++k) {
+    const ESegment *seg = data()->GetSegment(data()->GetThicknessSegment(k));
+    allKinds.push_back(PARAM_THICKNESS);
+    allAutoMean.push_back(seg->GetNominalThickness());
+    allAutoStd.push_back(seg->IsThicknessGroupFollower() ? 0.0 : seg->GetThicknessSigma());
   }
 
   if (allKinds.size() != fixed_.size()) {
@@ -523,7 +559,7 @@ void AZURECalcMCMC::BuildAutoPriors() const {
     const int kind = freeKinds_[i];
 
     if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_ABUNDANCE || kind == PARAM_SCREENING ||
-        kind == PARAM_ISOSPIN) {
+        kind == PARAM_DENSITY || kind == PARAM_DOPPLER || kind == PARAM_THICKNESS || kind == PARAM_ISOSPIN) {
       // Derived from the data, so it always wins over whatever the GUI holds.
       if (freeAutoStd[i] > 0.0) {
         priorMeans_[i] = freeAutoMean[i];
@@ -581,12 +617,55 @@ void AZURECalcMCMC::BuildAutoPriors() const {
   configure().outStream.flush();
 }
 
+bool AZURECalcMCMC::SetUpPriorCovariance(bool useRWA) const {
+  useRWA_ = useRWA;
+  priorCov_.reset();
+  if (!(configure().paramMask & Config::CALCULATE_WITH_DATA) || configure().priorCovariance.empty()) return true;
+  const int basis = AZUREParams::BasisForConfig(configure());
+  if (PriorCovariance::Load(configure(), g_param_names, fixed_, basis, priorCov_) < 0) return false;
+  if (!useRWA) {
+    // The prior is in the param.sav space: level energies and reduced-width amplitudes.  A physical-parameter chain
+    // samples partial widths, so a prior on a level parameter would be applied to the wrong quantity.
+    for (const std::string &name : priorCov_->Names())
+      if (name.rfind("energy_", 0) == 0 || name.rfind("width_", 0) == 0) {
+        configure().outStream << "**ERROR: priorCovariance: " << name << " is a level parameter and its prior is on "
+                              << "the reduced-width (RWA) parameters of param.sav; sample with RWA parameters."
+                              << std::endl;
+        priorCov_.reset();
+        return false;
+      }
+  }
+  // The multivariate Gaussian replaces the diagonal prior of each of its parameters.
+  std::vector<int> packedOf(fixed_.size(), -1);
+  for (int i = 0, k = 0; i < (int)fixed_.size(); i++)
+    if (!fixed_[i]) packedOf[i] = k++;
+  std::string replaced;
+  for (size_t a = 0; a < priorCov_->FullIndex().size(); a++) {
+    const int f = priorCov_->FullIndex()[a];
+    const int k = (f >= 0 && f < (int)packedOf.size()) ? packedOf[f] : -1;
+    if (k >= 0 && k < (int)usePriors_.size() && usePriors_[k] && k < (int)priorStds_.size() && priorStds_[k] > 0.0) {
+      usePriors_[k] = false;
+      replaced += (replaced.empty() ? "" : ", ") + priorCov_->Names()[a];
+    }
+  }
+  if (!replaced.empty())
+    configure().Note("Note: prior covariance: its multivariate Gaussian replaces the diagonal prior of " + replaced +
+                     " in the MCMC run (a fit applies both).");
+  return true;
+}
+
 double AZURECalcMCMC::CalculateLogPrior(const std::vector<double> &params) const {
+  // Prior parameter covariance: -0.5 (p - mu)^T C^-1 (p - mu) - 0.5 log det(2 pi C).
+  double covLogPrior = 0.0;
+  if (priorCov_ && priorCov_->Size() > 0) {
+    const vector_r full = useRWA_ ? ReconstructFullParameters(params) : ReconstructFullParametersPhysical(params);
+    covLogPrior = -0.5 * priorCov_->Chi2(full) + priorCov_->LogNormalization();
+  }
   if (priorMeans_.empty() || priorStds_.empty() || usePriors_.empty()) {
-    return 0.0;  // No priors specified - uniform priors
+    return covLogPrior;  // No diagonal priors specified - uniform priors
   }
 
-  double logPrior = 0.0;
+  double logPrior = covLogPrior;
 
   for (size_t i = 0; i < params.size() && i < usePriors_.size(); i++) {
     if (usePriors_[i] && i < priorMeans_.size() && i < priorStds_.size()) {
@@ -847,9 +926,16 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
               localCompound->FillMnParams(params.GetMinuitParams(), &g_mcmc_for_callbacks->configure());
               localData->FillMnParams(params.GetMinuitParams());
               localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
+              localData->FillNormsFromParams(fullParams);
               // After the compound: the sub-point grids are laid out from its fit values.
               localData->FillEnergyShiftsFromParams(fullParams, localData, localCompound, &g_mcmc_for_callbacks->configure());
               rwaFullParams = params.GetMinuitParams().Params();  // RWA params after TransformIn
+              // FillMnParams read the clone's starting norms and shifts; the
+              // sample's are in the tail of the physical vector, the same in
+              // both bases from the first data parameter on, so param.mcmc
+              // gets the sampled values rather than the start (2026-10-26).
+              for (size_t i = (size_t)localData->GetNormParamOffset(); i < rwaFullParams.size() && i < fullParams.size(); i++)
+                rwaFullParams[i] = fullParams[i];
 
               if (g_mcmc_for_callbacks->configure().paramMask & Config::USE_BRUNE_FORMALISM) {
                 localCompound->CalcShiftFunctions(g_mcmc_for_callbacks->configure());
@@ -863,6 +949,15 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
               if (!data.point()->IsMapped()) {
                 data.point()->Calculate(localCompound, g_mcmc_for_callbacks->configure());
               }
+            }
+            // Segments whose value the segment assembles (components, sample weights, transmission / yield): the
+            // iterator above skips composite segments, and a point holds the plain cross section, not the observable.
+            for (int s = 1; s <= localData->NumSegments(); s++) {
+              ESegment *seg = localData->GetSegment(s);
+              if (!seg || !seg->NeedsAssembly()) continue;
+              for (int pid = 0; pid < seg->NumPoints(); pid++)
+                seg->GetPoint(pid + 1)->SetFitCrossSection(
+                    seg->CalculateTheoreticalCrossSection(pid, localCompound, g_mcmc_for_callbacks->configure(), localData));
             }
 
             localData->WriteOutputFiles(g_mcmc_for_callbacks->configure(), true);
@@ -878,6 +973,11 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
               std::ofstream paramOut(paramMCMCFile);
               if (paramOut) {
                 paramOut.precision(7);
+                // Tagged like param.sav (the amplitudes are this run's basis);
+                // untagged before 2026-11-04, see AZURECalc::WriteParameters.
+                paramOut << std::setw(20) << "#parametrization" << std::scientific << std::setw(20)
+                         << (double)AZUREParams::BasisForConfig(g_mcmc_for_callbacks->configure())
+                         << std::scientific << std::setw(20) << 0.0 << std::endl;
                 for (size_t i = 0; i < rwaFullParams.size(); i++) {
                   paramOut << std::setw(20) << g_param_names[i]
                            << std::scientific << std::setw(20) << rwaFullParams[i]
@@ -973,6 +1073,11 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
     // energy-shift priors from the data. Must follow UpdateParameterVectors()
     // (it needs fixed_) and precede any log-probability evaluation.
     BuildAutoPriors();
+    // The prior parameter covariance (after the automatic priors, which it replaces for its parameters).
+    if (!SetUpPriorCovariance(useRWA)) {
+      configure().outStream << "MCMC sampling not started." << std::endl;
+      return;
+    }
 
     if (ndim == 0) {
       configure().outStream << "Error: No parameters provided for MCMC sampling\n";
@@ -1059,7 +1164,7 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
         spread = energySpreadMeV;
         nEnergyCapped++;
       } else if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_ABUNDANCE || kind == PARAM_SCREENING ||
-                 kind == PARAM_ISOSPIN) {
+                 kind == PARAM_DENSITY || kind == PARAM_DOPPLER || kind == PARAM_THICKNESS || kind == PARAM_ISOSPIN) {
         // Starting outside the prior only wastes steps walking back into it.
         if (j < (int)priorStds_.size() && j < (int)usePriors_.size() &&
             usePriors_[j] && priorStds_[j] > 0.0 && priorStds_[j] < spread) {

@@ -4,6 +4,7 @@
 #include "AZUREMain.h"
 
 #include "Constants.h"
+#include <map>
 #include <vector>
 
 class Config;
@@ -27,10 +28,8 @@ class AZUREAPI {
    * The AZUREAPI object is created with reference to an EData and CNuc object.
    *. The runtime configurations are also passed through a Config structure.
    */
-  AZUREAPI(Config &configure) :
-    configure_(configure),
-    data_(nullptr),
-    compound_(nullptr) {};
+  // Defined in the .cpp (Config is incomplete here).
+  AZUREAPI(Config &configure);
 
   // Defined in the .cpp: EData and CNuc are incomplete here, and deleting an
   // incomplete type is undefined.
@@ -62,8 +61,24 @@ class AZUREAPI {
   void SetExtrap();
   // Set the channel radius of particle pair idx (1-based) to r fm and rebuild
   // the compound nucleus, data and parameters.  Returns false if the rebuild
-  // failed, in which case the instance is no longer usable.
+  // failed, in which case the instance is no longer usable.  The override is
+  // kept for the life of the instance: every later rebuild (another SetRadius,
+  // Rebuild after a potential change, Initialize on a mode switch) applies all
+  // of them.  Before 2026-11-02 each rebuild applied only its own call's pair.
   bool SetRadius(int idx, double r);
+  // The channel-radius overrides in force, pair number -> fm.
+  const std::map<int, double> &RadiusOverrides() const { return radiusOverrides_; }
+  // Give channels (l, and optionally s and J; a negative value means any) of particle pair idx (1-based) a radius
+  // of their own, r fm, and rebuild, as SetRadius does.  It wins over the .azr's <channelRadii> line for the same
+  // (pair, l, s, J) and is kept, like SetRadius's, through every later rebuild; a later SetRadius of the pair
+  // leaves it in place.  Returns false (the instance is then unusable) if the rebuild failed, e.g. an external-
+  // capture transition whose initial and final channels would get different radii (2026-11-10).
+  bool SetChannelRadius(int idx, int l, double s, double J, double r);
+  /*!
+   * Every channel's radius: 8 doubles per channel of every J-group, in J-group and channel order,
+   *   [jgroup, channel, pair number, l, s, J, parity, radius (fm)].
+   */
+  vector_r GetChannelRadii() const;
   /*!
    * Rebuild the compound nucleus and the data from the .azr and re-initialize,
    * recomputing the external-capture integrals rather than reading back
@@ -111,7 +126,22 @@ class AZUREAPI {
    *                      line with a screening block: the effect number in
    *                      field 6, the prior centre in field 5, the prior sigma
    *                      in field 14 (0 = none)
-   *                    8=isospin parameter (only in a project with an
+   *                    8=fitted target density (atoms/cm^2) of a <targetInt>
+   *                      line with a densityfit block or of a density group:
+   *                      as type 7, plus the largest density the sub-point
+   *                      grids span in field 8
+   *                    9=fitted free-gas Doppler temperature (K) of a
+   *                      <targetInt> line with 'doppler T vary sigma
+   *                      [Tmax]': as type 8, the layout temperature (the
+   *                      largest the sub-point grids span) in field 8
+   *                   10=fitted sample thickness (atoms/barn) of a data
+   *                      segment with 'transmission n vary sigma' or
+   *                      'yield n vary sigma': the segment key in field 13,
+   *                      n (prior centre) in field 5, sigma in field 14
+   *                      (0 = none, and for a thicknessgroup follower),
+   *                      0 transmission / 1 yield in field 6, the group
+   *                      leader's key in field 7 for a follower (else -1)
+   *                   11=isospin parameter (only in a project with an
    *                      <isospin> block): an internal Coulomb shift or an
    *                      isospin-forbidden amplitude, k (0-based, shifts then
    *                      mixes) in field 6, the prior centre in field 5 and
@@ -136,7 +166,7 @@ class AZUREAPI {
 
   // Number of numeric fields packed per particle pair by GetPairsInfo().
   // Keep this in sync with pyazr/parameters.py (Pair._NFIELDS).
-  static const int kPairInfoFields = 19;
+  static const int kPairInfoFields = 20;
   /*!
    * Returns structured metadata describing every particle pair, in 1-based
    * pair-number order (the same number stored in field 9 -- "pair" -- of
@@ -157,11 +187,17 @@ class AZUREAPI {
    *   10 Z2            charge number of particle 2
    *   11 M2            mass of particle 2 (amu)
    *   12 sepE          separation energy (MeV)
-   *   13 exE           excitation energy of the pair (MeV)
+   *   13 exE           total excitation energy of the pair, light + heavy
+   *                    particle (MeV): the threshold is sepE + exE
    *   14 chRad         channel radius (fm)
    *   15 i1i2factor    1 / ((2 J1 + 1)(2 J2 + 1)); the entrance pair's value is
    *                    the denominator of the statistical spin factor
    *                    omega = (2 J + 1) * i1i2factor
+   *   16 nucZ          charge number of the compound nucleus the pair forms
+   *   17 nucA          mass number of that nucleus
+   *   18 abundance     its abundance in the default sample (1 without <abundances>)
+   *   19 lightExE      excitation energy of particle 1 (MeV), the optional 32nd
+   *                    column of the <levels> line; exE - lightExE is particle 2's
    */
   vector_r GetPairsInfo() const;
 
@@ -328,6 +364,17 @@ class AZUREAPI {
   int RefreezeCovariance();
 
   /*!
+   * Prior parameter covariance (<config> priorCovariance=, PriorCovariance.h): the whitened residuals
+   * r = L^-1 (p - mu) at the given non-fixed RWA parameters, one per prior parameter (empty without the key, or in
+   * extrapolation mode).  r.r is the prior's chi2 term, pyazr's penalties()["prior_covariance"]; it is NOT part of
+   * CalculateChi2RWA (pyazr's objective() adds it, as the normalization priors), and CalculateResidualJacobianRWA
+   * appends these rows (Jacobian L^-1) after the data and scattering-length rows.
+   */
+  vector_r PriorCovarianceResidualsRWA(const vector_r &rwaParams) const;
+  /// The names of the prior's parameters, in its row order (after the marginalization of fixed ones).
+  std::vector<std::string> PriorCovarianceNames() const;
+
+  /*!
    * Value and analytic gradient of the (data) chi-squared with respect to the
    * non-fixed RWA parameters.  Input: the non-fixed RWA parameters (energies,
    * reduced widths, normalizations), as for CalculateChi2RWA.  Returns
@@ -344,10 +391,14 @@ class AZUREAPI {
    * Gauss-Newton / Levenberg-Marquardt.  Columns are the non-fixed parameters
    * (input order).  Returns
    *   [ nRes, nCols, r_0..r_{nRes-1}, J row-major (nRes x nCols) ],
-   * or [ -1 ] if a point is outside the supported analytic path.  Energy-shift
-   * columns are left zero.
+   * or [ -1 ] if a point is outside the supported analytic path.  Energy-shift,
+   * sqrt(E)-shift, shift-function and target-density columns are central
+   * differences, two residual evaluations each; a column listed in
+   * \p skipColumns (0-based indices into \p params) is not differenced and
+   * comes back zero, for a caller that holds those parameters (rmfit's fixed
+   * bounds, 2026-10-30).  The adjoint columns are always filled.
    */
-  vector_r CalculateResidualJacobianRWA(const vector_r &params) const;
+  vector_r CalculateResidualJacobianRWA(const vector_r &params, const std::vector<int> &skipColumns = {}) const;
 
   /*!
    * Per-point sensitivities d(model)/d(theta) of the calculated segments, for
@@ -413,8 +464,16 @@ class AZUREAPI {
 
 
  private:
-  /// Shared body of SetRadius and Rebuild; idx/r are null for a plain rebuild.
-  bool RebuildImpl(const int *idx, const double *r);
+  /// Shared body of SetRadius and Rebuild: refill from the .azr with every radius override in \p radii and
+  /// every per-channel override in \p channelRadii.
+  bool RebuildImpl(const std::map<int, double> &radii, const std::vector<CNuc::ChannelRadiusOverride> &channelRadii);
+  /// Read and match the prior parameter covariance onto names_ / fixed_ (data mode only) and hand it to the data
+  /// object; false (ERROR printed) when the file is refused.
+  bool SetUpPriorCovariance();
+  /// Channel-radius overrides set through SetRadius, applied on every (re)build.
+  std::map<int, double> radiusOverrides_;
+  /// Per-channel radius overrides set through SetChannelRadius, applied on every (re)build.
+  std::vector<CNuc::ChannelRadiusOverride> channelRadiusOverrides_;
 
 
   /*!

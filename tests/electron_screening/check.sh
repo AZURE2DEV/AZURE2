@@ -56,7 +56,7 @@ if [ -s "$(out bare)" ] && [ -s "$(out scr)" ]; then
   # AZURE2's constants (Constants.h) and the pair's masses (1.00728, 12).
   n6="$(grep -c . "$SRC/data/skowronski_luna_hpge.dat")"; n7="$(grep -c . "$SRC/data/skowronski_luna_bgo.dat")"
   read -r worst unscr nrow <<< "$(paste "$(out bare)" "$(out scr)" | awk -v n=$((n6 + n7)) '
-    BEGIN { pi = 3.141592650; uconv = 931.4940880; fs = 1 / 137.0359996790; mu = 1.00728 * 12 / 13.00728 }
+    BEGIN { pi = 3.141592653589793; uconv = 931.49410242; fs = 1 / 137.035999084; mu = 1.00728 * 12 / 13.00728 }
     NF >= 8 { r++; m = NF / 2; E = $1; b = $4; s = $(m + 4)
       if (r <= n) { eta = sqrt(uconv / 2) * fs * 6 * sqrt(mu / E); f = exp(pi * eta * 1.0e-3 / E)
                     d = s / (b * f) - 1; if (d < 0) d = -d; if (d > w) w = d }

@@ -30,8 +30,11 @@ const double speedOfLightMPerMicroS = 299.792458;  ///< m / microsecond
 /// Flight time (microseconds) of a projectile of rest energy mass (MeV) and
 /// laboratory kinetic energy e (MeV) over flightPath metres, relativistic.
 inline double TimeOfFlight(double e, double mass, double flightPath) {
-  double gamma = 1.0 + e / mass;
-  double beta = std::sqrt(1.0 - 1.0 / (gamma * gamma));
+  // beta = sqrt(gamma^2 - 1)/gamma with gamma^2 - 1 = x (2 + x), x = e/mass:
+  // no cancellation at thermal energies (1 - 1/gamma^2 lost six digits at
+  // e/mass ~ 1e-11, i.e. 1.5 ns of a 3 ms flight time, 2026-11-07).
+  double x = e / mass;
+  double beta = std::sqrt(x * (2.0 + x)) / (1.0 + x);
   return flightPath / (beta * speedOfLightMPerMicroS);
 }
 
@@ -41,8 +44,9 @@ inline double EnergyFromTime(double t, double mass, double flightPath) {
   if (t <= 0.0) return 0.0;
   double beta = flightPath / (t * speedOfLightMPerMicroS);
   if (beta >= 1.0) return 0.0;
-  double gamma = 1.0 / std::sqrt(1.0 - beta * beta);
-  return mass * (gamma - 1.0);
+  // gamma - 1 = beta^2 / (s (1 + s)), s = sqrt(1 - beta^2): exact, no cancellation.
+  double s = std::sqrt(1.0 - beta * beta);
+  return mass * beta * beta / (s * (1.0 + s));
 }
 }  // namespace UdrKinematics
 

@@ -204,6 +204,14 @@ for v in brune:"":ext lanethomas:"--no-brune":ext pole:"--no-brune":ext_pole par
   else
     bad "$tag: scatteringLengths.out differs between the routes or is missing"
   fi
+  # the table belongs to the file; the run log (the GUI execution screen) only names it
+  if grep -q "s-wave scattering lengths at each" "$WORK/sc_$tag/run.log"; then
+    bad "$tag: the scattering-length table is printed to the run log"
+  elif grep -q "Scattering lengths written to" "$WORK/sc_$tag/run.log"; then
+    ok "$tag: the run log names scatteringLengths.out and does not repeat the table"
+  else
+    bad "$tag: the run log does not mention scatteringLengths.out"
+  fi
   MODEL="$model" gradcheck "dg_$tag" "$flags"
   MODEL="$model" gradcheck "dgl_$tag" "$flags" AZURE_LEVEL_SPACE=1
   nrows="$(wc -l < "$WORK/dg_$tag.rows" | tr -d ' ')"

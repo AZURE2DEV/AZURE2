@@ -76,6 +76,12 @@ class ExforData : public QObject {
 
   /// Convert parsed points to AZURE2 data-file text (energy angle cross error).
   static QString toAzureText(const QList<ExforPoint> &points);
+  /// The entrance channel the conversions need (what downloadDataset is given):
+  /// charges and masses (amu) of projectile 1 and target 2.
+  void setEntranceChannel(double z1, double z2, double m1, double m2) { cz1_ = z1; cz2_ = z2; cm1_ = m1; cm2_ = m2; }
+  /// Parse an x4get CSV into points (public for the unit tests).
+  bool parseCsv(const QString &csv, QList<ExforPoint> &out,
+                bool &differential, QString &error) const;
 
  signals:
   void searchFinished(const QList<ExforDataset> &datasets);
@@ -93,8 +99,6 @@ class ExforData : public QObject {
 
   static bool parseSearch(const QByteArray &data, QList<ExforDataset> &out,
                           QString &error);
-  bool parseCsv(const QString &csv, QList<ExforPoint> &out,
-                bool &differential, QString &error) const;
 
   QNetworkAccessManager *manager_;
   RequestType pending_;

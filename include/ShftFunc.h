@@ -20,11 +20,11 @@ class CoulombTable;
 class ShftFunc {
  public:
   /*!
-   * The ShftFunc object is created with reference to a particle pair.
+   * The ShftFunc object is created with reference to a particle pair and the radius of the channel.
    */
-  ShftFunc(PPair *pPair) {
+  ShftFunc(PPair *pPair, double channelRadius) {
     totalSepE_ = pPair->GetSepE() + pPair->GetExE();
-    radius_ = (double)pPair->GetChRad();
+    radius_ = channelRadius;  // the channel's radius (AChannel::GetRadius), not necessarily the pair's
     neutral_ = (pPair->GetZ(1) * pPair->GetZ(2) == 0);
     zz_ = pPair->GetZ(1) * pPair->GetZ(2);
     redmass_ = pPair->GetRedMass();
@@ -85,6 +85,10 @@ class ShftFunc {
   Kinematics::Channel kin_;
   /// The universal Coulomb table for a charged pair when Config::useCoulombTable is set.
   const CoulombTable *table_;
+  /// Set while a difference stencil has a point outside the table: every point then takes the exact route.
+  bool forceExact_ = false;
+  /// Does the table cover the bound state at this energy (eta_b, rho_b of l)?
+  bool BoundTableOk(int l, double energy) const;
   static const CoulombTable *SharedTable(bool neutral);
   /// Charged closed channels from the exact U ratio, unless AZURE_BOUND_SHIFT_NUMERICAL=1.
   static bool UseURatio();

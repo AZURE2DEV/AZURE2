@@ -33,6 +33,8 @@ void Config::Reset() {
   checkdir = "";
   nloptAlgorithm = 0;       // Default to SBPLX
   useHybridMethod = false;  // Default to disabled
+  refreezeCovariance = 0;
+  maxCalls = 0;
   useAdaptiveGrid = true;   // Default to adaptive grid
   useCoulombTable = true;   // the universal Coulomb table where it covers a channel (--no-coulomb-table)
   replaceSubPointGrids = true;  // re-place the adaptive sub-point grids (--no-grid-replacement)
@@ -45,11 +47,35 @@ void Config::Reset() {
   abundanceSumSigma = 0.0;
   relativistic = false;      // Off unless the <config> block says so: non-relativistic kinematics as before
   relativisticReferencePair = 0;
+  priorCovariance.clear();   // no prior parameter covariance unless the <config> block names a file
+}
+
+void Config::Note(const std::string &line) const {
+  if (noteLog) {
+    std::lock_guard<std::mutex> lock(noteLog->mutex);
+    if (!noteLog->printed.insert(line).second) return;
+  }
+  outStream << line << std::endl;
 }
 
 /*!
  * This funciton reads the configuration file and parses various options.
  */
+
+bool Config::ResolveMatrixRoute() {
+  if (paramMask & USE_AMATRIX) return false;
+  const bool ignore = (paramMask & IGNORE_ZERO_WIDTHS), park = (paramMask & USE_PARK_FORMALISM);
+  if (!ignore && !park) return false;
+  outStream << "WARNING: the R-matrix route (<config> first line false) does not implement ";
+  if (ignore)
+    outStream << "ignore-externals, which is on (CLI: the default, --no-ignore-externals turns it off; pyazr:"
+              << " ignore_externals=False)";
+  if (ignore && park) outStream << ", nor ";
+  if (park) outStream << "Park's parametrization";
+  outStream << ".  The A-matrix route will be used." << std::endl;
+  paramMask |= USE_AMATRIX;
+  return true;
+}
 
 int Config::ReadConfigFile() {
   std::string dummy;
@@ -164,6 +190,8 @@ int Config::ReadConfigFile() {
       relativistic = (value == "1" || value == "true");
     else if (key == "relativisticReferencePair")
       relativisticReferencePair = atoi(value.c_str());
+    else if (key == "priorCovariance")
+      priorCovariance = value;
   }
   if (line != "</config>") return -1;
   in.close();

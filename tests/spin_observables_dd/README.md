@@ -1,4 +1,4 @@
-# spin_observables_dd — isDiff 9 on identical spin-1 bosons (d + d)
+# spin_observables_dd — isDiff 10 on identical spin-1 bosons (d + d)
 
 Nineteen spin observables of a d + d toy (identical bosons: only l + s even; levels 0+, 2+ with
 s- and l-mixing, 1-, 2-, 0-, 3-): vector and spherical-tensor analyzing powers of beam and target

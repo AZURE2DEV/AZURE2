@@ -1,7 +1,7 @@
 // Headless checks on the observable controls of the segment dialogs.
 //
 // The observable list is short (Angle Integrated, Differential, Phase Shift,
-// Analyzing Power, Spin Observable, and for test segments Angular Distribution
+// Analyzing Power, Angular Coefficients, Spin Observable, and for test segments Angular Distribution
 // Coefficients);
 // its variants are separate controls that map onto the unchanged isDiff codes:
 //   - Differential + Frame Lab / C.M.            -> data 1 / 4,  test 1 / 5
@@ -100,9 +100,10 @@ int main(int argc, char** argv) {
   {
     AddSegDataDialog d;
     d.setPairsModel(&pairs);
-    ok("data: observable list is Angle Integrated, Differential, Phase Shift, Analyzing Power, Spin Observable",
-       d.dataTypeCombo->count() == 5 && d.dataTypeCombo->itemData(0).toInt() == 0 && d.dataTypeCombo->findData(1) >= 0 &&
-           d.dataTypeCombo->findData(2) >= 0 && d.dataTypeCombo->findData(7) >= 0 && d.dataTypeCombo->findData(9) >= 0,
+    ok("data: observable list is Angle Integrated, Differential, Phase Shift, Analyzing Power, Angular Coefficients, Scattering Length, Spin Observable",
+       d.dataTypeCombo->count() == 7 && d.dataTypeCombo->itemData(0).toInt() == 0 && d.dataTypeCombo->findData(1) >= 0 &&
+           d.dataTypeCombo->findData(2) >= 0 && d.dataTypeCombo->findData(7) >= 0 && d.dataTypeCombo->findData(9) == 4 &&
+           d.dataTypeCombo->findData(AddSegDataDialog::ScatteringLengthCode) == 5 && d.dataTypeCombo->findData(10) == 6,
        QString::number(d.dataTypeCombo->count()));
     ok("data: no total-capture, C.M. or E1/E2 items in the observable list",
        d.dataTypeCombo->findData(3) < 0 && d.dataTypeCombo->findData(4) < 0 && d.dataTypeCombo->findData(5) < 0 && d.dataTypeCombo->findData(6) < 0);
@@ -191,7 +192,7 @@ int main(int argc, char** argv) {
       {1, 1, 1, "lab differential"},                {-1, 3, 0, "total capture"},
       {1, 4, 1, "C.M. differential"},               {2, 5, 0, "E1 only"},
       {2, 6, 0, "E2 only"},                         {1, 7, 7, "analyzing power"},
-      {1, 2, 2, "phase shift"},                     {1, 9, 9, "spin observable"},
+      {1, 2, 2, "phase shift"},                     {1, 10, 10, "spin observable"},
     };
     for (const Case& c : cases) {
       AddSegDataDialog d;
@@ -203,7 +204,7 @@ int main(int argc, char** argv) {
          QString("%1 / %2").arg(d.dataTypeCode()).arg(writtenExit(d, 3)));
       if (c.code == 1 || c.code == 4)
         ok(tag + ": frame restored", !d.frameCombo->isHidden() && d.frameCombo->currentData().toInt() == c.code);
-      ok(tag + ": angle box title", d.angleBox->title() == ((c.code == 4 || c.code == 7 || c.code == 9) ? CM : LAB), d.angleBox->title());
+      ok(tag + ": angle box title", d.angleBox->title() == ((c.code == 4 || c.code == 7 || c.code == 10) ? CM : LAB), d.angleBox->title());
       if (c.code == 5 || c.code == 6)
         ok(tag + ": multipolarity restored", !d.multipolarityCombo->isHidden() && d.multipolarityCombo->currentData().toInt() == c.code);
       if (c.code == 3)
@@ -224,7 +225,7 @@ int main(int argc, char** argv) {
     ok("test: observable list is Angle Integrated, Differential, Phase Shift, Ang. Dist. Coefficients, Analyzing Power, "
        "Spin Observable",
        d.dataTypeCombo->count() == 6 && d.dataTypeCombo->itemData(0).toInt() == 0 && d.dataTypeCombo->findData(3) >= 0 &&
-           d.dataTypeCombo->findData(7) >= 0 && d.dataTypeCombo->findData(9) >= 0 && d.dataTypeCombo->findData(4) < 0 && d.dataTypeCombo->findData(5) < 0);
+           d.dataTypeCombo->findData(7) >= 0 && d.dataTypeCombo->findData(10) >= 0 && d.dataTypeCombo->findData(4) < 0 && d.dataTypeCombo->findData(5) < 0);
     ok("test: total-capture exit item present with a gamma pair", d.exitPairCombo->findData(PairKeyCombo::TotalCapture) >= 0);
     d.exitPairCombo->setKey(2);
     ok("test: gamma exit, Angle Integrated -> isDiff 0, frame hidden", d.dataTypeCode() == 0 && d.frameCombo->isHidden());

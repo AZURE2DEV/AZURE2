@@ -60,6 +60,10 @@ class RMatrixFunc : public GenMatrixFunc {
   vector_matrix_c rl_matrices_;
   vector_matrix_c rl_inv_matrices_;
   vector_matrix_c rl_inv_r_matrices_;
+  /// Groups solved at a pole of their R-matrix (FillMatrices): [1-RL]^{-1}R and [1-RL]^{-1} from the level form,
+  /// taken by InvertMatrices in place of inverting [1-RL]; empty for every other group.
+  vector_matrix_c pole_rl_inv_r_;
+  vector_matrix_c pole_rl_inv_;
   /// Compound nucleus (1-based) of the point being evaluated: groups of the
   /// others are skipped by FillMatrices and InvertMatrices.
   int activeNucleus_ = 0;

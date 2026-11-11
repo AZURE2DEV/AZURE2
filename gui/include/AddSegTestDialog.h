@@ -1,6 +1,7 @@
 #ifndef ADDSEGTESTDIALOG_H
 #define ADDSEGTESTDIALOG_H
 
+#include "SampleRow.h"
 #include <QDialog>
 #include <QShowEvent>
 #include <QLineEdit>
@@ -56,9 +57,11 @@ class AddSegTestDialog : public QDialog {
   int observableCode() const;
 
   QLineEdit *phaseJValueText;
-  QLineEdit *spinText;  //!< isDiff 9 observable token
+  QLineEdit *spinText;  //!< isDiff 10 observable token
   QLabel *spinLabel;
   QLineEdit *phaseLValueText;
+  QLineEdit *phaseSValueText;   ///< channel spin of a phase-shift segment ("spin <s>"), empty = not given
+  QLabel *phaseSValueLabel;
   QLabel *phaseJValueLabel;
   QLabel *phaseLValueLabel;
   QLabel *angDistLabel;
@@ -71,6 +74,9 @@ class AddSegTestDialog : public QDialog {
    *  refuses (ratio, phase shift, analyzing power). */
   QLabel *naturalLabel;
   QComboBox *naturalCombo;
+  /*! The transmission / self-shielded-yield block of the line (SampleRow.h): kind and n only, a test segment has no
+   *  fit parameter (a fit form read from the line is kept as it is and ignored by the engine). */
+  SampleRow *sampleRow = nullptr;
   /*! Fill the drop-down from the model's samples ("" = the default sample first). */
   void setSamples(const QStringList &samples);
   /*! The chosen token: "" (not natural), "1" (default sample) or a sample name. */

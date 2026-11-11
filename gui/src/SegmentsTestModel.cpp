@@ -163,6 +163,11 @@ QVariant SegmentsTestModel::data(const QModelIndex &index, int role) const {
     else if (index.column() == 8)
       return line.angleStep;
     else if (index.column() == 9) {
+      // a transmission / self-shielded-yield curve: the observable and its thickness
+      const SegmentKeywords::SampleBlock sb = SegmentKeywords::sampleBlock(line.extraTokens);
+      if (!sb.kind.isEmpty())
+        return QString("<center>%1<br><small>n = %2 atoms/b</small></center>")
+            .arg(sb.kind == "transmission" ? tr("Transmission") : tr("Self-Shielded Yield"), sb.n);
       if (line.dataType == 3)
         return QString(tr("<center>Angular Distribution</center>"));
       else if (line.dataType == 2) {
@@ -206,7 +211,7 @@ QVariant SegmentsTestModel::data(const QModelIndex &index, int role) const {
         return QString(tr("<center>C.M. Differential</center>"));
       else if (line.dataType == 7)
         return QString(tr("<center>Analyzing Power</center>"));
-      else if (line.dataType == 9)
+      else if (line.dataType == 10)
         return QString(tr("<center>Spin: %1</center>")).arg(line.spinObservable);
       else
         return QString(tr("<center>Angle Integrated</center>"));
@@ -399,6 +404,8 @@ Qt::ItemFlags SegmentsTestModel::flags(const QModelIndex &index) const {
   return QAbstractTableModel::flags(index);
 }
 
+// Row of a line equal to this one in every field (components and keyword blocks included; not the active flag),
+// or -1.  Before 2026-10-31 the components and keyword blocks were not compared.
 int SegmentsTestModel::isSegTestLine(const SegmentsTestData &line) const {
   int foundLine = -1;
   for (int i = 0; i < segTestLineList.size(); i++) {
@@ -414,7 +421,11 @@ int SegmentsTestModel::isSegTestLine(const SegmentsTestData &line) const {
         tempLine.dataType == line.dataType &&
         tempLine.phaseJ == line.phaseJ &&
         tempLine.phaseL == line.phaseL &&
-        tempLine.maxAngDistOrder == line.maxAngDistOrder) {
+        tempLine.maxAngDistOrder == line.maxAngDistOrder &&
+        tempLine.isAdvanced == line.isAdvanced &&
+        tempLine.operationType == line.operationType &&
+        tempLine.componentsList == line.componentsList &&
+        tempLine.extraTokens.simplified() == line.extraTokens.simplified()) {
       foundLine = i;
       break;
     }

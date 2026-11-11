@@ -13,7 +13,8 @@ class AboutAZURE2Dialog : public QDialog {
   Q_OBJECT
 
  public:
-  AboutAZURE2Dialog(QWidget *parent = 0);
+  /// polarized: show the logo with the polarization arrow (the project holds a polarization segment).
+  AboutAZURE2Dialog(QWidget *parent = 0, bool polarized = false);
 };
 
 #endif

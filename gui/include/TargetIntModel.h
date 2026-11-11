@@ -7,8 +7,11 @@
 Q_DECLARE_METATYPE(QList<double>);
 
 struct TargetIntData {
-  static const int SIZE = 39;  // column 33: derived, display-only summary of the effect types; 34: sigmaLab;
-                               // 35-38: electron screening (on, U_e eV, vary, prior sigma eV)
+  static const int SIZE = 50;  // column 33: derived, display-only summary of the effect types; 34: sigmaLab;
+                               // 35-38: electron screening (on, U_e eV, vary, prior sigma eV);
+                               // 39-43: fitted density (densityfit on, vary, prior sigma, grid maximum, group);
+                               // 44-45: free-gas Doppler broadening (doppler on, temperature K);
+                               // 46-49: fitted Doppler temperature (fit form on, vary, prior sigma K, grid maximum K)
   int isActive;
   QString segmentsList;
   int numPoints;
@@ -59,7 +62,39 @@ struct TargetIntData {
   double screeningUe = 0.;     // eV
   bool screeningVary = false;
   double screeningSigma = 0.;  // eV
+  // Fitted target density (thin-target integration only): `densityfit vary sigma [max]` makes the density the
+  // parameter density_<n> with a Gaussian prior of width densitySigma ("0" = none; atoms/cm^2, or "2.3%" of the
+  // density); densityMax is the largest density the sub-point grids span (0 = the engine's default); a
+  // `densitygroup` label makes lines share one parameter, the group's first line holding it and the densityfit
+  // block (a member may carry only the label).
+  bool densityFit = false;
+  bool densityVary = false;
+  QString densitySigma = "0";
+  double densityMax = 0.;
+  QString densityGroup;
+  // Free-gas Doppler broadening (the `doppler T` keyword, SAMMY's FGM): target atoms in thermal motion at the
+  // effective temperature T (K, > 0).  The engine broadens the cross section first, then applies any
+  // transmission/yield transform and the line's resolution kernel; a line may carry it alone (no convolution,
+  // no target integration), and it integrates over the line's sub-points either way.
+  bool isDoppler = false;
+  double dopplerTemperature = 0.;  // K
+  // Fitted temperature: `doppler T vary sigma [Tmax]` makes T the parameter doppler_<n> (n = the line's place among
+  // the active lines) with a Gaussian prior of width dopplerSigma K about T (0 = none); dopplerMax is the largest
+  // temperature the sub-point grids span (0 = the engine's default, defaultDopplerMax).  Without dopplerFit the
+  // line carries the plain `doppler T`.
+  bool dopplerFit = false;
+  bool dopplerVary = false;
+  double dopplerSigma = 0.;  // K
+  double dopplerMax = 0.;    // K, 0 = the default
 };
+
+/*! The prior width of a densityfit sigma token ("2.3%" of \p density, or atoms/cm^2); -1 if unreadable or negative. */
+double densitySigmaValue(const QString &token, double density);
+/*! The largest density the engine lays the grids out for when no maximum is given (TargetEffect). */
+double defaultDensityMax(double density, double sigma);
+/*! The temperature the engine lays a fitted Doppler line's grids out for when no Tmax is given (TargetEffect):
+ *  max(T + 3 sigma, 1.21 T) with a prior, 2 T without. */
+double defaultDopplerMax(double temperature, double sigma);
 
 /*!
  * Table model behind the Target Integration tab.

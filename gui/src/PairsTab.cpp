@@ -10,6 +10,8 @@
 #include "PairsTab.h"
 #include "RichTextDelegate.h"
 #include "InfoDialog.h"
+#include "MassCheckDialog.h"
+#include "MassTable.h"
 #include <QLabel>
 #include <QRegularExpression>
 #include <iostream>
@@ -68,10 +70,17 @@ PairsTab::PairsTab(QWidget *parent) :
   connect(infoButton[0],SIGNAL(clicked()),mapper,SLOT(map()));
   */
 
+  massButton = new QPushButton(tr("Masses from %1...").arg(MassTable::version()));
+  massButton->setObjectName("massesButton");
+  massButton->setToolTip(tr("Compare every pair's masses and separation energy with the %1 atomic mass table, and fill the "
+                            "pairs you tick from it.").arg(MassTable::version()));
+  connect(massButton, SIGNAL(clicked()), this, SLOT(checkMasses()));
+
   QGridLayout *buttonBox = new QGridLayout;
   buttonBox->addWidget(addButton, 0, 0);
   buttonBox->addWidget(deleteButton, 0, 1);
   buttonBox->addItem(new QSpacerItem(28, 28), 0, 2);
+  buttonBox->addWidget(massButton, 0, 4);
   // buttonBox->addWidget(infoButton[0],0,3);
   buttonBox->setColumnStretch(0, 0);
   buttonBox->setColumnStretch(1, 0);
@@ -149,17 +158,87 @@ PairsTab::PairsTab(QWidget *parent) :
   abundancesBox->setVisible(false);
   connect(abundancesModel, SIGNAL(modelReset()), this, SLOT(updateAbundancesBox()));
 
+  // Per-channel radii (<channelRadii>, 2026-11-10): rows that give some channels of a particle pair a radius of their
+  // own; every other channel keeps its pair's radius (the table above).
+  channelRadiiModel = new ChannelRadiiModel(this);
+  channelRadiiView = new QTableView;
+  channelRadiiView->setObjectName("channelRadiiView");
+  channelRadiiView->setModel(channelRadiiModel);
+  channelRadiiView->verticalHeader()->setVisible(false);
+  channelRadiiView->horizontalHeader()->setHighlightSections(false);
+  channelRadiiView->setSelectionBehavior(QAbstractItemView::SelectRows);
+  channelRadiiView->setSelectionMode(QAbstractItemView::SingleSelection);
+  channelRadiiView->setShowGrid(false);
+  for (int i = 0; i < ChannelRadiiModel::NumCols; i++)
+    channelRadiiView->horizontalHeader()->setSectionResizeMode(i, QHeaderView::Stretch);
+  channelRadiiView->setMaximumHeight(120);
+  addRadiusButton = new QPushButton(tr("+"));
+  addRadiusButton->setObjectName("addChannelRadiusButton");
+  addRadiusButton->setToolTip(tr("Add a row for the selected pair (l = 0, at the pair's radius); edit l, s, J and the radius in the table."));
+  removeRadiusButton = new QPushButton(tr("-"));
+  removeRadiusButton->setObjectName("removeChannelRadiusButton");
+  removeRadiusButton->setToolTip(tr("Remove the selected row: its channels go back to the pair's radius."));
+  connect(addRadiusButton, SIGNAL(clicked()), this, SLOT(addChannelRadius()));
+  connect(removeRadiusButton, SIGNAL(clicked()), this, SLOT(removeChannelRadius()));
+  QHBoxLayout *radiusButtons = new QHBoxLayout;
+  radiusButtons->addWidget(addRadiusButton);
+  radiusButtons->addWidget(removeRadiusButton);
+  radiusButtons->addStretch(1);
+  QLabel *radiiLabel = new QLabel(tr("A row gives the channels (pair, l) -- only channel spin s and/or total spin J when given -- "
+                                     "a radius of their own; every other channel keeps its pair's radius.  The most specific row wins "
+                                     "(l+s+J, l+J, l+s, l).  External capture needs the initial and final channels of a transition "
+                                     "at one radius."));
+  radiiLabel->setWordWrap(true);
+  QVBoxLayout *radiiLayout = new QVBoxLayout;
+  radiiLayout->addWidget(radiiLabel);
+  radiiLayout->addWidget(channelRadiiView);
+  radiiLayout->addLayout(radiusButtons);
+  channelRadiiBox = new QGroupBox(tr("Per-channel radii"));
+  channelRadiiBox->setObjectName("channelRadiiBox");
+  channelRadiiBox->setLayout(radiiLayout);
+
   QVBoxLayout *layout = new QVBoxLayout();
   layout->addWidget(pairsView);
   layout->addLayout(buttonBox);
-  relativisticCheck = new QCheckBox(tr("Relativistic kinematics"));
-  relativisticCheck->setObjectName("relativisticCheck");
-  relativisticCheck->setToolTip(tr("Channel wave numbers, Sommerfeld parameters and lab <-> c.m. energies from the invariant mass "
-                                   "(the kinematics of the LANL code EDA, ENDF KRL=1).  Level energies stay excitation energies; "
-                                   "relativistic.out lists them in EDA's E(s) convention.  Saved as relativistic=1 in <config>."));
-  layout->addWidget(relativisticCheck);
   layout->addWidget(abundancesBox);
+  layout->addWidget(channelRadiiBox);
   setLayout(layout);
+}
+
+ChannelRadiiModel *PairsTab::getChannelRadiiModel() {
+  return channelRadiiModel;
+}
+
+bool PairsTab::readChannelRadii(QTextStream &inStream) {
+  return channelRadiiModel->readBlock(inStream);
+}
+
+bool PairsTab::writeChannelRadii(QTextStream &outStream) {
+  channelRadiiModel->writeBlock(outStream);
+  return true;
+}
+
+bool PairsTab::hasChannelRadii() const {
+  return !channelRadiiModel->isEmpty();
+}
+
+void PairsTab::addChannelRadius() {
+  int pairKey = 1;
+  double radius = 5.0;
+  QModelIndexList selected = pairsView->selectionModel() ? pairsView->selectionModel()->selectedRows() : QModelIndexList();
+  if (!selected.isEmpty()) pairKey = selected.first().row() + 1;
+  if (pairKey >= 1 && pairKey <= pairsModel->getPairs().size()) {
+    const double r = pairsModel->getPairs().at(pairKey - 1).channelRadius;
+    if (r > 0.0) radius = r;
+  }
+  const int row = channelRadiiModel->addRow(pairKey, 0, radius);
+  channelRadiiView->selectRow(row);
+}
+
+void PairsTab::removeChannelRadius() {
+  QModelIndexList selected = channelRadiiView->selectionModel()->selectedRows();
+  if (selected.isEmpty()) return;
+  channelRadiiModel->removeRowAt(selected.first().row());
 }
 
 AbundancesModel *PairsTab::getAbundancesModel() {
@@ -275,18 +354,10 @@ void PairsTab::setAbundanceSumSigma(double sigma) {
   sumSigmaSpin->setValue(sigma);
 }
 
-bool PairsTab::relativistic() const {
-  return relativisticCheck->isChecked();
-}
-
-void PairsTab::setRelativistic(bool on) {
-  relativisticCheck->setChecked(on);
-}
-
 void PairsTab::reset() {
   abundancesModel->clear();
+  channelRadiiModel->clear();
   sumSigmaSpin->setValue(0.0);
-  relativisticCheck->setChecked(false);
 }
 
 PairsModel *PairsTab::getPairsModel() {
@@ -324,6 +395,7 @@ void PairsTab::addPair() {
       newPair.heavyG = 0.;  //(aDialog.heavyGText->text()).toDouble();
       newPair.seperationEnergy = (aDialog.seperationEnergyText->text()).toDouble();
       newPair.excitationEnergy = (aDialog.excitationEnergyText->text()).toDouble();
+      newPair.lightExcitation = aDialog.pairTypeCombo->currentIndex() == 0 ? aDialog.lightExcitationText->text().toDouble() : 0.;
       newPair.channelRadius = (aDialog.channelRadiusText->text()).toDouble();
       if (aDialog.pairTypeCombo->currentIndex() == 1)
         newPair.pairType = 10;
@@ -378,6 +450,8 @@ void PairsTab::addPair(PairsData pair, int pairIndex, bool fromFile) {
     pairsModel->setData(index, pair.pairType, Qt::EditRole);
     index = pairsModel->index(pairIndex, 14, QModelIndex());
     pairsModel->setData(index, pair.ecMultMask, Qt::EditRole);
+    index = pairsModel->index(pairIndex, PairsModel::LightExcitationColumn, QModelIndex());
+    pairsModel->setData(index, pair.lightExcitation, Qt::EditRole);
 
     pairsView->resizeRowsToContents();
     if (!fromFile) emit(pairAdded(pairIndex));
@@ -456,6 +530,9 @@ void PairsTab::editPair() {
   i = pairsModel->index(index.row(), 14, QModelIndex());
   var = pairsModel->data(i, Qt::EditRole);
   int ecMultMask = var.toInt();
+  i = pairsModel->index(index.row(), PairsModel::LightExcitationColumn, QModelIndex());
+  var = pairsModel->data(i, Qt::EditRole);
+  QString lightExcitation = var.toString();
 
 
   AddPairDialog aDialog;
@@ -477,6 +554,7 @@ void PairsTab::editPair() {
   aDialog.heavyMText->setText(heavyM);
   // aDialog.heavyGText->setText(heavyG);
   aDialog.excitationEnergyText->setText(excitationEnergy);
+  aDialog.lightExcitationText->setText(lightExcitation);
   aDialog.seperationEnergyText->setText(seperationEnergy);
   aDialog.channelRadiusText->setText(channelRadius);
   if (pairType == 10)
@@ -516,6 +594,7 @@ void PairsTab::editPair() {
       pair.heavyM = aDialog.heavyMText->text().toDouble();
       pair.heavyG = 0.;  // aDialog.heavyGText->text().toDouble();
       pair.excitationEnergy = aDialog.excitationEnergyText->text().toDouble();
+      pair.lightExcitation = aDialog.pairTypeCombo->currentIndex() == 0 ? aDialog.lightExcitationText->text().toDouble() : 0.;
       pair.seperationEnergy = aDialog.seperationEnergyText->text().toDouble();
       pair.channelRadius = aDialog.channelRadiusText->text().toDouble();
       if (aDialog.pairTypeCombo->currentIndex() == 1)
@@ -582,9 +661,30 @@ void PairsTab::editPair(PairsData pair, int pairIndex, bool fromFile) {
   if (pair.pairType != var.toInt()) pairsModel->setData(i, pair.pairType, Qt::EditRole);
   i = pairsModel->index(pairIndex, 14, QModelIndex());
   var = pairsModel->data(i, Qt::EditRole);
-  if (pair.pairType != var.toInt()) pairsModel->setData(i, pair.ecMultMask, Qt::EditRole);
+  // compared the pair type with the stored mask before 2026-11-05, so an edited mask was dropped whenever the
+  // pair type equalled the old mask (a particle pair, type 0, with mask 0)
+  if (pair.ecMultMask != var.toInt()) pairsModel->setData(i, pair.ecMultMask, Qt::EditRole);
+  i = pairsModel->index(pairIndex, PairsModel::LightExcitationColumn, QModelIndex());
+  var = pairsModel->data(i, Qt::EditRole);
+  if (pair.lightExcitation != var.toDouble()) pairsModel->setData(i, pair.lightExcitation, Qt::EditRole);
 
   if (!fromFile) emit(pairEdited(pairIndex));
+}
+
+void PairsTab::checkMasses() {
+  if (pairsModel->numPairs() == 0) {
+    QMessageBox::information(this, tr("Masses"), tr("There are no pairs yet."));
+    return;
+  }
+  if (!MassTable::instance().isLoaded()) {
+    QMessageBox::warning(this, tr("Masses"), tr("The %1 mass table could not be read.").arg(MassTable::version()));
+    return;
+  }
+  MassCheckDialog dialog(pairsModel, this);
+  if (dialog.exec() != QDialog::Accepted) return;
+  const QList<QPair<int, PairsData>> changes = dialog.filledPairs();
+  for (const auto &change : changes) editPair(change.second, change.first, false);
+  pairsView->viewport()->update();
 }
 
 void PairsTab::updateButtons(const QItemSelection &selection) {

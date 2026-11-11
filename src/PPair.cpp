@@ -18,7 +18,10 @@ PPair::PPair(NucLine nucLine) {
   pair_g_[1] = nucLine.g2();
   pair_j_[0] = nucLine.j1();
   pair_j_[1] = nucLine.j2();
-  pair_ex_e_ = nucLine.e2();
+  // e1 (light) and e2 (heavy) are kept apart; GetExE() is their sum, the
+  // channel's excitation above the ground-state threshold.
+  pair_light_ex_e_ = nucLine.e1();
+  pair_heavy_ex_e_ = nucLine.e2();
   pair_sep_e_ = nucLine.sepE();
   pair_ch_rad_ = nucLine.chRad();
   pair_ptype_ = nucLine.pType();
@@ -45,16 +48,20 @@ PPair::PPair(NucLine nucLine) {
     nucleus_a_ = (int)std::floor(pair_m_[0] + pair_m_[1] + 0.5);
   }
 
-  // Auto-detect identical-particle pair. Two particles are treated as
-  // identical when Z, mass, intrinsic spin, parity, and excitation energy
-  // (e2 of the heavy partner — the light partner is implicitly in its g.s.)
-  // all match. The boson/fermion sign is +1 for integer 2j (bosons) and
-  // -1 for half-integer 2j (fermions).
+  // Auto-detect identical-particle pair.  Two particles are identical when
+  // every per-particle input matches: Z, mass, intrinsic spin, parity,
+  // g-factor and excitation energy (e1 of the light particle, e2 of the
+  // heavy one).  Until 2026-11-05 the light particle had no excitation column
+  // and the test required e2 = 0, so a mutual-excitation channel such as
+  // 12C(2+)+12C(2+) could not be entered as identical; it is now e1 = e2 =
+  // 4.439 MeV with j1 = j2 = 2.  The boson/fermion sign is +1 for integer 2j
+  // (bosons) and -1 for half-integer 2j (fermions).
   is_identical_ = (pair_z_[0] == pair_z_[1]) &&
       (std::fabs(pair_m_[0] - pair_m_[1]) < 1.0e-6) &&
       (std::fabs(pair_j_[0] - pair_j_[1]) < 1.0e-6) &&
       (pair_pi_[0] == pair_pi_[1]) &&
-      (std::fabs(pair_ex_e_) < 1.0e-9) &&
+      (std::fabs(pair_g_[0] - pair_g_[1]) < 1.0e-9) &&
+      (std::fabs(pair_light_ex_e_ - pair_heavy_ex_e_) < 1.0e-9) &&
       (pair_ptype_ == 0);
   if (is_identical_) {
     int two_j = static_cast<int>(2.0 * pair_j_[0] + 0.5);
@@ -190,11 +197,32 @@ double PPair::GetJ(int particle) const {
 }
 
 /*!
- * Returns the excitation energy of the particle pair.
+ * Returns the total excitation energy of the particle pair, e1 + e2: the
+ * amount by which the channel threshold lies above the ground-state
+ * separation energy.  Use it for anything about the channel's energy
+ * (thresholds, Q-values, kinematics); GetHeavyExE() / GetLightExE() for
+ * anything about one particle's own state.
  */
 
 double PPair::GetExE() const {
-  return pair_ex_e_;
+  return pair_light_ex_e_ + pair_heavy_ex_e_;
+}
+
+/*!
+ * Returns the excitation energy of the light particle (column 32, e1).
+ */
+
+double PPair::GetLightExE() const {
+  return pair_light_ex_e_;
+}
+
+/*!
+ * Returns the excitation energy of the heavy particle (column 17, e2); for a
+ * gamma pair, the energy of the final level the photon feeds.
+ */
+
+double PPair::GetHeavyExE() const {
+  return pair_heavy_ex_e_;
 }
 
 /*!
@@ -206,11 +234,61 @@ double PPair::GetSepE() const {
 }
 
 /*!
- * Returns the channel radius of the particle pair.
+ * Returns the default channel radius of the particle pair (column 28 of its <levels> lines).
  */
 
-double PPair::GetChRad() const {
+double PPair::GetPairRadius() const {
   return pair_ch_rad_;
+}
+
+namespace {
+bool SameSpin(double a, double b) { return fabs(a - b) < 1.0e-6; }
+// 0: does not match; otherwise 1 + 1 (s named) + 2 (J named): l alone 1, l+s 2, l+J 3, l+s+J 4.
+int MatchRank(const PPair::ChannelRadius &e, int l, double s, double J) {
+  if (e.l != l) return 0;
+  if (e.s >= 0.0 && !SameSpin(e.s, s)) return 0;
+  if (e.J >= 0.0 && !SameSpin(e.J, J)) return 0;
+  return 1 + (e.s >= 0.0 ? 1 : 0) + (e.J >= 0.0 ? 2 : 0);
+}
+}  // namespace
+
+void PPair::SetChannelRadius(int l, double s, double J, double radius) {
+  if (s < 0.0) s = -1.0;
+  if (J < 0.0) J = -1.0;
+  for (ChannelRadius &e : channel_radii_)
+    if (e.l == l && SameSpin(e.s, s) && SameSpin(e.J, J)) {
+      e.radius = radius;
+      return;
+    }
+  channel_radii_.push_back(ChannelRadius{l, s, J, radius});
+}
+
+double PPair::GetChRad(int l, double s, double J) const {
+  int best = 0;
+  double radius = pair_ch_rad_;
+  for (const ChannelRadius &e : channel_radii_) {
+    const int rank = MatchRank(e, l, s, J);
+    if (rank > best) {
+      best = rank;
+      radius = e.radius;
+    }
+  }
+  return radius;
+}
+
+bool PPair::ChannelRadiusAmbiguous(int l, double s, double J) const {
+  bool sOnly = false, jOnly = false;
+  for (const ChannelRadius &e : channel_radii_) {
+    const int rank = MatchRank(e, l, s, J);
+    if (rank == 4) return false;
+    if (rank == 2) sOnly = true;
+    if (rank == 3) jOnly = true;
+  }
+  return sOnly && jOnly;
+}
+
+const std::vector<PPair::ChannelRadius> &PPair::GetChannelRadii() const {
+  return channel_radii_;
 }
 
 /*!

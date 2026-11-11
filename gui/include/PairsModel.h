@@ -5,7 +5,7 @@
 #include <QList>
 
 struct PairsData {
-  static const int SIZE = 15;
+  static const int SIZE = 16;
   double lightJ;
   int lightPi;
   int lightZ;
@@ -21,6 +21,10 @@ struct PairsData {
   double channelRadius;
   int pairType;
   int ecMultMask;
+  /*! The light particle's excitation energy (MeV): column 32 of a <levels> line, written only when nonzero
+   *  (2026-11-05).  excitationEnergy is the heavy particle's; the channel threshold is
+   *  seperationEnergy + excitationEnergy + lightExcitation.  Model column 15. */
+  double lightExcitation = 0.;
 };
 
 /*!
@@ -69,6 +73,13 @@ class PairsModel : public QAbstractTableModel {
    *  <sup> digits and signs turned into their Unicode characters. */
   static QString plainText(const QString &html);
 
+  /*! The model column of PairsData::lightExcitation (after ecMultMask). */
+  static const int LightExcitationColumn = 15;
+  /*! " *(4.439)" style marker of an excited light particle, empty for one in its ground state. */
+  static QString lightExcitationMark(const PairsData &pair);
+  /*! The same pair, identical particles by the engine's rule (PPair): a particle pair whose two particles have
+   *  the same Z, mass, spin, parity, g-factor and excitation energy. */
+  static bool isIdentical(const PairsData &pair);
   /*! The read-only column showing the compound nucleus a pair forms (after the PairsData columns). */
   static const int NucleusColumn = PairsData::SIZE;
   /*! The compound nucleus a pair forms (the engine's rule, PPair). */
