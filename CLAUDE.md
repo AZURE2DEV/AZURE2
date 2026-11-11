@@ -354,7 +354,9 @@ parameters; the engine applies whatever the table holds.
 3. Tests: cases in `experiment/tests/kernels_test.cpp` against closed forms (the table's own checks run on every row),
    a derivative against central differences; a format-3 fixture that validates (`experiment/tests/data/`, listed in
    `schema_test.cpp`); `AZURE2 --schema > tests/schema/schema_v3.json`, `python3 tools/gen_schema_docs.py` [check 18,
-   21].
+   21]. A test project of its own (`tests/rectangular_resolution/` is the pattern: the folded run against an average of
+   the unfolded one) also adds its lines to `tests/upgrade/predictions.txt` (`python3 tests/upgrade/predictions_test.py
+   --binary <AZURE2> --write`, lines added for the new project only) [`upgrade_predictions`].
 4. Docs: its row in `energy_grid.md` section 3.3, its form in `reference/data_formats.rst` (generated part) and a line in
    `developer/edata_and_target_effects.rst`.
 The engine is not edited: the fold (`src/PointFold.cpp`), the grid's extent (`EffectSupport`, `src/TargetSetup.cpp`) and
