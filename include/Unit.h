@@ -20,12 +20,6 @@
 #include "TermSettings.h"
 #include "UnitRange.h"
 
-/// Where a mapped point is mapped: the host's segment and point (1-based).
-struct EnergyMap {
-  int segment;
-  int point;
-};
-
 class Segment;
 class WorkingCopy;
 class Unit;
@@ -104,8 +98,6 @@ class Unit {
   const ThmAngleWindow *GetThmAngleWindow() const { return settings_->thmAngle; }
   /// THM coherent background of the point's experiment (cbackground=), or null.
   const ThmCoherentBackground *GetThmCoherent() const { return settings_->thmCoherent; }
-  /// Is this point calculated by another? Points at equal energies are mapped onto one so the energy-dependent work is done once.
-  bool IsMapped() const;
   /// Does the point carry target effects?
   bool IsTargetEffect() const;
   /// Angular distribution?
@@ -299,8 +291,6 @@ class Unit {
   /// As GetECAmplitude, at the point's current (shifted) energy: from the energy tables
   /// (ECTable), or interpolated through the amplitude cache with --no-ec-table.
   complex GetECAmplitudeWithShift(int, int, CNuc *, const Config &) const;
-  /// Where this point is mapped, if it is.
-  EnergyMap GetMap() const;
   /// Compute everything that depends on energy but not on the fit parameters. Run once before fitting.
   /// `data`: the data set that holds the point (its target effect may carry Q coefficients), null outside one.
   void Initialize(WorkingCopy *data, CNuc *, const Config &);
@@ -374,12 +364,10 @@ class Unit {
     const double *from = Rec(r) + azure2::Results::AngularOffset();
     std::copy(from, from + 1 + std::min<int>(num_model_ang_, num_ang_slots_), r.model.begin() + ModelRecord(r) + 1);
   }
-  /// A calculation that threw: NaN cross sections (total, E1, E2) on this point and on every point mapped onto it,
-  /// and a warning naming the segment, the role of the point, its energy and the error, the first time in a run.
-  /// Used by azure2::EvaluateModelPoint and WorkingCopy::CalculatePointsInParallel (before 2026-11-01
-  /// both gave 0 or left the term out, silently).
-  /// `data` is the data set that holds the point (its plan names the mapped points), null for a point outside one.
-  void MarkFailed(WorkingCopy *data, azure2::Results &results, const char *role, const Config &configure, const char *why);
+  /// A calculation that threw: NaN cross sections (total, E1, E2) on this point, and a warning naming the segment, the
+  /// role of the point, its energy and the error, the first time in a run.  Used by azure2::EvaluateModelPoint and
+  /// WorkingCopy::CalculatePointsInParallel (before 2026-11-01 both gave 0 or left the term out, silently).
+  void MarkFailed(azure2::Results &results, const char *role, const Config &configure, const char *why);
   int GetSegmentKey() const { return segment_key_; }
   /// Set the cross-section to S-factor conversion.
   void SetSFactorConversion(double);
@@ -392,26 +380,23 @@ class Unit {
   void CalcLegendreP(WorkingCopy *data, int, CNuc *, const TargetEffect *);
   /// Compute the geometrical factor, S-factor conversion, \f$L_o\f$ elements, penetrabilities and phases together.
   /// With includeSubPoints false the sub-points are left alone (their energies are updated, and their values recomputed, separately).
-  /// With `shareWithMappedOf`, the data set that holds the point (setup, grid re-placement), the points its plan maps
-  /// onto this one are given the same tables; null: none (RecalcEDependentValues, see there; a sub-point; a point
-  /// outside a data set).
   /// The rows of the open and closed particle channels are read from the tables of `rows` (docs/upgrade/
   /// channel_table.md) when one holds them, and otherwise computed (ChannelTable::Compute), once per (pair, l, E_c)
   /// of the point; rows->used, when set, receives every row used.
-  void CalcEDependentValues(WorkingCopy *data, CNuc *, const Config &, bool includeSubPoints, WorkingCopy *shareWithMappedOf,
+  void CalcEDependentValues(WorkingCopy *data, CNuc *, const Config &, bool includeSubPoints,
                             const ChannelRowSource *rows = nullptr);
   /// The keys (pair, l, E_c) of the channel-table rows CalcEDependentValues reads for this point and, with
   /// includeSubPoints, its sub-points: the same blocks, channels and channel energies.
   void ChannelKeys(WorkingCopy *data, CNuc *, std::vector<ChannelTable::Key> &, bool includeSubPoints = true);
   /// The compound-nucleus energy E_x (MeV) at which CalcEDependentValues evaluates the channels.
   double CompoundEnergy(CNuc *);
-  /// Recompute those at the current, possibly shifted, energy.  Writes this point (and its sub-points) only, never the
-  /// points mapped onto it: on an energy shift each of those is re-energised on its own (Segment::
-  /// UpdatePointEnergyWithShift), possibly at the same time on another thread.
+  /// Recompute those at the current, possibly shifted, energy.  Writes this point (and its sub-points) only.
   void RecalcEDependentValues(WorkingCopy *data, CNuc *, const Config &, bool includeSubPoints = true,
                               const ChannelRowSource *rows = nullptr);
-  /// Take the energy-dependent values (not the angle-dependent Coulomb amplitude) from a point at the same energy; false if the energies differ.
-  bool CopyEDependentValuesFrom(const Unit &);
+  /// The channel rows the point holds (L_o, sqrt(P), phases per J group and channel; null before they are computed),
+  /// and a holder of them (the node table shares them: NodeTable.h).
+  const EDependentTables *ChannelRows() const { return edep_ ? &*edep_ : nullptr; }
+  SharedTable<EDependentTables> ChannelRowsShared() const { return edep_; }
   /// Empties the per-JGroup rows of the energy-dependent arrays, keeping their storage.
   void ClearEDependentRows();
   /// Store an \f$L_o\f$ element at (J-group, channel).
@@ -469,39 +454,27 @@ class Unit {
       if (a[i].first != b[i].first || std::memcmp(&a[i].second, &b[i].second, sizeof(complex)) != 0) return false;
     return true;
   }
-  /// Calculate the point (and the points mapped onto it, its sub-points, its fold) for the current parameters,
-  /// outside the energy pass (WorkingCopy::CalculatePointsInParallel), writing the values into `results`, the buffer
-  /// of the evaluation laid out by `data`, the data set that holds the point: its plan names the points mapped onto
-  /// it, its target effects the fold.  One solve at the point's energy for it and its mapped points, or one per
-  /// sub-point index (azure2::SolveAtOneEnergy), then FoldSubPoints.  Null `data` for a point outside any data set
-  /// (no target effect, no plan: a reaction-rate point).
+  /// Calculate the point (its sub-points and its fold) for the current parameters, outside the energy pass
+  /// (WorkingCopy::CalculatePointsInParallel), writing the values into `results`, the buffer of the evaluation laid out
+  /// by `data`, the data set that holds the point (its target effects give the fold).  One solve at the point's energy,
+  /// or one per sub-point (azure2::SolveAtOneEnergy), then FoldSubPoints.  Null `data` for a point outside any data
+  /// set (no target effect: a reaction-rate point).
   void Calculate(WorkingCopy *data, CNuc *, const Config &configure, azure2::Results &results);
   /// The test hook of failed points: true when AZURE_TEST_FAIL_E (and AZURE_TEST_FAIL_EXIT, if set) name this point.
   bool InjectedFailure() const;
   /// Before its sub-points are calculated: with external capture, their energy-dependent values at their energies.
   void PrepareSubPoints(WorkingCopy *data, CNuc *, const Config &configure);
-  /// The fold of this point and of the points mapped onto it, from their sub-points' values already in `results`:
-  /// the bare probes, the automatic tolerance and edge blending, the thin-target fallback, the integrations.
+  /// The fold of this point from its sub-points' values already in `results`: the bare probe, the automatic tolerance
+  /// and edge blending, the thin-target fallback, the integrations.
   void FoldSubPoints(WorkingCopy *data, CNuc *, const Config &configure, azure2::Results &results);
   /// The fold of a thin-target integration, with its sigma(E_bar) fallback (see the .cpp).
-  void FoldThinTarget(WorkingCopy &data, azure2::Results &results, const Config &configure, const TargetEffect *effect,
-                      const azure2::MappedPoints &mappedPts);
-  void SetMap(int, int);
-  void ClearMapping();
-  /// A mapped point that keeps its own energy-dependent values: a component of a SUM, RATIO or total-capture segment
-  /// mapped onto a point of its base segment (WorkingCopy::MapData).  Its segment re-energises it on an energy shift, in
-  /// parallel with the host, so the host must not copy its values into it (CalcEDependentValues).
-  bool OwnsEDependentValues() const { return own_e_dependent_; }
-  void SetOwnsEDependentValues(bool own) { own_e_dependent_ = own; }
+  void FoldThinTarget(WorkingCopy &data, azure2::Results &results, const Config &configure, const TargetEffect *effect);
   /// The task of the data set's calculation plan that calculates this point (CalculationPlan.h; -1: none, as for a
-  /// sub-point, a probe copy or a point outside a data set).  Set when the plan is built (WorkingCopy::MapData).
+  /// sub-point, a probe copy or a point outside a data set).  Set when the plan is built (WorkingCopy::BuildPlan).
   int PlanTask() const { return plan_task_; }
   void SetPlanTask(int task) { plan_task_ = task; }
   /// Take a copy of the point out of the plan: it calculates itself alone (a probe).
   void DetachFromPlan() { plan_task_ = -1; }
-  /// The points this point calculates besides itself, from the plan of `data`, the data set that holds it (empty
-  /// unless it is a task's host; empty for a null data set).
-  azure2::MappedPoints PlanMapped(WorkingCopy *data) const;
   void SetTargetEffectNum(int);
   /// Make `sub` a sub-point of this point (WorkingCopy::AddSubPoint places it): it shares the term's settings and the
   /// point's screening.
@@ -540,7 +513,6 @@ class Unit {
   const Unit *GetSubPoint(const WorkingCopy &data, int i) const;
   UnitRange<Unit> GetSubPoints(WorkingCopy &data);
  private:
-  bool is_mapped_;
   bool is_sub_point_ = false;
   double cm_factor_ = 1.0;   ///< c.m./lab energy factor of the point's entrance pair (SetTargetKinematics)
   int bohr_z1_ = 0;          ///< beam charge of the entrance pair, for Bohr straggling
@@ -579,7 +551,6 @@ class Unit {
   double bin_high_cm_ = std::numeric_limits<double>::quiet_NaN();
   double photo_qgamma_ = 0.0;
   double photo_mcn_ = 0.0;
-  struct EnergyMap energy_map_;
   complex coulombamplitude_;
   // Direct and exchange Coulomb amplitudes, kept apart only for an identical
   // pair with spin, whose exchange sign depends on the channel spin.
@@ -603,7 +574,6 @@ class Unit {
   // the energy, the angle and the channel radii).
   double eDependentEnergy_ = 0.0;
   bool eDependentValid_ = false;
-  bool own_e_dependent_ = false;  // OwnsEDependentValues
   matrix_c ec_amplitudes_;
   matrix_r ec_energies_;  // Energies at which EC amplitudes were calculated
   /// The amplitude at the last shifted energy of each pathway (GetECAmplitudeWithShift).

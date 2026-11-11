@@ -1,13 +1,13 @@
 # shared_tables_race
 
-Energy shifts on segments whose points are mapped onto points of another segment
-(`WorkingCopy::MapData`), evaluated with several threads.
+Energy shifts on segments whose points lie at the same energies, evaluated with several threads.
 
 Six segments at the same energies (the `shift_fn` test's linear-calibration data at 40 and
 90 degrees, three copies each) form one shift group with a fitted shift function, so every
-point of segments 2-6 is mapped onto a point of segment 1. On every fit step
-`WorkingCopy::FillEnergyShiftsFromParams` re-energises the points in parallel, and each mapped
-point is re-energised by its own segment.
+point of segments 2-6 is at the energy of a point of segment 1. On every fit step
+`WorkingCopy::FillEnergyShiftsFromParams` re-energises the points in parallel, each point by its
+own segment. The point mapping that once tied them (a point of segments 2-6 calculated by its host in
+segment 1) is deleted; the test stays as a check of the threaded re-energising.
 
 Before the fix, `Unit::RecalcEDependentValues` on the host point also gave its new tables
 to the points mapped onto it (`Unit::CalcEDependentValues`, `mappedPoint->edep_ = edep_`).

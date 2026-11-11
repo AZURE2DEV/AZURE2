@@ -167,6 +167,11 @@ class Config {
   /// evaluation, for the current levels and energy shifts (WorkingCopy::ReplaceSubPointGrids);
   /// on by default, --no-grid-replacement keeps the grids placed from the input file.
   bool replaceSubPointGrids;
+  /// Refinement factor k of every sub-point grid (AZURE_REFINE_QUADRATURE=k, a diagnostic of the quadrature gate,
+  /// docs/upgrade/energy_grid.md section 7): the grids get k times the points per width and k times the smooth
+  /// intervals of the window (the smooth step / k); the tail step per distance follows the points per width (/ k).
+  /// 1 (the default): the grids as the project states them.
+  int refineQuadrature;
   /// Hard-sphere scattering in every J^pi the particle pairs allow, whether or not a level carries it
   /// (CNuc::AddHardSphereGroups). Read from "includeAllJPi=1" in the <config> block; off when absent.
   bool includeAllJPi;

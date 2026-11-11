@@ -252,6 +252,16 @@ like the `DataSet`. Nodes re-placed inside a stage (§2.3) live in the copy's ow
 its hand-over. No copy publishes anything to another; `NodeTableCache` and its mutexes go, and so do the per-unit
 copy-on-write tables of sub-points.
 
+**Status, branch 7 part 1 (2026-11-11).** The node table exists beside the sub-point units (`include/NodeTable.h`,
+`src/NodeTable.cpp`): one node per (nucleus, route, bits of E_x) of the units of the point pass, with its channel rows
+(a holder of the rows the first unit at the node computed: no second copy), built at the end of
+`WorkingCopy::Initialize`, held `shared_ptr<const>` by every copy; per plan task of a folded point its slots (the node
+of each sub-point, -1 off the table).  `AZURE_NODE_CHECK=1` compares them with the units before every parallel point
+pass.  Not yet done: the slots' per-(point, node) data (angle rows, stopping, screening, external-capture amplitudes),
+the readers (the energy pass, the kernels, the gradient's cotangents still address units), the copy's overflow table
+for re-placed and shifted nodes (they are counted as "off the table"), and the deletions (sub-point units,
+`SubPointAccess.h`, `NodeTableCache.h`, the copy-on-write tables).
+
 ### 2.7 Thread-count independence by construction
 
 - The mesh and the node table are built single-threaded (or by a parallel loop that writes one node per index) from
@@ -675,7 +685,7 @@ Peak RSS within 2 % of the base. Most of a T2 gradient is its finite-difference 
 1.1 s at 1 thread), which this branch does not touch. The 5-thread acceptance time was not measured (budget of 3
 threads that night).
 
-**Follow-up after the merge of branches 2, 5 and 6: delete the point mapping (about an hour).** The mapping no longer
+**Follow-up after the merge of branches 2, 5 and 6: delete the point mapping — done (2026-11-11, branch 7 part 1, `feature/upgrade-5-grid-nodes`).** The mapping no longer
 saves anything: the energy tasks share the solves, and the gradient no longer uses it. Evidence: the whole tree with
 `AZURE_NO_POINT_MAPPING=1` (tag `tab-egrad-nomap`, three bases) gives every output file identical to `tab-trial21a`
 except the "Coulomb table: N lookups" line of `run.log` in `angle_mapping` and `sum_lab_frame/models/plain_data` (a
@@ -705,6 +715,60 @@ mapping against 39.2 / 37.7 s with it (peak RSS 350.8 against 338.7 MB, +3.5 %);
   `tests/pyazr/composite_gradient_test.py`, `tests/pyazr/failed_point_test.py` (the switches), the mapping sections and
   switches of `docs/source/developer/edata_and_target_effects.rst`, `.claude/skills/azure2-setup/references/data-definition.md`.
 Verification: the full comparison (identical but the lookup lines), `AZURE_PLAN_CHECK=1` on the tree, the quick set.
+Done as listed: every point is a task of its own (`CalculationPlan` holds one `PointRef` per task, `WorkingCopy::BuildPlan`
+replaces `MapData`; the plan no longer changes after a shift, the energy tasks are rebuilt from the units as before);
+`Unit` lost `EnergyMap`, `IsMapped`, `GetMap`, `SetMap`, `ClearMapping`, `OwnsEDependentValues`, `PlanMapped`,
+`CopyEDependentValuesFrom` and three members; `Segment` lost `ShiftHost` and `UpdatePointGroupEnergyWithShift`; the
+energy tasks lost their `providers` array (each unit is its own provider). The data check file keeps its mapping
+column ("Not Mapped" on every row, the file's layout unchanged). The rewritten checks test what is still true:
+`component_mapping` (a SUM extrapolation equals the sum of its terms; the components add no level-matrix solve),
+`angle_mapping` (the shared solves of all segments equal each unit's own under `AZURE_PLAN_CHECK=1`; fewer energy tasks
+than units). Evidence: the whole tree in three bases (tag `tab-nodes-m0` against `tab-trial23g`): 778 of 780, 751 of
+753 and 778 of 780 files identical, the two others in each basis the "Coulomb table: N lookups" line of `run.log` in
+`angle_mapping` (1516 → 1211 lookups, Brune) and `sum_lab_frame/models/plain_data` (110 → 230), as measured before
+with the switch.
+
+**Branch 7, part 1: the measuring tools for part 2 (2026-11-11, `feature/upgrade-5-grid-nodes`).**
+- `AZURE_REFINE_QUADRATURE=k` (a diagnostic environment variable rather than the flag `--refine-quadrature` named in
+  §7.2: diagnostics are `AZURE_*` variables, and `src/AZURE2.cpp` may not grow): every sub-point grid gets k times its
+  points per width and k times its smooth intervals; the tail's step per distance follows the points per width
+  (TailFactor ∝ 1/p), so it is halved at k = 2 with the constant `tailRatio` unchanged. Fallback nodes are not
+  refined. Tested in `tests/layer_yield` (check 3b).
+- `tools/classify_quadrature.py CMP REF FINE NEW`: §7.1's criterion on every changed number; numbers that the
+  refinement leaves unchanged (unfolded) must not move.
+- The thick layer against an independent integral: `tests/layer_yield` (K'), README there.
+- Node counts (`tests/upgrade/node_count`, a tool built with the tests: every project of the tree that sets up, 24
+  of them with a sub-point fold; set-up grids, menu 1; "mesh" is §1.2's estimate on today's grids, computed, not
+  built):
+
+| project | points | folded | units | distinct E_x today | shared mesh estimate | mesh / today |
+|---|---|---|---|---|---|---|
+| 13N | 593 | 37 | 46,121 | 2,727 | 2,786 | 1.02 |
+| 17O | 23 | 23 | 19,560 | 2,021 | 1,905 | 0.94 |
+| 18O_p_a_thm | 118 | 118 | 14,688 | 703 | 714 | 1.02 |
+| 6Li_d | 62 | 62 | 3,162 | 3,162 | 1,182 | 0.37 |
+| 7Li_p_a | 66 | 66 | 6,807 | 4,761 | 3,415 | 0.72 |
+| beam_profile_kernel | 40 | 40 | 82,264 | 3,086 | 3,161 | 1.02 |
+| hybrid_potential | 136 | 76 | 111,976 | 2,471 | 2,650 | 1.07 |
+| layer_yield/models/fit | 41 | 41 | 60,367 | 3,133 | 2,175 | 0.69 |
+| layer_yield/models/layer_yield | 116 | 87 | 87,634 | 4,137 | 2,762 | 0.67 |
+| natural_neon | 6,271 | 3,107 | 292,742 | 56,696 | 25,313 | 0.45 |
+| shift_sqrt_subpoints/models/{const,noshift,shiftfn,sqrt} | 28 | 28 | 36,841 | 2,089 | 2,125 | 1.02 |
+| shift_sqrt_subpoints/models/dense | 28 | 28 | 56,028 | 8,004 | 2,961 | 0.37 |
+| shift_sqrt_subpoints/models/narrow_{const,sqrt} | 28 | 28 | 44,212 | 2,158 | 2,192 | 1.02 |
+| stopping_yield/models/fit | 93 | 93 | 176,270 | 5,014 | 2,331 | 0.46 |
+| stopping_yield/models/stopping_yield | 175 | 175 | 199,089 | 7,295 | 2,552 | 0.35 |
+| target_effect_ranges | 72 | 44 | 5,686 | 2,164 | 1,191 | 0.55 |
+| thick_target_resonance | 56 | 56 | 48,237 | 2,148 | 2,197 | 1.02 |
+| units_scales/models/yield_story | 33 | 33 | 37,372 | 1,782 | 1,830 | 1.03 |
+| upgrade/T2 | 380 | 309 | 24,319 | 5,442 | 2,782 | 0.51 |
+| upgrade/T2_true | 380 | 309 | 23,281 | 5,359 | 2,792 | 0.52 |
+
+  No project's mesh exceeds 1.07 times today's distinct nodes (the stop condition of the brief was 1.5); where the
+  grids already coincide on the anchored lattice the mesh adds the two edge nodes per point (≈ 1.02), elsewhere it
+  halves the nodes (T2, `natural_neon`, the stopping and layer projects).
+- The node table beside the sub-point units (`include/NodeTable.h`, check mode `AZURE_NODE_CHECK=1`): see the
+  status of part 1 in §2.6.
 
 ## 9. Decisions for the PI, and risks
 

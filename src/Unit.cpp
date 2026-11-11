@@ -68,7 +68,6 @@ Unit::Unit(const azure2::experiment::MeasurementRows &rows, int row, const Segme
   segment_key_ = parent->GetSegmentKey();
   geofactor_ = 0.;
   sfactorconv_ = 0.;
-  is_mapped_ = false;
   targetEffectNum_ = 0;
   stoppingPower_ = 0.0;
 }
@@ -88,7 +87,6 @@ Unit::Unit(double angle, double energy, const Segment *parent, int term)
   segment_key_ = parent->TermKey(term);
   geofactor_ = 0.;
   sfactorconv_ = 0.;
-  is_mapped_ = false;
   targetEffectNum_ = 0;
   stoppingPower_ = 0.0;
 }
@@ -121,7 +119,6 @@ Unit::Unit(double angle, double energy, int entranceKey,
   excitation_energy_ = energy;
   geofactor_ = 0.;
   sfactorconv_ = 0.;
-  is_mapped_ = false;
   targetEffectNum_ = 0;
   stoppingPower_ = 0.0;
 }
@@ -156,17 +153,6 @@ bool Unit::IsTHM() const {
 
 bool Unit::IsAngularDist() const {
   return settings_->angularDist;
-}
-
-/*!
- * Returns true if the point is a mapped point, otherwise returns false.  Mapping in
- * AZURE is performed so calculations are not redundantly performed for like energies.
- * Energy dependent quantities are calculated only once for a given energy, and then
- * copied to mapped points.
- */
-
-bool Unit::IsMapped() const {
-  return is_mapped_;
 }
 
 /*!
@@ -343,28 +329,12 @@ double Unit::GetTargetThickness() const {
 }
 
 /*!
- * If a point is mapped, returns an EnergyMap structure containing the point to which it is mapped.
- */
-
-EnergyMap Unit::GetMap() const {
-  EnergyMap thisMap;
-  if (this->IsMapped()) {
-    thisMap.segment = energy_map_.segment;
-    thisMap.point = energy_map_.point;
-  } else {
-    thisMap.segment = 0;
-    thisMap.point = 0;
-  }
-  return thisMap;
-}
-
-/*!
  * Initializes a data point to be used in a calculation.  Initilization is done before the fitting process
  * to calculate all energy dependent quantities that do no rely on the R-Matrix fit parameters.
  */
 
 void Unit::Initialize(WorkingCopy *data, CNuc *compound, const Config &configure) {
-  this->CalcEDependentValues(data, compound, configure, true, data);
+  this->CalcEDependentValues(data, compound, configure, true);
   if (this->IsDifferential()) {
     // Get TargetEffect with Q-coefficients if applicable
     const TargetEffect *effect = NULL;
@@ -480,29 +450,6 @@ void Unit::SetCMAngle(double angle) {
  * Sets the entrance key for the data point
  */
 
-/*!
- * If a point is mapped, sets the internal attribute indicating which point it is mapped to.
- */
-
-void Unit::SetMap(int segmentNum, int pointNum) {
-  is_mapped_ = true;
-  energy_map_.segment = segmentNum;
-  energy_map_.point = pointNum;
-}
-
-/*!
- * Clears the mapping status of the point, forcing it to be recalculated.
- * Used when energies change (e.g., after energy shifts during fitting) and
- * mapped points are no longer at identical energies.
- */
-
-void Unit::ClearMapping() {
-  is_mapped_ = false;
-  own_e_dependent_ = false;
-  energy_map_.segment = 0;
-  energy_map_.point = 0;
-}
-
 
 /*!
  * Sets the position of the corresponding TargetEffect object in the parent WorkingCopy object.
@@ -615,14 +562,3 @@ void Unit::NoResultRecord(const azure2::Results &r) const {
       " slots): the data set's layout (WorkingCopy::LayoutResults), its WorkingCopy::BeginEvaluation with this buffer, or the "
       "caller's UsePrivateRecord is missing");
 }
-
-azure2::MappedPoints Unit::PlanMapped(WorkingCopy *data) const {
-  if (plan_task_ < 0 || !data) return azure2::MappedPoints();
-  const azure2::CalculationTask &task = data->Plan().Task(plan_task_);
-  // only the host itself: a copy of it (a probe) or a point mapped onto it calculates itself alone
-  if (data->PlanPoint(task.host) != this) return azure2::MappedPoints();
-  return azure2::MappedPoints(data, &task.mapped);
-}
-
-
-

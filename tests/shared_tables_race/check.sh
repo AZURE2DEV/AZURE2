@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# Energy shifts on segments whose points are mapped across segments (EData::MapData), threaded.
+# Energy shifts on segments whose points lie at the same energies, threaded.
 #
 # Six data sets at the same energies (the shift_fn test's linear-calibration data at 40 and 90 deg, three
-# copies each) share one energy_scale record with a shift function, so every point of segments 2-6 is mapped onto a
-# point of segment 1.  On every fit step EData::FillEnergyShiftsFromParams re-energises the points in
-# parallel, each mapped point by its own segment.  Before the fix, the host's RecalcEDependentValues also
+# copies each) share one energy_scale record with a shift function, so every point of segments 2-6 is at the energy of
+# a point of segment 1.  On every fit step WorkingCopy::FillEnergyShiftsFromParams re-energises the points in
+# parallel, each point by its own segment (the point mapping that once tied them is deleted).  Before the fix, the host's RecalcEDependentValues also
 # assigned its tables to those mapped points (EPoint::CalcEDependentValues), from another thread, while their
 # own segment was re-energising them: two threads assigning one shared_ptr, a heap-use-after-free
 # (AddressSanitizer; the macOS CI aborts of tests/shift_fn and pyazr_data_covariance, 2026-11-06).

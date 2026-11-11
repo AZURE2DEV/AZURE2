@@ -18,8 +18,7 @@
 #      original tests/shift_fn from tests/convert/fixtures): a segment in a shiftgroup and a shiftfngroup, a first
 #      member without a shiftfn, a later member declaring one;
 #   5. a composite (SUM) member: the same as the composite declaring the function
-#      directly, and every output identical with and without the component mapping
-#      (AZURE_NO_COMPONENT_MAPPING=1; components of a shifted segment share its shift).
+#      directly, and the component is included (components of a shifted segment share its shift).
 #
 #   ./tests/shift_fn_groups/check.sh path/to/AZURE2
 
@@ -184,17 +183,6 @@ if run composite 1 ""; then
   d23="$(blockdiff "$WORK/composite" 2 3)"; d24="$(blockdiff "$WORK/composite" 2 4)"
   if awk -v d="$d23" 'BEGIN { exit !(d != "mismatch" && d + 0 <= 1e-10) }'; then ok "composite member = the composite with the function given directly ($d23)"; else bad "composite member vs direct: $d23"; fi
   if awk -v d="$d24" 'BEGIN { exit !(d != "mismatch" && d + 0 > 1e-6) }'; then ok "the component is included ($d24 from the plain segment)"; else bad "composite equals the plain segment ($d24)"; fi
-  mkdir -p "$WORK/composite_nomap"; cp -R "$WORK/composite/data" "$WORK/composite/t.azr" "$WORK/composite_nomap/"
-  mkdir -p "$WORK/composite_nomap/output" "$WORK/composite_nomap/checks"
-  (cd "$WORK/composite_nomap" && printf '1\n\n\n7\n' | AZURE_NO_COMPONENT_MAPPING=1 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
-  nf=0; nd=0
-  for f in "$WORK/composite/output/"*.out; do
-    nf=$((nf + 1))
-    awk 'NR == FNR { x[FNR] = $0; m = FNR; next } { k = FNR; if (x[FNR] != $0) e++ } END { exit !(e == 0 && k == m) }' \
-      "$f" "$WORK/composite_nomap/output/$(basename "$f")" 2>/dev/null || nd=$((nd + 1))
-  done
-  if [ "$nf" -ge 2 ] && [ "$nd" = 0 ]; then ok "composite: all $nf output files identical with and without the component mapping"
-  else bad "composite: $nd of $nf output files differ with AZURE_NO_COMPONENT_MAPPING=1"; fi
 fi
 
 if [ "$failures" -eq 0 ]; then echo "PASS: shift-function groups"; else echo "FAIL: $failures check(s)"; exit 1; fi

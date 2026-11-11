@@ -704,9 +704,10 @@ if not PIECES.search("w = compound->GetAbundance(sample, nucleus) * Segment::Ter
 #     the plan's, held by position in the data set (PointRef); a point holds the index of its task, never a pointer
 #     to another point.  A pointer from one point into another made Clone re-map every list, and a missed one had a
 #     working copy write into the original's points.  So: (a) no data member of Unit is a pointer to an Unit or a
-#     container of such pointers; (b) the old mapped-point list and its accessors are gone; (c) a plan position is
-#     turned into a point (WorkingCopy::PlanPoint) only by the plan (src/CalculationPlan.cpp), Unit::PlanMapped and the
-#     plan's tests -- everything else asks Unit::PlanMapped or the plan.
+#     container of such pointers; (b) the point mapping (a point calculated by another point at its energy: the old
+#     mapped-point lists, MapData, MapLeaves, SharesCalculation, the AZURE_NO_*_MAPPING switches) is gone -- shared
+#     energies are the energy tasks'; (c) a plan position is turned into a point (WorkingCopy::PlanPoint) only by the
+#     plan (src/CalculationPlan.cpp) and the plan's tests -- everything else asks the plan.
 POINT_PTR = re.compile(r"^\s*(?:mutable\s+)?(?:std::\w+<\s*)?(?:const\s+)?Unit\s*\*(?:\s*>)?\s*\w+_\s*(?:=[^;]*)?;", re.M)
 eph = re.sub(r"//[^\n]*|/\*.*?\*/", "", read("include/Unit.h"), flags=re.S)
 # the RAII scopes nested in Unit (DopplerAppliedScope, ...) hold the point they set a flag on: not a member of Unit
@@ -718,9 +719,10 @@ for m in POINT_PTR.finditer(eph):
                     "plan (include/CalculationPlan.h) says who calculates whom")
 if not POINT_PTR.search("  std::vector<Unit *> mapped_;") or not POINT_PTR.search("  Unit *host_ = nullptr;"):
     problems.append("check 29: the member pattern no longer matches the forms it guards; update this check")
-OLD_MAPPING = re.compile(r"\b(?:\w*LocalMappedPoints?|local_mapped_points_|GetMappedPoints|EPointMapIterator)\b")
+OLD_MAPPING = re.compile(r"\b(?:\w*LocalMappedPoints?|local_mapped_points_|GetMappedPoints|EPointMapIterator|PlanMapped|"
+                         r"MappedPoints|MapData|MapLeaves|SharesCalculation|IsMapped|AZURE_NO_\w*MAPPING)\b")
 PLAN_POINT = re.compile(r"\bPlanPoint\s*\(")
-PLAN_POINT_FILES = {"src/CalculationPlan.cpp", "src/Unit.cpp", "include/WorkingCopy.h", "tests/upgrade/plan_test.cpp"}
+PLAN_POINT_FILES = {"src/CalculationPlan.cpp", "include/WorkingCopy.h", "tests/upgrade/plan_test.cpp"}
 for top in ("src", "api/src", "include", "tests/upgrade", "tests/reference"):
     for name in sorted(os.listdir(os.path.join(ROOT, top))):
         rel = f"{top}/{name}"
@@ -728,11 +730,11 @@ for top in ("src", "api/src", "include", "tests/upgrade", "tests/reference"):
             continue
         text = re.sub(r"//[^\n]*|/\*.*?\*/", "", read(rel), flags=re.S)
         if OLD_MAPPING.search(text):
-            problems.append(f"{rel}: uses a mapped-point list of a point ({OLD_MAPPING.search(text).group(0)}); ask "
-                            "Unit::PlanMapped or the calculation plan")
+            problems.append(f"{rel}: uses the deleted point mapping ({OLD_MAPPING.search(text).group(0)}); a point is "
+                            "calculated by its own plan task, a shared energy by the energy tasks (CalculationPlan.h)")
         if rel not in PLAN_POINT_FILES and PLAN_POINT.search(text):
-            problems.append(f"{rel}: resolves a plan position itself (WorkingCopy::PlanPoint); ask Unit::PlanMapped or "
-                            "the calculation plan (src/CalculationPlan.cpp)")
+            problems.append(f"{rel}: resolves a plan position itself (WorkingCopy::PlanPoint); ask the calculation plan "
+                            "(src/CalculationPlan.cpp)")
 
 
 # 30. No path of one machine in the repository: a tracked file that names a directory under /data0 or /home works on
