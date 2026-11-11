@@ -2,6 +2,25 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, Phase 5 design) — the energy grid, kernels, lab-frame comparison, finite layers (`feature/upgrade-5-design`)
+
+**Done.** The design note `docs/upgrade/energy_grid.md`, measured on 2363abac (no code changed). Measured with an
+instrumented scratch build (`work/b-p5design`, patch `work/p5design/p5_dump.patch`, never committed) and the Release
+build `work/b-trial18`; scripts and runs in `work/p5design/`.
+- An evaluation solves the level matrix once per unit; the units lie on far fewer distinct compound energies, bit for
+  bit: 13N 45,872 solves on 2,728 energies, `thick_target_resonance` 48,239 on 2,149, `18O_p_a_thm` 14,689 on 704,
+  `natural_neon` 291,847 on 56,703, T2 24,300 on 5,442; T1, T3 and the shift projects 1.05-1.5x. A shared mesh at
+  today's node density adds at most 2.2x (T2, natural_neon). Level matrix + T-matrix are 40-80 % of a fit's point
+  pass (13N 166 of 258 ms, thick target 643 of 795 ms).
+- M3 (b) (lab-frame comparison of shifted data) is an identity for the chi^2: today value and error are both
+  multiplied by the same J(nu), so the pull is frame-invariant; the decision moves no fit beyond rounding.
+- ERYA is not called by the engine (only by `tests/reference/compound_stopping_reference_test.cpp`).
+- Ten branches proposed (section 8): bit-identical energy tasks first (one solve per distinct energy), lab frame and
+  layer yield at once, stopping wiring after `stopping-1`, kernels out of the unit, then the shared mesh (gate against
+  today's own twofold-refined grids), shift kernel, observables, THM. Eight decisions for the PI (section 9).
+
+**Open.** Everything in the note is a proposal for the director and the PI; the speed of the branches is inferred.
+
 ## 2026-11-11 (agent, brief X3, milestone 3) — `DataSet` and `WorkingCopy` apart; the old data classes gone (`feature/upgrade-4-data-structure-3`)
 
 **Done** (commits 075af6db, b1d3daaf, the file moves, the class renames, these docs).
