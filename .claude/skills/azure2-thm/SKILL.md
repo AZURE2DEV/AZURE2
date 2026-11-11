@@ -146,7 +146,7 @@ Then:
    observable code 10 or more as THM, and the `<thm>` block is optional.
 2. **Segments.**
    - HOES data become a THM segment: observable code + 10 (10 angle-integrated,
-     11 differential). In pyazr, `AzrModel.add_data_segment(..., thm=True)`. Free norm, no norm error: AZURE2
+     11 differential). In a format-3 project, a data set with the field `thm <experiment>` (or `thm global`). Free norm, no norm error: AZURE2
      profiles it analytically, n* = S_mm/S_md, with no parameter and no penalty.
    - On-shell-equivalent points become an ordinary segment (σ or dσ/dΩ, converted
      from S if needed) with a free norm. None of the THM options acts on them.
@@ -163,16 +163,16 @@ Then:
    - `background=const|linear|quadratic` is a smooth incoherent term, profiled linearly
      with the norm. Results are in `output/thm_experiments.out` and
      `session.thm_background(name)`.
-   - pyazr: `AzrModel.set_thm_experiment(name, segments, ...)`.
+   - pyazr: `Project.set_thm_experiment(name, ...)`; the data sets name the experiment by their `thm` field.
 5. **Resolution.** Record σ_E in the c.m. frame of x + A. The present input is one
    `<targetInt>` Gaussian per HOES segment, whose σ is a **lab** standard deviation:
    convert c.m. σ by ×(m₁+m₂)/m₂, and convert FWHM to σ (÷2.355). Example: 17 keV c.m. gives ≈ 0.01795 MeV for p+18O. Without a stated value,
-   start at σ ≈ 30 keV c.m. and fit or scan it. pyazr: `add_target_effect(segments,
-   gaussian_sigma=...)`.
+   start at σ ≈ 30 keV c.m. and fit or scan it. Format 3: a `beam` record with a Gaussian spread, named by the
+   data sets (`pyazr.Project.add_beam`; `pyazr.schema()` lists the fields).
 6. **Direct-data norms.** Give each direct segment a norm error equal to its quoted
    systematic. Centre the prior on the nominal scale with
-   `segment_N_norm prior_centre 1` in `<parameterSettings>` (pyazr
-   `AzrModel.set_prior_centres`). Without the row, the
+   `segment_N_norm prior_centre 1` in `<parameterSettings>` (old formats; in format 3 the nuisance states its
+   prior's centre: `norm 1.0 fit prior 1.0 5%`). Without a stated centre the
    norm column is both start value and prior centre. A saved fit then re-centres every
    later refit on its own result (15N S(0) 70.7 → 74).
 7. **Level scheme.** Take it from ENSDF and direct R-matrix analyses, not from the THM
@@ -463,7 +463,7 @@ the cross-checks are in `references/calibration.md`.
 | worked examples | `examples/o18_lacognata2008` (narrow, anchor), `examples/o18_lacognata2010` (doublet, DW, authors' background), `examples/o17_guardo2017_fit` (n entrance, p spectator), `examples/f19_pag_thm` (HOES + direct, linear background, direct strengths), `examples/c12c12_tumino2018` (four channels, one experiment, identical nuclei), `examples/li7_tumino2006`, `examples/li6_pizzone2011`, `examples/n15_lacognata2007` (on-shell-equivalent) |
 | classic-project differences of the branch | `MERGE_NOTES.md` |
 | detailed checklists | `references/provenance-checklist.md`, `references/model-choices.md`, `references/calibration.md`, `references/reproduction.md` |
-| THM segments, `<thm>` keys, `AzrModel` editors, reference test χ² | `references/thm-block.md` |
+| THM segments, `<thm>` keys, `Project` editors, reference test χ² | `references/thm-block.md` |
 | THM in the upgrade (observable, kernel, DWBA validation) | `docs/upgrade/THM.md` |
 
 ## Memory and process discipline (small machines)

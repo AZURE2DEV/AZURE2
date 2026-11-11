@@ -528,8 +528,9 @@ In the GUI the effect is set up under **Include Beam Profile** in the
 ``xi``/``omega``/``alpha``/weight rows, the detector resolution sigma, the
 truncation, and the **Weight by detailed balance** box.  The tab reads and
 writes the tokens, so a project can be loaded, edited and saved without
-losing them.  ``pyazr.AzrModel.add_target_effect`` writes the same line
-from a script.
+losing them.  In a format-3 project the resolution is a field of a ``detector``
+record, added and edited from a script with :class:`pyazr.Project`
+(``add_detector``, ``set``).
 
 User-defined numerical resolution function (SAMMY UDR)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -615,9 +616,8 @@ segment and is supported by the analytic gradient.
 In the GUI, check **Include User-Defined Resolution Function** in the
 *Add/Edit Experimental Effect* dialog and give the file (``Browse...``),
 the flight path, the burst and channel widths and the centring choice.
-``pyazr.AzrModel.add_target_effect(..., udr_file=, flight_path=,
-udr_burst=, udr_channel=, udr_centred=)`` writes the same line from a
-script.
+In a format-3 project the UDR is a field of a ``detector`` record, added and
+edited from a script with :class:`pyazr.Project` (``add_detector``, ``set``).
 
 Free-Gas Doppler Broadening
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -725,7 +725,7 @@ Doppler box of the dialog has **Temperature Is a Fit Parameter**, **Fit T**,
 **Prior Sigma [K]** and **Grid Maximum [K]** (blank = the default, shown beside
 it), and the Fitting tab lists the parameter under *Doppler Temperatures*
 (:doc:`fitting`). ``pyazr``: kind ``"doppler"``, ``penalties()["doppler"]``,
-``AzrModel.dopplers`` / ``set_doppler`` (:doc:`pyazr`). ``tests/doppler_fgm``
+the target record's ``doppler`` field, edited with ``pyazr.Project.set`` (:doc:`pyazr`). ``tests/doppler_fgm``
 recovers 450 K from 300 K (MIGRAD and ``--use-lm``) and checks the gradient, the
 prior and the refusals.
 
@@ -779,8 +779,8 @@ sub-tab (:doc:`fitting`), and can be edited in either place.
 
 The fitted :math:`U_e` is written to ``param.sav`` with the other parameters
 and read back from it; the value on the ``<targetInt>`` line stays the prior's
-centre. ``pyazr.AzrModel.add_target_effect(..., screening=(Ue, vary, sigma))``
-and ``AzrModel.set_screening`` write the block from a script.
+centre. In a format-3 project :math:`U_e` is the ``screening`` field of a
+``target`` record, edited from a script with ``pyazr.Project.set``.
 
 .. note::
 
@@ -859,8 +859,9 @@ Fitting tab lists each parameter on its **Target Densities** sub-tab
 
 The fitted :math:`N` is written to ``param.sav`` and read back from it, like a
 normalization; the density on the line stays the prior's centre.
-``pyazr.AzrModel.set_target_density`` writes the blocks from a script, and
-``AzrModel.target_densities`` lists them.
+In a format-3 project the density is the ``areal_density`` field of a ``target``
+record (``... fit prior ...``), shared by every data set that names the target,
+and edited from a script with ``pyazr.Project.set``.
 
 Straggling
 ^^^^^^^^^^

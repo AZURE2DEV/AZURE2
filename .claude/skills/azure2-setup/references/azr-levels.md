@@ -2,13 +2,13 @@
 
 This reference gives the line format of the `<levels>` block of an `.azr` project and the rules the engine applies
 to it, so that a project can be written or audited by hand. The authoritative column table is
-`docs/source/reference/data_formats.rst` ("Project Files"); `pyazr/azrfile.py` writes the same field order.
+`docs/source/reference/data_formats.rst` ("Project Files"); `pyazr.Project` edits rows through the engine's writer (`io/LevelRowText.h`).
 
 ## 1. There is no pairs section
 
 Every channel line repeats the full particle-pair description. `CNuc::Fill` rebuilds the pair list by
 de-duplicating those repeats (`CNuc::IsPair`). Writing correct level lines therefore creates the pairs.
-`pyazr.AzrModel` edits an existing project (levels, channels, data segments, extrapolation grids) but cannot create a
+`pyazr.Project` edits an existing format-3 project (levels, channels, pair columns, records) but cannot create a
 particle pair; a compound nucleus that has never been set up is reached by writing level lines directly.
 
 An external helper module, `azrbuild.py` (kept in the evaluation tree, not in this repository), implements
@@ -54,7 +54,7 @@ wrong threshold.
 
 Token map for hand parsing (0-based, whitespace split): `t0` J, `t1` parity, `t2` E_x, `t3` energy-fixed flag,
 `t5` pair key (the file's key, not pyazr's engine pair number), `t6` 2S, `t7` 2L, `t8` levelID, `t10`
-channel-fixed flag, `t11` gamma. Prefer `AzrModel` (`lv.J`, `lv.parity`, `lv.energy`, `c.pair`, `c.L`, `c.S`).
+channel-fixed flag, `t11` gamma. Prefer `Project.levels()` (`lv.J`, `lv.parity`, `lv.energy`, `c.pair`, `c.l`, `c.s`, `c.width`) and `pairs()`.
 
 ## 3. Rules the engine applies without telling you
 
@@ -135,7 +135,7 @@ cross section is off by up to 14 % (`tests/hard_sphere`). Consequences:
 3. Read the transformation warnings. "Denominator less than zero while transforming" means a seed width exceeds what
    the level shift can absorb; "radiative width larger than 10% of the particle width" means an unphysical seed
    Γ_γ. The seed is wrong, not the model.
-4. `AzrModel.mass_check()`, then `output/chiSquared.out` as usual.
+4. `pyazr.masses.mass_check(project)`, then `output/chiSquared.out` as usual.
 
 ## 9. Not covered here
 

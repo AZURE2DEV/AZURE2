@@ -91,19 +91,20 @@ and ``tests/pyazr`` compares the two.
 One file, three readers
 -----------------------
 
-The ``.azr`` file is parsed independently by:
+The ``.azr`` file is read by:
 
 * the engine: ``Config.cpp`` (``<config>``), ``CNuc.cpp`` with ``io/`` ``LevelRows.h``
   (``<levels>``), ``WorkingCopy.cpp`` with ``SegLine.h`` / ``ExtrapLine.h``
   (segments and experimental effects), plus the pre-scans in ``AZURE2.cpp``;
-* pyazr: ``pyazr/azrfile.py`` (``AzrModel``) and ``pyazr/datasets.py``
-  (``SegmentSet``).
+* pyazr reads format 3 only, through the engine: ``pyazr.Project`` keeps the
+  file as the engine's lossless document (``io::Document``) and edits it with
+  the engine's record, ``<levels>``, ``<config>`` and ``<thm>`` grammars
+  (bindings in ``api/src``); it holds no grammar of its own.  An old file is
+  refused with the conversion command (``AZURE2 --convert OLD NEW --to 3``).
 
-A new keyword or field is therefore implemented twice. pyazr must also write
-the file back unchanged, including blocks it does not understand.
-``tests/pyazr/roundtrip_test`` checks the round trip, and ``tests/consistency``
-checks that the two segment-keyword lists agree. (The Qt setup utility of the
-released versions is a third reader, on ``dev``; this version has none.) The full list of places a
+pyazr must write the file back unchanged, including sections it does not edit;
+``tests/pyazr/project_test`` checks the round trip. (The Qt setup utility of the
+released versions is another reader, on ``dev``; this version has none.) The full list of places a
 feature touches is in :doc:`contributing`.
 
 Caches and their signatures

@@ -29,7 +29,7 @@ interference and external-capture parts.
 
 - **CLI** (`$AZURE2_BINARY --no-gui --no-readline project.azr`): one-shot calculate, fit, extrapolate, MINOS, rate or
   MCMC run that writes the standard output files. Use it when the files are the product.
-- **pyazr** (`from pyazr import azure2, AzrModel`): the engine compiled into the extension module `pyazr/_azure2`,
+- **pyazr** (`from pyazr import azure2, Project`; format-3 projects only): the engine compiled into the extension module `pyazr/_azure2`,
   running in the interpreter. Use it for all evaluation work: χ², scans, decompositions, custom fitters and
   samplers. pyazr does not call the CLI binary; rebuilding `_azure2` is the update. Its version is
   `pyazr.__version__`.
@@ -119,7 +119,7 @@ with azure2("project.azr", cwd=HERE) as m:          # a session is a context man
   session.
 - **Never point an exploratory session at a live fit's `output/`.** Opening a session whose runtime options or
   segment count differ from the cached ones recomputes and overwrites `output/intEC.dat`/`intEC.extrap` there, even
-  for a calculation. Work on a copy with its own output directory (`AzrModel.set_output_dir(...)`). To repair, rerun a
+  for a calculation. Work on a copy with its own output directory (`Project.set_config(output_dir="out2/")`). To repair, rerun a
   CLI mode-1 calculate under the project's flags and confirm `chiSquared.out` reads as before.
 
 ### Two parameter vectors
@@ -195,22 +195,20 @@ Legendre coefficients as data, phase shifts, composite SUM/RATIO segments, total
    data segment k. Current CLI and `load_sav` skip `segment_*` entries in a run without data.
    Builds before 2026-10-26 (expires: 2027-02-01) applied data segment k's shift to test segment k, so the printed energies were
    E + shift; strip the `segment_*` lines when using such a build.
-4. **Define grids in the lab frame.** `AzrModel.set_extrapolations` takes lab energies:
+4. **State the frame of every grid.** An `extrapolation` record's `energies` and `angles` name their frame (`lab` or
+   `cm`); the engine converts a `cm` grid with the masses of `<levels>`:
 
    ```python
-   cm2lab = m_target / (m_beam + m_target)       # divide E_c.m. by it to get E_lab (3He+α: 0.5703)
-   mdl.set_extrapolations([
-       dict(entrance=1, exit=-1, e_min=0.10/cm2lab, e_max=8.5/cm2lab, e_step=0.05/cm2lab,
-            observable="total-capture"),
-       dict(entrance=1, exit=1, e_min=0.05, e_max=6.0, e_step=0.05,
-            observable="differential-cm", angle=90.0),
-   ])
+   p = Project.open("3He_a.azr")
+   p.add_extrapolation("capture", reaction=p.reaction(1, -1), quantity="sigma", unit="b",
+                       energies="range 0.10 8.5 MeV cm step 0.05")
+   p.add_extrapolation("el90", reaction=p.reaction(1, 1), quantity="dsigma_domega", unit="b/sr",
+                       energies="range 0.05 6.0 MeV lab step 0.05", angles="list 90 deg cm")
+   p.save("3He_a_grids.azr")
    ```
 
-   `observable` ∈ `angle-integrated`, `differential`, `differential-cm`, `total-capture`, `angular-distribution`
-   (needs `order=`), `phase-shift` (needs `phase_J=`, `phase_L=`). `exit=-1` is total capture. The raw `isDiff` codes
-   differ between blocks: in `<segmentsData>` 3 is total capture and 4 differential c.m.; in `<segmentsTest>` 3 is
-   angular distribution, 4 total capture, 5 differential c.m. pyazr handles this; hand edits must not mix them.
+   Quantities: `sigma`, `dsigma_domega`, `analyzing_power`, `legendre` (with `expansion`, `orders`), `phase_shift`,
+   ... (`pyazr.schema()` lists them with their fields); `p.reaction(entrance, -1)` is every capture pair summed.
 5. **Resolve narrow resonances.** A 5 keV grid misdraws keV-wide peaks by up to a factor 11; use 0.25–0.5 keV steps,
    or an adaptive table (below).
 

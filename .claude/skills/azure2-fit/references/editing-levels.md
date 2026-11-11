@@ -1,27 +1,29 @@
 # Editing the model and snapshotting a fit
 
 The engine reads its model from the `.azr`, so an edited level scheme is applied by writing a new `.azr` and opening a
-fresh session on it. `pyazr.AzrModel` parses the `<levels>` block and re-emits everything else verbatim; the original
-file is never modified. This page covers adding, removing and deactivating levels and channels, other `.azr` edits,
-and `save_fit`, which writes a fit back to a `.azr` plus its `param.sav`. Building a project from nothing (new pairs,
-first level scheme) is `azure2-setup`.
+fresh session on it. `pyazr.Project` (format 3 only; an old file is refused with `AZURE2 --convert OLD NEW --to 3`)
+edits the `<levels>` rows, the records, `<config>` and `<thm>` through the engine's grammars; the lines an edit does
+not touch keep their bytes and nothing is written until `save`. This page covers adding, removing and deactivating
+levels and channels, other edits, and `save_fit`, which writes a fit back to a `.azr` plus its `param.sav`. Building a
+project from nothing (new pairs, first level scheme) is `azure2-setup`.
 
 ## Adding, removing, deactivating
 
 ```python
-from pyazr import AzrModel, azure2
+from pyazr import Project, azure2
 
-mdl = AzrModel.from_file("7Be.azr")
-print(mdl)                                        # J^pi / energies / channels / fixed flags
-mdl.find(jpi="5/2+", energy=10.253, tol=2e-2)     # -> [AzrLevel]
+p = Project.open("7Be.azr")
+for lv in p.levels():                             # label, J^pi, E_x, channels (pair, l, s, width), fixed, active
+    print(lv.label, [(c.pair, c.l, c.s, c.width) for c in lv.channels])
+lv = p.level(("5/2+", 10.253))                    # by J^pi and E_x (within 1 keV), or by its label
 
-mdl.remove_level(jpi="1/2+", energy=20)           # drop a background pole entirely
-mdl.add_level(J=1.5, parity=+1, energy=8.6,       # add a 3/2+ resonance, E_x in MeV
-              channels=[dict(pair=1, L=2, S=0.5, gamma=1000.0, fixed=False),
-                        dict(pair=2, L=1, S=0.5, gamma=0.1)],   # never gamma=0 on a channel meant to be fitted
-              level_fixed=False)                  # level_fixed=False -> the energy is a fit parameter
-mdl.deactivate_level(jpi="7/2-", energy=4.572)    # keep in file, zero and fix every width
-path = mdl.write("_test.azr")
+p.remove_level(("1/2+", 20))                      # drop a background pole entirely
+p.add_level(1.5, +1, 8.6,                         # add a 3/2+ resonance, E_x in MeV
+            [dict(pair=1, l=2, s=0.5, width=1000.0, fixed=False),
+             dict(pair=2, l=1, s=0.5, width=0.1)],   # never width=0 on a channel meant to be fitted
+            fixed=False)                          # fixed=False -> the energy is a fit parameter
+p.set_level(("7/2-", 4.572), active=False)        # keep in the file, not read by the engine
+path = p.save("_test.azr")
 
 with azure2(path, cwd=HERE) as m:
     ...
@@ -30,32 +32,29 @@ with azure2(path, cwd=HERE) as m:
 Rules:
 
 - **All levels of one J^π share one channel set** (an R-matrix J-group requirement). If a level of that (J, parity)
-  exists, `add_level` clones the group's channel structure and applies your `gamma`/`fixed` only to matching
-  (pair, L, S); unmentioned channels are added inert (`gamma=0`, fixed). A spec matching none raises and lists the
-  allowed channels. Only for a new J^π do your channels define the group.
-- `remove_channel(jpi, pair, L, S)` removes that channel from every level of the group; removing it from one level
-  makes the engine reject the file.
-- `add_level`/`add_channel` reference only a pair that already exists in the file; new particle pairs are added by writing
-  their level lines or by building the project (`azure2-setup`).
-- `gamma` in the file is the width input (Γ in eV for an open channel, an ANC in fm^-1/2 for a closed one; see
+  exists, `add_level` clones the group's rows and applies your `width`/`fixed` only to matching (pair, l, s);
+  unmentioned channels are added inert (width 0, fixed). A channel outside the set is refused, with the set listed.
+  Only for a new J^π do your channels define the group.
+- `add_level` references only a pair that already exists in the file; new particle pairs are added by writing
+  their level rows or by building the project (`azure2-setup`). Removing one channel from a group is not offered.
+- The width column is the width input (Γ in eV for an open channel, an ANC in fm^-1/2 for a closed one; see
   `docs/source/user_guide/levels_channels.rst`), not a reduced-width amplitude. Seed a new channel with a small nonzero
   value and set `fixed=False`: a width of exactly 0 is fixed whatever its flag says (SKILL.md, "Free and fixed").
-- Levels are renumbered (`levelID`) on every edit; every later `energy_<N>`/`width_<N>_<c>` name moves
-  (`references/parameters-and-sav.md`).
-- Round level energies to at most 8 decimals when writing a `.azr` programmatically. A level line written by
-  `AzrModel.add_level` with a 16-significant-digit energy (e.g. `3.436212548111519`) made the engine misread the
-  model without a message (χ² × 4000 on ¹³N); the same energy with 8 decimals, and the 18-character energies that
-  `apply_fit` writes, read correctly, so the trigger is the token layout of `add_level`'s lines. rmfit rounds to 1 eV.
-- `observable="total-capture"` needs every significant γ-cascade transition set up beforehand as its own
-  (particle, γ) pair; the engine sums over them for a segment with this observable. Other observables include
-  `analyzing-power` (code 7). Fetching data sets from EXFOR to feed `add_data_segment`: `azure2-setup`.
-- **Adding or removing data segments invalidates the external-capture cache.** After `add_data_segment`,
-  `remove_data_segments`, `clear_data_segments` or `set_extrapolations`, delete `output/intEC.dat` and
-  `output/intEC.extrap` before the next run, or give the edited model its own output directory
-  (`mdl.set_output_dir(...)`); otherwise the engine reuses integrals computed for the old grids. In a live session
-  `azr.recalculate_external_capture()` forces a recompute (`pyazr/examples/edit_model.py`).
-- **Removing or inserting a `<segmentsData>` line renames every later segment parameter**: remap every per-segment
-  family or, better, deactivate (`references/parameters-and-sav.md`, `references/drop-dataset.md`).
+- A new level gets the next free level ID; the engine's (group, level) numbering of the others is unchanged unless the
+  level falls before them in its J^π group (`references/parameters-and-sav.md`).
+- Numbers are written as the shortest decimal that reads back as the same double, each right-aligned in the width of
+  the token it replaces.
+- A capture data set summed over the γ cascade (`reaction 12C(p,g)13N` with every capture pair) needs every
+  significant transition set up beforehand as its own (particle, γ) pair. Fetching data sets from EXFOR:
+  `azure2-setup`.
+- **Adding or removing data sets invalidates the external-capture cache.** After `add_dataset`, `remove`, or an
+  extrapolation change, delete `output/intEC.dat` and `output/intEC.extrap` before the next run, or give the edited
+  model its own output directory (`p.set_config(output_dir="out2/")`); otherwise the engine may reuse integrals
+  computed for the old grids. In a live session `azr.recalculate_external_capture()` forces a recompute
+  (`pyazr/examples/edit_model.py`).
+- Data-set parameters are named by record (`meyer_84.norm`), so adding or removing a data set renames nothing else;
+  deactivating one (`p.set(name, active="no")`) keeps its rows of `<parameterSettings>` for when it comes back
+  (`references/drop-dataset.md`).
 
 ## `save_fit`: snapshot a fit
 
@@ -69,7 +68,7 @@ compares the physical values transformed back, and the reduced-width amplitudes 
 β channels of each level, against the fit's (up to a common sign of a level, which the standard parametrization may
 flip). If either disagrees it removes both files and raises. `path` is explicit; nothing is written in place. It
 writes every level parameter at its current observed value (`transform_all_rwa(full, free_only=False)`,
-`apply_fit(..., include_fixed=True)`), so the re-read is exact; `load_sav` of the companion `.sav` gives the same.
+`place_level_values`, fixed parameters included), so the re-read is exact; `load_sav` of the companion `.sav` gives the same.
 
 - **Fixed parameters are fixed in reduced-width space, not in what the file shows.** A fixed channel's observed width
   or ANC moves whenever the free widths of the same level move (Brune's factor 1 + Σγ² dS/dE, the external width), and
@@ -103,19 +102,19 @@ writes every level parameter at its current observed value (`transform_all_rwa(f
 
 ## What a snapshot still cannot carry
 
-- **Fitted normalizations and shifts are only in the `.sav`.** `save_fit` leaves `<segmentsData>` alone, so a
-  calculation with a blank parameter file is not the fit, and baking norms in is not the fix
-  (`references/normalizations-and-shifts.md`).
+- **Fitted normalizations and shifts** go into their records' nuisances with `save_fit(norms="fitted")` (the
+  default; each prior keeps its own centre); with `norms="nominal"` they are only in the `.sav`, and a calculation
+  with a blank parameter file is then not the fit (`references/normalizations-and-shifts.md`).
 - **Verify a bake of `<levels>` with a blank parameter file**, not with `param.sav`: mode 1 with an external file
   loads that file's values by name and overrides `<levels>`, so it can only confirm the `.sav`. A blank-file run must
   equal a pyazr evaluation at the fitted R-matrix block with every norm and shift at its nominal value.
 - **The check dumps are keywords, not filenames.** `<config>` accepts only `none`, `screen` or `file`
   (`Config::ReadConfigFile`); anything else leaves the check off and `checks/` stays empty. Write `file`.
 
-## `apply_fit` and the example script
+## The placement and the example script
 
-`AzrModel.apply_fit` is the lower-level half: it takes `pairs=` (the engine's pair numbering, `m.pairs`), matches
-levels on the engine's own (jgroup, level) via `engine_level_keys()`, and refuses any parameter it cannot place. It does
-not verify; `save_fit` does. `pyazr/examples/save_fit_to_azr.py` does the whole job: it loads a fit from `param.sav` or
+`pyazr.snapshot.place_level_values(project, parameters, pairs, want)` is the lower-level half: it maps the engine's
+pair numbers to the file's keys through `pairs=` (`m.pairs`), places each value by the engine's own (group, level) and
+the channel's (pair key, l, 2s), and refuses any free parameter it cannot place. It does not verify; `save_fit` does. `pyazr/examples/save_fit_to_azr.py` does the whole job: it loads a fit from `param.sav` or
 an `.npz`, optionally changes a channel radius (`--radius 1=4.70`, dropping the stale `intEC` caches), writes the `.azr`
 plus a companion `param.sav` with the norms, and fails if the result does not round-trip.

@@ -67,18 +67,19 @@ AZURE2 exit with `ERROR: <thm> ...` before computing anything.
 
 ### Editing it from Python
 
-`AzrModel` applies the engine's rules and keeps comments and untouched lines:
+`pyazr.Project` (format 3) applies the engine's rules and keeps comments and untouched lines:
 
 ```python
-mdl.thm_options()                          # dict of the non-default options
-mdl.set_thm_option("kinematics", "kf3body")
-mdl.set_thm_weight(1, "R_of_E.dat")        # key counts every <segmentsData> line; must be THM;
-                                           # table checked; path relative to the .azr's directory
-mdl.clear_thm_option(key); mdl.clear_thm_weight(k)
-mdl.set_thm_experiment(name, segments, ...)
+p = Project.open("17O.azr")
+p.thm()                                    # the global options and the experiments
+p.set_thm(kinematics="kf3body")            # None removes an option
+p.set("o17_guardo", thm_weight="R_of_E.dat")   # a THM data set's own weight table (path relative to the project)
+p.set_thm_experiment("E", background="...")    # set keys of an experiment's line; None removes one
+p.set("o17_guardo", thm="E")               # a data set joins an experiment by its own field
+p.remove_thm_experiment("E")
 ```
 
-A bad value raises `ValueError`. By hand, append `"\n<thm>\n...\n</thm>\n"`: an `.azr` may lack a final newline, and
+A refusal raises `pyazr.FormatError` with the engine's message. By hand, append `"\n<thm>\n...\n</thm>\n"`: an `.azr` may lack a final newline, and
 `<thm>` must start its own line.
 
 ## Reference projects

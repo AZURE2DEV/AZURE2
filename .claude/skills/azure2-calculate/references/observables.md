@@ -26,7 +26,7 @@ ay = m.calculate_analyzing_power_rwa(m.params_rwa)
   have a small uncertainty, and treating it so gives it enormous weight.
 - **Free a normalization.** The beam-polarization calibration P scales A_y multiplicatively
   (A_y ∝ (N⁺ − N⁻)/(P (N⁺ + N⁻))), which is exactly a normalization:
-  `set_segment_norm(name, vary=True, sys_error=<polarization uncertainty in %>)`.
+  `Project.set(name, norm="1 fit prior 1 <polarization uncertainty>%")`.
 - **No target integration** on A_y segments compared with thin-target data. The target average
   ⟨A_y⟩ = ∫A_y σ dE / ∫σ dE is dominated by the low-energy Rutherford σ where A_y ≈ 0 (≈ 10⁻⁶ on a thick target);
   that is physics. A target-integrated A_y point also switches the whole fit to numerical derivatives, and for
@@ -105,8 +105,8 @@ level has a width in that channel spin. Formalism: `docs/source/theory/scatterin
   (s = −1: the coherent sum Σ_s (2s+1) a_s / ((2j₁+1)(2j₂+1)); neutron tables give the bound b, enter b·A/(A+1)).
   Each line is a χ² term in every fitter, the MCMC likelihood and `calculate_chi2_rwa`; `chiSquared.out` gains
   `Total-Scattering-Length-Chi-Squared`.
-- pyazr: `m.scattering_lengths(x)`, `m.penalties()["scattering_length"]`, `AzrModel.scattering_lengths`,
-  `add_scattering_length`, `set_scattering_lengths`.
+- pyazr: `m.scattering_lengths(x)`, `m.penalties()["scattering_length"]`, `m.scattering_length_chi2(x)`; the
+  measured values are `datum` records of quantity `scattering_length` (`Project.add_datum`, `set`, `remove`).
 - Trap when entering published Brune widths γ̃: the `.azr` width is the observed width
   Γ = 2P γ̃² / (1 + Σ γ̃² dS/dE), not 2P γ̃²; dropping the denominator moved a ³He+⁴He a_0 by 0.6 %
   (check `g_int` in `parameters.out`).

@@ -28,7 +28,7 @@ must follow, and the checks that show it is what was intended.
    photon pairs (one per final state reached by capture). Fetch the adopted level scheme and ground-state data with
    `pyazr.nds` (references/nds-exfor.md §5).
 2. **Pairs: masses and separation energies from one table.** Enter atomic masses (u, electrons included) from
-   AME2020 and S = m₁ + m₂ − M(compound) from the same table: `AzrModel.fill_masses()`. Then `AzrModel.mass_check()` (§ Rules, "Masses").
+   AME2020 and S = m₁ + m₂ − M(compound) from the same table: `pyazr.masses.fill_masses(project)`. Then `masses.mass_check(project)` (§ Rules, "Masses").
 3. **Channels and radii.** Enumerate the allowed (L, S) for each J^π (references/azr-levels.md §5). Start the
    channel radius at a_c = 1.4 (A₁^⅓ + A₂^⅓) fm. a_c is a model parameter to be scanned (azure2-check), not a
    physical radius.
@@ -46,7 +46,7 @@ must follow, and the checks that show it is what was intended.
    fit. Keep the project in its own directory with `output/` and `checks/` beside it.
 7. **First checks** (minutes, no fit):
    - CLI mode 3 with no data, then a mode-1 calculation from the file's own parameters (references/azr-levels.md §8);
-   - `AzrModel.mass_check()`: no mismatch above 1 keV;
+   - `pyazr.masses.mass_check(project)`: no mismatch above 1 keV;
    - the segment summary in the run log: every segment filled, every keyword recognised;
    - the tail audit and the shared-file audit (references/azr-segments.md §2, references/data-definition.md §2);
    - each data file plotted against the first calculation in the same frame (azure2-plot).
@@ -66,8 +66,8 @@ must follow, and the checks that show it is what was intended.
   In an archive of 5,705 projects with two or more particle pairs, 1,138 agreed to 0.1 keV; 4-decimal masses give
   tens of keV. Test: `tests/mass_separation_check`.
 - **AME2020 is shipped.** `pyazr/data/mass_1.mas20`: `pyazr.masses.atomic_mass("12C")`,
-  `separation_energy("p", "12C")`, `pair_masses("a", "12C")`. `AzrModel.fill_masses(pairs=None, separation=True)`
-  rewrites only the m₁, m₂ and S columns (and the entrance-S copy); particles are identified by Z and round(M), so
+  `separation_energy("p", "12C")`, `pair_masses("a", "12C")`. `masses.fill_masses(project, pairs=None, separation=True)`
+  sets only the masses and S of each pair through `Project.set_pair` (and the entrance-S copy); particles are identified by Z and round(M), so
   mass numbers and bare protons are recognised; γ pairs get M(compound) and keep S = 0.
 - **Filling S moves thresholds.** Never fill an archived fit in place: copy it, fill, compare χ², and leave any refit
   to the evaluator.
@@ -95,7 +95,7 @@ must follow, and the checks that show it is what was intended.
 
 ### Kinematics: non-relativistic unless `relativistic=1`
 
-- Without the `<config>` key the kinematics is non-relativistic. With `relativistic=1` (pyazr `AzrModel.relativistic`) k, η, lab↔c.m. energies, lab angles and cross sections come
+- Without the `<config>` key the kinematics is non-relativistic. With `relativistic=1` (pyazr `Project.set_config(relativistic=True)`) k, η, lab↔c.m. energies, lab angles and cross sections come
   from the invariant mass (the LANL/EDA prescription, ENDF KRL = 1; `include/Kinematics.h`). Level energies stay
   excitation energies; `output/relativistic.out` lists them in EDA's E(s) convention (E_s − E_x = T₀²/(2m₀), 43 keV
   at T₀ = 20 MeV for A = 5).

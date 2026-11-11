@@ -16,5 +16,5 @@ reaction, 2H(18O,α15N)n, has a neutron spectator; a charged one is made up as
 | (e) refusals | `lineshape=on` without kinematics, `lineshape=1`, E_sF ≤ 0 at a data point (Ebeam = 40 MeV), `--use-rmc` (no Brune) |
 
 `tests/pyazr/thm_lineshape_test.py` checks the same through pyazr
-(`AzrModel.set_thm_experiment(..., lineshape=True)`, CLI == session,
+(`Project.set_thm_experiment(..., lineshape="on")`, CLI == session,
 `session.thm_lineshape` against the formulas).

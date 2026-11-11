@@ -308,13 +308,19 @@ energies, barns or barns/sr — so a published dataset becomes a data segment
 without hand editing:
 
 ```python
-from pyazr import nds, AzrModel
+import os
+from pyazr import nds, Project
 
 hits = nds.search_exfor(target="C-13", reaction="p,g", quantity="SIG")
 data = nds.fetch_exfor("O2599004")                # S-factor, reported in b·keV
-kw   = data.to_azr("run/data", entrance=1, exit=2,   # -> barns, lab energies
-                   observable="total-capture")
-AzrModel.from_file("13N.azr").add_data_segment(**kw).write("13N_new.azr")
+print(data.to_sfactor_dataset("run/data", "S_luna",   # writes run/data/..., returns the text of a format-3
+                              norm="1 fit prior 1 5%"))  # `dataset` record (quantity sfactor) for <data>
+xs = nds.fetch_exfor(entry_id)                    # a cross section in B, MB, ...: a data file, then a record
+kw = xs.to_azr("run/data", entrance=1, exit=2)    # -> barns, lab energies
+p = Project.open("run/13N.azr")
+p.add_dataset("xs", reaction=p.reaction(1, -1), quantity="sigma", unit="b", norm="1 fixed",
+              file="data/" + os.path.basename(kw["data_file"]), columns="E_lab[MeV] _ value error")
+p.save()
 
 nds.fetch_levels("14n")                           # ENSDF level scheme
 nds.resolve_doi(nds.reference("O2599004"))        # the paper behind the data

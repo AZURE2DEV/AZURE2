@@ -79,8 +79,8 @@ if len(sys.argv) > 4:
     import re
     import os
     if os.environ.get("AZURE2_SRC"): sys.path.insert(0, os.environ["AZURE2_SRC"])  # repo checkout holding pyazr/
-    from pyazr import AzrModel
-    fixed = [(l.jpi, l.energy, l.fixed) for l in AzrModel.from_file(sys.argv[4]).levels if l.active]
+    from pyazr import Project
+    fixed = [(l.jpi, l.energy, l.fixed) for l in Project.open(sys.argv[4]).levels() if l.active]
     cur = None
     for line in open(sys.argv[3]):
         m = re.match(r"J =\s*(\S+)\s+E_level =\s*(\S+)", line)

@@ -69,10 +69,10 @@ tests used to answer:
 
 Where a **file** names a parameter (`param.sav` / `param.par`, a prior covariance, `<parameterSettings>`, the
 `<mcmc>` prior rows) the name is looked up whole in the vector (`AZUREParams::IndexOfName`, `PriorCovariance::Load`)
-or compared whole with the name its creation site gives it; the record then says what it is. Two file grammars are
-read without a parameter vector and stay as they are, listed in check 23: pyazr's reading of the
-`prior_centre` rows (`datasets.prior_centre_row`, `azrfile._PRIOR_ROW`; the document layer has no session) and the
-example `pyazr/examples/transform_widths.py`.
+or compared whole with the name its creation site gives it; the record then says what it is. One file grammar is
+read without a parameter vector and stays as it is, listed in check 23: the example
+`pyazr/examples/transform_widths.py`.  (pyazr's reading of the old `prior_centre` rows went with the old file class,
+pyazr 3.0.)
 
 Still a second walk of the layout (positions, not names; each must follow the creation order):
 `BuildParamIndexMap` (`src/AZUREGrad.cpp`), `AZUREAPI::GetParameterInfo` (which now throws if its kind disagrees with

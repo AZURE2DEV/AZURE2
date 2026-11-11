@@ -172,7 +172,7 @@ changes by a factor e per 16 keV). Therefore:
   order). Full width Δ_D = √(4 m E kT/M): 63 eV for n + ¹²C at 300 K and 0.46 MeV. It matters for resonances a few
   hundred eV wide or narrower. A line may carry `doppler` alone:
   `1 "1,2" 400 0 0 0 0 "" 0 0 0 0 "" 0 doppler 293.6`. Refused: `doppler 0`, a missing T, photon or β entrance.
-  pyazr: `add_target_effect(..., doppler=T)`. builds before 2026-11-05 (expires: 2027-02-01) refuse the whole
+  Format 3: the target record's field `doppler free_gas T K` (`pyazr.Project.set`). Builds before 2026-11-05 (expires: 2027-02-01) refuse the whole
   `<targetInt>` block.
 
 ## 7. Fitted apparatus parameters
@@ -181,12 +181,12 @@ Each is a parameter with a Gaussian prior about the value written on the line; t
 `param.sav` (the line keeps its prior centre, `save_fit` does not move it). Parameter index n = place among the
 active `<targetInt>` lines.
 
-| Keyword | Parameter | Range and grids | pyazr |
+| Keyword (old `<targetInt>` / segment line) | Parameter | Range and grids | Format 3 (edit with `pyazr.Project.set`) |
 |---|---|---|---|
-| `doppler T vary σ [Tmax]` | `doppler_<n>` (K) | grids laid out for Tmax (default max(T+3σ, 1.21T); 2T without prior); MIGRAD keeps T in [T/4, Tmax] | `AzrModel.set_doppler(effect, T=, vary=, sigma=, tmax=)` |
-| `transmission n vary σ`, `yield n vary σ`, `thicknessgroup <label>` | `segment_<key>_thickness` (atoms/barn) | group members follow the first segment | `AzrModel.set_sample_thickness(key, n=, vary=, sigma=, group=)` |
-| `densityfit vary σ [max]`, `densitygroup <label>` | `density_<n>` (atoms cm⁻²; σ absolute or "2.3%") | grids laid out at max (default N₀+3σ, ≥1.1N₀; 1.5N₀ without prior) | `AzrModel.set_target_density(effect, density=, vary=, sigma=, max=, group=)` |
-| `screening U_e vary σ_U` | `screening_<n>` (eV) | factor exp(πηU_e/E_c.m.) on σ at every point and sub-point | `add_target_effect(screening=(Ue, vary, sigma))`, `AzrModel.set_screening` |
+| `doppler T vary σ [Tmax]` | `doppler_<n>` (K) | grids laid out for Tmax (default max(T+3σ, 1.21T); 2T without prior); MIGRAD keeps T in [T/4, Tmax] | target field `doppler free_gas T K fit [prior T σ] [grid_max Tmax]`; parameter `<target>.doppler` |
+| `transmission n vary σ`, `yield n vary σ`, `thicknessgroup <label>` | `segment_<key>_thickness` (atoms/barn) | group members follow the first segment | `areal_density n atoms/b fit [prior n σ]` on a target of kind sample; parameter `<target>.areal_density`, shared by the data sets on the target |
+| `densityfit vary σ [max]`, `densitygroup <label>` | `density_<n>` (atoms cm⁻²; σ absolute or "2.3%") | grids laid out at max (default N₀+3σ, ≥1.1N₀; 1.5N₀ without prior) | target field `areal_density N atoms/cm2 fit [prior N σ]`; parameter `<target>.areal_density` |
+| `screening U_e vary σ_U` | `screening_<n>` (eV) | factor exp(πηU_e/E_c.m.) on σ at every point and sub-point | target field `screening U_e eV fit prior U_e σ`; parameter `<target>.screening` |
 
 - **A fit that ends at Tmax or at the density maximum wants a larger maximum**; beyond max the engine computes at
   max and warns once.

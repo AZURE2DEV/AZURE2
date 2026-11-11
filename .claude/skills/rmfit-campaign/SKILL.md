@@ -65,8 +65,8 @@ Prerequisites, done in the reaction's fit directory, not in the campaign:
    and check the baked file with the CLI in mode 1 with a blank external parameter file. A bake checked with the
    `.sav` as external file proves nothing (the `.sav` overrides `<levels>`). Never take parameters from a running or
    crashed fit, only from the last completed one. Purge inactive level lines.
-3. Merge new data sets onto the baked file (`AzrModel.add_data_segment`), capped at the energy range the level scheme
-   covers (`set_segment_energy_range`), normalizations free with a systematic error taken from the paper. Look at every
+3. Merge new data sets onto the baked file (`Project.add_dataset`), capped at the energy range the level scheme
+   covers (`energy_window`), normalizations free with a systematic error taken from the paper. Look at every
    new file: one negative or spiked cross section can dominate the objective.
 4. Audit the input file and the data (section 3b, items 1 and 2) before the first `init`.
 5. Without a converged fit to start from, build starting parameters level by level first (`azure2-fit`, "First fits");
@@ -86,7 +86,7 @@ Rules for `init`:
   reduce the `.sav` to its `segment_*` lines for such a seed. Never read a `.sav` by row position: newer files start
   with a `parametrization` row.
 - **Freeing a normalization, or adding data, is a structure change**: edit a copy of the base file
-  (`AzrModel.set_segment_norm(<file substring>, vary=True, sys_error=<percent>)` hits every segment of that file),
+  (`Project.set(<data set>, norm="1 fit prior 1 <percent>%")`, once per data set of that file),
   copy the `.sav` alongside, and `init` a fresh ledger. Crossover donors from a campaign without those norms still
   work: missing norm and shift keys are filled from the incumbent.
 - **Energy shifts are free in a campaign only if the policy says so** (`"shifts_free": true` at `init`). Shifts are

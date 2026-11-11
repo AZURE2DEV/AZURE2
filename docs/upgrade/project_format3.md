@@ -36,7 +36,7 @@ counts are quoted as "survey".
 | construct | where | what is wrong with it for a user, a GUI or an agent |
 |---|---|---|
 | segment line: 8 positional numbers, then `J l` only when isDiff = 2, then norm, then a shift block of 3, 1 or 0 tokens decided by whether tokens look like numbers | `include/SegLine.h:104-106, 146-174` [V] | the meaning of a token depends on the tokens before it; a file name that parses as a number was once read as a shift (`SegLine.h:146-149`) |
-| observable as an integer `isDiff` whose meaning differs between data (`ESegment.cpp:38-83`) and test lines (`ESegment.cpp:166-196`): 3, 4, 5 mean different things | `pyazr/datasets.py:77-98`, `pyazr/azrfile.py:2563-2568` copy both tables [V] | a number, not a word; two tables; pyazr holds its own copies |
+| observable as an integer `isDiff` whose meaning differs between data (`ESegment.cpp:38-83`) and test lines (`ESegment.cpp:166-196`): 3, 4, 5 mean different things | `pyazr/datasets.py:77-98`, `pyazr/azrfile.py:2563-2568` copied both tables [V] (deleted with pyazr 3.0) | a number, not a word; two tables; pyazr held its own copies |
 | composite block `1 op n e x θ [s]` with three layouts told apart by counting numbers | `include/ComponentList.h:30-88` [V] | reactions as pair keys; a short list silently becomes a plain segment with a warning (`ComponentList.h:71-75`) |
 | UPOS block `isUPOS L Ic δ` after the composite block | `SegLine.h:199-210` [V] | positional; a missing field silently resets to 0 (`SegLine.h:205-208`) |
 | trailing keywords; an unknown one ends the line silently | `SegLine.h:382-384` [V] | a typo drops every later keyword without a message; test lines skip data-only keywords silently (`include/ExtrapLine.h:104-131`) |
@@ -370,7 +370,7 @@ extrapolation S_low
   (relative), until no interval is refined or `max_points` is reached (then a warning). The grid is a function of the
   current parameters, computed in the extrapolation run (extrapolations never enter the χ²); `AdaptiveIntegrationGrid`
   is reused where it fits (HANDOFF 2026-11-10, "Requested feature").
-- The frame of the grid is stated (`lab` or `cm`); `cm` replaces pyazr's own conversion (`pyazr/azrfile.py:1522-1540`).
+- The frame of the grid is stated (`lab` or `cm`); `cm` replaces pyazr's own conversion (in the deleted `pyazr/azrfile.py`).
 
 **[Implemented (brief K, 2026-11-10).** One reader of the grid forms, `experiment/Grids.h` (`ReadGridValues`), used by
 `Build` and by `pyazr.extrapolation_grid`; a `cm` energy grid is taken to lab energies by `Frames`' `BeamLabFromCM`
@@ -942,9 +942,9 @@ a layer of finite thickness, reactions per incident particle (Phase 5, branch 4;
   committed old fixtures reproduces the committed converted files byte for byte; converting a format-3 file is
   refused with "already format 3".
 - **21.** The schema JSON equals the committed `tests/schema/schema_v3.json` unless `schema_version` changed.
-- **22.** pyazr's `_KEYWORDS`, `_DATA_CODE`, `_OBSERVABLE`, `_EXTRAP_OBSERVABLE` are gone (today
-  `pyazr/datasets.py:77-122`, `pyazr/azrfile.py:2563-2568`); check 6 (engine and pyazr keyword sets equal) is
-  replaced by 17.
+- **22.** pyazr's `_KEYWORDS`, `_DATA_CODE`, `_OBSERVABLE`, `_EXTRAP_OBSERVABLE` are gone (they were in
+  `pyazr/datasets.py` and `pyazr/azrfile.py`, deleted with pyazr 3.0, 2026-11-11); check 6 (engine and pyazr keyword
+  sets equal) is removed, replaced by 17.
 - **23.** No code recognises a parameter's kind by its name (prefix matches on `segment_`, `density_`, `screening_`,
   `doppler_`, `abundance_`, §1): the parameter vector carries a kind attribute (`ARCHITECTURE.md` §3, `inference/`
   `ParameterVector`).
