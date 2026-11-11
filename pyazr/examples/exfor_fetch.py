@@ -4,7 +4,7 @@ Demonstrates the ``pyazr.nds`` module end to end:
 
 1. search EXFOR for a reaction (``search_exfor``)
 2. fetch a dataset and convert it to an AZURE2 data file (``ExforData.to_azr``)
-3. attach it to an ``AzrModel`` as a new data segment (``add_data_segment``)
+3. add it to a project as a ``dataset`` record (``Project.add_dataset``)
 4. pull the level scheme for the compound nucleus from ENSDF (``fetch_levels``)
 5. resolve the paper behind the dataset (``reference`` + ``resolve_doi``)
 
@@ -21,7 +21,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))))
 
-from pyazr import AzrModel
+from pyazr import Project
 from pyazr import nds as N
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -54,13 +54,14 @@ with open(kw["data_file"]) as f:
     for line in f.readlines()[:3]:
         print("   ", line.rstrip())
 
-# 3. Attach the new segment to a model.  The 13N.azr compound nucleus is
-#    13C+p (pair 1) -> capture (pair 2), which matches the EXFOR entrance.
-mdl = AzrModel.from_file(os.path.join(HERE, "..", "..", "tests", "13N", "13N.azr"))
-mdl.add_data_segment(**kw)
-out_azr = os.path.join(WORK, "13N_nds.azr")
-mdl.write(out_azr)
-print("\n== wrote model with the new segment: %s ==" % out_azr)
+# 3. Add the data set to a project, saved in the work directory beside its data.  The 13N.azr compound nucleus is
+#    12C+p (pair 1) -> capture (pair 2): a model for the record's grammar, not for this reaction's physics.
+mdl = Project.open(os.path.join(HERE, "..", "..", "tests", "13N", "13N.azr"))
+mdl.path = os.path.join(WORK, "13N_nds.azr")
+mdl.add_dataset("o2599004", reaction=mdl.reaction(1, 2), quantity="sigma", unit="b", norm="1 fixed",
+                file=os.path.relpath(kw["data_file"], WORK), columns="E_lab[MeV] _ value error")
+out_azr = mdl.save()
+print("\n== wrote the project with the new data set: %s ==" % out_azr)
 
 # 4. Level scheme of the compound nucleus (14N) from ENSDF via LiveChart.
 print("\n== fetch_levels('14n') ==")
@@ -77,5 +78,5 @@ print("  authors:", ref.authors[:80], "...")
 doi = N.resolve_doi(ref)
 print("  DOI    :", doi, " -> https://doi.org/%s" % doi)
 
-print("\nNOTE: data segments changed the grids; delete output/intEC.dat and")
+print("\nNOTE: a new data set changes the grids; delete output/intEC.dat and")
 print("output/intEC.extrap before running this model (or set a fresh output dir).")

@@ -9,15 +9,19 @@ different model from the CLI whenever the file's fixed values differed from
 the .azr's -- silently.  11B+alpha, 10-12-26: 10 fixed widths off by up to
 1.6 %, chi2 9925.03 from pyazr against 9868.04 from the CLI at the same file.
 
-Pinned on tests/identical_pp_res with one width fixed (AzrModel), scaled in
-the file:
+Pinned on tests/identical_pp_res with one width fixed (Project.set_channel), scaled
+in the file:
 
   * the free-vector-only route ignores the change (the old behaviour);
   * load_sav applies it, returns the free vector, and the engine's
     params_all_rwa carries the file's value;
   * the chi2 after load_sav is AZURE2's own mode-1 chi2 with the same file
     (when a built AZURE2 binary is found next to the module);
-  * a file whose #parametrization tag is another basis is refused.
+  * a file whose #parametrization tag is another basis is refused;
+  * the file's names are matched against the run's as AZURE2 matches them
+    (experiment::MatchParameterFileNames, bound): a name the project does not
+    have warns with W_PARAMETER_FILE_NAMES and its list, a file with no name of
+    the run is refused with E_PARAMETER_FILE_NO_MATCH.
 
 Needs the compiled engine; skips cleanly without it.
 Run from anywhere:  python3 tests/pyazr/sav_fixed_params_test.py
@@ -44,10 +48,10 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2, AzrModel
+    from pyazr import azure2, Project
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
-    sys.exit(0)
+    sys.exit(77)
 
 
 def write_sav(path, names, values, basis):
@@ -65,10 +69,11 @@ with tempfile.TemporaryDirectory() as tmp:
         os.makedirs(os.path.join(work, junk))
     # The project ships with every width free: fix one, so the file has a
     # fixed level parameter to carry.
-    model = AzrModel.from_file(os.path.join(work, "identical_pp_res.azr"))
-    model.levels[1].channels[0].channel_fixed = True
-    azr = os.path.join(work, "fixed_width.azr")
-    model.write(azr)
+    model = Project.open(os.path.join(work, "identical_pp_res.azr"))
+    level = model.levels()[1]
+    c = level.channels[0]
+    model.set_channel(level, c.pair, c.l, c.s, fixed=True)
+    azr = model.save(os.path.join(work, "fixed_width.azr"))
     sav = os.path.join(work, "fixed.sav")
 
     with azure2(azr, cwd=work) as m:
@@ -117,6 +122,24 @@ with tempfile.TemporaryDirectory() as tmp:
             check("refused", False, "no error")
         except ValueError:
             check("refused", True)
+
+        print("\n3b. the file's names against the run's (the engine's rule)")
+        import warnings
+        extra = os.path.join(work, "extra_name.sav")
+        write_sav(extra, names + ["no_such_parameter"], list(full) + [1.0], m.basis)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            m.load_sav(extra)
+        said = " ".join(str(w.message) for w in caught)
+        check("a name the project lacks warns, naming it",
+              "W_PARAMETER_FILE_NAMES" in said and "no_such_parameter" in said, said[:300])
+        foreign = os.path.join(work, "foreign.sav")
+        write_sav(foreign, ["segment_1_norm", "other_width"], [1.0, 2.0], m.basis)
+        try:
+            m.load_sav(foreign)
+            check("a file with no name of the run is refused", False, "no error")
+        except ValueError as err:
+            check("a file with no name of the run is refused", "E_PARAMETER_FILE_NO_MATCH" in str(err), str(err)[:300])
 
     print("\n4. the same file through AZURE2 itself")
     binary = None

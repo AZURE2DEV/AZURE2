@@ -40,4 +40,4 @@ degrees times 0.8 / 0.9 with 1 % errors); every project is built by `check.sh` (
   level parameter is refused in a physical-parameter chain.
 
 `tests/pyazr/prior_covariance_test.py` covers the pyazr side (penalties, objective, residual_jacobian rows,
-prior_from_fit, AzrModel.prior_covariance); `tests/gui/runtime_options_test` the GUI's config round trip.
+prior_from_fit, the `priorCovariance` key through `Project.config` / `set_config`); `tests/gui/runtime_options_test` the GUI's config round trip.

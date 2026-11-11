@@ -129,7 +129,6 @@ class _HybridPotentials:
             self.sess.set_potential(pair, type_, bool(enabled), V0, R, a, r0, rc, rm, step_fm, so_list)
         except Exception as e:  # the engine's refusals (SpinOrbitChecks.h) and parameter checks
             raise ValueError(str(e)) from None
-        self._potentials_edited = True
         if reinitialize:
             self._rebuild_after_potential_change()
         return self.nuclear_potential(pair)
@@ -142,7 +141,6 @@ class _HybridPotentials:
         """
         pair = self._check_potential_pair(pair)
         self.sess.clear_potential(pair)
-        self._potentials_edited = True
         if reinitialize:
             self._rebuild_after_potential_change()
         return self.nuclear_potential(pair)
@@ -186,20 +184,10 @@ class _HybridPotentials:
             raise ValueError(str(e)) from None
         return bool(changed), list(lines), list(notes)
 
-    def _write_potential_records(self, model):
-        """Into ``model`` (a :class:`pyazr.Project` of this session's format-3 project, or an AzrModel of an older
-        one): the session's potentials, when set_nuclear_potential changed them; the section as read otherwise.
-        Returns ``model``.  A project of format 1 or 2 whose potential this session changed is refused with the
-        conversion command (ValueError): its ``<potential>`` block is not written; the format-3 records are."""
-        from .project import Project
-        if isinstance(model, Project):
-            changed, lines, _ = self.potential_records()
-            if changed:
-                model._replace_record_section("potentials", lines)
-        elif getattr(self, "_potentials_edited", False):
-            from .described import _engine as _engine_module
-            with open(self.file, "rb") as f:
-                refusal = _engine_module().validate_format3_text(f.read(), self.file)[0]
-            raise ValueError("save_fit: this session changed a hybrid potential, which is written only to a format-3 "
-                             "project (its potential records); convert the project first.\n" + refusal)
-        return model
+    def _write_potential_records(self, project):
+        """Into ``project`` (a :class:`pyazr.Project` of this session's project): the session's potentials, when
+        set_nuclear_potential changed them; the section as read otherwise.  Returns ``project``."""
+        changed, lines, _ = self.potential_records()
+        if changed:
+            project._replace_record_section("potentials", lines)
+        return project

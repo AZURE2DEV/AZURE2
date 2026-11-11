@@ -232,8 +232,10 @@ in its row but cannot be fitted: a parameter a fit varies still needs its own ki
 is not cheap -- the stopping scale of branch 5 edited 20 existing files. One generic kind that reads the kernel
 table's rows is the planned remedy.
 
-Then, to close Phase 4: the old reading path deleted (with `pyazr/azrfile.py`, 3,756 lines of
-a second grammar in Python); the rest of `CNuc` (the parameter vector and the set-up from the level rows).
+pyazr reads format 3 only since 3.0.0.dev0 (2026-11-11): `pyazr/azrfile.py` (3,756 lines of a second grammar in
+Python) and `datasets.py` are deleted, every pyazr test runs on the tree's format-3 projects, and a session or
+`Project.open` on an old file says how to convert it.  Then, to close Phase 4: the engine refuses old files and its
+old reading path is deleted; the rest of `CNuc` (the parameter vector and the set-up from the level rows).
 
 Phases 5–9 (`ROADMAP.md`): one energy grid with the apparatus as kernels, AZURE2's own stopping module, yields on
 finite layers, the comparison of energy-shifted data in the lab frame, and the THM observable (5); evaluation without

@@ -41,7 +41,7 @@ sys.path.insert(0, ROOT)
 os.environ.setdefault("OMP_NUM_THREADS", "2")
 try:
     from pyazr import azure2
-    from pyazr.azrfile import AzrModel
+    from pyazr import Project
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -83,9 +83,10 @@ with tempfile.TemporaryDirectory() as tmp:
     work = os.path.join(tmp, "abs")
     fresh_copy(work)
     elsewhere = os.path.join(tmp, "elsewhere")
-    m0 = AzrModel.from_file(os.path.join(work, AZR))
-    m0.set_output_dir(elsewhere)
-    m0.write(os.path.join(work, AZR))
+    m0 = Project.open(os.path.join(work, AZR))
+    os.makedirs(elsewhere)                       # set_config does not create the directory
+    m0.set_config(output_dir=elsewhere + "/")
+    m0.save()
     with azure2(os.path.join(work, AZR), cwd=work) as m:
         got = m.write_output_files()
     check("write_output_files returns the absolute directory",

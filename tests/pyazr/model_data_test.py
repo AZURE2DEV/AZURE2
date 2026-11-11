@@ -38,7 +38,7 @@ try:
     from pyazr import azure2, _azure2  # noqa: F401
 except Exception as err:
     print(f"skip: the engine is not importable ({type(err).__name__}: {err})")
-    sys.exit(0)
+    sys.exit(77)
 
 MODEL_DATA = """<modelData>
 datum wg_L5

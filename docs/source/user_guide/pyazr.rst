@@ -123,7 +123,7 @@ name like ``width_1_2``:
 
    print(azr.level_scheme)          # pairs -> J-groups -> levels -> channels
    print(azr.parameters.table())    # every parameter with its metadata
-   print(azr.datasets.table())      # per segment: file, reaction, E range, norm error
+   print(azr.datasets.table())      # per data set: record, file, reaction, E range
    print(azr.pairs)                 # masses, charges, spins, separation energies
 
    for w in azr.parameters.widths.free:
@@ -141,10 +141,11 @@ particle, so ``Pair.threshold`` = ``sep_energy + excitation`` is where its
 channels open. ``Pair.light_excitation`` is the light particle's share (the
 optional 32nd column of a ``<levels>`` line, November 2026) and
 ``Pair.heavy_excitation`` the heavy one's; ``Pair.label`` marks an excited
-particle (``'2+*(4.439 MeV) + 0+'``). In an ``AzrModel`` the same three are
-``AzrChannel.excitation`` / ``light_excitation`` / ``heavy_excitation``;
-setting ``light_excitation`` adds the 32nd column, setting it to 0 removes it
-again, and a line without the column keeps its 31 columns
+particle (``'2+*(4.439 MeV) + 0+'``). In a :class:`pyazr.Project` the pair's
+``light_excitation`` and ``heavy_excitation`` are fields of
+:meth:`~pyazr.Project.pairs`; ``set_pair(key, light_excitation=E)`` writes the
+32nd column on every row of the pair (a row without the column gets it only
+for a value other than 0), ``heavy_excitation=`` the heavy one's
 (:doc:`../reference/data_formats`).
 
 Filtered views (``.free``, ``.energies``, ``.widths``, ``.norms``,
@@ -229,47 +230,36 @@ every other column is unchanged. rmfit's ``polish`` passes the columns its
 bounds hold (since 30 October 2026, before which a held shift cost its two
 evaluations on every Jacobian all the same).
 
-A fitted target density (``densityfit`` / ``densitygroup`` on a ``<targetInt>``
-line, :doc:`experimental_effects`) is a parameter of kind ``"density"``
-(``ParameterSet.densities``; :attr:`Parameter.effect` is the line holding it,
+A fitted target density (``areal_density ... fit [prior ...]`` on a ``target``
+record, shared by every data set that names the target,
+:doc:`experimental_effects`) is a parameter ``<target>.areal_density`` of kind
+``"density"`` (``ParameterSet.densities``; :attr:`Parameter.effect` is its target,
 ``prior_nominal`` / ``prior_sigma`` its prior and ``density_max`` the largest
 density its grids span). Its column is finite-differenced the same way, and
-``penalties()["density"]`` is its prior, which ``objective()`` adds.
-``AzrModel.target_densities`` reads the blocks of a file and
-``AzrModel.set_target_density(effect, density=, vary=, sigma=, max=, group=)``
-writes them (``sigma`` in atoms/cm² or a string such as ``"2.3%"``). Like a
-normalization, the fitted density travels in the ``.sav``; ``save_fit`` leaves
-the line's value, the prior's centre, as it is.
+``penalties()["density"]`` is its prior, which ``objective()`` adds.  The
+field is read and written as any record field: ``project["d1"]["areal_density"]``,
+``project.set("d1", areal_density=Nuisance(5e17, "fit", unit="atoms/cm2",
+prior=(5e17, "5%")))``.
 
-A fitted free-gas Doppler temperature (``doppler T vary sigma [Tmax]``,
-:doc:`experimental_effects`) is a parameter of kind ``"doppler"``
-(``ParameterSet.dopplers``; :attr:`Parameter.effect` is its line,
+A fitted free-gas Doppler temperature (``doppler free_gas T K fit [prior T0
+sigma] [grid_max Tmax]`` on a ``target`` record, :doc:`experimental_effects`) is
+a parameter ``<target>.doppler`` of kind ``"doppler"``
+(``ParameterSet.dopplers``; :attr:`Parameter.effect` is its target,
 ``prior_nominal`` / ``prior_sigma`` its prior and ``doppler_max`` the layout
 temperature its grids span). Unlike a density its gradient entry and Jacobian
 column are analytic, through the Doppler weights. ``penalties()["doppler"]`` is
-its prior, which ``objective()`` adds. ``AzrModel.dopplers`` reads the ``doppler``
-blocks of a file (``temperature``, ``fit``, ``vary``, ``sigma``, ``tmax``, ``max``),
-``AzrModel.set_doppler(effect, T=, vary=, sigma=, tmax=)`` writes one (giving
-``vary``, ``sigma`` or ``tmax`` writes the fit form; ``tmax=0`` removes Tmax), and
-``add_target_effect(..., doppler=(T, vary, sigma[, tmax]))`` starts a line with
-it. The fitted temperature travels in the ``.sav``; ``save_fit`` leaves the line's
-value, the prior's centre, as it is.
+its prior, which ``objective()`` adds.  The field is edited as any record field
+(``project.set("D0", doppler="free_gas 300 K fit grid_max 900")``).
 
-A fitted sample thickness (``transmission n vary sigma`` or ``yield n vary sigma``
-on a segment line, :doc:`segments`) is a parameter of kind ``"thickness"``
-(``ParameterSet.thicknesses``; :attr:`Parameter.segment_key` is its segment,
+A fitted sample thickness (``areal_density n atoms/b fit [prior n sigma]`` on a
+``target`` record of kind ``sample``, named by ``transmission`` or
+``neutron_yield`` data sets, :doc:`segments`) is a parameter
+``<target>.areal_density`` of kind ``"thickness"`` (``ParameterSet.thicknesses``;
+:attr:`Parameter.segment_key` is the first data set on the target,
 ``prior_nominal`` / ``prior_sigma`` its prior, ``sample_kind`` ``"transmission"``
-or ``"yield"``, and ``thickness_leader`` the leader's segment key for a fixed
-``thicknessgroup`` follower). Its gradient entry and Jacobian column are
-analytic. ``penalties()["thickness"]`` is its prior, which ``objective()`` adds.
-``AzrModel.sample_thicknesses`` reads the blocks of a file (``kind``, ``n``,
-``fit``, ``vary``, ``sigma``, ``group``, ``active``),
-``AzrModel.set_sample_thickness(key, n=, vary=, sigma=, group=, kind=)`` writes
-one (giving ``vary`` or ``sigma`` writes the fit form, ``group=""`` removes the
-group), and ``add_data_segment(..., transmission=n or (n, vary, sigma),
-yield_=..., thickness_group=label)`` starts a line with it. The ``Segment``
-objects of :mod:`pyazr.datasets` carry ``thickness``, ``thickness_vary``
-(``None`` for the plain form), ``thickness_sigma`` and ``thickness_group``.
+or ``"yield"``); data sets that name one target share the parameter. Its
+gradient entry and Jacobian column are analytic. ``penalties()["thickness"]`` is
+its prior, which ``objective()`` adds.
 
 A prior parameter covariance (``priorCovariance=<file>`` in ``<config>``,
 :doc:`chi_squared`, "Prior parameter covariance") is set up by the engine when the
@@ -282,7 +272,8 @@ the model are marginalized). ``penalties()["prior_covariance"]`` is its term
 ``prior_covariance_names``, and ``residual_jacobian`` appends them as its last rows,
 with the constant Jacobian :math:`L^{-1}` on the prior's columns -- so
 :math:`\sum r^2` of ``residual_jacobian`` is ``calculate_chi2_rwa`` plus the prior
-term. ``AzrModel.prior_covariance`` reads and sets the key (``None`` removes it).
+term. ``Project.config()["priorCovariance"]`` reads the key and
+``Project.set_config(priorCovariance=...)`` sets it (``None`` removes it).
 :mod:`pyazr.priors` needs no engine: ``prior_from_fit(sav_path, covariance_path,
 out_path, names=None, columns=None)`` writes the file from a fit's ``param.sav``
 (means, ``#parametrization`` tag) and ``covariance.dat`` (the free level energies and
@@ -302,85 +293,79 @@ positive definite), ``read_prior`` and ``read_covariance_dat`` read them back.
 Editing the model
 -----------------
 
-``AzrModel`` parses the ``<levels>`` block and re-emits everything else
-verbatim, so the original file is never modified:
+pyazr reads project format 3 only: a session or :meth:`pyazr.Project.open` on a
+format-1 or format-2 file raises :class:`pyazr.FormatError` with the engine's
+message, which names the conversion (``AZURE2 --convert OLD NEW --to 3``, or
+``pyazr.convert_azr(old, new)`` from Python).
+
+:class:`pyazr.Project` edits a project the way the engine reads it: records by
+name and field, the ``<levels>`` rows by level and channel, ``<config>`` and
+``<thm>`` by key.  The engine owns every grammar (it makes each edited line and
+refuses what a run would refuse); every edit is validated, a new error raises
+:class:`~pyazr.FormatError` and leaves the project unchanged, and the lines an
+edit does not touch keep their bytes.  Nothing is written until ``save``:
 
 .. code-block:: python
 
-   from pyazr import AzrModel
+   from pyazr import Project, Nuisance
 
-   mdl = AzrModel.from_file("7Be.azr")
-   mdl.remove_level(jpi="1/2+", energy=20)
-   mdl.add_level(J=1.5, parity=+1, energy=8.6,
-                 channels=[dict(pair=1, L=2, S=0.5, gamma=1000.0, fixed=False)])
-   path = mdl.write("_variant.azr")
+   p = Project.open("13N.azr")
+   p.set("meyer_84", norm=Nuisance(1.0, "fit", prior=(1.0, "5%")))   # a record field
+   p.set_level(("3/2-", 3.5), energy=3.5021)                          # a level by J^pi and E_x (MeV)
+   lv = p.level(("1/2+", 2.365))
+   c = lv.channels[0]
+   p.set_channel(lv, c.pair, c.l, c.s, width=35000.0, fixed=False)    # a channel by pair key, l, s
+   p.set_pair(1, radius=4.5)                                          # every row of pair 1 (fm)
+   p.remove_level(("1/2+", 20))                                       # a background pole
+   p.add_level(1.5, +1, 8.6, [dict(pair=1, l=2, s=0.5, width=1000.0)])
+   p.add_dataset("roughton", reaction=p.reaction(1, -1), quantity="sigma", unit="b",
+                 file="data/roughton.dat", columns="E_lab[MeV] _ value error", norm="1 fixed")
+   p.set_config(output_dir="output_variant/")
+   path = p.save("_variant.azr")                                      # the original stays as it was
+   with p.session() as m:                                             # a calculation of the edited project
+       print(m.calculate_chi2_rwa(m.params_rwa))
+
+A level is named by its label (``"3/2- 3.5032"``, as :meth:`~pyazr.Project.levels`
+gives it), by ``(J^pi, E_x)`` within 1 keV, or by the :class:`~pyazr.ProjectLevel`
+itself; ``levels()`` gives each level's rows, its compound nucleus and the
+engine's (group, level) indices, ``pairs()`` the particle pairs (masses, charges,
+spins, radius, excitations).
 
 Because AZURE2 reads its model from the file, an edited scheme takes effect by
-opening a fresh ``azure2()`` session on the new file.
+opening a fresh session on the saved file.
 
 One rule catches people out: **all levels of one J**\ :sup:`π` **share a
 channel set**. Adding a level to an existing J\ :sup:`π` clones that group's
-channel structure; only a brand-new J\ :sup:`π` lets your channel list define
-the group.
+channel structure (channels not given get width 0, fixed); only a brand-new
+J\ :sup:`π` lets your channel list define the group.
 
-Also available: ``set_channel_radius``, ``mass_check``, ``fill_masses``, ``set_segment_norm``,
-``set_segment_active``, ``set_segment_datafile``, ``add_data_segment``,
-``remove_data_segments``, ``clear_data_segments``, ``set_extrapolations``,
-``apply_fit``; for a project with several compound nuclei (next section)
-``nuclei``, ``nucleus_of_pair``, ``abundances``, ``set_abundance``,
-``abundance_sum_sigma``, ``set_sample`` and ``set_test_sample``; and for the ``<thm>`` block ``thm_options``, ``set_thm_option``,
-``clear_thm_option``, ``set_thm_weight``, ``clear_thm_weight``,
-``thm_experiments``, ``set_thm_experiment`` and ``clear_thm_experiment``
-(:doc:`../theory/thm_implementation`; a session reports a THM experiment's
-shared norm and background with ``thm_background(name)``, and with
-``lineshape=on`` the spectator's Coulomb line shape -- :math:`\zeta(E)`,
-:math:`E_{sF}(E)` and :math:`|N_C|^2` per level -- with
-``thm_lineshape(name, energies)``; ``set_thm_experiment(..., cbackground="1/2+:2")``
-adds a coherent THM-only background amplitude whose Re and Im are fit
-parameters of kind ``"cbkg"`` (``parameters.cbkg``; their values in
-``thm_experiments()[name]["cbkg"]``, written back into the key by
-``save_fit``; ``set_thm_cbackground(name, value)`` edits the key in place);
-``set_thm_experiment(..., ps="hulthen:0-40")``
-averages the HOES cross section over the accepted spectator directions
-(weight :math:`|\phi(p_s)|^2\,d\cos\theta_\mathrm{cm}` at fixed :math:`E`),
-and ``thm_vertex(name, energies, strict=False)`` returns its nodes, weights
-and :math:`\rho` at every energy (lists over the energies), and the
-window-averaged :math:`|M_l|^2` per entrance channel and level; its
-``reached`` entry is False at an energy the window (or the DW vertex grid)
-does not reach, where the row is that of the nearest data point or grid
-energy, and such energies raise a ``UserWarning`` -- with ``strict=True`` a
-``ValueError``;
-``set_thm_experiment(..., distortion="coulomb")`` multiplies the model by the
-zero-range DWBA distortion factor :math:`R(E)`, with ``opticalAA``,
-``opticalSF`` (``"plane"``, ``"coulomb"``, ten numbers, or a global optical
-potential such as ``"ancai06"`` or ``"kd03:extrapolate"``, checked against
-the channel and its validity range), ``spectatorAngle``, ``distortionRef``,
-``distortionRatio`` and ``boundState``, and ``thm_distortion(name, energies)`` returns :math:`R`, the
-interpolated :math:`R` the model uses, :math:`|M|^2`, :math:`|M_\mathrm{PW}|^2`,
-:math:`E_{sF}`, :math:`\eta_{sF}` and the spectator angle;
-``set_thm_experiment(..., theta="50-70")`` (or ``theta=(50, 70)``) turns the
-model into the fixed-angle observable, :math:`d\sigma/d\Omega` of the exit
-pair averaged over that c.m. window, and residuals, Jacobian and output files
-follow; ``set_thm_experiment(..., distortion="optical", opticalAA=[...],
-vertexModel="dw")`` replaces the plane-wave entrance vertex by the surface
-term of the prior-form DWBA built from those distorted waves (:math:`R(E)` is
-then not applied), and ``thm_vertex`` returns that vertex -- ``model`` is
-``"dw"``, ``M2`` the DW vertex over the nodes the engine uses, ``M2_qf`` at
-the spectator direction and ``M2_pw`` the plane-wave vertex at the same
-kinematics); ``set_thm_experiment(..., spectatorAngles="cm:135-180")`` (or
-``(7, 30)`` for a lab window, or ``"table:<file>"``, with
-``spectatorAngleNodes``) averages :math:`R(E)` or the DW vertex over the
-accepted spectator directions, and ``thm_distortion`` / ``thm_vertex``
-return the window averages and, for the DW vertex, the directions
-(``angle_theta_cm``, ``angle_q``, ``angle_weights``). Every edit keeps the rest of the file
-byte for byte, including whether it ends with a newline.  The ``<thm>`` edits
-check what they write with a Python port of AZURE2's rules and, when the
-compiled module is there, with the engine's own parser as well
-(``_azure2.check_thm_block``); a refusal raises ``ValueError`` with AZURE2's
-message and leaves the model unchanged.
+The other edits: ``add`` / ``set`` / ``remove`` / ``rename`` of any record (data
+sets, extrapolations, normalizations, energy scales, targets, beams, detectors,
+model data, potentials; ``rename`` follows every reference and the parameter
+names of ``<parameterSettings>``); ``config()`` / ``set_config(**entries)``;
+``thm()``, ``set_thm(**options)``, ``set_thm_experiment(name, **keys)`` and
+``remove_thm_experiment(name)`` for the ``<thm>`` section (a data set joins an
+experiment by its own field ``thm <experiment>``).  The THM keys are the
+engine's (:doc:`../theory/thm_implementation`): ``cbackground="1/2+:2"`` adds a
+coherent THM-only background amplitude whose Re and Im are fit parameters of
+kind ``"cbkg"`` (``parameters.cbkg``, written back into the key by
+``save_fit``); ``ps="hulthen:0-40"`` averages the HOES cross section over the
+accepted spectator directions; ``distortion="coulomb"`` multiplies the model by
+the zero-range DWBA distortion factor :math:`R(E)`, with ``opticalAA``,
+``opticalSF``, ``spectatorAngle``, ``distortionRef``, ``distortionRatio`` and
+``boundState``; ``theta="50-70"`` turns the model into the fixed-angle
+observable; ``distortion="optical", vertexModel="dw"`` replaces the plane-wave
+entrance vertex by the DWBA surface term; ``spectatorAngles="cm:135-180"``
+averages over the accepted spectator directions.  A session reports what they
+do: ``thm_background(name)``, ``thm_lineshape(name, energies)``,
+``thm_vertex(name, energies, strict=False)`` (its ``reached`` entry is False at
+an energy the window or the DW vertex grid does not reach; such energies raise a
+``UserWarning``, with ``strict=True`` a ``ValueError``) and
+``thm_distortion(name, energies)``.  A ``<thm>`` edit is checked as the engine
+reads a format-3 block; a refusal raises :class:`~pyazr.FormatError` with the
+engine's message and leaves the project unchanged.
 
-To snapshot a fit, prefer :meth:`~pyazr.azure2.azure2.save_fit`, which wraps
-``apply_fit``:
+To snapshot a fit, use :meth:`~pyazr.azure2.azure2.save_fit`:
 
 .. code-block:: python
 
@@ -388,10 +373,13 @@ To snapshot a fit, prefer :meth:`~pyazr.azure2.azure2.save_fit`, which wraps
 
 ``save_fit(path, x=None, param_sav=True, verify=True, norms="fitted",
 close_session=False)`` converts the fit to the physical values a
-``<levels>`` line holds (fixed widths included, at the physical value the fit
-had: a fixed Brune amplitude keeps its amplitude, not its width), writes
-the fitted free normalizations and energy shifts into their ``<segmentsData>``
-lines, writes the companion ``param.sav`` carrying every parameter, and then
+``<levels>`` row holds and writes them into the rows they come from (fixed
+widths included, at the physical value the fit had: a fixed Brune amplitude
+keeps its amplitude, not its width; a level by the engine's (group, level), a
+channel by its pair key, l and s -- :func:`pyazr.snapshot.place_level_values`),
+writes the fitted free nuisances (normalizations, energy-scale terms, fitted
+densities, temperatures, thicknesses, abundances) into the records they come
+from, writes the companion ``param.sav`` carrying every parameter, and then
 reopens what it wrote and checks it against the fit (``verify``: the
 physical values transformed back, the reduced-width amplitudes the file reads
 for the particle and beta-decay channels of each level against the fit's, up
@@ -400,18 +388,17 @@ to a common sign of the level, and with ``norms="fitted"`` the data
 :math:`10^{-6}`) --- removing both files and raising if they disagree.  (The
 amplitude check is there because the physical one cannot see a value two
 parameters map onto: a negative beta-decay feeding amplitude came back
-positive from the physical transform until 2026-10-12.)  A fitted isotopic
-abundance is written back into the ``<abundances>`` block. A coherent THM background is written back into
-its ``cbackground=`` key.  A prior whose field now
-holds the fitted value keeps its centre as an explicit ``prior_centre`` row
-of ``<parameterSettings>`` (the centre the fit used; for an energy shift only
-an explicit centre other than 0 is written, since the shift prior is centred
-on 0 by default), so a fit started from
-the snapshot is pulled to the same centres, not to the fitted values;
-``save_fit(path, x, norms="nominal")`` keeps the loaded file's values in the
-fields and the fitted ones in the ``.sav`` only (run with it as the parameter
-file to reproduce the fit).  ``AzrModel.prior_centres()`` /
-``set_prior_centres({key: (norm, shift)})`` read and write the rows.  See
+positive from the physical transform until 2026-10-12.)  A coherent THM
+background is written back into its experiment's ``cbackground=`` key.  A
+format-3 nuisance states its prior with its own centre (``1.0 fit prior 1.0
+5%``), so the snapshot's fitted value leaves the prior where the fit had it, and
+a fit started from the snapshot is pulled to the same centres, not to the fitted
+values; ``save_fit(path, x, norms="nominal")`` keeps the loaded file's values in
+the fields and the fitted ones in the ``.sav`` only (run with it as the parameter
+file to reproduce the fit; :meth:`~pyazr.azure2.azure2.load_sav` matches its
+names to the run's as AZURE2 does: names the project lacks warn with
+``W_PARAMETER_FILE_NAMES``, a file with no name of the run is refused with
+``E_PARAMETER_FILE_NO_MATCH``).  See
 :ref:`nominal-norm`.  The check opens a second engine beside the fit's; as
 the last call of a fit, ``save_fit(path, x, close_session=True)`` closes the
 fit's session first, so that only one is in memory (a 19F THM session is
@@ -467,24 +454,25 @@ named by isotope (``"12C"``, ``"C12"``, ``"c-12"``) or shorthand (``"p"``,
 
 .. code-block:: python
 
-   from pyazr import masses, AzrModel
+   from pyazr import masses, Project
 
    masses.atomic_mass("p")               # 1.007825031898 u, atomic
    masses.separation_energy("p", "12C")  # 1.943490064 MeV, from the mass excesses
    masses.pair_masses("a", "12C")        # Z1, M1, Z2, M2, S and the compound (8, 16)
 
-   mdl = AzrModel.from_file("13N.azr")
-   for row in mdl.mass_check():          # every pair against the table
+   p = Project.open("13N.azr")
+   for row in masses.mass_check(p):      # every pair against the table
        print(row.describe())
-   mdl.fill_masses()                     # masses and S of every pair from the table
-   mdl.fill_masses(pairs=[2], separation=False)   # masses of pair 2 only
-   mdl.write("13N_ame.azr")
+   masses.fill_masses(p)                 # masses and S of every pair from the table
+   masses.fill_masses(p, pairs=[2], separation=False)   # masses of pair 2 only
+   p.save("13N_ame.azr")
 
 ``fill_masses`` identifies each particle by its charge and its mass rounded
 to a mass number, so mass numbers and a bare-proton mass are recognised. It
-rewrites only the mass and separation-energy columns of the chosen pairs (and
-the entrance-S copy on the lines whose entrance pair changed), and returns the
-list of changes. A gamma pair gets the compound nucleus's mass and keeps its
+sets the masses and separation energy of the chosen pairs through
+``Project.set_pair`` (the engine writes them on every row of the pair, and the
+entrance-S copy on the rows whose entrance pair changed), and returns the list
+of changes. A gamma pair gets the compound nucleus's mass and keeps its
 S of 0. A beta pair gets its parent's mass. Moving S moves the pair's
 threshold, so compare the fit before and after.
 
@@ -493,40 +481,40 @@ Several compound nuclei (natural targets)
 
 A natural or compound target is an abundance-weighted sum of cross sections
 of different compound nuclei (see the Particle Pairs page of the user guide).
-``merge_projects`` builds one such project from single-nucleus ones: pair keys
-are offset, segments renumbered, composite components and ``<targetInt>``
-lists remapped, the level blocks concatenated, and the ``<abundances>`` block
-written; a *shared* group of segments (the same natural-target data set
-present in every member) becomes one ``natural`` Sum line whose components
-are the members' terms:
+In format 3 the target is a ``target`` record with one ``isotope`` field per
+target nucleus (``isotope 12C 0.6 fit prior 0.6 0.02``) and an ``isotope_sum``
+field; a data set on it names the sum of its reactions (``12C(p,p)12C +
+13C(p,p)13C``), each term weighted by its isotope's abundance.
+``merge_projects`` builds one such project from single-nucleus ones: the
+engine merges their ``<levels>`` rows (each member's pair keys and level IDs
+moved past those before it), every record is kept (a name an earlier member
+uses is renamed ``<name>_<k>`` with its references), data-file paths are
+rewritten relative to the merged file, ``isotopes`` adds the target record, and
+a *shared* group of data sets (the same natural-target data set present in
+every member) becomes one record whose reaction is the sum of the members':
 
 .. code-block:: python
 
-   from pyazr import merge_projects, Nucleus, azure2
+   from pyazr import merge_projects, azure2
 
    report = merge_projects(
        ["20Ne/17O+a.azr", "22Ne/22Ne+n.azr", "21Ne/21Ne+n.azr"], "natNe.azr",
-       abundances={Nucleus(10, 21): 0.9048, Nucleus(10, 23): 0.0925, Nucleus(10, 22): 0.0027},
-       sum_sigma=0.0,
-       shared=[{0: 1, 1: 1, 2: 1}],   # one dict per common data set: member index -> its segment key
+       isotopes={"20Ne": 0.9048, "22Ne": 0.0925, "21Ne": 0.0027},
+       shared=[{0: "vaughn", 1: "vaughn", 2: "vaughn"}],   # one dict per common data set: member -> record name
    )
-   print(report)
+   print(report.pair_map, report.record_map, report.warnings)
 
    m = azure2("natNe.azr")
    m.nuclei                     # the compound nuclei and their abundances
-   m.parameters.abundances      # the abundance parameters, kind "abundance"
+   m.parameters.abundances      # the abundance parameters (<target>.isotope.<nucleus>), kind "abundance"
    m.penalties()["abundance"]   # the prior and sum-to-one terms at the current point
 
-``<parameterSettings>`` and ``<mcmc>`` blocks name parameters by position and
-are dropped with a warning. On the file side ``AzrModel.nuclei()``,
-``abundances`` (the default sample), ``samples`` (every sample),
-``set_abundance(nucleus, value, vary, sigma, sample="")``,
-``sample_sum_sigma`` / ``set_sample_sum_sigma(sample, sigma)``,
-``abundance_sum_sigma`` and ``set_sample(key, True)`` (or ``set_sample(key,
-"enr22Ne")`` for a named sample) edit the new pieces; ``Segment.natural`` and
-``Segment.natural_sample`` report the flag and the sample; ``Pair.nucleus`` and
-``Parameter.nucleus`` identify the nucleus at run time; ``save_fit`` writes a
-fitted abundance back into the block.
+Member 0's ``<config>``, ``<thm>``, ``<parameterSettings>`` and ``<mcmc>`` are
+kept, the others' are not (a warning says so).  On the file side the isotopes
+are record fields (``project["natural"]["isotope"]``, ``project.set("natural",
+isotope=[...])``) and :attr:`ProjectLevel.nucleus` gives each level's compound
+nucleus; ``Pair.nucleus`` and ``Parameter.nucleus`` identify the nucleus at run
+time; ``save_fit`` writes a fitted abundance back into its isotope field.
 
 Scattering lengths
 ------------------
@@ -545,16 +533,13 @@ from an MCMC chain sample by sample:
           for x in chain]                     # chain: free RWA vectors
 
 ``a0`` is complex when a lower channel is open at the pair's threshold.  The
-measured lengths of a ``<scatteringLengths>`` block are already inside
+measured lengths -- ``datum`` records of quantity ``scattering_length`` in
+``<modelData>`` -- are already inside
 ``calculate_chi2_rwa`` (and its gradient and ``residual_jacobian``, one row per
 constrained part after the data rows); ``penalties()["scattering_length"]``
-reports their sum.  On the file side ``AzrModel.scattering_lengths`` lists the
-block as ``ScatteringLengthLine`` tuples,
-``add_scattering_length(pair, s, value, sigma, im_value=0, im_sigma=0)``
-appends a line (``s = -1``: the coherent combination) and
-``set_scattering_lengths(lines)`` replaces the block (an empty list removes
-it); ``merge_projects`` carries every member's lines with their pair keys
-remapped.
+reports their sum, and ``scattering_length_chi2(x)`` the same from the
+model-data term.  On the file side they are records: ``add_datum``,
+``set`` and ``remove`` as for any record.
 
 Decomposing a cross section
 ---------------------------
@@ -594,10 +579,13 @@ holds the measured reaction data; LiveChart/ENSDF the evaluated level schemes.
    data = nds.fetch_exfor("O2599004")                 # S-factor, B*KEV
    record = data.to_sfactor_dataset("run/data", "S_luna", norm="1 fit prior 1 5%")
    # 'dataset S_luna\n    reaction 13C(p,g)14N\n    quantity sfactor\n    unit MeV*b ...'
-   # a cross section: an AZURE2 data file + segment kwargs
+   # a cross section: an AZURE2 data file, then a data set record
    xs = nds.fetch_exfor(entry_id)                      # an entry in B, MB, ... (not SFC)
-   kw = xs.to_azr("run/data", entrance=1, exit=2, observable="total-capture")
-   AzrModel.from_file("13N.azr").add_data_segment(**kw).write("13N_new.azr")
+   kw = xs.to_azr("run/data", entrance=1, exit=2)
+   p = Project.open("run/13N.azr")
+   p.add_dataset("xs", reaction=p.reaction(1, -1), quantity="sigma", unit="b", norm="1 fixed",
+                 file=os.path.relpath(kw["data_file"], p.directory), columns="E_lab[MeV] _ value error")
+   p.save()
 
    # without the network, or when the IAEA answers with a challenge page:
    # the same dataset from a local copy of the EXFOR master files
@@ -734,23 +722,23 @@ normalization factor is meaningless for a ratio.
 Angular-distribution coefficients
 ---------------------------------
 
-Legendre coefficients of a reaction's c.m. angular distribution are observable
-code 9, ``observable="angular-coefficients"``: data rows ``E_lab  k  a_k  da_k``
-with the order :math:`k` in the angle column, :math:`a_k = A_k/A_0` of
-:math:`d\sigma/d\Omega_\text{cm} = A_0[1 + \sum_k a_k P_k]` (the coefficients an
-``angular-distribution`` test segment computes). ``absolute=True`` writes
-``absolute 1``: the rows are the absolute :math:`A_k` in b/sr. The model's
-coefficient of each row's order comes back from :meth:`~pyazr.azure2.calculate_rwa`
-in the data slot, so :math:`\chi^2`, fitting and the analytic gradient need no
-special handling; target integration folds the absolute :math:`A_k` before the
-ratio. Normalised coefficients cannot carry a free norm (``add_data_segment``
-with ``vary_norm=True`` is refused by the engine); an elastic pair, total
-capture, composites and UPOS segments are refused.
+Legendre coefficients of a reaction's c.m. angular distribution are a data set
+of quantity ``legendre``: data rows ``E_lab  k  a_k  da_k`` with the order
+:math:`k` in the angle column; ``expansion a_over_a0`` (unit ``1``) gives
+:math:`a_k = A_k/A_0` of :math:`d\sigma/d\Omega_\text{cm} = A_0[1 + \sum_k a_k P_k]`
+(the coefficients a ``legendre`` extrapolation computes), ``expansion absolute``
+(unit ``b/sr``) the absolute :math:`A_k`. The model's coefficient of each row's
+order comes back from :meth:`~pyazr.azure2.calculate_rwa` in the data slot, so
+:math:`\chi^2`, fitting and the analytic gradient need no special handling;
+target integration folds the absolute :math:`A_k` before the ratio. Normalised
+coefficients cannot carry a free norm (the engine refuses it); an elastic
+reaction, total capture and sums are refused.
 
 .. code-block:: python
 
-   model.add_data_segment("data/wang_ak.dat", 2, 1, observable="angular-coefficients",
-                          energy_min=0.8, energy_max=1.9)
+   p.add_dataset("wang_ak", reaction=p.reaction(2, 1), quantity="legendre", unit="1", expansion="a_over_a0",
+                 file="data/wang_ak.dat", columns="E_lab[MeV] order value error", energy_window="0.8 1.9 MeV",
+                 norm="1 fixed")
 
 One trap is worth knowing about: comparing against thin-target data requires
 segments with **no target integration**, because :math:`A_y` averaged over a
@@ -1126,7 +1114,7 @@ summed weight).
 ``G[<Jπ>#<n>;p<pair key>;L<l>;S<s>]``, with ``n`` the engine's level number
 within the :math:`J^\pi` group, so the name depends on the ``.azr`` and not on
 the radius or the THM options. ``write_averaged_azr`` sets the averaged energies
-and widths of a template through ``AzrModel`` (names it does not find are
+and widths of a template into its rows through :class:`pyazr.Project` (names it does not find are
 skipped with a warning) and keeps everything else, so the result opens in the
 GUI. It is a representative model, not a fit.
 
@@ -1264,19 +1252,19 @@ the model is large, and measure rather than assume.
 Data mode and extrapolation mode
 --------------------------------
 
-``data_mode()`` (the default) evaluates the ``<segmentsData>`` segments — this
-is what χ² uses. ``extrap_mode()`` switches to the ``<segmentsTest>`` grids for
+``data_mode()`` (the default) evaluates the active ``dataset`` records — this
+is what χ² uses. ``extrap_mode()`` switches to the ``extrapolation`` grids for
 predictions on arbitrary energies and angles. Both re-initialise the engine, so
 switch sparingly and batch the work.
 
 Segment indexing differs between them, and getting it wrong misaligns results
 silently: in data mode segment *i* is ``azr.datasets[i]``; in extrapolation
-mode **only active test segments are returned**, so segment *i* is
+mode **only active extrapolations are returned**, so segment *i* is
 ``azr.extrapolations.active[i]``.
 
 .. note::
 
-   Delete ``output/intEC.extrap`` whenever the ``<segmentsTest>`` grid changes.
+   Delete ``output/intEC.extrap`` whenever an extrapolation grid changes.
    AZURE2 caches external-capture integrals there; a session that starts on a
    changed grid detects it from ``intEC.extrap.sig`` and recomputes, but a
    running session does not re-check. It is safe to delete; it only costs time

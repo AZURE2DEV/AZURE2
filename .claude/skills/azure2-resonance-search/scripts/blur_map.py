@@ -108,8 +108,8 @@ def read_levels(par, azr):
     if azr:
         import os
         if os.environ.get("AZURE2_SRC"): sys.path.insert(0, os.environ["AZURE2_SRC"])  # repo checkout holding pyazr/
-        from pyazr import AzrModel
-        fx = [(l.jpi, l.energy, l.fixed) for l in AzrModel.from_file(azr).levels if l.active]
+        from pyazr import Project
+        fx = [(l.jpi, l.energy, l.fixed) for l in Project.open(azr).levels() if l.active]
         for L in lev:
             c = [f for f in fx if f[0] == L["jpi"] and abs(f[1] - L["e"]) < 0.003]
             L["fixed"] = bool(c and c[0][2])

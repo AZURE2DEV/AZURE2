@@ -49,7 +49,7 @@ try:
     from pyazr import Project, FormatError  # noqa: E402
 except Exception as err:
     print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
-    sys.exit(0)
+    sys.exit(77)
 
 SRC = os.path.join(ROOT, "tests", "13N", "13N.azr")
 THM = os.path.join(ROOT, "examples", "o18_lacognata2010", "o18_lacognata2010.azr")

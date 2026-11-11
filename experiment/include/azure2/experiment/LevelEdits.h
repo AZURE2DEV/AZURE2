@@ -1,6 +1,7 @@
 #ifndef AZURE2_EXPERIMENT_LEVELEDITS_H
 #define AZURE2_EXPERIMENT_LEVELEDITS_H
 
+#include <map>
 #include <optional>
 #include <string>
 #include <utility>
@@ -100,6 +101,9 @@ struct PairChange {
   std::optional<double> radius;  ///< fm
   std::optional<double> lightMass, heavyMass;  ///< u
   std::optional<double> separationEnergy;      ///< MeV
+  /// The excitation energies (MeV) of the light (e1, the optional last column) and the heavy partner (e2); a light
+  /// excitation of 0 is not written on a row that does not write the column.
+  std::optional<double> lightExcitation, heavyExcitation;
 };
 struct NewChannel {
   int pairKey = 0, l = 0, twoS = 0;
@@ -135,6 +139,20 @@ struct LevelValue {
 /// ParameterValueEdit for level parameters).  A value with no row (a channel the level does not list) is reported in
 /// `unplaced` and not written.
 LevelEdit LevelValueEdits(const io::Document &doc, const std::vector<LevelValue> &values);
+
+/// The <levels> rows of several projects in one section (pyazr's merge_projects: the levels of several compound
+/// nuclei in one project).
+struct MergedLevelRows {
+  std::vector<std::string> rows;             ///< every row of every member, member by member, in file order
+  std::vector<std::map<int, int>> pairKeys;  ///< per member: the pair keys its rows name -> the keys in `rows`
+  std::string error;                         ///< the member whose section does not read, and why; "" when merged
+};
+/*!
+ * Member k's rows with each pair key (the ir column) moved past the keys of the members before it -- by the sum of
+ * their largest keys -- and each level ID past the largest ID before it; every other byte of a row is kept (inactive
+ * rows too).  The aa column is kept as written: the engine does not read it.
+ */
+MergedLevelRows MergeLevelRows(const std::vector<const io::Document *> &members);
 
 }  // namespace experiment
 }  // namespace azure2

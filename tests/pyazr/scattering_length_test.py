@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Scattering lengths through pyazr: the <scatteringLengths> block helpers of AzrModel (pure Python, on the old
-originals of the projects, tests/convert/fixtures),
+"""Scattering lengths through pyazr: the constraints as `datum` records of <modelData> (Project: read, added,
+removed),
 azure2.scattering_lengths against the reference values of tests/scattering_length, the constraint term
 in calculate_chi2_rwa / penalties(), chi2_and_grad and the residual_jacobian rows against central
 finite differences.  Model: tests/scattering_length/be7p_fit.azr (7Be+p, every kind of constraint; in format 3
@@ -19,8 +19,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SRC = os.path.join(ROOT, "tests", "scattering_length")
 sys.path.insert(0, ROOT)
-sys.path.insert(0, HERE)
-import old_tree  # noqa: E402  (the old originals of converted projects)
 
 failures = []
 engine_skipped = False
@@ -36,41 +34,42 @@ def close(a, b, tol):
     return abs(a - b) <= tol * max(abs(b), 1e-300)
 
 
-# --- AzrModel: the block (no engine) ------------------------------------------------------------
+# --- the constraints as records (no engine session) ----------------------------------------------
 try:
-    from pyazr.azrfile import AzrModel, ScatteringLengthLine  # noqa: E402
+    from pyazr import Project  # noqa: E402
 except ImportError as e:  # as the other pyazr tests: no package dependencies (e.g. mpmath) -> nothing to test
     print(f"pyazr not importable ({e}); nothing to test")
     sys.exit(77)
 
+
+def constraints(p):
+    return [r for r in p.records().values() if r.record_kind == "datum" and r["quantity"] == "scattering_length"]
+
+
 tmp = tempfile.mkdtemp(prefix="pyazr_scatlen_")
 try:
-    m = AzrModel.from_file(old_tree.original(os.path.join(SRC, "be7p_fit.azr")))
-    lines = m.scattering_lengths
-    check("block read: 5 lines", len(lines) == 5, lines)
-    check("coherent line s = -1", lines[2].s == -1 and lines[2].value == 5.0, lines[2])
-    check("complex line", lines[3].im_value == -0.3 and lines[3].im_sigma == 0.05, lines[3])
-    check("inactive line", not lines[4].active, lines[4])
-    m.add_scattering_length(1, 2, -5.0, 0.2)
-    m.set_scattering_lengths([e for e in m.scattering_lengths if e.active])
+    m = Project.open(os.path.join(SRC, "be7p_fit.azr"))
+    lines = constraints(m)
+    check("4 scattering_length data in <modelData>", len(lines) == 4, lines)
+    check("coherent datum: s coherent, 5.0 fm", lines[2]["s"] == "coherent" and lines[2]["value"] == "5.0 fm",
+          lines[2].fields)
+    check("complex datum", lines[3]["imag"] == "-0.3 fm" and lines[3]["imag_error"] == "0.05 fm", lines[3].fields)
+    m.add_datum("a_new", quantity="scattering_length", pair="p+7Be", s=2, value=(-5.0, "fm"), error=(0.2, "fm"))
     out = os.path.join(tmp, "rt.azr")
-    m.write(out)
-    back = AzrModel.from_file(out).scattering_lengths
-    check("round trip: inactive dropped, one added", len(back) == 5 and back[-1] == ScatteringLengthLine(1, 2.0, -5.0, 0.2),
-          back)
-    text = open(out).read()
-    check("block kept where it was (after </segmentsData>, before <segmentsTest>)",
-          text.index("</segmentsData>") < text.index("<scatteringLengths>") < text.index("<segmentsTest>"))
-    plain = AzrModel.from_file(old_tree.original(os.path.join(SRC, "be7p.azr")))
-    check("no block: empty list", plain.scattering_lengths == [])
-    plain.add_scattering_length(1, 1, 17.0, 0.5)
-    plain.write(os.path.join(tmp, "new.azr"))
-    t2 = open(os.path.join(tmp, "new.azr")).read()
-    check("new block after </segmentsTest>",
-          t2.index("</segmentsTest>") < t2.index("<scatteringLengths>") < t2.index("<targetInt>"))
-    plain.set_scattering_lengths([])
-    plain.write(os.path.join(tmp, "none.azr"))
-    check("empty list removes the block", "<scatteringLengths>" not in open(os.path.join(tmp, "none.azr")).read())
+    m.save(out)
+    back = constraints(Project.open(out))
+    check("round trip: one added, at the end", len(back) == 5 and back[-1].fields ==
+          {"quantity": "scattering_length", "pair": "p+7Be", "s": "2", "value": "-5.0 fm", "error": "0.2 fm"},
+          [r.fields for r in back])
+    plain = Project.open(os.path.join(SRC, "be7p.azr"))
+    check("no <modelData>: no constraint", constraints(plain) == [] and "<modelData>" not in plain.text)
+    plain.add_datum("a01", quantity="scattering_length", pair="p+7Be", s=1, value=(17.0, "fm"), error=(0.5, "fm"))
+    plain.save(os.path.join(tmp, "new.azr"))
+    check("a new <modelData> section holds it", len(constraints(Project.open(os.path.join(tmp, "new.azr")))) == 1)
+    plain.remove("a01")
+    plain.save(os.path.join(tmp, "none.azr"))
+    check("removing the record removes the constraint",
+          constraints(Project.open(os.path.join(tmp, "none.azr"))) == [])
 
     # --- engine ----------------------------------------------------------------------------------
     try:

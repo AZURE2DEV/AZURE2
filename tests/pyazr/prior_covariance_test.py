@@ -4,9 +4,10 @@
 Pure Python (no engine): ``pyazr.priors`` -- ``write_prior`` / ``read_prior`` round trip and refusals,
 ``read_covariance_dat`` (the ``#columns`` / ``#scaled`` header), ``prior_from_fit`` (means from param.sav, the
 covariance sub-block for a ``names`` subset, the basis tag, ``columns=`` for a header-less file, refusals);
-``AzrModel.prior_covariance`` get / set / remove.
+the ``<config>`` key through ``Project.config`` / ``set_config(priorCovariance=)`` (get / set / remove).
 
-With the engine, on the p+p model of tests/norm_groups (every level parameter free, both norms free):
+With the engine, on the p+p model of tests/norm_groups (every level parameter free; each data set its own free
+norm, the group D removed):
 ``penalties()["prior_covariance"]`` at moved parameters = the hand-computed quadratic form; a diagonal prior on the
 two norms gives the same ``objective()`` as their normError priors (1e-10); the last rows of ``residual_jacobian``
 are L^-1 (p - mu) (their squared sum = the prior term, the whole sum = calculate_chi2_rwa + the prior) and their
@@ -21,8 +22,6 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old originals of converted projects)
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
 
@@ -37,21 +36,22 @@ def check(name, ok, detail=""):
 
 try:
     import numpy as np                          # noqa: E402
-    from pyazr.azrfile import AzrModel          # noqa: E402
+    from pyazr import Project                   # noqa: E402
     from pyazr import priors                    # noqa: E402
 except Exception as err:
     print(f"skip: pyazr not importable ({type(err).__name__}: {err})")
-    sys.exit(0)
+    sys.exit(77)
 
 PROJECT = os.path.join(ROOT, "tests", "norm_groups")
-AZR = old_tree.original(os.path.join(PROJECT, "norm_groups.azr"))  # the old file (format3_tree.md)
+AZR = os.path.join(PROJECT, "norm_groups.azr")
+N1, N2 = "xs_40_s08.norm", "xs_90_s09.norm"   # the two data sets' norm parameters
 tmp = tempfile.mkdtemp(prefix="pyazr_prior_cov_")
 
 
 def raises(fn, text):
     try:
         fn()
-    except ValueError as e:
+    except ValueError as e:  # FormatError is a ValueError
         return text in str(e)
     return False
 
@@ -111,16 +111,16 @@ try:
                                                 columns=["width_1_1", "width_2_1", "width_3_1"]))
     check("... and accepted with columns=", r["names"] == ["width_1_1", "width_2_1", "width_3_1"], r["names"])
 
-    m = AzrModel.from_file(AZR)
-    check("AzrModel.prior_covariance: None without the key", m.prior_covariance is None)
-    m.prior_covariance = "prior.txt"
-    text = m.to_text()
+    m = Project.open(AZR)
+    check("Project.config: no priorCovariance without the key", "priorCovariance" not in m.config())
+    m.set_config(priorCovariance="prior.txt")
+    text = m.text
     check("set: priorCovariance=prior.txt before </config>", "priorCovariance=prior.txt\n</config>" in text)
-    open(os.path.join(tmp, "k.azr"), "w").write(text)
-    check("reads back from the file", AzrModel.from_file(os.path.join(tmp, "k.azr")).prior_covariance == "prior.txt")
-    m.prior_covariance = None
-    check("None removes the key, the file as before", m.to_text() == open(AZR).read())
-    check("a path with '#' is refused", raises(lambda: setattr(m, "prior_covariance", "a#b"), "no '#'"))
+    m.save(os.path.join(tmp, "k.azr"))
+    check("reads back from the file", Project.open(os.path.join(tmp, "k.azr")).config()["priorCovariance"] == "prior.txt")
+    m.set_config(priorCovariance=None)
+    check("None removes the key, the file as before", m.text == open(AZR).read())
+    check("a path with '#' is refused", raises(lambda: m.set_config(priorCovariance="a#b"), "without '#'"))
 
     print("\n2. with the engine")
     try:
@@ -130,30 +130,38 @@ try:
         print(f"  skip  engine not built ({e})")
         have_engine = False
     if have_engine:
-        def project(name, segs, prior_text=None):
+        def project(name, norms, prior_text=None, fixed_levels=False):
+            """The norm_groups project with the group D removed, each data set its own norm (NORMS: two texts),
+            and the prior file when given; FIXED_LEVELS fixes every level energy and width."""
             work = os.path.join(tmp, name)
             shutil.copytree(os.path.join(PROJECT, "data"), os.path.join(work, "data"))
             os.makedirs(os.path.join(work, "output"))
             os.makedirs(os.path.join(work, "checks"))
-            text = open(AZR).read()
-            a, b = text.index("<segmentsData>\n") + len("<segmentsData>\n"), text.index("</segmentsData>")
-            text = text[:a] + "\n".join(segs) + "\n" + text[b:]
+            pr = Project.open(AZR)
+            pr.set("xs_40_s08", norm=norms[0])
+            pr.set("xs_90_s09", norm=norms[1])
+            pr.remove("D")
+            if fixed_levels:
+                for lv in pr.levels():
+                    pr.set_level(lv, fixed=True)
+                    for c in lv.channels:
+                        pr.set_channel(lv, c.pair, c.l, c.s, fixed=True)
             if prior_text is not None:
-                text = text.replace("</config>", "priorCovariance=prior.txt\n</config>", 1)
+                pr.set_config(priorCovariance="prior.txt")
                 open(os.path.join(work, "prior.txt"), "w").write(prior_text)
-            open(os.path.join(work, "t.azr"), "w").write(text)
+            pr.save(os.path.join(work, "t.azr"))
             return os.path.join(work, "t.azr"), work
 
-        seg = "1 1 1 0 100 {a} {a} 4 1 1 {e} 0 0 0 data/{f}.dat 0 0"
-        S0 = [seg.format(a=40, e=0, f="xs_40_s08"), seg.format(a=90, e=0, f="xs_90_s09")]
-        SE = [seg.format(a=40, e=10, f="xs_40_s08"), seg.format(a=90, e=5, f="xs_90_s09")]
+        # norm 1, free; with a 10 % / 5 % prior in SE
+        S0 = ["1 fit", "1 fit"]
+        SE = ["1 fit prior 1 10%", "1 fit prior 1 5%"]
 
         Cb = np.array([[4e-4, 1.2e-4], [1.2e-4, 9e-4]])
-        azr, work = project("corr", S0, "segment_1_norm width_1_1\n1.02 0.6\n4e-4 1.2e-4\n1.2e-4 9e-4\n")
+        azr, work = project("corr", S0, f"{N1} width_1_1\n1.02 0.6\n4e-4 1.2e-4\n1.2e-4 9e-4\n")
         with azure2(azr, cwd=work) as mdl:
             fi = {q.name: q.free_index for q in mdl.parameters if not q.fixed}
             x = np.asarray(mdl.params_rwa, float).copy()
-            x[fi["segment_1_norm"]], x[fi["width_1_1"]] = 1.07, 0.63
+            x[fi[N1]], x[fi["width_1_1"]] = 1.07, 0.63
             d = np.array([1.07 - 1.02, 0.63 - 0.6])
             want = float(d @ np.linalg.solve(Cb, d))
             pen = mdl.penalties(x)
@@ -161,7 +169,7 @@ try:
                   abs(pen["prior_covariance"] - want) <= 1e-12 * want, (pen["prior_covariance"], want))
             check("objective() includes it",
                   abs(mdl.objective(x) - (float(np.sum(mdl.calculate_chi2_rwa(x))) + want)) <= 1e-10 * mdl.objective(x))
-            check("prior_covariance_names", mdl.prior_covariance_names == ["segment_1_norm", "width_1_1"],
+            check("prior_covariance_names", mdl.prior_covariance_names == [N1, "width_1_1"],
                   mdl.prior_covariance_names)
             r, J = mdl.residual_jacobian(x)
             rp = mdl.prior_covariance_residuals(x)
@@ -180,16 +188,16 @@ try:
             Linv = np.linalg.inv(np.linalg.cholesky(Cb))
             check("their Jacobian rows = central differences (every column) and L^-1 on the prior's columns",
                   worst < 1e-6 * np.abs(Linv).max() and
-                  np.allclose(J[-2:, [fi["segment_1_norm"], fi["width_1_1"]]], Linv, rtol=1e-12, atol=0), worst)
+                  np.allclose(J[-2:, [fi[N1], fi["width_1_1"]]], Linv, rtol=1e-12, atol=0), worst)
 
-        azr, work = project("diag", S0, "segment_1_norm segment_2_norm\n1 1\n0.01 0\n0 0.0025\n")
+        azr, work = project("diag", S0, f"{N1} {N2}\n1 1\n0.01 0\n0 0.0025\n")
         azr2, work2 = project("normerr", SE)
         with azure2(azr, cwd=work) as a, azure2(azr2, cwd=work2) as b:
             x = np.asarray(a.params_rwa, float).copy()
             fa = {q.name: q.free_index for q in a.parameters if not q.fixed}
             fb = {q.name: q.free_index for q in b.parameters if not q.fixed}
             check("same free-parameter layout", fa == fb)
-            x[fa["segment_1_norm"]], x[fa["segment_2_norm"]] = 1.07, 0.96
+            x[fa[N1]], x[fa[N2]] = 1.07, 0.96
             oa, ob = a.objective(x), b.objective(x)
             check("diagonal prior on the norms: objective() = the normError priors' (1e-10)",
                   abs(oa - ob) <= 1e-10 * ob, (oa, ob))
@@ -200,30 +208,17 @@ try:
                   b.prior_covariance_residuals(x).size == 0)
 
         # every level fixed: energy_2 is a fixed parameter -> marginalized
-        azr, work = project("fixed", S0, "segment_1_norm energy_2\n1.02 0.81\n4e-4 1.5e-4\n1.5e-4 1e-4\n")
-        lv = []
-        inlev = False
-        for line in open(azr).read().splitlines():
-            if line.strip() == "<levels>":
-                inlev = True
-            elif line.strip() == "</levels>":
-                inlev = False
-            elif inlev and len(line.split()) > 12:
-                t = line.split()
-                t[3], t[10] = "1", "1"
-                line = " ".join(t)
-            lv.append(line)
-        open(azr, "w").write("\n".join(lv) + "\n")
+        azr, work = project("fixed", S0, f"{N1} energy_2\n1.02 0.81\n4e-4 1.5e-4\n1.5e-4 1e-4\n", fixed_levels=True)
         with azure2(azr, cwd=work) as mdl:
             fi = {q.name: q.free_index for q in mdl.parameters if not q.fixed}
             x = np.asarray(mdl.params_rwa, float).copy()
-            x[fi["segment_1_norm"]] = 1.07
-            check("a fixed listed parameter is marginalized", mdl.prior_covariance_names == ["segment_1_norm"],
+            x[fi[N1]] = 1.07
+            check("a fixed listed parameter is marginalized", mdl.prior_covariance_names == [N1],
                   mdl.prior_covariance_names)
             v = mdl.penalties(x)["prior_covariance"]
             check("... the term is the marginal (n - mu)^2 / C_nn", abs(v - 0.05 ** 2 / 4e-4) <= 1e-12 * v, v)
 
-        azr, work = project("bad", S0, "segment_1_norm segment_9_norm\n1 1\n0.01 0\n0 0.01\n")
+        azr, work = project("bad", S0, f"{N1} segment_9_norm\n1 1\n0.01 0\n0 0.01\n")
         try:
             with azure2(azr, cwd=work):
                 pass

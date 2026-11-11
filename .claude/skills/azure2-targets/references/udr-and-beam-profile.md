@@ -11,9 +11,9 @@ distribution and each datum is an energy slice [a, b] of it seen through the det
 1. One segment per nominal beam energy, one `<targetInt>` line per segment.
 2. The per-point window [a, b] goes in columns 5 and 6 of the data file (lab MeV of the entrance channel; a
    photon-beam profile is shifted by the Q value and converted first).
-3. Write the line from pyazr:
-   `AzrModel.add_target_effect(segments, beam_profile=[(xi, omega, alpha, w), ...], tpc_sigma=s,
-   photodissociation=True)`. `photodissociation=True` sets `dbFlag = 1`, the detailed-balance weight that averages a
+3. Write the line (old format; in format 3 the profile is a field of the `beam` record, the TPC resolution of the
+   `detector` record, edited with `pyazr.Project.add_beam` / `add_detector` / `set`; `pyazr.schema()` lists the
+   fields). `dbFlag = 1` is the detailed-balance weight that averages a
    capture σ the way the inverse measurement did.
 4. Mirror the data segments as inactive `<segmentsTest>` lines so the keys line up.
 5. Give the effect a resonance-width multiplier of at least 20 when a resonance narrower than the base sub-point
@@ -25,8 +25,8 @@ distribution and each datum is an energy slice [a, b] of it seen through the det
 
 Line tail: `udr "<file>" L_m burstFWHM_ns channel_ns centred`. A negative channel value −n means n bins per decade
 (n_TOF: 10 below 300 keV, 100 above). Only the blocks within a decade of the segment energies are read, so the
-150 MB n_TOF EAR1 file loads in seconds. pyazr:
-`AzrModel.add_target_effect(udr_file=, flight_path=, udr_burst=, udr_channel=, udr_centred=)`.
+150 MB n_TOF EAR1 file loads in seconds. In format 3 the UDR is a field of the `detector` record
+(`pyazr.Project.add_detector` / `set`; `pyazr.schema()` lists the fields).
 
 Checks before a real fit:
 

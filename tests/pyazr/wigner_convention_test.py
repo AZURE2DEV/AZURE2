@@ -34,7 +34,7 @@ try:
     from pyazr import azure2, teichmann_wigner, lane_thomas_wigner
 except ImportError as e:
     print(f"SKIP: {e}")
-    sys.exit(0)
+    sys.exit(77)
 
 work = os.path.join(ROOT, "tests", "13N")
 m = azure2(os.path.join(work, "13N.azr"), cwd=work)

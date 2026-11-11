@@ -166,45 +166,25 @@ messages of `prior_covariance` (and two gradient agreements at the 1e-15 level),
 
 ## 5. What still reads old files (blocks the refusal switch)
 
-- No group is left: all 183 convertible files are format 3 (§3a).
-- `AZURE2 --convert` on purpose: `segline_formats`, `total_capture_code` (d), `ec_final_state_ambiguous` (e) convert an
-  old model at run time; they keep working after the switch (the converter reads old files).
-- pyazr tests of the old file class, on the originals (`tests/pyazr/old_tree.py`): those listed in §3 (groups 2, 4a,
-  4b, 5: `roundtrip`, `physical_norm`, `shift_first_call`, `target_density`, `jacobian_skip`, `jacobian_shift_columns`,
-  `zero_width_level`, `formal_capture_mask`, `composite_gradient`, `norm_group`, `prior_covariance`, `save_fit_norms`,
-  `extrap_layout`, `objective`, `shift_fn`, `sqrt_shift`, `data_covariance`, `angular_coefficients`, `screening`,
-  `parameter_kinds`; group 6: `natural_target`, `doppler`, `thickness`, `parameter_kinds` (the old generators)). `docs/upgrade/pyazr_on_records.md` lists their replacements as "gone with formats 1-2" (old
-  segment fields, `SegmentSet`) or "to be built" (level-row edits); none was moved to the format-3 session for that
-  reason. `pyazr_inactive_lines` (part 2), `pyazr_shared_state` and `pyazr_rmatrix_pole` edit format-3 records. Each loads the
-  original through `pyazr/azrfile.py` and runs the engine on it: they block the switch until pyazr's session reads
-  format 3 and the old class is deleted (another agent's work).
-- Group 8 (this page, §3, §4): pyazr tests of the old reader or the converter on the originals (`scattering_length`
-  block part, `azr_parse_cache`, `potential_record`, `save_fit_format3` part 2, `validate`, `convert_azr`,
-  `session_records` old T2, `composite_terms` 2b); `beta_delayed_alpha` (e) converts its old line with `AZURE2 --convert` (on purpose, as `segline_formats`); the generator of
-  `light_excitation` (run by its check; models written at run time in the old grammar).
-- The model generators. Run by a check and writing format 3: `clone_composite/make_models.py`,
-  `light_excitation/make_models.py` (its models as records). Writing format 3 through the converter (they compose the
-  old grammar and call `AZURE2 --convert --to 3 --exact-grids`; they give the committed files byte for byte): the
-  generators of T1–T3 (`tests/upgrade/lib/upgrade_project.py`, `T1/generate.py`, `T3/generate.py`, `T2/make_t2.py`).
-  Rewritten with group 6 to write format 3: `doppler_fgm`, `transmission_yield`; `natural_target/make_models.py` is deleted.
-  **Deleted** (branch `feature/upgrade-4-format3-gaps`; they wrote old files, their committed output, converted, is
-  what the tests use): the generators of `angular_coefficients`, `capture_ay_coupling`, `convolution_unify`,
-  `convolution_window`, `data_covariance`, `ec_e1m1_phase`, `ec_m1_exact`, `ec_threshold`, `electron_screening`,
-  `gamma_lab_frame`, `hard_sphere`, `mcmc_physical_norm` (`make_model.py`), `q_attenuation`, `ratio_frame`,
-  `relativistic`, `scattering_length`, `screening_6li`, `secondary_gamma`, `shift_sqrt_subpoints`,
-  `shift_subpoint_angle`, `sum_lab_frame`, `target_density`, `transform_level_order` and `reaction_rate`
-  (`make_truth.sh` reads the committed `*_truth.azr`); each README has a section "How the models were made" with the
-  generator's description and the commit that holds it.  `18O_p_a_thm/make_inputs.py` (not run: it needs the reproduction of the
-  paper) writes format 3 since group 7.
-- Group 7: the pyazr tests of the old file class's THM API (AzrModel's `<thm>` block and segment lines) on the
-  originals: `thm_experiment`, `thm_lineshape`, `thm_spectator_window`, `thm_distortion`, `thm_fixed_angle`,
-  `thm_dw_vertex`, `thm_spectator_angles`, `thm_coherent_background`, `thm_model_average`, `thm_vertex_reach`,
-  `tabulate_thm`, `extrapolation_frame`, `geometry_no_transform`, the 7Li_p_a parts of `roundtrip` and
-  `save_fit_norms`. `Project` has the replacements (`set(<data set>, thm=...)`, `set_thm_experiment`, `thm_weight`
-  as a field): moving them is open (not done in group 7's branch). The engine still accepts an old `segments=` list in
-  a format-3 `<thm>` section (a defect: §3.9 says it disappears); no committed check uses it any more.
-- The old generators `tests/convert/fixtures/tests/doppler_fgm/make_models.py`, `.../transmission_yield/make_models.py`
-  (on the original n12C), for the pyazr tests `doppler`, `thickness`, `parameter_kinds` of the old file class.
+Python is off the old formats (branch `feature/upgrade-4-pyazr-format3`, `pyazr_on_records.md`): `pyazr/azrfile.py`
+(`AzrModel`), `pyazr/datasets.py` (`SegmentSet`) and `tests/pyazr/old_tree.py` are deleted; a pyazr session,
+`Project.open` and every function that opens a project refuse a format-1/2 file with the engine's message
+(`convert::NotFormat3Message`, `pyazr.project.require_format3`). What is left for the refusal switch:
+
+- **The engine**: its old reading path (`src/Config*.cpp`'s old path, `EData`'s old segment readers), which the
+  next branch removes. A format-3 `<thm>` section still accepts an old `segments=` list (a defect: §3.9 says it
+  disappears); no committed check uses it.
+- **The GUI** (it reads and writes the old grammar).
+- **The converter** (on purpose; it keeps reading old files after the switch): `AZURE2 --convert`, `pyazr.convert_azr`
+  and the originals in `tests/convert/fixtures/`, used by the converter's own checks and by the pyazr converter
+  tests (`convert_azr`, `validate`, `save_fit_format3`, `potential_record`). `segline_formats`, `total_capture_code`
+  (d), `ec_final_state_ambiguous` (e) and `beta_delayed_alpha` (e) convert an old model at run time.
+- The generators of T1–T3 (`tests/upgrade/lib/upgrade_project.py`, `T1/generate.py`, `T3/generate.py`,
+  `T2/make_t2.py`) compose the old grammar and convert it (`AZURE2 --convert --to 3 --exact-grids`); they need the
+  converter only.
+- `light_excitation/make_models.py`, `clone_composite/make_models.py`, `doppler_fgm/make_models.py`,
+  `transmission_yield/make_models.py` write format 3; the old generators of `doppler_fgm` and `transmission_yield`
+  under `tests/convert/fixtures/` are deleted.
 
 ## 6. User-guide pages that show old keyword lines (for a later documentation pass)
 

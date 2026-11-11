@@ -46,7 +46,7 @@ try:
     from pyazr import azure2
 except ImportError as e:
     print(f"SKIP: {e}")
-    sys.exit(0)
+    sys.exit(77)
 
 work = tempfile.mkdtemp(prefix="hybrid_derivative.")
 try:

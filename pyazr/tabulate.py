@@ -37,18 +37,16 @@ Notes
 """
 
 import os
-import re
 import shutil
 import tempfile
 
 import numpy as np
 
 from .azure2 import azure2
-from .project import Project, _is_format3
+from .project import Project
 
 __all__ = ["tabulate", "TabulatedCrossSection"]
 
-_SEG_RE = re.compile(r"<segmentsData>.*</segmentsData>", re.S)
 
 
 class TabulatedCrossSection:
@@ -89,15 +87,9 @@ class TabulatedCrossSection:
 
 
 def _entrance_masses(model, entrance):
-    if isinstance(model, Project):
-        for p in model.pairs():
-            if p.key == entrance:
-                return float(p.light_mass), float(p.heavy_mass)
-        raise ValueError(f"entrance pair {entrance} not found in the model")
-    for lv in model.levels:
-        for c in lv.channels:
-            if c.pair == entrance:
-                return float(c.M1), float(c.M2)
+    for p in model.pairs():
+        if p.key == entrance:
+            return float(p.light_mass), float(p.heavy_mass)
     raise ValueError(f"entrance pair {entrance} not found in the model")
 
 
@@ -115,12 +107,7 @@ def tabulate(azr_file, pairs, e_min, e_max, rel_tol=5e-3, frame="cm",
     src = os.path.abspath(azr_file)
     base_cwd = cwd or os.path.dirname(src)
 
-    format3 = _is_format3(src)
-    if format3:
-        model0 = Project.open(src)
-    else:
-        from .azrfile import AzrModel
-        model0 = AzrModel.from_file(src)
+    model0 = Project.open(src)
     m1, m2 = _entrance_masses(model0, pairs[0][0])
     lab = {}
     for ent, _ in pairs:
@@ -141,10 +128,7 @@ def tabulate(azr_file, pairs, e_min, e_max, rel_tol=5e-3, frame="cm",
     os.makedirs(os.path.join(work, "output"), exist_ok=True)
     os.makedirs(os.path.join(work, "checks"), exist_ok=True)
     stripped = os.path.join(work, "_stripped.azr")
-    if format3:
-        _strip_format3(model0, stripped, observable)
-    else:
-        _strip_old_format(src, stripped)
+    _strip_format3(model0, stripped, observable)
     knots = {p: None for p in pairs}     # (E_cm sorted, sigma) arrays
     active = {p: None for p in pairs}    # list of (lo, hi) c.m. intervals
 
@@ -152,7 +136,7 @@ def tabulate(azr_file, pairs, e_min, e_max, rel_tol=5e-3, frame="cm",
         """requests: {pair: sorted c.m. energy array} -> {pair: (E_cm, sigma)}"""
         keys = [p for p in pairs if p in requests and len(requests[p])]
         run = os.path.join(work, "_run.azr")
-        m = Project.open(stripped) if format3 else AzrModel.from_file(stripped)
+        m = Project.open(stripped)
         for p in keys:
             ent, ex = p
             e = np.asarray(requests[p], float)
@@ -160,17 +144,10 @@ def tabulate(azr_file, pairs, e_min, e_max, rel_tol=5e-3, frame="cm",
             np.savetxt(fn, np.c_[e * lab[ent], np.zeros(e.size),
                                  np.ones(e.size), np.ones(e.size)],
                        fmt="%.10g")
-            if format3:  # sigma at the lab energies of the file (data mode; one data set per pair combination)
-                m.add_dataset(f"tab_{ent}_{ex}", reaction=m.reaction(ent, ex), quantity="sigma", unit="b",
-                              file=os.path.basename(fn), columns="E_lab[MeV] _ value error", norm="1 fixed")
-            else:
-                m.add_data_segment(fn, entrance=ent, exit=ex,
-                                   observable=observable, vary_norm=False,
-                                   energy_min=0.0, energy_max=1e5)
-        if format3:
-            m.save(run)
-        else:
-            m.write(run)
+            # sigma at the lab energies of the file (data mode; one data set per pair combination)
+            m.add_dataset(f"tab_{ent}_{ex}", reaction=m.reaction(ent, ex), quantity="sigma", unit="b",
+                          file=os.path.basename(fn), columns="E_lab[MeV] _ value error", norm="1 fixed")
+        m.save(run)
         out = {}
         with azure2(run, cwd=work, **session_opts) as a:
             v = np.asarray(a.params_rwa, float) if x is None else np.asarray(x, float)
@@ -259,25 +236,3 @@ def _strip_format3(project, stripped, observable):
         project.remove_thm_experiment(name)
     project.set_config(output_dir="output/", checks_dir="checks/")
     project.save(stripped)
-
-
-def _strip_old_format(src, stripped):
-    """The old-format project without its data segments (AzrModel; deleted with the old formats)."""
-    from .azrfile import AzrModel
-    txt = open(src).read()
-    txt = _SEG_RE.sub("<segmentsData>\n</segmentsData>", txt)
-    # keep engine side effects inside the scratch directory
-    txt = re.sub(r"^\s*\S*output\S*/?\s*(#Full Path to Output Directory)",
-                 "output/                                    \\1", txt, flags=re.M)
-    txt = re.sub(r"^\s*\S*checks\S*/?\s*(#Full Path to Checks Directory)",
-                 "checks/                                    \\1", txt, flags=re.M)
-    open(stripped, "w").write(txt)
-    # The data segments are gone, and with them what the <thm> block keys by
-    # their line numbers: experiment[...] segments= and weight[k] would name
-    # the tabulation segments (not THM) and the engine would refuse the file.
-    sm = AzrModel.from_file(stripped)
-    for name in list(sm.thm_experiments()):
-        sm.clear_thm_experiment(name)
-    for key in [k for k in sm.thm_options() if k.startswith("weight[")]:
-        sm.clear_thm_option(key)
-    sm.write(stripped)

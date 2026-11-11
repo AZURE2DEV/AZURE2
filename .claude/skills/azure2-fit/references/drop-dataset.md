@@ -73,8 +73,8 @@ io.open("model_noKEY.azr", "w", encoding="latin-1").write(
     c[:m.start(2)] + '\n'.join(rows) + c[m.end(2):])
 ```
 
-In pyazr the same edit is `mdl.set_segment_active("<name>", False)`; when a data file appears in several segments
-(angles, energy windows), check afterwards that exactly the intended segments changed.
+In pyazr (format 3) the same edit is `Project.set("<data set>", active="no")`; when a data file appears in several
+data sets (angles, energy windows), check afterwards that exactly the intended data sets changed.
 
 What needs no change, and what might:
 

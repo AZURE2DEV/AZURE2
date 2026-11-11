@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
-"""Free-gas Doppler broadening through pyazr: AzrModel.add_target_effect(doppler=T) writes the ``doppler`` keyword
-and refuses T <= 0 (pure Python); through the engine, a Doppler-only line changes sigma_t at the narrowed n + 12C
-resonance of tests/doppler_fgm by tens of percent and a transmission line gives exp(-N sigma_D) (the API path
-assembles transformed segments through Segment::NeedsAssembly, which must include the Doppler step).
+"""Free-gas Doppler broadening through pyazr, on the format-3 models of tests/doppler_fgm (make_models.py, on the
+tree's n12C): a Doppler-only target changes sigma_t at the narrowed n + 12C resonance by tens of percent and a
+transmission gives exp(-N sigma_D) (the API path assembles transformed segments through Segment::NeedsAssembly, which
+must include the Doppler step).
 
-The fitted temperature (``doppler T vary sigma [Tmax]``, parameter doppler_<n>): AzrModel.dopplers / set_doppler /
-add_target_effect(doppler=(T, vary, sigma, tmax)) round trips and refusals (pure Python); through the engine, on
-tests/doppler_fgm's grad_fit model (doppler_1: "300 1 0 900" on a Doppler-only + transmission/yield line, doppler_2:
-"300 1 20" on a Doppler + Gaussian transmission/yield line), the type-9 parameter records, penalties()["doppler"]
-and objective() at a moved T, and the doppler_n entries of chi2_and_grad and the residual_jacobian columns against
-central finite differences, at the start and at moved temperatures.
+The fitted temperature (``doppler free_gas T K fit ...`` on a target, parameter <target>.doppler), on grad_fit
+(targets D0 (data sets 1, 2) and D1 (5, 6) "fit grid_max 900", D2 (3, 4) "fit prior 300 20"): the type-9 parameter
+records, penalties()["doppler"] and objective() at moved temperatures, and the doppler entries of chi2_and_grad and the
+residual_jacobian columns against central finite differences, at the start and at moved temperatures.  (The record
+grammar -- the doppler field, its fit form and refusals -- is tests/doppler_fgm/check.sh's.)
 
-The engine part needs the compiled module and skips cleanly without it.
+Needs the compiled module and skips cleanly without it.
 
 Run from anywhere:  python3 tests/pyazr/doppler_test.py
 """
 import importlib.util
-import math
 import os
 import shutil
 import sys
@@ -26,14 +24,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SUITE = os.path.join(ROOT, "tests", "doppler_fgm")
 sys.path.insert(0, ROOT)
-sys.path.insert(0, HERE)
-import old_tree  # noqa: E402  (the old generator and n12C: these models are the old file class's)
-
-try:
-    from pyazr.azrfile import AzrModel  # noqa: E402
-except ImportError as e:
-    print(f"pyazr not importable ({e}); nothing to test")
-    sys.exit(0)
 
 failures = []
 
@@ -46,68 +36,10 @@ def check(name, ok, detail=""):
 
 tmp = tempfile.mkdtemp(prefix="pyazr_doppler_")
 try:
-    spec = importlib.util.spec_from_file_location("doppler_models", old_tree.original(os.path.join(SUITE, "make_models.py")))
+    spec = importlib.util.spec_from_file_location("doppler_models", os.path.join(SUITE, "make_models.py"))
     mm = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mm)
-    mm.main(old_tree.original(os.path.join(ROOT, "tests", "reaction_rate", "models", "n12C.azr")), tmp)
-
-    # --- AzrModel (no engine) ---------------------------------------------------------------------
-    b = AzrModel.from_file(os.path.join(tmp, "bare.azr"))
-    b.add_target_effect("1,2", n_points=400, doppler=293.6)
-    path = os.path.join(tmp, "added.azr")
-    b.write(path)
-    lines = open(path).read().split("<targetInt>")[1].split("</targetInt>")[0].strip().splitlines()
-    check("add_target_effect(doppler=293.6) writes one line ending in 'doppler 293.6'",
-          len(lines) == 1 and lines[0].split()[-2:] == ["doppler", "293.6"], lines)
-    for bad in (0, -5):
-        try:
-            AzrModel.from_file(os.path.join(tmp, "bare.azr")).add_target_effect("1", doppler=bad)
-            check(f"add_target_effect(doppler={bad}) refused", False)
-        except ValueError:
-            check(f"add_target_effect(doppler={bad}) refused", True)
-
-    def target_lines(model):
-        path = os.path.join(tmp, "rt.azr")
-        model.write(path)
-        return open(path).read().split("<targetInt>")[1].split("</targetInt>")[0].strip().splitlines()
-
-    f = AzrModel.from_file(os.path.join(tmp, "bare.azr")).add_target_effect("1,2", n_points=400,
-                                                                            doppler=(300, True, 20, 900))
-    check("add_target_effect(doppler=(300, 1, 20, 900)) writes the fit form",
-          target_lines(f)[0].split()[-5:] == ["doppler", "300", "1", "20", "900"], target_lines(f))
-    d = f.dopplers
-    check("dopplers reads it back (fit, vary, sigma 20, tmax 900, max 900)",
-          d == {1: dict(temperature=300.0, fit=True, vary=True, sigma=20.0, tmax=900.0, max=900.0)}, d)
-    f.set_doppler(1, tmax=0)
-    d = f.dopplers[1]
-    check("set_doppler(tmax=0) removes Tmax: the layout is max(T + 3 sigma, 1.21 T) = 363 K",
-          target_lines(f)[0].split()[-4:] == ["doppler", "300", "1", "20"] and d["max"] == 363.0, (target_lines(f), d))
-    f.set_doppler(1, T=310, vary=False, sigma=0)
-    d = f.dopplers[1]
-    check("set_doppler(T=310, vary=False, sigma=0): 'doppler 310 0 0', layout 2 T",
-          target_lines(f)[0].split()[-4:] == ["doppler", "310", "0", "0"] and d["max"] == 620.0 and not d["vary"],
-          (target_lines(f), d))
-    g = AzrModel.from_file(os.path.join(tmp, "dop.azr"))
-    g.set_doppler(1, T=350)
-    check("set_doppler(T=350) on a plain line keeps it plain",
-          target_lines(g)[0].split()[-2:] == ["doppler", "350"] and not g.dopplers[1]["fit"], target_lines(g))
-    g.set_doppler(1, vary=True, sigma=25, tmax=800)
-    written = target_lines(g)
-    check("set_doppler(vary, sigma, tmax) turns it into the fit form, round trip through the file",
-          AzrModel.from_file(os.path.join(tmp, "rt.azr")).dopplers == g.dopplers and
-          written[0].split()[-5:] == ["doppler", "350", "1", "25", "800"], written)
-    for what, kw in (("a negative sigma", dict(sigma=-1)), ("Tmax not above T", dict(tmax=300)),
-                     ("T <= 0", dict(T=0))):
-        try:
-            AzrModel.from_file(os.path.join(tmp, "dop.azr")).set_doppler(1, vary=True, **kw)
-            check(f"set_doppler refuses {what}", False)
-        except ValueError:
-            check(f"set_doppler refuses {what}", True)
-    try:
-        AzrModel.from_file(os.path.join(tmp, "bare.azr")).add_target_effect("1", n_points=10).set_doppler(1, vary=True)
-        check("set_doppler on a line without a doppler block needs T", False)
-    except ValueError:
-        check("set_doppler on a line without a doppler block needs T", True)
+    mm.main(os.path.join(ROOT, "tests", "reaction_rate", "models", "n12C.azr"), tmp)
 
     # --- engine ----------------------------------------------------------------------------------
     try:
@@ -144,20 +76,22 @@ try:
         # --- fitted temperature ------------------------------------------------------------------
         with session("grad_fit") as s:
             dp = s.parameters.dopplers
-            ok = (len(dp) == 2 and [p.effect for p in dp] == [1, 2] and all(not p.fixed for p in dp) and
-                  [p.prior_nominal for p in dp] == [300.0, 300.0] and [p.prior_sigma for p in dp] == [0.0, 20.0] and
-                  abs(dp[0].doppler_max - 900.0) < 1e-9 and abs(dp[1].doppler_max - 363.0) < 1e-9 and
-                  [p.name for p in dp] == ["doppler_1", "doppler_2"])
-            check("two type-9 records: doppler_1 (no prior, layout 900 K), doppler_2 (prior 20 K, layout 363 K)", ok, dp)
+            by = {p.name: p for p in dp}
+            ok = (sorted(by) == ["D0.doppler", "D1.doppler", "D2.doppler"] and all(not p.fixed for p in dp) and
+                  all(p.prior_nominal == 300.0 for p in dp) and
+                  [by[n].prior_sigma for n in ("D0.doppler", "D1.doppler", "D2.doppler")] == [0.0, 0.0, 20.0] and
+                  abs(by["D0.doppler"].doppler_max - 900.0) < 1e-9 and abs(by["D1.doppler"].doppler_max - 900.0) < 1e-9
+                  and abs(by["D2.doppler"].doppler_max - 363.0) < 1e-9)
+            check("three type-9 records: D0, D1 (no prior, grids for 900 K), D2 (prior 20 K, grids for 363 K)", ok, dp)
             x = np.asarray(s.params_rwa, float)
-            i1, i2 = dp[0].free_index, dp[1].free_index
             pen0 = s.penalties(x)["doppler"]
             xm = x.copy()
-            xm[i2] = 320.0
-            xm[i1] = 450.0
+            xm[by["D2.doppler"].free_index] = 320.0
+            xm[by["D0.doppler"].free_index] = 450.0
+            xm[by["D1.doppler"].free_index] = 450.0
             pen = s.penalties(xm)["doppler"]
             obj = s.objective(xm) - float(np.sum(s.calculate_chi2_rwa(xm)))
-            check("penalties()['doppler'] = ((320 - 300)/20)^2 = 1 at doppler_2 = 320 (doppler_1 has no prior), 0 at 300",
+            check("penalties()['doppler'] = ((320 - 300)/20)^2 = 1 at D2 = 320 (D0, D1 have no prior), 0 at 300",
                   abs(pen - 1.0) < 1e-12 and pen0 == 0.0, (pen, pen0))
             check("objective() carries it", abs(obj - 1.0) < 1e-9, obj)
             c_lo = float(np.sum(s.calculate_chi2_rwa(x)))

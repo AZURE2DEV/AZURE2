@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Add/remove resonances and data segments, recalc EC integrals, save a new file.
+"""Add/remove resonances and data sets, recalc EC integrals, save a new file.
 
-``AzrModel`` edits the two things a model is made of -- the level scheme
-(``<levels>``) and the data (``<segmentsData>`` / ``<segmentsTest>``) -- and
-writes a **new** ``.azr``, leaving the original untouched.  This example walks
-through the full edit loop:
+``pyazr.Project`` edits the two things a model is made of -- the level scheme
+(``<levels>``: levels by label or by J^pi and E_x, channels by pair, l and s) and
+the data (``dataset`` and ``extrapolation`` records) -- and writes a **new**
+project, leaving the original untouched.  This example walks through the full
+edit loop:
 
-  1. remove a resonance, add a resonance (and add a channel to one),
-  2. remove a data segment, add a data segment,
+  1. remove a resonance, add a resonance,
+  2. remove a data set, add a data set,
   3. **recalculate the external-capture integrals** -- required whenever the
      data change, because AZURE2 caches them in ``output/intEC.dat`` /
      ``output/intEC.extrap`` keyed on the *grid*, not on the segment selection,
@@ -33,7 +34,7 @@ os.environ.setdefault("OMP_NUM_THREADS", "4")
 
 import numpy as np
 
-from pyazr import AzrModel, azure2
+from pyazr import Project, azure2
 
 
 def recalc_ec_caches(outdir: Path):
@@ -64,38 +65,32 @@ def main() -> int:
     out = args.out or here / f"{args.azr.stem}_edited.azr"
 
     # -- 1. resonances -------------------------------------------------------
-    model = AzrModel.from_file(args.azr)
-    n_before = len(model.levels)
-    print(f"{args.azr.name}: {n_before} levels, "
-          f"{len(model.find())} levels found")
+    model = Project.open(args.azr)
+    print(f"{args.azr.name}: {len(model.levels())} levels")
 
-    removed = model.remove_level(jpi="1/2+", energy=20)      # a background pole
-    print(f"\nremoved level: {[str(r) for r in removed]}")
+    model.remove_level(("1/2+", 20))                          # a background pole
+    print("\nremoved level: 1/2+ at 20 MeV")
 
-    added = model.add_level(J=1.5, parity=+1, energy=4.1,    # a new 3/2+ resonance
-                            channels=[dict(pair=1, L=2, S=0.5, gamma=1000.0),
-                                      dict(pair=2, L=1, S=0.5, gamma=0.1)])
-    print(f"added level:   {added}")
+    model.add_level(1.5, +1, 4.1,                             # a new 3/2+ resonance (E_x, MeV)
+                    channels=[dict(pair=1, l=2, s=0.5, width=1000.0),
+                              dict(pair=2, l=1, s=0.5, width=0.1)])
+    print(f"added level:   {model.levels()[-1].label}")
 
     # -- 2. data ---------------------------------------------------------------
-    print(f"\ndata segments in the original file:")
-    from pyazr import datasets
-    for s in datasets.SegmentSet.from_file(args.azr):
-        print(f"  #{s.key:<2} {s.name:<24} {s.observable:<18} "
-              f"E={s.energy_min:g}-{s.energy_max:g}")
+    print("\ndata sets in the original file:")
+    for name, r in model.records().items():
+        if r.record_kind == "dataset":
+            print(f"  {name:<24} {r['quantity']:<14} {r['reaction']}")
 
-    # remove every segment that reads data/artemov.dat
-    n_removed = model.remove_data_segments("artemov.dat")
-    print(f"\nremoved {n_removed} data segment(s) (artemov)")
+    model.remove("artemov")
+    print("\nremoved the data set artemov")
 
-    # add a segment for a data file present but not yet used (roughton.dat).
-    # total capture: entrance pair 1 -> exit pair 2 (summed).
-    model.add_data_segment("data/roughton.dat", entrance=1, exit=2,
-                           observable="total-capture",
-                           energy_min=0.30, energy_max=2.30,
-                           angle_min=0.0, angle_max=180.0,
-                           norm=1.0, vary_norm=False, norm_error=5.0)
-    print("added 1 data segment (roughton, total capture, E=0.3-2.3)")
+    # add a data set for a data file present but not yet used (roughton.dat):
+    # the cross section of 12C(p,g)13N, every capture pair summed.
+    model.add_dataset("roughton", reaction=model.reaction(1, -1), quantity="sigma", unit="b",
+                      file="data/roughton.dat", columns="E_lab[MeV] _ value error",
+                      energy_window="0.30 2.30 MeV", norm="1 fixed")
+    print("added the data set roughton (total capture, E=0.3-2.3 MeV)")
 
     # -- 3. recalculate the EC integrals ---------------------------------------
     # data changed => the cached integrals belong to the old grids.  Delete
@@ -104,7 +99,7 @@ def main() -> int:
     recalc_ec_caches(here / "output")
 
     # -- 4. save + run ----------------------------------------------------------
-    model.write(out)
+    model.save(out)
     print(f"\nwrote edited model to {out}")
 
     with azure2(str(out), cwd=str(here)) as azr:

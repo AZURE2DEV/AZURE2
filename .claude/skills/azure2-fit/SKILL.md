@@ -50,8 +50,7 @@ data sets without corrupting the parameter files. Behaviour reference: `docs/sou
   fit, and a token seed of 10⁻¹² has a step of 10⁻¹³ and never moves either. Freeing a width is not enough: give it a
   seed of plausible size. The symptom is a free-parameter count that does not change when a channel is freed (freeing
   six E_x = 40 MeV capture background poles left a model at 366 free parameters; seeding them at 0.01 eV made it 372).
-  This holds for particle and photon channels and for `gamma=0.0` channels passed to `AzrModel.add_level`; it is also
-  why `deactivate_level` zeroes and fixes.
+  This holds for particle and photon channels and for `width=0` channels passed to `Project.add_level`.
 - **An amplitude at exactly zero never moves under a gradient method** even when it is free and nonzero-seeded
   elsewhere: χ² depends on it through γ². Seed in units of the Wigner amplitude (0.01–0.05 γ_W), never as a physical
   width, and audit closed channels just above the levels (`references/pyazr-fitting.md`, "Traps").
@@ -132,10 +131,9 @@ within the slots requested.
 
 ## 6. Editing levels and background poles
 
-- **Write a new `.azr` and open a fresh session**; `AzrModel` edits `<levels>` and copies the rest verbatim
-  (`references/editing-levels.md`).
-- **All levels of one J^π share one channel set.** `add_level` clones an existing group's channels; `remove_channel`
-  removes a channel from every level of the group.
+- **Write a new `.azr` and open a fresh session**; `pyazr.Project` edits `<levels>` and the records through the
+  engine and keeps every other byte (`references/editing-levels.md`).
+- **All levels of one J^π share one channel set.** `add_level` clones an existing group's channels.
 - **Every structural edit renames parameters.** Removing, deactivating or adding a level renames every later
   `energy_<N>` / `width_<N>_<c>`; a copied `param.sav` puts values on the wrong levels without an error. Bake the fit
   first (`save_fit`) and reseed only the `segment_*` lines, or remap by physical identity and verify every pair

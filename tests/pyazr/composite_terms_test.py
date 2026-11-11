@@ -34,8 +34,7 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
-sys.path.insert(0, HERE)
-import old_tree  # noqa: E402  (the old originals of converted projects)
+ORIGINALS = os.path.join(ROOT, "tests", "convert", "fixtures", "tests")  # the originals of converted projects
 ENERGIES = ["5.95", "6.05", "6.15", "6.25", "6.35"]
 
 
@@ -176,8 +175,8 @@ def main():
         check("SUM, scaling 'abc': the engine names the data set and the scale",
               "E_REACTION_SYNTAX: dataset 'sum', field 'reaction': the scale of a term is a number" in log, log[-600:])
 
-        # 2b (old files only: the component layouts of an old segment line, read by the converter's SegLine; the test
-        # edits the old original, tests/convert/fixtures, and goes with the engine's old reading path).
+        # 2b (a converter test: the component layouts of an old segment line, read by the converter's SegLine on the
+        # old original kept in tests/convert/fixtures; each variant converted with pyazr.convert_azr and run).
         # The two-number component layout of old GUI files ("entrance exit" per component, no angle), read as the
         # GUI reads it.  Before 2026-11-01 the engine took the next component's entrance key as an angle and dropped
         # the last component ("2 2 5 2 3" gave 2->5 at a fixed 2 deg only); the archive has 86 such lines (11B+a ELBE
@@ -193,13 +192,21 @@ def main():
                 return out
             return fn
         base = os.path.join(work, "sum_data_old.azr")
-        shutil.copy(old_tree.original(os.path.join(ROOT, "tests", "sum_lab_frame", "models", "sum_data.azr")), base)
+        shutil.copy(os.path.join(ORIGINALS, "sum_lab_frame", "models", "sum_data.azr"), base)
+        from pyazr import convert_azr
         layouts = {}
         for name, tail in (("three", "1 0 2 2 5 -999 2 3 -999"), ("two", "1 0 2 2 5 2 3"),
                            ("short", "1 0 2 2 5"), ("plain", "0")):
+            old = os.path.join(work, f"sum_{name}_old.azr")
+            edit(base, old, with_tail(tail))
             azr = os.path.join(work, f"sum_{name}.azr")
-            edit(base, azr, with_tail(tail))
+            import io
+            import contextlib
+            said = io.StringIO()
+            with contextlib.redirect_stderr(said), contextlib.redirect_stdout(said):
+                report = convert_azr(old, azr, overwrite=True)
             res, log = run(azr, work)
+            log = said.getvalue() + str(report) + log
             layouts[name] = (np.array(res["values"][0], float) if "error" not in res else None, log)
             if layouts[name][0] is None:
                 check(f"SUM, {name}-number layout: ran", False, res["error"])
@@ -208,9 +215,10 @@ def main():
             check(f"SUM, two-number layout (2 5, 2 3) = three-number layout (worst {d:.1e})", d <= 1e-12)
             d = np.max(np.abs(layouts["short"][0] - layouts["plain"][0]) / np.abs(layouts["plain"][0]))
             check(f"SUM, too few numbers: read as the plain segment (worst {d:.1e})", d <= 1e-12)
-            check("SUM, too few numbers: warning names the segment",
-                  "WARNING: Data segment #1: the component list declares 2 component(s) but holds only 2 number(s)"
-                  in layouts["short"][1], layouts["short"][1][-600:])
+            check("SUM, too few numbers: the converter's note names the record and says why",
+                  "'record': 'sum'" in layouts["short"][1]
+                  and "the composite block lists fewer numbers than its components need" in layouts["short"][1],
+                  layouts["short"][1][-600:])
 
         # 3. Route: R-matrix asked for, with and without ignore_externals
         work, base = project("13N", None)

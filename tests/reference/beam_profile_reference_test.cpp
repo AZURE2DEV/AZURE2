@@ -151,7 +151,7 @@ double referenceFold(const Kernel &k, Sigma sigma, double lo, double hi, int int
 // ---------------------------------------------------------------- the engine
 
 // One targetInt line carrying only the beam-profile block; the leading legacy
-// fields are inert, exactly as pyazr's AzrModel.add_target_effect writes them.
+// fields are inert, exactly as the old file class of pyazr (deleted in pyazr 3) wrote them.
 std::string targetIntLine(const std::string &profileBlock, int numPoints = 400) {
   std::ostringstream o;
   o << "1  \"1\"  " << numPoints << "  0  0  0  0  \"\"  0  0  0  0  \"\"  0  0  0.04  10  50  " << profileBlock;

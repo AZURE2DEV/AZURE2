@@ -231,18 +231,23 @@ void BindNuclearPart(py::module_ &m) {
   m.def(
       "set_pair_edits",
       [](const io::Document &doc, int pair, std::optional<double> radius, std::optional<double> lightMass,
-         std::optional<double> heavyMass, std::optional<double> separationEnergy) {
+         std::optional<double> heavyMass, std::optional<double> separationEnergy, std::optional<double> lightExcitation,
+         std::optional<double> heavyExcitation) {
         ex::PairChange c;
         c.radius = radius;
         c.lightMass = lightMass;
         c.heavyMass = heavyMass;
         c.separationEnergy = separationEnergy;
+        c.lightExcitation = lightExcitation;
+        c.heavyExcitation = heavyExcitation;
         return Done(ex::SetPair(doc, pair, c));
       },
       py::arg("doc"), py::arg("pair"), py::kw_only(), py::arg("radius") = py::none(), py::arg("light_mass") = py::none(),
       py::arg("heavy_mass") = py::none(), py::arg("separation_energy") = py::none(),
-      "The replacements that set a pair's channel radius (fm), masses (u) or separation energy (MeV) on every row of "
-      "the pair (the separation energy also in the entrance copy of the rows whose entrance pair it is).");
+      py::arg("light_excitation") = py::none(), py::arg("heavy_excitation") = py::none(),
+      "The replacements that set a pair's channel radius (fm), masses (u), separation energy or excitation energies "
+      "of its light and heavy partner (MeV) on every row of the pair (the separation energy also in the entrance copy "
+      "of the rows whose entrance pair it is).");
   m.def(
       "add_level_edits",
       [](const io::Document &doc, int twoJ, int parity, double energy, bool fixed,
@@ -286,6 +291,17 @@ void BindNuclearPart(py::module_ &m) {
       "The replacements that write fitted level values [(kind 'energy' | 'width', group, level, pair, l, 2s, value)] "
       "into the rows they come from (experiment::LevelValueEdits), and the values with no row: (replacements, "
       "[(index into values, why)]).");
+  m.def(
+      "merge_level_rows",
+      [](const std::vector<const io::Document *> &members) {
+        const ex::MergedLevelRows r = ex::MergeLevelRows(members);
+        if (!r.error.empty()) throw py::value_error(r.error);
+        return py::make_tuple(r.rows, r.pairKeys);
+      },
+      py::arg("members"),
+      "The <levels> rows of several projects (documents) in one section (experiment::MergeLevelRows): (rows, per "
+      "member {its pair key: the merged key}); each member's pair keys moved past the largest keys of the members "
+      "before it, its level IDs past the largest ID before it.  ValueError when a member's section does not read.");
 
   m.def(
       "config_entries",

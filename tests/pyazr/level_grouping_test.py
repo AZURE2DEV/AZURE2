@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""AzrModel groups <levels> lines as the engine does (io::LevelGrouper; docs/upgrade/project.md P2).
+"""pyazr.Project groups <levels> rows as the engine does (io::LevelGrouper, through experiment::LevelEdits).
 
-On tests/13N, tests/17O and tests/upgrade/T2: with the lines of <levels> interleaved (every other line first, then
-the rest, so that no two lines of a level stand next to each other), AzrModel finds the same levels as in the
+On tests/13N, tests/17O and tests/upgrade/T2: with the rows of <levels> interleaved (every other row first, then
+the rest, so that no two rows of a level stand next to each other), Project.levels() finds the same levels as in the
 original file -- the same (J, parity, energy, channel lines) -- and AZURE2 reads the interleaved file with the same
 parameters.  (The former rule, consecutive lines with the same ID, doubles the level count of these files: 24, 8 and
 10 levels instead of 12, 4 and 5.)
@@ -30,15 +30,15 @@ def check(name, ok, detail=""):
 try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
-    from pyazr import azure2, AzrModel
+    from pyazr import azure2, Project
 except ImportError as e:
     print(f"SKIP: {e}")
-    sys.exit(0)
+    sys.exit(77)
 
 
-def signature(model):
-    return sorted((lv.J, lv.parity, lv.energy, tuple(sorted(c.to_line() for c in lv.channels)))
-                  for lv in model.levels)
+def signature(project):
+    return sorted((lv.J, lv.parity, lv.energy, tuple(sorted((c.pair, c.l, c.s, c.width_text, c.fixed) for c in lv.channels)))
+                  for lv in project.levels())
 
 
 for project, azr in CASES:
@@ -56,9 +56,9 @@ for project, azr in CASES:
         rev = os.path.join(d, "interleaved.azr")
         with open(rev, "w") as f:
             f.write("\n".join(text[:a + 1] + body[::2] + body[1::2] + text[b:]))
-        m0, m1 = AzrModel.from_file(orig), AzrModel.from_file(rev)
-        check(f"{project}: the same {len(m0.levels)} levels from the interleaved lines", signature(m0) == signature(m1),
-              f"{len(m0.levels)} vs {len(m1.levels)} levels")
+        m0, m1 = Project.open(orig), Project.open(rev)
+        check(f"{project}: the same {len(m0.levels())} levels from the interleaved lines", signature(m0) == signature(m1),
+              f"{len(m0.levels())} vs {len(m1.levels())} levels")
         s0, s1 = azure2(orig, cwd=d), azure2(rev, cwd=d)
         check(f"{project}: the engine reads the same parameters", sorted(np.asarray(s0.params_rwa).round(12)) ==
               sorted(np.asarray(s1.params_rwa).round(12)), "")

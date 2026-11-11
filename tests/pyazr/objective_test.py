@@ -28,8 +28,6 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old originals of converted projects)
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 
 failures = []
@@ -45,14 +43,14 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2, AzrModel
+    from pyazr import azure2, Project, Nuisance
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
 
 with tempfile.TemporaryDirectory() as tmp:
     work = os.path.join(tmp, "13N")
-    old_tree.copytree(os.path.join(ROOT, "tests", "13N"), work)  # the old file
+    shutil.copytree(os.path.join(ROOT, "tests", "13N"), work)
     for junk in ("output", "checks"):
         shutil.rmtree(os.path.join(work, junk), ignore_errors=True)
     os.makedirs(os.path.join(work, "output"))
@@ -60,10 +58,10 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # Free one normalization, so the penalty has something to act on: the
     # project as shipped fixes every norm at its nominal, where it is zero.
-    model = AzrModel.from_file(os.path.join(work, "13N.azr"))
-    model.set_segment_norm("meyer_84", vary=True, sys_error=5.0)
+    model = Project.open(os.path.join(work, "13N.azr"))
+    model.set("meyer_84", norm=Nuisance(1, "fit", prior=(1, "5%")))
     azr = os.path.join(work, "free_norm.azr")
-    model.write(azr)
+    model.save(azr)
 
     print("1. the per-segment split adds up")
     with azure2(azr, cwd=work) as m:
@@ -112,8 +110,8 @@ with tempfile.TemporaryDirectory() as tmp:
 
     import glob
     import subprocess
-    binary = None
-    for cand in sorted(glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))):
+    binary = os.environ.get("AZURE2_BIN")  # ctest's: the binary this build made
+    for cand in [] if binary else sorted(glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))):
         if os.path.isfile(cand) and os.access(cand, os.X_OK):
             binary = cand
             break
@@ -144,23 +142,17 @@ print()
 print("\n5. shiftgroup followers are not penalised twice")
 with tempfile.TemporaryDirectory() as tmp:
     work = os.path.join(tmp, "sg")
-    old_tree.copytree(os.path.join(ROOT, "tests", "shift_groups"), work)  # the old file
+    shutil.copytree(os.path.join(ROOT, "tests", "shift_groups"), work)
     for junk in ("output", "checks"):
         shutil.rmtree(os.path.join(work, junk), ignore_errors=True)
     os.makedirs(os.path.join(work, "output"))
     os.makedirs(os.path.join(work, "checks"))
-    # both members of shiftgroup G with a shift of 0.004, an error of 0.01 and vary = 1 on their own lines:
+    # the energy scale G of both data sets with an offset of 0.004 MeV, free, prior 0 +- 0.01 MeV:
     # the engine penalises the group's shift once, (0.004/0.01)^2 = 0.16, on the first member
-    src = open(os.path.join(work, "shift_groups.azr")).read()
-    lines = []
-    for l in src.split("\n"):
-        if "shiftgroup G" in l:
-            t = l.split()
-            t[11], t[12], t[13] = "0.004", "0.01", "1"
-            l = " ".join(t)
-        lines.append(l)
+    sg = Project.open(os.path.join(work, "shift_groups.azr"))
+    sg.set("G", offset=Nuisance(0.004, "fit", unit="MeV", prior=(0, 0.01)))
     azr = os.path.join(work, "sg.azr")
-    open(azr, "w").write("\n".join(lines))
+    sg.save(azr)
     with azure2(azr, cwd=work) as m:
         x = np.asarray(m.params_rwa, float)
         pen = m.penalties(x)["shift"]
@@ -170,8 +162,8 @@ with tempfile.TemporaryDirectory() as tmp:
               np.allclose(pen, [0.16, 0.0], atol=1e-12), str(pen.tolist()))
         check("objective = chi-squared + 0.16", np.isclose(obj, chi2 + 0.16, rtol=1e-12),
               f"{obj} vs {chi2} + 0.16")
-    binary = None
-    for cand in sorted(glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))):
+    binary = os.environ.get("AZURE2_BIN")  # ctest's: the binary this build made
+    for cand in [] if binary else sorted(glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))):
         if os.path.isfile(cand) and os.access(cand, os.X_OK):
             binary = cand
             break

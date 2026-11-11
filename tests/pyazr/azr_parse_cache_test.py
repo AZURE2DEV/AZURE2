@@ -3,20 +3,20 @@
 
 Before 2026-11-03 every azure2.calculate_rwa / calculate / calculate_all_rwa call re-read and
 re-parsed the whole .azr once PER SEGMENT (_segment_values looked up the segment's observable
-through active_datasets -> datasets -> SegmentSet.from_file), and every penalties()/objective()
+through active_datasets -> datasets -> a Python reader of the file), and every penalties()/objective()
 call once more.  On the 3H+d model from /groups (NFS) that was 83 ms per calculate_rwa against
 8 ms from local disk, and it is what made forked pyazr workers there slow (fork_bench, 2026-11-02).
 
-Checks, on the old original of tests/channel_space/channel_space.azr (tests/convert/fixtures) plus an
-angle-integrated-E1 copy of its capture segment (isDiff 5, so the E1-component path of calculate_rwa is exercised):
+Checks, on tests/channel_space/channel_space.azr plus an E1 copy of its capture data set (a record with
+`multipole E1`, so the E1-component path of calculate_rwa is exercised):
   1. after the first evaluation, calculate_rwa / calculate / calculate_all_rwa / penalties /
      objective / segment_chi2 open the .azr ZERO times (the old code: once per segment per call);
   2. the values are unchanged: each segment is the engine's total, the E1 segment the engine's
      E1 component, and objective = chi2 + penalties as before;
-  3. a change to the file on disk is seen by the parse cache (active_datasets), while the penalties stay the
-     engine's, on the model it loaded (since pyazr 2.11), and configure() re-reads;
-  4. the public datasets / active_datasets / extrapolations are copies: editing them does not
-     change the session's penalties.
+  3. after a change to the file on disk the penalties stay the engine's, on the model it loaded (since pyazr
+     2.11), and configure() re-reads the file once, the next call not at all;
+  4. the public datasets / active_datasets / extrapolations are copies and cannot be edited (the engine's
+     description, frozen): the session's penalties do not move.
 The old code fails 1.
 
 Needs the compiled engine; skips cleanly without it.
@@ -32,8 +32,6 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
-sys.path.insert(0, HERE)
-import old_tree  # noqa: E402  (the old originals of converted projects)
 
 failures = []
 
@@ -73,7 +71,7 @@ def main():
     sys.path.insert(0, ROOT)
     try:
         import numpy as np
-        from pyazr import azure2
+        from pyazr import azure2, Project
         import pyazr._azure2  # noqa: F401
     except Exception as e:  # pragma: no cover
         print(f"SKIP: engine not importable ({e})")
@@ -86,19 +84,18 @@ def main():
         for d in ("output", "checks"):
             os.makedirs(os.path.join(work, d), exist_ok=True)
         azr = os.path.join(work, "cache.azr")
-        # the old original: the test edits its segment lines and reads them back through the parse cache
-        text = open(old_tree.original(os.path.join(src, "channel_space.azr"))).read()
-        e1_line = "1 1 3 0.5 7 0 180 5 1 0 0 0 0 0 data/capture.dat 0 0\n"
-        text = text.replace("</segmentsData>\n", e1_line + "</segmentsData>\n", 1)
-        with open(azr, "w") as f:
-            f.write(text)
+        p = Project.open(os.path.join(src, "channel_space.azr"))
+        cap = p["capture"]
+        p.add("dataset", "capture_e1", **{k: v for k, v in cap.fields.items()}, multipole="E1")
+        p.save(azr)
+        text = open(azr).read()
 
         with azure2(azr, cwd=work) as m:
             x = np.asarray(m.params_rwa, float)
             n = m.nsegments
-            obs = [d.observable for d in m.active_datasets]
-            check("the model has an angle-integrated-E1 segment", "angle-integrated-E1" in obs, f"{obs}")
-            k_e1 = obs.index("angle-integrated-E1") if "angle-integrated-E1" in obs else n - 1
+            names = [d.name for d in m.active_datasets]
+            check("the model has the E1 data set", "capture_e1" in names, f"{names}")
+            k_e1 = names.index("capture_e1") if "capture_e1" in names else n - 1
 
             m.calculate_rwa(x)
             m.objective(x)                      # warm whatever is cached
@@ -138,10 +135,10 @@ def main():
             check("objective = chi2 + penalties", abs(obj - ref_obj) <= 1e-13 * abs(ref_obj), f"{obj} vs {ref_obj}")
 
             print("\n3. an edit of the file on disk is still seen")
-            # segment 1: nominal norm 1 -> 1.1 (5 % error, norm parameter still 1.0 in the engine)
+            # data set 1: nominal norm 1 -> 1.1 (5 % error, norm parameter still 1.0 in the engine)
             norm_before = float(m.penalties(x)["norm"][0])
-            old = "1 1 1 0.5 7 0 180 1 1 1 5 0 0 0 data/elastic_90.dat 0 0\n"
-            new = "1 1 1 0.5 7 0 180 1 1.1 1 5 0 0 0 data/elastic_90.dat 0 0\n"
+            old = "    norm           1 fit prior 1 5%\n"
+            new = "    norm           1.1 fit prior 1.1 5%\n"
             check("the edit target is in the file", old in text)
             time.sleep(0.01)
             with open(azr, "w") as f:
@@ -163,8 +160,6 @@ def main():
                 m.active_datasets
                 m.penalties(x)
             check("... also after configure()", norm_after == 0.0, f"{norm_after}")
-            check("the parse cache follows the edit (active_datasets: nominal norm 1.1)",
-                  abs(m.active_datasets[0].nominal_norm - 1.1) <= 1e-12, f"{m.active_datasets[0].nominal_norm}")
             del want
             check("configure() re-reads, the next call does not", c.n >= 1 and c2.n == 0,
                   f"{c.n} then {c2.n} opens")
@@ -173,18 +168,18 @@ def main():
 
             print("\n4. public views are copies")
             p0 = m.penalties(x)["norm"].copy()
-            ds = m.active_datasets
-            ds[0].norm = 5.0
-            alld = m.datasets
-            alld[0].norm = 5.0
-            ex = m.extrapolations
-            if len(ex):
-                ex[0].active = not ex[0].active
+            import dataclasses
+            refused = 0
+            for view in (m.active_datasets, m.datasets, m.extrapolations):
+                if len(view):
+                    try:
+                        view[0].active = not view[0].active
+                    except dataclasses.FrozenInstanceError:
+                        refused += 1
             p1 = m.penalties(x)["norm"]
-            check("editing active_datasets/datasets does not move the penalties", np.array_equal(p0, p1),
-                  f"{p0} vs {p1}")
-            check("a fresh active_datasets is unedited", m.active_datasets[0].norm == 1.0,
-                  f"{m.active_datasets[0].norm}")
+            check("the views cannot be edited", refused == 2 + (1 if len(m.extrapolations) else 0), str(refused))
+            check("the penalties do not move", np.array_equal(p0, p1), f"{p0} vs {p1}")
+            check("a fresh view is another object", m.active_datasets is not m.active_datasets)
 
             t0 = time.perf_counter()
             for _ in range(50):

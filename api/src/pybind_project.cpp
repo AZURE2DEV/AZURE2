@@ -1,5 +1,5 @@
 // The project file for pyazr (docs/upgrade/project.md section 2, project_format3.md section 4): the lossless document
-// io::Document that pyazr's AzrModel and Project read and edit, as the engine reads the file; and the project's
+// io::Document that pyazr's Project reads and edits, as the engine reads the file; and the project's
 // format-3 records as the engine reads (io::ReadRecords), writes (io::WriteRecords, experiment::NuisanceText) and
 // resolves them (the validator's references, the sources of the fit parameters).  pyazr's Project (pyazr/project.py)
 // spells no field, unit or grammar: it hands texts over and applies the line edits these functions describe.
@@ -84,7 +84,7 @@ void BindNuclearPart(py::module_ &m);  // pybind_nuclear_part.cpp: <levels>, <co
 
 void BindProject(py::module_ &m) {
   BindNuclearPart(m);
-  // The project file as a lossless document (io::Document; docs/upgrade/project.md section 2): pyazr's AzrModel
+  // The project file as a lossless document (io::Document; docs/upgrade/project.md section 2): pyazr's Project
   // reads and edits the file through it, as the engine does.  Lines are str (decoded UTF-8, invalid bytes kept as
   // surrogates on the Python side by the caller); sections are (name, open, close, depth, parent) with close = -1 for
   // an unclosed section and parent = -1 at top level.

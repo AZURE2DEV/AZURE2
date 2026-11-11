@@ -83,7 +83,7 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
 | `stopping/` | Stopping and straggling: materials, SRIM-2013's electronic and nuclear stopping (ported from LunaSRIM; SRIM's data files in `stopping/data/srim/`, cite SRIM), energy loss, range, TRIM/Bohr straggling with Tschalär propagation, with uncertainty and provenance | Uses `physics/` only; the engine calls it through `TargetStopping` (`stopping evaluation`, `stopping table`), pyazr through `pyazr.stopping`; `docs/upgrade/stopping.md` |
 | `experiment/` | Model expressions (what a data set measures), lab → c.m. frames, the table of project format 3 | Uses `physics/` and `io/`'s `Record.h` only (no engine headers); `experiment/README.md` |
 | `physics/transfer` (in `physics/`) | Optical potentials, bound states, distorted waves, DWBA transfer, the THM vertex in the plane-wave limit | A leaf: target `azure2_physics_transfer`, used by nothing of the engine yet; checked against FRESCO (`docs/upgrade/transfer.md`) |
-| `pyazr/` | Python package | In-process engine; `.azr` editing (`azrfile.py`, `datasets.py`) on the engine's document and parsers |
+| `pyazr/` | Python package | In-process engine; reads project format 3 only: `Project` (`project.py`, `nuclear_part.py`) edits the engine's document with the engine's grammars; old files are refused with the conversion command (`convert.py`: the converter) |
 | `numcmc/` | Ensemble MCMC sampler | |
 | `external/` | Vendored Minuit2 (Coulomb functions: `physics/coulomb/`, from pycoulomb; stopping: `stopping/`) | **Do not edit**; it is upstream code |
 | `tests/` | All tests | See `tests/CLAUDE.md` |
@@ -193,12 +193,13 @@ the whole list of places to touch; `tests/consistency/repo_consistency_test.py` 
 bypassed. Run it first (under a second), then the build and the tests of "Definition of done".
 
 **A segment or extrapolation keyword** (as `shiftfngroup`, `normgroup`).
-1. Parse it in `include/SegLine.h` or `ExtrapLine.h` (the one tokenizer; pyazr reads lines through
-   `_azure2.parse_segment_line` / `parse_extrapolation_line`, so it gets the keyword with no Python parser).
+1. Old formats only (format 3 states it as a record field: the next recipe and `experiment/`'s table). Parse it in
+   `include/SegLine.h` or `ExtrapLine.h` (the one tokenizer, which the converter reads).
 2. Use it in the owning class: a setting in `Segment` (part of the immutable `DataSet`, written only by the set-up through
    `WorkingCopy::Draft`), a value an evaluation changes in `SegmentState`; refuse invalid combinations at start-up with a
    message.
-3. Add it to `_KEYWORDS` in `pyazr/datasets.py` (the writer's list) [check 6: engine and pyazr keyword sets equal].
+3. The converter writes it as the record field that means the same (`convert/`); pyazr reads format 3 only and needs
+   nothing.
 4. Docs: `reference/data_formats.rst` and the user-guide page; a `tests/<name>/` project or a pyazr test.
 
 **A `<config>` key or a new `.azr` section.**
@@ -208,8 +209,9 @@ bypassed. Run it first (under a second), then the build and the tests of "Defini
 2. Its absence must reproduce the old result. If an old file needs rewriting to mean the same thing, extend
    `io::ConvertToFormat2` (`io/src/Convert.cpp`) and `io/tests/convert_test.cpp`; `AZURE2 --convert` and
    `pyazr.convert_azr` then cover it.
-3. pyazr: a reader and a setter in `azrfile.py` that edit the document in place (an unedited model writes the
-   file back byte for byte: `tests/pyazr/azr_layout_test.py`, `roundtrip_test.py`).
+3. pyazr: `pyazr.Project` edits it through a binding of the engine's grammar (`api/src/`; Python hands over
+   names and numbers, the engine makes the line); an unedited project writes the file back byte for byte
+   (`tests/pyazr/project_test.py`, `azr_layout_test.py`).
 4. Docs: `reference/data_formats.rst`.
 
 **A term of the objective** (a prior, a penalty, a constraint).

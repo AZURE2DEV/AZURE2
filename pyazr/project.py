@@ -234,12 +234,10 @@ class Project(NuclearPart):
     @classmethod
     def open(cls, path):
         """Open the format-3 project at ``path``.  A format-1 or format-2 file is refused (FormatError, a ValueError)
-        with the engine's conversion command (``pyazr.convert_azr(old, new, to=3)``)."""
+        with the engine's conversion command (:func:`require_format3`)."""
+        require_format3(path)
         with open(path, "rb") as f:
             data = f.read()
-        refusal = _engine_module().validate_format3_text(data, str(path))[0]
-        if refusal:
-            raise FormatError(refusal)
         p = cls(data, path)
         p._saved = data
         return p
@@ -461,42 +459,43 @@ class Project(NuclearPart):
         a field the record lacks is added after its last field; None removes the field; a list gives a repeatable
         field once per element.  Only the lines of the fields named change.  Refused (FormatError) when the engine
         finds an error the project did not have."""
-        engine = _engine_module()
-
-        def edit(doc):
-            s, r = self._find(name, doc)
-            for key, value in fields.items():
-                texts = [] if value is None else [_value_text(v) for v in (value if isinstance(value, list) else [value])]
-                s, r = self._find(name, doc)
-                own = [f for f in r["fields"] if _text(f["key"]) == key]
-                new_lines = []
-                for i, t in enumerate(texts):
-                    canonical, comment, problems = engine.value_text(key, t)
-                    if problems:
-                        raise FormatError(f"{r['kind']} {name!r}:", [
-                            {"severity": "error", "code": c, "record": name, "field": key, "message": m}
-                            for c, m in problems])
-                    model = own[min(i, len(own) - 1)] if own else (r["fields"][-1] if r["fields"] else None)
-                    new_lines.append(_field_line(doc, model, key, canonical, comment if comment else
-                                                 (model["comment"] if own and i < len(own) else b"")))
-                if own:
-                    # the repeats' lines take the new values in order; every other line between them (another field,
-                    # a whole-line comment) stays where it is; more values follow the last repeat, fewer drop the rest
-                    first, last = own[0]["line"], own[-1]["line"]
-                    lines_of_own = {f["line"]: k for k, f in enumerate(own)}
-                    out = []
-                    for ln in range(first, last + 1):
-                        k = lines_of_own.get(ln)
-                        if k is None:
-                            out.append(doc.line(ln - 1))
-                        elif k < len(new_lines):
-                            out.append(new_lines[k])
-                    doc.replace_lines(first - 1, last, out + new_lines[len(own):])
-                elif new_lines:
-                    doc.replace_lines(r["last_line"], r["last_line"], new_lines)
-
-        self._apply(f"{self[name].record_kind} {name!r}", edit)
+        self._apply(f"{self[name].record_kind} {name!r}", lambda doc: self._set_fields(doc, name, fields))
         return Record(self, name)
+
+    def _set_fields(self, doc, name, fields):
+        """The edit of :meth:`set` on ``doc`` (not validated; :meth:`set` and the edits that change a record's fields
+        together with another section, as a new THM experiment with its data sets, run it inside ``_apply``)."""
+        engine = _engine_module()
+        s, r = self._find(name, doc)
+        for key, value in fields.items():
+            texts = [] if value is None else [_value_text(v) for v in (value if isinstance(value, list) else [value])]
+            s, r = self._find(name, doc)
+            own = [f for f in r["fields"] if _text(f["key"]) == key]
+            new_lines = []
+            for i, t in enumerate(texts):
+                canonical, comment, problems = engine.value_text(key, t)
+                if problems:
+                    raise FormatError(f"{r['kind']} {name!r}:", [
+                        {"severity": "error", "code": c, "record": name, "field": key, "message": m}
+                        for c, m in problems])
+                model = own[min(i, len(own) - 1)] if own else (r["fields"][-1] if r["fields"] else None)
+                new_lines.append(_field_line(doc, model, key, canonical, comment if comment else
+                                             (model["comment"] if own and i < len(own) else b"")))
+            if own:
+                # the repeats' lines take the new values in order; every other line between them (another field,
+                # a whole-line comment) stays where it is; more values follow the last repeat, fewer drop the rest
+                first, last = own[0]["line"], own[-1]["line"]
+                lines_of_own = {f["line"]: k for k, f in enumerate(own)}
+                out = []
+                for ln in range(first, last + 1):
+                    k = lines_of_own.get(ln)
+                    if k is None:
+                        out.append(doc.line(ln - 1))
+                    elif k < len(new_lines):
+                        out.append(new_lines[k])
+                doc.replace_lines(first - 1, last, out + new_lines[len(own):])
+            elif new_lines:
+                doc.replace_lines(r["last_line"], r["last_line"], new_lines)
 
     def rename(self, old, new):
         """Rename the record ``old`` to ``new``, with every reference to it (the validator's resolution of names) and
@@ -681,10 +680,16 @@ def records_from_csv(path, kind="dataset", project=None):
     return records
 
 
-def _is_format3(path):
-    """The project file at ``path`` is format 3 (io::FormatOf, the engine's reading of ``<config>``)."""
+def require_format3(path):
+    """Raise :class:`FormatError` unless the project file at ``path`` is format 3 (io::FormatOf, the engine's reading
+    of ``<config>``).  The one refusal of an old file in pyazr: the engine's message (convert::NotFormat3Message),
+    which names the conversion ``AZURE2 --convert OLD NEW --to 3`` (:func:`pyazr.convert_azr`).  Every entry point
+    that takes a path (a session, :meth:`Project.open`, the functions that open a project) calls it."""
     with open(os.fspath(path), "rb") as f:
-        return _engine_module().Document.parse(f.read()).format() == 3
+        data = f.read()
+    engine = _engine_module()
+    if engine.project_format(data) != 3:
+        raise FormatError(engine.not_format3_message(data, os.fspath(path)))
 
 
 def write_parameter_values(path, values):

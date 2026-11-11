@@ -35,7 +35,7 @@ form, and the two quadratures differ by about 1e-6.
 The data sets under the Gaussian use 1000 sub-points: the Gaussian's window is wider than the Doppler one and
 the grid must still resolve the 200 eV resonance (400 sub-points leave 4e-4 at the σ_t dip, 1600 give 3e-5).
 
-The old generator (old `<targetInt>` lines) is kept in `tests/convert/fixtures/tests/doppler_fgm/make_models.py` for
-the pyazr tests of the old file class (`tests/pyazr/old_tree.py`).
+`tests/pyazr/doppler_test.py` runs the session side (parameter records, penalties, gradient and Jacobian columns)
+on this generator's `grad_fit`.
 
     [REF_AZURE2=path/to/reference/AZURE2] ./tests/doppler_fgm/check.sh path/to/AZURE2      # ~1.5 min
