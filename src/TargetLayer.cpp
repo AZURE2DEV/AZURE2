@@ -14,7 +14,7 @@
 
 int RefuseLayerAtBeamEnergy(const TargetEffect &effect, const Unit &point, const std::string &dataFile, const Config &configure) {
   const azure2::experiment::LayerPoint where{effect.GetTargetName(), dataFile, point.GetLabEnergy()};
-  const double eps = effect.GetStoppingPowerEq()->Evaluate(configure, point.GetLabEnergy());
+  const double eps = effect.StoppingAt(point.GetLabEnergy(), configure, effect.GetStoppingScaleNominal());
   configure.outStream << "ERROR: " << azure2::experiment::LayerStoppingUndefined(where, point.GetLabEnergy(), eps).ToText()
                       << std::endl;
   return -1;

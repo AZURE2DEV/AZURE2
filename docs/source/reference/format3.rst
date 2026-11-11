@@ -434,8 +434,8 @@ Target, in ``<targets>``.  The target the beam passes through: thickness, stoppi
      - the nucleus the areal density and the stopping count
    * - ``composition``
      - ``<Symbol> <atoms> ...``
-     - only when kind is layer or infinite; required when stopping is evaluation
-     - element stoichiometry; needed by 'stopping evaluation'
+     - only when kind is layer or infinite; required when stopping is evaluation or table
+     - element stoichiometry; needed by 'stopping evaluation' and 'stopping table'
    * - ``areal_density``
      - ``<value> <areal_density unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]``
      - only when kind is layer or sample; required
@@ -445,7 +445,7 @@ Target, in ``<targets>``.  The target the beam passes through: thickness, stoppi
      - only when areal_density is given; optional; repeatable
      - the areal density in one epoch (K5)
    * - ``stopping``
-     - ``formula "<expression in x>" [<name>=<number> ...] <stopping unit> | evaluation scale <value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]``
+     - ``formula "<expression in x>" [<name>=<number> ...] <stopping unit> [scale <value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]] | evaluation [scale <value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]] | table <path> MeV|keV eV/1e15atoms/cm2|MeV*cm2/g [scale <value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]]``
      - only when kind is layer or infinite; required
      - stopping cross section
    * - ``straggling``
@@ -454,8 +454,12 @@ Target, in ``<targets>``.  The target the beam passes through: thickness, stoppi
      - energy straggling in the target
    * - ``phase``
      - ``solid|gas``
-     - only when stopping is evaluation; required
-     - solid or gas stopping (with 'stopping evaluation')
+     - only when stopping is evaluation; optional
+     - solid or gas stopping (left out: gas for one natural-gas element, solid otherwise; a gaseous compound must say gas)
+   * - ``compound_correction``
+     - ``<number > 0>``
+     - only when stopping is evaluation; optional
+     - SRIM's compound factor C of Bragg's rule (left out: 1)
    * - ``isotope``
      - ``<A><Symbol> <value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]``
      - optional; repeatable
@@ -1879,6 +1883,21 @@ Diagnostic codes
    * - ``E_LAYER_EXIT_BELOW_MODEL``
      - error
      - a yield on a layer the beam does not leave above the lowest energy the model is evaluated at (set-up)
+   * - ``E_STOPPING_PROJECTILE``
+     - error
+     - a target whose stopping depends on the projectile (evaluation, table, scale) crossed by a neutral particle, an ion above Z = 92, or several projectiles in one data set
+   * - ``E_STOPPING_ACTIVE``
+     - error
+     - a stopping evaluation or table whose composition does not contain the active nucleus's element
+   * - ``E_STOPPING_SCALE_CONFLICT``
+     - error
+     - two targets that share a stopping scale (one material and projectile) and write it differently
+   * - ``E_STOPPING_DATA``
+     - error
+     - a stopping evaluation in an engine built without SRIM's data files and no AZURE2_SRIM_DATA_DIR, or a stopping table that cannot be read (set-up)
+   * - ``E_STOPPING_RANGE``
+     - error
+     - a target's stopping asked for at an energy outside its range: SRIM's above 1e7 keV/u, or a table's ends (set-up)
    * - ``E_POTENTIAL_TWICE``
      - error
      - two potential records for one pair

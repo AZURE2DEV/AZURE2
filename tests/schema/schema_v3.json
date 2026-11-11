@@ -1033,10 +1033,10 @@
      "required_when": {
       "if": "field_is",
       "field": "stopping",
-      "in": ["evaluation"],
-      "text": "stopping is evaluation"
+      "in": ["evaluation", "table"],
+      "text": "stopping is evaluation or table"
      },
-     "doc": "element stoichiometry; needed by 'stopping evaluation'"
+     "doc": "element stoichiometry; needed by 'stopping evaluation' and 'stopping table'"
     },
     "areal_density": {
      "title": "Areal density",
@@ -1093,7 +1093,7 @@
     "stopping": {
      "title": "Stopping",
      "type": "structured",
-     "grammar": "formula \"<expression in x>\" [<name>=<number> ...] <stopping unit> | evaluation scale <value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+     "grammar": "formula \"<expression in x>\" [<name>=<number> ...] <stopping unit> [scale <value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]] | evaluation [scale <value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]] | table <path> MeV|keV eV/1e15atoms/cm2|MeV*cm2/g [scale <value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]]",
      "applies_when": {
       "if": "field_is",
       "field": "kind",
@@ -1121,6 +1121,14 @@
          "optional": false,
          "dimension": "stopping",
          "units": ["MeV*cm2/atom", "keV*cm2/atom", "eV*cm2/atom"]
+        },
+        {
+         "name": "scale",
+         "keyword": true,
+         "type": "nuisance",
+         "grammar": "<value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+         "optional": true,
+         "doc": "stopping-scale nuisance s (epsilon -> s epsilon); left out: none"
         }
        ],
        "doc": "stopping cross section per active atom"
@@ -1133,10 +1141,51 @@
          "keyword": true,
          "type": "nuisance",
          "grammar": "<value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
-         "optional": false
+         "optional": true,
+         "default": "1",
+         "doc": "stopping-scale nuisance s, one per (material, projectile)"
         }
        ],
-       "doc": "the evaluated stopping of the composition (Phase 5), scaled"
+       "doc": "SRIM-2013's stopping of the composition (stopping/, cite SRIM), per atom of the active element"
+      },
+      {
+       "keyword": "table",
+       "parts": [
+        {
+         "name": "file",
+         "keyword": false,
+         "type": "path",
+         "grammar": "<path>",
+         "optional": false,
+         "doc": "two columns: lab energy, stopping per atom of the material"
+        },
+        {
+         "name": "energy_unit",
+         "keyword": false,
+         "type": "enum",
+         "grammar": "MeV|keV",
+         "optional": false,
+         "values": ["MeV", "keV"]
+        },
+        {
+         "name": "stopping_unit",
+         "keyword": false,
+         "type": "enum",
+         "grammar": "eV/1e15atoms/cm2|MeV*cm2/g",
+         "optional": false,
+         "values": ["eV/1e15atoms/cm2", "MeV*cm2/g"]
+        },
+        {
+         "name": "scale",
+         "keyword": true,
+         "type": "nuisance",
+         "grammar": "<value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+         "optional": true,
+         "default": "1",
+         "doc": "stopping-scale nuisance s, one per (material, projectile)"
+        }
+       ],
+       "doc": "a measured stopping of the composition (stopping/'s user table), per atom of the material"
       }
      ],
      "doc": "stopping cross section"
@@ -1200,9 +1249,23 @@
       "in": ["evaluation"],
       "text": "stopping is evaluation"
      },
-     "required": true,
+     "required": false,
      "values": ["solid", "gas"],
-     "doc": "solid or gas stopping (with 'stopping evaluation')"
+     "doc": "solid or gas stopping (left out: gas for one natural-gas element, solid otherwise; a gaseous compound must say gas)"
+    },
+    "compound_correction": {
+     "title": "Compound correction",
+     "type": "number",
+     "grammar": "<number > 0>",
+     "applies_when": {
+      "if": "field_is",
+      "field": "stopping",
+      "in": ["evaluation"],
+      "text": "stopping is evaluation"
+     },
+     "required": false,
+     "positive": true,
+     "doc": "SRIM's compound factor C of Bragg's rule (left out: 1)"
     },
     "isotope": {
      "title": "Isotope",
@@ -3692,6 +3755,26 @@
   "E_LAYER_EXIT_BELOW_MODEL": {
    "severity": "error",
    "meaning": "a yield on a layer the beam does not leave above the lowest energy the model is evaluated at (set-up)"
+  },
+  "E_STOPPING_PROJECTILE": {
+   "severity": "error",
+   "meaning": "a target whose stopping depends on the projectile (evaluation, table, scale) crossed by a neutral particle, an ion above Z = 92, or several projectiles in one data set"
+  },
+  "E_STOPPING_ACTIVE": {
+   "severity": "error",
+   "meaning": "a stopping evaluation or table whose composition does not contain the active nucleus's element"
+  },
+  "E_STOPPING_SCALE_CONFLICT": {
+   "severity": "error",
+   "meaning": "two targets that share a stopping scale (one material and projectile) and write it differently"
+  },
+  "E_STOPPING_DATA": {
+   "severity": "error",
+   "meaning": "a stopping evaluation in an engine built without SRIM's data files and no AZURE2_SRIM_DATA_DIR, or a stopping table that cannot be read (set-up)"
+  },
+  "E_STOPPING_RANGE": {
+   "severity": "error",
+   "meaning": "a target's stopping asked for at an energy outside its range: SRIM's above 1e7 keV/u, or a table's ends (set-up)"
   },
   "E_POTENTIAL_TWICE": {
    "severity": "error",

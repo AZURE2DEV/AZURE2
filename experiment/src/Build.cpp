@@ -49,6 +49,7 @@ std::vector<std::string> ParameterNamesOf(const BuiltProject &b) {
       if (e.screening) add(e.targetName + ".screening");
       if (e.densityFit) add(e.targetName + ".areal_density");
       if (e.dopplerFit) add(e.targetName + ".doppler");
+      if (e.stopping.hasScale) add(e.stopping.scaleName);
     }
   for (const auto &source : b.parameterSources) add(source.first);
   return out;
@@ -376,10 +377,7 @@ bool ReadObservable(Context &c, const ValidatedRecord &r, const std::string &ang
 }
 
 // A data file's path as the engine opens it: relative to the project directory ("" = the working directory).
-std::string DataPath(const Context &c, const std::string &file) {
-  const bool absolute = !file.empty() && (file[0] == '/' || file[0] == '\\');
-  return absolute || c.opt_.projectDir.empty() ? file : c.opt_.projectDir + "/" + file;
-}
+std::string DataPath(const Context &c, const std::string &file) { return c.ProjectPath(file); }
 
 // The data file exists and its first row holds every column the roles name (a run that may not read the data).
 bool CheckFirstDataRow(Context &c, const ValidatedRecord &r, const std::string &path, std::ifstream &in, std::size_t columns) {

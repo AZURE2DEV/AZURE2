@@ -44,9 +44,10 @@ static void AddTargetFallbackNodes(WorkingCopy &data, Unit *point, TargetEffect 
   std::vector<double> nodes;
   if (te->HasDensityFit()) {
     const double n0 = te->GetDensityNominal(), eLab = point->GetLabEnergy();
-    const double dMin = cmConversion * te->MeanEnergyLoss(eLab, configure, 0.01 * n0);
-    const double d0 = cmConversion * te->MeanEnergyLoss(eLab, configure, n0);
-    double dMax = cmConversion * te->MeanEnergyLoss(eLab, configure, te->GetLayoutDensity());
+    const double s0 = te->GetStoppingScaleNominal();
+    const double dMin = cmConversion * te->MeanEnergyLoss(eLab, configure, 0.01 * n0, s0);
+    const double d0 = cmConversion * te->MeanEnergyLoss(eLab, configure, n0, s0);
+    double dMax = cmConversion * te->MeanEnergyLoss(eLab, configure, te->GetLayoutDensity(), s0);
     if (!(dMax > d0)) dMax = 1.5 * d0;
     nodes = {e - std::min(dMin, 0.5 * d0), e - d0, e - dMax};
   } else {
@@ -55,7 +56,8 @@ static void AddTargetFallbackNodes(WorkingCopy &data, Unit *point, TargetEffect 
   for (double sub : nodes) {
     Unit subPoint(point->GetCMAngle(), sub, segment.segment, segment.term);
     subPoint.BelongToRowOf(*point);
-    subPoint.SetStoppingPower(cmConversion * te->GetStoppingPowerEq()->Evaluate(configure, sub / cmConversion));
+    subPoint.SetStoppingPower(cmConversion * te->StoppingAt(sub / cmConversion, configure,
+                                                            data.EffectValues(point->GetTargetEffectNum()).stoppingScale));
     data.AddSubPoint(*point, subPoint);
   }
 }
@@ -80,6 +82,11 @@ static bool CheckTargetWindows(TargetEffect *te, int segmentKey, std::ostream &o
     out << "ERROR: segment #" << segmentKey << ": energy windows on a THICK-target integration (density 0): a thick-"
         << "target yield has no single equivalent energy to evaluate outside the windows.  Give the density or "
         << "drop the windows." << std::endl;
+    return false;
+  }
+  if (te->HasStoppingScale() && te->IsStoppingScaleVaried() && (windows || te->GetAutoTolerance() > 0.)) {
+    out << "ERROR: segment #" << segmentKey << ": energy windows or an automatic tolerance on a target integration "
+        << "whose stopping scale is fitted: the sigma(E_bar) fallback outside a window follows the density only." << std::endl;
     return false;
   }
   if (te->IsDoppler() && !te->IsThickTarget() && (windows || te->GetAutoTolerance() > 0.)) {
@@ -131,7 +138,7 @@ static std::vector<std::pair<double, double> > TargetWindowsFor(WorkingCopy &dat
     // the target and the spread as the segment's own points see them: the stopping power is an input fit over
     // the data's energies and means nothing far outside them
     const double eAt = std::min(std::max(eR, eLo), eHi);
-    double delta = te->TargetThickness(eAt, configure, te->GetLayoutDensity());
+    double delta = te->TargetThickness(eAt, configure, te->GetLayoutDensity(), te->GetLayoutStoppingScale());
     if (!(delta > 0.0) || !(delta < eAt)) continue;
     if (te->IsGaussian()) delta += 2.0 * te->SigmaCM(cmConversion * eAt, configure, cmConversion) / cmConversion;
     const double gamma = r.totalWidth / cmConversion;
@@ -154,7 +161,7 @@ static std::vector<std::pair<double, double> > TargetWindowsFor(WorkingCopy &dat
       const double eTh = (pair->GetSepE() + pair->GetExE() - eEntrance) / cmConversion;
       if (!(eTh > 0.0)) continue;
       const double eAt = std::min(std::max(eTh, eLo), eHi);
-      double delta = te->TargetThickness(eAt, configure, te->GetLayoutDensity());
+      double delta = te->TargetThickness(eAt, configure, te->GetLayoutDensity(), te->GetLayoutStoppingScale());
       if (!(delta > 0.0) || !(delta < eAt)) continue;
       if (te->IsGaussian()) delta += 2.0 * te->SigmaCM(cmConversion * eAt, configure, cmConversion) / cmConversion;
       const double lo = eTh - margin * delta, hi = eTh + delta + margin * delta;
@@ -371,7 +378,8 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
         sub.BelongToRowOf(*target);
         if (tspec.targetIntegration)
           sub.SetStoppingPower(tspec.stoppingConversion *
-                               effect->GetStoppingPowerEq()->Evaluate(configure, e / tspec.stoppingConversion));
+                               effect->StoppingAt(e / tspec.stoppingConversion, configure,
+                                                  EffectValues(seg.GetTargetEffectNum()).stoppingScale));
         auto o = std::lower_bound(old.begin(), old.end(), sub.GetCMEnergy(),
                                   [](const Unit::EDependentShare &x, double v) { return x.energy < v; });
         Unit::EDependentShare cached;
@@ -541,12 +549,15 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
   }
   if (specs.failed) return -1;
   if (this->SetUpDensityParams(configure) == -1) return -1;
+  this->SetUpStoppingScaleParams(configure);
   // The working copy starts from each effect's values as the set-up leaves them (a density-group member takes its
   // group's density).
   for (int n = 1; n <= Draft().NumTargetEffects(); n++) {
     const TargetEffect &te = *Draft().GetTargetEffect(n);
-    effectValues_[n - 1] = TargetEffectValues{te.GetScreeningUe(), te.GetDensity(), te.GetDopplerTemperature()};
+    effectValues_[n - 1] = TargetEffectValues{te.GetScreeningUe(), te.GetDensity(), te.GetDopplerTemperature(), te.GetStoppingScaleNominal()};
   }
+  // a stopping from the library (evaluation, table): its data and its value at every beam energy, before any is used
+  if (!this->CheckTargetStoppings(configure)) return -1;
   for (SegmentIterator segment = Draft().GetSegments().begin(); segment < Draft().GetSegments().end(); segment++) {
     PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(segment->GetEntranceKey()));
     PPair *exitPair = compound->GetPairFromKey(segment->GetExitKey());  // nullptr for total capture (-1)
@@ -608,7 +619,7 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
               // the grid spans the target at its layout density (a fitted density's largest expected value), and a
               // layer yield's grid a margin beyond it (its E_out comes from the grid's own quadrature)
               targetThickness = cmConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure,
-                                                                             targetEffect->GetLayoutDensity());
+                                                                             targetEffect->GetLayoutDensity(), targetEffect->GetLayoutStoppingScale());
               if (targetEffect->IsLayerYield()) targetThickness *= TargetEffect::LayerGridMargin();
               if (!(targetThickness > 0.0) && targetEffect->IsLayerYield())
                 return RefuseLayerAtBeamEnergy(*targetEffect, *point, segment->GetDataFile(), configure);
@@ -628,7 +639,7 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
           }
           if (thinTarget) {
             point->SetTargetFallbackDepth(cmConversion * targetEffect->MeanEnergyLoss(point->GetLabEnergy(), configure,
-                                                                                      targetEffect->GetDensity()));
+                                                                                      targetEffect->GetDensity(), targetEffect->GetStoppingScaleNominal()));
             if (blendWeight <= 0.) {
               point->SetTargetFallbackOnly(true);
               AddTargetFallbackNodes(*this, &*point, targetEffect, cmConversion, configure, {&*segment, 0});
@@ -691,7 +702,8 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
             Unit subPoint(point->GetCMAngle(), subEnergy, &*segment, 0);
             subPoint.BelongToRowOf(*point);
             if (targetEffect->IsTargetIntegration()) {
-              double stoppingPower = cmConversion * targetEffect->GetStoppingPowerEq()->Evaluate(configure, subEnergy / cmConversion);
+              double stoppingPower = cmConversion * targetEffect->StoppingAt(subEnergy / cmConversion, configure,
+                                                                             EffectValues(segment->GetTargetEffectNum()).stoppingScale);
               subPoint.SetStoppingPower(stoppingPower);
             }
             this->AddSubPoint(*point, subPoint);
@@ -745,7 +757,7 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
                   targetThickness = std::max(point->GetCMEnergy() - 0.001, 0.0);
                 } else {
                   targetThickness = compConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure,
-                                                                                   targetEffect->GetLayoutDensity());
+                                                                                   targetEffect->GetLayoutDensity(), targetEffect->GetLayoutStoppingScale());
                   if (targetEffect->IsLayerYield()) targetThickness *= TargetEffect::LayerGridMargin();
                   if (!(targetThickness > 0.0) && targetEffect->IsLayerYield())
                     return RefuseLayerAtBeamEnergy(*targetEffect, *point, segment->GetDataFile(), configure);
@@ -763,7 +775,7 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
               }
               if (thinTarget) {
                 point->SetTargetFallbackDepth(compConversion * targetEffect->MeanEnergyLoss(point->GetLabEnergy(), configure,
-                                                                                            targetEffect->GetDensity()));
+                                                                                            targetEffect->GetDensity(), targetEffect->GetStoppingScaleNominal()));
                 if (blendWeight <= 0.) {
                   point->SetTargetFallbackOnly(true);
                   AddTargetFallbackNodes(*this, &*point, targetEffect, compConversion, configure, component);
@@ -829,7 +841,8 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
                 Unit subPoint(point->GetCMAngle(), subEnergy, &*segment, t);
                 subPoint.BelongToRowOf(*point);
                 if (targetEffect->IsTargetIntegration()) {
-                  double stoppingPower = compConversion * targetEffect->GetStoppingPowerEq()->Evaluate(configure, subEnergy / compConversion);
+                  double stoppingPower = compConversion * targetEffect->StoppingAt(subEnergy / compConversion, configure,
+                                                                                   EffectValues(component.GetTargetEffectNum()).stoppingScale);
                   subPoint.SetStoppingPower(stoppingPower);
                 }
                 this->AddSubPoint(*point, subPoint);
@@ -841,6 +854,7 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
     }
   }
   this->CommitSubPoints();  // the sub-points given above take their places in the units
+  if (!this->CheckSubPointStoppings(configure)) return -1;  // and at every energy of the sub-point grids
   if (!CheckLayerYields(*this, configure)) return -1;  // a yield on a layer: its stopping and E_out on the grid
   // One screening parameter per <targetInt> line, shared by the copies of its effect.
   Draft().screeningEffects_.clear();

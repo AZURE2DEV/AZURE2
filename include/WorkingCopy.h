@@ -121,6 +121,11 @@ class WorkingCopy {
   void FillDensitiesFromParams(const vector_r &, const Config &);
   /// Sum of the density priors ((N - N0)/sigma)^2.
   double DensityPenalty() const;
+  /// Stopping scales from the parameter vector (StoppingScale.cpp): the working copy's s of every effect of a scale
+  /// parameter, then the stopping of the sub-points and the thickness of the points of the effects whose s changed.
+  void FillStoppingScalesFromParams(const vector_r &, const Config &);
+  /// The sum of the stopping-scale priors ((s - s0)/sigma)^2 (TargetEffect::StoppingScalePenalty).
+  double StoppingScalePenalty() const;
   /// Set the fitted temperatures from a parameter vector (clamped to [T0/4, layout temperature], with a warning
   /// printed once), called by FillEnergyShiftsFromParams so every evaluation sees the vector's values.
   void FillDopplerFromParams(const vector_r &, const Config *configure);
@@ -402,6 +407,12 @@ class WorkingCopy {
   EvaluationCount iterations_;  // objective evaluations (EvaluationCount.h)
   /// Group the densityfit / densitygroup lines into parameters (SetUpTargetEffects); -1 on an error.
   int SetUpDensityParams(const Config &);
+  /// Groups the effects into stopping-scale parameters by TargetEffect::GetStoppingScaleKey (StoppingScale.cpp).
+  void SetUpStoppingScaleParams(const Config &);
+  /// The set-up refusals of a library stopping (evaluation, table): its data, and its range at every sub-point
+  /// (StoppingChecks.h); the source of each target's stopping in the log, once per target.  false after a refusal.
+  bool CheckTargetStoppings(const Config &);
+  bool CheckSubPointStoppings(const Config &);
   bool isFit_;
   bool isErrorAnalysis_;
   std::streampos ecReadPos_;  // File offset where component-segment EC integrals begin in the intEC file

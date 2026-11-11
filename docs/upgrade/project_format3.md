@@ -315,13 +315,16 @@ applied to that data set's points, not a property of the target.
 target C13A
     kind           layer                                     # layer | infinite | sample | none
     active         13C                                       # the nucleus the areal density counts
-    composition    C 1                                       # element stoichiometry; needed by 'stopping evaluation'
+    composition    C 1                                       # element stoichiometry; needed by 'stopping evaluation|table'
     areal_density  1.2e18 atoms/cm2 fit prior 1.2e18 15%
     epoch          run2 areal_density 1.0e18 atoms/cm2 fit prior 1.2e18 15%
     stopping       formula "a0*x^a1" a0=1.6e-20 a1=-0.45 MeV*cm2/atom   # per active atom, x = E_lab/MeV
-    #  or          evaluation scale 1 fit prior 1 4%           (Phase 5 stopping, ARCHITECTURE.md §7)
+    #  or          evaluation scale 1 fit prior 1 4%           (SRIM-2013 of the composition, stopping/; cite SRIM)
+    #  or          table "tin_p.tab" MeV eV/1e15atoms/cm2 scale 1 fixed   (a measured stopping per atom of the material)
     straggling     bohr                                      # none | bohr | coefficient <c> keV^1/2 cm
-    phase          solid                                     # solid | gas; only with 'stopping evaluation'
+    phase          solid                                     # solid | gas; only with 'stopping evaluation' (left out:
+                                                             # gas for one natural-gas element, else solid)
+    compound_correction 0.93                                 # SRIM's compound factor; only with 'stopping evaluation'
     #              [Correction, step 2: refused here, since this target's stopping is a formula; fixture without it]
     isotope        13C 0.99 fixed                            # repeatable; abundance weights of Weighted
     doppler        free_gas 300 K fixed
@@ -339,6 +342,20 @@ detector D90
     energy_resolution 4 keV lab
     udr            file "res.udr" flight_path 20 m burst 5 ns channel 1 ns centred yes
 ```
+
+**The stopping (branch `stopping-wire`, `energy_grid.md` §6, `stopping.md` §14).** `formula`: per active nucleus, lab
+MeV cm², x = E_lab/MeV. `evaluation`: SRIM-2013's stopping of the `composition` (stopping/, ported from LunaSRIM; every
+output cites SRIM) in the `phase` with SRIM's `compound_correction` C (applied once), for the light particle of the
+entrance pair of each data set that names the target (its mass from `<levels>`; a neutral one is refused,
+`E_STOPPING_PROJECTILE`). `table "file" <energy unit> <stopping unit>`: two columns (lab energy; stopping per atom of
+the material, `eV/1e15atoms/cm2` or `MeV*cm2/g`), `#` comments, the units in the record. For both, per active nucleus
+ε_active = 10⁻²¹ ε_atom / f_active, f_active the atom fraction of the active nucleus's element in the composition
+(`E_STOPPING_ACTIVE` when it is absent); the isotopic part of the active fraction is the `isotope` line. `scale`: the
+stopping-scale nuisance s (ε → s ε), one parameter `stopping_scale.<material>.<projectile>` per material (composition,
+phase, C; a table: its target) and projectile; targets that share it write it alike (`E_STOPPING_SCALE_CONFLICT`); left
+out, fixed at 1 (a formula: no scale); `fit` without a prior takes SRIM's stated accuracy for the projectile class (H
+4.0 %, He 3.9 %, Li 4.8 %, heavier 5.8 %), printed at set-up. Set-up refusals: `E_STOPPING_DATA` (no SRIM data files, a
+table that cannot be read), `E_STOPPING_RANGE` (an energy outside the table).
 
 **Epochs.** A target that changes during a campaign (carbon build-up, loss) has one `areal_density` per epoch; the
 stoichiometry, stopping and isotopes are shared. A data set names `target C13A@run2`. The parameter is

@@ -1555,6 +1555,7 @@ void WorkingCopy::AddTargetEffect(TargetEffect targetEffect) {
   values.screeningUe = targetEffect.GetScreeningUe();
   values.density = targetEffect.GetDensity();
   values.dopplerTemperature = targetEffect.GetDopplerTemperature();
+  values.stoppingScale = targetEffect.GetStoppingScaleNominal();
   Draft().targetEffects_.push_back(std::move(targetEffect));
   effectValues_.push_back(values);
 }

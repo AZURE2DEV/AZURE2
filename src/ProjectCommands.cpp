@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "Predictions.h"
+#include "TargetStopping.h"
 #include "azure2/convert/Convert.h"
 #include "azure2/experiment/Describe.h"
 #include "azure2/experiment/ProjectReader.h"
@@ -138,6 +139,14 @@ int convertProjectTo3(const std::string &from, const std::string &to, const std:
  * section 6.2).  Every diagnostic is printed, one per line (file:line: record.field: message) or as one JSON array;
  * exit 0 without errors, 2 with errors, 3 for a format-1 or format-2 file (section 8.4), 1 when FILE cannot be read.
  */
+/// The target effects of a built project, data sets' and extrapolations'.
+std::vector<azure2::experiment::TargetEffectSpec> TargetEffectSpecs(const azure2::experiment::Format3Project &c) {
+  std::vector<azure2::experiment::TargetEffectSpec> out;
+  for (const auto &item : c.built.data.targetEffects.items) out.push_back(item.spec);
+  for (const auto &item : c.built.extrapolations.targetEffects.items) out.push_back(item.spec);
+  return out;
+}
+
 int validateProject(const std::string &file, bool json) {
   std::string bytes;
   if (!ReadFileBytes(file, bytes)) {
@@ -152,7 +161,10 @@ int validateProject(const std::string &file, bool json) {
   azure2::experiment::Format3ReadOptions read;
   read.fileName = file;
         // data files as the engine opens them: relative to the working directory
-  const azure2::experiment::Format3Project c = azure2::experiment::ReadFormat3Text(bytes, read);
+  azure2::experiment::Format3Project c = azure2::experiment::ReadFormat3Text(bytes, read);
+  // the stopping of each target from the library (energy_grid.md section 6): its source, or why it has none
+  const StoppingReport stopping = ReportTargetStoppings(c.Ok() ? TargetEffectSpecs(c) : std::vector<azure2::experiment::TargetEffectSpec>());
+  for (const azure2::experiment::Diagnostic &d : stopping.refusals) c.diagnostics.push_back(d);
   const std::string note = "note: " + std::to_string(c.buildChecksSkipped) +
                            " check(s) skipped (the build checks need a valid project and its <levels>).";
   if (json) {
@@ -162,7 +174,7 @@ int validateProject(const std::string &file, bool json) {
     std::cerr << note << std::endl;
   } else {
     for (const azure2::experiment::Diagnostic &d : c.diagnostics) std::cout << d.ToText() << std::endl;
-    std::cout << note << std::endl;
+    std::cout << stopping.text << note << std::endl;
     std::cout << file << ": " << c.diagnostics.size() << " diagnostic(s), " << (c.Ok() ? "valid" : "not valid") << "." << std::endl;
   }
   return c.Ok() ? 0 : 2;
@@ -222,7 +234,11 @@ int describeProject(const std::string &file, bool json, const std::string &recor
   }
   std::cout << (json ? azure2::experiment::DescribeJson(c, record) : azure2::experiment::DescribeText(c, record)) << std::flush;
   if (json) std::cout << std::endl;
-  return 0;
+  // the stopping of each target from the library: its source (text form only), or the refusal
+  const StoppingReport stopping = ReportTargetStoppings(TargetEffectSpecs(c));
+  for (const azure2::experiment::Diagnostic &d : stopping.refusals) std::cout << d.ToText() << std::endl;
+  if (!json && record.empty()) std::cout << stopping.text << std::flush;
+  return stopping.refusals.empty() ? 0 : 2;
 }
 
 /// The command was given; it exits with `value`.

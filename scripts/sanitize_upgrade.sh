@@ -200,7 +200,7 @@ fi
 # ------------------------------------------------------------------ 4. C++ reference tests of the integrators
 if want reference; then
   echo "== reference tests (ctest)"
-  for t in beam_profile_reference udr_reference adaptive_grid_reference compound_stopping_reference; do
+  for t in beam_profile_reference udr_reference adaptive_grid_reference; do
     san_env "reference-$t"
     if ctest --test-dir "$BUILD" -R "^$t\$" --output-on-failure > "$REP/reference-$t/ctest.log" 2>&1 \
        && grep -q "100% tests passed" "$REP/reference-$t/ctest.log"; then record ok "reference-$t"

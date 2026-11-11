@@ -180,6 +180,18 @@ inline void ForEachThicknessPrior(WorkingCopy *data, const ParamIndexMap &pmap, 
   }
 }
 
+// The stopping-scale priors ((s - s0)/sigma)^2, s dimensionless: f(full index, nominal, sigma) for each fitted scale
+// with sigma > 0 (WorkingCopy::StoppingScalePenalty is their sum).
+template <class F>
+inline void ForEachStoppingScalePrior(WorkingCopy *data, const ParamIndexMap &pmap, F f) {
+  for (int k = 1; k <= data->Data().NumStoppingScaleParams(); k++) {
+    const TargetEffect *te = data->Data().GetStoppingScaleTargetEffect(k);
+    if (te->GetStoppingScaleSigma() <= 0.0 || !te->IsStoppingScaleVaried() || te->IsStoppingScalePriorReplaced()) continue;
+    const int idx = pmap.StoppingScaleIndex(k);
+    if (idx >= 0) f(idx, te->GetStoppingScaleNominal(), te->GetStoppingScaleSigma());
+  }
+}
+
 // Every diagonal prior: normalizations (T3), energy shifts (T4), screening, density, Doppler and thickness (T8),
 // abundances (T7, per nucleus; the sum-to-one term couples them and is not diagonal).
 template <class F>
@@ -196,6 +208,7 @@ inline void ForEachDiagonalPrior(WorkingCopy *data, CNuc *compound, const ParamI
   ForEachDensityPrior(data, pmap, f);
   ForEachDopplerPrior(data, pmap, f);
   ForEachThicknessPrior(data, pmap, f);
+  ForEachStoppingScalePrior(data, pmap, f);
   if (compound->HasAbundanceBlock())
     for (int k = 1; k <= compound->NumAbundanceParams(); k++) {
       const int idx = pmap.AbundanceIndex(k);

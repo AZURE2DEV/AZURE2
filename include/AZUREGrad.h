@@ -50,6 +50,7 @@ struct ParamDesc {
   int density = -1;    ///< 1-based density parameter (WorkingCopy::GetDensityEffect), Density only, else -1
   int doppler = -1;    ///< 1-based Doppler parameter (WorkingCopy::GetDopplerEffect), Doppler only, else -1
   int thickness = -1;  ///< 1-based thickness parameter (WorkingCopy::GetThicknessSegment), Thickness only, else -1
+  int stoppingScale = -1;  ///< 1-based stopping-scale parameter (DataSet::NumStoppingScaleParams), else -1
 };
 
 /*!
@@ -102,6 +103,11 @@ class ParamIndexMap {
     auto it = dopplerIndex_.find(k);
     return (it == dopplerIndex_.end()) ? -1 : it->second;
   }
+  /// Full index of the 1-based stopping-scale parameter k, or -1.
+  int StoppingScaleIndex(int k) const {
+    auto it = stoppingScaleIndex_.find(k);
+    return (it == stoppingScaleIndex_.end()) ? -1 : it->second;
+  }
   /// Full index of the 1-based sample-thickness parameter k, or -1.
   int ThicknessIndex(int k) const {
     auto it = thicknessIndex_.find(k);
@@ -131,6 +137,7 @@ class ParamIndexMap {
   int GammaIndexFlat(int jGroup, int level, int channel) const { return gammaFlat_[jGroup - 1][level - 1][channel - 1]; }
 
   friend ParamIndexMap BuildParamIndexMap(CNuc *, WorkingCopy *, const std::vector<bool> &);
+  friend void AppendStoppingScaleParams(ParamIndexMap &, WorkingCopy *, int &);
 
  private:
   std::vector<std::vector<int>> eFlat_;                  ///< [j-1][la-1] -> full idx
@@ -147,6 +154,7 @@ class ParamIndexMap {
   std::map<int, int> densityIndex_;                      ///< density parameter k -> full idx
   std::map<int, int> dopplerIndex_;                      ///< Doppler parameter k -> full idx
   std::map<int, int> thicknessIndex_;                    ///< thickness parameter k -> full idx
+  std::map<int, int> stoppingScaleIndex_;                ///< stopping-scale parameter k -> full idx
   std::vector<int> fullToPacked_;
   std::vector<int> packedToFull_;
   int numPacked_ = 0;
@@ -261,6 +269,10 @@ struct GradAccum {
  */
 ParamIndexMap BuildParamIndexMap(CNuc *compound, WorkingCopy *data,
                                  const std::vector<bool> &fixed);
+/// The stopping-scale block of the map, after every other kind (WorkingCopy::FillMnParams): one entry per
+/// DataSet::NumStoppingScaleParams, from full index \p i on (advanced past them).  Defined in StoppingScale.cpp.  No
+/// analytic derivative: the scale is differenced on the whole chi^2, as a density (AZURECalc.cpp).
+void AppendStoppingScaleParams(ParamIndexMap &map, WorkingCopy *data, int &i);
 
 /*!
  * \brief Precompute the energy derivative of the Brune shift function S(E_lambda)

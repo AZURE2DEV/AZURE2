@@ -108,11 +108,12 @@ void WorkingCopy::FillDensitiesFromParams(const vector_r &p, const Config &confi
     const double density = EffectValues(n).density;
     for (UnitIterator point = seg.GetPoints(*this).begin(); point < seg.GetPoints(*this).end(); point++) {
       if (point->GetTargetEffectNum() != n || !(point->GetTargetThickness() > 0.0)) continue;
-      point->SetTargetThickness(point->GetCMFactor() * te->TargetThickness(point->GetTargetLabEnergy(), configure, density));
+      const double scale = EffectValues(n).stoppingScale;
+      point->SetTargetThickness(point->GetCMFactor() * te->TargetThickness(point->GetTargetLabEnergy(), configure, density, scale));
       // E_bar of the sigma(E_bar) fallback moves with the density too (Unit::SetTargetFallbackOnly)
       if (!te->IsThickTarget())
         point->SetTargetFallbackDepth(point->GetCMFactor() *
-                                      te->MeanEnergyLoss(point->GetTargetLabEnergy(), configure, density));
+                                      te->MeanEnergyLoss(point->GetTargetLabEnergy(), configure, density, scale));
     }
   };
   for (const Segment &seg : set_->segments_) update({&seg, 0});
@@ -198,6 +199,7 @@ void WorkingCopy::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNu
   // Screening first: sub-points rebuilt below (ReplaceSubPointGrids) inherit their parent's U_e.
   this->FillScreeningFromParams(p);
   // Fitted target densities: the thickness of each point of their lines (the grids stay put).
+  if (configure) this->FillStoppingScalesFromParams(p, *configure);
   if (configure) this->FillDensitiesFromParams(p, *configure);
   // Fitted Doppler temperatures: only the kernel values move (the grids and pieces stay put).
   this->FillDopplerFromParams(p, configure);

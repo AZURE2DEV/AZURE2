@@ -186,7 +186,8 @@ stateless thread-safe call, Whittaker functions, no committed build products, te
 ## 7. Stopping and straggling: SRIM-2013 through LunaSRIM (no ERYA)
 
 - Before: a user formula, or ERYA, which ships SRIM's coefficient file `SRIM2013.xml` inside a GPL code and evaluates
-  it with one formula at all energies. Straggling was c·√ΔE or plain Bohr. Both go (ERYA in the wiring branch).
+  it with one formula at all energies. Straggling was c·√ΔE or plain Bohr. ERYA is removed (branch
+  `stopping-wire`, 2026-11-11), where a target's `stopping evaluation` calls `stopping/`.
 - **Decision of the PI, 2026-11-11:** "I would use the SRIM stopping powers from my LunaSRIM repository. They are free
   to use as long as SRIM is cited." This replaces the earlier plan of an own evaluation fitted to the IAEA database.
   So the stopping library `stopping/` (`docs/upgrade/stopping.md`) computes SRIM-2013's stopping powers, ported to

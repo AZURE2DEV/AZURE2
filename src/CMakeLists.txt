@@ -14,6 +14,8 @@ DataOutputFiles.cpp
 DataCheckFiles.cpp
 DataCovarianceGroups.cpp
 TargetSetup.cpp
+TargetStopping.cpp
+StoppingScale.cpp
 ExternalCaptureSetup.cpp
 DataParameters.cpp
 HandOver.cpp
@@ -112,6 +114,7 @@ endif (BUILD_LIBRARY)
 # step 3d deletes the old sections; the engine reads an old project only through it (src/ProjectSetup.cpp).
 target_link_libraries(AZURE2Core PUBLIC
     azure2_physics
+    azure2_stopping
     azure2_io
     azure2_experiment
     azure2_experiment_reader

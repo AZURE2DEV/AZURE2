@@ -451,7 +451,7 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, WorkingCopy *data,
       map.desc_.push_back(ParamDesc{ParamKind::ThmCoherent, -1, -1, k + 1, -1, false});
       i++;
     }
-
+  AppendStoppingScaleParams(map, data, i);  // the stopping scales, last (StoppingScale.cpp)
   // --- Apply the fixed mask and build packed<->full lookups. ---
   const int nFull = (int)map.desc_.size();
   map.fullToPacked_.assign(nFull, -1);

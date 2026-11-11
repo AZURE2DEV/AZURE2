@@ -141,6 +141,13 @@ constexpr const char *kFoldConflict = "E_FOLD_CONFLICT";
 // A yield on a layer, refused by the engine's set-up, which evaluates the stopping on the sub-point grid (LayerChecks.h)
 constexpr const char *kLayerStopping = "E_LAYER_STOPPING";
 constexpr const char *kLayerExitBelowModel = "E_LAYER_EXIT_BELOW_MODEL";
+// A target's stopping from the engine's stopping/ library (evaluation, table, scale): the projectile, the active element
+// and the shared scale at build; the library's data and range at the engine's set-up (StoppingChecks.h)
+constexpr const char *kStoppingProjectile = "E_STOPPING_PROJECTILE";
+constexpr const char *kStoppingActive = "E_STOPPING_ACTIVE";
+constexpr const char *kStoppingScaleConflict = "E_STOPPING_SCALE_CONFLICT";
+constexpr const char *kStoppingData = "E_STOPPING_DATA";
+constexpr const char *kStoppingRange = "E_STOPPING_RANGE";
 // Hybrid potentials (`potential` records: BuildPotentials; the old block in a format-3 file: ReadFormat3Project)
 constexpr const char *kPotentialTwice = "E_POTENTIAL_TWICE";
 constexpr const char *kPotentialPairKind = "E_POTENTIAL_PAIR_KIND";

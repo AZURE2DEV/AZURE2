@@ -47,6 +47,7 @@ add_library(azure2_experiment STATIC
   src/KernelUdr.cpp
   src/HybridPotentialSettings.cpp
   src/LayerChecks.cpp
+  src/StoppingChecks.cpp
   src/SpinOrbitChecks.cpp
   src/Json.cpp
   src/ModelDatum.cpp

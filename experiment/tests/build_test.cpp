@@ -196,6 +196,31 @@ void UnitCases(const std::string &targets) {
                                                                                       "    efficiency 0.5 fit prior 0.5 3%\n") + inf));
     ExpectOne("E_FIELD_REQUIRED", BuildText(Data(y + "    target t9\n") + inf));
   }
+  // a stopping from the library (energy_grid.md section 6): the spec of an evaluation (composition, active element, the
+  // projectile of the data set's entrance pair, the scale's key and name) and the build's refusals
+  {
+    const std::string tin = "<targets>\ntarget e1\n    kind layer\n    active 15N\n    composition Ti 1 N 1\n"
+                            "    areal_density 1e18 atoms/cm2 fixed\n    stopping evaluation scale 1 fit prior 1 4%\n"
+                            "    straggling none\n</targets>\n";
+    const std::string ds = kDataset + "    target e1\n    quadrature points 20\n";
+    const BuiltProject b = BuildText(Data(ds) + tin);
+    const StoppingSpec *e = b.Ok() && b.data.targetEffects.items.size() == 1 ? &b.data.targetEffects.items[0].spec.stopping : nullptr;
+    check("stopping evaluation: TiN, active Z 7, the proton of pair 1 (1.00783 u), fitted scale with prior 0.04, named "
+          "stopping_scale.TiN.1H",
+          e && e->source == StoppingSpec::Source::Evaluation && e->material == "TiN" && e->activeZ == 7 &&
+              e->composition == std::vector<std::pair<int, double>>{{22, 1.0}, {7, 1.0}} && e->projectileZ == 1 &&
+              e->projectileA == 1 && e->projectileMass == 1.00783 && e->hasScale && e->scaleVary && e->scale == 1.0 &&
+              std::fabs(e->scalePriorWidth - 0.04) < 1e-15 && e->scaleName == "stopping_scale.TiN.1H" &&
+              b.parameterSources.count("stopping_scale.TiN.1H") == 1);
+    if (!e)
+      for (const Diagnostic &d : b.diagnostics) std::printf("        got %s: %s\n", d.code.c_str(), d.message.c_str());
+    ExpectOne("E_STOPPING_ACTIVE", BuildText(Data(ds) + Set(tin, "composition", "    composition Ti 1 O 1")));
+    ExpectOne("E_STOPPING_PROJECTILE", BuildText(Data(Set(ds, "reaction", "    reaction 16O(g,a)12C")) + tin));
+    std::string e2 = Set(tin.substr(tin.find("target e1")), "stopping", "    stopping evaluation scale 1.02 fixed");
+    e2.replace(e2.find("e1"), 2, "e2");
+    const std::string two = tin.substr(0, tin.size() - std::string("</targets>\n").size()) + e2;
+    ExpectOne("E_STOPPING_SCALE_CONFLICT", BuildText(Data(ds + Set(Rename(ds, "d2"), "target", "    target e2")) + two));
+  }
   // targets: areal density in atoms/b, U_e in keV, a stopping formula in keV*cm2/atom
   {
     std::string t = Set(Set(targets, "areal_density", "    areal_density 1e-6 atoms/b fit prior 1e-6 2e-7"), "screening",

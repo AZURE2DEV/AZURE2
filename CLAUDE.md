@@ -80,12 +80,12 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
 | `src/`, `include/` | C++ engine | `AZURE2.cpp` (main, CLI flags) → `AZUREMain` → `CNuc` (levels, channels) + `DataSet` (the data as set up, immutable: segments, measurements, target effects, covariance; `include/DataSet.h`) held by each `WorkingCopy` (what an evaluation changes: norms, shifts, frames, the flat vector of calculation `Unit`s; `include/WorkingCopy.h`) → `AZURECalc` (χ²), `AZUREGrad` (gradients), `AZURECalcMCMC` |
 | `api/` | `AZUREAPI` + pybind11 module `_azure2` | Builds `pyazr/_azure2*.so` in place |
 | `io/` | The `.azr` document and its format conversion | Standalone (no engine headers); the engine and pyazr read the file through it |
-| `stopping/` | Stopping and straggling: materials, SRIM-2013's electronic and nuclear stopping (ported from LunaSRIM; SRIM's data files in `stopping/data/srim/`, cite SRIM), energy loss, range, TRIM/Bohr straggling with Tschalär propagation, with uncertainty and provenance | Uses `physics/` only; not yet linked by the engine; `docs/upgrade/stopping.md` |
+| `stopping/` | Stopping and straggling: materials, SRIM-2013's electronic and nuclear stopping (ported from LunaSRIM; SRIM's data files in `stopping/data/srim/`, cite SRIM), energy loss, range, TRIM/Bohr straggling with Tschalär propagation, with uncertainty and provenance | Uses `physics/` only; the engine calls it through `TargetStopping` (`stopping evaluation`, `stopping table`), pyazr through `pyazr.stopping`; `docs/upgrade/stopping.md` |
 | `experiment/` | Model expressions (what a data set measures), lab → c.m. frames, the table of project format 3 | Uses `physics/` and `io/`'s `Record.h` only (no engine headers); `experiment/README.md` |
 | `physics/transfer` (in `physics/`) | Optical potentials, bound states, distorted waves, DWBA transfer, the THM vertex in the plane-wave limit | A leaf: target `azure2_physics_transfer`, used by nothing of the engine yet; checked against FRESCO (`docs/upgrade/transfer.md`) |
 | `pyazr/` | Python package | In-process engine; `.azr` editing (`azrfile.py`, `datasets.py`) on the engine's document and parsers |
 | `numcmc/` | Ensemble MCMC sampler | |
-| `external/` | Vendored Minuit2, erya/pugixml (Coulomb functions: `physics/coulomb/`, from pycoulomb) | **Do not edit**; it is upstream code |
+| `external/` | Vendored Minuit2 (Coulomb functions: `physics/coulomb/`, from pycoulomb; stopping: `stopping/`) | **Do not edit**; it is upstream code |
 | `tests/` | All tests | See `tests/CLAUDE.md` |
 | `docs/source/` | Sphinx site, built with `-W` | The user-facing source of truth |
 | `.claude/skills/` | How to *use* AZURE2 | See "Skills" below; `tools/check_skills.py` |
@@ -375,6 +375,18 @@ regenerate `stopping/tests/data/srim_reference.csv` with `stopping/tools/make_sr
 `lunasrim`) only if LunaSRIM itself changed, and run `ctest -R stopping`. Every output that uses these stopping powers
 cites SRIM (`kSrimCitation`). The library includes only `azure2/stopping/`, `azure2/physics/` and the standard library
 [check 32].
+
+**A new stopping source** (beside `formula`, `evaluation`, `table`; `docs/upgrade/stopping.md` §14). A target's stopping
+is computed in one place, `TargetStopping::PerActiveNucleus` (`src/TargetStopping.cpp`), lab MeV cm² per active nucleus;
+`TargetEffect::StoppingAt` multiplies the stopping scale once and every reader asks it.
+1. The keyword: one `Keyword(...)` of `f.stopping` in `experiment/src/Schema.cpp` (its parts, `scale` among them) and
+   its `StoppingSpec::Source` value (`experiment/.../SetupSpecs.h`), filled by `StoppingInto` and keyed for the shared
+   scale by `ScaleOf` (`experiment/src/BuildEffects.cpp`).
+2. Its case in `TargetStopping`: built in the constructor (a library object from the spec, or `Error()`), evaluated in
+   `LibraryPerActiveNucleus`, refused in `Check` (codes `E_STOPPING_DATA`, `E_STOPPING_RANGE`), described in
+   `Provenance` (a source that is a published evaluation cites it there).
+3. A test with an answer from outside the engine (`tests/stopping_yield` is the pattern), the schema and docs as in
+   "A format-3 field".
 
 Reference commits: `git show --stat 062b1bfe` (segment keyword `shiftfngroup`), `3e13fb28` (`normgroup`).
 

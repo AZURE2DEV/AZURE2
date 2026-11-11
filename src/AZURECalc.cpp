@@ -297,13 +297,14 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, WorkingCopy *ld, azure2::Results &re
     if (fixed[f]) continue;
     const ParamKind kind = pmap.Desc(f).kind;
     if (kind != ParamKind::EnergyShift && kind != ParamKind::EnergyShiftSqrt && kind != ParamKind::EnergyShiftFn &&
-        kind != ParamKind::Density) continue;
+        kind != ParamKind::Density && kind != ParamKind::StoppingScale) continue;
     const int packed = pmap.FullToPacked(f);
     if (packed < 0 || packed >= nCols) continue;
     // Columns the caller holds fixed: not differenced.
     if (skipPacked && packed < (int)skipPacked->size() && (*skipPacked)[packed]) continue;
-    // A fitted target density moves the depth window of every point of its lines: full re-evaluation.
-    if (kind == ParamKind::Density) {
+    // A fitted target density, or a stopping scale, moves the depth window of every point of its lines: full
+    // re-evaluation (the scale's analytic dY/ds = (-Y + 1e-24 N <sigma>(E_out))/s comes with the kernels branch).
+    if (kind == ParamKind::Density || kind == ParamKind::StoppingScale) {
       fullShifts.push_back(f);
       continue;
     }
@@ -937,8 +938,8 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   std::vector<char> fdWhole(p.size(), 0);
 
   // --- Finite differences only for what is left: non-fixed energy shifts, the
-  //     THM-segment contribution to energies/gammas/norms, and (if the analytic
-  //     path bailed) the energy/gamma and norm blocks too. ---
+  //     THM-segment contribution to energies/gammas/norms, densities and stopping scales (the whole chi^2 with
+  //     its priors; analytic with the kernels branch), and (if the analytic path bailed) the energy/gamma and norm blocks too. ---
   for (int idx = 0; idx < (int)p.size() && idx < pmap.NumFull(); idx++) {
     if (idx < nMn && fixedMask[idx]) continue;
     ParamKind kind = pmap.Desc(idx).kind;
@@ -1068,7 +1069,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   if (const char *gc = std::getenv("AZURE_GRAD_CHECK")) {
     if (!gradChecked.exchange(true)) {
       static const char *kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt", "shift_fn", "abundance", "screening",
-                                       "density", "doppler", "thickness", "cbkg"};
+                                       "density", "doppler", "thickness", "cbkg", "stopping_scale"};
       struct Row { double score, g, fd; int idx; ParamDesc d; double gj, scoreJ; };
       std::vector<Row> rows;
       constexpr int kNumKinds = sizeof(kindName) / sizeof(kindName[0]);  // one per ParamKind

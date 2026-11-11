@@ -2,6 +2,43 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, Phase 5 branch 5) — the engine uses `stopping/` (`feature/upgrade-5-stopping-wire`)
+
+**Done** (`energy_grid.md` §6 and §8 "Branch 5, done", `stopping.md` §14).
+- A target says `stopping evaluation` (SRIM-2013 of its `composition`, `phase`, `compound_correction`, for the light
+  particle of the entrance pair of each data set naming it) or `stopping table "file" <energy unit> <stopping unit>`
+  beside `stopping formula`.  `TargetStopping` (`include/TargetStopping.h`, `src/TargetStopping.cpp`) is the one place
+  the stopping is computed: formula | evaluation | table, per active nucleus ε_atom/f_active (the convention is stated
+  in `SetupSpecs.h` `StoppingSpec`).  `TargetEffect::StoppingAt(E, scale)` multiplies the scale once and is what every
+  reader asks (the sub-points' stopping in the set-up loops and `ReplaceSubPointGrids`, `TargetThickness`,
+  `MeanEnergyLoss`, `GridExtent`, the layer refusal).  Build refusals `E_STOPPING_ACTIVE`, `E_STOPPING_PROJECTILE`,
+  `E_STOPPING_SCALE_CONFLICT`; set-up refusals `E_STOPPING_DATA`, `E_STOPPING_RANGE`.  The log, `--validate` and
+  `--describe` print the library's provenance (SRIM cited) once per target and projectile.
+- The stopping scale (D6): parameter kind 12 `stopping_scale.<material>.<projectile>`, one per (material, projectile),
+  last in the vector; `fit` without a prior takes SRIM's stated accuracy (printed); its prior is a `TargetPriorTerm`;
+  the hand-over (`src/StoppingScale.cpp`) re-sets the sub-points' stopping and the points' thickness; derivative by
+  central differences of the whole χ², as the density.
+- `tests/stopping_yield` (README): plateau of a thick TiN layer against LunaSRIM's ε (8.3e-5, the line shape), the
+  width of a layer's step against LunaSRIM's energy loss (2.4e-7), table of the library's values against the
+  evaluation (2.1e-10), a fit of two layers' N and their one scale (pulls −0.66, +0.61, +0.46), the refusals;
+  ctest `stopping_convention` (Ta₂O₅ with ¹⁸O, TiN with ¹⁴N by hand).
+- `pyazr.stopping` (`api/src/pybind_stopping.cpp`, `pyazr/stopping.py`), ctest `pyazr_stopping` against
+  `srim_reference.csv`; pyazr 2.33.0.
+- ERYA removed: `external/erya`, `USE_ERYA`, `SRIM2013.xml`, `tests/reference/compound_stopping_reference_test.cpp`
+  (its check is `stopping_convention` now).
+
+**Verified** (binary `work/stopwire/AZURE2-final`, HEAD a7b9cac2): all projects × 3 bases against `tab-trial21a`
+(tag `tab-stopwire1`, 6 jobs): 766 / 739 / 766 identical, the 12 files per basis of `tests/stopping_yield` only-new;
+`ctest -LE slow` 202/202 (`-j3`, OMP 2); `tests/run_tests.sh` (OMP 2) 149 passed, 0 failed; converted-tree gate
+(`REF=tab-trial8`, tag `gstopwire1`, 3 jobs) 483 (456) identical, 38 classified, 0 differ, 0 missing; calculations at 1
+and 3 threads identical (stopping_yield's two models, layer_yield's two); a fresh build of the tree without
+`stopping/data/srim/` (0 warnings): with `AZURE2_SRIM_DATA_DIR` the outputs equal the compiled-in build's, without it
+`E_STOPPING_DATA` and exit 1.  Scratch: `work/stopwire/`.
+
+**Open.** §6.4 step 2 (the old integrators on the module's integrals) not done; TRIM straggling for an evaluated
+target (the `straggling` field still gives none, Bohr or a coefficient); the scale's analytic derivative (kernels
+branch); a scale in an extrapolation's data set is not tested.
+
 ## 2026-11-11 (agent, Phase 5 branch 6) — apparatus folds as kernel functions in one table (`feature/upgrade-5-kernels`)
 
 **Done.**
