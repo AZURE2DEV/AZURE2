@@ -2,6 +2,46 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, Phase 5 branch 7 part 2, stopped early) — every slot on a node table; energy tasks by node (`feature/upgrade-5-grid-readers`)
+
+**Done.**
+- Every slot is on a table (`include/NodeTable.h`, `src/NodeTable.cpp`): per plan task one slot per unit it calculates
+  (its point, or its sub-points), naming a node of the stage table or of the working copy's overflow table
+  (`NodeOverflow`). The hand-over places the overflow table from nothing for the tasks whose units moved (re-placed
+  grids: `ReplaceSubPointGrids` now returns their tasks; shifted points) and the tasks already on it
+  (`WorkingCopy::PlaceOverflowNodes`, end of `FillEnergyShiftsFromParamsImpl`); its rows are released before units are
+  re-energised (`ReleaseOverflowRows`), so they do not trigger the units' copy-on-write. The copy's node state is one
+  member (`NodeState`); before, a copy did not copy the node table at all.
+- `AZURE_NODE_CHECK=1` checks every unit of every task at every hand-over (also inside Minuit's parallel gradient,
+  where there is no point pass) and every point pass: 0 off the tables, 0 on a wrong node, 0 rows differ. Test
+  `upgrade_node_check` (`tests/upgrade/node_check.sh`), shown failing with an injected slot on the next node.
+- The seam for the shift-kernel branch: the comment of `NodeOverflow` lists what branch 8 deletes.
+- First reader moved: `CalculationPlan::EnergyTasks` takes nucleus, route and E_x from the slots' nodes
+  (`EnergyTask::node`); its unused compound argument is dropped (also `WorkingCopy::EnergyTasksOf`).
+
+**Verified** (build `work/b-readers`, logs `work/readers/logs/`): all projects x 3 bases against `tab-trial25c` (tag
+`tab-readers-full`, after the energy-task commit): 786 / 759 / 786 files, all identical; the Brune tree with
+`AZURE_NODE_CHECK=1` (`tab-readers-chk`): 186 checks, 3,255,304 units checked, 653,260 of them on overflow tables, 0
+off, 0 on a wrong node, 0 rows differ, the 593 output files other than `run.log` identical; `check.sh --quick` at the
+first commit: 204/204; `tests/run_tests.sh` 153 passed, 0 failed; converted-tree gate 483 (456) identical, 38
+classified, 0 differ, 0 missing; fits (T2 `--use-gradient`, `--use-lm`, MIGRAD 200 calls, 13N `--use-gradient`,
+`layer_yield` and `rectangular_resolution` fits) identical at 1 and 3 threads and to `b-trial25` at 1 thread.
+Speed (1 thread, 6 alternated runs with `b-trial25`, median): calculations T2, thick target, THM, `natural_neon`
+within -4 to -1 %, 13N +0.1 % (repeat; +3.8 % in a run beside `run_tests.sh`); 13N `--use-gradient` fit -3 %;
+`natural_neon` against `b-trial23` (before the node table) +0.6 %; **T2 MIGRAD 200 calls +2.5 to +3.6 %** (three
+series): the overflow table placed from nothing in every hand-over that moves a unit (T2 shifts a folded segment at
+every evaluation). Peak RSS unchanged within 1.5 %.
+
+**Open (readers not moved, objects not deleted).** The T2 fit's +3 %: place only the moved tasks' overflow nodes
+instead of all off-stage tasks (needs a way to drop nodes no slot names).  The observables the energy pass writes (unit records), the
+kernels' gather (`PointFold.cpp`), the result records of sub-points, the gradient's unit cotangents, the
+external-capture amplitudes and `intEC.dat`, THM `thm_ps_`; `SubPointAccess.h`, `NodeTableCache.h`, the copy-on-write
+tables, sub-point `Unit`s. What a slot must carry for them, found here: the c.m. energy of the entrance pair (not
+recoverable bit for bit from E_x: E_x is computed from it), the stopping (moved per copy by a fitted stopping scale:
+the per-copy slot data must be copy-on-write), the Legendre rows and Coulomb amplitude (angle and energy), the
+screening k, the EC amplitudes (last bits per point), and a record per slot. The `GenMatrixFunc` / `THMMatrixFunc`
+observables read all of these through `Unit` getters, so moving the energy pass means giving them a slot view.
+
 ## 2026-11-11 (agent, refusal switch) — the engine reads format 3 only; old files refused, the old reading path deleted (`feature/upgrade-4-refusal-switch`)
 
 **Done** (`AU_refusal_switch.md`):

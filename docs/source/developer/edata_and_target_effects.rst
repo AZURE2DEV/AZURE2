@@ -624,9 +624,13 @@ Until 2026-11-11 a point mapping (``WorkingCopy::MapData``, ``MapLeaves``,
 the energy tasks made it redundant and it is deleted (every output identical).
 The same grouping is kept as a table: ``azure2::NodeTable`` (``include/NodeTable.h``)
 lists every compound energy of the pass once per nucleus with its channel rows,
-and per folded point the node of each sub-point; it is built at the end of the
-set-up and shared by every working copy, and ``AZURE_NODE_CHECK=1`` compares it
-with the units before each point pass.  It is the first half of turning the
+and per plan task the node of each unit it calculates (a slot); it is built at
+the end of the set-up and shared by every working copy.  Nodes that the
+hand-over moves off it (re-placed grids, energy shifts) are held in the working
+copy's overflow table (``azure2::NodeOverflow``), placed again in each
+hand-over that moves a unit.  The energy tasks are grouped by the slots' nodes,
+and ``AZURE_NODE_CHECK=1`` compares every unit with the node its slot names at
+each hand-over and point pass.  It is the first half of turning the
 sub-points into entries of that table (``docs/upgrade/energy_grid.md`` section 2.6).  The adjoint does the
 same: the T-matrix cotangents of a differential point are, per pathway, a sum
 over orders of coefficients taken once per T-matrix

@@ -62,7 +62,7 @@ std::string CheckEnergyTasks(WorkingCopy &data, CNuc &compound, const Config &cf
   azure2::CalculationPlan &plan = const_cast<azure2::CalculationPlan &>(data.Plan());
   std::vector<int> work(plan.NumTasks());
   for (int t = 0; t < plan.NumTasks(); t++) work[t] = t;
-  const azure2::EnergyTaskList &list = plan.EnergyTasks(data, &compound, cfg, work);
+  const azure2::EnergyTaskList &list = plan.EnergyTasks(data, cfg, work);
   const std::vector<azure2::EnergyTask> &tasks = list.tasks;
   std::vector<int> owner(data.NumUnits(), -2);  // the plan task of each unit of the pass (-2: no unit of it)
   long expected = 0;
