@@ -25,6 +25,8 @@ class ExtrapLine {
       stream >> phaseJ_ >> phaseL_;
     else if (isDiff_ == 3)
       stream >> maxAngDistOrder_;
+    else if (isDiff_ == 10)
+      stream >> spinObservable_;  // a spin observable (SpinObservable.h)
 
     // Initialize advanced segment parameters to defaults
     isAdvanced_ = 0;
@@ -190,6 +192,8 @@ class ExtrapLine {
    * if the segment is to contain phase shift.
    */
   int phaseL() const { return phaseL_; };
+  //! The observable token of an isDiff 10 segment (empty otherwise).
+  std::string spinObservable() const { return spinObservable_; };
   /*!
    * The channel spin of a phase-shift test segment ("spin <s>" keyword), or -1 when not given.
    */
@@ -260,6 +264,7 @@ class ExtrapLine {
   int isDiff_;
   double phaseJ_;
   int phaseL_;
+  std::string spinObservable_;
   double phaseS_;
   int maxAngDistOrder_;
   int isAdvanced_;

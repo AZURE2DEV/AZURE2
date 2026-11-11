@@ -211,6 +211,8 @@ QVariant SegmentsTestModel::data(const QModelIndex &index, int role) const {
         return QString(tr("<center>C.M. Differential</center>"));
       else if (line.dataType == 7)
         return QString(tr("<center>Analyzing Power</center>"));
+      else if (line.dataType == 10)
+        return QString(tr("<center>Spin: %1</center>")).arg(line.spinObservable);
       else
         return QString(tr("<center>Angle Integrated</center>"));
     } else if (index.column() == 10)
@@ -359,6 +361,11 @@ bool SegmentsTestModel::setData(const QModelIndex &index, const QVariant &value,
     return true;
   }
   return false;
+}
+
+void SegmentsTestModel::setLineSpin(int row, const QString &token) {
+  if (row < 0 || row >= segTestLineList.size()) return;
+  segTestLineList[row].spinObservable = token;
 }
 
 void SegmentsTestModel::setLineExtras(int row, const QString &tokens) {

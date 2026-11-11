@@ -80,7 +80,16 @@ its own nucleus's pairs only, the missing-J\ :sup:`π` report is given per
 nucleus, and two levels with the same J\ :sup:`π` and energy in different
 nuclei are different levels. A level cannot be moved to another nucleus; add
 it again there. The file keeps one block of level lines per nucleus; the
-engine refuses a level whose channels name two nuclei.
+engine refuses a level whose channels name two nuclei, unless an
+``<isospin>`` block declares it.
+
+An isospin level (one level ID whose lines span several nuclei, see
+:doc:`../reference/data_formats`) appears as one level per nucleus. Saving
+writes its lines back consecutively under one ID, and keeps the
+``<isospin>`` block with its level IDs following the new numbering; the
+block itself is edited as text or through pyazr. The engine overwrites the
+energies and widths of the derived members (all but the reference
+nucleus's), so editing those in the table has no effect.
 
 Channels
 --------

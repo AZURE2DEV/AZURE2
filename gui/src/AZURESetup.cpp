@@ -431,7 +431,7 @@ bool AZURESetup::readFile(QString filename) {
   GetConfig().relativistic = fileRelativistic;
   GetConfig().relativisticReferencePair = fileRelativisticReferencePair;
 
-  // The optional <channelRadii> (2026-11-10) and <abundances> blocks sit between </levels> and <segmentsData>, in
+  // The optional <channelRadii> (2026-11-10), <abundances> and <isospin> blocks sit between </levels> and <segmentsData>, in
   // either order.  Before 2026-11-10 a <channelRadii> block was skipped here and dropped on save.
   line = QString("");
   while (!in.atEnd()) {
@@ -442,6 +442,8 @@ bool AZURESetup::readFile(QString filename) {
       if (!pairsTab->readAbundances(in)) return false;
     } else if (tag == QString("<channelRadii>")) {
       if (!pairsTab->readChannelRadii(in)) return false;
+    } else if (tag == QString("<isospin>")) {
+      if (!levelsTab->readIsospinBlock(in)) return false;
     }
   }
   if (in.atEnd() && line.trimmed() != QString("<segmentsData>")) return false;
@@ -884,6 +886,13 @@ bool AZURESetup::writeFile(QString filename) {
     out << "<abundances>" << Qt::endl;
     if (!pairsTab->writeAbundances(out)) return false;
     out << "</abundances>" << Qt::endl;
+  }
+
+  // Isospin levels: the block as read, its level IDs following the levels' new IDs.
+  if (levelsTab->hasIsospinBlock()) {
+    out << "<isospin>" << Qt::endl;
+    if (!levelsTab->writeIsospinBlock(out)) return false;
+    out << "</isospin>" << Qt::endl;
   }
 
   out << "<segmentsData>" << Qt::endl;

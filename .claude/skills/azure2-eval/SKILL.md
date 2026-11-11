@@ -69,6 +69,26 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   1e-10 (`tests/natural_target/check.sh` does exactly this). rmfit: keys of
   kind `abundance`, prior rows from the block, the sum-to-one term is NOT a
   row (fix the abundances or accept priors only).
+- **Isospin levels (Hale's charge-independent R-matrix): ties live in FORMAL
+  space with common radii and B = -l, so run with `--no-brune`.** An
+  `<isospin>` block (feature/isospin-levels, 2026-10-17; design
+  `Aeql4/10-16-26_isospin_design`) declares levels whose ONE level ID spans
+  several compound nuclei (`level <ID> <T>`); each line carries its own
+  nucleus's Ex. The reference nucleus's member is free, the others are
+  derived (E_m = E_ref - T_ref + T_m + shift_m; amplitudes = Clebsch-Gordan
+  ratio x the free one, t3 = (Z-N)/2, light particle first; forbidden channels 0
+  or a `mix` amplitude) and stay in the parameter list FIXED and synced. New
+  parameters `isospin_shift_<Z>_<A>`, `isospin_mix_<k>` follow the abundances.
+  Brune/Park/RMC are refused; MCMC and pyazr take RWA parameters only (the
+  physical-to-formal transform would mix stale derived members into free ones).
+  `soft <ID> <sigma_E> <sigma_gamma>` relaxes one level's tie into a penalty
+  (derived slots free; MIGRAD/MCMC only, LM/GSL refused).
+  Read the start-up factor table and `isospin.out` before trusting a model;
+  `tests/isospin_levels/check.sh` is the worked example (toy A=4: 4Li/4H/4He).
+  pyazr: `AzrModel.join_levels(..., T=)`, `set_isospin_reference/shift/level`,
+  `add_isospin_mix`; `parameters.isospin`; `penalties()["isospin"]` is already
+  inside `calculate_chi2_rwa`. The GUI keeps the block and the joined IDs on
+  save but writes masses to 6 significant digits (all projects).
 - **A width of exactly 0 is a fixed parameter, whatever its fix flag says.**
   `CNuc.cpp:1621` adds every channel as `p.Add(name, gamma, 0.1*gamma)` and then
   `if (gamma == 0.0) p.Fix(name)`, so a channel written with value `0` and

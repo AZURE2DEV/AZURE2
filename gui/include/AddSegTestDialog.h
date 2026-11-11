@@ -57,6 +57,8 @@ class AddSegTestDialog : public QDialog {
   int observableCode() const;
 
   QLineEdit *phaseJValueText;
+  QLineEdit *spinText;  //!< isDiff 10 observable token
+  QLabel *spinLabel;
   QLineEdit *phaseLValueText;
   QLineEdit *phaseSValueText;   ///< channel spin of a phase-shift segment ("spin <s>"), empty = not given
   QLabel *phaseSValueLabel;

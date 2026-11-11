@@ -44,6 +44,15 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
   dataTypeCombo->addItem(tr("Phase Shift"), 2);
   dataTypeCombo->addItem(tr("Angular Distribution Coefficients"), 3);
   dataTypeCombo->addItem(tr("Analyzing Power"), 7);
+  dataTypeCombo->addItem(tr("Spin Observable"), 10);
+  spinText = new QLineEdit;
+  spinText->setVisible(false);
+  spinText->setMinimumWidth(110);
+  spinText->setToolTip(tr("Spin observable token (isDiff 10):\n"
+                            "  b:y  beam A_y      t:y  target A_0y      b:y*t:y  spin correlation C_yy\n"
+                            "  b:yy b:xx b:zz b:xz  spin-1 tensor powers      b:iT11 b:T20 b:T21 b:T22  spherical\n"
+                            "  e1:y e2:y  outgoing polarization      b:y>e1:y  polarization transfer\n"
+                            "Madison frame (y along k_in x k_out)."));
   connect(dataTypeCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(dataTypeChanged(int)));
   frameLabel = new QLabel(tr("Frame:"));
   frameLabel->setVisible(false);
@@ -190,6 +199,10 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
   angDistSpin->setVisible(false);
   phaseLayout->addWidget(angDistLabel);
   phaseLayout->addWidget(angDistSpin);
+  spinLabel = new QLabel(tr("Observable:"));
+  spinLabel->setVisible(false);
+  phaseLayout->addWidget(spinLabel);
+  phaseLayout->addWidget(spinText);
   lowerLayout->addLayout(phaseLayout, 0, 3);
 
   lowerLayout->addWidget(advancedModeCheck, 1, 0, 1, 4);
@@ -306,13 +319,15 @@ void AddSegTestDialog::dataTypeChanged(int) {
   phaseSValueText->setVisible(phase);
   angDistLabel->setVisible(angDist);
   angDistSpin->setVisible(angDist);
-  // lab or C.M. differential, or A_y
-  const bool angles = (code == 1 || code == 5 || code == 7);
+  // lab or C.M. differential, A_y or a spin observable (isDiff 10, its token in the Observable field)
+  const bool angles = (code == 1 || code == 5 || code == 7 || code == 10);
+  spinLabel->setVisible(code == 10);
+  spinText->setVisible(code == 10);
   lowAngleText->setEnabled(angles);
   highAngleText->setEnabled(angles);
   angleStepText->setEnabled(angles);
-  // C.M. differential and A_y take centre-of-mass angles
-  angleBox->setTitle((code == 5 || code == 7) ? tr("C.M. Angle [degrees]") : tr("Lab Angle [degrees]"));
+  // C.M. differential, A_y and spin observables take centre-of-mass angles
+  angleBox->setTitle((code == 5 || code == 7 || code == 10) ? tr("C.M. Angle [degrees]") : tr("Lab Angle [degrees]"));
   frameLabel->setVisible(observable == 1);
   frameCombo->setVisible(observable == 1);
   // With "Total capture" as the exit pair only the angle-integrated observable is offered.
@@ -418,7 +433,7 @@ void AddSegTestDialog::removeComponent() {
 bool AddSegTestDialog::naturalAllowed() const {
   // The engine's NaturalAllowed: a weighted sum is only meaningful for additive observables.
   int code = dataTypeCode();
-  if (code == 2 || code == 3 || code == 7) return false;
+  if (code == 2 || code == 3 || code == 7 || code == 10) return false;
   if (advancedModeCheck->isChecked() && operationCombo->currentIndex() == 1) return false;  // ratio
   return true;
 }

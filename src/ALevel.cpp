@@ -19,6 +19,7 @@ ALevel::ALevel(NucLine nucLine) :
   isECLevel_(false),
   ecMultMask_(0),
   ecPairNum_(0) {
+  levelID_ = nucLine.levelID();
   if (nucLine.levelFix() == 1)
     energyfixed_ = true;
   else

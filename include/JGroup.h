@@ -51,6 +51,11 @@ class JGroup {
   /// CNuc::Fill on every group when the project holds more than one nucleus.
   bool NucleusLabelled() const { return nucleusLabelled_; }
   void SetNucleusLabelled(bool on) { nucleusLabelled_ = on; }
+  /// B_c = -l_c in every particle channel of the group (Hale's fixed boundary
+  /// values), instead of the shift function at the first level's energy.
+  /// Set for groups that hold isospin levels, so that isospin partners share B.
+  bool BoundaryMinusL() const { return boundaryMinusL_; }
+  void SetBoundaryMinusL(bool on) { boundaryMinusL_ = on; }
   /// Append a level.
   void AddLevel(ALevel);
   /// Append a channel; it applies to every level in the group.
@@ -67,6 +72,7 @@ class JGroup {
   int nucleusZ_ = 0;
   int nucleusA_ = 0;
   bool nucleusLabelled_ = false;
+  bool boundaryMinusL_ = false;
   double j_;
   std::vector<ALevel> levels_;
   std::vector<AChannel> channels_;

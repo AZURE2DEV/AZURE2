@@ -93,6 +93,9 @@ static bool CoefficientsAllowed(CNuc *theCNuc, const ESegment &segment, int numb
 static bool AnalyzingPowerAllowed(CNuc *theCNuc, const ESegment &segment, int number, bool isTest,
                                   const Config &configure) {
   if (!segment.IsAnalyzingPower()) return true;
+  // A general spin observable (isDiff 10) shares A_y's plumbing but not this restriction: SpinAllowed checks its
+  // token against the particles' spins (tensor observables of a spin-1 beam are what it is for).
+  if (segment.IsSpinSegment()) return true;
   PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetEntranceKey()));
   if (fabs(entrancePair->GetJ(1) - 0.5) < 1.e-6) return true;
   configure.outStream << "ERROR: " << (isTest ? "test segment #" : "segment #") << number
@@ -219,6 +222,41 @@ static bool NaturalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTes
 }
 
 /*!
+ * An isDiff 10 segment names a spin observable (SpinObservable.h).  Its token must parse, both pairs must be
+ * particle pairs (capture spin observables other than A_y are not implemented), and every particle the
+ * observable addresses must have the spin the operator needs.
+ */
+static bool SpinAllowed(CNuc *theCNuc, const ESegment &segment, int key, bool isTest, const Config &configure) {
+  if (!segment.IsSpinSegment()) return true;
+  const char *what = isTest ? "Test segment" : "Data segment";
+  if (!segment.GetSpinParseError().empty()) {
+    configure.outStream << "ERROR: " << what << " #" << key << ": " << segment.GetSpinParseError() << "." << std::endl;
+    return false;
+  }
+  if (!theCNuc->IsPairKey(segment.GetEntranceKey()) || !theCNuc->IsPairKey(segment.GetExitKey())) {
+    configure.outStream << "ERROR: " << what << " #" << key << ": a spin observable needs one entrance and one exit pair."
+                        << std::endl;
+    return false;
+  }
+  PPair *in = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetEntranceKey()));
+  PPair *out = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetExitKey()));
+  if (in->GetPType() != 0 || out->GetPType() != 0) {
+    configure.outStream << "ERROR: " << what << " #" << key << ": spin observable \"" << segment.GetSpinToken()
+                        << "\" needs particle pairs on both sides (for capture only A_y, isDiff 7, is implemented)."
+                        << std::endl;
+    return false;
+  }
+  std::string error;
+  if (!segment.GetSpinObservable()->Check(in->GetJ(1), in->GetJ(2), out->GetJ(1), out->GetJ(2),
+                                          in == out, error)) {
+    configure.outStream << "ERROR: " << what << " #" << key << ": spin observable \"" << segment.GetSpinToken()
+                        << "\": " << error << "." << std::endl;
+    return false;
+  }
+  return true;
+}
+
+/*!
  * The decomposition of a sample segment, one file per segment since
  * AZUREOut files are named by pair keys only: the energy, the total the fit
  * compares with the data, and the abundance-weighted term of every compound
@@ -337,6 +375,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
           if (!AnalyzingPowerAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!CoefficientsAllowed(theCNuc, NewSegment, numTotalSegments, configure)) return -1;
           if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
+          if (!SpinAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!UPOSAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!TotalCaptureCodeOk(NewSegment, numTotalSegments, false, configure)) return -1;
@@ -578,6 +617,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
           PPair *segEntrance = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
           if (!AnalyzingPowerAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
+          if (!SpinAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!UPOSAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!TotalCaptureCodeOk(NewSegment, numTotalSegments, true, configure)) return -1;
@@ -2517,6 +2557,9 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
         if (this->GetTargetEffect(this->GetScreeningEffect(k))->GetScreeningSigma() > 0.0) anyPrior = true;
       if (anyPrior) chiOut << " Total-Screening-Chi-Squared: " << this->ScreeningPenalty();
     }
+    // Isospin levels: priors on the internal Coulomb shifts and isospin-forbidden amplitudes.
+    if (hasIsospinPenalty_)
+      chiOut << " Total-Isospin-Chi-Squared: " << isospinPenalty_;
     // Fitted target densities: their priors, and the densities themselves (which param.sav also holds).
     if (this->NumDensityParams() > 0) {
       bool anyPrior = false;
@@ -3711,6 +3754,7 @@ bool SharesCalculation(EPoint &a, EPoint &b, bool sameExit = true) {
     return false;
   if (a.IsAnalyzingPower() != b.IsAnalyzingPower()) return false;
   if (a.IsAngularDist() != b.IsAngularDist()) return false;
+  if (a.GetSpinObservable() != b.GetSpinObservable()) return false;
   if (a.IsCoefficient() != b.IsCoefficient()) return false;
   if (a.IsCoefficient() && a.GetCoefficientAbsolute() != b.GetCoefficientAbsolute()) return false;
   if (a.NumSubPoints() != b.NumSubPoints()) return false;

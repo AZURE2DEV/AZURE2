@@ -103,6 +103,8 @@ class SegLine {
   SegLine(std::istream &stream) {
     stream >> isActive_ >> entranceKey_ >> exitKey_ >> minE_ >> maxE_ >> minA_ >> maxA_ >> isDiff_;
     if (isDiff_ == 2) stream >> phaseJ_ >> phaseL_;
+    // isDiff 10: a spin observable, named by one token (SpinObservable.h).
+    if (isDiff_ == 10) stream >> spinObservable_;
     stream >> dataNorm_ >> varyNorm_ >> dataNormError_;
     std::string dummyString;
     getline(stream, dummyString);
@@ -536,6 +538,8 @@ class SegLine {
    * Returns why the line could not be read ("" if it could, or if the reason is not known).
    */
   std::string parseError() const { return parseError_; };
+  //! The observable token of an isDiff 10 segment (empty otherwise).
+  std::string spinObservable() const { return spinObservable_; };
   /// A note about the line that did not fail it (printed by EData with the segment number).
   std::string parseWarning() const { return parseWarning_; };
   /*!
@@ -599,6 +603,7 @@ class SegLine {
   std::vector<double> shiftFnErrors_;
   std::vector<int> shiftFnVary_;
   std::string parseError_;
+  std::string spinObservable_;
   std::string parseWarning_;
   int isAdvanced_;
   int operationType_;

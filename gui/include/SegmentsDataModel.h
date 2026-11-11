@@ -42,6 +42,8 @@ struct SegmentsDataData {
   // (SegmentKeywords.h) and leaves every other token as read.  Set with
   // setLineExtras(); the Groups column (read-only) shows the group blocks.
   QString extraTokens;
+  // isDiff 10: the spin-observable token (SpinObservable.h).  Not a table column: set with setLineSpin().
+  QString spinObservable;
 };
 
 /*!
@@ -65,6 +67,7 @@ class SegmentsDataModel : public QAbstractTableModel {
   bool moveLine(int from, int to);
   /// Store the verbatim keyword blocks of a row (no editable column addresses them).
   void setLineExtras(int row, const QString &tokens);
+  void setLineSpin(int row, const QString &token);
   /// The read-only column listing a row's groups, "norm: D, shift: A" (normgroup / shiftgroup / shiftfngroup).
   static const int GroupsColumn = 24;
   /*! Row of the segment whose \p keyword ("normgroup", "shiftgroup", "shiftfngroup") value \p row takes: the first

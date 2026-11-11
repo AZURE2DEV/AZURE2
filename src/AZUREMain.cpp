@@ -138,6 +138,8 @@ int AZUREMain::operator()() {
     params.ReadUserParameters(configure());
     if (!params.ReconcileBasis(compound(), configure())) return -1;
   }
+  // A parameter file may hold values (or a free flag) for derived isospin slots.
+  compound()->SyncIsospinParams(params.GetMinuitParams());
   // Prior parameter covariance (<config> priorCovariance=): matched onto the parameter vector as it stands now (a
   // parameter file can fix or free level parameters), before anything is written, so a refused file leaves no
   // output.  Only a run with data has a chi-squared to add it to.
@@ -183,6 +185,7 @@ int AZUREMain::operator()() {
     ParameterLimitsManager limitsManager(&configure(), compound(), data(), &params);
     limitsManager.ReadParameterSettings();
     limitsManager.ApplyAllParameterSettings(params.GetMinuitParams());
+    compound()->SyncIsospinParams(params.GetMinuitParams());
 
     // Warn once if a level has a radiative width comparable to its particle width,
     // where the R-Matrix treatment of capture breaks down.
@@ -457,6 +460,7 @@ int AZUREMain::operator()() {
 
         data()->SyncShiftGroupParams(params.GetMinuitParams());
         data()->SyncNormGroupParams(params.GetMinuitParams());
+        compound()->SyncIsospinParams(params.GetMinuitParams());
         params.WriteUserParameters(configure(), true);
       } else {
 #endif
@@ -482,6 +486,7 @@ int AZUREMain::operator()() {
           }
           data()->SyncShiftGroupParams(params.GetMinuitParams());
           data()->SyncNormGroupParams(params.GetMinuitParams());
+          compound()->SyncIsospinParams(params.GetMinuitParams());
           params.WriteUserParameters(configure(), true);
         } else if (configure().paramMask & Config::USE_LM_MINIMIZER) {
           // Levenberg-Marquardt / Gauss-Newton using the analytic residual
@@ -506,6 +511,7 @@ int AZUREMain::operator()() {
           }
           data()->SyncShiftGroupParams(params.GetMinuitParams());
           data()->SyncNormGroupParams(params.GetMinuitParams());
+          compound()->SyncIsospinParams(params.GetMinuitParams());
           params.WriteUserParameters(configure(), true);
         } else {
           // Use Minuit2 MIGRAD for minimization (default).  When the analytic-
@@ -701,6 +707,7 @@ int AZUREMain::operator()() {
           params.GetMinuitParams() = min.UserParameters();
           data()->SyncShiftGroupParams(params.GetMinuitParams());
           data()->SyncNormGroupParams(params.GetMinuitParams());
+          compound()->SyncIsospinParams(params.GetMinuitParams());
           params.WriteUserParameters(configure(), true);
         }  // end MIGRAD (else of Levenberg-Marquardt selector)
 #ifdef USE_NLOPT
