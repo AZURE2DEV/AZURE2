@@ -2,6 +2,173 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (director, 19:25) — merged: kernels, the stopping wiring, the gradient per compound energy (Phase 5 branches 6, 5, 2)
+
+### State
+
+- `feature/upgrade-4-data` holds the three branches (merge commits of `feature/upgrade-5-kernels`,
+  `feature/upgrade-5-stopping-wire`, `feature/upgrade-5-energy-tasks-gradient`) and two director's commits (the pyazr
+  test-registration block last again; the documents on the kernel count's limits and the new refusals). Its tree is the
+  rehearsal's (`rehearsal/trial23`), which is what was verified. `feature/upgrade` is merged with it. Nothing pushed.
+- Phase 5 (`energy_grid.md` §8): branches 1 (one solve per energy), 2 (gradient), 3 (lab frame), 4 (layer yield),
+  5 (stopping wiring), 6 (kernels) are merged. Running: branch 7 part 1 (the node table; sub-points stop being
+  `Unit`s, the point mapping deleted, bit-identical; brief `work/briefs/AT_grid_part1_nodes.md`,
+  `feature/upgrade-5-grid-nodes`) and one generic fit-parameter kind for apparatus parameters (brief
+  `work/briefs/AS_apparatus_parameters.md`, `feature/upgrade-5-apparatus-parameters`). After them: branch 7 part 2
+  (the shared mesh of decision D2, the deletions of D3, kernels that compose), 8 (shift kernel), 9 (observables, D5),
+  10 (THM on the grid).
+- Phase 4 close, running: pyazr off its old file class (`feature/upgrade-4-pyazr-off-azrfile`), the audit of the
+  regression checks (`feature/upgrade-4-check-audit`). Then the refusal switch (old formats refused, the old reading
+  path deleted).
+- Machine: 12 threads in total for all agents and the director this night (PI, 2026-11-11); `work/briefs/COMMON.md`
+  says so. `work/director/full_verify3.sh` is the 6-thread verification; `full_verify2.sh` (12 threads) is not to be
+  used until the PI lifts the limit.
+
+### Director's verification (the tree of the last merge, build `work/b-trial23`)
+
+| check | result |
+|---|---|
+| all projects, 3 bases, against the last verified batch (`tab-trial23g` vs `tab-trial22`) | 780/753/780 files; 766/739/766 identical, 14 only-new per basis (the two new test directories), 0 differ |
+| calculations at 1 against 3 threads (T1, T2, T3, 13N; 12 files, χ²) | identical |
+| `ctest -LE slow` | 203/203 |
+| `ctest -L slow` | 10/10 |
+| `tests/run_tests.sh` | 152 passed, 0 failed |
+| old against format 3 (`spec_equivalence`) | 206 files: 184 converted and equal, 0 differ, 22 not converted |
+| converted-tree gate against `tab-trial8` | 483 (456 formal) identical, 38 classified, 0 differ, 0 missing |
+| build | 0 warnings |
+
+Logs: `work/director/v3_trial23.*.log`, `gate_trial23.log`.
+
+### Fits and the number of threads: what holds now, measured by the director
+
+`work/director/repro23/` (script `run.sh`, table `result.txt`): six fits (T2 with the analytic gradient, T2 MIGRAD,
+T2 `--use-lm`, 13N with the gradient, `tests/stopping_yield/models/fit.azr`, `tests/layer_yield/models/fit.azr`),
+each at 1 thread and twice at 3 threads.
+
+- **Every result file is identical at 1 and 3 threads and from run to run** (parameters, covariance, χ², the data
+  output). Before the gradient branch two runs of one build at 5 threads differed in 8 files.
+- **Not identical:** the count `calls` in `fitStatus.out` (T2: 205, 204, 203), the order of the "Iteration" lines of
+  the log, and the intermediate snapshot `param.fit`. Cause, read in the code: Minuit2's numerical-gradient loop
+  (`external/minuit2/src/Numerical2PGradientCalculator.cxx`) calls the objective from an OpenMP loop and its call
+  counter (`MnUserFcn.cxx`, `fNumCall++`) is not atomic; the engine's iteration snapshot is written in the order the
+  calls arrive. The numbers of the fit do not depend on it. A fit that ends at `--max-calls` could in principle end
+  one iteration apart. The PI decided not to patch Minuit2 (`external/`). A remedy on the engine's side (count the
+  calls in the engine's own wrapper, write the snapshot of the lowest χ² instead of the last arrival) is not started.
+- For agents and checks: compare fits on the result files, not on `fitStatus.out` or `param.fit`.
+
+### Open, for the owner or the PI
+
+- SRIM's terms (free for non-commercial use, citation) against a GPL repository that ships SRIM's two data files:
+  the owner's decision (`stopping/data/srim/README.md`).
+- A new kind of fit parameter costs 20 existing files; a new apparatus kernel costs none but does not compose and
+  cannot be fitted yet. Both are what the two running branches are for; the count will be repeated on them.
+- The accuracy of a yield over a narrow resonance on a thick layer is 1.5e-4 (the present quadrature); the grid
+  branch gets the director's integral as a committed test.
+- The Minuit2 call counter (above).
+- ThreadSanitizer has not been run: there is no clang on this machine.
+
+### The gradient per compound energy (`feature/upgrade-5-energy-tasks-gradient`, Phase 5 branch 2) — director's review
+
+- What it does: the analytic gradient, the least-squares rows and the model gradients run over the same energy
+  tasks as the values (`src/GradEnergyTasks.cpp`, 532 lines, read by the director): a forward pass, the cotangent of
+  every unit, one fill and factorisation of the level matrix per task, sums over 64 interleaved chunks added in a
+  fixed order, row blocks added in task order. That fixed order is what makes the fit's numbers independent of the
+  thread count. Deleted: `BuildGradItems` with its grouped and ungrouped routes, `GradOnePoint`, `GroupRows`,
+  `ForEachRow`, `TBarAdjointMany`, `ScopedPointMappingOff`, the switch `AZURE_NO_GROUPED_GRADIENT`.
+- The 5-thread slowdown of branch 1 (director's finding, 7 % on the T2 fit): the agent measured its cause (the
+  tasks rebuilt serially at 156 of 196 passes, 1.15 s of 15.6 s) and removed it (0.37 s). The director has not
+  repeated the 5-thread timing: the machine is limited to 12 threads this night and other runs share it. Owed.
+- Against the base at 1 thread the fits' end points move by rounding along the path (T2 2.5e-9 in a parameter, 13N
+  6.8e-11); `natural_neon` stopped after 30 calls far from a minimum differs by 5.9e-5 (the paths agree to 1e-15 at
+  the first call). Accepted: a fit's path is not a regression quantity; the outputs of calculations are identical.
+- No defect found in the reading. One thing for extensibility: the parameter cotangents name the kinds of data
+  parameter a third time, as characters (`ParamCotangent::kind` 'a', 'd', 't'); brief AS is told to enter new
+  apparatus parameters there by the parameter table, so that the next one adds no case.
+- The point mapping (`MapData`, `MapLeaves`, `SharesCalculation`) is still there and no longer saves anything: with
+  it switched off every output is identical except a look-up count in two `run.log` files; time equal, memory +3.5 %
+  on T2. Its deletion is the first milestone of the node-table branch.
+- For the merge (director): the record sizes of `tests/consistency/file_sizes.tsv` for files two branches changed
+  were set by hand (`--tighten-sizes` only lowers). The agent's speed series and a last documentation commit had not
+  arrived at the time of the merge; they are merged when they do.
+
+### Apparatus effects as kernel functions (`feature/upgrade-5-kernels`, Phase 5 branch 6) — director's review
+
+- What it does: the folds of a point (target integration with its four target kinds, Gaussian resolution, beam
+  profile, UDR, Doppler broadening) left `Unit` and are plain functions in `experiment/src/Kernel*.cpp`, listed in one
+  table (`experiment/src/Kernels.cpp`, `Kernels()`); the engine looks the effect's kernel up and calls it
+  (`src/PointFold.cpp`, 112 lines). `src/TargetFold.cpp` (502 lines) is deleted. Value and gradient weights come from
+  the same template (on `double` and on `LinearForm`). No number moved (agent's run of every project; the director's
+  batch verification repeats it).
+- **The extension count the PI asked for.** The agent added a rectangular energy resolution
+  (`energy_resolution rectangular width 20 keV` on a detector) by its own recipe: 1 new kernel file (69 lines), 1 line
+  in the table, 1 line in `experiment/CMakeLists.txt`, tests, schema and documentation; **0 files under `src/` and
+  `include/`** (director read the commit's file list: 14 files, +422/−13), 4 minutes to a passing test. The finite-layer
+  yield a week earlier had touched 11 engine files.
+- **The limits of that count (director's reading of the code; say them to the owner):**
+  1. It holds for a *stand-alone resolution kernel with scalar parameters*, selected by `detector.energy_resolution
+     <form>`. A kernel that needs a new datum of the point (as the Doppler kernel needs the temperature, the photon
+     kernels Q and mass) or a non-scalar parameter edits `KernelPoint`/`KernelParameters` in `Kernels.h` and the
+     engine function that fills them (`TargetEffect::KernelParametersFor`). `KernelParameters` still has named
+     members for every older kernel; only the new table kernels use the generic `values`.
+  2. **Kernels do not compose yet.** A table kernel on a data set that also has a target, a beam spread, a beam
+     profile or a UDR is refused (`src/TargetEffect.cpp`, `SelectKernels`: "the <kernel> kernel cannot be combined
+     with a target, a beam spread, a beam profile or a UDR"). So the rectangular resolution cannot be used on a
+     target-integrated yield today. The target kernel takes the beam spread and straggling as its own parameters;
+     the general chain (target ∘ resolution ∘ broadening on one mesh) is the grid branch (branch 7).
+  3. The kernel's parameter row says `fittable = true`, but a kernel parameter is not a fit parameter yet: there is
+     no generic "kernel parameter" kind that reads the table. Follow-up after the stopping-wire merge (it adds the
+     stopping-scale kind in the same files): one kind, read from the table rows, so that a new kernel's parameters
+     are fittable with no further code. Until then the row's flag is a declaration, not a feature.
+  4. Of the derivative column of `energy_grid.md` §3.3 only the Doppler temperature and the rectangular width are
+     kernel functions; the others (areal density by central differences, etc.) are still engine code.
+- New refusal users can meet: two resolution kernels on one data set ("one resolution kernel per data set: X and Y
+  cannot be combined"); before, one of them was silently not applied. Accepted; listed under "What users notice".
+- Director's own runs (`work/b-kernels`, 1 thread): `ctest -R kernels` passes; `tests/rectangular_resolution/check.sh`
+  passes (folded points within 8.6e-5 of the window average of the bare output; the tolerance of the check is 1e-3).
+- For the merge: 14 lines of `src/AZUREGrad.cpp` (`FoldPoint`/`FoldWeights`/`FoldTemperatureDerivative` in
+  `GradTargetEffectAdjoint` and `ThmPointModelGradient`) meet the gradient branch's rewrite; the stopping callback in
+  `KernelParametersFor` must call the stopping-wire branch's accessor.
+
+### The engine takes its stopping from `stopping/` (`feature/upgrade-5-stopping-wire`, Phase 5 branch 5) — director's review
+
+- What it adds: a target says `stopping evaluation` (SRIM-2013 for its `composition`, `phase`, `compound_correction`
+  and the projectile of the data set's entrance pair) or `stopping table "file" <units>`; `src/TargetStopping.cpp` is
+  the one place a stopping is computed, per active nucleus (the material's stopping per atom over the active
+  element's atom fraction), and `TargetEffect::StoppingAt` applies the stopping scale once. The scale is a fit
+  parameter (`stopping_scale.<material>.<projectile>`, one per material and projectile, fixed at 1 by default, prior
+  the record's or SRIM's stated accuracy when fitted: decision D6). The run's log, `--validate` and `--describe`
+  print the provenance and SRIM's citation. `pyazr.stopping` binds the library. ERYA is removed (decision D7:
+  `external/erya` only; the director checked that no other path under `external/` is touched).
+- Outputs of the present projects: identical (agent's run; the director's batch verification repeats it).
+- **Director's own check on a material the agent did not choose** (`work/director/stopcheck/`: Si₃N₄, active ¹⁵N,
+  atom fraction 4/7; the narrow resonance of the test; own script with LunaSRIM 1.0.0 for the stopping at the
+  resonance and the exit energy, Breit–Wigner integral over the layer): thick layer (45.6 keV), four energies:
+  engine/own − 1 between −8.0e-5 and +8.6e-5 (the line-shape and quadrature level of `layer_yield`); a 5.63 keV
+  layer scanned every 10 eV over both edges, 127 points: largest |engine − own| 2.0e-4 of the plateau, at the back
+  edge, which is 0.03 eV in the exit energy (6e-6 of the layer's loss; the two integrators agree to 5e-6).
+- **What a new kind of fit parameter costs (the count the PI asked for): 20 existing files** (parameter table, data
+  set, working copy, hand-over, objective, gradient map, finite-difference Jacobian, API, binding, labels, outputs,
+  documents), most by 1–20 lines, and one new file. This is not "a few named places". It is the argument for the
+  follow-up noted in the kernels review: one generic kind for kernel and target parameters read from the table.
+- Limits to know: the scale's derivative is by central differences on the whole χ² (as the density); a fitted scale
+  with fold windows or the automatic tolerance is refused; TRIM's straggling is not offered for an evaluated target;
+  a scale on an extrapolation's data set is untested; `--validate` cannot check the energy range (refused at set-up);
+  the old integrators do not call the library's integrals (brief step 6, not attempted);
+  `TargetStopping::LibraryPerActiveNucleus` returns NaN when the data are missing (the set-up refuses first;
+  tested with an empty `AZURE2_SRIM_DATA_DIR`).
+- Found by the director: `pyazr_stopping` (and five older pyazr tests) were registered after the block of
+  `tests/pyazr/CMakeLists.txt` that hands the scratch build's engine module to the tests, so under ctest they were
+  skipped unless the caller exported `PYAZR_ENGINE_DIR`. The block is last again (rehearsal commit).
+- Accepted: the one line in `src/AZUREGrad.cpp` (`AppendStoppingScaleParams` in `BuildParamIndexMap`); ten printed
+  digits of `azure2-stopping`.
+- For the merge with the kernels branch (director): the kernels' stopping callback of `KernelParametersFor` (the
+  support of a thick target with Bohr straggling) calls `StoppingAt(E, config, nominal scale)`, as the stopping
+  branch's `GridExtent` did; `GridExtent`, `GaussianKernel`, the straggling functions stay deleted (they are kernel
+  functions). With the pyazr branch: pyazr's version (2.33.0 here, 3.0.0.dev there).
+- **For the owner:** SRIM's terms (free for non-commercial use) against a GPL repository that ships its two data
+  files: unchanged, the owner's decision.
+
+
 ## 2026-11-11 (agent, Phase 5 branch 2) — the gradient over the energy tasks (`feature/upgrade-5-energy-tasks-gradient`)
 
 **Done.** (1) The 5-thread regression of branch 1: measured with a new profile stage "energy tasks: set-up" and the

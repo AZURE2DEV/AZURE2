@@ -189,12 +189,11 @@ reads `CLAUDE.md` first, so it is given the recipes and is stopped by the checks
 
 ## What is in work and what comes next
 
-In work now (2026-11-11, evening): the engine takes its stopping powers from the stopping library (a target says
-`stopping evaluation`; one stopping scale per material and projectile as a nuisance parameter with a prior; ERYA
-removed); the analytic gradient per compound energy (the old point mapping deleted); the apparatus effects (target,
-resolution, beam profile, UDR, Doppler, layer yield) as kernel functions in one table, with a new kernel added by
-the recipe as the proof; pyazr moved off its old file class; an audit that every regression check still tests what
-it says after the conversion.
+In work now (2026-11-11, night): the sub-points of a folded data point stop being objects of their own and become
+entries of one node table per compound nucleus (the old point mapping deleted; every output must stay the same: the
+structural half of the shared energy grid); one generic kind of fit parameter for the parameters of apparatus
+effects, so that a kernel's width or a target's stopping scale is fitted without new engine code; pyazr moved off
+its old file class; an audit that every regression check still tests what it says after the conversion.
 
 Merged on 2026-11-11: the data classes replaced (`DataSet`, `WorkingCopy`, `Segment`, `Unit`); **all 183
 convertible project files in format 3**, the THM projects included; validation that reports what a run would
@@ -203,11 +202,16 @@ with edits of levels, `<config>` and `<thm>` done by the engine; the old pathway
 reads the pathway table; a crash on one ordering of the particle pairs fixed); the design note of Phase 5
 (`energy_grid.md`) with its decisions taken, and its first branches: the level matrix solved once per compound
 energy instead of once per data point or sub-point (a fit evaluation of 13N 132 ms instead of 317, of the
-thick-target project 264 ms instead of 1,102, every output unchanged; a fit with the analytic gradient does not gain
-yet and is 7 % slower at 5 threads until the gradient branch lands); the yield of a layer of finite thickness as a
+thick-target project 264 ms instead of 1,102, every output unchanged); the analytic gradient on the same per-energy
+tasks, with its sums in a fixed order, so that a fit gives the same numbers at any thread count (see "For the
+maintainers to decide"; the old gradient routes deleted); the yield of a layer of finite thickness as a
 quantity (its accuracy over a narrow resonance on a thick layer is 1.5e-4, the present quadrature's); laboratory
 data compared in the laboratory frame (last-digit rounding in 23 projects); SRIM-2013's stopping powers in
-`stopping/`, ported from LunaSRIM (agreement with LunaSRIM to the printing precision).
+`stopping/`, ported from LunaSRIM (agreement with LunaSRIM to the printing precision), and the engine taking its
+stopping from there: a target says `stopping evaluation`, with one stopping scale per material and projectile as a
+nuisance parameter with a prior (checked by the director on Si₃N₄ against an own integral with LunaSRIM: 8e-5 on a
+thick layer, 2e-4 of the plateau at the back edge of a thin one); ERYA removed; the apparatus effects as kernel
+functions in one table (next paragraph).
 
 **What an apparatus effect costs now (Phase 5, branch 6).** The folds (target, beam spread, beam profile, UDR,
 Doppler) are no longer branches inside the engine's point class: each is a kernel of `experiment/` in a file of its
@@ -248,11 +252,16 @@ recipes.
 
 ## For the maintainers to decide
 
-- **Fits and the number of threads.** Calculations are identical at any thread count. A fit's path still depends on
-  it. Two causes were found (`fit_threads.md`). The first is fixed (a working copy kept a sub-point grid within
-  10⁻¹² of the new one). The second is in the vendored Minuit2: its call counter is not atomic, so with several
-  threads a fit limited by `--max-calls` can run one more iteration. Two atomic increments remove it (shown on a
-  scratch build); the patch touches `external/` and is not applied.
+- **Fits and the number of threads.** Calculations are identical at any thread count. Since the gradient branch
+  (2026-11-11) so are the results of a fit: six fits (T2 with the analytic gradient, MIGRAD and Levenberg-Marquardt,
+  13N, a fitted stopping scale, a fitted layer) give the same parameters, covariance, χ² and data output at 1 and 3
+  threads and from run to run (before, two runs of one build at 5 threads differed in 8 files). What still varies
+  is book-keeping: the number of calls printed in `fitStatus.out` (205, 204, 203 for one fit), the order of the
+  "Iteration" lines in the log, and the intermediate snapshot `param.fit`. The cause is in the vendored Minuit2: its
+  numerical-gradient loop calls the objective from several threads and its call counter is not atomic, so a fit
+  limited by `--max-calls` could in principle stop one iteration apart. Two atomic increments remove it (shown on a
+  scratch build, `fit_threads.md`); the patch touches `external/` and is not applied (the PI's decision); the engine
+  could count the calls itself instead.
 - **Two constants.** The electron mass in the β-decay Fermi function (CODATA 2002) and the proton mass of the M1
   capture integral (older than CODATA 2018) are kept at their values so that no result moves; they are named
   constants in `include/Constants.h` (`electronMassOfFermiFunction`, `protonMassOfM1Capture`) and can be changed in
