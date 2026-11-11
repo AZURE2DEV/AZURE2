@@ -41,7 +41,7 @@ def main():
         import pyazr._azure2  # noqa: F401
     except Exception as e:  # pragma: no cover
         print(f"skip: engine not importable ({e})")
-        return 0
+        return 77
 
     work = tempfile.mkdtemp(prefix="pyazr_api_model_value_")
     try:

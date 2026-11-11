@@ -270,20 +270,27 @@ int AZUREMain::operator()() {
                               << std::endl;
     };
 
-    // Build the band covariance from a Minuit covariance (MIGRAD paths).
-    auto captureMinuitCov = [&](const std::vector<double> &covData) {
-      if (!(configure().paramMask & Config::CALCULATE_COVARIANCE_BAND)) return;
+    // The free parameters as the band sees them.
+    auto freeParameterMap = [&]() {
       const int nMn = params.GetMinuitParams().Params().size();
       std::vector<bool> fixedMask(nMn);
       for (int fi = 0; fi < nMn; fi++) fixedMask[fi] = params.GetMinuitParams().Parameter(fi).IsFixed();
-      ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), fixedMask);
+      return BuildParamIndexMap(compound(), data(), fixedMask);
+    };
+
+    // Build the band covariance from a Minuit covariance (MIGRAD paths).
+    auto captureMinuitCov = [&](const std::vector<double> &covData) {
+      if (!(configure().paramMask & Config::CALCULATE_COVARIANCE_BAND)) return;
+      ParamIndexMap pmap = freeParameterMap();
       bandCov = BuildBandCovarianceFromMinuit(covData, pmap);
       // Saved later (after the optional reduced-chi^2 scaling) in the band block.
       if (!bandCov.empty())
         haveBandCov = true;
       else {
         const int np = pmap.NumPacked();
-        if (covData.empty()) {
+        if ((int)covData.size() == np * (np + 1) / 2 && BandPackedColumns(pmap).empty()) {
+          // No level parameter is free (or no parameter at all): reported where the band is skipped.
+        } else if (covData.empty()) {
           configure().outStream << "Note: no covariance available for the uncertainty band -- the fit "
                                    "did not produce one. This usually means the minimum is not well "
                                    "determined (the fit did not fully converge, a parameter is sitting "
@@ -589,7 +596,11 @@ int AZUREMain::operator()() {
           }
           // MIGRAD's error matrix is approximate; refine it with HESSE for the band,
           // falling back to the MIGRAD matrix if HESSE gives no valid covariance.
-          if (configure().paramMask & Config::CALCULATE_COVARIANCE_BAND) {
+          // With no free parameter there is nothing to refine, and MnHesse on such a state ends in a segmentation
+          // fault inside Minuit2 (found by tests/fit_modes; the code is the same at the branch point with dev).
+          if ((configure().paramMask & Config::CALCULATE_COVARIANCE_BAND) && min.UserState().VariableParameters() == 0) {
+            captureMinuitCov(min.UserCovariance().Data());
+          } else if (configure().paramMask & Config::CALCULATE_COVARIANCE_BAND) {
             std::vector<double> migradCov = min.UserCovariance().Data();
             configure().outStream << std::endl
                                   << "Computing accurate covariance (HESSE) for the uncertainty band..."
@@ -832,8 +843,14 @@ int AZUREMain::operator()() {
       else if (fitRun) {
         // The fit ran but produced no usable covariance (already reported above);
         // don't fall back to a stale saved file.
-        configure().outStream << "Uncertainty band skipped: this fit produced no usable covariance."
-                              << std::endl;
+        if (BandPackedColumns(freeParameterMap()).empty())
+          configure().outStream << "Uncertainty band skipped: the fit has no free level parameter. The band "
+                                   "propagates the covariance of level energies, widths and the THM coherent "
+                                   "background; the parameters of targets and data sets are not in it."
+                                << std::endl;
+        else
+          configure().outStream << "Uncertainty band skipped: this fit produced no usable covariance."
+                                << std::endl;
       } else if (!LoadBandCovariance(covPath, cov)) {
         // Extrapolation / no-fit run: the band needs a covariance from a prior fit.
         configure().outStream << "No saved parameter covariance found (" << covPath

@@ -47,7 +47,7 @@ def main():
         import pyazr  # noqa: F401
     except ImportError as e:
         print(f"skipping: {e}")
-        return 0
+        return 77
     work = tempfile.mkdtemp(prefix="ec_integrals_formal_")
     failures = []
     try:
