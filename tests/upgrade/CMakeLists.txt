@@ -163,6 +163,10 @@ set_tests_properties(upgrade_history PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" 
 # tests/ is calculated by exactly one task, checked when the plan is built at set-up, again here and on a copy.
 add_executable(plan_test plan_test.cpp)
 target_link_libraries(plan_test PRIVATE AZURE2Core)
+# A measuring tool for the shared mesh (node_count.cpp: units, distinct compound energies, the mesh estimate per
+# folded project); no test runs it.
+add_executable(node_count node_count.cpp)
+target_link_libraries(node_count PRIVATE AZURE2Core)
 add_test(NAME upgrade_plan COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/plan_test.sh $<TARGET_FILE:plan_test> ${CMAKE_SOURCE_DIR}/tests)
 set_tests_properties(upgrade_plan PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 1800)
 # ... and at run time (AZURE_PLAN_CHECK=1: writes, and every unit's shared solve against its own) on T1-T3, 13N,

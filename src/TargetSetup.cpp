@@ -622,7 +622,8 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
           azure2::experiment::EffectSupport(targetEffect->Kernels(), targetEffect->KernelParametersFor(configure), support,
                                             startEnergy, endEnergy);
           std::vector<double> energyGrid;
-          int numPoints = targetEffect->NumSubPoints();
+          // AZURE_REFINE_QUADRATURE=k: k times the smooth intervals and the points per width
+          int numPoints = targetEffect->NumSubPoints() * configure.refineQuadrature;
           if (configure.useAdaptiveGrid) {
             AdaptiveIntegrationGrid::GridConfig gridConfig;
             gridConfig.maxPoints = numPoints;
@@ -630,7 +631,7 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
             gridConfig.inputWidthsArePhysical = (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->IsTransformedIn();
             gridConfig.baseEnergyStep = (startEnergy - endEnergy) / numPoints;
             gridConfig.resonanceWidthMultiplier = targetEffect->GetResonanceWidthMultiplier();
-            gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth();
+            gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth() * configure.refineQuadrature;
             AdaptiveIntegrationGrid gridGenerator(gridConfig);
             energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
             Draft().SetUpFor(*point).grid = MakeSubGridSpec(gridConfig, startEnergy, endEnergy, targetEffect, cmConversion);
@@ -759,7 +760,7 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
               azure2::experiment::EffectSupport(targetEffect->Kernels(), targetEffect->KernelParametersFor(configure), support,
                                                 startEnergy, endEnergy);
               std::vector<double> energyGrid;
-              int numPoints = targetEffect->NumSubPoints();
+              int numPoints = targetEffect->NumSubPoints() * configure.refineQuadrature;  // as the base's
               if (configure.useAdaptiveGrid) {
                 AdaptiveIntegrationGrid::GridConfig gridConfig;
                 gridConfig.maxPoints = numPoints;
@@ -768,7 +769,7 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
                 gridConfig.inputWidthsArePhysical = (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->IsTransformedIn();
                 gridConfig.baseEnergyStep = (startEnergy - endEnergy) / numPoints;
                 gridConfig.resonanceWidthMultiplier = targetEffect->GetResonanceWidthMultiplier();
-                gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth();
+                gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth() * configure.refineQuadrature;
                 AdaptiveIntegrationGrid gridGenerator(gridConfig);
                 energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
                 Draft().SetUpFor(*point).grid =
