@@ -29,9 +29,12 @@ whoever asks for a calculation, and a project file that says in words what each 
 | 4. Data are data | Named records with units; new kinds of data; the data classes replaced; `CNuc` reduced | most of it done, see below |
 | 5–9 | Energy grid and apparatus kernels, own stopping, finite targets for yields; evaluation without copies; DWBA for THM; pyazr 3.0; web interface | not begun |
 
-**Stopping.** AZURE2 has its own stopping and straggling library, `stopping/` (ICRU 49 coefficients joined to Bethe
-with shell, Barkas and Bloch corrections, ZBL nuclear stopping, Bohr straggling propagated through the target, each
-value with an uncertainty and its source; `docs/upgrade/stopping.md`), built beside the engine and not yet used by it.
+**Stopping.** AZURE2 has its own stopping and straggling library, `stopping/` (materials by formula, energy loss,
+exit energy and range of a layer, straggling propagated through the target, each value with an uncertainty and its
+source; `docs/upgrade/stopping.md`), built beside the engine and not yet used by it. Its stopping powers are being
+changed to SRIM-2013's, ported from the LunaSRIM package with SRIM's two coefficient files and SRIM cited (decision
+of 2026-11-11). One point is yours: those two files stay under the terms of SRIM's authors, so whether the public
+repository ships them or asks the user to fetch them is for you to say.
 
 Phase 7 has begun as a separate library that the engine does not use yet: optical potentials, bound states,
 distorted waves and the DWBA transfer to a bound state, which agree with FRESCO to better than 0.2 %

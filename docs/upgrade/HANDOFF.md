@@ -2,6 +2,52 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (director, 14:00) — merged: the stopping library and the DWBA transfer library (leaves); stopping powers will be SRIM's
+
+Merged on the data branch (`--no-ff`), not pushed: `feature/upgrade-5-stopping-1` (`stopping/`) and
+`feature/upgrade-7-transfer-1` (`physics/transfer`). Both are leaf libraries: no engine file includes them, so no
+project output can move; the check was the build (0 warnings) and `ctest -LE slow` on the two together (197/197).
+
+What the director ran himself, beyond the agents' reports:
+- **Stopping against SRIM-2013** (LunaSRIM 1.0.0, electronic part, p and α in H, He, C, N, O, Ne, Al, Ti, Ta, Au,
+  0.02–10 MeV, gases as gases): most values within 3 %; p in Ta +6 to +7 % at 0.1–0.3 MeV; p in C −11 % and α in Au
+  −17 % at 0.02 MeV; α in C +7 to +11 % below 0.5 MeV; α above 5 MeV −3 to −5 % in several elements.
+- **FRESCO** on the committed (d,n) finite-range case: the cross sections equal `reference.txt` digit for digit.
+
+**Decision of the PI (2026-11-11), which replaces the licence question of the previous entry:** "I would use the
+SRIM stopping powers from my LunaSRIM repository. They are free to use as long as SRIM is cited." So:
+- the electronic coefficient table of the first branch (transcribed from Geant4's `G4BraggModel.cc` /
+  `G4BraggIonModel.cc`) and its Barkas table go; the stopping powers become SRIM-2013's (electronic for any ion,
+  gas/solid phase factor, compound correction, pair-specific nuclear stopping), ported to C++ from LunaSRIM
+  (github.com/skowrons94/LunaSRIM, MIT) with SRIM's data files `SCOEF03.DAT` and `SNUC03.dat`;
+- SRIM is cited in the data directory, in `stopping.md` and in the provenance text the library prints;
+- `ARCHITECTURE.md` §7 ("no SRIM, no ERYA, no LunaSRIM") and `stopping.md` §4, §5, §9, §12 are rewritten by that
+  branch (`feature/upgrade-5-stopping-2`, launched from this head). Until it is merged, `stopping/` computes with the
+  first branch's table: do not wire it into the engine before.
+- **For the owner:** LunaSRIM's own LICENSE says the SRIM data files are not under its MIT licence and stay under the
+  terms of SRIM's authors. They are copied into this repository on the PI's statement that they are free to use when
+  SRIM is cited; whether AZURE2's public repository ships them is the owner's decision (the alternative is a download
+  step, with the library reading the two files from a directory the user names).
+- The three coefficient discrepancies the first branch reported are moot (the rows go). The Chu table and the
+  Yang–O'Connor–Wang constants are not needed for now: the straggling becomes SRIM's (Bohr with TRIM's relativistic
+  factor and low-energy limit), propagated as before.
+
+Judgements on what the agents asked:
+- DWBA, post interaction: the default stays the whole V of the transferred particle with the core, and the choice
+  (whole / nuclear part) becomes an explicit setting when the library is wired to the THM observable.
+- Assigned uncertainties of the stopping power: provisional priors until the SRIM branch replaces them by SRIM's
+  published accuracy; the stopping scale per (material, projectile) (D6) takes its prior from there.
+
+Defects recorded, not fixed here:
+- `physics/coulomb` COULCC returns F and G with the wrong sign at isolated points beyond the turning point (l = 1,
+  η = 0.493, ρ = 8.55). The engine does not call COULCC there (it uses COULSM); only `physics/src/transfer/
+  RadialNumerics.cpp` and tests do. To be fixed or the routine dropped when the continuum part of the DWBA is written.
+
+Running: pathway table 2; one solve per compound energy; finite-layer yield (resumed to write its report); lab-frame
+comparison; THM projects to format 3; the gaps of format 3; SRIM stopping (new).
+Still owed to the PI: the count of engine files each new quantity touches (the finite-layer yield is the first), and
+the extension drill before the meeting with the owner.
+
 ## 2026-11-11 (agent, brief AG) — `physics/transfer`, first part: potentials, bound states, distorted waves, DWBA to a bound state against FRESCO (`feature/upgrade-7-transfer-1`)
 
 **Done.** A leaf library in `physics/` (target `azure2_physics_transfer`, namespace `azure2::physics::transfer`;
