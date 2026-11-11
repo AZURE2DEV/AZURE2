@@ -68,19 +68,33 @@ struct ModelCotangents {
 bool ModelPointBackward(WorkingCopy &data, const Segment &segment, int pointIndex, CNuc *compound, const Config &config,
                         const Results &results, double g, ModelCotangents &out);
 
-/// The residual of one datum: f - y n and dy n, as one expression for every path (the objective, the per-segment
-/// chi^2, the least-squares rows, the API, the covariance groups, the writers' diagnostics).
+/// The residual of one datum in the frame it was given in (docs/upgrade/energy_grid.md section 4): the model f (c.m.
+/// frame) divided by J = dOmega_lab/dOmega_cm of the row at its present energy shift (1 for c.m. data, angle-integrated
+/// data and ratios), against the datum y and its error dy as read, with the norm n.  One expression for every path
+/// (the objective, the per-segment chi^2, the least-squares rows, the gradients, the API, the covariance groups, THM).
 struct Residual {
-  double difference;  ///< f - y n
+  double model;       ///< f/J, the model in the frame of the datum
+  double difference;  ///< f/J - y n
   double error;       ///< dy n
-  /// (f - y n)/(dy n), 0 where dy n = 0.
+  double jacobian;    ///< J: d(model)/d f = 1/J
+  /// (f/J - y n)/(dy n), 0 where dy n = 0.
   double Pull() const { return error != 0.0 ? difference / error : 0.0; }
-  /// The same squared, as (f - y n)^2/(dy n)^2 (the per-segment sums), 0 where dy n = 0.
+  /// The same squared, as (f/J - y n)^2/(dy n)^2 (the per-segment sums), 0 where dy n = 0.
   double Chi2() const { return error != 0.0 ? (difference * difference) / (error * error) : 0.0; }
 };
-inline Residual DataResidual(double model, double y, double dy, double norm) { return {model - y * norm, dy * norm}; }
-/// The residual of row i (0-based) of a segment: its model value in `results` against its c.m. datum, with the norm n.
+inline Residual DataResidual(double model, double jacobian, double y, double dy, double norm) {
+  const double m = model / jacobian;
+  return {m, m - y * norm, dy * norm, jacobian};
+}
+/// The residual of row i (0-based) of a segment: its model value in `results` against its datum as read, with the
+/// norm n.
 Residual PointResidual(const WorkingCopy &data, const Segment &segment, int i, const Results &results, double norm);
+/// The model value of row i of a segment in the frame of its datum, f/J (the profiled norms and THM profiles).
+double ModelInDataFrame(const WorkingCopy &data, const Segment &segment, int i, double model);
+/// The model value f of row i and its nCols derivative columns, each divided by J, appended to `modelOut` and
+/// `columnsOut` (the THM rows of the least-squares path).
+void AppendInDataFrame(const WorkingCopy &data, const Segment &segment, int i, double f, const double *columns,
+                       int nCols, std::vector<double> &modelOut, std::vector<double> &columnsOut);
 
 }  // namespace azure2
 

@@ -100,7 +100,8 @@ working copy and the caller's `Results`.
   narrow-resonance term for resonances narrower than the grid can follow.
 
 ### experiment/
-- `Measurement`: data arrays (E, θ, y, δy) already converted to c.m. at load (frames are a load-time function), the
+- `Measurement`: data arrays (E, θ, y, δy) as read, in the frame they were given in; the model is compared with them in
+  that frame, r = (f/J − n y)/(n δy), the frame of a row (`MeasurementFrame`) holding only its kinematics and J, the
   **model expression** that predicts them (below), apparatus settings, provenance.
 - **Model expressions (decision 12, Jakub, 2026-11-07): what a data set measures is written, not coded.** A
   measurement's prediction is a small expression tree, so a new kind of data is a new combination, not new engine code.

@@ -235,11 +235,11 @@ double Segment::ProfileNormChiSquared(const WorkingCopy &data, const azure2::Res
   const SegmentState &state = data.State(*this);
   for (int i = 0; i < points.size(); i++) {
     const Unit &pt = points[i];
-    double e = CMError(state, i);
+    double e = LabError(i);
     if (e == 0.0) continue;
     double w = 1.0 / (e * e);
-    double m = pt.GetModelValue(results);
-    double d = CMValue(state, i);
+    double m = pt.GetModelValue(results) / Jacobian(state, 0, i);
+    double d = LabValue(i);
     Smm += m * m * w;
     Smd += m * d * w;
     Sdd += d * d * w;

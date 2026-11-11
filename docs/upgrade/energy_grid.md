@@ -361,6 +361,34 @@ What M3 (b) does change: the per-ν data frame loses y^c.m. and δy^c.m. (`Frame
 CMError`), the residual has one form for every data set, the written c.m. data columns become a display computed
 as J·y^lab, and the lab-frame fold of §4.3 becomes expressible.
 
+### 4.2a Status (branch `feature/upgrade-5-lab-frame`, 2026-11-11): done, and measured
+
+The frame of a row holds kinematics only (`FrameRow`: E, θ_c.m., J); y and δy stay as read in the `Measurement`.
+Every comparison is `DataResidual(f, J, y, δy, n)` = (f/J − n y)/(n δy) (`include/ModelPass.h`): the objective,
+the per-segment χ², the profiled norms, the least-squares rows and their norm columns, both analytic gradients (the
+model cotangent carries 1/J), the covariance pulls, the shift columns and the THM profiles.  The c.m. data columns
+of the writers and of the API are J y and J δy, computed where they are read (byte-identical to before).
+Measured against the same tree with the c.m. comparison (the branch's first commit, itself identical to the base):
+- Projects that can move: those with a row whose J ≠ 1 (a probe of every project that loads without generated
+  files): 13N, angle_mapping, channel_space, hybrid_potential, spin_orbit_potential, identical_entrance_reaction
+  (c12c12, dd_pt), relativistic (he5_ang, li7pn_ang, pa_ang, each with _rel, li7pn_edge), sum_lab_frame (plain_data,
+  sum_data, sum_free), T1, T1_start, T2, T2_true, T3, T3_start (`tools/classify.py` `LAB_FRAME_PROJECTS`).  Every
+  other project: identical in three bases.
+- Calculations (all projects × 3 bases, `tools/cls.sh`): every output file identical as printed, except
+  `sum_lab_frame/models/sum_data` and `sum_free`, whose χ² is 3.99 × 10⁻¹⁷ (data equal to the model: χ² is rounding
+  noise) and moves by 1–2 × 10⁻⁶ of itself, 7 × 10⁻²³ absolute.
+- Model values: bit-identical (the model does not depend on the frame of the comparison).
+- Per-point pulls, measured against the natural rounding scale ε (|f/J| + n|y|)/(n δy) of the two forms: at most
+  1.3 ε (limit of §4.4: 8 ulp).  Relative to the pull itself the change is up to 2.7 × 10⁻¹² (T1) and 1.2 × 10⁻² for
+  the pulls of 10⁻⁹ of `sum_lab_frame`: a pull that is a difference of two nearly equal numbers has no relative
+  precision in either form.
+- χ² at the start: ≤ 2 × 10⁻¹⁵ relative, except the 3.99 × 10⁻¹⁷ of `sum_lab_frame` (1.8 × 10⁻⁶).  χ² at the end
+  point of the reference fit (restart from its `param.sav`): ≤ 2.5 × 10⁻¹⁵, except `sum_lab_frame/sum_free`
+  (2 × 10⁻⁹ of 4 × 10⁻¹⁷).
+- Fits at their ends (1 thread, Brune; MIGRAD unless named): end points move by rounding through MIGRAD's path, up to
+  9 × 10⁻⁶ relative in a parameter (angle_mapping, a width), χ² up to 4.3 × 10⁻⁹ (spin_orbit_potential); the
+  `--use-lm` fit of T2 is byte-identical.
+
 ### 4.3 A real difference it makes possible (decision D5)
 
 Today a folded lab-differential point is folded at a fixed θ_c.m. (the point's) and compared through J at the point's

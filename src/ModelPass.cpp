@@ -360,7 +360,18 @@ bool ModelPointBackward(WorkingCopy &data, const Segment &segment, int pointInde
 }
 
 Residual PointResidual(const WorkingCopy &data, const Segment &segment, int i, const Results &results, double norm) {
-  return DataResidual(segment.GetPoints(data)[i].GetModelValue(results), segment.CMValue(data.State(segment), i), segment.CMError(data.State(segment), i), norm);
+  return DataResidual(segment.GetPoints(data)[i].GetModelValue(results), Segment::Jacobian(data.State(segment), 0, i),
+                      segment.LabValue(i), segment.LabError(i), norm);
+}
+
+double ModelInDataFrame(const WorkingCopy &data, const Segment &segment, int i, double model) {
+  return model / Segment::Jacobian(data.State(segment), 0, i);
+}
+
+void AppendInDataFrame(const WorkingCopy &data, const Segment &segment, int i, double f, const double *columns,
+                       int nCols, std::vector<double> &modelOut, std::vector<double> &columnsOut) {
+  modelOut.push_back(ModelInDataFrame(data, segment, i, f));
+  for (int c = 0; c < nCols; c++) columnsOut.push_back(ModelInDataFrame(data, segment, i, columns[c]));
 }
 
 }  // namespace azure2

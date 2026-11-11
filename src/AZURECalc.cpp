@@ -803,36 +803,35 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   // cotangent is d(chi2)/d(model) = 2 r / err^2.  The same per-point model also
   // gives the analytic normalization gradient, accumulated per segment here so
   // it needs no extra forward pass:
-  //   d(chi2)/d(n_s) = sum_pts [ -2 r data/(cmErr^2 n^2) - 2 r^2/(cmErr^2 n^3) ].
+  //   d(chi2)/d(n_s) = sum_pts [ -2 r data/(err^2 n^2) - 2 r^2/(err^2 n^3) ], r = model/J - data*n (DataResidual).
   std::vector<double> normData(ld->Data().NumSegments() + 1, 0.0);
-  // A data covariance couples the points: their cotangent is 2 (M^-1 r)_i / (cmErr n), which
+  // A data covariance couples the points: their cotangent is 2 (M^-1 r)_i / (err n J), which
   // needs every residual of the group first (one forward pass of those points).
   if (ld->Data().HasCovariance()) ld->PrepareCovarianceSeeds(lc, configure(), results);
   FitBarFn fitBarFn = [&](const Segment *seg, int i, int pid, double model) -> double {
     Unit *pt = seg->GetPoint(*ld, pid + 1);
     if (!pt) return 0.0;
     double norm = ld->State(*seg).norm;
-    double dataval = seg->CMValue(ld->State(*seg), pid);
-    double cmErr = seg->CMError(ld->State(*seg), pid);
-    const azure2::Residual res = azure2::DataResidual(model, dataval, cmErr, norm);
+    const double dataval = seg->LabValue(pid), labErr = seg->LabError(pid), jac = Segment::Jacobian(ld->State(*seg), 0, pid);
+    const azure2::Residual res = azure2::DataResidual(model, jac, dataval, labErr, norm);
     const double r = res.difference, err = res.error;
     if (err == 0.0) return 0.0;
     if (seg->GetCovarianceGroup() >= 0) {
-      // chi2 = r^T M^-1 r with r_i = (model - d n)/(cmErr n): d chi2/d r_i = 2 z_i, z = M^-1 r;
-      // d r_i/d model = 1/(cmErr n), d r_i/d n = -model/(cmErr n^2).
+      // chi2 = r^T M^-1 r with r_i = (model/J - d n)/(err n): d chi2/d r_i = 2 z_i, z = M^-1 r;
+      // d r_i/d model = 1/(err n J), d r_i/d n = -(model/J)/(err n^2).
       const double z = pt->GetCovarianceSeed(results);
       const int o = ld->Data().NormOwner(i);
       if (norm != 0.0 && o >= 1 && o < (int)normData.size() && ld->Data().GetSegment(o)->IsVaryNorm()) {
-        const double dNorm = -2.0 * z * model / (cmErr * norm * norm);
+        const double dNorm = -2.0 * z * res.model / (labErr * norm * norm);
 #pragma omp atomic
         normData[o] += dNorm;
       }
-      return 2.0 * z / err;
+      return 2.0 * z / err / res.jacobian;
     }
     // A norm-group follower's points move its leader's norm (o), the one parameter.
     const int o = ld->Data().NormOwner(i);
     if (norm != 0.0 && o >= 1 && o < (int)normData.size() && ld->Data().GetSegment(o)->IsVaryNorm()) {
-      double e2 = cmErr * cmErr;
+      double e2 = labErr * labErr;
       // fitBarFn runs inside the parallel point loop of AccumulateEGammaGradient,
       // and all points of a segment share the same normData[o], so guard the
       // accumulation.
@@ -840,7 +839,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
 #pragma omp atomic
       normData[o] += dNorm;
     }
-    return 2.0 * r / (err * err);
+    return 2.0 * r / (err * err) / res.jacobian;
   };
 
   bool eg = AccumulateEGammaGradient(lc, ld, results, configure(), pmap, sdp, fitBarFn, accum);
@@ -1700,7 +1699,7 @@ void AZURECalc::FinalizeLeastSquaresCovariance(const vector_r &full,
 
 bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
   // Forward-only counterpart of ResidualJacobian (no adjoint): same row order
-  // and residual r = (model - data*n)/(cmErr*n) as ComputeResidualJacobian.
+  // and residual r = (model/J - data*n)/(err*n) as ComputeResidualJacobian.
   // Pooled working copies keep their applied energy shifts and mapping between calls; a fresh
   // Clone() re-shifted every shifted segment and rebuilt the mapping each time (~1 s here).
   CNuc *lc = GetPooledCNuc();
