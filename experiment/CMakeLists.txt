@@ -27,6 +27,7 @@ add_library(azure2_experiment STATIC
   src/ColumnsGrid.cpp
   src/Diagnostics.cpp
   src/Build.cpp
+  src/ValueText.cpp
   src/BuildEffects.cpp
   src/BuildPotentials.cpp
   src/BuildUnits.cpp

@@ -47,6 +47,9 @@ RecordReadResult ReadRecords(const Document &doc, const Document::Section &secti
 /// nothing.  A token holding '"' cannot be written so that it reads back the same (the reader has no escapes).
 std::vector<std::string> WriteRecords(const RecordSet &set);
 
+/// The value tokens of one field as WriteRecords writes them: separated by one blank, quoted as said above.
+std::string WriteTokens(const std::vector<Token> &tokens);
+
 /// Split one line into tokens and a trailing comment (the lexical rules above), for callers that read one field.
 /// Appends problems (E_UNTERMINATED_QUOTE, E_QUOTE_IN_TOKEN) with `line` as their line number.
 std::vector<Token> Tokenize(const std::string &line, int lineNumber, std::string &comment,

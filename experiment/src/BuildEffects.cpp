@@ -368,9 +368,13 @@ void Abundances(Context &c) {
                                   : c.out_.extrapolations.extrapolations.items[m->key - 1].spec.reaction;
       r.sample = t->name;
     }
-    for (const Value *iso : t->GetAll("isotope")) {
+    const std::vector<const Value *> isotopes = t->GetAll("isotope");
+    for (std::size_t k = 0; k < isotopes.size(); k++) {
+      const Value *iso = isotopes[k];
       const Value *nucleus = iso->Get("nucleus"), *abundance = iso->Get("abundance");
       if (!nucleus || !abundance) continue;
+      // where the abundance is written; the name is the one CNuc::AbundanceParamName gives (<target>.isotope.<isotope>)
+      c.out_.parameterSources[t->name + ".isotope." + nucleus->nucleus.text] = {t->name, "isotope", (int)k, "abundance"};
       std::set<std::pair<int, int>> compounds;
       std::set<std::pair<int, int>> lights;  // the light particles of the target's data sets
       for (const Member *m : users)

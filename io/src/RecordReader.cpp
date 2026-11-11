@@ -168,6 +168,8 @@ RecordReadResult ReadRecords(const Document &doc, const Document::Section &secti
   return ReadRecords(doc.Body(section), static_cast<int>(section.open) + 2, kinds);
 }
 
+std::string WriteTokens(const std::vector<Token> &tokens) { return Joined(tokens, 0); }
+
 std::vector<std::string> WriteRecords(const RecordSet &set) {
   std::vector<std::string> out;
   auto withComment = [](std::string s, const std::string &comment) {

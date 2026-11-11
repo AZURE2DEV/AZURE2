@@ -40,6 +40,20 @@ struct BuildOptions {
   bool relativistic = false;
 };
 
+/*!
+ * Where the value of a fit parameter is written in the project (ParameterValues.h): the `occurrence`-th field `field`
+ * of record `record` (0 for a field given once), and within a structured field its part `part` ("" when the field's
+ * value is the nuisance itself).  E.g. a data set's own norm {"s01", "norm", 0, ""}, a shared normalization
+ * {"D", "value", 0, ""}, a data set's own offset {"s01", "shift", k, "value"} where the k-th shift field is the offset,
+ * the j-th parameter of an energy scale's function {"G", "param", j, "value"}.
+ */
+struct ParameterSource {
+  std::string record;
+  std::string field;
+  int occurrence = 0;
+  std::string part;
+};
+
 /// The specs of a format-3 project.  When diagnostics hold an error, the specs are incomplete and not set up.
 struct BuiltProject {
   DataSpecs data;
@@ -54,6 +68,10 @@ struct BuiltProject {
   std::map<int, std::pair<std::string, int>> potentialRecords;
   /// The defaults of the table the potential records used (matching radius, step), one line each for the log.
   std::vector<std::string> potentialNotes;
+  /// The record field each data-set parameter's value is written in (norm, shift offset and sqrt, the shift function's
+  /// parameters, a target isotope's abundance), by parameter name; a group's parameter only for its first active
+  /// member, whose parameter it is.
+  std::map<std::string, ParameterSource> parameterSources;
   /// Diagnostics of the build checks, ordered by line.
   std::vector<Diagnostic> diagnostics;
   /// The checks that need a calculation and are made by the engine's set-up, which this build does not do (the
