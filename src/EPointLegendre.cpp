@@ -11,9 +11,7 @@
 #include "PPair.h"
 #include "TargetEffect.h"
 
-/*!
- * The maximum order of the Legendre polynomials stored in the point object.
- */
+/// The maximum order of the Legendre polynomials stored in the point object.
 
 int EPoint::GetMaxLOrder() const {
   return legendreP_ ? (int)legendreP_->size() - 1 : -1;

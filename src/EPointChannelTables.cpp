@@ -23,9 +23,7 @@
 #include "ThmFunc.h"
 #include "ThmLineshape.h"
 
-/*!
- * Returns the geometrical cross section factor \f$ \frac{\pi}{k^2} \f$.
- */
+/// Returns the geometrical cross section factor \f$ \frac{\pi}{k^2} \f$.
 
 double EPoint::GetGeometricalFactor() const {
   return geofactor_;

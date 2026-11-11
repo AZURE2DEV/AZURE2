@@ -3,24 +3,18 @@
 
 #include <vector>
 
-class EData;
+class EData;  // EData.h
 class EPoint;
 class ESegment;
 
 typedef EPoint *EPointIterator;
 typedef std::vector<ESegment>::iterator ESegmentIterator;
 
-/// An iterator class for an EData object.
-
-/*!
- * The EDataIterator class is used to loop through all data segments and points contained in an
- * EData object.
- */
+/// Loops through the segments of an EData object and their points.
 
 class EDataIterator {
  public:
-  /// Over the points of the segments of `data` (the segments without components).
-  explicit EDataIterator(EData *data);
+  explicit EDataIterator(EData *data);  // the points of the segments of `data` that have no components
   EDataIterator(const EDataIterator &it);
   EDataIterator &operator++();
   EDataIterator operator++(int);

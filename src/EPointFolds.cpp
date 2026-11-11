@@ -15,15 +15,14 @@
 #include "TargetEffect.h"
 
 namespace {
-// 2-point Gauss-Legendre over the sub-point grid of `point` (energies descending from sub-point 1),
-// restricted to the c.m. window [lo, hi]: the cross section (through `rd`) and, for a yield, the
-// stopping power are interpolated linearly between the two sub-points that bracket each node.
+// 2-point Gauss-Legendre over the sub-point grid of `point` (energies descending from sub-point 1; units of `data`),
+// restricted to the c.m. window [lo, hi]: the cross section (through `rd`) and, for a yield, the stopping power are
+// interpolated linearly between the two sub-points that bracket each node.
 // Accumulates num += integral of wNum(E) sigma(E) [/ (stopping(E) 1e24)] and den += integral of
 // wDen(E), so a kernel average is num / den and a yield is num alone: the one quadrature of every effect.
 template <class V, class Read, class WNum, class WDen>
 void GridQuadrature(const EPoint *point, const EData &data, Read rd, double lo, double hi, bool divideByStopping,
-                    WNum wNum, WDen wDen,
-                    V &num, double &den) {
+                    WNum wNum, WDen wDen, V &num, double &den) {
   const double x1 = -1.0 / sqrt(3.0), x2 = 1.0 / sqrt(3.0);
   const int n = point->NumSubPoints();
   for (int j = 1; j < n; j++) {
@@ -469,8 +468,7 @@ double EPoint::IntegrateSubPointValues(const EData &data, const Config &configur
 bool EPoint::TargetEffectWeights(const EData &data, const Config &configure, std::vector<double> &c) {
   const int n = this->NumSubPoints();
   c.assign(n > 0 ? n : 0, 0.0);
-  TELinearForm y = this->IntegrateTargetEffectImpl<TELinearForm>(
-      data, configure, [](int j) { return TELinearForm::Unit(j); });
+  TELinearForm y = this->IntegrateTargetEffectImpl<TELinearForm>(data, configure, [](int j) { return TELinearForm::Unit(j); });
   if (!y.Valid()) return false;
   for (const auto &t : y.Terms()) {
     if (t.first < 1 || t.first > n) return false;

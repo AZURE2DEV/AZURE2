@@ -37,8 +37,8 @@ namespace {
  * smallest density the fit may reach (0.01 N0, EData::FillDensitiesFromParams), of the nominal N0 and of the layout
  * density, through which the kernel interpolates E_bar(N) -- exact at N0, smooth in N.
  */
-static void AddTargetFallbackNodes(EData &data, EPoint *point, TargetEffect *te, double cmConversion, const Config &configure,
-                                   const TermRef &segment) {
+static void AddTargetFallbackNodes(EData &data, EPoint *point, TargetEffect *te, double cmConversion,
+                                   const Config &configure, const TermRef &segment) {
   const double e = point->GetCMEnergy();
   std::vector<double> nodes;
   if (te->HasDensityFit()) {
@@ -99,8 +99,7 @@ static bool CheckTargetWindows(TargetEffect *te, int segmentKey, std::ostream &o
  * from).  The windows are fixed for the session: a fit that moves a narrow level by more than w leaves it
  * outside; a new session from the fitted file places them again.
  */
-static std::vector<std::pair<double, double> > TargetWindowsFor(EData &data, TargetEffect *te, CNuc *compound,
-                                                                 const TermRef &segment,
+static std::vector<std::pair<double, double> > TargetWindowsFor(EData &data, TargetEffect *te, CNuc *compound, const TermRef &segment,
                                                                  double cmConversion, const Config &configure,
                                                                  int reportKey, bool report) {
   std::vector<std::pair<double, double> > windows = te->GetRanges();
@@ -307,17 +306,13 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
   const auto t1 = std::chrono::steady_clock::now();
 
   std::atomic<int> changed{0};
-  std::atomic<long> newSubPoints{0};
-  std::atomic<long> reusedSubPoints{0};
-  std::atomic<long> sharedSubPoints{0};
+  std::atomic<long> newSubPoints{0}, reusedSubPoints{0}, sharedSubPoints{0};
   // For AZURE_GRID_TIMING: per work item, -1 = a different number of nodes, else the
   // largest node move (MeV) of a grid that changed.
   std::vector<double> moved(work.size(), 0.0);
   std::mutex reshiftMutex;
   std::vector<TermRef> mappedShifted;  // shifted segments of mapped points re-placed with their hosts
-  // The grids placed by work item q: (the unit of the point, its new sub-points), placed in the units after the
-  // parallel loop (a unit vector never grows during it).
-  std::vector<std::vector<std::pair<int, std::vector<EPoint>>>> placed(work.size());
+  SubPointGrids placed(work.size());  // per work item; the units never grow in the parallel loop
   auto replace = [&](const Item &it, size_t q) {
     EPoint *point = it.seg.GetPoint(*this, it.i);
     const EPoint::SubGridSpec &spec = point->GetSubGridSpec();
@@ -345,16 +340,11 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
     if ((size_t)subs.size() != grid.size())
       moved[q] = -1.0;
     else
-      for (size_t k = 0; k < grid.size(); k++)
-        moved[q] = std::max(moved[q], std::fabs(subs[(int)k].GetOriginalEnergy() - grid[k]));
-    // Lays a point's sub-points out on the grid.  Nodes that stay where they were
-    // keep their sub-point's energy-dependent values: the new sub-point shares the
-    // old one's tables (EPoint::AdoptEDependentValues requires the same energy,
-    // angle and pairs, so the values are exactly what CalcEDependentValues and
-    // CalcLegendreP would compute).  Most nodes of a re-placed grid do not move,
-    // and their tables are usually still shared with the EData this copy was
-    // cloned from: a copy re-placing its grids then adds tables only for the
-    // nodes that moved.
+      for (int k = 0; k < subs.size(); k++) moved[q] = std::max(moved[q], std::fabs(subs[k].GetOriginalEnergy() - grid[k]));
+    // Lays a point's sub-points out on the grid (placed after the loop).  A node that stays where it was keeps its
+    // sub-point's tables (EPoint::AdoptEDependentValues: the same energy, angle and pairs, so exactly what
+    // CalcEDependentValues and CalcLegendreP would compute); they are usually still shared with the copy's source, so
+    // a copy re-placing its grids adds tables only for the nodes that moved.
     long reused = 0, fromOtherCopies = 0;
     auto layOut = [&](EPoint *target, const TermRef &seg, bool shifted) {
       const EPoint::SubGridSpec &tspec = target->GetSubGridSpec();
@@ -369,7 +359,6 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
                   [](const EPoint::EDependentShare &x, const EPoint::EDependentShare &y) { return x.energy < y.energy; });
       }
       std::vector<EPoint> fresh;
-      fresh.reserve(grid.size());
       for (size_t k = 0; k < grid.size(); k++) {
         const double e = grid[k];
         EPoint sub(target->GetCMAngle(), e, seg.segment, seg.term);
@@ -428,16 +417,7 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
 #pragma omp parallel for schedule(dynamic, 4)
     for (int q = 0; q < (int)work.size(); q++) replace(work[q], (size_t)q);
   }
-  // The new grids become new ranges of the units; the old ones go with the compaction.
-  if (changed > 0) {
-    for (auto &item : placed)
-      for (auto &grid : item) {
-        const int first = NumUnits();
-        for (EPoint &s : grid.second) units_.push_back(std::move(s));
-        units_[grid.first].SetSubPointRange(first, static_cast<int>(grid.second.size()));
-      }
-    CompactUnits();
-  }
+  if (changed > 0) this->PlaceSubPointGrids(placed);
   if (changed > 0)
     for (const Item &it : work)
       if (it.shifted && std::find(reshift.begin(), reshift.end(), it.seg) == reshift.end()) reshift.push_back(it.seg);
@@ -943,8 +923,7 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
       }
     }
   }
-  // The sub-points given above take their places in the units.
-  this->CommitSubPoints();
+  this->CommitSubPoints();  // the sub-points given above take their places in the units
   // One screening parameter per <targetInt> line, shared by the copies of its effect.
   screeningEffects_.clear();
   screeningCopies_.clear();

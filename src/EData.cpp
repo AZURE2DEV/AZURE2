@@ -675,7 +675,7 @@ void EData::SetErrorAnalysis(bool errorAnalysis) {
  */
 
 int EData::Iterate() {
-  return iterations_.fetch_add(1, std::memory_order_relaxed);
+  return iterations_.n.fetch_add(1, std::memory_order_relaxed);
 }
 
 /*!
@@ -1714,48 +1714,14 @@ ESegment *EData::GetSegmentFromKey(int segmentKey) {
  */
 
 EData *EData::Clone() const {
-  EData *dataCopy = new EData();
-
-  // Explicitly copy all member variables
-  dataCopy->iterations_.store(this->iterations_.load(std::memory_order_relaxed), std::memory_order_relaxed);
-  dataCopy->normParamOffset_ = this->normParamOffset_;
-  dataCopy->energyShiftParamOffset_ = this->energyShiftParamOffset_;
-  dataCopy->energyShiftSqrtParamOffset_ = this->energyShiftSqrtParamOffset_;
-  dataCopy->energyShiftFnParamOffset_ = this->energyShiftFnParamOffset_;
-  dataCopy->screeningParamOffset_ = this->screeningParamOffset_;
-  dataCopy->screeningEffects_ = this->screeningEffects_;
-  dataCopy->screeningCopies_ = this->screeningCopies_;
-  dataCopy->densityParamOffset_ = this->densityParamOffset_;
-  dataCopy->densityEffects_ = this->densityEffects_;
-  dataCopy->densityLeadCopies_ = this->densityLeadCopies_;
-  dataCopy->densityParamOfEffect_ = this->densityParamOfEffect_;
-  dataCopy->dopplerParamOffset_ = this->dopplerParamOffset_;
-  dataCopy->dopplerEffects_ = this->dopplerEffects_;
-  dataCopy->dopplerCopies_ = this->dopplerCopies_;
-  dataCopy->thicknessParamOffset_ = this->thicknessParamOffset_;
-  dataCopy->thicknessSegments_ = this->thicknessSegments_;
-  dataCopy->isFit_ = this->isFit_;
-  dataCopy->isErrorAnalysis_ = this->isErrorAnalysis_;
-  dataCopy->targetEffects_ = this->targetEffects_;
-  dataCopy->segments_ = this->segments_;
-  dataCopy->leafRefs_ = this->leafRefs_;
-  dataCopy->plan_ = this->plan_;
-  dataCopy->thmGroups_ = this->thmGroups_;
-  dataCopy->thmCoherentParams_ = this->thmCoherentParams_;
-  dataCopy->thmCoherentParamOffset_ = this->thmCoherentParamOffset_;
-  dataCopy->covGroups_ = this->covGroups_;  // shared: one factor (and one frozen model) for all copies
-  dataCopy->nodeCache_ = this->nodeCache_;  // shared: a re-placed node is computed and held once
-  dataCopy->priorCov_ = this->priorCov_;    // shared, read-only
-  dataCopy->numNuclei_ = this->numNuclei_;
-
-  // The plan and the points' task indices are positions, valid in the copy as they are: no point holds a pointer to
-  // another or to its data set.  The copy's points (not their sub-points) start without the external-capture
-  // amplitudes of the set-up.
-  dataCopy->units_ = this->units_;
+  // A plain copy: the units, the plan and the points' task indices are values and positions, valid in the copy as
+  // they are (no unit points to another or to its data set); the measurements, the term settings, the covariance
+  // groups, the node tables and the prior covariance are shared and immutable (or, the two caches, shared on
+  // purpose).  A copy has no grid nucleus of its own (GridNucleus).
+  EData *dataCopy = new EData(*this);
+  // The copy's points (not their sub-points) start without the external-capture amplitudes of the set-up: a working
+  // copy evaluates them at its points' energies (EPoint::GetECAmplitudeWithShift).
   for (azure2::PointRef u : dataCopy->PlanUnits()) dataCopy->units_[u].ClearECAmplitudes();
-  // The copy's layout: its points carry this data set's offsets, which are the copy's own when the copy has the
-  // same points; the values are in the buffers of the callers that evaluate the two.
-  dataCopy->LayoutResults(nullptr);
   return dataCopy;
 }
 

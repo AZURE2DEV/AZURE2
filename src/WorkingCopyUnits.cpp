@@ -17,20 +17,23 @@ void EData::AddSubPoint(EPoint &point, EPoint sub) {
 
 void EData::CommitSubPoints() {
   // each point's sub-points in the order given, the points in the order of their first sub-point
-  std::vector<int> order;
-  std::vector<int> firstOf(units_.size(), -1);
-  for (const auto &p : pendingSubPoints_)
-    if (firstOf[p.first] < 0) firstOf[p.first] = 0, order.push_back(p.first);
-  std::vector<std::vector<EPoint>> subs(order.size());
+  SubPointGrids grids(1);
   std::vector<int> slot(units_.size(), -1);
-  for (std::size_t k = 0; k < order.size(); k++) slot[order[k]] = static_cast<int>(k);
-  for (auto &p : pendingSubPoints_) subs[slot[p.first]].push_back(std::move(p.second));
-  pendingSubPoints_.clear();
-  for (std::size_t k = 0; k < order.size(); k++) {
-    const int first = NumUnits();
-    for (EPoint &s : subs[k]) units_.push_back(std::move(s));
-    units_[order[k]].SetSubPointRange(first, static_cast<int>(subs[k].size()));
+  for (auto &p : pendingSubPoints_) {
+    if (slot[p.first] < 0) slot[p.first] = static_cast<int>(grids[0].size()), grids[0].push_back({p.first, {}});
+    grids[0][slot[p.first]].second.push_back(std::move(p.second));
   }
+  pendingSubPoints_.clear();
+  PlaceSubPointGrids(grids);
+}
+
+void EData::PlaceSubPointGrids(SubPointGrids &grids) {
+  for (auto &item : grids)
+    for (auto &grid : item) {
+      const int first = NumUnits();
+      for (EPoint &s : grid.second) units_.push_back(std::move(s));
+      units_[grid.first].SetSubPointRange(first, static_cast<int>(grid.second.size()));
+    }
   CompactUnits();
 }
 

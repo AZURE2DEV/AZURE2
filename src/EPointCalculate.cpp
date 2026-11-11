@@ -20,10 +20,6 @@
 #include "THMMatrixFunc.h"
 #include "TargetEffect.h"
 
-/*!
- * Calculates the cross section for a data point based on the fit parameters in the compound nucleus.
- */
-
 namespace {
 thread_local bool tlPointMappingOff = false;
 }

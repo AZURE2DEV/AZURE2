@@ -13,6 +13,9 @@
 //   pooled A -> B -> A -> B    the same copy back and forth: equal to fresh B's at the end;
 //   pooled C -> A -> C         C = A with every fixed energy-shift parameter moved by 1 keV: equal to fresh A's, then
 //                              to fresh C's (a shift that becomes inactive again must be undone).
+//   copy of a copy             a copy made from a copy evaluated at B, evaluated at A; its source then evaluated at D
+//                              (B with the free shifts 1 keV further): the copy's buffer does not move, and the copy
+//                              at A again equals fresh A (no state shared with the source).
 // Also: a second load of the project in the same process gives its leaves the same keys, all distinct.
 // An evaluation is AZURECalc::Chi2On's: the hand-over, the parallel point pass, the model value of every point, the
 // objective (Objective.h) with the per-segment chi^2.
@@ -201,6 +204,27 @@ int RunProject(const std::string &path) {
   Evaluate(back, pB, cfg);
   Evaluate(back, pA, cfg);
   Compare("pooled A -> B -> A -> B = fresh B", Evaluate(back, pB, cfg), eB);
+
+  // A copy of a working copy shares no mutable state with its source (EData::Clone is a plain copy): the source
+  // evaluated at other parameters after the copy was made moves neither the copy's buffer nor its next evaluation.
+  // D is B with every free energy shift moved 1 keV further, so that the source re-energises its points.
+  {
+    vector_r pD = pB;
+    for (unsigned int i = 0; i < pA.size(); i++)
+      if (!mp.Parameter(i).IsFixed() && params.Kind((int)i) == ParamKind::EnergyShift) pD[i] += 0.001;
+    Copy source = copy();
+    Evaluate(source, pB, cfg);
+    Copy second;
+    second.compound.reset(source.compound->Clone());
+    second.data.reset(source.data->Clone());
+    Compare("a copy of a copy (evaluated at B) at A = fresh A", Evaluate(second, pA, cfg), eA);
+    const std::vector<double> slots = second.results.slot, models = second.results.model;
+    Evaluate(source, pD, cfg);
+    check("the source evaluated at D leaves the copy's buffer", SameBits(second.results.slot, slots, why) &&
+                                                                     SameBits(second.results.model, models, why),
+          why);
+    Compare("then the copy at A again = fresh A", Evaluate(second, pA, cfg), eA);
+  }
 
   // C: A with every fixed energy-shift parameter (constant and sqrt(E) coefficient) moved by 1 keV (1e-3).  A fixed
   // parameter is still a component of the vector, and pyazr can change it between evaluations: a copy that evaluated

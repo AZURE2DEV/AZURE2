@@ -33,12 +33,8 @@ enum OperationType {
   RATIO = 1
 };
 
-/// An AZURE data segment
-
-/*!
- * An AZURE data segment is specified by an entrance and exit particle pair key, as well as a range of
- * energy and angle value and a data file name. The segment also contains flags specifing they type of data point it contains. The ESegment object is the container object for a vector of EData objects.
- */
+/// A data set of the project: its measurement, its settings and the terms of its prediction (its points are units of
+/// the data set that holds it, EData::Units).
 
 class ESegment {
  public:
@@ -61,8 +57,7 @@ class ESegment {
   /// parameter.
   bool IsProfiledNorm() const;
   /// The normalization that minimizes this segment's chi^2 at the model values in `results` (profiledNorm) and that
-  /// minimum chi^2 (returned).  Used for profiled (THM) norms; the segment's own norm is not changed.  `data` holds
-  /// the segment.
+  /// minimum chi^2 (returned).  Used for profiled (THM) norms; the segment's own norm is not changed.
   double ProfileNormChiSquared(const EData &data, const azure2::Results &results, double &profiledNorm) const;
   /// Does the segment carry target effects?
   bool IsTargetEffect() const;
@@ -157,13 +152,12 @@ class ESegment {
   // pairs; its points are calculation units that hold no data, and it takes every setting (shift, flags, THM) from
   // the segment.
   int NumTerms() const { return 1 + (int)leaves_.size(); }
-  /// The points of term t: a range of the units of `data`, the data set that holds the segment (EData::Units).
+  /// The points of term t: units [TermFirstUnit, + NumTermPoints) of `data`, the data set that holds the segment
+  /// (EData::Units; every function here that takes `data` means that one).  SetTermRange: EData::CompactUnits.
   UnitRange<EPoint> TermPoints(EData &data, int t) const;
   UnitRange<const EPoint> TermPoints(const EData &data, int t) const;
   int NumTermPoints(int t) const { return Units(t).count; }
-  /// The first unit of term t's points in the data set's units.
   int TermFirstUnit(int t) const { return Units(t).first; }
-  /// Move term t's points to units [first, first + count) (EData::CompactUnits).
   void SetTermRange(int t, int first) { Units(t).first = first; }
   /// Point i (1-based) of term t.
   EPoint *GetTermPoint(EData &data, int t, int i) const;
@@ -385,8 +379,7 @@ class ESegment {
   /// Set the sqrt(E) coefficient; UpdatePointEnergiesWithShift applies it to the points.
   void SetEnergyShiftSqrt(double);
   void SetLastEnergyShiftSqrt(double);
-  /// Re-apply the current energy shift to every point of every term, undoing the previous one.  `data` is the data
-  /// set that holds the segment (its plan and target effects); below too.
+  /// Re-apply the current energy shift to every point of every term, undoing the previous one.
   void UpdatePointEnergiesWithShift(EData &data, CNuc *theCNuc, const Config *configure);
   /// The same for point i (0-based) of term t and its sub-points.
   void UpdatePointEnergyWithShift(EData &data, int t, int i, CNuc *theCNuc, const Config *configure);
@@ -403,9 +396,8 @@ class ESegment {
   void SetIsTotalCapture(int);
   void SetMinAngle(double);
   void SetMaxAngle(double);
-  /// Point \p i, 1-based, in the units of `data`, the data set that holds the segment.
+  /// Point \p i (1-based) of the segment's own term, and its points.
   EPoint *GetPoint(EData &data, int i) const { return GetTermPoint(data, 0, i); }
-  /// The segment's own points (term 0).
   UnitRange<EPoint> GetPoints(EData &data) const { return TermPoints(data, 0); }
   UnitRange<const EPoint> GetPoints(const EData &data) const { return TermPoints(data, 0); }
 

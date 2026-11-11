@@ -21,22 +21,11 @@
 #include "TermSettings.h"
 #include "UnitRange.h"
 
-/// A container structure for a reference to a data point.
-
-/*!
- * If a point is mapped back to another in the calculation, this structure
- * hold the relevant indices of the map point.
- */
-
+/// Where a mapped point is mapped: the host's segment and point (1-based).
 struct EnergyMap {
-  /// The segment index for the map
   int segment;
-  /// The point index for the map
   int point;
 };
-
-#include <memory>
-#include <vector>
 
 class ESegment;
 class EData;
@@ -637,18 +626,12 @@ class EPoint {
   bool spinDependentCoulomb_ = false;
   complex coulombdirect_ = complex(0., 0.);
   complex coulombexchange_ = complex(0., 0.);
-  // The Legendre polynomials P_l(cos theta) of the point, by order.  Filled at
-  // setup and on an energy shift; shared between EData clones (see
-  // EDependentTables below) and written only through MutableLegendre().
-  SharedTable<vector_r> legendreP_;
-  // The energy-dependent channel tables, one row per J group: L_o elements,
-  // square roots of the penetrabilities, Coulomb and hard-sphere phase factors.
-  // They are filled at setup and rewritten only when the point's energy or grid
-  // changes, so the EData clones of a fit (AZURECalc::InitializePools, one per
-  // thread) share them instead of deep-copying them: a clone of a folded
-  // project with ~10^6 sub-points held ~7 GB of these rows.  Copying an EPoint
-  // copies the pointer; every writer goes through MutableEDep(), which gives
+  // The Legendre polynomials P_l(cos theta) of the point, by order, and the energy-dependent channel tables (one row
+  // per J group: L_o, sqrt(P), Coulomb and hard-sphere phase factors).  Filled at set-up and rewritten only when the
+  // point's energy or grid changes, so the working copies share them (a copy of a folded project with ~10^6
+  // sub-points held ~7 GB of these rows); every writer goes through MutableEDep() / MutableLegendre(), which give
   // the point its own copy first if the tables are shared (copy-on-write).
+  SharedTable<vector_r> legendreP_;
   SharedTable<EDependentTables> edep_;
   /// This point's own, writable tables (copied first if shared with another point).
   EDependentTables &MutableEDep();

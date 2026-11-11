@@ -8,6 +8,8 @@
 #include "EDataIterator.h"
 #include "NodeTableCache.h"
 #include "ThmExperiment.h"
+#include "ThmGroup.h"
+#include "EvaluationCount.h"
 #include "Results.h"
 #include "ParameterKind.h"
 #include <memory>
@@ -246,14 +248,8 @@ class EData {
   /// The units of every point of every term in data order: the segments' own points, then the leaves' (LeafRefs).
   std::vector<azure2::PointRef> PlanUnits() const;
 
-  /*!
-   * The calculation units of the working copy (docs/upgrade/data_structure.md section 1.4): one flat vector holding
-   * every point of every term and every sub-point.  A term's points are a range of it (ESegment::TermPoints), a
-   * point's sub-points another (EPoint::GetSubPoints); no unit points to another.  Laid out by CompactUnits: the
-   * points of the terms in data order (segments, then their leaves by term), then the sub-points in the same order.
-   * The points never move after the set-up (the plan names them by position); a re-placed sub-point grid is a new
-   * range, and the compaction in the single-threaded hand-over drops the old one.
-   */
+  /// The calculation units of the working copy (data_structure.md section 1.4), src/WorkingCopyUnits.cpp: every point
+  /// of every term and every sub-point in one vector; a term's points and a point's sub-points are ranges of it.
   EPoint &Unit(int i) { return units_[i]; }
   const EPoint &Unit(int i) const { return units_[i]; }
   int NumUnits() const { return (int)units_.size(); }
@@ -272,6 +268,10 @@ class EData {
   /// Place the sub-points given since the last commit: each point's become a new range (its earlier one, if any, is
   /// dropped), then CompactUnits.  Single-threaded.
   void CommitSubPoints();
+  /// Per work item of a grid re-placement: (a point's unit, its new sub-points); placed by PlaceSubPointGrids as new
+  /// ranges (the earlier ones dropped), then CompactUnits.  Single-threaded.
+  using SubPointGrids = std::vector<std::vector<std::pair<int, std::vector<EPoint>>>>;
+  void PlaceSubPointGrids(SubPointGrids &grids);
   /// Lay the units out again (see Units), dropping every unit no term and no point refers to.
   void CompactUnits();
   /// Every leaf of the data set as (0-based position of its segment, its term), in segment order and term order: the
@@ -371,49 +371,8 @@ class EData {
   ESegment *GetSegmentFromKey(int);
   EData *Clone() const;
 
-  /*!
-   * A THM experiment (<thm> experiment[<name>] ..., ThmExperiment.h) as the
-   * data see it: the segments that share one profiled norm and background.
-   */
-  struct ThmGroup {
-    std::string name;
-    int terms = 0;              ///< background terms, 0..3
-    std::vector<int> segments;  ///< 1-based indices into the segments, ascending
-    /// One segment and no background: exactly the per-segment profile of
-    /// ESegment::ProfileNormChiSquared, which then handles it.
-    bool trivial = false;
-    /// Coulomb line shape (lineshape=on), or null; shared with its segments.
-    std::shared_ptr<const ThmLineshape> lineshape;
-    /// Spectator-momentum window (ps=hulthen|gauss|table), or null; shared
-    /// with its segments.
-    std::shared_ptr<const ThmSpectatorWindow> window;
-    /// Distortion factor R(E) (distortion=...), or null; shared with its segments.
-    std::shared_ptr<const ThmDistortion> distortion;
-    /// Distorted-wave entrance vertex (vertexModel=dw), or null; shared with
-    /// its segments.  It replaces R(E): distortion is then null.
-    std::shared_ptr<const ThmDwVertex> dwVertex;
-    /// Angular window of the exit pair (theta=thmin-thmax), or null; shared
-    /// with its segments.
-    std::shared_ptr<const ThmAngleWindow> angle;
-    /// Entrance pair key of its segments (0 if they differ).
-    int pairKey = 0;
-    /// Coherent background (cbackground=), or null; shared with its segments.
-    std::shared_ptr<const ThmCoherentBackground> coherent;
-  };
-  /*!
-   * The fit parameters of the THM coherent backgrounds (cbackground=), the
-   * last block of the parameter vector after the energy shifts (none without
-   * the key): Re c0, Im c0 [, Re c1, Im c1] of each combination, in the order
-   * of the experiments and their terms.  `value` is the current value.
-   */
-  struct ThmCoherentParam {
-    std::string name;
-    std::string experiment;
-    double value = 0.0;
-    bool fixed = false;
-    int jGroup = -1, entrance = -1, exit = -1;  ///< the combination's J group and channels in it (1-based)
-    int term = -1;                              ///< 0 Re c0, 1 Im c0, 2 Re c1, 3 Im c1
-  };
+  using ThmGroup = ::ThmGroup;                  // ThmGroup.h
+  using ThmCoherentParam = ::ThmCoherentParam;  // ThmGroup.h
   int NumThmCoherentParams() const { return (int)thmCoherentParams_.size(); }
   const ThmCoherentParam &GetThmCoherentParam(int k) const { return thmCoherentParams_[k]; }
   /// Reads the coherent-background block of a full parameter vector (if it
@@ -509,7 +468,7 @@ class EData {
   std::vector<std::shared_ptr<DataCovariance::Group>> covGroups_;         // shared by every copy
   bool covarianceError_ = false;              // a covariance file could not be read (CovarianceFileFor)
   bool kinematicsError_ = false;              // a lab angle beyond the kinematic maximum (audit 2026-10-25, item 31)
-  std::atomic<int> iterations_{0};  // objective evaluations; incremented from every thread of a parallel gradient
+  EvaluationCount iterations_;  // objective evaluations (EvaluationCount.h)
   int normParamOffset_;
   int energyShiftParamOffset_;
   int energyShiftSqrtParamOffset_;
@@ -593,12 +552,6 @@ class EData {
   std::shared_ptr<const ChannelTable> BuildChannelTable(CNuc *, const Config &, const std::vector<EPoint *> &points);
 };
 
-inline EPoint *EPoint::GetSubPoint(EData &data, int i) {
-  return i <= sub_count_ ? &data.Unit(sub_first_ + i - 1) : nullptr;
-}
-inline const EPoint *EPoint::GetSubPoint(const EData &data, int i) const {
-  return i <= sub_count_ ? &data.Unit(sub_first_ + i - 1) : nullptr;
-}
-inline UnitRange<EPoint> EPoint::GetSubPoints(EData &data) { return data.Units(sub_first_, sub_count_); }
+#include "SubPointAccess.h"
 
 #endif

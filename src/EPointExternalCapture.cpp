@@ -27,10 +27,8 @@
 static complex ECPathwayAmplitude(CNuc *, const Config &, PPair *, int, double, KGroup *, ECMGroup *, double,
                                   const ChannelTable *table = nullptr);
 
-/*!
- * Returns the external capture amplitude for a given external reaction pathway
- * specified by positions in the KGroup and subsequent ECMGroup vectors.
- */
+/// Returns the external capture amplitude for a given external reaction pathway
+/// specified by positions in the KGroup and subsequent ECMGroup vectors.
 
 complex EPoint::GetECAmplitude(int kGroupNum, int ecMGroupNum) const {
   return ec_amplitudes_[kGroupNum - 1][ecMGroupNum - 1];
