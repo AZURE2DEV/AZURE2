@@ -2,6 +2,48 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, brief Z) — `pyazr.Project`: a format-3 project as records in Python (`feature/upgrade-4-pyazr-project`)
+
+**Done.**
+- `pyazr.Project` (`pyazr/project.py`): `open` (a format-1/2 file refused with the conversion command), `new(path,
+  nuclear_part=file)` (another format-3 file's record-free sections: `<config>`, `<levels>`, `<thm>`, ...),
+  `records()`, `p[name]` (a `Record`: fields as attributes and as a dict; its own kind is `record_kind`, since `kind`
+  is a target's field), `add(kind, name, **fields)` and one `add_<kind>` per kind of the schema, generated at import
+  from `_azure2.schema()` (signature and help: every field with title, grammar, condition, units, doc), `set`,
+  `rename` (header, every reference the validator resolves, parameter names in `<parameterSettings>`/`<mcmc>` and the
+  prior-covariance file), `remove` (refused while referenced, naming the referrers), `validate`, `describe(name)`,
+  `save`, `session(**options)` (saves, returns `pyazr.azure2` on the file).  The project is the engine's `Document`;
+  an edit replaces only its fields' lines.  Every edit is validated by the engine's one validator on the whole project
+  as it would stand; an edit that adds an error raises `pyazr.FormatError` (`.diagnostics`, `.codes`: the engine's)
+  and leaves the project unchanged.  `pyazr.Nuisance` and `(value, unit)` tuples serialise to the file text.
+- Engine: `experiment/ValueText.h` (the one nuisance writer, the converter's too; the edit writing a fitted value into
+  its nuisance in its unit), `BuiltProject::parameterSources`, `ValidationResult::references`, describe of one record,
+  `io::WriteTokens`; bindings in `api/src/pybind_project.cpp` (the `Document` binding moved there verbatim first).
+- Debts fixed: `save_fit(norms="fitted")` of a format-3 project writes free norms, shift terms, shift-function
+  parameters and isotope abundances into their records (it raised; and it added an `<abundances>` block to a format-3
+  file); `save_fit` of a format-1/2 project after `set_nuclear_potential` is refused with the conversion command;
+  `set_nuclear_potential(matching_radius=, step=)`; `io::WriteRecords` aligns a record's values past its longest key
+  (fixtures T2.f3, T3.f3, beam_profile_kernel.f3 moved by whitespace only); `tools/classify.py` never counts an
+  unreadable file as identical.
+- Recipe: `docs/source/user_guide/project_from_python.rst`, `.claude/skills/azure2-setup/references/
+  project-from-python.md`, code `pyazr/examples/project_from_python.py` run by `pyazr_project_recipe`.  pyazr 2.30.0.
+
+**Verified** (build `work/b-pyproj`, 0 warnings): 183 × 3 against `tab-trial12` (tag `tab-pyproj1`): 726 / 699 / 726
+identical; converted-tree gate (`REF=tab-trial8`, tag `gpyproj1`): 483 (456) identical, 38 classified, 0 differ, 0
+missing; `ctest -LE slow` 180/180; `tests/run_tests.sh` 145 passed, 0 failed; T1–T3, 13N at 1 and 4 threads in three
+bases: every output file identical (run.log differs in Coulomb-table lookup counts and progress bars only); one edit
+on T2 costs 2.7 ms (one validation with build 0.8 ms).  New tests (each shown failing once with an injected error):
+`pyazr_project` (36 checks), `pyazr_save_fit_format3`, `pyazr_project_recipe`, `tools_classify`, a case of
+`io_record_reader`.
+
+**Open.** `--describe --record NAME` on the command line (the engine function takes the name; only pyazr uses it);
+`records_from_csv` (§6.5); `add_norm` of §4.1 is `add_normalization` (the kind's name); the parameter-name form
+`<target>.isotope.<isotope>` is now made in `CNuc::AbundanceParamName` and in `Build` (its source), a second copy;
+whole-line comments between repeats of a field are dropped when `set` replaces that field; Sphinx not run (not
+installed here).  Found, not fixed: `--validate` passes a project whose covariance file is missing or whose data rows
+do not parse (it checks the first row's column count only); `azure2.dataset_chi2`/`datasets` read `<segmentsData>`
+and do not work on a format-3 session.
+
 ## 2026-11-11 (director, night) — the seventh wave merged: units, the measurement held once, spin–orbit, the pathway table
 
 **Merged into `feature/upgrade-4-data`** (`--no-ff`, in this order; rehearsed together in one scratch worktree, built
