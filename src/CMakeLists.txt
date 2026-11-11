@@ -20,6 +20,7 @@ HandOver.cpp
 WorkingCopyUnits.cpp DataSet.cpp
 PointPass.cpp
 TargetFold.cpp
+TargetLayer.cpp
 ChannelTables.cpp
 UnitLegendre.cpp
 UnitExternalCapture.cpp

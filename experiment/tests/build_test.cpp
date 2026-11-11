@@ -153,7 +153,7 @@ void UnitCases(const std::string &targets) {
             data(sf).reaction.observable == Observable::CrossSection);
   ExpectOne("E_REACTION_NOT_ALLOWED", BuildText(Data(Set(Set(Set(kDataset, "quantity", "    quantity sfactor"), "unit", "    unit keV*b"),
                                                          "reaction", "    reaction 16O(g,a)12C"))));
-  // yields: per particle and per uC on an infinite target; a layer, a fitted efficiency and no charge state refused
+  // yields: per particle and per uC on an infinite target and on a layer; a fitted efficiency and no charge state refused
   {
     const std::string inf = targets.substr(0, targets.size() - std::string("</targets>\n").size()) +
                             "target t9\n    kind infinite\n    active 15N\n    stopping formula \"a0\" a0=1e-20 MeV*cm2/atom\n"
@@ -168,7 +168,30 @@ void UnitCases(const std::string &targets) {
           c.Ok() && std::fabs(data(c).reaction.scale.factor / (0.5e-3 / 1.602176634e-19) - 1) < 1e-15);
     const BuiltProject p = BuildText(Data(Set(y, "unit", "    unit 1/particle") + "    target t9\n") + inf);
     check("yield 1/particle: no factor", p.Ok() && data(p).reaction.scale.Identity());
-    ExpectOne("E_NOT_BUILT", BuildText(Data(y + "    target t1\n    charge_state 2\n") + inf));
+    // a yield on a layer (energy_grid.md section 5): its own effect, per incident particle, the layer's density, the
+    // per-uC factor; a cross section on the same layer (its screening free: E_FOLD_CONFLICT across two effects) is
+    // another effect, the target-averaged one; fold windows on the yield are refused
+    {
+      const std::string noScreening = Set(targets, "screening", "");
+      const BuiltProject l = BuildText(Data(y + "    target t1\n    charge_state 2\n" +
+                                            Rename(kDataset + "    target t1\n    quadrature points 20\n", "s1")) +
+                                       noScreening.substr(0, noScreening.size() - std::string("</targets>\n").size()) +
+                                       inf.substr(inf.find("target t9")));
+      const auto &fx = l.data.targetEffects.items;
+      const bool two = l.Ok() && fx.size() == 2;
+      const TargetEffectSpec *ey = nullptr, *es = nullptr;
+      for (const auto &item : fx) (item.spec.layerYield ? ey : es) = &item.spec;
+      check("yield on a layer: an effect of its own (layerYield, the layer's 1e18 atoms/cm2), the per-uC factor; "
+            "sigma on the same layer: the target-averaged effect",
+            two && ey && es && ey->density == 1e18 && ey->targetIntegration && ey->datasetKeys == std::vector<int>{1} &&
+                es->datasetKeys == std::vector<int>{2} && std::fabs(data(l).reaction.scale.factor / perUC - 1) < 1e-15 &&
+                ey->source.find("yield per incident particle on the layer") != std::string::npos);
+      if (!two)
+        for (const Diagnostic &d : l.diagnostics) std::printf("        got %s: %s\n", d.code.c_str(), d.message.c_str());
+      ExpectOne("E_FOLD_CONFLICT", BuildText(Data(y + "    target t1\n    charge_state 2\n" +
+                                                  Rename(kDataset + "    target t1\n    quadrature points 20\n", "s1")) + inf));
+      ExpectOne("E_FIELD_NOT_APPLICABLE", BuildText(Data(y + "    target t1\n    charge_state 2\n    fold_windows 0.2-0.4 MeV\n") + inf));
+    }
     ExpectOne("E_NOT_BUILT", BuildText(Data(Set(y, "unit", "    unit counts/uC") + "    target t9\n    charge_state 1\n"
                                                                                       "    efficiency 0.5 fit prior 0.5 3%\n") + inf));
     ExpectOne("E_FIELD_REQUIRED", BuildText(Data(y + "    target t9\n") + inf));

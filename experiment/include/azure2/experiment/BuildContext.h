@@ -59,7 +59,7 @@ bool ResolvePair(Context &c, const ValidatedRecord &r, const std::string &labelF
 
 /// The unit of a data set's or an extrapolation's values (BuildUnits.cpp): for a data set (`columns` given) the factor
 /// of its value column; for an extrapolation a constant on the model; for a yield the factor per unit charge and the
-/// efficiency (ReactionSpec::scale), and the refusal of a layer.  Returns false after an error.
+/// efficiency (ReactionSpec::scale), and fold windows refused on a layer.  Returns false after an error.
 bool ValueUnit(Context &c, const ValidatedRecord &r, ReactionSpec &spec, ColumnConversion *columns);
 /// The column layout of a data set's file and the conversion of its rows (DatasetSpec::columns): units of the energy
 /// and angle roles, an E_cm column taken to E_lab with the entrance pair's masses.  Returns false after an error.

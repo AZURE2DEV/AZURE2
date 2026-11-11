@@ -124,6 +124,7 @@ TargetEffect::TargetEffect(const azure2::experiment::TargetEffectSpec &line, con
     density_ = density;
     // density 0 (or negative) with target integration = an infinitely thick target (IsThickTarget)
     isThickTarget_ = isTargetIntegration_ && !(density_ > 0.0);
+    isLayerYield_ = line.layerYield && isTargetIntegration_ && !isThickTarget_;
     if (densityFitRead || (!densityGroup_.empty() && !densityFitError_)) {
       if (!isTargetIntegration_ || isThickTarget_) {
         densityFitError_ = true;

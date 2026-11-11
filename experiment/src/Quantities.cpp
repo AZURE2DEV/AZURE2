@@ -59,6 +59,10 @@ Refusal RefusedAtValidation(const std::string &code, const std::string &rule, co
 Refusal RefusedAtBuild(const std::string &code, const std::string &rule, const std::string &message) {
   return {code, rule, message, "build"};
 }
+/// Checked by the engine's set-up, which evaluates what the table cannot (a stopping formula on a sub-point grid).
+Refusal RefusedAtSetUp(const std::string &code, const std::string &rule, const std::string &message) {
+  return {code, rule, message, "setup"};
+}
 Refusal RefusedByImporter(const std::string &code, const std::string &rule, const std::string &message) {
   return {code, rule, message, "importer"};
 }
@@ -317,8 +321,9 @@ Quantity Yield() {
   Quantity q;
   q.name = "yield";
   q.title = "Yield";
-  q.doc = "Reactions (or detected counts) per incident particle or per unit of beam charge, on a target layer or an "
-          "infinite target (data_kinds.md eqs. 3, 6).";
+  q.doc = "Reactions (or detected counts) per incident particle or per unit of beam charge, on a target layer, "
+          "1e-24 int_{E_out}^{E_0} <sigma>/epsilon dE with int_{E_out}^{E_0} dE/epsilon = N, or on an infinite target "
+          "(E_out = 1 keV); epsilon the lab stopping per active nucleus (data_kinds.md eqs. 3, 6; energy_grid.md section 5).";
   q.recordKinds = kDataKinds;
   q.engineUnit = "1/particle";
   q.units = {AnyUnitOf("yield", kNoAngle), AnyUnitOf("yield_per_sr", kAngle), AnyUnitOf("per_charge"),
@@ -330,13 +335,19 @@ Quantity Yield() {
               Requires("charge_state", Condition::Dimension({"per_charge", "counts_per_charge"})),
               Requires("efficiency", Condition::Dimension({"counts_per_charge"}))};
   q.targetKinds = {"layer", "infinite"};
-  q.tree = "Fold_target o sigma (or dsdo) x N 1e-24 for a layer, integral sigma/epsilon for an infinite target; "
-           "x 1e-6 C/(q e) per uC; x efficiency for counts";
+  q.tree = "Fold_target o sigma (or dsdo): 1e-24 integral of sigma/epsilon from E_out to E_0 (a layer: E_out where "
+           "the integral of 1/epsilon reaches N; infinite: 1 keV); x 1e-6 C/(q e) per uC; x efficiency for counts";
   q.exfor = {",MLT,,TT", ",PY,,TT", "TT/CH", "PAR,MLT,G,TT/CH"};
   q.refusals = {RefusedAtValidation("E_TARGET_KIND", "target kind none or sample",
                                     "a yield needs a target with a thickness (layer) or a thick (infinite) target"),
                 RefusedAtValidation("E_FIELD_REQUIRED", "per-charge unit without charge_state",
                                     "the number of beam particles per uC depends on the charge state q"),
+                RefusedAtBuild("E_FIELD_NOT_APPLICABLE", "fold_windows on a layer",
+                               "outside a window the integration is a cross section at one energy, not a yield"),
+                RefusedAtSetUp("E_LAYER_STOPPING", "a stopping not positive and finite in the layer",
+                               "give a stopping defined at every energy the beam has in the layer"),
+                RefusedAtSetUp("E_LAYER_EXIT_BELOW_MODEL", "the beam stops in the layer",
+                               "use a target of kind infinite, or the areal density the beam crosses"),
                 RefusedByImporter("E_NOT_IN_LIST", "TTY activation yields", "not supported (K9)")};
   return q;
 }

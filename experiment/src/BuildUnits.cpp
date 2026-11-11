@@ -27,21 +27,21 @@ std::string Number(double x) {
   return s.str();
 }
 
-// A yield (data_kinds.md section 4.6): the engine computes reactions per incident particle with an infinite target
-// (eq. 3, TargetEffect's thick target); per unit charge the model is that times the particles per unit charge,
-// 1e-6 C / (q e) for 1/uC; counts are reactions times the efficiency.  A layer gives the target-averaged cross section
-// (eq. 2), not a yield.
+// A yield (data_kinds.md section 4.6; docs/upgrade/energy_grid.md section 5): the engine computes reactions per
+// incident particle, 1e-24 int_{E_out}^{E_0} <sigma>/epsilon dE, on an infinite target (E_out = 1 keV, eq. 3) or on a
+// layer (int_{E_out}^{E_0} dE/epsilon = N; the target effect's layerYield, BuildEffects.cpp); per unit charge the model
+// is that times the particles per unit charge, 1e-6 C / (q e) for 1/uC; counts are reactions times the efficiency.
+// On a layer, energy windows are refused: outside them the integration falls back to a cross section at one energy.
 bool YieldScale(Context &c, const ValidatedRecord &r, const Unit &unit, ReactionSpec &spec) {
   bool ok = true;
   const Value *t = r.Get("target");
   const ValidatedRecord *target = t ? c.Record(t->word, "target") : nullptr;
   const Value *kind = target ? target->Get("kind") : nullptr;
-  if (kind && kind->word == "layer") {
-    c.Error(codes::kNotBuilt, r, "target",
-            "a yield on target " + target->name + " of kind layer: the engine folds a layer into the target-averaged "
-            "cross section (b, data_kinds.md eq. 2), and a yield per particle N 1e-24 <sigma> with N in the prefactor "
-            "is the layer kernel of Phase 5; give the data as quantity sigma with this target, or use a target of kind "
-            "infinite (a thick target)");
+  if (kind && kind->word == "layer" && r.Has("fold_windows")) {
+    c.Error(codes::kFieldNotApplicable, r, "fold_windows",
+            "fold_windows on a yield on target " + target->name + " (kind layer): outside a window the engine takes the "
+            "cross section at the depth-averaged energy, which is not a yield; drop fold_windows (the whole layer is "
+            "integrated at every point)");
     ok = false;
   }
   const std::string dimension = unit.dimension;

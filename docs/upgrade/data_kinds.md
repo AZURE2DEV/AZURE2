@@ -480,6 +480,17 @@ eq. (6) neglects multiple scattering and the angular spread of the beam, and the
 (angular distribution, Q-coefficients) across the target; screening (`screening U_e`) multiplies σ before the fold.
 Each needs its tolerance stated in the Phase 5 kernel note.
 
+**Status (Phase 5, branch 4, 2026-11-11).** `quantity yield` on a `target` of `kind layer` is built, with the beam spread
+and straggling of today's kernel: Y = 10⁻²⁴ ∫_{E_out}^{E₀} ⟨σ⟩/ε dE with
+∫ dE/ε = N, reactions per incident particle (per µC with `charge_state`), on the target kernel of eq. (2) without its
+division by N; E_out is found on the kernel's own nodes and quadrature (`include/LayerExit.h`), so a constant σ gives
+10⁻²⁴ σ N to rounding. Note on eq. (2): with a beam spread the kernel averages σ/ε over the Gaussian at each depth
+(not ⟨σ⟩/ε(E)); the two differ by the curvature of 1/ε across the Gaussian. The limits of `energy_grid.md` §5.3 are
+tested against closed forms in `tests/layer_yield` (README: the derivations with their frames; eq. (7) there with λ_r
+c.m. and ε lab: plateau (λ_r²/2) ωγ (m_a + m_A)/(m_A ε)). The stopping is the user's formula per active nucleus; an
+`isotope` line multiplies the yield by its abundance (the isotopic part of the active fraction). The evaluated
+stopping, its scale nuisance and the stoichiometric active fraction come with the stopping module.
+
 ### 4.7 Resonance strength, energy and widths (treated fully)
 
 **ωγ from the level parameters.** For a level λ of spin J in the compound nucleus, entrance a + A and exit b + B,

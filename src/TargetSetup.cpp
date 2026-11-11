@@ -22,6 +22,7 @@
 #include "AdaptiveIntegrationGrid.h"
 #include "CNuc.h"
 #include "Config.h"
+#include "TargetLayer.h"
 #include "WorkingCopy.h"
 #include "UdrKernel.h"
 
@@ -70,6 +71,11 @@ static bool CheckTargetWindows(TargetEffect *te, int segmentKey, std::ostream &o
   }
   if (!te->IsTargetIntegration()) return true;
   const bool windows = te->HasWindows();
+  if (te->IsLayerYield() && (windows || te->GetAutoTolerance() > 0.)) {
+    out << "ERROR: segment #" << segmentKey << ": energy windows or an automatic tolerance on a yield on a layer: "
+        << "outside a window the target integration is a cross section at one energy, not a yield." << std::endl;
+    return false;
+  }
   if (te->IsThickTarget() && windows) {
     out << "ERROR: segment #" << segmentKey << ": energy windows on a THICK-target integration (density 0): a thick-"
         << "target yield has no single equivalent energy to evaluate outside the windows.  Give the density or "
@@ -598,9 +604,13 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
               // an infinitely thick target: the point integrates from its energy down to 1 keV
               targetThickness = std::max(point->GetCMEnergy() - 0.001, 0.0);
             } else {
-              // the grid spans the target at its layout density (a fitted density's largest expected value)
+              // the grid spans the target at its layout density (a fitted density's largest expected value), and a
+              // layer yield's grid a margin beyond it (its E_out comes from the grid's own quadrature)
               targetThickness = cmConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure,
                                                                              targetEffect->GetLayoutDensity());
+              if (targetEffect->IsLayerYield()) targetThickness *= TargetEffect::LayerGridMargin();
+              if (!(targetThickness > 0.0) && targetEffect->IsLayerYield())
+                return RefuseLayerAtBeamEnergy(*targetEffect, *point, segment->GetDataFile(), configure);
               if (!(targetThickness > 0.0)) {
                 configure.outStream << "ERROR: target integration of segment #" << segment->GetSegmentKey()
                                     << " at E_lab = " << point->GetLabEnergy() << " MeV: the stopping cross section times the"
@@ -611,7 +621,7 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
               }
             }
             point->SetTargetLabEnergy(point->GetLabEnergy());
-            point->SetTargetThickness(targetEffect->HasDensityFit()
+            point->SetTargetThickness((targetEffect->HasDensityFit() || targetEffect->IsLayerYield())
                                           ? cmConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure)
                                           : targetThickness);
           }
@@ -799,6 +809,9 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
                 } else {
                   targetThickness = compConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure,
                                                                                    targetEffect->GetLayoutDensity());
+                  if (targetEffect->IsLayerYield()) targetThickness *= TargetEffect::LayerGridMargin();
+                  if (!(targetThickness > 0.0) && targetEffect->IsLayerYield())
+                    return RefuseLayerAtBeamEnergy(*targetEffect, *point, segment->GetDataFile(), configure);
                   if (!(targetThickness > 0.0)) {
                     configure.outStream << "ERROR: target integration of a component of segment #" << segment->GetSegmentKey()
                                         << " at E_lab = " << point->GetLabEnergy() << " MeV: the stopping cross section times"
@@ -807,7 +820,7 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
                   }
                 }
                 point->SetTargetLabEnergy(point->GetLabEnergy());
-                point->SetTargetThickness(targetEffect->HasDensityFit()
+                point->SetTargetThickness((targetEffect->HasDensityFit() || targetEffect->IsLayerYield())
                                               ? compConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure)
                                               : targetThickness);
               }
@@ -935,6 +948,7 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
     }
   }
   this->CommitSubPoints();  // the sub-points given above take their places in the units
+  if (!CheckLayerYields(*this, configure)) return -1;  // a yield on a layer: its stopping and E_out on the grid
   // One screening parameter per <targetInt> line, shared by the copies of its effect.
   Draft().screeningEffects_.clear();
   Draft().screeningCopies_.clear();

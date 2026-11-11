@@ -73,8 +73,8 @@ already or are files that exist to test a refusal.
 **What a user can fit now that could not be fitted before:**
 
 - ratio to Rutherford and to Mott; the S factor as a quantity (the engine converts with the pair's masses);
-- thick-target yields per charge or per particle, linked to a named target (infinitely thick so far; a finite layer
-  is the first item of Phase 5);
+- yields per charge or per particle, linked to a named target, thick or a layer of finite thickness (a resonance scan
+  through a target of known or fitted areal density; with the user's stopping formula until the stopping module);
 - values from the literature compared with functions of the level parameters, as χ² terms of their own
   (`<modelData>`): resonance strength ωγ, resonance energy, total and partial width, branching ratio, ANC,
   scattering length;

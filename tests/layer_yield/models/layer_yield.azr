@@ -1,0 +1,193 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+format=3
+</config>
+<levels>
+1 -1 13.027400 1 1 1 2 0 1 1 1 60 0.5 1 0.5 -1 0.0 1.007825 15.000109 1 7 12.1274 12.1274 0 0 0.0 0 4.85 0 0 0
+1 -1 13.027400 1 1 2 0 2 1 1 1 40 0 1 0 1 0.0 4.002603 12.0 2 6 12.1274 7.16192 0 0 0.0 0 5.43 0 0 0
+
+0.5 1 30.000000 1 1 3 1 0 2 1 1 0 0.5 1 0 1 0.0 1.008665 12.0 0 6 4.94636 4.94636 0 0 0.0 0 0.1 0 0 0
+</levels>
+<data>
+# Synthetic: one data set per limit of the yield of a layer (README.md).  The data values are
+# placeholders; check.py compares the model values with closed forms.
+dataset const
+    reaction       12C(n,n)12C
+    quantity       yield
+    unit           1/particle
+    file           data/const.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         LN
+    quadrature     points 10
+dataset const_spread
+    reaction       12C(n,n)12C
+    quantity       yield
+    unit           1/particle
+    file           data/const.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         LN
+    beam           B03
+    quadrature     points 100
+dataset const_iso
+    reaction       12C(n,n)12C
+    quantity       yield
+    unit           1/particle
+    file           data/const.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         LNI
+    quadrature     points 10
+dataset thin
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         TT
+    quadrature     points 20
+dataset thin_sigma
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         TT
+    quadrature     points 20
+dataset thin_bare
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin_bare.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+dataset thick
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         TK
+    quadrature     points 60
+dataset thick_inf
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick_inf.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         TI
+    quadrature     points 60
+dataset res
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/res.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         TR
+    quadrature     points 40
+dataset res_q1
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/uC
+    file           data/res_q.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         TR
+    quadrature     points 40
+    charge_state   1
+dataset res_q2
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/uC
+    file           data/res_q.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         TR
+    quadrature     points 40
+    charge_state   2
+dataset deriv
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/deriv.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         TD
+    quadrature     points 40
+dataset deriv_bare
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/deriv_bare.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+dataset res_bare
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/res_bare.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+</data>
+<targets>
+target LN
+    kind           layer
+    active         12C
+    areal_density  1e+20 atoms/cm2 fixed
+    stopping       formula "a0*x^a1" a0=1.2e-24 a1=-1 MeV*cm2/atom
+    straggling     none
+target LNI
+    kind           layer
+    active         12C
+    areal_density  1e+20 atoms/cm2 fixed
+    stopping       formula "a0*x^a1" a0=1.2e-24 a1=-1 MeV*cm2/atom
+    straggling     none
+    isotope        12C 0.5 fixed
+target TT
+    kind           layer
+    active         15N
+    areal_density  5e+15 atoms/cm2 fixed
+    stopping       formula "a0*x^a1" a0=4.5e-20 a1=-0.6 MeV*cm2/atom
+    straggling     none
+target TK
+    kind           layer
+    active         15N
+    areal_density  1.1e+19 atoms/cm2 fixed
+    stopping       formula "a0*x^a1" a0=4.5e-20 a1=-0.6 MeV*cm2/atom
+    straggling     none
+target TI
+    kind           infinite
+    active         15N
+    stopping       formula "a0*x^a1" a0=4.5e-20 a1=-0.6 MeV*cm2/atom
+    straggling     none
+target TR
+    kind           layer
+    active         15N
+    areal_density  1e+18 atoms/cm2 fixed
+    stopping       formula "a0" a0=5e-21 MeV*cm2/atom
+    straggling     none
+target TD
+    kind           layer
+    active         15N
+    areal_density  1e+18 atoms/cm2 fit prior 1e+18 10%
+    stopping       formula "a0" a0=5e-21 MeV*cm2/atom
+    straggling     none
+beam B03
+    spread         0.3 keV lab
+</targets>

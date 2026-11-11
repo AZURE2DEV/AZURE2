@@ -137,6 +137,9 @@ constexpr const char *kNotBuilt = "E_NOT_BUILT";
 constexpr const char *kThmRelativistic = "E_THM_RELATIVISTIC";
 constexpr const char *kThmCovariance = "E_THM_COVARIANCE";
 constexpr const char *kFoldConflict = "E_FOLD_CONFLICT";
+// A yield on a layer, refused by the engine's set-up, which evaluates the stopping on the sub-point grid (LayerChecks.h)
+constexpr const char *kLayerStopping = "E_LAYER_STOPPING";
+constexpr const char *kLayerExitBelowModel = "E_LAYER_EXIT_BELOW_MODEL";
 // Hybrid potentials (`potential` records: BuildPotentials; the old block in a format-3 file: ReadFormat3Project)
 constexpr const char *kPotentialTwice = "E_POTENTIAL_TWICE";
 constexpr const char *kPotentialPairKind = "E_POTENTIAL_PAIR_KIND";
