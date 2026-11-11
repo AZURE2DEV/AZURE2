@@ -157,7 +157,9 @@ flags = set(re.findall(r'"(--[a-z0-9-]+)=?"', parser))
 handled_in_main = {"--help", "--build-coulomb-table", "--convert", "--schema", "--validate", "--describe",
                    "--print-predictions",
                    # options of --convert ... --to 3 and of --validate, read in main() with their command
-                   "--to", "--json-report", "--answers", "--exact-grids", "--strict", "--allow-questions", "--json"}
+                   "--to", "--json-report", "--answers", "--exact-grids", "--strict", "--allow-questions", "--json",
+                   # option of --describe
+                   "--record"}
 flags -= handled_in_main
 # Removed: rejected with an error, documented as removed, not offered by --help.
 removed = {"--use-api"}

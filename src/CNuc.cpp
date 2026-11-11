@@ -28,6 +28,8 @@
 #include "ECIntegral.h"
 #include "GSLException.h"
 #include "ProjectSetup.h"
+#include "azure2/experiment/FinalStates.h"
+#include "azure2/experiment/ProjectReader.h"
 #include "azure2/io/LevelRows.h"
 #include "Minuit2/MnUserParameters.h"
 #include "AZUREParams.h"
@@ -389,7 +391,7 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
     this->AddHardSphereGroups(configure, configure.hardSphereMaxL >= 0 ? configure.hardSphereMaxL : maxLValue);
   if (RefuseForbiddenIdenticalChannels(*this, configure) == -1) return -1;
   if ((configure.paramMask & Config::USE_EXTERNAL_CAPTURE) && this->NumJGroups() > 0 && this->NumPairs() > 0)
-    if (this->ParseExternalCapture(configure, ecPairs) == -1) return -1;
+    if (this->ParseExternalCapture(configure, ecPairs, section.rows) == -1) return -1;
 
   if (this->NumNuclei() > 1)
     for (int j = 1; j <= this->NumJGroups(); j++) this->GetJGroup(j)->SetNucleusLabelled(true);
@@ -471,11 +473,8 @@ void CNuc::AbundanceOf(int ordinal, int &sample, int &nucleus) const {
 }
 
 std::string CNuc::AbundanceParamName(int sample, int nucleus) const {
-  const std::string &name = samples_[sample - 1].name;
-  const std::string &isotope = samples_[sample - 1].entries[nucleus - 1].isotope;
-  if (!isotope.empty()) return name + ".isotope." + isotope;  // format 3: <target>.isotope.<isotope>
-  const std::string zA = std::to_string(nuclei_[nucleus - 1].Z) + "_" + std::to_string(nuclei_[nucleus - 1].A);
-  return "abundance_" + (name.empty() ? std::string() : name + "_") + zA;
+  return azure2::experiment::AbundanceParameterName(samples_[sample - 1].name, samples_[sample - 1].entries[nucleus - 1].isotope,
+                                                    nuclei_[nucleus - 1].Z, nuclei_[nucleus - 1].A);
 }
 
 double CNuc::GetAbundance(int sample, int nucleus) const {
@@ -590,11 +589,17 @@ int CNuc::AddHardSphereGroups(const Config &configure, int maxL) {
 }
 
 /*!
- * Fills the ECLevel vector from information in the external capture file.  Also tests if the final state for external capture
- * exists from the nuclear file.  If not, the state is created.
+ * Marks the final state of each photon pair with external capture (`ecPairs`: pair number -> multipole mask) and
+ * stores its N_f integrals and Whittaker conversion factors; the final states are decided by
+ * experiment::ExternalCaptureFinalStates on the <levels> `rows`, as the validation decides them.
  */
 
-int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPairs) {
+int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPairs,
+                               const std::vector<azure2::io::LevelRow> &rows) {
+  std::vector<int> ecKeys;
+  for (const auto &ec : ecPairs) ecKeys.push_back(this->GetPair(ec.first)->GetPairKey());
+  const azure2::experiment::LevelTables tables = azure2::experiment::LevelTablesOfRows(rows);
+  const std::vector<azure2::experiment::FinalStateOfPair> finals = azure2::experiment::ExternalCaptureFinalStates(tables, ecKeys);
   std::set<int> usedExitKeys = ProjectExitPairKeys(configure);  // the exit pairs of the active data sets (their specs)
   // A total-capture rate (exit key -1) exits into every capture pair of its entrance nucleus.
   if ((configure.paramMask & Config::CALCULATE_REACTION_RATE) && configure.rateParams.exitPair == -1)
@@ -605,22 +610,16 @@ int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPa
       configure.outStream << "Final state is not a capture pair." << std::endl;
       continue;
     }
-    // The final state of an external-capture pair must be a level of the project (user guide, "Gamma-Ray
-    // Calculations"): its ANC and gamma widths live on that level's lines.  Before 2026-10-26 a missing level
-    // was silently created here with a fixed energy and FREE particle widths of 0.1 MeV^1/2 that were in no
-    // .azr line and not in the GUI, and -- because it was appended to its J-group only when external capture
-    // was on, i.e. only in modes with a capture segment on the CLI, always in the API -- every later level's
-    // energy_N / width_N_c name moved by one between runs of the same project, so a param.sav landed on the
-    // wrong levels without a message.  Now: a pair that an active segment (or the rate pair) exits into is
-    // refused; one that nothing uses (a level-isolation or scratch model whose final-state lines are switched
-    // off) is warned about and gets no external capture and no hidden level.  tests/ec_final_state_listed.
+    // The final state must be a level of the project (user guide, "Gamma-Ray Calculations"; it carries the ANC and the
+    // gamma widths): refused for a pair an active data set (or the rate) exits into, else warned about and switched off,
+    // so no level is ever made up.  tests/ec_final_state_listed.
     double jValue = exitPair->GetJ(2);
     int parity = exitPair->GetPi(2);
     JGroup newJGroup(jValue, parity);
     newJGroup.SetNucleus(exitPair->GetNucleus(), exitPair->GetNucleusZ(), exitPair->GetNucleusA());
     int jGroupNum = this->IsJGroup(newJGroup);
-    ALevel probeLevel(exitPair->GetHeavyExE());
-    if (!jGroupNum || !this->GetJGroup(jGroupNum)->IsLevel(probeLevel)) {
+    const azure2::experiment::FinalStateOfPair &finalState = *azure2::experiment::FinalStateOf(finals, exitPair->GetPairKey());
+    if (finalState.levels.empty()) {
       const bool used = usedExitKeys.count(exitPair->GetPairKey()) > 0;
       configure.outStream << (used ? "ERROR" : "WARNING") << ": external capture into pair " << exitPair->GetPairKey()
                           << " needs its final state, J^pi = " << jValue << (parity > 0 ? "+" : "-") << " at E_x = "
@@ -631,23 +630,21 @@ int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPa
       if (used) return -1;
       continue;
     }
-    const int levelNum = this->GetJGroup(jGroupNum)->IsLevel(probeLevel);
-    // IsLevel is an energy-only match within 1 keV and returns the first level that fits.  Since e239a12 two
-    // levels of one J^pi may sit within 1 keV of each other (different level IDs), so the pair's E_x can match
-    // more than one: refuse that instead of taking the first silently (audit 2026-10-25, checklist item 28).
-    {
-      int matches = 0;
-      for (int lv = 1; lv <= this->GetJGroup(jGroupNum)->NumLevels(); lv++)
-        if (fabs(this->GetJGroup(jGroupNum)->GetLevel(lv)->GetE() - exitPair->GetHeavyExE()) <= 1.0e-3) matches++;
-      if (matches > 1) {
-        configure.outStream << "ERROR: external capture into pair " << exitPair->GetPairKey() << ": " << matches
-                            << " levels of J^pi = " << jValue << (parity > 0 ? "+" : "-") << " lie within 1 keV of its final-state energy E_x = "
-                            << exitPair->GetHeavyExE() << " MeV, so the final state is ambiguous.  Move the extra level(s) by more than 1 keV"
-                            << " or give the pair the energy of the one it decays to." << std::endl;
-        return -1;
-      }
+    // Two levels of one J^pi within 1 keV of each other (different level IDs): the final state is ambiguous.
+    if (finalState.levels.size() > 1) {
+      configure.outStream << "ERROR: external capture into pair " << exitPair->GetPairKey() << ": " << finalState.levels.size()
+                          << " levels of J^pi = " << jValue << (parity > 0 ? "+" : "-") << " lie within 1 keV of its final-state energy E_x = "
+                          << exitPair->GetHeavyExE() << " MeV, so the final state is ambiguous.  Move the extra level(s) by more than 1 keV"
+                          << " or give the pair the energy of the one it decays to." << std::endl;
+      return -1;
     }
-    if (FinalStateOfAnotherPair(*this, configure, jGroupNum, levelNum, ec->first)) return -1;
+    const azure2::experiment::LevelInfo &level = tables.levels[finalState.levels[0]];
+    if (level.group != jGroupNum) throw std::logic_error("ParseExternalCapture: the level tables number J^pi groups unlike Fill");
+    const int levelNum = level.level;
+    if (finalState.sharedWithPairKey != 0) {
+      FinalStateOfAnotherPair(*this, configure, finalState.sharedWithPairKey, levelNum, ec->first);
+      return -1;
+    }
     this->GetJGroup(jGroupNum)->GetLevel(levelNum)->SetECParams(ec->first, ec->second);
     for (int ch = 1; ch <= this->GetJGroup(jGroupNum)->NumChannels(); ch++) {
       PPair *theFinalPair = this->GetPair(this->GetJGroup(jGroupNum)->GetChannel(ch)->GetPairNum());

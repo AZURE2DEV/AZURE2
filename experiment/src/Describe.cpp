@@ -3,6 +3,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <sstream>
 
 #include "azure2/experiment/Json.h"
@@ -210,6 +211,13 @@ std::string Fmt(double x) {
   return s.str();
 }
 
+/// A data set's lab-energy window in words: "0.2 - 1.4 MeV", ">= 0.2 MeV" without an upper end, "all energies (no
+/// energy_window)" without either (BuildUnits.cpp EnergyWindow: 0 and the largest double).
+std::string EnergyWindowText(double lo, double hi) {
+  if (hi < std::numeric_limits<double>::max()) return Fmt(lo) + " - " + Fmt(hi) + " MeV";
+  return lo > 0.0 ? ">= " + Fmt(lo) + " MeV" : "all energies (no energy_window)";
+}
+
 /// "Woods-Saxon V0 20 MeV, R 3.6 fm, a 0.6 fm" / "Gaussian V0 40 MeV, r0 2.5 fm".
 std::string CentralText(const HybridPotentialSetting &s) {
   if (s.shape == physics::FormShape::Gaussian) return "Gaussian V0 " + Fmt(s.V0) + " MeV, r0 " + Fmt(s.r0) + " fm";
@@ -245,7 +253,7 @@ std::string DescribeText(const Format3Project &p, const std::string &only) {
     for (const Term &t : Terms(r, d.reaction))
       out << "    " << t.text << ": entrance pair " << Pair(p, t.entrance) << ", exit pair " << Pair(p, t.exit)
           << (t.scale != 1.0 ? ", scale " + Fmt(t.scale) : "") << (t.hasAngle ? ", at " + Fmt(t.angle) + " deg lab" : "") << "\n";
-    out << "  window E_lab " << Fmt(d.minE) << " - " << Fmt(d.maxE) << " MeV";
+    out << "  window E_lab " << EnergyWindowText(d.minE, d.maxE);
     if (AngleObservable(d.reaction.observable))
       out << ", theta_" << (d.reaction.observable == Observable::DifferentialLab ? "lab " : "lab (data converted to c.m.) ")
           << Fmt(d.minA) << " - " << Fmt(d.maxA) << " deg";

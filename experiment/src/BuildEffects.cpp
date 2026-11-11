@@ -373,8 +373,8 @@ void Abundances(Context &c) {
       const Value *iso = isotopes[k];
       const Value *nucleus = iso->Get("nucleus"), *abundance = iso->Get("abundance");
       if (!nucleus || !abundance) continue;
-      // where the abundance is written; the name is the one CNuc::AbundanceParamName gives (<target>.isotope.<isotope>)
-      c.out_.parameterSources[t->name + ".isotope." + nucleus->nucleus.text] = {t->name, "isotope", (int)k, "abundance"};
+      // where the abundance is written, under the parameter's name (the engine's, CNuc::AbundanceParamName)
+      c.out_.parameterSources[AbundanceParameterName(t->name, nucleus->nucleus.text, 0, 0)] = {t->name, "isotope", (int)k, "abundance"};
       std::set<std::pair<int, int>> compounds;
       std::set<std::pair<int, int>> lights;  // the light particles of the target's data sets
       for (const Member *m : users)
@@ -425,5 +425,11 @@ void BuildEffects(Context &c) {
 }
 
 }  // namespace build
+
+std::string AbundanceParameterName(const std::string &sample, const std::string &isotope, int z, int a) {
+  if (!isotope.empty()) return sample + ".isotope." + isotope;
+  return "abundance_" + (sample.empty() ? std::string() : sample + "_") + std::to_string(z) + "_" + std::to_string(a);
+}
+
 }  // namespace experiment
 }  // namespace azure2

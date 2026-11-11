@@ -6,6 +6,7 @@
 // Texts are bytes (UTF-8 as in the file); line numbers and columns are the file's, 1-based, columns in bytes.
 
 #include <map>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -221,6 +222,22 @@ void BindProject(py::module_ &m) {
       py::arg("text"),
       "Every reference of a record to another in a format-3 project text, as the validator resolves names "
       "(experiment::RecordReference): dicts with record, field, line, col (of the name), name and epoch (bytes).");
+  m.def(
+      "parameter_names",
+      [](const std::string &text, bool allActive) {
+        ex::Format3ReadOptions read;
+        read.readDataFiles = false;  // the names come from the records and <levels>, not from the data
+        read.setUpChecks = false;
+        read.allRecordsActive = allActive;
+        const ex::Format3Project c = ex::ReadFormat3Text(text, read);
+        if (!c.Ok() || !c.levelsRead) throw std::invalid_argument("parameter_names: the project has errors or no <levels>");
+        return ex::ParameterNamesOf(c.built);
+      },
+      py::arg("text"), py::arg("all_active") = false,
+      "Every fit-parameter name the format-3 project text gives that is made from a record's name, in record order "
+      "(experiment::ParameterNamesOf); with all_active the names of inactive data sets and extrapolations too, as "
+      "when they are switched on (BuildOptions::allRecordsActive).  ValueError when the project has an error.  pyazr's "
+      "Project.rename maps the names before and after a rename by position.");
   m.def(
       "parameter_value_edits",
       [](const std::string &text, const std::string &projectDir, const std::map<std::string, double> &values) {

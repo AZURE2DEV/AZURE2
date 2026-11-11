@@ -1,0 +1,35 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+includeAllJPi=1
+maxOrbitalMomentum=4
+format=3
+</config>
+<levels>
+0 1 9.0 1 1 1 0 0 1 1 1 0 0 1 0 1 0 4.00260325 12.0 2 6 7.16192 7.16192 0 0 0.0 0 5.0 0 0 0
+
+</levels>
+<data>
+# Ratio-to-Rutherford data on the hard-sphere model (data/rth.dat, truth.py data).  check.sh makes the variants:
+# the same data multiplied by the Rutherford cross section as dsigma_domega, a fixed 5 keV energy shift, a beam spread.
+dataset rth
+    reaction       12C(a,a)12C
+    quantity       ratio_to_rutherford
+    unit           1
+    file           data/rth.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    norm           1 fixed
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+</targets>

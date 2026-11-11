@@ -19,6 +19,11 @@ class MnUserParameters;
 }  // namespace ROOT
 class Config;
 class AZUREParams;
+namespace azure2 {
+namespace io {
+class LevelRow;
+}
+}  // namespace azure2
 
 /// An AZURE compound nucleus
 
@@ -146,7 +151,7 @@ class CNuc {
   int AddHardSphereGroups(const Config &, int maxL);
   /// Read the external-capture file into the ECLevel vector and check each
   /// final state against the nuclear file.
-  int ParseExternalCapture(const Config &, std::map<int, int> &);
+  int ParseExternalCapture(const Config &, std::map<int, int> &, const std::vector<azure2::io::LevelRow> &rows);
   /// Boundary conditions, the physical-to-formal transformation, the reaction
   /// pathways and the angular-distribution coefficients -- everything derived
   /// that a calculation needs. Run after Fill, and again after anything that

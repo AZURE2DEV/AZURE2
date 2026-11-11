@@ -17,10 +17,11 @@ class JGroup;
  * gamma^ext.
  */
 
-/// Is level `level` of J-group `group` already the final state of another photon pair than `pairNum` (pair numbers
-/// 1-based)?  Then an ERROR naming both pair keys and the level is written: a photon pair has its own final state (a
-/// second pair took the level's capture parameters, and capture into the first ran without its external part).
-bool FinalStateOfAnotherPair(CNuc &compound, const Config &configure, int group, int level, int pairNum);
+/// The ERROR of a photon pair (number `pairNum`, 1-based) whose final state, level `level` of its J^pi group, is the
+/// final state of the earlier pair `otherPairKey` (experiment::ExternalCaptureFinalStates decides it): a photon pair
+/// has its own final state (else the second pair took the level's capture parameters, and capture into the first ran
+/// without its external part).
+void FinalStateOfAnotherPair(CNuc &compound, const Config &configure, int otherPairKey, int level, int pairNum);
 
 /*!
  * N_f^(-1/2) of level `level` of `group` (Eq. 1): n0 = 1 (Brune) or Park's J, gamma the level's amplitude per group

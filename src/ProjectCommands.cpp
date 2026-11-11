@@ -183,12 +183,13 @@ int printPredictions(const std::string &file) {
 }
 
 /*!
- * --describe FILE [--json]: what the engine makes of the format-3 project FILE (docs/upgrade/project_format3.md
- * section 6.3; experiment/Describe.h): per data set its quantity, observable, reaction with the pair keys, windows,
- * the data file's resolved path, effects and parameters.  A project with an error: its diagnostics, exit 2; a
- * format-1 or format-2 file: exit 3; a file that cannot be read: exit 1.
+ * --describe FILE [--json] [--record NAME]: what the engine makes of the format-3 project FILE (docs/upgrade/
+ * project_format3.md section 6.3; experiment/Describe.h): per data set its quantity, observable, reaction with the pair
+ * keys, windows, the data file's resolved path, effects and parameters; with --record only the data set, extrapolation,
+ * datum or potential NAME.  A project with an error, or no such record: exit 2; a format-1 or format-2 file: exit 3; a
+ * file that cannot be read: exit 1.
  */
-int describeProject(const std::string &file, bool json) {
+int describeProject(const std::string &file, bool json, const std::string &record) {
   std::string bytes;
   if (!ReadFileBytes(file, bytes)) {
     std::cout << "ERROR: --describe: cannot read " << file << std::endl;
@@ -208,7 +209,18 @@ int describeProject(const std::string &file, bool json) {
     std::cout << file << ": not described (" << (c.levelsRead ? "errors above" : "no readable <levels>") << ")." << std::endl;
     return 2;
   }
-  std::cout << (json ? azure2::experiment::DescribeJson(c) : azure2::experiment::DescribeText(c)) << std::flush;
+  if (!record.empty()) {
+    bool described = false;  // the kinds Describe.h describes
+    for (const azure2::experiment::ValidatedRecord &r : c.validated.records)
+      described = described || (r.name == record && (r.kind == "dataset" || r.kind == "extrapolation" || r.kind == "datum" ||
+                                                      r.kind == "potential"));
+    if (!described) {
+      std::cout << "ERROR: --describe --record " << record << ": " << file << " has no data set, extrapolation, datum or "
+                << "potential of that name." << std::endl;
+      return 2;
+    }
+  }
+  std::cout << (json ? azure2::experiment::DescribeJson(c, record) : azure2::experiment::DescribeText(c, record)) << std::flush;
   if (json) std::cout << std::endl;
   return 0;
 }
@@ -273,16 +285,27 @@ bool RunProjectCommand(int argc, char **argv, int &exitCode) {
       return Exit(exitCode, printPredictions(argv[i + 1]));
     }
 
-  // --describe FILE [--json] prints what the engine makes of a format-3 project and exits (section 6.3)
+  // --describe FILE [--json] [--record NAME] prints what the engine makes of a format-3 project, or of its record
+  // NAME, and exits (section 6.3)
   for (int i = 1; i < argc; i++)
     if (strcmp(argv[i], "--describe") == 0) {
       if (i + 1 >= argc) {
-        std::cout << "ERROR: --describe needs a file: --describe project.azr [--json]" << std::endl;
+        std::cout << "ERROR: --describe needs a file: --describe project.azr [--json] [--record NAME]" << std::endl;
         return Exit(exitCode, 1);
       }
       bool json = false;
-      for (int k = 1; k < argc; k++) json = json || strcmp(argv[k], "--json") == 0;
-      return Exit(exitCode, describeProject(argv[i + 1], json));
+      std::string record;
+      for (int k = 1; k < argc; k++) {
+        json = json || strcmp(argv[k], "--json") == 0;
+        if (strcmp(argv[k], "--record") == 0) {
+          if (k + 1 >= argc) {
+            std::cout << "ERROR: --record needs the name of a record: --describe project.azr --record NAME" << std::endl;
+            return Exit(exitCode, 1);
+          }
+          record = argv[++k];
+        }
+      }
+      return Exit(exitCode, describeProject(argv[i + 1], json, record));
     }
 
   // --schema prints the table of project format 3 as JSON and exits (docs/upgrade/project_format3.md section 6.1);

@@ -197,7 +197,7 @@ class _HybridPotentials:
             if changed:
                 _replace_section(model, "potentials", lines)
         elif getattr(self, "_potentials_edited", False):
-            from .azrfile import _engine_module
+            from .described import _engine as _engine_module
             with open(self.file, "rb") as f:
                 refusal = _engine_module().validate_format3_text(f.read(), self.file)[0]
             raise ValueError("save_fit: this session changed a hybrid potential, which is written only to a format-3 "

@@ -8,13 +8,13 @@ api/src/pybind_api.cpp	1235
 physics/coulomb/coul/src/cwfcomp.cpp	1440
 physics/coulomb/coulsm/src/cwfcomp.cpp	2070
 pyazr/azrfile.py	3756
-pyazr/azure2.py	2424
+pyazr/azure2.py	2421
 pyazr/nds.py	1450
 src/AMatrixFunc.cpp	2806
 src/AZURE2.cpp	1659
 src/AZURECalc.cpp	2075
 src/AZURECalcMCMC.cpp	1434
 src/AZUREGrad.cpp	1847
-src/CNuc.cpp	1777
+src/CNuc.cpp	1774
 src/EData.cpp	1826
 src/ThmExperiment.cpp	1026

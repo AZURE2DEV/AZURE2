@@ -130,7 +130,7 @@ void printHelp() {
             << std::setw(25) << std::left << "\t" << std::setw(0) << "--exact-grids the grids the old engine accumulated (F10), --strict ask where the old meaning was implicit," << std::endl
             << std::setw(25) << std::left << "\t" << std::setw(0) << "--allow-questions '?' for unanswered questions. --to 3 is needed until this engine reads format 3." << std::endl
             << std::setw(25) << std::left << "\t--validate:" << std::setw(0) << "--validate FILE [--json]: check a format-3 project against the table and print every problem" << std::endl
-            << std::setw(25) << std::left << "\t--describe:" << std::setw(0) << "--describe FILE [--json]: print what the engine makes of a format-3 project (data sets, reactions and pair keys, data files, effects, parameters)" << std::endl
+            << std::setw(25) << std::left << "\t--describe:" << std::setw(0) << "--describe FILE [--json] [--record NAME]: print what the engine makes of a format-3 project, or of its record NAME (data sets, reactions and pair keys, data files, effects, parameters)" << std::endl
             << std::setw(25) << std::left << "\t" << std::setw(0) << "(file:line: record.field: message, or a JSON array); exit 0 without errors, 2 with errors, 3 for format 1/2." << std::endl
             << std::setw(25) << std::left << "\t--print-predictions:" << std::setw(0) << "--print-predictions FILE: print the expression tree of every data set and extrapolation of FILE, one line each, and exit." << std::endl
             << std::setw(25) << std::left << "\t--schema:" << std::setw(0) << "Print the table of project format 3 (record kinds, fields, quantities, units, diagnostic codes) as JSON and exit." << std::endl
