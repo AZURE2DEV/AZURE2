@@ -1376,37 +1376,6 @@ void AMatrixFunc::TBarAdjoint(Unit *energyPoint, const TMatrixCotangent &bar, Gr
   }
 }
 
-void AMatrixFunc::TBarAdjointMany(const std::vector<Unit *> &points, const std::vector<TMatrixCotangent> &bars,
-                                  GradAccum &accum, const vector_matrix_r *shiftDeriv) {
-  if (points.empty()) return;
-  static const bool dense = [] {
-    const char *e = std::getenv("AZURE_GRAD_DENSE");
-    return e && *e && std::string(e) != "0";
-  }();
-  std::vector<std::vector<BilinearTerm>> merged(compound()->NumJGroups()), terms;
-  for (size_t q = 0; q < points.size() && q < bars.size(); q++) {
-    if (dense || !this->CollectBilinearTerms(points[q], bars[q], terms)) {
-      this->TBarAdjoint(points[q], bars[q], accum, shiftDeriv);
-      continue;
-    }
-    for (const auto &s : bars[q].screen) accum.AddScreening(s.first, s.second);
-    for (int j = 1; j <= (int)terms.size(); j++)
-      for (const BilinearTerm &t : terms[j - 1]) {
-        bool found = false;
-        for (BilinearTerm &m : merged[j - 1])
-          if (m.ch == t.ch && m.chp == t.chp) {
-            m.beta += t.beta;
-            found = true;
-            break;
-          }
-        if (!found) merged[j - 1].push_back(t);
-      }
-  }
-  AZUREProfile::Timer profileTimer(AZUREProfile::kGradBackprop);
-  for (int j = 1; j <= (int)merged.size(); j++)
-    if (!merged[j - 1].empty()) this->BilinearAdjoint(points[0], j, merged[j - 1], accum, shiftDeriv);
-}
-
 /*!
  * Beam energy in the compound system, as FillMatrices takes it.
  */

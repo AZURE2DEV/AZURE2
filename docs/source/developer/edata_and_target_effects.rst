@@ -639,26 +639,37 @@ points at one energy are mapped as before.  The energy-grouped gradient below
 leaves THM segments out; their rows come from the HOES adjoint
 (``THMMatrixFunc::THMPointAdjoint``) or THM-only differences.
 
-Energy-grouped analytic gradient
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Analytic gradient over the energy tasks
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The analytic gradient and the residual Jacobian (``AZUREGrad.cpp``) work on
-the same groups (``BuildGradItems``): one work item per host with the points
-mapped onto it, in parallel over items, so no two threads touch one point.  An
-item solves the level matrix and T-matrix once, forms each member's observable
-from them, and back-propagates:
+The analytic gradient, the residual Jacobian and the model gradients
+(``AZUREGrad.cpp``, ``GradEnergyTasks.cpp``) work on the energy tasks of the
+point pass (``CalculationPlan::EnergyTasks``: every unit -- a point or a
+sub-point -- at one compound energy, nucleus and route).  A pass has three
+steps:
 
-- for the scalar gradient (``AccumulateEGammaGradient``), the members'
-  T-matrix cotangents are summed and back-propagated once
-  (``AMatrixFunc::PointTBar``, ``TBarAdjoint``; the back-propagation is linear
-  in them);
-- for the rows of the residual Jacobian and the model gradients
-  (``GroupRows``), the derivatives of the group's level-matrix bilinear forms
-  :math:`g_c^T A\, g_{c'}` are taken once, for the cotangents 1 and *i*
-  (``AMatrixFunc::BilinearAdjoint``), and every member's row is a combination
-  of them with its own angle-dependent coefficients -- unless back-propagating
-  each member is cheaper (few members, many channel pairs) or the decay has
-  external capture.
+- forward: the point pass of the data segments other than THM
+  (``WorkingCopy::CalculatePointsInParallel``) and each point's model from the
+  records it wrote;
+- cotangents: each point's cotangent of its model (``fitBarFn`` of the
+  objective, called once per point in data order, or a row's
+  :math:`1/(\delta y\, n J)`) taken back through its expression tree
+  (``ModelPointBackward``) and its fold (``GradTargetEffectAdjoint``, the fold's
+  weights) to cotangents of its units' observables (``PointCotangents``);
+- adjoint: per energy task one fill and factorisation, one T-matrix per
+  T-matrix group, the T-matrix cotangents of a group's units summed
+  (``AMatrixFunc::PointTBar``), and the bilinear terms
+  :math:`g_c^T A\, g_{c'}` merged over the task and back-propagated once per
+  J-group (``AMatrixFunc::BilinearAdjoint``; a decay with external capture by
+  ``TBarAdjoint``, group by group).  The rows do the same per row; where it is
+  cheaper, the derivatives of the task's bilinear forms by free parameter are
+  taken once (``LevelBasis``, or ``BilinearAdjoint`` with the cotangents 1 and
+  *i*) and every row of the task is a combination of them.
+
+The sums do not depend on the number of threads: the scalar gradient sums the
+tasks in 64 interleaved chunks, each in task order, then the chunks in order;
+the rows add the tasks' contributions in task order.  A fit gives the same bits
+at any thread count.
 
 Electron screening (a ``screening`` block on a ``<targetInt>`` line) is a
 factor :math:`f = e^{k U_e}` on each point's own observable, applied after the
@@ -666,8 +677,8 @@ bare one is formed from the shared T-matrix (``GenMatrixFunc::CalculateCrossSect
 so points with different screening may share a calculation.  In the adjoint
 ``PointTBar`` scales the point's cotangent by :math:`f` and records
 :math:`\partial Y/\partial U_e`; ``TBarAdjoint`` adds it, and the
-bilinear-basis rows of ``GroupRows``, which do not back-propagate the
-member, add it to the member's row directly.
+bilinear-basis rows, which do not back-propagate a row, add it to the row
+directly.
 
 A fitted target density (``densityfit`` / ``densitygroup``, ``WorkingCopy::SetUpDensityParams``)
 is not in the adjoint: ``WorkingCopy::FillDensitiesFromParams`` sets the density of the
@@ -729,14 +740,12 @@ CurrentLevelDerivatives``, per parameter set and free mask), and with the
 solves :math:`u = A g` its derivative is :math:`O(n)` per free parameter
 (``AMatrixFunc::LevelAdjoint``, ``LevelBasis``; standard, Brune and Park
 level matrices).
-Points with components or sub-point target effects are still differentiated
-one by one (``GradOnePoint``), with the same back-propagation.  For a SUM or
-RATIO point without a sub-point target effect, ``GradOnePoint`` solves the
-level matrix once at the base point and takes each term's T-matrix and
-cotangent from it; the terms without external capture enter only through the
-bilinear forms :math:`g_c^T A g_{c'}`, which do not depend on the exit pair,
-so their cotangents are merged by channel pair and back-propagated once
-(``AMatrixFunc::TBarAdjointMany``).
+Points with components or sub-point target effects go the same way: their
+units' cotangents join the energy tasks of their units (see "Analytic gradient
+over the energy tasks"); the terms of a SUM or RATIO point without external
+capture enter only through the bilinear forms :math:`g_c^T A g_{c'}`, which do
+not depend on the exit pair, so their cotangents are merged by channel pair and
+back-propagated once per task.
 
 Segments with components (SUM, RATIO, total capture) are mapped as well, since
 October 2026 (``WorkingCopy::MapComponentSegments``): each component's point is
@@ -778,10 +787,9 @@ Environment switches
    No point mapping at all: every point calculates its own energy-dependent
    values and T-matrix.
 ``AZURE_NO_COMPONENT_MAPPING=1``
-   Every term of a SUM, RATIO or total-capture segment is its own calculation,
-   in the evaluation and in the gradient, as before October 2026.
-``AZURE_NO_GROUPED_GRADIENT=1``
-   Differentiate every point on its own (``GradOnePoint``), as before.
+   Every term of a SUM, RATIO or total-capture segment is a point of its own in
+   the calculation plan, as before October 2026 (the gradient runs over the
+   energy tasks either way).
 ``AZURE_GRAD_DENSE=1``
    Back-propagate through the level matrix with the dense
    :math:`A^H \bar A A^H` products.

@@ -378,8 +378,8 @@ class WorkingCopy {
    * the energy tasks of their plan tasks (CalculationPlan::EnergyTasks: one level-matrix solve per compound energy,
    * points and sub-points alike) in one OpenMP pass, largest first, then the folds of the points with sub-points in
    * a second.  A plan task whose calculation throws gets NaN on its points (Unit::MarkFailed).  Returns the number of
-   * such plan tasks, or -1 when nothing was calculated: no OpenMP, already inside a parallel region, point mapping
-   * switched off on this thread, or AZURE_SERIAL_CHI2 set.  The caller then reads the points with
+   * such plan tasks, or -1 when nothing was calculated: no OpenMP, already inside a parallel region, or
+   * AZURE_SERIAL_CHI2 set.  After a pass that returns 0 the caller reads the points with
    * azure2::EvaluateModelPoint(..., LeafValues::Ready).
    */
   int CalculatePointsInParallel(const std::vector<const Segment *> &segments, CNuc *theCNuc, const Config &configure,

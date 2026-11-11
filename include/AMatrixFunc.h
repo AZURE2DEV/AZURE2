@@ -193,8 +193,8 @@ class AMatrixFunc : public GenMatrixFunc {
   /*!
    * The first half of PointAdjoint: the cotangents of the T-matrix elements
    * held by this object, for `fitBar` times the derivative of `point`'s
-   * observable.  The T-matrix may be that of another point at the same energy
-   * (a host of point mapping, WorkingCopy::MapData): only the angle-dependent parts
+   * observable.  The T-matrix may be that of another unit at the same energy
+   * (the provider of the unit's T-matrix group, CalculationPlan.h): only the angle-dependent parts
    * (Legendre polynomials, Coulomb amplitude, A_y coefficients) are read from
    * `point`.  Returns false, with `bar` unusable, where PointAdjoint would.
    */
@@ -208,14 +208,6 @@ class AMatrixFunc : public GenMatrixFunc {
    */
   void TBarAdjoint(Unit *energyPoint, const TMatrixCotangent &bar, GradAccum &accum,
                    const vector_matrix_r *shiftDeriv = nullptr);
-  /*!
-   * TBarAdjoint for the T-matrix cotangents of several points at one energy whose exit pairs may differ (the terms of
-   * a SUM or RATIO segment): bars[q] belongs to points[q]'s decay.  The decays without external capture enter only
-   * through bilinear forms g_c^T A g_c', which do not depend on the exit, so their terms are merged by channel pair
-   * and back-propagated once per J-group; a decay with external capture is back-propagated on its own.
-   */
-  void TBarAdjointMany(const std::vector<Unit *> &points, const std::vector<TMatrixCotangent> &bars,
-                       GradAccum &accum, const vector_matrix_r *shiftDeriv = nullptr);
   /*!
    * The internal-pathway cotangents of `bar` as bilinear-form terms, per
    * J-group (terms[j-1]), merged by channel pair.  False if the decay has

@@ -230,7 +230,6 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
 #else
   return -1;
 #endif
-  if (ScopedPointMappingOff::Active()) return -1;
   if (std::getenv("AZURE_SERIAL_CHI2")) return -1;
   const std::vector<int> work = PassWork(segments);
   AZUREProfile::Timer profileTimer(AZUREProfile::kPoints);

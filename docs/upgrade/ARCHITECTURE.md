@@ -28,6 +28,13 @@ m_i(θ, ν)  = s_k(ν) · Σ_n K_in(ν) · O_n(θ)
 
 The gradient is the same three lines differentiated: ∂m/∂θ = s·K·∂O/∂θ, and ∂m/∂ν from K(ν). Nothing else.
 
+As built (Phase 5, second branch, `src/GradEnergyTasks.cpp`): the gradient runs over the same energy tasks as the
+point pass. The point pass gives every unit's record and every point's model; each point's cotangent goes back
+through its expression tree and its fold to cotangents of its units (the transpose of K); per energy task the
+level matrix is filled and factored once, the T-matrix cotangents of the units of each T-matrix group are summed,
+and the bilinear terms g_c^T A g_c' are back-propagated once per J-group (∂O/∂θ, transposed). The sums are formed
+in an order fixed by the tasks, not by the threads, so a gradient and a fit give the same bits at any thread count.
+
 **Exact energies (decision, Jakub, 2026-11-07).** As in AZURE2 today, every observable is calculated at the energy
 where it is compared with data; nothing is interpolated by default. The grid E_n is therefore the set of evaluation
 energies, not a mesh: (i) the data energies themselves, so a point without shift or fold has K_in = δ at its own
