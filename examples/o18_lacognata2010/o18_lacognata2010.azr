@@ -10,6 +10,7 @@ none                                                                            
 none                                                                                                #Coulomb Amplitudes Check
 none                                                                                                #Reaction Pathway Check
 none                                                                                                #Angular Distributions Check
+format=3
 </config>
 <levels>
 0.5 1 8.597967771795089 0 1 1 1 0 1 1 0 -5141.1172465714535 0.5 1 0 1 0 1.00727645 17.99477097 1 8 7.993600 7.993600 0 0 0.0 0 5.1 0 0 0 2.224566 0
@@ -22,24 +23,56 @@ none                                                                            
 1.5 -1            8.5912 1 1 2 1 4 3 1 1               2500.0000000000005 0 1 0.5 -1 0 4.00150609 14.99626884 2 7 7.993600 4.013799 0 0 0.0 0 5.7 0 0 0 0.000000 0
 
 </levels>
-<segmentsData>
-1  1  2  0.533369  0.945114  0  180  10  1  1  0  0  0  0  data/thm_lc2010_hoes_authbkg.dat  0  0
-1  1  2  0.000000  2.000000  0  180  0  0.9699240041450711  1  5  0  0  0  data/mak78.dat  0  0
-1  1  2  0.000000  2.000000  0  180  1  0.929516744508587  1  0  0  0  0  data/amsel67.dat  0  0
-</segmentsData>
-<segmentsTest>
-</segmentsTest>
-<targetInt>
-1  "1"  50  1  0.017951593  0  0  "" 0  0  0  0  "" 0  0 0.04 5 50
-</targetInt>
+<data>
+# <segmentsData> line 1
+dataset thm_lc2010_hoes_authbkg
+    reaction       18O(p,a)15N
+    quantity       sigma
+    unit           arbitrary
+    file           data/thm_lc2010_hoes_authbkg.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0.533369 0.945114 MeV
+    norm           profiled
+    beam           beam_thm_lc2010_hoes_authbkg
+    quadrature     points 50 width_multiplier 5 per_width 50
+    thm            LC10
+
+# <segmentsData> line 2
+dataset mak78
+    reaction       18O(p,a)15N
+    quantity       sigma
+    unit           b
+    file           data/mak78.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0.000000 2.000000 MeV
+    norm           0.9699240041450711 fit prior 1 5%
+
+# <segmentsData> line 3
+dataset amsel67
+    reaction       18O(p,a)15N
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/amsel67.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    energy_window  0.000000 2.000000 MeV
+    angle_window   0.000000 180 deg
+    norm           0.929516744508587 fit
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+# <targetInt> line 1
+beam beam_thm_lc2010_hoes_authbkg
+    # CONVERTED: a Gaussian convolution is written as the beam's energy spread (the kernel is the same; the old line does not say whether it was a detector resolution)
+    spread         0.017951593 MeV lab
+</targets>
 <parameterSettings>
 # Prior centres: segment_N_norm|segment_N_energy_shift prior_centre value
-segment_2_norm prior_centre 1
 </parameterSettings>
 <thm>
 entranceL=incoherent
 vertex=constant
 kinematics=lacognata
 coulombIntegral=0
-experiment[LC10] segments=1 background=linear beam=18O target=d spectator=n Ebeam=54 distortion=optical opticalAA=ancai06 opticalSF=kd03:extrapolate vertexModel=dw
+experiment[LC10] background=linear beam=18O target=d spectator=n Ebeam=54 distortion=optical opticalAA=ancai06 opticalSF=kd03:extrapolate vertexModel=dw
 </thm>

@@ -10,15 +10,9 @@ none                                                                            
 none                                                                                                #Coulomb Amplitudes Check
 none                                                                                                #Reaction Pathway Check
 none                                                                                                #Angular Distributions Check
-</config>
-<potential>
-useHybridPotential=0
 useAdaptiveGrid=1
-potentialType=0
-V0=150
-R=3.6
-a=0.6
-</potential>
+format=3
+</config>
 <levels>
 0 1 13.5219 1 1 1 0 0 1 1 1 -2.76485 0.5 1 0.5 1 0 1.00782 18.9984 1 9 12.844 12.844 0 0 0.0 0 5.136 0 0 0 2.224566 0
 0 1 13.5219 1 1 2 0 0 1 1 1 0 0 1 0 1 0 4.0026 15.9949 2 8 12.844 4.73 0 0 0.0 0 5.75 0 0 0 0 0
@@ -461,44 +455,58 @@ a=0.6
 2 1 13.6345 1 1 9 4 4 25 1 1 0 1 1 2 1 1.63367 0 19.9924 0 10 12.844 0 0 0 0.0 10 0 0 0 0 0 0
 
 </levels>
-<segmentsData>
-1  1  6  -0.2  0.473871  0  180  10  1  1  0  -0.00917  0.1  0  data/thm_su2025.dat  0  0
-1  1  6  0.05  0.35  0  180  0  0.904768  0  10  0  0  0  data/juna_zhang2022.dat  0  0
-1  1  6  0.05  0.35  0  180  0  1.092788  0  10  0  0  0  data/spyrou2000_S.dat  0  0
-</segmentsData>
-<segmentsTest>
-</segmentsTest>
-<targetInt>
-1  "1"  40  1  0.0447191959  0  0  "" 0  0  0  0  "" 0  0  0.04  2  12
-</targetInt>
+<data>
+# <segmentsData> line 1
+dataset thm_su2025
+    reaction       19F(p,a)16O[6.13]
+    quantity       sigma
+    unit           arbitrary
+    file           data/thm_su2025.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  -0.2 0.473871 MeV
+    norm           profiled
+    shift          offset -0.00917 MeV fixed prior 0 0.1
+    beam           beam_thm_su2025
+    quadrature     points 40 width_multiplier 2 per_width 12
+    thm            SU2025
+
+# <segmentsData> line 2
+dataset juna_zhang2022
+    reaction       19F(p,a)16O[6.13]
+    quantity       sigma
+    unit           b
+    file           data/juna_zhang2022.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0.05 0.35 MeV
+    norm           0.904768 fixed prior 1 10%
+
+# <segmentsData> line 3
+dataset spyrou2000_S
+    reaction       19F(p,a)16O[6.13]
+    quantity       sigma
+    unit           b
+    file           data/spyrou2000_S.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0.05 0.35 MeV
+    norm           1.092788 fixed prior 1 10%
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+# <targetInt> line 1
+beam beam_thm_su2025
+    # CONVERTED: a Gaussian convolution is written as the beam's energy spread (the kernel is the same; the old line does not say whether it was a detector resolution)
+    spread         0.0447191959 MeV lab
+</targets>
 <parameterSettings>
 # Fitting parameter settings (only non-fixed parameters shown)
 # Format: name value lower_limit upper_limit error fit_error nuisance category minuit_index
 # Prior centres: segment_N_norm|segment_N_energy_shift prior_centre value
-segment_2_norm prior_centre 1
-segment_3_norm prior_centre 1
 </parameterSettings>
-<lastRun>
-9985
-""
-""
-0 0
-0 ""
--1. -1. -1.
-</lastRun>
-<mcmc>
-nwalkers 50
-nsteps 10000
-chainspread 5
-nthreads 4
-usereducedwidths 0
-<parameters>
-</parameters>
-</mcmc>
 <thm>
 entranceL=incoherent
 vertex=constant
 kinematics=triple
 coulombIntegral=0
-experiment[SU2025] segments=1 background=linear beam=19F target=d spectator=n Ebeam=55
+experiment[SU2025] background=linear beam=19F target=d spectator=n Ebeam=55
 </thm>

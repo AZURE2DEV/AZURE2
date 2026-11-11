@@ -10,6 +10,7 @@ none                                                                            
 none                                                                                                #External Capture Check
 none                                                                                                #Coulomb Amplitude Check
 none                                                                                                #Angular Distribution Check
+format=3
 </config>
 <levels>
 0.5 -1 0.4996 1 1 1 1 2 1 1 1 20.0 0.5 1 0 1 0 1.007276 15.99053 1 8 0.599607 0.599607 0 0 0.0 0 5 5.5857 0 0
@@ -28,10 +29,19 @@ none                                                                            
 1.5 -1 30 1 1 3 1 2 5 1 1 0 1 1 0.5 -1 0.4996 0 17.0021 0 9 0.599607 0 0 0 0.0 10 0 0 0 1
 
 </levels>
-<segmentsData>
-1 1 3 0.1 3.0 0 180 4 1 0 0 0 0 0 data/dsdo.dat 0 0
-</segmentsData>
-<segmentsTest>
-</segmentsTest>
-<targetInt>
-</targetInt>
+<data>
+# <segmentsData> line 1
+dataset dsdo
+    reaction       16O(p,g)17F[0.4996]
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/dsdo.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0.1 3.0 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+</targets>

@@ -10,6 +10,7 @@ none                                                                            
 none                                                                                                #Coulomb Amplitudes Check
 none                                                                                                #Reaction Pathway Check
 none                                                                                                #Angular Distributions Check
+format=3
 </config>
 <levels>
 2.5 1 8.012777824168348 1 1 1 1 4 1 1 0 2.620861418322567e-20 0.5 1 0 1 0 1.00727645 17.99477097 1 8 7.993600 7.993600 0 0 0.0 0 5.1 0 0 0 2.224566 0
@@ -22,14 +23,28 @@ none                                                                            
 0.5 1 8.140404137835182 1 1 2 1 2 3 1 1 289.71690200450723 0 1 0.5 -1 0 4.00150609 14.99626884 2 7 7.993600 4.013799 0 0 0.0 0 5.7 0 0 0 0.000000 0
 
 </levels>
-<segmentsData>
-1  1  2  -0.052899  0.264094  0  180  10  1  1  0  0  0  0  data/thm_lc2008_hoes_bkgsub.dat  0  0
-</segmentsData>
-<segmentsTest>
-</segmentsTest>
-<targetInt>
-1  "1"  50  1  0.018239375  0  0  "" 0  0  0  0  "" 0  0 0.04 5 50
-</targetInt>
+<data>
+# <segmentsData> line 1
+dataset thm_lc2008_hoes_bkgsub
+    reaction       18O(p,a)15N
+    quantity       sigma
+    unit           arbitrary
+    file           data/thm_lc2008_hoes_bkgsub.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  -0.052899 0.264094 MeV
+    norm           profiled
+    beam           beam_thm_lc2008_hoes_bkgsub
+    quadrature     points 50 width_multiplier 5 per_width 50
+    thm            global
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+# <targetInt> line 1
+beam beam_thm_lc2008_hoes_bkgsub
+    # CONVERTED: a Gaussian convolution is written as the beam's energy spread (the kernel is the same; the old line does not say whether it was a detector resolution)
+    spread         0.018239375 MeV lab
+</targets>
 <thm>
 entranceL=incoherent
 vertex=constant
