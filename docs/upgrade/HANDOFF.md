@@ -2,6 +2,28 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, tree to format 3, third part) — the natural-target projects (group 6); THM not started (`feature/upgrade-4-tree-format3-3`)
+
+**Done** (`AA3_tree_natural_thm.md`; plan and state: `docs/upgrade/format3_tree.md`). Group 6 is format 3: natural_neon
+(tests and example, the example's `.sav` renamed to the format-3 parameter names), the natural_target models but
+`M_thick`, `reaction_rate/models/n12C.azr`, `p12C.azr` (140 converted files in all). Rewritten on records:
+natural_neon, natural_target, shared_effect_pairs, component_subpoint_angle, doppler_fgm and transmission_yield with
+their generators (format 3; the old generators kept in the fixtures for the pyazr tests of the old reader);
+natural_target/make_models.py deleted (README). The converter refuses six more kinds of old line the old engine
+refused and the conversion used to run (component naming a missing pair key, a sample `<abundances>` lacks, doppler
+fit forms with vary 2 / sigma < 0 / Tmax <= T, transmission and yield on one line, a thicknessgroup member without its
+own block); format 3 refuses a Doppler temperature <= 0 and a sample areal density of 0 (`E_OUT_OF_RANGE`, both ran).
+
+**Verified how**: all projects x 3 bases against `tab-tree3b` (tag `tab-tree3c-1`, the new reference): identical but
+natural_neon's param.par names and sample-file headers; gate (`gtree3c`) 483 (456) identical, 38 classified, 0 differ,
+0 missing; spec equivalence 198 files, 183 converted, 183 equal, 0 recorded, 0 differ, 15 not converted (bad_key,
+bad_sample now refused); ctest, run_tests.sh and the thread comparison: see the branch report.
+
+**Open**: group 7 (THM, not started; the page's group-7 row lists the readers of 17O measured on a trial conversion),
+group 8; `total_optical` (a natural sum of totals has no format-3 form: three options in the page's §4, for the
+director); `M_thick.azr`; the converter could answer its "two areal densities" question itself for a doppler-only
+`<targetInt>` line on a transmission line (one sample target with the doppler field gives byte-identical outputs).
+
 ## 2026-11-11 (agent, tree to format 3, second part) — shifts and apparatus projects, the director's decisions (`feature/upgrade-4-tree-format3-2`)
 
 **Done** (`AA2_tree_to_format3_rest.md`; plan and state: `docs/upgrade/format3_tree.md`). 126 of the 185 convertible
