@@ -2,6 +2,25 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, pyazr records) — the engine edits the nuclear part; pyazr's modules off `AzrModel` (`feature/upgrade-4-pyazr-records`)
+
+**Done** (`AC_pyazr_off_azrfile.md`; design and state: `docs/upgrade/pyazr_on_records.md`, sections "Edits of the
+nuclear part", "Remaining uses", "Tests"). The engine reads and writes `<levels>` rows (`io/LevelRowText.h`,
+`experiment/LevelEdits.h`), `<config>` entries (`io/ConfigSection.h`, now the reader of `Config::ReadConfigFile`) and
+`<thm>` lines (`include/ThmBlockEdits.h`); bindings in `api/src/pybind_nuclear_part.cpp`. pyazr 2.32.0: `Project`
+levels / pairs / config / thm reads and edits (`pyazr/nuclear_part.py`); `save_fit` (now `pyazr/snapshot.py`),
+`scattering_length_chi2`, the potential records, `bands`, `angular`, `tabulate`, `modelavg`, `transform` work on a
+format-3 project without `AzrModel` (old files: one format test, the old branch). Nine pyazr tests moved to the
+format-3 files; three new tests (`io_level_row_text`, `io_config_section`, `pyazr_project_nuclear_part`).
+
+**Verified how**: see the branch report (all projects x 3 bases against `tab-tree3b`, the converted-tree gate,
+`ctest -LE slow`, `ctest -L slow`, `tests/run_tests.sh`, 1 vs 4 threads; `save_fit` on 13N and on the THM toy with
+a coherent background: the snapshot chi2 equals the old path's to every digit).
+
+**Open**: `nuclei.merge_projects` (waits for the natural-target records of group 6); 13 tests still read originals
+through `old_tree.py` and 12 more use `AzrModel` on format-3 files (the page's table says which and why); the skills
+and user pages that teach `AzrModel` (`.claude/skills/azure2-*`, `particle_pairs.rst`, ...).
+
 ## 2026-11-11 (agent, tree to format 3, second part) — shifts and apparatus projects, the director's decisions (`feature/upgrade-4-tree-format3-2`)
 
 **Done** (`AA2_tree_to_format3_rest.md`; plan and state: `docs/upgrade/format3_tree.md`). 126 of the 185 convertible
