@@ -2,8 +2,8 @@
 #
 # Energy shifts on segments whose points are mapped across segments (EData::MapData), threaded.
 #
-# Six segments at the same energies (the shift_fn test's linear-calibration data at 40 and 90 deg, three
-# copies each) share one shift group with a shift function, so every point of segments 2-6 is mapped onto a
+# Six data sets at the same energies (the shift_fn test's linear-calibration data at 40 and 90 deg, three
+# copies each) share one energy_scale record with a shift function, so every point of segments 2-6 is mapped onto a
 # point of segment 1.  On every fit step EData::FillEnergyShiftsFromParams re-energises the points in
 # parallel, each mapped point by its own segment.  Before the fix, the host's RecalcEDependentValues also
 # assigned its tables to those mapped points (EPoint::CalcEDependentValues), from another thread, while their
@@ -37,20 +37,25 @@ bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
 mkdir -p "$WORK/model"
 cp -R "$SRC/data" "$WORK/model/data"
+# ds NAME FILE ANGLE: a data set of the model (p + p elastic at ANGLE degrees) on the record G
+ds() {
+  printf 'dataset %s\n    reaction       1H(p,p)1H\n    quantity       dsigma_domega\n    unit           b/sr\n' "$1"
+  printf '    file           data/%s\n    columns        E_lab[MeV] theta_cm[deg] value error\n' "$2"
+  printf '    energy_window  0 100 MeV\n    angle_window   %s %s deg\n    norm           1 fixed\n    shift          G\n\n' "$3" "$3"
+}
 {
-  echo '1 1 1 0 100 40 40 4 1 0 0 0 1 1 data/xs_40_lin_mislabelled.dat 0 0 shiftgroup G shiftfn "a0*(x-1)" 1 0 1 1'
-  echo '1 1 1 0 100 90 90 4 1 0 0 0 0 0 data/xs_90_lin_mislabelled.dat 0 0 shiftgroup G'
-  echo '1 1 1 0 100 40 40 4 1 0 0 0 0 0 data/xs_40_lin_mislabelled.dat 0 0 shiftgroup G'
-  echo '1 1 1 0 100 90 90 4 1 0 0 0 0 0 data/xs_90_lin_mislabelled.dat 0 0 shiftgroup G'
-  echo '1 1 1 0 100 40 40 4 1 0 0 0 0 0 data/xs_40_lin_mislabelled.dat 0 0 shiftgroup G'
-  echo '1 1 1 0 100 90 90 4 1 0 0 0 0 0 data/xs_90_lin_mislabelled.dat 0 0 shiftgroup G'
-} > "$WORK/segs.txt"
-awk -v segs="$WORK/segs.txt" '
+  printf 'energy_scale G\n    offset         0 MeV fit prior 0 1\n    function       "a0*(x-1)" MeV\n    param          a0 0 fit prior 0 1\n\n'
+  for c in 1 2 3; do
+    ds "xs_40_$c" xs_40_lin_mislabelled.dat 40
+    ds "xs_90_$c" xs_90_lin_mislabelled.dat 90
+  done
+} > "$WORK/records.txt"
+awk -v recs="$WORK/records.txt" '
   /<levels>/ { inlev = 1; print; next }
   /<\/levels>/ { inlev = 0 }
   inlev && NF > 12 { $4 = 1; $11 = 1; print; next }   # levels fixed: only the shifts move
-  /<segmentsData>/ { print; while ((getline l < segs) > 0) print l; skip = 1; next }
-  /<\/segmentsData>/ { skip = 0 }
+  /^<data>/ { print; while ((getline l < recs) > 0) print l; skip = 1; next }
+  /^<\/data>/ { skip = 0 }
   skip { next }
   { print }' "$SRC/shift_fn.azr" > "$WORK/model/t.azr"
 
@@ -61,7 +66,7 @@ fit() {  # NAME THREADS
   echo $?
 }
 total() { awk '/^Total-Chi-Squared:/ { print $2 }' "$1/output/chiSquared.out" 2>/dev/null; }
-shifts() { awk '$1 ~ /energy_shift/ { printf "%s ", $2 }' "$1/output/param.sav" 2>/dev/null; }
+shifts() { awk '$1 ~ /^G[.]|[.]shift[.]/ { printf "%s ", $2 }' "$1/output/param.sav" 2>/dev/null; }
 same() {  # two blank-separated number lists agree to 1e-6 relative
   awk -v a="$1" -v b="$2" 'BEGIN { n = split(a, x, " "); m = split(b, y, " "); if (n != m || n == 0) exit 1
     for (i = 1; i <= n; i++) { d = x[i] - y[i]; if (d < 0) d = -d; s = y[i] < 0 ? -y[i] : y[i]; if (s < 1e-12) s = 1e-12; if (d / s > 1e-6) exit 1 } }'

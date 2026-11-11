@@ -18,6 +18,8 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import old_tree  # noqa: E402  (the old originals of converted projects)
 
 failures = []
 
@@ -37,7 +39,7 @@ except Exception as err:                       # same skip as the other pyazr te
     sys.exit(0)
 
 PROJECT = os.path.join(ROOT, "tests", "shift_fn")
-AZR = os.path.join(PROJECT, "shift_fn.azr")
+AZR = old_tree.original(os.path.join(PROJECT, "shift_fn.azr"))  # the old file (format3_tree.md)
 
 print("1. the shiftfn block is read, with the group label")
 s = {x.key: x for x in SegmentSet.from_file(AZR)}

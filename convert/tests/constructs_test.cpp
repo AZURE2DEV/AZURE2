@@ -471,6 +471,24 @@ int main(int argc, char **argv) {
     check("screening_2 -> tgt_y2.screening", Param(r, "screening_2") == "tgt_y2.screening");
     check("doppler_3 -> tgt_y3.doppler", Param(r, "doppler_3") == "tgt_y3.doppler");
   }
+  // ---- a shiftfn block on a follower of a shift group or of a shift-function group, or a line in both kinds of group:
+  //      the old engine refused each (EData's group set-up), so the converter refuses it instead of dropping the block
+  {
+    const ConvertResult r = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 a.dat 0 0 shiftgroup G\n"
+                                     "1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 b.dat 0 0 shiftgroup G shiftfn \"a0*x\" 1 0 0 0\n",
+                                     "", "", "", ""});
+    check("shiftfn on a follower: refused", !r.ok && r.refusal.find("data line 2 declares a shiftfn, but it is not the first "
+                                                                    "segment of shift group 'G'") != std::string::npos);
+    const ConvertResult f = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 a.dat 0 0 shiftfngroup F shiftfn \"a0*x\" 1 0 0 0\n"
+                                     "1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 b.dat 0 0 shiftfngroup F shiftfn \"a0*x\" 1 0 0 0\n",
+                                     "", "", "", ""});
+    check("shiftfn on a later member of a shift-function group: refused",
+          !f.ok && f.refusal.find("data line 2 declares a shiftfn, but it is not the first segment of shift-function group 'F'") != std::string::npos);
+    const ConvertResult b = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 a.dat 0 0 shiftgroup G shiftfngroup F shiftfn \"a0*x\" 1 0 0 0\n",
+                                     "", "", "", ""});
+    check("a line in a shift group and a shift-function group: refused",
+          !b.ok && b.refusal.find("is in shift group 'G' and in shift-function group 'F'") != std::string::npos);
+  }
   // ---- an automatic tolerance without windows (an empty ranges token, then blend and tolerance): the tolerance applied
   //      to every point (TargetEffect), written as one window over every energy with that tolerance, and a note;
   //      never dropped (the outputs of the conversion equal the old line's: compared on tests/identical_pp_res with a

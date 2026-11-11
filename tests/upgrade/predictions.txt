@@ -248,11 +248,11 @@ data ng: sigma(1->3)
 == tests/electron_screening/grad.azr
 == tests/electron_screening/scr.azr
 == tests/energy_shift_sqrt/energy_shift_sqrt.azr
-data 1: dsdo_cm(1->1)
-data 2: dsdo_cm(1->1)
-data 3: ay(1->1)
-data 4: ay(1->1)
-data 5: dsdo_cm(1->1)
+data xs_40: dsdo_cm(1->1)
+data xs_40_preshifted: dsdo_cm(1->1)
+data ay_60: ay(1->1)
+data ay_60_preshifted: ay(1->1)
+data xs_90: dsdo_cm(1->1)
 == tests/gamma_lab_frame/models/cm.azr
 data cm: dsdo_cm(1->2)
 == tests/gamma_lab_frame/models/lab.azr
@@ -358,8 +358,8 @@ exit 1
 data xs_40_s08: dsdo_cm(1->1)
 data xs_90_s09: dsdo_cm(1->1)
 == tests/pyazr/data/shift_fn_groups/shift_fn_groups.azr
-data 1: dsdo_cm(1->1)
-data 2: dsdo_cm(1->1)
+data xs_40_lin_mislabelled: dsdo_cm(1->1)
+data xs_90_lin_mislabelled_p3: dsdo_cm(1->1)
 == tests/q_attenuation/models/plain.azr
 extrapolation x1: dsdo_cm(2->5)
 == tests/q_attenuation/models/q.azr
@@ -548,16 +548,16 @@ data spin2_zero_part: dsdo_cm(2->5)
 data twolevel_upos: dsdo_cm(2->6; upos L=1; Ic=0.5; delta=-0.094)
 data twolevel_upos2: dsdo_cm(2->6; upos L=1; Ic=0.5; delta=0)
 == tests/shift_fn/shift_fn.azr
-data 1: dsdo_cm(1->1)
-data 2: dsdo_cm(1->1)
-data 3: dsdo_cm(1->1)
-data 4: dsdo_cm(1->1)
-data 5: dsdo_cm(1->1)
-data 6: dsdo_cm(1->1)
-data 7: dsdo_cm(1->1)
+data xs_40: dsdo_cm(1->1)
+data xs_40_2: dsdo_cm(1->1)
+data xs_40_3: dsdo_cm(1->1)
+data xs_40_x15_preshifted: dsdo_cm(1->1)
+data xs_40_lin_mislabelled: dsdo_cm(1->1)
+data xs_90_lin_mislabelled: dsdo_cm(1->1)
+data xs_90: dsdo_cm(1->1)
 == tests/shift_groups/shift_groups.azr
-data 1: dsdo_cm(1->1)
-data 2: dsdo_cm(1->1)
+data xs_40: dsdo_cm(1->1)
+data xs_90: dsdo_cm(1->1)
 == tests/shift_sqrt_subpoints/models/const.azr
 data yield_1: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
 data yield_2: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
