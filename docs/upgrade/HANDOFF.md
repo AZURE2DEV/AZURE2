@@ -2,6 +2,40 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, check audit) — do the checks still test what they say? Six refusals (`feature/upgrade-4-check-audit`)
+
+**Done** (`AR_check_audit.md`; the audit in `docs/upgrade/format3_tree.md` section 7):
+- **The audit**, mechanical: `tools/edit_audit.sh` runs every `tests/*/check.sh` with `sed`/`awk`/`perl`/`python3`
+  and the binary replaced by logging stand-ins (`tools/edit_audit/`), `tools/edit_audit_report.py` prints the table.
+  Run once over the head `7a8e4d66` with the base engine (`b-trial22`), one thread: 126 checks, all pass; 103 edit a
+  project, data or parameter file; 1,658 edit places, 40 hit nothing (36 by design: `\r` stripping, the A-matrix
+  flag set to its value, base variants; **4 vacuous**: `target_effect_shared` and `thm_beam_profile` edited the old
+  `<targetInt>` block); 1,470 engine runs, 48 checks with runs of different inputs and equal outputs, all asserted
+  identities but one (**`nuisance_kinds`**: its `<parameterSettings>` row named `screening_1`, which no parameter is
+  called any more: ignored silently). In-scope `tests/pyazr/*.py` text edits checked by hand: all hit.
+- **Repaired** on records: `target_effect_shared`, `thm_beam_profile`, `nuisance_kinds`; each passes and fails with an
+  injected engine error (section 7). Expectations unchanged; no repaired check shows a number different from its
+  committed expectation.
+- **Guard**: `tests/lib/edit_guard.sh` (`edited`, `must_differ`); consistency check 33 (in-place edits in a check.sh);
+  `CLAUDE.md` recipe "A new regression check".
+- **Item 4**, one commit: `E_THM_OLD_LIST` (segments= / weight[k]= in a format-3 `<thm>`, at reading); an experiment
+  no data set names is ignored with the warning (was "segments= is required"); one experiment-name grammar
+  (`experiment/ThmSectionLines.h`), the reading-time `E_THM_EXPERIMENT_UNKNOWN` the user's message, the run-time test an
+  internal guard a project file cannot reach; a set-up refusal of a format-3 project ends with its own ERROR line
+  (`kFillRefused` from Fill/MakePoints); the converter writes the sample target on an inactive sample line, refuses one
+  whose sample has no target of its own; `E_LAB_JACOBIAN_AT_LIMIT` (dOmega_lab/dOmega_cm <= 1e-6 at set-up; without it
+  a point at theta_max gave chi2 1.06e17). 88 diagnostic codes.
+
+**Verified how**: build 0 warnings; unit tests of the change (experiment_frames, _diagnostics, _build, _schema,
+_standalone, convert_constructs, _fixtures, _spec_equivalence, pyazr_schema, repo_consistency); the six checks touched
+pass, and fail with their injected errors (one scratch rebuild of `work/b-audit` with all injections, reverted and
+rebuilt; not a separate `b-audit-inject`: one thread). The long runs at the end are in the final report.
+
+**Open**: a `<parameterSettings>` row that names no parameter is ignored without a word (found by the audit; engine,
+not changed); the audit's stdout key drops lines with '/' (paths), so refusals with different file names group
+together (read the check); pyazr tests of the old file class not audited (brief AQ); docs/source pages on THM still
+show `segments=` (format3_tree.md section 6).
+
 ## 2026-11-11 (director, 16:39) — merged: seven branches (finite-layer yield, pathway table 2, one solve per energy, SRIM stopping, lab frame, THM projects in format 3, format-3 gaps)
 
 **State.** `feature/upgrade-4-data` holds the seven branches, merged in this order; the tree is the one the director

@@ -213,3 +213,59 @@ messages of `prior_covariance` (and two gradient agreements at the 1e-15 level),
 `docs/source/theory/thm_implementation.rst`, `polarization_implementation.rst`; `docs/source/developer/
 architecture.rst`, `coulomb_table.rst`, `edata_and_target_effects.rst`; `docs/source/getting_started/whats_new.rst`.
 No test runs an `.azr` snippet of `docs/source/`.
+
+## 7. The audit of the checks (do the text edits of `check.sh` still bite?)
+
+After the conversion a check that builds its variants by editing a project with `awk`/`sed`/`perl` can edit nothing
+(the line it looked for is written differently in format 3); the variant is then the base, and the check compares a
+run with itself. The audit of 2026-11-11 (branch `feature/upgrade-4-check-audit`) ran every `tests/*/check.sh` of the
+integration head (`7a8e4d66`) once, mechanically, with the base engine.
+
+**How it is done (and repeated).** `tools/edit_audit.sh <AZURE2> <out> [check ...]` runs each check as
+`tests/run_tests.sh` does, with `sed`, `awk`, `perl` and `python3` replaced on `PATH` by `tools/edit_audit/shim.sh`
+and the binary by `tools/edit_audit/azure2_wrap.sh`. Both run the real program unchanged and log: for every call that
+reads a project, data or parameter file (a file argument, a redirected file or a pipe) whether its output equals its
+input byte for byte, for every in-place edit whether the file changed, for every `python3` call which project-like
+files of the check's scratch it changed; for every engine run a hash of what it reads (arguments, standard input, the
+`AZURE*`/`OMP_*` environment, the project and the files beside it and in `data/`) and of what it gives (exit status,
+standard output without times and paths, the files it wrote). `python3 tools/edit_audit_report.py <out> --details`
+prints the table: per check the edit places, those that hit nothing, the engine runs, and the groups of runs whose
+inputs differ and whose outputs are equal (a variant that made no difference). Each finding is then read against
+what the check asserts: a variant equal to the base is right where the check asserts an identity (a default written
+explicitly, a mapping switched off, 1 against several threads, refusals with one message). `EDIT_AUDIT_CPU=<n>` pins
+the checks to one CPU. The run at one thread takes about 2.5 hours.
+
+**Result.** 126 checks, all passing; 103 of them edit a project, data or parameter file; 1,658 edit places (a place
+per distinct command line: each variant of a loop counts); 1,470 engine runs.
+- 40 edit places changed nothing. 36 by design: 10 strip `\r` from files that have none, 17 set the A-matrix flag of
+  `<config>` to the value the project already has (`true`), 9 are the base variant of a parameterised edit (an empty
+  row, the same value, `sed ''` as a copy). **4 were vacuous**: `target_effect_shared` (both variants edited the old
+  `<targetInt>` block, which format 3 does not have: the check compared a run with itself) and `thm_beam_profile`
+  (both variants replaced the old `<targetInt>` line: the Gaussian fold was compared with itself).
+- 48 checks have groups of runs with different inputs and equal outputs; all but one are identities the checks
+  assert. **One hit but reached nothing**: `nuisance_kinds` appended a `<parameterSettings>` row on `screening_1`, the
+  old name of a parameter that format 3 names by its record (`tgt_cruz_metal.screening`); the row named no
+  parameter, the engine ignored it without a word, and the check's "runs and adds nothing" held for the wrong reason.
+- `tests/pyazr/*.py` that edit a project as text and are not the old file class's (15 files): every replacement was
+  checked by hand against the file it applies to (each substring occurs; `upgrade_parametrization_roundtrip`'s
+  photon-mask expression matches 14 rows of T1). The pyazr tests of the old file class (`AzrModel`, `old_tree`; 25
+  files) read the originals and were not audited (another branch moves them).
+
+**Repaired** (each on the format-3 records, through the edit guard; the committed expectations unchanged; each
+shown failing with a one-line engine error injected in a scratch build):
+- `target_effect_shared`: two data sets on one beam record against one record each (`beam_split`, the same spread).
+  Injected: the effect built from a record changed each time a data set takes its copy (`SetSigma(0.9 * sigma)` in
+  `WorkingCopy::SetUpTargetEffects`): segment 2, shared 1540.55 against split 1529, FAIL.
+- `thm_beam_profile`: the beam's spread against a beam `profile` record with a `detector` of the same resolution and
+  the data's window columns; agreement 4.97e-07 (was 0: the fold compared with itself). Injected: the resolution tails
+  of a THM point's beam-profile window cut at 4 sigma instead of 5 (`TargetSetup.cpp`): FAIL.
+- `nuisance_kinds`: the row names `tgt_cruz_metal.screening`, and the check fails when the name is not among the run's
+  parameters (`param.par`). Injected: the nuisance prior applied to a parameter with its own prior
+  (`ParameterLimitsManager.cpp`, the `ownPrior` skip removed): chi2 1113.55 against 1097.55, FAIL (with the old row name
+  the row reached no parameter, so this injection could not have shown; inferred, not run).
+
+**Kept from coming back.** `tests/lib/edit_guard.sh`: `edited SRC DEST CMD...` fails when the edit changes nothing,
+`must_differ A B` when a variant made another way equals the base; the repaired checks use it, `thm_records.sh` fails
+on a data set that is not there. `tests/consistency/repo_consistency_test.py` check 33 lists a `check.sh` with an
+in-place edit (`sed -i`, `perl -i`, `awk -i inplace`), except the four audited ones that had one. `CLAUDE.md`, recipe
+"A new regression check".
