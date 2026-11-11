@@ -2,6 +2,41 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, format-3 gaps) — what format 3 could not say, and the reading path's defects (`feature/upgrade-4-format3-gaps`)
+
+**Done** (`AL_format3_gaps.md`; one commit per item):
+- A refused format-3 project exits 1 with its diagnostics and the refusal line last (`Config::kConfigRefused`,
+  `ReportFormat3Refused`), also when a data run cannot read a data file (`E_DATA_FILE`, `WorkingCopy::kFillRefused`);
+  a missing project file keeps "Could not open", exit 255. `cli_route_exit`.
+- A `thm <name>` that names no `experiment[<name>]` of `<thm>` is refused when the project is read
+  (`E_THM_EXPERIMENT_UNKNOWN`, `ProjectReader.cpp`).
+- A parameter file given as a run's start is checked by name (`experiment/ParameterFileNames.h`): no name of the run
+  refuses it (`E_PARAMETER_FILE_NO_MATCH`, exit 1), a partial match warns with both sides (`W_PARAMETER_FILE_NAMES`);
+  the project's other run's names and fixed data-set/extrapolation parameters are not reported. `param_file_names`.
+- `sigma_total` takes a sum of elastic terms on a target with isotopes (the natural total); `total_optical` runs on
+  records (outputs equal to the old models' but param.par names and sample headers).
+- A detector's `energy_resolution` on a beta-delayed spectrum is the Gaussian fold of the measured energy;
+  `beta_delayed_alpha` (e) on records; the converter writes that detector for the old line.
+- With `entrance_pair` / `exit_pair` the keys decide whether a reaction is elastic (`PairsDecideElastic`), not the label.
+- Converter: a Doppler-only `<targetInt>` line on neutron-sample lines becomes the samples' `doppler` field; a target
+  shared by lines of a sample and of none is copied for the sample (M_thick's four questions); `M_thick.azr` is format 3.
+- The 24 generators that wrote old files are deleted; each README says how the models were made.
+- `AZURE_PROFILE` reports the set-up apart and labels a calculation's report.
+
+**Verified how** (on the last code commit; tag `tab-f3gaps`, the new reference): all projects x 3 bases against
+`tab-trial19`: the same files, every output file identical; run.log differs in 33 projects per basis (data files not
+in the folder: the refusal line of item 1 replaces "Could not fill data object from file.") and in M_thick (its
+old-format note gone). Converted-tree gate (`REF=tab-trial8`, `gf3gaps`): 483 (456) identical, 38 classified, 0
+differ, 0 missing. Spec equivalence: 198 files, 184 converted (M_thick added), 184 equal, 0 differ, 14 not converted.
+`ctest -LE slow` 186/186, `OMP_NUM_THREADS=2 ctest -L slow` 10/10, `tests/run_tests.sh` 147 passed, 1 failed
+(model_data: the thm check refused inactive data sets; fixed in the last commit, model_data rerun: passed). 1 vs 4
+threads: T1, T1_start, T2, T3, 13N, natural_neon menu 1 byte-identical.
+
+**Open**: pyazr's `load_sav` does not check parameter-file names (pyazr/*.py not touched); the converter writes an
+inactive old natural line without its sample target (it would change meaning when switched on); the adjoint gradient
+differs from the old path's at 1e-14 relative and moves with the order of a data set's target/beam fields (FD and
+Jacobian path identical); `18O_p_a_thm/make_inputs.py` (group 7); `energy_grid.md` section 11 not edited (Phase 5's page).
+
 ## 2026-11-11 (agent, pyazr records) — the engine edits the nuclear part; pyazr's modules off `AzrModel` (`feature/upgrade-4-pyazr-records`)
 
 **Done** (`AC_pyazr_off_azrfile.md`; design and state: `docs/upgrade/pyazr_on_records.md`, sections "Edits of the
