@@ -15,11 +15,11 @@ format=3
 </config>
 <potentials>
 potential a4He
-    pair           a+4He
-    coulomb_radius 3.5 fm
-    central        woods_saxon depth 10 MeV radius 3 fm diffuseness 0.6 fm
+    pair            a+4He
+    coulomb_radius  3.5 fm
+    central         woods_saxon depth 10 MeV radius 3 fm diffuseness 0.6 fm
     matching_radius 15 fm
-    step           0.0275 fm
+    step            0.0275 fm
 </potentials>
 <levels>
 2.0 1 3.03 0 1 1 0 4 1 1 0 1500000.0 0.0 1 0.0 1 0.0 4.00260325413 4.00260325413 2 2 -0.09183948734448354 -0.09183948734448354 0 0 0.0 0 5.5 0.0 0.0 0

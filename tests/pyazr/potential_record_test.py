@@ -22,6 +22,7 @@ Run from anywhere:  python3 tests/pyazr/potential_record_test.py
 """
 import csv
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -92,10 +93,11 @@ try:
     text = open(f35).read()
     pot = section(text, "potentials")
     check("(1) one record, coulomb_radius 3.5 fm, no <potential> block",
-          pot.count("\npotential ") == 1 and "coulomb_radius 3.5 fm" in pot and "<potential>" not in text, pot)
+          pot.count("\npotential ") == 1 and re.search(r"coulomb_radius +3\.5 fm", pot) and "<potential>" not in text,
+          pot)
     f50 = os.path.join(work, "f3_50.azr")
     with open(f50, "w") as f:
-        f.write(text.replace("coulomb_radius 3.5 fm", "coulomb_radius 5 fm"))
+        f.write(re.sub(r"(coulomb_radius +)3\.5 fm", r"\g<1>5 fm", text))
 
     contrast = min(abs(ref[(5.0, L, E, "P")] / ref[(3.5, L, E, "P")] - 1) for L in (0, 1, 2) for E in ENERGIES)
     check(f"the table sees the radius: P(5 fm) and P(3.5 fm) differ by >= {contrast:.1e} > 1e-4", contrast > 1e-4)
@@ -131,7 +133,8 @@ try:
     C.save_fit(moved, verify=False, norms="nominal")
     written = section(open(moved).read(), "potentials")
     check("(5) save_fit writes the record p12C with coulomb_radius 5 fm",
-          "potential p12C" in written and "coulomb_radius 5 fm" in written and written.count("\npotential ") == 1, written)
+          "potential p12C" in written and re.search(r"coulomb_radius +5 fm", written) and written.count("\npotential ") == 1,
+          written)
     D = azure2(moved, cwd=work)
     check("(5) the written project gives the record's channel functions", functions(D) == v50)
 finally:

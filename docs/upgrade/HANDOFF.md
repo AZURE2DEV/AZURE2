@@ -2,6 +2,161 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (director, early morning) — the eighth wave, first part merged: the project as records in Python; capture analyzing power at set-up
+
+**Merged into `feature/upgrade-4-data`** (`--no-ff`, in this order; rehearsed together in one scratch worktree, built
+and verified once; the committed tree is that tree): `pyazr.Project`, a format-3 project as named records in Python
+(`feature/upgrade-4-pyazr-project`); the capture analyzing-power terms built at set-up, with the refusal of two
+photon pairs that have one final state (`feature/upgrade-4-capture-ay`). Their entries are below.
+
+**The merged head as a whole** (build `work/b-trial13`, 0 warnings; reference tag of its outputs `tab-trial13`): all
+projects × 3 bases identical to the seventh wave's head (726 + 699 + 726 output files, none new or missing);
+`ctest -LE slow` 182/182; `tests/run_tests.sh` 145 passed, 0 failed; calculations at 1 and 6 threads 12/12 identical;
+T2 with model data identical in the three bases; spec equivalence: 197 files, 185 converted, 183 equal, 2 recorded,
+0 differ; the converted tree (exact grids, menu 1) against the fourth-wave reference: 483 (456 formal) identical, 38
+classified, 0 differ, 0 missing; consistency test: 28 flags, 75 diagnostic codes. Not run on this head: 1 against 8
+threads, ThreadSanitizer, `ctest -L slow`, the Sphinx build (not installed here).
+
+**What the director changed at the merge:** `project_format3.md` §4.1 names the call `add_normalization`.
+**Checked by hand** (the director, on the agent's build): one `set(norm=Nuisance(...))` on a converted project changes
+exactly one line of the file; a wrong unit, an unknown reference and a value outside a list are refused with the
+engine's codes (`E_UNIT_NOT_ALLOWED`, `E_UNKNOWN_REFERENCE`, `E_NOT_IN_LIST`); `remove` of a target that two data sets
+use is refused naming both; `rename` updates the references; the generated help of `add_dataset` lists the fields.
+
+**Decisions of the director.**
+- pyazr: the calls are named after the record kinds (`add_normalization`; no `add_norm` alias). A calculation is run
+  through `Project.session()`, which saves and returns the existing calculation object; no second calculation
+  interface.
+- A project in which two photon pairs resolve to the same final level is **refused at set-up** (it was read without
+  a message and gave a wrong capture cross section, a factor 2.2 at the first point of the 13N test with its photon
+  pair repeated). The other case, two final states on one photon pair, was refused already.
+- A unit of the working copy keeps a direct reference to its term's immutable settings (`TermSettings`) as the end
+  state of the data structure; the term owns them, the unit does not.
+
+**Defects and debts found, not yet fixed** (owner in brackets):
+- `--validate` / `pyazr.validate` pass a project whose covariance file is missing, whose data rows do not parse
+  beyond the first, or that has the duplicated photon pair above; the run then refuses it [validation follow-ups,
+  launched now].
+- `azure2.datasets`, `active_datasets`, `dataset_chi2` do not work on a format-3 session (they read the old data
+  block through `pyazr/azrfile.py`) [validation follow-ups].
+- The parameter name `<target>.isotope.<isotope>` is built in two places; `Project.rename` matches parameter names by
+  a pattern in Python; `Project.set` drops whole-line comments between repeats of a replaced field; `--describe`
+  prints `1.79769e+308` for an open window; `--describe --record NAME` and `records_from_csv` are not built
+  [validation follow-ups].
+- The capture-A_y table is built at the configured maximum order (before, a non-differential capture-A_y point
+  evaluated first would have left the table empty; no project does that) [none: recorded].
+- Still open from the seventh wave: the yield on a finite layer (Phase 5), the decay-position defect of the
+  external-capture code in the data classes (second pathway branch), `ScatteringLength::ZeroEnergyShift` for a
+  hybrid pair, an exception inside the external-capture path under OpenMP (Phases 5–6).
+
+**For the PI to see** (behaviour a user can meet; additions):
+- Python: `p = pyazr.Project.open("x.azr")`; `p.add_dataset(...)`, `p["name"].set(...)`, `p.rename`, `p.remove`,
+  `p.validate()`, `p.describe("name")`, `p.save()`, `p.session().calculate()`. Every refusal carries the engine's
+  diagnostic code and the allowed values. Recipe: `docs/source/user_guide/project_from_python.rst`.
+- A project with the same final state on two photon pairs no longer runs: the message names both pairs and the
+  level. Old results from such a project were wrong for the first pair's capture.
+- `pyazr.save_fit(norms="fitted")` works on a format-3 project; on an old-format project with a changed potential it
+  is refused with the conversion command.
+
+**Running now** (Opus agents; briefs in `/data0/skowrons/AZURE2-upgrade/work/briefs/`):
+- The flat working copy of the data, second half of milestone 2 (`X2_flat_working_copy.md`,
+  `docs/upgrade/data_structure.md`; `feature/upgrade-4-data-structure`). Its first half is on the branch, verified by
+  its agent, not merged: a term's settings as one shared immutable record, one S-factor formula, the output columns
+  of an S-factor data set holding σ and S, a test of a term's fixed-angle frame.
+- The test tree and the examples converted to format 3, `check.sh` scripts included (`AA_tree_to_format3.md`;
+  `feature/upgrade-4-tree-format3`): the first half of "the engine reads only format 3". The refusal of old files is
+  switched on only when nothing loads one any more.
+- Validation that catches what a run would refuse, and pyazr's session on a format-3 project without the old file
+  class (`AB_validation_pyazr_followups.md`; `feature/upgrade-4-validation`).
+
+**Then.** Milestone 3 of the data structure (the old class names and files deleted); the second pathway branch
+(external-capture amplitudes at set-up, the trees deleted); the old reading path and `pyazr/azrfile.py` deleted;
+`predict`, the recipe "a new kind of data"; the rest of `CNuc`; Phase 5 (targets: the yield on a finite layer
+first; the lab-frame comparison of shifted data); Phase 6; the GUI on the new format; `FOR_THE_OWNER.md` and
+`ROADMAP.md` for the meeting with the owner; `origin/dev` merged only when the reconstruction is complete.
+
+## 2026-11-11 (agent, pathway table) — capture A_y at set-up (`feature/upgrade-4-capture-ay`)
+
+**Done** (`cnuc_split.md` §11.6 step 6, §11.12).
+- `RequestCaptureAyTerms` (`include/CaptureAyRequests.h`, `src/CaptureAyRequests.cpp`) names every term (own and
+  leaf) of an analyzing-power data set or extrapolation with a photon exit, after the data are filled and before
+  `CNuc::Initialize`, in `AZUREMain`, `runMCMC` and both set-up paths of `AZUREAPI.cpp`.  `BuildPathwayTable` builds
+  the requested terms in the table's order (the table does not depend on the order of the requests), none for a beta
+  entrance.
+- `GenMatrixFunc::CalculateCaptureAnalyzingPower` and the capture-A_y block of `PointTBar` read the table; a point
+  whose terms were not requested is refused with a message naming the data set.  `CNuc::CalcCaptureAnalyzingPower`,
+  its static mutex and the trees' capture-A_y members are deleted.  The matrix functions read no tree any more.
+- Test `upgrade_capture_ay_requests` (every project in data and extrapolation mode: terms present for the capture-A_y
+  data sets `13N_capture_ay` and `capture_ay_coupling/models/twolevel.azr`, none for beta entrances, order independence,
+  refusal without the requests).
+
+**Verified**: (build `work/b-pathtab`, 0 warnings, 5 threads): 183 x 3 against `tab-trial12` (tag `tab-cayfinal`): 726 / 699 /
+726 identical; `ctest -LE slow` 178/178; `tests/run_tests.sh` 145 passed, 0 failed; converted-tree gate (`gcayfinal`):
+exit 0, 483 (456) identical, 38 classified, 0 differ, 0 missing; 1 against 3 threads in three bases on T1-T3, 13N,
+13N_capture_ay, beta_delayed_alpha, plus capture_ay_coupling and upos_pair_index through their check.sh: identical;
+fits at 1 thread against `b-trial12`, every output file identical: T2 `--use-lm` and `--use-gradient` (200 calls),
+13N_capture_ay MIGRAD, `--use-gradient` and `--use-lm`; capture_ay_coupling's twolevel.azr extrapolated in three
+bases identical (deuteron.azr is refused, as before); `AZURE_GRAD_CHECK` with the adjoint on 13N_capture_ay: 14
+components, largest relative difference to central differences 1.2e-9, the same numbers as the base build.  Cycles
+(1 thread, `--no-coulomb-table`, 5 runs alternated with `b-trial12`, minimum): T2 calculation 3.310e9 against 3.303e9
+(+0.2 %), 13N_capture_ay calculation 6.765e9 against 6.762e9 (+0.05 %); instructions +0.002 % and -0.004 %.
+
+**Two photon pairs with one final state are refused** (the director's decision): `ParseExternalCapture` stops with an
+ERROR naming both pair keys and the level (`FinalStateOfAnotherPair`, `src/CNucExternalCapture.cpp`); before, the
+second pair took the level and capture into the first ran without its external part and without a message
+(1.95e-9 against 4.32e-9).  Format 3 goes through the same function.  `tests/ec_final_state_ambiguous/check.sh` (d) the
+two-pair model, (e) its format-3 conversion (converted, refused when run); shown failing with the check disabled.
+Verified on that commit: 183 x 3 against `tab-trial12` (tag `tab-twopair`) 726 / 699 / 726 identical, no project
+newly refused; `ctest -LE slow` 178/178; `tests/run_tests.sh` 145 passed, 0 failed (the cases are in the existing
+project, so the count stays 145); gate (`gtwopair`) 483 (456) identical, 38 classified, 0 differ, 0 missing.  Two final states cannot share one photon pair
+(a second level in the 1 keV window is refused already).
+
+**Open.** Steps 3 and 8 (after the data classes are replaced).  Follow-up: the format-3 validation could refuse two
+photon pairs with one final state earlier, with a diagnostic code (not added: the schema and validation of
+`experiment/` are being edited by another agent); today the converter writes such a file and the run refuses it.
+
+## 2026-11-11 (agent, brief Z) — `pyazr.Project`: a format-3 project as records in Python (`feature/upgrade-4-pyazr-project`)
+
+**Done.**
+- `pyazr.Project` (`pyazr/project.py`): `open` (a format-1/2 file refused with the conversion command), `new(path,
+  nuclear_part=file)` (another format-3 file's record-free sections: `<config>`, `<levels>`, `<thm>`, ...),
+  `records()`, `p[name]` (a `Record`: fields as attributes and as a dict; its own kind is `record_kind`, since `kind`
+  is a target's field), `add(kind, name, **fields)` and one `add_<kind>` per kind of the schema, generated at import
+  from `_azure2.schema()` (signature and help: every field with title, grammar, condition, units, doc), `set`,
+  `rename` (header, every reference the validator resolves, parameter names in `<parameterSettings>`/`<mcmc>` and the
+  prior-covariance file), `remove` (refused while referenced, naming the referrers), `validate`, `describe(name)`,
+  `save`, `session(**options)` (saves, returns `pyazr.azure2` on the file).  The project is the engine's `Document`;
+  an edit replaces only its fields' lines.  Every edit is validated by the engine's one validator on the whole project
+  as it would stand; an edit that adds an error raises `pyazr.FormatError` (`.diagnostics`, `.codes`: the engine's)
+  and leaves the project unchanged.  `pyazr.Nuisance` and `(value, unit)` tuples serialise to the file text.
+- Engine: `experiment/ValueText.h` (the one nuisance writer, the converter's too; the edit writing a fitted value into
+  its nuisance in its unit), `BuiltProject::parameterSources`, `ValidationResult::references`, describe of one record,
+  `io::WriteTokens`; bindings in `api/src/pybind_project.cpp` (the `Document` binding moved there verbatim first).
+- Debts fixed: `save_fit(norms="fitted")` of a format-3 project writes free norms, shift terms, shift-function
+  parameters and isotope abundances into their records (it raised; and it added an `<abundances>` block to a format-3
+  file); `save_fit` of a format-1/2 project after `set_nuclear_potential` is refused with the conversion command;
+  `set_nuclear_potential(matching_radius=, step=)`; `io::WriteRecords` aligns a record's values past its longest key
+  (fixtures T2.f3, T3.f3, beam_profile_kernel.f3 moved by whitespace only); `tools/classify.py` never counts an
+  unreadable file as identical.
+- Recipe: `docs/source/user_guide/project_from_python.rst`, `.claude/skills/azure2-setup/references/
+  project-from-python.md`, code `pyazr/examples/project_from_python.py` run by `pyazr_project_recipe`.  pyazr 2.30.0.
+
+**Verified** (build `work/b-pyproj`, 0 warnings): 183 × 3 against `tab-trial12` (tag `tab-pyproj1`): 726 / 699 / 726
+identical; converted-tree gate (`REF=tab-trial8`, tag `gpyproj1`): 483 (456) identical, 38 classified, 0 differ, 0
+missing; `ctest -LE slow` 180/180; `tests/run_tests.sh` 145 passed, 0 failed; T1–T3, 13N at 1 and 4 threads in three
+bases: every output file identical (run.log differs in Coulomb-table lookup counts and progress bars only); one edit
+on T2 costs 2.7 ms (one validation with build 0.8 ms).  New tests (each shown failing once with an injected error):
+`pyazr_project` (37 checks), `pyazr_save_fit_format3`, `pyazr_project_recipe`, `tools_classify`, a case of
+`io_record_reader`.
+
+**Open.** `--describe --record NAME` on the command line (the engine function takes the name; only pyazr uses it);
+`records_from_csv` (§6.5); `add_norm` of §4.1 is `add_normalization` (the kind's name); the parameter-name form
+`<target>.isotope.<isotope>` is now made in `CNuc::AbundanceParamName` and in `Build` (its source), a second copy;
+whole-line comments between repeats of a field are dropped when `set` replaces that field; Sphinx not run (not
+installed here).  Found, not fixed: `--validate` passes a project whose covariance file is missing or whose data rows
+do not parse (it checks the first row's column count only); `azure2.dataset_chi2`/`datasets` read `<segmentsData>`
+and do not work on a format-3 session.
+
 ## 2026-11-11 (director, night) — the seventh wave merged: units, the measurement held once, spin–orbit, the pathway table
 
 **Merged into `feature/upgrade-4-data`** (`--no-ff`, in this order; rehearsed together in one scratch worktree, built

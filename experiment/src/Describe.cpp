@@ -227,11 +227,13 @@ std::string SpinOrbitText(const HybridPotentialSetting &s) {
 
 }  // namespace
 
-std::string DescribeText(const Format3Project &p) {
+std::string DescribeText(const Format3Project &p, const std::string &only) {
+  auto skip = [&](const std::string &name) { return !only.empty() && name != only; };
   std::ostringstream out;
   const std::vector<const ValidatedRecord *> data = RecordsOf(p, "dataset"), extrapolations = RecordsOf(p, "extrapolation");
   for (std::size_t i = 0; i < data.size() && i < p.built.data.datasets.items.size(); i++) {
     const ValidatedRecord &r = *data[i];
+    if (skip(r.name)) continue;
     const DatasetSpec &d = p.built.data.datasets.items[i].spec;
     const Value *reaction = r.Get("reaction");
     out << "dataset " << r.name << " (data set " << d.key << ", line " << r.line << ")" << (d.active ? "" : ": inactive")
@@ -258,6 +260,7 @@ std::string DescribeText(const Format3Project &p) {
   }
   for (std::size_t i = 0; i < extrapolations.size() && i < p.built.extrapolations.extrapolations.items.size(); i++) {
     const ValidatedRecord &r = *extrapolations[i];
+    if (skip(r.name)) continue;
     const ExtrapolationSpec &x = p.built.extrapolations.extrapolations.items[i].spec;
     const Value *reaction = r.Get("reaction");
     out << "extrapolation " << r.name << " (extrapolation " << x.key << ", line " << r.line << ")"
@@ -280,6 +283,7 @@ std::string DescribeText(const Format3Project &p) {
     out << "  parameters: " << x.names.energyShift << ", " << x.names.energyShiftSqrt << " (energy shift, fixed)\n";
   }
   for (const ModelDatum &d : p.built.modelData) {
+    if (skip(d.name)) continue;
     out << "datum " << d.name << " (line " << d.line << ")\n  " << d.quantityName << " = " << Fmt(d.value / d.unitFactor)
         << " +- " << Fmt(d.error / d.unitFactor) << " " << d.unit;
     if (d.levelId) out << "; level ID " << d.levelId << " (" << d.jpi << ", group " << d.group << ", level " << d.level << ")";
@@ -291,6 +295,7 @@ std::string DescribeText(const Format3Project &p) {
   for (const auto &x : p.built.potentials.pairs) {
     const HybridPotentialSetting &s = x.second;
     const auto r = p.built.potentialRecords.find(x.first);
+    if (skip(r != p.built.potentialRecords.end() ? r->second.first : "")) continue;
     out << "potential " << (r != p.built.potentialRecords.end() ? r->second.first + " (line " + std::to_string(r->second.second) + ")" : "?")
         << ": pair " << Pair(p, x.first) << "\n  central " << CentralText(s) << "; Coulomb radius R_C " << Fmt(s.coulomb_radius_fm)
         << " fm; matching radius " << Fmt(s.matching_radius_fm) << " fm, step " << Fmt(s.step_fm) << " fm"
@@ -299,7 +304,8 @@ std::string DescribeText(const Format3Project &p) {
   return out.str();
 }
 
-std::string DescribeJson(const Format3Project &p) {
+std::string DescribeJson(const Format3Project &p, const std::string &only) {
+  auto skip = [&](const std::string &name) { return !only.empty() && name != only; };
   JsonWriter j(1);
   j.BeginObject().Key("datasets").BeginArray();
   const std::vector<const ValidatedRecord *> data = RecordsOf(p, "dataset"), extrapolations = RecordsOf(p, "extrapolation");
@@ -322,6 +328,7 @@ std::string DescribeJson(const Format3Project &p) {
   };
   for (std::size_t i = 0; i < data.size() && i < p.built.data.datasets.items.size(); i++) {
     const ValidatedRecord &r = *data[i];
+    if (skip(r.name)) continue;
     const DatasetSpec &d = p.built.data.datasets.items[i].spec;
     j.BeginObject().Key("name").String(r.name).Key("key").Integer(d.key).Key("line").Integer(r.line).Key("active").Bool(d.active);
     j.Key("quantity").String(r.quantity ? r.quantity->name : "");
@@ -348,6 +355,7 @@ std::string DescribeJson(const Format3Project &p) {
   j.EndArray().Key("extrapolations").BeginArray();
   for (std::size_t i = 0; i < extrapolations.size() && i < p.built.extrapolations.extrapolations.items.size(); i++) {
     const ValidatedRecord &r = *extrapolations[i];
+    if (skip(r.name)) continue;
     const ExtrapolationSpec &x = p.built.extrapolations.extrapolations.items[i].spec;
     j.BeginObject().Key("name").String(r.name).Key("key").Integer(x.key).Key("line").Integer(r.line).Key("active").Bool(x.active);
     j.Key("quantity").String(r.quantity ? r.quantity->name : "");
@@ -361,6 +369,7 @@ std::string DescribeJson(const Format3Project &p) {
   }
   j.EndArray().Key("model_data").BeginArray();
   for (const ModelDatum &d : p.built.modelData) {
+    if (skip(d.name)) continue;
     j.BeginObject().Key("name").String(d.name).Key("line").Integer(d.line).Key("quantity").String(d.quantityName);
     j.Key("value").Number(d.value).Key("error").Number(d.error).Key("unit").String(d.unit);
     j.Key("level").Integer(d.levelId).Key("entrance_pair").Integer(d.entrancePair).Key("exit_pair").Integer(d.exitPair);
@@ -370,6 +379,7 @@ std::string DescribeJson(const Format3Project &p) {
   for (const auto &x : p.built.potentials.pairs) {
     const HybridPotentialSetting &s = x.second;
     const auto r = p.built.potentialRecords.find(x.first);
+    if (skip(r != p.built.potentialRecords.end() ? r->second.first : "")) continue;
     j.BeginObject().Key("name").String(r != p.built.potentialRecords.end() ? r->second.first : "").Key("pair").Integer(x.first);
     j.Key("central").String(s.shape == physics::FormShape::Gaussian ? "gaussian" : "woods_saxon").Key("depth_MeV").Number(s.V0);
     if (s.shape == physics::FormShape::Gaussian)

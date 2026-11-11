@@ -168,6 +168,8 @@ RecordReadResult ReadRecords(const Document &doc, const Document::Section &secti
   return ReadRecords(doc.Body(section), static_cast<int>(section.open) + 2, kinds);
 }
 
+std::string WriteTokens(const std::vector<Token> &tokens) { return Joined(tokens, 0); }
+
 std::vector<std::string> WriteRecords(const RecordSet &set) {
   std::vector<std::string> out;
   auto withComment = [](std::string s, const std::string &comment) {
@@ -179,11 +181,15 @@ std::vector<std::string> WriteRecords(const RecordSet &set) {
     for (const std::string &c : rec.comments) out.push_back(c);
     const std::string name = NeedsQuotes(rec.name) ? "\"" + rec.name + "\"" : rec.name;
     out.push_back(withComment(rec.name.empty() ? rec.kind : rec.kind + " " + name, rec.trailingComment));
+    // The values of a record start in one column: column 20, or one blank after the record's longest key.
+    std::size_t width = 15;
+    for (const Field &f : rec.fields)
+      if (!f.tokens.empty()) width = std::max(width, f.key.size() + 1);
     for (const Field &f : rec.fields) {
       for (const std::string &c : f.comments) out.push_back("    " + c);
       std::string line = "    " + f.key;
       if (!f.tokens.empty()) {
-        line += std::string(f.key.size() < 15 ? 15 - f.key.size() : 1, ' ');
+        line += std::string(width - f.key.size(), ' ');
         line += Joined(f.tokens, 0);
       }
       out.push_back(withComment(line, f.trailingComment));

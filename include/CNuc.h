@@ -163,9 +163,6 @@ class CNuc {
   void BuildPathways(const Config &);
   /// Build the KLGroup and Interference structure and its \f$Z_1Z_2\f$ coefficients.
   void CalcAngularDists(int);
-  /// Build one decay's capture analyzing-power coefficient table (Seyler and
-  /// Weller). Called on first use, not from Initialize.
-  void CalcCaptureAnalyzingPower(int, int, int);
   /// Recompute the shift functions at the current level energies. Needed every
   /// iteration under the Brune parameterization, where they move with the fit.
   /// In the Park formalism also dS/dE and J, and, unless `secondDerivatives`

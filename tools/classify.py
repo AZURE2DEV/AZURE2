@@ -9,10 +9,12 @@ A file is *identical* when its lines of tokens are equal, or when, zipping the l
 pair of tokens is equal as text or as numbers (float("1.0") == float("1")), no line has a token more or less, and the
 two files have the same number of lines.  Spacing and the format of a number with the same value do not count.
 
-Output (standard output, tab-separated): one line per file that differs or exists in one run only ("only-ref",
-"only-new"), with the largest relative difference over numeric tokens (|a-b| / max(|a|,|b|), sign flips left out),
-the same of the absolute values, the counts of differing numbers, sign flips and non-numeric tokens, and the change in
-the line count; then per basis "## <basis>: N files, M identical" and one "##   <kind>: ..." line per kind of file
+A file that cannot be read (in either run) is never identical.
+
+Output (standard output, tab-separated): one line per file that differs, exists in one run only ("only-ref",
+"only-new") or cannot be read ("unreadable-ref", "unreadable-new", "unreadable-both"), with the largest relative
+difference over numeric tokens (|a-b| / max(|a|,|b|), sign flips left out), the same of the absolute values, the
+counts of differing numbers, sign flips and non-numeric tokens, and the change in the line count; then per basis "## <basis>: N files, M identical" and one "##   <kind>: ..." line per kind of file
 (run.log, a checks/ file, param.par, chiSquared.out, ..., "observable:<suffix>") that has a difference.
 Exit 2 on a usage error, else 0.
 """
@@ -121,6 +123,12 @@ def main():
                 continue
             a = tokens(rf[k], kd == 'run.log')
             b = tokens(nf[k], kd == 'run.log')
+            if a is None or b is None:
+                # a file that cannot be read is never identical, not even to another one that cannot be read
+                s[1] += 1
+                which = 'both' if a is None and b is None else ('ref' if a is None else 'new')
+                print(f"{m}\t{k}\tunreadable-{which}")
+                continue
             if a == b:
                 ident += 1
                 continue

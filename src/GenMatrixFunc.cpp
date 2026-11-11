@@ -1,5 +1,4 @@
 #include "AngCoeff.h"
-#include "Decay.h"
 #include "Profile.h"
 #include "AChannel.h"
 #include "CNuc.h"
@@ -778,6 +777,13 @@ std::string GenMatrixFunc::NoPathwayMessage(int entrancePair, int exitPair) cons
          " (no R-matrix level couples them, and no external capture leads there)";
 }
 
+std::string GenMatrixFunc::CaptureAyNotBuiltMessage(const EPoint *point) const {
+  return "the capture analyzing power of data set " + std::to_string(point->GetSegmentKey()) + " (pair " +
+         std::to_string(point->GetEntranceKey()) + " to pair " + std::to_string(point->GetExitKey()) +
+         ") has no terms: they are built at set-up for the reactions the data sets name (RequestCaptureAyTerms), and "
+         "this one was not named";
+}
+
 bool GenMatrixFunc::CalculateAmplitudeMatrix(EPoint *point, double *spinSum,
                                              double *analyzingPower) {
   if (spinSum) *spinSum = 0.0;
@@ -830,17 +836,14 @@ bool GenMatrixFunc::CalculateCaptureAnalyzingPower(EPoint *point, const azure2::
   if (compound()->GetPair(aaPair)->GetPType() != 0) return false;   // particle in
   if (compound()->GetPair(irPair)->GetPType() != 10) return false;  // photon out
 
-  int ir = 0;
-  while (ir < compound()->GetPair(aaPair)->NumDecays()) {
-    ir++;
-    if (compound()->GetPair(aaPair)->GetDecay(ir)->GetPairNum() == irPair) break;
-  }
-  if (ir > compound()->GetPair(aaPair)->NumDecays()) return false;
+  const azure2::EntrancePathways &P = compound()->Pathways().Entrance(aaPair);
+  const int ir = P.ExitOf(irPair);
+  if (!ir) throw std::runtime_error(NoPathwayMessage(aaPair, irPair));
+  const azure2::ExitRow &exit = P.exits[ir - 1];
+  if (!exit.has_capture_ay) throw std::runtime_error(CaptureAyNotBuiltMessage(point));
 
   const int maxL = point->GetMaxLOrder();
-  compound()->CalcCaptureAnalyzingPower(aaPair, ir, maxL);
-  Decay *theDecay = compound()->GetPair(aaPair)->GetDecay(ir);
-  const int nTerms = theDecay->NumCaptureAyTerms();
+  const int nTerms = exit.num_capture_ay;
   if (nTerms == 0) return false;
 
   // P_k^1 is not among the polynomials the point caches, so it is evaluated
@@ -850,8 +853,8 @@ bool GenMatrixFunc::CalculateCaptureAnalyzingPower(EPoint *point, const azure2::
   for (int k = 1; k <= maxL; k++) assocP[k] = AngCoeff::LegendreP1(k, x);
 
   double num = 0.0, den = 0.0;
-  for (int i = 1; i <= nTerms; i++) {
-    const CaptureAyTerm *term = theDecay->GetCaptureAyTerm(i);
+  for (int i = 0; i < nTerms; i++) {
+    const azure2::CaptureAyTerm *term = &P.capture_ay[exit.first_capture_ay + i];
     if (term->kOrder > maxL) continue;
     complex T1 = term->isEC1
         ? this->GetECTMatrixElement(term->kGroup1, term->path1)

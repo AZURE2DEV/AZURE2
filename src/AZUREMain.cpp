@@ -4,6 +4,7 @@
 
 #include "AdaptiveExtrapolation.h"
 #include "CNucChecks.h"
+#include "CaptureAyRequests.h"
 #include "CNucReport.h"
 #include "Objective.h"
 #include "ModelData.h"
@@ -106,6 +107,8 @@ int AZUREMain::operator()() {
         return -1;
       }
     }
+    // The capture-A_y terms the data sets need are built with the pathway table (CNuc::Initialize below).
+    RequestCaptureAyTerms(*compound(), *data());
     // The data check lists the points that are calculated: an extrapolation run with an adaptive grid writes it after
     // the refinement below, on the refined grid.
     if (((configure().fileCheckMask | configure().screenCheckMask) & Config::CHECK_DATA) && !refinesAdaptiveGrids)

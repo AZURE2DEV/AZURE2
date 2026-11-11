@@ -34,7 +34,7 @@ class EPoint;
  * Scope: particle channels with a spin-1/2 projectile, which covers the
  * vector analyzing power A_y. Capture channels have no amplitude matrix of this
  * form and take the other route -- the Legendre coefficients of Seyler and
- * Weller, PRC 20 (1979) 453, built by CNuc::CalcCaptureAnalyzingPower and
+ * Weller, PRC 20 (1979) 453, built at set-up into the pathway table and
  * evaluated by GenMatrixFunc::CalculateCaptureAnalyzingPower. Tensor
  * observables are not implemented on either side.
  */

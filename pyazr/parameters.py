@@ -344,7 +344,10 @@ class NuclearPotential:
     ``coulomb_radius`` (fm) is the radius of the uniformly charged sphere of the
     potential's Coulomb term: the ``coulomb_radius`` field of a format-3
     ``potential`` record, 3.5 fm in an older project's ``<potential>`` block.
-    Depths are MeV, ``R``, ``a``, ``r0`` fm.
+    Depths are MeV, ``R``, ``a``, ``r0`` fm.  ``matching_radius`` (fm) is where
+    the solution inside the potential is matched to the Coulomb functions and
+    ``step`` (fm) the radial step of the integration (the record's
+    ``matching_radius`` and ``step``; a session reports the values it uses).
 
     ``spin_orbit`` is ``None`` or the pair's spin-orbit term as a dict
     ``{"depth": MeV, "radius": fm, "diffuseness": fm, "on": "light"|"heavy"}``:
@@ -362,6 +365,8 @@ class NuclearPotential:
     own: bool
     coulomb_radius: float = 3.5
     spin_orbit: Optional[dict] = None
+    matching_radius: Optional[float] = None
+    step: Optional[float] = None
 
     @property
     def is_woods_saxon(self):

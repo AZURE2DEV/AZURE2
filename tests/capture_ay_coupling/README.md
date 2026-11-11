@@ -2,7 +2,7 @@
 
 The capture analyzing power couples the channel spin light particle first, like the rest of AZURE2.
 
-`CNuc::CalcCaptureAnalyzingPower` builds Seyler and Weller's `a_k` and `b_k` (Phys. Rev. C 20 (1979) 453,
+The pathway table (`BuildPathwayTable`) holds Seyler and Weller's `a_k` and `b_k` (Phys. Rev. C 20 (1979) 453,
 Eqs. 20 and 21).  They couple the channel spin target first, `<j2 m2 j1 m1 | s nu>`; AZURE2 couples it
 light particle first, `<j1 m1 j2 m2 | s nu>` (Lane and Thomas: `PolarizationFunc`, the M1 external-capture
 spin operator, the secondary-gamma coupling).  The two differ by `(-1)^(j1 + j2 - s)` per channel-spin

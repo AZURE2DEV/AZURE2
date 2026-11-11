@@ -82,11 +82,13 @@ std::string Block(const std::string &text, const std::string &header) {
   return out;
 }
 
-/// A record as io::WriteRecords writes it: the header, then "    <key>" padded to column 20 and the value.
+/// A record as io::WriteRecords writes it: the header, then "    <key>" padded to the record's value column (20, or
+/// one blank after its longest key) and the value.
 std::string Rec(const std::string &header, const std::vector<std::pair<std::string, std::string>> &fields) {
   std::string out = header + "\n";
-  for (const auto &f : fields)
-    out += "    " + f.first + std::string(f.first.size() < 15 ? 15 - f.first.size() : 1, ' ') + f.second + "\n";
+  std::size_t width = 15;
+  for (const auto &f : fields) width = std::max(width, f.first.size() + 1);
+  for (const auto &f : fields) out += "    " + f.first + std::string(width - f.first.size(), ' ') + f.second + "\n";
   return out;
 }
 

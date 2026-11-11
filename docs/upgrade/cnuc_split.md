@@ -444,8 +444,8 @@ tokens of segment lines) is not moved, see "Remaining steps".
 - **Step 6b** (consumers of the pathway trees read the physics result): design in section 11 — the inventory of the
   readers (320 tree accesses outside `CNuc.cpp`, 86 in it), the immutable `PathwayTable` built by `CNuc::Initialize`
   from `reaction_pathways` and the coupling coefficients and shared by every working copy, and eight bit-identical
-  steps ending with the deletion of the trees.  Done on `feature/upgrade-4-pathway-table-1`: steps 1, 2, 4, 5 and 7
-  without the capture-A_y block; open: steps 3, 6 and 8 (they edit `EData*`/`EPoint*`).
+  steps ending with the deletion of the trees.  Done: steps 1, 2, 4, 5, 6 and 7 (§11.12); open: steps 3 and 8
+  (they edit `EData*`/`EPoint*`).
 - **Step 3b (iii)** (hybrid channels as (α, l, j)): today's hybrid potential is central and keyed by the pair
   (`NuclearPotentialManager::tagFor(pairKey)`), so the channel functions do not depend on j; (α, l, j) entries need a
   spin-orbit term first (a new physics feature: `<potential>` grammar, `NuclearPotentialManager`, `CoulFunc`, the
@@ -1256,3 +1256,30 @@ that every capture-A_y caller asks for `maxLOrder` (§11.2); that `channelOfBloc
 8. The steps start after the cut of `EData`, `EPoint` and `ESegment` into smaller files is merged. The R-matrix
    route and `--use-rmc` are compared separately at the steps that touch them (§11.6), since no project of
    `tests/` selects them.
+
+### 11.12 Status (2026-11-11)
+
+Done: steps 1, 2, 4, 5 and 7 (`feature/upgrade-4-pathway-table-1`), step 6 (`feature/upgrade-4-capture-ay`).
+Capture A_y at set-up: `RequestCaptureAyTerms` (`src/CaptureAyRequests.cpp`) names, after the data are filled and
+before `CNuc::Initialize`, every term (own and leaf) of an analyzing-power data set or extrapolation with a photon
+exit; it runs in the four set-up paths (`AZUREMain`, `runMCMC`, `AZUREAPI`'s session set-up and `RebuildImpl`).
+`BuildPathwayTable` builds the requested terms in the table's order (independent of the order of the requests) and
+none for a beta entrance.  A capture-A_y point without its terms is refused with a message naming the data set.
+
+Tree accesses left (the names of §11.1): `src/CNuc.cpp` 67 (`SortPathways`, `CalcAngularDists`: the writers of the
+trees), `src/EDataExternalCapture.cpp` 16, `src/EPointExternalCapture.cpp` 12, `src/EData.cpp` 6 (step 3); none in
+the matrix functions, the gradient, the check files, `CNucExternalCapture.cpp` or `AZUREAPI.cpp`.  Open: step 3
+(with decision 3) and step 8, after the data classes are replaced.
+
+Met while doing step 6:
+- The trees built capture-A_y terms for a beta entrance; both readers return before the terms for a non-particle
+  entrance, so no output read them (every output identical without them).
+- A photon pair names one final state (its J^pi group and the level within 1 keV of its E_x; a second level in the
+  window is refused, `tests/ec_final_state_ambiguous`), so two final states cannot share one photon pair, and the
+  loops of `GetECIntegrals` and `EPoint::CalculateECAmplitudes` over the EC levels of an exit's photon pair see one
+  level.  The reverse loads: two photon pairs with the same final state.  `ParseExternalCapture` then sets the level's
+  capture pair twice (`ALevel::SetECParams`; the last wins) and appends its NF integrals and conversion factors twice,
+  so capture into the first pair runs without external capture and without a message (13N with a copy of its photon
+  pair: 1.95e-9 against 4.32e-9 at the first point, fit column of AZUREOut; `GetECIntegrals` returns the second
+  pair's 8 pathways, as the engine computes them).  The defect is in `ParseExternalCapture`, not in `GetECIntegrals`; not fixed.
+
