@@ -63,7 +63,8 @@ struct Refusal {
   std::string code;       ///< the diagnostic code it produces
   std::string rule;       ///< a rule of ReactionRule ("identical", ...) or the condition in words
   std::string message;
-  std::string checkedBy;  ///< "validate" (here), "build" (step 3: needs <levels> or the data file) or "importer"
+  std::string checkedBy;  ///< "validate" (here), "build" (step 3: needs <levels> or the data file), "setup" (the
+                          ///< engine's set-up: needs the stopping on the sub-point grid) or "importer"
 };
 
 /*!

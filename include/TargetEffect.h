@@ -158,6 +158,20 @@ class TargetEffect {
   /// exactly 0 under a beam spread or straggling, and also fired for a thin target whose stopping
   /// cross section came out <= 0; audit item 17.)
   bool IsThickTarget() const { return isThickTarget_; }
+  /*!
+   * A yield on a layer of finite thickness (format 3: quantity yield on a target of kind layer; docs/upgrade/
+   * energy_grid.md section 5): reactions per incident particle, Y(E0) = 1e-24 int_{E_out}^{E0} <sigma>/epsilon dE
+   * with int_{E_out}^{E0} dE/epsilon = N (the working copy's density, fitted or not), E_out found on the point's own
+   * sub-points with the yield's own quadrature (LayerExit.h).  Not divided by N, unlike a thin target's
+   * target-averaged cross section; no sigma(E_bar) fallback (windows and automatic tolerance are refused).  The
+   * grid reaches LayerGridMargin() beyond the layer at its layout density.
+   */
+  bool IsLayerYield() const { return isLayerYield_; }
+  /// The factor on the layout thickness (TargetThickness) the sub-point grid of a layer yield spans, so that E_out of
+  /// the largest density a fit may reach, found by the grid's own quadrature, lies inside the grid: the two integrals
+  /// of 1/epsilon differ by the quadrature's error, measured up to 8e-4 relative in tests/layer_yield (10 nodes across
+  /// a layer of half the beam energy, epsilon ~ 1/E).  A grid that still ends inside the layer gives NaN.
+  static constexpr double LayerGridMargin() { return 1.02; }
   /// Energy loss (lab MeV) across the target at lab energy E: Delta with int_{E-Delta}^{E} dE'/epsilon = N, the
   /// exact range integral (first-order epsilon(E) N before 2026-10-27, 2-8 % off for 5-20 % targets).
   double TargetThickness(double, const Config &) const;
@@ -376,6 +390,7 @@ class TargetEffect {
   double sigma_ = 0.0;
   double density_ = 0.0;
   bool isThickTarget_ = false;   ///< target integration with density 0 (IsThickTarget)
+  bool isLayerYield_ = false;    ///< yield per incident particle on a layer (IsLayerYield)
   Equation stoppingPowerEq_;
   std::vector<int> datasetKeys_;  ///< the data sets it applies to (DatasetSpec::key)
   vector_r qCoefficients_;

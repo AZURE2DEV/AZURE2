@@ -42,6 +42,7 @@ std::string Text(const Value *v) {
 struct Combination {
   const ValidatedRecord *target = nullptr, *beam = nullptr, *detector = nullptr;
   const Value *quadrature = nullptr, *windows = nullptr;
+  bool layerYield = false;  ///< a yield on a layer: per incident particle, not the target-averaged cross section
   std::string signature;
   int position = 0;  ///< the first of its records in the file
   std::vector<int> keys;
@@ -275,8 +276,13 @@ SpecList<TargetEffectSpec> Effects(Context &c, const std::vector<Member> &member
     x.quadrature = r.Get("quadrature");
     x.windows = r.Get("fold_windows");
     CoulombRatioFolds(c, r, x);
+    // A yield on a layer folds the same sub-points to another quantity (reactions per incident particle): an effect of
+    // its own, whose areal density is shared with the target's other effects as below.
+    x.layerYield = x.target && x.target->Get("kind") && x.target->Get("kind")->word == "layer" && r.quantity &&
+                   r.quantity->name == "yield";
     x.signature = (x.target ? x.target->name : "") + "|" + (x.beam ? x.beam->name : "") + "|" +
-                  (x.detector ? x.detector->name : "") + "|" + Text(x.quadrature) + "|" + Text(x.windows);
+                  (x.detector ? x.detector->name : "") + "|" + Text(x.quadrature) + "|" + Text(x.windows) +
+                  (x.layerYield ? "|yield" : "");
     x.position = 1 << 30;
     for (const ValidatedRecord *p : {x.target, x.beam, x.detector})
       if (p) x.position = std::min(x.position, c.Position(p));
@@ -300,10 +306,13 @@ SpecList<TargetEffectSpec> Effects(Context &c, const std::vector<Member> &member
     e.active = true;
     e.datasetKeys = x.keys;
     e.source = "target " + (x.target ? x.target->name : std::string("-")) + ", beam " + (x.beam ? x.beam->name : std::string("-")) +
-               ", detector " + (x.detector ? x.detector->name : std::string("-"));
+               ", detector " + (x.detector ? x.detector->name : std::string("-")) +
+               (x.layerYield ? "; yield per incident particle on the layer: 1e-24 int_{E_out}^{E_0} <sigma>/epsilon dE, "
+                               "int_{E_out}^{E_0} dE/epsilon = N" : "");
     if (x.target) {
       e.targetName = x.target->name;
       TargetInto(c, *x.target, *x.target, e);
+      e.layerYield = x.layerYield;
       if (usesOfTarget[x.target] > 1) {
         if ((x.target->Has("screening") || FreeNuisance(x.target, "doppler")) && !reported.count(x.target) &&
             reported.insert(x.target).second)

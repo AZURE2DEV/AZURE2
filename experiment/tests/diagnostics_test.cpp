@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "azure2/experiment/LayerChecks.h"
 #include "azure2/experiment/ModelDatum.h"
 #include "azure2/experiment/Schema.h"
 #include "azure2/io/Document.h"
@@ -333,6 +334,21 @@ int main() {
         tested.insert(c.code);
       }
     }
+  }
+  // the set-up's refusals of a yield on a layer (LayerChecks.h): the engine evaluates the stopping on its grid and
+  // calls these; each alone, naming the target's field and saying what to write instead
+  {
+    const LayerPoint p{"C13A", "data/y.dat", 0.35};
+    const Diagnostic s = LayerStoppingUndefined(p, 0.21, -1e-21);
+    const bool okS = s.code == "E_LAYER_STOPPING" && s.record == "C13A" && s.field == "stopping" && s.found == "-1e-21" &&
+                     s.message.find("0.21 MeV") != std::string::npos && s.message.find("positive") != std::string::npos;
+    check("E_LAYER_STOPPING: the target's stopping, the energy and the value", okS);
+    if (okS) tested.insert(s.code);
+    const Diagnostic e = LayerExitBelowModel(p, 3e19, 0.00107);
+    const bool okE = e.code == "E_LAYER_EXIT_BELOW_MODEL" && e.record == "C13A" && e.field == "areal_density" &&
+                     e.found == "3e+19" && e.message.find("kind infinite") != std::string::npos;
+    check("E_LAYER_EXIT_BELOW_MODEL: the target's areal density, and the infinite target to use instead", okE);
+    if (okE) tested.insert(e.code);
   }
   // the build checks need <levels> pairs and data files: their cases are in build_test.cpp (Schema::Build);
   // E_UNKNOWN_PAIR and E_AMBIGUOUS_PAIR have a case in both (a datum's pair above, a data set's reaction there)

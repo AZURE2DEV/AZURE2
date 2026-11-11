@@ -4,11 +4,13 @@
 // analytic gradient (TargetEffectWeights).
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <map>
 #include <utility>
 #include <vector>
 
 #include "Config.h"
+#include "LayerExit.h"
 #include "WorkingCopy.h"
 #include "Unit.h"
 #include "TELinearForm.h"
@@ -59,7 +61,13 @@ void GridQuadrature(const Unit *point, const WorkingCopy &data, Read rd, double 
  *
  * Target integration:  Y(E0) = (1/N) int_{E0-T}^{E0} <sigma>(E_d) / epsilon(E_d) dE_d  over the depth, where
  * <sigma>(E_d) is sigma itself, or its Gaussian average about E_d of width sqrt(sigma_b(E_d)^2 +
- * sigma_straggling(E0 - E_d)^2) when there is a beam spread and/or straggling, normalised as above.
+ * sigma_straggling(E0 - E_d)^2) when there is a beam spread and/or straggling, normalised as above (the quadrature
+ * averages sigma/epsilon over that Gaussian, which is <sigma>/epsilon(E_d) to the curvature of 1/epsilon across it).
+ * Energies and epsilon are c.m. (lab epsilon times the point's c.m./lab factor): dE_cm/eps_cm = dE_lab/eps_lab.
+ * An infinitely thick target (density 0) and a yield on a layer (TargetEffect::IsLayerYield) are not divided by N:
+ *   Y(E0) = 1e-24 int_{E_out}^{E0} <sigma>(E_d) / epsilon(E_d) dE_d   reactions per incident particle (sigma in b,
+ * epsilon in MeV cm^2 per active nucleus), with E_out = 1 keV for the thick target and, for the layer, the energy at
+ * which the integral of 1/epsilon on the same nodes reaches the working copy's N (LayerExit.h).
  *
  * UDR (time-of-flight) and beam-profile kernels follow; both are normalised averages as well.
  * 2-point Gauss-Legendre on every sub-point interval throughout (GridQuadrature), exact for cubics and
@@ -270,16 +278,27 @@ V Unit::IntegrateKernelsImpl(const WorkingCopy &data, const Config &configure, R
 
   if (targetEffect->IsTargetIntegration()) {
     const double surface = centroid;
-    const double back = centroid - this->GetTargetThickness();
+    double back = centroid - this->GetTargetThickness();
     V outer = 0.0;
-    if (!targetEffect->IsGaussian() && !targetEffect->IsStraggling()) {
+    const bool noSpread = !targetEffect->IsGaussian() && !targetEffect->IsStraggling();
+    // A yield on a layer (reactions per incident particle, docs/upgrade/energy_grid.md section 5.2): the depth
+    // integral runs from the top of the integration down to E_out, found on these nodes with this quadrature
+    // (LayerExit.h), so that int_{E_out}^{top} dE/epsilon is the areal density the working copy holds.
+    if (targetEffect->IsLayerYield()) {
+      const double top = noSpread ? eHigh : surface;
+      auto energy = [&](int j) { return this->GetSubPoint(data, j)->GetCMEnergy(); };
+      auto stopping = [&](int j) { return this->GetSubPoint(data, j)->GetStoppingPower(); };
+      if (!LayerExitEnergy(numPoints, energy, stopping, top, data.EffectValues(this->GetTargetEffectNum()).density, back))
+        return V(std::numeric_limits<double>::quiet_NaN());  // refused at set-up (WorkingCopy::SetUpTargetEffects)
+    }
+    if (noSpread) {
       // The grid was built to span the target (WorkingCopy::GridExtent), so it is integrated whole, as it
       // always was: clipping it to [E0 - T, E0] here would drop a point whose segment energy shift
       // moved E0 away from the grid's own centre (13N, segment 1, lowest point).
       // A fitted density (TargetEffect::HasDensityFit) lays the grid out for the largest density the fit may
       // reach, so the depth integral is cut at the back of the target, E0 - T(N): smooth in N, grid unchanged.
       double unused = 0.0;
-      const double lo = targetEffect->HasDensityFit() ? std::max(eLow, back) : eLow;
+      const double lo = (targetEffect->HasDensityFit() || targetEffect->IsLayerYield()) ? std::max(eLow, back) : eLow;
       GridQuadrature<V>(this, data, rd, lo, eHigh, true, one, one, outer, unused);
     } else {
       const double x1 = -1.0 / sqrt(3.0), x2 = 1.0 / sqrt(3.0);
@@ -310,8 +329,11 @@ V Unit::IntegrateKernelsImpl(const WorkingCopy &data, const Config &configure, R
         }
       }
     }
-    // a thick target (density 0) is the yield per incident particle, not divided by a density
-    yield = targetEffect->IsThickTarget() ? outer : outer / (data.EffectValues(this->GetTargetEffectNum()).density * 1.0e-24);
+    // a thick target (density 0) and a layer yield are the yield per incident particle, 1e-24 int sigma/epsilon dE;
+    // a thin target's quantity is the target-averaged cross section, that divided by 1e-24 N
+    yield = (targetEffect->IsThickTarget() || targetEffect->IsLayerYield())
+                ? outer
+                : outer / (data.EffectValues(this->GetTargetEffectNum()).density * 1.0e-24);
     // The smooth edge of a window: blend with sigma(E_bar), not with sigma at the beam energy.  Done here, in
     // the linear kernel, so the gradient weights (TargetEffectWeights) carry it too.
     if (thinTarget && target_blend_weight_ < 1.0)

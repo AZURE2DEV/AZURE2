@@ -96,6 +96,8 @@ const std::vector<DiagnosticCode> &DiagnosticCodes() {
       {kThmRelativistic, E, "a THM data set or extrapolation in a project with relativistic kinematics"},
       {kThmCovariance, E, "a covariance file on a THM data set (its chi^2 is its experiment's profiled one)"},
       {kFoldConflict, E, "data sets sharing a target with a free parameter differ in beam, detector or quadrature"},
+      {kLayerStopping, E, "a yield on a layer whose stopping is not positive and finite at an energy of its sub-point grid (set-up)"},
+      {kLayerExitBelowModel, E, "a yield on a layer the beam does not leave above the lowest energy the model is evaluated at (set-up)"},
       {kPotentialTwice, E, "two potential records for one pair"},
       {kPotentialPairKind, E, "a potential record on a photon or beta pair (a potential belongs to a particle pair)"},
       {kPotentialRelativistic, E, "a potential record in a project with relativistic kinematics"},
