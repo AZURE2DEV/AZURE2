@@ -72,16 +72,27 @@ and 12 pyazr tests), so the groups follow the projects, not the directory names.
 
 ## 3a. State at the last commit (verification)
 
-126 of the 185 convertible files are converted (groups 1, 2, 3, 4a, 4b, 5): 119 projects of `tests/`, 7 examples.
-59 are left (groups 6, 7, 8, and `reaction_rate/models/n12C.azr`, `p12C.azr` of group 5). Not converted on purpose:
-`angular_coefficients/models/bad_norm.azr`, `bad_test.azr`, `natural_target/models/M_thick.azr` (old, in place), and
-the old-grammar refusals `electron_screening/bad.azr`, `target_density/bad.azr` (in the fixtures only; the converter
-refuses both, the second since this branch, so it no longer counts as convertible: the spec equivalence gives 198 files,
-185 converted, 183 equal, 2 recorded differences, 0 differ, 13 not converted). 8 files were format 3 already.
-The converted-tree gate (`REF=tab-trial8`, tag `gtree3b`) gives the base's counts: 483 (456 formal) identical, 38
-classified, 0 differ, 0 missing. The tree's own run, `tab-tree3b` (all projects × 3 bases), is the reference for the
-next agent: against `tab-trial16` every file is identical but `param.par` of 9 converted projects (the parameter
-names, values equal) and the `run.log` of the two refusal fixtures moved out of the tree (`run.log` is not compared).
+162 of the 185 convertible files are converted (groups 1, 2, 3, 4a, 4b, 5, 8): 155 projects of `tests/`, 7 examples.
+23 are left: groups 6 and 7 (another branch), with `reaction_rate/models/n12C.azr`, `p12C.azr`. Not converted on
+purpose: `angular_coefficients/models/bad_norm.azr`, `bad_test.azr`, `natural_target/models/M_thick.azr` (old, in
+place), and the old-grammar refusals `electron_screening/bad.azr`, `target_density/bad.azr` (fixtures only). 8 files
+were format 3 already. Spec equivalence: 198 files, 185 converted, 183 equal, 2 recorded differences, 0 differ, 13 not
+converted (the base's counts).
+
+Verification of group 8 (branch `feature/upgrade-4-tree-format3-4`): the converted-tree gate (`REF=tab-trial8`, tag
+`gtree3d`) gives the base's counts, 483 (456 formal) identical, 38 classified, 0 differ, 0 missing (after
+`tools/convert_tree.sh` drops the committed `prior_cov.f3.txt` before converting T2's original; the first run had T2
+missing). The tree's own run, `tab-tree3d` (all projects x 3 bases), is the reference for the next agent: against
+`tab-tree3b` every project not converted here is identical; the converted ones differ only by listed classes
+(param.par names, the step and follower rows of `hybrid_potential` and T2, T2's follower listed in normalizations.out,
+the scattering lengths as model data in chiSquared.out / scatteringLengths.out and the new modelData.out of
+`be7p_fit`, `he3he4_fit`, T3, T3_start) and run.log. `ctest -LE slow` 183/183, `ctest -L slow` (OMP 2) 10/10; T1-T3,
+13N, identical_pp_res and two relativistic models at 1 and 4 threads byte-identical; the T2 benchmark at 1 thread:
+calculation chi2 10899.8, fit of 200 calls 691.608 (the base's), its output files identical to the base's fit of the
+original but for param.par/param.sav names, the follower rows (`D.value[s03_diff150]`, `G.offset[s03_diff150]`) and
+normalizations.out's follower row (classes "follower", "follower listed"). `tests/run_tests.sh` whole: 145 passed,
+1 failed (`spin_orbit_potential`: its `unitarity.py` called the T1–T3 helper's old `write`; fixed in the last commit and
+the directory rerun: passed).
 
 ## 4. Kept old on purpose, and checks that changed their model
 
@@ -142,13 +153,19 @@ messages of `prior_covariance` (and two gradient agreements at the 1e-15 level),
 - `reaction_rate/models/n12C.azr`, `p12C.azr`, read as old lines by `doppler_fgm/make_models.py`,
   `transmission_yield/make_models.py` (and through them by pyazr `doppler`, `thickness`, `parameter_kinds`,
   `upgrade_plan_runtime`, `upgrade_poison_results`).
-- The model generators `tests/*/make_models.py` (29 of them; `make_model.py` of `mcmc_physical_norm`) write old files;
-  `clone_composite/make_models.py` writes format 3 since this branch.
-  Their committed outputs are converted; those run by a check (`transmission_yield`, `light_excitation`,
-  `natural_target`, ...) are rewritten with their group. The others are developer tools that read a tree project and
-  write old lines: to regenerate, point them at the original (`tests/convert/fixtures/...`, as
-  `mcmc_physical_norm/make_model.py` now does) and convert the output; they are to be rewritten for format 3 or
-  deleted (open).
+- The model generators. Run by a check and writing format 3: `clone_composite/make_models.py`,
+  `light_excitation/make_models.py` (its models as records). Writing format 3 through the converter (they compose the
+  old grammar and call `AZURE2 --convert --to 3 --exact-grids`; they give the committed files byte for byte): the
+  generators of T1–T3 (`tests/upgrade/lib/upgrade_project.py`, `T1/generate.py`, `T3/generate.py`, `T2/make_t2.py`).
+  Run by a check, of group 6: `doppler_fgm`, `transmission_yield` (with `reaction_rate/models/n12C.azr`, `p12C.azr`).
+  **Still writing old files, run by nothing** (developer tools whose committed output is converted; to regenerate, run
+  and convert the output, or rewrite them): `angular_coefficients`, `capture_ay_coupling`, `convolution_unify`,
+  `convolution_window`, `data_covariance`, `ec_e1m1_phase`, `ec_m1_exact`, `ec_threshold`, `electron_screening`,
+  `gamma_lab_frame`, `hard_sphere`, `mcmc_physical_norm/make_model.py`, `q_attenuation`, `ratio_frame`,
+  `relativistic`, `scattering_length`, `screening_6li`, `secondary_gamma`, `shift_sqrt_subpoints`,
+  `shift_subpoint_angle`, `sum_lab_frame`, `target_density`, `transform_level_order` (23); of groups 6, 7:
+  `natural_target`, `reaction_rate`, `18O_p_a_thm/make_inputs.py`. Not rewritten in group 8's branch (the time went
+  to the projects and their readers); the T1–T3 helpers show the pattern (compose, then convert with the engine).
 
 ## 6. User-guide pages that show old keyword lines (for a later documentation pass)
 
