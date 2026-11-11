@@ -101,6 +101,18 @@ add_test(NAME upgrade_lab_frame_residual COMMAND lab_frame_residual_test ${CMAKE
          WORKING_DIRECTORY ${_lab_frame_dir})
 set_tests_properties(upgrade_lab_frame_residual PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 600)
 
+# The gradient over the energy tasks: the same bits at 1 and 3 threads, and the residual pass with no free parameter.
+add_executable(energy_task_gradient_test energy_task_gradient_test.cpp)
+target_link_libraries(energy_task_gradient_test PRIVATE AZURE2Core)
+set(_energy_grad_dir ${CMAKE_CURRENT_BINARY_DIR}/energy_task_gradient)
+file(MAKE_DIRECTORY ${_energy_grad_dir}/output ${_energy_grad_dir}/checks)
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/T2/data ${CMAKE_CURRENT_SOURCE_DIR}/T2/cov_diff.txt
+          ${CMAKE_CURRENT_SOURCE_DIR}/T2/prior_cov.txt ${CMAKE_CURRENT_SOURCE_DIR}/T2/prior_cov.f3.txt
+          DESTINATION ${_energy_grad_dir})
+add_test(NAME upgrade_energy_task_gradient COMMAND energy_task_gradient_test ${CMAKE_CURRENT_SOURCE_DIR}/T2/T2.azr
+         WORKING_DIRECTORY ${_energy_grad_dir})
+set_tests_properties(upgrade_energy_task_gradient PROPERTIES TIMEOUT 600)
+
 # A working copy that evaluated other parameters before gives a fresh copy's bits (docs/upgrade/data_model.md S1):
 # per-segment chi^2 and model values, on T2, natural_neon, shift_sqrt_subpoints (sqrt, shiftfn), 18O_p_a_thm and a
 # 7Li(p,n) point an energy shift moves out of the kinematic range, each on a copy of its input files.
