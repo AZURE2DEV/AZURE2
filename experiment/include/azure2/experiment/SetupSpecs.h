@@ -269,6 +269,11 @@ struct AbundanceRowSpec {
   double sigma = 0.0;   ///< prior width (fraction)
 };
 
+/// The name of an abundance's fit parameter, made here only (CNuc::AbundanceParamName and the build's parameter sources
+/// call it): `<sample>.isotope.<isotope>` for a format-3 isotope, else `abundance_[<sample>_]<Z>_<A>` with the Z and A of
+/// the compound nucleus (BuildEffects.cpp).
+std::string AbundanceParameterName(const std::string &sample, const std::string &isotope, int z, int a);
+
 /// The abundances block: absent (no abundance is a parameter) or present with its rows (possibly none).
 struct AbundancesSpec {
   bool present = false;

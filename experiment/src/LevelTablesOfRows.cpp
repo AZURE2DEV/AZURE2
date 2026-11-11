@@ -30,6 +30,7 @@ PairInfo PairInfoOfRow(const io::LevelRow &r) {
   p.twoJLight = (int)std::lround(2.0 * r.j1());
   p.twoJHeavy = (int)std::lround(2.0 * r.j2());
   p.identical = io::IdenticalParticles(r);
+  p.heavyParity = r.pi2();
   return p;
 }
 
@@ -52,6 +53,17 @@ LevelTables LevelTablesOfRows(const std::vector<io::LevelRow> &rows) {
   LevelTables t;
   for (const io::LevelRow &r : rows)
     if (!PairByKey(r.ir(), t.pairs)) t.pairs.push_back(PairInfoOfRow(r));
+  // External capture: the mask of a pair's first active row that has one, the pairs in the order of their first active
+  // rows (CNuc::Fill numbers its pairs so, and fills its external-capture map from the same rows)
+  std::vector<int> activeOrder;
+  for (const io::LevelRow &r : rows) {
+    if (r.isActive() != 1) continue;
+    if (std::find(activeOrder.begin(), activeOrder.end(), r.ir()) == activeOrder.end()) activeOrder.push_back(r.ir());
+    PairInfo &p = *std::find_if(t.pairs.begin(), t.pairs.end(), [&](const PairInfo &x) { return x.key == r.ir(); });
+    if (p.externalCapture == 0 && r.ecMultMask() != 0) p.externalCapture = (unsigned int)r.ecMultMask();
+  }
+  for (int key : activeOrder)
+    if (PairByKey(key, t.pairs)->externalCapture != 0) t.externalCapturePairs.push_back(key);
 
   // Groups (J, parity, compound nucleus) and their channels, in the order of the active rows, as CNuc::Fill.
   std::vector<std::tuple<double, int, std::pair<int, int>>> groups;
@@ -84,6 +96,8 @@ LevelTables LevelTablesOfRows(const std::vector<io::LevelRow> &rows) {
       info.energy = r.levelE();
       info.group = g + 1;
       info.level = slot.level;
+      info.nucleusZ = std::get<2>(id).first;
+      info.nucleusA = std::get<2>(id).second;
       levels[g].push_back(info);
       lines[g].emplace_back();
     }

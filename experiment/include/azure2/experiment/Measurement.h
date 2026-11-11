@@ -88,6 +88,44 @@ bool ReadMeasurementRows(std::istream &in, const std::string &file, const RowWin
                          const std::function<bool(DataRow &)> &keep, MeasurementRows &rows,
                          MeasurementProvenance &provenance, std::string &error);
 
+/// Is `k` (the angle column of an angular-coefficient row) a Legendre order: an integer 0-20?
+bool IsLegendreOrder(double k);
+
+/// One problem of a row of a data file (CheckDataRows).
+struct DataRowProblem {
+  enum class Kind {
+    NotParsed,       ///< not a comment and not four numbers (the engine's reader stops there)
+    TooFewColumns,   ///< fewer numeric columns than the data set's column roles name
+    NotAnOrder,      ///< an angular-coefficient row whose second column is no Legendre order 0-20
+    RefusedKept      ///< a row inside the window the caller's check refuses (a non-positive error, a variance)
+  };
+  Kind kind = Kind::NotParsed;
+  int line = 0;    ///< 1-based physical line of the file
+  int record = 0;  ///< 1-based data row (comments and blanks not counted); 0 when the line did not parse
+  int column = 0;  ///< 1-based column the problem is in; 0 for the row as a whole
+  std::string found;    ///< the text found (the token, or the line)
+  std::string message;  ///< what is wrong, naming the file, line and column
+};
+
+/// Every problem of a data file and the rows it would give: what the set-up's reader (ReadMeasurementRows) refuses,
+/// found on every line instead of the first.
+struct DataRowCheck {
+  MeasurementProvenance provenance;  ///< rows read and kept as ReadMeasurementRows counts them
+  std::vector<DataRowProblem> problems;
+  int problemsNotListed = 0;  ///< problems beyond `maxProblems` (counted, not listed)
+};
+
+/*!
+ * Reads every line of `in` (the file `file`, for messages) as ReadMeasurementRows does (DataLine, the row taken to
+ * engine units by `columns`, the window) and lists, instead of stopping at the first: each line that does not parse,
+ * each row with fewer numeric columns than `roleColumns`, with `legendreOrders` each row whose second column is no
+ * Legendre order, and each row inside the window that `checkKept` refuses (it returns why, "" to accept; the row's
+ * value and error in engine units).  At most `maxProblems` are listed.
+ */
+DataRowCheck CheckDataRows(std::istream &in, const std::string &file, const RowWindow &window,
+                           const ColumnConversion &columns, bool legendreOrders, std::size_t roleColumns,
+                           const std::function<std::string(const DataRow &)> &checkKept, int maxProblems = 100);
+
 }  // namespace experiment
 }  // namespace azure2
 

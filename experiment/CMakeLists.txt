@@ -35,6 +35,8 @@ add_library(azure2_experiment STATIC
   src/Frames.cpp
   src/DataRows.cpp
   src/Measurement.cpp
+  src/CovarianceFile.cpp
+  src/FinalStates.cpp
   src/Grids.cpp
   src/HybridPotentialSettings.cpp
   src/SpinOrbitChecks.cpp

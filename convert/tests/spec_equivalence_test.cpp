@@ -548,6 +548,7 @@ int main(int argc, char **argv) {
     Format3ReadOptions read;
     read.fileName = rel;
     read.projectDir = root + "/" + rel.substr(0, rel.find('/', rel.find('/') + 1));
+    read.setUpChecks = false;  // the specs the engine builds: its set-up makes the external-capture checks itself
     Format3Project p = ReadFormat3Text(r.text, read);
     bool onlyFiles = !p.Ok();
     for (const Diagnostic &d : p.diagnostics) onlyFiles = onlyFiles && (d.severity != Severity::Error || d.code == codes::kDataFile);

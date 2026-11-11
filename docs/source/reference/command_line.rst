@@ -195,7 +195,7 @@ Available Options
        the set-up's messages on standard error when the project cannot be set up.
        ``pyazr.predictions(path)`` returns the same lines.
    * - ``--describe``
-     - ``--describe FILE [--json]``: print what the engine makes of the format-3 project
+     - ``--describe FILE [--json] [--record NAME]``: print what the engine makes of the format-3 project
        ``FILE``: for every data set the quantity, the observable computed, the reaction tree
        with the ``<levels>`` pair key each term resolved to, the windows, the data file as the
        engine opens it (its resolved path), the rows it holds and the rows kept inside the
@@ -203,7 +203,10 @@ Available Options
        ``kept_E_lab_MeV``), the target, beam and detector effects linked to it
        and its fit parameters with names and kinds; then the extrapolations and the model data.
        The place to see how a file was understood.  A project with errors prints them (exit 2).
-       ``pyazr.describe(path, as_json=False)`` returns the same.
+       With ``--record NAME`` only the data set, extrapolation, datum or potential ``NAME`` is
+       described (exit 2 when the project has no such record).  A data set without an
+       ``energy_window`` reads "window E_lab all energies (no energy_window)".
+       ``pyazr.describe(path, as_json=False)`` returns the same; ``Project.describe(name)`` one record.
    * - ``--schema``
      - Print the table of project format 3 as one JSON document and exit: the
        record kinds and their fields with value types and conditions, the

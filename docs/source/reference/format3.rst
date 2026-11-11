@@ -1833,7 +1833,22 @@ Diagnostic codes
      - entrance_pair / exit_pair / pair_key where the label names one pair, or a key the label does not name
    * - ``E_DATA_FILE``
      - error
-     - a data file that cannot be read, or has fewer columns than its roles
+     - a data file that cannot be read, holds no data row, or has a row with fewer columns than its roles
+   * - ``E_DATA_ROW``
+     - error
+     - a row of a data file that does not parse (four numbers), or an angular-coefficient row without a Legendre order 0-20
+   * - ``W_DATA_ERROR``
+     - warning
+     - a row inside a data set's window with an uncertainty <= 0 and no covariance file: the chi^2 skips a 0 and squares a negative one
+   * - ``E_COVARIANCE_FILE``
+     - error
+     - a covariance file that cannot be read, does not list the data set's file with its row count, or has a variance <= 0 on a row in the window
+   * - ``E_FINAL_STATE_NOT_LEVEL``
+     - error
+     - the final state of a photon pair with external capture that a data set or extrapolation exits into is not one level of <levels> (none, or several within 1 keV)
+   * - ``E_FINAL_STATE_SHARED``
+     - error
+     - two photon pairs with external capture whose final states are the same level
    * - ``E_NOT_BUILT``
      - error
      - a value the table takes and this engine cannot yet set up (a unit, frame or form of a later step)

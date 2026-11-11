@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "azure2/experiment/FinalStates.h"
 #include "azure2/experiment/ProjectReader.h"
 #include "azure2/experiment/SpinOrbitChecks.h"
 #include "azure2/io/Document.h"
@@ -276,6 +277,78 @@ int main() {
   }
   check("the data file read in the valid case", BuildText(Data(kDataset), false, true).diagnostics.empty());
   ExpectOne("E_DATA_FILE", BuildText(Data(Set(kDataset, "columns", "    columns E_lab[MeV] _ value error _ _")), false, true));
+  // every row the set-up's reader would refuse, not only the first (Measurement.h CheckDataRows)
+  {
+    std::ofstream("build_test_rows.dat") << "# E p value error\n0.3 0 1.0 0.1\n0.4 x 1.0 0.1\n0.5 0 1.0\n0.6 0 1.0 0.1\n";
+    const BuiltProject b = BuildText(Data(Set(kDataset, "file", "    file build_test_rows.dat")), false, true);
+    const bool two = b.diagnostics.size() == 2 && b.diagnostics[0].code == "E_DATA_ROW" && b.diagnostics[1].code == "E_DATA_ROW";
+    check("E_DATA_ROW: each row that does not parse (two), with the line, the column and the text found",
+          two && b.diagnostics[0].found == "x" && b.diagnostics[0].message.find("line 3, column 2") != std::string::npos &&
+              b.diagnostics[1].message.find("line 4:") != std::string::npos && !b.Ok());
+    if (!two)
+      for (const Diagnostic &d : b.diagnostics) std::printf("        got %s: %s\n", d.code.c_str(), d.message.c_str());
+    // the same file in a run that does not use the data: only its first row is looked at (the engine's own build)
+    check("E_DATA_ROW: not made by a build for a run without data",
+          BuildText(Data(Set(kDataset, "file", "    file build_test_rows.dat")), false, true, DataFiles::NotUsed).diagnostics.empty());
+    std::ofstream("build_test_rows.dat") << "0.3 0 1.0 0.1\n0.4 2.5 1.0 0.1\n";  // 2.5 is no Legendre order
+    const std::string legendre = Set(Set(Set(Set(kDataset, "file", "    file build_test_rows.dat"), "quantity", "    quantity legendre"),
+                                         "columns", "    columns E_lab[MeV] order value error"), "unit", "    unit b/sr");
+    ExpectOne("E_DATA_ROW", BuildText(Data(legendre + "    expansion absolute\n"), false, true));
+    std::ofstream("build_test_rows.dat") << "0.3 0 1.0 0.1\n0.4 0 1.0 0\n2.0 0 1.0 0\n";
+    const BuiltProject w = BuildText(Data(Set(kDataset, "file", "    file build_test_rows.dat")), false, true);
+    ExpectOne("W_DATA_ERROR", w);
+    check("W_DATA_ERROR: a warning for the row inside the window only, the project builds",
+          w.Ok() && w.diagnostics.size() == 1 && w.diagnostics[0].severity == Severity::Warning && w.diagnostics[0].found == "0");
+  }
+  // the covariance file the set-up reads (CovarianceFile.h): missing, not covering the data file, a variance <= 0
+  {
+    const std::string cov = Set(kDataset, "norm", "    norm 1 fixed") + "    covariance build_test_cov.txt\n";
+    ExpectOne("E_COVARIANCE_FILE", BuildText(Data(Set(cov, "covariance", "    covariance no_such_cov.txt")), false, true));
+    std::ofstream("build_test_cov.txt") << "file build_test_data.dat 2\ndiagonal 0.01 0.01\n";
+    ExpectOne("E_COVARIANCE_FILE", BuildText(Data(cov), false, true));  // the data file has 1 row, the header says 2
+    std::ofstream("build_test_other.dat") << "1 0 1 0.1\n";
+    std::ofstream("build_test_cov.txt") << "file build_test_other.dat 1\ndiagonal 0.01\n";
+    ExpectOne("E_COVARIANCE_FILE", BuildText(Data(cov), false, true));  // not among its file lines
+    std::ofstream("build_test_cov.txt") << "file build_test_data.dat 1\ndiagonal 0\n";
+    ExpectOne("E_COVARIANCE_FILE", BuildText(Data(cov), false, true));  // a variance 0 on the row in the window
+    std::ofstream("build_test_cov.txt") << "file build_test_data.dat 1\ndiagonal 0.01\n";
+    check("a readable covariance file covering the data file builds", BuildText(Data(cov), false, true).diagnostics.empty());
+  }
+  // the final state of external capture (FinalStates.h, the set-up's rule): g+16O (pair 4) with external capture
+  {
+    LevelTables t = Pairs();
+    t.pairs[3].externalCapture = 1;
+    t.externalCapturePairs = {4};
+    const std::string capture = Set(kDataset, "reaction", "    reaction 15N(p,g)16O");
+    ExpectOne("E_FINAL_STATE_NOT_LEVEL", BuildText(Data(capture), false, false, DataFiles::Required, t));
+    check("E_FINAL_STATE_NOT_LEVEL: not made when no data set exits into the pair",
+          BuildText(Data(kDataset), false, false, DataFiles::Required, t).diagnostics.empty());
+    LevelInfo ground;
+    ground.twoJ = 0;
+    ground.parity = 1;
+    ground.energy = 0.0;
+    ground.group = ground.level = 1;
+    ground.nucleusZ = 8;
+    ground.nucleusA = 16;
+    t.levels = {ground};
+    check("the final state listed: builds", BuildText(Data(capture), false, false, DataFiles::Required, t).diagnostics.empty());
+    t.levels.push_back(ground);
+    t.levels[1].energy = 0.0008;
+    t.levels[1].level = 2;
+    ExpectOne("E_FINAL_STATE_NOT_LEVEL", BuildText(Data(capture), false, false, DataFiles::Required, t));  // ambiguous
+    t.levels.pop_back();
+    t.pairs.push_back(t.pairs[3]);
+    t.pairs.back().key = 10;
+    t.externalCapturePairs = {4, 10};
+    const BuiltProject shared = BuildText(Data(capture + "    exit_pair 4\n"), false, false, DataFiles::Required, t);
+    ExpectOne("E_FINAL_STATE_SHARED", shared);
+    check("E_FINAL_STATE_SHARED: on the data set exiting into one of the pairs, naming both",
+          shared.diagnostics.size() == 1 && shared.diagnostics[0].record == "d1" &&
+              shared.diagnostics[0].message.find("photon pairs 4 and 10") != std::string::npos);
+    const std::vector<FinalStateOfPair> finals = ExternalCaptureFinalStates(t, t.externalCapturePairs);
+    check("the rule: the earlier pair keeps the level, the later names it",
+          finals.size() == 2 && finals[0].sharedWithPairKey == 0 && finals[1].sharedWithPairKey == 4);
+  }
   UnitCases(targets);
   const std::string thm = Set(Set(kDataset, "norm", "    norm profiled"), "unit", "    unit arbitrary") + "    thm global\n";
   check("a THM data set builds", BuildText(Data(thm)).diagnostics.empty());

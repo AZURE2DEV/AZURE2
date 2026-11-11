@@ -45,6 +45,7 @@ struct Format3ReadOptions {
   bool build = true;
   bool readDataFiles = true;
   DataFiles dataFiles = DataFiles::Required;  ///< BuildOptions::dataFiles
+  bool setUpChecks = true;                     ///< BuildOptions::setUpChecks
 };
 
 Format3Project ReadFormat3Project(const io::Document &doc, const Format3ReadOptions &options);

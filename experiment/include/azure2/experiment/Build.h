@@ -38,6 +38,10 @@ struct BuildOptions {
   DataFiles dataFiles = DataFiles::Required;
   /// The project's relativistic flag (<config>): THM data sets are refused with it.
   bool relativistic = false;
+  /// Also make the checks whose refusal the engine's set-up makes itself, by the same function (the final states of
+  /// external capture, FinalStates.h): on for --validate, --describe and pyazr; off in the engine's own build, so a
+  /// run refuses them once, at set-up, with the set-up's message.
+  bool setUpChecks = true;
 };
 
 /*!
@@ -79,6 +83,15 @@ struct BuiltProject {
   int checksLeftToEngine = 0;
   bool Ok() const;
 };
+
+/*!
+ * Every fit-parameter name a built project gives that is made from a record's name, in record order, each once: the
+ * data sets' (norm, shift offset and sqrt, shift-function parameters, sample thickness, a group follower's
+ * <record>.<field>[<data set>]), the extrapolations', the isotope abundances' (AbundanceParameterName) and the target
+ * effects' (<target>.screening, .areal_density, .doppler: the names src/EDataParameters.cpp EffectParameterName gives).
+ * pyazr's Project.rename maps the names before and after a rename by position.
+ */
+std::vector<std::string> ParameterNamesOf(const BuiltProject &built);
 
 }  // namespace experiment
 }  // namespace azure2

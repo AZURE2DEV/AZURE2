@@ -119,6 +119,7 @@ int Config::ReadFormat3Project(const azure2::io::Document &doc) {
   // Which run follows is chosen later (menu, pyazr call): a data file that cannot be read is reported by the set-up
   // that would open it (src/ProjectSetup.cpp: an error for a data run, a warning for an extrapolation)
   read.dataFiles = azure2::experiment::DataFiles::NotUsed;
+  read.setUpChecks = false;  // the set-up makes them itself (CNuc::ParseExternalCapture), once, with its message
   auto project = std::make_shared<azure2::experiment::Format3Project>(azure2::experiment::ReadFormat3Project(doc, read));
   for (const azure2::experiment::Diagnostic &d : project->diagnostics)
     if (d.code != azure2::experiment::codes::kDataFileNotRead) outStream << (d.severity == azure2::experiment::Severity::Error ? "ERROR: " : "WARNING: ") << d.ToText() << std::endl;
