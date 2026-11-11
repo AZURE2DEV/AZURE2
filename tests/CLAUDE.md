@@ -19,7 +19,7 @@ test (with a round trip). A new formula needs a reference test.
 A regression reference is not a correctness check: `tests/run_tests.sh` pins
 each project's χ² against a number this code produced, so it catches a change
 and nothing else. `tests/reference/beam_profile_reference_test.cpp` is the
-pattern for an integrator: it drives `Unit::IntegrateTargetEffect` with
+pattern for an integrator: it drives `FoldPoint` (`src/PointFold.cpp`) with
 hand-chosen sub-point cross sections, needs no model, runs in 0.1 s, and rests
 on an identity (a constant cross section folds back to itself exactly, whatever
 the profile, window and detailed-balance weight, because numerator and

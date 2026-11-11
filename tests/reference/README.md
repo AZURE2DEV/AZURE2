@@ -14,7 +14,7 @@ independent implementation of the documented formula — and compares.
 The beam-profile experimental effect (`docs/source/user_guide/experimental_effects.rst`),
 which averages a cross section over an absolute beam energy profile rather than
 a Gaussian centred on each data point. It drives
-`Unit::IntegrateTargetEffect` directly, with sub-point cross sections chosen
+`FoldPoint` (`src/PointFold.cpp`) directly, with sub-point cross sections chosen
 by hand, so it needs no model, no data files and no GUI, and runs in
 milliseconds.
 

@@ -218,7 +218,7 @@ distorted waves, stopping and straggling versus E and depth, kernel rows K_i(E_n
 | You add | It changes | You write | Tested in |
 |---|---|---|---|
 | an observable | O | how it follows from U | the test project with that observable |
-| an apparatus effect | K | its kernel weights on the grid | T2 |
+| an apparatus effect | K | its kernel: a fold template (value and weights) and a support, one row of `Kernels()` (`experiment/src/Kernels.cpp`) | `experiment/tests/kernels_test.cpp`, T2 |
 | a parameterization or convention | E_λ, γ_λc | the map from θ, with derivative | all (observables unchanged) |
 | a channel type | channel functions | P, S, φ for it (photon, β, potential) | T1 or T3 |
 | a THM vertex model | O (THM) | the vertex function W(p) | T2 THM part |
@@ -240,8 +240,9 @@ distorted waves, stopping and straggling versus E and depth, kernel rows K_i(E_n
 
 **Extension.** Each row of the table above is an explicit table in one source file, whose rows hold the name, what
 the front ends need (units, fields, documentation) and the function that does the work: the quantity table of
-`experiment/` (`project_format3.md` §7), the χ² terms of `src/Objective.cpp`, the apparatus kernels and stopping models
-of Phase 5. A new feature is one row and one test; `--schema`, the documentation tables and the GUI forms are
+`experiment/` (`project_format3.md` §7), the χ² terms of `src/Objective.cpp`, the apparatus kernels (`Kernels()`,
+`experiment/src/Kernels.cpp`, a row per kernel file; a detector-resolution row also generates its format-3 form) and
+the stopping models of Phase 5. A new feature is one row and one test; `--schema`, the documentation tables and the GUI forms are
 generated from the same rows, and a consistency check fails when a row is bypassed. Not used, on purpose:
 
 - classes that register themselves from a static object in their own `.cpp` (initialisation order is undefined, a

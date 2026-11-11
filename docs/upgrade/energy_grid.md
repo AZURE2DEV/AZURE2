@@ -315,6 +315,16 @@ cross section per active nucleus (lab MeV cm²).
 | THM fold | c.m. Gaussian, QF-window weights, OES S-fold (`THM.md` §2) | ±5σ | ∂/∂σ as Gaussian | the THM sub-point fold of `THMMatrixFunc` / `ThmNumerics` |
 | SUM, RATIO, natural target, S factor, transmission | not energy kernels: expression nodes `Sum`, `Ratio`, `Weighted` (abundance, ∂ analytic), `Scaled`, `Transform` (Phase 4) | — | as in Phase 4 | nothing; they stay |
 
+**Status (branch 6, `feature/upgrade-5-kernels`).** The kernels of the first five rows are rows of one table,
+`Kernels()` in `experiment/src/Kernels.cpp` (`experiment/include/azure2/experiment/Kernels.h`): `target`
+(`KernelTarget.cpp`: thin, thick, layer yield, with beam spread and straggling, the σ(Ē) fallback and the edge blend),
+`gaussian`, `beam_profile`, `udr` (one file each) and the broadening `doppler` (`KernelDoppler.cpp`), each a fold
+template on V = double (value) and V = `LinearForm` (the gradient's weights) and a support function (the interval the
+set-up lays the grid over). `src/TargetFold.cpp` is deleted; the engine's fold is `FoldPoint` (`src/PointFold.cpp`):
+it gathers the nodes and the point and makes one indirect call per point. Nodes and quadrature are unchanged, every
+output is byte-identical. The derivative columns above are not yet written as kernel functions, except the
+temperature derivative of `doppler` (`broadenDT`); a table kernel may carry `derivative` (∂/∂ its own parameter).
+
 The roadmap lists SUM, RATIO, natural targets and the S factor as kernel builders. They are already one table of
 expression nodes with `value` and `backward`, tested alone; re-implementing them as kernels would write them twice.
 
