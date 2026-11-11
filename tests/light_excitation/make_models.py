@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Models for tests/light_excitation/check.sh, written at run time.
+"""Models for tests/light_excitation/check.sh, written at run time (project format 3: the <levels> columns, data
+sets and extrapolations as records, docs/upgrade/project_format3.md).
 
     make_models.py <out_dir>
 
@@ -8,9 +9,13 @@ alpha' + 12C(2+, 4.43891 MeV), four levels with widths in both pairs.
   aC_heavy       the excitation on the heavy partner, as always: e2 = E*, J2 = 2+ (31 columns)
   aC_heavy0      the same with an explicit 32nd column "0" on every line
   aC_light       the excitation moved to the light partner: e1 = E* (column 32), J1 = 2+, J2 = 0+, e2 = 0
-  aC_light_noex  aC_light without column 32 -- pair 2 opens at S: the check must see the difference
+  aC_heavy_dsdo  aC_heavy with the differential (a,a') extrapolations only, the reference of aC_light_noex
+  aC_light_noex  aC_light without column 32 -- pair 2 opens at S: the check must see the difference (its
+                 differential (a,a') extrapolations only: pair 2 is then a second a + 12C, the keys written,
+                 and an angle-integrated cross section of 12C(a,a)12C is refused as elastic)
   bad_gamma      aC_heavy plus a gamma pair (type 10) with e1 = 1 MeV                -> ERROR
-  bad_negative   aC_light with e1 = -E*                                            -> ERROR
+  bad_negative   aC_light with e1 = -E* (the elastic extrapolation only: a reaction label
+                 cannot name a negative excitation)                                -> ERROR
   bad_mixed      aC_light with a different e1 on one line of pair 2                 -> ERROR
   upos_heavy     aC_heavy plus a UPOS (secondary-gamma) segment of (a,a'g): accepted
   bad_upos       aC_light with the same segment: the gamma would come from the light particle -> ERROR
@@ -42,19 +47,7 @@ none #Angular Distributions Check
 {extra}</config>
 """
 
-TAIL = """<targetInt>
-</targetInt>
-<lastRun>
-9997
-"output/param.sav"
-""
-0 0
-0 ""
--1. -1. -1.
-</lastRun>
-"""
-
-
+FORMAT = "format=3\n"
 def fmt(x):
     return repr(float(x)) if not float(x).is_integer() else str(int(x)) if isinstance(x, int) else f"{x:g}"
 
@@ -74,14 +67,38 @@ def write(path, cfg, levels, data="", test=""):
     with open(path, "w") as f:
         f.write(cfg)
         f.write("<levels>\n" + "\n".join(levels) + "\n\n</levels>\n")
-        f.write("<segmentsData>\n" + data + "</segmentsData>\n")
-        f.write("<segmentsTest>\n" + test + "</segmentsTest>\n")
-        f.write(TAIL)
+        f.write("<data>\n" + data + "</data>\n")
+        f.write("<extrapolations>\n" + test + "</extrapolations>\n")
+        f.write("<targets>\n</targets>\n")
+
+
+def reaction(kind, entrance, exit_):
+    """The reaction label of entrance -> exit pair of an aC model: pair 1 a + 12C, pair 2 with the 4.43891 MeV
+    excitation on the heavy partner (12C[E*]) or on the light one (a[E*]); without column 32 (light_noex) pair 2 is a
+    second a + 12C and the data set names both keys."""
+    light = kind in ("light", "light_noex", "bad_negative", "bad_mixed", "bad_upos")
+    ex = f"[{E2P:g}]" if kind != "light_noex" else ""
+    proj = {1: "a", 2: "a" + ex if light else "a"}
+    targ = {1: "12C", 2: "12C" if light else "12C" + ex}
+    text = f"{targ[entrance]}({proj[entrance]},{proj[exit_]}){targ[exit_]}"
+    if kind == "light_noex":   # both pairs are a + 12C: the label names each by its key
+        text += f"\n    entrance_pair  {entrance}\n    exit_pair      {exit_}"
+    return text
+
+
+def extrapolation(name, kind, entrance, exit_, lo, hi, step, alo=0, ahi=0, astep=0, frame=None):
+    """One extrapolation: E_lab lo..hi in steps (MeV); with a frame ("cm" or "lab"), dsigma/dOmega at alo..ahi deg."""
+    q = "    quantity       dsigma_domega\n    unit           b/sr\n" if frame else "    quantity       sigma\n    unit           b\n"
+    out = (f"extrapolation {name}\n    reaction       {reaction(kind, entrance, exit_)}\n{q}"
+           f"    energies       range {lo:g} {hi:g} MeV lab step {step:g}\n")
+    if frame:
+        out += f"    angles         range {alo:g} {ahi:g} deg {frame} step {astep:g}\n"
+    return out + "\n"
 
 
 def ac_levels(kind):
     P1 = (0.0, 1, 0.0, 1, 0.0, 4.0026, 12.0, 2, 6, S_AC, 0, 5.43)
-    if kind in ("heavy", "heavy0", "bad_gamma"):
+    if kind in ("heavy", "heavy0", "heavy_dsdo", "bad_gamma"):
         P2, e1 = (0.0, 1, 2.0, 1, E2P, 4.0026, 12.0, 2, 6, S_AC, 0, 5.43), None
     else:
         P2, e1 = (2.0, 1, 0.0, 1, 0.0, 4.0026, 12.0, 2, 6, S_AC, 0, 5.43), E2P
@@ -116,17 +133,36 @@ def ac_levels(kind):
     return rows[:-1]
 
 
-def ac_tests():
+def ac_tests(kind):
+    if kind == "bad_negative":
+        return extrapolation("el_cm", kind, 1, 1, 6.5, 10.4, 0.1, 20, 160, 20, "cm")
     t = [
-        "1 1 2 6.5 10.4 0.05 0 0 0 0",          # (a,a') angle integrated
-        "1 1 2 6.5 10.4 0.1 20 160 20 5",       # (a,a') c.m. differential
-        "1 1 2 8.5 10.4 0.1 20 160 20 1",       # (a,a') lab differential
-        "1 1 1 6.5 10.4 0.1 20 160 20 5",       # elastic
-        "1 2 1 1.4 4.5 0.05 0 0 0 0",           # (a',a): the excited pair as entrance
-        "1 2 1 1.4 4.5 0.1 30 150 30 1",        # (a',a) lab differential
-        "1 2 2 1.4 4.5 0.1 30 150 30 5",        # a' + 12C(2+) elastic
+        ("x_inel_int", 1, 2, 6.5, 10.4, 0.05, 0, 0, 0, None),      # (a,a') angle integrated
+        ("x_inel_cm", 1, 2, 6.5, 10.4, 0.1, 20, 160, 20, "cm"),    # (a,a') c.m. differential
+        ("x_inel_lab", 1, 2, 8.5, 10.4, 0.1, 20, 160, 20, "lab"),  # (a,a') lab differential
+        ("x_el_cm", 1, 1, 6.5, 10.4, 0.1, 20, 160, 20, "cm"),      # elastic
+        ("x_back_int", 2, 1, 1.4, 4.5, 0.05, 0, 0, 0, None),       # (a',a): the excited pair as entrance
+        ("x_back_lab", 2, 1, 1.4, 4.5, 0.1, 30, 150, 30, "lab"),   # (a',a) lab differential
+        ("x_exc_el_cm", 2, 2, 1.4, 4.5, 0.1, 30, 150, 30, "cm"),   # a' + 12C(2+) elastic
     ]
-    return "".join(x + "\n" for x in t)
+    if kind in ("light_noex", "heavy_dsdo"):
+        t = t[1:3]   # the differential (a,a') only: sigma with the label 12C(a,a)12C is refused as elastic
+    return "".join(extrapolation(*x[:1], kind, *x[1:]) for x in t)
+
+
+def dataset(name, kind, quantity, upos=False):
+    """A (a,a') data set over E_lab 0-100 MeV: lab dsigma/dOmega (or, upos, the secondary-gamma correlation L = 2,
+    final spin 0, delta 0, at c.m. angles), or the angle-integrated cross section."""
+    f, unit = ("inel_lab", "b/sr") if quantity == "dsigma_domega" else ("inel_int", "b")
+    out = f"dataset {name}\n    reaction       {reaction(kind, 1, 2)}\n    quantity       {quantity}\n    unit           {unit}\n"
+    if upos:
+        out += "    secondary_gamma L 2 Ic 0 delta 0\n"
+    if quantity == "dsigma_domega":
+        out += (f"    file           data/{f}.dat\n    columns        E_lab[MeV] theta_{'cm' if upos else 'lab'}[deg] value error\n"
+                "    energy_window  0 100 MeV\n    angle_window   0 180 deg\n")
+    else:
+        out += f"    file           data/{f}.dat\n    columns        E_lab[MeV] _ value error\n    energy_window  0 100 MeV\n"
+    return out + "    norm           1 fixed\n\n"
 
 
 def ac_data(out):
@@ -141,8 +177,8 @@ def ac_data(out):
         f.write("# E_lab(MeV) dummy sigma(b) error -- synthetic\n")
         for i in range(30):
             f.write(f"{6.6 + 0.12 * i:.2f} 0 0.05 0.005\n")
-    return ("1 1 2 0 100 0 180 1 1 0 0 0 0 0 data/inel_lab.dat 0 0\n"
-            "1 1 2 0 100 0 0 0 1 0 0 0 0 0 data/inel_int.dat 0 0\n")
+    return lambda kind: ("" if kind in ("light_noex", "heavy_dsdo", "bad_negative") else
+                         dataset("inel_lab", kind, "dsigma_domega") + dataset("inel_int", kind, "sigma"))
 
 
 def cc_levels(kind):
@@ -159,15 +195,20 @@ def cc_levels(kind):
 def main(out):
     os.makedirs(out, exist_ok=True)
     data = ac_data(out)
-    for kind in ("heavy", "heavy0", "light", "light_noex", "bad_gamma", "bad_negative", "bad_mixed"):
+    for kind in ("heavy", "heavy0", "heavy_dsdo", "light", "light_noex", "bad_gamma", "bad_negative", "bad_mixed"):
         write(os.path.join(out, f"aC_{kind}.azr" if not kind.startswith("bad") else f"{kind}.azr"),
-              CONFIG.format(cn="none", extra=""), ac_levels(kind), data, ac_tests())
-    upos = "1 1 2 0 100 0 180 4 1 0 0 0 0 0 data/inel_lab.dat 0 1 2 0 0\n"   # L = 2, final spin 0, delta 0
-    write(os.path.join(out, "upos_heavy.azr"), CONFIG.format(cn="none", extra=""), ac_levels("heavy"), data + upos, "")
-    write(os.path.join(out, "bad_upos.azr"), CONFIG.format(cn="none", extra=""), ac_levels("light"), data + upos, "")
-    cc_cfg = CONFIG.format(cn="screen", extra="includeAllJPi=1\nmaxOrbitalMomentum=4\n")
-    cc_test = "1 1 1 6.0 12.0 0.5 10 170 10 5\n"
+              CONFIG.format(cn="none", extra=FORMAT), ac_levels(kind), data(kind), ac_tests(kind))
+    for name, kind in (("upos_heavy", "heavy"), ("bad_upos", "bad_upos")):
+        write(os.path.join(out, f"{name}.azr"), CONFIG.format(cn="none", extra=FORMAT),
+              ac_levels("light" if kind == "bad_upos" else kind),
+              data(kind) + dataset("inel_lab_upos", kind, "dsigma_domega", upos=True), "")
+    cc_cfg = CONFIG.format(cn="screen", extra="includeAllJPi=1\nmaxOrbitalMomentum=4\n" + FORMAT)
     for kind in ("new", "old", "bad"):
+        pair = f"12C[{E2P:g}](12C[{E2P:g}],12C[{E2P:g}])12C[{E2P:g}]" if kind != "old" else \
+            f"12C[{2 * E2P:g}](12C,12C)12C[{2 * E2P:g}]"
+        cc_test = (f"extrapolation el_cm\n    reaction       {pair}\n    quantity       dsigma_domega\n"
+                   "    unit           b/sr\n    energies       range 6 12 MeV lab step 0.5\n"
+                   "    angles         range 10 170 deg cm step 10\n")
         write(os.path.join(out, f"cc_{kind}.azr"), cc_cfg, cc_levels(kind), "", cc_test)
 
 
