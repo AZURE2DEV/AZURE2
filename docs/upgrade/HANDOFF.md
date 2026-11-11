@@ -2,6 +2,55 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, brief X2, milestone 2, rest) — the flat working copy (`feature/upgrade-4-data-structure`)
+
+**Done** (four commits after a724d6ba: cfe7a91d, 044928ed, b0759ed8, 60bcb381).
+- A point has no pointer to its data set (`EPoint::parentData_` gone).  The data set is an argument of
+  `EPoint::Calculate`, `CalculateThinTarget`, `MarkFailed`, `PlanMapped`, `Initialize`, the folds, `ESegment`'s shift
+  step and `HasSubPointIntegration`, `azure2::EvaluateModelPoint` / `EvaluateModelSegment` / `ModelPointBackward` /
+  `PointResidual`, `CoulombReferenceValue`, the gradient helpers of `AZUREGrad.cpp`; `CalculatePointsInParallel` is a
+  member.  Null for a point outside any data set (reaction-rate points).
+- One flat vector of calculation units in the working copy (`EData::Units`, `include/UnitRange.h`,
+  `src/WorkingCopyUnits.cpp`): a term's points and a point's sub-points are ranges (`ESegment` TermUnits first/count,
+  `EPoint` sub_first_/sub_count_); `GetPoints`, `GetPoint`, `TermPoints`, `GetTermPoint`, `GetSubPoint`,
+  `GetSubPoints` keep their names and are views taking the data set.  Sub-points given at set-up
+  (`EData::AddSubPoint`, held per point) are placed by `CommitSubPoints` at the end of `SetUpTargetEffects`, which
+  lays the vector out (term points in data order, then the sub-points in the same order; each unit moved once into
+  a vector of the exact size); a re-placed grid (`ReplaceSubPointGrids`) is built in the parallel loop beside the
+  units and placed single-threaded (`PlaceSubPointGrids`): in the place of the old one when it has as many nodes,
+  else by a new layout.  The points keep their indices after the set-up.  A unit names its term's settings by a plain
+  `const TermSettings *` (the term owns the shared pointer; a point outside a data set owns its own).
+- The plan names units by index (`PointRef` is an int; `EData::PlanUnits` gives the data order).
+- `EData::Clone` is the copy constructor; then the copy's term points drop the set-up's external-capture amplitudes,
+  as before (clearing the sub-points' too moved the 13N fit in the 11th digit: kept as it was).  The objective
+  counter is `EvaluationCount` (copyable).  THM group records, the counter and the inline sub-point accessors moved to
+  `ThmGroup.h`, `EvaluationCount.h`, `SubPointAccess.h` (no data-class file is longer than at a724d6ba).
+- `tests/upgrade/history_test.cpp`: a copy of a copy shares no mutable state with its source (shown failing with
+  copy-on-write switched off in `SharedTable`).
+
+**Verified** on 60bcb381 (binary `work/dstruct/x2/AZURE2-s5`, build 0 warnings): every project x 3 bases (tag
+`tab-x2s5`) against `tab-trial12`: 724 / 697 / 724 identical of 737 / 710 / 737, the rest the run logs of
+`sum_data` / `sum_free` and the new files of those two and of `fixed_angle` (as at a724d6ba); against `tab-dsm2a`:
+737 / 710 / 737 identical; `ctest -LE slow` 177/177 (the history, poison and `AZURE_PLAN_CHECK=1` tests among them);
+`tests/run_tests.sh` 145 passed, 0 failed; calculations at 1 and 3 threads identical (T1-T3, 13N, natural_neon,
+energy_shift_sqrt, shift_sqrt_subpoints/dense, shift_fn, 18O_p_a_thm, three bases: 27/27); the converted-tree gate
+(`gx2s5`): 483 (456) identical, 38 classified, 0 differ, 0 missing; fits at 1 thread byte-identical to
+`b-trial12` (T2 `--use-lm` 200 calls, T2 `--use-gradient` 200 calls, 13N, energy_shift_sqrt, screening_6li/fit with
+adaptive grids, 18O_p_a_thm).  Cycles (perf stat, 1 thread, min of 6, alternated with `b-trial12`): T2 calculation
+669.4 M against 674.0 M (-0.7 %), 200-call T2 fit 50.33 G against 51.15 G (-1.6 %); peak RSS of the T2 fit 328 / 445
+MB at 1 / 3 threads against 355 / 447, natural_neon calculation 1499 / 1504 MB against 1553 / 1557 (a first layout,
+which placed the set-up's sub-points through a list and a compaction, was 2.7 % slower on the T2 calculation and
+up to 23 % higher in RSS: 60bcb381 places each unit once).  Bytes allocated by one copy
+(`work/dstruct/x2/copybytes`, after Initialize): T2 18.61 MB in 549 allocations before, 15.06 MB in 236 after;
+natural_neon 223.2 MB in 3901 before, 180.6 MB in 779 after; the copy is now nearly all the unit vector (24,628
+units of 608 bytes for T2, 295,849 for natural_neon).
+
+**Open.** Milestone 3: `DataSet` and `WorkingCopy` apart (an `ESegment` still holds both its settings and its
+working state: norm, shifts, frames, shift tables), the `EData &` arguments become the working copy, the old names
+and files go.  The set-up's external-capture amplitudes still live in the points (a copy drops those of its term
+points by an explicit loop in `Clone`): they belong to the external-capture set-up of the second pathway branch.
+The unit is 608 bytes; slimming it is what makes a copy cheaper now.
+
 ## 2026-11-11 (agent, brief X, milestone 2, first part) — settings out of the points, three debts (`feature/upgrade-4-data-structure`)
 
 **Done.**
