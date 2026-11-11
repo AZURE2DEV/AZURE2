@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Lab -> c.m. conversion of capture (gamma-ray) angular distributions (EPoint::ConvertLabAngleGammas and
-# ConvertCrossSectionGammas), models from make_models.py (12C(a,g)16O(g.s.), E1 + E2 external capture, strongly
+# ConvertCrossSectionGammas), models from make_models.py (deleted; README.md: how the models were made) (12C(a,g)16O(g.s.), E1 + E2 external capture, strongly
 # asymmetric):
 #
 #   1. cm.azr gives the c.m. differential cross section sigma*(theta*) at E_lab x theta*;

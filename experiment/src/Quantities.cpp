@@ -138,12 +138,14 @@ Quantity SigmaTotal() {
   Quantity q;
   q.name = "sigma_total";
   q.title = "Total cross section";
-  q.doc = "Total cross section of a neutral projectile, from the optical theorem.";
+  q.doc = "Total cross section of a neutral projectile, from the optical theorem; on a target with isotopes the "
+          "abundance-weighted sum of its nuclei's totals, one elastic term per nucleus (20Ne(n,n)20Ne + 22Ne(n,n)22Ne).";
   q.recordKinds = kDataKinds;
   q.engineUnit = "b";
   q.units = {AnyUnitOf("cross_section")};
   q.energyRoles = {"E_lab", "E_cm"};
-  q.reaction = {R::kElastic | R::kNeutralEntrance, "elastic, neutral entrance"};
+  // A sum only on a target with isotopes (the set-up refuses it otherwise: BuildEffects.cpp NaturalTotals).
+  q.reaction = {R::kSum | R::kElastic | R::kNeutralEntrance, "elastic, neutral entrance; on a target with isotopes a sum, one term per nucleus"};
   // Apparatus allowed as for sigma (the note's row lists only the reaction rule).
   q.fields = {Allows("target"), Allows("beam"), Allows("detector")};
   q.targetKinds = {"layer", "none"};

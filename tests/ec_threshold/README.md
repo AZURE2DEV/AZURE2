@@ -1,7 +1,7 @@
 # ec_threshold — external capture across a charged-particle threshold
 
 A 16O(n,g)17O(g.s.) model where the capture runs partly through the alpha + 13C channel (channel capture). That
-channel opens at E_cm(n) = 2.21556 MeV. The data grid is dense across that threshold. `make_models.py` writes the
+channel opens at E_cm(n) = 2.21556 MeV. The data grid is dense across that threshold. `make_models.py` (deleted; see "How the models were made") writes the
 model; `check.sh` runs it with the external-capture energy tables (default) and with `--no-ec-table`, and checks:
 
 - (a) every cross section is finite and positive;
@@ -24,3 +24,22 @@ to zero.
 Two related changes: the external-capture cache now refuses non-finite amplitudes (it used to refuse only NaN), and
 `EffectiveCharge` evaluates int_0^y j_L(t)/t dt in closed form (E1, E2) with a series at small y. The adaptive
 quadrature it replaces threw GSL roundoff errors on the long Whittaker tails near a threshold.
+
+## How the models were made
+
+The committed models are the reference.  They were written by `make_models.py` in the old project format and converted
+to format 3 with `tools/format3_tree_convert.sh` (`AZURE2 --convert ... --to 3 --exact-grids`); the generator
+was deleted with the old format (it is in the repository's history: `git show 3e9b5298:tests/ec_threshold/make_models.py`).  To change a
+model, edit its records.  The generator's description of what it wrote:
+
+```text
+Model for tests/ec_threshold: 16O(n,g)17O(g.s.) across the alpha + 13C threshold of 17O.
+
+Pairs: n + 16O (key 1, entrance), alpha + 13C (key 2; opens at E_cm(n) = 6.35869 - 4.14313 = 2.21556 MeV), photon to the
+17O 5/2+ ground state (key 3, E1 external capture).  The g.s. has ANCs in both particle channels; a 5/2- level at
+Ex = 9 MeV carries n (l = 3), alpha (l = 2) and an E1 photon width, so the capture includes channel capture through
+the alpha + 13C channel, whose Coulomb functions over- and underflow within ~1 keV above its threshold.
+The data grid is dense across the threshold (E_cm 2.195-2.235 MeV, 0.25 keV steps, plus points 0.01-0.5 keV around it).
+
+Run from this directory: python3 make_models.py   (writes models/)
+```

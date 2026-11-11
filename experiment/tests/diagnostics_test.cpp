@@ -11,6 +11,7 @@
 
 #include "azure2/experiment/LayerChecks.h"
 #include "azure2/experiment/ModelDatum.h"
+#include "azure2/experiment/ParameterFileNames.h"
 #include "azure2/experiment/Schema.h"
 #include "azure2/io/Document.h"
 #include "azure2/io/RecordReader.h"
@@ -266,6 +267,34 @@ int main() {
     if (one) tested.insert("E_WRONG_SECTION");
   }
   {
+    // A parameter file's names against the run's parameters (ParameterFileNames.h).
+    ParameterFileNames n;
+    n.ofRun = {"energy_1", "width_1_1", "d1.norm", "x1.shift.offset"};
+    n.optionalOfRun = {"x1.shift.offset"};
+    n.ofOtherRuns = {"d2.norm"};
+    n.inFile = {"energy_1", "width_1_1", "d1.norm", "d2.norm"};
+    check("every name of the run (an optional one left out, another run's name given): no diagnostic",
+          MatchParameterFileNames("p.sav", n).empty());
+    n.inFile = {"energy_1", "width_1_1", "segment_1_norm"};
+    const std::vector<Diagnostic> partial = MatchParameterFileNames("p.sav", n);
+    const bool warn = partial.size() == 1 && partial[0].code == "W_PARAMETER_FILE_NAMES" &&
+                      partial[0].severity == Severity::Warning && partial[0].file == "p.sav" &&
+                      partial[0].message == "2 of its 3 names applied; names this project has no parameter for (skipped): "
+                                            "segment_1_norm; parameters it does not name (the project's values kept): d1.norm";
+    check("W_PARAMETER_FILE_NAMES: a partial match, the names of both sides", warn);
+    if (warn) tested.insert("W_PARAMETER_FILE_NAMES");
+    n.inFile = {"segment_1_norm", "d2.norm"};
+    const std::vector<Diagnostic> none = MatchParameterFileNames("p.sav", n);
+    n.inFile = {};
+    const std::vector<Diagnostic> empty = MatchParameterFileNames("p.sav", n);
+    const bool refused = none.size() == 1 && none[0].code == "E_PARAMETER_FILE_NO_MATCH" &&
+                         none[0].severity == Severity::Error &&
+                         none[0].message.find("(segment_1_norm, d2.norm)") != std::string::npos && empty.size() == 1 &&
+                         empty[0].code == "E_PARAMETER_FILE_NO_MATCH";
+    check("E_PARAMETER_FILE_NO_MATCH: no name of the run in the file (or no name at all)", refused);
+    if (refused) tested.insert("E_PARAMETER_FILE_NO_MATCH");
+  }
+  {
     // The model data against <levels> (BuildModelData): T2's pairs and the 3- levels as plain tables
     // (tests/upgrade/T2/README.md section 1); each case changes one thing of a valid datum or of the tables.
     auto pair = [](int key, int lightZ, int lightA, int heavyZ, int heavyA, double heavyE, double threshold, int twoJ1,
@@ -355,6 +384,7 @@ int main() {
   const std::set<std::string> buildCodes = {"E_PAIR_KEY",    "E_DATA_FILE",   "W_DATA_FILE_NOT_READ", "E_DATA_ROW", "W_DATA_ERROR",
                                             "E_COVARIANCE_FILE", "E_FINAL_STATE_NOT_LEVEL", "E_FINAL_STATE_SHARED",
                                             "E_NOT_BUILT",    "E_THM_RELATIVISTIC", "E_THM_COVARIANCE", "E_FOLD_CONFLICT",
+                                            "E_THM_EXPERIMENT_UNKNOWN",
                                             "E_POTENTIAL_TWICE", "E_POTENTIAL_PAIR_KIND", "E_POTENTIAL_RELATIVISTIC",
                                             "E_THM_HYBRID_POTENTIAL", "E_OLD_POTENTIAL_BLOCK", "E_SO_TWO_SPINS", "E_SO_ZERO_SPIN",
                                             "E_SO_RELATIVISTIC", "E_SO_THM", "E_SO_NEEDS_J", "E_SO_NO_TERM"};

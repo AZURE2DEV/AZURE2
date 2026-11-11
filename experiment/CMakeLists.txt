@@ -43,6 +43,7 @@ add_library(azure2_experiment STATIC
   src/SpinOrbitChecks.cpp
   src/Json.cpp
   src/ModelDatum.cpp
+  src/ParameterFileNames.cpp
   src/Prediction.cpp
   src/LevelTables.cpp
   src/Quantities.cpp

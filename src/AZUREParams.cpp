@@ -5,6 +5,9 @@
 #include <stdexcept>
 #include "Config.h"
 #include "CNuc.h"
+#include "azure2/experiment/Build.h"
+#include "azure2/experiment/ProjectReader.h"
+#include "azure2/experiment/ParameterFileNames.h"
 
 
 /*!
@@ -42,16 +45,19 @@ int AZUREParams::IndexOfName(const std::string &name) const {
  * initial parameters determined from the nuclear input file.
  */
 
-void AZUREParams::ReadUserParameters(const Config &configure) {
+bool AZUREParams::ReadUserParameters(const Config &configure) {
   // A run without data (extrapolation, reaction rates) numbers its <segmentsTest> grids 1..N and emits
   // segment_<k>_* parameters for them, so a param.sav written by a fit would hand DATA segment k's fitted
   // normalization and energy shift to TEST segment k by name and move the requested grid (audit 2026-10-25,
   // item 12; tests/extrap_sav_segments).  Test segments carry no shift: those entries are skipped.
-  ApplyUserParameterFile(configure.paramfile, configure.outStream, (configure.paramMask & Config::CALCULATE_WITH_DATA) != 0);
+  const std::vector<std::string> projectNames =
+      configure.format3 ? azure2::experiment::ParameterNamesOf(configure.format3->built) : std::vector<std::string>();
+  return ApplyUserParameterFile(configure.paramfile, configure.outStream,
+                                (configure.paramMask & Config::CALCULATE_WITH_DATA) != 0, projectNames);
 }
 
-void AZUREParams::ReadUserParameters(const std::string &filename) {
-  ApplyUserParameterFile(filename, std::cout);
+bool AZUREParams::ReadUserParameters(const std::string &filename) {
+  return ApplyUserParameterFile(filename, std::cout);
 }
 
 /*!
@@ -67,7 +73,8 @@ void AZUREParams::ReadUserParameters(const std::string &filename) {
  * parameter's step size as it was; a line without a readable value is skipped
  * with a warning.
  */
-void AZUREParams::ApplyUserParameterFile(const std::string &filename, std::ostream &out, bool segmentEntries) {
+bool AZUREParams::ApplyUserParameterFile(const std::string &filename, std::ostream &out, bool segmentEntries,
+                                         const std::vector<std::string> &otherRunNames) {
   std::vector<std::string> names;
   int segmentSkipped = 0;
   vector_r values;
@@ -77,7 +84,7 @@ void AZUREParams::ApplyUserParameterFile(const std::string &filename, std::ostre
   std::ifstream in(filename.c_str());
   if (!in) {
     out << "Could not read user parameter file." << std::endl;
-    return;
+    return true;  // the prompt checked that it opens; a file gone since keeps the project's values, as before
   }
   auto number = [](const std::string &token, double &v) {
     if (token.empty()) return false;
@@ -112,6 +119,20 @@ void AZUREParams::ApplyUserParameterFile(const std::string &filename, std::ostre
     fixed.push_back(rest == "fixed");
   }
 
+  // The file's names against this run's parameters: none matching refuses the run, a partial match says which.
+  {
+    azure2::experiment::ParameterFileNames match;
+    match.inFile = names;
+    match.ofOtherRuns = otherRunNames;
+    for (unsigned int i = 0; i < params_.Params().size(); i++) {
+      match.ofRun.push_back(params_.GetName(i));
+      if (Record(i).Row().segmentField && params_.Parameter(i).IsFixed()) match.optionalOfRun.push_back(params_.GetName(i));
+    }
+    for (const azure2::experiment::Diagnostic &d : azure2::experiment::MatchParameterFileNames(filename, match)) {
+      out << (d.severity == azure2::experiment::Severity::Error ? "ERROR: " : "WARNING: ") << d.ToText() << std::endl;
+      if (d.severity == azure2::experiment::Severity::Error) return false;
+    }
+  }
   // Each row names its parameter by its whole name; the record says what the parameter is.
   std::vector<bool> skip(names.size(), false);
   for (size_t ii = 0; ii < names.size(); ii++) {
@@ -145,6 +166,7 @@ void AZUREParams::ApplyUserParameterFile(const std::string &filename, std::ostre
       }
     }
   }
+  return true;
 }
 
 /*!

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Regenerate expected/rates_*.dat: a dense mode-3 extrapolation of sigma(E) for each truth
-# model, integrated by truth.py.  Mode 3 does not go through ReactionRate.cpp, so the
+# model (models/*_truth.azr, committed; README.md: how the models were made), integrated by truth.py.  Mode 3 does not go through ReactionRate.cpp, so the
 # reference is independent of the code under test.  Also writes expected/moved.par, the
 # parameter file of moved_azr (the narrow level at E_x + 5 keV), which check.sh feeds to
 # the moved model.
@@ -17,7 +17,6 @@ export OMP_NUM_THREADS="${OMP_NUM_THREADS:-4}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/rate_truth.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
-python3 "$HERE/make_models.py"
 mkdir -p "$HERE/expected"
 for m in p12C:1.00728 n12C:1.008665 moved_azr:1.00728; do
   name="${m%%:*}"; m1="${m##*:}"

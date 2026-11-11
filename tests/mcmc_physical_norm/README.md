@@ -13,7 +13,7 @@ clone).  `AZUREAPI::CalculateChi2Physical` (pyazr `calculate_chi2`) had the same
 
 ## Model
 
-`13N_fast.azr` (`make_model.py`): `tests/13N/13N.azr` without its capture segments (the external
+`13N_fast.azr` (`make_model.py` (deleted; see "How the models were made")): `tests/13N/13N.azr` without its capture segments (the external
 capture integrals cost 0.7 s per evaluation), every `<targetInt>` line inactive, and the
 normalization of the `meyer_84` elastic segment free with a 5 % systematic error.  314 elastic
 points; the chain (4 walkers, 100 steps, 0.5 % spread) runs in two seconds.
@@ -38,3 +38,22 @@ bash tests/mcmc_physical_norm/check.sh path/to/AZURE2
 Check **(c)** (2026-11-04): `param.mcmc` starts with the run's `#parametrization` tag, as `param.sav`
 does. Before then it had none, so a `--use-park` chain's snapshot read back in Park mode was taken as
 Brune amplitudes and converted again (same defect as `param.fit`, see `tests/park_formalism` 2b).
+
+## How the models were made
+
+The committed models are the reference.  They were written by `make_model.py` in the old project format and converted
+to format 3 with `tools/format3_tree_convert.sh` (`AZURE2 --convert ... --to 3 --exact-grids`); the generator
+was deleted with the old format (it is in the repository's history: `git show 1884d3bc:tests/mcmc_physical_norm/make_model.py`).  To change a
+model, edit its records.  The generator's description of what it wrote:
+
+```text
+Write 13N_fast.azr: tests/13N/13N.azr without its capture segments (exit pair 2: the external
+capture integrals are what make a 13N evaluation cost 0.7 s), every <targetInt> line inactive,
+and the normalization of the meyer_84 elastic segment free with a 5 % systematic error
+(segment-line fields 10 and 11): 314 elastic points, an evaluation in milliseconds, one
+normalization for the chain to sample.  Regenerate with  python3 make_model.py  from here.
+
+It edits the old lines of the original of tests/13N/13N.azr (tests/convert/fixtures/tests/13N/13N.azr) and writes the
+old form; the committed 13N_fast.azr is its format-3 conversion (tools/format3_tree_convert.sh 13N_fast.azr after
+writing it; docs/upgrade/format3_tree.md).
+```

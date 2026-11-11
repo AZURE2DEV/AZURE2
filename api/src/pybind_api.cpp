@@ -194,12 +194,12 @@ class Session {
 
     ConfigScope guard(config_, &ecCache_);
 
-    // The API stub used to guard the CLI's reads against --use-api; the binding
-    // is the API, so mirror the checks main() performed for a headless run.
+    // The binding is the API: mirror the checks main() performs for a headless run.
     int configStatus = config_->ReadConfigFile();
-    if (configStatus == -1) {
-      std::string msg = "Could not open " + configfile + " or no <config> block found.";
-      fail(msg);
+    if (configStatus == Config::kConfigUnreadable) {
+      fail("Could not open " + configfile + " or no <config> block found.");
+    } else if (configStatus == Config::kConfigRefused) {
+      fail(configfile + " (format 3) is refused (see the ERROR lines above; AZURE2 --validate lists them).");
     } else if (configStatus < 0) {
       fail("Malformed <potential> or <thm> block in " + configfile + " (see the ERROR above).");
     }

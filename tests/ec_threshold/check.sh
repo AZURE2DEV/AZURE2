@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# External capture across a charged-particle threshold (models from make_models.py): 16O(n,g)17O(g.s.) with channel
+# External capture across a charged-particle threshold (models from make_models.py (deleted; README.md: how the models were made)): 16O(n,g)17O(g.s.) with channel
 # capture through alpha + 13C, which opens at E_cm(n) = 2.21556 MeV.  Within ~1 keV above that threshold the alpha +
 # 13C Coulomb functions over- and underflow (eta > 100); before 2026-10-24 the channel-capture integral there came out
 # as 0, as an overflow, as NaN or 30 % off, and the cross section of this model reached 1e177 b (direct integrals) and

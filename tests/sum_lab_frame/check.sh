@@ -6,7 +6,7 @@
 # A component to another exit pair is evaluated in its own c.m. frame, with its own Jacobian, so the model of the
 # segment is sum_i s_i (J_base / J_i) sigma_cm,i (ESegment::TermFrameFactor).  Before the fix the c.m. terms were
 # added as they were: 13C(a,n0+ + n3-) at 6 MeV differed by -3 % (0 deg) to +6 % (150 deg) from the lab sum.
-# Models from make_models.py (13C + alpha, exits n + 16O(6.05, 0+) and n + 16O(6.13, 3-), same masses, different Q):
+# Models from make_models.py (deleted; README.md: how the models were made) (13C + alpha, exits n + 16O(6.05, 0+) and n + 16O(6.13, 3-), same masses, different Q):
 #
 #   (a) mode 3 with lab output (kinflag.dat = 1): SUM(T1 + T2) = T1 + T2, SUM of the same pair twice = 2 T1,
 #       T1 + 0.5 T2 with the scaling token; the c.m. SUM = the c.m. terms; and the two frames really differ

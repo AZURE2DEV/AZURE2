@@ -96,8 +96,10 @@ class WorkingCopy {
   int Fill(const Config &, CNuc *, const azure2::experiment::DataSpecs &);
   /// Build points from the extrapolation grids instead of data files, for a run with no data.  Returns -1 on failure.
   int MakePoints(const Config &, CNuc *, const azure2::experiment::ExtrapolationSpecs &);
-  /// TEMPORARY (step 3d): the same from the old sections of the project (src/ProjectSetup.cpp).
+  /// TEMPORARY (step 3d): the same from the old sections of the project (src/ProjectSetup.cpp).  A format-3 data run
+  /// whose data files cannot be read returns kFillRefused (the files and the refusal line printed).
   int Fill(const Config &, CNuc *);
+  static constexpr int kFillRefused = -2;
   int MakePoints(const Config &, CNuc *);
   /*!
    * The prior centres of the data sets' normalizations and energy shifts (DatasetSpec::normCentre, shiftCentre):

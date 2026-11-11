@@ -7,7 +7,7 @@
 # (a yield factor, ~1.9 % for b = 0.02 at 0.28 MeV) and left the resonance-anchored fine grid -- placed with the data
 # point's shift (EData::ReplaceSubPointGrids) -- off a narrow resonance deep in the target by s' x depth.  A shift is a
 # calibration of the measured beam energy: the depth grid moves with the data point and keeps its width.
-# Models from make_models.py (tests/thick_target_resonance, 14N(p,g) 259.7 keV, Gamma 0.97 keV, four thick-target points):
+# Models from make_models.py (deleted; README.md: how the models were made) (tests/thick_target_resonance, 14N(p,g) 259.7 keV, Gamma 0.97 keV, four thick-target points):
 #
 #   (a) sqrt (b = 0.02 on one four-point segment) == const (four one-point segments, each with the constant shift
 #       b sqrt(E_k) of its point): the same calibration point by point, identical yields;

@@ -10,7 +10,8 @@
 # (RMatrixFunc has no Park matrices; pyazr and the GUI ran it, reading Park's amplitudes as Brune's).
 #
 # Exit status.  Before 2026-11-01 AZURE2 exited 0 whatever happened, also after "Calculation was aborted." or a
-# refused project, so a script or job chain could not tell.  Now 1.
+# refused project, so a script or job chain could not tell.  Now 1, also for a format-3 project refused when it is read
+# or for its data files; a project file that cannot be opened exits 255 with its own message.
 #
 # Checked on tests/13N (with its capture segment and target integration) and tests/7Li_p_ay --no-brune (refused: no
 # standard R-matrix corresponds to its 0+ levels, tests/no_brune_transform), and a SUM data set with a term scaled by
@@ -107,12 +108,34 @@ sed 's/^\(    reaction       13C(a,n)16O\[6.0494\] + \)\(13C(a,n)16O\[6.12989\]\
   "$HERE/../sum_lab_frame/models/sum_data.azr" > "$dir/sum_data.azr"
 grep -q -- "+ abc\*13C" "$dir/sum_data.azr" || bad "badscale: the model edit did not apply"
 (cd "$dir" && printf '1\n\n\n7\n' | "$AZURE2_BIN" --no-gui --no-readline sum_data.azr > run.log 2>&1); rc=$?
-# A format-3 project is refused when it is read (Config::ReadFormat3Project), where every refused project exits 255
-# (AZURE2.cpp, ReadConfigFile < 0), not by the set-up's exit 1: the test asks for a non-zero exit.
-grep -q "E_REACTION_SYNTAX: dataset 'sum', field 'reaction': the scale of a term is a number" "$dir/run.log" && [ "$rc" != 0 ] \
+# A format-3 project is refused when it is read (Config::ReadFormat3Project): its diagnostics, then the line that says
+# it is refused as its last line, exit 1 (as a refused set-up).
+REFUSED="ERROR: sum_data.azr (format 3) is refused; AZURE2 --validate sum_data.azr lists the same diagnostics."
+grep -q "E_REACTION_SYNTAX: dataset 'sum', field 'reaction': the scale of a term is a number" "$dir/run.log" && [ "$rc" = 1 ] \
+  && [ "$(tail -n 1 "$dir/run.log")" = "$REFUSED" ] && ! grep -q "Could not open" "$dir/run.log" \
   && [ ! -s "$dir/output/chiSquared.out" ] \
-  && ok "SUM term scaled by 'abc': refused with the data set named, exit $rc" \
-  || bad "SUM term scaled by 'abc': exit $rc, $(grep -c ERROR "$dir/run.log") ERROR line(s)"
+  && ok "SUM term scaled by 'abc': refused with the data set named, the refusal line last, exit 1" \
+  || bad "SUM term scaled by 'abc': exit $rc (want 1), last line '$(tail -n 1 "$dir/run.log")'"
+
+# A data file of a format-3 data run that cannot be read refuses the project the same way: E_DATA_FILE, the refusal
+# line (before the closing "Thanks for using AZURE2."), exit 1.
+dir="$WORK/nodata"; mkdir -p "$dir/output" "$dir/checks"
+cp "$HERE/../13N/13N.azr" "$dir/"
+(cd "$dir" && printf '1\n\n\n7\n' | "$AZURE2_BIN" --no-gui --no-readline 13N.azr > run.log 2>&1); rc=$?
+REFUSED="ERROR: 13N.azr (format 3) is refused; AZURE2 --validate 13N.azr lists the same diagnostics."
+last="$(grep -v '^ *$' "$dir/run.log" | grep -v '^Thanks for using AZURE2' | tail -n 1)"
+grep -q "E_DATA_FILE: dataset baumann_1658, field file: cannot read data/baumann_1658.dat" "$dir/run.log" \
+  && [ "$rc" = 1 ] && [ "$last" = "$REFUSED" ] && ! grep -q "Could not fill data object" "$dir/run.log" \
+  && ok "a data file that cannot be read: E_DATA_FILE, the refusal line, exit 1" \
+  || bad "a data file that cannot be read: exit $rc (want 1), last line '$last'"
+
+# A project file that does not exist keeps its own message (and exit status 255).
+dir="$WORK/nofile"; mkdir -p "$dir"
+(cd "$dir" && printf '1\n\n\n7\n' | "$AZURE2_BIN" --no-gui --no-readline absent.azr > run.log 2>&1); rc=$?
+grep -q "Could not open absent.azr.  Check that file exists." "$dir/run.log" && [ "$rc" = 255 ] \
+  && ! grep -q "is refused" "$dir/run.log" \
+  && ok "a missing project file: 'Could not open', exit 255" \
+  || bad "a missing project file: exit $rc, $(tail -n 1 "$dir/run.log")"
 
 echo
 if [ "$failures" -gt 0 ]; then echo "FAIL: $failures check(s)"; exit 1; fi

@@ -36,7 +36,14 @@ The prompts come in this order:
    chi-squared = 1? (y/n)" (mode 4 asks for the allowed chi-squared variance
    before both);
 3. the external parameter file (blank: start from the ``<levels>`` of the
-   project);
+   project).  Its lines are applied by name.  A file none of whose names is a
+   parameter of the run is refused (``E_PARAMETER_FILE_NO_MATCH``, exit 1:
+   nothing of it would be applied); a file with names the project has no
+   parameter for, or without names of parameters the run has, is applied with
+   ``W_PARAMETER_FILE_NAMES``, which lists both sides.  Names the project
+   gives to the parameters of its other run (the data sets' in a run without
+   data, the extrapolations' in a run with data) and fixed data-set or
+   extrapolation parameters the file leaves out are not reported;
 4. the external capture amplitude file (blank: compute them);
 5. the menu again (``7`` exits).
 
@@ -345,11 +352,16 @@ Exit status
 -----------
 
 AZURE2 exits with 0 when the run completed and 1 when it was aborted or
-refused ("Calculation was aborted.", a project that cannot be read or that
-AZURE2 refuses with ``ERROR: ...`` -- e.g. a malformed ``<thm>`` block or a
-``<thm>`` weight that does not fit the data --, a failed fill, initialization
-or parameter transformation, a failed MCMC run), so that a script or a job
-chain can tell.  Before November 2026 it exited with 0 in every case on
+refused ("Calculation was aborted.", a project that AZURE2 refuses with
+``ERROR: ...`` -- e.g. a malformed ``<thm>`` block or a ``<thm>`` weight that
+does not fit the data --, a failed fill, initialization or parameter
+transformation, a failed MCMC run), so that a script or a job chain can tell.
+A format-3 project refused when it is read, or in a run with data because a
+data file cannot be read (``E_DATA_FILE``), prints its diagnostics and then,
+as its last error line, ``ERROR: <file> (format 3) is refused; AZURE2
+--validate <file> lists the same diagnostics.``  A project file that cannot be
+opened prints ``Could not open <file>.  Check that file exists.`` and exits
+with -1 (255 on POSIX systems).  Before November 2026 it exited with 0 in every case on
 ``dev``, and with -1 (255 on POSIX systems) after a failed run on the ``thm``
 branch.
 
@@ -439,7 +451,11 @@ in the same way.  Two environment variables control and report this:
        the channel solves, the cross-section sums, the Coulomb functions and
        penetrabilities, and the stages of the gradient, with the number of
        channel-space and level-matrix solves and why a group fell back to the
-       level matrix.  No cost when unset.
+       level matrix.  The set-up's stages (every point's Coulomb functions,
+       penetrabilities and shifts, computed once) come first in a report of
+       their own (``[profile] set-up``); a calculation (menu 1) reports under
+       ``calculation``, the evaluation after a fit under ``final evaluation``.
+       No cost when unset.
 
 ``AZURE_CHANNEL_VERIFY=1`` (slow) compares every channel-space solve with the
 level matrix and reports the largest difference seen so far;

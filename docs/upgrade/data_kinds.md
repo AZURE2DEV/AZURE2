@@ -77,7 +77,9 @@ Further forms, all on the same line **[V]**:
   (`SegLine.h:316-320`; `data_formats.rst:325-436`). Refused for a RATIO (`EData.cpp:209`).
 - **UPOS.** `isUPOS L Ic δ` after the file: the secondary γ of B → C + γ instead of the undetected particle
   (`SegLine.h:199-210`; `segments.rst:512-552`).
-- **Neutron total, transmission, self-shielded yield.** `total 1`: the optical-theorem total cross section;
+- **Neutron total, transmission, self-shielded yield.** `total 1`: the optical-theorem total cross section (with
+  `natural 1` and components: the abundance-weighted sum of the components' totals; format 3: `sigma_total` with a sum
+  of elastic terms on a target with isotopes);
   `transmission n`: e^{−nσ}; `yield n`: (σ_x/σ_t)(1 − e^{−nσ_t}), n in atoms/b, optionally fitted and shared with
   `thicknessgroup` (`SegLine.h:328-350`; `ESegment.h:366-418`). Neutral entrance pair only (`segments.rst:727`).
 - **β-delayed spectra.** A segment whose entrance pair is a β pair (type 20): the energy column is the light

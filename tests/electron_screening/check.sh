@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Electron screening (the "screening <U_e> eV fixed|fit [prior c s]" field of a target record).  Models: tests/13N with
-# only the low-energy capture data sets 6, 7 (LUNA) and 8 (FELS) active (made by make_models.py from the old 13N, then
+# only the low-energy capture data sets 6, 7 (LUNA) and 8 (FELS) active (made by make_models.py (deleted; README.md: how the models were made) from the old 13N, then
 # converted; bad.azr, the old block without its numbers, stays old: the converter's refusal).
 #
 #   1. screened / bare = exp(pi eta U_e / E) point by point on segments 6 and 7, segment 8 untouched;

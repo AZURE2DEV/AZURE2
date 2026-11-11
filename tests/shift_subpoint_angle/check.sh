@@ -4,7 +4,7 @@
 # (ESegment::UpdatePointEnergyWithShift) used to re-run the parent's lab-to-c.m. angle conversion on them, taking
 # that c.m. angle for a lab angle: every sub-point moved by the full lab-c.m. difference as soon as a segment had
 # any active shift (nonzero, varied, shiftgroup, sqrtshift, shiftfn).  16O(p,p) with a 0.1 keV convolution went from
-# chi2 13,484 to 23,097 at a 1e-7 MeV shift.  Models from make_models.py (template: the 2026-10-25 audit model):
+# chi2 13,484 to 23,097 at a 1e-7 MeV shift.  Models from make_models.py (deleted; README.md: how the models were made) (template: the 2026-10-25 audit model):
 #
 #   (a) a1 (shift 1e-7 MeV) equals a0 (shift 0) -- 16O(p,p) lab-frame differential, 11 angles, convolution;
 #   (b) av (shift 0, varied) equals a0 -- a zero shift, varied or not, must not enter the conversion at all;

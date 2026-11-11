@@ -211,10 +211,11 @@ refuse fixed_norm "has a fixed norm" "experiment[A]" \
   '$1 == "dataset" { ds = $2 } ds == "lc723_band_mid" && $1 == "unit" { $0 = "    unit           b" }
    ds == "lc723_band_mid" && $1 == "norm" { $0 = "    norm           1.0 fixed" } { print }'
 refuse wrong_pair "does not give the entrance pair" "experiment[A] beam=18O target=t spectator=n Ebeam=54"
-# A data set that names an experiment the <thm> section does not define (here there is no section) is refused.
+# A data set that names an experiment the <thm> section does not define (here there is no section) is refused when
+# the project is read, with the record and the field.
 run undefined "" "$JOINAB"
 if [ "$(cat "$WORK/undefined/status")" != 0 ] &&
-   grep -q "ERROR: <thm> has no experiment\[A\], which data sets name (thm A)" "$WORK/undefined/log"; then
+   grep -q "lc723_thm_points.thm: error E_THM_EXPERIMENT_UNKNOWN: <thm> has no experiment\[A\] line" "$WORK/undefined/log"; then
   ok "undefined: $(grep -m1 'ERROR' "$WORK/undefined/log" | tr -d '\r')"
 else
   bad "undefined: an experiment no <thm> section defines not refused (status $(cat "$WORK/undefined/status"))"

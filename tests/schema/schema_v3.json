@@ -2056,7 +2056,7 @@
   },
   "sigma_total": {
    "title": "Total cross section",
-   "doc": "Total cross section of a neutral projectile, from the optical theorem.",
+   "doc": "Total cross section of a neutral projectile, from the optical theorem; on a target with isotopes the abundance-weighted sum of its nuclei's totals, one elastic term per nucleus (20Ne(n,n)20Ne + 22Ne(n,n)22Ne).",
    "record_kinds": ["dataset", "extrapolation"],
    "engine_unit": "b",
    "units": {
@@ -2073,8 +2073,8 @@
     "windows": false
    },
    "reaction": {
-    "rule": "elastic, neutral entrance",
-    "flags": ["elastic", "neutral_entrance"]
+    "rule": "elastic, neutral entrance; on a target with isotopes a sum, one term per nucleus",
+    "flags": ["sum", "elastic", "neutral_entrance"]
    },
    "fields": {
     "target": {
@@ -3660,6 +3660,10 @@
    "severity": "error",
    "meaning": "a covariance file on a THM data set (its chi^2 is its experiment's profiled one)"
   },
+  "E_THM_EXPERIMENT_UNKNOWN": {
+   "severity": "error",
+   "meaning": "a thm field naming an experiment that <thm> has no experiment[<name>] line for"
+  },
   "E_FOLD_CONFLICT": {
    "severity": "error",
    "meaning": "data sets sharing a target with a free parameter differ in beam, detector or quadrature"
@@ -3691,6 +3695,14 @@
   "E_OLD_POTENTIAL_BLOCK": {
    "severity": "error",
    "meaning": "the old <potential> block in a format-3 project (AZURE2 --convert writes potential records)"
+  },
+  "E_PARAMETER_FILE_NO_MATCH": {
+   "severity": "error",
+   "meaning": "a parameter file (param.sav as a run's start) none of whose names is a parameter of the run"
+  },
+  "W_PARAMETER_FILE_NAMES": {
+   "severity": "warning",
+   "meaning": "a parameter file with names the project has no parameter for, or without names of parameters it has"
   },
   "E_SO_TWO_SPINS": {
    "severity": "error",

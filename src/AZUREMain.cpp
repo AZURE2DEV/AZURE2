@@ -1,6 +1,7 @@
 #include <cmath>
 #include "AZURECalc.h"
 #include "AZUREMain.h"
+#include "Profile.h"
 
 #include "AdaptiveExtrapolation.h"
 #include "CNucChecks.h"
@@ -91,8 +92,8 @@ int AZUREMain::operator()() {
     //   center of mass conversions, s-factor conversions, etc.
     configure().outStream << "Filling Data Structures..." << std::endl;
     if (configure().paramMask & Config::CALCULATE_WITH_DATA) {
-      if (data()->Fill(configure(), compound()) == -1) {
-        configure().outStream << "Could not fill data object from file." << std::endl;
+      if (const int filled = data()->Fill(configure(), compound()); filled != 0) {
+        if (filled != WorkingCopy::kFillRefused) configure().outStream << "Could not fill data object from file." << std::endl;
         return -1;
       } else if (data()->Data().NumSegments() == 0 && compound()->GetModelData().NumResiduals() == 0) {  // model data alone run
         configure().outStream << "There is no data provided." << std::endl;
@@ -142,8 +143,7 @@ int AZUREMain::operator()() {
   data()->FillMnParams(params);
   if (configure().paramMask & Config::USE_PREVIOUS_PARAMETERS) {
     configure().outStream << "Reading User Parameter File..." << std::endl;
-    params.ReadUserParameters(configure());
-    if (!params.ReconcileBasis(compound(), configure())) return -1;
+    if (!params.ReadUserParameters(configure()) || !params.ReconcileBasis(compound(), configure())) return -1;
   }
   // An adaptive extrapolation grid is a function of the parameters (docs/upgrade/project_format3.md section 3.8): it is
   // refined now, at the run's parameters, and the extrapolations are made again on the refined grids before anything
@@ -209,6 +209,9 @@ int AZUREMain::operator()() {
     // The buffer of the evaluations on data() (the calculation, the final evaluation after a fit): this run owns it,
     // and the output files and the band read it (docs/upgrade/data_model.md S3).
     azure2::Results results;
+    // AZURE_PROFILE: the set-up's stages (the channel table, the points' energy-dependent values) on their own, not
+    // in the first evaluation's report.
+    AZUREProfile::Report(std::cerr, "set-up");
     // Declare a new instance of FCNBase
     AZURECalc theFunc(data(), results, compound(), configure(), &limitsManager);
     // The prior covariance replaces the diagonal prior of each of its parameters (docs/upgrade/objective.md D3).
@@ -739,7 +742,11 @@ int AZUREMain::operator()() {
     }
     data()->SetFit(false);
     data()->SetErrorAnalysis(false);
-    double chiSquared = theFunc(params.GetMinuitParams().Params());
+    double chiSquared = 0.0;
+    {
+      AZUREProfile::ScopedReport profileReport((configure().paramMask & Config::PERFORM_FIT) ? "final evaluation" : "calculation");
+      chiSquared = theFunc(params.GetMinuitParams().Params());
+    }
     if (configure().paramMask & Config::CALCULATE_WITH_DATA) {
       configure().outStream << std::endl
                             << std::endl;

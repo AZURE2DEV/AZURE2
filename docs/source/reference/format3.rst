@@ -741,7 +741,7 @@ Nuclear elastic integral (``dataset``, ``extrapolation``).  Angle-integrated ela
 sigma_total
 ~~~~~~~~~~~
 
-Total cross section (``dataset``, ``extrapolation``).  Total cross section of a neutral projectile, from the optical theorem.
+Total cross section (``dataset``, ``extrapolation``).  Total cross section of a neutral projectile, from the optical theorem; on a target with isotopes the abundance-weighted sum of its nuclei's totals, one elastic term per nucleus (20Ne(n,n)20Ne + 22Ne(n,n)22Ne).
 
 .. list-table::
    :header-rows: 1
@@ -756,7 +756,7 @@ Total cross section (``dataset``, ``extrapolation``).  Total cross section of a 
    * - energy column
      - ``E_lab``, ``E_cm``
    * - reaction
-     - elastic, neutral entrance
+     - elastic, neutral entrance; on a target with isotopes a sum, one term per nucleus
    * - ``target``
      - allowed
    * - ``beam``
@@ -1867,6 +1867,9 @@ Diagnostic codes
    * - ``E_THM_COVARIANCE``
      - error
      - a covariance file on a THM data set (its chi^2 is its experiment's profiled one)
+   * - ``E_THM_EXPERIMENT_UNKNOWN``
+     - error
+     - a thm field naming an experiment that <thm> has no experiment[<name>] line for
    * - ``E_FOLD_CONFLICT``
      - error
      - data sets sharing a target with a free parameter differ in beam, detector or quadrature
@@ -1891,6 +1894,12 @@ Diagnostic codes
    * - ``E_OLD_POTENTIAL_BLOCK``
      - error
      - the old <potential> block in a format-3 project (AZURE2 --convert writes potential records)
+   * - ``E_PARAMETER_FILE_NO_MATCH``
+     - error
+     - a parameter file (param.sav as a run's start) none of whose names is a parameter of the run
+   * - ``W_PARAMETER_FILE_NAMES``
+     - warning
+     - a parameter file with names the project has no parameter for, or without names of parameters it has
    * - ``E_SO_TWO_SPINS``
      - error
      - a spin-orbit term on a pair whose two particles both have spin (the coupled treatment is not implemented)

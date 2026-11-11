@@ -13,6 +13,7 @@
 #include "azure2/io/Document.h"
 #include "azure2/experiment/Schema.h"
 #include "AZUREMain.h"
+#include "Profile.h"
 #include "ProjectCommands.h"
 #include "ProjectSetup.h"
 #include "CaptureAyRequests.h"
@@ -50,7 +51,6 @@
 #include <readline/history.h>
 #endif
 #include <string.h>
-#include <algorithm>
 #include <cstdlib>
 
 // Global Config pointer for use across the codebase
@@ -1112,8 +1112,8 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
     // Fill the data object from segments and data file
     configure.outStream << "Filling Data Structures..." << std::endl;
     if (configure.paramMask & Config::CALCULATE_WITH_DATA) {
-      if (data->Fill(configure, compound) == -1) {
-        configure.outStream << "Could not fill data object from file." << std::endl;
+      if (const int filled = data->Fill(configure, compound); filled != 0) {
+        if (filled != WorkingCopy::kFillRefused) configure.outStream << "Could not fill data object from file." << std::endl;
         delete compound;
         delete data;
         return -1;
@@ -1159,8 +1159,9 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
       configure.outStream << "Initialized and cleared EC amplitude cache..." << std::endl;
     }
 
-    // Initialize data object
-    if (data->Initialize(compound, configure) == -1) {
+    const int initialized = data->Initialize(compound, configure);  // AZURE_PROFILE: the set-up's stages on their own
+    AZUREProfile::Report(std::cerr, "set-up");
+    if (initialized == -1) {
       configure.outStream << "Calculation was aborted." << std::endl;
       delete compound;
       delete data;
@@ -1175,8 +1176,7 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
     // Read existing parameters if provided
     if (configure.paramMask & Config::USE_PREVIOUS_PARAMETERS) {
       configure.outStream << "Reading User Parameter File..." << std::endl;
-      params.ReadUserParameters(configure);
-      if (!params.ReconcileBasis(compound, configure)) return -1;
+      if (!params.ReadUserParameters(configure) || !params.ReconcileBasis(compound, configure)) return -1;
     } else {
       configure.outStream << "Creating New param.par File..." << std::endl;
       params.WriteUserParameters(configure, false);
@@ -1530,12 +1530,12 @@ int main(int argc, char *argv[]) {
     return -1;
   }
   int configStatus = configure.ReadConfigFile();
-  if (configStatus == -1) {
+  if (configStatus == Config::kConfigUnreadable) {
     configure.outStream << "Could not open " << configure.configfile << ".  Check that file exists."
                         << std::endl;
     return -1;
-  } else if (configStatus < 0) {
-    return -1;
+  } else if (configStatus != 0) {
+    return 1;  // a refused format-3 project or a malformed block, like a refused set-up: its diagnostics are printed
   }
 #ifndef NO_STAT
   else if (configure.CheckForInputFiles() == -1)

@@ -208,12 +208,18 @@ class Config {
   bool cacheInputFiles = false;
   /// A constant indicating the maximum order of the Legendre polynomials to calculate.
   static const int maxLOrder = 20;
-  /// Read the <config> block, then the optional <potential> and <thm> blocks.
-  /// -1 if the file cannot be read, -2 if an optional block is malformed (already reported).
+  /// What ReadConfigFile returns besides 0.
+  static constexpr int kConfigUnreadable = -1;      ///< the file cannot be read or has no <config> section
+  static constexpr int kConfigBlockMalformed = -2;  ///< an optional block (<potential>, <thm>) is malformed; reported
+  static constexpr int kConfigRefused = -3;         ///< a format-3 project is refused; its diagnostics are printed
+  /// Read the <config> block, then the optional <potential> and <thm> blocks: 0, or one of the codes above.
   int ReadConfigFile();
-  /// The format-3 branch of ReadConfigFile: reads the project into `format3`; -1 (with every diagnostic printed) when
-  /// it is refused.
+  /// The format-3 branch of ReadConfigFile: reads the project into `format3`; kConfigRefused (with every diagnostic
+  /// printed, the last line from ReportFormat3Refused) when it is refused.
   int ReadFormat3Project(const azure2::io::Document &doc);
+  /// The last line of a refused format-3 project, after its diagnostics: the file is refused and --validate lists
+  /// the same diagnostics.  One text for every place a format-3 project is refused (reading, its data files).
+  void ReportFormat3Refused() const;
   /*!
    * The section <name> of the .azr (configfile) as a stream: its opening tag, its lines and its closing tag (each
    * line ending read as "\n"; to the end of the file if the section is not closed), or null when the file cannot be

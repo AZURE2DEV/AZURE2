@@ -105,7 +105,7 @@ std::vector<std::string> ProjectPredictions(const std::string &projectFile, std:
     return lines;
   }
   WorkingCopy data, extrapolations;
-  if (data.Fill(configure, &compound) == -1)
+  if (data.Fill(configure, &compound) != 0)
     lines.push_back("data: set-up failed");
   else
     AppendLines(data, "data", RecordNames(configure, "dataset"), lines);
