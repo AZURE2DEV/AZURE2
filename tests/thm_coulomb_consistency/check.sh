@@ -39,8 +39,10 @@ WP="$WORK"; if command -v cygpath > /dev/null 2>&1; then WP="$(cygpath -m "$WORK
 trap 'rm -rf "$WORK"' EXIT
 . "$HERE/../lib/guard.sh"
 . "$HERE/../lib/check_common.sh"
+. "$HERE/../lib/thm_records.sh"
 RUN="$(guard_command "${TEST_TIMEOUT:-300}")"
 OUT="AZUREOut_aa=1_R=2.out"
+BOTH="lc723_thm_points lc723_band_mid"   # the THM data sets of the experiment
 KIN="beam=18O target=3He spectator=d Ebeam=115"
 KINN="beam=18O target=d spectator=n Ebeam=54"
 WS="20,1.2,0.6,5,1.3,0.6,0,0,0,1.3"
@@ -57,7 +59,7 @@ run() {
   cp "$O18/18O_p_a_thm.azr" "$d/run.azr"
   local edit
   for edit in ${3:-}; do awk "${!edit}" "$d/run.azr" > "$d/tmp.azr" && mv "$d/tmp.azr" "$d/run.azr"; done
-  [ -z "$2" ] || printf '\n<thm>\n%s\n</thm>\n' "$2" >> "$d/run.azr"
+  [ -z "$2" ] || thm_set "$d/run.azr" "$2" $BOTH
   (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 1000000 > log;
    echo "${PIPESTATUS[1]}" > status)
 }
@@ -76,8 +78,8 @@ refuse() {  # refuse NAME MESSAGE-FRAGMENT BLOCK
     bad "$1: not refused with '$2' (status $(cat "$WORK/$1/status"))"; tail -3 "$WORK/$1/log" | sed 's/^/        /'
   fi
 }
-NOFOLD='/<targetInt>/ { print; T = 1; next } /<\/targetInt>/ { T = 0 } T { next } { print }'
-L="experiment[A] segments=1,2 $KIN"
+NOFOLD="$THM_NOFOLD"
+L="experiment[A] $KIN"
 
 # (a) ----------------------------------------------------------------------
 echo "(a) refused combinations"
@@ -140,8 +142,8 @@ if ran c_none && ran c_ls && ran c_r && ran c_r_ls; then
   awk -v s="$spread" 'BEGIN { split(s, a, "-"); exit !(a[2] - a[1] > 0.05) }' &&
     ok "the line shape changes the model ($spread)" || bad "the line shape does nothing here ($spread)"
 fi
-run n_dw "experiment[A] segments=1,2 $KINN distortion=coulomb vertexModel=dw" NOFOLD
-run n_dw_ls "experiment[A] segments=1,2 $KINN distortion=coulomb vertexModel=dw lineshape=on" NOFOLD
+run n_dw "experiment[A] $KINN distortion=coulomb vertexModel=dw" NOFOLD
+run n_dw_ls "experiment[A] $KINN distortion=coulomb vertexModel=dw lineshape=on" NOFOLD
 if ran n_dw && ran n_dw_ls; then
   same "$WORK/n_dw/output/$OUT" "$WORK/n_dw_ls/output/$OUT" && ok "neutral spectator: DW vertex with lineshape=on byte-identical" ||
     bad "neutral spectator: lineshape=on changes the DW vertex model"

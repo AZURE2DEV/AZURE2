@@ -25,6 +25,8 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SOURCE = os.path.join(ROOT, "tests", "17O")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import old_tree  # noqa: E402  (the old original: a test of the old file class, format3_tree.md section 5)
 
 failures = []
 
@@ -51,7 +53,7 @@ with tempfile.TemporaryDirectory() as tmp:
     shutil.copytree(os.path.join(SOURCE, "data"), os.path.join(work, "data"))
     for d in ("output", "checks"):
         os.makedirs(os.path.join(work, d))
-    mdl = AzrModel.from_file(os.path.join(SOURCE, "17O.azr"))
+    mdl = AzrModel.from_file(old_tree.original(os.path.join(SOURCE, "17O.azr")))
     pair = mdl._pair_template(1)
     m1, m2 = pair.M1, pair.M2
     mdl.clear_extrapolations()

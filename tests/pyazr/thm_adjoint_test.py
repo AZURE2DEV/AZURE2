@@ -49,6 +49,8 @@ def check(name, ok, detail=""):
 
 try:
     sys.path.insert(0, ROOT)
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import thm_records
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
     from pyazr import azure2
@@ -57,19 +59,19 @@ except Exception as err:                                   # engine not built
     sys.exit(77)
 
 CASES = {
-    "lineshape": (f"experiment[A] segments=1,2 {KIN} lineshape=on", {}),
+    "lineshape": (f"experiment[A] {KIN} lineshape=on", {}),
     "perlevel+coherentL+window+lineshape": (
         f"entranceL=coherent\nvertex=perlevel\n"
-        f"experiment[A] segments=1,2 {KIN} ps=hulthen:0-40 psNodes=6 lineshape=on", {}),
-    "onshell": (f"vertex=onshell\nexperiment[A] segments=1,2 {KIN}", {}),
-    "dw+window": (f"experiment[A] segments=1,2 {KIN} ps=hulthen:0-30 psNodes=8 "
+        f"experiment[A] {KIN} ps=hulthen:0-40 psNodes=6 lineshape=on", {}),
+    "onshell": (f"vertex=onshell\nexperiment[A] {KIN}", {}),
+    "dw+window": (f"experiment[A] {KIN} ps=hulthen:0-30 psNodes=8 "
                   f"distortion=coulomb vertexModel=dw", {}),
     "angle+window+cbackground": (
-        f"experiment[A] segments=1,2 {KIN} ps=hulthen:0-40 psNodes=6 theta=50-70 "
+        f"experiment[A] {KIN} ps=hulthen:0-40 psNodes=6 theta=50-70 "
         f"cbackground=1/2+:2=0.3,-0.2", {}),
     "cbackground linear+background": (
-        "experiment[A] segments=1,2 background=linear cbackground=1/2+:2:linear=0.25,-0.5,0.1,1e-3", {}),
-    "park+lineshape": (f"experiment[A] segments=1,2 {KIN} lineshape=on", {"use_park": True}),
+        "experiment[A] background=linear cbackground=1/2+:2:linear=0.25,-0.5,0.1,1e-3", {}),
+    "park+lineshape": (f"experiment[A] {KIN} lineshape=on", {"use_park": True}),
 }
 
 
@@ -92,10 +94,10 @@ def stage(tmp, name, block):
                 t[3], t[10] = "0", "0"
                 line = " ".join(t)
             out.append(line)
-    out.append(f"<thm>\n{block}\n</thm>\n")
+    text = thm_records.thm_set("\n".join(out), block, ("lc723_thm_points", "lc723_band_mid"))
     path = os.path.join(work, "run.azr")
     with open(path, "w") as f:
-        f.write("\n".join(out))
+        f.write(text)
     return path
 
 

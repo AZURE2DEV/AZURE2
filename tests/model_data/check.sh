@@ -209,7 +209,8 @@ check "model data alone: Total-Model-Data-Chi-Squared" "$(total only Total-Model
 
 echo "-- gradient with the term (AZURE_GRAD_CHECK) and a fit pulled by a displaced strength"
 # The fit project: data set 5 (the implanted target across level 5) alone, level 5's energy and alpha0 width free.
-# The THM experiment goes with its data sets (a format-3 experiment whose data sets are all inactive is refused).
+# The THM experiment goes with its data sets (an experiment whose data sets are all inactive would be ignored with a
+# warning).
 fitproj() {  # fitproj NAME WG_VALUE: the fit project with a strength datum of value WG_VALUE (keV), or none
   project "$1"
   awk '$1 == "dataset" { n++; ds = 1 }

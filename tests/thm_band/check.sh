@@ -17,7 +17,7 @@
 # not negligible must agree to 2e-3 relative.
 #
 # A second pass groups the two segments into one THM experiment with a linear
-# background (<thm> experiment[A] segments=1,2 background=linear): the curve
+# background (<thm> experiment[A] background=linear): the curve
 # written is then m + b(E), with the norm and background profiled together,
 # and q = (m + b) n*(p0)/n*(p) -- the same finite differences of the output.
 # A third adds a free coherent background (cbackground=, two cbkg values):
@@ -35,11 +35,12 @@ export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 TOP="$(mktemp -d "${TMPDIR:-/tmp}/thm_band.XXXXXX")"
 trap 'rm -rf "$TOP"' EXIT
 . "$HERE/../lib/guard.sh"
+. "$HERE/../lib/thm_records.sh"
 RUN="$(guard_command "${TEST_TIMEOUT:-300}")"
 OUT="AZUREOut_aa=1_R=2.out"
 
 # band_case LABEL BLOCK [NAMES SIGMAS] -- the whole check on the project with
-# BLOCK (lines) as its <thm> block ("" = none); NAMES/SIGMAS: free parameters
+# BLOCK (lines) as its <thm> section ("" = none; both data sets in its experiment); NAMES/SIGMAS: free parameters
 # beyond the six R-matrix ones and their standard deviations.
 band_case() {
 WORK="$TOP/$1"
@@ -49,7 +50,7 @@ mkdir -p "$WORK/proj"
 cp -r "$SRC/data" "$WORK/proj/"
 awk '/<levels>/ { L = 1; print; next } /<\/levels>/ { L = 0 }
      L && NF > 0 { $4 = 0; $11 = 0 } { print }' "$SRC/18O_p_a_thm.azr" > "$WORK/proj/run.azr"
-[ -z "$2" ] || printf '\n<thm>\n%s\n</thm>\n' "$2" >> "$WORK/proj/run.azr"
+[ -z "$2" ] || thm_set "$WORK/proj/run.azr" "$2" lc723_thm_points lc723_band_mid
 
 # run DIR PARFILE [FLAGS] -- a "calculate with data" run from a copy of proj.
 run() {
@@ -167,6 +168,6 @@ awk -v np="$np" -v W="$WORK" -v OUT="$OUT" '
 }
 
 band_case per_segment "" || exit 1
-band_case experiment_linear "experiment[A] segments=1,2 background=linear" || exit 1
-band_case coherent_background "experiment[A] segments=1,2 cbackground=1/2+:2=0.3,-0.2" \
+band_case experiment_linear "experiment[A] background=linear" || exit 1
+band_case coherent_background "experiment[A] cbackground=1/2+:2=0.3,-0.2" \
   "cbkg_A_1/2+_2_1/2,0,1/2,1_re0 cbkg_A_1/2+_2_1/2,0,1/2,1_im0" "0.05 0.04" || exit 1

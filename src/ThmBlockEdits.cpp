@@ -196,12 +196,14 @@ std::vector<std::string> ApplyThmLineEdits(const std::vector<std::string> &lines
 
 std::vector<std::string> Format3ThmLines(const std::vector<std::string> &section,
                                          const azure2::experiment::ThmMembershipSpec &thm) {
+  const std::vector<std::string> idle = ThmExperimentsWithoutMembers(thm);
   std::vector<std::string> out;
   for (std::string line : section) {
     std::string trimmed = line.substr(0, line.find('#'));
     trimmed.erase(0, trimmed.find_first_not_of(" \t\r"));
     if (trimmed.compare(0, 11, "experiment[") == 0) {
       const std::string name = trimmed.substr(11, trimmed.find(']') - 11);
+      if (std::find(idle.begin(), idle.end(), name) != idle.end()) continue;
       for (const auto &x : thm.experiments) {
         if (x.name != name) continue;
         std::string keys;
@@ -216,6 +218,13 @@ std::vector<std::string> Format3ThmLines(const std::vector<std::string> &section
     out.push_back(line);
   }
   return out;
+}
+
+std::vector<std::string> ThmExperimentsWithoutMembers(const azure2::experiment::ThmMembershipSpec &thm) {
+  std::vector<std::string> names;
+  for (const auto &x : thm.experiments)
+    if (x.datasetKeys.empty()) names.push_back(x.name);
+  return names;
 }
 
 std::string CheckFormat3ThmMembers(const std::vector<std::string> &lines, const azure2::experiment::ThmMembershipSpec &thm) {

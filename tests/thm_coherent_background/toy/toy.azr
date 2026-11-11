@@ -10,16 +10,26 @@ none                                                                            
 none                                                                                                #Coulomb Amplitudes Check
 none                                                                                                #Reaction Pathway Check
 none                                                                                                #Angular Distributions Check
+format=3
 </config>
 <levels>
 0.5 1 6.786 1 1 1 1 0 1 1 1 0.3 0.5 1 0 1 2.143 1.00866492 15.99052821 0 8 4.143 4.143 0 0 0.0 0 5.0 0 0 0 2.224566 1
 0.5 1 6.786 1 1 2 1 0 1 1 1 0.2 0.5 1 0 1 0 1.00866492 15.99052821 0 8 4.143 4.143 0 0 0.0 0 4.5 0 0 0 0 1
 
 </levels>
-<segmentsData>
-1  1  2  0.0  5.0  0  180  10  1.0  1  0  0  0  0  data/toy.dat  0  0
-</segmentsData>
-<segmentsTest>
-</segmentsTest>
-<targetInt>
-</targetInt>
+<data>
+# <segmentsData> line 1
+dataset toy
+    reaction       16O[2.143](n,n)16O
+    quantity       sigma
+    unit           arbitrary
+    file           data/toy.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0.0 5.0 MeV
+    norm           profiled
+    thm            global
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+</targets>

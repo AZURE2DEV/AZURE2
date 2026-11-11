@@ -258,7 +258,20 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
           std::vector<int> keys;
           const std::string why = ParseThmSegmentList(token.substr(9), keys);
           if (!why.empty()) return "<thm> experiment[" + name + "]: " + why;
-          for (int k : keys) out.thm.experimentOfSegment[k] = name;
+          // The member checks of the old engine (CheckThmExperiments, ThmNorm.cpp): a line in two experiments, a
+          // number past the last data line, a line in use that is not THM.
+          for (int k : keys) {
+            const std::string where = "<thm> experiment[" + name + "]: segment " + std::to_string(k);
+            const auto other = out.thm.experimentOfSegment.find(k);
+            if (other != out.thm.experimentOfSegment.end() && other->second != name)
+              return where + " is already in experiment[" + other->second + "], which the old engine refused";
+            if (k > (int)out.data.size())
+              return where + ": <segmentsData> has only " + std::to_string(out.data.size()) + " line(s), which the old engine refused";
+            const SegLine &line = *out.data[k - 1].parsed;
+            if (line.isActive() == 1 && line.isDiff() < 10)
+              return where + " is not a THM segment (isDiff < 10), which the old engine refused";
+            out.thm.experimentOfSegment[k] = name;
+          }
         }
         continue;
       }
@@ -269,6 +282,16 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
       bool valid = false;
       if (ReadThmWeightKey(key, value, w, valid)) {
         if (!valid) return "<thm> line \"" + trimmed + "\" cannot be read";
+        // The old engine's check of a data line's table (CheckThmWeights, WorkingCopy.cpp): a number past the last
+        // line, or a line in use that is not THM, refuses every run with data.
+        if (!w.test) {
+          const std::string where = "<thm> weight[" + std::to_string(w.segment) + "]: ";
+          if (w.segment > (int)out.data.size())
+            return where + "<segmentsData> has only " + std::to_string(out.data.size()) + " line(s), which the old engine refused";
+          const SegLine &line = *out.data[w.segment - 1].parsed;
+          if (line.isActive() == 1 && line.isDiff() < 10)
+            return where + "segment " + std::to_string(w.segment) + " is not a THM segment (isDiff < 10), which the old engine refused";
+        }
         (w.test ? out.thm.weightOfTest : out.thm.weightOfData)[w.segment] = w.file;
       }
     }

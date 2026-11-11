@@ -2,6 +2,29 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, tree to format 3, group 7) — the THM projects in format 3; all 183 convertible files converted (`feature/upgrade-4-tree-format3-5`)
+
+**Done** (`AK_tree_thm.md`; plan and state: `docs/upgrade/format3_tree.md`, group 7 row, §3a, §4, §5). The seven THM
+files are format 3 (`18O_p_a_thm`, `17O`, `7Li_p_a`, `6Li_d`, `thm_coherent_background/toy`, examples `c12c12_tumino2018`,
+`o17_guardo2017_fit`): the whole test tree is converted. The checks edit THM records through `tests/lib/thm_records.sh`
+(a data set joins an experiment by `thm <experiment>`, weights are `thm_weight`, folds are beam records) and
+`tests/pyazr/thm_records.py`; the old member and weight lists go through the converter on the originals. Engine fixes
+(`src/ThmBlockEdits.cpp`, `src/ConfigThm.cpp`): an experiment of inactive data sets only is ignored with the old warning
+(was refused with "'segments=' is not key=value"); a project without a `<thm>` section no longer drops its data sets'
+`thm_weight` tables silently, and an active data set naming an experiment no section defines is refused (it ran as global).
+The converter refuses five more THM member/weight forms the old engine refused. pyazr tests of AzrModel's THM API read
+the originals (`old_tree.py`; list in the page's §5).
+
+**Verified how**: page §3a (gate with the base counts; `tab-tree3e2`, the new reference, against `tab-trial19`:
+only names, one listed class and run.log in the converted projects; `ctest -LE slow` 186/186, `-L slow` 10/10; 1 vs 4
+threads identical; the 18O THM fit equal to the base's fit of the original; every rewritten check number for number
+the base's; `tests/run_tests.sh` 145/1, the failure, `model_data`, fixed in the last commit and rerun).
+
+**Open**: the refusal switch (what still reads old files: page §5, now without unconverted groups); the THM pyazr tests
+of the old file class to move to `Project`; the engine accepts an old `segments=` list in a format-3 `<thm>` section,
+and an experiment no data set names is refused with the old key's message "segments= is required" (both listed, not
+fixed: `src/` beyond the brief).
+
 ## 2026-11-11 (agent, Phase 5 branch 3) — lab data compared in the lab frame (`feature/upgrade-5-lab-frame`)
 
 **Done** (decision M3 (b), `energy_grid.md` §4 and its new §4.2a with the measured sizes).

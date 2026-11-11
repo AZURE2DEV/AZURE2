@@ -48,12 +48,14 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/thm_cbkg.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 . "$HERE/../lib/guard.sh"
 . "$HERE/../lib/check_common.sh"
+. "$HERE/../lib/thm_records.sh"
 RUN="$(guard_command "${TEST_TIMEOUT:-300}")"
 OUT="AZUREOut_aa=1_R=2.out"
 fail=0
 
 # run NAME SRC AZR BLOCK [OPTION] -- a run of a copy of SRC/AZR with BLOCK
-# (literal lines) as its <thm> block ("" = none); OPTION 1 (calculate with
+# (literal lines) as its <thm> section ("" = none), the data sets $MEMBERS (default
+# all) in its experiment; OPTION 1 (calculate with
 # data, default) or 2 (fit).  Exit status in NAME/status.
 run() {
   local d="$WORK/$1"
@@ -61,7 +63,7 @@ run() {
   mkdir -p "$d/output" "$d/checks"
   cp -r "$2/data" "$d/"
   cp "$2/$3" "$d/run.azr"
-  [ -z "$4" ] || printf '\n<thm>\n%s\n</thm>\n' "$4" >> "$d/run.azr"
+  [ -z "$4" ] || thm_set "$d/run.azr" "$4" ${MEMBERS-$(thm_datasets "$d/run.azr")}
   (cd "$d" && printf '%s\n\n\n7\n' "${5:-1}" | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 1000000 > log;
    echo "${PIPESTATUS[1]}" > status)
 }
@@ -74,8 +76,8 @@ started() { [ "$(cat "$WORK/$1/status")" = 0 ] && [ -f "$WORK/$1/output/$OUT" ] 
 
 # (a), (b) ------------------------------------------------------------------
 echo "(a, b) no key, and a background fixed at zero, change nothing"
-run none "$O18" 18O_p_a_thm.azr "experiment[E] segments=1,2"
-run zero "$O18" 18O_p_a_thm.azr "experiment[E] segments=1,2 cbackground=1/2+:2=0f,0f"
+run none "$O18" 18O_p_a_thm.azr "experiment[E]"
+run zero "$O18" 18O_p_a_thm.azr "experiment[E] cbackground=1/2+:2=0f,0f"
 started none; started zero
 for f in chiSquared.out normalizations.out "$OUT"; do
   same "$WORK/none/output/$f" "$WORK/zero/output/$f" && ok "c = 0 (fixed): $f byte-identical" || bad "c = 0: $f differs"
@@ -86,11 +88,11 @@ grep -q "cbkg" "$WORK/none/output/thm_experiments.out" "$WORK/none/output/param.
   bad "without the key a cbkg line was written" || ok "without the key: no cbkg line in thm_experiments.out or param.par"
 for w in "theta=50-70" "beam=18O target=d spectator=n Ebeam=54 ps=hulthen:0-40 background=linear" \
          "beam=18O target=d spectator=n Ebeam=54 distortion=coulomb vertexModel=dw"; do
-  run w0 "$O18" 18O_p_a_thm.azr "experiment[E] segments=1,2 $w"
-  run w1 "$O18" 18O_p_a_thm.azr "experiment[E] segments=1,2 $w cbackground=1/2+:2:linear=0f,0f,0f,0f"
+  run w0 "$O18" 18O_p_a_thm.azr "experiment[E] $w"
+  run w1 "$O18" 18O_p_a_thm.azr "experiment[E] $w cbackground=1/2+:2:linear=0f,0f,0f,0f"
   same "$WORK/w0/output/$OUT" "$WORK/w1/output/$OUT" && [ "$(total "$WORK/w0")" = "$(total "$WORK/w1")" ] &&
     ok "c = 0 with $w: model and chi2 identical" || bad "c = 0 with $w differs"
-  run w2 "$O18" 18O_p_a_thm.azr "experiment[E] segments=1,2 $w cbackground=1/2+:2=0.3,-0.2"
+  run w2 "$O18" 18O_p_a_thm.azr "experiment[E] $w cbackground=1/2+:2=0.3,-0.2"
   # a failed w2 run has no output: that is a failure, not "moves the model"
   [ -f "$WORK/w2/output/$OUT" ] || { started w2; continue; }
   same "$WORK/w0/output/$OUT" "$WORK/w2/output/$OUT" && bad "c != 0 with $w: no effect" || ok "c != 0 with $w moves the model"
@@ -117,9 +119,9 @@ formula() {
       d = (got - want) / want; if (d < 0) d = -d; if (d > w) w = d }
     END { printf "%.2e", w }'
 }
-run t0 "$TOY" toy.azr "experiment[E] segments=1"
-run t1 "$TOY" toy.azr "experiment[E] segments=1 cbackground=1/2+:2=0.05,-0.08"
-run t2 "$TOY" toy.azr "experiment[E] segments=1 cbackground=1/2+:2:1/2,0,1/2,0:linear=0.05,-0.08,-0.03,0.1"
+run t0 "$TOY" toy.azr "experiment[E]"
+run t1 "$TOY" toy.azr "experiment[E] cbackground=1/2+:2=0.05,-0.08"
+run t2 "$TOY" toy.azr "experiment[E] cbackground=1/2+:2:1/2,0,1/2,0:linear=0.05,-0.08,-0.03,0.1"
 started t0; started t1; started t2
 w="$(formula 0 0 0 0 "$WORK/t0/output/$OUT")"
 lt "$w" 1e-7 && ok "c = 0: the closed form (worst rel $w; awk's own difference quotient limits it)" || bad "c = 0: $w"
@@ -131,7 +133,7 @@ w="$(formula 0.05 -0.08 0 0 "$WORK/t1/output/$OUT" "$WORK/t0/output/$OUT")"
 lt "$w" 1e-9 && ok "m(c)/m(0) = |g_f g_c A + c|^2 / |g_f g_c A|^2 (worst rel $w)" || bad "ratio, constant c: $w"
 w="$(formula 0.05 -0.08 -0.03 0.1 "$WORK/t2/output/$OUT" "$WORK/t0/output/$OUT")"
 lt "$w" 1e-9 && ok "m(c)/m(0), linear c (worst rel $w)" || bad "ratio, linear c: $w"
-run t3 "$TOY" toy.azr "experiment[E] segments=1 theta=0-180 cbackground=1/2+:2:linear=0.05,-0.08,-0.03,0.1"
+run t3 "$TOY" toy.azr "experiment[E] theta=0-180 cbackground=1/2+:2:linear=0.05,-0.08,-0.03,0.1"
 started t3
 read -r w n <<< "$(worst4 "$WORK/t3/output/$OUT" "$WORK/t2/output/$OUT" 12.566370614359172)"
 lt "$w" 2e-10 && ok "theta=0-180 x 4 pi == angle-integrated, with the background ($n points, worst rel $w)" ||
@@ -139,7 +141,7 @@ lt "$w" 2e-10 && ok "theta=0-180 x 4 pi == angle-integrated, with the background
 
 # (d) -----------------------------------------------------------------------
 echo "(d) a coherent background is recovered by a fit"
-run gen "$O18" 18O_p_a_thm.azr "experiment[E] segments=1 cbackground=1/2+:2=0.3,-0.2"
+MEMBERS=lc723_thm_points run gen "$O18" 18O_p_a_thm.azr "experiment[E] cbackground=1/2+:2=0.3,-0.2"
 started gen
 mkdir -p "$WORK/syn/data"
 cp "$O18/18O_p_a_thm.azr" "$WORK/syn/"; cp "$O18/data/"* "$WORK/syn/data/"
@@ -147,7 +149,7 @@ F=data/lc723_thm_points.dat
 n="$(tr -d '\r' < "$O18/$F" | grep -cv '^#')"
 paste <(tr -d '\r' < "$O18/$F" | grep -v '^#') <(tr -d '\r' < "$WORK/gen/output/$OUT" | awk 'NF > 3' | head -n "$n" | awk '{ print $4 }') |
   awk '{ printf "%s %s %.12e %.12e\n", $1, $2, 250 * $5, 2.5 * $5 }' > "$WORK/syn/$F"
-run fit "$WORK/syn" 18O_p_a_thm.azr "experiment[E] segments=1 cbackground=1/2+:2" 2
+MEMBERS=lc723_thm_points run fit "$WORK/syn" 18O_p_a_thm.azr "experiment[E] cbackground=1/2+:2" 2
 [ "$(cat "$WORK/fit/status")" = 0 ] && [ -f "$WORK/fit/output/param.sav" ] || { bad "fit run failed"; tail -5 "$WORK/fit/log"; }
 re0="$(tr -d '\r' < "$WORK/fit/output/param.sav" | awk '$1 ~ /^cbkg_E_.*_re0$/ { print $2 }')"
 im0="$(tr -d '\r' < "$WORK/fit/output/param.sav" | awk '$1 ~ /^cbkg_E_.*_im0$/ { print $2 }')"
@@ -170,7 +172,7 @@ refuse() {  # refuse NAME MESSAGE-FRAGMENT BLOCK
     bad "$1: not refused with '$2' (status $(cat "$WORK/$1/status"))"; tail -3 "$WORK/$1/log" | sed 's/^/        /'
   fi
 }
-X="experiment[E] segments=1,2"
+X="experiment[E]"
 refuse no_parity "J^pi '1/2'" "$X cbackground=1/2:2"
 refuse bad_spin "J^pi '1/3+'" "$X cbackground=1/3+:2"
 refuse bad_exit "exit pair key 'x'" "$X cbackground=1/2+:x"

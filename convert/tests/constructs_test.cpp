@@ -228,6 +228,31 @@ int main(int argc, char **argv) {
     check("THM: segments= and weight[1] leave <thm>",
           r.text.find("experiment[X1] beam=15N target=d spectator=n Ebeam=60\n</thm>") != std::string::npos);
   }
+  // ---- members of a THM experiment the old engine refused (CheckThmExperiments, ThmNorm.cpp): a line in two
+  //      experiments, a number past the last data line, a line in use that is not THM; an inactive non-THM line converts
+  {
+    const std::string two = "1 1 2 0.03 0.6 0 180 10 1 1 0 0 0 0 h1.dat\n1 1 2 0.03 0.6 0 180 10 1 1 0 0 0 0 h2.dat\n";
+    const ConvertResult a = Convert({two, "", "", "<thm>\nexperiment[A] segments=1,2\nexperiment[B] segments=2\n</thm>\n", ""});
+    check("THM line in two experiments: refused",
+          !a.ok && a.refusal.find("<thm> experiment[B]: segment 2 is already in experiment[A], which the old engine refused") !=
+                       std::string::npos);
+    const ConvertResult b = Convert({two, "", "", "<thm>\nexperiment[A] segments=1-3\n</thm>\n", ""});
+    check("THM segment past the last data line: refused",
+          !b.ok && b.refusal.find("<thm> experiment[A]: segment 3: <segmentsData> has only 2 line(s)") != std::string::npos);
+    const std::string plain = "1 1 2 0.03 0.6 0 180 10 1 1 0 0 0 0 h1.dat\n1 1 2 0.03 0.6 0 180 0 1 1 0 0 0 0 h2.dat\n";
+    const ConvertResult c = Convert({plain, "", "", "<thm>\nexperiment[A] segments=1,2\n</thm>\n", ""});
+    check("non-THM line in an experiment: refused",
+          !c.ok && c.refusal.find("<thm> experiment[A]: segment 2 is not a THM segment (isDiff < 10)") != std::string::npos);
+    const std::string idle = "1 1 2 0.03 0.6 0 180 10 1 1 0 0 0 0 h1.dat\n0 1 2 0.03 0.6 0 180 0 1 1 0 0 0 0 h2.dat\n";
+    const ConvertResult d = Convert({idle, "", "", "<thm>\nexperiment[A] segments=1,2\n</thm>\n", ""});
+    check("inactive non-THM line in an experiment: converted", d.ok);
+    const ConvertResult e = Convert({two, "", "", "<thm>\nweight[3]=w.txt\n</thm>\n", ""});
+    check("THM weight past the last data line: refused",
+          !e.ok && e.refusal.find("<thm> weight[3]: <segmentsData> has only 2 line(s)") != std::string::npos);
+    const ConvertResult f = Convert({plain, "", "", "<thm>\nweight[2]=w.txt\n</thm>\n", ""});
+    check("THM weight on a non-THM line: refused",
+          !f.ok && f.refusal.find("<thm> weight[2]: segment 2 is not a THM segment (isDiff < 10)") != std::string::npos);
+  }
   // ---- composite: SUM "1 0 n e x angle", RATIO "1 1 1 e x angle" (ComponentList.h), the -1 layout with a scaling, a fixed
   //      angle in the frame of the line; the short list: a plain reaction and a note
   {
