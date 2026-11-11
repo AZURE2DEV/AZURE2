@@ -205,8 +205,7 @@ void WorkingCopy::WriteSegmentFiles(const Config &configure, const azure2::Resul
         out.precision(10);
         if (segment->IsAngularDist()) {
           out << std::setw(18) << std::scientific << point->GetCMEnergy();
-          for (int i = 0; i < point->GetNumModelAngularDists(results); i++)
-            out << std::setw(18) << point->GetModelAngularDist(results, i);
+          for (double c : segment->LegendreCoefficients(*point, results)) out << std::setw(18) << c;
           out << std::endl;
           if (bandOut) WriteBandLine(*bandOut, point->GetCMEnergy(), point->GetExcitationEnergy(),
                                      point->GetCMAngle(), 0., 0., 0.);
@@ -247,8 +246,7 @@ void WorkingCopy::WriteSegmentFiles(const Config &configure, const azure2::Resul
         out.precision(10);
         if (segment->IsAngularDist()) {
           out << std::setw(18) << std::scientific << point->GetCMEnergy();
-          for (int i = 0; i < point->GetNumModelAngularDists(results); i++)
-            out << std::setw(18) << point->GetModelAngularDist(results, i);
+          for (double c : segment->LegendreCoefficients(*point, results)) out << std::setw(18) << c;
           out << std::endl;
           if (bandOut) WriteBandLine(*bandOut, point->GetLabEnergy(), point->GetExcitationEnergy(),
                                      point->GetLabAngle(), 0., 0., 0.);

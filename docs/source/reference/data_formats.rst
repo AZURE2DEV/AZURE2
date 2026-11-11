@@ -153,6 +153,30 @@ third column is the absolute :math:`A_k` in b/sr (:math:`A_0 = \sigma/4\pi`).
 A normalised coefficient carries no normalization (the segment's norm must stay
 fixed at 1).
 
+In format 3 (``quantity legendre``, ``columns E_lab[MeV] order value error``)
+the field ``expansion`` names the normalisation, for data sets and
+extrapolations alike (EXFOR's codes in brackets), with
+:math:`d\sigma/d\Omega_\text{cm} = \sum_L A_L P_L(\cos\theta_\text{cm})`:
+
+==============  ==============================  ===========  ==============
+``expansion``   coefficient of order :math:`L`  unit         EXFOR
+==============  ==============================  ===========  ==============
+``a_over_a0``   :math:`A_L/A_0`                 ``1``        ``LEG/RS``
+``absolute``    :math:`A_L`                     b/sr         ``LEG``
+``rsl``         :math:`A_L/((2L+1)A_0)`         ``1``        ``LEG/RSL``
+``2l2``         :math:`2A_L/(2L+1)`             b/sr         ``LEG/2L2``
+``4pi``         :math:`4\pi A_L`                b            ``LEG/4PI``
+==============  ==============================  ===========  ==============
+
+The normalised forms (``a_over_a0``, ``rsl``) keep their norm fixed; the
+engine computes :math:`A_L/A_0` or :math:`A_L` and multiplies by the factor of
+:math:`L` the table implies, so a fold, an energy shift and the gradient act
+on all five alike.  An extrapolation writes :math:`L = 0 \ldots K` of its
+``orders 0 K`` in its expansion (the ``.acoeff`` file and pyazr's
+``calculate_angular_dists``).  ``tests/legendre_expansions`` checks every
+order against a Gauss--Legendre projection of the engine's own
+:math:`d\sigma/d\Omega`.
+
 Temperature Files
 ^^^^^^^^^^^^^^^^^
 

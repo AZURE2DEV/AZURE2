@@ -201,6 +201,9 @@ struct PointInputs {
         case FactorRef::Kind::SFactor:
           factorValue[f] = azure2::SFactorConversionValue(termPoint, cnuc, r.shape_perMeV);
           break;
+        case FactorRef::Kind::Legendre:
+          factorValue[f] = azure2::experiment::LegendreExpansionFactor(r.legendre, termPoint->GetCoefficientOrder());
+          break;
       }
       factorArray[f] = {&factorValue[f], 1};
     }

@@ -354,6 +354,19 @@ data res_q2: 3120754537230.382*sigma(1->2)
 data deriv: sigma(1->2)
 data deriv_bare: sigma(1->2)
 data res_bare: sigma(1->2)
+== tests/legendre_expansions/models/data.azr
+data leg_a_over_a0: ak(2->5)
+data leg_absolute: Ak(2->5)
+data leg_rsl: c_rsl(0)*ak(2->5)
+data leg_2l2: c_2l2(0)*Ak(2->5)
+data leg_4pi: c_4pi(0)*Ak(2->5)
+== tests/legendre_expansions/models/extrap.azr
+extrapolation leg_a_over_a0: angdist(2->5; k=6)
+extrapolation leg_absolute: angdist(2->5; k=6)
+extrapolation leg_rsl: angdist(2->5; k=6)
+extrapolation leg_2l2: angdist(2->5; k=6)
+extrapolation leg_4pi: angdist(2->5; k=6)
+extrapolation dsdo_nodes: dsdo_cm(2->5)
 == tests/mcmc_physical_norm/13N_fast.azr
 data: set-up failed
 exit 1

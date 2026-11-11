@@ -79,6 +79,12 @@ int AddFactor(FactorRef::Kind kind, int t, Prediction &p) {
   return static_cast<int>(p.factors.size()) - 1;
 }
 
+/// Coefficient data in an expansion whose coefficient is the engine's A_L / A_0 or A_L times a factor of L.
+bool LegendreFactorOnData(const ReactionSpec &r) {
+  return r.observable == Observable::AngularCoefficients && r.legendre != LegendreExpansion::AOverA0 &&
+         r.legendre != LegendreExpansion::Absolute;
+}
+
 int AddAbundance(const PredictionSetup &s, int t, Prediction &p) {
   p.params.push_back({ParamRef::Kind::Abundance, s.terms[t].nucleus});
   return static_cast<int>(p.params.size()) - 1;
@@ -168,10 +174,20 @@ void BuildTransform(const PredictionSetup &s, Prediction &p, TransformSpec::Kind
 void BuildScaled(const PredictionSetup &s, Prediction &p) {
   PredictionSetup inner = s;
   inner.reaction.scale = ValueScale();
+  const bool legendre = LegendreFactorOnData(s.reaction);
+  if (legendre)
+    inner.reaction.legendre =
+        LegendreExpansionNormalised(s.reaction.legendre) ? LegendreExpansion::AOverA0 : LegendreExpansion::Absolute;
   TreeKinds()[static_cast<std::size_t>(TreeKindOf(inner))].build(inner, p);
   const ValueScale &scale = s.reaction.scale;
-  const int factor = scale.sFactor ? AddFactor(FactorRef::Kind::SFactor, 0, p) : -1;
-  if (factor >= 0) p.factors[factor].shape_perMeV = scale.sFactorShape_perMeV;
+  int factor = -1;
+  if (scale.sFactor) {
+    factor = AddFactor(FactorRef::Kind::SFactor, 0, p);
+    p.factors[factor].shape_perMeV = scale.sFactorShape_perMeV;
+  } else if (legendre) {
+    factor = AddFactor(FactorRef::Kind::Legendre, 0, p);
+    p.factors[factor].legendre = s.reaction.legendre;
+  }
   p.tree.Scale(scale.factor, p.tree.Root(), factor);
 }
 
@@ -183,6 +199,8 @@ void BuildYield(const PredictionSetup &s, Prediction &p) { BuildTransform(s, p, 
 std::string FactorText(const Prediction &p, int f) {
   if (f < 0) return "";
   const FactorRef &r = p.factors[f];
+  if (r.kind == FactorRef::Kind::Legendre)
+    return std::string("c_") + LegendreExpansionName(r.legendre) + "(" + std::to_string(r.term) + ")";
   if (r.kind == FactorRef::Kind::SFactor && r.shape_perMeV != 0.0)
     return "S*(" + std::to_string(r.term) + ";g=" + Number(r.shape_perMeV) + "/MeV)";
   if (r.kind == FactorRef::Kind::SFactor) return "S(" + std::to_string(r.term) + ")";
@@ -255,7 +273,7 @@ const std::vector<TreeKindRow> &TreeKinds() {
 
 TreeKind TreeKindOf(const PredictionSetup &s) {
   const ReactionSpec &r = s.reaction;
-  if (!r.scale.Identity()) return TreeKind::Scaled;
+  if (!r.scale.Identity() || LegendreFactorOnData(r)) return TreeKind::Scaled;
   if (r.transmission > 0.0) return TreeKind::Transmission;
   if (r.yieldThickness > 0.0) return TreeKind::Yield;
   if (r.combination == ReactionSpec::Combination::Ratio) return TreeKind::Ratio;

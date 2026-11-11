@@ -379,6 +379,32 @@ void TestScaled() {
   check("S factor: g = 0 in its factor", p.factors[0].shape_perMeV == 0.0);
   s.reaction.scale.sFactorShape_perMeV = 0.0;
   s.reaction.scale.sFactor = false;
+  {
+    // Legendre coefficient data: rsl, 2l2, 4pi are a factor of the point's order on the a_k or A_k leaf
+    PredictionSetup c;
+    c.reaction.observable = Observable::AngularCoefficients;
+    c.terms = {Term(1, 2, 1)};
+    c.reaction.legendre = LegendreExpansion::Rsl;
+    const Prediction pr = BuildPrediction(c);
+    check("legendre rsl: c_rsl(0)*ak", pr.kind == TreeKind::Scaled && PredictionText(pr) == "c_rsl(0)*ak(1->2)", PredictionText(pr));
+    check("legendre rsl: one Legendre factor", pr.factors.size() == 1 && pr.factors[0].kind == FactorRef::Kind::Legendre &&
+                                                    pr.factors[0].legendre == LegendreExpansion::Rsl);
+    c.absolute = true;
+    c.reaction.legendre = LegendreExpansion::FourPi;
+    check("legendre 4pi: c_4pi(0)*Ak", PredictionText(BuildPrediction(c)) == "c_4pi(0)*Ak(1->2)", PredictionText(BuildPrediction(c)));
+    c.reaction.legendre = LegendreExpansion::Absolute;
+    check("legendre absolute: the leaf alone", TreeKindOf(c) == TreeKind::Observable && PredictionText(BuildPrediction(c)) == "Ak(1->2)",
+          PredictionText(BuildPrediction(c)));
+    c.reaction.observable = Observable::AngularDistribution;
+    c.reaction.legendre = LegendreExpansion::TwoL2;
+    check("an extrapolation in 2l2: no factor in the tree (Segment::LegendreCoefficients maps the output)",
+          TreeKindOf(c) == TreeKind::Observable);
+    check("LegendreExpansionFactor: 1, 1, 1/(2L+1), 2/(2L+1), 4 pi at L = 3",
+          LegendreExpansionFactor(LegendreExpansion::AOverA0, 3) == 1.0 && LegendreExpansionFactor(LegendreExpansion::Absolute, 3) == 1.0 &&
+              LegendreExpansionFactor(LegendreExpansion::Rsl, 3) == 1.0 / 7.0 &&
+              LegendreExpansionFactor(LegendreExpansion::TwoL2, 3) == 2.0 / 7.0 &&
+              LegendreExpansionFactor(LegendreExpansion::FourPi, 3) == 4.0 * 3.14159265358979323846);
+  }
   s.reaction.scale.factor = 3.1e12;
   check("a constant: c*sigma", PredictionText(BuildPrediction(s)) == "3100000000000*sigma(1->2)", PredictionText(BuildPrediction(s)));
   s.reaction.combination = ReactionSpec::Combination::Sum;

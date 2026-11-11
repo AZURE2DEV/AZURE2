@@ -67,10 +67,12 @@ struct FactorRef {
     RatioFrame,  ///< J_k of a RATIO term k, its own lab-to-c.m. factor (Segment::RatioTermFrameFactor)
     SFactor,     ///< E exp(2 pi eta(E) + g E) of term k's entrance pair at its point's c.m. energy E (MeV; S = this x
                  ///< sigma, physics/AstrophysicalFactor.h; g = shape_perMeV, 0 for the S factor)
+    Legendre,    ///< LegendreExpansionFactor(legendre, L) of term k's point, L its Legendre order (coefficient data)
   };
   Kind kind = Kind::TermFrame;
   int term = 0;
   double shape_perMeV = 0.0;  ///< SFactor: g of the modified S factor (1/MeV)
+  LegendreExpansion legendre = LegendreExpansion::AOverA0;  ///< Legendre: the expansion
 };
 
 /// What a parameter of the tree is.
@@ -115,8 +117,8 @@ struct TreeKindRow {
 /// The table: one row per TreeKind, in the order of the enum.
 const std::vector<TreeKindRow> &TreeKinds();
 
-/// The kind of tree a setup needs (the one place that decides it): a factor on the model value (ReactionSpec::scale)
-/// first, whose builder wraps the tree of the kind the setup has without it; then a transmission or a yield by its thickness, else a
+/// The kind of tree a setup needs (the one place that decides it): a factor on the model value (ReactionSpec::scale,
+/// or the factor of a Legendre expansion other than a_over_a0 and absolute on coefficient data) first, whose builder wraps the tree of the kind the setup has without it; then a transmission or a yield by its thickness, else a
 /// RATIO, else a SUM (a SUM line or a total capture), else a ratio to a Coulomb cross section, else the observable
 /// alone.
 TreeKind TreeKindOf(const PredictionSetup &setup);

@@ -13,6 +13,8 @@
 #include <utility>
 #include <vector>
 
+#include "azure2/experiment/LegendreExpansion.h"
+
 namespace azure2 {
 namespace experiment {
 
@@ -97,6 +99,10 @@ struct ReactionSpec {
   /// each folded by the point's apparatus (quantities ratio_to_rutherford, ratio_to_mott; observable DifferentialLab
   /// or DifferentialCM, elastic).  The value is the same in both frames: it is not converted at load.
   CoulombReference coulombReference = CoulombReference::None;
+  /// Quantity legendre: the normalisation of the coefficients (LegendreExpansion.h).  On data (AngularCoefficients) a
+  /// factor of the point's order on the engine's A_L / A_0 or A_L (the tree kind Scaled); on an extrapolation
+  /// (AngularDistribution) the map of the written coefficients (Segment::LegendreCoefficients).
+  LegendreExpansion legendre = LegendreExpansion::AOverA0;
   /// A factor on the model value (an S factor, a yield per unit charge, an extrapolation in another unit).
   ValueScale scale;
 };

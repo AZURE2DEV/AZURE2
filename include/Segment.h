@@ -414,6 +414,10 @@ class Segment {
   /// whose fit value is their own order's coefficient.
   bool IsCoefficients() const { return isCoefficients_; }
   bool IsCoefficientAbsolute() const { return coefficientsAbsolute_; }
+  /// The Legendre coefficients of an angular-distribution point (an extrapolation of quantity legendre) as the
+  /// output and the API give them: the engine's A_L / A_0 (L = 0 ... K) mapped to the segment's expansion
+  /// (experiment/LegendreExpansion.h: times A_0 for an absolute one, times the factor of L) and its unit.
+  std::vector<double> LegendreCoefficients(const Unit &point, const azure2::Results &results) const;
   /// "transmission <n>": the segment is the transmission T = exp(-n s) of a sample n atoms/barn thick, s the
   /// segment's (assembled) cross section in barns -- the total cross section of the entrance pair.  "yield <n>":
   /// the self-shielded capture or reaction yield Y0 = (s / s_t)(1 - exp(-n s_t)) (SAMMY's Y0, manual III.D.1), s the

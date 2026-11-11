@@ -100,6 +100,9 @@ std::string UnitsText(const ValidatedRecord &r, const ValueScale &scale, const C
     if (columns && columns->value != 1.0) out << ": x " << columns->value << " where the points are made";
     out << "\n";
   }
+  if (const Value *e = r.quantity && r.quantity->name == "legendre" ? r.Get("expansion") : nullptr)
+    out << "  Legendre expansion " << e->word << ": the coefficient of order L is "
+        << LegendreExpansionFormula(LegendreExpansionOf(e->word)) << ", dsigma/dOmega_cm = sum_L A_L P_L(cos theta_cm)\n";
   if (scale.sFactor && scale.sFactorShape_perMeV != 0.0)
     out << "  the model is the modified S factor E sigma exp(2 pi eta + g E), g = " << scale.sFactorShape_perMeV
         << " 1/MeV, E the point's c.m. energy after the energy shift, eta of the entrance pair (MeV b)\n";

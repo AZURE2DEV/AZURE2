@@ -366,12 +366,7 @@ bool ReadObservable(Context &c, const ValidatedRecord &r, const std::string &ang
   }
   if (q == "legendre") {
     spec.observable = data ? O::AngularCoefficients : O::AngularDistribution;
-    const std::string expansion = Word(r, "expansion", "a_over_a0");
-    if (expansion != "a_over_a0" && (!data || expansion != "absolute")) {
-      c.Error(codes::kNotBuilt, r, "expansion", "expansion " + expansion + ": this engine has a_over_a0" +
-                                                    std::string(data ? " and absolute" : "") + " only");
-      return false;
-    }
+    spec.legendre = LegendreExpansionOf(Word(r, "expansion", "a_over_a0"));
     return true;
   }
   c.Error(codes::kNotBuilt, r, "quantity", "quantity " + q + ": this engine cannot set it up yet (a later step)");
@@ -566,7 +561,7 @@ bool BuildDataset(Context &c, const ValidatedRecord &r, DatasetSpec &d, Member &
   if (!ok) return false;
   ok = ReadObservable(c, r, angleFrame, d.reaction) && ok;
   ok = build::ValueUnit(c, r, d.reaction, &d.columns) && ok;
-  d.absolute = Word(r, "expansion") == "absolute";
+  d.absolute = !LegendreExpansionNormalised(d.reaction.legendre);
   if (const Value *w = r.Get("angle_window")) {
     d.minA = Context::InBase(w->lo, w->unit);
     d.maxA = Context::InBase(w->hi, w->unit);

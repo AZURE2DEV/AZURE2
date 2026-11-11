@@ -412,7 +412,9 @@ dσ/dΩ_cm = Σ_L A_L P_L(cos θ_cm) with A₀ = σ/4π. AZURE2's normalized coe
 `LEG/RS` W_L; its `absolute 1` A_L is EXFOR's `LEG` a_L (b/sr). The other forms are fixed linear maps: `LEG/RSL`
 B_L = W_L/(2L+1); `LEG/2L2` a_L = 2A_L/(2L+1); `LEG/4PI` a_L = 4πA_L; `LEG/RS0`, `LEG/RSD` divide by
 Σ_L A_L P_L(1) or Σ_L A_L P_L(0) with the normalization of §3.2 finding 3; `LEG/1K2` multiplies by k² (energy
-dependent). Cosine forms are a triangular linear map of the Legendre ones. Only c.m. coefficients (`NUMBER-CM`) are
+dependent). The engine builds the first five (`quantity legendre`, `expansion a_over_a0 | absolute | rsl | 2l2 |
+4pi`, data and extrapolations; `experiment/LegendreExpansion.h`); the definitions are this section's (the
+ambiguity of §3.2 finding 3 concerns `RSD`/`RS0` only; LEXFOR's text was not re-read when they were built). Cosine forms are a triangular linear map of the Legendre ones. Only c.m. coefficients (`NUMBER-CM`) are
 a linear function of the c.m. A_L; lab-frame Legendre fits of particle distributions are not, and must be refused.
 Elastic scattering of charged particles has no finite expansion; `LEG/RTH` coefficients of the Rutherford ratio are
 the only form that can exist there, and they need the ratio of §4.3 projected on P_L **[I]**.
