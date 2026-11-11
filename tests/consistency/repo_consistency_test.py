@@ -798,9 +798,11 @@ if not MACHINE_PATH.search("tools/runall.sh is in /" + "data0/x/tools") or not M
 #     their comments follow after its merge, and the exception goes then.
 OLD_DATA_NAME = re.compile(r"\b(?:EData|ESegment|EPoint)\b")
 OLD_DATA_NAME_PENDING = {"experiment/src/Build.cpp", "experiment/src/BuildEffects.cpp"}
-#     One text an output file carries: the header of intEC.dat.sig names the function of its signature as it was
-#     written, so that the files of the projects stay byte-identical; it changes with the next signature version.
-OLD_DATA_NAME_OUTPUT = {("src/WorkingCopy.cpp", "see EData::ECSignature)")}
+#     Two texts output files carry, kept as they were written so that those files stay byte-identical: the header of
+#     intEC.dat.sig (changes with the next signature version) and a comment the converter writes into a format-3
+#     project (changes with the converter's next fixture regeneration).
+OLD_DATA_NAME_OUTPUT = {("src/WorkingCopy.cpp", "see EData::ECSignature)"),
+                        ("convert/src/BuildData.cpp", "(the same index, EData::MakePoints)")}
 for rel in tracked_files():
     if not rel.startswith(("src/", "include/", "api/", "tests/", "experiment/", "convert/", "io/", "physics/")):
         continue

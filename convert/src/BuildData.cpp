@@ -514,7 +514,7 @@ void Builder::BuildExtrapolations() {
     }
     if (app && Implicit(Construct::kEffectLine, name, "apparatus", "yes",
                         "the <targetInt> line that lists line " + std::to_string(t.key) +
-                            " also folded this extrapolation (the same index, WorkingCopy::MakePoints); written explicitly") != "yes")
+                            " also folded this extrapolation (the same index, EData::MakePoints); written explicitly") != "yes")
       app = nullptr;
     if (app) {
       const std::string comment = TakeComment();
