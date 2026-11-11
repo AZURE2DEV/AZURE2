@@ -33,7 +33,7 @@ bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 fit() {  # NAME THREADS TRACE
   local dir="$WORK/$1"
   mkdir -p "$dir/output" "$dir/checks"
-  cp -R "$MODEL/T2.azr" "$MODEL/cov_diff.txt" "$MODEL/prior_cov.txt" "$MODEL/data" "$dir/"
+  cp -R "$MODEL/T2.azr" "$MODEL/cov_diff.txt" "$MODEL/prior_cov.f3.txt" "$MODEL/data" "$dir/"
   (cd "$dir" && printf '2\nn\n\n\n7\n' | AZURE_TRACE_FCN="$3" OMP_NUM_THREADS="$2" "$AZURE2_BIN" --no-gui --no-readline \
      --no-coulomb-table --use-lm --max-calls=30 T2.azr > run.log 2> trace.log)
   if [ ! -s "$dir/output/chiSquared.out" ] || ! grep -q '^\[fcn\]' "$dir/trace.log"; then

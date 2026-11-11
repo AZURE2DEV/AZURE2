@@ -1,5 +1,8 @@
 # T2 — p + ¹⁵N → ¹⁶O through an apparatus
 
+The project files are format 3 (`docs/upgrade/format3_tree.md`); the old lines quoted on this page are those of the
+originals in `tests/convert/fixtures/tests/upgrade/T2/`.
+
 T2 is a synthetic R-matrix project whose data were computed from known level parameters and known apparatus
 parameters, then given noise. A fit of T2 must return those parameters within its own uncertainties. It exercises
 the second and third lines of the calculation (`docs/upgrade/ARCHITECTURE.md` §1): the apparatus kernel K(ν) —

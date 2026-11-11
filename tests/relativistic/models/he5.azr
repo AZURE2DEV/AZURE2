@@ -10,25 +10,35 @@ none #Legendre Polynomial Check
 none #Coulomb Amplitudes Check
 none #Reaction Pathway Check
 none #Angular Distributions Check
+format=3
 </config>
 <levels>
 1.5 1 16.840000 0 1 1 1 4 1 1 0 0.35 0.5 1 0 1 0 1.00866491595 4.00260325413 0 2 -0.735 -0.735 0 0 0.0 0 3.0 0 0 0
 1.5 1 16.840000 0 1 2 3 0 1 1 0 1.2 1 1 0.5 1 0 2.01410177812 3.0160492779 1 1 16.854 16.854 0 0 0.0 0 5.0 0 0 0
 
 </levels>
-<segmentsData>
-1 2 1 0.0 5.0 0 180 0 1 0 0 0 0 0 data/dt_fwd.dat 0 0
-1 1 2 0.0 40.0 0 180 0 1 0 0 0 0 0 data/na_rev_nr.dat 0 0
-</segmentsData>
-<segmentsTest>
-</segmentsTest>
-<targetInt>
-</targetInt>
-<lastRun>
-9997
-""
-""
-0 0
-0 ""
--1. -1. -1.
-</lastRun>
+<data>
+# <segmentsData> line 1
+dataset dt_fwd
+    reaction       3H(d,n)4He
+    quantity       sigma
+    unit           b
+    file           data/dt_fwd.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0.0 5.0 MeV
+    norm           1 fixed
+
+# <segmentsData> line 2
+dataset na_rev_nr
+    reaction       4He(n,d)3H
+    quantity       sigma
+    unit           b
+    file           data/na_rev_nr.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0.0 40.0 MeV
+    norm           1 fixed
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+</targets>

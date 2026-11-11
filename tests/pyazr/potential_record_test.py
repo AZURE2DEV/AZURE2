@@ -3,7 +3,8 @@
 3.10a): its Coulomb radius reaches the channel functions, and pyazr's set_nuclear_potential, its view and its writer
 agree with the record.
 
-Checks, on tests/hybrid_potential converted to format 3 (pyazr.convert_azr, to=3), pair 1 (p + 12C, Woods-Saxon
+Checks, on the old original of tests/hybrid_potential (tests/convert/fixtures) converted to format 3 (pyazr.convert_azr,
+to=3), pair 1 (p + 12C, Woods-Saxon
 20 / 3.6 / 0.6 MeV, fm, a_c = 3.6 fm):
   (1) the conversion writes one record, coulomb_radius 3.5 fm, and no <potential> block;
   (2) with `coulomb_radius 5 fm` in the record, P and S from coulomb_functions (l = 0-2, E = 0.5-3 MeV, and S at the
@@ -30,6 +31,8 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SRC = os.path.join(ROOT, "tests", "hybrid_potential")
+sys.path.insert(0, HERE)
+import old_tree  # noqa: E402  (the old originals of converted projects)
 REF = os.path.join(HERE, "data", "coulomb_radius.csv")
 
 failures = []
@@ -87,7 +90,7 @@ try:
     os.makedirs(os.path.join(work, "output"))
     shutil.copytree(os.path.join(SRC, "data"), os.path.join(work, "data"))
     old = os.path.join(work, "hybrid_potential.azr")
-    shutil.copy(os.path.join(SRC, "hybrid_potential.azr"), old)
+    shutil.copy(old_tree.original(os.path.join(SRC, "hybrid_potential.azr")), old)  # the old file
     f35 = os.path.join(work, "f3_35.azr")
     convert_azr(old, f35, to=3)
     text = open(f35).read()

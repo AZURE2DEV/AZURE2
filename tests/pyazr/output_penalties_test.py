@@ -7,8 +7,10 @@ Python side), so a `write_output_files()` from a session wrote 0 for all three -
 was missing from the file -- or, after a session had been through the CLI path, a stale value.  `AZUREAPI::WriteOutputFiles`
 now evaluates them at the current parameters before writing.
 
-Check on tests/scattering_length/be7p_fit.azr (two phase-shift segments plus a <scatteringLengths> constraint):
-the file's "Total-Scattering-Length-Chi-Squared" equals `penalties()["scattering_length"]` (which is > 0 here).
+Check on tests/scattering_length/be7p_fit.azr (two phase-shift data sets plus scattering-length data of <modelData>,
+the old <scatteringLengths> constraints): the file's "Total-Model-Data-Chi-Squared" (the old section's
+"Total-Scattering-Length-Chi-Squared", class "scattering lengths as model data (label)" of tools/format3_gate.py)
+equals `penalties()["scattering_length"]` (which is > 0 here).
 Needs the compiled engine; skips cleanly without it.
 
 Run from anywhere:  python3 tests/pyazr/output_penalties_test.py
@@ -50,10 +52,10 @@ try:
     want = float(s.penalties()["scattering_length"])
     out = s.write_output_files()
     text = open(os.path.join(out, "chiSquared.out")).read()
-    m = re.search(r"Total-Scattering-Length-Chi-Squared:\s*(\S+)", text)
+    m = re.search(r"Total-Model-Data-Chi-Squared:\s*(\S+)", text)
     got = float(m.group(1)) if m else None
     check(f"the model has a scattering-length penalty to report ({want:.6g})", want > 1e-6)
-    check("chiSquared.out carries Total-Scattering-Length-Chi-Squared", got is not None,
+    check("chiSquared.out carries Total-Model-Data-Chi-Squared", got is not None,
           "the line is missing: the API wrote the file with the penalty at 0")
     check(f"the file's value equals penalties()['scattering_length'] ({got} vs {want:.6g})",
           got is not None and abs(got - want) <= 1e-5 * max(1.0, abs(want)))

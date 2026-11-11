@@ -67,21 +67,32 @@ and 12 pyazr tests), so the groups follow the projects, not the directory names.
 | 5. targets and apparatus | `electron_screening` (not `bad`), `screening_6li`, `target_density` (not `bad`), `convolution_window`, `convolution_unify/models/bare`, `data_covariance`, `secondary_gamma/models/grad`, `angular_coefficients` (not `bad_norm`, `bad_test`), `beam_profile_kernel`, `hard_sphere` | rewritten: `electron_screening` (fit models' `screening` field; part 5, the old block without its numbers, through the converter: `bad.azr` moved to the fixtures), `screening_6li`, `target_density` (`<target>.areal_density`; the group member's own density and `bad.azr`, densityfit without target integration, through the converter), `data_covariance` (refusals on records; `verify.py` reads the data-set records), `clone_composite` (its `make_models.py` writes format 3), `beam_profile_kernel` (its two extrapolations in `extrapolations.txt`, the records the converter writes for the old test lines), `hard_sphere`; unchanged and passing: `convolution_window`, `convolution_unify`, `secondary_gamma`, `angular_coefficients`, `cli_route_exit`, `extrap_sav_segments`; pyazr tests of the old reader on the originals: `data_covariance`, `angular_coefficients`, `screening`, `parameter_kinds` (screening_6li part). **Left old:** `reaction_rate/models/n12C.azr`, `p12C.azr`: the generators `doppler_fgm/make_models.py`, `transmission_yield/make_models.py` (and through them `pyazr` `doppler`, `thickness`, `parameter_kinds`, `upgrade_plan_runtime`, `upgrade_poison_results`) build their models from these files' old lines; they move with the rewrite of those two generators (group 6, with `natural_neon`, which `transmission_yield` also reads) | converted but n12C, p12C |
 | 6. natural targets | `natural_neon` (tests and example), `natural_target` | `natural_neon`, `segline_formats`, `shared_effect_pairs`, `shared_point_tables`, `total_optical`, `transmission_yield`, `natural_target`, `component_subpoint_angle`; pyazr tests | to do |
 | 7. THM | `18O_p_a_thm`, `17O`, `7Li_p_a`, `6Li_d`, examples `c12c12_tumino2018`, `o17_guardo2017_fit`, `thm_coherent_background/toy` | the `thm_*` scripts, `18O_p_a_thm`, `level_at_threshold`, `excitation_energy_column`, `mcmc_classification`; pyazr THM tests | to do |
-| 8. the rest | `upgrade/T1–T3`, `relativistic`, `scattering_length`, `channel_space`, `beta_delayed_alpha`, `identical_entrance_reaction`, `identical_pp_res`, `hybrid_potential`, `sum_lab_frame` (`sum_data`, `extrap`), `ratio_frame/models/ratio_data`, `ec_m1_exact/models/m1` | `upgrade`, `format3_engine`, `model_data`, `fit_threads`, `relativistic`, `scattering_length`, `phase_channel_spin`, `channel_space`, `beta_delayed_alpha`, `fixed_param_par`, `mass_separation_check`; `upgrade_poison_results`; pyazr tests | to do |
+| 8. the rest | `upgrade/T1–T3` (`T1`, `T1_start`, `T2`, `T2_true`, `T3`, `T3_start`), `relativistic` (14 models), `scattering_length` (5), `channel_space`, `beta_delayed_alpha/16N`, `identical_entrance_reaction` (`be8`, `c12c12`, `dd_pt`), `identical_pp_res`, `hybrid_potential`, `sum_lab_frame` (`sum_data`, `extrap`), `ratio_frame/models` (`ratio_data`, `fixed_angle`) (36 files; `ec_m1_exact/models/m1` was converted with group 2) | rewritten: `upgrade` (`golden/golden.py` compares the golden files of the old originals as the format-3 project writes them: param.par through the converter's name map, the T3 classes of the scattering lengths; `golden/T2/regen_compare.py` the class "follower listed"; `recover.py` sets the `<modelData>` scattering lengths), `format3_engine` (the old T2 from the fixtures; the committed T2 = its conversion), `model_data`, `fit_threads`, `scattering_length` (the `<modelData>` data, refusals on records), `phase_channel_spin` (`s` required; the old segment without "spin" through the converter), `channel_space`, `beta_delayed_alpha` (but (e), §4), `fixed_param_par`, `relativistic` (g), `cli_route_exit`, `extrap_sav_segments`, `level_at_threshold` (its c12c12 part), `hybrid_potential/check_per_pair.py`, `scripts/bench_upgrade.sh`, `tests/reference/park_chi2_fallback_test.cpp` (the beam spread and window as records, project text only); the generators of T1–T3 (`upgrade/lib/upgrade_project.py`, `T1/generate.py`, `T3/generate.py`, `T2/make_t2.py`, `T2/check_recovery.py`) write format 3 through the converter and give the committed files byte for byte; pyazr tests that run the projects edit records: `hybrid_derivative`, `potential_sessions`, `api_model_value`, `composite_terms` (but its part 2b), `sav_readers`, `output_penalties`, `predictions`, `upgrade_unitarity`, `upgrade_breit_wigner`; pyazr tests of the old reader or the converter on the originals: `scattering_length` (its block part), `azr_parse_cache`, `potential_record`, `save_fit_format3` (part 2), `validate`, `convert_azr`, `session_records` (its old T2), `composite_terms` (2b); unchanged and passing: `cli_eof`, `fit_call_limit`, `mcmc_park_start`, `park_formalism`, `identical_entrance_reaction`, `mass_separation_check`, `check_files_data`, `failed_point`, `sum_lab_frame`, `ratio_frame`, `spin_orbit_potential` | converted |
 | 9. the refusal switch | — | §8.4 of `project_format3.md` | not started; only when nothing loads an old file |
 
 ## 3a. State at the last commit (verification)
 
-126 of the 185 convertible files are converted (groups 1, 2, 3, 4a, 4b, 5): 119 projects of `tests/`, 7 examples.
-59 are left (groups 6, 7, 8, and `reaction_rate/models/n12C.azr`, `p12C.azr` of group 5). Not converted on purpose:
-`angular_coefficients/models/bad_norm.azr`, `bad_test.azr`, `natural_target/models/M_thick.azr` (old, in place), and
-the old-grammar refusals `electron_screening/bad.azr`, `target_density/bad.azr` (in the fixtures only; the converter
-refuses both, the second since this branch, so it no longer counts as convertible: the spec equivalence gives 198 files,
-185 converted, 183 equal, 2 recorded differences, 0 differ, 13 not converted). 8 files were format 3 already.
-The converted-tree gate (`REF=tab-trial8`, tag `gtree3b`) gives the base's counts: 483 (456 formal) identical, 38
-classified, 0 differ, 0 missing. The tree's own run, `tab-tree3b` (all projects × 3 bases), is the reference for the
-next agent: against `tab-trial16` every file is identical but `param.par` of 9 converted projects (the parameter
-names, values equal) and the `run.log` of the two refusal fixtures moved out of the tree (`run.log` is not compared).
+162 of the 185 convertible files are converted (groups 1, 2, 3, 4a, 4b, 5, 8): 155 projects of `tests/`, 7 examples.
+23 are left: groups 6 and 7 (another branch), with `reaction_rate/models/n12C.azr`, `p12C.azr`. Not converted on
+purpose: `angular_coefficients/models/bad_norm.azr`, `bad_test.azr`, `natural_target/models/M_thick.azr` (old, in
+place), and the old-grammar refusals `electron_screening/bad.azr`, `target_density/bad.azr` (fixtures only). 8 files
+were format 3 already. Spec equivalence: 198 files, 185 converted, 183 equal, 2 recorded differences, 0 differ, 13 not
+converted (the base's counts).
+
+Verification of group 8 (branch `feature/upgrade-4-tree-format3-4`): the converted-tree gate (`REF=tab-trial8`, tag
+`gtree3d`) gives the base's counts, 483 (456 formal) identical, 38 classified, 0 differ, 0 missing (after
+`tools/convert_tree.sh` drops the committed `prior_cov.f3.txt` before converting T2's original; the first run had T2
+missing). The tree's own run, `tab-tree3d` (all projects x 3 bases), is the reference for the next agent: against
+`tab-tree3b` every project not converted here is identical; the converted ones differ only by listed classes
+(param.par names, the step and follower rows of `hybrid_potential` and T2, T2's follower listed in normalizations.out,
+the scattering lengths as model data in chiSquared.out / scatteringLengths.out and the new modelData.out of
+`be7p_fit`, `he3he4_fit`, T3, T3_start) and run.log. `ctest -LE slow` 183/183, `ctest -L slow` (OMP 2) 10/10; T1-T3,
+13N, identical_pp_res and two relativistic models at 1 and 4 threads byte-identical; the T2 benchmark at 1 thread:
+calculation chi2 10899.8, fit of 200 calls 691.608 (the base's), its output files identical to the base's fit of the
+original but for param.par/param.sav names, the follower rows (`D.value[s03_diff150]`, `G.offset[s03_diff150]`) and
+normalizations.out's follower row (classes "follower", "follower listed"). `tests/run_tests.sh` whole: 145 passed,
+1 failed (`spin_orbit_potential`: its `unitarity.py` called the T1–T3 helper's old `write`; fixed in the last commit and
+the directory rerun: passed).
 
 ## 4. Kept old on purpose, and checks that changed their model
 
@@ -98,7 +109,19 @@ names, values equal) and the `run.log` of the two refusal fixtures moved out of 
 | `shift_groups` (1), `shift_fn` (3) | a follower whose own shift value is ignored | a data set naming an `energy_scale` has no value of its own: the check compares the record's two data sets with the same shift given directly. |
 | `prior_centre` (unknown, typo, bad, nonpos) | `prior_centre` rows of `<parameterSettings>` that name no line, are misspelt or malformed, or put a norm's centre at 0 | the rows are the old grammar's; the converter refuses each with the old engine's reason (the check runs it). The format-3 counterpart of the last, `norm … fit prior 0 15%` (a centre at 0 or below), is refused by validation and so by the run with `E_PRIOR_CENTRE` (director's decision; the check's case "zero"). |
 | `norm_groups` (fixed leader) | a fixed group whose follower's own line says "free" | format 3 has one value per normalization record; the check now asserts that a fixed group has no norm parameter at all (the old file kept a fixed follower row at the leader's value). |
+| `beta_delayed_alpha` (e) | a Gaussian resolution (`<targetInt>` line with a convolution, 0.02 MeV) on a β-delayed spectrum; the old engine ran it | **not stated in format 3**: a beam (`spread`) does not apply to a decay (`E_FIELD_NOT_APPLICABLE`, so the converter refuses the old line) and a detector's `energy_resolution` is built only with a beam profile (`E_NOT_BUILT`). The part runs on the old original (`tests/convert/fixtures/tests/beta_delayed_alpha/16N.azr`) with the old line until the old reading path goes. Options for the director: allow `detector … energy_resolution` without a beam profile for β-delayed data (an engine change), or drop the case. Parts (b)–(d) are the format-3 refusals of `target`, `beam` on the data set. |
+| `phase_channel_spin` (d) | a phase-shift segment without "spin" whose (J, l) has two channel spins (the old engine refused it) | format 3 requires `s` of a phase shift (`E_FIELD_REQUIRED`, checked); the old line through `AZURE2 --convert` is refused with the old engine's reason (checked on the original fixture). |
+| `scattering_length` (7), `model_data` | the old `<scatteringLengths>` block's refusals and its own chi² line | the format-3 data (`datum … quantity scattering_length`) are refused on records (`E_NOT_A_CHANNEL`, `E_UNKNOWN_PAIR`, `E_FIELD_REQUIRED` for an error or an `imag_error`); the totals are `Total-Model-Data-Chi-Squared` and `modelData.out` (class "scattering lengths as model data"); `model_data` no longer appends an old block beside its `<modelData>` and checks the datum's own χ² in `modelData.out` instead of `Total-Scattering-Length-Chi-Squared` (rows printed to 5 digits: tolerance 1e-4). |
+| `hybrid_potential/check_per_pair.py` (2) | a pair without a section of its own inherits the old block's default | format 3 has no default: one record per particle pair. The inheritance is the converter's and `convert_spec_equivalence` compares the potential of every particle pair; the script checks the record of pair 1, no default, and the other parts as before. |
+| `pyazr/composite_terms` (2b) | the component layouts of an old segment line (two numbers per component of old GUI files, too few numbers) | old grammar only: the part edits the old original of `sum_data.azr` and runs it (blocks the refusal switch); parts 1 and 2 run on records (the ratio's denominator reaction, a scaled term `s*…`). |
+| `cli_route_exit` (badscale) | a SUM component scaling that is not a number: refused by the set-up, exit 1 | in format 3 the scale of a term is refused when the file is read (`E_REACTION_SYNTAX`), where every refused project exits 255 (`AZURE2.cpp`, with the misleading line "Could not open … Check that file exists."; listed as a defect): the check asks for a non-zero exit. |
+| `T2` truth runs of `make_t2.py`, `model_data` (fit project) | a THM experiment whose data sets are all inactive (the old engine ran it) | refused in format 3 ("'segments=' is not key=value": `ConfigThm.cpp` writes `segments=` with no key); the generator and the check leave the experiment line out of such runs. Listed as a defect. |
 | `kinematic_limits` (c) | pair 1 with its particles swapped | the labels become `1H(12C,12C)1H`, `1H(12C,g)13N`: `p` is not accepted as a target nucleus in a label. |
+
+Group 8: `beta_delayed_alpha` identical to the base check's output on the base build; `model_data` identical but for the
+two lines of the old `<scatteringLengths>` total; `upgrade` identical but for the T3 noise-free recovery (d): the base's
+`recover.py` wrote the edited old block with `</scatteringLengths>` on the line of its last constraint, which the old
+engine then dropped (one of two constraints active); the rewrite keeps both (fit parameters move by < 0.01 sigma).
 
 Checks whose numbers were compared with the base's (`work/tree3/cmpbase.sh`: the base check on the base build and
 the rewritten one on this branch, outputs diffed): identical for `thick_target`, `straggling_bohr`,
@@ -123,16 +146,26 @@ messages of `prior_covariance` (and two gradient agreements at the 1e-15 level),
   reason. `pyazr_inactive_lines` (part 2), `pyazr_shared_state` and `pyazr_rmatrix_pole` edit format-3 records. Each loads the
   original through `pyazr/azrfile.py` and runs the engine on it: they block the switch until pyazr's session reads
   format 3 and the old class is deleted (another agent's work).
+- Group 8 (this page, §3, §4): pyazr tests of the old reader or the converter on the originals (`scattering_length`
+  block part, `azr_parse_cache`, `potential_record`, `save_fit_format3` part 2, `validate`, `convert_azr`,
+  `session_records` old T2, `composite_terms` 2b), `beta_delayed_alpha` (e) on its original; the generator of
+  `light_excitation` (run by its check; models written at run time in the old grammar).
 - `reaction_rate/models/n12C.azr`, `p12C.azr`, read as old lines by `doppler_fgm/make_models.py`,
   `transmission_yield/make_models.py` (and through them by pyazr `doppler`, `thickness`, `parameter_kinds`,
   `upgrade_plan_runtime`, `upgrade_poison_results`).
-- The model generators `tests/*/make_models.py` (29 of them; `make_model.py` of `mcmc_physical_norm`) write old files;
-  `clone_composite/make_models.py` writes format 3 since this branch.
-  Their committed outputs are converted; those run by a check (`transmission_yield`, `light_excitation`,
-  `natural_target`, ...) are rewritten with their group. The others are developer tools that read a tree project and
-  write old lines: to regenerate, point them at the original (`tests/convert/fixtures/...`, as
-  `mcmc_physical_norm/make_model.py` now does) and convert the output; they are to be rewritten for format 3 or
-  deleted (open).
+- The model generators. Run by a check and writing format 3: `clone_composite/make_models.py`,
+  `light_excitation/make_models.py` (its models as records). Writing format 3 through the converter (they compose the
+  old grammar and call `AZURE2 --convert --to 3 --exact-grids`; they give the committed files byte for byte): the
+  generators of T1–T3 (`tests/upgrade/lib/upgrade_project.py`, `T1/generate.py`, `T3/generate.py`, `T2/make_t2.py`).
+  Run by a check, of group 6: `doppler_fgm`, `transmission_yield` (with `reaction_rate/models/n12C.azr`, `p12C.azr`).
+  **Still writing old files, run by nothing** (developer tools whose committed output is converted; to regenerate, run
+  and convert the output, or rewrite them): `angular_coefficients`, `capture_ay_coupling`, `convolution_unify`,
+  `convolution_window`, `data_covariance`, `ec_e1m1_phase`, `ec_m1_exact`, `ec_threshold`, `electron_screening`,
+  `gamma_lab_frame`, `hard_sphere`, `mcmc_physical_norm/make_model.py`, `q_attenuation`, `ratio_frame`,
+  `relativistic`, `scattering_length`, `screening_6li`, `secondary_gamma`, `shift_sqrt_subpoints`,
+  `shift_subpoint_angle`, `sum_lab_frame`, `target_density`, `transform_level_order` (23); of groups 6, 7:
+  `natural_target`, `reaction_rate`, `18O_p_a_thm/make_inputs.py`. Not rewritten in group 8's branch (the time went
+  to the projects and their readers); the T1–T3 helpers show the pattern (compose, then convert with the engine).
 
 ## 6. User-guide pages that show old keyword lines (for a later documentation pass)
 

@@ -4,7 +4,7 @@
 # (2026-11-05).  PPair keeps e1 and the heavy partner's e2 apart; GetExE() is e1 + e2, the channel's excitation
 # above the ground-state threshold.  Two particles are identical when Z, mass, spin, parity, g-factor AND
 # excitation are equal, so 12C(2+)+12C(2+) is entered as e1 = e2 = 4.43891 MeV, j1 = j2 = 2.
-# Models from make_models.py (see there); comparisons in analyze.py.
+# Models from make_models.py (see there; format 3, written at run time); comparisons in analyze.py.
 #
 #   (a) byte identity: an explicit "0" in column 32 on every line gives byte-identical output files (and run
 #       log, progress bars aside) to the same project without it -- alpha + 12C in modes 1 and 3, and tests/13N (capture, external
@@ -168,7 +168,8 @@ for seg in 'aa=1_R=2' 'aa=2_R=1' 'aa=1_R=1' 'aa=2_R=2'; do
   [ -s "$WORK/b_heavy_3/output/AZUREOut_$seg.extrap" ] || bad "(b) no AZUREOut_$seg.extrap"
 done
 run b_noex "$M/aC_light_noex.azr" 3
-read -r w rest <<< "$(an compare "$WORK/b_heavy_3/output" "$WORK/b_noex/output" 'AZUREOut_aa=1_R=2.extrap')"
+run b_heavy_dsdo "$M/aC_heavy_dsdo.azr" 3   # the same (differential) extrapolations with the excitation on 12C
+read -r w rest <<< "$(an compare "$WORK/b_heavy_dsdo/output" "$WORK/b_noex/output" 'AZUREOut_aa=1_R=2.extrap')"
 if gt "$w" 0.01; then ok "(b) without column 32 the light version differs by up to $w: e1 is what moves the threshold"
 else bad "(b) without column 32 the light version differs by only '$w': the check does not discriminate"; fi
 

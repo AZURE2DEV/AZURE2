@@ -8,7 +8,8 @@ cross section -- the total -- for such a segment, while chi^2 used the part; pya
 on its own side, calculate_sfactor* did not.  Since the plan branch (director's decision, HANDOFF) the engine returns
 the model value for every segment.
 
-Model: tests/channel_space/channel_space.azr plus E1-only and E2-only copies of its capture segment.  Checks, for each
+Model: tests/channel_space/channel_space.azr plus E1-only and E2-only copies of its capture data set (`multipole E1`,
+`E2`).  Checks, for each
 of the three entry points: calculated_segments of the E1 (E2) segment equals its calculated_segments_e1 (_e2), bit
 for bit; the plain capture segment's total differs from its E1 part (control); pyazr's calculate_rwa and
 calculate_sfactor_rwa give the part (times the S-factor conversion).  The start-head engine fails the first checks.
@@ -50,18 +51,22 @@ def main():
             os.makedirs(os.path.join(work, d), exist_ok=True)
         azr = os.path.join(work, "parts.azr")
         text = open(os.path.join(src, "channel_space.azr")).read()
-        extra = ("1 1 3 0.5 7 0 180 5 1 0 0 0 0 0 data/capture.dat 0 0\n"
-                 "1 1 3 0.5 7 0 180 6 1 0 0 0 0 0 data/capture.dat 0 0\n")
-        text = text.replace("</segmentsData>\n", extra + "</segmentsData>\n", 1)
+        extra = "".join(
+            f"dataset capture_{m}\n    reaction       12C(p,g)13N\n    quantity       sigma\n    unit           b\n"
+            f"    multipole      {m}\n    file           data/capture.dat\n    columns        E_lab[MeV] _ value error\n"
+            f"    energy_window  0.5 7 MeV\n    norm           1 fixed\n\n" for m in ("E1", "E2"))
+        assert text.count("</data>\n") == 1
+        text = text.replace("</data>\n", extra + "</data>\n", 1)
         with open(azr, "w") as f:
             f.write(text)
 
+        E1, E2 = "angle-integrated cross section, E1 part", "angle-integrated cross section, E2 part"
         with azure2(azr, cwd=work) as m:
             s = m.sess
             obs = [d.observable for d in m.active_datasets]
             check("the model has a total, an E1-only and an E2-only capture segment",
-                  "angle-integrated-E1" in obs and "angle-integrated-E2" in obs, f"{obs}")
-            k1, k2 = obs.index("angle-integrated-E1"), obs.index("angle-integrated-E2")
+                  E1 in obs and E2 in obs, f"{obs}")
+            k1, k2 = obs.index(E1), obs.index(E2)
             kt = k1 - 1  # the plain capture segment, written just before the two copies
             x = np.asarray(m.params_rwa, float)
             entry = {

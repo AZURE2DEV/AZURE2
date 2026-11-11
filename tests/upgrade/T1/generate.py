@@ -100,14 +100,14 @@ def main():
             seg.points = [p for p, k in zip(seg.points, keep) if k]
             truth[seg.name] = truth[seg.name][keep]
     data = up.synthesize(m, truth, SEED)
-    m.write(HERE)
-    start_model().write(HERE, "T1_start")
     for seg in m.data:
         kind, size = seg.noise
         hdr = (f"# T1 synthetic data ({seg.name}), generate.py: engine truth + Gaussian noise "
                f"({'%g %%' % (100 * size) if kind == 'rel' else '%g absolute' % size}), seed {SEED}\n"
                "# E_lab (MeV)  angle (deg)  value  uncertainty   [lab frame unless the segment is c.m. (A_y)]\n")
         up.write_data(os.path.join(HERE, "data", seg.name + ".dat"), data[seg.name], seg, hdr)
+    m.write(HERE, binary)                    # after the data files: the converter reads them
+    start_model().write(HERE, binary, "T1_start")
     with open(os.path.join(HERE, "temperatures.dat"), "w") as f:
         f.write("0.01\n0.03\n0.1\n0.3\n1.0\n3.0\n")
     n = sum(len(s.points) for s in m.data)

@@ -23,6 +23,8 @@ ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 DATA = os.path.join(ROOT, "experiment", "tests", "data")
 FIXTURES = os.path.join(ROOT, "convert", "tests", "fixtures")
 BIN = os.environ.get("AZURE2_BIN")
+sys.path.insert(0, HERE)
+import old_tree  # noqa: E402  (the old originals of converted projects)
 
 failures = []
 ran = 0
@@ -79,7 +81,9 @@ with tempfile.TemporaryDirectory() as tmp:
     broken = os.path.join(tmp, "broken.azr")
     with open(broken, "w") as f:
         f.write(BROKEN)
-    old = os.path.join(ROOT, "tests", "upgrade", "T2", "T2.azr")
+    # the old T2 (its original, tests/convert/fixtures) in a copy of its folder, beside its data and covariance files
+    old = os.path.join(old_tree.copytree(os.path.join(ROOT, "tests", "upgrade", "T2"), os.path.join(tmp, "T2old")),
+                       "T2.azr")
 
     # 1. the fixtures
     for name in fixtures:

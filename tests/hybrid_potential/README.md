@@ -9,40 +9,34 @@ It is `13N` cut down to the three Meyer elastic-scattering segments
 compute — the run is quick and the only thing moving the numbers is the
 Coulomb functions themselves.
 
-## The `<potential>` block
+## The potential record
+
+The project is format 3: the potential of a pair is one `potential` record of `<potentials>`
+(`docs/upgrade/project_format3.md` section 3.10a):
 
 ```
-<potential>
-useHybridPotential=1     # the master switch
-useAdaptiveGrid=1
-potentialType=0          # 0 = Woods-Saxon, 1 = Gaussian
-V0=40                    # the default: what a pair with no setting inherits
-R=3.6
-a=0.6
-pair=1                   # ... and everything below applies to pair 1 alone
-useHybridPotential=1
-potentialType=0
-V0=20
-R=3.6
-a=0.6
-pair=2
-useHybridPotential=0     # the photon pair opts out
-</potential>
+<potentials>
+potential p12C
+    pair            p+12C
+    coulomb_radius  3.5 fm
+    central         woods_saxon depth 20 MeV radius 3.6 fm diffuseness 0.6 fm
+    matching_radius 15 fm
+    step            0.0275 fm
+</potentials>
 ```
 
-Keys before the first `pair=` are the default. A `pair=` line opens a section
-that starts from that default and only states what differs. A file with no
-`pair=` line is read exactly as it was when the model was global, which is what
-keeps every existing project working.
-
-The same parser serves the GUI, `--no-gui` and pyazr
-(`Config::ReadPotentialBlock`), so the three cannot drift.
+A pair without a record has no potential (the photon pair here). The old file
+(`tests/convert/fixtures/tests/hybrid_potential/hybrid_potential.azr`) states it as
+an old `<potential>` block: a default (`V0=40`) that a pair without a section of its
+own inherits, a `pair=1` section overriding it with `V0=20`, and `pair=2` with
+`useHybridPotential=0`. The converter writes one record per particle pair from it
+(`convert_spec_equivalence` compares the potential of every particle pair).
 
 ## What the recorded chi-squared proves
 
-The default is `V0 = 40` and pair 1 overrides it with `V0 = 20`. Pair 1 is the
-only particle pair, so the recorded number is the `V0 = 20` answer. That single
-number discriminates three ways:
+In the old file the default is `V0 = 40` and pair 1 overrides it with `V0 = 20`.
+Pair 1 is the only particle pair, so the recorded number is the `V0 = 20` answer.
+That single number discriminated three ways:
 
 | if this were broken | chi-squared would be |
 |---|---|
@@ -62,8 +56,8 @@ the measurements are written out in `tolerance` itself.
 ## check_per_pair.py
 
 One project yields one number, which cannot show that the *per-pair* rules are
-right. `check_per_pair.py` covers those directly: that a pair's own setting
-beats the default, that a pair without one inherits it, that switching a pair
+right. `check_per_pair.py` covers those directly: that pair 1's record is its
+setting (there is no default in format 3), that switching a pair
 off returns exactly the no-hybrid answer, that setting a potential through the
 pyazr API equals loading the same potential from a file, and that the Coulomb
 memo is keyed on the potential so a change to one is actually seen.

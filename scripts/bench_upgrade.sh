@@ -86,7 +86,7 @@ for th in $THREADS; do
   for run in calc fit; do
     d="$WORK/$run-$th"
     mkdir -p "$d/output" "$d/checks"
-    cp -r "$T2/T2.azr" "$T2/cov_diff.txt" "$T2/prior_cov.txt" "$T2/data" "$d/"
+    cp -r "$T2/T2.azr" "$T2/cov_diff.txt" "$T2/prior_cov.f3.txt" "$T2/data" "$d/"
     menu='1\n\n\n7\n'; extra=""; [ "$run" = fit ] && { menu='2\nn\n\n\n7\n'; extra="--use-lm --max-calls=$FITCALLS"; }
     printf "$menu" > "$d/menu"
     ( cd "$d" && OMP_NUM_THREADS="$th" time_cmd "$d/meas" \

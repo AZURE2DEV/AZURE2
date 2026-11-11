@@ -10,25 +10,35 @@ none #Legendre Polynomial Check
 none #Coulomb Amplitudes Check
 none #Reaction Pathway Check
 none #Angular Distributions Check
+format=3
 </config>
 <levels>
 2 1 17.7551 0 1 1 4 2 1 1 0 50000.0 0.5 1 1.5 -1 0 1.00782503 7.01600344 1 3 17.2551 17.2551 0 0 0.0 0 4.5 0 0 0
 2 1 17.7551 0 1 2 0 4 1 1 0 100000.0 0 1 0 1 0 4.00260325 4.00260325 2 2 17.2551 -0.0918 0 0 0.0 0 4.0 0 0 0
 
 </levels>
-<segmentsData>
-1 1 2 0 100 0 180 0 1 0 0 0 0 0 data/p7li_aa_int.dat 0 0
-1 2 1 0 100 0 180 0 1 0 0 0 0 0 data/aa_p7li_int.dat 0 0
-</segmentsData>
-<segmentsTest>
-</segmentsTest>
-<targetInt>
-</targetInt>
-<lastRun>
-9997
-"output/param.sav"
-""
-0 0
-0 ""
--1. -1. -1.
-</lastRun>
+<data>
+# <segmentsData> line 1
+dataset p7li_aa_int
+    reaction       7Li(p,a)4He
+    quantity       sigma
+    unit           b
+    file           data/p7li_aa_int.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0 100 MeV
+    norm           1 fixed
+
+# <segmentsData> line 2
+dataset aa_p7li_int
+    reaction       4He(a,p)7Li
+    quantity       sigma
+    unit           b
+    file           data/aa_p7li_int.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0 100 MeV
+    norm           1 fixed
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+</targets>

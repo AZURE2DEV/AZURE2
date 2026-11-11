@@ -2,6 +2,30 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, tree to format 3, group 8) — T1–T3 and the rest of the tree (`feature/upgrade-4-tree-format3-4`)
+
+**Done** (`AA4_tree_rest_group8.md`; plan and state: `docs/upgrade/format3_tree.md`). The 36 old files of group 8 are
+format 3 (`upgrade/T1–T3`, `relativistic`, `scattering_length`, `channel_space`, `beta_delayed_alpha`,
+`identical_entrance_reaction`, `identical_pp_res`, `hybrid_potential`, `sum_lab_frame`, `ratio_frame` models): 162
+of the 185 convertible files. Every check, unit test and tool that reads them edits records (list in the page, §3
+row 8); the golden comparisons of T1–T3 compare the old golden files as the format-3 projects write them (the
+converter's parameter names, the classes of `tools/format3_gate.py`); the generators of T1–T3 write format 3 through
+the converter and give the committed files byte for byte; `light_excitation/make_models.py` (run by its check)
+writes records. `tools/convert_tree.sh` drops a committed side file (`prior_cov.f3.txt`) before converting an
+original, so the gate converts T2 again.
+
+**Verified how** (page §3a): converted-tree gate `gtree3d` 483 (456) identical, 38 classified, 0 differ, 0 missing;
+all projects x 3 bases `tab-tree3d` (the new reference) against `tab-tree3b`: only the converted projects differ, by
+listed classes; spec equivalence 198/185/183/2/0/13; `ctest -LE slow` 183/183; `ctest -L slow` (OMP 2) 10/10;
+`tests/run_tests.sh` 145 passed, 1 failed (spin_orbit_potential, fixed, rerun passed); 1 vs 4 threads identical on
+T1-T3, 13N, identical_pp_res, two relativistic models; T2 benchmark at 1 thread 10899.8 / 691.608.
+
+**Open**: groups 6 and 7 (another branch); 23 developer generators that still write old files (page §5);
+`beta_delayed_alpha` (e), a Gaussian resolution on a beta-delayed spectrum, which format 3 cannot state (director);
+defects found (page §4): a refused format-3 project exits 255 with "Could not open ... Check that file exists."
+(`src/AZURE2.cpp`), a THM experiment whose data sets are all inactive is refused (`ConfigThm.cpp` writes
+`segments=`), `sigma` of a label that reads elastic is refused even with `exit_pair` naming another pair.
+
 ## 2026-11-11 (agent, Phase 5 design) — the energy grid, kernels, lab-frame comparison, finite layers (`feature/upgrade-5-design`)
 
 **Done.** The design note `docs/upgrade/energy_grid.md`, measured on 2363abac (no code changed). Measured with an

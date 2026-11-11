@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 #
-# A parameter file's segment_* entries are not applied in a run without data (audit item 12, 2026-10-26).
+# A parameter file's data-set entries are not applied in a run without data (audit item 12, 2026-10-26).
 #
-# An extrapolation numbers its <segmentsTest> grids 1..N and emits segment_<k>_energy_shift / _norm parameters for
+# An extrapolation numbered its <segmentsTest> grids 1..N and emitted segment_<k>_energy_shift / _norm parameters for
 # them, so a param.sav written by a fit handed DATA segment k's fitted energy shift to TEST segment k by name
 # (AZUREParams::ReadUserParameters) and moved the requested grid -- the energy-shift twin of the <targetInt> trap.
-# Now those entries are skipped with a note.  Model: tests/sum_lab_frame/models/extrap.azr (13C + alpha, no EC).
+# Now those entries are skipped with a note.  In format 3 the extrapolations' parameters are named by their records
+# (x1.shift.offset, ...).  Model: tests/sum_lab_frame/models/extrap.azr (13C + alpha, no EC).
 #
-#   (a) mode 3 with a param.sav that sets segment_1_energy_shift = 0.01 gives the same grid as mode 3 without it
-#       (first energies and values identical); the run log carries the note;
-#   (b) the same file in a run WITH data (mode 1 on a one-point data segment) does apply the shift, as before;
+#   (a) mode 3 with a param.sav that sets x1.shift.offset = 0.01 gives the same grid as mode 3 without it (first
+#       energies and values identical); the run log carries the note;
+#   (b) a data set's offset (one.shift.offset = 0.01) in a run WITH data (mode 1 on a two-point data set) does apply
+#       the shift, as before;
 #   (c) pyazr (skipped without the extension): load_sav in extrapolation mode leaves the energies alone.
 #
 #   ./tests/extrap_sav_segments/check.sh path/to/AZURE2
@@ -38,8 +40,8 @@ prep plain
 (cd "$WORK/plain" && printf '3\n\n\n7\n' | run_limited 300 "$AZURE2_BIN" --use-brune --no-gui --no-readline t.azr > run.log 2>&1)
 f="$WORK/plain/output/AZUREOut_aa=2_R=3.extrap"
 [ -s "$f" ] && [ -s "$WORK/plain/output/param.par" ] || { bad "plain extrapolation wrote no output"; tail -5 "$WORK/plain/run.log"; exit 1; }
-grep -q "^segment_1_energy_shift " "$WORK/plain/output/param.par" || { bad "param.par has no segment_1_energy_shift line"; head -3 "$WORK/plain/output/param.par"; exit 1; }
-awk '$1 == "segment_1_energy_shift" { $2 = "0.01"; print; next } { print }' "$WORK/plain/output/param.par" > "$WORK/shift.sav"
+grep -q "^ *x1.shift.offset " "$WORK/plain/output/param.par" || { bad "param.par has no x1.shift.offset line"; head -3 "$WORK/plain/output/param.par"; exit 1; }
+awk '$1 == "x1.shift.offset" { $2 = "0.01"; print; next } { print }' "$WORK/plain/output/param.par" > "$WORK/shift.sav"
 prep sav; cp "$WORK/shift.sav" "$WORK/sav/"
 # mode 3 asks for the uncertainty band (n) before the parameter file
 (cd "$WORK/sav" && printf '3\nn\nshift.sav\n\n7\n' | run_limited 300 "$AZURE2_BIN" --use-brune --no-gui --no-readline t.azr > run.log 2>&1)
@@ -51,7 +53,7 @@ cmp_out="$(paste <(awk 'NF >= 4 { print $1, $4 }' "$f") <(awk 'NF >= 4 { print $
   { if ($1 != $3) { print "GRID"; exit } d = $2 - $4; if (d < 0) d = -d; m = $4 < 0 ? -$4 : $4; if (m < 1e-300) m = 1e-300; r = d / m; if (r > w) w = r; n++ }
   END { printf "%.2e %d", w, n }')"
 if [ "$cmp_out" = "GRID" ]; then bad "(a) the .sav moved the extrapolation grid: $(first "$f") vs $(first "$g")"
-elif awk -v w="${cmp_out%% *}" 'BEGIN { exit !(w + 0 <= 1e-6) }'; then ok "(a) the grid is unchanged with the fit's segment_1_energy_shift = 0.01 in the file (first energy $(first "$g" | cut -d' ' -f1) MeV; values to ${cmp_out%% *}, ${cmp_out##* } points)"
+elif awk -v w="${cmp_out%% *}" 'BEGIN { exit !(w + 0 <= 1e-6) }'; then ok "(a) the grid is unchanged with x1.shift.offset = 0.01 in the file (first energy $(first "$g" | cut -d' ' -f1) MeV; values to ${cmp_out%% *}, ${cmp_out##* } points)"
 else bad "(a) values differ by ${cmp_out%% *} with the .sav"; fi
 if grep -q "segment_\* entries of shift.sav (data-segment normalizations and energy shifts) are not applied" "$WORK/sav/run.log"; then ok "(a) the run log says the segment_* entries were skipped"; else bad "(a) no note about the skipped entries"; fi
 
@@ -61,11 +63,15 @@ printf '6.0  30  1.0  0.1\n6.2  30  1.0  0.1\n' > "$WORK/data/data/one.dat"
 python3 - "$WORK/data/t.azr" <<'EOF'
 import sys
 p = sys.argv[1]; s = open(p).read()
-s = s.replace("<segmentsData>\n</segmentsData>", "<segmentsData>\n1  2  3  5.9  6.4  0  180  1  1.0  0  0  0  0  0  data/one.dat  0  0\n</segmentsData>")
+one = ("dataset one\n    reaction       13C(a,n)16O[6.0494]\n    quantity       dsigma_domega\n"
+       "    unit           b/sr\n    file           data/one.dat\n    columns        E_lab[MeV] theta_lab[deg] value error\n"
+       "    energy_window  5.9 6.4 MeV\n    angle_window   0 180 deg\n    norm           1.0 fixed\n")
+assert s.count("<data>\n</data>") == 1
+s = s.replace("<data>\n</data>", "<data>\n" + one + "</data>")
 open(p, "w").write(s)
 EOF
 (cd "$WORK/data" && printf '1\n\n\n7\n' | run_limited 300 "$AZURE2_BIN" --use-brune --no-gui --no-readline t.azr > run.log 2>&1)
-awk '$1 == "segment_1_energy_shift" { $2 = "0.01"; print; next } { print }' "$WORK/data/output/param.par" > "$WORK/data/shift.sav"
+awk '$1 == "one.shift.offset" { $2 = "0.01"; print; next } { print }' "$WORK/data/output/param.par" > "$WORK/data/shift.sav"
 e0="$(awk 'NF >= 5 { print $1; exit }' "$WORK/data/output/AZUREOut_aa=2_R=3.out")"
 (cd "$WORK/data" && printf '1\nshift.sav\n\n7\n' | run_limited 300 "$AZURE2_BIN" --use-brune --no-gui --no-readline t.azr > run2.log 2>&1)
 e1="$(awk 'NF >= 5 { print $1; exit }' "$WORK/data/output/AZUREOut_aa=2_R=3.out")"

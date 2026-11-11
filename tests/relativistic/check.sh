@@ -12,7 +12,7 @@
 #   (e) lab-frame differential data: the relativistic c.m. angle and dOmega_lab/dOmega_cm against an
 #       explicit four-vector boost (t(d,n)a, p + 4He elastic, and 7Li(p,n)7Be just above threshold, forward branch);
 #   (h) a lab angle between the relativistic and the non-relativistic maximum is refused with relativistic=1;
-#   (g) relativistic=1 with the hybrid nuclear-potential Coulomb functions (<potential> block) stops with an ERROR.
+#   (g) relativistic=1 with the hybrid nuclear-potential Coulomb functions (a potential record) stops with an ERROR.
 #   (f) with a second binary (a build without relativistic kinematics), every non-relativistic model's
 #       output is byte-identical between the two.
 #
@@ -69,14 +69,16 @@ fi
 
 # (e) the hybrid model is refused
 mkdir -p "$WORK/hyb/output" "$WORK/hyb/checks"
-# the hybrid model is switched on by a <potential> block after </config>
-awk '{ print } /^<\/config>$/ { print "<potential>\nuseHybridPotential=1\npotentialType=0\nV0=40\nR=2.5\na=0.6\n</potential>" }' \
+# the hybrid model of the pair n + 4He: a potential record in <potentials> after </config>
+awk '{ print } /^<\/config>$/ { print "<potentials>\npotential n4He\n    pair            n+4He\n    coulomb_radius  2.5 fm"
+                                 print "    central         woods_saxon depth 40 MeV radius 2.5 fm diffuseness 0.6 fm\n</potentials>" }' \
   "$HERE/models/na_hs_rel.azr" > "$WORK/hyb/t.azr"
 (cd "$WORK/hyb" && printf "3\n\n\n7\n" | run_limited 120 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
-if grep -q "ERROR: relativistic=1 cannot be combined" "$WORK/hyb/run.log" && ! ls "$WORK/hyb/output/"AZUREOut_* > /dev/null 2>&1; then
+if grep -q "E_POTENTIAL_RELATIVISTIC: potential n4He: a hybrid potential cannot be combined with relativistic=1" "$WORK/hyb/run.log" &&
+   ! ls "$WORK/hyb/output/"AZUREOut_* > /dev/null 2>&1; then
   ok "(g) relativistic=1 with the hybrid Coulomb functions stops with an ERROR"
 else
-  bad "(g) relativistic=1 with a <potential> block did not stop"; tail -5 "$WORK/hyb/run.log"
+  bad "(g) relativistic=1 with a potential record did not stop"; tail -5 "$WORK/hyb/run.log"
 fi
 
 # (f) non-relativistic models byte-identical to a reference build

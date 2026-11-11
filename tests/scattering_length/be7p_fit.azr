@@ -10,6 +10,7 @@ none #Legendre Polynomial Check
 none #Coulomb Amplitudes Check
 none #Reaction Pathway Check
 none #Angular Distributions Check
+format=3
 </config>
 <levels>
 2 -1 3.520000 0 1 1 4 0 1 1 0 7120152.86399 0.5 1 1.5 -1 0 1.00783 7.01693 1 4 0.1375 0.1375 0 0 0.0 0 4.3 0 0 0
@@ -21,28 +22,88 @@ none #Angular Distributions Check
 1 -1 5.000000 0 1 2 2 0 3 1 0 285549.812688 0.5 1 0.5 -1 0.42908 1.00783 7.01693 1 4 0.1375 0.1375 0 0 0.0 0 4.3 0 0 0
 
 </levels>
-<segmentsData>
-1 1 1 0 10 0 180 2 2 0 1 0 0 0 0 0 data/be7p_phase_2m.dat 0 0
-1 1 1 0 10 0 180 2 1 0 1 0 0 0 0 0 data/be7p_phase_1m.dat 0 0
-</segmentsData>
-<scatteringLengths>
-1 1 1 17.0 0.5
-1 1 2 -4.0 0.5
-1 1 -1 5.0 1.0
-1 2 1 9.0 0.5 -0.3 0.05
-0 2 0 25.0 1.0
-</scatteringLengths>
-<segmentsTest>
-1 1 1 0.02 0.30 0.01 0 0 0 2 2 0
-1 1 1 0.02 0.30 0.01 0 0 0 2 1 0
-</segmentsTest>
-<targetInt>
-</targetInt>
-<lastRun>
-9997
-""
-""
-0 0
-0 ""
--1. -1. -1.
-</lastRun>
+<data>
+# <segmentsData> line 1
+dataset be7p_phase_2m
+    reaction       7Be(p,p)7Be
+    quantity       phase_shift
+    unit           deg
+    J              2
+    l              0
+    s              2
+    file           data/be7p_phase_2m.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0 10 MeV
+    norm           1 fixed
+
+# <segmentsData> line 2
+dataset be7p_phase_1m
+    reaction       7Be(p,p)7Be
+    quantity       phase_shift
+    unit           deg
+    J              1
+    l              0
+    s              1
+    file           data/be7p_phase_1m.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0 10 MeV
+    norm           1 fixed
+</data>
+<modelData>
+# <scatteringLengths> line 1
+datum scattering_length_1
+    quantity       scattering_length
+    pair           p+7Be
+    s              1
+    value          17.0 fm
+    error          0.5 fm
+
+# <scatteringLengths> line 2
+datum scattering_length_2
+    quantity       scattering_length
+    pair           p+7Be
+    s              2
+    value          -4.0 fm
+    error          0.5 fm
+
+# <scatteringLengths> line 3
+datum scattering_length_3
+    quantity       scattering_length
+    pair           p+7Be
+    s              coherent
+    value          5.0 fm
+    error          1.0 fm
+
+# <scatteringLengths> line 4
+datum scattering_length_4
+    quantity       scattering_length
+    pair           p+7Be[0.42908]
+    s              1
+    value          9.0 fm
+    error          0.5 fm
+    imag           -0.3 fm
+    imag_error     0.05 fm
+</modelData>
+<extrapolations>
+# <segmentsTest> line 1
+extrapolation x1
+    reaction       7Be(p,p)7Be
+    quantity       phase_shift
+    unit           deg
+    J              2
+    l              0
+    s              2
+    energies       list 0.02 0.03 0.04 0.05 0.060000000000000005 0.07 0.08 0.09 0.09999999999999999 0.10999999999999999 0.11999999999999998 0.12999999999999998 0.13999999999999999 0.15 0.16 0.17 0.18000000000000002 0.19000000000000003 0.20000000000000004 0.21000000000000005 0.22000000000000006 0.23000000000000007 0.24000000000000007 0.25000000000000006 0.26000000000000006 0.2700000000000001 0.2800000000000001 0.2900000000000001 MeV lab
+
+# <segmentsTest> line 2
+extrapolation x2
+    reaction       7Be(p,p)7Be
+    quantity       phase_shift
+    unit           deg
+    J              1
+    l              0
+    s              1
+    energies       list 0.02 0.03 0.04 0.05 0.060000000000000005 0.07 0.08 0.09 0.09999999999999999 0.10999999999999999 0.11999999999999998 0.12999999999999998 0.13999999999999999 0.15 0.16 0.17 0.18000000000000002 0.19000000000000003 0.20000000000000004 0.21000000000000005 0.22000000000000006 0.23000000000000007 0.24000000000000007 0.25000000000000006 0.26000000000000006 0.2700000000000001 0.2800000000000001 0.2900000000000001 MeV lab
+</extrapolations>
+<targets>
+</targets>

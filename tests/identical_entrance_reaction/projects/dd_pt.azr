@@ -10,25 +10,36 @@ none #Legendre Polynomial Check
 none #Coulomb Amplitudes Check
 none #Reaction Pathway Check
 none #Angular Distributions Check
+format=3
 </config>
 <levels>
 2 1 24.8465 0 1 1 4 0 1 1 0 100000.0 1 1 1 1 0 2.01410178 2.01410178 1 1 23.8465 23.8465 0 0 0.0 0 5.0 0 0 0
 2 1 24.8465 0 1 2 0 4 1 1 0 200000.0 0.5 1 0.5 1 0 1.00782503 3.01604928 1 1 23.8465 19.8139 0 0 0.0 0 5.0 0 0 0
 
 </levels>
-<segmentsData>
-1 1 2 0 100 0 180 0 1 0 0 0 0 0 data/dd_pt_int.dat 0 0
-1 1 2 0 100 0 180 1 1 0 0 0 0 0 data/dd_pt_diff.dat 0 0
-</segmentsData>
-<segmentsTest>
-</segmentsTest>
-<targetInt>
-</targetInt>
-<lastRun>
-9997
-"output/param.sav"
-""
-0 0
-0 ""
--1. -1. -1.
-</lastRun>
+<data>
+# <segmentsData> line 1
+dataset dd_pt_int
+    reaction       2H(d,p)3H
+    quantity       sigma
+    unit           b
+    file           data/dd_pt_int.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0 100 MeV
+    norm           1 fixed
+
+# <segmentsData> line 2
+dataset dd_pt_diff
+    reaction       2H(d,p)3H
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/dd_pt_diff.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    energy_window  0 100 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+</targets>

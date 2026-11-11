@@ -34,20 +34,27 @@ import tempfile
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-FILES = ["T2.azr", "T2_true.azr", "cov_diff.txt", "prior_cov.txt", "data"]
+FILES = ["T2.azr", "T2_true.azr", "cov_diff.txt", "prior_cov.f3.txt", "data"]
 
-# Free parameters: param.sav name -> how the truth is found ("level" = from the truth run's
-# param.par, else the key of truth.json's "nuisance" table).
+# Free parameters: param.sav name (format 3; the old name in the comment) -> how the truth is found ("level" = from
+# the truth run's param.par, else the key of truth.json's "nuisance" table).
 FREE = {
     "energy_1": "level", "width_1_3": "level",
     "width_2_1": "level", "width_2_4": "level",
     "energy_5": "level", "width_5_3": "level",
-    "segment_1_norm": "s1_norm", "segment_1_energy_shift": "s1_shift",
-    "segment_2_norm": "D_norm", "segment_2_energy_shift": "G_shift", "segment_2_energy_shift_fn0": "G_fn_a0",
-    "segment_4_norm": "s4_norm", "segment_4_energy_shift_sqrt": "s4_sqrt",
-    "density_4": "s5_density", "segment_6_norm": "s6_norm",
-    "segment_7_norm": "s7_norm", "segment_8_norm": "s8_norm",
-    "abundance_natN_8_16": "abundance", "segment_13_norm": "s13_norm",
+    "s01_int_thin.norm": "s1_norm",                     # segment_1_norm
+    "s01_int_thin.shift.offset": "s1_shift",            # segment_1_energy_shift
+    "D.value": "D_norm",                                # segment_2_norm (normalization group D)
+    "G.offset": "G_shift",                              # segment_2_energy_shift (shift group G)
+    "G.a0": "G_fn_a0",                                  # segment_2_energy_shift_fn0
+    "s04_thick.norm": "s4_norm",                        # segment_4_norm
+    "s04_thick.shift.sqrt": "s4_sqrt",                  # segment_4_energy_shift_sqrt
+    "tgt_s05_implanted.areal_density": "s5_density",    # density_4
+    "s06_gas.norm": "s6_norm",                          # segment_6_norm
+    "s07_profile.norm": "s7_norm",                      # segment_7_norm
+    "s08_sum.norm": "s8_norm",                          # segment_8_norm
+    "natN.isotope.15N": "abundance",                    # abundance_natN_8_16
+    "s13_thm_oes.norm": "s13_norm",                     # segment_13_norm
 }
 
 

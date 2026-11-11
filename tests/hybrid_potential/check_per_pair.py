@@ -2,12 +2,14 @@
 """Behavioural checks on the per-pair hybrid nuclear potential.
 
 run_tests.sh already pins this project's chi-squared, which proves the
-<potential> block reaches the calculation at all.  What it cannot show is that
+<potentials> section reaches the calculation at all.  What it cannot show is that
 the *per-pair* semantics are right, because one project produces one number.
 That is what this script covers:
 
-  1. A pair's own setting beats the default.
-  2. A pair without one follows the default.
+  1. The record of pair 1 (p + 12C) is pair 1's setting; there is no default.
+  2. (The old <potential> block's default, inherited by a pair without a section of
+     its own, is the converter's: it writes one record per particle pair, and
+     convert_spec_equivalence compares the potential of every particle pair.)
   3. Switching a pair off returns exactly the no-hybrid answer.
   4. Setting a potential through the API equals loading the same potential
      from a file -- the two paths must not drift.
@@ -64,8 +66,8 @@ def committed_tolerance():
     raise RuntimeError("no number in tolerance")
 
 
-# The project as committed: default Woods-Saxon V0 = 40, pair 1 overriding it
-# with V0 = 20, pair 2 (the photon pair) off.  Its chi-squared is the one of
+# The project as committed: one record, pair 1 (p + 12C) Woods-Saxon V0 = 20 (the
+# old file's pair section over a default of V0 = 40); pair 2 (the photon pair) has none.  Its chi-squared is the one of
 # expected/chiSquared.out (check 1, within the project's tolerance); every other
 # path that must give the same project is compared with the value computed here
 # (FILE_CHI2, set in check 1) to round-off.
@@ -90,56 +92,31 @@ def check_true(name, ok, detail=""):
         failures.append(name)
 
 
-def variant(tmp, potential_block):
-    """Write a copy of the project with a different <potential> block."""
+def variant(tmp, records):
+    """Write a copy of the project with other records in <potentials>."""
     text = open(AZR).read()
-    start = text.index("<potential>")
-    end = text.index("</potential>") + len("</potential>")
+    start = text.index("<potentials>")
+    end = text.index("</potentials>") + len("</potentials>")
     path = os.path.join(HERE, tmp)
-    open(path, "w").write(text[:start] + potential_block + text[end:])
+    open(path, "w").write(text[:start] + "<potentials>\n" + records + "</potentials>" + text[end:])
     return path
 
 
-NO_HYBRID = """<potential>
-useHybridPotential=0
-useAdaptiveGrid=1
-potentialType=0
-V0=40
-R=3.6
-a=0.6
-</potential>"""
+NO_HYBRID = ""      # no record: no pair has a potential
 
-DEFAULT_ONLY = """<potential>
-useHybridPotential=1
-useAdaptiveGrid=1
-potentialType=0
-V0=20
-R=3.6
-a=0.6
-</potential>"""
-
-print("1. the project as committed (pair 1 overrides the default)")
+print("1. the project as committed (pair 1's record)")
 with azure2(AZR, cwd=HERE) as m:
     x = np.asarray(m.params_rwa, float)
     chi2_file = float(np.sum(m.calculate_chi2_rwa(x)))
     check("chi2 from the file equals expected/chiSquared.out", chi2_file, EXPECTED_CHI2, EXPECTED_TOL)
     FILE_CHI2 = chi2_file
     check_true("pair 1 carries its own setting", m.nuclear_potential(1).own)
-    check_true("pair 1 uses its own V0, not the default's",
+    check_true("pair 1 uses its record's V0 = 20; there is no default",
                m.nuclear_potential(1).V0 == 20.0
-               and m.nuclear_potential(0).V0 == 40.0,
+               and not m.nuclear_potential(0).enabled,
                f"pair1 V0={m.nuclear_potential(1).V0}, "
-               f"default V0={m.nuclear_potential(0).V0}")
+               f"default {m.nuclear_potential(0)}")
     check_true("pair 2 is off", not m.nuclear_potential(2).enabled)
-
-print("\n2. the same potential on the default alone gives the same answer")
-print("   (pair 1 is the only particle pair, so inheriting V0=20 must match)")
-path = variant("_default_only.azr", DEFAULT_ONLY)
-with azure2(path, cwd=HERE) as m:
-    chi2_default = float(np.sum(m.calculate_chi2_rwa(np.asarray(m.params_rwa, float))))
-    check_true("pair 1 inherits, it has no setting of its own",
-               not m.nuclear_potential(1).own)
-    check("chi2 inheriting the default", chi2_default, FILE_CHI2)
 
 print("\n3. no hybrid at all")
 path = variant("_no_hybrid.azr", NO_HYBRID)
@@ -169,8 +146,6 @@ with azure2(AZR, cwd=HERE) as m:
 
 print("\n5. setting a potential through the API equals loading it from a file")
 with azure2(variant("_no_hybrid.azr", NO_HYBRID), cwd=HERE) as m:
-    m.set_nuclear_potential(0, type="WoodsSaxon", enabled=True, V0=40.0, R=3.6, a=0.6,
-                            reinitialize=False)
     m.set_nuclear_potential(1, type="WoodsSaxon", enabled=True, V0=20.0, R=3.6, a=0.6)
     x = np.asarray(m.params_rwa, float)
     check("chi2 built through the API", float(np.sum(m.calculate_chi2_rwa(x))), FILE_CHI2)
@@ -195,7 +170,7 @@ with azure2(variant("_no_hybrid.azr", NO_HYBRID), cwd=HERE) as m:
     check_true("the stale vector does not", abs(with_stale - FILE_CHI2) > 1e-3 * FILE_CHI2,
                f"stale {with_stale} vs file {FILE_CHI2}")
 
-for tmp in ("_default_only.azr", "_no_hybrid.azr"):
+for tmp in ("_no_hybrid.azr",):
     p = os.path.join(HERE, tmp)
     if os.path.exists(p):
         os.remove(p)
