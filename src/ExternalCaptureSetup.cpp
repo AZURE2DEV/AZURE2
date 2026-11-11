@@ -20,14 +20,15 @@
 #include "WorkingCopy.h"
 #include "GSLException.h"
 
-int ExternalCaptureExit(const CNuc &compound, int entrancePair, int exitPair, int segmentKey) {
-  const int exit = compound.Pathways().Entrance(entrancePair).ExitOf(exitPair);
+const azure2::ExitRow &ExternalCaptureExit(const CNuc &compound, int entrancePair, int exitPair, int segmentKey) {
+  const azure2::EntrancePathways &P = compound.Pathways().Entrance(entrancePair);
+  const int exit = P.ExitOf(exitPair);
   if (!exit)
     throw std::runtime_error("data segment #" + std::to_string(segmentKey) + " asks for external capture from pair " +
                              std::to_string(compound.GetPair(entrancePair)->GetPairKey()) + " to pair " +
                              std::to_string(compound.GetPair(exitPair)->GetPairKey()) +
                              ", but no reaction pathway leads from the one to the other");
-  return exit;
+  return P.exits[exit - 1];
 }
 
 namespace {
@@ -101,14 +102,14 @@ long long WalkECAmplitudes(WorkingCopy &data, Segments &segments, CNuc *theCNuc,
     int aa = theCNuc->GetPairNumFromKey(segment->GetEntranceKey());
     if (theCNuc->GetPair(aa)->GetPType() == 20) continue;
     if (!theCNuc->GetPair(aa)->IsEntrance()) continue;
-    PPair *entrancePair = theCNuc->GetPair(aa);
+    const azure2::EntrancePathways &P = theCNuc->Pathways().Entrance(aa);
     for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
       for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++) {
         if (!theCNuc->GetJGroup(j)->GetLevel(la)->IsECLevel()) continue;
         ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
         int ir = theCNuc->GetPairNumFromKey(segment->GetExitKey());
         if (ecLevel->GetECPairNum() != ir) continue;
-        Decay *decay = entrancePair->GetDecay(ExternalCaptureExit(*theCNuc, aa, ir, segment->GetSegmentKey()));
+        const azure2::ExitRow &exit = ExternalCaptureExit(*theCNuc, aa, ir, segment->GetSegmentKey());
         if (hash) {
           // Which block this is, and the final state it captures to.  The
           // level energy enters every integral (Unit::CalculateECAmplitudes);
@@ -121,24 +122,26 @@ long long WalkECAmplitudes(WorkingCopy &data, Segments &segments, CNuc *theCNuc,
           hash->Add(theCNuc->GetJGroup(j)->GetJ());
           hash->Add(ecLevel->GetECEnergy());  // the energy the integrals use (Brune; cnuc_split.md section 8)
           pairs->insert(aa);
-          for (int k = 1; k <= decay->NumKGroups(); k++) {
-            KGroup *theKGroup = decay->GetKGroup(k);
-            hash->Add(theKGroup->GetS());
-            for (int ecm = 1; ecm <= theKGroup->NumECMGroups(); ecm++) {
-              ECMGroup *theECMGroup = theKGroup->GetECMGroup(ecm);
-              AChannel *finalChannel = theCNuc->GetJGroup(j)->GetChannel(theECMGroup->GetFinalChannel());
-              hash->Add(theECMGroup->GetL());
-              hash->Add(theECMGroup->GetMult());
-              hash->Add((int)theECMGroup->GetRadType());
-              hash->Add(theECMGroup->GetJ());
+          // The pathways in the table's order, which is the order of the trees the signature was defined on: a file
+          // written before the table keeps its signature.
+          for (int k = 1; k <= exit.num_groups; k++) {
+            const azure2::SpinGroupRow &group = P.Group(exit, k);
+            hash->Add(group.s);
+            for (int ecm = 1; ecm <= group.num_external; ecm++) {
+              const azure2::ExternalRow &pathway = P.External(group, ecm);
+              AChannel *finalChannel = theCNuc->GetJGroup(j)->GetChannel(pathway.final_channel);
+              hash->Add(pathway.l);
+              hash->Add(pathway.mult);
+              hash->Add((int)pathway.rad_type);
+              hash->Add(pathway.J);
               hash->Add(finalChannel->GetL());
               hash->Add(finalChannel->GetS());
               hash->Add(theCNuc->GetPair(finalChannel->GetPairNum())->GetPairKey());
               pairs->insert(finalChannel->GetPairNum());
-              hash->Add(theECMGroup->IsChannelCapture() ? 1 : 0);
-              if (theECMGroup->IsChannelCapture()) {
-                MGroup *chanCap = entrancePair->GetDecay(theECMGroup->GetChanCapDecay())->GetKGroup(theECMGroup->GetChanCapKGroup())->GetMGroup(theECMGroup->GetChanCapMGroup());
-                AChannel *initial = theCNuc->GetJGroup(chanCap->GetJNum())->GetChannel(chanCap->GetChpNum());
+              hash->Add(pathway.channel_capture ? 1 : 0);
+              if (pathway.channel_capture) {
+                const azure2::InternalRow &chanCap = P.internal[pathway.cc_row];
+                AChannel *initial = theCNuc->GetJGroup(chanCap.group)->GetChannel(chanCap.chp);
                 hash->Add(initial->GetL());
                 hash->Add(initial->GetS());
               }
@@ -148,9 +151,8 @@ long long WalkECAmplitudes(WorkingCopy &data, Segments &segments, CNuc *theCNuc,
         // Every point carries its own amplitudes, mapped or not (see
         // CalculateECAmplitudes), so the intEC file does not depend on mapping.
         for (auto point = segment->GetPoints(data).begin(); point != segment->GetPoints(data).end(); point++) {
-          for (int k = 1; k <= decay->NumKGroups(); k++)
-            for (int ecm = 1; ecm <= decay->GetKGroup(k)->NumECMGroups(); ecm++)
-              count += 1 + (long long)point->NumSubPoints();
+          for (int k = 1; k <= exit.num_groups; k++)
+            count += (long long)P.Group(exit, k).num_external * (1 + (long long)point->NumSubPoints());
           if (hash) {
             // The energies the amplitudes are evaluated at.  The angle does
             // not enter an EC amplitude, so it is not part of the signature.
@@ -449,7 +451,7 @@ int WorkingCopy::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
     int aa = theCNuc->GetPairNumFromKey(segment->GetEntranceKey());
     if (theCNuc->GetPair(aa)->GetPType() == 20) continue;
     if (theCNuc->GetPair(aa)->IsEntrance()) {
-      PPair *entrancePair = theCNuc->GetPair(aa);
+      const azure2::EntrancePathways &P = theCNuc->Pathways().Entrance(aa);
       for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
         for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++) {
           if (theCNuc->GetJGroup(j)->GetLevel(la)->IsECLevel()) {
@@ -496,12 +498,12 @@ int WorkingCopy::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
                   configure.outStream << "\r\tSegment #" << std::setw(12) << segmentKeyOut
                                       << std::setw(0) << " [*************************] 100%" << std::endl;
               }
-              Decay *decay = entrancePair->GetDecay(ExternalCaptureExit(*theCNuc, aa, ir, segment->GetSegmentKey()));
+              const azure2::ExitRow &exit = ExternalCaptureExit(*theCNuc, aa, ir, segment->GetSegmentKey());
               for (UnitIterator point = segment->GetPoints(*this).begin();
                    point < segment->GetPoints(*this).end(); point++) {
                 {
-                  for (int k = 1; k <= decay->NumKGroups(); k++) {
-                    for (int ecm = 1; ecm <= decay->GetKGroup(k)->NumECMGroups(); ecm++) {
+                  for (int k = 1; k <= exit.num_groups; k++) {
+                    for (int ecm = 1; ecm <= P.Group(exit, k).num_external; ecm++) {
                       if (!usePrevious) {
                         if (out.is_open()) out << point->GetECAmplitude(k, ecm) << std::endl;
                         for (UnitIterator subPoint = point->GetSubPoints(*this).begin();
@@ -553,7 +555,7 @@ int WorkingCopy::LeafECAmplitudes(CNuc *theCNuc, const Config &configure, bool u
   for (const std::pair<int, int> &leaf : Draft().leafRefs_) {
     int aa = theCNuc->GetPairNumFromKey(Draft().segments_[leaf.first].TermEntranceKey(leaf.second));
     if (theCNuc->GetPair(aa)->GetPType() != 20 && theCNuc->GetPair(aa)->IsEntrance()) {
-      PPair *entrancePair = theCNuc->GetPair(aa);
+      const azure2::EntrancePathways &P = theCNuc->Pathways().Entrance(aa);
       for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
         for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++) {
           if (theCNuc->GetJGroup(j)->GetLevel(la)->IsECLevel()) {
@@ -607,13 +609,13 @@ int WorkingCopy::LeafECAmplitudes(CNuc *theCNuc, const Config &configure, bool u
               // Write the freshly calculated amplitudes to the file, or read the
               // previously saved ones back in.  The iteration order matches the
               // regular-segment loop in CalculateECAmplitudes exactly.
-              Decay *decay = entrancePair->GetDecay(
-                  ExternalCaptureExit(*theCNuc, aa, ir, Draft().segments_[leaf.first].TermKey(leaf.second)));
+              const azure2::ExitRow &exit = ExternalCaptureExit(
+                  *theCNuc, aa, ir, Draft().segments_[leaf.first].TermKey(leaf.second));
               for (UnitIterator point = Draft().segments_[leaf.first].TermPoints(*this, leaf.second).begin();
                    point < Draft().segments_[leaf.first].TermPoints(*this, leaf.second).end(); point++) {
                 if (!(point->IsMapped()) || point->OwnsEDependentValues()) {
-                  for (int k = 1; k <= decay->NumKGroups(); k++) {
-                    for (int ecm = 1; ecm <= decay->GetKGroup(k)->NumECMGroups(); ecm++) {
+                  for (int k = 1; k <= exit.num_groups; k++) {
+                    for (int ecm = 1; ecm <= P.Group(exit, k).num_external; ecm++) {
                       if (!usePrevious) {
                         if (out.is_open()) out << point->GetECAmplitude(k, ecm) << std::endl;
                         for (UnitIterator subPoint = point->GetSubPoints(*this).begin();

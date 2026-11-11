@@ -17,6 +17,7 @@
 #include "ECAmplitudeCache.h"
 #include "ExternalCaptureExit.h"
 #include "PPair.h"
+#include "PathwayTable.h"
 
 Config *g_config = nullptr;  // defined by the executable; the library reads it
 
@@ -62,17 +63,21 @@ int main(int argc, char **argv) {
   compound.GetPair(proton)->SetEntrance();
   compound.Initialize(cfg);
 
-  int position = -1;
+  const azure2::EntrancePathways &P = compound.Pathways().Entrance(proton);
+  int position = -1, pair = -1;
   try {
-    position = ExternalCaptureExit(compound, proton, photon, 7);
+    const azure2::ExitRow &exit = ExternalCaptureExit(compound, proton, photon, 7);
+    position = (int)(&exit - P.exits.data()) + 1;
+    pair = exit.pair;
   } catch (const std::exception &e) {
     check("the photon exit is found", false, e.what());
   }
-  check("the photon pair (3) is exit 2 of p + 12C", position == 2, std::to_string(position));
+  check("the photon pair (3) is exit 2 of p + 12C", position == 2 && pair == 3,
+        "exit " + std::to_string(position) + " to pair " + std::to_string(pair));
 
   std::string message;
   try {
-    position = ExternalCaptureExit(compound, proton, neutron, 7);
+    position = (int)(&ExternalCaptureExit(compound, proton, neutron, 7) - P.exits.data()) + 1;
   } catch (const std::runtime_error &e) {
     message = e.what();
   }
