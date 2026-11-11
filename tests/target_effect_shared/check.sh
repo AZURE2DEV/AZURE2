@@ -11,7 +11,8 @@
 # narrowed the kernel of its parent (22Ne+a, 10-1-26: Harms "4-6" chi2 2037
 # shared vs 1379 split).  TargetEffect::ConvertSigmaToCM now converts once.
 #
-# Model: tests/target_effect_ranges (two Deineko segments sharing "1,2").
+# Model: tests/target_effect_ranges (two Deineko data sets naming one beam record, beam_targetInt1, as the old
+# "1,2" line); the split variant gives the second its own copy of the record.
 #
 #   ./tests/target_effect_shared/check.sh path/to/AZURE2
 
@@ -24,6 +25,7 @@ AZURE2_BIN="${1:?usage: check.sh path/to/AZURE2}"
 AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
 # A hang fails the check instead of stalling the suite (tests/lib/guard.sh).
 . "$HERE/../lib/guard.sh"
+. "$HERE/../lib/edit_guard.sh"
 RUN="$(guard_command "${TEST_TIMEOUT:-600}")"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 
@@ -34,21 +36,24 @@ failures=0
 ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
-# make_variant NAME SPLIT: SPLIT=1 replaces the "1,2" line by identical "1" and
-# "2" lines.  The energy-range tokens are dropped so the whole segment is
-# convolved and the comparison does not depend on the automatic decision.
+# make_variant NAME SPLIT: the project with the fold windows of both data sets removed (the whole data set is folded,
+# so the comparison does not depend on the automatic decision); SPLIT=1 gives deineko_160 a beam record of its own,
+# beam_split, a copy of the shared beam_targetInt1 (the same spread), so that each data set has its own record.
+# Every edit must change the file (tests/lib/edit_guard.sh).
+NOWINDOWS='$1 == "fold_windows" { next } { print }'
+SPLIT='$1 == "dataset" { ds = $2 } /^<\/data>/ { ds = "" }
+  ds == "deineko_160" && $1 == "beam" { $0 = "    beam           beam_split" }
+  /^<\/targets>/ { print ""; print "beam beam_split"; print "    spread         0.030 MeV lab" }
+  { print }'
 make_variant() {
   local dir="$WORK/$1"
   mkdir -p "$dir/output" "$dir/checks"
   cp -R "$SRC/data" "$dir/data"
-  awk -v sep="$2" '
-    /<targetInt>/ { inte = 1; print; next }
-    /<\/targetInt>/ { inte = 0 }
-    inte && $2 == "\"1,2\"" {
-      NF = NF - 3
-      if (sep) { $2 = "\"1\""; print; $2 = "\"2\""; print; next }
-    }
-    { print }' "$SRC/target_effect_ranges.azr" > "$dir/t.azr"
+  edited "$SRC/target_effect_ranges.azr" "$dir/t.azr" awk "$NOWINDOWS" || bad "$1: the fold windows were not removed"
+  [ "$2" = 1 ] || return 0
+  edited "$dir/t.azr" "$dir/t.azr" awk "$SPLIT" || bad "$1: the beam record was not split"
+  [ "$(grep -c '^beam beam_' "$dir/t.azr")" -eq 2 ] && [ "$(grep -c '^    beam           beam_split$' "$dir/t.azr")" -eq 1 ] \
+    || bad "$1: not two beam records, one data set on each"
 }
 
 run() { (cd "$WORK/$1" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1); }
