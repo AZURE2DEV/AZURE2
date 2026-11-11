@@ -281,6 +281,15 @@ class Builder {
     if (out->e2 != 0) s += "[" + out->e2Text + "]";
     return s;
   }
+  /// The old engine refused an active line whose component names a pair key <levels> lacks
+  /// (EData::CheckComponentPairs); the reason, or "" when every component's pairs exist (exit -1 is total capture).
+  std::string MissingComponentPair(const std::vector<ComponentEntry> &components) const {
+    for (const ComponentEntry &c : components)
+      if (!Pair(c.entrance) || (c.exit != -1 && !Pair(c.exit)))
+        return "component " + std::to_string(c.entrance) + " -> " + std::to_string(c.exit) +
+               " names a pair key that is not in the compound nucleus";
+    return "";
+  }
   static std::string PairLabel(const OldPair &p) { return experiment::PairLabel(p.Info()); }
 
   /// The channel spin of a phase-shift line without "spin s": the one spin of (J, l) of the entrance pair in the
