@@ -464,8 +464,10 @@ has no scale unless the record gives one.
 - **User table** (`stopping table "file" <units>`): the module's tabulated override, with provenance.
 - **ERYA is not called by the engine.** `external/erya` (with SRIM's `SRIM2013.xml`) is built under `USE_ERYA`
   (`CMakeLists.txt` 61, 375–388) and used only by `tests/reference/compound_stopping_reference_test.cpp`; the Qt GUI
-  that used it is gone. No test project names it. Its removal is the CMake option, the directory and that test, whose
-  comparison moves to `stopping/tools/` (SRIM values for comparison only, never committed).
+  that used it is gone. No test project names it. Its removal is the CMake option, the directory and that test. The
+  module's own stopping powers are SRIM-2013's since 2026-11-11 (ported from LunaSRIM, decision of the PI;
+  `stopping.md`), and its tests compare them with LunaSRIM's values (`stopping/tests/data/srim_reference.csv`), so
+  ERYA's SRIM file is no longer needed as a reference.
 
 ### 6.4 Order of removal
 

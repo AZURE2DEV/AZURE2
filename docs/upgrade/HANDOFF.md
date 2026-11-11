@@ -2,6 +2,32 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, SRIM stopping) — `stopping/` computes SRIM-2013's stopping powers, ported from LunaSRIM (`feature/upgrade-5-stopping-2`)
+
+**Done.** The first branch's transcribed coefficients (Geant4's ICRU 49 rows, `elements.tsv`, Barkas table, joins,
+Pierce–Blann scaling, ZBL universal fit, Chu/Yang forms, the ERYA comparison tool) are gone. `stopping/` now ports
+LunaSRIM 1.0.0's `stopping.py` and `straggling.py` to C++ with SRIM's `SCOEF03.DAT` and `SNUC03.dat`
+(`stopping/data/srim/`, unchanged, README with SHA-256, terms, citation; compiled in, or read from
+`AZURE2_SRIM_DATA_DIR`): electronic stopping of any ion in any element, solid or gas with SRIM's phase factor;
+pair-specific nuclear stopping; Bragg's rule with SRIM's compound correction (applied once, as SRIM's tables, TRIM and
+LunaSRIM's energy loss do; LunaSRIM's `compound_stopping` applies it twice, following the SR module's list mode);
+break points of the integrals at the branch boundaries and at the nuclear stopping's jump (reduced energy 30);
+straggling TRIM (default) or Bohr; SRIM's published accuracy as the uncertainty (H 4.0 %, He 3.9 %, Li 4.8 %,
+heavier 5.8 %; nuclear 10 % provisional); SRIM cited in the provenance text and in every `azure2-stopping` output.
+Documents: `stopping.md` rewritten, `ARCHITECTURE.md` §7, `energy_grid.md`, `ROADMAP.md`, `FOR_THE_OWNER.md`,
+`CLAUDE.md`, the summary page.
+
+**Verified how.** Build 0 warnings; `ctest -R "stopping|consistency"`; tests against LunaSRIM's own values
+(`stopping/tools/make_srim_reference.py`, 8889 rows): electronic (8 projectiles, 25 elements, both phases for gases,
+every branch boundary) and compounds to 1e-10 (largest 1.6e-11), nuclear to 1e-10 (largest 1.1e-12, `log1p`),
+eight layers' energy loss and straggling to 1e-5 (largest 4.6e-6, LunaSRIM's integrator); a shifted coefficient
+column fails 1001 rows. `ctest -LE slow` (see the branch report). One ε 0.8–1.1 µs (before 3.1–3.5), one E_out
+0.6–0.9 ms (before 1.6–2.3).
+
+**Open.** Whether the public repository ships SRIM's two files (owner; LunaSRIM's README reads SRIM's terms as
+non-commercial use only); the compound correction by name from `Compound.dat` (not done, the user gives a number);
+a source for the nuclear uncertainty; the Python binding and the wiring (next branch).
+
 ## 2026-11-11 (director, 14:00) — merged: the stopping library and the DWBA transfer library (leaves); stopping powers will be SRIM's
 
 Merged on the data branch (`--no-ff`), not pushed: `feature/upgrade-5-stopping-1` (`stopping/`) and

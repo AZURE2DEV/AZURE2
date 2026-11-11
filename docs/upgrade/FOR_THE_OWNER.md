@@ -31,10 +31,12 @@ whoever asks for a calculation, and a project file that says in words what each 
 
 **Stopping.** AZURE2 has its own stopping and straggling library, `stopping/` (materials by formula, energy loss,
 exit energy and range of a layer, straggling propagated through the target, each value with an uncertainty and its
-source; `docs/upgrade/stopping.md`), built beside the engine and not yet used by it. Its stopping powers are being
-changed to SRIM-2013's, ported from the LunaSRIM package with SRIM's two coefficient files and SRIM cited (decision
-of 2026-11-11). One point is yours: those two files stay under the terms of SRIM's authors, so whether the public
-repository ships them or asks the user to fetch them is for you to say.
+source; `docs/upgrade/stopping.md`), built beside the engine and not yet used by it. Its stopping powers are
+SRIM-2013's for any ion in any element, solid or gas, ported to C++ from the LunaSRIM package (they agree with it to
+rounding) with SRIM's two data files, and every output cites SRIM (decision of 2026-11-11). One point is yours:
+those two files stay under the terms of SRIM's authors (LunaSRIM's README reads them as free for non-commercial use),
+so whether the public repository ships them or asks the user to fetch them is for you to say; the library works
+either way (`stopping/data/srim/README.md`).
 
 Phase 7 has begun as a separate library that the engine does not use yet: optical potentials, bound states,
 distorted waves and the DWBA transfer to a bound state, which agree with FRESCO to better than 0.2 %

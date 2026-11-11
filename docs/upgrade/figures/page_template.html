@@ -226,10 +226,10 @@ h3 { font: 600 1rem var(--f-body); margin: 0 0 8px; }
       <h3>Stopping</h3>
       <ul>
         <li><b>Material</b>, a physical object: elements with stoichiometry, density, phase (solid or gas), and a composition profile in depth for implanted targets. Stoichiometry, density and profile can be nuisance parameters.</li>
-        <li><b>Electronic stopping, protons and α</b>: AZURE2's own evaluation per element, in the ICRU 49 functional form (velocity-proportional at low energy, Bethe with shell, Barkas and Bloch corrections at high energy, joined smoothly), with coefficients and their covariance fitted to the measured data of the IAEA stopping database. Gas and solid phases separately where data exist (He, N, Ne, Ar, Kr; C, Ta, Ti, W, Si, Mo, …).</li>
-        <li><b>Other light ions</b> by scaling at the same velocity: d and t from protons, <sup>3</sup>He from α. Heavier beams (C, N, O, Ne in inverse kinematics) by effective-charge scaling, marked with a larger uncertainty.</li>
-        <li><b>Nuclear stopping</b>: the ZBL universal formula.</li>
-        <li><b>Compounds</b>: Bragg additivity of the elements, plus a core-and-bond correction where measured compound data show one (oxides, nitrides, water, Mylar).</li>
+        <li><b>Electronic stopping</b>: SRIM-2013's, for any ion in any element (Z = 1–92), solid or gas, ported to C++ from LunaSRIM with SRIM's data files, SRIM cited (decision of the PI, 2026-11-11). Its published accuracy (4 % for H and He ions, 6 % for heavier ions) is the stated uncertainty.</li>
+        <li><b>Any projectile</b>: SRIM's own treatment (H, He, Li fits joined to Bethe; heavier ions scaled from helium with SRIM's effective charge).</li>
+        <li><b>Nuclear stopping</b>: SRIM's pair-specific fit (ZBL reduced units).</li>
+        <li><b>Compounds</b>: Bragg additivity with SRIM's phase factor and compound correction (a number the user gives).</li>
         <li><b>Uncertainty used, not hidden</b>: each table carries its evaluation uncertainty, which becomes the prior of a stopping-scale nuisance per material in the fit.</li>
       </ul>
     </div>
