@@ -144,16 +144,8 @@ class EPoint {
   //! target-effect integration needs the cross section as the weight.
   double GetAnalyzingPower(const azure2::Results &r) const { return Rec(r)[azure2::Results::kAy]; };
   void SetAnalyzingPower(azure2::Results &r, double v) const { Rec(r)[azure2::Results::kAy] = v; };
-  //! The user-defined resolution kernel built for this point (shared, so
-  //! copies of the point and of the data set do not duplicate it), and the
-  //! projectile rest energy (MeV) its time-of-flight conversion uses.
-  void SetUdrKernel(std::shared_ptr<const UdrKernel> k, double projectileMass) {
-    udr_kernel_ = k; udr_mass_ = projectileMass;
-  };
-  const UdrKernel *GetUdrKernel() const { return udr_kernel_.get(); };
-  double GetUdrProjectileMass() const { return udr_mass_; };
-  /// How the adaptive sub-point grid of this point was laid out (EData::SetUpTargetEffects),
-  /// so EData::ReplaceSubPointGrids can lay it out again for other level parameters.
+  /// How the adaptive sub-point grid of a point was laid out (EData::SetUpTargetEffects), so EData::
+  /// ReplaceSubPointGrids can lay it out again for other level parameters; held by the data set (DataSet::PointSetUp).
   /// Energies are c.m., unshifted.
   struct SubGridSpec {
     bool valid = false;
@@ -163,8 +155,10 @@ class EPoint {
     bool targetIntegration = false;
     double stoppingConversion = 1.0;  ///< c.m./lab factor of the stopping power
   };
-  void SetSubGridSpec(const SubGridSpec &spec) { sub_grid_spec_ = spec; };
-  const SubGridSpec &GetSubGridSpec() const { return sub_grid_spec_; };
+  /// What the set-up worked out for this point that its evaluations read again (its sub-point grid's layout, its
+  /// user-defined resolution kernel): record SetUpIndex of the data set's DataSet::PointSetUps, -1 for none.
+  int SetUpIndex() const { return set_up_; }
+  void SetSetUpIndex(int i) { set_up_ = i; }
   /// The point's own lab -> c.m. factor and entrance-pair charges, with which every target-effect kernel
   /// converts the line's lab energies (beam sigma, beam profile, Bohr straggling).  Set by
   /// EData::SetUpTargetEffects for each point and component point; a line shared by several pairs
@@ -335,12 +329,6 @@ class EPoint {
   /// Take the energies, c.m. angle and c.m. bin edges of the point's row from its segment's frame
   /// (ESegment::ConvertToCM, experiment::ConvertRow).
   void SetFrame(const azure2::experiment::FrameRow &row);
-  /// Record what the angle maps of a conversion reported (the maximum lab angle, the reason), for the messages.
-  void NoteAngleLimit(const azure2::experiment::AngleLimit &lim) const;
-  /// The kinematic maximum lab angle (degrees) found by the last conversion that did not reach the point's angle.
-  double GetLabAngleMax() const { return labAngleMax_; };
-  /// Why the last conversion did not reach the angle (a sentence for the error message).
-  const std::string &GetLabAngleWhy() const { return labAngleWhy_; };
   /// Relativistic lab -> c.m. angle and dOmega_lab/dOmega_cm of the detected particle (relativistic=1).
   bool RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nrCMAngle, double &cmAngle, double &factor) const;
   /// dOmega_lab/dOmega_cm of a particle at the point, not stored (the RATIO frame factors).
@@ -583,7 +571,7 @@ class EPoint {
   double cm_factor_ = 1.0;   ///< c.m./lab energy factor of the point's entrance pair (SetTargetKinematics)
   int bohr_z1_ = 0;          ///< beam charge of the entrance pair, for Bohr straggling
   int bohr_z2_ = 0;          ///< target charge of the entrance pair
-  SubGridSpec sub_grid_spec_;
+  int set_up_ = -1;  ///< SetUpIndex
   int segment_key_;
   int targetEffectNum_;
   double target_blend_weight_ = 1.0;
@@ -603,8 +591,6 @@ class EPoint {
   double cm_energy_;
   double lab_energy_;
   double excitation_energy_;
-  std::shared_ptr<const UdrKernel> udr_kernel_;
-  double udr_mass_ = 0.0;
   double geofactor_;
   double sfactorconv_;
   double screen_k_ = 0.0;
@@ -613,8 +599,6 @@ class EPoint {
   double stoppingPower_;
   double targetThickness_;
   double targetLabEnergy_ = 0.0;
-  mutable double labAngleMax_ = 180.;  ///< kinematic maximum lab angle of the last failed conversion
-  mutable std::string labAngleWhy_;    ///< the reason of the last failed conversion (set by the const relativistic map too)
   // Beam-profile effect: per-point energy window (c.m.; NaN when the data file has no such columns) and the
   // inverse reaction kinematics for the detailed-balance weight.
   double bin_low_cm_ = std::numeric_limits<double>::quiet_NaN();

@@ -346,12 +346,13 @@ V EPoint::IntegrateKernelsImpl(const EData &data, const Config &configure, Read 
     // interpolated cross section, as in SAMMY's Udr_Resb.  Each product is a
     // quadratic on every piece between breakpoints of either grid, so
     // Simpson's rule evaluates it exactly.
-    const UdrKernel *kernel = this->GetUdrKernel();
+    const DataSet::PointSetUp *setUp = data.Data().SetUpOf(*this);
+    const UdrKernel *kernel = setUp ? setUp->udr.get() : nullptr;
     int numPoints = this->NumSubPoints();
     if (!kernel || kernel->tau.size() < 2 || numPoints < 2) {
       return V(0.0);
     }
-    const double mass = this->GetUdrProjectileMass();
+    const double mass = setUp->udrMass;
     const double path = targetEffect->GetUdrFlightPath();
     const double cmPerLab = (lab_energy_ != 0.0) ? cm_energy_ / lab_energy_ : 1.0;
     const double t0 = UdrKinematics::TimeOfFlight(lab_energy_, mass, path);

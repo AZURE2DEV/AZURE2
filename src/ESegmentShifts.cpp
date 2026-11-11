@@ -179,13 +179,14 @@ void ESegment::UpdatePointEnergyWithShift(EData &data, int t, int i, CNuc *theCN
 
         // The same conversion as ESegment::Fill (ratios are dimensionless: no cross-section conversion; a leaf's
         // value is always converted)
+        azure2::experiment::AngleLimit lim;
         if (!this->ConvertRowToCM(data, t, i, entrancePair, exitPair, t > 0 || !this->IsDimensionlessRatio(),
-                                  BeyondRange::Convert)) {
+                                  BeyondRange::Convert, lim)) {
           // An energy shift moved the point past the kinematic maximum lab angle mid-fit: the c.m. angle keeps
           // its value as loaded and the run says so (it cannot stop here; audit 2026-10-25, item 31).
           configure->outStream << "WARNING: segment #" << this->TermKey(t) << ": the energy shift moved the point at lab angle "
                                << point->GetLabAngle() << " deg to E_lab = " << point->GetLabEnergy()
-                               << " MeV, beyond its kinematic maximum " << point->GetLabAngleMax()
+                               << " MeV, beyond its kinematic maximum " << (lim.maxSet ? lim.max : 180.0)
                                << " deg; its c.m. angle is kept at its value as loaded." << std::endl;
         }
 

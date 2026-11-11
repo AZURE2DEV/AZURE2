@@ -430,11 +430,13 @@ int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
   PPair *exitPair = theCNuc->GetPairFromKey(this->GetExitKey());  // nullptr for total capture (-1)
   for (int i = 0; i < this->NumPoints(); i++) {
     // Ratios are dimensionless: no cross-section conversion (decided by the spec: components are not added yet).
-    if (!this->ConvertRowToCM(*theData, 0, i, entrancePair, exitPair, !this->IsDimensionlessRatio(), BeyondRange::Stop)) {
+    azure2::experiment::AngleLimit lim;
+    if (!this->ConvertRowToCM(*theData, 0, i, entrancePair, exitPair, !this->IsDimensionlessRatio(), BeyondRange::Stop,
+                              lim)) {
       // Beyond the kinematic maximum lab angle: not a NaN point, not a dropped segment (audit 2026-10-25, 31).
       const EPoint *converted = this->GetPoint(*theData, i + 1);
       configure.outStream << "ERROR: " << "segment #" << this->GetSegmentKey() << ": lab angle " << converted->GetLabAngle() << " deg at E_lab = " << converted->GetLabEnergy()
-                          << " MeV: " << converted->GetLabAngleWhy() << "." << std::endl;
+                          << " MeV: " << lim.why << "." << std::endl;
       theData->SetKinematicsError();
       return -1;
     }
@@ -513,7 +515,7 @@ azure2::experiment::FrameRule RuleOf(const ESegment &segment, int t, PPair *entr
 }  // namespace
 
 bool ESegment::ConvertRowToCM(EData &data, int t, int i, PPair *entrancePair, PPair *exitPair, bool convertValue,
-                              BeyondRange beyond) const {
+                              BeyondRange beyond, azure2::experiment::AngleLimit &lim) const {
   TermState &u = data.State(*this).terms[t];
   EPoint *point = &data.Unit(u.first + i);
   azure2::experiment::FrameRow &row = u.frame.rows[i];
@@ -522,12 +524,11 @@ bool ESegment::ConvertRowToCM(EData &data, int t, int i, PPair *entrancePair, PP
   const TermFixed &fixed = Fixed(t);
   if (beyond == BeyondRange::Convert && fixed.loadFrame) row = fixed.loadFrame->rows[i];
   const azure2::experiment::MeasurementRows &rows = *measurement_->rows;
-  azure2::experiment::AngleLimit lim;
+  lim = azure2::experiment::AngleLimit();
   const bool ok = azure2::experiment::ConvertRow(RuleOf(*this, t, entrancePair, exitPair, convertValue),
                                                  point->GetLabEnergy(), point->GetLabAngle(), rows.value[i],
                                                  rows.error[i], rows.binLow[i], rows.binHigh[i],
                                                  beyond == BeyondRange::Stop, row, lim);
-  point->NoteAngleLimit(lim);
   point->SetFrame(row);
   return ok;
 }

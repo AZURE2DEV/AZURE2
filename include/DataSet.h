@@ -49,6 +49,35 @@ class DataSet {
   /// are set up, laid out and written to the intEC file in.
   const std::vector<LeafRef> &LeafRefs() const { return leafRefs_; }
 
+  /*!
+   * What the set-up worked out for one point (a row of a term) that its evaluations read again: the layout of its
+   * adaptive sub-point grid (EData::ReplaceSubPointGrids lays it out again for other levels) and its user-defined
+   * resolution kernel with the projectile rest energy (MeV) its time-of-flight conversion uses.  A unit names its
+   * record by EPoint::SetUpIndex; the record is shared by every copy.
+   */
+  struct PointSetUp {
+    EPoint::SubGridSpec grid;
+    std::shared_ptr<const UdrKernel> udr;
+    double udrMass = 0.0;
+  };
+  /// The record of point `p`, null when the set-up gave it none.
+  const PointSetUp *SetUpOf(const EPoint &p) const {
+    return p.SetUpIndex() >= 0 ? &pointSetUps_[p.SetUpIndex()] : nullptr;
+  }
+  /// The layout of the adaptive grid of point `p` (an invalid one without).
+  const EPoint::SubGridSpec &GridSpecOf(const EPoint &p) const {
+    static const EPoint::SubGridSpec none;
+    return p.SetUpIndex() >= 0 ? pointSetUps_[p.SetUpIndex()].grid : none;
+  }
+  /// The set-up: the record of point `p`, made on first use.
+  PointSetUp &SetUpFor(EPoint &p) {
+    if (p.SetUpIndex() < 0) {
+      p.SetSetUpIndex((int)pointSetUps_.size());
+      pointSetUps_.emplace_back();
+    }
+    return pointSetUps_[p.SetUpIndex()];
+  }
+
   // ---- the target effects (1-based)
   int NumTargetEffects() const { return (int)targetEffects_.size(); }
   const TargetEffect *GetTargetEffect(int n) const {
@@ -150,6 +179,7 @@ class DataSet {
   std::vector<ESegment> segments_;
   std::vector<TargetEffect> targetEffects_;
   std::vector<LeafRef> leafRefs_;
+  std::vector<PointSetUp> pointSetUps_;  // SetUpOf
   /// The key of the next leaf (EData::AddLeaf): -1000, -1001, ... in creation order, one counter per data set, so a
   /// leaf's key depends on its project alone and no two leaves share one (data_model.md section 1.3, H10).
   int nextComponentKey_ = -1000;

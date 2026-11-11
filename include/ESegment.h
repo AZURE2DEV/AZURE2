@@ -143,9 +143,9 @@ class ESegment {
   /// (docs/upgrade/data_structure.md section 1.2, experiment::ConvertRow): the one sequence of the load (Stop), of an
   /// energy shift (Convert) and of the leaves, written into the term's frame and point.  With convertValue (false for
   /// a ratio: dimensionless) the value and its uncertainty carry dOmega_lab/dOmega_cm.  False where the lab angle is
-  /// beyond the kinematic maximum (EPoint::GetLabAngleWhy, GetLabAngleMax); the caller reports it.
+  /// beyond the kinematic maximum, with the maximum and the reason in `limit`; the caller reports it.
   bool ConvertRowToCM(EData &data, int t, int i, PPair *entrancePair, PPair *exitPair, bool convertValue,
-                      BeyondRange beyond) const;
+                      BeyondRange beyond, azure2::experiment::AngleLimit &limit) const;
   /// E_c.m., E_x and the c.m. bin edges of row i of term t alone (the leaf grids are laid out before the leaves'
   /// angles are converted).
   void ConvertRowEnergyToCM(EData &data, int t, int i, PPair *entrancePair, PPair *exitPair) const;

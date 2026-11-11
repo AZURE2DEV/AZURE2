@@ -383,14 +383,9 @@ void EPoint::Initialize(EData *data, CNuc *compound, const Config &configure) {
 // ---------------------------------------------------------------- lab -> c.m.
 // The formulas are azure2::experiment's (experiment/include/azure2/experiment/Frames.h, docs/upgrade/data_model.md
 // step S6); these functions read the point's lab values and its pairs, call them, and store the results in the point
-// with the state rules they always had (the maximum lab angle and the reason kept from the last map that set them; a
-// relativistic Jacobian kept at its load-time value where an energy shift moved the point beyond the kinematic
-// range).  ESegment::ConvertPointToCM is the one sequence that calls them.
-
-void EPoint::NoteAngleLimit(const azure2::experiment::AngleLimit &lim) const {
-  if (lim.maxSet) labAngleMax_ = lim.max;
-  if (!lim.why.empty()) labAngleWhy_ = lim.why;
-}
+// with the state rules they always had (a relativistic Jacobian kept at its load-time value where an energy shift moved
+// the point beyond the kinematic range).  ESegment::ConvertRowToCM is the one sequence that calls them; it hands the
+// maximum lab angle and the reason of a failed map to its caller, for the message.
 
 void EPoint::SetFrame(const azure2::experiment::FrameRow &row) {
   cm_energy_ = row.eCM;
@@ -411,7 +406,7 @@ void EPoint::ConvertExcitationEnergy(PPair *pPair) {
  * Relativistic lab -> c.m. transformation of a detected particle (relativistic=1): particle 1 of \p exitPair (of
  * \p entrancePair for elastic scattering) at the point's lab angle, at its c.m. energy
  * (azure2::experiment::RelativisticLabToCM).  Where the lab angle is reached from two c.m. angles the root nearest
- * \p nrCMAngle is taken.  Returns false if the angle is not reached (GetLabAngleMax, GetLabAngleWhy).
+ * \p nrCMAngle is taken.  Returns false if the angle is not reached.
  */
 bool EPoint::RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nrCMAngle, double &cmAngle,
                                  double &factor) const {
@@ -419,7 +414,6 @@ bool EPoint::RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nr
   const bool ok = azure2::experiment::RelativisticLabToCM(PartitionOf(entrancePair), PartitionOf(exitPair),
                                                           this->GetCMEnergy(), this->GetLabAngle(), nrCMAngle, cmAngle,
                                                           factor, lim);
-  this->NoteAngleLimit(lim);
   return ok;
 }
 

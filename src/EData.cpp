@@ -506,11 +506,12 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc, const azure2::expe
             for (int i = 0; i < theSegment->NumPoints(); i++) {
               // A ratio is dimensionless: no cross-section conversion (as ESegment::Fill for data segments;
               // the stored factor would otherwise divide the ratio in the lab output, kinflag.dat = 1).
+              azure2::experiment::AngleLimit lim;
               if (!theSegment->ConvertRowToCM(*this, 0, i, entrancePair, exitPair, !theSegment->IsDimensionlessRatio(),
-                                              ESegment::BeyondRange::Stop)) {
+                                              ESegment::BeyondRange::Stop, lim)) {
                 const EPoint *thePoint = theSegment->GetPoint(*this, i + 1);
                 configure.outStream << "ERROR: " << "test segment #" << theSegment->GetSegmentKey() << ": lab angle " << thePoint->GetLabAngle() << " deg at E_lab = " << thePoint->GetLabEnergy()
-                                    << " MeV: " << thePoint->GetLabAngleWhy() << "." << std::endl;
+                                    << " MeV: " << lim.why << "." << std::endl;
                 return -1;
               }
             }
@@ -1004,9 +1005,11 @@ int EData::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
 
       if (entrancePair && exitPair) {
         // The base segment's sequence, with the component's own pairs; a component's value is always converted.
-        if (!Draft().segments_[leaf.first].ConvertRowToCM(*this, leaf.second, i - 1, entrancePair, exitPair, true, ESegment::BeyondRange::Stop)) {
+        azure2::experiment::AngleLimit lim;
+        if (!Draft().segments_[leaf.first].ConvertRowToCM(*this, leaf.second, i - 1, entrancePair, exitPair, true,
+                                                          ESegment::BeyondRange::Stop, lim)) {
           configure.outStream << "ERROR: " << "component (" << entranceKey << " -> " << exitKey << ") of segment #" << Draft().segments_[leaf.first].TermKey(leaf.second) << ": lab angle " << point->GetLabAngle() << " deg at E_lab = " << point->GetLabEnergy()
-                              << " MeV: " << point->GetLabAngleWhy() << "." << std::endl;
+                              << " MeV: " << lim.why << "." << std::endl;
           return -1;
         }
         // The sub-points of a target effect were laid out (SetUpTargetEffects) from the copied base

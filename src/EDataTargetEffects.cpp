@@ -259,7 +259,7 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
     for (int i = 1; i <= seg.NumPoints(); i++)
       if (seg.GetPoint(*this, i)->IsMapped()) mappedSegment[seg.GetPoint(*this, i)] = {seg, false, false};
     bool any = false;
-    for (int i = 1; i <= seg.NumPoints() && !any; i++) any = seg.GetPoint(*this, i)->GetSubGridSpec().valid;
+    for (int i = 1; i <= seg.NumPoints() && !any; i++) any = Data().GridSpecOf(*seg.GetPoint(*this, i)).valid;
     if (!any) return;
     if (SegmentNeedsEC(seg, theCNuc, configure)) {
       if (!ecNoted.exchange(true))
@@ -274,7 +274,7 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
     const double cmFactor = ESegment::CMEnergyFactor(entrancePair, exitPair);
     for (int i = 1; i <= seg.NumPoints(); i++) {
       EPoint *point = seg.GetPoint(*this, i);
-      if (!point->GetSubGridSpec().valid) continue;
+      if (!Data().GridSpecOf(*point).valid) continue;
       // A mapped point keeps its host's grid: the mapping (MapData, MapLeaves) was made because the
       // two grids are identical, and the host's calculation fills the mapped point's sub-points node by node
       // (EPoint::Calculate).  It is re-placed with its host below, never on its own.
@@ -315,7 +315,7 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
   SubPointGrids placed(work.size());  // per work item; the units never grow in the parallel loop
   auto replace = [&](const Item &it, size_t q) {
     EPoint *point = it.seg.GetPoint(*this, it.i);
-    const EPoint::SubGridSpec &spec = point->GetSubGridSpec();
+    const EPoint::SubGridSpec &spec = Data().GridSpecOf(*point);
     AdaptiveIntegrationGrid::GridConfig gc;
     gc.maxPoints = spec.maxPoints;
     gc.entranceKey = spec.entranceKey;
@@ -347,7 +347,7 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
     // a copy re-placing its grids adds tables only for the nodes that moved.
     long reused = 0, fromOtherCopies = 0;
     auto layOut = [&](EPoint *target, const TermRef &seg, bool shifted) {
-      const EPoint::SubGridSpec &tspec = target->GetSubGridSpec();
+      const EPoint::SubGridSpec &tspec = Data().GridSpecOf(*target);
       const TargetEffect *effect = Data().GetTargetEffect(seg.GetTargetEffectNum());
       const TargetEffect *qEffect = effect->IsQCoefficients() ? effect : nullptr;
       const UnitRange<EPoint> tsubs = target->GetSubPoints(*this);
@@ -696,7 +696,9 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
             // delays (moderation) and below it for negative ones.
             double mass = entrancePair->GetM(1) * uconv;
             std::shared_ptr<const UdrKernel> kernel = targetEffect->BuildUdrKernel(point->GetLabEnergy(), mass);
-            point->SetUdrKernel(kernel, mass);
+            DataSet::PointSetUp &setUp = Draft().SetUpFor(*point);
+            setUp.udr = kernel;
+            setUp.udrMass = mass;
             double t0 = UdrKinematics::TimeOfFlight(point->GetLabEnergy(), mass, targetEffect->GetUdrFlightPath());
             double eHighLab = UdrKinematics::EnergyFromTime(t0 - kernel->tauMax, mass, targetEffect->GetUdrFlightPath());
             double eLowLab = UdrKinematics::EnergyFromTime(t0 - kernel->tauMin, mass, targetEffect->GetUdrFlightPath());
@@ -727,7 +729,7 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
             gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth();
             AdaptiveIntegrationGrid gridGenerator(gridConfig);
             energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
-            point->SetSubGridSpec(MakeSubGridSpec(gridConfig, startEnergy, endEnergy, targetEffect, cmConversion));
+            Draft().SetUpFor(*point).grid = MakeSubGridSpec(gridConfig, startEnergy, endEnergy, targetEffect, cmConversion);
           } else {
             double step = (startEnergy - endEnergy) / numPoints;
             for (int i = 0; i <= numPoints; i++)
@@ -874,7 +876,9 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
               if (targetEffect->IsUdr()) {
                 double mass = compEntrance->GetM(1) * uconv;
                 std::shared_ptr<const UdrKernel> kernel = targetEffect->BuildUdrKernel(point->GetLabEnergy(), mass);
-                point->SetUdrKernel(kernel, mass);
+                DataSet::PointSetUp &setUp = Draft().SetUpFor(*point);
+                setUp.udr = kernel;
+                setUp.udrMass = mass;
                 double t0 = UdrKinematics::TimeOfFlight(point->GetLabEnergy(), mass, targetEffect->GetUdrFlightPath());
                 double eHighLab = UdrKinematics::EnergyFromTime(t0 - kernel->tauMax, mass, targetEffect->GetUdrFlightPath());
                 double eLowLab = UdrKinematics::EnergyFromTime(t0 - kernel->tauMin, mass, targetEffect->GetUdrFlightPath());
@@ -906,7 +910,8 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
                 gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth();
                 AdaptiveIntegrationGrid gridGenerator(gridConfig);
                 energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
-                point->SetSubGridSpec(MakeSubGridSpec(gridConfig, startEnergy, endEnergy, targetEffect, compConversion));
+                Draft().SetUpFor(*point).grid =
+                    MakeSubGridSpec(gridConfig, startEnergy, endEnergy, targetEffect, compConversion);
               } else {
                 double step = (startEnergy - endEnergy) / numPoints;
                 for (int i = 0; i <= numPoints; i++)
