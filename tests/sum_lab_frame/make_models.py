@@ -4,7 +4,7 @@
 13C + alpha in 17O with two neutron exit pairs of the same masses and different Q values,
 n + 16O(6.05, 0+) (key 3) and n + 16O(6.13, 3-) (key 5): the lab-to-c.m. Jacobians of the two
 differ at the same lab angle, so a lab-frame differential SUM of the two is the place where the
-per-term frame factor (ESegment::TermFrameFactor) matters.  Two levels, 5/2+ and 3/2+, with
+per-term frame factor (Segment::TermFrameFactor) matters.  Two levels, 5/2+ and 3/2+, with
 widths to all three pairs; no external capture.
 
   extrap     : test segments (mode 3), lab (isDiff 1) and c.m. (isDiff 5):

@@ -8,13 +8,13 @@
 struct ThmSpectatorWindow;
 
 /*!
- * What EData's THM tables (ThmVertexTable, ThmLineshapeTable,
+ * What WorkingCopy's THM tables (ThmVertexTable, ThmLineshapeTable,
  * ThmDistortionTable) report, for thm_experiments.out, pyazr (thm_vertex,
  * thm_lineshape, thm_distortion) and the GUI diagnostics: plain data, apart
  * from the physics objects that compute them.
  */
 
-/// The window-averaged entrance vertex of one experiment (EData::ThmVertexTable).
+/// The window-averaged entrance vertex of one experiment (WorkingCopy::ThmVertexTable).
 struct ThmVertexReport {
   std::string experiment;
   std::string window;  ///< description ("delta" without a window)
@@ -68,7 +68,7 @@ struct ThmVertexReport {
   std::vector<Channel> channels;
 };
 
-/// The line shape of one experiment on an energy grid (EData::ThmLineshapeTable).
+/// The line shape of one experiment on an energy grid (WorkingCopy::ThmLineshapeTable).
 struct ThmLineshapeReport {
   std::string experiment, spectator;
   int Zs = 0, ZF = 0;

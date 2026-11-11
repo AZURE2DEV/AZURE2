@@ -79,8 +79,8 @@ struct TransformStage {
 };
 
 /*!
- * The base unit's kernel, supplied by the caller (the engine: EPoint::IntegrateKernelsImpl with a reader over the
- * values given here, under EPoint::DopplerAppliedScope).  One call per point; the kernel is the caller's.
+ * The base unit's kernel, supplied by the caller (the engine: Unit::IntegrateKernelsImpl with a reader over the
+ * values given here, under Unit::DopplerAppliedScope).  One call per point; the kernel is the caller's.
  */
 class SubPointFold {
  public:
@@ -89,13 +89,13 @@ class SubPointFold {
   virtual TransformStage stage(std::size_t i) const = 0;
   /// The kernel applied to the values f[0..n) at point i (n = the stage's rows).
   virtual double fold(std::size_t i, const double *f, std::size_t n) const = 0;
-  /// The exact weights c[0..n) of a linear kernel, fold(f) = sum_r c_r f_r (EPoint::TargetEffectWeights); false if
+  /// The exact weights c[0..n) of a linear kernel, fold(f) = sum_r c_r f_r (Unit::TargetEffectWeights); false if
   /// the kernel is not linear (backward then fails).
   virtual bool weights(std::size_t i, double *c, std::size_t n) const = 0;
 };
 
 /// One term of a Transform: weight w_i = (c J_i) a (J_i = 1 without a factor array, a = 1 without an abundance);
-/// `total` marks the total term s_t of a yield (weight 1, no scaling: ESegment::TransformTerms).
+/// `total` marks the total term s_t of a yield (weight 1, no scaling: Segment::TransformTerms).
 struct TransformTerm {
   int input = -1;      ///< leaf input (its point values in Inputs::leaves, its sub-point values in Inputs::subLeaves)
   double c = 1.0;      ///< the term's scaling
@@ -146,7 +146,7 @@ struct Cotangents {
 /// The arithmetic of each node at one point, value and backward, as used by Tree (and tested alone).
 namespace node {
 
-/// v_0 + v_1 + ... from v_0 (as ESegment: sum = base; sum += term).  0 for n = 0.
+/// v_0 + v_1 + ... from v_0 (as Segment: sum = base; sum += term).  0 for n = 0.
 inline double SumValue(const double *v, std::size_t n) {
   if (n == 0) return 0.0;
   double s = v[0];
@@ -156,27 +156,27 @@ inline double SumValue(const double *v, std::size_t n) {
 /// d(Sum)/d(child) = 1: every child gets g.
 inline double SumBackward(double g) { return g; }
 
-/// (c J) v (ESegment: componentScaling * TermFrameFactor * compValue).
+/// (c J) v (Segment: componentScaling * TermFrameFactor * compValue).
 inline double ScaleValue(double c, double J, double v) { return c * J * v; }
 /// child cotangent g (c J) (AZUREGrad: fitBar * s, s = scaling * TermFrameFactor).
 inline double ScaleBackward(double g, double c, double J) { return g * (c * J); }
 
-/// v a (ESegment: baseValue *= a; term *= a).
+/// v a (Segment: baseValue *= a; term *= a).
 inline double WeightedValue(double a, double v) { return v * a; }
 /// child cotangent g a; parameter cotangent g v (AZUREGrad: fitBar * weight, fitBar * baseVal).
 inline double WeightedBackwardChild(double g, double a) { return g * a; }
 inline double WeightedBackwardParam(double g, double v) { return g * v; }
 
-/// num / den (J_den / J_num), NaN where den = 0 (ESegment: baseValue / denominatorValue * (dJ / bJ)).
+/// num / den (J_den / J_num), NaN where den = 0 (Segment: baseValue / denominatorValue * (dJ / bJ)).
 double RatioValue(double num, double den, double jNum, double jDen);
 /// Cotangents of numerator and denominator from the value m: g (m / num) and g (-m / den) (AZUREGrad's shared
 /// route).  At num = 0 the numerator's is g (J_den / J_num) / den (AZUREGrad gives 0 there); NaN where den = 0.
 void RatioBackward(double g, double num, double den, double jNum, double jDen, double m, double &cotNum,
                    double &cotDen);
 
-/// T = exp(-n s) and its partial derivatives (ESegment::Transmission).
+/// T = exp(-n s) and its partial derivatives (Segment::Transmission).
 double Transmission(double n, double s, double *dTds = nullptr, double *dTdn = nullptr);
-/// Y0 = (s / s_t)(1 - exp(-n s_t)) and its partial derivatives (ESegment::YieldY0); below |n s_t| = 1e-4 the series
+/// Y0 = (s / s_t)(1 - exp(-n s_t)) and its partial derivatives (Segment::YieldY0); below |n s_t| = 1e-4 the series
 /// of g(s_t) = (1 - e^{-n s_t}) / s_t, so s_t -> 0 is no 0/0.
 double YieldY0(double n, double s, double st, double *dYds = nullptr, double *dYdst = nullptr, double *dYdn = nullptr);
 
@@ -261,7 +261,7 @@ class Tree {
 };
 
 /// The frame factor of a SUM term at a point, J_base / J_term, from the two points' lab-to-c.m. factors; 1 where
-/// either is 0 or they are equal (ESegment::TermFrameFactor).
+/// either is 0 or they are equal (Segment::TermFrameFactor).
 inline double TermFrameFactor(double jBase, double jTerm) {
   if (jTerm == 0.0 || jBase == 0.0 || jTerm == jBase) return 1.0;
   return jBase / jTerm;

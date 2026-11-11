@@ -9,8 +9,8 @@
 #include <vector>
 
 #include "Config.h"
-#include "EData.h"
-#include "EPoint.h"
+#include "WorkingCopy.h"
+#include "Unit.h"
 #include "TELinearForm.h"
 #include "TargetEffect.h"
 
@@ -21,7 +21,7 @@ namespace {
 // Accumulates num += integral of wNum(E) sigma(E) [/ (stopping(E) 1e24)] and den += integral of
 // wDen(E), so a kernel average is num / den and a yield is num alone: the one quadrature of every effect.
 template <class V, class Read, class WNum, class WDen>
-void GridQuadrature(const EPoint *point, const EData &data, Read rd, double lo, double hi, bool divideByStopping,
+void GridQuadrature(const Unit *point, const WorkingCopy &data, Read rd, double lo, double hi, bool divideByStopping,
                     WNum wNum, WDen wDen, V &num, double &den) {
   const double x1 = -1.0 / sqrt(3.0), x2 = 1.0 / sqrt(3.0);
   const int n = point->NumSubPoints();
@@ -67,8 +67,8 @@ void GridQuadrature(const EPoint *point, const EData &data, Read rd, double lo, 
  */
 
 template <class V, class Read>
-V EPoint::IntegrateTargetEffectImpl(const EData &data, const Config &configure, Read rd) {
-  const TargetEffect *targetEffect = data.GetTargetEffect(this->GetTargetEffectNum());
+V Unit::IntegrateTargetEffectImpl(const WorkingCopy &data, const Config &configure, Read rd) {
+  const TargetEffect *targetEffect = data.Data().GetTargetEffect(this->GetTargetEffectNum());
   if (!targetEffect->IsDoppler() || doppler_applied_) return this->IntegrateKernelsImpl<V>(data, configure, rd);
   // Free-gas Doppler broadening first (SAMMY's order), then the line's kernel on the broadened values.
   const int n = this->NumSubPoints();
@@ -86,14 +86,16 @@ V EPoint::IntegrateTargetEffectImpl(const EData &data, const Config &configure, 
   return this->IntegrateKernelsImpl<V>(data, configure, [&b](int j) { return b[j - 1]; });
 }
 
-void EPoint::DopplerWeights(const EData &data, double eCM, std::vector<std::pair<int, double>> &w,
+void Unit::DopplerWeights(const WorkingCopy &data, double eCM, std::vector<std::pair<int, double>> &w,
                             std::vector<std::pair<int, double>> *dwdT) const {
   w.clear();
   if (dwdT) dwdT->clear();
-  const TargetEffect *te = data.GetTargetEffect(this->GetTargetEffectNum());
+  const TargetEffect *te = data.Data().GetTargetEffect(this->GetTargetEffectNum());
   const int n = this->NumSubPoints();
   const double c = cm_factor_;
-  const double u = te->DopplerU(c);
+  // the present temperature (K) of the working copy, a fit parameter or the line's
+  const double T = data.EffectValues(this->GetTargetEffectNum()).dopplerTemperature;
+  const double u = te->DopplerUAt(c, T);
   if (n < 2 || !(u > 0.0) || !(eCM > 0.0)) return;
   // The window (layout temperature) and the pieces (nominal temperature) do not move with T: only the kernel
   // values below do, so sigma_D is smooth in a fitted T.  For a fixed line both are the line's T.
@@ -118,7 +120,6 @@ void EPoint::DopplerWeights(const EData &data, double eCM, std::vector<std::pair
   }
   std::map<int, double> acc, dacc;
   // d(norm k)/dT = norm [-k/u + dk/du] du/dT, du/dT = u/(2T)
-  const double T = te->GetDopplerTemperature();
   const double dudT = (T > 0.0) ? 0.5 * u / T : 0.0;
   const double u2 = u * u, u3 = u2 * u;
   for (int j = first; j <= last; j++) {
@@ -158,9 +159,9 @@ void EPoint::DopplerWeights(const EData &data, double eCM, std::vector<std::pair
   if (dwdT) dwdT->assign(dacc.begin(), dacc.end());
 }
 
-double EPoint::DopplerTemperatureDerivative(const EData &data, const Config &configure,
+double Unit::DopplerTemperatureDerivative(const WorkingCopy &data, const Config &configure,
                                             const std::vector<double> &values) {
-  const TargetEffect *targetEffect = data.GetTargetEffect(this->GetTargetEffectNum());
+  const TargetEffect *targetEffect = data.Data().GetTargetEffect(this->GetTargetEffectNum());
   if (!targetEffect->IsDoppler() || doppler_applied_) return 0.0;
   const int n = this->NumSubPoints();
   if (n < 2 || (int)values.size() < n) return 0.0;
@@ -179,7 +180,7 @@ double EPoint::DopplerTemperatureDerivative(const EData &data, const Config &con
 }
 
 template <class V, class Read>
-V EPoint::TargetFallbackImpl(const EData &data, Read rd) {
+V Unit::TargetFallbackImpl(const WorkingCopy &data, Read rd) {
   const int n = this->NumSubPoints();
   if (n <= 0) return V(0.0);
   if (n == 1) return rd(1);
@@ -213,9 +214,9 @@ V EPoint::TargetFallbackImpl(const EData &data, Read rd) {
 }
 
 template <class V, class Read>
-V EPoint::IntegrateKernelsImpl(const EData &data, const Config &configure, Read rd) {
+V Unit::IntegrateKernelsImpl(const WorkingCopy &data, const Config &configure, Read rd) {
   V yield = 0.0;
-  const TargetEffect *targetEffect = data.GetTargetEffect(this->GetTargetEffectNum());
+  const TargetEffect *targetEffect = data.Data().GetTargetEffect(this->GetTargetEffectNum());
   const int numPoints = this->NumSubPoints();
   // A thin-target point outside the windows of an energy-restricted integration, or one the automatic
   // tolerance let off: sigma at the depth-averaged energy E_bar (SetTargetFallbackOnly, TargetFallbackScope).
@@ -272,7 +273,7 @@ V EPoint::IntegrateKernelsImpl(const EData &data, const Config &configure, Read 
     const double back = centroid - this->GetTargetThickness();
     V outer = 0.0;
     if (!targetEffect->IsGaussian() && !targetEffect->IsStraggling()) {
-      // The grid was built to span the target (EData::GridExtent), so it is integrated whole, as it
+      // The grid was built to span the target (WorkingCopy::GridExtent), so it is integrated whole, as it
       // always was: clipping it to [E0 - T, E0] here would drop a point whose segment energy shift
       // moved E0 away from the grid's own centre (13N, segment 1, lowest point).
       // A fitted density (TargetEffect::HasDensityFit) lays the grid out for the largest density the fit may
@@ -310,7 +311,7 @@ V EPoint::IntegrateKernelsImpl(const EData &data, const Config &configure, Read 
       }
     }
     // a thick target (density 0) is the yield per incident particle, not divided by a density
-    yield = targetEffect->IsThickTarget() ? outer : outer / (targetEffect->GetDensity() * 1.0e-24);
+    yield = targetEffect->IsThickTarget() ? outer : outer / (data.EffectValues(this->GetTargetEffectNum()).density * 1.0e-24);
     // The smooth edge of a window: blend with sigma(E_bar), not with sigma at the beam energy.  Done here, in
     // the linear kernel, so the gradient weights (TargetEffectWeights) carry it too.
     if (thinTarget && target_blend_weight_ < 1.0)
@@ -345,12 +346,13 @@ V EPoint::IntegrateKernelsImpl(const EData &data, const Config &configure, Read 
     // interpolated cross section, as in SAMMY's Udr_Resb.  Each product is a
     // quadratic on every piece between breakpoints of either grid, so
     // Simpson's rule evaluates it exactly.
-    const UdrKernel *kernel = this->GetUdrKernel();
+    const DataSet::PointSetUp *setUp = data.Data().SetUpOf(*this);
+    const UdrKernel *kernel = setUp ? setUp->udr.get() : nullptr;
     int numPoints = this->NumSubPoints();
     if (!kernel || kernel->tau.size() < 2 || numPoints < 2) {
       return V(0.0);
     }
-    const double mass = this->GetUdrProjectileMass();
+    const double mass = setUp->udrMass;
     const double path = targetEffect->GetUdrFlightPath();
     const double cmPerLab = (lab_energy_ != 0.0) ? cm_energy_ / lab_energy_ : 1.0;
     const double t0 = UdrKinematics::TimeOfFlight(lab_energy_, mass, path);
@@ -359,7 +361,7 @@ V EPoint::IntegrateKernelsImpl(const EData &data, const Config &configure, Read 
     std::vector<double> tauSub(numPoints);
     std::vector<V> sigmaSub(numPoints);
     for (int i = 1; i <= numPoints; i++) {
-      const EPoint *sp = this->GetSubPoint(data, i);
+      const Unit *sp = this->GetSubPoint(data, i);
       tauSub[numPoints - i] = t0 - UdrKinematics::TimeOfFlight(sp->GetCMEnergy() / cmPerLab, mass, path);
       sigmaSub[numPoints - i] = rd(i);
     }
@@ -456,16 +458,16 @@ V EPoint::IntegrateKernelsImpl(const EData &data, const Config &configure, Read 
   }
   return yield;
 }
-void EPoint::IntegrateTargetEffect(const EData &data, const Config &configure, azure2::Results &results) {
+void Unit::IntegrateTargetEffect(const WorkingCopy &data, const Config &configure, azure2::Results &results) {
   this->SetFitCrossSection(results, this->IntegrateTargetEffectImpl<double>(data, configure, [this, &data, &results](int j) {
     return this->GetSubPoint(data, j)->GetFitCrossSection(results);
   }));
 }
-double EPoint::IntegrateSubPointValues(const EData &data, const Config &configure, const std::vector<double> &values) {
+double Unit::IntegrateSubPointValues(const WorkingCopy &data, const Config &configure, const std::vector<double> &values) {
   return this->IntegrateTargetEffectImpl<double>(data, configure, [&values](int j) { return values[j - 1]; });
 }
 
-bool EPoint::TargetEffectWeights(const EData &data, const Config &configure, std::vector<double> &c) {
+bool Unit::TargetEffectWeights(const WorkingCopy &data, const Config &configure, std::vector<double> &c) {
   const int n = this->NumSubPoints();
   c.assign(n > 0 ? n : 0, 0.0);
   TELinearForm y = this->IntegrateTargetEffectImpl<TELinearForm>(data, configure, [](int j) { return TELinearForm::Unit(j); });

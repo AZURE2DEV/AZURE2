@@ -5,15 +5,15 @@
 #include <vector>
 
 #include "CNuc.h"
-#include "EData.h"
-#include "EPoint.h"
+#include "WorkingCopy.h"
+#include "Unit.h"
 #include "Kinematics.h"
 #include "PPair.h"
 #include "TargetEffect.h"
 
 /// The maximum order of the Legendre polynomials stored in the point object.
 
-int EPoint::GetMaxLOrder() const {
+int Unit::GetMaxLOrder() const {
   return legendreP_ ? (int)legendreP_->size() - 1 : -1;
 }
 
@@ -21,7 +21,7 @@ int EPoint::GetMaxLOrder() const {
  * Returns the Legendre polynomial specified by an order.
  */
 
-double EPoint::GetLegendreP(int lOrder) const {
+double Unit::GetLegendreP(int lOrder) const {
   return (*legendreP_)[lOrder];
 }
 
@@ -29,7 +29,7 @@ double EPoint::GetLegendreP(int lOrder) const {
  * Adds a Legendre polynomial to the vector.  Polynomials are added to the vector in the order as L=0,1,2,...
  */
 
-void EPoint::AddLegendreP(double polynomial) {
+void Unit::AddLegendreP(double polynomial) {
   MutableLegendre().push_back(polynomial);
 }
 
@@ -38,7 +38,7 @@ void EPoint::AddLegendreP(double polynomial) {
  * This is needed when recalculating polynomials after energy shifts.
  */
 
-void EPoint::ClearLegendrePolynomials() {
+void Unit::ClearLegendrePolynomials() {
   // An empty list needs no copy of a shared one.
   if (legendreP_ && !legendreP_.SoleOwner())
     legendreP_.reset();
@@ -96,7 +96,7 @@ __attribute__((noinline)) void LegendreSeries(int n, double x, double *p) {
  * g^2 = m1 m3 E / (m2 m4 (E + Q)) (E the c.m. energy; the same g as ConvertLabAngle's a13/a24); relativistic=1:
  * the c.m. boost gamma and beta / beta_3* of RelativisticLabToCM.  Returns false where the transform is not used.
  */
-bool EPoint::QLabBoost(PPair *entrancePair, PPair *exitPair, double &g, double &gb) const {
+bool Unit::QLabBoost(PPair *entrancePair, PPair *exitPair, double &g, double &gb) const {
   const double ti = this->GetCMEnergy();
   const double tf = ti + entrancePair->GetSepE() + entrancePair->GetExE() - exitPair->GetSepE() - exitPair->GetExE();
   if (ti <= 0.0 || tf <= 0.0) return false;
@@ -134,7 +134,7 @@ bool EPoint::QLabBoost(PPair *entrancePair, PPair *exitPair, double &g, double &
  * with every Q_K = 1), a non-particle entrance gave every factor 0, and more than maxL coefficients read past the end.
  */
 
-void EPoint::CalcLegendreP(EData *data, int maxL, CNuc *theCNuc, TargetEffect *targetEffect) {
+void Unit::CalcLegendreP(WorkingCopy *data, int maxL, CNuc *theCNuc, const TargetEffect *targetEffect) {
   if (maxL >= 0) {
     std::vector<double> p(maxL + 1);
     const double x = cos(this->GetCMAngle() * pi / 180.0);

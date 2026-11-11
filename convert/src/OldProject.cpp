@@ -121,7 +121,7 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
     return "the project has no <levels> section";
   }
 
-  // <segmentsData>: EData::Fill's refusals that do not depend on the level scheme.
+  // <segmentsData>: WorkingCopy::Fill's refusals that do not depend on the level scheme.
   if (const io::Document::Section *s = doc.Find("segmentsData")) {
     int key = 0;
     for (std::size_t i = s->open + 1; i < s->close; i++) {
@@ -148,7 +148,7 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
     }
   }
 
-  // <segmentsTest>: EData::MakePoints's refusals.
+  // <segmentsTest>: WorkingCopy::MakePoints's refusals.
   if (const io::Document::Section *s = doc.Find("segmentsTest")) {
     int key = 0;
     for (std::size_t i = s->open + 1; i < s->close; i++) {
@@ -176,7 +176,7 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
     }
   }
 
-  // <targetInt>: EData::ReadTargetEffectsFile's refusals of a line.
+  // <targetInt>: WorkingCopy::ReadTargetEffectsFile's refusals of a line.
   if (const io::Document::Section *s = doc.Find("targetInt")) {
     int index = 0, active = 0;
     for (std::size_t i = s->open + 1; i < s->close; i++) {

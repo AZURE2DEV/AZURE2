@@ -4,7 +4,7 @@
 #include "ALevel.h"
 #include "CNuc.h"
 #include "Config.h"
-#include "ESegment.h"
+#include "Segment.h"
 #include "JGroup.h"
 #include "PPair.h"
 
@@ -88,7 +88,7 @@ double ThmVertexBoundary::ShiftAtLevelEnergy(PPair *pair, int l, int two_j, doub
   return s;
 }
 
-bool ThmVertexAllowsPair(CNuc *compound, const ESegment &segment, int key, bool isTest, const Config &configure) {
+bool ThmVertexAllowsPair(CNuc *compound, const Segment &segment, int key, bool isTest, const Config &configure) {
   if (!segment.IsTHM() || !compound->IsPairKey(segment.GetEntranceKey())) return true;
   PPair *pair = compound->GetPair(compound->GetPairNumFromKey(segment.GetEntranceKey()));
   if (!pair->GetHybridPotential()) return true;

@@ -12,7 +12,7 @@
 #include <stack>
 
 class Config;
-class EData;
+class WorkingCopy;
 class CNuc;
 class ParameterLimitsManager;
 
@@ -28,7 +28,7 @@ class ParameterLimitsManager;
 class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
  public:
   /*!
-   * The AZURECalc object is created with reference to an EData and CNuc object.
+   * The AZURECalc object is created with reference to an WorkingCopy and CNuc object.
    *. The runtime configurations are also passed through a Config structure.
    */
   /*!
@@ -36,7 +36,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * owned by the caller, which then reads it (the output files).  A fit's evaluations run on pooled working copies,
    * each with a buffer of its own (WorkingData).
    */
-  AZURECalc(EData *data, azure2::Results &results, CNuc *compound, const Config &configure,
+  AZURECalc(WorkingCopy *data, azure2::Results &results, CNuc *compound, const Config &configure,
             ParameterLimitsManager *limitsManager = nullptr) :
     configure_(configure),
     results_(results),
@@ -85,7 +85,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   /// Probe the analytic Jacobian at `p`; enables G2 for Minuit2 when it works.
   bool EnableG2(const std::vector<double> &p);
   /// AZURE_DUMP_NONFINITE diagnostic (see AZURECalc.cpp).
-  void DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld, const azure2::Results &results) const;
+  void DumpNonFinite(const vector_r &p, double chi, CNuc *lc, WorkingCopy *ld, const azure2::Results &results) const;
   /// True when the limits manager declares at least one nuisance parameter.
   bool HasNuisanceParameters() const;
   /*!
@@ -95,9 +95,9 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * already inside a parallel region (Minuit's parallel numerical gradient) or
    * when AZURE_SERIAL_CHI2 is set; callers then use the per-point path.
    */
-  bool PrecalculatePoints(CNuc *lc, EData *ld, azure2::Results &results, bool thmOnly = false) const;
+  bool PrecalculatePoints(CNuc *lc, WorkingCopy *ld, azure2::Results &results, bool thmOnly = false) const;
   /// chi^2 of `p` evaluated on the given working copies, writing `results` (optionally per segment).
-  double Chi2On(CNuc *lc, EData *ld, azure2::Results &results, const vector_r &p, std::vector<double> *segChis = nullptr,
+  double Chi2On(CNuc *lc, WorkingCopy *ld, azure2::Results &results, const vector_r &p, std::vector<double> *segChis = nullptr,
                 bool thmOnly = false) const;
   /*!
    * Side-effect-free chi-squared evaluation (no iteration counter / file output
@@ -187,9 +187,9 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    */
   const Config &configure() const { return configure_; };
   /*!
-   * Returns a pointer to the EData object.
+   * Returns a pointer to the WorkingCopy object.
    */
-  EData *data() const { return data_; };
+  WorkingCopy *data() const { return data_; };
   /*!
    * Returns a pointer to the CNuc object.
    */
@@ -260,7 +260,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
                                       struct BandCovariance *bandCovOut) const;
 
   const Config &configure_;
-  EData *data_;
+  WorkingCopy *data_;
   azure2::Results &results_;  ///< the caller's buffer for the evaluations on data_
   CNuc *compound_;
   ParameterLimitsManager *limitsManager_;
@@ -288,7 +288,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   // by the next snapshot, so resident memory climbed by roughly one data-set
   // copy per snapshot until long fits were OOM-killed.
   mutable std::unique_ptr<CNuc> output_compound_;
-  mutable std::unique_ptr<EData> output_data_;
+  mutable std::unique_ptr<WorkingCopy> output_data_;
   mutable azure2::Results output_results_;
   mutable std::mutex output_mutex_;
 };

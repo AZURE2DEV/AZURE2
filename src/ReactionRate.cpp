@@ -1,6 +1,6 @@
 #include "CNuc.h"
 #include "Config.h"
-#include "EPoint.h"
+#include "Unit.h"
 #include "ReactionRate.h"
 #include "ECTable.h"
 #include "AdaptiveIntegrationGrid.h"
@@ -63,7 +63,7 @@ double gsl_reactionrate_integrand(double u, void *p) {
   double crossSection = 0.0;
   if (x <= kRateEnergyHigh && x >= kRateEnergyLow) {
     for (int exitKey : params->exitKeys) {
-      EPoint *point = new EPoint(55.0, x, entranceKey, exitKey, false, false, false, 0.0, 0, 0);
+      Unit *point = new Unit(55.0, x, entranceKey, exitKey, false, false, false, 0.0, 0, 0);
       azure2::Results results;  // the point's own result record
       point->UsePrivateRecord(results);
       point->Initialize(nullptr, compound, configure);
@@ -93,7 +93,7 @@ static const double kRateEpsRel = 1e-7;
  * ReactionRate::ReactionRate fills the compound from the parameter vector (FitE /
  * FitGamma); the input values a level still carries (the .azr values after
  * TransformIn, formal ones under --no-brune) are not those parameters.  As
- * EData::ReplaceSubPointGrids does for the target-effect sub-grids, a private clone is
+ * WorkingCopy::ReplaceSubPointGrids does for the target-effect sub-grids, a private clone is
  * transformed out and refilled with the physical values, and the grid reads those.
  * Before, the clusters and breakpoints came from the input values, so a narrow level
  * that a parameter file had moved by more than its cluster (64 widths) was never
@@ -282,7 +282,7 @@ std::vector<double> BuildRateCrossSectionGrid(CNuc *compound, int entranceKey,
   return uniq;
 }
 
-// Fit cross section at one CM energy (same EPoint path as the legacy integrand), summed over the
+// Fit cross section at one CM energy (same Unit path as the legacy integrand), summed over the
 // exit keys of RateExitKeys (one, or every capture pair for the total capture -1).
 // Returns NaN if the level matrix is singular here (e.g. exactly on a pole with
 // vanishing penetrability) or the result is not finite; the caller drops such points.
@@ -292,7 +292,7 @@ double RateCrossSectionAt(double energy, CNuc *compound, const Config &configure
   try {
     double total = 0.0;
     for (int key : RateExitKeys(compound, entranceKey, exitKey)) {
-      EPoint point(55.0, energy, entranceKey, key, false, false, false, 0.0, 0, 0);
+      Unit point(55.0, energy, entranceKey, key, false, false, false, 0.0, 0, 0);
       azure2::Results results;  // the point's own result record
       point.UsePrivateRecord(results);
       point.Initialize(nullptr, compound, configure);

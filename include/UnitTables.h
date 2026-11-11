@@ -1,6 +1,6 @@
 // The energy-dependent tables of a point and their shared form: the channel rows (EDependentTables), what a
 // point at the same energy can take from another (EDependentShare), and the THM spectator-window table
-// (ThmPsTable).  EPoint names them as its own types (EPoint::EDependentTables, ...).
+// (ThmPsTable).  Unit names them as its own types (Unit::EDependentTables, ...).
 #ifndef EPOINTTABLES_H
 #define EPOINTTABLES_H
 
@@ -14,7 +14,7 @@
 
 struct ThmPsTable;  // defined below, named by EDependentShare
 
-/// The energy-dependent channel tables of a point (one row per J group); see EPoint::edep_ (include/EPoint.h).
+/// The energy-dependent channel tables of a point (one row per J group); see Unit::edep_ (include/Unit.h).
 /// Packed: one flat array per kind and one row index, five allocations a point
 /// instead of four per J group (natural neon: ~60 a sub-point).  Row j (from 1)
 /// holds the channels of J group j, at slots [rowStart[j-1], rowStart[j]).
@@ -74,7 +74,7 @@ struct EDependentTables {
 /// reference: the tables are shared, not copied.  These depend only on the
 /// point's c.m. energy, angle and pairs, never on a fit parameter, so a
 /// re-placed sub-point at an unchanged node takes them from the sub-point it
-/// replaces (EData::ReplaceSubPointGrids).
+/// replaces (WorkingCopy::ReplaceSubPointGrids).
 struct EDependentShare {
   double energy = 0.0;
   double angle = 0.0;

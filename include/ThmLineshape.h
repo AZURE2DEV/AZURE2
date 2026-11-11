@@ -148,7 +148,7 @@ struct ThmExperiment;
  * The nodes are Gauss-Legendre in cos(theta_cm) on every accepted interval
  * (ThmDistortion::AngleNodes, the same directions R(E) and the DW vertex
  * average over), so they depend on E: every point and folding sub-point
- * takes its own (EPoint::ThmPsTable), node k adding T_k = q_k^2 / 2 mu_sx to
+ * takes its own (Unit::ThmPsTable), node k adding T_k = q_k^2 / 2 mu_sx to
  * E + B in the vertex (and in the Coulomb term C_l), as spectatorEnergy does.
  */
 struct ThmSpectatorWindow {

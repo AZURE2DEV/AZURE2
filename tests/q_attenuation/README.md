@@ -2,7 +2,7 @@
 
 A `<targetInt>` line can carry finite-geometry attenuation coefficients Q_K (Rose, Phys. Rev. 91, 610 (1953)). They
 belong to the detector, so they act on the **lab** angular distribution. For a particle exit,
-`EPoint::CalcLegendreP` now does the following:
+`Unit::CalcLegendreP` now does the following:
 
 1. It expands W_lab = W* dΩ*/dΩ_lab in lab Legendre polynomials. The coefficients are
    b_K = Σ_L M_KL c_L, with M_KL = (2K+1)/2 ∫ P_K(x_lab(x*)) P_L(x*) dx* (96-point Gauss–Legendre).

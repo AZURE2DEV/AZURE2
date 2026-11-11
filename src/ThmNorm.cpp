@@ -1,10 +1,10 @@
 /*
- * The THM experiments of an EData (<thm> experiment[<name>] ...; ThmExperiment.h):
+ * The THM experiments of an WorkingCopy (<thm> experiment[<name>] ...; ThmExperiment.h):
  * building the groups and their physics objects, the profiled scale and
  * background, the coherent-background parameters and the per-experiment
  * profile reports (ThmExperimentReports).  thm_experiments.out and the pyazr
- * thm_* tables are written in EDataThmReports.cpp.  Members of EData, kept out
- * of EData.cpp so that the classic data handling stays as it is on dev.
+ * thm_* tables are written in ThmReports.cpp.  Members of WorkingCopy, kept out
+ * of WorkingCopy.cpp so that the classic data handling stays as it is on dev.
  */
 #include "CNuc.h"
 #include "Constants.h"
@@ -13,7 +13,7 @@
 #include "ThmVertexBoundary.h"
 #include "Config.h"
 #include "CovarianceBand.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 #include "Minuit2/MnUserParameters.h"
 #include "GSLException.h"
 #include "ThmLineshape.h"
@@ -33,12 +33,12 @@
 #include <omp.h>
 #endif
 
-void EData::FillThmCoherentFromParams(const vector_r &p, CNuc *theCNuc) {
-  if (thmCoherentParams_.empty() || thmCoherentParamOffset_ < 0) return;
-  const size_t n = thmCoherentParams_.size();
-  if (p.size() < (size_t)thmCoherentParamOffset_ + n) return;
+void WorkingCopy::FillThmCoherentFromParams(const vector_r &p, CNuc *theCNuc) {
+  if (set_->thmCoherentParams_.empty() || set_->thmCoherentParamOffset_ < 0) return;
+  const size_t n = set_->thmCoherentParams_.size();
+  if (p.size() < (size_t)set_->thmCoherentParamOffset_ + n) return;
   std::vector<double> v(n);
-  for (size_t k = 0; k < n; k++) v[k] = thmCoherentParams_[k].value = p[thmCoherentParamOffset_ + k];
+  for (size_t k = 0; k < n; k++) v[k] = thmCoherentValues_[k] = p[set_->thmCoherentParamOffset_ + k];
   if (theCNuc) theCNuc->SetThmCoherentValues(v);
 }
 
@@ -46,13 +46,13 @@ void EData::FillThmCoherentFromParams(const vector_r &p, CNuc *theCNuc) {
 // THM experiments (<thm> experiment[<name>] ...): see ThmExperiment.h.
 
 // The lowest and highest c.m. energy of the points of a group's segments.
-void EData::ThmGroupEnergyRange(EData &data, const EData::ThmGroup &group, double &eLo, double &eHi) {
+void WorkingCopy::ThmGroupEnergyRange(WorkingCopy &data, const WorkingCopy::ThmGroup &group, double &eLo, double &eHi) {
   eLo = 1.0e300;
   eHi = -1.0e300;
   for (int s : group.segments)
-    for (int p = 1; p <= data.GetSegment(s)->NumPoints(); p++) {
-      eLo = std::min(eLo, data.GetSegment(s)->GetPoint(data, p)->GetCMEnergy());
-      eHi = std::max(eHi, data.GetSegment(s)->GetPoint(data, p)->GetCMEnergy());
+    for (int p = 1; p <= data.Data().GetSegment(s)->NumPoints(); p++) {
+      eLo = std::min(eLo, data.Data().GetSegment(s)->GetPoint(data, p)->GetCMEnergy());
+      eHi = std::max(eHi, data.Data().GetSegment(s)->GetPoint(data, p)->GetCMEnergy());
     }
 }
 
@@ -75,12 +75,12 @@ struct ThmReaction {
  * Trojan horse a = x + s, the kinematics, and the startup lines that say so.
  * False (and the ERROR written) if they do not describe the segments.
  */
-bool ThmResolveKinematics(EData &data, const Config &configure, CNuc *theCNuc, const ThmExperiment &x,
-                          const EData::ThmGroup &group, const std::string &where, ThmReaction &r) {
+bool ThmResolveKinematics(WorkingCopy &data, const Config &configure, CNuc *theCNuc, const ThmExperiment &x,
+                          const WorkingCopy::ThmGroup &group, const std::string &where, ThmReaction &r) {
   ThmDistortion::Kinematics &dk = r.dk;
-  int pairKey = data.GetSegment(group.segments[0])->GetEntranceKey();
+  int pairKey = data.Data().GetSegment(group.segments[0])->GetEntranceKey();
   for (int s : group.segments)
-    if (data.GetSegment(s)->GetEntranceKey() != pairKey) {
+    if (data.Data().GetSegment(s)->GetEntranceKey() != pairKey) {
       configure.outStream << where << "beam/target/spectator describe one reaction, but its segments "
                              "have different entrance pairs."
                           << std::endl;
@@ -142,7 +142,7 @@ bool ThmResolveKinematics(EData &data, const Config &configure, CNuc *theCNuc, c
 }
 
 // Spectator-momentum window (ThmLineshape.h ThmSpectatorWindow) of a ps= line.
-bool ThmBuildWindow(EData &data, const Config &configure, const ThmExperiment &x, EData::ThmGroup &group,
+bool ThmBuildWindow(WorkingCopy &data, const Config &configure, const ThmExperiment &x, WorkingCopy::ThmGroup &group,
                     const std::string &where, const ThmReaction &r) {
   if (configure.thm.SpectatorEnergy(r.pairKey) != 0.0) {
     configure.outStream << where << "a ps window and spectatorEnergy both set the spectator motion of "
@@ -157,8 +157,8 @@ bool ThmBuildWindow(EData &data, const Config &configure, const ThmExperiment &x
   double muSx = r.mX * sp.mass / (r.mX + sp.mass) * kAmu;
   std::vector<double> dataE;
   for (int s : group.segments)
-    for (int p = 1; p <= data.GetSegment(s)->NumPoints(); p++)
-      dataE.push_back(data.GetSegment(s)->GetPoint(data, p)->GetCMEnergy());
+    for (int p = 1; p <= data.Data().GetSegment(s)->NumPoints(); p++)
+      dataE.push_back(data.Data().GetSegment(s)->GetPoint(data, p)->GetCMEnergy());
   std::shared_ptr<ThmSpectatorWindow> window = std::make_shared<ThmSpectatorWindow>();
   std::string why = BuildThmSpectatorWindow(x, muSx, r.dk, dataE, *window);
   if (!why.empty()) {
@@ -186,14 +186,14 @@ bool ThmBuildWindow(EData &data, const Config &configure, const ThmExperiment &x
     << " MeV.";
   configure.outStream << w.str() << std::endl;
   group.window = window;
-  for (int s : group.segments) data.GetSegment(s)->SetThmSpectatorWindow(data, window);
+  for (int s : group.segments) data.Draft().GetSegment(s)->SetThmSpectatorWindow(data, window);
   return true;
 }
 
 // Coulomb line shape of the spectator (ThmLineshape.h), lineshape=on.  The
 // level energies and widths it uses are the observed ones of Brune.
-bool ThmBuildLineshape(EData &data, const Config &configure, CNuc *theCNuc, const ThmExperiment &x,
-                       EData::ThmGroup &group, const std::string &where, const ThmReaction &r) {
+bool ThmBuildLineshape(WorkingCopy &data, const Config &configure, CNuc *theCNuc, const ThmExperiment &x,
+                       WorkingCopy::ThmGroup &group, const std::string &where, const ThmReaction &r) {
   if (!(configure.paramMask & Config::USE_BRUNE_FORMALISM)) {
     configure.outStream << where << "lineshape=on uses the observed level energies and widths "
                            "as the resonance poles; it needs the Brune parameterization."
@@ -214,8 +214,8 @@ bool ThmBuildLineshape(EData &data, const Config &configure, CNuc *theCNuc, cons
   // Every data point must leave the spectator some energy.
   double eMax = -1.0e300;
   for (int s : group.segments)
-    for (int p = 1; p <= data.GetSegment(s)->NumPoints(); p++)
-      eMax = std::max(eMax, data.GetSegment(s)->GetPoint(data, p)->GetCMEnergy());
+    for (int p = 1; p <= data.Data().GetSegment(s)->NumPoints(); p++)
+      eMax = std::max(eMax, data.Data().GetSegment(s)->GetPoint(data, p)->GetCMEnergy());
   if (!(shape->EsF(eMax) > 0.0)) {
     configure.outStream << where << "lineshape=on: at E = " << eMax
                         << " MeV the spectator has no energy left (E_sF = E_aA - B - E = "
@@ -230,7 +230,7 @@ bool ThmBuildLineshape(EData &data, const Config &configure, CNuc *theCNuc, cons
     << (sp.Z == 0 ? "; the spectator is neutral, so N_C = 1." : ".");
   configure.outStream << l.str() << std::endl;
   for (int s : group.segments) {
-    int key = data.GetSegment(s)->GetExitKey();
+    int key = data.Data().GetSegment(s)->GetExitKey();
     bool seen = false;
     for (const ThmLineshape::Exit &e : shape->exits) seen = seen || e.pairKey == key;
     if (seen || !theCNuc->IsPairKey(key)) continue;
@@ -246,15 +246,15 @@ bool ThmBuildLineshape(EData &data, const Config &configure, CNuc *theCNuc, cons
     shape->exits.push_back(e);
   }
   group.lineshape = shape;
-  for (int s : group.segments) data.GetSegment(s)->SetThmLineshape(data, shape);
+  for (int s : group.segments) data.Draft().GetSegment(s)->SetThmLineshape(data, shape);
   return true;
 }
 
 // Distorted-wave entrance vertex (ThmDwVertex.h): replaces M_l in the HOES
 // amplitude of every segment of the experiment; R(E) is not applied.
-bool ThmBuildDwVertex(EData &data, const Config &configure, CNuc *theCNuc, const ThmExperiment &x,
-                      EData::ThmGroup &group, const std::string &where, const ThmDistortion::Kinematics &dk) {
-  int pairKey = data.GetSegment(group.segments[0])->GetEntranceKey();
+bool ThmBuildDwVertex(WorkingCopy &data, const Config &configure, CNuc *theCNuc, const ThmExperiment &x,
+                      WorkingCopy::ThmGroup &group, const std::string &where, const ThmDistortion::Kinematics &dk) {
+  int pairKey = data.Data().GetSegment(group.segments[0])->GetEntranceKey();
   int pairNum = theCNuc->GetPairNumFromKey(pairKey);
   PPair *pair = theCNuc->GetPair(pairNum);
   // coulombIntegral=1 is refused with it by Config::ReadThmBlock
@@ -274,10 +274,10 @@ bool ThmBuildDwVertex(EData &data, const Config &configure, CNuc *theCNuc, const
   }
   std::vector<double> energies;
   for (int s : group.segments)
-    for (int p = 1; p <= data.GetSegment(s)->NumPoints(); p++)
-      energies.push_back(data.GetSegment(s)->GetPoint(data, p)->GetCMEnergy());
+    for (int p = 1; p <= data.Data().GetSegment(s)->NumPoints(); p++)
+      energies.push_back(data.Data().GetSegment(s)->GetPoint(data, p)->GetCMEnergy());
   double eLo, eHi;
-  EData::ThmGroupEnergyRange(data, group, eLo, eHi);
+  WorkingCopy::ThmGroupEnergyRange(data, group, eLo, eHi);
   std::shared_ptr<ThmDwVertex> v = std::make_shared<ThmDwVertex>();
   double eAA = dk.beamEnergy * dk.mTarget / (dk.mBeam + dk.mTarget);
   if (!(eAA - dk.bind - eHi > 0.0)) {
@@ -307,22 +307,22 @@ bool ThmBuildDwVertex(EData &data, const Config &configure, CNuc *theCNuc, const
     << "  The distortion factor R(E) is not applied: the DW vertex carries the energy dependence.";
   for (const std::string &w : v->dist.warnings) l << "\nWARNING: <thm> experiment[" << x.name << "]: " << w;
   for (int s : group.segments)
-    if (data.GetSegment(s)->GetThmWeight())
-      l << "\nWARNING: <thm> experiment[" << x.name << "]: segment " << data.GetSegment(s)->GetSegmentKey()
-        << " also has weight[" << data.GetSegment(s)->GetSegmentKey()
+    if (data.Data().GetSegment(s)->GetThmWeight())
+      l << "\nWARNING: <thm> experiment[" << x.name << "]: segment " << data.Data().GetSegment(s)->GetSegmentKey()
+        << " also has weight[" << data.Data().GetSegment(s)->GetSegmentKey()
         << "]=; it multiplies the model with the DW vertex.";
   configure.outStream << l.str() << std::endl;
   group.dwVertex = v;
-  for (int s : group.segments) data.GetSegment(s)->SetThmDwVertex(data, v);
+  for (int s : group.segments) data.Draft().GetSegment(s)->SetThmDwVertex(data, v);
   return true;
 }
 
 // Distortion factor R(E) (ThmDistortion.h): multiplies the model of every
 // segment of the experiment before the folding.
-bool ThmBuildDistortion(EData &data, const Config &configure, const ThmExperiment &x, EData::ThmGroup &group,
+bool ThmBuildDistortion(WorkingCopy &data, const Config &configure, const ThmExperiment &x, WorkingCopy::ThmGroup &group,
                         const std::string &where, const ThmDistortion::Kinematics &dk) {
   double eLo, eHi;
-  EData::ThmGroupEnergyRange(data, group, eLo, eHi);
+  WorkingCopy::ThmGroupEnergyRange(data, group, eLo, eHi);
   std::shared_ptr<ThmDistortion> d = std::make_shared<ThmDistortion>();
   d->experiment = x.name;
   std::ostringstream l;
@@ -352,8 +352,8 @@ bool ThmBuildDistortion(EData &data, const Config &configure, const ThmExperimen
     d->sf.mu = dk.ms * (dk.mx + dk.mA) / (dk.ms + dk.mx + dk.mA) * uconv;
     d->vcm = std::sqrt(2.0 * dk.mBeam * uconv * dk.beamEnergy) / ((dk.mBeam + dk.mTarget) * uconv);
     for (int s : group.segments)
-      for (int p = 1; p <= data.GetSegment(s)->NumPoints(); p++) {
-        std::string why = d->CheckEnergy(data.GetSegment(s)->GetPoint(data, p)->GetCMEnergy());
+      for (int p = 1; p <= data.Data().GetSegment(s)->NumPoints(); p++) {
+        std::string why = d->CheckEnergy(data.Data().GetSegment(s)->GetPoint(data, p)->GetCMEnergy());
         if (!why.empty()) {
           configure.outStream << where << "distortion: " << why << "." << std::endl;
           return false;
@@ -365,8 +365,8 @@ bool ThmBuildDistortion(EData &data, const Config &configure, const ThmExperimen
     std::string why = d->Build(x, dk, eLo - 0.5, gridHi, 0.5 * (eLo + eHi));
     // spectatorAngles=: every data point needs an accepted direction.
     for (int s = 0; why.empty() && d->angWindow && s < (int)group.segments.size(); s++)
-      for (int p = 1; why.empty() && p <= data.GetSegment(group.segments[s])->NumPoints(); p++)
-        why = d->CheckWindow(data.GetSegment(group.segments[s])->GetPoint(data, p)->GetCMEnergy());
+      for (int p = 1; why.empty() && p <= data.Data().GetSegment(group.segments[s])->NumPoints(); p++)
+        why = d->CheckWindow(data.Data().GetSegment(group.segments[s])->GetPoint(data, p)->GetCMEnergy());
     if (!why.empty()) {
       configure.outStream << where << "distortion: " << why << "." << std::endl;
       return false;
@@ -394,20 +394,20 @@ bool ThmBuildDistortion(EData &data, const Config &configure, const ThmExperimen
         << (d->n - 1) * d->h << " fm with a remainder up to " << d->tailWorst << " of |M|.";
   }
   for (int s : group.segments)
-    if (data.GetSegment(s)->GetThmWeight())
-      l << "\nWARNING: <thm> experiment[" << x.name << "]: segment " << data.GetSegment(s)->GetSegmentKey()
-        << " also has weight[" << data.GetSegment(s)->GetSegmentKey()
+    if (data.Data().GetSegment(s)->GetThmWeight())
+      l << "\nWARNING: <thm> experiment[" << x.name << "]: segment " << data.Data().GetSegment(s)->GetSegmentKey()
+        << " also has weight[" << data.Data().GetSegment(s)->GetSegmentKey()
         << "]=; both multiply its model (the distortion factor and the weight).";
   configure.outStream << l.str() << std::endl;
   group.distortion = d;
-  for (int s : group.segments) data.GetSegment(s)->SetThmDistortion(data, d);
+  for (int s : group.segments) data.Draft().GetSegment(s)->SetThmDistortion(data, d);
   return true;
 }
 
 // Angular window of the exit pair (ThmAngular.h), theta=: the model of every
 // segment is dsigma/dOmega averaged over theta_cm in the window.
-bool ThmBuildAngleWindow(EData &data, const Config &configure, CNuc *theCNuc, const ThmExperiment &x,
-                         EData::ThmGroup &group, const std::string &where) {
+bool ThmBuildAngleWindow(WorkingCopy &data, const Config &configure, CNuc *theCNuc, const ThmExperiment &x,
+                         WorkingCopy::ThmGroup &group, const std::string &where) {
   if (configure.thm.coherentL) {
     configure.outStream << where << "theta= computes the interference of the entrance partial waves "
                            "exactly (at fixed angle they interfere); entranceL=coherent is an approximation "
@@ -435,7 +435,7 @@ bool ThmBuildAngleWindow(EData &data, const Config &configure, CNuc *theCNuc, co
        "for 0-180).";
   configure.outStream << a.str() << std::endl;
   group.angle = w;
-  for (int s : group.segments) data.GetSegment(s)->SetThmAngleWindow(data, w);
+  for (int s : group.segments) data.Draft().GetSegment(s)->SetThmAngleWindow(data, w);
   return true;
 }
 
@@ -448,10 +448,10 @@ bool ThmBuildAngleWindow(EData &data, const Config &configure, CNuc *theCNuc, co
  * background.  The first refusal ends it (the order of the checks is what a
  * user sees, so it is kept).
  */
-int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) {
-  thmGroups_.clear();
-  thmCoherentParams_.clear();
-  thmCoherentParamOffset_ = -1;
+int WorkingCopy::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) {
+  Draft().thmGroups_.clear();
+  Draft().thmCoherentParams_.clear();
+  Draft().thmCoherentParamOffset_ = -1;
   for (const ThmExperiment &x : configure.thm.experiments) {
     const std::string where = "ERROR: <thm> experiment[" + x.name + "]: ";
     ThmGroup group;
@@ -464,14 +464,14 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
         return -1;
       }
       int index = 0;
-      for (int s = 1; s <= NumSegments(); s++)
-        if (GetSegment(s)->GetSegmentKey() == key) index = s;
+      for (int s = 1; s <= Draft().NumSegments(); s++)
+        if (Draft().GetSegment(s)->GetSegmentKey() == key) index = s;
       if (index == 0) {
         configure.outStream << "WARNING: <thm> experiment[" << x.name << "]: segment line " << key
                             << " of <segmentsData> is not in use; it is left out." << std::endl;
         continue;
       }
-      ESegment *segment = GetSegment(index);
+      const Segment *segment = Draft().GetSegment(index);
       if (!segment->IsTHM()) {
         configure.outStream << where << "segment " << key << " is not a THM segment (isDiff < 10)." << std::endl;
         return -1;
@@ -492,8 +492,8 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
     }
     int points = 0;
     for (int s : group.segments)
-      for (int p = 1; p <= GetSegment(s)->NumPoints(); p++)
-        if (GetSegment(s)->CMError(p - 1) != 0.0) points++;
+      for (int p = 1; p <= Draft().GetSegment(s)->NumPoints(); p++)
+        if (Segment::CMError(State(*Draft().GetSegment(s)), p - 1) != 0.0) points++;
     if (points <= 1 + group.terms) {
       configure.outStream << where << points << " point(s) with an error for " << 1 + group.terms
                           << " profiled linear parameter(s) (norm and background " << ThmExperiment::BackgroundName(group.terms)
@@ -501,14 +501,14 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
       return -1;
     }
     group.trivial = group.segments.size() == 1 && group.terms == 0;
-    group.pairKey = GetSegment(group.segments[0])->GetEntranceKey();
+    group.pairKey = Draft().GetSegment(group.segments[0])->GetEntranceKey();
     for (int s : group.segments)
-      if (GetSegment(s)->GetEntranceKey() != group.pairKey) group.pairKey = 0;
+      if (Draft().GetSegment(s)->GetEntranceKey() != group.pairKey) group.pairKey = 0;
 
     std::ostringstream summary;
     summary << "THM experiment '" << x.name << "': segment" << (group.segments.size() > 1 ? "s " : " ");
     for (size_t k = 0; k < group.segments.size(); k++)
-      summary << (k ? "," : "") << GetSegment(group.segments[k])->GetSegmentKey();
+      summary << (k ? "," : "") << Draft().GetSegment(group.segments[k])->GetSegmentKey();
     summary << (group.segments.size() > 1 ? " share one profiled norm" : " with a profiled norm")
             << ", background " << ThmExperiment::BackgroundName(group.terms) << ".";
     configure.outStream << summary.str() << std::endl;
@@ -551,7 +551,7 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
         const std::string jpi = ThmSpinText(t.J) + (t.parity > 0 ? "+" : "-");
         const std::string term = "cbackground " + jpi + ":" + std::to_string(t.exitKey) + ": ";
         bool exitUsed = false;
-        for (int s : group.segments) exitUsed = exitUsed || GetSegment(s)->GetExitKey() == t.exitKey;
+        for (int s : group.segments) exitUsed = exitUsed || Draft().GetSegment(s)->GetExitKey() == t.exitKey;
         if (!exitUsed || !theCNuc->IsPairKey(t.exitKey)) {
           configure.outStream << where << term << "no segment of the experiment has exit pair " << t.exitKey << "."
                               << std::endl;
@@ -590,7 +590,7 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
             combo.entrance = in;
             combo.exit = out;
             combo.form = t.form;
-            combo.index = (int)thmCoherentParams_.size();
+            combo.index = (int)Draft().thmCoherentParams_.size();
             cb->combos.push_back(combo);
             const std::string stem = ThmCoherentParamStem(x.name, t.J, t.parity, t.exitKey, ci->GetS(), ci->GetL(),
                                                           co->GetS(), co->GetL());
@@ -605,7 +605,7 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
               par.entrance = in;
               par.exit = out;
               par.term = k;
-              thmCoherentParams_.push_back(par);
+              Draft().thmCoherentParams_.push_back(par);
             }
             c << (found || cb->combos.size() > 1 ? "; " : "") << jpi << " (" << ThmSpinText(ci->GetS()) << ","
               << ci->GetL() << ") -> " << t.exitKey << " (" << ThmSpinText(co->GetS()) << "," << co->GetL()
@@ -628,69 +628,54 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
            "Re and Im of c are fit parameters (cbkg_*).";
       configure.outStream << c.str() << std::endl;
       group.coherent = cb;
-      for (int s : group.segments) GetSegment(s)->SetThmCoherent(*this, cb);
+      for (int s : group.segments) Draft().GetSegment(s)->SetThmCoherent(*this, cb);
     }
-    thmGroups_.push_back(group);
+    Draft().thmGroups_.push_back(group);
   }
   // The coherent backgrounds are the last block of the parameter vector
   // (FillMnParams sets the offset again when it lays the vector out).
-  if (!thmCoherentParams_.empty()) {
+  if (!Draft().thmCoherentParams_.empty()) {
     int offset = 0;
     for (int j = 1; j <= theCNuc->NumJGroups(); j++)
       offset += theCNuc->GetJGroup(j)->NumLevels() * (1 + theCNuc->GetJGroup(j)->NumChannels());
-    for (int s = 1; s <= NumSegments(); s++) {
-      if (GetSegment(s)->IsVaryNorm() && !GetSegment(s)->IsProfiledNorm()) offset++;
+    for (int s = 1; s <= Draft().NumSegments(); s++) {
+      if (Draft().GetSegment(s)->IsVaryNorm() && !Draft().GetSegment(s)->IsProfiledNorm()) offset++;
       offset++;  // energy shift
     }
-    thmCoherentParamOffset_ = offset;
+    Draft().thmCoherentParamOffset_ = offset;
     std::vector<double> v;
-    for (const ThmCoherentParam &par : thmCoherentParams_) v.push_back(par.value);
+    for (const ThmCoherentParam &par : Draft().thmCoherentParams_) v.push_back(par.value);
+    thmCoherentValues_ = v;
     theCNuc->SetThmCoherentValues(v);
   }
   return 0;
 }
 
-int EData::ThmGroupOf(int i) {
-  for (size_t g = 0; g < thmGroups_.size(); g++) {
-    if (thmGroups_[g].trivial) continue;
-    const std::vector<int> &s = thmGroups_[g].segments;
-    if (std::find(s.begin(), s.end(), i) != s.end()) return GetSegment(i)->IsProfiledNorm() ? (int)g : -1;
-  }
-  return -1;
-}
-
-bool EData::IsLastOfThmGroup(int g, int i) {
-  const std::vector<int> &s = thmGroups_[g].segments;
-  for (size_t k = s.size(); k-- > 0;)
-    if (GetSegment(s[k])->IsProfiledNorm()) return s[k] == i;
-  return false;
-}
-
 namespace {
 // The points of the profiled segments of a group, concatenated in order.
-void GatherThmGroup(EData *data, const azure2::Results &results, const std::vector<int> &segments, std::vector<double> &m,
+void GatherThmGroup(WorkingCopy *data, const azure2::Results &results, const std::vector<int> &segments, std::vector<double> &m,
                     std::vector<double> &d, std::vector<double> &e, std::vector<double> &energy) {
   m.clear();
   d.clear();
   e.clear();
   energy.clear();
   for (int s : segments) {
-    ESegment *seg = data->GetSegment(s);
+    const Segment *seg = data->Data().GetSegment(s);
     if (!seg->IsProfiledNorm()) continue;
     for (int p = 1; p <= seg->NumPoints(); p++) {
-      EPoint *pt = seg->GetPoint(*data, p);
+      Unit *pt = seg->GetPoint(*data, p);
       if (!pt) continue;
       m.push_back(pt->GetModelValue(results));
-      d.push_back(seg->CMValue(p - 1));
-      e.push_back(seg->CMError(p - 1));
+      d.push_back(Segment::CMValue(data->State(*seg), p - 1));
+      e.push_back(Segment::CMError(data->State(*seg), p - 1));
       energy.push_back(pt->GetCMEnergy());
     }
   }
 }
 }  // namespace
 
-double EData::ProfileThmGroup(int g, azure2::Results &results) {
-  ThmGroup &group = thmGroups_[g];
+double WorkingCopy::ProfileThmGroup(int g, azure2::Results &results) {
+  const ThmGroup &group = set_->thmGroups_[g];
   std::vector<double> m, d, e, energy;
   GatherThmGroup(this, results, group.segments, m, d, e, energy);
   azure2::Results::ObjectiveValues &out = results.objective;
@@ -698,7 +683,7 @@ double EData::ProfileThmGroup(int g, azure2::Results &results) {
   double total = 0.0;
   size_t k = 0;
   for (int s : group.segments) {
-    ESegment *seg = GetSegment(s);
+    const Segment *seg = Data().GetSegment(s);
     if (!seg->IsProfiledNorm()) continue;
     out.norm[s] = p.Norm();
     double chi = 0.0;
@@ -714,34 +699,34 @@ double EData::ProfileThmGroup(int g, azure2::Results &results) {
   return total;
 }
 
-void EData::ThmGroupResiduals(int g, int i, const azure2::Results &results, std::vector<double> &out) {
+void WorkingCopy::ThmGroupResiduals(int g, int i, const azure2::Results &results, std::vector<double> &out) {
   out.clear();
   const ThmProfile &p = results.objective.thmProfiles[g];
-  ESegment *seg = GetSegment(i);
+  const Segment *seg = Data().GetSegment(i);
   for (int q = 1; q <= seg->NumPoints(); q++) {
-    EPoint *pt = seg->GetPoint(*this, q);
+    Unit *pt = seg->GetPoint(*this, q);
     if (!pt) continue;
-    out.push_back(p.Residual(pt->GetModelValue(results), seg->CMValue(q - 1), seg->CMError(q - 1),
+    out.push_back(p.Residual(pt->GetModelValue(results), Segment::CMValue(State(*seg), q - 1), Segment::CMError(State(*seg), q - 1),
                              pt->GetCMEnergy()));
   }
 }
 
-double EData::ThmBackgroundAt(int i, double energy, const azure2::Results &results) {
-  int g = ThmGroupOf(i);
-  if (g < 0 || thmGroups_[g].terms == 0) return 0.0;
+double WorkingCopy::ThmBackgroundAt(int i, double energy, const azure2::Results &results) {
+  int g = Data().ThmGroupOf(i);
+  if (g < 0 || set_->thmGroups_[g].terms == 0) return 0.0;
   return results.objective.thmProfiles[g].Background(energy);
 }
 
-std::vector<ThmExperimentReport> EData::ThmExperimentReports(const azure2::Results &results) {
+std::vector<ThmExperimentReport> WorkingCopy::ThmExperimentReports(const azure2::Results &results) {
   std::vector<ThmExperimentReport> out;
-  for (size_t g = 0; g < thmGroups_.size(); g++) {
-    ThmGroup &group = thmGroups_[g];
+  for (size_t g = 0; g < set_->thmGroups_.size(); g++) {
+    const ThmGroup &group = set_->thmGroups_[g];
     ThmExperimentReport r;
     r.name = group.name;
     r.background = ThmExperiment::BackgroundName(group.terms);
     ThmProfile p;
-    if (group.trivial || ThmGroupOf(group.segments[0]) < 0) {
-      // Profiled per segment (ESegment::ProfileNormChiSquared) or not at all:
+    if (group.trivial || Data().ThmGroupOf(group.segments[0]) < 0) {
+      // Profiled per segment (Segment::ProfileNormChiSquared) or not at all:
       // the same closed form, recomputed here for its uncertainty.
       std::vector<double> m, d, e, energy;
       GatherThmGroup(this, results, group.segments, m, d, e, energy);
@@ -752,7 +737,7 @@ std::vector<ThmExperimentReport> EData::ThmExperimentReports(const azure2::Resul
     r.points = 0;
     r.chi2 = 0.0;
     for (int s : group.segments) {
-      ESegment *seg = GetSegment(s);
+      const Segment *seg = Data().GetSegment(s);
       if (!seg->IsProfiledNorm()) continue;
       r.segments.push_back(seg->GetSegmentKey());
       r.chi2 += results.objective.segmentChi2[s];
@@ -760,10 +745,10 @@ std::vector<ThmExperimentReport> EData::ThmExperimentReports(const azure2::Resul
     r.points = p.points;
     p.Reported(r.value, r.covariance);
     r.status = r.segments.empty() ? "not profiled: no segment of it has a free norm" : p.status;
-    for (const ThmCoherentParam &c : thmCoherentParams_)
-      if (c.experiment == group.name) {
+    for (int k = 0; k < Data().NumThmCoherentParams(); k++)
+      if (const ThmCoherentParam &c = Data().GetThmCoherentParam(k); c.experiment == group.name) {
         r.coherentNames.push_back(c.name);
-        r.coherentValues.push_back(c.value);
+        r.coherentValues.push_back(thmCoherentValues_[k]);
         r.coherentFixed.push_back(c.fixed);
       }
     out.push_back(r);

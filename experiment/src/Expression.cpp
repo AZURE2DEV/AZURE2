@@ -16,7 +16,7 @@ const double kNaN = std::numeric_limits<double>::quiet_NaN();
 namespace node {
 
 double RatioValue(double num, double den, double jNum, double jDen) {
-  // No ratio exists where the denominator vanishes (its exit channel closed, say): NaN, never 0 (ESegment, since
+  // No ratio exists where the denominator vanishes (its exit channel closed, say): NaN, never 0 (Segment, since
   // 2026-11-01).
   if (den == 0.0) return kNaN;
   return num / den * (jDen / jNum);
@@ -145,7 +145,7 @@ int Tree::Transform(const TransformSpec &spec) {
 
 namespace {
 
-/// The scale c J and the weight (c J) a of term q at point i (ESegment::TransformTerms: the total term 1 and 1).
+/// The scale c J and the weight (c J) a of term q at point i (Segment::TransformTerms: the total term 1 and 1).
 inline void TermWeight(const TransformTerm &t, const Inputs &in, std::size_t i, double &scale, double &weight) {
   if (t.total) {
     scale = weight = 1.0;
@@ -189,7 +189,7 @@ double Tree::TransformValue(const TransformSpec &t, const Inputs &in, std::size_
   }
   const std::size_t nsp = st.nsp;
   for (std::size_t q = 0; q < nt; q++)
-    if (in.subLeaves[t.terms[q].input].count(i) != nsp) return kNaN;  // refused at load (EData::CheckTransformedSegments)
+    if (in.subLeaves[t.terms[q].input].count(i) != nsp) return kNaN;  // refused at load (WorkingCopy::CheckTransformedSegments)
   std::vector<double> &f = ws.f;
   if (st.premap.rowStart) {
     // a linear map of every term's sub-point values first (free-gas Doppler), F at each row, then the kernel

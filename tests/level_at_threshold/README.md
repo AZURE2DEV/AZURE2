@@ -4,7 +4,7 @@ Every place that evaluates the shift function, penetrability or dS/dE at a
 level energy (CNuc::CalcBoundaryConditions, CalcShiftFunctions, TransformIn,
 TransformOut, ObservedWidthsAt; the THM vertex=constant shift
 ShiftAtLevelEnergy; AZUREGrad's dS/dE table; the adaptive grid's width
-estimate) and the external-capture entrance channel (EPoint, ECIntegral) goes
+estimate) and the external-capture entrance channel (Unit, ECIntegral) goes
 through `ChannelFunc` (include/ChannelFunc.h), which handles threshold once:
 S continued through E = 0, P = 0 at and just above a Coulomb threshold
 (eta > 100), dS/dE differenced on the continuous S where its stencil crosses

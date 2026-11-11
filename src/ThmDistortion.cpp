@@ -814,7 +814,7 @@ std::string ThmDistortion::Build(const ThmExperiment &x, const Kinematics &k, do
   std::vector<double> tails(nodes, 0.0), pw(nodes, 0.0);
   std::vector<std::string> errors(nodes);
   // A window can accept no direction at grid energies beyond the data
-  // (EData refuses data points without one): those take the nearest value.
+  // (WorkingCopy refuses data points without one): those take the nearest value.
   std::vector<char> empty(nodes, 0);
 #pragma omp parallel for schedule(dynamic)
   for (int i = 0; i < nodes; i++) {

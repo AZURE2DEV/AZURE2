@@ -3,7 +3,7 @@
 A lab angle the forward-branch kinematics cannot reach is an error, not a NaN
 (audit 2026-10-25, 01_kinematics_frames C1-C4, checklist item 31).
 
-`EPoint::ConvertLabAngle` maps a lab angle to the c.m. on the forward branch
+`Unit::ConvertLabAngle` maps a lab angle to the c.m. on the forward branch
 only. Where two c.m. angles reach one lab angle (a reaction near the threshold
 of an endothermic exit, or elastic scattering with a projectile heavier than
 the target) a lab angle past the kinematic maximum gave NaN: the reaction

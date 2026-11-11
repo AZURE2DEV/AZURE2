@@ -1,6 +1,6 @@
 #include "CovarianceBand.h"
 #include "CNuc.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 #include "AZUREParams.h"
 #include "Config.h"
 #include <fstream>
@@ -179,7 +179,7 @@ double BandData::dXS(const std::vector<double> &g) const {
   return (v > 0.0) ? std::sqrt(v) : 0.0;
 }
 
-bool BuildBandData(CNuc *compound, EData *data, azure2::Results &results, const Config &config,
+bool BuildBandData(CNuc *compound, WorkingCopy *data, azure2::Results &results, const Config &config,
                    const BandCovariance &savedCov, BandData &out,
                    const std::vector<bool> *fixedMask) {
   out.compound = compound;
@@ -209,7 +209,7 @@ bool BuildBandData(CNuc *compound, EData *data, azure2::Results &results, const 
   // A covariance loaded from covariance.dat has no column identities; its
   // dimension must then equal the number of free band parameters.
   if (savedCov.cols.empty() && savedCov.size() != m) {
-    const bool coherent = data->NumThmCoherentParams() > 0;
+    const bool coherent = data->Data().NumThmCoherentParams() > 0;
     config.outStream << "Data covariance size mismatch: covariance.dat has "
                      << savedCov.size() << " rows/columns but the model has " << m
                      << (coherent ? " free R-matrix and THM coherent-background parameters (level energies, "
@@ -233,7 +233,7 @@ bool BuildBandData(CNuc *compound, EData *data, azure2::Results &results, const 
 
   // ComputeModelGradients yields full packed rows; reduce each to the band
   // columns so the sensitivities line up with the covariance.
-  std::map<EPoint *, vector_r> fullGrad;
+  std::map<Unit *, vector_r> fullGrad;
   if (!ComputeModelGradients(compound, data, results, config, pmap, sdp, fullGrad, /*skipTHM=*/true))
     return false;
 
@@ -251,10 +251,10 @@ bool BuildBandData(CNuc *compound, EData *data, azure2::Results &results, const 
     std::vector<THMRows> thm = ComputeTHMRows(compound, data, results, config, full, pmap);
     const int nCols = pmap.NumPacked();
     for (const THMRows &tr : thm) {
-      ESegment *seg = data->GetSegment(tr.segment);
+      const Segment *seg = data->Data().GetSegment(tr.segment);
       size_t i = 0;
       for (int pid = 0; pid < seg->NumPoints(); pid++) {
-        EPoint *pt = seg->GetPoint(*data, pid + 1);
+        Unit *pt = seg->GetPoint(*data, pid + 1);
         if (!pt) continue;
         vector_r &row = fullGrad[pt];
         row.assign(nCols, 0.0);
@@ -269,7 +269,7 @@ bool BuildBandData(CNuc *compound, EData *data, azure2::Results &results, const 
       }
     }
   }
-  for (std::map<EPoint *, vector_r>::const_iterator it = fullGrad.begin();
+  for (std::map<Unit *, vector_r>::const_iterator it = fullGrad.begin();
        it != fullGrad.end(); ++it) {
     const vector_r &f = it->second;
     vector_r g(m, 0.0);

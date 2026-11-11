@@ -6,7 +6,7 @@
 
 #include <string>
 
-class EPoint;
+class Unit;
 class CNuc;
 namespace azure2 {
 struct Results;
@@ -54,7 +54,7 @@ class GenMatrixFunc {
   /*!
    *This virtual function in implemented in the child class.
    */
-  virtual void FillMatrices(EPoint *) = 0;
+  virtual void FillMatrices(Unit *) = 0;
   /*!
    *This virtual function in implemented in the child class.
    */
@@ -62,19 +62,19 @@ class GenMatrixFunc {
   /*!
    *This virtual function in implemented in the child class.
    */
-  virtual void CalculateTMatrix(EPoint *) = 0;
+  virtual void CalculateTMatrix(Unit *) = 0;
   /// The T-matrix of another exit pair at the same energy: drops the elements held now (and what was derived from
   /// them) and builds those of `point`'s exit from the solved level matrix, which does not depend on the exit.  Used
-  /// for points of different exit pairs mapped onto one host (EData::MapData).
-  void RecalculateTMatrix(EPoint *point) {
+  /// for points of different exit pairs mapped onto one host (WorkingCopy::MapData).
+  void RecalculateTMatrix(Unit *point) {
     ResetTMatrix();
     CalculateTMatrix(point);
   }
   /// The observable of the point from the T-matrix the subclass built, times the electron-screening factor where the
-  /// point carries one (CalculateBareCrossSection, then EPoint::ScreeningFactor).
-  void CalculateCrossSection(EPoint *, azure2::Results &results);
+  /// point carries one (CalculateBareCrossSection, then Unit::ScreeningFactor).
+  void CalculateCrossSection(Unit *, azure2::Results &results);
   /// The observable without electron screening.
-  void CalculateBareCrossSection(EPoint *, azure2::Results &results);
+  void CalculateBareCrossSection(Unit *, azure2::Results &results);
 
   /*!
    * Spin-summed |M|^2 from the channel-spin amplitude matrix, and the vector
@@ -91,7 +91,7 @@ class GenMatrixFunc {
    * the existing cross section has to be constant in angle, which is what pins
    * down the coupling order and the choice of l versus l'.
    */
-  bool CalculateAmplitudeMatrix(EPoint *point, double *spinSum, double *analyzingPower);
+  bool CalculateAmplitudeMatrix(Unit *point, double *spinSum, double *analyzingPower);
   /*!
    * Vector analyzing power of a capture reaction, from the Legendre
    * coefficients of R. G. Seyler and H. R. Weller, Phys. Rev. C \b 20 (1979)
@@ -103,7 +103,7 @@ class GenMatrixFunc {
    * included.  Returns false for anything that is not a photon exit channel;
    * throws when the exit's terms were not requested.
    */
-  bool CalculateCaptureAnalyzingPower(EPoint *point, const azure2::Results &results, double *unpolarized,
+  bool CalculateCaptureAnalyzingPower(Unit *point, const azure2::Results &results, double *unpolarized,
                                       double *analyzingPower);
   /// Start a temporary T-matrix element for a \f$J,l,l'\f$ combination.
   void NewTempTMatrix(TempTMatrix);
@@ -151,7 +151,7 @@ class GenMatrixFunc {
   /// The refusal of a point whose exit pair no pathway of its entrance pair reaches (pair numbers, 1-based).
   std::string NoPathwayMessage(int entrancePair, int exitPair) const;
   /// The refusal of a capture-A_y point whose terms were not requested at set-up (CNuc::RequestCaptureAy).
-  std::string CaptureAyNotBuiltMessage(const EPoint *point) const;
+  std::string CaptureAyNotBuiltMessage(const Unit *point) const;
 
   /*!
    *This virtual function in implemented in the child class.
@@ -180,7 +180,7 @@ class GenMatrixFunc {
   /// The interference products Z1Z2 T1 conj(T2) of the differential sum,
   /// summed by Legendre order (rt_wl_[L]), for the T-matrix held now: they do
   /// not depend on the angle, so the points that share one T-matrix
-  /// (EData::MapData) compute them once, and each point's sum is one term per
+  /// (WorkingCopy::MapData) compute them once, and each point's sum is one term per
   /// order.  Entrance = exit pair, capture, and particle exits other than
   /// UPOS (whose sum keeps only the k-groups of equal channel spins).
   const azure2::ExitRow *rt_decay_ = nullptr;

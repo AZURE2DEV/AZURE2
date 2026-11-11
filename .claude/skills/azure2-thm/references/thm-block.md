@@ -8,7 +8,7 @@ without penetrability suppression; the entrance channel is off the energy shell,
 ## THM segments
 
 - **A THM segment adds 10 to its observable code** (`isDiff`). `isDiff ≥ 10` means THM and `isDiff − 10` is the
-  ordinary code: 10 = THM angle-integrated, 11 = THM differential. `ESegment` strips the offset before anything else
+  ordinary code: 10 = THM angle-integrated, 11 = THM differential. `Segment` strips the offset before anything else
   reads it, so THM composes with every observable, including the analyzing power.
 
   ```python
@@ -91,5 +91,5 @@ A bad value raises `ValueError`. By hand, append `"\n<thm>\n...\n</thm>\n"`: an 
 | `tests/18O_p_a_thm` | ¹⁸O(p,α) | χ² = 2191.98 and `check.sh` against the published band; two interfering levels of one J^π |
 | `tests/thm_rwa_grid`, `tests/thm_options` | | `check.sh` |
 
-They exist because THM shares `ESegment`, `EPoint`, `AZURECalc` and the gradient code with the on-shell path and
+They exist because THM shares `Segment`, `Unit`, `AZURECalc` and the gradient code with the on-shell path and
 diverges only at the observable.

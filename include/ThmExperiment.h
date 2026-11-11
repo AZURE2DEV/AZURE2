@@ -52,7 +52,7 @@ struct ThmReactionKinematics {
  * pair x + A whose nuclei have charges Z and masses M (u; mass numbers their
  * rounding): one of beam/target must be a nucleus of the pair and the other
  * the second nucleus plus the spectator.  "" or what is wrong, as AZURE2
- * reports it (EData's THM experiments and the GUI's Experiments page).
+ * reports it (WorkingCopy's THM experiments and the GUI's Experiments page).
  */
 std::string ThmResolveReaction(const ThmNuclide &beam, const ThmNuclide &target, const ThmNuclide &spectator,
                                double beamEnergy, const int Z[2], const double M[2], ThmReactionKinematics &out);
@@ -249,7 +249,7 @@ std::string ThmCoherentParamStem(const std::string &experiment, double J, int pa
                                  double sp, int lp);
 /*!
  * The coherent background of one THM experiment as the model sees it
- * (EData::BuildThmGroups resolves the terms against the compound nucleus).
+ * (WorkingCopy::BuildThmGroups resolves the terms against the compound nucleus).
  * One entry per (J group, entrance channel, exit channel) combination, each
  * with 2 (const) or 4 (linear) real fit parameters at `index` in the
  * compound's coherent-background values (CNuc::ThmCoherentValues).  In the
@@ -307,7 +307,7 @@ std::string CheckThmCoulombConsistency(const std::vector<ThmExperiment> &experim
 
 /*!
  * The refusals of vertexModel=dw by the global options of the <thm> block,
- * made when the vertex is built (EData, ThmBuildDwVertex): entranceL=coherent
+ * made when the vertex is built (WorkingCopy, ThmBuildDwVertex): entranceL=coherent
  * (the DW vertex sums the entrance partial waves incoherently) and a non-zero
  * spectatorEnergy for the experiment's entrance pair `pairKey` (the spectator
  * kinematics come from Ebeam and the direction).  "" or the reason, without

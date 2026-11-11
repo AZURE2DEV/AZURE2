@@ -1,6 +1,6 @@
 // The old-line adaptor (convert/'s SpecsFromOldLines.h) and the engine's constructors that take its specs.
 //   old_line_specs_test
-// 1. Every isDiff code of a <segmentsData> and a <segmentsTest> line gives the ESegment flags of the old engine's
+// 1. Every isDiff code of a <segmentsData> and a <segmentsTest> line gives the Segment flags of the old engine's
 //    line constructors (the expected table below is written from those constructors, not from the adaptor).
 // 2. Composite components keep entrance, exit, fixed angle and scaling bit for bit.
 // 3. The refusals the old engine made while reading a line come with its words, in its order (warning first).
@@ -12,8 +12,8 @@
 #include <string>
 #include <vector>
 
-#include "EData.h"
-#include "ESegment.h"
+#include "WorkingCopy.h"
+#include "Segment.h"
 #include "azure2/convert/SpecsFromOldLines.h"
 
 Config *g_config = nullptr;  // defined by the executable; the library reads it
@@ -44,7 +44,7 @@ std::string OldDataText(int isDiff, const std::string &tail = "") {
   return "1 1 2 0.1 1.0 10 170 " + std::to_string(isDiff) + extra + " 1.0 0 0.0 0.0 0.0 0 data.dat" + tail + "\n";
 }
 
-// The flags of the old ESegment(SegLine) / ESegment(ExtrapLine): differential, c.m. differential, phase, total
+// The flags of the old Segment(SegLine) / Segment(ExtrapLine): differential, c.m. differential, phase, total
 // capture, cross-section component, angular distribution, coefficients, analyzing power, THM.
 struct Flags {
   bool diff, cm, phase;
@@ -52,7 +52,7 @@ struct Flags {
   bool angDist, coefficients, analyzing, thm;
 };
 
-Flags Of(const ESegment &s) {
+Flags Of(const Segment &s) {
   return {s.IsDifferential(), s.IsCMDifferential(), s.IsPhase(), s.IsTotalCapture(), s.GetCrossSectionComponent(),
           s.IsAngularDist(), s.IsCoefficients(), s.IsAnalyzingPower(), s.IsTHM()};
 }
@@ -66,7 +66,7 @@ bool Same(const Flags &a, const Flags &b) {
 }  // namespace
 
 int main() {
-  // 1. Data codes (ESegment(SegLine)): 1, 4, 7 differential; 4, 7 c.m.; 2 phase; 3 total capture; 5 / 6 the E1 / E2
+  // 1. Data codes (Segment(SegLine)): 1, 4, 7 differential; 4, 7 c.m.; 2 phase; 3 total capture; 5 / 6 the E1 / E2
   // component; 9 coefficients; 7 analyzing power; + 10 THM; any other code angle-integrated.
   const struct {
     int code;
@@ -84,9 +84,9 @@ int main() {
     const SpecList<DatasetSpec> d = Data(OldDataText(c.code));
     const bool one = !d.failed && d.items.size() == 1;
     check("data isDiff " + std::to_string(c.code) + " read", one);
-    if (one) check("data isDiff " + std::to_string(c.code) + " flags", Same(Of(ESegment(d.items[0].spec)), c.f));
+    if (one) check("data isDiff " + std::to_string(c.code) + " flags", Same(Of(Segment(d.items[0].spec)), c.f));
   }
-  // Extrapolation codes (ESegment(ExtrapLine)): 1, 5, 7 differential; 5, 7 c.m.; 3 angular distribution; 4 total.
+  // Extrapolation codes (Segment(ExtrapLine)): 1, 5, 7 differential; 5, 7 c.m.; 3 angular distribution; 4 total.
   const struct {
     int code;
     std::string line;
@@ -104,7 +104,7 @@ int main() {
     const bool one = !t.failed && t.items.size() == 1;
     check("test isDiff " + std::to_string(c.code) + " read", one);
     if (!one) continue;
-    const ESegment s(t.items[0].spec);
+    const Segment s(t.items[0].spec);
     check("test isDiff " + std::to_string(c.code) + " flags", Same(Of(s), c.f));
     if (c.code == 3) check("test isDiff 3 order", s.GetMaxAngDistOrder() == 4);
   }
@@ -122,7 +122,7 @@ int main() {
                                  r.components[0].angle == 30.25 && r.components[0].scaling == 1.4999999999999999e-07);
         check("component 2", r.components[1].exitKey == 3 && !r.components[1].hasAngle && r.components[1].scaling == 1.0);
       }
-      const ESegment s(d.items[0].spec);
+      const Segment s(d.items[0].spec);
       check("segment ratio", s.IsAdvanced() && s.GetLegacyOperationType() == 1 && s.GetComponents().size() == 2);
     }
     const SpecList<DatasetSpec> bad = Data(OldDataText(0, " 1 2 1 1 2"));

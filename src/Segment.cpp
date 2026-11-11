@@ -7,8 +7,8 @@
 #include "Config.h"
 #include "Kinematics.h"
 #include "DataCovariance.h"
-#include "EData.h"
-#include "ESegment.h"
+#include "WorkingCopy.h"
+#include "Segment.h"
 #include "ModelPass.h"
 #include "azure2/experiment/Expression.h"
 #include "ExperimentAdapter.h"
@@ -28,7 +28,7 @@
  * differential cross section although it is a dimensionless ratio.
  */
 
-void ESegment::SetReaction(const azure2::experiment::ReactionSpec &r) {
+void Segment::SetReaction(const azure2::experiment::ReactionSpec &r) {
   using azure2::experiment::Observable;
   entrancekey_ = r.entranceKey;
   exitkey_ = r.exitKey;
@@ -66,14 +66,14 @@ void ESegment::SetReaction(const azure2::experiment::ReactionSpec &r) {
   isTotal_ = r.total;
   transmission_ = r.transmission;
   yield_ = r.yieldThickness;
-  thickness_ = GetNominalThickness();
+  startThickness_ = GetNominalThickness();
 }
 
 /*!
  * A data segment: points read from a file (Fill) and compared with the model.
  */
 
-ESegment::ESegment(const azure2::experiment::DatasetSpec &spec) : parameterNames_(spec.names) {
+Segment::Segment(const azure2::experiment::DatasetSpec &spec) : parameterNames_(spec.names) {
   SetReaction(spec.reaction);
   min_e_ = spec.minE;
   max_e_ = spec.maxE;
@@ -82,17 +82,15 @@ ESegment::ESegment(const azure2::experiment::DatasetSpec &spec) : parameterNames
   coefficientsAbsolute_ = spec.absolute;
   datafile_ = spec.dataFile;
   columns_ = spec.columns;
-  dataNorm_ = dataNormNominal_ = spec.norm;
+  startNorm_ = dataNormNominal_ = spec.norm;
   dataNormError_ = spec.normError;
-  energyShift_ = spec.energyShift;
+  startEnergyShift_ = spec.energyShift;
   // The shift prior is centred on no shift (the spec's value is only the start), unless the spec gives a centre
-  // (applied by EData::Fill once the groups are resolved, as is the normalization's).
+  // (applied by WorkingCopy::Fill once the groups are resolved, as is the normalization's).
   energyShiftNominal_ = 0.0;
-  lastEnergyShift_ = std::numeric_limits<double>::quiet_NaN();  // the points start unshifted: the first fill always applies the shift
   energyShiftError_ = spec.energyShiftError;
   varyEnergyShift_ = spec.varyEnergyShift;
-  energyShiftSqrt_ = spec.energyShiftSqrt;
-  lastEnergyShiftSqrt_ = std::numeric_limits<double>::quiet_NaN();
+  startEnergyShiftSqrt_ = spec.energyShiftSqrt;
   energyShiftSqrtError_ = spec.energyShiftSqrtError;
   varyEnergyShiftSqrt_ = spec.varyEnergyShiftSqrt;
   shiftGroup_ = spec.shiftGroup;
@@ -127,10 +125,10 @@ ESegment::ESegment(const azure2::experiment::DatasetSpec &spec) : parameterNames
 }
 
 /*!
- * An extrapolation segment: no data, the points are made on a grid (EData::MakePoints).
+ * An extrapolation segment: no data, the points are made on a grid (WorkingCopy::MakePoints).
  */
 
-ESegment::ESegment(const azure2::experiment::ExtrapolationSpec &spec) : parameterNames_(spec.names) {
+Segment::Segment(const azure2::experiment::ExtrapolationSpec &spec) : parameterNames_(spec.names) {
   SetReaction(spec.reaction);
   min_e_ = spec.minE;
   max_e_ = spec.maxE;
@@ -141,14 +139,12 @@ ESegment::ESegment(const azure2::experiment::ExtrapolationSpec &spec) : paramete
     maxAngDistOrder_ = spec.maxAngDistOrder;
   }
   datafile_ = "";
-  dataNorm_ = dataNormNominal_ = 1.;
+  startNorm_ = dataNormNominal_ = 1.;
   dataNormError_ = 0.;
-  energyShift_ = energyShiftNominal_ = 0.0;
+  startEnergyShift_ = energyShiftNominal_ = 0.0;
   energyShiftError_ = 0.0;
-  lastEnergyShift_ = std::numeric_limits<double>::quiet_NaN();  // the points start unshifted: the first fill always applies the shift
   varyEnergyShift_ = false;
-  energyShiftSqrt_ = 0.0;
-  lastEnergyShiftSqrt_ = std::numeric_limits<double>::quiet_NaN();
+  startEnergyShiftSqrt_ = 0.0;
   energyShiftSqrtError_ = 0.0;
   shiftGroup_ = "";
   shiftLeaderPos_ = -1;
@@ -183,7 +179,7 @@ ESegment::ESegment(const azure2::experiment::ExtrapolationSpec &spec) : paramete
  * Returns true if the segment is differential cross section, otherwise returns false.
  */
 
-bool ESegment::IsDifferential() const {
+bool Segment::IsDifferential() const {
   return isdifferential_;
 }
 
@@ -191,7 +187,7 @@ bool ESegment::IsDifferential() const {
  * Returns true if the segment is differential C.M. cross section, otherwise returns false.
  */
 
-bool ESegment::IsCMDifferential() const {
+bool Segment::IsCMDifferential() const {
   return iscmdifferential_;
 }
 
@@ -199,7 +195,7 @@ bool ESegment::IsCMDifferential() const {
  * Returns true if the segment is phase shift, otherwise returns false.
  */
 
-bool ESegment::IsPhase() const {
+bool Segment::IsPhase() const {
   return isphase_;
 }
 
@@ -209,7 +205,7 @@ bool ESegment::IsPhase() const {
  * penetrability and whose cross section is the HOES formula (arbitrary units).
  */
 
-bool ESegment::IsTHM() const {
+bool Segment::IsTHM() const {
   return isTHM_;
 }
 
@@ -221,7 +217,7 @@ bool ESegment::IsTHM() const {
  * the direct norm.
  */
 
-bool ESegment::IsProfiledNorm() const {
+bool Segment::IsProfiledNorm() const {
   return isTHM_ && IsVaryNorm();
 }
 
@@ -233,16 +229,17 @@ bool ESegment::IsProfiledNorm() const {
  * returned in `profiledNorm`.
  */
 
-double ESegment::ProfileNormChiSquared(const EData &data, const azure2::Results &results, double &profiledNorm) const {
+double Segment::ProfileNormChiSquared(const WorkingCopy &data, const azure2::Results &results, double &profiledNorm) const {
   double Smm = 0.0, Smd = 0.0, Sdd = 0.0;
-  const UnitRange<const EPoint> points = GetPoints(data);
+  const UnitRange<const Unit> points = GetPoints(data);
+  const SegmentState &state = data.State(*this);
   for (int i = 0; i < points.size(); i++) {
-    const EPoint &pt = points[i];
-    double e = CMError(i);
+    const Unit &pt = points[i];
+    double e = CMError(state, i);
     if (e == 0.0) continue;
     double w = 1.0 / (e * e);
     double m = pt.GetModelValue(results);
-    double d = CMValue(i);
+    double d = CMValue(state, i);
     Smm += m * m * w;
     Smd += m * d * w;
     Sdd += d * d * w;
@@ -266,7 +263,7 @@ double ESegment::ProfileNormChiSquared(const EData &data, const azure2::Results 
  * E2 component only.
  */
 
-int ESegment::GetCrossSectionComponent() const {
+int Segment::GetCrossSectionComponent() const {
   return crossSectionComponent_;
 }
 
@@ -276,7 +273,7 @@ int ESegment::GetCrossSectionComponent() const {
  * (inclusive of the current segment).
  */
 
-int ESegment::IsTotalCapture() const {
+int Segment::IsTotalCapture() const {
   return isTotalCapture_;
 }
 
@@ -284,7 +281,7 @@ int ESegment::IsTotalCapture() const {
  * Returns true if the segment is angular distribution.
  */
 
-bool ESegment::IsAngularDist() const {
+bool Segment::IsAngularDist() const {
   return isAngDist_;
 }
 
@@ -292,7 +289,7 @@ bool ESegment::IsAngularDist() const {
  * Returns true if this segment is an Unobserved Primary, Observed Secondary (UPOS) segment.
  */
 
-bool ESegment::IsUPOS() const {
+bool Segment::IsUPOS() const {
   return isUPOS_;
 }
 
@@ -300,7 +297,7 @@ bool ESegment::IsUPOS() const {
  * Returns the angular momentum of the secondary decay for a UPOS segment.
  */
 
-int ESegment::GetSecondaryDecayL() const {
+int Segment::GetSecondaryDecayL() const {
   return secondaryDecayL_;
 }
 
@@ -308,7 +305,7 @@ int ESegment::GetSecondaryDecayL() const {
  * Returns the spin of the final state for a UPOS segment.
  */
 
-double ESegment::GetIc() const {
+double Segment::GetIc() const {
   return Ic_;
 }
 
@@ -316,7 +313,7 @@ double ESegment::GetIc() const {
  * Returns the multipole mixing ratio for a UPOS segment.
  */
 
-double ESegment::GetDelta() const {
+double Segment::GetDelta() const {
   return delta_;
 }
 
@@ -325,7 +322,7 @@ double ESegment::GetDelta() const {
  * returns false.
  */
 
-bool ESegment::IsTargetEffect() const {
+bool Segment::IsTargetEffect() const {
   return isTargetEffect_;
 }
 
@@ -334,7 +331,7 @@ bool ESegment::IsTargetEffect() const {
  * returns false.
  */
 
-bool ESegment::IsVaryNorm() const {
+bool Segment::IsVaryNorm() const {
   return varyNorm_;
 }
 
@@ -342,15 +339,15 @@ bool ESegment::IsVaryNorm() const {
  * Returns the number of data point objects in the segment.
  */
 
-int ESegment::NumPoints() const {
-  return own_.count;
+int Segment::NumPoints() const {
+  return measurement_ ? measurement_->rows->Size() : 0;
 }
 
 /*!
  * Returns the entrance particle pair key of the segment.
  */
 
-int ESegment::GetEntranceKey() const {
+int Segment::GetEntranceKey() const {
   return entrancekey_;
 }
 
@@ -358,7 +355,7 @@ int ESegment::GetEntranceKey() const {
  * Returns the exit particle pair key of the segment.
  */
 
-int ESegment::GetExitKey() const {
+int Segment::GetExitKey() const {
   return exitkey_;
 }
 
@@ -368,7 +365,7 @@ int ESegment::GetExitKey() const {
  * in the lab frame, conversions are performed to the center of mass frame.
  */
 
-int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
+int Segment::Fill(CNuc *theCNuc, WorkingCopy *theData, const Config &configure) {
   std::string infile = this->GetDataFile();
   std::unique_ptr<std::istream> inStream = InputFiles::Open(infile, configure.cacheInputFiles);
   std::istream &in = *inStream;
@@ -433,20 +430,22 @@ int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
   PPair *exitPair = theCNuc->GetPairFromKey(this->GetExitKey());  // nullptr for total capture (-1)
   for (int i = 0; i < this->NumPoints(); i++) {
     // Ratios are dimensionless: no cross-section conversion (decided by the spec: components are not added yet).
-    if (!this->ConvertRowToCM(*theData, 0, i, entrancePair, exitPair, !this->IsDimensionlessRatio(), BeyondRange::Stop)) {
+    azure2::experiment::AngleLimit lim;
+    if (!this->ConvertRowToCM(*theData, 0, i, entrancePair, exitPair, !this->IsDimensionlessRatio(), BeyondRange::Stop,
+                              lim)) {
       // Beyond the kinematic maximum lab angle: not a NaN point, not a dropped segment (audit 2026-10-25, 31).
-      const EPoint *converted = this->GetPoint(*theData, i + 1);
+      const Unit *converted = this->GetPoint(*theData, i + 1);
       configure.outStream << "ERROR: " << "segment #" << this->GetSegmentKey() << ": lab angle " << converted->GetLabAngle() << " deg at E_lab = " << converted->GetLabEnergy()
-                          << " MeV: " << converted->GetLabAngleWhy() << "." << std::endl;
+                          << " MeV: " << lim.why << "." << std::endl;
       theData->SetKinematicsError();
       return -1;
     }
   }
-  this->KeepLoadFrame(0);
+  this->KeepLoadFrame(*theData, 0);
   return 0;
 }
 
-void ESegment::SetMeasurementRows(EData &data, std::shared_ptr<const azure2::experiment::MeasurementRows> rows,
+void Segment::SetMeasurementRows(WorkingCopy &data, std::shared_ptr<const azure2::experiment::MeasurementRows> rows,
                                   const azure2::experiment::MeasurementProvenance &provenance, bool extrapolation) {
   auto m = std::make_shared<azure2::experiment::Measurement>();
   m->key = this->GetSegmentKey();
@@ -456,19 +455,19 @@ void ESegment::SetMeasurementRows(EData &data, std::shared_ptr<const azure2::exp
   measurement_ = m;
   const azure2::experiment::MeasurementRows &r = *measurement_->rows;
   own_.settings = MakeOwnSettings();
-  // the points: a new range at the end of the data set's units (an earlier range is left for the compaction)
-  own_.first = data.NumUnits();
-  own_.count = r.Size();
-  own_.frame.rows.clear();
-  own_.frame.rows.reserve(r.Size());
+  // the points: a new range at the end of the working copy's units (an earlier range is left for the compaction)
+  TermState &own = data.State(*this).terms.at(0);
+  own.first = data.NumUnits();
+  own.frame.rows.clear();
+  own.frame.rows.reserve(r.Size());
   for (int i = 0; i < r.Size(); i++) {
-    data.AppendUnit(EPoint(r, i, this, 0));
-    own_.frame.rows.push_back(azure2::experiment::UnconvertedRow(r.energy[i], r.angle[i], r.value[i], r.error[i],
+    data.AppendUnit(Unit(r, i, this, 0));
+    own.frame.rows.push_back(azure2::experiment::UnconvertedRow(r.energy[i], r.angle[i], r.value[i], r.error[i],
                                                             r.binLow[i], r.binHigh[i]));
   }
 }
 
-void ESegment::SetGridRows(EData &data, const std::vector<double> &energies, const std::vector<double> &angles) {
+void Segment::SetGridRows(WorkingCopy &data, const std::vector<double> &energies, const std::vector<double> &angles) {
   auto rows = std::make_shared<azure2::experiment::MeasurementRows>();
   for (double angle : angles)
     for (double energy : energies)
@@ -479,13 +478,13 @@ void ESegment::SetGridRows(EData &data, const std::vector<double> &energies, con
   this->SetMeasurementRows(data, rows, provenance, true);
 }
 
-void ESegment::SetPrediction(std::shared_ptr<const azure2::experiment::Prediction> p) {
+void Segment::SetPrediction(std::shared_ptr<const azure2::experiment::Prediction> p) {
   auto m = std::make_shared<azure2::experiment::Measurement>(*measurement_);
   m->prediction = std::move(p);
   measurement_ = m;
 }
 
-double ESegment::CMEnergyFactor(PPair *entrancePair, PPair *exitPair) {
+double Segment::CMEnergyFactor(PPair *entrancePair, PPair *exitPair) {
   return (entrancePair->GetPType() == 20 && exitPair) ? azure2::experiment::DecayCMFactor(PartitionOf(exitPair))
                                                       : azure2::experiment::BeamCMFactor(PartitionOf(entrancePair));
 }
@@ -493,7 +492,7 @@ double ESegment::CMEnergyFactor(PPair *entrancePair, PPair *exitPair) {
 namespace {
 
 // How the rows of a term with these pairs are converted (experiment::FrameRule).
-azure2::experiment::FrameRule RuleOf(const ESegment &segment, int t, PPair *entrancePair, PPair *exitPair,
+azure2::experiment::FrameRule RuleOf(const Segment &segment, int t, PPair *entrancePair, PPair *exitPair,
                                      bool convertValue) {
   using azure2::experiment::ExitKind;
   azure2::experiment::FrameRule r;
@@ -515,28 +514,28 @@ azure2::experiment::FrameRule RuleOf(const ESegment &segment, int t, PPair *entr
 
 }  // namespace
 
-bool ESegment::ConvertRowToCM(EData &data, int t, int i, PPair *entrancePair, PPair *exitPair, bool convertValue,
-                              BeyondRange beyond) {
-  TermUnits &u = Units(t);
-  EPoint *point = &data.Unit(u.first + i);
+bool Segment::ConvertRowToCM(WorkingCopy &data, int t, int i, PPair *entrancePair, PPair *exitPair, bool convertValue,
+                              BeyondRange beyond, azure2::experiment::AngleLimit &lim) const {
+  TermState &u = data.State(*this).terms[t];
+  Unit *point = &data.UnitAt(u.first + i);
   azure2::experiment::FrameRow &row = u.frame.rows[i];
   // After a shift: from the row as converted at load, so that where the angle cannot be converted the angle and the
   // factor are the load-time ones, whatever this copy converted before (data_model.md section 1.3, H4).
-  if (beyond == BeyondRange::Convert && u.loadFrame) row = u.loadFrame->rows[i];
+  const TermFixed &fixed = Fixed(t);
+  if (beyond == BeyondRange::Convert && fixed.loadFrame) row = fixed.loadFrame->rows[i];
   const azure2::experiment::MeasurementRows &rows = *measurement_->rows;
-  azure2::experiment::AngleLimit lim;
+  lim = azure2::experiment::AngleLimit();
   const bool ok = azure2::experiment::ConvertRow(RuleOf(*this, t, entrancePair, exitPair, convertValue),
                                                  point->GetLabEnergy(), point->GetLabAngle(), rows.value[i],
                                                  rows.error[i], rows.binLow[i], rows.binHigh[i],
                                                  beyond == BeyondRange::Stop, row, lim);
-  point->NoteAngleLimit(lim);
   point->SetFrame(row);
   return ok;
 }
 
-void ESegment::ConvertRowEnergyToCM(EData &data, int t, int i, PPair *entrancePair, PPair *exitPair) {
-  TermUnits &u = Units(t);
-  EPoint &point = data.Unit(u.first + i);
+void Segment::ConvertRowEnergyToCM(WorkingCopy &data, int t, int i, PPair *entrancePair, PPair *exitPair) const {
+  TermState &u = data.State(*this).terms[t];
+  Unit &point = data.UnitAt(u.first + i);
   azure2::experiment::FrameRow &row = u.frame.rows[i];
   const azure2::experiment::MeasurementRows &rows = *measurement_->rows;
   azure2::experiment::ConvertRowEnergy(RuleOf(*this, t, entrancePair, exitPair, false), point.GetLabEnergy(),
@@ -544,7 +543,7 @@ void ESegment::ConvertRowEnergyToCM(EData &data, int t, int i, PPair *entrancePa
   point.SetFrame(row);
 }
 
-int ESegment::AddLeaf(EData &data, int entranceKey, int exitKey, std::optional<double> fixedAngle, double scaling,
+int Segment::AddLeaf(WorkingCopy &data, int entranceKey, int exitKey, std::optional<double> fixedAngle, double scaling,
                       int key) {
   Leaf leaf;
   leaf.key = key;
@@ -552,36 +551,39 @@ int ESegment::AddLeaf(EData &data, int entranceKey, int exitKey, std::optional<d
   leaf.exitKey = exitKey;
   leaf.fixedAngle = fixedAngle;
   leaf.scaling = scaling;
-  // the leaf's points: copies of the segment's, a new range at the end of the data set's units
-  leaf.units.first = data.NumUnits();
-  leaf.units.count = own_.count;
-  for (int i = 0; i < own_.count; i++) {
-    if (data.Unit(own_.first + i).NumSubPoints())
-      throw std::logic_error("ESegment::AddLeaf: a leaf is added after the sub-points of its segment");
-    data.AppendUnit(EPoint(data.Unit(own_.first + i)));
+  // the leaf's points: copies of the segment's, a new range at the end of the working copy's units
+  SegmentState &state = data.State(*this);
+  TermState term;
+  term.first = data.NumUnits();
+  const int ownFirst = state.terms[0].first;
+  for (int i = 0; i < NumPoints(); i++) {
+    if (data.UnitAt(ownFirst + i).NumSubPoints())
+      throw std::logic_error("Segment::AddLeaf: a leaf is added after the sub-points of its segment");
+    data.AppendUnit(Unit(data.UnitAt(ownFirst + i)));
   }
-  leaf.units.frame = own_.frame;
-  leaf.units.loadFrame = own_.loadFrame;
-  for (int i = 0; i < leaf.units.count; i++) {
-    EPoint &point = data.Unit(leaf.units.first + i);
+  term.frame = state.terms[0].frame;
+  leaf.fixed.loadFrame = own_.loadFrame;
+  for (int i = 0; i < NumPoints(); i++) {
+    Unit &point = data.UnitAt(term.first + i);
     if (fixedAngle) {
       point.SetCMAngle(*fixedAngle);
       point.SetLabAngle(*fixedAngle);
-      leaf.units.frame.rows[i].thetaCM = *fixedAngle;
+      term.frame.rows[i].thetaCM = *fixedAngle;
     }
   }
+  state.terms.push_back(std::move(term));
   leaves_.push_back(std::move(leaf));
   const int t = (int)leaves_.size();
   SetLeafSettings(data, t);
   return t;
 }
 
-void ESegment::MakeYieldTotalLeaf(EData &data, int t) {
+void Segment::MakeYieldTotalLeaf(WorkingCopy &data, int t) {
   leaves_[t - 1].yieldTotal = true;
   SetLeafSettings(data, t);
 }
 
-void ESegment::SetLeafSettings(EData &data, int t) {
+void Segment::SetLeafSettings(WorkingCopy &data, int t) {
   // The segment's settings as they stand when the leaf is made, with the leaf's pairs and role.
   auto settings = std::make_shared<TermSettings>(*own_.settings);
   settings->entranceKey = leaves_[t - 1].entranceKey;
@@ -590,11 +592,11 @@ void ESegment::SetLeafSettings(EData &data, int t) {
   SetTermSettings(data, t, std::move(settings));
 }
 
-bool ESegment::IsTermTotal(int t) const {
+bool Segment::IsTermTotal(int t) const {
   return (isTotal_ || IsYieldTotalLeaf(t)) && TermExitKey(t) == TermEntranceKey(t);
 }
 
-void ESegment::SetTermTargetEffectNum(int t, int n) {
+void Segment::SetTermTargetEffectNum(int t, int n) {
   if (t == 0)
     SetTargetEffectNum(n);
   else
@@ -605,25 +607,25 @@ void ESegment::SetTermTargetEffectNum(int t, int n) {
  * Returns the orbital angular momentum value for the segment.  Applies only if the segment is phase shift.
  */
 
-int ESegment::GetL() const {
+int Segment::GetL() const {
   return l_;
 }
 
 /*!
  * Returns the position of the corresponding TargetEffect object in the vector
- *  of the parent EData object.
+ *  of the parent WorkingCopy object.
  */
 
-int ESegment::GetTargetEffectNum() const {
+int Segment::GetTargetEffectNum() const {
   return targetEffectNum_;
 }
 
 /*!
- * Returns the segment key for the current ESegment object.  The segment key is the order of
+ * Returns the segment key for the current Segment object.  The segment key is the order of
  * the segment specified in the input file, INCLUDING non-active segments.
  */
 
-int ESegment::GetSegmentKey() const {
+int Segment::GetSegmentKey() const {
   return segmentKey_;
 }
 
@@ -631,7 +633,7 @@ int ESegment::GetSegmentKey() const {
  * Returns the maximum polynomial order if segment is angular distribution.
  */
 
-int ESegment::GetMaxAngDistOrder() const {
+int Segment::GetMaxAngDistOrder() const {
   return maxAngDistOrder_;
 }
 
@@ -639,7 +641,7 @@ int ESegment::GetMaxAngDistOrder() const {
  * Returns the minimum energy of the segment (lab frame).
  */
 
-double ESegment::GetMinEnergy() const {
+double Segment::GetMinEnergy() const {
   return min_e_;
 }
 
@@ -647,7 +649,7 @@ double ESegment::GetMinEnergy() const {
  * Returns the maximum energy of the segment (lab frame).
  */
 
-double ESegment::GetMaxEnergy() const {
+double Segment::GetMaxEnergy() const {
   return max_e_;
 }
 
@@ -655,7 +657,7 @@ double ESegment::GetMaxEnergy() const {
  * Returns the minimum angle of the segment (lab frame).
  */
 
-double ESegment::GetMinAngle() const {
+double Segment::GetMinAngle() const {
   return min_a_;
 }
 
@@ -663,7 +665,7 @@ double ESegment::GetMinAngle() const {
  * Returns the maximum angle of the segment (lab frame).
  */
 
-double ESegment::GetMaxAngle() const {
+double Segment::GetMaxAngle() const {
   return max_a_;
 }
 
@@ -671,7 +673,7 @@ double ESegment::GetMaxAngle() const {
  * Returns the chi-squared value due to the normalization for each segment after the fitting process.
  */
 
-// double ESegment::GetNormChiSquared() const {
+// double Segment::GetNormChiSquared() const {
 //   return norm_chi_squared_;
 // }
 
@@ -679,23 +681,15 @@ double ESegment::GetMaxAngle() const {
  * Returns the total spin of the segment.  Only applies if the segment is phase shift.
  */
 
-double ESegment::GetJ() const {
+double Segment::GetJ() const {
   return j_;
-}
-
-/*!
- * Returns the normalization parameter for the data segment.
- */
-
-double ESegment::GetNorm() const {
-  return dataNorm_;
 }
 
 /*!
  * Returns the nominal normalization parameter for the data segment.
  */
 
-double ESegment::GetNominalNorm() const {
+double Segment::GetNominalNorm() const {
   return dataNormNominal_;
 }
 
@@ -703,7 +697,7 @@ double ESegment::GetNominalNorm() const {
  * Returns the normalization error for the data segment.
  */
 
-double ESegment::GetNormError() const {
+double Segment::GetNormError() const {
   return dataNormError_;
 }
 
@@ -711,7 +705,7 @@ double ESegment::GetNormError() const {
  * Returns the name of the data file from which to read.
  */
 
-std::string ESegment::GetDataFile() const {
+std::string Segment::GetDataFile() const {
   return datafile_;
 }
 
@@ -719,7 +713,7 @@ std::string ESegment::GetDataFile() const {
  * Returns true if this is an advanced segment (sum/ratio).
  */
 
-bool ESegment::IsAdvanced() const {
+bool Segment::IsAdvanced() const {
   return isAdvanced_;
 }
 
@@ -727,11 +721,11 @@ bool ESegment::IsAdvanced() const {
  * Returns the operation type (0 for sum, 1 for ratio).
  */
 
-int ESegment::GetLegacyOperationType() const {
+int Segment::GetLegacyOperationType() const {
   return operationType_;
 }
 
-std::shared_ptr<TermSettings> ESegment::MakeOwnSettings() const {
+std::shared_ptr<TermSettings> Segment::MakeOwnSettings() const {
   auto t = std::make_shared<TermSettings>();
   t->entranceKey = entrancekey_;
   t->exitKey = exitkey_;
@@ -761,50 +755,42 @@ std::shared_ptr<TermSettings> ESegment::MakeOwnSettings() const {
   return t;
 }
 
-void ESegment::SetTermSettings(EData &data, int t, std::shared_ptr<const TermSettings> settings) {
-  TermUnits &u = Units(t);
+void Segment::SetTermSettings(WorkingCopy &data, int t, std::shared_ptr<const TermSettings> settings) {
+  TermFixed &u = Fixed(t);
   u.settings = std::move(settings);
-  for (EPoint &point : TermPoints(data, t)) {
+  for (Unit &point : TermPoints(data, t)) {
     point.UseSettings(u.settings.get());
-    for (EPoint &sub : point.GetSubPoints(data)) sub.UseSettings(u.settings.get());
+    for (Unit &sub : point.GetSubPoints(data)) sub.UseSettings(u.settings.get());
   }
 }
 
-void ESegment::RefreshOwnSettings(EData &data) {
+void Segment::RefreshOwnSettings(WorkingCopy &data) {
   SetTermSettings(data, 0, MakeOwnSettings());
 }
 
 /*!
  * Sets the position of the corresponding TargetEffect object in the vector
- * of the parent EData object.
+ * of the parent WorkingCopy object.
  */
 
-void ESegment::SetTargetEffectNum(int targetEffectNum) {
+void Segment::SetTargetEffectNum(int targetEffectNum) {
   targetEffectNum_ = targetEffectNum;
   isTargetEffect_ = true;
 }
 
 /*!
- * Sets the segment key for the current ESegment object.
+ * Sets the segment key for the current Segment object.
  */
 
-void ESegment::SetSegmentKey(int segmentKey) {
+void Segment::SetSegmentKey(int segmentKey) {
   segmentKey_ = segmentKey;
-}
-
-/*!
- * Sets the normalization parameter for the segment.
- */
-
-void ESegment::SetNorm(double norm) {
-  dataNorm_ = norm;
 }
 
 /*!
  * Sets the exit pair key to the given value.
  */
 
-void ESegment::SetExitKey(EData &data, int key) {
+void Segment::SetExitKey(WorkingCopy &data, int key) {
   exitkey_ = key;
   RefreshOwnSettings(data);
 }
@@ -812,7 +798,7 @@ void ESegment::SetExitKey(EData &data, int key) {
 /*!
  * Sets the entrance key for the segment and all its points
  */
-void ESegment::SetEntranceKey(EData &data, int key) {
+void Segment::SetEntranceKey(WorkingCopy &data, int key) {
   entrancekey_ = key;
   RefreshOwnSettings(data);
 }
@@ -823,34 +809,40 @@ void ESegment::SetEntranceKey(EData &data, int key) {
  * (inclusive of the current segment).
  */
 
-void ESegment::SetIsTotalCapture(int num) {
+void Segment::SetIsTotalCapture(int num) {
   isTotalCapture_ = num;
 }
 
 /*!
  * Sets the minimum angle for the segment.
  */
-void ESegment::SetMinAngle(double minAngle) {
+void Segment::SetMinAngle(double minAngle) {
   min_a_ = minAngle;
 }
 
 /*!
  * Sets the maximum angle for the segment.
  */
-void ESegment::SetMaxAngle(double maxAngle) {
+void Segment::SetMaxAngle(double maxAngle) {
   max_a_ = maxAngle;
 }
 
-UnitRange<EPoint> ESegment::TermPoints(EData &data, int t) const {
-  return data.Units(Units(t).first, Units(t).count);
+UnitRange<Unit> Segment::TermPoints(WorkingCopy &data, int t) const {
+  return data.Units(TermFirstUnit(data, t), NumPoints());
 }
 
-UnitRange<const EPoint> ESegment::TermPoints(const EData &data, int t) const {
-  return data.Units(Units(t).first, Units(t).count);
+UnitRange<const Unit> Segment::TermPoints(const WorkingCopy &data, int t) const {
+  return data.Units(TermFirstUnit(data, t), NumPoints());
 }
 
-EPoint *ESegment::GetTermPoint(EData &data, int t, int i) const {
-  return &data.Unit(Units(t).first + i - 1);
+int Segment::TermFirstUnit(const WorkingCopy &data, int t) const { return data.State(*this).terms[t].first; }
+
+Unit *Segment::GetTermPoint(WorkingCopy &data, int t, int i) const {
+  return &data.UnitAt(TermFirstUnit(data, t) + i - 1);
+}
+
+void Segment::KeepLoadFrame(const WorkingCopy &data, int t) {
+  Fixed(t).loadFrame = std::make_shared<const azure2::experiment::MeasurementFrame>(data.State(*this).terms[t].frame);
 }
 
 // Advanced segment composition methods
@@ -858,36 +850,36 @@ EPoint *ESegment::GetTermPoint(EData &data, int t, int i) const {
 /*!
  * Sets the operation type for combining components (SUM or RATIO)
  */
-void ESegment::SetOperationType(OperationType operation) {
+void Segment::SetOperationType(OperationType operation) {
   segmentOperationType_ = operation;
 }
 
 /*!
  * Gets the operation type for combining components
  */
-OperationType ESegment::GetOperationType() const {
+OperationType Segment::GetOperationType() const {
   return segmentOperationType_;
 }
 
 /*!
- * The frame factor of a SUM term (ESegment.h).  Each point carries the
- * lab-to-c.m. factor of its own conversion (EPoint::ConvertCrossSection,
+ * The frame factor of a SUM term (Segment.h).  Each point carries the
+ * lab-to-c.m. factor of its own conversion (Unit::ConvertCrossSection,
  * ConvertCrossSectionGammas; 1 when none was done), refreshed with the energy
  * shift (UpdatePointEnergyWithShift).  Before 2026-10-26 the terms were added
  * as they were: 13C(a,n1+n2) at 6 MeV, -2.9 % at 0 deg to +5.6 % at 150 deg
  * (audit item 7, tests/sum_lab_frame).
  */
-double ESegment::TermFrameFactor(int t, int i) const {
-  return azure2::experiment::TermFrameFactor(Jacobian(0, i), Jacobian(t, i));
+double Segment::TermFrameFactor(const SegmentState &state, int t, int i) {
+  return azure2::experiment::TermFrameFactor(Jacobian(state, 0, i), Jacobian(state, t, i));
 }
 
 /*!
- * The lab-to-c.m. factor of one RATIO term at a point (ESegment.h): the term's own
+ * The lab-to-c.m. factor of one RATIO term at a point (Segment.h): the term's own
  * pairs, the photon Jacobian for a gamma exit and the particle one otherwise, and
  * 1 for a ratio that is not a lab-frame differential one (c.m., angle-integrated,
  * phase shift) or a term without a proper exit pair (a total-capture term).
  */
-double ESegment::RatioTermFrameFactor(int t, EPoint *point, CNuc *cnuc) const {
+double Segment::RatioTermFrameFactor(int t, Unit *point, CNuc *cnuc) const {
   if (!point || !cnuc) return 1.0;
   if (!IsDifferential() || IsCMDifferential() || IsPhase() || IsAngularDist()) return 1.0;
   if (!cnuc->IsPairKey(TermEntranceKey(t)) || !cnuc->IsPairKey(TermExitKey(t))) return 1.0;
@@ -899,38 +891,38 @@ double ESegment::RatioTermFrameFactor(int t, EPoint *point, CNuc *cnuc) const {
   return point->CalculateCrossSectionConversionFactor(entrancePair, exitPair);
 }
 
-bool ESegment::HasSubPointIntegration(const EData &data, const EPoint *point) {
+bool Segment::HasSubPointIntegration(const WorkingCopy &data, const Unit *point) {
   if (!point || !point->IsTargetEffect() || point->NumSubPoints() <= 0) return false;
-  const TargetEffect *te = data.GetTargetEffect(point->GetTargetEffectNum());
+  const TargetEffect *te = data.Data().GetTargetEffect(point->GetTargetEffectNum());
   return te && te->IsSubPointEffect();
 }
 
-void ESegment::SetThmLineshape(EData &data, std::shared_ptr<const ThmLineshape> l) {
+void Segment::SetThmLineshape(WorkingCopy &data, std::shared_ptr<const ThmLineshape> l) {
   thmLineshape_ = l;
   RefreshOwnSettings(data);
 }
 
-void ESegment::SetThmDistortion(EData &data, std::shared_ptr<const ThmDistortion> d) {
+void Segment::SetThmDistortion(WorkingCopy &data, std::shared_ptr<const ThmDistortion> d) {
   thmDistortion_ = d;
   RefreshOwnSettings(data);
 }
 
-void ESegment::SetThmDwVertex(EData &data, std::shared_ptr<const ThmDwVertex> v) {
+void Segment::SetThmDwVertex(WorkingCopy &data, std::shared_ptr<const ThmDwVertex> v) {
   thmDwVertex_ = v;
   RefreshOwnSettings(data);
 }
 
-void ESegment::SetThmCoherent(EData &data, std::shared_ptr<const ThmCoherentBackground> c) {
+void Segment::SetThmCoherent(WorkingCopy &data, std::shared_ptr<const ThmCoherentBackground> c) {
   thmCoherent_ = c;
   RefreshOwnSettings(data);
 }
 
-void ESegment::SetThmAngleWindow(EData &data, std::shared_ptr<const ThmAngleWindow> w) {
+void Segment::SetThmAngleWindow(WorkingCopy &data, std::shared_ptr<const ThmAngleWindow> w) {
   thmAngle_ = w;
   RefreshOwnSettings(data);
 }
 
-void ESegment::SetThmSpectatorWindow(EData &data, std::shared_ptr<const ThmSpectatorWindow> w) {
+void Segment::SetThmSpectatorWindow(WorkingCopy &data, std::shared_ptr<const ThmSpectatorWindow> w) {
   thmWindow_ = w;
   RefreshOwnSettings(data);
 }

@@ -11,7 +11,7 @@
 #include "AZUREParams.h"
 #include "CNuc.h"
 #include "Config.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 #include "ExperimentAdapter.h"
 #include "Kinematics.h"
 #include "Results.h"
@@ -25,9 +25,9 @@ namespace {
 using azure2::experiment::ExtrapolationSpec;
 using azure2::experiment::ExtrapolationSpecs;
 
-// The positions of the run's data parameters (EData::FillMnParams sets them from the length of the vector before):
+// The positions of the run's data parameters (WorkingCopy::FillMnParams sets them from the length of the vector before):
 // the compound nucleus's parameters, then the data set's, as the run laid them out.
-void LayOutParameters(CNuc *compound, EData *data, const Config &configure) {
+void LayOutParameters(CNuc *compound, WorkingCopy *data, const Config &configure) {
   AZUREParams layout;
   compound->FillMnParams(layout, &configure);
   data->FillMnParams(layout);
@@ -92,7 +92,7 @@ class SweepModel {
       }
     }
     const ExtrapolationSpec &mine = s.extrapolations.items[index_].spec;
-    EData data;
+    WorkingCopy data;
     if (data.MakePoints(config_, compound_, s) == -1) throw std::runtime_error("the points of a sweep could not be made");
     LayOutParameters(compound_, &data, config_);
     if (data.Initialize(compound_, config_) == -1) throw std::runtime_error("the points of a sweep could not be initialized");
@@ -101,9 +101,9 @@ class SweepModel {
     azure2::Results results;
     AZURECalc calculate(&data, results, compound_, config_);
     calculate(params_);
-    ESegment *segment = nullptr;
-    for (int k = 1; k <= data.NumSegments(); k++)
-      if (data.GetSegment(k)->GetSegmentKey() == mine.key) segment = data.GetSegment(k);
+    const Segment *segment = nullptr;
+    for (int k = 1; k <= data.Data().NumSegments(); k++)
+      if (data.Data().GetSegment(k)->GetSegmentKey() == mine.key) segment = data.Data().GetSegment(k);
     const std::size_t nE = energies.size(), nA = mine.angles.size();
     if (!segment || (std::size_t)segment->NumPoints() != nE * nA) throw std::runtime_error("a sweep lost its points");
     std::vector<std::vector<double>> values(nE, std::vector<double>(nA));
@@ -172,7 +172,7 @@ bool SessionRefusesAdaptiveGrids(const Config &configure) {
   return true;
 }
 
-std::unique_ptr<EData> MakeRefinedExtrapolations(const Config &configure, CNuc *compound, const vector_r &params) {
+std::unique_ptr<WorkingCopy> MakeRefinedExtrapolations(const Config &configure, CNuc *compound, const vector_r &params) {
   ExtrapolationSpecs specs = Quiet(configure.format3->built.extrapolations);
   ScratchDirectory scratch;
   if (!scratch.Ok()) {
@@ -219,7 +219,7 @@ std::unique_ptr<EData> MakeRefinedExtrapolations(const Config &configure, CNuc *
     x.energies = grid.x;
     x.adaptive.on = false;
   }
-  std::unique_ptr<EData> data(new EData);
+  std::unique_ptr<WorkingCopy> data(new WorkingCopy);
   if (data->MakePoints(configure, compound, specs) == -1) return nullptr;
   LayOutParameters(compound, data.get(), configure);
   return data;

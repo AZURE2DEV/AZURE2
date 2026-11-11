@@ -14,10 +14,10 @@
 
 #include "Config.h"
 #include "DataCovariance.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 #include "ModelPass.h"
 
-std::shared_ptr<DataCovariance::File> EData::CovarianceFileFor(const std::string &path, const Config &configure) {
+std::shared_ptr<DataCovariance::File> WorkingCopy::CovarianceFileFor(const std::string &path, const Config &configure) {
   const std::string key = DataCovariance::CanonicalPath(path);
   auto it = covFiles_.find(key);
   if (it != covFiles_.end()) return it->second;
@@ -43,14 +43,14 @@ std::shared_ptr<DataCovariance::File> EData::CovarianceFileFor(const std::string
  * with them it is checked here with the data in place of the model and frozen at the
  * first evaluation (DataCovariance::Group::EnsureFactored).
  */
-int EData::ResolveCovarianceGroups(const Config &configure) {
-  covGroups_.clear();
+int WorkingCopy::ResolveCovarianceGroups(const Config &configure) {
+  Draft().covGroups_.clear();
   std::map<std::string, int> groupOf;
   struct Item { int row, seg, pid; };
   std::vector<std::vector<Item>> items;
   std::vector<std::shared_ptr<DataCovariance::File>> files;
-  for (int s = 1; s <= this->NumSegments(); s++) {
-    ESegment *seg = this->GetSegment(s);
+  for (int s = 1; s <= Draft().NumSegments(); s++) {
+    Segment *seg = Draft().GetSegment(s);
     if (seg->GetCovarianceFile().empty()) continue;
     const std::string key = DataCovariance::CanonicalPath(seg->GetCovarianceFile());
     auto fit = covFiles_.find(key);
@@ -64,12 +64,12 @@ int EData::ResolveCovarianceGroups(const Config &configure) {
       files.push_back(fit->second);
       auto grp = std::make_shared<DataCovariance::Group>();
       grp->path = seg->GetCovarianceFile();
-      covGroups_.push_back(grp);
+      Draft().covGroups_.push_back(grp);
     } else {
       g = git->second;
     }
     seg->SetCovarianceGroup(g);
-    covGroups_[g]->numSegments++;
+    Draft().covGroups_[g]->numSegments++;
     const std::string canonicalData = DataCovariance::CanonicalPath(seg->GetDataFile());
     for (int pid = 0; pid < seg->NumPoints(); pid++) {
       const int row = fit->second->RowOf(canonicalData, seg->FileRecord(pid));
@@ -77,22 +77,22 @@ int EData::ResolveCovarianceGroups(const Config &configure) {
       items[g].push_back({row, s, pid});
     }
   }
-  if (covGroups_.empty()) {
+  if (Draft().covGroups_.empty()) {
     covFiles_.clear();
     return 0;
   }
   const std::string modelFile = configure.outputdir + "covarianceModel.out";
   bool anyRelative = false;
-  for (size_t g = 0; g < covGroups_.size(); g++) {
-    DataCovariance::Group &grp = *covGroups_[g];
+  for (size_t g = 0; g < Draft().covGroups_.size(); g++) {
+    DataCovariance::Group &grp = *Draft().covGroups_[g];
     const DataCovariance::File &f = *files[g];
     std::vector<Item> &it = items[g];
     std::stable_sort(it.begin(), it.end(), [](const Item &a, const Item &b) { return a.row < b.row; });
     for (size_t k = 1; k < it.size(); k++)
       if (it[k].row == it[k - 1].row) {
         configure.outStream << "ERROR: Row " << it[k].row + 1 << " of covariance file " << grp.path
-                            << " is fitted twice, in segments #" << this->GetSegment(it[k - 1].seg)->GetSegmentKey()
-                            << " and #" << this->GetSegment(it[k].seg)->GetSegmentKey()
+                            << " is fitted twice, in segments #" << Draft().GetSegment(it[k - 1].seg)->GetSegmentKey()
+                            << " and #" << Draft().GetSegment(it[k].seg)->GetSegmentKey()
                             << " (overlapping energy or angle windows on one data file)." << std::endl;
         return -1;
       }
@@ -107,8 +107,8 @@ int EData::ResolveCovarianceGroups(const Config &configure) {
     for (int a = 0; a < n; a++) {
       grp.members[a] = {it[a].seg, it[a].pid};
       grp.rows[a] = it[a].row;
-      ESegment *seg = this->GetSegment(it[a].seg);
-      EPoint *pt = seg->GetPoint(*this, it[a].pid + 1);
+      Segment *seg = Draft().GetSegment(it[a].seg);
+      Unit *pt = seg->GetPoint(*this, it[a].pid + 1);
       grp.sigma[a] = seg->LabError(it[a].pid);
       grp.data[a] = seg->LabValue(it[a].pid);
       std::ostringstream lab;
@@ -149,17 +149,17 @@ int EData::ResolveCovarianceGroups(const Config &configure) {
   return 0;
 }
 
-double EData::CovarianceChi2Correction(azure2::Results &results, std::vector<double> *segChis) {
+double WorkingCopy::CovarianceChi2Correction(azure2::Results &results, std::vector<double> *segChis) {
   double correction = 0.0;
   std::vector<double> r, z;
-  for (const std::shared_ptr<DataCovariance::Group> &gp : covGroups_) {
+  for (const std::shared_ptr<DataCovariance::Group> &gp : set_->covGroups_) {
     DataCovariance::Group &g = *gp;
     r.assign(g.n, 0.0);
     double diag = 0.0;
     for (int a = 0; a < g.n; a++) {
-      ESegment *seg = this->GetSegment(g.members[a].first);
-      EPoint *pt = seg->GetPoint(*this, g.members[a].second + 1);
-      r[a] = azure2::PointResidual(*this, *seg, g.members[a].second, results, seg->GetNorm()).Pull();
+      const Segment *seg = Data().GetSegment(g.members[a].first);
+      Unit *pt = seg->GetPoint(*this, g.members[a].second + 1);
+      r[a] = azure2::PointResidual(*this, *seg, g.members[a].second, results, State(*seg).norm).Pull();
       diag += r[a] * r[a];
     }
     g.EnsureFactored(r);
@@ -170,7 +170,7 @@ double EData::CovarianceChi2Correction(azure2::Results &results, std::vector<dou
     g.WhitenTranspose(z.data());
     correction += q - diag;
     for (int a = 0; a < g.n; a++)
-      this->GetSegment(g.members[a].first)->GetPoint(*this, g.members[a].second + 1)->SetCovarianceSeed(results, z[a]);
+      Data().GetSegment(g.members[a].first)->GetPoint(*this, g.members[a].second + 1)->SetCovarianceSeed(results, z[a]);
     // Per-segment chi2: the exact partition sum_i r_i (M^-1 r)_i of the group's chi2.
     std::map<int, double> part;
     for (int a = 0; a < g.n; a++) part[g.members[a].first] += r[a] * z[a];
@@ -182,16 +182,16 @@ double EData::CovarianceChi2Correction(azure2::Results &results, std::vector<dou
   return correction;
 }
 
-void EData::WhitenResidualRows(std::vector<double> &residuals, std::vector<double> *jacobian, int nCols) {
-  if (covGroups_.empty()) return;
-  std::vector<int> rowStart(this->NumSegments() + 2, 0);
+void WorkingCopy::WhitenResidualRows(std::vector<double> &residuals, std::vector<double> *jacobian, int nCols) {
+  if (set_->covGroups_.empty()) return;
+  std::vector<int> rowStart(Data().NumSegments() + 2, 0);
   int row = 0;
-  for (int s = 1; s <= this->NumSegments(); s++) {
+  for (int s = 1; s <= Data().NumSegments(); s++) {
     rowStart[s] = row;
-    row += this->GetSegment(s)->NumPoints();
+    row += Data().GetSegment(s)->NumPoints();
   }
   if (row > (int)residuals.size()) return;  // not the data-row layout
-  for (const std::shared_ptr<DataCovariance::Group> &gp : covGroups_) {
+  for (const std::shared_ptr<DataCovariance::Group> &gp : set_->covGroups_) {
     DataCovariance::Group &g = *gp;
     std::vector<int> rows(g.n);
     for (int a = 0; a < g.n; a++) rows[a] = rowStart[g.members[a].first] + g.members[a].second;
@@ -219,7 +219,7 @@ void EData::WhitenResidualRows(std::vector<double> &residuals, std::vector<doubl
  * current fit values and, for comparison, the sum of r_i^2 (the chi2 the same points
  * would have without their correlations).
  */
-void EData::WriteCovarianceSummary(const Config &configure, const azure2::Results &results) {
+void WorkingCopy::WriteCovarianceSummary(const Config &configure, const azure2::Results &results) {
   std::ofstream out((configure.outputdir + "covariance.out").c_str());
   if (!out) return;
   out << "# file, fitted rows, rows, segments, chi2 (r^T M^-1 r), sum of r_i^2 (correlations ignored), relvector terms"
@@ -227,14 +227,14 @@ void EData::WriteCovarianceSummary(const Config &configure, const azure2::Result
   out.precision(12);
   out << std::scientific;
   std::vector<double> r;
-  for (const std::shared_ptr<DataCovariance::Group> &gp : covGroups_) {
+  for (const std::shared_ptr<DataCovariance::Group> &gp : set_->covGroups_) {
     DataCovariance::Group &g = *gp;
     r.assign(g.n, 0.0);
     double diag = 0.0;
     for (int a = 0; a < g.n; a++) {
-      ESegment *seg = this->GetSegment(g.members[a].first);
-      EPoint *pt = seg->GetPoint(*this, g.members[a].second + 1);
-      r[a] = azure2::PointResidual(*this, *seg, g.members[a].second, results, seg->GetNorm()).Pull();
+      const Segment *seg = Data().GetSegment(g.members[a].first);
+      Unit *pt = seg->GetPoint(*this, g.members[a].second + 1);
+      r[a] = azure2::PointResidual(*this, *seg, g.members[a].second, results, State(*seg).norm).Pull();
       diag += r[a] * r[a];
     }
     g.EnsureFactored(r);
@@ -246,21 +246,15 @@ void EData::WriteCovarianceSummary(const Config &configure, const azure2::Result
   }
 }
 
-bool EData::HasRelativeCovariance() const {
-  for (const std::shared_ptr<DataCovariance::Group> &gp : covGroups_)
-    if (gp->HasRelative()) return true;
-  return false;
+void WorkingCopy::RefreezeCovariance() {
+  for (const std::shared_ptr<DataCovariance::Group> &gp : set_->covGroups_) gp->Refreeze();
 }
 
-void EData::RefreezeCovariance() {
-  for (const std::shared_ptr<DataCovariance::Group> &gp : covGroups_) gp->Refreeze();
-}
-
-void EData::PrepareCovarianceSeeds(CNuc *theCNuc, const Config &configure, azure2::Results &results) {
-  if (covGroups_.empty()) return;
-  std::vector<std::pair<ESegment *, int>> work;
-  for (int s = 1; s <= this->NumSegments(); s++) {
-    ESegment *seg = this->GetSegment(s);
+void WorkingCopy::PrepareCovarianceSeeds(CNuc *theCNuc, const Config &configure, azure2::Results &results) {
+  if (set_->covGroups_.empty()) return;
+  std::vector<std::pair<const Segment *, int>> work;
+  for (int s = 1; s <= Data().NumSegments(); s++) {
+    const Segment *seg = Data().GetSegment(s);
     if (seg->GetCovarianceGroup() < 0) continue;
     for (int pid = 0; pid < seg->NumPoints(); pid++) work.push_back({seg, pid});
   }

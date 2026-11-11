@@ -95,7 +95,7 @@ int Weigh(const PredictionSetup &s, int t, int node, Prediction &p) {
 
 void BuildObservable(const PredictionSetup &s, Prediction &p) { Weigh(s, 0, AddLeaf(s, 0, BasePart(s), p), p); }
 
-/// sum(term 0, (c_k J_0/J_k) v_k, ...), each term weighted by its abundance in a sample: the order of ESegment's SUM
+/// sum(term 0, (c_k J_0/J_k) v_k, ...), each term weighted by its abundance in a sample: the order of Segment's SUM
 /// (the base first, the components in order; a term is (c J) v, then times a).
 void BuildSum(const PredictionSetup &s, Prediction &p) {
   std::vector<int> children{Weigh(s, 0, AddLeaf(s, 0, BasePart(s), p), p)};
@@ -132,7 +132,7 @@ void BuildCoulombRatio(const PredictionSetup &s, Prediction &p) {
   p.tree.Ratio(num, den);
 }
 
-/// The weighted terms of a transmission or a yield (ESegment::TransformTerms): term 0 with weight a, a component
+/// The weighted terms of a transmission or a yield (Segment::TransformTerms): term 0 with weight a, a component
 /// with (c J_0/J_k) a, the yield's total term with 1.
 void BuildTransform(const PredictionSetup &s, Prediction &p, TransformSpec::Kind kind) {
   TransformSpec spec;

@@ -259,7 +259,7 @@ class CNuc {
 
   /// Current values of the THM coherent backgrounds (`cbackground=`,
   /// ThmCoherentBackground in ThmExperiment.h), in parameter order: the data
-  /// own the parameters (EData::FillThmCoherentFromParams), the HOES model
+  /// own the parameters (WorkingCopy::FillThmCoherentFromParams), the HOES model
   /// (THMMatrixFunc) reads them here, on the compound it is handed.  Empty
   /// without the key.
   const std::vector<double> &ThmCoherentValues() const { return thmCoherentValues_; }

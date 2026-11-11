@@ -5,7 +5,7 @@
  * of a real project against a recorded number: it catches a CHANGE, but it
  * cannot say the number was ever right, because the reference came from the
  * same code.  This test is the independent check.  It drives
- * EPoint::IntegrateTargetEffect directly, with sub-point cross sections chosen
+ * Unit::IntegrateTargetEffect directly, with sub-point cross sections chosen
  * by hand, and compares against
  *
  *   - closed-form values, where the fold has one (a constant cross section must
@@ -39,8 +39,8 @@
 #include <vector>
 
 #include "Config.h"
-#include "EData.h"
-#include "EPoint.h"
+#include "WorkingCopy.h"
+#include "Unit.h"
 #include "TargetEffect.h"
 #include "azure2/convert/SpecsFromOldLines.h"
 
@@ -166,7 +166,7 @@ TargetEffect makeEffect(const Config &configure, const std::string &line) {
 // Fold sigma(E) through the engine: build a point with sub-points on a uniform
 // grid over [lo, hi], hand it the effect, and call IntegrateTargetEffect.
 template <typename Sigma>
-double engineFold(const Config &configure, EData &data, int effectNum, Sigma sigma,
+double engineFold(const Config &configure, WorkingCopy &data, int effectNum, Sigma sigma,
                   double e0, double lo, double hi, int nSub,
                   double shift = 0.0, const double *window = nullptr,
                   double qGamma = 0.0, double mass = 0.0) {
@@ -174,7 +174,7 @@ double engineFold(const Config &configure, EData &data, int effectNum, Sigma sig
   const size_t rec = azure2::Results::RecordSize(0, 0);
   azure2::Results results;
   results.slot.assign(rec * (nSub + 1), 0.0);
-  EPoint point(0.0, e0, 1, 2, false, false, false, 0.0, 0, 0);
+  Unit point(0.0, e0, 1, 2, false, false, false, 0.0, 0, 0);
   point.SetResultRecord(0, 0, 0);
   point.SetTargetEffectNum(effectNum);
   if (window) point.SetBinWindow(window[0], window[1]);
@@ -188,15 +188,15 @@ double engineFold(const Config &configure, EData &data, int effectNum, Sigma sig
   const int unit = data.AppendUnit(point);
   for (int i = 0; i < nSub; i++) {
     double e = hi - (hi - lo) * i / (nSub - 1);   // engine convention: high to low
-    EPoint sub(0.0, e, 1, 2, false, false, false, 0.0, 0, 0);
+    Unit sub(0.0, e, 1, 2, false, false, false, 0.0, 0, 0);
     sub.SetResultRecord(rec * (i + 1), 0, 0);
     sub.SetFitCrossSection(results, sigma(e));
-    data.Unit(unit).MakeSubPoint(sub);
+    data.UnitAt(unit).MakeSubPoint(sub);
     data.AppendUnit(sub);
   }
-  data.Unit(unit).SetSubPointRange(unit + 1, nSub);
-  data.Unit(unit).IntegrateTargetEffect(data, configure, results);
-  return data.Unit(unit).GetFitCrossSection(results);
+  data.UnitAt(unit).SetSubPointRange(unit + 1, nSub);
+  data.UnitAt(unit).IntegrateTargetEffect(data, configure, results);
+  return data.UnitAt(unit).GetFitCrossSection(results);
 }
 
 }  // namespace
@@ -260,15 +260,15 @@ int main() {
         single.BeamProfileWeight(lo) < 1e-4 * single.BeamProfileWeight(3.4));
 
   // the profile stays in the lab frame of the input file; each point converts it with its own pair's
-  // factor (EPoint::SetTargetKinematics), so a line shared by several segments or pairs is never scaled
+  // factor (Unit::SetTargetKinematics), so a line shared by several segments or pairs is never scaled
   TargetEffect shared = makeEffect(configure, targetIntLine(oneComponent));
   checkClose("the stored profile is the lab one, however many segments share the line",
              shared.GetBeamProfile()[0].xi, 3.5, 1e-12);
 
   // ------------------------------------------------ 2. the fold
-  EData data;
+  WorkingCopy data;
   data.AddTargetEffect(single);
-  const int effect = data.NumTargetEffects();
+  const int effect = data.Data().NumTargetEffects();
   const double e0 = 3.5, gridLo = 2.6, gridHi = 4.4;
   const double window[2] = {3.40, 3.60};
   const double qGamma = 7.16191, mass = 14887.0;   // 12C + alpha, MeV
@@ -320,10 +320,10 @@ int main() {
 
   // (e) the detailed-balance weight, which is what makes a capture cross section
   //     average the way the inverse photodissociation measurement averaged it
-  EData dataDb;
+  WorkingCopy dataDb;
   dataDb.AddTargetEffect(makeEffect(configure, targetIntLine(
       "beamprofile  1  3.5  0.30  -1.6  1  0.0733  0  1")));
-  const int effectDb = dataDb.NumTargetEffects();
+  const int effectDb = dataDb.Data().NumTargetEffects();
   Kernel kDb = kWin;
   kDb.photodissociation = true;
   kDb.qGamma = qGamma;

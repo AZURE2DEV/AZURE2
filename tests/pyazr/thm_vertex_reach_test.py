@@ -3,7 +3,7 @@
 
 Beyond the kinematic reach of a ``ps`` window (no accepted spectator
 direction at E) the engine uses the nodes of the nearest data point -- by
-design, for the folding sub-points next to the data (EPoint.cpp,
+design, for the folding sub-points next to the data (Unit.cpp,
 ThmSpectatorWindow::Nodes).  thm_vertex returned those rows without a word,
 so a vertex scan out there showed identical rows that read as physics (the
 7Li cross-check, 1.88-4 MeV).  Now, on tests/18O_p_a_thm, 2H(18O,a15N)n at

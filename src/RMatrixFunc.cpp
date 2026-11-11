@@ -1,4 +1,4 @@
-#include "EPoint.h"
+#include "Unit.h"
 #include "CNuc.h"
 #include "MatrixInv.h"
 #include "RMatrixFunc.h"
@@ -111,7 +111,7 @@ void RMatrixFunc::ClearMatrices() {
  * This function creates the \f$ [1-RL] \f$ and \f$ R \f$ Matrices from the CNuc object.
  */
 
-void RMatrixFunc::FillMatrices(EPoint *point) {
+void RMatrixFunc::FillMatrices(Unit *point) {
   double inEnergy;
   if (compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetPType() == 20)
     inEnergy = point->GetCMEnergy() +
@@ -122,7 +122,7 @@ void RMatrixFunc::FillMatrices(EPoint *point) {
         compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetSepE() +
         compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetExE();
   // Groups of another compound nucleus are not part of this point's matrices
-  // (EPoint::CalcEDependentValues left their rows empty).
+  // (Unit::CalcEDependentValues left their rows empty).
   activeNucleus_ = compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetNucleus();
   for (int j = 1; j <= compound()->NumJGroups(); j++) {
     if (compound()->GetJGroup(j)->IsInRMatrix() && compound()->GetJGroup(j)->GetNucleus() == activeNucleus_) {
@@ -338,7 +338,7 @@ void RMatrixFunc::InvertMatrices() {
  * This function calculates the T-Matrix for each reaction pathways based on the \f$ [1-RL]^{-1}R \f$ matrix.
  */
 
-void RMatrixFunc::CalculateTMatrix(EPoint *point) {
+void RMatrixFunc::CalculateTMatrix(Unit *point) {
   int aa = compound()->GetPairNumFromKey(point->GetEntranceKey());
   const int exitPairNum = compound()->GetPairNumFromKey(point->GetExitKey());
   const azure2::EntrancePathways &P = compound()->Pathways().Entrance(aa);

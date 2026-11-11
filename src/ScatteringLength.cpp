@@ -6,7 +6,7 @@
 #include "ALevel.h"
 #include "CNuc.h"
 #include "Config.h"
-#include "EPoint.h"
+#include "Unit.h"
 #include "JGroup.h"
 #include "PPair.h"
 #include "ParameterLabel.h"
@@ -82,7 +82,7 @@ std::vector<Channel> Channels(CNuc *compound, int pairKey) {
 
 namespace {
 /// Fill and invert the level matrices at the pair's threshold.
-void ThresholdMatrices(CNuc *compound, const Config &configure, EPoint &point, AMatrixFunc &f) {
+void ThresholdMatrices(CNuc *compound, const Config &configure, Unit &point, AMatrixFunc &f) {
   point.CalcEDependentValues(nullptr, compound, configure, false, nullptr);
   f.ClearMatrices();
   f.FillMatrices(&point);
@@ -95,7 +95,7 @@ Value Evaluate(CNuc *compound, const Config &configure, const Channel &ch) {
   v.ch = ch;
   v.M = complex(0.0, 0.0);
   if (ch.hasLevels) {
-    EPoint point(0.0, 0.0, ch.pairKey, ch.pairKey, false, false, false, 0.0, 0, 0);
+    Unit point(0.0, 0.0, ch.pairKey, ch.pairKey, false, false, false, 0.0, 0, 0);
     AMatrixFunc f(compound, configure);
     ThresholdMatrices(compound, configure, point, f);
     v.M = f.GetUBilinear(ch.jGroup, ch.channel, ch.channel);
@@ -108,7 +108,7 @@ Value Evaluate(CNuc *compound, const Config &configure, const Channel &ch) {
 bool Adjoint(CNuc *compound, const Config &configure, const Channel &ch, complex aBar, GradAccum &accum,
              const vector_matrix_r *shiftDeriv) {
   if (!ch.hasLevels) return true;  // a0 does not depend on any parameter
-  EPoint point(0.0, 0.0, ch.pairKey, ch.pairKey, false, false, false, 0.0, 0, 0);
+  Unit point(0.0, 0.0, ch.pairKey, ch.pairKey, false, false, false, 0.0, 0, 0);
   AMatrixFunc f(compound, configure);
   ThresholdMatrices(compound, configure, point, f);
   const Coefficients c = FormulaCoefficients(compound->GetPair(ch.pairNum));

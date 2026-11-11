@@ -9,10 +9,10 @@
 #include <functional>
 
 class CNuc;
-class EData;
+class WorkingCopy;
 class Config;
-class EPoint;
-class ESegment;
+class Unit;
+class Segment;
 namespace azure2 {
 struct Results;
 }
@@ -27,8 +27,8 @@ class ParamIndexMap;
  * the full derivation and phase structure.
  *
  * Phase 0 provides the parameter-index map: a faithful mirror of the flat
- * ordering produced by CNuc::FillCompoundFromParams / EData::FillNormsFromParams
- * / EData::FillEnergyShiftsFromParams, so that gradient components computed in
+ * ordering produced by CNuc::FillCompoundFromParams / WorkingCopy::FillNormsFromParams
+ * / WorkingCopy::FillEnergyShiftsFromParams, so that gradient components computed in
  * "physics" coordinates (jGroup, level, channel) can be scattered into the same
  * flat vector the sampler perturbs.
  */
@@ -46,10 +46,10 @@ struct ParamDesc {
   int nucleus = -1;  ///< 1-based compound nucleus (Abundance only, else -1)
   int sample = -1;   ///< 1-based sample of the <abundances> block (Abundance only, else -1)
   int fnTerm = -1;  ///< j of a shift-function parameter aj (EnergyShiftFn only, else -1)
-  int screening = -1;  ///< 1-based screening parameter (EData::GetScreeningEffect), Screening only, else -1
-  int density = -1;    ///< 1-based density parameter (EData::GetDensityEffect), Density only, else -1
-  int doppler = -1;    ///< 1-based Doppler parameter (EData::GetDopplerEffect), Doppler only, else -1
-  int thickness = -1;  ///< 1-based thickness parameter (EData::GetThicknessSegment), Thickness only, else -1
+  int screening = -1;  ///< 1-based screening parameter (WorkingCopy::GetScreeningEffect), Screening only, else -1
+  int density = -1;    ///< 1-based density parameter (WorkingCopy::GetDensityEffect), Density only, else -1
+  int doppler = -1;    ///< 1-based Doppler parameter (WorkingCopy::GetDopplerEffect), Doppler only, else -1
+  int thickness = -1;  ///< 1-based thickness parameter (WorkingCopy::GetThicknessSegment), Thickness only, else -1
 };
 
 /*!
@@ -130,7 +130,7 @@ class ParamIndexMap {
   int EIndexFlat(int jGroup, int level) const { return eFlat_[jGroup - 1][level - 1]; }
   int GammaIndexFlat(int jGroup, int level, int channel) const { return gammaFlat_[jGroup - 1][level - 1][channel - 1]; }
 
-  friend ParamIndexMap BuildParamIndexMap(CNuc *, EData *, const std::vector<bool> &);
+  friend ParamIndexMap BuildParamIndexMap(CNuc *, WorkingCopy *, const std::vector<bool> &);
 
  private:
   std::vector<std::vector<int>> eFlat_;                  ///< [j-1][la-1] -> full idx
@@ -235,13 +235,13 @@ struct GradAccum {
     if (k > (int)screening.size()) screening.resize(k, 0.0);
     screening[k - 1] += v;
   }
-  /// Add a contribution to d/dT (K) of Doppler-temperature parameter k (1-based, EData::DopplerParamOfEffect).
+  /// Add a contribution to d/dT (K) of Doppler-temperature parameter k (1-based, WorkingCopy::DopplerParamOfEffect).
   void AddDoppler(int k, double v) {
     if (k < 1) return;
     if (k > (int)doppler.size()) doppler.resize(k, 0.0);
     doppler[k - 1] += v;
   }
-  /// Add a contribution to d/dn (atoms/barn) of sample-thickness parameter k (1-based, EData::ThicknessParamOfSegment).
+  /// Add a contribution to d/dn (atoms/barn) of sample-thickness parameter k (1-based, WorkingCopy::ThicknessParamOfSegment).
   void AddThickness(int k, double v) {
     if (k < 1) return;
     if (k > (int)thickness.size()) thickness.resize(k, 0.0);
@@ -255,11 +255,11 @@ struct GradAccum {
  * \brief Build the parameter-index map by mirroring the fill routines.
  *
  * \param compound  the CNuc whose levels/channels define the R-matrix params.
- * \param data      the EData whose segments define norm/energy-shift params.
+ * \param data      the WorkingCopy whose segments define norm/energy-shift params.
  * \param fixed     the per-full-index fixed mask (same as AZUREAPI::fixed_).
  *                  If empty, all parameters are treated as non-fixed.
  */
-ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
+ParamIndexMap BuildParamIndexMap(CNuc *compound, WorkingCopy *data,
                                  const std::vector<bool> &fixed);
 
 /*!
@@ -302,9 +302,9 @@ void AddAbundancePenaltyGradient(CNuc *compound, const Config &configure, GradAc
  * fitBarFn arguments: (segment, 1-based segment index, 0-based point index,
  * combined model value).
  */
-using FitBarFn = std::function<double(ESegment *, int, int, double)>;
+using FitBarFn = std::function<double(const Segment *, int, int, double)>;
 
-bool AccumulateEGammaGradient(CNuc *compound, EData *data, azure2::Results &results, const Config &config,
+bool AccumulateEGammaGradient(CNuc *compound, WorkingCopy *data, azure2::Results &results, const Config &config,
                               const ParamIndexMap &pmap,
                               const vector_matrix_r *shiftDeriv,
                               const FitBarFn &fitBarFn,
@@ -331,7 +331,7 @@ bool AccumulateEGammaGradient(CNuc *compound, EData *data, azure2::Results &resu
  * row) but left zero, for a caller that fills them itself -- AZUREAPI does, with
  * the profiled norm (see ComputeTHMRows).
  */
-bool ComputeResidualJacobian(CNuc *compound, EData *data, azure2::Results &results, const Config &config,
+bool ComputeResidualJacobian(CNuc *compound, WorkingCopy *data, azure2::Results &results, const Config &config,
                              const ParamIndexMap &pmap,
                              const vector_matrix_r *shiftDeriv,
                              vector_r &residuals, vector_r &jacobian, int &nCols,
@@ -355,7 +355,7 @@ struct ShiftColumnCount {
  *   total-capture sum, no point mapping outside them) on those segments' rows
  *   alone, every other row being exactly zero;
  * - any other column on every row, with one parallel pass over the points
- *   (EData::CalculatePointsInParallel) per side.
+ *   (WorkingCopy::CalculatePointsInParallel) per side.
  * Neither side solves an adjoint: up to 2026-10-30 pyazr re-solved the whole
  * Jacobian twice per column and threw it away.
  *
@@ -366,14 +366,14 @@ struct ShiftColumnCount {
  * left at `full`.  Defined in AZURECalc.cpp, beside the shift helpers the
  * analytic gradient shares.
  */
-ShiftColumnCount FillShiftColumns(CNuc *compound, EData *data, azure2::Results &results, const Config &config,
+ShiftColumnCount FillShiftColumns(CNuc *compound, WorkingCopy *data, azure2::Results &results, const Config &config,
                                   const ParamIndexMap &pmap,
                                   const std::vector<bool> &fixed, const vector_r &full,
                                   const std::vector<char> *skipPacked, size_t nRes, int nCols, vector_r &jac);
 
 /*!
  * \brief Per-point d(model)/d(theta) for analytic covariance bands, keyed by
- *        EPoint*.  Columns are the packed parameters of `pmap`; only the R-matrix
+ *        Unit*.  Columns are the packed parameters of `pmap`; only the R-matrix
  *        (E, gamma) columns are populated (dT/dn = dT/dshift = 0).  Each row is
  *        one adjoint with cotangent 1.  `compound`/`data` must be best-fit-filled.
  *        Returns false (clearing the output) if any point is outside the analytic
@@ -381,10 +381,10 @@ ShiftColumnCount FillShiftColumns(CNuc *compound, EData *data, azure2::Results &
  *        (HOES) points are left zero for the caller to fill (the adjoint
  *        differentiates the T-matrix observable, not the HOES one).
  */
-bool ComputeModelGradients(CNuc *compound, EData *data, azure2::Results &results, const Config &config,
+bool ComputeModelGradients(CNuc *compound, WorkingCopy *data, azure2::Results &results, const Config &config,
                            const ParamIndexMap &pmap,
                            const vector_matrix_r *shiftDeriv,
-                           std::map<EPoint *, vector_r> &gradByPoint,
+                           std::map<Unit *, vector_r> &gradByPoint,
                            bool skipTHM = false);
 
 /// True when AZURE2_THM_FD is set (and not empty or "0"): THM (HOES) model
@@ -434,7 +434,7 @@ struct THMRows {
  * filled at `full`, each THM point's fit cross section set to its model and a
  * profiled segment's norm to n*.
  */
-std::vector<THMRows> ComputeTHMRows(CNuc *compound, EData *data, azure2::Results &results, const Config &config,
+std::vector<THMRows> ComputeTHMRows(CNuc *compound, WorkingCopy *data, azure2::Results &results, const Config &config,
                                     const vector_r &full, const ParamIndexMap &pmap);
 
 #endif

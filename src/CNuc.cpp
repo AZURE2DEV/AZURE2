@@ -1204,7 +1204,7 @@ void CNuc::FillMnParams(AZUREParams &params, const Config *config) {
     }
   }
   // Isotopic abundances, one per compound nucleus and sample (sample by
-  // sample), right after the level block (so EData::FillMnParams, which
+  // sample), right after the level block (so WorkingCopy::FillMnParams, which
   // takes its offsets from the vector size, needs no change); only when the
   // project carries an <abundances> block.  A fixed abundance is still a
   // parameter, so the layout does not depend on which ones vary.

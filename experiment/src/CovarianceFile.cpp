@@ -80,7 +80,7 @@ class Tokens {
   std::string bad_;
 };
 
-// Data rows of a data file, counted as ESegment::Fill counts them (DataLine: neither blank nor '#').
+// Data rows of a data file, counted as Segment::Fill counts them (DataLine: neither blank nor '#').
 int CountRecords(std::istream &in) {
   std::string raw;
   int n = 0;

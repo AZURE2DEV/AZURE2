@@ -28,7 +28,7 @@ class AZUREParams {
   ROOT::Minuit2::MnUserParameters &GetMinuitParams();
   const ROOT::Minuit2::MnUserParameters &GetMinuitParams() const { return params_; }
   /// Append a parameter (value and Minuit step in the unit of its kind, ParamKindTable()) with its record.  The
-  /// creation sites (CNuc::FillMnParams, EData::FillMnParams) are the only callers: the record is written where the
+  /// creation sites (CNuc::FillMnParams, WorkingCopy::FillMnParams) are the only callers: the record is written where the
   /// parameter is made, the one place that knows what it is.
   void Add(const std::string &name, double value, double step, ParameterRecord record);
   /// What parameter i (0-based, full vector) is; throws std::logic_error if the vector holds a parameter added

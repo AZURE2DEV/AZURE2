@@ -5,7 +5,7 @@ Up to 2026-10-30 the CLI's chi-squared calculated every point in one OpenMP pass
 but the API calls behind pyazr (calculate_chi2_rwa, calculate_chi2, calculate_rwa, calculate, calculate_all_rwa)
 walked the points one at a time on one thread: a 17O+a evaluation ran at ~1.1 cpu/wall with OMP_NUM_THREADS=4
 (2,490 s on 2,719 points; R-matrix/AZURE2_code_audit/10-25-26/readme).  They now share the CLI's pass
-(EData::CalculatePointsInParallel); after any point failure they repeat the calculation point by point, so a failed
+(WorkingCopy::CalculatePointsInParallel); after any point failure they repeat the calculation point by point, so a failed
 point keeps the serial handling.
 
 Checks, each model in fresh processes with OMP_NUM_THREADS=4:

@@ -29,7 +29,7 @@
  *
  * The anchors are quantized (see Quantize) so the lattice is a deterministic,
  * piecewise-constant function of the level parameters: the grid can then be
- * re-placed when a fit moves a narrow level (EData::ReplaceSubPointGrids)
+ * re-placed when a fit moves a narrow level (WorkingCopy::ReplaceSubPointGrids)
  * without each evaluation seeing a slightly different grid.
  */
 class AdaptiveIntegrationGrid {
@@ -46,13 +46,13 @@ class AdaptiveIntegrationGrid {
     /// The level gammas are still the input values (partial widths in eV for
     /// open particle channels, ANCs for closed ones, gamma widths in eV): the
     /// parameter transformation is enabled but has not run yet.  This is the
-    /// state during EData::Fill in every CLI and API flow.
+    /// state during WorkingCopy::Fill in every CLI and API flow.
     bool inputWidthsArePhysical;
     /// Subtracted from every resonance's c.m. energy.  The sub-points of a segment
     /// with an energy shift are laid out at the unshifted energies and moved with
     /// the data; offsetting the resonances by the segment's c.m. shift puts the
     /// dense part of the grid where the resonance is after the move
-    /// (EData::ReplaceSubPointGrids).
+    /// (WorkingCopy::ReplaceSubPointGrids).
     double resonanceOffset;
 
     GridConfig() :

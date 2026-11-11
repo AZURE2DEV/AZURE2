@@ -2,7 +2,7 @@
 """Free-gas Doppler broadening through pyazr: AzrModel.add_target_effect(doppler=T) writes the ``doppler`` keyword
 and refuses T <= 0 (pure Python); through the engine, a Doppler-only line changes sigma_t at the narrowed n + 12C
 resonance of tests/doppler_fgm by tens of percent and a transmission line gives exp(-N sigma_D) (the API path
-assembles transformed segments through ESegment::NeedsAssembly, which must include the Doppler step).
+assembles transformed segments through Segment::NeedsAssembly, which must include the Doppler step).
 
 The fitted temperature (``doppler T vary sigma [Tmax]``, parameter doppler_<n>): AzrModel.dopplers / set_doppler /
 add_target_effect(doppler=(T, vary, sigma, tmax)) round trips and refusals (pure Python); through the engine, on

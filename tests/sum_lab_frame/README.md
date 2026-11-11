@@ -3,11 +3,11 @@
 A lab-frame differential SUM composite is the sum of its terms' **lab** cross sections.
 
 A lab-frame differential segment (data `isDiff` 1, test `isDiff` 1) is compared in the c.m. frame of
-its base pair: the data are converted once, σ_cm = J_base σ_lab (`ESegment::Fill`,
-`EPoint::ConvertCrossSection`).  A SUM component to another exit pair is evaluated in its own c.m.
+its base pair: the data are converted once, σ_cm = J_base σ_lab (`Segment::Fill`,
+`Unit::ConvertCrossSection`).  A SUM component to another exit pair is evaluated in its own c.m.
 frame, at its own c.m. angle, with its own Jacobian J_term.  The lab sum Σ s_i σ_cm,i / J_i therefore
 reads Σ s_i (J_base / J_i) σ_cm,i in the base frame.  Before 2026-10-26 `CalculateTheoreticalCrossSection`
-added the c.m. terms as they were (audit item 7); `ESegment::TermFrameFactor` supplies the ratio now,
+added the c.m. terms as they were (audit item 7); `Segment::TermFrameFactor` supplies the ratio now,
 in the forward calculation and in both gradient paths (`AZUREGrad.cpp`), and the lab output
 (`kinflag.dat` = 1) of the segment is the lab sum.  Each point stores its own conversion factor
 (`GetCrossSectionKinFactor`, 1 when no conversion was done, refreshed with the energy shift), so a

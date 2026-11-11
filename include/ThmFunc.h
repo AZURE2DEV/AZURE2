@@ -75,7 +75,7 @@ double ThmFormFactor(int l, double b, double mu, double E, double B,
  * Dimensionless; exactly 0 for a neutral pair.
  *
  * Sign and normalisation.  The term is ADDED to the surface part
- * (B - 1) j_l(rho) - rho j_l'(rho) (EPoint::GetThmFormFactor), with a plus sign
+ * (B - 1) j_l(rho) - rho j_l'(rho) (Unit::GetThmFormFactor), with a plus sign
  * and no further factor.  All three references agree: Tribble 2.79 and
  * Mukhamedzhanov 27 write j_l [(B - 1) - D] + 2 Z1 Z2 e^2 mu \int O/O(a) j_l
  * (hbar = c = 1, so 2 Z1 Z2 e^2 mu = 2 eta k), and Typel & Baur A.4, rewritten

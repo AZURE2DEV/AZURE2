@@ -118,7 +118,7 @@ with tempfile.TemporaryDirectory() as tmp:
     check("-> back to 4.1 fm == fresh 4.1 fm", rel(c2, fresh[4.1]) < 1e-10, f"{c2!r}")
 
     # 3. The THM level-matrix function is reused by every point of a thread
-    # (EPoint::Calculate, as the classic A-matrix function): its buffers carry
+    # (Unit::Calculate, as the classic A-matrix function): its buffers carry
     # over from one session to the next, its values must not.  Two models of
     # different J-group structure alive at once, evaluated in turn, give their
     # fresh-process chi2 exactly.

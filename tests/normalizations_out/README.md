@@ -2,7 +2,7 @@
 
 `normalizations.out` holds one complete row per segment whose normalization is fitted.
 
-`EData::WriteOutputFiles` wrote the first four fields of a row (segment key, data file, angle
+`WorkingCopy::WriteOutputFiles` wrote the first four fields of a row (segment key, data file, angle
 bounds) only for segments with a varied normalization, but the remaining six (frames, energy
 bounds, normalization, shift) for every segment: a project with fixed and varied normalizations
 got a six-field row without key, file or angles for each fixed one (audit 2026-10-25, item 18;

@@ -7,8 +7,8 @@
 #include <utility>
 
 /*!
- * A read-only table shared between copies of a point (EData clones, mapped points, re-placed sub-points), written in
- * place only by a sole holder: the copy-on-write handle of EPoint's energy-dependent tables and Legendre polynomials.
+ * A read-only table shared between copies of a point (WorkingCopy clones, mapped points, re-placed sub-points), written in
+ * place only by a sole holder: the copy-on-write handle of Unit's energy-dependent tables and Legendre polynomials.
  *
  * The lifetime is that of a std::shared_ptr.  The ownership test is not shared_ptr::use_count(): that is a relaxed
  * load, and an acquire fence after it, which makes it correct under the C++ memory model, is not modelled by
@@ -25,7 +25,7 @@
  *    of the table happen before the sole holder's write.
  *
  * As with use_count(), the test is exact only while no other thread copies a handle to the same table; within a
- * parallel step a point copies only from a point its own thread has finished (EPoint::CopyEDependentValuesFrom).  A
+ * parallel step a point copies only from a point its own thread has finished (Unit::CopyEDependentValuesFrom).  A
  * Weak reference (NodeTableCache) can create a holder at any moment; a table published through one is never written
  * again (NodeTableCache.h).
  */

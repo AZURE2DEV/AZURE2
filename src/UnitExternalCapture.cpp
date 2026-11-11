@@ -17,8 +17,8 @@
 #include "ECIntegral.h"
 #include "ECMGroup.h"
 #include "ECTable.h"
-#include "EData.h"
-#include "EPoint.h"
+#include "WorkingCopy.h"
+#include "Unit.h"
 #include "JGroup.h"
 #include "KGroup.h"
 #include "Kinematics.h"
@@ -30,7 +30,7 @@ static complex ECPathwayAmplitude(CNuc *, const Config &, PPair *, int, double, 
 /// Returns the external capture amplitude for a given external reaction pathway
 /// specified by positions in the KGroup and subsequent ECMGroup vectors.
 
-complex EPoint::GetECAmplitude(int kGroupNum, int ecMGroupNum) const {
+complex Unit::GetECAmplitude(int kGroupNum, int ecMGroupNum) const {
   return ec_amplitudes_[kGroupNum - 1][ecMGroupNum - 1];
 }
 
@@ -50,7 +50,7 @@ complex EPoint::GetECAmplitude(int kGroupNum, int ecMGroupNum) const {
  * energies of the segment's own points (ECAmplitudeCache) and held flat beyond
  * its ends, as before the tables.
  */
-complex EPoint::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, CNuc *theCNuc, const Config &configure) const {
+complex Unit::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, CNuc *theCNuc, const Config &configure) const {
   // Get current energy including shifts
   double currentEnergy = this->GetCMEnergy();
 
@@ -88,7 +88,7 @@ complex EPoint::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, CNuc *th
     key.ecMGroupNum = ecMGroupNum;
     key.entranceKey = this->GetEntranceKey();
     key.exitKey = this->GetExitKey();
-    // Use segment key directly - same as used in EData::CalculateECAmplitudes
+    // Use segment key directly - same as used in WorkingCopy::CalculateECAmplitudes
     key.segmentKey = segment_key_;
 
     // Simple interpolation from cache
@@ -184,7 +184,7 @@ static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, PPair 
  * entrance and exit pairs.
  */
 
-void EPoint::CalculateECAmplitudes(EData *data, CNuc *theCNuc, const Config &configure, const ChannelTable *table) {
+void Unit::CalculateECAmplitudes(WorkingCopy *data, CNuc *theCNuc, const Config &configure, const ChannelTable *table) {
   int aa = theCNuc->GetPairNumFromKey(this->GetEntranceKey());
   if (theCNuc->GetPair(aa)->GetPType() == 20) return;
   if (theCNuc->GetPair(aa)->IsEntrance()) {
@@ -218,7 +218,7 @@ void EPoint::CalculateECAmplitudes(EData *data, CNuc *theCNuc, const Config &con
  * Adds an external capture amplitude with reference to a specified reaction pathway.
  */
 
-void EPoint::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude, double energy) {
+void Unit::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude, double energy) {
   vector_c d_amp;
   vector_r d_energy;
   while (kGroupNum > ec_amplitudes_.size()) {
@@ -230,7 +230,7 @@ void EPoint::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude,
   assert(ecMGroupNum == ec_amplitudes_[kGroupNum - 1].size());
   assert(ec_amplitudes_[kGroupNum - 1].size() == ec_energies_[kGroupNum - 1].size());
 
-  // Add to shared cache for interpolation across different EPoints.  The energy
+  // Add to shared cache for interpolation across different units.  The energy
   // tables evaluate shifted points directly (GetECAmplitudeWithShift), so the
   // cache is only filled without them.
   if (g_ecAmplitudeCache && !(g_config && g_config->useECTable)) {
@@ -256,7 +256,7 @@ void EPoint::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude,
   }
 }
 
-void EPoint::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude) {
+void Unit::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude) {
   // Default behavior - use current CM energy
   double currentEnergy = this->GetCMEnergy();
   AddECAmplitude(kGroupNum, ecMGroupNum, ecAmplitude, currentEnergy);
@@ -265,7 +265,7 @@ void EPoint::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude)
 /*!
  * Clears all EC amplitudes and energies. Used when cloning to avoid duplicate accumulation.
  */
-void EPoint::ClearECAmplitudes() {
+void Unit::ClearECAmplitudes() {
   ec_amplitudes_.clear();
   ec_energies_.clear();
   ec_shifted_.clear();

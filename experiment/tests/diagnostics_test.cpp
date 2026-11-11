@@ -115,7 +115,7 @@ int main() {
 
   // Constructs the old engine reads and the table took from step 3a on (the converter's survey of the test tree):
   // each validates with no diagnostic.
-  check("thm global with norm profiled (ESegment::IsProfiledNorm profiles every fitted THM norm)",
+  check("thm global with norm profiled (Segment::IsProfiledNorm profiles every fitted THM norm)",
         Diagnose(Data(Set(Set(kDataset, "norm", "    norm profiled"), "unit", "    unit arbitrary") + "    thm global\n")).empty());
   check("legendre data folded with a beam",
         Diagnose(kTargets + Data(Folded(Set(Set(Set(Set(kDataset, "quantity", "    quantity legendre"), "unit", "    unit 1"),

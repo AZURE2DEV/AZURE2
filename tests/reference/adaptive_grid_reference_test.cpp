@@ -1,14 +1,14 @@
 // The adaptive sub-point grid (AdaptiveIntegrationGrid) against closed forms.
 //
 // Every experimental effect that integrates over energy interpolates the cross
-// section linearly between sub-points (EPoint.cpp GridQuadrature), so the
+// section linearly between sub-points (Unit.cpp GridQuadrature), so the
 // integral of a resonance on a grid is the trapezoid rule on that grid.  Here the
 // "cross section" is a Lorentzian of width G centred on E_R,
 //     f(E) = (G/2)^2 / ((E - E_R)^2 + (G/2)^2),
 // whose integral over [a, b] is (G/2) [atan((b - E_R)/(G/2)) - atan((a - E_R)/(G/2))].
 // The resonance is moved across a fixed window in small steps, as a fit moves a
 // level, and the grid is laid out again at each position, as the engine does
-// (EData::ReplaceSubPointGrids).  Two things are checked, relative to the
+// (WorkingCopy::ReplaceSubPointGrids).  Two things are checked, relative to the
 // resonance's area pi G / 2:
 //   - accuracy: the trapezoid integral equals the exact one;
 //   - smoothness: the error does not swing as the resonance moves.  A grid whose
@@ -84,7 +84,7 @@ Result Scan(double lo, double hi, int numPoints, double g, double mult, double p
             int steps) {
   AdaptiveIntegrationGrid::GridConfig gc;
   gc.maxPoints = numPoints;
-  gc.baseEnergyStep = (hi - lo) / numPoints;  // as EData::SetUpTargetEffects sets it
+  gc.baseEnergyStep = (hi - lo) / numPoints;  // as WorkingCopy::SetUpTargetEffects sets it
   gc.resonanceWidthMultiplier = mult;
   gc.pointsPerWidth = ppw;
   AdaptiveIntegrationGrid grid(gc);

@@ -106,7 +106,7 @@ const Elastic kElastic[] = {
     {67.69, 1.30000623e+00, 1.50358e+00}, {77.87, 5.17349669e-01, 7.48311e-01},
 };
 
-const double kAmu = 931.49410242;  // EData::BuildThmGroups
+const double kAmu = 931.49410242;  // WorkingCopy::BuildThmGroups
 const double kD = 2.0135532134, kN = 1.0086649159, kP = 1.0072764675, kF19 = 18.9934689019;
 
 // 19F + d at 55 MeV, neutron spectator (examples/f19_pag_thm): a = d, A = 19F, s = n, x = p.

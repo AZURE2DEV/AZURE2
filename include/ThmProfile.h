@@ -18,7 +18,7 @@
  *
  * Degenerate cases: when G is singular, or s <= 0 (no positive overlap of
  * model and data: the n = 1/s it implies is meaningless), the scale is not
- * profiled -- s = 1 (n = 1, as ESegment::ProfileNormChiSquared does) -- and
+ * profiled -- s = 1 (n = 1, as Segment::ProfileNormChiSquared does) -- and
  * only the background is, if its own normal matrix is regular; otherwise
  * nothing is (s = 1, b = 0).  `status` says which.
  */

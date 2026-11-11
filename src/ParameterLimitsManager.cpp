@@ -1,7 +1,7 @@
 #include "ParameterLimitsManager.h"
 #include "Config.h"
 #include "CNuc.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 #include "AZUREParams.h"
 #include <fstream>
 #include <sstream>
@@ -107,7 +107,7 @@ inline double custom_stod(const std::string &str, std::size_t *pos = nullptr) {
   return sign * value;
 }
 
-ParameterLimitsManager::ParameterLimitsManager(const Config *config, CNuc *compound, EData *data, AZUREParams *params) :
+ParameterLimitsManager::ParameterLimitsManager(const Config *config, CNuc *compound, WorkingCopy *data, AZUREParams *params) :
   config_(config),
   compound_(compound),
   data_(data),

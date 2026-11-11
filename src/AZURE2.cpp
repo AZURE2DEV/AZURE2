@@ -983,7 +983,7 @@ void startMessage(const Config &configure) {
 
 #ifdef USE_MCMC
 #include "CNuc.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 #include "AZUREParams.h"
 #include "AZURECalcMCMC.h"
 #include <iomanip>
@@ -1094,7 +1094,7 @@ static int FindMcmcPriorParameter(const std::string &token, const AZUREParams &p
 int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
   try {
     CNuc *compound = new CNuc();
-    EData *data = new EData();
+    WorkingCopy *data = new WorkingCopy();
 
     configure.outStream << "Filling Compound Nucleus..." << std::endl;
     if (compound->Fill(configure) == -1) {
@@ -1117,7 +1117,7 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
         delete compound;
         delete data;
         return -1;
-      } else if (data->NumSegments() == 0 && compound->GetModelData().NumResiduals() == 0) {  // model data alone run
+      } else if (data->Data().NumSegments() == 0 && compound->GetModelData().NumResiduals() == 0) {  // model data alone run
         configure.outStream << "There is no data provided." << std::endl;
         delete compound;
         delete data;
@@ -1129,7 +1129,7 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
         delete compound;
         delete data;
         return -1;
-      } else if (data->NumSegments() == 0) {
+      } else if (data->Data().NumSegments() == 0) {
         configure.outStream << "Extrapolation segments produce no data." << std::endl;
         delete compound;
         delete data;
@@ -1630,7 +1630,7 @@ int main(int argc, char *argv[]) {
 #endif
       // Create instance of main AZURE function, print start message,
       //  and execute.  On the heap and deliberately never deleted: the process
-      //  ends right after this, and freeing the millions of EPoint objects one by
+      //  ends right after this, and freeing the millions of Unit objects one by
       //  one took 2.3-3.7 s of a natural_neon calculation (more with more threads)
       //  after every output file had been written.  No engine object holds a file
       //  or another resource its destructor would release; the OS reclaims the

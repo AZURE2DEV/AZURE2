@@ -28,7 +28,7 @@ AdaptiveIntegrationGrid::AdaptiveIntegrationGrid(const GridConfig &config) :
  * then piecewise constant in the level parameters: it changes only when a
  * level moves by about a quarter of its width or its width changes by about
  * 25 %, so the grid re-placed as a fit moves a narrow level
- * (EData::ReplaceSubPointGrids) is the same at the same parameters in every
+ * (WorkingCopy::ReplaceSubPointGrids) is the same at the same parameters in every
  * thread, and a finite-difference step almost never straddles a change.
  * The peak stays within Gamma/8 of the centre of its uniform core.
  */

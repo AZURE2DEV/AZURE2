@@ -2,7 +2,7 @@
 #define AZUREMAIN_H
 
 #include "CNuc.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 
 /// The top-level AZURE function class
 
@@ -14,16 +14,16 @@
 class AZUREMain {
  public:
   /*!
-   * The AZUREMain function class is created using a Config structure.  New CNuc and EData objects are created at initialization
+   * The AZUREMain function class is created using a Config structure.  New CNuc and WorkingCopy objects are created at initialization
    * of an AZUREMain object.
    */
   AZUREMain(const Config &configure) :
     configure_(configure) {
     compound_ = new CNuc;
-    data_ = new EData;
+    data_ = new WorkingCopy;
   };
   /*!
-   * The CNuc and EData objects are destroyed with the AZUREMain instance.
+   * The CNuc and WorkingCopy objects are destroyed with the AZUREMain instance.
    */
   ~AZUREMain() {
     delete compound_;
@@ -43,14 +43,14 @@ class AZUREMain {
    */
   CNuc *compound() const { return compound_; };
   /*!
-   * Returns a pointer to the EData object.
+   * Returns a pointer to the WorkingCopy object.
    */
-  EData *data() const { return data_; };
+  WorkingCopy *data() const { return data_; };
 
  private:
   const Config &configure_;
   CNuc *compound_;
-  EData *data_;
+  WorkingCopy *data_;
 };
 
 #endif

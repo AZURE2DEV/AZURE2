@@ -19,7 +19,7 @@
 
 #include "AZUREParams.h"
 #include "Config.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 #include "GSLException.h"
 #include "Minuit2/MnUserParameters.h"
 
@@ -27,17 +27,17 @@
  * Moves the nominal normalization / energy shift of the segments whose specs give a prior centre (after the groups
  * are resolved, so that a group's follower keeps its own centre).  A centre for a data set that has no segment (not
  * active, or skipped at load) is reported and ignored.  A refusal of the reader (specs.priorCentreError) is reported
- * after the centres before it are applied, and fails the run.  Segment keys are unique in segments_, so at most one
+ * after the centres before it are applied, and fails the run.  Segment keys are unique in the data set, so at most one
  * segment matches a spec.
  */
 
-int EData::ApplyPriorCentres(const Config &configure, const azure2::experiment::DataSpecs &specs) {
+int WorkingCopy::ApplyPriorCentres(const Config &configure, const azure2::experiment::DataSpecs &specs) {
   for (const auto &item : specs.datasets.items) {
     const azure2::experiment::DatasetSpec &d = item.spec;
     if (!d.hasNormCentre && !d.hasShiftCentre) continue;
-    ESegment *segment = nullptr;
-    for (int s = 1; s <= this->NumSegments(); s++)
-      if (this->GetSegment(s)->GetSegmentKey() == d.key) segment = this->GetSegment(s);
+    Segment *segment = nullptr;
+    for (int s = 1; s <= Draft().NumSegments(); s++)
+      if (Draft().GetSegment(s)->GetSegmentKey() == d.key) segment = Draft().GetSegment(s);
     if (d.hasNormCentre) {
       if (segment)
         segment->SetNominalNorm(d.normCentre);
@@ -61,57 +61,6 @@ int EData::ApplyPriorCentres(const Config &configure, const azure2::experiment::
 }
 
 /*!
- * Returns the offset of the normalization paramters in the Minuit parameter vector.
- */
-int EData::GetNormParamOffset() const {
-  return normParamOffset_;
-}
-
-/*!
- * Returns the offset of the energy shift parameters in the Minuit parameter vector.
- */
-int EData::GetEnergyShiftParamOffset() const {
-  return energyShiftParamOffset_;
-}
-
-/*!
- * Returns the index at which the sqrt(E) energy-shift coefficients start in
- * the Minuit parameter vector (one per segment, after the energy shifts).
- */
-
-int EData::GetEnergyShiftSqrtParamOffset() const {
-  return energyShiftSqrtParamOffset_;
-}
-
-int EData::GetEnergyShiftFnParamOffset() const {
-  return energyShiftFnParamOffset_;
-}
-
-/*!
- * Sets the normalization parameter offset in the parameter vector.
- */
-
-void EData::SetNormParamOffset(int offset) {
-  normParamOffset_ = offset;
-}
-
-/*!
- * Sets the energy shift parameter offset in the parameter vector.
- */
-
-void EData::SetEnergyShiftParamOffset(int offset) {
-  energyShiftParamOffset_ = offset;
-}
-
-void EData::SetEnergyShiftSqrtParamOffset(int offset) {
-  energyShiftSqrtParamOffset_ = offset;
-}
-
-void EData::SetEnergyShiftFnParamOffset(int offset) {
-  energyShiftFnParamOffset_ = offset;
-}
-
-/*!
  * Links the segments of each shift group ("shiftgroup <label>" on the segment
  * line) to the group's first segment in file order: that segment keeps its own
  * constant-shift parameter (value, uncertainty, vary flag, penalty), and every
@@ -119,10 +68,10 @@ void EData::SetEnergyShiftFnParamOffset(int offset) {
  * in the fit.  A note per group lists the members.
  */
 
-int EData::ResolveShiftGroups(const Config &configure) {
+int WorkingCopy::ResolveShiftGroups(const Config &configure) {
   std::vector<std::pair<std::string, int>> leaders;  // label, leader position
-  for (int pos = 0; pos < (int)segments_.size(); pos++) {
-    ESegment &seg = segments_[pos];
+  for (int pos = 0; pos < (int)Draft().segments_.size(); pos++) {
+    Segment &seg = Draft().segments_[pos];
     const std::string label = seg.GetShiftGroup();
     if (label.empty()) continue;
     auto it = std::find_if(leaders.begin(), leaders.end(),
@@ -131,14 +80,15 @@ int EData::ResolveShiftGroups(const Config &configure) {
       leaders.push_back({label, pos});
       continue;
     }
-    ESegment &leader = segments_[it->second];
-    seg.SetShiftGroupFollower(it->second, leader.GetEnergyShift());
+    Segment &leader = Draft().segments_[it->second];
+    seg.SetShiftGroupFollower(it->second, State(leader).energyShift);
+    State(seg).energyShift = State(leader).energyShift;
   }
   for (const auto &g : leaders) {
-    const ESegment &leader = segments_[g.second];
+    Segment &leader = Draft().segments_[g.second];
     std::ostringstream members;
     int n = 0;
-    for (const ESegment &seg : segments_)
+    for (Segment &seg : Draft().segments_)
       if (seg.GetShiftLeaderPos() == g.second) {
         members << " " << seg.GetSegmentKey();
         n++;
@@ -189,14 +139,14 @@ std::set<int> ShiftFnParamRefs(const std::string &expression) {
  * is an error.  One log line per function.
  */
 
-int EData::ResolveShiftFunctions(const Config &configure) {
+int WorkingCopy::ResolveShiftFunctions(const Config &configure) {
   // Shift-function groups: the first segment with a label (file order) declares the
   // function; the others apply it and keep their own constant shifts.
-  std::vector<int> fnGroupLeader(segments_.size(), -1);
+  std::vector<int> fnGroupLeader(Draft().segments_.size(), -1);
   {
     std::vector<std::pair<std::string, int>> fnLeaders;  // label, leader position
-    for (int pos = 0; pos < (int)segments_.size(); pos++) {
-      const ESegment &seg = segments_[pos];
+    for (int pos = 0; pos < (int)Draft().segments_.size(); pos++) {
+      Segment &seg = Draft().segments_[pos];
       const std::string label = seg.GetShiftFnGroup();
       if (label.empty()) continue;
       if (!seg.GetShiftGroup().empty()) {
@@ -220,15 +170,15 @@ int EData::ResolveShiftFunctions(const Config &configure) {
       if (seg.OwnsShiftFn()) {
         configure.outStream << "ERROR: Data segment #" << seg.GetSegmentKey() << " declares a shiftfn, but it is not "
                             << "the first segment of shift-function group '" << label << "' (segment #"
-                            << segments_[it->second].GetSegmentKey() << " is): one function per group." << std::endl;
+                            << Draft().segments_[it->second].GetSegmentKey() << " is): one function per group." << std::endl;
         return -1;
       }
       fnGroupLeader[pos] = it->second;
     }
   }
   int fnStart = 0;
-  for (int pos = 0; pos < (int)segments_.size(); pos++) {
-    ESegment &owner = segments_[pos];
+  for (int pos = 0; pos < (int)Draft().segments_.size(); pos++) {
+    Segment &owner = Draft().segments_[pos];
     if (!owner.OwnsShiftFn()) continue;
     const int key = owner.GetSegmentKey();
     const std::string expression = owner.GetDeclaredShiftFn();
@@ -236,16 +186,16 @@ int EData::ResolveShiftFunctions(const Config &configure) {
     if (owner.IsShiftGroupFollower()) {
       configure.outStream << "ERROR: Data segment #" << key << " declares a shiftfn, but it is not the first segment of "
                           << "shift group '" << owner.GetShiftGroup() << "' (segment #"
-                          << segments_[owner.GetShiftLeaderPos()].GetSegmentKey()
+                          << Draft().segments_[owner.GetShiftLeaderPos()].GetSegmentKey()
                           << " is): put the block on that segment; it applies to the whole group." << std::endl;
       return -1;
     }
     std::vector<int> members{pos};
-    for (int f = 0; f < (int)segments_.size(); f++)
-      if (segments_[f].GetShiftLeaderPos() == pos || fnGroupLeader[f] == pos) members.push_back(f);
+    for (int f = 0; f < (int)Draft().segments_.size(); f++)
+      if (Draft().segments_[f].GetShiftLeaderPos() == pos || fnGroupLeader[f] == pos) members.push_back(f);
     for (int m : members)
-      if (segments_[m].HasSqrtShiftBlock()) {
-        configure.outStream << "ERROR: Data segment #" << segments_[m].GetSegmentKey() << " has a sqrtshift block and "
+      if (Draft().segments_[m].HasSqrtShiftBlock()) {
+        configure.outStream << "ERROR: Data segment #" << Draft().segments_[m].GetSegmentKey() << " has a sqrtshift block and "
                             << "shift function \"" << expression << "\" (segment #" << key
                             << "): two descriptions of one energy calibration.  Write the sqrt(E) term into the function, "
                             << "e.g. a" << n << "*sqrt(x), and drop the sqrtshift block." << std::endl;
@@ -265,7 +215,8 @@ int EData::ResolveShiftFunctions(const Config &configure) {
                             << j << " but never uses it." << std::endl;
         return -1;
       }
-    for (int m : members) segments_[m].InstallShiftFn(owner, pos, configure);
+    for (int m : members)
+      Draft().segments_[m].InstallShiftFn(State(Draft().segments_[m]), owner, pos, configure);
     owner.SetShiftFnParamStart(fnStart);
     fnStart += n;
 
@@ -274,10 +225,10 @@ int EData::ResolveShiftFunctions(const Config &configure) {
     // d(dE)/d(term) for every free constant (one per constant owner) and every varied aj.
     std::vector<std::pair<int, double>> rows;  // constant owner position, energy
     for (int m : members) {
-      const int constOwner = segments_[m].GetShiftLeaderPos() >= 0 ? segments_[m].GetShiftLeaderPos() : m;
+      const int constOwner = Draft().segments_[m].GetShiftLeaderPos() >= 0 ? Draft().segments_[m].GetShiftLeaderPos() : m;
       std::vector<double> e;
-      for (int pid = 1; pid <= segments_[m].NumPoints(); pid++) {
-        EPoint *pt = segments_[m].GetPoint(*this, pid);
+      for (int pid = 1; pid <= Draft().segments_[m].NumPoints(); pid++) {
+        Unit *pt = Draft().segments_[m].GetPoint(*this, pid);
         e.push_back(pt->GetOriginalEnergy() > 0 ? pt->GetOriginalEnergy() : pt->GetLabEnergy());
       }
       std::sort(e.begin(), e.end());
@@ -294,24 +245,24 @@ int EData::ResolveShiftFunctions(const Config &configure) {
     for (const auto &r : rows)
       if (std::find(constOwners.begin(), constOwners.end(), r.first) == constOwners.end()) constOwners.push_back(r.first);
     for (int c : constOwners) {
-      if (!segments_[c].IsVaryEnergyShift()) continue;
-      names.push_back(constOwners.size() == 1 ? std::string("a") : "a#" + std::to_string(segments_[c].GetSegmentKey()));
+      if (!Draft().segments_[c].IsVaryEnergyShift()) continue;
+      names.push_back(constOwners.size() == 1 ? std::string("a") : "a#" + std::to_string(Draft().segments_[c].GetSegmentKey()));
       std::vector<double> col(rows.size());
       for (size_t r = 0; r < rows.size(); r++) col[r] = (rows[r].first == c) ? 1.0 : 0.0;
       cols.push_back(col);
     }
-    ESegment probe = owner;  // a scratch copy: the owner's own values stay untouched
+    SegmentState probe = State(owner);  // a scratch copy: the owner's own values stay untouched
     for (int j = 0; j < n; j++) {
       if (!owner.IsVaryShiftFn(j)) continue;
-      const double v0 = owner.GetShiftFnValues()[j], h = 1.0e-6 * (std::fabs(v0) + 1.0);
+      const double v0 = probe.shiftFnValues[j], h = 1.0e-6 * (std::fabs(v0) + 1.0);
       std::vector<double> c(rows.size());
       for (size_t r = 0; r < rows.size(); r++) {
-        probe.SetShiftFnValue(j, v0 + h);
-        const double fp = probe.ShiftFnTerm(rows[r].second);
-        probe.SetShiftFnValue(j, v0 - h);
-        c[r] = (fp - probe.ShiftFnTerm(rows[r].second)) / (2.0 * h);
+        owner.SetShiftFnValue(probe, j, v0 + h);
+        const double fp = owner.ShiftFnTerm(probe, rows[r].second);
+        owner.SetShiftFnValue(probe, j, v0 - h);
+        c[r] = (fp - owner.ShiftFnTerm(probe, rows[r].second)) / (2.0 * h);
       }
-      probe.SetShiftFnValue(j, v0);
+      owner.SetShiftFnValue(probe, j, v0);
       double norm = 0.0;
       for (double v : c) norm += v * v;
       if (!(norm > 0.0) || !std::isfinite(norm)) {
@@ -329,7 +280,7 @@ int EData::ResolveShiftFunctions(const Config &configure) {
       const bool fnGroup = !owner.GetShiftFnGroup().empty();
       note << " (" << (fnGroup ? "shift-function group '" + owner.GetShiftFnGroup() : "group '" + owner.GetShiftGroup())
            << "', segments #" << key;
-      for (size_t m = 1; m < members.size(); m++) note << " " << segments_[members[m]].GetSegmentKey();
+      for (size_t m = 1; m < members.size(); m++) note << " " << Draft().segments_[members[m]].GetSegmentKey();
       note << (fnGroup ? "; each keeps its own constant shift)" : ")");
     }
     note << ": dE = a + " << expression << ", x = lab energy (MeV);";
@@ -387,11 +338,11 @@ int EData::ResolveShiftFunctions(const Config &configure) {
  * its group leader's, so that param.sav / param.fit read back unchanged.
  */
 
-void EData::SyncShiftGroupParams(ROOT::Minuit2::MnUserParameters &p) const {
-  const int off = energyShiftParamOffset_;
+void WorkingCopy::SyncShiftGroupParams(ROOT::Minuit2::MnUserParameters &p) const {
+  const int off = set_->energyShiftParamOffset_;
   if (off < 0) return;
-  for (int pos = 0; pos < (int)segments_.size(); pos++) {
-    const int lead = segments_[pos].GetShiftLeaderPos();
+  for (int pos = 0; pos < (int)set_->segments_.size(); pos++) {
+    const int lead = set_->segments_[pos].GetShiftLeaderPos();
     if (lead < 0 || off + pos >= (int)p.Params().size() || off + lead >= (int)p.Params().size()) continue;
     p.SetValue(off + pos, p.Value(off + lead));
   }
@@ -406,10 +357,10 @@ void EData::SyncShiftGroupParams(ROOT::Minuit2::MnUserParameters &p) const {
  * note per group lists the members.
  */
 
-void EData::ResolveNormGroups(const Config &configure) {
+void WorkingCopy::ResolveNormGroups(const Config &configure) {
   std::vector<std::pair<std::string, int>> leaders;  // label, leader position
-  for (int pos = 0; pos < (int)segments_.size(); pos++) {
-    ESegment &seg = segments_[pos];
+  for (int pos = 0; pos < (int)Draft().segments_.size(); pos++) {
+    Segment &seg = Draft().segments_[pos];
     const std::string label = seg.GetNormGroup();
     if (label.empty()) continue;
     auto it = std::find_if(leaders.begin(), leaders.end(),
@@ -418,14 +369,15 @@ void EData::ResolveNormGroups(const Config &configure) {
       leaders.push_back({label, pos});
       continue;
     }
-    ESegment &leader = segments_[it->second];
-    seg.SetNormGroupFollower(it->second, leader.GetNorm(), leader.GetNominalNorm());
+    Segment &leader = Draft().segments_[it->second];
+    seg.SetNormGroupFollower(it->second, State(leader).norm, leader.GetNominalNorm());
+    State(seg).norm = State(leader).norm;
   }
   for (const auto &g : leaders) {
-    const ESegment &leader = segments_[g.second];
+    Segment &leader = Draft().segments_[g.second];
     std::ostringstream members;
     int n = 0;
-    for (const ESegment &seg : segments_)
+    for (Segment &seg : Draft().segments_)
       if (seg.GetNormLeaderPos() == g.second) {
         members << " " << seg.GetSegmentKey();
         n++;
@@ -441,49 +393,42 @@ void EData::ResolveNormGroups(const Config &configure) {
   }
 }
 
-int EData::NormOwner(int s) const {
-  if (s < 1 || s > (int)segments_.size()) return s;
-  const int lead = segments_[s - 1].GetNormLeaderPos();
-  return (lead >= 0) ? lead + 1 : s;
-}
-
-
 /*!
  * Writes each norm-group follower's (fixed) norm parameter as the value it
  * actually uses, its group leader's, so that param.sav / param.fit read back
  * unchanged.
  */
 
-void EData::SyncNormGroupParams(ROOT::Minuit2::MnUserParameters &p) const {
-  const int off = GetNormParamOffset();
+void WorkingCopy::SyncNormGroupParams(ROOT::Minuit2::MnUserParameters &p) const {
+  const int off = Data().GetNormParamOffset();
   if (off < 0) return;
-  std::vector<int> index(segments_.size(), -1);  // norm parameter of each segment, -1 = none
+  std::vector<int> index(set_->segments_.size(), -1);  // norm parameter of each segment, -1 = none
   int i = off;
-  for (int pos = 0; pos < (int)segments_.size(); pos++)
-    if (segments_[pos].IsVaryNorm()) index[pos] = i++;
-  for (int pos = 0; pos < (int)segments_.size(); pos++) {
-    const int lead = segments_[pos].GetNormLeaderPos();
+  for (int pos = 0; pos < (int)set_->segments_.size(); pos++)
+    if (set_->segments_[pos].IsVaryNorm()) index[pos] = i++;
+  for (int pos = 0; pos < (int)set_->segments_.size(); pos++) {
+    const int lead = set_->segments_[pos].GetNormLeaderPos();
     if (lead < 0 || index[pos] < 0 || index[pos] >= (int)p.Params().size()) continue;
     const double value = (index[lead] >= 0 && index[lead] < (int)p.Params().size()) ? p.Value(index[lead])
-                                                                                     : segments_[lead].GetNorm();
+                                                                                     : State(Data().segments_[lead]).norm;
     p.SetValue(index[pos], value);
   }
   // Thickness-group followers likewise: their (fixed) segment_<key>_thickness is written as the leader's value.
-  if (thicknessParamOffset_ >= 0) {
-    for (int k = 1; k <= this->NumThicknessParams(); k++) {
-      const ESegment &seg = segments_[thicknessSegments_[k - 1] - 1];
-      const int idx = thicknessParamOffset_ + k - 1;
+  if (set_->thicknessParamOffset_ >= 0) {
+    for (int k = 1; k <= Data().NumThicknessParams(); k++) {
+      const Segment &seg = set_->segments_[set_->thicknessSegments_[k - 1] - 1];
+      const int idx = set_->thicknessParamOffset_ + k - 1;
       if (!seg.IsThicknessGroupFollower() || idx >= (int)p.Params().size()) continue;
-      const int lk = this->ThicknessParamOfSegment(thicknessSegments_[k - 1]);
-      const int lidx = (lk > 0) ? thicknessParamOffset_ + lk - 1 : -1;
+      const int lk = Data().ThicknessParamOfSegment(set_->thicknessSegments_[k - 1]);
+      const int lidx = (lk > 0) ? set_->thicknessParamOffset_ + lk - 1 : -1;
       p.SetValue(idx, (lidx >= 0 && lidx < (int)p.Params().size()) ? p.Value(lidx)
-                                                                     : segments_[seg.GetThicknessLeaderPos()].GetSampleThickness());
+                                                                     : Data().segments_[seg.GetThicknessLeaderPos()].GetSampleThickness(State(Data().segments_[seg.GetThicknessLeaderPos()])));
     }
   }
 }
 
 /*!
- * Fills the Minuit parameter array from initial values in the EData object.
+ * Fills the Minuit parameter array from initial values in the WorkingCopy object.
  */
 
 namespace {
@@ -496,15 +441,20 @@ std::string EffectParameterName(const TargetEffect &te, const char *oldKind, con
 
 }  // namespace
 
-void EData::FillMnParams(AZUREParams &params) {
+void WorkingCopy::FillMnParams(AZUREParams &params) {
   ROOT::Minuit2::MnUserParameters &p = params.GetMinuitParams();
   // 1-based position of a segment in the list (the records' and ParamIndexMap's numbering).
-  auto SegmentPosition = [this](ESegmentIterator it) { return (int)(it - GetSegments().begin()) + 1; };
-  SetNormParamOffset(p.Params().size());
-  for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+  auto SegmentPosition = [this](SegmentIterator it) { return (int)(it - Data().GetSegments().begin()) + 1; };
+  // The layout is the data set's; laid out again by a later call (pyazr) only if it moved (ReviseDataSet).
+  struct Layout {
+    int norm, shift, shiftSqrt, shiftFn, screening, density, doppler, thickness, thmCoherent;
+  } layout;
+  layout.norm = (int)p.Params().size();
+  for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     if (segment->IsVaryNorm() && !segment->IsProfiledNorm()) {
       const std::string &varname = segment->GetParameterNames().norm;
-      params.Add(varname, segment->GetNorm(), segment->GetNorm() * 0.05,
+      const double norm = State(*segment).norm;
+      params.Add(varname, norm, norm * 0.05,
                  ParameterRecord::OfSegment(ParamKind::Norm, SegmentPosition(segment), segment->GetSegmentKey()));
       p.SetLowerLimit(varname, 0.0);
       if (segment->IsNormGroupFollower()) p.Fix(varname);  // the group's norm is its leader's parameter
@@ -515,12 +465,12 @@ void EData::FillMnParams(AZUREParams &params) {
   }
 
   // Add energy shift parameters FOR ALL SEGMENTS (like normalization)
-  SetEnergyShiftParamOffset(p.Params().size());
-  for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+  layout.shift = (int)p.Params().size();
+  for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     // Always add energy shift parameter, regardless of IsVaryEnergyShift()
     const std::string &varname = segment->GetParameterNames().energyShift;
     double stepSize = (segment->GetEnergyShiftError() > 0.0) ? segment->GetEnergyShiftError() * 0.01 : 0.0005;
-    params.Add(varname, segment->GetEnergyShift(), stepSize,
+    params.Add(varname, State(*segment).energyShift, stepSize,
                ParameterRecord::OfSegment(ParamKind::EnergyShift, SegmentPosition(segment), segment->GetSegmentKey()));
 
     if (!segment->IsVaryEnergyShift()) {
@@ -532,93 +482,112 @@ void EData::FillMnParams(AZUREParams &params) {
   // (and every parameter index downstream) depends only on the segment count.
   // A segment without a "sqrtshift" block carries a fixed 0 here, so a model
   // written before the term existed fits exactly as before.
-  SetEnergyShiftSqrtParamOffset(p.Params().size());
-  for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+  layout.shiftSqrt = (int)p.Params().size();
+  for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     const std::string &varname = segment->GetParameterNames().energyShiftSqrt;
     double stepSize = (segment->GetEnergyShiftSqrtError() > 0.0) ? segment->GetEnergyShiftSqrtError() * 0.01 : 0.0005;
-    params.Add(varname, segment->GetEnergyShiftSqrt(), stepSize,
+    params.Add(varname, State(*segment).energyShiftSqrt, stepSize,
                ParameterRecord::OfSegment(ParamKind::EnergyShiftSqrt, SegmentPosition(segment), segment->GetSegmentKey()));
     if (!segment->IsVaryEnergyShiftSqrt()) p.Fix(varname);
   }
 
   // Shift-function parameters: only segments that declare a "shiftfn" block have
   // any, so a model without one gets no new parameter at all.
-  SetEnergyShiftFnParamOffset(p.Params().size());
-  for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+  layout.shiftFn = (int)p.Params().size();
+  for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     if (!segment->OwnsShiftFn() || !segment->HasShiftFn()) continue;
     for (int j = 0; j < segment->NumShiftFnParams(); j++) {
       const std::string &varname = segment->GetParameterNames().shiftFunction.at(j);
       const double err = segment->GetShiftFnErrors()[j];
-      params.Add(varname, segment->GetShiftFnValues()[j], (err > 0.0) ? err * 0.01 : 0.0005,
+      params.Add(varname, State(*segment).shiftFnValues[j], (err > 0.0) ? err * 0.01 : 0.0005,
                  ParameterRecord::ShiftFnTerm(SegmentPosition(segment), segment->GetSegmentKey(), j));
       if (!segment->IsVaryShiftFn(j)) p.Fix(varname);
     }
   }
 
   // Electron-screening potentials (eV): one per target effect with a "screening" block, none otherwise.
-  screeningParamOffset_ = p.Params().size();
-  for (int k = 1; k <= this->NumScreeningParams(); k++) {
-    const TargetEffect *te = this->GetScreeningTargetEffect(k);
-    const std::string varname = EffectParameterName(*te, "screening", ".screening", this->GetScreeningEffect(k));
-    const double ue = te->GetScreeningUe();
+  layout.screening = (int)p.Params().size();
+  for (int k = 1; k <= Data().NumScreeningParams(); k++) {
+    const TargetEffect *te = Data().GetScreeningTargetEffect(k);
+    const std::string varname = EffectParameterName(*te, "screening", ".screening", Data().GetScreeningEffect(k));
+    const double ue = EffectValues(Data().ScreeningCopies(k).front()).screeningUe;
     params.Add(varname, ue, std::max(10.0, 0.05 * std::fabs(ue)),
-               ParameterRecord::OfEffect(ParamKind::Screening, this->GetScreeningEffect(k)));
+               ParameterRecord::OfEffect(ParamKind::Screening, Data().GetScreeningEffect(k)));
     p.SetLowerLimit(varname, 0.0);
     if (!te->IsScreeningVaried()) p.Fix(varname);
   }
 
   // Fitted target densities (atoms/cm^2): one per densityfit line or density group, none otherwise.  Bounded by
   // the density the sub-point grids span (TargetEffect::GetLayoutDensity) and a hundredth of the line's.
-  densityParamOffset_ = p.Params().size();
-  for (int k = 1; k <= this->NumDensityParams(); k++) {
-    const TargetEffect *te = this->GetDensityTargetEffect(k);
-    const std::string varname = EffectParameterName(*te, "density", ".areal_density", this->GetDensityEffect(k));
-    const double n = te->GetDensity();
+  layout.density = (int)p.Params().size();
+  for (int k = 1; k <= Data().NumDensityParams(); k++) {
+    const TargetEffect *te = Data().GetDensityTargetEffect(k);
+    const std::string varname = EffectParameterName(*te, "density", ".areal_density", Data().GetDensityEffect(k));
+    const double n = EffectValues(Data().GetDensityLeadCopy(k)).density;
     params.Add(varname, n, (te->GetDensitySigma() > 0.0) ? 0.1 * te->GetDensitySigma() : 0.01 * n,
-               ParameterRecord::OfEffect(ParamKind::Density, this->GetDensityEffect(k)));
+               ParameterRecord::OfEffect(ParamKind::Density, Data().GetDensityEffect(k)));
     p.SetLimits(varname, 0.01 * te->GetDensityNominal(), te->GetLayoutDensity());
     if (!te->IsDensityVaried()) p.Fix(varname);
   }
 
   // Fitted Doppler temperatures (K): one per line with the fit form 'doppler T vary sigma [Tmax]', none otherwise.
   // Bounded by the temperature the grids span (TargetEffect::GetDopplerLayoutTemperature) and T0/4.
-  dopplerParamOffset_ = p.Params().size();
-  for (int k = 1; k <= this->NumDopplerParams(); k++) {
-    const TargetEffect *te = this->GetDopplerTargetEffect(k);
-    const std::string varname = EffectParameterName(*te, "doppler", ".doppler", this->GetDopplerEffect(k));
-    const double t = te->GetDopplerTemperature();
+  layout.doppler = (int)p.Params().size();
+  for (int k = 1; k <= Data().NumDopplerParams(); k++) {
+    const TargetEffect *te = Data().GetDopplerTargetEffect(k);
+    const std::string varname = EffectParameterName(*te, "doppler", ".doppler", Data().GetDopplerEffect(k));
+    const double t = EffectValues(Data().DopplerCopies(k).front()).dopplerTemperature;
     params.Add(varname, t, (te->GetDopplerSigma() > 0.0) ? 0.1 * te->GetDopplerSigma() : 0.01 * t,
-               ParameterRecord::OfEffect(ParamKind::Doppler, this->GetDopplerEffect(k)));
+               ParameterRecord::OfEffect(ParamKind::Doppler, Data().GetDopplerEffect(k)));
     p.SetLimits(varname, te->GetDopplerMinimum(), te->GetDopplerLayoutTemperature());
     if (!te->IsDopplerVaried()) p.Fix(varname);
   }
 
   // Fitted sample thicknesses (atoms/barn): one per data segment whose transmission / yield block has the fit form
   // 'n vary sigma', none otherwise.  A thickness-group follower's is fixed (its value is its leader's).
-  thicknessParamOffset_ = p.Params().size();
-  for (int k = 1; k <= this->NumThicknessParams(); k++) {
-    ESegment *seg = this->GetSegment(this->GetThicknessSegment(k));
+  layout.thickness = (int)p.Params().size();
+  for (int k = 1; k <= Data().NumThicknessParams(); k++) {
+    const Segment *seg = Data().GetSegment(Data().GetThicknessSegment(k));
     const std::string &varname = seg->GetParameterNames().thickness;
-    const double n = seg->GetSampleThickness();
+    const double n = seg->GetSampleThickness(State(*seg));
     params.Add(varname, n, (seg->GetThicknessSigma() > 0.0) ? 0.1 * seg->GetThicknessSigma() : 0.01 * n,
-               ParameterRecord::OfSegment(ParamKind::Thickness, this->GetThicknessSegment(k), seg->GetSegmentKey()));
+               ParameterRecord::OfSegment(ParamKind::Thickness, Data().GetThicknessSegment(k), seg->GetSegmentKey()));
     p.SetLowerLimit(varname, 0.0);
     if (!seg->IsThicknessVaried()) p.Fix(varname);
   }
 
   // THM coherent backgrounds (cbackground=): Re/Im of each amplitude, last.
-  thmCoherentParamOffset_ = thmCoherentParams_.empty() ? -1 : (int)p.Params().size();
-  for (const ThmCoherentParam &c : thmCoherentParams_) {
-    params.Add(c.name, c.value, c.value != 0.0 ? 0.1 * std::fabs(c.value) : 0.1,
+  layout.thmCoherent = Data().thmCoherentParams_.empty() ? -1 : (int)p.Params().size();
+  for (int k = 0; k < Data().NumThmCoherentParams(); k++) {
+    const ThmCoherentParam &c = Data().GetThmCoherentParam(k);
+    const double value = thmCoherentValues_[k];
+    params.Add(c.name, value, value != 0.0 ? 0.1 * std::fabs(value) : 0.1,
                ParameterRecord::ThmCoherent(c.experiment, c.jGroup, c.entrance, c.exit, c.term));
     if (c.fixed) p.Fix(c.name);
   }
+  const DataSet &d = Data();
+  if (d.normParamOffset_ != layout.norm || d.energyShiftParamOffset_ != layout.shift ||
+      d.energyShiftSqrtParamOffset_ != layout.shiftSqrt || d.energyShiftFnParamOffset_ != layout.shiftFn ||
+      d.screeningParamOffset_ != layout.screening || d.densityParamOffset_ != layout.density ||
+      d.dopplerParamOffset_ != layout.doppler || d.thicknessParamOffset_ != layout.thickness ||
+      d.thmCoherentParamOffset_ != layout.thmCoherent)
+    ReviseDataSet([&layout](DataSet &next) {
+      next.normParamOffset_ = layout.norm;
+      next.energyShiftParamOffset_ = layout.shift;
+      next.energyShiftSqrtParamOffset_ = layout.shiftSqrt;
+      next.energyShiftFnParamOffset_ = layout.shiftFn;
+      next.screeningParamOffset_ = layout.screening;
+      next.densityParamOffset_ = layout.density;
+      next.dopplerParamOffset_ = layout.doppler;
+      next.thicknessParamOffset_ = layout.thickness;
+      next.thmCoherentParamOffset_ = layout.thmCoherent;
+    });
 }
 
-int EData::ResolveThicknessGroups(const Config &configure) {
+int WorkingCopy::ResolveThicknessGroups(const Config &configure) {
   std::vector<std::pair<std::string, int>> leaders;  // label, leader position (0-based)
-  for (int pos = 0; pos < (int)segments_.size(); pos++) {
-    ESegment &seg = segments_[pos];
+  for (int pos = 0; pos < (int)Draft().segments_.size(); pos++) {
+    Segment &seg = Draft().segments_[pos];
     const std::string label = seg.GetThicknessGroup();
     if (label.empty()) continue;
     if (!seg.IsTransformed()) {
@@ -633,13 +602,15 @@ int EData::ResolveThicknessGroups(const Config &configure) {
       leaders.push_back({label, pos});
       continue;
     }
-    seg.SetThicknessGroupFollower(it->second, segments_[it->second].GetSampleThickness());
+    const Segment &leader = Draft().segments_[it->second];
+    seg.SetThicknessGroupFollower(it->second, leader.GetSampleThickness(State(leader)));
+    State(seg).thickness = leader.GetSampleThickness(State(leader));
   }
   for (const auto &g : leaders) {
-    const ESegment &leader = segments_[g.second];
+    Segment &leader = Draft().segments_[g.second];
     std::ostringstream members;
     int n = 0;
-    for (const ESegment &seg : segments_)
+    for (Segment &seg : Draft().segments_)
       if (seg.GetThicknessLeaderPos() == g.second) {
         members << " " << seg.GetSegmentKey();
         n++;
@@ -656,25 +627,9 @@ int EData::ResolveThicknessGroups(const Config &configure) {
                                              : std::string("fixed")) +
                    ").");
   }
-  thicknessSegments_.clear();
-  for (int pos = 0; pos < (int)segments_.size(); pos++)
-    if (segments_[pos].HasThicknessFit()) thicknessSegments_.push_back(pos + 1);
-  return 0;
-}
-
-int EData::ThicknessParamOfSegment(int pos) const {
-  if (pos < 1 || pos > (int)segments_.size()) return 0;
-  const int lead = segments_[pos - 1].GetThicknessLeaderPos();
-  const int owner = (lead >= 0) ? lead + 1 : pos;
-  for (int k = 1; k <= this->NumThicknessParams(); k++)
-    if (thicknessSegments_[k - 1] == owner) return k;
-  return 0;
-}
-
-int EData::DopplerParamOfEffect(int n) const {
-  for (int k = 1; k <= this->NumDopplerParams(); k++)
-    for (int c : dopplerCopies_[k - 1])
-      if (c == n) return k;
+  Draft().thicknessSegments_.clear();
+  for (int pos = 0; pos < (int)Draft().segments_.size(); pos++)
+    if (Draft().segments_[pos].HasThicknessFit()) Draft().thicknessSegments_.push_back(pos + 1);
   return 0;
 }
 
@@ -684,21 +639,21 @@ int EData::DopplerParamOfEffect(int n) const {
  * by line (TargetEffect::GetLineNumber): the first copy of a line decides, the other copies follow it.  A
  * line that lists no existing segment has no copy and so no parameter (dev makes one that moves nothing).
  */
-int EData::SetUpDensityParams(const Config &configure) {
-  densityEffects_.clear();
-  densityLeadCopies_.clear();
-  densityParamOfEffect_.assign(this->NumTargetEffects(), 0);
+int WorkingCopy::SetUpDensityParams(const Config &configure) {
+  Draft().densityEffects_.clear();
+  Draft().densityLeadCopies_.clear();
+  Draft().densityParamOfEffect_.assign(Draft().NumTargetEffects(), 0);
   std::map<int, int> firstCopyOfLine;       // line number -> its first copy (target effect number)
   std::map<std::string, int> groupLeader;   // label -> first copy of the group's first line
-  for (int n = 1; n <= this->NumTargetEffects(); n++) {
-    TargetEffect *te = this->GetTargetEffect(n);
+  for (int n = 1; n <= Draft().NumTargetEffects(); n++) {
+    TargetEffect *te = Draft().GetTargetEffect(n);
     const int line = te->GetLineNumber();
     auto seen = firstCopyOfLine.find(line);
     if (seen != firstCopyOfLine.end()) {
       // Another copy of a line already grouped: the same parameter, and the group's values if it joined one.
-      const TargetEffect *lineFirst = this->GetTargetEffect(seen->second);
+      const TargetEffect *lineFirst = Draft().GetTargetEffect(seen->second);
       if (lineFirst->HasDensityFit()) te->JoinDensityGroup(*lineFirst);
-      densityParamOfEffect_[n - 1] = densityParamOfEffect_[seen->second - 1];
+      Draft().densityParamOfEffect_[n - 1] = Draft().densityParamOfEffect_[seen->second - 1];
       continue;
     }
     firstCopyOfLine[line] = n;
@@ -706,7 +661,7 @@ int EData::SetUpDensityParams(const Config &configure) {
     if (!group.empty()) {
       auto it = groupLeader.find(group);
       if (it != groupLeader.end()) {
-        const TargetEffect *lead = this->GetTargetEffect(it->second);
+        const TargetEffect *lead = Draft().GetTargetEffect(it->second);
         const int leadLine = lead->GetLineNumber();
         if (std::fabs(te->GetDensity() - lead->GetDensity()) > 1.0e-9 * lead->GetDensity()) {
           std::ostringstream note;
@@ -721,7 +676,7 @@ int EData::SetUpDensityParams(const Config &configure) {
                          "): its densityfit block is ignored, the group's is its first line's (effect " +
                          std::to_string(leadLine) + ").");
         te->JoinDensityGroup(*lead);
-        densityParamOfEffect_[n - 1] = densityParamOfEffect_[it->second - 1];
+        Draft().densityParamOfEffect_[n - 1] = Draft().densityParamOfEffect_[it->second - 1];
         continue;
       }
       if (!te->HasDensityFit()) {
@@ -733,9 +688,9 @@ int EData::SetUpDensityParams(const Config &configure) {
       groupLeader[group] = n;
     }
     if (!te->HasDensityFit()) continue;
-    densityEffects_.push_back(line);
-    densityLeadCopies_.push_back(n);
-    densityParamOfEffect_[n - 1] = (int)densityEffects_.size();
+    Draft().densityEffects_.push_back(line);
+    Draft().densityLeadCopies_.push_back(n);
+    Draft().densityParamOfEffect_[n - 1] = (int)Draft().densityEffects_.size();
   }
   return 0;
 }

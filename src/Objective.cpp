@@ -10,9 +10,9 @@
 #include "JGroup.h"
 #include "PPair.h"
 #include "Config.h"
-#include "EData.h"
-#include "ESegment.h"
-#include "EPoint.h"
+#include "WorkingCopy.h"
+#include "Segment.h"
+#include "Unit.h"
 #include "ModelPass.h"
 #include "PriorCovariance.h"
 #include "ModelData.h"
@@ -24,17 +24,17 @@ class SegmentTerms : public ObjectiveTerm {
  public:
   std::string Name() const override { return "data, normalizations and energy shifts"; }
   void Add(const ObjectiveContext &c, double &chi2) const override {
-    EData *ld = c.data;
-    if (c.segmentChi2) c.segmentChi2->assign(ld->NumSegments() + 1, 0.0);
+    WorkingCopy *ld = c.data;
+    if (c.segmentChi2) c.segmentChi2->assign(ld->Data().NumSegments() + 1, 0.0);
     ObjectiveContext::SegmentPriors *out = c.segmentPriorsOut;
     if (out) {
-      out->norm.assign(ld->NumSegments() + 1, 0.0);
-      out->shift.assign(ld->NumSegments() + 1, 0.0);
-      out->shiftSqrt.assign(ld->NumSegments() + 1, 0.0);
-      out->shiftFn.assign(ld->NumSegments() + 1, 0.0);
+      out->norm.assign(ld->Data().NumSegments() + 1, 0.0);
+      out->shift.assign(ld->Data().NumSegments() + 1, 0.0);
+      out->shiftSqrt.assign(ld->Data().NumSegments() + 1, 0.0);
+      out->shiftFn.assign(ld->Data().NumSegments() + 1, 0.0);
     }
-    for (int i = 1; i <= ld->NumSegments(); i++) {
-      ESegment *segment = ld->GetSegment(i);
+    for (int i = 1; i <= ld->Data().NumSegments(); i++) {
+      const Segment *segment = ld->Data().GetSegment(i);
       if (!segment) continue;
       if (c.thmOnly && !segment->IsTHM()) continue;
       // A THM segment with a free norm has an arbitrary overall scale: during a fit it is profiled out
@@ -43,9 +43,9 @@ class SegmentTerms : public ObjectiveTerm {
       // its segments: once, at its last segment, when the models of all of them are in.  It sets their norms and
       // chi^2.
       double segmentChiSquared = 0.0;
-      const int thmGroup = ld->ThmGroupOf(i);
+      const int thmGroup = ld->Data().ThmGroupOf(i);
       if (thmGroup >= 0) {
-        if (ld->IsLastOfThmGroup(thmGroup, i)) {
+        if (ld->Data().IsLastOfThmGroup(thmGroup, i)) {
           const double g = ld->ProfileThmGroup(thmGroup, c.results);
           chi2 += g;
           if (c.segmentChi2) (*c.segmentChi2)[i] = g;
@@ -54,10 +54,10 @@ class SegmentTerms : public ObjectiveTerm {
         segmentChiSquared = segment->ProfileNormChiSquared(*c.data, c.results, c.results.objective.norm[i]);
       } else {
         for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++)
-          segmentChiSquared += azure2::PointResidual(*c.data, *segment, pointIdx, c.results, segment->GetNorm()).Chi2();
+          segmentChiSquared += azure2::PointResidual(*c.data, *segment, pointIdx, c.results, c.data->State(*segment).norm).Chi2();
         // Normalization prior (profiled norms have none; a fixed norm pays none, objective.md D5).
         if (c.segmentPriors && segment->IsVaryNorm() && !segment->IsNormPriorReplaced()) {
-          double dataNorm = segment->GetNorm();
+          double dataNorm = c.data->State(*segment).norm;
           double dataNormNominal = segment->GetNominalNorm();
           double dataNormError = dataNormNominal / 100. * segment->GetNormError();
           if (dataNormError != 0.) {
@@ -68,8 +68,8 @@ class SegmentTerms : public ObjectiveTerm {
         }
       }
       // Energy-shift priors.
-      if (c.segmentPriors) segment->AddShiftPenalty(chi2);
-      if (out && c.segmentPriors) segment->ShiftPenaltyParts(out->shift[i], out->shiftSqrt[i], out->shiftFn[i]);
+      if (c.segmentPriors) segment->AddShiftPenalty(c.data->State(*segment), chi2);
+      if (out && c.segmentPriors) segment->ShiftPenaltyParts(c.data->State(*segment), out->shift[i], out->shiftSqrt[i], out->shiftFn[i]);
       if (thmGroup < 0) {
         c.results.objective.segmentChi2[i] = segmentChiSquared;
         if (c.segmentChi2) (*c.segmentChi2)[i] = segmentChiSquared;
@@ -80,12 +80,12 @@ class SegmentTerms : public ObjectiveTerm {
 };
 
 // T2: r^T M^-1 r over each covariance group in place of its points' r_i^2.  (A THM segment carries no covariance
-// block: EData refuses one.)
+// block: WorkingCopy refuses one.)
 class DataCovarianceTerm : public ObjectiveTerm {
  public:
   std::string Name() const override { return "data covariance"; }
   void Add(const ObjectiveContext &c, double &chi2) const override {
-    if (c.data->HasCovariance()) chi2 += c.data->CovarianceChi2Correction(c.results, c.segmentChi2);
+    if (c.data->Data().HasCovariance()) chi2 += c.data->CovarianceChi2Correction(c.results, c.segmentChi2);
   }
 };
 
@@ -173,7 +173,7 @@ class PriorCovarianceTerm : public ObjectiveTerm {
  public:
   std::string Name() const override { return "prior covariance"; }
   void Add(const ObjectiveContext &c, double &chi2) const override {
-    const PriorCovariance *pc = c.data->GetPriorCovariance();
+    const PriorCovariance *pc = c.data->Data().GetPriorCovariance();
     if (!pc) return;
     const double pcChi2 = pc->Chi2(c.p);
     chi2 += pcChi2;
@@ -260,74 +260,77 @@ double Objective::Chi2(const ObjectiveContext &c) const {
   return chi2;
 }
 
-std::vector<std::string> ReplaceDiagonalPriors(CNuc *compound, EData *data, const PriorCovariance &pc) {
+std::vector<std::string> ReplaceDiagonalPriors(CNuc *compound, WorkingCopy *data, const PriorCovariance &pc) {
   std::vector<std::string> replaced;
   const ParamIndexMap pmap = BuildParamIndexMap(compound, data, std::vector<bool>());
-  for (size_t a = 0; a < pc.FullIndex().size(); a++) {
-    const int f = pc.FullIndex()[a];
-    if (f < 0 || f >= pmap.NumFull()) continue;
-    const ParamDesc &d = pmap.Desc(f);
-    bool had = false;
-    switch (d.kind) {
-      case ParamKind::Norm: {
-        ESegment *seg = data->GetSegment(d.segment);
-        had = seg->GetNormError() != 0.0;
-        seg->ReplaceNormPrior();
-        break;
+  // The flags are settings of the data set: one revision of it (WorkingCopy::ReviseDataSet) for all of them.
+  data->ReviseDataSet([&](DataSet &ds) {
+    for (size_t a = 0; a < pc.FullIndex().size(); a++) {
+      const int f = pc.FullIndex()[a];
+      if (f < 0 || f >= pmap.NumFull()) continue;
+      const ParamDesc &d = pmap.Desc(f);
+      bool had = false;
+      switch (d.kind) {
+        case ParamKind::Norm: {
+          Segment *seg = ds.GetSegment(d.segment);
+          had = seg->GetNormError() != 0.0;
+          seg->ReplaceNormPrior();
+          break;
+        }
+        case ParamKind::EnergyShift: {
+          Segment *seg = ds.GetSegment(d.segment);
+          had = seg->GetEnergyShiftError() != 0.0;
+          seg->ReplaceShiftPrior();
+          break;
+        }
+        case ParamKind::EnergyShiftSqrt: {
+          Segment *seg = ds.GetSegment(d.segment);
+          had = seg->GetEnergyShiftSqrtError() != 0.0;
+          seg->ReplaceShiftSqrtPrior();
+          break;
+        }
+        case ParamKind::EnergyShiftFn: {
+          Segment *seg = ds.GetSegment(d.segment);
+          had = d.fnTerm >= 0 && d.fnTerm < (int)seg->GetShiftFnErrors().size() && seg->GetShiftFnErrors()[d.fnTerm] != 0.0;
+          seg->ReplaceShiftFnPrior(d.fnTerm);
+          break;
+        }
+        case ParamKind::Thickness: {
+          Segment *seg = ds.GetSegment(ds.GetThicknessSegment(d.thickness));
+          had = seg->GetThicknessSigma() > 0.0;
+          seg->ReplaceThicknessPrior();
+          break;
+        }
+        case ParamKind::Screening: {
+          TargetEffect *te = ds.GetScreeningTargetEffect(d.screening);
+          had = te->GetScreeningSigma() > 0.0;
+          te->ReplaceScreeningPrior();
+          break;
+        }
+        case ParamKind::Density: {
+          TargetEffect *te = ds.GetDensityTargetEffect(d.density);
+          had = te->GetDensitySigma() > 0.0;
+          te->ReplaceDensityPrior();
+          break;
+        }
+        case ParamKind::Doppler: {
+          TargetEffect *te = ds.GetDopplerTargetEffect(d.doppler);
+          had = te->GetDopplerSigma() > 0.0;
+          te->ReplaceDopplerPrior();
+          break;
+        }
+        case ParamKind::Abundance: {
+          SampleAbundance &e = compound->GetSample(d.sample)->entries[d.nucleus - 1];
+          had = e.sigma > 0.0;
+          e.priorReplaced = true;
+          break;
+        }
+        default:  // levels and THM coherent background: a nuisance prior, skipped by index
+          break;
       }
-      case ParamKind::EnergyShift: {
-        ESegment *seg = data->GetSegment(d.segment);
-        had = seg->GetEnergyShiftError() != 0.0;
-        seg->ReplaceShiftPrior();
-        break;
-      }
-      case ParamKind::EnergyShiftSqrt: {
-        ESegment *seg = data->GetSegment(d.segment);
-        had = seg->GetEnergyShiftSqrtError() != 0.0;
-        seg->ReplaceShiftSqrtPrior();
-        break;
-      }
-      case ParamKind::EnergyShiftFn: {
-        ESegment *seg = data->GetSegment(d.segment);
-        had = d.fnTerm >= 0 && d.fnTerm < (int)seg->GetShiftFnErrors().size() && seg->GetShiftFnErrors()[d.fnTerm] != 0.0;
-        seg->ReplaceShiftFnPrior(d.fnTerm);
-        break;
-      }
-      case ParamKind::Thickness: {
-        ESegment *seg = data->GetSegment(data->GetThicknessSegment(d.thickness));
-        had = seg->GetThicknessSigma() > 0.0;
-        seg->ReplaceThicknessPrior();
-        break;
-      }
-      case ParamKind::Screening: {
-        TargetEffect *te = data->GetScreeningTargetEffect(d.screening);
-        had = te->GetScreeningSigma() > 0.0;
-        te->ReplaceScreeningPrior();
-        break;
-      }
-      case ParamKind::Density: {
-        TargetEffect *te = data->GetDensityTargetEffect(d.density);
-        had = te->GetDensitySigma() > 0.0;
-        te->ReplaceDensityPrior();
-        break;
-      }
-      case ParamKind::Doppler: {
-        TargetEffect *te = data->GetDopplerTargetEffect(d.doppler);
-        had = te->GetDopplerSigma() > 0.0;
-        te->ReplaceDopplerPrior();
-        break;
-      }
-      case ParamKind::Abundance: {
-        SampleAbundance &e = compound->GetSample(d.sample)->entries[d.nucleus - 1];
-        had = e.sigma > 0.0;
-        e.priorReplaced = true;
-        break;
-      }
-      default:  // levels and THM coherent background: a nuisance prior, skipped by index
-        break;
+      if (had) replaced.push_back(pc.Names()[a]);
     }
-    if (had) replaced.push_back(pc.Names()[a]);
-  }
+  });
   return replaced;
 }
 

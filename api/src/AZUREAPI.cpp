@@ -17,9 +17,9 @@
 #include "CNucReport.h"
 #include "CaptureAyRequests.h"
 #include "PPair.h"
-#include "EData.h"
-#include "ESegment.h"
-#include "EPoint.h"
+#include "WorkingCopy.h"
+#include "Segment.h"
+#include "Unit.h"
 #include "TargetEffect.h"
 #include "AMatrixFunc.h"
 #include "AZUREGrad.h"
@@ -58,16 +58,16 @@ AZUREAPI::~AZUREAPI() {
 // caller repeats the calculation point by point, so a failed point keeps the
 // serial path's handling (a NaN slot in UpdateSegments*, 0 or a skipped
 // component in a chi-squared) and the results equal the serial path's.
-static bool PrecalculateAll(EData &data, const std::vector<ESegment *> &segments, CNuc *lc, const Config &cfg,
+static bool PrecalculateAll(WorkingCopy &data, const std::vector<const Segment *> &segments, CNuc *lc, const Config &cfg,
                             azure2::Results &results) {
   return data.CalculatePointsInParallel(segments, lc, cfg, results) == 0;
 }
 
 // The segments the UpdateSegments* loops report: the first of each run of equal keys.
-static std::vector<ESegment *> ReportedSegments(std::vector<ESegment> &segments) {
-  std::vector<ESegment *> out;
+static std::vector<const Segment *> ReportedSegments(const std::vector<Segment> &segments) {
+  std::vector<const Segment *> out;
   int prevKey = -1;
-  for (ESegment &seg : segments) {
+  for (const Segment &seg : segments) {
     if (seg.GetSegmentKey() == prevKey) continue;
     prevKey = seg.GetSegmentKey();
     out.push_back(&seg);
@@ -76,9 +76,9 @@ static std::vector<ESegment *> ReportedSegments(std::vector<ESegment> &segments)
 }
 
 // Every segment of the data, as the chi-squared loops visit them.
-static std::vector<ESegment *> AllSegments(EData *ld) {
-  std::vector<ESegment *> out;
-  for (int i = 1; i <= ld->NumSegments(); i++) out.push_back(ld->GetSegment(i));
+static std::vector<const Segment *> AllSegments(WorkingCopy *ld) {
+  std::vector<const Segment *> out;
+  for (int i = 1; i <= ld->Data().NumSegments(); i++) out.push_back(ld->Data().GetSegment(i));
   return out;
 }
 
@@ -124,7 +124,7 @@ int AZUREAPI::Initialize() {
     data_ = nullptr;
   }
 
-  data_ = new EData();
+  data_ = new WorkingCopy();
   compound_ = new CNuc();
 
   // With the session's radius overrides: Initialize runs again on every mode switch.
@@ -145,14 +145,14 @@ int AZUREAPI::Initialize() {
       if (data()->Fill(configure(), compound()) == -1) {
         // configure().outStream << "Could not fill data object from file." << std::endl;
         return -1;
-      } else if (data()->NumSegments() == 0 && compound()->GetModelData().NumResiduals() == 0) {
+      } else if (data()->Data().NumSegments() == 0 && compound()->GetModelData().NumResiduals() == 0) {
         // configure().outStream << "There is no data provided." << std::endl;
         return -1;
       }
     } else {
       if (data()->MakePoints(configure(), compound()) == -1 || SessionRefusesAdaptiveGrids(configure())) {
         return -1;
-      } else if (data()->NumSegments() == 0) {
+      } else if (data()->Data().NumSegments() == 0) {
         // configure().outStream << "Extrapolation segments produce no data." << std::endl;
         return -1;
       }
@@ -213,7 +213,7 @@ bool AZUREAPI::SetUpPriorCovariance() {
 
 vector_r AZUREAPI::PriorCovarianceResidualsRWA(const vector_r &rwaParams) const {
   vector_r r;
-  const PriorCovariance *pc = data() ? data()->GetPriorCovariance() : nullptr;
+  const PriorCovariance *pc = data() ? data()->Data().GetPriorCovariance() : nullptr;
   if (!pc) return r;
   vector_r full = all_rwa_;
   for (int i = 0, k = 0; i < (int)all_rwa_.size(); ++i)
@@ -223,7 +223,7 @@ vector_r AZUREAPI::PriorCovarianceResidualsRWA(const vector_r &rwaParams) const 
 }
 
 std::vector<std::string> AZUREAPI::PriorCovarianceNames() const {
-  const PriorCovariance *pc = data() ? data()->GetPriorCovariance() : nullptr;
+  const PriorCovariance *pc = data() ? data()->Data().GetPriorCovariance() : nullptr;
   return pc ? pc->Names() : std::vector<std::string>();
 }
 
@@ -316,9 +316,9 @@ bool AZUREAPI::SetParamsAllRWA(const vector_r &p) {
 // (Results::model, the value the residual compares with the datum: the E1 / E2 part of an E1- or E2-only segment, the
 // combination of a SUM, RATIO, sample or transform), the E1 and E2 parts and the angular-distribution coefficients
 // of its base point, its c.m. energy and angle, S-factor conversion and excitation energy.  A point whose
-// calculation fails is NaN (EPoint::MarkFailed), and the arrays keep one entry per point.  Without data: the arrays
+// calculation fails is NaN (Unit::MarkFailed), and the arrays keep one entry per point.  Without data: the arrays
 // are emptied.
-int AZUREAPI::ReportSegments(CNuc *localCompound, EData *localData) {
+int AZUREAPI::ReportSegments(CNuc *localCompound, WorkingCopy *localData) {
   calculatedConv_.clear();
   calculatedEnergies_.clear();
   calculatedAngles_.clear();
@@ -329,10 +329,10 @@ int AZUREAPI::ReportSegments(CNuc *localCompound, EData *localData) {
   calculatedExcitationEnergies_.clear();
   if (!localData) return 0;
   AZUREProfile::ScopedReport profileReport("api segments");
-  const std::vector<ESegment *> segments = ReportedSegments(localData->GetSegments());
+  const std::vector<const Segment *> segments = ReportedSegments(localData->Data().GetSegments());
   const bool pre = PrecalculateAll(*localData, segments, localCompound, configure(), results());
-  for (ESegment *segment : segments) {
-    const UnitRange<EPoint> data = segment->GetPoints(*localData);
+  for (const Segment *segment : segments) {
+    const UnitRange<Unit> data = segment->GetPoints(*localData);
     std::vector<double> cross, crossE1, crossE2, energies, angles, conv, excitationEnergies;
     // Angular-distribution coefficients, self-describing per point: a count followed by that many Legendre
     // coefficients (a zero for a point outside an angular-distribution segment).
@@ -373,7 +373,7 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
   }
 
   CNuc *localCompound = NULL;
-  EData *localData = NULL;
+  WorkingCopy *localData = NULL;
   localCompound = compound();
   localData = data();
 
@@ -410,7 +410,7 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r &p) {
   }
 
   CNuc *localCompound = NULL;
-  EData *localData = NULL;
+  WorkingCopy *localData = NULL;
   localCompound = compound();
   localData = data();
 
@@ -434,7 +434,7 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
   vector_r params_ = all_rwa_;
 
   CNuc *localCompound = NULL;
-  EData *localData = NULL;
+  WorkingCopy *localData = NULL;
   localCompound = compound();
   localData = data();
 
@@ -464,7 +464,7 @@ vector_r AZUREAPI::TransformRWAParameters(const vector_r &p) const {
   }
 
   CNuc *localCompound = NULL;
-  EData *localData = NULL;
+  WorkingCopy *localData = NULL;
   localCompound = compound();
   localData = data();
 
@@ -496,7 +496,7 @@ vector_r AZUREAPI::TransformAllRWAParameters(const vector_r &p, bool includeFixe
   }
 
   CNuc *localCompound = NULL;
-  EData *localData = NULL;
+  WorkingCopy *localData = NULL;
   localCompound = compound();
   localData = data();
 
@@ -552,7 +552,7 @@ int AZUREAPI::UpdateData() {
   dataExcitationEnergies_.clear();
 
   CNuc *localCompound = NULL;
-  EData *localData = NULL;
+  WorkingCopy *localData = NULL;
   localCompound = compound();
   localData = data();
 
@@ -560,21 +560,21 @@ int AZUREAPI::UpdateData() {
   int prevKey = -1;
   int nSegments = 0;
 
-  std::vector<ESegment> &segments = localData->GetSegments();
+  const std::vector<Segment> &segments = localData->Data().GetSegments();
   for (int i = 0; i < segments.size(); ++i) {
     newKey = segments[i].GetSegmentKey();
     if (prevKey == newKey) continue;
     prevKey = newKey;
     ++nSegments;
 
-    const UnitRange<EPoint> data = segments[i].GetPoints(*localData);
+    const UnitRange<Unit> data = segments[i].GetPoints(*localData);
 
     std::vector<double> energies, angles, cross, crossErr, conv, excitationEnergies;
     for (int k = 0; k < data.size(); ++k) {
       energies.push_back(data[k].GetCMEnergy());
       angles.push_back(data[k].GetCMAngle());
-      cross.push_back(segments[i].CMValue(k));
-      crossErr.push_back(segments[i].CMError(k));
+      cross.push_back(Segment::CMValue(localData->State(segments[i]), k));
+      crossErr.push_back(Segment::CMError(localData->State(segments[i]), k));
       conv.push_back(data[k].GetSFactorConversion());
       excitationEnergies.push_back(data[k].GetExcitationEnergy());
     }
@@ -595,7 +595,7 @@ void AZUREAPI::UpdateNorms() {
   normsErrors_.clear();
 
   CNuc *localCompound = NULL;
-  EData *localData = NULL;
+  WorkingCopy *localData = NULL;
   localCompound = compound();
   localData = data();
 
@@ -603,7 +603,7 @@ void AZUREAPI::UpdateNorms() {
   int prevKey = -1;
   int nSegments = 0;
 
-  std::vector<ESegment> &segments = localData->GetSegments();
+  const std::vector<Segment> &segments = localData->Data().GetSegments();
   for (int i = 0; i < segments.size(); ++i) {
     newKey = segments[i].GetSegmentKey();
     if (prevKey == newKey) continue;
@@ -649,7 +649,7 @@ bool AZUREAPI::SetRadius(int idx, double r) {
 
 bool AZUREAPI::WriteOutputFiles() {
   if (data_ == nullptr) return false;
-  // chiSquared.out reports the Park, abundance and scattering-length totals from the EData object; the CLI's
+  // chiSquared.out reports the Park, abundance and scattering-length totals from the WorkingCopy object; the CLI's
   // chi2 path stores them there, the API's CalculateChi2RWA does not (pyazr adds those terms in Python), so
   // through pyazr the file carried 0 or stale values (audit 2026-10-25, item 30).  Evaluate them at the current
   // parameters before writing.
@@ -707,7 +707,7 @@ bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
   if (data_ != nullptr) delete data_;
 
   compound_ = new CNuc;
-  data_ = new EData;
+  data_ = new WorkingCopy;
 
   if (compound()->Fill(configure(), radii) == -1) return false;
   if (compound()->NumPairs() == 0 || compound()->NumJGroups() == 0) return false;
@@ -719,7 +719,7 @@ bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
   } else {
     if (data()->MakePoints(configure(), compound()) == -1 || SessionRefusesAdaptiveGrids(configure())) return false;
   }
-  if (data()->NumSegments() == 0) return false;
+  if (data()->Data().NumSegments() == 0) return false;
 
   configure().paramMask &= ~Config::USE_PREVIOUS_INTEGRALS;
   RequestCaptureAyTerms(*compound(), *data());
@@ -779,7 +779,7 @@ static vector_r MapPackedToFull(const vector_r &packed, const vector_r &all_rwa,
 
 void AZUREAPI::FillFromFullRWA(const vector_r &full) const {
   CNuc *lc = compound();
-  EData *ld = data();
+  WorkingCopy *ld = data();
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
   ld->FillEnergyShiftsFromParams(full, results(), lc, &configure());
@@ -789,30 +789,30 @@ void AZUREAPI::FillFromFullRWA(const vector_r &full) const {
 // The data term of AZURECalc::operator(), on the filled canonical objects.
 double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
   CNuc *lc = compound();
-  EData *ld = data();
+  WorkingCopy *ld = data();
   if (res) res->clear();
   double chiSquared = 0.0;
   // Rows of the segments of a THM experiment, filled once it is profiled.
-  std::vector<std::vector<std::pair<int, size_t>>> groupRows(ld->NumThmGroups());
+  std::vector<std::vector<std::pair<int, size_t>>> groupRows(ld->Data().NumThmGroups());
   // Every point in one parallel pass first (dev 37cdd34), as the CLI's AZURECalc::PrecalculatePoints.
   AZUREProfile::ScopedReport profileReport("api chi2");
   const bool pre = PrecalculateAll(*ld, AllSegments(ld), lc, configure(), results());
-  for (int i = 1; i <= ld->NumSegments(); i++) {
-    ESegment *segment = ld->GetSegment(i);
+  for (int i = 1; i <= ld->Data().NumSegments(); i++) {
+    const Segment *segment = ld->Data().GetSegment(i);
     if (!segment) continue;
     azure2::EvaluateModelSegment(*ld, *segment, lc, configure(), results(),
                                  pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
 
     // A THM experiment: one profile (shared norm, background) over its
     // segments, at the last of them, as the CLI.
-    const int g = ld->ThmGroupOf(i);
+    const int g = ld->Data().ThmGroupOf(i);
     if (g >= 0) {
       if (res) {
         groupRows[g].push_back(std::make_pair(i, res->size()));
         for (int pid = 0; pid < segment->NumPoints(); pid++)
           if (segment->GetPoint(*ld, pid + 1)) res->push_back(0.0);
       }
-      if (ld->IsLastOfThmGroup(g, i)) {
+      if (ld->Data().IsLastOfThmGroup(g, i)) {
         chiSquared += ld->ProfileThmGroup(g, results());
         if (res) {
           std::vector<double> r;
@@ -842,7 +842,7 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
     chiSquared += segChi;
   }
   // Data covariance: r^T M^-1 r over each group in place of its points' r_i^2 (never a THM segment).
-  if (ld->HasCovariance()) chiSquared += ld->CovarianceChi2Correction(results());
+  if (ld->Data().HasCovariance()) chiSquared += ld->CovarianceChi2Correction(results());
   return chiSquared;
 }
 
@@ -861,7 +861,7 @@ double AZUREAPI::CalculateChi2RWA(const vector_r &rwaParams) const {
   FillFromFullRWA(full);
   // Prior parameter covariance (dev b7e77292): not part of this chi2 (pyazr's objective() adds
   // penalties()["prior_covariance"]), recorded for chiSquared.out (WriteOutputFiles).
-  if (const PriorCovariance *pc = data()->GetPriorCovariance()) results().objective.priorCovariance = pc->Chi2(full);
+  if (const PriorCovariance *pc = data()->Data().GetPriorCovariance()) results().objective.priorCovariance = pc->Chi2(full);
   return EvaluateFilledChi2(nullptr) + FilledModelPenalties();
 }
 
@@ -870,14 +870,14 @@ vector_r AZUREAPI::CalculateResidualsRWA(const vector_r &params) const {
   vector_r res;
   EvaluateFilledChi2(&res);
   // Data covariance: whitened data rows, w = W r per group, so that sum w^2 is the chi-squared.
-  if (data()->HasCovariance()) data()->WhitenResidualRows(res, nullptr, 0);
+  if (data()->Data().HasCovariance()) data()->WhitenResidualRows(res, nullptr, 0);
   return res;
 }
 
 vector_r AZUREAPI::GetCurrentNorms() const {
   vector_r out;
   int prevKey = -1;
-  std::vector<ESegment> &segments = data()->GetSegments();
+  const std::vector<Segment> &segments = data()->Data().GetSegments();
   for (size_t i = 0; i < segments.size(); ++i) {
     int newKey = segments[i].GetSegmentKey();
     if (prevKey == newKey) continue;
@@ -888,10 +888,10 @@ vector_r AZUREAPI::GetCurrentNorms() const {
 }
 
 int AZUREAPI::RefreezeCovariance() {
-  EData *ld = data();
+  WorkingCopy *ld = data();
   int n = 0;
-  for (int g = 0; g < ld->NumCovarianceGroups(); g++)
-    if (ld->GetCovarianceGroup(g).HasRelative()) n++;
+  for (int g = 0; g < ld->Data().NumCovarianceGroups(); g++)
+    if (ld->Data().GetCovarianceGroup(g).HasRelative()) n++;
   ld->RefreezeCovariance();
   return n;
 }
@@ -926,7 +926,7 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
   // One request at a time: operate on the canonical compound/data in place
   // (re-filled below from these parameters) instead of cloning.
   CNuc *localCompound = compound();
-  EData *localData = data();
+  WorkingCopy *localData = data();
 
   AZUREParams params;
   localCompound->FillCompoundFromParamsPhysical(params_);
@@ -950,7 +950,7 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
   localData->FillEnergyShiftsFromParams(params_, results(), localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
 
-  if (const PriorCovariance *pc = localData->GetPriorCovariance()) results().objective.priorCovariance = pc->Chi2(params_);
+  if (const PriorCovariance *pc = localData->Data().GetPriorCovariance()) results().objective.priorCovariance = pc->Chi2(params_);
   // The same terms CalculateChi2RWA adds: the two bases must give one objective (dev 7284d09).
   return EvaluateFilledChi2(nullptr) + FilledModelPenalties();
 }
@@ -968,7 +968,7 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
   // compound/data in place (like UpdateSegments) rather than cloning; every
   // entry point re-fills from its own parameters before use.
   CNuc *lc = compound();
-  EData *ld = data();
+  WorkingCopy *ld = data();
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
   ld->FillEnergyShiftsFromParams(full, results(), lc, &configure());
@@ -987,21 +987,21 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
 
   // chi2 = sum (fit - data*n)^2/(cmErr*n)^2.  d(chi2)/d(model) = 2 r / err^2;
   // the same model gives the data-term norm gradient, accumulated per segment.
-  std::vector<double> normData(ld->NumSegments() + 1, 0.0);
+  std::vector<double> normData(ld->Data().NumSegments() + 1, 0.0);
   double chi2 = 0.0;
   // A data covariance couples the points: their cotangent 2 (M^-1 r)_i / (cmErr n) needs
   // every residual of the group first (one forward pass of those points), and the
   // group's chi2 is r^T M^-1 r in place of the sum of r_i^2 accumulated below.
-  if (ld->HasCovariance()) {
+  if (ld->Data().HasCovariance()) {
     ld->PrepareCovarianceSeeds(lc, configure(), results());
     chi2 += ld->CovarianceChi2Correction(results());
   }
-  FitBarFn fb = [&](ESegment *seg, int i, int pid, double model) -> double {
-    EPoint *pt = seg->GetPoint(*ld, pid + 1);
+  FitBarFn fb = [&](const Segment *seg, int i, int pid, double model) -> double {
+    Unit *pt = seg->GetPoint(*ld, pid + 1);
     if (!pt) return 0.0;
-    double norm = seg->GetNorm();
-    double dataval = seg->CMValue(pid);
-    double cmErr = seg->CMError(pid);
+    double norm = ld->State(*seg).norm;
+    double dataval = Segment::CMValue(ld->State(*seg), pid);
+    double cmErr = Segment::CMError(ld->State(*seg), pid);
     const azure2::Residual res = azure2::DataResidual(model, dataval, cmErr, norm);
     const double r = res.difference, err = res.error;
     if (err == 0.0) return 0.0;
@@ -1012,8 +1012,8 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
     if (seg->GetCovarianceGroup() >= 0) {
       // d chi2/d r_i = 2 z_i, z = M^-1 r; d r_i/d model = 1/(cmErr n), d r_i/d n = -model/(cmErr n^2).
       const double z = pt->GetCovarianceSeed(results());
-      const int o = ld->NormOwner(i);
-      if (norm != 0.0 && o >= 1 && o < (int)normData.size() && ld->GetSegment(o)->IsVaryNorm()) {
+      const int o = ld->Data().NormOwner(i);
+      if (norm != 0.0 && o >= 1 && o < (int)normData.size() && ld->Data().GetSegment(o)->IsVaryNorm()) {
         const double dNorm = -2.0 * z * model / (cmErr * norm * norm);
 #pragma omp atomic
         normData[o] += dNorm;
@@ -1021,8 +1021,8 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
       return 2.0 * z / err;
     }
     // A norm-group follower's points move its leader's norm (o), the one parameter.
-    const int o = ld->NormOwner(i);
-    if (norm != 0.0 && o >= 1 && o < (int)normData.size() && ld->GetSegment(o)->IsVaryNorm()) {
+    const int o = ld->Data().NormOwner(i);
+    if (norm != 0.0 && o >= 1 && o < (int)normData.size() && ld->Data().GetSegment(o)->IsVaryNorm()) {
       double e2 = cmErr * cmErr;
       // fitBarFn runs inside the parallel point loop of AccumulateEGammaGradient,
       // and all points of a segment share the same normData[o], so guard the
@@ -1043,8 +1043,8 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
     // Their values: the model terms of the objective (T6, T7, T9; before 2026-11-09 added here in the order 9, 6, 7).
     chi2 += Objective::Engine().ModelChi2(ObjectiveContext{lc, ld, results(), full, configure()});
     accum.Scatter(pmap, gradFull);
-    for (int s = 1; s <= ld->NumSegments(); s++) {
-      ESegment *seg = ld->GetSegment(s);
+    for (int s = 1; s <= ld->Data().NumSegments(); s++) {
+      const Segment *seg = ld->Data().GetSegment(s);
       if (!seg || !seg->IsVaryNorm() || seg->IsNormGroupFollower()) continue;  // a follower's norm is fixed
       int idx = pmap.NormIndex(s);
       if (idx >= 0 && idx < (int)gradFull.size()) gradFull[idx] = normData[s];
@@ -1076,9 +1076,9 @@ vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r &params) const {
     std::vector<THMRows> thm = ComputeTHMRows(full, pmap);
     const int nCols = pmap.NumPacked();
     for (const THMRows &tr : thm) {
-      ESegment *seg = data()->GetSegment(tr.segment);
+      const Segment *seg = data()->Data().GetSegment(tr.segment);
       double c = 0.0;
-      if (data()->ThmGroupOf(tr.segment) >= 0) {
+      if (data()->Data().ThmGroupOf(tr.segment) >= 0) {
         // A THM experiment, profiled by ComputeTHMRows: its residuals.
         for (double r : tr.r) c += r * r;
       } else if (seg->IsProfiledNorm()) {
@@ -1138,7 +1138,7 @@ bool AZUREAPI::NuisancePriorOf(int f, double &nominal, double &sigma) const {
   }
   if (!nuisance_) return false;
   // A parameter of the prior covariance has no diagonal prior of its own (objective.md D3).
-  if (const PriorCovariance *pc = data()->GetPriorCovariance()) {
+  if (const PriorCovariance *pc = data()->Data().GetPriorCovariance()) {
     const std::vector<int> &listed = pc->FullIndex();
     if (std::find(listed.begin(), listed.end(), f) != listed.end()) return false;
   }
@@ -1193,7 +1193,7 @@ vector_r AZUREAPI::CalculateObjectiveGradRWA(const vector_r &params) const {
     gradFull[idx] += 2.0 * (full[idx] - nominal) / (sigma * sigma);
   });
   AddNuisanceGradient(full, gradFull);
-  if (const PriorCovariance *pc = data()->GetPriorCovariance()) pc->AddGradient(full, gradFull);
+  if (const PriorCovariance *pc = data()->Data().GetPriorCovariance()) pc->AddGradient(full, gradFull);
   for (int i = 0, k = 1; i < (int)all_rwa_.size(); i++)
     if (!fixed_[i]) out[k++] += gradFull[i];
   out[0] = CalculateObjectiveRWA(params);
@@ -1207,7 +1207,7 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const st
   // One request at a time: operate on the canonical compound/data in place
   // (re-filled here from these parameters) instead of cloning.
   CNuc *lc = compound();
-  EData *ld = data();
+  WorkingCopy *ld = data();
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
   ld->FillEnergyShiftsFromParams(full, results(), lc, &configure());
@@ -1272,7 +1272,7 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const st
     for (int c : skipColumns)
       if (c >= 0 && c < (int)params.size()) skip[c] = 1;
     bool anyTHM = false;
-    for (int i = 1; i <= ld->NumSegments(); i++) anyTHM = anyTHM || (ld->GetSegment(i) && ld->GetSegment(i)->IsTHM());
+    for (int i = 1; i <= ld->Data().NumSegments(); i++) anyTHM = anyTHM || (ld->Data().GetSegment(i) && ld->Data().GetSegment(i)->IsTHM());
     if (!anyTHM) {
       FillShiftColumns(lc, ld, results(), configure(), pmap, fixed_, full, &skip, residuals.size(), nCols, jacobian);
     } else {
@@ -1318,7 +1318,7 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const st
   }
 
   // Data covariance: whiten the data rows, w = W r per group (W^T W = M^-1, sum w^2 = r^T M^-1 r).
-  if (ld->HasCovariance()) ld->WhitenResidualRows(residuals, &jacobian, nCols);
+  if (ld->Data().HasCovariance()) ld->WhitenResidualRows(residuals, &jacobian, nCols);
 
   // The model data (T9): rows after the data rows, as AZURECalc::ResidualJacobian.
   if (!Objective::Engine().AppendModelDataRows(ObjectiveContext{lc, ld, results(), full, configure()}, pmap, sdp, nCols,
@@ -1326,7 +1326,7 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const st
     return vector_r{-1.0};
 
   // Prior parameter covariance: its whitened rows L^-1 (p - mu) last, Jacobian L^-1 on its parameters' columns.
-  if (const PriorCovariance *pc = ld->GetPriorCovariance())
+  if (const PriorCovariance *pc = ld->Data().GetPriorCovariance())
     pc->AppendRows(full, [&](int f) { return f < pmap.NumFull() ? pmap.FullToPacked(f) : -1; }, nCols, residuals,
                    &jacobian);
 
@@ -1345,7 +1345,7 @@ vector_r AZUREAPI::CalculateModelGradientsRWA(const vector_r &params) const {
   // Same preparation as CalculateResidualJacobianRWA: one request at a time, so
   // the canonical compound/data are re-filled in place from these parameters.
   CNuc *lc = compound();
-  EData *ld = data();
+  WorkingCopy *ld = data();
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
   ld->FillEnergyShiftsFromParams(full, results(), lc, &configure());
@@ -1369,19 +1369,19 @@ vector_r AZUREAPI::CalculateModelGradientsRWA(const vector_r &params) const {
 
   // THM (HOES) rows come from the HOES adjoint (the T-matrix adjoint does not
   // cover them); see ComputeTHMRows.
-  std::map<EPoint *, vector_r> grad;
+  std::map<Unit *, vector_r> grad;
   if (!ComputeModelGradients(lc, ld, results(), configure(), pmap, sdp, grad, /*skipTHM=*/true))
     return vector_r{-1.0};
   {
     std::vector<THMRows> thm = ComputeTHMRows(full, pmap);
     const int nPacked = pmap.NumPacked();
     for (const THMRows &tr : thm) {
-      ESegment *seg = ld->GetSegment(tr.segment);
+      const Segment *seg = ld->Data().GetSegment(tr.segment);
       size_t i = 0;
       for (int pid = 0; pid < seg->NumPoints(); pid++) {
-        EPoint *pt = seg->GetPoint(*ld, pid + 1);
+        Unit *pt = seg->GetPoint(*ld, pid + 1);
         if (!pt) continue;
-        std::map<EPoint *, vector_r>::iterator it = grad.find(pt);
+        std::map<Unit *, vector_r>::iterator it = grad.find(pt);
         if (it != grad.end() && i < tr.m.size())
           for (int c = 0; c < nPacked && c < (int)it->second.size(); c++)
             it->second[c] = tr.Jm[i * nPacked + c];
@@ -1396,16 +1396,16 @@ vector_r AZUREAPI::CalculateModelGradientsRWA(const vector_r &params) const {
   std::vector<int> counts;
   vector_r rows;
   int prevKey = -1;
-  std::vector<ESegment> &segments = ld->GetSegments();
+  const std::vector<Segment> &segments = ld->Data().GetSegments();
   for (int i = 0; i < (int)segments.size(); ++i) {
     const int newKey = segments[i].GetSegmentKey();
     if (prevKey == newKey) continue;
     prevKey = newKey;
 
-    const UnitRange<EPoint> points = segments[i].GetPoints(*ld);
+    const UnitRange<Unit> points = segments[i].GetPoints(*ld);
     int n = 0;
     for (int k = 0; k < (int)points.size(); ++k) {
-      std::map<EPoint *, vector_r>::const_iterator it = grad.find(&points[k]);
+      std::map<Unit *, vector_r>::const_iterator it = grad.find(&points[k]);
       if (it == grad.end()) continue;
       const vector_r &f = it->second;
       for (int c = 0; c < nCols; ++c)
@@ -1461,7 +1461,7 @@ vector_r AZUREAPI::GetEnergyShiftIndices() {
 }
 
 // Structured metadata for every parameter.  The parameters are walked in the
-// exact order CNuc::FillMnParams (energies + widths) then EData::FillMnParams
+// exact order CNuc::FillMnParams (energies + widths) then WorkingCopy::FillMnParams
 // (norms, energy shifts, sqrt(E) shift coefficients, shift-function
 // parameters, then the THM coherent backgrounds) emit them, so the records
 // line up one-to-one with
@@ -1535,8 +1535,8 @@ vector_r AZUREAPI::GetParameterInfo() const {
   }
 
   // Normalization parameters: one per segment with IsVaryNorm(), except a
-  // profiled (free THM) norm, which EData::FillMnParams leaves out too.
-  std::vector<ESegment> &segments = data()->GetSegments();
+  // profiled (free THM) norm, which WorkingCopy::FillMnParams leaves out too.
+  const std::vector<Segment> &segments = data()->Data().GetSegments();
   for (size_t s = 0; s < segments.size(); ++s) {
     if (segments[s].IsVaryNorm() && !segments[s].IsProfiledNorm())
       push(2, -1, -1, 0, -1, 0, -1, -1, -1, -1, -1,
@@ -1567,9 +1567,9 @@ vector_r AZUREAPI::GetParameterInfo() const {
 
   // Electron-screening potentials (eV): the effect number in field 6, the prior centre in field 5 and its
   // sigma in field 14 (0 = no prior).
-  for (int k = 1; k <= data()->NumScreeningParams(); ++k) {
-    const TargetEffect *te = data()->GetScreeningTargetEffect(k);
-    push(7, -1, -1, 0, -1, te->GetScreeningNominal(), data()->GetScreeningEffect(k), -1, -1, -1, -1, -1,
+  for (int k = 1; k <= data()->Data().NumScreeningParams(); ++k) {
+    const TargetEffect *te = data()->Data().GetScreeningTargetEffect(k);
+    push(7, -1, -1, 0, -1, te->GetScreeningNominal(), data()->Data().GetScreeningEffect(k), -1, -1, -1, -1, -1,
          te->GetScreeningSigma(), -1);
   }
 
@@ -1577,9 +1577,9 @@ vector_r AZUREAPI::GetParameterInfo() const {
   // Fitted target densities (atoms/cm^2), one per densityfit line or density group: type 8, the effect number
   // (the group's first line) in field 6, the prior centre in field 5, its sigma in field 14 (0 = no prior) and
   // the largest density the sub-point grids span in field 8 (the S field).
-  for (int k = 1; k <= data()->NumDensityParams(); ++k) {
-    const TargetEffect *te = data()->GetDensityTargetEffect(k);
-    push(8, -1, -1, 0, -1, te->GetDensityNominal(), data()->GetDensityEffect(k), -1, te->GetLayoutDensity(), -1, -1, -1,
+  for (int k = 1; k <= data()->Data().NumDensityParams(); ++k) {
+    const TargetEffect *te = data()->Data().GetDensityTargetEffect(k);
+    push(8, -1, -1, 0, -1, te->GetDensityNominal(), data()->Data().GetDensityEffect(k), -1, te->GetLayoutDensity(), -1, -1, -1,
          te->GetDensitySigma(), -1);
   }
 
@@ -1587,9 +1587,9 @@ vector_r AZUREAPI::GetParameterInfo() const {
   // Fitted Doppler temperatures (K), one per 'doppler T vary sigma [Tmax]' line: type 9, the effect number in field 6,
   // the prior centre in field 5, its sigma in field 14 (0 = no prior) and the layout temperature (the largest the
   // sub-point grids span) in field 8 (the S field).
-  for (int k = 1; k <= data()->NumDopplerParams(); ++k) {
-    const TargetEffect *te = data()->GetDopplerTargetEffect(k);
-    push(9, -1, -1, 0, -1, te->GetDopplerNominal(), data()->GetDopplerEffect(k), -1, te->GetDopplerLayoutTemperature(),
+  for (int k = 1; k <= data()->Data().NumDopplerParams(); ++k) {
+    const TargetEffect *te = data()->Data().GetDopplerTargetEffect(k);
+    push(9, -1, -1, 0, -1, te->GetDopplerNominal(), data()->Data().GetDopplerEffect(k), -1, te->GetDopplerLayoutTemperature(),
          -1, -1, -1, te->GetDopplerSigma(), -1);
   }
 
@@ -1597,10 +1597,10 @@ vector_r AZUREAPI::GetParameterInfo() const {
   // sigma': type 10, the segment key in field 13, the line's n (the prior centre) in field 5, its sigma in field 14
   // (0 = no prior; 0 for a thickness-group follower), 0 = transmission / 1 = yield in field 6, and for a follower the
   // key of its group's leader in field 7 (-1 otherwise).
-  for (int k = 1; k <= data()->NumThicknessParams(); ++k) {
-    const ESegment *seg = data()->GetSegment(data()->GetThicknessSegment(k));
+  for (int k = 1; k <= data()->Data().NumThicknessParams(); ++k) {
+    const Segment *seg = data()->Data().GetSegment(data()->Data().GetThicknessSegment(k));
     const bool follower = seg->IsThicknessGroupFollower();
-    const double leaderKey = follower ? data()->GetSegments()[seg->GetThicknessLeaderPos()].GetSegmentKey() : -1;
+    const double leaderKey = follower ? data()->Data().GetSegments()[seg->GetThicknessLeaderPos()].GetSegmentKey() : -1;
     push(10, -1, -1, 0, -1, seg->GetNominalThickness(), seg->IsYield() ? 1 : 0, leaderKey, -1, -1, -1,
          seg->GetSegmentKey(), follower ? 0.0 : seg->GetThicknessSigma(), -1);
   }
@@ -1608,8 +1608,8 @@ vector_r AZUREAPI::GetParameterInfo() const {
   // THM coherent backgrounds (cbackground=), last (type 11; 9 before the merge of dev 3264896d): Re c0, Im c0 [, Re c1,
   // Im c1] per combination, with its J group, entrance channel (channel, L,
   // S) and exit pair number (pair).
-  for (int g = 0; g < data()->NumThmGroups(); ++g) {
-    const ThmCoherentBackground *cb = data()->GetThmGroup(g).coherent.get();
+  for (int g = 0; g < data()->Data().NumThmGroups(); ++g) {
+    const ThmCoherentBackground *cb = data()->Data().GetThmGroup(g).coherent.get();
     if (!cb) continue;
     for (const ThmCoherentBackground::Combo &c : cb->combos) {
       JGroup *jg = nuc->GetJGroup(c.jGroup);
@@ -1666,7 +1666,7 @@ vector_r AZUREAPI::GetPairsInfo() const {
 /*!
  * External-capture radial integrals on a requested energy grid.
  *
- * Walks exactly the pathway structure EPoint::CalculateECAmplitudes walks --
+ * Walks exactly the pathway structure Unit::CalculateECAmplitudes walks --
  * every EC level whose final pair matches, every KGroup of the entrance pair's
  * decay, every ECMGroup within it -- and evaluates the integral at each
  * requested energy instead of at a data point's energy.  The quantum numbers of

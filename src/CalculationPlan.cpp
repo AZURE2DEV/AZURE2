@@ -6,42 +6,42 @@
 #include <sstream>
 #include <stdexcept>
 
-#include "EData.h"
-#include "EPoint.h"
-#include "ESegment.h"
+#include "WorkingCopy.h"
+#include "Unit.h"
+#include "Segment.h"
 #include "Results.h"
 
 namespace azure2 {
 
 namespace {
 
-std::string Where(EData &data, PointRef r) {
+std::string Where(WorkingCopy &data, PointRef r) {
   std::ostringstream s;
   s << "unit " << r;
   if (r >= 0 && r < data.NumUnits())
-    s << " (key " << data.Unit(r).GetSegmentKey() << ", E_lab " << data.Unit(r).GetLabEnergy() << " MeV)";
+    s << " (key " << data.UnitAt(r).GetSegmentKey() << ", E_lab " << data.UnitAt(r).GetLabEnergy() << " MeV)";
   return s.str();
 }
 
 // The slots a point and its sub-points hold apart from the natural terms (the model pass's).
-void AddUnitRanges(EData &data, EPoint &p, std::vector<std::pair<std::size_t, std::size_t>> &ranges) {
-  auto add = [&ranges](EPoint &u) {
-    if (u.ResultSlot() == EPoint::kNoRecord) return;
+void AddUnitRanges(WorkingCopy &data, Unit &p, std::vector<std::pair<std::size_t, std::size_t>> &ranges) {
+  auto add = [&ranges](Unit &u) {
+    if (u.ResultSlot() == Unit::kNoRecord) return;
     const std::size_t n = Results::RecordSize(u.ResultAngularSlots(), 0);
     ranges.push_back({u.ResultSlot(), u.ResultSlot() + n});
   };
   add(p);
-  for (EPoint &sub : p.GetSubPoints(data)) add(sub);
+  for (Unit &sub : p.GetSubPoints(data)) add(sub);
 }
 
 }  // namespace
 
-EPoint *MappedPoints::operator[](int i) const { return data_->PlanPoint((*refs_)[i]); }
+Unit *MappedPoints::operator[](int i) const { return data_->PlanPoint((*refs_)[i]); }
 
-void CalculationPlan::Build(EData &data, const std::vector<std::pair<PointRef, PointRef>> &mapping) {
+void CalculationPlan::Build(WorkingCopy &data, const std::vector<std::pair<PointRef, PointRef>> &mapping) {
   tasks_.clear();
   for (PointRef u : data.PlanUnits()) {
-    EPoint *point = data.PlanPoint(u);
+    Unit *point = data.PlanPoint(u);
     point->SetPlanTask(-1);
     if (point->IsMapped()) continue;
     tasks_.push_back({u, {}});
@@ -49,19 +49,19 @@ void CalculationPlan::Build(EData &data, const std::vector<std::pair<PointRef, P
   }
   for (const std::pair<PointRef, PointRef> &m : mapping) {
     const int task = data.PlanPoint(m.first)->PlanTask();
-    if (task < 0) throw std::logic_error("EData: the calculation plan maps " + Where(data, m.second) + " onto " +
+    if (task < 0) throw std::logic_error("WorkingCopy: the calculation plan maps " + Where(data, m.second) + " onto " +
                                          Where(data, m.first) + ", which is not the host of a task");
     tasks_[task].mapped.push_back(m.second);
     data.PlanPoint(m.second)->SetPlanTask(task);
   }
   const std::string why = Check(data);
-  if (!why.empty()) throw std::logic_error("EData: the calculation plan does not give every point one writer: " + why);
+  if (!why.empty()) throw std::logic_error("WorkingCopy: the calculation plan does not give every point one writer: " + why);
 }
 
 namespace {
 
 // One task's writes: `before` the slots before it ran, `writer` the task that wrote each slot so far (-1: none).
-void CheckTaskWrites(EData &data, int task, const std::vector<double> &before, const Results &results,
+void CheckTaskWrites(WorkingCopy &data, int task, const std::vector<double> &before, const Results &results,
                      std::vector<int> &writer) {
   std::vector<std::pair<std::size_t, std::size_t>> ranges;
   if (task >= 0) data.Plan().WriteRanges(data, task, ranges);
@@ -84,18 +84,18 @@ void CheckTaskWrites(EData &data, int task, const std::vector<double> &before, c
 
 }  // namespace
 
-void CalculationPlan::RunChecked(EData &data, const std::vector<EPoint *> &hosts, Results &results,
-                                 const std::function<void(EPoint *)> &run) {
+void CalculationPlan::RunChecked(WorkingCopy &data, const std::vector<Unit *> &hosts, Results &results,
+                                 const std::function<void(Unit *)> &run) {
   std::vector<int> writer;
   std::vector<double> before;
-  for (EPoint *host : hosts) {
+  for (Unit *host : hosts) {
     before = results.slot;
     run(host);
     CheckTaskWrites(data, host->PlanTask(), before, results, writer);
   }
 }
 
-std::string CalculationPlan::Check(EData &data) const {
+std::string CalculationPlan::Check(WorkingCopy &data) const {
   // writer[unit]: the task that calculates the point (-1: none yet; -2: a unit that is no point of a term).
   const std::vector<PointRef> points = data.PlanUnits();
   std::vector<int> writer(data.NumUnits(), -2);
@@ -122,11 +122,11 @@ std::string CalculationPlan::Check(EData &data) const {
   for (int t = 0; t < NumTasks(); t++) {
     const CalculationTask &task = tasks_[t];
     if (!claim(task.host, t, why)) return why;
-    EPoint *host = data.PlanPoint(task.host);
+    Unit *host = data.PlanPoint(task.host);
     if (host->IsMapped()) return Where(data, task.host) + " is a host and mapped onto another point";
     for (PointRef m : task.mapped) {
       if (!claim(m, t, why)) return why;
-      EPoint *mp = data.PlanPoint(m);
+      Unit *mp = data.PlanPoint(m);
       if (!mp->IsMapped()) return Where(data, m) + " is calculated by a host but not mapped";
       if (host->NumSubPoints() > 0 && mp->NumSubPoints() != host->NumSubPoints())
         return Where(data, m) + " has " + std::to_string(mp->NumSubPoints()) + " sub-points, its host " +
@@ -138,7 +138,7 @@ std::string CalculationPlan::Check(EData &data) const {
   return std::string();
 }
 
-void CalculationPlan::WriteRanges(EData &data, int task, std::vector<std::pair<std::size_t, std::size_t>> &ranges) const {
+void CalculationPlan::WriteRanges(WorkingCopy &data, int task, std::vector<std::pair<std::size_t, std::size_t>> &ranges) const {
   ranges.clear();
   AddUnitRanges(data, *data.PlanPoint(tasks_[task].host), ranges);
   for (PointRef m : tasks_[task].mapped) AddUnitRanges(data, *data.PlanPoint(m), ranges);

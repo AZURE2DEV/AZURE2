@@ -164,7 +164,7 @@ class Config {
   /// Nodes per decade of E_out of those tables ($AZURE2_EC_TABLE_NODES overrides).
   int ecTableNodesPerDecade;
   /// Lay the adaptive sub-point grids of experimental effects out again on every
-  /// evaluation, for the current levels and energy shifts (EData::ReplaceSubPointGrids);
+  /// evaluation, for the current levels and energy shifts (WorkingCopy::ReplaceSubPointGrids);
   /// on by default, --no-grid-replacement keeps the grids placed from the input file.
   bool replaceSubPointGrids;
   /// Hard-sphere scattering in every J^pi the particle pairs allow, whether or not a level carries it

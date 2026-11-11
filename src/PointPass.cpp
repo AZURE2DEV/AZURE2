@@ -1,4 +1,4 @@
-// The calculation of one point: EPoint::Calculate (the R-, A- or THM-matrix route, the mapped points it fills, the
+// The calculation of one point: Unit::Calculate (the R-, A- or THM-matrix route, the mapped points it fills, the
 // probes of a target-effect point), the thin-target and observable-wise integrations of its sub-points, the marking
 // of a point whose calculation failed, and the scope that switches point mapping off on a thread.
 #include <algorithm>
@@ -14,8 +14,8 @@
 #include "AMatrixFunc.h"
 #include "CNuc.h"
 #include "Config.h"
-#include "EData.h"
-#include "EPoint.h"
+#include "WorkingCopy.h"
+#include "Unit.h"
 #include "RMatrixFunc.h"
 #include "THMMatrixFunc.h"
 #include "TargetEffect.h"
@@ -28,12 +28,12 @@ ScopedPointMappingOff::ScopedPointMappingOff() : previous_(tlPointMappingOff) { 
 ScopedPointMappingOff::~ScopedPointMappingOff() { tlPointMappingOff = previous_; }
 bool ScopedPointMappingOff::Active() { return tlPointMappingOff; }
 
-void EPoint::MarkFailed(EData *data, azure2::Results &results, const char *role, const Config &configure,
+void Unit::MarkFailed(WorkingCopy *data, azure2::Results &results, const char *role, const Config &configure,
                         const char *why) {
   // Every fixed quantity NaN and no angular-distribution coefficient, on this point and every point mapped onto it.
   const azure2::MappedPoints mappedPts = this->PlanMapped(data);
   for (int i = 0; i <= mappedPts.size(); i++) {
-    EPoint *p = i ? mappedPts[i - 1] : this;
+    Unit *p = i ? mappedPts[i - 1] : this;
     std::fill(p->Rec(results), p->Rec(results) + azure2::Results::kNumFixed, std::numeric_limits<double>::quiet_NaN());
     if (p->num_ang_slots_) p->Rec(results)[azure2::Results::AngularOffset()] = 0.0;
   }
@@ -46,7 +46,7 @@ void EPoint::MarkFailed(EData *data, azure2::Results &results, const char *role,
   }
 }
 
-void EPoint::Calculate(EData *data, CNuc *theCNuc, const Config &configure, azure2::Results &results, EPoint *parent,
+void Unit::Calculate(WorkingCopy *data, CNuc *theCNuc, const Config &configure, azure2::Results &results, Unit *parent,
                        int subPointNum) {
   // Test hook (tests/pyazr/failed_point_test.py): AZURE_TEST_FAIL_E=<lab energy, MeV> makes the calculation of a
   // data or test point at that energy throw, AZURE_TEST_FAIL_EXIT=<pair key> only for that exit pair, so the
@@ -56,11 +56,11 @@ void EPoint::Calculate(EData *data, CNuc *theCNuc, const Config &configure, azur
   if (testFailE >= 0.0 && !parent && std::fabs(this->GetLabEnergy() - testFailE) <= 1e-9 * std::max(1.0, testFailE) &&
       (testFailExit == 0 || this->GetExitKey() == testFailExit))
     throw std::runtime_error("injected failure (AZURE_TEST_FAIL_E).");
-  // Points mapped onto this one (EData::MapData), unless mapping is switched
+  // Points mapped onto this one (WorkingCopy::MapData), unless mapping is switched
   // off on this thread (ScopedPointMappingOff).
   const azure2::MappedPoints mappedPts = ScopedPointMappingOff::Active() ? azure2::MappedPoints() : this->PlanMapped(data);
   const int numMapped = mappedPts.size();
-  if (!this->IsTargetEffect() || !data->GetTargetEffect(this->GetTargetEffectNum())->IsSubPointEffect()) {
+  if (!this->IsTargetEffect() || !data->Data().GetTargetEffect(this->GetTargetEffectNum())->IsSubPointEffect()) {
     // THM (modified R-matrix) segments: reuse the shared interior (A-matrix)
     // but assemble the half-off-shell cross section instead of the standard
     // T-matrix cross section. Kept fully per-segment so a project may mix THM
@@ -80,7 +80,7 @@ void EPoint::Calculate(EData *data, CNuc *theCNuc, const Config &configure, azur
       if (subPointNum && parent) {
         const azure2::MappedPoints parentMapped = parent->PlanMapped(data);
         for (int i = 1; i <= parentMapped.size(); i++) {
-          EPoint *mappedSubPoint = parentMapped[i - 1]->GetSubPoint(*data, subPointNum);
+          Unit *mappedSubPoint = parentMapped[i - 1]->GetSubPoint(*data, subPointNum);
           thmFunc.CalculateTHMCrossSection(mappedSubPoint, results);
         }
       } else {
@@ -111,11 +111,11 @@ void EPoint::Calculate(EData *data, CNuc *theCNuc, const Config &configure, azur
     theMatrixFunc->InvertMatrices();
     theMatrixFunc->CalculateTMatrix(this);
     theMatrixFunc->CalculateCrossSection(this, results);
-    // A mapped point may have another exit pair (a component of a SUM, RATIO or total-capture segment, EData::MapData):
+    // A mapped point may have another exit pair (a component of a SUM, RATIO or total-capture segment, WorkingCopy::MapData):
     // the solved level matrix is the same, only its T-matrix is built anew.  Mapped points are ordered by exit, so
     // each exit's T-matrix is built once.
     int tExitKey = this->GetExitKey();
-    auto mappedCrossSection = [&](EPoint *mapped) {
+    auto mappedCrossSection = [&](Unit *mapped) {
       if (mapped->GetExitKey() != tExitKey) {
         theMatrixFunc->RecalculateTMatrix(mapped);
         tExitKey = mapped->GetExitKey();
@@ -130,7 +130,7 @@ void EPoint::Calculate(EData *data, CNuc *theCNuc, const Config &configure, azur
       for (int i = 1; i <= numMapped; i++) mappedCrossSection(mappedPts[i - 1]);
     }
   } else {
-    TargetEffect *effect = data->GetTargetEffect(this->GetTargetEffectNum());
+    const TargetEffect *effect = data->Data().GetTargetEffect(this->GetTargetEffectNum());
     if (effect->IsTargetIntegration() && !effect->IsThickTarget()) {
       this->CalculateThinTarget(*data, theCNuc, configure, results, effect);
       return;
@@ -146,7 +146,7 @@ void EPoint::Calculate(EData *data, CNuc *theCNuc, const Config &configure, azur
     double bareValue = 0.0, bareE1 = 0.0, bareE2 = 0.0;
     bool haveBare = false;
     if (blend < 1.0 || autoTol > 0.) {
-      EPoint probe(*this);
+      Unit probe(*this);
       azure2::Results probeResults;  // the probe's own record: it must not write the point's
       probe.UsePrivateRecord(probeResults, results);
       probe.SetTargetEffectNum(0);
@@ -177,7 +177,7 @@ void EPoint::Calculate(EData *data, CNuc *theCNuc, const Config &configure, azur
       }
       const int probes[3] = {iFirst, iMid, iLast};
       for (int k = 0; k < 3; k++) {
-        EPoint *subPoint = this->GetSubPoint(*data, probes[k]);
+        Unit *subPoint = this->GetSubPoint(*data, probes[k]);
         if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE)
           subPoint->RecalcEDependentValues(data, theCNuc, configure);
         if (hasMapped)
@@ -187,7 +187,7 @@ void EPoint::Calculate(EData *data, CNuc *theCNuc, const Config &configure, azur
       }
       bool allPass = true;
       for (int m = 0; m <= numMapped && allPass; m++) {
-        EPoint *host = (m == 0) ? this : mappedPts[m - 1];
+        Unit *host = (m == 0) ? this : mappedPts[m - 1];
         double sFirst = host->GetSubPoint(*data, iFirst)->GetFitCrossSection(results);
         double sMid = host->GetSubPoint(*data, iMid)->GetFitCrossSection(results);
         double sLast = host->GetSubPoint(*data, iLast)->GetFitCrossSection(results);
@@ -200,8 +200,8 @@ void EPoint::Calculate(EData *data, CNuc *theCNuc, const Config &configure, azur
         this->SetFitCrossSection(results, bareValue);
         this->SetFitE1CrossSection(results, bareE1), this->SetFitE2CrossSection(results, bareE2);
         for (int m = 1; m <= numMapped; m++) {
-          EPoint *mappedPoint = mappedPts[m - 1];
-          EPoint mappedProbe(*mappedPoint);
+          Unit *mappedPoint = mappedPts[m - 1];
+          Unit mappedProbe(*mappedPoint);
           azure2::Results probeResults;
           mappedProbe.UsePrivateRecord(probeResults, results);
           mappedProbe.SetTargetEffectNum(0);
@@ -217,7 +217,7 @@ void EPoint::Calculate(EData *data, CNuc *theCNuc, const Config &configure, azur
     }
 
     for (int i = 1; i <= this->NumSubPoints(); i++) {
-      EPoint *subPoint = this->GetSubPoint(*data, i);
+      Unit *subPoint = this->GetSubPoint(*data, i);
       // Recalculate energy-dependent values for sub-points too if using external capture
       if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
         subPoint->RecalcEDependentValues(data, theCNuc, configure);
@@ -231,12 +231,12 @@ void EPoint::Calculate(EData *data, CNuc *theCNuc, const Config &configure, azur
     if (blend < 1.0 && haveBare)
       this->SetFitCrossSection(results, blend * this->GetFitCrossSection(results) + (1.0 - blend) * bareValue);
     for (int i = 1; i <= numMapped; i++) {
-      EPoint *mappedPoint = mappedPts[i - 1];
+      Unit *mappedPoint = mappedPts[i - 1];
       mappedPoint->IntegrateTargetEffectForObservable(*data, configure, results);
       if (blend < 1.0) {
         // The mapped point is another observable at the same energy: its bare
         // value needs its own probe.
-        EPoint mappedProbe(*mappedPoint);
+        Unit mappedProbe(*mappedPoint);
         azure2::Results probeResults;
         mappedProbe.UsePrivateRecord(probeResults, results);
         mappedProbe.SetTargetEffectNum(0);
@@ -261,15 +261,15 @@ void EPoint::Calculate(EData *data, CNuc *theCNuc, const Config &configure, azur
  *    the end nodes stays within the tolerance of sigma(E_bar) (a curvature bound, about three times the error of
  *    sigma(E_bar) for a box), sigma(E_bar) is used and no other sub-point is evaluated.
  */
-void EPoint::CalculateThinTarget(EData &data, CNuc *theCNuc, const Config &configure, azure2::Results &results,
-                                 TargetEffect *effect) {
+void Unit::CalculateThinTarget(WorkingCopy &data, CNuc *theCNuc, const Config &configure, azure2::Results &results,
+                                 const TargetEffect *effect) {
   const azure2::MappedPoints mappedPts =
       ScopedPointMappingOff::Active() ? azure2::MappedPoints() : this->PlanMapped(&data);
   const int numMapped = mappedPts.size();
   const bool hasMapped = numMapped > 0;
   const int n = this->NumSubPoints();
   auto calcSub = [&](int i) {
-    EPoint *subPoint = this->GetSubPoint(data, i);
+    Unit *subPoint = this->GetSubPoint(data, i);
     if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) subPoint->RecalcEDependentValues(&data, theCNuc, configure);
     if (hasMapped)
       subPoint->Calculate(&data, theCNuc, configure, results, this, i);
@@ -298,7 +298,7 @@ void EPoint::CalculateThinTarget(EData &data, CNuc *theCNuc, const Config &confi
     const double tBar = (ea > eb) ? std::min(std::max((ea - eBar) / (ea - eb), 0.0), 1.0) : 0.0;
     bool allPass = true;
     for (int m = 0; m <= numMapped && allPass; m++) {
-      EPoint *host = (m == 0) ? this : mappedPts[m - 1];
+      Unit *host = (m == 0) ? this : mappedPts[m - 1];
       const double sF = host->GetSubPoint(data, 1)->GetFitCrossSection(results);
       const double sL = host->GetSubPoint(data, n)->GetFitCrossSection(results);
       const double sBar = (1.0 - tBar) * host->GetSubPoint(data, jb)->GetFitCrossSection(results) +
@@ -309,10 +309,10 @@ void EPoint::CalculateThinTarget(EData &data, CNuc *theCNuc, const Config &confi
     if (allPass) {
       // sigma(E_bar) from the two bracketing sub-points, through the one integrator (A_y, coefficients and
       // capture components keep their own combinations)
-      EPoint::TargetFallbackScope self(this);
-      std::vector<std::unique_ptr<EPoint::TargetFallbackScope>> mapped;
+      Unit::TargetFallbackScope self(this);
+      std::vector<std::unique_ptr<Unit::TargetFallbackScope>> mapped;
       for (int m = 1; m <= numMapped; m++)
-        mapped.emplace_back(new EPoint::TargetFallbackScope(mappedPts[m - 1]));
+        mapped.emplace_back(new Unit::TargetFallbackScope(mappedPts[m - 1]));
       integrateAll();
       return;
     }
@@ -333,7 +333,7 @@ void EPoint::CalculateThinTarget(EData &data, CNuc *theCNuc, const Config &confi
  * component is integrated with the same combiner by swapping it into the
  * sub-points' cross-section slot, exactly as the analyzing power is handled.
  */
-void EPoint::IntegrateTargetEffectComponents(const EData &data, const Config &configure, azure2::Results &results) {
+void Unit::IntegrateTargetEffectComponents(const WorkingCopy &data, const Config &configure, azure2::Results &results) {
   if (settings_->crossSectionComponent == 0) return;
   const int n = this->NumSubPoints();
   if (n <= 0) return;
@@ -371,7 +371,7 @@ void EPoint::IntegrateTargetEffectComponents(const EData &data, const Config &co
  * quadrature, straggling and energy-loss treatment stay identical and there is
  * only one integration scheme to maintain.
  */
-void EPoint::IntegrateTargetEffectForObservable(const EData &data, const Config &configure, azure2::Results &results) {
+void Unit::IntegrateTargetEffectForObservable(const WorkingCopy &data, const Config &configure, azure2::Results &results) {
   if (this->IsCoefficient() && !this->GetCoefficientAbsolute()) {
     // A normalised Legendre coefficient is a ratio like A_y: the absolute A_k = a_k A_0
     // and A_0 are each folded with the integrator (linear in the cross section), then

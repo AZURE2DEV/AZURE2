@@ -28,7 +28,7 @@
  * of the LANL code EDA).  Both tend to the non-relativistic forms as T/m -> 0, and the
  * threshold quantities (k^2/T and eta k at T = 0) are exactly the non-relativistic ones.
  * The R-matrix denominators stay E_lambda - E_x, so level energies remain excitation
- * energies; EData::WriteRelativisticLevels writes them in the E(s) convention of EDA.
+ * energies; WorkingCopy::WriteRelativisticLevels writes them in the E(s) convention of EDA.
  *
  * Masses are in MeV/c^2 (PPair masses in u times uconv), energies in MeV, k in fm^-1.
  */

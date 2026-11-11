@@ -1,6 +1,6 @@
 // The capture analyzing-power terms are built at set-up for the reactions the data sets name (cnuc_split.md section
 // 11.5, decision 2; include/CaptureAyRequests.h).  Every project of the tree given is loaded as the engine loads it
-// (CNuc::Fill, EData::Fill or MakePoints, RequestCaptureAyTerms, CNuc::Initialize), in a scratch copy, and:
+// (CNuc::Fill, WorkingCopy::Fill or MakePoints, RequestCaptureAyTerms, CNuc::Initialize), in a scratch copy, and:
 //  (a) every term of an analyzing-power data set with a photon exit has its exit's terms in the pathway table;
 //  (b) no beta entrance has capture-A_y terms;
 //  (c) the table is the same with the requests in one order and in the reverse order (every entrance and every photon
@@ -22,9 +22,9 @@
 #include "CaptureAyRequests.h"
 #include "Config.h"
 #include "ECAmplitudeCache.h"
-#include "EData.h"
-#include "EPoint.h"
-#include "ESegment.h"
+#include "WorkingCopy.h"
+#include "Unit.h"
+#include "Segment.h"
 #include "ModelPass.h"
 #include "PathwayTable.h"
 #include "Results.h"
@@ -44,7 +44,7 @@ struct Loaded {
   std::unique_ptr<std::ostringstream> sink;
   std::unique_ptr<Config> cfg;
   std::unique_ptr<CNuc> compound;
-  std::unique_ptr<EData> data;
+  std::unique_ptr<WorkingCopy> data;
   bool ok = false;
 };
 
@@ -58,7 +58,7 @@ Loaded Load(const std::string &file, Requests requests, bool withData) {
   l.cfg->configfile = file;
   g_config = l.cfg.get();
   l.compound.reset(new CNuc);
-  l.data.reset(new EData);
+  l.data.reset(new WorkingCopy);
   if (l.cfg->ReadConfigFile() < 0) return l;
   if (withData)
     l.cfg->paramMask |= Config::CALCULATE_WITH_DATA;
@@ -114,8 +114,8 @@ std::vector<std::string> DumpCaptureAy(CNuc &c) {
 std::pair<int, int> CaptureAyTerms(Loaded &l) {
   int terms = 0, built = 0;
   CNuc &c = *l.compound;
-  for (int i = 1; i <= l.data->NumSegments(); i++) {
-    const ESegment &s = *l.data->GetSegment(i);
+  for (int i = 1; i <= l.data->Data().NumSegments(); i++) {
+    const Segment &s = *l.data->Data().GetSegment(i);
     if (!s.IsAnalyzingPower()) continue;
     for (int t = 0; t < s.NumTerms(); t++) {
       if (!c.IsPairKey(s.TermEntranceKey(t)) || !c.IsPairKey(s.TermExitKey(t))) continue;
@@ -146,8 +146,8 @@ std::vector<double> CaptureAyValues(Loaded &l) {
   azure2::EvaluateModel(*l.data, l.compound.get(), *l.cfg, results, azure2::LeafValues::Calculate);
   std::vector<double> values;
   CNuc &c = *l.compound;
-  for (int i = 1; i <= l.data->NumSegments(); i++) {
-    ESegment &s = *l.data->GetSegment(i);
+  for (int i = 1; i <= l.data->Data().NumSegments(); i++) {
+    const Segment &s = *l.data->Data().GetSegment(i);
     if (!s.IsAnalyzingPower() || !c.IsPairKey(s.GetExitKey())) continue;
     if (c.GetPair(c.GetPairNumFromKey(s.GetExitKey()))->GetPType() != 10) continue;
     for (int k = 1; k <= s.NumPoints(); k++) values.push_back(s.GetPoint(*l.data, k)->GetFitCrossSection(results));
@@ -227,7 +227,7 @@ int main(int argc, char **argv) {
     const std::vector<double> refused = CaptureAyValues(without);
     bool allNaN = !refused.empty();
     for (double v : refused) allNaN = allNaN && std::isnan(v);
-    // EPoint::MarkFailed reports the first failure of the process only: the message is looked for once, below.
+    // Unit::MarkFailed reports the first failure of the process only: the message is looked for once, below.
     refusalMessage = refusalMessage || without.sink->str().find("has no terms") != std::string::npos;
     Check(allNaN, tag + ": without the requests the " + std::to_string(refused.size()) +
                       " capture-A_y points are refused (NaN)");

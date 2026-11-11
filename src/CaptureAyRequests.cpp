@@ -2,13 +2,13 @@
 #include "CaptureAyRequests.h"
 
 #include "CNuc.h"
-#include "EData.h"
-#include "ESegment.h"
+#include "WorkingCopy.h"
+#include "Segment.h"
 #include "PPair.h"
 
-void RequestCaptureAyTerms(CNuc &compound, EData &data) {
-  for (int i = 1; i <= data.NumSegments(); i++) {
-    const ESegment &segment = *data.GetSegment(i);
+void RequestCaptureAyTerms(CNuc &compound, WorkingCopy &data) {
+  for (int i = 1; i <= data.Data().NumSegments(); i++) {
+    const Segment &segment = *data.Data().GetSegment(i);
     if (!segment.IsAnalyzingPower()) continue;
     for (int t = 0; t < segment.NumTerms(); t++) {
       const int entranceKey = segment.TermEntranceKey(t), exitKey = segment.TermExitKey(t);

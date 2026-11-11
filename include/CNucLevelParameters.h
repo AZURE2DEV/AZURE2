@@ -21,7 +21,7 @@ class Config;
 /*!
  * Channel functions of the blocks at any level energy E (MeV, E_x), from the engine's ChannelFunc and WhitFunc, with
  * the channel energy E_c = (E - S) - e (MeV, c.m.; S = GetSepE(), e = GetExE()), the order in which the collision
- * matrix forms it at a data point (EPoint.cpp) and CNuc::CalcShiftFunctions at a level, so that a level and a data
+ * matrix forms it at a data point (Unit.cpp) and CNuc::CalcShiftFunctions at a level, so that a level and a data
  * point at the same E_x see the same E_c.  Every call returns all values of the channel: particle channels S, dS/dE
  * and P, evaluated on one ChannelFunc in that order (P = ChannelFunc::Penetrability above threshold and
  * mu a / (hbar^2 W^2) from WhitFunc below it, 0 at threshold); photon channels (E_gamma/hbar c)^(2L+1) (1 with

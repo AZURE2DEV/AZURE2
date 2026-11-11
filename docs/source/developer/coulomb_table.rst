@@ -205,7 +205,7 @@ coulomb_table=...`` (pyazr) sets ``Config::useCoulombTable``. Below the
 existing interfaces, so no caller changes:
 
 - ``CoulFunc::Penetrability``, ``CoulFunc::PEShift`` and the new
-  ``CoulFunc::HardSpherePhase`` (used by ``EPoint`` for the per-point phase)
+  ``CoulFunc::HardSpherePhase`` (used by ``Unit`` for the per-point phase)
   look up open charged channels, with a one-deep memo so a point's three
   requests cost one lookup;
 - ``ShftFunc`` looks up closed charged channels;
@@ -260,11 +260,11 @@ Three changes, 2026-10-19:
   routines and the table agree at every printed digit.
   ``AZURE_BOUND_SHIFT_NUMERICAL=1`` and ``AZURE_SHIFT_DE_1EV=1`` restore the
   earlier routes for comparison.
-- **Sub-point grids are re-placed** (``EData::ReplaceSubPointGrids``, called
+- **Sub-point grids are re-placed** (``WorkingCopy::ReplaceSubPointGrids``, called
   from ``FillEnergyShiftsFromParams`` on every evaluation;
   ``Config::replaceSubPointGrids``, CLI ``--no-grid-replacement``, pyazr
   ``replace_grids``). Each adaptive grid remembers how it was laid out
-  (``EPoint::SubGridSpec``: window, node budget, step, width multiplier). The
+  (``Unit::SubGridSpec``: window, node budget, step, width multiplier). The
   current fit values are converted to observed energies and widths on a
   private copy of the compound nucleus (``CNuc::TransformOut``, then
   ``GetTransformParams``), which is what a saved file would hold, and the same

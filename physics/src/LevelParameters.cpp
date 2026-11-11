@@ -30,7 +30,7 @@ bool IsParticle(const System &s, int c) {
 }
 
 // E_c = (E_x - S_alpha) - (e_0 + e_1) (MeV, c.m.): the energy above the partition's ground-state threshold less the
-// excitation of the pair, in the order the engine forms it at a data point (EPoint.cpp, inEnergy - GetSepE() -
+// excitation of the pair, in the order the engine forms it at a data point (Unit.cpp, inEnergy - GetSepE() -
 // GetExE(), GetExE() = e_light + e_heavy) and in the adapter's channel functions (cnuc_split.md section 7).
 double ChannelEnergy(const System &s, int partition, double E) {
   const Partition &p = s.partition(partition);

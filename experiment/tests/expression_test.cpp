@@ -4,7 +4,7 @@
 // value: each node, and the compositions the engine forms today (SUM with frame factors and abundances, RATIO,
 // transmission and self-shielded yield with and without sub-points and free-gas Doppler), against the engine's
 // expressions written out below as they stand in src/ModelPass.cpp (ComposeModelValue,
-// TransformedValue) and src/ESegment.cpp (Transmission, YieldY0, TermFrameFactor), bit for bit, on values with full 53-bit mantissas.  A
+// TransformedValue) and src/Segment.cpp (Transmission, YieldY0, TermFrameFactor), bit for bit, on values with full 53-bit mantissas.  A
 // reordered sum or product (a + b + c as a + (b + c), (c J) v as c (J v)) changes the last bit at some of the 4000
 // random points and fails here.  Edge cases: a zero RATIO denominator (NaN, also -0), an empty Sum (0), a zero sample
 // thickness, a vanishing yield total (the series branch), a term with a sub-point grid of another length (NaN).
@@ -61,7 +61,7 @@ const double NaN = std::numeric_limits<double>::quiet_NaN();
 
 // ---------------------------------------------------------------- the engine's expressions, written out
 
-// ESegment::TermFrameFactor (jTerm, jBase: GetCrossSectionKinFactor of the term's and the base's point)
+// Segment::TermFrameFactor (jTerm, jBase: GetCrossSectionKinFactor of the term's and the base's point)
 double OldTermFrameFactor(double jBase, double jTerm) {
   if (jTerm == 0.0 || jBase == 0.0 || jTerm == jBase) return 1.0;
   return jBase / jTerm;
@@ -102,7 +102,7 @@ double OldRatio(double baseValue, double denominatorValue, double baseConversion
   return ratioValue;
 }
 
-// ESegment::Transmission, ESegment::YieldY0
+// Segment::Transmission, Segment::YieldY0
 double OldTransmission(double n, double s, double *dTds, double *dTdn) {
   const double t = std::exp(-n * s);
   if (dTds) *dTds = -n * t;
@@ -126,7 +126,7 @@ double OldYieldY0(double n, double s, double st, double *dYds, double *dYdst, do
   return s * g;
 }
 
-// ESegment::TransformTerms + TransformedValue on plain arrays.  terms: base first, then components; a yield's
+// Segment::TransformTerms + TransformedValue on plain arrays.  terms: base first, then components; a yield's
 // total term last.  sub[q][j]: sub-point j of term q.  kernel c: the base point's IntegrateTargetEffect, here the
 // linear test kernel sum_j c_j f_j.  doppler: rows of (sub-point, weight) per kernel sub-point (or the one row at
 // the point's energy when !resolution).
@@ -517,9 +517,9 @@ void TestSum(bool natural) {
     t.Natural(in, i, natNew.data(), ws);
     for (std::size_t k = 0; k <= K; k++) okNatural = okNatural && same(natNew[k], natOld[k]);
   }
-  check("Evaluate = ESegment SUM, bit for bit", ok);
+  check("Evaluate = Segment SUM, bit for bit", ok);
   check("Value(i) = Evaluate", okValue);
-  if (natural) check("Natural: per-nucleus terms = ESegment's SetNaturalTerms", okNatural);
+  if (natural) check("Natural: per-nucleus terms = Segment's SetNaturalTerms", okNatural);
 
   // backward: finite differences on a few points (the leaves and the abundances)
   const std::size_t n = 5;
@@ -605,7 +605,7 @@ void TestRatio() {
     ok = ok && same(m[i], OldRatio(num[i], den[i], jn[i], jd[i]));
     if (den[i] == 0.0) nanOk = nanOk && std::isnan(m[i]);
   }
-  check("Evaluate = ESegment RATIO, bit for bit", ok);
+  check("Evaluate = Segment RATIO, bit for bit", ok);
   check("zero (and -0) denominator: NaN", nanOk);
 
   // backward away from den = 0; one point with num = 0
@@ -781,7 +781,7 @@ void TestTransform(bool yield, bool natural, int mode) {
     }
     ok = ok && same(m[i], OldTransformedValue(s));
     if (natural) {
-      // ESegment: naturalTerms[nucleus] += weight * point value, every non-total term
+      // Segment: naturalTerms[nucleus] += weight * point value, every non-total term
       std::vector<OldTT> tt = OldTransformTerms(s);
       std::vector<double> natOld(K + 1, 0.0), natNew(K + 1, 0.0);
       for (std::size_t q = 0; q <= K; q++) natOld[q] += tt[q].weight * point[q][i];
@@ -790,7 +790,7 @@ void TestTransform(bool yield, bool natural, int mode) {
     }
   }
   check("Evaluate = TransformedValue (src/ModelPass.cpp), bit for bit", ok);
-  if (natural) check("Natural = ESegment's SetNaturalTerms", okNat);
+  if (natural) check("Natural = Segment's SetNaturalTerms", okNat);
 
   // backward against finite differences on 3 points
   const std::size_t n = 3;
@@ -1026,7 +1026,7 @@ int main() {
   TestSum(true);
   TestRatio();
   for (int yield = 0; yield <= 1; yield++)
-    for (int natural = 0; natural <= 1 - yield; natural++)  // a sample yield is refused (EData)
+    for (int natural = 0; natural <= 1 - yield; natural++)  // a sample yield is refused (WorkingCopy)
       for (int mode = 0; mode <= 3; mode++) TestTransform(yield == 1, natural == 1, mode);
   TestEdges();
   if (failures) {

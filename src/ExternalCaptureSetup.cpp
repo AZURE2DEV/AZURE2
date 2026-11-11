@@ -15,7 +15,7 @@
 #include "CNuc.h"
 #include "Config.h"
 #include "ECTable.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 #include "GSLException.h"
 
 namespace {
@@ -66,23 +66,23 @@ class ECSignatureHash {
  */
 /// A leaf seen as the walk sees a segment: its pairs, its key and its points.
 struct LeafView {
-  ESegment *segment;
+  const Segment *segment;
   int term;
   int GetEntranceKey() const { return segment->TermEntranceKey(term); }
   int GetExitKey() const { return segment->TermExitKey(term); }
   int GetSegmentKey() const { return segment->TermKey(term); }
-  UnitRange<EPoint> GetPoints(EData &data) const { return segment->TermPoints(data, term); }
+  UnitRange<Unit> GetPoints(WorkingCopy &data) const { return segment->TermPoints(data, term); }
 };
 
 /// The leaves of `data` in the order InitializeLeaves writes their amplitudes.
-std::vector<LeafView> LeafViews(EData &data) {
+std::vector<LeafView> LeafViews(WorkingCopy &data) {
   std::vector<LeafView> views;
-  for (const EData::LeafRef &leaf : data.LeafRefs()) views.push_back({&data.GetSegments()[leaf.first], leaf.second});
+  for (const WorkingCopy::LeafRef &leaf : data.Data().LeafRefs()) views.push_back({&data.Data().GetSegments()[leaf.first], leaf.second});
   return views;
 }
 
 template <class Segments>
-long long WalkECAmplitudes(EData &data, Segments &segments, CNuc *theCNuc, ECSignatureHash *hash,
+long long WalkECAmplitudes(WorkingCopy &data, Segments &segments, CNuc *theCNuc, ECSignatureHash *hash,
                            std::set<int> *pairs) {
   long long count = 0;
   for (auto segment = segments.begin(); segment != segments.end(); segment++) {
@@ -99,7 +99,7 @@ long long WalkECAmplitudes(EData &data, Segments &segments, CNuc *theCNuc, ECSig
         Decay *decay = entrancePair->GetDecay(ir);
         if (hash) {
           // Which block this is, and the final state it captures to.  The
-          // level energy enters every integral (EPoint::CalculateECAmplitudes);
+          // level energy enters every integral (Unit::CalculateECAmplitudes);
           // the ANC does not -- it multiplies the amplitude later -- so it is
           // deliberately left out and can be varied without invalidating.
           hash->Add("segment");
@@ -173,9 +173,9 @@ long long WalkECAmplitudes(EData &data, Segments &segments, CNuc *theCNuc, ECSig
  * different energies.
  */
 
-long long EData::CountECAmplitudes(CNuc *theCNuc, const Config &configure) {
+long long WorkingCopy::CountECAmplitudes(CNuc *theCNuc, const Config &configure) {
   std::vector<LeafView> leaves = LeafViews(*this);
-  return WalkECAmplitudes(*this, GetSegments(), theCNuc, nullptr, nullptr) + WalkECAmplitudes(*this, leaves, theCNuc, nullptr, nullptr);
+  return WalkECAmplitudes(*this, Data().GetSegments(), theCNuc, nullptr, nullptr) + WalkECAmplitudes(*this, leaves, theCNuc, nullptr, nullptr);
 }
 
 /*!
@@ -195,14 +195,14 @@ long long EData::CountECAmplitudes(CNuc *theCNuc, const Config &configure) {
  *
  * Energy shifts: the amplitudes are computed once, here, at the energies the
  * points have at initialization, and are not recomputed when a fit moves a
- * segment's energy shift (ESegment::UpdatePointEnergiesWithShift refreshes the
+ * segment's energy shift (Segment::UpdatePointEnergiesWithShift refreshes the
  * penetrabilities and phases, not the EC amplitudes).  The file is therefore
  * the initial state only, and the signature is taken over the energies at the
  * time the file is written or read, which is the same stage of the same
  * calculation in both cases.
  */
 
-std::string EData::ECSignature(CNuc *theCNuc, const Config &configure) {
+std::string WorkingCopy::ECSignature(CNuc *theCNuc, const Config &configure) {
   ECSignatureHash hash;
   // Bump the version if what goes into the signature changes, so files written
   // under the old definition are recomputed rather than wrongly matched.
@@ -231,7 +231,7 @@ std::string EData::ECSignature(CNuc *theCNuc, const Config &configure) {
 
   std::set<int> pairs;
   hash.Add("data segments");
-  WalkECAmplitudes(*this, GetSegments(), theCNuc, &hash, &pairs);
+  WalkECAmplitudes(*this, Data().GetSegments(), theCNuc, &hash, &pairs);
   hash.Add("component segments");
   std::vector<LeafView> leaves = LeafViews(*this);
   WalkECAmplitudes(*this, leaves, theCNuc, &hash, &pairs);
@@ -266,7 +266,7 @@ std::string EData::ECSignature(CNuc *theCNuc, const Config &configure) {
   return hash.Hex();
 }
 
-std::string EData::ECSignaturePath(const std::string &integralsFile) {
+std::string WorkingCopy::ECSignaturePath(const std::string &integralsFile) {
   return integralsFile + ".sig";
 }
 
@@ -296,7 +296,7 @@ std::string ECProgressBar(int done, int total) {
 // loops' error messages share): one thread at a time writes a whole bar, never interleaved with another's.  Up
 // to dev 0119771 the threads wrote their bars piece by piece without a lock ("Segment #\r\tSegment #1111"),
 // tests/progress_bars.
-void EData::ECProgressRedraw(const Config &configure, const char *segmentKeyOut, const std::atomic<int> &pointIndex,
+void WorkingCopy::ECProgressRedraw(const Config &configure, const char *segmentKeyOut, const std::atomic<int> &pointIndex,
                              int numPoints, time_t &startTime) {
 #pragma omp critical(ec_progress)
   {
@@ -312,12 +312,12 @@ void EData::ECProgressRedraw(const Config &configure, const char *segmentKeyOut,
 }
 
 /*!
- * If external capture amplitudes are to be calculated, EPoint::CalculateECAmplitudes is
- * called for each point with a corresponding external capture component in the EData object.
+ * If external capture amplitudes are to be calculated, Unit::CalculateECAmplitudes is
+ * called for each point with a corresponding external capture component in the WorkingCopy object.
  * Otherwise, the amplitudes are read from the specified file.
  */
 
-int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
+int WorkingCopy::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
   std::ifstream in;
   std::ofstream out;
   std::string outputfile;
@@ -414,7 +414,7 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
   }
   int sumSegmentI = 0;
   int numSumSegments = 0;
-  for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+  for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     if (segment->IsTotalCapture()) {
       numSumSegments = segment->IsTotalCapture();
       sumSegmentI = 1;  // Start at 1 since total capture is now handled within the segment
@@ -450,7 +450,7 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
 #pragma omp parallel for shared(configure, localStop, pointIndex, startTime)
                 for (int i = 1; i <= numPoints; i++) {
                   if (configure.stopFlag || localStop) continue;
-                  EPoint *point = segment->GetPoint(*this, i);
+                  Unit *point = segment->GetPoint(*this, i);
                   // Mapped points compute their own amplitudes too: the
                   // amplitudes are a one-off setup cost, and the intEC file
                   // then has the same layout with and without point mapping.
@@ -477,21 +477,21 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
                   configure.outStream << "\r\tSegment #" << std::setw(12) << segmentKeyOut
                                       << std::setw(0) << " [*************************] 100%" << std::endl;
               }
-              for (EPointIterator point = segment->GetPoints(*this).begin();
+              for (UnitIterator point = segment->GetPoints(*this).begin();
                    point < segment->GetPoints(*this).end(); point++) {
                 {
                   for (int k = 1; k <= entrancePair->GetDecay(ir)->NumKGroups(); k++) {
                     for (int ecm = 1; ecm <= entrancePair->GetDecay(ir)->GetKGroup(k)->NumECMGroups(); ecm++) {
                       if (!usePrevious) {
                         if (out.is_open()) out << point->GetECAmplitude(k, ecm) << std::endl;
-                        for (EPointIterator subPoint = point->GetSubPoints(*this).begin();
+                        for (UnitIterator subPoint = point->GetSubPoints(*this).begin();
                              subPoint < point->GetSubPoints(*this).end(); subPoint++)
                           if (out.is_open()) out << subPoint->GetECAmplitude(k, ecm) << std::endl;
                       } else {
                         complex ecAmplitude(0.0, 0.0);
                         in >> ecAmplitude;
                         point->AddECAmplitude(k, ecm, ecAmplitude);
-                        for (EPointIterator subPoint = point->GetSubPoints(*this).begin();
+                        for (UnitIterator subPoint = point->GetSubPoints(*this).begin();
                              subPoint < point->GetSubPoints(*this).end(); subPoint++) {
                           ecAmplitude = complex(0.0, 0.0);
                           in >> ecAmplitude;

@@ -521,7 +521,7 @@ void Validator::CheckNorm(Work &w) {
   const io::Field *src = Source(w, "norm");
   Diagnostic d = Base(w, "norm", src->line, src->col);
   const std::string mode = NuisanceModeName(n->mode);
-  // Every THM data set with a fitted norm has it profiled (ESegment::IsProfiledNorm), in an experiment or not.
+  // Every THM data set with a fitted norm has it profiled (Segment::IsProfiledNorm), in an experiment or not.
   if (n->mode == NuisanceMode::Profiled && Holds(Condition::Present("thm"), w) == 0) {
     d.hasFound = true;
     d.found = mode;
