@@ -42,7 +42,7 @@ Then the crash fix on top (58db64bb, the same build directory rebuilt, 0 warning
 | all projects, 3 bases, against the table above (`tab-trial24c` vs `tab-trial24`) | 780/753/780 files, all identical |
 | `ctest -R "upgrade\|grad\|consistency"` | 20/20, with the new `upgrade_energy_task_gradient` |
 | `thick_target_resonance` (no free parameter) as a fit with `--use-lm`, `--use-gradient`, plain | exit 0, χ² 30.909423272 in the three (the head before: exit 139 with `--use-lm`) |
-| T2 and 13N fits with `--use-lm` and `--use-gradient`, 200 calls, 1 thread, against the build of the head before (`work/b-trial23`) | every output file identical (4 fits) |
+| T2 and 13N fits with `--use-lm` and `--use-gradient`, run to convergence, 1 thread, against the build of the head before (`work/b-trial23`) | every output file identical (4 fits) |
 
 Not repeated after the fix: the full `ctest`, `run_tests.sh`, the gate (the fix changes one function that only a
 gradient or a row pass reaches; the documents commit after it was checked with the consistency test).
@@ -57,6 +57,8 @@ Logs: `work/director/v4_trial24.*.log`, `gate_trial24.log`, `cls_trial24c.log`.
 - New refusals a user can meet: `E_THM_OLD_LIST`, `E_LAB_JACOBIAN_AT_LIMIT`; a refused format-3 set-up ends with
   its own ERROR line. Listed in `FOR_THE_OWNER.md` ("What users notice").
 - pyazr 3.0.0.dev0 refuses an old file; the engine still reads it until the refusal switch is merged.
+- Found by the director's own slip: `--max-calls 200` (a space instead of `=`) prints "WARNING: Unknown option
+  --max-calls." and the fit runs without a limit. An option the engine does not know should end the run; not changed.
 
 ### Fits and the number of threads, and a crash the director's last verification missed
 
