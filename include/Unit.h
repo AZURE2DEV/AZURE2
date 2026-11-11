@@ -393,6 +393,10 @@ class Unit {
   /// Recompute those at the current, possibly shifted, energy.  Writes this point (and its sub-points) only.
   void RecalcEDependentValues(WorkingCopy *data, CNuc *, const Config &, bool includeSubPoints = true,
                               const ChannelRowSource *rows = nullptr);
+  /// The channel rows the point holds (L_o, sqrt(P), phases per J group and channel; null before they are computed),
+  /// and a holder of them (the node table shares them: NodeTable.h).
+  const EDependentTables *ChannelRows() const { return edep_ ? &*edep_ : nullptr; }
+  SharedTable<EDependentTables> ChannelRowsShared() const { return edep_; }
   /// Empties the per-JGroup rows of the energy-dependent arrays, keeping their storage.
   void ClearEDependentRows();
   /// Store an \f$L_o\f$ element at (J-group, channel).

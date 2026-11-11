@@ -8,6 +8,7 @@
 #include "Segment.h"
 #include "TargetEffect.h"
 #include "NodeTableCache.h"
+#include "NodeTable.h"
 #include "ThmExperiment.h"
 #include "ThmGroup.h"
 #include "EvaluationCount.h"
@@ -209,6 +210,11 @@ class WorkingCopy {
   bool BuildPredictions(CNuc *, const Config &);
   /// The calculation plan of the data set, one task per point, built and checked (CalculationPlan.h).
   void BuildPlan();
+  /// The node table of the stage (NodeTable.h), built at the end of Initialize and shared by the copies; null before.
+  const azure2::NodeTable *Nodes() const { return nodeTable_.get(); }
+  /// AZURE_NODE_CHECK=1 (the point pass, before its tasks): the node table and slots against the units of the plan
+  /// tasks `work`, bit for bit; prints the counts to stderr and returns the number that differ (src/NodeTable.cpp).
+  long CheckNodeTable(CNuc *cnuc, const std::vector<int> &work);
   /// The calculation plan: which task calculates which point (CalculationPlan.h).  Positions only: a shift or a
   /// re-placed sub-point grid leaves it as it is (the energy tasks it gives are rebuilt from the units).
   const azure2::CalculationPlan &Plan() const { return plan_; }
@@ -476,6 +482,7 @@ class WorkingCopy {
   /// The stage's channel table (docs/upgrade/channel_table.md): built by CalcEDependentValues and
   /// InitializeLeaves before their point loops, read-only afterwards, replaced, never written.
   std::shared_ptr<const ChannelTable> channelTable_;
+  std::shared_ptr<const azure2::NodeTable> nodeTable_;  // Nodes(): the stage's, immutable, shared by the copies
   std::shared_ptr<const ChannelTable> BuildChannelTable(CNuc *, const Config &, const std::vector<Unit *> &points);
 };
 

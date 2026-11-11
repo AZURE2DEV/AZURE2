@@ -17,6 +17,7 @@
 #include "CalculationPlan.h"
 #include "Config.h"
 #include "JGroup.h"
+#include "NodeTable.h"
 #include "Profile.h"
 #include "Segment.h"
 #include "RMatrixFunc.h"
@@ -231,6 +232,10 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
 #endif
   if (std::getenv("AZURE_SERIAL_CHI2")) return -1;
   const std::vector<int> work = PassWork(segments);
+  if (azure2::NodeCheckRequested()) {
+    const long differ = CheckNodeTable(theCNuc, work);
+    if (differ) throw std::logic_error("AZURE_NODE_CHECK: " + std::to_string(differ) + " differ (listed above)");
+  }
   AZUREProfile::Timer profileTimer(AZUREProfile::kPoints);
   // A plan task whose calculation threw: the reason (empty: none).  Its point gets NaN (Unit::MarkFailed) after the
   // pass, and its folds do not run.

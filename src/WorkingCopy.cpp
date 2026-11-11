@@ -784,6 +784,8 @@ int WorkingCopy::Initialize(CNuc *compound, const Config &configure) {
   // Where the result record of every point and sub-point lies (Results.h); laid out again when the points change
   // (BeginEvaluation).
   this->LayoutResults(nullptr);
+  // The stage's node table, from the units as the set-up placed them (NodeTable.h).
+  nodeTable_ = azure2::BuildNodeTable(*this, compound, configure);
   this->Freeze();
 
   return 0;
