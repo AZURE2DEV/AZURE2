@@ -621,8 +621,9 @@ void AMatrixFunc::AddAInvMatrixElement(int jGroupNum, int lambdaNum, int muNum, 
 }
 
 /*!
- * Reverse-mode adjoint of one energy point's cross section (angle-integrated or
- * differential), accumulating dlnL/dE and dlnL/dgamma into `accum`.
+ * Reverse mode of one unit's observable: PointTBar (cross section -> T) and TBarAdjoint (T -> level energies and
+ * reduced widths); the gradient over the energy tasks (GradEnergyTasks.cpp) sums the T cotangents of the units of a
+ * T-matrix group between the two.
  *
  * Adjoint convention (consistent throughout, see PLAN.md "Gotchas"):
  *   For a complex intermediate z and the real scalar lnL we store the cotangent
@@ -634,27 +635,18 @@ void AMatrixFunc::AddAInvMatrixElement(int jGroupNum, int lambdaNum, int muNum, 
  *   - The holomorphic inverse A = M^{-1} back-propagates as
  *         Mbar = -A^H * Abar * A^H.
  *
- * Forward chain reproduced here (per point, standard A-matrix):
+ * Forward chain (per point, standard A-matrix):
  *   T(k,m) = [tphase] - uphase ( [1] + umatrix )         ([..] only if chNum==chpNum)
  *   umatrix = sum_{l,l'} 2i sqrtP_en sqrtP_ex gamma_en,l gamma_ex,l' A_j[l][l']
  *   A_j = M_j^{-1},   M_j[r][c] = (E_r - inE) delta_rc - sum_ch gamma_r,ch gamma_c,ch L_ch
  * with the cross-section -> T step depending on whether the point is
  * angle-integrated (quadratic |T_temp|^2 sum) or differential (Legendre
- * interference sum + elastic Coulomb interference).  Returns false (touching
- * nothing) for configurations outside the supported standard path.
+ * interference sum + elastic Coulomb interference).
  */
-bool AMatrixFunc::PointAdjoint(Unit *point, const azure2::Results &results, double fitBar, GradAccum &accum,
-                               const vector_matrix_r *shiftDeriv, int xsComponent,
-                               bool ayCrossSection) {
-  TMatrixCotangent bar;
-  if (!this->PointTBar(point, results, fitBar, bar, xsComponent, ayCrossSection)) return false;
-  this->TBarAdjoint(point, bar, accum, shiftDeriv);
-  return true;
-}
 
 /*!
  * Cross section -> T: the T-matrix cotangents of one point's observable
- * (see PointAdjoint).  Reads the T-matrix held by this object and the
+ * (AMatrixFunc.h).  Reads the T-matrix held by this object and the
  * angle-dependent quantities of `point`.
  */
 bool AMatrixFunc::PointTBar(Unit *point, const azure2::Results &results, double fitBar, TMatrixCotangent &bar,
@@ -1112,7 +1104,7 @@ bool AMatrixFunc::PointTBar(Unit *point, const azure2::Results &results, double 
 }
 
 /*!
- * T -> level energies and reduced widths (see PointAdjoint), at the energy of
+ * T -> level energies and reduced widths (AMatrixFunc.h), at the energy of
  * `energyPoint`, whose T-matrix this object holds.
  */
 void AMatrixFunc::TBarAdjoint(Unit *energyPoint, const TMatrixCotangent &bar, GradAccum &accum,

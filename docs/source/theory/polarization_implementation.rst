@@ -352,14 +352,14 @@ Differentiating it
 The analyzing power has an exact adjoint, which matters because without one a
 fit either falls back to numerical derivatives or -- worse -- uses the wrong
 ones. Before this was written, an analyzing-power point fell through
-``AMatrixFunc::PointAdjoint`` into the differential-cross-section branch, since
+``AMatrixFunc::PointTBar`` into the differential-cross-section branch, since
 :math:`A_y` segments are flagged differential. It silently returned
 :math:`\partial\sigma/\partial p` where :math:`\partial A_y/\partial p` was
 wanted.
 
 One structural fact makes the derivative easy. ``AddPathway`` is called in a
 loop over exactly the ``(k, m)`` K-group and M-group indices that
-``PointAdjoint`` uses for its T-matrix cotangents ``tBar``, so the forward and
+``PointTBar`` uses for its T-matrix cotangents ``tBar``, so the forward and
 reverse passes are the same loop and no index mapping is needed. And since
 :math:`M` is *linear* in :math:`T`, the coefficient that ``AddPathway``
 multiplies :math:`T` by **is** the derivative:
@@ -469,7 +469,8 @@ coefficient table, ``GenMatrixFunc::CalculateCaptureAnalyzingPower`` evaluates
    A_y(\theta) = \frac{\sum_k b_k P_k^1(\cos\theta)}
                       {\sum_k a_k P_k(\cos\theta)}
 
-and ``AMatrixFunc::PointAdjoint`` differentiates it. The forward evaluation
+and ``AMatrixFunc::PointTBar`` differentiates it (its T-matrix cotangents are then
+back-propagated with the other units at the same energy, ``AMatrixFunc::TBarAdjoint``). The forward evaluation
 consumes the T-matrix elements the code has already computed, external capture
 included: a term may pair two internal pathways, two external ones, or one of
 each, exactly as the ``Interference`` objects of the unpolarized angular

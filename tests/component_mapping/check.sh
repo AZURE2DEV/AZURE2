@@ -21,7 +21,8 @@
 #   (b) the level-matrix solutions do not depend on the mapping (AZURE_PROFILE): since the energy tasks
 #       (docs/upgrade/energy_grid.md section 8) there is one per distinct compound energy with or without it;
 #   (c) without the ratio: a fit with the analytic gradient starts from the chi2 of the calculation, the gradient
-#       (one level-matrix solution for all terms of a composite point, AZUREGrad GradOnePoint) agrees with finite
+#       (one level-matrix adjoint per compound energy for all terms of a composite point, src/GradEnergyTasks.cpp)
+#       agrees with finite
 #       differences of the mapped evaluation, and the Jacobian path with the adjoint (AZURE_GRAD_CHECK).
 #
 #   ./tests/component_mapping/check.sh path/to/AZURE2

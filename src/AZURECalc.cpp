@@ -1140,7 +1140,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
           if (nAll[k]) std::cerr << " " << kindName[k] << " " << nBadJ[k] << "/" << nAll[k];
       }
       std::cerr << std::endl;
-      // Full precision, so two runs (e.g. AZURE_NO_GROUPED_GRADIENT) can be
+      // Full precision, so two runs (e.g. two builds, or two thread counts) can be
       // compared value by value; AZURE_GRAD_CHECK_ROWS lists more than 60.
       const std::streamsize prec = std::cerr.precision(15);
       const int maxRows = std::getenv("AZURE_GRAD_CHECK_ROWS") ? std::atoi(std::getenv("AZURE_GRAD_CHECK_ROWS")) : 60;
