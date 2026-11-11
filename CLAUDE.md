@@ -254,6 +254,20 @@ The objective gets no new term: T9, `ModelDataTerm`, evaluates every row of `<mo
 
 **A CLI flag.** `parseOptions`, `printHelp` and `docs/source/reference/command_line.rst` [check 1].
 
+**A new regression check** (`tests/<name>/check.sh`; `tests/CLAUDE.md` for the house pattern). A variant of a
+project is made on its format-3 records, and every edit must be shown to bite: an edit that matches nothing leaves
+the variant equal to the base, and the check then compares a run with itself and passes without testing anything.
+1. Edit through the guard of `tests/lib/edit_guard.sh`: `edited SRC DEST awk '...'` (or `sed`, `perl`, a shell
+   function) fails when DEST would equal SRC; `must_differ A B` for a variant made another way (a heredoc, pyazr).
+   THM records through `tests/lib/thm_records.sh` (it fails on a data set that is not there).
+2. Where the check's logic needs the variant's result to differ from the base, assert that it does (a number, an
+   output file), not only that the run ended.
+3. Inject the error the check protects against once (a one-line engine change in a scratch build), see it fail, and
+   say so in the commit message.
+4. `tools/edit_audit.sh <AZURE2> <dir> <name>` then `python3 tools/edit_audit_report.py <dir> --details` lists every
+   edit that hit nothing and every pair of runs with different inputs and equal outputs
+   (`docs/upgrade/format3_tree.md` section 7).
+
 **A new kind of fit parameter** (a nuisance, an apparatus parameter; `docs/upgrade/parameter_kinds.md`). What a
 parameter is lives in its record, never in its name [check 23: no prefix or suffix test of a parameter name].
 1. `include/ParameterKind.h`: the enum value (the next code) and its `ParamKindTable()` row (key, unit, owner fields,

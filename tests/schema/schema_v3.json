@@ -3744,6 +3744,10 @@
    "severity": "error",
    "meaning": "a thm field naming an experiment that <thm> has no experiment[<name>] line for"
   },
+  "E_THM_OLD_LIST": {
+   "severity": "error",
+   "meaning": "an old member or weight list in <thm> (segments=, weight[<k>]=, weightTest[<k>]=): in format 3 the data set's thm and thm_weight fields say it"
+  },
   "E_FOLD_CONFLICT": {
    "severity": "error",
    "meaning": "data sets sharing a target with a free parameter differ in beam, detector or quadrature"
@@ -3775,6 +3779,10 @@
   "E_STOPPING_RANGE": {
    "severity": "error",
    "meaning": "a target's stopping asked for at an energy outside its range: SRIM's above 1e7 keV/u, or a table's ends (set-up)"
+  },
+  "E_LAB_JACOBIAN_AT_LIMIT": {
+   "severity": "error",
+   "meaning": "a laboratory-frame differential datum at the kinematic maximum lab angle, where dOmega_lab/dOmega_cm is 0 and the lab-frame model diverges (set-up)"
   },
   "E_POTENTIAL_TWICE": {
    "severity": "error",

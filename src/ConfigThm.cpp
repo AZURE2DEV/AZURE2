@@ -15,24 +15,23 @@
 
 namespace {
 
-// The <thm> section of a format-3 project in the grammar read below (Format3ThmLines, ThmBlockEdits.h), or why in
-// `why` when the section does not define an experiment an active data set names (one that only inactive data sets
-// name is ignored, defined or not).  A project without the section whose active data sets name an experiment, or
-// whose records name a weight table, reads an empty one: the members and weights are in the records.
+// The <thm> section of a format-3 project in the grammar read below (Format3ThmLines, ThmBlockEdits.h), with the
+// names of its experiments that no active data set names in `idle` (ignored).  A project without the section whose
+// active data sets name an experiment, or whose records name a weight table, reads an empty one: the members and
+// weights are in the records.  `why` is the internal guard CheckFormat3ThmMembers (the reading refuses first).
 std::unique_ptr<std::istream> Format3ThmSection(std::istream *in, const azure2::experiment::ThmMembershipSpec &thm,
-                                                std::string &why) {
-  azure2::experiment::ThmMembershipSpec used = thm;
-  used.experiments.erase(std::remove_if(used.experiments.begin(), used.experiments.end(),
-                                        [](const azure2::experiment::ThmMembershipSpec::Experiment &x) { return x.datasetKeys.empty(); }),
-                         used.experiments.end());
+                                                std::vector<std::string> &idle, std::string &why) {
+  bool members = false;
+  for (const auto &x : thm.experiments) members = members || !x.datasetKeys.empty();
   std::vector<std::string> lines;
   if (in)
     for (std::string line; std::getline(*in, line);) lines.push_back(line);
-  else if (!used.experiments.empty() || !thm.datasetWeights.empty() || !thm.extrapolationWeights.empty())
+  else if (members || !thm.datasetWeights.empty() || !thm.extrapolationWeights.empty())
     lines = {"<thm>", "</thm>"};
   else
     return nullptr;
-  why = CheckFormat3ThmMembers(lines, used);
+  why = CheckFormat3ThmMembers(lines, thm);
+  idle = ThmExperimentsWithoutMembers(lines, thm);
   std::string text;
   for (const std::string &line : Format3ThmLines(lines, thm)) text += line + "\n";
   return std::unique_ptr<std::istream>(new std::istringstream(text));
@@ -61,12 +60,13 @@ int Config::ReadThmBlock() {
   std::unique_ptr<std::istream> section = SectionStream("thm");
   if (format3) {
     std::string why;
-    section = Format3ThmSection(section.get(), format3->built.thm, why);
+    std::vector<std::string> idle;
+    section = Format3ThmSection(section.get(), format3->built.thm, idle, why);
     if (!why.empty()) {
       outStream << "ERROR: " << why << std::endl;
       return -1;
     }
-    for (const std::string &name : ThmExperimentsWithoutMembers(format3->built.thm))
+    for (const std::string &name : idle)
       outStream << "WARNING: <thm> experiment[" << name << "] has no data set in use; ignored." << std::endl;
   }
   if (!section) return 0;  // optional block, absent

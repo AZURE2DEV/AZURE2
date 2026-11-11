@@ -678,6 +678,21 @@ int main() {
       check("... with every record active it is refused", codesOf(inactive) == std::vector<std::string>{"E_THM_EXPERIMENT_UNKNOWN@10"});
       if (wrong.size() != 1)
         for (const std::string &c : wrong) std::printf("        got %s\n", c.c_str());
+      // the old member and weight lists of <thm> are refused at their line, with the record field to use
+      read.allRecordsActive = false;
+      const std::string members = "<thm>\n  experiment[LC09] beam=15N target=d spectator=n Ebeam=60 segments=1 # x\n</thm>\n";
+      const std::string weights = "<thm>\nweight[1]=w.dat\n  experiment[LC09] beam=15N target=d spectator=n Ebeam=60\n</thm>\n";
+      const std::string comment = "<thm>\n  experiment[LC09] beam=15N target=d spectator=n Ebeam=60 # segments=1\n</thm>\n";
+      const std::vector<std::string> oldMembers = codesOf(Data(thm + "    thm LC09\n") + members);
+      const std::vector<std::string> oldWeights = codesOf(Data(thm + "    thm LC09\n") + weights);
+      check("E_THM_OLD_LIST alone, at the line of segments= and of weight[k]=",
+            oldMembers == std::vector<std::string>{"E_THM_OLD_LIST@13"} && oldWeights == oldMembers);
+      if (oldMembers.size() != 1)
+        for (const std::string &c : oldMembers) std::printf("        got %s\n", c.c_str());
+      check("... not in a comment", codesOf(Data(thm + "    thm LC09\n") + comment).empty());
+      const std::vector<Diagnostic> old = ReadFormat3Text(Data(thm + "    thm LC09\n") + members, read).diagnostics;
+      check("... the message names the record field (thm LC09)",
+            old.size() == 1 && old[0].message.find("'thm LC09'") != std::string::npos && old[0].found == "segments=");
     }
   }
 

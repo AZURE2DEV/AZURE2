@@ -320,6 +320,13 @@ void Builder::BuildSamples() {
     const int i = sampleOfLine("test line " + std::to_string(kv.first), kv.second->parsed->entranceKey(), kv.second->parsed->natural());
     if (i >= 0) sampleOfTest_[kv.first] = i;
   }
+  // An inactive line keeps the sample it names: its data set gets the sample's target (NameApparatus), so that
+  // switching it on gives the old line's meaning.  The old engine did not read it, so a sample it names that does not
+  // exist is no refusal: the line is written without one.
+  for (const OldDataLine &d : old_.data)
+    if (!activeData_.count(d.key) && sampleIndex(d.parsed->natural()) >= 0) inactiveSampleOfData_[d.key] = sampleIndex(d.parsed->natural());
+  for (const OldTestLine &t : old_.tests)
+    if (!activeTest_.count(t.key) && sampleIndex(t.parsed->natural()) >= 0) inactiveSampleOfTest_[t.key] = sampleIndex(t.parsed->natural());
 }
 
 // A Doppler-only <targetInt> line (no integration, no screening) on neutron-sample lines only (transmission or yield,
@@ -384,7 +391,17 @@ void Builder::NameApparatus() {
       }
     for (const auto &kv : sampleOfTest_)
       if (kv.second == si) addTerms(activeTest_[kv.first]->parsed->entranceKey(), activeTest_[kv.first]->parsed->components());
+    // The inactive lines of the sample (they get its own target below).
+    std::vector<std::string> inactive;
+    for (const auto &kv : inactiveSampleOfData_)
+      if (kv.second == si) inactive.push_back("data line " + std::to_string(kv.first));
+    for (const auto &kv : inactiveSampleOfTest_)
+      if (kv.second == si) inactive.push_back("test line " + std::to_string(kv.first));
     if (users.empty() && nucleusOfCompound.empty()) {
+      if (!inactive.empty() && res_.refusal.empty())
+        res_.refusal = inactive[0] + " is inactive and names sample \"" + smp.name + "\", which no active line uses: format 3 "
+                       "writes a sample as the target of its data sets, and an inactive data set keeps the target it names; "
+                       "switch the line on or remove its sample in the original";
       Note(Construct::kAbundances, "", "sample '" + smp.name + "' is used by no active line: its abundances are dropped");
       continue;
     }
@@ -539,6 +556,25 @@ void Builder::NameApparatus() {
         if (kv.second == si && !(apparatusOfTest_.count(kv.first) && apparatus_[apparatusOfTest_[kv.first]].hasTarget))
           sampleTargetOfTest_[kv.first] = sampleTarget;
     }
+    // An inactive line of the sample names the sample's own target; where the sample's isotopes sit on a <targetInt>
+    // target only (no own target), the inactive line has no target to name (its <targetInt> line, if any, is not
+    // converted with it): refused, as a record that changes meaning when switched on.
+    for (const auto &kv : inactiveSampleOfData_)
+      if (kv.second == si) {
+        if (ownTarget) sampleTargetOfData_[kv.first] = sampleTarget;
+        else if (res_.refusal.empty())
+          res_.refusal = "data line " + std::to_string(kv.first) + " is inactive and names sample \"" + smp.name +
+                         "\", whose isotopes are written on a <targetInt> target only: format 3 has no target for it to keep; "
+                         "switch the line on or remove its sample in the original";
+      }
+    for (const auto &kv : inactiveSampleOfTest_)
+      if (kv.second == si) {
+        if (ownTarget) sampleTargetOfTest_[kv.first] = sampleTarget;
+        else if (res_.refusal.empty())
+          res_.refusal = "test line " + std::to_string(kv.first) + " is inactive and names sample \"" + smp.name +
+                         "\", whose isotopes are written on a <targetInt> target only: format 3 has no target for it to keep; "
+                         "switch the line on or remove its sample in the original";
+      }
     for (const auto &p : params)
       Param(p.first, (ownTarget ? sampleTarget : "@sample" + std::to_string(*targetApparatus.begin())) + ".isotope." + p.second);
   }

@@ -363,6 +363,7 @@ class Builder {
   std::map<int, int> apparatusOfData_, apparatusOfTest_;  // key -> index into apparatus_
   std::vector<Sample> samples_;
   std::map<int, int> sampleOfData_, sampleOfTest_;  // key -> index into samples_
+  std::map<int, int> inactiveSampleOfData_, inactiveSampleOfTest_;  // the same for inactive lines (their target only)
   std::map<int, std::string> sampleTargetOfData_, sampleTargetOfTest_;  // key -> target name for a sample without <targetInt>
   std::vector<io::Record> sampleTargets_;
   std::vector<io::Record> groupRecords_;  // normalization and energy_scale

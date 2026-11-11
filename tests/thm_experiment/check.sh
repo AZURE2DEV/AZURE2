@@ -24,8 +24,10 @@
 #   (d) what AZURE2 refuses (ERROR line, non-zero exit): the reserved key theta, a bad distortion,
 #       an unknown key or nuclide, a malformed value, partial kinematics, a
 #       segment that has a fixed norm, kinematics that do not make the entrance
-#       pair; the old segments= lists (a malformed or huge one, a segment in two
-#       experiments, past the last line or not THM) refused by the converter.
+#       pair, an old segments= list in a format-3 <thm> (E_THM_OLD_LIST); an
+#       experiment no data set names is ignored with a warning; the old segments=
+#       lists (a malformed or huge one, a segment in two experiments, past the
+#       last line or not THM) refused by the converter.
 #
 #   ./tests/thm_experiment/check.sh path/to/AZURE2
 
@@ -203,7 +205,25 @@ refuse bad_explicit "expected Z,A,mass" "experiment[A] beam=18O target=2,1,2.013
 refuse partial_kinematics "all four or none" "experiment[A] beam=18O target=d"
 MEMBERS=lc723_thm_points refuse bad_background "expected none, const, linear or quadratic" "experiment[A] background=cubic"
 refuse bad_ebeam "Ebeam='-3'" "experiment[A] beam=18O target=d spectator=n Ebeam=-3"
-MEMBERS= refuse no_segments "segments= is required" "experiment[A] background=linear"   # no data set names A
+# An experiment no data set names is ignored with a warning, as one only inactive data sets name: one behaviour, one
+# message (was refused with the old grammar's "segments= is required").  Its run is the base run.
+MEMBERS= run no_members "experiment[A] background=linear"
+if [ "$(cat "$WORK/no_members/status")" = 0 ] &&
+   grep -q "WARNING: <thm> experiment\[A\] has no data set in use; ignored." "$WORK/no_members/log" &&
+   ! grep -q "segments= is required" "$WORK/no_members/log" && same "$WORK/base/output/$OUT" "$WORK/no_members/output/$OUT"; then
+  ok "no_members: an experiment no data set names is ignored with the warning; the outputs are the base run's"
+else
+  bad "no_members: status $(cat "$WORK/no_members/status"), $(grep -m1 -E 'ERROR|WARNING: <thm>' "$WORK/no_members/log" | tr -d '\r')"
+fi
+# The old member list in a format-3 <thm> section is refused when the project is read, naming the record field to use.
+run old_members "experiment[A] segments=1,2"
+if [ "$(cat "$WORK/old_members/status")" != 0 ] &&
+   grep -q "error E_THM_OLD_LIST: <thm> experiment\[A\]: segments= is the old member list; in format 3 a data set joins the experiment with its field 'thm A'" "$WORK/old_members/log"; then
+  ok "old_members: $(grep -m1 'E_THM_OLD_LIST' "$WORK/old_members/log" | tr -d '\r')"
+else
+  bad "old_members: segments= in a format-3 <thm> not refused with E_THM_OLD_LIST (status $(cat "$WORK/old_members/status"))"
+  tail -3 "$WORK/old_members/log" | sed 's/^/        /'
+fi
 refuse no_space "expected a space after ']'" "experiment[A]background=linear"
 refuse repeated_key "is given twice" "experiment[A] background=linear
 experiment[A] background=const"

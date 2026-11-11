@@ -8,6 +8,7 @@
 #include "azure2/io/Document.h"
 #include "azure2/io/LevelRows.h"
 #include "azure2/io/RecordReader.h"
+#include "azure2/experiment/ThmSectionLines.h"
 
 namespace azure2 {
 namespace experiment {
@@ -32,21 +33,43 @@ std::shared_ptr<const io::LevelSection> LevelSectionOf(const io::Document &doc) 
   return std::make_shared<const io::LevelSection>(io::ReadLevelSection(in));
 }
 
-// The names of the experiment[<name>] lines of <thm> (a line's text before '#', trimmed; the rest of the line is the
-// THM block's grammar, read by the engine: src/ConfigThm.cpp).
+// The names of the experiment[<name>] lines of <thm> (ReadThmSectionLine; the rest of the line is the THM block's
+// grammar, read by the engine: src/ConfigThm.cpp).
 std::set<std::string> ThmExperimentNames(const io::Document &doc) {
   std::set<std::string> names;
   const io::Document::Section *s = doc.Find("thm");
   if (!s) return names;
-  const std::string open = "experiment[";
   for (const std::string &line : doc.Body(*s)) {
-    const std::string text = line.substr(0, line.find('#'));
-    const std::size_t at = text.find_first_not_of(" \t");
-    if (at == std::string::npos || text.compare(at, open.size(), open) != 0) continue;
-    const std::size_t close = text.find(']', at + open.size());
-    if (close != std::string::npos) names.insert(text.substr(at + open.size(), close - at - open.size()));
+    const ThmSectionLine l = ReadThmSectionLine(line);
+    if (l.experiment && l.text.find(']') != std::string::npos) names.insert(l.name);
   }
   return names;
+}
+
+// The old member and weight lists (segments= on an experiment line, weight[<k>]= / weightTest[<k>]=) do not exist in
+// format 3 (project_format3.md section 3.9): the records say which data sets an experiment has and their weights.
+// The engine would otherwise read such a list beside the members the records give.
+void CheckThmOldLists(const io::Document &doc, std::vector<Diagnostic> &out) {
+  const io::Document::Section *s = doc.Find("thm");
+  if (!s) return;
+  const std::vector<std::string> body = doc.Body(*s);
+  for (std::size_t i = 0; i < body.size(); i++) {
+    const ThmSectionLine l = ReadThmSectionLine(body[i]);
+    std::string field;
+    const std::string key = ThmOldListKey(l, field);
+    if (key.empty()) continue;
+    Diagnostic d;
+    d.code = codes::kThmOldList;
+    d.line = (int)(s->open + 2 + i);
+    d.section = "thm";
+    d.hasFound = true;
+    d.found = key + "=";
+    d.message = l.experiment ? "<thm> experiment[" + l.name + "]: segments= is the old member list; in format 3 a data set "
+                                   "joins the experiment with its field '" + field + "'"
+                             : "<thm> " + key + "= is the old weight list; in format 3 the data set or extrapolation names "
+                                   "its weight table with its field '" + field + "'";
+    out.push_back(d);
+  }
 }
 
 // Every `thm <name>` of an active data set or extrapolation names an experiment of <thm> (`global` names none):
@@ -107,6 +130,7 @@ Format3Project ReadFormat3Project(const io::Document &doc, const Format3ReadOpti
   p.validated = Schema::Validate(sections);
   p.diagnostics.insert(p.diagnostics.end(), p.validated.diagnostics.begin(), p.validated.diagnostics.end());
   CheckThmExperimentNames(doc, p.validated, options.allRecordsActive, p.diagnostics);
+  CheckThmOldLists(doc, p.diagnostics);
   // The old <potential> block is not read in format 3 (its default section would give a potential to pairs the file
   // does not name): the converter writes one potential record per pair.
   if (const io::Document::Section *old = doc.Find("potential")) {

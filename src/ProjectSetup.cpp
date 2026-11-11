@@ -76,7 +76,8 @@ bool ReportUnreadDataFiles(const Config &configure, bool dataRun) {
 int WorkingCopy::Fill(const Config &configure, CNuc *theCNuc) {
   if (configure.format3) {
     if (ReportUnreadDataFiles(configure, true)) return kFillRefused;
-    return this->Fill(configure, theCNuc, configure.format3->built.data);
+    // Every refusal of the set-up prints its ERROR line before it returns: that line ends the run (WorkingCopy.h).
+    return this->Fill(configure, theCNuc, configure.format3->built.data) == 0 ? 0 : kFillRefused;
   }
   bool present = false;
   const azure2::experiment::DataSpecs specs = OldDataSpecs(configure, present);
@@ -86,7 +87,7 @@ int WorkingCopy::Fill(const Config &configure, CNuc *theCNuc) {
 int WorkingCopy::MakePoints(const Config &configure, CNuc *theCNuc) {
   if (configure.format3) {
     ReportUnreadDataFiles(configure, false);
-    return this->MakePoints(configure, theCNuc, configure.format3->built.extrapolations);
+    return this->MakePoints(configure, theCNuc, configure.format3->built.extrapolations) == 0 ? 0 : kFillRefused;
   }
   bool present = false;
   const azure2::experiment::ExtrapolationSpecs specs = OldExtrapolationSpecs(configure, present);

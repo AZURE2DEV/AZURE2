@@ -9,7 +9,9 @@
 # out-of-bounds write (an _GLIBCXX_ASSERTIONS build aborts there).  Only a width is converted now (the parameter's
 # record says what it is); any other kind keeps its settings as given.
 #
-#   screening   tests/screening_6li/fit.azr (screening_1 free), row "screening_1 300 0 1000 50 0 1 ..."
+#   screening   tests/screening_6li/fit.azr (tgt_cruz_metal.screening free), row
+#               "tgt_cruz_metal.screening 300 0 1000 50 0 1 ..." (a row names a parameter by its record name; the row
+#               must name one of the run's parameters, as its param.par lists them, or it would be ignored)
 #               -> the run completes, chi2 equal to the run without the row (a screening potential carries its
 #                  own prior; the nuisance flag adds nothing)
 #   cbkg        tests/thm_coherent_background/toy with cbackground=1/2+:2=0.05,-0.08 (Re c0, Im c0 free), row
@@ -50,14 +52,17 @@ TOY="$WORK/toy"
 THM='<thm>\nexperiment[E] cbackground=1/2+:2=0.05,-0.08\n</thm>\n'
 
 s0="$(run s0 "$SCR" fit.azr "")"
-s1="$(run s1 "$SCR" fit.azr '<parameterSettings>\nscreening_1 300 0 1000 50 0 1 screening 0\n</parameterSettings>\n')"
+SCREENING=tgt_cruz_metal.screening
+s1="$(run s1 "$SCR" fit.azr "<parameterSettings>\n$SCREENING 300 0 1000 50 0 1 screening 0\n</parameterSettings>\n")"
 t0="$(run t0 "$TOY" toy.azr "$THM")"
 t1="$(run t1 "$TOY" toy.azr "$THM"'<parameterSettings>\ncbkg_E_1/2+_2_1/2,0,1/2,0_re0 0 0 0 0.01 0 1 level 0\n</parameterSettings>\n')"
 echo "  chi2: screening $s0, with its nuisance row $s1;  cbkg $t0, with its nuisance row $t1"
 
 bad=0
-if [ "$(cat "$WORK/s1/status")" = 0 ] && [ -n "$s1" ] && [ "$s1" = "$s0" ]; then
-  echo "  ok    screening: a nuisance row on screening_1 runs and adds nothing (its own prior)"
+if ! awk -v n="$SCREENING" '$1 == n { found = 1 } END { exit !found }' "$WORK/s0/output/param.par" 2> /dev/null; then
+  echo "  FAIL  screening: $SCREENING is not a parameter of the run (its param.par): the row would name nothing"; bad=1
+elif [ "$(cat "$WORK/s1/status")" = 0 ] && [ -n "$s1" ] && [ "$s1" = "$s0" ]; then
+  echo "  ok    screening: a nuisance row on $SCREENING runs and adds nothing (its own prior)"
 else
   echo "  FAIL  screening: status $(cat "$WORK/s1/status"), chi2 '$s1' (without the row '$s0')"; tail -3 "$WORK/s1/run.log"; bad=1
 fi

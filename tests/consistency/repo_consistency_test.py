@@ -822,6 +822,25 @@ for rel in tracked_files():
 if not OLD_DATA_NAME.search("EData *ld = data();") or OLD_DATA_NAME.search("EDataLike ECAmplitudeCache"):
     problems.append("check 31: the old-name pattern no longer matches the forms it guards; update this check")
 
+# 33. A check's text edits can be shown to bite (docs/upgrade/format3_tree.md section 7): an edit in place (sed -i,
+#     perl -i, awk -i inplace) leaves no copy to compare with, so a pattern that matches nothing goes unnoticed; a
+#     tests/*/check.sh edits through tests/lib/edit_guard.sh (`edited SRC DEST awk ...`) instead.  The checks listed
+#     in IN_PLACE_AUDITED had in-place edits when the rule came in, and tools/edit_audit.sh showed that each of them
+#     changes its file; a new in-place edit elsewhere is listed.
+IN_PLACE = re.compile(r"\bsed\s+(?:-[a-zA-Z]+\s+)*-i|\bperl\s+-[a-zA-Z0-9]*i|\bawk\s+-i\s+inplace")
+IN_PLACE_AUDITED = {"data_covariance", "format3_engine", "extrapolation_grids", "validate_run_refusals"}
+for name in sorted(os.listdir(os.path.join(ROOT, "tests"))):
+    rel = f"tests/{name}/check.sh"
+    if name in IN_PLACE_AUDITED or not os.path.isfile(os.path.join(ROOT, rel)):
+        continue
+    for number, line in enumerate(read(rel).splitlines(), 1):
+        if not line.lstrip().startswith("#") and IN_PLACE.search(line):
+            problems.append(f"{rel}:{number}: edits a file in place; edit through tests/lib/edit_guard.sh (`edited SRC "
+                            "DEST awk ...`), which fails when the edit changes nothing (check 33)")
+if not IN_PLACE.search("sed -i.bak 's/a/b/' t.azr") or not IN_PLACE.search("perl -pi -e 's/a/b/' t.azr") or \
+        IN_PLACE.search("sed 's/a/b/' t.azr > u.azr"):
+    problems.append("check 33: the in-place pattern no longer matches the forms it guards; update this check")
+
 if problems:
     for p in problems:
         print("FAIL", p)

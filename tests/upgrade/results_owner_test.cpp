@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
   CNuc compound;
   WorkingCopy data;
   AZUREParams params;
-  if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg) == -1 || data.Fill(cfg, &compound) == -1) {
+  if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg) == -1 || data.Fill(cfg, &compound) != 0) {
     check("T2 loads", false, sink.str().substr(0, 400));
     return 1;
   }
