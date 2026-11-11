@@ -81,3 +81,29 @@ Not moved (they have analytic routes and parameter names that every project's `p
 - **Sample thickness** (kind 10): a parameter of a segment's transform, not of an effect: a row keyed on the segment
   (owner field `segment`), with the transform's backward as its derivative (`'t'`).  It is the furthest from an
   apparatus record of the three.
+
+## 4. The derivative
+
+Every apparatus parameter is differenced on the whole χ² (`Gradient` and `FillShiftColumns` in `src/AZURECalc.cpp`,
+the LM columns of `AZUREAPI::ResidualJacobian` with THM data), the route of the density: no case is needed.  A kernel's
+analytic `derivative` (∂Y/∂w of the rectangular and triangular windows, tested against central differences in
+`kernels_test.cpp`) is **not** used by the gradient yet: that needs, at the one place the gradient collects parameter
+cotangents (`src/GradEnergyTasks.cpp`, `ParamCotangent` with the characters `'a'`, `'d'`, `'t'` and `GradAccum`'s three
+vectors), a fourth entry keyed by (kind, index) and the point's fold cotangent times `Kernel::derivative` for a point
+whose only fold is that kernel.  Not done on this branch (see the HANDOFF entry); the three characters are untouched.
+
+## 5. What a new fitted parameter costs (measured)
+
+| | before (the stopping scale, commit fdd11148) | after: a table kernel's parameter (the triangular width, commit bea56a6f) |
+|---|---|---|
+| engine files (`src/`, `include/`, `api/`, `pyazr/`) edited | 20 (listed in §1) + 1 new | **0** |
+| other existing files edited | (the stopping feature itself also edited experiment/ and tests: not counted here) | `experiment/src/Kernels.cpp` (2 lines), `experiment/CMakeLists.txt` (1), `experiment/tests/kernels_test.cpp` (+48), `tests/rectangular_resolution/check.sh` (+38), `tests/schema/schema_v3.json` and `docs/source/reference/format3.rst` (regenerated), `energy_grid.md`, `experimental_effects.rst`, `edata_and_target_effects.rst` (a row or sentence each) |
+| new files | `src/StoppingScale.cpp`, `TargetStopping.*`, a test project | `experiment/src/KernelTriangular.cpp` (68 lines) |
+| time | a branch | about 6 minutes to the passing fit |
+
+A number that reaches the calculation in some other way than as a kernel's value (as the stopping scale re-sets the
+sub-points' stopping) is a new **row**: one function file (declare, write, read, follow; `src/StoppingScale.cpp` is
+the pattern), one line in `ApparatusRows()` and one declaration in `include/ApparatusParameters.h`, the file in
+`src/CMakeLists.txt`; plus, if the value lives in a new member of the working copy's effect values, that member
+(`include/SegmentState.h`).  Still not free: a parameter that is not an apparatus record's (of a segment, of a level,
+of a THM experiment) is a kind of its own (`CLAUDE.md`, "A new kind of fit parameter").
