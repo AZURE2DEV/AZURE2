@@ -132,7 +132,7 @@ struct Model {
     if (cfg.ReadConfigFile() < 0) return false;
     compound = new CNuc();
     data = new WorkingCopy();
-    if (compound->Fill(cfg) == -1 || data->Fill(cfg, compound) == -1) return false;
+    if (compound->Fill(cfg) == -1 || data->Fill(cfg, compound) != 0) return false;
     compound->Initialize(cfg);
     compound->FillMnParams(params, &cfg);
     data->FillMnParams(params);

@@ -140,7 +140,7 @@ void RunProject(const std::string &path) {
   WorkingCopy data;
   AZUREParams params;
   try {
-    if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg) == -1 || data.Fill(cfg, &compound) == -1) {
+    if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg) == -1 || data.Fill(cfg, &compound) != 0) {
       notSetUp++;
       std::printf("  --    %s: does not set up\n", path.c_str());
       return;

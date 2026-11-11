@@ -191,7 +191,7 @@ int RunProject(const std::string &path, bool externalCapture) {
   CNuc compound;
   WorkingCopy data;
   AZUREParams params;
-  if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg) == -1 || data.Fill(cfg, &compound) == -1) {
+  if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg) == -1 || data.Fill(cfg, &compound) != 0) {
     check("loads", false, sink.str().substr(0, 400));
     return 1;
   }
@@ -212,7 +212,7 @@ int RunProject(const std::string &path, bool externalCapture) {
     CNuc compound2;
     WorkingCopy data2;
     AZUREParams params2;
-    const bool loaded = cfg2.ReadConfigFile() >= 0 && compound2.Fill(cfg2) != -1 && data2.Fill(cfg2, &compound2) != -1;
+    const bool loaded = cfg2.ReadConfigFile() >= 0 && compound2.Fill(cfg2) != -1 && data2.Fill(cfg2, &compound2) == 0;
     if (loaded) {
       compound2.Initialize(cfg2);
       compound2.FillMnParams(params2, &cfg2);
