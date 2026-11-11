@@ -14,6 +14,7 @@
 #include "Segment.h"
 #include "Kinematics.h"
 #include "PPair.h"
+#include "PointFold.h"
 #include "TargetEffect.h"
 #include "azure2/physics/AstrophysicalFactor.h"
 #include "azure2/physics/CoulombScattering.h"
@@ -35,9 +36,9 @@ double CoulombReferenceValue(const WorkingCopy &data, Unit *point, experiment::L
   if (!Segment::HasSubPointIntegration(data, point)) return at(point);
   std::vector<double> sub(static_cast<std::size_t>(point->NumSubPoints()));
   for (int j = 1; j <= point->NumSubPoints(); j++) sub[j - 1] = at(point->GetSubPoint(data, j));
-  double folded = point->IntegrateSubPointValues(data, configure, sub);
+  double folded = FoldValues(*point, data, configure, sub);
   // Unit::Calculate blends a folded value with the bare one at a window edge outside a thin-target integration (a
-  // thin target blends inside its kernel, which IntegrateSubPointValues applies).
+  // thin target blends inside its kernel, which FoldValues applies).
   const TargetEffect *effect = data.Data().GetTargetEffect(point->GetTargetEffectNum());
   const bool thinTarget = effect->IsTargetIntegration() && !effect->IsThickTarget();
   const double blend = point->GetTargetBlendWeight();

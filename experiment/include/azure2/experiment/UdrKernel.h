@@ -1,8 +1,11 @@
-#ifndef UDRKERNEL_H
-#define UDRKERNEL_H
+#ifndef AZURE2_EXPERIMENT_UDRKERNEL_H
+#define AZURE2_EXPERIMENT_UDRKERNEL_H
 
 #include <cmath>
 #include <vector>
+
+namespace azure2 {
+namespace experiment {
 
 /*!
  * A user-defined numerical resolution function (SAMMY's "UDR") evaluated
@@ -45,5 +48,8 @@ inline double EnergyFromTime(double t, double mass, double flightPath) {
   return mass * (gamma - 1.0);
 }
 }  // namespace UdrKinematics
+
+}  // namespace experiment
+}  // namespace azure2
 
 #endif

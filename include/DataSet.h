@@ -57,7 +57,7 @@ class DataSet {
    */
   struct PointSetUp {
     Unit::SubGridSpec grid;
-    std::shared_ptr<const UdrKernel> udr;
+    std::shared_ptr<const azure2::experiment::UdrKernel> udr;
     double udrMass = 0.0;
   };
   /// The record of point `p`, null when the set-up gave it none.

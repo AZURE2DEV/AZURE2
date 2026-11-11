@@ -8,7 +8,7 @@
 #include <iosfwd>
 #include "Constants.h"
 #include "Equation.h"
-#include "UdrKernel.h"
+#include "azure2/experiment/Kernels.h"
 #include "azure2/experiment/SetupSpecs.h"
 
 /// An AZURE target effect entry
@@ -124,30 +124,24 @@ class TargetEffect {
   /// Join a density group: take its first line's density, prior and layout density.
   void JoinDensityGroup(const TargetEffect &leader);
   /// The c.m. beam-spread sigma at c.m. energy \p eCM for a point whose entrance pair has the c.m./lab
-  /// factor \p cmFactor: the one place every kernel takes its width from.  A constant sigma (lab, as read)
+  /// factor \p cmFactor: the one place every kernel takes its width from (KernelParametersFor).  A constant sigma (lab, as read)
   /// is scaled by the factor; a lab expression is evaluated at eCM / F and its value scaled by F; a legacy
   /// expression is used as it stands.
   double SigmaCM(double eCM, const Config &, double cmFactor) const;
-  /// The normalised Gaussian kernel exp(-(e - centroid)^2 / 2 sigma^2) / (sigma sqrt(2 pi)).
-  static double GaussianKernel(double e, double centroid, double sigma);
-  /// Straggling sigma (c.m. MeV) after an energy loss of \p deltaE (c.m. MeV): c_s * sqrt(dE[keV]) keV.  The
-  /// coefficient c_s (keV^1/2) is a CENTRE-OF-MASS quantity: the width it gives is the c.m. width of the
-  /// energy distribution after a c.m. energy loss, with no frame factor (documented as such 2026-10-27; a
-  /// coefficient describing the beam in the lab has to be multiplied by sqrt(m2/(m1+m2)) first).
-  double StragglingSigma(double deltaE) const;
-  /// Straggling on with a coefficient of 0 (the default) means Bohr straggling, computed from the charges
-  /// and the stopping power instead of a coefficient: Omega_lab^2 = 4 pi Z1^2 e^4 Z2 N x, with N x the
-  /// areal density (atoms/cm^2) traversed (int dE / epsilon), Z1 the beam and Z2 the target nucleus of the
-  /// entrance pair, and the c.m. width m2/(m1+m2) Omega_lab.  (Before 2026-10-27 the default coefficient
-  /// was 0.04 keV^1/2, several times below Bohr for light ions in light targets: essentially no straggling.)
-  bool IsBohrStraggling() const { return isStraggling_ && !(stragglingCoefficient_ > 0.0); }
-  /// The Bohr straggling sigma (c.m. MeV) after traversing \p arealDensity atoms/cm^2 of the target, for a
-  /// point whose entrance pair has the c.m./lab factor \p cmFactor and charges \p z1 (beam), \p z2 (target).
-  double BohrStragglingSigma(double arealDensity, double cmFactor, int z1, int z2) const;
-  /// How far the sub-point grid of a point at c.m. energy \p eCM must reach above (\p forward) and below
-  /// (\p backward) it for this effect; \p thicknessCM is the point's target thickness (c.m. MeV, 0 if none),
-  /// \p cmFactor and \p z1, \p z2 the point's entrance-pair factor and charges (Bohr straggling).
-  void GridExtent(double eCM, double thicknessCM, const Config &, double cmFactor, int z1, int z2, double &forward, double &backward) const;
+  /*!
+   * The kernels of this effect (azure2/experiment/Kernels.h): the free-gas Doppler broadening when the line has one,
+   * then the resolution kernel chosen when the effect was built (target integration, else a Gaussian beam spread,
+   * else UDR, else a beam profile, or the table kernel the spec names).  Straggling (a c.m. coefficient c_s in
+   * keV^1/2, or Bohr's formula when it is on with c_s = 0) and the beam spread are parameters of the target kernel.
+   */
+  const azure2::experiment::EffectKernels &Kernels() const { return kernels_; }
+  /// The parameters the kernels read, with the formulas (sigma, stopping) evaluated through this effect and \p
+  /// configure: valid while both live.
+  azure2::experiment::KernelParameters KernelParametersFor(const Config &configure) const;
+  /// Two resolution kernels on one effect (a target integration, a beam profile, a UDR or a beam spread outside a
+  /// target, two of them): refused at set-up, as one of them would be ignored.
+  bool HasKernelError() const { return !kernelErrorText_.empty(); }
+  const std::string &GetKernelErrorText() const { return kernelErrorText_; }
   /// Target density in atoms/cm^2 as the line gives it (the present value is a working copy's, TargetEffectValues).
   /// Target integration only.
   double GetDensity() const;
@@ -195,7 +189,7 @@ class TargetEffect {
   const Equation *GetStoppingPowerEq() const;
   Equation *GetConvolutionEq();
 
-  // Energy straggling (see StragglingSigma / IsBohrStraggling)
+  // Energy straggling (a parameter of the target kernel: azure2::experiment::StragglingSigma, BohrStragglingSigma)
   bool IsStraggling() const;
   double GetStragglingCoefficient() const;
 
@@ -230,13 +224,13 @@ class TargetEffect {
 
   /// The multiple of sigma above and below centroid energy to use as integration range
   /// (5 since dev 7d24c88: at 3 the 0.27 % of kernel weight beyond the window was dropped and the rest rescaled).
-  static constexpr double convolutionRange = 5.;
+  static constexpr double convolutionRange = azure2::experiment::kConvolutionRange;
   /*Window for THM (HOES) segments: their extremely narrow resonances make
   the smeared curve in the valleys a pure Gaussian tail of a neighboring spike,
   so a +-3 sigma cutoff loses up to ~25% there; +-5 sigma keeps the truncation
   error below ~1e-3.  Equal to convolutionRange since dev 7d24c88; kept as its
   own name so the THM window is stated where it is used.*/
-  static constexpr double thmConvolutionRange = 5.;
+  static constexpr double thmConvolutionRange = azure2::experiment::kThmConvolutionRange;
   /*Numerical floor (in MeV) kept between a target-effect sub-point energy and the
   channel threshold, since Coulomb functions and penetrabilities are singular at
   E=0. For ordinary segments this bounds the channel CM energy directly; for THM
@@ -246,12 +240,7 @@ class TargetEffect {
   static constexpr double minIntegrationEnergy = 0.001;
 
   /// One skewed-Gaussian component of a beam energy profile.
-  struct BeamProfileComponent {
-    double xi;      ///< location parameter
-    double omega;   ///< scale parameter
-    double alpha;   ///< shape (skewness) parameter
-    double weight;  ///< relative weight (luminosity) of the component
-  };
+  using BeamProfileComponent = azure2::experiment::BeamProfileComponent;
   /// Beam-profile kernel: an absolute (not point-centred) beam energy profile,
   /// a Gaussian detector-resolution window per point and, optionally, the
   /// detailed-balance weight of an inverse photodissociation measurement.
@@ -304,19 +293,9 @@ class TargetEffect {
     const double r = (temperature - dopplerNominal_) / dopplerSigma_;
     return r * r;
   }
-  /// The same at temperature \p temperature (K).
-  double DopplerUAt(double cmFactor, double temperature) const;
-  /// The c.m. energy window [lo, hi] beyond which the Doppler kernel at c.m. energy eCM is below
-  /// exp(-convolutionRange^2 / 2), i.e. +-convolutionRange standard deviations in velocity (lo >= 0), at the
-  /// layout temperature (GetDopplerLayoutTemperature): the grids are padded and the integrals cut with it.
-  void DopplerWindow(double eCM, double cmFactor, double &lo, double &hi) const;
   /// Does the line also carry a kernel applied after the Doppler step (Gaussian, UDR, target integration,
   /// beam profile)?  Without one the value is sigma_D at the point.
-  bool HasResolutionStage() const { return IsGaussian() || isTargetIntegration_ || isUdr_ || isBeamProfile_; }
-  /// Beam profile weight (sum of the skewed Gaussians) at an energy.
-  double BeamProfileWeight(double energy) const;
-  /// Energy range outside which the beam profile is negligible.
-  void BeamProfileSupport(double &low, double &high) const;
+  bool HasResolutionStage() const { return kernels_.resolution != nullptr; }
   /// Sigma of the Gaussian detector (TPC) energy resolution.
   double GetBeamTpcSigma() const;
   /// Truncate each component outside mean +- this many standard deviations; 0 = none.
@@ -352,10 +331,14 @@ class TargetEffect {
   /// The kernel for a point at lab energy eLab (MeV) for a projectile of rest
   /// energy mass (MeV): the table interpolated in energy, centred if asked,
   /// convolved with the burst and channel width, normalised.
-  std::shared_ptr<const UdrKernel> BuildUdrKernel(double eLab, double mass) const;
+  std::shared_ptr<const azure2::experiment::UdrKernel> BuildUdrKernel(double eLab, double mass) const;
 
  private:
+  void SelectKernels(const azure2::experiment::TargetEffectSpec &);
   std::string targetName_;
+  azure2::experiment::EffectKernels kernels_;  ///< Kernels
+  std::vector<double> kernelValues_;           ///< a table kernel's parameter values (KernelParameters::values)
+  std::string kernelErrorText_;                ///< HasKernelError
   struct UdrTable {
     std::string file;
     std::vector<double> energy;                ///< lab MeV, ascending

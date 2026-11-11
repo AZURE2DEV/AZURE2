@@ -1,10 +1,14 @@
 // The back of a target layer on a point's sub-point grid: the energy E_out at which the beam leaves a layer of areal
-// density N, found on the same nodes and with the same quadrature as the yield it bounds (src/TargetFold.cpp).
-#ifndef LAYEREXIT_H
-#define LAYEREXIT_H
+// density N, found on the same nodes and with the same quadrature as the yield it bounds (the target kernel,
+// KernelTarget.cpp).
+#ifndef AZURE2_EXPERIMENT_LAYEREXIT_H
+#define AZURE2_EXPERIMENT_LAYEREXIT_H
 
 #include <algorithm>
 #include <cmath>
+
+namespace azure2 {
+namespace experiment {
 
 /*!
  * E_out of a layer (docs/upgrade/energy_grid.md section 5.2): the energy, in [E_n, top], with
@@ -13,7 +17,7 @@
  *   each interval clipped to [E_out, top]  =  N 1e-24,
  *
  * eps_lin the stopping interpolated linearly between the interval's two nodes.  This is, term by term and in the same
- * order of operations, the weight GridQuadrature (src/TargetFold.cpp) puts on the cross section of a target
+ * order of operations, the weight GridQuadrature (KernelQuadrature.h) puts on the cross section of a target
  * integration, so a constant cross section sigma_0 folded over [E_out, top] is 1e-24 sigma_0 N to rounding: the
  * layer's thickness and its yield come from one epsilon on one set of nodes (an E_out from another integration of
  * epsilon, e.g. TargetEffect::TargetThickness, differs by that integration's quadrature error).
@@ -73,5 +77,8 @@ bool LayerExitEnergy(int n, Energy energy, Stopping stopping, double top, double
   }
   return false;
 }
+
+}  // namespace experiment
+}  // namespace azure2
 
 #endif

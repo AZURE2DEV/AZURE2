@@ -255,6 +255,10 @@ struct TargetEffectSpec {
   double udrBurstFwhm = 0.0;     ///< ns
   double udrChannelWidth = 0.0;  ///< ns
   bool udrCentred = true;
+  /// A table kernel (Kernels.h, Kernel::tableForm) selected by its format-3 form, and its parameter values in the
+  /// order of its row's parameters, in their engine units; "" = the kernel the fields above select.
+  std::string kernel;
+  std::vector<double> kernelParameters;
 };
 
 /// One row of the abundances of the samples, in the order given: rows are applied in that order (a sample exists from

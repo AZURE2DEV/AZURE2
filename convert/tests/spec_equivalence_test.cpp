@@ -389,6 +389,10 @@ void CompareEffect(const std::string &w, const TargetEffectSpec &x, const Target
     Bits(w + " channel", x.udrChannelWidth, y.udrChannelWidth);
     Eq(w + " centred", x.udrCentred, y.udrCentred);
   }
+  Eq(w + " kernel", x.kernel, y.kernel);
+  Eq(w + " kernel parameters", x.kernelParameters.size(), y.kernelParameters.size());
+  for (size_t i = 0; i < x.kernelParameters.size() && i < y.kernelParameters.size(); i++)
+    Bits(w + " kernel parameter", x.kernelParameters[i], y.kernelParameters[i]);
 }
 
 void CompareEffects(const std::string &what, const SpecList<TargetEffectSpec> &a, const SpecList<TargetEffectSpec> &b,

@@ -24,7 +24,7 @@
 #include "Config.h"
 #include "TargetLayer.h"
 #include "WorkingCopy.h"
-#include "UdrKernel.h"
+#include "azure2/experiment/Kernels.h"
 
 /*!
  * Reads the target effects input file and creates the TargetEffect objects
@@ -491,6 +491,10 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
         std::cout << "ERROR: <targetInt> line \"" << line << "\": " << targetEffect.GetDopplerErrorText() << std::endl;
         return -1;
       }
+      if (targetEffect.HasKernelError()) {
+        std::cout << "ERROR: <targetInt> line \"" << line << "\": " << targetEffect.GetKernelErrorText() << std::endl;
+        return -1;
+      }
       if (targetEffect.HasDensityFitError()) {
         std::cout << "ERROR: <targetInt> line \"" << line << "\": " << targetEffect.GetDensityFitErrorText() << std::endl;
         return -1;
@@ -595,9 +599,6 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
         point->SetTargetKinematics(cmConversion, bohrZ1, bohrZ2);
 
         if (targetEffect->IsSubPointEffect()) {
-          double forwardDepth = 0.0;
-          double backwardDepth = 0.0;
-
           double targetThickness = 0.0;
           if (targetEffect->IsTargetIntegration()) {
             if (targetEffect->IsThickTarget()) {
@@ -634,99 +635,38 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
               continue;
             }
           }
-          // How far the grid reaches above and below the point for this effect (beam spread, target, straggling).
-          targetEffect->GridExtent(point->GetCMEnergy(), targetThickness, configure, cmConversion, bohrZ1, bohrZ2, forwardDepth, backwardDepth);
-          // A THM (HOES) segment's Gaussian fold reaches thmConvolutionRange sigma (5; convolutionRange is 5 too
-          // since dev 7d24c88).
-          if (segment->IsTHM() && targetEffect->IsGaussian() && !targetEffect->IsTargetIntegration())
-            forwardDepth = backwardDepth =
-                TargetEffect::thmConvolutionRange * targetEffect->SigmaCM(point->GetCMEnergy(), configure, cmConversion);
-
-          // Generate adaptive integration grid
-          double startEnergy = point->GetCMEnergy() + forwardDepth;
-          double endEnergy;
-
-          /*
-          THM (HOES) segments carry data below the entrance threshold, so their
-          sub-point grids may extend to negative energies as long as the
-          compound-system energy Ecm+SepE+ExE stays positive.
-          */
+          // THM (HOES) segments carry data below the entrance threshold, so their sub-point grids may extend to negative
+          // energies as long as the compound-system energy Ecm+SepE+ExE stays positive.
           double minSubEnergy = segment->IsTHM() ? TargetEffect::minIntegrationEnergy - (entrancePair->GetSepE() + entrancePair->GetExE()) : TargetEffect::minIntegrationEnergy;
-
-          if (targetEffect->IsTargetIntegration()) {
-            // the target (or, for a thick target, everything down to 1 keV), plus the spread below it
-            // (never a THM segment: refused above)
-            endEnergy = point->GetCMEnergy() - backwardDepth;
-            // Safety check: if backwardDepth > energy, set endEnergy to minimum
-            if (endEnergy < minSubEnergy) {
-              endEnergy = minSubEnergy;
-            }
-          } else {
-            // Convolution or ConvCoefficients - use backward depth
-            endEnergy = point->GetCMEnergy() - backwardDepth;
-            // Safety check: if backwardDepth > energy, set endEnergy to minimum
-            if (endEnergy < minSubEnergy) {
-              endEnergy = minSubEnergy;
-            }
+          // What the kernels read beyond the effect's parameters: the point's UDR kernel, from the effect's table, and the
+          // inverse kinematics of a beam profile's detailed-balance weight, Q = E_gamma - E_cm: the entrance pair's threshold
+          // (S plus its total excitation) minus the energy of the final level the gamma pair feeds (its heavy excitation).
+          azure2::experiment::SupportPoint support;
+          if (targetEffect->IsUdr()) {
+            const double mass = entrancePair->GetM(1) * uconv;
+            DataSet::PointSetUp &setUp = Draft().SetUpFor(*point);
+            setUp.udr = targetEffect->BuildUdrKernel(point->GetLabEnergy(), mass);
+            setUp.udrMass = mass;
+            support.udr = setUp.udr.get();
+            support.udrMass = mass;
           }
-
-          if (targetEffect->IsBeamProfile()) {
-            // The kernel is an absolute beam profile: sample where the beam
-            // is, narrowed to the point's energy window (plus the resolution
-            // tails) when it has one, not around the point's own energy.
-            double low, high;
-            targetEffect->BeamProfileSupport(low, high);  // lab
-            low *= cmConversion; high *= cmConversion;
-            double s = cmConversion * targetEffect->GetBeamTpcSigma();
-            // The resolution tails: 4 s, or for a THM (HOES) point the 5 s of
-            // its Gaussian fold -- a narrow peak 4-5 s from a point dominates
-            // the tail there (-2 % at 81 keV from a 289 eV level, 18O(p,a) THM).
-            double tails = segment->IsTHM() ? TargetEffect::thmConvolutionRange : 4.0;
-            if (point->HasBinWindow()) {
-              low = std::max(low, point->GetBinLowCM() - tails * s);
-              high = std::min(high, point->GetBinHighCM() + tails * s);
-            }
-            // The floor of the Gaussian fold: a THM point may sit below the entrance
-            // threshold (this was +1 keV, and the fold of a point at -45 keV came
-            // out 66 times too large).
-            if (low < minSubEnergy) low = minSubEnergy;
-            if (high <= low) high = low + 0.001;
-            startEnergy = high;
-            endEnergy = low;
-            // Q = E_gamma - E_cm: the entrance pair's threshold (S plus its total excitation, e1 + e2) minus the
-            // energy of the final level the gamma pair feeds (its heavy excitation).  Before 2026-11-05 the
-            // entrance pair's excitation was left out.
+          if (targetEffect->IsBeamProfile())
             point->SetPhotoKinematics(entrancePair->GetSepE() + entrancePair->GetExE() - exitPair->GetHeavyExE(),
                                       (entrancePair->GetM(1) + entrancePair->GetM(2)) * uconv);
-          }
-          if (targetEffect->IsUdr()) {
-            // A delay tau maps the point's nominal flight time t0 to a true
-            // flight time t0 - tau: the kernel's support in delay becomes a
-            // window in true energy, extending above the point for positive
-            // delays (moderation) and below it for negative ones.
-            double mass = entrancePair->GetM(1) * uconv;
-            std::shared_ptr<const UdrKernel> kernel = targetEffect->BuildUdrKernel(point->GetLabEnergy(), mass);
-            DataSet::PointSetUp &setUp = Draft().SetUpFor(*point);
-            setUp.udr = kernel;
-            setUp.udrMass = mass;
-            double t0 = UdrKinematics::TimeOfFlight(point->GetLabEnergy(), mass, targetEffect->GetUdrFlightPath());
-            double eHighLab = UdrKinematics::EnergyFromTime(t0 - kernel->tauMax, mass, targetEffect->GetUdrFlightPath());
-            double eLowLab = UdrKinematics::EnergyFromTime(t0 - kernel->tauMin, mass, targetEffect->GetUdrFlightPath());
-            double cmPerLab = point->GetCMEnergy() / point->GetLabEnergy();
-            if (eHighLab <= point->GetLabEnergy()) eHighLab = point->GetLabEnergy() * 1.0001;
-            if (eLowLab <= 0.0 || eLowLab >= point->GetLabEnergy()) eLowLab = point->GetLabEnergy() * 0.9999;
-            startEnergy = eHighLab * cmPerLab;
-            endEnergy = std::max(eLowLab * cmPerLab, 0.001);
-          }
-          // Free-gas Doppler broadening comes first: every sub-point the kernel above reaches needs its own
-          // Doppler window inside the grid, so the window is widened by the Doppler width at each end.
-          if (targetEffect->IsDoppler()) {
-            double lo, hi, unused;
-            targetEffect->DopplerWindow(startEnergy, cmConversion, unused, hi);
-            targetEffect->DopplerWindow(endEnergy, cmConversion, lo, unused);
-            startEnergy = std::max(startEnergy, hi);
-            endEnergy = std::max(std::min(endEnergy, lo), 0.001);
-          }
+          // The interval the nodes span: the support of the effect's kernels (azure2/experiment/Kernels.h).
+          support.energy = point->GetCMEnergy();
+          support.labEnergy = point->GetLabEnergy();
+          support.cmFactor = cmConversion;
+          support.z1 = bohrZ1;
+          support.z2 = bohrZ2;
+          support.targetThickness = targetThickness;
+          support.minimumEnergy = minSubEnergy;
+          support.thm = segment->IsTHM();
+          support.binLow = point->GetBinLowCM();
+          support.binHigh = point->GetBinHighCM();
+          double startEnergy = 0.0, endEnergy = 0.0;
+          azure2::experiment::EffectSupport(targetEffect->Kernels(), targetEffect->KernelParametersFor(configure), support,
+                                            startEnergy, endEnergy);
           std::vector<double> energyGrid;
           int numPoints = targetEffect->NumSubPoints();
           if (configure.useAdaptiveGrid) {
@@ -799,9 +739,6 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
             point->SetTargetKinematics(compConversion, bohrZ1, bohrZ2);
 
             if (targetEffect->IsSubPointEffect()) {
-              double forwardDepth = 0.0;
-              double backwardDepth = 0.0;
-
               double targetThickness = 0.0;
               if (targetEffect->IsTargetIntegration()) {
                 if (targetEffect->IsThickTarget()) {
@@ -833,83 +770,39 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
                   continue;
                 }
               }
-              // How far the grid reaches above and below the point for this effect (beam spread, target, straggling).
-              targetEffect->GridExtent(point->GetCMEnergy(), targetThickness, configure, compConversion, bohrZ1, bohrZ2, forwardDepth, backwardDepth);
-              // A THM (HOES) segment's Gaussian fold reaches thmConvolutionRange sigma (5), as above.
-              if (segment->IsTHM() && targetEffect->IsGaussian() && !targetEffect->IsTargetIntegration())
-                forwardDepth = backwardDepth =
-                    TargetEffect::thmConvolutionRange * targetEffect->SigmaCM(point->GetCMEnergy(), configure, compConversion);
-
-              // Generate adaptive integration grid for the leaf
-              double startEnergy = point->GetCMEnergy() + forwardDepth;
-              double endEnergy;
-
-              /*
-              THM (HOES) segments carry data below the entrance threshold, so their
-              sub-point grids may extend to negative energies as long as the
-              compound-system energy Ecm+SepE+ExE stays positive. Note this uses the
-              component's own entrance pair, since an advanced (sum/ratio) component
-              can have a different entrance channel than its master segment.
-              */
-              PPair *componentEntrancePair = compound->GetPair(compound->GetPairNumFromKey(component.GetEntranceKey()));
-              double minSubEnergy = segment->IsTHM() ? TargetEffect::minIntegrationEnergy - (componentEntrancePair->GetSepE() + componentEntrancePair->GetExE()) : TargetEffect::minIntegrationEnergy;
-
-              if (targetEffect->IsTargetIntegration()) {
-                endEnergy = point->GetCMEnergy() - backwardDepth;
-                // Safety check: if backwardDepth > energy, set endEnergy to minimum
-                if (endEnergy < minSubEnergy) {
-                  endEnergy = minSubEnergy;
-                }
-              } else {
-                // Convolution or ConvCoefficients - use backward depth
-                endEnergy = point->GetCMEnergy() - backwardDepth;
-                // Safety check: if backwardDepth > energy, set endEnergy to minimum
-                if (endEnergy < minSubEnergy) {
-                  endEnergy = minSubEnergy;
-                }
+              // THM (HOES) segments carry data below the entrance threshold, so their sub-point grids may extend to negative
+              // energies as long as the compound-system energy Ecm+SepE+ExE stays positive.
+              // THM: the component's own entrance pair (an advanced component can have another entrance channel).
+              double minSubEnergy = segment->IsTHM() ? TargetEffect::minIntegrationEnergy - (compEntrance->GetSepE() + compEntrance->GetExE()) : TargetEffect::minIntegrationEnergy;
+              // What the kernels read beyond the effect's parameters: the point's UDR kernel, from the effect's table, and the
+              // inverse kinematics of a beam profile's detailed-balance weight, Q = E_gamma - E_cm: the entrance pair's threshold
+              // (S plus its total excitation) minus the energy of the final level the gamma pair feeds (its heavy excitation).
+              azure2::experiment::SupportPoint support;
+              if (targetEffect->IsUdr()) {
+                const double mass = compEntrance->GetM(1) * uconv;
+                DataSet::PointSetUp &setUp = Draft().SetUpFor(*point);
+                setUp.udr = targetEffect->BuildUdrKernel(point->GetLabEnergy(), mass);
+                setUp.udrMass = mass;
+                support.udr = setUp.udr.get();
+                support.udrMass = mass;
               }
-
-              if (targetEffect->IsBeamProfile()) {
-                double low, high;
-                targetEffect->BeamProfileSupport(low, high);  // lab
-                low *= compConversion; high *= compConversion;
-                double s = compConversion * targetEffect->GetBeamTpcSigma();
-                double tails = segment->IsTHM() ? TargetEffect::thmConvolutionRange : 4.0;
-                if (point->HasBinWindow()) {
-                  low = std::max(low, point->GetBinLowCM() - tails * s);
-                  high = std::min(high, point->GetBinHighCM() + tails * s);
-                }
-                if (low < minSubEnergy) low = minSubEnergy;  // as above
-                if (high <= low) high = low + 0.001;
-                startEnergy = high;
-                endEnergy = low;
+              if (targetEffect->IsBeamProfile())
                 point->SetPhotoKinematics(compEntrance->GetSepE() + compEntrance->GetExE() - compExit->GetHeavyExE(),
                                           (compEntrance->GetM(1) + compEntrance->GetM(2)) * uconv);
-              }
-              if (targetEffect->IsUdr()) {
-                double mass = compEntrance->GetM(1) * uconv;
-                std::shared_ptr<const UdrKernel> kernel = targetEffect->BuildUdrKernel(point->GetLabEnergy(), mass);
-                DataSet::PointSetUp &setUp = Draft().SetUpFor(*point);
-                setUp.udr = kernel;
-                setUp.udrMass = mass;
-                double t0 = UdrKinematics::TimeOfFlight(point->GetLabEnergy(), mass, targetEffect->GetUdrFlightPath());
-                double eHighLab = UdrKinematics::EnergyFromTime(t0 - kernel->tauMax, mass, targetEffect->GetUdrFlightPath());
-                double eLowLab = UdrKinematics::EnergyFromTime(t0 - kernel->tauMin, mass, targetEffect->GetUdrFlightPath());
-                double cmPerLab = point->GetCMEnergy() / point->GetLabEnergy();
-                if (eHighLab <= point->GetLabEnergy()) eHighLab = point->GetLabEnergy() * 1.0001;
-                if (eLowLab <= 0.0 || eLowLab >= point->GetLabEnergy()) eLowLab = point->GetLabEnergy() * 0.9999;
-                startEnergy = eHighLab * cmPerLab;
-                endEnergy = std::max(eLowLab * cmPerLab, 0.001);
-              }
-              // Free-gas Doppler broadening comes first: every sub-point the kernel above reaches needs its own
-              // Doppler window inside the grid, so the window is widened by the Doppler width at each end.
-              if (targetEffect->IsDoppler()) {
-                double lo, hi, unused;
-                targetEffect->DopplerWindow(startEnergy, compConversion, unused, hi);
-                targetEffect->DopplerWindow(endEnergy, compConversion, lo, unused);
-                startEnergy = std::max(startEnergy, hi);
-                endEnergy = std::max(std::min(endEnergy, lo), 0.001);
-              }
+              // The interval the nodes span: the support of the effect's kernels (azure2/experiment/Kernels.h).
+              support.energy = point->GetCMEnergy();
+              support.labEnergy = point->GetLabEnergy();
+              support.cmFactor = compConversion;
+              support.z1 = bohrZ1;
+              support.z2 = bohrZ2;
+              support.targetThickness = targetThickness;
+              support.minimumEnergy = minSubEnergy;
+              support.thm = segment->IsTHM();
+              support.binLow = point->GetBinLowCM();
+              support.binHigh = point->GetBinHighCM();
+              double startEnergy = 0.0, endEnergy = 0.0;
+              azure2::experiment::EffectSupport(targetEffect->Kernels(), targetEffect->KernelParametersFor(configure), support,
+                                                startEnergy, endEnergy);
               std::vector<double> energyGrid;
               int numPoints = targetEffect->NumSubPoints();
               if (configure.useAdaptiveGrid) {

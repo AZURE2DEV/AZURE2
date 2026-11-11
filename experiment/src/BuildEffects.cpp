@@ -15,6 +15,7 @@
 #include <sstream>
 
 #include "azure2/experiment/BuildContext.h"
+#include "azure2/experiment/Kernels.h"
 
 namespace azure2 {
 namespace experiment {
@@ -183,7 +184,15 @@ void DetectorInto(Context &c, const ValidatedRecord &d, TargetEffectSpec &e) {
     e.qCoefficients = true;
     for (const Number &n : q->numbers) e.qCoefficientValues.push_back(n.value);
   }
-  if (const Value *r = d.Get("energy_resolution")) {
+  const Value *r = d.Get("energy_resolution");
+  // A table kernel (Kernels.h): its name and its parameters, in the order of its row, in their engine units.
+  if (const Kernel *k = r ? KernelOfForm("detector", "energy_resolution", r->word) : nullptr) {
+    e.kernel = k->name;
+    for (const KernelParameter &p : k->parameters) {
+      const Value *v = r->Get(p.name);
+      e.kernelParameters.push_back(v ? Context::InBase(v->number, v->unit) : 0.0);
+    }
+  } else if (r) {
     const Value *sigma = r->Get("sigma");
     const Value *frame = r->Get("frame");
     if (!e.beamProfile || (frame && frame->word != "lab"))
