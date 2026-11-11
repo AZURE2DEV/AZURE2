@@ -46,10 +46,10 @@ double ShiftedEnergy(double originalEnergy, double shift) {
  * Updates the energies of all points in this segment based on the current energy shift.
  */
 
-void ESegment::UpdatePointEnergiesWithShift(CNuc *theCNuc, const Config *configure) {
+void ESegment::UpdatePointEnergiesWithShift(EData &data, CNuc *theCNuc, const Config *configure) {
   // No lock: each thread re-energises the points of its own EData clone.
   for (int t = 0; t < NumTerms(); t++)
-    for (int i = 0; i < (int)Units(t).points.size(); i++) UpdatePointEnergyWithShift(t, i, theCNuc, configure);
+    for (int i = 0; i < (int)Units(t).points.size(); i++) UpdatePointEnergyWithShift(data, t, i, theCNuc, configure);
 }
 
 std::vector<double> ESegment::ShiftState() const {
@@ -95,7 +95,7 @@ ChannelRowSource ESegment::ShiftRowSource(int t, int i) {
  * (EData::MapData), or NULL -- also for a point mapped onto a point of another
  * segment, which this segment's shift step re-energises on its own.
  */
-EPoint *ESegment::ShiftHost(int t, int i) {
+EPoint *ESegment::ShiftHost(EData &data, int t, int i) {
   std::vector<EPoint> &points = Units(t).points;
   if (i < 0 || i >= (int)points.size()) return nullptr;
   EPoint *point = &points[i];
@@ -104,8 +104,9 @@ EPoint *ESegment::ShiftHost(int t, int i) {
   if (map.point < 1 || map.point > i) return nullptr;
   EPoint *candidate = &points[map.point - 1];
   if (candidate->NumSubPoints() != point->NumSubPoints()) return nullptr;
-  for (int m = 0, n = candidate->PlanMapped().size(); m < n; m++)
-    if (candidate->PlanMapped()[m] == point) return candidate;
+  const azure2::MappedPoints mapped = candidate->PlanMapped(&data);
+  for (int m = 0, n = mapped.size(); m < n; m++)
+    if (mapped[m] == point) return candidate;
   return nullptr;
 }
 
@@ -117,20 +118,22 @@ EPoint *ESegment::ShiftHost(int t, int i) {
  * columns of AZURECalc::ResidualJacobian) hand out these groups, never single
  * mapped points.  A point with a host returns at once.
  */
-void ESegment::UpdatePointGroupEnergyWithShift(int t, int i, CNuc *theCNuc, const Config *configure) {
-  if (ShiftHost(t, i)) return;
-  UpdatePointEnergyWithShift(t, i, theCNuc, configure);
+void ESegment::UpdatePointGroupEnergyWithShift(EData &data, int t, int i, CNuc *theCNuc, const Config *configure) {
+  if (ShiftHost(data, t, i)) return;
+  UpdatePointEnergyWithShift(data, t, i, theCNuc, configure);
   std::vector<EPoint> &points = Units(t).points;
   EPoint *point = &points[i];
   // A point mapped from another segment (EData::MapData) is not this
   // segment's to move: it is re-energised with its own segment, on its own.
   std::less<const EPoint *> before;
   const EPoint *first = &points.front(), *last = &points.back();
-  for (int m = 0, n = point->PlanMapped().size(); m < n; m++) {
-    const EPoint *mapped = point->PlanMapped()[m];
+  const azure2::MappedPoints pointMapped = point->PlanMapped(&data);
+  for (int m = 0, n = pointMapped.size(); m < n; m++) {
+    const EPoint *mapped = pointMapped[m];
     if (before(mapped, first) || before(last, mapped)) continue;
     const int j = (int)(mapped - first);
-    if (j > i && j < (int)points.size() && ShiftHost(t, j) == point) UpdatePointEnergyWithShift(t, j, theCNuc, configure);
+    if (j > i && j < (int)points.size() && ShiftHost(data, t, j) == point)
+      UpdatePointEnergyWithShift(data, t, j, theCNuc, configure);
   }
 }
 
@@ -141,7 +144,7 @@ void ESegment::UpdatePointGroupEnergyWithShift(int t, int i, CNuc *theCNuc, cons
  * reads its host (ShiftHost), so it must run after its host and not
  * concurrently with it: UpdatePointGroupEnergyWithShift.
  */
-void ESegment::UpdatePointEnergyWithShift(int t, int i, CNuc *theCNuc, const Config *configure) {
+void ESegment::UpdatePointEnergyWithShift(EData &data, int t, int i, CNuc *theCNuc, const Config *configure) {
   // An ordinary segment's energies are positive and must stay so: points at
   // E <= 0 are left alone and a shift is floored above zero (ShiftedEnergy).
   // A THM (HOES) segment has points and folding sub-points below the entrance
@@ -159,7 +162,7 @@ void ESegment::UpdatePointEnergyWithShift(int t, int i, CNuc *theCNuc, const Con
     // angle-dependent Coulomb amplitude is its own.  CopyEDependentValuesFrom
     // refuses (and the values are recomputed) if the host is not at this
     // energy.
-    EPoint *host = ShiftHost(t, i);
+    EPoint *host = ShiftHost(data, t, i);
     if (point && (thm || point->GetOriginalEnergy() > 0)) {
       double originalEnergy = point->GetOriginalEnergy();
       double shiftedEnergy = thm ? originalEnergy + TotalEnergyShift(originalEnergy)
@@ -189,9 +192,8 @@ void ESegment::UpdatePointEnergyWithShift(int t, int i, CNuc *theCNuc, const Con
           point->ClearLegendrePolynomials();
           // Get TargetEffect with Q-coefficients if applicable
           TargetEffect *effect = NULL;
-          EData *parentData = point->GetParentData();
-          if (parentData && this->IsTargetEffect()) {
-            TargetEffect *te = parentData->GetTargetEffect(this->TermTargetEffectNum(t));
+          if (this->IsTargetEffect()) {
+            TargetEffect *te = data.GetTargetEffect(this->TermTargetEffectNum(t));
             if (te && te->IsQCoefficients()) {
               effect = te;
             }
@@ -266,11 +268,9 @@ void ESegment::UpdatePointEnergyWithShift(int t, int i, CNuc *theCNuc, const Con
             if (this->IsDifferential() || this->IsCMDifferential()) {
               subPoint->ClearLegendrePolynomials();
               // Get TargetEffect with Q-coefficients if applicable
-              // Note: Use point->GetParentData() since subpoints don't have parentData_ set
               TargetEffect *subEffect = NULL;
-              EData *parentData = point->GetParentData();
-              if (parentData && this->IsTargetEffect()) {
-                TargetEffect *te = parentData->GetTargetEffect(this->TermTargetEffectNum(t));
+              if (this->IsTargetEffect()) {
+                TargetEffect *te = data.GetTargetEffect(this->TermTargetEffectNum(t));
                 if (te && te->IsQCoefficients()) {
                   subEffect = te;
                 }

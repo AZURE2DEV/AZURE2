@@ -70,7 +70,6 @@ EPoint::EPoint(const azure2::experiment::MeasurementRows &rows, int row, const E
   sfactorconv_ = 0.;
   is_mapped_ = false;
   targetEffectNum_ = 0;
-  parentData_ = NULL;
   stoppingPower_ = 0.0;
 }
 
@@ -90,7 +89,6 @@ EPoint::EPoint(double angle, double energy, const ESegment *parent, int term) : 
   sfactorconv_ = 0.;
   is_mapped_ = false;
   targetEffectNum_ = 0;
-  parentData_ = NULL;
   stoppingPower_ = 0.0;
 }
 
@@ -123,7 +121,6 @@ EPoint::EPoint(double angle, double energy, int entranceKey,
   sfactorconv_ = 0.;
   is_mapped_ = false;
   targetEffectNum_ = 0;
-  parentData_ = NULL;
   stoppingPower_ = 0.0;
 }
 
@@ -372,14 +369,13 @@ EnergyMap EPoint::GetMap() const {
  * to calculate all energy dependent quantities that do no rely on the R-Matrix fit parameters.
  */
 
-void EPoint::Initialize(CNuc *compound, const Config &configure) {
-  this->CalcEDependentValues(compound, configure);
+void EPoint::Initialize(EData *data, CNuc *compound, const Config &configure) {
+  this->CalcEDependentValues(compound, configure, true, data);
   if (this->IsDifferential()) {
     // Get TargetEffect with Q-coefficients if applicable
     TargetEffect *effect = NULL;
-    EData *parentData = this->GetParentData();
-    if (parentData && this->IsTargetEffect()) {
-      TargetEffect *te = parentData->GetTargetEffect(this->GetTargetEffectNum());
+    if (data && this->IsTargetEffect()) {
+      TargetEffect *te = data->GetTargetEffect(this->GetTargetEffectNum());
       if (te && te->IsQCoefficients()) {
         effect = te;
       }
@@ -548,14 +544,6 @@ void EPoint::AddSubPoint(EPoint subPoint) {
 }
 
 /*!
- * This function sets an internal pointer to the parent EData object.
- */
-
-void EPoint::SetParentData(EData *parentData) {
-  parentData_ = parentData;
-}
-
-/*!
  * This function sets the stopping cross section (effective) for the current
  * EPoint object.  Used only for sub-point involoved in target effect integration.
  */
@@ -645,20 +633,12 @@ void EPoint::NoResultRecord(const azure2::Results &r) const {
       "caller's UsePrivateRecord is missing");
 }
 
-/*!
- * Returns a pointer to the parent EData object.
- */
-
-azure2::MappedPoints EPoint::PlanMapped() const {
-  if (plan_task_ < 0 || !parentData_) return azure2::MappedPoints();
-  const azure2::CalculationTask &task = parentData_->Plan().Task(plan_task_);
+azure2::MappedPoints EPoint::PlanMapped(EData *data) const {
+  if (plan_task_ < 0 || !data) return azure2::MappedPoints();
+  const azure2::CalculationTask &task = data->Plan().Task(plan_task_);
   // only the host itself: a copy of it (a probe) or a point mapped onto it calculates itself alone
-  if (parentData_->PlanPoint(task.host) != this) return azure2::MappedPoints();
-  return azure2::MappedPoints(parentData_, &task.mapped);
-}
-
-EData *EPoint::GetParentData() const {
-  return parentData_;
+  if (data->PlanPoint(task.host) != this) return azure2::MappedPoints();
+  return azure2::MappedPoints(data, &task.mapped);
 }
 
 

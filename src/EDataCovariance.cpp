@@ -269,7 +269,7 @@ void EData::PrepareCovarianceSeeds(CNuc *theCNuc, const Config &configure, azure
 #pragma omp parallel for schedule(dynamic) if (!omp_in_parallel())
   for (int k = 0; k < (int)work.size(); k++) {
     ScopedPointMappingOff noPointMapping;
-    azure2::EvaluateModelPoint(*work[k].first, work[k].second, theCNuc, configure, results, azure2::LeafValues::Calculate);
+    azure2::EvaluateModelPoint(*this, *work[k].first, work[k].second, theCNuc, configure, results, azure2::LeafValues::Calculate);
   }
   this->CovarianceChi2Correction(results);
 }

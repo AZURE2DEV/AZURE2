@@ -512,7 +512,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc, const azure2::expe
             theCNuc->GetPair(theCNuc->GetPairNumFromKey(theSegment->GetEntranceKey()))->SetEntrance();
             PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(theSegment->GetEntranceKey()));
             PPair *exitPair = theCNuc->GetPairFromKey(theSegment->GetExitKey());  // nullptr for total capture (-1)
-            theSegment->SetGridRows(segment.energies, segment.angles, this);
+            theSegment->SetGridRows(segment.energies, segment.angles);
             for (int i = 0; i < theSegment->NumPoints(); i++) {
               // A ratio is dimensionless: no cross-section conversion (as ESegment::Fill for data segments;
               // the stored factor would otherwise divide the ratio in the lab output, kinflag.dat = 1).
@@ -894,7 +894,7 @@ int EData::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
       EPoint *point = segment->GetPoint(i);
       if (!(point->IsMapped())) {
         try {
-          point->CalcEDependentValues(theCNuc, configure, true, true, table);
+          point->CalcEDependentValues(theCNuc, configure, true, this, table);
         } catch (GSLException e) {
 #pragma omp critical
           {
@@ -1038,7 +1038,7 @@ int EData::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
       EPoint *point = segments_[leaf.first].GetTermPoint(leaf.second, i);
       if (!(point->IsMapped()) || point->OwnsEDependentValues()) {
         try {
-          point->CalcEDependentValues(theCNuc, configure, true, true, componentTable);
+          point->CalcEDependentValues(theCNuc, configure, true, this, componentTable);
         } catch (GSLException e) {
 #pragma omp critical
           {
@@ -1296,9 +1296,9 @@ bool EData::CheckTransformedSegments(const Config &configure) {
                              (seg.IsTransmission() ? "transmission" : "yield") + "): ";
     for (int p = 1; p <= seg.NumPoints(); p++) {
       EPoint *base = seg.GetPoint(p);
-      if (!ESegment::HasSubPointIntegration(base)) {
+      if (!ESegment::HasSubPointIntegration(*this, base)) {
         for (int t = 1; t < seg.NumTerms(); t++)
-          if (p <= (int)seg.TermPoints(t).size() && ESegment::HasSubPointIntegration(seg.GetTermPoint(t, p))) {
+          if (p <= (int)seg.TermPoints(t).size() && ESegment::HasSubPointIntegration(*this, seg.GetTermPoint(t, p))) {
             configure.outStream << "ERROR: " << what << "a term is integrated over sub-points at E_lab "
                                 << base->GetLabEnergy() << " MeV where the segment's own point is not." << std::endl;
             return false;
@@ -1748,11 +1748,11 @@ EData *EData::Clone() const {
   dataCopy->priorCov_ = this->priorCov_;    // shared, read-only
   dataCopy->numNuclei_ = this->numNuclei_;
 
-  // The points of the copy belong to it (a fitted density or Doppler temperature reaches them through it).  The plan
-  // and the points' task indices are positions, valid in the copy as they are: no point holds a pointer to another.
+  // The plan and the points' task indices are positions, valid in the copy as they are: no point holds a pointer to
+  // another or to its data set.  The copy starts without the external-capture amplitudes of the set-up.
   for (ESegment &segment : dataCopy->segments_)
     for (int t = 0; t < segment.NumTerms(); t++)
-      for (EPoint &point : segment.TermPoints(t)) point.SetParentData(dataCopy), point.ClearECAmplitudes();
+      for (EPoint &point : segment.TermPoints(t)) point.ClearECAmplitudes();
   // The copy's layout: its points carry this data set's offsets, which are the copy's own when the copy has the
   // same points; the values are in the buffers of the callers that evaluate the two.
   dataCopy->LayoutResults(nullptr);
@@ -1802,8 +1802,8 @@ std::vector<ESegment> &EData::GetSegments() {
  * (AZURECalc::PrecalculatePoints) and the API's calculations (AZUREAPI).
  */
 
-int EData::CalculatePointsInParallel(const std::vector<ESegment *> &segments, CNuc *theCNuc,
-                                     const Config &configure, azure2::Results &results) {
+int EData::CalculatePointsInParallel(const std::vector<ESegment *> &segments, CNuc *theCNuc, const Config &configure,
+                                     azure2::Results &results) {
 #ifdef _OPENMP
   if (omp_in_parallel()) return -1;
 #else
@@ -1826,7 +1826,7 @@ int EData::CalculatePointsInParallel(const std::vector<ESegment *> &segments, CN
   // same way whatever the order.
   std::vector<double> cost(work.size());
   for (size_t k = 0; k < work.size(); k++)
-    cost[k] = (1.0 + work[k]->NumSubPoints()) * (1.0 + work[k]->PlanMapped().size());
+    cost[k] = (1.0 + work[k]->NumSubPoints()) * (1.0 + work[k]->PlanMapped(this).size());
   std::vector<size_t> order(work.size());
   for (size_t k = 0; k < order.size(); k++) order[k] = k;
   std::stable_sort(order.begin(), order.end(), [&cost](size_t a, size_t b) { return cost[a] > cost[b]; });
@@ -1838,20 +1838,20 @@ int EData::CalculatePointsInParallel(const std::vector<ESegment *> &segments, CN
   // One item per task of the plan: its host calculates itself and the points the plan maps onto it.
   auto runTask = [&](EPoint *host) {
     try {
-      host->Calculate(theCNuc, configure, results);
+      host->Calculate(this, theCNuc, configure, results);
     } catch (const std::exception &e) {
       // NaN on the point and the points mapped onto it, reported once (EPoint::MarkFailed); 0 on the point alone,
       // silently, before 2026-11-01 -- and the CLI's objective takes these values (PrecalculatePoints).
-      host->MarkFailed(results, "point", configure, e.what());
+      host->MarkFailed(this, results, "point", configure, e.what());
       return 1;
     } catch (...) {
-      host->MarkFailed(results, "point", configure, "unknown exception.");
+      host->MarkFailed(this, results, "point", configure, "unknown exception.");
       return 1;
     }
     return 0;
   };
   if (azure2::CalculationPlan::RunTimeCheckRequested() && !work.empty()) {
-    azure2::CalculationPlan::RunChecked(*work[0]->GetParentData(), work, results, [&](EPoint *h) { failed += runTask(h); });
+    azure2::CalculationPlan::RunChecked(*this, work, results, [&](EPoint *h) { failed += runTask(h); });
     return failed;
   }
 #pragma omp parallel for schedule(dynamic, 1) reduction(+ : failed)

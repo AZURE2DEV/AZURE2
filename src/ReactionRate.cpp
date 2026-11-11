@@ -66,8 +66,8 @@ double gsl_reactionrate_integrand(double u, void *p) {
       EPoint *point = new EPoint(55.0, x, entranceKey, exitKey, false, false, false, 0.0, 0, 0);
       azure2::Results results;  // the point's own result record
       point->UsePrivateRecord(results);
-      point->Initialize(compound, configure);
-      point->Calculate(compound, configure, results);
+      point->Initialize(nullptr, compound, configure);
+      point->Calculate(nullptr, compound, configure, results);
       double sigma = point->GetFitCrossSection(results);
       delete point;
       if (std::isfinite(sigma) && sigma > 0.0) crossSection += sigma;
@@ -295,8 +295,8 @@ double RateCrossSectionAt(double energy, CNuc *compound, const Config &configure
       EPoint point(55.0, energy, entranceKey, key, false, false, false, 0.0, 0, 0);
       azure2::Results results;  // the point's own result record
       point.UsePrivateRecord(results);
-      point.Initialize(compound, configure);
-      point.Calculate(compound, configure, results);
+      point.Initialize(nullptr, compound, configure);
+      point.Calculate(nullptr, compound, configure, results);
       double sigma = point.GetFitCrossSection(results);
       if (!std::isfinite(sigma)) return std::numeric_limits<double>::quiet_NaN();
       total += sigma;

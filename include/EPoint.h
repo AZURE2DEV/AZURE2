@@ -336,7 +336,8 @@ class EPoint {
   /// Where this point is mapped, if it is.
   EnergyMap GetMap() const;
   /// Compute everything that depends on energy but not on the fit parameters. Run once before fitting.
-  void Initialize(CNuc *, const Config &);
+  /// `data`: the data set that holds the point (its target effect may carry Q coefficients), null outside one.
+  void Initialize(EData *data, CNuc *, const Config &);
   /// Fill the compound excitation energy from the c.m. energy (a sub-point moved by an energy shift).
   void ConvertExcitationEnergy(PPair *);
   /// Take the energies, c.m. angle and c.m. bin edges of the point's row from its segment's frame
@@ -417,7 +418,8 @@ class EPoint {
   /// and a warning naming the segment, the role of the point, its energy and the error, the first time in a run.
   /// Used by azure2::EvaluateModelPoint and EData::CalculatePointsInParallel (before 2026-11-01
   /// both gave 0 or left the term out, silently).
-  void MarkFailed(azure2::Results &results, const char *role, const Config &configure, const char *why);
+  /// `data` is the data set that holds the point (its plan names the mapped points), null for a point outside one.
+  void MarkFailed(EData *data, azure2::Results &results, const char *role, const Config &configure, const char *why);
   int GetSegmentKey() const { return segment_key_; }
   /// Set the cross-section to S-factor conversion.
   void SetSFactorConversion(double);
@@ -429,12 +431,13 @@ class EPoint {
   void CalcLegendreP(int, CNuc *, TargetEffect *);
   /// Compute the geometrical factor, S-factor conversion, \f$L_o\f$ elements, penetrabilities and phases together.
   /// With includeSubPoints false the sub-points are left alone (their energies are updated, and their values recomputed, separately).
-  /// With shareWithMapped true (setup, grid re-placement) the points mapped onto this one (EData::MapData) are given
-  /// the same tables; RecalcEDependentValues passes false (see there).
+  /// With `shareWithMappedOf`, the data set that holds the point (setup, grid re-placement), the points its plan maps
+  /// onto this one are given the same tables; null: none (RecalcEDependentValues, see there; a sub-point; a point
+  /// outside a data set).
   /// The rows of the open and closed particle channels are read from the tables of `rows` (docs/upgrade/
   /// channel_table.md) when one holds them, and otherwise computed (ChannelTable::Compute), once per (pair, l, E_c)
   /// of the point; rows->used, when set, receives every row used.
-  void CalcEDependentValues(CNuc *, const Config &, bool includeSubPoints = true, bool shareWithMapped = true,
+  void CalcEDependentValues(CNuc *, const Config &, bool includeSubPoints, EData *shareWithMappedOf,
                             const ChannelRowSource *rows = nullptr);
   /// The keys (pair, l, E_c) of the channel-table rows CalcEDependentValues reads for this point and, with
   /// includeSubPoints, its sub-points: the same blocks, channels and channel energies.
@@ -470,10 +473,13 @@ class EPoint {
   void AddECAmplitude(int, int, complex, double);
   void ClearECAmplitudes();
   /// Calculate the point (and the points mapped onto it, its sub-points) for the current parameters, writing the
-  /// values into `results`, the buffer of the evaluation laid out by the point's data set.
-  void Calculate(CNuc *, const Config &configure, azure2::Results &results, EPoint *parent = NULL, int subPointNum = 0);
+  /// values into `results`, the buffer of the evaluation laid out by `data`, the data set that holds the point: its
+  /// plan names the points mapped onto it, its target effects the fold.  Null for a point outside any data set (no
+  /// target effect, no plan: a reaction-rate point).
+  void Calculate(EData *data, CNuc *, const Config &configure, azure2::Results &results, EPoint *parent = NULL,
+                 int subPointNum = 0);
   /// The sub-point stage of a thin-target integration, with its sigma(E_bar) fallback (see the .cpp).
-  void CalculateThinTarget(CNuc *, const Config &configure, azure2::Results &results, TargetEffect *effect);
+  void CalculateThinTarget(EData &data, CNuc *, const Config &configure, azure2::Results &results, TargetEffect *effect);
   void SetMap(int, int);
   void ClearMapping();
   /// A mapped point that keeps its own energy-dependent values: a component of a SUM, RATIO or total-capture segment
@@ -487,14 +493,16 @@ class EPoint {
   void SetPlanTask(int task) { plan_task_ = task; }
   /// Take a copy of the point out of the plan: it calculates itself alone (a probe).
   void DetachFromPlan() { plan_task_ = -1; }
-  /// The points this point calculates besides itself, from its data set's plan (empty unless it is a task's host).
-  azure2::MappedPoints PlanMapped() const;
+  /// The points this point calculates besides itself, from the plan of `data`, the data set that holds it (empty
+  /// unless it is a task's host; empty for a null data set).
+  azure2::MappedPoints PlanMapped(EData *data) const;
   void SetTargetEffectNum(int);
   void AddSubPoint(EPoint);
-  void IntegrateTargetEffect(const Config &, azure2::Results &results);
+  /// The folds below take the data set that holds the point: the point's target effect is one of its effects.
+  void IntegrateTargetEffect(const EData &data, const Config &, azure2::Results &results);
   /// IntegrateTargetEffect on given sub-point values (0-based, one per sub-point) instead of the sub-points' slots:
   /// the integrated value, nothing written (the transform of a transmission or yield segment, src/ModelPass.cpp).
-  double IntegrateSubPointValues(const Config &, const std::vector<double> &values);
+  double IntegrateSubPointValues(const EData &data, const Config &, const std::vector<double> &values);
   /*!
    * Free-gas Doppler broadening on this point's sub-point grid (TargetEffect::IsDoppler): the weights w with
    * sigma_D(eCM) = sum w.second * sigma(sub-point w.first), sigma linear in E between sub-points, from the
@@ -503,7 +511,7 @@ class EPoint {
    * layout temperature and the pieces are those of the nominal temperature (TargetEffect::HasDopplerFit), so
    * only the kernel values depend on the current T; \p dwdT, if given, receives dw/dT (per K) on the same nodes.
    */
-  void DopplerWeights(double eCM, std::vector<std::pair<int, double>> &w,
+  void DopplerWeights(const EData &data, double eCM, std::vector<std::pair<int, double>> &w,
                       std::vector<std::pair<int, double>> *dwdT = nullptr) const;
   /*!
    * d/dT of the integrated value (IntegrateTargetEffect) for the sub-point values \p values (0-based): the
@@ -511,7 +519,7 @@ class EPoint {
    * at the point for a line without a kernel.  0 when the line has no Doppler step or it is applied elsewhere
    * (DopplerAppliedScope).  For the analytic gradient of a fitted temperature (doppler_<n>).
    */
-  double DopplerTemperatureDerivative(const Config &, const std::vector<double> &values);
+  double DopplerTemperatureDerivative(const EData &data, const Config &, const std::vector<double> &values);
   /*!
    * While alive, IntegrateTargetEffect (and TargetEffectWeights) skip the Doppler step: for the
    * transmission/yield assembly (TransformedValue in src/ModelPass.cpp), which broadens the terms itself before the
@@ -530,11 +538,11 @@ class EPoint {
   /// Exact weights c (0-based, one per sub-point) of IntegrateTargetEffect:
   /// yield = sum_i c[i] * (sub-point i's cross-section slot).  False if the
   /// integrator is not a pure linear form for this point.
-  bool TargetEffectWeights(const Config &, std::vector<double> &c);
-  void IntegrateTargetEffectForObservable(const Config &, azure2::Results &results);
+  bool TargetEffectWeights(const EData &data, const Config &, std::vector<double> &c);
+  void IntegrateTargetEffectForObservable(const EData &data, const Config &, azure2::Results &results);
   /// Integrate the E1 and E2 components of the cross section over the same
   /// sub-points as the total, for a segment compared against one component.
-  void IntegrateTargetEffectComponents(const Config &, azure2::Results &results);
+  void IntegrateTargetEffectComponents(const EData &data, const Config &, azure2::Results &results);
   /// Per-point energy window (columns 5-6 of the data file) of a beam-profile
   /// effect: the detector-reconstructed energy slice the point was built from.
   bool HasBinWindow() const { return bin_low_cm_ == bin_low_cm_ && bin_high_cm_ == bin_high_cm_; };
@@ -551,21 +559,19 @@ class EPoint {
   /// detailed-balance weight: Q_gamma = S_entrance - Ex_final (MeV) and the
   /// compound-nucleus mass (MeV).
   void SetPhotoKinematics(double qGamma, double compoundMassMeV) { photo_qgamma_ = qGamma; photo_mcn_ = compoundMassMeV; };
-  void SetParentData(EData *);
   void SetStoppingPower(double);
   void SetTargetThickness(double);
   void SetAngularDists(azure2::Results &r, vector_r dists);
-  EData *GetParentData() const;
   EPoint *GetSubPoint(int);
   std::vector<EPoint> &GetSubPoints();
  private:
   /// Body of IntegrateTargetEffect on a value type V (double or TELinearForm);
   /// rd(j) supplies sub-point j's value.
   template <class V, class Read>
-  V IntegrateTargetEffectImpl(const Config &, Read rd);
+  V IntegrateTargetEffectImpl(const EData &data, const Config &, Read rd);
   /// The line's kernels (Gaussian, target integration, UDR, beam profile) on sub-point values rd(j).
   template <class V, class Read>
-  V IntegrateKernelsImpl(const Config &, Read rd);
+  V IntegrateKernelsImpl(const EData &data, const Config &, Read rd);
   /// sigma at E_bar = E - D from the sub-point values: the single node, a quadratic through three fallback
   /// nodes, or a linear interpolation on a full grid.
   template <class V, class Read>
@@ -657,7 +663,6 @@ class EPoint {
   mutable std::vector<std::vector<ShiftedECAmplitude>> ec_shifted_;
   int plan_task_ = -1;  // see PlanTask
   std::vector<EPoint> integrationPoints_;
-  EData *parentData_;
   // Where the result record lies (see ResultSlot): no value of an evaluation is held in the point itself.
   std::size_t slot_ = kNoRecord;
   std::uint16_t num_ang_slots_ = 0;

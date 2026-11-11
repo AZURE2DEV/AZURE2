@@ -33,14 +33,15 @@ const double kNaN = std::numeric_limits<double>::quiet_NaN();
  * a failed RATIO denominator gave 0, all without a word: the natural SUM segments of tests/natural_neon on the
  * R-matrix route came back 0 at 84 points.
  */
-bool CalculatePoint(EPoint *point, const char *role, CNuc *cnuc, const Config &configure, azure2::Results &results) {
+bool CalculatePoint(EData &data, EPoint *point, const char *role, CNuc *cnuc, const Config &configure,
+                    azure2::Results &results) {
   try {
-    point->Calculate(cnuc, configure, results);
+    point->Calculate(&data, cnuc, configure, results);
     return true;
   } catch (const std::exception &e) {
-    point->MarkFailed(results, role, configure, e.what());
+    point->MarkFailed(&data, results, role, configure, e.what());
   } catch (...) {
-    point->MarkFailed(results, role, configure, "unknown exception.");
+    point->MarkFailed(&data, results, role, configure, "unknown exception.");
   }
   return false;
 }
@@ -112,13 +113,14 @@ const char *TermRole(const Prediction &p, const ESegment &segment, int term) {
  */
 class BaseKernel : public azure2::experiment::SubPointFold {
  public:
-  BaseKernel(EPoint *base, const Config &configure, int temperatureSlot) : base_(base), configure_(configure) {
-    if (!ESegment::HasSubPointIntegration(base)) return;
+  BaseKernel(const EData &data, EPoint *base, const Config &configure, int temperatureSlot)
+      : data_(data), base_(base), configure_(configure) {
+    if (!ESegment::HasSubPointIntegration(data, base)) return;
     stage_.subPoints = true;
     stage_.nsp = static_cast<std::size_t>(base->NumSubPoints());
-    const TargetEffect *effect = base->GetParentData()->GetTargetEffect(base->GetTargetEffectNum());
+    const TargetEffect *effect = data.GetTargetEffect(base->GetTargetEffectNum());
     if (!effect || !effect->IsDoppler()) return;
-    const bool temperature = temperatureSlot >= 0 && base->GetParentData()->DopplerParamOfEffect(base->GetTargetEffectNum()) > 0;
+    const bool temperature = temperatureSlot >= 0 && data.DopplerParamOfEffect(base->GetTargetEffectNum()) > 0;
     // one row at the point (no kernel after the Doppler step) or one per sub-point (the kernel's grid)
     std::vector<double> energies;
     stage_.fold = effect->HasResolutionStage();
@@ -130,7 +132,7 @@ class BaseKernel : public azure2::experiment::SubPointFold {
     rowStart_.push_back(0);
     rowStartT_.push_back(0);
     for (double e : energies) {
-      base->DopplerWeights(e, dw, temperature ? &dwdT : nullptr);
+      base->DopplerWeights(data, e, dw, temperature ? &dwdT : nullptr);
       for (const auto &t : dw) {
         col_.push_back(t.first - 1);
         w_.push_back(t.second);
@@ -151,17 +153,18 @@ class BaseKernel : public azure2::experiment::SubPointFold {
   azure2::experiment::TransformStage stage(std::size_t) const override { return stage_; }
   double fold(std::size_t, const double *f, std::size_t n) const override {
     EPoint::DopplerAppliedScope dopplerDone(base_);
-    return base_->IntegrateSubPointValues(configure_, std::vector<double>(f, f + n));
+    return base_->IntegrateSubPointValues(data_, configure_, std::vector<double>(f, f + n));
   }
   bool weights(std::size_t, double *c, std::size_t n) const override {
     std::vector<double> weights;
     EPoint::DopplerAppliedScope dopplerDone(base_);
-    if (!base_->TargetEffectWeights(configure_, weights) || weights.size() != n) return false;
+    if (!base_->TargetEffectWeights(data_, configure_, weights) || weights.size() != n) return false;
     std::copy(weights.begin(), weights.end(), c);
     return true;
   }
 
  private:
+  const EData &data_;
   EPoint *base_;
   const Config &configure_;
   azure2::experiment::TransformStage stage_;
@@ -179,8 +182,8 @@ class BaseKernel : public azure2::experiment::SubPointFold {
  * fitted Doppler temperature.
  */
 struct PointInputs {
-  PointInputs(ESegment &segment, const Prediction &p, int pointIndex, CNuc *cnuc, const Config &configure,
-              const azure2::Results &results)
+  PointInputs(const EData &data, ESegment &segment, const Prediction &p, int pointIndex, CNuc *cnuc,
+              const Config &configure, const azure2::Results &results)
       : nl(p.leaves.size()), nf(p.factors.size()), np(p.params.size()), point(nl), leafValue(nl), factorValue(nf),
         paramValue(np + 1), leafArray(nl), factorArray(nf) {
     EPoint *basePoint = segment.GetPoint(pointIndex + 1);
@@ -188,7 +191,7 @@ struct PointInputs {
       point[k] = TermPoint(segment, p.leaves[k].term, pointIndex);
       const LeafPart part = p.leaves[k].part;
       leafValue[k] = azure2::experiment::IsCoulombReference(part)
-                         ? azure2::CoulombReferenceValue(point[k], part, cnuc, configure)
+                         ? azure2::CoulombReferenceValue(data, point[k], part, cnuc, configure)
                          : LeafValue(point[k], part, results);
       leafArray[k] = {&leafValue[k], 1};
     }
@@ -214,10 +217,10 @@ struct PointInputs {
     in.factors = {factorArray.data(), nf};
     in.params = paramValue.data();
     if (p.tree.Transforms().empty()) return;
-    kernel = std::make_unique<BaseKernel>(basePoint, configure, static_cast<int>(np));
+    kernel = std::make_unique<BaseKernel>(data, basePoint, configure, static_cast<int>(np));
     folds[0] = kernel.get();
     in.folds = {folds, 1};
-    if (!ESegment::HasSubPointIntegration(basePoint)) return;
+    if (!ESegment::HasSubPointIntegration(data, basePoint)) return;
     for (std::size_t k = 0; k < nl; k++) {
       subOffsets.push_back(subValues.size());
       for (int j = 1; j <= point[k]->NumSubPoints(); j++)
@@ -252,7 +255,7 @@ const Prediction &PredictionOf(const ESegment &segment) {
  * (PointInputs).  The per-nucleus terms of a sample segment go into the base point's leaf record (the decomposition
  * output).
  */
-double ComposeModelValue(ESegment &segment, int pointIndex, CNuc *cnuc, const Config &configure,
+double ComposeModelValue(EData &data, ESegment &segment, int pointIndex, CNuc *cnuc, const Config &configure,
                          azure2::Results &results, azure2::LeafValues leaves) {
   const Prediction &p = PredictionOf(segment);
   EPoint *basePoint = segment.GetPoint(pointIndex + 1);
@@ -262,10 +265,10 @@ double ComposeModelValue(ESegment &segment, int pointIndex, CNuc *cnuc, const Co
     if (!termPoint) return FailedSample(segment, basePoint, cnuc, results);  // a leaf has a point at every row
     if (azure2::experiment::IsCoulombReference(leaf.part)) continue;  // analytic: nothing to calculate
     if (CalculatesItself(termPoint, leaves) &&
-        !CalculatePoint(termPoint, TermRole(p, segment, leaf.term), cnuc, configure, results))
+        !CalculatePoint(data, termPoint, TermRole(p, segment, leaf.term), cnuc, configure, results))
       return FailedSample(segment, basePoint, cnuc, results);
   }
-  PointInputs inputs(segment, p, pointIndex, cnuc, configure, results);
+  PointInputs inputs(data, segment, p, pointIndex, cnuc, configure, results);
   azure2::experiment::Workspace ws;
   double m;
   if (segment.IsNatural()) {
@@ -294,33 +297,34 @@ double ComposeModelValue(ESegment &segment, int pointIndex, CNuc *cnuc, const Co
 
 namespace azure2 {
 
-double EvaluateModelPoint(ESegment &segment, int pointIndex, CNuc *compound, const Config &config, Results &results,
-                          LeafValues leaves) {
+double EvaluateModelPoint(EData &data, ESegment &segment, int pointIndex, CNuc *compound, const Config &config,
+                          Results &results, LeafValues leaves) {
   EPoint *point = (pointIndex >= 0 && pointIndex < segment.NumPoints()) ? segment.GetPoint(pointIndex + 1) : nullptr;
   if (!point) throw std::logic_error("EvaluateModelPoint: segment " + std::to_string(segment.GetSegmentKey()) +
                                      " has no point " + std::to_string(pointIndex));
-  const double m = ComposeModelValue(segment, pointIndex, compound, config, results, leaves);
+  const double m = ComposeModelValue(data, segment, pointIndex, compound, config, results, leaves);
   point->SetModelValue(results, m);
   point->CopyAngularDistsToModel(results);
   return m;
 }
 
-void EvaluateModelSegment(ESegment &segment, CNuc *compound, const Config &config, Results &results,
+void EvaluateModelSegment(EData &data, ESegment &segment, CNuc *compound, const Config &config, Results &results,
                           LeafValues leaves) {
   for (int pid = 0; pid < segment.NumPoints(); pid++)
-    EvaluateModelPoint(segment, pid, compound, config, results, leaves);
+    EvaluateModelPoint(data, segment, pid, compound, config, results, leaves);
 }
 
 void EvaluateModel(EData &data, CNuc *compound, const Config &config, Results &results, LeafValues leaves) {
-  for (int i = 1; i <= data.NumSegments(); i++) EvaluateModelSegment(*data.GetSegment(i), compound, config, results, leaves);
+  for (int i = 1; i <= data.NumSegments(); i++)
+    EvaluateModelSegment(data, *data.GetSegment(i), compound, config, results, leaves);
 }
 
-bool ModelPointBackward(ESegment &segment, int pointIndex, CNuc *compound, const Config &config,
+bool ModelPointBackward(const EData &data, ESegment &segment, int pointIndex, CNuc *compound, const Config &config,
                         const Results &results, double g, ModelCotangents &out) {
   const Prediction &p = PredictionOf(segment);
   for (const experiment::LeafSelector &leaf : p.leaves)
     if (!TermPoint(segment, leaf.term, pointIndex)) return false;
-  PointInputs inputs(segment, p, pointIndex, compound, config, results);
+  PointInputs inputs(data, segment, p, pointIndex, compound, config, results);
   const std::size_t nl = inputs.nl, np = inputs.np;
   out.leaves.assign(nl, ModelCotangents::Leaf());
   out.params.assign(np + 1, 0.0);

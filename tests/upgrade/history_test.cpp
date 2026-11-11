@@ -88,7 +88,7 @@ Evaluation Evaluate(Copy &c, const vector_r &p, const Config &cfg) {
   if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(cfg, false);
   std::vector<ESegment *> segments;
   for (int i = 1; i <= ld->NumSegments(); i++) segments.push_back(ld->GetSegment(i));
-  const bool pre = EData::CalculatePointsInParallel(segments, lc, cfg, c.results) >= 0;
+  const bool pre = ld->CalculatePointsInParallel(segments, lc, cfg, c.results) >= 0;
   Evaluation e;
   azure2::EvaluateModel(*ld, lc, cfg, c.results, pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
   e.models = c.results.model;

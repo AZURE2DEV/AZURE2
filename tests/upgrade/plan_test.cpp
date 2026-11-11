@@ -41,10 +41,10 @@ std::string CrossCheck(EData &data) {
   for (int t = 0; t < plan.NumTasks(); t++) {
     const azure2::CalculationTask &task = plan.Task(t);
     EPoint *host = data.PlanPoint(task.host);
-    const azure2::MappedPoints m = host->PlanMapped();
+    const azure2::MappedPoints m = host->PlanMapped(&data);
     if (m.size() != (int)task.mapped.size()) return "task " + std::to_string(t) + ": its host does not see its mapped points";
     for (int k = 0; k < m.size(); k++)
-      if (m[k] != data.PlanPoint(task.mapped[k]) || m[k]->PlanTask() != t || m[k]->PlanMapped().size() != 0)
+      if (m[k] != data.PlanPoint(task.mapped[k]) || m[k]->PlanTask() != t || m[k]->PlanMapped(&data).size() != 0)
         return "task " + std::to_string(t) + ": mapped point " + std::to_string(k) + " is not the plan's";
   }
   return plan.Check(data);

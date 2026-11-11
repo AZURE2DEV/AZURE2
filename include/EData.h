@@ -457,11 +457,12 @@ class EData {
   bool ThmDistortionTable(const std::string &name, const std::vector<double> &energies, ThmDistortionReport &out,
                           std::string &why);
   TargetEffect *GetTargetEffect(int);
+  const TargetEffect *GetTargetEffect(int n) const { return const_cast<EData *>(this)->GetTargetEffect(n); }
   EDataIterator begin();
   EDataIterator end();
   std::vector<ESegment> &GetSegments();
   /*!
-   * Calculates every point of \p segments and of their leaves in
+   * Calculates every point of \p segments (segments of this data set) and of their leaves in
    * one OpenMP pass, largest items first.  A host point also fills the points
    * mapped onto it, so mapped points are not items of their own.  A point whose
    * calculation throws gets a fit cross section of 0.  Returns the number of
@@ -470,8 +471,8 @@ class EData {
    * AZURE_SERIAL_CHI2 set.  The caller then reads the points with
    * azure2::EvaluateModelPoint(..., LeafValues::Ready).
    */
-  static int CalculatePointsInParallel(const std::vector<ESegment *> &segments, CNuc *theCNuc,
-                                       const Config &configure, azure2::Results &results);
+  int CalculatePointsInParallel(const std::vector<ESegment *> &segments, CNuc *theCNuc, const Config &configure,
+                                azure2::Results &results);
 
  private:
   std::vector<TargetEffect> targetEffects_;

@@ -325,7 +325,7 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
     gc.resonanceWidthMultiplier = spec.resonanceWidthMultiplier;
     gc.pointsPerWidth = spec.pointsPerWidth;
     gc.resonanceOffset = it.offset;
-    const azure2::MappedPoints mapped = point->PlanMapped();
+    const azure2::MappedPoints mapped = point->PlanMapped(this);
     for (int m = 0; m < mapped.size(); m++) {
       auto own = mappedSegment.find(mapped[m]);
       if (own == mappedSegment.end() || !own->second.replaceable) return;  // its mapped point keeps the grid
@@ -385,7 +385,7 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
           sub.CalcLegendreP(configure.maxLOrder, theCNuc, qEffect);
           // A shifted segment's sub-points are moved and energised by the shift step.
           if (!shifted) {
-            sub.CalcEDependentValues(theCNuc, configure);
+            sub.CalcEDependentValues(theCNuc, configure, true, nullptr);
             sub.CalcCoulombAmplitude(theCNuc);
           }
         }
@@ -437,7 +437,7 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
     for (const Item &it : work) {
       EPoint *host = it.seg.GetPoint(it.i);
       const std::vector<EPoint> &hs = host->GetSubPoints();
-      const azure2::MappedPoints mapped = host->PlanMapped();
+      const azure2::MappedPoints mapped = host->PlanMapped(this);
       for (int m = 0; m < mapped.size(); m++) {
         const std::vector<EPoint> &ms = mapped[m]->GetSubPoints();
         bool same = ms.size() == hs.size();

@@ -118,10 +118,10 @@ class ESegment {
   /// Make `rows` the segment's measurement and one point per row (a data file's rows, or the grid of an
   /// extrapolation), in the frame as read; ConvertRowToCM converts them.
   void SetMeasurementRows(std::shared_ptr<const azure2::experiment::MeasurementRows> rows,
-                          const azure2::experiment::MeasurementProvenance &provenance, bool extrapolation, EData *data);
+                          const azure2::experiment::MeasurementProvenance &provenance, bool extrapolation);
   /// The grid of an extrapolation as its measurement: one row per (angle, energy), energies varying fastest, value
   /// 0 and uncertainty 0.1 (lab MeV, deg).
-  void SetGridRows(const std::vector<double> &energies, const std::vector<double> &angles, EData *data);
+  void SetGridRows(const std::vector<double> &energies, const std::vector<double> &angles);
   /// Row i (0-based) of the measurement as read: the value, its uncertainty (after a covariance file), its data-file
   /// record.
   double LabValue(int i) const { return measurement_->rows->value[i]; }
@@ -379,15 +379,16 @@ class ESegment {
   /// Set the sqrt(E) coefficient; UpdatePointEnergiesWithShift applies it to the points.
   void SetEnergyShiftSqrt(double);
   void SetLastEnergyShiftSqrt(double);
-  /// Re-apply the current energy shift to every point of every term, undoing the previous one.
-  void UpdatePointEnergiesWithShift(CNuc *theCNuc = NULL, const Config *configure = NULL);
+  /// Re-apply the current energy shift to every point of every term, undoing the previous one.  `data` is the data
+  /// set that holds the segment (its plan and target effects); below too.
+  void UpdatePointEnergiesWithShift(EData &data, CNuc *theCNuc, const Config *configure);
   /// The same for point i (0-based) of term t and its sub-points.
-  void UpdatePointEnergyWithShift(int t, int i, CNuc *theCNuc, const Config *configure);
+  void UpdatePointEnergyWithShift(EData &data, int t, int i, CNuc *theCNuc, const Config *configure);
   /// Point i (0-based) of term t and, after it, every point of the term mapped onto it; nothing if point i is itself
   /// mapped onto an earlier point of the term (its host does it).  The unit for parallel re-energising.
-  void UpdatePointGroupEnergyWithShift(int t, int i, CNuc *theCNuc, const Config *configure);
+  void UpdatePointGroupEnergyWithShift(EData &data, int t, int i, CNuc *theCNuc, const Config *configure);
   /// The earlier point of term t that its point i (0-based) is mapped onto, or NULL.
-  EPoint *ShiftHost(int t, int i);
+  EPoint *ShiftHost(EData &data, int t, int i);
   /// Change the exit pair key.
   void SetExitKey(int);
   /// Change the entrance pair key, for this segment and every point in it.
@@ -467,8 +468,8 @@ class ESegment {
   /// The value the fit compares with the data is formed by the segment, not read off its points: components, a
   /// sample's abundance weights or a transmission / yield transform.
   bool NeedsAssembly() const { return HasComponents() || IsNatural() || IsTransformed(); }
-  /// True when the point is integrated over sub-points (EPoint::IntegrateTargetEffect).
-  static bool HasSubPointIntegration(EPoint *point);
+  /// True when the point, a point of `data`, is integrated over sub-points (EPoint::IntegrateTargetEffect).
+  static bool HasSubPointIntegration(const EData &data, EPoint *point);
   /// IsTotal for the segment's own term: the segment is "total" and its exit pair is its entrance pair.
   bool IsTotalTerm() const { return IsTermTotal(0); }
   int GetNaturalSample() const { return naturalSample_; }

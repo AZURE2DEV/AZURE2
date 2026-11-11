@@ -190,8 +190,8 @@ void EPoint::ChannelKeys(CNuc *theCNuc, std::vector<ChannelTable::Key> &keys, bo
     for (int i = 1; i <= this->NumSubPoints(); i++) this->GetSubPoint(i)->ChannelKeys(theCNuc, keys, true);
 }
 
-void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool includeSubPoints, bool shareWithMapped,
-                                  const ChannelRowSource *rows) {
+void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool includeSubPoints,
+                                  EData *shareWithMappedOf, const ChannelRowSource *rows) {
   AZUREProfile::Timer profileTimer(AZUREProfile::kEDependent);
   PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
   PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
@@ -405,7 +405,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   }
   if (includeSubPoints) {
     for (int i = 1; i <= this->NumSubPoints(); i++) {
-      this->GetSubPoint(i)->CalcEDependentValues(theCNuc, configure, true, true, rows);
+      this->GetSubPoint(i)->CalcEDependentValues(theCNuc, configure, true, nullptr, rows);
     }
   }
   // The points mapped onto this one share its tables -- at setup and on a grid
@@ -416,8 +416,8 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   // (EData::FillEnergyShiftsFromParams), and two threads assigning the same
   // shared_ptr freed the tables under the other's copy-on-write
   // (heap-use-after-free, AddressSanitizer 2026-11-06; macOS CI aborts).
-  const azure2::MappedPoints mappedPts = this->PlanMapped();
-  for (int i = 1; shareWithMapped && i <= mappedPts.size(); i++) {
+  const azure2::MappedPoints mappedPts = this->PlanMapped(shareWithMappedOf);
+  for (int i = 1; i <= mappedPts.size(); i++) {
     EPoint *mappedPoint = mappedPts[i - 1];
     if (mappedPoint->OwnsEDependentValues()) continue;
     mappedPoint->geofactor_ = geofactor_;
@@ -496,7 +496,7 @@ void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config &configure, bool
   // Recalculate with current energy.  The points mapped onto this one are not
   // touched: each is re-energised itself, from its host's values
   // (CopyEDependentValuesFrom) or anew (ESegment::UpdatePointEnergyWithShift).
-  this->CalcEDependentValues(theCNuc, configure, includeSubPoints, false, rows);
+  this->CalcEDependentValues(theCNuc, configure, includeSubPoints, nullptr, rows);
 
   // Also recalculate Coulomb amplitude with current energy
   this->CalcCoulombAmplitude(theCNuc, includeSubPoints);

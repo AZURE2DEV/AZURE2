@@ -57,9 +57,9 @@ AZUREAPI::~AZUREAPI() {
 // caller repeats the calculation point by point, so a failed point keeps the
 // serial path's handling (a NaN slot in UpdateSegments*, 0 or a skipped
 // component in a chi-squared) and the results equal the serial path's.
-static bool PrecalculateAll(const std::vector<ESegment *> &segments, CNuc *lc, const Config &cfg,
+static bool PrecalculateAll(EData &data, const std::vector<ESegment *> &segments, CNuc *lc, const Config &cfg,
                             azure2::Results &results) {
-  return EData::CalculatePointsInParallel(segments, lc, cfg, results) == 0;
+  return data.CalculatePointsInParallel(segments, lc, cfg, results) == 0;
 }
 
 // The segments the UpdateSegments* loops report: the first of each run of equal keys.
@@ -331,7 +331,7 @@ int AZUREAPI::ReportSegments(CNuc *localCompound, EData *localData) {
   if (!localData) return 0;
   AZUREProfile::ScopedReport profileReport("api segments");
   const std::vector<ESegment *> segments = ReportedSegments(localData->GetSegments());
-  const bool pre = PrecalculateAll(segments, localCompound, configure(), results());
+  const bool pre = PrecalculateAll(*localData, segments, localCompound, configure(), results());
   for (ESegment *segment : segments) {
     std::vector<EPoint> &data = segment->GetPoints();
     std::vector<double> cross, crossE1, crossE2, energies, angles, conv, excitationEnergies;
@@ -339,7 +339,7 @@ int AZUREAPI::ReportSegments(CNuc *localCompound, EData *localData) {
     // coefficients (a zero for a point outside an angular-distribution segment).
     std::vector<double> angularDists;
     for (int k = 0; k < (int)data.size(); ++k) {
-      cross.push_back(azure2::EvaluateModelPoint(*segment, k, localCompound, configure(), results(),
+      cross.push_back(azure2::EvaluateModelPoint(*localData, *segment, k, localCompound, configure(), results(),
                                                  pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate));
       crossE1.push_back(data[k].GetFitE1CrossSection(results()));
       crossE2.push_back(data[k].GetFitE2CrossSection(results()));
@@ -796,11 +796,11 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
   std::vector<std::vector<std::pair<int, size_t>>> groupRows(ld->NumThmGroups());
   // Every point in one parallel pass first (dev 37cdd34), as the CLI's AZURECalc::PrecalculatePoints.
   AZUREProfile::ScopedReport profileReport("api chi2");
-  const bool pre = PrecalculateAll(AllSegments(ld), lc, configure(), results());
+  const bool pre = PrecalculateAll(*ld, AllSegments(ld), lc, configure(), results());
   for (int i = 1; i <= ld->NumSegments(); i++) {
     ESegment *segment = ld->GetSegment(i);
     if (!segment) continue;
-    azure2::EvaluateModelSegment(*segment, lc, configure(), results(),
+    azure2::EvaluateModelSegment(*ld, *segment, lc, configure(), results(),
                                  pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
 
     // A THM experiment: one profile (shared norm, background) over its

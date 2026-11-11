@@ -427,7 +427,7 @@ int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
     if (!error.empty()) configure.outStream << error << std::endl;
     return -1;
   }
-  this->SetMeasurementRows(rows, provenance, false, theData);
+  this->SetMeasurementRows(rows, provenance, false);
   PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
   PPair *exitPair = theCNuc->GetPairFromKey(this->GetExitKey());  // nullptr for total capture (-1)
   for (int i = 0; i < this->NumPoints(); i++) {
@@ -446,8 +446,7 @@ int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
 }
 
 void ESegment::SetMeasurementRows(std::shared_ptr<const azure2::experiment::MeasurementRows> rows,
-                                  const azure2::experiment::MeasurementProvenance &provenance, bool extrapolation,
-                                  EData *data) {
+                                  const azure2::experiment::MeasurementProvenance &provenance, bool extrapolation) {
   auto m = std::make_shared<azure2::experiment::Measurement>();
   m->key = this->GetSegmentKey();
   m->extrapolation = extrapolation;
@@ -462,13 +461,12 @@ void ESegment::SetMeasurementRows(std::shared_ptr<const azure2::experiment::Meas
   own_.frame.rows.reserve(r.Size());
   for (int i = 0; i < r.Size(); i++) {
     this->AddPoint(EPoint(r, i, this, 0));
-    own_.points.back().SetParentData(data);
     own_.frame.rows.push_back(azure2::experiment::UnconvertedRow(r.energy[i], r.angle[i], r.value[i], r.error[i],
                                                             r.binLow[i], r.binHigh[i]));
   }
 }
 
-void ESegment::SetGridRows(const std::vector<double> &energies, const std::vector<double> &angles, EData *data) {
+void ESegment::SetGridRows(const std::vector<double> &energies, const std::vector<double> &angles) {
   auto rows = std::make_shared<azure2::experiment::MeasurementRows>();
   for (double angle : angles)
     for (double energy : energies)
@@ -476,7 +474,7 @@ void ESegment::SetGridRows(const std::vector<double> &energies, const std::vecto
                 std::numeric_limits<double>::quiet_NaN(), 0);
   azure2::experiment::MeasurementProvenance provenance;
   provenance.rowsRead = provenance.rowsKept = rows->Size();
-  this->SetMeasurementRows(rows, provenance, true, data);
+  this->SetMeasurementRows(rows, provenance, true);
 }
 
 void ESegment::SetPrediction(std::shared_ptr<const azure2::experiment::Prediction> p) {
@@ -903,9 +901,9 @@ double ESegment::RatioTermFrameFactor(int t, EPoint *point, CNuc *cnuc) const {
   return point->CalculateCrossSectionConversionFactor(entrancePair, exitPair);
 }
 
-bool ESegment::HasSubPointIntegration(EPoint *point) {
-  if (!point || !point->IsTargetEffect() || point->NumSubPoints() <= 0 || !point->GetParentData()) return false;
-  TargetEffect *te = point->GetParentData()->GetTargetEffect(point->GetTargetEffectNum());
+bool ESegment::HasSubPointIntegration(const EData &data, EPoint *point) {
+  if (!point || !point->IsTargetEffect() || point->NumSubPoints() <= 0) return false;
+  const TargetEffect *te = data.GetTargetEffect(point->GetTargetEffectNum());
   return te && te->IsSubPointEffect();
 }
 

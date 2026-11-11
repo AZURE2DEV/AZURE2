@@ -88,7 +88,7 @@ void EData::PrintData(const Config &configure) {
         out << std::setw(12) << "Not Mapped"
             << std::setw(18) << data.point()->NumSubPoints();
       if (data.point()->IsTargetEffect() && data.point()->NumSubPoints() > 0 &&
-          data.point()->GetParentData()->GetTargetEffect(data.point()->GetTargetEffectNum())->IsSubPointEffect()) {
+          this->GetTargetEffect(data.point()->GetTargetEffectNum())->IsSubPointEffect()) {
         out << std::setw(18) << data.point()->GetSubPoint(data.point()->NumSubPoints())->GetCMEnergy()
             << std::setw(18) << data.point()->GetSubPoint(1)->GetCMEnergy();
       }

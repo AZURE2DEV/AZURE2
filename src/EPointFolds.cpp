@@ -67,15 +67,15 @@ void GridQuadrature(EPoint *point, Read rd, double lo, double hi, bool divideByS
  */
 
 template <class V, class Read>
-V EPoint::IntegrateTargetEffectImpl(const Config &configure, Read rd) {
-  TargetEffect *targetEffect = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
-  if (!targetEffect->IsDoppler() || doppler_applied_) return this->IntegrateKernelsImpl<V>(configure, rd);
+V EPoint::IntegrateTargetEffectImpl(const EData &data, const Config &configure, Read rd) {
+  const TargetEffect *targetEffect = data.GetTargetEffect(this->GetTargetEffectNum());
+  if (!targetEffect->IsDoppler() || doppler_applied_) return this->IntegrateKernelsImpl<V>(data, configure, rd);
   // Free-gas Doppler broadening first (SAMMY's order), then the line's kernel on the broadened values.
   const int n = this->NumSubPoints();
   if (n < 2) return V(0.0);
   std::vector<std::pair<int, double>> w;
   auto broaden = [&](double e) {
-    this->DopplerWeights(e, w);
+    this->DopplerWeights(data, e, w);
     V s = 0.0;
     for (const auto &t : w) s += t.second * rd(t.first);
     return s;
@@ -83,14 +83,14 @@ V EPoint::IntegrateTargetEffectImpl(const Config &configure, Read rd) {
   if (!targetEffect->HasResolutionStage()) return broaden(this->GetCMEnergy());
   std::vector<V> b(n);
   for (int j = 1; j <= n; j++) b[j - 1] = broaden(this->GetSubPoint(j)->GetCMEnergy());
-  return this->IntegrateKernelsImpl<V>(configure, [&b](int j) { return b[j - 1]; });
+  return this->IntegrateKernelsImpl<V>(data, configure, [&b](int j) { return b[j - 1]; });
 }
 
-void EPoint::DopplerWeights(double eCM, std::vector<std::pair<int, double>> &w,
+void EPoint::DopplerWeights(const EData &data, double eCM, std::vector<std::pair<int, double>> &w,
                             std::vector<std::pair<int, double>> *dwdT) const {
   w.clear();
   if (dwdT) dwdT->clear();
-  const TargetEffect *te = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
+  const TargetEffect *te = data.GetTargetEffect(this->GetTargetEffectNum());
   const int n = this->NumSubPoints();
   const double c = cm_factor_;
   const double u = te->DopplerU(c);
@@ -158,14 +158,15 @@ void EPoint::DopplerWeights(double eCM, std::vector<std::pair<int, double>> &w,
   if (dwdT) dwdT->assign(dacc.begin(), dacc.end());
 }
 
-double EPoint::DopplerTemperatureDerivative(const Config &configure, const std::vector<double> &values) {
-  TargetEffect *targetEffect = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
+double EPoint::DopplerTemperatureDerivative(const EData &data, const Config &configure,
+                                            const std::vector<double> &values) {
+  const TargetEffect *targetEffect = data.GetTargetEffect(this->GetTargetEffectNum());
   if (!targetEffect->IsDoppler() || doppler_applied_) return 0.0;
   const int n = this->NumSubPoints();
   if (n < 2 || (int)values.size() < n) return 0.0;
   std::vector<std::pair<int, double>> w, dw;
   auto dBroaden = [&](double e) {
-    this->DopplerWeights(e, w, &dw);
+    this->DopplerWeights(data, e, w, &dw);
     double s = 0.0;
     for (const auto &t : dw) s += t.second * values[t.first - 1];
     return s;
@@ -174,7 +175,7 @@ double EPoint::DopplerTemperatureDerivative(const Config &configure, const std::
   // The kernel after the Doppler step is linear in its sub-point values: apply it to d(sigma_D)/dT.
   std::vector<double> b(n);
   for (int j = 1; j <= n; j++) b[j - 1] = dBroaden(this->GetSubPoint(j)->GetCMEnergy());
-  return this->IntegrateKernelsImpl<double>(configure, [&b](int j) { return b[j - 1]; });
+  return this->IntegrateKernelsImpl<double>(data, configure, [&b](int j) { return b[j - 1]; });
 }
 
 template <class V, class Read>
@@ -212,9 +213,9 @@ V EPoint::TargetFallbackImpl(Read rd) {
 }
 
 template <class V, class Read>
-V EPoint::IntegrateKernelsImpl(const Config &configure, Read rd) {
+V EPoint::IntegrateKernelsImpl(const EData &data, const Config &configure, Read rd) {
   V yield = 0.0;
-  TargetEffect *targetEffect = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
+  const TargetEffect *targetEffect = data.GetTargetEffect(this->GetTargetEffectNum());
   const int numPoints = this->NumSubPoints();
   // A thin-target point outside the windows of an energy-restricted integration, or one the automatic
   // tolerance let off: sigma at the depth-averaged energy E_bar (SetTargetFallbackOnly, TargetFallbackScope).
@@ -455,20 +456,20 @@ V EPoint::IntegrateKernelsImpl(const Config &configure, Read rd) {
   }
   return yield;
 }
-void EPoint::IntegrateTargetEffect(const Config &configure, azure2::Results &results) {
-  this->SetFitCrossSection(results, this->IntegrateTargetEffectImpl<double>(configure, [this, &results](int j) {
+void EPoint::IntegrateTargetEffect(const EData &data, const Config &configure, azure2::Results &results) {
+  this->SetFitCrossSection(results, this->IntegrateTargetEffectImpl<double>(data, configure, [this, &results](int j) {
     return this->GetSubPoint(j)->GetFitCrossSection(results);
   }));
 }
-double EPoint::IntegrateSubPointValues(const Config &configure, const std::vector<double> &values) {
-  return this->IntegrateTargetEffectImpl<double>(configure, [&values](int j) { return values[j - 1]; });
+double EPoint::IntegrateSubPointValues(const EData &data, const Config &configure, const std::vector<double> &values) {
+  return this->IntegrateTargetEffectImpl<double>(data, configure, [&values](int j) { return values[j - 1]; });
 }
 
-bool EPoint::TargetEffectWeights(const Config &configure, std::vector<double> &c) {
+bool EPoint::TargetEffectWeights(const EData &data, const Config &configure, std::vector<double> &c) {
   const int n = this->NumSubPoints();
   c.assign(n > 0 ? n : 0, 0.0);
   TELinearForm y = this->IntegrateTargetEffectImpl<TELinearForm>(
-      configure, [](int j) { return TELinearForm::Unit(j); });
+      data, configure, [](int j) { return TELinearForm::Unit(j); });
   if (!y.Valid()) return false;
   for (const auto &t : y.Terms()) {
     if (t.first < 1 || t.first > n) return false;

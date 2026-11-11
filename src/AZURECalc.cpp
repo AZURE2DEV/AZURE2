@@ -108,7 +108,7 @@ double SegmentLocalChi2(ESegment *segment, CNuc *lc, const Config &config, EData
   double chi = 0.0;
   const double norm = segment->GetNorm();
   for (int pid = 0; pid < segment->NumPoints(); pid++) {
-    azure2::EvaluateModelPoint(*segment, pid, lc, config, results, azure2::LeafValues::Calculate);
+    azure2::EvaluateModelPoint(*ld, *segment, pid, lc, config, results, azure2::LeafValues::Calculate);
     chi += azure2::PointResidual(*segment, pid, results, norm).Chi2();
   }
   segment->AddShiftPenalty(chi);
@@ -249,7 +249,7 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, azure2::Results &results,
       EPoint *pt = seg->GetPoint(pid + 1);
       if (!pt) return;
       present[pid] = 1;
-      azure2::EvaluateModelPoint(*seg, pid, lc, config, results, azure2::LeafValues::Calculate);
+      azure2::EvaluateModelPoint(*ld, *seg, pid, lc, config, results, azure2::LeafValues::Calculate);
       byPoint[pid] = azure2::PointResidual(*seg, pid, results, norm).Pull();
     };
     // No parallel construct inside an enclosing parallel region.  In parallel each point is calculated on
@@ -274,14 +274,14 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, azure2::Results &results,
   // chi-squared evaluation), then the residuals in row order.  If a point
   // failed in the pass, the combination recalculates point by point.
   auto allResiduals = [&](vector_r &out) {
-    const bool pre = EData::CalculatePointsInParallel(segments, lc, config, results) == 0;
+    const bool pre = ld->CalculatePointsInParallel(segments, lc, config, results) == 0;
     out.clear();
     for (ESegment *seg : segments) {
       const double norm = seg->GetNorm();
       for (int pid = 0; pid < seg->NumPoints(); pid++) {
         EPoint *pt = seg->GetPoint(pid + 1);
         if (!pt) continue;
-        azure2::EvaluateModelPoint(*seg, pid, lc, config, results, pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
+        azure2::EvaluateModelPoint(*ld, *seg, pid, lc, config, results, pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
         out.push_back(azure2::PointResidual(*seg, pid, results, norm).Pull());
       }
     }
@@ -327,9 +327,9 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, azure2::Results &results,
   auto updateSegment = [&](ESegment *seg) {
     if (!InParallelRegion()) {
 #pragma omp parallel for schedule(dynamic, 1)
-      for (int pid = 0; pid < seg->NumPoints(); pid++) seg->UpdatePointGroupEnergyWithShift(0, pid, lc, &config);
+      for (int pid = 0; pid < seg->NumPoints(); pid++) seg->UpdatePointGroupEnergyWithShift(*ld, 0, pid, lc, &config);
     } else {
-      seg->UpdatePointEnergiesWithShift(lc, &config);
+      seg->UpdatePointEnergiesWithShift(*ld, lc, &config);
     }
   };
   for (const LocalShift &ls : localCols) {
@@ -651,7 +651,7 @@ bool AZURECalc::PrecalculatePoints(CNuc *lc, EData *ld, azure2::Results &results
     if (!seg || (thmOnly && !seg->IsTHM())) continue;
     segments.push_back(seg);
   }
-  return EData::CalculatePointsInParallel(segments, lc, configure(), results) >= 0;
+  return ld->CalculatePointsInParallel(segments, lc, configure(), results) >= 0;
 }
 
 /*!
@@ -672,7 +672,7 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, azure2::Results &results, const ve
 
   for (int i = 1; i <= ld->NumSegments(); i++)
     if (!thmOnly || ld->GetSegment(i)->IsTHM())
-      azure2::EvaluateModelSegment(*ld->GetSegment(i), lc, configure(), results,
+      azure2::EvaluateModelSegment(*ld, *ld->GetSegment(i), lc, configure(), results,
                                    pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
   // The objective of operator() (Objective.h), on these working copies: the finite-difference columns of
   // Gradient(), the AZURE_GRAD_CHECK reference and the LM / GSL-LM cost differentiate or minimize the same function.
@@ -996,7 +996,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
           // Every segment is moved before any is calculated: a host calculates
           // the observables of points mapped onto it from other segments, with
           // their energy-dependent values (EPoint::Calculate).
-          for (int m : target.segs) ld->GetSegment(m)->UpdatePointEnergiesWithShift(lc, &configure());
+          for (int m : target.segs) ld->GetSegment(m)->UpdatePointEnergiesWithShift(*ld, lc, &configure());
           double c = 0.0;
           for (int m : target.segs) c += SegmentLocalChi2(ld->GetSegment(m), lc, configure(), ld, results);
           return c;
@@ -1005,7 +1005,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
         double chiP = groupChi(x0 + h);
         double chiM = groupChi(x0 - h);
         target.Set(ld, d0);  // restore base state on the clone
-        for (int m : target.segs) ld->GetSegment(m)->UpdatePointEnergiesWithShift(lc, &configure());
+        for (int m : target.segs) ld->GetSegment(m)->UpdatePointEnergiesWithShift(*ld, lc, &configure());
         grad[idx] = (chiP - chiM) / (2.0 * h);
 
         // Optional self-check: compare against the exact full-dataset finite
@@ -1718,7 +1718,7 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
     if (!segment) continue;
     const double norm = segment->GetNorm();
     for (int pid = 0; pid < segment->NumPoints(); pid++) {
-      azure2::EvaluateModelPoint(*segment, pid, lc, configure(), results, azure2::LeafValues::Calculate);
+      azure2::EvaluateModelPoint(*ld, *segment, pid, lc, configure(), results, azure2::LeafValues::Calculate);
       residuals.push_back(azure2::PointResidual(*segment, pid, results, norm).Pull());
     }
   }

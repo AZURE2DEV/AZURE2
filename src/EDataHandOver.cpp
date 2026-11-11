@@ -287,10 +287,10 @@ void EData::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNuc, con
     std::vector<Item> work;
     for (const TermRef &s : toUpdate)
       for (int i = 0; i < s.NumPoints(); i++) {
-        if (s.segment->ShiftHost(s.term, i)) continue;
+        if (s.segment->ShiftHost(*this, s.term, i)) continue;
         EPoint *pt = s.GetPoint(i + 1);
         const double nsp = pt ? pt->NumSubPoints() : 0;
-        const double nMapped = pt ? pt->PlanMapped().size() : 0;
+        const double nMapped = pt ? pt->PlanMapped(this).size() : 0;
         work.push_back({(1.0 + nsp) * (1.0 + 0.1 * nMapped), s, i});
       }
     std::stable_sort(work.begin(), work.end(), [](const Item &x, const Item &y) { return x.cost > y.cost; });
@@ -304,11 +304,11 @@ void EData::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNuc, con
     // indexed by thread number would then be shared between the outer threads.
     if (serial) {
       for (size_t q = 0; q < work.size(); q++)
-        work[q].seg.segment->UpdatePointGroupEnergyWithShift(work[q].seg.term, work[q].i, theCNuc, configure);
+        work[q].seg.segment->UpdatePointGroupEnergyWithShift(*this, work[q].seg.term, work[q].i, theCNuc, configure);
     } else {
 #pragma omp parallel for schedule(dynamic, 1)
       for (int q = 0; q < (int)work.size(); q++)
-        work[q].seg.segment->UpdatePointGroupEnergyWithShift(work[q].seg.term, work[q].i, theCNuc, configure);
+        work[q].seg.segment->UpdatePointGroupEnergyWithShift(*this, work[q].seg.term, work[q].i, theCNuc, configure);
     }
     if (theCNuc && configure)
       for (const TermRef &t : toUpdate) t.segment->CommitShiftTable(t.term, theCNuc, *configure);

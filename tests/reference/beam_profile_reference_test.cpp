@@ -176,7 +176,6 @@ double engineFold(const Config &configure, EData &data, int effectNum, Sigma sig
   results.slot.assign(rec * (nSub + 1), 0.0);
   EPoint point(0.0, e0, 1, 2, false, false, false, 0.0, 0, 0);
   point.SetResultRecord(0, 0, 0);
-  point.SetParentData(&data);
   point.SetTargetEffectNum(effectNum);
   if (window) point.SetBinWindow(window[0], window[1]);
   if (mass > 0.0) point.SetPhotoKinematics(qGamma, mass);
@@ -192,7 +191,7 @@ double engineFold(const Config &configure, EData &data, int effectNum, Sigma sig
     sub.SetFitCrossSection(results, sigma(e));
     point.AddSubPoint(sub);
   }
-  point.IntegrateTargetEffect(configure, results);
+  point.IntegrateTargetEffect(data, configure, results);
   return point.GetFitCrossSection(results);
 }
 
