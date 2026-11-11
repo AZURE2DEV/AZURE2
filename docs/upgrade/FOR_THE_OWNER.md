@@ -29,6 +29,10 @@ whoever asks for a calculation, and a project file that says in words what each 
 | 4. Data are data | Named records with units; new kinds of data; the data classes replaced; `CNuc` reduced | most of it done, see below |
 | 5–9 | Energy grid and apparatus kernels, own stopping, finite targets for yields; evaluation without copies; DWBA for THM; pyazr 3.0; web interface | not begun |
 
+Phase 7 has begun as a separate library that the engine does not use yet: optical potentials, bound states,
+distorted waves and the DWBA transfer to a bound state, which agree with FRESCO to better than 0.2 %
+(`docs/upgrade/transfer.md`).
+
 **How every step is checked.** Each merge is verified as a whole: the 183 project files of the test suite run in
 three bases (Brune, formal, Park) and every output file is compared byte for byte with the previous head (726 + 699
 + 726 files); 182 unit and pyazr tests; the 145 regression projects with their own checks; calculations at 1

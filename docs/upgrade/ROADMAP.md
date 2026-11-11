@@ -216,9 +216,14 @@ Gate: thread-count independence by construction; memory one problem regardless o
 
 ## Phase 7 — DWBA for THM vertices (leaf module; may start in parallel with Phases 4–6)
 
-- [ ] `physics/potentials` (Woods–Saxon, Coulomb, global optical sets) and `physics/transfer` (bound states, level
-      functions, distorted waves via pycoulomb's Numerov, zero-range then finite-range post-form DWBA vertex).
-- [ ] Validation: plane-wave limit to 1e-6; FRESCO benchmarks for d, ³He, ⁶Li, ¹⁴N Trojan horses to 1 %.
+- [x] `physics/transfer`, first part (`transfer.md`; branch `feature/upgrade-7-transfer-1`): optical potentials with
+      explicit numbers, bound states, distorted waves (spin 0, ½, 1), zero-range and finite-range post-form DWBA to a
+      bound state, the plane-wave THM vertex.
+- [ ] Global optical sets; level functions; transfer to the x + A continuum (the THM vertex); the wiring into the
+      THM observable (after Phase 5).
+- [x] Validation, first part: plane-wave limit to 1e-6; FRESCO benchmarks for the d and ⁶Li Trojan horses to a bound
+      state (¹⁵N(d,n)¹⁶O, ¹²C(⁶Li,d)¹⁶O: < 0.2 %), committed with inputs and outputs (`physics/tests/data/fresco`).
+- [ ] Validation, continuum: FRESCO bins; ³He and ¹⁴N Trojan horses (¹⁸O(³He,d)¹⁹F, ¹²C(¹⁴N,d)²⁴Mg).
 Gate: benchmarks committed with their FRESCO inputs and outputs.
 
 ## Phase 8 — pyazr 3.0

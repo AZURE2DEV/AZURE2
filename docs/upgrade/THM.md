@@ -72,6 +72,14 @@ Validation (the independent check required by `CLAUDE.md`):
 - the ratio of vertices between two levels (e.g. ¹⁸O 20 keV / 144 keV) is stable against the potential choice within
   a stated systematic, reported as a model uncertainty.
 
+Status (2026-11-11, branch `feature/upgrade-7-transfer-1`, `transfer.md`): `physics/transfer` exists as a leaf
+library, not yet called by the engine. Done: the bound state of item 1 (depth search, ANC, D0; FRESCO to its printed
+digits), the distorted waves of item 3 with explicit potentials (spin 0, ½, 1 with spin-orbit; FRESCO to 1e-4), the
+post-form transfer of item 4 to a *bound* state in zero and finite range (FRESCO, ¹⁵N(d,n)¹⁶O and ¹²C(⁶Li,d)¹⁶O, to
+0.2 %), and the plane-wave limit of the vertex (M_l and the full form factor to 1e-6). Open: the level function of
+item 2 inside a, the transfer to the x + A continuum (FRESCO bins), the global optical sets, the ³He and ¹⁴N
+benchmarks, the wiring (`transfer.md` §11–12).
+
 Open questions for Catania (formula sheet Q2): their potential geometry and radius convention (r0·A^{1/3} vs
 r0·(A1^{1/3} + A2^{1/3})), spin–orbit, Coulomb radius, node rule for clusters, whether the interaction radius equals
 the channel radius, which boundary condition fixes the level function, whether u is normalised inside a, and one

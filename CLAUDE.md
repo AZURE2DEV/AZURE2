@@ -81,6 +81,7 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
 | `api/` | `AZUREAPI` + pybind11 module `_azure2` | Builds `pyazr/_azure2*.so` in place |
 | `io/` | The `.azr` document and its format conversion | Standalone (no engine headers); the engine and pyazr read the file through it |
 | `experiment/` | Model expressions (what a data set measures), lab → c.m. frames, the table of project format 3 | Uses `physics/` and `io/`'s `Record.h` only (no engine headers); `experiment/README.md` |
+| `physics/transfer` (in `physics/`) | Optical potentials, bound states, distorted waves, DWBA transfer, the THM vertex in the plane-wave limit | A leaf: target `azure2_physics_transfer`, used by nothing of the engine yet; checked against FRESCO (`docs/upgrade/transfer.md`) |
 | `pyazr/` | Python package | In-process engine; `.azr` editing (`azrfile.py`, `datasets.py`) on the engine's document and parsers |
 | `numcmc/` | Ensemble MCMC sampler | |
 | `external/` | Vendored Minuit2, erya/pugixml (Coulomb functions: `physics/coulomb/`, from pycoulomb) | **Do not edit**; it is upstream code |
@@ -227,6 +228,14 @@ bypassed. Run it first (under a second), then the build and the tests of "Defini
 3. Constants come from `physics/include/azure2/physics/Constants.h` [check 10: no copy with another value], masses
    from `pyazr/data/mass_1.mas20` (`pyazr.masses`; the engine's THM nuclei are generated from it and checked by
    `pyazr_thm_nuclide_masses`).
+
+**A new optical potential term** (`physics/transfer`, `docs/upgrade/transfer.md` §2).
+1. A field in `OpticalPotential` (`physics/include/azure2/physics/transfer/OpticalPotential.h`, with its formula, unit
+   and sign in the header's Eq. (2.1)), its `operator==`, its value in `TermsAt` (one member of `PotentialTerms` per
+   FRESCO TYPE, so that the listing stays comparable with FRESCO's fort.34) and its line in `Describe`.
+2. If it depends on l or j, its factor where `SolveDistortedWaves` and `SolveBoundState` build U_lj.
+3. A FRESCO case in `physics/tests/data/make_fresco_benchmarks.py` that uses it (run the script, commit the data) and
+   its check in `physics/tests/transfer_fresco_test.cpp`: the listing first, then S and the cross sections.
 
 **A model-only datum** (no beam energy: a resonance strength, a width, an ANC; `docs/upgrade/data_model.md` §4, M10).
 The objective gets no new term: T9, `ModelDataTerm`, evaluates every row of `<modelData>`.
