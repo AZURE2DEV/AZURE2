@@ -47,10 +47,15 @@ engine then replaces errors from a covariance file (sqrt C_ii) before the measur
 ### 1.2 `experiment::MeasurementFrame` (`experiment/Frames.h`) and the one conversion
 
 ```
-struct FrameRow { double eLab, eCM, eX, thetaCM, jacobian, yCM, dyCM, binLowCM, binHighCM; };
+struct FrameRow { double eLab, eCM, eX, thetaCM, jacobian, binLowCM, binHighCM; };   // kinematics only
 struct MeasurementFrame { std::vector<FrameRow> rows; };
-FrameRow ConvertRow(const FrameRule &, double eLab, double thetaLab, row values, const FrameRow *atLoad, AngleLimit &);
+bool ConvertRow(const FrameRule &, double eLab, double thetaLab, double binLowLab, double binHighLab, bool atLoad,
+                FrameRow &row, AngleLimit &);
 ```
+The frame holds no datum: the value and error stay as read in the `Measurement`, and the model is compared with them
+in the frame they were given in, r = (f/J − n y)/(n δy) with J = `jacobian` (`energy_grid.md` §4; `DataResidual` in
+`include/ModelPass.h`).  The c.m. value and error that the writers and the API show are J y and J δy, computed where
+they are read (`Segment::CMValue`, `CMError`).
 `FrameRule` holds the partitions of the term (entrance, exit, exit kind: none / particle / photon), elastic,
 β-delayed, relativistic, `labDifferential`, `convertValue`. `ConvertRow` is the sequence of
 `ESegment::ConvertPointToCM` and the `EPoint::Convert*` functions, operation for operation. At load `atLoad` is null
@@ -87,7 +92,8 @@ exit; they hold no data. The order of the units (base first, leaves in term orde
 | input datum | `original_energy_`, `lab_angle_` (as read), `lab_crosssection_`, `lab_dcrosssection_`, `bin_low_lab_`, `bin_high_lab_`, `fileRecord_`, `coefficient_order_`, `coefficient_absolute_` | `Measurement::rows` (read by row) |
 | segment settings in every point | keys, `is_*` flags, `j_value_`, `l_value_`, UPOS, `thm_*` pointers, `crossSectionComponent_`, `max_ang_dist_order_` | the measurement / leaf, named by index (milestone 2) |
 | kinematics from the datum | `cm_energy_`, `excitation_energy_`, `cm_angle_`, bins c.m. | the frame (rows) and the unit (E and θ it is calculated at) |
-| | `cm_crosssection_`, `cm_dcrosssection_`, `crossSectionKinFactor_`, `loadFrame_` | the frame only |
+| | `crossSectionKinFactor_`, `loadFrame_` | the frame only (its Jacobian) |
+| | `cm_crosssection_`, `cm_dcrosssection_` | gone: J y and J δy computed for display (`Segment::CMValue`, `CMError`) |
 | energy-dependent tables | `edep_`, `legendreP_`, `thm_ps_`, `geofactor_`, `sfactorconv_`, Coulomb, EC | the unit (copy-on-write, unchanged) |
 | apparatus | `targetEffectNum_`, stopping, thickness, grid spec, UDR, blend, fallback, screening | fixed part: data set; per-ν values: the unit |
 | topology | `is_mapped_`, `energy_map_`, `own_e_dependent_`, `plan_task_`, `integrationPoints_`, `parentData_` | the plan (by index); sub-points: a range of the unit vector |
@@ -137,8 +143,8 @@ a new DataSet (`WorkingCopy::ReviseDataSet`).
 Milestone 1 (what was measured exists once; done, commits 0439701a and 9db6b59a):
 1. `Measurement`, `ReadMeasurementRows`, `ConvertRow` in `experiment/` with unit tests by hand.
 2. Segments hold a `shared_ptr<const Measurement>`; points read the datum by row; the input members go.
-3. The frame: `ESegment::Fill`, the shift step and the component load call one function; y_c.m., δy_c.m. and the
-   Jacobian live in the frame; `loadFrame_` goes (the nominal frame takes its place).
+3. The frame: `ESegment::Fill`, the shift step and the component load call one function; the Jacobian lives in the
+   frame (y_c.m. and δy_c.m. lived there too until Phase 5 compared the data in their own frame); `loadFrame_` goes (the nominal frame takes its place).
 4. Components as leaves of the base segment: the component deque and its copies go.  In milestone 1 a leaf lives in
    its segment (`ESegment::Leaf`: pairs, key, fixed angle, scale, role, target effect, units); the segment's own
    points are term 0, a leaf term k, and the shift step, the frame, the grids and the target set-up take

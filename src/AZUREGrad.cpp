@@ -1471,24 +1471,24 @@ bool ComputeResidualJacobian(CNuc *compound, WorkingCopy *data, azure2::Results 
   const long long comb0 = g_teCombinerNs.load(), adj0 = g_teAdjointNs.load();
   const auto ts0 = std::chrono::steady_clock::now();
 
-  // Residual r = (model - data*n)/(cmErr*n);  d r / d model = 1/(cmErr*n), the
-  // cotangent that yields d r / d(E,gamma) directly.
+  // r = (model/J - data*n)/(err*n) (DataResidual); d r/d model = 1/(err*n*J) yields d r/d(E,gamma) directly.
   auto fitBarOf = [&](const GroupMember &m) {
-    const double denom = Segment::CMError(data->State(*m.seg), m.pointIdx) * norm[m.segNum];
-    return (denom != 0.0) ? 1.0 / denom : 0.0;
+    const double denom = m.seg->LabError(m.pointIdx) * norm[m.segNum];
+    return (denom != 0.0) ? 1.0 / denom / Segment::Jacobian(data->State(*m.seg), 0, m.pointIdx) : 0.0;
   };
   static thread_local vector_r fullRow;
   auto writeRow = [&](const GroupMember &m, double model, const GradAccum &accum) {
     const int row = rowOf[m.segNum][m.pointIdx];
     if (row < 0) return;
     const double n = norm[m.segNum];
-    const double cmErr = Segment::CMError(data->State(*m.seg), m.pointIdx);
-    residuals[row] = azure2::DataResidual(model, Segment::CMValue(data->State(*m.seg), m.pointIdx), cmErr, n).Pull();
+    const double labErr = m.seg->LabError(m.pointIdx), jac = Segment::Jacobian(data->State(*m.seg), 0, m.pointIdx);
+    const azure2::Residual res = azure2::DataResidual(model, jac, m.seg->LabValue(m.pointIdx), labErr, n);
+    residuals[row] = res.Pull();
     // Scatter this row's d r / d(E,gamma) into the packed columns.
     fullRow.assign(pmap.NumFull(), 0.0);
     accum.Scatter(pmap, fullRow);
-    // Norm column:  d r / d n = -model/(cmErr*n^2).
-    if (normFull[m.segNum] >= 0 && cmErr != 0.0 && n != 0.0) fullRow[normFull[m.segNum]] += -model / (cmErr * n * n);
+    // Norm column:  d r / d n = -(model/J)/(err*n^2).
+    if (normFull[m.segNum] >= 0 && labErr != 0.0 && n != 0.0) fullRow[normFull[m.segNum]] += -res.model / (labErr * n * n);
     const size_t base = (size_t)row * nCols;
     for (int f = 0; f < pmap.NumFull(); f++) {
       int packed = pmap.FullToPacked(f);
@@ -1749,13 +1749,14 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, WorkingCopy *ld, azure2::Results &
   for (size_t t = 0; t < rows.size(); t++) {
     THMRows &tr = rows[t];
     const Segment *seg = ld->Data().GetSegment(tr.segment);
-    std::vector<double> d, e;
+    std::vector<double> d, e, ml, Jml;
     for (int pid = 0; pid < seg->NumPoints(); pid++) {
       Unit *pt = seg->GetPoint(*ld, pid + 1);
       if (!pt) continue;
-      d.push_back(Segment::CMValue(ld->State(*seg), pid));
-      e.push_back(Segment::CMError(ld->State(*seg), pid));
-      pt->SetModelValue(results, tr.m[d.size() - 1]);
+      d.push_back(seg->LabValue(pid));
+      e.push_back(seg->LabError(pid));
+      pt->SetModelValue(results, tr.m[d.size() - 1]);  // the residuals below take the model in the datum's frame
+      azure2::AppendInDataFrame(*ld, *seg, pid, tr.m[d.size() - 1], tr.Jm.data() + (d.size() - 1) * nCols, nCols, ml, Jml);
     }
     const size_t n = d.size();
     if (ld->Data().ThmGroupOf(tr.segment) >= 0) continue;  // a THM experiment: below
@@ -1763,8 +1764,8 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, WorkingCopy *ld, azure2::Results &
     for (size_t i = 0; i < n; i++) {
       if (e[i] == 0.0) continue;
       double w = 1.0 / (e[i] * e[i]);
-      Smm += tr.m[i] * tr.m[i] * w;
-      Smd += tr.m[i] * d[i] * w;
+      Smm += ml[i] * ml[i] * w;
+      Smd += ml[i] * d[i] * w;
     }
     // s multiplies the model (s = 1/n, n the norm on the data).
     bool varyScale = false;
@@ -1778,7 +1779,7 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, WorkingCopy *ld, azure2::Results &
     }
     tr.r.assign(n, 0.0);
     for (size_t i = 0; i < n; i++)
-      if (e[i] != 0.0) tr.r[i] = (s * tr.m[i] - d[i]) / e[i];
+      if (e[i] != 0.0) tr.r[i] = (s * ml[i] - d[i]) / e[i];
 
     vector_r ds(nCols, 0.0);
     if (varyScale) {
@@ -1787,8 +1788,8 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, WorkingCopy *ld, azure2::Results &
         for (size_t i = 0; i < n; i++) {
           if (e[i] == 0.0) continue;
           double w = 1.0 / (e[i] * e[i]);
-          sdJ += d[i] * tr.Jm[i * nCols + c] * w;
-          smJ += tr.m[i] * tr.Jm[i * nCols + c] * w;
+          sdJ += d[i] * Jml[i * nCols + c] * w;
+          smJ += ml[i] * Jml[i * nCols + c] * w;
         }
         ds[c] = (sdJ - 2.0 * s * smJ) / Smm;
       }
@@ -1796,7 +1797,7 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, WorkingCopy *ld, azure2::Results &
     for (size_t i = 0; i < n; i++) {
       if (e[i] == 0.0) continue;
       for (int c = 0; c < nCols; c++)
-        tr.J[i * nCols + c] = (s * tr.Jm[i * nCols + c] + tr.m[i] * ds[c]) / e[i];
+        tr.J[i * nCols + c] = (s * Jml[i * nCols + c] + ml[i] * ds[c]) / e[i];
     }
     tr.s = s;
     tr.profiled = varyScale;
@@ -1819,11 +1820,10 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, WorkingCopy *ld, azure2::Results &
       for (int pid = 0; pid < seg->NumPoints(); pid++) {
         Unit *pt = seg->GetPoint(*ld, pid + 1);
         if (!pt) continue;
-        m.push_back(rows[t].m[i]);
-        d.push_back(Segment::CMValue(ld->State(*seg), pid));
-        e.push_back(Segment::CMError(ld->State(*seg), pid));
+        d.push_back(seg->LabValue(pid));
+        e.push_back(seg->LabError(pid));
         energy.push_back(pt->GetCMEnergy());
-        Jm.insert(Jm.end(), rows[t].Jm.begin() + i * nCols, rows[t].Jm.begin() + (i + 1) * nCols);
+        azure2::AppendInDataFrame(*ld, *seg, pid, rows[t].m[i], rows[t].Jm.data() + i * nCols, nCols, m, Jm);
         i++;
       }
     }

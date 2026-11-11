@@ -89,6 +89,18 @@ add_test(NAME upgrade_results_owner COMMAND results_owner_test ${CMAKE_CURRENT_S
          WORKING_DIRECTORY ${_results_owner_dir})
 set_tests_properties(upgrade_results_owner PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 600)
 
+# The residual in the frame of the datum (docs/upgrade/energy_grid.md section 4): on T2, every pull equals the c.m.
+# comparison to rounding, bit for bit where J = 1, at the start and with the shifts moved.  On a copy of T2's inputs.
+add_executable(lab_frame_residual_test lab_frame_residual_test.cpp)
+target_link_libraries(lab_frame_residual_test PRIVATE AZURE2Core)
+set(_lab_frame_dir ${CMAKE_CURRENT_BINARY_DIR}/lab_frame_residual)
+file(MAKE_DIRECTORY ${_lab_frame_dir}/output ${_lab_frame_dir}/checks)
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/T2/data ${CMAKE_CURRENT_SOURCE_DIR}/T2/cov_diff.txt
+          ${CMAKE_CURRENT_SOURCE_DIR}/T2/prior_cov.txt DESTINATION ${_lab_frame_dir})
+add_test(NAME upgrade_lab_frame_residual COMMAND lab_frame_residual_test ${CMAKE_CURRENT_SOURCE_DIR}/T2/T2.azr
+         WORKING_DIRECTORY ${_lab_frame_dir})
+set_tests_properties(upgrade_lab_frame_residual PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 600)
+
 # A working copy that evaluated other parameters before gives a fresh copy's bits (docs/upgrade/data_model.md S1):
 # per-segment chi^2 and model values, on T2, natural_neon, shift_sqrt_subpoints (sqrt, shiftfn), 18O_p_a_thm and a
 # 7Li(p,n) point an energy shift moves out of the kinematic range, each on a copy of its input files.

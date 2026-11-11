@@ -2,6 +2,41 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, Phase 5 branch 3) — lab data compared in the lab frame (`feature/upgrade-5-lab-frame`)
+
+**Done** (decision M3 (b), `energy_grid.md` §4 and its new §4.2a with the measured sizes).
+- Stage 1 (1ba9772d): `FrameRow` keeps kinematics only (E, θ_c.m., J); `yCM`, `dyCM` and the value arguments of
+  `ConvertRow`/`UnconvertedRow` are gone; `Segment::CMValue`/`CMError` are members computing J·y, J·δy for display
+  (writers, API, diagnostics).  Byte-identical: all projects × 3 bases against `tab-trial18` (tag `tab-labframe1b`,
+  728 / 701 / 728 identical).  One copy after Initialize: T2 11,872,460 -> 11,866,380 bytes, natural_neon
+  142,705,164 -> 142,604,828, angle_mapping 501,376 -> 487,712 (probe `work/labframe/cb`).
+- Stage 2 (ec234914): one residual, `DataResidual(f, J, y, δy, n)` = (f/J − n y)/(n δy), in the objective, the
+  profiled norm, the least-squares rows and norm column, both analytic gradients (model cotangent × 1/J), the
+  covariance pulls, the shift columns, the THM profiles (model and columns divided by J; `THMRows::m, Jm` stay c.m.
+  for the band).  J = 1 gives the old bits.  `tools/classify.py --class=lab-frame-rounding` (cls.sh forwards it) with
+  the probed list of projects with lab-differential rows; `tests/consistency/classify_test.py` and
+  `tests/upgrade/lab_frame_residual_test.cpp` (T2; shown failing with f·J).
+- Measured (scratch `work/labframe/`): outputs identical as printed except the χ² of `sum_lab_frame/models/sum_data`,
+  `sum_free` (3.99e-17, data equal to the model; 1–2e-6 of itself, 7e-23 absolute); model values bit-identical; pulls
+  within 1.3 ε of their natural scale (relative to the pull up to 2.7e-12, 1.2e-2 for the 1e-9 pulls of
+  sum_lab_frame); χ² ≤ 2e-15 at the start and ≤ 2.5e-15 at the reference fits' end points (sum_free 2e-9);
+  fit end points up to 9e-6 in a parameter (angle_mapping), χ² up to 4.3e-9 (spin_orbit_potential).
+
+**Verified on ec234914** (binary `work/labframe/AZURE2-final`, scripts `work/labframe/final.sh`, `bench.sh`): all
+projects × 3 bases (tag `tab-labframe2`) identical to `tab-labframe2a`; against `tab-trial18` with the class: 726 / 697
+/ 724 identical, 0 / 2 / 2 lab-frame rounding, the 2 `run.log` of `sum_lab_frame` per basis differing; `ctest -LE
+slow` 184/184 (check.sh --quick); `tests/run_tests.sh` 146 passed, 0 failed; calculations at 1 and 4 threads
+identical (11 projects × 3 bases, 33/33); fits at 1 thread of stage 1 byte-identical to `b-trial18` (T2 lm, grad,
+migrad, angle_mapping); converted-tree gate (`glab`) 483 (456) identical, 38 classified, 0 differ, 0 missing.
+Cycles (perf stat, 1 thread, min of 6, alternated with `b-trial18`, load average about 18): T2 calculation 649.0 M
+against 646.0 M (+0.5 %), 200-call T2 fit 50.32 G against 49.82 G (+1.0 %); a first series gave +1.0 % and +5.3 %
+(spread of single runs 50–80 G); stage 2 against stage 1 on the fit, min of 4: −0.7 %.
+
+**Open.**  The class does not accept the `run.log` χ² of `sum_lab_frame` (12 printed digits of a rounding-noise χ²): a
+decision for the director (an absolute floor for a χ² that is zero to rounding, or the change as it is).  Reference
+tag from this tree: `tab-labframe2` (= `tab-labframe2a`).  pyazr's docstrings (`azure2.py` `residuals`,
+`residual_jacobian`) still write the residual with the c.m. error (pyazr is another branch's).
+
 ## 2026-11-11 (agent, SRIM stopping) — `stopping/` computes SRIM-2013's stopping powers, ported from LunaSRIM (`feature/upgrade-5-stopping-2`)
 
 **Done.** The first branch's transcribed coefficients (Geant4's ICRU 49 rows, `elements.tsv`, Barkas table, joins,

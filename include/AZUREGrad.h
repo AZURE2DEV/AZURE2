@@ -313,10 +313,11 @@ bool AccumulateEGammaGradient(CNuc *compound, WorkingCopy *data, azure2::Results
 /*!
  * \brief Residual vector and its Jacobian for Gauss-Newton / Levenberg-Marquardt.
  *
- * Builds the standardized residuals r_i = (model_i - data_i*n)/(cmErr_i*n) (so
- * that sum r_i^2 = chi^2) and the Jacobian J_{ij} = d r_i / d theta_j, where the
- * columns theta_j are the non-fixed (packed) parameters.  Each row is obtained
- * by one reverse-mode adjoint of the point with cotangent 1/(cmErr_i*n), so the
+ * Builds the standardized residuals r_i = (model_i/J_i - data_i*n)/(err_i*n) in the
+ * frame of the datum (ModelPass.h DataResidual; so that sum r_i^2 = chi^2) and the
+ * Jacobian J_{ij} = d r_i / d theta_j, where the columns theta_j are the non-fixed
+ * (packed) parameters.  Each row is obtained by one reverse-mode adjoint of the
+ * point with cotangent 1/(err_i*n*J_i), so the
  * whole Jacobian costs ~2 forwards regardless of the parameter count.
  *
  * `compound`/`data` must already be filled.  `residuals` gets N_res entries;

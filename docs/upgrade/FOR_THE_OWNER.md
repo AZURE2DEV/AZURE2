@@ -148,6 +148,8 @@ refused at once with the engine's message. An edit changes only the lines it tou
     pathways (a crash in the test); it now finds the photon pair's pathways by the pair;
   - in format 3 a data run with an unreadable data file is refused (the old engine skipped the segment with a
     warning); an extrapolation run does not need the data files.
+  - data given in the lab frame are compared with the model in the lab frame (the model divided by
+    dΩ_lab/dΩ_c.m., the datum and its error as read), as the PI decided: χ² and fits are the same to rounding.
 
 ## Speed
 
