@@ -298,13 +298,17 @@ int IsospinLevels::Resolve(const Config &configure, CNuc &c) {
         std::ostringstream key;
         key << arr << " l=" << chan->GetL() << " s=" << chan->GetS();
         w.key = key.str();
-        const double radius = c.GetPair(chan->GetPairNum())->GetChRad();
-        auto rad = arrangementRadius.find(arr);
+        // The channel's own radius (per-channel radii, <channelRadii>, may set it per l, s, J): partner channels --
+        // one arrangement, the same l, s and J in every nucleus -- must share it.
+        const double radius = c.GetPair(chan->GetPairNum())->GetChRad(chan->GetL(), chan->GetS(), g->GetJ());
+        std::ostringstream radKey;
+        radKey << w.key << " J=" << g->GetJ();
+        auto rad = arrangementRadius.find(radKey.str());
         if (rad == arrangementRadius.end())
-          arrangementRadius[arr] = radius;
+          arrangementRadius[radKey.str()] = radius;
         else if (std::fabs(rad->second - radius) > 1e-9)
-          return fail("pairs of one arrangement (" + arr + ") have channel radii " + Fmt(rad->second, 6) + " and " +
-                      Fmt(radius, 6) + " fm; Hale's isospin relations need equal radii.");
+          return fail("channels " + radKey.str() + " of one arrangement have channel radii " + Fmt(rad->second, 6) +
+                      " and " + Fmt(radius, 6) + " fm; Hale's isospin relations need equal radii.");
         m.widths.push_back(w);
       }
     }

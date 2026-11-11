@@ -457,7 +457,9 @@ after ``</levels>`` (and after ``</abundances>``)::
   times one amplitude per isospin channel (arrangement, l, s). Particle
   isospins default to :math:`t = |N-Z|/2`, :math:`t_3 = (Z-N)/2`; pairs whose
   particles match in mass number, spin, parity and isospin form one
-  arrangement and must share a channel radius.
+  arrangement, and partner channels (same l, s and J) must share a channel radius
+  (a ``<channelRadii>`` line may set it per l, s or J, the same for every pair of
+  the arrangement).
 - The member in the ``reference`` nucleus (otherwise the first in file
   order) holds the free parameters. The others are derived: energies
   :math:`E_m = E_\mathrm{ref} - T_\mathrm{ref} + T_m + \Delta_m` (:math:`T` the
