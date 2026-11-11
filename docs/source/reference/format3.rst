@@ -741,7 +741,7 @@ Nuclear elastic integral (``dataset``, ``extrapolation``).  Angle-integrated ela
 sigma_total
 ~~~~~~~~~~~
 
-Total cross section (``dataset``, ``extrapolation``).  Total cross section of a neutral projectile, from the optical theorem.
+Total cross section (``dataset``, ``extrapolation``).  Total cross section of a neutral projectile, from the optical theorem; on a target with isotopes the abundance-weighted sum of its nuclei's totals, one elastic term per nucleus (20Ne(n,n)20Ne + 22Ne(n,n)22Ne).
 
 .. list-table::
    :header-rows: 1
@@ -756,7 +756,7 @@ Total cross section (``dataset``, ``extrapolation``).  Total cross section of a 
    * - energy column
      - ``E_lab``, ``E_cm``
    * - reaction
-     - elastic, neutral entrance
+     - elastic, neutral entrance; on a target with isotopes a sum, one term per nucleus
    * - ``target``
      - allowed
    * - ``beam``

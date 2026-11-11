@@ -379,7 +379,8 @@ int main(int argc, char **argv) {
   {
     const ConvertResult r = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 v1.dat covariance cov.txt\n"
                                      "1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 tot.dat total 1\n"
-                                     "1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 nat.dat 1 0 1 6 6 -999 sample natNe\n",
+                                     "1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 nat.dat 1 0 1 6 6 -999 sample natNe\n"
+                                     "1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 nattot.dat 1 0 1 6 6 -999 sample natNe total 1\n",
                                      "", "",
                                      "<abundances>\nnatNe: 10 21 0.9048 1 0.01\nnatNe: sum 0.001\n</abundances>\n", ""});
     Expect("covariance", r, "dataset v1", Sigma("v1.dat") + F{{"energy_window", "0.2 1.4 MeV"}, {"norm", "1 fixed"}, {"covariance", "cov.txt"}});
@@ -392,6 +393,11 @@ int main(int argc, char **argv) {
     Expect("sample data set", r, "dataset nat",
            Sigma("nat.dat", "20Ne(n,n)20Ne + 22Ne(n,n)22Ne") + F{{"energy_window", "0.1 2 MeV"}, {"norm", "1 fixed"}, {"target", "natNe"}});
     check("sample: abundance_natNe_10_21 -> natNe.isotope.20Ne", Param(r, "abundance_natNe_10_21") == "natNe.isotope.20Ne");
+    // a sample's total: the abundance-weighted sum of the nuclei's totals, one elastic term per nucleus
+    Expect("sample total", r, "dataset nattot",
+           F{{"reaction", "20Ne(n,n)20Ne + 22Ne(n,n)22Ne"}, {"quantity", "sigma_total"}, {"unit", "b"}, {"file", "nattot.dat"},
+             {"columns", "E_lab[MeV] _ value error"}, {"energy_window", "0.1 2 MeV"}, {"norm", "1 fixed"}, {"target", "natNe"}});
+    check("covariance, total, samples: converted", r.ok);
   }
   // ---- transmission n vary sigma (a fitted sample thickness, SegLine.h); thicknessgroup: one target
   {

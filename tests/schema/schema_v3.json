@@ -2056,7 +2056,7 @@
   },
   "sigma_total": {
    "title": "Total cross section",
-   "doc": "Total cross section of a neutral projectile, from the optical theorem.",
+   "doc": "Total cross section of a neutral projectile, from the optical theorem; on a target with isotopes the abundance-weighted sum of its nuclei's totals, one elastic term per nucleus (20Ne(n,n)20Ne + 22Ne(n,n)22Ne).",
    "record_kinds": ["dataset", "extrapolation"],
    "engine_unit": "b",
    "units": {
@@ -2073,8 +2073,8 @@
     "windows": false
    },
    "reaction": {
-    "rule": "elastic, neutral entrance",
-    "flags": ["elastic", "neutral_entrance"]
+    "rule": "elastic, neutral entrance; on a target with isotopes a sum, one term per nucleus",
+    "flags": ["sum", "elastic", "neutral_entrance"]
    },
    "fields": {
     "target": {

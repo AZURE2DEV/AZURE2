@@ -423,6 +423,51 @@ void Abundances(Context &c) {
   }
 }
 
+// The total cross section of a target with isotopes (quantity sigma_total with a sum): the abundance-weighted sum of
+// each nucleus's total by the optical theorem, one elastic term per nucleus.  A sum means nothing else: refused
+// without isotopes on the target, with a term whose exit pair is not its entrance pair (not a total), with two terms
+// on one pair, or with a factor on a term (the abundance is the weight).  An inactive record is checked when it is
+// switched on (BuildOptions::allRecordsActive): the converter writes an old inactive line without its sample.
+void NaturalTotals(Context &c, const std::vector<Member> &members) {
+  for (const Member &m : members) {
+    const ValidatedRecord &r = *m.record;
+    if (!m.active || !r.quantity || r.quantity->name != "sigma_total") continue;
+    const ReactionSpec &spec = m.isData ? c.out_.data.datasets.items[m.key - 1].spec.reaction
+                                        : c.out_.extrapolations.extrapolations.items[m.key - 1].spec.reaction;
+    std::vector<ComponentSpec> terms = {ComponentSpec{spec.entranceKey, spec.exitKey}};
+    terms.insert(terms.end(), spec.components.begin(), spec.components.end());
+    for (const ComponentSpec &t : terms)
+      if (t.exitKey != t.entranceKey) {
+        c.Error(codes::kReactionNotAllowed, r, "reaction",
+                "a total cross section is the elastic term of its pair by the optical theorem: pair " +
+                    std::to_string(t.exitKey) + " is not the entrance pair " + std::to_string(t.entranceKey));
+        break;
+      }
+    if (spec.combination != ReactionSpec::Combination::Sum) continue;
+    const Value *name = r.Get("target");
+    const ValidatedRecord *target = name ? c.Record(name->word, "target") : nullptr;
+    if (!target || !target->Has("isotope")) {
+      c.Error(codes::kReactionNotAllowed, r, "reaction",
+              "a sum of total cross sections is the total of a target with isotopes (their abundances weight the terms): "
+              "give the data set a target with 'isotope' fields, or one reaction");
+      continue;
+    }
+    std::set<int> pairs;
+    for (const ComponentSpec &t : terms) {
+      if (!pairs.insert(t.entranceKey).second) {
+        c.Error(codes::kReactionNotAllowed, r, "reaction",
+                "two terms on pair " + std::to_string(t.entranceKey) + ": a target's total has one term per nucleus");
+        break;
+      }
+      if (t.scaling != 1.0) {
+        c.Error(codes::kReactionNotAllowed, r, "reaction",
+                "a factor on a term of a target's total: the abundance of the term's nucleus is its weight");
+        break;
+      }
+    }
+  }
+}
+
 }  // namespace
 
 void BuildEffects(Context &c) {
@@ -431,6 +476,8 @@ void BuildEffects(Context &c) {
   SampleThickness(c, c.data_, true);
   SampleThickness(c, c.extrapolations_, false);
   Abundances(c);
+  NaturalTotals(c, c.data_);
+  NaturalTotals(c, c.extrapolations_);
 }
 
 }  // namespace build
