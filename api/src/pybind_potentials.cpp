@@ -21,8 +21,8 @@ using azure2::experiment::HybridPotentialSetting;
 // spinOrbit: {} (none) or {V_so (MeV), R_so (fm), a_so (fm), on (0 light, 1 heavy)}; refused on the default (pair 0,
 // which would give the term to every pair) and where SpinOrbitPairRefusal refuses it for the pair of `compound`.
 HybridPotentialSetting SessionPotentialSetting(const std::string &type, bool enabled, double V0, double R, double a,
-                                               double r0, double coulombRadius_fm, const std::vector<double> &spinOrbit,
-                                               CNuc *compound, int pair) {
+                                               double r0, double coulombRadius_fm, double matchingRadius_fm, double step_fm,
+                                               const std::vector<double> &spinOrbit, CNuc *compound, int pair) {
   HybridPotentialSetting s;
   s.enabled = enabled;
   if (type == "WoodsSaxon")
@@ -36,6 +36,8 @@ HybridPotentialSetting SessionPotentialSetting(const std::string &type, bool ena
   s.a = a;
   s.r0 = r0;
   s.coulomb_radius_fm = coulombRadius_fm;
+  s.matching_radius_fm = matchingRadius_fm;
+  s.step_fm = step_fm;
   if (!spinOrbit.empty()) {
     if (spinOrbit.size() != 4) throw std::invalid_argument("spin_orbit needs [V_so, R_so, a_so, on]");
     if (!pair) throw std::invalid_argument("a spin-orbit term belongs to one pair: name the pair (the default would give it to every pair)");
@@ -61,7 +63,8 @@ py::tuple SessionPotentialView(const Config &config, int pair) {
   if (s.spin_orbit)
     spinOrbit = {s.spin_orbit->depth_MeV, s.spin_orbit->form.radius_fm, s.spin_orbit->form.diffuseness_fm,
                  s.spin_orbit->acts_on == azure2::physics::SpinOrbitParticle::Heavy ? 1.0 : 0.0};
-  return py::make_tuple(s.enabled, s.ShapeName(), s.V0, s.R, s.a, s.r0, own, s.coulomb_radius_fm, spinOrbit);
+  return py::make_tuple(s.enabled, s.ShapeName(), s.V0, s.R, s.a, s.r0, own, s.coulomb_radius_fm, spinOrbit,
+                        s.matching_radius_fm, s.step_fm);
 }
 
 py::tuple SessionPotentialRecords(const Config &config) {

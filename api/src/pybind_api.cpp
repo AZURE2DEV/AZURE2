@@ -52,7 +52,7 @@ class AZURE2Error : public std::runtime_error {
 
 // pybind_potentials.cpp: a session's hybrid potentials
 azure2::experiment::HybridPotentialSetting SessionPotentialSetting(const std::string &type, bool enabled, double V0, double R, double a, double r0,
-                                                                   double coulombRadius_fm, const std::vector<double> &spinOrbit, CNuc *compound, int pair);
+                                                                   double coulombRadius_fm, double matchingRadius_fm, double step_fm, const std::vector<double> &spinOrbit, CNuc *compound, int pair);
 pybind11::tuple SessionPotentialView(const Config &config, int pair);
 pybind11::tuple SessionPotentialRecords(const Config &config);
 
@@ -289,9 +289,9 @@ class Session {
 
   // pair = 0 addresses the default that every unnamed pair falls back to.
   void set_potential(int pair, const std::string &type, bool enabled, double V0, double R, double a, double r0,
-                     double coulomb_radius, const std::vector<double> &spin_orbit) {
+                     double coulomb_radius, double matching_radius, double step, const std::vector<double> &spin_orbit) {
     try {
-      azure2::experiment::HybridPotentialSetting s = SessionPotentialSetting(type, enabled, V0, R, a, r0, coulomb_radius, spin_orbit, api_->compound(), pair);
+      azure2::experiment::HybridPotentialSetting s = SessionPotentialSetting(type, enabled, V0, R, a, r0, coulomb_radius, matching_radius, step, spin_orbit, api_->compound(), pair);
       (pair ? config_->potentials.pairs[pair] : config_->potentials.defaults) = s;
     } catch (const std::exception &e) {
       throw AZURE2Error(std::string(pair ? "Failed to set potential for pair: " : "Failed to set default potential: ") +
@@ -308,7 +308,7 @@ class Session {
     PotentialsChanged();
   }
 
-  // (enabled, type, V0, R, a, r0, has_own_setting, coulomb_radius) for the given pair, resolved against the default.
+  // (enabled, type, V0, R, a, r0, has_own_setting, coulomb_radius, spin_orbit, matching_radius, step) for the given pair, resolved against the default.
   py::tuple get_potential(int pair) { return SessionPotentialView(*config_, pair); }
   // (changed, record lines, notes): the session's potentials as format-3 records (pybind_potentials.cpp)
   py::tuple potential_records() { return SessionPotentialRecords(*config_); }
@@ -1120,15 +1120,15 @@ PYBIND11_MODULE(_azure2, m) {
            "Rebuild the model with one pair's channel radius changed (fm).")
       .def("set_potential", &Session::set_potential, py::arg("pair"),
            py::arg("type"), py::arg("enabled"), py::arg("V0"), py::arg("R"),
-           py::arg("a"), py::arg("r0"), py::arg("coulomb_radius"), py::arg("spin_orbit"),
-           "Set the hybrid nuclear potential for one particle pair; pair=0 "
+           py::arg("a"), py::arg("r0"), py::arg("coulomb_radius"), py::arg("matching_radius"), py::arg("step"), py::arg("spin_orbit"),
+           "Set the hybrid nuclear potential for one particle pair (lengths fm); pair=0 "
            "sets the default the unnamed pairs fall back to.  spin_orbit: [] or [V_so MeV, R_so fm, a_so fm, "
            "on (0 light, 1 heavy)].  Call initialize() afterwards for it to reach the model.")
       .def("clear_potential", &Session::clear_potential, py::arg("pair"),
            "Drop a pair's own potential so it follows the default again; "
            "pair=0 resets the default and every pair.")
       .def("get_potential", &Session::get_potential, py::arg("pair"),
-           "(enabled, type, V0, R, a, r0, has_own_setting, coulomb_radius, spin_orbit [] or [V_so, R_so, a_so, on]) for a pair.")
+           "(enabled, type, V0, R, a, r0, has_own_setting, coulomb_radius, spin_orbit [] or [V_so, R_so, a_so, on], matching_radius, step) for a pair.")
       .def("potential_records", &Session::potential_records,
            "(changed, lines, notes): the potentials as format-3 records (a format-3 project only).")
       .def("configured_potential_pairs", &Session::configured_potential_pairs,
