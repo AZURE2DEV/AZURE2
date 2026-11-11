@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Free-gas Doppler broadening ("doppler T" on a <targetInt> line, T the effective temperature in kelvin): SAMMY's
+# Free-gas Doppler broadening ("doppler free_gas T K" on a target record, T the effective temperature): SAMMY's
 # free-gas model (manual, "Free-Gas Model of Doppler Broadening"), applied to the cross section of every sub-point
 # BEFORE the transmission/yield transform and the line's resolution kernel.  Model (make_models.py): n + 12C from
 # tests/reaction_rate/models/n12C.azr with the 1/2+ resonance (E_cm = 0.4247 MeV) narrowed to Gamma_n = 200 eV, so
@@ -16,21 +16,22 @@
 #       other order (the transform of the broadened sigma) is more than 1 % off;
 #   (d) the analytic gradient equals finite differences and the Jacobian path (AZURE_GRAD_CHECK) on a project with
 #       all three kinds, every free parameter varied, --no-grid-replacement (as tests/transmission_yield);
-#   (e) refused with an ERROR and no output: "doppler 0" and "doppler" without a temperature.
+#   (e) refused with an ERROR and no output: a temperature of 0 K and none.
 #
-# The fitted temperature, "doppler T vary sigma [Tmax]" (parameter doppler_<n>):
+# The fitted temperature, "doppler free_gas T K fit [prior T sigma] [grid_max Tmax]" (parameter <target>.doppler):
 #
-#   (f) data = the dop model's sigma_t and sigma_gamma at T = 450 K (1 % errors), every level fixed, the line
-#       "doppler 300 1 0 900": MIGRAD (--use-gradient) and --use-lm recover T within 1 K;
-#   (g) AZURE_GRAD_CHECK on grad_fit (doppler_1 "300 1 0 900" on the Doppler-only and transmission/yield
-#       segments, doppler_2 "300 1 20" on the Doppler + Gaussian transmission/yield ones), free with the widths:
+#   (f) data = the dop model's sigma_t and sigma_gamma at T = 450 K (1 % errors), every level fixed, the target
+#       "doppler free_gas 300 K fit grid_max 900": MIGRAD (--use-gradient) and --use-lm recover T within 1 K;
+#   (g) AZURE_GRAD_CHECK on grad_fit (D0 and D1 "fit grid_max 900" on the Doppler-only and the transmission/yield
+#       data sets, D2 "fit prior 300 20" on the Doppler + Gaussian transmission/yield ones), free with the widths:
 #       the analytic gradient = finite differences (1e-6 of the largest) and the Jacobian path (1e-10);
-#   (h) "doppler 300 1 20" against the same data with 20 % errors: T lands between 300 K and the default layout
+#   (h) "fit prior 300 20" against the same data with 20 % errors: T lands between 300 K and the default layout
 #       temperature 363 K, and Total-Doppler-Chi-Squared in chiSquared.out = ((T - 300)/20)^2;
-#   (i) malformed fit forms refused with an ERROR and no output: vary 2, sigma missing, sigma < 0, Tmax <= T,
-#       T < 0;
-#   (j) only with REF_AZURE2=<an f373664 build>: the plain "doppler T" models' AZUREOut files and chiSquared.out
-#       are byte-identical to that build's (the fit form changed nothing for a fixed line).
+#   (i) malformed fit forms refused with an ERROR and no output: a prior without its width, a negative width,
+#       grid_max <= T, T < 0 (the old line's "vary 2" has no format-3 form: the converter refuses it,
+#       convert_constructs);
+#   (j) only with REF_AZURE2=<a reference build that reads format 3>: the plain Doppler models' AZUREOut files and
+#       chiSquared.out are byte-identical to that build's.
 #
 #   [REF_AZURE2=path/to/reference/AZURE2] ./tests/doppler_fgm/check.sh path/to/AZURE2
 
@@ -135,10 +136,11 @@ else
     || bad "(d) Jacobian-path vs adjoint gradient: $jac of the largest"
 fi
 
-# (e) refusals
-for name in refuse_zero refuse_missing; do
+# (e) refusals: NAME:the text of the run's ERROR
+for v in "refuse_zero:D.doppler: error E_OUT_OF_RANGE" "refuse_missing:D.doppler: error E_NOT_A_NUMBER"; do
+  name="${v%%:*}"; want="${v#*:}"
   run "$name" "$name" 1
-  if grep -q "a doppler block is 'doppler T'" "$WORK/$name/run.log" && [ ! -s "$WORK/$name/output/chiSquared.out" ]; then
+  if grep -q "ERROR: .*$want" "$WORK/$name/run.log" && [ ! -s "$WORK/$name/output/chiSquared.out" ]; then
     ok "(e) refused: $name"
   else bad "(e) not refused: $name"; grep -m2 -E 'ERROR|WARN' "$WORK/$name/run.log"; fi
 done
@@ -158,10 +160,10 @@ if "$PY" -I "$HERE/make_models.py" fitdata "$HERE/../reaction_rate/models/n12C.a
   for v in "fit_grad:--use-gradient" "fit_lm:--use-lm"; do
     name="${v%%:*}"; flags="${v#*:}"
     fit "$name" fit "$flags"
-    t="$(par "$name" doppler_1)"; c="$(chi "$name" Total-Chi-Squared)"
+    t="$(par "$name" D.doppler)"; c="$(chi "$name" Total-Chi-Squared)"
     if [ -n "$t" ] && awk -v t="$t" -v re="$num" 'BEGIN { d = t - 450; if (d < 0) d = -d; exit !(t ~ re && d < 1) }'; then
-      ok "(f) $flags: doppler_1 = $t K from 300 K (truth 450 K), chi2 $c"
-    else bad "(f) $flags: doppler_1 '${t}', chi2 '${c}'"; tail -5 "$WORK/$name/run.log"; fi
+      ok "(f) $flags: D.doppler = $t K from 300 K (truth 450 K), chi2 $c"
+    else bad "(f) $flags: D.doppler '${t}', chi2 '${c}'"; tail -5 "$WORK/$name/run.log"; fi
   done
 else bad "(f) fit data not built"; fi
 
@@ -176,7 +178,7 @@ awk '{ sub(/\r$/, "") }
        print a, f, j, $4 }' "$WORK/gfit/run.log" > "$WORK/gfit/rows"
 nrow="$(awk 'END { print NR }' "$WORK/gfit/rows")"
 ndop="$(awk '$4 == "doppler"' "$WORK/gfit/rows" | grep -c .)"
-if [ "$ndop" -ne 2 ] || [ "$nrow" -lt 4 ]; then bad "(g) gradient check listed $nrow parameters, $ndop temperatures"
+if [ "$ndop" -ne 3 ] || [ "$nrow" -lt 4 ]; then bad "(g) gradient check listed $nrow parameters, $ndop temperatures"
 else
   read -r fd jac <<< "$(awk '{ a = $1 < 0 ? -$1 : $1; if (a > m) m = a
                                d = $1 - $2; if (d < 0) d = -d; if (d > w) w = d
@@ -184,7 +186,7 @@ else
                              END { printf "%.2e %.2e", w / m, v / m }' "$WORK/gfit/rows")"
   read -r dfd <<< "$(awk '$4 == "doppler" { d = ($1 - $2) / $2; if (d < 0) d = -d; if (d > w) w = d } END { printf "%.2e", w }' \
                      "$WORK/gfit/rows")"
-  le "$fd" 1e-6 && ok "(g) gradient = finite differences for $nrow parameters, doppler_1 and doppler_2 among them ($fd of the largest; the temperatures to $dfd of their own)" \
+  le "$fd" 1e-6 && ok "(g) gradient = finite differences for $nrow parameters, the three temperatures among them ($fd of the largest; the temperatures to $dfd of their own)" \
     || bad "(g) gradient vs finite differences: $fd of the largest (temperatures $dfd of their own)"
   le "$jac" 1e-10 && ok "(g) Jacobian-path gradient = adjoint gradient ($jac of the largest)" \
     || bad "(g) Jacobian-path vs adjoint gradient: $jac of the largest"
@@ -192,21 +194,23 @@ fi
 
 # (h) a prior
 fit prior fit_prior --use-gradient
-t="$(par prior doppler_1)"; dc="$(chi prior Total-Doppler-Chi-Squared)"
+t="$(par prior D.doppler)"; dc="$(chi prior Total-Doppler-Chi-Squared)"
 if [ -n "$t" ] && [ -n "$dc" ] && awk -v t="$t" -v s="$dc" -v re="$num" 'BEGIN { p = ((t - 300) / 20)^2; d = s - p; if (d < 0) d = -d
        exit !(t ~ re && s ~ re && t > 300 && t < 363 && d <= 1e-5 * (p + 1)) }'; then
   ok "(h) a 20 K prior holds T at $t K (data alone: 450 K); Total-Doppler-Chi-Squared $dc = ((T - 300)/20)^2"
-else bad "(h) prior fit: doppler_1 '${t}', Total-Doppler-Chi-Squared '${dc}'"; tail -5 "$WORK/prior/run.log"; fi
+else bad "(h) prior fit: D.doppler '${t}', Total-Doppler-Chi-Squared '${dc}'"; tail -5 "$WORK/prior/run.log"; fi
 
 # (i) malformed fit forms
-for name in refuse_vary refuse_nosigma refuse_sigma refuse_tmax refuse_negT; do
+for v in "refuse_nosigma:D.doppler: error E_PRIOR_SYNTAX" "refuse_sigma:D.doppler: error E_PRIOR_SYNTAX" \
+         "refuse_tmax:Tmax \"200\" must be a temperature above T" "refuse_negT:D.doppler: error E_OUT_OF_RANGE"; do
+  name="${v%%:*}"; want="${v#*:}"
   run "$name" "$name" 1
-  if grep -q "a doppler block is 'doppler T'" "$WORK/$name/run.log" && [ ! -s "$WORK/$name/output/chiSquared.out" ]; then
-    ok "(i) refused: $name ($(grep -m1 -o "a doppler block is.*" "$WORK/$name/run.log" | cut -c1-120))"
+  if grep -q "ERROR: .*$want" "$WORK/$name/run.log" && [ ! -s "$WORK/$name/output/chiSquared.out" ]; then
+    ok "(i) refused: $name ($(grep -m1 -o "ERROR: .*" "$WORK/$name/run.log" | cut -c1-120))"
   else bad "(i) not refused: $name"; grep -m2 -E 'ERROR|WARN' "$WORK/$name/run.log"; fi
 done
 
-# (j) plain "doppler T" byte-identical to a reference build (optional)
+# (j) plain Doppler models byte-identical to a reference build (optional)
 if [ -n "${REF_AZURE2:-}" ]; then
   ref="$AZURE2_BIN"; AZURE2_BIN="$REF_AZURE2"
   for m in dop dopg dopT dopgT; do run "ref_$m" "$m" 1; done

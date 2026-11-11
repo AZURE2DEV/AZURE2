@@ -12,7 +12,7 @@ none #Reaction Pathway Check
 none #Angular Distributions Check
 includeAllJPi=1
 maxOrbitalMomentum=4
-abundanceSumSigma=0.01
+format=3
 </config>
 <levels>
 0.5 1 2.365000 1 1 1 1 0 1 1 1 0.6 0.5 1 0 1 0 1.00782 12.0 1 6 1.9435 1.9435 0 0 0.0 0 5.0 0 0 0
@@ -30,19 +30,45 @@ abundanceSumSigma=0.01
 0 1 9.400600 1 1 2 2 2 6 1 1 0.2 0.5 1 0.5 -1 0 1.00782 13.00335 1 6 7.5506 7.5506 0 0 0.0 0 5.0 0 0 0
 
 </levels>
-<abundances>
-7 13 0.5 1 0
-7 14 0.5 1 0
-enr: 7 13 0.5 1 0
-enr: 7 14 0.5 1 0
-enr: sum 0.01
-</abundances>
-<segmentsData>
-1 1 1 1.0 3.0 0 0 0 1 0 0 0 0 0 data.dat 1 0 1 2 2 -999 natural 1
-1 1 1 1.0 3.0 0 0 0 1 0 0 0 0 0 data_enr.dat 1 0 1 2 2 -999 sample enr
-</segmentsData>
-<segmentsTest>
+<data>
+# <segmentsData> line 1
+dataset data
+    reaction       12C(p,p)12C + 13C(p,p)13C
+    # CONVERTED: the old engine computed the integral of the nuclear amplitude alone (pi/k^2 sum g |T|^2), not a measurable cross section
+    quantity       sigma_nuclear
+    unit           b
+    file           data.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  1.0 3.0 MeV
+    norm           1.0 fixed
+    target         natural
 
-</segmentsTest>
-<targetInt>
-</targetInt>
+# <segmentsData> line 2
+dataset data_enr
+    reaction       12C(p,p)12C + 13C(p,p)13C
+    # CONVERTED: the old engine computed the integral of the nuclear amplitude alone (pi/k^2 sum g |T|^2), not a measurable cross section
+    quantity       sigma_nuclear
+    unit           b
+    file           data_enr.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  1.0 3.0 MeV
+    norm           1.0 fixed
+    target         enr
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+# <abundances> sample (unnamed)
+target natural
+    kind           none
+    isotope        12C 0.5 fit
+    isotope        13C 0.5 fit
+    isotope_sum    prior 1 0.01
+
+# <abundances> sample enr
+target enr
+    kind           none
+    isotope        12C 0.5 fit
+    isotope        13C 0.5 fit
+    isotope_sum    prior 1 0.01
+</targets>

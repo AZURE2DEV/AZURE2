@@ -2,7 +2,7 @@
 #
 # "total 1" on a segment line: the total cross section of a neutral entrance pair by the optical theorem,
 # sigma_tot = (pi/k^2) g sum_J (2J+1) sum_c 2 Re T_cc (GenMatrixFunc::CalculateBareCrossSection), one T-matrix per
-# point instead of one per exit pair of a SUM.  Built at run time from tests/natural_neon (n+20Ne, n+22Ne, n+21Ne;
+# point instead of one per exit pair of a SUM.  Built at run time from the old tests/natural_neon (n+20Ne, n+22Ne, n+21Ne;
 # three compound nuclei, natural-abundance sums, target integration) with a free 1 keV width given to every open
 # reaction channel (alpha+17O, n'+20Ne, n'+22Ne, n'+21Ne), which are all zero in the fitted model:
 #
@@ -25,6 +25,9 @@ export LC_ALL=C
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REF="$HERE/../natural_neon"
+# The models are built from the old file (tests/convert/fixtures): a natural sum of totals ("natural 1 total 1" with
+# components) has no format-3 form (sigma_total takes one reaction), see docs/upgrade/format3_tree.md section 4.
+OLD="$HERE/../convert/fixtures/tests/natural_neon/natural_neon.azr"
 AZURE2_BIN="${1:?usage: check.sh path/to/AZURE2}"
 AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
@@ -45,7 +48,7 @@ awk '/<levels>/ { f = 1; print; next } /<\/levels>/ { f = 0 }
      f && NF > 30 && ($6 == 1 || $6 == 3 || $6 == 5 || $6 == 7) && $3 > $23 + $26 + 0.05 { $11 = 0; $12 = (k++ % 2 ? -1000 : 1000) }
      /<segmentsTest>/ { x = 1; print; next } /<\/segmentsTest>/ { x = 0 }
      x && NF > 10 { $5 = 2.5; $6 = 0.01 }
-     { print }' "$REF/natural_neon.azr" > "$WORK/sum.azr"
+     { print }' "$OLD" > "$WORK/sum.azr"
 # MODE tot|ela: each data and test line rewritten without the reaction components; "natural" sums keep the three totals
 rewrite() {
   awk -v mode="$1" '

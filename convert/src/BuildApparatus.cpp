@@ -8,6 +8,23 @@ namespace convert {
 namespace {
 // MeV: the upper edge of the one window that stands for "every point" (above every lab energy a project holds).
 constexpr double kEveryEnergyMeV = 1.0e6;
+
+// The reason the old engine refused the fit form of a doppler block (TargetEffect's set-up: vary 0 or 1, sigma >= 0 K,
+// Tmax above T), or "".
+std::string DopplerFitRefusal(const TargetIntLine &l) {
+  auto number = [](const std::string &tok, double &v) {
+    char *end = nullptr;
+    v = std::strtod(tok.c_str(), &end);
+    return !tok.empty() && end != tok.c_str() && *end == '\0' && std::isfinite(v);
+  };
+  double vary = -1.0, sigma = -1.0, tmax = 0.0;
+  if (!number(l.dopplerVaryToken, vary) || !(vary == 0.0 || vary == 1.0)) return "vary \"" + l.dopplerVaryToken + "\" is not 0 or 1";
+  if (!number(l.dopplerSigmaToken, sigma) || !(sigma >= 0.0))
+    return "sigma \"" + l.dopplerSigmaToken + "\" is not a non-negative number (K)";
+  if (!l.dopplerMaxToken.empty() && (!number(l.dopplerMaxToken, tmax) || !(tmax > l.dopplerTemperature)))
+    return "Tmax \"" + l.dopplerMaxToken + "\" must be a temperature above T (K)";
+  return "";
+}
 }  // namespace
 
 // ================================================================ <targetInt>
@@ -104,6 +121,13 @@ void Builder::BuildApparatus() {
         const std::string T = NumberText(l.dopplerTemperature, e.text);
         std::string d = "free_gas " + T + " K";
         if (l.dopplerFitRead) {
+          // a fit form the old engine refused is refused here: a conversion must not make it run
+          const std::string why = DopplerFitRefusal(l);
+          if (!why.empty()) {
+            res_.refusal = "<targetInt> line " + std::to_string(e.index) + ": a doppler block is 'doppler T' or 'doppler T vary sigma [Tmax]': " +
+                           why + ", which the old engine refused";
+            return;
+          }
           const double sigma = std::strtod(l.dopplerSigmaToken.c_str(), nullptr);
           d += std::strtod(l.dopplerVaryToken.c_str(), nullptr) == 1.0 ? " fit" : " fixed";
           if (sigma > 0) d += " prior " + T + " " + l.dopplerSigmaToken;
@@ -266,19 +290,20 @@ void Builder::BuildSamples() {
       if (samples_[i].name == token) return i;
     return -2;
   };
-  // data and test lines alike: a sample <abundances> lacks is dropped with a note naming the line
-  auto sampleOfLine = [&](const std::string &record, const std::string &natural) {
+  // data and test lines alike: the old engine refused an active line (with an entrance pair of <levels>) whose sample
+  // <abundances> lacks (WorkingCopy.cpp, NaturalAllowed), so the conversion is refused with its reason
+  auto sampleOfLine = [&](const std::string &line, int entrance, const std::string &natural) {
     const int i = sampleIndex(natural);
-    if (i == -2)
-      Note(Construct::kSample, record, "sample '" + natural + "' is not in <abundances>: the old engine refused the line; the record has no isotopes");
+    if (i == -2 && Pair(entrance) && res_.refusal.empty())
+      res_.refusal = line + ": sample \"" + natural + "\" is not in the <abundances> block, which the old engine refused";
     return i;
   };
   for (const auto &kv : activeData_) {
-    const int i = sampleOfLine(dataName_[kv.first], kv.second->parsed->natural());
+    const int i = sampleOfLine("data line " + std::to_string(kv.first), kv.second->parsed->entranceKey(), kv.second->parsed->natural());
     if (i >= 0) sampleOfData_[kv.first] = i;
   }
   for (const auto &kv : activeTest_) {
-    const int i = sampleOfLine(testName_[kv.first], kv.second->parsed->natural());
+    const int i = sampleOfLine("test line " + std::to_string(kv.first), kv.second->parsed->entranceKey(), kv.second->parsed->natural());
     if (i >= 0) sampleOfTest_[kv.first] = i;
   }
 }

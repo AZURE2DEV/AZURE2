@@ -74,12 +74,7 @@ std::vector<std::string> problems;  // of the current file
 // Files whose specs differ, with the reason (each a construct the old engine refused or skipped, which a format-3
 // record cannot express; or a converter defect left for the director, named so).
 const std::map<std::string, const char *> kRecorded = {
-    {"tests/natural_target/models/bad_key.azr",
-     "a test line naming a pair key that <levels> lacks: the old engine skipped it with a warning, the converter drops "
-     "the record, so the later extrapolations' keys move down by one (converter defect: output numbering)"},
-    {"tests/natural_target/models/bad_sample.azr",
-     "a test line naming a sample that <abundances> lacks: the old engine refused it (menu 3), the conversion has no "
-     "sample (a format-3 record cannot name a missing one)"},
+    // none since natural_target's bad_key and bad_sample: the converter refuses both, as the old engine did
 };
 int injected = 0;                   // AZURE2_SPEC_INJECT: change one value of the format-3 side (shows the test fails)
 

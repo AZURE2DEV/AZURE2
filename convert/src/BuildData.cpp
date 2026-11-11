@@ -146,6 +146,13 @@ void Builder::BuildData() {
     const bool ratio = s.isAdvanced() == 1 && s.operationType() == 1 && !s.components().empty();
     // The old engine refused the exit key -1 with any data type but total capture (src/WorkingCopy.cpp, TotalCaptureCodeOk):
     // format 3 writes both halves as one token ([total]), so converting the line would make a refused file run.
+    if (active && in && !s.components().empty() && s.isAdvanced() == 1) {
+      const std::string why = MissingComponentPair(s.components());
+      if (!why.empty()) {
+        res_.refusal = "data line " + std::to_string(d.key) + ": " + why + ", which the old engine refused";
+        return;
+      }
+    }
     if (active && in && s.exitKey() == -1 && code != 3) {
       res_.refusal = "data line " + std::to_string(d.key) +
                      ": the exit key -1 (total capture) needs the total-capture data type (3 on a data line); the old engine refused it";
@@ -195,6 +202,17 @@ void Builder::BuildData() {
       quantity = "sigma_total";
     }
     const bool sampleThickness = s.transmission() > 0 || s.yieldThickness() > 0;
+    // What the old engine refused of a transformed line (WorkingCopy::FinishTransformedSegment, ResolveThicknessGroups):
+    // format 3 has one quantity per data set and a thickness only on a sample target, so a conversion would run it.
+    if (active && in && s.transmission() > 0 && s.yieldThickness() > 0) {
+      res_.refusal = "data line " + std::to_string(d.key) + ": a line is a transmission or a yield, not both, which the old engine refused";
+      return;
+    }
+    if (active && in && !sampleThickness && !s.thicknessGroup().empty()) {
+      res_.refusal = "data line " + std::to_string(d.key) + ": thicknessgroup '" + s.thicknessGroup() +
+                     "' needs the line's own transmission or yield block, which the old engine refused";
+      return;
+    }
     if (sampleThickness) {
       quantity = s.transmission() > 0 ? "transmission" : "neutron_yield";
       unit = "1";
@@ -419,6 +437,13 @@ void Builder::BuildExtrapolations() {
     const OldPair *in = Pair(s.entranceKey());
     const bool ratio = s.isAdvanced() == 1 && s.operationType() == 1 && !s.components().empty();
     // As for a data line: exit key -1 needs the total-capture type (4 on a test line), or the old engine refused it.
+    if (active && in && !s.components().empty() && s.isAdvanced() == 1) {
+      const std::string why = MissingComponentPair(s.components());
+      if (!why.empty()) {
+        res_.refusal = "test line " + std::to_string(t.key) + ": " + why + ", which the old engine refused";
+        return;
+      }
+    }
     if (active && in && s.exitKey() == -1 && code != 4) {
       res_.refusal = "test line " + std::to_string(t.key) +
                      ": the exit key -1 (total capture) needs the total-capture data type (4 on a test line); the old engine refused it";

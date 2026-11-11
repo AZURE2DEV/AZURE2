@@ -12,8 +12,9 @@
 #       from 0.5/0.5 recovers 0.6/0.4; a normgroup over a natural SUM and a
 #       plain segment: the shared norm's gradient agrees too; an abundance prior
 #       acts the same in --use-lm and --use-gsl-lm as in MIGRAD;
-#   (d) a level with channels of both nuclei, "natural 1" on a RATIO and a
-#       component naming a missing pair key are refused.
+#   (d) a level with channels of both nuclei and "natural 1" on a RATIO are refused by the run; a component
+#       naming a missing pair key and a sample <abundances> lacks (old files, tests/convert/fixtures) by the
+#       converter.  The models are format 3 but M_thick.azr (old: four converter questions, format3_tree.md).
 #
 #   ./tests/natural_target/check.sh path/to/AZURE2
 
@@ -150,12 +151,34 @@ if [ -s "$WORK/a.Amat" ] && [ -s "$WORK/b.Amat" ]; then
   else
     bad "gradient check printed nothing about the abundances"; grep -i "grad" "$WORK/gradcheck/run.log" | head -5
   fi
-  # a normalization group over the natural SUM (leader, norm free) and a plain segment on the same data
-  # (follower): the follower's rows must reach the leader's norm column on both gradient paths
+  # a normalization record shared by the natural SUM and a plain data set on the same data (norm free): the second data
+  # set's rows must reach the shared norm column on both gradient paths
+  cat > "$WORK/ng_data.txt" <<'RECORDS'
+normalization N
+    value          1.05 fit prior 1.05 10%
+
+dataset data
+    reaction       12C(p,p)12C + 13C(p,p)13C
+    quantity       sigma_nuclear
+    unit           b
+    file           data.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  1.0 3.0 MeV
+    norm           N
+    target         natural
+
+dataset data_2
+    reaction       12C(p,p)12C
+    quantity       sigma_nuclear
+    unit           b
+    file           data.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  1.0 3.0 MeV
+    norm           N
+RECORDS
   (cd "$WORK" && mkdir -p gradcheck_ng/output gradcheck_ng/checks && cp data.dat gradcheck_ng/ &&
-   awk '/<segmentsData>/ { print; print "1 1 1 1.0 3.0 0 0 0 1.05 1 10 0 0 0 data.dat 1 0 1 2 2 -999 normgroup N natural 1";
-                           print "1 1 1 1.0 3.0 0 0 0 1 1 10 0 0 0 data.dat 0 0 normgroup N"; skip = 1; next }
-        /<\/segmentsData>/ { skip = 0 } skip { next } { print }' "$M/M_data.azr" > gradcheck_ng/t.azr &&
+   awk -v recs="$WORK/ng_data.txt" '/^<data>$/ { print; while ((getline l < recs) > 0) print l; skip = 1; next }
+        /^<\/data>$/ { skip = 0 } skip { next } { print }' "$M/M_data.azr" > gradcheck_ng/t.azr &&
    cd gradcheck_ng && printf '2\n\n\n7\n' | AZURE_GRAD_CHECK=exit run_limited 600 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > run.log 2>&1)
   line="$(grep "components with relative" "$WORK/gradcheck_ng/run.log" | head -1)"
   if echo "$line" | grep -q "norm 0/1 .*Jacobian path:.* norm 0/1"; then ok "normalization group over a natural SUM and a plain segment: norm gradient agrees with finite differences"
@@ -169,7 +192,7 @@ if [ -s "$WORK/a.Amat" ] && [ -s "$WORK/b.Amat" ]; then
   run "fit2" "$M/M_samples_data.azr" true "" 2 || true
   sav="$WORK/fit2/output/param.sav"
   if [ -s "$sav" ]; then
-    v="$(awk '$1 == "abundance_7_13" || $1 == "abundance_7_14" || $1 == "abundance_enr_7_13" || $1 == "abundance_enr_7_14" { printf "%s ", $2 }' "$sav")"
+    v="$(awk '$1 == "natural.isotope.12C" || $1 == "natural.isotope.13C" || $1 == "enr.isotope.12C" || $1 == "enr.isotope.13C" { printf "%s ", $2 }' "$sav")"
     if awk -v v="$v" 'BEGIN { n = split(v, a, " "); exit !(n == 4 && (a[1]-0.6)^2 < 1e-6 && (a[2]-0.4)^2 < 1e-6 && (a[3]-0.1)^2 < 1e-6 && (a[4]-0.9)^2 < 1e-6) }'; then ok "fit with two samples recovers 0.6 / 0.4 and 0.1 / 0.9 ($v)"; else bad "fit with two samples gave $v (want 0.6 0.4 0.1 0.9)"; tail -5 "$WORK/fit2/run.log"; fi
   else
     bad "two-sample fit wrote no param.sav"; tail -8 "$WORK/fit2/run.log"
@@ -178,7 +201,7 @@ if [ -s "$WORK/a.Amat" ] && [ -s "$WORK/b.Amat" ]; then
   run "fit" "$M/M_data.azr" true "" 2 || true
   sav="$WORK/fit/output/param.sav"
   if [ -s "$sav" ]; then
-    a13="$(awk '$1 == "abundance_7_13" { print $2 }' "$sav")"; a14="$(awk '$1 == "abundance_7_14" { print $2 }' "$sav")"
+    a13="$(awk '$1 == "natural.isotope.12C" { print $2 }' "$sav")"; a14="$(awk '$1 == "natural.isotope.13C" { print $2 }' "$sav")"
     chi="$(grep -o "Total-Chi-Squared: [0-9.e+-]*" "$WORK/fit/output/chiSquared.out" 2>/dev/null | head -1)"
     if awk -v a="$a13" -v b="$a14" 'BEGIN { exit !((a - 0.6)^2 < 1e-6 && (b - 0.4)^2 < 1e-6) }'; then ok "fit recovers the abundances 0.6 / 0.4 ($a13 / $a14; $chi)"; else bad "fit gave abundances $a13 / $a14 (want 0.6 / 0.4; $chi)"; tail -5 "$WORK/fit/run.log"; fi
   else
@@ -188,18 +211,19 @@ if [ -s "$WORK/a.Amat" ] && [ -s "$WORK/b.Amat" ]; then
   # want 0.6).  Guards AZURECalc::Chi2On, which took the prior from compound() instead of the evaluated copy until
   # 2026-10-17; that copy is refreshed between LM/GSL steps, so this case passed with the old code as well -- the
   # check keeps the three minimizers in agreement rather than reproducing a failure.
-  sed 's/^7 13 0.5 1 0$/7 13 0.5 1 0.002/' "$M/M_data.azr" > "$WORK/M_prior.azr"
+  sed 's/^\(    isotope  *12C 0.5 fit\)$/\1 prior 0.5 0.002/' "$M/M_data.azr" > "$WORK/M_prior.azr"
+  grep -q '12C 0.5 fit prior 0.5 0.002$' "$WORK/M_prior.azr" || bad "the abundance prior was not written into M_prior.azr"
   for mz in migrad lm gsl; do
     case $mz in migrad) fl="--use-gradient" ;; lm) fl="--use-lm" ;; gsl) fl="--use-gsl-lm" ;; esac
     run "prior_$mz" "$WORK/M_prior.azr" true "$fl" 2 || true
   done
-  pm="$(awk '$1 == "abundance_7_13" { print $2 }' "$WORK/prior_migrad/output/param.sav" 2>/dev/null)"
+  pm="$(awk '$1 == "natural.isotope.12C" { print $2 }' "$WORK/prior_migrad/output/param.sav" 2>/dev/null)"
   for mz in lm gsl; do
-    pv="$(awk '$1 == "abundance_7_13" { print $2 }' "$WORK/prior_$mz/output/param.sav" 2>/dev/null)"
+    pv="$(awk '$1 == "natural.isotope.12C" { print $2 }' "$WORK/prior_$mz/output/param.sav" 2>/dev/null)"
     if [ -n "$pm" ] && [ -n "$pv" ] && awk -v a="$pm" -v b="$pv" 'BEGIN { exit !((a - b)^2 < 1e-8 && (a - 0.6)^2 > 1e-6) }'; then
-      ok "abundance prior acts in --use-$mz as in MIGRAD (abundance_7_13 $pv vs $pm; data alone 0.6)"
+      ok "abundance prior acts in --use-$mz as in MIGRAD (natural.isotope.12C $pv vs $pm; data alone 0.6)"
     else
-      bad "abundance prior in --use-$mz: abundance_7_13 $pv, MIGRAD $pm (data alone 0.6)"; tail -3 "$WORK/prior_$mz/run.log"
+      bad "abundance prior in --use-$mz: natural.isotope.12C $pv, MIGRAD $pm (data alone 0.6)"; tail -3 "$WORK/prior_$mz/run.log"
     fi
   done
 else
@@ -207,12 +231,28 @@ else
 fi
 
 # ---- (d) refused models ----------------------------------------------------------------------------------
-for name in bad_level bad_ratio bad_key bad_sample; do
+for name in bad_level bad_ratio; do
   run "$name" "$M/$name.azr" true "" || true
   if grep -q "ERROR" "$WORK/$name/run.log" && ! ls "$WORK/$name/output"/AZUREOut_* > /dev/null 2>&1; then
     ok "$name refused: $(grep -m1 ERROR "$WORK/$name/run.log" | cut -c1-90)"
   else
     bad "$name was not refused"; tail -3 "$WORK/$name/run.log"
+  fi
+done
+
+# a component naming a pair key <levels> lacks, and a sample <abundances> lacks: format 3 cannot state either (a
+# reaction names nuclei, a target names its isotopes); the old files (tests/convert/fixtures) are refused by the
+# converter with the old engine's reason
+OLDM="$HERE/../convert/fixtures/tests/natural_target/models"
+for case in "bad_key:component 9 -> 9 names a pair key that is not in the compound nucleus" \
+            "bad_sample:sample \"nosuch\" is not in the <abundances> block"; do
+  name="${case%%:*}"; want="${case#*:}"
+  (cd "$M" && "$AZURE2_BIN" --convert "$OLDM/$name.azr" "$WORK/${name}_conv.azr" --to 3 > "$WORK/${name}_conv.log" 2>&1)
+  st=$?
+  if [ "$st" -ne 0 ] && grep -qF "$want" "$WORK/${name}_conv.log" && [ ! -e "$WORK/${name}_conv.azr" ]; then
+    ok "$name refused by the converter: $want"
+  else
+    bad "$name was not refused by the converter (exit $st)"; tail -3 "$WORK/${name}_conv.log"
   fi
 done
 
