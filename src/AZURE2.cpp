@@ -1175,8 +1175,7 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
     // Read existing parameters if provided
     if (configure.paramMask & Config::USE_PREVIOUS_PARAMETERS) {
       configure.outStream << "Reading User Parameter File..." << std::endl;
-      params.ReadUserParameters(configure);
-      if (!params.ReconcileBasis(compound, configure)) return -1;
+      if (!params.ReadUserParameters(configure) || !params.ReconcileBasis(compound, configure)) return -1;
     } else {
       configure.outStream << "Creating New param.par File..." << std::endl;
       params.WriteUserParameters(configure, false);

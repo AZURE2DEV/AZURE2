@@ -1882,6 +1882,12 @@ Diagnostic codes
    * - ``E_OLD_POTENTIAL_BLOCK``
      - error
      - the old <potential> block in a format-3 project (AZURE2 --convert writes potential records)
+   * - ``E_PARAMETER_FILE_NO_MATCH``
+     - error
+     - a parameter file (param.sav as a run's start) none of whose names is a parameter of the run
+   * - ``W_PARAMETER_FILE_NAMES``
+     - warning
+     - a parameter file with names the project has no parameter for, or without names of parameters it has
    * - ``E_SO_TWO_SPINS``
      - error
      - a spin-orbit term on a pair whose two particles both have spin (the coupled treatment is not implemented)

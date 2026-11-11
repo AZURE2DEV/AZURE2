@@ -142,8 +142,7 @@ int AZUREMain::operator()() {
   data()->FillMnParams(params);
   if (configure().paramMask & Config::USE_PREVIOUS_PARAMETERS) {
     configure().outStream << "Reading User Parameter File..." << std::endl;
-    params.ReadUserParameters(configure());
-    if (!params.ReconcileBasis(compound(), configure())) return -1;
+    if (!params.ReadUserParameters(configure()) || !params.ReconcileBasis(compound(), configure())) return -1;
   }
   // An adaptive extrapolation grid is a function of the parameters (docs/upgrade/project_format3.md section 3.8): it is
   // refined now, at the run's parameters, and the extrapolations are made again on the refined grids before anything

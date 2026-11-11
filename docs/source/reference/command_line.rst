@@ -36,7 +36,14 @@ The prompts come in this order:
    chi-squared = 1? (y/n)" (mode 4 asks for the allowed chi-squared variance
    before both);
 3. the external parameter file (blank: start from the ``<levels>`` of the
-   project);
+   project).  Its lines are applied by name.  A file none of whose names is a
+   parameter of the run is refused (``E_PARAMETER_FILE_NO_MATCH``, exit 1:
+   nothing of it would be applied); a file with names the project has no
+   parameter for, or without names of parameters the run has, is applied with
+   ``W_PARAMETER_FILE_NAMES``, which lists both sides.  Names the project
+   gives to the parameters of its other run (the data sets' in a run without
+   data, the extrapolations' in a run with data) and fixed data-set or
+   extrapolation parameters the file leaves out are not reported;
 4. the external capture amplitude file (blank: compute them);
 5. the menu again (``7`` exits).
 

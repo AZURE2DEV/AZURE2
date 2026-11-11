@@ -144,6 +144,9 @@ constexpr const char *kPotentialPairKind = "E_POTENTIAL_PAIR_KIND";
 constexpr const char *kPotentialRelativistic = "E_POTENTIAL_RELATIVISTIC";
 constexpr const char *kThmHybridPotential = "E_THM_HYBRID_POTENTIAL";
 constexpr const char *kOldPotentialBlock = "E_OLD_POTENTIAL_BLOCK";
+// The names of a parameter file given as a run's start (ParameterFileNames.h)
+constexpr const char *kParameterFileNoMatch = "E_PARAMETER_FILE_NO_MATCH";
+constexpr const char *kParameterFileNames = "W_PARAMETER_FILE_NAMES";
 // Spin-orbit terms (a potential record's spin_orbit, pyazr, the API: SpinOrbitChecks.h)
 constexpr const char *kSoTwoSpins = "E_SO_TWO_SPINS";
 constexpr const char *kSoZeroSpin = "E_SO_ZERO_SPIN";
