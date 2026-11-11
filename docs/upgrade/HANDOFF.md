@@ -2,6 +2,35 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, Phase 5 branch 2) — the gradient over the energy tasks (`feature/upgrade-5-energy-tasks-gradient`)
+
+**Done.** (1) The 5-thread regression of branch 1: measured with a new profile stage "energy tasks: set-up" and the
+counter "energy tasks rebuilt": a T2 fit rebuilds the tasks at 156 of 196 passes (every shift change rebuilds the
+plan), serially, 1.15 s of 15.6 s wall at 5 threads. The tasks are now ranges of flat arrays (`EnergyTaskList`),
+keys and sort in parallel: 0.37 s. (2) The analytic gradient, the least-squares rows and the model gradients run
+over the energy tasks (`src/GradEnergyTasks.cpp`): point pass, cotangents of every unit (`PointCotangents`,
+`GradTargetEffectAdjoint` now hands out sub-point cotangents), one fill and factorisation per task, T-matrix
+cotangents summed per group, bilinear terms merged per task. Sums in a thread-independent order (64 interleaved
+chunks; rows in task order; fitBarFn serial in data order): this removed the cause of fits differing at several
+threads (the old per-thread reduction over a dynamic schedule and the atomic norm sums). (3) Deleted:
+`BuildGradItems` and the grouped/ungrouped routes, `GradOnePoint`, `GroupRows`, `ForEachRow`,
+`AZURE_NO_GROUPED_GRADIENT`, `ScopedPointMappingOff` (its two other users run the point pass), `TBarAdjointMany`.
+
+**Verified** (binary `work/egrad/AZURE2-final` = a69f6854): all projects x 3 bases identical to `tab-trial21a`
+(766/739/766, tag `tab-egrad-final`); `AZURE_PLAN_CHECK=1` on the tree: 265 evaluations, 3,653,648 units, 0 differ;
+quick set per commit; T2 fits at 1, 2, 3 threads identical (base: chiSquared.out differs 1 vs 3 threads);
+fits at 1 thread against the base (`work/egrad/fitcmp`): T1, T3, T2 --use-lm, angle_mapping, energy_shift_sqrt,
+sum_free, 18O THM identical; T2 migrad/grad 2.5e-9 in a parameter, chi2 1.5e-13; 13N 6.8e-11; natural_neon
+(30 calls, not converged, EDM 3.4e3) 5.9e-5 -- above the brief's 1e-5: the paths agree to 1e-15 at call 1 and
+the difference grows along the unconverged path (the base itself is identical at 1 and 3 threads there).
+
+**Not done / open.** The point mapping (`MapData`, `MapLeaves`, `SharesCalculation`, `AZURE_NO_*_MAPPING`) is kept:
+the whole tree with `AZURE_NO_POINT_MAPPING=1` gives every output identical except the Coulomb-table lookup count in
+the run.log of `angle_mapping` and `sum_lab_frame/models/plain_data` (tag `tab-egrad-nomap`); T2 fit and
+natural_neon calculation equal in time, RSS +3.5 % (T2) -- a decision for the director. Not run: ctest -LE slow,
+tests/run_tests.sh, the converted-tree gate, 1-against-3-thread calculations, gradient-at-start table, speed series,
+ThreadSanitizer (no clang here). THM locality not attempted.
+
 ## 2026-11-11 (agent, Phase 5 branch 3) — lab data compared in the lab frame (`feature/upgrade-5-lab-frame`)
 
 **Done** (decision M3 (b), `energy_grid.md` §4 and its new §4.2a with the measured sizes).
