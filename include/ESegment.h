@@ -569,6 +569,7 @@ class ESegment {
   azure2::experiment::ReactionSpec reaction_;  ///< GetReaction
   std::shared_ptr<const azure2::experiment::Prediction> prediction_;  ///< GetPrediction
   std::string datafile_;
+  azure2::experiment::ColumnConversion columns_;  ///< the rows of datafile_ into the engine's units and frame (format 3)
   std::vector<EPoint> points_;
 
   // Advanced segment composition

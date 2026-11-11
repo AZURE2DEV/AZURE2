@@ -9,7 +9,7 @@ physics/coulomb/coul/src/cwfcomp.cpp	1440
 physics/coulomb/coulsm/src/cwfcomp.cpp	2070
 pyazr/azrfile.py	3756
 pyazr/azure2.py	2424
-pyazr/nds.py	1461
+pyazr/nds.py	1450
 src/AMatrixFunc.cpp	2817
 src/AZURE2.cpp	1659
 src/AZURECalc.cpp	2075

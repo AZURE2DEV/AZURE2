@@ -86,6 +86,36 @@ std::vector<Term> Terms(const ValidatedRecord &r, const ReactionSpec &spec) {
   return terms;
 }
 
+/// The unit of the values as written and the engine's, the factors of the data file's columns and the factor on the
+/// model (BuildUnits.cpp): lines only where something is converted or scaled ("" otherwise).
+std::string UnitsText(const ValidatedRecord &r, const ValueScale &scale, const ColumnConversion *columns) {
+  std::ostringstream out;
+  const Value *u = r.Get("unit");
+  const std::string written = u && u->unit ? u->unit->token : "", engine = r.quantity ? r.quantity->engineUnit : "";
+  if (!written.empty() && (written != engine || !scale.Identity())) {
+    out << "  values in " << written << " (engine unit " << engine << ")";
+    if (columns && columns->value != 1.0) out << ": x " << columns->value << " where the points are made";
+    out << "\n";
+  }
+  if (scale.sFactor)
+    out << "  the model is the S factor E sigma exp(2 pi eta), E the point's c.m. energy after the energy shift, eta of the "
+           "entrance pair (MeV b)\n";
+  if (scale.factor != 1.0) out << "  the model " << scale.text << "\n";
+  if (!columns) return out.str();
+  const Value *cols = r.Get("columns");
+  const ColumnRole *energy = cols ? cols->columns.EnergyRole() : nullptr;
+  if (energy && energy->unit && (columns->energy != 1.0 || columns->energyCM)) {
+    out << "  energy column " << energy->role << "[" << energy->unit->token << "]";
+    if (columns->energy != 1.0) out << ": x " << columns->energy << " to MeV";
+    if (columns->energyCM) out << (columns->energy != 1.0 ? ", " : ": ") << "c.m. to lab with the entrance pair's masses";
+    out << "\n";
+  }
+  const ColumnRole *angle = cols ? cols->columns.AngleRole() : nullptr;
+  if (angle && angle->unit && columns->angle != 1.0)
+    out << "  angle column " << angle->role << "[" << angle->unit->token << "]: x " << columns->angle << " to deg\n";
+  return out.str();
+}
+
 struct Parameter {
   std::string name, kind, status;
 };
@@ -163,7 +193,7 @@ std::string DescribeText(const Format3Project &p) {
     if (!d.active) continue;
     out << "  " << (r.quantity ? r.quantity->name : "?") << ": " << ObservableName(d.reaction.observable)
         << (reaction ? " of " + reaction->reaction.Tree() : "") << "\n";
-    out << ReferenceText(d.reaction);
+    out << ReferenceText(d.reaction) << UnitsText(r, d.reaction.scale, &d.columns);
     for (const Term &t : Terms(r, d.reaction))
       out << "    " << t.text << ": entrance pair " << Pair(p, t.entrance) << ", exit pair " << Pair(p, t.exit)
           << (t.scale != 1.0 ? ", scale " + Fmt(t.scale) : "") << (t.hasAngle ? ", at " + Fmt(t.angle) + " deg lab" : "") << "\n";
@@ -188,7 +218,7 @@ std::string DescribeText(const Format3Project &p) {
     if (!x.active) continue;
     out << "  " << (r.quantity ? r.quantity->name : "?") << ": " << ObservableName(x.reaction.observable)
         << (reaction ? " of " + reaction->reaction.Tree() : "") << "\n";
-    out << ReferenceText(x.reaction);
+    out << ReferenceText(x.reaction) << UnitsText(r, x.reaction.scale, nullptr);
     for (const Term &t : Terms(r, x.reaction))
       out << "    " << t.text << ": entrance pair " << Pair(p, t.entrance) << ", exit pair " << Pair(p, t.exit) << "\n";
     out << "  grid: " << x.energies.size() << (x.adaptive.on ? " start energies" : " energies") << " E_lab " << Fmt(x.minE)
@@ -230,6 +260,9 @@ std::string DescribeJson(const Format3Project &p) {
     j.Key("observable").String(ObservableName(spec.observable));
     j.Key("tree").String(reaction ? reaction->reaction.Tree() : "");
     j.Key("coulomb_reference").String(ReferenceName(spec.coulombReference));
+    const Value *u = r.Get("unit");
+    j.Key("unit").String(u && u->unit ? u->unit->token : "").Key("engine_unit").String(r.quantity ? r.quantity->engineUnit : "");
+    j.Key("model_factor").Number(spec.scale.factor).Key("sfactor").Bool(spec.scale.sFactor);
     j.Key("terms").BeginArray();
     for (const Term &t : Terms(r, spec)) {
       j.BeginObject().Key("reaction").String(t.text).Key("entrance_pair").Integer(t.entrance).Key("exit_pair").Integer(t.exit);
@@ -245,6 +278,8 @@ std::string DescribeJson(const Format3Project &p) {
     j.BeginObject().Key("name").String(r.name).Key("key").Integer(d.key).Key("line").Integer(r.line).Key("active").Bool(d.active);
     j.Key("quantity").String(r.quantity ? r.quantity->name : "");
     reactionTree(r, d.reaction);
+    j.Key("columns").BeginObject().Key("value_factor").Number(d.columns.value).Key("energy_factor").Number(d.columns.energy);
+    j.Key("energy_frame").String(d.columns.energyCM ? "cm" : "lab").Key("angle_factor").Number(d.columns.angle).EndObject();
     j.Key("E_lab_window_MeV").BeginArray().Number(d.minE).Number(d.maxE).EndArray();
     if (AngleObservable(d.reaction.observable)) j.Key("angle_window_deg").BeginArray().Number(d.minA).Number(d.maxA).EndArray();
     j.Key("data_file").String(d.dataFile).Key("data_file_resolved").String(ResolvedPath(p.projectDir, d.dataFile));

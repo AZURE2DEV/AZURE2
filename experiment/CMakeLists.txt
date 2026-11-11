@@ -29,8 +29,10 @@ add_library(azure2_experiment STATIC
   src/Build.cpp
   src/BuildEffects.cpp
   src/BuildPotentials.cpp
+  src/BuildUnits.cpp
   src/Expression.cpp
   src/Frames.cpp
+  src/DataRows.cpp
   src/Grids.cpp
   src/HybridPotentialSettings.cpp
   src/Json.cpp

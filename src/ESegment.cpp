@@ -81,6 +81,7 @@ ESegment::ESegment(const azure2::experiment::DatasetSpec &spec) : parameterNames
   max_a_ = spec.maxA;
   coefficientsAbsolute_ = spec.absolute;
   datafile_ = spec.dataFile;
+  columns_ = spec.columns;
   dataNorm_ = dataNormNominal_ = spec.norm;
   dataNormError_ = spec.normError;
   energyShift_ = spec.energyShift;
@@ -416,6 +417,7 @@ int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
       return -1;
     }
     record++;
+    line.ToEngineUnits(columns_);
     {
       EPoint NewEPoint(line, this);
       NewEPoint.SetFileRecord(record);

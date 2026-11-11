@@ -19,6 +19,7 @@ endif()
 
 add_library(azure2_physics STATIC
   src/AngularCoupling.cpp
+  src/AstrophysicalFactor.cpp
   src/ChannelFunctions.cpp
   src/CoulombScattering.cpp
   src/Derivatives.cpp

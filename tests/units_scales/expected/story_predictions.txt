@@ -1,0 +1,2 @@
+data Y_curve: 113595465155.1859*sigma(1->2)
+extrapolation Y_thick: sigma(1->2)

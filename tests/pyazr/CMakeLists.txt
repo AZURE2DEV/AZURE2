@@ -453,6 +453,14 @@ add_test(NAME pyazr_ratio_to_rutherford
                  ${CMAKE_CURRENT_SOURCE_DIR}/ratio_to_rutherford_test.py)
 set_tests_properties(pyazr_ratio_to_rutherford PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# Units of format 3 and the quantities that are scales (project_format3.md sections 3.3, 7.2): data files in other
+# units to the bit or to 1e-12, S-factor data against an mpmath conversion (with a shift, and the gradient), yields per
+# uC against per particle, pyazr.sfactor_to_cross_section (mpmath; skipped without it).
+add_test(NAME pyazr_units_scales
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/units_scales_test.py)
+set_tests_properties(pyazr_units_scales PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" SKIP_RETURN_CODE 77)
+
 # Electron screening: the AzrModel helpers for the screening block of a <targetInt> line, the
 # screening_<n> parameter and its prior, and its analytic gradient and Jacobian column.
 add_test(NAME pyazr_screening

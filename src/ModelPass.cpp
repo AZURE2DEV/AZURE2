@@ -203,9 +203,13 @@ struct PointInputs {
     for (std::size_t f = 0; f < nf; f++) {
       const FactorRef &r = p.factors[f];
       EPoint *termPoint = TermPoint(segment, r.term, pointIndex);
-      factorValue[f] = (r.kind == FactorRef::Kind::TermFrame)
-                           ? ESegment::TermFrameFactor(basePoint, termPoint)
-                           : ESegment::RatioTermFrameFactor(termPoint, TermSegment(segment, r.term), cnuc);
+      switch (r.kind) {
+        case FactorRef::Kind::TermFrame: factorValue[f] = ESegment::TermFrameFactor(basePoint, termPoint); break;
+        case FactorRef::Kind::RatioFrame:
+          factorValue[f] = ESegment::RatioTermFrameFactor(termPoint, TermSegment(segment, r.term), cnuc);
+          break;
+        case FactorRef::Kind::SFactor: factorValue[f] = azure2::SFactorConversionValue(termPoint, cnuc); break;
+      }
       factorArray[f] = {&factorValue[f], 1};
     }
     for (std::size_t q = 0; q < np; q++) {

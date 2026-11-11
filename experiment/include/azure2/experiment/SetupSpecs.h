@@ -34,6 +34,38 @@ enum class Observable {
 /// (a charged, non-identical elastic pair), or Mott (identical particles, the spin from the pair).
 enum class CoulombReference { None, Rutherford, Mott };
 
+/*!
+ * A factor on the model value of a data set or an extrapolation (format 3: the quantity and the unit of the values;
+ * the tree kind Scaled of experiment/Prediction.h): the value compared with the data is
+ *
+ *   factor x [E exp(2 pi eta(E)) if sFactor] x (the observable's tree),
+ *
+ * E the c.m. energy of the entrance pair at the point as the model evaluates it (after an energy shift; MeV) and eta
+ * its Sommerfeld parameter (physics/AstrophysicalFactor.h), so that a fitted shift moves the factor.  The identity
+ * (factor 1, no sFactor) is no node at all, and every old line has it.
+ */
+struct ValueScale {
+  double factor = 1.0;   ///< the constant c: 1e-6 C / (q e) for a yield per uC, 1 / (unit factor) for an extrapolation
+  bool sFactor = false;  ///< the astrophysical S factor S = E sigma exp(2 pi eta) of an angle-integrated sigma
+  std::string text;      ///< what the factor is, in words, for --describe ("" when factor is 1)
+  bool Identity() const { return factor == 1.0 && !sFactor; }
+};
+
+/*!
+ * How a row of a data file becomes a point (format 3: the units of the column roles, the unit of the values, the
+ * frame of the energy column; experiment/DataRows.h, RowToEngine, applied where the points are made).  The identity
+ * leaves every number's bits as read, and every old line has it.
+ */
+struct ColumnConversion {
+  double energy = 1.0;     ///< MeV per unit of the energy column (and of window_lo, window_hi)
+  bool energyCM = false;   ///< the energy column is the entrance pair's E_cm: taken to E_lab (Frames.h BeamLabFromCM)
+  double lightMass = 0.0, heavyMass = 0.0;  ///< u, the entrance pair's masses (energyCM)
+  bool relativistic = false;                ///< the run's kinematics (energyCM)
+  double angle = 1.0;      ///< deg per unit of the angle column (1 for an order column)
+  double value = 1.0;      ///< engine units of the quantity per unit of the value and error columns
+  bool Identity() const { return energy == 1.0 && !energyCM && angle == 1.0 && value == 1.0; }
+};
+
 /// One term of a composite (SUM / RATIO) data set or extrapolation.
 struct ComponentSpec {
   int entranceKey = 0;   ///< pair key of <levels>
@@ -63,6 +95,8 @@ struct ReactionSpec {
   /// each folded by the point's apparatus (quantities ratio_to_rutherford, ratio_to_mott; observable DifferentialLab
   /// or DifferentialCM, elastic).  The value is the same in both frames: it is not converted at load.
   CoulombReference coulombReference = CoulombReference::None;
+  /// A factor on the model value (an S factor, a yield per unit charge, an extrapolation in another unit).
+  ValueScale scale;
 };
 
 /// The names of a data set's or an extrapolation's fit parameters, given by the spec's producer
@@ -88,6 +122,7 @@ struct DatasetSpec {
   double minE = 0.0, maxE = 0.0;  ///< lab energy window of the points used (MeV)
   double minA = 0.0, maxA = 0.0;  ///< lab angle window (deg), differential observables
   std::string dataFile;
+  ColumnConversion columns;       ///< the rows of dataFile into the engine's units and frame
   bool absolute = false;          ///< AngularCoefficients: the data are A_k (b/sr), not a_k = A_k / A_0
   // Normalization n: the model is compared with n x data ... (EData; value, uncertainty in percent, vary).
   double norm = 1.0;

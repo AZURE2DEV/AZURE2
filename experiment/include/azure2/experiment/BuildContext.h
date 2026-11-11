@@ -45,8 +45,8 @@ class Context {
   const ValidatedRecord *Record(const std::string &name, const std::string &kind) const;
   /// The position of a record in the project (records in input order), for ordering.
   int Position(const ValidatedRecord *r) const;
-  /// "MeV": the value in the engine's unit of its dimension (the unit factor); bit-exact for factor 1.
-  static double InBase(const Number &n, const Unit *unit) { return unit && unit->factor != 1.0 ? n.value * unit->factor : n.value; }
+  /// The value in the engine's unit of its dimension (Units.h ToBase: the unit table's factor; bit-exact for factor 1).
+  static double InBase(const Number &n, const Unit *unit) { return ToBase(n.value, unit); }
 };
 
 /// The pair key `labelField` names by its label (light, heavy, state; `text` as written, `what` for the messages:
@@ -56,6 +56,16 @@ class Context {
 bool ResolvePair(Context &c, const ValidatedRecord &r, const std::string &labelField, const std::string &what,
                  const Particle &light, const Particle &heavy, const ResidualState &state, const std::string &text,
                  const std::string &keyField, int &key);
+
+/// The unit of a data set's or an extrapolation's values (BuildUnits.cpp): for a data set (`columns` given) the factor
+/// of its value column; for an extrapolation a constant on the model; for a yield the factor per unit charge and the
+/// efficiency (ReactionSpec::scale), and the refusal of a layer.  Returns false after an error.
+bool ValueUnit(Context &c, const ValidatedRecord &r, ReactionSpec &spec, ColumnConversion *columns);
+/// The column layout of a data set's file and the conversion of its rows (DatasetSpec::columns): units of the energy
+/// and angle roles, an E_cm column taken to E_lab with the entrance pair's masses.  Returns false after an error.
+bool DataColumns(Context &c, const ValidatedRecord &r, const Columns &cols, const std::string &secondRole, DatasetSpec &d);
+/// The data set's energy window in lab MeV (the frame and unit of its energy column), after DataColumns.
+void EnergyWindow(const ValidatedRecord &r, DatasetSpec &d);
 
 /// The `potential` records of <potentials> (BuildPotentials.cpp): one setting per pair into out_.potentials, and the
 /// refusals that need the pairs, the THM data sets and the relativistic flag.  After the data sets are built.

@@ -41,6 +41,21 @@ const Unit *FindUnitIgnoringCase(const std::string &token);
 std::vector<std::string> UnitsOfDimension(const std::string &dimension);
 const Dimension *FindDimension(const std::string &name);
 
+/*!
+ * v x factor, rounded as a decimal unit should be: where the factor is (to 1e-12) an integer N, v N; where its inverse
+ * is, v / N; else v x factor.  Dividing by the exact integer 1000 gives the correctly rounded quotient, so a value
+ * written as 12.5 mb becomes the same double as 0.0125 written in b (multiplying by the double nearest 1e-3 can be one
+ * unit in the last place off).  factor 1 returns v itself.  The one place a unit factor is applied to a number.
+ */
+double Rescale(double value, double factor);
+/// The factor that takes a value in `from` to the unit `to` of the same dimension (from.factor / to.factor).
+double FactorBetween(const Unit &from, const Unit &to);
+/// A value written in `unit` in the base unit of its dimension (the engine's): Rescale(value, unit->factor); the value
+/// itself when there is no unit.
+double ToBase(double value, const Unit *unit);
+/// A value written in `from` in the unit token `to` (a row of the table, same dimension; throws otherwise).
+double ToUnit(double value, const Unit *from, const std::string &to);
+
 /// Beam particles per unit of charge of a per-charge unit (1/uC: 1e-6 C / (q e)); q >= 1 is the charge state.
 double ParticlesPerUnitCharge(const Unit &unit, int chargeState);
 

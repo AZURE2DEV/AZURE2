@@ -116,6 +116,77 @@ void ExpectOne(const std::string &code, const BuiltProject &b) {
     for (const Diagnostic &d : b.diagnostics) std::printf("        got %s: %s\n", d.code.c_str(), d.message.c_str());
 }
 
+// Units (project_format3.md sections 3.3, 7.2): the factor of every number Build holds and of every column of a data
+// file comes from the unit table; a per-charge yield and an S factor are factors on the model.
+void UnitCases(const std::string &targets) {
+  auto data = [](const BuiltProject &b) -> const DatasetSpec & { return b.data.datasets.items.at(0).spec; };
+  const BuiltProject mb = BuildText(Data(Set(kDataset, "unit", "    unit mb")));
+  check("unit mb: the value column times 1e-3 at the points, the model unscaled",
+        mb.Ok() && data(mb).columns.value == 1e-3 && data(mb).reaction.scale.Identity() && data(mb).columns.energy == 1.0);
+  const BuiltProject keV = BuildText(Data(Set(Set(kDataset, "columns", "    columns E_cm[keV] _ value error"), "energy_window",
+                                              "    energy_window 200 1400 keV")));
+  {
+    const DatasetSpec &d = data(keV);
+    const double lab = 16.00793 / 15.0001;  // E_lab / E_cm of pair 1 (masses of Pairs())
+    check("E_cm[keV]: energy factor 1e-3, c.m. with pair 1's masses; the window in c.m. keV to lab MeV",
+          keV.Ok() && d.columns.energy == 1e-3 && d.columns.energyCM && d.columns.lightMass == 1.00783 &&
+              d.columns.heavyMass == 15.0001 && std::fabs(d.minE - 0.2 * lab) < 1e-15 && std::fabs(d.maxE - 1.4 * lab) < 1e-15);
+  }
+  const BuiltProject rad = BuildText(Data(Set(Set(Set(kDataset, "quantity", "    quantity dsigma_domega"), "columns",
+                                                  "    columns E_lab[MeV] theta_lab[rad] value error"),
+                                              "unit", "    unit mb/sr")));
+  check("theta_lab[rad], mb/sr: angle factor 180/pi, value 1e-3",
+        rad.Ok() && data(rad).columns.angle == 180.0 / 3.14159265358979323846 && data(rad).columns.value == 1e-3);
+  ExpectOne("E_NOT_BUILT", BuildText(Data(Set(kDataset, "unit", "    unit mb") + "    covariance cov.txt\n")));
+  // an extrapolation in another unit: the model in that unit
+  const BuiltProject xmb = BuildText("<extrapolations>\nextrapolation x1\n    reaction 15N(p,g)16O\n    quantity sigma\n    unit mb\n"
+                                     "    energies list 0.3 MeV lab\n</extrapolations>\n");
+  check("an extrapolation in mb: the model x 1000", xmb.Ok() && xmb.extrapolations.extrapolations.items[0].spec.reaction.scale.factor == 1000.0);
+  // a wrong dimension is the validator's (the unit is not one of the quantity's)
+  ExpectOne("E_UNIT_NOT_ALLOWED", BuildText(Data(Set(kDataset, "unit", "    unit MeV*b"))));
+  // the S factor: a factor on the model, defined for a charged entrance
+  const BuiltProject sf = BuildText(Data(Set(Set(kDataset, "quantity", "    quantity sfactor"), "unit", "    unit keV*b")));
+  check("sfactor keV*b: an S-factor factor on the model, the values times 1e-3 (to MeV b)",
+        sf.Ok() && data(sf).reaction.scale.sFactor && data(sf).reaction.scale.factor == 1.0 && data(sf).columns.value == 1e-3 &&
+            data(sf).reaction.observable == Observable::CrossSection);
+  ExpectOne("E_REACTION_NOT_ALLOWED", BuildText(Data(Set(Set(Set(kDataset, "quantity", "    quantity sfactor"), "unit", "    unit keV*b"),
+                                                         "reaction", "    reaction 16O(g,a)12C"))));
+  // yields: per particle and per uC on an infinite target; a layer, a fitted efficiency and no charge state refused
+  {
+    const std::string inf = targets.substr(0, targets.size() - std::string("</targets>\n").size()) +
+                            "target t9\n    kind infinite\n    active 15N\n    stopping formula \"a0\" a0=1e-20 MeV*cm2/atom\n"
+                            "    straggling none\n</targets>\n";
+    const std::string y = Set(Set(kDataset, "quantity", "    quantity yield"), "unit", "    unit 1/uC") + "    quadrature points 20\n";
+    const BuiltProject q2 = BuildText(Data(y + "    target t9\n    charge_state 2\n") + inf);
+    const double perUC = 1e-6 / (2 * 1.602176634e-19);
+    check("yield 1/uC, q = 2: the model x 1e-6 C / (2 e)",
+          q2.Ok() && std::fabs(data(q2).reaction.scale.factor / perUC - 1) < 1e-15 && !data(q2).reaction.scale.sFactor);
+    const BuiltProject c = BuildText(Data(Set(y, "unit", "    unit counts/mC") + "    target t9\n    charge_state 1\n    efficiency 0.5 fixed\n") + inf);
+    check("yield counts/mC, q = 1, efficiency 0.5: the model x 1e-3 C / e x 0.5",
+          c.Ok() && std::fabs(data(c).reaction.scale.factor / (0.5e-3 / 1.602176634e-19) - 1) < 1e-15);
+    const BuiltProject p = BuildText(Data(Set(y, "unit", "    unit 1/particle") + "    target t9\n") + inf);
+    check("yield 1/particle: no factor", p.Ok() && data(p).reaction.scale.Identity());
+    ExpectOne("E_NOT_BUILT", BuildText(Data(y + "    target t1\n    charge_state 2\n") + inf));
+    ExpectOne("E_NOT_BUILT", BuildText(Data(Set(y, "unit", "    unit counts/uC") + "    target t9\n    charge_state 1\n"
+                                                                                      "    efficiency 0.5 fit prior 0.5 3%\n") + inf));
+    ExpectOne("E_FIELD_REQUIRED", BuildText(Data(y + "    target t9\n") + inf));
+  }
+  // targets: areal density in atoms/b, U_e in keV, a stopping formula in keV*cm2/atom
+  {
+    std::string t = Set(Set(targets, "areal_density", "    areal_density 1e-6 atoms/b fit prior 1e-6 2e-7"), "screening",
+                        "    screening 1 keV fit prior 1 0.2");
+    t = Set(t, "stopping", "    stopping formula \"a0\" a0=1e-17 keV*cm2/atom");
+    const BuiltProject b = BuildText(Data(kDataset + "    target t1\n    quadrature points 20\n") + t);
+    const bool one = b.Ok() && b.data.targetEffects.items.size() == 1;
+    const TargetEffectSpec *e = one ? &b.data.targetEffects.items[0].spec : nullptr;
+    check("target: 1e-6 atoms/b = 1e18 atoms/cm2 (prior 2e17), U_e 1 keV = 1000 eV (prior 200 eV), stopping (a0)*0.001",
+          e && e->density == 1e18 && e->densitySigmaText == "2e+17" && e->screeningUe == 1000.0 && e->screeningSigma == 200.0 &&
+              e->stoppingPowerEquation == "(a0)*0.001");
+    if (!one)
+      for (const Diagnostic &d : b.diagnostics) std::printf("        got %s: %s\n", d.code.c_str(), d.message.c_str());
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -204,7 +275,7 @@ int main() {
   }
   check("the data file read in the valid case", BuildText(Data(kDataset), false, true).diagnostics.empty());
   ExpectOne("E_DATA_FILE", BuildText(Data(Set(kDataset, "columns", "    columns E_lab[MeV] _ value error _ _")), false, true));
-  ExpectOne("E_NOT_BUILT", BuildText(Data(Set(kDataset, "unit", "    unit mb"))));
+  UnitCases(targets);
   const std::string thm = Set(Set(kDataset, "norm", "    norm profiled"), "unit", "    unit arbitrary") + "    thm global\n";
   check("a THM data set builds", BuildText(Data(thm)).diagnostics.empty());
   ExpectOne("E_THM_RELATIVISTIC", BuildText(Data(thm), true));

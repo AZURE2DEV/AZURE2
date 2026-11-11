@@ -24,6 +24,14 @@ namespace azure2 {
  */
 double CoulombReferenceValue(EPoint *point, experiment::LeafPart part, CNuc *compound, const Config &configure);
 
+/*!
+ * The factor E exp(2 pi eta(E)) (MeV) that takes the cross section of a point to its S factor (experiment::FactorRef::
+ * SFactor; physics/AstrophysicalFactor.h): E the point's present c.m. energy (after an energy shift that re-energised
+ * it), eta of its entrance pair with the pair's masses and charges.  Under a fold it is taken at the point's energy:
+ * the model is E exp(2 pi eta(E)) <sigma>, the S factor of the folded cross section at the point.
+ */
+double SFactorConversionValue(const EPoint *point, CNuc *compound);
+
 }  // namespace azure2
 
 #endif
