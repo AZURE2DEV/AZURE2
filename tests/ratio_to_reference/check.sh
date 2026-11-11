@@ -125,7 +125,6 @@ refused() {  # refused WHAT FILE CODE TEXT
 edited m.azr noref.azr sed '/^    reference      data\/ref_cm.dat unit mb$/d' || bad "edit: no reference"
 refused "no reference" noref.azr E_FIELD_REQUIRED "field 'reference' is missing"
 edited "$HERE/models/extrap.azr" far.azr sed 's|range 0.1 1.6 MeV cm step 0.05|range 0.1 2.5 MeV cm step 0.05|' || bad "edit: far grid"
-ln -s "$HERE/models/data" "$WORK/fit_ratio/data" 2> /dev/null
 refused "a grid point outside the table" far.azr E_REFERENCE_TABLE "is outside the reference table"
 mkdir -p bad
 edited "$HERE/models/data/ref_cm.dat" bad/ref0.dat awk 'NR == 5 { $2 = "0" } { print }' || bad "edit: table"
