@@ -19,6 +19,8 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
+sys.path.insert(0, HERE)
+import old_tree  # noqa: E402  (the old originals of converted projects)
 CASES = [("17O", "17O.azr", False), ("hybrid_potential", "hybrid_potential.azr", True)]
 
 failures = []
@@ -43,7 +45,7 @@ for project, azr, hybrid in CASES:
     work = tempfile.mkdtemp(prefix="convert_azr.")
     try:
         d = os.path.join(work, project)
-        shutil.copytree(os.path.join(ROOT, "tests", project), d)
+        old_tree.copytree(os.path.join(ROOT, "tests", project), d)  # the old originals laid over the folder
         for sub in ("output", "checks"):
             os.makedirs(os.path.join(d, sub), exist_ok=True)
         old = os.path.join(d, azr)

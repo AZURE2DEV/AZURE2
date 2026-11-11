@@ -1,5 +1,8 @@
 # T3 — identical bosons, neutrons and special channels, ⁸Be
 
+The project files are format 3 (`docs/upgrade/format3_tree.md`); the old lines quoted on this page are those of the
+originals in `tests/convert/fixtures/tests/upgrade/T3/`.
+
 T3 is a synthetic R-matrix evaluation of ⁸Be with four partitions: α + α (identical spin-0 bosons), p + ⁷Li,
 n + ⁷Be and the β⁻ decay of ⁸Li. It is generated from the parameters below; a fit with the present engine must
 return them (`../recover.py`), and the present engine's outputs on it are kept in `../golden/T3/`. The level scheme

@@ -15,7 +15,8 @@ passes when
   (c) every free parameter satisfies |p_fit - p_true| <= max_pull * sigma_p, sigma_p the MIGRAD uncertainty in
       param.sav (Brune basis, the engine's own parameter vector), max_pull = 4 by default;
   (d) the same fit to noise-free data (the committed data files with each value replaced by the truth, the
-      uncertainties kept, and the measured scattering lengths of T3 replaced by the truth's) returns every free parameter to |p_fit - p_true| <= 0.05 sigma_p.
+      uncertainties kept, and the measured scattering lengths of T3 (scattering_length data of <modelData>) replaced
+      by the truth's) returns every free parameter to |p_fit - p_true| <= 0.05 sigma_p.
 
 (c) tests the fit on the committed noisy data; with 13 (T1) and 8 (T3) parameters a 3 sigma excursion is expected in a
 few per cent of noise realizations, hence 4.  An ensemble of 8 noise seeds for T1 (2026-11-06) gave pull means within
@@ -67,32 +68,30 @@ def write_noise_free(work, project):
 
 
 def noise_free_scattering_lengths(work, azr):
-    """Set the <scatteringLengths> constraints of azr (in work) to the truth: the lengths in
-    output/scatteringLengths.out of the truth calculation (s-wave, J = s)."""
+    """Set the scattering-length data of <modelData> in azr (in work) to the truth: the lengths in
+    output/scatteringLengths.out of the truth calculation (s-wave, J = s), matched by pair label and channel spin."""
     a0 = {}
     for ln in open(os.path.join(work, "output", "scatteringLengths.out")):
         p = ln.split()
         if len(p) >= 6 and p[0].isdigit() and p[2][-1] in "+-":
-            a0[(p[0], p[2][:-1])] = (p[4], p[5])
+            a0[(p[1], p[2][:-1])] = (p[4], p[5])
     path = os.path.join(work, azr)
     text = open(path).read()
-    if "<scatteringLengths>" not in text:
+    if "<modelData>" not in text:
         return
 
     def fix(m):
+        records = re.split(r"(?m)^(?=datum )", m.group(1))
         out = []
-        for ln in m.group(1).splitlines():
-            p = ln.split()
-            if len(p) >= 5 and not p[0].startswith("#"):
-                key = (p[1], p[2])   # pair key, channel spin s (= J of the s wave); integer s in T3
-                re_, im_ = a0[key]
-                p[3] = re_
-                if len(p) >= 7:
-                    p[5] = im_
-                ln = " ".join(p)
-            out.append(ln)
-        return "<scatteringLengths>" + "\n".join(out) + "</scatteringLengths>"
-    text = re.sub(r"<scatteringLengths>(.*?)</scatteringLengths>", fix, text, flags=re.S)
+        for rec in records:
+            field = dict(re.findall(r"(?m)^ +(\w+) +(\S+)", rec))
+            if field.get("quantity") == "scattering_length":
+                re_, im_ = a0[(field["pair"], field["s"])]   # integer s in T3
+                rec = re.sub(r"(?m)^( +value +)\S+", lambda v: v.group(1) + re_, rec)
+                rec = re.sub(r"(?m)^( +imag +)\S+", lambda v: v.group(1) + im_, rec)
+            out.append(rec)
+        return "<modelData>" + "".join(out) + "</modelData>"
+    text = re.sub(r"<modelData>(.*?)</modelData>", fix, text, flags=re.S)
     open(path, "w").write(text)
 
 

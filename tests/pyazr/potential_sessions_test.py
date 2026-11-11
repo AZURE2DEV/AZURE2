@@ -7,7 +7,7 @@ V0 = 80 MeV, computed with B's V0 = 120 MeV from the moment B existed.  Now the 
 own Config (`HybridPotentialSettings`) and each pair of its model holds its own (`PPair::GetHybridPotential`), so
 sessions cannot reconfigure each other: there is no shared state to swap.
 
-Checks on tests/hybrid_potential (p + 12C, hybrid model on):
+Checks on tests/hybrid_potential (p + 12C, its potential record's depth set to 80 and 120 MeV):
   (1) the shift function of session A (V0 = 80) is the same before and after session B (V0 = 120) is created and used;
   (2) A and B differ (teeth);
   (3) after B is deleted, A is still itself.
@@ -47,13 +47,12 @@ try:
     os.makedirs(os.path.join(work, "output"))
     shutil.copytree(os.path.join(os.path.dirname(SRC), "data"), os.path.join(work, "data"))
     text = open(SRC).read()
-    s = text.index("<potential>")
-    e = text.index("</potential>") + len("</potential>")
+    depth = "central         woods_saxon depth 20 MeV"   # the p + 12C record of <potentials>
+    assert text.count(depth) == 1, "the p + 12C potential record of hybrid_potential.azr moved"
 
     def variant(name, v0):
         path = os.path.join(work, name + ".azr")
-        open(path, "w").write(text[:s] + "<potential>\nuseHybridPotential=1\nuseAdaptiveGrid=1\npotentialType=0\n"
-                              f"V0={v0}\nR=3.6\na=0.6\n</potential>" + text[e:])
+        open(path, "w").write(text.replace(depth, f"central         woods_saxon depth {v0} MeV"))
         return path
 
     energies = np.array([0.5, 1.0, 2.0, 3.0])
@@ -69,7 +68,7 @@ try:
     del B
     again = A.coulomb_functions(1, energies, L=1)["S"].copy()
     check("session A is unchanged after B is gone", np.max(np.abs(again - before)) < 1e-12)
-    reported = A.nuclear_potential(0)
+    reported = A.nuclear_potential(1)  # pair 1, p + 12C, the pair of the record
     v0 = reported["V0"] if isinstance(reported, dict) else getattr(reported, "V0", None)
     check(f"A still reports its own V0 = 80 ({reported})", v0 is not None and abs(v0 - 80.0) < 1e-9,
           "nuclear_potential reports the other session's setting")

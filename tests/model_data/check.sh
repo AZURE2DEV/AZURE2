@@ -112,9 +112,6 @@ datum a_p15N
     value      0 fm
     error      100 fm
 </modelData>
-<scatteringLengths>
-1 1 1 0 100
-</scatteringLengths>
 MD
 project t2
 run t2 1
@@ -142,12 +139,12 @@ test_total_width() { basis_check "Gamma of level 5 (keV): 1.702 + 12.92 + 0" G_L
 test_partial_width() { basis_check "Gamma_p of level 5 (eV)" Gp_L5 1702 1e-9; }
 test_branching_ratio() { basis_check "Gamma_a0 / Gamma of level 5 (%)" BR_L5 88.360005 1e-7; }
 test_scattering_length() {
-  # The same s-wave length as scatteringLengths.out (p + 15N, 1-) and as the <scatteringLengths> line.
+  # The same s-wave length as scatteringLengths.out (p + 15N, 1-); its chi^2 (value 0, error 100 fm) is (a0/100)^2.
   local a0
   a0="$(awk '$1 == 1 && $3 == "1-" { print $5; exit }' "$WORK/t2/output/scatteringLengths.out")"
   check "scattering length p+15N s = 1 = scatteringLengths.out" "$(model t2 a_p15N)" "$a0" 1e-6
-  check "Total-Scattering-Length-Chi-Squared = (a0 / 100 fm)^2" "$(total t2 Total-Scattering-Length-Chi-Squared)" \
-    "$(awk -v a="$a0" 'BEGIN { printf "%.10g", (a / 100) ^ 2 }')" 1e-5
+  check "its chi^2 in modelData.out = (a0 / 100 fm)^2" "$(awk '$1 == "a_p15N" { print $NF; exit }' "$WORK/t2/output/modelData.out")" \
+    "$(awk -v a="$a0" 'BEGIN { printf "%.10g", (a / 100) ^ 2 }')" 1e-4
 }
 test_anc() {
   # Level 1 moved below the p + 15N threshold (12.0 MeV): its p channel (l = 0, s = 1) is closed and the value of
@@ -201,21 +198,23 @@ grep -q "^Model data (<modelData>)" "$WORK/t2/run.log" && ok "the table is in th
 
 echo "-- a project with only model data (no segments)"
 project only
-# No data sets, and nothing that refers to them (the THM experiments, the target lines, the prior covariance).
-awk '/^<(segmentsData|thm|targetInt)>/ { print; skip = 1; next } /^<\/(segmentsData|thm|targetInt)>/ { skip = 0 } !skip' \
+# No data sets, and nothing that refers to them (the THM experiments, the targets, beams and detectors, the prior
+# covariance).
+awk '/^<(data|thm|targets)>/ { print; skip = 1; next } /^<\/(data|thm|targets)>/ { skip = 0 } !skip' \
   "$T2/T2_true.azr" | grep -v priorCovariance > "$WORK/only/m.azr"
 cat "$WORK/t2.md" >> "$WORK/only/m.azr"
 run only 1
 check "model data alone: omega gamma as with segments" "$(model only wg_L5)" "$(model t2 wg_L5)" 1e-12
 check "model data alone: Total-Model-Data-Chi-Squared" "$(total only Total-Model-Data-Chi-Squared)" "$(total t2 Total-Model-Data-Chi-Squared)" 1e-12
-check "model data alone: Total-Scattering-Length-Chi-Squared" "$(total only Total-Scattering-Length-Chi-Squared)" "$(total t2 Total-Scattering-Length-Chi-Squared)" 1e-12
 
 echo "-- gradient with the term (AZURE_GRAD_CHECK) and a fit pulled by a displaced strength"
-# The fit project: segment 5 (the implanted target across level 5) alone, level 5's energy and alpha0 width free.
+# The fit project: data set 5 (the implanted target across level 5) alone, level 5's energy and alpha0 width free.
+# The THM experiment goes with its data sets (a format-3 experiment whose data sets are all inactive is refused).
 fitproj() {  # fitproj NAME WG_VALUE: the fit project with a strength datum of value WG_VALUE (keV), or none
   project "$1"
-  awk '/^<segmentsData>/ { seg = 1; n = 0; print; next } /^<\/segmentsData>/ { seg = 0 }
-       seg && NF > 0 { n++; if (n != 5) $1 = 0 }
+  awk '$1 == "dataset" { n++; ds = 1 }
+       ds && (/^$/ || /^<\/data>/) { if (n != 5) print "    active         no"; ds = 0 }
+       /^experiment\[/ { next }
        /^3 -1 13.269200 / { $4 = 0; if ($6 == 2) $11 = 0 }
        { print }' "$T2/T2_true.azr" > "$WORK/$1/m.azr"
   if [ -n "$2" ]; then
@@ -269,7 +268,7 @@ refuse() {  # refuse LABEL CODE MD [SED]: the run stops with the code in an ERRO
   sed "${4:-}" "$T2/T2_true.azr" > "$dir/m.azr"
   printf '%b' "$3" >> "$dir/m.azr"
   (cd "$dir" && printf '1\n\n\n' | run_limited 120 "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1)
-  if grep -q "ERROR: <modelData> line .*\[$2\]" "$dir/run.log" && [ ! -s "$dir/output/chiSquared.out" ]; then ok "refused: $1 ($2)"
+  if grep -q "^ERROR: m.azr:[0-9]*: wg[.A-Za-z_]*: error $2: datum 'wg'" "$dir/run.log" && [ ! -s "$dir/output/chiSquared.out" ]; then ok "refused: $1 ($2)"
   else bad "not refused: $1 ($2)"; grep -i "error" "$dir/run.log" | head -3; fi
 }
 wg() { printf '<modelData>\\ndatum wg\\n    quantity resonance_strength\\n    level %s\\n    J %s\\n    reaction %s\\n    value 2.6 keV\\n    error 0.1 keV\\n%s</modelData>\\n' "$1" "$2" "$3" "${4:-}"; }

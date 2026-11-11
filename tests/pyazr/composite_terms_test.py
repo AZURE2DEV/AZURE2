@@ -2,16 +2,17 @@
 """Composite segments: a zero RATIO denominator, the component scaling factor, and the route pyazr runs.
 
 1. RATIO with a zero denominator (azure2::EvaluateModelPoint).  tests/ratio_frame/models/ratio_data.azr
-   (2->3 over a fixed-angle denominator) with the denominator moved to exit pair 5 and every pair-5 width set to 0, so
-   the denominator cross section is exactly 0.  Before 2026-11-01 each such point was 0, which a fit compared with the
-   datum as if it were a calculated ratio; now it is NaN and a warning is printed once.  Control: the same model with
-   the pair-5 widths kept is finite everywhere.
+   (2->3 over a fixed-angle denominator) with the denominator's reaction moved to exit pair 5 and every pair-5 width
+   set to 0, so the denominator cross section is exactly 0.  Before 2026-11-01 each such point was 0, which a fit
+   compared with the datum as if it were a calculated ratio; now it is NaN and a warning is printed once.  Control:
+   the same model with the pair-5 widths kept is finite everywhere.
 
-2. Component scaling (SegLine / ExtrapLine, ReadComponentList).  tests/sum_lab_frame/models/sum_data.azr (2->3 plus
-   2->5) with the component written in the scaling format, "-1 1 2 5 -999 <s>".  The SUM is linear in s, so
-   v(s) - v(0) must equal s * (v(1) - v(0)).  Before 2026-11-01 s went through std::to_string ("%f", six decimals):
-   s = 1.5e-7 was read as 0 and 1.2345678e-4 as 1.23e-4 (0.4 % off).  A scaling that is not a number ("abc") was
-   read as 1.0 without a word; now the project is refused with a message naming the segment and component.
+2. Component scaling.  tests/sum_lab_frame/models/sum_data.azr (2->3 plus 2->5) with the second term scaled,
+   "13C(a,n)16O[6.0494] + <s>*13C(a,n)16O[6.12989]".  The SUM is linear in s, so v(s) - v(0) must equal
+   s * (v(1) - v(0)).  Before 2026-11-01 s went through std::to_string ("%f", six decimals): s = 1.5e-7 was read as
+   0 and 1.2345678e-4 as 1.23e-4 (0.4 % off).  A scale that is not a number ("abc") is refused with a message naming
+   the data set.  2b: the component layouts of an old segment line (the old original of sum_data.azr, until the
+   engine's old reading path goes): the two-number layout of old GUI files and too few numbers.
 
 3. Route.  tests/13N with the R-matrix route asked for (<config> first line false) and ignore_externals=True (the
    pyazr default): the R-matrix route does not implement ignore-externals, so pyazr now switches to the A-matrix with a
@@ -33,6 +34,8 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
+sys.path.insert(0, HERE)
+import old_tree  # noqa: E402  (the old originals of converted projects)
 ENERGIES = ["5.95", "6.05", "6.15", "6.25", "6.35"]
 
 
@@ -107,16 +110,14 @@ def main():
                 out, block = [], None
                 for l in lines:
                     s = l.split()
-                    if l.strip() in ("<levels>", "<segmentsData>"):
-                        block = l.strip()
-                    elif l.strip() in ("</levels>", "</segmentsData>"):
-                        block = None
+                    if l.strip() in ("<levels>", "</levels>"):
+                        block = "<levels>" if l.strip() == "<levels>" else None
                     elif block == "<levels>" and len(s) > 12 and s[5] == "5" and zero_widths:
                         s[11] = "0.0"
                         l = "  ".join(s)
-                    elif block == "<segmentsData>" and s:
-                        assert s[-6:] == ["1", "1", "1", "2", "2", "60"], s
-                        l = "  ".join(s[:-6] + ["1", "1", "1", "2", "5", "60"])
+                    elif s[:1] == ["reaction"]:
+                        assert s[1:] == ["13C(a,n)16O[6.0494]", "/", "13C(a,a)13C", "@", "60", "deg", "lab"], s
+                        l = "    reaction       13C(a,n)16O[6.0494] / 13C(a,n)16O[6.12989] @ 60 deg lab"  # exit pair 5
                     out.append(l)
                 return out
             return fn
@@ -144,9 +145,8 @@ def main():
             def fn(lines):
                 out = []
                 for l in lines:
-                    t = l.split()
-                    if t[-6:] == ["1", "0", "1", "2", "5", "-999"]:
-                        l = "  ".join(t[:-6] + ["1", "0", "-1", "1", "2", "5", "-999", s])
+                    if l.split() == ["reaction", "13C(a,n)16O[6.0494]", "+", "13C(a,n)16O[6.12989]"]:
+                        l = f"    reaction       13C(a,n)16O[6.0494] + {s}*13C(a,n)16O[6.12989]"
                     out.append(l)
                 return out
             return fn
@@ -173,10 +173,12 @@ def main():
         edit(base, azr, with_scaling("abc"))
         res, log = run(azr, work)
         check("SUM, scaling 'abc': the project is refused", "error" in res, f"{res}")
-        check("SUM, scaling 'abc': the engine names segment and component",
-              "Data segment #1: component 1 of 1: the scaling factor is not a number" in log, log[-600:])
+        check("SUM, scaling 'abc': the engine names the data set and the scale",
+              "E_REACTION_SYNTAX: dataset 'sum', field 'reaction': the scale of a term is a number" in log, log[-600:])
 
-        # 2b. The two-number component layout of old GUI files ("entrance exit" per component, no angle), read as the
+        # 2b (old files only: the component layouts of an old segment line, read by the converter's SegLine; the test
+        # edits the old original, tests/convert/fixtures, and goes with the engine's old reading path).
+        # The two-number component layout of old GUI files ("entrance exit" per component, no angle), read as the
         # GUI reads it.  Before 2026-11-01 the engine took the next component's entrance key as an angle and dropped
         # the last component ("2 2 5 2 3" gave 2->5 at a fixed 2 deg only); the archive has 86 such lines (11B+a ELBE
         # and 13C+a Cierjacks/Fowler neutron totals, 2025).  Too few numbers: a warning, read as a plain segment.
@@ -190,6 +192,8 @@ def main():
                     out.append(l)
                 return out
             return fn
+        base = os.path.join(work, "sum_data_old.azr")
+        shutil.copy(old_tree.original(os.path.join(ROOT, "tests", "sum_lab_frame", "models", "sum_data.azr")), base)
         layouts = {}
         for name, tail in (("three", "1 0 2 2 5 -999 2 3 -999"), ("two", "1 0 2 2 5 2 3"),
                            ("short", "1 0 2 2 5"), ("plain", "0")):

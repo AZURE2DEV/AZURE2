@@ -10,6 +10,11 @@ Three runs of tests/upgrade/T2, each from a clean copy of the project:
 All runs use --no-coulomb-table (exact Coulomb functions), so the result does not depend on whether a
 Coulomb table exists on the machine, and OMP_NUM_THREADS from --threads (results must not depend on it).
 
+The project is format 3; the golden files were written from its old original (tests/convert/fixtures).  A golden
+file is compared as the format-3 project writes it, with the classes tools/format3_gate.py lists for T2 (as_format3).
+param.sav of the fit carries the format-3 parameter names: the fit's golden set is to be regenerated (not run by
+tests/upgrade/check.sh).
+
 Comparison, token by token (the files must have the same tokens; every number is compared):
   calc_*:  |a - b| <= 1e-5 max(|a|, |b|) + 1e-300   (the cross-compiler spread stated in CLAUDE.md)
   fit:     the same with 1e-3: a MIGRAD path ends where its stopping rule (EDM) says, and a change of
@@ -34,7 +39,9 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 T2 = os.path.normpath(os.path.join(HERE, "..", "..", "T2"))
-PROJECT = ["T2.azr", "T2_true.azr", "cov_diff.txt", "prior_cov.txt", "data"]
+sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..", "..", "..", "tools")))
+import format3_gate  # noqa: E402  (the accepted differences between an old file's outputs and its conversion's)
+PROJECT = ["T2.azr", "T2_true.azr", "cov_diff.txt", "prior_cov.f3.txt", "data"]
 RUNS = {
     "calc_start": ("T2.azr", "1\n\n\n7\n", 1e-5, []),
     "calc_truth": ("T2_true.azr", "1\n\n\n7\n", 1e-5, []),
@@ -45,12 +52,31 @@ KEEP = re.compile(r"^(chiSquared\.out|AZUREOut_.*\.out|thm_experiments\.out|para
 NUM = re.compile(r"^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$")
 
 
-def tokens(path):
-    return open(path).read().replace(",", " ").split()
+def tokens(text):
+    return text.replace(",", " ").split()
 
 
-def compare(a, b, rtol):
-    ta, tb = tokens(a), tokens(b)
+def as_format3(name, f, golden, produced):
+    """The golden text (written from the old T2) as the format-3 project writes it: in normalizations.out of the fit
+    project the class 'follower listed' of tools/format3_gate.py, a member of a varied shared normalization listed as a
+    row of its own (s03 of the group D): rows of the produced file whose label (data file) the golden file lacks are
+    added to it in place."""
+    azr = RUNS[name][0]
+    if f != "normalizations.out" or not format3_gate.listed("follower listed", f, f"upgrade/T2/{azr}"):
+        return golden
+    labels = {l.split(",")[1] for l in golden.splitlines() if l.count(",") > 1}
+    out, g = [], iter(golden.splitlines())
+    for l in produced.splitlines():
+        if l.count(",") > 1 and l.split(",")[1] not in labels:
+            out.append(l)                      # the follower's row
+        else:
+            out.append(next(g, ""))
+    return "\n".join(out + list(g)) + "\n"
+
+
+def compare(a, b, rtol, name=None):
+    pa, pb = open(a).read(), open(b).read()
+    ta, tb = tokens(pa), tokens(as_format3(name, os.path.basename(a), pb, pa) if name else pb)
     if len(ta) != len(tb):
         return f"{len(ta)} tokens, golden {len(tb)}"
     worst, where = 0.0, None
@@ -117,7 +143,7 @@ def main():
                 fail += 1
                 continue
             for f in produced:
-                msg = compare(os.path.join(out, f), os.path.join(gdir, f), RUNS[name][2])
+                msg = compare(os.path.join(out, f), os.path.join(gdir, f), RUNS[name][2], name)
                 print(f"  {'FAIL' if msg else 'ok  '} {name}/{f}" + (f": {msg}" if msg else ""))
                 fail += 1 if msg else 0
         if args.regenerate:

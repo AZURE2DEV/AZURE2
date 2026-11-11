@@ -105,7 +105,7 @@ def truth_scattering_lengths(binary, m):
     work = tempfile.mkdtemp(prefix="T3_sl_")
     try:
         ones = {s.name: [(e, a, 1.0, 1.0) for e, a in s.points] for s in m.data}
-        azr = m.write(work, data=ones)
+        azr = m.write(work, binary, data=ones)
         up.run(binary, work, azr, up.CALC)
         out = {}
         with open(os.path.join(work, "output", "scatteringLengths.out")) as f:
@@ -140,8 +140,6 @@ def main():
         re_, im_ = a0[s][0] + rng.normal(0.0, SL_SIGMA), a0[s][1] + rng.normal(0.0, SL_SIGMA)
         sl += f"1 3 {s} {re_:.6f} {SL_SIGMA} {im_:.6f} {SL_SIGMA}\n"
     m.scattering_lengths = sl
-    m.write(HERE)
-    start_model(sl).write(HERE, "T3_start")
     for seg in m.data:
         kind, size = seg.noise
         hdr = (f"# T3 synthetic data ({seg.name}), generate.py: engine truth + Gaussian noise "
@@ -149,6 +147,8 @@ def main():
                "# E_lab (MeV; for the beta-delayed spectrum the energy of one alpha, decay at rest)  angle (deg)  value  "
                "uncertainty   [lab frame unless the segment is c.m.: alpha + alpha cross sections]\n")
         up.write_data(os.path.join(HERE, "data", seg.name + ".dat"), data[seg.name], seg, hdr)
+    m.write(HERE, binary)                    # after the data files: the converter reads them
+    start_model(sl).write(HERE, binary, "T3_start")
     with open(os.path.join(HERE, "temperatures.dat"), "w") as f:   # 7Li(p,alpha)alpha rate, <lastRun> 2 -> 1
         f.write("0.01\n0.03\n0.1\n0.3\n1.0\n3.0\n")
     n = sum(len(s.points) for s in m.data)

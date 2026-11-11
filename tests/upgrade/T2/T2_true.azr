@@ -10,15 +10,9 @@ none                                                                            
 none                                                                                                #Coulomb Amplitudes Check
 none                                                                                                #Reaction Pathway Check
 none                                                                                                #Angular Distributions Check
-</config>
-<potential>
-useHybridPotential=0
 useAdaptiveGrid=1
-potentialType=0
-V0=150
-R=3.6
-a=0.6
-</potential>
+format=3
+</config>
 <levels>
 1 -1 12.420800 1 1 1 2 0 1 1 1 496 0.5 1 0.5 -1 0.0 1.007825 15.000109 1 7 12.1274 12.1274 0 0 0.0 0 4.85 0 0 0 2.224566 0
 1 -1 12.420800 1 1 1 2 4 1 1 1 0 0.5 1 0.5 -1 0.0 1.007825 15.000109 1 7 12.1274 12.1274 0 0 0.0 0 4.85 0 0 0 2.224566 0
@@ -45,48 +39,267 @@ a=0.6
 3 -1 13.269200 1 1 2 0 6 5 1 1 12920 0.0 1 0.0 1 0.0 4.002603 12.0 2 6 12.1274 7.16192 0 0 0.0 0 5.43 0 0 0
 3 -1 13.269200 1 1 3 4 2 5 1 1 0 0.0 1 2.0 1 4.43891 4.002603 12.0 2 6 12.1274 7.16192 0 0 0.0 0 5.43 0 0 0
 </levels>
-<abundances>
-natN: 8 16 0.00364 0 0
-natN: sum 0
-</abundances>
-<segmentsData>
-1 1 2 0.199999 1.400001 0 180 0 1.04 0 5 0.002 0.003 0 data/s01_int_thin.dat 0 0
-1 1 2 0.249999 1.350001 90 90 1 0.95 0 8 -0.0015 0.003 0 data/s02_diff090.dat 0 0 normgroup D shiftgroup G shiftfn "a0*(x-0.8)" 1 0.004 0.01 0
-1 1 2 0.249999 1.350001 150 150 1 1 0 0 0 0 0 data/s03_diff150.dat 0 0 normgroup D shiftgroup G
-1 1 2 0.249999 1.350001 0 180 0 0.98 0 3 0 0 0 data/s04_thick.dat 0 0 sqrtshift 0.0015 0.003 0
-1 1 2 1.169999 1.270001 0 180 0 1 0 0 0 0 0 data/s05_implanted.dat 0 0
-1 1 2 0.259999 0.420001 0 180 0 1.02 0 5 0 0 0 data/s06_gas.dat 0 0
-1 1 2 0.277499 0.412501 0 180 0 0.97 0 0 0 0 0 data/s07_profile.dat 0 0
-1 1 2 0.599999 1.400001 0 180 0 1.03 0 0 0 0 0 data/s08_sum.dat 1 0 1 1 3 -999
-1 1 3 0.699999 1.400001 0 180 0 1 0 0 0 0 0 data/s09_ratio.dat 1 1 1 1 2 -999
-1 1 2 0.249999 0.450001 0 180 0 1 0 0 0 0 0 data/s10_natural.dat 0 0 sample natN
-1 1 2 0.032015 0.640314 0 180 10 1 1 0 0 0 0 data/s11_thm_hoes_a.dat 0 0
-1 1 2 0.042687 0.618970 0 180 10 1 1 0 0 0 0 data/s12_thm_hoes_b.dat 0 0
-1 1 2 0.053358 0.533595 0 180 0 0.740741 0 0 0 0 0 data/s13_thm_oes.dat 0 0
-</segmentsData>
-<segmentsTest>
-</segmentsTest>
-<targetInt>
-1 "1" 20 1 0.001 1 5e17 "a0*x^a1" 2 1.6e-20 -0.45 0 0 0 "" 0 1 0 10 20
-1 "2,3" 20 1 0.002 0 0 "" 0 1 5 1 0.995 0.98 0.96 0.93 0 "" 0
-1 "4" 40 0 0 1 0 "a0*x^a1" 2 1.6e-20 -0.45 0 0 0 "" 0 0 0 10 20
-1 "5" 40 1 0.0008 1 2.2e+17 "a0*x^a1" 2 6.0e-20 -0.30 0 0 0 "" 0 1 0.6 10 20
-1 "6" 40 0 0 1 1e18 "a0*x^a1" 2 0.9e-20 -0.50 0 0 1 "a0*x" 1 0.004 0 sigmalab doppler 300
-1 "7" 60 0 0 0 0 "" 0 0 0 0 "" 0 0 0 20 50 beamprofile 1 0.34 0.035 1.5 1.0 0.004 0 0
-1 "8" 20 1 0.002 0 0 "" 0 0 0 0 "" 0
-1 "11,12" 30 1 0.021344 0 0 "" 0 0 0 0 "" 0
-</targetInt>
+<data>
+normalization D
+    value          0.95 fixed prior 0.95 8%
+
+energy_scale G
+    offset         -0.0015 MeV fixed prior 0 0.003
+    function       "a0*(x-0.8)" MeV
+    param          a0 0.004 fixed prior 0 0.01
+
+# <segmentsData> line 1
+dataset s01_int_thin
+    reaction       15N(p,a)12C
+    quantity       sigma
+    # CONVERTED: a thin target: the old engine compared the numbers as the target-averaged cross section in b
+    unit           b
+    file           data/s01_int_thin.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0.199999 1.400001 MeV
+    norm           1.04 fixed prior 1.04 5%
+    shift          offset 0.002 MeV fixed prior 0 0.003
+    target         tgt_s01_int_thin
+    beam           beam_s01_int_thin
+    quadrature     points 20 width_multiplier 10 per_width 20
+
+# <segmentsData> line 2
+dataset s02_diff090
+    reaction       15N(p,a)12C
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/s02_diff090.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    energy_window  0.249999 1.350001 MeV
+    angle_window   90 90 deg
+    norm           D
+    shift          G
+    beam           beam_targetInt2
+    detector       det_targetInt2
+    quadrature     points 20
+
+# <segmentsData> line 3
+dataset s03_diff150
+    reaction       15N(p,a)12C
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/s03_diff150.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    energy_window  0.249999 1.350001 MeV
+    angle_window   150 150 deg
+    norm           D
+    shift          G
+    beam           beam_targetInt2
+    detector       det_targetInt2
+    quadrature     points 20
+
+# <segmentsData> line 4
+dataset s04_thick
+    reaction       15N(p,a)12C
+    quantity       yield
+    # CONVERTED: a thick target (density 0): the old engine compared the numbers as reactions per incident particle (yield in 1/particle)
+    unit           1/particle
+    file           data/s04_thick.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0.249999 1.350001 MeV
+    norm           0.98 fixed prior 0.98 3%
+    shift          sqrt 0.0015 MeV^1/2 fixed prior 0 0.003
+    target         tgt_s04_thick
+    quadrature     points 40 width_multiplier 10 per_width 20
+
+# <segmentsData> line 5
+dataset s05_implanted
+    reaction       15N(p,a)12C
+    quantity       sigma
+    # CONVERTED: a thin target: the old engine compared the numbers as the target-averaged cross section in b
+    unit           b
+    file           data/s05_implanted.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  1.169999 1.270001 MeV
+    norm           1 fixed
+    target         tgt_s05_implanted
+    beam           beam_s05_implanted
+    quadrature     points 40 width_multiplier 10 per_width 20
+
+# <segmentsData> line 6
+dataset s06_gas
+    reaction       15N(p,a)12C
+    quantity       sigma
+    # CONVERTED: a thin target: the old engine compared the numbers as the target-averaged cross section in b
+    unit           b
+    file           data/s06_gas.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0.259999 0.420001 MeV
+    norm           1.02 fixed prior 1.02 5%
+    target         tgt_s06_gas
+    beam           beam_s06_gas
+    quadrature     points 40
+
+# <segmentsData> line 7
+dataset s07_profile
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/s07_profile.dat
+    columns        E_lab[MeV] _ value error window_lo window_hi
+    energy_window  0.277499 0.412501 MeV
+    norm           0.97 fixed
+    beam           beam_s07_profile
+    detector       det_s07_profile
+    quadrature     points 60 width_multiplier 20 per_width 50
+
+# <segmentsData> line 8
+dataset s08_sum
+    reaction       15N(p,a)12C + 15N(p,a)12C[4.43891]
+    quantity       sigma
+    unit           b
+    file           data/s08_sum.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0.599999 1.400001 MeV
+    norm           1.03 fixed
+    beam           beam_targetInt2
+    quadrature     points 20
+
+# <segmentsData> line 9
+dataset s09_ratio
+    reaction       15N(p,a)12C[4.43891] / 15N(p,a)12C
+    quantity       sigma
+    unit           1
+    file           data/s09_ratio.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0.699999 1.400001 MeV
+    norm           1 fixed
+
+# <segmentsData> line 10
+dataset s10_natural
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/s10_natural.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0.249999 0.450001 MeV
+    norm           1 fixed
+    target         natN
+
+# <segmentsData> line 11
+dataset s11_thm_hoes_a
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           arbitrary
+    file           data/s11_thm_hoes_a.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0.032015 0.640314 MeV
+    norm           profiled
+    beam           beam_LC09
+    quadrature     points 30
+    thm            LC09
+
+# <segmentsData> line 12
+dataset s12_thm_hoes_b
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           arbitrary
+    file           data/s12_thm_hoes_b.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0.042687 0.618970 MeV
+    norm           profiled
+    beam           beam_LC09
+    quadrature     points 30
+    thm            LC09
+
+# <segmentsData> line 13
+dataset s13_thm_oes
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/s13_thm_oes.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0.053358 0.533595 MeV
+    norm           0.740741 fixed
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+# <targetInt> line 1
+target tgt_s01_int_thin
+    kind           layer
+    active         15N
+    areal_density  5e17 atoms/cm2 fixed
+    stopping       formula "a0*x^a1" a0=1.6e-20 a1=-0.45 MeV*cm2/atom
+    straggling     bohr
+
+# <targetInt> line 1
+beam beam_s01_int_thin
+    # CONVERTED: a Gaussian convolution is written as the beam's energy spread (the kernel is the same; the old line does not say whether it was a detector resolution)
+    spread         0.001 MeV lab
+
+# <targetInt> line 2
+beam beam_targetInt2
+    # CONVERTED: a Gaussian convolution is written as the beam's energy spread (the kernel is the same; the old line does not say whether it was a detector resolution)
+    spread         0.002 MeV lab
+
+# <targetInt> line 2
+detector det_targetInt2
+    attenuation    1 0.995 0.98 0.96 0.93
+
+# <targetInt> line 3
+target tgt_s04_thick
+    kind           infinite
+    active         15N
+    stopping       formula "a0*x^a1" a0=1.6e-20 a1=-0.45 MeV*cm2/atom
+    straggling     none
+
+# <targetInt> line 4
+target tgt_s05_implanted
+    kind           layer
+    active         15N
+    areal_density  2.2e+17 atoms/cm2 fixed
+    stopping       formula "a0*x^a1" a0=6.0e-20 a1=-0.30 MeV*cm2/atom
+    straggling     coefficient 0.6 keV^1/2 cm
+
+# <targetInt> line 4
+beam beam_s05_implanted
+    # CONVERTED: a Gaussian convolution is written as the beam's energy spread (the kernel is the same; the old line does not say whether it was a detector resolution)
+    spread         0.0008 MeV lab
+
+# <targetInt> line 5
+target tgt_s06_gas
+    kind           layer
+    active         15N
+    areal_density  1e18 atoms/cm2 fixed
+    stopping       formula "a0*x^a1" a0=0.9e-20 a1=-0.50 MeV*cm2/atom
+    straggling     none
+    doppler        free_gas 300 K fixed
+
+# <targetInt> line 5
+beam beam_s06_gas
+    # CONVERTED: a Gaussian convolution is written as the beam's energy spread (the kernel is the same; the old line does not say whether it was a detector resolution)
+    spread         formula "a0*x" a0=0.004 MeV lab
+
+# <targetInt> line 6
+beam beam_s07_profile
+    profile          skewed_gaussian xi 0.34 MeV omega 0.035 MeV alpha 1.5 weight 1.0
+    truncation       0
+    detailed_balance no
+
+# <targetInt> line 6
+detector det_s07_profile
+    energy_resolution 0.004 MeV lab
+
+# <targetInt> line 8
+beam beam_LC09
+    # CONVERTED: a Gaussian convolution is written as the beam's energy spread (the kernel is the same; the old line does not say whether it was a detector resolution)
+    spread         0.021344 MeV lab
+
+# <abundances> sample natN
+target natN
+    kind           none
+    isotope        15N 0.00364 fixed
+    isotope_sum    none
+</targets>
 <parameterSettings>
 </parameterSettings>
-<lastRun>
-0
-"output/param.sav"
-"output/intEC.dat"
-1 2
-0 ""
-0.07 10 -1.
-</lastRun>
 <thm>
 # La Cognata et al. 2009: 2H(15N,a12C)n at 60 MeV; two HOES runs share one profiled scale
-experiment[LC09] segments=11,12 beam=15N target=d spectator=n Ebeam=60
+experiment[LC09] beam=15N target=d spectator=n Ebeam=60
 </thm>

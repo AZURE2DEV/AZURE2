@@ -55,7 +55,7 @@ model = up.Project(
 
 work = tempfile.mkdtemp(prefix="upgrade_unitarity.")
 try:
-    up.run(binary, work, model.write(work), up.EXTRAP)
+    up.run(binary, work, model.write(work, binary), up.EXTRAP)
     el, tot = up.read_blocks(os.path.join(work, "output", "AZUREOut_aa=1_R=1.extrap"))
 finally:
     shutil.rmtree(work, ignore_errors=True)

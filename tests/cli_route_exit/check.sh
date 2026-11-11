@@ -13,8 +13,8 @@
 # refused project, so a script or job chain could not tell.  Now 1.
 #
 # Checked on tests/13N (with its capture segment and target integration) and tests/7Li_p_ay --no-brune (refused: no
-# standard R-matrix corresponds to its 0+ levels, tests/no_brune_transform), and a SUM segment whose component scaling
-# is not a number (tests/sum_lab_frame/models/sum_data.azr; also tests/pyazr/composite_terms_test.py).
+# standard R-matrix corresponds to its 0+ levels, tests/no_brune_transform), and a SUM data set with a term scaled by
+# something that is not a number (tests/sum_lab_frame/models/sum_data.azr; also tests/pyazr/composite_terms_test.py).
 #
 # Usage:
 #   ./tests/cli_route_exit/check.sh path/to/AZURE2
@@ -103,13 +103,16 @@ said li7 "Calculation was aborted" && [ "$rc" = 1 ] && ok "7Li_p_ay --no-brune (
   || bad "7Li_p_ay --no-brune: exit $rc (aborted: $(said li7 'Calculation was aborted' && echo yes || echo no))"
 dir="$WORK/badscale"; mkdir -p "$dir/output" "$dir/checks" "$dir/data"
 for e in 5.95 6.05 6.15; do echo "$e  90  1.0  0.01"; done > "$dir/data/sum.dat"
-sed 's/1  0  1  2  5  -999$/1  0  -1  1  2  5  -999  abc/' "$HERE/../sum_lab_frame/models/sum_data.azr" > "$dir/sum_data.azr"
-grep -q -- "-999  abc$" "$dir/sum_data.azr" || bad "badscale: the model edit did not apply"
+sed 's/^\(    reaction       13C(a,n)16O\[6.0494\] + \)\(13C(a,n)16O\[6.12989\]\)$/\1abc*\2/' \
+  "$HERE/../sum_lab_frame/models/sum_data.azr" > "$dir/sum_data.azr"
+grep -q -- "+ abc\*13C" "$dir/sum_data.azr" || bad "badscale: the model edit did not apply"
 (cd "$dir" && printf '1\n\n\n7\n' | "$AZURE2_BIN" --no-gui --no-readline sum_data.azr > run.log 2>&1); rc=$?
-grep -q "ERROR: Data segment #1: component 1 of 1: the scaling factor is not a number" "$dir/run.log" && [ "$rc" = 1 ] \
+# A format-3 project is refused when it is read (Config::ReadFormat3Project), where every refused project exits 255
+# (AZURE2.cpp, ReadConfigFile < 0), not by the set-up's exit 1: the test asks for a non-zero exit.
+grep -q "E_REACTION_SYNTAX: dataset 'sum', field 'reaction': the scale of a term is a number" "$dir/run.log" && [ "$rc" != 0 ] \
   && [ ! -s "$dir/output/chiSquared.out" ] \
-  && ok "SUM component scaling 'abc': refused with the segment and component named, exit 1" \
-  || bad "SUM component scaling 'abc': exit $rc, $(grep -c ERROR "$dir/run.log") ERROR line(s)"
+  && ok "SUM term scaled by 'abc': refused with the data set named, exit $rc" \
+  || bad "SUM term scaled by 'abc': exit $rc, $(grep -c ERROR "$dir/run.log") ERROR line(s)"
 
 echo
 if [ "$failures" -gt 0 ]; then echo "FAIL: $failures check(s)"; exit 1; fi

@@ -9,8 +9,12 @@ except --no-coulomb-table (exact Coulomb functions whether or not a table exists
 
   calc    menu 1, calculate segments from data at the truth (T<n>.azr): chiSquared.out, AZUREOut_*.out,
           parameters.out, param.par, scatteringLengths.out
-  extrap  menu 3, the <segmentsTest> lines: AZUREOut_*.extrap
-  rate    menu 5, the reaction rate of the pair named in <lastRun> over temperatures.dat: reactionrates.out
+  extrap  menu 3, the extrapolations: AZUREOut_*.extrap
+  rate    menu 5, the reaction rate of the pair in PROJECTS below over temperatures.dat: reactionrates.out
+
+The projects are format 3; the golden files were written from their old originals (tests/convert/fixtures).  A
+golden file is compared as the format-3 project writes it (golden_lines): param.par with the converter's parameter
+names, and the classes tools/format3_gate.py lists for T3 (the scattering lengths as model data).
 
 --write stores the files under golden/<project>/<mode>/ and the engine commit in golden/ENGINE.  Without it the
 files are compared token by token: every non-numeric token equal, every number within
@@ -23,6 +27,7 @@ summation-order noise on one machine.  Across compilers (GCC, Clang, MinGW) diff
 """
 import argparse
 import glob
+import json
 import os
 import shutil
 import subprocess
@@ -30,13 +35,16 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.normpath(os.path.join(HERE, "..", "..", ".."))
 sys.path.insert(0, os.path.join(HERE, "..", "lib"))
+sys.path.insert(0, os.path.join(ROOT, "tools"))
 import upgrade_project as up  # noqa: E402
+import format3_gate  # noqa: E402  (the accepted differences between an old file's outputs and its conversion's)
 
 # Exact Coulomb functions: the universal table (~/.azure2) changes results at the 1e-6 level and may or may not
 # exist on a machine, so the golden runs never use it.
 FLAGS = ["--no-coulomb-table"]
-PROJECTS = {"T1": (1, 2), "T3": (2, 1)}   # rate entrance, exit (also in each project's <lastRun>)
+PROJECTS = {"T1": (1, 2), "T3": (2, 1)}   # rate entrance, exit (the old originals' <lastRun>)
 MODES = {
     "calc": (up.CALC, ["chiSquared.out", "AZUREOut_*.out", "parameters.out", "param.par",
                        "scatteringLengths.out"]),
@@ -68,14 +76,53 @@ def run_project(binary, name, dest):
             shutil.rmtree(work, ignore_errors=True)
 
 
-def tokens(path):
+def parameter_names(binary, name):
+    """{old parameter name: format-3 name}: the report of the converter run on the project's old original
+    (tests/convert/fixtures/tests/upgrade/<name>/<name>.azr), in a copy beside the project's data files."""
+    work = tempfile.mkdtemp(prefix=f"{name}_names_")
+    try:
+        src = os.path.join(HERE, "..", name)
+        shutil.copytree(os.path.join(src, "data"), os.path.join(work, "data"))
+        shutil.copy(os.path.join(ROOT, "tests", "convert", "fixtures", "tests", "upgrade", name, f"{name}.azr"),
+                    os.path.join(work, "old.azr"))
+        subprocess.run([binary, "--convert", "old.azr", "new.azr", "--to", "3", "--exact-grids", "--json-report",
+                        "report.json"], cwd=work, capture_output=True, check=True,
+                       env=dict(os.environ, OMP_NUM_THREADS="1", LC_ALL="C"))
+        with open(os.path.join(work, "report.json")) as f:
+            return json.load(f)["parameters"]
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def golden_lines(name, fname, path, names):
+    """The golden file as the format-3 project writes it.  The golden files were written from the old project; the
+    format-3 conversion (tests/upgrade/<name>/<name>.azr) writes the same numbers, with the parameter names of the
+    converter's map in param.par and, where tools/format3_gate.py lists them for this project, the classes
+    'scattering lengths as model data (label)' (chiSquared.out) and '(table)' (scatteringLengths.out: the old
+    section's table of measured values is in modelData.out)."""
     with open(path) as f:
-        return [line.split() for line in f]
+        lines = f.read().splitlines()
+    project = f"upgrade/{name}/{name}.azr"
+    if fname == "param.par":
+        return [" ".join([names.get(t[0], t[0])] + t[1:]) if t else "" for t in (l.split() for l in lines)]
+    if fname == "chiSquared.out" and format3_gate.listed("scattering lengths as model data (label)", fname, project):
+        return [l.replace("Scattering-Length", "Model-Data") for l in lines]
+    if fname == "scatteringLengths.out" and format3_gate.listed("scattering lengths as model data (table)", fname,
+                                                                 project):
+        cut = [i for i, l in enumerate(lines) if l.startswith("Constraints (<scatteringLengths>)")]
+        return lines[:cut[0]] if cut else lines
+    return lines
 
 
-def compare_file(a, b, rtol):
-    """Return (worst relative difference, list of problems) for two output files."""
-    ta, tb = tokens(a), tokens(b)
+def tokens(lines):
+    return [line.split() for line in lines]
+
+
+def compare_file(a, golden, rtol):
+    """Return (worst relative difference, list of problems) for an output file and the golden file's lines."""
+    with open(a) as f:
+        ta = tokens(f.read().splitlines())
+    tb = tokens(golden)
     problems, worst = [], 0.0
     if len(ta) != len(tb):
         return float("inf"), [f"{len(ta)} lines, golden {len(tb)}"]
@@ -126,6 +173,7 @@ def main():
     tmp = tempfile.mkdtemp(prefix="golden_cmp_")
     try:
         for name in args.projects:
+            names = parameter_names(binary, name)
             run_project(binary, name, tmp)
             for mode in MODES:
                 gdir = os.path.join(HERE, name, mode)
@@ -137,7 +185,8 @@ def main():
                 for fname in golden:
                     if fname not in got:
                         continue
-                    worst, problems = compare_file(os.path.join(tmp, name, mode, fname), os.path.join(gdir, fname),
+                    worst, problems = compare_file(os.path.join(tmp, name, mode, fname),
+                                                   golden_lines(name, fname, os.path.join(gdir, fname), names),
                                                    args.rtol)
                     if problems:
                         failures += 1

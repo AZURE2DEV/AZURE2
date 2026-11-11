@@ -10,26 +10,47 @@ none #Legendre Polynomial Check
 none #Coulomb Amplitudes Check
 none #Reaction Pathway Check
 none #Angular Distributions Check
+format=3
 </config>
 <levels>
 2 1 15.9336 0 1 1 0 4 1 1 0 1.5e-06 0 1 0 1 0 12.0 12.0 6 6 13.9336 13.9336 0 0 0.0 0 6.4 0 0 0
 2 1 15.9336 0 1 2 0 4 1 1 0 80000.0 0 1 0 1 0 4.0026 19.99244 2 10 13.9336 4.6168 0 0 0.0 0 6.0 0 0 0
 
 </levels>
-<segmentsData>
-1 1 2 0 100 0 180 0 1 0 0 0 0 0 data/c12_a_int.dat 0 0
-1 1 2 0 100 0 180 1 1 0 0 0 0 0 data/c12_a_diff.dat 0 0
-1 1 1 0 100 0 180 0 1 0 0 0 0 0 data/c12_el_int.dat 0 0
-</segmentsData>
-<segmentsTest>
-</segmentsTest>
-<targetInt>
-</targetInt>
-<lastRun>
-9997
-"output/param.sav"
-""
-0 0
-0 ""
--1. -1. -1.
-</lastRun>
+<data>
+# <segmentsData> line 1
+dataset c12_a_int
+    reaction       12C(12C,a)20Ne
+    quantity       sigma
+    unit           b
+    file           data/c12_a_int.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0 100 MeV
+    norm           1 fixed
+
+# <segmentsData> line 2
+dataset c12_a_diff
+    reaction       12C(12C,a)20Ne
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/c12_a_diff.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    energy_window  0 100 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 3
+dataset c12_el_int
+    reaction       12C(12C,12C)12C
+    # CONVERTED: the old engine computed the integral of the nuclear amplitude alone (pi/k^2 sum g |T|^2), not a measurable cross section
+    quantity       sigma_nuclear
+    unit           b
+    file           data/c12_el_int.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0 100 MeV
+    norm           1 fixed
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+</targets>

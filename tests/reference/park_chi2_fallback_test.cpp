@@ -67,7 +67,7 @@ std::string num(double x) {
 }
 
 // The project with every energy and width fixed but two widths, the 0+ one
-// raised past Park's bound; with `convolve`, a target-effect line on segment 4.
+// raised past Park's bound; with `convolve`, a beam spread on data set 4 (ay_60).
 bool writeProject(const std::string &source, const std::string &target, bool convolve) {
   std::ifstream in(source.c_str());
   if (!in) return false;
@@ -101,10 +101,15 @@ bool writeProject(const std::string &source, const std::string &target, bool con
       }
     }
     out << line << "\n";
-    // The automatic-application tolerance (last token, 1e-12: the fold is
-    // always applied) is what makes the adjoint bail; a convolved A_y did
-    // until dev's target-integrated A_y adjoint (2e726db).
-    if (line == "<targetInt>" && convolve) out << "1 \"4\" 10 1 0.0001 0 0 \"\" 0 0 0 0 \"\" 0 \"\" 0 1e-12\n";
+    // The automatic-application tolerance (auto_tolerance 1e-12 over one
+    // window of every energy: the fold is always applied) is what makes the
+    // adjoint bail; a convolved A_y did until dev's target-integrated A_y
+    // adjoint (2e726db).  The records are those the converter writes for the
+    // old <targetInt> line 1 "4" 10 1 0.0001 ... 1e-12.
+    if (line == "dataset ay_60" && convolve)
+      out << "    beam           spread_ay_60\n    quadrature     points 10\n"
+             "    fold_windows   0-1e+06 MeV auto_tolerance 1e-12\n";
+    if (line == "<targets>" && convolve) out << "beam spread_ay_60\n    spread         0.0001 MeV lab\n\n";
   }
   return wallDone;
 }

@@ -23,6 +23,8 @@ ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 T2 = os.path.join(ROOT, "tests", "upgrade", "T2")
 HYBRID = os.path.join(ROOT, "tests", "hybrid_potential")
 FIXTURES = os.path.join(ROOT, "convert", "tests", "fixtures")
+sys.path.insert(0, HERE)
+import old_tree  # noqa: E402  (the old originals of converted projects)
 
 failures = []
 
@@ -108,7 +110,7 @@ def potentials(work):
     os.makedirs(os.path.join(d, "output"))
     shutil.copytree(os.path.join(HYBRID, "data"), os.path.join(d, "data"))
     old = os.path.join(d, "hybrid_potential.azr")
-    shutil.copy(os.path.join(HYBRID, "hybrid_potential.azr"), old)
+    shutil.copy(old_tree.original(os.path.join(HYBRID, "hybrid_potential.azr")), old)  # the old file
     with azure2(old, cwd=d) as m:
         m.save_fit(os.path.join(d, "unchanged.azr"), verify=False, norms="nominal")
         check("save_fit of an old project with no potential change: written", os.path.exists(os.path.join(d, "unchanged.azr")))

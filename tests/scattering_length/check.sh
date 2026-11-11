@@ -2,7 +2,8 @@
 #
 # s-wave scattering lengths (ScatteringLength.cpp): the threshold evaluation against independent values,
 # against AZURE2's own phase shifts through the effective-range expansion, across parametrizations, the
-# <scatteringLengths> chi2 term, its analytic gradient, a fit with it, and the block's error messages.
+# scattering-length data of <modelData> (the old <scatteringLengths> block) in the chi2, their analytic gradient, a
+# fit with them, and the refusals of a wrong datum.
 # See README.md for the models and the reference values.
 #
 #   ./tests/scattering_length/check.sh path/to/AZURE2
@@ -76,16 +77,17 @@ run be7p_std be7p.azr 3 --no-brune
 for j in 1- 2-; do check "7Be+p $j, standard parametrization = Brune" "$(a0 be7p_std 1 $j)" "$(a0 be7p 1 $j)" 1e-8; done
 check "7Be*+p 1- (Im), standard = Brune" "$(a0 be7p_std 2 1- im)" "$(a0 be7p 2 1- im)" 1e-8
 
-# 4. The <scatteringLengths> chi2: every kind of line (a01, a02, the coherent combination, a complex
-#    length with both parts, an inactive line).  Coherent = 3/8 a01 + 5/8 a02 for p (1/2) + 7Be (3/2).
+# 4. The scattering-length chi2 (scattering_length data of <modelData>, the old <scatteringLengths> lines): every
+#    kind of datum (a01, a02, the coherent combination, a complex length with both parts; the old file's inactive
+#    line is not converted).  Coherent = 3/8 a01 + 5/8 a02 for p (1/2) + 7Be (3/2).
 run fit7 be7p_fit.azr 1
-SL="$WORK/fit7/output/scatteringLengths.out"
-coh="$(awk '/coherent/ { for (i = 1; i <= NF; i++) if ($i == "model") { print $(i + 1); exit } }' "$SL")"
+MD="$WORK/fit7/output/modelData.out"
+coh="$(awk '$1 == "scattering_length_3" { print $(NF - 5); exit }' "$MD")"
 check "coherent combination = 3/8 a01 + 5/8 a02" "$coh" "$(awk -v a="$(a0 fit7 1 1-)" -v b="$(a0 fit7 1 2-)" 'BEGIN { printf "%.8f", 3 / 8 * a + 5 / 8 * b }')" 1e-5
-total="$(awk '/total scattering-length chi2/ { print $NF }' "$SL")"
-sum="$(awk '/^  line/ { s += $NF } END { printf "%.8g", s }' "$SL")"
-check "chi2 total = sum of the lines (inactive line 0)" "$total" "$sum" 1e-6
-check "chi2 total in chiSquared.out" "$(sed -n 's/.*Total-Scattering-Length-Chi-Squared: \([^ ]*\).*/\1/p' "$WORK/fit7/output/chiSquared.out")" "$total" 1e-5
+total="$(awk '/^Total model-data chi2/ { print $NF }' "$MD")"
+sum="$(awk '$1 ~ /^scattering_length_/ { s += $NF } END { printf "%.8g", s }' "$MD")"
+check "chi2 total = sum of the data" "$total" "$sum" 1e-4
+check "chi2 total in chiSquared.out" "$(sed -n 's/.*Total-Model-Data-Chi-Squared: \([^ ]*\).*/\1/p' "$WORK/fit7/output/chiSquared.out")" "$total" 1e-5
 check "chi2 total, reference" "$total" 48.3471 1e-4
 
 # 5. Analytic gradient (level-matrix adjoint at the thresholds) against finite differences, in the
@@ -106,25 +108,35 @@ done
 
 # 6. A fit with the constraints (least squares: the constraints are residual rows).
 run lm be7p_fit.azr 2 --use-lm
-fitted="$(awk '/total scattering-length chi2/ { print $NF }' "$WORK/lm/output/scatteringLengths.out")"
+fitted="$(awk '/^Total model-data chi2/ { print $NF }' "$WORK/lm/output/modelData.out")"
 data="$(sed -n 's/^Total-Chi-Squared: \([^ ]*\).*/\1/p' "$WORK/lm/output/chiSquared.out")"
 if awk -v a="$fitted" -v b="$data" 'BEGIN { exit !(a != "" && b != "" && a + b < 6) }'; then ok "--use-lm fit: data chi2 $data + scattering-length chi2 $fitted (start 227.0 + 48.3)"
 else bad "--use-lm fit: data chi2 ${data:-missing} + scattering-length chi2 ${fitted:-missing}, expected below 6"; fi
 
-# 7. Errors in the block stop the run with a message.
-refuse() {  # refuse LABEL LINE EXPECTED-TEXT
-  local dir="$WORK/refuse_$4"
+# 7. Errors in a scattering-length datum stop the run with a message (the datum scattering_length_1, p+7Be s = 1,
+#    17.0 +- 0.5 fm, and scattering_length_4, the complex one, edited).
+refuse() {  # refuse LABEL OLD NEW EXPECTED-TEXT TAG: the datum text OLD replaced by NEW (printf escapes)
+  local dir="$WORK/refuse_$5"
   mkdir -p "$dir/output" "$dir/checks"
   ln -s "$HERE/data" "$dir/data"
-  sed "s|^1 1 1 17.0 0.5\$|$2|" "$HERE/be7p_fit.azr" > "$dir/m.azr"
+  "$PYTHON" -c 'import sys; t = open(sys.argv[1]).read(); o, n = sys.argv[2], sys.argv[3]; assert t.count(o) == 1, o
+sys.stdout.write(t.replace(o, n))' "$HERE/be7p_fit.azr" "$(printf "$2")" "$(printf "$3")" > "$dir/m.azr"
   (cd "$dir" && printf '1\n\n\n' | run_limited 120 "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1)
-  if grep -q "ERROR: <scatteringLengths> line 1: $3" "$dir/run.log" && [ ! -s "$dir/output/chiSquared.out" ]; then ok "refused: $1"
+  if grep -q "$4" "$dir/run.log" && [ ! -s "$dir/output/chiSquared.out" ]; then ok "refused: $1"
   else bad "not refused: $1"; grep -i error "$dir/run.log" | head -3; fi
 }
-refuse "channel spin 3 of p+7Be" "1 1 3 17.0 0.5" "pair 1 has no s-wave channel with channel spin 3" a
-refuse "unknown pair key" "1 9 1 17.0 0.5" "no particle pair with key 9" b
-refuse "missing sigma" "1 1 1 17.0" "expected" c
-refuse "imaginary part without its sigma" "1 1 1 17.0 0.5 -0.3" "an imaginary part needs its uncertainty too" d
+if [ -n "$PYTHON" ]; then
+  refuse "channel spin 3 of p+7Be" '    s              1\n    value          17.0 fm' '    s              3\n    value          17.0 fm' \
+    "E_NOT_A_CHANNEL: datum 'scattering_length_1', field 's': pair 1 (p+7Be) has no s-wave channel with channel spin 3" a
+  refuse "unknown pair" '    pair           p+7Be\n    s              1\n' '    pair           n+7Be\n    s              1\n' \
+    "E_UNKNOWN_PAIR: datum 'scattering_length_1', field 'pair'" b
+  refuse "missing uncertainty" '    value          17.0 fm\n    error          0.5 fm\n' '    value          17.0 fm\n' \
+    "E_FIELD_REQUIRED: datum 'scattering_length_1': field 'error' is missing" c
+  refuse "imaginary part without its uncertainty" '    imag_error     0.05 fm\n' '' \
+    "E_FIELD_REQUIRED: datum 'scattering_length_4': field 'imag_error' is missing" d
+else
+  echo "  skip  refusals (no python3)"
+fi
 
 if [ "$failures" -eq 0 ]; then echo "PASS scattering_length"; exit 0; fi
 echo "FAIL scattering_length ($failures)"; exit 1

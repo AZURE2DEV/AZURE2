@@ -72,7 +72,7 @@ model = up.Project("bw", [p12c, g0], [up.Level(0.5, 1, EX, [C(p12c, 1, 0, GP), C
 
 work = tempfile.mkdtemp(prefix="upgrade_bw.")
 try:
-    up.run(binary, work, model.write(work), up.EXTRAP)
+    up.run(binary, work, model.write(work, binary), up.EXTRAP)
     rows = up.read_blocks(os.path.join(work, "output", "AZUREOut_aa=1_R=2.extrap"))[0]
 finally:
     shutil.rmtree(work, ignore_errors=True)

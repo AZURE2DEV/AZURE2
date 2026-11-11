@@ -13,23 +13,25 @@ none #Angular Distributions Check
 relativistic=1
 includeAllJPi=1
 maxOrbitalMomentum=0
+format=3
 </config>
 <levels>
 0.5 1 60.000000 1 1 1 1 0 1 1 1 0 0.5 1 0 1 0 1.00782503207 4.00260325413 1 2 -1.965 -1.965 0 0 0.0 0 3.0 0 0 0
 
 </levels>
-<segmentsData>
-1 1 1 0.0 30.0 0 180 1 1 0 0 0 0 0 data/pa_ang.dat 0 0
-</segmentsData>
-<segmentsTest>
-</segmentsTest>
-<targetInt>
-</targetInt>
-<lastRun>
-9997
-""
-""
-0 0
-0 ""
--1. -1. -1.
-</lastRun>
+<data>
+# <segmentsData> line 1
+dataset pa_ang
+    reaction       4He(p,p)4He
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/pa_ang.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    energy_window  0.0 30.0 MeV
+    angle_window   0.0 180 deg
+    norm           1 fixed
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+</targets>
