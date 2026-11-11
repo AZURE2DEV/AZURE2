@@ -106,7 +106,7 @@ class Site {
   /// Is this one of the sub-points a target-effect integral is built from?
   bool IsSubPoint() const { return is_sub_point_; };
   /*!
-   * Electron screening (a `screening` block on the point's <targetInt> line): the calculated
+   * Electron screening (a `screening` block of the point's target effect): the calculated
    * cross section is the bare one times f = exp(k U_e), k = pi eta / E_cm of the entrance pair
    * (CalcEDependentValues), U_e in MeV.  param is the 1-based number of the screening
    * parameter (WorkingCopy::ScreeningEffects), 0 = not screened.  Set by WorkingCopy::ApplyScreening on every
