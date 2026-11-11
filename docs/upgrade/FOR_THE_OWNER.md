@@ -190,7 +190,10 @@ would refuse; pyazr's functions on a format-3 project, with edits of levels, `<c
 engine; the design note of Phase 5 (`energy_grid.md`) with its decisions taken. First branch of Phase 5
 (in the merge batch being verified): the level matrix is solved once per compound energy instead of once per data
 point or sub-point, so a fit evaluation of 13N takes 132 ms instead of 317 and of the thick-target project 264 ms
-instead of 1,102, every output unchanged.
+instead of 1,102, every output unchanged. Second branch: the analytic gradient works per compound energy too, so a
+200-call 13N fit with `--use-gradient` takes 27 s instead of 51 and a 30-call natural_neon fit 106 s instead of 220
+(1 thread); a fit now gives the same bits at 1, 2 or 3 threads (measured on T2 and 13N), where two 3-thread runs of
+the same T2 fit used to end apart.
 
 Then, to close Phase 4: the old reading path deleted (with `pyazr/azrfile.py`, 3,756 lines of
 a second grammar in Python); the rest of `CNuc` (the parameter vector and the set-up from the level rows).
@@ -212,8 +215,9 @@ recipes.
 
 ## For the maintainers to decide
 
-- **Fits and the number of threads.** Calculations are identical at any thread count. A fit's path still depends on
-  it. Two causes were found (`fit_threads.md`). The first is fixed (a working copy kept a sub-point grid within
+- **Fits and the number of threads.** Calculations are identical at any thread count. A fit's path depended on it
+  through three causes; the third, the order of the analytic gradient's sums, is removed (Phase 5, second branch: T2
+  and 13N fits identical at 1, 2 and 3 threads). Two others were found (`fit_threads.md`). The first is fixed (a working copy kept a sub-point grid within
   10⁻¹² of the new one). The second is in the vendored Minuit2: its call counter is not atomic, so with several
   threads a fit limited by `--max-calls` can run one more iteration. Two atomic increments remove it (shown on a
   scratch build); the patch touches `external/` and is not applied.

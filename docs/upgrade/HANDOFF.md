@@ -2,34 +2,61 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
-## 2026-11-11 (agent, Phase 5 branch 2) — the gradient over the energy tasks (`feature/upgrade-5-energy-tasks-gradient`)
+## 2026-11-12 (agent, Phase 5 branch 2) — the gradient over the energy tasks (`feature/upgrade-5-energy-tasks-gradient`)
 
-**Done.** (1) The 5-thread regression of branch 1: measured with a new profile stage "energy tasks: set-up" and the
-counter "energy tasks rebuilt": a T2 fit rebuilds the tasks at 156 of 196 passes (every shift change rebuilds the
-plan), serially, 1.15 s of 15.6 s wall at 5 threads. The tasks are now ranges of flat arrays (`EnergyTaskList`),
-keys and sort in parallel: 0.37 s. (2) The analytic gradient, the least-squares rows and the model gradients run
-over the energy tasks (`src/GradEnergyTasks.cpp`): point pass, cotangents of every unit (`PointCotangents`,
-`GradTargetEffectAdjoint` now hands out sub-point cotangents), one fill and factorisation per task, T-matrix
-cotangents summed per group, bilinear terms merged per task. Sums in a thread-independent order (64 interleaved
-chunks; rows in task order; fitBarFn serial in data order): this removed the cause of fits differing at several
-threads (the old per-thread reduction over a dynamic schedule and the atomic norm sums). (3) Deleted:
-`BuildGradItems` and the grouped/ungrouped routes, `GradOnePoint`, `GroupRows`, `ForEachRow`,
-`AZURE_NO_GROUPED_GRADIENT`, `ScopedPointMappingOff` (its two other users run the point pass), `TBarAdjointMany`.
+**Done.**
+- The 5-thread regression of branch 1, measured: a profile stage "energy tasks: set-up" and a counter "energy tasks
+  rebuilt" (AZURE_PROFILE) show a T2 fit rebuilding the tasks at 156 of 196 passes (every shift change rebuilds the
+  plan), serially, 1.15 s of 15.6 s wall at 5 threads. The tasks are now ranges of flat arrays (`EnergyTaskList`), keys
+  and sort in parallel: 0.37 s (5 threads), 0.50 s over 234 passes (3 threads).
+- The analytic gradient, the least-squares rows and the model gradients run over the energy tasks
+  (`src/GradEnergyTasks.cpp`): the point pass, the cotangents of every unit (`PointCotangents`; `GradTargetEffectAdjoint`
+  hands out sub-point cotangents), one fill and factorisation per task, T-matrix cotangents summed per group, bilinear
+  terms merged per task (rows: per row or by the task's basis). The forward of the adjoint is recomputed per task.
+  Sums in a thread-independent order (64 interleaved chunks; rows task by task; fitBarFn serial in data order).
+- Deleted: `BuildGradItems` and the grouped/ungrouped routes, `GradOnePoint`, `GroupRows`, `ForEachRow`,
+  `AZURE_NO_GROUPED_GRADIENT`, `ScopedPointMappingOff` (its two other users run the point pass), `TBarAdjointMany`,
+  `AMatrixFunc::PointAdjoint`. A crash found by the speed series fixed: the row pass with no free parameter
+  (thick_target_resonance `--use-lm`) divided by the column count; `tests/upgrade/energy_task_gradient_test.cpp`
+  (ctest `upgrade_energy_task_gradient`, shown failing with a segfault without the fix) also checks that the scalar
+  gradient, the residual Jacobian and the model gradients of T2 are the same bits at 1 and 3 threads.
+  `tests/angle_mapping/check.sh` (d) now requires the gradient at 1 thread to equal the one at the check's thread count
+  bit for bit (the base fails it: 3, 4, 2 of 21 parameters).
 
-**Verified** (binary `work/egrad/AZURE2-final` = a69f6854): all projects x 3 bases identical to `tab-trial21a`
-(766/739/766, tag `tab-egrad-final`); `AZURE_PLAN_CHECK=1` on the tree: 265 evaluations, 3,653,648 units, 0 differ;
-quick set per commit; T2 fits at 1, 2, 3 threads identical (base: chiSquared.out differs 1 vs 3 threads);
-fits at 1 thread against the base (`work/egrad/fitcmp`): T1, T3, T2 --use-lm, angle_mapping, energy_shift_sqrt,
-sum_free, 18O THM identical; T2 migrad/grad 2.5e-9 in a parameter, chi2 1.5e-13; 13N 6.8e-11; natural_neon
-(30 calls, not converged, EDM 3.4e3) 5.9e-5 -- above the brief's 1e-5: the paths agree to 1e-15 at call 1 and
-the difference grows along the unconverged path (the base itself is identical at 1 and 3 threads there).
+**Verified.** On 2d20a50b (`work/egrad/AZURE2-final2`) unless said:
+- all projects x 3 bases identical to `tab-trial21a` (766/739/766; a69f6854, 6 jobs, before the 3-thread budget);
+- `AZURE_PLAN_CHECK=1` on the tree: 265 evaluations, 3,653,648 units, 0 differ;
+- `ctest -LE slow` 201/201 (-j1, OMP 2); `tests/run_tests.sh` 148 passed, 0 failed (OMP 2);
+- converted-tree gate (`REF=tab-trial8`, JOBS=3, tag `gegrad`): 483 (456) identical, 38 classified, 0 differ, 0 missing;
+- calculations at 1 and 3 threads identical: T1, T2, T3, 13N, natural_neon, thick target, energy_shift_sqrt, shift_fn,
+  18O_p_a_thm, target_effect_ranges, angle_mapping;
+- fits at 1, 2, 3 threads and two repeated 3-thread runs identical (param.par, chiSquared.out, param.sav) for T2
+  `--use-gradient`, T2 `--use-lm`, 13N `--use-gradient`; the base's two 3-thread T2 `--use-gradient` runs differ
+  (chiSquared.out, param.sav); its T2 `--use-lm` and 13N runs agree with each other;
+- the gradient at the start (AZURE_GRAD_CHECK, 1 thread, `work/egrad/gstart`): 13 fit projects with checked
+  components (18O_p_a_thm and target_density print none; park_formalism, doppler_fgm, transmission_yield and
+  natural_target were not found by the script: their .azr lie in subfolders), largest change against the base 3.3e-13
+  of the largest component (7Li_p_ay), agreement with finite differences unchanged;
+- the gradient at the same parameter points, base against this branch (pyazr, 1 thread, every component,
+  `work/egrad/twopt`): natural_neon at the start 3.9e-14 of the largest component (per component 6.2e-13), at the
+  base's 30-call end point 1.9e-14 (1.9e-12); rows 2 J^T r <= 1.3e-16; the screening fit 7.4e-14 at its end point;
+  T2 <= 1.3e-14. So the fit end points that move (natural_neon 30 calls 5.9e-5 in a parameter, EDM 3.4e3; the
+  screening fit 200 calls 0.13, EDM 27) are rounding amplified on unconverged paths (director's class);
+- fits at 1 thread against the base: T1, T3, T2 `--use-lm`, angle_mapping, energy_shift_sqrt, sum_free, 18O THM
+  identical; T2 2.5e-9 in a parameter (chi2 1.5e-13); 13N 6.8e-11 (2.6e-14);
+- speed: `energy_grid.md` section 8 (13N gradient fit 51 -> 27 s, natural_neon 220 -> 106 s; T2 at 3 threads not slower
+  than b-trial19). After the fix commit: build, quick set, the new test, thick-target fits.
 
-**Not done / open.** The point mapping (`MapData`, `MapLeaves`, `SharesCalculation`, `AZURE_NO_*_MAPPING`) is kept:
-the whole tree with `AZURE_NO_POINT_MAPPING=1` gives every output identical except the Coulomb-table lookup count in
-the run.log of `angle_mapping` and `sum_lab_frame/models/plain_data` (tag `tab-egrad-nomap`); T2 fit and
-natural_neon calculation equal in time, RSS +3.5 % (T2) -- a decision for the director. Not run: ctest -LE slow,
-tests/run_tests.sh, the converted-tree gate, 1-against-3-thread calculations, gradient-at-start table, speed series,
-ThreadSanitizer (no clang here). THM locality not attempted.
+**Not done / open.**
+- The 5-thread acceptance time (budget 3 threads that night): the director times it.
+- ThreadSanitizer: not possible here (no clang; `scripts/sanitize_upgrade.sh` needs clang with LLVM's libomp and
+  libarcher, a GCC/libgomp build reports every OpenMP barrier as a race).
+- The point mapping stays (director's decision): its deletion is a follow-up after branches 5 and 6 merge, written out
+  file by file in `energy_grid.md` section 8 with the evidence (tag `tab-egrad-nomap`).
+- THM locality (`Unit::GetLoElement` cold rows) not attempted; most of a T2 gradient is the finite-difference part for
+  shifts and THM.
+- Not edited (other branches' or historical files) that still name deleted functions: `experiment/README.md`,
+  `experiment/tests/expression_test.cpp` (GradOnePoint, as history), `MERGE_NOTES.md`, `docs/upgrade/edata_split.md`.
 
 ## 2026-11-11 (agent, Phase 5 branch 3) — lab data compared in the lab frame (`feature/upgrade-5-lab-frame`)
 

@@ -33,7 +33,11 @@ point pass. The point pass gives every unit's record and every point's model; ea
 through its expression tree and its fold to cotangents of its units (the transpose of K); per energy task the
 level matrix is filled and factored once, the T-matrix cotangents of the units of each T-matrix group are summed,
 and the bilinear terms g_c^T A g_c' are back-propagated once per J-group (∂O/∂θ, transposed). The sums are formed
-in an order fixed by the tasks, not by the threads, so a gradient and a fit give the same bits at any thread count.
+in an order fixed by the tasks, not by the threads (64 interleaved chunks of tasks, each summed in task order, then
+the chunks in order; rows task by task), so a gradient and a fit give the same bits at any thread count. Why:
+floating-point addition is not associative, and a fit amplifies a difference of 1e-16 in one gradient into a different
+path (seen: two 3-thread runs of the same T2 fit ending apart before this; a 30-call natural_neon fit moving 6e-5 in a
+parameter from a 1e-15 change of the summation order).
 
 **Exact energies (decision, Jakub, 2026-11-07).** As in AZURE2 today, every observable is calculated at the energy
 where it is compared with data; nothing is interpolated by default. The grid E_n is therefore the set of evaluation
