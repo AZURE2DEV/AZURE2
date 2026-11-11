@@ -163,21 +163,24 @@ else
 fi
 
 # An experiment that only inactive data sets name has no member: it is ignored with a warning, as the old engine
-# ignored an experiment with no segment in use, and the run equals the run without it.
-for v in idle plain; do
+# ignored an experiment with no segment in use, and the run equals the run without it -- also when no <thm> section
+# defines it (idle_undefined; an active data set naming an undefined experiment is refused, tests/thm_experiment).
+for v in idle idle_undefined plain; do
   d="$WORK/$v"
   mkdir -p "$d/output" "$d/checks"
   cp -r "$HERE/data" "$d/"
   awk '$1 == "dataset" { ds = $2 }
-       ds == "lc723_thm_points" && $1 == "thm" { print "    active         no"; if (V == "idle") { print "    thm            A"; next } }
+       ds == "lc723_thm_points" && $1 == "thm" { print "    active         no"; if (V != "plain") { print "    thm            A"; next } }
        { print }' V="$v" "$HERE/18O_p_a_thm.azr" > "$d/run.azr"
-  [ "$v" = plain ] || printf '<thm>\nexperiment[A] background=linear\n</thm>\n' >> "$d/run.azr"
+  [ "$v" != idle ] || printf '<thm>\nexperiment[A] background=linear\n</thm>\n' >> "$d/run.azr"
   (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
 done
 if grep -q "WARNING: <thm> experiment\[A\] has no data set in use; ignored." "$WORK/idle/log" &&
    [ -s "$WORK/plain/output/chiSquared.out" ] &&
    same "$WORK/idle/output/chiSquared.out" "$WORK/plain/output/chiSquared.out" &&
-   same "$WORK/idle/output/AZUREOut_aa=1_R=2.out" "$WORK/plain/output/AZUREOut_aa=1_R=2.out"; then
+   same "$WORK/idle/output/AZUREOut_aa=1_R=2.out" "$WORK/plain/output/AZUREOut_aa=1_R=2.out" &&
+   same "$WORK/idle_undefined/output/chiSquared.out" "$WORK/plain/output/chiSquared.out" &&
+   same "$WORK/idle_undefined/output/AZUREOut_aa=1_R=2.out" "$WORK/plain/output/AZUREOut_aa=1_R=2.out"; then
   echo "  ok    an experiment of inactive data sets only: ignored with a warning, the run as without it"
 else
   echo "  FAIL  an experiment of inactive data sets only: not ignored as without it"; tail -3 "$WORK/idle/log" | sed 's/^/        /'; fail=1
