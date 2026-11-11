@@ -277,3 +277,12 @@ shown failing with a one-line engine error injected in a scratch build):
 on a data set that is not there. `tests/consistency/repo_consistency_test.py` check 33 lists a `check.sh` with an
 in-place edit (`sed -i`, `perl -i`, `awk -i inplace`), except the four audited ones that had one. `CLAUDE.md`, recipe
 "A new regression check".
+
+**Run again on the refusal switch** (2026-11-12, branch `feature/upgrade-4-refusal-switch`, its build, `OMP_NUM_THREADS=3`,
+32 min): 129 checks, 1,682 edit places, 36 that change nothing (the 36 by design above: 10 `\r` strippings, 17
+A-matrix flags set to their value, 9 base variants), 1,506 engine runs; no vacuous edit. The new and rewritten checks
+of the branch (`convert_params`, `cli_route_exit`, `angular_coefficients` (g), `target_density` (6),
+`nuisance_kinds`) have no edit that hits nothing; `cli_route_exit`'s five groups of four equal runs are the refusal
+asserted to be one message for the run, `--validate`, `--describe` and `--print-predictions`. One check fails under
+the audit only: `stopping_yield` looks for `azure2-stopping` beside the binary, which the audit replaces by its
+wrapper (the tool's limit; the check passes in `tests/run_tests.sh`).

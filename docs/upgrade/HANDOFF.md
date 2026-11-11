@@ -2,6 +2,73 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, refusal switch) — the engine reads format 3 only; old files refused, the old reading path deleted (`feature/upgrade-4-refusal-switch`)
+
+**Done** (`AU_refusal_switch.md`):
+- **The refusal** (`project_format3.md` §8.4, built): `Config::ReadConfigFile` refuses a text that is not a format-3
+  project before reading anything of it, with one message, `io::NotFormat3Message` (moved from `convert/` to
+  `io/ProjectFormat.h` so that the engine library links nothing of the converter): the format and the first old
+  section with its line, `AZURE2 --convert OLD OLD_f3.azr` and `pyazr.convert_azr(...)`, "the converter keeps OLD
+  unchanged". Own lines for a `format=3` header over an old section and for a text without `<config>` (empty, not a
+  project). The CLI exits 3 with the message as the run's last line; `--validate`, `--describe`,
+  `--print-predictions` end with it and exit 3; the API session raises it; pyazr's `require_format3` uses it.
+  `--convert OLD NEW` writes format 3 without `--to` (`--to 3` accepted; the format-2 output and
+  `convert_azr(to=2)` are gone; `ConvertToFormat2` is the converter's first step, `convert/src/Format2.cpp`).
+- **Parameter files**: `AZURE2 --convert-params OLD.sav NEW.sav --project OLD.azr`, `pyazr.convert_params`
+  (`convert::ConvertParameterFile`): the map of the OLD project's conversion (`--project` is the old project: a
+  format-3 project does not determine the map, its records may have been renamed); `tests/convert_params`.
+- **The old path deleted** (map in `format3_tree.md` §5, made with a coverage build): the old producers of specs
+  (`ProjectSetup.cpp`), Config's format-1 conversion and `<potential>` reader, the `<scatteringLengths>` reader and
+  its chi2 line, the `<thm>` member lists (`ReadFormat3ThmSection` takes members and weight tables from the records;
+  `Format3ThmLines`, `ParseThmBlockLines`, `CheckThmBlockLines` gone), the bindings without a Python caller.
+  `Config::format3` is `Config::project`. `AZURE2Core` links no `convert/` target (0 undefined `azure2::convert`
+  symbols in `libAZURE2Core.a`, 5 before; link lines: `src/CMakeLists.txt`).
+- **Small defects** (item 6): density warning names `<target>.areal_density` and `grid_max`; a refused THM edit
+  names its experiment once; `Project.set/rename/remove` of an unknown record raise `FormatError`; a `<config>`
+  directory gets its trailing '/', `write_output_files` creates the output directory; `sav_fixed_params`,
+  `inactive_lines` take `AZURE2_BIN` (their CLI cross-checks now run); `W_PARAMETER_SETTING_UNKNOWN` (a
+  `<parameterSettings>` row naming no parameter; a warning: the GUI leaves such rows behind).
+- **Tests of old files**: `angular_coefficients` (g) `bad_norm.azr` deleted (refusal on the record,
+  `E_MODE_NOT_ALLOWED`), `bad_test.azr` to the converter's fixtures (the converter's refusal);
+  `physics_pathway_table` and `upgrade_capture_ay_requests` leave `tests/convert/fixtures/` out (they ran the old
+  originals through the engine); `thm_optical` without `segments=`; consistency check 34 (no old section named in
+  the engine; five comment-only files of the two parallel branches listed as pending).
+- `convert_spec_equivalence` kept unchanged as a converter test: its old side is the converter's old-line reader
+  (`convert/SpecsFromOldLines`, which the converter needs for prior-centre rows), no longer an engine producer; the
+  guarantee that the engine's results did not move is the converted-tree gate against `tab-trial8`.
+
+**Verified how**: per commit, build 0 warnings, the consistency test, `ctest -R "convert|cli|consistency|project|validate|...|thm|model_data"` (65), the `check.sh` of `cli_route_exit`, `convert_params`, `13N`, `thm_fit`, `natural_target`, `angular_coefficients`, `target_density`, `nuisance_kinds`, `thm_options`, `thm_experiment`, `model_data`, `scattering_length`, `18O_p_a_thm`; T1-T3, 13N, 17O, 18O_p_a_thm, scattering_length menu 1 byte-identical to `tab-trial24c`. Every build 0 warnings. At the end (engine of d93192f6; the later commits change tests and documents only):
+all projects x 3 bases against `tab-trial24c` (tag `tab-refuse1`): 780/753/780 files, 778/751/778 identical, the
+two others per basis the `run.log` of the removed `angular_coefficients/models/bad_norm.azr`, `bad_test.azr`
+(only in the reference); `ctest -LE slow` 202/203 (`physics_pathway_table` ran the fixtures through the engine:
+fixed in 2756d7ee, it and `upgrade_capture_ay_requests` rerun: pass); `ctest -L slow` 10/10;
+`tests/run_tests.sh` 152 passed, 1 failed (`format3_engine`: its old-file run, rewritten in 8483d5b9 and rerun:
+pass); converted-tree gate (`grefuse1`) 483 (456) identical, 38 classified, 0 differ, 0 missing; T1-T3 and 13N at 1
+against 3 threads, 3 bases: 12 identical; fits at 1 thread, base build (`b-trial24`) against this one, MIGRAD 200
+calls: T2, 13N, 13N `--use-gradient`, 13N `--use-lm`: every output file identical; the T1 and T3 generators
+(through the converter) with the base build and with this one: every file identical. The refusal for each case
+(CLI run, `--validate`, `--describe`, `--print-predictions`, pyazr `azure2`, `Project.open`, the engine session):
+the message and exit 3 (`cli_route_exit`, `convert_azr_test`). `convert_params` fails with a wrong name injected
+in the map (chi2 1.36e43 against 294.173). Edit audit (`tools/edit_audit.sh`, once, alone, 3 threads, 32 min): 129 checks, 1,682 edit places, 36 hit nothing
+(all by design, the audit's 36), 1,506 runs, no vacuous edit (`format3_tree.md` §7); `stopping_yield` fails under the
+audit only (the tool's wrapper hides `azure2-stopping`).
+
+**Open**: the five files of the parallel branches still name old sections in comments (`include/Unit.h`,
+`include/ParameterKind.h`, `src/TargetSetup.cpp`, `src/DataParameters.cpp` (also its `EffectParameterName`
+fallback to the old `density_<n>` names, now unreachable), `experiment/src/Schema.cpp`): check 34 lists them as
+pending; after those merges, remove the words and the list. `TargetEffect`'s refusals of the old block texts
+(unreachable, kept: the spec carries text members both producers wrote). `tools/convert_tree.sh`'s old-engine pass
+needs a pre-switch binary (the gate does not use it). `tests/pyazr/model_data_test.py` edits `<segmentsData>` lines
+of a format-3 text (an edit that hits nothing: its gradient case runs on all data sets instead of segment 5; the
+check still holds, the data part cancels). User-guide pages of `format3_tree.md` §6 other than THM still show old
+lines. Sphinx not installed here: the docs were not built.
+
+**Line counts** (acb0cc3e..the branch head): engine `src/` +352 -657, `include/` +66 -118, `api/` +48 -304, `io/`
++136 -91 (the refusal moved in, ConvertToFormat2 and its test moved out), `experiment/` +56 -4; `convert/` +97 -29;
+`pyazr/` +88 -66; tests +332 -165; docs and skills +375 -205. Files of the engine that still name `segmentsData`,
+`targetInt`, `format 2` or "old format": `io/src/ProjectFormat.cpp` (the message) and the five pending files above.
+
+
 ## 2026-11-11 (director, 21:00) — merged: pyazr reads format 3 only, the audit of the checks with six refusals, the crash without free parameters fixed
 
 ### State
