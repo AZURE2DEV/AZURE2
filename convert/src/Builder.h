@@ -269,17 +269,8 @@ class Builder {
     }
     inAmbiguous = Ambiguous(*in);
     outAmbiguous = out && Ambiguous(*out);
-    std::string s = Nuclide(in->z2, in->A2()) + (in->e2 != 0 ? "[" + in->e2Text + "]" : "") + "(" + LightLabel(*in) +
-                    (in->e1 != 0 ? "[" + in->e1Text + "]" : "") + ",";
-    if (!out) {
-      s += "g)" + Nuclide(in->z1 + in->z2, in->A1() + in->A2()) + "[total]";
-      return s;
-    }
-    s += LightLabel(*out);
-    if (out->e1 != 0) s += "[" + out->e1Text + "]";
-    s += ")" + Nuclide(out->z2, out->A2());
-    if (out->e2 != 0) s += "[" + out->e2Text + "]";
-    return s;
+    const experiment::PairInfo outInfo = out ? out->Info() : experiment::PairInfo();
+    return experiment::ReactionLabel(in->Info(), out ? &outInfo : nullptr);
   }
   static std::string PairLabel(const OldPair &p) { return experiment::PairLabel(p.Info()); }
 

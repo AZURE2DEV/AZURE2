@@ -44,6 +44,7 @@ Examples
 import os
 import shutil
 import sys
+import tempfile
 import warnings
 from dataclasses import dataclass, field
 
@@ -285,8 +286,8 @@ def _worker_setup(spec):
     from the parent's caches, so the integrals are reused rather than rebuilt
     -- the same trick :func:`trimmed_model` uses.
     """
-    from .azrfile import AzrModel
     from .azure2 import azure2
+    from .project import Project, _is_format3
 
     cwd, workdir = spec["cwd"], os.path.join(spec["workdir"], str(os.getpid()))
     os.makedirs(workdir, exist_ok=True)
@@ -301,9 +302,17 @@ def _worker_setup(spec):
 
     # The edited .azr lives in the private directory too, so the parent removing
     # that directory takes the temporary file with it.
-    edited = AzrModel.from_file(spec["file"])
-    edited.set_output_dir(os.path.relpath(workdir, cwd))
-    path = edited.to_tempfile(dir=workdir)
+    if _is_format3(spec["file"]):  # the engine reads a format-3 project's data files relative to cwd
+        edited = Project.open(spec["file"])
+        edited.set_config(output_dir=os.path.relpath(workdir, cwd).rstrip("/") + "/")
+        fd, path = tempfile.mkstemp(suffix=".azr", dir=workdir)
+        os.close(fd)
+        edited.save(path)
+    else:
+        from .azrfile import AzrModel
+        edited = AzrModel.from_file(spec["file"])
+        edited.set_output_dir(os.path.relpath(workdir, cwd))
+        path = edited.to_tempfile(dir=workdir)
 
     model = azure2(path, cwd=cwd, **spec["options"])
     if spec["mode"] == "extrap":
@@ -630,35 +639,26 @@ def trimmed_model(azr_file, keys=None, grids=None, cwd=None, workdir=None):
     cache is never touched, and a repeat call on the same grid reuses its own
     valid cache instead of rebuilding it.
     """
-    from .azrfile import AzrModel
-    from .datasets import TestSegmentSet
     import hashlib
+    from .project import _is_format3
 
     if (keys is None) == (grids is None):
         raise ValueError("give exactly one of keys= or grids=.")
     if cwd is None:
         cwd = os.path.dirname(os.path.abspath(azr_file)) or "."
 
-    model_file = AzrModel.from_file(azr_file)
-    if keys is not None:
-        n = len(TestSegmentSet.from_file(azr_file))
-        bad = [k for k in keys if not 1 <= k <= n]
-        if bad:
-            raise KeyError(f"{azr_file} declares {n} <segmentsTest> segments; "
-                           f"no {bad}.")
-        model_file.keep_extrapolations(list(keys))
+    if _is_format3(azr_file):
+        model_file, block = _trimmed_project(azr_file, keys, grids)
     else:
-        model_file.set_extrapolations(list(grids))
-
+        model_file, block = _trimmed_old_format(azr_file, keys, grids)
     if workdir is None:
-        from .azrfile import _tag_index
-        suffix = model_file._suffix.splitlines(keepends=True)
-        # The text between the tags, starting with the opening tag's newline: the bytes the directory name was
-        # always hashed from, so existing band directories stay valid.
-        block = "\n" + "".join(suffix[_tag_index(suffix, "<segmentsTest>") + 1:_tag_index(suffix, "</segmentsTest>")])
         tag = hashlib.sha1(block.encode()).hexdigest()[:10]
         workdir = os.path.join(cwd, "output", "bands", tag)
-    model_file.set_output_dir(os.path.relpath(workdir, cwd))
+    os.makedirs(workdir, exist_ok=True)
+    if hasattr(model_file, "set_config"):
+        model_file.set_config(output_dir=os.path.relpath(workdir, cwd).rstrip("/") + "/")
+    else:
+        model_file.set_output_dir(os.path.relpath(workdir, cwd))
 
     # Trimming touches <segmentsTest> only, so the data-segment external-capture
     # integrals are unchanged and the main run's cache is valid here.  Seeding
@@ -669,7 +669,58 @@ def trimmed_model(azr_file, keys=None, grids=None, cwd=None, workdir=None):
         if os.path.exists(seed) and not os.path.exists(target):
             shutil.copyfile(seed, target)
 
+    if hasattr(model_file, "set_config"):
+        fd, path = tempfile.mkstemp(suffix=".azr", dir=cwd)
+        os.close(fd)
+        model_file.save(path)
+        return path, workdir
     return model_file.to_tempfile(dir=cwd), workdir
+
+
+def _trimmed_project(azr_file, keys, grids):
+    """A format-3 project with only the extrapolations ``keys`` (1-based, in file order; kept in the order given)
+    or the extrapolation records ``grids`` (dicts of :meth:`pyazr.Project.add_extrapolation` fields, with an
+    optional ``name``), and the text the band directory is named from (the kept records)."""
+    from .project import Project
+    model = Project.open(azr_file)
+    names = [n for n, r in model.records().items() if r.record_kind == "extrapolation"]
+    if keys is not None:
+        bad = [k for k in keys if not 1 <= k <= len(names)]
+        if bad:
+            raise KeyError(f"{azr_file} declares {len(names)} extrapolations; no {bad}.")
+        kept = [(names[k - 1], model[names[k - 1]].fields) for k in keys]
+    else:
+        kept = []
+        for i, g in enumerate(grids, start=1):
+            g = dict(g)
+            kept.append((g.pop("name", f"band_{i}"), g))
+    for n in names:
+        model.remove(n)
+    for name, fields in kept:
+        model.add("extrapolation", name, **fields)
+    block = "\n".join(model[name].text for name, _ in kept)
+    return model, block
+
+
+def _trimmed_old_format(azr_file, keys, grids):
+    """trimmed_model of an old-format project (AzrModel; deleted with the old formats)."""
+    from .azrfile import AzrModel, _tag_index
+    from .datasets import TestSegmentSet
+    model_file = AzrModel.from_file(azr_file)
+    if keys is not None:
+        n = len(TestSegmentSet.from_file(azr_file))
+        bad = [k for k in keys if not 1 <= k <= n]
+        if bad:
+            raise KeyError(f"{azr_file} declares {n} <segmentsTest> segments; "
+                           f"no {bad}.")
+        model_file.keep_extrapolations(list(keys))
+    else:
+        model_file.set_extrapolations(list(grids))
+    suffix = model_file._suffix.splitlines(keepends=True)
+    # The text between the tags, starting with the opening tag's newline: the bytes the directory name was
+    # always hashed from, so existing band directories stay valid.
+    block = "\n" + "".join(suffix[_tag_index(suffix, "<segmentsTest>") + 1:_tag_index(suffix, "</segmentsTest>")])
+    return model_file, block
 
 
 def extrapolation_bands(azr_file, keys=None, grids=None, params=None,
@@ -687,12 +738,13 @@ def extrapolation_bands(azr_file, keys=None, grids=None, params=None,
     Parameters
     ----------
     azr_file : the model.
-    keys : 1-based ``<segmentsTest>`` numbers of the file to keep (as reported
+    keys : 1-based extrapolation numbers of the file to keep, in file order (as reported
         by :attr:`~pyazr.azure2.azure2.extrapolations`).  The returned dict is
         keyed by these same numbers.
-    grids : alternatively, an iterable of keyword bundles for
-        :meth:`~pyazr.AzrModel.add_extrapolation` -- a grid the file does not
-        contain.  Keyed 1, 2, ... in the order given.
+    grids : alternatively, an iterable of grids the file does not contain, keyed 1, 2, ... in the order given:
+        for a format-3 project dicts of :meth:`pyazr.Project.add_extrapolation` fields (``reaction``,
+        ``quantity``, ``unit``, ``energies``, ...; an optional ``name``), for an older one keyword bundles of
+        ``AzrModel.add_extrapolation``.
     params : defaults to ``output/param.sav`` beside the model.
     covariance, quantity, step, method, progress, nprocs : see
         :func:`uncertainty_bands`.

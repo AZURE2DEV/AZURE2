@@ -1,7 +1,6 @@
 """The hybrid nuclear potentials of a session, per particle pair (the methods of :class:`pyazr.azure2` that read and
 set them, and write them as format-3 records; ``docs/source/user_guide/pyazr.rst``, "The hybrid nuclear potential, per
 particle pair")."""
-import re
 
 from .parameters import NuclearPotential
 
@@ -188,14 +187,15 @@ class _HybridPotentials:
         return bool(changed), list(lines), list(notes)
 
     def _write_potential_records(self, model):
-        """Into ``model`` (an AzrModel of this session's format-3 project): the session's potentials, when
-        set_nuclear_potential changed them; the section as read otherwise.  Returns ``model``.  A project of format
-        1 or 2 whose potential this session changed is refused with the conversion command (ValueError): its
-        ``<potential>`` block is not written; the format-3 records are."""
-        if model._config_value("format") == "3":
+        """Into ``model`` (a :class:`pyazr.Project` of this session's format-3 project, or an AzrModel of an older
+        one): the session's potentials, when set_nuclear_potential changed them; the section as read otherwise.
+        Returns ``model``.  A project of format 1 or 2 whose potential this session changed is refused with the
+        conversion command (ValueError): its ``<potential>`` block is not written; the format-3 records are."""
+        from .project import Project
+        if isinstance(model, Project):
             changed, lines, _ = self.potential_records()
             if changed:
-                _replace_section(model, "potentials", lines)
+                model._replace_record_section("potentials", lines)
         elif getattr(self, "_potentials_edited", False):
             from .described import _engine as _engine_module
             with open(self.file, "rb") as f:
@@ -203,18 +203,3 @@ class _HybridPotentials:
             raise ValueError("save_fit: this session changed a hybrid potential, which is written only to a format-3 "
                              "project (its potential records); convert the project first.\n" + refusal)
         return model
-
-
-def _replace_section(model, name, lines):
-    """The section ``name`` of an AzrModel replaced by ``lines`` (removed when empty; added before <levels>)."""
-    block = f"<{name}>\n" + "".join(line + "\n" for line in lines) + f"</{name}>\n" if lines else ""
-    pattern = re.compile(rf"^[ \t]*<{name}>[ \t\r]*\n.*?^[ \t]*</{name}>[ \t\r]*\n", re.S | re.M)
-    for attr in ("_prefix", "_suffix"):
-        text = getattr(model, attr)
-        m = pattern.search(text)
-        if m:
-            setattr(model, attr, text[:m.start()] + block + text[m.end():])
-            return
-    if block:
-        at = model._prefix.rindex("<levels>")
-        model._prefix = model._prefix[:at] + block + model._prefix[at:]

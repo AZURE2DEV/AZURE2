@@ -20,10 +20,10 @@ sampler can wander off to ``gamma ~ 1e59`` without the fit noticing.
 This module reproduces that transformation in Python, at AZURE2's own constants,
 channel radii and boundary conditions, with no running instance required::
 
-    from pyazr import AzrModel
+    from pyazr import Project
     from pyazr.transform import levels_from_azr, transform_out
 
-    levels = levels_from_azr(AzrModel.from_file("3H+d.azr"),
+    levels = levels_from_azr(Project.open("3H+d.azr"),
                              gammas={(1, 1): [0.0, 5.3032255, 0.0, 0.780586]})
     for lv in transform_out(levels, brune=True):
         print(lv.table())
@@ -49,6 +49,7 @@ What is reproduced, and what is not
 from __future__ import annotations
 
 import math
+import os
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -751,18 +752,23 @@ def _radiation_type(azr_channel) -> str:
 
 def levels_from_azr(model, gammas: Optional[Dict[Tuple[int, int], Sequence[float]]] = None,
                     *, active_only: bool = True) -> List[Level]:
-    """Build :class:`Level` objects from a :class:`pyazr.AzrModel` (or a path).
+    """Build :class:`Level` objects from a project: a :class:`pyazr.Project`, a path, or an AzrModel (older
+    formats).
 
-    The ``.azr`` ``<levels>`` block carries the *physical* widths, not reduced
-    ones, so supply the reduced-width amplitudes yourself -- from
-    ``output/param.par``, an MCMC sample, whatever.  ``gammas`` is keyed by
-    ``(jgroup, level)`` where the J-group is numbered in first-seen J^pi order,
-    matching AZURE2; omit it to get channels with ``gamma = 0`` that you fill in
-    later.
+    The ``<levels>`` rows carry the *physical* widths, not reduced ones, so supply the reduced-width amplitudes
+    yourself -- from ``output/param.par``, an MCMC sample, whatever.  ``gammas`` is keyed by ``(jgroup, level)``,
+    the engine's numbering (a format-3 project: :attr:`pyazr.nuclear_part.Level.group` and ``.level``; older
+    formats: J-groups in first-seen J^pi order); omit it to get channels with ``gamma = 0`` that you fill in later.
     """
-    if isinstance(model, str):
-        from .azrfile import AzrModel
-        model = AzrModel.from_file(model)
+    from .project import Project, _is_format3
+    if isinstance(model, (str, os.PathLike)):
+        if _is_format3(model):
+            model = Project.open(model)
+        else:
+            from .azrfile import AzrModel
+            model = AzrModel.from_file(os.fspath(model))
+    if isinstance(model, Project):
+        return _levels_from_project(model, gammas, active_only)
 
     jgroup_of: Dict[Tuple[float, int], int] = {}
     counter: Dict[int, int] = {}
@@ -800,6 +806,36 @@ def levels_from_azr(model, gammas: Optional[Dict[Tuple[int, int], Sequence[float
                 c.gamma = float(v)
         levels.append(lv)
 
+    return levels
+
+
+def _levels_from_project(project, gammas, active_only):
+    """levels_from_azr of a format-3 project: its levels and pairs as the engine reads them."""
+    pairs = {p.key: p for p in project.pairs()}
+    levels = []
+    for lv in project.levels():
+        if active_only and not lv.active:
+            continue
+        chans = []
+        for c in lv.channels:
+            p = pairs[c.pair]
+            radiation = ("P" if p.kind == 0 else
+                         ("E" if lv.parity * p.heavy_parity == (-1) ** c.l else "M") if p.kind == 10 else
+                         ("F" if c.l == 0 else "G"))
+            chans.append(Channel(
+                L=c.l, S=c.s, pair=c.pair, radiation_type=radiation,
+                Z1=p.light[0], Z2=p.heavy[0], M1=p.light_mass, M2=p.heavy_mass,
+                channel_radius=p.radius, sep_energy=p.separation_energy,
+                excitation=p.light_excitation + p.heavy_excitation,
+                pair_J2=p.two_j_heavy / 2, pair_parity2=p.heavy_parity))
+        level = Level(energy=lv.energy, channels=chans, J=lv.J, parity=lv.parity, jgroup=lv.group, level=lv.level)
+        if gammas and (lv.group, lv.level) in gammas:
+            g = gammas[(lv.group, lv.level)]
+            if len(g) != len(chans):
+                raise ValueError(f"level ({lv.group},{lv.level}) has {len(chans)} channels, got {len(g)} gammas")
+            for c, v in zip(chans, g):
+                c.gamma = float(v)
+        levels.append(level)
     return levels
 
 

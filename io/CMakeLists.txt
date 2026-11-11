@@ -7,9 +7,11 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 endif()
 
 add_library(azure2_io STATIC
+  src/ConfigSection.cpp
   src/Convert.cpp
   src/Document.cpp
   src/LevelGrouping.cpp
+  src/LevelRowText.cpp
   src/LevelRows.cpp
   src/RecordReader.cpp)
 add_library(azure2::io ALIAS azure2_io)
@@ -30,8 +32,8 @@ target_compile_features(azure2_io_record INTERFACE cxx_std_17)
 # The lossless document on synthetic input; byte-identical round trips of every project file under tests/ and
 # examples/ and of variants made from each (docs/upgrade/project.md section 3, P1).
 # (Sources named in full: repo_consistency checks that every tests/*_test.cpp is named here.)
-foreach(_src convert_test.cpp document_test.cpp level_grouping_test.cpp level_rows_test.cpp
-             record_reader_test.cpp roundtrip_test.cpp)
+foreach(_src config_section_test.cpp convert_test.cpp document_test.cpp level_grouping_test.cpp level_rows_test.cpp
+             level_row_text_test.cpp record_reader_test.cpp roundtrip_test.cpp)
   string(REPLACE "_test.cpp" "" _t ${_src})
   add_executable(io_${_t}_test tests/${_src})
   target_link_libraries(io_${_t}_test PRIVATE azure2_io)
@@ -44,6 +46,12 @@ add_test(NAME io_level_grouping COMMAND io_level_grouping_test)
 # The <levels> grammar (LevelRows.h): synthetic cases, and every such section of the
 # project files against the engine's readers before they moved to io/ (docs/upgrade/cnuc_split.md, step (c)).
 add_test(NAME io_level_rows COMMAND io_level_rows_test ${CMAKE_CURRENT_SOURCE_DIR}/../tests ${CMAKE_CURRENT_SOURCE_DIR}/../examples)
+# The writer of a <levels> row (LevelRowText.h): synthetic rows, and every row of every project file written back
+# byte for byte (unedited and with each column set to its own token).
+add_test(NAME io_level_row_text COMMAND io_level_row_text_test ${CMAKE_CURRENT_SOURCE_DIR}/../tests ${CMAKE_CURRENT_SOURCE_DIR}/../examples)
+# The <config> section (ConfigSection.h): synthetic edits and refusals; every project file read as Config read it
+# before the grammar moved here, and each entry written back with its own value byte for byte.
+add_test(NAME io_config_section COMMAND io_config_section_test ${CMAKE_CURRENT_SOURCE_DIR}/../tests ${CMAKE_CURRENT_SOURCE_DIR}/../examples)
 # The generic record reader of format 3 (docs/upgrade/project_format3.md sections 3.1-3.3, 7.3): synthetic sections,
 # each syntax code, and round trips of the record sections of the format-3 fixtures of experiment/tests/data/.
 file(GLOB _format3_fixtures ${CMAKE_CURRENT_SOURCE_DIR}/../experiment/tests/data/*.azr)

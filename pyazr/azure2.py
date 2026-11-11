@@ -34,6 +34,7 @@ from .parameters import (Pair, PairSet, Parameter,
 # depend on the compiled engine, and this keeps that direction of the
 # dependency one-way.
 from .azrfile import AzrModel
+from .project import _is_format3
 from .potentials import _HybridPotentials
 
 
@@ -403,7 +404,7 @@ class azure2(_HybridPotentials):
 
         Note this changes only the running session; the ``.azr`` on disk is
         untouched.  To persist a radius (and to scan several radii, which is
-        the safer pattern) use :meth:`pyazr.AzrModel.set_channel_radius` and
+        the safer pattern) use :meth:`pyazr.Project.set_pair` (``radius=``) and
         write a new file.
 
         The radius stays set for the life of the session, through later
@@ -453,7 +454,7 @@ class azure2(_HybridPotentials):
         J-groups, then levels and their channels (L, S, radiation type, partial
         width, fixed flag, Wigner limit).  ``print(azr.level_scheme)`` gives a
         human-readable overview.  Read-only; to add/remove levels and write the
-        result to a file see :class:`pyazr.AzrModel`.
+        result to a file see :meth:`pyazr.Project.add_level` and the other level edits of :class:`pyazr.Project`.
         """
         from .scheme import LevelScheme
         return LevelScheme.from_azr(self)
@@ -834,7 +835,7 @@ class azure2(_HybridPotentials):
         tests/15N_p_a.)
 
         Two things a ``<levels>`` block cannot carry, which is why this is not
-        just :meth:`~pyazr.azrfile.AzrModel.apply_fit`:
+        just a write of the level values into ``<levels>``:
 
         - **Normalizations and energy shifts are not in it.** They live in the
           ``<segmentsData>`` lines, whose norm (and shift) field AZURE2 reads
@@ -911,46 +912,8 @@ class azure2(_HybridPotentials):
         want = np.asarray(self.transform_all_rwa(full, include_fixed=True), float)
 
         path = os.path.abspath(path)
-        model = AzrModel.from_file(self.file)
-        model.apply_fit(self.parameters, want, physical=True, pairs=self.pairs,
-                        include_fixed=True)
-        format3 = model._config_value("format") == "3"  # its abundances are records, written below
-        for p in ([] if format3 else self.parameters.abundances):  # an <abundances> block: the fitted values
-            model.set_abundance((p.nucleus_Z, p.nucleus_A), value=float(want[p.index]), sample=p.sample or "")
-        self._save_cbkg(model, np.asarray(full, float))
-        if norms == "fitted" and not format3:
-            values, centres = {}, {}
-            datasets = self.datasets
-            for p in self.parameters:
-                if p.kind not in ("norm", "shift") or p.fixed or p.free_index is None:
-                    continue
-                n, sh = values.get(p.segment_key, (None, None))
-                v = float(x[p.free_index])
-                values[p.segment_key] = (v, sh) if p.kind == "norm" else (n, v)
-                # Keep the prior where the fit had it: an explicit centre for
-                # every prior whose field now holds another value.
-                d = datasets.by_key(p.segment_key)
-                cn, cs = centres.get(p.segment_key, (None, None))
-                if p.kind == "norm" and d.norm_error and v != d.nominal_norm:
-                    cn = d.nominal_norm
-                elif (p.kind == "shift" and d.vary_shift and d.energy_shift_error
-                      and d.nominal_shift != 0.0):
-                    # an explicit shift centre (the default, 0, needs no row)
-                    cs = d.nominal_shift
-                if cn is not None or cs is not None:
-                    centres[p.segment_key] = (cn, cs)
-            if values:
-                model.set_segment_values(values)
-            if centres:
-                model.set_prior_centres(centres)
-        # Electron-screening potentials are not written into the <targetInt> lines (their value is the prior's
-        # centre; the fitted U_e travels in the .sav).  Format 3: the potentials as records, and with "fitted" the free
-        # parameters (and the isotopes' abundances) into the nuisances they come from (pyazr.project); priors explicit.
-        self._write_potential_records(model).write(path)
-        if format3:
-            from .project import write_parameter_values
-            write_parameter_values(path, {p.name: float(want[p.index]) for p in self.parameters.abundances} if norms != "fitted"
-                                   else {p.name: float(x[p.free_index]) for p in self.parameters if p.free_index is not None})
+        from .snapshot import write_format3, write_old_format
+        (write_format3 if _is_format3(self.file) else write_old_format)(self, path, x, want, full, norms)
 
         sav = None
         if param_sav:
@@ -987,11 +950,17 @@ class azure2(_HybridPotentials):
             probe = tmpdir = None
             try:
                 tmpdir = tempfile.mkdtemp(prefix=".azr_verify_", dir=self.cwd)
-                copy = AzrModel.from_file(path)
-                copy.set_output_dir(tmpdir)
                 fd, probe = tempfile.mkstemp(suffix=".azr", dir=self.cwd)
                 os.close(fd)
-                copy.write(probe)
+                if _is_format3(path):
+                    from .project import Project
+                    copy = Project.open(path)
+                    copy.set_config(output_dir=tmpdir.rstrip("/") + "/")
+                    copy.save(probe)
+                else:
+                    copy = AzrModel.from_file(path)
+                    copy.set_output_dir(tmpdir)
+                    copy.write(probe)
                 with azure2(probe, cwd=self.cwd, **check_options) as check:
                     back_full = np.asarray(check.sess.params_all_rwa(), float)
                     got = np.asarray(check.transform_all_rwa(back_full, include_fixed=True), float)
@@ -1039,37 +1008,6 @@ class azure2(_HybridPotentials):
                         f"the snapshot's priors give {got_p:.10g}, the fit's "
                         f"{want_p:.10g}; it has been removed.")
         return path, sav
-
-    def _save_cbkg(self, model, values):
-        """Write the THM coherent-background parameters (``cbkg_*``) back into
-        the ``cbackground=`` values of their experiments, one explicit term
-        per (entrance, exit) combination with its values (``f`` for fixed),
-        so the snapshot reads back as the fit.  ``values`` is the full
-        parameter vector in the session's order (the cbkg entries are not
-        transformed).  Each parameter's experiment, combination and coefficient
-        come from its record (:attr:`Parameter.thm_experiment` ...)."""
-        cb = [(i, p) for i, p in enumerate(self.parameters) if p.kind == "cbkg"]
-        if not cb:
-            return
-        for name in model.thm_experiments():
-            combos = {}
-            for i, p in cb:
-                if p.thm_experiment != name:
-                    continue
-                key = (p.thm_jpi, str(p.thm_exit_key), p.thm_channels)
-                combos.setdefault(key, {})[p.thm_term] = (float(values[i]),
-                                                          bool(self.fixed_params[i]))
-            if not combos:
-                continue
-            terms = []
-            for (jpi, exit_key, chans), v in combos.items():
-                n = 4 if 2 in v or 3 in v else 2
-                vals = ",".join(repr(v.get(k, (0.0, False))[0])
-                                + ("f" if v.get(k, (0.0, False))[1] else "")
-                                for k in range(n))
-                terms.append(f"{jpi}:{exit_key}:{chans}"
-                             + (":linear" if n == 4 else "") + "=" + vals)
-            model.set_thm_cbackground(name, terms)
 
     @staticmethod
     def _discard(*paths):
@@ -1828,9 +1766,13 @@ class azure2(_HybridPotentials):
         return [ScatteringLength(int(r[0]), float(r[1]), int(r[2]), complex(r[3], r[4]), bool(r[5])) for r in flat]
 
     def scattering_length_chi2(self, params=None):
-        """chi-squared of the measured scattering lengths (``<scatteringLengths>``)
-        at a free RWA vector: the term the engine adds inside
-        :meth:`calculate_chi2_rwa`, recomputed from :meth:`scattering_lengths`."""
+        """chi-squared of the measured scattering lengths at a free RWA vector: the term the engine adds inside
+        :meth:`calculate_chi2_rwa`.  Format 3: the ``scattering_length`` data of ``<modelData>``, their rows of the
+        engine's model-data term (:func:`pyazr.model_data.model_data`); older formats: the active lines of
+        ``<scatteringLengths>``, recomputed from :meth:`scattering_lengths`."""
+        if _is_format3(self.file):
+            from .model_data import model_data
+            return float(sum(d.chi2 for d in model_data(self, params) if d.quantity == "scattering_length"))
         lines = [e for e in self._parsed("model").scattering_lengths if e.active]
         if not lines:
             return 0.0
@@ -2120,7 +2062,7 @@ class azure2(_HybridPotentials):
         them in the running session.
 
         For a file you are about to run from scratch, deleting the cache files
-        (or :meth:`pyazr.AzrModel.set_output_dir` to a fresh directory) is the
+        (or :meth:`pyazr.Project.set_config` ``output_dir=`` a fresh directory) is the
         equivalent and usually simpler.
         """
         if not self.sess.calculate_external_capture():

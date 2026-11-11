@@ -44,6 +44,7 @@ from .model_data import ModelDatum, model_data
 from .described import (DescribedDataset, DescribedDatasets, DescribedExtrapolation,
                         DescribedExtrapolations)
 from .project import Project, Record, Nuisance, FormatError, records_from_csv
+from .nuclear_part import ProjectLevel, ProjectChannel, ProjectPair
 
 __all__ = ["azure2", "convert_azr", "ScatteringLength", "ScatteringLengthLine", "whittaker_wave",
            "tabulate", "TabulatedCrossSection",
@@ -74,5 +75,6 @@ __all__ = ["azure2", "convert_azr", "ScatteringLength", "ScatteringLengthLine", 
            "schema", "validate", "describe", "predictions", "ModelDatum", "model_data",
            "extrapolation_grid", "refine_grid",
            "Project", "Record", "Nuisance", "FormatError", "records_from_csv",
+           "ProjectLevel", "ProjectChannel", "ProjectPair",
            "DescribedDataset", "DescribedDatasets", "DescribedExtrapolation", "DescribedExtrapolations"]
-__version__ = '2.31.0'
+__version__ = '2.32.0'

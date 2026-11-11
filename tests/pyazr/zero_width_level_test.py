@@ -7,7 +7,7 @@ level route then dropped the whole J-group at that point (the factorization fail
 group came back zero), and the R-matrix route divided 0 by 0.  Seen in 12C+12C (a zero-width 4+ placed at
 E_cm 3.55 MeV, a Tan2024 data energy, in a 16-level group: chi2 4353 -> 4505).
 
-Model (tests/13N): the 84.3 deg elastic and the capture segment (A-matrix; the R-matrix variants the elastic only), plus a 1/2+ level with every width 0 at
+Model (tests/13N): the 84.3 deg elastic and the capture data set (A-matrix; the R-matrix variants the elastic only), plus a 1/2+ level with every width 0 at
 E_x = E_cm + S_p of one elastic point (formed as the engine forms its energy, so the hit is exact).  Each variant
 runs in its own process: A-matrix Brune and standard, each with the default route and with the level route forced
 (AZURE_LEVEL_SPACE=1); R-matrix Brune and standard.  Every calculated point must equal the model without the level
@@ -23,35 +23,26 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old originals of converted projects)
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
 
-SRC = old_tree.original(os.path.join(ROOT, "tests", "13N", "13N.azr"))  # the old file (format3_tree.md)
-# <segmentsData> lines kept: capture (0-5 MeV) and the 84.3 deg elastic, whose middle point is hit.  The R-matrix
-# variants keep the elastic only: their capture is not the A-matrix's (no external capture, and NaN above the
+SRC = os.path.join(ROOT, "tests", "13N", "13N.azr")
+# Data sets kept: the capture artemov (0-5 MeV) and the 84.3 deg elastic meyer_84, whose middle point is hit.  The
+# R-matrix variants keep the elastic only: their capture is not the A-matrix's (no external capture, and NaN above the
 # 1/2+ resonance in the standard formalism, with or without the extra level -- a separate matter).
-KEEP = {False: (0, 2), True: (2,)}
+KEEP = {False: ("artemov", "meyer_84"), True: ("meyer_84",)}
 
 
 def write_model(path, rmatrix, level_energy=None):
-    from pyazr import AzrModel
-    m = AzrModel.from_file(SRC)
-    if level_energy is not None:
-        m.add_level(J=0.5, parity=+1, energy=level_energy, channels=[], level_fixed=True)
-    m.write(path)
-    lines = open(path).read().split("\n")
-    i0, i1 = lines.index("<segmentsData>"), lines.index("</segmentsData>")
-    seg = [l for l in lines[i0 + 1:i1] if l.split()]
-    for k, l in enumerate(seg):
-        if k not in KEEP[rmatrix]:
-            seg[k] = "0" + l.lstrip()[1:]
-    lines[i0 + 1:i1] = seg
-    c = lines.index("<config>") + 1
-    rest = (lines[c].split(None, 1) + [""])[1]
-    lines[c] = ("false" if rmatrix else "true") + "  " + rest                  # Perform A-Matrix Calculation
-    open(path, "w").write("\n".join(lines))
+    from pyazr import Project
+    p = Project.open(SRC)
+    if level_energy is not None:  # the 1/2+ group's rows, every width 0 and fixed
+        p.add_level(J=0.5, parity=+1, energy=level_energy, channels=[], fixed=True)
+    for name, r in p.records().items():
+        if r.record_kind == "dataset" and name not in KEEP[rmatrix]:
+            p.set(name, active="no")
+    p.set_config(amatrix="false" if rmatrix else "true")  # Perform A-Matrix Calculation
+    p.save(path)
 
 
 def worker(work, rmatrix, brune, out):

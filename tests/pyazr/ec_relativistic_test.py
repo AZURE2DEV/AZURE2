@@ -49,7 +49,7 @@ if __name__ == "__main__" and len(sys.argv) == 3 and sys.argv[1] == "--fresh":
 try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
-    from pyazr import azure2, AzrModel
+    from pyazr import azure2, Project
 except ImportError as e:
     print(f"SKIP: {e}")
     sys.exit(0)
@@ -62,16 +62,16 @@ try:
         d = os.path.join(work, name)
         os.makedirs(os.path.join(d, "output"))
         shutil.copytree(os.path.join(os.path.dirname(SRC), "data"), os.path.join(d, "data"))
-        m = AzrModel.from_file(SRC)
-        m.relativistic = relativistic
-        path = os.path.join(d, name + ".azr")
-        m.write(path)
+        m = Project.open(SRC)
+        m.set_config(relativistic=True if relativistic else None)
+        path = m.save(os.path.join(d, name + ".azr"))
         return path, d
 
     plain, plain_dir = model_dir("plain", False)
     rel, rel_dir = model_dir("rel", True)
     rel2, rel2_dir = model_dir("rel_fresh", True)
-    check("the relativistic variant carries the config key", AzrModel.from_file(rel).relativistic and not AzrModel.from_file(plain).relativistic)
+    check("the relativistic variant carries the config key",
+          Project.open(rel).config().get("relativistic") == "1" and "relativistic" not in Project.open(plain).config())
 
     o_plain = objective_of(plain, plain_dir)
     o_rel_after = objective_of(rel, rel_dir)       # same process: the node table already holds non-relativistic nodes

@@ -1,0 +1,405 @@
+// The nuclear part of a format-3 project for pyazr's Project (docs/upgrade/pyazr_on_records.md, "Edits of the nuclear
+// part"): the <levels> rows as levels and pairs (experiment/LevelEdits.h), the <config> entries (io/ConfigSection.h)
+// and the <thm> lines (ThmBlockEdits.h), read and edited by the engine's one grammar of each.  An edit returns the
+// replacements of the document's lines, (first, last, [lines]) with 0-based [first, last), to be applied in the order
+// given; pyazr applies them to its Document and validates the project as it would stand.  A refusal is a ValueError
+// with the reason.  Texts are bytes.
+#include <algorithm>
+#include <map>
+#include <optional>
+#include <string>
+#include <vector>
+
+#include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
+
+#include "ThmBlockEdits.h"
+#include "ThmExperiment.h"
+#include "azure2/experiment/LevelEdits.h"
+#include "azure2/experiment/ProjectReader.h"
+#include "azure2/io/ConfigSection.h"
+#include "azure2/io/Document.h"
+
+namespace py = pybind11;
+
+namespace {
+
+namespace io = azure2::io;
+namespace ex = azure2::experiment;
+
+py::list Replacements(const std::vector<ex::LineReplacement> &edits) {
+  py::list out;
+  for (const ex::LineReplacement &r : edits) {
+    py::list lines;
+    for (const std::string &l : r.lines) lines.append(py::bytes(l));
+    out.append(py::make_tuple(r.first, r.last, lines));
+  }
+  return out;
+}
+
+py::list Done(const ex::LevelEdit &e) {
+  if (!e.error.empty()) throw py::value_error(e.error);
+  return Replacements(e.replacements);
+}
+
+// A level named by its label (str) or by the engine's indices ((group, level)).
+ex::LevelAddress Address(const py::object &level) {
+  ex::LevelAddress a;
+  if (py::isinstance<py::str>(level) || py::isinstance<py::bytes>(level)) {
+    a.label = level.cast<std::string>();
+  } else {
+    const auto gl = level.cast<std::pair<int, int>>();
+    a.group = gl.first;
+    a.level = gl.second;
+    if (a.group < 1) throw py::value_error("a level's engine indices start at 1");
+  }
+  return a;
+}
+
+py::dict LevelTable(const io::Document &doc) {
+  ex::LevelRowTable t;
+  std::string why;
+  if (!ex::ReadLevelRowTable(doc, t, why)) throw py::value_error(why);
+  py::list levels, pairs;
+  for (const ex::LevelEntry &l : t.levels) {
+    py::dict d;
+    d["label"] = l.label;
+    d["two_j"] = l.twoJ;
+    d["parity"] = l.parity;
+    d["jpi"] = ex::JpiText(l.twoJ, l.parity);
+    d["energy_text"] = l.energyText;
+    d["energy"] = l.energy;
+    d["fixed"] = l.energyFixed;
+    d["active"] = l.active;
+    d["ids"] = l.ids;
+    d["group"] = l.group;
+    d["level"] = l.level;
+    d["nucleus"] = py::make_tuple(l.nucleusZ, l.nucleusA);
+    py::list channels;
+    for (int r : l.rows) {
+      const ex::LevelRowLine &row = t.rows[r];
+      py::dict c;
+      c["pair"] = row.channel.pairKey;
+      c["l"] = row.channel.l;
+      c["two_s"] = row.channel.twoS;
+      c["width_text"] = row.widthText;
+      c["width"] = row.width;
+      c["fixed"] = row.fixed;
+      c["amplitude"] = row.widthIsAmplitude;
+      c["channel"] = row.slot.channel;
+      c["line"] = row.line + 1;
+      channels.append(c);
+    }
+    d["channels"] = channels;
+    levels.append(d);
+  }
+  for (const ex::PairInfo &p : t.tables.pairs) {
+    py::dict d;
+    d["key"] = p.key;
+    d["label"] = ex::PairLabel(p);
+    d["kind"] = p.kind;
+    d["light"] = py::make_tuple(p.lightZ, p.lightA);
+    d["heavy"] = py::make_tuple(p.heavyZ, p.heavyA);
+    d["light_mass"] = p.lightMass;
+    d["heavy_mass"] = p.heavyMass;
+    d["light_excitation"] = p.lightExcitation;
+    d["heavy_excitation"] = p.heavyExcitation;
+    d["separation_energy"] = p.separationEnergy;
+    d["threshold"] = p.threshold;
+    d["radius"] = p.radius;
+    d["two_j_light"] = p.twoJLight;
+    d["two_j_heavy"] = p.twoJHeavy;
+    d["heavy_parity"] = p.heavyParity;
+    pairs.append(d);
+  }
+  py::dict out;
+  out["levels"] = levels;
+  out["pairs"] = pairs;
+  return out;
+}
+
+// The <config> lines of a document and the 0-based line of its tag; ValueError when there is no section.
+std::vector<std::string> ConfigLines(const io::Document &doc, std::size_t &open) {
+  std::vector<std::string> lines = io::ConfigLinesOf(doc, open);
+  if (lines.empty()) throw py::value_error("the project has no <config> section");
+  return lines;
+}
+
+// The lines between <thm> and </thm> (0-based line of the tag in `open`); empty with open = npos without a section.
+std::vector<std::string> ThmBody(const io::Document &doc, std::size_t &open) {
+  const io::Document::Section *s = doc.Find("thm");
+  open = std::string::npos;
+  if (!s) return {};
+  if (s->close == io::Document::Section::npos) throw py::value_error("the <thm> section is not closed");
+  open = s->open;
+  return doc.Body(*s);
+}
+
+py::list ThmReplacements(const io::Document &doc, std::size_t open, const std::vector<std::string> &body,
+                         const std::vector<ThmLineEdit> &edits) {
+  if (open == std::string::npos) {  // a new section after </config> (or at the start)
+    const io::Document::Section *c = doc.Find("config");
+    const int at = c && c->close != io::Document::Section::npos ? (int)c->close + 1 : 0;
+    std::vector<std::string> lines{"<thm>"};
+    for (const std::string &l : ApplyThmLineEdits(body, edits)) lines.push_back(l);
+    lines.push_back("</thm>");
+    return Replacements({ex::LineReplacement{at, at, lines}});
+  }
+  // The body replaced as a whole only where it changed: one replacement per edit, in the order given.
+  std::vector<ex::LineReplacement> out;
+  for (const ThmLineEdit &e : edits) {
+    const int line = (int)open + 1 + e.line;
+    if (e.kind == ThmLineEdit::Kind::Replace)
+      out.push_back({line, line + 1, {e.text}});
+    else if (e.kind == ThmLineEdit::Kind::Remove)
+      out.push_back({line, line + 1, {}});
+    else
+      out.push_back({line, line, {e.text}});
+  }
+  return Replacements(out);
+}
+
+}  // namespace
+
+void BindNuclearPart(py::module_ &m) {
+  m.def("level_table", &LevelTable, py::arg("doc"),
+        "The <levels> section as levels and pairs (experiment::ReadLevelRowTable): {'levels': [dicts with label, "
+        "two_j, parity, jpi, energy_text, energy (MeV), fixed, active, ids, group and level (the engine's indices, 0 "
+        "for an inactive level), nucleus (Z, A), channels: [dicts with pair, l, two_s, width_text, width, fixed, "
+        "amplitude, channel (the group's channel index), line (1-based)]], 'pairs': [dicts with key, label, kind, "
+        "light and heavy (Z, A), light_mass, heavy_mass (u), light_excitation, heavy_excitation, separation_energy, "
+        "threshold (MeV), radius (fm), two_j_light, two_j_heavy, heavy_parity]}.  ValueError when a row does not read.");
+  m.def(
+      "reaction_label",
+      [](const io::Document &doc, int entrance, int exit) {
+        ex::LevelRowTable t;
+        std::string why;
+        if (!ex::ReadLevelRowTable(doc, t, why)) throw py::value_error(why);
+        const ex::PairInfo *in = ex::PairByKey(entrance, t.tables.pairs), *out = ex::PairByKey(exit, t.tables.pairs);
+        if (!in || (exit != -1 && !out))
+          throw py::value_error("no pair has the key " + std::to_string(in ? exit : entrance) + " (the pairs: " +
+                                [&] {
+                                  std::string l;
+                                  for (const std::string &x : ex::PairListing(t.tables.pairs)) l += (l.empty() ? "" : "; ") + x;
+                                  return l;
+                                }() + ")");
+        return ex::ReactionLabel(*in, exit == -1 ? nullptr : out);
+      },
+      py::arg("doc"), py::arg("entrance"), py::arg("exit"),
+      "The reaction label from pair `entrance` to pair `exit` (keys of <levels>; exit -1: the total capture), as the "
+      "converter writes it (experiment::ReactionLabel): '12C(p,g)13N'.");
+  m.def(
+      "find_level",
+      [](const io::Document &doc, const py::object &level) {
+        ex::LevelRowTable t;
+        std::string why;
+        if (!ex::ReadLevelRowTable(doc, t, why)) throw py::value_error(why);
+        const int k = ex::FindLevel(t, Address(level), why);
+        if (k < 0) throw py::value_error(why);
+        return k;
+      },
+      py::arg("doc"), py::arg("level"),
+      "The index in level_table()['levels'] of the level named by its label, by 'J^pi E_x' (within 1 keV) or by the "
+      "engine's (group, level); ValueError when none or more than one.");
+  m.def(
+      "set_level_edits",
+      [](const io::Document &doc, const py::object &level, std::optional<double> energy, std::optional<bool> fixed,
+         std::optional<bool> active) {
+        ex::LevelChange c;
+        c.energy = energy;
+        c.energyFixed = fixed;
+        c.active = active;
+        return Done(ex::SetLevel(doc, Address(level), c));
+      },
+      py::arg("doc"), py::arg("level"), py::kw_only(), py::arg("energy") = py::none(), py::arg("fixed") = py::none(),
+      py::arg("active") = py::none(),
+      "The replacements that set a level's E_x (MeV), its fixed flag or its active flag on every row of the level; "
+      "the level by its label (str) or the engine's (group, level).");
+  m.def(
+      "set_channel_edits",
+      [](const io::Document &doc, const py::object &level, int pair, int l, int twoS, std::optional<double> width,
+         std::optional<bool> fixed) {
+        ex::ChannelChange c;
+        c.width = width;
+        c.fixed = fixed;
+        return Done(ex::SetChannel(doc, Address(level), ex::LevelChannelInfo{pair, l, twoS}, c));
+      },
+      py::arg("doc"), py::arg("level"), py::arg("pair"), py::arg("l"), py::arg("two_s"), py::kw_only(),
+      py::arg("width") = py::none(), py::arg("fixed") = py::none(),
+      "The replacements that set the width column (the row's convention: eV, fm^-1/2, or MeV^1/2 with gammaIsRWA) or "
+      "the fixed flag of one channel (pair key, l, 2s) of a level.");
+  m.def(
+      "set_pair_edits",
+      [](const io::Document &doc, int pair, std::optional<double> radius, std::optional<double> lightMass,
+         std::optional<double> heavyMass, std::optional<double> separationEnergy) {
+        ex::PairChange c;
+        c.radius = radius;
+        c.lightMass = lightMass;
+        c.heavyMass = heavyMass;
+        c.separationEnergy = separationEnergy;
+        return Done(ex::SetPair(doc, pair, c));
+      },
+      py::arg("doc"), py::arg("pair"), py::kw_only(), py::arg("radius") = py::none(), py::arg("light_mass") = py::none(),
+      py::arg("heavy_mass") = py::none(), py::arg("separation_energy") = py::none(),
+      "The replacements that set a pair's channel radius (fm), masses (u) or separation energy (MeV) on every row of "
+      "the pair (the separation energy also in the entrance copy of the rows whose entrance pair it is).");
+  m.def(
+      "add_level_edits",
+      [](const io::Document &doc, int twoJ, int parity, double energy, bool fixed,
+         const std::vector<std::tuple<int, int, int, double, bool>> &channels) {
+        ex::NewLevel n;
+        n.twoJ = twoJ;
+        n.parity = parity;
+        n.energy = energy;
+        n.energyFixed = fixed;
+        for (const auto &c : channels)
+          n.channels.push_back(ex::NewChannel{std::get<0>(c), std::get<1>(c), std::get<2>(c), std::get<3>(c), std::get<4>(c)});
+        return Done(ex::AddLevel(doc, n));
+      },
+      py::arg("doc"), py::arg("two_j"), py::arg("parity"), py::arg("energy"), py::kw_only(), py::arg("fixed"),
+      py::arg("channels"),
+      "The replacements that add a level (2J, parity, E_x in MeV, fixed) with channels [(pair, l, 2s, width, fixed)]: "
+      "the rows of its J^pi group (channels not given: width 0, fixed), or one row per channel cloned from a row of "
+      "its pair; the next free level ID; at the end of <levels>.");
+  m.def(
+      "remove_level_edits", [](const io::Document &doc, const py::object &level) { return Done(ex::RemoveLevel(doc, Address(level))); },
+      py::arg("doc"), py::arg("level"), "The replacements that remove every row of a level.");
+  m.def(
+      "level_value_edits",
+      [](const io::Document &doc, const std::vector<std::tuple<std::string, int, int, int, int, int, double>> &values) {
+        std::vector<ex::LevelValue> v;
+        for (const auto &x : values) {
+          ex::LevelValue lv;
+          const std::string &kind = std::get<0>(x);
+          if (kind != "energy" && kind != "width") throw py::value_error("a level value is an 'energy' or a 'width'");
+          lv.kind = kind == "energy" ? ex::LevelValue::Kind::Energy : ex::LevelValue::Kind::Width;
+          lv.group = std::get<1>(x);
+          lv.level = std::get<2>(x);
+          lv.channel = ex::LevelChannelInfo{std::get<3>(x), std::get<4>(x), std::get<5>(x)};
+          lv.value = std::get<6>(x);
+          v.push_back(lv);
+        }
+        const ex::LevelEdit e = ex::LevelValueEdits(doc, v);
+        return py::make_tuple(Done(e), e.unplaced);
+      },
+      py::arg("doc"), py::arg("values"),
+      "The replacements that write fitted level values [(kind 'energy' | 'width', group, level, pair, l, 2s, value)] "
+      "into the rows they come from (experiment::LevelValueEdits), and the values with no row: (replacements, "
+      "[(index into values, why)]).");
+
+  m.def(
+      "config_entries",
+      [](const io::Document &doc) {
+        std::size_t open = 0;
+        const io::ConfigSection c = io::ReadConfigSection(ConfigLines(doc, open));
+        py::list entries;
+        for (const io::ConfigEntry &e : c.entries) {
+          py::dict d;
+          d["name"] = e.name;
+          d["value"] = py::bytes(e.value);
+          d["line"] = (int)open + e.line + 1;
+          d["positional"] = e.positional;
+          entries.append(d);
+        }
+        return py::make_tuple(entries, c.closed);
+      },
+      py::arg("doc"),
+      "The <config> entries as the engine reads them (io::ReadConfigSection): ([dicts with name, value, line "
+      "(1-based), positional], the section is complete).");
+  m.def(
+      "config_keys",
+      []() {
+        static const char *kinds[] = {"bool", "int", "number", "path", "version"};
+        py::list out;
+        for (const io::ConfigKey &k : io::ConfigKeys()) out.append(py::make_tuple(k.name, kinds[k.kind], k.doc));
+        return py::make_tuple(io::ConfigPositionalNames(), out);
+      },
+      "(the positional entries' names, [(key, kind, doc)]) of <config>.");
+  m.def(
+      "config_edits",
+      [](const io::Document &doc, const std::string &name, const std::string &value, bool remove) {
+        std::size_t open = 0;
+        const std::vector<std::string> lines = ConfigLines(doc, open);
+        std::vector<io::ConfigLineEdit> edits;
+        std::string why;
+        if (!io::ConfigEdits(lines, name, value, remove ? io::ConfigChange::Remove : io::ConfigChange::Set, edits, why))
+          throw py::value_error(why);
+        std::vector<ex::LineReplacement> out;
+        for (const io::ConfigLineEdit &e : edits) {
+          const int line = (int)open + e.line;
+          if (e.insert)
+            out.push_back({line, line, {e.text}});
+          else
+            out.push_back({line, line + 1, e.remove ? std::vector<std::string>() : std::vector<std::string>{e.text}});
+        }
+        std::sort(out.begin(), out.end(), [](const ex::LineReplacement &a, const ex::LineReplacement &b) { return a.first > b.first; });
+        return Replacements(out);
+      },
+      py::arg("doc"), py::arg("name"), py::arg("value"), py::kw_only(), py::arg("remove") = false,
+      "The replacements that set a <config> entry (io::ConfigEdits) or, with remove, remove a key.");
+
+  m.def(
+      "thm_entries",
+      [](const io::Document &doc) {
+        std::size_t open = 0;
+        const std::vector<std::string> body = ThmBody(doc, open);
+        py::list out;
+        for (const ThmEntry &e : ThmBlockEntries(body))
+          out.append(py::make_tuple(e.experiment, e.key, e.value, open == std::string::npos ? 0 : (int)open + 2 + e.line));
+        return py::make_tuple(open != std::string::npos, out);
+      },
+      py::arg("doc"),
+      "The <thm> section's key=value entries (ThmBlockEntries): (the section exists, [(experiment or '', key, value, "
+      "line (1-based))]).");
+  m.def(
+      "thm_option_edits",
+      [](const io::Document &doc, const std::string &key, const std::string &value, bool remove) {
+        std::size_t open = 0;
+        const std::vector<std::string> body = ThmBody(doc, open);
+        std::vector<ThmLineEdit> edits;
+        std::string why;
+        if (!ThmOptionEdits(body, key, value, remove ? ThmChange::Remove : ThmChange::Set, edits, why)) throw py::value_error(why);
+        return ThmReplacements(doc, open, body, edits);
+      },
+      py::arg("doc"), py::arg("key"), py::arg("value"), py::kw_only(), py::arg("remove") = false,
+      "The replacements that set (or remove) a global option of <thm> (ThmOptionEdits); a project without <thm> gets "
+      "the section after </config>.");
+  m.def(
+      "thm_experiment_edits",
+      [](const io::Document &doc, const std::string &name, const std::string &key, const std::string &value, bool remove) {
+        std::size_t open = 0;
+        const std::vector<std::string> body = ThmBody(doc, open);
+        std::vector<ThmLineEdit> edits;
+        std::string why;
+        if (!ThmExperimentEdits(body, name, key, value, remove ? ThmChange::Remove : ThmChange::Set, edits, why))
+          throw py::value_error(why);
+        return ThmReplacements(doc, open, body, edits);
+      },
+      py::arg("doc"), py::arg("name"), py::arg("key"), py::arg("value"), py::kw_only(), py::arg("remove") = false,
+      "The replacements that set (or remove) a key of experiment[name] (ThmExperimentEdits); with remove and key '' "
+      "the experiment's lines.");
+  m.def(
+      "check_format3_thm",
+      [](const std::string &text) {
+        ex::Format3ReadOptions read;
+        read.readDataFiles = false;
+        read.setUpChecks = false;
+        const ex::Format3Project p = ex::ReadFormat3Text(text, read);
+        const io::Document doc = io::Document::Parse(text);
+        const io::Document::Section *s = doc.Find("thm");
+        if (!p.Ok()) return std::string();  // the project's own errors say what is wrong
+        if (!s) return p.built.thm.experiments.empty() ? std::string() : "the project has no <thm> section, which its THM data name";  // nothing to check, or the project's own errors say what is wrong
+        const std::string members = CheckFormat3ThmMembers(doc.Body(*s), p.built.thm);
+        if (!members.empty()) return members;
+        std::vector<std::string> section{"<thm>"};
+        for (const std::string &l : doc.Body(*s)) section.push_back(l);
+        section.push_back("</thm>");
+        std::vector<std::string> lines = Format3ThmLines(section, p.built.thm);
+        lines.erase(lines.begin());
+        lines.pop_back();
+        return CheckThmBlockLines(lines, true);
+      },
+      py::arg("text"),
+      "The <thm> section of a format-3 project text as the engine reads it (members and weights from the records, "
+      "Format3ThmLines; files not read): \"\" or the engine's message.");
+}

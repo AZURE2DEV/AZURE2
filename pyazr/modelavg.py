@@ -526,14 +526,27 @@ def _azr_model_class():
 
 
 def azr_parameter_slots(model):
-    """``{name: setter}`` for every level energy and width of an AzrModel.
+    """``{name: setter}`` for every level energy and width of a project: a :class:`pyazr.Project` (format 3) or
+    an AzrModel (older formats).
 
     Names as :func:`parameter_label` gives them; levels numbered as the engine
-    numbers them (active levels only, file order within a J^pi; see
-    :meth:`pyazr.azrfile.AzrModel.engine_level_keys`).  A setter takes the
+    numbers them (active levels only; a Project's :attr:`~pyazr.nuclear_part.Level.level`).  A setter takes the
     *physical* value (level energy in MeV; partial width in eV, or ANC in
-    fm^-1/2 for a closed channel), as a ``<levels>`` line holds it.
+    fm^-1/2 for a closed channel), as a ``<levels>`` row holds it; on a Project it writes the value into the row
+    at once (the engine's edit, ``Project._write_level_values``).
     """
+    if hasattr(model, "levels") and callable(model.levels):  # a Project: the engine's levels and rows
+        slots = {}
+        for lv in model.levels():
+            if not lv.active:
+                continue
+            slots[f"E[{level_label(lv.J, lv.parity, lv.level)}]"] = (
+                lambda v, lv=lv: _write_level(model, ("energy", lv.group, lv.level, 0, 0, 0, float(v))))
+            for c in lv.channels:
+                name = width_label(lv.J, lv.parity, lv.level, c.pair, c.l, c.s)
+                slots[name] = (lambda v, lv=lv, c=c: _write_level(
+                    model, ("width", lv.group, lv.level, c.pair, c.l, int(round(2 * c.s)), float(v))))
+        return slots
     slots = {}
     for (_, n), lv in model.engine_level_keys().items():
         slots[f"E[{level_label(lv.J, lv.parity, n)}]"] = lv.set_energy
@@ -543,10 +556,16 @@ def azr_parameter_slots(model):
     return slots
 
 
+def _write_level(project, value):
+    unplaced = project._write_level_values([value])
+    if unplaced:
+        raise ValueError(unplaced[0][1])
+
+
 def write_averaged_azr(template, path, values, output_dir=None):
     """Write the averaged parameter values into a copy of ``template``.
 
-    ``template``: a ``.azr`` path or an AzrModel (not modified).  ``values``:
+    ``template``: a ``.azr`` path, a :class:`pyazr.Project` or an AzrModel (not modified).  ``values``:
     a :class:`ModelAverage` (its means are written) or ``{name: value}``.
     Level energies and widths are matched by name (:func:`parameter_label`)
     and set through AzrModel's own setters, so the result opens in the GUI
@@ -560,10 +579,18 @@ def write_averaged_azr(template, path, values, output_dir=None):
     variants' and need not be close to the best one when the variants
     disagree.  Returns ``(path, written, skipped)``.
     """
-    AzrModel = _azr_model_class()
-    if isinstance(template, (str, os.PathLike)):
+    AzrModel = None
+    if _is_project(template):
+        from .project import Project
+        if isinstance(template, (str, os.PathLike)):
+            model = Project.open(os.fspath(template))
+        else:
+            model = Project(template.to_bytes(), template.path)  # a private copy: the caller's stays untouched
+    elif isinstance(template, (str, os.PathLike)):
+        AzrModel = _azr_model_class()
         model = AzrModel.from_file(os.fspath(template))
     else:
+        AzrModel = _azr_model_class()
         # a private copy, so the caller's model stays untouched
         model = _copy_model(AzrModel, template)
     if isinstance(values, ModelAverage):
@@ -581,10 +608,26 @@ def write_averaged_azr(template, path, values, output_dir=None):
         warnings.warn(f"write_averaged_azr: {len(skipped)} name(s) not in the "
                       f"template, skipped: {', '.join(skipped[:10])}"
                       + (" ..." if len(skipped) > 10 else ""), stacklevel=2)
+    if AzrModel is None:  # a format-3 project (Project)
+        if output_dir is not None:
+            os.makedirs(output_dir, exist_ok=True)
+            model.set_config(output_dir=str(output_dir).rstrip("/") + "/")
+        model.save(os.fspath(path))
+        return os.fspath(path), written, skipped
     if output_dir is not None:
         model.set_output_dir(output_dir)
     model.write(os.fspath(path))
     return os.fspath(path), written, skipped
+
+
+def _is_project(template):
+    """``template`` is a format-3 project: a :class:`pyazr.Project` or the path of a format-3 file."""
+    if isinstance(template, (str, os.PathLike)):
+        if not __package__:
+            return False  # loaded on its own: the old file class only
+        from .project import _is_format3
+        return _is_format3(template)
+    return hasattr(template, "to_bytes") and hasattr(template, "levels")
 
 
 def _copy_model(AzrModel, template):

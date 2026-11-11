@@ -9,8 +9,8 @@ least-squares path had long differenced a self-contained segment's shift on its 
 (FillShiftColumns), and the other columns take one forward point pass per side.
 
 Models (tests/13N, each in a fresh process with AZURE_PROFILE=1):
-  L  segments 3 and 4 (Meyer, 84.3 and 114.5 deg), a free constant shift each       -> two segment-local columns
-  F  segment 3 at 0.3-0.9 MeV with target integration and ``densityfit``, segment 4 with a free shift
+  L  meyer_84 and meyer_114 (84.3 and 114.5 deg), a free constant shift each           -> two segment-local columns
+  F  meyer_84 at 0.3-0.9 MeV with a target of fitted areal density, meyer_114 with a free shift
                                                                                     -> one full, one segment-local
 Checks: (a) the "api jacobian" profile report counts the columns of each kind (a build before the change has no
 such stages and fails here); (b) every differenced column equals the central difference of the residuals that
@@ -29,36 +29,27 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old originals of converted projects)
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
 
-SRC = old_tree.original(os.path.join(ROOT, "tests", "13N", "13N.azr"))  # the old file (format3_tree.md)
+SRC = os.path.join(ROOT, "tests", "13N", "13N.azr")
 KINDS = ("shift", "shift_sqrt", "shift_fn", "density")
 
 
 def make_model(work, density):
-    lines = open(SRC).read().split("\n")
-    i0, i1 = lines.index("<segmentsData>"), lines.index("</segmentsData>")
-    seg = [l.split() for l in lines[i0 + 1:i1] if l.split()]
-    for k, f in enumerate(seg):
-        if k == 3:                             # segment 4: a free shift
-            f[11], f[13] = "0.01", "1"
-        elif k == 2:                           # segment 3: a free shift, or a fitted density at 0.3-0.9 MeV
-            if density:
-                f[3], f[4] = "0.3", "0.9"
-            else:
-                f[11], f[13] = "0.01", "1"
-        else:
-            f[0] = "0"
-    lines[i0 + 1:i1] = [" ".join(f) for f in seg]
-    if density:
-        j0, j1 = lines.index("<targetInt>"), lines.index("</targetInt>")
-        lines[j0 + 1:j1] = ['1 "3" 50 0 0 1 1e+18 "a0" 1 1e-20 0 0 0 "" 0 0 densityfit 1 5%']
-    path = os.path.join(work, "model.azr")
-    open(path, "w").write("\n".join(lines))
-    return path
+    from pyazr import Project
+    p = Project.open(SRC)
+    for name, r in p.records().items():
+        if r.record_kind == "dataset" and name not in ("meyer_84", "meyer_114"):
+            p.set(name, active="no")
+    p.set("meyer_114", shift="offset 0.01 MeV fit")              # segment 4 of the old file: a free shift
+    if density:                                                  # segment 3: a fitted density at 0.3-0.9 MeV
+        p.add_target("tgt_meyer_84", kind="layer", active="12C", areal_density="1e+18 atoms/cm2 fit prior 1e+18 5%",
+                     stopping='formula "a0" a0=1e-20 MeV*cm2/atom', straggling="none")
+        p.set("meyer_84", energy_window="0.3 0.9 MeV", target="tgt_meyer_84", quadrature="points 50")
+    else:                                                        # segment 3: a free shift (prior: its error, 5 keV)
+        p.set("meyer_84", shift="offset 0.01 MeV fit prior 0 0.005")
+    return p.save(os.path.join(work, "model.azr"))
 
 
 def worker(work, density, out):

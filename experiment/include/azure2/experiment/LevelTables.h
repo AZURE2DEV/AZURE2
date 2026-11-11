@@ -29,6 +29,8 @@ struct PairInfo {
   std::string lightExcitationText, heavyExcitationText;
   double threshold = 0.0;  ///< MeV, the E_x of the compound nucleus at which the pair opens (S + e1 + e2)
   double lightMass = 0.0, heavyMass = 0.0;  ///< u, the masses of <levels> (PPair's), for the frame of a c.m. grid
+  double separationEnergy = 0.0;  ///< MeV, S of <levels>
+  double radius = 0.0;            ///< fm, the channel radius of its first row
   int twoJLight = 0, twoJHeavy = 0;  ///< 2j of the two particles
   int heavyParity = 1;               ///< parity of the heavy particle (photon pair: of the final level)
   /// The external-capture multipole mask of the pair (column 31 of its first active row that has one; 0 = none)
@@ -56,6 +58,12 @@ struct LevelInfo {
   int nucleusZ = 0, nucleusA = 0;  ///< the compound nucleus of its J^pi group
 };
 
+/// Where one row of <levels> belongs: the engine's indices (1-based) of its J^pi group, of its level in the group and
+/// of its channel in the group's channel list; all 0 for an inactive row (the engine does not read it).
+struct LevelRowSlot {
+  int group = 0, level = 0, channel = 0;
+};
+
 /// The tables of one <levels> section.
 struct LevelTables {
   std::vector<PairInfo> pairs;    ///< one per pair key, from its first row (active or not), in row order
@@ -63,6 +71,7 @@ struct LevelTables {
   /// The keys of the pairs with an external-capture mask on an active row, in the engine's pair order (the order of
   /// their first active rows)
   std::vector<int> externalCapturePairs;
+  std::vector<LevelRowSlot> rowSlots;  ///< one per row, in row order
 };
 
 /// "15N", "4He": mass number and element symbol.
@@ -71,6 +80,9 @@ std::string NuclideLabel(int Z, int A);
 std::string LightParticleLabel(int kind, int Z, int A);
 /// The pair as a label writes it: "p+15N", "a[3.0]+12C[4.439]" (the excitations as written when known).
 std::string PairLabel(const PairInfo &pair);
+/// The label of the reaction from pair `in` to pair `out`, "15N(p,a)12C" (states as PairLabel writes them), or with
+/// `out` null the total capture of `in`, "12C(p,g)13N[total]".  The converter writes its reactions with it.
+std::string ReactionLabel(const PairInfo &in, const PairInfo *out);
 /// "key: label" for every pair, the list a refusal shows.
 std::vector<std::string> PairListing(const std::vector<PairInfo> &pairs);
 

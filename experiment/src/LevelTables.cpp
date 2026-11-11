@@ -63,6 +63,14 @@ std::string PairLabel(const PairInfo &p) {
          NuclideLabel(p.heavyZ, p.heavyA) + State(p.heavyExcitation, p.heavyExcitationText);
 }
 
+std::string ReactionLabel(const PairInfo &in, const PairInfo *out) {
+  std::string s = NuclideLabel(in.heavyZ, in.heavyA) + State(in.heavyExcitation, in.heavyExcitationText) + "(" +
+                  LightParticleLabel(in.kind, in.lightZ, in.lightA) + State(in.lightExcitation, in.lightExcitationText) + ",";
+  if (!out) return s + "g)" + NuclideLabel(in.lightZ + in.heavyZ, in.lightA + in.heavyA) + "[total]";
+  return s + LightParticleLabel(out->kind, out->lightZ, out->lightA) + State(out->lightExcitation, out->lightExcitationText) +
+         ")" + NuclideLabel(out->heavyZ, out->heavyA) + State(out->heavyExcitation, out->heavyExcitationText);
+}
+
 std::vector<std::string> PairListing(const std::vector<PairInfo> &pairs) {
   std::vector<std::string> labels;
   for (const PairInfo &p : pairs) labels.push_back(std::to_string(p.key) + ": " + PairLabel(p));
