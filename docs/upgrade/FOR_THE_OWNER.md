@@ -104,9 +104,10 @@ refused at once with the engine's message. An edit changes only the lines it tou
   record; every point is an entry of one flat array, and a copy of the working data is a plain copy (15 MB instead
   of 18.6 MB for the largest test project). In work: an immutable `DataSet` apart from a small `WorkingCopy`, and
   the old class names deleted.
-- `CNuc.cpp` went from 2,907 to 1,774 lines: printing, checks, messages, the `<levels>` grammar and the reaction
+- `CNuc.cpp` went from 2,907 to 1,548 lines: printing, checks, messages, the `<levels>` grammar and the reaction
   pathways are files of their own. The pathways of a run are one immutable table built at set-up and shared by all
-  threads; the capture analyzing-power terms are built at set-up too (a lazily built table behind a mutex is gone).
+  threads, read by every observable and by external capture; the six classes of the old pathway trees are deleted;
+  the capture analyzing-power terms are built at set-up too (a lazily built table behind a mutex is gone).
 - State rule (`ARCHITECTURE.md` §9): the only singletons are constant tables; whatever an evaluation writes is owned
   by its caller; an extension is one explicit table row, never a self-registering class.
 - No source file may grow: `tests/consistency/file_sizes.tsv` lists the 15 hand-written files above 1,000 lines; the
@@ -130,6 +131,8 @@ refused at once with the engine's message. An edit changes only the lines it tou
   - a project with the same final state on two photon pairs was read without a message and gave a wrong capture
     cross section for the first pair (a factor 2.2 in the test); it is now refused, naming both pairs;
   - a point whose exit pair no pathway of its entrance reaches is refused (the last decay was read before);
+  - external capture with a beta pair or a pair of another nucleus numbered below the photon pair read the wrong
+    pathways (a crash in the test); it now finds the photon pair's pathways by the pair;
   - in format 3 a data run with an unreadable data file is refused (the old engine skipped the segment with a
     warning); an extrapolation run does not need the data files.
 
@@ -169,8 +172,7 @@ reports what a run would refuse (a data row that does not parse, a missing covar
 not a level), and pyazr's per-data-set functions on a format-3 project.
 
 Then, to close Phase 4: the old data classes and the old reading path deleted (with `pyazr/azrfile.py`, 3,756 lines of
-a second grammar in Python); external-capture amplitudes computed at set-up and the old pathway trees deleted; the
-rest of `CNuc` (the parameter vector and the set-up from the level rows).
+a second grammar in Python); the rest of `CNuc` (the parameter vector and the set-up from the level rows).
 
 Phases 5–9 (`ROADMAP.md`): one energy grid with the apparatus as kernels, AZURE2's own stopping module, yields on
 finite layers, the comparison of energy-shifted data in the lab frame, and the THM observable (5); evaluation without

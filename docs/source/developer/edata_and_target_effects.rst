@@ -597,7 +597,7 @@ and, since 2026-10-30, the API calls behind pyazr), hands out hosts
 only.  The angle-independent products :math:`Z_1Z_2\,T_1T_2^*` of the
 differential sum are formed once per T-matrix and summed by Legendre order
 (``GenMatrixFunc::CalculateCrossSection``, from the flat interference table of
-the decay, ``Decay::FlatInterferences``), as are the Coulomb-nuclear
+the exit in the pathway table, ``EntrancePathways::interferences``), as are the Coulomb-nuclear
 interference terms of elastic scattering per channel spin and :math:`l`
 (``BuildCoulombInterference``); every point that shares the T-matrix then
 needs one term per order.  Particle exits other than UPOS take the same path.

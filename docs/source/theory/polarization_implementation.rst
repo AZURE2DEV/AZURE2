@@ -478,16 +478,18 @@ distribution do.
 Where the pathway pairs come from
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``CalcAngularDists`` already pairs pathways for the unpolarized angular
-distribution, but only *within* one ``KGroup`` — one entrance channel spin —
-because Eq. (20) forces :math:`s = s'`. Eq. (21) does not, and the channel-spin
-off-diagonal terms are the whole point of the observable, so the table is built
-over ordered pairs drawn from **all** KGroups of the decay. Each term therefore
-carries its own KGroup index on each side, which is why it is a new structure
-(``CaptureAyTerm``) rather than another ``Interference``.
+The interference list of the pathway table (``include/PathwayTable.h``) already
+pairs pathways for the unpolarized angular distribution, but only *within* one
+spin group — one entrance channel spin — because Eq. (20) forces
+:math:`s = s'`. Eq. (21) does not, and the channel-spin off-diagonal terms are
+the whole point of the observable, so the terms are built over ordered pairs
+drawn from **all** spin groups of the exit. Each term therefore carries its own
+spin-group index on each side, which is why it is a list of its own
+(``CaptureAyTerm``) rather than another interference.
 
-The table costs 9-j symbols, so it is built on first use rather than at
-initialization: a run with no polarization segment never pays for it.
+The terms cost 9-j symbols, so they are built at set-up only for the reactions
+that a capture analyzing-power data set names: a run without one never pays
+for them.
 
 Three conventions, settled numerically
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -513,8 +515,8 @@ What pins it inside AZURE2
 
 The same table carries :math:`a_k`, and the denominator
 :math:`\sum_k a_k P_k` must reproduce the differential capture cross section
-AZURE2 builds by the entirely separate Blatt-Biedenharn route of
-``CalcAngularDists``, up to the angle-independent factor
+AZURE2 builds by the entirely separate Blatt-Biedenharn route of the
+interference list, up to the angle-independent factor
 :math:`400\pi/(\text{geom} \times I_1I_2)` — since that route's ``z1z2`` is
 :math:`a_k/4` and ``GenMatrixFunc`` forms
 :math:`\sigma = \mathrm{Re}(\text{sum})/\pi \times \text{geom} \times I_1I_2/100`.
