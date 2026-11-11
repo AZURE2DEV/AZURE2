@@ -130,7 +130,7 @@ its refusals, Initialize, the copy, the result layout, the mapping, the parallel
 `HandOver.cpp`, `DataParameters.cpp`, `TargetSetup.cpp`, `ExternalCaptureSetup.cpp`, `DataCovarianceGroups.cpp`
 (`DataCovariance.cpp` is the file reader of another branch), `ThmNorm.cpp`, `ThmReports.cpp`, `DataOutputFiles.cpp`,
 `DataCheckFiles.cpp`, `Segment.cpp`, `SegmentParameters.cpp`, `ShiftFrames.cpp`, `Unit.cpp`, `PointPass.cpp`,
-`ChannelTables.cpp`, `TargetFold.cpp`, `UnitLegendre.cpp`, `UnitExternalCapture.cpp`.  No `EData*`, `EPoint*`,
+`ChannelTables.cpp`, `PointFold.cpp`, `UnitLegendre.cpp`, `UnitExternalCapture.cpp`.  No `EData*`, `EPoint*`,
 `ESegment*` file or class (consistency check 31).
 
 Shared and written after the set-up, on purpose, and nothing else: a covariance group's frozen relvector model (under

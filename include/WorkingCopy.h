@@ -121,6 +121,11 @@ class WorkingCopy {
   void FillDensitiesFromParams(const vector_r &, const Config &);
   /// Sum of the density priors ((N - N0)/sigma)^2.
   double DensityPenalty() const;
+  /// Stopping scales from the parameter vector (StoppingScale.cpp): the working copy's s of every effect of a scale
+  /// parameter, then the stopping of the sub-points and the thickness of the points of the effects whose s changed.
+  void FillStoppingScalesFromParams(const vector_r &, const Config &);
+  /// The sum of the stopping-scale priors ((s - s0)/sigma)^2 (TargetEffect::StoppingScalePenalty).
+  double StoppingScalePenalty() const;
   /// Set the fitted temperatures from a parameter vector (clamped to [T0/4, layout temperature], with a warning
   /// printed once), called by FillEnergyShiftsFromParams so every evaluation sees the vector's values.
   void FillDopplerFromParams(const vector_r &, const Config *configure);
@@ -222,6 +227,8 @@ class WorkingCopy {
   Unit &UnitAt(int i) { return units_[i]; }
   const Unit &UnitAt(int i) const { return units_[i]; }
   int NumUnits() const { return (int)units_.size(); }
+  /// The index of a unit of this working copy (UnitAt(UnitIndex(u)) is u).
+  int UnitIndex(const Unit *u) const { return (int)(u - units_.data()); }
   UnitRange<Unit> Units(int first, int count) { return UnitRange<Unit>(units_.data() + first, count); }
   UnitRange<const Unit> Units(int first, int count) const {
     return UnitRange<const Unit>(units_.data() + first, count);
@@ -378,15 +385,21 @@ class WorkingCopy {
    * the energy tasks of their plan tasks (CalculationPlan::EnergyTasks: one level-matrix solve per compound energy,
    * points and sub-points alike) in one OpenMP pass, largest first, then the folds of the points with sub-points in
    * a second.  A plan task whose calculation throws gets NaN on its points (Unit::MarkFailed).  Returns the number of
-   * such plan tasks, or -1 when nothing was calculated: no OpenMP, already inside a parallel region, point mapping
-   * switched off on this thread, or AZURE_SERIAL_CHI2 set.  The caller then reads the points with
+   * such plan tasks, or -1 when nothing was calculated: no OpenMP, already inside a parallel region, or
+   * AZURE_SERIAL_CHI2 set.  After a pass that returns 0 the caller reads the points with
    * azure2::EvaluateModelPoint(..., LeafValues::Ready).
    */
   int CalculatePointsInParallel(const std::vector<const Segment *> &segments, CNuc *theCNuc, const Config &configure,
                                 azure2::Results &results);
+  /// The energy tasks of the point pass over \p segments (the ones CalculatePointsInParallel runs): the analytic
+  /// gradient back-propagates through the same tasks (src/GradEnergyTasks.cpp).
+  const azure2::EnergyTaskList &EnergyTasksOf(const std::vector<const Segment *> &segments, CNuc *theCNuc,
+                                              const Config &configure);
 
  private:
   void LayOutUnits(std::vector<std::vector<Unit> *> *fresh);  // CompactUnits, PlaceSubPointGrids
+  /// The plan tasks of the points of \p segments and their leaves, in data order (src/EnergyPass.cpp).
+  std::vector<int> PassWork(const std::vector<const Segment *> &segments) const;
   /// The data set (shared, immutable) and, during the set-up only, the same object writable (Draft).
   std::shared_ptr<const DataSet> set_;
   std::shared_ptr<DataSet> draft_;
@@ -402,6 +415,12 @@ class WorkingCopy {
   EvaluationCount iterations_;  // objective evaluations (EvaluationCount.h)
   /// Group the densityfit / densitygroup lines into parameters (SetUpTargetEffects); -1 on an error.
   int SetUpDensityParams(const Config &);
+  /// Groups the effects into stopping-scale parameters by TargetEffect::GetStoppingScaleKey (StoppingScale.cpp).
+  void SetUpStoppingScaleParams(const Config &);
+  /// The set-up refusals of a library stopping (evaluation, table): its data, and its range at every sub-point
+  /// (StoppingChecks.h); the source of each target's stopping in the log, once per target.  false after a refusal.
+  bool CheckTargetStoppings(const Config &);
+  bool CheckSubPointStoppings(const Config &);
   bool isFit_;
   bool isErrorAnalysis_;
   std::streampos ecReadPos_;  // File offset where component-segment EC integrals begin in the intEC file

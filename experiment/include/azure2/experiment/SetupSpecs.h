@@ -183,6 +183,40 @@ struct ExtrapolationSpec {
   } adaptive;
 };
 
+/*!
+ * Where a target's stopping comes from, and its stopping-scale nuisance s (docs/upgrade/energy_grid.md section 6,
+ * decision D6).  The convention, stated once: the engine's stopping is epsilon_active(E), lab MeV cm^2 per atom of the
+ * active element, = 1e-21 x eps_atom(E) / f_active, with eps_atom the material's stopping cross section per atom of the
+ * material (eV/(1e15 atoms/cm^2), stopping/'s unit) and f_active = n_active / sum_i n_i the atom fraction of the
+ * active nucleus's element in the composition (n_i atoms per formula unit); equivalently the stopping per formula unit
+ * divided by n_active.  The isotopic part of the active fraction is the target's `isotope` line, which multiplies the
+ * yield (data_kinds.md section 4.6).
+ */
+struct StoppingSpec {
+  enum class Source { Formula, Evaluation, Table };
+  Source source = Source::Formula;
+  std::vector<std::pair<int, double>> composition;  ///< (Z, atoms per formula unit) as written (evaluation, table)
+  std::string material;                             ///< the composition as a formula, "Ta2O5" (names the scale)
+  int activeZ = 0;                                  ///< Z of the active nucleus (its element's fraction divides)
+  std::string phase;                                ///< "solid", "gas", or "" = stopping/'s DefaultPhase
+  double compoundCorrection = 1.0;                  ///< SRIM's compound factor C (1 = Bragg's rule)
+  std::string tableFile;                            ///< table: the file, as written (relative to the project)
+  std::string tableEnergyUnit, tableStoppingUnit;   ///< table: stopping/'s unit names, "MeV", "eV/1e15atoms/cm2"
+  /// The projectile: the light particle of the entrance pair of the data sets the effect folds (one per effect).
+  int projectileZ = 0, projectileA = 0;
+  double projectileMass = 0.0;  ///< atomic mass, u (the pair's in <levels>)
+  /// The stopping scale s, multiplying epsilon wherever this material is crossed by this projectile: one parameter
+  /// per scaleKey; a formula has none unless its record gives `scale`.
+  bool hasScale = false;
+  double scale = 1.0;            ///< start value and prior centre
+  bool scaleVary = false;
+  bool scaleHasPrior = false;    ///< a written prior; a fitted scale without one takes stopping/'s uncertainty
+  double scalePriorWidth = 0.0;  ///< absolute width (s is dimensionless; a percentage already converted)
+  std::string scaleKey;          ///< what shares one scale: source, material, phase, C, projectile
+  std::string scaleMaterial, scaleProjectile;  ///< the two labels of the name: "TiN" (or the target's name), "1H"
+  std::string scaleName;         ///< its fit parameter's name, stopping_scale.<material>.<projectile>
+};
+
 /// An apparatus effect (target integration, beam resolution, beam profile, Doppler, UDR, screening) and the data
 /// sets it applies to.  Grammar and meaning of every field: docs/source/reference/data_formats.rst, <targetInt>.
 struct TargetEffectSpec {
@@ -200,6 +234,7 @@ struct TargetEffectSpec {
   /// A yield on a layer (quantity yield, target kind layer): the fold is reactions per incident particle,
   /// 1e-24 int_{E_out}^{E0} sigma/epsilon dE, not the target-averaged cross section (docs/upgrade/energy_grid.md section 5)
   bool layerYield = false;
+  StoppingSpec stopping;  ///< the source of the stopping and its scale (the formula: stoppingPowerEquation)
   std::string stoppingPowerEquation;
   std::vector<double> stoppingPowerParameters;
   bool qCoefficients = false;
@@ -255,6 +290,10 @@ struct TargetEffectSpec {
   double udrBurstFwhm = 0.0;     ///< ns
   double udrChannelWidth = 0.0;  ///< ns
   bool udrCentred = true;
+  /// A table kernel (Kernels.h, Kernel::tableForm) selected by its format-3 form, and its parameter values in the
+  /// order of its row's parameters, in their engine units; "" = the kernel the fields above select.
+  std::string kernel;
+  std::vector<double> kernelParameters;
 };
 
 /// One row of the abundances of the samples, in the order given: rows are applied in that order (a sample exists from

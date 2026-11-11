@@ -13,7 +13,6 @@
 #include <cstring>
 #include <cstdint>
 #include "Constants.h"
-#include "UdrKernel.h"
 #include "SharedTable.h"
 #include "ChannelTable.h"
 #include "UnitTables.h"
@@ -58,31 +57,6 @@ struct ThmSpectatorWindow;
  * measured cross section and uncertainty, s-factor conversions, and
  * several flags that determine the type of data (angle integrated or differential) to be analysed.
  */
-
-/*!
- * While an object of this type is alive on a thread, point mapping
- * (WorkingCopy::MapData) is ignored by the calculations made on THAT thread: a host
- * point's Unit::Calculate no longer fills its mapped points, and
- * azure2::EvaluateModelPoint calculates a mapped point itself
- * instead of reading back the value its host left there.  Every mapped point
- * carries its own sub-points and energy-dependent values, so the result is the
- * same; only the sharing is lost.  The analytic-gradient loops (AZUREGrad.cpp)
- * use it: they run the points of a segment in parallel, and sharing there would
- * have a mapped point read -- and finite-difference -- sub-point values its
- * host is writing on another thread.
- */
-class ScopedPointMappingOff {
- public:
-  ScopedPointMappingOff();
-  ~ScopedPointMappingOff();
-  ScopedPointMappingOff(const ScopedPointMappingOff &) = delete;
-  ScopedPointMappingOff &operator=(const ScopedPointMappingOff &) = delete;
-  /// True while mapping is switched off on the calling thread.
-  static bool Active();
-
- private:
-  bool previous_;
-};
 
 class Unit {
  private:
@@ -165,6 +139,8 @@ class Unit {
   /// used to be converted once with the first pair's factor (2026-10-27).
   void SetTargetKinematics(double cmFactor, int z1, int z2) { cm_factor_ = cmFactor; bohr_z1_ = z1; bohr_z2_ = z2; }
   double GetCMFactor() const { return cm_factor_; }
+  int GetBeamCharge() const { return bohr_z1_; }
+  int GetTargetCharge() const { return bohr_z2_; }
   /// Is this one of the sub-points a target-effect integral is built from?
   bool IsSubPoint() const { return is_sub_point_; };
   /*!
@@ -206,6 +182,9 @@ class Unit {
   /// and SetTargetFallbackOnly(true) marks it.  D (c.m. MeV, TargetEffect::MeanEnergyLoss) is set on every thin-target
   /// point: edge blending and the automatic decision fall back to sigma(E_bar) as well.
   void SetTargetFallbackOnly(bool f) { target_fallback_only_ = f; }
+  bool IsTargetFallbackOnly() const { return target_fallback_only_; }
+  /// Inside a TargetFallbackScope.
+  bool IsTargetFallbackNow() const { return target_fallback_now_; }
   double GetTargetFallbackDepth() const { return target_fallback_depth_; }
   void SetTargetFallbackDepth(double d) { target_fallback_depth_ = d; }
   /// While alive, the target integration of the point returns sigma(E_bar) from its sub-points (an automatic
@@ -530,47 +509,7 @@ class Unit {
   /// The point's sub-points, a range of the units of `data` (WorkingCopy::Units); set by the data set.
   int SubPointFirst() const { return sub_first_; }
   void SetSubPointRange(int first, int count) { sub_first_ = first, sub_count_ = count; }
-  /// The folds below take the data set that holds the point: the point's target effect is one of its effects.
-  void IntegrateTargetEffect(const WorkingCopy &data, const Config &, azure2::Results &results);
-  /// IntegrateTargetEffect on given sub-point values (0-based, one per sub-point) instead of the sub-points' slots:
-  /// the integrated value, nothing written (the transform of a transmission or yield segment, src/ModelPass.cpp).
-  double IntegrateSubPointValues(const WorkingCopy &data, const Config &, const std::vector<double> &values);
-  /*!
-   * Free-gas Doppler broadening on this point's sub-point grid (TargetEffect::IsDoppler): the weights w with
-   * sigma_D(eCM) = sum w.second * sigma(sub-point w.first), sigma linear in E between sub-points, from the
-   * velocity-space integral of TargetEffect::IsDoppler (4-point Gauss-Legendre on pieces no wider than u/4).
-   * Empty when the effect has no Doppler step or the point no grid.  The integration window is the one at the
-   * layout temperature and the pieces are those of the nominal temperature (TargetEffect::HasDopplerFit), so
-   * only the kernel values depend on the current T; \p dwdT, if given, receives dw/dT (per K) on the same nodes.
-   */
-  void DopplerWeights(const WorkingCopy &data, double eCM, std::vector<std::pair<int, double>> &w,
-                      std::vector<std::pair<int, double>> *dwdT = nullptr) const;
-  /*!
-   * d/dT of the integrated value (IntegrateTargetEffect) for the sub-point values \p values (0-based): the
-   * line's kernel applied to the T-derivatives of the Doppler-broadened values, or the derivative of sigma_D
-   * at the point for a line without a kernel.  0 when the line has no Doppler step or it is applied elsewhere
-   * (DopplerAppliedScope).  For the analytic gradient of a fitted temperature (doppler_<n>).
-   */
-  double DopplerTemperatureDerivative(const WorkingCopy &data, const Config &, const std::vector<double> &values);
-  /*!
-   * While alive, IntegrateTargetEffect (and TargetEffectWeights) skip the Doppler step: for the
-   * transmission/yield assembly (TransformedValue in src/ModelPass.cpp), which broadens the terms itself before the
-   * transform and only then hands the sub-point values to the kernel.
-   */
-  class DopplerAppliedScope {
-   public:
-    explicit DopplerAppliedScope(Unit *p) : p_(p), prev_(p->doppler_applied_) { p_->doppler_applied_ = true; }
-    ~DopplerAppliedScope() { p_->doppler_applied_ = prev_; }
-    DopplerAppliedScope(const DopplerAppliedScope &) = delete;
-    DopplerAppliedScope &operator=(const DopplerAppliedScope &) = delete;
-   private:
-    Unit *p_;
-    bool prev_;
-  };
-  /// Exact weights c (0-based, one per sub-point) of IntegrateTargetEffect:
-  /// yield = sum_i c[i] * (sub-point i's cross-section slot).  False if the
-  /// integrator is not a pure linear form for this point.
-  bool TargetEffectWeights(const WorkingCopy &data, const Config &, std::vector<double> &c);
+  /// The point's fold of its observable slots (FoldPoint, include/PointFold.h, on each slot the data set compares).
   void IntegrateTargetEffectForObservable(const WorkingCopy &data, const Config &, azure2::Results &results);
   /// Integrate the E1 and E2 components of the cross section over the same
   /// sub-points as the total, for a segment compared against one component.
@@ -591,6 +530,8 @@ class Unit {
   /// detailed-balance weight: Q_gamma = S_entrance - Ex_final (MeV) and the
   /// compound-nucleus mass (MeV).
   void SetPhotoKinematics(double qGamma, double compoundMassMeV) { photo_qgamma_ = qGamma; photo_mcn_ = compoundMassMeV; };
+  double GetPhotoQ() const { return photo_qgamma_; }
+  double GetPhotoCompoundMass() const { return photo_mcn_; }
   void SetStoppingPower(double);
   void SetTargetThickness(double);
   void SetAngularDists(azure2::Results &r, vector_r dists);
@@ -599,18 +540,6 @@ class Unit {
   const Unit *GetSubPoint(const WorkingCopy &data, int i) const;
   UnitRange<Unit> GetSubPoints(WorkingCopy &data);
  private:
-  /// Body of IntegrateTargetEffect on a value type V (double or TELinearForm);
-  /// rd(j) supplies sub-point j's value.
-  template <class V, class Read>
-  V IntegrateTargetEffectImpl(const WorkingCopy &data, const Config &, Read rd);
-  /// The line's kernels (Gaussian, target integration, UDR, beam profile) on sub-point values rd(j).
-  template <class V, class Read>
-  V IntegrateKernelsImpl(const WorkingCopy &data, const Config &, Read rd);
-  /// sigma at E_bar = E - D from the sub-point values: the single node, a quadratic through three fallback
-  /// nodes, or a linear interpolation on a full grid.
-  template <class V, class Read>
-  V TargetFallbackImpl(const WorkingCopy &data, Read rd);
-  bool doppler_applied_ = false;  ///< see DopplerAppliedScope
   bool is_mapped_;
   bool is_sub_point_ = false;
   double cm_factor_ = 1.0;   ///< c.m./lab energy factor of the point's entrance pair (SetTargetKinematics)

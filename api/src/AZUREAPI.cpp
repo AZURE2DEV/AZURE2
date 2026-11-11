@@ -960,7 +960,6 @@ std::vector<AZUREAPI::THMRows> AZUREAPI::ComputeTHMRows(const vector_r &full,
   return ::ComputeTHMRows(compound(), data(), results(), configure(), full, pmap);
 }
 
-
 bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
                                   double &chi2Out) const {
   const bool brune = (configure().paramMask & Config::USE_BRUNE_FORMALISM);
@@ -1281,7 +1280,7 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const st
         if (fixed_[f]) continue;
         const ParamKind kind = pmap.Desc(f).kind;
         if (kind != ParamKind::EnergyShift && kind != ParamKind::EnergyShiftSqrt && kind != ParamKind::EnergyShiftFn &&
-            kind != ParamKind::Density)
+            kind != ParamKind::Density && kind != ParamKind::StoppingScale)
           continue;
         const int packed = pmap.FullToPacked(f);
         if (packed < 0 || packed >= (int)params.size() || skip[packed]) continue;
@@ -1563,7 +1562,6 @@ vector_r AZUREAPI::GetParameterInfo() const {
            segments[s].GetSegmentKey(), -1, -1);
   }
 
-
   // Electron-screening potentials (eV): the effect number in field 6, the prior centre in field 5 and its
   // sigma in field 14 (0 = no prior).
   for (int k = 1; k <= data()->Data().NumScreeningParams(); ++k) {
@@ -1571,7 +1569,6 @@ vector_r AZUREAPI::GetParameterInfo() const {
     push(7, -1, -1, 0, -1, te->GetScreeningNominal(), data()->Data().GetScreeningEffect(k), -1, -1, -1, -1, -1,
          te->GetScreeningSigma(), -1);
   }
-
 
   // Fitted target densities (atoms/cm^2), one per densityfit line or density group: type 8, the effect number
   // (the group's first line) in field 6, the prior centre in field 5, its sigma in field 14 (0 = no prior) and
@@ -1581,7 +1578,6 @@ vector_r AZUREAPI::GetParameterInfo() const {
     push(8, -1, -1, 0, -1, te->GetDensityNominal(), data()->Data().GetDensityEffect(k), -1, te->GetLayoutDensity(), -1, -1, -1,
          te->GetDensitySigma(), -1);
   }
-
 
   // Fitted Doppler temperatures (K), one per 'doppler T vary sigma [Tmax]' line: type 9, the effect number in field 6,
   // the prior centre in field 5, its sigma in field 14 (0 = no prior) and the layout temperature (the largest the
@@ -1619,6 +1615,11 @@ vector_r AZUREAPI::GetParameterInfo() const {
     }
   }
 
+  // Stopping scales, last (type 12): field 6 the scale's first target effect, 5 its start value, 14 its prior sigma (0 = none), 8 its layout scale.
+  for (int k = 1; k <= data()->Data().NumStoppingScaleParams(); ++k) {
+    const TargetEffect *te = data()->Data().GetStoppingScaleTargetEffect(k);
+    push(12, -1, -1, 0, -1, te->GetStoppingScaleNominal(), data()->Data().GetStoppingScaleLeadCopy(k), -1, te->GetLayoutStoppingScale(), -1, -1, -1, te->IsStoppingScaleVaried() ? te->GetStoppingScaleSigma() : 0.0, -1);
+  }
   return info;
 }
 

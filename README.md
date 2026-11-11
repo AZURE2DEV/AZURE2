@@ -31,7 +31,7 @@ Upstream project: <https://azure.nd.edu/> · Source:
 | `api/`         | Python bindings: `AZUREAPI` C++ API + the pybind11 `_azure2` module. |
 | `numcmc/`      | Affine-invariant ensemble MCMC sampler (`USE_MCMC`). |
 | `pyazr/`       | Python package that drives AZURE2 in-process via the `_azure2` module. |
-| `external/`    | Vendored third-party code, built in-tree: `minuit2/` (ROOT Minuit2), `erya/` (SRIM stopping powers + pugixml). The Coulomb wave functions are in `physics/coulomb/` (from pycoulomb). |
+| `external/`    | Vendored third-party code, built in-tree: `minuit2/` (ROOT Minuit2). The Coulomb wave functions are in `physics/coulomb/` (from pycoulomb), the stopping powers (SRIM-2013 through LunaSRIM) in `stopping/`. |
 | `tests/`       | Physics regression suite — reference evaluations and the runner. |
 | `cmake/`       | Custom CMake find-modules (GSL, Minuit2). |
 | `packaging/`   | Distribution: `docker/` images and `icons/`; the AppImage, Windows and macOS packaging live in the CI workflow. |
@@ -188,7 +188,6 @@ Pass options to CMake with `-D<OPTION>=ON|OFF` (or edit them interactively with
 |-------------------------|:-------:|-------------|
 | `USE_API`               | ON      | Build the `AZUREAPI` library and the pybind11 `_azure2` module (required for `pyazr`). |
 | `USE_MCMC`              | ON      | Enable MCMC Bayesian sampling via the bundled `numcmc`. |
-| `USE_ERYA`              | ON      | Enable the SRIM stopping-power utilities. |
 | `USE_READLINE`          | ON      | Use Readline for console input. |
 | `USE_STAT`              | ON      | Use `stat()` for directory checks (turn OFF on Windows). |
 | `USE_NLOPT`             | OFF     | Use NLopt as an alternative minimizer (expects an `nlopt/` tree). |

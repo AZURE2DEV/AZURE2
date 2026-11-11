@@ -258,12 +258,14 @@ void WorkingCopy::PrepareCovarianceSeeds(CNuc *theCNuc, const Config &configure,
     if (seg->GetCovarianceGroup() < 0) continue;
     for (int pid = 0; pid < seg->NumPoints(); pid++) work.push_back({seg, pid});
   }
-  // Each point on its own, without point mapping (as the gradient's own point loops): a
-  // mapped point would otherwise read a host value that may not be calculated yet.
-#pragma omp parallel for schedule(dynamic) if (!omp_in_parallel())
-  for (int k = 0; k < (int)work.size(); k++) {
-    ScopedPointMappingOff noPointMapping;
-    azure2::EvaluateModelPoint(*this, *work[k].first, work[k].second, theCNuc, configure, results, azure2::LeafValues::Calculate);
-  }
+  // The point pass of those segments, then each point from the records it wrote; serially (inside a parallel
+  // region, or a failed point) point by point, where index order puts every host first.
+  std::vector<const Segment *> segments;
+  for (const auto &w : work)
+    if (segments.empty() || segments.back() != w.first) segments.push_back(w.first);
+  const bool pre = this->CalculatePointsInParallel(segments, theCNuc, configure, results) == 0;
+  for (int k = 0; k < (int)work.size(); k++)
+    azure2::EvaluateModelPoint(*this, *work[k].first, work[k].second, theCNuc, configure, results,
+                               pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
   this->CovarianceChi2Correction(results);
 }

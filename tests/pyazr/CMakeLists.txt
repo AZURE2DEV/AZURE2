@@ -780,23 +780,6 @@ add_test(NAME pyazr_project_recipe
                  ${CMAKE_CURRENT_SOURCE_DIR}/project_recipe_test.py)
 set_tests_properties(pyazr_project_recipe PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
 
-# A test that cannot run its engine part -- numpy, scipy or the compiled
-# _azure2 module missing (pybind11 absent at configure time builds no module),
-# or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so
-# ctest lists it as Skipped rather than Passed.  An exit of 0 there once hid
-# that CI had never run a single CLI == pyazr comparison.  Set on every test
-# in this directory, so a new one only has to follow the convention; the
-# numpy-free roundtrip test never exits 77.  Keep this block LAST: it applies
-# to the tests registered above it only (sqrt_shift, park_gradient and
-# sav_readers, added after it, went without it until October 2026).
-get_property(_pyazr_tests DIRECTORY PROPERTY TESTS)
-set_tests_properties(${_pyazr_tests} PROPERTIES SKIP_RETURN_CODE 77)
-# A build with -DPYAZR_OUTPUT_DIR outside pyazr/ (sanitizer and scratch builds)
-# keeps _azure2 out of the checkout; PYAZR_ENGINE_DIR points the package at it,
-# so these tests run the module this build made instead of skipping.
-if(PYAZR_OUTPUT_DIR)
-    set_property(TEST ${_pyazr_tests} APPEND PROPERTY ENVIRONMENT "PYAZR_ENGINE_DIR=${PYAZR_OUTPUT_DIR}")
-endif()
 
 # pyazr.predictions(path): the expression trees of a project, as AZURE2 --print-predictions prints them
 # (docs/upgrade/data_model.md section 3, step S10).
@@ -836,3 +819,30 @@ add_test(NAME pyazr_project_nuclear_part
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/project_nuclear_part_test.py)
 set_tests_properties(pyazr_project_nuclear_part PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# pyazr.stopping: the binding of stopping/ (SRIM-2013 through LunaSRIM) against LunaSRIM's reference values
+# (stopping/tests/data/srim_reference.csv), the same tolerances as the C++ tests.
+add_test(NAME pyazr_stopping
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/stopping_test.py)
+set_tests_properties(pyazr_stopping PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
+
+# A test that cannot run its engine part -- numpy, scipy or the compiled
+# _azure2 module missing (pybind11 absent at configure time builds no module),
+# or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so
+# ctest lists it as Skipped rather than Passed.  An exit of 0 there once hid
+# that CI had never run a single CLI == pyazr comparison.  Set on every test
+# in this directory, so a new one only has to follow the convention; the
+# numpy-free roundtrip test never exits 77.  Keep this block LAST: it applies
+# to the tests registered above it only (sqrt_shift, park_gradient and
+# sav_readers went without it until October 2026; six more, the last
+# pyazr_stopping, until November 2026: without PYAZR_ENGINE_DIR in the
+# caller's environment they were skipped in a scratch build).
+get_property(_pyazr_tests DIRECTORY PROPERTY TESTS)
+set_tests_properties(${_pyazr_tests} PROPERTIES SKIP_RETURN_CODE 77)
+# A build with -DPYAZR_OUTPUT_DIR outside pyazr/ (sanitizer and scratch builds)
+# keeps _azure2 out of the checkout; PYAZR_ENGINE_DIR points the package at it,
+# so these tests run the module this build made instead of skipping.
+if(PYAZR_OUTPUT_DIR)
+    set_property(TEST ${_pyazr_tests} APPEND PROPERTY ENVIRONMENT "PYAZR_ENGINE_DIR=${PYAZR_OUTPUT_DIR}")
+endif()

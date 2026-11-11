@@ -37,6 +37,7 @@ enum Stage {
   kGradRows,         ///< per-member rows: basis combination, scatter into the Jacobian
   kShiftLocal,       ///< energy-shift Jacobian columns differenced on their own segments' rows
   kShiftFull,        ///< energy-shift / density Jacobian columns differenced on every row (forward only)
+  kEnergyTaskSetup,  ///< the energy tasks of a pass: checked against the units, rebuilt when they changed (serial)
   kNumStages
 };
 
@@ -53,6 +54,7 @@ enum Counter {
   kWhitMemoMiss,       ///< ... computed and stored
   kEnergyTasks,        ///< energy tasks of the point pass: one level-matrix fill and factorisation each (CalculationPlan.h)
   kEnergyUnits,        ///< units (points and sub-points) calculated by those tasks
+  kEnergyTaskBuilds,   ///< passes whose energy tasks were rebuilt (a unit, its E_x, an amplitude source or the work changed)
   kNumCounters
 };
 

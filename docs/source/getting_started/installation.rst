@@ -82,9 +82,6 @@ The following options can be passed to CMake as ``-D<OPTION>=ON|OFF``:
    * - ``USE_MCMC``
      - ON
      - MCMC Bayesian sampling with the bundled ``numcmc``.
-   * - ``USE_ERYA``
-     - ON
-     - SRIM stopping-power utilities.
    * - ``USE_READLINE``
      - ON
      - Readline for console input.

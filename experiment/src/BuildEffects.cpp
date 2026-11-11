@@ -15,6 +15,8 @@
 #include <sstream>
 
 #include "azure2/experiment/BuildContext.h"
+#include "azure2/experiment/Kernels.h"
+#include "azure2/physics/Elements.h"
 
 namespace azure2 {
 namespace experiment {
@@ -44,6 +46,7 @@ struct Combination {
   const Value *quadrature = nullptr, *windows = nullptr;
   bool layerYield = false;  ///< a yield on a layer: per incident particle, not the target-averaged cross section
   bool decay = false;  ///< its data sets are beta-delayed spectra (no beam: the energy is the particle's in the decay)
+  const PairInfo *projectile = nullptr;  ///< the entrance pair whose light particle crosses the target (a scaled stopping)
   std::string signature;
   int position = 0;  ///< the first of its records in the file
   std::vector<int> keys;
@@ -82,6 +85,54 @@ std::string FormulaInBase(const std::string &expression, const Unit *unit) {
   return s.str();
 }
 
+// The composition as a formula ("Ta 2 O 5" -> "Ta2O5"; a count of 1 left out), the label of a stopping scale.
+std::string MaterialFormula(const Value &composition) {
+  std::string out;
+  for (const auto &part : composition.composition) out += part.first + (part.second.value == 1.0 ? "" : part.second.text);
+  return out;
+}
+
+// The stopping record's source, composition, phase and compound correction, and its scale nuisance (SetupSpecs.h
+// StoppingSpec).  The projectile, the key and the name of the scale are the combination's (Effects).
+void StoppingInto(Context &c, const ValidatedRecord &t, const Value &stopping, StoppingSpec &s) {
+  using Source = StoppingSpec::Source;
+  s.source = stopping.word == "evaluation" ? Source::Evaluation : stopping.word == "table" ? Source::Table : Source::Formula;
+  if (const Value *comp = t.Get("composition")) {
+    for (const auto &part : comp->composition) s.composition.push_back({physics::ElementZ(part.first), part.second.value});
+    s.material = MaterialFormula(*comp);
+  }
+  if (const Value *a = t.Get("active")) s.activeZ = a->nucleus.Z;
+  if (s.source != Source::Formula) {
+    bool present = false;
+    for (const auto &zn : s.composition) present = present || (zn.first == s.activeZ && zn.second > 0.0);
+    if (!present)
+      c.Error(codes::kStoppingActive, t, "composition",
+              "the active nucleus's element is not in the composition: the stopping per active nucleus divides the "
+              "material's stopping by its atom fraction (energy_grid.md section 6)");
+  }
+  if (const Value *p = t.Get("phase")) s.phase = p->word;
+  if (const Value *cc = t.Get("compound_correction")) s.compoundCorrection = cc->number.value;
+  if (s.source == Source::Table) {
+    if (const Value *f = stopping.Get("file")) s.tableFile = c.ProjectPath(f->word);
+    if (const Value *u = stopping.Get("energy_unit")) s.tableEnergyUnit = u->word;
+    if (const Value *u = stopping.Get("stopping_unit")) s.tableStoppingUnit = u->word;
+  }
+  const Value *scale = stopping.Get("scale");
+  // left out: a formula has no scale; an evaluation or a table has one, fixed at 1
+  s.hasScale = scale || s.source != Source::Formula;
+  if (!scale) return;
+  const Nuisance &n = scale->nuisance;
+  s.scale = n.value.value;
+  if (!(s.scale > 0.0)) c.Error(codes::kOutOfRange, t, "stopping", "the stopping scale must be > 0, not " + n.value.text);
+  s.scaleVary = n.mode == NuisanceMode::Fit;
+  s.scaleHasPrior = n.hasPrior;
+  if (n.hasPrior) {
+    if (n.priorCentre.value != n.value.value)
+      c.Error(codes::kNotBuilt, t, "stopping", "a stopping-scale prior centred away from the value: this engine centres it on the value");
+    s.scalePriorWidth = n.priorPercent ? n.priorWidth.value / 100.0 * n.priorCentre.value : n.priorWidth.value;
+  }
+}
+
 void TargetInto(Context &c, const ValidatedRecord &t, const ValidatedRecord &user, TargetEffectSpec &e) {
   const std::string kind = t.Get("kind") ? t.Get("kind")->word : "none";
   if (kind == "layer" || kind == "infinite") {
@@ -99,8 +150,9 @@ void TargetInto(Context &c, const ValidatedRecord &t, const ValidatedRecord &use
       }
     }
     if (const Value *s = t.Get("stopping")) {
+      StoppingInto(c, t, *s, e.stopping);
       if (s->word != "formula") {
-        c.Error(codes::kNotBuilt, t, "stopping", "stopping " + s->word + ": this engine takes a formula (Phase 5)");
+        // evaluation, table: the engine's stopping/ library (TargetStopping.h)
       } else if (const Value *f = s->Get("expression")) {
         const Value *u = s->Get("unit");
         e.stoppingPowerEquation = FormulaInBase(f->formula.expression, u ? u->unit : nullptr);
@@ -187,7 +239,15 @@ void DetectorInto(Context &c, const ValidatedRecord &d, bool decay, TargetEffect
     e.qCoefficients = true;
     for (const Number &n : q->numbers) e.qCoefficientValues.push_back(n.value);
   }
-  if (const Value *r = d.Get("energy_resolution")) {
+  const Value *r = d.Get("energy_resolution");
+  // A table kernel (Kernels.h): its name and its parameters, in the order of its row, in their engine units.
+  if (const Kernel *k = r ? KernelOfForm("detector", "energy_resolution", r->word) : nullptr) {
+    e.kernel = k->name;
+    for (const KernelParameter &p : k->parameters) {
+      const Value *v = r->Get(p.name);
+      e.kernelParameters.push_back(v ? Context::InBase(v->number, v->unit) : 0.0);
+    }
+  } else if (r) {
     const Value *sigma = r->Get("sigma");
     const Value *frame = r->Get("frame");
     if (frame && frame->word != "lab")
@@ -273,6 +333,96 @@ void CoulombRatioFolds(Context &c, const ValidatedRecord &r, const Combination &
                    "observable's sub-points, which numerator and denominator could choose differently");
 }
 
+// A target whose stopping depends on the projectile through the engine: an evaluation, a table, or any stopping with a
+// scale (one scale per material and projectile).
+bool ScaledStopping(const ValidatedRecord *t) {
+  const Value *s = t ? t->Get("stopping") : nullptr;
+  return s && (s->word != "formula" || s->Get("scale"));
+}
+
+// The entrance pair whose light particle crosses the target, for a data set: one particle for every term, an ion the
+// stopping library computes (Z = 1..92; stopping/'s SRIM tables).  nullptr after a refusal.
+const PairInfo *StoppingProjectile(Context &c, const Member &m) {
+  const PairInfo *first = nullptr;
+  for (int key : m.termEntranceKeys) {
+    const PairInfo *p = c.Pair(key);
+    if (!p) return nullptr;  // an unknown pair key is refused where the reaction is resolved
+    if (p->kind != 0 || p->lightZ < 1 || p->lightZ > 92) {
+      c.Error(codes::kStoppingProjectile, *m.record, "target",
+              "the stopping of its target needs a charged projectile of Z = 1..92 (SRIM's tables), and the entrance pair " +
+                  std::to_string(key) + " has none (Z = " + std::to_string(p->lightZ) + ")");
+      return nullptr;
+    }
+    if (first && (first->lightZ != p->lightZ || first->lightA != p->lightA)) {
+      c.Error(codes::kStoppingProjectile, *m.record, "target",
+              "its terms have different projectiles; the stopping of the target is one projectile's: give one data set per "
+              "projectile");
+      return nullptr;
+    }
+    if (!first) first = p;
+  }
+  return first;
+}
+
+// The projectile of an effect and the key and name of its stopping scale (SetupSpecs.h StoppingSpec): an evaluation is
+// shared by every target of the same composition, phase and compound correction; a table by the targets naming the same
+// file; a formula is its target's own.
+void ScaleOf(const ValidatedRecord &t, const PairInfo &p, StoppingSpec &s) {
+  s.projectileZ = p.lightZ;
+  s.projectileA = p.lightA;
+  s.projectileMass = p.lightMass;
+  const std::string projectile = std::to_string(p.lightA) + physics::ElementSymbol(p.lightZ);
+  std::ostringstream key;
+  key.precision(17);
+  std::string material;
+  switch (s.source) {
+    case StoppingSpec::Source::Evaluation:
+      key << "evaluation|" << s.material << "|" << s.phase << "|" << s.compoundCorrection;
+      material = s.material + (s.phase == "gas" ? "_gas" : "");
+      if (s.compoundCorrection != 1.0) {
+        std::ostringstream cc;
+        cc << s.compoundCorrection;
+        material += "_C" + cc.str();
+      }
+      break;
+    case StoppingSpec::Source::Table:
+      key << "table|" << s.tableFile << "|" << s.material << "|" << s.tableEnergyUnit << "|" << s.tableStoppingUnit;
+      material = t.name;
+      break;
+    case StoppingSpec::Source::Formula:
+      key << "formula|" << t.name;
+      material = t.name;
+      break;
+  }
+  key << "|" << p.lightZ << "," << p.lightA;
+  s.scaleKey = key.str();
+  s.scaleMaterial = material;
+  s.scaleProjectile = projectile;
+  s.scaleName = "stopping_scale." + material + "." + projectile;
+}
+
+// The targets that share a stopping scale must write it alike (one parameter, one start value, one prior); where its
+// fitted value is written: the first of them.
+void SharedScales(Context &c, const std::vector<Combination> &combos, SpecList<TargetEffectSpec> &out) {
+  std::map<std::string, std::size_t> first;
+  for (std::size_t i = 0; i < out.items.size(); i++) {
+    const StoppingSpec &s = out.items[i].spec.stopping;
+    if (!s.hasScale || s.scaleKey.empty()) continue;
+    auto it = first.emplace(s.scaleKey, i).first;
+    if (it->second == i) {
+      c.out_.parameterSources[s.scaleName] = {combos[i].target->name, "stopping", 0, "scale"};
+      continue;
+    }
+    const StoppingSpec &a = out.items[it->second].spec.stopping;
+    if (a.scale != s.scale || a.scaleVary != s.scaleVary || a.scaleHasPrior != s.scaleHasPrior ||
+        a.scalePriorWidth != s.scalePriorWidth)
+      c.Error(codes::kStoppingScaleConflict, *combos[i].target, "stopping",
+              "its stopping scale is " + s.scaleName + ", shared with target " + combos[it->second].target->name +
+                  " (one scale per material and projectile, decision D6), and the two write it differently: write the "
+                  "same scale field on both");
+  }
+}
+
 // The effects of the data sets (isData) or of the extrapolations.
 SpecList<TargetEffectSpec> Effects(Context &c, const std::vector<Member> &members) {
   std::vector<Combination> combos;
@@ -295,9 +445,12 @@ SpecList<TargetEffectSpec> Effects(Context &c, const std::vector<Member> &member
     // its own, whose areal density is shared with the target's other effects as below.
     x.layerYield = x.target && x.target->Get("kind") && x.target->Get("kind")->word == "layer" && r.quantity &&
                    r.quantity->name == "yield";
+    // A stopping that depends on the projectile (an evaluation, a table, a scale): one projectile per effect.
+    if (ScaledStopping(x.target) && !(x.projectile = StoppingProjectile(c, m))) continue;
     x.signature = (x.target ? x.target->name : "") + "|" + (x.beam ? x.beam->name : "") + "|" +
                   (x.detector ? x.detector->name : "") + "|" + Text(x.quadrature) + "|" + Text(x.windows) +
-                  (x.layerYield ? "|yield" : "") + (x.decay ? "|decay" : "");
+                  (x.layerYield ? "|yield" : "") + (x.decay ? "|decay" : "") +
+                  (x.projectile ? "|" + std::to_string(x.projectile->lightZ) + "," + std::to_string(x.projectile->lightA) : "");
     x.position = 1 << 30;
     for (const ValidatedRecord *p : {x.target, x.beam, x.detector})
       if (p) x.position = std::min(x.position, c.Position(p));
@@ -327,6 +480,7 @@ SpecList<TargetEffectSpec> Effects(Context &c, const std::vector<Member> &member
     if (x.target) {
       e.targetName = x.target->name;
       TargetInto(c, *x.target, *x.target, e);
+      if (x.projectile) ScaleOf(*x.target, *x.projectile, e.stopping);
       e.layerYield = x.layerYield;
       if (usesOfTarget[x.target] > 1) {
         if ((x.target->Has("screening") || FreeNuisance(x.target, "doppler")) && !reported.count(x.target) &&
@@ -342,6 +496,7 @@ SpecList<TargetEffectSpec> Effects(Context &c, const std::vector<Member> &member
     QuadratureInto(x.quadrature, x.windows, e);
     out.items.push_back(item);
   }
+  SharedScales(c, combos, out);
   return out;
 }
 

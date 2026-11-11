@@ -115,6 +115,12 @@ vector:
      - ``cbkg_<experiment>_...``
      - HOES amplitude (:math:`c_1` per MeV)
      - Re or Im of a THM coherent-background coefficient
+   * - ``stopping_scale``
+     - ``stopping_scale.<material>.<projectile>``
+     - 1
+     - stopping scale :math:`s` of one material and projectile: every target of that material crossed by that
+       projectile has the stopping :math:`s\,\epsilon` (format 3, the target's ``stopping ... scale`` field); last in
+       the vector
 
 param.fit
 ^^^^^^^^^

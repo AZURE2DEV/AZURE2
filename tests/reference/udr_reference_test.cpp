@@ -34,7 +34,7 @@ static void check(const char *what, double got, double want, double tol) {
   if (!ok) failures++;
 }
 
-static void moments(const UdrKernel &k, double &norm, double &mean, double &var) {
+static void moments(const azure2::experiment::UdrKernel &k, double &norm, double &mean, double &var) {
   norm = mean = 0.0;
   double second = 0.0;
   for (size_t j = 0; j + 1 < k.tau.size(); j++) {
@@ -91,7 +91,7 @@ int main() {
     check("parser: centred flag off", te.IsUdrCentred() ? 1 : 0, 0, 0);
     std::ostringstream log;
     check("loader: file read", te.LoadUdrTable(0.5, 2.0, log) ? 1 : 0, 1, 0);
-    std::shared_ptr<const UdrKernel> k = te.BuildUdrKernel(1.0, mn);
+    std::shared_ptr<const azure2::experiment::UdrKernel> k = te.BuildUdrKernel(1.0, mn);
     double norm, mean, var;
     moments(*k, norm, mean, var);
     check("kernel integral is one", norm, 1.0, 1e-9);
@@ -109,7 +109,7 @@ int main() {
     TargetEffect c = makeEffect(config, shifted, 0.0, 0.0, 1);
     std::ostringstream log;
     c.LoadUdrTable(0.5, 2.0, log);
-    std::shared_ptr<const UdrKernel> k = c.BuildUdrKernel(1.0, mn);
+    std::shared_ptr<const azure2::experiment::UdrKernel> k = c.BuildUdrKernel(1.0, mn);
     double norm, mean, var;
     moments(*k, norm, mean, var);
     check("centred: mean is zero", mean, 0.0, 1e-9);
@@ -162,13 +162,13 @@ int main() {
   // energy above 100 x nominal) is cut there and renormalised, so a badly
   // scaled or uncentred table cannot send the sub-point window to infinity.
   {
-    const double t0 = UdrKinematics::TimeOfFlight(1.0, mn, 100.0);
-    const double cap = t0 - UdrKinematics::TimeOfFlight(100.0, mn, 100.0);
+    const double t0 = azure2::experiment::UdrKinematics::TimeOfFlight(1.0, mn, 100.0);
+    const double cap = t0 - azure2::experiment::UdrKinematics::TimeOfFlight(100.0, mn, 100.0);
     std::string late = writeUdr(0.1, cap + 0.15, 1.0, one);  // Gaussian, 0.1 us wide, centred 0.15 us past the cap
     TargetEffect te = makeEffect(config, late, 0.0, 0.0, 0);
     std::ostringstream log;
     te.LoadUdrTable(0.5, 2.0, log);
-    std::shared_ptr<const UdrKernel> k = te.BuildUdrKernel(1.0, mn);
+    std::shared_ptr<const azure2::experiment::UdrKernel> k = te.BuildUdrKernel(1.0, mn);
     double norm, mean, var;
     moments(*k, norm, mean, var);
     check("delay cap: support ends at the cap", k->tauMax, cap, 3e-3);
@@ -179,9 +179,9 @@ int main() {
   // non-relativistically; beta = 0.046101), and the inverse conversion
   // recovers the energy.
   {
-    double t = UdrKinematics::TimeOfFlight(1.0, mn, 100.0);
+    double t = azure2::experiment::UdrKinematics::TimeOfFlight(1.0, mn, 100.0);
     check("1 MeV neutron, 100 m: 7.2356 us", t, 7.2356, 2e-4);
-    check("energy from time inverts", UdrKinematics::EnergyFromTime(t, mn, 100.0), 1.0, 1e-12);
+    check("energy from time inverts", azure2::experiment::UdrKinematics::EnergyFromTime(t, mn, 100.0), 1.0, 1e-12);
   }
   std::remove("udr_reference_test_tmp.txt");
   std::printf("%s: %d failure(s)\n", failures ? "FAILED" : "OK", failures);

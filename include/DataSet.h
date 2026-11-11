@@ -57,7 +57,7 @@ class DataSet {
    */
   struct PointSetUp {
     Unit::SubGridSpec grid;
-    std::shared_ptr<const UdrKernel> udr;
+    std::shared_ptr<const azure2::experiment::UdrKernel> udr;
     double udrMass = 0.0;
   };
   /// The record of point `p`, null when the set-up gave it none.
@@ -143,6 +143,22 @@ class DataSet {
   int ThicknessParamOfSegment(int pos) const;
   /// The segment (1-based) whose norm segment s uses: its norm-group leader, or s itself.
   int NormOwner(int s) const;
+  /*!
+   * Stopping scales (TargetEffect::HasStoppingScale; energy_grid.md section 6.2, decision D6).  One parameter
+   * `stopping_scale.<material>.<projectile>` (dimensionless) per distinct TargetEffect::GetStoppingScaleKey of the
+   * effects, in the order of their first effect, after the THM coherent backgrounds (the last kind).  The parameter
+   * holds the first effect's settings (Schema::Build refuses targets that share it and write it differently).
+   */
+  int NumStoppingScaleParams() const { return (int)stoppingScaleLeads_.size(); }
+  /// The first target effect (copy) of stopping-scale parameter k (1-based).
+  int GetStoppingScaleLeadCopy(int k) const { return stoppingScaleLeads_[k - 1]; }
+  const TargetEffect *GetStoppingScaleTargetEffect(int k) const { return GetTargetEffect(stoppingScaleLeads_[k - 1]); }
+  TargetEffect *GetStoppingScaleTargetEffect(int k) { return GetTargetEffect(stoppingScaleLeads_[k - 1]); }
+  /// The stopping-scale parameter (1-based) of target effect (copy) n (1-based), 0 = none.
+  int StoppingScaleParamOfEffect(int n) const {
+    return (n >= 1 && n <= (int)stoppingScaleParamOfEffect_.size()) ? stoppingScaleParamOfEffect_[n - 1] : 0;
+  }
+  int StoppingScaleParamOffset() const { return stoppingScaleParamOffset_; }
   int ScreeningParamOffset() const { return screeningParamOffset_; }
   int DensityParamOffset() const { return densityParamOffset_; }
   int DopplerParamOffset() const { return dopplerParamOffset_; }
@@ -195,6 +211,9 @@ class DataSet {
   std::vector<int> densityEffects_;        // line number (effect number) holding each density parameter, in order
   std::vector<int> densityLeadCopies_;     // per density parameter: the first target effect (copy) of that line
   std::vector<int> densityParamOfEffect_;  // per target effect (copy, 0-based): its density parameter, 0 = none
+  int stoppingScaleParamOffset_ = -1;
+  std::vector<int> stoppingScaleLeads_;          // per stopping-scale parameter: its first target effect (copy)
+  std::vector<int> stoppingScaleParamOfEffect_;  // per target effect (copy, 0-based): its scale parameter, 0 = none
   int dopplerParamOffset_ = -1;
   std::vector<int> dopplerEffects_;               // line number holding each Doppler parameter, in order
   std::vector<std::vector<int>> dopplerCopies_;   // per Doppler parameter: the target effects (copies) of its line

@@ -308,12 +308,23 @@ cross section per active nucleus (lab MeV cm²).
 | beam profile | Σ_i G W D σ / Σ_i G W (skewed Gaussians G, window W by erf, detailed balance D) | `BeamProfileSupport` | ∂/∂(shift of the window) from ∂W/∂a, ∂W/∂b (Gaussians) | `TargetFold.cpp` beam-profile branch; `TargetEffect::BeamProfileWeight` |
 | UDR (time of flight) | w_i = ∫ R(τ) φ_i(τ) dτ, φ_i hat functions on the delay axis, Simpson exact | the table's τ range | no fitted parameter; ∂/∂E₀ through t(E₀) | `TargetFold.cpp` UDR branch; `TargetEffect::BuildUdrKernel, LoadUdrTable` |
 | Doppler (free gas) | SAMMY free-gas kernel in √E, 4-point Gauss–Legendre pieces | `TargetEffect::DopplerWindow` | ∂/∂T exists (`Unit::DopplerTemperatureDerivative`) | `TargetFold.cpp: Unit::DopplerWeights` |
+| rectangular resolution (branch 6, added by the recipe) | Y = (1/w) ∫_{E₀−w/2}^{E₀+w/2} σ dE, w lab × the pair's c.m./lab factor; format 3: `detector … energy_resolution rectangular width <w>` | [E₀ − w/2, E₀ + w/2] | ∂Y/∂w = [σ(E₀+w/2) + σ(E₀−w/2)]/(2w) − Y/w (`derivative`; not yet a fit parameter) | nothing: `experiment/src/KernelRectangular.cpp` |
 | energy shift, folded data | the point's kernel centred at E₀(ν) = E + a + b√E + f(E; p) on fixed nodes | that kernel's | ∂w/∂ν = ∂w/∂E₀ · ∂E₀/∂ν | `ShiftFrames.cpp: Segment::UpdatePointEnergyWithShift` (rigid move of sub-points); `AZURECalc.cpp: FillShiftColumns` (central differences) |
 | energy shift, unfolded data | exact node at E₀(ν) (§2.5); interpolated mode: linear or cubic weights | one node (or 2–4) | dO/dE · ∂E₀/∂ν | the same, and `WorkingCopy::FillEnergyShiftsFromParamsImpl` |
 | detector attenuation Q_L, angular convolution | diagonal in L: row P_L(cos θ) Q_L | — | none fitted | `UnitLegendre.cpp: Unit::CalcLegendreP` (Q coefficients, `QTransformRule`) |
 | electron screening | diagonal per node: f = exp(π η U_e / E) on σ before the fold | node | ∂f/∂U_e = (π η/E) f (exists) | `Unit::ScreeningFactor`, applied in `CalcEDependentValues` |
 | THM fold | c.m. Gaussian, QF-window weights, OES S-fold (`THM.md` §2) | ±5σ | ∂/∂σ as Gaussian | the THM sub-point fold of `THMMatrixFunc` / `ThmNumerics` |
 | SUM, RATIO, natural target, S factor, transmission | not energy kernels: expression nodes `Sum`, `Ratio`, `Weighted` (abundance, ∂ analytic), `Scaled`, `Transform` (Phase 4) | — | as in Phase 4 | nothing; they stay |
+
+**Status (branch 6, `feature/upgrade-5-kernels`).** The kernels of the first five rows are rows of one table,
+`Kernels()` in `experiment/src/Kernels.cpp` (`experiment/include/azure2/experiment/Kernels.h`): `target`
+(`KernelTarget.cpp`: thin, thick, layer yield, with beam spread and straggling, the σ(Ē) fallback and the edge blend),
+`gaussian`, `beam_profile`, `udr` (one file each) and the broadening `doppler` (`KernelDoppler.cpp`), each a fold
+template on V = double (value) and V = `LinearForm` (the gradient's weights) and a support function (the interval the
+set-up lays the grid over). `src/TargetFold.cpp` is deleted; the engine's fold is `FoldPoint` (`src/PointFold.cpp`):
+it gathers the nodes and the point and makes one indirect call per point. Nodes and quadrature are unchanged, every
+output is byte-identical. The derivative columns above are not yet written as kernel functions, except the
+temperature derivative of `doppler` (`broadenDT`); a table kernel may carry `derivative` (∂/∂ its own parameter).
 
 The roadmap lists SUM, RATIO, natural targets and the S factor as kernel builders. They are already one table of
 expression nodes with `value` and `backward`, tested alone; re-implementing them as kernels would write them twice.
@@ -482,8 +493,14 @@ One parameter s per (material, projectile species) of the project, multiplying �
 crossed by that projectile; prior Gaussian with centre 1 and width the evaluation's stated relative uncertainty
 (or the user's `prior` on the `stopping` field); fixed at 1 by default, fitted when the record says `fit`. It enters
 the objective as one more prior term (`src/Objective.cpp`, the list of terms) and the parameter layout as a new kind
-(`DataParameters.cpp`, `ParamIndexMap`). Its gradient is analytic through the kernel (§3.3). A user formula or table
-has no scale unless the record gives one.
+(`DataParameters.cpp`, `ParamIndexMap`). Its gradient: central differences of the whole χ² in branch 5 (as the
+density); analytic through the kernel (§3.3) with the kernels branch. A user formula has no scale unless the record
+gives one; an evaluation or a table has one, fixed at 1 unless the record says otherwise.
+
+**Done in branch 5** (2026-11-11, `feature/upgrade-5-stopping-wire`): §6.1 for `evaluation` and `table` (formulas
+unchanged: no output of a present project moves), §6.2, ERYA removed (§6.4 step 3). Not done: §6.4 step 2 (the old
+integrators on the module's integrals). What calls what: `stopping.md` §14; the test with LunaSRIM's numbers:
+`tests/stopping_yield`.
 
 ### 6.3 User formulas and ERYA
 
@@ -535,7 +552,7 @@ Every changed number found by `tools/cls.sh` is put in one class; anything else 
 | # | branch (`feature/upgrade-5-…`) | what it changes | files | deletes | gate | size | can run with |
 |---|---|---|---|---|---|---|---|
 | 1 (done) | `energy-tasks` | the plan's task is one compound energy (nucleus, E_x bits) with every unit at it: one level-matrix fill and solve per task, one T-matrix per (entrance, exit), the cross section per unit; sub-points are calculated in the energy pass, folds after it (the automatic-tolerance and fallback decisions read values already computed, so they choose the same) | `include/CalculationPlan.h`, `src/CalculationPlan.cpp`, `src/WorkingCopy.cpp` (`MapData`, `MapLeaves`, `CalculatePointsInParallel`), `src/PointPass.cpp`, `include/Unit.h`, `tests/upgrade/plan_test.cpp` | point mapping by (pairs, E) and `SharesCalculation`; the sub-point recursion of `Unit::Calculate`; probe copies | identical; a check mode (`AZURE_PLAN_CHECK`) compares the shared solve with a per-unit solve bit for bit on the whole tree; solves per evaluation reported (§1.2) | ~600 lines, 8–12 h | 3, 4, 5 |
-| 2 | `energy-tasks-gradient` | the analytic gradient per energy: cotangents of all units at E_n summed, one level-matrix adjoint per E_n | `src/AZUREGrad.cpp`, `src/AMatrixFunc.cpp` (adjoint entry points) | the grouped gradient by host (`BuildGradItems`), `ScopedPointMappingOff` | rounding (gradient sums reordered) | ~500, 8–12 h | after the pathway branch (it edits `AMatrixFunc`'s readers); with 3, 4, 5 |
+| 2 (done, below) | `energy-tasks-gradient` | the analytic gradient per energy: cotangents of all units at E_n summed, one level-matrix adjoint per E_n | `src/AZUREGrad.cpp`, `src/AMatrixFunc.cpp` (adjoint entry points) | the grouped gradient by host (`BuildGradItems`), `ScopedPointMappingOff` | rounding (gradient sums reordered) | ~500, 8–12 h | after the pathway branch (it edits `AMatrixFunc`'s readers); with 3, 4, 5 |
 | 3 | `lab-frame` | M3 (b): residual on y^lab, δy^lab and m/J(ν); frames keep kinematics only; the writer computes c.m. data for display | `experiment/.../Frames.h`, `experiment/src/Frames.cpp`, `include/Segment.h`, `src/Segment.cpp`, `src/ModelPass.cpp`, `src/AZURECalc.cpp` (`FitBarFn`), `src/DataOutputFiles.cpp` | `FrameRow::yCM, dyCM`, `CMValue/CMError` | rounding (§4.4) | ~250, 3–5 h | 1, 4, 5; **starts now** |
 | 4 | `layer-yield` (**done**, below) | `yield` on a `layer` (formula stopping), the closed-form test project | `experiment/src/Quantities.cpp`, `experiment/src/Build*.cpp`, `src/TargetFold.cpp` (per-particle normalization), `src/TargetSetup.cpp`, `tests/layer_yield/`, `docs/source/…/data_formats.rst` | the refusal | identical (new quantity only) + the six tests of §5.3 | ~350 + test, 5–8 h | 1, 3; **starts now** |
 | 5 | `stopping-wire` | §6: the kernel calls `stopping/`; `stopping evaluation` and `table`; the scale nuisance and its prior; ERYA removed | `src/TargetEffect.cpp`, `include/TargetEffect.h`, `src/HandOver.cpp`, `src/DataParameters.cpp`, `src/Objective.cpp`, `experiment/src/Validate.cpp`, `CMakeLists.txt`, `external/erya` (removed), `tests/reference/compound_stopping_reference_test.cpp` (moved) | `TargetThickness`'s integrator (step 2 of §6.4), ERYA | identical for formula projects (step 1); quadrature class for step 2 (its brief must name `external/erya`, which agents may not edit otherwise) | ~600, 8–12 h | after `stopping-1` is merged; with 1, 3 (after 4 or in coordination: both touch the target set-up) |
@@ -556,6 +573,31 @@ NaN, and the set-up refuses that case and a stopping that is not positive (`E_LA
 tested against 10⁻²⁴ σ(E_out). Where the stopping module plugs in: ε enters only as the sub-points' stopping (set in
 `TargetSetup.cpp`'s set-up loops and `ReplaceSubPointGrids`) and is read by `GridQuadrature` and `LayerExitEnergy`
 alike, so the scale s multiplies it there, once. Tests: `tests/layer_yield` (README).
+
+**Branch 5, done (2026-11-11, `feature/upgrade-5-stopping-wire`).** A target says `stopping evaluation` (SRIM-2013 of
+its `composition`, `phase`, `compound_correction`, for the projectile of the data set's entrance pair) or `stopping
+table "file" <units>`; `TargetStopping` (`src/TargetStopping.cpp`) is the one place the stopping is computed, per
+active nucleus ε_atom/f_active, and `TargetEffect::StoppingAt` multiplies the stopping scale once, where the sub-points
+get their stopping and in the range integrals. The scale is parameter kind 12 (`stopping_scale.<material>.<projectile>`,
+one per material and projectile, prior the record's or SRIM's stated accuracy), differenced on the whole χ² (central
+differences, as the density). Every output of the present projects is identical; `tests/stopping_yield` compares the
+plateau of a thick TiN layer with LunaSRIM's ε (8.3 × 10⁻⁵, the line shape), the width of a layer's step with
+LunaSRIM's energy loss (2.4 × 10⁻⁷), a table of the library's values with the evaluation (2.1 × 10⁻¹⁰), and a fit of
+two layers' N and the shared scale. pyazr binds the library (`pyazr.stopping`). ERYA is removed. Not done: §6.4 step
+2; the analytic derivative of the scale.
+
+**Branch 6, done (2026-11-11, `feature/upgrade-5-kernels`).** The folds of `src/TargetFold.cpp` (502 lines, deleted)
+are kernels of `experiment/` listed in `Kernels()` (`experiment/src/Kernels.cpp`): `target`, `gaussian`,
+`beam_profile`, `udr`, the broadening `doppler`, one file each, with the shared quadrature in `KernelQuadrature.h`;
+`LayerExit.h`, `UdrKernel.h` and the linear form (`LinearForm.h`) moved to `experiment/`. A kernel row holds its
+name, format-3 keyword, parameters, fold on double and on `LinearForm`, support and (optionally) a parameter
+derivative; `TargetEffect` keeps the parameters as read and chooses its kernels once (`Kernels()`,
+`KernelParametersFor`). The engine's fold is `src/PointFold.cpp` (one indirect call per point; the per-node work
+stays inside the kernel, except a beam-spread formula, which is called through `EnergyFunction` as `SigmaCM` was).
+Unit lost its ten fold members. The set-up takes the grid's interval from `EffectSupport` (the two copies of
+`GridExtent`, the beam-profile, UDR and Doppler windows in `TargetSetup.cpp` are one call each). Every output of the
+tree byte-identical. The proof of extension: the rectangular resolution (§3.3, last row) was added by the recipe in
+`CLAUDE.md` with no engine file edited (the layer yield of branch 4 had touched 11 engine files).
 
 **First steps before Phase 4's last branches are merged.** `lab-frame` (3) and `layer-yield` (4) touch no file of
 the pathway branch (`CNuc*`, `GenMatrixFunc`, `AMatrixFunc` readers, `UnitExternalCapture`, `ExternalCaptureSetup`)

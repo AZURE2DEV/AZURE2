@@ -80,12 +80,12 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
 | `src/`, `include/` | C++ engine | `AZURE2.cpp` (main, CLI flags) → `AZUREMain` → `CNuc` (levels, channels) + `DataSet` (the data as set up, immutable: segments, measurements, target effects, covariance; `include/DataSet.h`) held by each `WorkingCopy` (what an evaluation changes: norms, shifts, frames, the flat vector of calculation `Unit`s; `include/WorkingCopy.h`) → `AZURECalc` (χ²), `AZUREGrad` (gradients), `AZURECalcMCMC` |
 | `api/` | `AZUREAPI` + pybind11 module `_azure2` | Builds `pyazr/_azure2*.so` in place |
 | `io/` | The `.azr` document and its format conversion | Standalone (no engine headers); the engine and pyazr read the file through it |
-| `stopping/` | Stopping and straggling: materials, SRIM-2013's electronic and nuclear stopping (ported from LunaSRIM; SRIM's data files in `stopping/data/srim/`, cite SRIM), energy loss, range, TRIM/Bohr straggling with Tschalär propagation, with uncertainty and provenance | Uses `physics/` only; not yet linked by the engine; `docs/upgrade/stopping.md` |
+| `stopping/` | Stopping and straggling: materials, SRIM-2013's electronic and nuclear stopping (ported from LunaSRIM; SRIM's data files in `stopping/data/srim/`, cite SRIM), energy loss, range, TRIM/Bohr straggling with Tschalär propagation, with uncertainty and provenance | Uses `physics/` only; the engine calls it through `TargetStopping` (`stopping evaluation`, `stopping table`), pyazr through `pyazr.stopping`; `docs/upgrade/stopping.md` |
 | `experiment/` | Model expressions (what a data set measures), lab → c.m. frames, the table of project format 3 | Uses `physics/` and `io/`'s `Record.h` only (no engine headers); `experiment/README.md` |
 | `physics/transfer` (in `physics/`) | Optical potentials, bound states, distorted waves, DWBA transfer, the THM vertex in the plane-wave limit | A leaf: target `azure2_physics_transfer`, used by nothing of the engine yet; checked against FRESCO (`docs/upgrade/transfer.md`) |
 | `pyazr/` | Python package | In-process engine; `.azr` editing (`azrfile.py`, `datasets.py`) on the engine's document and parsers |
 | `numcmc/` | Ensemble MCMC sampler | |
-| `external/` | Vendored Minuit2, erya/pugixml (Coulomb functions: `physics/coulomb/`, from pycoulomb) | **Do not edit**; it is upstream code |
+| `external/` | Vendored Minuit2 (Coulomb functions: `physics/coulomb/`, from pycoulomb; stopping: `stopping/`) | **Do not edit**; it is upstream code |
 | `tests/` | All tests | See `tests/CLAUDE.md` |
 | `docs/source/` | Sphinx site, built with `-W` | The user-facing source of truth |
 | `.claude/skills/` | How to *use* AZURE2 | See "Skills" below; `tools/check_skills.py` |
@@ -340,6 +340,33 @@ factor, a yield per unit charge) is `ReactionSpec::scale` (`experiment/src/Build
 `io/include/azure2/io/Record.h`), its row in `DiagnosticCodes()` and a case in `experiment/tests/diagnostics_test.cpp`
 that triggers it alone [check 24].
 
+**A new apparatus kernel** (a resolution or broadening of a folded point: `experiment/include/azure2/experiment/Kernels.h`,
+`docs/upgrade/energy_grid.md` section 3.3). A kernel is plain functions of the point's nodes, the point and the effect's
+parameters; the engine applies whatever the table holds.
+1. One file `experiment/src/Kernel<Name>.cpp` (`KernelGaussian.cpp` is the pattern): the fold as a template on V
+   (`double` gives the value, `LinearForm` the exact weights the gradient reads: the same arithmetic), its support (the
+   c.m. interval the point's nodes must span; the set-up lays the grid over it) and `Kernel <Name>Kernel()` filling its
+   row member by member. Its own parameters are `KernelParameter` rows (name, dimension, engine unit, fittable) whose
+   values arrive in `KernelParameters::values`; with `tableForm = true` and the keyword `detector.energy_resolution
+   <form>` the format-3 form is generated from those rows (`Schema.cpp`) and read by `BuildEffects.cpp`: no parser
+   code. An analytic derivative in a parameter goes in `derivative`.
+2. Its line in `Kernels()` (`experiment/src/Kernels.cpp`) and the file in `experiment/CMakeLists.txt`.
+3. Tests: cases in `experiment/tests/kernels_test.cpp` against closed forms (the table's own checks run on every row),
+   a derivative against central differences; a format-3 fixture that validates (`experiment/tests/data/`, listed in
+   `schema_test.cpp`); `AZURE2 --schema > tests/schema/schema_v3.json`, `python3 tools/gen_schema_docs.py` [check 18,
+   21]. A test project of its own (`tests/rectangular_resolution/` is the pattern: the folded run against an average of
+   the unfolded one) also adds its lines to `tests/upgrade/predictions.txt` (`python3 tests/upgrade/predictions_test.py
+   --binary <AZURE2> --write`, lines added for the new project only) [`upgrade_predictions`].
+4. Docs: its row in `energy_grid.md` section 3.3, its form in `reference/data_formats.rst` (generated part) and a line in
+   `developer/edata_and_target_effects.rst`.
+The engine is not edited: the fold (`src/PointFold.cpp`), the grid's extent (`EffectSupport`, `src/TargetSetup.cpp`) and
+the gradient's weights (`FoldWeights`) read the table. Limits (2026-11): a table kernel cannot be combined with a
+target, a beam spread, a beam profile or a UDR on one data set (refused in `TargetEffect::SelectKernels`; kernels are
+chained by the grid branch); a kernel that needs a new datum of the point or a non-scalar parameter adds it to
+`KernelPoint`/`KernelParameters` and to `TargetEffect::KernelParametersFor`; a parameter a fit varies needs its
+parameter kind (recipe "A new kind of fit parameter"): kernel parameters are not yet fit parameters, whatever the
+row's `fittable` says.
+
 **A new material or a measured stopping table** (`stopping/`, `docs/upgrade/stopping.md`). A material is data, not
 code: `MaterialFromFormula("Ta2O5")` or `MaterialFromFractions(...)`, then set its fields: `phase` (SRIM's default is
 gas only for a single natural-gas element; a gaseous compound such as CH4 needs `Phase::kGas`), `compound_correction`
@@ -352,6 +379,18 @@ regenerate `stopping/tests/data/srim_reference.csv` with `stopping/tools/make_sr
 `lunasrim`) only if LunaSRIM itself changed, and run `ctest -R stopping`. Every output that uses these stopping powers
 cites SRIM (`kSrimCitation`). The library includes only `azure2/stopping/`, `azure2/physics/` and the standard library
 [check 32].
+
+**A new stopping source** (beside `formula`, `evaluation`, `table`; `docs/upgrade/stopping.md` §14). A target's stopping
+is computed in one place, `TargetStopping::PerActiveNucleus` (`src/TargetStopping.cpp`), lab MeV cm² per active nucleus;
+`TargetEffect::StoppingAt` multiplies the stopping scale once and every reader asks it.
+1. The keyword: one `Keyword(...)` of `f.stopping` in `experiment/src/Schema.cpp` (its parts, `scale` among them) and
+   its `StoppingSpec::Source` value (`experiment/.../SetupSpecs.h`), filled by `StoppingInto` and keyed for the shared
+   scale by `ScaleOf` (`experiment/src/BuildEffects.cpp`).
+2. Its case in `TargetStopping`: built in the constructor (a library object from the spec, or `Error()`), evaluated in
+   `LibraryPerActiveNucleus`, refused in `Check` (codes `E_STOPPING_DATA`, `E_STOPPING_RANGE`), described in
+   `Provenance` (a source that is a published evaluation cites it there).
+3. A test with an answer from outside the engine (`tests/stopping_yield` is the pattern), the schema and docs as in
+   "A format-3 field".
 
 Reference commits: `git show --stat 062b1bfe` (segment keyword `shiftfngroup`), `3e13fb28` (`normgroup`).
 

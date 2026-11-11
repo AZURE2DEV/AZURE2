@@ -38,7 +38,6 @@ TargetEffect::TargetEffect(const azure2::experiment::TargetEffectSpec &line, con
     const int numIntegrationPoints = line.numIntegrationPoints;
     const double sigma = line.sigma;
     const double density = line.density;
-    const int numParameters = (int)line.stoppingPowerParameters.size();
     const vector_r &parameters = line.stoppingPowerParameters;
     const int numConvCoefficients = (int)line.convolutionCoefficientValues.size();
     const vector_r &convCoefficients = line.convolutionCoefficientValues;
@@ -188,10 +187,21 @@ TargetEffect::TargetEffect(const azure2::experiment::TargetEffectSpec &line, con
     }
     if (dopplerError_) isDoppler_ = false;
     if (isTargetIntegration_) {
-      stoppingPowerEq_.Initialize(stoppingPowerEq, numParameters, configure);
-      for (int i = 0; i < numParameters; i++) {
-        stoppingPowerEq_.SetParameter(i, parameters[i], configure);
+      stopping_ = TargetStopping(line.stopping, stoppingPowerEq, parameters, configure);
+      const azure2::experiment::StoppingSpec &st = line.stopping;
+      hasStoppingScale_ = st.hasScale;
+      stoppingScaleNominal_ = st.scale;
+      stoppingScaleVary_ = st.scaleVary;
+      stoppingScaleSigma_ = st.scalePriorWidth;
+      // a fitted evaluation's scale without a written prior: the library's stated uncertainty (energy_grid.md 6.2)
+      if (st.scaleVary && !st.scaleHasPrior && stopping_.GetSource() == TargetStopping::Source::Evaluation) {
+        stoppingScaleSigma_ = stopping_.StatedRelUncertainty() * st.scale;
+        stoppingScaleSigmaDefault_ = true;
       }
+      stoppingScaleKey_ = st.scaleKey;
+      stoppingScaleName_ = st.scaleName;
+      stoppingScaleMaterial_ = st.scaleMaterial;
+      stoppingScaleProjectile_ = st.scaleProjectile;
     }
     if (isConvCoefficients_) {
       convolutionEq_.Initialize(convolutionEq, numConvCoefficients, configure);
@@ -200,6 +210,67 @@ TargetEffect::TargetEffect(const azure2::experiment::TargetEffectSpec &line, con
       }
     }
   }
+  this->SelectKernels(line);
+}
+
+/*!
+ * The effect's kernels (Kernels): the Doppler broadening when the line has one; the resolution kernel the spec names
+ * (a table kernel of a format-3 form), else the one the line's blocks select.  A target integration takes the beam
+ * spread and the straggling as its own parameters; a second resolution kernel beside it, or two of the beam spread,
+ * the beam profile and the UDR, would leave one of them unapplied: refused (HasKernelError).
+ */
+void TargetEffect::SelectKernels(const azure2::experiment::TargetEffectSpec &line) {
+  using azure2::experiment::KernelNamed;
+  if (isDoppler_) kernels_.broadening = KernelNamed("doppler");
+  if (!line.kernel.empty()) {
+    kernels_.resolution = KernelNamed(line.kernel);
+    kernelValues_ = line.kernelParameters;
+    if (!kernels_.resolution) kernelErrorText_ = "no kernel named \"" + line.kernel + "\"";
+    if (isTargetIntegration_ || this->IsGaussian() || isUdr_ || isBeamProfile_)
+      kernelErrorText_ = "the " + line.kernel + " kernel cannot be combined with a target, a beam spread, a beam profile or a UDR";
+    return;
+  }
+  std::vector<std::string> named;
+  if (isTargetIntegration_) named.push_back("target");
+  if (this->IsGaussian() && !isTargetIntegration_) named.push_back("gaussian");
+  if (isUdr_) named.push_back("udr");
+  if (isBeamProfile_) named.push_back("beam_profile");
+  if (named.empty()) return;
+  kernels_.resolution = KernelNamed(named.front());
+  if (named.size() > 1)
+    kernelErrorText_ = "one resolution kernel per data set: " + named[0] + " and " + named[1] + " cannot be combined";
+}
+
+azure2::experiment::KernelParameters TargetEffect::KernelParametersFor(const Config &configure) const {
+  azure2::experiment::KernelParameters p;
+  p.gaussian = this->IsGaussian();
+  p.sigma.at = [](const void *effect, const void *config, double eCM, double cmFactor) {
+    return static_cast<const TargetEffect *>(effect)->SigmaCM(eCM, *static_cast<const Config *>(config), cmFactor);
+  };
+  p.sigma.owner = this;
+  p.sigma.context = &configure;
+  p.thickTarget = isThickTarget_;
+  p.layerYield = isLayerYield_;
+  p.densityFit = hasDensityFit_;
+  p.straggling = isStraggling_;
+  p.stragglingCoefficient = stragglingCoefficient_;
+  p.layoutDensity = this->GetLayoutDensity();
+  p.stopping.at = [](const void *effect, const void *config, double eLab, double) {
+    const TargetEffect *te = static_cast<const TargetEffect *>(effect);
+    return te->StoppingAt(eLab, *static_cast<const Config *>(config), te->stoppingScaleNominal_);
+  };
+  p.stopping.owner = this;
+  p.stopping.context = &configure;
+  p.profile = &beamProfile_;
+  p.tpcSigma = beamTpcSigma_;
+  p.truncation = beamTruncation_;
+  p.detailedBalance = beamPhotodissociation_;
+  p.flightPath = udrFlightPath_;
+  p.dopplerNominal = this->GetDopplerNominal();
+  p.dopplerLayout = this->GetDopplerLayoutTemperature();
+  p.values = kernelValues_.data();
+  p.numValues = static_cast<int>(kernelValues_.size());
+  return p;
 }
 
 /*!
@@ -244,25 +315,10 @@ bool TargetEffect::IsBeamProfile() const {
  */
 
 bool TargetEffect::IsSubPointEffect() const {
-  return isConvolution_ || isTargetIntegration_ || isConvCoefficients_ || isBeamProfile_ || isUdr_ || isDoppler_;
+  return kernels_.resolution != nullptr || kernels_.broadening != nullptr;
 }
 
 
-double TargetEffect::DopplerUAt(double cmFactor, double temperature) const {
-  if (!isDoppler_ || !(cmFactor > 0.0) || !(cmFactor < 1.0)) return 0.0;
-  const double kT = 8.617333262e-11 * temperature;     // MeV
-  return std::sqrt(kT * (1.0 - cmFactor) / cmFactor);  // m/M = (1 - c)/c for c = M/(m+M)
-}
-
-void TargetEffect::DopplerWindow(double eCM, double cmFactor, double &lo, double &hi) const {
-  lo = hi = eCM;
-  const double u = this->DopplerUAt(cmFactor, this->GetDopplerLayoutTemperature());
-  if (!(u > 0.0) || !(eCM > 0.0)) return;
-  // the kernel is a Gaussian in velocity, exp(-(v-w)^2/u^2): standard deviation u/sqrt(2)
-  const double v = std::sqrt(eCM / cmFactor), dv = convolutionRange * u / std::sqrt(2.0);
-  hi = cmFactor * (v + dv) * (v + dv);
-  lo = (v > dv) ? cmFactor * (v - dv) * (v - dv) : 0.0;
-}
 
 bool TargetEffect::IsUdr() const { return isUdr_; }
 const std::string &TargetEffect::GetUdrFile() const { return udrFile_; }
@@ -362,8 +418,8 @@ bool TargetEffect::LoadUdrTable(double eMinLab, double eMaxLab, std::ostream &lo
  * convolution and normalisation.
  */
 
-std::shared_ptr<const UdrKernel> TargetEffect::BuildUdrKernel(double eLab, double mass) const {
-  std::shared_ptr<UdrKernel> k = std::make_shared<UdrKernel>();
+std::shared_ptr<const azure2::experiment::UdrKernel> TargetEffect::BuildUdrKernel(double eLab, double mass) const {
+  std::shared_ptr<azure2::experiment::UdrKernel> k = std::make_shared<azure2::experiment::UdrKernel>();
   if (!udrTable_ || udrTable_->energy.empty()) return k;
   const UdrTable &t = *udrTable_;
   size_t hi = 0;
@@ -410,7 +466,7 @@ std::shared_ptr<const UdrKernel> TargetEffect::BuildUdrKernel(double eLab, doubl
   // time at this point's flight time t (SAMMY manual eq. III C3 a.14).
   double width = udrChannelWidth_ * 1.0e-3;
   if (udrChannelWidth_ < 0.0)
-    width = UdrKinematics::TimeOfFlight(eLab, mass, udrFlightPath_) * std::log(10.0) / (2.0 * std::fabs(udrChannelWidth_));
+    width = azure2::experiment::UdrKinematics::TimeOfFlight(eLab, mass, udrFlightPath_) * std::log(10.0) / (2.0 * std::fabs(udrChannelWidth_));
   if (sigma > 0.0 || width > 0.0) {
     double dt = (k->tau.back() - k->tau.front()) / (n - 1);
     double half = 5.0 * sigma + 0.5 * width;
@@ -444,8 +500,8 @@ std::shared_ptr<const UdrKernel> TargetEffect::BuildUdrKernel(double eLab, doubl
   // the nominal one (no real resolution function has weight there; a badly
   // scaled or uncentred table can), so the sub-point window stays finite.
   {
-    const double t0 = UdrKinematics::TimeOfFlight(eLab, mass, udrFlightPath_);
-    const double tauCap = t0 - UdrKinematics::TimeOfFlight(100.0 * eLab, mass, udrFlightPath_);
+    const double t0 = azure2::experiment::UdrKinematics::TimeOfFlight(eLab, mass, udrFlightPath_);
+    const double tauCap = t0 - azure2::experiment::UdrKinematics::TimeOfFlight(100.0 * eLab, mass, udrFlightPath_);
     for (size_t j = 0; j < k->tau.size(); j++) if (k->tau[j] > tauCap) k->r[j] = 0.0;
   }
   // Support and normalisation.
@@ -460,52 +516,6 @@ std::shared_ptr<const UdrKernel> TargetEffect::BuildUdrKernel(double eLab, doubl
   for (size_t j = 0; j + 1 < k->tau.size(); j++) norm += 0.5 * (k->r[j] + k->r[j + 1]) * (k->tau[j + 1] - k->tau[j]);
   if (norm > 0.0) for (double &v : k->r) v /= norm;
   return k;
-}
-
-/*!
- * Beam profile weight at an energy: the weighted sum of the skewed-Gaussian
- * components,  G(E|xi,omega,alpha) = exp(-((E-xi)/omega)^2/2) /(omega sqrt(2 pi))
- * * (1 + erf(alpha (E-xi)/(omega sqrt 2))),  each optionally zeroed outside
- * its mean +- nCut standard deviations.
- */
-
-double TargetEffect::BeamProfileWeight(double energy) const {
-  double weight = 0.0;
-  for (std::vector<BeamProfileComponent>::const_iterator c = beamProfile_.begin(); c != beamProfile_.end(); c++) {
-    if (!(c->omega > 0.0)) continue;
-    double z = (energy - c->xi) / c->omega;
-    if (beamTruncation_ > 0.0) {
-      double delta = c->alpha / std::sqrt(1.0 + c->alpha * c->alpha);
-      double mean = c->xi + c->omega * delta * std::sqrt(2.0 / pi);
-      double sd = c->omega * std::sqrt(1.0 - 2.0 * delta * delta / pi);
-      if (std::fabs(energy - mean) > beamTruncation_ * sd) continue;
-    }
-    weight += c->weight * std::exp(-0.5 * z * z) / (c->omega * std::sqrt(2.0 * pi)) * (1.0 + std::erf(c->alpha * z / std::sqrt(2.0)));
-  }
-  return weight;
-}
-
-/*!
- * Energy interval that contains all of the beam profile: the union of
- * xi +- 5 omega over the components (tighter if the profile is truncated).
- */
-
-void TargetEffect::BeamProfileSupport(double &low, double &high) const {
-  low = 1.0e300;
-  high = -1.0e300;
-  for (std::vector<BeamProfileComponent>::const_iterator c = beamProfile_.begin(); c != beamProfile_.end(); c++) {
-    double lo = c->xi - 5.0 * c->omega;
-    double hi = c->xi + 5.0 * c->omega;
-    if (beamTruncation_ > 0.0) {
-      double delta = c->alpha / std::sqrt(1.0 + c->alpha * c->alpha);
-      double mean = c->xi + c->omega * delta * std::sqrt(2.0 / pi);
-      double sd = c->omega * std::sqrt(1.0 - 2.0 * delta * delta / pi);
-      lo = std::max(lo, mean - beamTruncation_ * sd);
-      hi = std::min(hi, mean + beamTruncation_ * sd);
-    }
-    low = std::min(low, lo);
-    high = std::max(high, hi);
-  }
 }
 
 double TargetEffect::GetBeamTpcSigma() const {
@@ -535,65 +545,6 @@ double TargetEffect::SigmaCM(double eCM, const Config &configure, double cmFacto
     return convolutionEq_.Evaluate(configure, eCM);
   }
   return cmFactor * sigma_;
-}
-
-double TargetEffect::GaussianKernel(double e, double centroid, double sigma) {
-  return pow(2. * pi, -0.5) / sigma * exp(-pow(e - centroid, 2.0) / 2.0 / pow(sigma, 2.0));
-}
-
-double TargetEffect::StragglingSigma(double deltaE) const {
-  if (!isStraggling_ || deltaE <= 0.0) return 0.0;
-  return stragglingCoefficient_ * std::sqrt(deltaE * 1000.0) / 1000.0;
-}
-
-/*!
- * Bohr's energy straggling after traversing an areal density N x (atoms/cm^2) of the target:
- * Omega_lab^2 = 4 pi Z1^2 e^4 Z2 N x (N. Bohr, Phil. Mag. 30 (1915) 581), a lab width converted to the
- * c.m. with the entrance pair's mass ratio.  e^2 = alpha hbar c in MeV fm, 1 fm = 1e-13 cm.  Z2 is the
- * charge of the target nucleus: for a compound target whose stopping cross section is per molecule or per
- * active atom (see the user guide) the electrons of the other constituents are not counted, and an
- * explicit coefficient should be entered instead.
- */
-
-double TargetEffect::BohrStragglingSigma(double arealDensity, double cmFactor, int z1, int z2) const {
-  if (!this->IsBohrStraggling() || !(arealDensity > 0.0) || z1 == 0 || z2 <= 0) return 0.0;
-  const double e2 = fstruc * hbarc * 1.0e-13;  // MeV cm
-  const double omega2 = 4.0 * pi * z1 * z1 * z2 * e2 * e2 * arealDensity;  // lab MeV^2
-  return cmFactor * std::sqrt(omega2);
-}
-
-/*!
- * The sub-point grid of a point reaches forwardDepth above and backwardDepth below its energy. A
- * Gaussian beam spread needs convolutionRange sigma on each side; target integration needs the target
- * thickness below, and with a beam spread the window is padded by a further factor 5 (kept from the
- * original code, which sized the grid that way for the nested integral); straggling adds its own
- * convolutionRange sigma at the back of the target. One function for what used to be written out
- * eight times in WorkingCopy.cpp.
- */
-
-void TargetEffect::GridExtent(double eCM, double thicknessCM, const Config &configure, double cmFactor, int z1, int z2, double &forward, double &backward) const {
-  forward = 0.0;
-  backward = 0.0;
-  double beam = this->IsGaussian() ? convolutionRange * this->SigmaCM(eCM, configure, cmFactor) : 0.0;
-  if (this->IsTargetIntegration()) {
-    backward = thicknessCM + (this->IsGaussian() ? 5.0 * beam : 0.0);
-    forward = this->IsGaussian() ? 5.0 * beam : 0.0;
-    if (this->IsBohrStraggling()) {
-      // the whole target: its areal density (the largest a fitted density is laid out for), or for a thick
-      // target the thickness over the surface stopping power
-      double areal = this->GetLayoutDensity();
-      if (isThickTarget_) {
-        const double eps = cmFactor * stoppingPowerEq_.Evaluate(configure, eCM / cmFactor);
-        areal = (eps > 0.0) ? thicknessCM / eps : 0.0;
-      }
-      backward += convolutionRange * this->BohrStragglingSigma(areal, cmFactor, z1, z2);
-    } else {
-      backward += convolutionRange * this->StragglingSigma(thicknessCM);
-    }
-  } else if (this->IsGaussian()) {
-    backward = beam;
-    forward = beam;
-  }
 }
 
 const std::vector<TargetEffect::BeamProfileComponent> &TargetEffect::GetBeamProfile() const {
@@ -676,14 +627,20 @@ double TargetEffect::GetDensity() const {
  */
 
 double TargetEffect::TargetThickness(double energy, const Config &configure) const {
-  return this->TargetThickness(energy, configure, this->GetDensity());
+  return this->TargetThickness(energy, configure, this->GetDensity(), stoppingScaleNominal_);
 }
 
-double TargetEffect::TargetThickness(double energy, const Config &configure, double density) const {
-  const double eps0 = stoppingPowerEq_.Evaluate(configure, energy);
+double TargetEffect::GetLayoutStoppingScale() const {
+  if (!hasStoppingScale_ || !stoppingScaleVary_) return stoppingScaleNominal_;
+  const double s0 = stoppingScaleNominal_;
+  return (stoppingScaleSigma_ > 0.0) ? std::max(s0 + 3.0 * stoppingScaleSigma_, 1.1 * s0) : 1.5 * s0;
+}
+
+double TargetEffect::TargetThickness(double energy, const Config &configure, double density, double scale) const {
+  const double eps0 = this->StoppingAt(energy, configure, scale);
   if (!(eps0 > 0.0) || !(density > 0.0) || !(energy > 0.0)) return eps0 * density;
   auto invEps = [&](double e) {
-    const double eps = stoppingPowerEq_.Evaluate(configure, e);
+    const double eps = this->StoppingAt(e, configure, scale);
     return (eps > 0.0) ? 1.0 / eps : 0.0;
   };
   double delta = eps0 * density;
@@ -706,12 +663,12 @@ double TargetEffect::TargetThickness(double energy, const Config &configure, dou
   return delta;
 }
 
-double TargetEffect::MeanEnergyLoss(double energy, const Config &configure, double density) const {
+double TargetEffect::MeanEnergyLoss(double energy, const Config &configure, double density, double scale) const {
   if (isThickTarget_) return 0.0;
-  const double delta = this->TargetThickness(energy, configure, density);
+  const double delta = this->TargetThickness(energy, configure, density, scale);
   if (!(delta > 0.0) || !(delta <= energy)) return 0.0;
   auto invEps = [&](double e) {
-    const double eps = stoppingPowerEq_.Evaluate(configure, e);
+    const double eps = this->StoppingAt(e, configure, scale);
     return (eps > 0.0) ? 1.0 / eps : 0.0;
   };
   // Simpson on 32 panels: int (E - e)/epsilon de / int 1/epsilon de over [E - Delta, E]
@@ -797,7 +754,6 @@ std::vector<int> TargetEffect::GetSegmentsList() const {
  * cross section.
  */
 
-const Equation *TargetEffect::GetStoppingPowerEq() const { return &stoppingPowerEq_; }
 
 /*!
  * Returns the Equation object corresponding to the parametrized convolution.

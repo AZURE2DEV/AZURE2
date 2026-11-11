@@ -1,0 +1,57 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+format=3
+</config>
+<levels>
+1 -1 13.027400 1 1 1 2 0 1 1 1 60 0.5 1 0.5 -1 0.0 1.007825 15.000109 1 7 12.1274 12.1274 0 0 0.0 0 4.85 0 0 0
+1 -1 13.027400 1 1 2 0 2 1 1 1 40 0 1 0 1 0.0 4.002603 12.0 2 6 12.1274 7.16192 0 0 0.0 0 5.43 0 0 0
+
+0.5 1 30.000000 1 1 3 1 0 2 1 1 0 0.5 1 0 1 0.0 1.008665 12.0 0 6 4.94636 4.94636 0 0 0.0 0 0.1 0 0 0
+</levels>
+<data>
+# Synthetic scans (make_project.py): N1, N2 and the stopping scale of (TiN, p) free
+dataset scan1
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/scan1.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         F1
+    quadrature     points 40
+dataset scan2
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/scan2.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         F2
+    quadrature     points 40
+</data>
+<targets>
+target F1
+    kind           layer
+    active         15N
+    composition    Ti 1 N 1
+    areal_density  5e+17 atoms/cm2 fit
+    stopping       evaluation scale 1 fit prior 1 4%
+    straggling     none
+target F2
+    kind           layer
+    active         15N
+    composition    Ti 1 N 1
+    areal_density  1e+18 atoms/cm2 fit
+    stopping       evaluation scale 1 fit prior 1 4%
+    straggling     none
+</targets>

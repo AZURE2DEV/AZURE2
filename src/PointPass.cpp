@@ -15,17 +15,10 @@
 #include "CNuc.h"
 #include "CalculationPlan.h"
 #include "Config.h"
+#include "PointFold.h"
 #include "WorkingCopy.h"
 #include "Unit.h"
 #include "TargetEffect.h"
-
-namespace {
-thread_local bool tlPointMappingOff = false;
-}
-
-ScopedPointMappingOff::ScopedPointMappingOff() : previous_(tlPointMappingOff) { tlPointMappingOff = true; }
-ScopedPointMappingOff::~ScopedPointMappingOff() { tlPointMappingOff = previous_; }
-bool ScopedPointMappingOff::Active() { return tlPointMappingOff; }
 
 void Unit::MarkFailed(WorkingCopy *data, azure2::Results &results, const char *role, const Config &configure,
                         const char *why) {
@@ -57,9 +50,8 @@ bool Unit::InjectedFailure() const {
 
 void Unit::Calculate(WorkingCopy *data, CNuc *theCNuc, const Config &configure, azure2::Results &results) {
   if (this->InjectedFailure()) throw std::runtime_error("injected failure (AZURE_TEST_FAIL_E).");
-  // Points mapped onto this one (WorkingCopy::MapData): they share its energy, and each of its sub-points' energies,
-  // unless mapping is switched off on this thread (ScopedPointMappingOff).
-  const azure2::MappedPoints mappedPts = ScopedPointMappingOff::Active() ? azure2::MappedPoints() : this->PlanMapped(data);
+  // Points mapped onto this one (WorkingCopy::MapData): they share its energy, and each of its sub-points' energies.
+  const azure2::MappedPoints mappedPts = this->PlanMapped(data);
   const int numMapped = mappedPts.size();
   std::vector<Unit *> units(1 + numMapped);
   if (!this->IsTargetEffect() || !azure2::HasSubPointFold(*data, *this)) {
@@ -89,7 +81,7 @@ void Unit::PrepareSubPoints(WorkingCopy *data, CNuc *theCNuc, const Config &conf
 }
 
 void Unit::FoldSubPoints(WorkingCopy *data, CNuc *theCNuc, const Config &configure, azure2::Results &results) {
-  const azure2::MappedPoints mappedPts = ScopedPointMappingOff::Active() ? azure2::MappedPoints() : this->PlanMapped(data);
+  const azure2::MappedPoints mappedPts = this->PlanMapped(data);
   const int numMapped = mappedPts.size();
   const TargetEffect *effect = data->Data().GetTargetEffect(this->GetTargetEffectNum());
   if (effect->IsTargetIntegration() && !effect->IsThickTarget()) {
@@ -263,12 +255,12 @@ void Unit::IntegrateTargetEffectComponents(const WorkingCopy &data, const Config
 
   for (int i = 1; i <= n; i++)
     this->GetSubPoint(data, i)->SetFitCrossSection(results, this->GetSubPoint(data, i)->GetFitE1CrossSection(results));
-  this->IntegrateTargetEffect(data, configure, results);
+  FoldPoint(*this, data, configure, results);
   this->SetFitE1CrossSection(results, this->GetFitCrossSection(results));
 
   for (int i = 1; i <= n; i++)
     this->GetSubPoint(data, i)->SetFitCrossSection(results, this->GetSubPoint(data, i)->GetFitE2CrossSection(results));
-  this->IntegrateTargetEffect(data, configure, results);
+  FoldPoint(*this, data, configure, results);
   this->SetFitE2CrossSection(results, this->GetFitCrossSection(results));
 
   for (int i = 1; i <= n; i++) this->GetSubPoint(data, i)->SetFitCrossSection(results, sigma[i - 1]);
@@ -304,17 +296,17 @@ void Unit::IntegrateTargetEffectForObservable(const WorkingCopy &data, const Con
       a0[i - 1] = this->GetSubPoint(data, i)->GetAngDistA0(results);
     }
     for (int i = 1; i <= n; i++) this->GetSubPoint(data, i)->SetFitCrossSection(results, a0[i - 1]);
-    this->IntegrateTargetEffect(data, configure, results);
+    FoldPoint(*this, data, configure, results);
     const double denominator = this->GetFitCrossSection(results);
     for (int i = 1; i <= n; i++) this->GetSubPoint(data, i)->SetFitCrossSection(results, ak[i - 1] * a0[i - 1]);
-    this->IntegrateTargetEffect(data, configure, results);
+    FoldPoint(*this, data, configure, results);
     const double numerator = this->GetFitCrossSection(results);
     for (int i = 1; i <= n; i++) this->GetSubPoint(data, i)->SetFitCrossSection(results, ak[i - 1]);
     this->SetFitCrossSection(results, std::fabs(denominator) > 0.0 ? numerator / denominator : 0.0);
     return;
   }
   if (!this->IsAnalyzingPower()) {
-    this->IntegrateTargetEffect(data, configure, results);
+    FoldPoint(*this, data, configure, results);
     this->IntegrateTargetEffectComponents(data, configure, results);
     return;
   }
@@ -323,12 +315,12 @@ void Unit::IntegrateTargetEffectForObservable(const WorkingCopy &data, const Con
   std::vector<double> sigma(n);
   for (int i = 1; i <= n; i++) sigma[i - 1] = this->GetSubPoint(data, i)->GetFitCrossSection(results);
 
-  this->IntegrateTargetEffect(data, configure, results);
+  FoldPoint(*this, data, configure, results);
   const double denominator = this->GetFitCrossSection(results);
 
   for (int i = 1; i <= n; i++)
     this->GetSubPoint(data, i)->SetFitCrossSection(results, sigma[i - 1] * this->GetSubPoint(data, i)->GetAnalyzingPower(results));
-  this->IntegrateTargetEffect(data, configure, results);
+  FoldPoint(*this, data, configure, results);
   const double numerator = this->GetFitCrossSection(results);
 
   for (int i = 1; i <= n; i++) this->GetSubPoint(data, i)->SetFitCrossSection(results, sigma[i - 1]);

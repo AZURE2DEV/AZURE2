@@ -19,6 +19,7 @@
 #include "Unit.h"
 #include "Segment.h"
 #include "PPair.h"
+#include "PointFold.h"
 #include "Predictions.h"
 #include "TargetEffect.h"
 
@@ -48,7 +49,7 @@ bool CalculatePoint(WorkingCopy &data, Unit *point, const char *role, CNuc *cnuc
 
 // Whether the combination calculates `point` itself: the leaves are not in yet, and the point is its own host.
 bool CalculatesItself(const Unit *point, azure2::LeafValues leaves) {
-  return leaves == azure2::LeafValues::Calculate && (!point->IsMapped() || ScopedPointMappingOff::Active());
+  return leaves == azure2::LeafValues::Calculate && !point->IsMapped();
 }
 
 // A sample segment's point whose combination fails: its per-nucleus terms are NaN too (written by this evaluation).
@@ -106,7 +107,7 @@ const char *TermRole(const Prediction &p, const Segment &segment, int term) {
  * The base point's kernel for a transmission or yield (experiment::SubPointFold): the layout of its sub-points, with
  * the free-gas Doppler broadening of the point's target effect as a linear map before the transform (SAMMY's order:
  * every term's sub-point values broadened on the common grid, the broadened values transformed, the kernel applied
- * without its own Doppler step), and Unit::IntegrateSubPointValues on a local vector, never on the sub-points.
+ * without its own Doppler step), and FoldValues on a local vector, never on the sub-points.
  * For the backward pass of a fitted temperature, the map's derivative d/dT goes beside it, its cotangent into
  * parameter slot `temperatureSlot`.  WorkingCopy::CheckTransformedSegments makes sure every term shares the base point's
  * sub-point grid.
@@ -132,7 +133,7 @@ class BaseKernel : public azure2::experiment::SubPointFold {
     rowStart_.push_back(0);
     rowStartT_.push_back(0);
     for (double e : energies) {
-      base->DopplerWeights(data, e, dw, temperature ? &dwdT : nullptr);
+      FoldBroadeningWeights(*base, data, configure, e, dw, temperature ? &dwdT : nullptr);
       for (const auto &t : dw) {
         col_.push_back(t.first - 1);
         w_.push_back(t.second);
@@ -152,13 +153,12 @@ class BaseKernel : public azure2::experiment::SubPointFold {
   }
   azure2::experiment::TransformStage stage(std::size_t) const override { return stage_; }
   double fold(std::size_t, const double *f, std::size_t n) const override {
-    Unit::DopplerAppliedScope dopplerDone(base_);
-    return base_->IntegrateSubPointValues(data_, configure_, std::vector<double>(f, f + n));
+    return FoldValues(*base_, data_, configure_, std::vector<double>(f, f + n), azure2::experiment::Broadening::kAlreadyApplied);
   }
   bool weights(std::size_t, double *c, std::size_t n) const override {
     std::vector<double> weights;
-    Unit::DopplerAppliedScope dopplerDone(base_);
-    if (!base_->TargetEffectWeights(data_, configure_, weights) || weights.size() != n) return false;
+    if (!FoldWeights(*base_, data_, configure_, weights, azure2::experiment::Broadening::kAlreadyApplied) || weights.size() != n)
+      return false;
     std::copy(weights.begin(), weights.end(), c);
     return true;
   }

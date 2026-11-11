@@ -50,7 +50,7 @@ oracle until the new module replaces the code it tests.
 | Gaussian ∘ Gaussian = Gaussian (σ² add) | Phase 5 kernels | `tests/convolution_window` (partial) |
 | probability conservation of kernel weights | Phase 5 kernels | none as a stand-alone identity |
 | convention invariance | Phase 1 `Convention` record and `level_parameters` conversions | none; T1 README lists the convention round trip as TODO |
-| stopping: thin-layer limit | Phase 5 stopping module | `tests/reference/compound_stopping_reference_test.cpp` (SRIM tables, to be removed) |
+| stopping: thin-layer limit | Phase 5 stopping module | `tests/stopping_yield` (against LunaSRIM) and ctest `stopping_convention` (the stopping per active nucleus) |
 | straggling: Bohr limit | Phase 5 stopping module | `tests/straggling_bohr` |
 | THM Green identity | Phase 5 THM observable (`THM.md`) | the THM tests of `thm-review` (Green identity 2.6 × 10⁻¹⁰, HANDOFF) |
 | DWBA vertex vs FRESCO | Phase 7 `physics/transfer` | `tests/reference/thm_dw_vertex_test.cpp` (zero-range against mpmath, not FRESCO) |

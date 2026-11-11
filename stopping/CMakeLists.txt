@@ -1,6 +1,6 @@
 # stopping/: AZURE2's stopping and straggling (docs/upgrade/stopping.md, docs/upgrade/ARCHITECTURE.md section 7).
 # A leaf library: it uses physics/ (constants, element symbols) and the C++ standard library, nothing else of AZURE2
-# (repo_consistency check 32 refuses any other include).  Nothing in the engine links it yet.
+# (repo_consistency check 32 refuses any other include).  The engine (AZURE2Core) links it.
 #
 # Layout: public headers in include/azure2/stopping/, sources in src/, SRIM-2013's data files in data/srim/ (compiled
 # in at build time, so the library needs no file at run time), tests in tests/, the command-line tool and the

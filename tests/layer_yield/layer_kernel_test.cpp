@@ -1,5 +1,5 @@
 /*!
- * The layer kernel alone (TargetEffect::IsLayerYield, include/LayerExit.h, src/TargetFold.cpp), on sub-point values
+ * The layer kernel alone (TargetEffect::IsLayerYield, azure2/experiment/LayerExit.h, experiment/src/KernelTarget.cpp), on sub-point values
  * chosen by hand -- no R-matrix, no project (the pattern of tests/reference/beam_profile_reference_test.cpp).  The
  * project of this directory (check.sh) tests the same kernel through the engine against closed forms to the output's
  * 11 digits; here the identity of energy_grid.md section 5.3 is tested to rounding:
@@ -8,7 +8,7 @@
  *      epsilon = a0 x^a1 (lab MeV cm^2, x = E/MeV) on a uniform and on an irregular grid, and for a c.m./lab factor of
  *      0.9375 (sub-point energies and stopping both c.m.); the same point as a thin target is sigma_0 to 1e-5 only
  *      (its E_out is TargetThickness's, another integration of epsilon), which shows the identity is not trivial;
- *   2. the weights of the fold (Unit::TargetEffectWeights, the analytic gradient's) add up to 1e-24 N to 1e-14;
+ *   2. the weights of the fold (FoldWeights, the analytic gradient's) add up to 1e-24 N to 1e-14;
  *   3. E_out of a constant epsilon is E_0 - N epsilon to 1e-14 (the rule is exact for it);
  *   4. a cross section linear in E folds to 1e-24 N sigma(E_bar_Q) with E_bar_Q the weighted mean energy of the nodes,
  *      checked against a constant epsilon, where E_bar = E_0 - N epsilon / 2 exactly: 1e-13;
@@ -24,7 +24,8 @@
 #include <vector>
 
 #include "Config.h"
-#include "LayerExit.h"
+#include "PointFold.h"
+#include "azure2/experiment/LayerExit.h"
 #include "TargetEffect.h"
 #include "Unit.h"
 #include "WorkingCopy.h"
@@ -88,16 +89,16 @@ Fold Run(const Config &configure, const TargetEffect &effect, const std::vector<
     Unit sub(0.0, nodes[i], 1, 2, false, false, false, 0.0, 0, 0);
     sub.SetResultRecord(rec * (i + 1), 0, 0);
     sub.SetFitCrossSection(results, sigma(nodes[i]));
-    sub.SetStoppingPower(f * effect.GetStoppingPowerEq()->Evaluate(configure, nodes[i] / f));
+    sub.SetStoppingPower(f * effect.StoppingAt(nodes[i] / f, configure, 1.0));
     data.UnitAt(unit).MakeSubPoint(sub);
     data.AppendUnit(sub);
   }
   data.UnitAt(unit).SetSubPointRange(unit + 1, (int)nodes.size());
-  data.UnitAt(unit).IntegrateTargetEffect(data, configure, results);
+  FoldPoint(data.UnitAt(unit), data, configure, results);
   Fold out;
   out.value = data.UnitAt(unit).GetFitCrossSection(results);
   std::vector<double> w;
-  if (data.UnitAt(unit).TargetEffectWeights(data, configure, w))
+  if (FoldWeights(data.UnitAt(unit), data, configure, w))
     for (double x : w) out.weightSum += x;
   return out;
 }
@@ -150,7 +151,7 @@ int main() {
     const TargetEffect layer = Layer(configure, N, "a0", {eps}, true);
     std::vector<double> nodes = Uniform(e0, e0 - 1.02 * N * eps, 9);
     double eOut = 0.0;
-    const bool found = LayerExitEnergy(
+    const bool found = azure2::experiment::LayerExitEnergy(
         (int)nodes.size(), [&](int j) { return nodes[j - 1]; }, [&](int) { return eps; }, e0, N, eOut);
     check("3. constant epsilon: E_out = E0 - N eps", found ? eOut : 0.0, e0 - N * eps, 1e-14);
     const double s0 = 0.2, s1 = 3.0;  // sigma = s0 + s1 (E - E0), b

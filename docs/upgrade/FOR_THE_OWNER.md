@@ -31,7 +31,9 @@ whoever asks for a calculation, and a project file that says in words what each 
 
 **Stopping.** AZURE2 has its own stopping and straggling library, `stopping/` (materials by formula, energy loss,
 exit energy and range of a layer, straggling propagated through the target, each value with an uncertainty and its
-source; `docs/upgrade/stopping.md`), built beside the engine and not yet used by it. Its stopping powers are
+source; `docs/upgrade/stopping.md`). A target says `stopping evaluation` and the engine takes the stopping of its
+composition from it, per active nucleus, with one stopping-scale nuisance per material and projectile (fixed at 1, or
+fitted with SRIM's stated accuracy as its prior); `pyazr.stopping` gives the same numbers in Python. Its stopping powers are
 SRIM-2013's for any ion in any element, solid or gas, ported to C++ from the LunaSRIM package (they agree with it to
 rounding) with SRIM's two data files, and every output cites SRIM (decision of 2026-11-11). One point is yours:
 those two files stay under the terms of SRIM's authors (LunaSRIM's README reads them as free for non-commercial use),
@@ -76,7 +78,8 @@ already or are files that exist to test a refusal.
 
 - ratio to Rutherford and to Mott; the S factor as a quantity (the engine converts with the pair's masses);
 - yields per charge or per particle, linked to a named target, thick or a layer of finite thickness (a resonance scan
-  through a target of known or fitted areal density; with the user's stopping formula until the stopping module);
+  through a target of known or fitted areal density; the stopping a formula, a table, or SRIM-2013's evaluation of the
+  target's composition with a fitted stopping scale);
 - values from the literature compared with functions of the level parameters, as χ² terms of their own
   (`<modelData>`): resonance strength ωγ, resonance energy, total and partial width, branching ratio, ANC,
   scattering length;
@@ -150,6 +153,11 @@ refused at once with the engine's message. An edit changes only the lines it tou
     warning); an extrapolation run does not need the data files.
   - data given in the lab frame are compared with the model in the lab frame (the model divided by
     dΩ_lab/dΩ_c.m., the datum and its error as read), as the PI decided: χ² and fits are the same to rounding.
+  - two resolution kernels on one data set (two of: a target integration, a beam spread without a target, a beam
+    profile, a UDR) are refused; before, one of them was not applied, without a message (a target integration
+    with a beam spread is one kernel and works as before);
+  - a THM data set that names an experiment the `<thm>` section does not define is refused at reading
+    (`E_THM_EXPERIMENT_UNKNOWN`).
 
 ## Speed
 
@@ -181,12 +189,11 @@ reads `CLAUDE.md` first, so it is given the recipes and is stopped by the checks
 
 ## What is in work and what comes next
 
-In work now (2026-11-11, evening): the engine takes its stopping powers from the stopping library (a target says
-`stopping evaluation`; one stopping scale per material and projectile as a nuisance parameter with a prior; ERYA
-removed); the analytic gradient per compound energy (the old point mapping deleted); the apparatus effects (target,
-resolution, beam profile, UDR, Doppler, layer yield) as kernel functions in one table, with a new kernel added by
-the recipe as the proof; pyazr moved off its old file class; an audit that every regression check still tests what
-it says after the conversion.
+In work now (2026-11-11, night): the sub-points of a folded data point stop being objects of their own and become
+entries of one node table per compound nucleus (the old point mapping deleted; every output must stay the same: the
+structural half of the shared energy grid); one generic kind of fit parameter for the parameters of apparatus
+effects, so that a kernel's width or a target's stopping scale is fitted without new engine code; pyazr moved off
+its old file class; an audit that every regression check still tests what it says after the conversion.
 
 Merged on 2026-11-11: the data classes replaced (`DataSet`, `WorkingCopy`, `Segment`, `Unit`); **all 183
 convertible project files in format 3**, the THM projects included; validation that reports what a run would
@@ -195,18 +202,42 @@ with edits of levels, `<config>` and `<thm>` done by the engine; the old pathway
 reads the pathway table; a crash on one ordering of the particle pairs fixed); the design note of Phase 5
 (`energy_grid.md`) with its decisions taken, and its first branches: the level matrix solved once per compound
 energy instead of once per data point or sub-point (a fit evaluation of 13N 132 ms instead of 317, of the
-thick-target project 264 ms instead of 1,102, every output unchanged; a fit with the analytic gradient does not gain
-yet and is 7 % slower at 5 threads until the gradient branch lands); the yield of a layer of finite thickness as a
+thick-target project 264 ms instead of 1,102, every output unchanged); the analytic gradient on the same per-energy
+tasks, with its sums in a fixed order, so that a fit gives the same numbers at any thread count (see "For the
+maintainers to decide"; the old gradient routes deleted); the yield of a layer of finite thickness as a
 quantity (its accuracy over a narrow resonance on a thick layer is 1.5e-4, the present quadrature's); laboratory
 data compared in the laboratory frame (last-digit rounding in 23 projects); SRIM-2013's stopping powers in
-`stopping/`, ported from LunaSRIM (agreement with LunaSRIM to the printing precision).
+`stopping/`, ported from LunaSRIM (agreement with LunaSRIM to the printing precision), and the engine taking its
+stopping from there: a target says `stopping evaluation`, with one stopping scale per material and projectile as a
+nuisance parameter with a prior (checked by the director on Si₃N₄ against an own integral with LunaSRIM: 8e-5 on a
+thick layer, 2e-4 of the plateau at the back edge of a thin one); ERYA removed; the apparatus effects as kernel
+functions in one table (next paragraph).
+
+**What an apparatus effect costs now (Phase 5, branch 6).** The folds (target, beam spread, beam profile, UDR,
+Doppler) are no longer branches inside the engine's point class: each is a kernel of `experiment/` in a file of its
+own, listed in one table (`experiment/src/Kernels.cpp`) with its format-3 keyword, its parameters and the interval its
+grid must span; the engine calls whatever the table holds, and the gradient reads the same code. Every output is
+unchanged. As the test of that claim a new effect was added by the written recipe (`CLAUDE.md`, "A new apparatus
+kernel"): a rectangular energy resolution of full width w (`energy_resolution rectangular width 20 keV` on a
+detector). It took one new kernel file (69 lines), one line in the table, one in the CMake list, tests (cases in
+`experiment/tests/kernels_test.cpp`, a fixture line, a test project `tests/rectangular_resolution/`), the regenerated
+schema and three documentation rows -- and no engine file. The yield of a finite layer, added a week earlier before
+this table existed, had touched 11 engine files. **The limits of that count** (director's review, 2026-11-11):
+(1) it holds for a resolution kernel that stands alone and has scalar parameters; a kernel that needs a new datum of
+the point (as Doppler needs the temperature) also edits the two parameter blocks of `Kernels.h` and the engine
+function that fills them (`TargetEffect::KernelParametersFor`); (2) kernels do not compose yet: the new kernel on a
+data set that also has a target, a beam spread, a beam profile or a UDR is refused, so it cannot fold a
+target-integrated yield until the shared grid (Phase 5, branch 7) chains kernels; (3) its width is declared fittable
+in its row but cannot be fitted: a parameter a fit varies still needs its own kind of fit parameter, and a new kind
+is not cheap -- the stopping scale of branch 5 edited 20 existing files. One generic kind that reads the kernel
+table's rows is the planned remedy.
 
 Then, to close Phase 4: the old reading path deleted (with `pyazr/azrfile.py`, 3,756 lines of
 a second grammar in Python); the rest of `CNuc` (the parameter vector and the set-up from the level rows).
 
 Phases 5–9 (`ROADMAP.md`): one energy grid with the apparatus as kernels, AZURE2's own stopping module, yields on
 finite layers, the comparison of energy-shifted data in the lab frame, and the THM observable (5); evaluation without
-copies (6); DWBA vertices for THM (7); pyazr 3.0 with wheels (8); the web interface, and removal of Qt, ERYA and
+copies (6); DWBA vertices for THM (7); pyazr 3.0 with wheels (8); the web interface, and removal of Qt (ERYA is gone) and
 numcmc (9).
 
 **An idea outside AZURE2 (Jakub):** an experiment logbook — yields, target scans, on-line analysis — as a separate
@@ -221,11 +252,16 @@ recipes.
 
 ## For the maintainers to decide
 
-- **Fits and the number of threads.** Calculations are identical at any thread count. A fit's path still depends on
-  it. Two causes were found (`fit_threads.md`). The first is fixed (a working copy kept a sub-point grid within
-  10⁻¹² of the new one). The second is in the vendored Minuit2: its call counter is not atomic, so with several
-  threads a fit limited by `--max-calls` can run one more iteration. Two atomic increments remove it (shown on a
-  scratch build); the patch touches `external/` and is not applied.
+- **Fits and the number of threads.** Calculations are identical at any thread count. Since the gradient branch
+  (2026-11-11) so are the results of a fit: six fits (T2 with the analytic gradient, MIGRAD and Levenberg-Marquardt,
+  13N, a fitted stopping scale, a fitted layer) give the same parameters, covariance, χ² and data output at 1 and 3
+  threads and from run to run (before, two runs of one build at 5 threads differed in 8 files). What still varies
+  is book-keeping: the number of calls printed in `fitStatus.out` (205, 204, 203 for one fit), the order of the
+  "Iteration" lines in the log, and the intermediate snapshot `param.fit`. The cause is in the vendored Minuit2: its
+  numerical-gradient loop calls the objective from several threads and its call counter is not atomic, so a fit
+  limited by `--max-calls` could in principle stop one iteration apart. Two atomic increments remove it (shown on a
+  scratch build, `fit_threads.md`); the patch touches `external/` and is not applied (the PI's decision); the engine
+  could count the calls itself instead.
 - **Two constants.** The electron mass in the β-decay Fermi function (CODATA 2002) and the proton mass of the M1
   capture integral (older than CODATA 2018) are kept at their values so that no result moves; they are named
   constants in `include/Constants.h` (`electronMassOfFermiFunction`, `protonMassOfM1Capture`) and can be changed in

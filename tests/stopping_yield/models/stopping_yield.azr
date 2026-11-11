@@ -1,0 +1,74 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+format=3
+</config>
+<levels>
+1 -1 13.027400 1 1 1 2 0 1 1 1 60 0.5 1 0.5 -1 0.0 1.007825 15.000109 1 7 12.1274 12.1274 0 0 0.0 0 4.85 0 0 0
+1 -1 13.027400 1 1 2 0 2 1 1 1 40 0 1 0 1 0.0 4.002603 12.0 2 6 12.1274 7.16192 0 0 0.0 0 5.43 0 0 0
+
+0.5 1 30.000000 1 1 3 1 0 2 1 1 0 0.5 1 0 1 0.0 1.008665 12.0 0 6 4.94636 4.94636 0 0 0.0 0 0.1 0 0 0
+</levels>
+<data>
+# Synthetic (make_project.py): a narrow resonance on TiN layers with SRIM-2013's stopping.  The data
+# values are placeholders; check.py compares the model values with LunaSRIM's numbers in truth.json.
+dataset plateau
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/plateau.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         TP
+    quadrature     points 40
+dataset plateau_table
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/plateau.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         TT
+    quadrature     points 40
+dataset step
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/step.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         TS
+    quadrature     points 40
+</data>
+<targets>
+target TP
+    kind           layer
+    active         15N
+    composition    Ti 1 N 1
+    areal_density  4e+18 atoms/cm2 fixed
+    stopping       evaluation
+    straggling     none
+target TT
+    kind           layer
+    active         15N
+    composition    Ti 1 N 1
+    areal_density  4e+18 atoms/cm2 fixed
+    stopping       table "data/tin_p.tab" MeV eV/1e15atoms/cm2
+    straggling     none
+target TS
+    kind           layer
+    active         15N
+    composition    Ti 1 N 1
+    areal_density  5e+17 atoms/cm2 fixed
+    stopping       evaluation
+    straggling     none
+</targets>

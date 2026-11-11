@@ -5,7 +5,7 @@
  * of a real project against a recorded number: it catches a CHANGE, but it
  * cannot say the number was ever right, because the reference came from the
  * same code.  This test is the independent check.  It drives
- * Unit::IntegrateTargetEffect directly, with sub-point cross sections chosen
+ * the point's fold (FoldPoint) directly, with sub-point cross sections chosen
  * by hand, and compares against
  *
  *   - closed-form values, where the fold has one (a constant cross section must
@@ -39,6 +39,7 @@
 #include <vector>
 
 #include "Config.h"
+#include "PointFold.h"
 #include "WorkingCopy.h"
 #include "Unit.h"
 #include "TargetEffect.h"
@@ -164,7 +165,7 @@ TargetEffect makeEffect(const Config &configure, const std::string &line) {
 }
 
 // Fold sigma(E) through the engine: build a point with sub-points on a uniform
-// grid over [lo, hi], hand it the effect, and call IntegrateTargetEffect.
+// grid over [lo, hi], hand it the effect, and call FoldPoint.
 template <typename Sigma>
 double engineFold(const Config &configure, WorkingCopy &data, int effectNum, Sigma sigma,
                   double e0, double lo, double hi, int nSub,
@@ -195,7 +196,7 @@ double engineFold(const Config &configure, WorkingCopy &data, int effectNum, Sig
     data.AppendUnit(sub);
   }
   data.UnitAt(unit).SetSubPointRange(unit + 1, nSub);
-  data.UnitAt(unit).IntegrateTargetEffect(data, configure, results);
+  FoldPoint(data.UnitAt(unit), data, configure, results);
   return data.UnitAt(unit).GetFitCrossSection(results);
 }
 
@@ -205,6 +206,10 @@ int main() {
   std::ostringstream sink;
   Config configure(sink);
   g_config = &configure;
+  // the beam profile at a lab energy, as the kernel evaluates it
+  auto Weight = [&configure](const TargetEffect &t, double e) {
+    return azure2::experiment::BeamProfileWeight(t.KernelParametersFor(configure), e);
+  };
 
   std::cout << "beam-profile reference calculation" << std::endl;
 
@@ -226,7 +231,7 @@ int main() {
   bool weightOk = true;
   double worstWeight = 0.0;
   for (double e = 2.0; e <= 5.0; e += 0.05) {
-    double got = single.BeamProfileWeight(e), want = ref.G(e);
+    double got = Weight(single, e), want = ref.G(e);
     double rel = std::fabs(got - want) / std::max(std::fabs(want), 1e-300);
     worstWeight = std::max(worstWeight, rel);
     if (rel > kPiTolerance) weightOk = false;
@@ -243,21 +248,21 @@ int main() {
   Kernel refTwin;
   refTwin.profile = {{3.4, 0.25, -1.2, 0.3}, {3.8, 0.32, -2.0, 0.7}};
   checkClose("a two-component profile sums its components",
-             twin.BeamProfileWeight(3.6), refTwin.G(3.6), kPiTolerance);
+             Weight(twin, 3.6), refTwin.G(3.6), kPiTolerance);
 
   // truncation
   TargetEffect cut = makeEffect(configure, targetIntLine(
       "beamprofile  1  3.5  0.30  -1.6  1  0.0733  2  0"));
   Kernel refCut = ref;
   refCut.truncation = 2.0;
-  checkClose("truncation keeps the centre", cut.BeamProfileWeight(3.4), refCut.G(3.4), kPiTolerance);
-  check("truncation zeroes the far tail", cut.BeamProfileWeight(2.2) == 0.0);
-  check("and the untruncated profile does not", single.BeamProfileWeight(2.2) > 0.0);
+  checkClose("truncation keeps the centre", Weight(cut, 3.4), refCut.G(3.4), kPiTolerance);
+  check("truncation zeroes the far tail", Weight(cut, 2.2) == 0.0);
+  check("and the untruncated profile does not", Weight(single, 2.2) > 0.0);
 
   double lo = 0.0, hi = 0.0;
-  single.BeamProfileSupport(lo, hi);
+  azure2::experiment::BeamProfileSupport(single.KernelParametersFor(configure), lo, hi);
   check("the support brackets the profile", lo < 3.5 && hi > 3.5 &&
-        single.BeamProfileWeight(lo) < 1e-4 * single.BeamProfileWeight(3.4));
+        Weight(single, lo) < 1e-4 * Weight(single, 3.4));
 
   // the profile stays in the lab frame of the input file; each point converts it with its own pair's
   // factor (Unit::SetTargetKinematics), so a line shared by several segments or pairs is never scaled

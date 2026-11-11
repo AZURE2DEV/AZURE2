@@ -249,17 +249,44 @@ effects follows this order:
 
 2. **Integrate** -- after the energy pass, ``Unit::FoldSubPoints()`` runs on
    the parent point (and the points mapped onto it): the bare probes, the
-   automatic tolerance and blending, then ``IntegrateTargetEffect()`` on the
-   sub-point cross sections, yielding the effective yield that accounts for
+   automatic tolerance and blending, then ``FoldPoint()`` (``src/PointFold.cpp``)
+   on the sub-point cross sections, yielding the effective yield that accounts for
    target and beam effects.
 
 Integration Methods
 -------------------
 
-The integration is implemented in ``Unit::IntegrateTargetEffect()``
-(``src/Unit.cpp``). All cases use **2-point Gauss-Legendre quadrature** on
-each sub-interval, which is exact for cubic polynomials and handles
-non-uniform (adaptive) grids correctly.
+Each apparatus effect is a kernel of ``experiment/``
+(``azure2/experiment/Kernels.h``): plain functions of the point's nodes (the
+sub-point energies, descending, and for a target their stopping), of the point
+(its energy, c.m./lab factor, target thickness, window, ...) and of the effect's
+parameters, listed in one table, ``Kernels()`` in ``experiment/src/Kernels.cpp``:
+
+=================  ==============================================  ====================================
+kernel             format-3 keyword                                file
+=================  ==============================================  ====================================
+``target``         a ``target`` of the data set (thin, layer,      ``KernelTarget.cpp``
+                   thick)
+``gaussian``       ``beam.spread``                                 ``KernelGaussian.cpp``
+``beam_profile``   ``beam.profile``                                ``KernelBeamProfile.cpp``
+``udr``            ``detector.udr``                                ``KernelUdr.cpp``
+``doppler``        ``target.doppler``                              ``KernelDoppler.cpp`` (a broadening,
+                                                                   applied first)
+``rectangular``    ``detector.energy_resolution rectangular``      ``KernelRectangular.cpp``: the
+                   ``width <w>``                                   average over [E0 - w/2, E0 + w/2]
+=================  ==============================================  ====================================
+
+An effect has at most one broadening and one resolution kernel
+(``TargetEffect::Kernels``, chosen once when the effect is built; two resolution
+kernels on one data set are refused).  The engine's fold, ``FoldPoint``
+(``src/PointFold.cpp``), gathers what the kernels read and makes one call through
+the table per point; the set-up lays each grid over the kernels' support
+(``EffectSupport``); the gradient reads the same kernel evaluated on a linear
+form (``FoldWeights``).  A new kernel is one file and one table row (``CLAUDE.md``,
+recipe "A new apparatus kernel").  All kernels that integrate use **2-point
+Gauss-Legendre quadrature** on each sub-interval (``KernelQuadrature.h``), which
+is exact for cubic polynomials and handles non-uniform (adaptive) grids
+correctly.
 
 Cross section values between grid points are obtained by **linear
 interpolation** from the two nearest sub-points.
@@ -410,7 +437,7 @@ Summary: Data Flow Diagram
        │           └── CalculateCrossSection() ← σ(E) of each unit
        │
        └── For each point with a fold: Unit::FoldSubPoints()
-           └── Unit::IntegrateTargetEffect()
+           └── FoldPoint() → the effect's kernels (experiment/Kernels.h)
            └── Gauss-Legendre quadrature over sub-point grid
                ├── Convolution only: ∫ σ(E') g(E'-E₀) dE'
                ├── Target only: ∫ σ(E')/ε(E') dE'
@@ -437,7 +464,7 @@ a THM segment 1 keV above the compound threshold, so a HOES point below the
 entrance threshold is folded over its whole window (``tests/thm_beam_profile``).  The window
 comes from ``DataLine`` extras (columns 5–6, ``Unit::HasBinWindow``), is
 converted with the point in ``ConvertLabEnergy`` and stored unshifted; the
-branch in ``Unit::IntegrateTargetEffect`` shifts it by the segment's current
+kernel (``KernelBeamProfile.cpp``) shifts it by the segment's current
 c.m. energy shift, normalises numerically (numerator and denominator on the
 same Gauss–Legendre points) and applies the detailed-balance weight from the
 kinematics stored by ``Unit::SetPhotoKinematics`` to the numerator only
@@ -449,7 +476,7 @@ re-runs the combiner on the E1 and E2 components for isDiff 5/6 segments.
 
 The convolution has a reference calculation of its own in
 ``tests/reference/beam_profile_reference_test.cpp``: it drives
-``Unit::IntegrateTargetEffect`` with hand-chosen sub-point cross sections and
+``FoldPoint`` with hand-chosen sub-point cross sections and
 compares against closed forms (a constant cross section must come back exactly)
 and against a second, densely integrated implementation of the documented
 formula. Unlike ``tests/beam_profile_kernel``, which pins a chi-squared this
@@ -482,8 +509,8 @@ thin-target point and updated with a fitted density).  A point outside every
 window keeps the effect number, is marked by ``SetTargetFallbackOnly(true)`` and has one
 sub-point at :math:`\bar E` (three, at :math:`\bar E` of 0.01 :math:`N_0`,
 :math:`N_0` and the layout density, under ``densityfit``); edge blending happens
-inside ``IntegrateKernelsImpl`` against ``TargetFallbackImpl`` (linear in the
-sub-point values, so ``TargetEffectWeights`` and the analytic gradient carry it);
+inside the target kernel against its sigma(E_bar) fallback (``KernelTarget.cpp``; linear in the
+sub-point values, so ``FoldWeights`` and the analytic gradient carry it);
 and ``Unit::FoldThinTarget`` makes the automatic decision from the end
 sub-points and the two around :math:`\bar E`, comparing the chord with
 :math:`\sigma(\bar E)` (curvature only), and lets the point off through a
@@ -510,7 +537,7 @@ merged with the line's own ranges and passed to the two-argument
 above.  The decision is made once per session and the windows do not follow a
 level that a fit moves.  Test: ``tests/target_auto_windows``.
 
-The combined branch of ``Unit::IntegrateTargetEffect`` accepts either
+The target kernel with a beam spread accepts either
 convolution flavour: a fixed beam sigma, or the energy-dependent convolution
 equation evaluated at each depth energy.  The latter combination used to fall
 through to pure target integration on a grid sized for the convolution,
@@ -530,14 +557,14 @@ frame factor and sample abundance; a yield's hidden ``total 1`` component,
 :math:`\sigma_t`) are summed and transformed at the point, or, under a
 sub-point target effect, at every sub-point, and the transformed values are
 swapped into the base point's sub-point slots for one more pass of
-``Unit::IntegrateTargetEffect``.  ``WorkingCopy::CheckTransformedSegments`` refuses
+``FoldValues`` (the broadening already applied).  ``WorkingCopy::CheckTransformedSegments`` refuses
 what that cannot express: terms on different sub-point grids (a sample of
 several compound nuclei), and a blended or automatically skipped effect.  Every
 evaluation path assembles a segment through ``azure2::EvaluateModelPoint``;
 pyazr's branch tests ``Segment::NeedsAssembly`` (components, sample weights or
 a transform), and the MCMC output snapshot assembles those segments too.  The
 gradient (``GradTransformedPoint``) back-propagates each term's point or
-sub-point with :math:`f'` times the kernel weight (``TargetEffectWeights``);
+sub-point with :math:`f'` times the kernel weight (``FoldWeights``);
 such points are never grouped (``Groupable``).  Test: ``tests/transmission_yield``.
 
 The fitted sample thickness: ``SegLine``'s ``ReadThicknessBlock`` reads the fit
@@ -639,26 +666,37 @@ points at one energy are mapped as before.  The energy-grouped gradient below
 leaves THM segments out; their rows come from the HOES adjoint
 (``THMMatrixFunc::THMPointAdjoint``) or THM-only differences.
 
-Energy-grouped analytic gradient
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Analytic gradient over the energy tasks
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The analytic gradient and the residual Jacobian (``AZUREGrad.cpp``) work on
-the same groups (``BuildGradItems``): one work item per host with the points
-mapped onto it, in parallel over items, so no two threads touch one point.  An
-item solves the level matrix and T-matrix once, forms each member's observable
-from them, and back-propagates:
+The analytic gradient, the residual Jacobian and the model gradients
+(``AZUREGrad.cpp``, ``GradEnergyTasks.cpp``) work on the energy tasks of the
+point pass (``CalculationPlan::EnergyTasks``: every unit -- a point or a
+sub-point -- at one compound energy, nucleus and route).  A pass has three
+steps:
 
-- for the scalar gradient (``AccumulateEGammaGradient``), the members'
-  T-matrix cotangents are summed and back-propagated once
-  (``AMatrixFunc::PointTBar``, ``TBarAdjoint``; the back-propagation is linear
-  in them);
-- for the rows of the residual Jacobian and the model gradients
-  (``GroupRows``), the derivatives of the group's level-matrix bilinear forms
-  :math:`g_c^T A\, g_{c'}` are taken once, for the cotangents 1 and *i*
-  (``AMatrixFunc::BilinearAdjoint``), and every member's row is a combination
-  of them with its own angle-dependent coefficients -- unless back-propagating
-  each member is cheaper (few members, many channel pairs) or the decay has
-  external capture.
+- forward: the point pass of the data segments other than THM
+  (``WorkingCopy::CalculatePointsInParallel``) and each point's model from the
+  records it wrote;
+- cotangents: each point's cotangent of its model (``fitBarFn`` of the
+  objective, called once per point in data order, or a row's
+  :math:`1/(\delta y\, n J)`) taken back through its expression tree
+  (``ModelPointBackward``) and its fold (``GradTargetEffectAdjoint``, the fold's
+  weights) to cotangents of its units' observables (``PointCotangents``);
+- adjoint: per energy task one fill and factorisation, one T-matrix per
+  T-matrix group, the T-matrix cotangents of a group's units summed
+  (``AMatrixFunc::PointTBar``), and the bilinear terms
+  :math:`g_c^T A\, g_{c'}` merged over the task and back-propagated once per
+  J-group (``AMatrixFunc::BilinearAdjoint``; a decay with external capture by
+  ``TBarAdjoint``, group by group).  The rows do the same per row; where it is
+  cheaper, the derivatives of the task's bilinear forms by free parameter are
+  taken once (``LevelBasis``, or ``BilinearAdjoint`` with the cotangents 1 and
+  *i*) and every row of the task is a combination of them.
+
+The sums do not depend on the number of threads: the scalar gradient sums the
+tasks in 64 interleaved chunks, each in task order, then the chunks in order;
+the rows add the tasks' contributions in task order.  A fit gives the same bits
+at any thread count.
 
 Electron screening (a ``screening`` block on a ``<targetInt>`` line) is a
 factor :math:`f = e^{k U_e}` on each point's own observable, applied after the
@@ -666,8 +704,8 @@ bare one is formed from the shared T-matrix (``GenMatrixFunc::CalculateCrossSect
 so points with different screening may share a calculation.  In the adjoint
 ``PointTBar`` scales the point's cotangent by :math:`f` and records
 :math:`\partial Y/\partial U_e`; ``TBarAdjoint`` adds it, and the
-bilinear-basis rows of ``GroupRows``, which do not back-propagate the
-member, add it to the member's row directly.
+bilinear-basis rows, which do not back-propagate a row, add it to the row
+directly.
 
 A fitted target density (``densityfit`` / ``densitygroup``, ``WorkingCopy::SetUpDensityParams``)
 is not in the adjoint: ``WorkingCopy::FillDensitiesFromParams`` sets the density of the
@@ -675,20 +713,20 @@ group's lines and recomputes each point's target thickness at the lab energy it
 was laid out at (``Unit::GetTargetLabEnergy``), and the gradient, the Jacobian
 column and the LM / GSL rows difference it like an energy shift.  The sub-point
 grids are laid out for ``TargetEffect::GetLayoutDensity`` and
-``Unit::IntegrateTargetEffect`` cuts the depth integral at :math:`E_0 - T(N)`,
+the target kernel cuts the depth integral at :math:`E_0 - T(N)`,
 so no grid moves with the parameter.
 
 A fitted Doppler temperature (``doppler T vary sigma [Tmax]``,
 ``TargetEffect::HasDopplerFit``, ``WorkingCopy::FillDopplerFromParams``) moves only the
-kernel values of ``Unit::DopplerWeights``: the grids are padded and each
+kernel values of the Doppler weights (``KernelDoppler.cpp``): the grids are padded and each
 integral's window taken at ``TargetEffect::GetDopplerLayoutTemperature``, and the
 number of Gauss-Legendre pieces per interval is fixed by the nominal temperature
-(``DopplerUAt(c, GetDopplerNominal())``). ``DopplerWeights(eCM, w, &dwdT)`` also
+(``DopplerU(c, T0)``). The weights at an energy (``FoldBroadeningWeights``) also
 returns :math:`\partial w/\partial T` on the same nodes, with
 :math:`\partial(\mathrm{norm}\,k)/\partial u = \mathrm{norm}\,[-k/u + x^2(2(v-x)^2
 e^{-(v-x)^2/u^2} - 2(v+x)^2 e^{-(v+x)^2/u^2})/u^3]` and :math:`du/dT = u/(2T)`.
 The adjoint adds :math:`\bar Y\,\partial Y/\partial T` to ``GradAccum::doppler``:
-``GradTargetEffectAdjoint`` through ``Unit::DopplerTemperatureDerivative`` (the
+``GradTargetEffectAdjoint`` through ``FoldTemperatureDerivative`` (the
 line's kernel applied to the broadened derivatives; :math:`(dN - \langle A\rangle
 dD)/D` for an analyzing power or a normalised coefficient), and
 ``GradTransformedPoint`` with each term's cotangent :math:`\bar Y c_J\,\partial
@@ -729,14 +767,12 @@ CurrentLevelDerivatives``, per parameter set and free mask), and with the
 solves :math:`u = A g` its derivative is :math:`O(n)` per free parameter
 (``AMatrixFunc::LevelAdjoint``, ``LevelBasis``; standard, Brune and Park
 level matrices).
-Points with components or sub-point target effects are still differentiated
-one by one (``GradOnePoint``), with the same back-propagation.  For a SUM or
-RATIO point without a sub-point target effect, ``GradOnePoint`` solves the
-level matrix once at the base point and takes each term's T-matrix and
-cotangent from it; the terms without external capture enter only through the
-bilinear forms :math:`g_c^T A g_{c'}`, which do not depend on the exit pair,
-so their cotangents are merged by channel pair and back-propagated once
-(``AMatrixFunc::TBarAdjointMany``).
+Points with components or sub-point target effects go the same way: their
+units' cotangents join the energy tasks of their units (see "Analytic gradient
+over the energy tasks"); the terms of a SUM or RATIO point without external
+capture enter only through the bilinear forms :math:`g_c^T A g_{c'}`, which do
+not depend on the exit pair, so their cotangents are merged by channel pair and
+back-propagated once per task.
 
 Segments with components (SUM, RATIO, total capture) are mapped as well, since
 October 2026 (``WorkingCopy::MapComponentSegments``): each component's point is
@@ -778,10 +814,9 @@ Environment switches
    No point mapping at all: every point calculates its own energy-dependent
    values and T-matrix.
 ``AZURE_NO_COMPONENT_MAPPING=1``
-   Every term of a SUM, RATIO or total-capture segment is its own calculation,
-   in the evaluation and in the gradient, as before October 2026.
-``AZURE_NO_GROUPED_GRADIENT=1``
-   Differentiate every point on its own (``GradOnePoint``), as before.
+   Every term of a SUM, RATIO or total-capture segment is a point of its own in
+   the calculation plan, as before October 2026 (the gradient runs over the
+   energy tasks either way).
 ``AZURE_GRAD_DENSE=1``
    Back-propagate through the level matrix with the dense
    :math:`A^H \bar A A^H` products.

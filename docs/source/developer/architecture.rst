@@ -27,9 +27,10 @@ Repository layout
    * - ``numcmc/``
      - The affine-invariant ensemble MCMC sampler.
    * - ``external/``
-     - Vendored upstream code, built in-tree and not modified: Minuit2 and
-       ``erya`` (SRIM stopping powers, pugixml). The Coulomb functions are part
-       of ``physics/`` (``physics/coulomb/``, from pycoulomb).
+     - Vendored upstream code, built in-tree and not modified: Minuit2. The
+       Coulomb functions are part of ``physics/`` (``physics/coulomb/``, from
+       pycoulomb); the stopping powers are ``stopping/`` (SRIM-2013 through
+       LunaSRIM).
    * - ``tests/``
      - The test suites (see :doc:`contributing`).
    * - ``docs/``

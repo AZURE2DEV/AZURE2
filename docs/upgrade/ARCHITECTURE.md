@@ -28,6 +28,13 @@ m_i(θ, ν)  = s_k(ν) · Σ_n K_in(ν) · O_n(θ)
 
 The gradient is the same three lines differentiated: ∂m/∂θ = s·K·∂O/∂θ, and ∂m/∂ν from K(ν). Nothing else.
 
+As built (Phase 5, second branch, `src/GradEnergyTasks.cpp`): the gradient runs over the same energy tasks as the
+point pass. The point pass gives every unit's record and every point's model; each point's cotangent goes back
+through its expression tree and its fold to cotangents of its units (the transpose of K); per energy task the
+level matrix is filled and factored once, the T-matrix cotangents of the units of each T-matrix group are summed,
+and the bilinear terms g_c^T A g_c' are back-propagated once per J-group (∂O/∂θ, transposed). The sums are formed
+in an order fixed by the tasks, not by the threads, so a gradient and a fit give the same bits at any thread count.
+
 **Exact energies (decision, Jakub, 2026-11-07).** As in AZURE2 today, every observable is calculated at the energy
 where it is compared with data; nothing is interpolated by default. The grid E_n is therefore the set of evaluation
 energies, not a mesh: (i) the data energies themselves, so a point without shift or fold has K_in = δ at its own
@@ -186,7 +193,8 @@ stateless thread-safe call, Whittaker functions, no committed build products, te
 ## 7. Stopping and straggling: SRIM-2013 through LunaSRIM (no ERYA)
 
 - Before: a user formula, or ERYA, which ships SRIM's coefficient file `SRIM2013.xml` inside a GPL code and evaluates
-  it with one formula at all energies. Straggling was c·√ΔE or plain Bohr. Both go (ERYA in the wiring branch).
+  it with one formula at all energies. Straggling was c·√ΔE or plain Bohr. ERYA is removed (branch
+  `stopping-wire`, 2026-11-11), where a target's `stopping evaluation` calls `stopping/`.
 - **Decision of the PI, 2026-11-11:** "I would use the SRIM stopping powers from my LunaSRIM repository. They are free
   to use as long as SRIM is cited." This replaces the earlier plan of an own evaluation fitted to the IAEA database.
   So the stopping library `stopping/` (`docs/upgrade/stopping.md`) computes SRIM-2013's stopping powers, ported to
@@ -218,7 +226,7 @@ distorted waves, stopping and straggling versus E and depth, kernel rows K_i(E_n
 | You add | It changes | You write | Tested in |
 |---|---|---|---|
 | an observable | O | how it follows from U | the test project with that observable |
-| an apparatus effect | K | its kernel weights on the grid | T2 |
+| an apparatus effect | K | its kernel: a fold template (value and weights) and a support, one row of `Kernels()` (`experiment/src/Kernels.cpp`) | `experiment/tests/kernels_test.cpp`, T2 |
 | a parameterization or convention | E_λ, γ_λc | the map from θ, with derivative | all (observables unchanged) |
 | a channel type | channel functions | P, S, φ for it (photon, β, potential) | T1 or T3 |
 | a THM vertex model | O (THM) | the vertex function W(p) | T2 THM part |
@@ -240,8 +248,9 @@ distorted waves, stopping and straggling versus E and depth, kernel rows K_i(E_n
 
 **Extension.** Each row of the table above is an explicit table in one source file, whose rows hold the name, what
 the front ends need (units, fields, documentation) and the function that does the work: the quantity table of
-`experiment/` (`project_format3.md` §7), the χ² terms of `src/Objective.cpp`, the apparatus kernels and stopping models
-of Phase 5. A new feature is one row and one test; `--schema`, the documentation tables and the GUI forms are
+`experiment/` (`project_format3.md` §7), the χ² terms of `src/Objective.cpp`, the apparatus kernels (`Kernels()`,
+`experiment/src/Kernels.cpp`, a row per kernel file; a detector-resolution row also generates its format-3 form) and
+the stopping models of Phase 5. A new feature is one row and one test; `--schema`, the documentation tables and the GUI forms are
 generated from the same rows, and a consistency check fails when a row is bypassed. Not used, on purpose:
 
 - classes that register themselves from a static object in their own `.cpp` (initialisation order is undefined, a

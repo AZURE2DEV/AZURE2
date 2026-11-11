@@ -70,21 +70,25 @@ def name_from_record(r):
         return f"segment_{r['segment_key']}_energy_shift_fn{r['fn_term']}"
     if k in ("screening", "density", "doppler"):
         return f"{k}_{r['effect']}"
+    if k == "stopping_scale":
+        return f"stopping_scale.{r['material']}.{r['projectile']}"
     if k == "cbkg":
         part = ("re0", "im0", "re1", "im1")[r["thm_term"]]
         return f"cbkg_{r['thm_experiment']}_{r['thm_jpi']}_{r['thm_exit_key']}_{r['thm_channels']}_{part}"
     return None
 
 
-def check_project(label, path, cwd, want_kinds):
+def check_project(label, path, cwd, want_kinds, old_names=True):
     with azure2(path, cwd=cwd) as s:
         sess = s.sess
         records = sess.parameter_records()
         n = len(records)
         names = [sess.params_names(i) for i in range(n)]
         info = np.asarray(sess.parameter_info(), float).reshape(n, -1)
-        bad = [(names[i], name_from_record(r)) for i, r in enumerate(records) if name_from_record(r) != names[i]]
-        check(f"{label}: all {n} names rebuilt from their records", not bad, bad[:5])
+        # a format-3 project names its data-set parameters by its records (scan1.norm): only the others are rebuilt
+        rebuilt = [i for i, r in enumerate(records) if old_names or r["kind"] not in ("norm", "shift", "shift_sqrt", "density")]
+        bad = [(names[i], name_from_record(records[i])) for i in rebuilt if name_from_record(records[i]) != names[i]]
+        check(f"{label}: all {len(rebuilt)} names rebuilt from their records", not bad, bad[:5])
         check(f"{label}: record code == parameter_info type code",
               all(r["code"] == int(round(info[i][0])) for i, r in enumerate(records)))
         seg = [i for i, r in enumerate(records) if "segment_key" in r]
@@ -131,18 +135,18 @@ def load_module(name, path):
 # -- the table ----------------------------------------------------------------------------------------------------
 print("the table of kinds")
 kinds = parameter_kinds()
-check("codes 0..11 in order", [k["code"] for k in kinds] == list(range(12)), [k["code"] for k in kinds])
+check("codes 0..12 in order", [k["code"] for k in kinds] == list(range(13)), [k["code"] for k in kinds])
 keys = [k["key"] for k in kinds]
 check("keys", keys == ["energy", "width", "norm", "shift", "shift_sqrt", "shift_fn", "abundance", "screening",
-                       "density", "doppler", "thickness", "cbkg"], keys)
+                       "density", "doppler", "thickness", "cbkg", "stopping_scale"], keys)
 check("every row has a unit, owner and doc", all(k["unit"] and k["owner"] and k["doc"] for k in kinds))
-check("own_prior: the nuisance kinds 2..10",
-      [k["key"] for k in kinds if k["own_prior"]] == keys[2:11])
+check("own_prior: the nuisance kinds 2..10 and 12",
+      [k["key"] for k in kinds if k["own_prior"]] == keys[2:11] + ["stopping_scale"])
 check("segment_field: norm, the shifts, thickness",
       [k["key"] for k in kinds if k["segment_field"]] == ["norm", "shift", "shift_sqrt", "shift_fn", "thickness"])
-check("vary_from_project: the shifts, screening, density, Doppler, thickness",
+check("vary_from_project: the shifts, screening, density, Doppler, thickness, stopping scale",
       [k["key"] for k in kinds if k["vary_from_project"]] ==
-      ["shift", "shift_sqrt", "shift_fn", "screening", "density", "doppler", "thickness"])
+      ["shift", "shift_sqrt", "shift_fn", "screening", "density", "doppler", "thickness", "stopping_scale"])
 
 seen = set()
 with tempfile.TemporaryDirectory() as tmp:
@@ -176,6 +180,15 @@ with tempfile.TemporaryDirectory() as tmp:
     m.set_thm_experiment("E", [1, 2], cbackground="1/2+:2:0.5,0,0.5,1:linear=0.25,-0.5f,0,1e-3")
     m.write(os.path.join(d, "cb.azr"))
     seen |= set(check_project("18O_p_a_thm", os.path.join(d, "cb.azr"), d, {"cbkg"}))
+
+    print("tests/stopping_yield/models/fit.azr: two targets of TiN, one stopping scale")
+    d = os.path.join(tmp, "stop")
+    shutil.copytree(os.path.join(ROOT, "tests", "stopping_yield", "models"), d)
+    for sub in ("output", "checks"):
+        os.makedirs(os.path.join(d, sub))
+    kinds_sy = check_project("stopping_yield", os.path.join(d, "fit.azr"), d, {"stopping_scale", "density"}, old_names=False)
+    check("stopping_yield: one stopping_scale for the two targets", kinds_sy.get("stopping_scale") == 1, kinds_sy)
+    seen |= set(kinds_sy)
 
 check("the projects hold every kind", seen == set(keys), sorted(set(keys) - seen))
 

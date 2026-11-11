@@ -29,6 +29,7 @@ kinds in the order of their codes, except that the abundances (6) follow the lev
 | 9 | `Doppler` (`doppler`) | K | effect | `EData::FillMnParams` | `doppler_<effect>` |
 | 10 | `Thickness` (`thickness`) | atoms/barn | segment, segmentKey | `EData::FillMnParams` | `EData::SegmentParameterName` |
 | 11 | `ThmCoherent` (`cbkg`) | HOES amplitude (c1 per MeV) | thmExperiment, jGroup, channel, exitChannel, thmTerm | owners `EData::BuildThmGroups` (`EDataThm.cpp`), added in `EData::FillMnParams` | `ThmCoherentParamStem` + `re0`… |
+| 12 | `StoppingScale` (`stopping_scale`) | 1 | effect (the first target effect of the scale) | grouped by `WorkingCopy::SetUpStoppingScaleParams` (`src/StoppingScale.cpp`), added last in `WorkingCopy::FillMnParams` | `stopping_scale.<material>.<projectile>` (`StoppingSpec::scaleName`, Build) |
 
 Every record also has `ordinal`, its place among the parameters of its kind (the `k` of `GetScreeningEffect(k)`,
 `GetThicknessSegment(k)`, …), set by `AZUREParams::Add`. The table's three flags answer the questions the name

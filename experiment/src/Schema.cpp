@@ -8,6 +8,8 @@
 // its value type one of Values.h's, its structure (if any) a FormSpec of StructuredValues().
 #include "azure2/experiment/Schema.h"
 
+#include "azure2/experiment/Kernels.h"
+
 #include <utility>
 
 namespace azure2 {
@@ -201,9 +203,17 @@ Forms MakeForms() {
   f.param = {{Unkeyed({Pos("name", Spec(ValueType::Name)), Pos("value", Nuis(""))}, "")}};
   f.epoch = {{Unkeyed({Pos("name", Spec(ValueType::Name)), Kw("areal_density", Nuis("areal_density"))},
                       "the areal density of the target in one epoch of a campaign (data sets name target@epoch)")}};
-  f.stopping = {{Keyword("formula", {Pos("expression", Spec(ValueType::Formula), "x = E_lab/MeV"), Pos("unit", Spec(ValueType::Unit, "stopping"))},
+  f.stopping = {{Keyword("formula",
+                         {Pos("expression", Spec(ValueType::Formula), "x = E_lab/MeV"), Pos("unit", Spec(ValueType::Unit, "stopping")),
+                          OptionalKw("scale", Nuis(""), "stopping-scale nuisance s (epsilon -> s epsilon); left out: none")},
                          "stopping cross section per active atom"),
-                 Keyword("evaluation", {Kw("scale", Nuis(""))}, "the evaluated stopping of the composition (Phase 5), scaled")}};
+                 Keyword("evaluation", {OptionalKw("scale", Nuis(""), "stopping-scale nuisance s, one per (material, projectile)", "1")},
+                         "SRIM-2013's stopping of the composition (stopping/, cite SRIM), per atom of the active element"),
+                 Keyword("table",
+                         {Pos("file", Spec(ValueType::Path), "two columns: lab energy, stopping per atom of the material"),
+                          Pos("energy_unit", Words({"MeV", "keV"})), Pos("stopping_unit", Words({"eV/1e15atoms/cm2", "MeV*cm2/g"})),
+                          OptionalKw("scale", Nuis(""), "stopping-scale nuisance s, one per (material, projectile)", "1")},
+                         "a measured stopping of the composition (stopping/'s user table), per atom of the material")}};
   f.straggling = {{Keyword("none", {}, "no straggling"),
                    Keyword("bohr", {}, "Bohr straggling from the entrance charges and the stopping"),
                    Keyword("coefficient", {Pos("value", PositiveWithUnit("sqrt_energy")), Pos("frame", Words({"cm"}))},
@@ -221,6 +231,15 @@ Forms MakeForms() {
                         {Kw("xi", WithUnit("energy")), Kw("omega", PositiveWithUnit("energy")), Kw("alpha", Num()), Kw("weight", PositiveNum())},
                         "one skewed Gaussian of the beam energy distribution")}};
   f.resolution = {{Unkeyed({Pos("sigma", WithUnit("energy")), Pos("frame", Words({"lab", "cm"}))}, "a Gaussian energy resolution")}};
+  // The table kernels of a detector's energy resolution (Kernels.h, Kernel::tableForm): one form per row, named by the
+  // last word of its keyword, a keyword part per parameter (a positive value with a unit of its dimension).
+  const std::string resolutionField = "detector.energy_resolution ";
+  for (const Kernel &k : Kernels()) {
+    if (!k.tableForm || k.keyword.compare(0, resolutionField.size(), resolutionField) != 0) continue;
+    std::vector<PartSpec> parts;
+    for (const KernelParameter &p : k.parameters) parts.push_back(Kw(p.name, PositiveWithUnit(p.dimension), p.doc));
+    f.resolution.alternatives.push_back(Keyword(k.keyword.substr(resolutionField.size()), parts, k.doc));
+  }
   f.udr = {{Unkeyed({Kw("file", Spec(ValueType::Path)), Kw("flight_path", PositiveWithUnit("length")), Kw("burst", WithUnit("time")),
                      Kw("channel", WithUnit("time")), Kw("centred", Words({"yes", "no"}))},
                     "SAMMY's time-of-flight resolution (UDR)")}};
@@ -383,8 +402,8 @@ RecordKind TargetKind() {
               RequiredWhen("active", "Active nucleus", Spec(ValueType::Nucleus), Condition::Is("kind", {"layer", "infinite", "sample"}),
                            "the nucleus the areal density and the stopping count"),
               RequiredIf(OptionalWhen("composition", "Composition", Spec(ValueType::Composition), Condition::Is("kind", {"layer", "infinite"}),
-                                      "element stoichiometry; needed by 'stopping evaluation'"),
-                         Condition::Is("stopping", {"evaluation"})),
+                                      "element stoichiometry; needed by 'stopping evaluation' and 'stopping table'"),
+                         Condition::Is("stopping", {"evaluation", "table"})),
               RequiredWhen("areal_density", "Areal density", Nuis("areal_density"), Condition::Is("kind", {"layer", "sample"}),
                            "areal density of the active nucleus"),
               Repeatable(OptionalWhen("epoch", "Epoch", Structured(f.epoch), Condition::Present("areal_density"),
@@ -393,8 +412,11 @@ RecordKind TargetKind() {
                            "stopping cross section"),
               RequiredWhen("straggling", "Straggling", Structured(f.straggling), Condition::Is("kind", {"layer", "infinite"}),
                            "energy straggling in the target"),
-              RequiredWhen("phase", "Phase", Words({"solid", "gas"}), Condition::Is("stopping", {"evaluation"}),
-                           "solid or gas stopping (with 'stopping evaluation')"),
+              OptionalWhen("phase", "Phase", Words({"solid", "gas"}), Condition::Is("stopping", {"evaluation"}),
+                           "solid or gas stopping (left out: gas for one natural-gas element, solid otherwise; a gaseous "
+                           "compound must say gas)"),
+              OptionalWhen("compound_correction", "Compound correction", PositiveNum(), Condition::Is("stopping", {"evaluation"}),
+                           "SRIM's compound factor C of Bragg's rule (left out: 1)"),
               Repeatable(Opt("isotope", "Isotope", Structured(f.isotope), "abundance weight of a target nucleus")),
               OptionalWhen("isotope_sum", "Isotope sum", Structured(f.isotopeSum), Condition::Present("isotope"),
                            "constraint on the sum of the abundances"),
