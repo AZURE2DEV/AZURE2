@@ -20,10 +20,12 @@ const char *const kCounterNames[kNumCounters] = {"channel-space solves", "level 
                                                  "level route: no formal set-up", "level route: near pole",
                                                  "level route: pivot", "level route: forced",
                                                  "channel space, deflated", "final-state W: memo hits",
-                                                 "final-state W: computed"};
+                                                 "final-state W: computed", "energy tasks (one solve each)",
+                                                 "units of the energy tasks"};
 }  // namespace
 
 void CountEvent(Counter counter) { g_count[counter].fetch_add(1, std::memory_order_relaxed); }
+void CountEvents(Counter counter, long long n) { g_count[counter].fetch_add(n, std::memory_order_relaxed); }
 
 void Add(Stage stage, long long ns) {
   g_ns[stage].fetch_add(ns, std::memory_order_relaxed);

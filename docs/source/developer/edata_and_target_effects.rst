@@ -239,14 +239,19 @@ Calculation Flow for Target Effects
 During calculation (in ``AZURECalc``), the processing of a point with target
 effects follows this order:
 
-1. **Calculate each sub-point** -- the R-matrix cross section is computed at
-   each sub-point energy by calling ``Unit::Calculate()`` on each sub-point.
-   This runs the full FillMatrices/InvertMatrices/CalculateTMatrix/
-   CalculateCrossSection pipeline for each sub-point.
+1. **Calculate each sub-point** -- the sub-points are units of the energy
+   pass like the points without a fold: the units of an evaluation at the same
+   compound energy (the same nucleus and the same bits of :math:`E_x`) share
+   one FillMatrices/InvertMatrices, one CalculateTMatrix per entrance and exit
+   pair, and each gets its own CalculateCrossSection
+   (``WorkingCopy::CalculatePointsInParallel``, ``azure2::SolveAtOneEnergy``,
+   ``CalculationPlan::EnergyTasks``).
 
-2. **Integrate** -- ``Unit::IntegrateTargetEffect()`` is called on the parent
-   point to numerically integrate the sub-point cross sections, yielding the
-   effective yield that accounts for target and beam effects.
+2. **Integrate** -- after the energy pass, ``Unit::FoldSubPoints()`` runs on
+   the parent point (and the points mapped onto it): the bare probes, the
+   automatic tolerance and blending, then ``IntegrateTargetEffect()`` on the
+   sub-point cross sections, yielding the effective yield that accounts for
+   target and beam effects.
 
 Integration Methods
 -------------------
@@ -395,16 +400,17 @@ Summary: Data Flow Diagram
            └── Create sub-point units at grid energies
                    │
                    ▼
-   AZURECalc calculation loop (per data point):
-       ├── For each sub-point:
-       │       └── Unit::Calculate()
+   Point pass of an evaluation (WorkingCopy::CalculatePointsInParallel):
+       ├── For each compound energy E_x (an energy task: points and sub-points):
+       │       └── azure2::SolveAtOneEnergy()
        │           ├── ClearMatrices()
-       │           ├── FillMatrices()      ← build A⁻¹ or R matrix
-       │           ├── InvertMatrices()    ← GSL LU decomposition
-       │           ├── CalculateTMatrix()  ← collision matrix
-       │           └── CalculateCrossSection() ← σ(E) at sub-point
+       │           ├── FillMatrices()      ← build A⁻¹ or R matrix, once
+       │           ├── InvertMatrices()    ← factorisation, once
+       │           ├── CalculateTMatrix()  ← once per (entrance, exit) pair
+       │           └── CalculateCrossSection() ← σ(E) of each unit
        │
-       └── Unit::IntegrateTargetEffect()
+       └── For each point with a fold: Unit::FoldSubPoints()
+           └── Unit::IntegrateTargetEffect()
            └── Gauss-Legendre quadrature over sub-point grid
                ├── Convolution only: ∫ σ(E') g(E'-E₀) dE'
                ├── Target only: ∫ σ(E')/ε(E') dE'
@@ -478,7 +484,7 @@ sub-point at :math:`\bar E` (three, at :math:`\bar E` of 0.01 :math:`N_0`,
 :math:`N_0` and the layout density, under ``densityfit``); edge blending happens
 inside ``IntegrateKernelsImpl`` against ``TargetFallbackImpl`` (linear in the
 sub-point values, so ``TargetEffectWeights`` and the analytic gradient carry it);
-and ``Unit::CalculateThinTarget`` makes the automatic decision from the end
+and ``Unit::FoldThinTarget`` makes the automatic decision from the end
 sub-points and the two around :math:`\bar E`, comparing the chord with
 :math:`\sigma(\bar E)` (curvature only), and lets the point off through a
 ``TargetFallbackScope``.  Windows on a thick target, and windows or a tolerance
@@ -589,12 +595,22 @@ the residual Jacobian (``FillShiftColumns``, shared by
 are mapped only among themselves; they move all of them before calculating
 any.
 
-The host is calculated first by every loop over the whole data set, and
-calculates the observables of the points mapped onto it
-(``Unit::Calculate``); the parallel pass over an evaluation's points,
+The host is calculated first by every serial loop over the whole data set,
+and calculates the observables of the points mapped onto it
+(``Unit::Calculate``).  The parallel pass over an evaluation's points,
 ``WorkingCopy::CalculatePointsInParallel`` (the CLI's ``AZURECalc::PrecalculatePoints``
-and, since 2026-10-30, the API calls behind pyazr), hands out hosts
-only.  The angle-independent products :math:`Z_1Z_2\,T_1T_2^*` of the
+and, since 2026-10-30, the API calls behind pyazr), goes further: its tasks
+are compound energies, not hosts (``CalculationPlan::EnergyTasks``).  Every
+unit -- a point without a fold, or a sub-point -- whose nucleus, route
+(A-matrix, THM, R-matrix) and :math:`E_x` (``AMatrixFunc::InEnergy``, bit for
+bit) agree is calculated by one task: one fill and factorisation of the level
+matrix, one T-matrix per (entrance, exit) pair, the observable of each unit;
+then the folds of the points with sub-points, which read the values already
+there (``Unit::FoldSubPoints``).  Units of different segments, entrance pairs
+and data sets share a solve whenever their energies agree, mapped or not; the
+mapping still groups the folds, the energy-dependent values and the analytic
+gradient.  ``AZURE_PLAN_CHECK=1`` compares every unit's shared solve with its
+own, bit for bit.  The angle-independent products :math:`Z_1Z_2\,T_1T_2^*` of the
 differential sum are formed once per T-matrix and summed by Legendre order
 (``GenMatrixFunc::CalculateCrossSection``, from the flat interference table of
 the decay, ``Decay::FlatInterferences``), as are the Coulomb-nuclear

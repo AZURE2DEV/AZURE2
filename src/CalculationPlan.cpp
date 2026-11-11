@@ -39,6 +39,8 @@ void AddUnitRanges(WorkingCopy &data, Unit &p, std::vector<std::pair<std::size_t
 
 Unit *MappedPoints::operator[](int i) const { return data_->PlanPoint((*refs_)[i]); }
 
+Unit *CalculationPlan::Host(WorkingCopy &data, int task) const { return data.PlanPoint(tasks_[task].host); }
+
 void CalculationPlan::Build(WorkingCopy &data, const std::vector<std::pair<PointRef, PointRef>> &mapping) {
   tasks_.clear();
   energy_tasks_.clear(), energy_work_.clear(), energy_units_.clear(), energy_keys_.clear();

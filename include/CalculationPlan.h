@@ -72,6 +72,8 @@ class CalculationPlan {
   void Build(WorkingCopy &data, const std::vector<std::pair<PointRef, PointRef>> &mapping);
   int NumTasks() const { return (int)tasks_.size(); }
   const CalculationTask &Task(int task) const { return tasks_[task]; }
+  /// The host point of task `task` in `data`.
+  Unit *Host(WorkingCopy &data, int task) const;
 
   /// The build-time assertion (see above), on the data set the plan was built for: an empty string when it holds,
   /// otherwise what is wrong (the first point that breaks it, by segment key and lab energy).

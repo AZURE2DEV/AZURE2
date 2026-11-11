@@ -454,14 +454,23 @@ class Unit {
   void AddECAmplitude(int, int, complex);
   void AddECAmplitude(int, int, complex, double);
   void ClearECAmplitudes();
-  /// Calculate the point (and the points mapped onto it, its sub-points) for the current parameters, writing the
-  /// values into `results`, the buffer of the evaluation laid out by `data`, the data set that holds the point: its
-  /// plan names the points mapped onto it, its target effects the fold.  Null for a point outside any data set (no
-  /// target effect, no plan: a reaction-rate point).
-  void Calculate(WorkingCopy *data, CNuc *, const Config &configure, azure2::Results &results, Unit *parent = NULL,
-                 int subPointNum = 0);
-  /// The sub-point stage of a thin-target integration, with its sigma(E_bar) fallback (see the .cpp).
-  void CalculateThinTarget(WorkingCopy &data, CNuc *, const Config &configure, azure2::Results &results, const TargetEffect *effect);
+  /// Calculate the point (and the points mapped onto it, its sub-points, its fold) for the current parameters,
+  /// outside the energy pass (WorkingCopy::CalculatePointsInParallel), writing the values into `results`, the buffer
+  /// of the evaluation laid out by `data`, the data set that holds the point: its plan names the points mapped onto
+  /// it, its target effects the fold.  One solve at the point's energy for it and its mapped points, or one per
+  /// sub-point index (azure2::SolveAtOneEnergy), then FoldSubPoints.  Null `data` for a point outside any data set
+  /// (no target effect, no plan: a reaction-rate point).
+  void Calculate(WorkingCopy *data, CNuc *, const Config &configure, azure2::Results &results);
+  /// The test hook of failed points: true when AZURE_TEST_FAIL_E (and AZURE_TEST_FAIL_EXIT, if set) name this point.
+  bool InjectedFailure() const;
+  /// Before its sub-points are calculated: with external capture, their energy-dependent values at their energies.
+  void PrepareSubPoints(WorkingCopy *data, CNuc *, const Config &configure);
+  /// The fold of this point and of the points mapped onto it, from their sub-points' values already in `results`:
+  /// the bare probes, the automatic tolerance and edge blending, the thin-target fallback, the integrations.
+  void FoldSubPoints(WorkingCopy *data, CNuc *, const Config &configure, azure2::Results &results);
+  /// The fold of a thin-target integration, with its sigma(E_bar) fallback (see the .cpp).
+  void FoldThinTarget(WorkingCopy &data, azure2::Results &results, const Config &configure, const TargetEffect *effect,
+                      const azure2::MappedPoints &mappedPts);
   void SetMap(int, int);
   void ClearMapping();
   /// A mapped point that keeps its own energy-dependent values: a component of a SUM, RATIO or total-capture segment

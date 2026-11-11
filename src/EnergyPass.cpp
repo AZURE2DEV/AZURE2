@@ -210,63 +210,114 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
 #endif
   if (ScopedPointMappingOff::Active()) return -1;
   if (std::getenv("AZURE_SERIAL_CHI2")) return -1;
-  std::vector<Unit *> work;
+  // The plan tasks of the segments (each point that is no other's mapped point hosts one), in data order.
+  std::vector<int> work;
   std::set<const Segment *> seen;
   for (const Segment *seg : segments) {
     if (!seg || !seen.insert(seg).second) continue;
     for (int t = 0; t < seg->NumTerms(); t++)
       for (Unit &pt : seg->TermPoints(*this, t))
-        if (!pt.IsMapped()) work.push_back(&pt);
+        if (!pt.IsMapped()) work.push_back(pt.PlanTask());
   }
-  // A host also calculates every point mapped onto it (WorkingCopy::MapData), so
-  // its work grows with that number: one Fowler-type angular distribution at
-  // a single energy is one item.  Largest items first, one at a time, so such
-  // an item does not end up last on one thread.  Each item is calculated the
-  // same way whatever the order.
-  std::vector<double> cost(work.size());
-  for (size_t k = 0; k < work.size(); k++)
-    cost[k] = (1.0 + work[k]->NumSubPoints()) * (1.0 + work[k]->PlanMapped(this).size());
-  std::vector<size_t> order(work.size());
-  for (size_t k = 0; k < order.size(); k++) order[k] = k;
-  std::stable_sort(order.begin(), order.end(), [&cost](size_t a, size_t b) { return cost[a] > cost[b]; });
-  std::vector<Unit *> sorted(work.size());
-  for (size_t k = 0; k < order.size(); k++) sorted[k] = work[order[k]];
-  work.swap(sorted);
-  int failed = 0;
   AZUREProfile::Timer profileTimer(AZUREProfile::kPoints);
-  // One item per task of the plan: its host calculates itself and the points the plan maps onto it.
-  auto runTask = [&](Unit *host) {
-    try {
-      host->Calculate(this, theCNuc, configure, results);
-    } catch (const std::exception &e) {
-      // NaN on the point and the points mapped onto it, reported once (Unit::MarkFailed); 0 on the point alone,
-      // silently, before 2026-11-01 -- and the CLI's objective takes these values (PrecalculatePoints).
-      host->MarkFailed(this, results, "point", configure, e.what());
-      return 1;
-    } catch (...) {
-      host->MarkFailed(this, results, "point", configure, "unknown exception.");
-      return 1;
+  // A plan task whose calculation threw: the reason (empty: none).  Its points get NaN (Unit::MarkFailed) after the
+  // pass, and its folds do not run.
+  std::vector<std::string> failure(plan_.NumTasks());
+  for (int t : work)
+    if (plan_.Host(*this, t)->InjectedFailure()) failure[t] = "injected failure (AZURE_TEST_FAIL_E).";
+  // The points with a fold, largest first (sub-points times points), so a large fold does not end up last on a thread.
+  std::vector<int> folds;
+  for (int t : work)
+    if (azure2::HasSubPointFold(*this, *plan_.Host(*this, t))) folds.push_back(t);
+  std::stable_sort(folds.begin(), folds.end(), [this](int a, int b) {
+    auto cost = [this](int t) { return (1.0 + plan_.Host(*this, t)->NumSubPoints()) * (1.0 + plan_.Task(t).mapped.size()); };
+    return cost(a) > cost(b);
+  });
+  // Before the energy pass: the sub-points' energy-dependent values (external capture), point by point.
+  if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
+#pragma omp parallel for schedule(dynamic, 1)
+    for (int k = 0; k < (int)folds.size(); k++) plan_.Host(*this, folds[k])->PrepareSubPoints(this, theCNuc, configure);
+  }
+  // The energy pass: one task per compound energy, each writing only its units' records.  A unit whose calculation
+  // throws fails its plan task; the units after it are calculated with a new solve.
+  const std::vector<azure2::EnergyTask> &tasks = plan_.EnergyTasks(*this, theCNuc, configure, work);
+  AZUREProfile::CountMany(AZUREProfile::kEnergyTasks, (long long)tasks.size());
+  std::vector<std::vector<std::pair<int, std::string>>> taskFailures(tasks.size());
+  auto runEnergyTask = [&](int k) {
+    const azure2::EnergyTask &task = tasks[k];
+    const int n = (int)task.units.size();
+    AZUREProfile::CountMany(AZUREProfile::kEnergyUnits, n);
+    static thread_local std::vector<Unit *> units;
+    units.resize(n);
+    for (int i = 0; i < n; i++) units[i] = &units_[task.units[i]];
+    int start = 0;
+    while (start < n) {
+      int progress = 0;
+      try {
+        azure2::SolveAtOneEnergy(theCNuc, configure, results, units.data() + start, n - start, &progress);
+        return;
+      } catch (const std::exception &e) {
+        taskFailures[k].push_back({task.owners[start + progress], e.what()});
+      } catch (...) {
+        taskFailures[k].push_back({task.owners[start + progress], "unknown exception."});
+      }
+      start += progress + 1;
     }
-    return 0;
   };
-  if (azure2::CalculationPlan::RunTimeCheckRequested() && !work.empty()) {
+  // The folds, after every sub-point is calculated: each writes only its points' records.
+  auto runFold = [&](int k) {
+    const int t = folds[k];
+    if (!failure[t].empty()) return;
+    try {
+      plan_.Host(*this, t)->FoldSubPoints(this, theCNuc, configure, results);
+    } catch (const std::exception &e) {
+      failure[t] = e.what();
+    } catch (...) {
+      failure[t] = "unknown exception.";
+    }
+  };
+  auto collectFailures = [&]() {
+    for (const auto &list : taskFailures)
+      for (const auto &f : list)
+        if (failure[f.first].empty()) failure[f.first] = f.second;
+  };
+  if (azure2::CalculationPlan::RunTimeCheckRequested()) {
+    // One step after the other, each checked to write only its own records (the energy tasks: their units'; a fold:
+    // its points' and their sub-points'); then every unit's shared solve against its own.
+    const int numTasks = (int)tasks.size();
     azure2::CalculationPlan::RunChecked(
-        results, (int)work.size(),
+        results, numTasks + (int)folds.size(),
         [&](int k, std::vector<std::pair<std::size_t, std::size_t>> &ranges) {
-          failed += runTask(work[k]);
-          plan_.WriteRanges(*this, work[k]->PlanTask(), ranges);
+          if (k < numTasks) {
+            runEnergyTask(k);
+            for (azure2::UnitRef u : tasks[k].units) azure2::CalculationPlan::AddRecordRange(units_[u], ranges);
+            if (k == numTasks - 1) collectFailures();
+          } else {
+            runFold(k - numTasks);
+            plan_.WriteRanges(*this, folds[k - numTasks], ranges);
+          }
         },
-        [&](int k) { return "task " + std::to_string(work[k]->PlanTask()); });
-    std::vector<int> tasks;
-    for (Unit *h : work) tasks.push_back(h->PlanTask());
-    std::sort(tasks.begin(), tasks.end());
-    const long differ =
-        azure2::CheckEnergyTasks(*this, theCNuc, configure, results, plan_.EnergyTasks(*this, theCNuc, configure, tasks));
+        [&](int k) {
+          return k < numTasks ? "energy task " + std::to_string(k) : "the fold of plan task " + std::to_string(folds[k - numTasks]);
+        });
+    if (numTasks == 0) collectFailures();
+    const long differ = azure2::CheckEnergyTasks(*this, theCNuc, configure, results, tasks);
     if (differ) throw std::logic_error("AZURE_PLAN_CHECK: " + std::to_string(differ) +
                                        " units differ from their own solve (listed above)");
-    return failed;
+  } else {
+#pragma omp parallel for schedule(dynamic, 1)
+    for (int k = 0; k < (int)tasks.size(); k++) runEnergyTask(k);
+    collectFailures();
+#pragma omp parallel for schedule(dynamic, 1)
+    for (int k = 0; k < (int)folds.size(); k++) runFold(k);
   }
-#pragma omp parallel for schedule(dynamic, 1) reduction(+ : failed)
-  for (int k = 0; k < (int)work.size(); k++) failed += runTask(work[k]);
+  // NaN on the points of a failed plan task, reported once (Unit::MarkFailed); the CLI's objective then recalculates
+  // point by point (PrecalculatePoints).
+  int failed = 0;
+  for (int t : work)
+    if (!failure[t].empty()) {
+      plan_.Host(*this, t)->MarkFailed(this, results, "point", configure, failure[t].c_str());
+      failed++;
+    }
   return failed;
 }

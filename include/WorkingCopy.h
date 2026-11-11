@@ -371,13 +371,12 @@ class WorkingCopy {
   bool ThmDistortionTable(const std::string &name, const std::vector<double> &energies, ThmDistortionReport &out,
                           std::string &why);
   /*!
-   * Calculates every point of \p segments (segments of this data set) and of their leaves in
-   * one OpenMP pass, largest items first.  A host point also fills the points
-   * mapped onto it, so mapped points are not items of their own.  A point whose
-   * calculation throws gets a fit cross section of 0.  Returns the number of
-   * such points, or -1 when nothing was calculated: no OpenMP, already inside a
-   * parallel region, point mapping switched off on this thread, or
-   * AZURE_SERIAL_CHI2 set.  The caller then reads the points with
+   * Calculates every point of \p segments (segments of this data set) and of their leaves (src/EnergyPass.cpp):
+   * the energy tasks of their plan tasks (CalculationPlan::EnergyTasks: one level-matrix solve per compound energy,
+   * points and sub-points alike) in one OpenMP pass, largest first, then the folds of the points with sub-points in
+   * a second.  A plan task whose calculation throws gets NaN on its points (Unit::MarkFailed).  Returns the number of
+   * such plan tasks, or -1 when nothing was calculated: no OpenMP, already inside a parallel region, point mapping
+   * switched off on this thread, or AZURE_SERIAL_CHI2 set.  The caller then reads the points with
    * azure2::EvaluateModelPoint(..., LeafValues::Ready).
    */
   int CalculatePointsInParallel(const std::vector<const Segment *> &segments, CNuc *theCNuc, const Config &configure,

@@ -494,12 +494,14 @@ angle-integrated cross section become NaN, since they are never calculated
 there (0 without the variable).
 
 ``AZURE_PLAN_CHECK=1``: the points of an evaluation are calculated by the
-tasks of the data set's calculation plan, one task per point that calculates
-itself and the points of equal energy mapped onto it (one writer per value,
-checked when the plan is built).  With the variable set, the parallel point
-pass runs the tasks one after the other and checks that each writes only the
-values of its own points and sub-points and that no value is written by two
-tasks; a breach stops the run with a message naming the task and the point.
+energy tasks of the data set's calculation plan, one task per compound energy
+with every point and sub-point at it, then the folds of the points with
+sub-points (one writer per value, checked when the plan is built).  With the
+variable set, the parallel point pass runs the tasks and folds one after the
+other and checks that each writes only the values of its own points and
+sub-points and that no value is written by two of them (compared after each
+one, or after each batch in a pass of more than 2,000); a breach stops the run
+with a message naming the task and the slot.
 Then every unit of the pass (a point, or a sub-point of a fold) is solved
 alone -- level-matrix fill and factorisation, its T-matrix, its record -- and
 compared bit for bit with the solve it shares with the other units at the same
