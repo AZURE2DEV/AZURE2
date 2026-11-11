@@ -357,6 +357,9 @@ def merge_projects(models, out, abundances, sum_sigma=0.0, shared=(), natural=Tr
             warnings.append(f"member {mi}: <parameterSettings> dropped (its names refer to GUI rows)")
         if block_lines(m._suffix, "mcmc"):
             warnings.append(f"member {mi}: <mcmc> block dropped (its parameters are named by position)")
+        if block_lines(m._suffix, "isospin"):
+            warnings.append(f"member {mi}: <isospin> block dropped (join the levels and declare them on the "
+                            f"merged model: AzrModel.join_levels, set_isospin_reference, set_isospin_shift)")
         if mi > 0 and block_lines(m._suffix, "lastRun"):
             warnings.append(f"member {mi}: <lastRun> block dropped (member 0's is kept)")
     merged.write(out)

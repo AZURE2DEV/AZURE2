@@ -30,6 +30,7 @@ std::tuple<int, int, int, int> IdentityKey(const ParamDesc &d) {
     case ParamKind::EnergyShiftFn: return std::make_tuple(kind, d.segment, d.fnTerm, -1);
     case ParamKind::Abundance: return std::make_tuple(kind, d.sample, d.nucleus, -1);
     case ParamKind::Screening: return std::make_tuple(kind, d.screening, -1, -1);
+    case ParamKind::Isospin: return std::make_tuple(kind, d.isospin, -1, -1);
     case ParamKind::Density: return std::make_tuple(kind, d.density, -1, -1);
     case ParamKind::Doppler: return std::make_tuple(kind, d.doppler, -1, -1);
     case ParamKind::Thickness: return std::make_tuple(kind, d.segment, -1, -1);
@@ -44,7 +45,8 @@ std::vector<int> RMatrixPackedColumns(const ParamIndexMap &pmap) {
   const int n = pmap.NumPacked();
   for (int a = 0; a < n; a++) {
     ParamKind k = pmap.Desc(pmap.PackedToFull(a)).kind;
-    if (k == ParamKind::LevelEnergy || k == ParamKind::Gamma) cols.push_back(a);
+    // Isospin shifts and mix amplitudes move derived levels: they belong to the band too.
+    if (k == ParamKind::LevelEnergy || k == ParamKind::Gamma || k == ParamKind::Isospin) cols.push_back(a);
   }
   return cols;
 }

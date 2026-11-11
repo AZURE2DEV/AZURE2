@@ -2,6 +2,7 @@
 #define AZUREGRAD_H
 
 #include "Constants.h"
+#include "IsospinLevels.h"
 #include <vector>
 #include <map>
 #include <tuple>
@@ -41,7 +42,8 @@ enum class ParamKind {
   Screening,        ///< electron-screening potential U_e (eV) of a <targetInt> line with a screening block
   Density,          ///< fitted areal density (atoms/cm^2) of a <targetInt> line or density group (densityfit)
   Doppler,          ///< fitted free-gas Doppler temperature (K) of a <targetInt> line ('doppler T vary sigma')
-  Thickness         ///< fitted sample thickness (atoms/barn) of a transmission / yield segment ('transmission n vary sigma')
+  Thickness,        ///< fitted sample thickness (atoms/barn) of a transmission / yield segment ('transmission n vary sigma')
+  Isospin           ///< internal Coulomb shift or isospin-forbidden amplitude (projects with an <isospin> block)
 };
 
 /// Description of one entry in the full (unfiltered) flat parameter vector.
@@ -59,6 +61,7 @@ struct ParamDesc {
   int density = -1;    ///< 1-based density parameter (EData::GetDensityEffect), Density only, else -1
   int doppler = -1;    ///< 1-based Doppler parameter (EData::GetDopplerEffect), Doppler only, else -1
   int thickness = -1;  ///< 1-based thickness parameter (EData::GetThicknessSegment), Thickness only, else -1
+  int isospin = -1; ///< 0-based isospin parameter: shifts, then mixes (Isospin only, else -1)
 };
 
 /*!
@@ -115,6 +118,10 @@ class ParamIndexMap {
     auto it = thicknessIndex_.find(k);
     return (it == thicknessIndex_.end()) ? -1 : it->second;
   }
+  /// Full index of isospin parameter k (0-based), or -1.
+  int IsospinIndex(int k) const;
+  /// Derived isospin slots as linear functions of free ones (empty without an <isospin> block).
+  const std::vector<IsospinTie> &IsospinTies() const { return isospinTies_; }
 
   /// Number of entries in the full (unfiltered) parameter vector.
   int NumFull() const { return (int)desc_.size(); }
@@ -155,6 +162,8 @@ class ParamIndexMap {
   std::map<int, int> densityIndex_;                      ///< density parameter k -> full idx
   std::map<int, int> dopplerIndex_;                      ///< Doppler parameter k -> full idx
   std::map<int, int> thicknessIndex_;                    ///< thickness parameter k -> full idx
+  std::map<int, int> isospinIndex_;                      ///< isospin parameter k -> full idx
+  std::vector<IsospinTie> isospinTies_;
   std::vector<int> fullToPacked_;
   std::vector<int> packedToFull_;
   int numPacked_ = 0;
@@ -219,6 +228,10 @@ struct GradAccum {
    * parameter (AMatrixFunc::LevelAdjoint).  Not owned.
    */
   const FreeLevelMask *mask = nullptr;
+  // isospin[k]              -> d/d(isospin parameter k), shifts then mixes (zero-length without an <isospin> block)
+  std::vector<double> isospin;
+  // (full index, d/dx) of the isospin soft-tie penalty, added as they come
+  std::vector<std::pair<int, double>> slot;
 
   /// Allocate (and zero) the accumulators to match the compound's dimensions.
   void Init(CNuc *compound);
@@ -255,7 +268,14 @@ struct GradAccum {
     if (k > (int)thickness.size()) thickness.resize(k, 0.0);
     thickness[k - 1] += v;
   }
-  /// Scatter into the flat (full) gradient vector using the index map.
+  /// Add a contribution by full parameter index (the soft-tie penalty).
+  void AddSlot(int fullIndex, double v) { slot.push_back({fullIndex, v}); }
+  /// Add an isospin-parameter contribution (0-based k).
+  void AddIsospin(int k, double v) {
+    if (k >= 0 && k < (int)isospin.size()) isospin[k] += v;
+  }
+  /// Scatter into the flat (full) gradient vector using the index map.  Derived
+  /// isospin slots pass their gradient on to the free slots they follow.
   void Scatter(const ParamIndexMap &map, vector_r &gradFull) const;
 };
 
@@ -291,6 +311,8 @@ vector_matrix_r BuildShiftDerivTable(CNuc *compound, const Config &configure);
 void AddParkPenaltyGradient(CNuc *compound, const Config &configure, GradAccum &accum);
 /// Gradient of the isotopic-abundance priors and sum-to-one penalty (CNuc::AbundancePenalty), into the accumulator.
 void AddAbundancePenaltyGradient(CNuc *compound, const Config &configure, GradAccum &accum);
+/// Gradient of the isospin priors (shifts, mix amplitudes).
+void AddIsospinPenaltyGradient(CNuc *compound, GradAccum &accum);
 
 /*!
  * \brief Shared analytic gradient engine used by both AZUREAPI (log-likelihood)

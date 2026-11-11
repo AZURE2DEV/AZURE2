@@ -190,6 +190,13 @@ QString LevelsModel::getSpinLabel(const LevelsData &level) const {
   return tempSpin + (level.piValue == -1 ? QString(QChar(0x207B)) : QString(QChar(0x207A)));
 }
 
+void LevelsModel::setFileId(int row, int fileId) {
+  if (row < 0 || row >= levelsList.size()) return;
+  LevelsData tempData = levelsList.value(row);
+  tempData.fileId = fileId;
+  levelsList.replace(row, tempData);
+}
+
 void LevelsModel::setNucleus(int row, const Nucleus &nucleus) {
   if (row < 0 || row >= levelsList.size()) return;
   LevelsData tempData = levelsList.value(row);

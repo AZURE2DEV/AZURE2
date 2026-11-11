@@ -157,6 +157,8 @@ class EData {
   /// The abundance penalty (priors + sum-to-one) of the last evaluation, reported in chiSquared.out.
   void SetAbundancePenalty(double penalty) { abundancePenalty_ = penalty; }
   double GetAbundancePenalty() const { return abundancePenalty_; }
+  /// The isospin prior penalty (shifts, mixes) of the last evaluation, reported in chiSquared.out when it exists.
+  void SetIsospinPenalty(double penalty) { isospinPenalty_ = penalty; hasIsospinPenalty_ = true; }
   /// chi2 of the measured scattering lengths (<scatteringLengths>) at the last evaluation.
   void SetScatteringLengthChi2(double chi2) { scatteringLengthChi2_ = chi2; }
   double GetScatteringLengthChi2() const { return scatteringLengthChi2_; }
@@ -317,6 +319,8 @@ class EData {
   std::string ecOutputFile_;  // The intEC file being written, when not reading one back
   double parkPenalty_ = 0.0;
   double abundancePenalty_ = 0.0;
+  double isospinPenalty_ = 0.0;
+  bool hasIsospinPenalty_ = false;
   double scatteringLengthChi2_ = 0.0;
   std::shared_ptr<const PriorCovariance> priorCov_;  // shared by every copy (read-only once set up)
   double priorCovChi2_ = 0.0;
