@@ -899,7 +899,7 @@ int WorkingCopy::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
       if (configure.stopFlag || localStop) continue;
       Unit *point = segment->GetPoint(*this, i);
       try {
-        point->CalcEDependentValues(this, theCNuc, configure, true, table);
+        point->CalcEDependentValues(this, theCNuc, configure, table);
       } catch (GSLException e) {
 #pragma omp critical
         {
@@ -1040,7 +1040,7 @@ int WorkingCopy::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
       if (configure.stopFlag || localStop) continue;
       Unit *point = Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
       try {
-        point->CalcEDependentValues(this, theCNuc, configure, true, componentTable);
+        point->CalcEDependentValues(this, theCNuc, configure, componentTable);
       } catch (GSLException e) {
 #pragma omp critical
         {

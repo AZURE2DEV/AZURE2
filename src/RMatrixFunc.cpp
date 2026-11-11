@@ -111,7 +111,7 @@ void RMatrixFunc::ClearMatrices() {
  * This function creates the \f$ [1-RL] \f$ and \f$ R \f$ Matrices from the CNuc object.
  */
 
-void RMatrixFunc::FillMatrices(Unit *point) {
+void RMatrixFunc::FillMatrices(Site *point) {
   double inEnergy;
   if (compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetPType() == 20)
     inEnergy = point->GetCMEnergy() +
@@ -338,7 +338,7 @@ void RMatrixFunc::InvertMatrices() {
  * This function calculates the T-Matrix for each reaction pathways based on the \f$ [1-RL]^{-1}R \f$ matrix.
  */
 
-void RMatrixFunc::CalculateTMatrix(Unit *point) {
+void RMatrixFunc::CalculateTMatrix(Site *point) {
   int aa = compound()->GetPairNumFromKey(point->GetEntranceKey());
   const int exitPairNum = compound()->GetPairNumFromKey(point->GetExitKey());
   const azure2::EntrancePathways &P = compound()->Pathways().Entrance(aa);

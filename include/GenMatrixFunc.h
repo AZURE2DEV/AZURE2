@@ -7,7 +7,7 @@
 #include <cstring>
 #include <string>
 
-class Unit;
+class Site;
 class CNuc;
 namespace azure2 {
 struct Results;
@@ -55,7 +55,7 @@ class GenMatrixFunc {
   /*!
    *This virtual function in implemented in the child class.
    */
-  virtual void FillMatrices(Unit *) = 0;
+  virtual void FillMatrices(Site *) = 0;
   /*!
    *This virtual function in implemented in the child class.
    */
@@ -63,11 +63,11 @@ class GenMatrixFunc {
   /*!
    *This virtual function in implemented in the child class.
    */
-  virtual void CalculateTMatrix(Unit *) = 0;
+  virtual void CalculateTMatrix(Site *) = 0;
   /// The T-matrix of another exit pair at the same energy: drops the elements held now (and what was derived from
   /// them) and builds those of `point`'s exit from the solved level matrix, which does not depend on the exit.  Used
   /// for the T-matrix groups of an energy task after the first (SolveAtOneEnergy).
-  void RecalculateTMatrix(Unit *point) {
+  void RecalculateTMatrix(Site *point) {
     ResetTMatrix();
     CalculateTMatrix(point);
   }
@@ -78,9 +78,9 @@ class GenMatrixFunc {
   }
   /// The observable of the point from the T-matrix the subclass built, times the electron-screening factor where the
   /// point carries one (CalculateBareCrossSection, then Unit::ScreeningFactor).
-  void CalculateCrossSection(Unit *, azure2::Results &results);
+  void CalculateCrossSection(Site *, azure2::Results &results);
   /// The observable without electron screening.
-  void CalculateBareCrossSection(Unit *, azure2::Results &results);
+  void CalculateBareCrossSection(Site *, azure2::Results &results);
 
   /*!
    * Spin-summed |M|^2 from the channel-spin amplitude matrix, and the vector
@@ -97,7 +97,7 @@ class GenMatrixFunc {
    * the existing cross section has to be constant in angle, which is what pins
    * down the coupling order and the choice of l versus l'.
    */
-  bool CalculateAmplitudeMatrix(Unit *point, double *spinSum, double *analyzingPower);
+  bool CalculateAmplitudeMatrix(Site *point, double *spinSum, double *analyzingPower);
   /*!
    * Vector analyzing power of a capture reaction, from the Legendre
    * coefficients of R. G. Seyler and H. R. Weller, Phys. Rev. C \b 20 (1979)
@@ -109,7 +109,7 @@ class GenMatrixFunc {
    * included.  Returns false for anything that is not a photon exit channel;
    * throws when the exit's terms were not requested.
    */
-  bool CalculateCaptureAnalyzingPower(Unit *point, const azure2::Results &results, double *unpolarized,
+  bool CalculateCaptureAnalyzingPower(Site *point, const azure2::Results &results, double *unpolarized,
                                       double *analyzingPower);
   /// Start a temporary T-matrix element for a \f$J,l,l'\f$ combination.
   void NewTempTMatrix(TempTMatrix);
@@ -157,7 +157,7 @@ class GenMatrixFunc {
   /// The refusal of a point whose exit pair no pathway of its entrance pair reaches (pair numbers, 1-based).
   std::string NoPathwayMessage(int entrancePair, int exitPair) const;
   /// The refusal of a capture-A_y point whose terms were not requested at set-up (CNuc::RequestCaptureAy).
-  std::string CaptureAyNotBuiltMessage(const Unit *point) const;
+  std::string CaptureAyNotBuiltMessage(const Site *point) const;
 
   /*!
    *This virtual function in implemented in the child class.

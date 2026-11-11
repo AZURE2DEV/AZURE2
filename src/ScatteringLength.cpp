@@ -82,7 +82,7 @@ std::vector<Channel> Channels(CNuc *compound, int pairKey) {
 namespace {
 /// Fill and invert the level matrices at the pair's threshold.
 void ThresholdMatrices(CNuc *compound, const Config &configure, Unit &point, AMatrixFunc &f) {
-  point.CalcEDependentValues(nullptr, compound, configure, false, nullptr);
+  point.OwnSite().CalcEDependentValues(nullptr, compound, configure, nullptr);
   f.ClearMatrices();
   f.FillMatrices(&point);
   f.InvertMatrices();

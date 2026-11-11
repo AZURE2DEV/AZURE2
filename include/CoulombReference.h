@@ -7,6 +7,7 @@ class CNuc;
 class Config;
 class WorkingCopy;
 class Unit;
+class Site;
 
 namespace azure2 {
 
@@ -33,7 +34,7 @@ double CoulombReferenceValue(const WorkingCopy &data, Unit *point, experiment::L
  * it), eta of its entrance pair with the pair's masses and charges.  Under a fold it is taken at the point's energy:
  * the model is E exp(2 pi eta(E)) <sigma>, the S factor of the folded cross section at the point.
  */
-double SFactorConversionValue(const Unit *point, CNuc *compound);
+double SFactorConversionValue(const Site *point, CNuc *compound);
 
 }  // namespace azure2
 

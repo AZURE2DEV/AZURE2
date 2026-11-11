@@ -11,6 +11,7 @@
 
 class WorkingCopy;
 class Unit;
+class Site;
 class CNuc;
 class Config;
 
@@ -139,7 +140,7 @@ class CalculationPlan {
 /// `tGroups` (one per unit, non-decreasing), or, if null, runs of one (entrance, exit) pair.  `progress`, if given,
 /// holds the index of the unit being calculated (so a caller that catches an exception knows whose it was: the fill's
 /// and factorisation's are units[0]'s).
-void SolveAtOneEnergy(CNuc *cnuc, const Config &configure, Results &results, Unit *const *units, int n,
+void SolveAtOneEnergy(CNuc *cnuc, const Config &configure, Results &results, Site *const *units, int n,
                       const int *tGroups = nullptr, int *progress = nullptr);
 /// AZURE_PLAN_CHECK=1: every unit of `tasks` solved alone (fill and factorisation, T-matrix and record with it) and
 /// compared bit for bit with the shared solve of its task (the bilinear forms g^T A g of every J-group, the route, the

@@ -9,6 +9,7 @@
 struct GradAccum;
 struct FreeLevelMask;
 class JGroup;
+class Unit;
 
 /*!
  * Cotangents of the T-matrix elements of one decay (AMatrixFunc::PointTBar):
@@ -105,7 +106,7 @@ class AMatrixFunc : public GenMatrixFunc {
     tbar_decay_ = nullptr;
   }
   /// Build \f$A^{-1}\f$ per J-group from the level parameters at this point.
-  void FillMatrices(Unit *);
+  void FillMatrices(Site *);
   /*!
    * Factors the level matrix of every J-group.  The full inverse is no longer
    * formed here: the T-matrix needs only bilinear forms of it, and Inverse() is
@@ -113,7 +114,7 @@ class AMatrixFunc : public GenMatrixFunc {
    */
   void InvertMatrices();
   /// T-matrix per pathway from the inverted level matrix.
-  void CalculateTMatrix(Unit *);
+  void CalculateTMatrix(Site *);
   /*!
    * Instantiated in the parent class.
    */
@@ -124,7 +125,7 @@ class AMatrixFunc : public GenMatrixFunc {
    * separation and excitation energies of the entrance pair (of the exit pair for a beta-delayed entrance).  Units
    * with the same nucleus and the same bits of this number share one solve (CalculationPlan.h, EnergyTask).
    */
-  static double InEnergy(CNuc *compound, Unit *point);
+  static double InEnergy(CNuc *compound, Site *point);
 
   /// Level-matrix element at (J-group, level, level'), all 1-based.
   complex GetAMatrixElement(int, int, int) const;
@@ -157,7 +158,7 @@ class AMatrixFunc : public GenMatrixFunc {
    * (1-based) to its level number; null means every level is in the R matrix.
    * `inEnergy` is the compound-system energy of the point.
    */
-  void LevelMatrixABarAdjoint(Unit *point, int jNum, const matrix_c &aBar, double inEnergy,
+  void LevelMatrixABarAdjoint(Site *point, int jNum, const matrix_c &aBar, double inEnergy,
                               const vector_matrix_r *shiftDeriv, GradAccum &accum,
                               const std::vector<int> *levelOf = nullptr);
 
@@ -182,7 +183,7 @@ class AMatrixFunc : public GenMatrixFunc {
    * T-matrix this object holds).  Linear in `bar`, so the cotangents of all the
    * points sharing one T-matrix may be summed first.
    */
-  void TBarAdjoint(Unit *energyPoint, const TMatrixCotangent &bar, GradAccum &accum,
+  void TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, GradAccum &accum,
                    const vector_matrix_r *shiftDeriv = nullptr);
   /*!
    * The internal-pathway cotangents of `bar` as bilinear-form terms, per
@@ -190,7 +191,7 @@ class AMatrixFunc : public GenMatrixFunc {
    * external capture, whose channel-capture terms are not of this form
    * (TBarAdjoint then takes the dense path).
    */
-  bool CollectBilinearTerms(Unit *energyPoint, const TMatrixCotangent &bar,
+  bool CollectBilinearTerms(Site *energyPoint, const TMatrixCotangent &bar,
                             std::vector<std::vector<BilinearTerm>> &terms);
   /*!
    * Adjoint of the bilinear terms of J-group j: the explicit reduced-width
@@ -199,7 +200,7 @@ class AMatrixFunc : public GenMatrixFunc {
    * that of the level matrix is formed from the solves A g_c in O(n^2) per
    * term instead of the two O(n^3) products of the dense path.
    */
-  void BilinearAdjoint(Unit *energyPoint, int jNum, const std::vector<BilinearTerm> &terms,
+  void BilinearAdjoint(Site *energyPoint, int jNum, const std::vector<BilinearTerm> &terms,
                        GradAccum &accum, const vector_matrix_r *shiftDeriv = nullptr);
   /// Free level parameters of each J-group (AZUREGrad.h).
   typedef FreeLevelMask FreeMask;
@@ -215,7 +216,7 @@ class AMatrixFunc : public GenMatrixFunc {
    * structural contraction of LevelMatrixAdjoint.  Standard, Brune and Park
    * level matrices on either route.
    */
-  bool LevelBasis(Unit *energyPoint, int j, const BilinearTerm &term, const FreeMask &mask,
+  bool LevelBasis(Site *energyPoint, int j, const BilinearTerm &term, const FreeMask &mask,
                   const vector_matrix_r *shiftDeriv, std::vector<double> &block);
   /// Store an \f$A^{-1}\f$ element.
   void AddAInvMatrixElement(int, int, int, complex);
@@ -227,7 +228,7 @@ class AMatrixFunc : public GenMatrixFunc {
    * (ScatteringLength::Adjoint).  Returns false, accumulating nothing, for the RMC formalism or a group
    * with levels left out of the R-matrix.
    */
-  bool BilinearAdjoint(Unit *point, int jGroupNum, int chNum, complex mBar, GradAccum &accum,
+  bool BilinearAdjoint(Site *point, int jGroupNum, int chNum, complex mBar, GradAccum &accum,
                        const vector_matrix_r *shiftDeriv = nullptr);
 
  private:
@@ -246,13 +247,13 @@ class AMatrixFunc : public GenMatrixFunc {
   /// (the adjoint differentiates the widths as they are), cached per energy.
   const vector_c &GetRawChannelSolve(int jGroupNum, int chNum);
   /// Beam energy in the compound system, as FillMatrices takes it.
-  double InEnergy(Unit *point) { return InEnergy(compound(), point); }
+  double InEnergy(Site *point) { return InEnergy(compound(), point); }
   /// d(level matrix) part of the adjoint of one J-group, given the level-matrix
   /// cotangent Mbar (n x n): structural energy and reduced-width gradients of
   /// the standard, Brune and Park level matrices.  The channel kernel is read
   /// from `energyPoint` (Lo-matrix plus, for Brune and Park particle channels,
   /// the boundary condition) unless `lambda` gives it per channel.
-  void LevelMatrixAdjoint(Unit *energyPoint, int jNum, const matrix_c &Mbar, double inEnergy,
+  void LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c &Mbar, double inEnergy,
                           GradAccum &accum, const vector_matrix_r *shiftDeriv,
                           const complex *lambda = nullptr, const std::vector<int> *levelOf = nullptr);
   /// LevelMatrixAdjoint's level data over the active levels of a THM block (levelOf).
@@ -283,23 +284,23 @@ class AMatrixFunc : public GenMatrixFunc {
     std::vector<double> X;       ///< pencil route: (H - E T)^-1 Qt G over the active channels, n x m
   };
   /// Level matrix of J-group j at this energy, into a_inv_matrices_ (level route).
-  void FillLevelMatrix(int j, Unit *point, double inEnergy);
+  void FillLevelMatrix(int j, Site *point, double inEnergy);
   /// Channel-space solve of J-group j at this energy; false sends it to the level route.
-  bool SolveChannelSpace(int j, Unit *point, double inEnergy);
+  bool SolveChannelSpace(int j, Site *point, double inEnergy);
   /// R of the pencil route (no formal representation); false sends the J-group to the level route.
   bool SolvePencil(int j, double inEnergy);
   /// R of the formal route; false sends the J-group to the level route.
   bool SolveFormal(int j, double inEnergy);
   /// Rank-two derivatives of the bilinear terms by free level parameter (see LevelBasis).
   template <class Add>
-  bool LevelAdjoint(Unit *energyPoint, int j, const std::vector<BilinearTerm> &terms, const FreeMask &mask,
+  bool LevelAdjoint(Site *energyPoint, int j, const std::vector<BilinearTerm> &terms, const FreeMask &mask,
                     const vector_matrix_r *shiftDeriv, Add add);
   std::vector<int> la_used_, la_slot_;
   std::vector<char> la_particle_;
   std::vector<const vector_c *> la_u_;
   vector_c la_gu_, la_ku_;
   /// Channel kernel Lambda_d of J-group j at the energy of `point` (as LevelMatrixAdjoint takes it).
-  const std::vector<complex> &KernelLambda(Unit *point, int j);
+  const std::vector<complex> &KernelLambda(Site *point, int j);
   std::vector<complex> kernel_scratch_;
   /// Solves the bordered system (deflated levels, channels) in place (wp may be null without deflated levels).
   void SolveBordered(int j, complex *wp, complex *wz);
@@ -329,7 +330,7 @@ class AMatrixFunc : public GenMatrixFunc {
   const azure2::ExitRow *tbar_decay_ = nullptr;
   bool tbar_particle_ = false;
   /// AZURE_CHANNEL_VERIFY: compare the channel-space solve of J-group j with the level matrix.
-  void VerifyChannelSpace(int j, Unit *point, double inEnergy);
+  void VerifyChannelSpace(int j, Site *point, double inEnergy);
 
   const Config *configure_;
   CNuc *compound_;

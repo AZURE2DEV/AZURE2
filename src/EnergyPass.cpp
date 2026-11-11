@@ -35,7 +35,7 @@ namespace azure2 {
 namespace {
 
 // Whether unit k starts a T-matrix group: by `tGroups`, or, if null, by a change of (entrance, exit) pair.
-bool StartsTMatrix(Unit *const *units, int k, const int *tGroups) {
+bool StartsTMatrix(Site *const *units, int k, const int *tGroups) {
   if (k == 0) return true;
   if (tGroups) return tGroups[k] != tGroups[k - 1];
   return units[k]->GetEntranceKey() != units[k - 1]->GetEntranceKey() ||
@@ -44,7 +44,7 @@ bool StartsTMatrix(Unit *const *units, int k, const int *tGroups) {
 
 }  // namespace
 
-void SolveAtOneEnergy(CNuc *cnuc, const Config &configure, Results &results, Unit *const *units, int n,
+void SolveAtOneEnergy(CNuc *cnuc, const Config &configure, Results &results, Site *const *units, int n,
                       const int *tGroups, int *progress) {
   if (progress) *progress = 0;
   if (n <= 0) return;
@@ -266,7 +266,7 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
     const azure2::EnergyTask &task = tasks[k];
     const int n = task.size;
     AZUREProfile::CountMany(AZUREProfile::kEnergyUnits, n);
-    static thread_local std::vector<Unit *> units;
+    static thread_local std::vector<Site *> units;
     units.resize(n);
     for (int i = 0; i < n; i++) units[i] = &units_[tasks.units[task.begin + i]];
     int start = 0;

@@ -23,7 +23,7 @@
  * analyzing power are left as they are, while an analyzing-power sub-point keeps its (screened) cross
  * section as the weight of the target average.  The E1 and E2 components are scaled with the total.
  */
-void GenMatrixFunc::CalculateCrossSection(Unit *point, azure2::Results &results) {
+void GenMatrixFunc::CalculateCrossSection(Site *point, azure2::Results &results) {
   AZUREProfile::Timer profileTimer(AZUREProfile::kCrossSection);
   this->CalculateBareCrossSection(point, results);
   if (point->GetScreeningParam() == 0) return;
@@ -36,7 +36,7 @@ void GenMatrixFunc::CalculateCrossSection(Unit *point, azure2::Results &results)
   point->SetFitE2CrossSection(results, f * point->GetFitE2CrossSection(results));
 }
 
-void GenMatrixFunc::CalculateBareCrossSection(Unit *point, azure2::Results &results) {
+void GenMatrixFunc::CalculateBareCrossSection(Site *point, azure2::Results &results) {
   complex sum(0., 0.);
   complex sumE1(0., 0.);
   complex sumE2(0., 0.);
@@ -777,14 +777,14 @@ std::string GenMatrixFunc::NoPathwayMessage(int entrancePair, int exitPair) cons
          " (no R-matrix level couples them, and no external capture leads there)";
 }
 
-std::string GenMatrixFunc::CaptureAyNotBuiltMessage(const Unit *point) const {
+std::string GenMatrixFunc::CaptureAyNotBuiltMessage(const Site *point) const {
   return "the capture analyzing power of data set " + std::to_string(point->GetSegmentKey()) + " (pair " +
          std::to_string(point->GetEntranceKey()) + " to pair " + std::to_string(point->GetExitKey()) +
          ") has no terms: they are built at set-up for the reactions the data sets name (RequestCaptureAyTerms), and "
          "this one was not named";
 }
 
-bool GenMatrixFunc::CalculateAmplitudeMatrix(Unit *point, double *spinSum,
+bool GenMatrixFunc::CalculateAmplitudeMatrix(Site *point, double *spinSum,
                                              double *analyzingPower) {
   if (spinSum) *spinSum = 0.0;
   if (analyzingPower) *analyzingPower = 0.0;
@@ -825,7 +825,7 @@ bool GenMatrixFunc::CalculateAmplitudeMatrix(Unit *point, double *spinSum,
   return true;
 }
 
-bool GenMatrixFunc::CalculateCaptureAnalyzingPower(Unit *point, const azure2::Results &results,
+bool GenMatrixFunc::CalculateCaptureAnalyzingPower(Site *point, const azure2::Results &results,
                                                    double *unpolarized,
                                                    double *analyzingPower) {
   if (unpolarized) *unpolarized = 0.0;

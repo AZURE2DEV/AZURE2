@@ -31,7 +31,7 @@ static complex ECPathwayAmplitude(CNuc *, const Config &, int entrancePair, cons
 /// Returns the external capture amplitude of external pathway m (1-based) of spin group k (1-based) of the point's
 /// exit, as stored at set-up.
 
-complex Unit::GetECAmplitude(int kGroupNum, int ecMGroupNum) const {
+complex Site::GetECAmplitude(int kGroupNum, int ecMGroupNum) const {
   return ec_amplitudes_[kGroupNum - 1][ecMGroupNum - 1];
 }
 
@@ -53,7 +53,7 @@ complex Unit::GetECAmplitude(int kGroupNum, int ecMGroupNum) const {
  * energies of the segment's own points (ECAmplitudeCache) and held flat beyond
  * its ends, as before the tables.
  */
-complex Unit::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, CNuc *theCNuc, const Config &configure) const {
+complex Site::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, CNuc *theCNuc, const Config &configure) const {
   // Get current energy including shifts
   double currentEnergy = this->GetCMEnergy();
 
@@ -180,7 +180,7 @@ static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, int en
  * entrance and exit pairs.
  */
 
-void Unit::CalculateECAmplitudes(WorkingCopy *data, CNuc *theCNuc, const Config &configure, const ChannelTable *table) {
+void Site::CalculateECAmplitudes(WorkingCopy *data, CNuc *theCNuc, const Config &configure, const ChannelTable *table) {
   int aa = theCNuc->GetPairNumFromKey(this->GetEntranceKey());
   if (theCNuc->GetPair(aa)->GetPType() == 20) return;
   if (theCNuc->GetPair(aa)->IsEntrance()) {
@@ -205,16 +205,13 @@ void Unit::CalculateECAmplitudes(WorkingCopy *data, CNuc *theCNuc, const Config 
       }
     }
   }
-  for (int i = 1; i <= this->NumSubPoints(); i++) {
-    this->GetSubPoint(*data, i)->CalculateECAmplitudes(data, theCNuc, configure, table);
-  }
 }
 
 /*!
  * Adds an external capture amplitude with reference to a specified reaction pathway.
  */
 
-void Unit::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude, double energy) {
+void Site::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude, double energy) {
   vector_c d_amp;
   vector_r d_energy;
   while (kGroupNum > ec_amplitudes_.size()) {
@@ -252,7 +249,7 @@ void Unit::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude, d
   }
 }
 
-void Unit::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude) {
+void Site::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude) {
   // Default behavior - use current CM energy
   double currentEnergy = this->GetCMEnergy();
   AddECAmplitude(kGroupNum, ecMGroupNum, ecAmplitude, currentEnergy);
@@ -261,7 +258,7 @@ void Unit::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude) {
 /*!
  * Clears all EC amplitudes and energies. Used when cloning to avoid duplicate accumulation.
  */
-void Unit::ClearECAmplitudes() {
+void Site::ClearECAmplitudes() {
   ec_amplitudes_.clear();
   ec_energies_.clear();
   ec_shifted_.clear();

@@ -372,7 +372,7 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
           sub.CalcLegendreP(this, configure.maxLOrder, theCNuc, qEffect);
           // A shifted segment's sub-points are moved and energised by the shift step.
           if (!shifted) {
-            sub.CalcEDependentValues(this, theCNuc, configure, true);
+            sub.CalcEDependentValues(this, theCNuc, configure);
             sub.CalcCoulombAmplitude(this, theCNuc);
           }
         }
