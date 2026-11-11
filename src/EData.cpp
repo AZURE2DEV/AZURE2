@@ -93,6 +93,9 @@ static bool CoefficientsAllowed(CNuc *theCNuc, const ESegment &segment, int numb
 static bool AnalyzingPowerAllowed(CNuc *theCNuc, const ESegment &segment, int number, bool isTest,
                                   const Config &configure) {
   if (!segment.IsAnalyzingPower()) return true;
+  // A general spin observable (isDiff 10) shares A_y's plumbing but not this restriction: SpinAllowed checks its
+  // token against the particles' spins (tensor observables of a spin-1 beam are what it is for).
+  if (segment.IsSpinSegment()) return true;
   PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetEntranceKey()));
   if (fabs(entrancePair->GetJ(1) - 0.5) < 1.e-6) return true;
   configure.outStream << "ERROR: " << (isTest ? "test segment #" : "segment #") << number
