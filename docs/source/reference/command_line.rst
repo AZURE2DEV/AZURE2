@@ -345,11 +345,16 @@ Exit status
 -----------
 
 AZURE2 exits with 0 when the run completed and 1 when it was aborted or
-refused ("Calculation was aborted.", a project that cannot be read or that
-AZURE2 refuses with ``ERROR: ...`` -- e.g. a malformed ``<thm>`` block or a
-``<thm>`` weight that does not fit the data --, a failed fill, initialization
-or parameter transformation, a failed MCMC run), so that a script or a job
-chain can tell.  Before November 2026 it exited with 0 in every case on
+refused ("Calculation was aborted.", a project that AZURE2 refuses with
+``ERROR: ...`` -- e.g. a malformed ``<thm>`` block or a ``<thm>`` weight that
+does not fit the data --, a failed fill, initialization or parameter
+transformation, a failed MCMC run), so that a script or a job chain can tell.
+A format-3 project refused when it is read, or in a run with data because a
+data file cannot be read (``E_DATA_FILE``), prints its diagnostics and then,
+as its last error line, ``ERROR: <file> (format 3) is refused; AZURE2
+--validate <file> lists the same diagnostics.``  A project file that cannot be
+opened prints ``Could not open <file>.  Check that file exists.`` and exits
+with -1 (255 on POSIX systems).  Before November 2026 it exited with 0 in every case on
 ``dev``, and with -1 (255 on POSIX systems) after a failed run on the ``thm``
 branch.
 

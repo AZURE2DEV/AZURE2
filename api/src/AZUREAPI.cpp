@@ -142,7 +142,7 @@ int AZUREAPI::Initialize() {
     //   center of mass conversions, s-factor conversions, etc.
     // configure().outStream << "Filling Data Structures..." << std::endl;
     if (configure().paramMask & Config::CALCULATE_WITH_DATA) {
-      if (data()->Fill(configure(), compound()) == -1) {
+      if (data()->Fill(configure(), compound()) != 0) {
         // configure().outStream << "Could not fill data object from file." << std::endl;
         return -1;
       } else if (data()->Data().NumSegments() == 0 && compound()->GetModelData().NumResiduals() == 0) {
@@ -715,7 +715,7 @@ bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
   // Mirror the branch taken at startup: data mode reads the data segments,
   // extrapolation mode builds its points from <segmentsTest>.
   if (configure().paramMask & Config::CALCULATE_WITH_DATA) {
-    if (data()->Fill(configure(), compound()) == -1) return false;
+    if (data()->Fill(configure(), compound()) != 0) return false;
   } else {
     if (data()->MakePoints(configure(), compound()) == -1 || SessionRefusesAdaptiveGrids(configure())) return false;
   }

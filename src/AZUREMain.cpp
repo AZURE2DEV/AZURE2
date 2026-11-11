@@ -91,8 +91,8 @@ int AZUREMain::operator()() {
     //   center of mass conversions, s-factor conversions, etc.
     configure().outStream << "Filling Data Structures..." << std::endl;
     if (configure().paramMask & Config::CALCULATE_WITH_DATA) {
-      if (data()->Fill(configure(), compound()) == -1) {
-        configure().outStream << "Could not fill data object from file." << std::endl;
+      if (const int filled = data()->Fill(configure(), compound()); filled != 0) {
+        if (filled != WorkingCopy::kFillRefused) configure().outStream << "Could not fill data object from file." << std::endl;
         return -1;
       } else if (data()->Data().NumSegments() == 0 && compound()->GetModelData().NumResiduals() == 0) {  // model data alone run
         configure().outStream << "There is no data provided." << std::endl;

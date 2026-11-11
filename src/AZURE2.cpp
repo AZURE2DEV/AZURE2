@@ -1112,8 +1112,8 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
     // Fill the data object from segments and data file
     configure.outStream << "Filling Data Structures..." << std::endl;
     if (configure.paramMask & Config::CALCULATE_WITH_DATA) {
-      if (data->Fill(configure, compound) == -1) {
-        configure.outStream << "Could not fill data object from file." << std::endl;
+      if (const int filled = data->Fill(configure, compound); filled != 0) {
+        if (filled != WorkingCopy::kFillRefused) configure.outStream << "Could not fill data object from file." << std::endl;
         delete compound;
         delete data;
         return -1;
@@ -1530,12 +1530,12 @@ int main(int argc, char *argv[]) {
     return -1;
   }
   int configStatus = configure.ReadConfigFile();
-  if (configStatus == -1) {
+  if (configStatus == Config::kConfigUnreadable) {
     configure.outStream << "Could not open " << configure.configfile << ".  Check that file exists."
                         << std::endl;
     return -1;
-  } else if (configStatus < 0) {
-    return -1;
+  } else if (configStatus != 0) {
+    return 1;  // a refused format-3 project or a malformed block, like a refused set-up: its diagnostics are printed
   }
 #ifndef NO_STAT
   else if (configure.CheckForInputFiles() == -1)

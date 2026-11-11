@@ -53,7 +53,8 @@ azure2::experiment::ExtrapolationSpecs OldExtrapolationSpecs(const Config &confi
 }
 
 // The data files of a format-3 project that could not be read (Config::ReadFormat3Project builds it for a run without
-// data): a data run refuses them as E_DATA_FILE, a run without data warns.  True when there were any.
+// data): a data run refuses them as E_DATA_FILE and refuses the project (Config::ReportFormat3Refused, the line of a
+// project refused when it is read), a run without data warns.  True when there were any.
 bool ReportUnreadDataFiles(const Config &configure, bool dataRun) {
   bool any = false;
   for (azure2::experiment::Diagnostic d : configure.format3->diagnostics) {
@@ -66,6 +67,7 @@ bool ReportUnreadDataFiles(const Config &configure, bool dataRun) {
     }
     configure.outStream << (dataRun ? "ERROR: " : "WARNING: ") << d.ToText() << std::endl;
   }
+  if (any && dataRun) configure.ReportFormat3Refused();
   return any;
 }
 
@@ -73,7 +75,7 @@ bool ReportUnreadDataFiles(const Config &configure, bool dataRun) {
 
 int WorkingCopy::Fill(const Config &configure, CNuc *theCNuc) {
   if (configure.format3) {
-    if (ReportUnreadDataFiles(configure, true)) return -1;
+    if (ReportUnreadDataFiles(configure, true)) return kFillRefused;
     return this->Fill(configure, theCNuc, configure.format3->built.data);
   }
   bool present = false;
