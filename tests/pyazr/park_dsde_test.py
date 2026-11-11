@@ -112,10 +112,14 @@ def stage(tmp, tag):
         os.makedirs(os.path.join(work, d))
     # .azr channel lines carry 2s and 2l
     lines = "\n\n".join(f"{J} {pi} {E} 1 1 1 0 {2 * l} {lid} 1 0 {w} {PAIR}" for J, pi, E, l, w, lid in LEVELS)
-    with open(os.path.join(work, "park_dsde.azr"), "w") as f:
-        f.write(MODEL.format(levels=lines))
     with open(os.path.join(work, "data", "xs.dat"), "w") as f:
         f.write("2.0\t90\t1.0\t0.1\n2.5\t90\t1.0\t0.1\n3.0\t90\t1.0\t0.1\n")
+    # the model is composed in the old grammar and converted to format 3 by the engine's converter (pyazr reads
+    # format 3 only), as the generators of tests/upgrade do
+    from pyazr import convert_azr
+    with open(os.path.join(work, "park_dsde_old.azr"), "w") as f:
+        f.write(MODEL.format(levels=lines))
+    convert_azr(os.path.join(work, "park_dsde_old.azr"), os.path.join(work, "park_dsde.azr"))
     return work
 
 
