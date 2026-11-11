@@ -44,8 +44,19 @@ below() { grep -c "below the threshold of the exit pair" "$WORK/$1/run.log"; }
 has_nan() { grep -il "nan" "$WORK/$1/output"/AZUREOut_* "$WORK/$1/output/chiSquared.out" 2> /dev/null | head -1; }
 
 # (a) test segment past theta_max
+# ext NAME ENERGIES ANGLE: 7Li_p_ay with a 7Li(p,n)7Be dsigma/dOmega extrapolation (lab angle in deg) as its first one
+ext() {
+  export REC="extrapolation kl
+    reaction       7Li(p,n)7Be
+    quantity       dsigma_domega
+    unit           b/sr
+    energies       $2
+    angles         list $3 deg lab"
+  awk '{ print } /^<extrapolations>$/ { print ENVIRON["REC"] }' "$LI/7Li_p_ay.azr" > "$WORK/$1/m.azr"
+}
+
 prep a "$LI"
-awk '{print} /<segmentsTest>/{print "1 5 2 1.89 1.90 0.01 60 60 0 1"}' "$LI/7Li_p_ay.azr" > "$WORK/a/m.azr"
+ext a "range 1.89 1.90 MeV lab step 0.01" 60
 run a 3
 if [ "$(errors a)" -ge 1 ] && [ ! -e "$WORK/a/output/AZUREOut_aa=5_R=2.extrap" ]; then
   ok "(a) 7Li(p,n) test segment at 60 deg lab (theta_max 21-45 deg): refused, no extrapolation file"
@@ -54,7 +65,16 @@ else bad "(a) test segment past theta_max: errors $(errors a), extrap file $(ls 
 # (b) data segment past theta_max
 prep b "$LI"
 printf '1.89 60 1.0 0.1\n1.90 60 1.0 0.1\n' > "$WORK/b/data/pn60.dat"
-awk '{print} /<segmentsData>/{print "1 5 2 1.8 2.0 60 60 1 1 0 0 0 0 0 data/pn60.dat 0 0"}' "$LI/7Li_p_ay.azr" > "$WORK/b/m.azr"
+export REC="dataset pn60
+    reaction       7Li(p,n)7Be
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/pn60.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    energy_window  1.8 2.0 MeV
+    angle_window   60 60 deg
+    norm           1 fixed"
+awk '{ print } /^<data>$/ { print ENVIRON["REC"] }' "$LI/7Li_p_ay.azr" > "$WORK/b/m.azr"
 run b 1
 if [ "$(errors b)" -ge 1 ] && [ ! -s "$WORK/b/output/chiSquared.out" ]; then
   ok "(b) the same as a data segment: refused, no chiSquared.out"
@@ -62,9 +82,12 @@ else bad "(b) data segment past theta_max: errors $(errors b); chiSquared.out: $
 
 # (c) elastic with m1 > m2: 13N's pair 1 as 12C + p (swap j, pi, m and z of the two particles; the A_y segments off)
 prep c "$N13"
-awk 'BEGIN{inl=0;ins=0} /<levels>/{inl=1} /<\/levels>/{inl=0} /<segmentsData>/{ins=1} /<\/segmentsData>/{ins=0}
-     { if (ins && NF > 14 && $8 == 7) $1 = 0;
-       if (inl && NF > 25 && $6 == 1) { t=$13; $13=$15; $15=t; t=$14; $14=$16; $16=t; t=$18; $18=$19; $19=t; t=$20; $20=$21; $21=t }
+# pair 1 with its particles swapped (12C the projectile, p the target: the labels of its data sets follow), and the
+# analyzing-power data sets inactive
+awk 'BEGIN{inl=0} /<levels>/{inl=1} /<\/levels>/{inl=0}
+     { if (inl && NF > 25 && $6 == 1) { t=$13; $13=$15; $15=t; t=$14; $14=$16; $16=t; t=$18; $18=$19; $19=t; t=$20; $20=$21; $21=t }
+       if ($1 == "reaction") { sub(/12C\(p,p\)12C/, "1H(12C,12C)1H"); sub(/12C\(p,g\)13N/, "1H(12C,g)13N"); $0 = "    " $0 }
+       if ($1 == "quantity" && $2 == "analyzing_power") { print; $0 = "    active         no" }
        print }' "$N13/13N.azr" > "$WORK/c/m.azr"
 run c 1
 if [ "$(errors c)" -ge 1 ] && [ ! -s "$WORK/c/output/chiSquared.out" ]; then
@@ -73,7 +96,7 @@ else bad "(c) elastic m1 > m2 past theta_max: errors $(errors c); chiSquared.out
 
 # (d) control inside theta_max
 prep d "$LI"
-awk '{print} /<segmentsTest>/{print "1 5 2 1.89 1.91 0.01 10 10 0 1"}' "$LI/7Li_p_ay.azr" > "$WORK/d/m.azr"
+ext d "range 1.89 1.91 MeV lab step 0.01" 10
 run d 3
 f="$WORK/d/output/AZUREOut_aa=5_R=2.extrap"
 if [ -s "$f" ] && [ "$(errors d)" -eq 0 ] && ! grep -qi nan "$f"; then
@@ -82,7 +105,7 @@ else bad "(d) control at 10 deg: errors $(errors d), file $(ls -la "$f" 2> /dev/
 
 # (e) below the exit threshold
 prep e "$LI"
-awk '{print} /<segmentsTest>/{print "1 5 2 1.88 1.88 0 10 10 0 1"}' "$LI/7Li_p_ay.azr" > "$WORK/e/m.azr"
+ext e "list 1.88 MeV lab" 10
 run e 3
 if [ "$(below e)" -ge 1 ] && [ ! -e "$WORK/e/output/AZUREOut_aa=5_R=2.extrap" ]; then
   ok "(e) a lab-differential point below the (p,n) threshold (E_p = 1.88 MeV): refused, no extrapolation file"

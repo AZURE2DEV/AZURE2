@@ -60,8 +60,8 @@ and 12 pyazr tests), so the groups follow the projects, not the directory names.
 | group | projects converted | scripts and tests that read them | state |
 |---|---|---|---|
 | 1. self-contained | regression and model files whose checks edit nothing old: `13N_capture_ay`, `6Li_d`, `angle_mapping`, `capture_ay_coupling`, `convolution_unify` (not `bare`), `coulomb_nuclear_sign`, `data_file_comments`, `ec_e1m1_phase`, `ec_final_state_listed`, `ec_m1_exact`, `gamma_lab_frame`, `identical_dd_mott`, `identical_pp_mott`, `q_attenuation` (not `plain`), `ratio_frame` (not `ratio_data`), `reaction_rate` (not `n12C`, `p12C`), `secondary_gamma` (not `grad`, `mixing`), `shift_sqrt_subpoints`, `shift_subpoint_angle`, `sum_lab_frame` (`plain_data`, `sum_free`), `target_effect_ranges`, `transform_level_order`, the examples but `c12c12_tumino2018`, `natural_neon`, `o17_guardo2017_fit` (82 files) | their own `check.sh` (no edit of old lines; their `sed`/`awk` touch `<config>` lines or outputs only), `upos_pair_index`, `target_effect_shared`, `thm_beam_profile`, `thm_threshold_grid`, `thm_fixed_angle`, `failed_point`, `thm_park` (its example part) | converted |
-| 2. 13N | `13N`, `mcmc_physical_norm/13N_fast`, `q_attenuation/models/plain`, `ec_threshold`, `secondary_gamma/models/mixing` | `13N`, `component_mapping`, `ec_final_state_ambiguous`, `ec_integrals_signature`, `ec_relativistic_signature`, `ec_shift`, `kinematic_limits`, `mixing_guard_lorder`, `normalizations_out`, `progress_bars`, `segline_formats`, `straggling_bohr`, `thick_target`, `total_capture_code`, `level_ids`, `level_channel_order`, `nuisance_level_index`, `parameter_settings_nan`, `mcmc_*`; pyazr tests on 13N | to do |
-| 3. thick target | `thick_target_resonance` | `straggling_bohr`, `target_auto_windows`, `target_thickness_exact`, `target_window_fallback` | to do |
+| 2. 13N | `13N`, `mcmc_physical_norm/13N_fast`, `q_attenuation/models/plain`, `ec_threshold/models/ng`, `secondary_gamma/models/mixing`, `ec_m1_exact/models/m1`, `7Li_p_ay` | rewritten: `component_mapping` (new composites, see §4), `ec_final_state_ambiguous`, `ec_integrals_signature`, `ec_relativistic_signature`, `ec_shift`, `excitation_energy_column`, `kinematic_limits`, `mcmc_physical_norm` (and its `make_model.py`), `mcmc_snapshot_components`, `mixing_guard_lorder`, `normalizations_out` (part a), `progress_bars`, `straggling_bohr` (part d), `thick_target`, `total_capture_code` (§4); through the converter: `segline_formats`; unchanged and passing: `13N`, `level_ids`, `level_channel_order`, `nuisance_level_index`, `parameter_settings_nan`, `ec_m1_exact`, `ec_threshold`, `q_attenuation`, `secondary_gamma`; pyazr tests of the old reader on the original of 13N: `roundtrip`, `physical_norm`, `shift_first_call`, `target_density`, `jacobian_skip`, `jacobian_shift_columns`, `zero_width_level`, `formal_capture_mask`, `composite_gradient` | converted |
+| 3. thick target | `thick_target_resonance` | rewritten (each model's records written by the check): `straggling_bohr`, `target_auto_windows` (but (f), §4), `target_thickness_exact`, `target_window_fallback`; unchanged: `shift_sqrt_subpoints` | converted |
 | 4. groups, shifts, priors | `norm_groups`, `shift_fn`, `shift_groups`, `energy_shift_sqrt`, `15N_p_a`, `7Li_p_a` | `norm_groups`, `normalizations_out`, `prior_covariance`, `prior_centre`, `nuisance_prior`, `shift_*`, `shared_tables_race`, `energy_shift_sqrt`; pyazr tests | to do |
 | 5. targets and apparatus | `electron_screening`, `screening_6li`, `target_density`, `convolution_window`, `convolution_unify/models/bare`, `data_covariance`, `reaction_rate/models/n12C`, `p12C` (read by `transmission_yield/make_models.py`), `secondary_gamma/models/grad`, `angular_coefficients`, `beam_profile_kernel`, `hard_sphere` | `electron_screening`, `screening_6li`, `target_density`, `data_covariance`, `doppler_fgm`, `transmission_yield`, `clone_composite`, `angular_coefficients`, `beam_profile_kernel`, `hard_sphere`, `cli_route_exit`, `extrap_sav_segments`; `park_chi2_fallback`, `upgrade_plan_runtime`; pyazr tests | to do |
 | 6. natural targets | `natural_neon` (tests and example), `natural_target` | `natural_neon`, `segline_formats`, `shared_effect_pairs`, `shared_point_tables`, `total_optical`, `transmission_yield`, `natural_target`, `component_subpoint_angle`; pyazr tests | to do |
@@ -69,15 +69,39 @@ and 12 pyazr tests), so the groups follow the projects, not the directory names.
 | 8. the rest | `upgrade/T1–T3`, `relativistic`, `scattering_length`, `channel_space`, `beta_delayed_alpha`, `identical_entrance_reaction`, `identical_pp_res`, `hybrid_potential`, `sum_lab_frame` (`sum_data`, `extrap`), `ratio_frame/models/ratio_data`, `ec_m1_exact/models/m1` | `upgrade`, `format3_engine`, `model_data`, `fit_threads`, `relativistic`, `scattering_length`, `phase_channel_spin`, `channel_space`, `beta_delayed_alpha`, `fixed_param_par`, `mass_separation_check`; `upgrade_poison_results`; pyazr tests | to do |
 | 9. the refusal switch | — | §8.4 of `project_format3.md` | not started; only when nothing loads an old file |
 
-## 4. Kept old on purpose
+## 4. Kept old on purpose, and checks that changed their model
 
-| file | why | where it is tested |
+| file or check | what | why |
 |---|---|---|
-| (none yet) | | |
+| `total_capture_code` (a), (b) | an old line with exit key −1 and a data type that is not total capture, refused by the old engine | format 3 writes the two halves as one token (`[total]`), so the mismatch cannot be written. The converter converts such a line to `[total]` without a note (the old engine refused the file): a decision for the director (refuse in the converter, or accept). Part (d), the total-capture type with a real exit key, is checked through the converter. |
+| `segline_formats` | the layouts of an old segment line (no shift, one shift, three fields; keyword blocks before `sample`) | the old segment-line reader is the converter's (`convert/include/azure2/convert/SegLine.h`): the check converts the original 13N and natural_neon with the line replaced and runs the conversion, the same expectations. |
+| `component_mapping` | composites of the 13N model | two composites of the old model cannot be written in format 3 (a sum on a thick-target yield, `E_REACTION_NOT_ALLOWED`; an angle-integrated elastic term of a charged pair in a sum, no quantity). The new model: the composites in the check's header; the same assertions (outputs identical with and without the mapping, fewer level-matrix solutions, gradient = differences). |
+| `progress_bars` | the SUM model | data set 6 (σ) instead of data set 1 (a thick-target yield, which takes one reaction in format 3). |
+| `target_auto_windows` (f) | automatic windows and explicit ranges on one line (`"auto,0.48-0.50"`) | format 3's `fold_windows` is `auto[:tol[:margin]]` or a list of ranges, not both; the converter writes `auto` and drops the ranges with a note. The case is left out of the check: a decision for the director (a grammar for both, or none). |
+| `target_window_fallback` (e) | the automatic per-point tolerance with no windows (old: an empty ranges token, then the tolerance) | format 3 states `auto_tolerance` only inside `fold_windows`, after a range or `auto`; the check writes one window over every point (`0-10 MeV auto_tolerance 0.001`), which gives the old outputs (compared). The converter drops such a tolerance **without a note** (`convert/src/BuildApparatus.cpp`, the windows branch requires ranges or auto): a defect for the director; `tests/reference/park_chi2_fallback_test.cpp` writes such a line (tolerance 1e-12). |
+| `kinematic_limits` (c) | pair 1 with its particles swapped | the labels become `1H(12C,12C)1H`, `1H(12C,g)13N`: `p` is not accepted as a target nucleus in a label. |
+
+Checks whose numbers were compared with the base's (`work/tree3/cmpbase.sh`: the base check on the base build and
+the rewritten one on this branch, outputs diffed): identical for `thick_target`, `straggling_bohr`,
+`segline_formats`, `normalizations_out`, `ec_relativistic_signature`, `ec_integrals_signature`, `ec_shift`,
+`ec_final_state_ambiguous`, `kinematic_limits`, `excitation_energy_column`, `mixing_guard_lorder`,
+`mcmc_physical_norm`, `mcmc_snapshot_components`, `target_thickness_exact`, `target_window_fallback`; identical but for
+the case left out for `target_auto_windows`.
 
 ## 5. What still reads old files (blocks the refusal switch)
 
-To be filled as the groups are converted.
+- The groups not yet converted (§3).
+- `AZURE2 --convert` on purpose: `segline_formats`, `total_capture_code` (d), `ec_final_state_ambiguous` (e) convert an
+  old model at run time; they keep working after the switch (the converter reads old files).
+- pyazr tests of the old file class, on the originals (`tests/pyazr/old_tree.py`): those listed in §3. Each loads the
+  original through `pyazr/azrfile.py` and runs the engine on it: they block the switch until pyazr's session reads
+  format 3 and the old class is deleted (another agent's work).
+- The model generators `tests/*/make_models.py` (29 of them; `make_model.py` of `mcmc_physical_norm`) write old files.
+  Their committed outputs are converted; those run by a check (`transmission_yield`, `light_excitation`,
+  `natural_target`, ...) are rewritten with their group. The others are developer tools that read a tree project and
+  write old lines: to regenerate, point them at the original (`tests/convert/fixtures/...`, as
+  `mcmc_physical_norm/make_model.py` now does) and convert the output; they are to be rewritten for format 3 or
+  deleted (open).
 
 ## 6. User-guide pages that show old keyword lines (for a later documentation pass)
 

@@ -25,6 +25,8 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import old_tree  # noqa: E402  (the old originals of converted projects)
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 
 failures = []
@@ -53,7 +55,7 @@ def main():
     work = tempfile.mkdtemp(prefix="pyazr_physical_norm_")
     try:
         src = os.path.join(ROOT, "tests", "13N")
-        shutil.copy(os.path.join(src, "13N.azr"), work)
+        shutil.copy(old_tree.original(os.path.join(src, "13N.azr")), work)  # the old file (format3_tree.md)
         shutil.copytree(os.path.join(src, "data"), os.path.join(work, "data"))
         model = AzrModel.from_file(os.path.join(work, "13N.azr"))
         model.set_segment_norm("meyer_84", vary=True, sys_error=5.0)

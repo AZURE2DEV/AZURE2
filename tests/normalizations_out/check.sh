@@ -35,10 +35,11 @@ fields() { awk -F, 'NR > 1 { print NF }' "$1" | sort -n | uniq -c | awk '{ print
 
 # ---- (a) 13N, one varied norm -----------------------------------------------------------------------------------
 mkdir -p "$WORK/a/output" "$WORK/a/checks" && cp -r "$HERE/../13N/data" "$WORK/a/"
-# data line: active ent exit minE maxE minA maxA isDiff norm varyNorm normErr ... ; the third data segment
-awk 'BEGIN { n = 0 } /<segmentsData>/ { inb = 1 } /<\/segmentsData>/ { inb = 0 }
-     { sub(/\r$/, ""); if (inb && $0 !~ /segmentsData/ && NF > 10) { n++; if (n == 3) { $10 = 1; $11 = 5; $1 = $1 } } print }' \
+# the third data set, meyer_84 (its norm "1 fixed prior 1 5%"), with its norm fitted
+awk '{ sub(/\r$/, "") } /^[a-z_]+ [A-Za-z0-9_-]+$/ { rec = $0 }
+     rec == "dataset meyer_84" && $1 == "norm" { $0 = "    norm           1 fit prior 1 5%" } { print }' \
     "$HERE/../13N/13N.azr" > "$WORK/a/t.azr"
+grep -q '^    norm           1 fit prior 1 5%$' "$WORK/a/t.azr" || bad "(a) the model: tests/13N/13N.azr has no data set meyer_84 with a norm"
 run a
 f="$WORK/a/output/normalizations.out"
 if [ -s "$f" ]; then

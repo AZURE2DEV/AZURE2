@@ -18,8 +18,10 @@
 # a new key (its ground-state line) and a copy of its first capture data set into that pair.  The second pair took the
 # level's capture parameters, and capture into the first ran without its external part and without a message
 # (1.95e-9 against 4.32e-9 at the first point).  Now an ERROR names both pair keys and the level.
-#   (d) the two-pair model stops with that ERROR and writes no chiSquared.out;
-#   (e) so does its format-3 conversion (AZURE2 --convert ... --to 3; the converter writes it, the run refuses it).
+#   (d) the two-pair model (format 3, each capture data set naming its exit_pair) stops with that ERROR and writes no
+#       chiSquared.out;
+#   (e) so does the conversion of the same model written in the old grammar (AZURE2 --convert ... --to 3 of the
+#       original 13N with the lines added; the converter writes it, the run refuses it).
 # dev b5faec4: (b) runs, attaching the capture to the first level.
 #
 #   ./tests/ec_final_state_ambiguous/check.sh path/to/AZURE2
@@ -56,8 +58,35 @@ make_model() {  # NAME ENERGY-OF-THE-DUPLICATE ("" = none)
   fi
 }
 # the two-pair model: the ground state's gamma-pair line again with a new pair key, and the first data set into the
-# gamma pair again into the new one
+# gamma pair again into the new one; the reaction label 12C(p,g)13N names both pairs now, so each capture data set says
+# its exit pair (exit_pair <key>, project_format3.md section 3.5)
 make_pairs() {  # NAME
+  mkdir -p "$WORK/$1/output" "$WORK/$1/checks"
+  cp -r "$BASE/data" "$WORK/$1/"
+  awk '{ sub(/\r$/, "") }
+       /<levels>/ { lv = 1 } /<\/levels>/ { lv = 0 }
+       lv && NF > 26 { if ($6 + 0 > maxkey) maxkey = $6 + 0 }
+       lv && NF > 26 && $1 == 0.5 && $2 == -1 && $3 + 0 == 0 && $27 == 10 { gamma = $6; line = $0 }
+       { lines[++n] = $0; inlev[n] = lv }
+       END {
+         key = maxkey + 1; first = ""
+         for (i = 1; i <= n; i++) {
+           l = lines[i]
+           if (l ~ /^dataset /) { rec = l; incap = 0 }
+           if (l ~ /^[a-z_]+ [A-Za-z0-9_-]+$/ && l !~ /^dataset /) rec = ""
+           if (rec != "" && l == "    reaction       12C(p,g)13N") {
+             incap = 1; l = l "\n    exit_pair      " gamma
+             if (first == "") { first = rec; copy = rec "_pair" key "\n" lines[i] "\n    exit_pair      " key; collecting = 1 }
+           }
+           if (collecting && i > 0 && lines[i] ~ /^    / && lines[i] !~ /reaction/ && rec == first) copy = copy "\n" lines[i]
+           if (collecting && rec == first && (i == n || lines[i + 1] !~ /^    /)) { collecting = 0; l = l "\n" copy }
+           print l
+           if (lines[i] == line) { $0 = line; $6 = key; print }
+         }
+       }' "$BASE/13N.azr" > "$WORK/$1/t.azr"
+}
+# the same model in the old grammar (from the original of tests/13N, tests/convert/fixtures), for (e)
+make_pairs_old() {  # NAME
   mkdir -p "$WORK/$1/output" "$WORK/$1/checks"
   cp -r "$BASE/data" "$WORK/$1/"
   awk '{ sub(/\r$/, "") }
@@ -73,7 +102,7 @@ make_pairs() {  # NAME
            if (lines[i] == line) { $0 = line; $6 = key; print }
            if (inseg[i] && !done && f[1] == 1 && f[3] == gamma) { $0 = lines[i]; $3 = key; print; done = 1 }
          }
-       }' "$BASE/13N.azr" > "$WORK/$1/t.azr"
+       }' "$HERE/../convert/fixtures/tests/13N/13N.azr" > "$WORK/$1/t.azr"
 }
 run() { (cd "$WORK/$1" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1); }
 total() { awk '{ sub(/\r$/, "") } /^Total-Chi-Squared:/ { print $2 }' "$WORK/$1/output/chiSquared.out" 2> /dev/null; }
@@ -91,13 +120,14 @@ if [ -n "$t" ] && [ -f "$WORK/far/output/chiSquared.out" ]; then ok "(c) the dup
 make_pairs pairs; run pairs
 PAIRS="ERROR: external capture into pairs 2 and 3: both have the final state J^pi = 0.5- at E_x = 0 MeV"
 if [ ! -f "$WORK/pairs/output/chiSquared.out" ] && grep -q "$PAIRS" "$WORK/pairs/run.log"; then ok "(d) two photon pairs with one final state are refused: $(grep -o 'ERROR: external capture into pairs[^(]*' "$WORK/pairs/run.log" | head -1)"; else bad "(d) two photon pairs with one final state were not refused (chiSquared.out present: $([ -f "$WORK/pairs/output/chiSquared.out" ] && echo yes || echo no))"; grep -i "error" "$WORK/pairs/run.log" | head -2; fi
+make_pairs_old pairs_old
 mkdir -p "$WORK/pairs3/output" "$WORK/pairs3/checks"; cp -r "$BASE/data" "$WORK/pairs3/"
-(cd "$WORK/pairs" && run_limited 300 "$AZURE2_BIN" --convert t.azr "$WORK/pairs3/t.azr" --to 3 > convert.log 2>&1)
+(cd "$WORK/pairs_old" && run_limited 300 "$AZURE2_BIN" --convert t.azr "$WORK/pairs3/t.azr" --to 3 > convert.log 2>&1)
 if [ -f "$WORK/pairs3/t.azr" ]; then
   run pairs3
   if [ ! -f "$WORK/pairs3/output/chiSquared.out" ] && grep -q "$PAIRS" "$WORK/pairs3/run.log"; then ok "(e) its format-3 conversion is refused the same way"; else bad "(e) the format-3 conversion of the two-pair model was not refused"; grep -i "error" "$WORK/pairs3/run.log" | head -2; fi
 else
-  bad "(e) the two-pair model did not convert to format 3"; tail -3 "$WORK/pairs/convert.log"
+  bad "(e) the two-pair model did not convert to format 3"; tail -3 "$WORK/pairs_old/convert.log"
 fi
 
 if [ "$failures" -ne 0 ]; then echo "$failures check(s) FAILED"; exit 1; fi

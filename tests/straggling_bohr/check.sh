@@ -48,16 +48,25 @@ CB="$(awk -v eps="$EPS" 'BEGIN { pi = 3.141592653589793; hbarc = 197.3269804; al
 echo "  Bohr coefficient for p + 14N, epsilon = $EPS MeV cm^2: c_B = $CB keV^1/2 (c.m.)"
 if awk -v c="$CB" 'BEGIN { exit !(c > 0.2 && c < 0.6) }'; then ok "c_B is in the 0.2 - 0.6 keV^1/2 range expected for light ions"; else bad "c_B = $CB is outside 0.2 - 0.6"; fi
 
-# make_model NAME STRAGGLING-FLAG COEFFICIENT: the resonance project with its <targetInt> block replaced by one line
-# for segments 1 and 2 (fields: active, segments, sub-points, convolution, sigma, target integration, density,
-# equation, n, parameters, Q flag, nQ, conv flag, equation, nconv, straggling, coefficient, widths, points per width)
+# make_model NAME STRAGGLING-FLAG COEFFICIENT: the resonance project with one target (a layer of DENS atoms/cm2 with the
+# constant stopping cross section EPS, straggling none / Bohr (flag 1, coefficient 0) / the coefficient) and a 0.1 keV
+# beam spread on its data sets and extrapolations (sub-point grid 20 points, width multiplier 20, 50 per width)
 make_model() {
   mkdir -p "$WORK/$1/output" "$WORK/$1/checks" "$WORK/$1/data"
   printf '%s 0 5.0e-12 5.0e-13\n' 0.276 0.277 0.278 0.279 0.280 0.282 0.290 0.300 > "$WORK/$1/data/yield_scan.dat"
-  awk -v line="1  \"1,2\"  20  1  0.0001  1  $DENS  \"a0\"  1  $EPS  0  0  0  \"\"  0  $2  $3  20  50" '
+  local strag=none
+  [ "$2" = 1 ] && strag=bohr
+  [ "$2" = 1 ] && [ "$3" != 0 ] && strag="coefficient $3 keV^1/2 cm"
+  awk -v dens="$DENS" -v eps="$EPS" -v strag="$strag" '
     { sub(/\r$/, "") }
-    /^<targetInt>$/ { print; print line; skip = 1; next }
-    /^<\/targetInt>$/ { skip = 0 }
+    /^[a-z_]+ [A-Za-z0-9_-]+$/ { rec = $1 }
+    /^<targets>$/ { print; print "target layer"; print "    kind           layer"; print "    active         14N"
+      print "    areal_density  " dens " atoms/cm2 fixed"; print "    stopping       formula \"a0\" a0=" eps " MeV*cm2/atom"
+      print "    straggling     " strag; print "beam spread"; print "    spread         0.0001 MeV lab"; skip = 1; next }
+    /^<\/targets>$/ { skip = 0 }
+    (rec == "dataset" || rec == "extrapolation") && ($1 == "target" || $1 == "beam" || $1 == "quadrature" || $1 == "#") { next }
+    (rec == "dataset" || rec == "extrapolation") && $1 == "reaction" { print; print "    target         layer"; print "    beam           spread"
+      print "    quadrature     points 20 width_multiplier 20 per_width 50"; next }
     !skip { print }' "$BASE/thick_target_resonance.azr" > "$WORK/$1/t.azr"
 }
 run() { (cd "$WORK/$1" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1); }
@@ -81,18 +90,19 @@ echo "  E_cm [MeV], yield off / Bohr / c_B on the rising edge (segment 1):"
 paste "$WORK/off.yields" "$WORK/bohr.yields" "$WORK/coef.yields" | head -8 | awk '{ printf "    %s  %s  %s  %s\n", $1, $2, $4, $6 }'
 
 # ---- (d) the 13N thick target with Bohr straggling --------------------------------------------------------------------
-LINE_PREFIX='1  "1,2"  10  0  0  1  0  '
-if grep -qF "$LINE_PREFIX" "$BASE13/13N.azr"; then
+# the thick target of 13N's data sets 1 and 2: target tgt_targetInt2, straggling none -> bohr
+if grep -q '^target tgt_targetInt2$' "$BASE13/13N.azr" && grep -q '^    straggling     none$' "$BASE13/13N.azr"; then
   mkdir -p "$WORK/thick/output" "$WORK/thick/checks"
   cp -r "$BASE13/data" "$WORK/thick/"
-  awk -v pre="$LINE_PREFIX" '{ sub(/\r$/, ""); if (index($0, pre) == 1) { $23 = 1; $24 = 0 } print }' "$BASE13/13N.azr" > "$WORK/thick/t.azr"
+  awk '{ sub(/\r$/, "") } /^[a-z_]+ [A-Za-z0-9_-]+$/ { rec = $0 }
+       rec == "target tgt_targetInt2" && $1 == "straggling" { $0 = "    straggling     bohr" } { print }' "$BASE13/13N.azr" > "$WORK/thick/t.azr"
   run thick
   rows="$(awk 'BEGIN { RS = ""; FS = "\n" } NR <= 2 { print }' "$WORK/thick/output/AZUREOut_aa=1_R=2.out" 2> /dev/null | awk 'NF >= 5 { print $4 }')"
   nt="$(printf '%s\n' "$rows" | grep -c .)"
   npos="$(printf '%s\n' "$rows" | awk '$1 > 0 && $1 == $1 + 0 && $1 < 1e300' | wc -l | tr -d ' ')"
   if [ "$nt" -ge 30 ] && [ "$npos" -eq "$nt" ]; then ok "(d) 13N thick target with Bohr straggling: every yield of segments 1 and 2 finite and positive ($nt points)"; else bad "(d) 13N thick target with Bohr straggling: $((nt - npos)) of $nt yields not positive/finite"; tail -3 "$WORK/thick/run.log"; fi
 else
-  bad "tests/13N/13N.azr no longer holds the thick-target line '$LINE_PREFIX...'"
+  bad "tests/13N/13N.azr no longer holds the thick target tgt_targetInt2 without straggling"
 fi
 
 if [ "$failures" -ne 0 ]; then echo "$failures check(s) FAILED"; exit 1; fi

@@ -20,6 +20,8 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import old_tree  # noqa: E402  (the old originals of converted projects)
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 TOL = 1e-5
 
@@ -38,7 +40,7 @@ ENERGIES = [0.40, 0.44, 0.46, 0.50, 1.40, 1.52, 1.56, 1.60, 1.70]
 def make_project(work, isdiff):
     """tests/13N with one data set: a SUM of the E1 (isDiff 5) or E2 (6) part of p + 12C -> 13N + g and, as its
     component, the full cross section of the same pair."""
-    with open(os.path.join(ROOT, "tests", "13N", "13N.azr")) as f:
+    with open(old_tree.original(os.path.join(ROOT, "tests", "13N", "13N.azr"))) as f:
         text = f.read()
     line = f"1 1 2 0.3 1.8 0 180 {isdiff} 1 0 0 0 0 0 data/sum.dat 1 0 1 1 2 -999\n"
     text = re.sub(r"<segmentsData>.*?</segmentsData>", "<segmentsData>\n" + line + "</segmentsData>", text, flags=re.S)
