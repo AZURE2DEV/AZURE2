@@ -137,62 +137,54 @@ format-1 note in run.log. Open: `sources/` (the item above), `<scatteringLengths
 
 ## Phase 4 — Data are data
 
-Design: `data_model.md` (survey, types, decisions M1–M13, steps S1–S16), `data_kinds.md` (what the engine accepts,
-what EXFOR holds, the proposal for named quantities, targets, Rutherford ratios, resonance strengths),
-`project_format3.md` (the format the engine reads), `fit_threads.md` (the fit's dependence on the thread count).
-Started 2026-11-09; integration branch `feature/upgrade-4-data`.
-Done by 2026-11-10 (merged, verified): S3 (a) `Results` behind the old accessors and `AZURE_POISON_RESULTS`; S6 frames;
-S8 expression nodes; the first cause of thread-dependent fits (S2, exact grid comparison); format 3 step 2 (record
-reader, the table, `--schema`); S3 (b) the buffer owned by the caller; parameter kinds as records
-(`parameter_kinds.md`); format 3 step 3a (`convert/`: the converter old → format 3, `--validate`); S1 (history
-test), the S2 remainder and S4 (one model pass and one residual, `src/ModelPass.cpp`, check 28); S15 (`<modelData>`:
-ωγ, resonance energy, widths, branching ratio, ANC, scattering length; `ModelDataTerm`, check 27); S9 and format 3
-step 3b-1 as far as the specs (the engine's set-up consumes specs; `Schema::Build` makes them from format-3
-records; spec-equivalence test, 183 of 186 converted files equal, 3 recorded). In work: S10 and S11 (the model pass
-evaluates the expression tree, the gradient calls its `backward`); S5 (the calculation plan) with the follow-ups of
-the model pass; the engine runs a format-3 file, `--describe`, the converted-tree gate.
+Design: `data_model.md` (survey, types, decisions), `data_kinds.md` (what the engine accepts, what EXFOR holds),
+`project_format3.md` (the format the engine reads), `data_structure.md` (the data classes replaced), `cnuc_split.md`
+(the pathway table), `fit_threads.md` (the fit's dependence on the thread count). Started 2026-11-09; integration
+branch `feature/upgrade-4-data`. The dated record is `HANDOFF.md`; the summary for the owner is `FOR_THE_OWNER.md`.
+State on 2026-11-11:
 
-- [ ] State of an evaluation in one place (S1–S5): a `Results` buffer owned by the caller, with slots per calculation
-      unit; one model pass and one residual function; the mapping as a plan; no writes from one object into another and
-      nothing carried from one evaluation to the next. `AZURE_POISON_RESULTS=1` fails on any read before write.
-- [ ] `experiment/` target (S6–S8), a standalone library that links only `physics/`: frames (lab ↔ c.m., one
-      implementation), `Measurement` (immutable, shared between threads) and `MeasurementFrame` (what depends on fitted
-      shifts), and the model-expression nodes `Leaf`, `Sum`, `Scale`, `Weighted`, `Ratio`, `Transform` with `value` and
-      `backward`.
-- [ ] Model expressions in the engine (S9–S13): one keyword → tree table; the tree pass replaces the 19 loops and the
-      two compositions (forward in `ESegment`, adjoint in `AZUREGrad`); components as leaves; amplitude filters
-      (multipole, Jπ, l, s, internal/external) on any cross section. Test: every test project's χ² unchanged; an
-      E1-only and an E2-only fit of T1 against a closed form.
-- [ ] Format 3 (maintainer's decision 2026-11-09: no backward compatibility in the engine, a converter instead): a data
-      set states its quantity, unit, frame, reference (Rutherford or Mott), target by name and normalisation in words;
-      `<targets>` with names replaces `<targetInt>` index lists; `<modelData>` holds model-level data (resonance
-      strengths ωγ, scattering lengths, widths). Old files are read only by `AZURE2 --convert` / `pyazr.convert_azr`.
-      One table of quantities feeds the file validation, Python, the GUI and the documentation; `AZURE2 --schema` and
-      `--validate` give them to programs and AI agents.
-- [ ] New data kinds, in this order (`data_kinds.md` §5.3): ratio to Rutherford and to Mott (done on
-      `feature/upgrade-4-rutherford`, brief L: the `rutherford` / `mott` leaf, `tests/ratio_to_rutherford`); S factor as an engine
-      quantity (with it, the fix of pyazr's S-factor conversion, which uses mass numbers: σ +2.9 % for ³He+α at 93 keV,
-      +6.7 % for p+¹²C at 100 keV); named targets and thick-target yields per incident particle or per charge;
-      ωγ; Legendre coefficients with their normalisations. Extrapolation segments on a list, a file or an adaptive grid.
-- [ ] Recipe "a new kind of data" in `CLAUDE.md` and its checks (S16).
-Gate: outputs of the 179 projects × 3 bases bit-identical through the restructuring (S1–S13); for format 3, the outputs
-of the converted projects identical to the originals' on the previous engine.
+- [x] State of an evaluation in one place: a `Results` buffer owned by the caller with slots per calculation unit,
+      one model pass and one residual function (`src/ModelPass.cpp`), the mapping as a plan
+      (`src/CalculationPlan.cpp`), nothing carried from one evaluation to the next (`upgrade_history`,
+      `AZURE_POISON_RESULTS=1`).
+- [x] `experiment/`, a library that links only `physics/`: frames (lab ↔ c.m., one implementation), `Measurement`
+      (what was measured, immutable, held once and shared by every copy and thread), `MeasurementFrame` (what depends
+      on fitted shifts), the model-expression nodes with `value` and `backward`.
+- [x] One keyword → tree table; the tree pass replaces the composition loops, the gradient calls its `backward`.
+      Open: components as leaves, amplitude filters (multipole, Jπ, l, s, internal/external) on any cross section,
+      `predict`.
+- [x] Format 3 (no backward compatibility in the engine, a converter instead): a data set is a named record that
+      states its quantity, unit, frame, reference, target by name and normalisation; 9 record kinds, 21 quantities,
+      one table that feeds the file validation, Python and the documentation. `AZURE2 --convert`, `--validate`,
+      `--describe`, `--schema` (for programs and AI agents); `pyazr.Project` edits a project as records. The engine
+      runs format 3; every converted test project gives the old outputs (the gate, `tools/format3_gate.sh`).
+- [ ] The engine reads **only** format 3. Done: half of the test tree and of the examples is format 3 (92 of 185
+      project files, the originals kept as the converter's fixtures; `format3_tree.md`); `--validate` reports the
+      data rows, covariance files and final states the run would refuse; pyazr's session reads a format-3 project
+      from the engine (`pyazr_on_records.md`). In work: the rest of the tree. Then: old files refused with the
+      converter's command, the old reading path and `pyazr/azrfile.py` (3,756 lines) deleted, a second round of
+      validation (the level rows, kinematic limits, combinations of target effects).
+- [x] New data kinds: ratio to Rutherford and to Mott; the S factor as a quantity; units with dimensions checked;
+      named targets and thick-target yields per particle or per charge; model-level data (ωγ, resonance energy,
+      widths, branching ratio, ANC, scattering length); Legendre coefficients with their expansions; extrapolations
+      on a list, a file, a logarithmic range or an adaptive grid; the spin–orbit term of the hybrid potential.
+      Open: the yield of a layer of finite thickness (Phase 5, with the stopping module).
+- [ ] Recipe "a new kind of data" in `CLAUDE.md` with its checks.
+Gate: outputs of all test projects × 3 bases bit-identical through the restructuring; for format 3, the outputs of
+the converted projects identical to the originals' but for the classified differences of the gate.
 
-**`CNuc` split, to finish** (own track; Phase 1 left it at steps 1–5 and 6a): `src/CNuc.cpp` was 2,907 lines and is
-1,954 after the moves of 2026-11-10 (printing, checks, transformation messages, the `<levels>` grammar to `io/`).
-Remaining (`cnuc_split.md`, "Remaining steps"): 3b (iii) hybrid-potential channels, 3b (iv) `CoulombTable` /
-`--gsl-coul`, 6b consumers of the pathway trees, 7 the parameter vector and the set-up out, `CNuc` deleted. The
-file-size ratchet is consistency check 26 (`tests/consistency/file_sizes.tsv`): no listed file grows, no other file
-passes 1,000 lines, and the record only goes down.
+**The data classes replaced** (`data_structure.md`; the PI, 2026-11-10: replace, do not carve). `EData`, `EPoint`,
+`ESegment` were 10,665 lines in three files. Milestone 1 (merged): the measurement exists once. Milestone 2 (merged
+2026-11-11): a term's settings are one shared immutable record, every point and sub-point is a unit of one flat
+vector, the plan names units by index, a copy of the working copy is a plain copy. Milestone 3 (in work): an
+immutable `DataSet` and a small `WorkingCopy` apart, the three class names and their files deleted.
 
-**`EData`, `EPoint`, `ESegment` split** (own track beside the `CNuc` split; plan `edata_split.md`): at 070756a1
-`src/EData.cpp` has 5,571 lines, `EDataThm.cpp` 1,233, `EPoint.cpp` 3,006, `ESegment.cpp` 1,446. Each step is a
-verbatim move, a split in place or a deletion, bit-identical on 179 × 3. Now, beside the running branches: the output
-writer (490 lines), the check files (240) and the THM reports and tables (461) into files of their own, and the writer
-in four functions (N1–N4). After the current wave: dead code (W1) and the data covariance (W2). After 3d, S7 and S12:
-the load-time checks, the parameter layout, the hand-over and the shift code into their own files; S5, S7, S10–S12
-delete mapping, frames and composition. The parts Phases 5 and 6 rewrite (target effects and grids, external capture,
-folds, channel tables) wait for the director's decision D1 (`edata_split.md` §8).
+**`CNuc`, to finish** (`cnuc_split.md`): `src/CNuc.cpp` was 2,907 lines and is 1,774; printing, checks, messages, the
+level grammar, external-capture set-up and the bridge to `physics/` are files of their own; the pathway table is
+immutable, built at set-up and read by everything outside the data classes; the capture analyzing-power terms are
+built at set-up. Remaining: external-capture amplitudes at set-up (with the decay-position defect of the data
+classes), the pathway trees deleted, the parameter vector and the set-up out, `CNuc` deleted. The file-size ratchet
+(`tests/consistency/file_sizes.tsv`): no listed file grows, no other file passes 1,000 lines.
 
 ## Phase 5 — Energy grid, kernels, stopping, THM observable
 

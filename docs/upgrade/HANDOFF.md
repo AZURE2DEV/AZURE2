@@ -2,6 +2,122 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (director, morning) — the eighth wave, second part merged: the flat working copy; validation that predicts the run's refusals; half of the test tree in format 3
+
+**Merged into `feature/upgrade-4-data`** (`--no-ff`; each rehearsed in a scratch worktree, built and verified once;
+the committed trees are those trees): the second milestone of the data structure
+(`feature/upgrade-4-data-structure`: a term's settings as one shared record, one flat vector of calculation units,
+the plan by index, a copy of the working copy a plain copy), then the validation and pyazr follow-ups
+(`feature/upgrade-4-validation`), then the first half of the conversion of the test tree
+(`feature/upgrade-4-tree-format3`: 92 of the 185 convertible project files are format 3 under their own names, the
+originals in `tests/convert/fixtures/`, 22 `check.sh` scripts edit format-3 records; plan and hand-over page
+`docs/upgrade/format3_tree.md`). Their entries are below.
+
+**The merged head as a whole** (build `work/b-trial16`, 0 warnings; reference tag of its outputs `tab-trial16`):
+all projects x 3 bases against the previous head (`tab-trial14`, 737 / 710 / 737 files): with the validation alone
+(`tab-trial15`) every file identical; with the half-converted tree on top (`tab-trial16`) the 597 / 573 / 597 files
+of the projects that are still old identical, and the files that differ belong to the 85 converted projects of
+`tests/` and to no other, by the classes of `tools/format3_gate.py` (the records' names in run logs and parameter
+files, the sample files of `angle_mapping`, `shifts.out` of the `secondary_gamma` models, the template of
+`shift_subpoint_angle` refused without its data files); the outputs of each converted project equal those of the
+gate's conversion of its original. The gate (originals laid back, everything converted, against `tab-trial8`):
+483 (456 formal) identical, 38 classified, 0 differ, 0 missing. `ctest -LE slow` 183/183; `tests/run_tests.sh` 146
+passed, 0 failed; calculations at 1 against 6 threads 12/12 identical; T2 with model data identical in the three
+bases; spec equivalence on the originals 198 files, 186 converted, 184 equal, 2 recorded, 0 differ. Milestone 2 by
+itself (`tab-trial14` against `tab-trial13`): 724 / 697 / 724 of 726 / 699 / 726 identical, the two run logs of
+`sum_lab_frame` differ as text, 11 files new. **Not run on this head:** 1 against 8 threads, ThreadSanitizer,
+`ctest -L slow`, Sphinx; Phase 4 as a whole is not yet benchmarked against the Phase 3 head.
+The comparison scripts of the director now use the tree's own `tools/runall.sh` and `tools/cls.sh` (they skip
+`tests/convert/`); the reference tag for the next branches is `tab-trial16`.
+
+**What the director changed at the merges:** `tests/upgrade/capture_ay_requests_test.cpp` line 153 follows the new
+accessor of a term's points (`s.GetPoint(*l.data, k)`); `tests/consistency/file_sizes.tsv` tightened (15 files);
+`tests/upgrade/predictions.txt` regenerated on the tree that holds both the validation and the converted projects
+(both branches had changed it: the block of `ratio_frame/models/fixed_angle.azr` is new, the SUM data set of
+`sum_data` and `sum_free` is described).
+**Sent back before the merge:** the rename of an inactive data set left its rows in `<parameterSettings>`, `<mcmc>`
+and the prior covariance with the old name (the engine named the parameters of active records only); it now asks the
+engine for the names with every record taken as active (`BuildOptions::allRecordsActive`, never set for a run) and
+warns, with the lines, of rows it could not rename.
+**Checked by hand** (the director, build `work/b-trial15`): a data file with a non-numeric cell in row 7 and a row of
+two columns gives two `E_DATA_ROW` diagnostics with file, line, column and the text found, exit 2;
+`--describe FILE --record NAME` prints the one record, an unknown name exits 2 with a message; the comparison of the
+flat working copy with the previous head flags exactly `sum_data`, `sum_free` (run logs, text) and the new files.
+
+**Decisions of the director.**
+- A copy of the working copy keeps one explicit step after the plain copy: its term points drop the set-up's
+  external-capture amplitudes. They belong to the external-capture set-up, which the second pathway branch moves to
+  the immutable tables; until then the step stays and is named in `Clone`.
+- The final state of a photon pair with external capture is decided by one function
+  (`experiment::ExternalCaptureFinalStates`), which the engine's set-up (`CNuc::ParseExternalCapture`) and the
+  validation both call. The agent edited `src/CNuc.cpp` for it beyond its brief's limit: accepted, the messages and
+  every output are unchanged.
+- A measured uncertainty ≤ 0 is a **warning** of the validation (`W_DATA_ERROR`), not an error: the run accepts such
+  rows (χ² skips a zero and squares a negative, `chi_squared.rst`). Whether the run should refuse a negative
+  uncertainty is a question for the maintainers (three committed test data files have such rows: `13N`
+  `baumann_1618.dat` negative, `16N` `bda.dat` and `18O_p_a_thm` `lc723_band_mid.dat` zero).
+- On the cases the conversion found that format 3 cannot write (`format3_tree.md` §4): (1) an old line with exit
+  key −1 and a data type that is not total capture is **refused by the converter**, as the old engine refused it (it
+  writes `[total]` today: a conversion must never turn a refused file into one that runs); (2) automatic windows
+  together with explicit ranges get **no grammar**; the converter drops the ranges with a note; (3) an automatic
+  tolerance without windows must not be dropped silently: the converter writes the one window over every point that
+  gives the old outputs, or a note; (4) a fitted normalization with a prior centred at 0 is **refused** by the
+  validation and the run (the old engine refused a centre of 0); (5) a fixed normalization group whose follower's
+  own line said "free" has no counterpart and needs none. (1), (3), (4) are in the brief of the tree's second half.
+- The two expected texts `tests/ratio_to_rutherford/expected/story_describe.txt` and
+  `tests/units_scales/expected/story_describe.txt` changed with the wording of an open energy window: accepted.
+
+**Defects and debts found, not yet fixed** (owner in brackets):
+- A data row that does not parse makes the run drop the whole data set with a WARNING ("Could Not Fill Segment") and
+  go on; the validation refuses it. The run should refuse it too [the deletion of the old reading path].
+- Refusals the validation does not predict yet (survey in the validation entry: 2 files of the converted tree, 26
+  generated models): the `<levels>`-row checks of `CNuc::Fill`, kinematic limits of a lab angle, combinations of
+  target effects, a covariance matrix that is not positive definite, two fitted rows of one covariance file from
+  overlapping windows [a second validation round, after the old path is deleted: the rules then move to `experiment/`
+  once instead of being written twice].
+- `--describe` words the angle window "theta_lab (data converted to c.m.)" also for a file whose angle column is
+  `theta_cm` (`experiment/src/Describe.cpp`) [second validation round].
+- The names of the target-effect parameters (`.screening`, `.areal_density`, `.doppler`) are written in the data
+  classes and again in `experiment::ParameterNamesOf`; `ESegment::Fill` compares the covariance variance with 0
+  itself [milestone 3 of the data structure or the round after it].
+- The warning of `Project.rename` for rows it could not rename matches the old name as plain text and does not
+  cover the names line of the prior-covariance file [second validation round].
+- Possible dependence of the external-capture memo on the history of a copy (`ShiftedECAmplitude::levelEnergy`;
+  inferred by the agent from the code, not tested) [second pathway branch: a test with a fitted level energy of the
+  final state].
+- The covariance groups' frozen model and `NodeTableCache` are shared and mutable between copies by design
+  [milestone 3: named with the reason they are safe, or reported].
+- Still open: the yield on a finite layer (Phase 5), the decay-position defect of the external-capture code (second
+  pathway branch), `ScatteringLength::ZeroEnergyShift` for a hybrid pair, an exception inside the external-capture
+  path under OpenMP (Phases 5–6).
+
+**For the PI to see** (behaviour a user can meet; additions):
+- `AZURE2 --validate` now reports, before any calculation: every data row that does not parse or is too short (file,
+  line, column, the text found), a missing or unreadable covariance file or one that does not fit its data set, a
+  photon pair whose final state is not a level or is shared with another pair; uncertainties ≤ 0 as warnings.
+- `AZURE2 --describe FILE --record NAME`; an open energy window reads "all energies".
+- Python: `session.datasets`, `active_datasets`, `dataset_chi2` work on a format-3 project (keyed by the record
+  names); `pyazr.records_from_csv` declares data sets from a table; pyazr is 2.31.0.
+- The file of the natural decomposition (`AZUREOut_sample_seg=N`) written from a copy of the data (MCMC, fit
+  snapshots) now has the columns of the nuclei; before, a copy wrote the total only.
+- An S-factor data set's output columns hold σ and S (one formula for the conversion).
+- Memory of a fit: T2 at 1 thread 328 MB (was 355), `natural_neon` 1.50 GB (was 1.55); one copy of the working copy
+  15 MB for T2 (was 18.6).
+
+**Running now** (Opus agents; briefs in `/data0/skowrons/AZURE2-upgrade/work/briefs/`):
+- Milestone 3 of the data structure (`X3_dataset_workingcopy.md`; `feature/upgrade-4-data-structure-3`): an
+  immutable `DataSet` and a small `WorkingCopy` apart, the unit slimmed, the names `EData`, `ESegment`, `EPoint` and
+  their files deleted.
+- The rest of the test tree and of the examples converted to format 3 (`AA2_tree_to_format3_rest.md`;
+  `feature/upgrade-4-tree-format3-2`; from `docs/upgrade/format3_tree.md`: the shift tests, targets and apparatus,
+  natural targets, THM, T1–T3 and the rest; the 29 model generators; the converter's refusals decided above; the
+  switch that makes the engine refuse an old file, last and only if nothing loads one).
+
+**Then.** The second pathway branch (external-capture amplitudes at set-up with the decay-position fix, the trees
+deleted); the engine refuses old files, the old reading path and `pyazr/azrfile.py` deleted (inventory:
+`docs/upgrade/pyazr_on_records.md`); a second validation round; components as leaves, amplitude filters, `predict`;
+the recipe "a new kind of data"; the rest of `CNuc`; Phase 5 (the yield of a finite layer first).
+
 ## 2026-11-11 (agent, tree to format 3) — the test tree converted, first half (`feature/upgrade-4-tree-format3`)
 
 **Done** (`AA_tree_to_format3.md`; plan and state: `docs/upgrade/format3_tree.md`). 92 of the 185 convertible
