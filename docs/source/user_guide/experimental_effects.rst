@@ -642,7 +642,9 @@ least :math:`1.1\,w_0`, with a prior; :math:`1.5\,w_0` without):
 A fitted width is one parameter ``D.energy_resolution.width`` (MeV) for every data set that names ``D``, bounded by
 :math:`w_0/10` and the grid's width; its prior adds ``Total-Kernel-Parameter-Chi-Squared`` to ``chiSquared.out``.  Its
 derivative is taken by central differences of the whole :math:`\chi^2`.  The window cannot yet be combined with a
-target, a beam spread, a beam profile or a UDR on one data set (refused).
+target, a beam spread, a beam profile or a UDR on one data set (refused).  ``energy_resolution triangular width <w>
+<unit> fixed|fit ...`` is a triangular window of base width :math:`w` (the weight :math:`1 - |E - E_0|/(fw/2)`, full
+width at half maximum :math:`w/2`), written and fitted the same way.
 
 Free-Gas Doppler Broadening
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^

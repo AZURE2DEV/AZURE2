@@ -21,6 +21,9 @@
 #       chiSquared.out's Total-Kernel-Parameter-Chi-Squared too, and w lies between the prior centre and the data's 20;
 #   (f) refusals: a prior centred away from the value (E_NOT_BUILT), grid_max below the value and a width 0
 #       (E_OUT_OF_RANGE), no mode (E_NUISANCE_MODE), `profiled` (E_MODE_NOT_ALLOWED), the width beside a target.
+#   (g) the triangular resolution (experiment/src/KernelTriangular.cpp), base width w fitted the same way: noise-free
+#       data made here as triangle-weighted averages of the bare output at w = 20 keV, models/fit.azr with
+#       `triangular width 14 keV fit`: w within 0.05 sigma of 20 keV.
 #
 #   ./tests/rectangular_resolution/check.sh path/to/AZURE2
 
@@ -165,5 +168,40 @@ sed -e 's/^    detector       det_fit$/    detector       det_fit\n    target   
 msg="$(cd "$dir" && printf '1\n\n\n7\n' | run_limited 120 "$AZURE2_BIN" --no-gui --no-readline t.azr 2>&1)"
 if echo "$msg" | grep -q "cannot be combined with a target"; then echo "  ok    (f) the fitted width beside a target is refused"
 else echo "  FAIL  (f) the fitted width beside a target: no refusal"; FAILS=$((FAILS + 1)); fi
+# ---- (g) the triangular resolution's base width, fitted
+python3 - "$WORK/bare/$OUT" "$WORK/tri-data" "$HERE/models/data" <<'PY'
+import os, sys
+rows = [list(map(float, l.split())) for l in open(sys.argv[1]) if len(l.split()) >= 4]
+e, s = [r[0] for r in rows], [r[3] for r in rows]
+f = e[0] / 0.79  # c.m./lab factor: the bare grid starts at 0.79 MeV lab
+def at(x):
+    for i in range(len(e) - 1):
+        if e[i] <= x <= e[i + 1]:
+            return s[i] + (x - e[i]) / (e[i + 1] - e[i]) * (s[i + 1] - s[i])
+    raise ValueError(x)
+os.makedirs(sys.argv[2], exist_ok=True)
+for name in ("d1", "d2"):
+    with open(os.path.join(sys.argv[2], name + ".dat"), "w") as out:
+        for line in open(os.path.join(sys.argv[3], name + ".dat")):
+            lab = float(line.split()[0])
+            c, h = f * lab, 0.5 * f * 0.020
+            xs = [c - h] + [x for x in e if c - h < x < c + h] + [c + h]
+            if c not in xs:
+                xs = sorted(xs + [c])
+            t = lambda x: 1 - abs(x - c) / h
+            num = sum(0.5 * (t(xs[i]) * at(xs[i]) + t(xs[i + 1]) * at(xs[i + 1])) * (xs[i + 1] - xs[i]) for i in range(len(xs) - 1))
+            y = num / h  # the integral of t is h
+            out.write(f"{lab:.6f} 0 {y:.6e} {0.01 * y:.6e}\n")
+PY
+fit triangular "$WORK/tri-data" "s/rectangular width 14 keV fit$/triangular width 14 keV fit/"
+python3 - "$WORK/triangular/output/param.sav" <<'PY' || FAILS=$((FAILS + 1))
+import sys
+p = {l.split()[0]: (float(l.split()[1]), float(l.split()[2])) for l in open(sys.argv[1]) if l.strip() and not l.startswith("#")}
+w, dw = p.get("det_fit.energy_resolution.width", (float("nan"), 0.0))
+pull = (w - 0.020) / dw if dw > 0 else float("inf")
+ok = abs(pull) <= 0.05
+print(("  ok    " if ok else "  FAIL  ") + f"(g) triangular, noise-free data at 20 keV: w = {w * 1e3:.6f} +- {dw * 1e3:.4f} keV ({pull:+.3f} sigma)")
+sys.exit(0 if ok else 1)
+PY
 echo "rectangular_resolution: $([ $FAILS = 0 ] && echo PASS || echo "FAIL ($FAILS)")"
 [ $FAILS = 0 ]

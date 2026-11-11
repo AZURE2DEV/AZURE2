@@ -193,6 +193,54 @@ int main() {
     p.numValues = 0;
   }
 
+  std::printf("triangular resolution\n");
+  {
+    // base 20 keV lab about E0 = 1 MeV c.m.; nodes every w/100 c.m. over 3 bases, E0 a node
+    const Kernel &k = *KernelNamed("triangular");
+    double width = 0.02;  // MeV, lab
+    p.values = &width;
+    p.numValues = 1;
+    const double f = point.cmFactor, w = f * width, h = 0.5 * w;
+    Grid g(1.0 + 1.5 * w, 1.0 - 1.5 * w, 300, 1.0);
+    auto at = [&](double (*s)(double)) {
+      std::vector<double> v;
+      for (double e : g.energy) v.push_back(s(e));
+      return v;
+    };
+    double v, wv;
+    FoldBoth(k, p, point, g, at([](double e) { return 2.0 + 5.0 * (e - 1.0); }), v, wv);
+    Close("sigma linear in E: the average is sigma(E0)", v, 2.0, 1e-13);
+    Close("the weights give the same value", wv, v, 1e-14);
+    // sigma = 2 + 3 x + 400 x^2: sigma(E0) + 400 <x^2>, <x^2> = h^2/6 for the triangle, plus the linear interpolation's
+    // h_n^2/12 per interval of the curvature (h_n the node spacing)
+    const std::vector<double> quad = at([](double e) { return 2.0 + 3.0 * (e - 1.0) + 400.0 * (e - 1.0) * (e - 1.0); });
+    FoldBoth(k, p, point, g, quad, v, wv);
+    const double hn = g.energy[0] - g.energy[1];
+    Close("sigma quadratic: sigma(E0) + sigma'' h^2/12 (+ sigma'' h_n^2/12 of the interpolation)", v,
+          2.0 + 800.0 * h * h / 12.0 + 800.0 * hn * hn / 12.0, 1e-12);
+    // d/dw against central differences, on the quadratic (edges between nodes)
+    width = 0.0201;
+    const double d = k.derivative(p, point, g.nodes, quad.data(), 0);
+    width = 0.0201 * (1.0 + 1e-6);
+    const double plus = k.fold(p, point, g.nodes, quad.data());
+    width = 0.0201 * (1.0 - 1e-6);
+    const double minus = k.fold(p, point, g.nodes, quad.data());
+    Close("dY/dw against central differences", d, (plus - minus) / (2.0 * 0.0201e-6), 1e-6);
+    // and against the closed form d/dw [400 h^2/6] = 400 h f/6 (the interpolation term does not depend on w)
+    Close("dY/dw: the closed form 400 h f / 6", d, 400.0 * (0.5 * f * 0.0201) * f / 6.0, 1e-6);
+    width = 0.02;
+    SupportPoint sp;
+    sp.energy = 1.0;
+    sp.cmFactor = f;
+    double hi, lo;
+    EffectKernels ek;
+    ek.resolution = &k;
+    EffectSupport(ek, p, sp, hi, lo);
+    Check("support: the base [E0 - f w/2, E0 + f w/2]", hi == 1.0 + h && lo == 1.0 - h);
+    p.values = nullptr;
+    p.numValues = 0;
+  }
+
   std::printf("support\n");
   {
     SupportPoint s;

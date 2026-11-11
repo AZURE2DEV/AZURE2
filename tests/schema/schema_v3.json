@@ -1535,7 +1535,7 @@
     "energy_resolution": {
      "title": "Energy resolution",
      "type": "structured",
-     "grammar": "<number> <energy unit> lab|cm | rectangular width <value> <energy unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+     "grammar": "<number> <energy unit> lab|cm | rectangular width <value> <energy unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>] | triangular width <value> <energy unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
      "required": false,
      "alternatives": [
       {
@@ -1576,6 +1576,22 @@
         }
        ],
        "doc": "a rectangular energy resolution: the average of the cross section over [E0 - w/2, E0 + w/2]"
+      },
+      {
+       "keyword": "triangular",
+       "parts": [
+        {
+         "name": "width",
+         "keyword": true,
+         "type": "nuisance",
+         "grammar": "<value> <energy unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+         "optional": false,
+         "dimension": "energy",
+         "units": ["MeV", "keV", "eV", "meV", "ueV"],
+         "doc": "base width w of the triangle (FWHM w/2), lab"
+        }
+       ],
+       "doc": "a triangular energy resolution: the cross section weighted by 1 - |E - E0|/(w/2) over [E0 - w/2, E0 + w/2]"
       }
      ],
      "doc": "resolution of a reconstructed energy"
