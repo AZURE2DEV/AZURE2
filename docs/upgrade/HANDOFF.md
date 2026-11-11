@@ -29,7 +29,14 @@ Update this file at the end of every work session: what changed, what is next, w
 **Verified how**: build 0 warnings; unit tests of the change (experiment_frames, _diagnostics, _build, _schema,
 _standalone, convert_constructs, _fixtures, _spec_equivalence, pyazr_schema, repo_consistency); the six checks touched
 pass, and fail with their injected errors (one scratch rebuild of `work/b-audit` with all injections, reverted and
-rebuilt; not a separate `b-audit-inject`: one thread). The long runs at the end are in the final report.
+rebuilt; not a separate `b-audit-inject`: one thread). At the end (build of `3ec01e1e`'s engine, identical to
+`2d4c085e`'s): all projects x 3 bases against `tab-trial22` (tag `tab-audit1`): 765/766, 738/739, 765/766 identical,
+the one file per basis `relativistic/models/li7pn_edge_rel.azr/run.log` ("Could not fill data object from file." gone
+after the set-up refusal, item 4); `ctest -LE slow` 200/201 before the last commit (upgrade_plan counted a refused
+project as set up: `Fill == -1`; fixed with five other tests in `3ec01e1e`, the six pass); converted-tree gate
+(`gaudit1`) 483 (456) identical, 38 classified, 0 differ, 0 missing; `tests/run_tests.sh` 148 passed, 2 failed, both
+pass alone with this build (`cli_help`, known under load; `shared_point_tables` (d): the calculation's peak RSS read
+39 MB under load against 184 MB alone, base and new alike).
 
 **Open**: a `<parameterSettings>` row that names no parameter is ignored without a word (found by the audit; engine,
 not changed); the audit's stdout key drops lines with '/' (paths), so refusals with different file names group
