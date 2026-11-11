@@ -295,7 +295,7 @@ Editing the model
 
 pyazr reads project format 3 only: a session or :meth:`pyazr.Project.open` on a
 format-1 or format-2 file raises :class:`pyazr.FormatError` with the engine's
-message, which names the conversion (``AZURE2 --convert OLD NEW --to 3``, or
+message, which names the conversion (``AZURE2 --convert OLD NEW``, or
 ``pyazr.convert_azr(old, new)`` from Python).
 
 :class:`pyazr.Project` edits a project the way the engine reads it: records by
@@ -977,7 +977,7 @@ records when ``set_nuclear_potential`` changed them (the converter's writer: a
 session default becomes one record per particle pair it applies to).  An older
 project's ``<potential>`` block is not written: ``save_fit`` of a format-1/2
 project whose potential the session changed raises ``ValueError`` with the
-conversion command (``pyazr.convert_azr(old, new, to=3)``).
+conversion command (``pyazr.convert_azr(old, new)``).
 
 An older project has the ``<potential>`` block instead, where keys before the
 first ``pair=`` are the default and a ``pair=`` line opens a section that starts
@@ -997,7 +997,7 @@ from it:
    useHybridPotential=0
    </potential>
 
-Its Coulomb radius is 3.5 fm. ``AZURE2 --convert OLD NEW --to 3`` writes one
+Its Coulomb radius is 3.5 fm. ``AZURE2 --convert OLD NEW`` writes one
 ``potential`` record per particle pair the block gives a potential (the default
 expanded, ``coulomb_radius 3.5 fm`` written out; a section with
 ``useHybridPotential=0`` writes nothing and is noted), and a format-3 project

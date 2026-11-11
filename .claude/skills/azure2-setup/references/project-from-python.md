@@ -8,7 +8,7 @@ The recipe is `pyazr/examples/project_from_python.py` (run by `tests/pyazr/proje
    prints the fields. Never guess a field name or a unit token.
 2. **Start.** `p = Project.new("<dir>/m.azr", nuclear_part="<format-3 file with the levels>")` (that file's
    `<config>`, `<levels>` and other record-free sections), or `Project.open(path)`. A format-1/2 file is refused with
-   the conversion command: `pyazr.convert_azr(old, new, to=3)` first. Data files are relative to the project's dir.
+   the conversion command: `pyazr.convert_azr(old, new)` first. Data files are relative to the project's dir.
 3. **Add records**, a referenced record first (target, beam, detector, normalization, energy scale before the data
    set naming it): `p.add_target(...)`, `p.add_dataset(name, reaction=..., quantity=..., unit=..., file=...,
    columns=..., norm=..., ...)`. Values: the file's text, a number, a `(value, "unit")` tuple,

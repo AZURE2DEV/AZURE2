@@ -20,7 +20,7 @@ norms and shifts is azure2-fit; covariance files are azure2-uncertainty.
   numbering. Older Qt GUI saves placed limits and priors on other levels (azure2-fit).
 - `<mcmc>`: walkers, steps, threads.
 
-These are the blocks of the old formats (1 and 2), which the converter reads (`AZURE2 --convert OLD NEW --to 3`);
+These are the blocks of the old formats (1 and 2), which the converter reads (`AZURE2 --convert OLD NEW`);
 pyazr reads format 3 only, whose data sets are records (`docs/upgrade/project_format3.md`): edit those with
 `pyazr.Project`.
 
