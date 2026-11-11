@@ -121,19 +121,6 @@ target_link_libraries(equation_reference_test PRIVATE AZURE2Core)
 
 add_test(NAME equation_reference COMMAND equation_reference_test)
 
-# Compound stopping cross section (Bragg's rule) against the single-element
-# values: per active atom and per average atom.  Reads erya/data/SRIM2013.xml,
-# so it runs from external/.
-if(USE_ERYA)
-  add_executable(compound_stopping_reference_test compound_stopping_reference_test.cpp)
-  target_include_directories(compound_stopping_reference_test PRIVATE
-      ${CMAKE_SOURCE_DIR}/external/erya/include)
-  target_link_libraries(compound_stopping_reference_test PRIVATE srim_utilities)
-  add_test(NAME compound_stopping_reference
-           COMMAND compound_stopping_reference_test
-           WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/external)
-endif()
-
 # Closed-channel shift function of neutral (eta = 0) pairs,
 # ShftFunc::NeutralBoundShift, against the numerical Whittaker derivative it
 # replaces and the l = 0, 1 textbook expressions; prints the speed-up.

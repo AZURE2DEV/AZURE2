@@ -1,5 +1,5 @@
 # Formatting for the AZURE2 core and API sources.  external/ is vendored
-# (Minuit2, erya, pugixml) and is left exactly as upstream wrote it, as are the
+# (Minuit2) and is left exactly as upstream wrote it, as are the
 # third-party algorithms in physics/coulomb/{coulsm,coul,coulfg,coulcc}/.
 #
 # The settings follow what the majority of the existing code already did, so

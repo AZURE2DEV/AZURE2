@@ -274,8 +274,10 @@ refuses it there; use the Gaussian convolution for the THM resolution.
    Set the **Number of Parameters** to ``3`` and enter the values for ``a0``,
    ``a1``, and ``a2`` in the table.
 
-   AZURE2 also provides tools to look up stopping powers by element or compound
-   formula (**Fetch from ERYA**).
+   In project format 3 a target can instead say ``stopping evaluation``: the
+   engine then takes SRIM-2013's stopping of the target's ``composition``
+   (cite SRIM) per active atom, and ``pyazr.stopping`` gives the same numbers
+   (:doc:`../reference/data_formats`).
 
 **Compound and mixed targets: one stopping power is enough, but it must
 be normalized to the same thing the density counts.**
@@ -305,21 +307,18 @@ be normalized to the same thing the density counts.**
    large fraction of it), or a per-average-atom value with the active
    density (the loss is too small by :math:`(x+y)/x`).
 
-   **Fetch from ERYA** with a compound formula does this for you: choose the
-   reacting nucleus in the **Active Element** box next to the formula (it is
-   filled from the formula; the first element is preselected) and the fetched
-   equation is the per-active-atom sum, ready to pair with the Active
-   Density. The **Calculate ΔE** preview uses the same normalization.
+   ``stopping evaluation`` does this for you: it divides the material's
+   stopping per atom by the atom fraction of the active nucleus's element,
+   the first row of the table, ready to pair with the active density.
 
    .. warning::
 
-      Before September 2026 the ERYA compound fetch returned the
+      Before September 2026 the GUI's compound stopping fetch returned the
       *average-atom* value (each element weighted by its stoichiometry divided
-      by the *total* stoichiometry) with no way to choose otherwise. A
-      ``<targetInt>`` entry written by an older GUI for a compound target is
-      therefore consistent only with the areal density of **all** atoms; with
-      the active density it makes the target too thin by :math:`(x+y)/x`.
-      Re-fetch it, or multiply its equation by that factor.
+      by the *total* stoichiometry). A ``<targetInt>`` entry written by such a
+      GUI for a compound target is consistent only with the areal density of
+      **all** atoms; with the active density it makes the target too thin by
+      :math:`(x+y)/x`: multiply its equation by that factor.
 
    If the experiment reports the energy loss in the target directly (for
    example "the target thickness corresponded to 1.5 keV at the resonance"),

@@ -58,7 +58,6 @@ if(USE_API)
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 option(USE_READLINE "Use Readline library for CLI input." ON)
-option(USE_ERYA "Use ERYA SRIM stopping power utilities." ON)
 option(USE_MCMC "Use MCMC Bayesian sampling OFF" ON)
 option(USE_GCOV "Create a GCov-enabled build." OFF)
 option(CODE_COVERAGE "Enable coverage reporting" OFF)
@@ -372,24 +371,7 @@ else()
     message(STATUS "NLopt minimization disabled - using Minuit2 only")
 endif()
 
-# ERYA SRIM utilities (optional)
-if(USE_ERYA)
-    # Add ERYA subdirectory (pugixml is handled inside external/erya/CMakeLists.txt)
-    add_subdirectory(external/erya)
-    
-    # Add include directories from ERYA module
-    include_directories(${SRIM_UTILITIES_INCLUDE_DIRS})
-    
-    # Define USE_ERYA preprocessor macro
-    add_definitions(-DUSE_ERYA)
-    
-    message(STATUS "ERYA SRIM utilities enabled")
-else()
-    message(STATUS "ERYA SRIM utilities disabled")
-endif()
-
-# stopping/: AZURE2's stopping and straggling, a leaf library on physics/ (docs/upgrade/stopping.md).  Added after
-# ERYA only so that its comparison tool can link ERYA where it is built.
+# stopping/: AZURE2's stopping and straggling, a leaf library on physics/ (docs/upgrade/stopping.md); the engine links it.
 add_subdirectory(stopping)
 
 # MCMC Bayesian sampling (optional)
@@ -435,15 +417,6 @@ add_subdirectory(tests/consistency)
 add_subdirectory(tests/upgrade)
 add_subdirectory(tests/layer_yield)
 add_subdirectory(tests/stopping_yield)
-
-# Install and copy SRIM data file (only if ERYA is enabled)
-if(USE_ERYA)
-    install(FILES external/erya/data/SRIM2013.xml DESTINATION share/azure2/ COMPONENT Runtime)
-    
-    # Copy SRIM data file to build directory for development
-    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/external/erya/data/SRIM2013.xml
-                   ${CMAKE_CURRENT_BINARY_DIR}/SRIM2013.xml COPYONLY)
-endif()
 
 # Conditional defines
 if(NOT USE_STAT)
