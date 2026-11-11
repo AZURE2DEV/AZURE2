@@ -34,6 +34,11 @@ divided by J_base, because `EData::MakePoints` converted the test points' cross 
   reading `data/ratio.dat`, which `check.sh` writes from the plain segments' lab values; `ratio_free`
   has the seven widths free for the gradient check.
 
+- `fixed_angle`: a term at a fixed angle.  In c.m. data (isDiff 5) the term is evaluated at the fixed angle itself
+  (FC = n0+ / (α,α)(60° c.m.)); in lab data (isDiff 1) its 60° lab is converted with the term's pair to
+  θ_cm = 60° + asin((m1/m2) sin 60°) = 75.4606°, a number `make_models.py` computes and the model holds as a plain
+  c.m. segment, so FL = n0+_lab / ((α,α)_cm(75.46°) / J) with J = sin²60° / sin²θ_cm cos(θ_cm − 60°) (check (g)).
+
 ## Checks (`check.sh path/to/AZURE2`)
 
 - (a), (b): every particle ratio equals the ratio of the plain segments' lab values (c.m. /
