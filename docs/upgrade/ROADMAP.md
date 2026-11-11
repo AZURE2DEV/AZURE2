@@ -202,8 +202,9 @@ classes), the pathway trees deleted, the parameter vector and the set-up out, `C
 - [ ] Stopping module (`ARCHITECTURE.md` §7): the leaf library `stopping/` with SRIM-2013's stopping powers
       ported from LunaSRIM (any ion, any element, solid or gas, compound correction; decision of 2026-11-11),
       TRIM and Bohr straggling with Tschalär propagation, user tables (done, `stopping.md`); then wired into the
-      engine with the stopping-scale nuisance; ERYA and `SRIM2013.xml` removed; the owner decides whether SRIM's
-      two data files are shipped.
+      engine with the stopping-scale nuisance; ERYA and `SRIM2013.xml` removed (both done, branch `stopping-wire`,
+      2026-11-11: `stopping evaluation`, `stopping table`, kind `stopping_scale`, `pyazr.stopping`); the owner decides
+      whether SRIM's two data files are shipped.
 - [ ] THM (`THM.md` §1–2): σ_HOES observable with plane-wave and full-form-factor vertices, THM kernel (c.m.
       resolution, QF window, OES S-fold), free or double-ratio normalization, legacy K options marked.
 Gate: outputs within the stated quadrature tolerance, each difference explained; smooth χ² in shifts; gradient = FD.
@@ -248,5 +249,5 @@ Gate: ported pyazr tests pass; wheels install and run T1–T3 on three platforms
       test lines, from `4bf7aa06:gui/` and `tests/gui/`).
 - [x] `gui/`, `tests/gui/`, `BUILD_GUI`/`USE_QWT`/`BUILD_MACOS_BUNDLE`, Qt/Qwt in CMake, CI, Docker and build scripts
       removed (decision 3, 2026-11-07; branch `feature/upgrade-remove-qt`); `--no-gui` kept, accepted and ignored.
-- [ ] Remove `numcmc/`, `external/erya`, readline menus, the GSL fitter.
+- [ ] Remove `numcmc/`, readline menus, the GSL fitter (`external/erya`: removed in Phase 5, branch `stopping-wire`).
 Gate: parity checklist signed off by Jakub; release notes.

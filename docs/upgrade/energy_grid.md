@@ -482,8 +482,14 @@ One parameter s per (material, projectile species) of the project, multiplying �
 crossed by that projectile; prior Gaussian with centre 1 and width the evaluation's stated relative uncertainty
 (or the user's `prior` on the `stopping` field); fixed at 1 by default, fitted when the record says `fit`. It enters
 the objective as one more prior term (`src/Objective.cpp`, the list of terms) and the parameter layout as a new kind
-(`DataParameters.cpp`, `ParamIndexMap`). Its gradient is analytic through the kernel (§3.3). A user formula or table
-has no scale unless the record gives one.
+(`DataParameters.cpp`, `ParamIndexMap`). Its gradient: central differences of the whole χ² in branch 5 (as the
+density); analytic through the kernel (§3.3) with the kernels branch. A user formula has no scale unless the record
+gives one; an evaluation or a table has one, fixed at 1 unless the record says otherwise.
+
+**Done in branch 5** (2026-11-11, `feature/upgrade-5-stopping-wire`): §6.1 for `evaluation` and `table` (formulas
+unchanged: no output of a present project moves), §6.2, ERYA removed (§6.4 step 3). Not done: §6.4 step 2 (the old
+integrators on the module's integrals). What calls what: `stopping.md` §14; the test with LunaSRIM's numbers:
+`tests/stopping_yield`.
 
 ### 6.3 User formulas and ERYA
 
@@ -556,6 +562,18 @@ NaN, and the set-up refuses that case and a stopping that is not positive (`E_LA
 tested against 10⁻²⁴ σ(E_out). Where the stopping module plugs in: ε enters only as the sub-points' stopping (set in
 `TargetSetup.cpp`'s set-up loops and `ReplaceSubPointGrids`) and is read by `GridQuadrature` and `LayerExitEnergy`
 alike, so the scale s multiplies it there, once. Tests: `tests/layer_yield` (README).
+
+**Branch 5, done (2026-11-11, `feature/upgrade-5-stopping-wire`).** A target says `stopping evaluation` (SRIM-2013 of
+its `composition`, `phase`, `compound_correction`, for the projectile of the data set's entrance pair) or `stopping
+table "file" <units>`; `TargetStopping` (`src/TargetStopping.cpp`) is the one place the stopping is computed, per
+active nucleus ε_atom/f_active, and `TargetEffect::StoppingAt` multiplies the stopping scale once, where the sub-points
+get their stopping and in the range integrals. The scale is parameter kind 12 (`stopping_scale.<material>.<projectile>`,
+one per material and projectile, prior the record's or SRIM's stated accuracy), differenced on the whole χ² (central
+differences, as the density). Every output of the present projects is identical; `tests/stopping_yield` compares the
+plateau of a thick TiN layer with LunaSRIM's ε (8.3 × 10⁻⁵, the line shape), the width of a layer's step with
+LunaSRIM's energy loss (2.4 × 10⁻⁷), a table of the library's values with the evaluation (2.1 × 10⁻¹⁰), and a fit of
+two layers' N and the shared scale. pyazr binds the library (`pyazr.stopping`). ERYA is removed. Not done: §6.4 step
+2; the analytic derivative of the scale.
 
 **First steps before Phase 4's last branches are merged.** `lab-frame` (3) and `layer-yield` (4) touch no file of
 the pathway branch (`CNuc*`, `GenMatrixFunc`, `AMatrixFunc` readers, `UnitExternalCapture`, `ExternalCaptureSetup`)

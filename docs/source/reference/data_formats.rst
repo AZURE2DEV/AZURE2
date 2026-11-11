@@ -767,6 +767,35 @@ layer the beam does not leave above the lowest energy the model is evaluated at,
 keV c.m. (``E_LAYER_EXIT_BELOW_MODEL``: use ``kind infinite``).  The worked example is ``tests/units_scales``
 (``models/yield_story.azr``).
 
+The stopping of a target.  ``stopping formula "<expr>" <unit>`` is the stopping per
+active nucleus (lab, x = E_lab/MeV).  ``stopping evaluation`` takes SRIM-2013's
+stopping powers (AZURE2's ``stopping/`` library, ported from LunaSRIM; every result
+that uses them must cite SRIM: J. F. Ziegler, M. D. Ziegler and J. P. Biersack,
+Nucl. Instrum. Methods Phys. Res. B 268 (2010) 1818) for the target's
+``composition`` (element symbols and atoms per formula unit, required), its
+``phase`` (``solid`` or ``gas``; left out: gas for a material of one element that is
+a gas in its natural state, solid otherwise, so a gaseous compound must say
+``gas``) and ``compound_correction`` (SRIM's factor of Bragg's rule, left out 1), for
+the projectile of the entrance pair of each data set that names the target (its
+mass from ``<levels>``).  ``stopping table "file" MeV|keV eV/1e15atoms/cm2|MeV*cm2/g``
+reads a measured stopping of the composition, two columns (lab energy, stopping per
+atom of the material), ``#`` comments.  For both, the stopping per active nucleus is
+the material's per atom divided by the atom fraction of the active nucleus's element:
+for Ta\ :sub:`2`\ O\ :sub:`5` with :sup:`18`\ O active the stopping per formula
+unit over 5.  ``scale <s> fixed|fit [prior <s> <width>]`` on the ``stopping`` field
+is the stopping-scale nuisance (:math:`\varepsilon \to s\,\varepsilon`): one
+parameter ``stopping_scale.<material>.<projectile>`` per material and projectile,
+shared by every target of that material (targets that share it write it alike); left
+out it is fixed at 1 (a formula has none); ``fit`` without a prior takes SRIM's
+stated accuracy for the projectile class (H 4.0 %, He 3.9 %, Li 4.8 %, heavier
+5.8 %).  The run's log, ``--validate`` and ``--describe`` print where each target's
+stopping comes from, with the citation.  Refusals: ``E_STOPPING_ACTIVE`` (the active
+element not in the composition), ``E_STOPPING_PROJECTILE`` (a neutral projectile),
+``E_STOPPING_SCALE_CONFLICT``, ``E_STOPPING_DATA`` (the build has no SRIM data files
+and ``AZURE2_SRIM_DATA_DIR`` names none; a table that cannot be read),
+``E_STOPPING_RANGE`` (an energy outside a table).  The test is
+``tests/stopping_yield`` (README: the numbers against LunaSRIM).
+
 .. _extrapolation-grids:
 
 Extrapolation Grids

@@ -488,8 +488,11 @@ division by N; E_out is found on the kernel's own nodes and quadrature (`include
 (not ⟨σ⟩/ε(E)); the two differ by the curvature of 1/ε across the Gaussian. The limits of `energy_grid.md` §5.3 are
 tested against closed forms in `tests/layer_yield` (README: the derivations with their frames; eq. (7) there with λ_r
 c.m. and ε lab: plateau (λ_r²/2) ωγ (m_a + m_A)/(m_A ε)). The stopping is the user's formula per active nucleus; an
-`isotope` line multiplies the yield by its abundance (the isotopic part of the active fraction). The evaluated
-stopping, its scale nuisance and the stoichiometric active fraction come with the stopping module.
+`isotope` line multiplies the yield by its abundance (the isotopic part of the active fraction). **Branch 5
+(`stopping-wire`, 2026-11-11):** `stopping evaluation` (SRIM-2013 of the `composition`, `stopping/`) and `stopping
+table` divide the material's stopping per atom by the stoichiometric atom fraction of the active element (ε per formula
+unit / n_active); the stopping scale s (`scale` on the field, one per material and projectile) multiplies ε; tested
+against LunaSRIM in `tests/stopping_yield`.
 
 ### 4.7 Resonance strength, energy and widths (treated fully)
 

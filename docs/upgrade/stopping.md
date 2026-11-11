@@ -4,8 +4,9 @@
 powers**, ported to C++ from **LunaSRIM** (J. Skowronski, github.com/skowrons94/LunaSRIM, MIT), the pure-Python
 re-implementation of SRIM-2013 that reproduces SRIM's tables. The PI decided this on 2026-11-11: "I would use the SRIM
 stopping powers from my LunaSRIM repository. They are free to use as long as SRIM is cited." An AZURE2 fit and a LUNA
-analysis made with LunaSRIM then use the same stopping power. The module is a leaf library that nothing in the engine
-links yet; the wiring and the removal of ERYA are the next branch (§13).
+analysis made with LunaSRIM then use the same stopping power. The module is a leaf library on `physics/`; the engine
+calls it for a target whose record says `stopping evaluation` or `stopping table` (§14), and pyazr binds it as
+`pyazr.stopping` (§11). ERYA is removed.
 
 **Cite SRIM** in every result that uses these stopping powers: J. F. Ziegler, M. D. Ziegler and J. P. Biersack,
 *SRIM – The stopping and range of ions in matter (2010)*, Nucl. Instrum. Methods Phys. Res. B 268 (2010) 1818,
@@ -295,10 +296,11 @@ azure2-stopping provenance --projectile a --material CO2 --phase gas --compound-
 give any ion. Every table starts with comment lines naming SRIM-2013 and LunaSRIM, the citation to give, and the
 material, phase and compound correction.
 
-Python: not bound in this branch. Binding the functions as a `pyazr.stopping` submodule needs one new file
-`api/src/pybind_stopping.cpp` (array inputs, numpy outputs, as `pybind_physics.cpp`), its line in
-`api/src/CMakeLists.txt` with `azure2::stopping` linked, and two lines in `api/src/pybind_api.cpp` (the declaration
-`void BindStopping(py::module_ &m);` and the call `BindStopping(m);`); it is left for the wiring branch.
+Python: `pyazr.stopping` (`pyazr/stopping.py` on the submodule `_azure2.stopping`, `api/src/pybind_stopping.cpp`):
+`Material(formula, phase, compound_correction)`, `stopping`, `energy_after`, `energy_loss`, `areal_density_between`,
+`range_of`, `straggling`, `provenance`, `projectile`, `CITATION`, arrays in and out, the units of §2 in the docstrings.
+A thin binding: every value is the C++ function's. `tests/pyazr/stopping_test.py` (ctest `pyazr_stopping`) compares it
+with `stopping/tests/data/srim_reference.csv` to the C++ tests' tolerances.
 
 ## 12. Provenance and licence
 
@@ -319,9 +321,27 @@ Python: not bound in this branch. Binding the functions as a `pyazr.stopping` su
 
 ## 13. Next
 
-1. Wiring into the engine (Phase 5, `energy_grid.md` §6): `TargetEffect`'s stopping expression, its range-integral
-   energy loss and Bohr straggling replaced by this module (a material, phase, compound correction and projectile per
-   target in format 3), the stopping-scale nuisance with the prior of §7, the Python binding (§11), and the removal of
-   ERYA and `SRIM2013.xml`.
+1. The old integrators (`TargetEffect::TargetThickness`, `MeanEnergyLoss`, `StragglingSigma`, `BohrStragglingSigma`)
+   on this module's integrals for formulas too (`energy_grid.md` §6.4 step 2; outputs move by the difference of two
+   quadratures), and TRIM straggling for an evaluated target (today the target's `straggling` field: none, Bohr or a
+   coefficient).
 2. Optional: the compound correction by name from SRIM's `Compound.dat` (it would be a third SRIM file to ship).
 3. A source for the uncertainty of the nuclear stopping, to replace the provisional 10 %.
+
+## 14. Wired: what calls what (branch `feature/upgrade-5-stopping-wire`)
+
+- **The record** (`project_format3.md` §7, `data_formats.rst`): `stopping evaluation [scale ...]` or `stopping table
+  "file" MeV|keV eV/1e15atoms/cm2|MeV*cm2/g [scale ...]` beside `stopping formula`; the material from `composition`
+  (required), `phase` (left out: `DefaultPhase`), `compound_correction` (left out: 1); the projectile is the light
+  particle of the entrance pair of the data set that names the target, with its mass from `<levels>`.
+- **Build** (`experiment/src/BuildEffects.cpp`): `TargetEffectSpec::stopping` (`StoppingSpec`, `SetupSpecs.h`); one
+  effect per projectile; refusals `E_STOPPING_ACTIVE`, `E_STOPPING_PROJECTILE`, `E_STOPPING_SCALE_CONFLICT`.
+- **The engine** (`include/TargetStopping.h`, `src/TargetStopping.cpp`): the one place the stopping is computed:
+  formula | `Stopping(material, projectile, E).total` | the user table, per active nucleus, ε_active = 10⁻²¹ ε_atom /
+  f_active (`StoppingSpec`'s comment states the convention). `TargetEffect::StoppingAt(E, scale)` multiplies the scale
+  once; every reader asks it: the sub-points' stopping (`TargetSetup.cpp` set-up loops, `ReplaceSubPointGrids`, and the
+  hand-over of a scale, `src/StoppingScale.cpp`), `TargetThickness`, `MeanEnergyLoss`, `GridExtent`, the layer refusal.
+  Set-up refusals `E_STOPPING_DATA`, `E_STOPPING_RANGE` (`experiment/StoppingChecks.h`); the log prints
+  `StoppingProvenance` once per target and projectile, `--validate` and `--describe` too.
+- **The scale** (`energy_grid.md` §6.2): parameter kind 12 `stopping_scale`, one per (material, projectile).
+- **Python**: §11.

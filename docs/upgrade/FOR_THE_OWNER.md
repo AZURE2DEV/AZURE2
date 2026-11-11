@@ -31,7 +31,9 @@ whoever asks for a calculation, and a project file that says in words what each 
 
 **Stopping.** AZURE2 has its own stopping and straggling library, `stopping/` (materials by formula, energy loss,
 exit energy and range of a layer, straggling propagated through the target, each value with an uncertainty and its
-source; `docs/upgrade/stopping.md`), built beside the engine and not yet used by it. Its stopping powers are
+source; `docs/upgrade/stopping.md`). A target says `stopping evaluation` and the engine takes the stopping of its
+composition from it, per active nucleus, with one stopping-scale nuisance per material and projectile (fixed at 1, or
+fitted with SRIM's stated accuracy as its prior); `pyazr.stopping` gives the same numbers in Python. Its stopping powers are
 SRIM-2013's for any ion in any element, solid or gas, ported to C++ from the LunaSRIM package (they agree with it to
 rounding) with SRIM's two data files, and every output cites SRIM (decision of 2026-11-11). One point is yours:
 those two files stay under the terms of SRIM's authors (LunaSRIM's README reads them as free for non-commercial use),
@@ -76,7 +78,8 @@ already or are files that exist to test a refusal.
 
 - ratio to Rutherford and to Mott; the S factor as a quantity (the engine converts with the pair's masses);
 - yields per charge or per particle, linked to a named target, thick or a layer of finite thickness (a resonance scan
-  through a target of known or fitted areal density; with the user's stopping formula until the stopping module);
+  through a target of known or fitted areal density; the stopping a formula, a table, or SRIM-2013's evaluation of the
+  target's composition with a fitted stopping scale);
 - values from the literature compared with functions of the level parameters, as χ² terms of their own
   (`<modelData>`): resonance strength ωγ, resonance energy, total and partial width, branching ratio, ANC,
   scattering length;
@@ -197,7 +200,7 @@ a second grammar in Python); the rest of `CNuc` (the parameter vector and the se
 
 Phases 5–9 (`ROADMAP.md`): one energy grid with the apparatus as kernels, AZURE2's own stopping module, yields on
 finite layers, the comparison of energy-shifted data in the lab frame, and the THM observable (5); evaluation without
-copies (6); DWBA vertices for THM (7); pyazr 3.0 with wheels (8); the web interface, and removal of Qt, ERYA and
+copies (6); DWBA vertices for THM (7); pyazr 3.0 with wheels (8); the web interface, and removal of Qt (ERYA is gone) and
 numcmc (9).
 
 **An idea outside AZURE2 (Jakub):** an experiment logbook — yields, target scans, on-line analysis — as a separate
