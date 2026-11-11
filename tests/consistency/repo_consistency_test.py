@@ -315,9 +315,10 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, "io")):
 #     M1; docs/upgrade/project_format3.md section 7.3, the director's decision of 2026-11-09): its own headers
 #     ("azure2/experiment/..."), physics/'s ("azure2/physics/..."), the one header "azure2/io/Record.h" (header-only
 #     structs) and the C++ standard library.  Its tests may also include io/'s reader ("azure2/io/..."): they read
-#     their fixtures as the engine will; so may the two files of the reading path, src/ProjectReader.cpp and
-#     src/LevelTablesOfRows.cpp (library azure2_experiment_reader, which links io/: records -> Validate -> <levels>
-#     tables -> Build, step 3b), which the table library azure2_experiment does not contain.  An engine header (EPoint.h, Config.h), another io/ header in
+#     their fixtures as the engine will; so may the files of the reading path, src/ProjectReader.cpp,
+#     src/LevelTablesOfRows.cpp and src/LevelEdits.cpp (library azure2_experiment_reader, which links io/: records ->
+#     Validate -> <levels> tables -> Build, step 3b; the <levels> rows and their edits), which the table library
+#     azure2_experiment does not contain.  An engine header (EPoint.h, Config.h), another io/ header in
 #     the table library or a system library makes the module depend on what it must not.
 for dirpath, _, files in os.walk(os.path.join(ROOT, "experiment")):
     for name in sorted(files):
@@ -326,7 +327,8 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, "experiment")):
         rel = os.path.relpath(os.path.join(dirpath, name), ROOT)
         in_tests = rel.startswith(os.path.join("experiment", "tests") + os.sep) or \
             rel in (os.path.join("experiment", "src", "ProjectReader.cpp"),
-                    os.path.join("experiment", "src", "LevelTablesOfRows.cpp"))
+                    os.path.join("experiment", "src", "LevelTablesOfRows.cpp"),
+                    os.path.join("experiment", "src", "LevelEdits.cpp"))
         for inc in re.findall(r'^\s*#\s*include\s*([<"][^>"]+[>"])', read(rel), re.M):
             if inc.startswith('"') and inc[1:-1].startswith(("azure2/experiment/", "azure2/physics/")):
                 continue

@@ -27,6 +27,8 @@ PairInfo PairInfoOfRow(const io::LevelRow &r) {
   p.threshold = r.sepE() + (r.e1() + r.e2());  // PPair: GetSepE() + GetExE()
   p.lightMass = r.m1();
   p.heavyMass = r.m2();
+  p.separationEnergy = r.sepE();
+  p.radius = r.chRad();
   p.twoJLight = (int)std::lround(2.0 * r.j1());
   p.twoJHeavy = (int)std::lround(2.0 * r.j2());
   p.identical = io::IdenticalParticles(r);
@@ -72,6 +74,7 @@ LevelTables LevelTablesOfRows(const std::vector<io::LevelRow> &rows) {
   std::vector<std::vector<LevelLines>> lines;
   io::LevelGrouper grouper;
   for (const io::LevelRow &r : rows) {
+    t.rowSlots.emplace_back();
     if (r.isActive() != 1) continue;
     const auto id = std::make_tuple(r.levelJ(), r.levelPi(), CompoundOf(r));
     int g = 0;
@@ -104,6 +107,7 @@ LevelTables LevelTablesOfRows(const std::vector<io::LevelRow> &rows) {
     LevelInfo &level = levels[g][slot.level - 1];
     if (std::find(level.ids.begin(), level.ids.end(), r.levelID()) == level.ids.end()) level.ids.push_back(r.levelID());
     lines[g][slot.level - 1].widths[c + 1] = {r.gamma(), r.gammaIsRWA() == 1};
+    t.rowSlots.back() = LevelRowSlot{g + 1, slot.level, c + 1};
   }
   for (std::size_t g = 0; g < groups.size(); g++)
     for (std::size_t la = 0; la < levels[g].size(); la++) {

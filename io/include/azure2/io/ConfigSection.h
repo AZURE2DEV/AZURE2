@@ -1,0 +1,84 @@
+#ifndef AZURE2_IO_CONFIGSECTION_H
+#define AZURE2_IO_CONFIGSECTION_H
+
+#include <string>
+#include <vector>
+
+namespace azure2 {
+namespace io {
+
+/*!
+ * The <config> section: its one reader (Config::ReadConfigFile reads the project through it, pyazr through the
+ * binding) and the line of an edited entry.  The grammar, as the engine has always read it:
+ *
+ *   - after the <config> tag, eleven positional entries: `amatrix` (the first token of its line: true = A-matrix
+ *     calculation), `output_dir` and `checks_dir` (the whole line before its last '#', trimmed; may be empty), then
+ *     the eight checks `check_compound_nucleus`, `check_boundary_conditions`, `check_data`,
+ *     `check_energy_dependence`, `check_legendre`, `check_coulomb_amplitudes`, `check_pathways`,
+ *     `check_angular_distributions` (the first token: none | screen | file).  An entry read as a token skips blank
+ *     lines before it (the stream's >>); the rest of its line is ignored.
+ *   - then `key=value` lines up to </config>: the text before the first '#', split at the first '=', key and value
+ *     trimmed; a line without '=' is skipped; the last line of a key wins.  The keys the engine reads are
+ *     ConfigKeys(); an unknown key is skipped by the engine, refused by an edit.
+ */
+struct ConfigEntry {
+  std::string name;   ///< a positional name above, or the key
+  std::string value;  ///< as the engine reads it (trimmed; a token entry's first token)
+  int line = 0;       ///< index into the lines given to ReadConfigSection (0 = the <config> tag)
+  bool positional = false;
+};
+
+struct ConfigSection {
+  std::vector<ConfigEntry> entries;  ///< the positional entries, then every key=value line in file order
+  bool closed = false;               ///< the eleven entries were read and the </config> line was reached
+  /// The value of the last entry named `name`, or nullptr.
+  const ConfigEntry *Find(const std::string &name) const;
+};
+
+/// The names of the eleven positional entries, in file order.
+const std::vector<std::string> &ConfigPositionalNames();
+
+/// One key of the key=value part the engine reads.
+struct ConfigKey {
+  const char *name;
+  /// bool (0 | 1 | true | false), int (>= minimum), number (>= 0), path (one line, no '#'), version (not editable)
+  enum Kind { Bool, Int, Number, Path, Version } kind;
+  int minimum;      ///< Int: the smallest value taken
+  const char *doc;  ///< what it sets
+};
+const std::vector<ConfigKey> &ConfigKeys();
+
+/// Reads the section from its lines as Config::SectionStream gives them: the <config> tag line first, then the body,
+/// then the </config> line (absent when the section is not closed).
+ConfigSection ReadConfigSection(const std::vector<std::string> &lines);
+
+class Document;
+/// The lines of a document's <config> section as Config::SectionStream gives them (the tags written "<config>",
+/// "</config>"), and in `open` the index of its tag line in the document; empty when there is no such section.
+std::vector<std::string> ConfigLinesOf(const Document &doc, std::size_t &open);
+
+/// The edit of one entry: replace line `line` (index as above) by `text`, or remove it (`remove`), or insert `text`
+/// before line `line` (`insert`).
+struct ConfigLineEdit {
+  int line = 0;
+  std::string text;
+  bool remove = false;
+  bool insert = false;
+};
+
+/*!
+ * The edits that set entry `name` to `value` in the section of `lines` (as for ReadConfigSection): a positional entry
+ * rewrites its line, the value where the old one began and the rest of the line (its comment) kept in its column; a
+ * key rewrites the line that wins (`key=value`, its comment kept) and removes the earlier lines of the key, or adds
+ * `key=value` before </config>; ConfigChange::Remove (keys only) removes every line of the key.  False with `why` when the name is
+ * neither a positional entry nor a key of ConfigKeys(), or the value is not one the engine reads (a word of the
+ * entry's list, a number, one line without '#').
+ */
+enum class ConfigChange { Set, Remove };
+bool ConfigEdits(const std::vector<std::string> &lines, const std::string &name, const std::string &value,
+                 ConfigChange change, std::vector<ConfigLineEdit> &edits, std::string &why);
+
+}  // namespace io
+}  // namespace azure2
+
+#endif

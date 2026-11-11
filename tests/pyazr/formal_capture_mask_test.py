@@ -30,33 +30,26 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old originals of converted projects)
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
 
-SRC = old_tree.original(os.path.join(ROOT, "tests", "13N", "13N.azr"))  # the old file (format3_tree.md)
-KEEP = (0, 2)          # <segmentsData> lines kept: capture (artemov) and the 84.3 deg elastic
-CAPTURE = 0            # its index among the kept segments
+SRC = os.path.join(ROOT, "tests", "13N", "13N.azr")
+KEEP = ("artemov", "meyer_84")  # data sets kept: capture (artemov) and the 84.3 deg elastic
+CAPTURE = 0                     # its index among the kept data sets
 
 
 def write_model(path, photon_width_eV):
-    from pyazr import AzrModel
-    m = AzrModel.from_file(SRC)
+    from pyazr import Project
+    p = Project.open(SRC)
     # A 1/2+ level at E_x 4.5 MeV with a proton width (fixed) and the photon width under test (fixed): with 0 it is
     # masked, and its proton width couples it to the 2.368 MeV resonance of the block.
-    m.add_level(J=0.5, parity=+1, energy=4.5, level_fixed=True,
-                channels=[{"pair": 1, "L": 0, "S": 0.5, "gamma": 2.0e4, "fixed": True},
-                          {"pair": 2, "L": 1, "S": 0.5, "gamma": photon_width_eV, "fixed": True}])
-    m.write(path)
-    lines = open(path).read().split("\n")
-    i0, i1 = lines.index("<segmentsData>"), lines.index("</segmentsData>")
-    seg = [l for l in lines[i0 + 1:i1] if l.split()]
-    for k, l in enumerate(seg):
-        if k not in KEEP:
-            seg[k] = "0" + l.lstrip()[1:]
-    lines[i0 + 1:i1] = seg
-    open(path, "w").write("\n".join(lines))
+    p.add_level(J=0.5, parity=+1, energy=4.5, fixed=True,
+                channels=[{"pair": 1, "l": 0, "s": 0.5, "width": 2.0e4, "fixed": True},
+                          {"pair": 2, "l": 1, "s": 0.5, "width": photon_width_eV, "fixed": True}])
+    for name, r in p.records().items():
+        if r.record_kind == "dataset" and name not in KEEP:
+            p.set(name, active="no")
+    p.save(path)
 
 
 def worker(work, width, brune, ignore, grad, out):

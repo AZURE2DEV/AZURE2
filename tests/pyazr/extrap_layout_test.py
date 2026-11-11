@@ -33,7 +33,6 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old originals of converted projects)
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SOURCE = os.path.join(ROOT, "tests", "15N_p_a")
 
@@ -50,7 +49,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2, AzrModel
+    from pyazr import azure2, Project
     from pyazr.parameters import Parameter
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
@@ -73,12 +72,14 @@ with tempfile.TemporaryDirectory() as tmp:
     for d in ("output", "checks"):
         os.makedirs(os.path.join(work, d))
     azr = [f for f in os.listdir(SOURCE) if f.endswith(".azr")][0]
-    mdl = AzrModel.from_file(old_tree.original(os.path.join(SOURCE, azr)))  # the old file
-    mdl.clear_extrapolations()
-    for k in range(5):
-        mdl.add_extrapolation(1, 2, 0.1 + 0.1 * k, 0.2 + 0.1 * k, 0.05)
-    path = os.path.join(work, "layout.azr")
-    mdl.write(path)
+    mdl = Project.open(os.path.join(SOURCE, azr))
+    for name, r in mdl.records().items():
+        if r.record_kind == "extrapolation":
+            mdl.remove(name)
+    for k in range(5):  # the angle-integrated cross section of pair 1 -> 2, 0.1 + 0.1 k to 0.2 + 0.1 k MeV lab
+        mdl.add_extrapolation(f"x{k + 1}", reaction=mdl.reaction(1, 2), quantity="sigma", unit="b",
+                              energies=f"range {0.1 + 0.1 * k:.1f} {0.2 + 0.1 * k:.1f} MeV lab step 0.05")
+    path = mdl.save(os.path.join(work, "layout.azr"))
 
     with azure2(path, cwd=work) as m:
         x0 = np.asarray(m.params_rwa, float).copy()

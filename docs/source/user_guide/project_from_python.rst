@@ -78,3 +78,77 @@ come at once in one :class:`pyazr.FormatError`, each diagnostic with its
 the built project (:class:`pyazr.DescribedDatasets`: record name, quantity,
 reaction with pair keys, windows, data file, rows read and kept, parameters),
 and ``m.dataset_chi2()`` is keyed by the data sets' record names.
+
+The nuclear part
+----------------
+
+``<levels>``, ``<config>`` and ``<thm>`` are not records; ``Project`` reads and
+edits them through the engine as well (the engine reads each line, makes each
+new or edited line and refuses what a run would refuse; a row or line an edit
+does not name keeps its bytes, and a number replaced in a ``<levels>`` row keeps
+its column).  Every edit is validated on the project as it would stand, returns
+the engine's new warnings and raises :class:`pyazr.FormatError` on an error,
+the project unchanged.  A level is named by its label, ``"<J^pi> <E_x as
+written>"``, by J^pi and E_x within 1 keV, or by the engine's ``(group,
+level)``; a channel by its pair key and (l, s).
+
+``p.levels()`` and ``p.level(name)``
+    The levels in the order of their first rows (:class:`pyazr.ProjectLevel`:
+    label, J^pi, E_x in MeV, fixed, active, the engine's group and level, the
+    channels with their width columns)::
+
+        lv = p.level(("3/2-", 3.5))          # the 3/2- level within 1 keV of 3.5 MeV
+        print(lv.label, lv.channel(1, 1, 0.5).width)
+
+``p.pairs()`` and ``p.reaction(entrance, exit)``
+    The pairs of ``<levels>`` (:class:`pyazr.ProjectPair`: particles, masses in
+    u, separation energy in MeV, channel radius in fm) and the reaction label
+    of two pair keys, as a data set names it::
+
+        p.add_extrapolation("S_low", reaction=p.reaction(1, 2), quantity="sigma",
+                            unit="b", energies="range 0.1 1 MeV cm step 0.01")
+
+``p.set_level(level, energy=, fixed=, active=)``
+    E_x (MeV), whether it is fixed in a fit, whether the engine reads the
+    level, on every row of the level::
+
+        p.set_level("3/2- 3.5032", energy=3.51, fixed=False)
+
+``p.set_channel(level, pair, l, s, width=, fixed=)``
+    The width column of one channel, in the row's convention (a partial width
+    in eV for an open channel or a photon, an ANC in fm^-1/2 for a closed one)::
+
+        p.set_channel("3/2- 3.51", 1, 1, 0.5, width=6.0e4)
+
+``p.set_pair(pair, radius=, light_mass=, heavy_mass=, separation_energy=)``
+    A pair's columns on every row of the pair (refit after a new radius)::
+
+        p.set_pair(1, radius=4.0)
+
+``p.add_level(J, parity, energy, channels, fixed=True)`` and ``p.remove_level(level)``
+    A level of an existing J^pi gets the rows of its group (the channels not
+    given with width 0, fixed); a new J^pi one row per channel given.  It takes
+    the next free level ID and goes at the end of ``<levels>``::
+
+        p.add_level(1.5, -1, 7.0, [dict(pair=1, l=1, s=0.5, width=100.0)])
+        p.remove_level("3/2- 7")
+
+``p.config()`` and ``p.set_config(**entries)``
+    The ``<config>`` entries by name as the engine reads them: ``amatrix``,
+    ``output_dir``, ``checks_dir``, the eight checks (``check_data``, ...) and
+    the keys (``relativistic``, ``priorCovariance``, ``useAdaptiveGrid``, ...);
+    ``None`` removes a key::
+
+        p.set_config(output_dir="run2/", relativistic=True)
+
+``p.thm()``, ``p.set_thm(**options)``, ``p.set_thm_experiment(name, **keys)``, ``p.remove_thm_experiment(name)``
+    The ``<thm>`` options and experiments (their data sets name them in their
+    ``thm`` field), the block checked as the engine reads it::
+
+        p.set_thm(kinematics="triple")
+        p.set_thm_experiment("LC10", Ebeam=55)
+
+:meth:`pyazr.azure2.save_fit` of a format-3 project writes the fitted level
+values into the rows they come from with the same engine edits, the THM
+coherent backgrounds into their experiments and the free nuisances into their
+records.
