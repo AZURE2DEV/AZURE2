@@ -2,6 +2,107 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (director, 23:10) — merged: one fit-parameter kind for apparatus numbers, the point mapping deleted with the node table beside the sub-points; external capture was missing for a capture term that is only a component
+
+Batch rehearsal `rehearsal/trial25` (worktree `wt-trial25`, build `work/b-trial25`) = the head of 22:00 +
+`feature/upgrade-5-apparatus-parameters` + `feature/upgrade-5-grid-nodes` + one fix by the director. Merged into
+`feature/upgrade-4-data` and `feature/upgrade`. Nothing pushed.
+
+### The generic apparatus kind (`feature/upgrade-5-apparatus-parameters`) — director's review
+
+- What it does (the agent's entry below has the detail): `ParamKind::Apparatus` replaces `StoppingScale`; a
+  parameter of an apparatus effect is a row of `ApparatusRows()` (`include/ApparatusParameters.h`: declare, write,
+  read, follow) and its fit plumbing (limits, prior penalty, label, χ² line, hand-over, `parameters.out`) is
+  written once in `src/ApparatusParameters.cpp`. The proof is the drill: a triangular resolution kernel with a
+  fitted width cost 68 lines in `experiment/src/KernelTriangular.cpp`, 2 lines in `experiment/src/Kernels.cpp`, 1
+  CMake line, tests and regenerated documents, and **no file under `src/`, `include/`, `api/`, `pyazr/`** (the
+  stopping scale had cost 20).
+- Engine diff read by the director. No defect found. What a maintainer should know, not said loudly enough in the
+  agent's text:
+  - **The limits assume a positive, scale-like number**: [0.1 × nominal, the row's layout]. A parameter that can be
+    0 or negative (an energy offset of a detector) needs another limit rule; the place is `ApparatusLayout`.
+  - **The derivative is a central difference of the whole χ²** for every apparatus parameter. A kernel's analytic
+    derivative with respect to its width exists and is tested (`kernels_test`), but is not wired into the gradient.
+    Cost: two full evaluations per apparatus parameter per gradient.
+  - **The band does not see apparatus parameters** (as it does not see densities or norms: entry of 22:00).
+  - One "warn once" flag is shared by all apparatus parameters: the second parameter that leaves its range does
+    not warn.
+  - Density, Doppler temperature and layer thickness keep their own kinds (moving them would reorder the
+    parameters of every project that fits one, and with them the fits' paths). Decided: not now; after the grid.
+- The agent asked whether `Schema::kVersion` should be raised because `width 20 keV` now needs `fixed` or `fit`:
+  no — format 3 has not been released, there is nobody to tell apart by a version.
+- Left over, small: a build refusal of a detector shared by two effects is printed twice;
+  `TargetEffect::GetStoppingScaleMinimum` is unused; `WorkingCopy::SetUpStoppingScaleParams` is an inline forward.
+
+### The point mapping deleted, the node table beside the sub-points (`feature/upgrade-5-grid-nodes`) — director's review
+
+- **This is half of what its brief asked.** Done: the point mapping is gone (`MapData`, `MapLeaves`,
+  `SharesCalculation`, the three `AZURE_NO_*_MAPPING` switches, the mapped clauses of 15 engine files: 1,018 lines
+  out, 528 in, of which 263 are the node table); the tools the shared mesh needs; a node table built at the end of
+  the set-up and compared with the units by `AZURE_NODE_CHECK=1`. **Not done: no reader uses the table.** The
+  sub-point units still carry the calculation, so nothing is saved yet and the set-up does one pass more. The
+  second half (readers onto the table, sub-point units deleted, the overflow table for re-placed and shifted nodes)
+  is brief `AV_grid_part1b_readers.md`, started at once on the rehearsal head (`wt-readers`,
+  `feature/upgrade-5-grid-readers`).
+- Engine diff read by the director (26 files). No defect found. Outside its brief the agent touched
+  `src/AZURECalc.cpp` and `src/AZUREGrad.cpp`: the deleted lines are the mapping's (`CrossSegmentPartners`,
+  `MappingConfined`, the second loop over mapped points in `ComputeTHMRows`); accepted.
+- `AZURE_REFINE_QUADRATURE=k` is read in `Config::Reset` and ends the process on a bad value. Fine for the command
+  line; in pyazr a bad environment variable would end the Python process. To become a flag when `src/AZURE2.cpp`
+  has room (it is at its size limit), or an exception.
+- Expected output changes, seen by the director: only the "Coulomb table: N lookups" line of `run.log` in
+  `angle_mapping` and `sum_lab_frame/models/plain_data` (a work counter).
+
+### External capture was missing for a capture term that is only a component (fixed; older than the upgrade)
+
+- Reported by the grid agent as "a SUM extrapolation of different pairs may be wrong" (elastic + 1000 × capture at
+  90° c.m. on 13N: the capture term 0.54 to 2.9 times the separate capture extrapolation, energy dependent). It
+  did not investigate.
+- Cause, found by the director: the command line switches external capture on when a level with external capture
+  exits into a pair that some active data set or extrapolation uses, and it listed **only the leading term** of
+  each reaction (`ProjectReactionPairs`, `ProjectExitPairKeys` in `src/ProjectSetup.cpp`). A project whose capture
+  pair appears only as the second term of a SUM or RATIO ran **without external capture, without a word**. With
+  any other data set or extrapolation that has the capture as leading term the same SUM was right — which is why
+  the old check never saw it (its model had both), and why it appeared when the agent's rewritten check changed
+  the model. The decision is the same in the code at the branch point with `dev` (`readSegmentFile` reads the
+  leading pair of each segment line). The API (pyazr) always switches external capture on and was not affected.
+- Fix: every term's pair is listed (`ForEachTermPair`). Test: `tests/component_mapping` (d) — the SUM as the only
+  extrapolation equals elastic + 1000 × capture of the separate runs to the digits of the file (7.6e-11 of the
+  sum) and writes `intEC.extrap`; on a build without the fix it fails (7.58e-4 of the sum, no `intEC.extrap`).
+- No output of the tree changes with the fix (all projects × 3 bases identical before and after): no project of
+  the tree had a capture pair only as a component. A user's project could.
+
+### Verification by the director (build `work/b-trial25` at the rehearsal head, 0 warnings)
+
+- All projects × 3 bases against the head of 22:00 (`tab-trial24c`): 778 / 751 / 778 files identical; different are
+  the two `run.log` work-counter lines named above (per basis) and 6 files that are new
+  (`rectangular_resolution/models/fit.azr`, the width fit). With the external-capture fix against the run without it
+  (`tab-trial25b`): 786 / 759 / 786 identical.
+- `ctest -LE slow` 203 of 203; `ctest -L slow` 10 of 10; `tests/run_tests.sh` 153 passed, 0 failed; spec equivalence
+  184 of 184 converted files equal; the converted-tree gate against `tab-trial8` 0 differ, 0 missing (38 classified
+  per basis, as before).
+- Calculations at 1 against 3 threads: T1, T2, T3, 13N × 3 bases and `T2_true` with model data identical.
+- Fits at 1 thread against the head of 22:00 (build `work/b-trial24`), every output file identical: T2 with
+  `--use-lm`, `--use-gradient`, MIGRAD at 200 calls; 13N with `--use-gradient`, `--use-lm`;
+  `layer_yield/models/fit.azr` with `--use-gradient`; `stopping_yield/models/fit.azr` (two areal densities and the
+  stopping scale, now of the generic kind) with `--use-gradient`, `--use-lm`. At 2 threads against 1: T2
+  (`--use-gradient`, `--use-lm`) and the stopping fit identical in every final output (the intermediate snapshot
+  `param.fit` of the stopping fit differs: known book-keeping, see FOR_THE_OWNER "Fits and the number of threads").
+- `natural_neon`, calculation at 1 thread, 6 alternated runs, median: 6.40 s on the build of 19:25
+  (`work/b-trial23`), 6.43 s on the head of 22:00, 6.51 s now (+1.6 % and +1.2 %: the node table's set-up pass).
+  Accepted until the readers are on the table; brief AV asks for the time of `work/b-trial23` back.
+- `tests/component_mapping` (d) fails on the grid agent's own binary (no fix) and passes on the merged head.
+- Under the 12-thread limit of this night: 6 threads for the director's runs, 3 for each agent.
+
+### Next
+
+- Running: the readers onto the node table (brief AV, 3 threads); the engine refusing old files (brief AU, 3
+  threads). After AV: the shared mesh (decision D2) with decision D3's deletions, on the node planner alone.
+- For the shared mesh's brief: the quadrature gate's "fine" reference should be k = 4 (the agent's classifier
+  failed a k = 4 run on 5 of 92 files per basis with k = 2 as reference: `natural_neon`, `T2_true`,
+  `layer_yield` const are not asymptotic at k = 2).
+- `tests/fit_modes` has no case "apparatus parameter only" (the rectangular width fit): to add.
+
 ## 2026-11-11 (agent, Phase 5 branch 7 part 1) — point mapping deleted, tools for the shared mesh, the node table beside the sub-points (`feature/upgrade-5-grid-nodes`)
 
 **Done.**

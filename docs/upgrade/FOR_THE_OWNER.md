@@ -150,6 +150,11 @@ refused at once with the engine's message. An edit changes only the lines it tou
   - a point whose exit pair no pathway of its entrance reaches is refused (the last decay was read before);
   - external capture with a beta pair or a pair of another nucleus numbered below the photon pair read the wrong
     pathways (a crash in the test); it now finds the photon pair's pathways by the pair;
+  - a SUM or RATIO whose capture reaction appears only as a later term (no data set or extrapolation of the
+    project has that capture as its own reaction) ran from the command line **without external capture and without
+    a message**: in the test the capture term was 0.54 to 2.9 times the right one, depending on the energy. The
+    switch looked at the first term of each reaction only; the same is in `dev`. Every term counts now
+    (`tests/component_mapping`, case (d)). pyazr always had external capture on and was not affected;
   - in format 3 a data run with an unreadable data file is refused (the old engine skipped the segment with a
     warning); an extrapolation run does not need the data files.
   - data given in the lab frame are compared with the model in the lab frame (the model divided by
