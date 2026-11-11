@@ -153,3 +153,12 @@ if(Python3_Interpreter_FOUND)
            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/predictions_test.py --binary $<TARGET_FILE:AZURE2>)
   set_tests_properties(upgrade_predictions PROPERTIES TIMEOUT 1800)
 endif()
+
+# The capture-A_y terms built at set-up for the reactions the data sets name (docs/upgrade/cnuc_split.md section 11.5):
+# every capture-A_y data set of tests/ has its terms, none for a beta entrance, the table independent of the order of
+# the requests, and a capture-A_y point without its request refused.
+add_executable(capture_ay_requests_test capture_ay_requests_test.cpp)
+target_link_libraries(capture_ay_requests_test PRIVATE AZURE2Core)
+add_test(NAME upgrade_capture_ay_requests
+         COMMAND capture_ay_requests_test ${CMAKE_SOURCE_DIR}/tests ${CMAKE_CURRENT_BINARY_DIR}/capture_ay_requests)
+set_tests_properties(upgrade_capture_ay_requests PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 900)

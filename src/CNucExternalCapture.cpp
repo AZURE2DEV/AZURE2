@@ -326,3 +326,15 @@ const CNuc::CaptureMask *CNuc::FormalCaptureMask(int group, int channel) const {
     if (m.group == group && m.channel == channel) return &m;
   return nullptr;
 }
+
+bool FinalStateOfAnotherPair(CNuc &compound, const Config &configure, int group, int level, int pairNum) {
+  const ALevel *finalLevel = compound.GetJGroup(group)->GetLevel(level);
+  if (!finalLevel->IsECLevel() || finalLevel->GetECPairNum() == pairNum) return false;
+  PPair *pair = compound.GetPair(pairNum);
+  configure.outStream << "ERROR: external capture into pairs " << compound.GetPair(finalLevel->GetECPairNum())->GetPairKey()
+                      << " and " << pair->GetPairKey() << ": both have the final state J^pi = " << pair->GetJ(2)
+                      << (pair->GetPi(2) > 0 ? "+" : "-") << " at E_x = " << pair->GetHeavyExE() << " MeV (level " << level
+                      << " of that J^pi group).  A photon pair has its own final state: remove the duplicated pair, or"
+                      << " give it the energy of another level." << std::endl;
+  return true;
+}

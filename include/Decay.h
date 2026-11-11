@@ -12,9 +12,8 @@
  * and serves as a container class for the KGroup and the KLGroup vectors and their subsequent reaction pathways.
  */
 
-// The interference, pathway and capture-A_y rows are the pathway table's (PathwayTable.h); the trees hold them in the
+// The interference and pathway rows are the pathway table's (PathwayTable.h); the trees hold them in the
 // same types until they are deleted.
-using azure2::CaptureAyTerm;
 using azure2::DiagonalPathway;
 using azure2::FlatInterference;
 using azure2::InterferencePathway;
@@ -45,17 +44,6 @@ class Decay {
   KLGroup *GetKLGroup(int);
   const KLGroup *GetKLGroup(int i) const { return &klgroups_[i - 1]; }
 
-  //! Capture analyzing-power terms, filled by CNuc::CalcCaptureAnalyzingPower.
-  int NumCaptureAyTerms() const;
-  /// Add one \f$(t,t')\f$ pathway pair to the capture analyzing-power table.
-  void AddCaptureAyTerm(const CaptureAyTerm &);
-  /// Term \p i, 1-based.
-  const CaptureAyTerm *GetCaptureAyTerm(int) const;
-  /// Has the table been built? It is filled on first use, not at
-  /// initialization: it costs 9-j symbols a run without polarization segments
-  /// would never look at.
-  bool IsCaptureAyBuilt() const;
-  void SetCaptureAyBuilt();
   /*!
    * The interferences of all k,L groups as one flat table, in the order of
    * the groups (CNuc::CalcAngularDists builds it after the groups): what the
@@ -80,8 +68,6 @@ class Decay {
   int pair_;
   std::vector<KGroup> kgroups_;
   std::vector<KLGroup> klgroups_;
-  std::vector<CaptureAyTerm> captureAy_;
-  bool captureAyBuilt_ = false;
   std::vector<FlatInterference> flat_;
   std::vector<InterferencePathway> flatPathways_;
   int flatOrders_ = 0;

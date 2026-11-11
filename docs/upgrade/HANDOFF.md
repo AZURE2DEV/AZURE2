@@ -2,6 +2,46 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, pathway table) — capture A_y at set-up (`feature/upgrade-4-capture-ay`)
+
+**Done** (`cnuc_split.md` §11.6 step 6, §11.12).
+- `RequestCaptureAyTerms` (`include/CaptureAyRequests.h`, `src/CaptureAyRequests.cpp`) names every term (own and
+  leaf) of an analyzing-power data set or extrapolation with a photon exit, after the data are filled and before
+  `CNuc::Initialize`, in `AZUREMain`, `runMCMC` and both set-up paths of `AZUREAPI.cpp`.  `BuildPathwayTable` builds
+  the requested terms in the table's order (the table does not depend on the order of the requests), none for a beta
+  entrance.
+- `GenMatrixFunc::CalculateCaptureAnalyzingPower` and the capture-A_y block of `PointTBar` read the table; a point
+  whose terms were not requested is refused with a message naming the data set.  `CNuc::CalcCaptureAnalyzingPower`,
+  its static mutex and the trees' capture-A_y members are deleted.  The matrix functions read no tree any more.
+- Test `upgrade_capture_ay_requests` (every project in data and extrapolation mode: terms present for the capture-A_y
+  data sets `13N_capture_ay` and `capture_ay_coupling/models/twolevel.azr`, none for beta entrances, order independence,
+  refusal without the requests).
+
+**Verified**: (build `work/b-pathtab`, 0 warnings, 5 threads): 183 x 3 against `tab-trial12` (tag `tab-cayfinal`): 726 / 699 /
+726 identical; `ctest -LE slow` 178/178; `tests/run_tests.sh` 145 passed, 0 failed; converted-tree gate (`gcayfinal`):
+exit 0, 483 (456) identical, 38 classified, 0 differ, 0 missing; 1 against 3 threads in three bases on T1-T3, 13N,
+13N_capture_ay, beta_delayed_alpha, plus capture_ay_coupling and upos_pair_index through their check.sh: identical;
+fits at 1 thread against `b-trial12`, every output file identical: T2 `--use-lm` and `--use-gradient` (200 calls),
+13N_capture_ay MIGRAD, `--use-gradient` and `--use-lm`; capture_ay_coupling's twolevel.azr extrapolated in three
+bases identical (deuteron.azr is refused, as before); `AZURE_GRAD_CHECK` with the adjoint on 13N_capture_ay: 14
+components, largest relative difference to central differences 1.2e-9, the same numbers as the base build.  Cycles
+(1 thread, `--no-coulomb-table`, 5 runs alternated with `b-trial12`, minimum): T2 calculation 3.310e9 against 3.303e9
+(+0.2 %), 13N_capture_ay calculation 6.765e9 against 6.762e9 (+0.05 %); instructions +0.002 % and -0.004 %.
+
+**Two photon pairs with one final state are refused** (the director's decision): `ParseExternalCapture` stops with an
+ERROR naming both pair keys and the level (`FinalStateOfAnotherPair`, `src/CNucExternalCapture.cpp`); before, the
+second pair took the level and capture into the first ran without its external part and without a message
+(1.95e-9 against 4.32e-9).  Format 3 goes through the same function.  `tests/ec_final_state_ambiguous/check.sh` (d) the
+two-pair model, (e) its format-3 conversion (converted, refused when run); shown failing with the check disabled.
+Verified on that commit: 183 x 3 against `tab-trial12` (tag `tab-twopair`) 726 / 699 / 726 identical, no project
+newly refused; `ctest -LE slow` 178/178; `tests/run_tests.sh` 145 passed, 0 failed (the cases are in the existing
+project, so the count stays 145); gate (`gtwopair`) 483 (456) identical, 38 classified, 0 differ, 0 missing.  Two final states cannot share one photon pair
+(a second level in the 1 keV window is refused already).
+
+**Open.** Steps 3 and 8 (after the data classes are replaced).  Follow-up: the format-3 validation could refuse two
+photon pairs with one final state earlier, with a diagnostic code (not added: the schema and validation of
+`experiment/` are being edited by another agent); today the converter writes such a file and the run refuses it.
+
 ## 2026-11-11 (agent, brief Z) — `pyazr.Project`: a format-3 project as records in Python (`feature/upgrade-4-pyazr-project`)
 
 **Done.**

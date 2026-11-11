@@ -20,3 +20,15 @@ state of its gamma pair), with its own ANC line:
 - (c) the duplicate moved to 2 keV, outside the window, runs.
 
 dev b5faec4: (b) runs, attaching the capture to the first level.
+
+## Two photon pairs with one final state
+
+The other way round: `tests/13N` with a copy of its gamma pair under a new key (pair 3) and a copy of its first
+capture data set into that pair.  Both pairs name the ground state.  `ParseExternalCapture` gave the level the
+second pair's capture parameters, and capture into pair 2 ran without its external part and without a message
+(1.95e-9 against 4.32e-9 at the first point).  Now it stops with an ERROR naming both pair keys and the level
+(`FinalStateOfAnotherPair`, `src/CNucExternalCapture.cpp`):
+
+- (d) the two-pair model writes the ERROR and no chiSquared.out;
+- (e) its format-3 conversion (`AZURE2 --convert ... --to 3`) converts and is refused the same way when run.
+

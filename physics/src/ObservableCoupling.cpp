@@ -1,6 +1,6 @@
 // Coupling coefficients of the observables (ObservableCoupling.h; docs/upgrade/cnuc_split.md section 9).  The
-// expressions and the order of their factors are those of CNuc::CalcAngularDists and CNuc::CalcCaptureAnalyzingPower
-// before step 5, with AngCoeff's Clebsch-Gordan and Racah coefficients replaced by AngularCoupling's.
+// expressions and the order of their factors are those of CNuc::CalcAngularDists and of the capture-A_y build (now
+// BuildPathwayTable) before step 5, with AngCoeff's Clebsch-Gordan and Racah coefficients replaced by AngularCoupling's.
 #include "azure2/physics/ObservableCoupling.h"
 
 #include <cmath>

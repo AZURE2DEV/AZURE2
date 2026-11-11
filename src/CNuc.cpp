@@ -631,7 +631,6 @@ int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPa
       if (used) return -1;
       continue;
     }
-    // Here the J^pi group exists and holds a level at the final state's energy (above).
     const int levelNum = this->GetJGroup(jGroupNum)->IsLevel(probeLevel);
     // IsLevel is an energy-only match within 1 keV and returns the first level that fits.  Since e239a12 two
     // levels of one J^pi may sit within 1 keV of each other (different level IDs), so the pair's E_x can match
@@ -648,6 +647,7 @@ int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPa
         return -1;
       }
     }
+    if (FinalStateOfAnotherPair(*this, configure, jGroupNum, levelNum, ec->first)) return -1;
     this->GetJGroup(jGroupNum)->GetLevel(levelNum)->SetECParams(ec->first, ec->second);
     for (int ch = 1; ch <= this->GetJGroup(jGroupNum)->NumChannels(); ch++) {
       PPair *theFinalPair = this->GetPair(this->GetJGroup(jGroupNum)->GetChannel(ch)->GetPairNum());
@@ -1148,109 +1148,6 @@ void CNuc::CalcAngularDists(int maxL) {
   }
 }
 
-
-/*!
- * Builds the capture analyzing-power coefficient table for one decay.
- *
- * The Legendre coefficients of a particle-capture-\f$\gamma\f$ angular
- * distribution are R. G. Seyler and H. R. Weller, Phys. Rev. C \b 20 (1979)
- * 453, Eqs. (20) and (21) in the channel-spin representation -- the
- * representation AZURE2 already works in, so no recoupling is needed and the
- * \f$R\f$ of that paper is the T-matrix element the code already forms.
- *
- * \f$a_k\f$ (Eq. 20) reproduces the coefficients CalcAngularDists already
- * builds as \c z1z2, up to a factor 4; it is recomputed here so that the ratio
- * \f$A_y = \sum_k b_k P_k^1 / \sum_k a_k P_k\f$ is formed from two coefficients
- * in one convention, and so that the agreement with \c z1z2 is available as a
- * check.
- *
- * The essential difference from the unpolarized case is that \f$a_k\f$ requires
- * \f$s = s'\f$ while \f$b_k\f$ (Eq. 21) does not: the channel-spin off-diagonal
- * terms are precisely what an analyzing power is sensitive to and a cross
- * section is not. Pathways are therefore paired across KGroups, not within one.
- *
- * Called on first use rather than from Initialize, since the 9-j symbols cost
- * time a run without polarization segments should not pay.
- */
-
-void CNuc::CalcCaptureAnalyzingPower(int aa, int decayNum, int maxL) {
-  // Built lazily from the first capture A_y point that needs it, which may be
-  // computed on any OpenMP thread.  Setting the flag before the tables were
-  // filled let a second thread read half-built tables (13N_capture_ay chi2
-  // varied from run to run once all points were computed in one parallel
-  // pass), so the build is serialized and the flag is set only when it is done.
-  Decay *theDecay = this->GetPair(aa)->GetDecay(decayNum);
-  static std::mutex captureAyMutex;
-  std::lock_guard<std::mutex> lock(captureAyMutex);
-  if (theDecay->IsCaptureAyBuilt()) return;
-  struct MarkBuilt {
-    Decay *d;
-    ~MarkBuilt() { d->SetCaptureAyBuilt(); }
-  } markBuilt{theDecay};  // on every return path below, after the tables are complete
-
-  PPair *entrancePair = this->GetPair(aa);
-  PPair *exitPair = this->GetPair(theDecay->GetPairNum());
-  if (exitPair->GetPType() != 10) return;  // photon exit channels only
-
-  const double xSpin = entrancePair->GetJ(1);  // projectile, the light one
-  const double aSpin = entrancePair->GetJ(2);  // target
-  const double cSpin = exitPair->GetJ(2);      // residual nucleus
-  if (xSpin <= 0.0) return;                    // no vector polarization to have
-
-  // --- Flatten every pathway of the decay, internal and external. ---
-  struct Pathway {
-    int kGroup, path;
-    bool isEC;
-    azure2::physics::CapturePathway t;
-  };
-  std::vector<Pathway> paths;
-  for (int k = 1; k <= theDecay->NumKGroups(); k++) {
-    KGroup *theKGroup = theDecay->GetKGroup(k);
-    for (int m = 1; m <= theKGroup->NumMGroups(); m++) {
-      MGroup *theMGroup = theKGroup->GetMGroup(m);
-      JGroup *jgroup = this->GetJGroup(theMGroup->GetJNum());
-      AChannel *entranceChannel = jgroup->GetChannel(theMGroup->GetChNum());
-      AChannel *exitChannel = jgroup->GetChannel(theMGroup->GetChpNum());
-      paths.push_back(Pathway{k, m, false,
-                              {entranceChannel->GetL(), exitChannel->GetL(), Twice(jgroup->GetJ()),
-                               Twice(theKGroup->GetS()), (exitChannel->GetRadType() == 'E') ? 1 : 0}});
-    }
-    for (int m = 1; m <= theKGroup->NumECMGroups(); m++) {
-      ECMGroup *theECMGroup = theKGroup->GetECMGroup(m);
-      paths.push_back(Pathway{k, m, true,
-                              {theECMGroup->GetL(), theECMGroup->GetMult(), Twice(theECMGroup->GetJ()),
-                               Twice(theKGroup->GetS()), (theECMGroup->GetRadType() == 'E') ? 1 : 0}});
-    }
-  }
-  if (paths.empty()) return;
-
-  // a_k (Seyler and Weller, Eq. 20) and b_k (Eq. 21) with the light-first channel-spin phase (-1)^(s - s') on the
-  // channel-spin off-diagonal terms (before 2026-10-26, audit item 9, it was missing: fitting the capture A_y of a
-  // target with spin was the same as flipping the sign of every width with odd j1 + j2 - s, and inconsistent with the
-  // particle A_y of the same widths; tests/capture_ay_coupling); docs/upgrade/cnuc_split.md section 9.
-  for (size_t i1 = 0; i1 < paths.size(); i1++) {
-    const Pathway &t1 = paths[i1];
-    for (size_t i2 = 0; i2 < paths.size(); i2++) {
-      const Pathway &t2 = paths[i2];
-      for (int k = 0; k <= maxL; k++) {
-        const azure2::physics::CaptureAyCoefficients c =
-            azure2::physics::capture_ay_coefficients(t1.t, t2.t, k, Twice(xSpin), Twice(aSpin), Twice(cSpin));
-        if (fabs(c.a) < 1.e-10 && fabs(c.b) < 1.e-10) continue;
-        CaptureAyTerm term;
-        term.kOrder = k;
-        term.kGroup1 = t1.kGroup;
-        term.path1 = t1.path;
-        term.isEC1 = t1.isEC;
-        term.kGroup2 = t2.kGroup;
-        term.path2 = t2.path;
-        term.isEC2 = t2.isEC;
-        term.ak = c.a;
-        term.bk = c.b;
-        theDecay->AddCaptureAyTerm(term);
-      }
-    }
-  }
-}
 
 /*!
  * Fills the Minuit parameter array from initial values in the CNuc object.
