@@ -9,7 +9,10 @@
 #include <sstream>
 
 #include "azure2/experiment/BuildContext.h"
+#include "azure2/experiment/CovarianceFile.h"
+#include "azure2/experiment/FinalStates.h"
 #include "azure2/experiment/Grids.h"
+#include "azure2/experiment/Measurement.h"
 #include "azure2/experiment/ModelDatum.h"
 #include "azure2/physics/Elements.h"
 
@@ -18,6 +21,38 @@ namespace experiment {
 
 using build::Context;
 using build::Member;
+
+std::vector<std::string> ParameterNamesOf(const BuiltProject &b) {
+  std::vector<std::string> out;
+  auto add = [&](const std::string &name) {
+    if (!name.empty() && std::find(out.begin(), out.end(), name) == out.end()) out.push_back(name);
+  };
+  for (const auto &item : b.data.datasets.items) {
+    const ParameterNames &n = item.spec.names;
+    add(n.norm);
+    add(n.energyShift);
+    add(n.energyShiftSqrt);
+    for (const std::string &f : n.shiftFunction) add(f);
+    add(n.thickness);
+  }
+  for (const auto &item : b.extrapolations.extrapolations.items) {
+    add(item.spec.names.norm);
+    add(item.spec.names.energyShift);
+    add(item.spec.names.energyShiftSqrt);
+  }
+  for (const AbundanceRowSpec &row : b.abundances.abundances.rows)
+    if (!row.isSum && !row.isotope.empty()) add(AbundanceParameterName(row.sample, row.isotope, row.z, row.a));
+  for (const SpecList<TargetEffectSpec> *effects : {&b.data.targetEffects, &b.extrapolations.targetEffects})
+    for (const auto &item : effects->items) {
+      const TargetEffectSpec &e = item.spec;
+      if (e.targetName.empty()) continue;
+      if (e.screening) add(e.targetName + ".screening");
+      if (e.densityFit) add(e.targetName + ".areal_density");
+      if (e.dopplerFit) add(e.targetName + ".doppler");
+    }
+  for (const auto &source : b.parameterSources) add(source.first);
+  return out;
+}
 
 bool BuiltProject::Ok() const {
   for (const Diagnostic &d : diagnostics)
@@ -51,6 +86,7 @@ void Context::Warn(const char *code, const ValidatedRecord &record, const std::s
                    const std::string &found) {
   Error(code, record, field, message);
   out_.diagnostics.back().severity = Severity::Warning;
+  out_.diagnostics.back().hasFound = !found.empty();
   out_.diagnostics.back().found = found;
 }
 
@@ -317,19 +353,14 @@ bool ReadObservable(Context &c, const ValidatedRecord &r, const std::string &ang
   return false;
 }
 
-// The data file exists and its first row holds every column the roles name.
-bool CheckDataFile(Context &c, const ValidatedRecord &r, const std::string &file, std::size_t columns) {
+// A data file's path as the engine opens it: relative to the project directory ("" = the working directory).
+std::string DataPath(const Context &c, const std::string &file) {
   const bool absolute = !file.empty() && (file[0] == '/' || file[0] == '\\');
-  const std::string path = absolute || c.opt_.projectDir.empty() ? file : c.opt_.projectDir + "/" + file;
-  std::ifstream in(path);
-  if (!in) {
-    if (c.opt_.dataFiles == DataFiles::NotUsed) {  // an extrapolation run never opens it
-      c.Warn(codes::kDataFileNotRead, r, "file", "cannot read " + path + "; not read: this run does not use data", path);
-      return true;
-    }
-    c.Error(codes::kDataFile, r, "file", "cannot read " + path);
-    return false;
-  }
+  return absolute || c.opt_.projectDir.empty() ? file : c.opt_.projectDir + "/" + file;
+}
+
+// The data file exists and its first row holds every column the roles name (a run that may not read the data).
+bool CheckFirstDataRow(Context &c, const ValidatedRecord &r, const std::string &path, std::ifstream &in, std::size_t columns) {
   std::string line;
   while (std::getline(in, line)) {
     std::istringstream row(line);
@@ -347,6 +378,98 @@ bool CheckDataFile(Context &c, const ValidatedRecord &r, const std::string &file
   }
   c.Error(codes::kDataFile, r, "file", path + " holds no data row");
   return false;
+}
+
+// An error of `r` at `field` with the text found.
+void ErrorFound(Context &c, const char *code, const ValidatedRecord &r, const std::string &field, const std::string &message,
+                const std::string &found) {
+  c.Error(code, r, field, message);
+  c.out_.diagnostics.back().hasFound = true;
+  c.out_.diagnostics.back().found = found;
+}
+
+// The covariance file of a data set read by its one reader (CovarianceFile.h), and the data set's file among its
+// "file" lines, as the set-up requires; null after an error.
+std::shared_ptr<CovarianceFile> CheckCovarianceFile(Context &c, const ValidatedRecord &r, const DatasetSpec &d,
+                                                    const std::string &dataPath) {
+  CovarianceFileAccess access;
+  access.resolve = [&c](const std::string &name) { return DataPath(c, name); };
+  std::string err;
+  std::shared_ptr<CovarianceFile> f = ReadCovarianceFile(d.covarianceFile, access, err);
+  if (!f) {
+    ErrorFound(c, codes::kCovarianceFile, r, "covariance", err, d.covarianceFile);
+    return nullptr;
+  }
+  if (f->FileIndex(CanonicalPath(dataPath)) < 0) {
+    ErrorFound(c, codes::kCovarianceFile, r, "covariance",
+               "the data file " + d.dataFile + " is not among the \"file\" lines of the covariance file " + d.covarianceFile +
+                   " (" + std::to_string(f->files.size()) + " file(s), " + std::to_string(f->N) + " rows)",
+               d.covarianceFile);
+    return nullptr;
+  }
+  return f;
+}
+
+// The data file of an active data set as the run reads it.  A run that may not use the data (DataFiles::NotUsed: the
+// engine's own build, which runs before the menu) checks the first row's columns only.  A run that uses them
+// (--validate, --describe, pyazr.validate) reads every row as the set-up does and lists every row it would refuse:
+// one that does not parse, has fewer columns than the roles, an angular-coefficient row without a Legendre order, and
+// the covariance file: readable, covering the data file with its row count, a positive variance on every row inside
+// the window.  A non-positive uncertainty inside the window (no covariance file) is a warning: the run keeps the row.
+bool CheckDataFile(Context &c, const ValidatedRecord &r, const DatasetSpec &d, std::size_t columns) {
+  const std::string path = DataPath(c, d.dataFile);
+  std::ifstream in(path);
+  if (!in) {
+    if (c.opt_.dataFiles == DataFiles::NotUsed) {  // an extrapolation run never opens it
+      c.Warn(codes::kDataFileNotRead, r, "file", "cannot read " + path + "; not read: this run does not use data", path);
+      return true;
+    }
+    c.Error(codes::kDataFile, r, "file", "cannot read " + path);
+    return false;
+  }
+  if (c.opt_.dataFiles == DataFiles::NotUsed) return CheckFirstDataRow(c, r, path, in, columns);
+  bool ok = true;
+  std::shared_ptr<CovarianceFile> cov;
+  if (!d.covarianceFile.empty()) {
+    cov = CheckCovarianceFile(c, r, d, path);
+    ok = cov != nullptr;
+  }
+  const std::string canonicalData = cov ? CanonicalPath(path) : "";
+  auto checkKept = [&](const DataRow &row) -> std::string {
+    if (cov) {  // the set-up takes sqrt(C_ii) as the row's uncertainty (ESegment::Fill)
+      const int fileRow = cov->RowOf(canonicalData, row.record);
+      const double v = fileRow < 0 ? 0.0 : cov->Variance(fileRow, row.value);
+      if (v > 0.0) return "";
+      std::ostringstream m;
+      m << "row " << fileRow + 1 << " of the covariance file " << d.covarianceFile << " has a variance " << v << " <= 0";
+      return m.str();
+    }
+    if (row.error > 0.0) return "";
+    return row.error == 0.0 ? "the uncertainty is 0: the chi^2 skips the point (it is still counted in N)"
+                            : "the uncertainty is negative: the chi^2 squares it as if it were positive";
+  };
+  const bool orders = d.reaction.observable == Observable::AngularCoefficients;
+  const DataRowCheck check = CheckDataRows(in, d.dataFile, WindowOf(d), d.columns, orders, columns, checkKept);
+  for (const DataRowProblem &p : check.problems) {
+    const bool kept = p.kind == DataRowProblem::Kind::RefusedKept;
+    if (kept && !cov) {  // the run computes the chi^2 without the point (chi_squared.rst): a warning
+      c.Warn(codes::kDataError, r, "file", p.message, p.found);
+      continue;
+    }
+    const char *code = kept ? codes::kCovarianceFile
+                       : p.kind == DataRowProblem::Kind::TooFewColumns ? codes::kDataFile : codes::kDataRow;
+    ErrorFound(c, code, r, kept ? "covariance" : "file", p.message, p.found);
+    ok = false;
+  }
+  if (check.problemsNotListed > 0) {
+    c.Error(codes::kDataRow, r, "file", std::to_string(check.problemsNotListed) + " further problem(s) in " + d.dataFile + " not listed");
+    ok = false;
+  }
+  if (check.provenance.rowsRead == 0 && check.problems.empty()) {
+    c.Error(codes::kDataFile, r, "file", path + " holds no data row");
+    ok = false;
+  }
+  return ok;
 }
 
 // ---------------------------------------------------------------- shared nuisances (section 3.6)
@@ -433,7 +556,6 @@ bool BuildDataset(Context &c, const ValidatedRecord &r, DatasetSpec &d, Member &
   if (cols) {
     const std::string second = angleRole ? angleRole->role : (r.quantity && r.quantity->name == "legendre") ? "order" : "_";
     ok = build::DataColumns(c, r, cols->columns, second, d) && ok;
-    if (ok && m.active && c.opt_.readDataFiles) ok = CheckDataFile(c, r, d.dataFile, cols->columns.roles.size()) && ok;
   }
   build::EnergyWindow(r, d);
   // norm: its own nuisance, or a shared normalization record (its values in every member; the engine takes the group's
@@ -514,6 +636,8 @@ bool BuildDataset(Context &c, const ValidatedRecord &r, DatasetSpec &d, Member &
     }
     if (const Value *w = r.Get("thm_weight")) c.out_.thm.datasetWeights.push_back({d.key, w->word});
   }
+  // the data file last: the window, the column conversion and the covariance file are known
+  if (ok && cols && m.active && c.opt_.readDataFiles) ok = CheckDataFile(c, r, d, cols->columns.roles.size());
   return ok;
 }
 
@@ -633,6 +757,61 @@ void NameParameters(Context &c) {
   }
 }
 
+// ---------------------------------------------------------------- final states of external capture (FinalStates.h)
+
+// The refusals of the set-up's external capture (CNuc::ParseExternalCapture takes them from the same rule): the final
+// state of a photon pair with external capture is one level of <levels>; a pair that an active data set or
+// extrapolation exits into is refused without one (the set-up only warns about a pair nothing exits into); two levels
+// within 1 keV, or a level that is an earlier pair's final state, are refused in any case.  External capture is taken
+// as on (the API sets it up always; the command line when a data set exits into such a pair).
+void CheckFinalStates(Context &c, const LevelTables &levels) {
+  if (levels.externalCapturePairs.empty()) return;
+  // the record of the first active data set or extrapolation exiting into a pair (the diagnostic's place), by key
+  std::map<int, const ValidatedRecord *> user;
+  for (std::size_t i = 0; i < c.data_.size(); i++)
+    if (c.data_[i].active) user.emplace(c.out_.data.datasets.items[i].spec.reaction.exitKey, c.data_[i].record);
+  for (std::size_t i = 0; i < c.extrapolations_.size(); i++)
+    if (c.extrapolations_[i].active)
+      user.emplace(c.out_.extrapolations.extrapolations.items[i].spec.reaction.exitKey, c.extrapolations_[i].record);
+  auto report = [&](const char *code, int key, int otherKey, const std::string &message) {
+    auto u = user.find(key);
+    if (u == user.end() && otherKey) u = user.find(otherKey);
+    if (u != user.end()) {
+      c.Error(code, *u->second, "reaction", message);
+      return;
+    }
+    Diagnostic d;
+    d.code = code;
+    d.section = "levels";
+    d.message = message;
+    c.out_.diagnostics.push_back(d);
+  };
+  for (const FinalStateOfPair &f : ExternalCaptureFinalStates(levels, levels.externalCapturePairs)) {
+    const PairInfo *p = PairByKey(f.pairKey, levels.pairs);
+    std::ostringstream state;
+    state << "J^pi = " << (f.twoJ % 2 ? std::to_string(f.twoJ) + "/2" : std::to_string(f.twoJ / 2)) << (f.parity > 0 ? "+" : "-")
+          << " at E_x = " << f.energy << " MeV of " << NuclideLabel(p->heavyZ, p->heavyA);
+    const std::string pair = "photon pair " + std::to_string(f.pairKey) + " (" + PairLabel(*p) + ")";
+    if (f.levels.empty()) {
+      if (!user.count(f.pairKey)) continue;  // the set-up warns and switches its external capture off
+      report(codes::kFinalStateNotLevel, f.pairKey, 0,
+             "the external capture into " + pair + " needs its final state, " + state.str() + ", as a level of <levels> (with " +
+                 "its ANC and gamma widths); none is listed" + (f.groupExists ? " within 1 keV in that J^pi group" : ", and no level has that J^pi") +
+                 ": add the level, or give the pair the energy of a level");
+    } else if (f.levels.size() > 1) {
+      report(codes::kFinalStateNotLevel, f.pairKey, 0,
+             "the final state of " + pair + ", " + state.str() + ", is ambiguous: " + std::to_string(f.levels.size()) +
+                 " levels of that J^pi lie within 1 keV of it; move the extra level(s) by more than 1 keV");
+    } else if (f.sharedWithPairKey) {
+      report(codes::kFinalStateShared, f.pairKey, f.sharedWithPairKey,
+             "photon pairs " + std::to_string(f.sharedWithPairKey) + " and " + std::to_string(f.pairKey) +
+                 " both have the final state " + state.str() + " (level " + std::to_string(levels.levels[f.levels[0]].level) +
+                 " of that J^pi group); a photon pair has its own final state: remove the duplicated pair, or give it the "
+                 "energy of another level");
+    }
+  }
+}
+
 }  // namespace
 
 BuiltProject Schema::Build(const ValidationResult &validated, const LevelTables &levels, const BuildOptions &options) {
@@ -644,7 +823,7 @@ BuiltProject Schema::Build(const ValidationResult &validated, const LevelTables 
     Member m;
     m.record = &r;
     m.isData = r.kind == "dataset";
-    m.active = Word(r, "active", "yes") != "no";
+    m.active = options.allRecordsActive || Word(r, "active", "yes") != "no";
     if (m.isData) {
       SpecList<DatasetSpec>::Item item;
       item.spec.key = m.key = (int)c.data_.size() + 1;
@@ -662,6 +841,7 @@ BuiltProject Schema::Build(const ValidationResult &validated, const LevelTables 
   for (auto &x : out.thm.experiments) std::sort(x.datasetKeys.begin(), x.datasetKeys.end());
   build::BuildEffects(c);
   build::BuildPotentials(c);
+  if (options.setUpChecks) CheckFinalStates(c, levels);
   NameParameters(c);
   ModelDataBuild modelData = BuildModelData(validated, levels.levels, levels.pairs);
   out.modelData = std::move(modelData.data);

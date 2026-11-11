@@ -254,7 +254,7 @@ bool BuildBandData(CNuc *compound, EData *data, azure2::Results &results, const 
       ESegment *seg = data->GetSegment(tr.segment);
       size_t i = 0;
       for (int pid = 0; pid < seg->NumPoints(); pid++) {
-        EPoint *pt = seg->GetPoint(pid + 1);
+        EPoint *pt = seg->GetPoint(*data, pid + 1);
         if (!pt) continue;
         vector_r &row = fullGrad[pt];
         row.assign(nCols, 0.0);

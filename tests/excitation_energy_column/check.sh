@@ -30,7 +30,18 @@ ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
 mkdir -p "$WORK/output" "$WORK/checks"; cp -r "$LI/data" "$WORK/"
-awk '/<segmentsTest>/{print; print "1 3 3 1.0 2.0 0.25 0 0 0 0"; print "1 5 5 1.0 2.0 0.25 0 0 0 0"; skip=1; next} /<\/segmentsTest>/{skip=0} !skip{print}' "$LI/7Li_p_ay.azr" > "$WORK/m.azr"
+# the project's extrapolations replaced by two: elastic n + 7Be* (pair 3) and p + 7Li (pair 5), E_lab 1.0 .. 2.0 MeV
+export RECS="extrapolation n7Be_excited
+    reaction       7Be[0.429](n,n)7Be[0.429]
+    quantity       sigma
+    unit           b
+    energies       range 1.0 2.0 MeV lab step 0.25
+extrapolation p7Li
+    reaction       7Li(p,p)7Li
+    quantity       sigma_nuclear
+    unit           b
+    energies       range 1.0 2.0 MeV lab step 0.25"
+awk '/^<extrapolations>$/ { print; print ENVIRON["RECS"]; skip = 1; next } /^<\/extrapolations>$/ { skip = 0 } !skip { print }' "$LI/7Li_p_ay.azr" > "$WORK/m.azr"
 (cd "$WORK" && printf '3\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1)
 # column 1 = E_cm, column 2 = E_x: check E_x - E_cm against S + E*
 colcheck() {  # FILE EXPECTED-OFFSET LABEL

@@ -184,5 +184,31 @@ else
   bad "(e) no relativistic plain outputs to build the ratio data from"
 fi
 
+# ---- (g) a term at a fixed angle -------------------------------------------------------------------------------
+# R=3 file: T1 (c.m. n0+), FC, T2 (lab n0+), FL ; R=2 file: T3 (a,a) at 60 deg c.m., T4 (a,a) at 75.46 deg c.m.
+# FC: in c.m. data the term's angle is the fixed angle itself, FC = T1 / T3.  FL: in lab data the term's 60 deg lab
+# is converted with the term's pair, theta_cm = 60 + asin((m1/m2) sin 60) = 75.4606 deg (the angle of T4, computed in
+# make_models.py), and J = sin^2(60) / sin^2(theta_cm) cos(theta_cm - 60), so FL = T2 / (T4 / J).
+run fixed_angle fixed_angle 3 1
+fa="$WORK/fixed_angle/output/AZUREOut_aa=2_R=3.extrap"; fb="$WORK/fixed_angle/output/AZUREOut_aa=2_R=2.extrap"
+if [ -s "$fa" ] && [ -s "$fb" ]; then
+  p="$WORK/fixed"
+  rows "$fa" 1 > "$p.t1"; rows "$fa" 2 > "$p.fc"; rows "$fa" 3 > "$p.t2"; rows "$fa" 4 > "$p.fl"
+  rows "$fb" 1 > "$p.t3"; rows "$fb" 2 > "$p.t4"
+  tc="$(awk '$2 + 0 > 0 { print $2; exit }' "$p.t4")"
+  awk -v tc="$tc" 'BEGIN { pi = atan2(0, -1); l = 60 * pi / 180; c = tc * pi / 180
+                           j = (sin(l) / sin(c))^2 * cos(c - l) }
+                   { printf "%s %s %.12e\n", $1, $2, $3 / j }' "$p.t4" > "$p.t4lab"
+  n="$(wc -l < "$p.fc" | tr -d ' ')"
+  r="$(ratio_dev "$p.t1" "$p.t3" "$p.fc")"
+  if [ "$n" -ge 50 ] && le "$r" 1e-9; then ok "(g) c.m. ratio with a fixed-angle term = n0+ / (a,a)(60 deg c.m.) (max rel $r, $n points)"
+  else bad "(g) c.m. ratio with a fixed-angle term (max rel $r, $n points)"; fi
+  r="$(ratio_dev "$p.t2" "$p.t4lab" "$p.fl")"
+  if le "$r" 1e-8; then ok "(g) lab ratio with a term at 60 deg lab = n0+ / (a,a) at the c.m. angle $tc deg by the formula (max rel $r)"
+  else bad "(g) lab ratio with a term at 60 deg lab against the formula angle $tc deg (max rel $r)"; fi
+else
+  bad "(g) an extrapolation of the fixed-angle model is missing"; tail -5 "$WORK/fixed_angle/run.log"
+fi
+
 if [ "$failures" -eq 0 ]; then echo "ratio_frame: PASS"; else echo "ratio_frame: $failures check(s) FAILED"; fi
 [ "$failures" -eq 0 ]

@@ -41,17 +41,18 @@ ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 run() { (cd "$WORK/$1" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1); }
 
-UPOS='1  2  6  5.569971  6.569971  0  180  4  1  0  0  0  0.02  1  data/mixing_upos.dat  0  1  1  0.5  -0.094'
-grep -qF "$UPOS" "$SG/mixing.azr" || { echo "  FAIL  tests/secondary_gamma/models/mixing.azr no longer holds the UPOS line '$UPOS'"; exit 1; }
-# mixing NAME DELTA: the mixing model with the UPOS final state 3/2 and the given delta, the other two segments dropped
+UPOS='    secondary_gamma L 1 Ic 1/2 delta -0.094'
+grep -qF "$UPOS" "$SG/mixing.azr" || { echo "  FAIL  tests/secondary_gamma/models/mixing.azr no longer holds the UPOS field '$UPOS'"; exit 1; }
+# mixing NAME DELTA: the mixing model with the UPOS final state 3/2 and the given delta, the other two data sets dropped
 mixing() {
   mkdir -p "$WORK/$1/output" "$WORK/$1/checks"
   cp -r "$SG/data" "$WORK/$1/"
-  awk -v upos="$UPOS" -v delta="$2" '
+  awk -v upos="$UPOS" -v delta="$2" 'BEGIN { keep = 1 }
     { sub(/\r$/, "") }
-    /^<segmentsData>$/ { print; print "1  2  6  5.569971  6.569971  0  180  4  1  0  0  0  0.02  1  data/mixing_upos.dat  0  1  1  1.5  " delta; skip = 1; next }
-    /^<\/segmentsData>$/ { skip = 0 }
-    !skip { print }' "$SG/mixing.azr" > "$WORK/$1/t.azr"
+    /^dataset / { keep = ($2 == "mixing_upos") }
+    /^<\/data>$/ { keep = 1 }
+    $0 == upos { $0 = "    secondary_gamma L 1 Ic 3/2 delta " delta }
+    keep { print }' "$SG/mixing.azr" > "$WORK/$1/t.azr"
 }
 mixing d03 0.3
 mixing d00 0

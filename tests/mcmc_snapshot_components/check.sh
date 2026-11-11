@@ -22,11 +22,14 @@ bad() { echo "  FAIL  $1"; fail=1; }
 
 mkdir -p "$WORK/output" "$WORK/checks"
 cp -r "$HERE/../13N/data" "$WORK/data"
-awk '/<\/segmentsData>/ {
-       print "1 1 2 0.05 0.5 0 180 0 1 0 0 0 0 0 data/skowronski_luna_bgo.dat 0 0"
-       print "1 1 2 0.05 0.5 0 180 5 1 0 0 0 0 0 data/skowronski_luna_bgo.dat 0 0"
-       print "1 1 2 0.05 0.5 0 180 6 1 0 0 0 0 0 data/skowronski_luna_bgo.dat 0 0" }
-     { print }' "$HERE/../mcmc_physical_norm/13N_fast.azr" > "$WORK/t.azr"
+# three capture data sets on one file: the total, E1 only, E2 only
+export RECS="$(for m in total E1 E2; do
+  printf 'dataset bgo_%s\n    reaction       12C(p,g)13N\n    quantity       sigma\n    unit           b\n' "$m"
+  [ "$m" = total ] || printf '    multipole      %s\n' "$m"
+  printf '    file           data/skowronski_luna_bgo.dat\n    columns        E_lab[MeV] _ value error\n'
+  printf '    energy_window  0.05 0.5 MeV\n    norm           1 fixed\n'
+done)"
+awk '/^<\/data>$/ { print ENVIRON["RECS"] } { print }' "$HERE/../mcmc_physical_norm/13N_fast.azr" > "$WORK/t.azr"
 cd "$WORK"
 # mode 6: param file (blank), EC file (blank), walkers, steps, spread %, energy spread (default), threads, RWA?, overwrite?
 printf '6\n\n\n4\n100\n0.5\n\n1\nno\nyes\n' | "$AZURE2_BIN" --no-gui --no-readline t.azr > mcmc.log 2>&1

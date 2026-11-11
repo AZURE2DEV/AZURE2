@@ -8,6 +8,8 @@
 #include <utility>
 #include <vector>
 
+#include "azure2/experiment/CovarianceFile.h"
+
 /*!
  * Data covariance matrices (segment keyword "covariance <file>").
  *
@@ -50,39 +52,10 @@
  */
 namespace DataCovariance {
 
-/// Canonical form of a path for matching data files (weakly_canonical, as a string).
-std::string CanonicalPath(const std::string &path);
-
-/// A symmetric block of the matrix on a set of (0-based) rows, m x m row-major.
-struct Block {
-  std::vector<int> rows;
-  std::vector<double> values;
-};
-
-/// A parsed covariance file: its row layout and the terms.
-struct File {
-  std::string path;                                 ///< as written on the segment line
-  std::vector<std::string> files;                   ///< data files, as written in the header
-  std::vector<std::string> canonical;               ///< the same, CanonicalPath
-  std::vector<int> counts;                          ///< data rows of each file
-  std::vector<int> offsets;                         ///< 0-based row of each file's first record
-  int N = 0;                                        ///< total rows
-  std::vector<double> diag;                         ///< the diagonal terms (N)
-  std::vector<Block> blocks;                        ///< the block and matrix terms
-  std::vector<std::vector<double>> vectors;         ///< absolute rank-1 terms, each of size N
-  std::vector<std::vector<double>> rel;             ///< relvector fractions, each of size N
-  std::vector<double> diagB;                        ///< diagonal of B = diag + blocks (N)
-  /// C_ii with \p model standing in for the model in the relvector terms.
-  double Variance(int row, double model) const;
-  /// 0-based row of record \p record (1-based) of data file \p canonicalFile; -1 if none.
-  int RowOf(const std::string &canonicalFile, int record) const;
-  /// Index of \p canonicalFile in the header, or -1.
-  int FileIndex(const std::string &canonicalFile) const;
-  // Bookkeeping for the setup report.
-  int numSigmaMismatch = 0;                         ///< points whose error column differs > 1 % from sqrt(C_ii)
-  double worstSigmaMismatch = 0.0;
-  std::string firstSigmaMismatch;
-};
+/// The file and its reader live in experiment/ (CovarianceFile.h), where the validation reads it too.
+using File = azure2::experiment::CovarianceFile;
+using Block = azure2::experiment::CovarianceBlock;
+using azure2::experiment::CanonicalPath;
 
 /// Read a covariance file.  On failure returns null and writes the reason to \p err.
 /// cached: read the covariance file and the data files it lists through InputFiles (Config::cacheInputFiles).

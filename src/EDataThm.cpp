@@ -51,8 +51,8 @@ void EData::ThmGroupEnergyRange(EData &data, const EData::ThmGroup &group, doubl
   eHi = -1.0e300;
   for (int s : group.segments)
     for (int p = 1; p <= data.GetSegment(s)->NumPoints(); p++) {
-      eLo = std::min(eLo, data.GetSegment(s)->GetPoint(p)->GetCMEnergy());
-      eHi = std::max(eHi, data.GetSegment(s)->GetPoint(p)->GetCMEnergy());
+      eLo = std::min(eLo, data.GetSegment(s)->GetPoint(data, p)->GetCMEnergy());
+      eHi = std::max(eHi, data.GetSegment(s)->GetPoint(data, p)->GetCMEnergy());
     }
 }
 
@@ -158,7 +158,7 @@ bool ThmBuildWindow(EData &data, const Config &configure, const ThmExperiment &x
   std::vector<double> dataE;
   for (int s : group.segments)
     for (int p = 1; p <= data.GetSegment(s)->NumPoints(); p++)
-      dataE.push_back(data.GetSegment(s)->GetPoint(p)->GetCMEnergy());
+      dataE.push_back(data.GetSegment(s)->GetPoint(data, p)->GetCMEnergy());
   std::shared_ptr<ThmSpectatorWindow> window = std::make_shared<ThmSpectatorWindow>();
   std::string why = BuildThmSpectatorWindow(x, muSx, r.dk, dataE, *window);
   if (!why.empty()) {
@@ -186,7 +186,7 @@ bool ThmBuildWindow(EData &data, const Config &configure, const ThmExperiment &x
     << " MeV.";
   configure.outStream << w.str() << std::endl;
   group.window = window;
-  for (int s : group.segments) data.GetSegment(s)->SetThmSpectatorWindow(window);
+  for (int s : group.segments) data.GetSegment(s)->SetThmSpectatorWindow(data, window);
   return true;
 }
 
@@ -215,7 +215,7 @@ bool ThmBuildLineshape(EData &data, const Config &configure, CNuc *theCNuc, cons
   double eMax = -1.0e300;
   for (int s : group.segments)
     for (int p = 1; p <= data.GetSegment(s)->NumPoints(); p++)
-      eMax = std::max(eMax, data.GetSegment(s)->GetPoint(p)->GetCMEnergy());
+      eMax = std::max(eMax, data.GetSegment(s)->GetPoint(data, p)->GetCMEnergy());
   if (!(shape->EsF(eMax) > 0.0)) {
     configure.outStream << where << "lineshape=on: at E = " << eMax
                         << " MeV the spectator has no energy left (E_sF = E_aA - B - E = "
@@ -246,7 +246,7 @@ bool ThmBuildLineshape(EData &data, const Config &configure, CNuc *theCNuc, cons
     shape->exits.push_back(e);
   }
   group.lineshape = shape;
-  for (int s : group.segments) data.GetSegment(s)->SetThmLineshape(shape);
+  for (int s : group.segments) data.GetSegment(s)->SetThmLineshape(data, shape);
   return true;
 }
 
@@ -275,7 +275,7 @@ bool ThmBuildDwVertex(EData &data, const Config &configure, CNuc *theCNuc, const
   std::vector<double> energies;
   for (int s : group.segments)
     for (int p = 1; p <= data.GetSegment(s)->NumPoints(); p++)
-      energies.push_back(data.GetSegment(s)->GetPoint(p)->GetCMEnergy());
+      energies.push_back(data.GetSegment(s)->GetPoint(data, p)->GetCMEnergy());
   double eLo, eHi;
   EData::ThmGroupEnergyRange(data, group, eLo, eHi);
   std::shared_ptr<ThmDwVertex> v = std::make_shared<ThmDwVertex>();
@@ -313,7 +313,7 @@ bool ThmBuildDwVertex(EData &data, const Config &configure, CNuc *theCNuc, const
         << "]=; it multiplies the model with the DW vertex.";
   configure.outStream << l.str() << std::endl;
   group.dwVertex = v;
-  for (int s : group.segments) data.GetSegment(s)->SetThmDwVertex(v);
+  for (int s : group.segments) data.GetSegment(s)->SetThmDwVertex(data, v);
   return true;
 }
 
@@ -353,7 +353,7 @@ bool ThmBuildDistortion(EData &data, const Config &configure, const ThmExperimen
     d->vcm = std::sqrt(2.0 * dk.mBeam * uconv * dk.beamEnergy) / ((dk.mBeam + dk.mTarget) * uconv);
     for (int s : group.segments)
       for (int p = 1; p <= data.GetSegment(s)->NumPoints(); p++) {
-        std::string why = d->CheckEnergy(data.GetSegment(s)->GetPoint(p)->GetCMEnergy());
+        std::string why = d->CheckEnergy(data.GetSegment(s)->GetPoint(data, p)->GetCMEnergy());
         if (!why.empty()) {
           configure.outStream << where << "distortion: " << why << "." << std::endl;
           return false;
@@ -366,7 +366,7 @@ bool ThmBuildDistortion(EData &data, const Config &configure, const ThmExperimen
     // spectatorAngles=: every data point needs an accepted direction.
     for (int s = 0; why.empty() && d->angWindow && s < (int)group.segments.size(); s++)
       for (int p = 1; why.empty() && p <= data.GetSegment(group.segments[s])->NumPoints(); p++)
-        why = d->CheckWindow(data.GetSegment(group.segments[s])->GetPoint(p)->GetCMEnergy());
+        why = d->CheckWindow(data.GetSegment(group.segments[s])->GetPoint(data, p)->GetCMEnergy());
     if (!why.empty()) {
       configure.outStream << where << "distortion: " << why << "." << std::endl;
       return false;
@@ -400,7 +400,7 @@ bool ThmBuildDistortion(EData &data, const Config &configure, const ThmExperimen
         << "]=; both multiply its model (the distortion factor and the weight).";
   configure.outStream << l.str() << std::endl;
   group.distortion = d;
-  for (int s : group.segments) data.GetSegment(s)->SetThmDistortion(d);
+  for (int s : group.segments) data.GetSegment(s)->SetThmDistortion(data, d);
   return true;
 }
 
@@ -435,7 +435,7 @@ bool ThmBuildAngleWindow(EData &data, const Config &configure, CNuc *theCNuc, co
        "for 0-180).";
   configure.outStream << a.str() << std::endl;
   group.angle = w;
-  for (int s : group.segments) data.GetSegment(s)->SetThmAngleWindow(w);
+  for (int s : group.segments) data.GetSegment(s)->SetThmAngleWindow(data, w);
   return true;
 }
 
@@ -628,7 +628,7 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
            "Re and Im of c are fit parameters (cbkg_*).";
       configure.outStream << c.str() << std::endl;
       group.coherent = cb;
-      for (int s : group.segments) GetSegment(s)->SetThmCoherent(cb);
+      for (int s : group.segments) GetSegment(s)->SetThmCoherent(*this, cb);
     }
     thmGroups_.push_back(group);
   }
@@ -678,7 +678,7 @@ void GatherThmGroup(EData *data, const azure2::Results &results, const std::vect
     ESegment *seg = data->GetSegment(s);
     if (!seg->IsProfiledNorm()) continue;
     for (int p = 1; p <= seg->NumPoints(); p++) {
-      EPoint *pt = seg->GetPoint(p);
+      EPoint *pt = seg->GetPoint(*data, p);
       if (!pt) continue;
       m.push_back(pt->GetModelValue(results));
       d.push_back(seg->CMValue(p - 1));
@@ -703,7 +703,7 @@ double EData::ProfileThmGroup(int g, azure2::Results &results) {
     out.norm[s] = p.Norm();
     double chi = 0.0;
     for (int q = 1; q <= seg->NumPoints(); q++) {
-      if (!seg->GetPoint(q)) continue;
+      if (!seg->GetPoint(*this, q)) continue;
       double r = p.Residual(m[k], d[k], e[k], energy[k]);
       chi += r * r;
       k++;
@@ -719,7 +719,7 @@ void EData::ThmGroupResiduals(int g, int i, const azure2::Results &results, std:
   const ThmProfile &p = results.objective.thmProfiles[g];
   ESegment *seg = GetSegment(i);
   for (int q = 1; q <= seg->NumPoints(); q++) {
-    EPoint *pt = seg->GetPoint(q);
+    EPoint *pt = seg->GetPoint(*this, q);
     if (!pt) continue;
     out.push_back(p.Residual(pt->GetModelValue(results), seg->CMValue(q - 1), seg->CMError(q - 1),
                              pt->GetCMEnergy()));

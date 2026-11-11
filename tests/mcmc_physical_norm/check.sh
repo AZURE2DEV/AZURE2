@@ -34,7 +34,7 @@ read -r step walker logL norm < <(awk -F, -v n="$nfree" 'NR > 1 { s = $1 } END {
   read -r last
   awk -F, -v last="$last" 'NR > 1 && $1 == last && ($3 > best || best == "") { best = $3; line = $0 }
        END { n = split(line, f, ","); print f[1], f[2], f[4], f[n] }' output/samples.mcmc; })
-pnorm="$(awk '$1 ~ /_norm$/ { print $2 }' output/param.mcmc)"
+pnorm="$(awk '$1 ~ /\.norm$/ { print $2 }' output/param.mcmc)"
 echo "  last step $step, best walker $walker: sampled norm $norm, param.mcmc norm $pnorm, logL $logL"
 rel() { awk -v a="$1" -v b="$2" 'BEGIN { d = a - b; if (d < 0) d = -d; m = (a < 0 ? -a : a); if (m == 0) m = 1; printf "%.2e", d / m }'; }
 d="$(rel "$pnorm" "$norm")"
@@ -43,9 +43,9 @@ else bad "(a) param.mcmc norm $pnorm is not the sampled norm $norm (rel $d)"; fi
 # (b) re-evaluate the sampled point two ways: param.mcmc (the full RWA set, 7 digits) with the norm set
 # to the sampled value, and with the norm at its start value 1.  The likelihood the sampler recorded must
 # be the first (to the 7-digit rounding of the file, ~1e-5 of chi2) and not the second.
-norm0="$(awk '/<segmentsData>/ { on = 1; next } /<\/segmentsData>/ { on = 0 } on && $15 ~ /meyer_84/ { print $8 }' t.azr)"
-awk -v n="$norm" '$1 ~ /_norm$/ { $2 = n } { printf "%20s %20s %20s\n", $1, $2, $3 }' output/param.mcmc > sampled.par
-awk -v n="$norm0" '$1 ~ /_norm$/ { $2 = n } { printf "%20s %20s %20s\n", $1, $2, $3 }' output/param.mcmc > start.par
+norm0="$(awk '/^dataset / { on = ($2 == "meyer_84") } on && $1 == "norm" { print $2; exit }' t.azr)"
+awk -v n="$norm" '$1 ~ /\.norm$/ { $2 = n } { printf "%20s %20s %20s\n", $1, $2, $3 }' output/param.mcmc > sampled.par
+awk -v n="$norm0" '$1 ~ /\.norm$/ { $2 = n } { printf "%20s %20s %20s\n", $1, $2, $3 }' output/param.mcmc > start.par
 chi2_at() {  # chi2_at <parfile> -> data chi2 of a mode-1 calculation from that parameter file
   local d="calc_$(basename "$1" .par)"
   mkdir -p "$d/output" "$d/checks" && cp t.azr "$d/" && cp -r data "$d/"

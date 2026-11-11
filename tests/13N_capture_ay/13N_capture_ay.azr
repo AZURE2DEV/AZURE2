@@ -10,15 +10,9 @@ none                                                                            
 none                                                                                                #Coulomb Amplitudes Check
 none                                                                                                #Reaction Pathway Check
 none                                                                                                #Angular Distributions Check
-</config>
-<potential>
-useHybridPotential=0
 useAdaptiveGrid=1
-potentialType=0
-V0=150
-R=3.6
-a=0.6
-</potential>
+format=3
+</config>
 <levels>
 0.5 -1 0 1 1 1 1 2 1 1 0 1.62 0.5 1 0 1 0 1.00728 12 1 6 1.94351 1.94351 0 0 0.0 0 3.6 0 0 0
 0.5 -1 0 1 1 2 1 2 1 1 1 0 1 1 0.5 -1 0 0 13.0057 0 7 1.94351 0 0 0 0.0 10 0 0 0 5
@@ -63,16 +57,33 @@ a=0.6
 3.5 1 20 1 1 2 1 6 12 1 0 0 1 1 0.5 -1 0 0 13.0057 0 7 1.94351 0 0 0 0.0 10 0 0 0 5
 
 </levels>
-<segmentsData>
-1  1  2  0  5  0  180  4  1  0  0  0  0  0  data/capture_xs.dat  0  0
-1  1  2  0  5  0  180  7  1  0  0  0  0  0  data/capture_ay.dat  0  0
-</segmentsData>
-<segmentsTest>
-</segmentsTest>
-<targetInt>
-0              "8,9"          10             0              0              0              0               "" 0               1              5 1 0.943 0.834 0.688 0.517               0               "" 0               0 0.04 5 50
-0              "1,2"          10             0              0              1              0               "((a0*(x*1e3)^a1+a2*(x*1e3)^a3)*(a4/((x*1e3)^a5)*ln(a6/(x*1e3)+a7*(x*1e3))))/((a4/((x*1e3)^a5)*ln(a6/(x*1e3)+a7*(x*1e3)))+(a0*(x*1e3)^a1+a2*(x*1e3)^a3))/1e+21" 8 2.40289 0.00491497 2.49101 0.414939 1858.36 1.01581 2504.17 0.0181984               0              0               0               "" 0               0 0.04 5 50
-</targetInt>
+<data>
+# <segmentsData> line 1
+dataset capture_xs
+    reaction       12C(p,g)13N
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/capture_xs.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0 5 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 2
+dataset capture_ay
+    reaction       12C(p,g)13N
+    quantity       analyzing_power
+    unit           1
+    file           data/capture_ay.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0 5 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+</targets>
 <parameterSettings>
 # Fitting parameter settings (only non-fixed parameters shown)
 # Format: name value lower_limit upper_limit error fit_error nuisance category minuit_index
@@ -90,54 +101,6 @@ Level 6 Channel 14 Width (eV) 1100 0 0 110 0 0 level 10
 Level 9 Energy (MeV) 3.5453 0 0 0.01 0 0 level 11
 Level 9 Channel 21 Width (eV) 49000 0 0 4900 0 0 level 12
 Level 9 Channel 22 Width (eV) 1e-05 0 0 1e-06 0 0 level 13
-segment_1_norm 1 0 0 0 0 0 norm -1
-segment_2_norm 1 0 0 0 0 0 norm -1
-segment_3_norm 1 0 0 5 0 0 norm -1
-segment_4_norm 1 0 0 0 0 0 norm -1
-segment_5_norm 1 0 0 0 0 0 norm -1
-segment_6_norm 1 0 0 0 0 0 norm -1
-segment_7_norm 1 0 0 0 0 0 norm -1
-segment_8_norm 1 0 0 0 0 0 norm -1
-segment_9_norm 1 0 0 0 0 0 norm -1
-segment_10_norm 1 0 0 10 0 0 norm -1
-segment_11_norm 1 0 0 0 0 0 norm -1
-segment_12_norm 1 0 0 0 0 0 norm -1
-segment_13_norm 1 0 0 0 0 0 norm -1
-segment_14_norm 1 0 0 0 0 0 norm -1
-segment_15_norm 1 0 0 0 0 0 norm -1
-segment_16_norm 1 0 0 0 0 0 norm -1
-segment_1_energy_shift 0 0 0 0 0 0 shift 14
-segment_2_energy_shift 0 0 0 0 0 0 shift 15
-segment_3_energy_shift 0 0 0 0.005 0 0 shift 16
-segment_4_energy_shift 0 0 0 0 0 0 shift 17
-segment_5_energy_shift 0 0 0 0 0 0 shift 18
-segment_6_energy_shift 0 0 0 0 0 0 shift 19
-segment_7_energy_shift 0 0 0 0 0 0 shift 20
-segment_8_energy_shift 0 0 0 0 0 0 shift 21
-segment_9_energy_shift 0 0 0 0 0 0 shift 22
-segment_10_energy_shift 0 0 0 0.001 0 0 shift 23
-segment_11_energy_shift 0 0 0 0 0 0 shift 24
-segment_12_energy_shift 0 0 0 0 0 0 shift 25
-segment_13_energy_shift 0 0 0 0 0 0 shift 26
-segment_14_energy_shift 0 0 0 0 0 0 shift 27
-segment_15_energy_shift 0 0 0 0 0 0 shift 28
-segment_16_energy_shift 0 0 0 0 0 0 shift 29
+capture_xs.shift.offset 0 0 0 0 0 0 shift 14
+capture_ay.shift.offset 0 0 0 0 0 0 shift 15
 </parameterSettings>
-<lastRun>
-10089
-"output/param.sav"
-"output/intEC.dat"
-1 2
-1 "temperatures.dat"
-0.07 10 -1.
-</lastRun>
-<mcmc>
-nwalkers 50
-nsteps 10000
-chainspread 5
-energyspread 1
-nthreads 4
-usereducedwidths 0
-<parameters>
-</parameters>
-</mcmc>

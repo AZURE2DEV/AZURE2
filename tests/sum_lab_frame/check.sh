@@ -40,7 +40,7 @@ run() {
   shift 5 2> /dev/null || shift $#
   mkdir -p "$dir/output" "$dir/checks"
   cp "$HERE/models/$model.azr" "$dir/t.azr"
-  cp -r "$HERE/models/data" "$dir/"
+  cp -rn "$HERE/models/data" "$dir/"  # -n: data written by this script (sum.dat) stay
   [ "$kin" = 1 ] && echo 1 > "$dir/kinflag.dat"
   # shellcheck disable=SC2086
   (cd "$dir" && for kv in "$@"; do export "$kv"; done

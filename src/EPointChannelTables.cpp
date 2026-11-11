@@ -11,19 +11,19 @@
 #include "CNuc.h"
 #include "ChannelTable.h"
 #include "Config.h"
+#include "EData.h"
 #include "EPoint.h"
 #include "IntegratedFermiFunc.h"
 #include "JGroup.h"
 #include "Kinematics.h"
+#include "azure2/physics/AstrophysicalFactor.h"
 #include "PPair.h"
 #include "ScatteringLength.h"
 #include "ShftFunc.h"
 #include "ThmFunc.h"
 #include "ThmLineshape.h"
 
-/*!
- * Returns the geometrical cross section factor \f$ \frac{\pi}{k^2} \f$.
- */
+/// Returns the geometrical cross section factor \f$ \frac{\pi}{k^2} \f$.
 
 double EPoint::GetGeometricalFactor() const {
   return geofactor_;
@@ -167,7 +167,7 @@ double EPoint::CompoundEnergy(CNuc *theCNuc) {
   return this->GetCMEnergy() + entrancePair->GetSepE() + entrancePair->GetExE();
 }
 
-void EPoint::ChannelKeys(CNuc *theCNuc, std::vector<ChannelTable::Key> &keys, bool includeSubPoints) {
+void EPoint::ChannelKeys(EData *data, CNuc *theCNuc, std::vector<ChannelTable::Key> &keys, bool includeSubPoints) {
   // The walk of CalcEDependentValues: the blocks of the entrance pair's compound nucleus, their particle channels,
   // E_c by the same expression; the exact threshold of a scattering length is not a row.
   PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
@@ -186,11 +186,11 @@ void EPoint::ChannelKeys(CNuc *theCNuc, std::vector<ChannelTable::Key> &keys, bo
     }
   }
   if (includeSubPoints)
-    for (int i = 1; i <= this->NumSubPoints(); i++) this->GetSubPoint(i)->ChannelKeys(theCNuc, keys, true);
+    for (int i = 1; i <= this->NumSubPoints(); i++) this->GetSubPoint(*data, i)->ChannelKeys(data, theCNuc, keys, true);
 }
 
-void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool includeSubPoints, bool shareWithMapped,
-                                  const ChannelRowSource *rows) {
+void EPoint::CalcEDependentValues(EData *data, CNuc *theCNuc, const Config &configure, bool includeSubPoints,
+                                  EData *shareWithMappedOf, const ChannelRowSource *rows) {
   AZUREProfile::Timer profileTimer(AZUREProfile::kEDependent);
   PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
   PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
@@ -205,7 +205,10 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   } else {
     inEnergy = this->CompoundEnergy(theCNuc);
     geofactor = Kinematics::Channel(entrancePair).PiOverK2(this->GetCMEnergy());
-    sfactorconv = this->GetCMEnergy() * exp(2 * pi * sqrt(uconv / 2.) * fstruc * entrancePair->GetZ(1) * entrancePair->GetZ(2) * sqrt(entrancePair->GetRedMass() / this->GetCMEnergy()));
+    // The output's S factor column: physics::sfactor_conversion, and E sigma for a neutral pair (eta = 0).
+    const azure2::physics::ChannelKinematics kin = Kinematics::Channel(entrancePair).Physics();
+    sfactorconv = (kin.z1 * kin.z2 == 0) ? this->GetCMEnergy()
+                                         : azure2::physics::sfactor_conversion(kin, this->GetCMEnergy());
   }
   // THM (HOES) cross sections are in arbitrary units and extend below the
   // entrance threshold, where the Gamow conversion is undefined (NaN).
@@ -234,10 +237,10 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   // channels of the entrance pair share an l; ThmCoulombTerm's small memo
   // cannot hold them once a window has more than 32 nodes).
   std::map<int, std::vector<complex>> psCoulByL;
-  if (this->IsTHM() && thm_window_) {
+  if (this->IsTHM() && settings_->thmWindow) {
     // The accepted directions at this point's energy (or, for a folding
     // sub-point beyond the reach of the window, at the nearest data point).
-    thm_window_->Nodes(this->GetCMEnergy(), psNodes);
+    settings_->thmWindow->Nodes(this->GetCMEnergy(), psNodes);
     psTable = std::make_shared<ThmPsTable>();
     psTable->nodes = (int)psNodes.size();
     psTable->offset.assign(theCNuc->NumJGroups() + 1, 0);
@@ -313,7 +316,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
         double thmJl = 0.0;
         double thmRhoDjl = 0.0;
         complex thmCoul(0.0, 0.0);
-        const ThmSpectatorWindow *window = this->IsTHM() ? thm_window_ : nullptr;
+        const ThmSpectatorWindow *window = this->IsTHM() ? settings_->thmWindow : nullptr;
         if (window) {
           // Spectator-momentum window (ps=..., ThmLineshape.h): the pieces at
           // every node p_k of this energy, with T_k = p_k^2/2 mu_sx added to
@@ -401,7 +404,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   }
   if (includeSubPoints) {
     for (int i = 1; i <= this->NumSubPoints(); i++) {
-      this->GetSubPoint(i)->CalcEDependentValues(theCNuc, configure, true, true, rows);
+      this->GetSubPoint(*data, i)->CalcEDependentValues(data, theCNuc, configure, true, nullptr, rows);
     }
   }
   // The points mapped onto this one share its tables -- at setup and on a grid
@@ -412,8 +415,8 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   // (EData::FillEnergyShiftsFromParams), and two threads assigning the same
   // shared_ptr freed the tables under the other's copy-on-write
   // (heap-use-after-free, AddressSanitizer 2026-11-06; macOS CI aborts).
-  const azure2::MappedPoints mappedPts = this->PlanMapped();
-  for (int i = 1; shareWithMapped && i <= mappedPts.size(); i++) {
+  const azure2::MappedPoints mappedPts = this->PlanMapped(shareWithMappedOf);
+  for (int i = 1; i <= mappedPts.size(); i++) {
     EPoint *mappedPoint = mappedPts[i - 1];
     if (mappedPoint->OwnsEDependentValues()) continue;
     mappedPoint->geofactor_ = geofactor_;
@@ -423,12 +426,12 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
     mappedPoint->thm_ps_ = thm_ps_;
     if (!includeSubPoints) continue;
     for (int ii = 1; ii <= this->NumSubPoints(); ii++) {
-      EPoint *subMappedPoint = mappedPoint->GetSubPoint(ii);
-      subMappedPoint->geofactor_ = this->GetSubPoint(ii)->geofactor_;
-      subMappedPoint->sfactorconv_ = this->GetSubPoint(ii)->sfactorconv_;
-      subMappedPoint->screen_k_ = this->GetSubPoint(ii)->screen_k_;
-      subMappedPoint->edep_ = this->GetSubPoint(ii)->edep_;
-      subMappedPoint->thm_ps_ = this->GetSubPoint(ii)->thm_ps_;
+      EPoint *subMappedPoint = mappedPoint->GetSubPoint(*data, ii);
+      subMappedPoint->geofactor_ = this->GetSubPoint(*data, ii)->geofactor_;
+      subMappedPoint->sfactorconv_ = this->GetSubPoint(*data, ii)->sfactorconv_;
+      subMappedPoint->screen_k_ = this->GetSubPoint(*data, ii)->screen_k_;
+      subMappedPoint->edep_ = this->GetSubPoint(*data, ii)->edep_;
+      subMappedPoint->thm_ps_ = this->GetSubPoint(*data, ii)->thm_ps_;
     }
   }
   eDependentEnergy_ = this->GetCMEnergy();
@@ -460,7 +463,7 @@ void EPoint::ClearEDependentRows() {
  * Recalculates energy-dependent values using the current (possibly shifted) energy.
  * This is needed when energy shifts are applied after initialization.
  */
-void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config &configure, bool includeSubPoints,
+void EPoint::RecalcEDependentValues(EData *data, CNuc *theCNuc, const Config &configure, bool includeSubPoints,
                                     const ChannelRowSource *rows) {
   // Nothing to do while the energy is the one the values were computed at.
   // Every sub-point of a target-effect point used to pay for this on every
@@ -487,15 +490,15 @@ void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config &configure, bool
   // only doubled the cost of every shift step (all Coulomb functions of every
   // sub-point, twice, serially).
   if (includeSubPoints)
-    for (int i = 1; i <= this->NumSubPoints(); i++) this->GetSubPoint(i)->ClearEDependentRows();
+    for (int i = 1; i <= this->NumSubPoints(); i++) this->GetSubPoint(*data, i)->ClearEDependentRows();
 
   // Recalculate with current energy.  The points mapped onto this one are not
   // touched: each is re-energised itself, from its host's values
   // (CopyEDependentValuesFrom) or anew (ESegment::UpdatePointEnergyWithShift).
-  this->CalcEDependentValues(theCNuc, configure, includeSubPoints, false, rows);
+  this->CalcEDependentValues(data, theCNuc, configure, includeSubPoints, nullptr, rows);
 
   // Also recalculate Coulomb amplitude with current energy
-  this->CalcCoulombAmplitude(theCNuc, includeSubPoints);
+  this->CalcCoulombAmplitude(data, theCNuc, includeSubPoints);
 }
 
 /*!
@@ -657,7 +660,7 @@ void EPoint::AddExpHardSpherePhase(int jGroupNum, int channelNum, complex expShi
  * Calculates the Coulomb amplitude \f$ C_\alpha \f$ for the data point.
  */
 
-void EPoint::CalcCoulombAmplitude(CNuc *theCNuc, bool includeSubPoints) {
+void EPoint::CalcCoulombAmplitude(EData *data, CNuc *theCNuc, bool includeSubPoints) {
   if (this->GetEntranceKey() == this->GetExitKey()) {
     PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
     int z1 = entrancePair->GetZ(1);
@@ -699,7 +702,7 @@ void EPoint::CalcCoulombAmplitude(CNuc *theCNuc, bool includeSubPoints) {
   }
   if (!includeSubPoints) return;
   for (int i = 1; i <= this->NumSubPoints(); i++) {
-    this->GetSubPoint(i)->CalcCoulombAmplitude(theCNuc);
+    this->GetSubPoint(*data, i)->CalcCoulombAmplitude(data, theCNuc);
   }
 }
 

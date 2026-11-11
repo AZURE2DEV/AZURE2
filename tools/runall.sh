@@ -27,7 +27,8 @@ usage() { echo "usage: SRC_TESTS=<tests dir> WORK=<scratch> [JOBS=n] runall.sh E
 HERE=$(cd "$(dirname "$0")" && pwd)
 BIN=$1; TAG=$2; shift 2
 MODES=("$@"); [ ${#MODES[@]} -eq 0 ] && MODES=("" "--no-brune" "--use-park")
-DIRS=$(cd "$SRC_TESTS" && find . -name '*.azr' -not -path '*/output/*' | sed 's|/[^/]*$||; s|^\./||' | sort -u)
+# tests/convert/ holds the originals of converted projects (fixtures of the converter, without data): not run
+DIRS=$(cd "$SRC_TESTS" && find . -name '*.azr' -not -path '*/output/*' -not -path './convert/*' | sed 's|/[^/]*$||; s|^\./||' | sort -u)
 for m in "${MODES[@]}"; do
   for d in $DIRS; do echo "$SRC_TESTS $WORK/cmp $TAG $BIN '$m' $d"; done
 done | xargs -P "${JOBS:-1}" -L 1 bash "$HERE/run_one.sh"

@@ -277,7 +277,7 @@ int EData::ResolveShiftFunctions(const Config &configure) {
       const int constOwner = segments_[m].GetShiftLeaderPos() >= 0 ? segments_[m].GetShiftLeaderPos() : m;
       std::vector<double> e;
       for (int pid = 1; pid <= segments_[m].NumPoints(); pid++) {
-        EPoint *pt = segments_[m].GetPoint(pid);
+        EPoint *pt = segments_[m].GetPoint(*this, pid);
         e.push_back(pt->GetOriginalEnergy() > 0 ? pt->GetOriginalEnergy() : pt->GetLabEnergy());
       }
       std::sort(e.begin(), e.end());

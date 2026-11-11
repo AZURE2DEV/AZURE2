@@ -335,7 +335,8 @@ int main() {
   }
   // the build checks need <levels> pairs and data files: their cases are in build_test.cpp (Schema::Build);
   // E_UNKNOWN_PAIR and E_AMBIGUOUS_PAIR have a case in both (a datum's pair above, a data set's reaction there)
-  const std::set<std::string> buildCodes = {"E_PAIR_KEY",    "E_DATA_FILE",   "W_DATA_FILE_NOT_READ",
+  const std::set<std::string> buildCodes = {"E_PAIR_KEY",    "E_DATA_FILE",   "W_DATA_FILE_NOT_READ", "E_DATA_ROW", "W_DATA_ERROR",
+                                            "E_COVARIANCE_FILE", "E_FINAL_STATE_NOT_LEVEL", "E_FINAL_STATE_SHARED",
                                             "E_NOT_BUILT",    "E_THM_RELATIVISTIC", "E_THM_COVARIANCE", "E_FOLD_CONFLICT",
                                             "E_POTENTIAL_TWICE", "E_POTENTIAL_PAIR_KIND", "E_POTENTIAL_RELATIVISTIC",
                                             "E_THM_HYBRID_POTENTIAL", "E_OLD_POTENTIAL_BLOCK", "E_SO_TWO_SPINS", "E_SO_ZERO_SPIN",

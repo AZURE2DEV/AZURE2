@@ -17,6 +17,8 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import old_tree  # noqa: E402  (the old originals of converted projects)
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
 
@@ -38,7 +40,7 @@ except Exception as err:                       # same skip as the other pyazr te
     sys.exit(0)
 
 PROJECT = os.path.join(ROOT, "tests", "norm_groups")
-AZR = os.path.join(PROJECT, "norm_groups.azr")
+AZR = old_tree.original(os.path.join(PROJECT, "norm_groups.azr"))  # the old file (format3_tree.md)
 
 print("1. the normgroup block is read")
 s = {x.key: x for x in SegmentSet.from_file(AZR)}

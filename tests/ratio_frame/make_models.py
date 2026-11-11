@@ -21,6 +21,7 @@ compared with the ratio of the plain segments' lab values):
 
 Run from this directory: python3 make_models.py  (writes models/).
 """
+import math
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -110,6 +111,18 @@ def main():
                 f"1  2  3  {e}  0  0  15  0  1  1  1  2  5  -999"]  # R7 angle-integrated ratio
     write("particle", PARTICLE_LEVELS, particle)
     write("particle_rel", PARTICLE_LEVELS, particle, "relativistic=1\n")
+    # A term at a fixed angle in the c.m. frame (FC: the term's frame angle is the fixed angle, not converted) and in
+    # the lab (FL: converted with the term's pair); the elastic c.m. angle of 60 deg lab, theta_cm = theta_lab +
+    # asin((m1/m2) sin theta_lab) with the pair's masses, written out so the check has a value of its own.
+    m1, m2, tl = 4.0026, 13.0033, 60.0
+    tc = tl + math.degrees(math.asin(m1 / m2 * math.sin(math.radians(tl))))
+    fixed = [f"1  2  3  {full}  5",                         # T1 c.m. n0+
+             f"1  2  3  {full}  5  1  1  1  2  2  60",       # FC c.m. n0+ / (a,a)(60 deg c.m.)
+             f"1  2  3  {full}  1",                         # T2 lab n0+
+             f"1  2  3  {full}  1  1  1  1  2  2  60",       # FL lab n0+ / (a,a)(60 deg lab)
+             f"1  2  2  {e}  60  60  15  5",                # T3 c.m. (a,a) at 60 deg c.m.
+             f"1  2  2  {e}  {tc:.15g}  {tc:.15g}  15  5"]  # T4 c.m. (a,a) at the c.m. angle of 60 deg lab
+    write("fixed_angle", PARTICLE_LEVELS, fixed)
 
     ge = "2.0  6.0  1.0"
     gfull = f"{ge}  10  170  40"

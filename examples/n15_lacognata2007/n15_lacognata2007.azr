@@ -10,6 +10,7 @@ none                                                                            
 none                                                                                                #Coulomb Amplitudes Check
 none                                                                                                #Reaction Pathway Check
 none                                                                                                #Angular Distributions Check
+format=3
 </config>
 <levels>
 1 -1 12.431033085025357 0 1 1 2 0 1 1 0 949.8400776962612 0.5 1 0.5 -1 0 1.00727645 14.99626884 1 7 12.127412 12.127412 0 0 0.0 0 4.85 0 0 0 2.224566 0
@@ -33,20 +34,43 @@ none                                                                            
 3 -1 13.269224 1 1 2 0 6 5 1 0  1299.5430027921952 0 1 0 1 0 4.00150609 11.99670852 2 6 12.127412 7.161918 0 0 0.0 0 5.43 0 0 0 0.000000 0
 
 </levels>
-<segmentsData>
-1  1  2  0.000000  2.000000  0  180  0  0.9747205860300547  1  0  0  0  0  data/thm_lc2007_tab3_sigma.dat  0  0
-1  1  2  0.000000  2.000000  0  180  0  1.0427830056156089  1  5  0  0  0  data/redder82.dat  0  0
-1  1  2  0.000000  2.000000  0  180  0  1.0793010900668574  1  15  0  0  0  data/schardt52.dat  0  0
-</segmentsData>
-<segmentsTest>
-</segmentsTest>
-<targetInt>
+<data>
+# <segmentsData> line 1
+dataset thm_lc2007_tab3_sigma
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thm_lc2007_tab3_sigma.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0.000000 2.000000 MeV
+    norm           0.9747205860300547 fit
 
-</targetInt>
+# <segmentsData> line 2
+dataset redder82
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/redder82.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0.000000 2.000000 MeV
+    norm           1.0427830056156089 fit prior 1 5%
+
+# <segmentsData> line 3
+dataset schardt52
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/schardt52.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0.000000 2.000000 MeV
+    norm           1.0793010900668574 fit prior 1 15%
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+</targets>
 <parameterSettings>
 # Prior centres: segment_N_norm|segment_N_energy_shift prior_centre value
-segment_2_norm prior_centre 1
-segment_3_norm prior_centre 1
 </parameterSettings>
 <thm>
 # no THM segment here: Table 3 is fitted as an on-shell S(E), so these options act on no segment

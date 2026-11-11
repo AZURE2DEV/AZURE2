@@ -18,23 +18,14 @@
 #include "ChannelTable.h"
 #include "EPointTables.h"
 #include "Results.h"
+#include "TermSettings.h"
+#include "UnitRange.h"
 
-/// A container structure for a reference to a data point.
-
-/*!
- * If a point is mapped back to another in the calculation, this structure
- * hold the relevant indices of the map point.
- */
-
+/// Where a mapped point is mapped: the host's segment and point (1-based).
 struct EnergyMap {
-  /// The segment index for the map
   int segment;
-  /// The point index for the map
   int point;
 };
-
-#include <memory>
-#include <vector>
 
 class ESegment;
 class EData;
@@ -105,7 +96,7 @@ class EPoint {
   /// The point of row `row` (0-based) of a measurement, taking its conventions from the segment.  The point reads
   /// what was measured there (energy, value, uncertainty, bins, file record, Legendre order) from the rows, which the
   /// segment's measurement keeps alive and never changes.
-  EPoint(const azure2::experiment::MeasurementRows &rows, int row, ESegment *);
+  EPoint(const azure2::experiment::MeasurementRows &rows, int row, const ESegment *segment, int term);
   /// A point at a given c.m. energy and angle that is no row of a measurement (a sub-point of a target effect), with
   /// the conventions of term `term` of the segment (ESegment::TermEntranceKey ...).
   EPoint(double angle, double energy, const ESegment *segment, int term);
@@ -119,30 +110,24 @@ class EPoint {
   bool IsTHM() const;
   /// Weight table multiplying the THM model cross section (<thm> weight[k]=),
   /// or null.  Owned by the parent ESegment.
-  const ThmWeightTable *GetThmWeight() const { return thm_weight_; }
+  const ThmWeightTable *GetThmWeight() const { return settings_->thmWeight; }
   /// Coulomb line shape of the point's THM experiment (lineshape=on), or
   /// null.  Owned by the parent ESegment.
-  const ThmLineshape *GetThmLineshape() const { return thm_lineshape_; }
-  void SetThmLineshape(const ThmLineshape *l);
+  const ThmLineshape *GetThmLineshape() const { return settings_->thmLineshape; }
   /// Spectator-momentum window of the point's THM experiment (ps=...), or
   /// null.  Owned by the parent ESegment.
-  const ThmSpectatorWindow *GetThmSpectatorWindow() const { return thm_window_; }
-  void SetThmSpectatorWindow(const ThmSpectatorWindow *w);
+  const ThmSpectatorWindow *GetThmSpectatorWindow() const { return settings_->thmWindow; }
   /// Distortion factor R(E) of the point's THM experiment (distortion=...),
   /// or null.  Owned by the parent ESegment.
-  const ThmDistortion *GetThmDistortion() const { return thm_distortion_; }
-  void SetThmDistortion(const ThmDistortion *d);
+  const ThmDistortion *GetThmDistortion() const { return settings_->thmDistortion; }
   /// Distorted-wave entrance vertex of the point's THM experiment
   /// (vertexModel=dw), or null (the plane-wave vertex).
-  const ThmDwVertex *GetThmDwVertex() const { return thm_dw_; }
-  void SetThmDwVertex(const ThmDwVertex *v);
+  const ThmDwVertex *GetThmDwVertex() const { return settings_->thmDw; }
   /// Angular window of the point's THM experiment (theta=thmin-thmax), or
   /// null (the angle-integrated observable).  Owned by the parent ESegment.
-  const ThmAngleWindow *GetThmAngleWindow() const { return thm_angle_; }
-  void SetThmAngleWindow(const ThmAngleWindow *w);
+  const ThmAngleWindow *GetThmAngleWindow() const { return settings_->thmAngle; }
   /// THM coherent background of the point's experiment (cbackground=), or null.
-  const ThmCoherentBackground *GetThmCoherent() const { return thm_coherent_; }
-  void SetThmCoherent(const ThmCoherentBackground *c);
+  const ThmCoherentBackground *GetThmCoherent() const { return settings_->thmCoherent; }
   /// Is this point calculated by another? Points at equal energies are mapped onto one so the energy-dependent work is done once.
   bool IsMapped() const;
   /// Does the point carry target effects?
@@ -150,15 +135,13 @@ class EPoint {
   /// Angular distribution?
   bool IsAngularDist() const;
   //! Vector analyzing power point; the fit value is A_y, not a cross section.
-  bool IsAnalyzingPower() const { return is_analyzing_power_; };
-  void SetIsAnalyzingPower(bool v) { is_analyzing_power_ = v; };
+  bool IsAnalyzingPower() const { return settings_->analyzingPower; };
   /// The total cross section of the entrance pair (optical theorem), ESegment::IsTotalTerm.
-  bool IsTotal() const { return is_total_; };
-  void SetIsTotal(bool v) { is_total_ = v; };
+  bool IsTotal() const { return settings_->total; };
   //! A_y is kept beside the cross section rather than replacing it, because
   //! target-effect integration needs the cross section as the weight.
   double GetAnalyzingPower(const azure2::Results &r) const { return Rec(r)[azure2::Results::kAy]; };
-  void SetAnalyzingPower(azure2::Results &r, double v) { Rec(r)[azure2::Results::kAy] = v; };
+  void SetAnalyzingPower(azure2::Results &r, double v) const { Rec(r)[azure2::Results::kAy] = v; };
   //! The user-defined resolution kernel built for this point (shared, so
   //! copies of the point and of the data set do not duplicate it), and the
   //! projectile rest energy (MeV) its time-of-flight conversion uses.
@@ -193,7 +176,7 @@ class EPoint {
    * cross section is the bare one times f = exp(k U_e), k = pi eta / E_cm of the entrance pair
    * (CalcEDependentValues), U_e in MeV.  param is the 1-based number of the screening
    * parameter (EData::ScreeningEffects), 0 = not screened.  Set by EData::ApplyScreening on every
-   * point and sub-point of the effect's segments; a new sub-point inherits it (AddSubPoint).
+   * point and sub-point of the effect's segments; a new sub-point inherits it (EData::AddSubPoint).
    */
   void SetScreening(double ueMeV, int param) { screen_ue_ = ueMeV; screen_param_ = param; }
   int GetScreeningParam() const { return screen_param_; }
@@ -213,7 +196,7 @@ class EPoint {
   /// Orbital angular momentum. Phase-shift points only.
   int GetL() const;
   /// Number of sub-points, the samples a target-effect integral is evaluated on.
-  int NumSubPoints() const;
+  int NumSubPoints() const { return sub_count_; }
   /// 1-based position of the TargetEffect in the parent EData.
   int GetTargetEffectNum() const;
   /// Weight in [0,1] with which the target effect applies to this point;
@@ -250,7 +233,7 @@ class EPoint {
   bool GetCoefficientAbsolute() const;
   /// A_0 = sigma_int / 4 pi (b/sr) of an angular-distribution point, set with its coefficients.
   double GetAngDistA0(const azure2::Results &r) const { return Rec(r)[azure2::Results::kA0]; };
-  void SetAngDistA0(azure2::Results &r, double a0) { Rec(r)[azure2::Results::kA0] = a0; };
+  void SetAngDistA0(azure2::Results &r, double a0) const { Rec(r)[azure2::Results::kA0] = a0; };
   /// Angular momentum of the secondary decay. UPOS points only.
   int GetSecondaryDecayL() const;
   /// Angle in the lab frame.
@@ -267,19 +250,14 @@ class EPoint {
   double GetOriginalEnergy() const;
   /// Legendre polynomial of the given order at this point's angle.
   double GetLegendreP(int) const;
-  /// Measured cross section, lab frame.
-  double GetLabCrossSection() const;
-  /// Measured uncertainty, lab frame.
-  double GetLabCrossSectionError() const;
-  /// 1-based number of the point's data row in its file (comments and blank lines not
-  /// counted); 0 for a point not read from a file.  Rows of a data covariance file.
-  int GetFileRecord() const;
   /// The point's row in its segment's measurement (0-based), -1 for a point that is no row (a sub-point).
-  int Row() const { return IsRow() ? row_ : -1; }
+  int Row() const { return is_sub_point_ ? -1 : row_; }
+  /// Give the point its term's settings (ESegment::SetTermSettings, at set-up).
+  void UseSettings(const TermSettings *settings) { settings_ = settings; }
   /// Make this point a sub-point of `parent`'s row: it takes the row's Legendre order (an angular-coefficient row)
   /// but none of its data.
   void BelongToRowOf(const EPoint &parent) {
-    rows_ = parent.rows_;
+    legendre_order_ = parent.legendre_order_;
     row_ = parent.row_;
     is_sub_point_ = true;
   }
@@ -312,7 +290,7 @@ class EPoint {
   /// Total spin. Phase-shift points only.
   double GetJ() const;
   /// Channel spin of a phase-shift point (< 0: the segment gave none, so a single spin must match).
-  double GetPhaseS() const { return phase_s_value_; }
+  double GetPhaseS() const { return settings_->phaseS; }
   /// Stopping cross section at this sub-point, for a yield-curve target integration.
   double GetStoppingPower() const;
   /// Beam energy loss across the target at this point.
@@ -348,7 +326,8 @@ class EPoint {
   /// Where this point is mapped, if it is.
   EnergyMap GetMap() const;
   /// Compute everything that depends on energy but not on the fit parameters. Run once before fitting.
-  void Initialize(CNuc *, const Config &);
+  /// `data`: the data set that holds the point (its target effect may carry Q coefficients), null outside one.
+  void Initialize(EData *data, CNuc *, const Config &);
   /// Fill the compound excitation energy from the c.m. energy (a sub-point moved by an energy shift).
   void ConvertExcitationEnergy(PPair *);
   /// Take the energies, c.m. angle and c.m. bin edges of the point's row from its segment's frame
@@ -375,13 +354,13 @@ class EPoint {
   /// Set \f$\pi/k^2\f$.
   void SetGeometricalFactor(double);
   /// Record the calculated cross section.
-  void SetFitCrossSection(azure2::Results &r, double v) { Rec(r)[azure2::Results::kSigma] = v; }
+  void SetFitCrossSection(azure2::Results &r, double v) const { Rec(r)[azure2::Results::kSigma] = v; }
   /// The abundance-weighted term of each compound nucleus at this point of a
   /// natural-target segment, indexed by nucleus (azure2::EvaluateModelPoint).
   std::vector<double> GetNaturalTerms(const azure2::Results &r) const;
   void SetNaturalTerms(azure2::Results &r, const std::vector<double> &terms);
-  void SetFitE1CrossSection(azure2::Results &r, double v) { Rec(r)[azure2::Results::kSigmaE1] = v; }
-  void SetFitE2CrossSection(azure2::Results &r, double v) { Rec(r)[azure2::Results::kSigmaE2] = v; }
+  void SetFitE1CrossSection(azure2::Results &r, double v) const { Rec(r)[azure2::Results::kSigmaE1] = v; }
+  void SetFitE2CrossSection(azure2::Results &r, double v) const { Rec(r)[azure2::Results::kSigmaE2] = v; }
   /// Where the point's result record lies in the buffer of an evaluation (Results.h, docs/upgrade/data_model.md S3):
   /// its offset, assigned by the layout of the data set that holds the point (EData::LayoutResults) or by the caller
   /// of a calculation on a point outside a data set (UsePrivateRecord); kNoRecord before either.  The point holds
@@ -390,7 +369,9 @@ class EPoint {
   std::size_t ResultSlot() const { return slot_; }
   /// Slots for angular-distribution coefficients a unit needs: max_ang_dist_order + 1 for an angular-distribution
   /// or coefficient point (GenMatrixFunc writes min(maxLOrder, max_ang_dist_order) + 1 of them), else 0.
-  int ResultAngularCapacity() const { return (is_ang_dist_ && max_ang_dist_order_ >= 0) ? max_ang_dist_order_ + 1 : 0; }
+  int ResultAngularCapacity() const {
+    return (settings_->angularDist && settings_->maxAngDistOrder >= 0) ? settings_->maxAngDistOrder + 1 : 0;
+  }
   int ResultAngularSlots() const { return num_ang_slots_; }
   int ResultNaturalSlots() const { return num_natural_slots_; }
   /// Place the point's record at offset `slot`, with nAng angular and nNat natural slots.
@@ -427,7 +408,8 @@ class EPoint {
   /// and a warning naming the segment, the role of the point, its energy and the error, the first time in a run.
   /// Used by azure2::EvaluateModelPoint and EData::CalculatePointsInParallel (before 2026-11-01
   /// both gave 0 or left the term out, silently).
-  void MarkFailed(azure2::Results &results, const char *role, const Config &configure, const char *why);
+  /// `data` is the data set that holds the point (its plan names the mapped points), null for a point outside one.
+  void MarkFailed(EData *data, azure2::Results &results, const char *role, const Config &configure, const char *why);
   int GetSegmentKey() const { return segment_key_; }
   /// Set the cross-section to S-factor conversion.
   void SetSFactorConversion(double);
@@ -435,28 +417,29 @@ class EPoint {
   void SetCMEnergy(double);
   void SetLabAngle(double);
   void SetCMAngle(double);
-  void SetExitKey(int);
-  void SetEntranceKey(int);
-  /// Compute the Legendre polynomials up to a maximum order.
-  void CalcLegendreP(int, CNuc *, TargetEffect *);
+  /// Compute the Legendre polynomials up to a maximum order.  The functions below that reach the point's sub-points
+  /// take `data`, the data set that holds them (null for a point outside one, which has none).
+  void CalcLegendreP(EData *data, int, CNuc *, TargetEffect *);
   /// Compute the geometrical factor, S-factor conversion, \f$L_o\f$ elements, penetrabilities and phases together.
   /// With includeSubPoints false the sub-points are left alone (their energies are updated, and their values recomputed, separately).
-  /// With shareWithMapped true (setup, grid re-placement) the points mapped onto this one (EData::MapData) are given
-  /// the same tables; RecalcEDependentValues passes false (see there).
+  /// With `shareWithMappedOf`, the data set that holds the point (setup, grid re-placement), the points its plan maps
+  /// onto this one are given the same tables; null: none (RecalcEDependentValues, see there; a sub-point; a point
+  /// outside a data set).
   /// The rows of the open and closed particle channels are read from the tables of `rows` (docs/upgrade/
   /// channel_table.md) when one holds them, and otherwise computed (ChannelTable::Compute), once per (pair, l, E_c)
   /// of the point; rows->used, when set, receives every row used.
-  void CalcEDependentValues(CNuc *, const Config &, bool includeSubPoints = true, bool shareWithMapped = true,
+  void CalcEDependentValues(EData *data, CNuc *, const Config &, bool includeSubPoints, EData *shareWithMappedOf,
                             const ChannelRowSource *rows = nullptr);
   /// The keys (pair, l, E_c) of the channel-table rows CalcEDependentValues reads for this point and, with
   /// includeSubPoints, its sub-points: the same blocks, channels and channel energies.
-  void ChannelKeys(CNuc *, std::vector<ChannelTable::Key> &, bool includeSubPoints = true);
+  void ChannelKeys(EData *data, CNuc *, std::vector<ChannelTable::Key> &, bool includeSubPoints = true);
   /// The compound-nucleus energy E_x (MeV) at which CalcEDependentValues evaluates the channels.
   double CompoundEnergy(CNuc *);
   /// Recompute those at the current, possibly shifted, energy.  Writes this point (and its sub-points) only, never the
   /// points mapped onto it: on an energy shift each of those is re-energised on its own (ESegment::
   /// UpdatePointEnergyWithShift), possibly at the same time on another thread.
-  void RecalcEDependentValues(CNuc *, const Config &, bool includeSubPoints = true, const ChannelRowSource *rows = nullptr);
+  void RecalcEDependentValues(EData *data, CNuc *, const Config &, bool includeSubPoints = true,
+                              const ChannelRowSource *rows = nullptr);
   /// Take the energy-dependent values (not the angle-dependent Coulomb amplitude) from a point at the same energy; false if the energies differ.
   bool CopyEDependentValuesFrom(const EPoint &);
   /// Empties the per-JGroup rows of the energy-dependent arrays, keeping their storage.
@@ -472,20 +455,23 @@ class EPoint {
   /// Store a hard-sphere phase factor at (J-group, channel).
   void AddExpHardSpherePhase(int, int, complex);
   /// Compute the Coulomb amplitude \f$C_\alpha\f$.
-  void CalcCoulombAmplitude(CNuc *, bool includeSubPoints = true);
+  void CalcCoulombAmplitude(EData *data, CNuc *, bool includeSubPoints = true);
   /// Set the Coulomb amplitude directly.
   void SetCoulombAmplitude(complex);
   /// Compute the external-capture amplitudes for every matching pathway.
   /// `table`: the stage's channel table, for sqrt(P) and exp(-i phi) at a_c (null: computed).
-  void CalculateECAmplitudes(CNuc *, const Config &, const ChannelTable *table = nullptr);
+  void CalculateECAmplitudes(EData *data, CNuc *, const Config &, const ChannelTable *table = nullptr);
   void AddECAmplitude(int, int, complex);
   void AddECAmplitude(int, int, complex, double);
   void ClearECAmplitudes();
   /// Calculate the point (and the points mapped onto it, its sub-points) for the current parameters, writing the
-  /// values into `results`, the buffer of the evaluation laid out by the point's data set.
-  void Calculate(CNuc *, const Config &configure, azure2::Results &results, EPoint *parent = NULL, int subPointNum = 0);
+  /// values into `results`, the buffer of the evaluation laid out by `data`, the data set that holds the point: its
+  /// plan names the points mapped onto it, its target effects the fold.  Null for a point outside any data set (no
+  /// target effect, no plan: a reaction-rate point).
+  void Calculate(EData *data, CNuc *, const Config &configure, azure2::Results &results, EPoint *parent = NULL,
+                 int subPointNum = 0);
   /// The sub-point stage of a thin-target integration, with its sigma(E_bar) fallback (see the .cpp).
-  void CalculateThinTarget(CNuc *, const Config &configure, azure2::Results &results, TargetEffect *effect);
+  void CalculateThinTarget(EData &data, CNuc *, const Config &configure, azure2::Results &results, TargetEffect *effect);
   void SetMap(int, int);
   void ClearMapping();
   /// A mapped point that keeps its own energy-dependent values: a component of a SUM, RATIO or total-capture segment
@@ -499,14 +485,21 @@ class EPoint {
   void SetPlanTask(int task) { plan_task_ = task; }
   /// Take a copy of the point out of the plan: it calculates itself alone (a probe).
   void DetachFromPlan() { plan_task_ = -1; }
-  /// The points this point calculates besides itself, from its data set's plan (empty unless it is a task's host).
-  azure2::MappedPoints PlanMapped() const;
+  /// The points this point calculates besides itself, from the plan of `data`, the data set that holds it (empty
+  /// unless it is a task's host; empty for a null data set).
+  azure2::MappedPoints PlanMapped(EData *data) const;
   void SetTargetEffectNum(int);
-  void AddSubPoint(EPoint);
-  void IntegrateTargetEffect(const Config &, azure2::Results &results);
+  /// Make `sub` a sub-point of this point (EData::AddSubPoint places it): it shares the term's settings and the
+  /// point's screening.
+  void MakeSubPoint(EPoint &sub) const;
+  /// The point's sub-points, a range of the units of `data` (EData::Units); set by the data set.
+  int SubPointFirst() const { return sub_first_; }
+  void SetSubPointRange(int first, int count) { sub_first_ = first, sub_count_ = count; }
+  /// The folds below take the data set that holds the point: the point's target effect is one of its effects.
+  void IntegrateTargetEffect(const EData &data, const Config &, azure2::Results &results);
   /// IntegrateTargetEffect on given sub-point values (0-based, one per sub-point) instead of the sub-points' slots:
   /// the integrated value, nothing written (the transform of a transmission or yield segment, src/ModelPass.cpp).
-  double IntegrateSubPointValues(const Config &, const std::vector<double> &values);
+  double IntegrateSubPointValues(const EData &data, const Config &, const std::vector<double> &values);
   /*!
    * Free-gas Doppler broadening on this point's sub-point grid (TargetEffect::IsDoppler): the weights w with
    * sigma_D(eCM) = sum w.second * sigma(sub-point w.first), sigma linear in E between sub-points, from the
@@ -515,7 +508,7 @@ class EPoint {
    * layout temperature and the pieces are those of the nominal temperature (TargetEffect::HasDopplerFit), so
    * only the kernel values depend on the current T; \p dwdT, if given, receives dw/dT (per K) on the same nodes.
    */
-  void DopplerWeights(double eCM, std::vector<std::pair<int, double>> &w,
+  void DopplerWeights(const EData &data, double eCM, std::vector<std::pair<int, double>> &w,
                       std::vector<std::pair<int, double>> *dwdT = nullptr) const;
   /*!
    * d/dT of the integrated value (IntegrateTargetEffect) for the sub-point values \p values (0-based): the
@@ -523,7 +516,7 @@ class EPoint {
    * at the point for a line without a kernel.  0 when the line has no Doppler step or it is applied elsewhere
    * (DopplerAppliedScope).  For the analytic gradient of a fitted temperature (doppler_<n>).
    */
-  double DopplerTemperatureDerivative(const Config &, const std::vector<double> &values);
+  double DopplerTemperatureDerivative(const EData &data, const Config &, const std::vector<double> &values);
   /*!
    * While alive, IntegrateTargetEffect (and TargetEffectWeights) skip the Doppler step: for the
    * transmission/yield assembly (TransformedValue in src/ModelPass.cpp), which broadens the terms itself before the
@@ -542,11 +535,11 @@ class EPoint {
   /// Exact weights c (0-based, one per sub-point) of IntegrateTargetEffect:
   /// yield = sum_i c[i] * (sub-point i's cross-section slot).  False if the
   /// integrator is not a pure linear form for this point.
-  bool TargetEffectWeights(const Config &, std::vector<double> &c);
-  void IntegrateTargetEffectForObservable(const Config &, azure2::Results &results);
+  bool TargetEffectWeights(const EData &data, const Config &, std::vector<double> &c);
+  void IntegrateTargetEffectForObservable(const EData &data, const Config &, azure2::Results &results);
   /// Integrate the E1 and E2 components of the cross section over the same
   /// sub-points as the total, for a segment compared against one component.
-  void IntegrateTargetEffectComponents(const Config &, azure2::Results &results);
+  void IntegrateTargetEffectComponents(const EData &data, const Config &, azure2::Results &results);
   /// Per-point energy window (columns 5-6 of the data file) of a beam-profile
   /// effect: the detector-reconstructed energy slice the point was built from.
   bool HasBinWindow() const { return bin_low_cm_ == bin_low_cm_ && bin_high_cm_ == bin_high_cm_; };
@@ -563,63 +556,48 @@ class EPoint {
   /// detailed-balance weight: Q_gamma = S_entrance - Ex_final (MeV) and the
   /// compound-nucleus mass (MeV).
   void SetPhotoKinematics(double qGamma, double compoundMassMeV) { photo_qgamma_ = qGamma; photo_mcn_ = compoundMassMeV; };
-  void SetParentData(EData *);
   void SetStoppingPower(double);
   void SetTargetThickness(double);
   void SetAngularDists(azure2::Results &r, vector_r dists);
-  EData *GetParentData() const;
-  EPoint *GetSubPoint(int);
-  std::vector<EPoint> &GetSubPoints();
+  /// Sub-point i (1-based) in the units of `data`, the data set that holds the point; null beyond the last.
+  EPoint *GetSubPoint(EData &data, int i);
+  const EPoint *GetSubPoint(const EData &data, int i) const;
+  UnitRange<EPoint> GetSubPoints(EData &data);
  private:
   /// Body of IntegrateTargetEffect on a value type V (double or TELinearForm);
   /// rd(j) supplies sub-point j's value.
   template <class V, class Read>
-  V IntegrateTargetEffectImpl(const Config &, Read rd);
+  V IntegrateTargetEffectImpl(const EData &data, const Config &, Read rd);
   /// The line's kernels (Gaussian, target integration, UDR, beam profile) on sub-point values rd(j).
   template <class V, class Read>
-  V IntegrateKernelsImpl(const Config &, Read rd);
+  V IntegrateKernelsImpl(const EData &data, const Config &, Read rd);
   /// sigma at E_bar = E - D from the sub-point values: the single node, a quadratic through three fallback
   /// nodes, or a linear interpolation on a full grid.
   template <class V, class Read>
-  V TargetFallbackImpl(Read rd);
+  V TargetFallbackImpl(const EData &data, Read rd);
   bool doppler_applied_ = false;  ///< see DopplerAppliedScope
-  bool is_differential_;
-  bool is_phase_;
-  bool is_thm_;
-  const ThmWeightTable *thm_weight_ = nullptr;
-  const ThmLineshape *thm_lineshape_ = nullptr;
-  const ThmSpectatorWindow *thm_window_ = nullptr;
-  const ThmDistortion *thm_distortion_ = nullptr;
-  const ThmDwVertex *thm_dw_ = nullptr;
-  const ThmAngleWindow *thm_angle_ = nullptr;
-  const ThmCoherentBackground *thm_coherent_ = nullptr;
   bool is_mapped_;
-  bool is_ang_dist_;
-  bool is_analyzing_power_ = false;
   bool is_sub_point_ = false;
   double cm_factor_ = 1.0;   ///< c.m./lab energy factor of the point's entrance pair (SetTargetKinematics)
   int bohr_z1_ = 0;          ///< beam charge of the entrance pair, for Bohr straggling
   int bohr_z2_ = 0;          ///< target charge of the entrance pair
   SubGridSpec sub_grid_spec_;
-  int entrance_key_;
-  int exit_key_;
   int segment_key_;
-  int l_value_;
   int targetEffectNum_;
   double target_blend_weight_ = 1.0;
   bool target_fallback_only_ = false;   ///< see SetTargetFallbackOnly
   bool target_fallback_now_ = false;    ///< see TargetFallbackScope
   double target_fallback_depth_ = 0.0;  ///< D = E - E_bar, c.m. MeV (see SetTargetFallbackOnly)
-  int max_ang_dist_order_;
   double cm_angle_;
   double lab_angle_;       ///< the lab angle the point is calculated at: its row's, a fixed angle, or a parent's
   double nominal_energy_;  ///< a point that is no row: its energy before any shift (MeV)
-  /// The rows of the measurement the point belongs to and its row there (shared, immutable); null and -1 for a point
-  /// that is no row.
-  const azure2::experiment::MeasurementRows *rows_ = nullptr;
-  int row_ = -1;
-  /// The point is a row of a measurement (not a sub-point of one, not a free point).
-  bool IsRow() const { return rows_ && !is_sub_point_; }
+  /// What the point's term computes (shared, immutable once set up; TermSettings.h).
+  /// Not owning: the term (segment or leaf) holds the record by a shared pointer that every copy of the data set
+  /// copies, so a copy of a unit touches no reference count.  A point outside a data set owns its own (own_settings_).
+  const TermSettings *settings_ = nullptr;
+  std::shared_ptr<const TermSettings> own_settings_;
+  int row_ = -1;            ///< the point's row in its measurement (0-based), -1 for a point that is no row
+  int legendre_order_ = -1; ///< the Legendre order k of an angular-coefficient row (and its sub-points), else -1
   double cm_energy_;
   double lab_energy_;
   double excitation_energy_;
@@ -630,8 +608,6 @@ class EPoint {
   double screen_k_ = 0.0;
   double screen_ue_ = 0.0;
   int screen_param_ = 0;
-  double j_value_;
-  double phase_s_value_ = -1.0;
   double stoppingPower_;
   double targetThickness_;
   double targetLabEnergy_ = 0.0;
@@ -643,10 +619,6 @@ class EPoint {
   double bin_high_cm_ = std::numeric_limits<double>::quiet_NaN();
   double photo_qgamma_ = 0.0;
   double photo_mcn_ = 0.0;
-  bool isUPOS_;
-  int secondaryDecayL_;
-  double Ic_;
-  double delta_;
   struct EnergyMap energy_map_;
   complex coulombamplitude_;
   // Direct and exchange Coulomb amplitudes, kept apart only for an identical
@@ -654,18 +626,12 @@ class EPoint {
   bool spinDependentCoulomb_ = false;
   complex coulombdirect_ = complex(0., 0.);
   complex coulombexchange_ = complex(0., 0.);
-  // The Legendre polynomials P_l(cos theta) of the point, by order.  Filled at
-  // setup and on an energy shift; shared between EData clones (see
-  // EDependentTables below) and written only through MutableLegendre().
-  SharedTable<vector_r> legendreP_;
-  // The energy-dependent channel tables, one row per J group: L_o elements,
-  // square roots of the penetrabilities, Coulomb and hard-sphere phase factors.
-  // They are filled at setup and rewritten only when the point's energy or grid
-  // changes, so the EData clones of a fit (AZURECalc::InitializePools, one per
-  // thread) share them instead of deep-copying them: a clone of a folded
-  // project with ~10^6 sub-points held ~7 GB of these rows.  Copying an EPoint
-  // copies the pointer; every writer goes through MutableEDep(), which gives
+  // The Legendre polynomials P_l(cos theta) of the point, by order, and the energy-dependent channel tables (one row
+  // per J group: L_o, sqrt(P), Coulomb and hard-sphere phase factors).  Filled at set-up and rewritten only when the
+  // point's energy or grid changes, so the working copies share them (a copy of a folded project with ~10^6
+  // sub-points held ~7 GB of these rows); every writer goes through MutableEDep() / MutableLegendre(), which give
   // the point its own copy first if the tables are shared (copy-on-write).
+  SharedTable<vector_r> legendreP_;
   SharedTable<EDependentTables> edep_;
   /// This point's own, writable tables (copied first if shared with another point).
   EDependentTables &MutableEDep();
@@ -678,7 +644,6 @@ class EPoint {
   double eDependentEnergy_ = 0.0;
   bool eDependentValid_ = false;
   bool own_e_dependent_ = false;  // OwnsEDependentValues
-  bool is_total_ = false;         // IsTotal
   matrix_c ec_amplitudes_;
   matrix_r ec_energies_;  // Energies at which EC amplitudes were calculated
   /// The amplitude at the last shifted energy of each pathway (GetECAmplitudeWithShift).
@@ -691,13 +656,7 @@ class EPoint {
   };
   mutable std::vector<std::vector<ShiftedECAmplitude>> ec_shifted_;
   int plan_task_ = -1;  // see PlanTask
-  std::vector<EPoint> integrationPoints_;
-  EData *parentData_;
-  // Which cross-section component the owning segment is compared against (0 full,
-  // 1 E1, 2 E2), copied in at construction.  Not a pointer to the segment: points are
-  // copied with their segments (segment vector growth, component segments, the fit's
-  // pooled EData clones), and a stored ESegment* then dangles.
-  int crossSectionComponent_;
+  int sub_first_ = 0, sub_count_ = 0;  ///< the sub-points: units [first, first + count) of the data set
   // Where the result record lies (see ResultSlot): no value of an evaluation is held in the point itself.
   std::size_t slot_ = kNoRecord;
   std::uint16_t num_ang_slots_ = 0;

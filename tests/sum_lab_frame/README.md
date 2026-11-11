@@ -24,7 +24,8 @@ same lab angle (2.4 % at most on this grid).  No external capture; a run takes a
   twice, T5–T7 the c.m. versions, T8 = T1 + 0.5 T2 with the scaling token; lab 5.95–6.30 MeV, 0–180°.
 - `plain_data` / `sum_data`: the two plain lab data segments and the SUM data segment, each with a
   fixed 0.05 MeV energy shift; `check.sh` writes `data/sum.dat` from the plain segments' fitted lab
-  values.
+  values.  A copy of that file, made with the engine of 2026-11-11, is committed in `models/data/sum.dat` so that
+  a run of the project tree (`tools/runall.sh`) fills the SUM segment too; `check.sh` uses the one it writes.
 - `sum_free`: `sum_data` with the seven widths free, for the gradient check.
 
 ## Checks (`check.sh path/to/AZURE2`)

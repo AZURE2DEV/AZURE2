@@ -15,24 +15,23 @@ namespace azure2 {
 
 namespace {
 
-std::string Where(EData &data, const PointRef &r) {
+std::string Where(EData &data, PointRef r) {
   std::ostringstream s;
-  EPoint *p = data.PlanPoint(r);
-  s << (r.list == PointRef::kSegments ? "segment" : "leaf") << " #" << r.segment + 1 << ", point "
-    << r.point + 1;
-  if (p) s << " (key " << p->GetSegmentKey() << ", E_lab " << p->GetLabEnergy() << " MeV)";
+  s << "unit " << r;
+  if (r >= 0 && r < data.NumUnits())
+    s << " (key " << data.Unit(r).GetSegmentKey() << ", E_lab " << data.Unit(r).GetLabEnergy() << " MeV)";
   return s.str();
 }
 
 // The slots a point and its sub-points hold apart from the natural terms (the model pass's).
-void AddUnitRanges(EPoint &p, std::vector<std::pair<std::size_t, std::size_t>> &ranges) {
+void AddUnitRanges(EData &data, EPoint &p, std::vector<std::pair<std::size_t, std::size_t>> &ranges) {
   auto add = [&ranges](EPoint &u) {
     if (u.ResultSlot() == EPoint::kNoRecord) return;
     const std::size_t n = Results::RecordSize(u.ResultAngularSlots(), 0);
     ranges.push_back({u.ResultSlot(), u.ResultSlot() + n});
   };
   add(p);
-  for (EPoint &sub : p.GetSubPoints()) add(sub);
+  for (EPoint &sub : p.GetSubPoints(data)) add(sub);
 }
 
 }  // namespace
@@ -41,15 +40,13 @@ EPoint *MappedPoints::operator[](int i) const { return data_->PlanPoint((*refs_)
 
 void CalculationPlan::Build(EData &data, const std::vector<std::pair<PointRef, PointRef>> &mapping) {
   tasks_.clear();
-  for (int list = 0; list < 2; list++)
-    for (int s = 0; s < data.NumPlanSegments(list); s++)
-      for (int p = 0; p < data.NumPlanPoints(list, s); p++) {
-        EPoint *point = data.PlanPoint({list, s, p});
-        point->SetPlanTask(-1);
-        if (point->IsMapped()) continue;
-        tasks_.push_back({{list, s, p}, {}});
-        point->SetPlanTask((int)tasks_.size() - 1);
-      }
+  for (PointRef u : data.PlanUnits()) {
+    EPoint *point = data.PlanPoint(u);
+    point->SetPlanTask(-1);
+    if (point->IsMapped()) continue;
+    tasks_.push_back({u, {}});
+    point->SetPlanTask((int)tasks_.size() - 1);
+  }
   for (const std::pair<PointRef, PointRef> &m : mapping) {
     const int task = data.PlanPoint(m.first)->PlanTask();
     if (task < 0) throw std::logic_error("EData: the calculation plan maps " + Where(data, m.second) + " onto " +
@@ -99,20 +96,16 @@ void CalculationPlan::RunChecked(EData &data, const std::vector<EPoint *> &hosts
 }
 
 std::string CalculationPlan::Check(EData &data) const {
-  // writer[list][segment][point]: the task that calculates the point (-1: none yet).
-  std::vector<std::vector<std::vector<int>>> writer(2);
-  for (int list = 0; list < 2; list++) {
-    writer[list].resize(data.NumPlanSegments(list));
-    for (int s = 0; s < data.NumPlanSegments(list); s++)
-      writer[list][s].assign(data.NumPlanPoints(list, s), -1);
-  }
-  auto claim = [&](const PointRef &r, int task, std::string &why) {
-    if (r.list < 0 || r.list > 1 || r.segment < 0 || r.segment >= (int)writer[r.list].size() || r.point < 0 ||
-        r.point >= (int)writer[r.list][r.segment].size()) {
-      why = "task " + std::to_string(task) + " names a point outside the data set";
+  // writer[unit]: the task that calculates the point (-1: none yet; -2: a unit that is no point of a term).
+  const std::vector<PointRef> points = data.PlanUnits();
+  std::vector<int> writer(data.NumUnits(), -2);
+  for (PointRef u : points) writer[u] = -1;
+  auto claim = [&](PointRef r, int task, std::string &why) {
+    if (r < 0 || r >= (int)writer.size() || writer[r] == -2) {
+      why = "task " + std::to_string(task) + " names a unit that is no point of the data set";
       return false;
     }
-    int &w = writer[r.list][r.segment][r.point];
+    int &w = writer[r];
     if (w >= 0) {
       why = Where(data, r) + " is calculated by two tasks (" + std::to_string(w) + " and " + std::to_string(task) + ")";
       return false;
@@ -131,7 +124,7 @@ std::string CalculationPlan::Check(EData &data) const {
     if (!claim(task.host, t, why)) return why;
     EPoint *host = data.PlanPoint(task.host);
     if (host->IsMapped()) return Where(data, task.host) + " is a host and mapped onto another point";
-    for (const PointRef &m : task.mapped) {
+    for (PointRef m : task.mapped) {
       if (!claim(m, t, why)) return why;
       EPoint *mp = data.PlanPoint(m);
       if (!mp->IsMapped()) return Where(data, m) + " is calculated by a host but not mapped";
@@ -140,17 +133,15 @@ std::string CalculationPlan::Check(EData &data) const {
                std::to_string(host->NumSubPoints()) + ": the host would write past them";
     }
   }
-  for (int list = 0; list < 2; list++)
-    for (int s = 0; s < (int)writer[list].size(); s++)
-      for (int p = 0; p < (int)writer[list][s].size(); p++)
-        if (writer[list][s][p] < 0) return Where(data, {list, s, p}) + " is calculated by no task";
+  for (PointRef u : points)
+    if (writer[u] < 0) return Where(data, u) + " is calculated by no task";
   return std::string();
 }
 
 void CalculationPlan::WriteRanges(EData &data, int task, std::vector<std::pair<std::size_t, std::size_t>> &ranges) const {
   ranges.clear();
-  AddUnitRanges(*data.PlanPoint(tasks_[task].host), ranges);
-  for (const PointRef &m : tasks_[task].mapped) AddUnitRanges(*data.PlanPoint(m), ranges);
+  AddUnitRanges(data, *data.PlanPoint(tasks_[task].host), ranges);
+  for (PointRef m : tasks_[task].mapped) AddUnitRanges(data, *data.PlanPoint(m), ranges);
 }
 
 bool CalculationPlan::RunTimeCheckRequested() {

@@ -10,6 +10,9 @@
 # cases EData printed "Could Not Fill Segment" and the fit went on without the data.  Now the layout is decided by whole
 # tokens.  And a <segmentsTest> line's keyword reader stopped at a data-only block (sqrtshift, shiftgroup, ...), losing a
 # "sample" or "total" written after it; those blocks are skipped now.
+# The segment-line reader is the converter's since format 3 (convert/include/azure2/convert/SegLine.h): each model is
+# the original old project (tests/convert/fixtures) with the line replaced, converted with AZURE2 --convert ... --to 3
+# and run.
 #
 #   (a) tests/13N with segment 3 in the no-shift layout and its file 84deg_meyer.dat in the model directory: the total equals
 #       expected/chiSquared.out (the segment is read, no shift);
@@ -41,13 +44,19 @@ bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 near() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = (a - b) / b; if (d < 0) d = -d; exit !(a != "" && b != "" && d <= t) }'; }
 
 SEG3='1              1              1              0              5              84.3           84.3           1              1              0              5              0              0.005          0               data/meyer_84.dat 0 0'
-grep -qF "$SEG3" "$BASE/13N.azr" || { echo "  FAIL  tests/13N/13N.azr no longer holds segment 3 as '$SEG3'"; exit 1; }
+# the old project: its original once the tree holds its conversion
+old() { if [ -f "$HERE/../convert/fixtures/tests/$1" ]; then echo "$HERE/../convert/fixtures/tests/$1"; else echo "$HERE/../$1"; fi; }
+OLD13="$(old 13N/13N.azr)"; OLDNE="$(old natural_neon/natural_neon.azr)"
+grep -qF "$SEG3" "$OLD13" || { echo "  FAIL  $OLD13 no longer holds segment 3 as '$SEG3'"; exit 1; }
+# convert NAME: $WORK/NAME/old.azr -> t.azr (format 3)
+convert() { (cd "$WORK/$1" && run_limited 300 "$AZURE2_BIN" --convert old.azr t.azr --to 3 > convert.log 2>&1) || { echo "  (conversion of $1: $(grep -m1 ERROR "$WORK/$1/convert.log"))"; }; }
 # model NAME NEW-SEGMENT-3-LINE [RENAMED-FILE]
 model() {
   mkdir -p "$WORK/$1/output" "$WORK/$1/checks"
   cp -r "$BASE/data" "$WORK/$1/"
   [ -n "${3:-}" ] && cp "$BASE/data/meyer_84.dat" "$WORK/$1/$3"   # in the model directory: the name itself starts with digits
-  awk -v old="$SEG3" -v new="$2" '{ sub(/\r$/, "") } index($0, old) == 1 { print new; next } { print }' "$BASE/13N.azr" > "$WORK/$1/t.azr"
+  awk -v old="$SEG3" -v new="$2" '{ sub(/\r$/, "") } index($0, old) == 1 { print new; next } { print }' "$OLD13" > "$WORK/$1/old.azr"
+  convert "$1"
 }
 run() { (cd "$WORK/$1" && printf '1\n\n\n7\n' | run_limited 900 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1); }
 total() { awk '{ sub(/\r$/, "") } /^Total-Chi-Squared:/ { print $2 }' "$WORK/$1/output/chiSquared.out" 2> /dev/null; }
@@ -66,7 +75,8 @@ if near "$b" "$c" 1e-9 && ! near "$b" "$want" 1e-5 && ! grep -q "Could Not Fill"
 tmodel() {  # NAME TEST-LINE
   mkdir -p "$WORK/$1/output" "$WORK/$1/checks"
   cp -r "$NEON/data" "$WORK/$1/"
-  awk -v line="$2" '{ sub(/\r$/, "") } /^<segmentsTest>$/ { print; print line; skip = 1; next } /^<\/segmentsTest>$/ { skip = 0 } !skip { print }' "$NEON/natural_neon.azr" > "$WORK/$1/t.azr"
+  awk -v line="$2" '{ sub(/\r$/, "") } /^<segmentsTest>$/ { print; print line; skip = 1; next } /^<\/segmentsTest>$/ { skip = 0 } !skip { print }' "$OLDNE" > "$WORK/$1/old.azr"
+  convert "$1"
 }
 trun() { (cd "$WORK/$1" && printf '3\n\n\n7\n' | run_limited 900 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1); }
 tmodel tbare "1 2 2 0.5 1.0 0.1 0 0 0 0"

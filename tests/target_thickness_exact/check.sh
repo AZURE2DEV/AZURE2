@@ -51,14 +51,22 @@ ENERGIES="0.320 0.360 0.400 0.450 0.500"
 mkdir -p "$WORK/m/output" "$WORK/m/checks" "$WORK/m/data"
 for e in $ENERGIES; do printf '%s 0 1.0e-06 1.0e-07\n' "$e"; done > "$WORK/m/data/thin.dat"
 awk 'BEGIN { for (i = 0; i <= 3200; i++) printf "%.4f 0 1.0e-06 1.0e-07\n", 0.20 + i * 0.0001 }' > "$WORK/m/data/fine.dat"
-awk -v tline="1  \"1\"  20  0  0  1  $DENS  \"a0/x^a1\"  2  $A0  $A1  0  0  0  \"\"  0  0  0  20  50" \
-    -v s1="1 1 -1 0 6 0 180 3 1 0 0 0 0 0 data/thin.dat 0 0" \
-    -v s2="1 1 -1 0 6 0 180 3 1 0 0 0 0 0 data/fine.dat 0 0" '
+# two total-capture data sets: thin.dat on a layer of DENS atoms/cm2 (stopping a0/x^a1), fine.dat bare
+ds() {  # NAME FILE [TARGET]
+  printf 'dataset %s\n    reaction       14N(p,g)15O[total]\n    quantity       sigma\n    unit           b\n' "$1"
+  printf '    file           %s\n    columns        E_lab[MeV] _ value error\n    energy_window  0 6 MeV\n    norm           1 fixed\n' "$2"
+  [ -n "${3:-}" ] && printf '    target         %s\n    quadrature     points 20 width_multiplier 20 per_width 50\n' "$3"
+}
+export DS="$(ds thin data/thin.dat tgt; ds fine data/fine.dat)" TGT="target tgt
+    kind           layer
+    active         14N
+    areal_density  $DENS atoms/cm2 fixed
+    stopping       formula \"a0/x^a1\" a0=$A0 a1=$A1 MeV*cm2/atom
+    straggling     none"
+awk '
   { sub(/\r$/, "") }
-  /^<targetInt>$/ { print; print tline; skip = 1; next }
-  /^<segmentsData>$/ { print; print s1; print s2; skip = 1; next }
-  /^<segmentsTest>$/ { print; skip = 1; next }
-  /^<\/targetInt>$|^<\/segmentsData>$|^<\/segmentsTest>$/ { skip = 0 }
+  /^<data>$|^<extrapolations>$|^<targets>$/ { print; if ($0 == "<data>") print ENVIRON["DS"]; if ($0 == "<targets>") print ENVIRON["TGT"]; skip = 1; next }
+  /^<\/data>$|^<\/extrapolations>$|^<\/targets>$/ { skip = 0 }
   !skip { print }' "$BASE/thick_target_resonance.azr" > "$WORK/m/t.azr"
 (cd "$WORK/m" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
 OUT="$WORK/m/output/AZUREOut_aa=1_TOTAL_CAPTURE.out"

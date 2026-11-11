@@ -2,6 +2,274 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (director, morning) — the eighth wave, second part merged: the flat working copy; validation that predicts the run's refusals; half of the test tree in format 3
+
+**Merged into `feature/upgrade-4-data`** (`--no-ff`; each rehearsed in a scratch worktree, built and verified once;
+the committed trees are those trees): the second milestone of the data structure
+(`feature/upgrade-4-data-structure`: a term's settings as one shared record, one flat vector of calculation units,
+the plan by index, a copy of the working copy a plain copy), then the validation and pyazr follow-ups
+(`feature/upgrade-4-validation`), then the first half of the conversion of the test tree
+(`feature/upgrade-4-tree-format3`: 92 of the 185 convertible project files are format 3 under their own names, the
+originals in `tests/convert/fixtures/`, 22 `check.sh` scripts edit format-3 records; plan and hand-over page
+`docs/upgrade/format3_tree.md`). Their entries are below.
+
+**The merged head as a whole** (build `work/b-trial16`, 0 warnings; reference tag of its outputs `tab-trial16`):
+all projects x 3 bases against the previous head (`tab-trial14`, 737 / 710 / 737 files): with the validation alone
+(`tab-trial15`) every file identical; with the half-converted tree on top (`tab-trial16`) the 597 / 573 / 597 files
+of the projects that are still old identical, and the files that differ belong to the 85 converted projects of
+`tests/` and to no other, by the classes of `tools/format3_gate.py` (the records' names in run logs and parameter
+files, the sample files of `angle_mapping`, `shifts.out` of the `secondary_gamma` models, the template of
+`shift_subpoint_angle` refused without its data files); the outputs of each converted project equal those of the
+gate's conversion of its original. The gate (originals laid back, everything converted, against `tab-trial8`):
+483 (456 formal) identical, 38 classified, 0 differ, 0 missing. `ctest -LE slow` 183/183; `tests/run_tests.sh` 146
+passed, 0 failed; calculations at 1 against 6 threads 12/12 identical; T2 with model data identical in the three
+bases; spec equivalence on the originals 198 files, 186 converted, 184 equal, 2 recorded, 0 differ. Milestone 2 by
+itself (`tab-trial14` against `tab-trial13`): 724 / 697 / 724 of 726 / 699 / 726 identical, the two run logs of
+`sum_lab_frame` differ as text, 11 files new. **Not run on this head:** 1 against 8 threads, ThreadSanitizer,
+`ctest -L slow`, Sphinx; Phase 4 as a whole is not yet benchmarked against the Phase 3 head.
+The comparison scripts of the director now use the tree's own `tools/runall.sh` and `tools/cls.sh` (they skip
+`tests/convert/`); the reference tag for the next branches is `tab-trial16`.
+
+**What the director changed at the merges:** `tests/upgrade/capture_ay_requests_test.cpp` line 153 follows the new
+accessor of a term's points (`s.GetPoint(*l.data, k)`); `tests/consistency/file_sizes.tsv` tightened (15 files);
+`tests/upgrade/predictions.txt` regenerated on the tree that holds both the validation and the converted projects
+(both branches had changed it: the block of `ratio_frame/models/fixed_angle.azr` is new, the SUM data set of
+`sum_data` and `sum_free` is described).
+**Sent back before the merge:** the rename of an inactive data set left its rows in `<parameterSettings>`, `<mcmc>`
+and the prior covariance with the old name (the engine named the parameters of active records only); it now asks the
+engine for the names with every record taken as active (`BuildOptions::allRecordsActive`, never set for a run) and
+warns, with the lines, of rows it could not rename.
+**Checked by hand** (the director, build `work/b-trial15`): a data file with a non-numeric cell in row 7 and a row of
+two columns gives two `E_DATA_ROW` diagnostics with file, line, column and the text found, exit 2;
+`--describe FILE --record NAME` prints the one record, an unknown name exits 2 with a message; the comparison of the
+flat working copy with the previous head flags exactly `sum_data`, `sum_free` (run logs, text) and the new files.
+
+**Decisions of the director.**
+- A copy of the working copy keeps one explicit step after the plain copy: its term points drop the set-up's
+  external-capture amplitudes. They belong to the external-capture set-up, which the second pathway branch moves to
+  the immutable tables; until then the step stays and is named in `Clone`.
+- The final state of a photon pair with external capture is decided by one function
+  (`experiment::ExternalCaptureFinalStates`), which the engine's set-up (`CNuc::ParseExternalCapture`) and the
+  validation both call. The agent edited `src/CNuc.cpp` for it beyond its brief's limit: accepted, the messages and
+  every output are unchanged.
+- A measured uncertainty ≤ 0 is a **warning** of the validation (`W_DATA_ERROR`), not an error: the run accepts such
+  rows (χ² skips a zero and squares a negative, `chi_squared.rst`). Whether the run should refuse a negative
+  uncertainty is a question for the maintainers (three committed test data files have such rows: `13N`
+  `baumann_1618.dat` negative, `16N` `bda.dat` and `18O_p_a_thm` `lc723_band_mid.dat` zero).
+- On the cases the conversion found that format 3 cannot write (`format3_tree.md` §4): (1) an old line with exit
+  key −1 and a data type that is not total capture is **refused by the converter**, as the old engine refused it (it
+  writes `[total]` today: a conversion must never turn a refused file into one that runs); (2) automatic windows
+  together with explicit ranges get **no grammar**; the converter drops the ranges with a note; (3) an automatic
+  tolerance without windows must not be dropped silently: the converter writes the one window over every point that
+  gives the old outputs, or a note; (4) a fitted normalization with a prior centred at 0 is **refused** by the
+  validation and the run (the old engine refused a centre of 0); (5) a fixed normalization group whose follower's
+  own line said "free" has no counterpart and needs none. (1), (3), (4) are in the brief of the tree's second half.
+- The two expected texts `tests/ratio_to_rutherford/expected/story_describe.txt` and
+  `tests/units_scales/expected/story_describe.txt` changed with the wording of an open energy window: accepted.
+
+**Defects and debts found, not yet fixed** (owner in brackets):
+- A data row that does not parse makes the run drop the whole data set with a WARNING ("Could Not Fill Segment") and
+  go on; the validation refuses it. The run should refuse it too [the deletion of the old reading path].
+- Refusals the validation does not predict yet (survey in the validation entry: 2 files of the converted tree, 26
+  generated models): the `<levels>`-row checks of `CNuc::Fill`, kinematic limits of a lab angle, combinations of
+  target effects, a covariance matrix that is not positive definite, two fitted rows of one covariance file from
+  overlapping windows [a second validation round, after the old path is deleted: the rules then move to `experiment/`
+  once instead of being written twice].
+- `--describe` words the angle window "theta_lab (data converted to c.m.)" also for a file whose angle column is
+  `theta_cm` (`experiment/src/Describe.cpp`) [second validation round].
+- The names of the target-effect parameters (`.screening`, `.areal_density`, `.doppler`) are written in the data
+  classes and again in `experiment::ParameterNamesOf`; `ESegment::Fill` compares the covariance variance with 0
+  itself [milestone 3 of the data structure or the round after it].
+- The warning of `Project.rename` for rows it could not rename matches the old name as plain text and does not
+  cover the names line of the prior-covariance file [second validation round].
+- Possible dependence of the external-capture memo on the history of a copy (`ShiftedECAmplitude::levelEnergy`;
+  inferred by the agent from the code, not tested) [second pathway branch: a test with a fitted level energy of the
+  final state].
+- The covariance groups' frozen model and `NodeTableCache` are shared and mutable between copies by design
+  [milestone 3: named with the reason they are safe, or reported].
+- Still open: the yield on a finite layer (Phase 5), the decay-position defect of the external-capture code (second
+  pathway branch), `ScatteringLength::ZeroEnergyShift` for a hybrid pair, an exception inside the external-capture
+  path under OpenMP (Phases 5–6).
+
+**For the PI to see** (behaviour a user can meet; additions):
+- `AZURE2 --validate` now reports, before any calculation: every data row that does not parse or is too short (file,
+  line, column, the text found), a missing or unreadable covariance file or one that does not fit its data set, a
+  photon pair whose final state is not a level or is shared with another pair; uncertainties ≤ 0 as warnings.
+- `AZURE2 --describe FILE --record NAME`; an open energy window reads "all energies".
+- Python: `session.datasets`, `active_datasets`, `dataset_chi2` work on a format-3 project (keyed by the record
+  names); `pyazr.records_from_csv` declares data sets from a table; pyazr is 2.31.0.
+- The file of the natural decomposition (`AZUREOut_sample_seg=N`) written from a copy of the data (MCMC, fit
+  snapshots) now has the columns of the nuclei; before, a copy wrote the total only.
+- An S-factor data set's output columns hold σ and S (one formula for the conversion).
+- Memory of a fit: T2 at 1 thread 328 MB (was 355), `natural_neon` 1.50 GB (was 1.55); one copy of the working copy
+  15 MB for T2 (was 18.6).
+
+**Running now** (Opus agents; briefs in `/data0/skowrons/AZURE2-upgrade/work/briefs/`):
+- Milestone 3 of the data structure (`X3_dataset_workingcopy.md`; `feature/upgrade-4-data-structure-3`): an
+  immutable `DataSet` and a small `WorkingCopy` apart, the unit slimmed, the names `EData`, `ESegment`, `EPoint` and
+  their files deleted.
+- The rest of the test tree and of the examples converted to format 3 (`AA2_tree_to_format3_rest.md`;
+  `feature/upgrade-4-tree-format3-2`; from `docs/upgrade/format3_tree.md`: the shift tests, targets and apparatus,
+  natural targets, THM, T1–T3 and the rest; the 29 model generators; the converter's refusals decided above; the
+  switch that makes the engine refuse an old file, last and only if nothing loads one).
+
+**Then.** The second pathway branch (external-capture amplitudes at set-up with the decay-position fix, the trees
+deleted); the engine refuses old files, the old reading path and `pyazr/azrfile.py` deleted (inventory:
+`docs/upgrade/pyazr_on_records.md`); a second validation round; components as leaves, amplitude filters, `predict`;
+the recipe "a new kind of data"; the rest of `CNuc`; Phase 5 (the yield of a finite layer first).
+
+## 2026-11-11 (agent, tree to format 3) — the test tree converted, first half (`feature/upgrade-4-tree-format3`)
+
+**Done** (`AA_tree_to_format3.md`; plan and state: `docs/upgrade/format3_tree.md`). 92 of the 185 convertible
+project files of `tests/` and `examples/` are format 3, in place under their own names; the originals are in
+`tests/convert/fixtures/<path>` and stay the converter's fixtures (the gate, `convert_spec_equivalence` and
+`convert_fixtures` read them there; `tools/convert_tree.sh` lays them back before converting). Groups done: 1 (81
+self-contained projects and 7 examples), 2 (13N family and 7Li_p_ay), 3 (thick_target_resonance), 4a (norm_groups,
+15N_p_a). 22 checks rewritten to edit format-3 records (or write them); `segline_formats` and parts of
+`total_capture_code`, `prior_centre`, `ec_final_state_ambiguous` test old lines through `AZURE2 --convert`. pyazr tests
+of the old file class (14) read the originals (`tests/pyazr/old_tree.py`). Tools: `tools/format3_tree_convert.sh`
+(convert files in place, originals to the fixtures).
+
+**Verified how**: per group, the touched directories' regression projects and checks, the rewritten checks against
+the base checks on the base build (same output, differences listed in the page), `scripts/check.sh --quick`
+(ctest -LE slow 182/182). At the last commit: converted-tree gate (`gtree3a`) 483 (456) identical, 38 classified, 0
+differ, 0 missing; spec equivalence 197 files, 185 converted, 183 equal, 2 recorded, 0 differ; `convert_fixtures` 86
+checks; T1–T3 and 13N at 1 and 4 threads identical; reference tag of this tree: `tab-tree3`
+(page §3a); `tests/run_tests.sh` whole: see the report.
+
+**Open** (the page, §3–§5): groups 4b (shifts), 5 (targets and apparatus), 6 (natural targets), 7 (THM, the largest:
+about 20 scripts and 12 pyazr tests), 8 (T1–T3, relativistic, scattering lengths, ...); the refusal switch (blocked:
+pyazr tests load old files through `pyazr/azrfile.py`; the old `make_models.py` generators). For the director: the
+converter writes an old exit −1 / data-type mismatch as `[total]` (the old engine refused it); format 3 cannot state
+automatic windows plus explicit ranges, nor an automatic tolerance without windows (the converter drops the latter
+without a note); `norm … prior 0 15%` is accepted (a zero-width prior, not applied) where the old engine refused a
+centre 0.
+
+## 2026-11-11 (agent, validation follow-ups) — validation reaches the run's refusals; pyazr's session on format 3 (`feature/upgrade-4-validation`)
+
+**Done.**
+- `--validate` / `pyazr.validate` / every `Project` edit (a build that uses the data; the engine's own build in
+  `Config` does not, its set-up refuses at run time as before) now report what a run refuses: every row of a data file
+  that does not parse (`E_DATA_ROW`, line, column, text found; `experiment::CheckDataRows` beside
+  `ReadMeasurementRows`), a row with fewer columns than the roles (`E_DATA_FILE`, every row not the first), an
+  angular-coefficient row without a Legendre order (`E_DATA_ROW`), a non-positive uncertainty in the window
+  (`W_DATA_ERROR`, a warning: the chi^2 skips a 0); the covariance file (`E_COVARIANCE_FILE`: missing, unreadable,
+  row counts, data file not listed, a variance <= 0 in the window; its one reader moved to
+  `experiment/CovarianceFile`, the engine's `DataCovariance::Read` calls it); the final state of external capture
+  (`E_FINAL_STATE_NOT_LEVEL`, `E_FINAL_STATE_SHARED`: one rule, `experiment::ExternalCaptureFinalStates`, called by
+  `CNuc::ParseExternalCapture` with its messages unchanged and by `Schema::Build` under `BuildOptions::setUpChecks`).
+- `AZURE2 --describe FILE --record NAME`; an open energy window reads "all energies (no energy_window)" (the expected
+  describe texts of `ratio_to_rutherford` and `units_scales` follow).
+- One function names an abundance parameter (`experiment::AbundanceParameterName`; `CNuc::AbundanceParamName`'s body
+  calls it); `experiment::ParameterNamesOf` / `_azure2.parameter_names`; `Project.rename` maps the engine's names.
+- pyazr 2.31.0: `azure2.datasets`, `active_datasets`, `extrapolations`, `dataset_chi2` on a format-3 session from the
+  engine's description (`pyazr/described.py`); `Project.set` keeps comments between repeats;
+  `pyazr.records_from_csv`; `pyazr.describe(path, record=)`; the inventory of `azrfile.py` uses:
+  `docs/upgrade/pyazr_on_records.md`.
+- Tests: `tests/validate_run_refusals` (format-3 fixtures `*.f3`), `pyazr_session_records`, build_test cases of the
+  five new codes, `convert_spec_equivalence` reads with the engine's options.
+
+**Verified** (build `work/b-valid`, 0 warnings, 5 threads): all projects x 3 bases against `tab-trial13` (tag
+`tab-valid1`): 726 / 699 / 726 identical; converted-tree gate (`REF=tab-trial8`, tag `gvalid1`): 483 (456) identical,
+38 classified, 0 differ, 0 missing, no converted file's bytes moved; `tests/run_tests.sh` 146 passed, 0 failed (the new
+`validate_run_refusals`); consistency test: 28 flags, 80 diagnostic codes; `--validate` of T2's conversion 4.6 ms
+against 4.0 ms on `b-trial13` (minimum of 20); `ctest -LE slow` 183/183; 13N, T1, T2 and the final-state models at 4
+threads: 47 output files byte-identical to the 1-thread run.
+
+**Corrections after the director's review.** `Project.rename` asks the engine for the names with every record taken as
+active (`BuildOptions::allRecordsActive`, `parameter_names(text, all_active)`), so the rows of an inactive data set
+follow and apply once it is switched on; rows that still contain the old name (no parameter the engine gives) are
+listed in a warning.  `Context::Warn` sets `hasFound`: the JSON of `W_DATA_FILE_NOT_READ` carries the path (no
+committed expected file held it).
+
+**Open.** Refusals validation does not predict (survey of the converted tree and of the check.sh models): `<levels>`
+rows whose level ID has channels of two nuclei and the other `CNuc::Fill` row checks; a lab angle beyond the
+kinematic maximum (`relativistic/models/li7pn_edge_rel.azr`); two fitted rows of one covariance file from overlapping
+windows; a covariance matrix not positive definite. `ESegment::Fill` still compares a covariance variance with 0 by
+itself (the validation reads the variance through the shared reader); EData's `EffectParameterName` should give its
+names through experiment (`ParameterNamesOf` copies its three suffixes). An unparseable data row: the run drops the
+data set with a WARNING ("Could Not Fill Segment"), validation refuses it.
+
+## 2026-11-11 (agent, brief X2, milestone 2, rest) — the flat working copy (`feature/upgrade-4-data-structure`)
+
+**Done** (four commits after a724d6ba: cfe7a91d, 044928ed, b0759ed8, 60bcb381).
+- A point has no pointer to its data set (`EPoint::parentData_` gone).  The data set is an argument of
+  `EPoint::Calculate`, `CalculateThinTarget`, `MarkFailed`, `PlanMapped`, `Initialize`, the folds, `ESegment`'s shift
+  step and `HasSubPointIntegration`, `azure2::EvaluateModelPoint` / `EvaluateModelSegment` / `ModelPointBackward` /
+  `PointResidual`, `CoulombReferenceValue`, the gradient helpers of `AZUREGrad.cpp`; `CalculatePointsInParallel` is a
+  member.  Null for a point outside any data set (reaction-rate points).
+- One flat vector of calculation units in the working copy (`EData::Units`, `include/UnitRange.h`,
+  `src/WorkingCopyUnits.cpp`): a term's points and a point's sub-points are ranges (`ESegment` TermUnits first/count,
+  `EPoint` sub_first_/sub_count_); `GetPoints`, `GetPoint`, `TermPoints`, `GetTermPoint`, `GetSubPoint`,
+  `GetSubPoints` keep their names and are views taking the data set.  Sub-points given at set-up
+  (`EData::AddSubPoint`, held per point) are placed by `CommitSubPoints` at the end of `SetUpTargetEffects`, which
+  lays the vector out (term points in data order, then the sub-points in the same order; each unit moved once into
+  a vector of the exact size); a re-placed grid (`ReplaceSubPointGrids`) is built in the parallel loop beside the
+  units and placed single-threaded (`PlaceSubPointGrids`): in the place of the old one when it has as many nodes,
+  else by a new layout.  The points keep their indices after the set-up.  A unit names its term's settings by a plain
+  `const TermSettings *` (the term owns the shared pointer; a point outside a data set owns its own).
+- The plan names units by index (`PointRef` is an int; `EData::PlanUnits` gives the data order).
+- `EData::Clone` is the copy constructor; then the copy's term points drop the set-up's external-capture amplitudes,
+  as before (clearing the sub-points' too moved the 13N fit in the 11th digit: kept as it was).  The objective
+  counter is `EvaluationCount` (copyable).  THM group records, the counter and the inline sub-point accessors moved to
+  `ThmGroup.h`, `EvaluationCount.h`, `SubPointAccess.h` (no data-class file is longer than at a724d6ba).
+- `tests/upgrade/history_test.cpp`: a copy of a copy shares no mutable state with its source (shown failing with
+  copy-on-write switched off in `SharedTable`).
+
+**Verified** on 60bcb381 (binary `work/dstruct/x2/AZURE2-s5`, build 0 warnings): every project x 3 bases (tag
+`tab-x2s5`) against `tab-trial12`: 724 / 697 / 724 identical of 737 / 710 / 737, the rest the run logs of
+`sum_data` / `sum_free` and the new files of those two and of `fixed_angle` (as at a724d6ba); against `tab-dsm2a`:
+737 / 710 / 737 identical; `ctest -LE slow` 177/177 (the history, poison and `AZURE_PLAN_CHECK=1` tests among them);
+`tests/run_tests.sh` 145 passed, 0 failed; calculations at 1 and 3 threads identical (T1-T3, 13N, natural_neon,
+energy_shift_sqrt, shift_sqrt_subpoints/dense, shift_fn, 18O_p_a_thm, three bases: 27/27); the converted-tree gate
+(`gx2s5`): 483 (456) identical, 38 classified, 0 differ, 0 missing; fits at 1 thread byte-identical to
+`b-trial12` (T2 `--use-lm` 200 calls, T2 `--use-gradient` 200 calls, 13N, energy_shift_sqrt, screening_6li/fit with
+adaptive grids, 18O_p_a_thm).  Cycles (perf stat, 1 thread, min of 6, alternated with `b-trial12`): T2 calculation
+669.4 M against 674.0 M (-0.7 %), 200-call T2 fit 50.33 G against 51.15 G (-1.6 %); peak RSS of the T2 fit 328 / 445
+MB at 1 / 3 threads against 355 / 447, natural_neon calculation 1499 / 1504 MB against 1553 / 1557 (a first layout,
+which placed the set-up's sub-points through a list and a compaction, was 2.7 % slower on the T2 calculation and
+up to 23 % higher in RSS: 60bcb381 places each unit once).  Bytes allocated by one copy
+(`work/dstruct/x2/copybytes`, after Initialize): T2 18.61 MB in 549 allocations before, 15.06 MB in 236 after;
+natural_neon 223.2 MB in 3901 before, 180.6 MB in 779 after; the copy is now nearly all the unit vector (24,628
+units of 608 bytes for T2, 295,849 for natural_neon).
+
+**Open.** Milestone 3: `DataSet` and `WorkingCopy` apart (an `ESegment` still holds both its settings and its
+working state: norm, shifts, frames, shift tables), the `EData &` arguments become the working copy, the old names
+and files go.  The set-up's external-capture amplitudes still live in the points (a copy drops those of its term
+points by an explicit loop in `Clone`): they belong to the external-capture set-up of the second pathway branch.
+The unit is 608 bytes; slimming it is what makes a copy cheaper now.
+
+## 2026-11-11 (agent, brief X, milestone 2, first part) — settings out of the points, three debts (`feature/upgrade-4-data-structure`)
+
+**Done.**
+- The settings of a term (pairs, observable flags, J/l/s, UPOS, cross-section component, THM attachments) are one
+  record, `TermSettings` (`include/TermSettings.h`), built by the segment at set-up and shared, immutable, by the
+  term's points, their sub-points and every copy; `EPoint` lost about twenty copied members and their setters.  The raw
+  rows pointer of a point is gone: a point keeps its row index, Legendre order, nominal energy and angle; the
+  measured value, error and record come from the measurement (`ESegment::LabValue`, `LabError`, `FileRecord`).
+- The S factor has one formula (`physics::sfactor_conversion`, E sigma for a neutral pair); the AZUREOut columns of an
+  S-factor data set or extrapolation hold sigma (b) and S (MeV b) (`SigmaAndS` in `EDataOutputFiles.cpp`);
+  `tests/units_scales/check.sh` reads them so.
+- `tests/ratio_frame` (g): a term at a fixed angle, c.m. (not converted) and lab (converted; the c.m. angle by the
+  closed form in `make_models.py`).  `tests/sum_lab_frame/models/data/sum.dat` committed, so the SUM data segment
+  fills in a run of the project tree (`check.sh` copies models/data with `cp -n`).
+
+**Verified** (build `work/b-dstruct`, 0 warnings; binary `work/dstruct/AZURE2-m2a`): every project x 3 bases against
+`tab-trial12` (tag `tab-dsm2a`): all 726 / 699 / 726 reference files identical but the run logs of `sum_data` and
+`sum_free` (their segment fills now), plus the new files of those two and of `fixed_angle`; `ctest -LE slow` 176/177,
+the one failure `upgrade_predictions` (the committed table lacked the new and now-filled projects; regenerated, nine
+added lines, then passed); `tests/run_tests.sh` 145 / 0; the gate (`gdsm2a`): 483 (456) identical, 38 classified, 0
+differ, 0 missing; calculations at 1 and 3 threads identical (T1-T3, 13N, natural_neon, energy_shift_sqrt, three
+bases, 18/18); fits at 1 thread byte-identical to `b-trial12` (T2 `--use-lm` 200 calls, T2 `--use-gradient` 200
+calls, 13N, energy_shift_sqrt).  Speed (min of 6, 1 thread, alternated with `b-trial12`): T2 calculation 659.9 M
+cycles against 663.7 M, 200-call T2 fit 49.56 G against 50.48 G; peak RSS of the T2 fit 331 / 412 MB at 1 / 3 threads
+against 355 / 447.
+
+**Open (rest of milestone 2).** The flat unit vector (sub-points as ranges), the plan by unit index, the
+parent-data pointer of a point (folds, model pass and gradient then take the data set), `Clone` as a plain copy.  A
+term's settings are named by a shared pointer, not by an index: the matrix functions ask the point for them and
+their bodies may not change while the pathway work runs.
+
 ## 2026-11-11 (director, early morning) — the eighth wave, first part merged: the project as records in Python; capture analyzing power at set-up
 
 **Merged into `feature/upgrade-4-data`** (`--no-ff`, in this order; rehearsed together in one scratch worktree, built

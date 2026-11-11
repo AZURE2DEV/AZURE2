@@ -48,23 +48,49 @@ bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
 A0=7.95e-21
 A1=0.8
-LINE="1  \"1\"  200  0  0  1  1.0e18  \"a0/x^a1\"  2  $A0  $A1  0  0  0  \"\"  0  0  0  20  50"
 OUTNAME="AZUREOut_aa=1_R=3.out"
 
-# model NAME TARGETINT-LINE [E_LO E_HI [THRESHOLD]]: the resonance project, one capture pair (exit 3, type 0), points
-# every 5 keV from E_LO to E_HI (lab MeV, default 0.240-0.520); THRESHOLD=1 adds a closed channel of a pair whose
-# heavy partner is excited by 0.42 MeV (key 9, zero ANC on the ground state: a threshold, no change in sigma)
+# model NAME TARGET WINDOWS [E_LO E_HI [THRESHOLD]]: the resonance project, one data set of 14N(p,g) to the 6.79 MeV state
+# (pair 3), points every 5 keV from E_LO to E_HI (lab MeV, default 0.240-0.520), sub-point grid of 200 points.
+# TARGET: thin (a layer of 1e18 atoms/cm2, stopping a0/x^a1), thinfit (its areal density fitted, no prior), thick
+# (kind infinite: a yield per particle), conv (no target, a 2 keV lab beam spread, 50 points).  WINDOWS: the value of
+# fold_windows ("" for none).  THRESHOLD=1 adds a closed channel of a pair whose heavy partner is excited by 0.42 MeV
+# (key 9, zero ANC on the ground state: a threshold, no change in sigma)
 model() {
-  local d="$WORK/$1" lo="${3:-0.240}" hi="${4:-0.520}" thr="${5:-0}"
+  local d="$WORK/$1" kind="$2" win="$3" lo="${4:-0.240}" hi="${5:-0.520}" thr="${6:-0}"
   mkdir -p "$d/output" "$d/checks" "$d/data"
   awk -v lo="$lo" -v hi="$hi" 'BEGIN { for (e = lo; e <= hi + 1e-9; e += 0.005) printf "%.3f 0 1.0e-06 1.0e-07\n", e }' > "$d/data/thin.dat"
-  awk -v tline="$2" -v thr="$thr" \
-      -v s1="1 1 3 0 6 0 180 0 1 0 0 0 0 0 data/thin.dat 0 0" '
+  local q="sigma" u="b" eff="    target         tgt" pts=200 tgt=""
+  case "$kind" in
+    thin|thinfit) tgt="target tgt
+    kind           layer
+    active         14N
+    areal_density  1.0e18 atoms/cm2 $([ "$kind" = thinfit ] && echo fit || echo fixed)
+    stopping       formula \"a0/x^a1\" a0=$A0 a1=$A1 MeV*cm2/atom
+    straggling     none" ;;
+    thick) q="yield"; u="1/particle"; tgt="target tgt
+    kind           infinite
+    active         14N
+    stopping       formula \"a0/x^a1\" a0=$A0 a1=$A1 MeV*cm2/atom
+    straggling     none" ;;
+    conv) pts=50; eff="    beam           spread"; tgt="beam spread
+    spread         0.002 MeV lab" ;;
+  esac
+  export DS="dataset thin
+    reaction       14N(p,g)15O[6.7931]
+    quantity       $q
+    unit           $u
+    file           data/thin.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0 6 MeV
+    norm           1 fixed
+$eff
+    quadrature     points $pts width_multiplier 20 per_width 50${win:+
+    fold_windows   $win}" TGT="$tgt"
+  awk -v thr="$thr" '
     { sub(/\r$/, "") }
-    /^<targetInt>$/ { print; print tline; skip = 1; next }
-    /^<segmentsData>$/ { print; print s1; skip = 1; next }
-    /^<segmentsTest>$/ { print; skip = 1; next }
-    /^<\/targetInt>$|^<\/segmentsData>$|^<\/segmentsTest>$/ { skip = 0 }
+    /^<data>$|^<extrapolations>$|^<targets>$/ { print; if ($0 == "<data>") print ENVIRON["DS"]; if ($0 == "<targets>") print ENVIRON["TGT"]; skip = 1; next }
+    /^<\/data>$|^<\/extrapolations>$|^<\/targets>$/ { skip = 0 }
     /^<levels>$/ { inl = 1; print; next }
     /^<\/levels>$/ { inl = 0 }
     inl && thr == 1 && !done && NF >= 31 && $6 == 1 {
@@ -83,8 +109,8 @@ y() { awk 'NF >= 5 { sub(/\r$/, ""); print $4 }' "$WORK/$1/output/$OUTNAME" 2> /
 same() { [ -s "$WORK/$1/output/$OUTNAME" ] && "$PY" -I -c 'import sys; sys.exit(open(sys.argv[1], "rb").read() != open(sys.argv[2], "rb").read())' \
            "$WORK/$1/output/$OUTNAME" "$WORK/$2/output/$OUTNAME"; }
 
-model full "$LINE";                    run full 1 ""
-model auto "$LINE  \"auto\"  0";       run auto 1 ""
+model full thin "";                    run full 1 ""
+model auto thin auto;                  run auto 1 ""
 
 # (a) the Note
 n="$(note auto)"; nin="$(inside auto)"
@@ -94,7 +120,7 @@ else bad "(a) \"auto\": Note '${n:-none}'"; tail -3 "$WORK/auto/run.log"; fi
 
 # (b) the same as the listed windows written out; inside = full to every digit
 W="$(windows auto)"
-model listed "$LINE  \"${W:-none}\"  0"; run listed 1 ""
+model listed thin "$(echo "${W:-none}" | tr ',' ' ') MeV"; run listed 1 ""
 if [ -n "$W" ] && same auto listed; then ok "(b) identical to the line with the listed windows \"$W\" written out"
 else bad "(b) differs from the line with the listed windows \"${W:-none}\""; fi
 read -r nsame nall <<< "$(paste <(y full) <(y auto) | awk '$1 == $2 { s++ } END { print s + 0, NR }')"
@@ -107,14 +133,14 @@ if awk -v w="$worst" 'BEGIN { exit !(w <= 1e-2) }'; then ok "(c) every point wit
 else bad "(c) a point is $worst off the full integration at $at MeV (tolerance 1e-2)"; fi
 
 # (d) tolerance and margin
-model tight "$LINE  \"auto:0.001:1\"  0"; run tight 1 ""
+model tight thin auto:0.001:1; run tight 1 ""
 nt="$(inside tight)"
 if note tight | grep -q "tolerance 0.001, margin 1)" && [ -n "$nt" ] && [ -n "$nin" ] && [ "$nt" -lt "$nin" ]; then
   ok "(d) \"auto:0.001:1\": reported, $nt points integrated (default: $nin)"
 else bad "(d) \"auto:0.001:1\": Note '$(note tight)'"; fi
 
 # (e) a threshold of the same compound nucleus
-model thr "$LINE  \"auto\"  0" 0.240 0.520 1; run thr 1 ""
+model thr thin auto 0.240 0.520 1; run thr 1 ""
 F="$(awk 'BEGIN { printf "%.10f", 14.0031 / (1.00783 + 14.0031) }')"
 eth="$(awk -v f="$F" 'BEGIN { printf "%.4f", 0.42 / f }')"
 covered="$(windows thr | tr ',' '\n' | awk -F- -v e="$eth" '$1 < e && $2 > e { c = 1 } END { print c + 0 }')"
@@ -124,29 +150,28 @@ elif note thr | grep -q "1 narrow level(s), 1 threshold(s)" && [ "$covered" -eq 
   ok "(e) the threshold at $eth MeV lab gets a window ($(windows thr))"
 else bad "(e) threshold at $eth MeV: Note '$(note thr)'"; fi
 
-# (f) explicit ranges are added
-model union "$LINE  \"auto,0.48-0.50\"  0"; run union 1 ""
-if windows union | grep -q "0.48-0.5" && [ "$(inside union)" -gt "${nin:-999}" ]; then ok "(f) \"auto,0.48-0.50\": $(windows union)"
-else bad "(f) \"auto,0.48-0.50\": Note '$(note union)'"; fi
+# (f) explicit ranges added to "auto" ("auto,0.48-0.50" on an old line): format 3's fold_windows is auto or ranges, not
+# both, so this case is not written here (docs/upgrade/format3_tree.md section 4; the converter drops the ranges with
+# a note)
 
 # (g) no level near the data: every point at E_bar
-model far "$LINE  \"auto\"  0" 0.400 0.520; run far 1 ""
-model faroff "$LINE  \"0.10-0.11\"  0" 0.400 0.520; run faroff 1 ""
+model far thin auto 0.400 0.520; run far 1 ""
+model faroff thin "0.10-0.11 MeV" 0.400 0.520; run faroff 1 ""
 if note far | grep -q "0 narrow level(s), 0 threshold(s), 0 of 25 points" && same far faroff; then ok "(g) data far from every level: no window, every point at E_bar"
 else bad "(g) data far from every level: Note '$(note far)'"; fi
 
 # (h) gradient: fitted density and a blend, analytic block
-model grad "$LINE  \"auto\"  0.01  densityfit 1 0"; run grad 2 "--use-gradient" AZURE_GRAD_CHECK=exit
+model grad thinfit "auto blend 0.01 MeV"; run grad 2 "--use-gradient" AZURE_GRAD_CHECK=exit
 line="$(grep "components with relative disagreement" "$WORK/grad/run.log" | head -1)"
 if echo "$line" | grep -q "analytic block used;.*density 0/1;.*Jacobian path: density 0/1" && note grad > /dev/null; then
   ok "(h) gradient check on the analytic path: $line"
 else bad "(h) gradient check: ${line:-no [grad-check] line}"; fi
 
 # (i) refusals
-model thick "1  \"1\"  200  0  0  1  0  \"a0/x^a1\"  2  $A0  $A1  0  0  0  \"\"  0  0  0  20  50  \"auto\"  0"; run thick 1 ""
+model thick thick auto; run thick 1 ""
 if grep -q "ERROR.*auto.*THIN-target" "$WORK/thick/run.log" && [ ! -s "$WORK/thick/output/$OUTNAME" ]; then ok "(i) \"auto\" on a thick target: refused, no output"
 else bad "(i) \"auto\" on a thick target was not refused"; tail -2 "$WORK/thick/run.log"; fi
-model conv "1  \"1\"  50  1  0.002  0  0  \"\"  0  0  0  0  \"\"  0  0  0  20  50  \"auto\"  0"; run conv 1 ""
+model conv conv auto; run conv 1 ""
 if grep -q "ERROR.*auto.*THIN-target" "$WORK/conv/run.log" && [ ! -s "$WORK/conv/output/$OUTNAME" ]; then ok "(i) \"auto\" without a target integration: refused, no output"
 else bad "(i) \"auto\" on a convolution-only line was not refused"; tail -2 "$WORK/conv/run.log"; fi
 

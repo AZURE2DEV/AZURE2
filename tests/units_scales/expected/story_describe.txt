@@ -4,7 +4,7 @@ dataset Y_curve (data set 1, line 47)
   the model x 6.241509074e+12 beam particles per unit of charge of counts/uC (charge state 1, e = 1.602176634e-19 C) x efficiency 0.0182
   energy column E_lab[keV]: x 0.001 to MeV
     15N(p,a)12C: entrance pair 1 (p+15N), exit pair 2 (a+12C)
-  window E_lab 0 - 1.79769e+308 MeV
+  window E_lab all energies (no energy_window)
   data file <project>/data/yield_curve.dat
   rows: 33 read, 33 kept, E_lab 0.8 - 1.2 MeV
   effect: target N15T, beam pbeam, detector -

@@ -30,6 +30,9 @@ struct PairInfo {
   double threshold = 0.0;  ///< MeV, the E_x of the compound nucleus at which the pair opens (S + e1 + e2)
   double lightMass = 0.0, heavyMass = 0.0;  ///< u, the masses of <levels> (PPair's), for the frame of a c.m. grid
   int twoJLight = 0, twoJHeavy = 0;  ///< 2j of the two particles
+  int heavyParity = 1;               ///< parity of the heavy particle (photon pair: of the final level)
+  /// The external-capture multipole mask of the pair (column 31 of its first active row that has one; 0 = none)
+  unsigned int externalCapture = 0;
   bool identical = false;            ///< the two particles are identical (PPair::IsIdentical)
 };
 
@@ -50,12 +53,16 @@ struct LevelInfo {
   double width = -1.0;
   int group = 0, level = 0;  ///< the engine's indices of the J^pi group and of the level in it (1-based)
   std::vector<LevelChannelInfo> channels;  ///< the channels of its J^pi group
+  int nucleusZ = 0, nucleusA = 0;  ///< the compound nucleus of its J^pi group
 };
 
 /// The tables of one <levels> section.
 struct LevelTables {
   std::vector<PairInfo> pairs;    ///< one per pair key, from its first row (active or not), in row order
   std::vector<LevelInfo> levels;  ///< the levels of the active rows, by group and level number
+  /// The keys of the pairs with an external-capture mask on an active row, in the engine's pair order (the order of
+  /// their first active rows)
+  std::vector<int> externalCapturePairs;
 };
 
 /// "15N", "4He": mass number and element symbol.

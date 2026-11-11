@@ -6,12 +6,15 @@
 # The 13N reference model is edited at run time into composites of both exit pairs (p+12C elastic, 1; capture to
 # 13N g.s. with external capture, 2):
 #
-#   seg 2  Seagrave capture, gas-target integration: SUM + 1e-7 x elastic (angle-integrated) + 0.5 x capture
-#   seg 3  Meyer 84.3 deg elastic, fixed energy shift 2 keV: SUM + 1000 x capture at the same angle
-#   seg 4  Meyer 114.5 deg elastic: RATIO elastic / capture
-#   seg 9  Kettner 0 deg capture, sub-point target effect: SUM + capture at 90 deg (same exit, another angle)
-#   seg 10 Kettner 55 deg capture: SUM + 1e-7 x elastic at 55 deg
-#   test   0.3-3 MeV, 90 deg: SUM elastic + 1000 x capture (Calculate Segments Without Data)
+#   skowronski_luna_hpge  capture: SUM + 0.5 x capture
+#   meyer_84              84.3 deg elastic, fixed energy shift 2 keV: SUM + 1000 x capture at the same angle
+#   meyer_114             114.5 deg elastic: RATIO elastic / capture (unit 1)
+#   kettner_0             0 deg capture, Q attenuation: SUM + capture at 90 deg lab (same exit, another angle)
+#   kettner_55            55 deg capture: SUM + 1e-7 x elastic at 55 deg
+#   extrapolation         0.3-3 MeV, 90 deg lab: SUM elastic + 1000 x capture (Calculate Segments Without Data)
+# (Format 3 cannot write two composites of the old model: a sum on the thick-target yield of Seagrave, and an
+# angle-integrated elastic term of a charged pair in a sum; the capture data set skowronski_luna_hpge takes the first
+# one's place, and the elastic term of kettner_55 stays differential.)
 #
 #   (a) every output file identical with and without the component mapping (AZURE_NO_COMPONENT_MAPPING=1), for the
 #       data (mode 1) and the extrapolation (mode 3);
@@ -41,28 +44,28 @@ failures=0
 ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
-awk '/<segmentsData>/ { f = 1; n = 0; print; next }
-     /<\/segmentsData>/ { f = 0 }
-     /<segmentsTest>/ { print; print "1 1 1 0.3 3.0 0.01 90 90 0 1 1 0 -1 2 1 1 -999 1 1 2 -999 1000"; next }
-     f { n++
-         tail = ""
-         if (n == 2)  tail = "1 0 -1 2 1 1 -999 1e-7 1 2 -999 0.5 0"
-         if (n == 3)  { $12 = 0.002; tail = "1 0 -1 1 1 2 -999 1000 0" }
-         if (n == 4)  tail = "1 1 1 1 2 -999 0"
-         if (n == 9)  tail = "1 0 -1 1 1 2 90 1 0"
-         if (n == 10) tail = "1 0 -1 1 1 1 -999 1e-7 0"
-         if (tail != "") { NF = 15; $0 = $0 " " tail } }
-     { print }' "$REF/13N.azr" > "$WORK/t.azr"
-[ "$(awk '/<segmentsData>/ { f = 1; next } /<\/segmentsData>/ { f = 0 } f && NF > 17' "$WORK/t.azr" | awk 'END { print NR }')" = 5 ] \
-  || { bad "model not built"; exit 1; }
-# The fit copy (c): without the ratio, whose elastic/capture values (~1e8 against data of ~1) would dominate chi2 and
-# hide the other composites in the gradient check.
-awk '/<segmentsData>/ { f = 1; n = 0; print; next } /<\/segmentsData>/ { f = 0 }
-     f { n++; if (n == 4) { NF = 15; $0 = $0 " 0 0" } } { print }' "$WORK/t.azr" > "$WORK/g.azr"
-# The extrapolation copy: target effects off (they would fold the test segment, see the azure2-calculate skill).
-awk '/<targetInt>/ { f = 1; print; next } /<\/targetInt>/ { f = 0 } f { $1 = 0 } { print }' "$WORK/t.azr" > "$WORK/x.azr"
+# model RATIO OUT: the composites above (meyer_114's ratio only when RATIO = 1)
+model() {
+  awk -v ratio="$1" '
+    { sub(/\r$/, "") }
+    /^dataset / { ds = $2 }
+    /^[a-z_]+ [A-Za-z0-9_-]+$/ && !/^dataset / { ds = "" }
+    $1 == "reaction" && ds == "skowronski_luna_hpge" { $0 = "    reaction       12C(p,g)13N + 0.5*12C(p,g)13N" }
+    $1 == "reaction" && ds == "meyer_84" { $0 = "    reaction       12C(p,p)12C + 1000*12C(p,g)13N"; print; print "    shift          offset 0.002 MeV fixed"; next }
+    $1 == "reaction" && ds == "meyer_114" && ratio == 1 { $0 = "    reaction       12C(p,p)12C / 12C(p,g)13N" }
+    $1 == "unit" && ds == "meyer_114" && ratio == 1 { $0 = "    unit           1" }
+    $1 == "reaction" && ds == "kettner_0" { $0 = "    reaction       12C(p,g)13N + 12C(p,g)13N @ 90 deg lab" }
+    $1 == "reaction" && ds == "kettner_55" { $0 = "    reaction       12C(p,g)13N + 1e-7*12C(p,p)12C" }
+    /^<extrapolations>$/ { print; print "extrapolation sum90"; print "    reaction       12C(p,p)12C + 1000*12C(p,g)13N"
+      print "    quantity       dsigma_domega"; print "    unit           b/sr"
+      print "    energies       range 0.3 3.0 MeV lab step 0.01"; print "    angles         list 90 deg lab"; next }
+    { print }' "$REF/13N.azr" > "$WORK/$2"
+}
+model 1 t.azr
+[ "$(grep -c '^    reaction       .* [+/] ' "$WORK/t.azr")" = 6 ] || { bad "model not built"; exit 1; }
+model 0 g.azr
+cp "$WORK/t.azr" "$WORK/x.azr"
 
-# run NAME MODEL MODE [ENV...] -> $WORK/NAME
 run() {
   local name="$1" model="$2" mode="$3"; shift 3
   local dir="$WORK/$name" input

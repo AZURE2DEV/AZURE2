@@ -176,7 +176,6 @@ double engineFold(const Config &configure, EData &data, int effectNum, Sigma sig
   results.slot.assign(rec * (nSub + 1), 0.0);
   EPoint point(0.0, e0, 1, 2, false, false, false, 0.0, 0, 0);
   point.SetResultRecord(0, 0, 0);
-  point.SetParentData(&data);
   point.SetTargetEffectNum(effectNum);
   if (window) point.SetBinWindow(window[0], window[1]);
   if (mass > 0.0) point.SetPhotoKinematics(qGamma, mass);
@@ -185,15 +184,19 @@ double engineFold(const Config &configure, EData &data, int effectNum, Sigma sig
   // lab and c.m. energies equal makes that amount exactly `shift`.
   point.SetLabEnergy(e0 + shift);
   point.SetCMEnergy(e0 + shift);
+  // the point and its sub-points as units of the data set: the sub-points a range after the point
+  const int unit = data.AppendUnit(point);
   for (int i = 0; i < nSub; i++) {
     double e = hi - (hi - lo) * i / (nSub - 1);   // engine convention: high to low
     EPoint sub(0.0, e, 1, 2, false, false, false, 0.0, 0, 0);
     sub.SetResultRecord(rec * (i + 1), 0, 0);
     sub.SetFitCrossSection(results, sigma(e));
-    point.AddSubPoint(sub);
+    data.Unit(unit).MakeSubPoint(sub);
+    data.AppendUnit(sub);
   }
-  point.IntegrateTargetEffect(configure, results);
-  return point.GetFitCrossSection(results);
+  data.Unit(unit).SetSubPointRange(unit + 1, nSub);
+  data.Unit(unit).IntegrateTargetEffect(data, configure, results);
+  return data.Unit(unit).GetFitCrossSection(results);
 }
 
 }  // namespace

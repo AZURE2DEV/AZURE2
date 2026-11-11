@@ -1,24 +1,23 @@
 #include "EDataIterator.h"
-#include "ESegment.h"
+#include "EData.h"
 
 
 /*!
  * The EDataIterator object is created with reference to a vector of ESegment objects.
  */
 
-EDataIterator::EDataIterator(std::vector<ESegment> *segments) :
-  segments_(segments) {
+EDataIterator::EDataIterator(EData *data) : data_(data), segments_(&data->GetSegments()) {
   segmentIterator_ = segments_->begin();
   // Skip initial segments with components
   while (segmentIterator_ < segments_->end() && (*segmentIterator_).HasComponents()) {
     segmentIterator_++;
   }
   if (segmentIterator_ < segments_->end()) {
-    pointIterator_ = (*segmentIterator_).GetPoints().begin();
+    pointIterator_ = (*segmentIterator_).GetPoints(*data_).begin();
   } else {
     // All segments have components, set to end
     segmentIterator_ = segments_->end() - 1;
-    pointIterator_ = (*segmentIterator_).GetPoints().end();
+    pointIterator_ = (*segmentIterator_).GetPoints(*data_).end();
   }
 }
 
@@ -28,6 +27,7 @@ EDataIterator::EDataIterator(std::vector<ESegment> *segments) :
  */
 
 EDataIterator::EDataIterator(const EDataIterator &it) :
+  data_(it.data_),
   segments_(it.segments_),
   segmentIterator_(it.segmentIterator_),
   pointIterator_(it.pointIterator_) {
@@ -38,7 +38,7 @@ EDataIterator::EDataIterator(const EDataIterator &it) :
  */
 
 EDataIterator &EDataIterator::operator++() {
-  if (pointIterator_ < ((*segmentIterator_).GetPoints().end()) - 1) {
+  if (pointIterator_ < ((*segmentIterator_).GetPoints(*data_).end()) - 1) {
     pointIterator_++;
   } else if (segmentIterator_ < segments_->end() - 1) {
     segmentIterator_++;
@@ -47,14 +47,14 @@ EDataIterator &EDataIterator::operator++() {
       segmentIterator_++;
     }
     if (segmentIterator_ < segments_->end()) {
-      pointIterator_ = (*segmentIterator_).GetPoints().begin();
+      pointIterator_ = (*segmentIterator_).GetPoints(*data_).begin();
     } else {
       // We've reached the end, set to end position
       segmentIterator_ = segments_->end() - 1;
-      pointIterator_ = (*segmentIterator_).GetPoints().end();
+      pointIterator_ = (*segmentIterator_).GetPoints(*data_).end();
     }
   } else if ((segmentIterator_ == (segments_->end() - 1)) &&
-             (pointIterator_ == ((*segmentIterator_).GetPoints().end() - 1)))
+             (pointIterator_ == ((*segmentIterator_).GetPoints(*data_).end() - 1)))
     pointIterator_++;
   return *this;
 }
@@ -92,7 +92,7 @@ bool EDataIterator::operator!=(const EDataIterator &rhs) {
 
 EDataIterator &EDataIterator::SetEnd() {
   segmentIterator_ = segments_->end() - 1;
-  pointIterator_ = (*segmentIterator_).GetPoints().end();
+  pointIterator_ = (*segmentIterator_).GetPoints(*data_).end();
   return *this;
 }
 

@@ -15,9 +15,9 @@ import re
 import warnings
 from collections import Counter
 
-from .azrfile import _engine_module
+from .described import _engine as _engine_module
 
-__all__ = ["Project", "Record", "Nuisance", "FormatError"]
+__all__ = ["Project", "Record", "Nuisance", "FormatError", "records_from_csv"]
 
 _ENCODING = ("utf-8", "surrogateescape")  # bytes of the file <-> str, every byte kept
 
@@ -476,10 +476,18 @@ class Project:
                     new_lines.append(_field_line(doc, model, key, canonical, comment if comment else
                                                  (model["comment"] if own and i < len(own) else b"")))
                 if own:
+                    # the repeats' lines take the new values in order; every other line between them (another field,
+                    # a whole-line comment) stays where it is; more values follow the last repeat, fewer drop the rest
                     first, last = own[0]["line"], own[-1]["line"]
-                    keep = [doc.line(f["line"] - 1) for f in r["fields"] if first < f["line"] < last
-                            and _text(f["key"]) != key]  # other fields between repeats stay, after the new lines
-                    doc.replace_lines(first - 1, last, new_lines + keep)
+                    lines_of_own = {f["line"]: k for k, f in enumerate(own)}
+                    out = []
+                    for ln in range(first, last + 1):
+                        k = lines_of_own.get(ln)
+                        if k is None:
+                            out.append(doc.line(ln - 1))
+                        elif k < len(new_lines):
+                            out.append(new_lines[k])
+                    doc.replace_lines(first - 1, last, out + new_lines[len(own):])
                 elif new_lines:
                     doc.replace_lines(r["last_line"], r["last_line"], new_lines)
 
@@ -492,7 +500,8 @@ class Project:
         ``<mcmc>`` and the prior-covariance file the project names (written by :meth:`save`).  Refused (FormatError)
         when the engine finds an error the project did not have (a name of the wrong syntax or already in use)."""
         refs = [r for r in self._references() if _text(r["name"]) == old]
-        cov = self._prior_covariance_renamed(old, new)
+        engine = _engine_module()
+        names = {}  # parameter name before -> after, from the engine (experiment::ParameterNamesOf)
 
         def edit(doc):
             _, r = self._find(old, doc)
@@ -503,21 +512,39 @@ class Project:
                 if b[start:start + len(_bytes(old))] != _bytes(old):
                     raise RuntimeError(f"line {line}: '{old}' not at column {col}")
                 doc.replace_lines(line - 1, line, [b[:start] + _bytes(new) + b[start + len(_bytes(old)):]])
+            try:  # the names the engine gives, before and after, inactive records taken as active (their rows apply when
+                # they are switched on); the same parameters in the same order
+                before = engine.parameter_names(self._doc.write(), True)
+                after = engine.parameter_names(doc.write(), True)
+            except ValueError:
+                warnings.warn(f"rename {old!r}: the project has errors, so the engine names no parameters: "
+                              f"<parameterSettings>, <mcmc> and the prior covariance are left as they are", stacklevel=3)
+                return
+            if len(before) != len(after):
+                raise RuntimeError(f"rename {old!r}: {len(before)} parameter names before, {len(after)} after")
+            names.update((_bytes(b), _bytes(a)) for b, a in zip(before, after) if b != a)
+            unnamed = []  # rows that still hold the old name after the engine's names are renamed
             for s in _sections_named(doc, _PARAMETER_SECTIONS):
                 for i in range(s[1] + 1, s[2]):
                     b = doc.line(i)
-                    renamed = _rename_parameters(b, old, new)
+                    renamed = _rename_parameters(b, names)
                     if renamed != b:
                         doc.replace_lines(i, i + 1, [renamed])
+                    if _bytes(old) in renamed:
+                        unnamed.append(f"{i + 1}: {_text(renamed).strip()}")
+            if unnamed:
+                warnings.warn(f"rename {old!r}: these rows contain {old!r} but name no parameter the engine gives the "
+                              f"project; left as they are: " + "; ".join(unnamed), stacklevel=3)
 
         self._apply(f"rename {old!r} to {new!r}", edit)
+        cov = self._prior_covariance_renamed(names)
         if cov:
             self._side_files[cov[0]] = cov[1]
         return Record(self, new)
 
-    def _prior_covariance_renamed(self, old, new):
+    def _prior_covariance_renamed(self, names):
         """(path relative to the project, renamed bytes) of the prior-covariance file whose names line holds a
-        parameter of ``old``; None when there is none to change."""
+        parameter renamed by ``names`` (bytes -> bytes); None when there is none to change."""
         rel = _config_value(self._doc, "priorCovariance")
         if not rel:
             return None
@@ -532,7 +559,7 @@ class Project:
         lines = content.split(b"\n")
         for i, line in enumerate(lines):
             if line.strip() and not line.lstrip().startswith(b"#"):  # the line of names (data_formats.rst)
-                renamed = _rename_parameters(line, old, new)
+                renamed = _rename_parameters(line, names)
                 if renamed == line:
                     return None
                 lines[i] = renamed
@@ -581,6 +608,56 @@ class Project:
         return list(missing)
 
 
+def records_from_csv(path, kind="dataset", project=None):
+    """Records of ``kind`` declared in a sheet (docs/upgrade/project_format3.md section 6.5): a CSV file whose header
+    row holds field keys, a ``name`` column among them, and one row per record (``name, file, reaction, quantity,
+    unit, columns, norm, ...``; an empty cell leaves the field out; blank rows and rows starting with ``#`` are
+    skipped).  Every row is checked by the engine: the grammar of its values, and with ``project`` (a
+    :class:`Project`) the whole project as it would stand with the rows added before it (references, units, required
+    fields).  All refusals come at once: FormatError whose diagnostics are the engine's, each with ``row`` (the line of
+    the file) and its message starting "row N:".  Returns ``[(kind, name, fields)]`` for :meth:`Project.add`::
+
+        for kind, name, fields in pyazr.records_from_csv("datasets.csv", project=p):
+            p.add(kind, name, **fields)
+    """
+    import csv
+    engine = _engine_module()
+    with open(path, newline="") as f:
+        lines = [(n, row) for n, row in enumerate(csv.reader(f), start=1)
+                 if any(c.strip() for c in row) and not row[0].lstrip().startswith("#")]
+    if not lines:
+        raise FormatError(f"{path}: no header row")
+    header = [h.strip() for h in lines[0][1]]
+    if "name" not in header:
+        raise FormatError(f"{path}: the header row has no 'name' column (the keys: {', '.join(header)})")
+    trial = Project(project.to_bytes(), project.path) if project is not None else None
+    records, refusals = [], []
+
+    def refuse(n, diagnostics):
+        refusals.extend(dict(d, row=n, message=f"row {n}: {d.get('message', '')}") for d in diagnostics)
+
+    for n, row in lines[1:]:
+        cells = dict(zip(header, (c.strip() for c in row)))
+        name = cells.pop("name", "")
+        fields = {k: v for k, v in cells.items() if v != ""}
+        _, problems = engine.record_lines(kind, name, list(fields.items()))
+        if problems:
+            refuse(n, [{"severity": "error", "code": c, "record": name, "message": m} for c, m in problems])
+            continue
+        if trial is not None:
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    trial.add(kind, name, **fields)
+            except FormatError as e:
+                refuse(n, e.diagnostics)
+                continue
+        records.append((kind, name, fields))
+    if refusals:
+        raise FormatError(f"{path}: {len({d['row'] for d in refusals})} row(s) refused", refusals)
+    return records
+
+
 def write_parameter_values(path, values):
     """Write ``{parameter name: value in the engine's unit}`` into the format-3 project at ``path``
     (:meth:`Project._write_parameter_values`; pyazr.azure2.save_fit).  Returns the names written nowhere."""
@@ -601,12 +678,10 @@ def _sections_named(doc, names):
     return [(s[0], s[1], s[2]) for s in doc.sections() if s[0] in names and s[2] >= 0]
 
 
-def _rename_parameters(line, old, new):
-    """``line`` (bytes) with every parameter name made from the record ``old`` renamed: ``old.<field>``,
-    ``old@<epoch>``, and ``[old]`` (a group member's fixed parameter), never a part of a longer name."""
-    o, n = re.escape(_bytes(old)), _bytes(new)
-    line = re.sub(rb"(?<![A-Za-z0-9_\-.@\[/])" + o + rb"(?=[.@])", n, line)
-    return re.sub(rb"\[" + o + rb"\]", b"[" + n + b"]", line)
+def _rename_parameters(line, names):
+    """``line`` (bytes) with every whitespace-separated token that is a key of ``names`` replaced by its value: the
+    parameter names are the engine's, compared whole."""
+    return b"".join(names.get(t, t) for t in re.split(rb"(\s+)", line))
 
 
 def _config_value(doc, key):

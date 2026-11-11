@@ -5,6 +5,7 @@
 
 class CNuc;
 class Config;
+class EData;
 class EPoint;
 
 namespace azure2 {
@@ -20,9 +21,11 @@ namespace azure2 {
  * <dsigma/dOmega> / <sigma_C>, not the fold of the ratio.
  *
  * It reads the point's present energy and angle: an energy shift that re-energised the point (ESegment::
- * UpdatePointEnergiesWithShift) moves it as it moves the numerator; no level parameter does.
+ * UpdatePointEnergiesWithShift) moves it as it moves the numerator; no level parameter does.  `data` is the data set
+ * that holds the point (its target effect).
  */
-double CoulombReferenceValue(EPoint *point, experiment::LeafPart part, CNuc *compound, const Config &configure);
+double CoulombReferenceValue(const EData &data, EPoint *point, experiment::LeafPart part, CNuc *compound,
+                             const Config &configure);
 
 /*!
  * The factor E exp(2 pi eta(E)) (MeV) that takes the cross section of a point to its S factor (experiment::FactorRef::

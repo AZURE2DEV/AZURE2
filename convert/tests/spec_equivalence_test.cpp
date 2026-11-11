@@ -35,6 +35,8 @@
 // AZURE2_SPEC_INJECT=1 moves one value of the format-3 side by one ulp, to show that the test fails on a difference
 // (=2: the value of its first model datum; =3: the name of its first data set's energy-shift parameter; =4: the
 // Coulomb radius of its first potential).
+// The old projects are those of tests/ and examples/, an original kept in tests/convert/fixtures/ read in place of the
+// committed conversion of the same path (docs/upgrade/format3_tree.md).
 //   spec_equivalence_test <repository root>
 #include <algorithm>
 #include <cmath>
@@ -114,7 +116,7 @@ void Find(const std::string &dir, const std::string &rel, std::vector<std::strin
   std::error_code ec;
   for (const fs::directory_entry &e : fs::directory_iterator(dir, ec)) {
     const std::string name = e.path().filename().string();
-    if (name == "output" || name == "checks") continue;
+    if (name == "output" || name == "checks" || rel + name == "tests/convert") continue;
     if (e.is_directory(ec)) Find(e.path().string(), rel + name + "/", out);
     else if (name.size() > 4 && name.substr(name.size() - 4) == ".azr" && name.find(".f3.") == std::string::npos)
       out.push_back(rel + name);
@@ -480,13 +482,20 @@ int main(int argc, char **argv) {
   const std::string root = argv[1];
   if (const char *inject = std::getenv("AZURE2_SPEC_INJECT")) injected = std::atoi(inject);
   std::vector<std::string> files;
+  // The tree's projects and the originals of the converted ones (tests/convert/fixtures/<path>, the original of
+  // <path>; docs/upgrade/format3_tree.md): an original is read in place of its conversion, with the data files of
+  // its own folder.
+  const std::string fixtures = root + "/tests/convert/fixtures";
   Find(root + "/tests", "tests/", files);
   Find(root + "/examples", "examples/", files);
+  Find(fixtures + "/tests", "tests/", files);
+  Find(fixtures + "/examples", "examples/", files);
   std::sort(files.begin(), files.end());
+  files.erase(std::unique(files.begin(), files.end()), files.end());
   int passed = 0, failed = 0, notConverted = 0, filesNotAtHand = 0, recorded = 0;
   for (const std::string &rel : files) {
     std::string text;
-    if (!Slurp(root + "/" + rel, text)) continue;
+    if (!Slurp(fixtures + "/" + rel, text) && !Slurp(root + "/" + rel, text)) continue;
     const std::string dir = root + "/" + rel.substr(0, rel.find_last_of('/'));
     convert::ConvertOptions o;
     o.projectDir = dir;
@@ -548,6 +557,7 @@ int main(int argc, char **argv) {
     Format3ReadOptions read;
     read.fileName = rel;
     read.projectDir = root + "/" + rel.substr(0, rel.find('/', rel.find('/') + 1));
+    read.setUpChecks = false;  // the specs the engine builds: its set-up makes the external-capture checks itself
     Format3Project p = ReadFormat3Text(r.text, read);
     bool onlyFiles = !p.Ok();
     for (const Diagnostic &d : p.diagnostics) onlyFiles = onlyFiles && (d.severity != Severity::Error || d.code == codes::kDataFile);

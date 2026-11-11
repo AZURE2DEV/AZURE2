@@ -10,15 +10,9 @@ none                                                                            
 none                                                                                                #Coulomb Amplitudes Check
 none                                                                                                #Reaction Pathway Check
 none                                                                                                #Angular Distributions Check
-</config>
-<potential>
-useHybridPotential=0
 useAdaptiveGrid=1
-potentialType=0
-V0=150
-R=3.6
-a=0.6
-</potential>
+format=3
+</config>
 <levels>
  1   -1   12.420829208074792    0    1    1    2    0    1    1    0    495.64374187160314    0.5    1    0.5    -1    0 1.00728    14.99627    1    7    12.1274    12.1274    0    0    0.0    0    4.85    0    0    0
  1   -1   12.420829208074792    0    1    1    2    4    1    1    1    0    0.5    1    0.5    -1    0 1.00728    14.99627    1    7    12.1274    12.1274    0    0    0.0    0    4.85    0    0    0
@@ -41,34 +35,42 @@ a=0.6
  3    -1    13.26922393351259    0    1    2    0    6    5    1    0    12919.287559610993    0    1    0    1    0    4.00151    11.99671    2    6    12.1274    7.16192    0    0    0.0    0    5.43    0    0    0
 
 </levels>
-<segmentsData>
-1  1  2  0  0.6  0  180  0  0.444486  1  0  0  0  0  data/lacognata_a.dat  0  0
-1  1  2  0  0.6  0  180  0  0.519255  1  0  0  0  0  data/lacognata_b.dat  0  0
-1  1  2  0  1.65  0  180  0  0.9950877877494786  1  15  0  0  0  data/schardt.dat  0  0
-</segmentsData>
-<segmentsTest>
-</segmentsTest>
-<targetInt>
-</targetInt>
+<data>
+# <segmentsData> line 1
+dataset lacognata_a
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/lacognata_a.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0 0.6 MeV
+    norm           0.444486 fit
+
+# <segmentsData> line 2
+dataset lacognata_b
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/lacognata_b.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0 0.6 MeV
+    norm           0.519255 fit
+
+# <segmentsData> line 3
+dataset schardt
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/schardt.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0 1.65 MeV
+    norm           0.9950877877494786 fit prior 0.9950877877494786 15%
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+</targets>
 <parameterSettings>
 # Fitting parameter settings (only non-fixed parameters shown)
 # Format: name value lower_limit upper_limit error fit_error nuisance category minuit_index
 </parameterSettings>
-<lastRun>
-0
-"output/param.sav"
-"output/intEC.dat"
-1 2
-0 ""
-0.07 10 -1.
-</lastRun>
-<mcmc>
-nwalkers 50
-nsteps 10000
-chainspread 5
-energyspread 1
-nthreads 4
-usereducedwidths 0
-<parameters>
-</parameters>
-</mcmc>

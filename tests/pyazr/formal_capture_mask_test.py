@@ -30,10 +30,12 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import old_tree  # noqa: E402  (the old originals of converted projects)
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
 
-SRC = os.path.join(ROOT, "tests", "13N", "13N.azr")
+SRC = old_tree.original(os.path.join(ROOT, "tests", "13N", "13N.azr"))  # the old file (format3_tree.md)
 KEEP = (0, 2)          # <segmentsData> lines kept: capture (artemov) and the 84.3 deg elastic
 CAPTURE = 0            # its index among the kept segments
 
