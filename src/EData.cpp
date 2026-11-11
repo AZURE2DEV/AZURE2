@@ -2784,7 +2784,11 @@ long long WalkECAmplitudes(Segments &segments, CNuc *theCNuc, ECSignatureHash *h
         ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
         int ir = theCNuc->GetPairNumFromKey(segment->GetExitKey());
         if (ecLevel->GetECPairNum() != ir) continue;
-        Decay *decay = entrancePair->GetDecay(ir);
+        // The decay list of an entrance pair is indexed by decay number, which equals the pair
+        // number only while every pair of the project is a decay of it (one compound nucleus).
+        int irDecay = entrancePair->IsDecay(ir);
+        if (!irDecay) continue;
+        Decay *decay = entrancePair->GetDecay(irDecay);
         if (hash) {
           // Which block this is, and the final state it captures to.  The
           // level energy enters every integral (EPoint::CalculateECAmplitudes);
@@ -3141,7 +3145,8 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
           if (theCNuc->GetJGroup(j)->GetLevel(la)->IsECLevel()) {
             ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
             int ir = theCNuc->GetPairNumFromKey(segment->GetExitKey());
-            if (ecLevel->GetECPairNum() == ir) {
+            int irDecay = entrancePair->IsDecay(ir);  // decay number, not the pair number
+            if (ecLevel->GetECPairNum() == ir && irDecay) {
               if (!usePrevious) {
                 if (!(configure.paramMask & Config::USE_API)) {
                   configure.outStream << "\tSegment #" << std::setw(12) << segmentKeyOut
@@ -3185,8 +3190,8 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
               for (EPointIterator point = segment->GetPoints().begin();
                    point < segment->GetPoints().end(); point++) {
                 {
-                  for (int k = 1; k <= entrancePair->GetDecay(ir)->NumKGroups(); k++) {
-                    for (int ecm = 1; ecm <= entrancePair->GetDecay(ir)->GetKGroup(k)->NumECMGroups(); ecm++) {
+                  for (int k = 1; k <= entrancePair->GetDecay(irDecay)->NumKGroups(); k++) {
+                    for (int ecm = 1; ecm <= entrancePair->GetDecay(irDecay)->GetKGroup(k)->NumECMGroups(); ecm++) {
                       if (!usePrevious) {
                         if (out.is_open()) out << point->GetECAmplitude(k, ecm) << std::endl;
                         for (EPointIterator subPoint = point->GetSubPoints().begin();
@@ -3421,7 +3426,8 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
             if (theCNuc->GetJGroup(j)->GetLevel(la)->IsECLevel()) {
               ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
               int ir = theCNuc->GetPairNumFromKey(componentSegment.GetExitKey());
-              if (ecLevel->GetECPairNum() == ir) {
+              int irDecay = entrancePair->IsDecay(ir);  // decay number, not the pair number
+              if (ecLevel->GetECPairNum() == ir && irDecay) {
                 if (!usePrevious) {
                   char segmentKeyOut[256];
                   snprintf(segmentKeyOut, sizeof(segmentKeyOut), "%d", componentSegment.GetSegmentKey());
@@ -3472,8 +3478,8 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
                 for (EPointIterator point = componentSegment.GetPoints().begin();
                      point < componentSegment.GetPoints().end(); point++) {
                   if (!(point->IsMapped()) || point->OwnsEDependentValues()) {
-                    for (int k = 1; k <= entrancePair->GetDecay(ir)->NumKGroups(); k++) {
-                      for (int ecm = 1; ecm <= entrancePair->GetDecay(ir)->GetKGroup(k)->NumECMGroups(); ecm++) {
+                    for (int k = 1; k <= entrancePair->GetDecay(irDecay)->NumKGroups(); k++) {
+                      for (int ecm = 1; ecm <= entrancePair->GetDecay(irDecay)->GetKGroup(k)->NumECMGroups(); ecm++) {
                         if (!usePrevious) {
                           if (out.is_open()) out << point->GetECAmplitude(k, ecm) << std::endl;
                           for (EPointIterator subPoint = point->GetSubPoints().begin();
