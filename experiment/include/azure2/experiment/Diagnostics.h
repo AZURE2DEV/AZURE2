@@ -136,6 +136,7 @@ constexpr const char *kFinalStateShared = "E_FINAL_STATE_SHARED";
 constexpr const char *kNotBuilt = "E_NOT_BUILT";
 constexpr const char *kThmRelativistic = "E_THM_RELATIVISTIC";
 constexpr const char *kThmCovariance = "E_THM_COVARIANCE";
+constexpr const char *kThmExperimentUnknown = "E_THM_EXPERIMENT_UNKNOWN";  // ReadFormat3Project: <thm> lacks the name
 constexpr const char *kFoldConflict = "E_FOLD_CONFLICT";
 // Hybrid potentials (`potential` records: BuildPotentials; the old block in a format-3 file: ReadFormat3Project)
 constexpr const char *kPotentialTwice = "E_POTENTIAL_TWICE";

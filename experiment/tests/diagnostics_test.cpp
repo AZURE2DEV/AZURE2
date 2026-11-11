@@ -339,6 +339,7 @@ int main() {
   const std::set<std::string> buildCodes = {"E_PAIR_KEY",    "E_DATA_FILE",   "W_DATA_FILE_NOT_READ", "E_DATA_ROW", "W_DATA_ERROR",
                                             "E_COVARIANCE_FILE", "E_FINAL_STATE_NOT_LEVEL", "E_FINAL_STATE_SHARED",
                                             "E_NOT_BUILT",    "E_THM_RELATIVISTIC", "E_THM_COVARIANCE", "E_FOLD_CONFLICT",
+                                            "E_THM_EXPERIMENT_UNKNOWN",
                                             "E_POTENTIAL_TWICE", "E_POTENTIAL_PAIR_KIND", "E_POTENTIAL_RELATIVISTIC",
                                             "E_THM_HYBRID_POTENTIAL", "E_OLD_POTENTIAL_BLOCK", "E_SO_TWO_SPINS", "E_SO_ZERO_SPIN",
                                             "E_SO_RELATIVISTIC", "E_SO_THM", "E_SO_NEEDS_J", "E_SO_NO_TERM"};

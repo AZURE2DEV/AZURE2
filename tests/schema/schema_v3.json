@@ -3642,6 +3642,10 @@
    "severity": "error",
    "meaning": "a covariance file on a THM data set (its chi^2 is its experiment's profiled one)"
   },
+  "E_THM_EXPERIMENT_UNKNOWN": {
+   "severity": "error",
+   "meaning": "a thm field naming an experiment that <thm> has no experiment[<name>] line for"
+  },
   "E_FOLD_CONFLICT": {
    "severity": "error",
    "meaning": "data sets sharing a target with a free parameter differ in beam, detector or quadrature"

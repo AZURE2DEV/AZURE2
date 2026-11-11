@@ -1,6 +1,7 @@
 // The reading path of a format-3 project (ProjectReader.h): records -> Validate -> pairs of <levels> -> Build.
 #include "azure2/experiment/ProjectReader.h"
 
+#include <set>
 #include <sstream>
 
 #include "azure2/io/ConfigSection.h"
@@ -31,6 +32,48 @@ std::shared_ptr<const io::LevelSection> LevelSectionOf(const io::Document &doc) 
   return std::make_shared<const io::LevelSection>(io::ReadLevelSection(in));
 }
 
+// The names of the experiment[<name>] lines of <thm> (a line's text before '#', trimmed; the rest of the line is the
+// THM block's grammar, read by the engine: src/ConfigThm.cpp).
+std::set<std::string> ThmExperimentNames(const io::Document &doc) {
+  std::set<std::string> names;
+  const io::Document::Section *s = doc.Find("thm");
+  if (!s) return names;
+  const std::string open = "experiment[";
+  for (const std::string &line : doc.Body(*s)) {
+    const std::string text = line.substr(0, line.find('#'));
+    const std::size_t at = text.find_first_not_of(" \t");
+    if (at == std::string::npos || text.compare(at, open.size(), open) != 0) continue;
+    const std::size_t close = text.find(']', at + open.size());
+    if (close != std::string::npos) names.insert(text.substr(at + open.size(), close - at - open.size()));
+  }
+  return names;
+}
+
+// Every `thm <name>` of a data set or extrapolation names an experiment of <thm> (`global` names none): otherwise the
+// engine's THM set-up would refuse the experiment it does have for having no data sets, not the name that is wrong.
+void CheckThmExperimentNames(const io::Document &doc, const ValidationResult &validated, std::vector<Diagnostic> &out) {
+  const std::set<std::string> names = ThmExperimentNames(doc);
+  for (const ValidatedRecord &r : validated.records)
+    for (const ValidatedField &f : r.fields) {
+      if (f.key != "thm" || f.value.word == "global" || names.count(f.value.word)) continue;
+      Diagnostic d;
+      d.code = codes::kThmExperimentUnknown;
+      d.line = f.line;
+      d.column = f.col;
+      d.section = r.section;
+      d.recordKind = r.kind;
+      d.record = r.name;
+      d.field = "thm";
+      d.hasFound = true;
+      d.found = f.value.word;
+      d.allowed.assign(names.begin(), names.end());
+      d.allowed.push_back("global");
+      d.message = "<thm> has no experiment[" + f.value.word + "] line" +
+                  (names.empty() ? std::string(" (it has no experiment)") : "");
+      out.push_back(d);
+    }
+}
+
 }  // namespace
 
 std::vector<io::LevelRow> LevelRowsOf(const io::Document &doc, bool &ok) {
@@ -57,6 +100,7 @@ Format3Project ReadFormat3Project(const io::Document &doc, const Format3ReadOpti
   }
   p.validated = Schema::Validate(sections);
   p.diagnostics.insert(p.diagnostics.end(), p.validated.diagnostics.begin(), p.validated.diagnostics.end());
+  CheckThmExperimentNames(doc, p.validated, p.diagnostics);
   // The old <potential> block is not read in format 3 (its default section would give a potential to pairs the file
   // does not name): the converter writes one potential record per pair.
   if (const io::Document::Section *old = doc.Find("potential")) {

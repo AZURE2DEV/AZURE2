@@ -1861,6 +1861,9 @@ Diagnostic codes
    * - ``E_THM_COVARIANCE``
      - error
      - a covariance file on a THM data set (its chi^2 is its experiment's profiled one)
+   * - ``E_THM_EXPERIMENT_UNKNOWN``
+     - error
+     - a thm field naming an experiment that <thm> has no experiment[<name>] line for
    * - ``E_FOLD_CONFLICT``
      - error
      - data sets sharing a target with a free parameter differ in beam, detector or quadrature

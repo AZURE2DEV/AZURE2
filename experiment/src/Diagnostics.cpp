@@ -95,6 +95,7 @@ const std::vector<DiagnosticCode> &DiagnosticCodes() {
       {kNotBuilt, E, "a value the table takes and this engine cannot yet set up (a unit, frame or form of a later step)"},
       {kThmRelativistic, E, "a THM data set or extrapolation in a project with relativistic kinematics"},
       {kThmCovariance, E, "a covariance file on a THM data set (its chi^2 is its experiment's profiled one)"},
+      {kThmExperimentUnknown, E, "a thm field naming an experiment that <thm> has no experiment[<name>] line for"},
       {kFoldConflict, E, "data sets sharing a target with a free parameter differ in beam, detector or quadrature"},
       {kPotentialTwice, E, "two potential records for one pair"},
       {kPotentialPairKind, E, "a potential record on a photon or beta pair (a potential belongs to a particle pair)"},

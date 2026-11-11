@@ -573,6 +573,27 @@ int main() {
       if (!one)
         for (const Diagnostic &d : p.diagnostics) std::printf("        got %s: %s\n", d.code.c_str(), d.message.c_str());
     }
+    // a thm field naming an experiment <thm> lacks (the reading path: ProjectReader)
+    {
+      Format3ReadOptions read;
+      read.build = false;
+      const std::string thm = Set(Set(kDataset, "norm", "    norm profiled"), "unit", "    unit arbitrary");
+      const std::string block = "<thm>\n  # a comment\n  experiment[LC09] beam=15N target=d spectator=n Ebeam=60 # x\n</thm>\n";
+      const auto codesOf = [&read](const std::string &text) {
+        std::vector<std::string> out;
+        for (const Diagnostic &d : ReadFormat3Text(text, read).diagnostics) out.push_back(d.code + "@" + std::to_string(d.line));
+        return out;
+      };
+      const std::vector<std::string> named = codesOf(Data(thm + "    thm LC09\n") + block);
+      const std::vector<std::string> global = codesOf(Data(thm + "    thm global\n"));
+      const std::vector<std::string> wrong = codesOf(Data(thm + "    thm LC10\n") + block);
+      const std::vector<std::string> none = codesOf(Data(thm + "    thm LC09\n"));
+      check("thm naming an experiment of <thm>, or global: no diagnostic", named.empty() && global.empty());
+      check("E_THM_EXPERIMENT_UNKNOWN alone, at the thm field's line (a name <thm> lacks; no <thm> at all)",
+            wrong == std::vector<std::string>{"E_THM_EXPERIMENT_UNKNOWN@10"} && none == wrong);
+      if (wrong.size() != 1)
+        for (const std::string &c : wrong) std::printf("        got %s\n", c.c_str());
+    }
   }
 
   std::printf("experiment_build: %d checks, %d failed\n", checks, failures);

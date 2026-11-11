@@ -384,7 +384,8 @@ User page: `data_formats.rst`, "Extrapolation Grids".]**
 ### 3.9 THM data
 
 A THM data set is the same record with `thm <experiment>` (today isDiff + 10, `ESegment.cpp:38-43`), naming an
-`experiment[<name>]` of `<thm>`, or `thm global` for one without an experiment. `segments=` disappears from `<thm>`
+`experiment[<name>]` of `<thm>`, or `thm global` for one without an experiment (a name `<thm>` has no
+`experiment[<name>]` line for is refused when the project is read: `E_THM_EXPERIMENT_UNKNOWN`). `segments=` disappears from `<thm>`
 (today `src/ThmExperiment.cpp:77-87` parses an index list); the experiment's members are the data sets that name it.
 `norm profiled` is the norm mode of THM data sets in an experiment. Target integration on a THM data set stays refused
 (`src/EData.cpp:1504-1515`).
