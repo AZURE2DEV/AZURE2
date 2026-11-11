@@ -181,12 +181,15 @@ void WorkingCopy::PlaceOverflowNodes(CNuc *cnuc, const std::vector<int> &changed
     } else {
       refs.clear();
       plan_.TaskUnits(*this, t, refs);
+      // the units of a task share their point's entrance pair, and so its compound nucleus
+      const int nucleus = refs.empty() ? 0 : azure2::NucleusOf(cnuc, units_[refs[0]]);
       for (azure2::UnitRef r : refs) {
         Unit &u = units_[r];
-        const azure2::NodeKey key = azure2::KeyOf(cnuc, u);
+        const double ex = AMatrixFunc::InEnergy(cnuc, &u);
+        const azure2::NodeKey key(nucleus, u.IsTHM() ? 1 : 0, azure2::Bits(ex));
         int n = stage->Find(key);
         if (n < 0) {
-          n = stage->Size() + nodes_.overflow.Place(key, AMatrixFunc::InEnergy(cnuc, &u), u.ChannelRowsShared());
+          n = stage->Size() + nodes_.overflow.Place(key, ex, u.ChannelRowsShared());
           slots->overflow[t] = 1;
         }
         slots->node.push_back(n);
