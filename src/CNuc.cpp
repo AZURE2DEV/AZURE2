@@ -631,7 +631,6 @@ int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPa
       if (used) return -1;
       continue;
     }
-    // Here the J^pi group exists and holds a level at the final state's energy (above).
     const int levelNum = this->GetJGroup(jGroupNum)->IsLevel(probeLevel);
     // IsLevel is an energy-only match within 1 keV and returns the first level that fits.  Since e239a12 two
     // levels of one J^pi may sit within 1 keV of each other (different level IDs), so the pair's E_x can match
@@ -648,6 +647,7 @@ int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPa
         return -1;
       }
     }
+    if (FinalStateOfAnotherPair(*this, configure, jGroupNum, levelNum, ec->first)) return -1;
     this->GetJGroup(jGroupNum)->GetLevel(levelNum)->SetECParams(ec->first, ec->second);
     for (int ch = 1; ch <= this->GetJGroup(jGroupNum)->NumChannels(); ch++) {
       PPair *theFinalPair = this->GetPair(this->GetJGroup(jGroupNum)->GetChannel(ch)->GetPairNum());
