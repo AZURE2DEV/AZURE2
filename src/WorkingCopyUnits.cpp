@@ -12,48 +12,74 @@ void EData::AddSubPoint(EPoint &point, EPoint sub) {
   if (&point < base || &point >= base + units_.size())
     throw std::logic_error("EData::AddSubPoint: the point is not a unit of this data set");
   point.MakeSubPoint(sub);
-  pendingSubPoints_.emplace_back(static_cast<int>(&point - base), std::move(sub));
+  const std::size_t unit = static_cast<std::size_t>(&point - base);
+  if (pendingSubPoints_.size() <= unit) pendingSubPoints_.resize(units_.size());
+  pendingSubPoints_[unit].push_back(std::move(sub));
 }
 
 void EData::CommitSubPoints() {
-  // each point's sub-points in the order given, the points in the order of their first sub-point
-  SubPointGrids grids(1);
-  std::vector<int> slot(units_.size(), -1);
-  for (auto &p : pendingSubPoints_) {
-    if (slot[p.first] < 0) slot[p.first] = static_cast<int>(grids[0].size()), grids[0].push_back({p.first, {}});
-    grids[0][slot[p.first]].second.push_back(std::move(p.second));
-  }
-  pendingSubPoints_.clear();
-  PlaceSubPointGrids(grids);
+  std::vector<std::vector<EPoint> *> fresh(units_.size(), nullptr);
+  for (std::size_t u = 0; u < pendingSubPoints_.size(); u++)
+    if (!pendingSubPoints_[u].empty()) fresh[u] = &pendingSubPoints_[u];
+  LayOutUnits(&fresh);
+  std::vector<std::vector<EPoint>>().swap(pendingSubPoints_);
 }
 
 void EData::PlaceSubPointGrids(SubPointGrids &grids) {
+  // A grid with as many nodes as the one it replaces takes its place; any other is a new range, and the units are
+  // laid out again.
+  std::vector<std::vector<EPoint> *> fresh(units_.size(), nullptr);
+  bool layOut = false;
   for (auto &item : grids)
     for (auto &grid : item) {
-      const int first = NumUnits();
-      for (EPoint &s : grid.second) units_.push_back(std::move(s));
-      units_[grid.first].SetSubPointRange(first, static_cast<int>(grid.second.size()));
+      EPoint &point = units_[grid.first];
+      if ((int)grid.second.size() == point.NumSubPoints()) {
+        for (int j = 0; j < point.NumSubPoints(); j++)
+          units_[point.SubPointFirst() + j] = std::move(grid.second[j]);
+      } else {
+        fresh[grid.first] = &grid.second;
+        layOut = true;
+      }
     }
-  CompactUnits();
+  if (layOut) LayOutUnits(&fresh);
 }
 
-void EData::CompactUnits() {
+void EData::CompactUnits() { LayOutUnits(nullptr); }
+
+// The one layout of the units: the points of every term in data order, then their sub-points in the same order --
+// a point's new sub-points from `fresh` (by its present unit) where it has some, else its present ones -- each unit
+// moved once into a vector of exactly the size needed.
+void EData::LayOutUnits(std::vector<std::vector<EPoint> *> *fresh) {
+  auto newSubs = [&](int unit) { return fresh && (*fresh)[unit] ? (*fresh)[unit] : nullptr; };
+  std::size_t size = 0;
+  for (ESegment &segment : segments_)
+    for (int t = 0; t < segment.NumTerms(); t++)
+      for (int p = 0; p < segment.NumTermPoints(t); p++) {
+        const int unit = segment.TermFirstUnit(t) + p;
+        size += 1 + (newSubs(unit) ? newSubs(unit)->size() : (std::size_t)units_[unit].NumSubPoints());
+      }
   std::vector<EPoint> next;
-  next.reserve(units_.size());
-  // the points of every term, in data order
+  next.reserve(size);
+  std::vector<int> from;  // the present unit of each point placed
   for (ESegment &segment : segments_)
     for (int t = 0; t < segment.NumTerms(); t++) {
       const int first = static_cast<int>(next.size());
-      for (EPoint &p : segment.TermPoints(*this, t)) next.push_back(std::move(p));
+      for (int p = 0; p < segment.NumTermPoints(t); p++) {
+        from.push_back(segment.TermFirstUnit(t) + p);
+        next.push_back(std::move(units_[from.back()]));
+      }
       segment.SetTermRange(t, first);
     }
-  // then their sub-points, in the same order
-  const int numPoints = static_cast<int>(next.size());
-  for (int i = 0; i < numPoints; i++) {
-    const int from = next[i].SubPointFirst(), count = next[i].NumSubPoints();
+  for (std::size_t i = 0; i < from.size(); i++) {
     const int first = static_cast<int>(next.size());
-    for (int j = 0; j < count; j++) next.push_back(std::move(units_[from + j]));
-    next[i].SetSubPointRange(first, count);
+    if (std::vector<EPoint> *subs = newSubs(from[i])) {
+      for (EPoint &sub : *subs) next.push_back(std::move(sub));
+      next[i].SetSubPointRange(first, static_cast<int>(subs->size()));
+    } else {
+      const int old = next[i].SubPointFirst(), count = next[i].NumSubPoints();
+      for (int j = 0; j < count; j++) next.push_back(std::move(units_[old + j]));
+      next[i].SetSubPointRange(first, count);
+    }
   }
   units_.swap(next);
 }

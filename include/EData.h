@@ -265,11 +265,11 @@ class EData {
   /// Give `point` (a unit of this data set) the sub-point `sub` after those already given; held until
   /// CommitSubPoints, so that no unit moves while the set-up holds pointers to points.
   void AddSubPoint(EPoint &point, EPoint sub);
-  /// Place the sub-points given since the last commit: each point's become a new range (its earlier one, if any, is
-  /// dropped), then CompactUnits.  Single-threaded.
+  /// Place the sub-points given since the last commit (each point's replace any it had) and lay the units out again
+  /// (CompactUnits).  Single-threaded.
   void CommitSubPoints();
-  /// Per work item of a grid re-placement: (a point's unit, its new sub-points); placed by PlaceSubPointGrids as new
-  /// ranges (the earlier ones dropped), then CompactUnits.  Single-threaded.
+  /// Per work item of a grid re-placement: (a point's unit, its new sub-points).  PlaceSubPointGrids puts a grid with
+  /// as many nodes as the old one in its place, any other in a new layout of the units.  Single-threaded.
   using SubPointGrids = std::vector<std::vector<std::pair<int, std::vector<EPoint>>>>;
   void PlaceSubPointGrids(SubPointGrids &grids);
   /// Lay the units out again (see Units), dropping every unit no term and no point refers to.
@@ -454,10 +454,11 @@ class EData {
                                 azure2::Results &results);
 
  private:
+  void LayOutUnits(std::vector<std::vector<EPoint> *> *fresh);  // CompactUnits, PlaceSubPointGrids
   std::vector<TargetEffect> targetEffects_;
   std::vector<ESegment> segments_;
   std::vector<EPoint> units_;  // Unit
-  std::vector<std::pair<int, EPoint>> pendingSubPoints_;  // AddSubPoint: (point's unit, sub-point), until the commit
+  std::vector<std::vector<EPoint>> pendingSubPoints_;  // AddSubPoint: per point's unit, until the commit
   std::vector<LeafRef> leafRefs_;  // LeafRefs
   azure2::CalculationPlan plan_;  // built by MapData; positions only, so a copy of the data set copies it as it is
   /// The key of the next leaf (AddLeaf): -1000, -1001, ... in creation order, one counter per data set, so a leaf's key
