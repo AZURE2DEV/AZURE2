@@ -212,7 +212,9 @@ fi
 
 # ---- (g) soft tie --------------------------------------------------------------------------------
 run soft "$M/iso_soft.azr" 3 "--no-brune"
-n=0; for f in "$WORK/iso/output/"*.extrap; do cmp -s "$f" "$WORK/soft/output/$(basename "$f")" || n=$((n + 1)); done
+# Byte-identical files without cmp (the Windows MSYS2 runner has none); \r stripped so a CRLF-writing build compares alike.
+same_file() { [ -f "$2" ] && [ "$(tr -d '\r' < "$1")" = "$(tr -d '\r' < "$2")" ]; }
+n=0; for f in "$WORK/iso/output/"*.extrap; do same_file "$f" "$WORK/soft/output/$(basename "$f")" || n=$((n + 1)); done
 if [ "$n" = 0 ] && [ -n "$(ls "$WORK/soft/output/"*.extrap 2>/dev/null)" ]; then ok "soft tie at its start == hard tie (every extrapolation identical)"
 else bad "soft tie at its start differs from the hard tie in $n file(s)"; fi
 grep -q "SOFT (sigma E 0.05" "$WORK/soft/run.log" && grep -q "soft" "$WORK/soft/output/isospin.out" && ok "soft tie reported (start-up log, isospin.out)" || bad "soft tie not reported"

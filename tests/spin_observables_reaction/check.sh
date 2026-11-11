@@ -69,7 +69,11 @@ fi
 # --- start-up refusals ---
 refuse() {  # label, sed expression applied to the first isDiff 10 line, expected message fragment
   local d="$WORK/bad_$1"; mkdir -p "$d"
-  sed "0,/ 10 b:y /s// 10 $2 /" "$HERE/spin_observables_reaction.azr" > "$d/m.azr"
+  # First occurrence only, by index/substr so BSD (macOS) and GNU awk agree and the token's * and > stay literal
+  # (GNU sed's "0,/re/" address is not portable: on macOS the token was never substituted).
+  awk -v new=" 10 $2 " '!done && (i = index($0, " 10 b:y ")) { $0 = substr($0, 1, i - 1) new substr($0, i + 8); done = 1 } 1' \
+    "$HERE/spin_observables_reaction.azr" > "$d/m.azr"
+  grep -qF " 10 $2 " "$d/m.azr" || bad "token $2 was not written into the model"
   run "$d" m.azr
   if grep -q "ERROR: Data segment #2: .*$3" "$d/run.log"; then ok "refused $2 ($3)"
   else bad "token $2 was not refused with \"$3\""; sed 's/^/    /' "$d/run.log" | grep -i error | head -3
