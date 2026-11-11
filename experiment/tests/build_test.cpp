@@ -352,6 +352,24 @@ int main() {
           finals.size() == 2 && finals[0].sharedWithPairKey == 0 && finals[1].sharedWithPairKey == 4);
   }
   UnitCases(targets);
+  {
+    // sigma_total: the total of the entrance pair, its elastic term; the pairs decide, not the label (two n+12C pairs)
+    LevelTables t = Pairs();
+    for (int key : {10, 11}) {
+      PairInfo n;
+      n.key = key;
+      n.lightZ = 0;
+      n.lightA = 1;
+      n.heavyZ = 6;
+      n.heavyA = 12;
+      n.twoJLight = 1;
+      t.pairs.push_back(n);
+    }
+    const std::string total = Set(Set(kDataset, "reaction", "    reaction 12C(n,n)12C"), "quantity", "    quantity sigma_total");
+    check("sigma_total, entrance and exit pair 10: builds",
+          BuildText(Data(total + "    entrance_pair 10\n    exit_pair 10\n"), false, false, DataFiles::Required, t).diagnostics.empty());
+    ExpectOne("E_REACTION_NOT_ALLOWED", BuildText(Data(total + "    entrance_pair 10\n    exit_pair 11\n"), false, false, DataFiles::Required, t));
+  }
   const std::string thm = Set(Set(kDataset, "norm", "    norm profiled"), "unit", "    unit arbitrary") + "    thm global\n";
   check("a THM data set builds", BuildText(Data(thm)).diagnostics.empty());
   ExpectOne("E_THM_RELATIVISTIC", BuildText(Data(thm), true));
