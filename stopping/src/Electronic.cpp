@@ -1,177 +1,152 @@
 #include "azure2/stopping/Electronic.h"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
+#include <sstream>
 #include <stdexcept>
-
-#include "azure2/physics/Constants.h"
 
 namespace azure2 {
 namespace stopping {
 
 namespace {
 
-using physics::kAtomicMassUnit_MeV;
-using physics::kElectronMass_MeV;
-using physics::kFineStructure;
-using physics::kHbarC_MeV_fm;
-
-constexpr double kPi = 3.14159265358979323846;
-constexpr double kProtonNuclearMass_u = 1.007276466621;  ///< the variable of the AZ_p form is proton keV / this
-constexpr double kAlphaNuclearMass_u = 4.001506179127;   ///< the variable of the Z_He form is He-4 MeV at this mass
-
-/// K = 4 pi r_e^2 m_e c^2 in eV/(1e15 atoms/cm^2): r_e = alpha hbar c / m_e c^2 (fm -> cm 1e-13), m_e c^2 in eV.
-double BetheConstant() {
-  const double re_cm = kFineStructure * kHbarC_MeV_fm / kElectronMass_MeV * 1.0e-13;
-  return 4.0 * kPi * re_cm * re_cm * kElectronMass_MeV * 1.0e6 * 1.0e15;
+/// sum_k c_k x^k in ascending order, each power by std::pow (lunasrim _poly; the same order of the sum).
+template <std::size_t N>
+double Poly(const std::array<double, N> &c, double x) {
+  double s = 0.0;
+  for (std::size_t k = 0; k < N; ++k) s += c[k] * std::pow(x, static_cast<double>(k));
+  return s;
 }
 
-/// beta^2 at kinetic energy per nucleon mass unit t_u (MeV per u): gamma = 1 + t_u / (u c^2).
-double Beta2PerU(double t_MeV_u) {
-  const double gamma = 1.0 + t_MeV_u / kAtomicMassUnit_MeV;
-  return 1.0 - 1.0 / (gamma * gamma);
-}
-
-/// F(W) of Ashley, Ritchie and Brandt (Phys. Rev. B 5 (1972) 2393) for the Barkas term, the 47-point table of
-/// Geant4's G4EmCorrections (Geant4 Software License 1.0); linear interpolation, F(0.02) below the table, F ~ 1/W
-/// above it.
-double BarkasF(double w) {
-  static const std::array<std::array<double, 2>, 47> kTable = {{
-      {0.02, 21.5}, {0.03, 20.0}, {0.04, 18.0}, {0.05, 15.6}, {0.06, 15.0}, {0.07, 14.0}, {0.08, 13.5}, {0.09, 13.0},
-      {0.1, 12.2},  {0.2, 9.25},  {0.3, 7.0},   {0.4, 6.0},   {0.5, 4.5},   {0.6, 3.5},   {0.7, 3.0},   {0.8, 2.5},
-      {0.9, 2.0},   {1.0, 1.7},   {1.2, 1.2},   {1.3, 1.0},   {1.4, 0.86},  {1.5, 0.7},   {1.6, 0.61},  {1.7, 0.52},
-      {1.8, 0.5},   {1.9, 0.43},  {2.0, 0.42},  {2.1, 0.3},   {2.4, 0.2},   {3.0, 0.13},  {3.08, 0.1},  {3.1, 0.09},
-      {3.3, 0.08},  {3.5, 0.07},  {3.8, 0.06},  {4.0, 0.051}, {4.1, 0.04},  {4.8, 0.03},  {5.0, 0.024}, {5.1, 0.02},
-      {6.0, 0.013}, {6.5, 0.01},  {7.0, 0.009}, {7.1, 0.008}, {8.0, 0.006}, {9.0, 0.0032}, {10.0, 0.0025}}};
-  if (w <= kTable.front()[0]) return kTable.front()[1];
-  if (w >= kTable.back()[0]) return kTable.back()[1] * kTable.back()[0] / w;
-  std::size_t k = 1;
-  while (kTable[k][0] < w) ++k;
-  const auto &lo = kTable[k - 1];
-  const auto &hi = kTable[k];
-  return lo[1] + (hi[1] - lo[1]) * (w - lo[0]) / (hi[0] - lo[0]);
-}
-
-/// The screening parameter b of the Barkas term per target (Geant4 G4EmCorrections, after ICRU Report 49).
-double BarkasB(int z2) {
-  if (z2 == 1) return 1.8;
-  if (z2 == 2) return 0.6;
-  if (z2 <= 10) return 1.8;
-  if (z2 <= 17) return 1.4;
-  if (z2 == 18) return 1.8;
-  if (z2 <= 25) return 1.4;
-  if (z2 <= 50) return 1.35;
-  return 1.3;
-}
-
-/// The low-energy fit of the row at energy per nucleon mass unit t_u (MeV/u), at the same velocity.
-double FitAt(const CoefficientRow &row, double t_MeV_u) {
-  if (row.form == FitForm::kAndersenZieglerProton) return ProtonFitStopping(row, t_MeV_u * 1.0e3);
-  return HeliumFitStopping(row, t_MeV_u * kAlphaNuclearMass_u);
-}
-
-/// Electronic stopping of hydrogen (z1 = 1) or helium (z1 = 2) ions at t_u (MeV/u, the same-velocity energy).
-StoppingWithUncertainty LightIonStopping(int z1, int z2, double t_MeV_u) {
-  const CoefficientRow &row = Coefficients(z2, z1);
-  const double i_eV = Element(z2).mean_excitation_eV;
-  const double t1 = row.fit_max_MeV_u;
-  const double t2 = kBetheFrom_MeV_u;
-  if (t_MeV_u <= t1) return {FitAt(row, t_MeV_u), row.rel_uncertainty};
-  if (t_MeV_u >= t2) return {BetheStopping(z1, z2, i_eV, Beta2PerU(t_MeV_u)), kBetheRelUncertainty};
-  // between the fit and Bethe: linear in log S - log T
-  const double s1 = std::log(FitAt(row, t1));
-  const double s2 = std::log(BetheStopping(z1, z2, i_eV, Beta2PerU(t2)));
-  const double x = std::log(t_MeV_u / t1) / std::log(t2 / t1);
-  return {std::exp(s1 + (s2 - s1) * x), std::max(row.rel_uncertainty, kBetheRelUncertainty)};
-}
+double Log10(double x) { return std::log(x) / std::log(10.0); }
 
 }  // namespace
 
-double ProtonFitStopping(const CoefficientRow &row, double t_keV) {
-  if (!(t_keV > 0.0)) throw std::domain_error("stopping: proton fit at T <= 0");
-  double scale = 1.0;
-  double t = t_keV;
-  if (t < 10.0) {
-    scale = std::sqrt(t / 10.0);
-    t = 10.0;
+double SrimFit(const std::array<double, 10> &c, double e) {
+  // lunasrim _fit: S_low = c1 e^c2 + c3 e^c4 + c9 e^0.5, S_high = c5 / e^c6 (ln(c7/e + c8 e) + c10 / e^0.2),
+  // S = S_low S_high / (S_low + S_high)
+  const double slow = c[0] * std::pow(e, c[1]) + c[2] * std::pow(e, c[3]) + c[8] * std::pow(e, 0.5);
+  const double shigh = (c[4] / std::pow(e, c[5])) * (std::log(c[6] / e + c[7] * e) + c[9] / std::pow(e, 0.2));
+  return slow * shigh / (slow + shigh);
+}
+
+double SrimBethe(const SrimElement &target, int z1, double e, Phase phase) {
+  // lunasrim bethe: e in keV/u; 931494 keV/u, 1022000 eV = 2 m_e c^2, 1961.16 = 1 / (4 pi r_e^2 m_e c^2) in SRIM's
+  // units, 137.036 = 1/alpha, as SRIM writes them.
+  const bool gas = phase == Phase::kGas;
+  const double z2 = target.z;
+  const double beta2 = 1.0 - 1.0 / std::pow(1.0 + e / 931494.0, 2);
+  const double lx = std::log(e / 1000.0);
+  const double shell_d = gas ? 0.0 : Poly(target.shell_d, lx);
+  const double shell_c = Poly(target.shell_c, lx);
+  double mean_i = 0.0;
+  double q = 0.0;
+  if (gas) {
+    mean_i = z1 == 1 ? target.mean_excitation_gas_eV[0] : target.mean_excitation_gas_eV[1];
+    q = 1.35 / std::pow(e, 0.4);
+  } else {
+    mean_i = target.mean_excitation_solid_eV;
+    q = 1.5 / std::pow(e, 0.4) + 45000.0 / (z2 * std::pow(e, 1.6));
   }
-  const double s_low = row.a[1] * std::pow(t, 0.45);
-  const double s_high = row.a[2] / t * std::log(1.0 + row.a[3] / t + row.a[4] * t);
-  return scale * s_low * s_high / (s_low + s_high);
+  const double barkas = (z1 * (0.001 * e) * q) / (0.001 * e + q);
+  const double y = std::pow(z1 / 137.036, 2) / beta2;
+  const double bloch = -y * (1.20206 - y * (1.042 + -0.8549 * y + 0.343 * y * y));
+  const double l = (std::log(1022000.0 * beta2 / (1.0 - beta2)) - beta2 - shell_d - shell_c - std::log(mean_i) +
+                    barkas + bloch);
+  return (static_cast<double>(z1) * z1 * z2) / (beta2 * 1961.16) * l;
 }
 
-double HeliumFitStopping(const CoefficientRow &row, double t_MeV) {
-  if (!(t_MeV > 0.0)) throw std::domain_error("stopping: helium fit at T <= 0");
-  double scale = 1.0;
-  double t = t_MeV;
-  if (t < 1.0e-3) {
-    scale = std::sqrt(t / 1.0e-3);
-    t = 1.0e-3;
+double SrimLightIon(const SrimElement &target, const std::array<double, 10> &c, int z1, double e, double fit_max,
+                    Phase phase) {
+  // lunasrim _light_ion
+  const double emin = kSrimVelocityLimit_keV_u;
+  const double ehigh = fit_max * kBetheJoinFactor;
+  if (e > ehigh) return SrimBethe(target, z1, e, phase);
+  const double s = SrimFit(c, std::min(std::max(e, emin), fit_max));
+  if (e > fit_max) {
+    const double sb = SrimBethe(target, z1, ehigh, phase);
+    return s + (sb - s) * (e - fit_max) / (ehigh - fit_max);
   }
-  const double s_low = row.a[0] * std::pow(1000.0 * t, row.a[1]);
-  const double s_high = row.a[2] / t * std::log(1.0 + row.a[3] / t + row.a[4] * t);
-  return scale * s_low * s_high / (s_low + s_high);
+  if (e < emin) return s * std::pow(e / emin, 0.5);
+  return s;
 }
 
-double BlochCorrection(double y) {
-  // -y^2 sum_{n>=1} 1/(n (n^2 + y^2)); the tail beyond N is y^2-independent to O(1/N^4): 1/(2 N^2)
-  constexpr int kTerms = 2000;
-  double sum = 0.0;
-  for (int n = kTerms; n >= 1; --n) sum += 1.0 / (n * (static_cast<double>(n) * n + y * y));
-  sum += 1.0 / (2.0 * kTerms * static_cast<double>(kTerms));
-  return -y * y * sum;
+double SrimHighEnergyCharge(const std::array<double, 5> &hi, double e) {
+  // lunasrim _hi_charge
+  const double d = Log10(e) - hi[1];
+  const double w = d >= 0 ? hi[3] : hi[2];
+  const double x = std::exp(-d / w) + 1.0;
+  return hi[0] + (1.0 - hi[0]) / x + hi[4] * std::exp(-std::fabs(1.3 + hi[1] - Log10(e)));
 }
 
-double ShellCorrectionBarkasBerger(double mean_excitation_eV, double eta) {
-  const double e2 = 1.0 / (eta * eta);
-  const double e4 = e2 * e2;
-  const double e6 = e4 * e2;
-  const double i = mean_excitation_eV;
-  return (0.422377 * e2 + 0.0304043 * e4 - 0.00038106 * e6) * 1.0e-6 * i * i +
-         (3.858019 * e2 - 0.1667989 * e4 + 0.00157955 * e6) * 1.0e-9 * i * i * i;
+double SrimElementStopping(const SrimData &data, int z1, int z2, double e, Phase phase) {
+  // lunasrim electronic_stopping_element
+  const SrimElement &t = ElementData(data, z2);
+  if (z1 == 1) return SrimLightIon(t, t.proton, 1, e, kProtonFitMax_keV_u, phase);
+  if (z1 == 2) return SrimLightIon(t, t.helium, 2, e, kHeliumLithiumFitMax_keV_u, phase);
+  if (z1 == 3) return SrimLightIon(t, t.lithium, 3, e, kHeliumLithiumFitMax_keV_u, phase);
+  // heavy ions: helium stopping at the same e, scaled
+  const double emin = kSrimVelocityLimit_keV_u;
+  const double emax = kHeavyIonScalingMax_keV_u;
+  const double ec = std::min(std::max(e, emin), emax);
+  const double lne = std::log(ec);
+  const SrimElement &ion = ElementData(data, z1);
+  const double s = SrimLightIon(t, t.helium, 2, ec, kHeliumLithiumFitMax_keV_u, phase) * Poly(ion.ion_poly, lne) * z1 *
+                   z1 / 4.0 * Poly(t.target_poly, lne);
+  if (e < emin) return s * std::pow(e / emin, 0.5);
+  if (e > emax) {
+    const double r_hi = SrimHighEnergyCharge(ion.high_energy_charge, e) * SrimBethe(t, 2, e, phase);
+    const double r_lo = SrimHighEnergyCharge(ion.high_energy_charge, emax) * SrimBethe(t, 2, emax, phase);
+    return s * r_hi / r_lo;
+  }
+  return s;
 }
 
-double BarkasCorrection(int z2, double beta2) {
-  const double x = beta2 / (kFineStructure * kFineStructure * z2);
-  const double w = BarkasB(z2) / std::sqrt(x);
-  return BarkasF(w) / (std::sqrt(static_cast<double>(z2)) * x * std::sqrt(x));
+double SrimPhaseFactor(int z2, Phase phase) {
+  // lunasrim phase_factor
+  for (int noble : {2, 10, 18, 36, 54, 86}) {
+    if (z2 == noble) return 1.0;
+  }
+  const bool natural_gas = IsNaturalGas(z2);
+  if (natural_gas == (phase == Phase::kGas)) return 1.0;
+  return natural_gas ? kSrimPhaseFactor : 1.0 / kSrimPhaseFactor;
 }
 
-BetheTerms BetheStoppingTerms(int z1, int z2, double mean_excitation_eV, double beta2) {
-  BetheTerms t;
-  const double gamma2 = 1.0 / (1.0 - beta2);
-  const double eta = std::sqrt(beta2 * gamma2);
-  t.l0 = std::log(2.0 * kElectronMass_MeV * 1.0e6 * beta2 * gamma2 / mean_excitation_eV) - beta2;
-  t.shell = ShellCorrectionBarkasBerger(mean_excitation_eV, std::max(eta, 0.13)) / z2;
-  t.barkas = BarkasCorrection(z2, beta2);
-  t.bloch = BlochCorrection(z1 * kFineStructure / std::sqrt(beta2));
-  return t;
+double SrimFadeOut(double factor, double e, int z1) {
+  // lunasrim fade_correction (above x = 700 the fade is complete; std::exp would overflow near 709.78)
+  const double c = z1 == 1 ? 7.0 : 4.0;
+  const double x = 1.48 * (std::sqrt(e / 25.0) - c);
+  if (x > 700) return 1.0;
+  return 1.0 + (factor - 1.0) / (1.0 + std::exp(x));
 }
 
-double BetheStopping(int z1, int z2, double mean_excitation_eV, double beta2) {
-  const BetheTerms t = BetheStoppingTerms(z1, z2, mean_excitation_eV, beta2);
-  const double l = t.l0 - t.shell + z1 * t.barkas + z1 * z1 * t.bloch;
-  return BetheConstant() * z1 * z1 * z2 / beta2 * l;
+double ElectronicRelUncertainty(int z1) {
+  if (z1 == 1) return 0.040;
+  if (z1 == 2) return 0.039;
+  if (z1 == 3) return 0.048;
+  return 0.058;
 }
 
-double EffectiveChargeFraction(int z1, double beta2) {
-  const double v_over_v0 = std::sqrt(beta2) / kFineStructure;
-  const double vr = v_over_v0 / std::pow(static_cast<double>(z1), 2.0 / 3.0);
-  return 1.0 - std::exp(-0.95 * vr);
+StoppingWithUncertainty ElectronicStopping(const SrimData &data, const Projectile &projectile, int z2, double energy_MeV,
+                                           Phase phase, double compound_correction) {
+  // lunasrim electronic_stopping
+  const int z1 = projectile.z;
+  if (z1 < 1 || z1 > kSrimMaxZ) throw std::out_of_range("stopping: projectile Z1 = " + std::to_string(z1) + " outside 1..92");
+  const double e = energy_MeV * 1.0e3 / projectile.mass_u;
+  if (!(energy_MeV > 0.0) || e > kSrimMaxEnergy_keV_u) {
+    std::ostringstream o;
+    o << "stopping: energy " << energy_MeV << " MeV of " << projectile.label << " outside SRIM's range (0, "
+      << kSrimMaxEnergy_keV_u << " keV/u]";
+    throw std::domain_error(o.str());
+  }
+  const double s = SrimElementStopping(data, z1, z2, e, phase);
+  if (!(compound_correction > 0.0)) throw std::invalid_argument("stopping: the compound correction must be > 0");
+  return {s * SrimFadeOut(SrimPhaseFactor(z2, phase) * compound_correction, e, z1), ElectronicRelUncertainty(z1)};
 }
 
-StoppingWithUncertainty ElectronicStopping(const Projectile &projectile, int z2, double energy_MeV) {
-  if (!(energy_MeV > 0.0)) throw std::domain_error("stopping: energy must be > 0");
-  // the same-velocity energy per mass unit: (gamma - 1) u c^2 = E / M (M in u)
-  const double t_MeV_u = energy_MeV / projectile.mass_u;
-  if (projectile.z <= 2) return LightIonStopping(projectile.z, z2, t_MeV_u);
-  // heavier ions: the proton value at the same velocity times (q z1)^2
-  const double beta2 = Beta2(projectile, energy_MeV);
-  const double q = EffectiveChargeFraction(projectile.z, beta2) * projectile.z;
-  const StoppingWithUncertainty p = LightIonStopping(1, z2, t_MeV_u);
-  const double vr = std::sqrt(beta2) / kFineStructure / std::pow(static_cast<double>(projectile.z), 2.0 / 3.0);
-  return {q * q * p.value, vr >= 1.0 ? kHeavyIonRelUncertainty : kSlowHeavyIonRelUncertainty};
+StoppingWithUncertainty ElectronicStopping(const Projectile &projectile, int z2, double energy_MeV, Phase phase,
+                                           double compound_correction) {
+  return ElectronicStopping(SrimTables(), projectile, z2, energy_MeV, phase, compound_correction);
 }
 
 }  // namespace stopping

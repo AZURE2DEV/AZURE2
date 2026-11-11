@@ -67,8 +67,18 @@ std::vector<Constituent> ParseFormula(const std::string &formula) {
   return out;
 }
 
-Material MaterialFromFractions(const std::string &name, const std::vector<Constituent> &constituents, Phase phase,
-                               double mass_density_g_cm3) {
+bool IsNaturalGas(int z) {
+  for (int g : {1, 2, 7, 8, 9, 10, 17, 18, 35, 36, 53, 54, 85, 86}) {
+    if (z == g) return true;
+  }
+  return false;
+}
+
+Phase DefaultPhase(const std::vector<Constituent> &constituents) {
+  return constituents.size() == 1 && IsNaturalGas(constituents[0].z) ? Phase::kGas : Phase::kSolid;
+}
+
+Material MaterialFromFractions(const std::string &name, const std::vector<Constituent> &constituents) {
   if (constituents.empty()) throw std::invalid_argument("stopping: material '" + name + "' has no constituents");
   double total = 0.0;
   for (const auto &c : constituents) {
@@ -76,22 +86,18 @@ Material MaterialFromFractions(const std::string &name, const std::vector<Consti
     if (!(c.atom_fraction > 0.0)) throw std::invalid_argument("stopping: material '" + name + "': fractions must be > 0");
     total += c.atom_fraction;
   }
-  if (mass_density_g_cm3 < 0.0) throw std::invalid_argument("stopping: material '" + name + "': negative density");
   Material m;
   m.name = name;
-  m.phase = phase;
-  m.mass_density_g_cm3 = mass_density_g_cm3;
   for (const auto &c : constituents) m.constituents.push_back({c.z, c.atom_fraction / total});
+  m.phase = DefaultPhase(m.constituents);
   return m;
 }
 
-Material MaterialFromFormula(const std::string &formula, Phase phase, double mass_density_g_cm3) {
-  return MaterialFromFractions(formula, ParseFormula(formula), phase, mass_density_g_cm3);
-}
+Material MaterialFromFormula(const std::string &formula) { return MaterialFromFractions(formula, ParseFormula(formula)); }
 
 double MeanAtomicWeight(const Material &material) {
   double a = 0.0;
-  for (const auto &c : material.constituents) a += c.atom_fraction * Element(c.z).atomic_weight_u;
+  for (const auto &c : material.constituents) a += c.atom_fraction * ElementData(c.z).atomic_weight_u;
   return a;
 }
 
