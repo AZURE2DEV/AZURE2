@@ -53,10 +53,15 @@ std::vector<std::string> ApplyThmLineEdits(const std::vector<std::string> &lines
  * The <thm> section of a format-3 project (its lines from the <thm> tag to </thm>) in the grammar the reader takes:
  * format 3 names an experiment's data sets and a data set's weight table in its records (project_format3.md section
  * 3.9; Schema::Build, ThmMembershipSpec), so the members are appended to each experiment[<name>] line as
- * segments=<keys> and the weights as weight[<k>]= / weightTest[<k>]= lines before </thm>.
+ * segments=<keys> and the weights as weight[<k>]= / weightTest[<k>]= lines before </thm>.  An experiment that only
+ * inactive data sets name (ThmExperimentsWithoutMembers) is left out, as the old engine ignored an experiment with no
+ * segment in use.
  */
 std::vector<std::string> Format3ThmLines(const std::vector<std::string> &section,
                                          const azure2::experiment::ThmMembershipSpec &thm);
+
+/// The experiments that data sets name (`thm <name>`) but no active one: they have no member and are ignored.
+std::vector<std::string> ThmExperimentsWithoutMembers(const azure2::experiment::ThmMembershipSpec &thm);
 
 /// "" or why the block does not hold an experiment a data set or extrapolation names (`thm <name>`): the reader
 /// would not know it.
