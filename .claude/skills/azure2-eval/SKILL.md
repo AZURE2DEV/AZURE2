@@ -71,7 +71,8 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   row (fix the abundances or accept priors only).
 - **Isospin levels (Hale's charge-independent R-matrix): ties live in FORMAL
   space with common radii and B = -l, so run with `--no-brune`.** An
-  `<isospin>` block (feature/isospin-levels, 2026-10-17; design
+  `<isospin>` block (feature/isospin-levels, 2026-10-17; on dev since 6e4fa458,
+  PR #3, and in the shared install since 2026-11-11; older builds have no isospin code; design
   `Aeql4/10-16-26_isospin_design`) declares levels whose ONE level ID spans
   several compound nuclei (`level <ID> <T>`); each line carries its own
   nucleus's Ex. The reference nucleus's member is free, the others are
@@ -89,6 +90,26 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   `add_isospin_mix`; `parameters.isospin`; `penalties()["isospin"]` is already
   inside `calculate_chi2_rwa`. The GUI keeps the block and the joined IDs on
   save but writes masses to 6 significant digits (all projects).
+  An isospin level cannot sit in a J-group that has a photon or beta channel
+  (the engine stops at load): no capture in a tied model as of dev 9278055c.
+- **Spin observables are data type 10 (`10 <token>`), and type 9 means two
+  different things in files of different origin.** On dev since 6e4fa458 (PR #3,
+  2026-11-11): analyzing powers of beam or target, spin correlations, spin-1
+  tensor analyzing powers, outgoing polarizations and transfer coefficients, in
+  `<segmentsData>` and `<segmentsTest>`, columns E_lab, theta_CM, value, error.
+  The token follows the 10: `b:y` (beam A_y, same as type 7), `t:y`, `b:y*t:y`
+  (C_yy), `b:yy`/`b:T20`/`b:iT11` (spin 1), `b:y>e1:y` (transfer); grammar and
+  conventions (Madison frame) in docs `reference/data_formats.rst`, tests
+  `tests/spin_observables_*`. Literature names are ambiguous (A_yy), so files
+  carry only the explicit token; `pyazr.spin.resolve` maps names from the spins.
+  THE TRAP: the private A = 4 builds (branch integration/a4-isospin-spin,
+  10-18-26 to 11-10-26) wrote these lines as `9 b:y`; on dev 9 is
+  angular-coefficient data (89fa22f) and the API isospin record moved 8 -> 11.
+  Neither build misreads the other silently: dev stops on `9 <token>`, the
+  private build on `10 <token>`. The Aeql4 archive was converted 2026-11-11
+  (`Aeql4/11-11-26_spin10_convert`: manifest, `convert_spin10.py --revert`); its
+  frozen engine is `~/AZURE2_work/AZURE2_a4_a4d35901`. Any other file from that
+  branch needs its 9 changed to 10 before a dev build will load it.
 - **A width of exactly 0 is a fixed parameter, whatever its fix flag says.**
   `CNuc.cpp:1621` adds every channel as `p.Add(name, gamma, 0.1*gamma)` and then
   `if (gamma == 0.0) p.Fix(name)`, so a channel written with value `0` and
@@ -2411,7 +2432,7 @@ first**: every rebuild re-read the `.azr` with only that call's override, so
 then the overrides persist through every rebuild, and `set_channel_radius`
 raises if the rebuilt model does not have the radius asked for. On an older
 build, write every radius into the `.azr` (`AzrModel`) and open a fresh session.
-**Per-channel radii (dev 2026-11-10, branch feature/channel-radii until merged).**
+**Per-channel radii (on dev since 997a426e, 2026-11-10; in the shared install since 2026-11-11).**
 One radius per pair was the only option before; now an optional `<channelRadii>`
 block right after `</levels>` gives some channels their own:
 `<pair key> <l> <radius> [s=<s>] [J=<J>]` (spins `1/2` or `0.5`, `#` comments).
@@ -3529,6 +3550,21 @@ complete:
   queue (user instruction 2026-10-08): `13C+a/10-8-26_udr_validation` (synthetic Gaussian-in-
   time UDR vs numpy fold on the Cierjacks segment, 7.6e-4 worst rel. diff) and
   `11B+a/10-8-26_udr_ntof` (analytic sigma(E) vs UDR on segment 103).
+
+- 2026-11-07 -- UDR KERNEL BELOW ~1 keV WAS WRONG BEFORE dev a68474f0 (fix/udr-low-energy, 2026-11-08;
+  in the shared install since 2026-11-09): a 1/v cross section came back biased by HALF THE CHANNEL WIDTH (0.924 at 0.1 eV with
+  7.55 log bins/decade on the Koehler 17O(n,a) points, LANSCE 7 m) and thermal points came back EXACTLY ZERO.  Four
+  absolute energy floors written for charged particles: the UDR sub-point window's low edge clamped to 0.001 MeV
+  (EData; the grid then ran from the point UP to 1 keV), the adaptive grid's 1e-6 MeV trivial-range cut, 0.01 eV
+  duplicate tolerance and 1e-10 MeV stall guard (collapsed any window narrower than ~1 eV to one or two nodes beside
+  the start), and the kernel support scan dropping the zero end nodes (a narrow table -> tauMin == tauMax -> window
+  fell back to +-1e-4).  Plus cancellation in UdrKinematics at thermal energies (1.5 ns of 3 ms).  n_TOF-scale use
+  (ns channels, keV-MeV) was never affected.  Any UDR result below a few keV, or with a channel/bins-per-decade wide
+  compared with the burst, made on a build before this fix is wrong: rerun.  Identity test to run on any new kernel
+  code: a constant and a 1/v cross section fold to themselves for every channel width (tests/udr_low_energy/check.sh,
+  which the 2026-11-06 binary fails 3/3).  Numbers and the diagnosis: R-matrix/14C+a/11-7-26_sym_claude/readme, section 4
+  and "UDR fix".  On an older build, the analytic `sigmalab` Gaussian (koehler_gauss/ there) and a numpy fold
+  on a mode-3 grid are the workaround; above 100 keV they agree with the UDR to ~10 %.
 
 - 2026-10-08 -- CHANNEL-THRESHOLD BLOW-UP CAUGHT BY SUB-POINT GRIDS. AZURE2's bare cross section
   is not merely bumpy at a channel threshold: on a 10 eV grid across the 11B+alpha threshold in the
