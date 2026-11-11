@@ -32,19 +32,30 @@ SRC = os.path.join(ROOT, "tests", "13N")
 
 
 def write_model(path, amatrix, target_int):
-    lines = open(os.path.join(SRC, "13N.azr")).read().split("\n")
-    i0, i1 = lines.index("<segmentsData>"), lines.index("</segmentsData>")
-    for k in range(i0 + 1, i1):
-        if lines[k].split() and "artemov" not in lines[k]:
-            lines[k] = "0" + lines[k].lstrip()[1:]
-    if not target_int:
-        t0, t1 = lines.index("<targetInt>"), lines.index("</targetInt>")
-        for k in range(t0 + 1, t1):
-            if lines[k].split():
-                lines[k] = "0" + lines[k].lstrip()[1:]
-    c = lines.index("<config>") + 1
-    lines[c] = ("true" if amatrix else "false") + "  " + lines[c].split(None, 1)[1]
-    open(path, "w").write("\n".join(lines))
+    """tests/13N (format 3) with every data set but artemov inactive; without target integration artemov is the bare
+    cross section at the data energies (what the old file's inactive <targetInt> line gave: sigma in b)."""
+    out, name = [], None
+    for line in open(os.path.join(SRC, "13N.azr")).read().split("\n"):
+        if line.startswith("dataset "):
+            name = line.split()[1]
+            out.append(line)
+            if name != "artemov":
+                out.append("    active         no")
+            continue
+        if not line.strip() or line.startswith("<"):
+            name = None
+        if name == "artemov" and not target_int:
+            key = line.split()[0] if line.split() else ""
+            if key in ("target", "quadrature") or line.lstrip().startswith("#"):
+                continue
+            if key == "quantity":
+                line = "    quantity       sigma"
+            elif key == "unit":
+                line = "    unit           b"
+        out.append(line)
+    c = out.index("<config>") + 1
+    out[c] = ("true" if amatrix else "false") + "  " + out[c].split(None, 1)[1]
+    open(path, "w").write("\n".join(out))
 
 
 def main():

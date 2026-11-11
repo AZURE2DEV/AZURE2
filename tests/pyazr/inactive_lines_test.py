@@ -157,17 +157,22 @@ with tempfile.TemporaryDirectory() as tmp:
               f"{chi2_purged} vs {chi2_moved}")
 
     print("\n2. an inactive segment in front of a segment with a free norm")
-    model = AzrModel.from_file(os.path.join(work, "13N.azr"))
-    model.set_segment_norm("meyer_84", vary=True, sys_error=5.0)
-    # splice an inactive copy of the artemov line at the top of the block
-    lines = model._suffix.splitlines()
-    top = lines.index("<segmentsData>") + 1
-    ghost_seg = lines[top].split()
-    ghost_seg[0] = "0"
-    lines.insert(top, " ".join(ghost_seg))
-    model._suffix = "\n".join(lines)
-    model.set_output_dir(os.path.join(work, "output_seg"))
-    segazr = model.write(os.path.join(work, "seg.azr"))
+    # the format-3 project: meyer_84's norm free with its 5 % prior (Project.set), an inactive copy of the artemov
+    # data set spliced in front of every data set, the outputs to output_seg/
+    from pyazr import Project
+    proj = Project.open(os.path.join(work, "13N.azr"))
+    proj.set("meyer_84", norm="1 fit prior 1 5%")
+    segazr = os.path.join(work, "seg.azr")
+    proj.save(segazr)
+    lines = open(segazr).read().split("\n")
+    a0 = lines.index("dataset artemov")
+    a1 = lines.index("", a0)
+    ghost = ["dataset ghost", "    active         no"] + [l for l in lines[a0 + 1:a1]] + [""]
+    lines[a0:a0] = ghost
+    c = lines.index("<config>") + 1
+    lines[c + 1] = "output_seg/"
+    open(segazr, "w").write("\n".join(lines))
+    os.makedirs(os.path.join(work, "output_seg"), exist_ok=True)
 
     with azure2(segazr, cwd=work) as m:
         x = np.asarray(m.params_rwa, float)
@@ -185,7 +190,7 @@ with tempfile.TemporaryDirectory() as tmp:
               and set(byfile) == set(counts))
         norm = m.parameters.norms[0]
         seg = m.datasets.by_key(norm.segment_key)
-        check("the free norm belongs to meyer_84 by key", "meyer_84" in seg.name)
+        check("the free norm belongs to meyer_84 by key", seg is not None and "meyer_84" in seg.name)
         moved = x.copy()
         moved[norm.free_index] = 1.10
         pen = m.penalties(moved)

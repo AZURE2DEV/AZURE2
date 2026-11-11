@@ -46,7 +46,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2, AzrModel
+    from pyazr import azure2, Project
 except Exception as err:
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(0)
@@ -69,11 +69,13 @@ with tempfile.TemporaryDirectory() as tmp:
     azr_a = stage(tmp, ".data")
     # a capture extrapolation grid for the second session (lab energies)
     azr_b = stage(tmp, ".extrap")
-    mdl = AzrModel.from_file(azr_b)
-    mdl.clear_extrapolations()
-    mdl.add_extrapolation(entrance=1, exit=2, e_min=0.2, e_max=2.5, e_step=0.02,
-                          observable="angle-integrated")
-    mdl.write(azr_b)
+    proj = Project.open(azr_b)
+    for name, r in list(proj.records().items()):
+        if r.record_kind == "extrapolation":
+            proj.remove(name)
+    proj.add("extrapolation", "capture", reaction="12C(p,g)13N", quantity="sigma", unit="b",
+             energies="range 0.2 2.5 MeV lab step 0.02")
+    proj.save(azr_b)
 
     A = azure2(azr_a)
     A.__enter__()
