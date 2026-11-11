@@ -636,9 +636,7 @@ class Unit {
   struct ShiftedECAmplitude {
     double energy = 0.0;
     complex amplitude = complex(0.0, 0.0);
-    double levelEnergy = 0.0;
     bool valid = false;
-    bool hasLevelEnergy = false;
   };
   mutable std::vector<std::vector<ShiftedECAmplitude>> ec_shifted_;
   int plan_task_ = -1;  // see PlanTask

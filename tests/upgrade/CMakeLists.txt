@@ -121,10 +121,37 @@ string(REPLACE "<segmentsData>\n" "<segmentsData>\n1 5 2 1.8 2.0 0 180 1 1 0 0 -
 file(WRITE ${_history_dir}/pn/pn.azr "${_pn}")
 file(WRITE ${_history_dir}/pn/data/pn13.dat "1.90 13 1.0 0.1\n")
 file(COPY ${CMAKE_SOURCE_DIR}/tests/7Li_p_ay/data/ DESTINATION ${_history_dir}/pn/data)
+# ec: tests/ec_exit_position/models/photon_pair_first.azr (external capture into the 13N ground state, a component)
+# with a fitted energy shift of 5 keV on the LUNA capture data set and the ground state's energy free.  At A and B the
+# shifted points take their capture amplitudes from the memo of the shifted amplitude (Unit::GetECAmplitudeWithShift);
+# B moves the final state's energy by 2 keV.  A copy that evaluated B before A must give fresh A's bits: the final
+# state enters external capture at the energy of the set-up (ALevel::GetECEnergy), whatever the copy evaluated first.
+file(MAKE_DIRECTORY ${_history_dir}/ec/output ${_history_dir}/ec/checks)
+file(COPY ${CMAKE_SOURCE_DIR}/tests/ec_exit_position/models/data DESTINATION ${_history_dir}/ec)
+file(READ ${CMAKE_SOURCE_DIR}/tests/ec_exit_position/models/photon_pair_first.azr _ec)
+set(_ec_edits
+    "dataset luna_hpge\n    reaction       12C(p,g)13N\n    quantity       sigma\n    unit           b\n    file           data/skowronski_luna_hpge.dat\n    columns        E_lab[MeV] _ value error\n    energy_window  0 5 MeV\n    norm           1 fixed\n"
+    "dataset luna_hpge\n    reaction       12C(p,g)13N\n    quantity       sigma\n    unit           b\n    file           data/skowronski_luna_hpge.dat\n    columns        E_lab[MeV] _ value error\n    energy_window  0 5 MeV\n    norm           1 fixed\n    shift          offset 0.005 MeV fit\n"
+    "\n 0.5   -1            0    1    1    1    1    2    1 " "\n 0.5   -1            0    0    1    1    1    2    1 "
+    "\n 0.5   -1            0    1    1    2    1    2    1 " "\n 0.5   -1            0    0    1    2    1    2    1 ")
+list(LENGTH _ec_edits _ec_n)
+math(EXPR _ec_last "${_ec_n} - 1")
+foreach(_i RANGE 0 ${_ec_last} 2)
+  math(EXPR _j "${_i} + 1")
+  list(GET _ec_edits ${_i} _from)
+  list(GET _ec_edits ${_j} _to)
+  string(FIND "${_ec}" "${_from}" _at)
+  if(_at EQUAL -1)
+    message(FATAL_ERROR "history ec model: tests/ec_exit_position/models/photon_pair_first.azr no longer holds '${_from}'")
+  endif()
+  string(REPLACE "${_from}" "${_to}" _ec "${_ec}")
+endforeach()
+file(WRITE ${_history_dir}/ec/ec.azr "${_ec}")
 add_test(NAME upgrade_history
          COMMAND history_test ${_history_dir}/T2/T2.azr ${_history_dir}/natural_neon/natural_neon.azr
                  ${_history_dir}/shift_sqrt/sqrt.azr ${_history_dir}/shift_sqrt/shiftfn.azr
                  ${_history_dir}/thm/18O_p_a_thm.azr ${_history_dir}/pn/pn.azr
+                 --external-capture ${_history_dir}/ec/ec.azr
          WORKING_DIRECTORY ${_history_dir})
 set_tests_properties(upgrade_history PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 900)
 

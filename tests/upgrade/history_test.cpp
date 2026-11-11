@@ -13,6 +13,8 @@
 //   pooled A -> B -> A -> B    the same copy back and forth: equal to fresh B's at the end;
 //   pooled C -> A -> C         C = A with every fixed energy-shift parameter moved by 1 keV: equal to fresh A's, then
 //                              to fresh C's (a shift that becomes inactive again must be undone).
+//   pooled B -> C              equal to fresh C's: a shifted point's amplitudes do not keep level energies of B (the
+//                              external-capture memo of a shifted point, project ec).
 //   copy of a copy             a copy made from a copy evaluated at B, evaluated at A; its source then evaluated at D
 //                              (B with the free shifts 1 keV further): the copy's buffer does not move, and the copy
 //                              at A again equals fresh A (no state shared with the source).
@@ -22,7 +24,9 @@
 // An evaluation is AZURECalc::Chi2On's: the hand-over, the parallel point pass, the model value of every point, the
 // objective (Objective.h) with the per-segment chi^2.
 //
-//   history_test <dir/project.azr> ...   (each project is read in its own directory: data paths are relative)
+//   history_test [--external-capture] <dir/project.azr> ...   (each project is read in its own directory: data paths
+//   are relative; --external-capture switches external capture on for the next project, as the CLI does for a
+//   project whose data reach a capture pair with a final state)
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -170,7 +174,7 @@ void Compare(const std::string &what, const Evaluation &got, const Evaluation &w
   check(what + ": model values", SameBits(got.models, want.models, why), why);
 }
 
-int RunProject(const std::string &path) {
+int RunProject(const std::string &path, bool externalCapture) {
   const size_t slash = path.find_last_of('/');
   const std::string dir = slash == std::string::npos ? "." : path.substr(0, slash);
   const std::string file = slash == std::string::npos ? path : path.substr(slash + 1);
@@ -182,6 +186,7 @@ int RunProject(const std::string &path) {
   std::ostringstream sink;
   Config cfg(sink);
   cfg.configfile = file;
+  if (externalCapture) cfg.paramMask |= Config::USE_EXTERNAL_CAPTURE;
   g_config = &cfg;
   CNuc compound;
   WorkingCopy data;
@@ -203,6 +208,7 @@ int RunProject(const std::string &path) {
     std::ostringstream sink2;
     Config cfg2(sink2);
     cfg2.configfile = file;
+    if (externalCapture) cfg2.paramMask |= Config::USE_EXTERNAL_CAPTURE;
     CNuc compound2;
     WorkingCopy data2;
     AZUREParams params2;
@@ -316,6 +322,12 @@ int RunProject(const std::string &path) {
     Evaluate(fixedShift, pC, cfg);
     Compare("pooled C -> A = fresh A (fixed shifts moved and back)", Evaluate(fixedShift, pA, cfg), eA);
     Compare("pooled C -> A -> C = fresh C", Evaluate(fixedShift, pC, cfg), eC);
+    // B moves every level energy and C none: a copy that evaluated B and then C gives fresh C's bits.  The points C
+    // shifts take their external-capture amplitudes at C's energies with the final state's energy of the set-up
+    // (Unit::GetECAmplitudeWithShift), whatever level energies the copy saw before.
+    Copy levelsMoved = copy();
+    Evaluate(levelsMoved, pB, cfg);
+    Compare("pooled B -> C = fresh C (level energies moved and back)", Evaluate(levelsMoved, pC, cfg), eC);
   }
   check("every evaluation and hand-over above leaves the shared data set as the set-up made it",
         DataSetFingerprint(data.Data()) == setUp && DataSetFingerprint(freshA.data->Data()) == setUp);
@@ -326,14 +338,20 @@ int RunProject(const std::string &path) {
 
 int main(int argc, char **argv) {
   if (argc < 2) {
-    std::fprintf(stderr, "usage: history_test <dir/project.azr> ...\n");
+    std::fprintf(stderr, "usage: history_test [--external-capture] <dir/project.azr> ...\n");
     return 2;
   }
   char start[4096];
   if (!getcwd(start, sizeof(start))) return 2;
+  bool externalCapture = false;
   for (int k = 1; k < argc; k++) {
+    if (std::strcmp(argv[k], "--external-capture") == 0) {
+      externalCapture = true;
+      continue;
+    }
     if (chdir(start) != 0) return 2;
-    RunProject(argv[k]);
+    RunProject(argv[k], externalCapture);
+    externalCapture = false;
   }
   std::printf("history: %s (%d failure%s)\n", failures ? "FAIL" : "all checks passed", failures,
               failures == 1 ? "" : "s");

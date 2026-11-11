@@ -43,9 +43,11 @@ complex Unit::GetECAmplitude(int kGroupNum, int ecMGroupNum) const {
  * With the energy tables (Config::useECTable, the default) a moved point is
  * evaluated at its new energy, from the same tables as every other amplitude,
  * and the result is kept until the energy moves again.  The final level's
- * energy is the one the point's own amplitudes were computed with (recorded at
- * the first shifted evaluation), so shifted and unshifted segments stay
- * consistent even where an MCMC moves that level.
+ * energy is the one the point's own amplitudes were computed with: the energy
+ * of the set-up (ALevel::GetECEnergy, written once by CNuc::Initialize), which a
+ * fit or an MCMC that moves the level does not change, so shifted and unshifted
+ * segments stay consistent and the memo holds no history of the copy
+ * (tests/upgrade/history_test.cpp, project ec).
  *
  * With --no-ec-table the amplitude is interpolated linearly between the
  * energies of the segment's own points (ECAmplitudeCache) and held flat beyond
@@ -73,12 +75,9 @@ complex Unit::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, CNuc *theC
         entrancePair->GetDecay(ExternalCaptureExit(*theCNuc, aa, ir, segment_key_))->GetKGroup(kGroupNum);
     ECMGroup *theECMGroup = theKGroup->GetECMGroup(ecMGroupNum);
     int j = theECMGroup->GetJGroupNum();
-    if (!memo.hasLevelEnergy) {
-      memo.levelEnergy = theCNuc->GetJGroup(j)->GetLevel(theECMGroup->GetLevelNum())->GetECEnergy();
-      memo.hasLevelEnergy = true;
-    }
-    memo.amplitude = ECPathwayAmplitude(theCNuc, configure, entrancePair, j, memo.levelEnergy, theKGroup,
-                                        theECMGroup, currentEnergy);
+    const double levelEnergy = theCNuc->GetJGroup(j)->GetLevel(theECMGroup->GetLevelNum())->GetECEnergy();
+    memo.amplitude = ECPathwayAmplitude(theCNuc, configure, entrancePair, j, levelEnergy, theKGroup, theECMGroup,
+                                        currentEnergy);
     memo.energy = currentEnergy;
     memo.valid = true;
     return memo.amplitude;
