@@ -181,8 +181,8 @@ int AZUREAPI::Initialize() {
 
   UpdateParameters();
   if (!SetUpPriorCovariance()) return -1;
-
   if (data()->Initialize(compound(), configure()) == -1) return -1;
+  AZUREProfile::Report(std::cerr, "api set-up");
   // The session's buffer for the new layout, at 0 until an evaluation writes it (a read before any evaluation, such
   // as GetThmExperiments, sees 0 as it did when the data set held the buffer).
   results_ = azure2::Results();

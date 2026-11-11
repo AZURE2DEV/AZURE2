@@ -451,7 +451,11 @@ in the same way.  Two environment variables control and report this:
        the channel solves, the cross-section sums, the Coulomb functions and
        penetrabilities, and the stages of the gradient, with the number of
        channel-space and level-matrix solves and why a group fell back to the
-       level matrix.  No cost when unset.
+       level matrix.  The set-up's stages (every point's Coulomb functions,
+       penetrabilities and shifts, computed once) come first in a report of
+       their own (``[profile] set-up``); a calculation (menu 1) reports under
+       ``calculation``, the evaluation after a fit under ``final evaluation``.
+       No cost when unset.
 
 ``AZURE_CHANNEL_VERIFY=1`` (slow) compares every channel-space solve with the
 level matrix and reports the largest difference seen so far;

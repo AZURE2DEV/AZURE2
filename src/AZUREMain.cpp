@@ -1,6 +1,7 @@
 #include <cmath>
 #include "AZURECalc.h"
 #include "AZUREMain.h"
+#include "Profile.h"
 
 #include "AdaptiveExtrapolation.h"
 #include "CNucChecks.h"
@@ -208,6 +209,9 @@ int AZUREMain::operator()() {
     // The buffer of the evaluations on data() (the calculation, the final evaluation after a fit): this run owns it,
     // and the output files and the band read it (docs/upgrade/data_model.md S3).
     azure2::Results results;
+    // AZURE_PROFILE: the set-up's stages (the channel table, the points' energy-dependent values) on their own, not
+    // in the first evaluation's report.
+    AZUREProfile::Report(std::cerr, "set-up");
     // Declare a new instance of FCNBase
     AZURECalc theFunc(data(), results, compound(), configure(), &limitsManager);
     // The prior covariance replaces the diagonal prior of each of its parameters (docs/upgrade/objective.md D3).
@@ -738,7 +742,11 @@ int AZUREMain::operator()() {
     }
     data()->SetFit(false);
     data()->SetErrorAnalysis(false);
-    double chiSquared = theFunc(params.GetMinuitParams().Params());
+    double chiSquared = 0.0;
+    {
+      AZUREProfile::ScopedReport profileReport((configure().paramMask & Config::PERFORM_FIT) ? "final evaluation" : "calculation");
+      chiSquared = theFunc(params.GetMinuitParams().Params());
+    }
     if (configure().paramMask & Config::CALCULATE_WITH_DATA) {
       configure().outStream << std::endl
                             << std::endl;

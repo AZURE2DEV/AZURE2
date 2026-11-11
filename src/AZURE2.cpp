@@ -13,6 +13,7 @@
 #include "azure2/io/Document.h"
 #include "azure2/experiment/Schema.h"
 #include "AZUREMain.h"
+#include "Profile.h"
 #include "ProjectCommands.h"
 #include "ProjectSetup.h"
 #include "CaptureAyRequests.h"
@@ -50,7 +51,6 @@
 #include <readline/history.h>
 #endif
 #include <string.h>
-#include <algorithm>
 #include <cstdlib>
 
 // Global Config pointer for use across the codebase
@@ -1159,8 +1159,9 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
       configure.outStream << "Initialized and cleared EC amplitude cache..." << std::endl;
     }
 
-    // Initialize data object
-    if (data->Initialize(compound, configure) == -1) {
+    const int initialized = data->Initialize(compound, configure);  // AZURE_PROFILE: the set-up's stages on their own
+    AZUREProfile::Report(std::cerr, "set-up");
+    if (initialized == -1) {
       configure.outStream << "Calculation was aborted." << std::endl;
       delete compound;
       delete data;
