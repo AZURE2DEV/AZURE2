@@ -49,11 +49,16 @@ std::set<std::string> ThmExperimentNames(const io::Document &doc) {
   return names;
 }
 
-// Every `thm <name>` of a data set or extrapolation names an experiment of <thm> (`global` names none): otherwise the
-// engine's THM set-up would refuse the experiment it does have for having no data sets, not the name that is wrong.
-void CheckThmExperimentNames(const io::Document &doc, const ValidationResult &validated, std::vector<Diagnostic> &out) {
+// Every `thm <name>` of an active data set or extrapolation names an experiment of <thm> (`global` names none):
+// otherwise the engine's THM set-up would refuse the experiment it does have for having no data sets, not the name that
+// is wrong.  An inactive record is checked when it is switched on (allRecordsActive), as its experiment's membership is
+// (Build adds active members only).
+void CheckThmExperimentNames(const io::Document &doc, const ValidationResult &validated, bool allRecordsActive,
+                             std::vector<Diagnostic> &out) {
   const std::set<std::string> names = ThmExperimentNames(doc);
-  for (const ValidatedRecord &r : validated.records)
+  for (const ValidatedRecord &r : validated.records) {
+    const Value *active = r.Get("active");
+    if (!allRecordsActive && active && active->word == "no") continue;
     for (const ValidatedField &f : r.fields) {
       if (f.key != "thm" || f.value.word == "global" || names.count(f.value.word)) continue;
       Diagnostic d;
@@ -72,6 +77,7 @@ void CheckThmExperimentNames(const io::Document &doc, const ValidationResult &va
                   (names.empty() ? std::string(" (it has no experiment)") : "");
       out.push_back(d);
     }
+  }
 }
 
 }  // namespace
@@ -100,7 +106,7 @@ Format3Project ReadFormat3Project(const io::Document &doc, const Format3ReadOpti
   }
   p.validated = Schema::Validate(sections);
   p.diagnostics.insert(p.diagnostics.end(), p.validated.diagnostics.begin(), p.validated.diagnostics.end());
-  CheckThmExperimentNames(doc, p.validated, p.diagnostics);
+  CheckThmExperimentNames(doc, p.validated, options.allRecordsActive, p.diagnostics);
   // The old <potential> block is not read in format 3 (its default section would give a potential to pairs the file
   // does not name): the converter writes one potential record per pair.
   if (const io::Document::Section *old = doc.Find("potential")) {

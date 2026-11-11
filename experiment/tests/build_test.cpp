@@ -624,6 +624,10 @@ int main() {
       check("thm naming an experiment of <thm>, or global: no diagnostic", named.empty() && global.empty());
       check("E_THM_EXPERIMENT_UNKNOWN alone, at the thm field's line (a name <thm> lacks; no <thm> at all)",
             wrong == std::vector<std::string>{"E_THM_EXPERIMENT_UNKNOWN@10"} && none == wrong);
+      const std::string inactive = Data(thm + "    thm LC10\n    active no\n") + block;
+      check("an inactive data set's thm is checked when it is switched on", codesOf(inactive).empty());
+      read.allRecordsActive = true;
+      check("... with every record active it is refused", codesOf(inactive) == std::vector<std::string>{"E_THM_EXPERIMENT_UNKNOWN@10"});
       if (wrong.size() != 1)
         for (const std::string &c : wrong) std::printf("        got %s\n", c.c_str());
     }
