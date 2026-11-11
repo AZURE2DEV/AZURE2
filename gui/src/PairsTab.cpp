@@ -158,11 +158,87 @@ PairsTab::PairsTab(QWidget *parent) :
   abundancesBox->setVisible(false);
   connect(abundancesModel, SIGNAL(modelReset()), this, SLOT(updateAbundancesBox()));
 
+  // Per-channel radii (<channelRadii>, 2026-11-10): rows that give some channels of a particle pair a radius of their
+  // own; every other channel keeps its pair's radius (the table above).
+  channelRadiiModel = new ChannelRadiiModel(this);
+  channelRadiiView = new QTableView;
+  channelRadiiView->setObjectName("channelRadiiView");
+  channelRadiiView->setModel(channelRadiiModel);
+  channelRadiiView->verticalHeader()->setVisible(false);
+  channelRadiiView->horizontalHeader()->setHighlightSections(false);
+  channelRadiiView->setSelectionBehavior(QAbstractItemView::SelectRows);
+  channelRadiiView->setSelectionMode(QAbstractItemView::SingleSelection);
+  channelRadiiView->setShowGrid(false);
+  for (int i = 0; i < ChannelRadiiModel::NumCols; i++)
+    channelRadiiView->horizontalHeader()->setSectionResizeMode(i, QHeaderView::Stretch);
+  channelRadiiView->setMaximumHeight(120);
+  addRadiusButton = new QPushButton(tr("+"));
+  addRadiusButton->setObjectName("addChannelRadiusButton");
+  addRadiusButton->setToolTip(tr("Add a row for the selected pair (l = 0, at the pair's radius); edit l, s, J and the radius in the table."));
+  removeRadiusButton = new QPushButton(tr("-"));
+  removeRadiusButton->setObjectName("removeChannelRadiusButton");
+  removeRadiusButton->setToolTip(tr("Remove the selected row: its channels go back to the pair's radius."));
+  connect(addRadiusButton, SIGNAL(clicked()), this, SLOT(addChannelRadius()));
+  connect(removeRadiusButton, SIGNAL(clicked()), this, SLOT(removeChannelRadius()));
+  QHBoxLayout *radiusButtons = new QHBoxLayout;
+  radiusButtons->addWidget(addRadiusButton);
+  radiusButtons->addWidget(removeRadiusButton);
+  radiusButtons->addStretch(1);
+  QLabel *radiiLabel = new QLabel(tr("A row gives the channels (pair, l) -- only channel spin s and/or total spin J when given -- "
+                                     "a radius of their own; every other channel keeps its pair's radius.  The most specific row wins "
+                                     "(l+s+J, l+J, l+s, l).  External capture needs the initial and final channels of a transition "
+                                     "at one radius."));
+  radiiLabel->setWordWrap(true);
+  QVBoxLayout *radiiLayout = new QVBoxLayout;
+  radiiLayout->addWidget(radiiLabel);
+  radiiLayout->addWidget(channelRadiiView);
+  radiiLayout->addLayout(radiusButtons);
+  channelRadiiBox = new QGroupBox(tr("Per-channel radii"));
+  channelRadiiBox->setObjectName("channelRadiiBox");
+  channelRadiiBox->setLayout(radiiLayout);
+
   QVBoxLayout *layout = new QVBoxLayout();
   layout->addWidget(pairsView);
   layout->addLayout(buttonBox);
   layout->addWidget(abundancesBox);
+  layout->addWidget(channelRadiiBox);
   setLayout(layout);
+}
+
+ChannelRadiiModel *PairsTab::getChannelRadiiModel() {
+  return channelRadiiModel;
+}
+
+bool PairsTab::readChannelRadii(QTextStream &inStream) {
+  return channelRadiiModel->readBlock(inStream);
+}
+
+bool PairsTab::writeChannelRadii(QTextStream &outStream) {
+  channelRadiiModel->writeBlock(outStream);
+  return true;
+}
+
+bool PairsTab::hasChannelRadii() const {
+  return !channelRadiiModel->isEmpty();
+}
+
+void PairsTab::addChannelRadius() {
+  int pairKey = 1;
+  double radius = 5.0;
+  QModelIndexList selected = pairsView->selectionModel() ? pairsView->selectionModel()->selectedRows() : QModelIndexList();
+  if (!selected.isEmpty()) pairKey = selected.first().row() + 1;
+  if (pairKey >= 1 && pairKey <= pairsModel->getPairs().size()) {
+    const double r = pairsModel->getPairs().at(pairKey - 1).channelRadius;
+    if (r > 0.0) radius = r;
+  }
+  const int row = channelRadiiModel->addRow(pairKey, 0, radius);
+  channelRadiiView->selectRow(row);
+}
+
+void PairsTab::removeChannelRadius() {
+  QModelIndexList selected = channelRadiiView->selectionModel()->selectedRows();
+  if (selected.isEmpty()) return;
+  channelRadiiModel->removeRowAt(selected.first().row());
 }
 
 AbundancesModel *PairsTab::getAbundancesModel() {
@@ -280,6 +356,7 @@ void PairsTab::setAbundanceSumSigma(double sigma) {
 
 void PairsTab::reset() {
   abundancesModel->clear();
+  channelRadiiModel->clear();
   sumSigmaSpin->setValue(0.0);
 }
 

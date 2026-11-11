@@ -615,3 +615,28 @@ endif()
 add_test(NAME thickness_fitting COMMAND thickness_fitting_test)
 set_tests_properties(thickness_fitting PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# Per-channel radii (<channelRadii>, 2026-11-10): ChannelRadiiModel's line format and precedence, the Pairs tab's
+# "Per-channel radii" box, and the project file round trip (the GUI dropped the block on save before).
+add_executable(channel_radii_test channel_radii_test.cpp)
+set_target_properties(channel_radii_test PROPERTIES AUTOMOC OFF)
+target_include_directories(channel_radii_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(channel_radii_test PRIVATE AZURE2_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(channel_radii_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(channel_radii_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(channel_radii_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME channel_radii COMMAND channel_radii_test)
+set_tests_properties(channel_radii PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

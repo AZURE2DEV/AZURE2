@@ -796,11 +796,17 @@ void LevelsTab::updateDetails(const QItemSelection &selection) {
     if (pair.lightExcitation != 0.)
       stm << qSetFieldWidth(21) << Qt::right << "Light Excitation: "
           << qSetFieldWidth(0) << Qt::left << QString("%1").arg(pair.lightExcitation) << Qt::endl;
+    // the channel's own radius when a <channelRadii> row gives it one, else the pair's
+    const double channelRadius = (channel.radType == 'P' && channelRadiiModel)
+        ? channelRadiiModel->radiusFor(pairIndex + 1, channel.lValue, channel.sValue, level.jValue, pair.channelRadius)
+        : pair.channelRadius;
     if (channel.radType != 'M' && channel.radType != 'E') {
       stm << qSetFieldWidth(21) << Qt::right << "Separation Energy: "
           << qSetFieldWidth(0) << Qt::left << QString("%1").arg(pair.seperationEnergy) << Qt::endl;
       stm << qSetFieldWidth(21) << Qt::right << "Channel Radius: "
-          << qSetFieldWidth(0) << Qt::left << QString("%1").arg(pair.channelRadius) << Qt::endl;
+          << qSetFieldWidth(0) << Qt::left << QString("%1").arg(channelRadius)
+          << (channelRadius != pair.channelRadius ? QString(" (own; pair %1)").arg(pair.channelRadius) : QString())
+          << Qt::endl;
     }
     stm.flush();
     channelDetails->details->setText(details);
@@ -825,11 +831,11 @@ void LevelsTab::updateDetails(const QItemSelection &selection) {
         ? pair.lightM * pair.heavyM / (pair.lightM + pair.heavyM)
         : 0.;
     double eCm = level.energy - pair.seperationEnergy - pair.excitationEnergy - pair.lightExcitation;
-    wignerApplicable_ = (channel.radType == 'P') && (eCm > 0.) && (pair.channelRadius > 0.) && (reducedMass > 0.);
+    wignerApplicable_ = (channel.radType == 'P') && (eCm > 0.) && (channelRadius > 0.) && (reducedMass > 0.);
     wignerZ1_ = pair.lightZ;
     wignerZ2_ = pair.heavyZ;
     wignerRedMass_ = reducedMass;
-    wignerRadius_ = pair.channelRadius;
+    wignerRadius_ = channelRadius;
     wignerEcm_ = eCm;
     wignerL_ = channel.lValue;
     channelDetails->wignerButton->setEnabled(wignerApplicable_);

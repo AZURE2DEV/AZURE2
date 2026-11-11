@@ -11,6 +11,7 @@
 
 #include "PairsModel.h"
 #include "AbundancesModel.h"
+#include "ChannelRadiiModel.h"
 #include <QGroupBox>
 #include <QCheckBox>
 #include <QDoubleSpinBox>
@@ -35,6 +36,13 @@ class PairsTab : public QWidget {
   PairsTab(QWidget *parent = 0);
   PairsModel *getPairsModel();
   AbundancesModel *getAbundancesModel();
+  /// The per-channel radii (<channelRadii> block, 2026-11-10).
+  ChannelRadiiModel *getChannelRadiiModel();
+  /// Read the <channelRadii> block body (after its opening tag) up to </channelRadii>.
+  bool readChannelRadii(QTextStream &);
+  /// Write the block body; the caller writes the tags, and only when hasChannelRadii().
+  bool writeChannelRadii(QTextStream &);
+  bool hasChannelRadii() const;
   bool parseOldECSection(QTextStream &);
   /*! Read the <abundances> block ("[<sample>:] Z A abundance vary sigma" and "[<sample>:] sum sigma" lines) up to its closing tag. */
   bool readAbundances(QTextStream &);
@@ -57,6 +65,8 @@ class PairsTab : public QWidget {
   void showInfo(int which = 0, QString title = "");
   void updateNucleusColumn();
   void updateAbundancesBox();
+  void addChannelRadius();
+  void removeChannelRadius();
   /*! The sample selector follows the model's samples; the sum width shown is the chosen sample's. */
   void updateSampleCombo();
   void sampleChosen(int index);
@@ -82,6 +92,11 @@ class PairsTab : public QWidget {
   QPushButton *addSampleButton;
   QPushButton *removeSampleButton;
   QDoubleSpinBox *sampleSumSigmaSpin;
+  ChannelRadiiModel *channelRadiiModel;
+  QTableView *channelRadiiView;
+  QGroupBox *channelRadiiBox;
+  QPushButton *addRadiusButton;
+  QPushButton *removeRadiusButton;
   QPushButton *addButton;
   QPushButton *deleteButton;
   QPushButton *massButton;

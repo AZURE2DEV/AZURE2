@@ -98,6 +98,7 @@ AZURESetup::AZURESetup() :
 
   levelsTab = new LevelsTab;
   levelsTab->setPairsModel(pairsTab->getPairsModel());
+  levelsTab->setChannelRadiiModel(pairsTab->getChannelRadiiModel());
   connect(pairsTab, SIGNAL(pairAdded(int)), levelsTab, SLOT(updateChannelsPairAddedEdited()));
   connect(pairsTab, SIGNAL(pairEdited(int)), levelsTab, SLOT(updateChannelsPairAddedEdited()));
   connect(pairsTab, SIGNAL(pairRemoved(int)), levelsTab, SLOT(updateChannelsPairRemoved(int)));
@@ -430,15 +431,20 @@ bool AZURESetup::readFile(QString filename) {
   GetConfig().relativistic = fileRelativistic;
   GetConfig().relativisticReferencePair = fileRelativisticReferencePair;
 
-  // The optional <abundances> block sits between </levels> and <segmentsData>.
+  // The optional <channelRadii> (2026-11-10) and <abundances> blocks sit between </levels> and <segmentsData>, in
+  // either order.  Before 2026-11-10 a <channelRadii> block was skipped here and dropped on save.
   line = QString("");
-  while (line.trimmed() != QString("<abundances>") && line.trimmed() != QString("<segmentsData>") && !in.atEnd()) line = in.readLine();
-  if (!in.atEnd() && line.trimmed() == QString("<abundances>")) {
-    if (!pairsTab->readAbundances(in)) return false;
-    line = QString("");
-    while (line.trimmed() != QString("<segmentsData>") && !in.atEnd()) line = in.readLine();
+  while (!in.atEnd()) {
+    line = in.readLine();
+    const QString tag = line.trimmed();
+    if (tag == QString("<segmentsData>")) break;
+    if (tag == QString("<abundances>")) {
+      if (!pairsTab->readAbundances(in)) return false;
+    } else if (tag == QString("<channelRadii>")) {
+      if (!pairsTab->readChannelRadii(in)) return false;
+    }
   }
-  if (in.atEnd()) return false;
+  if (in.atEnd() && line.trimmed() != QString("<segmentsData>")) return false;
   if (!segmentsTab->readSegDataFile(in)) return false;
 
   line = QString("");
@@ -864,6 +870,13 @@ bool AZURESetup::writeFile(QString filename) {
   out << "<levels>" << Qt::endl;
   if (!levelsTab->writeNuclearFile(out)) return false;
   out << "</levels>" << Qt::endl;
+
+  // Per-channel radii, only for a project that has some (older files are written as before).
+  if (pairsTab->hasChannelRadii()) {
+    out << "<channelRadii>" << Qt::endl;
+    if (!pairsTab->writeChannelRadii(out)) return false;
+    out << "</channelRadii>" << Qt::endl;
+  }
 
   // Isotopic abundances, one line per compound nucleus, only for a project
   // that needs them (several nuclei, or a non-default entry).

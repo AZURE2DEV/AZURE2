@@ -69,7 +69,7 @@ set(AZURESETUP_SOURCES
     TargetIntModel.cpp ChannelsModel.cpp main.cpp TargetIntTab.cpp FittingTab.cpp
     AboutAZURE2Dialog.cpp InfoDialog.cpp InTabDocs.cpp
     IAEALevelData.cpp IAEALevelDialog.cpp NuclearPotentialTab.cpp
-    ExforData.cpp ExforDialog.cpp PairKeyCombo.cpp AzureTheme.cpp FileDialogPolicy.cpp AbundancesModel.cpp
+    ExforData.cpp ExforDialog.cpp PairKeyCombo.cpp AzureTheme.cpp FileDialogPolicy.cpp AbundancesModel.cpp ChannelRadiiModel.cpp
     ScatteringLengthsModel.cpp MassTable.cpp MassCheckDialog.cpp
 )
 
@@ -85,7 +85,7 @@ set(AZURESETUP_HEADERS
     ../include/TargetIntModel.h ../include/TargetIntTab.h ../include/FittingTab.h
     ../include/TextEditBuffer.h ../include/AboutAZURE2Dialog.h ../include/InfoDialog.h
     ../include/IAEALevelData.h ../include/IAEALevelDialog.h ../include/NuclearPotentialTab.h
-    ../include/ExforData.h ../include/ExforDialog.h ../include/DialogScrollArea.h ../include/AbundancesModel.h
+    ../include/ExforData.h ../include/ExforDialog.h ../include/DialogScrollArea.h ../include/AbundancesModel.h ../include/ChannelRadiiModel.h
     ../include/ScatteringLengthsModel.h ../include/MassTable.h ../include/MassCheckDialog.h
 )
 
