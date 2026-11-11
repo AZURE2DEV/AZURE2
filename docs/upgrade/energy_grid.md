@@ -130,9 +130,9 @@ through `NodeTableCache` (its mutexes are one of the two pieces of shared mutabl
 
 ```bash
 # environment
-source ~/miniforge3/etc/profile.d/conda.sh && conda activate /data0/skowrons/envs/azure2-up
-export AZURE2_COULOMB_TABLE=/data0/skowrons/AZURE2-upgrade/work/coulomb_table_v2.bin
-S=/data0/skowrons/AZURE2-upgrade/work/p5design; T=<worktree>/tests
+source ~/miniforge3/etc/profile.d/conda.sh && conda activate <the upgrade environment>   # UP: the directory that holds the worktrees and work/
+export AZURE2_COULOMB_TABLE=$UP/work/coulomb_table_v2.bin
+S=$UP/work/p5design; T=<worktree>/tests
 
 # instrumented build (never committed): work/p5design/p5_dump.patch on a copy of 2363abac, build work/b-p5design
 #   P5_DUMP=1 prints every unit (P5U), its sub-points (P5SUB) and every level-matrix fill (P5S) to stderr
