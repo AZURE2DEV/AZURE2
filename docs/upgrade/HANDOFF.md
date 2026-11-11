@@ -2,6 +2,33 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, extension drill, `feature/upgrade-5-extension-drill`) — three new kinds of data by the recipes, and what each cost
+
+Done (one commit per lane, then the recipe corrections):
+- `quantity modified_sfactor` (S* = E sigma exp(2 pi eta + g E), field `shape <g> 1/MeV`, new dimension
+  `inverse_energy`): the S factor's `Scaled` tree with g carried by the S-factor `FactorRef`; physics
+  `modified_sfactor_conversion` with its unit test and binding; the AZUREOut columns hold sigma and S*.
+  `tests/modified_sfactor`.
+- `quantity legendre` with `expansion rsl | 2l2 | 4pi` (data and extrapolations) and `absolute` for extrapolations:
+  one table `experiment/LegendreExpansion.h`; on data a `FactorRef::Kind::Legendre` of the point's order; on
+  extrapolations `Segment::LegendreCoefficients` (the `.acoeff` writer and the API). `tests/legendre_expansions`.
+- `quantity ratio_to_reference` (sigma / a tabulated sigma_ref, field `reference <file> [unit <u>]`): tree kind
+  `ReferenceRatio`, `LeafPart::Reference`, `src/ReferenceTableLeaf.cpp`; the Coulomb leaf's fold-and-blend factored
+  into `FoldReferenceAtPoint`; `E_REFERENCE_TABLE`. Folded points work through the existing seam.
+  `tests/ratio_to_reference`.
+- Recipes of `CLAUDE.md` corrected where the drill found them silent or wrong; consistency check 34
+  (`IsReferenceLeaf`, not `IsCoulombReference`, where the model pass skips or drops a reference leaf).
+
+Verified how: per lane, build 0 warnings, consistency, the experiment/convert/predictions ctest subset, the lane's
+`check.sh` (each shown failing with an injected error), a handful of projects against `tab-trial25c`; at the end the
+full comparison, `ctest -LE slow`, `tests/run_tests.sh`, the converted-tree gate (the report gives the numbers).
+
+Open: a fold's sub-point or a shifted energy outside a reference table gives a NaN point (not refused at set-up: the
+sub-point grid is made in files another branch is rebuilding); differential data relative to a reference are not
+built; pyazr's `calculate_sfactor` and the API's per-point `conv` know only the plain S factor (a modified_sfactor
+segment's model is already S*); fitStatus.out's MIGRAD call count varies between 2-thread runs of one fit (also on
+the base engine; defect outside the drill).
+
 ## 2026-11-11 (director, 23:10) — merged: one fit-parameter kind for apparatus numbers, the point mapping deleted with the node table beside the sub-points; external capture was missing for a capture term that is only a component
 
 Batch rehearsal `rehearsal/trial25` (worktree `wt-trial25`, build `work/b-trial25`) = the head of 22:00 +

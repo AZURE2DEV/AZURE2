@@ -308,6 +308,9 @@ parameter name].
    alternatives and `Pos`/`Kw`/`OptionalKw` parts. If the field depends on the quantity, `ByQ(...)` there and an
    `Allows(...)`/`Requires(...)` in each quantity function of `experiment/src/Quantities.cpp` that uses it.
    No parser code: the value type's parser exists (`Parsers.h`); a new value type is a parser plus a case in `ParseValue`.
+   A positional part cannot be optional: an optional part is a keyword part (`OptionalKw("unit", ...)`, written
+   `reference <file> unit mb`).  A `ByQ` field needs a value in the `plausible` map of
+   `experiment/tests/quantities_test.cpp` (the test tries it on every quantity that does not list it).
 2. A fixture line in `experiment/tests/data/` that validates, and a case in `experiment/tests/diagnostics_test.cpp`
    if the field brings a refusal of its own.
 3. `AZURE2 --schema > tests/schema/schema_v3.json`, bump `Schema::kVersion` if an existing project changes meaning
@@ -345,15 +348,28 @@ one), the schema and docs as above; later its tree builder (step 3).
    the nuisances with their `ParameterNames`); until it has one, `Build` refuses the quantity with `E_NOT_BUILT`, so
    a file never runs with a quantity the engine does not compute.  What the engine computes for the spec is the
    model pass (`include/ModelPass.h`; the expression tree, S10).  A spec member the old lines never set (as
-   `ReactionSpec::coulombReference`) goes into the comparison of `convert/tests/spec_equivalence_test.cpp` too.
+   `ReactionSpec::coulombReference`) goes into the comparison of `convert/tests/spec_equivalence_test.cpp` too; where an
+   old construct means the same thing (`absolute 1` is `ReactionSpec::legendre` Absolute), the old-line adaptor
+   `convert/src/SpecsFromOldLines.cpp` sets it, or `convert_spec_equivalence` fails.  A convention of the data (a
+   normalisation, an expansion) is one table of its own in `experiment/` (`LegendreExpansion.h`), read by Build and
+   the engine alike.
    A refusal that depends on the target, beam or detector the data set names is made where the effects are built
    (`experiment/src/BuildEffects.cpp`, `CoulombRatioFolds` is the pattern).
 3. If the spec needs a tree the existing kinds do not build: one row of `TreeKinds()` (`experiment/src/Prediction.cpp`,
    its `TreeKind` and builder; `TreeKindOf` decides) and, for a value the R-matrix does not compute, a `LeafPart`.
    Such a leaf's value at a point is computed in `PointInputs` (`src/ModelPass.cpp`) by a function of its own file
-   (`src/CoulombReference.cpp`: the Rutherford / Mott leaf, folded on the point's own sub-points with
-   `Unit::IntegrateSubPointValues`, never a second quadrature); `ComposeModelValue` does not calculate a point for
-   it, and `ModelPointBackward` drops it from the leaves when no level parameter moves it.  A data value that is the
+   (`src/CoulombReference.cpp`: the Rutherford / Mott leaf; `src/ReferenceTableLeaf.cpp`: a tabulated reference),
+   folded on the point's own sub-points by `FoldReferenceAtPoint` (`CoulombReference.h`: the one quadrature and the
+   edge blend, never a copy of them); add the part to `IsReferenceLeaf` (`Prediction.h`) [check 34], which `PointInputs`,
+   `ComposeModelValue` (no point is calculated for it) and `ModelPointBackward` (it leaves the adjoint's leaves) all
+   ask.  A table the record names is read once by Build and kept in the spec in engine units and frame
+   (`ReferenceTable.h`: energies taken to the lab once); the engine's own build reads only a data file's first row
+   (`CheckDataFile`), so a refusal that needs every row (a row outside a table) reads them for that quantity only.
+   A factor on the value that depends on the point (E exp(2 pi eta + g E), a Legendre order's normalisation) is a
+   `FactorRef` kind (`Prediction.h`; its value in `PointInputs`) under the tree kind `Scaled`, not a new tree.
+   The coefficients of a Legendre extrapolation (`AngularDistribution`) are no tree value: the `.acoeff` writer
+   (`src/DataOutputFiles.cpp`) and the API take them from `Segment::LegendreCoefficients`, as the sigma and S columns
+   of `AZUREOut` take theirs from `SigmaAndS` there.  A data value that is the
    same in the lab and c.m. frames (a ratio) answers `Segment::IsDimensionlessRatio`, so it is not converted at load.
    Then `python3 tests/upgrade/predictions_test.py --binary <AZURE2> --write` (lines added for new projects only).
 4. A test: a case in `experiment/tests/build_test.cpp` (the spec member by member, and its refusals), a case in
@@ -366,11 +382,16 @@ one), the schema and docs as above; later its tree builder (step 3).
    `AZURE2 --describe` must show the observable and the pair keys it resolved to.
 
 **A format-3 unit.** One `Unit` row in `experiment/src/Units.cpp`, `{token, dimension, factor to the dimension's
-engine unit[, aliases]}`, e.g. `{"keV", "energy", 1e-3}`; `experiment_parsers` checks every row's dimension and factor and `experiment_quantities` tries the unit
+engine unit[, aliases]}`, e.g. `{"keV", "energy", 1e-3}` (a new dimension is also a row of `Dimensions()` there, its
+base unit with factor 1, as `inverse_energy`, 1/MeV); `experiment_parsers` checks every row's dimension and factor and `experiment_quantities` tries the unit
 on every quantity; then the schema and docs as above.  A factor is applied only by `Units.h` `Rescale` (through
 `ToBase`, `ToUnit`, `Context::InBase`; the columns of a data file through `experiment/DataRows.h`, where the points
 are made), never as a literal in `Build`.  A quantity that is a scale of an observable the engine computes (an S
-factor, a yield per unit charge) is `ReactionSpec::scale` (`experiment/src/BuildUnits.cpp`), one tree kind `Scaled`.
+factor, a yield per unit charge) is `ReactionSpec::scale`, one tree kind `Scaled`: a constant factor is set in
+`experiment/src/BuildUnits.cpp` (units, the yield per charge), an energy-dependent one in `Build.cpp` (`SFactorOf`:
+`sFactor` and the modified S factor's g); its per-point value is a `FactorRef` evaluated in `PointInputs`
+(`src/ModelPass.cpp`; the conversion in `src/CoulombReference.cpp`), and `src/DataOutputFiles.cpp` (`SigmaAndS`)
+writes the sigma and S columns of such a data set.
 
 **A format-3 diagnostic code.** A constant in `experiment/include/azure2/experiment/Diagnostics.h` (`io/`'s reader:
 `io/include/azure2/io/Record.h`), its row in `DiagnosticCodes()` and a case in `experiment/tests/diagnostics_test.cpp`
