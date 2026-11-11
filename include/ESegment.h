@@ -61,8 +61,9 @@ class ESegment {
   /// parameter.
   bool IsProfiledNorm() const;
   /// The normalization that minimizes this segment's chi^2 at the model values in `results` (profiledNorm) and that
-  /// minimum chi^2 (returned).  Used for profiled (THM) norms; the segment's own norm is not changed.
-  double ProfileNormChiSquared(const azure2::Results &results, double &profiledNorm) const;
+  /// minimum chi^2 (returned).  Used for profiled (THM) norms; the segment's own norm is not changed.  `data` holds
+  /// the segment.
+  double ProfileNormChiSquared(const EData &data, const azure2::Results &results, double &profiledNorm) const;
   /// Does the segment carry target effects?
   bool IsTargetEffect() const;
   /// Is the normalization a free fit parameter?
@@ -117,11 +118,11 @@ class ESegment {
   bool HasMeasurement() const { return measurement_ != nullptr; }
   /// Make `rows` the segment's measurement and one point per row (a data file's rows, or the grid of an
   /// extrapolation), in the frame as read; ConvertRowToCM converts them.
-  void SetMeasurementRows(std::shared_ptr<const azure2::experiment::MeasurementRows> rows,
+  void SetMeasurementRows(EData &data, std::shared_ptr<const azure2::experiment::MeasurementRows> rows,
                           const azure2::experiment::MeasurementProvenance &provenance, bool extrapolation);
   /// The grid of an extrapolation as its measurement: one row per (angle, energy), energies varying fastest, value
   /// 0 and uncertainty 0.1 (lab MeV, deg).
-  void SetGridRows(const std::vector<double> &energies, const std::vector<double> &angles);
+  void SetGridRows(EData &data, const std::vector<double> &energies, const std::vector<double> &angles);
   /// Row i (0-based) of the measurement as read: the value, its uncertainty (after a covariance file), its data-file
   /// record.
   double LabValue(int i) const { return measurement_->rows->value[i]; }
@@ -140,10 +141,11 @@ class ESegment {
   /// energy shift (Convert) and of the leaves, written into the term's frame and point.  With convertValue (false for
   /// a ratio: dimensionless) the value and its uncertainty carry dOmega_lab/dOmega_cm.  False where the lab angle is
   /// beyond the kinematic maximum (EPoint::GetLabAngleWhy, GetLabAngleMax); the caller reports it.
-  bool ConvertRowToCM(int t, int i, PPair *entrancePair, PPair *exitPair, bool convertValue, BeyondRange beyond);
+  bool ConvertRowToCM(EData &data, int t, int i, PPair *entrancePair, PPair *exitPair, bool convertValue,
+                      BeyondRange beyond);
   /// E_c.m., E_x and the c.m. bin edges of row i of term t alone (the leaf grids are laid out before the leaves'
   /// angles are converted).
-  void ConvertRowEnergyToCM(int t, int i, PPair *entrancePair, PPair *exitPair);
+  void ConvertRowEnergyToCM(EData &data, int t, int i, PPair *entrancePair, PPair *exitPair);
   /// The frame of term t as it stands now becomes the frame an energy shift starts from (BeyondRange::Convert).
   void KeepLoadFrame(int t) {
     Units(t).loadFrame = std::make_shared<const azure2::experiment::MeasurementFrame>(Units(t).frame);
@@ -155,10 +157,16 @@ class ESegment {
   // pairs; its points are calculation units that hold no data, and it takes every setting (shift, flags, THM) from
   // the segment.
   int NumTerms() const { return 1 + (int)leaves_.size(); }
-  std::vector<EPoint> &TermPoints(int t) { return Units(t).points; }
-  const std::vector<EPoint> &TermPoints(int t) const { return Units(t).points; }
+  /// The points of term t: a range of the units of `data`, the data set that holds the segment (EData::Units).
+  UnitRange<EPoint> TermPoints(EData &data, int t) const;
+  UnitRange<const EPoint> TermPoints(const EData &data, int t) const;
+  int NumTermPoints(int t) const { return Units(t).count; }
+  /// The first unit of term t's points in the data set's units.
+  int TermFirstUnit(int t) const { return Units(t).first; }
+  /// Move term t's points to units [first, first + count) (EData::CompactUnits).
+  void SetTermRange(int t, int first) { Units(t).first = first; }
   /// Point i (1-based) of term t.
-  EPoint *GetTermPoint(int t, int i) { return &Units(t).points[i - 1]; }
+  EPoint *GetTermPoint(EData &data, int t, int i) const;
   /// What term t's points compute (shared by them and their sub-points; immutable once set up).
   const std::shared_ptr<const TermSettings> &TermSettingsOf(int t) const { return Units(t).settings; }
   int TermEntranceKey(int t) const { return t ? leaves_[t - 1].entranceKey : entrancekey_; }
@@ -177,9 +185,9 @@ class ESegment {
   double LeafScaling(int t) const { return t ? leaves_[t - 1].scaling : 1.0; }
   /// Add a leaf with these pairs, a fixed lab angle (deg; a RATIO denominator) or none, a scale factor and its key:
   /// its points are the segment's (at the rows, with the frame at load) with the leaf's pairs.  Returns its term.
-  int AddLeaf(int entranceKey, int exitKey, std::optional<double> fixedAngle, double scaling, int key);
+  int AddLeaf(EData &data, int entranceKey, int exitKey, std::optional<double> fixedAngle, double scaling, int key);
   /// Make leaf t the total-cross-section term of a yield segment.
-  void MakeYieldTotalLeaf(int t);
+  void MakeYieldTotalLeaf(EData &data, int t);
   /// E_c.m. / E_lab of the segment's points, non-relativistic: (M1 + M2) / M2 of the decay pair for a beta-delayed
   /// point, M2 / (M1 + M2) of the entrance pair otherwise (the rigid shift of sub-points, the target-effect grids).
   static double CMEnergyFactor(PPair *entrancePair, PPair *exitPair);
@@ -334,8 +342,6 @@ class ESegment {
   void SetPrediction(std::shared_ptr<const azure2::experiment::Prediction> p);
   /// Path of the data file this segment reads.
   std::string GetDataFile() const;
-  /// Append a point.
-  void AddPoint(EPoint);
   /// Point the segment at a TargetEffect in the parent EData.
   void SetTargetEffectNum(int);
   void SetSegmentKey(int);
@@ -352,24 +358,24 @@ class ESegment {
   /// Attach the Coulomb line shape of this segment's THM experiment
   /// (lineshape=on) to the segment and to every point it has (and sub-points
   /// created afterwards).  The segment keeps it alive.
-  void SetThmLineshape(std::shared_ptr<const ThmLineshape> l);
+  void SetThmLineshape(EData &data, std::shared_ptr<const ThmLineshape> l);
   const ThmLineshape *GetThmLineshape() const { return thmLineshape_.get(); }
   /// Attach the spectator-momentum window of this segment's THM experiment
   /// (ps=...), as SetThmLineshape.
-  void SetThmSpectatorWindow(std::shared_ptr<const ThmSpectatorWindow> w);
+  void SetThmSpectatorWindow(EData &data, std::shared_ptr<const ThmSpectatorWindow> w);
   const ThmSpectatorWindow *GetThmSpectatorWindow() const { return thmWindow_.get(); }
   /// Attach the distortion factor R(E) of this segment's THM experiment
   /// (distortion=...), as SetThmLineshape.
-  void SetThmDistortion(std::shared_ptr<const ThmDistortion> d);
+  void SetThmDistortion(EData &data, std::shared_ptr<const ThmDistortion> d);
   const ThmDistortion *GetThmDistortion() const { return thmDistortion_.get(); }
-  void SetThmDwVertex(std::shared_ptr<const ThmDwVertex> v);
+  void SetThmDwVertex(EData &data, std::shared_ptr<const ThmDwVertex> v);
   const ThmDwVertex *GetThmDwVertex() const { return thmDwVertex_.get(); }
   /// Attach the angular window of this segment's THM experiment
   /// (theta=thmin-thmax), as SetThmLineshape.
-  void SetThmAngleWindow(std::shared_ptr<const ThmAngleWindow> w);
+  void SetThmAngleWindow(EData &data, std::shared_ptr<const ThmAngleWindow> w);
   const ThmAngleWindow *GetThmAngleWindow() const { return thmAngle_.get(); }
   /// THM coherent background (cbackground=), as SetThmLineshape.
-  void SetThmCoherent(std::shared_ptr<const ThmCoherentBackground> c);
+  void SetThmCoherent(EData &data, std::shared_ptr<const ThmCoherentBackground> c);
   const ThmCoherentBackground *GetThmCoherent() const { return thmCoherent_.get(); }
   /// Set the normalization applied to the data.
   void SetNorm(double);
@@ -390,18 +396,18 @@ class ESegment {
   /// The earlier point of term t that its point i (0-based) is mapped onto, or NULL.
   EPoint *ShiftHost(EData &data, int t, int i);
   /// Change the exit pair key.
-  void SetExitKey(int);
+  void SetExitKey(EData &data, int);
   /// Change the entrance pair key, for this segment and every point in it.
-  void SetEntranceKey(int);
+  void SetEntranceKey(EData &data, int);
   /// Number of segments to sum for total capture; 0 if not total capture.
   void SetIsTotalCapture(int);
   void SetMinAngle(double);
   void SetMaxAngle(double);
-  /// Point \p i, 1-based.
-  EPoint *GetPoint(int);
-  /// The points, by reference.
-  std::vector<EPoint> &GetPoints();
-  const std::vector<EPoint> &GetPoints() const { return own_.points; }
+  /// Point \p i, 1-based, in the units of `data`, the data set that holds the segment.
+  EPoint *GetPoint(EData &data, int i) const { return GetTermPoint(data, 0, i); }
+  /// The segment's own points (term 0).
+  UnitRange<EPoint> GetPoints(EData &data) const { return TermPoints(data, 0); }
+  UnitRange<const EPoint> GetPoints(const EData &data) const { return TermPoints(data, 0); }
 
   /// How the components combine: SUM or RATIO.
   void SetOperationType(OperationType operation);
@@ -469,7 +475,7 @@ class ESegment {
   /// sample's abundance weights or a transmission / yield transform.
   bool NeedsAssembly() const { return HasComponents() || IsNatural() || IsTransformed(); }
   /// True when the point, a point of `data`, is integrated over sub-points (EPoint::IntegrateTargetEffect).
-  static bool HasSubPointIntegration(const EData &data, EPoint *point);
+  static bool HasSubPointIntegration(const EData &data, const EPoint *point);
   /// IsTotal for the segment's own term: the segment is "total" and its exit pair is its entrance pair.
   bool IsTotalTerm() const { return IsTermTotal(0); }
   int GetNaturalSample() const { return naturalSample_; }
@@ -508,11 +514,11 @@ class ESegment {
     std::vector<double> state;  ///< energy shift, sqrt shift, shift-function values
     std::shared_ptr<const ChannelTable> table;
   };
-  /// What a term holds of the working state: its points (calculation units at the rows), its frame, and the channel
-  /// tables of its last shift states.
+  /// What a term holds of the working state: its points (calculation units at the rows, a range of the data set's
+  /// units), its frame, and the channel tables of its last shift states.
   struct TermUnits {
     std::shared_ptr<const TermSettings> settings;  ///< what the term's points compute (TermSettings.h)
-    std::vector<EPoint> points;
+    int first = 0, count = 0;                     ///< the points: units [first, first + count) of the data set
     azure2::experiment::MeasurementFrame frame;  ///< the rows in the c.m. frame at the present shift
     std::shared_ptr<const azure2::experiment::MeasurementFrame> loadFrame;  ///< KeepLoadFrame (shared by every copy)
     std::vector<ShiftTable> shiftTables;  ///< most recent first
@@ -532,11 +538,11 @@ class ESegment {
   TermUnits &Units(int t) { return t ? leaves_[t - 1].units : own_; }
   /// The settings of the segment's own term from its members; given to its points (SetTermSettings).
   std::shared_ptr<TermSettings> MakeOwnSettings() const;
-  void SetTermSettings(int t, std::shared_ptr<const TermSettings> settings);
+  void SetTermSettings(EData &data, int t, std::shared_ptr<const TermSettings> settings);
   /// After a set-up change of the segment's pairs or THM attachments.
-  void RefreshOwnSettings();
+  void RefreshOwnSettings(EData &data);
   /// Leaf t's settings: the segment's with the leaf's pairs and role.
-  void SetLeafSettings(int t);
+  void SetLeafSettings(EData &data, int t);
   const TermUnits &Units(int t) const { return t ? leaves_[t - 1].units : own_; }
   ChannelRowSource ShiftRowSource(int t, int i);
   std::vector<double> ShiftState() const;
@@ -642,10 +648,10 @@ struct TermRef {
   int term = 0;
   bool operator==(const TermRef &o) const { return segment == o.segment && term == o.term; }
   bool operator!=(const TermRef &o) const { return !(*this == o); }
-  int NumPoints() const { return (int)segment->TermPoints(term).size(); }
-  /// Point i, 1-based.
-  EPoint *GetPoint(int i) const { return segment->GetTermPoint(term, i); }
-  std::vector<EPoint> &GetPoints() const { return segment->TermPoints(term); }
+  int NumPoints() const { return segment->NumTermPoints(term); }
+  /// Point i, 1-based, in the units of `data`, the data set that holds the segment.
+  EPoint *GetPoint(EData &data, int i) const { return segment->GetTermPoint(data, term, i); }
+  UnitRange<EPoint> GetPoints(EData &data) const { return segment->TermPoints(data, term); }
   int GetEntranceKey() const { return segment->TermEntranceKey(term); }
   int GetExitKey() const { return segment->TermExitKey(term); }
   int GetSegmentKey() const { return segment->TermKey(term); }

@@ -108,7 +108,7 @@ int EData::ResolveCovarianceGroups(const Config &configure) {
       grp.members[a] = {it[a].seg, it[a].pid};
       grp.rows[a] = it[a].row;
       ESegment *seg = this->GetSegment(it[a].seg);
-      EPoint *pt = seg->GetPoint(it[a].pid + 1);
+      EPoint *pt = seg->GetPoint(*this, it[a].pid + 1);
       grp.sigma[a] = seg->LabError(it[a].pid);
       grp.data[a] = seg->LabValue(it[a].pid);
       std::ostringstream lab;
@@ -158,8 +158,8 @@ double EData::CovarianceChi2Correction(azure2::Results &results, std::vector<dou
     double diag = 0.0;
     for (int a = 0; a < g.n; a++) {
       ESegment *seg = this->GetSegment(g.members[a].first);
-      EPoint *pt = seg->GetPoint(g.members[a].second + 1);
-      r[a] = azure2::PointResidual(*seg, g.members[a].second, results, seg->GetNorm()).Pull();
+      EPoint *pt = seg->GetPoint(*this, g.members[a].second + 1);
+      r[a] = azure2::PointResidual(*this, *seg, g.members[a].second, results, seg->GetNorm()).Pull();
       diag += r[a] * r[a];
     }
     g.EnsureFactored(r);
@@ -170,7 +170,7 @@ double EData::CovarianceChi2Correction(azure2::Results &results, std::vector<dou
     g.WhitenTranspose(z.data());
     correction += q - diag;
     for (int a = 0; a < g.n; a++)
-      this->GetSegment(g.members[a].first)->GetPoint(g.members[a].second + 1)->SetCovarianceSeed(results, z[a]);
+      this->GetSegment(g.members[a].first)->GetPoint(*this, g.members[a].second + 1)->SetCovarianceSeed(results, z[a]);
     // Per-segment chi2: the exact partition sum_i r_i (M^-1 r)_i of the group's chi2.
     std::map<int, double> part;
     for (int a = 0; a < g.n; a++) part[g.members[a].first] += r[a] * z[a];
@@ -233,8 +233,8 @@ void EData::WriteCovarianceSummary(const Config &configure, const azure2::Result
     double diag = 0.0;
     for (int a = 0; a < g.n; a++) {
       ESegment *seg = this->GetSegment(g.members[a].first);
-      EPoint *pt = seg->GetPoint(g.members[a].second + 1);
-      r[a] = azure2::PointResidual(*seg, g.members[a].second, results, seg->GetNorm()).Pull();
+      EPoint *pt = seg->GetPoint(*this, g.members[a].second + 1);
+      r[a] = azure2::PointResidual(*this, *seg, g.members[a].second, results, seg->GetNorm()).Pull();
       diag += r[a] * r[a];
     }
     g.EnsureFactored(r);

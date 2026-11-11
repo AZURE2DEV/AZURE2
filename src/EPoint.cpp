@@ -55,7 +55,7 @@
  */
 
 EPoint::EPoint(const azure2::experiment::MeasurementRows &rows, int row, const ESegment *parent, int term)
-    : settings_(parent->TermSettingsOf(term)), row_(row) {
+    : settings_(parent->TermSettingsOf(term).get()), row_(row) {
   cm_angle_ = rows.angle[row];
   lab_angle_ = rows.angle[row];
   nominal_energy_ = rows.energy[row];
@@ -77,7 +77,8 @@ EPoint::EPoint(const azure2::experiment::MeasurementRows &rows, int row, const E
  * A point that is no row (a sub-point of a target effect), with the settings of term `term` of the segment.
  */
 
-EPoint::EPoint(double angle, double energy, const ESegment *parent, int term) : settings_(parent->TermSettingsOf(term)) {
+EPoint::EPoint(double angle, double energy, const ESegment *parent, int term)
+    : settings_(parent->TermSettingsOf(term).get()) {
   lab_angle_ = angle;
   cm_angle_ = angle;
   nominal_energy_ = energy;
@@ -110,7 +111,8 @@ EPoint::EPoint(double angle, double energy, int entranceKey,
   settings->maxAngDistOrder = maxAngDistOrder;
   settings->j = jValue;
   settings->l = lValue;
-  settings_ = std::move(settings);
+  own_settings_ = std::move(settings);
+  settings_ = own_settings_.get();
   lab_angle_ = angle;
   cm_angle_ = angle;
   nominal_energy_ = energy;
@@ -240,14 +242,6 @@ int EPoint::GetL() const {
 }
 
 /*!
- * Returns the total number of sub-points contained within the present objet.  The sub-points are used to calculate the target effect integrals.
- */
-
-int EPoint::NumSubPoints() const {
-  return integrationPoints_.size();
-}
-
-/*!
  * Returns the position of the corresponding TargetEffect object in the parent EData object.
  */
 
@@ -370,7 +364,7 @@ EnergyMap EPoint::GetMap() const {
  */
 
 void EPoint::Initialize(EData *data, CNuc *compound, const Config &configure) {
-  this->CalcEDependentValues(compound, configure, true, data);
+  this->CalcEDependentValues(data, compound, configure, true, data);
   if (this->IsDifferential()) {
     // Get TargetEffect with Q-coefficients if applicable
     TargetEffect *effect = NULL;
@@ -380,10 +374,10 @@ void EPoint::Initialize(EData *data, CNuc *compound, const Config &configure) {
         effect = te;
       }
     }
-    this->CalcLegendreP(configure.maxLOrder, compound, effect);
+    this->CalcLegendreP(data, configure.maxLOrder, compound, effect);
   }
-  this->CalcCoulombAmplitude(compound);
-  if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) this->CalculateECAmplitudes(compound, configure);
+  this->CalcCoulombAmplitude(data, compound);
+  if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) this->CalculateECAmplitudes(data, compound, configure);
 }
 
 // ---------------------------------------------------------------- lab -> c.m.
@@ -531,16 +525,11 @@ void EPoint::SetTargetEffectNum(int targetEffectNum) {
 
 
 
-/*!
- * Adds a sub-point to the current point object for target effect integration.
- */
-
-void EPoint::AddSubPoint(EPoint subPoint) {
+void EPoint::MakeSubPoint(EPoint &subPoint) const {
   // A sub-point shares its term's settings (the observable, A_y or total included) with its parent.
   subPoint.is_sub_point_ = true;
   subPoint.screen_ue_ = this->screen_ue_;
   subPoint.screen_param_ = this->screen_param_;
-  integrationPoints_.push_back(subPoint);
 }
 
 /*!
@@ -641,27 +630,5 @@ azure2::MappedPoints EPoint::PlanMapped(EData *data) const {
   return azure2::MappedPoints(data, &task.mapped);
 }
 
-
-/*!
- * Returns a pointer to the specified sub-point in the current EPoint object.
- */
-
-EPoint *EPoint::GetSubPoint(int subPoint) {
-  EPoint *tempPoint;
-  if (subPoint <= integrationPoints_.size())
-    tempPoint = &integrationPoints_[subPoint - 1];
-  else
-    tempPoint = NULL;
-  return tempPoint;
-}
-
-/*!
- * Returns a reference to the vector of EPoint objects containing the subpoints used in target
- * effect integration.
- */
-
-std::vector<EPoint> &EPoint::GetSubPoints() {
-  return integrationPoints_;
-}
 
 

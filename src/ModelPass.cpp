@@ -81,9 +81,9 @@ class LocalArray {
 };
 
 /// The point of term t (0: the segment's own, k: its k-th leaf's) at pointIndex; null if it has none.
-EPoint *TermPoint(ESegment &segment, int term, int pointIndex) {
-  if (term < 0 || term >= segment.NumTerms() || pointIndex >= (int)segment.TermPoints(term).size()) return nullptr;
-  return segment.GetTermPoint(term, pointIndex + 1);
+EPoint *TermPoint(EData &data, ESegment &segment, int term, int pointIndex) {
+  if (term < 0 || term >= segment.NumTerms() || pointIndex >= segment.NumTermPoints(term)) return nullptr;
+  return segment.GetTermPoint(data, term, pointIndex + 1);
 }
 
 double LeafValue(const EPoint *p, LeafPart part, const azure2::Results &results) {
@@ -127,7 +127,7 @@ class BaseKernel : public azure2::experiment::SubPointFold {
     if (!stage_.fold)
       energies.push_back(base->GetCMEnergy());
     else
-      for (int j = 1; j <= base->NumSubPoints(); j++) energies.push_back(base->GetSubPoint(j)->GetCMEnergy());
+      for (int j = 1; j <= base->NumSubPoints(); j++) energies.push_back(base->GetSubPoint(data, j)->GetCMEnergy());
     std::vector<std::pair<int, double>> dw, dwdT;
     rowStart_.push_back(0);
     rowStartT_.push_back(0);
@@ -182,13 +182,13 @@ class BaseKernel : public azure2::experiment::SubPointFold {
  * fitted Doppler temperature.
  */
 struct PointInputs {
-  PointInputs(const EData &data, ESegment &segment, const Prediction &p, int pointIndex, CNuc *cnuc,
+  PointInputs(EData &data, ESegment &segment, const Prediction &p, int pointIndex, CNuc *cnuc,
               const Config &configure, const azure2::Results &results)
       : nl(p.leaves.size()), nf(p.factors.size()), np(p.params.size()), point(nl), leafValue(nl), factorValue(nf),
         paramValue(np + 1), leafArray(nl), factorArray(nf) {
-    EPoint *basePoint = segment.GetPoint(pointIndex + 1);
+    EPoint *basePoint = segment.GetPoint(data, pointIndex + 1);
     for (std::size_t k = 0; k < nl; k++) {
-      point[k] = TermPoint(segment, p.leaves[k].term, pointIndex);
+      point[k] = TermPoint(data, segment, p.leaves[k].term, pointIndex);
       const LeafPart part = p.leaves[k].part;
       leafValue[k] = azure2::experiment::IsCoulombReference(part)
                          ? azure2::CoulombReferenceValue(data, point[k], part, cnuc, configure)
@@ -197,7 +197,7 @@ struct PointInputs {
     }
     for (std::size_t f = 0; f < nf; f++) {
       const FactorRef &r = p.factors[f];
-      EPoint *termPoint = TermPoint(segment, r.term, pointIndex);
+      EPoint *termPoint = TermPoint(data, segment, r.term, pointIndex);
       switch (r.kind) {
         case FactorRef::Kind::TermFrame:
           factorValue[f] = basePoint && termPoint ? segment.TermFrameFactor(r.term, pointIndex) : 1.0;
@@ -224,7 +224,7 @@ struct PointInputs {
     for (std::size_t k = 0; k < nl; k++) {
       subOffsets.push_back(subValues.size());
       for (int j = 1; j <= point[k]->NumSubPoints(); j++)
-        subValues.push_back(LeafValue(point[k]->GetSubPoint(j), p.leaves[k].part, results));
+        subValues.push_back(LeafValue(point[k]->GetSubPoint(data, j), p.leaves[k].part, results));
       subOffsets.push_back(subValues.size());
     }
     for (std::size_t k = 0; k < nl; k++) subArray.push_back({subValues.data(), &subOffsets[2 * k]});
@@ -258,10 +258,10 @@ const Prediction &PredictionOf(const ESegment &segment) {
 double ComposeModelValue(EData &data, ESegment &segment, int pointIndex, CNuc *cnuc, const Config &configure,
                          azure2::Results &results, azure2::LeafValues leaves) {
   const Prediction &p = PredictionOf(segment);
-  EPoint *basePoint = segment.GetPoint(pointIndex + 1);
+  EPoint *basePoint = segment.GetPoint(data, pointIndex + 1);
   // The terms' points, calculated here when the leaves are not in yet (in term order, the base first).
   for (const azure2::experiment::LeafSelector &leaf : p.leaves) {
-    EPoint *termPoint = TermPoint(segment, leaf.term, pointIndex);
+    EPoint *termPoint = TermPoint(data, segment, leaf.term, pointIndex);
     if (!termPoint) return FailedSample(segment, basePoint, cnuc, results);  // a leaf has a point at every row
     if (azure2::experiment::IsCoulombReference(leaf.part)) continue;  // analytic: nothing to calculate
     if (CalculatesItself(termPoint, leaves) &&
@@ -299,7 +299,7 @@ namespace azure2 {
 
 double EvaluateModelPoint(EData &data, ESegment &segment, int pointIndex, CNuc *compound, const Config &config,
                           Results &results, LeafValues leaves) {
-  EPoint *point = (pointIndex >= 0 && pointIndex < segment.NumPoints()) ? segment.GetPoint(pointIndex + 1) : nullptr;
+  EPoint *point = (pointIndex >= 0 && pointIndex < segment.NumPoints()) ? segment.GetPoint(data, pointIndex + 1) : nullptr;
   if (!point) throw std::logic_error("EvaluateModelPoint: segment " + std::to_string(segment.GetSegmentKey()) +
                                      " has no point " + std::to_string(pointIndex));
   const double m = ComposeModelValue(data, segment, pointIndex, compound, config, results, leaves);
@@ -319,11 +319,11 @@ void EvaluateModel(EData &data, CNuc *compound, const Config &config, Results &r
     EvaluateModelSegment(data, *data.GetSegment(i), compound, config, results, leaves);
 }
 
-bool ModelPointBackward(const EData &data, ESegment &segment, int pointIndex, CNuc *compound, const Config &config,
+bool ModelPointBackward(EData &data, ESegment &segment, int pointIndex, CNuc *compound, const Config &config,
                         const Results &results, double g, ModelCotangents &out) {
   const Prediction &p = PredictionOf(segment);
   for (const experiment::LeafSelector &leaf : p.leaves)
-    if (!TermPoint(segment, leaf.term, pointIndex)) return false;
+    if (!TermPoint(data, segment, leaf.term, pointIndex)) return false;
   PointInputs inputs(data, segment, p, pointIndex, compound, config, results);
   const std::size_t nl = inputs.nl, np = inputs.np;
   out.leaves.assign(nl, ModelCotangents::Leaf());
@@ -359,8 +359,8 @@ bool ModelPointBackward(const EData &data, ESegment &segment, int pointIndex, CN
   return ok;
 }
 
-Residual PointResidual(const ESegment &segment, int i, const Results &results, double norm) {
-  return DataResidual(segment.GetPoints()[i].GetModelValue(results), segment.CMValue(i), segment.CMError(i), norm);
+Residual PointResidual(const EData &data, const ESegment &segment, int i, const Results &results, double norm) {
+  return DataResidual(segment.GetPoints(data)[i].GetModelValue(results), segment.CMValue(i), segment.CMError(i), norm);
 }
 
 }  // namespace azure2

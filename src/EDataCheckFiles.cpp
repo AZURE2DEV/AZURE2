@@ -70,12 +70,12 @@ void EData::PrintData(const Config &configure) {
         << std::endl;
     for (EDataIterator data = begin(); data != end(); data++) {
       out << std::setw(11) << data.segment() - GetSegments().begin() + 1
-          << std::setw(14) << data.point() - (data.segment()->GetPoints()).begin() + 1
+          << std::setw(14) << data.point() - (data.segment()->GetPoints(*this)).begin() + 1
           << std::setw(15) << data.point()->GetLabEnergy()
           << std::setw(15) << data.point()->GetCMEnergy()
           << std::setw(15) << data.point()->GetCMAngle()
-          << std::setw(20) << data.segment()->CMValue((int)(data.point() - data.segment()->GetPoints().begin()))
-          << std::setw(22) << data.segment()->CMError((int)(data.point() - data.segment()->GetPoints().begin()));
+          << std::setw(20) << data.segment()->CMValue((int)(data.point() - data.segment()->GetPoints(*this).begin()))
+          << std::setw(22) << data.segment()->CMError((int)(data.point() - data.segment()->GetPoints(*this).begin()));
       if (data.point()->IsMapped()) {
         EnergyMap map = data.point()->GetMap();
         char tempMap[25];
@@ -89,11 +89,11 @@ void EData::PrintData(const Config &configure) {
             << std::setw(18) << data.point()->NumSubPoints();
       if (data.point()->IsTargetEffect() && data.point()->NumSubPoints() > 0 &&
           this->GetTargetEffect(data.point()->GetTargetEffectNum())->IsSubPointEffect()) {
-        out << std::setw(18) << data.point()->GetSubPoint(data.point()->NumSubPoints())->GetCMEnergy()
-            << std::setw(18) << data.point()->GetSubPoint(1)->GetCMEnergy();
+        out << std::setw(18) << data.point()->GetSubPoint(*this, data.point()->NumSubPoints())->GetCMEnergy()
+            << std::setw(18) << data.point()->GetSubPoint(*this, 1)->GetCMEnergy();
       }
       out << std::endl;
-      if (data.point() == data.segment()->GetPoints().end() - 1) out << std::endl;
+      if (data.point() == data.segment()->GetPoints(*this).end() - 1) out << std::endl;
     }
   } else
     configure.outStream << "Could not write data check file." << std::endl;
@@ -130,7 +130,7 @@ void EData::PrintLegendreP(const Config &configure) {
     for (EDataIterator data = begin(); data != end(); data++) {
       for (int lOrder = 0; lOrder <= data.point()->GetMaxLOrder(); lOrder++) {
         out << std::setw(10) << data.segment() - GetSegments().begin() + 1
-            << std::setw(10) << data.point() - (data.segment()->GetPoints()).begin() + 1
+            << std::setw(10) << data.point() - (data.segment()->GetPoints(*this)).begin() + 1
             << std::setw(15) << data.point()->GetCMEnergy()
             << std::setw(15) << data.point()->GetCMAngle()
             << std::setw(5) << lOrder
@@ -186,7 +186,7 @@ void EData::PrintEDependentValues(const Config &configure, CNuc *theCNuc) {
             complex loElement = data.point()->GetLoElement(j, ch);
             complex expHSP = data.point()->GetExpHardSpherePhase(j, ch);
             out << std::setw(10) << data.segment() - GetSegments().begin() + 1
-                << std::setw(10) << data.point() - (data.segment()->GetPoints()).begin() + 1
+                << std::setw(10) << data.point() - (data.segment()->GetPoints(*this)).begin() + 1
                 << std::setw(5) << j
                 << std::setw(5) << ch
                 << std::setw(5) << lValue
@@ -233,9 +233,9 @@ void EData::PrintCoulombAmplitude(const Config &configure, CNuc *theCNuc) {
         << std::endl;
     for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
       if (segment->GetEntranceKey() == segment->GetExitKey()) {
-        for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
+        for (EPointIterator point = segment->GetPoints(*this).begin(); point < segment->GetPoints(*this).end(); point++) {
           out << std::setw(10) << segment - GetSegments().begin() + 1
-              << std::setw(10) << point - segment->GetPoints().begin() + 1
+              << std::setw(10) << point - segment->GetPoints(*this).begin() + 1
               << std::setw(10) << theCNuc->GetPairNumFromKey(segment->GetEntranceKey())
               << std::setw(15) << point->GetCMEnergy()
               << std::setw(15) << point->GetCMAngle()

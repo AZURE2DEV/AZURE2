@@ -100,7 +100,7 @@ void EData::FillDensitiesFromParams(const vector_r &p, const Config &configure) 
     const int n = seg.GetTargetEffectNum();
     if (n < 1 || n > (int)changed.size() || !changed[n - 1]) return;
     TargetEffect *te = this->GetTargetEffect(n);
-    for (EPointIterator point = seg.GetPoints().begin(); point < seg.GetPoints().end(); point++) {
+    for (EPointIterator point = seg.GetPoints(*this).begin(); point < seg.GetPoints(*this).end(); point++) {
       if (point->GetTargetEffectNum() != n || !(point->GetTargetThickness() > 0.0)) continue;
       point->SetTargetThickness(point->GetCMFactor() * te->TargetThickness(point->GetTargetLabEnergy(), configure));
       // E_bar of the sigma(E_bar) fallback moves with the density too (EPoint::SetTargetFallbackOnly)
@@ -130,9 +130,9 @@ void EData::ApplyScreening() {
     if (te <= 0 || te >= (int)paramOf.size() || paramOf[te] == 0) return;
     const double ueMeV = this->GetTargetEffect(te)->GetScreeningUe() * 1.0e-6;
     for (int i = 1; i <= seg.NumPoints(); i++) {
-      EPoint *point = seg.GetPoint(i);
+      EPoint *point = seg.GetPoint(*this, i);
       point->SetScreening(ueMeV, paramOf[te]);
-      for (int j = 1; j <= point->NumSubPoints(); j++) point->GetSubPoint(j)->SetScreening(ueMeV, paramOf[te]);
+      for (int j = 1; j <= point->NumSubPoints(); j++) point->GetSubPoint(*this, j)->SetScreening(ueMeV, paramOf[te]);
     }
   };
   for (ESegment &seg : segments_) apply({&seg, 0});
@@ -288,7 +288,7 @@ void EData::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNuc, con
     for (const TermRef &s : toUpdate)
       for (int i = 0; i < s.NumPoints(); i++) {
         if (s.segment->ShiftHost(*this, s.term, i)) continue;
-        EPoint *pt = s.GetPoint(i + 1);
+        EPoint *pt = s.GetPoint(*this, i + 1);
         const double nsp = pt ? pt->NumSubPoints() : 0;
         const double nMapped = pt ? pt->PlanMapped(this).size() : 0;
         work.push_back({(1.0 + nsp) * (1.0 + 0.1 * nMapped), s, i});

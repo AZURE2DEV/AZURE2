@@ -21,13 +21,14 @@ namespace {
 // Accumulates num += integral of wNum(E) sigma(E) [/ (stopping(E) 1e24)] and den += integral of
 // wDen(E), so a kernel average is num / den and a yield is num alone: the one quadrature of every effect.
 template <class V, class Read, class WNum, class WDen>
-void GridQuadrature(EPoint *point, Read rd, double lo, double hi, bool divideByStopping, WNum wNum, WDen wDen,
+void GridQuadrature(const EPoint *point, const EData &data, Read rd, double lo, double hi, bool divideByStopping,
+                    WNum wNum, WDen wDen,
                     V &num, double &den) {
   const double x1 = -1.0 / sqrt(3.0), x2 = 1.0 / sqrt(3.0);
   const int n = point->NumSubPoints();
   for (int j = 1; j < n; j++) {
-    const double Ea = point->GetSubPoint(j)->GetCMEnergy();
-    const double Eb = point->GetSubPoint(j + 1)->GetCMEnergy();
+    const double Ea = point->GetSubPoint(data, j)->GetCMEnergy();
+    const double Eb = point->GetSubPoint(data, j + 1)->GetCMEnergy();
     if (Eb >= hi || Ea <= lo) continue;
     const double a = std::min(Ea, hi), b = std::max(Eb, lo);
     const double mid = 0.5 * (a + b), half = 0.5 * (a - b);
@@ -38,7 +39,7 @@ void GridQuadrature(EPoint *point, Read rd, double lo, double hi, bool divideByS
       V sigma = (1.0 - frac) * rd(j) + frac * rd(j + 1);
       double f = 1.0;
       if (divideByStopping) {
-        double stopping = (1.0 - frac) * point->GetSubPoint(j)->GetStoppingPower() + frac * point->GetSubPoint(j + 1)->GetStoppingPower();
+        double stopping = (1.0 - frac) * point->GetSubPoint(data, j)->GetStoppingPower() + frac * point->GetSubPoint(data, j + 1)->GetStoppingPower();
         f = 1.0 / stopping / 1.0e24;
       }
       num += (half * wNum(e) * f) * sigma;
@@ -82,7 +83,7 @@ V EPoint::IntegrateTargetEffectImpl(const EData &data, const Config &configure, 
   };
   if (!targetEffect->HasResolutionStage()) return broaden(this->GetCMEnergy());
   std::vector<V> b(n);
-  for (int j = 1; j <= n; j++) b[j - 1] = broaden(this->GetSubPoint(j)->GetCMEnergy());
+  for (int j = 1; j <= n; j++) b[j - 1] = broaden(this->GetSubPoint(data, j)->GetCMEnergy());
   return this->IntegrateKernelsImpl<V>(data, configure, [&b](int j) { return b[j - 1]; });
 }
 
@@ -105,7 +106,7 @@ void EPoint::DopplerWeights(const EData &data, double eCM, std::vector<std::pair
   // 4-point Gauss-Legendre on [-1, 1]
   static const double gx[4] = {-0.8611363115940526, -0.3399810435848563, 0.3399810435848563, 0.8611363115940526};
   static const double gw[4] = {0.3478548451374538, 0.6521451548625461, 0.6521451548625461, 0.3478548451374538};
-  auto energy = [this](int j) { return const_cast<EPoint *>(this)->GetSubPoint(j)->GetCMEnergy(); };
+  auto energy = [this, &data](int j) { return this->GetSubPoint(data, j)->GetCMEnergy(); };
   // sub-points run from high to low energy: the first interval (j, j+1) whose lower end lies below hi
   int first = 1, last = n - 1;
   {
@@ -174,12 +175,12 @@ double EPoint::DopplerTemperatureDerivative(const EData &data, const Config &con
   if (!targetEffect->HasResolutionStage()) return dBroaden(this->GetCMEnergy());
   // The kernel after the Doppler step is linear in its sub-point values: apply it to d(sigma_D)/dT.
   std::vector<double> b(n);
-  for (int j = 1; j <= n; j++) b[j - 1] = dBroaden(this->GetSubPoint(j)->GetCMEnergy());
+  for (int j = 1; j <= n; j++) b[j - 1] = dBroaden(this->GetSubPoint(data, j)->GetCMEnergy());
   return this->IntegrateKernelsImpl<double>(data, configure, [&b](int j) { return b[j - 1]; });
 }
 
 template <class V, class Read>
-V EPoint::TargetFallbackImpl(Read rd) {
+V EPoint::TargetFallbackImpl(const EData &data, Read rd) {
   const int n = this->NumSubPoints();
   if (n <= 0) return V(0.0);
   if (n == 1) return rd(1);
@@ -187,7 +188,7 @@ V EPoint::TargetFallbackImpl(Read rd) {
   if (target_fallback_only_ && n == 3) {
     // three fallback nodes spanning the E_bar a fitted density can reach: the quadratic through them
     double x[3];
-    for (int k = 0; k < 3; k++) x[k] = this->GetSubPoint(k + 1)->GetCMEnergy();
+    for (int k = 0; k < 3; k++) x[k] = this->GetSubPoint(data, k + 1)->GetCMEnergy();
     const double lo = std::min(x[0], x[2]), hi = std::max(x[0], x[2]);
     const double ec = std::min(std::max(e, lo), hi);
     V v = 0.0;
@@ -200,10 +201,10 @@ V EPoint::TargetFallbackImpl(Read rd) {
     return v;
   }
   // a full grid (descending energies): linear between the two nodes around E_bar, the end node outside it
-  if (e >= this->GetSubPoint(1)->GetCMEnergy()) return rd(1);
-  if (e <= this->GetSubPoint(n)->GetCMEnergy()) return rd(n);
+  if (e >= this->GetSubPoint(data, 1)->GetCMEnergy()) return rd(1);
+  if (e <= this->GetSubPoint(data, n)->GetCMEnergy()) return rd(n);
   for (int j = 1; j < n; j++) {
-    const double Ea = this->GetSubPoint(j)->GetCMEnergy(), Eb = this->GetSubPoint(j + 1)->GetCMEnergy();
+    const double Ea = this->GetSubPoint(data, j)->GetCMEnergy(), Eb = this->GetSubPoint(data, j + 1)->GetCMEnergy();
     if (e <= Ea && e >= Eb) {
       const double frac = (Ea > Eb) ? (Ea - e) / (Ea - Eb) : 0.0;
       return (1.0 - frac) * rd(j) + frac * rd(j + 1);
@@ -220,21 +221,21 @@ V EPoint::IntegrateKernelsImpl(const EData &data, const Config &configure, Read 
   // A thin-target point outside the windows of an energy-restricted integration, or one the automatic
   // tolerance let off: sigma at the depth-averaged energy E_bar (SetTargetFallbackOnly, TargetFallbackScope).
   const bool thinTarget = targetEffect->IsTargetIntegration() && !targetEffect->IsThickTarget();
-  if (thinTarget && (target_fallback_only_ || target_fallback_now_)) return this->TargetFallbackImpl<V>(rd);
+  if (thinTarget && (target_fallback_only_ || target_fallback_now_)) return this->TargetFallbackImpl<V>(data, rd);
   if (numPoints < 2) return V(0.0);
-  const double eHigh = this->GetSubPoint(1)->GetCMEnergy();
-  const double eLow = this->GetSubPoint(numPoints)->GetCMEnergy();
+  const double eHigh = this->GetSubPoint(data, 1)->GetCMEnergy();
+  const double eLow = this->GetSubPoint(data, numPoints)->GetCMEnergy();
   const double centroid = this->GetCMEnergy();
   const double range = targetEffect->convolutionRange;
   auto one = [](double) { return 1.0; };
   // sigma(E) / (epsilon(E) 1e24) interpolated at one energy, for a depth node with no spread to average over
   auto yieldAt = [&](double e) {
     for (int j = 1; j < numPoints; j++) {
-      double Ea = this->GetSubPoint(j)->GetCMEnergy(), Eb = this->GetSubPoint(j + 1)->GetCMEnergy();
+      double Ea = this->GetSubPoint(data, j)->GetCMEnergy(), Eb = this->GetSubPoint(data, j + 1)->GetCMEnergy();
       if (e <= Ea && e >= Eb) {
         double frac = (Ea - e) / (Ea - Eb);
         V sigma = (1.0 - frac) * rd(j) + frac * rd(j + 1);
-        double stopping = (1.0 - frac) * this->GetSubPoint(j)->GetStoppingPower() + frac * this->GetSubPoint(j + 1)->GetStoppingPower();
+        double stopping = (1.0 - frac) * this->GetSubPoint(data, j)->GetStoppingPower() + frac * this->GetSubPoint(data, j + 1)->GetStoppingPower();
         return (1.0 / stopping / 1.0e24) * sigma;
       }
     }
@@ -248,18 +249,18 @@ V EPoint::IntegrateKernelsImpl(const EData &data, const Config &configure, Read 
   if (targetEffect->IsBohrStraggling()) {
     arealCum.assign(numPoints + 1, 0.0);
     for (int j = 1; j < numPoints; j++) {
-      double Ea = this->GetSubPoint(j)->GetCMEnergy(), Eb = this->GetSubPoint(j + 1)->GetCMEnergy();
-      double ia = invEps(this->GetSubPoint(j)->GetStoppingPower()), ib = invEps(this->GetSubPoint(j + 1)->GetStoppingPower());
+      double Ea = this->GetSubPoint(data, j)->GetCMEnergy(), Eb = this->GetSubPoint(data, j + 1)->GetCMEnergy();
+      double ia = invEps(this->GetSubPoint(data, j)->GetStoppingPower()), ib = invEps(this->GetSubPoint(data, j + 1)->GetStoppingPower());
       arealCum[j + 1] = arealCum[j] + 0.5 * (ia + ib) * (Ea - Eb);
     }
   }
   auto arealTo = [&](double e) {
     if (arealCum.empty() || e >= eHigh) return 0.0;
     for (int j = 1; j < numPoints; j++) {
-      double Ea = this->GetSubPoint(j)->GetCMEnergy(), Eb = this->GetSubPoint(j + 1)->GetCMEnergy();
+      double Ea = this->GetSubPoint(data, j)->GetCMEnergy(), Eb = this->GetSubPoint(data, j + 1)->GetCMEnergy();
       if (e <= Ea && e >= Eb) {
         double frac = (Ea - e) / (Ea - Eb);
-        double ia = invEps(this->GetSubPoint(j)->GetStoppingPower()), ib = invEps(this->GetSubPoint(j + 1)->GetStoppingPower());
+        double ia = invEps(this->GetSubPoint(data, j)->GetStoppingPower()), ib = invEps(this->GetSubPoint(data, j + 1)->GetStoppingPower());
         double ie = (1.0 - frac) * ia + frac * ib;
         return arealCum[j] + 0.5 * (ia + ie) * (Ea - e);
       }
@@ -279,11 +280,11 @@ V EPoint::IntegrateKernelsImpl(const EData &data, const Config &configure, Read 
       // reach, so the depth integral is cut at the back of the target, E0 - T(N): smooth in N, grid unchanged.
       double unused = 0.0;
       const double lo = targetEffect->HasDensityFit() ? std::max(eLow, back) : eLow;
-      GridQuadrature<V>(this, rd, lo, eHigh, true, one, one, outer, unused);
+      GridQuadrature<V>(this, data, rd, lo, eHigh, true, one, one, outer, unused);
     } else {
       const double x1 = -1.0 / sqrt(3.0), x2 = 1.0 / sqrt(3.0);
       for (int i = 1; i < numPoints; i++) {
-        double Ea = this->GetSubPoint(i)->GetCMEnergy(), Eb = this->GetSubPoint(i + 1)->GetCMEnergy();
+        double Ea = this->GetSubPoint(data, i)->GetCMEnergy(), Eb = this->GetSubPoint(data, i + 1)->GetCMEnergy();
         if (Eb >= surface || Ea <= back) continue;
         double a = std::min(Ea, surface), b = std::max(Eb, back);
         double mid = 0.5 * (a + b), half = 0.5 * (a - b);
@@ -300,7 +301,7 @@ V EPoint::IntegrateKernelsImpl(const EData &data, const Config &configure, Read 
           if (sigmaEff > 1.0e-10) {
             double den = 0.0;
             auto k = [&](double e) { return TargetEffect::GaussianKernel(e, eDepth, sigmaEff); };
-            GridQuadrature<V>(this, rd, std::max(eLow, eDepth - range * sigmaEff), std::min(eHigh, eDepth + range * sigmaEff), true, k, k, inner, den);
+            GridQuadrature<V>(this, data, rd, std::max(eLow, eDepth - range * sigmaEff), std::min(eHigh, eDepth + range * sigmaEff), true, k, k, inner, den);
             inner = (den > 0.0) ? inner / den : V(0.0);
           } else {
             inner = yieldAt(eDepth);
@@ -314,13 +315,13 @@ V EPoint::IntegrateKernelsImpl(const EData &data, const Config &configure, Read 
     // The smooth edge of a window: blend with sigma(E_bar), not with sigma at the beam energy.  Done here, in
     // the linear kernel, so the gradient weights (TargetEffectWeights) carry it too.
     if (thinTarget && target_blend_weight_ < 1.0)
-      yield = target_blend_weight_ * yield + (1.0 - target_blend_weight_) * this->TargetFallbackImpl<V>(rd);
+      yield = target_blend_weight_ * yield + (1.0 - target_blend_weight_) * this->TargetFallbackImpl<V>(data, rd);
   } else if (targetEffect->IsGaussian()) {
     const double s = targetEffect->SigmaCM(centroid, configure, cm_factor_);
     if (!(s > 0.)) {
       // no spread: the bare value at the point, interpolated on the grid
       for (int j = 1; j < numPoints; j++) {
-        double Ea = this->GetSubPoint(j)->GetCMEnergy(), Eb = this->GetSubPoint(j + 1)->GetCMEnergy();
+        double Ea = this->GetSubPoint(data, j)->GetCMEnergy(), Eb = this->GetSubPoint(data, j + 1)->GetCMEnergy();
         if (centroid <= Ea && centroid >= Eb) {
           double frac = (Ea - centroid) / (Ea - Eb);
           return (1.0 - frac) * rd(j) + frac * rd(j + 1);
@@ -331,7 +332,7 @@ V EPoint::IntegrateKernelsImpl(const EData &data, const Config &configure, Read 
     auto k = [&](double e) { return TargetEffect::GaussianKernel(e, centroid, s); };
     V num = 0.0;
     double den = 0.0;
-    GridQuadrature<V>(this, rd, eLow, eHigh, false, k, k, num, den);
+    GridQuadrature<V>(this, data, rd, eLow, eHigh, false, k, k, num, den);
     yield = (den > 0.0) ? num / den : V(0.0);
   } else if (targetEffect->IsUdr()) {
     // User-defined numerical resolution function (SAMMY UDR).  The kernel
@@ -359,7 +360,7 @@ V EPoint::IntegrateKernelsImpl(const EData &data, const Config &configure, Read 
     std::vector<double> tauSub(numPoints);
     std::vector<V> sigmaSub(numPoints);
     for (int i = 1; i <= numPoints; i++) {
-      const EPoint *sp = this->GetSubPoint(i);
+      const EPoint *sp = this->GetSubPoint(data, i);
       tauSub[numPoints - i] = t0 - UdrKinematics::TimeOfFlight(sp->GetCMEnergy() / cmPerLab, mass, path);
       sigmaSub[numPoints - i] = rd(i);
     }
@@ -451,14 +452,14 @@ V EPoint::IntegrateKernelsImpl(const EData &data, const Config &configure, Read 
     };
     V numerator = 0.0;
     double denominator = 0.0;
-    GridQuadrature<V>(this, rd, eLow, eHigh, false, weighted, kernel, numerator, denominator);
+    GridQuadrature<V>(this, data, rd, eLow, eHigh, false, weighted, kernel, numerator, denominator);
     yield = (denominator > 0.0) ? numerator / denominator : V(0.0);
   }
   return yield;
 }
 void EPoint::IntegrateTargetEffect(const EData &data, const Config &configure, azure2::Results &results) {
-  this->SetFitCrossSection(results, this->IntegrateTargetEffectImpl<double>(data, configure, [this, &results](int j) {
-    return this->GetSubPoint(j)->GetFitCrossSection(results);
+  this->SetFitCrossSection(results, this->IntegrateTargetEffectImpl<double>(data, configure, [this, &data, &results](int j) {
+    return this->GetSubPoint(data, j)->GetFitCrossSection(results);
   }));
 }
 double EPoint::IntegrateSubPointValues(const EData &data, const Config &configure, const std::vector<double> &values) {

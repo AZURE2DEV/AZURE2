@@ -17,6 +17,7 @@ EDataTargetEffects.cpp
 EDataExternalCapture.cpp
 EDataParameters.cpp
 EDataHandOver.cpp
+WorkingCopyUnits.cpp
 EPointCalculate.cpp
 EPointFolds.cpp
 EPointChannelTables.cpp

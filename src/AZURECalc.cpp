@@ -109,7 +109,7 @@ double SegmentLocalChi2(ESegment *segment, CNuc *lc, const Config &config, EData
   const double norm = segment->GetNorm();
   for (int pid = 0; pid < segment->NumPoints(); pid++) {
     azure2::EvaluateModelPoint(*ld, *segment, pid, lc, config, results, azure2::LeafValues::Calculate);
-    chi += azure2::PointResidual(*segment, pid, results, norm).Chi2();
+    chi += azure2::PointResidual(*ld, *segment, pid, results, norm).Chi2();
   }
   segment->AddShiftPenalty(chi);
   return chi;
@@ -177,7 +177,7 @@ std::vector<std::vector<int>> CrossSegmentPartners(EData *ld) {
     ESegment *seg = ld->GetSegment(s);
     if (!seg) continue;
     for (int pid = 1; pid <= seg->NumPoints(); pid++) {
-      EPoint *pt = seg->GetPoint(pid);
+      EPoint *pt = seg->GetPoint(*ld, pid);
       if (!pt || !pt->IsMapped()) continue;
       const int h = pt->GetMap().segment;
       if (h == s || h < 1 || h > ld->NumSegments()) continue;
@@ -230,7 +230,7 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, azure2::Results &results,
       if (!seg) continue;
       segments.push_back(seg);
       for (int pid = 0; pid < seg->NumPoints(); pid++) {
-        EPoint *pt = seg->GetPoint(pid + 1);
+        EPoint *pt = seg->GetPoint(*ld, pid + 1);
         if (!pt) continue;
         row++;
       }
@@ -246,11 +246,11 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, azure2::Results &results,
     std::vector<double> byPoint(nPts, 0.0);
     std::vector<char> present(nPts, 0);
     auto one = [&](int pid) {
-      EPoint *pt = seg->GetPoint(pid + 1);
+      EPoint *pt = seg->GetPoint(*ld, pid + 1);
       if (!pt) return;
       present[pid] = 1;
       azure2::EvaluateModelPoint(*ld, *seg, pid, lc, config, results, azure2::LeafValues::Calculate);
-      byPoint[pid] = azure2::PointResidual(*seg, pid, results, norm).Pull();
+      byPoint[pid] = azure2::PointResidual(*ld, *seg, pid, results, norm).Pull();
     };
     // No parallel construct inside an enclosing parallel region.  In parallel each point is calculated on
     // its own, without point mapping (ScopedPointMappingOff, as in the
@@ -279,10 +279,10 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, azure2::Results &results,
     for (ESegment *seg : segments) {
       const double norm = seg->GetNorm();
       for (int pid = 0; pid < seg->NumPoints(); pid++) {
-        EPoint *pt = seg->GetPoint(pid + 1);
+        EPoint *pt = seg->GetPoint(*ld, pid + 1);
         if (!pt) continue;
         azure2::EvaluateModelPoint(*ld, *seg, pid, lc, config, results, pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
-        out.push_back(azure2::PointResidual(*seg, pid, results, norm).Pull());
+        out.push_back(azure2::PointResidual(*ld, *seg, pid, results, norm).Pull());
       }
     }
   };
@@ -440,8 +440,8 @@ void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld
     if (!seg) continue;
     double c = 0.0;
     for (int pid = 1; pid <= seg->NumPoints(); pid++) {
-      EPoint *pt = seg->GetPoint(pid);
-      if (pt) c += azure2::PointResidual(*seg, pid - 1, results, seg->GetNorm()).Chi2();
+      EPoint *pt = seg->GetPoint(*ld, pid);
+      if (pt) c += azure2::PointResidual(*ld, *seg, pid - 1, results, seg->GetNorm()).Chi2();
     }
     segs.push_back({std::isfinite(c) ? c : std::numeric_limits<double>::max(), i});
   }
@@ -453,10 +453,10 @@ void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld
         << "  norm " << seg->GetNorm() << " shift " << seg->GetEnergyShift() << " sqrtshift " << seg->GetEnergyShiftSqrt() << "\n";
     int shown = 0;
     for (int pid = 1; pid <= seg->NumPoints() && shown < 6; pid++) {
-      EPoint *pt = seg->GetPoint(pid);
+      EPoint *pt = seg->GetPoint(*ld, pid);
       if (!pt) continue;
       const double fit = pt->GetModelValue(results);
-      const double pull = azure2::PointResidual(*seg, pid - 1, results, seg->GetNorm()).Pull();
+      const double pull = azure2::PointResidual(*ld, *seg, pid - 1, results, seg->GetNorm()).Pull();
       if (std::isfinite(fit) && std::fabs(pull) < 1.0e4) continue;
       shown++;
       out << "    point " << pid << " Elab " << pt->GetLabEnergy() << " Ecm " << pt->GetCMEnergy() << " angle "
@@ -464,9 +464,9 @@ void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld
       int nBad = 0;
       double firstBadE = 0.0, firstBadS = 0.0;
       for (int j = 1; j <= pt->NumSubPoints(); j++) {
-        const double sv = pt->GetSubPoint(j)->GetFitCrossSection(results);
+        const double sv = pt->GetSubPoint(*ld, j)->GetFitCrossSection(results);
         if (!std::isfinite(sv) || std::fabs(sv) > 1.0e10) {
-          if (!nBad) { firstBadE = pt->GetSubPoint(j)->GetCMEnergy(); firstBadS = sv; }
+          if (!nBad) { firstBadE = pt->GetSubPoint(*ld, j)->GetCMEnergy(); firstBadS = sv; }
           nBad++;
         }
       }
@@ -809,7 +809,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   // needs every residual of the group first (one forward pass of those points).
   if (ld->HasCovariance()) ld->PrepareCovarianceSeeds(lc, configure(), results);
   FitBarFn fitBarFn = [&](ESegment *seg, int i, int pid, double model) -> double {
-    EPoint *pt = seg->GetPoint(pid + 1);
+    EPoint *pt = seg->GetPoint(*ld, pid + 1);
     if (!pt) return 0.0;
     double norm = seg->GetNorm();
     double dataval = seg->CMValue(pid);
@@ -1719,7 +1719,7 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
     const double norm = segment->GetNorm();
     for (int pid = 0; pid < segment->NumPoints(); pid++) {
       azure2::EvaluateModelPoint(*ld, *segment, pid, lc, configure(), results, azure2::LeafValues::Calculate);
-      residuals.push_back(azure2::PointResidual(*segment, pid, results, norm).Pull());
+      residuals.push_back(azure2::PointResidual(*ld, *segment, pid, results, norm).Pull());
     }
   }
   if (ld->HasCovariance()) ld->WhitenResidualRows(residuals, nullptr, 0);

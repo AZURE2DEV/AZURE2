@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "CNuc.h"
+#include "EData.h"
 #include "EPoint.h"
 #include "Kinematics.h"
 #include "PPair.h"
@@ -135,7 +136,7 @@ bool EPoint::QLabBoost(PPair *entrancePair, PPair *exitPair, double &g, double &
  * with every Q_K = 1), a non-particle entrance gave every factor 0, and more than maxL coefficients read past the end.
  */
 
-void EPoint::CalcLegendreP(int maxL, CNuc *theCNuc, TargetEffect *targetEffect) {
+void EPoint::CalcLegendreP(EData *data, int maxL, CNuc *theCNuc, TargetEffect *targetEffect) {
   if (maxL >= 0) {
     std::vector<double> p(maxL + 1);
     const double x = cos(this->GetCMAngle() * pi / 180.0);
@@ -178,6 +179,6 @@ void EPoint::CalcLegendreP(int maxL, CNuc *theCNuc, TargetEffect *targetEffect) 
     for (int l = 0; l <= maxL; l++) this->AddLegendreP(p[l]);
   }
   for (int i = 1; i <= this->NumSubPoints(); i++) {
-    this->GetSubPoint(i)->CalcLegendreP(maxL, theCNuc, targetEffect);
+    this->GetSubPoint(*data, i)->CalcLegendreP(data, maxL, theCNuc, targetEffect);
   }
 }

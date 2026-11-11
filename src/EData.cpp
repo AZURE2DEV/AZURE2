@@ -276,7 +276,7 @@ int CheckThmWeights(const Config &configure,
       return -1;
     }
     for (int p = 1; p <= segment->NumPoints(); p++) {
-      double energy = segment->GetPoint(p)->GetCMEnergy();
+      double energy = segment->GetPoint(*data, p)->GetCMEnergy();
       if (!table.Covers(energy)) {
         configure.outStream << "ERROR: <thm> " << keyName << "[" << key << "]: segment " << key
                             << " has a point at E_cm = " << energy << " MeV, outside the table '"
@@ -403,7 +403,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc, const azure2::experiment
                     numCapturePairs++;
                     if (numCapturePairs == 1) {
                       // For the first capture pair, set the base segment's exit key
-                      baseSegment->SetExitKey(theCNuc->GetPair(i)->GetPairKey());
+                      baseSegment->SetExitKey(*this, theCNuc->GetPair(i)->GetPairKey());
                     } else {
                       // Each further capture pair is a leaf of the segment
                       this->AddLeaf(*baseSegment, baseSegment->GetEntranceKey(), theCNuc->GetPair(i)->GetPairKey(),
@@ -512,13 +512,13 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc, const azure2::expe
             theCNuc->GetPair(theCNuc->GetPairNumFromKey(theSegment->GetEntranceKey()))->SetEntrance();
             PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(theSegment->GetEntranceKey()));
             PPair *exitPair = theCNuc->GetPairFromKey(theSegment->GetExitKey());  // nullptr for total capture (-1)
-            theSegment->SetGridRows(segment.energies, segment.angles);
+            theSegment->SetGridRows(*this, segment.energies, segment.angles);
             for (int i = 0; i < theSegment->NumPoints(); i++) {
               // A ratio is dimensionless: no cross-section conversion (as ESegment::Fill for data segments;
               // the stored factor would otherwise divide the ratio in the lab output, kinflag.dat = 1).
-              if (!theSegment->ConvertRowToCM(0, i, entrancePair, exitPair, !theSegment->IsDimensionlessRatio(),
+              if (!theSegment->ConvertRowToCM(*this, 0, i, entrancePair, exitPair, !theSegment->IsDimensionlessRatio(),
                                               ESegment::BeyondRange::Stop)) {
-                const EPoint *thePoint = theSegment->GetPoint(i + 1);
+                const EPoint *thePoint = theSegment->GetPoint(*this, i + 1);
                 configure.outStream << "ERROR: " << "test segment #" << theSegment->GetSegmentKey() << ": lab angle " << thePoint->GetLabAngle() << " deg at E_lab = " << thePoint->GetLabEnergy()
                                     << " MeV: " << thePoint->GetLabAngleWhy() << "." << std::endl;
                 return -1;
@@ -557,7 +557,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc, const azure2::expe
                     numCapturePairs++;
                     if (numCapturePairs == 1) {
                       // For the first capture pair, set the base segment's exit key
-                      baseSegment->SetExitKey(theCNuc->GetPair(i)->GetPairKey());
+                      baseSegment->SetExitKey(*this, theCNuc->GetPair(i)->GetPairKey());
                     } else {
                       // Each further capture pair is a leaf of the segment
                       this->AddLeaf(*baseSegment, baseSegment->GetEntranceKey(), theCNuc->GetPair(i)->GetPairKey(),
@@ -835,8 +835,8 @@ void EData::CalcLegendreP(int maxL, CNuc *theCNuc) {
         : NULL;
 #pragma omp parallel for
     for (int i = 1; i <= segment->NumPoints(); i++) {
-      EPoint *point = segment->GetPoint(i);
-      point->CalcLegendreP(maxL, theCNuc, effect);
+      EPoint *point = segment->GetPoint(*this, i);
+      point->CalcLegendreP(this, maxL, theCNuc, effect);
     }
   }
 }
@@ -857,7 +857,7 @@ std::shared_ptr<const ChannelTable> EData::BuildChannelTable(CNuc *theCNuc, cons
   std::size_t requested = 0;
   for (EPoint *point : points) {
     own.clear();
-    point->ChannelKeys(theCNuc, own);
+    point->ChannelKeys(this, theCNuc, own);
     requested += own.size();
     std::sort(own.begin(), own.end());
     own.erase(std::unique(own.begin(), own.end()), own.end());
@@ -875,7 +875,7 @@ int EData::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
     std::vector<EPoint *> points;
     for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++)
       for (int i = 1; i <= segment->NumPoints(); i++)
-        if (!segment->GetPoint(i)->IsMapped()) points.push_back(segment->GetPoint(i));
+        if (!segment->GetPoint(*this, i)->IsMapped()) points.push_back(segment->GetPoint(*this, i));
     try {
       channelTable_ = BuildChannelTable(theCNuc, configure, points);
     } catch (std::exception &e) {
@@ -891,10 +891,10 @@ int EData::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
 #pragma omp parallel for shared(localStop, configure)
     for (int i = 1; i <= segment->NumPoints(); i++) {
       if (configure.stopFlag || localStop) continue;
-      EPoint *point = segment->GetPoint(i);
+      EPoint *point = segment->GetPoint(*this, i);
       if (!(point->IsMapped())) {
         try {
-          point->CalcEDependentValues(theCNuc, configure, true, this, table);
+          point->CalcEDependentValues(this, theCNuc, configure, true, this, table);
         } catch (GSLException e) {
 #pragma omp critical
           {
@@ -918,8 +918,8 @@ void EData::CalcCoulombAmplitude(CNuc *theCNuc) {
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
 #pragma omp parallel for
     for (int i = 1; i <= segment->NumPoints(); i++) {
-      EPoint *point = segment->GetPoint(i);
-      point->CalcCoulombAmplitude(theCNuc);
+      EPoint *point = segment->GetPoint(*this, i);
+      point->CalcCoulombAmplitude(this, theCNuc);
     }
   }
 }
@@ -983,12 +983,12 @@ int EData::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
     }
 
     // Apply the same conversions that are done for test segment points
-    for (int i = 1; i <= (int)segments_[leaf.first].TermPoints(leaf.second).size(); i++) {
-      EPoint *point = segments_[leaf.first].GetTermPoint(leaf.second, i);
+    for (int i = 1; i <= (int)segments_[leaf.first].TermPoints(*this, leaf.second).size(); i++) {
+      EPoint *point = segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
 
       if (entrancePair && exitPair) {
         // The base segment's sequence, with the component's own pairs; a component's value is always converted.
-        if (!segments_[leaf.first].ConvertRowToCM(leaf.second, i - 1, entrancePair, exitPair, true, ESegment::BeyondRange::Stop)) {
+        if (!segments_[leaf.first].ConvertRowToCM(*this, leaf.second, i - 1, entrancePair, exitPair, true, ESegment::BeyondRange::Stop)) {
           configure.outStream << "ERROR: " << "component (" << entranceKey << " -> " << exitKey << ") of segment #" << segments_[leaf.first].TermKey(leaf.second) << ": lab angle " << point->GetLabAngle() << " deg at E_lab = " << point->GetLabEnergy()
                               << " MeV: " << point->GetLabAngleWhy() << "." << std::endl;
           return -1;
@@ -999,8 +999,8 @@ int EData::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
         // different exit pair, or a fixed-angle RATIO denominator (raw lab angle), was integrated at the
         // wrong angle (audit 2026-10-25, item 32).
         for (int k = 1; k <= point->NumSubPoints(); k++) {
-          point->GetSubPoint(k)->SetLabAngle(point->GetLabAngle());
-          point->GetSubPoint(k)->SetCMAngle(point->GetCMAngle());
+          point->GetSubPoint(*this, k)->SetLabAngle(point->GetLabAngle());
+          point->GetSubPoint(*this, k)->SetCMAngle(point->GetCMAngle());
         }
       }
     }
@@ -1015,9 +1015,9 @@ int EData::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
   {
     std::vector<EPoint *> points;
     for (const std::pair<int, int> &leaf : leafRefs_)
-      for (int i = 1; i <= (int)segments_[leaf.first].TermPoints(leaf.second).size(); i++)
-        if (!(segments_[leaf.first].GetTermPoint(leaf.second, i)->IsMapped()) || segments_[leaf.first].GetTermPoint(leaf.second, i)->OwnsEDependentValues())
-          points.push_back(segments_[leaf.first].GetTermPoint(leaf.second, i));
+      for (int i = 1; i <= (int)segments_[leaf.first].TermPoints(*this, leaf.second).size(); i++)
+        if (!(segments_[leaf.first].GetTermPoint(*this, leaf.second, i)->IsMapped()) || segments_[leaf.first].GetTermPoint(*this, leaf.second, i)->OwnsEDependentValues())
+          points.push_back(segments_[leaf.first].GetTermPoint(*this, leaf.second, i));
     if (!points.empty()) {
       try {
         channelTable_ = BuildChannelTable(theCNuc, configure, points);
@@ -1033,12 +1033,12 @@ int EData::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
   for (const std::pair<int, int> &leaf : leafRefs_) {
     bool localStop = false;
 #pragma omp parallel for shared(localStop, configure)
-    for (int i = 1; i <= (int)segments_[leaf.first].TermPoints(leaf.second).size(); i++) {
+    for (int i = 1; i <= (int)segments_[leaf.first].TermPoints(*this, leaf.second).size(); i++) {
       if (configure.stopFlag || localStop) continue;
-      EPoint *point = segments_[leaf.first].GetTermPoint(leaf.second, i);
+      EPoint *point = segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
       if (!(point->IsMapped()) || point->OwnsEDependentValues()) {
         try {
-          point->CalcEDependentValues(theCNuc, configure, true, this, componentTable);
+          point->CalcEDependentValues(this, theCNuc, configure, true, this, componentTable);
         } catch (GSLException e) {
 #pragma omp critical
           {
@@ -1061,17 +1061,17 @@ int EData::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
         effect = te;
       }
     }
-    for (int i = 1; i <= (int)segments_[leaf.first].TermPoints(leaf.second).size(); i++) {
-      EPoint *point = segments_[leaf.first].GetTermPoint(leaf.second, i);
-      point->CalcLegendreP(configure.maxLOrder, theCNuc, effect);
+    for (int i = 1; i <= (int)segments_[leaf.first].TermPoints(*this, leaf.second).size(); i++) {
+      EPoint *point = segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
+      point->CalcLegendreP(this, configure.maxLOrder, theCNuc, effect);
     }
   }
 
   // CalcCoulombAmplitude for the leaves
   for (const std::pair<int, int> &leaf : leafRefs_) {
-    for (int i = 1; i <= (int)segments_[leaf.first].TermPoints(leaf.second).size(); i++) {
-      EPoint *point = segments_[leaf.first].GetTermPoint(leaf.second, i);
-      point->CalcCoulombAmplitude(theCNuc);
+    for (int i = 1; i <= (int)segments_[leaf.first].TermPoints(*this, leaf.second).size(); i++) {
+      EPoint *point = segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
+      point->CalcCoulombAmplitude(this, theCNuc);
     }
   }
 
@@ -1122,17 +1122,17 @@ int EData::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
                                         << std::setw(0) << " [                         ] 0%";
                     configure.outStream.flush();
                   }
-                  int numPoints = (int)segments_[leaf.first].TermPoints(leaf.second).size();
+                  int numPoints = (int)segments_[leaf.first].TermPoints(*this, leaf.second).size();
                   std::atomic<int> pointIndex(0);
                   time_t startTime = time(NULL);
                   bool localStop = false;
 #pragma omp parallel for shared(configure, localStop, pointIndex, startTime)
                   for (int i = 1; i <= numPoints; i++) {
                     if (configure.stopFlag || localStop) continue;
-                    EPoint *point = segments_[leaf.first].GetTermPoint(leaf.second, i);
+                    EPoint *point = segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
                     if (!(point->IsMapped()) || point->OwnsEDependentValues()) {
                       try {
-                        point->CalculateECAmplitudes(theCNuc, configure, channelTable_.get());
+                        point->CalculateECAmplitudes(this, theCNuc, configure, channelTable_.get());
                       } catch (GSLException e) {
 #pragma omp critical(ec_progress)
                         {
@@ -1161,22 +1161,22 @@ int EData::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
                 // Write the freshly calculated amplitudes to the file, or read the
                 // previously saved ones back in.  The iteration order matches the
                 // regular-segment loop in CalculateECAmplitudes exactly.
-                for (EPointIterator point = segments_[leaf.first].TermPoints(leaf.second).begin();
-                     point < segments_[leaf.first].TermPoints(leaf.second).end(); point++) {
+                for (EPointIterator point = segments_[leaf.first].TermPoints(*this, leaf.second).begin();
+                     point < segments_[leaf.first].TermPoints(*this, leaf.second).end(); point++) {
                   if (!(point->IsMapped()) || point->OwnsEDependentValues()) {
                     for (int k = 1; k <= entrancePair->GetDecay(ir)->NumKGroups(); k++) {
                       for (int ecm = 1; ecm <= entrancePair->GetDecay(ir)->GetKGroup(k)->NumECMGroups(); ecm++) {
                         if (!usePrevious) {
                           if (out.is_open()) out << point->GetECAmplitude(k, ecm) << std::endl;
-                          for (EPointIterator subPoint = point->GetSubPoints().begin();
-                               subPoint < point->GetSubPoints().end(); subPoint++)
+                          for (EPointIterator subPoint = point->GetSubPoints(*this).begin();
+                               subPoint < point->GetSubPoints(*this).end(); subPoint++)
                             if (out.is_open()) out << subPoint->GetECAmplitude(k, ecm) << std::endl;
                         } else {
                           complex ecAmplitude(0.0, 0.0);
                           in >> ecAmplitude;
                           point->AddECAmplitude(k, ecm, ecAmplitude);
-                          for (EPointIterator subPoint = point->GetSubPoints().begin();
-                               subPoint < point->GetSubPoints().end(); subPoint++) {
+                          for (EPointIterator subPoint = point->GetSubPoints(*this).begin();
+                               subPoint < point->GetSubPoints(*this).end(); subPoint++) {
                             ecAmplitude = complex(0.0, 0.0);
                             in >> ecAmplitude;
                             subPoint->AddECAmplitude(k, ecm, ecAmplitude);
@@ -1278,7 +1278,7 @@ bool EData::FinishTransformedSegment(CNuc *theCNuc, ESegment *seg, int key, bool
   if (configure.paramMask & Config::USE_RMC_FORMALISM)
     return refuse("the total cross section of Y0 needs the optical theorem, not available with --use-rmc.");
   if (!seg->HasComponents()) seg->SetOperationType(SUM);
-  seg->MakeYieldTotalLeaf(this->AddLeaf(*seg, seg->GetEntranceKey(), seg->GetEntranceKey(), std::nullopt, 1.0));
+  seg->MakeYieldTotalLeaf(*this, this->AddLeaf(*seg, seg->GetEntranceKey(), seg->GetEntranceKey(), std::nullopt, 1.0));
   return true;
 }
 
@@ -1295,10 +1295,10 @@ bool EData::CheckTransformedSegments(const Config &configure) {
     const std::string what = "segment #" + std::to_string(seg.GetSegmentKey()) + " (" +
                              (seg.IsTransmission() ? "transmission" : "yield") + "): ";
     for (int p = 1; p <= seg.NumPoints(); p++) {
-      EPoint *base = seg.GetPoint(p);
+      EPoint *base = seg.GetPoint(*this, p);
       if (!ESegment::HasSubPointIntegration(*this, base)) {
         for (int t = 1; t < seg.NumTerms(); t++)
-          if (p <= (int)seg.TermPoints(t).size() && ESegment::HasSubPointIntegration(*this, seg.GetTermPoint(t, p))) {
+          if (p <= (int)seg.TermPoints(*this, t).size() && ESegment::HasSubPointIntegration(*this, seg.GetTermPoint(*this, t, p))) {
             configure.outStream << "ERROR: " << what << "a term is integrated over sub-points at E_lab "
                                 << base->GetLabEnergy() << " MeV where the segment's own point is not." << std::endl;
             return false;
@@ -1316,10 +1316,10 @@ bool EData::CheckTransformedSegments(const Config &configure) {
         return false;
       }
       for (int t = 1; t < seg.NumTerms(); t++) {
-        EPoint *cp = p <= (int)seg.TermPoints(t).size() ? seg.GetTermPoint(t, p) : nullptr;
+        EPoint *cp = p <= (int)seg.TermPoints(*this, t).size() ? seg.GetTermPoint(*this, t, p) : nullptr;
         bool same = cp && cp->NumSubPoints() == base->NumSubPoints();
         for (int j = 1; same && j <= base->NumSubPoints(); j++) {
-          const double a = base->GetSubPoint(j)->GetCMEnergy(), b = cp->GetSubPoint(j)->GetCMEnergy();
+          const double a = base->GetSubPoint(*this, j)->GetCMEnergy(), b = cp->GetSubPoint(*this, j)->GetCMEnergy();
           if (std::fabs(a - b) > 1.0e-9 * std::max(1.0, std::fabs(a))) same = false;
         }
         if (!same) {
@@ -1341,7 +1341,7 @@ bool EData::CheckTransformedSegments(const Config &configure) {
  * not a segment of the file; the caches and the intEC file are keyed by it).  Returns its term.
  */
 int EData::AddLeaf(ESegment &base, int entranceKey, int exitKey, std::optional<double> fixedAngle, double scaling) {
-  const int t = base.AddLeaf(entranceKey, exitKey, fixedAngle, scaling, nextComponentKey_--);
+  const int t = base.AddLeaf(*this, entranceKey, exitKey, fixedAngle, scaling, nextComponentKey_--);
   leafRefs_.push_back({(int)(&base - segments_.data()), t});
   return t;
 }
@@ -1355,7 +1355,7 @@ namespace {
 // CalculateCrossSection on the point itself (angle, Coulomb amplitude,
 // observable type) may differ.  Whether `a` and `b` may sit in different
 // segments is the caller's question (ShiftsAgree).
-bool SharesCalculation(EPoint &a, EPoint &b, bool sameExit = true) {
+bool SharesCalculation(EData &data, EPoint &a, EPoint &b, bool sameExit = true) {
   if (a.GetEntranceKey() != b.GetEntranceKey() || (sameExit && a.GetExitKey() != b.GetExitKey())) return false;
   if (a.GetOriginalEnergy() != b.GetOriginalEnergy() || a.GetLabEnergy() != b.GetLabEnergy() ||
       a.GetCMEnergy() != b.GetCMEnergy())
@@ -1368,9 +1368,9 @@ bool SharesCalculation(EPoint &a, EPoint &b, bool sameExit = true) {
   if (a.IsCoefficient() != b.IsCoefficient()) return false;
   if (a.IsCoefficient() && a.GetCoefficientAbsolute() != b.GetCoefficientAbsolute()) return false;
   if (a.NumSubPoints() != b.NumSubPoints()) return false;
-  std::vector<EPoint> &sa = a.GetSubPoints();
-  std::vector<EPoint> &sb = b.GetSubPoints();
-  for (size_t i = 0; i < sa.size(); i++) {
+  const UnitRange<EPoint> sa = a.GetSubPoints(data);
+  const UnitRange<EPoint> sb = b.GetSubPoints(data);
+  for (int i = 0; i < sa.size(); i++) {
     if (sa[i].GetOriginalEnergy() != sb[i].GetOriginalEnergy() ||
         sa[i].GetCMEnergy() != sb[i].GetCMEnergy() ||
         sa[i].GetLabEnergy() != sb[i].GetLabEnergy() ||
@@ -1466,11 +1466,11 @@ bool ShiftsAgree(const ShiftForm &a, const ShiftForm &b) {
 
 void EData::MapData(CNuc *theCNuc) {
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
-    for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++)
+    for (EPointIterator point = segment->GetPoints(*this).begin(); point < segment->GetPoints(*this).end(); point++)
       point->ClearMapping();
   }
   for (const std::pair<int, int> &leaf : leafRefs_)
-    for (EPoint &point : segments_[leaf.first].TermPoints(leaf.second)) point.ClearMapping();
+    for (EPoint &point : segments_[leaf.first].TermPoints(*this, leaf.second)) point.ClearMapping();
   // (host, mapped point) in the order each host calculates its mapped points
   std::vector<std::pair<azure2::PointRef, azure2::PointRef>> mapping;
   const char *off = std::getenv("AZURE_NO_POINT_MAPPING");
@@ -1518,7 +1518,7 @@ void EData::MapData(CNuc *theCNuc) {
     if (segments[s].HasComponents() || segments[s].IsTotalCapture()) continue;
     for (int p = 0; p < segments[s].NumPoints(); p++) refs.push_back({s, p});
   }
-  auto pointOf = [&segments](const Ref &r) -> EPoint & { return segments[r.seg].GetPoints()[r.point]; };
+  auto pointOf = [this, &segments](const Ref &r) -> EPoint & { return segments[r.seg].GetPoints(*this)[r.point]; };
 
   // Group by pair and energy; a stable sort keeps data order inside a group,
   // so the first point of a group is its first point in data order.
@@ -1551,10 +1551,10 @@ void EData::MapData(CNuc *theCNuc) {
         if (h.seg != refs[k].seg && !(crossSegment && !ownOnly[h.seg] && !ownOnly[refs[k].seg] &&
                                       ShiftsAgree(shiftForms[h.seg], shiftForms[refs[k].seg])))
           continue;
-        if (SharesCalculation(pointOf(h), p)) {
+        if (SharesCalculation(*this, pointOf(h), p)) {
           p.SetMap(h.seg + 1, h.point + 1);
-          mapping.push_back({{azure2::PointRef::kSegments, h.seg, h.point},
-                             {azure2::PointRef::kSegments, refs[k].seg, refs[k].point}});
+          mapping.push_back({segments[h.seg].TermFirstUnit(0) + h.point,
+                             segments[refs[k].seg].TermFirstUnit(0) + refs[k].point});
           mapped = true;
           break;
         }
@@ -1592,21 +1592,21 @@ void EData::MapLeaves(CNuc *theCNuc, std::vector<std::pair<azure2::PointRef, azu
     if (!seg.HasComponents() && !seg.IsTotalCapture()) continue;
     const int entrancePair = theCNuc->GetPairNumFromKey(seg.GetEntranceKey());
     if (entrancePair < 1 || theCNuc->GetPair(entrancePair)->GetPType() == 20) continue;
-    std::vector<EPoint> &points = seg.GetPoints();
-    const int n = (int)points.size();
+    const UnitRange<EPoint> points = seg.GetPoints(*this);
+    const int n = points.size();
     // Each component's point i onto the base's point i (components in turn, so a host's mapped points come grouped
     // by exit and EPoint::Calculate builds each exit's T-matrix once).  The base's points stay unmapped among
     // themselves, as before: the external-capture amplitudes and their file (intEC.dat) skip mapped points, so
     // mapping them would change that file's layout.
     for (int t = 1; t < seg.NumTerms(); t++) {
-      std::vector<EPoint> &leafPoints = seg.TermPoints(t);
-      if ((int)leafPoints.size() != n || !leafPos.count({s, t})) continue;
+      const UnitRange<EPoint> leafPoints = seg.TermPoints(*this, t);
+      if (leafPoints.size() != n || !leafPos.count({s, t})) continue;
       for (int p = 0; p < n; p++) {
         EPoint *cp = &leafPoints[p];
-        if (!SharesCalculation(points[p], *cp, false)) continue;
+        if (!SharesCalculation(*this, points[p], *cp, false)) continue;
         cp->SetMap(s + 1, p + 1);
         cp->SetOwnsEDependentValues(true);
-        mapping.push_back({{azure2::PointRef::kSegments, s, p}, {azure2::PointRef::kLeaves, leafPos[{s, t}], p}});
+        mapping.push_back({seg.TermFirstUnit(0) + p, seg.TermFirstUnit(t) + p});
       }
     }
   }
@@ -1634,9 +1634,9 @@ void EData::ForEachResultUnit(F f) {
   const int nNatural = numNuclei_;
   auto segment = [&](ESegment &seg, int t) {
     const int nat = (t == 0 && seg.IsNatural()) ? nNatural : 0;
-    for (EPoint &point : seg.TermPoints(t)) {
+    for (EPoint &point : seg.TermPoints(*this, t)) {
       f(point, point.ResultAngularCapacity(), nat);
-      for (EPoint &sub : point.GetSubPoints()) f(sub, sub.ResultAngularCapacity(), 0);
+      for (EPoint &sub : point.GetSubPoints(*this)) f(sub, sub.ResultAngularCapacity(), 0);
     }
   };
   for (ESegment &seg : segments_) segment(seg, 0);
@@ -1662,7 +1662,7 @@ void EData::LayoutResults(azure2::Results *results) {
   if (results) results->slot.swap(next);
   modelSize_ = 0;
   for (ESegment &seg : segments_)
-    for (EPoint &point : seg.GetPoints()) {
+    for (EPoint &point : seg.GetPoints(*this)) {
       point.SetModelRecord(modelSize_, point.ResultAngularCapacity());
       modelSize_ += azure2::Results::ModelRecordSize(point.ResultAngularCapacity());
     }
@@ -1749,10 +1749,10 @@ EData *EData::Clone() const {
   dataCopy->numNuclei_ = this->numNuclei_;
 
   // The plan and the points' task indices are positions, valid in the copy as they are: no point holds a pointer to
-  // another or to its data set.  The copy starts without the external-capture amplitudes of the set-up.
-  for (ESegment &segment : dataCopy->segments_)
-    for (int t = 0; t < segment.NumTerms(); t++)
-      for (EPoint &point : segment.TermPoints(t)) point.ClearECAmplitudes();
+  // another or to its data set.  The copy's points (not their sub-points) start without the external-capture
+  // amplitudes of the set-up.
+  dataCopy->units_ = this->units_;
+  for (azure2::PointRef u : dataCopy->PlanUnits()) dataCopy->units_[u].ClearECAmplitudes();
   // The copy's layout: its points carry this data set's offsets, which are the copy's own when the copy has the
   // same points; the values are in the buffers of the callers that evaluate the two.
   dataCopy->LayoutResults(nullptr);
@@ -1777,7 +1777,7 @@ TargetEffect *EData::GetTargetEffect(int effectNumber) {
  */
 
 EDataIterator EData::begin() {
-  return EDataIterator(&segments_);
+  return EDataIterator(this);
 }
 
 /*!
@@ -1785,7 +1785,7 @@ EDataIterator EData::begin() {
  */
 
 EDataIterator EData::end() {
-  EDataIterator it(&segments_);
+  EDataIterator it(this);
   return it.SetEnd();
 }
 
@@ -1816,7 +1816,7 @@ int EData::CalculatePointsInParallel(const std::vector<ESegment *> &segments, CN
   for (ESegment *seg : segments) {
     if (!seg || !seen.insert(seg).second) continue;
     for (int t = 0; t < seg->NumTerms(); t++)
-      for (EPoint &pt : seg->TermPoints(t))
+      for (EPoint &pt : seg->TermPoints(*this, t))
         if (!pt.IsMapped()) work.push_back(&pt);
   }
   // A host also calculates every point mapped onto it (EData::MapData), so

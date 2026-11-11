@@ -3,10 +3,11 @@
 
 #include <vector>
 
+class EData;
 class EPoint;
 class ESegment;
 
-typedef std::vector<EPoint>::iterator EPointIterator;
+typedef EPoint *EPointIterator;
 typedef std::vector<ESegment>::iterator ESegmentIterator;
 
 /// An iterator class for an EData object.
@@ -18,7 +19,8 @@ typedef std::vector<ESegment>::iterator ESegmentIterator;
 
 class EDataIterator {
  public:
-  EDataIterator(std::vector<ESegment> *);
+  /// Over the points of the segments of `data` (the segments without components).
+  explicit EDataIterator(EData *data);
   EDataIterator(const EDataIterator &it);
   EDataIterator &operator++();
   EDataIterator operator++(int);
@@ -29,6 +31,7 @@ class EDataIterator {
   EPointIterator &point();
 
  private:
+  EData *data_;
   std::vector<ESegment> *segments_;
   ESegmentIterator segmentIterator_;
   EPointIterator pointIterator_;

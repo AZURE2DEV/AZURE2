@@ -49,7 +49,7 @@ double ShiftedEnergy(double originalEnergy, double shift) {
 void ESegment::UpdatePointEnergiesWithShift(EData &data, CNuc *theCNuc, const Config *configure) {
   // No lock: each thread re-energises the points of its own EData clone.
   for (int t = 0; t < NumTerms(); t++)
-    for (int i = 0; i < (int)Units(t).points.size(); i++) UpdatePointEnergyWithShift(data, t, i, theCNuc, configure);
+    for (int i = 0; i < Units(t).count; i++) UpdatePointEnergyWithShift(data, t, i, theCNuc, configure);
 }
 
 std::vector<double> ESegment::ShiftState() const {
@@ -62,12 +62,12 @@ void ESegment::BeginShiftRefill(int t, CNuc *theCNuc, const Config &configure) {
   TermUnits &u = Units(t);
   // Tables of another system (a session that changed a radius or the Coulomb route) are dropped.
   if (!u.shiftTables.empty() && !u.shiftTables.front().table->SameSystem(theCNuc, configure)) u.shiftTables.clear();
-  u.shiftRows.assign(u.points.size(), {});
+  u.shiftRows.assign(u.count, {});
 }
 
 void ESegment::CommitShiftTable(int t, CNuc *theCNuc, const Config &configure) {
   TermUnits &u = Units(t);
-  if (u.shiftRows.size() != u.points.size()) return;  // no refill since BeginShiftRefill
+  if ((int)u.shiftRows.size() != u.count) return;  // no refill since BeginShiftRefill
   std::vector<std::pair<ChannelTable::Key, ChannelTable::Row>> all;
   for (auto &v : u.shiftRows) all.insert(all.end(), v.begin(), v.end());
   u.shiftRows.clear();
@@ -96,8 +96,8 @@ ChannelRowSource ESegment::ShiftRowSource(int t, int i) {
  * segment, which this segment's shift step re-energises on its own.
  */
 EPoint *ESegment::ShiftHost(EData &data, int t, int i) {
-  std::vector<EPoint> &points = Units(t).points;
-  if (i < 0 || i >= (int)points.size()) return nullptr;
+  const UnitRange<EPoint> points = TermPoints(data, t);
+  if (i < 0 || i >= points.size()) return nullptr;
   EPoint *point = &points[i];
   if (!point->IsMapped()) return nullptr;
   EnergyMap map = point->GetMap();
@@ -121,7 +121,7 @@ EPoint *ESegment::ShiftHost(EData &data, int t, int i) {
 void ESegment::UpdatePointGroupEnergyWithShift(EData &data, int t, int i, CNuc *theCNuc, const Config *configure) {
   if (ShiftHost(data, t, i)) return;
   UpdatePointEnergyWithShift(data, t, i, theCNuc, configure);
-  std::vector<EPoint> &points = Units(t).points;
+  const UnitRange<EPoint> points = TermPoints(data, t);
   EPoint *point = &points[i];
   // A point mapped from another segment (EData::MapData) is not this
   // segment's to move: it is re-energised with its own segment, on its own.
@@ -132,7 +132,7 @@ void ESegment::UpdatePointGroupEnergyWithShift(EData &data, int t, int i, CNuc *
     const EPoint *mapped = pointMapped[m];
     if (before(mapped, first) || before(last, mapped)) continue;
     const int j = (int)(mapped - first);
-    if (j > i && j < (int)points.size() && ShiftHost(data, t, j) == point)
+    if (j > i && j < points.size() && ShiftHost(data, t, j) == point)
       UpdatePointEnergyWithShift(data, t, j, theCNuc, configure);
   }
 }
@@ -153,7 +153,7 @@ void ESegment::UpdatePointEnergyWithShift(EData &data, int t, int i, CNuc *theCN
   // threshold, and a point below threshold never moved at all.
   const bool thm = this->IsTHM();
   {
-    EPoint *point = &Units(t).points[i];
+    EPoint *point = &TermPoints(data, t)[i];
     // A point mapped onto an earlier point of this segment (EData::MapData)
     // is at the same energy as its host, which has already been moved (index
     // order in UpdatePointEnergiesWithShift; host first within a group in
@@ -178,7 +178,7 @@ void ESegment::UpdatePointEnergyWithShift(EData &data, int t, int i, CNuc *theCN
 
         // The same conversion as ESegment::Fill (ratios are dimensionless: no cross-section conversion; a leaf's
         // value is always converted)
-        if (!this->ConvertRowToCM(t, i, entrancePair, exitPair, t > 0 || !this->IsDimensionlessRatio(),
+        if (!this->ConvertRowToCM(data, t, i, entrancePair, exitPair, t > 0 || !this->IsDimensionlessRatio(),
                                   BeyondRange::Convert)) {
           // An energy shift moved the point past the kinematic maximum lab angle mid-fit: the c.m. angle keeps
           // its value as loaded and the run says so (it cannot stop here; audit 2026-10-25, item 31).
@@ -198,18 +198,18 @@ void ESegment::UpdatePointEnergyWithShift(EData &data, int t, int i, CNuc *theCN
               effect = te;
             }
           }
-          point->CalcLegendreP(configure->maxLOrder, theCNuc, effect);
+          point->CalcLegendreP(&data, configure->maxLOrder, theCNuc, effect);
         }
         // The sub-points are moved and recalculated below, one by one.
         const ChannelRowSource rows = ShiftRowSource(t, i);
         if (host && point->CopyEDependentValuesFrom(*host))
-          point->CalcCoulombAmplitude(theCNuc, false);
+          point->CalcCoulombAmplitude(&data, theCNuc, false);
         else
-          point->RecalcEDependentValues(theCNuc, *configure, false, &rows);
+          point->RecalcEDependentValues(&data, theCNuc, *configure, false, &rows);
 
         // IMPORTANT: Also apply energy shift to all subpoints (used in convolution/target integration)
         for (int j = 1; j <= point->NumSubPoints(); j++) {
-          EPoint *subPoint = point->GetSubPoint(j);
+          EPoint *subPoint = point->GetSubPoint(data, j);
           if (subPoint && (thm || subPoint->GetOriginalEnergy() > 0)) {
             double subOriginalEnergy = subPoint->GetOriginalEnergy();
             // Sub-points hold c.m. energies and are the depth / resolution samples
@@ -275,12 +275,12 @@ void ESegment::UpdatePointEnergyWithShift(EData &data, int t, int i, CNuc *theCN
                   subEffect = te;
                 }
               }
-              subPoint->CalcLegendreP(configure->maxLOrder, theCNuc, subEffect);
+              subPoint->CalcLegendreP(&data, configure->maxLOrder, theCNuc, subEffect);
             }
-            if (host && subPoint->CopyEDependentValuesFrom(*host->GetSubPoint(j)))
-              subPoint->CalcCoulombAmplitude(theCNuc);
+            if (host && subPoint->CopyEDependentValuesFrom(*host->GetSubPoint(data, j)))
+              subPoint->CalcCoulombAmplitude(&data, theCNuc);
             else
-              subPoint->RecalcEDependentValues(theCNuc, *configure, true, &rows);
+              subPoint->RecalcEDependentValues(&data, theCNuc, *configure, true, &rows);
           }
         }
       }

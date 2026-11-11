@@ -17,6 +17,7 @@
 #include "ECIntegral.h"
 #include "ECMGroup.h"
 #include "ECTable.h"
+#include "EData.h"
 #include "EPoint.h"
 #include "JGroup.h"
 #include "KGroup.h"
@@ -185,7 +186,7 @@ static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, PPair 
  * entrance and exit pairs.
  */
 
-void EPoint::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure, const ChannelTable *table) {
+void EPoint::CalculateECAmplitudes(EData *data, CNuc *theCNuc, const Config &configure, const ChannelTable *table) {
   int aa = theCNuc->GetPairNumFromKey(this->GetEntranceKey());
   if (theCNuc->GetPair(aa)->GetPType() == 20) return;
   if (theCNuc->GetPair(aa)->IsEntrance()) {
@@ -211,7 +212,7 @@ void EPoint::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure, const
     }
   }
   for (int i = 1; i <= this->NumSubPoints(); i++) {
-    this->GetSubPoint(i)->CalculateECAmplitudes(theCNuc, configure, table);
+    this->GetSubPoint(*data, i)->CalculateECAmplitudes(data, theCNuc, configure, table);
   }
 }
 

@@ -65,7 +65,7 @@ struct ModelCotangents {
 /// The cotangents of point `pointIndex` of a data or test segment for the cotangent g of its model value, from the
 /// leaf values in `results` (the point pass, or the caller, calculated them).  False where the composition has no
 /// exact adjoint (a missing term point, a kernel that is not linear): the caller falls back to finite differences.
-bool ModelPointBackward(const EData &data, ESegment &segment, int pointIndex, CNuc *compound, const Config &config,
+bool ModelPointBackward(EData &data, ESegment &segment, int pointIndex, CNuc *compound, const Config &config,
                         const Results &results, double g, ModelCotangents &out);
 
 /// The residual of one datum: f - y n and dy n, as one expression for every path (the objective, the per-segment
@@ -80,7 +80,7 @@ struct Residual {
 };
 inline Residual DataResidual(double model, double y, double dy, double norm) { return {model - y * norm, dy * norm}; }
 /// The residual of row i (0-based) of a segment: its model value in `results` against its c.m. datum, with the norm n.
-Residual PointResidual(const ESegment &segment, int i, const Results &results, double norm);
+Residual PointResidual(const EData &data, const ESegment &segment, int i, const Results &results, double norm);
 
 }  // namespace azure2
 

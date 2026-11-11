@@ -90,12 +90,12 @@ void EData::WriteThmExperiments(const Config &configure, const azure2::Results &
       size_t tablePoints = 0, tableBytes = 0;
       for (int s : group.segments)
         for (int p = 1; p <= GetSegment(s)->NumPoints(); p++) {
-          EPoint *point = GetSegment(s)->GetPoint(p);
+          EPoint *point = GetSegment(s)->GetPoint(*this, p);
           tablePoints++;
           tableBytes += point->ThmPsTableBytes();
           for (int q = 1; q <= point->NumSubPoints(); q++) {
             tablePoints++;
-            tableBytes += point->GetSubPoint(q)->ThmPsTableBytes();
+            tableBytes += point->GetSubPoint(*this, q)->ThmPsTableBytes();
           }
         }
       out << "# Node tables of the vertex: points (with folding sub-points), bytes.\n"

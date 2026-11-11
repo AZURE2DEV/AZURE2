@@ -84,7 +84,7 @@ void EPoint::Calculate(EData *data, CNuc *theCNuc, const Config &configure, azur
       if (subPointNum && parent) {
         const azure2::MappedPoints parentMapped = parent->PlanMapped(data);
         for (int i = 1; i <= parentMapped.size(); i++) {
-          EPoint *mappedSubPoint = parentMapped[i - 1]->GetSubPoint(subPointNum);
+          EPoint *mappedSubPoint = parentMapped[i - 1]->GetSubPoint(*data, subPointNum);
           thmFunc.CalculateTHMCrossSection(mappedSubPoint, results);
         }
       } else {
@@ -129,7 +129,7 @@ void EPoint::Calculate(EData *data, CNuc *theCNuc, const Config &configure, azur
     if (subPointNum && parent) {
       const azure2::MappedPoints parentMapped =
           ScopedPointMappingOff::Active() ? azure2::MappedPoints() : parent->PlanMapped(data);
-      for (int i = 1; i <= parentMapped.size(); i++) mappedCrossSection(parentMapped[i - 1]->GetSubPoint(subPointNum));
+      for (int i = 1; i <= parentMapped.size(); i++) mappedCrossSection(parentMapped[i - 1]->GetSubPoint(*data, subPointNum));
     } else {
       for (int i = 1; i <= numMapped; i++) mappedCrossSection(mappedPts[i - 1]);
     }
@@ -155,7 +155,7 @@ void EPoint::Calculate(EData *data, CNuc *theCNuc, const Config &configure, azur
       probe.UsePrivateRecord(probeResults, results);
       probe.SetTargetEffectNum(0);
       probe.DetachFromPlan();
-      probe.integrationPoints_.clear();
+      probe.SetSubPointRange(0, 0);
       probe.Calculate(data, theCNuc, configure, probeResults);
       bareValue = probe.GetFitCrossSection(probeResults);
       bareE1 = probe.GetFitE1CrossSection(probeResults), bareE2 = probe.GetFitE2CrossSection(probeResults);
@@ -176,14 +176,14 @@ void EPoint::Calculate(EData *data, CNuc *theCNuc, const Config &configure, azur
       int iMid = 1;
       double dBest = 1e100;
       for (int i = 1; i <= this->NumSubPoints(); i++) {
-        double d = std::fabs(this->GetSubPoint(i)->GetCMEnergy() - this->GetCMEnergy());
+        double d = std::fabs(this->GetSubPoint(*data, i)->GetCMEnergy() - this->GetCMEnergy());
         if (d < dBest) { dBest = d; iMid = i; }
       }
       const int probes[3] = {iFirst, iMid, iLast};
       for (int k = 0; k < 3; k++) {
-        EPoint *subPoint = this->GetSubPoint(probes[k]);
+        EPoint *subPoint = this->GetSubPoint(*data, probes[k]);
         if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE)
-          subPoint->RecalcEDependentValues(theCNuc, configure);
+          subPoint->RecalcEDependentValues(data, theCNuc, configure);
         if (hasMapped)
           subPoint->Calculate(data, theCNuc, configure, results, this, probes[k]);
         else
@@ -192,9 +192,9 @@ void EPoint::Calculate(EData *data, CNuc *theCNuc, const Config &configure, azur
       bool allPass = true;
       for (int m = 0; m <= numMapped && allPass; m++) {
         EPoint *host = (m == 0) ? this : mappedPts[m - 1];
-        double sFirst = host->GetSubPoint(iFirst)->GetFitCrossSection(results);
-        double sMid = host->GetSubPoint(iMid)->GetFitCrossSection(results);
-        double sLast = host->GetSubPoint(iLast)->GetFitCrossSection(results);
+        double sFirst = host->GetSubPoint(*data, iFirst)->GetFitCrossSection(results);
+        double sMid = host->GetSubPoint(*data, iMid)->GetFitCrossSection(results);
+        double sLast = host->GetSubPoint(*data, iLast)->GetFitCrossSection(results);
         double estimate = std::fabs(0.5 * (sFirst + sLast) - sMid);
         if (effect->IsTargetIntegration()) estimate += 0.5 * std::fabs(sLast - sFirst);
         if (estimate > autoTol * std::max(std::fabs(sMid), 1e-300)) allPass = false;
@@ -210,7 +210,7 @@ void EPoint::Calculate(EData *data, CNuc *theCNuc, const Config &configure, azur
           mappedProbe.UsePrivateRecord(probeResults, results);
           mappedProbe.SetTargetEffectNum(0);
           mappedProbe.DetachFromPlan();
-          mappedProbe.integrationPoints_.clear();
+          mappedProbe.SetSubPointRange(0, 0);
           mappedProbe.Calculate(data, theCNuc, configure, probeResults);
           mappedPoint->SetFitCrossSection(results, mappedProbe.GetFitCrossSection(probeResults));
           mappedPoint->SetFitE1CrossSection(results, mappedProbe.GetFitE1CrossSection(probeResults));
@@ -221,10 +221,10 @@ void EPoint::Calculate(EData *data, CNuc *theCNuc, const Config &configure, azur
     }
 
     for (int i = 1; i <= this->NumSubPoints(); i++) {
-      EPoint *subPoint = this->GetSubPoint(i);
+      EPoint *subPoint = this->GetSubPoint(*data, i);
       // Recalculate energy-dependent values for sub-points too if using external capture
       if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
-        subPoint->RecalcEDependentValues(theCNuc, configure);
+        subPoint->RecalcEDependentValues(data, theCNuc, configure);
       }
       if (numMapped > 0)
         subPoint->Calculate(data, theCNuc, configure, results, this, i);
@@ -245,7 +245,7 @@ void EPoint::Calculate(EData *data, CNuc *theCNuc, const Config &configure, azur
         mappedProbe.UsePrivateRecord(probeResults, results);
         mappedProbe.SetTargetEffectNum(0);
         mappedProbe.DetachFromPlan();
-        mappedProbe.integrationPoints_.clear();
+        mappedProbe.SetSubPointRange(0, 0);
         mappedProbe.Calculate(data, theCNuc, configure, probeResults);
         mappedPoint->SetFitCrossSection(results, blend * mappedPoint->GetFitCrossSection(results) +
                                                      (1.0 - blend) * mappedProbe.GetFitCrossSection(probeResults));
@@ -273,8 +273,8 @@ void EPoint::CalculateThinTarget(EData &data, CNuc *theCNuc, const Config &confi
   const bool hasMapped = numMapped > 0;
   const int n = this->NumSubPoints();
   auto calcSub = [&](int i) {
-    EPoint *subPoint = this->GetSubPoint(i);
-    if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) subPoint->RecalcEDependentValues(theCNuc, configure);
+    EPoint *subPoint = this->GetSubPoint(data, i);
+    if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) subPoint->RecalcEDependentValues(&data, theCNuc, configure);
     if (hasMapped)
       subPoint->Calculate(&data, theCNuc, configure, results, this, i);
     else
@@ -290,23 +290,23 @@ void EPoint::CalculateThinTarget(EData &data, CNuc *theCNuc, const Config &confi
     const double eBar = this->GetCMEnergy() - target_fallback_depth_;
     int jb = 1;  // the sub-points jb, jb + 1 bracket E_bar (descending energies)
     for (int j = 1; j < n; j++)
-      if (this->GetSubPoint(j + 1)->GetCMEnergy() <= eBar) { jb = j; break; }
-    if (eBar <= this->GetSubPoint(n)->GetCMEnergy()) jb = n - 1;
+      if (this->GetSubPoint(data, j + 1)->GetCMEnergy() <= eBar) { jb = j; break; }
+    if (eBar <= this->GetSubPoint(data, n)->GetCMEnergy()) jb = n - 1;
     const int probes[4] = {1, jb, jb + 1, n};
     std::vector<bool> done(n + 1, false);
     for (int k = 0; k < 4; k++)
       if (!done[probes[k]]) { calcSub(probes[k]); done[probes[k]] = true; }
-    const double eF = this->GetSubPoint(1)->GetCMEnergy(), eL = this->GetSubPoint(n)->GetCMEnergy();
-    const double ea = this->GetSubPoint(jb)->GetCMEnergy(), eb = this->GetSubPoint(jb + 1)->GetCMEnergy();
+    const double eF = this->GetSubPoint(data, 1)->GetCMEnergy(), eL = this->GetSubPoint(data, n)->GetCMEnergy();
+    const double ea = this->GetSubPoint(data, jb)->GetCMEnergy(), eb = this->GetSubPoint(data, jb + 1)->GetCMEnergy();
     const double tChord = (eF > eL) ? (eF - eBar) / (eF - eL) : 0.0;
     const double tBar = (ea > eb) ? std::min(std::max((ea - eBar) / (ea - eb), 0.0), 1.0) : 0.0;
     bool allPass = true;
     for (int m = 0; m <= numMapped && allPass; m++) {
       EPoint *host = (m == 0) ? this : mappedPts[m - 1];
-      const double sF = host->GetSubPoint(1)->GetFitCrossSection(results);
-      const double sL = host->GetSubPoint(n)->GetFitCrossSection(results);
-      const double sBar = (1.0 - tBar) * host->GetSubPoint(jb)->GetFitCrossSection(results) +
-                          tBar * host->GetSubPoint(jb + 1)->GetFitCrossSection(results);
+      const double sF = host->GetSubPoint(data, 1)->GetFitCrossSection(results);
+      const double sL = host->GetSubPoint(data, n)->GetFitCrossSection(results);
+      const double sBar = (1.0 - tBar) * host->GetSubPoint(data, jb)->GetFitCrossSection(results) +
+                          tBar * host->GetSubPoint(data, jb + 1)->GetFitCrossSection(results);
       const double chord = (1.0 - tChord) * sF + tChord * sL;
       if (std::fabs(chord - sBar) > autoTol * std::max(std::fabs(sBar), 1e-300)) allPass = false;
     }
@@ -342,20 +342,20 @@ void EPoint::IntegrateTargetEffectComponents(const EData &data, const Config &co
   const int n = this->NumSubPoints();
   if (n <= 0) return;
   std::vector<double> sigma(n);
-  for (int i = 1; i <= n; i++) sigma[i - 1] = this->GetSubPoint(i)->GetFitCrossSection(results);
+  for (int i = 1; i <= n; i++) sigma[i - 1] = this->GetSubPoint(data, i)->GetFitCrossSection(results);
   const double total = this->GetFitCrossSection(results);
 
   for (int i = 1; i <= n; i++)
-    this->GetSubPoint(i)->SetFitCrossSection(results, this->GetSubPoint(i)->GetFitE1CrossSection(results));
+    this->GetSubPoint(data, i)->SetFitCrossSection(results, this->GetSubPoint(data, i)->GetFitE1CrossSection(results));
   this->IntegrateTargetEffect(data, configure, results);
   this->SetFitE1CrossSection(results, this->GetFitCrossSection(results));
 
   for (int i = 1; i <= n; i++)
-    this->GetSubPoint(i)->SetFitCrossSection(results, this->GetSubPoint(i)->GetFitE2CrossSection(results));
+    this->GetSubPoint(data, i)->SetFitCrossSection(results, this->GetSubPoint(data, i)->GetFitE2CrossSection(results));
   this->IntegrateTargetEffect(data, configure, results);
   this->SetFitE2CrossSection(results, this->GetFitCrossSection(results));
 
-  for (int i = 1; i <= n; i++) this->GetSubPoint(i)->SetFitCrossSection(results, sigma[i - 1]);
+  for (int i = 1; i <= n; i++) this->GetSubPoint(data, i)->SetFitCrossSection(results, sigma[i - 1]);
   this->SetFitCrossSection(results, total);
 }
 
@@ -384,16 +384,16 @@ void EPoint::IntegrateTargetEffectForObservable(const EData &data, const Config 
     const int n = this->NumSubPoints();
     std::vector<double> ak(n), a0(n);
     for (int i = 1; i <= n; i++) {
-      ak[i - 1] = this->GetSubPoint(i)->GetFitCrossSection(results);
-      a0[i - 1] = this->GetSubPoint(i)->GetAngDistA0(results);
+      ak[i - 1] = this->GetSubPoint(data, i)->GetFitCrossSection(results);
+      a0[i - 1] = this->GetSubPoint(data, i)->GetAngDistA0(results);
     }
-    for (int i = 1; i <= n; i++) this->GetSubPoint(i)->SetFitCrossSection(results, a0[i - 1]);
+    for (int i = 1; i <= n; i++) this->GetSubPoint(data, i)->SetFitCrossSection(results, a0[i - 1]);
     this->IntegrateTargetEffect(data, configure, results);
     const double denominator = this->GetFitCrossSection(results);
-    for (int i = 1; i <= n; i++) this->GetSubPoint(i)->SetFitCrossSection(results, ak[i - 1] * a0[i - 1]);
+    for (int i = 1; i <= n; i++) this->GetSubPoint(data, i)->SetFitCrossSection(results, ak[i - 1] * a0[i - 1]);
     this->IntegrateTargetEffect(data, configure, results);
     const double numerator = this->GetFitCrossSection(results);
-    for (int i = 1; i <= n; i++) this->GetSubPoint(i)->SetFitCrossSection(results, ak[i - 1]);
+    for (int i = 1; i <= n; i++) this->GetSubPoint(data, i)->SetFitCrossSection(results, ak[i - 1]);
     this->SetFitCrossSection(results, std::fabs(denominator) > 0.0 ? numerator / denominator : 0.0);
     return;
   }
@@ -405,17 +405,17 @@ void EPoint::IntegrateTargetEffectForObservable(const EData &data, const Config 
 
   const int n = this->NumSubPoints();
   std::vector<double> sigma(n);
-  for (int i = 1; i <= n; i++) sigma[i - 1] = this->GetSubPoint(i)->GetFitCrossSection(results);
+  for (int i = 1; i <= n; i++) sigma[i - 1] = this->GetSubPoint(data, i)->GetFitCrossSection(results);
 
   this->IntegrateTargetEffect(data, configure, results);
   const double denominator = this->GetFitCrossSection(results);
 
   for (int i = 1; i <= n; i++)
-    this->GetSubPoint(i)->SetFitCrossSection(results, sigma[i - 1] * this->GetSubPoint(i)->GetAnalyzingPower(results));
+    this->GetSubPoint(data, i)->SetFitCrossSection(results, sigma[i - 1] * this->GetSubPoint(data, i)->GetAnalyzingPower(results));
   this->IntegrateTargetEffect(data, configure, results);
   const double numerator = this->GetFitCrossSection(results);
 
-  for (int i = 1; i <= n; i++) this->GetSubPoint(i)->SetFitCrossSection(results, sigma[i - 1]);
+  for (int i = 1; i <= n; i++) this->GetSubPoint(data, i)->SetFitCrossSection(results, sigma[i - 1]);
 
   this->SetFitCrossSection(results, std::fabs(denominator) > 0.0 ? numerator / denominator : 0.0);
 }

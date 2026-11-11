@@ -34,7 +34,7 @@ double CoulombReferenceValue(const EData &data, EPoint *point, experiment::LeafP
   };
   if (!ESegment::HasSubPointIntegration(data, point)) return at(point);
   std::vector<double> sub(static_cast<std::size_t>(point->NumSubPoints()));
-  for (int j = 1; j <= point->NumSubPoints(); j++) sub[j - 1] = at(point->GetSubPoint(j));
+  for (int j = 1; j <= point->NumSubPoints(); j++) sub[j - 1] = at(point->GetSubPoint(data, j));
   double folded = point->IntegrateSubPointValues(data, configure, sub);
   // EPoint::Calculate blends a folded value with the bare one at a window edge outside a thin-target integration (a
   // thin target blends inside its kernel, which IntegrateSubPointValues applies).

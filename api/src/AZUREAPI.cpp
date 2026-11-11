@@ -333,7 +333,7 @@ int AZUREAPI::ReportSegments(CNuc *localCompound, EData *localData) {
   const std::vector<ESegment *> segments = ReportedSegments(localData->GetSegments());
   const bool pre = PrecalculateAll(*localData, segments, localCompound, configure(), results());
   for (ESegment *segment : segments) {
-    std::vector<EPoint> &data = segment->GetPoints();
+    const UnitRange<EPoint> data = segment->GetPoints(*localData);
     std::vector<double> cross, crossE1, crossE2, energies, angles, conv, excitationEnergies;
     // Angular-distribution coefficients, self-describing per point: a count followed by that many Legendre
     // coefficients (a zero for a point outside an angular-distribution segment).
@@ -568,7 +568,7 @@ int AZUREAPI::UpdateData() {
     prevKey = newKey;
     ++nSegments;
 
-    std::vector<EPoint> &data = segments[i].GetPoints();
+    const UnitRange<EPoint> data = segments[i].GetPoints(*localData);
 
     std::vector<double> energies, angles, cross, crossErr, conv, excitationEnergies;
     for (int k = 0; k < data.size(); ++k) {
@@ -810,7 +810,7 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
       if (res) {
         groupRows[g].push_back(std::make_pair(i, res->size()));
         for (int pid = 0; pid < segment->NumPoints(); pid++)
-          if (segment->GetPoint(pid + 1)) res->push_back(0.0);
+          if (segment->GetPoint(*ld, pid + 1)) res->push_back(0.0);
       }
       if (ld->IsLastOfThmGroup(g, i)) {
         chiSquared += ld->ProfileThmGroup(g, results());
@@ -829,11 +829,11 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
     // (n* stored in the buffer), exactly as the CLI does.
     double segChi = 0.0;
     const bool profiled = segment->IsProfiledNorm();
-    if (profiled) segChi = segment->ProfileNormChiSquared(results(), results().objective.norm[i]);
+    if (profiled) segChi = segment->ProfileNormChiSquared(*ld, results(), results().objective.norm[i]);
 
     const double norm = ld->NormUsed(i, results());
     for (int pid = 0; pid < segment->NumPoints(); pid++) {
-      const double r = azure2::PointResidual(*segment, pid, results(), norm).Pull();
+      const double r = azure2::PointResidual(*ld, *segment, pid, results(), norm).Pull();
       if (!profiled) segChi += r * r;
       if (res) res->push_back(r);
     }
@@ -997,7 +997,7 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
     chi2 += ld->CovarianceChi2Correction(results());
   }
   FitBarFn fb = [&](ESegment *seg, int i, int pid, double model) -> double {
-    EPoint *pt = seg->GetPoint(pid + 1);
+    EPoint *pt = seg->GetPoint(*ld, pid + 1);
     if (!pt) return 0.0;
     double norm = seg->GetNorm();
     double dataval = seg->CMValue(pid);
@@ -1082,7 +1082,7 @@ vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r &params) const {
         // A THM experiment, profiled by ComputeTHMRows: its residuals.
         for (double r : tr.r) c += r * r;
       } else if (seg->IsProfiledNorm()) {
-        c = seg->ProfileNormChiSquared(results(), results().objective.norm[tr.segment]);
+        c = seg->ProfileNormChiSquared(*data(), results(), results().objective.norm[tr.segment]);
       } else {
         for (double r : tr.r) c += r * r;
       }
@@ -1379,7 +1379,7 @@ vector_r AZUREAPI::CalculateModelGradientsRWA(const vector_r &params) const {
       ESegment *seg = ld->GetSegment(tr.segment);
       size_t i = 0;
       for (int pid = 0; pid < seg->NumPoints(); pid++) {
-        EPoint *pt = seg->GetPoint(pid + 1);
+        EPoint *pt = seg->GetPoint(*ld, pid + 1);
         if (!pt) continue;
         std::map<EPoint *, vector_r>::iterator it = grad.find(pt);
         if (it != grad.end() && i < tr.m.size())
@@ -1402,7 +1402,7 @@ vector_r AZUREAPI::CalculateModelGradientsRWA(const vector_r &params) const {
     if (prevKey == newKey) continue;
     prevKey = newKey;
 
-    std::vector<EPoint> &points = segments[i].GetPoints();
+    const UnitRange<EPoint> points = segments[i].GetPoints(*ld);
     int n = 0;
     for (int k = 0; k < (int)points.size(); ++k) {
       std::map<EPoint *, vector_r>::const_iterator it = grad.find(&points[k]);

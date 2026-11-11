@@ -241,19 +241,39 @@ class EData {
   void MapLeaves(CNuc *theCNuc, std::vector<std::pair<azure2::PointRef, azure2::PointRef>> &mapping);
   /// The calculation plan: which task calculates which point (CalculationPlan.h).
   const azure2::CalculationPlan &Plan() const { return plan_; }
-  /// A point of the plan, by position (list 0: the segments' own points, 1: the leaves', LeafRef).
-  EPoint *PlanPoint(const azure2::PointRef &r) {
-    if (r.list == azure2::PointRef::kSegments) return &segments_[r.segment].GetPoints()[r.point];
-    const LeafRef &leaf = leafRefs_[r.segment];
-    return &segments_[leaf.first].TermPoints(leaf.second)[r.point];
+  /// A point of the plan, by its unit.
+  EPoint *PlanPoint(azure2::PointRef r) { return &Unit(r); }
+  /// The units of every point of every term in data order: the segments' own points, then the leaves' (LeafRefs).
+  std::vector<azure2::PointRef> PlanUnits() const;
+
+  /*!
+   * The calculation units of the working copy (docs/upgrade/data_structure.md section 1.4): one flat vector holding
+   * every point of every term and every sub-point.  A term's points are a range of it (ESegment::TermPoints), a
+   * point's sub-points another (EPoint::GetSubPoints); no unit points to another.  Laid out by CompactUnits: the
+   * points of the terms in data order (segments, then their leaves by term), then the sub-points in the same order.
+   * The points never move after the set-up (the plan names them by position); a re-placed sub-point grid is a new
+   * range, and the compaction in the single-threaded hand-over drops the old one.
+   */
+  EPoint &Unit(int i) { return units_[i]; }
+  const EPoint &Unit(int i) const { return units_[i]; }
+  int NumUnits() const { return (int)units_.size(); }
+  UnitRange<EPoint> Units(int first, int count) { return UnitRange<EPoint>(units_.data() + first, count); }
+  UnitRange<const EPoint> Units(int first, int count) const {
+    return UnitRange<const EPoint>(units_.data() + first, count);
   }
-  int NumPlanSegments(int list) const {
-    return list == azure2::PointRef::kSegments ? (int)segments_.size() : (int)leafRefs_.size();
+  /// Append a unit (a point of a term, at set-up); returns its index.
+  int AppendUnit(EPoint unit) {
+    units_.push_back(std::move(unit));
+    return (int)units_.size() - 1;
   }
-  int NumPlanPoints(int list, int s) const {
-    if (list == azure2::PointRef::kSegments) return segments_[s].NumPoints();
-    return (int)segments_[leafRefs_[s].first].TermPoints(leafRefs_[s].second).size();
-  }
+  /// Give `point` (a unit of this data set) the sub-point `sub` after those already given; held until
+  /// CommitSubPoints, so that no unit moves while the set-up holds pointers to points.
+  void AddSubPoint(EPoint &point, EPoint sub);
+  /// Place the sub-points given since the last commit: each point's become a new range (its earlier one, if any, is
+  /// dropped), then CompactUnits.  Single-threaded.
+  void CommitSubPoints();
+  /// Lay the units out again (see Units), dropping every unit no term and no point refers to.
+  void CompactUnits();
   /// Every leaf of the data set as (0-based position of its segment, its term), in segment order and term order: the
   /// order the leaves are set up, laid out and written to the intEC file in.
   using LeafRef = std::pair<int, int>;
@@ -477,6 +497,8 @@ class EData {
  private:
   std::vector<TargetEffect> targetEffects_;
   std::vector<ESegment> segments_;
+  std::vector<EPoint> units_;  // Unit
+  std::vector<std::pair<int, EPoint>> pendingSubPoints_;  // AddSubPoint: (point's unit, sub-point), until the commit
   std::vector<LeafRef> leafRefs_;  // LeafRefs
   azure2::CalculationPlan plan_;  // built by MapData; positions only, so a copy of the data set copies it as it is
   /// The key of the next leaf (AddLeaf): -1000, -1001, ... in creation order, one counter per data set, so a leaf's key
@@ -570,5 +592,13 @@ class EData {
   std::shared_ptr<const ChannelTable> channelTable_;
   std::shared_ptr<const ChannelTable> BuildChannelTable(CNuc *, const Config &, const std::vector<EPoint *> &points);
 };
+
+inline EPoint *EPoint::GetSubPoint(EData &data, int i) {
+  return i <= sub_count_ ? &data.Unit(sub_first_ + i - 1) : nullptr;
+}
+inline const EPoint *EPoint::GetSubPoint(const EData &data, int i) const {
+  return i <= sub_count_ ? &data.Unit(sub_first_ + i - 1) : nullptr;
+}
+inline UnitRange<EPoint> EPoint::GetSubPoints(EData &data) { return data.Units(sub_first_, sub_count_); }
 
 #endif
