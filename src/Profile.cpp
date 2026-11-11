@@ -14,14 +14,15 @@ const char *const kNames[kNumStages] = {"evaluation",     "points",          "E-
                                         "channel solves", "cross sections",  "gradient",
                                         "grad forward",   "grad T-cotangent", "grad back-propagation",
                                         "grad level matrix", "grad rows",
-                                        "shift cols (segment)", "shift cols (full)"};
+                                        "shift cols (segment)", "shift cols (full)",
+                                        "energy tasks: set-up"};
 std::atomic<long long> g_count[kNumCounters];
 const char *const kCounterNames[kNumCounters] = {"channel-space solves", "level route: size",
                                                  "level route: no formal set-up", "level route: near pole",
                                                  "level route: pivot", "level route: forced",
                                                  "channel space, deflated", "final-state W: memo hits",
                                                  "final-state W: computed", "energy tasks (one solve each)",
-                                                 "units of the energy tasks"};
+                                                 "units of the energy tasks", "energy tasks rebuilt"};
 }  // namespace
 
 void CountEvent(Counter counter) { g_count[counter].fetch_add(1, std::memory_order_relaxed); }

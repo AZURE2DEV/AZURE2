@@ -65,7 +65,8 @@ std::string CheckEnergyTasks(WorkingCopy &data, CNuc &compound, const Config &cf
   azure2::CalculationPlan &plan = const_cast<azure2::CalculationPlan &>(data.Plan());
   std::vector<int> work(plan.NumTasks());
   for (int t = 0; t < plan.NumTasks(); t++) work[t] = t;
-  const std::vector<azure2::EnergyTask> &tasks = plan.EnergyTasks(data, &compound, cfg, work);
+  const azure2::EnergyTaskList &list = plan.EnergyTasks(data, &compound, cfg, work);
+  const std::vector<azure2::EnergyTask> &tasks = list.tasks;
   std::vector<int> owner(data.NumUnits(), -2);  // the plan task of each unit of the pass (-2: no unit of it)
   long expected = 0;
   for (int t = 0; t < plan.NumTasks(); t++) {
@@ -82,15 +83,21 @@ std::string CheckEnergyTasks(WorkingCopy &data, CNuc &compound, const Config &cf
   for (std::size_t k = 0; k < tasks.size(); k++) {
     const azure2::EnergyTask &task = tasks[k];
     const std::string where = "energy task " + std::to_string(k);
-    if (task.units.empty() || task.owners.size() != task.units.size()) return where + " is empty or has no owners";
-    const double cost = 1.0 + task.numTMatrices + task.units.size();
+    if (task.size <= 0 || task.begin < 0 || task.begin + task.size > (int)list.units.size() ||
+        list.owners.size() != list.units.size() || list.tGroups.size() != list.units.size() ||
+        list.providers.size() != list.units.size())
+      return where + " is empty, outside the arrays, or has no owners";
+    if (task.begin != (int)seen) return where + " does not follow the task before it in the arrays";
+    const azure2::UnitRef *taskUnits = list.units.data() + task.begin, *taskProviders = list.providers.data() + task.begin;
+    const int *taskOwners = list.owners.data() + task.begin, *taskGroups = list.tGroups.data() + task.begin;
+    const double cost = 1.0 + task.numTMatrices + task.size;
     if (cost > lastCost) return where + " is out of the order of cost";
     lastCost = cost;
     int pairs = 0;
-    for (std::size_t i = 0; i < task.units.size(); i++) {
-      const azure2::UnitRef r = task.units[i];
+    for (int i = 0; i < task.size; i++) {
+      const azure2::UnitRef r = taskUnits[i];
       if (r < 0 || r >= data.NumUnits() || owner[r] < 0) return where + " names a unit of no plan task (or twice)";
-      if (owner[r] != task.owners[i]) return where + ": unit " + std::to_string(r) + " has another owner";
+      if (owner[r] != taskOwners[i]) return where + ": unit " + std::to_string(r) + " has another owner";
       owner[r] = -1;
       Unit &u = data.UnitAt(r);
       const double e = AMatrixFunc::InEnergy(&compound, &u);
@@ -98,28 +105,26 @@ std::string CheckEnergyTasks(WorkingCopy &data, CNuc &compound, const Config &cf
       if (compound.GetPair(compound.GetPairNumFromKey(u.GetEntranceKey()))->GetNucleus() != task.nucleus)
         return where + ": a unit of another nucleus";
       if ((u.IsTHM() ? 'T' : 'A') != task.route && task.route != 'R') return where + ": a unit of another route";
-      if (task.tGroups.size() != task.units.size() || task.providers.size() != task.units.size())
-        return where + ": no T-matrix group or provider for every unit";
-      Unit &prov = data.UnitAt(task.providers[i]);
+      Unit &prov = data.UnitAt(taskProviders[i]);
       const std::tuple<int, int, long long> b{u.GetEntranceKey(), u.GetExitKey(), azure2::ECAmplitudeSource(prov, cfg)};
       if (prov.GetEntranceKey() != u.GetEntranceKey() || prov.GetExitKey() != u.GetExitKey())
         return where + ": a provider of another pair";
       if (i > 0) {
-        Unit &p = data.UnitAt(task.units[i - 1]);
+        Unit &p = data.UnitAt(taskUnits[i - 1]);
         const std::tuple<int, int, long long> a{p.GetEntranceKey(), p.GetExitKey(),
-                                                azure2::ECAmplitudeSource(data.UnitAt(task.providers[i - 1]), cfg)};
+                                                azure2::ECAmplitudeSource(data.UnitAt(taskProviders[i - 1]), cfg)};
         if (b < a) return where + ": units not ordered by T-matrix group";
-        if ((b != a) != (task.tGroups[i] != task.tGroups[i - 1])) return where + ": T-matrix groups wrong";
+        if ((b != a) != (taskGroups[i] != taskGroups[i - 1])) return where + ": T-matrix groups wrong";
         if (b != a) pairs++;
       } else
         pairs = 1;
       // a group's first unit is its own provider
-      if ((i == 0 || task.tGroups[i] != task.tGroups[i - 1]) && task.providers[i] != task.units[i])
+      if ((i == 0 || taskGroups[i] != taskGroups[i - 1]) && taskProviders[i] != taskUnits[i])
         return where + ": a T-matrix group whose first unit is not its own provider";
     }
     if (pairs != task.numTMatrices)
       return where + ": numTMatrices " + std::to_string(task.numTMatrices) + ", groups " + std::to_string(pairs);
-    seen += (long)task.units.size();
+    seen += (long)task.size;
   }
   if (seen != expected) return std::to_string(expected - seen) + " units of the plan tasks in no energy task";
   energyTasks += (long)tasks.size();

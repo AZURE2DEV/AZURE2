@@ -120,7 +120,7 @@ std::string Describe(const Unit &u, const EnergyTask &task) {
 }  // namespace
 
 long CheckEnergyTasks(WorkingCopy &data, CNuc *cnuc, const Config &configure, const Results &results,
-                      const std::vector<EnergyTask> &tasks) {
+                      const EnergyTaskList &tasks) {
   Results scratch = results;  // the check writes here, never into the evaluation's values
   std::unique_ptr<AMatrixFunc> sharedA, ownA;
   if (configure.paramMask & Config::USE_AMATRIX) {
@@ -131,8 +131,11 @@ long CheckEnergyTasks(WorkingCopy &data, CNuc *cnuc, const Config &configure, co
   long units = 0, shared = 0, differ = 0;
   std::vector<std::string> reports;
   std::vector<double> own;
-  for (const EnergyTask &task : tasks) {
-    const int n = (int)task.units.size();
+  for (const EnergyTask &task : tasks.tasks) {
+    const int n = task.size;
+    const UnitRef *taskUnits = tasks.units.data() + task.begin;
+    const UnitRef *taskProviders = tasks.providers.data() + task.begin;
+    const int *taskGroups = tasks.tGroups.data() + task.begin;
     units += n;
     if (n > 1) shared += n;
     const bool thm = task.route == 'T';
@@ -146,12 +149,12 @@ long CheckEnergyTasks(WorkingCopy &data, CNuc *cnuc, const Config &configure, co
       sharedR.reset(new RMatrixFunc(cnuc, configure)), ownR.reset(new RMatrixFunc(cnuc, configure));
       s = sharedR.get(), o = ownR.get();
     }
-    Unit *first = &data.UnitAt(task.units[0]);
+    Unit *first = &data.UnitAt(taskUnits[0]);
     s->ClearMatrices();
     s->FillMatrices(first);
     s->InvertMatrices();
     for (int k = 0; k < n; k++) {
-      Unit *u = &data.UnitAt(task.units[k]);
+      Unit *u = &data.UnitAt(taskUnits[k]);
       std::string why;
       if (AMatrixFunc::InEnergy(cnuc, u) != task.energy) why = "E_x is not the task's";
       // The unit's own solve.
@@ -161,10 +164,10 @@ long CheckEnergyTasks(WorkingCopy &data, CNuc *cnuc, const Config &configure, co
       if (why.empty() && task.route != 'R')
         why = CompareLevelMatrices(cnuc, task.nucleus, *static_cast<AMatrixFunc *>(s), *static_cast<AMatrixFunc *>(o));
       if (!thm) {
-        o->CalculateTMatrix(&data.UnitAt(task.providers[k]));  // as its host would, from the provider
+        o->CalculateTMatrix(&data.UnitAt(taskProviders[k]));  // as its host would, from the provider
         if (k == 0)
           s->CalculateTMatrix(u);
-        else if (task.tGroups[k] != task.tGroups[k - 1])
+        else if (taskGroups[k] != taskGroups[k - 1])
           s->RecalculateTMatrix(u);
         if (why.empty() && !s->SameTMatrix(*o)) why = "T-matrix";
       }
@@ -185,8 +188,8 @@ long CheckEnergyTasks(WorkingCopy &data, CNuc *cnuc, const Config &configure, co
         why = "record";
       if (why.empty()) continue;
       differ++;
-      if (reports.size() < 10) reports.push_back(why + " differs at unit " + std::to_string(task.units[k]) + " (" +
-                                                 Describe(*u, task) + ") from unit " + std::to_string(task.units[0]));
+      if (reports.size() < 10) reports.push_back(why + " differs at unit " + std::to_string(taskUnits[k]) + " (" +
+                                                 Describe(*u, task) + ") from unit " + std::to_string(taskUnits[0]));
     }
   }
   std::cerr << "AZURE_PLAN_CHECK: " << units << " units in " << tasks.size() << " energy tasks (" << shared
@@ -241,27 +244,29 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
   }
   // The energy pass: one task per compound energy, each writing only its units' records.  A unit whose calculation
   // throws fails its plan task; the units after it are calculated with a new solve.
-  const std::vector<azure2::EnergyTask> &tasks = plan_.EnergyTasks(*this, theCNuc, configure, work);
+  AZUREProfile::Timer setupTimer(AZUREProfile::kEnergyTaskSetup);
+  const azure2::EnergyTaskList &tasks = plan_.EnergyTasks(*this, theCNuc, configure, work);
+  setupTimer.Stop();
   AZUREProfile::CountMany(AZUREProfile::kEnergyTasks, (long long)tasks.size());
   std::vector<std::vector<std::pair<int, std::string>>> taskFailures(tasks.size());
   auto runEnergyTask = [&](int k) {
     const azure2::EnergyTask &task = tasks[k];
-    const int n = (int)task.units.size();
+    const int n = task.size;
     AZUREProfile::CountMany(AZUREProfile::kEnergyUnits, n);
     static thread_local std::vector<Unit *> units;
     units.resize(n);
-    for (int i = 0; i < n; i++) units[i] = &units_[task.units[i]];
+    for (int i = 0; i < n; i++) units[i] = &units_[tasks.units[task.begin + i]];
     int start = 0;
     while (start < n) {
       int progress = 0;
       try {
         azure2::SolveAtOneEnergy(theCNuc, configure, results, units.data() + start, n - start,
-                                 task.tGroups.data() + start, &progress);
+                                 tasks.tGroups.data() + task.begin + start, &progress);
         return;
       } catch (const std::exception &e) {
-        taskFailures[k].push_back({task.owners[start + progress], e.what()});
+        taskFailures[k].push_back({tasks.owners[task.begin + start + progress], e.what()});
       } catch (...) {
-        taskFailures[k].push_back({task.owners[start + progress], "unknown exception."});
+        taskFailures[k].push_back({tasks.owners[task.begin + start + progress], "unknown exception."});
       }
       start += progress + 1;
     }
@@ -292,7 +297,8 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
         [&](int k, std::vector<std::pair<std::size_t, std::size_t>> &ranges) {
           if (k < numTasks) {
             runEnergyTask(k);
-            for (azure2::UnitRef u : tasks[k].units) azure2::CalculationPlan::AddRecordRange(units_[u], ranges);
+            for (int i = 0; i < tasks[k].size; i++)
+              azure2::CalculationPlan::AddRecordRange(units_[tasks.units[tasks[k].begin + i]], ranges);
             if (k == numTasks - 1) collectFailures();
           } else {
             // A fold writes its points' records; it swaps values into its sub-points' slots and restores them.
