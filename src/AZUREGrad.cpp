@@ -57,12 +57,12 @@ vector_matrix_r BuildShiftDerivTable(CNuc *compound, const Config &configure) {
         double resonanceEnergy = levelEnergy - (pair->GetSepE() + pair->GetExE());
         double dS;
         if (resonanceEnergy < 0.0) {
-          ShftFunc theShiftFunction(pair);
+          ShftFunc theShiftFunction(pair, channel->GetRadius());
           dS = theShiftFunction.EnergyDerivative(l, levelEnergy);
         } else {
           CoulFunc theCoulombFunction(pair,
                                       !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-          double radius = pair->GetChRad();
+          double radius = channel->GetRadius();
           dS = theCoulombFunction.PEShift_dE(l, radius, resonanceEnergy);
         }
         tab[j - 1][la - 1][ch - 1] = dS;

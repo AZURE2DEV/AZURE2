@@ -184,7 +184,8 @@ int CNuc::GetPairNumFromKey(int key) {
  * input files.  Returns -1 if the files could not be read, and 0 if the files were read successfully.
  */
 
-int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
+int CNuc::Fill(const Config &configure, const std::map<int, double> &radii,
+               const std::vector<ChannelRadiusOverride> &channelRadii) {
   transformedIn_ = false;
   if (configure.relativistic && configure.useHybridMethod) {
     // The hybrid model solves a Schrodinger equation with a nuclear potential inside the channel
@@ -295,10 +296,8 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
           if (this->GetJGroup(JGroupNum)->GetChannel(ChannelNum)->GetL() > maxLValue &&
               this->GetJGroup(JGroupNum)->GetChannel(ChannelNum)->GetRadType() == 'P')
             maxLValue = this->GetJGroup(JGroupNum)->GetChannel(ChannelNum)->GetL();
-
-          // Calculate and set Wigner Limit for the newly created channel
-          PPair *channelPair = this->GetPair(PairNum);
-          this->GetJGroup(JGroupNum)->GetChannel(ChannelNum)->SetWignerLimit(channelPair->GetRedMass(), channelPair->GetChRad());
+          // The channel's radius and Wigner limit are set after the parse loop (SetChannelRadius), once the
+          // <channelRadii> block and the API's overrides are known.
         }
         // A line belongs to a level of its J-group that carries the same level ID within 1 keV, or failing that
         // to one at the identical energy.  Until 2026-10-24 any level within 1 keV was taken (JGroup::IsLevel),
@@ -389,20 +388,25 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
                           << this->NumPairs() << "." << std::endl;
       return -1;
     }
-    PPair *changedPair = this->GetPair(it->first);
-    changedPair->SetChRad(it->second);
-    // The Wigner limits above were computed inside the parse loop, i.e. with
-    // the radius as written in the .azr.  Redo them for the overridden pair,
-    // or every theta^2 reported after a radius change is against the old limit.
-    for (int j = 1; j <= this->NumJGroups(); j++) {
-      for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
-        AChannel *theChannel = this->GetJGroup(j)->GetChannel(ch);
-        if (theChannel->GetPairNum() == it->first)
-          theChannel->SetWignerLimit(changedPair->GetRedMass(),
-                                     changedPair->GetChRad());
-      }
-    }
+    this->GetPair(it->first)->SetChRad(it->second);
   }
+  // Per-channel radii: the file's <channelRadii> block, then the API's SetChannelRadius overrides (2026-11-10).
+  if (this->ReadChannelRadii(configure) == -1) return -1;
+  for (const ChannelRadiusOverride &o : channelRadii) {
+    if (o.pair < 1 || o.pair > this->NumPairs() || this->GetPair(o.pair)->GetPType() != 0 || o.l < 0 ||
+        !(o.radius > 0.0)) {
+      configure.outStream << "ERROR: channel-radius override for pair " << o.pair << ", l = " << o.l << ", radius "
+                          << o.radius << " fm: the pair must be a particle pair of the model (1-" << this->NumPairs()
+                          << "), l >= 0 and the radius positive." << std::endl;
+      return -1;
+    }
+    this->GetPair(o.pair)->SetChannelRadius(o.l, o.s, o.J, o.radius);
+  }
+  // Every channel's radius and Wigner limit, from its pair: after all overrides, so a rebuild with a changed
+  // radius reports every theta^2 against the limit at the radius actually used.
+  for (int j = 1; j <= this->NumJGroups(); j++)
+    for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++)
+      this->SetChannelRadius(this->GetJGroup(j), this->GetJGroup(j)->GetChannel(ch));
 
   this->SetMaxLValue(maxLValue);
   if (configure.includeAllJPi) {
@@ -413,6 +417,7 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
   if (this->CheckIdenticalChannels(configure) == -1) return -1;
   if ((configure.paramMask & Config::USE_EXTERNAL_CAPTURE) && this->NumJGroups() > 0 && this->NumPairs() > 0)
     if (this->ParseExternalCapture(configure, ecPairs) == -1) return -1;
+  if (this->CheckChannelRadii(configure) == -1) return -1;
 
   if (this->NumNuclei() > 1)
     for (int j = 1; j <= this->NumJGroups(); j++) this->GetJGroup(j)->SetNucleusLabelled(true);
@@ -422,6 +427,222 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
   // right after the pairs are known, before any data file is read (a project whose data fail still gets it)
   this->CheckMassSeparationConsistency(configure);
 
+  return 0;
+}
+
+/*!
+ * The optional <channelRadii> block (2026-11-10): a radius of its own for some channels of a particle pair.
+ * One line per entry,
+ *   <pair key> <l> <radius in fm> [s=<s>] [J=<J>]
+ * s and J (decimal or n/2) narrow the entry to one channel spin and/or one total spin; without them it applies to
+ * every channel of that pair and l.  The most specific entry wins (l+s+J > l+J > l+s > l); a channel matched by an
+ * l+s and an l+J entry but no l+s+J one is refused (CheckChannelRadii).  '#' starts a comment.  Without the block
+ * every channel takes its pair's radius (column 28), as before.
+ */
+
+namespace {
+// "1.5", "3/2" -> 1.5; false on anything else or a value that is not a non-negative multiple of 1/2.
+bool ParseHalfInteger(const std::string &text, double &value) {
+  std::string t = text;
+  double v = 0.0;
+  size_t slash = t.find('/');
+  try {
+    size_t used = 0;
+    if (slash != std::string::npos) {
+      const double num = std::stod(t.substr(0, slash), &used);
+      if (used != slash) return false;
+      size_t usedDen = 0;
+      const double den = std::stod(t.substr(slash + 1), &usedDen);
+      if (usedDen != t.size() - slash - 1 || den == 0.0) return false;
+      v = num / den;
+    } else {
+      v = std::stod(t, &used);
+      if (used != t.size()) return false;
+    }
+  } catch (...) {
+    return false;
+  }
+  if (v < 0.0 || fabs(2.0 * v - std::round(2.0 * v)) > 1.0e-9) return false;
+  value = 0.5 * std::round(2.0 * v);
+  return true;
+}
+}  // namespace
+
+int CNuc::ReadChannelRadii(const Config &configure) {
+  std::unique_ptr<std::istream> inStream = InputFiles::Open(configure.configfile, configure.cacheInputFiles);
+  std::istream &in = *inStream;
+  if (!in) return -1;
+  std::string line = "";
+  while (line != "<channelRadii>" && !in.eof()) getline(in, line);
+  if (line != "<channelRadii>") return 0;
+  std::set<std::tuple<int, int, int, int>> seen;  // (pair number, l, 2s or -1, 2J or -1)
+  bool closed = false;
+  while (getline(in, line)) {
+    if (line == "</channelRadii>") {
+      closed = true;
+      break;
+    }
+    std::string entry = line;
+    size_t hash = entry.find('#');
+    if (hash != std::string::npos) entry = entry.substr(0, hash);
+    if (entry.find_first_not_of(" \t\r") == std::string::npos) continue;
+    if (entry[entry.find_first_not_of(" \t\r")] == '<') break;  // the next block: unterminated, reported below
+    std::istringstream stm(entry);
+    int key, l;
+    double radius;
+    const std::string usage = "\" is not \"<pair key> <l> <radius in fm> [s=<s>] [J=<J>]\".";
+    if (!(stm >> key >> l >> radius)) {
+      configure.outStream << "ERROR: <channelRadii> line \"" << line << usage << std::endl;
+      return -1;
+    }
+    double s = -1.0, J = -1.0;
+    std::string token;
+    while (stm >> token) {
+      double v;
+      if (token.size() > 2 && token.compare(0, 2, "s=") == 0 && s < 0.0 && ParseHalfInteger(token.substr(2), v)) {
+        s = v;
+      } else if (token.size() > 2 && token.compare(0, 2, "J=") == 0 && J < 0.0 && ParseHalfInteger(token.substr(2), v)) {
+        J = v;
+      } else {
+        configure.outStream << "ERROR: <channelRadii> line \"" << line << usage << "  \"" << token
+                            << "\" is not s=<s> or J=<J> with a non-negative multiple of 1/2 (each at most once)." << std::endl;
+        return -1;
+      }
+    }
+    const int pairNum = this->GetPairNumFromKey(key);
+    if (!pairNum) {
+      configure.outStream << "ERROR: <channelRadii> line \"" << line << "\" names pair key " << key
+                          << ", which no active <levels> line has." << std::endl;
+      return -1;
+    }
+    if (this->GetPair(pairNum)->GetPType() != 0) {
+      configure.outStream << "ERROR: <channelRadii> line \"" << line << "\" names pair " << key << ", a "
+                          << (this->GetPair(pairNum)->GetPType() == 10 ? "gamma" : "beta")
+                          << " pair; only particle pairs have channel radii." << std::endl;
+      return -1;
+    }
+    if (l < 0 || !(radius > 0.0)) {
+      configure.outStream << "ERROR: <channelRadii> line \"" << line << "\": l must be >= 0 and the radius positive."
+                          << std::endl;
+      return -1;
+    }
+    std::tuple<int, int, int, int> id(pairNum, l, s < 0.0 ? -1 : (int)std::lround(2.0 * s),
+                                      J < 0.0 ? -1 : (int)std::lround(2.0 * J));
+    if (!seen.insert(id).second) {
+      configure.outStream << "ERROR: <channelRadii> line \"" << line << "\" repeats an earlier line's pair, l"
+                          << (s < 0.0 ? "" : ", s") << (J < 0.0 ? "" : ", J") << "." << std::endl;
+      return -1;
+    }
+    this->GetPair(pairNum)->SetChannelRadius(l, s, J, radius);
+  }
+  if (!closed) {
+    configure.outStream << "ERROR: <channelRadii> has no </channelRadii> (before \"" << line << "\")." << std::endl;
+    return -1;
+  }
+  return 0;
+}
+
+void CNuc::SetChannelRadius(JGroup *group, AChannel *ch) {
+  PPair *pair = this->GetPair(ch->GetPairNum());
+  ch->SetRadius(pair->GetChRad(ch->GetL(), ch->GetS(), group->GetJ()), pair->GetRedMass());
+}
+
+namespace {
+// Can a photon of multipolarity multL and type radType connect particle channel `initial` (any J-group) to
+// particle channel `finalCh` of a level with spin finalJ?  The coupling rule of the external-capture pathways
+// (SortPathways' ECMGroups and CalcExternalWidth): the spin-conserving orbital transition, or for M1 the
+// spin-flip one.
+bool ECChannelsCouple(const AChannel *initial, const AChannel *finalCh, double finalJ, int multL, char radType) {
+  const int li = initial->GetL(), lf = finalCh->GetL();
+  const double si = initial->GetS(), sf = finalCh->GetS();
+  if (abs(li - multL) <= lf && lf <= li + multL && fabs(si - lf) <= finalJ && finalJ <= si + lf && si == sf) return true;
+  return radType == 'M' && fabs(si - multL) <= sf && sf <= si + multL && fabs(li - sf) <= finalJ &&
+         finalJ <= li + sf && li == lf;
+}
+}  // namespace
+
+int CNuc::CheckChannelRadii(const Config &configure) {
+  bool anyEntries = false;
+  for (int p = 1; p <= this->NumPairs(); p++)
+    if (!this->GetPair(p)->GetChannelRadii().empty()) anyEntries = true;
+  if (!anyEntries) return 0;
+  std::string pfx = "ERROR: <channelRadii>";
+  // 1. equal claims
+  for (int j = 1; j <= this->NumJGroups(); j++) {
+    JGroup *g = this->GetJGroup(j);
+    for (int c = 1; c <= g->NumChannels(); c++) {
+      AChannel *ch = g->GetChannel(c);
+      if (ch->GetRadType() != 'P') continue;
+      PPair *pair = this->GetPair(ch->GetPairNum());
+      if (pair->ChannelRadiusAmbiguous(ch->GetL(), ch->GetS(), g->GetJ())) {
+        configure.outStream << pfx << ": channel (pair " << pair->GetPairKey() << ", l = " << ch->GetL() << ", s = "
+                            << ch->GetS() << ", J = " << g->GetJ() << (g->GetPi() < 0 ? "-" : "+")
+                            << ") matches one line naming s and another naming J; give it a line naming l, s and J."
+                            << std::endl;
+        return -1;
+      }
+    }
+  }
+  // 2. external capture: initial and final channels of every transition share one radius (DeBoer 2026-11-10:
+  //    with different radii the start of the external region is not defined; refused until that is settled).
+  for (int jf = 1; jf <= this->NumJGroups(); jf++) {
+    JGroup *finalGroup = this->GetJGroup(jf);
+    for (int lf = 1; lf <= finalGroup->NumLevels(); lf++) {
+      ALevel *finalLevel = finalGroup->GetLevel(lf);
+      if (!finalLevel->IsECLevel()) continue;
+      for (int cf = 1; cf <= finalGroup->NumChannels(); cf++) {
+        AChannel *finalCh = finalGroup->GetChannel(cf);
+        if (finalCh->GetRadType() != 'P') continue;
+        for (int ji = 1; ji <= this->NumJGroups(); ji++) {
+          JGroup *g = this->GetJGroup(ji);
+          for (int multL = 1; multL <= 2; multL++) {
+            if (fabs(g->GetJ() - multL) > finalGroup->GetJ() || finalGroup->GetJ() > g->GetJ() + multL) continue;
+            const char radType = (g->GetPi() * finalGroup->GetPi() == (multL % 2 == 0 ? 1 : -1)) ? 'E' : 'M';
+            const unsigned char mask = finalLevel->GetECMultMask();
+            if (!((radType == 'E' && multL == 1 && (mask & isE1)) || (radType == 'M' && multL == 1 && (mask & isM1)) ||
+                  (radType == 'E' && multL == 2 && (mask & isE2)))) continue;
+            for (int ci = 1; ci <= g->NumChannels(); ci++) {
+              AChannel *initial = g->GetChannel(ci);
+              if (initial->GetRadType() != 'P' || initial->GetPairNum() != finalCh->GetPairNum()) continue;
+              if (!ECChannelsCouple(initial, finalCh, finalGroup->GetJ(), multL, radType)) continue;
+              if (fabs(initial->GetRadius() - finalCh->GetRadius()) <= 1.0e-12) continue;
+              configure.outStream << pfx << ": external capture into the " << finalGroup->GetJ()
+                                  << (finalGroup->GetPi() < 0 ? "-" : "+") << " level at " << finalLevel->GetE()
+                                  << " MeV connects channel (pair " << this->GetPair(initial->GetPairNum())->GetPairKey()
+                                  << ", l = " << initial->GetL() << ", s = " << initial->GetS() << ", J = " << g->GetJ()
+                                  << (g->GetPi() < 0 ? "-" : "+") << ") at a = " << initial->GetRadius()
+                                  << " fm with its final channel (l = " << finalCh->GetL() << ", s = " << finalCh->GetS()
+                                  << ") at a = " << finalCh->GetRadius() << " fm by " << radType << multL
+                                  << ".  External capture needs the initial and final channels of a transition at one"
+                                  << " radius (where the external region starts is otherwise not defined): give them"
+                                  << " the same radius, or switch external capture off." << std::endl;
+              return -1;
+            }
+          }
+        }
+      }
+    }
+  }
+  // 3. lines that match nothing
+  for (int p = 1; p <= this->NumPairs(); p++) {
+    PPair *pair = this->GetPair(p);
+    for (const PPair::ChannelRadius &e : pair->GetChannelRadii()) {
+      bool used = false;
+      for (int j = 1; j <= this->NumJGroups() && !used; j++) {
+        JGroup *g = this->GetJGroup(j);
+        for (int c = 1; c <= g->NumChannels() && !used; c++) {
+          AChannel *ch = g->GetChannel(c);
+          used = ch->GetPairNum() == p && ch->GetL() == e.l && (e.s < 0.0 || fabs(e.s - ch->GetS()) < 1.0e-6) &&
+              (e.J < 0.0 || fabs(e.J - g->GetJ()) < 1.0e-6);
+        }
+      }
+      if (!used)
+        configure.outStream << "WARNING: <channelRadii> entry for pair " << pair->GetPairKey() << ", l = " << e.l
+                            << (e.s < 0.0 ? "" : ", s = " + std::to_string(e.s).substr(0, 3))
+                            << (e.J < 0.0 ? "" : ", J = " + std::to_string(e.J).substr(0, 3))
+                            << " matches no channel of the model; it has no effect." << std::endl;
+    }
+  }
   return 0;
 }
 
@@ -636,7 +857,7 @@ int CNuc::AddHardSphereGroups(const Config &configure, int maxL) {
                 AChannel newChannel(cL, cS, ir, 'P');
                 if (jg->IsChannel(newChannel)) continue;
                 jg->AddChannel(newChannel);
-                jg->GetChannel(jg->NumChannels())->SetWignerLimit(chPair->GetRedMass(), chPair->GetChRad());
+                this->SetChannelRadius(jg, jg->GetChannel(jg->NumChannels()));
               }
             }
           }
@@ -796,13 +1017,15 @@ int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPa
         double nfIntegralValue = 0.;
         double ecConvert = 0.;
         if (theFinalPair->GetPType() == 0) {
-          NFIntegral newNFIntegral(theFinalPair);
+          // the ANC <-> reduced width conversion and N_f integral are taken at the final channel's radius
+          const double finalRadius = this->GetJGroup(jGroupNum)->GetChannel(ch)->GetRadius();
+          NFIntegral newNFIntegral(theFinalPair, finalRadius);
           nfIntegralValue = newNFIntegral(this->GetJGroup(jGroupNum)->GetChannel(ch)->GetL(), exitPair->GetHeavyExE());
           WhitFunc newWhitFunc(theFinalPair);
           double whitConv = newWhitFunc(this->GetJGroup(jGroupNum)->GetChannel(ch)->GetL(),
-                                        theFinalPair->GetChRad(),
+                                        finalRadius,
                                         fabs(exitPair->GetHeavyExE() - theFinalPair->GetSepE() - theFinalPair->GetExE()));
-          ecConvert = sqrt(2.0 * theFinalPair->GetRedMass() * theFinalPair->GetChRad() * uconv / pow(hbarc, 2.0)) / whitConv;
+          ecConvert = sqrt(2.0 * theFinalPair->GetRedMass() * finalRadius * uconv / pow(hbarc, 2.0)) / whitConv;
         }
         this->GetJGroup(jGroupNum)->GetLevel(levelNum)->AddNFIntegral(nfIntegralValue);
         this->GetJGroup(jGroupNum)->GetLevel(levelNum)->AddECConversionFactor(ecConvert);
@@ -832,18 +1055,19 @@ int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPa
                 AChannel newChannel(chL, chS, ir, 'P');
                 this->GetJGroup(jGroupNum)->AddChannel(newChannel);
 
-                // Calculate and set Wigner Limit for the newly created channel
+                // The channel's radius and Wigner limit
                 int newChannelNum = this->GetJGroup(jGroupNum)->NumChannels();
-                PPair *channelPair = this->GetPair(ir);
-                this->GetJGroup(jGroupNum)->GetChannel(newChannelNum)->SetWignerLimit(channelPair->GetRedMass(), channelPair->GetChRad());
+                AChannel *newCh = this->GetJGroup(jGroupNum)->GetChannel(newChannelNum);
+                this->SetChannelRadius(this->GetJGroup(jGroupNum), newCh);
+                const double finalRadius = newCh->GetRadius();
 
                 this->GetJGroup(jGroupNum)->GetLevel(levelNum)->AddGamma(0.1);
-                NFIntegral newNFIntegral(this->GetPair(ir));
+                NFIntegral newNFIntegral(this->GetPair(ir), finalRadius);
                 double nfIntegralValue = newNFIntegral(chL, exitPair->GetHeavyExE());
                 WhitFunc newWhitFunc(this->GetPair(ir));
-                double whitConv = newWhitFunc(chL, this->GetPair(ir)->GetChRad(),
+                double whitConv = newWhitFunc(chL, finalRadius,
                                               fabs(exitPair->GetHeavyExE() - this->GetPair(ir)->GetSepE() - this->GetPair(ir)->GetExE()));
-                double ecConvert = sqrt(2.0 * this->GetPair(ir)->GetRedMass() * this->GetPair(ir)->GetChRad() * uconv / pow(hbarc, 2.0)) / whitConv;
+                double ecConvert = sqrt(2.0 * this->GetPair(ir)->GetRedMass() * finalRadius * uconv / pow(hbarc, 2.0)) / whitConv;
                 this->GetJGroup(jGroupNum)->GetLevel(levelNum)->AddNFIntegral(nfIntegralValue);
                 this->GetJGroup(jGroupNum)->GetLevel(levelNum)->AddECConversionFactor(ecConvert);
               }
@@ -1078,7 +1302,15 @@ void CNuc::PrintNuc(const Config &configure) {
       // the light particle's excitation (32nd column) only when it is set, so older outputs are unchanged
       if (this->GetPair(i)->GetLightExE() != 0.)
         out << std::setw(30) << "Light Excitation [MeV]: " << this->GetPair(i)->GetLightExE() << std::endl;
-      out << std::setw(30) << "Channel Radius: " << this->GetPair(i)->GetChRad() << std::endl;
+      out << std::setw(30) << "Channel Radius: " << this->GetPair(i)->GetPairRadius() << std::endl;
+      // per-channel radii (<channelRadii>) only when there are any, so older outputs are unchanged
+      for (const PPair::ChannelRadius &e : this->GetPair(i)->GetChannelRadii()) {
+        std::ostringstream which;
+        which << "  l = " << e.l;
+        if (e.s >= 0.0) which << ", s = " << e.s;
+        if (e.J >= 0.0) which << ", J = " << e.J;
+        out << std::setw(30) << "Channel Radius" << which.str() << ": " << e.radius << std::endl;
+      }
       if (this->GetPair(i)->GetPType() == 0)
         out << std::setw(30) << "Pair Type: " << "Particle,Particle" << std::endl;
       else if (this->GetPair(i)->GetPType() == 10)
@@ -1143,7 +1375,7 @@ void CNuc::FillCompoundFromParamsPhysical(const vector_r &p) {
       for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
         level->SetGamma(ch, p[i]);
         if (ch <= level->NumNFIntegrals()) nFSum += 2.0 *
-            this->GetPair(this->GetJGroup(j)->GetChannel(ch)->GetPairNum())->GetChRad() *
+            this->GetJGroup(j)->GetChannel(ch)->GetRadius() *
             this->GetPair(this->GetJGroup(j)->GetChannel(ch)->GetPairNum())->GetRedMass() *
             uconv / pow(hbarc, 2.0) * pow(p[i], 2.0) * level->GetNFIntegral(ch);
         i++;
@@ -1217,7 +1449,7 @@ bool CNuc::TransformIn(const Config &configure) {
           for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
             AChannel *theChannel = theJGroup->GetChannel(ch);
             double localEnergy = theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetExE() - this->GetPair(theChannel->GetPairNum())->GetSepE();
-            double radius = this->GetPair(theChannel->GetPairNum())->GetChRad();
+            double radius = theChannel->GetRadius();
             if (theChannel->GetRadType() == 'P') {
               if (localEnergy > 0.0) {
                 if (theLevel->GetGamma(ch) < 0.0)
@@ -1239,7 +1471,7 @@ bool CNuc::TransformIn(const Config &configure) {
                 else
                   isNegative.push_back(false);
                 tempGammas.push_back(pow(theLevel->GetGamma(ch), 2.0));
-                ShftFunc theShiftFunction(this->GetPair(theChannel->GetPairNum()));
+                ShftFunc theShiftFunction(this->GetPair(theChannel->GetPairNum()), theChannel->GetRadius());
                 WhitFunc newWhitFunc(this->GetPair(theChannel->GetPairNum()));
                 double whitConv = newWhitFunc(theChannel->GetL(), radius, fabs(localEnergy));
                 double tempPene = this->GetPair(theChannel->GetPairNum())->GetRedMass() * radius * uconv /
@@ -1332,7 +1564,7 @@ bool CNuc::TransformIn(const Config &configure) {
             if (isNegative[ch - 1]) tempGammas[ch - 1] = -tempGammas[ch - 1];
             theLevel->SetGamma(ch, tempGammas[ch - 1]);
             if (ch <= theLevel->NumNFIntegrals()) nFSum += 2.0 *
-                this->GetPair(theChannel->GetPairNum())->GetChRad() *
+                theChannel->GetRadius() *
                 this->GetPair(theChannel->GetPairNum())->GetRedMass() *
                 uconv / pow(hbarc, 2.0) * pow(tempGammas[ch - 1], 2.0) * theLevel->GetNFIntegral(ch);
           }
@@ -1359,7 +1591,7 @@ bool CNuc::TransformIn(const Config &configure) {
           for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
             AChannel *theChannel = theJGroup->GetChannel(ch);
             double localEnergy = theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetExE() - this->GetPair(theChannel->GetPairNum())->GetSepE();
-            double radius = this->GetPair(theChannel->GetPairNum())->GetChRad();
+            double radius = theChannel->GetRadius();
             if (theChannel->GetRadType() == 'P') {
               if (localEnergy > 0.0) {
                 tempGammas[levelKeys.size() - 1].push_back(theLevel->GetGamma(ch));
@@ -1370,7 +1602,7 @@ bool CNuc::TransformIn(const Config &configure) {
                                                                                   localEnergy));
               } else {
                 tempGammas[levelKeys.size() - 1].push_back(theLevel->GetGamma(ch));
-                ShftFunc theShiftFunction(this->GetPair(theChannel->GetPairNum()));
+                ShftFunc theShiftFunction(this->GetPair(theChannel->GetPairNum()), theChannel->GetRadius());
                 shifts[levelKeys.size() - 1].push_back(theShiftFunction(theChannel->GetL(), theLevel->GetE()));
               }
             } else {
@@ -1428,9 +1660,9 @@ bool CNuc::TransformIn(const Config &configure) {
           const double localEnergy = theLevel->GetE() - thePair->GetExE() - thePair->GetSepE();
           if (localEnergy > 0.0) {
             CoulFunc theCoulombFunction(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-            return theCoulombFunction.PEShift_dE(theChannel->GetL(), thePair->GetChRad(), localEnergy);
+            return theCoulombFunction.PEShift_dE(theChannel->GetL(), theChannel->GetRadius(), localEnergy);
           }
-          ShftFunc theShiftFunction(thePair);
+          ShftFunc theShiftFunction(thePair, theChannel->GetRadius());
           return theShiftFunction.EnergyDerivative(theChannel->GetL(), theLevel->GetE());
         };
         for (int mu = 0; mu < tempEnergies.size(); mu++) {
@@ -1898,12 +2130,12 @@ void CNuc::CalcBoundaryConditions(const Config &configure) {
             double levelEnergy = firstLevel->GetE();
             double resonanceEnergy = levelEnergy - (thePair->GetSepE() + thePair->GetExE());
             if (resonanceEnergy < 0.0) {
-              ShftFunc theShiftFunction(thePair);
+              ShftFunc theShiftFunction(thePair, theChannel->GetRadius());
               theChannel->SetBoundaryCondition(theShiftFunction(lValue, levelEnergy));
             } else {
               CoulFunc theCoulombFunction(thePair,
                                           !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-              double radius = thePair->GetChRad();
+              double radius = theChannel->GetRadius();
               double boundary = theCoulombFunction.PEShift(lValue, radius, resonanceEnergy);
               theChannel->SetBoundaryCondition(boundary);
             }
@@ -2429,7 +2661,7 @@ void CNuc::FillCompoundFromParams(const vector_r &p) {
       for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
         level->SetFitGamma(ch, p[i]);
         if (ch <= level->NumNFIntegrals()) nFSum += 2.0 *
-            this->GetPair(this->GetJGroup(j)->GetChannel(ch)->GetPairNum())->GetChRad() *
+            this->GetJGroup(j)->GetChannel(ch)->GetRadius() *
             this->GetPair(this->GetJGroup(j)->GetChannel(ch)->GetPairNum())->GetRedMass() *
             uconv / pow(hbarc, 2.0) * pow(p[i], 2.0) * level->GetNFIntegral(ch);
         i++;
@@ -2523,12 +2755,12 @@ void CNuc::TransformOut(const Config &configure) {
               double localEnergy = tempE[thisLevel] - exitPair->GetSepE() - exitPair->GetExE();
               if (theChannel->GetRadType() == 'P') {
                 if (localEnergy < 0.0) {
-                  ShftFunc theShiftFunction(exitPair);
+                  ShftFunc theShiftFunction(exitPair, theChannel->GetRadius());
                   newBoundary = theShiftFunction(theChannel->GetL(), tempE[thisLevel]);
                 } else {
                   CoulFunc theCoulombFunction(exitPair,
                                               !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-                  double radius = exitPair->GetChRad();
+                  double radius = theChannel->GetRadius();
                   newBoundary = theCoulombFunction.PEShift(theChannel->GetL(), radius, localEnergy);
                 }
                 boundaryDiff.push_back(newBoundary - tempBoundary[ch - 1]);
@@ -2640,7 +2872,7 @@ void CNuc::TransformOut(const Config &configure) {
             AChannel *theChannel = this->GetJGroup(j)->GetChannel(ch);
             theLevel->SetTransformGamma(ch, tempGamma[thisLevel][ch - 1]);
             if (ch <= theLevel->NumNFIntegrals()) nFSum += 2.0 *
-                this->GetPair(theChannel->GetPairNum())->GetChRad() *
+                theChannel->GetRadius() *
                 this->GetPair(theChannel->GetPairNum())->GetRedMass() *
                 uconv / pow(hbarc, 2.0) * pow(tempGamma[thisLevel][ch - 1], 2.0) *
                 theLevel->GetNFIntegral(ch);
@@ -2676,20 +2908,20 @@ void CNuc::TransformOut(const Config &configure) {
         double localEnergy = theLevel->GetTransformE() - exitPair->GetSepE() - exitPair->GetExE();
         if (theChannel->GetRadType() == 'P') {
           if (localEnergy < 0.0) {
-            ShftFunc theShiftFunction(exitPair);
+            ShftFunc theShiftFunction(exitPair, theChannel->GetRadius());
             normSum += theShiftFunction.EnergyDerivative(theChannel->GetL(), theLevel->GetTransformE()) *
                 pow(theLevel->GetTransformGamma(ch), 2.0);
             WhitFunc newWhitFunc(exitPair);
             double whitConv = newWhitFunc(theChannel->GetL(),
-                                          exitPair->GetChRad(),
+                                          theChannel->GetRadius(),
                                           fabs(localEnergy));
-            double pene = exitPair->GetRedMass() * exitPair->GetChRad() * uconv /
+            double pene = exitPair->GetRedMass() * theChannel->GetRadius() * uconv /
                 pow(hbarc, 2.0) / pow(whitConv, 2.0);
             tempPene.push_back(pene);
           } else {
             CoulFunc theCoulombFunction(exitPair,
                                         !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-            double radius = exitPair->GetChRad();
+            double radius = theChannel->GetRadius();
             normSum += theCoulombFunction.PEShift_dE(theChannel->GetL(), radius, localEnergy) *
                 pow(theLevel->GetTransformGamma(ch), 2.0);
             double pene = theCoulombFunction.Penetrability(theChannel->GetL(), radius, localEnergy);
@@ -2794,7 +3026,7 @@ void CNuc::CheckRadiativeWidths(const Config &configure, const vector_r &params)
           if (theChannel->GetRadType() == 'P') {
             if (localEnergy <= 0.0) continue;
             CoulFunc theCoulombFunction(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-            double radius = thePair->GetChRad();
+            double radius = theChannel->GetRadius();
             particleWidth += 2.0 * pow(gamma, 2.0) *
                 theCoulombFunction.Penetrability(theChannel->GetL(), radius, localEnergy);
             normSum += theCoulombFunction.PEShift_dE(theChannel->GetL(), radius, localEnergy) *
@@ -3150,10 +3382,11 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
     ALevel *level;
     PPair *pair;
     int ch, l;
+    double radius;  ///< the channel's radius (<channelRadii>)
     double energy;
     bool first, second;
     double d1, d2;
-    int source;  ///< an earlier entry of the same level, pair and l (another channel spin), or -1
+    int source;  ///< an earlier entry of the same level, pair, l and radius (another channel spin), or -1
   };
   std::vector<Derivative> derivatives;
   struct Moved {
@@ -3197,12 +3430,12 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
               double resonanceEnergy = levelEnergy - (thePair->GetSepE() + thePair->GetExE());
               if (recompute) {
                 if (resonanceEnergy < 0.0) {
-                  ShftFunc theShiftFunction(thePair);
+                  ShftFunc theShiftFunction(thePair, theChannel->GetRadius());
                   theLevel->SetShiftFunction(ch, theShiftFunction(lValue, levelEnergy));
                 } else {
                   CoulFunc theCoulombFunction(thePair,
                                               !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-                  double radius = thePair->GetChRad();
+                  double radius = theChannel->GetRadius();
                   theLevel->SetShiftFunction(ch, theCoulombFunction.PEShift(lValue, radius, resonanceEnergy));
                 }
               }
@@ -3210,8 +3443,11 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
                 // Channels that differ only in the channel spin share the derivative.
                 int source = -1;
                 for (int k = firstOfLevel; k < (int)derivatives.size() && source < 0; k++)
-                  if (derivatives[k].source < 0 && derivatives[k].pair == thePair && derivatives[k].l == lValue) source = k;
-                derivatives.push_back({theLevel, thePair, ch, lValue, levelEnergy, first, second, 0.0, 0.0, source});
+                  if (derivatives[k].source < 0 && derivatives[k].pair == thePair && derivatives[k].l == lValue &&
+                      derivatives[k].radius == theChannel->GetRadius())
+                    source = k;
+                derivatives.push_back({theLevel, thePair, ch, lValue, theChannel->GetRadius(), levelEnergy, first, second,
+                                       0.0, 0.0, source});
               }
             } else {
               theLevel->SetShiftFunction(ch, theJGroup->GetLevel(1)->GetShiftFunction(1));
@@ -3241,7 +3477,7 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
       theCoulombFunction.SetUseGlobalCache(false);
       const ShiftDerivKey key{d.pair->GetZ(1), d.pair->GetZ(2), d.l, gslCoulomb, theCoulombFunction.hybridTag(),
                               theCoulombFunction.UsesTable(), Kinematics::Relativistic(), d.pair->GetRedMass(),
-                              d.pair->GetM(1) + d.pair->GetM(2), d.pair->GetChRad(), threshold, d.energy};
+                              d.pair->GetM(1) + d.pair->GetM(2), d.radius, threshold, d.energy};
       bool need1 = d.first, need2 = d.second;
       {
         std::lock_guard<std::mutex> lock(g_shiftDerivMutex);
@@ -3259,11 +3495,11 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
       }
       if (!need1 && !need2) continue;
       if (resonanceEnergy < 0.0) {
-        ShftFunc theShiftFunction(d.pair);
+        ShftFunc theShiftFunction(d.pair, d.radius);
         if (need1) d.d1 = theShiftFunction.EnergyDerivative(d.l, d.energy);
         if (need2) d.d2 = theShiftFunction.EnergySecondDerivative(d.l, d.energy);
       } else {
-        const double radius = d.pair->GetChRad();
+        const double radius = d.radius;
         if (need1) d.d1 = theCoulombFunction.PEShift_dE(d.l, radius, resonanceEnergy);
         if (need2) d.d2 = theCoulombFunction.PEShift_d2E(d.l, radius, resonanceEnergy);
       }
@@ -3318,7 +3554,7 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
       double nFSum = parkNorm;
       for (int ch = 1; ch <= theJGroup->NumChannels() && ch <= theLevel->NumNFIntegrals(); ch++) {
         PPair *thePair = this->GetPair(theJGroup->GetChannel(ch)->GetPairNum());
-        nFSum += 2.0 * thePair->GetChRad() * thePair->GetRedMass() * uconv / pow(hbarc, 2.0) *
+        nFSum += 2.0 * theJGroup->GetChannel(ch)->GetRadius() * thePair->GetRedMass() * uconv / pow(hbarc, 2.0) *
             pow(theLevel->GetFitGamma(ch), 2.0) * theLevel->GetNFIntegral(ch);
       }
       theLevel->SetSqrtNFFactor(1.0 / sqrt(nFSum));
@@ -3360,11 +3596,11 @@ bool CNuc::ConvertAmplitudeBasis(ROOT::Minuit2::MnUserParameters &p, int from, i
         double resonanceEnergy = levelEnergy - (thePair->GetSepE() + thePair->GetExE());
         double dS;
         if (resonanceEnergy < 0.0) {
-          ShftFunc theShiftFunction(thePair);
+          ShftFunc theShiftFunction(thePair, theChannel->GetRadius());
           dS = theShiftFunction.EnergyDerivative(theChannel->GetL(), levelEnergy);
         } else {
           CoulFunc theCoulombFunction(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-          dS = theCoulombFunction.PEShift_dE(theChannel->GetL(), thePair->GetChRad(), resonanceEnergy);
+          dS = theCoulombFunction.PEShift_dE(theChannel->GetL(), theChannel->GetRadius(), resonanceEnergy);
         }
         sum += gamma * gamma * dS;
       }
@@ -3493,7 +3729,8 @@ complex CNuc::CalcExternalWidth(JGroup *theJGroup, ALevel *theLevel,
                        theChannel->GetRadType() == 'M')) {
                     PPair *theFinalPair = this->GetPair(finalChannel->GetPairNum());
 
-                    ECIntegral theECIntegral(theFinalPair, configure);
+                    // initial and final channel share the radius (CheckChannelRadii refuses otherwise)
+                    ECIntegral theECIntegral(theFinalPair, finalChannel->GetRadius(), configure);
                     complex integrals = theECIntegral(initialChannel->GetL(), finalChannel->GetL(),
                                                       initialChannel->GetS(), finalChannel->GetS(),
                                                       theJGroup->GetJ(), theFinalJGroup->GetJ(),

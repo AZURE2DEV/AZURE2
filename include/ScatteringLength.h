@@ -28,19 +28,21 @@ namespace ScatteringLength {
 /// Channels within this energy (MeV) of their threshold take the exact zero-energy limit.
 const double kThresholdTolerance = 1.0e-10;
 
-/// \f$x = (8Z_1Z_2e^2\mu a/\hbar^2)^{1/2}\f$ at the pair's channel radius (0 for a neutral pair).
-double CoulombX(const PPair *pair);
+/// \f$x = (8Z_1Z_2e^2\mu a/\hbar^2)^{1/2}\f$ at channel radius \p radius (0 for a neutral pair).
+double CoulombX(const PPair *pair, double radius);
 
 /// Shift function \f$S_l\f$ of the pair at zero channel energy: \f$-l - (x/2)K_{2l}(x)/K_{2l+1}(x)\f$,
 /// \f$-l\f$ for a neutral pair.
-double ZeroEnergyShift(const PPair *pair, int l);
+/// \p radius is the channel's (AChannel::GetRadius).
+double ZeroEnergyShift(const PPair *pair, double radius, int l);
 
-/// a0 = c1 M + c0 (fm), the coefficients of the closed formula for the pair.
+/// a0 = c1 M + c0 (fm), the coefficients of the closed formula for the pair, at the radius of the s-wave
+/// channel (ChannelRadius).
 struct Coefficients {
   double c1;
   double c0;
 };
-Coefficients FormulaCoefficients(const PPair *pair);
+Coefficients FormulaCoefficients(const PPair *pair, double radius);
 
 /// One s-wave channel spin of a particle pair.
 struct Channel {
@@ -55,6 +57,8 @@ struct Channel {
 
 /// Every allowed s-wave channel spin of a particle pair (identical pairs: s even only).
 std::vector<Channel> Channels(CNuc *compound, int pairKey);
+/// Radius of the s-wave channel (l = 0, s, J = s) of \p ch's pair: its own when a <channelRadii> line gives one.
+double ChannelRadius(CNuc *compound, const Channel &ch);
 
 /// Value of one channel: a0 (fm, complex if a channel is open at the threshold) and M.
 struct Value {

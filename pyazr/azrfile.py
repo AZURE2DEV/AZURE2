@@ -538,6 +538,71 @@ class PairMassCheck(NamedTuple):
         return ", ".join(parts)
 
 
+class ChannelRadiusEntry(NamedTuple):
+    """One line of the ``<channelRadii>`` block (AZURE2 dev 2026-11-10): channels
+    ``(pair, L)`` -- and, when given, only channel spin ``S`` and/or total spin
+    ``J`` -- take ``radius`` (fm) instead of their pair's radius."""
+    pair: int
+    L: int
+    radius: float
+    S: Optional[float] = None
+    J: Optional[float] = None
+
+    def matches(self, pair, L, S, J):
+        """Does this entry apply to channel (pair, L, S, J)?"""
+        return (self.pair == int(pair) and self.L == int(L)
+                and (self.S is None or abs(self.S - S) < 1e-6)
+                and (self.J is None or abs(self.J - J) < 1e-6))
+
+    @property
+    def rank(self):
+        """Precedence, as the engine has it: L+S+J 4 > L+J 3 > L+S 2 > L 1."""
+        return 1 + (self.S is not None) + 2 * (self.J is not None)
+
+    def line(self):
+        """The block line this entry is written as."""
+        out = f"{self.pair} {self.L} {_fmt(float(self.radius))}"
+        if self.S is not None:
+            out += f" s={_fmt_half(self.S)}"
+        if self.J is not None:
+            out += f" J={_fmt_half(self.J)}"
+        return out
+
+
+def _fmt_half(x):
+    """``0.5 -> "1/2"``, ``1.0 -> "1"``."""
+    twice = int(round(2 * float(x)))
+    return str(twice // 2) if twice % 2 == 0 else f"{twice}/2"
+
+
+def _parse_half(text):
+    """``"3/2"`` or ``"1.5"`` -> 1.5; ValueError unless a non-negative multiple of 1/2."""
+    if "/" in text:
+        num, den = text.split("/", 1)
+        v = float(num) / float(den)
+    else:
+        v = float(text)
+    if v < 0 or abs(2 * v - round(2 * v)) > 1e-9:
+        raise ValueError(f"{text!r} is not a non-negative multiple of 1/2")
+    return round(2 * v) / 2
+
+
+def _parse_channel_radius_line(line):
+    """A ``<channelRadii>`` line (comment stripped) as a ChannelRadiusEntry."""
+    t = line.split("#", 1)[0].split()
+    if len(t) < 3:
+        raise ValueError(f"<channelRadii> line {line!r} is not '<pair key> <l> <radius> [s=<s>] [J=<J>]'")
+    S = J = None
+    for tok in t[3:]:
+        if tok.startswith("s=") and S is None:
+            S = _parse_half(tok[2:])
+        elif tok.startswith("J=") and J is None:
+            J = _parse_half(tok[2:])
+        else:
+            raise ValueError(f"<channelRadii> line {line!r}: {tok!r} is not s=<s> or J=<J>")
+    return ChannelRadiusEntry(int(t[0]), int(t[1]), float(t[2]), S, J)
+
+
 class ScatteringLengthLine(NamedTuple):
     """One line of the ``<scatteringLengths>`` block: a measured s-wave
     scattering length (fm) of particle pair ``pair`` (its key) in channel spin
@@ -811,7 +876,7 @@ class AzrModel:
                     out[c.pair] = c.channel_radius
         return dict(sorted(out.items()))
 
-    def set_channel_radius(self, pair, radius):
+    def _set_pair_radius(self, pair, radius):
         """Set the channel radius (fm) of one particle pair, on every line.
 
         AZURE2 stores the radius per channel line, so it must be written to all
@@ -848,6 +913,118 @@ class AzrModel:
                 f"pair {pair} has no particle channel in this model "
                 f"(radii: {self.channel_radii()}).")
         return changed
+
+    # -- per-channel radii (<channelRadii>, AZURE2 dev 2026-11-10) -------------
+
+    def channel_radius_entries(self):
+        """The ``<channelRadii>`` block as a list of :class:`ChannelRadiusEntry`
+        (empty without the block).  :meth:`channel_radii` gives the pair radii;
+        these entries override them for single channels."""
+        return [_parse_channel_radius_line(ln) for ln in self._channel_radius_lines()]
+
+    def _channel_radius_lines(self):
+        lines = self._suffix.splitlines()
+        if "<channelRadii>" not in lines or "</channelRadii>" not in lines:
+            return []
+        a, b = lines.index("<channelRadii>"), lines.index("</channelRadii>")
+        return [ln for ln in lines[a + 1:b] if ln.split("#", 1)[0].strip()]
+
+    def _write_channel_radius_lines(self, new_lines):
+        lines = self._suffix.splitlines()
+        if "<channelRadii>" in lines and "</channelRadii>" in lines:
+            a, b = lines.index("<channelRadii>"), lines.index("</channelRadii>")
+            del lines[a:b + 1]
+            at = a
+        else:
+            at = lines.index("</levels>") + 1 if "</levels>" in lines else 0
+        if new_lines:
+            lines[at:at] = ["<channelRadii>"] + list(new_lines) + ["</channelRadii>"]
+        self._suffix = "\n".join(lines) + "\n"
+
+    def channel_radius_of(self, pair, L, S, J):
+        """The radius (fm) the engine gives channel ``(pair, L, S, J)``: the most
+        specific matching ``<channelRadii>`` entry, else the pair's radius."""
+        best = None
+        for e in self.channel_radius_entries():
+            if e.matches(pair, L, S, J) and (best is None or e.rank > best.rank):
+                best = e
+        if best is not None:
+            return best.radius
+        return self.channel_radii()[int(pair)]
+
+    def set_channel_radius(self, pair, radius, L=None, S=None, J=None):
+        """Set a channel radius (fm).
+
+        Without ``L`` it is the pair's radius, written on every line of the pair
+        (the number of lines changed is returned).  With ``L`` it gives the
+        pair's channels of that orbital angular momentum -- only channel spin
+        ``S`` and/or total spin ``J`` when those are given -- a radius of their
+        own in the ``<channelRadii>`` block (created after ``</levels>``; a line
+        for the same ``(pair, L, S, J)`` is replaced).  The engine takes the
+        most specific entry (L+S+J > L+J > L+S > L) and refuses a channel that
+        an S entry and a J entry match without an L+S+J one, and an external-
+        capture transition whose initial and final channels end up at different
+        radii.  Older engines (before dev 2026-11-10) ignore the block silently.
+
+        Everything said below about refitting holds for one channel's radius as
+        for the pair's.
+
+        The radius is the matching surface between the internal R-matrix region
+        and the external Coulomb solutions, so changing it changes the
+        penetrabilities, shift functions, boundary conditions, Wigner limits and
+        the lower limit of every external-capture integral. A reduced width
+        therefore *means* something different afterwards, and the level scheme
+        is no longer fitted -- **refit before reading anything off the result**.
+        Delete ``output/intEC.dat`` / ``output/intEC.extrap`` (or write the new
+        model into its own output directory) so the cached external-capture
+        integrals, which belong to the old radius, cannot be reused.
+
+        >>> mdl = AzrModel.from_file("7Be.azr")
+        >>> mdl.channel_radii()                 # {1: 4.24151, 2: 3.94396, 3: 3.94396}
+        >>> mdl.set_channel_radius(1, 5.0)      # 3He+alpha, every channel
+        >>> mdl.set_channel_radius(1, 4.5, L=1) # its l = 1 channels only
+        >>> path = mdl.write("a5.0.azr")
+        """
+        if L is None:
+            if S is not None or J is not None:
+                raise ValueError("S and J narrow an L entry: give L as well.")
+            return self._set_pair_radius(pair, radius)
+        radius = float(radius)
+        if not radius > 0:
+            raise ValueError(f"channel radius must be positive, got {radius}.")
+        pair, L = int(pair), int(L)
+        if L < 0:
+            raise ValueError(f"L must be >= 0, got {L}.")
+        if pair not in self.channel_radii():
+            raise KeyError(f"pair {pair} has no particle channel in this model "
+                           f"(radii: {self.channel_radii()}).")
+        entry = ChannelRadiusEntry(pair, L, radius,
+                                   None if S is None else _parse_half(str(S)),
+                                   None if J is None else _parse_half(str(J)))
+        out, replaced = [], False
+        for ln in self._channel_radius_lines():
+            e = _parse_channel_radius_line(ln)
+            if (e.pair, e.L, e.S, e.J) == (entry.pair, entry.L, entry.S, entry.J):
+                out.append(entry.line())
+                replaced = True
+            else:
+                out.append(ln)
+        if not replaced:
+            out.append(entry.line())
+        self._write_channel_radius_lines(out)
+        return entry
+
+    def remove_channel_radius(self, pair, L, S=None, J=None):
+        """Remove the ``<channelRadii>`` line for ``(pair, L, S, J)`` (the block
+        goes when it is empty); KeyError if there is none."""
+        key = (int(pair), int(L), None if S is None else _parse_half(str(S)),
+               None if J is None else _parse_half(str(J)))
+        kept = [ln for ln in self._channel_radius_lines()
+                if (lambda e: (e.pair, e.L, e.S, e.J))(_parse_channel_radius_line(ln)) != key]
+        if len(kept) == len(self._channel_radius_lines()):
+            raise KeyError(f"no <channelRadii> line for pair {key[0]}, L={key[1]}, S={key[2]}, J={key[3]}")
+        self._write_channel_radius_lines(kept)
+        return self
 
     # -- pair masses and separation energies (AME mass table) -----------------
 

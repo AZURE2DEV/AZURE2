@@ -1,8 +1,8 @@
-from .azure2 import azure2, ScatteringLength
+from .azure2 import azure2, ScatteringLength, ChannelRadius
 from .parameters import (Pair, PairSet, Parameter, ParameterSet, LevelKey,
                          NuclearPotential)
 from .scheme import LevelScheme, SchemeLevel, SchemeChannel
-from .azrfile import AzrModel, AzrLevel, AzrChannel, ScatteringLengthLine, PairMassCheck
+from .azrfile import AzrModel, AzrLevel, AzrChannel, ScatteringLengthLine, PairMassCheck, ChannelRadiusEntry
 from . import masses
 from .datasets import (Segment, SegmentSet, TestSegment, TestSegmentSet,
                        fitted_norms)
@@ -27,7 +27,7 @@ from .bands import (Band, load_covariance, rmatrix_columns, best_fit_params,
 from .priors import prior_from_fit, read_prior, write_prior, read_covariance_dat
 from .sampling import nuts, sample, NUTSResult, ess, split_rhat, AzurePosterior
 
-__all__ = ["azure2", "ScatteringLength", "ScatteringLengthLine",
+__all__ = ["azure2", "ScatteringLength", "ScatteringLengthLine", "ChannelRadius", "ChannelRadiusEntry",
            "angular_distribution",
            "Pair", "PairSet", "Parameter", "ParameterSet", "LevelKey",
            "NuclearPotential",

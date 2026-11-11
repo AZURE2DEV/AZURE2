@@ -131,10 +131,22 @@ class CNuc {
   void SetMaxLValue(int);
 
   // -- building -------------------------------------------------------------
+  /// A radius for one channel or a set of channels (l, and optionally s and J; negative = any) of the pair with
+  /// 1-based number \p pair: the API's SetChannelRadius.  Applied after the file's <channelRadii> block.
+  struct ChannelRadiusOverride {
+    int pair;
+    int l;
+    double s;
+    double J;
+    double radius;
+  };
   /// Build the whole object from the nuclear and external-capture input files.
-  /// Returns -1 if a file cannot be read. \p radii overrides channel radii, pair number (1-based) -> fm, as the
+  /// Returns -1 if a file cannot be read. \p radii overrides pair radii, pair number (1-based) -> fm, as the
   /// API's SetRadius does; it holds every override of the session, so a rebuild keeps them all.
-  int Fill(const Config &, const std::map<int, double> &radii = std::map<int, double>());
+  /// \p channelRadii does the same for the per-channel radii (SetChannelRadius); they win over the file's
+  /// <channelRadii> lines, and a pair radius override leaves every per-channel radius as it is.
+  int Fill(const Config &, const std::map<int, double> &radii = std::map<int, double>(),
+           const std::vector<ChannelRadiusOverride> &channelRadii = std::vector<ChannelRadiusOverride>());
   /// Adds a level-less J^pi group, with its particle channels, for every J^pi the particle pairs allow up to
   /// \p maxL that no active level provides. Such a group contributes hard-sphere scattering only.
   int AddHardSphereGroups(const Config &, int maxL);
@@ -242,6 +254,15 @@ class CNuc {
   /// Reads the optional <abundances> block of the project file into samples_.
   /// Returns -1 on a malformed line.
   int ReadAbundances(const Config &);
+  /// Reads the optional <channelRadii> block into the pairs (PPair::SetChannelRadius).  Returns -1 on a
+  /// malformed line, an unknown pair key, a gamma or beta pair, or a repeated (pair, l, s, J).
+  int ReadChannelRadii(const Config &);
+  /// Sets channel \p ch of group \p group to its radius, PPair::GetChRad(l, s, J), and its Wigner limit.
+  void SetChannelRadius(JGroup *group, AChannel *ch);
+  /// After the groups are complete: refuses a channel that two <channelRadii> lines match with equal claim
+  /// (one naming s, one naming J), refuses an external-capture transition whose initial and final channels have
+  /// different radii, and warns about a <channelRadii> line that matches no channel.
+  int CheckChannelRadii(const Config &);
   std::vector<PPair> pairs_;
   std::vector<JGroup> jgroups_;
   std::vector<CompoundNucleus> nuclei_;

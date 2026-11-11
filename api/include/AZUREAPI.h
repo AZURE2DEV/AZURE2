@@ -68,6 +68,17 @@ class AZUREAPI {
   bool SetRadius(int idx, double r);
   // The channel-radius overrides in force, pair number -> fm.
   const std::map<int, double> &RadiusOverrides() const { return radiusOverrides_; }
+  // Give channels (l, and optionally s and J; a negative value means any) of particle pair idx (1-based) a radius
+  // of their own, r fm, and rebuild, as SetRadius does.  It wins over the .azr's <channelRadii> line for the same
+  // (pair, l, s, J) and is kept, like SetRadius's, through every later rebuild; a later SetRadius of the pair
+  // leaves it in place.  Returns false (the instance is then unusable) if the rebuild failed, e.g. an external-
+  // capture transition whose initial and final channels would get different radii (2026-11-10).
+  bool SetChannelRadius(int idx, int l, double s, double J, double r);
+  /*!
+   * Every channel's radius: 8 doubles per channel of every J-group, in J-group and channel order,
+   *   [jgroup, channel, pair number, l, s, J, parity, radius (fm)].
+   */
+  vector_r GetChannelRadii() const;
   /*!
    * Rebuild the compound nucleus and the data from the .azr and re-initialize,
    * recomputing the external-capture integrals rather than reading back
@@ -445,13 +456,16 @@ class AZUREAPI {
 
 
  private:
-  /// Shared body of SetRadius and Rebuild: refill from the .azr with every radius override in \p radii.
-  bool RebuildImpl(const std::map<int, double> &radii);
+  /// Shared body of SetRadius and Rebuild: refill from the .azr with every radius override in \p radii and
+  /// every per-channel override in \p channelRadii.
+  bool RebuildImpl(const std::map<int, double> &radii, const std::vector<CNuc::ChannelRadiusOverride> &channelRadii);
   /// Read and match the prior parameter covariance onto names_ / fixed_ (data mode only) and hand it to the data
   /// object; false (ERROR printed) when the file is refused.
   bool SetUpPriorCovariance();
   /// Channel-radius overrides set through SetRadius, applied on every (re)build.
   std::map<int, double> radiusOverrides_;
+  /// Per-channel radius overrides set through SetChannelRadius, applied on every (re)build.
+  std::vector<CNuc::ChannelRadiusOverride> channelRadiusOverrides_;
 
 
   /*!

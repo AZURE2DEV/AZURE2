@@ -282,7 +282,7 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
 
   double sepEnergy = pair()->GetSepE() + pair()->GetExE();
   double outEnergy = inEnergy - sepEnergy;
-  double chanRad = pair()->GetChRad();
+  double chanRad = chanrad_;
   double redMass = pair()->GetRedMass();
 
   // Just above a charged-particle threshold the open-channel form fails: with eta >~ 110 the penetrability

@@ -47,6 +47,13 @@ add_test(NAME pyazr_radius_override
                  ${CMAKE_CURRENT_SOURCE_DIR}/radius_override_test.py)
 set_tests_properties(pyazr_radius_override PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# Per-channel radii (dev 2026-11-10): AzrModel's <channelRadii> block, the session's set_channel_radius(L=, S=, J=)
+# and channel_radius_table(), precedence, and the transform / level-scheme radii.
+add_test(NAME pyazr_channel_radii
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/channel_radii_test.py)
+set_tests_properties(pyazr_channel_radii PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # A session parses its .azr once: calculate_rwa / objective do not re-read the file per segment per
 # call (before 2026-11-03: 83 ms per call from NFS on the 3H+d model instead of 8 ms).
 add_test(NAME pyazr_azr_parse_cache

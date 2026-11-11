@@ -122,7 +122,7 @@ int AZUREAPI::Initialize() {
 
   // configure().outStream << "Filling Compound Nucleus..." << std::endl;
   // With the session's radius overrides: Initialize runs again on every mode switch.
-  if (compound()->Fill(configure(), radiusOverrides_) == -1) {
+  if (compound()->Fill(configure(), radiusOverrides_, channelRadiusOverrides_) == -1) {
     // configure().outStream << "Could not fill compound nucleus from file." << std::endl;
     return -1;
   } else if (compound()->NumPairs() == 0 || compound()->NumJGroups() == 0) {
@@ -843,9 +843,45 @@ bool AZUREAPI::SetRadius(int idx, double r) {
   // The new override joins the earlier ones; it is kept only if the rebuild worked.
   std::map<int, double> radii = radiusOverrides_;
   radii[idx] = r;
-  if (!RebuildImpl(radii)) return false;
+  if (!RebuildImpl(radii, channelRadiusOverrides_)) return false;
   radiusOverrides_ = radii;
   return true;
+}
+
+bool AZUREAPI::SetChannelRadius(int idx, int l, double s, double J, double r) {
+  std::vector<CNuc::ChannelRadiusOverride> overrides = channelRadiusOverrides_;
+  if (s < 0.0) s = -1.0;
+  if (J < 0.0) J = -1.0;
+  bool replaced = false;
+  for (CNuc::ChannelRadiusOverride &o : overrides)
+    if (o.pair == idx && o.l == l && fabs(o.s - s) < 1.0e-6 && fabs(o.J - J) < 1.0e-6) {
+      o.radius = r;
+      replaced = true;
+    }
+  if (!replaced) overrides.push_back(CNuc::ChannelRadiusOverride{idx, l, s, J, r});
+  if (!RebuildImpl(radiusOverrides_, overrides)) return false;
+  channelRadiusOverrides_ = overrides;
+  return true;
+}
+
+vector_r AZUREAPI::GetChannelRadii() const {
+  vector_r out;
+  if (!compound_) return out;
+  for (int j = 1; j <= compound_->NumJGroups(); ++j) {
+    JGroup *jg = compound_->GetJGroup(j);
+    for (int ch = 1; ch <= jg->NumChannels(); ++ch) {
+      AChannel *c = jg->GetChannel(ch);
+      out.push_back(j);
+      out.push_back(ch);
+      out.push_back(c->GetPairNum());
+      out.push_back(c->GetL());
+      out.push_back(c->GetS());
+      out.push_back(jg->GetJ());
+      out.push_back(jg->GetPi());
+      out.push_back(c->GetRadius());
+    }
+  }
+  return out;
 }
 
 bool AZUREAPI::WriteOutputFiles() {
@@ -866,13 +902,14 @@ bool AZUREAPI::WriteOutputFiles() {
 }
 
 bool AZUREAPI::Rebuild() {
-  return RebuildImpl(radiusOverrides_);
+  return RebuildImpl(radiusOverrides_, channelRadiusOverrides_);
 }
 
 // Shared body of SetRadius and Rebuild.  Every radius override of the session
 // goes to CNuc::Fill, so a rebuild for one reason (a potential change, another
 // pair's radius) does not undo an earlier SetRadius.
-bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
+bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii,
+                            const std::vector<CNuc::ChannelRadiusOverride> &channelRadii) {
   // The Coulomb memo is keyed on the channel radius (and the potential): what the old model put there is of no use
   // to the new one, and kept, it grew by one set of keys per new radius without bound (3H+d free-radius MCMC,
   // 2026-11-03).  Values are unaffected either way: the memo only stores exact results.
@@ -883,7 +920,7 @@ bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
   compound_ = new CNuc;
   data_ = new EData;
 
-  if (compound()->Fill(configure(), radii) == -1) return false;
+  if (compound()->Fill(configure(), radii, channelRadii) == -1) return false;
   if (compound()->NumPairs() == 0 || compound()->NumJGroups() == 0) return false;
 
   // Mirror the branch taken at startup: data mode reads the data segments,
@@ -1629,7 +1666,7 @@ vector_r AZUREAPI::GetPairsInfo() const {
     info.push_back(pair->GetM(2));
     info.push_back(pair->GetSepE());
     info.push_back(pair->GetExE());
-    info.push_back(pair->GetChRad());
+    info.push_back(pair->GetPairRadius());
     info.push_back(pair->GetI1I2Factor());
     // the compound nucleus the pair forms (PPair's pType rule), its abundance in the default sample
     info.push_back(pair->GetNucleusZ());
@@ -1669,7 +1706,8 @@ vector_r AZUREAPI::GetCoulombFunctions(const vector_r &request) const {
   if (!compound_ || !compound_->IsPairKey(pairKey)) return out;
   PPair *pair = compound_->GetPair(compound_->GetPairNumFromKey(pairKey));
   if (!pair) return out;
-  if (radius <= 0.0) radius = pair->GetChRad();  // the channel radius by default
+  // by default the radius of the pair's channels with this l (a <channelRadii> line naming l alone), else the pair's
+  if (radius <= 0.0) radius = pair->GetChRad(lValue, -1.0, -1.0);
 
   CoulFunc coul(pair, !!(configure().paramMask & Config::USE_GSL_COULOMB_FUNC));
 
@@ -1772,7 +1810,7 @@ vector_r AZUREAPI::GetECIntegrals(const vector_r &request) const {
           block.push_back(static_cast<double>(g->GetMult()));
           block.push_back(g->GetRadType() == 'E' ? 1.0 : 0.0);
 
-          ECIntegral theECIntegral(finalPair, configure());
+          ECIntegral theECIntegral(finalPair, finalChannel->GetRadius(), configure());
           double levelEnergy = ecLevel->GetE();
           for (int i = 0; i < nE; ++i) {
             double inEnergy = energies[i] + entrancePair->GetSepE() + entrancePair->GetExE();

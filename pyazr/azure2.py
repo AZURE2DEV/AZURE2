@@ -45,6 +45,18 @@ def _in_dir(path):
         os.chdir(previous)
 
 
+class ChannelRadius(NamedTuple):
+    """One channel's radius in the running model (:meth:`azure2.channel_radius_table`)."""
+    jgroup: int
+    channel: int
+    pair: int
+    L: int
+    S: float
+    J: float
+    parity: int
+    radius: float
+
+
 class ScatteringLength(NamedTuple):
     """The s-wave scattering length of one channel spin of a particle pair
     (:meth:`azure2.scattering_lengths`).  ``a0`` is complex when a lower channel
@@ -349,8 +361,21 @@ class azure2:
 
     # -- channel radius -------------------------------------------------------
 
-    def set_channel_radius(self, pair, radius):
-        """Change one particle pair's channel radius.
+    def set_channel_radius(self, pair, radius, L=None, S=None, J=None):
+        """Change one particle pair's channel radius, or (with ``L``) the radius
+        of some of its channels.
+
+        With ``L`` the pair's channels of that orbital angular momentum -- only
+        channel spin ``S`` and/or total spin ``J`` when given -- get ``radius``
+        of their own, as a ``<channelRadii>`` line of the ``.azr`` would give
+        them (AZURE2 dev 2026-11-10); it wins over the file's line for the same
+        ``(pair, L, S, J)`` and stays through later rebuilds, including a later
+        pair radius change.  The engine refuses (``RuntimeError``, session
+        unusable) a channel that an S entry and a J entry match without an
+        L+S+J one, and an external-capture transition whose initial and final
+        channels would have different radii.  Every matched channel's radius is
+        read back (:meth:`channel_radius_table`) and checked.  What follows
+        holds for the per-channel form as for the pair radius.
 
         ``pair`` is the 1-based :attr:`Pair.number`, ``radius`` is in fm.  This
         is not a light edit: the radius sets the matching surface, so AZURE2
@@ -387,6 +412,10 @@ class azure2:
                            f"(have {[p.number for p in self.pairs]}).")
         if not radius > 0:
             raise ValueError(f"channel radius must be positive, got {radius}.")
+        if L is not None:
+            return self._set_channel_radius_lsj(pair, float(radius), int(L), S, J)
+        if S is not None or J is not None:
+            raise ValueError("S and J narrow an L entry: give L as well.")
         if not self.sess.set_radius(pair, float(radius)):
             raise RuntimeError(
                 f"AZURE2 could not rebuild with pair {pair} at "
@@ -398,6 +427,49 @@ class azure2:
                 f"pair {pair}: asked for a channel radius of {radius} fm, the "
                 f"rebuilt model has {got} fm.")
         return got
+
+    def _set_channel_radius_lsj(self, pair, radius, L, S, J):
+        if L < 0:
+            raise ValueError(f"L must be >= 0, got {L}.")
+        if not hasattr(self.sess, "set_channel_radius"):
+            raise RuntimeError("this AZURE2 engine predates per-channel radii (dev 2026-11-10).")
+        s = -1.0 if S is None else float(S)
+        j = -1.0 if J is None else float(J)
+        if not self.sess.set_channel_radius(pair, L, s, j, radius):
+            raise RuntimeError(
+                f"AZURE2 could not rebuild with pair {pair}, L={L}"
+                f"{'' if S is None else f', S={S}'}{'' if J is None else f', J={J}'} at {radius} fm "
+                f"(see the engine's ERROR); the session is no longer usable.")
+        self.configure()
+        matched = [r for r in self.channel_radius_table()
+                   if r.pair == pair and r.L == L and (S is None or abs(r.S - s) < 1e-6)
+                   and (J is None or abs(r.J - j) < 1e-6)]
+        bad = [r for r in matched if abs(r.radius - radius) > 1e-9 * radius]
+        if bad:
+            raise RuntimeError(
+                f"pair {pair}, L={L}: asked for {radius} fm, the rebuilt model has "
+                f"{sorted({r.radius for r in bad})} fm on {len(bad)} channel(s) "
+                "(a more specific entry wins).")
+        return matched
+
+    def channel_radius_table(self):
+        """Every channel's radius in the running model, a list of
+        :class:`ChannelRadius` (jgroup, channel, pair, L, S, J, parity, radius)
+        in J-group and channel order.  Engines before dev 2026-11-10 have no
+        per-channel radii: every channel gets its pair's radius."""
+        if hasattr(self.sess, "channel_radii"):
+            a = np.asarray(self.sess.channel_radii(), dtype=float).reshape(-1, 8)
+            return [ChannelRadius(int(r[0]), int(r[1]), int(r[2]), int(r[3]), float(r[4]),
+                                  float(r[5]), int(r[6]), float(r[7])) for r in a]
+        radii = {p.number: p.channel_radius for p in self.pairs}
+        out, seen = [], set()
+        for p in self.parameters:
+            key = (p.jgroup, p.pair, p.L, p.S)
+            if p.kind == "width" and key not in seen:
+                seen.add(key)
+                out.append(ChannelRadius(p.jgroup, getattr(p, "channel", 0), p.pair, p.L, p.S,
+                                         p.J, p.parity, radii.get(p.pair, 0.0)))
+        return out
 
     # -- hybrid nuclear potential, per particle pair --------------------------
 

@@ -20,11 +20,11 @@ class CoulombTable;
 class ShftFunc {
  public:
   /*!
-   * The ShftFunc object is created with reference to a particle pair.
+   * The ShftFunc object is created with reference to a particle pair and the radius of the channel.
    */
-  ShftFunc(PPair *pPair) {
+  ShftFunc(PPair *pPair, double channelRadius) {
     totalSepE_ = pPair->GetSepE() + pPair->GetExE();
-    radius_ = (double)pPair->GetChRad();
+    radius_ = channelRadius;  // the channel's radius (AChannel::GetRadius), not necessarily the pair's
     neutral_ = (pPair->GetZ(1) * pPair->GetZ(2) == 0);
     zz_ = pPair->GetZ(1) * pPair->GetZ(2);
     redmass_ = pPair->GetRedMass();

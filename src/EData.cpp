@@ -2897,7 +2897,18 @@ std::string EData::ECSignature(CNuc *theCNuc, const Config &configure) {
       hash.Add("light excitation");
       hash.Add(pair->GetLightExE());
     }
-    hash.Add(pair->GetChRad());
+    hash.Add(pair->GetPairRadius());
+    // per-channel radii (<channelRadii>, 2026-11-10) only when there are any, so an older cache keeps its signature:
+    // the integrals start at the channel's radius, so a changed one must not reuse the cache
+    if (!pair->GetChannelRadii().empty()) {
+      hash.Add("channel radii");
+      for (const PPair::ChannelRadius &e : pair->GetChannelRadii()) {
+        hash.Add(e.l);
+        hash.Add(e.s);
+        hash.Add(e.J);
+        hash.Add(e.radius);
+      }
+    }
     // The hybrid potential bends the Coulomb functions of this pair, and so
     // both the entrance-channel phases and the final-state integrand.
     // (CoulFunc applies it when the global switch and the pair's own

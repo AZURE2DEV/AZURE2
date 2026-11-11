@@ -234,11 +234,61 @@ double PPair::GetSepE() const {
 }
 
 /*!
- * Returns the channel radius of the particle pair.
+ * Returns the default channel radius of the particle pair (column 28 of its <levels> lines).
  */
 
-double PPair::GetChRad() const {
+double PPair::GetPairRadius() const {
   return pair_ch_rad_;
+}
+
+namespace {
+bool SameSpin(double a, double b) { return fabs(a - b) < 1.0e-6; }
+// 0: does not match; otherwise 1 + 1 (s named) + 2 (J named): l alone 1, l+s 2, l+J 3, l+s+J 4.
+int MatchRank(const PPair::ChannelRadius &e, int l, double s, double J) {
+  if (e.l != l) return 0;
+  if (e.s >= 0.0 && !SameSpin(e.s, s)) return 0;
+  if (e.J >= 0.0 && !SameSpin(e.J, J)) return 0;
+  return 1 + (e.s >= 0.0 ? 1 : 0) + (e.J >= 0.0 ? 2 : 0);
+}
+}  // namespace
+
+void PPair::SetChannelRadius(int l, double s, double J, double radius) {
+  if (s < 0.0) s = -1.0;
+  if (J < 0.0) J = -1.0;
+  for (ChannelRadius &e : channel_radii_)
+    if (e.l == l && SameSpin(e.s, s) && SameSpin(e.J, J)) {
+      e.radius = radius;
+      return;
+    }
+  channel_radii_.push_back(ChannelRadius{l, s, J, radius});
+}
+
+double PPair::GetChRad(int l, double s, double J) const {
+  int best = 0;
+  double radius = pair_ch_rad_;
+  for (const ChannelRadius &e : channel_radii_) {
+    const int rank = MatchRank(e, l, s, J);
+    if (rank > best) {
+      best = rank;
+      radius = e.radius;
+    }
+  }
+  return radius;
+}
+
+bool PPair::ChannelRadiusAmbiguous(int l, double s, double J) const {
+  bool sOnly = false, jOnly = false;
+  for (const ChannelRadius &e : channel_radii_) {
+    const int rank = MatchRank(e, l, s, J);
+    if (rank == 4) return false;
+    if (rank == 2) sOnly = true;
+    if (rank == 3) jOnly = true;
+  }
+  return sOnly && jOnly;
+}
+
+const std::vector<PPair::ChannelRadius> &PPair::GetChannelRadii() const {
+  return channel_radii_;
 }
 
 /*!

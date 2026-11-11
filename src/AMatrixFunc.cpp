@@ -1263,7 +1263,7 @@ void AMatrixFunc::TBarAdjoint(EPoint *energyPoint, const TMatrixCotangent &bar, 
         int numD = parkFinal ? jgf->NumChannels() : numNF;
         for (int d = 1; d <= numD; d++) {
           PPair *pd = compound()->GetPair(jgf->GetChannel(d)->GetPairNum());
-          double Ad = (d <= numNF) ? 2.0 * pd->GetChRad() * pd->GetRedMass() * uconv / (hbarc * hbarc) * finalLevel->GetNFIntegral(d)
+          double Ad = (d <= numNF) ? 2.0 * jgf->GetChannel(d)->GetRadius() * pd->GetRedMass() * uconv / (hbarc * hbarc) * finalLevel->GetNFIntegral(d)
                                    : 0.0;
           if (parkFinal && jgf->GetChannel(d)->GetRadType() == 'P' && pd->GetPType() == 0)
             Ad -= finalLevel->GetShiftDerivative(d);

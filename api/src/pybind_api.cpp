@@ -260,6 +260,11 @@ class Session {
     ConfigScope guard(config_, &ecCache_, &potentials_);
     return api_->SetRadius(idx, radius);
   }
+  bool set_channel_radius(int idx, int l, double s, double J, double radius) {
+    ConfigScope guard(config_, &ecCache_, &potentials_);
+    return api_->SetChannelRadius(idx, l, s, J, radius);
+  }
+  py::array_t<double> channel_radii() const { return to_array(api_->GetChannelRadii()); }
 
   // -- hybrid nuclear potential, per particle pair ---------------------------
   //
@@ -632,6 +637,11 @@ PYBIND11_MODULE(_azure2, m) {
       .def("set_radius", &Session::set_radius, py::arg("pair"), py::arg("radius"),
            py::call_guard<py::gil_scoped_release>(),
            "Rebuild the model with one pair's channel radius changed (fm).")
+      .def("set_channel_radius", &Session::set_channel_radius, py::arg("pair"), py::arg("l"), py::arg("s"),
+           py::arg("J"), py::arg("radius"), py::call_guard<py::gil_scoped_release>(),
+           "Rebuild the model with channels (pair, l, s, J; s or J < 0: any) at their own radius (fm).")
+      .def("channel_radii", &Session::channel_radii,
+           "Every channel's radius: rows [jgroup, channel, pair, l, s, J, parity, radius].")
       .def("set_potential", &Session::set_potential, py::arg("pair"),
            py::arg("type"), py::arg("enabled"), py::arg("V0"), py::arg("R"),
            py::arg("a"), py::arg("r0"),

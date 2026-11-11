@@ -1349,13 +1349,13 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
             // Exactly at the channel's threshold (the entrance channel of a scattering length):
             // the E -> 0 limit, P = 0 and S_l(0) from the zero-energy Coulomb solutions, in
             // place of the Whittaker log-derivative at zero binding, which is ill-conditioned.
-            complex loElement(ScatteringLength::ZeroEnergyShift(thePair, lValue) - theChannel->GetBoundaryCondition(), 0.0);
+            complex loElement(ScatteringLength::ZeroEnergyShift(thePair, theChannel->GetRadius(), lValue) - theChannel->GetBoundaryCondition(), 0.0);
             this->AddLoElement(j, ch, loElement);
             this->AddSqrtPenetrability(j, ch, 0.0);
             this->AddExpCoulombPhase(j, ch, 1.0);
             this->AddExpHardSpherePhase(j, ch, 1.0);
           } else if (localEnergy < 0.0) {
-            ShftFunc theShiftFunction(thePair);
+            ShftFunc theShiftFunction(thePair, theChannel->GetRadius());
             double localShift = theShiftFunction(lValue, inEnergy);
             double boundary = theChannel->GetBoundaryCondition();
             complex loElement(localShift - boundary, 0.0);
@@ -1372,7 +1372,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
             //	    }
           } else {
             CoulFunc theCoulombFunction(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-            double radius = thePair->GetChRad();
+            double radius = theChannel->GetRadius();
             double localPene = theCoulombFunction.Penetrability(lValue, radius, localEnergy);
             double localShift = theCoulombFunction.PEShift(lValue, radius, localEnergy);
             double boundary = theChannel->GetBoundaryCondition();
@@ -1410,7 +1410,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
           this->AddLoElement(j, ch, loElement);
           IntegratedFermiFunc fermiFunc(thePair->GetZ(1));
           double endPointE = thePair->GetSepE() - inEnergy;
-          double sqrtPene = (1. + endPointE / 0.510998903 <= 1.) ? 0. : sqrt(fermiFunc(1. + endPointE / 0.510998903, exitPair->GetZ(1) + exitPair->GetZ(2), thePair->GetChRad()));
+          double sqrtPene = (1. + endPointE / 0.510998903 <= 1.) ? 0. : sqrt(fermiFunc(1. + endPointE / 0.510998903, exitPair->GetZ(1) + exitPair->GetZ(2), thePair->GetPairRadius()));
           this->AddSqrtPenetrability(j, ch, sqrtPene);
           this->AddExpCoulombPhase(j, ch, 1.0);
           this->AddExpHardSpherePhase(j, ch, 1.0);
@@ -1731,7 +1731,9 @@ static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, PPair 
   for (int ll = 1; ll <= theECMGroup->GetL(); ll++)
     expCP *= complex((double)ll / sqrt(pow((double)ll, 2.0) + pow(eta, 2.0)),
                      eta / sqrt(pow((double)ll, 2.0) + pow(eta, 2.0)));
-  complex expHSP = theCoulombFunction.HardSpherePhase(theECMGroup->GetL(), entrancePair->GetChRad(), cmEnergy);
+  // the entrance channel's own hard-sphere phase: its radius may differ from the pair's (<channelRadii>)
+  complex expHSP = theCoulombFunction.HardSpherePhase(
+      theECMGroup->GetL(), entrancePair->GetChRad(theECMGroup->GetL(), theKGroup->GetS(), theECMGroup->GetJ()), cmEnergy);
 
   double sqrtGammaPene = pow((inEnergy - levelEnergy) / hbarc, theECMGroup->GetMult() + 0.5);
 
@@ -1750,13 +1752,14 @@ static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, PPair 
 
   complex integrals;
   if (configure.useECTable) {
-    integrals = ECTable::Integral(theFinalPair, configure, theInitialLValue, theFinalChannel->GetL(),
+    // initial and final channel share the radius (CNuc::CheckChannelRadii refuses otherwise)
+    integrals = ECTable::Integral(theFinalPair, theFinalChannel->GetRadius(), configure, theInitialLValue, theFinalChannel->GetL(),
                                   theInitialSValue, theFinalChannel->GetS(),
                                   theECMGroup->GetJ(), theCNuc->GetJGroup(j)->GetJ(),
                                   theECMGroup->GetMult(), theECMGroup->GetRadType(),
                                   inEnergy, levelEnergy, theECMGroup->IsChannelCapture());
   } else {
-    ECIntegral theECIntegral(theFinalPair, configure);
+    ECIntegral theECIntegral(theFinalPair, theFinalChannel->GetRadius(), configure);
     integrals = theECIntegral(theInitialLValue, theFinalChannel->GetL(),
                               theInitialSValue, theFinalChannel->GetS(),
                               theECMGroup->GetJ(), theCNuc->GetJGroup(j)->GetJ(),

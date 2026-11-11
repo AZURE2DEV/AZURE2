@@ -46,7 +46,8 @@ class ECIntegral {
    * The PPair object is used to create new instances of the CoulFunc and
    * WhitFunc objects.
    */
-  ECIntegral(PPair *pPair, const Config &configure) {
+  ECIntegral(PPair *pPair, double channelRadius, const Config &configure) {
+    chanrad_ = channelRadius;
     params_.coulFunc = std::make_unique<CoulFunc>(pPair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
     // Disable the global Coulomb cache ONLY for the reaction rate.  There the
     // energies never recur, so the radial-integral lookups (keyed on radius,
@@ -97,10 +98,14 @@ class ECIntegral {
   WhitFunc *whitfunction() const { return params_.whitFunc.get(); };
   /// The pair this integral belongs to.
   PPair *pair() const { return pair_; };
+  /// The channel radius the integral starts at (fm): the transition's channels' radius, which since
+  /// 2026-11-10 can differ from the pair's (<channelRadii>).
+  double chanRad() const { return chanrad_; };
   double FW() const { return FW_; };
   double GW() const { return GW_; };
   Params params_;
   PPair *pair_;
+  double chanrad_;
   const Config *configure_;
   double FW_;
   double GW_;

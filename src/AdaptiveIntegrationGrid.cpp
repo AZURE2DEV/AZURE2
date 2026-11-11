@@ -469,7 +469,7 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
         if (localEnergy <= 0.0) continue;  // sub-threshold channel
         double gamma = std::abs(level->GetGamma(ch));
         if (gamma <= 0.0) continue;
-        double radius = chPair->GetChRad();
+        double radius = channel->GetRadius();
         CoulFunc coulFunc(chPair, false);
         double pene = coulFunc.Penetrability(channel->GetL(), radius, localEnergy);
         double dSdE = coulFunc.PEShift_dE(channel->GetL(), radius, localEnergy);

@@ -16,11 +16,12 @@
 class NFIntegral {
  public:
   /*!
-   * The NFIntegral object is created with reference to a PPair object. A WhitFunc object is also created.
+   * The NFIntegral object is created with reference to a PPair object and the radius of the channel it
+   * integrates from. A WhitFunc object is also created.
    */
-  NFIntegral(PPair *pPair) {
+  NFIntegral(PPair *pPair, double channelRadius) {
     params_.whitFunc = std::make_unique<WhitFunc>(pPair);
-    chanrad_ = pPair->GetChRad();
+    chanrad_ = channelRadius;  // the final channel's radius (<channelRadii>), not necessarily the pair's
     total_sep_e_ = pPair->GetSepE() + pPair->GetExE();
   };
   /*!
@@ -34,7 +35,7 @@ class NFIntegral {
    */
   double operator()(int lFinal, double levelEnergy);
   /*!
-   * Returns the channel radius of the particle pair.
+   * Returns the channel radius the integral starts at.
    */
   double chanRad() const { return chanrad_; };
   /*!
