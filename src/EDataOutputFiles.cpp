@@ -24,6 +24,19 @@
  * nucleus (azure2::EvaluateModelPoint).  Same frame as the
  * AZUREOut file (kinflag.dat), one line per point.
  */
+namespace {
+/// The cross-section and S-factor columns of an AZUREOut row from a model or data value v: sigma (b) and S = sigma E
+/// exp(2 pi eta) (MeV b; the point's factor).  For a data set or extrapolation of the S factor, v = c S (c the scale's
+/// constant, ESegment::ModelScaleFactor), so sigma = (v / c) / (E exp(2 pi eta)) and S = v / c; otherwise v is the
+/// cross section (times the scale's constant of an extrapolation in another unit, as before) and S = v E exp(2 pi eta).
+struct SigmaAndS {
+  bool modelIsS;
+  double scale;
+  double Sigma(double v, const EPoint &point) const { return modelIsS ? v / scale / point.GetSFactorConversion() : v; }
+  double S(double v, const EPoint &point) const { return modelIsS ? v / scale : v * point.GetSFactorConversion(); }
+};
+}  // namespace
+
 static void WriteNaturalDecomposition(const Config &configure, const azure2::Results &results, bool isExtrap,
                                       int kinflag, const std::vector<std::string> &nucleusLabels, ESegment *segment) {
   std::string name = configure.outputdir + "AZUREOut_sample_seg=" + std::to_string(segment->GetSegmentKey()) +
@@ -156,6 +169,7 @@ void EData::WriteSegmentFiles(const Config &configure, const azure2::Results &re
                                thmGroups_[ThmGroupOf(segmentIndex)].terms > 0;
     ESegmentIterator thisSegment = segment;
     if (firstSumIterator != GetSegments().end()) thisSegment = firstSumIterator;
+    const SigmaAndS columns{segment->ModelIsSFactor(), segment->ModelScaleFactor()};
 
     // Band stream for this segment (skip angular-coefficient extrap files, which
     // have no scalar cross section; other segments get a block for alignment).
@@ -201,15 +215,15 @@ void EData::WriteSegmentFiles(const Config &configure, const azure2::Results &re
           out << std::setw(18) << std::scientific << point->GetCMEnergy()
               << std::setw(18) << std::scientific << point->GetExcitationEnergy()
               << std::setw(18) << std::scientific << point->GetCMAngle()
-              << std::setw(18) << std::scientific << fitCrossSection
-              << std::setw(18) << std::scientific << fitCrossSection * point->GetSFactorConversion();
+              << std::setw(18) << std::scientific << columns.Sigma(fitCrossSection, *point)
+              << std::setw(18) << std::scientific << columns.S(fitCrossSection, *point);
           if (!output.IsExtrap()) {
             double dataNorm = NormUsed((int)(thisSegment - GetSegments().begin()) + 1, results);
             const int row = (int)(point - segment->GetPoints().begin());
-            out << std::setw(18) << std::scientific << segment->CMValue(row) * dataNorm
-                << std::setw(18) << std::scientific << segment->CMError(row) * dataNorm
-                << std::setw(18) << std::scientific << segment->CMValue(row) * dataNorm * point->GetSFactorConversion()
-                << std::setw(18) << std::scientific << segment->CMError(row) * dataNorm * point->GetSFactorConversion()
+            out << std::setw(18) << std::scientific << columns.Sigma(segment->CMValue(row) * dataNorm, *point)
+                << std::setw(18) << std::scientific << columns.Sigma(segment->CMError(row) * dataNorm, *point)
+                << std::setw(18) << std::scientific << columns.S(segment->CMValue(row) * dataNorm, *point)
+                << std::setw(18) << std::scientific << columns.S(segment->CMError(row) * dataNorm, *point)
                 << std::endl;
           } else
             out << std::endl;
@@ -244,14 +258,14 @@ void EData::WriteSegmentFiles(const Config &configure, const azure2::Results &re
           out << std::setw(18) << std::scientific << point->GetLabEnergy()
               << std::setw(18) << std::scientific << point->GetExcitationEnergy()
               << std::setw(18) << std::scientific << point->GetLabAngle()
-              << std::setw(18) << std::scientific << fitCrossSection
-              << std::setw(18) << std::scientific << fitCrossSection * point->GetSFactorConversion();
+              << std::setw(18) << std::scientific << columns.Sigma(fitCrossSection, *point)
+              << std::setw(18) << std::scientific << columns.S(fitCrossSection, *point);
           if (!output.IsExtrap()) {
             double dataNorm = NormUsed((int)(thisSegment - GetSegments().begin()) + 1, results);
-            out << std::setw(18) << std::scientific << point->GetLabCrossSection() * dataNorm
-                << std::setw(18) << std::scientific << point->GetLabCrossSectionError() * dataNorm
-                << std::setw(18) << std::scientific << point->GetLabCrossSection() * dataNorm * point->GetSFactorConversion()
-                << std::setw(18) << std::scientific << point->GetLabCrossSectionError() * dataNorm * point->GetSFactorConversion()
+            out << std::setw(18) << std::scientific << columns.Sigma(point->GetLabCrossSection() * dataNorm, *point)
+                << std::setw(18) << std::scientific << columns.Sigma(point->GetLabCrossSectionError() * dataNorm, *point)
+                << std::setw(18) << std::scientific << columns.S(point->GetLabCrossSection() * dataNorm, *point)
+                << std::setw(18) << std::scientific << columns.S(point->GetLabCrossSectionError() * dataNorm, *point)
                 << std::endl;
           } else
             out << std::endl;

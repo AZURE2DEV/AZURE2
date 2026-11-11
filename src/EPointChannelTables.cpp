@@ -15,6 +15,7 @@
 #include "IntegratedFermiFunc.h"
 #include "JGroup.h"
 #include "Kinematics.h"
+#include "azure2/physics/AstrophysicalFactor.h"
 #include "PPair.h"
 #include "ScatteringLength.h"
 #include "ShftFunc.h"
@@ -205,7 +206,10 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   } else {
     inEnergy = this->CompoundEnergy(theCNuc);
     geofactor = Kinematics::Channel(entrancePair).PiOverK2(this->GetCMEnergy());
-    sfactorconv = this->GetCMEnergy() * exp(2 * pi * sqrt(uconv / 2.) * fstruc * entrancePair->GetZ(1) * entrancePair->GetZ(2) * sqrt(entrancePair->GetRedMass() / this->GetCMEnergy()));
+    // The output's S factor column: physics::sfactor_conversion, and E sigma for a neutral pair (eta = 0).
+    const azure2::physics::ChannelKinematics kin = Kinematics::Channel(entrancePair).Physics();
+    sfactorconv = (kin.z1 * kin.z2 == 0) ? this->GetCMEnergy()
+                                         : azure2::physics::sfactor_conversion(kin, this->GetCMEnergy());
   }
   // THM (HOES) cross sections are in arbitrary units and extend below the
   // entrance threshold, where the Gamow conversion is undefined (NaN).

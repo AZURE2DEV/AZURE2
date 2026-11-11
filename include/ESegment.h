@@ -319,6 +319,10 @@ class ESegment {
   const azure2::experiment::Prediction *GetPrediction() const {
     return measurement_ ? measurement_->prediction.get() : nullptr;
   }
+  /// The model value is an S factor, c E sigma exp(2 pi eta) with c the scale's constant (ReactionSpec::scale; 1 for a
+  /// data set, 1 / (unit factor) for an extrapolation in another unit than MeV b).
+  bool ModelIsSFactor() const { return reaction_.scale.sFactor; }
+  double ModelScaleFactor() const { return reaction_.scale.factor; }
   /// Give the measurement its prediction (a new measurement that shares the rows: the points read them).
   void SetPrediction(std::shared_ptr<const azure2::experiment::Prediction> p);
   /// Path of the data file this segment reads.
