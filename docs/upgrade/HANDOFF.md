@@ -2,6 +2,58 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (director) — merged: the data classes replaced; two thirds of the tree in format 3; what runs now
+
+**Merged on `feature/upgrade-4-data`, then on `feature/upgrade`** (both `--no-ff`, not pushed):
+- `feature/upgrade-4-tree-format3-2` (92b046a8): groups 4b and 5 of `format3_tree.md` (shift, target, screening,
+  covariance and apparatus projects), 126 of 185 project files in format 3; the converter refuses what the old engine
+  refused and keeps an automatic tolerance without windows; a fitted normalization with a prior centred at 0 is
+  refused with a diagnostic code.
+- `feature/upgrade-4-data-structure-3` (2363abac): `DataSet` (immutable, `shared_ptr<const DataSet>`), `WorkingCopy`,
+  `Segment`, `Unit`; `EData`, `ESegment`, `EPoint` and their files deleted (consistency check 31).
+
+**Verified by the director** (clean builds of the rehearsal trees, 0 warnings).
+- The tree branch alone (rehearsal `trial17`, against `tab-trial16`): 685 / 658 / 685 files identical; the others are
+  `param.par` of 9 converted projects (parameter names only, values equal) and 36 `run.log`; `ctest -LE slow`
+  183/183; `tests/run_tests.sh` 146 passed, 0 failed; 12 calculations identical at 1 and 6 threads; model-data χ²
+  identical in three bases; spec equivalence 198 files, 185 converted, 183 equal, 2 recorded, 0 differ; gate 483
+  (456 formal) identical, 38 classified, 0 differ, 0 missing; `ctest -L slow` 10/10.
+- Both together (rehearsal `trial18` = 2363abac's tree, against `tab-trial17`): 728 / 701 / 728 files, all
+  identical; `ctest -LE slow` 183/183; `run_tests.sh` 146 / 0; 12 identical at 1 and 6 threads; χ² identical in three
+  bases; spec equivalence and gate with the same counts; `ctest -L slow` 10/10. Reference tag from here: `tab-trial18`.
+
+**Director's judgements at the merge.**
+- Two output texts still name the old classes on purpose (`src/WorkingCopy.cpp` "see EData::ECSignature)",
+  `convert/src/BuildData.cpp` "(the same index, EData::MakePoints)"): they are bytes of committed outputs; check 31
+  lists them as the only exceptions. They go with the outputs' next regeneration.
+- The agent's "pyazr behaviour change" (a target's `density` after an evaluation) is not visible to a user: the only
+  binding that returns a density builds a fresh `TargetEffect` from the line (`api/src/pybind_api.cpp`,
+  `parse_target_effect_line`), and the hand-over reads `EffectValues(n).density`. Nothing to fix.
+- `Unit` is 480 bytes but not yet a plain record: about 130 member functions, the apparatus fold among them
+  (`src/TargetFold.cpp`). That is Phase 5's work (kernels leave the unit), not a debt of this branch.
+
+**Procedure changed (the PI, 2026-11-11: "Can't we go faster?").** A merge is committed on the data branch as soon as
+all outputs are identical, and agents start from it; `feature/upgrade` takes it after the whole verification. One
+verification per batch of merges, its parts side by side: `work/director/full_verify2.sh WT TAG NT [REFTAG]`. Work that
+depends on nothing in progress starts at once (leaf libraries, the next phase's design).
+
+**Running** (branches from ec04bd55 or 2363abac):
+- `feature/upgrade-4-tree-format3-3`: natural targets and THM projects to format 3.
+- `feature/upgrade-4-tree-format3-4`: the last group (files left old in converted directories, T1–T3) and the model
+  generators.
+- `feature/upgrade-4-pyazr-records`: pyazr's own modules and tests off `azrfile.py`.
+- `feature/upgrade-4-pathway-table-2`: the decay-position defect of external capture, external capture on the
+  pathway table, the trees deleted.
+- `feature/upgrade-5-stopping-1`: the stopping-power library `stopping/` (leaf; links `physics/` only).
+- `feature/upgrade-7-transfer-1`: potentials, bound states, distorted waves and DWBA transfer in `physics/`, checked
+  against FRESCO 3.5 (installed outside the repository: `/data0/skowrons/AZURE2-upgrade/opt/fresco/README.md`).
+- `feature/upgrade-5-design` (finished, under review): `docs/upgrade/energy_grid.md`, the design of Phase 5.
+
+**Open** (unchanged unless said): the second validation round waits for the deletion of the old reading path; the
+UDR fold through a point has no end-to-end test; comments in `pyazr/azrfile.py` and `pyazr/datasets.py` name the old
+classes (the files go with the old path); the 6-thread fit's peak memory (+13 % at milestone 2) is to be measured
+again now that a copy is smaller; ThreadSanitizer and the Sphinx build have not been run on this state.
+
 ## 2026-11-11 (agent, brief X3, milestone 3) — `DataSet` and `WorkingCopy` apart; the old data classes gone (`feature/upgrade-4-data-structure-3`)
 
 **Done** (commits 075af6db, b1d3daaf, the file moves, the class renames, these docs).
