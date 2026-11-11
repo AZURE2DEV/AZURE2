@@ -667,7 +667,7 @@ p = Project.open("T2.azr")                     # refuses a format-1/2 file: "run
 p.add_target(name, *, kind, **fields)          # target
 p.add_beam(name, **fields)                     # beam
 p.add_detector(name, **fields)                 # detector
-p.add_norm(name, *, value)                     # shared normalization
+p.add_normalization(name, *, value)            # shared normalization
 p.add_energy_scale(name, **fields)             # shared energy scale
 p.add_dataset(name, *, reaction, quantity, unit, file, columns, norm, **fields)
 p.add_extrapolation(name, *, reaction, quantity, unit, energies, **fields)

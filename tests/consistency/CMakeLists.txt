@@ -21,3 +21,8 @@ add_test(NAME check_skills_unit
 add_test(NAME check_skills
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_SOURCE_DIR}/tools/check_skills.py --user-skills none)
+
+# tools/classify.py (the comparison of two engines' outputs): a file that cannot be read is never identical.
+add_test(NAME tools_classify
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/classify_test.py)

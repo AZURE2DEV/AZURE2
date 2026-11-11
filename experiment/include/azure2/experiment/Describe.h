@@ -17,8 +17,9 @@ namespace experiment {
  * linked to it, and its fit parameters with their names and kinds (fit, fixed, shared, profiled); then the model
  * data with their levels and pairs.  Library azure2_experiment_reader.  `project` must have been built (Ok()).
  */
-std::string DescribeText(const Format3Project &project);
-std::string DescribeJson(const Format3Project &project);
+/// `record`: describe only the record of that name ("" = every record).
+std::string DescribeText(const Format3Project &project, const std::string &record = "");
+std::string DescribeJson(const Format3Project &project, const std::string &record = "");
 
 }  // namespace experiment
 }  // namespace azure2

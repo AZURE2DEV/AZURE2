@@ -13,6 +13,7 @@
 #include <sstream>
 #include "azure2/convert/PotentialRecords.h"
 #include "azure2/convert/PriorCentreRow.h"
+#include "azure2/experiment/ValueText.h"
 #include "azure2/io/Convert.h"
 #include "azure2/physics/Elements.h"
 
@@ -327,12 +328,18 @@ class Builder {
   bool ReactionTokens(const std::string &record, int entrance, int exit, int isAdvanced, int op,
                       const std::vector<ComponentEntry> &components, const std::string &angleFrame, std::vector<io::Token> &out,
                       std::string &why, std::vector<std::pair<std::string, std::string>> &pairKeys);
-  /// A nuisance: "<v> [unit] fixed|fit [prior c w]".
+  /// A nuisance: "<v> [unit] fixed|fit [prior c w]" (experiment::NuisanceText, the one writer of a nuisance).
   static std::vector<io::Token> Nuisance(const std::string &value, const std::string &unit, bool fit, bool prior,
                                          const std::string &centre, const std::string &width) {
-    std::string s = value + (unit.empty() ? "" : " " + unit) + (fit ? " fit" : " fixed");
-    if (prior) s += " prior " + centre + " " + width;
-    return Words(s);
+    experiment::NuisanceWords w;
+    w.value = value;
+    w.unit = unit;
+    w.mode = experiment::NuisanceModeName(fit ? experiment::NuisanceMode::Fit : experiment::NuisanceMode::Fixed);
+    if (prior) {
+      w.priorCentre = centre;
+      w.priorWidth = width;
+    }
+    return Words(experiment::NuisanceText(w));
   }
 
   const io::Document &doc_;

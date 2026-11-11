@@ -152,8 +152,10 @@ must follow, and the checks that show it is what was intended.
 - references/nds-exfor.md: `pyazr.nds` search, fetch, conversion, levels, bibliography, service failures.
 - references/rmatrix-picture.md: what the parameters mean and which levels to include.
 - references/key-papers.md: annotated primary literature.
+- references/project-from-python.md: a format-3 project written from Python (`pyazr.Project`): schema, records, the
+  engine's diagnostics, describe, calculate.
 
 Sphinx pages: `docs/source/user_guide/particle_pairs.rst`, `docs/source/user_guide/levels_channels.rst`,
 `docs/source/user_guide/segments.rst`, `docs/source/reference/data_formats.rst`, `docs/source/user_guide/pyazr.rst`,
 `docs/source/examples/natural_neon.rst`. Examples: `pyazr/examples/exfor_fetch.py`, `pyazr/examples/edit_scheme.py`,
-`pyazr/examples/print_scheme.py`. Test projects to copy from: `tests/13N`, `tests/natural_neon`.
+`pyazr/examples/print_scheme.py`, `pyazr/examples/project_from_python.py`. Test projects to copy from: `tests/13N`, `tests/natural_neon`.

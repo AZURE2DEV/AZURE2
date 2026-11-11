@@ -491,8 +491,8 @@ dataset Haverson2026_eTPC_ag0_dcs_Eg9p85
 <targets>
 # <targetInt> line 1
 beam beam_Haverson2026_eTPC_ag0_dcs_Eg8p51
-    profile        skewed_gaussian xi 2.0210771558345906 MeV omega 0.30805005 MeV alpha -1.64 weight 1
-    truncation     0
+    profile          skewed_gaussian xi 2.0210771558345906 MeV omega 0.30805005 MeV alpha -1.64 weight 1
+    truncation       0
     detailed_balance yes
 
 # <targetInt> line 1
@@ -501,7 +501,7 @@ detector det_targetInt1
 
 # <targetInt> line 2
 beam beam_Haverson2026_eTPC_ag0_dcs_Eg9p85
-    profile        skewed_gaussian xi 3.7802596656384173 MeV omega 0.3760611 MeV alpha -2.06 weight 1
-    truncation     0
+    profile          skewed_gaussian xi 3.7802596656384173 MeV omega 0.3760611 MeV alpha -2.06 weight 1
+    truncation       0
     detailed_balance yes
 </targets>

@@ -853,16 +853,11 @@ class azure2(_HybridPotentials):
               their segment lines, and the centre of every prior that thereby
               leaves its field is written as an explicit ``prior_centre`` row
               (the centre the fit used: the loaded field, or the loaded
-              row).  The snapshot run on its own -- CLI calculate, GUI, a
-              fresh pyazr session -- gives the fitted data chi-squared *and*
-              the fit's priors (both checked by ``verify``), and a fit
-              started from it is pulled to the same centres, not to the
-              fitted values.  Before October 2026 this wrote the norms to the
-              ``.sav`` only (a ``_fit.azr`` run alone gave another
-              chi-squared: 18O 2010, 7483 against 1872), and in between
-              without the centre rows (a refit was centred on the fitted
-              norms).  AZURE2 versions before the rows existed skip them and
-              centre the prior on the field.
+              row).  The snapshot run on its own gives the fitted data
+              chi-squared *and* the fit's priors (both checked by ``verify``).
+              A format-3 project: the free norms, shift terms and shift
+              function parameters go into the records' nuisances (in their
+              units), whose priors state their centres.
           ``"nominal"``
               the segment lines keep the loaded file's values; the fitted
               norms and shifts are in the ``.sav`` only (needs
@@ -923,11 +918,11 @@ class azure2(_HybridPotentials):
         model = AzrModel.from_file(self.file)
         model.apply_fit(self.parameters, want, physical=True, pairs=self.pairs,
                         include_fixed=True)
-        # isotopic abundances (projects with an <abundances> block): the fitted values
-        for p in self.parameters.abundances:
+        format3 = model._config_value("format") == "3"  # its abundances are records, written below
+        for p in ([] if format3 else self.parameters.abundances):  # an <abundances> block: the fitted values
             model.set_abundance((p.nucleus_Z, p.nucleus_A), value=float(want[p.index]), sample=p.sample or "")
         self._save_cbkg(model, np.asarray(full, float))
-        if norms == "fitted":
+        if norms == "fitted" and not format3:
             values, centres = {}, {}
             datasets = self.datasets
             for p in self.parameters:
@@ -952,9 +947,14 @@ class azure2(_HybridPotentials):
                 model.set_segment_values(values)
             if centres:
                 model.set_prior_centres(centres)
-        # Electron-screening potentials are not written into the <targetInt> lines: the value there is the
-        # prior's centre, and the fitted U_e travels in the .sav, like a normalization.
-        self._write_potential_records(model).write(path)  # format 3: the session's hybrid potentials as records
+        # Electron-screening potentials are not written into the <targetInt> lines (their value is the prior's
+        # centre; the fitted U_e travels in the .sav).  Format 3: the potentials as records, and with "fitted" the free
+        # parameters (and the isotopes' abundances) into the nuisances they come from (pyazr.project); priors explicit.
+        self._write_potential_records(model).write(path)
+        if format3:
+            from .project import write_parameter_values
+            write_parameter_values(path, {p.name: float(want[p.index]) for p in self.parameters.abundances} if norms != "fitted"
+                                   else {p.name: float(x[p.free_index]) for p in self.parameters if p.free_index is not None})
 
         sav = None
         if param_sav:

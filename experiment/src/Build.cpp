@@ -588,6 +588,14 @@ void NameParameters(Context &c) {
     const int leader = leaders.emplace(label, key).first->second;
     return label + "." + field + (leader == key ? "" : "[" + dataset + "]");
   };
+  std::map<std::string, ParameterSource> &sources = c.out_.parameterSources;
+  // The occurrence of a data set's shift field with the alternative `word` (offset, sqrt), or -1.
+  auto shiftOccurrence = [](const ValidatedRecord &r, const std::string &word) {
+    const std::vector<const Value *> shifts = r.GetAll("shift");
+    for (std::size_t k = 0; k < shifts.size(); k++)
+      if (shifts[k]->word == word) return (int)k;
+    return -1;
+  };
   for (std::size_t i = 0; i < c.data_.size(); i++) {
     const Member &m = c.data_[i];
     DatasetSpec &d = c.out_.data.datasets.items[i].spec;
@@ -598,6 +606,19 @@ void NameParameters(Context &c) {
     d.names.energyShiftSqrt = name + ".shift.sqrt";
     const std::string &scale = d.shiftFunctionGroup.empty() ? d.shiftGroup : d.shiftFunctionGroup;
     for (std::size_t j = 0; j < d.shiftFunctionValues.size(); j++) d.names.shiftFunction.push_back(scale + ".a" + std::to_string(j));
+    // where each value is written (a follower's parameter of a group is fixed and written nowhere)
+    if (d.normGroup.empty())
+      sources[d.names.norm] = {name, "norm", 0, ""};
+    else if (normLeader[d.normGroup] == d.key)
+      sources[d.names.norm] = {d.normGroup, "value", 0, ""};
+    const int offset = shiftOccurrence(*m.record, "offset"), sqrt = shiftOccurrence(*m.record, "sqrt");
+    if (!d.shiftGroup.empty()) {
+      if (shiftLeader[d.shiftGroup] == d.key) sources[d.names.energyShift] = {d.shiftGroup, "offset", 0, ""};
+    } else if (offset >= 0) {
+      sources[d.names.energyShift] = {name, "shift", offset, "value"};
+    }
+    if (sqrt >= 0) sources[d.names.energyShiftSqrt] = {name, "shift", sqrt, "value"};
+    for (std::size_t j = 0; j < d.names.shiftFunction.size(); j++) sources[d.names.shiftFunction[j]] = {scale, "param", (int)j, "value"};
     if (d.thicknessFit && !d.thicknessGroup.empty()) {
       const int leader = thicknessLeader.emplace(d.thicknessGroup, d.key).first->second;
       if (leader != d.key) d.names.thickness += "[" + name + "]";

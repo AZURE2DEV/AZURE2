@@ -150,6 +150,17 @@ int main(int argc, char **argv) {
                                 canonical[4] == "    file           \"data/run 1.dat\"  # trailing");
   }
 
+  {
+    // The values of one record start in one column: one blank after a key of 15 characters or more.
+    const RecordReadResult r = ReadRecords(Lines("potential p1\n    pair p+12C\n    matching_radius 15 fm\n"
+                                                 "beam b\n    spread 1 keV lab\n"),
+                                           1, {"potential", "beam"});
+    const std::vector<std::string> w = WriteRecords(r.set);
+    check("a long key moves the record's value column",
+          w.size() == 6 && w[1] == "    pair            p+12C" && w[2] == "    matching_radius 15 fm");
+    check("a record without a long key keeps column 20", w.size() == 6 && w[5] == "    spread         1 keV lab");
+  }
+
   // Each code alone.
   OneCode("dataset a\n    file \"x y\n", "E_UNTERMINATED_QUOTE", 2, 10);
   OneCode("dataset a\n    file \"x\"y\n", "E_QUOTE_IN_TOKEN", 2, 13);

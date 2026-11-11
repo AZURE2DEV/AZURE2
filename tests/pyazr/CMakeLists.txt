@@ -758,6 +758,28 @@ add_test(NAME pyazr_upgrade_gradient
          COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/upgrade_gradient_test.py)
 set_tests_properties(pyazr_upgrade_gradient PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# pyazr.Project, the project as records (docs/upgrade/project_format3.md sections 4, 6): round trip of every converted
+# project, one edit = one line, rename/remove, the engine's refusals, the user stories built from scratch against the
+# committed projects' outputs (the CLI's), help() from the table, describe, session.
+add_test(NAME pyazr_project
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/project_test.py)
+set_tests_properties(pyazr_project PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
+# save_fit of a format-3 project with norms="fitted" (the fitted nuisances written into their records), a changed
+# potential of a format-1/2 project refused with the conversion command, set_nuclear_potential's matching radius and step.
+add_test(NAME pyazr_save_fit_format3
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/save_fit_format3_test.py)
+set_tests_properties(pyazr_save_fit_format3 PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# The recipe "write a project from Python" (docs/source/user_guide/project_from_python.rst, the azure2-setup skill):
+# pyazr/examples/project_from_python.py runs, and its chi^2 is the committed story's.
+add_test(NAME pyazr_project_recipe
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/project_recipe_test.py)
+set_tests_properties(pyazr_project_recipe PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
+
 # A test that cannot run its engine part -- numpy, scipy or the compiled
 # _azure2 module missing (pybind11 absent at configure time builds no module),
 # or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so
@@ -798,3 +820,4 @@ add_test(NAME pyazr_ec_integrals_formal
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/ec_integrals_formal_test.py)
 set_tests_properties(pyazr_ec_integrals_formal PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+

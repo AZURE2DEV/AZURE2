@@ -281,8 +281,8 @@ beam beam_s06_gas
 
 # <targetInt> line 6
 beam beam_s07_profile
-    profile        skewed_gaussian xi 0.34 MeV omega 0.035 MeV alpha 1.5 weight 1.0
-    truncation     0
+    profile          skewed_gaussian xi 0.34 MeV omega 0.035 MeV alpha 1.5 weight 1.0
+    truncation       0
     detailed_balance no
 
 # <targetInt> line 6

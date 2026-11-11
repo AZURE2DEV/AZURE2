@@ -66,6 +66,7 @@ class Validator {
   void CheckNames();
   void CheckRecord(Work &w);
   std::vector<Work> works;
+  std::vector<RecordReference> references;  ///< collected by CheckReferences
 
  private:
   Diagnostic Base(const Work &w, const std::string &field, int line, int col) const {
@@ -564,6 +565,7 @@ void Validator::CheckReferences(Work &w) {
     CollectRefs(def->spec, f.value, refs);
     for (const auto &ref : refs) {
       const Value &v = *ref.first;
+      references.push_back({w.vr.name, f.key, v.line, v.col, v.word, v.epoch});
       Diagnostic d = Base(w, f.key, v.line, v.col);
       d.hasFound = true;
       d.found = v.word;
@@ -724,6 +726,7 @@ ValidationResult Schema::Validate(const std::vector<SectionRecords> &sections) {
                    [](const Diagnostic &a, const Diagnostic &b) { return a.line < b.line; });
   for (Work &w : v.works)
     if (w.def) result.records.push_back(std::move(w.vr));
+  result.references = std::move(v.references);
   return result;
 }
 

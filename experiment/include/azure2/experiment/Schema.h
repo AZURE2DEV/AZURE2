@@ -121,9 +121,21 @@ struct ValidatedRecord {
   std::vector<const Value *> GetAll(const std::string &key) const;
 };
 
+/// A reference of one record to another as written (a data set's target, beam, detector, normalization or energy
+/// scale): where the name stands and what it names, whether that record exists or not.
+struct RecordReference {
+  std::string record;  ///< the referring record
+  std::string field;   ///< its field that holds the name
+  int line = 0;        ///< of the name's token (1-based, the file's)
+  int col = 0;         ///< of the name's first character
+  std::string name;    ///< the record named
+  std::string epoch;   ///< the epoch of a target named <name>@<epoch>, or ""
+};
+
 struct ValidationResult {
   std::vector<Diagnostic> diagnostics;   ///< every problem, ordered by line
   std::vector<ValidatedRecord> records;  ///< every record of a known kind, in input order
+  std::vector<RecordReference> references;  ///< every reference of a record to another, in record order
   bool Ok() const;                       ///< no diagnostic of severity error
   const ValidatedRecord *Find(const std::string &name) const;
 };
