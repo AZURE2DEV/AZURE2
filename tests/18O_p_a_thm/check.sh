@@ -22,9 +22,10 @@
 #
 # i.e. it encodes the verdict of the reproduction: the formal vertex with the
 # channel constant B_c reproduces the band, the per-level S_c(E_lambda) vertex
-# does not.  It also checks that the project's shared "1,2" <targetInt> line
-# folds both segments as one line per segment would, and that target
-# integration on a THM segment is refused.  Pure bash + awk.
+# does not.  It also checks that the project's shared beam record folds both
+# data sets as one beam record per data set would, that a target on a THM data
+# set is refused (and the old <targetInt> line by the converter), and that an
+# experiment that only inactive data sets name is ignored.  Pure bash + awk.
 #
 #   ./tests/18O_p_a_thm/check.sh path/to/AZURE2
 
@@ -93,24 +94,25 @@ else
   fi
 fi
 
-# One <targetInt> line for both segments ("1,2", as the project has it) is the
-# same as one line per segment.  The shared effect's sigma was converted to
-# the c.m. once per listed segment, so segment 2 was folded with 17 x 0.947
+# One beam record for both data sets (beam_targetInt1, as the project has it) is the same as one beam record per data
+# set.  The shared effect's sigma was converted to the c.m. once per member, so data set 2 was folded with 17 x 0.947
 # keV instead of 17 keV.
 run split ""
 # Byte-identical files, without cmp (not in every MSYS2 image); \r stripped so a
 # CRLF-writing Windows build compares like the others.
 same() { [ "$(tr -d '\r' < "$1")" = "$(tr -d '\r' < "$2")" ]; }
-awk '$2 == "\"1,2\"" { l = $0; sub(/"1,2"/, "\"1\"", l); print l; sub(/"1,2"/, "\"2\""); print; next }
+awk '$1 == "dataset" { ds = $2 } /^<\/data>/ { ds = "" }
+     ds == "lc723_band_mid" && $1 == "beam" { sub(/beam_targetInt1/, "beam_band") }
+     /^<\/targets>/ { print "beam beam_band"; print "    spread         0.017952 MeV lab" }
      { print }' "$WORK/split/run.azr" > "$WORK/split/run.azr.tmp" && mv "$WORK/split/run.azr.tmp" "$WORK/split/run.azr"
 (cd "$WORK/split" && rm -rf output && mkdir output &&
    printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
-if [ "$(grep -c '^1  *"[12]"' "$WORK/split/run.azr")" -eq 2 ] && [ -s "$WORK/split/output/chiSquared.out" ] &&
+if [ "$(grep -c '^beam beam_' "$WORK/split/run.azr")" -eq 2 ] && [ -s "$WORK/split/output/chiSquared.out" ] &&
    same "$WORK/default/output/chiSquared.out" "$WORK/split/output/chiSquared.out" &&
    same "$WORK/default/output/AZUREOut_aa=1_R=2.out" "$WORK/split/output/AZUREOut_aa=1_R=2.out"; then
-  echo "  ok    targetInt \"1,2\" == one line per segment (identical output)"
+  echo "  ok    one beam record for both data sets == one per data set (identical output)"
 else
-  echo "  FAIL  targetInt \"1,2\" differs from one line per segment:"
+  echo "  FAIL  one beam record for both data sets differs from one per data set:"
   paste "$WORK/default/output/chiSquared.out" "$WORK/split/output/chiSquared.out" 2>/dev/null | sed 's/^/        /'
   fail=1
 fi
@@ -128,20 +130,57 @@ else
   fi
 fi
 
-# Target integration does not apply to a THM segment: its energies are the
+# Target integration does not apply to a THM data set: its energies are the
 # reconstructed x + A energies, and its sub-points go below the entrance
 # threshold, where the stopping power was evaluated at E < 0 (chi2 = nan).
+# Format 3 refuses a target on a THM data set when the file is read; the old
+# line (a <targetInt> line on a THM segment) is refused by the converter with
+# the old engine's reason.
 d="$WORK/thick"
 mkdir -p "$d/output" "$d/checks"
 cp -r "$HERE/data" "$d/"
-awk '/<targetInt>/ { print; print "1  \"1\"  20  0  0.0001  1  1e+21  \"a0/sqrt(x)\"  1  1e-14  0  0  0  \"\"  0  0  0.8  5  50"; T = 1; next }
-     /<\/targetInt>/ { T = 0 } !T { print }' "$HERE/18O_p_a_thm.azr" > "$d/run.azr"
+awk '$1 == "dataset" { ds = $2 }
+     ds == "lc723_thm_points" && $1 == "thm" { print "    target         tgt_thick" }
+     /^<\/targets>/ { print "target tgt_thick"; print "    kind           layer"; print "    active         18O"
+                      print "    areal_density  1e+21 atoms/cm2 fixed"; print "    stopping       formula \"a0/sqrt(x)\" a0=1e-14 MeV*cm2/atom" }
+     { print }' "$HERE/18O_p_a_thm.azr" > "$d/run.azr"
 (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 1000000 > log)
-if grep -q "segment 1 is a THM segment: target integration does not apply to it" "$d/log" &&
+if grep -q "E_FIELD_NOT_APPLICABLE: dataset 'lc723_thm_points', field 'target' does not belong here: .* only when thm is not given" "$d/log" &&
    [ ! -f "$d/output/chiSquared.out" ]; then
-  echo "  ok    target integration on a THM segment refused"
+  echo "  ok    a target on a THM data set refused"
 else
-  echo "  FAIL  target integration on a THM segment not refused"; tail -3 "$d/log" | sed 's/^/        /'; fail=1
+  echo "  FAIL  a target on a THM data set not refused"; tail -3 "$d/log" | sed 's/^/        /'; fail=1
+fi
+ORIG="$HERE/../convert/fixtures/tests/18O_p_a_thm/18O_p_a_thm.azr"
+awk '/<targetInt>/ { print; print "1  \"1\"  20  0  0.0001  1  1e+21  \"a0/sqrt(x)\"  1  1e-14  0  0  0  \"\"  0  0  0.8  5  50"; T = 1; next }
+     /<\/targetInt>/ { T = 0 } !T { print }' "$ORIG" > "$d/old.azr"
+(cd "$d" && "$AZURE2_BIN" --convert old.azr conv.azr --to 3 > conv.log 2>&1; echo $? > conv.status)
+if [ "$(cat "$d/conv.status")" != 0 ] && [ ! -f "$d/conv.azr" ] &&
+   grep -q "data line 1 is a THM segment with target integration, which the old engine refused" "$d/conv.log"; then
+  echo "  ok    the old <targetInt> line on a THM segment refused by the converter"
+else
+  echo "  FAIL  the old <targetInt> line on a THM segment not refused by the converter"; tail -3 "$d/conv.log" | sed 's/^/        /'; fail=1
+fi
+
+# An experiment that only inactive data sets name has no member: it is ignored with a warning, as the old engine
+# ignored an experiment with no segment in use, and the run equals the run without it.
+for v in idle plain; do
+  d="$WORK/$v"
+  mkdir -p "$d/output" "$d/checks"
+  cp -r "$HERE/data" "$d/"
+  awk '$1 == "dataset" { ds = $2 }
+       ds == "lc723_thm_points" && $1 == "thm" { print "    active         no"; if (V == "idle") { print "    thm            A"; next } }
+       { print }' V="$v" "$HERE/18O_p_a_thm.azr" > "$d/run.azr"
+  [ "$v" = plain ] || printf '<thm>\nexperiment[A] background=linear\n</thm>\n' >> "$d/run.azr"
+  (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
+done
+if grep -q "WARNING: <thm> experiment\[A\] has no data set in use; ignored." "$WORK/idle/log" &&
+   [ -s "$WORK/plain/output/chiSquared.out" ] &&
+   same "$WORK/idle/output/chiSquared.out" "$WORK/plain/output/chiSquared.out" &&
+   same "$WORK/idle/output/AZUREOut_aa=1_R=2.out" "$WORK/plain/output/AZUREOut_aa=1_R=2.out"; then
+  echo "  ok    an experiment of inactive data sets only: ignored with a warning, the run as without it"
+else
+  echo "  FAIL  an experiment of inactive data sets only: not ignored as without it"; tail -3 "$WORK/idle/log" | sed 's/^/        /'; fail=1
 fi
 
 if [ "$fail" -eq 0 ]; then

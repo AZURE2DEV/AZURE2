@@ -23,6 +23,7 @@ set -uo pipefail
 export LC_ALL=C
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/../lib/guard.sh"
+. "$HERE/../lib/thm_records.sh"
 RUN="$(guard_command "${TEST_TIMEOUT:-600}")"
 AZURE2_BIN="${1:?usage: check.sh path/to/AZURE2}"
 AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
@@ -41,8 +42,12 @@ run() {
 }
 
 SCR="$HERE/../screening_6li"
-TOY="$HERE/../thm_coherent_background/toy"
-THM='<thm>\nexperiment[E] segments=1 cbackground=1/2+:2=0.05,-0.08\n</thm>\n'
+# the toy with its data set in experiment E
+mkdir -p "$WORK/toy"
+cp -r "$HERE/../thm_coherent_background/toy/data" "$HERE/../thm_coherent_background/toy/toy.azr" "$WORK/toy/"
+thm_join "$WORK/toy/toy.azr" E toy
+TOY="$WORK/toy"
+THM='<thm>\nexperiment[E] cbackground=1/2+:2=0.05,-0.08\n</thm>\n'
 
 s0="$(run s0 "$SCR" fit.azr "")"
 s1="$(run s1 "$SCR" fit.azr '<parameterSettings>\nscreening_1 300 0 1000 50 0 1 screening 0\n</parameterSettings>\n')"

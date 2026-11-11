@@ -55,6 +55,7 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/thm_park.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 . "$HERE/../lib/guard.sh"
 . "$HERE/../lib/check_common.sh"
+. "$HERE/../lib/thm_records.sh"
 RUN="$(guard_command "${TEST_TIMEOUT:-900}")"
 TOL_MODEL="${TOL_MODEL:-1e-8}"
 TOL_WIDTH="${TOL_WIDTH:-1e-5}"
@@ -65,8 +66,9 @@ KIN18="beam=18O target=d spectator=n Ebeam=54"
 fail=0
 
 # stage NAME SRC [BLOCK [EDIT]]: a copy of project directory SRC (its first
-# .azr, as run.azr) under $WORK/NAME; BLOCK replaces its <thm> block; EDIT is
-# an awk program the .azr is passed through first.
+# .azr, as run.azr) under $WORK/NAME; BLOCK replaces its <thm> section, every
+# data set in BLOCK's experiment; EDIT is an awk program the .azr is passed
+# through first.
 stage() {
   local d="$WORK/$1" src="$2" azr
   rm -rf "$d"
@@ -74,10 +76,7 @@ stage() {
   cp -R "$src/data" "$d/data"
   azr="$(ls "$src"/*.azr | head -1)"
   if [ -n "${4:-}" ]; then tr -d '\r' < "$azr" | awk "$4" > "$d/run.azr"; else tr -d '\r' < "$azr" > "$d/run.azr"; fi
-  if [ -n "${3:-}" ]; then
-    awk '/^<thm>/ { T = 1 } !T { print } /^<\/thm>/ { T = 0 }' "$d/run.azr" > "$d/tmp.azr" && mv "$d/tmp.azr" "$d/run.azr"
-    printf '\n<thm>\n%s\n</thm>\n' "$3" >> "$d/run.azr"
-  fi
+  [ -z "${3:-}" ] || thm_set "$d/run.azr" "$3" $(thm_datasets "$d/run.azr")
 }
 # run NAME MENU [FLAGS]: AZURE2 on $WORK/NAME/run.azr with the menu input
 # MENU (printf format); status in NAME/status, output in NAME/log.
@@ -188,15 +187,15 @@ done
 same_physics 18O_p_a_thm "$T18"
 same_physics 17O "$ROOT/tests/17O"
 same_physics 17O_perlevel "$ROOT/tests/17O" "vertex=perlevel"
-same_physics 18O.lineshape "$T18" "experiment[A] segments=1,2 $KIN lineshape=on"
-same_physics 18O.dw_coulomb_lineshape "$T18" "experiment[A] segments=1,2 $KIN distortion=coulomb vertexModel=dw lineshape=on"
-same_physics 18O.dw_optical "$T18" "experiment[A] segments=1,2 $KIN18 distortion=optical opticalAA=ancai06 opticalSF=kd03:extrapolate vertexModel=dw background=linear"
-same_physics 18O.distortion "$T18" "experiment[A] segments=1,2 $KIN distortion=coulomb"
-same_physics 18O.window "$T18" "experiment[A] segments=1,2 $KIN ps=hulthen:0-40 psNodes=8"
-same_physics 18O.angle_window "$T18" "experiment[A] segments=1,2 $KIN18 ps=hulthen:0-40 background=linear theta=50-70"
-same_physics 18O.cbackground "$T18" "experiment[A] segments=1,2 background=linear cbackground=1/2+:2=0.3,-0.2"
+same_physics 18O.lineshape "$T18" "experiment[A] $KIN lineshape=on"
+same_physics 18O.dw_coulomb_lineshape "$T18" "experiment[A] $KIN distortion=coulomb vertexModel=dw lineshape=on"
+same_physics 18O.dw_optical "$T18" "experiment[A] $KIN18 distortion=optical opticalAA=ancai06 opticalSF=kd03:extrapolate vertexModel=dw background=linear"
+same_physics 18O.distortion "$T18" "experiment[A] $KIN distortion=coulomb"
+same_physics 18O.window "$T18" "experiment[A] $KIN ps=hulthen:0-40 psNodes=8"
+same_physics 18O.angle_window "$T18" "experiment[A] $KIN18 ps=hulthen:0-40 background=linear theta=50-70"
+same_physics 18O.cbackground "$T18" "experiment[A] background=linear cbackground=1/2+:2=0.3,-0.2"
 same_physics 18O.cbackground_perlevel "$T18" "vertex=perlevel
-experiment[A] segments=1,2 cbackground=1/2+:2=0.3,-0.2"
+experiment[A] cbackground=1/2+:2=0.3,-0.2"
 same_physics 18O.onshell "$T18" "vertex=onshell"
 same_physics 18O.coulomb_integral "$T18" "coulombIntegral=1
 kinematics=kf3body"
@@ -208,8 +207,8 @@ echo "2. parameter files converted on read"
 converted 18O_p_a_thm.file "$T18" "" both
 converted f19_pag_thm.file "$ROOT/examples/f19_pag_thm" "" both
 converted 7Li_p_a.file "$ROOT/tests/7Li_p_a"
-converted 6Li_d.angle.file "$ROOT/tests/6Li_d" "experiment[A] segments=1 theta=10-40"
-converted 7Li_p_a.angle.file "$ROOT/tests/7Li_p_a" "experiment[A] segments=1 theta=30-60"
+converted 6Li_d.angle.file "$ROOT/tests/6Li_d" "experiment[A] theta=10-40"
+converted 7Li_p_a.angle.file "$ROOT/tests/7Li_p_a" "experiment[A] theta=30-60"
 # Why the file route for these two: their widths are beyond Brune's reach.
 grep -q "Denominator less than zero" "$WORK/7Li_p_a.file.b/log" && ok "7Li_p_a: the .azr widths are beyond Brune's transformation (warned)" \
   || bad "7Li_p_a: expected Brune's 'Denominator less than zero' warning"
@@ -217,7 +216,7 @@ grep -q "Denominator less than zero" "$WORK/7Li_p_a.file.b/log" && ok "7Li_p_a: 
 echo "3. a fit in each mode"
 # tests/18O_p_a_thm unfolded, the 8.6 MeV level 10 keV high and free, every
 # amplitude free.
-FREE='/^<targetInt>/ { print; skip = 1; next } /^<\/targetInt>/ { skip = 0 } skip { next }
+FREE='/^<targets>/ { print; skip = 1; next } /^<\/targets>/ { skip = 0 } skip { next } $1 == "beam" || $1 == "quadrature" { next }
       /^<levels>/ { L = 1 } /^<\/levels>/ { L = 0 }
       L && NF > 30 { if ($3 == "8.602600") { $3 = "8.612600"; $4 = 0 } $11 = 0 } { print }'
 stage fit.b "$T18" "" "$FREE"; stage fit.p "$T18" "" "$FREE"

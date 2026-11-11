@@ -42,8 +42,10 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/thm_dw_vertex.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 . "$HERE/../lib/guard.sh"
 . "$HERE/../lib/check_common.sh"
+. "$HERE/../lib/thm_records.sh"
 RUN="$(guard_command "${TEST_TIMEOUT:-300}")"
 OUT="AZUREOut_aa=1_R=2.out"
+BOTH="lc723_thm_points lc723_band_mid"   # the THM data sets of the experiment
 KIN="beam=18O target=d spectator=n Ebeam=54"
 fail=0
 
@@ -58,7 +60,7 @@ run() {
   cp "$O18/18O_p_a_thm.azr" "$d/run.azr"
   local edit
   for edit in ${3:-}; do awk "${!edit}" "$d/run.azr" > "$d/tmp.azr" && mv "$d/tmp.azr" "$d/run.azr"; done
-  [ -z "$2" ] || printf '\n<thm>\n%s\n</thm>\n' "$2" >> "$d/run.azr"
+  [ -z "$2" ] || thm_set "$d/run.azr" "$2" $BOTH
   (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 1000000 > log;
    echo "${PIPESTATUS[1]}" > status)
 }
@@ -68,14 +70,14 @@ ratios() {
               <(tr -d '\r' < "$WORK/$2/output/$OUT" | awk 'NF > 4 { print $1, $4 }') |
     awk '{ if ($1 != $3) { print "ENERGY", $1, $3; exit 1 } printf "%.12e %.12e\n", $1, $2 / $4 }'
 }
-NOFOLD='/<targetInt>/ { print; T = 1; next } /<\/targetInt>/ { T = 0 } T { next } { print }'
+NOFOLD="$THM_NOFOLD"
 
 # (a) ----------------------------------------------------------------------
 echo "(a) vertexModel=pw == no key"
-run nokey "experiment[A] segments=1,2 $KIN"
-run pw "experiment[A] segments=1,2 $KIN vertexModel=pw"
-run r_nokey "experiment[A] segments=1,2 $KIN distortion=coulomb"
-run r_pw "experiment[A] segments=1,2 $KIN distortion=coulomb vertexModel=pw"
+run nokey "experiment[A] $KIN"
+run pw "experiment[A] $KIN vertexModel=pw"
+run r_nokey "experiment[A] $KIN distortion=coulomb"
+run r_pw "experiment[A] $KIN distortion=coulomb vertexModel=pw"
 if ran nokey && ran pw && ran r_nokey && ran r_pw; then
   for f in chiSquared.out normalizations.out parameters.out thm_experiments.out "$OUT"; do
     same "$WORK/nokey/output/$f" "$WORK/pw/output/$f" && ok "$f byte-identical" || bad "$f differs"
@@ -86,8 +88,8 @@ fi
 
 # (b) ----------------------------------------------------------------------
 echo "(b) plane waves in both channels: the plane-wave vertex"
-run b_pw "experiment[A] segments=1,2 $KIN" "NOFOLD"
-run b_dw "experiment[A] segments=1,2 $KIN distortion=optical opticalAA=plane opticalSF=plane vertexModel=dw" "NOFOLD"
+run b_pw "experiment[A] $KIN" "NOFOLD"
+run b_dw "experiment[A] $KIN distortion=optical opticalAA=plane opticalSF=plane vertexModel=dw" "NOFOLD"
 if ran b_pw && ran b_dw; then
   # dw_vertex_point: E q pa l G11 G22 ReG12 ImG12, l = 0 and 1 (j_1 = sin/x^2 - cos/x).
   r="$(tr -d '\r' < "$WORK/b_dw/output/thm_experiments.out" | awk '$1 == "dw_vertex_point" {
@@ -115,8 +117,8 @@ fi
 
 # (c) ----------------------------------------------------------------------
 echo "(c) point Coulomb in d + 18O"
-run c_dw "experiment[A] segments=1,2 $KIN distortion=coulomb vertexModel=dw" "NOFOLD"
-run c_ps "experiment[A] segments=1,2 $KIN distortion=coulomb vertexModel=dw ps=hulthen:0-30 psNodes=8" "NOFOLD"
+run c_dw "experiment[A] $KIN distortion=coulomb vertexModel=dw" "NOFOLD"
+run c_ps "experiment[A] $KIN distortion=coulomb vertexModel=dw ps=hulthen:0-30 psNodes=8" "NOFOLD"
 if ran c_dw && ran c_ps; then
   grep -q '^vertex: vertexModel=dw' "$WORK/c_dw/output/thm_experiments.out" && ok "thm_experiments.out: vertex line" \
     || bad "no vertex line"
@@ -147,11 +149,11 @@ $3"
     bad "$1: not refused with '$2' (status $(cat "$WORK/$1/status"))"; tail -3 "$WORK/$1/log" | sed 's/^/        /'
   fi
 }
-L="experiment[A] segments=1,2 $KIN"
+L="experiment[A] $KIN"
 printf '0.4 1.0\n1.0 2.0\n' > "$WORK/w.dat"
 refuse value "expected pw or dw" "$L distortion=coulomb vertexModel=dwba"
 refuse no_distortion "needs distortion=coulomb or distortion=optical" "$L vertexModel=dw"
-refuse table "needs distortion=coulomb or distortion=optical" "experiment[A] segments=1,2 distortion=table:$WORK/w.dat vertexModel=dw"
+refuse table "needs distortion=coulomb or distortion=optical" "experiment[A] distortion=table:$WORK/w.dat vertexModel=dw"
 refuse ref "belongs to the distortion factor R(E)" "$L distortion=coulomb distortionRef=0.7 vertexModel=dw"
 refuse ratio "belongs to the distortion factor R(E)" "$L distortion=coulomb distortionRatio=dw vertexModel=dw"
 refuse angle_ps "spectatorAngle= (one direction) and a ps window" "$L distortion=coulomb spectatorAngle=10 ps=hulthen:0-30 vertexModel=dw"
@@ -170,9 +172,9 @@ echo "(e) the same numbers on 1 and 4 threads"
 # same to the last digit whatever the thread count (and the schedule).
 threads_saved="$OMP_NUM_THREADS"
 export OMP_NUM_THREADS=1
-run t1 "experiment[A] segments=1,2 $KIN distortion=coulomb vertexModel=dw spectatorAngles=cm:0-180" "NOFOLD"
+run t1 "experiment[A] $KIN distortion=coulomb vertexModel=dw spectatorAngles=cm:0-180" "NOFOLD"
 export OMP_NUM_THREADS=4
-run t4 "experiment[A] segments=1,2 $KIN distortion=coulomb vertexModel=dw spectatorAngles=cm:0-180" "NOFOLD"
+run t4 "experiment[A] $KIN distortion=coulomb vertexModel=dw spectatorAngles=cm:0-180" "NOFOLD"
 export OMP_NUM_THREADS="$threads_saved"
 if ran t1 && ran t4; then
   for f in chiSquared.out thm_experiments.out "$OUT"; do
@@ -187,8 +189,8 @@ echo "(f) a node of phi~(q) in the spectatorAngle direction is reported"
 # -q/kappa); at a lab angle of 50 deg q runs over 90-81 MeV/c on the data,
 # and rmin = 4.8 fm puts a node at 85 MeV/c, where G ~ 1/phi~^2 has a pole
 # (G11 jumped from 8.5 to 226 at the 0.7 MeV grid node, without a word).
-run node "experiment[A] segments=1,2 $KIN distortion=coulomb vertexModel=dw spectatorAngle=50 boundState=yukawa:4.8" "NOFOLD"
-run nonode "experiment[A] segments=1,2 $KIN distortion=coulomb vertexModel=dw spectatorAngle=50 boundState=yukawa:4" "NOFOLD"
+run node "experiment[A] $KIN distortion=coulomb vertexModel=dw spectatorAngle=50 boundState=yukawa:4.8" "NOFOLD"
+run nonode "experiment[A] $KIN distortion=coulomb vertexModel=dw spectatorAngle=50 boundState=yukawa:4" "NOFOLD"
 if ran node && ran nonode; then
   grep -q "WARNING: <thm> experiment\[A\]: the plane-wave source phi~(q) of the vertex changes sign between E = 0.725 and 0.745 MeV" \
     "$WORK/node/log" && ok "node between 0.725 and 0.745 MeV: warned" || bad "no warning for the node of phi~(q)"

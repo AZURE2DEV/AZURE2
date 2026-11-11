@@ -40,6 +40,7 @@ AZURE2_BIN="${1:?usage: check.sh path/to/AZURE2}"
 AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
 . "$HERE/../lib/guard.sh"
 . "$HERE/../lib/check_common.sh"
+. "$HERE/../lib/thm_records.sh"
 RUN="$(guard_command "${TEST_TIMEOUT:-600}")"
 export OMP_NUM_THREADS=1
 
@@ -137,9 +138,10 @@ stage thm "$TOY" toy.azr
 free_toy "$WORK/thm/source.azr" > "$WORK/thm/run.azr"
 stage thm_cbkg "$TOY" toy.azr
 { free_toy "$WORK/thm_cbkg/source.azr"
-  printf '<thm>\nexperiment[E] segments=1 cbackground=1/2+:2=0.05,-0.08\n</thm>\n'
+  printf '<thm>\nexperiment[E] cbackground=1/2+:2=0.05,-0.08\n</thm>\n'
   printf '<mcmc>\n<parameters>\ncbkg_E_1/2+_2_1/2,0,1/2,0_re0 0.05 0.05 0.01 1\n</parameters>\n</mcmc>\n'
 } > "$WORK/thm_cbkg/run.azr"
+thm_join "$WORK/thm_cbkg/run.azr" E toy
 
 # <mcmc> prior rows name their parameter: a short form (E1, the first level's energy) is applied; a row that names
 # no parameter (the old spelling width_01_2) stops the run with a message, instead of leaving that prior out.

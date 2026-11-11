@@ -55,8 +55,10 @@ WP="$WORK"; if command -v cygpath > /dev/null 2>&1; then WP="$(cygpath -m "$WORK
 trap 'rm -rf "$WORK"' EXIT
 . "$HERE/../lib/guard.sh"
 . "$HERE/../lib/check_common.sh"
+. "$HERE/../lib/thm_records.sh"
 RUN="$(guard_command "${TEST_TIMEOUT:-300}")"
 OUT="AZUREOut_aa=1_R=2.out"
+BOTH="lc723_thm_points lc723_band_mid"   # the THM data sets of the experiment
 KIN="beam=18O target=3He spectator=d Ebeam=115"
 KINN="beam=18O target=d spectator=n Ebeam=54"
 fail=0
@@ -75,7 +77,7 @@ run() {
   cp "$src/$azr" "$d/run.azr"
   local edit
   for edit in ${3:-}; do awk "${!edit}" "$d/run.azr" > "$d/tmp.azr" && mv "$d/tmp.azr" "$d/run.azr"; done
-  [ -z "$2" ] || printf '\n<thm>\n%s\n</thm>\n' "$2" >> "$d/run.azr"
+  [ -z "$2" ] || thm_set "$d/run.azr" "$2" ${MEMBERS-$BOTH}
   (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 1000000 > log;
    echo "${PIPESTATUS[1]}" > status)
 }
@@ -87,19 +89,21 @@ ratios() {
 }
 
 # awk programs editing the .azr
-NOFOLD='/<targetInt>/ { print; T = 1; next } /<\/targetInt>/ { T = 0 } T { next } { print }'
-# examples/c12c12_tumino2018 reduced to one THM segment on data/pts.dat, no
-# folding, its <thm> block dropped (the runs append their own), and the
-# prior_centre rows of the segment lines that are gone dropped with them (a row
-# that names no <segmentsData> line is an error).
-C12MIN='/<segmentsData>/ { print; print "1  1  2  0  7  0  180  10  1  1  0  0  0  0  data/pts.dat  0  0"; S = 1; next }
-/<\/segmentsData>/ { S = 0 } /<targetInt>/ { print; S = 1; next } /<\/targetInt>/ { S = 0 }
-/<thm>/ { T = 1; next } /<\/thm>/ { T = 0; next } S || T { next } / prior_centre / { next } { print }'
+NOFOLD="$THM_NOFOLD"
+# examples/c12c12_tumino2018 reduced to one THM data set on data/pts.dat (pts,
+# 12C(12C,p)23Na from pair 1), no folding, its <thm> section dropped (the runs
+# write their own).
+C12MIN='/^<data>/ { print; print "dataset pts"; print "    reaction       12C(12C,p)23Na"; print "    entrance_pair  1"
+                    print "    quantity       sigma"; print "    unit           arbitrary"; print "    file           data/pts.dat"
+                    print "    columns        E_lab[MeV] _ value error"; print "    energy_window  0 7 MeV"
+                    print "    norm           profiled"; print "    thm            global"; S = 1; next }
+/^<\/data>/ { S = 0 } /^<targets>/ { print; S = 1; next } /^<\/targets>/ { S = 0 }
+/^<thm>/ { T = 1; next } /^<\/thm>/ { T = 0; next } S || T { next } $1 == "beam" || $1 == "quadrature" { next } { print }'
 
 # (a) ----------------------------------------------------------------------
 echo "(a) distortion=none == no key"
-run nokey "experiment[A] segments=1,2 $KIN"
-run none "experiment[A] segments=1,2 $KIN distortion=none"
+run nokey "experiment[A] $KIN"
+run none "experiment[A] $KIN distortion=none"
 ran nokey && ran none
 for f in chiSquared.out normalizations.out parameters.out thm_experiments.out "$OUT"; do
   same "$WORK/nokey/output/$f" "$WORK/none/output/$f" && ok "$f byte-identical" || bad "$f differs"
@@ -107,9 +111,9 @@ done
 
 # (b) ----------------------------------------------------------------------
 echo "(b) neutral spectator"
-run n_off "experiment[A] segments=1,2 $KINN"
-run n_plane "experiment[A] segments=1,2 $KINN distortion=optical opticalAA=plane"
-run n_coul "experiment[A] segments=1,2 $KINN distortion=coulomb"
+run n_off "experiment[A] $KINN"
+run n_plane "experiment[A] $KINN distortion=optical opticalAA=plane"
+run n_coul "experiment[A] $KINN distortion=coulomb"
 if ran n_off && ran n_plane && ran n_coul; then
   w="$(ratios n_plane n_off | awk '{ d = $2 - 1; if (d < 0) d = -d; if (d > w) w = d; n++ } END { printf "%d %.3e", n, w }')"
   awk -v w="${w#* }" -v n="${w% *}" 'BEGIN { exit !(n > 100 && w < 1e-6) }' \
@@ -123,8 +127,8 @@ fi
 
 # (c) ----------------------------------------------------------------------
 echo "(c) the model carries R(E)"
-run c_off "experiment[A] segments=1,2 $KIN" "NOFOLD"
-run c_on "experiment[A] segments=1,2 $KIN distortion=coulomb spectatorAngle=30" "NOFOLD"
+run c_off "experiment[A] $KIN" "NOFOLD"
+run c_on "experiment[A] $KIN distortion=coulomb spectatorAngle=30" "NOFOLD"
 if ran c_off && ran c_on; then
   ratios c_on c_off | sort -g > "$WORK/c.ratio"
   # distortion_point rows: E E_sF eta_sF theta |M|^2 |M_PW|^2 R lmax (lowest point, E_ref, highest point)
@@ -137,7 +141,7 @@ if ran c_off && ran c_on; then
     && ok "model ratio == R of thm_experiments.out at E = ${lo% *} (${lo#* }) and ${hi% *} (${hi#* }), lab 30 deg" \
     || bad "model ratio vs distortion_point: '$lo' '$rlo' / '$hi' '$rhi'"
   eref="$(awk 'NR == 10 { print $1 }' "$WORK/c.ratio")"
-  run c_ref "experiment[A] segments=1,2 $KIN distortion=coulomb spectatorAngle=30 distortionRef=$eref" "NOFOLD"
+  run c_ref "experiment[A] $KIN distortion=coulomb spectatorAngle=30 distortionRef=$eref" "NOFOLD"
   if ran c_ref; then
     r="$(ratios c_ref c_off | awk -v e="$eref" '$1 == e { print $2 }')"
     awk -v r="$r" 'BEGIN { d = r - 1; if (d < 0) d = -d; exit !(r != "" && d < 1e-6) }' \
@@ -162,9 +166,9 @@ DIG="0.80 2.2944e-03 3.7018e-03
 echo "$DIG" | awk '{ printf "%.4f 0 1.0 0.1\n", 2 * $1 }' > "$WORK/pts.dat"   # E_lab = 2 E_cm
 echo "(d) 12C(14N,d): Mukhamedzhanov's published factors"
 K12="beam=14N target=12C spectator=d"
-run d_off "experiment[T] segments=1 $K12 Ebeam=30" "C12MIN" c12
-run d_19 "experiment[T] segments=1 $K12 Ebeam=30 distortion=coulomb distortionRef=2.664" "C12MIN" c12
-run d_26 "experiment[T] segments=1 $K12 Ebeam=30.11 distortion=coulomb distortionRatio=dw distortionRef=2.664" "C12MIN" c12
+MEMBERS=pts run d_off "experiment[T] $K12 Ebeam=30" "C12MIN" c12
+MEMBERS=pts run d_19 "experiment[T] $K12 Ebeam=30 distortion=coulomb distortionRef=2.664" "C12MIN" c12
+MEMBERS=pts run d_26 "experiment[T] $K12 Ebeam=30.11 distortion=coulomb distortionRatio=dw distortionRef=2.664" "C12MIN" c12
 compare() {  # compare RUN COLUMN LABEL
   paste -d' ' <(ratios "$1" d_off) <(echo "$DIG") |
     awk -v c="$2" '{ if (($1 - $3) > 1e-6 || ($3 - $1) > 1e-6) { print "ENERGY", $1, $3; exit 1 }
@@ -181,9 +185,9 @@ fi
 
 # (e) ----------------------------------------------------------------------
 echo "(e) optical potential, nuclear part off == coulomb"
-run e_coul "experiment[A] segments=1,2 $KIN distortion=coulomb"
-run e_zero "experiment[A] segments=1,2 $KIN distortion=optical opticalAA=0,0,0,0,0,0,0,0,0,0 opticalSF=0,0,0,0,0,0,0,0,0,0"
-run e_ws "experiment[A] segments=1,2 $KIN distortion=optical opticalAA=100,4.2,0.7,20,4.2,0.7,0,0,0,4.2 opticalSF=90,3.5,0.75,0,0,0,10,3.8,0.65,3.5"
+run e_coul "experiment[A] $KIN distortion=coulomb"
+run e_zero "experiment[A] $KIN distortion=optical opticalAA=0,0,0,0,0,0,0,0,0,0 opticalSF=0,0,0,0,0,0,0,0,0,0"
+run e_ws "experiment[A] $KIN distortion=optical opticalAA=100,4.2,0.7,20,4.2,0.7,0,0,0,4.2 opticalSF=90,3.5,0.75,0,0,0,10,3.8,0.65,3.5"
 if ran e_coul && ran e_zero && ran e_ws; then
   for f in chiSquared.out normalizations.out "$OUT"; do
     same "$WORK/e_coul/output/$f" "$WORK/e_zero/output/$f" && ok "$f byte-identical" || bad "$f differs"
@@ -204,23 +208,23 @@ refuse() {  # refuse NAME MESSAGE-FRAGMENT BLOCK [EDITS PROJECT]
   fi
 }
 printf '0.6 1.0\n0.7 2.0\n' > "$WORK/short.dat"
-refuse no_kinematics "distortion=coulomb needs the kinematics" "experiment[A] segments=1,2 distortion=coulomb"
-refuse bad_kind "expected none, coulomb, optical or table" "experiment[A] segments=1,2 $KIN distortion=dwba"
-refuse optical_key "need distortion=optical" "experiment[A] segments=1,2 $KIN distortion=coulomb opticalAA=plane"
-refuse optical_count "ten numbers" "experiment[A] segments=1,2 $KIN distortion=optical opticalSF=50,1.2,0.6"
-refuse optical_radius "ten numbers" "experiment[A] segments=1,2 $KIN distortion=optical opticalAA=50,0,0.6,0,0,0,0,0,0,0"
-refuse angle_value "expected qf, a lab angle" "experiment[A] segments=1,2 $KIN distortion=coulomb spectatorAngle=200"
-refuse angle_alone "needs distortion=coulomb or distortion=optical" "experiment[A] segments=1,2 $KIN spectatorAngle=10"
-refuse ratio_value "expected dwpw or dw" "experiment[A] segments=1,2 $KIN distortion=coulomb distortionRatio=pw"
-refuse bound_value "expected whittaker or yukawa" "experiment[A] segments=1,2 $KIN distortion=coulomb boundState=hulthen"
-refuse theta "expected all or thmin-thmax" "experiment[A] segments=1,2 $KIN theta=5"
-refuse twice "is given twice" "experiment[A] segments=1,2 $KIN distortion=coulomb distortion=none"
-refuse table_missing "cannot read" "experiment[A] segments=1,2 distortion=table:$WP/none_such.dat"
-refuse table_short "beyond the table" "experiment[A] segments=1,2 distortion=table:$WP/short.dat"
-refuse no_energy "the spectator has no energy left" "experiment[A] segments=1,2 beam=18O target=3He spectator=d Ebeam=40 distortion=coulomb"
+refuse no_kinematics "distortion=coulomb needs the kinematics" "experiment[A] distortion=coulomb"
+refuse bad_kind "expected none, coulomb, optical or table" "experiment[A] $KIN distortion=dwba"
+refuse optical_key "need distortion=optical" "experiment[A] $KIN distortion=coulomb opticalAA=plane"
+refuse optical_count "ten numbers" "experiment[A] $KIN distortion=optical opticalSF=50,1.2,0.6"
+refuse optical_radius "ten numbers" "experiment[A] $KIN distortion=optical opticalAA=50,0,0.6,0,0,0,0,0,0,0"
+refuse angle_value "expected qf, a lab angle" "experiment[A] $KIN distortion=coulomb spectatorAngle=200"
+refuse angle_alone "needs distortion=coulomb or distortion=optical" "experiment[A] $KIN spectatorAngle=10"
+refuse ratio_value "expected dwpw or dw" "experiment[A] $KIN distortion=coulomb distortionRatio=pw"
+refuse bound_value "expected whittaker or yukawa" "experiment[A] $KIN distortion=coulomb boundState=hulthen"
+refuse theta "expected all or thmin-thmax" "experiment[A] $KIN theta=5"
+refuse twice "is given twice" "experiment[A] $KIN distortion=coulomb distortion=none"
+refuse table_missing "cannot read" "experiment[A] distortion=table:$WP/none_such.dat"
+refuse table_short "beyond the table" "experiment[A] distortion=table:$WP/short.dat"
+refuse no_energy "the spectator has no energy left" "experiment[A] beam=18O target=3He spectator=d Ebeam=40 distortion=coulomb"
 # 12C(14N,d): above E = 2.3 MeV the deuteron cannot reach 75 deg in the lab.
-refuse lab_reach "beyond the reach of the spectator" "experiment[T] segments=1 $K12 Ebeam=30 distortion=coulomb spectatorAngle=75" "C12MIN" c12
-refuse ref_energy "distortionRef: at E = 20" "experiment[A] segments=1,2 $KIN distortion=coulomb distortionRef=20"
+MEMBERS=pts refuse lab_reach "beyond the reach of the spectator" "experiment[T] $K12 Ebeam=30 distortion=coulomb spectatorAngle=75" "C12MIN" c12
+refuse ref_energy "distortionRef: at E = 20" "experiment[A] $KIN distortion=coulomb distortionRef=20"
 # B(x+s): masses 5.493 MeV (3He = d + p) against field 32 = 2.2246 MeV; the real d kinematics agree.
 grep -q "WARNING: <thm> experiment\[A\]: B(x+s) from the masses of 3He = x + d is 5.49343 MeV, but the entrance pair 1 carries B = 2.22457 MeV (field 32" "$WORK/c_off/log" \
   && ok "B(x+s) warning: masses 5.49343 MeV vs field 32 2.22457 MeV" || bad "no B(x+s) warning for 3He"
@@ -231,8 +235,8 @@ grep -q "B(x+s) from the masses" "$WORK/n_off/log" && bad "B(x+s) warning for th
 echo "(g) global optical potentials (2H(18O,a15N)n: d + 18O, n + 19F)"
 # ancai06 for d + 18O at E_d = 6.0424 MeV, the ten numbers written out (An & Cai 2006).
 ANCAI="92.3094248915,3.01133408613,0.752021341567,1.47983816455,3.51976751944,0.592925860579,10.6451021248,3.64806901987,0.693485966441,3.41482603665"
-run g_name "experiment[A] segments=1,2 $KINN distortion=optical opticalAA=ancai06 opticalSF=plane"
-run g_ten "experiment[A] segments=1,2 $KINN distortion=optical opticalAA=$ANCAI opticalSF=plane"
+run g_name "experiment[A] $KINN distortion=optical opticalAA=ancai06 opticalSF=plane"
+run g_ten "experiment[A] $KINN distortion=optical opticalAA=$ANCAI opticalSF=plane"
 if ran g_name && ran g_ten; then
   ratios g_name g_ten | awk '{ d = $2 - 1; if (d < 0) d = -d; if (d > m) m = d; n++ }
     END { printf "%d %.2e\n", n, m; exit !(n > 0 && m <= 1e-6) }' > "$WORK/g.cmp" \
@@ -240,7 +244,7 @@ if ran g_name && ran g_ten; then
     || bad "ancai06 against its ten numbers: $(cat "$WORK/g.cmp")"
   grep -q "WARNING" "$WORK/g_name/log" && bad "a warning for ancai06 inside its range" || ok "no warning inside the range"
 fi
-run g_extra "experiment[A] segments=1,2 $KINN distortion=optical opticalAA=ancai06 opticalSF=kd03:extrapolate"
+run g_extra "experiment[A] $KINN distortion=optical opticalAA=ancai06 opticalSF=kd03:extrapolate"
 if ran g_extra; then
   grep -q "WARNING: <thm> experiment\[A\]: opticalSF=kd03 (Koning & Delaroche, NPA 713 (2003) 231 (global)) is outside its validity range for n + 19F: target A = 19 (valid 24-209); extrapolated" "$WORK/g_extra/log" \
     && ok "kd03:extrapolate for n + 19F: warned" || bad "no extrapolation warning for kd03"
@@ -251,22 +255,22 @@ fi
 # inside its range, bg71 (A >= 40) extrapolated with a warning.  (Their
 # formulas: tests/reference/thm_optical_reference.py against RIPL-3; the 4He
 # ones, mcfadden66 and avrigeanu94, have no alpha channel in these projects.)
-run g_liang "experiment[A] segments=1,2 $KIN distortion=optical opticalAA=liang09 opticalSF=plane"
+run g_liang "experiment[A] $KIN distortion=optical opticalAA=liang09 opticalSF=plane"
 if ran g_liang; then
   grep -q "a + A: liang09 (3He on 18O) Woods-Saxon V=" "$WORK/g_liang/log" && ! grep -q "WARNING.*liang09" "$WORK/g_liang/log" \
     && ok "opticalAA=liang09 for 3He + 18O: run, reported, no warning" || bad "liang09 for 3He + 18O"
 fi
-run g_bg "experiment[A] segments=1,2 $KIN distortion=optical opticalAA=bg71:extrapolate opticalSF=plane"
+run g_bg "experiment[A] $KIN distortion=optical opticalAA=bg71:extrapolate opticalSF=plane"
 if ran g_bg; then
   grep -q "opticalAA=bg71 (Becchetti & Greenlees (1971)) is outside its validity range for 3He + 18O: target A = 18 (valid 40-208); extrapolated" "$WORK/g_bg/log" \
     && ok "opticalAA=bg71:extrapolate for 3He + 18O: run, warned" || bad "no extrapolation warning for bg71"
   same "$WORK/g_bg/output/$OUT" "$WORK/g_liang/output/$OUT" && bad "bg71 and liang09 give the same model" \
     || ok "bg71 and liang09 give different R(E)"
 fi
-refuse g_range "Write kd03:extrapolate" "experiment[A] segments=1,2 $KINN distortion=optical opticalSF=kd03"
-refuse g_species "which it does not describe" "experiment[A] segments=1,2 $KINN distortion=optical opticalAA=kd03"
-refuse g_mass "outside its validity range for d + 18O: target A = 18 (valid 27-238)" "experiment[A] segments=1,2 $KINN distortion=optical opticalAA=daehnick80"
-refuse g_name_bad "a global optical potential (ancai06, daehnick80" "experiment[A] segments=1,2 $KINN distortion=optical opticalAA=ancai"
+refuse g_range "Write kd03:extrapolate" "experiment[A] $KINN distortion=optical opticalSF=kd03"
+refuse g_species "which it does not describe" "experiment[A] $KINN distortion=optical opticalAA=kd03"
+refuse g_mass "outside its validity range for d + 18O: target A = 18 (valid 27-238)" "experiment[A] $KINN distortion=optical opticalAA=daehnick80"
+refuse g_name_bad "a global optical potential (ancai06, daehnick80" "experiment[A] $KINN distortion=optical opticalAA=ancai"
 
 echo
 if [ "$fail" -eq 0 ]; then echo "PASS: THM distortion factor"; else echo "FAIL"; exit 1; fi

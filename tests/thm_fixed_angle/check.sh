@@ -42,20 +42,22 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/thm_fixed_angle.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 . "$HERE/../lib/guard.sh"
 . "$HERE/../lib/check_common.sh"
+. "$HERE/../lib/thm_records.sh"
 RUN="$(guard_command "${TEST_TIMEOUT:-600}")"
 KIN18="beam=18O target=d spectator=n Ebeam=54"
 FOURPI="12.566370614359172"
 fail=0
 
 # run PROJECT NAME BLOCK -- a "calculate with data" run of a copy of
-# tests/PROJECT with BLOCK as its <thm> block ("" = none).  Status in NAME/status.
+# tests/PROJECT with BLOCK as its <thm> section ("" = none), every data set of
+# the project in BLOCK's experiment.  Status in NAME/status.
 run() {
   local d="$WORK/$2"
   rm -rf "$d"
   mkdir -p "$d/output" "$d/checks"
   cp -r "$HERE/../$1/data" "$d/"
   cp "$HERE/../$1/$1.azr" "$d/run.azr"
-  [ -z "$3" ] || printf '\n<thm>\n%s\n</thm>\n' "$3" >> "$d/run.azr"
+  [ -z "$3" ] || thm_set "$d/run.azr" "$3" $(thm_datasets "$d/run.azr")
   (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 1000000 > log;
    echo "${PIPESTATUS[1]}" > status)
 }
@@ -86,8 +88,8 @@ same_chi2() {  # same_chi2 A B LABEL
 # (a) ----------------------------------------------------------------------
 echo "(a) theta=all == no key"
 run 7Li_p_a none ""
-run 7Li_p_a nokey "experiment[A] segments=1"
-run 7Li_p_a all "experiment[A] segments=1 theta=all"
+run 7Li_p_a nokey "experiment[A]"
+run 7Li_p_a all "experiment[A] theta=all"
 if ran none && ran nokey && ran all; then
   for f in chiSquared.out normalizations.out parameters.out thm_experiments.out "$(out all)"; do
     same "$WORK/nokey/output/$f" "$WORK/all/output/$f" && ok "$f byte-identical" || bad "$f differs"
@@ -99,20 +101,20 @@ fi
 
 # (b) ----------------------------------------------------------------------
 echo "(b) a 0-180 window is the angle-integrated model / 4 pi"
-run 7Li_p_a full "experiment[A] segments=1 theta=0-180"
+run 7Li_p_a full "experiment[A] theta=0-180"
 if ran full; then
   check_worst full nokey "$FOURPI" 1.2e-10 "7Li(p,a): 4 pi <dsigma/dOmega>_{0-180} vs angle-integrated"
   same_chi2 full nokey "7Li(p,a) 0-180"
 fi
 run 17O o17_all ""
-run 17O o17_full "experiment[A] segments=1 theta=0-180"
+run 17O o17_full "experiment[A] theta=0-180"
 if ran o17_all && ran o17_full; then
   check_worst o17_full o17_all "$FOURPI" 1.2e-10 "17O(n,a): 4 pi <dsigma/dOmega>_{0-180} vs angle-integrated"
   same_chi2 o17_full o17_all "17O(n,a) 0-180"
 fi
 echo "    18O(p,a): one 1/2+ group, one entrance and one exit wave -- isotropic"
-run 18O_p_a_thm o18_ps "experiment[A] segments=1,2 $KIN18 ps=hulthen:0-40 background=linear"
-run 18O_p_a_thm o18_ps_theta "experiment[A] segments=1,2 $KIN18 ps=hulthen:0-40 background=linear theta=50-70"
+run 18O_p_a_thm o18_ps "experiment[A] $KIN18 ps=hulthen:0-40 background=linear"
+run 18O_p_a_thm o18_ps_theta "experiment[A] $KIN18 ps=hulthen:0-40 background=linear theta=50-70"
 if ran o18_ps && ran o18_ps_theta; then
   check_worst o18_ps_theta o18_ps "$FOURPI" 1.2e-10 "18O(p,a) theta=50-70 with ps window and background: 4 pi <.> vs angle-integrated"
   same_chi2 o18_ps_theta o18_ps "18O(p,a) theta=50-70, ps window, linear background"
@@ -120,9 +122,9 @@ fi
 
 # (c) ----------------------------------------------------------------------
 echo "(c) theta -> 0"
-run 7Li_p_a p0 "experiment[A] segments=1 theta=0-0"
-run 7Li_p_a p05 "experiment[A] segments=1 theta=0-0.5"
-run 7Li_p_a p1 "experiment[A] segments=1 theta=0-1"
+run 7Li_p_a p0 "experiment[A] theta=0-0"
+run 7Li_p_a p05 "experiment[A] theta=0-0.5"
+run 7Li_p_a p1 "experiment[A] theta=0-1"
 if ran p0 && ran p05 && ran p1; then
   # (m(0-1) - m(0)) / (m(0-0.5) - m(0)) -> 4 (the window mean is m(0) + c t^2)
   read -r n q lo hi <<< "$(paste -d' ' <(model p0) <(model p05) <(model p1) |
@@ -140,20 +142,20 @@ fi
 
 # (e) ----------------------------------------------------------------------
 echo "(e) identical exit particles: symmetric about 90 deg"
-run 7Li_p_a f3060 "experiment[A] segments=1 theta=30-60"
-run 7Li_p_a b120150 "experiment[A] segments=1 theta=120-150"
+run 7Li_p_a f3060 "experiment[A] theta=30-60"
+run 7Li_p_a b120150 "experiment[A] theta=120-150"
 if ran f3060 && ran b120150; then
   check_worst f3060 b120150 1 1e-12 "7Li(p,a)a: 30-60 == 120-150"
   read -r n w <<< "$(worst f3060 nokey "$FOURPI")"
   ok "(size) 7Li(p,a) 30-60 vs angle-integrated: worst rel $w"
 fi
-run 6Li_d li6_f "experiment[A] segments=1 theta=10-40"
-run 6Li_d li6_b "experiment[A] segments=1 theta=140-170"
+run 6Li_d li6_f "experiment[A] theta=10-40"
+run 6Li_d li6_b "experiment[A] theta=140-170"
 if ran li6_f && ran li6_b; then
   check_worst li6_f li6_b 1 1e-12 "6Li(d,a)a: 10-40 == 140-170"
 fi
-run 17O o17_f "experiment[A] segments=1 theta=20-60"
-run 17O o17_b "experiment[A] segments=1 theta=120-160"
+run 17O o17_f "experiment[A] theta=20-60"
+run 17O o17_b "experiment[A] theta=120-160"
 if ran o17_f && ran o17_b; then
   read -r n w <<< "$(worst o17_f o17_b)"
   counted "$n" && awk -v w="$w" 'BEGIN { exit !(w > 1e-3) }' && ok "17O(n,a)14C (1-, 2+, 3-, 5- interfere): 20-60 vs 120-160 differ by up to $w" \
@@ -172,20 +174,20 @@ refuse() {  # refuse NAME MESSAGE-FRAGMENT BLOCK
   fi
 }
 USAGE="expected all or thmin-thmax"
-refuse word "$USAGE" "experiment[A] segments=1 theta=forward"
-refuse single "$USAGE" "experiment[A] segments=1 theta=60"
-refuse reversed "$USAGE" "experiment[A] segments=1 theta=70-50"
-refuse negative "$USAGE" "experiment[A] segments=1 theta=-10-20"
-refuse beyond "$USAGE" "experiment[A] segments=1 theta=170-190"
-refuse empty_end "$USAGE" "experiment[A] segments=1 theta=50-"
-refuse twice "given twice" "experiment[A] segments=1 theta=50-70
+refuse word "$USAGE" "experiment[A] theta=forward"
+refuse single "$USAGE" "experiment[A] theta=60"
+refuse reversed "$USAGE" "experiment[A] theta=70-50"
+refuse negative "$USAGE" "experiment[A] theta=-10-20"
+refuse beyond "$USAGE" "experiment[A] theta=170-190"
+refuse empty_end "$USAGE" "experiment[A] theta=50-"
+refuse twice "given twice" "experiment[A] theta=50-70
 experiment[A] theta=all"
 refuse coherent "entranceL=coherent" "entranceL=coherent
-experiment[A] segments=1 theta=50-70"
+experiment[A] theta=50-70"
 
 # effect size ----------------------------------------------------------------
 echo "(size) Tumino et al. EPJA 27 (2006) 243: theta_cm = 50-70 deg, same parameters"
-run 7Li_p_a tumino "experiment[A] segments=1 theta=50-70"
+run 7Li_p_a tumino "experiment[A] theta=50-70"
 if ran tumino; then
   # shape: the two models scaled to the same mean over the points
   paste -d' ' <(model tumino) <(model nokey) |

@@ -35,7 +35,9 @@ R-matrix curve rather than against AZURE2's own earlier output. It is where the
   the Brune and formal representations, this equals a no-Brune run of the formal
   set (checked to 2e-11 in b351b90) — which is what the authors computed.
 * **Resolution**: 17 keV Gaussian σ (c.m.; 40 keV FWHM in the companion papers),
-  folded by `<targetInt>` on both segments; its σ is lab: 0.017952 MeV.
+  the beam record `beam_targetInt1` (`spread 0.017952 MeV lab`) that both data
+  sets name (the project is format 3 since 2026-11-11; the old original is
+  `tests/convert/fixtures/tests/18O_p_a_thm/18O_p_a_thm.azr`).
 * **Segment 1** (`data/lc723_thm_points.dat`, 39 points): the THM S(E) points
   of Fig. 4, digitized, with their digitized error bars (mean of the two arms),
   turned into the HOES observable AZURE2 computes:
@@ -76,8 +78,9 @@ segment, so both segments were folded with 17 x 0.947 = 16.1 keV instead of
 once. 2191.98 -> 2228.94 (segment 1 2095.59 -> 2130.08, segment 2 96.38 ->
 98.86); the table above moved by less than 0.4 points (it was 10.2 / 5.2 %,
 30 %, 0.72 and 26.8 / 23.1 %, 55 %, 0.15) and both verdicts stand.
-`check.sh` also asserts that the "1,2" line gives output identical to one
-line per segment.
+`check.sh` also asserts that the one beam record of both data sets gives
+output identical to one beam record per data set (the format-3 form of that
+"1,2" line).
 
 ## Verdict
 

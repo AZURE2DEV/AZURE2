@@ -10,6 +10,7 @@ none                                                                            
 none                                                                                                #Coulomb Amplitudes Check
 none                                                                                                #Reaction Pathway Check
 none                                                                                                #Angular Distributions Check
+format=3
 </config>
 <levels>
 1 -1   8.0378 1 1 1 4 2 1 1 0 0.004575765004887271 0.5 1 2.5 1 0 1.00866492 16.99474312 0 8 8.045370 8.045370 0 0 0.0 0 4.643 0 0 0 2.224566 0
@@ -29,14 +30,28 @@ none                                                                            
 3 -1  8.28417 1 1 2 0 6 4 1 0 13657.649553397972 0 1 0 1 0 4.00150609 13.99995051 2 6 8.045370 6.227625 0 0 0.0 0 5.197 0 0 0 0.000000 0
 
 </levels>
-<segmentsData>
-1  1  2  -0.053412  0.302553  0  180  10  1  1  0  0  0  0  data/thm_guardo2017_hoes_shifted.dat  0  0
-</segmentsData>
-<segmentsTest>
-</segmentsTest>
-<targetInt>
-1  "1"  50  1  0.023874596  0  0  "" 0  0  0  0  "" 0  0 0.04 5 50
-</targetInt>
+<data>
+# <segmentsData> line 1
+dataset thm_guardo2017_hoes_shifted
+    reaction       17O(n,a)14C
+    quantity       sigma
+    unit           arbitrary
+    file           data/thm_guardo2017_hoes_shifted.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  -0.053412 0.302553 MeV
+    norm           profiled
+    beam           beam_thm_guardo2017_hoes_shifted
+    quadrature     points 50 width_multiplier 5 per_width 50
+    thm            global
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+# <targetInt> line 1
+beam beam_thm_guardo2017_hoes_shifted
+    # CONVERTED: a Gaussian convolution is written as the beam's energy spread (the kernel is the same; the old line does not say whether it was a detector resolution)
+    spread         0.023874596 MeV lab
+</targets>
 <thm>
 entranceL=incoherent
 vertex=constant

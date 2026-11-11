@@ -121,7 +121,7 @@ with tempfile.TemporaryDirectory() as tmp:
 print("1b. AzrModel prior centres")
 with tempfile.TemporaryDirectory() as tmp:
     src = old_tree.original(os.path.join(SOURCE, AZR))
-    plain = os.path.join(ROOT, "tests", "7Li_p_a", "7Li_p_a.azr")
+    plain = old_tree.original(os.path.join(ROOT, "tests", "7Li_p_a", "7Li_p_a.azr"))
     text = open(plain).read()
     check("tests/7Li_p_a has no <parameterSettings>", "<parameterSettings>" not in text)
     m = AzrModel.from_file(plain)

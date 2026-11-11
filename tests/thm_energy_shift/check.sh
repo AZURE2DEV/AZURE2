@@ -7,7 +7,7 @@
 # Model: tests/17O (17O(n,a) THM, points from E_lab = -54 keV, the 33 eV 5-
 # level at E_cm = 74 keV, 21 keV Gaussian).  For a shift d (lab, MeV) the
 # project is run twice:
-#   A  segment_1_energy_shift = d in an external parameter file;
+#   A  o17_guardo.shift.offset = d in an external parameter file;
 #   B  the data file's energies moved by d, no shift.
 # The two must give the same model at every point (column 4 of the output;
 # column 1 is the shifted E_cm in both) to 1e-4.  Two shifts: +6 and -4 keV.
@@ -53,10 +53,10 @@ run() {
 setup base; run base
 for d in 0.006 -0.004; do
   setup "A$d"
-  awk -v d="$d" '{ sub(/\r$/, "") } $1 == "segment_1_energy_shift" { $2 = d } { print }' \
+  awk -v d="$d" '{ sub(/\r$/, "") } $1 == "o17_guardo.shift.offset" { $2 = d } { print }' \
     "$WORK/base/output/param.par" > "$WORK/A$d/shift.par"
-  grep -q "^segment_1_energy_shift $d " "$WORK/A$d/shift.par" ||
-    { echo "  FAIL  no segment_1_energy_shift in param.par"; exit 1; }
+  grep -q "^o17_guardo.shift.offset $d " "$WORK/A$d/shift.par" ||
+    { echo "  FAIL  no o17_guardo.shift.offset in param.par"; exit 1; }
   run "A$d" shift.par
   setup "B$d"
   for f in "$WORK/B$d"/data/*.dat; do

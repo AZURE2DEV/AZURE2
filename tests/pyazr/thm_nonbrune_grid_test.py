@@ -37,7 +37,7 @@ ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SOURCE = os.path.join(ROOT, "tests", "17O")
 LEVEL_EX = 1.891
 MOVED_EX = LEVEL_EX + 0.0015
-TARGETINT = '1 "1" 150 1 0.021 0 0 "" 0 0 0 0 "" 0'
+QUADRATURE = "points 150"          # the default sub-point grid of the beam's fold (spread 0.021 MeV lab)
 
 failures = []
 
@@ -50,9 +50,11 @@ def check(name, ok, detail=""):
 
 try:
     sys.path.insert(0, ROOT)
+    sys.path.insert(0, HERE)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
     from pyazr import azure2
+    import thm_records
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -71,23 +73,24 @@ def project(dst, level_ex):
     out, skip = [], False
     for line in open(os.path.join(SOURCE, "17O.azr")).read().split("\n"):
         tag = line.strip()
-        if tag == "<segmentsData>":
-            out += [line, "1 1 2 -1 1 0 180 10 1.0 0 0 0 0 0 data/pts.dat 0 0"]
-            skip = True
-            continue
-        if tag == "<targetInt>":
-            out += [line, TARGETINT]
+        f = line.split()
+        if tag == "<data>":
+            out += [line, "dataset pts", "    reaction       17O(n,a)14C", "    quantity       sigma", "    unit           b",
+                    "    file           data/pts.dat", "    columns        E_lab[MeV] _ value error",
+                    "    energy_window  -1 1.0 MeV", "    norm           1.0 fixed", "    beam           beam_o17_guardo",
+                    f"    quadrature     {QUADRATURE}", "    thm            global"]
             skip = True
             continue
         if tag == "<parameterSettings>":
             out.append(line)
             skip = True
             continue
-        if tag in ("</segmentsData>", "</targetInt>", "</parameterSettings>"):
+        if tag in ("</data>", "</parameterSettings>"):
             skip = False
         if skip:
             continue
-        f = line.split()
+        if f[:1] == ["quadrature"]:
+            line = f"    quadrature     {QUADRATURE}"
         if len(f) > 30 and abs(float(f[2]) - LEVEL_EX) < 1e-9:
             f[2] = f"{level_ex:.6f}"
             f[3] = "0"
@@ -117,7 +120,7 @@ with tempfile.TemporaryDirectory() as tmp:
     dense = project(os.path.join(tmp, "dense"), LEVEL_EX)
     # the dense copy: no folding, the dense grid as its data (lab energies)
     with open(dense) as f:
-        text = f.read().replace(TARGETINT + "\n", "")
+        text = thm_records.no_fold(f.read())
     with open(dense, "w") as f:
         f.write(text)
     with open(os.path.join(tmp, "dense", "data", "pts.dat"), "w") as f:

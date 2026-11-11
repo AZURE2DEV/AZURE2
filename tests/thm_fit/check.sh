@@ -5,7 +5,7 @@
 # vertexModel=dw, lineshape=on and a ps window.  The calculation of each is
 # checked elsewhere (tests/thm_*); this checks that a fit runs through them.
 #
-# Model: tests/18O_p_a_thm without its folding (the <targetInt> line removed),
+# Model: tests/18O_p_a_thm without its folding (the beam record removed),
 # the energy of the 8.6026 MeV level free and started 10 keV high.  For each
 # variant:
 #   - the fit ends and writes output/param.sav;
@@ -27,19 +27,20 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/thm_fit.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 . "$HERE/../lib/guard.sh"
 . "$HERE/../lib/check_common.sh"
+. "$HERE/../lib/thm_records.sh"
 RUN="$(guard_command "${TEST_TIMEOUT:-600}")"
 KIN="beam=18O target=3He spectator=d Ebeam=115"
 fail=0
 
 # setup NAME BLOCK: a copy of the project, unfolded, the first level's energy
-# free and 10 keV high, with BLOCK as its <thm> block.
+# free and 10 keV high, with BLOCK as its <thm> section, both data sets in its
+# experiment.
 setup() {
   local d="$WORK/$1"
   mkdir -p "$d/output" "$d/checks"
   cp -r "$SRC/data" "$d/"
-  awk '/^<targetInt>/ { print; skip = 1; next } /^<\/targetInt>/ { skip = 0 } skip { next }
-       $3 == "8.602600" { $3 = "8.612600"; $4 = 0 } { print }' "$SRC/18O_p_a_thm.azr" > "$d/run.azr"
-  printf '\n<thm>\n%s\n</thm>\n' "$2" >> "$d/run.azr"
+  awk "$THM_NOFOLD" "$SRC/18O_p_a_thm.azr" | awk '$3 == "8.602600" { $3 = "8.612600"; $4 = 0 } { print }' > "$d/run.azr"
+  thm_set "$d/run.azr" "$2" lc723_thm_points lc723_band_mid
 }
 # total DIR: the total chi2 of DIR/output/chiSquared.out.
 total() { tr -d '\r' < "$1/output/chiSquared.out" 2>/dev/null | grep -oE 'Total-Chi-Squared: [0-9.eE+-]+' | awk '{ print $2 }'; }
@@ -47,11 +48,11 @@ energy() { tr -d '\r' < "$1" | awk '$1 == "energy_1" { print $2 }'; }
 
 for v in experiment distortion dw lineshape ps; do
   case $v in
-    experiment) block="experiment[A] segments=1,2" ;;
-    distortion) block="experiment[A] segments=1,2 $KIN distortion=coulomb" ;;
-    dw) block="experiment[A] segments=1,2 $KIN distortion=coulomb vertexModel=dw" ;;
-    lineshape) block="experiment[A] segments=1,2 $KIN lineshape=on" ;;
-    ps) block="experiment[A] segments=1,2 $KIN ps=hulthen:0-40 psNodes=8" ;;
+    experiment) block="experiment[A]" ;;
+    distortion) block="experiment[A] $KIN distortion=coulomb" ;;
+    dw) block="experiment[A] $KIN distortion=coulomb vertexModel=dw" ;;
+    lineshape) block="experiment[A] $KIN lineshape=on" ;;
+    ps) block="experiment[A] $KIN ps=hulthen:0-40 psNodes=8" ;;
   esac
   echo "($v) $block"
   setup "$v.start" "$block"

@@ -52,8 +52,8 @@ SOURCE = os.path.join(ROOT, "tests", "18O_p_a_thm")
 KIN = "beam=18O target=3He spectator=d Ebeam=115"
 VARIANTS = {
     "A (experiment, linear and coherent background)":
-        "experiment[A] segments=1,2 background=linear cbackground=1/2+:2=0.3,-0.2",
-    "B (lineshape=on)": f"experiment[A] segments=1,2 {KIN} lineshape=on",
+        "experiment[A] background=linear cbackground=1/2+:2=0.3,-0.2",
+    "B (lineshape=on)": f"experiment[A] {KIN} lineshape=on",
 }
 
 failures = []
@@ -67,6 +67,8 @@ def check(name, ok, detail=""):
 
 try:
     sys.path.insert(0, ROOT)
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import thm_records
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     sys.stdout.reconfigure(line_buffering=True)
     import numpy as np
@@ -83,17 +85,9 @@ def stage(tmp, name, block):
     os.makedirs(os.path.join(work, "output"))
     os.makedirs(os.path.join(work, "checks"))
     shutil.copytree(os.path.join(SOURCE, "data"), os.path.join(work, "data"))
-    out, skip, levels = [], False, False
+    out, levels = [], False
     with open(os.path.join(SOURCE, "18O_p_a_thm.azr")) as f:
-        for line in f.read().replace("\r", "").split("\n"):
-            if line.startswith("<targetInt>"):
-                out.append(line)
-                skip = True
-                continue
-            if line.startswith("</targetInt>"):
-                skip = False
-            if skip:
-                continue
+        for line in thm_records.no_fold(f.read().replace("\r", "")).split("\n"):
             if line.startswith("<levels>"):
                 levels = True
             elif line.startswith("</levels>"):
@@ -105,10 +99,10 @@ def stage(tmp, name, block):
                 t[10] = "0"
                 line = " ".join(t)
             out.append(line)
-    out.append(f"<thm>\n{block}\n</thm>\n")
+    text = thm_records.thm_set("\n".join(out), block, ("lc723_thm_points", "lc723_band_mid"))
     path = os.path.join(work, "run.azr")
     with open(path, "w") as f:
-        f.write("\n".join(out))
+        f.write(text)
     return path
 
 

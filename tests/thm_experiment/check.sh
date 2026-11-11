@@ -8,7 +8,8 @@
 #
 # Model: tests/18O_p_a_thm (two THM segments with free norms, 39 + 79 points,
 # all parameters fixed; 0.1 s a run).  Each case appends a <thm> block to a
-# temporary copy of the .azr.
+# temporary copy of the .azr and names its experiment in the data sets' `thm`
+# field (format 3; the old grammar's segments= lists through the converter).
 #
 #   (a) one-segment experiments without background change nothing: every
 #       output file is byte-identical to the run without the block;
@@ -22,8 +23,9 @@
 #       (+ a2 E^2; b1, b2 to 1e-7);
 #   (d) what AZURE2 refuses (ERROR line, non-zero exit): the reserved key theta, a bad distortion,
 #       an unknown key or nuclide, a malformed value, partial kinematics, a
-#       segment in two experiments, a segment that is not THM or has a fixed
-#       norm, kinematics that do not make the entrance pair.
+#       segment that has a fixed norm, kinematics that do not make the entrance
+#       pair; the old segments= lists (a malformed or huge one, a segment in two
+#       experiments, past the last line or not THM) refused by the converter.
 #
 #   ./tests/thm_experiment/check.sh path/to/AZURE2
 
@@ -38,20 +40,23 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/thm_experiment.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 . "$HERE/../lib/guard.sh"
 . "$HERE/../lib/check_common.sh"
+. "$HERE/../lib/thm_records.sh"
 RUN="$(guard_command "${TEST_TIMEOUT:-300}")"
 OUT="AZUREOut_aa=1_R=2.out"
+BOTH="lc723_thm_points lc723_band_mid"   # the THM data sets; MEMBERS=<names> run ...: others
 fail=0
 
 # run NAME BLOCK [AWK] -- a "calculate with data" run of a copy of the project
-# with BLOCK (literal lines) as its <thm> block ("" = none), the .azr first
-# passed through the awk program AWK if given.  Exit status in NAME/status.
+# with BLOCK (literal lines) as its <thm> section ("" = none), the data sets
+# $MEMBERS (default both) in BLOCK's experiment, the .azr first passed through
+# the awk program AWK if given.  Exit status in NAME/status.
 run() {
   local d="$WORK/$1"
   rm -rf "$d"
   mkdir -p "$d/output" "$d/checks"
   cp -r "$SRC/data" "$d/"
   if [ -n "${3:-}" ]; then awk "$3" "$SRC/18O_p_a_thm.azr" > "$d/run.azr"; else cp "$SRC/18O_p_a_thm.azr" "$d/run.azr"; fi
-  [ -z "$2" ] || printf '\n<thm>\n%s\n</thm>\n' "$2" >> "$d/run.azr"
+  [ -z "$2" ] || thm_set "$d/run.azr" "$2" ${MEMBERS-$BOTH}
   (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 1000000 > log;
    echo "${PIPESTATUS[1]}" > status)
 }
@@ -63,8 +68,9 @@ field() { tr -d '\r' < "$1" | awk -v k="$2" '$1 == k || $1 == k ":" { print $2; 
 echo "(a) one-segment experiments without background == no experiment"
 run base ""
 [ "$(cat "$WORK/base/status")" = 0 ] && [ -f "$WORK/base/output/$OUT" ] || { echo "FAIL: base run"; tail -5 "$WORK/base/log"; exit 1; }
-run one "experiment[A] segments=1
-experiment[B] segments=2 beam=18O target=d spectator=n Ebeam=54   # kinematics: printed only"
+JOINAB='$1 == "dataset" { ds = $2 } $1 == "thm" { $0 = sprintf("    %-14s %s", "thm", ds == "lc723_thm_points" ? "A" : "B") } { print }'
+MEMBERS= run one "experiment[A]
+experiment[B] beam=18O target=d spectator=n Ebeam=54   # kinematics: printed only" "$JOINAB"
 for f in chiSquared.out normalizations.out "$OUT"; do
   if same "$WORK/base/output/$f" "$WORK/one/output/$f"; then ok "$f byte-identical"; else bad "$f differs"; fi
 done
@@ -91,7 +97,7 @@ tr -d '\r' < "$WORK/base/output/$OUT" | awk -v D1="$SRC/data/lc723_thm_points.da
 
 # (b) ----------------------------------------------------------------------
 echo "(b) two segments sharing one profiled norm"
-run shared "experiment[A] segments=1,2"
+run shared "experiment[A]"
 X="$WORK/shared/output/thm_experiments.out"
 read -r hn hchi <<< "$(awk '$5 != 0 { w = 1 / ($5 * $5); Smm += $3 * $3 * w; Smd += $3 * $4 * w; Sdd += $4 * $4 * w }
   END { printf "%.12e %.12e\n", Smm / Smd, Sdd - Smd * Smd / Smm }' "$WORK/model.txt")"
@@ -121,7 +127,7 @@ for s in 1 2; do
     END { i = 0; while ((getline line < F) > 0) { split(line, t, " "); if (t[1] == "") continue; i++
             printf "%s %s %.17e %.17e\n", t[1], t[2], y[i], z[i] } }' "$WORK/model.txt" > "$WORK/syn/$f"
 done
-run bkg "experiment[A] segments=1-2 background=linear"
+run bkg "experiment[A] background=linear"
 cp "$WORK/syn/"*.dat "$WORK/bkg/data/"
 (cd "$WORK/bkg" && rm -rf output && mkdir output && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
 X="$WORK/bkg/output/thm_experiments.out"
@@ -135,7 +141,7 @@ grep -q "^status: profiled" "$X" && ok "status: profiled" || bad "status: $(grep
 worst="$(tr -d '\r' < "$WORK/bkg/output/$OUT" | awk 'NF >= 6 { d = ($4 - $6) / $6; if (d < 0) d = -d; if (d > w) w = d } END { printf "%.2e", w }')"
 awk -v w="$worst" 'BEGIN { exit !(w < 1e-8) }' && ok "output: model + b(E) = data x n (worst rel $worst)" || bad "output curve off the data by $worst"
 # The background is not a shift of the data: without it the same data do not fit.
-run nobkg "experiment[A] segments=1-2"
+run nobkg "experiment[A]"
 cp "$WORK/syn/"*.dat "$WORK/nobkg/data/"
 (cd "$WORK/nobkg" && rm -rf output && mkdir output && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
 awk -v c="$(field "$WORK/nobkg/output/thm_experiments.out" chi2)" 'BEGIN { exit !(c > 1) }' \
@@ -152,7 +158,7 @@ bkgform() {  # bkgform NAME FORM A0 A1 A2: synthetic data, fit, and the recovere
       END { i = 0; while ((getline line < F) > 0) { split(line, t, " "); if (t[1] == "") continue; i++
               printf "%s %s %.17e %.17e\n", t[1], t[2], y[i], z[i] } }' "$WORK/model.txt" > "$WORK/syn_$1/$f"
   done
-  run "$1" "experiment[A] segments=1-2 background=$2"
+  run "$1" "experiment[A] background=$2"
   cp "$WORK/syn_$1/"*.dat "$WORK/$1/data/"
   (cd "$WORK/$1" && rm -rf output && mkdir output && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
   local X="$WORK/$1/output/thm_experiments.out"
@@ -188,29 +194,54 @@ refuse() {  # refuse NAME MESSAGE-FRAGMENT BLOCK [AWK]
   fi
 }
 # theta= is implemented since Stage E (tests/thm_fixed_angle); a bad value is refused.
-refuse bad_theta "expected all or thmin-thmax" "experiment[A] segments=1,2 theta=1"  # ps: tests/thm_spectator_window
+refuse bad_theta "expected all or thmin-thmax" "experiment[A] theta=1"  # ps: tests/thm_spectator_window
 # distortion= is implemented since Stage D (tests/thm_distortion); a bad value is refused.
-refuse bad_distortion "expected none, coulomb, optical or table" "experiment[A] segments=1,2 distortion=1"
-refuse unknown_key "unknown key 'foo'" "experiment[A] segments=1 foo=1"
-refuse huge_range "segment numbers go up to 100000" "experiment[A] segments=1-100000000"
-refuse bad_nuclide "unknown nuclide '8Be'" "experiment[A] segments=1-2 beam=8Be target=d spectator=n Ebeam=54"
-refuse bad_explicit "expected Z,A,mass" "experiment[A] segments=1-2 beam=18O target=2,1,2.0135 spectator=n Ebeam=54"
-refuse partial_kinematics "all four or none" "experiment[A] segments=1-2 beam=18O target=d"
-refuse bad_background "expected none, const, linear or quadratic" "experiment[A] segments=1 background=cubic"
-refuse bad_segments "expected segment numbers" "experiment[A] segments=1,x"
-refuse bad_ebeam "Ebeam='-3'" "experiment[A] segments=1-2 beam=18O target=d spectator=n Ebeam=-3"
-refuse no_segments "segments= is required" "experiment[A] background=linear"
-refuse no_space "expected a space after ']'" "experiment[A]segments=1,2"
-refuse repeated_key "is given twice" "experiment[A] segments=1
-experiment[A] segments=2"
-refuse two_experiments "already in experiment\[A\]" "experiment[A] segments=1,2
+refuse bad_distortion "expected none, coulomb, optical or table" "experiment[A] distortion=1"
+MEMBERS=lc723_thm_points refuse unknown_key "unknown key 'foo'" "experiment[A] foo=1"
+refuse bad_nuclide "unknown nuclide '8Be'" "experiment[A] beam=8Be target=d spectator=n Ebeam=54"
+refuse bad_explicit "expected Z,A,mass" "experiment[A] beam=18O target=2,1,2.0135 spectator=n Ebeam=54"
+refuse partial_kinematics "all four or none" "experiment[A] beam=18O target=d"
+MEMBERS=lc723_thm_points refuse bad_background "expected none, const, linear or quadratic" "experiment[A] background=cubic"
+refuse bad_ebeam "Ebeam='-3'" "experiment[A] beam=18O target=d spectator=n Ebeam=-3"
+MEMBERS= refuse no_segments "segments= is required" "experiment[A] background=linear"   # no data set names A
+refuse no_space "expected a space after ']'" "experiment[A]background=linear"
+refuse repeated_key "is given twice" "experiment[A] background=linear
+experiment[A] background=const"
+refuse fixed_norm "has a fixed norm" "experiment[A]" \
+  '$1 == "dataset" { ds = $2 } ds == "lc723_band_mid" && $1 == "unit" { $0 = "    unit           b" }
+   ds == "lc723_band_mid" && $1 == "norm" { $0 = "    norm           1.0 fixed" } { print }'
+refuse wrong_pair "does not give the entrance pair" "experiment[A] beam=18O target=t spectator=n Ebeam=54"
+# A data set that names an experiment the <thm> section does not define (here there is no section) is refused.
+run undefined "" "$JOINAB"
+if [ "$(cat "$WORK/undefined/status")" != 0 ] &&
+   grep -q "ERROR: <thm> has no experiment\[A\], which data sets name (thm A)" "$WORK/undefined/log"; then
+  ok "undefined: $(grep -m1 'ERROR' "$WORK/undefined/log" | tr -d '\r')"
+else
+  bad "undefined: an experiment no <thm> section defines not refused (status $(cat "$WORK/undefined/status"))"
+fi
+
+# The old grammar's member lists (segments=) are the converter's: an old <thm> section the old engine refused is not
+# converted, with the old engine's reason.
+convrefuse() {  # convrefuse NAME MESSAGE-FRAGMENT BLOCK [AWK]: the original with BLOCK through AZURE2 --convert
+  local d="$WORK/$1"
+  mkdir -p "$d"
+  if [ -n "${4:-}" ]; then awk "$4" "$ORIG" > "$d/old.azr"; else cp "$ORIG" "$d/old.azr"; fi
+  printf '\n<thm>\n%s\n</thm>\n' "$3" >> "$d/old.azr"
+  (cd "$d" && "$AZURE2_BIN" --convert old.azr new.azr --to 3 > log 2>&1; echo $? > status)
+  if [ "$(cat "$d/status")" != 0 ] && [ ! -f "$d/new.azr" ] && grep -q -- "$2" "$d/log"; then
+    ok "$1: $(grep -m1 'ERROR' "$d/log" | tr -d '\r')"
+  else
+    bad "$1: not refused by the converter with '$2' (status $(cat "$d/status"))"; tail -3 "$d/log" | sed 's/^/        /'
+  fi
+}
+ORIG="$HERE/../convert/fixtures/tests/18O_p_a_thm/18O_p_a_thm.azr"
+convrefuse huge_range "segment numbers go up to 100000" "experiment[A] segments=1-100000000"
+convrefuse bad_segments "expected segment numbers" "experiment[A] segments=1,x"
+convrefuse two_experiments "already in experiment\[A\]" "experiment[A] segments=1,2
 experiment[B] segments=2"
-refuse no_such_segment "has only 2 line" "experiment[A] segments=1-3"
-refuse not_thm "is not a THM segment" "experiment[A] segments=1,2" \
+convrefuse no_such_segment "has only 2 line" "experiment[A] segments=1-3"
+convrefuse not_thm "is not a THM segment" "experiment[A] segments=1,2" \
   '/<segmentsData>/ { S = 1; print; next } S && NF > 8 { S++; if (S == 3) $8 = 0 } /<\/segmentsData>/ { S = 0 } { print }'
-refuse fixed_norm "has a fixed norm" "experiment[A] segments=1,2" \
-  '/<segmentsData>/ { S = 1; print; next } S && NF > 8 { S++; if (S == 3) $10 = 0 } /<\/segmentsData>/ { S = 0 } { print }'
-refuse wrong_pair "does not give the entrance pair" "experiment[A] segments=1-2 beam=18O target=t spectator=n Ebeam=54"
 
 echo
 if [ "$fail" -eq 0 ]; then echo "PASS: THM experiments (shared norm, background, refusals)"; else echo "FAIL"; exit 1; fi

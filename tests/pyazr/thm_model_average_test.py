@@ -36,6 +36,8 @@ os.environ.setdefault("OMP_NUM_THREADS", "1")   # before numpy (OpenBLAS buffers
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SOURCE = os.path.join(ROOT, "tests", "18O_p_a_thm")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import old_tree  # noqa: E402  (the old original: a test of the old file class, format3_tree.md section 5)
 AZR = "18O_p_a_thm.azr"
 SCRIPT = os.path.join(ROOT, "scripts", "thm_model_average.py")
 
@@ -66,7 +68,7 @@ ma = load("modelavg")
 tmp = tempfile.mkdtemp(prefix="thm_modelavg_")
 try:
     proj = os.path.join(tmp, "o18")
-    shutil.copytree(SOURCE, proj)
+    old_tree.copytree(SOURCE, proj)
     for junk in ("output", "checks"):
         shutil.rmtree(os.path.join(proj, junk), ignore_errors=True)
         os.makedirs(os.path.join(proj, junk))
