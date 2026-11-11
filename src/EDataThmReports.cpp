@@ -66,7 +66,7 @@ void EData::WriteThmExperiments(const Config &configure, const azure2::Results &
             << r.coherentValues[k] << (r.coherentFixed[k] ? "  fixed" : "") << "\n";
     }
     // Spectator-momentum window (ps=...): the nodes.
-    for (const ThmGroup &group : thmGroups_) {
+    for (const ThmGroup &group : set_->thmGroups_) {
       if (group.name != r.name || !group.window) continue;
       const ThmSpectatorWindow &w = *group.window;
       out << "ps: " << w.description << "; mu_sx = " << w.muSx << " MeV\n"
@@ -89,8 +89,8 @@ void EData::WriteThmExperiments(const Config &configure, const azure2::Results &
       // over the points (x nodes = entries), and their bytes.
       size_t tablePoints = 0, tableBytes = 0;
       for (int s : group.segments)
-        for (int p = 1; p <= GetSegment(s)->NumPoints(); p++) {
-          EPoint *point = GetSegment(s)->GetPoint(*this, p);
+        for (int p = 1; p <= Data().GetSegment(s)->NumPoints(); p++) {
+          EPoint *point = Data().GetSegment(s)->GetPoint(*this, p);
           tablePoints++;
           tableBytes += point->ThmPsTableBytes();
           for (int q = 1; q <= point->NumSubPoints(); q++) {
@@ -102,7 +102,7 @@ void EData::WriteThmExperiments(const Config &configure, const azure2::Results &
           << "ps_table" << std::setw(18) << (double)tablePoints << std::setw(18) << (double)tableBytes << "\n";
     }
     // Distortion factor (distortion=...): R at the lowest point, E_ref and the highest point.
-    for (const ThmGroup &group : thmGroups_) {
+    for (const ThmGroup &group : set_->thmGroups_) {
       if (group.name != r.name || !group.distortion) continue;
       const ThmDistortion &d = *group.distortion;
       out << "distortion: " << d.description << "\n";
@@ -127,7 +127,7 @@ void EData::WriteThmExperiments(const Config &configure, const azure2::Results &
     }
     // Distorted-wave entrance vertex (vertexModel=dw): the Gram entries at the
     // lowest, the middle and the highest point.
-    for (const ThmGroup &group : thmGroups_) {
+    for (const ThmGroup &group : set_->thmGroups_) {
       if (group.name != r.name || !group.dwVertex) continue;
       const ThmDwVertex &v = *group.dwVertex;
       double eLo, eHi;
@@ -151,7 +151,7 @@ void EData::WriteThmExperiments(const Config &configure, const azure2::Results &
       }
     }
     // Coulomb line shape (lineshape=on): the ranges over the experiment's points.
-    for (const ThmGroup &group : thmGroups_) {
+    for (const ThmGroup &group : set_->thmGroups_) {
       if (group.name != r.name || !group.lineshape) continue;
       const ThmLineshape &ls = *group.lineshape;
       double eLo, eHi;
@@ -185,7 +185,7 @@ void EData::WriteThmExperiments(const Config &configure, const azure2::Results &
 bool EData::ThmLineshapeTable(const std::string &name, const std::vector<double> &energies, CNuc *compound,
                               const Config &configure, ThmLineshapeReport &out, std::string &why) {
   const ThmGroup *group = nullptr;
-  for (const ThmGroup &g : thmGroups_)
+  for (const ThmGroup &g : set_->thmGroups_)
     if (g.name == name) group = &g;
   if (!group) {
     why = "no THM experiment '" + name + "' in use";
@@ -208,7 +208,7 @@ bool EData::ThmLineshapeTable(const std::string &name, const std::vector<double>
     out.esf.push_back(ls.EsF(e));
     out.eta0.push_back(ls.Eta0(e));
   }
-  int entranceKey = GetSegment(group->segments[0])->GetEntranceKey();
+  int entranceKey = Data().GetSegment(group->segments[0])->GetEntranceKey();
   int aa = compound->GetPairNumFromKey(entranceKey);
   PPair *entrance = compound->GetPair(aa);
   double threshold = entrance->GetSepE() + entrance->GetExE();
@@ -256,7 +256,7 @@ bool EData::ThmLineshapeTable(const std::string &name, const std::vector<double>
 bool EData::ThmDistortionTable(const std::string &name, const std::vector<double> &energies, ThmDistortionReport &out,
                                std::string &why) {
   const ThmGroup *group = nullptr;
-  for (const ThmGroup &g : thmGroups_)
+  for (const ThmGroup &g : set_->thmGroups_)
     if (g.name == name) group = &g;
   if (!group) {
     why = "no THM experiment '" + name + "' in use";
@@ -311,7 +311,7 @@ bool EData::ThmDistortionTable(const std::string &name, const std::vector<double
 bool EData::ThmVertexTable(const std::string &name, const std::vector<double> &energies, CNuc *compound,
                            const Config &configure, ThmVertexReport &out, std::string &why) {
   const ThmGroup *group = nullptr;
-  for (const ThmGroup &g : thmGroups_)
+  for (const ThmGroup &g : set_->thmGroups_)
     if (g.name == name) group = &g;
   if (!group) {
     why = "no THM experiment '" + name + "' in use";

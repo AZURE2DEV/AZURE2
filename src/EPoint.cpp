@@ -367,9 +367,9 @@ void EPoint::Initialize(EData *data, CNuc *compound, const Config &configure) {
   this->CalcEDependentValues(data, compound, configure, true, data);
   if (this->IsDifferential()) {
     // Get TargetEffect with Q-coefficients if applicable
-    TargetEffect *effect = NULL;
+    const TargetEffect *effect = NULL;
     if (data && this->IsTargetEffect()) {
-      TargetEffect *te = data->GetTargetEffect(this->GetTargetEffectNum());
+      const TargetEffect *te = data->Data().GetTargetEffect(this->GetTargetEffectNum());
       if (te && te->IsQCoefficients()) {
         effect = te;
       }

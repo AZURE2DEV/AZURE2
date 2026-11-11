@@ -131,16 +131,16 @@ int NumParameters(CNuc *compound, EData *data) {
     n += compound->NumAbundanceParams();
   }
   if (data) {
-    std::vector<ESegment> &segments = data->GetSegments();
+    const std::vector<ESegment> &segments = data->Data().GetSegments();
     for (size_t s = 0; s < segments.size(); s++)
       if (segments[s].IsVaryNorm()) n++;
     n += 2 * (int)segments.size();  // energy shift and sqrt(E) coefficient, every segment
     for (size_t s = 0; s < segments.size(); s++)  // shift-function parameters of the segments declaring one
       if (segments[s].OwnsShiftFn() && segments[s].HasShiftFn()) n += segments[s].NumShiftFnParams();
-    n += data->NumScreeningParams();  // electron-screening potentials
-    n += data->NumDensityParams();    // fitted target densities
-    n += data->NumDopplerParams();    // fitted Doppler temperatures
-    n += data->NumThicknessParams();  // fitted sample thicknesses
+    n += data->Data().NumScreeningParams();  // electron-screening potentials
+    n += data->Data().NumDensityParams();    // fitted target densities
+    n += data->Data().NumDopplerParams();    // fitted Doppler temperatures
+    n += data->Data().NumThicknessParams();  // fitted sample thicknesses
   }
   return n;
 }
@@ -184,7 +184,7 @@ std::string Parameter(CNuc *compound, EData *data, int minuitIndex) {
   // Then EData::FillMnParams: norms for segments that vary one (a free THM
   // norm is profiled, not a parameter), then an energy shift and a sqrt(E)
   // coefficient for every segment, then the THM coherent backgrounds.
-  std::vector<ESegment> &segments = data->GetSegments();
+  const std::vector<ESegment> &segments = data->Data().GetSegments();
   for (size_t s = 0; s < segments.size(); s++) {
     if (!segments[s].IsVaryNorm() || segments[s].IsProfiledNorm()) continue;
     if (index == minuitIndex) {
@@ -225,36 +225,36 @@ std::string Parameter(CNuc *compound, EData *data, int minuitIndex) {
       index++;
     }
   }
-  for (int k = 1; k <= data->NumScreeningParams(); k++) {
+  for (int k = 1; k <= data->Data().NumScreeningParams(); k++) {
     if (index == minuitIndex) {
       std::ostringstream out;
-      out << "electron-screening potential U_e (eV) of experimental effect " << data->GetScreeningEffect(k);
+      out << "electron-screening potential U_e (eV) of experimental effect " << data->Data().GetScreeningEffect(k);
       return out.str();
     }
     index++;
   }
-  for (int k = 1; k <= data->NumDensityParams(); k++) {
+  for (int k = 1; k <= data->Data().NumDensityParams(); k++) {
     if (index == minuitIndex) {
       std::ostringstream out;
-      const TargetEffect *te = data->GetDensityTargetEffect(k);
-      out << "target density (atoms/cm^2) of experimental effect " << data->GetDensityEffect(k);
+      const TargetEffect *te = data->Data().GetDensityTargetEffect(k);
+      out << "target density (atoms/cm^2) of experimental effect " << data->Data().GetDensityEffect(k);
       if (!te->GetDensityGroup().empty()) out << " (density group " << te->GetDensityGroup() << ")";
       return out.str();
     }
     index++;
   }
-  for (int k = 1; k <= data->NumDopplerParams(); k++) {
+  for (int k = 1; k <= data->Data().NumDopplerParams(); k++) {
     if (index == minuitIndex) {
       std::ostringstream out;
-      out << "free-gas Doppler temperature (K) of experimental effect " << data->GetDopplerEffect(k);
+      out << "free-gas Doppler temperature (K) of experimental effect " << data->Data().GetDopplerEffect(k);
       return out.str();
     }
     index++;
   }
-  for (int k = 1; k <= data->NumThicknessParams(); k++) {
+  for (int k = 1; k <= data->Data().NumThicknessParams(); k++) {
     if (index == minuitIndex) {
       std::ostringstream out;
-      const ESegment *seg = data->GetSegment(data->GetThicknessSegment(k));
+      const ESegment *seg = data->Data().GetSegment(data->Data().GetThicknessSegment(k));
       out << "sample thickness (atoms/barn) of the " << (seg->IsTransmission() ? "transmission" : "yield")
           << " of segment " << seg->GetSegmentKey();
       if (!seg->GetThicknessGroup().empty()) out << " (thickness group " << seg->GetThicknessGroup() << ")";
@@ -262,9 +262,9 @@ std::string Parameter(CNuc *compound, EData *data, int minuitIndex) {
     }
     index++;
   }
-  for (int k = 0; k < data->NumThmCoherentParams(); k++) {
+  for (int k = 0; k < data->Data().NumThmCoherentParams(); k++) {
     if (index == minuitIndex)
-      return "THM coherent background " + data->GetThmCoherentParam(k).name;
+      return "THM coherent background " + data->Data().GetThmCoherentParam(k).name;
     index++;
   }
 

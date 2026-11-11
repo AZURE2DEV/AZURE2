@@ -60,7 +60,7 @@ void EPoint::Calculate(EData *data, CNuc *theCNuc, const Config &configure, azur
   // off on this thread (ScopedPointMappingOff).
   const azure2::MappedPoints mappedPts = ScopedPointMappingOff::Active() ? azure2::MappedPoints() : this->PlanMapped(data);
   const int numMapped = mappedPts.size();
-  if (!this->IsTargetEffect() || !data->GetTargetEffect(this->GetTargetEffectNum())->IsSubPointEffect()) {
+  if (!this->IsTargetEffect() || !data->Data().GetTargetEffect(this->GetTargetEffectNum())->IsSubPointEffect()) {
     // THM (modified R-matrix) segments: reuse the shared interior (A-matrix)
     // but assemble the half-off-shell cross section instead of the standard
     // T-matrix cross section. Kept fully per-segment so a project may mix THM
@@ -130,7 +130,7 @@ void EPoint::Calculate(EData *data, CNuc *theCNuc, const Config &configure, azur
       for (int i = 1; i <= numMapped; i++) mappedCrossSection(mappedPts[i - 1]);
     }
   } else {
-    TargetEffect *effect = data->GetTargetEffect(this->GetTargetEffectNum());
+    const TargetEffect *effect = data->Data().GetTargetEffect(this->GetTargetEffectNum());
     if (effect->IsTargetIntegration() && !effect->IsThickTarget()) {
       this->CalculateThinTarget(*data, theCNuc, configure, results, effect);
       return;
@@ -262,7 +262,7 @@ void EPoint::Calculate(EData *data, CNuc *theCNuc, const Config &configure, azur
  *    sigma(E_bar) for a box), sigma(E_bar) is used and no other sub-point is evaluated.
  */
 void EPoint::CalculateThinTarget(EData &data, CNuc *theCNuc, const Config &configure, azure2::Results &results,
-                                 TargetEffect *effect) {
+                                 const TargetEffect *effect) {
   const azure2::MappedPoints mappedPts =
       ScopedPointMappingOff::Active() ? azure2::MappedPoints() : this->PlanMapped(&data);
   const int numMapped = mappedPts.size();

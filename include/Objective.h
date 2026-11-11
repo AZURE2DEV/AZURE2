@@ -113,8 +113,8 @@ class Objective {
 // is only the start).
 template <class F>
 inline void ForEachShiftPenalty(EData *data, const ParamIndexMap &pmap, F f) {
-  for (int s = 1; s <= data->NumSegments(); s++) {
-    ESegment *seg = data->GetSegment(s);
+  for (int s = 1; s <= data->Data().NumSegments(); s++) {
+    const ESegment *seg = data->Data().GetSegment(s);
     if (!seg) continue;
     int idx;
     if (seg->IsVaryEnergyShift() && seg->GetEnergyShiftError() != 0.0 && !seg->IsShiftPriorReplaced() &&
@@ -135,8 +135,8 @@ inline void ForEachShiftPenalty(EData *data, const ParamIndexMap &pmap, F f) {
 // screening parameter with sigma > 0 (EData::ScreeningPenalty is their sum).
 template <class F>
 inline void ForEachScreeningPrior(EData *data, const ParamIndexMap &pmap, F f) {
-  for (int k = 1; k <= data->NumScreeningParams(); k++) {
-    const TargetEffect *te = data->GetScreeningTargetEffect(k);
+  for (int k = 1; k <= data->Data().NumScreeningParams(); k++) {
+    const TargetEffect *te = data->Data().GetScreeningTargetEffect(k);
     if (te->GetScreeningSigma() <= 0.0 || !te->IsScreeningVaried() || te->IsScreeningPriorReplaced()) continue;
     const int idx = pmap.ScreeningIndex(k);
     if (idx >= 0) f(idx, te->GetScreeningNominal(), te->GetScreeningSigma());
@@ -147,8 +147,8 @@ inline void ForEachScreeningPrior(EData *data, const ParamIndexMap &pmap, F f) {
 // parameter with sigma > 0 (EData::DensityPenalty is their sum).
 template <class F>
 inline void ForEachDensityPrior(EData *data, const ParamIndexMap &pmap, F f) {
-  for (int k = 1; k <= data->NumDensityParams(); k++) {
-    const TargetEffect *te = data->GetDensityTargetEffect(k);
+  for (int k = 1; k <= data->Data().NumDensityParams(); k++) {
+    const TargetEffect *te = data->Data().GetDensityTargetEffect(k);
     if (te->GetDensitySigma() <= 0.0 || !te->IsDensityVaried() || te->IsDensityPriorReplaced()) continue;
     const int idx = pmap.DensityIndex(k);
     if (idx >= 0) f(idx, te->GetDensityNominal(), te->GetDensitySigma());
@@ -159,8 +159,8 @@ inline void ForEachDensityPrior(EData *data, const ParamIndexMap &pmap, F f) {
 // parameter with sigma > 0 (EData::DopplerPenalty is their sum).
 template <class F>
 inline void ForEachDopplerPrior(EData *data, const ParamIndexMap &pmap, F f) {
-  for (int k = 1; k <= data->NumDopplerParams(); k++) {
-    const TargetEffect *te = data->GetDopplerTargetEffect(k);
+  for (int k = 1; k <= data->Data().NumDopplerParams(); k++) {
+    const TargetEffect *te = data->Data().GetDopplerTargetEffect(k);
     if (te->GetDopplerSigma() <= 0.0 || !te->IsDopplerVaried() || te->IsDopplerPriorReplaced()) continue;
     const int idx = pmap.DopplerIndex(k);
     if (idx >= 0) f(idx, te->GetDopplerNominal(), te->GetDopplerSigma());
@@ -172,8 +172,8 @@ inline void ForEachDopplerPrior(EData *data, const ParamIndexMap &pmap, F f) {
 // follower's parameter is fixed and carries no prior).
 template <class F>
 inline void ForEachThicknessPrior(EData *data, const ParamIndexMap &pmap, F f) {
-  for (int k = 1; k <= data->NumThicknessParams(); k++) {
-    const ESegment *seg = data->GetSegment(data->GetThicknessSegment(k));
+  for (int k = 1; k <= data->Data().NumThicknessParams(); k++) {
+    const ESegment *seg = data->Data().GetSegment(data->Data().GetThicknessSegment(k));
     if (seg->GetThicknessSigma() <= 0.0 || !seg->IsThicknessVaried() || seg->IsThicknessPriorReplaced()) continue;
     const int idx = pmap.ThicknessIndex(k);
     if (idx >= 0) f(idx, seg->GetNominalThickness(), seg->GetThicknessSigma());
@@ -184,8 +184,8 @@ inline void ForEachThicknessPrior(EData *data, const ParamIndexMap &pmap, F f) {
 // abundances (T7, per nucleus; the sum-to-one term couples them and is not diagonal).
 template <class F>
 inline void ForEachDiagonalPrior(EData *data, CNuc *compound, const ParamIndexMap &pmap, F f) {
-  for (int s = 1; s <= data->NumSegments(); s++) {
-    ESegment *seg = data->GetSegment(s);
+  for (int s = 1; s <= data->Data().NumSegments(); s++) {
+    const ESegment *seg = data->Data().GetSegment(s);
     int idx;
     if (!seg || !seg->IsVaryNorm() || seg->IsNormPriorReplaced() || (idx = pmap.NormIndex(s)) < 0) continue;
     const double n0 = seg->GetNominalNorm(), nerr = n0 / 100.0 * seg->GetNormError();

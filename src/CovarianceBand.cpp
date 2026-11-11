@@ -209,7 +209,7 @@ bool BuildBandData(CNuc *compound, EData *data, azure2::Results &results, const 
   // A covariance loaded from covariance.dat has no column identities; its
   // dimension must then equal the number of free band parameters.
   if (savedCov.cols.empty() && savedCov.size() != m) {
-    const bool coherent = data->NumThmCoherentParams() > 0;
+    const bool coherent = data->Data().NumThmCoherentParams() > 0;
     config.outStream << "Data covariance size mismatch: covariance.dat has "
                      << savedCov.size() << " rows/columns but the model has " << m
                      << (coherent ? " free R-matrix and THM coherent-background parameters (level energies, "
@@ -251,7 +251,7 @@ bool BuildBandData(CNuc *compound, EData *data, azure2::Results &results, const 
     std::vector<THMRows> thm = ComputeTHMRows(compound, data, results, config, full, pmap);
     const int nCols = pmap.NumPacked();
     for (const THMRows &tr : thm) {
-      ESegment *seg = data->GetSegment(tr.segment);
+      const ESegment *seg = data->Data().GetSegment(tr.segment);
       size_t i = 0;
       for (int pid = 0; pid < seg->NumPoints(); pid++) {
         EPoint *pt = seg->GetPoint(*data, pid + 1);

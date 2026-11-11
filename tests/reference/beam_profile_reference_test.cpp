@@ -268,7 +268,7 @@ int main() {
   // ------------------------------------------------ 2. the fold
   EData data;
   data.AddTargetEffect(single);
-  const int effect = data.NumTargetEffects();
+  const int effect = data.Data().NumTargetEffects();
   const double e0 = 3.5, gridLo = 2.6, gridHi = 4.4;
   const double window[2] = {3.40, 3.60};
   const double qGamma = 7.16191, mass = 14887.0;   // 12C + alpha, MeV
@@ -323,7 +323,7 @@ int main() {
   EData dataDb;
   dataDb.AddTargetEffect(makeEffect(configure, targetIntLine(
       "beamprofile  1  3.5  0.30  -1.6  1  0.0733  0  1")));
-  const int effectDb = dataDb.NumTargetEffects();
+  const int effectDb = dataDb.Data().NumTargetEffects();
   Kernel kDb = kWin;
   kDb.photodissociation = true;
   kDb.qGamma = qGamma;

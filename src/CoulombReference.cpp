@@ -38,7 +38,7 @@ double CoulombReferenceValue(const EData &data, EPoint *point, experiment::LeafP
   double folded = point->IntegrateSubPointValues(data, configure, sub);
   // EPoint::Calculate blends a folded value with the bare one at a window edge outside a thin-target integration (a
   // thin target blends inside its kernel, which IntegrateSubPointValues applies).
-  const TargetEffect *effect = data.GetTargetEffect(point->GetTargetEffectNum());
+  const TargetEffect *effect = data.Data().GetTargetEffect(point->GetTargetEffectNum());
   const bool thinTarget = effect->IsTargetIntegration() && !effect->IsThickTarget();
   const double blend = point->GetTargetBlendWeight();
   if (!thinTarget && blend < 1.0) folded = blend * folded + (1.0 - blend) * at(point);

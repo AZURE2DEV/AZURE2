@@ -29,6 +29,8 @@ struct EnergyMap {
 
 class ESegment;
 class EData;
+class EPoint;
+typedef EPoint *EPointIterator;
 class CNuc;
 class PPair;
 class TargetEffect;
@@ -419,7 +421,7 @@ class EPoint {
   void SetCMAngle(double);
   /// Compute the Legendre polynomials up to a maximum order.  The functions below that reach the point's sub-points
   /// take `data`, the data set that holds them (null for a point outside one, which has none).
-  void CalcLegendreP(EData *data, int, CNuc *, TargetEffect *);
+  void CalcLegendreP(EData *data, int, CNuc *, const TargetEffect *);
   /// Compute the geometrical factor, S-factor conversion, \f$L_o\f$ elements, penetrabilities and phases together.
   /// With includeSubPoints false the sub-points are left alone (their energies are updated, and their values recomputed, separately).
   /// With `shareWithMappedOf`, the data set that holds the point (setup, grid re-placement), the points its plan maps
@@ -471,7 +473,7 @@ class EPoint {
   void Calculate(EData *data, CNuc *, const Config &configure, azure2::Results &results, EPoint *parent = NULL,
                  int subPointNum = 0);
   /// The sub-point stage of a thin-target integration, with its sigma(E_bar) fallback (see the .cpp).
-  void CalculateThinTarget(EData &data, CNuc *, const Config &configure, azure2::Results &results, TargetEffect *effect);
+  void CalculateThinTarget(EData &data, CNuc *, const Config &configure, azure2::Results &results, const TargetEffect *effect);
   void SetMap(int, int);
   void ClearMapping();
   /// A mapped point that keeps its own energy-dependent values: a component of a SUM, RATIO or total-capture segment

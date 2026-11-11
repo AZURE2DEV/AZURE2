@@ -246,7 +246,6 @@ bool TargetEffect::IsSubPointEffect() const {
   return isConvolution_ || isTargetIntegration_ || isConvCoefficients_ || isBeamProfile_ || isUdr_ || isDoppler_;
 }
 
-double TargetEffect::DopplerU(double cmFactor) const { return this->DopplerUAt(cmFactor, dopplerTemperature_); }
 
 double TargetEffect::DopplerUAt(double cmFactor, double temperature) const {
   if (!isDoppler_ || !(cmFactor > 0.0) || !(cmFactor < 1.0)) return 0.0;
@@ -675,11 +674,11 @@ double TargetEffect::GetDensity() const {
  * before; a target the beam cannot cross returns E itself (the caller floors the grid at 1 keV).
  */
 
-double TargetEffect::TargetThickness(double energy, const Config &configure) {
+double TargetEffect::TargetThickness(double energy, const Config &configure) const {
   return this->TargetThickness(energy, configure, this->GetDensity());
 }
 
-double TargetEffect::TargetThickness(double energy, const Config &configure, double density) {
+double TargetEffect::TargetThickness(double energy, const Config &configure, double density) const {
   const double eps0 = stoppingPowerEq_.Evaluate(configure, energy);
   if (!(eps0 > 0.0) || !(density > 0.0) || !(energy > 0.0)) return eps0 * density;
   auto invEps = [&](double e) {
@@ -706,7 +705,7 @@ double TargetEffect::TargetThickness(double energy, const Config &configure, dou
   return delta;
 }
 
-double TargetEffect::MeanEnergyLoss(double energy, const Config &configure, double density) {
+double TargetEffect::MeanEnergyLoss(double energy, const Config &configure, double density) const {
   if (isThickTarget_) return 0.0;
   const double delta = this->TargetThickness(energy, configure, density);
   if (!(delta > 0.0) || !(delta <= energy)) return 0.0;
@@ -797,11 +796,7 @@ std::vector<int> TargetEffect::GetSegmentsList() const {
  * cross section.
  */
 
-Equation *TargetEffect::GetStoppingPowerEq() {
-  Equation *tempEquation;
-  tempEquation = &stoppingPowerEq_;
-  return tempEquation;
-}
+const Equation *TargetEffect::GetStoppingPowerEq() const { return &stoppingPowerEq_; }
 
 /*!
  * Returns the Equation object corresponding to the parametrized convolution.

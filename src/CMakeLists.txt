@@ -5,7 +5,7 @@ AMatrixFunc.cpp  DoubleFactorial.cpp EigenFunc.cpp  NFIntegral.cpp
 ECIntegral.cpp ECTable.cpp ECAmplitudeCache.cpp MatrixInv.cpp LevelMatrixSolver.cpp Profile.cpp ChannelSpace.cpp
 PPair.cpp AZURECalc.cpp Objective.cpp
 ECMGroup.cpp ReactionRate.cpp AZUREMain.cpp EData.cpp DataCovariance.cpp ShftFunc.cpp ScatteringLength.cpp ModelData.cpp CNucObserved.cpp
-RMatrixFunc.cpp AZUREOutput.cpp  EDataIterator.cpp   TargetEffect.cpp
+RMatrixFunc.cpp AZUREOutput.cpp    TargetEffect.cpp
 AZUREParams.cpp EPoint.cpp Interference.cpp CNuc.cpp Equation.cpp
 JGroup.cpp Config.cpp ESegment.cpp ModelPass.cpp CoulombReference.cpp Predictions.cpp CalculationPlan.cpp KGroup.cpp IntegratedFermiFunc.cpp
 EffectiveCharge.cpp  GSLException.cpp ParameterLimitsManager.cpp
@@ -17,7 +17,7 @@ EDataTargetEffects.cpp
 EDataExternalCapture.cpp
 EDataParameters.cpp
 EDataHandOver.cpp
-WorkingCopyUnits.cpp
+WorkingCopyUnits.cpp DataSet.cpp
 EPointCalculate.cpp
 EPointFolds.cpp
 EPointChannelTables.cpp

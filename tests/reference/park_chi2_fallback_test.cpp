@@ -149,7 +149,7 @@ bool AdjointApplies(Model &m, const vector_r &p) {
   ParamIndexMap pmap = BuildParamIndexMap(lc, ld, std::vector<bool>());
   GradAccum accum;
   accum.Init(lc);
-  FitBarFn one = [](ESegment *, int, int, double) { return 1.0; };
+  FitBarFn one = [](const ESegment *, int, int, double) { return 1.0; };
   const bool ok = AccumulateEGammaGradient(lc, ld, results, m.cfg, pmap, &sd, one, accum);
   delete lc;
   delete ld;

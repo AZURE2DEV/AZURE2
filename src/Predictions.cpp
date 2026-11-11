@@ -36,8 +36,8 @@ std::vector<std::string> RecordNames(const Config &configure, const std::string 
 /// The trees of one EData as lines "<what> <label>: <tree>", the label the data set's name where the project gives
 /// one (format 3), else its key.
 void AppendLines(EData &data, const char *what, const std::vector<std::string> &names, std::vector<std::string> &lines) {
-  for (int s = 1; s <= data.NumSegments(); s++) {
-    const ESegment &segment = *data.GetSegment(s);
+  for (int s = 1; s <= data.Data().NumSegments(); s++) {
+    const ESegment &segment = *data.Data().GetSegment(s);
     const experiment::Prediction *p = segment.GetPrediction();
     const int key = segment.GetSegmentKey();
     const bool named = key >= 1 && key <= (int)names.size() && !names[key - 1].empty();
@@ -119,8 +119,8 @@ std::vector<std::string> ProjectPredictions(const std::string &projectFile, std:
 }  // namespace azure2
 
 bool EData::BuildPredictions(CNuc *compound, const Config &configure) {
-  for (int s = 1; s <= this->NumSegments(); s++) {
-    ESegment *segment = this->GetSegment(s);
+  for (int s = 1; s <= this->Draft().NumSegments(); s++) {
+    ESegment *segment = this->Draft().GetSegment(s);
     try {
       segment->SetPrediction(std::make_shared<const azure2::experiment::Prediction>(
           azure2::experiment::BuildPrediction(azure2::PredictionSetupOf(*segment, *compound))));

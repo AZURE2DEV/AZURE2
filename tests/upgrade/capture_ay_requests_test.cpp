@@ -114,8 +114,8 @@ std::vector<std::string> DumpCaptureAy(CNuc &c) {
 std::pair<int, int> CaptureAyTerms(Loaded &l) {
   int terms = 0, built = 0;
   CNuc &c = *l.compound;
-  for (int i = 1; i <= l.data->NumSegments(); i++) {
-    const ESegment &s = *l.data->GetSegment(i);
+  for (int i = 1; i <= l.data->Data().NumSegments(); i++) {
+    const ESegment &s = *l.data->Data().GetSegment(i);
     if (!s.IsAnalyzingPower()) continue;
     for (int t = 0; t < s.NumTerms(); t++) {
       if (!c.IsPairKey(s.TermEntranceKey(t)) || !c.IsPairKey(s.TermExitKey(t))) continue;
@@ -146,8 +146,8 @@ std::vector<double> CaptureAyValues(Loaded &l) {
   azure2::EvaluateModel(*l.data, l.compound.get(), *l.cfg, results, azure2::LeafValues::Calculate);
   std::vector<double> values;
   CNuc &c = *l.compound;
-  for (int i = 1; i <= l.data->NumSegments(); i++) {
-    ESegment &s = *l.data->GetSegment(i);
+  for (int i = 1; i <= l.data->Data().NumSegments(); i++) {
+    const ESegment &s = *l.data->Data().GetSegment(i);
     if (!s.IsAnalyzingPower() || !c.IsPairKey(s.GetExitKey())) continue;
     if (c.GetPair(c.GetPairNumFromKey(s.GetExitKey()))->GetPType() != 10) continue;
     for (int k = 1; k <= s.NumPoints(); k++) values.push_back(s.GetPoint(*l.data, k)->GetFitCrossSection(results));

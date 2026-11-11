@@ -841,7 +841,7 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
               // sample's are in the tail of the physical vector, the same in
               // both bases from the first data parameter on, so param.mcmc
               // gets the sampled values rather than the start (2026-10-26).
-              for (size_t i = (size_t)localData->GetNormParamOffset(); i < rwaFullParams.size() && i < fullParams.size(); i++)
+              for (size_t i = (size_t)localData->Data().GetNormParamOffset(); i < rwaFullParams.size() && i < fullParams.size(); i++)
                 rwaFullParams[i] = fullParams[i];
 
               if (g_mcmc_for_callbacks->configure().paramMask & Config::USE_BRUNE_FORMALISM) {
@@ -852,15 +852,15 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
 
           if (isValid) {
             // Calculate cross sections for all data points
-            for (EDataIterator data = localData->begin(); data != localData->end(); data++) {
-              if (!data.point()->IsMapped()) {
-                data.point()->Calculate(localData, localCompound, g_mcmc_for_callbacks->configure(), localResults);
-              }
-            }
-            // The model values (ModelPass.h): the points above are calculated; the iterator skips the component
+            for (const ESegment &seg : localData->Data().GetSegments())
+              if (!seg.HasComponents())
+                for (EPoint &point : seg.GetPoints(*localData))
+                  if (!point.IsMapped())
+                    point.Calculate(localData, localCompound, g_mcmc_for_callbacks->configure(), localResults);
+            // The model values (ModelPass.h): the points above are calculated; the loop skips the component
             // segments, so those of a segment that assembles its value are calculated by the model pass.
-            for (int s = 1; s <= localData->NumSegments(); s++) {
-              ESegment *seg = localData->GetSegment(s);
+            for (int s = 1; s <= localData->Data().NumSegments(); s++) {
+              const ESegment *seg = localData->Data().GetSegment(s);
               azure2::EvaluateModelSegment(*localData, *seg, localCompound, g_mcmc_for_callbacks->configure(), localResults,
                                            seg->NeedsAssembly() ? azure2::LeafValues::Calculate : azure2::LeafValues::Ready);
             }

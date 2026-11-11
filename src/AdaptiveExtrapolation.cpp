@@ -101,9 +101,9 @@ class SweepModel {
     azure2::Results results;
     AZURECalc calculate(&data, results, compound_, config_);
     calculate(params_);
-    ESegment *segment = nullptr;
-    for (int k = 1; k <= data.NumSegments(); k++)
-      if (data.GetSegment(k)->GetSegmentKey() == mine.key) segment = data.GetSegment(k);
+    const ESegment *segment = nullptr;
+    for (int k = 1; k <= data.Data().NumSegments(); k++)
+      if (data.Data().GetSegment(k)->GetSegmentKey() == mine.key) segment = data.Data().GetSegment(k);
     const std::size_t nE = energies.size(), nA = mine.angles.size();
     if (!segment || (std::size_t)segment->NumPoints() != nE * nA) throw std::runtime_error("a sweep lost its points");
     std::vector<std::vector<double>> values(nE, std::vector<double>(nA));

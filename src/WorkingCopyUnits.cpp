@@ -52,23 +52,23 @@ void EData::CompactUnits() { LayOutUnits(nullptr); }
 void EData::LayOutUnits(std::vector<std::vector<EPoint> *> *fresh) {
   auto newSubs = [&](int unit) { return fresh && (*fresh)[unit] ? (*fresh)[unit] : nullptr; };
   std::size_t size = 0;
-  for (ESegment &segment : segments_)
+  for (const ESegment &segment : set_->segments_)
     for (int t = 0; t < segment.NumTerms(); t++)
       for (int p = 0; p < segment.NumTermPoints(t); p++) {
-        const int unit = segment.TermFirstUnit(t) + p;
+        const int unit = segment.TermFirstUnit(*this, t) + p;
         size += 1 + (newSubs(unit) ? newSubs(unit)->size() : (std::size_t)units_[unit].NumSubPoints());
       }
   std::vector<EPoint> next;
   next.reserve(size);
   std::vector<int> from;  // the present unit of each point placed
-  for (ESegment &segment : segments_)
+  for (const ESegment &segment : set_->segments_)
     for (int t = 0; t < segment.NumTerms(); t++) {
       const int first = static_cast<int>(next.size());
       for (int p = 0; p < segment.NumTermPoints(t); p++) {
-        from.push_back(segment.TermFirstUnit(t) + p);
+        from.push_back(segment.TermFirstUnit(*this, t) + p);
         next.push_back(std::move(units_[from.back()]));
       }
-      segment.SetTermRange(t, first);
+      State(segment).terms[t].first = first;
     }
   for (std::size_t i = 0; i < from.size(); i++) {
     const int first = static_cast<int>(next.size());
@@ -86,11 +86,11 @@ void EData::LayOutUnits(std::vector<std::vector<EPoint> *> *fresh) {
 
 std::vector<azure2::PointRef> EData::PlanUnits() const {
   std::vector<azure2::PointRef> units;
-  for (const ESegment &segment : segments_)
-    for (int p = 0; p < segment.NumPoints(); p++) units.push_back(segment.TermFirstUnit(0) + p);
-  for (const LeafRef &leaf : leafRefs_) {
-    const ESegment &segment = segments_[leaf.first];
-    for (int p = 0; p < segment.NumTermPoints(leaf.second); p++) units.push_back(segment.TermFirstUnit(leaf.second) + p);
+  for (const ESegment &segment : set_->segments_)
+    for (int p = 0; p < segment.NumPoints(); p++) units.push_back(segment.TermFirstUnit(*this, 0) + p);
+  for (const LeafRef &leaf : set_->leafRefs_) {
+    const ESegment &segment = set_->segments_[leaf.first];
+    for (int p = 0; p < segment.NumTermPoints(leaf.second); p++) units.push_back(segment.TermFirstUnit(*this, leaf.second) + p);
   }
   return units;
 }

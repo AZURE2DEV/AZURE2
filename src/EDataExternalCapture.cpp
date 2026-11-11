@@ -66,7 +66,7 @@ class ECSignatureHash {
  */
 /// A leaf seen as the walk sees a segment: its pairs, its key and its points.
 struct LeafView {
-  ESegment *segment;
+  const ESegment *segment;
   int term;
   int GetEntranceKey() const { return segment->TermEntranceKey(term); }
   int GetExitKey() const { return segment->TermExitKey(term); }
@@ -77,7 +77,7 @@ struct LeafView {
 /// The leaves of `data` in the order InitializeLeaves writes their amplitudes.
 std::vector<LeafView> LeafViews(EData &data) {
   std::vector<LeafView> views;
-  for (const EData::LeafRef &leaf : data.LeafRefs()) views.push_back({&data.GetSegments()[leaf.first], leaf.second});
+  for (const EData::LeafRef &leaf : data.Data().LeafRefs()) views.push_back({&data.Data().GetSegments()[leaf.first], leaf.second});
   return views;
 }
 
@@ -175,7 +175,7 @@ long long WalkECAmplitudes(EData &data, Segments &segments, CNuc *theCNuc, ECSig
 
 long long EData::CountECAmplitudes(CNuc *theCNuc, const Config &configure) {
   std::vector<LeafView> leaves = LeafViews(*this);
-  return WalkECAmplitudes(*this, GetSegments(), theCNuc, nullptr, nullptr) + WalkECAmplitudes(*this, leaves, theCNuc, nullptr, nullptr);
+  return WalkECAmplitudes(*this, Data().GetSegments(), theCNuc, nullptr, nullptr) + WalkECAmplitudes(*this, leaves, theCNuc, nullptr, nullptr);
 }
 
 /*!
@@ -231,7 +231,7 @@ std::string EData::ECSignature(CNuc *theCNuc, const Config &configure) {
 
   std::set<int> pairs;
   hash.Add("data segments");
-  WalkECAmplitudes(*this, GetSegments(), theCNuc, &hash, &pairs);
+  WalkECAmplitudes(*this, Data().GetSegments(), theCNuc, &hash, &pairs);
   hash.Add("component segments");
   std::vector<LeafView> leaves = LeafViews(*this);
   WalkECAmplitudes(*this, leaves, theCNuc, &hash, &pairs);
@@ -414,7 +414,7 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
   }
   int sumSegmentI = 0;
   int numSumSegments = 0;
-  for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+  for (ESegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     if (segment->IsTotalCapture()) {
       numSumSegments = segment->IsTotalCapture();
       sumSegmentI = 1;  // Start at 1 since total capture is now handled within the segment

@@ -302,7 +302,7 @@ void AddAbundancePenaltyGradient(CNuc *compound, const Config &configure, GradAc
  * fitBarFn arguments: (segment, 1-based segment index, 0-based point index,
  * combined model value).
  */
-using FitBarFn = std::function<double(ESegment *, int, int, double)>;
+using FitBarFn = std::function<double(const ESegment *, int, int, double)>;
 
 bool AccumulateEGammaGradient(CNuc *compound, EData *data, azure2::Results &results, const Config &config,
                               const ParamIndexMap &pmap,

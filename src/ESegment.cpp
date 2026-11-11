@@ -66,7 +66,7 @@ void ESegment::SetReaction(const azure2::experiment::ReactionSpec &r) {
   isTotal_ = r.total;
   transmission_ = r.transmission;
   yield_ = r.yieldThickness;
-  thickness_ = GetNominalThickness();
+  startThickness_ = GetNominalThickness();
 }
 
 /*!
@@ -82,17 +82,15 @@ ESegment::ESegment(const azure2::experiment::DatasetSpec &spec) : parameterNames
   coefficientsAbsolute_ = spec.absolute;
   datafile_ = spec.dataFile;
   columns_ = spec.columns;
-  dataNorm_ = dataNormNominal_ = spec.norm;
+  startNorm_ = dataNormNominal_ = spec.norm;
   dataNormError_ = spec.normError;
-  energyShift_ = spec.energyShift;
+  startEnergyShift_ = spec.energyShift;
   // The shift prior is centred on no shift (the spec's value is only the start), unless the spec gives a centre
   // (applied by EData::Fill once the groups are resolved, as is the normalization's).
   energyShiftNominal_ = 0.0;
-  lastEnergyShift_ = std::numeric_limits<double>::quiet_NaN();  // the points start unshifted: the first fill always applies the shift
   energyShiftError_ = spec.energyShiftError;
   varyEnergyShift_ = spec.varyEnergyShift;
-  energyShiftSqrt_ = spec.energyShiftSqrt;
-  lastEnergyShiftSqrt_ = std::numeric_limits<double>::quiet_NaN();
+  startEnergyShiftSqrt_ = spec.energyShiftSqrt;
   energyShiftSqrtError_ = spec.energyShiftSqrtError;
   varyEnergyShiftSqrt_ = spec.varyEnergyShiftSqrt;
   shiftGroup_ = spec.shiftGroup;
@@ -141,14 +139,12 @@ ESegment::ESegment(const azure2::experiment::ExtrapolationSpec &spec) : paramete
     maxAngDistOrder_ = spec.maxAngDistOrder;
   }
   datafile_ = "";
-  dataNorm_ = dataNormNominal_ = 1.;
+  startNorm_ = dataNormNominal_ = 1.;
   dataNormError_ = 0.;
-  energyShift_ = energyShiftNominal_ = 0.0;
+  startEnergyShift_ = energyShiftNominal_ = 0.0;
   energyShiftError_ = 0.0;
-  lastEnergyShift_ = std::numeric_limits<double>::quiet_NaN();  // the points start unshifted: the first fill always applies the shift
   varyEnergyShift_ = false;
-  energyShiftSqrt_ = 0.0;
-  lastEnergyShiftSqrt_ = std::numeric_limits<double>::quiet_NaN();
+  startEnergyShiftSqrt_ = 0.0;
   energyShiftSqrtError_ = 0.0;
   shiftGroup_ = "";
   shiftLeaderPos_ = -1;
@@ -236,13 +232,14 @@ bool ESegment::IsProfiledNorm() const {
 double ESegment::ProfileNormChiSquared(const EData &data, const azure2::Results &results, double &profiledNorm) const {
   double Smm = 0.0, Smd = 0.0, Sdd = 0.0;
   const UnitRange<const EPoint> points = GetPoints(data);
+  const SegmentState &state = data.State(*this);
   for (int i = 0; i < points.size(); i++) {
     const EPoint &pt = points[i];
-    double e = CMError(i);
+    double e = CMError(state, i);
     if (e == 0.0) continue;
     double w = 1.0 / (e * e);
     double m = pt.GetModelValue(results);
-    double d = CMValue(i);
+    double d = CMValue(state, i);
     Smm += m * m * w;
     Smd += m * d * w;
     Sdd += d * d * w;
@@ -343,7 +340,7 @@ bool ESegment::IsVaryNorm() const {
  */
 
 int ESegment::NumPoints() const {
-  return own_.count;
+  return measurement_ ? measurement_->rows->Size() : 0;
 }
 
 /*!
@@ -442,7 +439,7 @@ int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
       return -1;
     }
   }
-  this->KeepLoadFrame(0);
+  this->KeepLoadFrame(*theData, 0);
   return 0;
 }
 
@@ -456,14 +453,14 @@ void ESegment::SetMeasurementRows(EData &data, std::shared_ptr<const azure2::exp
   measurement_ = m;
   const azure2::experiment::MeasurementRows &r = *measurement_->rows;
   own_.settings = MakeOwnSettings();
-  // the points: a new range at the end of the data set's units (an earlier range is left for the compaction)
-  own_.first = data.NumUnits();
-  own_.count = r.Size();
-  own_.frame.rows.clear();
-  own_.frame.rows.reserve(r.Size());
+  // the points: a new range at the end of the working copy's units (an earlier range is left for the compaction)
+  TermState &own = data.State(*this).terms.at(0);
+  own.first = data.NumUnits();
+  own.frame.rows.clear();
+  own.frame.rows.reserve(r.Size());
   for (int i = 0; i < r.Size(); i++) {
     data.AppendUnit(EPoint(r, i, this, 0));
-    own_.frame.rows.push_back(azure2::experiment::UnconvertedRow(r.energy[i], r.angle[i], r.value[i], r.error[i],
+    own.frame.rows.push_back(azure2::experiment::UnconvertedRow(r.energy[i], r.angle[i], r.value[i], r.error[i],
                                                             r.binLow[i], r.binHigh[i]));
   }
 }
@@ -516,13 +513,14 @@ azure2::experiment::FrameRule RuleOf(const ESegment &segment, int t, PPair *entr
 }  // namespace
 
 bool ESegment::ConvertRowToCM(EData &data, int t, int i, PPair *entrancePair, PPair *exitPair, bool convertValue,
-                              BeyondRange beyond) {
-  TermUnits &u = Units(t);
+                              BeyondRange beyond) const {
+  TermState &u = data.State(*this).terms[t];
   EPoint *point = &data.Unit(u.first + i);
   azure2::experiment::FrameRow &row = u.frame.rows[i];
   // After a shift: from the row as converted at load, so that where the angle cannot be converted the angle and the
   // factor are the load-time ones, whatever this copy converted before (data_model.md section 1.3, H4).
-  if (beyond == BeyondRange::Convert && u.loadFrame) row = u.loadFrame->rows[i];
+  const TermFixed &fixed = Fixed(t);
+  if (beyond == BeyondRange::Convert && fixed.loadFrame) row = fixed.loadFrame->rows[i];
   const azure2::experiment::MeasurementRows &rows = *measurement_->rows;
   azure2::experiment::AngleLimit lim;
   const bool ok = azure2::experiment::ConvertRow(RuleOf(*this, t, entrancePair, exitPair, convertValue),
@@ -534,8 +532,8 @@ bool ESegment::ConvertRowToCM(EData &data, int t, int i, PPair *entrancePair, PP
   return ok;
 }
 
-void ESegment::ConvertRowEnergyToCM(EData &data, int t, int i, PPair *entrancePair, PPair *exitPair) {
-  TermUnits &u = Units(t);
+void ESegment::ConvertRowEnergyToCM(EData &data, int t, int i, PPair *entrancePair, PPair *exitPair) const {
+  TermState &u = data.State(*this).terms[t];
   EPoint &point = data.Unit(u.first + i);
   azure2::experiment::FrameRow &row = u.frame.rows[i];
   const azure2::experiment::MeasurementRows &rows = *measurement_->rows;
@@ -552,24 +550,27 @@ int ESegment::AddLeaf(EData &data, int entranceKey, int exitKey, std::optional<d
   leaf.exitKey = exitKey;
   leaf.fixedAngle = fixedAngle;
   leaf.scaling = scaling;
-  // the leaf's points: copies of the segment's, a new range at the end of the data set's units
-  leaf.units.first = data.NumUnits();
-  leaf.units.count = own_.count;
-  for (int i = 0; i < own_.count; i++) {
-    if (data.Unit(own_.first + i).NumSubPoints())
+  // the leaf's points: copies of the segment's, a new range at the end of the working copy's units
+  SegmentState &state = data.State(*this);
+  TermState term;
+  term.first = data.NumUnits();
+  const int ownFirst = state.terms[0].first;
+  for (int i = 0; i < NumPoints(); i++) {
+    if (data.Unit(ownFirst + i).NumSubPoints())
       throw std::logic_error("ESegment::AddLeaf: a leaf is added after the sub-points of its segment");
-    data.AppendUnit(EPoint(data.Unit(own_.first + i)));
+    data.AppendUnit(EPoint(data.Unit(ownFirst + i)));
   }
-  leaf.units.frame = own_.frame;
-  leaf.units.loadFrame = own_.loadFrame;
-  for (int i = 0; i < leaf.units.count; i++) {
-    EPoint &point = data.Unit(leaf.units.first + i);
+  term.frame = state.terms[0].frame;
+  leaf.fixed.loadFrame = own_.loadFrame;
+  for (int i = 0; i < NumPoints(); i++) {
+    EPoint &point = data.Unit(term.first + i);
     if (fixedAngle) {
       point.SetCMAngle(*fixedAngle);
       point.SetLabAngle(*fixedAngle);
-      leaf.units.frame.rows[i].thetaCM = *fixedAngle;
+      term.frame.rows[i].thetaCM = *fixedAngle;
     }
   }
+  state.terms.push_back(std::move(term));
   leaves_.push_back(std::move(leaf));
   const int t = (int)leaves_.size();
   SetLeafSettings(data, t);
@@ -684,14 +685,6 @@ double ESegment::GetJ() const {
 }
 
 /*!
- * Returns the normalization parameter for the data segment.
- */
-
-double ESegment::GetNorm() const {
-  return dataNorm_;
-}
-
-/*!
  * Returns the nominal normalization parameter for the data segment.
  */
 
@@ -762,7 +755,7 @@ std::shared_ptr<TermSettings> ESegment::MakeOwnSettings() const {
 }
 
 void ESegment::SetTermSettings(EData &data, int t, std::shared_ptr<const TermSettings> settings) {
-  TermUnits &u = Units(t);
+  TermFixed &u = Fixed(t);
   u.settings = std::move(settings);
   for (EPoint &point : TermPoints(data, t)) {
     point.UseSettings(u.settings.get());
@@ -790,14 +783,6 @@ void ESegment::SetTargetEffectNum(int targetEffectNum) {
 
 void ESegment::SetSegmentKey(int segmentKey) {
   segmentKey_ = segmentKey;
-}
-
-/*!
- * Sets the normalization parameter for the segment.
- */
-
-void ESegment::SetNorm(double norm) {
-  dataNorm_ = norm;
 }
 
 /*!
@@ -842,15 +827,21 @@ void ESegment::SetMaxAngle(double maxAngle) {
 }
 
 UnitRange<EPoint> ESegment::TermPoints(EData &data, int t) const {
-  return data.Units(Units(t).first, Units(t).count);
+  return data.Units(TermFirstUnit(data, t), NumPoints());
 }
 
 UnitRange<const EPoint> ESegment::TermPoints(const EData &data, int t) const {
-  return data.Units(Units(t).first, Units(t).count);
+  return data.Units(TermFirstUnit(data, t), NumPoints());
 }
 
+int ESegment::TermFirstUnit(const EData &data, int t) const { return data.State(*this).terms[t].first; }
+
 EPoint *ESegment::GetTermPoint(EData &data, int t, int i) const {
-  return &data.Unit(Units(t).first + i - 1);
+  return &data.Unit(TermFirstUnit(data, t) + i - 1);
+}
+
+void ESegment::KeepLoadFrame(const EData &data, int t) {
+  Fixed(t).loadFrame = std::make_shared<const azure2::experiment::MeasurementFrame>(data.State(*this).terms[t].frame);
 }
 
 // Advanced segment composition methods
@@ -877,8 +868,8 @@ OperationType ESegment::GetOperationType() const {
  * as they were: 13C(a,n1+n2) at 6 MeV, -2.9 % at 0 deg to +5.6 % at 150 deg
  * (audit item 7, tests/sum_lab_frame).
  */
-double ESegment::TermFrameFactor(int t, int i) const {
-  return azure2::experiment::TermFrameFactor(Jacobian(0, i), Jacobian(t, i));
+double ESegment::TermFrameFactor(const SegmentState &state, int t, int i) {
+  return azure2::experiment::TermFrameFactor(Jacobian(state, 0, i), Jacobian(state, t, i));
 }
 
 /*!
@@ -901,7 +892,7 @@ double ESegment::RatioTermFrameFactor(int t, EPoint *point, CNuc *cnuc) const {
 
 bool ESegment::HasSubPointIntegration(const EData &data, const EPoint *point) {
   if (!point || !point->IsTargetEffect() || point->NumSubPoints() <= 0) return false;
-  const TargetEffect *te = data.GetTargetEffect(point->GetTargetEffectNum());
+  const TargetEffect *te = data.Data().GetTargetEffect(point->GetTargetEffectNum());
   return te && te->IsSubPointEffect();
 }
 

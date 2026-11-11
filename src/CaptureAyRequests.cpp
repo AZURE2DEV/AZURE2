@@ -7,8 +7,8 @@
 #include "PPair.h"
 
 void RequestCaptureAyTerms(CNuc &compound, EData &data) {
-  for (int i = 1; i <= data.NumSegments(); i++) {
-    const ESegment &segment = *data.GetSegment(i);
+  for (int i = 1; i <= data.Data().NumSegments(); i++) {
+    const ESegment &segment = *data.Data().GetSegment(i);
     if (!segment.IsAnalyzingPower()) continue;
     for (int t = 0; t < segment.NumTerms(); t++) {
       const int entranceKey = segment.TermEntranceKey(t), exitKey = segment.TermExitKey(t);

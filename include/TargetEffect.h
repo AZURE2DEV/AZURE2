@@ -65,9 +65,8 @@ class TargetEffect {
   void SetLineNumber(int n) { lineNumber_ = n; }
   /// A `screening` keyword without its three numbers (or a negative sigma).
   bool HasScreeningError() const { return screeningError_; }
-  /// Current U_e in eV (the value read, or the fit parameter's).
+  /// U_e in eV as the line gives it, the start of a fit (the present value is a working copy's, TargetEffectValues).
   double GetScreeningUe() const { return screeningUe_; }
-  void SetScreeningUe(double ueEv) { screeningUe_ = ueEv; }
   /// U_e as read from the line, the centre of the prior, eV.
   double GetScreeningNominal() const { return screeningNominal_; }
   bool IsScreeningVaried() const { return screeningVary_; }
@@ -80,11 +79,11 @@ class TargetEffect {
   bool IsDopplerPriorReplaced() const { return dopplerPriorReplaced_; }
   /// Prior width in eV, 0 = no prior.
   double GetScreeningSigma() const { return screeningSigma_; }
-  /// ((U_e - nominal) / sigma)^2, or 0 without a prior or when U_e is fixed (a fixed parameter pays no prior,
-  /// docs/upgrade/objective.md D5).
-  double ScreeningPenalty() const {
+  /// ((U_e - nominal) / sigma)^2 at the present U_e (eV, a working copy's TargetEffectValues), or 0 without a prior or
+  /// when U_e is fixed (a fixed parameter pays no prior, docs/upgrade/objective.md D5).
+  double ScreeningPenalty(double ue) const {
     if (!hasScreening_ || !screeningVary_ || screeningPriorReplaced_ || screeningSigma_ <= 0.0) return 0.0;
-    const double r = (screeningUe_ - screeningNominal_) / screeningSigma_;
+    const double r = (ue - screeningNominal_) / screeningSigma_;
     return r * r;
   }
   /*!
@@ -113,10 +112,10 @@ class TargetEffect {
   double GetDensitySigma() const { return densitySigma_; }
   /// The `densitygroup` label, empty without one.
   const std::string &GetDensityGroup() const { return densityGroup_; }
-  /// ((N - N0)/sigma)^2, or 0 without a prior or when N is fixed (objective.md D5).
-  double DensityPenalty() const {
+  /// ((N - N0)/sigma)^2 at the present density N (atoms/cm^2), or 0 without a prior or when N is fixed (objective.md D5).
+  double DensityPenalty(double density) const {
     if (!hasDensityFit_ || !densityVary_ || densityPriorReplaced_ || densitySigma_ <= 0.0) return 0.0;
-    const double r = (density_ - densityNominal_) / densitySigma_;
+    const double r = (density - densityNominal_) / densitySigma_;
     return r * r;
   }
   /// The density the sub-point grids span (the line's density when it is not fitted).
@@ -149,7 +148,8 @@ class TargetEffect {
   /// (\p backward) it for this effect; \p thicknessCM is the point's target thickness (c.m. MeV, 0 if none),
   /// \p cmFactor and \p z1, \p z2 the point's entrance-pair factor and charges (Bohr straggling).
   void GridExtent(double eCM, double thicknessCM, const Config &, double cmFactor, int z1, int z2, double &forward, double &backward) const;
-  /// Target density in atoms/cm^2. Target integration only.
+  /// Target density in atoms/cm^2 as the line gives it (the present value is a working copy's, TargetEffectValues).
+  /// Target integration only.
   double GetDensity() const;
   /// A target integration with a density of 0 is an infinitely THICK target: the yield per incident
   /// particle, int_0^{E0} sigma(E) / epsilon(E) dE, not divided by a density; every point integrates
@@ -160,15 +160,15 @@ class TargetEffect {
   bool IsThickTarget() const { return isThickTarget_; }
   /// Energy loss (lab MeV) across the target at lab energy E: Delta with int_{E-Delta}^{E} dE'/epsilon = N, the
   /// exact range integral (first-order epsilon(E) N before 2026-10-27, 2-8 % off for 5-20 % targets).
-  double TargetThickness(double, const Config &);
+  double TargetThickness(double, const Config &) const;
   /// The same for an areal density \p density instead of the current one.
-  double TargetThickness(double, const Config &, double density);
+  double TargetThickness(double, const Config &, double density) const;
   /// Depth-averaged energy loss (lab MeV) in the target at lab energy E: E - E_bar with
   /// E_bar = int E' dE'/epsilon / int dE'/epsilon over [E - Delta, E] (Delta = TargetThickness).  The cross section
   /// at E_bar equals the target average for a cross section linear across the target; the remainder is about
   /// sigma'' Delta^2 / 24.  It is the single energy a thin-target point is evaluated at outside the windows of an
   /// energy-restricted target integration (EPoint fallback, 2026-11-05).  0 for a thick target.
-  double MeanEnergyLoss(double, const Config &, double density);
+  double MeanEnergyLoss(double, const Config &, double density) const;
   /// Attenuation coefficient of the given order.
   double GetQCoefficient(int) const;
   /// Convolution coefficient of the given order.
@@ -178,7 +178,7 @@ class TargetEffect {
   void SetNumSubPoints(int);
   /// The keys of the data sets the effect applies to.
   std::vector<int> GetSegmentsList() const;
-  Equation *GetStoppingPowerEq();
+  const Equation *GetStoppingPowerEq() const;
   Equation *GetConvolutionEq();
 
   // Energy straggling (see StragglingSigma / IsBohrStraggling)
@@ -262,10 +262,8 @@ class TargetEffect {
   bool HasDopplerError() const { return dopplerError_; }
   /// Why the `doppler` block was refused (HasDopplerError).
   const std::string &GetDopplerErrorText() const { return dopplerErrorText_; }
-  /// Effective temperature, K (the current value: a fitted temperature follows the parameter vector).
+  /// Effective temperature, K, as the line gives it (the present value is a working copy's, TargetEffectValues).
   double GetDopplerTemperature() const { return dopplerTemperature_; }
-  /// Set the current temperature (EData::FillDopplerFromParams); the nominal and layout temperatures stay.
-  void SetDopplerTemperature(double t) { dopplerTemperature_ = t; }
   /*!
    * Fitted temperature (`doppler T vary sigma [Tmax]`): T is the fit parameter `doppler_<n>` (n = the effect
    * number, as screening_<n>), with a Gaussian prior ((T - T0)/sigma)^2 about the line's T0 when sigma > 0.  The
@@ -286,14 +284,12 @@ class TargetEffect {
   double GetDopplerLayoutTemperature() const { return (dopplerLayout_ > 0.0) ? dopplerLayout_ : dopplerTemperature_; }
   /// The lowest temperature a fit may reach: T0/4 (the pieces, u(T0)/4 wide, stay within u(T)/2).
   double GetDopplerMinimum() const { return 0.25 * this->GetDopplerNominal(); }
-  /// ((T - T0)/sigma)^2, or 0 without a prior or when T is fixed (objective.md D5).
-  double DopplerPenalty() const {
+  /// ((T - T0)/sigma)^2 at the present temperature T (K), or 0 without a prior or when T is fixed (objective.md D5).
+  double DopplerPenalty(double temperature) const {
     if (!dopplerFit_ || !dopplerVary_ || dopplerPriorReplaced_ || dopplerSigma_ <= 0.0) return 0.0;
-    const double r = (dopplerTemperature_ - dopplerNominal_) / dopplerSigma_;
+    const double r = (temperature - dopplerNominal_) / dopplerSigma_;
     return r * r;
   }
-  /// u = sqrt(kT m/M) in sqrt(MeV) for a pair of c.m./lab factor cmFactor = M/(m+M), at the current T.
-  double DopplerU(double cmFactor) const;
   /// The same at temperature \p temperature (K).
   double DopplerUAt(double cmFactor, double temperature) const;
   /// The c.m. energy window [lo, hi] beyond which the Doppler kernel at c.m. energy eCM is below

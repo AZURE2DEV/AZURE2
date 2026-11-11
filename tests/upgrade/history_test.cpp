@@ -16,7 +16,9 @@
 //   copy of a copy             a copy made from a copy evaluated at B, evaluated at A; its source then evaluated at D
 //                              (B with the free shifts 1 keV further): the copy's buffer does not move, and the copy
 //                              at A again equals fresh A (no state shared with the source).
-// Also: a second load of the project in the same process gives its leaves the same keys, all distinct.
+// Also: a second load of the project in the same process gives its leaves the same keys, all distinct; a copy shares
+// its source's data set (DataSet.h: one object, never written after the set-up), and every evaluation and hand-over of
+// the copies above leaves a fingerprint of that data set as it was after the set-up.
 // An evaluation is AZURECalc::Chi2On's: the hand-over, the parallel point pass, the model value of every point, the
 // objective (Objective.h) with the per-segment chi^2.
 //
@@ -33,6 +35,7 @@
 #include <vector>
 
 #include "AZUREParams.h"
+#include "DataSet.h"
 #include "CNuc.h"
 #include "Config.h"
 #include "EData.h"
@@ -71,6 +74,65 @@ bool SameBits(const std::vector<double> &a, const std::vector<double> &b, std::s
   return true;
 }
 
+// A fingerprint of what a data set holds that an evaluation could read: the settings, start values, priors and terms of
+// every segment, its measurement's rows, the target effects' lines and priors, the parameter layout, the THM
+// experiments and covariance groups (FNV-1a over the values' bits).
+struct Fingerprint {
+  std::uint64_t h = 1469598103934665603ULL;
+  void Bytes(const void *p, size_t n) {
+    const unsigned char *c = static_cast<const unsigned char *>(p);
+    for (size_t i = 0; i < n; i++) h = (h ^ c[i]) * 1099511628211ULL;
+  }
+  void Add(double v) { Bytes(&v, sizeof v); }
+  void Add(int v) { Bytes(&v, sizeof v); }
+  void Add(bool v) { Add(v ? 1 : 0); }
+  void Add(const std::string &v) { Bytes(v.data(), v.size()), Add((int)v.size()); }
+  void Add(const std::vector<double> &v) {
+    for (double x : v) Add(x);
+    Add((int)v.size());
+  }
+};
+
+std::uint64_t DataSetFingerprint(const DataSet &d) {
+  Fingerprint f;
+  f.Add(d.NumSegments());
+  f.Add(d.GetNormParamOffset()), f.Add(d.GetEnergyShiftParamOffset()), f.Add(d.GetEnergyShiftSqrtParamOffset());
+  f.Add(d.GetEnergyShiftFnParamOffset()), f.Add(d.ScreeningParamOffset()), f.Add(d.DensityParamOffset());
+  f.Add(d.DopplerParamOffset()), f.Add(d.ThicknessParamOffset()), f.Add(d.ThmCoherentParamOffset());
+  for (const DataSet::LeafRef &leaf : d.LeafRefs()) f.Add(leaf.first), f.Add(leaf.second);
+  for (const ESegment &s : d.GetSegments()) {
+    f.Add(s.GetSegmentKey()), f.Add(s.Pos()), f.Add(s.NumTerms()), f.Add(s.NumPoints());
+    f.Add(s.StartNorm()), f.Add(s.GetNominalNorm()), f.Add(s.GetNormError()), f.Add(s.IsVaryNorm());
+    f.Add(s.StartEnergyShift()), f.Add(s.GetNominalEnergyShift()), f.Add(s.GetEnergyShiftError());
+    f.Add(s.StartEnergyShiftSqrt()), f.Add(s.GetEnergyShiftSqrtError()), f.Add(s.StartThickness());
+    f.Add(s.GetNormLeaderPos()), f.Add(s.GetShiftLeaderPos()), f.Add(s.GetThicknessLeaderPos());
+    f.Add(s.IsNormPriorReplaced()), f.Add(s.IsShiftPriorReplaced()), f.Add(s.IsThicknessPriorReplaced());
+    f.Add(s.HasShiftFn()), f.Add(s.NumShiftFnParams()), f.Add(s.GetShiftFnParamStart());
+    f.Add(s.GetNominalShiftFnValues()), f.Add(s.GetShiftFnErrors()), f.Add(s.GetCovarianceGroup());
+    for (int t = 0; t < s.NumTerms(); t++) {
+      f.Add(s.TermEntranceKey(t)), f.Add(s.TermExitKey(t)), f.Add(s.TermKey(t)), f.Add(s.TermTargetEffectNum(t));
+      f.Add(s.LeafScaling(t));
+      const TermSettings &ts = *s.TermSettingsOf(t);
+      f.Add(ts.entranceKey), f.Add(ts.exitKey), f.Add(ts.differential), f.Add(ts.total), f.Add(ts.angularDist);
+      f.Add(ts.maxAngDistOrder), f.Add(ts.crossSectionComponent);
+    }
+    if (s.HasMeasurement()) {
+      const azure2::experiment::MeasurementRows &r = *s.GetMeasurement().rows;
+      f.Add(r.energy), f.Add(r.angle), f.Add(r.value), f.Add(r.error);
+    }
+  }
+  for (int n = 1; n <= d.NumTargetEffects(); n++) {
+    const TargetEffect &te = *d.GetTargetEffect(n);
+    f.Add(te.GetScreeningUe()), f.Add(te.GetDensity()), f.Add(te.GetDopplerTemperature());
+    f.Add(te.GetDensityNominal()), f.Add(te.GetDensitySigma()), f.Add(te.GetScreeningSigma());
+    f.Add(te.GetLayoutDensity()), f.Add(te.GetDopplerLayoutTemperature()), f.Add(te.IsScreeningPriorReplaced());
+  }
+  for (int k = 0; k < d.NumThmCoherentParams(); k++) f.Add(d.GetThmCoherentParam(k).value);
+  for (int g = 0; g < d.NumThmGroups(); g++) f.Add(d.GetThmGroup(g).name), f.Add((int)d.GetThmGroup(g).segments.size());
+  f.Add(d.NumCovarianceGroups());
+  return f.h;
+}
+
 struct Evaluation {
   std::vector<double> segmentChi2, models;  // segmentChi2[0] = total
 };
@@ -89,8 +151,8 @@ Evaluation Evaluate(Copy &c, const vector_r &p, const Config &cfg) {
   ld->FillNormsFromParams(p);
   ld->FillEnergyShiftsFromParams(p, c.results, lc, &cfg);
   if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(cfg, false);
-  std::vector<ESegment *> segments;
-  for (int i = 1; i <= ld->NumSegments(); i++) segments.push_back(ld->GetSegment(i));
+  std::vector<const ESegment *> segments;
+  for (int i = 1; i <= ld->Data().NumSegments(); i++) segments.push_back(ld->Data().GetSegment(i));
   const bool pre = ld->CalculatePointsInParallel(segments, lc, cfg, c.results) >= 0;
   Evaluation e;
   azure2::EvaluateModel(*ld, lc, cfg, c.results, pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
@@ -154,8 +216,8 @@ int RunProject(const std::string &path) {
     g_config = &cfg;
     auto keys = [](EData &d) {
       std::vector<int> k;
-      for (int i = 1; i <= d.NumSegments(); i++)
-        for (int t = 1; t < d.GetSegment(i)->NumTerms(); t++) k.push_back(d.GetSegment(i)->TermKey(t));
+      for (int i = 1; i <= d.Data().NumSegments(); i++)
+        for (int t = 1; t < d.Data().GetSegment(i)->NumTerms(); t++) k.push_back(d.Data().GetSegment(i)->TermKey(t));
       return k;
     };
     const std::vector<int> k1 = keys(data), k2 = keys(data2);
@@ -189,8 +251,16 @@ int RunProject(const std::string &path) {
     c.data.reset(data.Clone());
     return c;
   };
+  // The data set is shared by the copies and only read by their evaluations.
+  const std::uint64_t setUp = DataSetFingerprint(data.Data());
+  check("the set-up froze the data set", data.IsFrozen());
   Copy freshA = copy(), freshB = copy();
+  check("a copy shares its source's data set (one object)",
+        freshA.data->DataSetPointer().get() == data.DataSetPointer().get() &&
+            freshB.data->DataSetPointer().get() == data.DataSetPointer().get());
   const Evaluation eA = Evaluate(freshA, pA, cfg), eB = Evaluate(freshB, pB, cfg);
+  check("an evaluation at A and one at B leave the shared data set as the set-up made it",
+        DataSetFingerprint(freshB.data->Data()) == setUp);
   std::string why;
   std::printf("  %zu segments, %zu points; chi2 A %.17g, B %.17g\n", eA.segmentChi2.size() - 1, eA.models.size(),
               eA.segmentChi2[0], eB.segmentChi2[0]);
@@ -247,6 +317,8 @@ int RunProject(const std::string &path) {
     Compare("pooled C -> A = fresh A (fixed shifts moved and back)", Evaluate(fixedShift, pA, cfg), eA);
     Compare("pooled C -> A -> C = fresh C", Evaluate(fixedShift, pC, cfg), eC);
   }
+  check("every evaluation and hand-over above leaves the shared data set as the set-up made it",
+        DataSetFingerprint(data.Data()) == setUp && DataSetFingerprint(freshA.data->Data()) == setUp);
   return 0;
 }
 

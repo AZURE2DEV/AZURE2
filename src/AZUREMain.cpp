@@ -94,7 +94,7 @@ int AZUREMain::operator()() {
       if (data()->Fill(configure(), compound()) == -1) {
         configure().outStream << "Could not fill data object from file." << std::endl;
         return -1;
-      } else if (data()->NumSegments() == 0 && compound()->GetModelData().NumResiduals() == 0) {  // model data alone run
+      } else if (data()->Data().NumSegments() == 0 && compound()->GetModelData().NumResiduals() == 0) {  // model data alone run
         configure().outStream << "There is no data provided." << std::endl;
         return -1;
       }
@@ -102,7 +102,7 @@ int AZUREMain::operator()() {
       if (data()->MakePoints(configure(), compound()) == -1) {
         configure().outStream << "Could not fill data object from file." << std::endl;
         return -1;
-      } else if (data()->NumSegments() == 0) {
+      } else if (data()->Data().NumSegments() == 0) {
         configure().outStream << "Extrapolation segments produce no data." << std::endl;
         return -1;
       }
@@ -562,7 +562,7 @@ int AZUREMain::operator()() {
           // MIGRAD is rerun with the re-frozen covariance until the objective stops changing.
           // (12C+a_onefile 10-29-26: fits that started 15k-90k above their minimum reported a chi^2
           // 50-600 away from a mode-1 calculation of their own param.sav.)
-          if (data()->HasRelativeCovariance()) {
+          if (data()->Data().HasRelativeCovariance()) {
             for (int pass = 0;; pass++) {
               const double frozen = min.Fval();
               data()->RefreezeCovariance();
@@ -743,12 +743,12 @@ int AZUREMain::operator()() {
     if (configure().paramMask & Config::CALCULATE_WITH_DATA) {
       configure().outStream << std::endl
                             << std::endl;
-      for (ESegmentIterator segment = data()->GetSegments().begin();
-           segment < data()->GetSegments().end(); segment++) {
+      for (ESegmentIterator segment = data()->Data().GetSegments().begin();
+           segment < data()->Data().GetSegments().end(); segment++) {
         configure().outStream << "Segment #"
                               << segment->GetSegmentKey()
                               << " Chi-Squared/N: "
-                              << results.objective.segmentChi2[segment - data()->GetSegments().begin() + 1] / segment->NumPoints()
+                              << results.objective.segmentChi2[segment - data()->Data().GetSegments().begin() + 1] / segment->NumPoints()
                               << std::endl;
         // With component segments, no need to skip - total capture is handled within the segment
       }
@@ -773,8 +773,8 @@ int AZUREMain::operator()() {
             (configure().paramMask & Config::CALCULATE_WITH_DATA)) {
           double chi2data = 0.;
           int nData = 0;
-          for (int s = 1; s <= data()->NumSegments(); s++) {
-            ESegment *seg = data()->GetSegment(s);
+          for (int s = 1; s <= data()->Data().NumSegments(); s++) {
+            const ESegment *seg = data()->Data().GetSegment(s);
             if (!seg) continue;
             chi2data += results.objective.segmentChi2[s];
             nData += seg->NumPoints();

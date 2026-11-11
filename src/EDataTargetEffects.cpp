@@ -283,12 +283,12 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
         continue;
       }
       // the parent's shift, which is what moves every sub-point (ESegment::UpdatePointEnergyWithShift)
-      const double offset = shifted ? cmFactor * seg.segment->TotalEnergyShift(point->GetOriginalEnergy()) : 0.0;
+      const double offset = shifted ? cmFactor * seg.segment->TotalEnergyShift(State(*seg.segment), point->GetOriginalEnergy()) : 0.0;
       work.push_back({seg, i, offset, shifted});
     }
   };
-  for (ESegment &seg : segments_) collect({&seg, 0});
-  for (const LeafRef &leaf : leafRefs_) collect({&segments_[leaf.first], leaf.second});
+  for (const ESegment &seg : set_->segments_) collect({&seg, 0});
+  for (const LeafRef &leaf : set_->leafRefs_) collect({&set_->segments_[leaf.first], leaf.second});
   if (work.empty()) return 0;
 
   // The observed parameters of the current fit values, on the private copy.
@@ -348,8 +348,8 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
     long reused = 0, fromOtherCopies = 0;
     auto layOut = [&](EPoint *target, const TermRef &seg, bool shifted) {
       const EPoint::SubGridSpec &tspec = target->GetSubGridSpec();
-      TargetEffect *effect = this->GetTargetEffect(seg.GetTargetEffectNum());
-      TargetEffect *qEffect = effect->IsQCoefficients() ? effect : nullptr;
+      const TargetEffect *effect = Data().GetTargetEffect(seg.GetTargetEffectNum());
+      const TargetEffect *qEffect = effect->IsQCoefficients() ? effect : nullptr;
       const UnitRange<EPoint> tsubs = target->GetSubPoints(*this);
       std::vector<EPoint::EDependentShare> old;
       if (!shifted) {
@@ -501,8 +501,8 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
         // share one line.
         std::vector<int> segmentsList = targetEffect.GetSegmentsList();
         for (int i = 1; i <= segmentsList.size(); i++) {
-          if (this->IsSegmentKey(segmentsList[i - 1])) {
-            ESegment *segment = this->GetSegmentFromKey(segmentsList[i - 1]);
+          if (Draft().IsSegmentKey(segmentsList[i - 1])) {
+            ESegment *segment = Draft().GetSegmentFromKey(segmentsList[i - 1]);
             if (segment && segment->IsTHM() && targetEffect.IsTargetIntegration()) {
               // A THM energy is the x + A energy reconstructed from the
               // three-body kinematics, not a beam energy slowing down in the
@@ -516,12 +516,12 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
             }
             if (segment) {
               this->AddTargetEffect(targetEffect);
-              segment->SetTargetEffectNum(this->NumTargetEffects());
+              segment->SetTargetEffectNum(Draft().NumTargetEffects());
               // If segment has components, set the target effect to these as
               // well -- again a copy each, since each is converted below.
               for (int t = 1; t < segment->NumTerms(); t++) {
                 this->AddTargetEffect(targetEffect);
-                segment->SetTermTargetEffectNum(t, this->NumTargetEffects());
+                segment->SetTermTargetEffectNum(t, Draft().NumTargetEffects());
               }
             }
           }
@@ -531,13 +531,19 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
   }
   if (specs.failed) return -1;
   if (this->SetUpDensityParams(configure) == -1) return -1;
-  for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+  // The working copy starts from each effect's values as the set-up leaves them (a density-group member takes its
+  // group's density).
+  for (int n = 1; n <= Draft().NumTargetEffects(); n++) {
+    const TargetEffect &te = *Draft().GetTargetEffect(n);
+    effectValues_[n - 1] = TargetEffectValues{te.GetScreeningUe(), te.GetDensity(), te.GetDopplerTemperature()};
+  }
+  for (ESegmentIterator segment = Draft().GetSegments().begin(); segment < Draft().GetSegments().end(); segment++) {
     PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(segment->GetEntranceKey()));
     PPair *exitPair = compound->GetPairFromKey(segment->GetExitKey());  // nullptr for total capture (-1)
     const double cmConversion = ESegment::CMEnergyFactor(entrancePair, exitPair);
 
     if (segment->IsTargetEffect()) {
-      TargetEffect *targetEffect = this->GetTargetEffect(segment->GetTargetEffectNum());
+      TargetEffect *targetEffect = Draft().GetTargetEffect(segment->GetTargetEffectNum());
       // the line's energies stay in the lab frame; every point converts them with its own pair's factor
       const int bohrZ1 = (entrancePair->GetPType() == 20) ? 0 : entrancePair->GetZ(1);
       const int bohrZ2 = entrancePair->GetZ(2);
@@ -755,7 +761,7 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
         const double compConversion = ESegment::CMEnergyFactor(compEntrance, compExit);
         for (int i = 0; i < component.NumPoints(); i++) segment->ConvertRowEnergyToCM(*this, t, i, compEntrance, compExit);
         if (segment->IsTargetEffect()) {
-          TargetEffect *targetEffect = this->GetTargetEffect(component.GetTargetEffectNum());
+          TargetEffect *targetEffect = Draft().GetTargetEffect(component.GetTargetEffectNum());
           const int bohrZ1 = (compEntrance->GetPType() == 20) ? 0 : compEntrance->GetZ(1);
           const int bohrZ2 = compEntrance->GetZ(2);
           if (targetEffect->IsUdr()) {
@@ -925,33 +931,33 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
   }
   this->CommitSubPoints();  // the sub-points given above take their places in the units
   // One screening parameter per <targetInt> line, shared by the copies of its effect.
-  screeningEffects_.clear();
-  screeningCopies_.clear();
-  for (int n = 1; n <= this->NumTargetEffects(); n++) {
-    const TargetEffect *te = this->GetTargetEffect(n);
+  Draft().screeningEffects_.clear();
+  Draft().screeningCopies_.clear();
+  for (int n = 1; n <= Draft().NumTargetEffects(); n++) {
+    const TargetEffect *te = Draft().GetTargetEffect(n);
     if (!te->HasScreening()) continue;
     size_t k = 0;
-    while (k < screeningEffects_.size() && screeningEffects_[k] != te->GetLineNumber()) k++;
-    if (k == screeningEffects_.size()) {
-      screeningEffects_.push_back(te->GetLineNumber());
-      screeningCopies_.emplace_back();
+    while (k < Draft().screeningEffects_.size() && Draft().screeningEffects_[k] != te->GetLineNumber()) k++;
+    if (k == Draft().screeningEffects_.size()) {
+      Draft().screeningEffects_.push_back(te->GetLineNumber());
+      Draft().screeningCopies_.emplace_back();
     }
-    screeningCopies_[k].push_back(n);
+    Draft().screeningCopies_[k].push_back(n);
   }
   this->ApplyScreening();
   // One Doppler parameter per <targetInt> line with the fit form, shared by the copies of its effect (as screening).
-  dopplerEffects_.clear();
-  dopplerCopies_.clear();
-  for (int n = 1; n <= this->NumTargetEffects(); n++) {
-    const TargetEffect *te = this->GetTargetEffect(n);
+  Draft().dopplerEffects_.clear();
+  Draft().dopplerCopies_.clear();
+  for (int n = 1; n <= Draft().NumTargetEffects(); n++) {
+    const TargetEffect *te = Draft().GetTargetEffect(n);
     if (!te->HasDopplerFit()) continue;
     size_t k = 0;
-    while (k < dopplerEffects_.size() && dopplerEffects_[k] != te->GetLineNumber()) k++;
-    if (k == dopplerEffects_.size()) {
-      dopplerEffects_.push_back(te->GetLineNumber());
-      dopplerCopies_.emplace_back();
+    while (k < Draft().dopplerEffects_.size() && Draft().dopplerEffects_[k] != te->GetLineNumber()) k++;
+    if (k == Draft().dopplerEffects_.size()) {
+      Draft().dopplerEffects_.push_back(te->GetLineNumber());
+      Draft().dopplerCopies_.emplace_back();
     }
-    dopplerCopies_[k].push_back(n);
+    Draft().dopplerCopies_[k].push_back(n);
   }
   return 0;
 }

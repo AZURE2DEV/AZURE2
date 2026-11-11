@@ -1117,7 +1117,7 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
         delete compound;
         delete data;
         return -1;
-      } else if (data->NumSegments() == 0 && compound->GetModelData().NumResiduals() == 0) {  // model data alone run
+      } else if (data->Data().NumSegments() == 0 && compound->GetModelData().NumResiduals() == 0) {  // model data alone run
         configure.outStream << "There is no data provided." << std::endl;
         delete compound;
         delete data;
@@ -1129,7 +1129,7 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
         delete compound;
         delete data;
         return -1;
-      } else if (data->NumSegments() == 0) {
+      } else if (data->Data().NumSegments() == 0) {
         configure.outStream << "Extrapolation segments produce no data." << std::endl;
         delete compound;
         delete data;

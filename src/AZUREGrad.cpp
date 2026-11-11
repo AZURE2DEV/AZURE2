@@ -346,8 +346,8 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
   // --- Norm parameters: one per varying-norm segment. ---
   map.normOffset_ = i;
   if (data) {
-    for (int s = 1; s <= data->NumSegments(); s++) {
-      ESegment *segment = data->GetSegment(s);
+    for (int s = 1; s <= data->Data().NumSegments(); s++) {
+      const ESegment *segment = data->Data().GetSegment(s);
       if (segment && segment->IsVaryNorm() && !segment->IsProfiledNorm()) {
         map.normIndex_[s] = i;
         map.desc_.push_back(ParamDesc{ParamKind::Norm, -1, -1, -1, s, false});
@@ -359,8 +359,8 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
   // --- Energy-shift parameters: one per segment (all segments). ---
   map.energyShiftOffset_ = i;
   if (data) {
-    for (int s = 1; s <= data->NumSegments(); s++) {
-      ESegment *segment = data->GetSegment(s);
+    for (int s = 1; s <= data->Data().NumSegments(); s++) {
+      const ESegment *segment = data->Data().GetSegment(s);
       if (segment) {
         map.shiftIndex_[s] = i;
         map.desc_.push_back(ParamDesc{ParamKind::EnergyShift, -1, -1, -1, s, false});
@@ -372,8 +372,8 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
   // --- sqrt(E) energy-shift coefficients: one per segment (all segments). ---
   map.energyShiftSqrtOffset_ = i;
   if (data) {
-    for (int s = 1; s <= data->NumSegments(); s++) {
-      ESegment *segment = data->GetSegment(s);
+    for (int s = 1; s <= data->Data().NumSegments(); s++) {
+      const ESegment *segment = data->Data().GetSegment(s);
       if (segment) {
         map.sqrtShiftIndex_[s] = i;
         map.desc_.push_back(ParamDesc{ParamKind::EnergyShiftSqrt, -1, -1, -1, s, false});
@@ -385,8 +385,8 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
   // --- Shift-function parameters: those of each segment that declares one (EData::FillMnParams). ---
   map.energyShiftFnOffset_ = i;
   if (data) {
-    for (int s = 1; s <= data->NumSegments(); s++) {
-      ESegment *segment = data->GetSegment(s);
+    for (int s = 1; s <= data->Data().NumSegments(); s++) {
+      const ESegment *segment = data->Data().GetSegment(s);
       if (!segment || !segment->OwnsShiftFn() || !segment->HasShiftFn()) continue;
       for (int j = 0; j < segment->NumShiftFnParams(); j++) {
         map.fnShiftIndex_[{s, j}] = i;
@@ -400,7 +400,7 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
 
   // --- Electron-screening potentials: one per <targetInt> line with a screening block (EData::FillMnParams). ---
   if (data) {
-    for (int k = 1; k <= data->NumScreeningParams(); k++) {
+    for (int k = 1; k <= data->Data().NumScreeningParams(); k++) {
       map.screeningIndex_[k] = i;
       ParamDesc d{ParamKind::Screening, -1, -1, -1, -1, false};
       d.screening = k;
@@ -412,7 +412,7 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
   // --- Fitted target densities: one per densityfit line or density group (EData::FillMnParams). ---
   // No analytic derivative: the target thickness enters through the depth window, finite differences.
   if (data) {
-    for (int k = 1; k <= data->NumDensityParams(); k++) {
+    for (int k = 1; k <= data->Data().NumDensityParams(); k++) {
       map.densityIndex_[k] = i;
       ParamDesc d{ParamKind::Density, -1, -1, -1, -1, false};
       d.density = k;
@@ -424,7 +424,7 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
   // --- Fitted Doppler temperatures: one per 'doppler T vary sigma' line (EData::FillMnParams). ---
   // Analytic: d/dT through the Doppler weights (EPoint::DopplerWeights), GradAccum::AddDoppler.
   if (data) {
-    for (int k = 1; k <= data->NumDopplerParams(); k++) {
+    for (int k = 1; k <= data->Data().NumDopplerParams(); k++) {
       map.dopplerIndex_[k] = i;
       ParamDesc d{ParamKind::Doppler, -1, -1, -1, -1, false};
       d.doppler = k;
@@ -436,9 +436,9 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
   // --- Fitted sample thicknesses: one per transmission / yield line with the fit form (EData::FillMnParams). ---
   // Analytic: d/dn of the transform (the tree's backward, AddParamCotangents), GradAccum::AddThickness.
   if (data) {
-    for (int k = 1; k <= data->NumThicknessParams(); k++) {
+    for (int k = 1; k <= data->Data().NumThicknessParams(); k++) {
       map.thicknessIndex_[k] = i;
-      ParamDesc d{ParamKind::Thickness, -1, -1, -1, data->GetThicknessSegment(k), false};
+      ParamDesc d{ParamKind::Thickness, -1, -1, -1, data->Data().GetThicknessSegment(k), false};
       d.thickness = k;
       map.desc_.push_back(d);
       i++;
@@ -447,7 +447,7 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
 
   // --- THM coherent backgrounds (cbackground=): the last block, if any. ---
   if (data)
-    for (int k = 0; k < data->NumThmCoherentParams(); k++) {
+    for (int k = 0; k < data->Data().NumThmCoherentParams(); k++) {
       map.desc_.push_back(ParamDesc{ParamKind::ThmCoherent, -1, -1, k + 1, -1, false});
       i++;
     }
@@ -506,7 +506,7 @@ bool GradTargetEffectAdjoint(EData &data, EPoint *point, azure2::Results &result
   // pure integrator differentiated below, so leave such points to finite
   // differences.
   {
-    const TargetEffect *te = data.GetTargetEffect(point->GetTargetEffectNum());
+    const TargetEffect *te = data.Data().GetTargetEffect(point->GetTargetEffectNum());
     // A thin-target integration blends with sigma(E_bar) inside its linear kernel (EPoint::TargetFallbackImpl),
     // so its window edges and the points outside its windows are linear in the sub-point values (2026-11-05).
     const bool thinTarget = te && te->IsTargetIntegration() && !te->IsThickTarget();
@@ -622,7 +622,7 @@ bool GradTargetEffectAdjoint(EData &data, EPoint *point, azure2::Results &result
   point->SetFitCrossSection(results, model);
   // A fitted Doppler temperature (doppler_<n>): d/dT through the Doppler weights, the sub-point values fixed.  The
   // ratios (A_y, a normalised coefficient) take d(N/D) = (dN - <A> dD)/D on the same integrator.
-  if (const int dk = data.DopplerParamOfEffect(point->GetTargetEffectNum())) {
+  if (const int dk = data.Data().DopplerParamOfEffect(point->GetTargetEffectNum())) {
     std::vector<double> vals(nsp);
     double dT = 0.0;
     if (isAy || isCoefNorm) {
@@ -680,7 +680,7 @@ bool GradTargetEffectAdjoint(EData &data, EPoint *point, azure2::Results &result
 // Forward + adjoint for one data point (target-effect or direct A-matrix).
 bool GradAdjointPoint(EData &data, EPoint *point, azure2::Results &results, int xsComponent, double fitBar,
                       GradAccum &accum, const vector_matrix_r *shiftDeriv, CNuc *compound, const Config &config) {
-  const TargetEffect *te = point->IsTargetEffect() ? data.GetTargetEffect(point->GetTargetEffectNum()) : nullptr;
+  const TargetEffect *te = point->IsTargetEffect() ? data.Data().GetTargetEffect(point->GetTargetEffectNum()) : nullptr;
   bool subpointTE = te && te->IsSubPointEffect();
   if (subpointTE)
     return GradTargetEffectAdjoint(data, point, results, fitBar, accum, shiftDeriv, xsComponent, compound, config);
@@ -695,7 +695,7 @@ bool GradAdjointPoint(EData &data, EPoint *point, azure2::Results &results, int 
 
 // The parameters' share of a point's model cotangents (ModelPass.h): each weighted term's abundance, a transform's
 // sample thickness (segment_<key>_thickness, its group leader's for a follower) and a fitted Doppler temperature.
-void AddParamCotangents(const azure2::ModelCotangents &c, ESegment *segment, EPoint *base, const EData &data, int i,
+void AddParamCotangents(const azure2::ModelCotangents &c, const ESegment *segment, EPoint *base, const EData &data, int i,
                         CNuc *compound, GradAccum &accum) {
   using azure2::experiment::ParamRef;
   for (std::size_t q = 0; q < c.refs->size(); q++) {
@@ -704,12 +704,12 @@ void AddParamCotangents(const azure2::ModelCotangents &c, ESegment *segment, EPo
     if (r.kind == ParamRef::Kind::Abundance) {
       accum.AddAbundance(compound->AbundanceOrdinal(segment->GetNaturalSample(), r.nucleus), c.params[q]);
     } else {
-      const int k = data.ThicknessParamOfSegment(i);
+      const int k = data.Data().ThicknessParamOfSegment(i);
       if (k > 0) accum.AddThickness(k, c.params[q]);
     }
   }
   if (c.params.back() != 0.0) {
-    const int dk = data.DopplerParamOfEffect(base->GetTargetEffectNum());
+    const int dk = data.Data().DopplerParamOfEffect(base->GetTargetEffectNum());
     if (dk > 0) accum.AddDoppler(dk, c.params.back());
   }
 }
@@ -754,7 +754,7 @@ bool AdjointOfLeaves(EData &data, const azure2::ModelCotangents &c, azure2::Resu
 // its leaves and parameters, then each leaf through the R-matrix.  Plain points
 // share one forward between model and adjoint, as do SUM / RATIO terms at one
 // energy.  Returns false on an unsupported configuration.
-bool GradOnePoint(ESegment *segment, EData *data, azure2::Results &results, int i, int pointIdx,
+bool GradOnePoint(const ESegment *segment, EData *data, azure2::Results &results, int i, int pointIdx,
                   CNuc *compound, const Config &config,
                   const vector_matrix_r *shiftDeriv, const FitBarFn &fitBarFn,
                   GradAccum &accum, double &outModel) {
@@ -765,7 +765,7 @@ bool GradOnePoint(ESegment *segment, EData *data, azure2::Results &results, int 
   outModel = 0.0;
   if (!point) return true;
   const bool hasComp = segment->HasComponents();
-  const TargetEffect *te = point->IsTargetEffect() ? data->GetTargetEffect(point->GetTargetEffectNum()) : nullptr;
+  const TargetEffect *te = point->IsTargetEffect() ? data->Data().GetTargetEffect(point->GetTargetEffectNum()) : nullptr;
   const bool subpointTE = te && te->IsSubPointEffect();
   azure2::ModelCotangents c;
   auto backward = [&](double fitBar) {
@@ -874,7 +874,7 @@ bool ThmPointModelGradient(EData &data, EPoint *point, azure2::Results &results,
     f.InvertMatrices();
     return f.THMPointAdjoint(pt, weight, accum, ctx, &coherentBar);
   };
-  const TargetEffect *te = point->IsTargetEffect() ? data.GetTargetEffect(point->GetTargetEffectNum()) : nullptr;
+  const TargetEffect *te = point->IsTargetEffect() ? data.Data().GetTargetEffect(point->GetTargetEffectNum()) : nullptr;
   if (!(te && te->IsSubPointEffect())) return adjoint(point, 1.0);
   if (point->IsAnalyzingPower() || te->GetAutoTolerance() > 0.0) return false;
   const int nsp = point->NumSubPoints();
@@ -910,7 +910,7 @@ bool ThmPointModelGradient(EData &data, EPoint *point, azure2::Results &results,
 // ---------------------------------------------------------------------------
 
 struct GroupMember {
-  ESegment *seg;
+  const ESegment *seg;
   int segNum;    // 1-based
   int pointIdx;  // 0-based
   EPoint *pt;
@@ -923,10 +923,10 @@ struct GradItem {
 
 // A point whose gradient can be taken from a shared T-matrix: no components
 // (SUM/RATIO) and no sub-point target effect.  The others keep GradOnePoint.
-bool Groupable(const EData &data, ESegment *seg, EPoint *pt) {
+bool Groupable(const EData &data, const ESegment *seg, EPoint *pt) {
   if (seg->HasComponents() || seg->IsTransformed()) return false;
   if (pt->IsTargetEffect()) {
-    const TargetEffect *te = data.GetTargetEffect(pt->GetTargetEffectNum());
+    const TargetEffect *te = data.Data().GetTargetEffect(pt->GetTargetEffectNum());
     if (te && te->IsSubPointEffect()) return false;
   }
   return true;
@@ -953,16 +953,16 @@ bool GroupedGradientOff() {
 std::vector<GradItem> BuildGradItems(EData *data, bool skipTHM) {
   const bool off = GroupedGradientOff();
   std::unordered_map<const EPoint *, std::pair<int, int>> where;
-  for (int s = 1; s <= data->NumSegments(); s++) {
-    ESegment *seg = data->GetSegment(s);
+  for (int s = 1; s <= data->Data().NumSegments(); s++) {
+    const ESegment *seg = data->Data().GetSegment(s);
     if (!seg) continue;
     for (int p = 1; p <= seg->NumPoints(); p++) where[seg->GetPoint(*data, p)] = {s, p - 1};
   }
   auto hostOf = [&](EPoint *pt) -> EPoint * {
     if (!pt->IsMapped()) return nullptr;
     EnergyMap m = pt->GetMap();
-    if (m.segment < 1 || m.segment > data->NumSegments()) return nullptr;
-    ESegment *hs = data->GetSegment(m.segment);
+    if (m.segment < 1 || m.segment > data->Data().NumSegments()) return nullptr;
+    const ESegment *hs = data->Data().GetSegment(m.segment);
     if (m.point < 1 || m.point > hs->NumPoints()) return nullptr;
     EPoint *h = hs->GetPoint(*data, m.point);
     if (!Groupable(*data, hs, h) || h->GetCMEnergy() != pt->GetCMEnergy()) return nullptr;
@@ -972,8 +972,8 @@ std::vector<GradItem> BuildGradItems(EData *data, bool skipTHM) {
     return nullptr;
   };
   std::vector<GradItem> items;
-  for (int s = 1; s <= data->NumSegments(); s++) {
-    ESegment *seg = data->GetSegment(s);
+  for (int s = 1; s <= data->Data().NumSegments(); s++) {
+    const ESegment *seg = data->Data().GetSegment(s);
     if (!seg) continue;
     if (skipTHM && seg->IsTHM()) continue;
     for (int p = 1; p <= seg->NumPoints(); p++) {
@@ -990,7 +990,7 @@ std::vector<GradItem> BuildGradItems(EData *data, bool skipTHM) {
           EPoint *m = mapped[k];
           auto w = where.find(m);
           if (w == where.end()) continue;
-          ESegment *ms = data->GetSegment(w->second.first);
+          const ESegment *ms = data->Data().GetSegment(w->second.first);
           if (skipTHM && ms->IsTHM()) continue;
           if (Groupable(*data, ms, m) && hostOf(m) == pt) it.members.push_back({ms, w->second.first, w->second.second, m});
         }
@@ -1209,7 +1209,7 @@ bool GroupRows(EData &data, AMatrixFunc &amf, const GradItem &it, azure2::Result
   return true;
 }
 
-void ReportBail(EData &data, const char *what, ESegment *segment, int i) {
+void ReportBail(EData &data, const char *what, const ESegment *segment, int i) {
   if (!std::getenv("AZURE_GRAD_DEBUG") || !segment) return;
   EPoint *pt = segment->GetPoint(data, 1);
   std::cerr << "[grad] " << what << " adjoint bailed on segment " << i << " (key " << segment->GetSegmentKey()
@@ -1318,7 +1318,7 @@ bool AccumulateEGammaGradient(CNuc *compound, EData *data, azure2::Results &resu
           for (int la = 1; la <= jg->NumLevels(); la++)
             if (!jg->GetLevel(la)->IsInRMatrix()) inactiveLevel = true;
         }
-        ESegment *segment = data->GetSegment(bailSeg);
+        const ESegment *segment = data->Data().GetSegment(bailSeg);
         EPoint *pt = segment ? segment->GetPoint(*data, 1) : nullptr;
         std::cerr << "[grad] adjoint bailed on segment " << bailSeg << " (entrance "
                   << (segment ? segment->GetEntranceKey() : 0) << ", exit " << (segment ? segment->GetExitKey() : 0)
@@ -1373,7 +1373,7 @@ bool ForEachRow(CNuc *compound, EData *data, azure2::Results &results, const Con
                 const ParamIndexMap &pmap, const AMatrixFunc::FreeMask *mask) {
   const std::vector<GradItem> items = BuildGradItems(data, skipTHM);
   numGroups = 0;
-  if (FormalPartsOutsideAdjoint(compound, pmap) && data->NumSegments() > 0) {
+  if (FormalPartsOutsideAdjoint(compound, pmap) && data->Data().NumSegments() > 0) {
     bailSeg = 1;
     return false;
   }
@@ -1400,7 +1400,7 @@ bool ForEachRow(CNuc *compound, EData *data, azure2::Results &results, const Con
       } else {
         for (const GroupMember &m : it.members) {
           const double fitBar = fitBarOf(m);
-          FitBarFn oneFitBar = [fitBar](ESegment *, int, int, double) -> double { return fitBar; };
+          FitBarFn oneFitBar = [fitBar](const ESegment *, int, int, double) -> double { return fitBar; };
           accum.Zero();
           double model = 0.0;
           if (!GradOnePoint(m.seg, data, results, m.segNum, m.pointIdx, compound, config, shiftDeriv, oneFitBar, accum, model)) {
@@ -1440,29 +1440,29 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, azure2::Results &resul
   // MIGRAD (which handles THM through Gradient()'s hybrid path).  A caller
   // that fills THM rows itself (AZUREAPI) asks for them to be left zero.
   if (!skipTHM)
-    for (int i = 1; i <= data->NumSegments(); i++)
-      if (data->GetSegment(i) && data->GetSegment(i)->IsTHM()) return false;
+    for (int i = 1; i <= data->Data().NumSegments(); i++)
+      if (data->Data().GetSegment(i) && data->Data().GetSegment(i)->IsTHM()) return false;
 
   // Each (non-null) point is one independent row, so pre-assign every point a
   // global row index (mirroring the serial null-skip) and pre-size the outputs.
   // Rows can then be filled in parallel with no contention -- each work item
   // writes only the rows of its own points.
-  const int nSeg = data->NumSegments();
+  const int nSeg = data->Data().NumSegments();
   std::vector<std::vector<int>> rowOf(nSeg + 1);
   std::vector<double> norm(nSeg + 1, 0.0);
   std::vector<int> normFull(nSeg + 1, -1);
   int totalRows = 0;
   for (int i = 1; i <= nSeg; i++) {
-    ESegment *segment = data->GetSegment(i);
+    const ESegment *segment = data->Data().GetSegment(i);
     if (!segment) continue;
     const int nPoints = segment->NumPoints();
     rowOf[i].assign(nPoints, -1);
     for (int pointIdx = 0; pointIdx < nPoints; pointIdx++)
       if (segment->GetPoint(*data, pointIdx + 1)) rowOf[i][pointIdx] = totalRows++;
-    norm[i] = segment->GetNorm();
+    norm[i] = data->State(*segment).norm;
     // A norm-group follower's rows depend on its leader's norm parameter.
-    const int normOwner = data->NormOwner(i);
-    normFull[i] = data->GetSegment(normOwner)->IsVaryNorm() ? pmap.NormIndex(normOwner) : -1;
+    const int normOwner = data->Data().NormOwner(i);
+    normFull[i] = data->Data().GetSegment(normOwner)->IsVaryNorm() ? pmap.NormIndex(normOwner) : -1;
   }
   residuals.assign(totalRows, 0.0);
   jacobian.assign((size_t)totalRows * nCols, 0.0);
@@ -1474,7 +1474,7 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, azure2::Results &resul
   // Residual r = (model - data*n)/(cmErr*n);  d r / d model = 1/(cmErr*n), the
   // cotangent that yields d r / d(E,gamma) directly.
   auto fitBarOf = [&](const GroupMember &m) {
-    const double denom = m.seg->CMError(m.pointIdx) * norm[m.segNum];
+    const double denom = ESegment::CMError(data->State(*m.seg), m.pointIdx) * norm[m.segNum];
     return (denom != 0.0) ? 1.0 / denom : 0.0;
   };
   static thread_local vector_r fullRow;
@@ -1482,8 +1482,8 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, azure2::Results &resul
     const int row = rowOf[m.segNum][m.pointIdx];
     if (row < 0) return;
     const double n = norm[m.segNum];
-    const double cmErr = m.seg->CMError(m.pointIdx);
-    residuals[row] = azure2::DataResidual(model, m.seg->CMValue(m.pointIdx), cmErr, n).Pull();
+    const double cmErr = ESegment::CMError(data->State(*m.seg), m.pointIdx);
+    residuals[row] = azure2::DataResidual(model, ESegment::CMValue(data->State(*m.seg), m.pointIdx), cmErr, n).Pull();
     // Scatter this row's d r / d(E,gamma) into the packed columns.
     fullRow.assign(pmap.NumFull(), 0.0);
     accum.Scatter(pmap, fullRow);
@@ -1499,7 +1499,7 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, azure2::Results &resul
   const AMatrixFunc::FreeMask mask = BuildFreeMask(compound, pmap);
   const bool ok = ForEachRow(compound, data, results, config, shiftDeriv, fitBarOf, writeRow, bailSeg, numGroups,
                              /*skipTHM=*/true, pmap, &mask);
-  if (!ok) ReportBail(*data, "Jacobian/gradient", data->GetSegment(bailSeg), bailSeg);
+  if (!ok) ReportBail(*data, "Jacobian/gradient", data->Data().GetSegment(bailSeg), bailSeg);
 
   if (timing) {
     static std::atomic<int> calls{0};
@@ -1527,13 +1527,13 @@ bool ComputeModelGradients(CNuc *compound, EData *data, azure2::Results &results
                            bool skipTHM) {
   gradByPoint.clear();
   const int nCols = pmap.NumPacked();
-  const int nSeg = data->NumSegments();
+  const int nSeg = data->Data().NumSegments();
 
   // Pre-create every point's (zero-initialized) packed row so the parallel loop
   // only writes into slots that already exist -- std::map insertion is not
   // thread-safe, so all keys must be present before the parallel region.
   for (int i = 1; i <= nSeg; i++) {
-    ESegment *segment = data->GetSegment(i);
+    const ESegment *segment = data->Data().GetSegment(i);
     if (!segment) continue;
     for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
       EPoint *pt = segment->GetPoint(*data, pointIdx + 1);
@@ -1559,7 +1559,7 @@ bool ComputeModelGradients(CNuc *compound, EData *data, azure2::Results &results
   const bool ok = ForEachRow(compound, data, results, config, shiftDeriv, fitBarOf, writeRow, bailSeg, numGroups, skipTHM,
                              pmap, &mask);
   if (!ok) {
-    ReportBail(*data, "Jacobian/gradient", data->GetSegment(bailSeg), bailSeg);
+    ReportBail(*data, "Jacobian/gradient", data->Data().GetSegment(bailSeg), bailSeg);
     gradByPoint.clear();
   }
   return ok;
@@ -1576,8 +1576,8 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, azure2::Results &result
   // Row bookkeeping mirrors ComputeResidualJacobian / EvaluateFilledChi2: one
   // row per non-null point, segments in order.
   int row = 0;
-  for (int s = 1; s <= ld->NumSegments(); s++) {
-    ESegment *seg = ld->GetSegment(s);
+  for (int s = 1; s <= ld->Data().NumSegments(); s++) {
+    const ESegment *seg = ld->Data().GetSegment(s);
     if (!seg) continue;
     if (seg->IsTHM()) {
       THMRows tr;
@@ -1599,7 +1599,7 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, azure2::Results &result
   // so the mapped ones are read afterwards.
   std::vector<std::pair<int, int>> order;  // (row block t, point index pid)
   for (size_t t = 0; t < rows.size(); t++) {
-    ESegment *seg = ld->GetSegment(rows[t].segment);
+    const ESegment *seg = ld->Data().GetSegment(rows[t].segment);
     for (int pid = 0; pid < seg->NumPoints(); pid++)
       if (seg->GetPoint(*ld, pid + 1)) order.push_back(std::make_pair((int)t, pid));
   }
@@ -1613,13 +1613,13 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, azure2::Results &result
     const long n = (long)order.size();
 #pragma omp parallel for schedule(dynamic)
     for (long k = 0; k < n; k++) {
-      ESegment *seg = ld->GetSegment(rows[order[k].first].segment);
+      const ESegment *seg = ld->Data().GetSegment(rows[order[k].first].segment);
       if (seg->GetPoint(*ld, order[k].second + 1)->IsMapped()) continue;
       out[order[k].first][slot[k]] =
           azure2::EvaluateModelPoint(*ld, *seg, order[k].second, lc, config, results, azure2::LeafValues::Calculate);
     }
     for (long k = 0; k < n; k++) {
-      ESegment *seg = ld->GetSegment(rows[order[k].first].segment);
+      const ESegment *seg = ld->Data().GetSegment(rows[order[k].first].segment);
       if (seg->GetPoint(*ld, order[k].second + 1)->IsMapped())
         out[order[k].first][slot[k]] =
             azure2::EvaluateModelPoint(*ld, *seg, order[k].second, lc, config, results, azure2::LeafValues::Calculate);
@@ -1649,7 +1649,7 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, azure2::Results &result
   // not cover, or AZURE2_THM_FD=1, takes the central differences below.
   bool analytic = !ThmFiniteDifferencesRequested();
   for (size_t t = 0; t < rows.size() && analytic; t++)
-    if (ld->GetSegment(rows[t].segment)->HasComponents()) analytic = false;
+    if (ld->Data().GetSegment(rows[t].segment)->HasComponents()) analytic = false;
   if (analytic) {
     vector_matrix_r shiftDeriv;
     const vector_matrix_r *sdp = nullptr;
@@ -1659,9 +1659,9 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, azure2::Results &result
     }
     bool lineshape = false;
     for (size_t t = 0; t < rows.size(); t++)
-      if (ld->GetSegment(rows[t].segment)->GetThmLineshape()) lineshape = true;
+      if (ld->Data().GetSegment(rows[t].segment)->GetThmLineshape()) lineshape = true;
     const ThmAdjointContext ctx = BuildThmAdjointContext(lc, config, sdp, lineshape);
-    const int nCoherent = ld->NumThmCoherentParams();
+    const int nCoherent = ld->Data().NumThmCoherentParams();
     std::vector<size_t> slot(order.size());
     {
       std::vector<size_t> next(rows.size(), 0);
@@ -1678,7 +1678,7 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, azure2::Results &result
 #pragma omp for schedule(dynamic)
       for (long k = 0; k < n; k++) {
         if (bail) continue;
-        ESegment *seg = ld->GetSegment(rows[order[k].first].segment);
+        const ESegment *seg = ld->Data().GetSegment(rows[order[k].first].segment);
         EPoint *pt = seg->GetPoint(*ld, order[k].second + 1);
         accum.Zero();
         std::fill(coherentBar.begin(), coherentBar.end(), 0.0);
@@ -1748,17 +1748,17 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, azure2::Results &result
   // Residuals and the chain rule through the profiled scale.
   for (size_t t = 0; t < rows.size(); t++) {
     THMRows &tr = rows[t];
-    ESegment *seg = ld->GetSegment(tr.segment);
+    const ESegment *seg = ld->Data().GetSegment(tr.segment);
     std::vector<double> d, e;
     for (int pid = 0; pid < seg->NumPoints(); pid++) {
       EPoint *pt = seg->GetPoint(*ld, pid + 1);
       if (!pt) continue;
-      d.push_back(seg->CMValue(pid));
-      e.push_back(seg->CMError(pid));
+      d.push_back(ESegment::CMValue(ld->State(*seg), pid));
+      e.push_back(ESegment::CMError(ld->State(*seg), pid));
       pt->SetModelValue(results, tr.m[d.size() - 1]);
     }
     const size_t n = d.size();
-    if (ld->ThmGroupOf(tr.segment) >= 0) continue;  // a THM experiment: below
+    if (ld->Data().ThmGroupOf(tr.segment) >= 0) continue;  // a THM experiment: below
     double Smm = 0.0, Smd = 0.0;
     for (size_t i = 0; i < n; i++) {
       if (e[i] == 0.0) continue;
@@ -1773,7 +1773,7 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, azure2::Results &result
       varyScale = (Smd > 0.0 && Smm > 0.0);
       s = varyScale ? Smd / Smm : 1.0;
     } else {
-      double norm = seg->GetNorm();
+      double norm = ld->State(*seg).norm;
       s = (norm != 0.0) ? 1.0 / norm : 0.0;
     }
     tr.r.assign(n, 0.0);
@@ -1805,23 +1805,23 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, azure2::Results &result
 
   // THM experiments: one linear profile (shared norm, background) over the
   // points of all their segments, differentiated through the profile.
-  for (int g = 0; g < ld->NumThmGroups(); g++) {
+  for (int g = 0; g < ld->Data().NumThmGroups(); g++) {
     std::vector<size_t> members;  // indices into rows
     for (size_t t = 0; t < rows.size(); t++)
-      if (ld->ThmGroupOf(rows[t].segment) == g) members.push_back(t);
+      if (ld->Data().ThmGroupOf(rows[t].segment) == g) members.push_back(t);
     if (members.empty()) continue;
     ld->ProfileThmGroup(g, results);  // norms and profile from the models set above
     const ThmProfile &prof = results.objective.thmProfiles[g];
     std::vector<double> m, d, e, energy, Jm;
     for (size_t t : members) {
-      ESegment *seg = ld->GetSegment(rows[t].segment);
+      const ESegment *seg = ld->Data().GetSegment(rows[t].segment);
       size_t i = 0;
       for (int pid = 0; pid < seg->NumPoints(); pid++) {
         EPoint *pt = seg->GetPoint(*ld, pid + 1);
         if (!pt) continue;
         m.push_back(rows[t].m[i]);
-        d.push_back(seg->CMValue(pid));
-        e.push_back(seg->CMError(pid));
+        d.push_back(ESegment::CMValue(ld->State(*seg), pid));
+        e.push_back(ESegment::CMError(ld->State(*seg), pid));
         energy.push_back(pt->GetCMEnergy());
         Jm.insert(Jm.end(), rows[t].Jm.begin() + i * nCols, rows[t].Jm.begin() + (i + 1) * nCols);
         i++;

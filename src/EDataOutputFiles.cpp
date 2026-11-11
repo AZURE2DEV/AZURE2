@@ -38,7 +38,7 @@ struct SigmaAndS {
 }  // namespace
 
 static void WriteNaturalDecomposition(EData &data, const Config &configure, const azure2::Results &results, bool isExtrap,
-                                      int kinflag, const std::vector<std::string> &nucleusLabels, ESegment *segment) {
+                                      int kinflag, const std::vector<std::string> &nucleusLabels, const ESegment *segment) {
   std::string name = configure.outputdir + "AZUREOut_sample_seg=" + std::to_string(segment->GetSegmentKey()) +
                      (isExtrap ? ".extrap" : ".out");
   std::ofstream out(name.c_str());
@@ -46,7 +46,7 @@ static void WriteNaturalDecomposition(EData &data, const Config &configure, cons
   out << "# Segment " << segment->GetSegmentKey() << ": abundance-weighted sum over compound nuclei (sample "
       << segment->GetNaturalToken() << ")" << std::endl;
   if (segment->IsTransmission())
-    out << "# transmission of n = " << segment->GetSampleThickness() << " atoms/b: the total column is exp(-n s), the"
+    out << "# transmission of n = " << segment->GetSampleThickness(data.State(*segment)) << " atoms/b: the total column is exp(-n s), the"
         << " nucleus columns the abundance-weighted cross sections s_k (b), s = sum_k s_k" << std::endl;
   out << "# E_" << (kinflag ? "lab" : "cm") << " [MeV]   total";
   for (size_t k = 0; k < nucleusLabels.size(); k++) out << "   " << nucleusLabels[k];
@@ -54,7 +54,7 @@ static void WriteNaturalDecomposition(EData &data, const Config &configure, cons
   out.precision(10);
   for (int i = 1; i <= segment->NumPoints(); i++) {
     EPoint *point = segment->GetPoint(data, i);
-    double kin = (kinflag != 0) ? segment->Jacobian(0, i - 1) : 1.0;
+    double kin = (kinflag != 0) ? ESegment::Jacobian(data.State(*segment), 0, i - 1) : 1.0;
     if (kin == 0.0) kin = 1.0;
     out << std::setw(18) << std::scientific << (kinflag != 0 ? point->GetLabEnergy() : point->GetCMEnergy())
         << std::setw(18) << std::scientific << point->GetModelValue(results) / kin;
@@ -98,16 +98,16 @@ void EData::WriteOutputFiles(const Config &configure, azure2::Results &results, 
   // THM experiments and profiled THM norms: their profile from the model values in `results` (a snapshot written
   // during a fit has not been profiled), so that the norm and the background written are those of these models.
   if (configure.paramMask & Config::CALCULATE_WITH_DATA) {
-    for (int g = 0; g < NumThmGroups(); g++)
-      if (!thmGroups_[g].trivial) ProfileThmGroup(g, results);
-    for (int i = 1; i <= NumSegments(); i++)
-      if (ThmGroupOf(i) < 0 && GetSegment(i)->IsProfiledNorm())
-        results.objective.segmentChi2[i] = GetSegment(i)->ProfileNormChiSquared(*this, results, results.objective.norm[i]);
+    for (int g = 0; g < Data().NumThmGroups(); g++)
+      if (!set_->thmGroups_[g].trivial) ProfileThmGroup(g, results);
+    for (int i = 1; i <= Data().NumSegments(); i++)
+      if (Data().ThmGroupOf(i) < 0 && Data().GetSegment(i)->IsProfiledNorm())
+        results.objective.segmentChi2[i] = Data().GetSegment(i)->ProfileNormChiSquared(*this, results, results.objective.norm[i]);
   }
 
   WriteSegmentFiles(configure, results, kinflag, band);
   if (!isFit && (configure.paramMask & Config::CALCULATE_WITH_DATA)) WriteChiSquaredFile(configure, results);
-  if (!isFit && (configure.paramMask & Config::CALCULATE_WITH_DATA) && NumThmGroups() > 0)
+  if (!isFit && (configure.paramMask & Config::CALCULATE_WITH_DATA) && Data().NumThmGroups() > 0)
     WriteThmExperiments(configure, results);
   WriteNormalizationsFile(configure, results);
   WriteShiftsFile(configure, results);
@@ -143,9 +143,9 @@ void EData::WriteSegmentFiles(const Config &configure, const azure2::Results &re
     return (it == band->grad.end()) ? nullptr : &it->second;
   };
 
-  ESegmentIterator firstSumIterator = GetSegments().end();
-  for (ESegmentIterator segment = GetSegments().begin();
-       segment < GetSegments().end(); segment++) {
+  ESegmentIterator firstSumIterator = Data().GetSegments().end();
+  for (ESegmentIterator segment = Data().GetSegments().begin();
+       segment < Data().GetSegments().end(); segment++) {
     if (segment->IsTotalCapture()) {
       firstSumIterator = segment;
       // With component segments, no need to skip - total capture is handled within the segment
@@ -153,7 +153,7 @@ void EData::WriteSegmentFiles(const Config &configure, const azure2::Results &re
     int aa = segment->GetEntranceKey();
     int ir = segment->GetExitKey();
     std::filebuf *buf;
-    if (firstSumIterator != GetSegments().end())
+    if (firstSumIterator != Data().GetSegments().end())
       buf = output(aa, -1);
     else {
       if (segment->IsAngularDist() &&
@@ -164,23 +164,23 @@ void EData::WriteSegmentFiles(const Config &configure, const azure2::Results &re
     }
     std::ostream out(buf);
     // A THM experiment with a background: the fitted curve is the model plus b(E).
-    const int segmentIndex = (int)(segment - GetSegments().begin()) + 1;
-    const bool thmBackground = !output.IsExtrap() && ThmGroupOf(segmentIndex) >= 0 &&
-                               thmGroups_[ThmGroupOf(segmentIndex)].terms > 0;
+    const int segmentIndex = (int)(segment - Data().GetSegments().begin()) + 1;
+    const bool thmBackground = !output.IsExtrap() && Data().ThmGroupOf(segmentIndex) >= 0 &&
+                               set_->thmGroups_[Data().ThmGroupOf(segmentIndex)].terms > 0;
     ESegmentIterator thisSegment = segment;
-    if (firstSumIterator != GetSegments().end()) thisSegment = firstSumIterator;
+    if (firstSumIterator != Data().GetSegments().end()) thisSegment = firstSumIterator;
     const SigmaAndS columns{segment->ModelIsSFactor(), segment->ModelScaleFactor()};
 
     // Band stream for this segment (skip angular-coefficient extrap files, which
     // have no scalar cross section; other segments get a block for alignment).
     bool bandThisSegment = writeBand && !(segment->IsAngularDist() && output.IsExtrap());
-    std::ofstream *bandOut = bandThisSegment ? bandStreamFor(aa, (firstSumIterator != GetSegments().end()) ? -1 : ir) : nullptr;
+    std::ofstream *bandOut = bandThisSegment ? bandStreamFor(aa, (firstSumIterator != Data().GetSegments().end()) ? -1 : ir) : nullptr;
     // Point gradient, summed across total-capture components like the value is.
     auto pointBandGrad = [&](EPointIterator point) -> std::vector<double> {
       std::vector<double> g;
       const std::vector<double> *g0 = gradFor(&*point);
       if (g0) g = *g0;
-      if (firstSumIterator != GetSegments().end()) {
+      if (firstSumIterator != Data().GetSegments().end()) {
         int pointIndex = point - segment->GetPoints(*this).begin() + 1;
         for (ESegmentIterator it = firstSumIterator; it < segment; it++) {
           const std::vector<double> *gi = gradFor(it->GetPoint(*this, pointIndex));
@@ -207,7 +207,7 @@ void EData::WriteSegmentFiles(const Config &configure, const azure2::Results &re
         } else {
           double fitCrossSection = point->GetModelValue(results);
           if (thmBackground) fitCrossSection += ThmBackgroundAt(segmentIndex, point->GetCMEnergy(), results);
-          if (firstSumIterator != GetSegments().end()) {
+          if (firstSumIterator != Data().GetSegments().end()) {
             int pointIndex = point - segment->GetPoints(*this).begin() + 1;
             for (ESegmentIterator it = firstSumIterator; it < segment; it++)
               fitCrossSection += it->GetPoint(*this, pointIndex)->GetModelValue(results);
@@ -218,12 +218,12 @@ void EData::WriteSegmentFiles(const Config &configure, const azure2::Results &re
               << std::setw(18) << std::scientific << columns.Sigma(fitCrossSection, *point)
               << std::setw(18) << std::scientific << columns.S(fitCrossSection, *point);
           if (!output.IsExtrap()) {
-            double dataNorm = NormUsed((int)(thisSegment - GetSegments().begin()) + 1, results);
+            double dataNorm = NormUsed((int)(thisSegment - Data().GetSegments().begin()) + 1, results);
             const int row = (int)(point - segment->GetPoints(*this).begin());
-            out << std::setw(18) << std::scientific << columns.Sigma(segment->CMValue(row) * dataNorm, *point)
-                << std::setw(18) << std::scientific << columns.Sigma(segment->CMError(row) * dataNorm, *point)
-                << std::setw(18) << std::scientific << columns.S(segment->CMValue(row) * dataNorm, *point)
-                << std::setw(18) << std::scientific << columns.S(segment->CMError(row) * dataNorm, *point)
+            out << std::setw(18) << std::scientific << columns.Sigma(ESegment::CMValue(State(*segment), row) * dataNorm, *point)
+                << std::setw(18) << std::scientific << columns.Sigma(ESegment::CMError(State(*segment), row) * dataNorm, *point)
+                << std::setw(18) << std::scientific << columns.S(ESegment::CMValue(State(*segment), row) * dataNorm, *point)
+                << std::setw(18) << std::scientific << columns.S(ESegment::CMError(State(*segment), row) * dataNorm, *point)
                 << std::endl;
           } else
             out << std::endl;
@@ -249,8 +249,8 @@ void EData::WriteSegmentFiles(const Config &configure, const azure2::Results &re
         } else {
           double fitCrossSection = (point->GetModelValue(results) +
                                     (thmBackground ? ThmBackgroundAt(segmentIndex, point->GetCMEnergy(), results) : 0.0)) /
-                                   segment->Jacobian(0, (int)(point - segment->GetPoints(*this).begin()));
-          if (firstSumIterator != GetSegments().end()) {
+                                   ESegment::Jacobian(State(*segment), 0, (int)(point - segment->GetPoints(*this).begin()));
+          if (firstSumIterator != Data().GetSegments().end()) {
             int pointIndex = point - segment->GetPoints(*this).begin() + 1;
             for (ESegmentIterator it = firstSumIterator; it < segment; it++)
               fitCrossSection += it->GetPoint(*this, pointIndex)->GetModelValue(results);
@@ -261,7 +261,7 @@ void EData::WriteSegmentFiles(const Config &configure, const azure2::Results &re
               << std::setw(18) << std::scientific << columns.Sigma(fitCrossSection, *point)
               << std::setw(18) << std::scientific << columns.S(fitCrossSection, *point);
           if (!output.IsExtrap()) {
-            double dataNorm = NormUsed((int)(thisSegment - GetSegments().begin()) + 1, results);
+            double dataNorm = NormUsed((int)(thisSegment - Data().GetSegments().begin()) + 1, results);
             const int row = (int)(point - segment->GetPoints(*this).begin());
             out << std::setw(18) << std::scientific << columns.Sigma(segment->LabValue(row) * dataNorm, *point)
                 << std::setw(18) << std::scientific << columns.Sigma(segment->LabError(row) * dataNorm, *point)
@@ -272,7 +272,7 @@ void EData::WriteSegmentFiles(const Config &configure, const azure2::Results &re
             out << std::endl;
           if (bandOut) {
             std::vector<double> g = pointBandGrad(point);
-            double kin = segment->Jacobian(0, (int)(point - segment->GetPoints(*this).begin()));
+            double kin = ESegment::Jacobian(State(*segment), 0, (int)(point - segment->GetPoints(*this).begin()));
             double dxs = g.empty() ? 0. : band->dXS(g) / kin;
             WriteBandLine(*bandOut, point->GetLabEnergy(), point->GetExcitationEnergy(),
                           point->GetLabAngle(), fitCrossSection, dxs, point->GetSFactorConversion());
@@ -284,13 +284,13 @@ void EData::WriteSegmentFiles(const Config &configure, const azure2::Results &re
         << std::endl;
     out.flush();
     if (segment->IsNatural())
-      WriteNaturalDecomposition(*this, configure, results, output.IsExtrap(), kinflag, nucleusLabels_, &*segment);
+      WriteNaturalDecomposition(*this, configure, results, output.IsExtrap(), kinflag, set_->nucleusLabels_, &*segment);
     if (bandOut) {
       *bandOut << std::endl
                << std::endl;
       bandOut->flush();
     }
-    firstSumIterator = GetSegments().end();
+    firstSumIterator = Data().GetSegments().end();
   }
 }
 
@@ -303,7 +303,7 @@ void EData::WriteChiSquaredFile(const Config &configure, const azure2::Results &
   double totalChiSquared = 0.;
   double totalNormChiSquared = 0.;
   double totalN = 0.;
-  for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+  for (ESegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     ESegmentIterator thisSegment = segment;
     // The normalization penalty as the fit sees it (AZURECalc::operator()):
     // the deviation from the nominal normalization in units of its uncertainty,
@@ -315,8 +315,8 @@ void EData::WriteChiSquaredFile(const Config &configure, const azure2::Results &
     double normError = thisSegment->GetNominalNorm() / 100. * thisSegment->GetNormError();
     if (normError != 0. && thisSegment->IsVaryNorm() && !thisSegment->IsProfiledNorm() &&
         !thisSegment->IsNormPriorReplaced()) normChiSquared =
-                             pow((thisSegment->GetNorm() - thisSegment->GetNominalNorm()) / normError, 2.0);
-    const int thisIndex = (int)(thisSegment - GetSegments().begin()) + 1;
+                             pow((State(*thisSegment).norm - thisSegment->GetNominalNorm()) / normError, 2.0);
+    const int thisIndex = (int)(thisSegment - Data().GetSegments().begin()) + 1;
     totalChiSquared += results.objective.segmentChi2[thisIndex];
     totalNormChiSquared += normChiSquared;
     totalN += thisSegment->NumPoints();
@@ -346,12 +346,12 @@ void EData::WriteChiSquaredFile(const Config &configure, const azure2::Results &
   // minimiser's own total by exactly this amount.
   bool anyShiftVaried = false;
   double totalShiftChiSquared = 0.;
-  for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+  for (ESegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     if (segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt()) anyShiftVaried = true;
     if (segment->OwnsShiftFn())
       for (int q = 0; q < segment->NumShiftFnParams(); q++)
         if (segment->IsVaryShiftFn(q)) anyShiftVaried = true;
-    segment->AddShiftPenalty(totalShiftChiSquared);
+    segment->AddShiftPenalty(State(*segment), totalShiftChiSquared);
   }
   if (anyShiftVaried) chiOut << " Total-Shift-Chi-Squared: " << totalShiftChiSquared;
   // Isotopic abundances: their priors and the sum-to-one term.
@@ -360,29 +360,29 @@ void EData::WriteChiSquaredFile(const Config &configure, const azure2::Results &
   // Electron-screening priors, when a screening potential has one.
   {
     bool anyPrior = false;
-    for (int k = 1; k <= this->NumScreeningParams(); k++)
-      if (this->GetScreeningTargetEffect(k)->GetScreeningSigma() > 0.0) anyPrior = true;
+    for (int k = 1; k <= Data().NumScreeningParams(); k++)
+      if (Data().GetScreeningTargetEffect(k)->GetScreeningSigma() > 0.0) anyPrior = true;
     if (anyPrior) chiOut << " Total-Screening-Chi-Squared: " << this->ScreeningPenalty();
   }
   // Fitted target densities: their priors, and the densities themselves (which param.sav also holds).
-  if (this->NumDensityParams() > 0) {
+  if (Data().NumDensityParams() > 0) {
     bool anyPrior = false;
-    for (int k = 1; k <= this->NumDensityParams(); k++)
-      if (this->GetDensityTargetEffect(k)->GetDensitySigma() > 0.0) anyPrior = true;
+    for (int k = 1; k <= Data().NumDensityParams(); k++)
+      if (Data().GetDensityTargetEffect(k)->GetDensitySigma() > 0.0) anyPrior = true;
     if (anyPrior) chiOut << " Total-Density-Chi-Squared: " << this->DensityPenalty();
   }
   // Fitted Doppler temperatures: their priors.
-  if (this->NumDopplerParams() > 0) {
+  if (Data().NumDopplerParams() > 0) {
     bool anyPrior = false;
-    for (int k = 1; k <= this->NumDopplerParams(); k++)
-      if (this->GetDopplerTargetEffect(k)->GetDopplerSigma() > 0.0) anyPrior = true;
+    for (int k = 1; k <= Data().NumDopplerParams(); k++)
+      if (Data().GetDopplerTargetEffect(k)->GetDopplerSigma() > 0.0) anyPrior = true;
     if (anyPrior) chiOut << " Total-Doppler-Chi-Squared: " << this->DopplerPenalty();
   }
   // Fitted sample thicknesses: their priors.
-  if (this->NumThicknessParams() > 0) {
+  if (Data().NumThicknessParams() > 0) {
     bool anyPrior = false;
-    for (int k = 1; k <= this->NumThicknessParams(); k++) {
-      const ESegment *seg = &segments_[this->GetThicknessSegment(k) - 1];
+    for (int k = 1; k <= Data().NumThicknessParams(); k++) {
+      const ESegment *seg = &set_->segments_[Data().GetThicknessSegment(k) - 1];
       if (seg->GetThicknessSigma() > 0.0 && !seg->IsThicknessGroupFollower()) anyPrior = true;
     }
     if (anyPrior) chiOut << " Total-Thickness-Chi-Squared: " << this->ThicknessPenalty();
@@ -404,12 +404,12 @@ void EData::WriteChiSquaredFile(const Config &configure, const azure2::Results &
          << std::endl;
   chiOut.flush();
   chiOut.close();
-  if (this->HasCovariance()) this->WriteCovarianceSummary(configure, results);
+  if (Data().HasCovariance()) this->WriteCovarianceSummary(configure, results);
 }
 
 void EData::WriteNormalizationsFile(const Config &configure, const azure2::Results &results) {
   bool isVaryNorm = false;
-  for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++)
+  for (ESegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++)
     if (segment->IsVaryNorm()) isVaryNorm = true;
   if (isVaryNorm) {
     std::string outputfile = configure.outputdir + "normalizations.out";
@@ -421,7 +421,7 @@ void EData::WriteNormalizationsFile(const Config &configure, const azure2::Resul
       // One complete row per segment whose normalization is varied (a norm-group member keeps its own
       // flag).  Before 2026-10-27 only the first four fields were conditional, so every other segment
       // left a row of six fields without key, file or angles.
-      for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+      for (ESegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
         if (!segment->IsVaryNorm()) continue;
         out << segment->GetSegmentKey() << ","
             << segment->GetDataFile() << ","
@@ -437,8 +437,8 @@ void EData::WriteNormalizationsFile(const Config &configure, const azure2::Resul
           out << "CM,";
         } else
           out << "Lab,";
-        out << NormUsed((int)(segment - GetSegments().begin()) + 1, results) << ","
-            << segment->GetEnergyShift() << std::endl;
+        out << NormUsed((int)(segment - Data().GetSegments().begin()) + 1, results) << ","
+            << State(*segment).energyShift << std::endl;
       }
       out.flush();
       out.close();
@@ -450,7 +450,7 @@ void EData::WriteNormalizationsFile(const Config &configure, const azure2::Resul
 void EData::WriteShiftsFile(const Config &configure, const azure2::Results &results) {
   // Check if any energy shifts (constant or sqrt(E) term) are varied
   bool isVaryEnergyShift = false;
-  for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+  for (ESegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     if (segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt() || segment->IsShiftGroupFollower() ||
         segment->HasShiftFn()) {
       isVaryEnergyShift = true;
@@ -468,7 +468,7 @@ void EData::WriteShiftsFile(const Config &configure, const azure2::Results &resu
       // One complete row per segment with a free shift term; sqrt_shift is the
       // coefficient b of E' = E + shift + b*sqrt(E/MeV), in MeV^1/2.
       out << "segment_key_#, file_name, low_angle_bound, high_angle_bound, aframe, low_energy_bound, high_energy_bound, eframe, norm, shift, sqrt_shift" << std::endl;
-      for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+      for (ESegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
         if (!(segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt() || segment->IsShiftGroupFollower() ||
               segment->HasShiftFn()))
           continue;
@@ -486,18 +486,18 @@ void EData::WriteShiftsFile(const Config &configure, const azure2::Results &resu
           out << "CM,";
         } else
           out << "Lab,";
-        out << NormUsed((int)(segment - GetSegments().begin()) + 1, results) << ","
-            << segment->GetEnergyShift() << ","
-            << segment->GetEnergyShiftSqrt() << std::endl;
+        out << NormUsed((int)(segment - Data().GetSegments().begin()) + 1, results) << ","
+            << State(*segment).energyShift << ","
+            << State(*segment).energyShiftSqrt << std::endl;
       }
       // Shift functions: one line per function, after the per-segment rows.  The
       // lines start with '#' so that readers of the rows above skip them.
       bool header = false;
       double totalShiftChi = 0.;
-      for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++)
-        segment->AddShiftPenalty(totalShiftChi);
-      for (int pos = 0; pos < (int)segments_.size(); pos++) {
-        ESegment &owner = segments_[pos];
+      for (ESegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++)
+        segment->AddShiftPenalty(State(*segment), totalShiftChi);
+      for (int pos = 0; pos < (int)set_->segments_.size(); pos++) {
+        const ESegment &owner = set_->segments_[pos];
         if (!owner.OwnsShiftFn() || !owner.HasShiftFn()) continue;
         if (!header) {
           out << "# shift functions: dE(x) = shift + f(x), x = original lab energy of a point (MeV), dE in MeV" << std::endl
@@ -507,11 +507,11 @@ void EData::WriteShiftsFile(const Config &configure, const azure2::Results &resu
         }
         std::ostringstream keys;
         double lo = std::numeric_limits<double>::infinity(), hi = -lo;
-        for (int m = 0; m < (int)segments_.size(); m++) {
-          if (segments_[m].GetShiftFnSourcePos() != pos) continue;
-          keys << (m == pos ? "" : " ") << segments_[m].GetSegmentKey();
-          for (int pid = 1; pid <= segments_[m].NumPoints(); pid++) {
-            EPoint *pt = segments_[m].GetPoint(*this, pid);
+        for (int m = 0; m < (int)set_->segments_.size(); m++) {
+          if (set_->segments_[m].GetShiftFnSourcePos() != pos) continue;
+          keys << (m == pos ? "" : " ") << set_->segments_[m].GetSegmentKey();
+          for (int pid = 1; pid <= set_->segments_[m].NumPoints(); pid++) {
+            EPoint *pt = set_->segments_[m].GetPoint(*this, pid);
             const double x = pt->GetOriginalEnergy() > 0 ? pt->GetOriginalEnergy() : pt->GetLabEnergy();
             lo = std::min(lo, x);
             hi = std::max(hi, x);
@@ -520,13 +520,13 @@ void EData::WriteShiftsFile(const Config &configure, const azure2::Results &resu
         // The function's own penalty: the owner's shift penalties minus those of its
         // constant and sqrt(E) terms.
         double pen = 0.0, penOwn = 0.0;
-        owner.AddShiftPenalty(pen);
+        owner.AddShiftPenalty(State(owner), pen);
         if (owner.IsVaryEnergyShift() && owner.GetEnergyShiftError() != 0.0)
-          penOwn = pow((owner.GetEnergyShift() - owner.GetNominalEnergyShift()) / owner.GetEnergyShiftError(), 2.0);  // as AddShiftPenalty
+          penOwn = pow((State(owner).energyShift - owner.GetNominalEnergyShift()) / owner.GetEnergyShiftError(), 2.0);  // as AddShiftPenalty
         out << "# " << owner.GetSegmentKey() << "," << keys.str() << "," << owner.GetShiftFnExpression() << ","
-            << owner.GetEnergyShift() << ",";
-        for (int q = 0; q < owner.NumShiftFnParams(); q++) out << (q ? " " : "") << owner.GetShiftFnValues()[q];
-        out << "," << lo << "," << hi << "," << owner.TotalEnergyShift(lo) << "," << owner.TotalEnergyShift(hi) << ","
+            << State(owner).energyShift << ",";
+        for (int q = 0; q < owner.NumShiftFnParams(); q++) out << (q ? " " : "") << State(owner).shiftFnValues[q];
+        out << "," << lo << "," << hi << "," << owner.TotalEnergyShift(State(owner), lo) << "," << owner.TotalEnergyShift(State(owner), hi) << ","
             << pen - penOwn << std::endl;
       }
       if (header) out << "# Total-Shift-Chi-Squared: " << totalShiftChi << std::endl;

@@ -35,10 +35,10 @@ enum class LeafValues { Ready, Calculate };
 /// angular-distribution coefficients of such a point, and the per-nucleus terms of a sample segment in the base
 /// point's leaf record) and returned.  A point whose calculation throws, or a RATIO whose denominator is 0, is NaN.
 /// `data` is the data set that holds the segment (its plan, its target effects); below too.
-double EvaluateModelPoint(EData &data, ESegment &segment, int pointIndex, CNuc *compound, const Config &config,
+double EvaluateModelPoint(EData &data, const ESegment &segment, int pointIndex, CNuc *compound, const Config &config,
                           Results &results, LeafValues leaves);
 /// Every point of one segment, in order.
-void EvaluateModelSegment(EData &data, ESegment &segment, CNuc *compound, const Config &config, Results &results,
+void EvaluateModelSegment(EData &data, const ESegment &segment, CNuc *compound, const Config &config, Results &results,
                           LeafValues leaves);
 /// Every point of every segment of the data set, segment by segment, point by point.
 void EvaluateModel(EData &data, CNuc *compound, const Config &config, Results &results, LeafValues leaves);
@@ -65,7 +65,7 @@ struct ModelCotangents {
 /// The cotangents of point `pointIndex` of a data or test segment for the cotangent g of its model value, from the
 /// leaf values in `results` (the point pass, or the caller, calculated them).  False where the composition has no
 /// exact adjoint (a missing term point, a kernel that is not linear): the caller falls back to finite differences.
-bool ModelPointBackward(EData &data, ESegment &segment, int pointIndex, CNuc *compound, const Config &config,
+bool ModelPointBackward(EData &data, const ESegment &segment, int pointIndex, CNuc *compound, const Config &config,
                         const Results &results, double g, ModelCotangents &out);
 
 /// The residual of one datum: f - y n and dy n, as one expression for every path (the objective, the per-segment
