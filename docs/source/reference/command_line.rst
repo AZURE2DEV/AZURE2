@@ -43,7 +43,9 @@ The prompts come in this order:
    ``W_PARAMETER_FILE_NAMES``, which lists both sides.  Names the project
    gives to the parameters of its other run (the data sets' in a run without
    data, the extrapolations' in a run with data) and fixed data-set or
-   extrapolation parameters the file leaves out are not reported;
+   extrapolation parameters the file leaves out are not reported.  A file
+   written for a project before its conversion to format 3 names data-set
+   parameters by their old names: ``--convert-params`` renames it;
 4. the external capture amplitude file (blank: compute them);
 5. the menu again (``7`` exits).
 
@@ -147,33 +149,35 @@ Available Options
        report progress in steps of 10 % and exit; no project file is needed.
        The same build as **Configure → Build Coulomb Table...** in the GUI.
    * - ``--convert``
-     - ``--convert OLD NEW``: write the project ``OLD`` in the updated file format (format 2) to
-       ``NEW``, which must not exist, list what changed and exit: ``<lastRun>``
-       and ``<mcmc>``'s run settings removed (read by nothing),
-       ``useAdaptiveGrid`` moved from ``<potential>`` to ``<config>``,
-       ``<potential>`` kept only with a hybrid potential, and ``format=2`` added
-       to ``<config>``.  An old file still loads: it is read as its conversion,
-       with a note.
-
-       ``--convert OLD NEW --to 3 [--json-report R] [--answers A] [--exact-grids] [--strict]
-       [--allow-questions]``: write ``OLD`` in project format 3 (:doc:`format3`; the design is
-       ``docs/upgrade/project_format3.md`` section 8) to ``NEW``, every data set, extrapolation,
-       target, beam, detector, shared normalization and energy scale a named record.  Where the old
-       file left a meaning implicit (a thick target's numbers per incident particle, a Gaussian
-       convolution as a beam spread, an effect that also folded the extrapolation of the same
-       index), the record states it with a ``# CONVERTED:`` comment and a note; values the old
-       engine did not use (a group member's own norm or shift) are dropped with a note; where the
-       old meaning cannot be written (two pairs with the same particles and states) the converter
-       asks.  ``R``: the report as JSON (notes, questions, the parameter names old -> new such as
-       ``segment_3_norm`` -> ``s03.norm``); ``A``: answers, a JSON object
-       ``{"<record>.<field>": value}``; ``--exact-grids``: the extrapolation energies as the list
-       the old engine accumulated instead of ``range lo hi step s`` with E_k = lo + k s;
-       ``--strict``: ask instead of noting an implicit meaning; ``--allow-questions``: write ``?``
-       for an unanswered question (the file then does not validate).  A prior-covariance file is
-       written beside ``NEW`` as ``<name>.f3<ext>`` with renamed parameters; data files are never
-       written; nothing existing is overwritten.  The output is validated before it is written.
-       ``--to 3`` writes format 3, which the engine runs (an old project still runs until
-       step 3d of the upgrade).
+     - ``--convert OLD NEW [--json-report R] [--answers A] [--exact-grids] [--strict]
+       [--allow-questions]``: write the old project ``OLD`` (format 1 or 2) in project format 3
+       (:doc:`format3`; the design is ``docs/upgrade/project_format3.md`` section 8) to ``NEW``, which
+       must not exist, and exit; this AZURE2 reads format 3 only (:doc:`../user_guide/older_projects`).
+       Every data set, extrapolation, target, beam, detector, shared normalization and energy scale
+       becomes a named record.  Where the old file left a meaning implicit (a thick target's numbers
+       per incident particle, a Gaussian convolution as a beam spread, an effect that also folded the
+       extrapolation of the same index), the record states it with a ``# CONVERTED:`` comment and a
+       note; values the old engine did not use (a group member's own norm or shift) are dropped with a
+       note; where the old meaning cannot be written (two pairs with the same particles and states) the
+       converter asks.  ``R``: the report as JSON (notes, questions, the parameter names old -> new
+       such as ``segment_3_norm`` -> ``s03.norm``); ``A``: answers, a JSON object
+       ``{"<record>.<field>": value}``; ``--exact-grids``: the extrapolation energies as the list the
+       old engine accumulated instead of ``range lo hi step s`` with E_k = lo + k s; ``--strict``: ask
+       instead of noting an implicit meaning; ``--allow-questions``: write ``?`` for an unanswered
+       question (the file then does not validate).  A prior-covariance file is written beside ``NEW``
+       as ``<name>.f3<ext>`` with renamed parameters; data files are never written; ``OLD`` is kept
+       unchanged and nothing existing is overwritten.  The output is validated before it is written.
+       ``--to 3`` is accepted and changes nothing.  ``pyazr.convert_azr(OLD, NEW)`` is the same
+       converter.
+   * - ``--convert-params``
+     - ``--convert-params OLD.sav NEW.sav --project OLD.azr``: the parameter file ``OLD.sav``
+       (``param.sav``, ``param.par`` or ``param.fit``) written for the old project ``OLD.azr``, with
+       the names that ``OLD.azr``'s conversion gives its parameters (the report's map:
+       ``segment_3_norm`` -> ``s03.norm``, ``density_1`` -> ``<target>.areal_density``), written to
+       ``NEW.sav``, which must not exist; the renamed names are listed.  Level parameters keep their
+       names; every other byte is kept.  ``--project`` is the old project (the converter keeps it):
+       the map is that of its conversion, which a format-3 project alone does not determine; a
+       format-3 project there is refused.  ``pyazr.convert_params(OLD, NEW, project)`` does the same.
    * - ``--validate``
      - ``--validate FILE [--json]``: read the format-3 project ``FILE``, check every record
        against the table (:doc:`format3`) and print every problem, one per line as
@@ -183,14 +187,14 @@ Available Options
        files are read relative to the working directory, as the engine opens them); when the
        project has an error they are not, and their number is printed as a note.  Exit 0 without
        errors, 2 with errors,
-       3 for a format-1 or format-2 file (with the conversion command), 1 when ``FILE`` cannot be
-       read.  ``pyazr.validate(path)`` returns the same diagnostics.
+       3 for a file that is not a format-3 project (with the conversion command), 1 when ``FILE``
+       cannot be read.  ``pyazr.validate(path)`` returns the same diagnostics.
    * - ``--print-predictions``
      - ``--print-predictions FILE``: set the project ``FILE`` up as a calculation would (its
        data files are read relative to the working directory), print what every data set and
        then every extrapolation predicts, one line each as ``data <label>: <tree>`` or
        ``extrapolation <label>: <tree>``, and exit; the label is the data set's or extrapolation's
-       name in a format-3 project and its number (1, 2, ...) in an older one.  The tree is the expression the model pass
+       name.  The tree is the expression the model pass
        evaluates at each point: leaves ``sigma(1->2)``, ``sigma(1->2; mult=E1)``,
        ``dsdo_cm(1->2)``, ``ay``, ``phase(1->1; J=..; l=..; s=..)``, ``ak``/``Ak``,
        ``angdist(..; k=K)``, ``sigma_total(1->1)`` (``thm_`` before a THM observable;
@@ -359,7 +363,18 @@ transformation, a failed MCMC run), so that a script or a job chain can tell.
 A format-3 project refused when it is read, or in a run with data because a
 data file cannot be read (``E_DATA_FILE``), prints its diagnostics and then,
 as its last error line, ``ERROR: <file> (format 3) is refused; AZURE2
---validate <file> lists the same diagnostics.``  A project file that cannot be
+--validate <file> lists the same diagnostics.``  A file that is not a format-3
+project (format 1 or 2, a format-3 header over an old section such as
+``<segmentsData>``, an empty file, a file without ``<config>``) is refused
+before anything of it is read, exit 3, with one message as the run's last
+lines (:doc:`../user_guide/older_projects`)::
+
+   ERROR: T2.azr is a format-1 project (<segmentsData> at line 53). This AZURE2 reads format 3 only.
+          Convert it:  AZURE2 --convert T2.azr T2_f3.azr     (or pyazr.convert_azr("T2.azr", "T2_f3.azr"))
+          The converter keeps T2.azr unchanged and reports every change it makes.
+
+``--validate``, ``--describe`` and ``--print-predictions`` end with the same
+message and exit 3.  A project file that cannot be
 opened prints ``Could not open <file>.  Check that file exists.`` and exits
 with -1 (255 on POSIX systems).  Before November 2026 it exited with 0 in every case on
 ``dev``, and with -1 (255 on POSIX systems) after a failed run on the ``thm``

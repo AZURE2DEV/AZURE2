@@ -150,7 +150,7 @@ class AbundanceTerm : public ObjectiveTerm {
   }
 };
 
-// T9: the model data (ModelData.h): measured scattering lengths (<scatteringLengths>, <modelData>) and the level
+// T9: the model data (ModelData.h): measured scattering lengths and the level
 // quantities of <modelData> (resonance strengths, energies, widths, branching ratios, ANCs).
 class ModelDataTerm : public ObjectiveTerm {
  public:
@@ -159,12 +159,10 @@ class ModelDataTerm : public ObjectiveTerm {
   void Add(const ObjectiveContext &c, double &chi2) const override {
     const ModelDataSet &set = c.compound->GetModelData();
     if (set.NumResiduals() == 0) return;
-    double sectionPart = 0.0, linesPart = 0.0;
-    const double v = ModelData::Chi2(c.compound, c.config, set, &sectionPart, &linesPart);
+    const double v = ModelData::Chi2(c.compound, c.config, set);
     chi2 += v;
-    c.results.objective.scatteringLength = linesPart;
     if (set.hasSection) {
-      c.results.objective.modelData = sectionPart;
+      c.results.objective.modelData = v;
       c.results.objective.hasModelData = true;
     }
   }

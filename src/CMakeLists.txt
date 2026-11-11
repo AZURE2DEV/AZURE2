@@ -81,7 +81,8 @@ if(NOT NO_READLINE)
     endif()
 endif (NOT NO_READLINE)
 
-# ProjectCommands.cpp: --convert, --validate, --schema (they use convert/, linked below)
+# ProjectCommands.cpp: --convert, --convert-params, --validate, --describe, --schema, --print-predictions (the first
+# two use convert/, linked below)
 set(AZURE2_EXEC_SOURCES AZURE2.cpp ProjectCommands.cpp)
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
@@ -110,15 +111,12 @@ endif (BUILD_LIBRARY)
 # azure2_experiment (experiment/: model expressions, lab -> c.m. frames, the format-3 table of AZURE2 --schema
 # and the binding's schema()) uses physics/ and io/'s Record.h only and is below the engine likewise.
 # azure2_experiment_reader (the reading path of a format-3 project, ProjectReader.h, and the <levels> tables) links io/.
-# azure2_convert_specs (convert/: the old sections as set-up specs, with the old line parsers it is built on) until
-# step 3d deletes the old sections; the engine reads an old project only through it (src/ProjectSetup.cpp).
 target_link_libraries(AZURE2Core PUBLIC
     azure2_physics
     azure2_stopping
     azure2_io
     azure2_experiment
     azure2_experiment_reader
-    azure2_convert_specs
     Minuit2::Minuit2
     ${GSL_LIBRARIES}
     ${BLAS_LIBRARIES}
@@ -135,7 +133,8 @@ endif()
 # AZUREAPI pulls AZURE2Core in as a PUBLIC dependency of its own.  Everything
 # else follows from the graph above.
 target_link_libraries(AZURE2 ${AZUREAPI_LIBRARIES} AZURE2Core)
-# convert/: AZURE2 --convert ... --to 3 and --validate (src/AZURE2.cpp)
+# convert/: the converter of old projects, AZURE2 --convert and --convert-params (src/ProjectCommands.cpp); the engine
+# library (AZURE2Core) reads format 3 only and links none of convert/
 target_link_libraries(AZURE2 azure2_convert)
 
 # Windows DLL bundling for libraries that can't be statically linked

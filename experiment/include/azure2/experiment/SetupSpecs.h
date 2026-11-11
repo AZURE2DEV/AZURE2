@@ -218,7 +218,7 @@ struct StoppingSpec {
 };
 
 /// An apparatus effect (target integration, beam resolution, beam profile, Doppler, UDR, screening) and the data
-/// sets it applies to.  Grammar and meaning of every field: docs/source/reference/data_formats.rst, <targetInt>.
+/// sets it applies to.  Meaning of every field: docs/source/reference/format3.rst (target, beam, detector).
 struct TargetEffectSpec {
   std::string source;  ///< the text it was read from, quoted in messages
   /// The target's name, which names the effect's fit parameters (<target>.areal_density, <target>.doppler,
@@ -332,7 +332,7 @@ struct SpecList {
     Spec spec;
     std::string warning;      ///< printed as "WARNING: ..." before the item ("" = none)
     std::string note;         ///< passed to Config::Note before the item ("" = none)
-    bool readFailed = false;  ///< the reader could not read all of the item's text (old <targetInt> lines)
+    bool readFailed = false;  ///< the reader could not read all of the item's text (the converter's old lines)
   };
   std::vector<Item> items;
   bool failed = false;

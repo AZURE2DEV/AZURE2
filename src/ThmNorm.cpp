@@ -449,7 +449,7 @@ bool ThmBuildAngleWindow(WorkingCopy &data, const Config &configure, CNuc *theCN
  * background.  The first refusal ends it (the order of the checks is what a
  * user sees, so it is kept).
  */
-int WorkingCopy::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) {
+int WorkingCopy::BuildThmGroups(const Config &configure, CNuc *theCNuc) {
   Draft().thmGroups_.clear();
   Draft().thmCoherentParams_.clear();
   Draft().thmCoherentParamOffset_ = -1;
@@ -459,17 +459,12 @@ int WorkingCopy::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numL
     group.name = x.name;
     group.terms = x.backgroundTerms;
     for (int key : x.segments) {
-      if (key > numLines) {
-        configure.outStream << where << "segment " << key << ": <segmentsData> has only " << numLines
-                            << " line(s)." << std::endl;
-        return -1;
-      }
       int index = 0;
       for (int s = 1; s <= Draft().NumSegments(); s++)
         if (Draft().GetSegment(s)->GetSegmentKey() == key) index = s;
       if (index == 0) {
-        configure.outStream << "WARNING: <thm> experiment[" << x.name << "]: segment line " << key
-                            << " of <segmentsData> is not in use; it is left out." << std::endl;
+        configure.outStream << "WARNING: <thm> experiment[" << x.name << "]: the data set with key " << key
+                            << " is not in use; it is left out." << std::endl;
         continue;
       }
       const Segment *segment = Draft().GetSegment(index);

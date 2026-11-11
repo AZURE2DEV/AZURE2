@@ -74,7 +74,7 @@ struct Results {
     /// model record, Unit::SetModelRecord); sized only when the data set has a covariance group.
     std::vector<double> covarianceSeed;
     std::vector<ThmProfile> thmProfiles;
-    double nuisance = 0.0, park = 0.0, abundance = 0.0, scatteringLength = 0.0, priorCovariance = 0.0;
+    double nuisance = 0.0, park = 0.0, abundance = 0.0, priorCovariance = 0.0;
     /// The <modelData> section's part of the model-data term, and whether the project has the section (the total is
     /// written to chiSquared.out whenever it has).
     double modelData = 0.0;

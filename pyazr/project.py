@@ -458,9 +458,15 @@ class Project(NuclearPart):
         place, indentation and value column; a comment after the value stays unless the new text brings its own);
         a field the record lacks is added after its last field; None removes the field; a list gives a repeatable
         field once per element.  Only the lines of the fields named change.  Refused (FormatError) when the engine
-        finds an error the project did not have."""
+        finds an error the project did not have, or when there is no record ``name``."""
+        self._require(name)
         self._apply(f"{self[name].record_kind} {name!r}", lambda doc: self._set_fields(doc, name, fields))
         return Record(self, name)
+
+    def _require(self, name):
+        """FormatError (the refusal of every edit) when the project has no record ``name``."""
+        if name not in self:
+            raise FormatError(f"{self.path}: no record {name!r} (the records: {', '.join(self.records()) or 'none'})")
 
     def _set_fields(self, doc, name, fields):
         """The edit of :meth:`set` on ``doc`` (not validated; :meth:`set` and the edits that change a record's fields
@@ -502,6 +508,7 @@ class Project(NuclearPart):
         every parameter name made from it (``old.norm``, ``D.value[old]``, ``old@epoch...``) in ``<parameterSettings>``,
         ``<mcmc>`` and the prior-covariance file the project names (written by :meth:`save`).  Refused (FormatError)
         when the engine finds an error the project did not have (a name of the wrong syntax or already in use)."""
+        self._require(old)
         refs = [r for r in self._references() if _text(r["name"]) == old]
         engine = _engine_module()
         names = {}  # parameter name before -> after, from the engine (experiment::ParameterNamesOf)
@@ -573,6 +580,7 @@ class Project(NuclearPart):
         """Remove the record ``name`` (its header, fields and the comments above it).  Refused (FormatError) while
         another record refers to it: the message names the referrers, the diagnostics are the engine's
         (E_UNKNOWN_REFERENCE of each)."""
+        self._require(name)
 
         def edit(doc):
             _, r = self._find(name, doc)
@@ -681,15 +689,16 @@ def records_from_csv(path, kind="dataset", project=None):
 
 
 def require_format3(path):
-    """Raise :class:`FormatError` unless the project file at ``path`` is format 3 (io::FormatOf, the engine's reading
-    of ``<config>``).  The one refusal of an old file in pyazr: the engine's message (convert::NotFormat3Message),
-    which names the conversion ``AZURE2 --convert OLD NEW --to 3`` (:func:`pyazr.convert_azr`).  Every entry point
-    that takes a path (a session, :meth:`Project.open`, the functions that open a project) calls it."""
+    """Raise :class:`FormatError` unless the project file at ``path`` is format 3: the engine's refusal
+    (io::NotFormat3Message; a format-1 or format-2 file, a format-3 header over an old section, a file that is not a
+    project), which names the conversion ``AZURE2 --convert OLD NEW`` (:func:`pyazr.convert_azr`).  The one refusal of
+    an old file in pyazr: every entry point that takes a path (a session, :meth:`Project.open`, the functions that
+    open a project) calls it."""
     with open(os.fspath(path), "rb") as f:
         data = f.read()
-    engine = _engine_module()
-    if engine.project_format(data) != 3:
-        raise FormatError(engine.not_format3_message(data, os.fspath(path)))
+    message = _engine_module().not_format3_message(data, os.fspath(path))
+    if message:
+        raise FormatError(message)
 
 
 def write_parameter_values(path, values):

@@ -431,7 +431,7 @@ class WorkingCopy {
   std::string ecSignature_;   // Signature of the calculation being set up (see ECSignature)
   std::string ecOutputFile_;  // The intEC file being written, when not reading one back
   /// Builds thmGroups_ from the <thm> experiments once the segments are read; -1 after an ERROR.
-  int BuildThmGroups(const Config &, CNuc *, int numLines);
+  int BuildThmGroups(const Config &, CNuc *);
   /// Writes output/thm_experiments.out.
   void WriteThmExperiments(const Config &, const azure2::Results &results);
   /// The parts of WriteOutputFiles (src/DataOutputFiles.cpp), in the order it calls them.  The AZUREOut_* files with

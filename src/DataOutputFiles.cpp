@@ -398,9 +398,7 @@ void WorkingCopy::WriteChiSquaredFile(const Config &configure, const azure2::Res
   }
   // Nuisance priors (<parameterSettings> useAsNuisance), part of the objective in every path (objective.md D6).
   if (results.objective.nuisance != 0.0) chiOut << " Total-Nuisance-Chi-Squared: " << results.objective.nuisance;
-  // The model data (T9): <scatteringLengths> (table in scatteringLengths.out) and <modelData> (modelData.out).
-  if (results.objective.scatteringLength != 0.0)
-    chiOut << " Total-Scattering-Length-Chi-Squared: " << results.objective.scatteringLength;
+  // The model data (T9): the <modelData> data (modelData.out).
   if (results.objective.hasModelData) chiOut << " Total-Model-Data-Chi-Squared: " << results.objective.modelData;
   // Prior parameter covariance (<config> priorCovariance=): (p - mu)^T C^-1 (p - mu), whenever the key is set.
   // Written with 15 significant digits (a new field: the older ones keep their 6).

@@ -8,11 +8,11 @@ endif()
 
 add_library(azure2_io STATIC
   src/ConfigSection.cpp
-  src/Convert.cpp
   src/Document.cpp
   src/LevelGrouping.cpp
   src/LevelRowText.cpp
   src/LevelRows.cpp
+  src/ProjectFormat.cpp
   src/RecordReader.cpp)
 add_library(azure2::io ALIAS azure2_io)
 target_include_directories(azure2_io PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -32,7 +32,7 @@ target_compile_features(azure2_io_record INTERFACE cxx_std_17)
 # The lossless document on synthetic input; byte-identical round trips of every project file under tests/ and
 # examples/ and of variants made from each (docs/upgrade/project.md section 3, P1).
 # (Sources named in full: repo_consistency checks that every tests/*_test.cpp is named here.)
-foreach(_src config_section_test.cpp convert_test.cpp document_test.cpp level_grouping_test.cpp level_rows_test.cpp
+foreach(_src config_section_test.cpp document_test.cpp level_grouping_test.cpp level_rows_test.cpp
              level_row_text_test.cpp record_reader_test.cpp roundtrip_test.cpp)
   string(REPLACE "_test.cpp" "" _t ${_src})
   add_executable(io_${_t}_test tests/${_src})
@@ -57,5 +57,3 @@ add_test(NAME io_config_section COMMAND io_config_section_test ${CMAKE_CURRENT_S
 file(GLOB _format3_fixtures ${CMAKE_CURRENT_SOURCE_DIR}/../experiment/tests/data/*.azr)
 add_test(NAME io_record_reader COMMAND io_record_reader_test ${_format3_fixtures})
 add_test(NAME io_roundtrip COMMAND io_roundtrip_test ${CMAKE_CURRENT_SOURCE_DIR}/../tests ${CMAKE_CURRENT_SOURCE_DIR}/../examples)
-# The format-1 -> format-2 converter on every project file (docs/upgrade/project.md section 4).
-add_test(NAME io_convert COMMAND io_convert_test ${CMAKE_CURRENT_SOURCE_DIR}/../tests ${CMAKE_CURRENT_SOURCE_DIR}/../examples)

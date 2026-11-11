@@ -1,5 +1,4 @@
 #include "ThmExperiment.h"
-#include "azure2/convert/ThmLines.h"
 #include "ThmOptical.h"
 #include "Constants.h"
 
@@ -57,9 +56,6 @@ std::vector<std::string> Split(const std::string &text, char sep) {
   if (!text.empty() && text.back() == sep) out.push_back("");
   return out;
 }
-
-// "1,2,5-7" -> {1,2,5,6,7}: convert/'s ThmLines.h, the one reader of the list (shared with the converter).
-std::string ParseSegmentList(const std::string &text, std::vector<int> &out) { return azure2::convert::ParseThmSegmentList(text, out); }
 
 // "pmin-pmax" (MeV/c, 0 <= pmin <= pmax): the '-' whose both sides are numbers.
 bool ReadWindow(const std::string &text, double &lo, double &hi) {
@@ -391,62 +387,7 @@ bool ParseThmOptionLine(const std::string &key, const std::string &value, ThmOpt
     out.perPair = true;
     return !!(ks >> out.pairKey);
   }
-  {
-    // weight[<k>]=<file> (k-th <segmentsData> line) or weightTest[<k>]=<file>
-    // (k-th <segmentsTest> line): convert/'s ThmLines.h.  Which segments exist, and whether they are
-    // THM, is checked once the data are read (WorkingCopy::Fill / MakePoints).
-    azure2::convert::ThmWeightKey weight;
-    bool valid = false;
-    if (azure2::convert::ReadThmWeightKey(key, value, weight, valid)) {
-      out.kind = ThmOptionLine::WEIGHT;
-      out.test = weight.test;
-      if (!valid) return false;
-      out.segment = weight.segment;
-      out.file = weight.file;
-      return true;
-    }
-  }
   return false;
-}
-
-std::string ParseThmBlockLines(const std::vector<std::string> &lines, std::vector<ThmOptionLine> &options,
-                               std::vector<ThmExperiment> &experiments) {
-  for (std::string line : lines) {
-    size_t hash = line.find('#');
-    if (hash != std::string::npos) line = line.substr(0, hash);
-    size_t b = line.find_first_not_of(" \t\r\n");
-    if (b == std::string::npos) continue;
-    size_t e = line.find_last_not_of(" \t\r\n");
-    const std::string trimmed = line.substr(b, e - b + 1);
-    if (trimmed.compare(0, 11, "experiment[") == 0) {
-      std::string why = ParseThmExperimentLine(trimmed, experiments);
-      if (!why.empty()) return "<thm> " + why;
-      continue;
-    }
-    size_t eq = trimmed.find('=');
-    std::string key = trimmed.substr(0, eq);
-    std::string value = eq == std::string::npos ? std::string() : trimmed.substr(eq + 1);
-    key.erase(key.find_last_not_of(" \t") + 1);
-    value.erase(0, value.find_first_not_of(" \t"));
-    ThmOptionLine o;
-    if (eq == std::string::npos || !ParseThmOptionLine(key, value, o))
-      return "<thm> line not understood: '" + trimmed + "'";
-    options.push_back(o);
-  }
-  std::string why = CheckThmExperiments(experiments);
-  return why.empty() ? why : "<thm> " + why;
-}
-
-std::string CheckThmBlockLines(const std::vector<std::string> &lines, bool global) {
-  std::vector<ThmOptionLine> options;
-  std::vector<ThmExperiment> experiments;
-  std::string why = ParseThmBlockLines(lines, options, experiments);
-  if (!why.empty() || !global) return why;
-  bool coulombIntegral = false;
-  for (const ThmOptionLine &o : options)
-    if (o.kind == ThmOptionLine::COULOMB_INTEGRAL) coulombIntegral = o.flag;
-  why = CheckThmCoulombConsistency(experiments, coulombIntegral);
-  return why.empty() ? why : "<thm> " + why;
 }
 
 std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExperiment> &experiments) {
@@ -471,9 +412,7 @@ std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExper
 
   std::istringstream tokens(rest);
   std::string token;
-  int count = 0;
   while (tokens >> token) {
-    count++;
     size_t eq = token.find('=');
     if (eq == std::string::npos || eq == 0 || eq + 1 == token.size())
       return where + "'" + token + "' is not key=value";
@@ -481,9 +420,7 @@ std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExper
     if (std::find(work.keys.begin(), work.keys.end(), key) != work.keys.end())
       return where + "key '" + key + "' is given twice";
     std::string why;
-    if (key == "segments") {
-      why = ParseSegmentList(value, work.segments);
-    } else if (key == "background") {
+    if (key == "background") {
       int terms = -1;
       for (int t = 0; t <= 3; t++)
         if (value == ThmExperiment::BackgroundName(t)) terms = t;
@@ -606,7 +543,7 @@ std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExper
         why = "vertexModel='" + value + "': expected pw or dw";
     } else {
       why = "unknown key '" + key +
-            "' (keys: segments, background, beam, target, spectator, Ebeam, lineshape, ps, psNodes, "
+            "' (keys: background, beam, target, spectator, Ebeam, lineshape, ps, psNodes, "
             "distortion, opticalAA, opticalSF, spectatorAngle, distortionRef, distortionRatio, boundState, "
             "theta, vertexModel, spectatorAngles, spectatorAngleNodes, cbackground)";
     }
@@ -614,7 +551,6 @@ std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExper
     work.keys.push_back(key);
     work.values.push_back(value);
   }
-  if (count == 0) return where + "no key=value given";
   if (x)
     *x = work;
   else
@@ -627,7 +563,8 @@ std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments) {
   for (const ThmExperiment &x : experiments) {
     std::string where = "experiment[" + x.name + "]: ";
     auto has = [&](const char *key) { return std::find(x.keys.begin(), x.keys.end(), key) != x.keys.end(); };
-    if (!has("segments")) return where + "segments= is required";
+    // the members: the data sets that name the experiment (ReadFormat3ThmSection; an experiment without one is left out)
+    if (x.segments.empty()) return where + "no data set in use names it (thm " + x.name + ")";
     int kin = has("beam") + has("target") + has("spectator") + has("Ebeam");
     if (kin != 0 && kin != 4) return where + "beam, target, spectator and Ebeam go together (all four or none)";
     if (x.lineshape && kin != 4)

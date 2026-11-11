@@ -10,7 +10,7 @@ from .azure2 import azure2, ScatteringLength
 from .parameters import (Pair, PairSet, Parameter, ParameterSet, LevelKey,
                          NuclearPotential)
 from .scheme import LevelScheme, SchemeLevel, SchemeChannel
-from .convert import convert_azr
+from .convert import convert_azr, convert_params
 from . import masses
 from . import stopping
 from .physics import whittaker_wave
@@ -46,7 +46,7 @@ from .described import (DescribedDataset, DescribedDatasets, DescribedExtrapolat
 from .project import Project, Record, Nuisance, FormatError, records_from_csv
 from .nuclear_part import ProjectLevel, ProjectChannel, ProjectPair
 
-__all__ = ["azure2", "convert_azr", "ScatteringLength", "whittaker_wave",
+__all__ = ["azure2", "convert_azr", "convert_params", "ScatteringLength", "whittaker_wave",
            "tabulate", "TabulatedCrossSection",
            "angular_distribution",
            "Pair", "PairSet", "Parameter", "ParameterSet", "LevelKey",

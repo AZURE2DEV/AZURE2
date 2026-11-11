@@ -327,7 +327,7 @@ set_tests_properties(pyazr_sav_readers PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2
 add_test(NAME pyazr_sav_fixed_params
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/sav_fixed_params_test.py)
-set_tests_properties(pyazr_sav_fixed_params PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+set_tests_properties(pyazr_sav_fixed_params PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
 # Two sessions in one process share no state: a data session's residuals are
 # unchanged by an extrapolation (or second data) session opened beside it.

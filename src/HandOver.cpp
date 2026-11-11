@@ -84,9 +84,9 @@ void WorkingCopy::FillDensitiesFromParams(const vector_r &p, const Config &confi
     if (v > vMax || !(v >= vMin)) {
       static std::atomic<bool> warned{false};
       if (!warned.exchange(true))
-        configure.outStream << "WARNING: density_" << Data().GetDensityEffect(k) << " = " << v << " is outside ["
+        configure.outStream << "WARNING: " << lead->GetTargetName() << ".areal_density = " << v << " is outside ["
                             << vMin << ", " << vMax << "], the range its sub-point grids span; the calculation uses the"
-                            << " nearest end.  Give the line a wider range with 'densityfit vary sigma max'."
+                            << " nearest end.  Give the target's areal_density a larger grid_max."
                             << " (Printed once.)" << std::endl;
       v = (v > vMax) ? vMax : vMin;
     }

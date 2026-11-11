@@ -533,7 +533,7 @@ bool TargetEffect::IsBeamPhotodissociation() const {
 /*!
  * The c.m. beam-spread sigma at c.m. energy eCM for a point whose entrance pair has the c.m./lab factor
  * cmFactor.  The sigma and a `sigmalab` expression are kept in the lab frame of the input file and
- * converted here, per point: every segment listed on a <targetInt> line, and every component of an
+ * converted here, per point: every data set that names the record, and every component of an
  * advanced (SUM/RATIO or natural-target) segment, points to the same TargetEffect, and up to 2026-10-27
  * the sigma was converted once with the factor of the first segment on the line (and before 2026-10-01
  * once per segment), wrong for the other pairs by the ratio of their mass ratios.
@@ -789,7 +789,7 @@ double TargetEffect::GetStragglingCoefficient() const {
  */
 
 double TargetEffect::GetResonanceWidthMultiplier() const {
-  // A value on the targetInt line always wins.  Left out, a pure Gaussian
+  // A value given (the data set's quadrature width_multiplier) always wins.  Left out, a pure Gaussian
   // convolution gets the smaller core it needs (see
   // AdaptiveIntegrationGrid::convolutionCoreWidths); every other effect keeps
   // the general default.

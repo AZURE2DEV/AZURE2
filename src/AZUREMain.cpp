@@ -861,11 +861,10 @@ int AZUREMain::operator()() {
       }
     }
     data()->WriteOutputFiles(configure(), results, false, bandPtr);
-    // s-wave scattering lengths of every particle pair at the parameters just written, and the
-    // measured ones of the <scatteringLengths> block: the table goes to scatteringLengths.out only,
-    // the run log (GUI execution screen) names the file.
+    // s-wave scattering lengths of every particle pair at the parameters just written: the table goes to
+    // scatteringLengths.out only, the run log (GUI execution screen) names the file.
     try {
-      std::string report = ScatteringLength::Report(compound(), configure(), compound()->ScatteringLengthConstraints());
+      std::string report = ScatteringLength::Report(compound(), configure());
       std::ofstream slOut((configure().outputdir + "scatteringLengths.out").c_str());
       slOut << report;
       configure().outStream << "Scattering lengths written to " << configure().outputdir << "scatteringLengths.out"

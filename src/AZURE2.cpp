@@ -9,7 +9,6 @@
  * subsequent routines/classes follow object-oriented C++ programming conventions.
  */
 
-#include "azure2/io/Convert.h"
 #include "azure2/io/Document.h"
 #include "azure2/experiment/Schema.h"
 #include "AZUREMain.h"
@@ -123,15 +122,14 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--no-ec-table:" << std::setw(0) << "External capture integrals at every energy (no energy tables); shifted amplitudes interpolated." << std::endl
             << std::setw(25) << std::left << "\t--ec-convection-current:" << std::setw(0) << "The exact-form convection current (the default; undoes an earlier --no-ec-convection-current)." << std::endl
             << std::setw(25) << std::left << "\t--no-ec-convection-current:" << std::setw(0) << "With --no-long-wavelength: external capture with the charge (extended Siegert) part of the E_L operator only, without its convection-current part." << std::endl
-            << std::setw(25) << std::left << "\t--convert:" << std::setw(0) << "--convert OLD NEW: write the old-format project OLD in the updated format (format 2) to NEW (not overwritten) and exit." << std::endl
-            << std::setw(25) << std::left << "\t" << std::setw(0) << "--convert OLD NEW --to 3 [--json-report R] [--answers A] [--exact-grids] [--strict] [--allow-questions]:" << std::endl
-            << std::setw(25) << std::left << "\t" << std::setw(0) << "write format 3 (records; docs/upgrade/project_format3.md section 8) and its side files <f>.f3<ext>," << std::endl
-            << std::setw(25) << std::left << "\t" << std::setw(0) << "R the JSON report (notes, questions, parameter names old -> new), A the answers {\"<record>.<field>\": value}," << std::endl
-            << std::setw(25) << std::left << "\t" << std::setw(0) << "--exact-grids the grids the old engine accumulated (F10), --strict ask where the old meaning was implicit," << std::endl
-            << std::setw(25) << std::left << "\t" << std::setw(0) << "--allow-questions '?' for unanswered questions. --to 3 is needed until this engine reads format 3." << std::endl
+            << std::setw(25) << std::left << "\t--convert:" << std::setw(0) << "--convert OLD NEW [--json-report R] [--answers A] [--exact-grids] [--strict] [--allow-questions]: write the old project OLD (format 1 or 2)" << std::endl
+            << std::setw(25) << std::left << "\t" << std::setw(0) << "in format 3 to NEW with its side files <f>.f3<ext>, and exit (OLD kept, nothing overwritten; this AZURE2 reads format 3 only). R the JSON report" << std::endl
+            << std::setw(25) << std::left << "\t" << std::setw(0) << "(notes, questions, parameter names old -> new), A the answers {\"<record>.<field>\": value}, --exact-grids the grids the old engine" << std::endl
+            << std::setw(25) << std::left << "\t" << std::setw(0) << "accumulated (F10), --strict ask where the old meaning was implicit, --allow-questions '?' for unanswered questions." << std::endl
+            << std::setw(25) << std::left << "\t--convert-params:" << std::setw(0) << "--convert-params OLD.sav NEW.sav --project OLD.azr: a param.sav/param.par of the old project OLD.azr with the names of its conversion, and exit." << std::endl
             << std::setw(25) << std::left << "\t--validate:" << std::setw(0) << "--validate FILE [--json]: check a format-3 project against the table and print every problem" << std::endl
             << std::setw(25) << std::left << "\t--describe:" << std::setw(0) << "--describe FILE [--json] [--record NAME]: print what the engine makes of a format-3 project, or of its record NAME (data sets, reactions and pair keys, data files, effects, parameters)" << std::endl
-            << std::setw(25) << std::left << "\t" << std::setw(0) << "(file:line: record.field: message, or a JSON array); exit 0 without errors, 2 with errors, 3 for format 1/2." << std::endl
+            << std::setw(25) << std::left << "\t" << std::setw(0) << "(file:line: record.field: message, or a JSON array); exit 0 without errors, 2 with errors, 3 for a file that is not format 3." << std::endl
             << std::setw(25) << std::left << "\t--print-predictions:" << std::setw(0) << "--print-predictions FILE: print the expression tree of every data set and extrapolation of FILE, one line each, and exit." << std::endl
             << std::setw(25) << std::left << "\t--schema:" << std::setw(0) << "Print the table of project format 3 (record kinds, fields, quantities, units, diagnostic codes) as JSON and exit." << std::endl
             << std::setw(25) << std::left << "\t--build-coulomb-table[=FILE]:" << std::setw(0) << "Build the Coulomb table (about 5 min on 4 threads, 88 MB; FILE as for --coulomb-table) and exit." << std::endl
@@ -592,12 +590,8 @@ static std::istringstream SectionText(const Config &configure, const std::string
 
 bool readSegmentFile(const Config &configure, std::vector<SegPairs> &segPairs) {
   // the active data sets (or extrapolations, for a run without data) from their specs (ProjectSetup.h)
-  std::vector<std::pair<int, int>> pairs;
-  if (!ProjectReactionPairs(configure, (configure.paramMask & Config::CALCULATE_WITH_DATA) != 0, pairs)) {
-    configure.outStream << "Cannot read segments. Check configuration file." << std::endl;
-    return false;
-  }
-  for (const std::pair<int, int> &p : pairs) segPairs.push_back({p.first, p.second});
+  for (const std::pair<int, int> &p : ProjectReactionPairs(configure, (configure.paramMask & Config::CALCULATE_WITH_DATA) != 0))
+    segPairs.push_back({p.first, p.second});
   return true;
 }
 
@@ -1496,7 +1490,7 @@ int main(int argc, char *argv[]) {
   // Set GSL Error Handler
   gsl_set_error_handler(&GSLException::GSLErrorHandler);
 
-  // --convert, --validate, --schema, --print-predictions: the project-file commands (src/ProjectCommands.cpp), each exits
+  // The project-file commands (src/ProjectCommands.cpp: --convert, --validate, --schema, ...), each exits
   if (int projectCommandExit = 0; RunProjectCommand(argc, argv, projectCommandExit)) return projectCommandExit;
 
   // --build-coulomb-table[=FILE] builds the table and exits
@@ -1534,6 +1528,8 @@ int main(int argc, char *argv[]) {
     configure.outStream << "Could not open " << configure.configfile << ".  Check that file exists."
                         << std::endl;
     return -1;
+  } else if (configStatus == Config::kConfigNotFormat3) {
+    return 3;  // not a format-3 project (docs/upgrade/project_format3.md section 8.4): the refusal is the last line
   } else if (configStatus != 0) {
     return 1;  // a refused format-3 project or a malformed block, like a refused set-up: its diagnostics are printed
   }

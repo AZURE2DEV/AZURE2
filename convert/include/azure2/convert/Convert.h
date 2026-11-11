@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "azure2/experiment/Diagnostics.h"
+#include "azure2/io/Document.h"
 
 namespace azure2 {
 namespace convert {
@@ -79,6 +80,18 @@ struct ConvertResult {
   std::string ReportJson(const std::string &input, const std::string &output) const;
 };
 
+/*!
+ * Converts a format-1 project to format 2 in place, the converter's first step (docs/upgrade/project.md section 4), and
+ * returns what it changed, one line per change (empty for a file already in format 2 or 3):
+ *  - <lastRun> removed (the Qt GUI's runtime options, read by nothing);
+ *  - <mcmc>'s run settings removed (the CLI asks for them), and <mcmc> with them when its <parameters> are empty;
+ *  - useAdaptiveGrid moved from <potential> to <config>, and <potential> removed unless useHybridPotential=1 for
+ *    the default or for any pair;
+ *  - "format=2" added as the last line of <config>.
+ * Every other byte is kept.  Converting twice is converting once.
+ */
+std::vector<std::string> ConvertToFormat2(io::Document &doc);
+
 /// Converts the text of an old project.  Never throws for bad input; never reads anything but the data files and the
 /// prior-covariance file under options.projectDir.
 ConvertResult ConvertToFormat3(const std::string &oldText, const ConvertOptions &options);
@@ -87,9 +100,32 @@ ConvertResult ConvertToFormat3(const std::string &oldText, const ConvertOptions 
 /// wrong with the text.
 std::string ReadAnswersJson(const std::string &text, std::map<std::string, std::string> &answers);
 
-/// The refusal of section 8.4 for a project that is not format 3 ("" for a format-3 text): it names the first old
-/// section and the conversion command.
-std::string NotFormat3Message(const std::string &text, const std::string &fileName);
+/*!
+ * A parameter file written for an old project (param.sav, param.par, param.fit: "name value error [fixed]" lines) with
+ * the names the project's conversion gives its parameters (ConvertResult::parameterNames, section 8.4: AZURE2
+ * --convert-params, pyazr.convert_params): the first token of a line that the map renames (segment_3_norm -> s03.norm)
+ * is replaced, the name column kept right-aligned where the new name fits; every other byte is kept.  `renamed` gets
+ * the pairs applied, in file order.
+ */
+std::string RenameParameterFile(const std::string &text, const std::vector<std::pair<std::string, std::string>> &names,
+                                std::vector<std::pair<std::string, std::string>> &renamed);
+
+/// A parameter file of an old project, renamed (RenameParameterFile) by the map of that project's conversion.
+struct ParameterFileConversion {
+  std::string refusal;  ///< "" or why there is no result (the project is format 3, or the converter refuses it)
+  std::string text;     ///< the renamed file
+  std::vector<std::pair<std::string, std::string>> renamed;  ///< old name -> new name, in file order
+};
+
+/*!
+ * `parameterText` (a param.sav, param.par or param.fit) renamed for the format-3 conversion of `oldProjectText`, the old
+ * project the file was written for (the converter keeps it unchanged): the map is ConvertResult::parameterNames of its
+ * conversion (the "parameters" of the JSON report), which a format-3 project alone does not determine (its records
+ * may have been renamed or reordered since).  Questions of the conversion do not matter for names: they are allowed.
+ * `projectDir` as ConvertOptions::projectDir.  AZURE2 --convert-params and pyazr.convert_params.
+ */
+ParameterFileConversion ConvertParameterFile(const std::string &parameterText, const std::string &oldProjectText,
+                                             const std::string &projectDir);
 
 }  // namespace convert
 }  // namespace azure2

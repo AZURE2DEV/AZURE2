@@ -33,13 +33,6 @@ int ModelDataSet::NumResiduals() const {
   return n;
 }
 
-int ModelDataSet::NumSectionResiduals() const {
-  int n = 0;
-  for (const ModelDataRow &row : rows)
-    if (row.inSection) n += row.isScatteringLength ? ScatteringLength::NumResiduals(row.constraint) : 1;
-  return n;
-}
-
 namespace ModelData {
 
 namespace {
@@ -201,15 +194,6 @@ void AddToAccum(const Column &c, double v, GradAccum &accum) {
     accum.AddGamma(c.j, c.la, c.ch, v);
 }
 
-ex::ModelDatum ScatteringLengthLine(const ScatteringLength::Constraint &c) {
-  ex::ModelDatum d;
-  d.quantity = ex::ModelQuantity::ScatteringLength;
-  d.quantityName = "scattering_length";
-  d.name = "<scatteringLengths> line " + std::to_string(c.line);
-  d.line = c.line;
-  return d;
-}
-
 void Print(const Config &configure, const ex::Diagnostic &d) {
   configure.outStream << (d.severity == ex::Severity::Warning ? "WARNING: " : "ERROR: ") << "<modelData> line " << d.line
                       << " [" << d.code << "]: " << d.message << std::endl;
@@ -220,15 +204,6 @@ void Print(const Config &configure, const ex::Diagnostic &d) {
 std::shared_ptr<const ModelDataSet> Read(CNuc &compound, const Config &configure,
                                          const std::vector<azure2::io::LevelRow> &rows) {
   auto set = std::make_shared<ModelDataSet>();
-  if (ScatteringLength::ReadConstraints(&compound, configure, set->scatteringLengthLines) == -1) return nullptr;
-  for (const ScatteringLength::Constraint &c : set->scatteringLengthLines)
-    if (ScatteringLength::NumResiduals(c) > 0) {
-      ModelDataRow row;
-      row.constraint = c;
-      row.datum = ScatteringLengthLine(c);
-      set->rows.push_back(row);
-    }
-
   const ex::LevelTables levels = ex::LevelTablesOfRows(rows);
   // <modelData>: format-3 datum records, read and validated by the format-3 table, then found in <levels>.  Line
   // numbers count from the section's first line after its tag.
@@ -265,7 +240,6 @@ std::shared_ptr<const ModelDataSet> Read(CNuc &compound, const Config &configure
     }
     ModelDataRow row;
     row.datum = d;
-    row.inSection = true;
     row.isScatteringLength = d.quantity == ex::ModelQuantity::ScatteringLength;
     if (row.isScatteringLength) {
       ScatteringLength::Constraint &c = row.constraint;
@@ -296,21 +270,16 @@ void Residuals(CNuc *compound, const Config &configure, const ModelDataSet &set,
   for (std::size_t k = 0; k < set.rows.size(); k++) RowResiduals(compound, configure, set.rows[k], q[k], r);
 }
 
-double Chi2(CNuc *compound, const Config &configure, const ModelDataSet &set, double *sectionPart, double *linesPart) {
+double Chi2(CNuc *compound, const Config &configure, const ModelDataSet &set) {
   std::vector<double> q;
   LevelValues(compound, configure, set, q);
-  double chi2 = 0.0, section = 0.0, lines = 0.0;
+  double chi2 = 0.0;
   vector_r r;
   for (std::size_t k = 0; k < set.rows.size(); k++) {
     r.clear();
     RowResiduals(compound, configure, set.rows[k], q[k], r);
-    for (double x : r) {
-      chi2 += x * x;
-      (set.rows[k].inSection ? section : lines) += x * x;
-    }
+    for (double x : r) chi2 += x * x;
   }
-  if (sectionPart) *sectionPart = section;
-  if (linesPart) *linesPart = lines;
   return chi2;
 }
 
@@ -383,7 +352,6 @@ std::vector<Value> SectionValues(CNuc *compound, const Config &configure, const 
   LevelValues(compound, configure, set, q);
   for (std::size_t k = 0; k < set.rows.size(); k++) {
     const ModelDataRow &row = set.rows[k];
-    if (!row.inSection) continue;
     Value v;
     v.datum = &row.datum;
     if (row.isScatteringLength) {

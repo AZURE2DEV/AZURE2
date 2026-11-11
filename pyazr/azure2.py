@@ -1557,7 +1557,7 @@ class azure2(_HybridPotentials):
         """Write the run's standard output files, as the CLI does at the end.
 
         ``AZUREOut_*``, ``chiSquared.out`` and the rest land in the ``.azr``'s
-        output directory, which must already exist.  Without this a Python
+        output directory, created when it does not exist.  Without this a Python
         session could compute everything and still had to re-run the binary to
         get the files a colleague or the GUI expects.
 
@@ -1570,6 +1570,7 @@ class azure2(_HybridPotentials):
         ``cwd/output``.
         """
         x = np.asarray(self.params_rwa if params is None else params, float).ravel()
+        os.makedirs(self.output_dir, exist_ok=True)
         with _in_dir(self.cwd):
             if self.mode == "data":
                 # chiSquared.out reports the per-segment chi-squared *stored on
