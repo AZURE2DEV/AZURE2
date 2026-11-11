@@ -232,7 +232,16 @@ directory; both fixed.
 least-squares fit (`--use-lm`) or a covariance band of a project with no free parameter. The whole verification
 had passed: no test ran that case. The agent that wrote the gradient found it in its timing series and fixed it
 with a test (`upgrade_energy_task_gradient`); the fix was merged the same evening. The lesson is the one of the
-audit above: the verification compares what the tests cover.
+audit above: the verification compares what the tests cover. The director then wrote the missing check
+(`tests/fit_modes`: the four minimizer routes, each with the uncertainty band, on projects with no free parameter,
+with level parameters, with level and target parameters, with target parameters only). On its first run it found a
+second crash, **older than the upgrade**: a MIGRAD fit with `--covariance-band` of a project without free
+parameters ends in a segmentation fault inside Minuit2 (HESSE on a state with no variable parameter; the code is
+the same on `dev`). The engine now skips HESSE there. The check also showed two things about the band a user should
+know: it propagates the covariance of level energies, widths and the THM coherent background only, so **a fitted
+target parameter (areal density, stopping scale) does not widen the band of a yield**, and a fit whose only free
+parameters are such ones gets no band. The message said "this fit produced no usable covariance"; it now says
+which parameters the band takes. Whether fitted target parameters should enter the band is a question for you.
 
 Merged on 2026-11-11: the data classes replaced (`DataSet`, `WorkingCopy`, `Segment`, `Unit`); **all 183
 convertible project files in format 3**, the THM projects included; validation that reports what a run would

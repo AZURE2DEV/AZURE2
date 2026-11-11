@@ -51,9 +51,10 @@ case.
   into the source tree.
 - Keep fixtures small: trim data files to the points the test needs. Keep
   every file under 1 MB.
-- pyazr tests print `skip:` and exit 0 when `pyazr`/`_azure2` cannot be
-  imported. A green ctest line can therefore be a skip. After touching pyazr,
-  read the test output and confirm it says `ok`.
+- pyazr tests print `skip:` and exit 77 when `pyazr`/`_azure2` cannot be
+  imported; ctest shows them as skipped (`SKIP_RETURN_CODE 77`), never as
+  passed. A run with skipped tests has not tested pyazr: give the build its
+  engine module (`PYAZR_ENGINE_DIR`).
 - A test directory gets a `README.md` when the model or data need explaining:
   where the data came from, and why this model.
 
@@ -67,7 +68,7 @@ run there too. Before pushing:
 2. No GNU-only shell in tests (`sed -i` without a suffix, `sed '0,/re/'`,
    `grep -P`); macOS runs BSD tools. awk and perl are portable.
 3. A pyazr test imports numpy and pyazr inside its skip guard
-   (`try: ... except: print("skip: ..."); sys.exit(0)`).
+   (`try: ... except: print("skip: ..."); sys.exit(77)`).
 4. CI runs `ctest -LE slow`. A test that takes minutes gets `LABELS slow` in
    `tests/pyazr/CMakeLists.txt`; run `ctest -L slow` locally (the longest,
    `park_gradient`, takes about 40 min) when the pyazr or engine paths those
