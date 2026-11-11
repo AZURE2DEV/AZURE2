@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 #
-# Point mapping inside segments with components (EData::MapComponentSegments): each component's point is mapped onto
-# the base segment's point at the same energy, and the base's calculation (one level-matrix solution) builds the
-# component's T-matrix and observable (EPoint::Calculate).  Before 2026-10-24 every term was its own calculation.
+# The components of composite data sets (SUM, RATIO, a second term at another angle) are points of their own at the
+# energies of their base points: they share the base points' level-matrix solves through the energy tasks
+# (docs/upgrade/energy_grid.md section 8), and the composite is the sum of its terms.  (Until 2026-11-11 each
+# component point was mapped onto its base point, which calculated it; that mapping is deleted.)
 # The 13N reference model is edited at run time into composites of both exit pairs (p+12C elastic, 1; capture to
 # 13N g.s. with external capture, 2):
 #
@@ -11,19 +12,21 @@
 #   meyer_114             114.5 deg elastic: RATIO elastic / capture (unit 1)
 #   kettner_0             0 deg capture, Q attenuation: SUM + capture at 90 deg lab (same exit, another angle)
 #   kettner_55            55 deg capture: SUM + 1e-7 x elastic at 55 deg
-#   extrapolation         0.3-3 MeV, 90 deg lab: SUM elastic + 1000 x capture (Calculate Segments Without Data)
+#   extrapolations        0.3-3 MeV, 90 deg c.m.: SUM elastic + 1000 x capture, and SUM capture + 1000 x capture
+#                         (Calculate Segments Without Data)
+# and into the same model without the components ("parts": each data set its base reaction, meyer_84 with its shift;
+# the extrapolation as two, elastic and capture at 90 deg c.m.; in the c.m. frame a SUM is the plain sum of its terms).
 # (Format 3 cannot write two composites of the old model: a sum on the thick-target yield of Seagrave, and an
 # angle-integrated elastic term of a charged pair in a sum; the capture data set skowronski_luna_hpge takes the first
 # one's place, and the elastic term of kettner_55 stays differential.)
 #
-#   (a) every output file identical with and without the component mapping (AZURE_NO_COMPONENT_MAPPING=1), for the
-#       data (mode 1) and the extrapolation (mode 3);
-#   (b) the level-matrix solutions do not depend on the mapping (AZURE_PROFILE): since the energy tasks
-#       (docs/upgrade/energy_grid.md section 8) there is one per distinct compound energy with or without it;
+#   (a) the extrapolated SUM capture + 1000 x capture is 1001 x the parts' capture extrapolation, point by point
+#       (1e-10, the 11 digits of the file; the component is a point of its own, calculated in its own plan task);
+#   (b) the components add no level-matrix solution (AZURE_PROFILE "matrix fill"): the composite model solves as many
+#       as the parts model, for the data (mode 1) and the extrapolation (mode 3) -- one per distinct compound energy;
 #   (c) without the ratio: a fit with the analytic gradient starts from the chi2 of the calculation, the gradient
 #       (one level-matrix adjoint per compound energy for all terms of a composite point, src/GradEnergyTasks.cpp)
-#       agrees with finite
-#       differences of the mapped evaluation, and the Jacobian path with the adjoint (AZURE_GRAD_CHECK).
+#       agrees with finite differences, and the Jacobian path with the adjoint (AZURE_GRAD_CHECK).
 #
 #   ./tests/component_mapping/check.sh path/to/AZURE2
 
@@ -46,12 +49,21 @@ failures=0
 ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
-# model RATIO OUT: the composites above (meyer_114's ratio only when RATIO = 1)
+# model RATIO OUT: the composites above (meyer_114's ratio only when RATIO = 1); RATIO = parts: no composite, the base
+# reactions only (meyer_84 keeps its shift), and the extrapolation as its two terms
 model() {
   awk -v ratio="$1" '
     { sub(/\r$/, "") }
     /^dataset / { ds = $2 }
     /^[a-z_]+ [A-Za-z0-9_-]+$/ && !/^dataset / { ds = "" }
+    ratio == "parts" && $1 == "reaction" && ds == "meyer_84" { print; print "    shift          offset 0.002 MeV fixed"; next }
+    ratio == "parts" && /^<extrapolations>$/ { print
+      for (k = 1; k <= 2; k++) {
+        print "extrapolation part" k; print "    reaction       " (k == 1 ? "12C(p,p)12C" : "12C(p,g)13N")
+        print "    quantity       dsigma_domega"; print "    unit           b/sr"
+        print "    energies       range 0.3 3.0 MeV lab step 0.01"; print "    angles         list 90 deg cm" }
+      next }
+    ratio == "parts" { print; next }
     $1 == "reaction" && ds == "skowronski_luna_hpge" { $0 = "    reaction       12C(p,g)13N + 0.5*12C(p,g)13N" }
     $1 == "reaction" && ds == "meyer_84" { $0 = "    reaction       12C(p,p)12C + 1000*12C(p,g)13N"; print; print "    shift          offset 0.002 MeV fixed"; next }
     $1 == "reaction" && ds == "meyer_114" && ratio == 1 { $0 = "    reaction       12C(p,p)12C / 12C(p,g)13N" }
@@ -60,13 +72,18 @@ model() {
     $1 == "reaction" && ds == "kettner_55" { $0 = "    reaction       12C(p,g)13N + 1e-7*12C(p,p)12C" }
     /^<extrapolations>$/ { print; print "extrapolation sum90"; print "    reaction       12C(p,p)12C + 1000*12C(p,g)13N"
       print "    quantity       dsigma_domega"; print "    unit           b/sr"
-      print "    energies       range 0.3 3.0 MeV lab step 0.01"; print "    angles         list 90 deg lab"; next }
+      print "    energies       range 0.3 3.0 MeV lab step 0.01"; print "    angles         list 90 deg cm"
+      print "extrapolation cap1001"; print "    reaction       12C(p,g)13N + 1000*12C(p,g)13N"
+      print "    quantity       dsigma_domega"; print "    unit           b/sr"
+      print "    energies       range 0.3 3.0 MeV lab step 0.01"; print "    angles         list 90 deg cm"; next }
     { print }' "$REF/13N.azr" > "$WORK/$2"
 }
 model 1 t.azr
-[ "$(grep -c '^    reaction       .* [+/] ' "$WORK/t.azr")" = 6 ] || { bad "model not built"; exit 1; }
+[ "$(grep -c '^    reaction       .* [+/] ' "$WORK/t.azr")" = 7 ] || { bad "model not built"; exit 1; }
 model 0 g.azr
-cp "$WORK/t.azr" "$WORK/x.azr"
+model parts p.azr
+[ "$(grep -c '^extrapolation part' "$WORK/p.azr")" = 2 ] && [ "$(grep -c '^    reaction       .* [+/] ' "$WORK/p.azr")" = 0 ] ||
+  { bad "parts model not built"; exit 1; }
 
 run() {
   local name="$1" model="$2" mode="$3"; shift 3
@@ -79,37 +96,34 @@ run() {
      printf "$input" | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
   if [ -z "$(ls "$dir/output" | grep -i 'AZUREOut')" ]; then bad "$name: no output written"; tail -15 "$dir/run.log"; return 1; fi
 }
-# awk only: the Windows runner has no cmp/diff
-same_outputs() {
-  local a="$1" b="$2" n=0 d=0 f
-  for f in "$a"/output/*.out "$a"/output/*.extrap; do
-    [ -e "$f" ] || continue
-    n=$((n + 1))
-    if [ ! -e "$b/output/$(basename "$f")" ]; then d=$((d + 1)); continue; fi
-    awk 'NR == FNR { x[FNR] = $0; m = FNR; next } { k = FNR; if (x[FNR] != $0) e++ } END { exit !(e == 0 && k == m) }' \
-      "$f" "$b/output/$(basename "$f")" || d=$((d + 1))
-  done
-  echo "$n $d"
-}
 fills() { awk '/^\[profile\]   matrix fill/ { print $5 }' "$1/run.log"; }
 
-run on  t.azr 1 X=0 || exit 1
-run off t.azr 1 AZURE_NO_COMPONENT_MAPPING=1 || exit 1
-read -r n d <<< "$(same_outputs "$WORK/on" "$WORK/off")"
-if [ "$n" -ge 3 ] && [ "$d" = 0 ]; then ok "(a) data: all $n output files identical with and without the mapping"
-else bad "(a) data: $d of $n output files differ"; fi
-fon="$(fills "$WORK/on")"; foff="$(fills "$WORK/off")"
-if [ -n "$fon" ] && [ -n "$foff" ] && [ "$fon" -eq "$foff" ]; then ok "(b) level-matrix solutions $fon with and without the mapping"
-else bad "(b) level-matrix solutions '$foff' without, '$fon' with the mapping (must be equal)"; fi
+run comp  t.azr 1 X=0 || exit 1
+run parts p.azr 1 X=0 || exit 1
+fc="$(fills "$WORK/comp")"; fp="$(fills "$WORK/parts")"
+if [ -n "$fc" ] && [ -n "$fp" ] && [ "$fc" -eq "$fp" ]; then ok "(b) data: level-matrix solutions $fc, as many as without the components"
+else bad "(b) data: level-matrix solutions '$fc' with the components, '$fp' without (must be equal)"; fi
 
-run xon  x.azr 3 X=0 || exit 1
-run xoff x.azr 3 AZURE_NO_COMPONENT_MAPPING=1 || exit 1
-read -r n d <<< "$(same_outputs "$WORK/xon" "$WORK/xoff")"
-if [ "$n" -ge 1 ] && [ "$d" = 0 ]; then ok "(a) extrapolation: all $n output files identical"
-else bad "(a) extrapolation: $d of $n output files differ"; fi
-fon="$(fills "$WORK/xon")"; foff="$(fills "$WORK/xoff")"
-if [ -n "$fon" ] && [ -n "$foff" ] && [ "$fon" -eq "$foff" ]; then ok "(b) extrapolation: level-matrix solutions $fon with and without the mapping"
-else bad "(b) extrapolation: level-matrix solutions '$foff' without, '$fon' with the mapping (must be equal)"; fi
+run xcomp  t.azr 3 X=0 || exit 1
+run xparts p.azr 3 X=0 || exit 1
+fc="$(fills "$WORK/xcomp")"; fp="$(fills "$WORK/xparts")"
+if [ -n "$fc" ] && [ -n "$fp" ] && [ "$fc" -eq "$fp" ]; then ok "(b) extrapolation: level-matrix solutions $fc, as many as its two terms alone"
+else bad "(b) extrapolation: level-matrix solutions '$fc' with the components, '$fp' without (must be equal)"; fi
+# (a) the extrapolated SUM capture + 1000 x capture (pair 2's file) against 1001 x the parts' capture, column 4
+sum="$WORK/xcomp/output/AZUREOut_aa=1_R=2.extrap"; cap="$WORK/xparts/output/AZUREOut_aa=1_R=2.extrap"
+if [ -s "$sum" ] && [ -s "$cap" ]; then
+  res="$(awk '{ sub(/\r$/, "") } NF < 4 { next }
+              FILENAME == ARGV[1] { s[FNR] = $4; e[FNR] = $1; n++; next }
+              { if ($1 != e[FNR]) bad++; m++; x = 1001 * $4; d = s[FNR] - x; if (d < 0) d = -d
+                r = d / (x < 0 ? -x : x); if (r > w) w = r }
+              END { printf "%d %d %d %.2e", n, m, bad + 0, w }' "$sum" "$cap")"
+  read -r n m nbad worst <<< "$res"
+  if [ "$n" -ge 100 ] && [ "$n" = "$m" ] && [ "$nbad" = 0 ] && awk -v w="$worst" 'BEGIN { exit !(w + 0 <= 1e-10) }'; then
+    ok "(a) extrapolated SUM capture + 1000 x capture = 1001 x capture at $n energies (worst $worst relative)"
+  else bad "(a) extrapolated SUM against its terms: $n and $m rows, $nbad energies differ, worst $worst"; fi
+else
+  bad "(a) extrapolation files missing"; ls "$WORK/xcomp/output" "$WORK/xparts/output"
+fi
 
 # (c) the gradient check of tests/13N on the composite model
 mkdir -p "$WORK/fit/output" "$WORK/fit/checks"; ln -s "$REF/data" "$WORK/fit/data"; cp "$WORK/g.azr" "$WORK/fit/t.azr"
@@ -138,4 +152,4 @@ else
     || bad "(c) Jacobian-path vs adjoint gradient: $jac of the largest"
 fi
 
-if [ "$failures" -eq 0 ]; then echo "PASS: component mapping"; else echo "FAIL: $failures check(s)"; exit 1; fi
+if [ "$failures" -eq 0 ]; then echo "PASS: components of composite data sets"; else echo "FAIL: $failures check(s)"; exit 1; fi

@@ -8,11 +8,9 @@
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
-#include <mutex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 #ifdef _OPENMP
@@ -263,14 +261,8 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
 
   struct Item { TermRef seg; int i; double offset; bool shifted; };
   std::vector<Item> work;
-  struct Owner { TermRef seg; bool shifted; bool replaceable; };
-  std::unordered_map<const Unit *, Owner> mappedSegment;  // the segment of each mapped point
   static std::atomic<bool> ecNoted{false};
   auto collect = [&](const TermRef &seg) {
-    // Mapped points are registered first, also in segments whose grids are not
-    // re-placed: a host with such a mapped point keeps its grid too.
-    for (int i = 1; i <= seg.NumPoints(); i++)
-      if (seg.GetPoint(*this, i)->IsMapped()) mappedSegment[seg.GetPoint(*this, i)] = {seg, false, false};
     bool any = false;
     for (int i = 1; i <= seg.NumPoints() && !any; i++) any = Data().GridSpecOf(*seg.GetPoint(*this, i)).valid;
     if (!any) return;
@@ -288,13 +280,6 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
     for (int i = 1; i <= seg.NumPoints(); i++) {
       Unit *point = seg.GetPoint(*this, i);
       if (!Data().GridSpecOf(*point).valid) continue;
-      // A mapped point keeps its host's grid: the mapping (MapData, MapLeaves) was made because the
-      // two grids are identical, and the host's calculation fills the mapped point's sub-points node by node
-      // (Unit::Calculate).  It is re-placed with its host below, never on its own.
-      if (point->IsMapped()) {
-        mappedSegment[point] = {seg, shifted, true};
-        continue;
-      }
       // the parent's shift, which is what moves every sub-point (Segment::UpdatePointEnergyWithShift)
       const double offset = shifted ? cmFactor * seg.segment->TotalEnergyShift(State(*seg.segment), point->GetOriginalEnergy()) : 0.0;
       work.push_back({seg, i, offset, shifted});
@@ -323,8 +308,6 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
   // For AZURE_GRID_TIMING: per work item, -1 = a different number of nodes, else the
   // largest node move (MeV) of a grid that changed.
   std::vector<double> moved(work.size(), 0.0);
-  std::mutex reshiftMutex;
-  std::vector<TermRef> mappedShifted;  // shifted segments of mapped points re-placed with their hosts
   SubPointGrids placed(work.size());  // per work item; the units never grow in the parallel loop
   auto replace = [&](const Item &it, size_t q) {
     Unit *point = it.seg.GetPoint(*this, it.i);
@@ -337,11 +320,6 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
     gc.resonanceWidthMultiplier = spec.resonanceWidthMultiplier;
     gc.pointsPerWidth = spec.pointsPerWidth;
     gc.resonanceOffset = it.offset;
-    const azure2::MappedPoints mapped = point->PlanMapped(this);
-    for (int m = 0; m < mapped.size(); m++) {
-      auto own = mappedSegment.find(mapped[m]);
-      if (own == mappedSegment.end() || !own->second.replaceable) return;  // its mapped point keeps the grid
-    }
     std::vector<double> grid = AdaptiveIntegrationGrid(gc).GenerateGrid(spec.startEnergy, spec.endEnergy, g);
     const UnitRange<Unit> subs = point->GetSubPoints(*this);
     // The grid kept is the one placed now, bit for bit.  A grid kept within a tolerance would depend on the
@@ -394,7 +372,7 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
           sub.CalcLegendreP(this, configure.maxLOrder, theCNuc, qEffect);
           // A shifted segment's sub-points are moved and energised by the shift step.
           if (!shifted) {
-            sub.CalcEDependentValues(this, theCNuc, configure, true, nullptr);
+            sub.CalcEDependentValues(this, theCNuc, configure, true);
             sub.CalcCoulombAmplitude(this, theCNuc);
           }
         }
@@ -405,16 +383,6 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
       placed[q].emplace_back(static_cast<int>(target - &this->UnitAt(0)), std::move(fresh));
     };
     layOut(point, it.seg, it.shifted);
-    for (int m = 0; m < mapped.size(); m++) {
-      Unit *mp = mapped[m];
-      auto own = mappedSegment.find(mp);  // present and replaceable: checked above
-      layOut(mp, own->second.seg, own->second.shifted);
-      newSubPoints += (long)grid.size();
-      if (own->second.shifted) {
-        std::lock_guard<std::mutex> lock(reshiftMutex);
-        mappedShifted.push_back(own->second.seg);
-      }
-    }
     reusedSubPoints += reused;
     sharedSubPoints += fromOtherCopies;
     changed++;
@@ -435,32 +403,7 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
   if (changed > 0)
     for (const Item &it : work)
       if (it.shifted && std::find(reshift.begin(), reshift.end(), it.seg) == reshift.end()) reshift.push_back(it.seg);
-  for (const TermRef &seg : mappedShifted)
-    if (std::find(reshift.begin(), reshift.end(), seg) == reshift.end()) reshift.push_back(seg);
 
-  // The invariant point mapping rests on (SharesCalculation): a host and its
-  // mapped points have the same sub-point grid, which Unit::Calculate fills
-  // node by node.  Before 2026-11-05 every grid was re-placed on its own and a
-  // component's grid could come out with another node count than its host's:
-  // the host then wrote past the end of the component's sub-points (heap
-  // corruption, natural neon fits at 4 threads) or filled nodes at other
-  // energies.  Fail loudly rather than calculate on mismatched grids.
-  if (changed > 0)
-    for (const Item &it : work) {
-      Unit *host = it.seg.GetPoint(*this, it.i);
-      const UnitRange<Unit> hs = host->GetSubPoints(*this);
-      const azure2::MappedPoints mapped = host->PlanMapped(this);
-      for (int m = 0; m < mapped.size(); m++) {
-        const UnitRange<Unit> ms = mapped[m]->GetSubPoints(*this);
-        bool same = ms.size() == hs.size();
-        for (int k = 0; same && k < hs.size(); k++) same = ms[k].GetOriginalEnergy() == hs[k].GetOriginalEnergy();
-        if (!same)
-          throw std::logic_error("WorkingCopy::ReplaceSubPointGrids: segment " + std::to_string(it.seg.GetSegmentKey()) +
-                                 " point " + std::to_string(it.i) + " and a point mapped onto it have different "
-                                 "sub-point grids (" + std::to_string(hs.size()) + " and " +
-                                 std::to_string(ms.size()) + " nodes)");
-      }
-    }
   if (std::getenv("AZURE_GRID_TIMING")) {
     static std::atomic<int> calls{0};
     const int c = ++calls;

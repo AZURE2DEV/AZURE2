@@ -40,16 +40,11 @@ bool CalculatePoint(WorkingCopy &data, Unit *point, const char *role, CNuc *cnuc
     point->Calculate(&data, cnuc, configure, results);
     return true;
   } catch (const std::exception &e) {
-    point->MarkFailed(&data, results, role, configure, e.what());
+    point->MarkFailed(results, role, configure, e.what());
   } catch (...) {
-    point->MarkFailed(&data, results, role, configure, "unknown exception.");
+    point->MarkFailed(results, role, configure, "unknown exception.");
   }
   return false;
-}
-
-// Whether the combination calculates `point` itself: the leaves are not in yet, and the point is its own host.
-bool CalculatesItself(const Unit *point, azure2::LeafValues leaves) {
-  return leaves == azure2::LeafValues::Calculate && !point->IsMapped();
 }
 
 // A sample segment's point whose combination fails: its per-nucleus terms are NaN too (written by this evaluation).
@@ -264,7 +259,7 @@ double ComposeModelValue(WorkingCopy &data, const Segment &segment, int pointInd
     Unit *termPoint = TermPoint(data, segment, leaf.term, pointIndex);
     if (!termPoint) return FailedSample(segment, basePoint, cnuc, results);  // a leaf has a point at every row
     if (azure2::experiment::IsCoulombReference(leaf.part)) continue;  // analytic: nothing to calculate
-    if (CalculatesItself(termPoint, leaves) &&
+    if (leaves == azure2::LeafValues::Calculate &&
         !CalculatePoint(data, termPoint, TermRole(p, segment, leaf.term), cnuc, configure, results))
       return FailedSample(segment, basePoint, cnuc, results);
   }

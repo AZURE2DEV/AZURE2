@@ -207,15 +207,10 @@ class WorkingCopy {
   /// The expression tree of every segment (src/Predictions.cpp), once its components, pairs and sample are resolved;
   /// false, with a message, if one cannot be built.
   bool BuildPredictions(CNuc *, const Config &);
-  /// Map points at equal energies onto one another, so a shared energy is calculated once.
-  /// The compound nucleus tells which segments have a particle exit; null is conservative.
-  /// Then the calculation plan is built from the mapping and checked (CalculationPlan.h).
-  void MapData(CNuc *theCNuc = nullptr);
-  /// The mapping of the leaves onto their segment's points (MapData calls it last), appended to `mapping` as (host,
-  /// mapped).
-  void MapLeaves(CNuc *theCNuc, std::vector<std::pair<azure2::PointRef, azure2::PointRef>> &mapping);
-  /// The calculation plan: which task calculates which point (CalculationPlan.h).  The working copy's: the mapping
-  /// is rebuilt when a shift or a sub-point grid changes (FillEnergyShiftsFromParams).
+  /// The calculation plan of the data set, one task per point, built and checked (CalculationPlan.h).
+  void BuildPlan();
+  /// The calculation plan: which task calculates which point (CalculationPlan.h).  Positions only: a shift or a
+  /// re-placed sub-point grid leaves it as it is (the energy tasks it gives are rebuilt from the units).
   const azure2::CalculationPlan &Plan() const { return plan_; }
   /// A point of the plan, by its unit.
   Unit *PlanPoint(azure2::PointRef r) { return &UnitAt(r); }
@@ -408,7 +403,7 @@ class WorkingCopy {
   std::vector<double> thmCoherentValues_;       // ThmCoherentValue: one per coherent-background parameter
   std::vector<Unit> units_;  // Unit
   std::vector<std::vector<Unit>> pendingSubPoints_;  // AddSubPoint: per point's unit, until the commit
-  azure2::CalculationPlan plan_;  // built by MapData; positions only, so a copy copies it as it is
+  azure2::CalculationPlan plan_;  // built by BuildPlan; positions only, so a copy copies it as it is
   std::map<std::string, std::shared_ptr<DataCovariance::File>> covFiles_;  // only while filling
   bool covarianceError_ = false;              // a covariance file could not be read (CovarianceFileFor)
   bool kinematicsError_ = false;              // a lab angle beyond the kinematic maximum (audit 2026-10-25, item 31)

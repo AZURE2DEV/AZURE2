@@ -91,17 +91,9 @@ void WorkingCopy::PrintData(const Config &configure) {
           << std::setw(15) << pt->GetCMAngle()
           << std::setw(20) << seg.CMValue(State(seg), p)
           << std::setw(22) << seg.CMError(State(seg), p);
-      if (pt->IsMapped()) {
-        EnergyMap map = pt->GetMap();
-        char tempMap[25];
-        snprintf(tempMap, sizeof(tempMap), "(%d,%d)", map.segment, map.point);
-        // Same columns as an unmapped point: a mapped point has its own
-        // (identical) sub-point grid.
-        out << std::setw(12) << tempMap
-            << std::setw(18) << pt->NumSubPoints();
-      } else
-        out << std::setw(12) << "Not Mapped"
-            << std::setw(18) << pt->NumSubPoints();
+      // The mapping column of the file's layout: points are no longer mapped onto one another.
+      out << std::setw(12) << "Not Mapped"
+          << std::setw(18) << pt->NumSubPoints();
       if (pt->IsTargetEffect() && pt->NumSubPoints() > 0 &&
           Data().GetTargetEffect(pt->GetTargetEffectNum())->IsSubPointEffect()) {
         out << std::setw(18) << pt->GetSubPoint(*this, pt->NumSubPoints())->GetCMEnergy()

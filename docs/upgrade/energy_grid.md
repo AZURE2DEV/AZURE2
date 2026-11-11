@@ -642,6 +642,49 @@ Whole runs (`perf stat` cycles, alternated with the base): fits of 8 MIGRAD call
 A 200-call T2 fit is not faster as a whole: at 1 thread 0.96× (its gradients' forward solves are still per host:
 29.0 of 53 s), at 5 threads 0.89× (17.0 s against 14.8, two runs each; not explained, see HANDOFF).
 
+**Follow-up after the merge of branches 2, 5 and 6: delete the point mapping — done (2026-11-11, branch 7 part 1, `feature/upgrade-5-grid-nodes`).** The mapping no longer
+saves anything: the energy tasks share the solves, and the gradient no longer uses it. Evidence: the whole tree with
+`AZURE_NO_POINT_MAPPING=1` (tag `tab-egrad-nomap`, three bases) gives every output file identical to `tab-trial21a`
+except the "Coulomb table: N lookups" line of `run.log` in `angle_mapping` and `sum_lab_frame/models/plain_data` (a
+work counter; the director accepts that it moves); the T2 200-call fit at 1 thread took 38.4 / 38.3 s without the
+mapping against 39.2 / 37.7 s with it (peak RSS 350.8 against 338.7 MB, +3.5 %); the `natural_neon` calculation
+6.44 / 6.37 s against 6.46 / 6.34 s, RSS equal. What the follow-up deletes, by file:
+- `src/WorkingCopy.cpp`: `MapData` becomes "build the plan" (`plan_.Build` with no mapping, one task per point);
+  `SharesCalculation`, the shift-form helpers only it uses, `MapLeaves`, the switches `AZURE_NO_POINT_MAPPING`,
+  `AZURE_NO_CROSS_SEGMENT_MAPPING`, `AZURE_NO_COMPONENT_MAPPING`; the `IsMapped`/`OwnsEDependentValues` conditions of
+  the two set-up loops of `CalcEDependentValues` (every point computes its own values).
+- `include/Unit.h`, `src/Unit.cpp`: `EnergyMap`, `IsMapped`, `GetMap`, `SetMap`, `ClearMapping`, `OwnsEDependentValues`,
+  `SetOwnsEDependentValues`, `PlanMapped`, the members `energy_map_`, `own_e_dependent_`.
+- `include/CalculationPlan.h`, `src/CalculationPlan.cpp`: `CalculationTask::mapped`, `MappedPoints`, the provider rule of
+  `TaskUnits` (each unit is its own provider), the mapped clauses of `Check`; `src/EnergyPass.cpp`: the mapped points
+  of a fold's ranges under `AZURE_PLAN_CHECK`.
+- `src/PointPass.cpp`: the mapped points of `Unit::Calculate`, `MarkFailed`, `FoldSubPoints`; the `MappedPoints`
+  parameter of `FoldThinTarget` (`src/TargetFold.cpp`, or its kernel after branch 6).
+- `src/TargetSetup.cpp` (`ReplaceSubPointGrids`): `mappedSegment`, the "a mapped point keeps its host's grid" branch,
+  the host/mapped grid invariant after re-placement.
+- `src/ChannelTables.cpp` (`shareWithMappedOf`), `src/ExternalCaptureSetup.cpp` (the two `IsMapped` conditions of the
+  component amplitudes and `intEC.dat`), `src/ShiftFrames.cpp` (the mapped host of a shifted point),
+  `src/HandOver.cpp` (copying a mapped point's values; re-running `MapData` after a shift), `src/AZURECalc.cpp`
+  (`MappingConfined` and the partners of the local shift columns), `src/AZURECalcMCMC.cpp`, `src/ModelPass.cpp`
+  (`CalculatesItself`), `src/DataCheckFiles.cpp` (the mapping column of the data check file).
+- Tests and documents: `tests/component_mapping/check.sh` (a, b: with/without), `tests/angle_mapping/check.sh`
+  (a, b: the data check's mapping), `tests/shift_fn_groups/check.sh`, `tests/sum_lab_frame/check.sh`,
+  `tests/pyazr/composite_gradient_test.py`, `tests/pyazr/failed_point_test.py` (the switches), the mapping sections and
+  switches of `docs/source/developer/edata_and_target_effects.rst`, `.claude/skills/azure2-setup/references/data-definition.md`.
+Verification: the full comparison (identical but the lookup lines), `AZURE_PLAN_CHECK=1` on the tree, the quick set.
+Done as listed: every point is a task of its own (`CalculationPlan` holds one `PointRef` per task, `WorkingCopy::BuildPlan`
+replaces `MapData`; the plan no longer changes after a shift, the energy tasks are rebuilt from the units as before);
+`Unit` lost `EnergyMap`, `IsMapped`, `GetMap`, `SetMap`, `ClearMapping`, `OwnsEDependentValues`, `PlanMapped`,
+`CopyEDependentValuesFrom` and three members; `Segment` lost `ShiftHost` and `UpdatePointGroupEnergyWithShift`; the
+energy tasks lost their `providers` array (each unit is its own provider). The data check file keeps its mapping
+column ("Not Mapped" on every row, the file's layout unchanged). The rewritten checks test what is still true:
+`component_mapping` (a SUM extrapolation equals the sum of its terms; the components add no level-matrix solve),
+`angle_mapping` (the shared solves of all segments equal each unit's own under `AZURE_PLAN_CHECK=1`; fewer energy tasks
+than units). Evidence: the whole tree in three bases (tag `tab-nodes-m0` against `tab-trial23g`): 778 of 780, 751 of
+753 and 778 of 780 files identical, the two others in each basis the "Coulomb table: N lookups" line of `run.log` in
+`angle_mapping` (1516 → 1211 lookups, Brune) and `sum_lab_frame/models/plain_data` (110 → 230), as measured before
+with the switch.
+
 ## 9. Decisions for the PI, and risks
 
 **D1. The grid inside a fit stage.** (a) Today's rule: re-placed in the hand-over when a quantized level anchor

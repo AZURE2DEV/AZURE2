@@ -66,7 +66,7 @@ class GenMatrixFunc {
   virtual void CalculateTMatrix(Unit *) = 0;
   /// The T-matrix of another exit pair at the same energy: drops the elements held now (and what was derived from
   /// them) and builds those of `point`'s exit from the solved level matrix, which does not depend on the exit.  Used
-  /// for points of different exit pairs mapped onto one host (WorkingCopy::MapData).
+  /// for the T-matrix groups of an energy task after the first (SolveAtOneEnergy).
   void RecalculateTMatrix(Unit *point) {
     ResetTMatrix();
     CalculateTMatrix(point);
@@ -196,7 +196,7 @@ class GenMatrixFunc {
   /// The interference products Z1Z2 T1 conj(T2) of the differential sum,
   /// summed by Legendre order (rt_wl_[L]), for the T-matrix held now: they do
   /// not depend on the angle, so the points that share one T-matrix
-  /// (WorkingCopy::MapData) compute them once, and each point's sum is one term per
+  /// (the units of one T-matrix group of an energy task) compute them once, and each point's sum is one term per
   /// order.  Entrance = exit pair, capture, and particle exits other than
   /// UPOS (whose sum keeps only the k-groups of equal channel spins).
   const azure2::ExitRow *rt_decay_ = nullptr;

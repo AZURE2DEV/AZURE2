@@ -77,7 +77,7 @@ void SolveAtOneEnergy(CNuc *cnuc, const Config &configure, Results &results, Uni
   func->FillMatrices(units[0]);
   func->InvertMatrices();
   // The first T-matrix after a fill is built directly, every later one through RecalculateTMatrix (which drops the
-  // elements held), as a host and its mapped points always did.
+  // elements held).
   for (int k = 0; k < n; k++) {
     if (progress) *progress = k;
     if (k == 0)
@@ -134,7 +134,6 @@ long CheckEnergyTasks(WorkingCopy &data, CNuc *cnuc, const Config &configure, co
   for (const EnergyTask &task : tasks.tasks) {
     const int n = task.size;
     const UnitRef *taskUnits = tasks.units.data() + task.begin;
-    const UnitRef *taskProviders = tasks.providers.data() + task.begin;
     const int *taskGroups = tasks.tGroups.data() + task.begin;
     units += n;
     if (n > 1) shared += n;
@@ -164,7 +163,7 @@ long CheckEnergyTasks(WorkingCopy &data, CNuc *cnuc, const Config &configure, co
       if (why.empty() && task.route != 'R')
         why = CompareLevelMatrices(cnuc, task.nucleus, *static_cast<AMatrixFunc *>(s), *static_cast<AMatrixFunc *>(o));
       if (!thm) {
-        o->CalculateTMatrix(&data.UnitAt(taskProviders[k]));  // as its host would, from the provider
+        o->CalculateTMatrix(u);
         if (k == 0)
           s->CalculateTMatrix(u);
         else if (taskGroups[k] != taskGroups[k - 1])
@@ -201,14 +200,14 @@ long CheckEnergyTasks(WorkingCopy &data, CNuc *cnuc, const Config &configure, co
 }  // namespace azure2
 
 std::vector<int> WorkingCopy::PassWork(const std::vector<const Segment *> &segments) const {
-  // The plan tasks of the segments (each point that is no other's mapped point hosts one), in data order.
+  // The plan tasks of the segments (one per point), in data order.
   std::vector<int> work;
   std::set<const Segment *> seen;
   for (const Segment *seg : segments) {
     if (!seg || !seen.insert(seg).second) continue;
     for (int t = 0; t < seg->NumTerms(); t++)
       for (const Unit &pt : seg->TermPoints(*this, t))
-        if (!pt.IsMapped()) work.push_back(pt.PlanTask());
+        work.push_back(pt.PlanTask());
   }
   return work;
 }
@@ -233,23 +232,23 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
   if (std::getenv("AZURE_SERIAL_CHI2")) return -1;
   const std::vector<int> work = PassWork(segments);
   AZUREProfile::Timer profileTimer(AZUREProfile::kPoints);
-  // A plan task whose calculation threw: the reason (empty: none).  Its points get NaN (Unit::MarkFailed) after the
+  // A plan task whose calculation threw: the reason (empty: none).  Its point gets NaN (Unit::MarkFailed) after the
   // pass, and its folds do not run.
   std::vector<std::string> failure(plan_.NumTasks());
   for (int t : work)
-    if (plan_.Host(*this, t)->InjectedFailure()) failure[t] = "injected failure (AZURE_TEST_FAIL_E).";
+    if (plan_.Point(*this, t)->InjectedFailure()) failure[t] = "injected failure (AZURE_TEST_FAIL_E).";
   // The points with a fold, largest first (sub-points times points), so a large fold does not end up last on a thread.
   std::vector<int> folds;
   for (int t : work)
-    if (azure2::HasSubPointFold(*this, *plan_.Host(*this, t))) folds.push_back(t);
+    if (azure2::HasSubPointFold(*this, *plan_.Point(*this, t))) folds.push_back(t);
   std::stable_sort(folds.begin(), folds.end(), [this](int a, int b) {
-    auto cost = [this](int t) { return (1.0 + plan_.Host(*this, t)->NumSubPoints()) * (1.0 + plan_.Task(t).mapped.size()); };
+    auto cost = [this](int t) { return 1.0 + plan_.Point(*this, t)->NumSubPoints(); };
     return cost(a) > cost(b);
   });
   // Before the energy pass: the sub-points' energy-dependent values (external capture), point by point.
   if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
 #pragma omp parallel for schedule(dynamic, 1)
-    for (int k = 0; k < (int)folds.size(); k++) plan_.Host(*this, folds[k])->PrepareSubPoints(this, theCNuc, configure);
+    for (int k = 0; k < (int)folds.size(); k++) plan_.Point(*this, folds[k])->PrepareSubPoints(this, theCNuc, configure);
   }
   // The energy pass: one task per compound energy, each writing only its units' records.  A unit whose calculation
   // throws fails its plan task; the units after it are calculated with a new solve.
@@ -285,7 +284,7 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
     const int t = folds[k];
     if (!failure[t].empty()) return;
     try {
-      plan_.Host(*this, t)->FoldSubPoints(this, theCNuc, configure, results);
+      plan_.Point(*this, t)->FoldSubPoints(this, theCNuc, configure, results);
     } catch (const std::exception &e) {
       failure[t] = e.what();
     } catch (...) {
@@ -310,12 +309,9 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
               azure2::CalculationPlan::AddRecordRange(units_[tasks.units[tasks[k].begin + i]], ranges);
             if (k == numTasks - 1) collectFailures();
           } else {
-            // A fold writes its points' records; it swaps values into its sub-points' slots and restores them.
+            // A fold writes its point's record; it swaps values into its sub-points' slots and restores them.
             runFold(k - numTasks);
-            Unit *host = plan_.Host(*this, folds[k - numTasks]);
-            azure2::CalculationPlan::AddRecordRange(*host, ranges);
-            const azure2::MappedPoints mapped = host->PlanMapped(this);
-            for (int m = 0; m < mapped.size(); m++) azure2::CalculationPlan::AddRecordRange(*mapped[m], ranges);
+            azure2::CalculationPlan::AddRecordRange(*plan_.Point(*this, folds[k - numTasks]), ranges);
           }
         },
         [&](int k) {
@@ -332,12 +328,12 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
 #pragma omp parallel for schedule(dynamic, 1)
     for (int k = 0; k < (int)folds.size(); k++) runFold(k);
   }
-  // NaN on the points of a failed plan task, reported once (Unit::MarkFailed); the CLI's objective then recalculates
+  // NaN on the point of a failed plan task, reported once (Unit::MarkFailed); the CLI's objective then recalculates
   // point by point (PrecalculatePoints).
   int failed = 0;
   for (int t : work)
     if (!failure[t].empty()) {
-      plan_.Host(*this, t)->MarkFailed(this, results, "point", configure, failure[t].c_str());
+      plan_.Point(*this, t)->MarkFailed(results, "point", configure, failure[t].c_str());
       failed++;
     }
   return failed;
