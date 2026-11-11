@@ -460,7 +460,7 @@ void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, WorkingCo
       if (std::isfinite(fit) && std::fabs(pull) < 1.0e4) continue;
       shown++;
       out << "    point " << pid << " Elab " << pt->GetLabEnergy() << " Ecm " << pt->GetCMEnergy() << " angle "
-          << pt->GetCMAngle() << " fit " << fit << " data " << Segment::CMValue(ld->State(*seg), pid - 1) << " pull " << pull;
+          << pt->GetCMAngle() << " fit " << fit << " data " << seg->CMValue(ld->State(*seg), pid - 1) << " pull " << pull;
       int nBad = 0;
       double firstBadE = 0.0, firstBadS = 0.0;
       for (int j = 1; j <= pt->NumSubPoints(); j++) {
@@ -812,8 +812,8 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     Unit *pt = seg->GetPoint(*ld, pid + 1);
     if (!pt) return 0.0;
     double norm = ld->State(*seg).norm;
-    double dataval = Segment::CMValue(ld->State(*seg), pid);
-    double cmErr = Segment::CMError(ld->State(*seg), pid);
+    double dataval = seg->CMValue(ld->State(*seg), pid);
+    double cmErr = seg->CMError(ld->State(*seg), pid);
     const azure2::Residual res = azure2::DataResidual(model, dataval, cmErr, norm);
     const double r = res.difference, err = res.error;
     if (err == 0.0) return 0.0;

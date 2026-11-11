@@ -89,8 +89,8 @@ void WorkingCopy::PrintData(const Config &configure) {
           << std::setw(15) << pt->GetLabEnergy()
           << std::setw(15) << pt->GetCMEnergy()
           << std::setw(15) << pt->GetCMAngle()
-          << std::setw(20) << Segment::CMValue(State(seg), p)
-          << std::setw(22) << Segment::CMError(State(seg), p);
+          << std::setw(20) << seg.CMValue(State(seg), p)
+          << std::setw(22) << seg.CMError(State(seg), p);
       if (pt->IsMapped()) {
         EnergyMap map = pt->GetMap();
         char tempMap[25];

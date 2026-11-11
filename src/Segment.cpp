@@ -462,8 +462,7 @@ void Segment::SetMeasurementRows(WorkingCopy &data, std::shared_ptr<const azure2
   own.frame.rows.reserve(r.Size());
   for (int i = 0; i < r.Size(); i++) {
     data.AppendUnit(Unit(r, i, this, 0));
-    own.frame.rows.push_back(azure2::experiment::UnconvertedRow(r.energy[i], r.angle[i], r.value[i], r.error[i],
-                                                            r.binLow[i], r.binHigh[i]));
+    own.frame.rows.push_back(azure2::experiment::UnconvertedRow(r.energy[i], r.angle[i], r.binLow[i], r.binHigh[i]));
   }
 }
 
@@ -526,9 +525,8 @@ bool Segment::ConvertRowToCM(WorkingCopy &data, int t, int i, PPair *entrancePai
   const azure2::experiment::MeasurementRows &rows = *measurement_->rows;
   lim = azure2::experiment::AngleLimit();
   const bool ok = azure2::experiment::ConvertRow(RuleOf(*this, t, entrancePair, exitPair, convertValue),
-                                                 point->GetLabEnergy(), point->GetLabAngle(), rows.value[i],
-                                                 rows.error[i], rows.binLow[i], rows.binHigh[i],
-                                                 beyond == BeyondRange::Stop, row, lim);
+                                                 point->GetLabEnergy(), point->GetLabAngle(), rows.binLow[i],
+                                                 rows.binHigh[i], beyond == BeyondRange::Stop, row, lim);
   point->SetFrame(row);
   return ok;
 }

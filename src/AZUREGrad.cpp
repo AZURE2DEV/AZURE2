@@ -1474,7 +1474,7 @@ bool ComputeResidualJacobian(CNuc *compound, WorkingCopy *data, azure2::Results 
   // Residual r = (model - data*n)/(cmErr*n);  d r / d model = 1/(cmErr*n), the
   // cotangent that yields d r / d(E,gamma) directly.
   auto fitBarOf = [&](const GroupMember &m) {
-    const double denom = Segment::CMError(data->State(*m.seg), m.pointIdx) * norm[m.segNum];
+    const double denom = m.seg->CMError(data->State(*m.seg), m.pointIdx) * norm[m.segNum];
     return (denom != 0.0) ? 1.0 / denom : 0.0;
   };
   static thread_local vector_r fullRow;
@@ -1482,8 +1482,8 @@ bool ComputeResidualJacobian(CNuc *compound, WorkingCopy *data, azure2::Results 
     const int row = rowOf[m.segNum][m.pointIdx];
     if (row < 0) return;
     const double n = norm[m.segNum];
-    const double cmErr = Segment::CMError(data->State(*m.seg), m.pointIdx);
-    residuals[row] = azure2::DataResidual(model, Segment::CMValue(data->State(*m.seg), m.pointIdx), cmErr, n).Pull();
+    const double cmErr = m.seg->CMError(data->State(*m.seg), m.pointIdx);
+    residuals[row] = azure2::DataResidual(model, m.seg->CMValue(data->State(*m.seg), m.pointIdx), cmErr, n).Pull();
     // Scatter this row's d r / d(E,gamma) into the packed columns.
     fullRow.assign(pmap.NumFull(), 0.0);
     accum.Scatter(pmap, fullRow);
@@ -1753,8 +1753,8 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, WorkingCopy *ld, azure2::Results &
     for (int pid = 0; pid < seg->NumPoints(); pid++) {
       Unit *pt = seg->GetPoint(*ld, pid + 1);
       if (!pt) continue;
-      d.push_back(Segment::CMValue(ld->State(*seg), pid));
-      e.push_back(Segment::CMError(ld->State(*seg), pid));
+      d.push_back(seg->CMValue(ld->State(*seg), pid));
+      e.push_back(seg->CMError(ld->State(*seg), pid));
       pt->SetModelValue(results, tr.m[d.size() - 1]);
     }
     const size_t n = d.size();
@@ -1820,8 +1820,8 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, WorkingCopy *ld, azure2::Results &
         Unit *pt = seg->GetPoint(*ld, pid + 1);
         if (!pt) continue;
         m.push_back(rows[t].m[i]);
-        d.push_back(Segment::CMValue(ld->State(*seg), pid));
-        e.push_back(Segment::CMError(ld->State(*seg), pid));
+        d.push_back(seg->CMValue(ld->State(*seg), pid));
+        e.push_back(seg->CMError(ld->State(*seg), pid));
         energy.push_back(pt->GetCMEnergy());
         Jm.insert(Jm.end(), rows[t].Jm.begin() + i * nCols, rows[t].Jm.begin() + (i + 1) * nCols);
         i++;

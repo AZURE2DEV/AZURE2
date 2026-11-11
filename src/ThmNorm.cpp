@@ -493,7 +493,7 @@ int WorkingCopy::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numL
     int points = 0;
     for (int s : group.segments)
       for (int p = 1; p <= Draft().GetSegment(s)->NumPoints(); p++)
-        if (Segment::CMError(State(*Draft().GetSegment(s)), p - 1) != 0.0) points++;
+        if (Draft().GetSegment(s)->CMError(State(*Draft().GetSegment(s)), p - 1) != 0.0) points++;
     if (points <= 1 + group.terms) {
       configure.outStream << where << points << " point(s) with an error for " << 1 + group.terms
                           << " profiled linear parameter(s) (norm and background " << ThmExperiment::BackgroundName(group.terms)
@@ -666,8 +666,8 @@ void GatherThmGroup(WorkingCopy *data, const azure2::Results &results, const std
       Unit *pt = seg->GetPoint(*data, p);
       if (!pt) continue;
       m.push_back(pt->GetModelValue(results));
-      d.push_back(Segment::CMValue(data->State(*seg), p - 1));
-      e.push_back(Segment::CMError(data->State(*seg), p - 1));
+      d.push_back(seg->CMValue(data->State(*seg), p - 1));
+      e.push_back(seg->CMError(data->State(*seg), p - 1));
       energy.push_back(pt->GetCMEnergy());
     }
   }
@@ -706,7 +706,7 @@ void WorkingCopy::ThmGroupResiduals(int g, int i, const azure2::Results &results
   for (int q = 1; q <= seg->NumPoints(); q++) {
     Unit *pt = seg->GetPoint(*this, q);
     if (!pt) continue;
-    out.push_back(p.Residual(pt->GetModelValue(results), Segment::CMValue(State(*seg), q - 1), Segment::CMError(State(*seg), q - 1),
+    out.push_back(p.Residual(pt->GetModelValue(results), seg->CMValue(State(*seg), q - 1), seg->CMError(State(*seg), q - 1),
                              pt->GetCMEnergy()));
   }
 }

@@ -130,12 +130,14 @@ class Segment {
   double LabValue(int i) const { return measurement_->rows->value[i]; }
   double LabError(int i) const { return measurement_->rows->error[i]; }
   int FileRecord(int i) const { return measurement_->rows->record[i]; }
-  /// The c.m. value, its uncertainty and dOmega_lab/dOmega_cm of row i (0-based) at the present energy shift of the
-  /// segment's `state` in a working copy; the Jacobian of term t (the leaf's own exit pair) for a SUM or RATIO frame
-  /// factor.
-  static double CMValue(const SegmentState &state, int i) { return state.terms[0].frame.rows[i].yCM; }
-  static double CMError(const SegmentState &state, int i) { return state.terms[0].frame.rows[i].dyCM; }
+  /// dOmega_lab/dOmega_cm of row i (0-based) at the present energy shift of the segment's `state` in a working copy
+  /// (1 where the value is not converted: c.m. data, angle-integrated data, a ratio); the Jacobian of term t (the
+  /// leaf's own exit pair) for a SUM or RATIO frame factor.
   static double Jacobian(const SegmentState &state, int t, int i) { return state.terms[t].frame.rows[i].jacobian; }
+  /// The value and uncertainty of row i in the c.m. frame at the present shift, J y and J dy with J = Jacobian(state,
+  /// 0, i): computed for display (the written c.m. data columns, the API's c.m. data), never stored.
+  double CMValue(const SegmentState &state, int i) const { return LabValue(i) * Jacobian(state, 0, i); }
+  double CMError(const SegmentState &state, int i) const { return LabError(i) * Jacobian(state, 0, i); }
   /// What ConvertRowToCM does with a lab angle beyond the kinematic maximum: stop (at load: the value is not
   /// converted), or convert the value at the load-time angle (an energy shift moved the point there mid-fit).
   enum class BeyondRange { Stop, Convert };

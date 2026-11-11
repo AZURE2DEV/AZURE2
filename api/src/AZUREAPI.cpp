@@ -573,8 +573,8 @@ int AZUREAPI::UpdateData() {
     for (int k = 0; k < data.size(); ++k) {
       energies.push_back(data[k].GetCMEnergy());
       angles.push_back(data[k].GetCMAngle());
-      cross.push_back(Segment::CMValue(localData->State(segments[i]), k));
-      crossErr.push_back(Segment::CMError(localData->State(segments[i]), k));
+      cross.push_back(segments[i].CMValue(localData->State(segments[i]), k));
+      crossErr.push_back(segments[i].CMError(localData->State(segments[i]), k));
       conv.push_back(data[k].GetSFactorConversion());
       excitationEnergies.push_back(data[k].GetExcitationEnergy());
     }
@@ -1000,8 +1000,8 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
     Unit *pt = seg->GetPoint(*ld, pid + 1);
     if (!pt) return 0.0;
     double norm = ld->State(*seg).norm;
-    double dataval = Segment::CMValue(ld->State(*seg), pid);
-    double cmErr = Segment::CMError(ld->State(*seg), pid);
+    double dataval = seg->CMValue(ld->State(*seg), pid);
+    double cmErr = seg->CMError(ld->State(*seg), pid);
     const azure2::Residual res = azure2::DataResidual(model, dataval, cmErr, norm);
     const double r = res.difference, err = res.error;
     if (err == 0.0) return 0.0;

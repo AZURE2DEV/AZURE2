@@ -118,24 +118,23 @@ FrameRule Rule(ExitKind kind, bool elastic, bool labDifferential = true, bool co
 }
 
 void TestConvert() {
-  const double eLab = 2.0, thetaLab = 30.0, y = 3.0, dy = 0.3;
+  const double eLab = 2.0, thetaLab = 30.0;
   // Elastic, equal masses: theta_cm = 2 theta_lab, J = sin^2 tl / sin^2 tc cos(tc - tl) = 1 / (4 cos tl).
   {
-    FrameRow row = UnconvertedRow(eLab, thetaLab, y, dy, 1.9, 2.1);
+    FrameRow row = UnconvertedRow(eLab, thetaLab, 1.9, 2.1);
     AngleLimit lim;
-    const bool ok = ConvertRow(Rule(ExitKind::Particle, true), eLab, thetaLab, y, dy, 1.9, 2.1, true, row, lim);
+    const bool ok = ConvertRow(Rule(ExitKind::Particle, true), eLab, thetaLab, 1.9, 2.1, true, row, lim);
     const double j = 1.0 / (4.0 * std::cos(thetaLab * kDeg));
     check("elastic: E_cm = E_lab / 2, bins too", ok && near(row.eCM, 1.0) && near(row.binLowCM, 0.95) &&
                                                      near(row.binHighCM, 1.05), num(row.eCM));
     check("elastic: theta_cm = 2 theta_lab", near(row.thetaCM, 60.0), num(row.thetaCM));
-    check("elastic: J = 1 / (4 cos theta_lab), y and dy times J",
-          near(row.jacobian, j) && near(row.yCM, y * j) && near(row.dyCM, dy * j), num(row.jacobian));
+    check("elastic: J = 1 / (4 cos theta_lab)", near(row.jacobian, j), num(row.jacobian));
   }
   // Inelastic with the entrance's masses and Q = 0: the reaction map gives the elastic angle and Jacobian.
   {
-    FrameRow row = UnconvertedRow(eLab, thetaLab, y, dy, NAN, NAN);
+    FrameRow row = UnconvertedRow(eLab, thetaLab, NAN, NAN);
     AngleLimit lim;
-    ConvertRow(Rule(ExitKind::Particle, false), eLab, thetaLab, y, dy, NAN, NAN, true, row, lim);
+    ConvertRow(Rule(ExitKind::Particle, false), eLab, thetaLab, NAN, NAN, true, row, lim);
     check("reaction, Q = 0, equal masses: theta_cm = 2 theta_lab", near(row.thetaCM, 60.0, 1e-10), num(row.thetaCM));
     check("reaction: c.m. bins NaN without bins", std::isnan(row.binLowCM) && std::isnan(row.binHighCM));
   }
@@ -143,13 +142,12 @@ void TestConvert() {
   {
     const double u = azure2::physics::kAtomicMassUnit_MeV;
     const double p = std::sqrt(eLab * (eLab + 2.0 * 4.0 * u)), e = eLab + 8.0 * u, beta = p / e;
-    FrameRow row = UnconvertedRow(eLab, 90.0, y, dy, NAN, NAN);
+    FrameRow row = UnconvertedRow(eLab, 90.0, NAN, NAN);
     AngleLimit lim;
-    ConvertRow(Rule(ExitKind::Photon, false), eLab, 90.0, y, dy, NAN, NAN, true, row, lim);
+    ConvertRow(Rule(ExitKind::Photon, false), eLab, 90.0, NAN, NAN, true, row, lim);
     check("photon at 90 deg: cos theta_cm = -beta", near(std::cos(row.thetaCM * kDeg), -beta, 1e-9),
           num(row.thetaCM));
-    check("photon at 90 deg: J = 1 / (1 - beta^2)", near(row.jacobian, 1.0 / (1.0 - beta * beta)) &&
-                                                       near(row.yCM, y * row.jacobian), num(row.jacobian));
+    check("photon at 90 deg: J = 1 / (1 - beta^2)", near(row.jacobian, 1.0 / (1.0 - beta * beta)), num(row.jacobian));
   }
   // Beta-delayed: E is the light particle's; E_cm = E (m1 + m2) / m2 of the decay (exit) pair, E_x = E_cm + S + E*.
   {
@@ -159,13 +157,12 @@ void TestConvert() {
     r.exit.m2 = 12.0;
     r.exit.sepE = 7.0;
     r.exit.exE = 0.5;
-    FrameRow row = UnconvertedRow(1.2, 0.0, y, dy, NAN, NAN);
+    FrameRow row = UnconvertedRow(1.2, 0.0, NAN, NAN);
     AngleLimit lim;
-    ConvertRow(r, 1.2, 0.0, y, dy, NAN, NAN, true, row, lim);
+    ConvertRow(r, 1.2, 0.0, NAN, NAN, true, row, lim);
     check("beta-delayed: E_cm = E (m1 + m2) / m2, E_x = E_cm + S + E*",
           near(row.eCM, 1.2 * 16.0 / 12.0) && near(row.eX, 1.2 * 16.0 / 12.0 + 7.5), num(row.eCM));
-    check("beta-delayed (not lab differential): angle and value as read", row.thetaCM == 0.0 && row.yCM == y &&
-                                                                              row.jacobian == 1.0);
+    check("beta-delayed (not lab differential): angle as read, J 1", row.thetaCM == 0.0 && row.jacobian == 1.0);
   }
   // Relativistic: E_cm = sqrt(s) - m1 - m2 with s = (m1 + m2)^2 + 2 m2 E_lab (MeV); off: E_lab m2 / (m1 + m2).
   {
@@ -173,45 +170,45 @@ void TestConvert() {
     const double eRel = std::sqrt(4.0 * m * m + 2.0 * m * eLab) - 2.0 * m;
     FrameRule r = Rule(ExitKind::Particle, true, false);
     r.relativistic = true;
-    FrameRow row = UnconvertedRow(eLab, thetaLab, y, dy, NAN, NAN);
+    FrameRow row = UnconvertedRow(eLab, thetaLab, NAN, NAN);
     AngleLimit lim;
-    ConvertRow(r, eLab, thetaLab, y, dy, NAN, NAN, true, row, lim);
+    ConvertRow(r, eLab, thetaLab, NAN, NAN, true, row, lim);
     check("relativistic on: E_cm from the invariant mass", near(row.eCM, eRel, 1e-9), num(row.eCM));
     r.relativistic = false;
-    row = UnconvertedRow(eLab, thetaLab, y, dy, NAN, NAN);
-    ConvertRow(r, eLab, thetaLab, y, dy, NAN, NAN, true, row, lim);
+    row = UnconvertedRow(eLab, thetaLab, NAN, NAN);
+    ConvertRow(r, eLab, thetaLab, NAN, NAN, true, row, lim);
     check("relativistic off: E_cm = E_lab m2 / (m1 + m2)", near(row.eCM, 1.0) && !near(row.eCM, eRel, 1e-9),
           num(row.eCM));
   }
   // A ratio: the angle is converted, the value is not.
   {
-    FrameRow row = UnconvertedRow(eLab, thetaLab, y, dy, NAN, NAN);
+    FrameRow row = UnconvertedRow(eLab, thetaLab, NAN, NAN);
     AngleLimit lim;
-    ConvertRow(Rule(ExitKind::Particle, true, true, false), eLab, thetaLab, y, dy, NAN, NAN, true, row, lim);
-    check("ratio: theta_cm converted, y and dy as read, J 1", near(row.thetaCM, 60.0) && row.yCM == y &&
-                                                                 row.dyCM == dy && row.jacobian == 1.0);
+    ConvertRow(Rule(ExitKind::Particle, true, true, false), eLab, thetaLab, NAN, NAN, true, row, lim);
+    check("ratio: theta_cm converted, J 1 (the value is dimensionless)", near(row.thetaCM, 60.0) &&
+                                                                              row.jacobian == 1.0);
   }
   // Beyond the kinematic maximum: elastic with m1 = 2 m2, theta_max = asin(m2/m1) = 30 deg.
   {
     FrameRule r = Rule(ExitKind::Particle, true);
     r.entrance.m1 = 8.0;
     r.exit.m1 = 8.0;
-    FrameRow load = UnconvertedRow(eLab, 20.0, y, dy, NAN, NAN);
+    FrameRow load = UnconvertedRow(eLab, 20.0, NAN, NAN);
     AngleLimit lim;
-    const bool okLoad = ConvertRow(r, eLab, 20.0, y, dy, NAN, NAN, true, load, lim);
+    const bool okLoad = ConvertRow(r, eLab, 20.0, NAN, NAN, true, load, lim);
     check("kinematic maximum: 20 deg converted at load", okLoad && load.thetaCM > 20.0);
-    FrameRow beyond = UnconvertedRow(eLab, 40.0, y, dy, NAN, NAN);
+    FrameRow beyond = UnconvertedRow(eLab, 40.0, NAN, NAN);
     AngleLimit limLoad;
-    const bool refused = !ConvertRow(r, eLab, 40.0, y, dy, NAN, NAN, true, beyond, limLoad);
-    check("kinematic maximum: 40 deg refused at load, value as read, maximum 30 deg reported",
-          refused && beyond.yCM == y && limLoad.maxSet && near(limLoad.max, 30.0) && !limLoad.why.empty(),
+    const bool refused = !ConvertRow(r, eLab, 40.0, NAN, NAN, true, beyond, limLoad);
+    check("kinematic maximum: 40 deg refused at load, J 1, maximum 30 deg reported",
+          refused && beyond.jacobian == 1.0 && limLoad.maxSet && near(limLoad.max, 30.0) && !limLoad.why.empty(),
           num(limLoad.max));
     FrameRow shifted = load;  // after a shift a row starts from its load-time conversion
     AngleLimit limShift;
-    const bool inRange = ConvertRow(r, 2.5, 40.0, y, dy, NAN, NAN, false, shifted, limShift);
-    check("kinematic maximum after a shift: false, the load-time angle kept, the value converted there",
+    const bool inRange = ConvertRow(r, 2.5, 40.0, NAN, NAN, false, shifted, limShift);
+    check("kinematic maximum after a shift: false, the load-time angle kept, J computed there",
           !inRange && shifted.thetaCM == load.thetaCM && near(shifted.eCM, 2.5 * 4.0 / 12.0) &&
-              shifted.yCM == y * shifted.jacobian);
+              shifted.jacobian == ParticleJacobian(r.entrance, r.exit, 2.5, 40.0, load.thetaCM));
   }
 }
 

@@ -119,12 +119,15 @@ struct FrameRule {
   bool convertValue = false;           ///< the value carries dOmega_lab/dOmega_cm (false for a ratio)
 };
 
-/// One row of a measurement in the c.m. frame (MeV, deg, the value's unit; jacobian = dOmega_lab/dOmega_cm).
+/*!
+ * The kinematics of one row of a measurement in the c.m. frame (MeV, deg; jacobian = dOmega_lab/dOmega_cm, 1 where
+ * the value is not converted).  The measured value and error are not here: they stay as read in the Measurement, and
+ * the model is compared with them in the frame they were given in (docs/upgrade/energy_grid.md section 4).
+ */
 struct FrameRow {
   double eLab = 0.0, eCM = 0.0, eX = 0.0;
   double binLowCM = 0.0, binHighCM = 0.0;
   double thetaCM = 0.0, jacobian = 1.0;
-  double yCM = 0.0, dyCM = 0.0;
 };
 
 /// The rows of a measurement (or of one leaf of it) in the c.m. frame, at one energy shift.
@@ -133,20 +136,20 @@ struct MeasurementFrame {
 };
 
 /// The row as read, before any conversion: the state ConvertRow starts from at load.
-FrameRow UnconvertedRow(double eLab, double thetaLab, double y, double dy, double binLowLab, double binHighLab);
+FrameRow UnconvertedRow(double eLab, double thetaLab, double binLowLab, double binHighLab);
 
 /*!
  * The one lab -> c.m. conversion of a row (the engine's sequence, operation for operation): E_c.m., E_x and the bin
  * edges from the lab energy eLab (beam, or the light particle of a beta decay); for lab-frame differential data with
- * an exit, the c.m. angle of the detected particle at lab angle thetaLab and, with convertValue, y and dy times the
- * Jacobian.  `row` holds the state to start from: at load the unconverted row, after an energy shift the row as it
+ * an exit, the c.m. angle of the detected particle at lab angle thetaLab and, with convertValue, the Jacobian
+ * dOmega_lab/dOmega_cm (otherwise it stays as `row` had it).  `row` holds the state to start from: at load the unconverted row, after an energy shift the row as it
  * was converted at load, so that where the lab angle is beyond the kinematic maximum the angle and Jacobian are the
  * load-time ones (whatever an earlier evaluation converted).  At load (`atLoad`) such a row stops the conversion and
- * false is returned; after a shift the value is still converted at the load-time angle and false is returned.  `lim`
+ * false is returned; after a shift the Jacobian is still computed at the load-time angle and false is returned.  `lim`
  * receives what the angle maps reported, in the order they ran (merge with Merge).
  */
-bool ConvertRow(const FrameRule &rule, double eLab, double thetaLab, double y, double dy, double binLowLab,
-                double binHighLab, bool atLoad, FrameRow &row, AngleLimit &lim);
+bool ConvertRow(const FrameRule &rule, double eLab, double thetaLab, double binLowLab, double binHighLab, bool atLoad,
+                FrameRow &row, AngleLimit &lim);
 /// The energy part of ConvertRow alone: eLab, E_c.m., E_x and (beam) the c.m. bin edges of the row.
 void ConvertRowEnergy(const FrameRule &rule, double eLab, double binLowLab, double binHighLab, FrameRow &row);
 /// Merge what a later angle map reported into `into`: a maximum and a reason replace earlier ones when set.

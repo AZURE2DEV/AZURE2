@@ -360,7 +360,7 @@ bool ModelPointBackward(WorkingCopy &data, const Segment &segment, int pointInde
 }
 
 Residual PointResidual(const WorkingCopy &data, const Segment &segment, int i, const Results &results, double norm) {
-  return DataResidual(segment.GetPoints(data)[i].GetModelValue(results), Segment::CMValue(data.State(segment), i), Segment::CMError(data.State(segment), i), norm);
+  return DataResidual(segment.GetPoints(data)[i].GetModelValue(results), segment.CMValue(data.State(segment), i), segment.CMError(data.State(segment), i), norm);
 }
 
 }  // namespace azure2
