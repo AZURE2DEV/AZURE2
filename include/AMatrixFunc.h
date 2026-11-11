@@ -9,7 +9,6 @@
 struct GradAccum;
 struct FreeLevelMask;
 class JGroup;
-class Decay;
 
 /*!
  * Cotangents of the T-matrix elements of one decay (AMatrixFunc::PointTBar):

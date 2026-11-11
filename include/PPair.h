@@ -3,7 +3,6 @@
 
 #include <optional>
 
-#include "Decay.h"
 #include "azure2/physics/HybridPotential.h"
 
 namespace azure2 {
@@ -17,7 +16,7 @@ class LevelRow;
 /*!
  * In R-Matrix theory, the configuration space in the external region is decomposed into combinations of particle
  * pairs, traditionally given by the symbol \f$ \alpha \f$.  In AZURE, these particle pair are represented by a PPair object.
- * PPair objects are containers for vectors of Decay objects.
+ * The reaction pathways between pairs are in the pathway table (PathwayTable.h).
  */
 
 class PPair {
@@ -32,12 +31,6 @@ class PPair {
   int GetPi(int) const;
   /// Pair type: 0 particle+particle, 10 particle+gamma.
   int GetPType() const;
-  /// Number of exit pairs reachable from here; nonzero only for an entrance pair.
-  int NumDecays() const;
-  /// 1-based position of the decay in the Decay vector, or 0 if absent.
-  int IsDecay(Decay);
-  /// 1-based position of the decay to that exit pair, or 0 if absent.
-  int IsDecay(int);
   /// The pair's key as written in the input file -- its 1-based position, and
   /// what an AChannel's pair number refers to.
   int GetPairKey() const;
@@ -128,13 +121,7 @@ class PPair {
   /// <2 l.i> of the pair's spin-orbit term for a channel of orbital l and key two_j (SpinOrbitTwoJ): 0 for
   /// kNoSpinOrbit, else j(j+1) - l(l+1) - i(i+1) with i the spin of the particle the term acts on.
   double SpinOrbitFactor(int l, int two_j) const;
-  void AddDecay(Decay);
-  /// Removes every Decay (tests/upgrade/pathways_from_cnuc_test.cpp rebuilds the trees with the code before step 6a).
-  void ClearDecays();
   void SetEntrance();
-  /// Decay \p i, 1-based.
-  Decay *GetDecay(int);
-  const Decay *GetDecay(int i) const { return const_cast<PPair *>(this)->GetDecay(i); }
 
  private:
   bool entrance_;
@@ -158,7 +145,6 @@ class PPair {
   double binding_energy_;
   double red_mass_;
   double i1i2factor_;
-  std::vector<Decay> decays_;
   std::optional<azure2::physics::HybridPotential> hybrid_potential_;
 };
 

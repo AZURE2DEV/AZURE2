@@ -873,7 +873,7 @@ bool GenMatrixFunc::CalculateCaptureAnalyzingPower(Unit *point, const azure2::Re
   // which must be AZURE2's own differential capture cross section up to the
   // energy-dependent, angle-independent factor
   //     den / sigma(theta) = 400 pi / (geometrical factor * I1I2 factor),
-  // since CalcAngularDists builds the same coefficients as z1z2 = a_k / 4 and
+  // since the pathway table holds the same coefficients as z1z2 = a_k / 4 and
   // GenMatrixFunc forms sigma = Re(sum)/pi * geom * I1I2 / 100. A ratio that
   // moves with angle means the pathway enumeration or a coupling order is
   // wrong. The point still holds the cross section here; the analyzing power

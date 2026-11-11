@@ -65,8 +65,8 @@ PathwayQuantumNumbers OfPathway(const phys::System &system, const EntrancePathwa
   return OfInternal(system, P.Internal(g, m));
 }
 
-/// The interferences of exit `exit` (CNuc::CalcAngularDists' loops: group, order, pathway, pathway), then its flat
-/// pathway list and its diagonal pathways.
+/// The interferences of exit `exit` (loops: group, order, pathway, pathway, the engine's order since before the
+/// table), then its flat pathway list and its diagonal pathways.
 void AddInterferences(const phys::System &system, int entrancePair, int maxL, EntrancePathways &P, ExitRow &exit) {
   const phys::Partition &exitPartition = system.partition(exit.pair - 1);
   exit.has_interferences = true;

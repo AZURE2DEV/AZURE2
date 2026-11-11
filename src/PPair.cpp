@@ -4,14 +4,6 @@
 #include <assert.h>
 #include <cmath>
 #include <stdexcept>
-#include <cstdio>
-#include <cstdlib>
-
-// The trees are no longer built (cnuc_split.md 11.6, step 8): any access stops the run.
-static void TreeReadAbort(const char *what) {
-  std::fprintf(stderr, "ABORT: PPair::%s: the pathway trees are not built\n", what);
-  std::abort();
-}
 
 /*!
  * A particle pair object is created from and entry in the nuclear input file.
@@ -106,54 +98,6 @@ int PPair::GetPi(int particle) const {
 
 int PPair::GetPType() const {
   return pair_ptype_;
-}
-
-/*!
- * Returns the number of decay particle pairs for a given pair.  Size of Decay vector will only be nonzero if PPair object is
- * an entrance pair.
- */
-
-int PPair::NumDecays() const {
-  TreeReadAbort("NumDecays");
-  return decays_.size();
-}
-
-/*!
- * Tests a given decay particle pair to determine if it is in the Decay vector.  If the decay particle pair exists
- * in the vector, the position in the vector is returned.  Otherwise, the function returns 0.
- */
-
-int PPair::IsDecay(Decay decay) {
-  TreeReadAbort("IsDecay");
-  bool b = false;
-  int c = 0;
-  while (!b && c < this->NumDecays()) {
-    if (decay.GetPairNum() == this->GetDecay(c + 1)->GetPairNum()) b = true;
-    c++;
-  }
-  if (b)
-    return c;
-  else
-    return 0;
-}
-
-/*!
- * Tests a given particle pair number to determine if there exists a corresponding particle pair decay in the Decay vector.
- * If the object exists, the position in the vector is returned.  Otherwise, the function returns 0.
- */
-
-int PPair::IsDecay(int pairNum) {
-  TreeReadAbort("IsDecay");
-  bool b = false;
-  int c = 0;
-  while (!b && c < this->NumDecays()) {
-    if (pairNum == this->GetDecay(c + 1)->GetPairNum()) b = true;
-    c++;
-  }
-  if (b)
-    return c;
-  else
-    return 0;
 }
 
 /*!
@@ -308,34 +252,11 @@ double PPair::GetEntranceSymmetryFactor() const {
 }
 
 /*!
- * Adds a decay particle pair to the Decay vector.
- */
-
-void PPair::AddDecay(Decay decay) {
-  TreeReadAbort("AddDecay");
-  decays_.push_back(decay);
-}
-
-void PPair::ClearDecays() {
-  decays_.clear();
-}
-
-/*!
  * Sets the particle pair to be an internal entrance pair.
  */
 
 void PPair::SetEntrance() {
   entrance_ = true;
-}
-
-/*!
- * Returns a pointer to the decay particle pair specified by a position in the Decay vector.
- */
-
-Decay *PPair::GetDecay(int decayNum) {
-  TreeReadAbort("GetDecay");
-  Decay *b = &decays_[decayNum - 1];
-  return b;
 }
 
 int PPair::SpinOrbitTwoJ(double J) const {

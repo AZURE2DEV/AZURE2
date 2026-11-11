@@ -8,7 +8,6 @@
 #include "AZUREGrad.h"
 #include "azure2/physics/ExternalCapture.h"
 #include <stdexcept>
-#include "Interference.h"
 #include "JGroup.h"
 #include "ALevel.h"
 #include "AChannel.h"

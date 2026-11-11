@@ -53,13 +53,8 @@ add_executable(observable_coupling_gsl_test observable_coupling_gsl_test.cpp)
 target_link_libraries(observable_coupling_gsl_test PRIVATE AZURE2Core)
 add_test(NAME physics_observable_coupling_gsl COMMAND observable_coupling_gsl_test)
 
-# The pathway trees built from physics/ reaction_pathways against a verbatim copy of the SortPathways they replaced,
-# on every .azr under tests/, Brune and formal basis (docs/upgrade/cnuc_split.md section 10 (b)).
-add_executable(pathways_from_cnuc_test pathways_from_cnuc_test.cpp)
-target_link_libraries(pathways_from_cnuc_test PRIVATE AZURE2Core)
-
 # Properties of the pathway table checked against the loaded CNuc without the builder's loops, on every .azr under
-# tests/ (docs/upgrade/cnuc_split.md section 11.6 step 1); it stays when the trees go.
+# tests/ (docs/upgrade/cnuc_split.md section 11.6 step 1).
 add_executable(pathway_table_test pathway_table_test.cpp)
 target_link_libraries(pathway_table_test PRIVATE AZURE2Core)
 add_test(NAME physics_pathway_table COMMAND pathway_table_test ${CMAKE_SOURCE_DIR}/tests

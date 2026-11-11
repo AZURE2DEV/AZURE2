@@ -314,7 +314,8 @@ class Unit {
   /// GetCoulombAmplitude() except for an identical pair with spin j != 0,
   /// where exchange enters with (-1)^s: f_C(theta) + (-1)^s f_C(pi - theta).
   complex GetCoulombAmplitude(double s) const;
-  /// External-capture amplitude for the pathway at (KGroup, ECMGroup), both 1-based.
+  /// External-capture amplitude of external pathway m of spin group k of the point's exit (PathwayTable.h), both
+  /// 1-based.
   complex GetECAmplitude(int, int) const;
   /// As GetECAmplitude, at the point's current (shifted) energy: from the energy tables
   /// (ECTable), or interpolated through the amplitude cache with --no-ec-table.

@@ -16,8 +16,9 @@ struct CNucSystem;
  * interference, the capture analyzing-power terms).  Built once by BuildPathwayTable from physics/ reaction_pathways
  * and the coupling coefficients; nothing writes it afterwards, and every working copy of the compound shares it.
  *
- * Rows are in the order of the trees they replace (Decay -> KGroup -> MGroup / ECMGroup), so a reader that walks
- * them visits the pathways in the same order and every sum over pathways adds the same terms in the same order.
+ * Rows are in the order of reaction_pathways (exit -> spin group -> internal, then external pathways), the order of
+ * the pathway trees the table replaced (until 2026-11-11), so every sum over pathways adds the same terms in the same
+ * order as before and the signature of an intEC file is unchanged.
  * The positions (k, m) -- spin group within its exit and pathway within its group, 1-based, internal and external
  * counted separately -- key the T-matrix storage, the external-capture amplitudes and their cache; the table keeps
  * them.  Engine numbers (J-group, channel, level) are 1-based as CNuc numbers them; System indices are 0-based.
