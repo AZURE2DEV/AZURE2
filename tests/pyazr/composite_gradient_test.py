@@ -6,10 +6,10 @@ its own point and the FULL cross section of each component (src/ModelPass.cpp; b
 `compValue = componentPoint->GetFitCrossSection(results)`).  The analytic gradient must differentiate the same thing.
 On 12C(p,g)13N (tests/13N levels; the 3/2- level decays by E1 and M1/E2, so sigma_E1, sigma_E2 and sigma differ), with
 synthetic data at 0.4-1.7 MeV, the gradient of the objective (pyazr objective_and_grad) is compared with central
-differences of the objective, for E1 and E2 SUMs, by the shared-component route and by the per-term route
-(AZURE_NO_COMPONENT_MAPPING=1, a process of its own).  In project format 3 the SUM is a data set with reaction
-"12C(p,g)13N + 12C(p,g)13N" and ``multipole E1`` (or E2), without a target: format 3 does not state a thick-target
-yield of a sum (``quantity yield`` takes one reaction), which the old file's <targetInt> line applied here.  Tolerance: |analytic - FD| <= 1e-5 of the largest gradient
+differences of the objective, for E1 and E2 SUMs (each in a process of its own).  In project format 3 the SUM is a
+data set with reaction "12C(p,g)13N + 12C(p,g)13N" and ``multipole E1`` (or E2), without a target: format 3 does not
+state a thick-target yield of a sum (``quantity yield`` takes one reaction), which the old file's <targetInt> line
+applied here.  Tolerance: |analytic - FD| <= 1e-5 of the largest gradient
 entry (the differences themselves agree to ~1e-8 here).
 
   PYAZR_ENGINE_DIR=<build>/pyazr-out python3 tests/pyazr/composite_gradient_test.py
@@ -76,7 +76,7 @@ if __name__ == "__main__" and len(sys.argv) == 2:  # one case, in its own proces
 failures = []
 with tempfile.TemporaryDirectory() as tmp:
     for part in ("E1", "E2"):
-        for route, env in (("shared-component route", {}), ("per-term route", {"AZURE_NO_COMPONENT_MAPPING": "1"})):
+        for route, env in (("components at the base point's energies", {}),):
             work = os.path.join(tmp, f"{part}_{len(env)}")
             make_project(work, part)
             r = subprocess.run([sys.executable, os.path.abspath(__file__), work], stdout=subprocess.PIPE,

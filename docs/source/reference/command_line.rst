@@ -509,6 +509,23 @@ output files of a correct engine do not change.  In pyazr the E1 and E2 parts
 angle-integrated cross section become NaN, since they are never calculated
 there (0 without the variable).
 
+``AZURE_REFINE_QUADRATURE=K``: a diagnostic of the quadrature gate
+(``docs/upgrade/energy_grid.md`` section 7): every sub-point grid of an
+experimental effect gets K times its points per resonance width and K times its
+smooth intervals (the smooth step divided by K; the step of the geometric tails
+per distance follows the points per width).  A folded value moves by the error
+of the grid it was computed on; an unfolded one does not move.  K is a whole
+number from 1 (the default) to 64; anything else stops the run.
+
+``AZURE_NODE_CHECK=1``: before every parallel point pass, the stage's node table
+(one entry per compound nucleus and bits of :math:`E_x` of the units the set-up
+placed, with the channel rows there) and the folded points' slots on it are
+compared bit for bit with the units: the channel rows of every unit on a node of
+the table equal the node's, and every slot names the node its sub-point is at.
+Units and slots moved inside the stage (re-placed grids, energy shifts) are
+counted, not compared.  The counts go to standard error (``AZURE_NODE_CHECK:
+...``); a difference stops the run.  The output files do not change.
+
 ``AZURE_PLAN_CHECK=1``: the points of an evaluation are calculated by the
 energy tasks of the data set's calculation plan, one task per compound energy
 with every point and sub-point at it, then the folds of the points with

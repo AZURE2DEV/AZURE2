@@ -442,7 +442,7 @@ int WorkingCopy::Fill(const Config &configure, CNuc *theCNuc, const azure2::expe
   if (Draft().NumSegments() > 0) {
     if (this->SetUpTargetEffects(configure, theCNuc, specs.targetEffects) == -1) return -1;
     if (!this->CheckTransformedSegments(configure) || !this->BuildPredictions(theCNuc, configure)) return -1;
-    this->MapData(theCNuc);
+    this->BuildPlan();
   }
 
   return 0;
@@ -589,7 +589,7 @@ int WorkingCopy::MakePoints(const Config &configure, CNuc *theCNuc, const azure2
   if (Draft().NumSegments() > 0) {
     if (this->SetUpTargetEffects(configure, theCNuc, specs.targetEffects) == -1) return -1;
     if (!this->CheckTransformedSegments(configure) || !this->BuildPredictions(theCNuc, configure)) return -1;
-    this->MapData(theCNuc);
+    this->BuildPlan();
   }
 
   return 0;
@@ -784,6 +784,8 @@ int WorkingCopy::Initialize(CNuc *compound, const Config &configure) {
   // Where the result record of every point and sub-point lies (Results.h); laid out again when the points change
   // (BeginEvaluation).
   this->LayoutResults(nullptr);
+  // The stage's node table, from the units as the set-up placed them (NodeTable.h).
+  nodeTable_ = azure2::BuildNodeTable(*this, compound, configure);
   this->Freeze();
 
   return 0;
@@ -892,7 +894,7 @@ int WorkingCopy::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
     std::vector<Unit *> points;
     for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++)
       for (int i = 1; i <= segment->NumPoints(); i++)
-        if (!segment->GetPoint(*this, i)->IsMapped()) points.push_back(segment->GetPoint(*this, i));
+        points.push_back(segment->GetPoint(*this, i));
     try {
       channelTable_ = BuildChannelTable(theCNuc, configure, points);
     } catch (std::exception &e) {
@@ -909,16 +911,14 @@ int WorkingCopy::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
     for (int i = 1; i <= segment->NumPoints(); i++) {
       if (configure.stopFlag || localStop) continue;
       Unit *point = segment->GetPoint(*this, i);
-      if (!(point->IsMapped())) {
-        try {
-          point->CalcEDependentValues(this, theCNuc, configure, true, this, table);
-        } catch (GSLException e) {
+      try {
+        point->CalcEDependentValues(this, theCNuc, configure, true, table);
+      } catch (GSLException e) {
 #pragma omp critical
-          {
-            std::cout << point->GetLabEnergy() << "\t" << point->GetLabAngle() << std::endl;
-            configure.outStream << e.what() << std::endl;
-            localStop = true;
-          }
+        {
+          std::cout << point->GetLabEnergy() << "\t" << point->GetLabAngle() << std::endl;
+          configure.outStream << e.what() << std::endl;
+          localStop = true;
         }
       }
     }
@@ -1027,16 +1027,13 @@ int WorkingCopy::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
   }
 
   // CalcEDependentValues for the leaves, in parallel as for the data segments
-  // (WorkingCopy::CalcEDependentValues).  Each point writes only itself, its sub-points and its local
-  // mapped points that do not own their values; those are never computed here (the condition
-  // below) and each has exactly one host, so no two threads write the same point.  Serial, this
+  // (WorkingCopy::CalcEDependentValues).  Each point writes only itself and its sub-points.  Serial, this
   // loop was 9 of the 17.6 s of a natural_neon calculation on 24 threads.
   {
     std::vector<Unit *> points;
     for (const std::pair<int, int> &leaf : Draft().leafRefs_)
       for (int i = 1; i <= (int)Draft().segments_[leaf.first].TermPoints(*this, leaf.second).size(); i++)
-        if (!(Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i)->IsMapped()) || Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i)->OwnsEDependentValues())
-          points.push_back(Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i));
+        points.push_back(Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i));
     if (!points.empty()) {
       try {
         channelTable_ = BuildChannelTable(theCNuc, configure, points);
@@ -1055,15 +1052,13 @@ int WorkingCopy::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
     for (int i = 1; i <= (int)Draft().segments_[leaf.first].TermPoints(*this, leaf.second).size(); i++) {
       if (configure.stopFlag || localStop) continue;
       Unit *point = Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
-      if (!(point->IsMapped()) || point->OwnsEDependentValues()) {
-        try {
-          point->CalcEDependentValues(this, theCNuc, configure, true, this, componentTable);
-        } catch (GSLException e) {
+      try {
+        point->CalcEDependentValues(this, theCNuc, configure, true, componentTable);
+      } catch (GSLException e) {
 #pragma omp critical
-          {
-            configure.outStream << "Component segment calculation error: " << e.what() << std::endl;
-            localStop = true;
-          }
+        {
+          configure.outStream << "Component segment calculation error: " << e.what() << std::endl;
+          localStop = true;
         }
       }
     }
@@ -1278,273 +1273,10 @@ int WorkingCopy::AddLeaf(Segment &base, int entranceKey, int exitKey, std::optio
   return t;
 }
 
-namespace {
-
-// True when the calculation of `b` can be taken from that of `a`: both are at
-// the same energy, with the same entrance and exit pair, so they share the
-// T-matrix of the point and -- checked here, sub-point by sub-point -- of the
-// integration grid.  Only what enters through GenMatrixFunc::
-// CalculateCrossSection on the point itself (angle, Coulomb amplitude,
-// observable type) may differ.  Whether `a` and `b` may sit in different
-// segments is the caller's question (ShiftsAgree).
-bool SharesCalculation(WorkingCopy &data, Unit &a, Unit &b, bool sameExit = true) {
-  if (a.GetEntranceKey() != b.GetEntranceKey() || (sameExit && a.GetExitKey() != b.GetExitKey())) return false;
-  if (a.GetOriginalEnergy() != b.GetOriginalEnergy() || a.GetLabEnergy() != b.GetLabEnergy() ||
-      a.GetCMEnergy() != b.GetCMEnergy())
-    return false;
-  if (a.IsTargetEffect() != b.IsTargetEffect() || a.GetTargetEffectNum() != b.GetTargetEffectNum() ||
-      a.GetTargetBlendWeight() != b.GetTargetBlendWeight())
-    return false;
-  if (a.IsAnalyzingPower() != b.IsAnalyzingPower()) return false;
-  if (a.IsAngularDist() != b.IsAngularDist()) return false;
-  if (a.IsCoefficient() != b.IsCoefficient()) return false;
-  if (a.IsCoefficient() && a.GetCoefficientAbsolute() != b.GetCoefficientAbsolute()) return false;
-  if (a.NumSubPoints() != b.NumSubPoints()) return false;
-  const UnitRange<Unit> sa = a.GetSubPoints(data);
-  const UnitRange<Unit> sb = b.GetSubPoints(data);
-  for (int i = 0; i < sa.size(); i++) {
-    if (sa[i].GetOriginalEnergy() != sb[i].GetOriginalEnergy() ||
-        sa[i].GetCMEnergy() != sb[i].GetCMEnergy() ||
-        sa[i].GetLabEnergy() != sb[i].GetLabEnergy() ||
-        sa[i].GetStoppingPower() != sb[i].GetStoppingPower())
-      return false;
-  }
-  return true;
-}
-
-// The energy shift of a segment as a function of the fit parameters: which
-// free parameters move it, and its current fixed form.  Two segments whose
-// shifts agree here are at the same energy for EVERY value of the free shift
-// parameters, not only the current one: a finite-difference step on a shift
-// (AZURECalc's segment-local shift derivatives) moves both together, so a
-// mapping between them stays valid without being rebuilt.
-struct ShiftForm {
-  int constOwner = -1;  // segment position of the free constant shift, -1 if fixed
-  bool sqrtFree = false;
-  int fnOwner = -1;     // segment position of the shift function with a free parameter, -1 if none
-  double constShift = 0.0, sqrtShift = 0.0;
-  bool hasFn = false;
-  std::string fnExpression;
-  std::vector<double> fnValues;
-};
-
-ShiftForm ShiftFormOf(const WorkingCopy &data, int pos) {
-  const std::vector<Segment> &segments = data.Data().GetSegments();
-  const Segment &seg = segments[pos];
-  const SegmentState &state = data.State(seg);
-  ShiftForm f;
-  const int lead = seg.GetShiftLeaderPos() >= 0 ? seg.GetShiftLeaderPos() : pos;
-  if (segments[lead].IsVaryEnergyShift()) f.constOwner = lead;
-  f.sqrtFree = seg.IsVaryEnergyShiftSqrt();
-  f.constShift = state.energyShift;
-  f.sqrtShift = state.energyShiftSqrt;
-  f.hasFn = seg.HasShiftFn();
-  if (f.hasFn) {
-    f.fnExpression = seg.GetShiftFnExpression();
-    f.fnValues = state.shiftFnValues;
-    const int src = seg.GetShiftFnSourcePos();
-    if (src >= 0)
-      for (int j = 0; j < segments[src].NumShiftFnParams(); j++)
-        if (segments[src].IsVaryShiftFn(j)) f.fnOwner = src;
-  }
-  return f;
-}
-
-// A free sqrt(E) coefficient is the segment's own parameter, so a segment with
-// one agrees with no other segment.
-bool ShiftsAgree(const ShiftForm &a, const ShiftForm &b) {
-  if (a.sqrtFree || b.sqrtFree) return false;
-  return a.constOwner == b.constOwner && a.fnOwner == b.fnOwner && a.constShift == b.constShift &&
-         a.sqrtShift == b.sqrtShift && a.hasFn == b.hasFn && a.fnExpression == b.fnExpression &&
-         a.fnValues == b.fnValues;
-}
-
-}  // namespace
-
 /*!
- * Maps points onto other points at the same energy, so the energy-dependent
- * part of the calculation (the energy-dependent values, and the level matrix
- * and T-matrix of the point and of each target-effect sub-point) is done once
- * per energy; each mapped point then only forms its own observable (angle,
- * Coulomb amplitude, A_y) from it and integrates its own target effect
- * (Unit::Calculate).
- *
- * Points are mapped within a segment and across segments.  Two points share a
- * calculation (SharesCalculation) when they have the same entrance and exit
- * pair, the same original, lab and c.m. energies, the same target effect and
- * sub-point grid, and the same kind of observable (cross section or A_y,
- * angular-distribution coefficients or not).  Across segments their energy
- * shifts must also agree as functions of the fit parameters (ShiftsAgree):
- * the same free parameters and the same fixed values.  Then the two segments
- * are at the same energy whatever a fit or a finite-difference step does to
- * the shifts.  Segments whose shifts merely coincide at the current values are
- * mapped too, but only while they coincide: every change of a shift or of a
- * sub-point grid rebuilds the mapping (WorkingCopy::FillEnergyShiftsFromParams).
- * Normalizations play no part: they scale the data, not the model.
- *
- * The host of a group is its first point in data order (segment, then point
- * index): every loop that calculates the whole data set walks it in that order,
- * so a host is calculated before the points that read from it
- * (azure2::EvaluateModelPoint; Segment::
- * UpdatePointEnergiesWithShift for the energy-dependent values, within a
- * segment).  The parallel loops (AZURECalc::PrecalculatePoints) hand out hosts
- * only, each of which calculates its mapped points.  The analytic gradient
- * (AZUREGrad.cpp) works on the same groups: one forward solve per group.
- *
- * Segments with components (SUM/RATIO, total capture) are not mapped; a
- * shifted segment without a particle exit (external capture) and a THM segment
- * only within themselves.
- * AZURE_NO_POINT_MAPPING=1 in the environment switches mapping off entirely;
- * AZURE_NO_CROSS_SEGMENT_MAPPING=1 keeps it within each segment only.
+ * The calculation plan (CalculationPlan.h): one task per point, built and checked.
  */
-
-void WorkingCopy::MapData(CNuc *theCNuc) {
-  for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
-    for (UnitIterator point = segment->GetPoints(*this).begin(); point < segment->GetPoints(*this).end(); point++)
-      point->ClearMapping();
-  }
-  for (const std::pair<int, int> &leaf : Data().leafRefs_)
-    for (Unit &point : Data().segments_[leaf.first].TermPoints(*this, leaf.second)) point.ClearMapping();
-  // (host, mapped point) in the order each host calculates its mapped points
-  std::vector<std::pair<azure2::PointRef, azure2::PointRef>> mapping;
-  const char *off = std::getenv("AZURE_NO_POINT_MAPPING");
-  if (off && *off && std::string(off) != "0") return plan_.Build(*this, mapping);
-  const char *crossOff = std::getenv("AZURE_NO_CROSS_SEGMENT_MAPPING");
-  const bool crossSegment = !(crossOff && *crossOff && std::string(crossOff) != "0");
-
-  const std::vector<Segment> &segments = Data().GetSegments();
-  const int numSegments = (int)segments.size();
-  std::vector<ShiftForm> shiftForms(numSegments);
-  for (int s = 0; s < numSegments; s++) shiftForms[s] = ShiftFormOf(*this, s);
-  // External-capture amplitudes at a shifted energy may be interpolated from
-  // the energies of the segment's own points (ECAmplitudeCache), so a shifted
-  // capture segment is mapped within itself only.  Without the compound
-  // nucleus at hand, every shifted segment is.
-  std::vector<char> ownOnly(numSegments, 0);
-  for (int s = 0; s < numSegments; s++) {
-    // A THM (HOES) segment is mapped within itself only, and no other point is
-    // mapped onto one of its points.  Its model is THMMatrixFunc's, from the
-    // segment's own options (observable, vertex, kinematics, windows, line
-    // shape, distortion, experiment, coherent background, 5-sigma fold), which
-    // SharesCalculation does not compare; its gradient rows (ComputeTHMRows,
-    // the THM-only differences of AZURECalc::Gradient) calculate THM segments
-    // alone, so a host in another segment would not be up to date there.
-    if (segments[s].IsTHM()) {
-      ownOnly[s] = 1;
-      continue;
-    }
-    const ShiftForm &f = shiftForms[s];
-    const bool shifted = f.constOwner >= 0 || f.sqrtFree || f.fnOwner >= 0 || f.constShift != 0.0 ||
-                         f.sqrtShift != 0.0 || f.hasFn;
-    if (!shifted) continue;
-    if (!theCNuc) {
-      ownOnly[s] = 1;
-      continue;
-    }
-    const int exitPair = theCNuc->GetPairNumFromKey(segments[s].GetExitKey());
-    if (exitPair < 1 || theCNuc->GetPair(exitPair)->GetPType() != 0) ownOnly[s] = 1;
-  }
-
-  // Every point of every mappable segment, in data order.
-  struct Ref { int seg, point; };
-  std::vector<Ref> refs;
-  for (int s = 0; s < numSegments; s++) {
-    if (segments[s].HasComponents() || segments[s].IsTotalCapture()) continue;
-    for (int p = 0; p < segments[s].NumPoints(); p++) refs.push_back({s, p});
-  }
-  auto pointOf = [this, &segments](const Ref &r) -> Unit & { return segments[r.seg].GetPoints(*this)[r.point]; };
-
-  // Group by pair and energy; a stable sort keeps data order inside a group,
-  // so the first point of a group is its first point in data order.
-  std::stable_sort(refs.begin(), refs.end(), [&](const Ref &x, const Ref &y) {
-    Unit &a = pointOf(x), &b = pointOf(y);
-    if (a.GetEntranceKey() != b.GetEntranceKey()) return a.GetEntranceKey() < b.GetEntranceKey();
-    if (a.GetExitKey() != b.GetExitKey()) return a.GetExitKey() < b.GetExitKey();
-    if (a.GetOriginalEnergy() != b.GetOriginalEnergy()) return a.GetOriginalEnergy() < b.GetOriginalEnergy();
-    return a.GetCMEnergy() < b.GetCMEnergy();
-  });
-
-  std::vector<Ref> hosts;
-  const int n = (int)refs.size();
-  int start = 0;
-  while (start < n) {
-    Unit &first = pointOf(refs[start]);
-    int end = start + 1;
-    while (end < n) {
-      Unit &e = pointOf(refs[end]);
-      if (e.GetEntranceKey() != first.GetEntranceKey() || e.GetExitKey() != first.GetExitKey() ||
-          e.GetOriginalEnergy() != first.GetOriginalEnergy() || e.GetCMEnergy() != first.GetCMEnergy())
-        break;
-      end++;
-    }
-    hosts.clear();
-    for (int k = start; k < end; k++) {
-      Unit &p = pointOf(refs[k]);
-      bool mapped = false;
-      for (const Ref &h : hosts) {
-        if (h.seg != refs[k].seg && !(crossSegment && !ownOnly[h.seg] && !ownOnly[refs[k].seg] &&
-                                      ShiftsAgree(shiftForms[h.seg], shiftForms[refs[k].seg])))
-          continue;
-        if (SharesCalculation(*this, pointOf(h), p)) {
-          p.SetMap(h.seg + 1, h.point + 1);
-          mapping.push_back({segments[h.seg].TermFirstUnit(*this, 0) + h.point,
-                             segments[refs[k].seg].TermFirstUnit(*this, 0) + refs[k].point});
-          mapped = true;
-          break;
-        }
-      }
-      if (!mapped) hosts.push_back(refs[k]);
-    }
-    start = end;
-  }
-
-  MapLeaves(theCNuc, mapping);
-  plan_.Build(*this, mapping);
-}
-
-/*!
- * Point mapping inside a segment with components (SUM, RATIO, total capture): each component's point i is mapped onto
- * the base segment's point i.  A component has its own exit pair but the base's entrance pair, energies, sub-point
- * grid and energy shift, so its level matrix is the host's: the host's calculation builds only the component's
- * T-matrix and observable (Unit::Calculate).  Before 2026-10-24 every term was a calculation of its own, and a
- * neutron total cross section summed over nine exit pairs cost nine level-matrix solutions per point (13C+a: 87 % of
- * an evaluation).
- *
- * Such a family is not mapped with other segments.  A component re-energises its own points on an energy shift
- * (OwnsEDependentValues).  A beta-delayed entrance is left out: its energy-dependent values depend on the exit pair.
- * AZURE_NO_COMPONENT_MAPPING=1 switches this off (and AZURE_NO_POINT_MAPPING=1 all mapping).
- */
-void WorkingCopy::MapLeaves(CNuc *theCNuc, std::vector<std::pair<azure2::PointRef, azure2::PointRef>> &mapping) {
-  if (!theCNuc) return;
-  const char *off = std::getenv("AZURE_NO_COMPONENT_MAPPING");
-  if (off && *off && std::string(off) != "0") return;
-  std::map<std::pair<int, int>, int> leafPos;  // (segment, term) -> position in the plan's leaf list
-  for (int c = 0; c < (int)Data().leafRefs_.size(); c++) leafPos[Data().leafRefs_[c]] = c;
-  const std::vector<Segment> &segments = Data().GetSegments();
-  for (int s = 0; s < (int)segments.size(); s++) {
-    const Segment &seg = segments[s];
-    if (!seg.HasComponents() && !seg.IsTotalCapture()) continue;
-    const int entrancePair = theCNuc->GetPairNumFromKey(seg.GetEntranceKey());
-    if (entrancePair < 1 || theCNuc->GetPair(entrancePair)->GetPType() == 20) continue;
-    const UnitRange<Unit> points = seg.GetPoints(*this);
-    const int n = points.size();
-    // Each component's point i onto the base's point i (components in turn, so a host's mapped points come grouped
-    // by exit and Unit::Calculate builds each exit's T-matrix once).  The base's points stay unmapped among
-    // themselves, as before: the external-capture amplitudes and their file (intEC.dat) skip mapped points, so
-    // mapping them would change that file's layout.
-    for (int t = 1; t < seg.NumTerms(); t++) {
-      const UnitRange<Unit> leafPoints = seg.TermPoints(*this, t);
-      if (leafPoints.size() != n || !leafPos.count({s, t})) continue;
-      for (int p = 0; p < n; p++) {
-        Unit *cp = &leafPoints[p];
-        if (!SharesCalculation(*this, points[p], *cp, false)) continue;
-        cp->SetMap(s + 1, p + 1);
-        cp->SetOwnsEDependentValues(true);
-        mapping.push_back({seg.TermFirstUnit(*this, 0) + p, seg.TermFirstUnit(*this, t) + p});
-      }
-    }
-  }
-}
+void WorkingCopy::BuildPlan() { plan_.Build(*this); }
 
 /*!
  * Adds a TargetEffect object to the vector contained within the present object.

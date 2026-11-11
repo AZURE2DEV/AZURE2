@@ -855,8 +855,7 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
             for (const Segment &seg : localData->Data().GetSegments())
               if (!seg.HasComponents())
                 for (Unit &point : seg.GetPoints(*localData))
-                  if (!point.IsMapped())
-                    point.Calculate(localData, localCompound, g_mcmc_for_callbacks->configure(), localResults);
+                  point.Calculate(localData, localCompound, g_mcmc_for_callbacks->configure(), localResults);
             // The model values (ModelPass.h): the points above are calculated; the loop skips the component
             // segments, so those of a segment that assembles its value are calculated by the model pass.
             for (int s = 1; s <= localData->Data().NumSegments(); s++) {

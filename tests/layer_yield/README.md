@@ -76,6 +76,21 @@ same ε:
 and at E_out (C2); tolerance 1e-5: two adaptive grids across the resonance (3.2e-6; 1.5e-6 with the grids four times
 finer). Y_layer/Y_∞(E_0) − 1 = −Y_∞(E_out)/Y_∞(E_0) = −4.3e-6 is printed.
 
+**(K') Thick layer against an independent integral.** The same data set `thick` against (Y1) computed without the
+engine's quadrature (`make_thick_reference.py`, numbers in `models/thick_reference.json`): E_out in closed form (C2),
+σ the engine's bare cross section at 34,516 nodes (every 50 eV lab, every Γ_lab/50 = 2.1 eV within 200 Γ of the
+resonance, and the limits), the trapezoid rule on σ/ε (the same rule on every second node differs by 3.7e-6). The
+engine (60 quadrature points, 50 points per width) is 1.54e-4 to 1.55e-4 above it; the recorded bound is that
+deviation rounded up (1.56e-4): `check.py` fails if the engine gets worse. What the deviation is made of: the
+quadrature's linear interpolation between nodes across the resonance, second order in the node spacing -- with every
+sub-point grid refined k-fold (`AZURE_REFINE_QUADRATURE=k`: points per width and smooth intervals × k) it is 4.1e-5
+(k = 2), 1.06e-5 (k = 4), 2.6e-6 (k = 8), falling as 1/k² to near the reference's own trapezoid error (about 1.2e-6).
+Refining the smooth intervals alone (480 points, the director's run) leaves 1.07e-4: the core of the resonance, at
+p points per width, carries two thirds of it. Neither the exit-energy solve nor the two-point Gauss rule limits it.
+`check.sh` also runs the model with `AZURE_REFINE_QUADRATURE=2` (check 3b): the unfolded data sets do not move, every
+folded yield moves by less than 1/p² = 4e-4 of its data set's largest value (measured 1.2e-4), and the thick layer
+comes closer to the reference (4.2e-5).
+
 **(R) Isolated narrow resonance.** One 1⁻ level of ¹⁶O at E_r = 0.9 MeV c.m. (E_x = 13.0274 MeV), proton s wave
 Γ_p = 60 eV, α₀ p wave Γ_α = 40 eV (observed widths at E_r), no other level. The Breit–Wigner, in the c.m. frame:
 
@@ -125,6 +140,7 @@ threads (Minuit's call count left out: docs/upgrade/fit_threads.md section 3).
 ## Files
 
 - `make_project.py` writes `models/layer_yield.azr`, `models/fit.azr`, `models/data/`, `models/truth.json`.
+- `make_thick_reference.py AZURE2 [--write]` the independent integral of (K'), `models/thick_reference.json`.
 - `check.py TRUTH OUTPUT` the closed forms above against a menu-1 output; `check.sh AZURE2` runs it, the fit, the
   refusals and the pyazr test.
 - `layer_kernel_test.cpp` (ctest `layer_kernel`) the kernel on hand-set sub-points: (C) to 1e-14, the weights' sum,

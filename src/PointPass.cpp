@@ -1,7 +1,6 @@
-// The calculation of one point outside the energy pass (Unit::Calculate: a host with the points mapped onto it, or a
-// point alone), the folds of a point's sub-points after they are calculated (Unit::FoldSubPoints: the probes, the
-// automatic tolerance, the thin-target fallback, the observable-wise integrations), the marking of a point whose
-// calculation failed, and the scope that switches point mapping off on a thread.
+// The calculation of one point outside the energy pass (Unit::Calculate), the folds of a point's sub-points after
+// they are calculated (Unit::FoldSubPoints: the probes, the automatic tolerance, the thin-target fallback, the
+// observable-wise integrations), and the marking of a point whose calculation failed.
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -20,15 +19,10 @@
 #include "Unit.h"
 #include "TargetEffect.h"
 
-void Unit::MarkFailed(WorkingCopy *data, azure2::Results &results, const char *role, const Config &configure,
-                        const char *why) {
-  // Every fixed quantity NaN and no angular-distribution coefficient, on this point and every point mapped onto it.
-  const azure2::MappedPoints mappedPts = this->PlanMapped(data);
-  for (int i = 0; i <= mappedPts.size(); i++) {
-    Unit *p = i ? mappedPts[i - 1] : this;
-    std::fill(p->Rec(results), p->Rec(results) + azure2::Results::kNumFixed, std::numeric_limits<double>::quiet_NaN());
-    if (p->num_ang_slots_) p->Rec(results)[azure2::Results::AngularOffset()] = 0.0;
-  }
+void Unit::MarkFailed(azure2::Results &results, const char *role, const Config &configure, const char *why) {
+  // Every fixed quantity NaN and no angular-distribution coefficient.
+  std::fill(Rec(results), Rec(results) + azure2::Results::kNumFixed, std::numeric_limits<double>::quiet_NaN());
+  if (num_ang_slots_) Rec(results)[azure2::Results::AngularOffset()] = 0.0;
   static std::atomic<bool> reported(false);
   if (!reported.exchange(true)) {
 #pragma omp critical(azure_failed_point)
@@ -50,22 +44,16 @@ bool Unit::InjectedFailure() const {
 
 void Unit::Calculate(WorkingCopy *data, CNuc *theCNuc, const Config &configure, azure2::Results &results) {
   if (this->InjectedFailure()) throw std::runtime_error("injected failure (AZURE_TEST_FAIL_E).");
-  // Points mapped onto this one (WorkingCopy::MapData): they share its energy, and each of its sub-points' energies.
-  const azure2::MappedPoints mappedPts = this->PlanMapped(data);
-  const int numMapped = mappedPts.size();
-  std::vector<Unit *> units(1 + numMapped);
+  Unit *unit = this;
   if (!this->IsTargetEffect() || !azure2::HasSubPointFold(*data, *this)) {
-    units[0] = this;
-    for (int i = 1; i <= numMapped; i++) units[i] = mappedPts[i - 1];
-    azure2::SolveAtOneEnergy(theCNuc, configure, results, units.data(), (int)units.size());
+    azure2::SolveAtOneEnergy(theCNuc, configure, results, &unit, 1);
     return;
   }
-  // One energy per sub-point: this point's sub-point i and sub-point i of each mapped point; then the folds.
+  // One energy per sub-point; then the fold.
   this->PrepareSubPoints(data, theCNuc, configure);
   for (int i = 1; i <= this->NumSubPoints(); i++) {
-    units[0] = this->GetSubPoint(*data, i);
-    for (int m = 1; m <= numMapped; m++) units[m] = mappedPts[m - 1]->GetSubPoint(*data, i);
-    azure2::SolveAtOneEnergy(theCNuc, configure, results, units.data(), (int)units.size());
+    unit = this->GetSubPoint(*data, i);
+    azure2::SolveAtOneEnergy(theCNuc, configure, results, &unit, 1);
   }
   this->FoldSubPoints(data, theCNuc, configure, results);
 }
@@ -81,11 +69,9 @@ void Unit::PrepareSubPoints(WorkingCopy *data, CNuc *theCNuc, const Config &conf
 }
 
 void Unit::FoldSubPoints(WorkingCopy *data, CNuc *theCNuc, const Config &configure, azure2::Results &results) {
-  const azure2::MappedPoints mappedPts = this->PlanMapped(data);
-  const int numMapped = mappedPts.size();
   const TargetEffect *effect = data->Data().GetTargetEffect(this->GetTargetEffectNum());
   if (effect->IsTargetIntegration() && !effect->IsThickTarget()) {
-    this->FoldThinTarget(*data, results, configure, effect, mappedPts);
+    this->FoldThinTarget(*data, results, configure, effect);
     return;
   }
   const double blend = this->GetTargetBlendWeight();
@@ -115,10 +101,8 @@ void Unit::FoldSubPoints(WorkingCopy *data, CNuc *theCNuc, const Config &configu
   // (plus the centroid shift when the target thickness is integrated).  If
   // the effect would change the observable by less than the tolerance, the
   // bare value is used, so any discontinuity this introduces is bounded by
-  // the tolerance itself.  Points with mapped observables take the bare value
-  // only when every one of them passes its own estimate against its own bare
-  // probe.  (The sub-points are all calculated in the energy pass; the
-  // decision reads three of them.)
+  // the tolerance itself.  (The sub-points are all calculated in the energy
+  // pass; the decision reads three of them.)
   if (autoTol > 0. && haveBare && this->NumSubPoints() >= 3) {
     int iFirst = 1;
     int iLast = this->NumSubPoints();
@@ -128,33 +112,15 @@ void Unit::FoldSubPoints(WorkingCopy *data, CNuc *theCNuc, const Config &configu
       double d = std::fabs(this->GetSubPoint(*data, i)->GetCMEnergy() - this->GetCMEnergy());
       if (d < dBest) { dBest = d; iMid = i; }
     }
-    bool allPass = true;
-    for (int m = 0; m <= numMapped && allPass; m++) {
-      Unit *host = (m == 0) ? this : mappedPts[m - 1];
-      double sFirst = host->GetSubPoint(*data, iFirst)->GetFitCrossSection(results);
-      double sMid = host->GetSubPoint(*data, iMid)->GetFitCrossSection(results);
-      double sLast = host->GetSubPoint(*data, iLast)->GetFitCrossSection(results);
-      double estimate = std::fabs(0.5 * (sFirst + sLast) - sMid);
-      if (effect->IsTargetIntegration()) estimate += 0.5 * std::fabs(sLast - sFirst);
-      if (estimate > autoTol * std::max(std::fabs(sMid), 1e-300)) allPass = false;
-    }
-    if (allPass) {
+    const double sFirst = this->GetSubPoint(*data, iFirst)->GetFitCrossSection(results);
+    const double sMid = this->GetSubPoint(*data, iMid)->GetFitCrossSection(results);
+    const double sLast = this->GetSubPoint(*data, iLast)->GetFitCrossSection(results);
+    double estimate = std::fabs(0.5 * (sFirst + sLast) - sMid);
+    if (effect->IsTargetIntegration()) estimate += 0.5 * std::fabs(sLast - sFirst);
+    if (!(estimate > autoTol * std::max(std::fabs(sMid), 1e-300))) {  // (a NaN estimate takes the bare value)
       // the bare point's sigma and its E1 and E2 parts (what an E1 / E2 line reads)
       this->SetFitCrossSection(results, bareValue);
       this->SetFitE1CrossSection(results, bareE1), this->SetFitE2CrossSection(results, bareE2);
-      for (int m = 1; m <= numMapped; m++) {
-        Unit *mappedPoint = mappedPts[m - 1];
-        Unit mappedProbe(*mappedPoint);
-        azure2::Results probeResults;
-        mappedProbe.UsePrivateRecord(probeResults, results);
-        mappedProbe.SetTargetEffectNum(0);
-        mappedProbe.DetachFromPlan();
-        mappedProbe.SetSubPointRange(0, 0);
-        mappedProbe.Calculate(data, theCNuc, configure, probeResults);
-        mappedPoint->SetFitCrossSection(results, mappedProbe.GetFitCrossSection(probeResults));
-        mappedPoint->SetFitE1CrossSection(results, mappedProbe.GetFitE1CrossSection(probeResults));
-        mappedPoint->SetFitE2CrossSection(results, mappedProbe.GetFitE2CrossSection(probeResults));
-      }
       return;
     }
   }
@@ -162,23 +128,6 @@ void Unit::FoldSubPoints(WorkingCopy *data, CNuc *theCNuc, const Config &configu
   this->IntegrateTargetEffectForObservable(*data, configure, results);
   if (blend < 1.0 && haveBare)
     this->SetFitCrossSection(results, blend * this->GetFitCrossSection(results) + (1.0 - blend) * bareValue);
-  for (int i = 1; i <= numMapped; i++) {
-    Unit *mappedPoint = mappedPts[i - 1];
-    mappedPoint->IntegrateTargetEffectForObservable(*data, configure, results);
-    if (blend < 1.0) {
-      // The mapped point is another observable at the same energy: its bare
-      // value needs its own probe.
-      Unit mappedProbe(*mappedPoint);
-      azure2::Results probeResults;
-      mappedProbe.UsePrivateRecord(probeResults, results);
-      mappedProbe.SetTargetEffectNum(0);
-      mappedProbe.DetachFromPlan();
-      mappedProbe.SetSubPointRange(0, 0);
-      mappedProbe.Calculate(data, theCNuc, configure, probeResults);
-      mappedPoint->SetFitCrossSection(results, blend * mappedPoint->GetFitCrossSection(results) +
-                                                   (1.0 - blend) * mappedProbe.GetFitCrossSection(probeResults));
-    }
-  }
 }
 
 /*!
@@ -194,14 +143,8 @@ void Unit::FoldSubPoints(WorkingCopy *data, CNuc *theCNuc, const Config &configu
  *    sigma(E_bar) for a box), sigma(E_bar) is used.
  */
 void Unit::FoldThinTarget(WorkingCopy &data, azure2::Results &results, const Config &configure,
-                          const TargetEffect *effect, const azure2::MappedPoints &mappedPts) {
-  const int numMapped = mappedPts.size();
+                          const TargetEffect *effect) {
   const int n = this->NumSubPoints();
-  auto integrateAll = [&]() {
-    this->IntegrateTargetEffectForObservable(data, configure, results);
-    for (int m = 1; m <= numMapped; m++)
-      mappedPts[m - 1]->IntegrateTargetEffectForObservable(data, configure, results);
-  };
   const double autoTol = effect->GetAutoTolerance();
   if (autoTol > 0. && !target_fallback_only_ && n >= 4) {
     const double eBar = this->GetCMEnergy() - target_fallback_depth_;
@@ -213,28 +156,20 @@ void Unit::FoldThinTarget(WorkingCopy &data, azure2::Results &results, const Con
     const double ea = this->GetSubPoint(data, jb)->GetCMEnergy(), eb = this->GetSubPoint(data, jb + 1)->GetCMEnergy();
     const double tChord = (eF > eL) ? (eF - eBar) / (eF - eL) : 0.0;
     const double tBar = (ea > eb) ? std::min(std::max((ea - eBar) / (ea - eb), 0.0), 1.0) : 0.0;
-    bool allPass = true;
-    for (int m = 0; m <= numMapped && allPass; m++) {
-      Unit *host = (m == 0) ? this : mappedPts[m - 1];
-      const double sF = host->GetSubPoint(data, 1)->GetFitCrossSection(results);
-      const double sL = host->GetSubPoint(data, n)->GetFitCrossSection(results);
-      const double sBar = (1.0 - tBar) * host->GetSubPoint(data, jb)->GetFitCrossSection(results) +
-                          tBar * host->GetSubPoint(data, jb + 1)->GetFitCrossSection(results);
-      const double chord = (1.0 - tChord) * sF + tChord * sL;
-      if (std::fabs(chord - sBar) > autoTol * std::max(std::fabs(sBar), 1e-300)) allPass = false;
-    }
-    if (allPass) {
+    const double sF = this->GetSubPoint(data, 1)->GetFitCrossSection(results);
+    const double sL = this->GetSubPoint(data, n)->GetFitCrossSection(results);
+    const double sBar = (1.0 - tBar) * this->GetSubPoint(data, jb)->GetFitCrossSection(results) +
+                        tBar * this->GetSubPoint(data, jb + 1)->GetFitCrossSection(results);
+    const double chord = (1.0 - tChord) * sF + tChord * sL;
+    if (!(std::fabs(chord - sBar) > autoTol * std::max(std::fabs(sBar), 1e-300))) {
       // sigma(E_bar) from the two bracketing sub-points, through the one integrator (A_y, coefficients and
       // capture components keep their own combinations)
       Unit::TargetFallbackScope self(this);
-      std::vector<std::unique_ptr<Unit::TargetFallbackScope>> mapped;
-      for (int m = 1; m <= numMapped; m++)
-        mapped.emplace_back(new Unit::TargetFallbackScope(mappedPts[m - 1]));
-      integrateAll();
+      this->IntegrateTargetEffectForObservable(data, configure, results);
       return;
     }
   }
-  integrateAll();
+  this->IntegrateTargetEffectForObservable(data, configure, results);
 }
 
 /*!

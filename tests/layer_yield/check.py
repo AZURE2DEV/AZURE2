@@ -181,6 +181,18 @@ def main():
           "two adaptive grids at the resonance (1.5e-6 at 4x)")
     rows_out.append(("thick: Y vs Y_inf(E0) (the cut below E_out)", worst_lim[2], worst_lim[1], worst_lim[0], None,
                      "Y_inf(E_out)/Y_inf(E0), the yield below E_out", True))
+    # ... and against the independent integral of make_thick_reference.py (models/thick_reference.json): the trapezoid
+    # rule on ~35,000 nodes of the engine's bare sigma, E_out in closed form.  The bound is the engine's deviation when
+    # the file was written: the check fails if the engine's thick-layer quadrature gets worse.
+    ref_path = os.path.join(os.path.dirname(os.path.abspath(sys.argv[1])), "thick_reference.json")
+    ref = json.load(open(ref_path))
+    worst = (0.0, 0, 0)
+    for E0, y, E0r, c in zip(S["thick"]["E0"], model(P["thick"]), ref["E0"], ref["Y_reference"]):
+        r = finite(abs(y / c - 1)) if E0 == E0r else math.inf
+        if r >= worst[0]:
+            worst = (r, y, c)
+    check("thick: Y vs the independent integral (thick_reference.json)", worst[1], worst[2], worst[0], ref["bound"],
+          "the engine's own deviation when recorded (README.md (K'))")
 
     # 4. narrow resonance, constant epsilon: the arctan form (eq. R3), relative to the plateau
     eps = truth["eps_const"]

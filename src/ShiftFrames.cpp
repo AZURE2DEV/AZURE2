@@ -91,58 +91,9 @@ ChannelRowSource Segment::ShiftRowSource(TermState &u, int i) {
 }
 
 /*!
- * The earlier point of this segment that point i (0-based) is mapped onto
- * (WorkingCopy::MapData), or NULL -- also for a point mapped onto a point of another
- * segment, which this segment's shift step re-energises on its own.
- */
-Unit *Segment::ShiftHost(WorkingCopy &data, int t, int i) const {
-  const UnitRange<Unit> points = TermPoints(data, t);
-  if (i < 0 || i >= points.size()) return nullptr;
-  Unit *point = &points[i];
-  if (!point->IsMapped()) return nullptr;
-  EnergyMap map = point->GetMap();
-  if (map.point < 1 || map.point > i) return nullptr;
-  Unit *candidate = &points[map.point - 1];
-  if (candidate->NumSubPoints() != point->NumSubPoints()) return nullptr;
-  const azure2::MappedPoints mapped = candidate->PlanMapped(&data);
-  for (int m = 0, n = mapped.size(); m < n; m++)
-    if (mapped[m] == point) return candidate;
-  return nullptr;
-}
-
-/*!
- * Re-energises point i and then every point mapped onto it, on the calling
- * thread.  A mapped point copies its energy-dependent values from its host
- * (UpdatePointEnergyWithShift), so the host must be finished first: the
- * parallel re-energise loops (WorkingCopy::FillEnergyShiftsFromParams, the shift
- * columns of AZURECalc::ResidualJacobian) hand out these groups, never single
- * mapped points.  A point with a host returns at once.
- */
-void Segment::UpdatePointGroupEnergyWithShift(WorkingCopy &data, int t, int i, CNuc *theCNuc, const Config *configure) const {
-  if (ShiftHost(data, t, i)) return;
-  UpdatePointEnergyWithShift(data, t, i, theCNuc, configure);
-  const UnitRange<Unit> points = TermPoints(data, t);
-  Unit *point = &points[i];
-  // A point mapped from another segment (WorkingCopy::MapData) is not this
-  // segment's to move: it is re-energised with its own segment, on its own.
-  std::less<const Unit *> before;
-  const Unit *first = &points.front(), *last = &points.back();
-  const azure2::MappedPoints pointMapped = point->PlanMapped(&data);
-  for (int m = 0, n = pointMapped.size(); m < n; m++) {
-    const Unit *mapped = pointMapped[m];
-    if (before(mapped, first) || before(last, mapped)) continue;
-    const int j = (int)(mapped - first);
-    if (j > i && j < points.size() && ShiftHost(data, t, j) == point)
-      UpdatePointEnergyWithShift(data, t, j, theCNuc, configure);
-  }
-}
-
-/*!
  * Applies the segment's energy shift to point i (0-based) and its sub-points
  * and recalculates their energy-dependent values.  Writes only that point, so
- * different points may be updated concurrently -- except that a mapped point
- * reads its host (ShiftHost), so it must run after its host and not
- * concurrently with it: UpdatePointGroupEnergyWithShift.
+ * different points may be updated concurrently.
  */
 void Segment::UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, CNuc *theCNuc, const Config *configure) const {
   // An ordinary segment's energies are positive and must stay so: points at
@@ -155,15 +106,6 @@ void Segment::UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, CNuc *
   SegmentState &state = data.State(*this);
   {
     Unit *point = &TermPoints(data, t)[i];
-    // A point mapped onto an earlier point of this segment (WorkingCopy::MapData)
-    // is at the same energy as its host, which has already been moved (index
-    // order in UpdatePointEnergiesWithShift; host first within a group in
-    // UpdatePointGroupEnergyWithShift): its energy-dependent values (and its
-    // sub-points') are copied from the host instead of recomputed.  Only the
-    // angle-dependent Coulomb amplitude is its own.  CopyEDependentValuesFrom
-    // refuses (and the values are recomputed) if the host is not at this
-    // energy.
-    Unit *host = ShiftHost(data, t, i);
     if (point && (thm || point->GetOriginalEnergy() > 0)) {
       double originalEnergy = point->GetOriginalEnergy();
       double shiftedEnergy = thm ? originalEnergy + TotalEnergyShift(state, originalEnergy)
@@ -204,10 +146,7 @@ void Segment::UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, CNuc *
         }
         // The sub-points are moved and recalculated below, one by one.
         const ChannelRowSource rows = ShiftRowSource(state.terms[t], i);
-        if (host && point->CopyEDependentValuesFrom(*host))
-          point->CalcCoulombAmplitude(&data, theCNuc, false);
-        else
-          point->RecalcEDependentValues(&data, theCNuc, *configure, false, &rows);
+        point->RecalcEDependentValues(&data, theCNuc, *configure, false, &rows);
 
         // IMPORTANT: Also apply energy shift to all subpoints (used in convolution/target integration)
         for (int j = 1; j <= point->NumSubPoints(); j++) {
@@ -279,10 +218,7 @@ void Segment::UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, CNuc *
               }
               subPoint->CalcLegendreP(&data, configure->maxLOrder, theCNuc, subEffect);
             }
-            if (host && subPoint->CopyEDependentValuesFrom(*host->GetSubPoint(data, j)))
-              subPoint->CalcCoulombAmplitude(&data, theCNuc);
-            else
-              subPoint->RecalcEDependentValues(&data, theCNuc, *configure, true, &rows);
+            subPoint->RecalcEDependentValues(&data, theCNuc, *configure, true, &rows);
           }
         }
       }

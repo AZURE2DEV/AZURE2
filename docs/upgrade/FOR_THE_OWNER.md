@@ -211,11 +211,14 @@ reads `CLAUDE.md` first, so it is given the recipes and is stopped by the checks
 
 ## What is in work and what comes next
 
-In work now (2026-11-11, night): the sub-points of a folded data point stop being objects of their own and become
-entries of one node table per compound nucleus (the old point mapping deleted; every output must stay the same: the
-structural half of the shared energy grid); one generic kind of fit parameter for the parameters of apparatus
-effects, so that a kernel's width or a target's stopping scale is fitted without new engine code; the engine
-refusing old files, with its old reading path deleted (the close of Phase 4).
+In work now (2026-11-11, late night): the engine refusing old files, with its old reading path deleted (the close of
+Phase 4); the sub-points of a folded data point becoming entries of one node table per compound nucleus. Of the
+second, the first half is merged: the old point mapping is deleted (every output identical; the energy tasks share
+the solves it used to share), and a node table of the compound energies is built beside the sub-points and checked
+against them on the whole tree, with the tools the next step needs (a refined quadrature, its classifier, node
+counts per project). No reader uses the table yet: moving the readers onto it and deleting the sub-point objects
+is the next branch, before the shared energy mesh. Merged in the same batch: one generic kind of fit parameter for
+the parameters of apparatus effects (see "How to add a feature now").
 
 **Do the checks still test what they say? (merged 2026-11-11, evening.)** A regression check that edits a project's
 text can go on passing after the conversion to format 3 because its pattern no longer matches anything and it

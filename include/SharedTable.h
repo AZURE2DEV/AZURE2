@@ -25,7 +25,7 @@
  *    of the table happen before the sole holder's write.
  *
  * As with use_count(), the test is exact only while no other thread copies a handle to the same table; within a
- * parallel step a point copies only from a point its own thread has finished (Unit::CopyEDependentValuesFrom).  A
+ * parallel step a point takes tables only from a point its own thread has finished (Unit::AdoptEDependentValues).  A
  * Weak reference (NodeTableCache) can create a holder at any moment; a table published through one is never written
  * again (NodeTableCache.h).
  */
