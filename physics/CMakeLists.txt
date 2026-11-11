@@ -45,6 +45,37 @@ endif()
 # The Coulomb functions (docs/upgrade/coulomb.md): sources from pycoulomb, one directory per algorithm.
 include(coulomb/coulomb.cmake)
 
+# physics/transfer: optical potentials, bound states, distorted waves and the DWBA transfer amplitude
+# (docs/upgrade/transfer.md).  A leaf: its own target, which links physics/ and is linked by nothing of the engine.
+add_library(azure2_physics_transfer STATIC
+  src/transfer/OpticalPotential.cpp
+  src/transfer/RadialNumerics.cpp
+  src/transfer/BoundState.cpp
+  src/transfer/DistortedWaves.cpp
+  src/transfer/Transfer.cpp
+  src/transfer/ThmVertex.cpp)
+add_library(azure2::physics_transfer ALIAS azure2_physics_transfer)
+target_link_libraries(azure2_physics_transfer PUBLIC azure2_physics)
+set_target_properties(azure2_physics_transfer PROPERTIES POSITION_INDEPENDENT_CODE ON CXX_EXTENSIONS OFF)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(azure2_physics_transfer PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+# physics/transfer, against answers independent of its solvers (docs/upgrade/transfer.md section 9): the bound state
+# against a square well, its normalisation and tail; the distorted waves against free and point-Coulomb waves, a square
+# well, unitarity; the THM vertex against closed forms; and everything against FRESCO 3.5 (tests/data/fresco,
+# make_fresco_benchmarks.py; the test never runs FRESCO).
+foreach(_src transfer_bound_state_test.cpp transfer_distorted_waves_test.cpp transfer_thm_vertex_test.cpp
+             transfer_fresco_test.cpp)
+  string(REPLACE "_test.cpp" "" _t ${_src})
+  add_executable(physics_${_t}_test tests/${_src})
+  target_link_libraries(physics_${_t}_test PRIVATE azure2_physics_transfer)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(physics_${_t}_test PRIVATE -Wall -Wextra -Wpedantic)
+  endif()
+  add_test(NAME physics_${_t} COMMAND physics_${_t}_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/fresco)
+endforeach()
+
 # Unit test of the types themselves (construction, validation, index conventions); links physics only.
 add_executable(physics_system_unit_test tests/system_unit_test.cpp)
 target_link_libraries(physics_system_unit_test PRIVATE azure2_physics)
