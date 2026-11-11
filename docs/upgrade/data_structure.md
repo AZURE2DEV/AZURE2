@@ -117,6 +117,10 @@ Milestone 1 (what was measured exists once; done, commits 0439701a and 9db6b59a)
    points are term 0, a leaf term k, and the shift step, the frame, the grids and the target set-up take
    (segment, term) (`TermRef`); `EData::LeafRefs` lists the leaves in creation order (plan, layout, intEC file).
 5. `--describe` shows rows read, kept and the kept range.
+Milestone 2, done so far: the settings of a term are one shared immutable record (`TermSettings`) that the term's
+points name, and a point no longer holds the rows pointer (its row index, Legendre order, nominal energy and angle
+only); the S factor has one formula.  Left: the flat unit vector with sub-points as ranges, the plan by unit index,
+the parent-data pointer (folds and the model pass then take the data set), `Clone` as a plain copy.
 Milestone 2 (the working copy is flat): the unit vector with sub-points as ranges; settings out of the units; plan
 by index; `Clone` becomes a copy. Milestone 3 (the old names are gone): `DataSet` and `WorkingCopy` apart, callers
 moved, the three classes and their files deleted, docs.

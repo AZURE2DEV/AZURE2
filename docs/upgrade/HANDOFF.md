@@ -2,6 +2,37 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, brief X, milestone 2, first part) — settings out of the points, three debts (`feature/upgrade-4-data-structure`)
+
+**Done.**
+- The settings of a term (pairs, observable flags, J/l/s, UPOS, cross-section component, THM attachments) are one
+  record, `TermSettings` (`include/TermSettings.h`), built by the segment at set-up and shared, immutable, by the
+  term's points, their sub-points and every copy; `EPoint` lost about twenty copied members and their setters.  The raw
+  rows pointer of a point is gone: a point keeps its row index, Legendre order, nominal energy and angle; the
+  measured value, error and record come from the measurement (`ESegment::LabValue`, `LabError`, `FileRecord`).
+- The S factor has one formula (`physics::sfactor_conversion`, E sigma for a neutral pair); the AZUREOut columns of an
+  S-factor data set or extrapolation hold sigma (b) and S (MeV b) (`SigmaAndS` in `EDataOutputFiles.cpp`);
+  `tests/units_scales/check.sh` reads them so.
+- `tests/ratio_frame` (g): a term at a fixed angle, c.m. (not converted) and lab (converted; the c.m. angle by the
+  closed form in `make_models.py`).  `tests/sum_lab_frame/models/data/sum.dat` committed, so the SUM data segment
+  fills in a run of the project tree (`check.sh` copies models/data with `cp -n`).
+
+**Verified** (build `work/b-dstruct`, 0 warnings; binary `work/dstruct/AZURE2-m2a`): every project x 3 bases against
+`tab-trial12` (tag `tab-dsm2a`): all 726 / 699 / 726 reference files identical but the run logs of `sum_data` and
+`sum_free` (their segment fills now), plus the new files of those two and of `fixed_angle`; `ctest -LE slow` 176/177,
+the one failure `upgrade_predictions` (the committed table lacked the new and now-filled projects; regenerated, nine
+added lines, then passed); `tests/run_tests.sh` 145 / 0; the gate (`gdsm2a`): 483 (456) identical, 38 classified, 0
+differ, 0 missing; calculations at 1 and 3 threads identical (T1-T3, 13N, natural_neon, energy_shift_sqrt, three
+bases, 18/18); fits at 1 thread byte-identical to `b-trial12` (T2 `--use-lm` 200 calls, T2 `--use-gradient` 200
+calls, 13N, energy_shift_sqrt).  Speed (min of 6, 1 thread, alternated with `b-trial12`): T2 calculation 659.9 M
+cycles against 663.7 M, 200-call T2 fit 49.56 G against 50.48 G; peak RSS of the T2 fit 331 / 412 MB at 1 / 3 threads
+against 355 / 447.
+
+**Open (rest of milestone 2).** The flat unit vector (sub-points as ranges), the plan by unit index, the
+parent-data pointer of a point (folds, model pass and gradient then take the data set), `Clone` as a plain copy.  A
+term's settings are named by a shared pointer, not by an index: the matrix functions ask the point for them and
+their bodies may not change while the pathway work runs.
+
 ## 2026-11-11 (director, night) — the seventh wave merged: units, the measurement held once, spin–orbit, the pathway table
 
 **Merged into `feature/upgrade-4-data`** (`--no-ff`, in this order; rehearsed together in one scratch worktree, built

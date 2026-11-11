@@ -356,6 +356,13 @@ extrapolation 1: dsdo_cm(2->5)
 extrapolation 1: dsdo_cm(2->5)
 == tests/q_attenuation/models/q5.azr
 extrapolation 1: dsdo_cm(2->5)
+== tests/ratio_frame/models/fixed_angle.azr
+extrapolation 1: dsdo_cm(2->3)
+extrapolation 2: ratio(dsdo_cm(2->3), dsdo_cm(2->2; angle=60))*J1/J0
+extrapolation 3: dsdo_cm(2->3)
+extrapolation 4: ratio(dsdo_cm(2->3), dsdo_cm(2->2; angle=60))*J1/J0
+extrapolation 5: dsdo_cm(2->2)
+extrapolation 6: dsdo_cm(2->2)
 == tests/ratio_frame/models/gamma.azr
 extrapolation 1: dsdo_cm(1->2)
 extrapolation 2: dsdo_cm(1->2)
@@ -610,7 +617,9 @@ extrapolation 8: sum(dsdo_cm(2->3), 0.5*J0/J1*dsdo_cm(2->5))
 data 1: dsdo_cm(2->3)
 data 2: dsdo_cm(2->5)
 == tests/sum_lab_frame/models/sum_data.azr
+data 1: sum(dsdo_cm(2->3), J0/J1*dsdo_cm(2->5))
 == tests/sum_lab_frame/models/sum_free.azr
+data 1: sum(dsdo_cm(2->3), J0/J1*dsdo_cm(2->5))
 == tests/target_density/bad.azr
 == tests/target_density/fit.azr
 == tests/target_density/fit_group.azr
