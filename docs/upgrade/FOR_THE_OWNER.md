@@ -191,7 +191,10 @@ reads `CLAUDE.md` first, so it is given the recipes and is stopped by the checks
 
 In work now (2026-11-11, evening): the engine takes its stopping powers from the stopping library (a target says
 `stopping evaluation`; one stopping scale per material and projectile as a nuisance parameter with a prior; ERYA
-removed); the analytic gradient per compound energy (the old point mapping deleted); the apparatus effects (target,
+removed); the analytic gradient per compound energy; the point mapping deleted (every output identical; the
+energy tasks share the solves it used to share); a node table of the compound energies beside the sub-points, the
+first half of making sub-points table entries instead of objects, with the tools part 2 needs (a refined quadrature,
+its classifier, node counts per project); the apparatus effects (target,
 resolution, beam profile, UDR, Doppler, layer yield) as kernel functions in one table, with a new kernel added by
 the recipe as the proof; pyazr moved off its old file class; an audit that every regression check still tests what
 it says after the conversion.

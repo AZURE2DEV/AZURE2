@@ -82,7 +82,11 @@ working copy and the caller's `Results`.  Its point pass (`WorkingCopy::Calculat
 energy tasks (`CalculationPlan::EnergyTasks`, since Phase 5): one task per compound energy E_x (nucleus and the bits of
 `AMatrixFunc::InEnergy`) with every unit at it -- points without a fold and sub-points alike -- one level-matrix fill
 and factorisation, one T-matrix per (entrance, exit) pair and external-capture amplitude source, one observable per unit (`azure2::SolveAtOneEnergy`); then
-the folds, on values already computed (`Unit::FoldSubPoints`).  Each task writes only its units' records.
+the folds, on values already computed (`Unit::FoldSubPoints`).  Each task writes only its units' records.  The plan
+has one task per point (the point mapping, which made one point calculate others at its energy, is deleted).  Beside
+the units stands the stage's node table (`include/NodeTable.h`: one node per nucleus and bits of E_x with its channel
+rows, built at the end of the set-up, shared by every copy, and per folded point its slots on it); in this state the
+sub-point units still carry the calculation and `AZURE_NODE_CHECK=1` shows that the table says what they say.
 
 ## 3. Module contents (physical objects; physics stages are functions, not classes)
 
@@ -326,5 +330,5 @@ tools/cls.sh tab-ref tab-new; grep '^## ' $WORK/cls-tab-new.tsv
 ## 12. Out of the tree at the end
 
 Qt/Qwt GUI (removed already, decision 3), ERYA (and `SRIM2013.xml`), numcmc, readline menus, the GSL fitter, per-thread `WorkingCopy`/`CNuc` clones,
-point mapping, copy-on-write tables, `NodeTableCache`, process-wide memos, `external/coul` (→ pycoulomb). Kept
+point mapping (deleted 2026-11-11), copy-on-write tables, `NodeTableCache`, process-wide memos, `external/coul` (→ pycoulomb). Kept
 externals: Minuit2, GSL (quadrature and special functions only), pybind11, pycoulomb.

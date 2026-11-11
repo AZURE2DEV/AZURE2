@@ -252,6 +252,16 @@ like the `DataSet`. Nodes re-placed inside a stage (§2.3) live in the copy's ow
 its hand-over. No copy publishes anything to another; `NodeTableCache` and its mutexes go, and so do the per-unit
 copy-on-write tables of sub-points.
 
+**Status, branch 7 part 1 (2026-11-11).** The node table exists beside the sub-point units (`include/NodeTable.h`,
+`src/NodeTable.cpp`): one node per (nucleus, route, bits of E_x) of the units of the point pass, with its channel rows
+(a holder of the rows the first unit at the node computed: no second copy), built at the end of
+`WorkingCopy::Initialize`, held `shared_ptr<const>` by every copy; per plan task of a folded point its slots (the node
+of each sub-point, -1 off the table).  `AZURE_NODE_CHECK=1` compares them with the units before every parallel point
+pass.  Not yet done: the slots' per-(point, node) data (angle rows, stopping, screening, external-capture amplitudes),
+the readers (the energy pass, the kernels, the gradient's cotangents still address units), the copy's overflow table
+for re-placed and shifted nodes (they are counted as "off the table"), and the deletions (sub-point units,
+`SubPointAccess.h`, `NodeTableCache.h`, the copy-on-write tables).
+
 ### 2.7 Thread-count independence by construction
 
 - The mesh and the node table are built single-threaded (or by a parallel loop that writes one node per index) from
