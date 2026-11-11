@@ -219,6 +219,28 @@ Quantity ModifiedSFactor() {
   return q;
 }
 
+Quantity RatioToReference() {
+  Quantity q;
+  q.name = "ratio_to_reference";
+  q.title = "Ratio to a reference cross section";
+  q.doc = "sigma(E) of the reaction divided by a tabulated reference sigma_ref(E) (a monitor reaction or a standard); "
+          "the table's energies are in the data set's energy role, frame and unit (data_kinds.md section 4.9).";
+  q.recordKinds = kDataKinds;
+  q.engineUnit = "1";
+  q.units = {OneUnit("1")};
+  q.energyRoles = {"E_lab", "E_cm"};
+  q.reaction = {R::kNoChargedElastic, "no charged-particle elastic"};
+  q.fields = {Requires("reference"), Allows("target"), Allows("beam"), Allows("detector")};
+  q.targetKinds = {"layer", "none"};
+  q.tree = "Ratio(Fold[sigma(r)], Fold[sigma_ref(table)])";
+  q.exfor = {};  // EXFOR states the monitor in MONITOR/MONIT-REF with the data as SIG: the importer does not map it
+  q.refusals = {RefusedAtValidation("E_FIELD_REQUIRED", "no reference", "the reference table is named, never assumed"),
+                RefusedAtBuild("E_REFERENCE_TABLE", "table",
+                               "the table cannot be read, is not increasing in energy, has a value <= 0, or does not "
+                               "cover an energy of the data set or extrapolation")};
+  return q;
+}
+
 Quantity RatioToRutherford() {
   Quantity q;
   q.name = "ratio_to_rutherford";
@@ -549,7 +571,7 @@ const std::vector<NormRule> &GeneralNormRules() {
 const std::vector<Quantity> &Quantities() {
   static const std::vector<Quantity> rows = {
       // data sets and extrapolations
-      Sigma(), SigmaNuclear(), SigmaTotal(), DsigmaDomega(), SFactor(), ModifiedSFactor(), RatioToRutherford(), RatioToMott(), Legendre(),
+      Sigma(), SigmaNuclear(), SigmaTotal(), DsigmaDomega(), SFactor(), ModifiedSFactor(), RatioToReference(), RatioToRutherford(), RatioToMott(), Legendre(),
       AnalyzingPower(), PhaseShift(), Yield(), Transmission(), NeutronYield(), BetaDelayedSpectrum(),
       // model data
       ResonanceStrength(), ResonanceEnergy(), TotalWidth(), PartialWidth(), BranchingRatio(), Anc(),

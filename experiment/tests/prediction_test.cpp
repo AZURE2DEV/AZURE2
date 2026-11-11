@@ -415,10 +415,26 @@ void TestScaled() {
   check("the identity is no node (a sum)", TreeKindOf(s) == TreeKind::Sum);
 }
 
+/// A ratio to a reference table: sigma over the reference leaf of the same term, no frame factors.
+void TestReferenceRatio() {
+  std::printf("reference ratio\n");
+  PredictionSetup s;
+  s.reaction.observable = Observable::CrossSection;
+  s.terms = {Term(1, 2, 1)};
+  s.reaction.reference.energyLab_MeV = {0.1, 1.0};
+  s.reaction.reference.sigma_b = {1.0, 2.0};
+  const Prediction p = BuildPrediction(s);
+  check("kind reference_ratio", p.kind == TreeKind::ReferenceRatio && TreeKindOf(s) == TreeKind::ReferenceRatio);
+  check("text", PredictionText(p) == "ratio(sigma(1->2), reference(1->2))", PredictionText(p));
+  check("two leaves of term 0, the second the reference, no factors",
+        p.leaves.size() == 2 && p.leaves[1].part == LeafPart::Reference && p.leaves[1].term == 0 && p.factors.empty() &&
+            IsReferenceLeaf(LeafPart::Reference) && !IsCoulombReference(LeafPart::Reference));
+}
+
 void TestTable() {
   std::printf("table\n");
   const std::vector<TreeKindRow> &rows = TreeKinds();
-  bool ordered = rows.size() == 7;
+  bool ordered = rows.size() == static_cast<std::size_t>(TreeKind::ReferenceRatio) + 1;  // the enum's last kind
   for (std::size_t k = 0; k < rows.size(); k++) ordered = ordered && static_cast<std::size_t>(rows[k].kind) == k && rows[k].build;
   check("one row per kind, in the order of the enum", ordered);
   bool threw = false;
@@ -439,6 +455,7 @@ int main() {
   TestTransforms();
   TestCoulombRatio();
   TestScaled();
+  TestReferenceRatio();
   TestTable();
   if (failures) {
     std::printf("%d FAILURE(S)\n", failures);

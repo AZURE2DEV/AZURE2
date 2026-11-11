@@ -20,10 +20,13 @@ namespace experiment {
 /// angle-integrated capture cross section (b) -- the codes 0, 1, 2 are the engine's cross-section component --, or the
 /// Rutherford or Mott cross section (b/sr, c.m.) at the term's point, folded as the point's observable is: an analytic
 /// leaf, which no level parameter moves (src/CoulombReference.cpp).
-enum class LeafPart { Value = 0, E1 = 1, E2 = 2, Rutherford = 3, Mott = 4 };
+enum class LeafPart { Value = 0, E1 = 1, E2 = 2, Rutherford = 3, Mott = 4, Reference = 5 };
 
 /// Whether a leaf is the analytic Coulomb reference (no R-matrix calculation, no adjoint to the level parameters).
 inline bool IsCoulombReference(LeafPart part) { return part == LeafPart::Rutherford || part == LeafPart::Mott; }
+/// Whether a leaf is a value the R-matrix does not compute: a Coulomb reference or a tabulated reference
+/// (ReactionSpec::reference): no point to calculate, no adjoint to the level parameters.
+inline bool IsReferenceLeaf(LeafPart part) { return IsCoulombReference(part) || part == LeafPart::Reference; }
 
 /// One term of a prediction as the set-up resolved it: term 0 is the data set's own points, terms 1, 2, ... its
 /// component segments in order (the components of a SUM or RATIO, the further capture pairs of a total capture, the
@@ -94,6 +97,7 @@ enum class TreeKind {
   Yield,         ///< Y0 = (s / s_t)(1 - exp(-n s_t)), s_t the yield's total term
   CoulombRatio,  ///< dsigma/dOmega over the Rutherford or Mott cross section at the same point, both folded alike
   Scaled,        ///< c [x E exp(2 pi eta)] x the tree of another kind (ReactionSpec::scale: S factor, yield per charge)
+  ReferenceRatio,  ///< sigma over the tabulated reference cross section at the same point, both folded alike
 };
 
 /// A built prediction: the tree and what its inputs, factors and parameters refer to (indices into these lists).

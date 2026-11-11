@@ -497,6 +497,17 @@ exit 1
 == tests/ratio_frame/models/ratio_free.azr
 data: set-up failed
 exit 1
+== tests/ratio_to_reference/models/extrap.azr
+extrapolation sigma: sigma(1->2)
+extrapolation ratio: ratio(sigma(1->2), reference(1->2))
+extrapolation ratio_one: ratio(sigma(1->2), reference(1->2))
+== tests/ratio_to_reference/models/fit_ratio.azr
+data pa: ratio(sigma(1->2), reference(1->2))
+== tests/ratio_to_reference/models/fit_sigma.azr
+data pa: sigma(1->2)
+== tests/ratio_to_reference/models/folded.azr
+data pa_sigma: sigma(1->2)
+data pa_one: ratio(sigma(1->2), reference(1->2))
 == tests/ratio_to_rutherford/models/aC_data.azr
 data rth: ratio(dsdo_cm(1->1), rutherford(1->1))
 == tests/ratio_to_rutherford/models/aC_hs.azr

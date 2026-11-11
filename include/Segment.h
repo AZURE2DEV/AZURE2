@@ -321,7 +321,7 @@ class Segment {
   /// same in the lab and the c.m. frame: the data are not converted at load and the lab output does not divide it.
   bool IsDimensionlessRatio() const {
     return (IsAdvanced() && GetLegacyOperationType() == 1) ||
-           reaction_.coulombReference != azure2::experiment::CoulombReference::None;
+           reaction_.coulombReference != azure2::experiment::CoulombReference::None || !reaction_.reference.Empty();
   }
   /// What the segment predicts at its points (src/Predictions.cpp, WorkingCopy::BuildPredictions): built once at set-up,
   /// immutable, shared by the working copies; null before it is built.

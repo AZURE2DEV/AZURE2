@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "azure2/experiment/LegendreExpansion.h"
+#include "azure2/experiment/ReferenceTable.h"
 
 namespace azure2 {
 namespace experiment {
@@ -103,6 +104,10 @@ struct ReactionSpec {
   /// factor of the point's order on the engine's A_L / A_0 or A_L (the tree kind Scaled); on an extrapolation
   /// (AngularDistribution) the map of the written coefficients (Segment::LegendreCoefficients).
   LegendreExpansion legendre = LegendreExpansion::AOverA0;
+  /// Quantity ratio_to_reference: the table the value is divided by (empty otherwise).  The value is the reaction's
+  /// cross section over this one, each folded by the point's apparatus (tree kind ReferenceRatio; the leaf
+  /// LeafPart::Reference); it is the same in both frames and not converted at load.
+  ReferenceTable reference;
   /// A factor on the model value (an S factor, a yield per unit charge, an extrapolation in another unit).
   ValueScale scale;
 };

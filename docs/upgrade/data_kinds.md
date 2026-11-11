@@ -563,6 +563,21 @@ N_A⟨σv⟩(T) is an integral of σ over a Maxwellian (LEXFOR p. T.6). A measur
 EXFOR is derived from cross sections or resonance parameters, often the same ones in the fit. Refuse as data;
 compare rates as outputs.
 
+### 4.9 Cross sections relative to a tabulated reference
+
+Many EXFOR entries give σ(E)/σ_ref(E), a measurement relative to a monitor reaction or a standard (the monitor in
+`MONITOR`, `MONIT-REF`). `quantity ratio_to_reference` with `reference <file> [unit <u>]` compares such data with
+⟨σ⟩/⟨σ_ref⟩: σ_ref is the table of the file (two columns: the energy in the data set's energy role, frame and unit,
+an extrapolation's in its grid's; the cross section, b unless `unit` says otherwise), interpolated linearly in ln σ
+against E between the rows around E; Build takes the energies to the entrance pair's lab frame once (a linear map
+of E_cm, so the interpolant is the same). The ratio is the same in both frames and not converted at load. With an
+apparatus fold σ_ref is folded on the point's own sub-points by the point's own kernel (the Coulomb reference's
+seam, `FoldReferenceAtPoint`), so the model is the ratio of the two folds. Refused: no `reference`
+(`E_FIELD_REQUIRED`), a file that is not a table, a value ≤ 0, a data row or grid point outside the table
+(`E_REFERENCE_TABLE`; the table is never extrapolated). A fold's sub-point or a shifted energy outside the table makes
+that point's model NaN (a failed point): the table must cover the fold's extent. Differential data relative to a
+reference (an angle-dependent table) are not built.
+
 ## 5. Proposal
 
 *Superseded in its text form by `project_format3.md` (2026-11-09): records with one field per line instead of keyword

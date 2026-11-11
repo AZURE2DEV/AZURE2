@@ -50,6 +50,7 @@ LeafSelector Leaf(const PredictionSetup &s, int t, LeafPart part) {
   if (r.thm) kind = "thm_" + kind;
   if (part == LeafPart::Rutherford) kind = "rutherford";
   if (part == LeafPart::Mott) kind = "mott";
+  if (part == LeafPart::Reference) kind = "reference";
   if (part == LeafPart::E1) options += "; mult=E1";
   if (part == LeafPart::E2) options += "; mult=E2";
   if (s.upos) options += "; upos L=" + std::to_string(s.uposL) + "; Ic=" + Number(s.uposIc) + "; delta=" + Number(s.uposDelta);
@@ -191,6 +192,17 @@ void BuildScaled(const PredictionSetup &s, Prediction &p) {
   p.tree.Scale(scale.factor, p.tree.Root(), factor);
 }
 
+/// term 0's cross section over the tabulated reference at its point (ReactionSpec::reference): no frame factors (an
+/// angle-integrated ratio; the data are not converted at load).  A sample, components and a THM observable are refused.
+void BuildReferenceRatio(const PredictionSetup &s, Prediction &p) {
+  const ReactionSpec &r = s.reaction;
+  if (s.terms.size() != 1 || s.sample > 0 || r.thm || r.combination != ReactionSpec::Combination::None)
+    throw std::invalid_argument("experiment::BuildPrediction: a ratio to a reference table is one term");
+  const int num = AddLeaf(s, 0, LeafPart::Value, p);
+  const int den = AddLeaf(s, 0, LeafPart::Reference, p);
+  p.tree.Ratio(num, den);
+}
+
 void BuildTransmission(const PredictionSetup &s, Prediction &p) { BuildTransform(s, p, TransformSpec::Kind::Transmission); }
 void BuildYield(const PredictionSetup &s, Prediction &p) { BuildTransform(s, p, TransformSpec::Kind::Yield); }
 
@@ -267,6 +279,7 @@ const std::vector<TreeKindRow> &TreeKinds() {
       {TreeKind::Yield, "yield", BuildYield},
       {TreeKind::CoulombRatio, "coulomb_ratio", BuildCoulombRatio},
       {TreeKind::Scaled, "scaled", BuildScaled},
+      {TreeKind::ReferenceRatio, "reference_ratio", BuildReferenceRatio},
   };
   return rows;
 }
@@ -279,6 +292,7 @@ TreeKind TreeKindOf(const PredictionSetup &s) {
   if (r.combination == ReactionSpec::Combination::Ratio) return TreeKind::Ratio;
   if (r.combination == ReactionSpec::Combination::Sum || r.observable == Observable::TotalCapture) return TreeKind::Sum;
   if (r.coulombReference != CoulombReference::None) return TreeKind::CoulombRatio;
+  if (!r.reference.Empty()) return TreeKind::ReferenceRatio;
   return TreeKind::Observable;
 }
 

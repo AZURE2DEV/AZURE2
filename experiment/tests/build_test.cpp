@@ -195,6 +195,30 @@ void UnitCases(const std::string &targets) {
                 x.extrapolations.extrapolations.items[0].spec.maxAngDistOrder == 4);
     }
   }
+  // a ratio to a reference table: read once, its E_cm energies taken to the lab, mb to b; its refusals
+  {
+    std::ofstream("build_test_ref.dat") << "# E_cm[keV] sigma[mb]\n100 2\n800 4\n1600 8\n";
+    const std::string rr = Set(Set(Set(kDataset, "quantity", "    quantity ratio_to_reference"), "unit", "    unit 1"), "columns",
+                               "    columns E_cm[keV] _ value error") + "    reference build_test_ref.dat unit mb\n";
+    const BuiltProject b = BuildText(Data(rr));
+    const double lab = 16.00793 / 15.0001;  // E_lab / E_cm of pair 1 (masses of Pairs())
+    const ReferenceTable &t = data(b).reaction.reference;
+    check("ratio_to_reference: the table in lab MeV and b, the sigma observable, the tree kind",
+          b.Ok() && t.file == "build_test_ref.dat" && t.energyLab_MeV.size() == 3 &&
+              std::fabs(t.energyLab_MeV[1] - 0.8 * lab) < 1e-15 && t.sigma_b[2] == 8e-3 &&
+              data(b).reaction.observable == Observable::CrossSection);
+    check("ReferenceAt: linear in ln sigma (the geometric mean half way), NaN outside, the end rows",
+          std::fabs(ReferenceAt(t, 0.45 * lab) / std::sqrt(2e-3 * 4e-3) - 1) < 1e-14 && std::isnan(ReferenceAt(t, 0.05 * lab)) &&
+              ReferenceAt(t, t.energyLab_MeV.back()) == 8e-3 && ReferenceAt(t, t.energyLab_MeV.front()) == 2e-3);
+    std::ofstream("build_test_ref.dat") << "100 2\n800 -4\n";
+    ExpectOne("E_REFERENCE_TABLE", BuildText(Data(rr)));
+    std::ofstream("build_test_ref.dat") << "100 2\n80 4\n";
+    ExpectOne("E_REFERENCE_TABLE", BuildText(Data(rr)));
+    std::ofstream("build_test_ref.dat") << "0.1 2\n0.8 4\n";  // MeV, the grid's unit: 1.2 MeV is outside
+    ExpectOne("E_REFERENCE_TABLE",
+              BuildText("<extrapolations>\nextrapolation x1\n    reaction 15N(p,a)12C\n    quantity ratio_to_reference\n"
+                        "    reference build_test_ref.dat\n    unit 1\n    energies list 0.3 1.2 MeV cm\n</extrapolations>\n"));
+  }
   // yields: per particle and per uC on an infinite target and on a layer; a fitted efficiency and no charge state refused
   {
     const std::string inf = targets.substr(0, targets.size() - std::string("</targets>\n").size()) +

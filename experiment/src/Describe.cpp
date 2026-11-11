@@ -32,6 +32,13 @@ const char *ObservableName(Observable o) {
 
 /// For a ratio to a Coulomb cross section, what the observable is divided by ("" otherwise).
 std::string ReferenceText(const ReactionSpec &r) {
+  if (!r.reference.Empty()) {
+    std::ostringstream out;
+    out << "  divided by the reference cross section of " << r.reference.file << " (" << r.reference.energyLab_MeV.size()
+        << " rows, E_lab " << r.reference.energyLab_MeV.front() << " - " << r.reference.energyLab_MeV.back()
+        << " MeV, linear in ln sigma), at the point's lab energy, folded alike; not converted at load\n";
+    return out.str();
+  }
   switch (r.coulombReference) {
     case CoulombReference::None: return "";
     case CoulombReference::Rutherford:

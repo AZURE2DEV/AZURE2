@@ -137,7 +137,7 @@ Data set, in ``<data>``.  Measured values of one quantity in one data file (sect
      - only when the reaction is one reaction (no sum, no ratio); optional
      - the <levels> pair key of the exit pair, only where the reaction label names two pairs
    * - ``quantity``
-     - ``sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
+     - ``sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_reference|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
      - required
      - what the numbers are (section 7.2)
    * - ``unit``
@@ -236,6 +236,10 @@ Data set, in ``<data>``.  Measured values of one quantity in one data file (sect
      - ``<name>``
      - by quantity
      - the experiment[<name>] of <thm>, or global
+   * - ``reference``
+     - ``<path> [unit <cross_section unit>]``
+     - by quantity
+     - the table sigma_ref(E) the values are divided by: interpolated linearly in log sigma against E
    * - ``thm_weight``
      - ``<path>``
      - only when thm is given; optional
@@ -329,7 +333,7 @@ Extrapolation, in ``<extrapolations>``.  Model values on a grid, without data (s
      - only when the reaction is one reaction (no sum, no ratio); optional
      - the <levels> pair key of the exit pair, only where the reaction label names two pairs
    * - ``quantity``
-     - ``sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
+     - ``sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_reference|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
      - required
      - what is computed (section 7.2)
    * - ``unit``
@@ -412,6 +416,10 @@ Extrapolation, in ``<extrapolations>``.  Model values on a grid, without data (s
      - ``<name>``
      - by quantity
      - the experiment[<name>] of <thm>, or global
+   * - ``reference``
+     - ``<path> [unit <cross_section unit>]``
+     - by quantity
+     - the table sigma_ref(E) the values are divided by: interpolated linearly in log sigma against E
    * - ``thm_weight``
      - ``<path>``
      - only when thm is given; optional
@@ -887,6 +895,42 @@ Modified S factor of heavy-ion fusion (``dataset``, ``extrapolation``).  S\*(E) 
      - neutral: the modified S factor is defined for charged particles (Gamow factor) (``E_REACTION_NOT_ALLOWED``)
    * - refused (validate)
      - no shape: the constant g of exp(g E) is given, never guessed (``E_FIELD_REQUIRED``)
+
+ratio_to_reference
+~~~~~~~~~~~~~~~~~~
+
+Ratio to a reference cross section (``dataset``, ``extrapolation``).  sigma(E) of the reaction divided by a tabulated reference sigma_ref(E) (a monitor reaction or a standard); the table's energies are in the data set's energy role, frame and unit (data_kinds.md section 4.9).
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - property
+     - value
+   * - engine unit
+     - ``1``
+   * - units
+     - ``1`` (1)
+   * - energy column
+     - ``E_lab``, ``E_cm``
+   * - reaction
+     - no charged-particle elastic
+   * - ``reference``
+     - required
+   * - ``target``
+     - allowed
+   * - ``beam``
+     - allowed
+   * - ``detector``
+     - allowed
+   * - target kinds
+     - ``layer``, ``none``
+   * - tree
+     - ``Ratio(Fold[sigma(r)], Fold[sigma_ref(table)])``
+   * - refused (validate)
+     - no reference: the reference table is named, never assumed (``E_FIELD_REQUIRED``)
+   * - refused (build)
+     - table: the table cannot be read, is not increasing in energy, has a value <= 0, or does not cover an energy of the data set or extrapolation (``E_REFERENCE_TABLE``)
 
 ratio_to_rutherford
 ~~~~~~~~~~~~~~~~~~~
@@ -1946,6 +1990,9 @@ Diagnostic codes
    * - ``E_STOPPING_DATA``
      - error
      - a stopping evaluation in an engine built without SRIM's data files and no AZURE2_SRIM_DATA_DIR, or a stopping table that cannot be read (set-up)
+   * - ``E_REFERENCE_TABLE``
+     - error
+     - the reference table of a ratio_to_reference record: unreadable, not increasing in energy, a value <= 0, or not covering an energy of the data set or grid (build)
    * - ``E_STOPPING_RANGE``
      - error
      - a target's stopping asked for at an energy outside its range: SRIM's above 1e7 keV/u, or a table's ends (set-up)

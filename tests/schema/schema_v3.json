@@ -140,9 +140,9 @@
     "quantity": {
      "title": "Quantity",
      "type": "enum",
-     "grammar": "sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum",
+     "grammar": "sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_reference|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum",
      "required": true,
-     "values": ["sigma", "sigma_nuclear", "sigma_total", "dsigma_domega", "sfactor", "modified_sfactor", "ratio_to_rutherford", "ratio_to_mott", "legendre", "analyzing_power", "phase_shift", "yield", "transmission", "neutron_yield", "beta_delayed_spectrum"],
+     "values": ["sigma", "sigma_nuclear", "sigma_total", "dsigma_domega", "sfactor", "modified_sfactor", "ratio_to_reference", "ratio_to_rutherford", "ratio_to_mott", "legendre", "analyzing_power", "phase_shift", "yield", "transmission", "neutron_yield", "beta_delayed_spectrum"],
      "aliases": {
       "cross_section": "sigma",
       "dsdo": "dsigma_domega",
@@ -502,6 +502,40 @@
      "by_quantity": true,
      "doc": "the experiment[<name>] of <thm>, or global"
     },
+    "reference": {
+     "title": "Reference cross section",
+     "type": "structured",
+     "grammar": "<path> [unit <cross_section unit>]",
+     "by_quantity": true,
+     "alternatives": [
+      {
+       "keyword": "",
+       "parts": [
+        {
+         "name": "file",
+         "keyword": false,
+         "type": "path",
+         "grammar": "<path>",
+         "optional": false,
+         "doc": "two columns: energy (the data set's energy role, frame and unit), cross section"
+        },
+        {
+         "name": "unit",
+         "keyword": true,
+         "type": "unit",
+         "grammar": "<cross_section unit>",
+         "optional": true,
+         "default": "b",
+         "dimension": "cross_section",
+         "units": ["b", "mb", "ub", "nb"],
+         "doc": "unit of the cross-section column"
+        }
+       ],
+       "doc": "a tabulated reference cross section (ratio_to_reference)"
+      }
+     ],
+     "doc": "the table sigma_ref(E) the values are divided by: interpolated linearly in log sigma against E"
+    },
     "thm_weight": {
      "title": "THM weight file",
      "type": "path",
@@ -684,9 +718,9 @@
     "quantity": {
      "title": "Quantity",
      "type": "enum",
-     "grammar": "sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum",
+     "grammar": "sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_reference|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum",
      "required": true,
-     "values": ["sigma", "sigma_nuclear", "sigma_total", "dsigma_domega", "sfactor", "modified_sfactor", "ratio_to_rutherford", "ratio_to_mott", "legendre", "analyzing_power", "phase_shift", "yield", "transmission", "neutron_yield", "beta_delayed_spectrum"],
+     "values": ["sigma", "sigma_nuclear", "sigma_total", "dsigma_domega", "sfactor", "modified_sfactor", "ratio_to_reference", "ratio_to_rutherford", "ratio_to_mott", "legendre", "analyzing_power", "phase_shift", "yield", "transmission", "neutron_yield", "beta_delayed_spectrum"],
      "aliases": {
       "cross_section": "sigma",
       "dsdo": "dsigma_domega",
@@ -988,6 +1022,40 @@
      "grammar": "<name>",
      "by_quantity": true,
      "doc": "the experiment[<name>] of <thm>, or global"
+    },
+    "reference": {
+     "title": "Reference cross section",
+     "type": "structured",
+     "grammar": "<path> [unit <cross_section unit>]",
+     "by_quantity": true,
+     "alternatives": [
+      {
+       "keyword": "",
+       "parts": [
+        {
+         "name": "file",
+         "keyword": false,
+         "type": "path",
+         "grammar": "<path>",
+         "optional": false,
+         "doc": "two columns: energy (the data set's energy role, frame and unit), cross section"
+        },
+        {
+         "name": "unit",
+         "keyword": true,
+         "type": "unit",
+         "grammar": "<cross_section unit>",
+         "optional": true,
+         "default": "b",
+         "dimension": "cross_section",
+         "units": ["b", "mb", "ub", "nb"],
+         "doc": "unit of the cross-section column"
+        }
+       ],
+       "doc": "a tabulated reference cross section (ratio_to_reference)"
+      }
+     ],
+     "doc": "the table sigma_ref(E) the values are divided by: interpolated linearly in log sigma against E"
     },
     "thm_weight": {
      "title": "THM weight file",
@@ -2374,6 +2442,57 @@
      "rule": "no shape",
      "message": "the constant g of exp(g E) is given, never guessed",
      "checked_by": "validate"
+    }
+   ]
+  },
+  "ratio_to_reference": {
+   "title": "Ratio to a reference cross section",
+   "doc": "sigma(E) of the reaction divided by a tabulated reference sigma_ref(E) (a monitor reaction or a standard); the table's energies are in the data set's energy role, frame and unit (data_kinds.md section 4.9).",
+   "record_kinds": ["dataset", "extrapolation"],
+   "engine_unit": "1",
+   "units": {
+    "1": 1
+   },
+   "columns": {
+    "energy": ["E_lab", "E_cm"],
+    "angle": [],
+    "angle_axis": "none",
+    "order": false,
+    "windows": false
+   },
+   "reaction": {
+    "rule": "no charged-particle elastic",
+    "flags": ["no_charged_elastic"]
+   },
+   "fields": {
+    "reference": {
+     "required": true
+    },
+    "target": {
+     "required": false
+    },
+    "beam": {
+     "required": false
+    },
+    "detector": {
+     "required": false
+    }
+   },
+   "target_kinds": ["layer", "none"],
+   "tree": "Ratio(Fold[sigma(r)], Fold[sigma_ref(table)])",
+   "exfor": [],
+   "refusals": [
+    {
+     "code": "E_FIELD_REQUIRED",
+     "rule": "no reference",
+     "message": "the reference table is named, never assumed",
+     "checked_by": "validate"
+    },
+    {
+     "code": "E_REFERENCE_TABLE",
+     "rule": "table",
+     "message": "the table cannot be read, is not increasing in energy, has a value <= 0, or does not cover an energy of the data set or extrapolation",
+     "checked_by": "build"
     }
    ]
   },
@@ -3872,6 +3991,10 @@
   "E_STOPPING_DATA": {
    "severity": "error",
    "meaning": "a stopping evaluation in an engine built without SRIM's data files and no AZURE2_SRIM_DATA_DIR, or a stopping table that cannot be read (set-up)"
+  },
+  "E_REFERENCE_TABLE": {
+   "severity": "error",
+   "meaning": "the reference table of a ratio_to_reference record: unreadable, not increasing in energy, a value <= 0, or not covering an energy of the data set or grid (build)"
   },
   "E_STOPPING_RANGE": {
    "severity": "error",

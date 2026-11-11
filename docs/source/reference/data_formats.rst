@@ -775,6 +775,21 @@ inverse energy (``E_UNIT_NOT_ALLOWED``), an uncharged entrance
 ``AZUREOut`` files the cross-section columns hold :math:`\sigma` and the
 S-factor columns :math:`S^*` (``tests/modified_sfactor``).
 
+Ratio to a reference cross section.  ``quantity ratio_to_reference`` (unit
+``1``; an ``E_lab`` or ``E_cm`` column) with ``reference <file> [unit <u>]``
+compares the data with :math:`\langle\sigma\rangle/\langle\sigma_\text{ref}\rangle`:
+the file has two columns, the energy in the data set's energy role, frame and
+unit (an extrapolation: its grid's) and the reference cross section (``b``
+unless ``unit`` names another cross-section unit); between rows it is
+interpolated linearly in :math:`\ln\sigma` against :math:`E`, and never
+extrapolated.  With a target or beam fold the reference is folded on the
+point's own sub-points, as the Rutherford reference is.  Refused: no
+``reference`` (``E_FIELD_REQUIRED``), a file that is not a table (fewer than two
+rows, energies not increasing), a value :math:`\le 0`, a data row or grid point
+outside the table (``E_REFERENCE_TABLE``).  A fold's sub-point or a shifted
+energy outside the table makes that point's model NaN: give a table that covers
+the fold.  ``tests/ratio_to_reference``.
+
 Yields.  ``quantity yield`` on a ``target`` of kind ``infinite`` compares the
 data with the thick-target yield the engine folds,
 :math:`Y(E_0) = 10^{-24}\int_{1\,\mathrm{keV}}^{E_0}\langle\sigma\rangle/\varepsilon\,dE`

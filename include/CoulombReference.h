@@ -1,6 +1,8 @@
 #ifndef AZURE2_COULOMBREFERENCE_H
 #define AZURE2_COULOMBREFERENCE_H
 
+#include <functional>
+
 #include "azure2/experiment/Prediction.h"
 
 class CNuc;
@@ -26,6 +28,15 @@ namespace azure2 {
  */
 double CoulombReferenceValue(const WorkingCopy &data, Unit *point, experiment::LeafPart part, CNuc *compound,
                              const Config &configure);
+
+/*!
+ * A reference value the R-matrix does not compute, at a point as its observable is: at(point) without a sub-point
+ * effect; else at(sub-point) folded by the point's own kernel (FoldValues, the one quadrature) with the edge blend
+ * w fold + (1 - w) at(point) of Unit::Calculate where that applies.  The Coulomb leaf above and the tabulated
+ * reference (ReferenceTableLeaf.h) use it.
+ */
+double FoldReferenceAtPoint(const WorkingCopy &data, Unit *point, const Config &configure,
+                            const std::function<double(const Unit *)> &at);
 
 /*!
  * The factor E exp(2 pi eta(E) + g E) (MeV) that takes the cross section of a point to its S factor (g = 0) or its

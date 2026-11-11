@@ -56,6 +56,7 @@ add_library(azure2_experiment STATIC
   src/ParameterFileNames.cpp
   src/Prediction.cpp
   src/LegendreExpansion.cpp
+  src/ReferenceTable.cpp
   src/LevelTables.cpp
   src/Quantities.cpp
   src/ReactionParser.cpp

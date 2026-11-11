@@ -178,6 +178,7 @@ std::vector<FieldDef> Concat(std::vector<std::vector<FieldDef>> lists) {
 struct Forms {
   FormSpec shift, quadrature, foldWindows, secondaryGamma, orders, function, param, epoch, stopping, straggling,
       isotope, isotopeSum, doppler, spread, profile, resolution, udr, channelSpin, central, spinOrbit;
+  FormSpec reference;
 };
 
 Forms MakeForms() {
@@ -197,6 +198,10 @@ Forms MakeForms() {
                                 Kw("delta", Num(), "mixing ratio")},
                                "unobserved primary, observed secondary photon (UPOS)")}};
   f.orders = {{Unkeyed({Pos("first", IntAtLeast(0)), Pos("last", IntAtLeast(0))}, "the Legendre orders first..last")}};
+  f.reference = {{Unkeyed({Pos("file", Spec(ValueType::Path), "two columns: energy (the data set's energy role, frame and "
+                                                                  "unit), cross section"),
+                           OptionalKw("unit", Spec(ValueType::Unit, "cross_section"), "unit of the cross-section column", "b")},
+                          "a tabulated reference cross section (ratio_to_reference)")}};
   f.function = {{Unkeyed({Pos("expression", Spec(ValueType::Formula), "x = E_lab of the point in MeV"),
                           Pos("unit", Spec(ValueType::Unit, "energy"))},
                          "a shift term function(x) in the stated unit; its parameters are 'param' fields")}};
@@ -303,6 +308,8 @@ std::vector<FieldDef> QuantityFields() {
           ByQ("charge_state", "Charge state", IntAtLeast(1), "the beam's charge state q; per-charge units need it (F8)"),
           ByQ("efficiency", "Efficiency x branching", Nuis(""), "detection efficiency times branching of counted photons (F9)"),
           ByQ("thm", "THM experiment", Spec(ValueType::Name), "the experiment[<name>] of <thm>, or global"),
+          ByQ("reference", "Reference cross section", Structured(f.reference),
+              "the table sigma_ref(E) the values are divided by: interpolated linearly in log sigma against E"),
           OptionalWhen("thm_weight", "THM weight file", Spec(ValueType::Path), Condition::Present("thm"),
                        "the weight table of <thm> weight[k]")};
 }
