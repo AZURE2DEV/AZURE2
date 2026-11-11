@@ -4,6 +4,7 @@
 #include "Constants.h"
 #include "Config.h"
 
+#include <cstring>
 #include <string>
 
 class Unit;
@@ -69,6 +70,11 @@ class GenMatrixFunc {
   void RecalculateTMatrix(Unit *point) {
     ResetTMatrix();
     CalculateTMatrix(point);
+  }
+  /// True when `other` holds the same T-matrix bit for bit, internal and external elements (the shared-solve check
+  /// of AZURE_PLAN_CHECK, CalculationPlan.h).
+  bool SameTMatrix(const GenMatrixFunc &other) const {
+    return SameBits(tmatrix_, other.tmatrix_) && SameBits(ec_tmatrix_, other.ec_tmatrix_);
   }
   /// The observable of the point from the T-matrix the subclass built, times the electron-screening factor where the
   /// point carries one (CalculateBareCrossSection, then Unit::ScreeningFactor).
@@ -167,6 +173,16 @@ class GenMatrixFunc {
   std::vector<matrix_c> tmatrix_;
   /// Vector of external T-matrix elements accessable to child class.
   matrix_c ec_tmatrix_;
+  static bool SameBits(const vector_c &a, const vector_c &b) {
+    return a.size() == b.size() && (a.empty() || std::memcmp(a.data(), b.data(), a.size() * sizeof(complex)) == 0);
+  }
+  template <class V>
+  static bool SameBits(const std::vector<V> &a, const std::vector<V> &b) {
+    if (a.size() != b.size()) return false;
+    for (std::size_t i = 0; i < a.size(); i++)
+      if (!SameBits(a[i], b[i])) return false;
+    return true;
+  }
   /// Forget everything derived from the T-matrix (ClearMatrices).
   void InvalidateTMatrixProducts() { rt_decay_ = nullptr; }
   /// Drop the T-matrix elements and their products, keeping the solved matrices (RecalculateTMatrix).

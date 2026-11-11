@@ -500,6 +500,13 @@ checked when the plan is built).  With the variable set, the parallel point
 pass runs the tasks one after the other and checks that each writes only the
 values of its own points and sub-points and that no value is written by two
 tasks; a breach stops the run with a message naming the task and the point.
+Then every unit of the pass (a point, or a sub-point of a fold) is solved
+alone -- level-matrix fill and factorisation, its T-matrix, its record -- and
+compared bit for bit with the solve it shares with the other units at the same
+compound energy (the same nucleus and the same bits of E_x; the bilinear forms
+of every J-group's level matrix, the T-matrix of its entrance and exit pair, and
+its record).  The counts go to standard error (``AZURE_PLAN_CHECK: ... units in
+... energy tasks ...: 0 differ``); a unit that differs stops the run.
 A test of the engine, slow, single-threaded; the output files do not change.
 
 Examples

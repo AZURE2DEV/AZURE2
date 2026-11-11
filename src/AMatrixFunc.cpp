@@ -1411,13 +1411,13 @@ void AMatrixFunc::TBarAdjointMany(const std::vector<Unit *> &points, const std::
 /*!
  * Beam energy in the compound system, as FillMatrices takes it.
  */
-double AMatrixFunc::InEnergy(Unit *point) {
-  if (compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetPType() == 20) {
-    int ep = compound()->GetPairNumFromKey(point->GetExitKey());
-    return point->GetCMEnergy() + compound()->GetPair(ep)->GetSepE() + compound()->GetPair(ep)->GetExE();
+double AMatrixFunc::InEnergy(CNuc *compound, Unit *point) {
+  if (compound->GetPair(compound->GetPairNumFromKey(point->GetEntranceKey()))->GetPType() == 20) {
+    int ep = compound->GetPairNumFromKey(point->GetExitKey());
+    return point->GetCMEnergy() + compound->GetPair(ep)->GetSepE() + compound->GetPair(ep)->GetExE();
   }
-  int aa = compound()->GetPairNumFromKey(point->GetEntranceKey());
-  return point->GetCMEnergy() + compound()->GetPair(aa)->GetSepE() + compound()->GetPair(aa)->GetExE();
+  int aa = compound->GetPairNumFromKey(point->GetEntranceKey());
+  return point->GetCMEnergy() + compound->GetPair(aa)->GetSepE() + compound->GetPair(aa)->GetExE();
 }
 
 /*!

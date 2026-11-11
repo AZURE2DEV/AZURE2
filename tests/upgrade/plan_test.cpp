@@ -4,21 +4,25 @@
 // For each project that sets up, also: the plan checks again here (CalculationPlan::Check), every point of the data
 // set is a task's host or a point the plan maps onto one, a host's mapped points are those whose Unit::PlanTask is
 // the host's, and a copy of the data set (WorkingCopy::Clone) holds the same plan, valid in the copy, whose hosts are the
-// copy's own points.  No evaluation is run.  A project that does not set up (missing data files: the projects whose
+// copy's own points; and the energy tasks of the point pass (CalculationPlan::EnergyTasks, CheckEnergyTasks below):
+// every unit in one task, one nucleus, route and E_x per task.  No evaluation is run.  A project that does not set up (missing data files: the projects whose
 // data their check.sh writes) is listed and counted, not a failure.
 //
 //   plan_test <dir/project.azr> ...   (each project is read in its own directory: data paths are relative)
 #include <cstdio>
+#include <cstring>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <unistd.h>
 
+#include "AMatrixFunc.h"
 #include "AZUREParams.h"
 #include "CNuc.h"
 #include "CalculationPlan.h"
 #include "Config.h"
+#include "PPair.h"
 #include "WorkingCopy.h"
 #include "Unit.h"
 #include "Segment.h"
@@ -48,6 +52,66 @@ std::string CrossCheck(WorkingCopy &data) {
         return "task " + std::to_string(t) + ": mapped point " + std::to_string(k) + " is not the plan's";
   }
   return plan.Check(data);
+}
+
+// The energy tasks of every plan task (CalculationPlan::EnergyTasks): every unit of the plan tasks -- a point, or each
+// sub-point of a point with a sub-point fold -- in exactly one energy task, with the plan task of its point; inside a
+// task one nucleus, one route and the same bits of E_x (AMatrixFunc::InEnergy), the units by (entrance, exit) pair
+// and numPairs their count; the tasks by decreasing cost.  Counts the solves of a pass (energy tasks) against the
+// units.
+long energyTasks = 0, energyUnits = 0;
+std::string CheckEnergyTasks(WorkingCopy &data, CNuc &compound, const Config &cfg) {
+  azure2::CalculationPlan &plan = const_cast<azure2::CalculationPlan &>(data.Plan());
+  std::vector<int> work(plan.NumTasks());
+  for (int t = 0; t < plan.NumTasks(); t++) work[t] = t;
+  const std::vector<azure2::EnergyTask> &tasks = plan.EnergyTasks(data, &compound, cfg, work);
+  std::vector<int> owner(data.NumUnits(), -2);  // the plan task of each unit of the pass (-2: no unit of it)
+  long expected = 0;
+  for (int t = 0; t < plan.NumTasks(); t++) {
+    std::vector<azure2::UnitRef> units;
+    plan.TaskUnits(data, t, units);
+    for (azure2::UnitRef u : units) {
+      if (owner[u] != -2) return "unit " + std::to_string(u) + " is a unit of two plan tasks";
+      owner[u] = t;
+    }
+    expected += (long)units.size();
+  }
+  long seen = 0;
+  double lastCost = 1e300;
+  for (std::size_t k = 0; k < tasks.size(); k++) {
+    const azure2::EnergyTask &task = tasks[k];
+    const std::string where = "energy task " + std::to_string(k);
+    if (task.units.empty() || task.owners.size() != task.units.size()) return where + " is empty or has no owners";
+    const double cost = 1.0 + task.numPairs + task.units.size();
+    if (cost > lastCost) return where + " is out of the order of cost";
+    lastCost = cost;
+    int pairs = 0;
+    for (std::size_t i = 0; i < task.units.size(); i++) {
+      const azure2::UnitRef r = task.units[i];
+      if (r < 0 || r >= data.NumUnits() || owner[r] < 0) return where + " names a unit of no plan task (or twice)";
+      if (owner[r] != task.owners[i]) return where + ": unit " + std::to_string(r) + " has another owner";
+      owner[r] = -1;
+      Unit &u = data.UnitAt(r);
+      const double e = AMatrixFunc::InEnergy(&compound, &u);
+      if (std::memcmp(&e, &task.energy, sizeof e) != 0) return where + ": a unit at another E_x";
+      if (compound.GetPair(compound.GetPairNumFromKey(u.GetEntranceKey()))->GetNucleus() != task.nucleus)
+        return where + ": a unit of another nucleus";
+      if ((u.IsTHM() ? 'T' : 'A') != task.route && task.route != 'R') return where + ": a unit of another route";
+      if (i > 0) {
+        Unit &p = data.UnitAt(task.units[i - 1]);
+        const std::pair<int, int> a{p.GetEntranceKey(), p.GetExitKey()}, b{u.GetEntranceKey(), u.GetExitKey()};
+        if (b < a) return where + ": units not ordered by (entrance, exit)";
+        if (b != a) pairs++;
+      } else
+        pairs = 1;
+    }
+    if (pairs != task.numPairs) return where + ": numPairs " + std::to_string(task.numPairs) + ", pairs " + std::to_string(pairs);
+    seen += (long)task.units.size();
+  }
+  if (seen != expected) return std::to_string(expected - seen) + " units of the plan tasks in no energy task";
+  energyTasks += (long)tasks.size();
+  energyUnits += seen;
+  return std::string();
 }
 
 void RunProject(const std::string &path) {
@@ -86,6 +150,8 @@ void RunProject(const std::string &path) {
   setUp++;
   std::string why = CrossCheck(data);
   if (!why.empty()) return Fail(path, why);
+  why = CheckEnergyTasks(data, compound, cfg);
+  if (!why.empty()) return Fail(path, why);
   std::unique_ptr<WorkingCopy> copy(data.Clone());
   if (copy->Plan().NumTasks() != data.Plan().NumTasks()) return Fail(path, "the copy has another plan");
   why = CrossCheck(*copy);
@@ -110,7 +176,8 @@ int main(int argc, char **argv) {
     if (chdir(start) != 0) return 2;
     RunProject(argv[k]);
   }
-  std::printf("plan: %d projects set up (%ld tasks, %ld mapped points), %d do not set up; %s (%d failure%s)\n", setUp,
-              tasks, mapped, notSetUp, failures ? "FAIL" : "one writer per point", failures, failures == 1 ? "" : "s");
+  std::printf("plan: %d projects set up (%ld tasks, %ld mapped points; %ld energy tasks for %ld units), %d do not set "
+              "up; %s (%d failure%s)\n", setUp, tasks, mapped, energyTasks, energyUnits, notSetUp,
+              failures ? "FAIL" : "one writer per point", failures, failures == 1 ? "" : "s");
   return failures || setUp == 0 ? 1 : 0;
 }
