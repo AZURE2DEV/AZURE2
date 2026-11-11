@@ -338,10 +338,53 @@ void TestCoulombRatio() {
   check("refused: an angle-integrated observable", refused(x));
 }
 
+/// A factor on the model value (ReactionSpec::scale): c x [S(0) x] the tree of the setup without it; the S-factor
+/// factor is a per-point factor of term 0, so the value is c S sigma and the leaf's cotangent g c S.
+void TestScaled() {
+  std::printf("scaled (S factor, yield per charge)\n");
+  PredictionSetup s;
+  s.reaction.observable = Observable::CrossSection;
+  s.terms = {Term(1, 2, 1)};
+  s.reaction.scale.sFactor = true;
+  Prediction p = BuildPrediction(s);
+  check("kind scaled", p.kind == TreeKind::Scaled && TreeKindOf(s) == TreeKind::Scaled);
+  check("text", PredictionText(p) == "S(0)*sigma(1->2)", PredictionText(p));
+  check("one leaf, one S-factor factor of term 0", p.leaves.size() == 1 && p.factors.size() == 1 &&
+                                                       p.factors[0].kind == FactorRef::Kind::SFactor && p.factors[0].term == 0);
+  bool ok = true, okBack = true;
+  for (int i = 0; i < 2000; i++) {
+    double v = rnd(0, 30), S = rnd(1e-3, 1e6);
+    PointArray leaf = {&v, 1}, factor = {&S, 1};
+    Inputs in;
+    in.leaves = View<PointArray>(&leaf, 1);
+    in.factors = View<PointArray>(&factor, 1);
+    Workspace ws;
+    ok = ok && same(p.tree.Value(in, 0, ws), 1.0 * S * v);
+    const double g = rnd(-2, 2);
+    double c = 0.0;
+    double *cots[1] = {&c};
+    Cotangents cot;
+    cot.leaves = View<double *>(cots, 1);
+    p.tree.Backward(in, 1, &g, cot, ws);
+    okBack = okBack && same(c, g * (1.0 * S));
+  }
+  check("value = S sigma, bit for bit", ok);
+  check("backward: g S", okBack);
+  s.reaction.scale.sFactor = false;
+  s.reaction.scale.factor = 3.1e12;
+  check("a constant: c*sigma", PredictionText(BuildPrediction(s)) == "3100000000000*sigma(1->2)", PredictionText(BuildPrediction(s)));
+  s.reaction.combination = ReactionSpec::Combination::Sum;
+  s.terms.push_back(Term(1, 3, 1));
+  check("over a sum: c*sum(...)", PredictionText(BuildPrediction(s)) == "3100000000000*sum(sigma(1->2), J0/J1*sigma(1->3))",
+        PredictionText(BuildPrediction(s)));
+  s.reaction.scale = ValueScale();
+  check("the identity is no node (a sum)", TreeKindOf(s) == TreeKind::Sum);
+}
+
 void TestTable() {
   std::printf("table\n");
   const std::vector<TreeKindRow> &rows = TreeKinds();
-  bool ordered = rows.size() == 6;
+  bool ordered = rows.size() == 7;
   for (std::size_t k = 0; k < rows.size(); k++) ordered = ordered && static_cast<std::size_t>(rows[k].kind) == k && rows[k].build;
   check("one row per kind, in the order of the enum", ordered);
   bool threw = false;
@@ -361,6 +404,7 @@ int main() {
   TestRatio();
   TestTransforms();
   TestCoulombRatio();
+  TestScaled();
   TestTable();
   if (failures) {
     std::printf("%d FAILURE(S)\n", failures);

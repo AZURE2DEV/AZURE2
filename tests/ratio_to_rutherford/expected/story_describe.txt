@@ -4,6 +4,7 @@ dataset aC_RTH (data set 1, line 28)
     12C(a,a)12C: entrance pair 1 (a+12C), exit pair 1 (a+12C)
   window E_lab 0 - 1.79769e+308 MeV, theta_lab 0 - 180 deg
   data file <project>/data/aC_rth.dat
+  rows: 65 read, 65 kept, E_lab 3 - 6 MeV
   parameters:
     aC_RTH.norm (norm, fit)
     aC_RTH.shift.offset (energy shift, fixed)

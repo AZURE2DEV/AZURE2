@@ -163,6 +163,16 @@ void BuildTransform(const PredictionSetup &s, Prediction &p, TransformSpec::Kind
   p.tree.Transform(spec);
 }
 
+/// c [x E exp(2 pi eta)] x the tree the setup has without its factor (ReactionSpec::scale): the S factor of a cross
+/// section, a yield per unit charge, an extrapolation in another unit than the engine's.
+void BuildScaled(const PredictionSetup &s, Prediction &p) {
+  PredictionSetup inner = s;
+  inner.reaction.scale = ValueScale();
+  TreeKinds()[static_cast<std::size_t>(TreeKindOf(inner))].build(inner, p);
+  const ValueScale &scale = s.reaction.scale;
+  p.tree.Scale(scale.factor, p.tree.Root(), scale.sFactor ? AddFactor(FactorRef::Kind::SFactor, 0, p) : -1);
+}
+
 void BuildTransmission(const PredictionSetup &s, Prediction &p) { BuildTransform(s, p, TransformSpec::Kind::Transmission); }
 void BuildYield(const PredictionSetup &s, Prediction &p) { BuildTransform(s, p, TransformSpec::Kind::Yield); }
 
@@ -171,6 +181,7 @@ void BuildYield(const PredictionSetup &s, Prediction &p) { BuildTransform(s, p, 
 std::string FactorText(const Prediction &p, int f) {
   if (f < 0) return "";
   const FactorRef &r = p.factors[f];
+  if (r.kind == FactorRef::Kind::SFactor) return "S(" + std::to_string(r.term) + ")";
   return r.kind == FactorRef::Kind::TermFrame ? "J0/J" + std::to_string(r.term) : "J" + std::to_string(r.term);
 }
 
@@ -233,12 +244,14 @@ const std::vector<TreeKindRow> &TreeKinds() {
       {TreeKind::Transmission, "transmission", BuildTransmission},
       {TreeKind::Yield, "yield", BuildYield},
       {TreeKind::CoulombRatio, "coulomb_ratio", BuildCoulombRatio},
+      {TreeKind::Scaled, "scaled", BuildScaled},
   };
   return rows;
 }
 
 TreeKind TreeKindOf(const PredictionSetup &s) {
   const ReactionSpec &r = s.reaction;
+  if (!r.scale.Identity()) return TreeKind::Scaled;
   if (r.transmission > 0.0) return TreeKind::Transmission;
   if (r.yieldThickness > 0.0) return TreeKind::Yield;
   if (r.combination == ReactionSpec::Combination::Ratio) return TreeKind::Ratio;

@@ -62,7 +62,7 @@ vector_matrix_r BuildShiftDerivTable(CNuc *compound, const Config &configure) {
         double levelEnergy = level->GetFitE();
         double resonanceEnergy = levelEnergy - (pair->GetSepE() + pair->GetExE());
         double dS = ChannelFunc(pair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC))
-                        .ShiftDerivative(l, resonanceEnergy);
+                        .ShiftDerivative(l, pair->SpinOrbitTwoJ(jg->GetJ()), resonanceEnergy);
         tab[j - 1][la - 1][ch - 1] = dS;
       }
     }
@@ -793,7 +793,7 @@ bool GradOnePoint(ESegment *segment, EData *data, azure2::Results &results, int 
     return amf.PointAdjoint(point, results, c.leaves[0].cotangent, accum, shiftDeriv, c.leaves[0].xsComponent);
   }
 
-  // A SUM or RATIO segment whose components share the base point's energy (EData::MapComponentSegments): one
+  // A SUM or RATIO segment whose components share the base point's energy (EData::MapLeaves): one
   // level-matrix solution for every term, each term's T-matrix and cotangent in turn, and one back-propagation of
   // the merged cotangents (TBarAdjointMany).  AZURE_NO_COMPONENT_MAPPING=1 keeps the per-term route below.
   static const bool componentMappingOff = [] {
@@ -803,9 +803,9 @@ bool GradOnePoint(ESegment *segment, EData *data, azure2::Results &results, int 
   if (!segment->IsTransformed() && hasComp && !subpointTE && !componentMappingOff) {
     std::vector<EPoint *> pts{point};
     bool shared = true;
-    for (ESegment *comp : segment->GetComponentSegments()) {
-      if (!comp || pointIdx >= comp->NumPoints()) continue;
-      EPoint *cp = comp->GetPoint(pointIdx + 1);
+    for (int t = 1; t < segment->NumTerms(); t++) {
+      if (pointIdx >= (int)segment->TermPoints(t).size()) continue;
+      EPoint *cp = segment->GetTermPoint(t, pointIdx + 1);
       if (!cp) continue;
       if (cp->GetEntranceKey() != point->GetEntranceKey() || cp->GetCMEnergy() != point->GetCMEnergy() ||
           cp->NumSubPoints() != 0)
@@ -1477,7 +1477,7 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, azure2::Results &resul
   // Residual r = (model - data*n)/(cmErr*n);  d r / d model = 1/(cmErr*n), the
   // cotangent that yields d r / d(E,gamma) directly.
   auto fitBarOf = [&](const GroupMember &m) {
-    const double denom = m.pt->GetCMCrossSectionError() * norm[m.segNum];
+    const double denom = m.seg->CMError(m.pointIdx) * norm[m.segNum];
     return (denom != 0.0) ? 1.0 / denom : 0.0;
   };
   static thread_local vector_r fullRow;
@@ -1485,8 +1485,8 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, azure2::Results &resul
     const int row = rowOf[m.segNum][m.pointIdx];
     if (row < 0) return;
     const double n = norm[m.segNum];
-    const double cmErr = m.pt->GetCMCrossSectionError();
-    residuals[row] = azure2::DataResidual(model, m.pt->GetCMCrossSection(), cmErr, n).Pull();
+    const double cmErr = m.seg->CMError(m.pointIdx);
+    residuals[row] = azure2::DataResidual(model, m.seg->CMValue(m.pointIdx), cmErr, n).Pull();
     // Scatter this row's d r / d(E,gamma) into the packed columns.
     fullRow.assign(pmap.NumFull(), 0.0);
     accum.Scatter(pmap, fullRow);
@@ -1756,8 +1756,8 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, azure2::Results &result
     for (int pid = 0; pid < seg->NumPoints(); pid++) {
       EPoint *pt = seg->GetPoint(pid + 1);
       if (!pt) continue;
-      d.push_back(pt->GetCMCrossSection());
-      e.push_back(pt->GetCMCrossSectionError());
+      d.push_back(seg->CMValue(pid));
+      e.push_back(seg->CMError(pid));
       pt->SetModelValue(results, tr.m[d.size() - 1]);
     }
     const size_t n = d.size();
@@ -1823,8 +1823,8 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, azure2::Results &result
         EPoint *pt = seg->GetPoint(pid + 1);
         if (!pt) continue;
         m.push_back(rows[t].m[i]);
-        d.push_back(pt->GetCMCrossSection());
-        e.push_back(pt->GetCMCrossSectionError());
+        d.push_back(seg->CMValue(pid));
+        e.push_back(seg->CMError(pid));
         energy.push_back(pt->GetCMEnergy());
         Jm.insert(Jm.end(), rows[t].Jm.begin() + i * nCols, rows[t].Jm.begin() + (i + 1) * nCols);
         i++;

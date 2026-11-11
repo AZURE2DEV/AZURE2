@@ -89,6 +89,11 @@ PotentialRecordsResult PotentialRecords(const experiment::HybridPotentialSetting
     else
       AddField(r, "central", {"woods_saxon", "depth", ShortestText(s.V0), "MeV", "radius", ShortestText(s.R), "fm",
                               "diffuseness", ShortestText(s.a), "fm"});
+    if (s.spin_orbit)  // a pyazr session's term (the old block has none)
+      AddField(r, "spin_orbit", {"woods_saxon", "depth", ShortestText(s.spin_orbit->depth_MeV), "MeV", "radius",
+                                 ShortestText(s.spin_orbit->form.radius_fm), "fm", "diffuseness",
+                                 ShortestText(s.spin_orbit->form.diffuseness_fm), "fm", "on",
+                                 s.spin_orbit->acts_on == physics::SpinOrbitParticle::Heavy ? "heavy" : "light", "operator", "2l.s"});
     AddField(r, "matching_radius", {ShortestText(s.matching_radius_fm), "fm"});
     AddField(r, "step", {ShortestText(s.step_fm), "fm"});
     out.records.records.push_back(r);

@@ -13,7 +13,7 @@
 //   pooled A -> B -> A -> B    the same copy back and forth: equal to fresh B's at the end;
 //   pooled C -> A -> C         C = A with every fixed energy-shift parameter moved by 1 keV: equal to fresh A's, then
 //                              to fresh C's (a shift that becomes inactive again must be undone).
-// Also: a second load of the project in the same process gives its component segments the same keys, all distinct.
+// Also: a second load of the project in the same process gives its leaves the same keys, all distinct.
 // An evaluation is AZURECalc::Chi2On's: the hand-over, the parallel point pass, the model value of every point, the
 // objective (Objective.h) with the per-segment chi^2.
 //
@@ -132,7 +132,7 @@ int RunProject(const std::string &path) {
     check("initializes", false, sink.str().substr(0, 400));
     return 1;
   }
-  // The component segments' keys depend on the project alone: a second load in this process gives the same keys,
+  // The leaves' keys depend on the project alone: a second load in this process gives the same keys,
   // and no two components share one (H10: one counter per data set, not one per process and per kind).
   {
     std::ostringstream sink2;
@@ -152,7 +152,7 @@ int RunProject(const std::string &path) {
     auto keys = [](EData &d) {
       std::vector<int> k;
       for (int i = 1; i <= d.NumSegments(); i++)
-        for (const ESegment *c : d.GetSegment(i)->GetComponentSegments()) k.push_back(c->GetSegmentKey());
+        for (int t = 1; t < d.GetSegment(i)->NumTerms(); t++) k.push_back(d.GetSegment(i)->TermKey(t));
       return k;
     };
     const std::vector<int> k1 = keys(data), k2 = keys(data2);

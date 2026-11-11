@@ -65,25 +65,22 @@ experiment::PredictionSetup PredictionSetupOf(const ESegment &segment, CNuc &com
   base.nucleus = NucleusOf(compound, base.entranceKey);
   base.total = segment.IsTotalTerm();
   s.terms.push_back(base);
-  // The component segments: the line's components first (with their fixed angles), then the further capture pairs of
+  // The leaves: the line's components first (with their fixed angles), then the further capture pairs of
   // a total capture, then a yield's total term (EData::Fill, FinishTransformedSegment).
   const std::vector<experiment::ComponentSpec> &line = segment.GetComponents();
-  const std::vector<ESegment *> &components = segment.GetComponentSegments();
-  for (std::size_t k = 0; k < components.size(); k++) {
-    const ESegment *c = components[k];
-    if (!c) throw std::logic_error("PredictionSetupOf: segment " + std::to_string(segment.GetSegmentKey()) +
-                                   " has a null component");
+  for (int leaf = 1; leaf < segment.NumTerms(); leaf++) {
+    const std::size_t k = leaf - 1;
     experiment::PredictionTerm t;
-    t.entranceKey = c->GetEntranceKey();
-    t.exitKey = c->GetExitKey();
-    t.scaling = c->GetComponentScaling();
+    t.entranceKey = segment.TermEntranceKey(leaf);
+    t.exitKey = segment.TermExitKey(leaf);
+    t.scaling = segment.LeafScaling(leaf);
     if (k < line.size() && line[k].hasAngle) {
       t.hasAngle = true;
       t.angle = line[k].angle;
     }
     t.nucleus = NucleusOf(compound, t.entranceKey);
-    t.total = c->IsTotalTerm();
-    t.yieldTotal = c->IsYieldTotalTerm();
+    t.total = segment.IsTermTotal(leaf);
+    t.yieldTotal = segment.IsYieldTotalLeaf(leaf);
     s.terms.push_back(t);
   }
   if (segment.IsNatural()) {

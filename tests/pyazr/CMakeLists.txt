@@ -453,6 +453,14 @@ add_test(NAME pyazr_ratio_to_rutherford
                  ${CMAKE_CURRENT_SOURCE_DIR}/ratio_to_rutherford_test.py)
 set_tests_properties(pyazr_ratio_to_rutherford PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# Units of format 3 and the quantities that are scales (project_format3.md sections 3.3, 7.2): data files in other
+# units to the bit or to 1e-12, S-factor data against an mpmath conversion (with a shift, and the gradient), yields per
+# uC against per particle, pyazr.sfactor_to_cross_section (mpmath; skipped without it).
+add_test(NAME pyazr_units_scales
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/units_scales_test.py)
+set_tests_properties(pyazr_units_scales PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" SKIP_RETURN_CODE 77)
+
 # Electron screening: the AzrModel helpers for the screening block of a <targetInt> line, the
 # screening_<n> parameter and its prior, and its analytic gradient and Jacobian column.
 add_test(NAME pyazr_screening
@@ -481,6 +489,13 @@ add_test(NAME pyazr_hybrid_threshold
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/hybrid_threshold_test.py)
 set_tests_properties(pyazr_hybrid_threshold PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# The spin-orbit term of a hybrid pair through pyazr: channel functions per J against an independent integration, the
+# API's term equal to the record's, the refusals, external capture per J (tests/spin_orbit_potential, ec_ratio.csv).
+add_test(NAME pyazr_spin_orbit_potential
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/spin_orbit_potential_test.py)
+set_tests_properties(pyazr_spin_orbit_potential PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
 # The per-pair semantics of the hybrid potential on tests/hybrid_potential (its own folder's script): a pair's setting
 # beats the default, a pair without one inherits it, the API and the file give the same chi-squared, the Coulomb memo
@@ -776,3 +791,10 @@ add_test(NAME pyazr_composite_gradient
                  ${CMAKE_CURRENT_SOURCE_DIR}/composite_gradient_test.py)
 set_tests_properties(pyazr_composite_gradient PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77
                      TIMEOUT 900)
+
+# azure2.ec_integrals at the energy the engine uses for the final state (ALevel::GetECEnergy) in every basis: the
+# formal basis gives the Brune basis's integrals on tests/13N (they were at the formal energy before 2026-11-10).
+add_test(NAME pyazr_ec_integrals_formal
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/ec_integrals_formal_test.py)
+set_tests_properties(pyazr_ec_integrals_formal PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

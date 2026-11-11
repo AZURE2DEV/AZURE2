@@ -78,12 +78,13 @@ class ThmVertexBoundary {
   /*! S_c of `pair` at a compound-system level energy (MeV), through a small
       per-thread memo keyed by every input of S_c (charges, reduced mass,
       radius, hybrid-potential state, l, energy, Coulomb routine). */
-  static double ShiftAtLevelEnergy(PPair *pair, int l, double levelEnergy, bool useGSL);
+  static double ShiftAtLevelEnergy(PPair *pair, int l, int two_j, double levelEnergy, bool useGSL);
 
  private:
   Rule rule_;
   int channel_;
   int l_;
+  int two_j_;  ///< the channel's 2J key (PPair::SpinOrbitTwoJ)
   int lowest_;
   double fixed_;  // B_c, or S_c(E_min) for LOWEST_LEVEL_SHIFT
   mutable ChannelFunc channelFunc_;

@@ -48,7 +48,8 @@ double ShiftedEnergy(double originalEnergy, double shift) {
 
 void ESegment::UpdatePointEnergiesWithShift(CNuc *theCNuc, const Config *configure) {
   // No lock: each thread re-energises the points of its own EData clone.
-  for (int i = 0; i < NumPoints(); i++) UpdatePointEnergyWithShift(i, theCNuc, configure);
+  for (int t = 0; t < NumTerms(); t++)
+    for (int i = 0; i < (int)Units(t).points.size(); i++) UpdatePointEnergyWithShift(t, i, theCNuc, configure);
 }
 
 std::vector<double> ESegment::ShiftState() const {
@@ -57,32 +58,35 @@ std::vector<double> ESegment::ShiftState() const {
   return state;
 }
 
-void ESegment::BeginShiftRefill(CNuc *theCNuc, const Config &configure) {
+void ESegment::BeginShiftRefill(int t, CNuc *theCNuc, const Config &configure) {
+  TermUnits &u = Units(t);
   // Tables of another system (a session that changed a radius or the Coulomb route) are dropped.
-  if (!shiftTables_.empty() && !shiftTables_.front().table->SameSystem(theCNuc, configure)) shiftTables_.clear();
-  shiftRows_.assign(this->NumPoints(), {});
+  if (!u.shiftTables.empty() && !u.shiftTables.front().table->SameSystem(theCNuc, configure)) u.shiftTables.clear();
+  u.shiftRows.assign(u.points.size(), {});
 }
 
-void ESegment::CommitShiftTable(CNuc *theCNuc, const Config &configure) {
-  if ((int)shiftRows_.size() != this->NumPoints()) return;  // no refill since BeginShiftRefill
+void ESegment::CommitShiftTable(int t, CNuc *theCNuc, const Config &configure) {
+  TermUnits &u = Units(t);
+  if (u.shiftRows.size() != u.points.size()) return;  // no refill since BeginShiftRefill
   std::vector<std::pair<ChannelTable::Key, ChannelTable::Row>> all;
-  for (auto &v : shiftRows_) all.insert(all.end(), v.begin(), v.end());
-  shiftRows_.clear();
+  for (auto &v : u.shiftRows) all.insert(all.end(), v.begin(), v.end());
+  u.shiftRows.clear();
   if (all.empty()) return;
   const std::vector<double> state = ShiftState();
-  for (auto it = shiftTables_.begin(); it != shiftTables_.end(); ++it)
+  for (auto it = u.shiftTables.begin(); it != u.shiftTables.end(); ++it)
     if (it->state == state) {
-      shiftTables_.erase(it);
+      u.shiftTables.erase(it);
       break;
     }
-  shiftTables_.insert(shiftTables_.begin(), ShiftTable{state, ChannelTable::FromRows(theCNuc, configure, std::move(all))});
-  if (shiftTables_.size() > kShiftTables) shiftTables_.resize(kShiftTables);
+  u.shiftTables.insert(u.shiftTables.begin(), ShiftTable{state, ChannelTable::FromRows(theCNuc, configure, std::move(all))});
+  if (u.shiftTables.size() > kShiftTables) u.shiftTables.resize(kShiftTables);
 }
 
-ChannelRowSource ESegment::ShiftRowSource(int i) {
+ChannelRowSource ESegment::ShiftRowSource(int t, int i) {
+  TermUnits &u = Units(t);
   ChannelRowSource rows;
-  for (const ShiftTable &t : shiftTables_) rows.tables.push_back(t.table.get());
-  if (i >= 0 && i < (int)shiftRows_.size()) rows.used = &shiftRows_[i];
+  for (const ShiftTable &table : u.shiftTables) rows.tables.push_back(table.table.get());
+  if (i >= 0 && i < (int)u.shiftRows.size()) rows.used = &u.shiftRows[i];
   return rows;
 }
 
@@ -91,13 +95,14 @@ ChannelRowSource ESegment::ShiftRowSource(int i) {
  * (EData::MapData), or NULL -- also for a point mapped onto a point of another
  * segment, which this segment's shift step re-energises on its own.
  */
-EPoint *ESegment::ShiftHost(int i) {
-  if (i < 0 || i >= NumPoints()) return nullptr;
-  EPoint *point = GetPoint(i + 1);
+EPoint *ESegment::ShiftHost(int t, int i) {
+  std::vector<EPoint> &points = Units(t).points;
+  if (i < 0 || i >= (int)points.size()) return nullptr;
+  EPoint *point = &points[i];
   if (!point->IsMapped()) return nullptr;
   EnergyMap map = point->GetMap();
   if (map.point < 1 || map.point > i) return nullptr;
-  EPoint *candidate = GetPoint(map.point);
+  EPoint *candidate = &points[map.point - 1];
   if (candidate->NumSubPoints() != point->NumSubPoints()) return nullptr;
   for (int m = 0, n = candidate->PlanMapped().size(); m < n; m++)
     if (candidate->PlanMapped()[m] == point) return candidate;
@@ -112,19 +117,20 @@ EPoint *ESegment::ShiftHost(int i) {
  * columns of AZURECalc::ResidualJacobian) hand out these groups, never single
  * mapped points.  A point with a host returns at once.
  */
-void ESegment::UpdatePointGroupEnergyWithShift(int i, CNuc *theCNuc, const Config *configure) {
-  if (ShiftHost(i)) return;
-  UpdatePointEnergyWithShift(i, theCNuc, configure);
-  EPoint *point = GetPoint(i + 1);
+void ESegment::UpdatePointGroupEnergyWithShift(int t, int i, CNuc *theCNuc, const Config *configure) {
+  if (ShiftHost(t, i)) return;
+  UpdatePointEnergyWithShift(t, i, theCNuc, configure);
+  std::vector<EPoint> &points = Units(t).points;
+  EPoint *point = &points[i];
   // A point mapped from another segment (EData::MapData) is not this
   // segment's to move: it is re-energised with its own segment, on its own.
   std::less<const EPoint *> before;
-  const EPoint *first = &points_.front(), *last = &points_.back();
+  const EPoint *first = &points.front(), *last = &points.back();
   for (int m = 0, n = point->PlanMapped().size(); m < n; m++) {
     const EPoint *mapped = point->PlanMapped()[m];
     if (before(mapped, first) || before(last, mapped)) continue;
     const int j = (int)(mapped - first);
-    if (j > i && j < NumPoints() && ShiftHost(j) == point) UpdatePointEnergyWithShift(j, theCNuc, configure);
+    if (j > i && j < (int)points.size() && ShiftHost(t, j) == point) UpdatePointEnergyWithShift(t, j, theCNuc, configure);
   }
 }
 
@@ -135,7 +141,7 @@ void ESegment::UpdatePointGroupEnergyWithShift(int i, CNuc *theCNuc, const Confi
  * reads its host (ShiftHost), so it must run after its host and not
  * concurrently with it: UpdatePointGroupEnergyWithShift.
  */
-void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *configure) {
+void ESegment::UpdatePointEnergyWithShift(int t, int i, CNuc *theCNuc, const Config *configure) {
   // An ordinary segment's energies are positive and must stay so: points at
   // E <= 0 are left alone and a shift is floored above zero (ShiftedEnergy).
   // A THM (HOES) segment has points and folding sub-points below the entrance
@@ -144,7 +150,7 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
   // threshold, and a point below threshold never moved at all.
   const bool thm = this->IsTHM();
   {
-    EPoint *point = GetPoint(i + 1);
+    EPoint *point = &Units(t).points[i];
     // A point mapped onto an earlier point of this segment (EData::MapData)
     // is at the same energy as its host, which has already been moved (index
     // order in UpdatePointEnergiesWithShift; host first within a group in
@@ -153,7 +159,7 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
     // angle-dependent Coulomb amplitude is its own.  CopyEDependentValuesFrom
     // refuses (and the values are recomputed) if the host is not at this
     // energy.
-    EPoint *host = ShiftHost(i);
+    EPoint *host = ShiftHost(t, i);
     if (point && (thm || point->GetOriginalEnergy() > 0)) {
       double originalEnergy = point->GetOriginalEnergy();
       double shiftedEnergy = thm ? originalEnergy + TotalEnergyShift(originalEnergy)
@@ -164,15 +170,16 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
 
       // Recalculate energy dependent values
       if (theCNuc && configure) {
-        PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
-        PPair *exitPair = theCNuc->GetPairFromKey(this->GetExitKey());  // nullptr for total capture (-1)
+        PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->TermEntranceKey(t)));
+        PPair *exitPair = theCNuc->GetPairFromKey(this->TermExitKey(t));  // nullptr for total capture (-1)
 
-        // The same conversion as ESegment::Fill (ratios are dimensionless: no cross-section conversion)
-        if (!this->ConvertPointToCM(point, entrancePair, exitPair, *configure, !this->IsDimensionlessRatio(),
-                                    BeyondRange::Convert)) {
+        // The same conversion as ESegment::Fill (ratios are dimensionless: no cross-section conversion; a leaf's
+        // value is always converted)
+        if (!this->ConvertRowToCM(t, i, entrancePair, exitPair, t > 0 || !this->IsDimensionlessRatio(),
+                                  BeyondRange::Convert)) {
           // An energy shift moved the point past the kinematic maximum lab angle mid-fit: the c.m. angle keeps
           // its value as loaded and the run says so (it cannot stop here; audit 2026-10-25, item 31).
-          configure->outStream << "WARNING: segment #" << this->GetSegmentKey() << ": the energy shift moved the point at lab angle "
+          configure->outStream << "WARNING: segment #" << this->TermKey(t) << ": the energy shift moved the point at lab angle "
                                << point->GetLabAngle() << " deg to E_lab = " << point->GetLabEnergy()
                                << " MeV, beyond its kinematic maximum " << point->GetLabAngleMax()
                                << " deg; its c.m. angle is kept at its value as loaded." << std::endl;
@@ -184,7 +191,7 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
           TargetEffect *effect = NULL;
           EData *parentData = point->GetParentData();
           if (parentData && this->IsTargetEffect()) {
-            TargetEffect *te = parentData->GetTargetEffect(this->GetTargetEffectNum());
+            TargetEffect *te = parentData->GetTargetEffect(this->TermTargetEffectNum(t));
             if (te && te->IsQCoefficients()) {
               effect = te;
             }
@@ -192,7 +199,7 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
           point->CalcLegendreP(configure->maxLOrder, theCNuc, effect);
         }
         // The sub-points are moved and recalculated below, one by one.
-        const ChannelRowSource rows = ShiftRowSource(i);
+        const ChannelRowSource rows = ShiftRowSource(t, i);
         if (host && point->CopyEDependentValuesFrom(*host))
           point->CalcCoulombAmplitude(theCNuc, false);
         else
@@ -263,7 +270,7 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
               TargetEffect *subEffect = NULL;
               EData *parentData = point->GetParentData();
               if (parentData && this->IsTargetEffect()) {
-                TargetEffect *te = parentData->GetTargetEffect(this->GetTargetEffectNum());
+                TargetEffect *te = parentData->GetTargetEffect(this->TermTargetEffectNum(t));
                 if (te && te->IsQCoefficients()) {
                   subEffect = te;
                 }

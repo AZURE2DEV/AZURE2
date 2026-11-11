@@ -2,6 +2,245 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (director, night) — the seventh wave merged: units, the measurement held once, spin–orbit, the pathway table
+
+**Merged into `feature/upgrade-4-data`** (`--no-ff`, in this order; rehearsed together in one scratch worktree, built
+and verified once; the committed tree is that tree): units of every number, the S factor as a quantity and yields per
+charge (`feature/upgrade-4-units`); the first milestone of the new data structure, what was measured exists once
+(`feature/upgrade-4-data-structure`); the spin–orbit term of the hybrid potential (`feature/upgrade-4-spin-orbit`);
+the reaction pathways as one immutable table, first branch (`feature/upgrade-4-pathway-table-1`). Their entries are
+below.
+
+**The merged head as a whole** (build `work/b-trial12`, 0 warnings): every project × 3 bases: the 704 + 677 + 704
+output files of the reference tag `tab-trial8` identical, and only the 22 files per basis of the four new project
+files (the units story, the spin–orbit project and its two models) are new;
+`ctest -LE slow` 177/177; `tests/run_tests.sh` 144 passed / 1 failed in the verification: the units project compares
+its `--describe` text, which gained the "rows read, kept" line of the data structure — the expected text is corrected
+in the data-structure merge and the check passes alone (the whole script is being run again; its result is in the
+next entry if it is not 145 / 0); calculations at 1 and 6 threads 12/12 identical; T2 with a `<modelData>` section
+identical in the three bases; spec equivalence: 197 files, 185 converted, 183 equal, 2 recorded, 0 differ (12 not
+converted: the four new files are format 3 already); the converted tree: 483 (456 formal) identical, 38 classified,
+0 differ, 0 missing.
+
+**What the director changed at the merges** (each in its merge commit's message):
+- Units × data structure: the units branch converts the columns of a data row to the engine's units where the row is
+  read; the data-structure branch moved that reading into `experiment/Measurement.cpp`. `ReadMeasurementRows` now takes
+  the data set's `ColumnConversion` and applies it to the line before the order check, the row window and the
+  covariance file; `ESegment::Fill` and `Describe.cpp` pass it. `src/ModelPass.cpp` holds the three factor kinds (term
+  frame, ratio frame, S factor).
+- pyazr is **2.29.0** (units 2.27.0, the data structure's `describe` fields 2.28.0, spin–orbit 2.29.0; the pathway
+  table changed no interface).
+- Checked by hand: S = 1 keV b of p + ¹²C at 100 keV gives 1.37383423e-10 b by the formula and by pyazr; the sign of
+  the spin–orbit term (with V_so > 0 the j = l + ½ partner is the attractive one, FRESCO's convention).
+
+**Decisions of the director.**
+- Spin–orbit: the agent's extra refusal code `E_SO_NO_TERM` and the rule that `E_SO_THM` / `E_SO_RELATIVISTIC` take the
+  place of the general codes when the record has the term are accepted; pyazr refuses a term on the default pair.
+- Pathway table: a point whose exit pair no pathway of its entrance reaches is refused with a message (before, the
+  last decay was read); accepted. The correction of `azure2.ec_integrals` in the formal basis is accepted as a fix.
+- Data structure: milestone 1 keeps a raw pointer to the shared rows in a point; it goes with the flat working copy
+  (milestone 2).
+
+**Defects and debts found, not yet fixed** (owner in brackets):
+- The AZUREOut file of an S-factor data set prints S in the cross-section columns; a second S-factor formula lives in
+  the point code [data structure, milestone 2: one formula, `physics::sfactor_conversion`].
+- A yield on a finite layer is refused: not built [first item of the target work of Phase 5].
+- No project exercises a term's fixed-angle frame angle; `tests/sum_lab_frame/models/sum_data.azr` does not fill its
+  segment [data structure, milestone 2].
+- The capture-A_y terms are still built lazily under a static mutex, and also for a β entrance; two final states
+  that share one photon pair would mismatch rows and final states in `GetECIntegrals` and
+  `EPoint::CalculateECAmplitudes` (not known whether such a project can load) [pathway table, capture A_y at set-up].
+- The decay-position defect of the external-capture code of the data classes [second pathway branch, after the data
+  classes are replaced, with a test project].
+- `ScatteringLength::ZeroEnergyShift` takes the point-Coulomb S(0) for a pair with a hybrid potential; an exception
+  inside the external-capture path under OpenMP ends the process [Phase 5 / Phase 6].
+- pyazr and tools debts of the sixth wave (`save_fit` with `norms="fitted"`, a changed potential in an old file,
+  matching radius and step, key padding, `classify.py`) [pyazr on records, running].
+- Not run on this head: 1 against 8 threads, ThreadSanitizer, `ctest -L slow`, the Sphinx build (not installed here).
+
+**For the PI to see** (behaviour a user can meet; additions):
+- Format 3: every number has a unit; a data file may be in keV, degrees or radians, mb, μb, an E_cm energy column; a
+  data set can hold S(E) (the engine converts with the masses of the pair) or a thick-target yield per charge or per
+  particle.
+- `--describe` / `pyazr.describe`: rows read, rows kept and the kept energy range of every data set.
+- A potential record can hold `spin_orbit woods_saxon depth radius diffuseness on light|heavy` for a pair with one
+  spinning particle; other cases are refused with a code that says why.
+- `azure2.ec_integrals` in the formal basis gives other (correct) numbers than before.
+- A data line that does not parse is reported before an angle beyond the kinematic maximum of an earlier row.
+
+**Running now** (Opus agents; briefs in `/data0/skowrons/AZURE2-upgrade/work/briefs/`):
+- The data structure, milestones 2 and 3 (`X_data_structure.md`, `docs/upgrade/data_structure.md`): the flat working
+  copy addressed by the plan, then the deletion of `EData`, `ESegment`, `EPoint`.
+- The pathway table, capture A_y at set-up (`cnuc_split.md` §11.6 step 6): the requests from the data-set specs, the
+  two readers onto the table, `CNuc::CalcCaptureAnalyzingPower` and its static mutex deleted.
+- `pyazr.Project`: the project as records in Python (`Z_pyazr_project.md`; `project_format3.md` §4, §6).
+
+**Then.** The second pathway branch (external-capture amplitudes at set-up, the trees deleted) after the data classes
+are replaced; one set-up path for both formats, `predict`, the recipe "a new kind of data"; the rest of `CNuc`;
+Phase 5 (targets: the yield on a finite layer first; the lab-frame comparison of shifted data); Phase 6;
+the GUI on the new format; `FOR_THE_OWNER.md` and `ROADMAP.md` for the meeting with the owner; `origin/dev` merged only
+when the reconstruction is complete.
+
+## 2026-11-10 (agent, brief Y) — the pathway table, read by everything outside the data classes (`feature/upgrade-4-pathway-table-1`)
+
+**Done** (`cnuc_split.md` §11.6 steps 1, 2, 4, 5 and 7 without capture A_y; §11.11 decisions 1, 4, 5, 6, 7).
+- `include/PathwayTable.h`, `src/PathwayTable.cpp`: the immutable `PathwayTable` (per entrance pair: exits, spin
+  groups, internal and external rows, flat interferences with `z_upos`, interference pathways, diagonal pathways,
+  capture-A_y terms), built by `BuildPathwayTable` from `reaction_pathways` and the coupling coefficients.
+  `CNuc::Initialize` builds it (`CNuc::BuildPathways`, `src/CNucPathways.cpp`) and holds a
+  `shared_ptr<const PathwayTable>` (`CNuc::Pathways()`), shared by every clone.  Capture-A_y terms are built for the
+  (entrance, exit) pairs given to `CNuc::RequestCaptureAy` before `Initialize`; the engine requests none yet.
+- Readers moved: the pathways and angular-distributions check files, `SetUpFormalCaptureMasks`,
+  `AZUREAPI::GetECIntegrals`, `RMatrixFunc::CalculateTMatrix`, `AMatrixFunc::CalculateTMatrix`,
+  `GenMatrixFunc::CalculateBareCrossSection` / `CalculateAmplitudeMatrix` / `BuildCoulombInterference`, and the
+  gradient (`PointTBar`, `TBarAdjoint`, `CollectBilinearTerms`, `TBarProducts`).  `rt_decay_` and `tbar_decay_` are
+  `const ExitRow *`.  A point whose exit pair no pathway reaches stops with a message (it read the last decay).
+  The `TablesBuilt() == false` fall-backs of `GenMatrixFunc` are deleted (an abort run of every project first).
+- Fix: `GetECIntegrals` (pyazr `ec_integrals`) uses the final state's capture energy `GetECEnergy()`, not the formal
+  energy (test `pyazr_ec_integrals_formal`: formal against Brune 2.995 before, 1.3e-13 after).
+- Tests: `physics_pathways_from_cnuc` compares table and trees field by field on every `.azr` (Brune, formal);
+  `physics_pathway_table` checks properties without the builder (it stays when the trees go).
+
+**Verified** (final code, build `work/b-pathtab-s7`, 0 warnings): 183 x 3 against `tab-trial8` (tag `tab-ptfinal`):
+704 / 677 / 704 identical; `ctest -LE slow` 173/173; `tests/run_tests.sh` 142 passed, 0 failed; 1 against 3 threads on T1-T3,
+13N, beta_delayed_alpha, ec_e1m1_phase (6 models), identical_entrance_reaction (3) in three bases: 43 x 3 runs
+identical, upos_pair_index and light_excitation (their check.sh at 1 and 3 threads, work trees identical); R-matrix
+route (T1, T3, 13N, beam_profile_kernel with `<config>` false and `--no-ignore-externals`, Brune and formal) and
+`--use-rmc` (T1, 13N, Brune and formal), base against branch: 12 cases, every output file identical; the four check
+files of T1, T3, 13N, beam_profile_kernel: 16 identical; converted-tree gate (tag `gptfinal`): exit 0, 483 (456)
+identical, 38 classified, 0 differ, 0 missing; fits at 1 thread (T2 `--use-lm` 200 calls, T2 MIGRAD with the
+analytic gradient, 13N MIGRAD): every output file identical.  Before the fall-backs were deleted, a run of every
+project with an abort in them (tag `tab-ptabort`) reached neither.  Cost (1 thread, `--no-coulomb-table`, base
+`b-trial11` alternated with the branch): T2 calculation cycles -0.6 %, instructions -0.13 %; T2 200-call fit cycles
+-1.3 %, instructions -0.49 %; peak RSS unchanged (64 MB, 275 MB).  Largest table (beam_profile_kernel, every
+particle and beta pair an entrance): 396,483 rows, 24.1 MB, 0.59 s to build; it is built beside the trees until
+they are deleted.
+
+**Open (second branch, after the data classes are replaced)**: step 3 (external-capture amplitudes at set-up in
+`EDataExternalCapture.cpp`, `EPointExternalCapture.cpp`, with the decay-position defect, decision 3), step 6
+(capture-A_y requests from the data sets, `CalculateCaptureAnalyzingPower` and the capture-A_y block of `PointTBar`
+on the table, the static mutex deleted), step 8 (the trees deleted).  `GenMatrixFunc.cpp` keeps 4 tree accesses and
+`AMatrixFunc.cpp` 4, all in the capture-A_y code.
+
+## 2026-11-10 (agent, brief W) — the spin-orbit term of the hybrid potential (`feature/upgrade-4-spin-orbit`)
+
+**Done** (`spin_orbit_potential.md` §5 steps 4 and 5, option (a): pairs with one spinning particle).
+- The key: channel functions of a pair whose potential has a spin-orbit term depend on (l, J).  `ChannelTable::Key`
+  is (pair, l, two_j, E_c); `CoulFunc`, `ShftFunc`, `WhitFunc`, `ChannelFunc`, `NFIntegral` take (l, two_j); the
+  radial scratch and one-deep memo of `CoulFunc`, the shift-derivative memo of `CNuc::CalcShiftFunctions`, the THM
+  shift memo and the rate grid of `ECIntegral` (now also keyed by the potential) carry it.  One function forms it:
+  `PPair::SpinOrbitTwoJ(J)` (`kNoSpinOrbit` = -1 for a pair without the term); `PPair::SpinOrbitFactor(l, two_j)`
+  gives <2 l.i>.  The THM Coulomb term passes `kNoSpinOrbit` (the THM vertex refuses any potential).
+- The term: `physics/HybridPotential.h` `SpinOrbitTerm` (optional field of `HybridPotential`, compared by value,
+  appended to `PotentialKey` only when present), `TwoLDotI`, `SpinOrbitRadialTerm` (FRESCO: V_so 2.000 fm^2 (1/r)
+  df/dr); `RadialPotential`, `IntegrateInward`, `DecayingSolution`, `HybridBoundShift` take <2 l.i>, added last and
+  not at all when 0.  Bound states, closed channels, S', S'' and the EC final state use it.
+- Format 3: `spin_orbit woods_saxon depth radius diffuseness on light|heavy operator 2l.s` (schema row; --describe;
+  the record writer writes it for pyazr's save_fit).  Codes (`experiment/SpinOrbitChecks.h`, shared by the build,
+  pyazr and the API): `E_SO_TWO_SPINS`, `E_SO_ZERO_SPIN`, `E_SO_RELATIVISTIC`, `E_SO_THM`, `E_SO_NEEDS_J`,
+  `E_SO_NO_TERM`.  `PPair::SetHybridPotential` refuses an impossible term as a last guard.
+- pyazr 2.24.0: `set_nuclear_potential(..., spin_orbit={depth, radius, diffuseness, on})`, `NuclearPotential.spin_orbit`,
+  `coulomb_functions(..., J=None)`.  `AZUREAPI::GetCoulombFunctions` moved verbatim to
+  `api/src/AZUREAPIChannelFunctions.cpp` first (size limit).
+- Tests: `physics_spin_orbit` (m-scheme angular factor, radial term, delta-shell closed form, the DOP853 table
+  `physics/tests/data/spin_orbit.csv`, bit-identity at <2 l.i> = 0), `tests/spin_orbit_potential` (χ² pinned; check.sh:
+  phase shifts against the table, unitarity, 1 vs 3 threads, gradient, capture), `pyazr_spin_orbit_potential`
+  (coulomb_functions with J, API = record, refusals, EC integrals per J against `ec_reference.py`),
+  `channel_table_unit` with both j.  Docs: `theory/hybrid_potential.rst`, `examples/spin_orbit_potential.rst`,
+  `pyazr.rst`, format3.rst regenerated.
+
+**Verified** (build `work/b-so`, clean, 0 warnings): 183 × 3 against `tab-trial8` (tag `tab-so3`): 704 / 677 / 704
+identical, plus 15 / 15 / 15 new files (the new project and its models); channel tables of T1–T3 byte-identical
+to the base build (a scratch dumper linked against each); T2 cycles (perf stat, 1 thread, base and branch alternated,
+6 repetitions, minimum): calculation 3.326e9 against 3.326e9, 200-call fit 2.122e11 against 2.124e11 (+0.1 %);
+instructions +0.38 % and +0.08 %; the remaining checks are in the report of the branch.  Every new test was shown to
+fail once with an injected error (l.s for 2 l.s, the sign of df/dr, <2 l.i> halved, the point's row read with
+J = l + 1/2, the EC bound state without its J).
+
+**Open.** Web UI / Qt forms for the word (they need: the spin_orbit structured value of the schema row, pyazr's
+dict, the J argument of coulomb_functions).  `gaussian` as a spin-orbit form (one schema alternative, one solver
+case, one test).  Option (b), pairs with two spins (refused).  `ScatteringLength::ZeroEnergyShift` (the exact
+threshold of a scattering-length point) uses the point-Coulomb S(0) for a hybrid pair, not the distorted one (older
+than this branch).  Sphinx not run (not installed on this host).
+
+## 2026-11-10 (agent, brief X, milestone 1) — what was measured exists once (`feature/upgrade-4-data-structure`)
+
+**Design.** `docs/upgrade/data_structure.md`: `Measurement` (immutable, shared), the data set, a flat working copy;
+where every member of `EPoint`/`ESegment`/`EData` goes; the three milestones.
+
+**Done (milestone 1).**
+- `experiment::Measurement` (`experiment/include/azure2/experiment/Measurement.h`): the rows of a data set inside its
+  window as read (E_lab, angle, value, error after a covariance file, bins, file record, the Legendre-order flag) and
+  their provenance (file, rows read, rows kept, kept E_lab range), held as `shared_ptr<const>` by the segment and its
+  copies; an extrapolation's grid is a measurement too.  `ReadMeasurementRows` is the one reader (`DataLine` moved
+  to `experiment/`); the engine and `--describe` use it.
+- The points read their datum by row: `lab_crosssection_`, `lab_dcrosssection_`, `bin_low_lab_`, `bin_high_lab_`,
+  `fileRecord_`, `coefficient_order_`, `coefficient_absolute_`, `original_energy_` (of a row) are gone; a sub-point
+  takes its row's Legendre order (`EPoint::BelongToRowOf`).
+- One lab -> c.m. conversion, `experiment::ConvertRow`, writing a `MeasurementFrame` row; the load, the shift step and
+  the leaves call it (`ESegment::ConvertRowToCM`); a shifted row starts from the frame at load (H4).  y_c.m., dy_c.m.
+  and the Jacobian live only in the frame (`ESegment::CMValue`, `CMError`, `Jacobian`); `PointResidual` takes the
+  segment and the row.
+- Components are leaves of their segment (`ESegment::AddLeaf`, term k >= 1; the segment's own points are term 0):
+  `EData::componentSegments_`, `CreateComponentSegment` and the pointer re-mapping of `Clone` are gone; the shift
+  step, grid re-placement and target set-up take (segment, term) (`TermRef`); `EData::LeafRefs` keeps creation order
+  (plan, layout, intEC file).
+- `--describe [--json]` / `pyazr.describe` (pyazr 2.25.0): rows read and kept and the kept E_lab range per data set.
+
+**Verified** (build `work/b-dstruct`, 0 warnings): 183 x 3 against `tab-trial8` (tag `tab-dsm1a`): 704 / 677 / 704
+identical; `ctest -LE slow` 172/172 (upgrade_history, upgrade_plan_runtime, upgrade_poison_results among them);
+`tests/run_tests.sh` 141 passed, 1 failed (the story `--describe` of `tests/ratio_to_rutherford`: the new rows line;
+expected file updated, its check then passed); converted-tree gate (`gdsm1a`): 483 (456) identical, 38 classified,
+0 differ, 0 missing; `tests/format3_engine/check.sh` passed; calculations at 1 and 3 threads identical on T1-T3, 13N,
+natural_neon (three bases); fits at 1 thread identical to the base build (T1, T2, 13N), at 3 threads they differ from
+1 thread on the base build as well (T2: edm, chi2 in the last digits; T1, T3, 13N: the call count) -- not from this
+work.  Speed (min of 6 alternated runs, 1 thread, Coulomb table): T2 calculation 668.8 M cycles against 672.3 M,
+200-call T2 fit 53.47 G against 53.39 G; peak RSS T2 fit 349 / 427 MB at 1 / 3 threads against 360 / 441,
+natural_neon 1532 MB against 1551.
+
+**Open (milestones 2 and 3).** The working copy is not yet flat: units are still `EPoint`s inside segments (term 0 and
+leaves), each with its settings; the plan addresses (list, segment, point); `Clone` copies segments.  `EPoint`,
+`ESegment`, `EData` still exist.
+
+## 2026-11-10 (agent, brief J) — units in format 3, the S factor as a quantity, yields per charge (`feature/upgrade-4-units`)
+
+**Done.**
+- Units: every number of a format-3 project may be written in any unit of its dimension.  One function applies a
+  factor (`experiment/Units.h` `Rescale`, through `ToBase`, `ToUnit`, `Context::InBase`): a power-of-ten factor
+  divides by the exact integer, so a value exact in the written unit is the same double as the value written in the
+  engine unit.  Record fields (windows, shifts incl. the sqrt term, grids, areal density in atoms/b for a layer and a
+  sample, U_e in keV, a straggling coefficient in any sqrt-energy unit, stopping and spread formulas in another unit,
+  UDR times, model data) are converted in `Build`.  The columns of a data file: `DatasetSpec::columns`
+  (`ColumnConversion`: energy, angle, value factors, an `E_cm` column with the entrance pair's masses), applied by
+  `experiment/DataRows.h` `RowToEngine` through `DataLine::ToEngineUnits`, called in `ESegment::Fill`; the energy
+  window is in the energy column's frame and unit.  An extrapolation in another unit is computed in it.
+- S factor: `quantity sfactor` builds; `ReactionSpec::scale` (`ValueScale`) with `sFactor`; tree kind `Scaled`
+  (one row of `TreeKinds()`), `FactorRef::Kind::SFactor`, its value `SFactorConversionValue` (src/CoulombReference.cpp)
+  from `physics/AstrophysicalFactor.h` `sfactor_conversion` (E exp(2 pi eta), non-relativistic eta, <levels> masses);
+  binding `_azure2.sfactor_conversion`.  Adaptive extrapolation grids of `sfactor` refine on S (the model value).
+- Yields: `1/uC|mC|C` with `charge_state` (x 1e-6 C/(q e) ...), `counts/...` with a fixed `efficiency`, `arbitrary`;
+  a layer target is refused for a yield (Phase 5 kernel), a fitted efficiency is refused.
+- pyazr 2.27.0: `sfactor_to_cross_section(S, E_cm_kev, z1, z2, m1_u, m2_u)` via the engine; `to_azr` refuses S-factor
+  data; `ExforData.to_sfactor_dataset` (pyazr/exfor_sfactor.py) writes `quantity sfactor`.
+- Defects fixed on the way: `unit 1/C` / `counts/C` (factor 1) were built with no scaling; a yield on a layer built as
+  the target-averaged cross section; a sqrt shift, straggling coefficient, UDR times read without their unit; percent
+  priors of U_e and sample thickness read as absolute.
+- Tests: `experiment_build` (units, sfactor, yields), `experiment_prediction` (Scaled), `pyazr_units_scales`,
+  `nds_local_exfor` section 6, `tests/units_scales/check.sh` (the section 9.1 example on T2's levels, adaptive S grid).
+
+**Verified** (build `work/b-units`, 0 warnings): 183 + 1 projects x 3 bases against `tab-trial8`: 704 / 677 / 704
+identical, the 7 other files per basis those of the new `tests/units_scales/models/yield_story.azr` (tag
+`tab-units-final`); converted-tree gate (`gunits2`): 483 (456) identical, 38 classified, 0 differ, 0 missing; spec
+equivalence 194 files, 185 converted, 183 equal, 2 recorded, 0 differ; `ctest -LE slow` 172/172 (after adding the new
+project's three lines to `tests/upgrade/predictions.txt`); calculations at 1 and 2 threads on T1-T3, 13N in three
+bases identical; every new test shown failing once with an injected error (multiplying instead of dividing in
+`Rescale`, the S factor at the lab energy, charge state 1, the S-factor node dropped, pi = 3.1416, mass numbers in
+`sfactor_to_cross_section`).  `tests/run_tests.sh` (OMP 2) 143 passed, 0 failed (with `units_scales`).
+
+**Open.** AZUREOut files of an S-factor or per-charge data set print the model in the cross-section column and that
+times E exp(2 pi eta) in the S column (the output writer is in the data-class files); `calculate_sfactor_rwa` likewise.
+`EPoint`'s own S-factor conversion (output column) is a second formula of the same factor (bit-different association).
+
 ## 2026-11-10 (director, night) — the sixth wave merged; a faster regime; the data structure is replaced, not carved
 
 **Merged into `feature/upgrade-4-data`** (`--no-ff`; each rehearsed, built and verified in a scratch worktree, the

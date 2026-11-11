@@ -1,6 +1,7 @@
 #include "AngCoeff.h"
 #include "Decay.h"
 #include "Profile.h"
+#include "AChannel.h"
 #include "CNuc.h"
 #include "EPoint.h"
 #include <cstdio>
@@ -9,6 +10,7 @@
 #include "PolarizationFunc.h"
 #include <assert.h>
 #include <iostream>
+#include <stdexcept>
 
 /*!
  * The child classes AMatrixFunc or RMatrixFunc contain functions
@@ -45,41 +47,36 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point, azure2::Results &re
   // (aa == ir happened to hold for the first pair of a file, which is why a
   // second compound nucleus's elastic segments came out as inelastic.)
   const int exitPairNum = compound()->GetPairNumFromKey(point->GetExitKey());
-  int ir = 0;
-  while (ir < compound()->GetPair(aa)->NumDecays()) {
-    ir++;
-    if (compound()->GetPair(aa)->GetDecay(ir)->GetPairNum() == compound()->GetPairNumFromKey(point->GetExitKey())) break;
-  }
-  Decay *theDecay = compound()->GetPair(aa)->GetDecay(ir);
+  const azure2::EntrancePathways &P = compound()->Pathways().Entrance(aa);
   if (compound()->GetPair(compound()->GetPairNumFromKey(point->GetExitKey()))->GetPType() == 10 &&
       (configure().paramMask & Config::USE_RMC_FORMALISM)) {
-    int decayNum = 0;
-    while (decayNum < compound()->GetPair(aa)->NumDecays()) {
-      decayNum++;
-      if (compound()->GetPair(aa)->GetDecay(decayNum)->GetPairNum() == aa) break;
-    }
-    for (int k = 1; k <= compound()->GetPair(aa)->GetDecay(decayNum)->NumKGroups(); k++) {
-      for (int m = 1; m <= compound()->GetPair(aa)->GetDecay(decayNum)->GetKGroup(k)->NumMGroups(); m++) {
-        MGroup *theMGroup = compound()->GetPair(aa)->GetDecay(decayNum)->GetKGroup(k)->GetMGroup(m);
-        if (theMGroup->GetChNum() == theMGroup->GetChpNum()) {
-          double jValue = compound()->GetJGroup(theMGroup->GetJNum())->GetJ();
+    const int decayNum = P.ExitOf(aa);
+    if (!decayNum) throw std::runtime_error(NoPathwayMessage(aa, aa));
+    const azure2::ExitRow &elastic = P.exits[decayNum - 1];
+    for (int k = 1; k <= elastic.num_groups; k++) {
+      const azure2::SpinGroupRow &g = P.Group(elastic, k);
+      for (int m = 1; m <= g.num_internal; m++) {
+        const azure2::InternalRow &theMGroup = P.Internal(g, m);
+        if (theMGroup.ch == theMGroup.chp) {
+          double jValue = compound()->GetJGroup(theMGroup.group)->GetJ();
           sum += 2. * point->GetGeometricalFactor() *
               (2. * jValue + 1.) * compound()->GetPair(aa)->GetI1I2Factor() *
               imag(this->GetTMatrixElement(k, m, decayNum));
         }
       }
     }
-    for (int dp = 1; dp <= compound()->GetPair(aa)->NumDecays(); dp++) {
-      if (compound()->GetPair(compound()->GetPair(aa)->GetDecay(dp)->GetPairNum())->GetPType() == 0) {
-        for (int k = 1; k <= compound()->GetPair(aa)->GetDecay(dp)->NumKGroups(); k++) {
+    for (int dp = 1; dp <= (int)P.exits.size(); dp++) {
+      if (compound()->GetPair(P.exits[dp - 1].pair)->GetPType() == 0) {
+        for (int k = 1; k <= P.exits[dp - 1].num_groups; k++) {
+          const azure2::SpinGroupRow &g = P.Group(P.exits[dp - 1], k);
           // A cross-spin UPOS group repeats pathways of the equal-spin groups.
-          if (compound()->GetPair(aa)->GetDecay(dp)->GetKGroup(k)->IsCrossSpin()) continue;
+          if (g.CrossSpin()) continue;
           this->ClearTempTMatrices();
-          for (int m = 1; m <= compound()->GetPair(aa)->GetDecay(dp)->GetKGroup(k)->NumMGroups(); m++) {
-            MGroup *theMGroup = compound()->GetPair(aa)->GetDecay(dp)->GetKGroup(k)->GetMGroup(m);
-            int lValue = compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChNum())->GetL();
-            int lpValue = compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChpNum())->GetL();
-            double jValue = compound()->GetJGroup(theMGroup->GetJNum())->GetJ();
+          for (int m = 1; m <= g.num_internal; m++) {
+            const azure2::InternalRow &theMGroup = P.Internal(g, m);
+            int lValue = compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.ch)->GetL();
+            int lpValue = compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.chp)->GetL();
+            double jValue = compound()->GetJGroup(theMGroup.group)->GetJ();
             int tempTNum = this->IsTempTMatrix(jValue, lValue, lpValue);
             if (!tempTNum) {
               TempTMatrix temptmatrix = {jValue, lValue, lpValue, this->GetTMatrixElement(k, m, dp)};
@@ -100,6 +97,9 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point, azure2::Results &re
     // branch below.
     point->SetFitCrossSection(results, real(sum) / 100. * compound()->GetPair(aa)->GetEntranceSymmetryFactor());
   } else {
+    const int ir = P.ExitOf(exitPairNum);
+    if (!ir) throw std::runtime_error(NoPathwayMessage(aa, exitPairNum));
+    const azure2::ExitRow &theDecay = P.exits[ir - 1];
     if (point->IsTotal() && !point->IsPhase()) {
       // The total cross section of the entrance pair by the optical theorem: with every channel of the J-group in its
       // level matrix, U is unitary, so sum_c' |T_cc'|^2 over all exit channels is 2 Re T_cc (T = 1 - U for a neutral
@@ -107,12 +107,13 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point, azure2::Results &re
       // elastic one) instead of one per exit pair.  Photon channels carry no width in the level matrix and external
       // capture is outside it, so capture is not included (add it as a SUM component).
       double total = 0.;
-      for (int k = 1; k <= theDecay->NumKGroups(); k++) {
-        if (theDecay->GetKGroup(k)->IsCrossSpin()) continue;
-        for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
-          MGroup *theMGroup = theDecay->GetKGroup(k)->GetMGroup(m);
-          if (theMGroup->GetChNum() != theMGroup->GetChpNum()) continue;
-          const double jValue = compound()->GetJGroup(theMGroup->GetJNum())->GetJ();
+      for (int k = 1; k <= theDecay.num_groups; k++) {
+        const azure2::SpinGroupRow &g = P.Group(theDecay, k);
+        if (g.CrossSpin()) continue;
+        for (int m = 1; m <= g.num_internal; m++) {
+          const azure2::InternalRow &theMGroup = P.Internal(g, m);
+          if (theMGroup.ch != theMGroup.chp) continue;
+          const double jValue = compound()->GetJGroup(theMGroup.group)->GetJ();
           total += (2. * jValue + 1.) * 2. * real(this->GetTMatrixElement(k, m));
         }
       }
@@ -126,31 +127,32 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point, azure2::Results &re
       double angleIntegratedE1XS = 0.;
       double angleIntegratedE2XS = 0.;
       if (!point->IsDifferential()) {
-        for (int k = 1; k <= theDecay->NumKGroups(); k++) {
+        for (int k = 1; k <= theDecay.num_groups; k++) {
+          const azure2::SpinGroupRow &g = P.Group(theDecay, k);
           // For inelastic particle reactions (aa!=ir, GetPType==0) with UPOS 3-param KGroups,
           // skip KGroups where sp!=sp2 to avoid over-counting in angle-integrated XS.
           if (aa != exitPairNum && compound()->GetPair(compound()->GetPairNumFromKey(point->GetExitKey()))->GetPType() == 0) {
-            if (theDecay->GetKGroup(k)->GetSp() != theDecay->GetKGroup(k)->GetSp2()) continue;
+            if (g.sp != g.sp2) continue;
           }
           this->ClearTempTMatrices();
           this->ClearTempTMatricesE1();
           this->ClearTempTMatricesE2();
-          for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
-            MGroup *theMGroup = theDecay->GetKGroup(k)->GetMGroup(m);
+          for (int m = 1; m <= g.num_internal; m++) {
+            const azure2::InternalRow &theMGroup = P.Internal(g, m);
             if (compound()->GetPair(aa)->GetPType() == 20) {
               sum += 25. * this->GetTMatrixElement(k, m) * conj(this->GetTMatrixElement(k, m));
             } else {
-              int lValue = compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChNum())->GetL();
-              int lpValue = compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChpNum())->GetL();
-              double jValue = compound()->GetJGroup(theMGroup->GetJNum())->GetJ();
+              int lValue = compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.ch)->GetL();
+              int lpValue = compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.chp)->GetL();
+              double jValue = compound()->GetJGroup(theMGroup.group)->GetJ();
               int tempTNum = this->IsTempTMatrix(jValue, lValue, lpValue);
               if (!tempTNum) {
                 TempTMatrix temptmatrix = {jValue, lValue, lpValue, this->GetTMatrixElement(k, m)};
                 this->NewTempTMatrix(temptmatrix);
               } else
                 this->AddToTempTMatrix(tempTNum, this->GetTMatrixElement(k, m));
-              if (compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChpNum())->GetRadType() == 'E' &&
-                  compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChpNum())->GetL() == 1) {
+              if (compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.chp)->GetRadType() == 'E' &&
+                  compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.chp)->GetL() == 1) {
                 int tempTNumE1 = this->IsTempTMatrixE1(jValue, lValue, lpValue);
                 if (!tempTNumE1) {
                   TempTMatrix temptmatrixE1 = {jValue, lValue, lpValue, this->GetTMatrixElement(k, m)};
@@ -158,8 +160,8 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point, azure2::Results &re
                 } else
                   this->AddToTempTMatrixE1(tempTNumE1, this->GetTMatrixElement(k, m));
               }
-              if (compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChpNum())->GetRadType() == 'E' &&
-                  compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChpNum())->GetL() == 2) {
+              if (compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.chp)->GetRadType() == 'E' &&
+                  compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.chp)->GetL() == 2) {
                 int tempTNumE2 = this->IsTempTMatrixE2(jValue, lValue, lpValue);
                 if (!tempTNumE2) {
                   TempTMatrix temptmatrixE2 = {jValue, lValue, lpValue, this->GetTMatrixElement(k, m)};
@@ -170,18 +172,18 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point, azure2::Results &re
             }
           }
           if (compound()->GetPair(aa)->GetPType() == 20) continue;
-          for (int m = 1; m <= theDecay->GetKGroup(k)->NumECMGroups(); m++) {
-            ECMGroup *theECMGroup = theDecay->GetKGroup(k)->GetECMGroup(m);
-            int lValue = theECMGroup->GetL();
-            int lpValue = theECMGroup->GetMult();
-            double jValue = theECMGroup->GetJ();
+          for (int m = 1; m <= g.num_external; m++) {
+            const azure2::ExternalRow &theECMGroup = P.External(g, m);
+            int lValue = theECMGroup.l;
+            int lpValue = theECMGroup.mult;
+            double jValue = theECMGroup.J;
             int tempTNum = this->IsTempTMatrix(jValue, lValue, lpValue);
             if (!tempTNum) {
               TempTMatrix temptmatrix = {jValue, lValue, lpValue, this->GetECTMatrixElement(k, m)};
               this->NewTempTMatrix(temptmatrix);
             } else
               this->AddToTempTMatrix(tempTNum, this->GetECTMatrixElement(k, m));
-            if (theECMGroup->GetRadType() == 'E' && theECMGroup->GetMult() == 1) {
+            if (theECMGroup.rad_type == 'E' && theECMGroup.mult == 1) {
               int tempTNumE1 = this->IsTempTMatrixE1(jValue, lValue, lpValue);
               if (!tempTNumE1) {
                 TempTMatrix temptmatrixE1 = {jValue, lValue, lpValue, this->GetECTMatrixElement(k, m)};
@@ -189,7 +191,7 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point, azure2::Results &re
               } else
                 this->AddToTempTMatrixE1(tempTNumE1, this->GetECTMatrixElement(k, m));
             }
-            if (theECMGroup->GetRadType() == 'E' && theECMGroup->GetMult() == 2) {
+            if (theECMGroup.rad_type == 'E' && theECMGroup.mult == 2) {
               int tempTNumE2 = this->IsTempTMatrixE2(jValue, lValue, lpValue);
               if (!tempTNumE2) {
                 TempTMatrix temptmatrixE2 = {jValue, lValue, lpValue, this->GetECTMatrixElement(k, m)};
@@ -268,11 +270,13 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point, azure2::Results &re
       // coefficients take the loop below.
       const bool particleExit = (aa != exitPairNum && exitPairDiff->GetPType() == 0);
       if (!point->IsAngularDist() && !(particleExit && point->IsUPOS())) {
-        const std::vector<FlatInterference> &flat = theDecay->FlatInterferences();
-        if (rt_decay_ != theDecay && theDecay->TablesBuilt()) {
+        const azure2::FlatInterference *flat = P.interferences.data() + theDecay.first_interference;
+        // An exit without interference lists (a beta entrance) has an empty list here.
+        if (rt_decay_ != &theDecay) {
           rt_wl_.clear();
           const std::vector<vector_c> *T = tmatrix_.empty() ? nullptr : &tmatrix_[0];
-          for (const FlatInterference &f : flat) {
+          for (const azure2::FlatInterference *fp = flat; fp != flat + theDecay.num_interferences; fp++) {
+            const azure2::FlatInterference &f = *fp;
             if (particleExit && !f.spEqual) continue;
             if ((int)rt_wl_.size() <= f.l) rt_wl_.resize(f.l + 1, complex(0.0, 0.0));
             if (!f.r1) continue;  // unknown type: no contribution, as in the loop below
@@ -282,79 +286,47 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point, azure2::Results &re
                                              : (T ? (*T)[f.k - 1][f.m2 - 1] : complex(0.0, 0.0));
             rt_wl_[f.l] += f.z * T1 * conj(T2);
           }
-          this->BuildCoulombInterference(theDecay, aa == exitPairNum);
-          rt_decay_ = theDecay;
-        } else if (rt_decay_ != theDecay) {
-          rt_wl_.clear();
-          for (int kL = 1; kL <= theDecay->NumKLGroups(); kL++) {
-            KLGroup *klGroup = theDecay->GetKLGroup(kL);
-            const int kNum = klGroup->GetK();
-            if (particleExit && theDecay->GetKGroup(kNum)->GetSp() != theDecay->GetKGroup(kNum)->GetSp2()) continue;
-            const int lOrder = klGroup->GetLOrder();
-            if ((int)rt_wl_.size() <= lOrder) rt_wl_.resize(lOrder + 1, complex(0.0, 0.0));
-            for (int inter = 1; inter <= klGroup->NumInterferences(); inter++) {
-              Interference *theInterference = klGroup->GetInterference(inter);
-              complex T1(0.0, 0.0), T2(0.0, 0.0);
-              const std::string &interferenceType = theInterference->GetInterferenceType();
-              if (interferenceType == "RR") {
-                T1 = this->GetTMatrixElement(kNum, theInterference->GetM1());
-                T2 = this->GetTMatrixElement(kNum, theInterference->GetM2());
-              } else if (interferenceType == "ER") {
-                T1 = this->GetECTMatrixElement(kNum, theInterference->GetM1());
-                T2 = this->GetTMatrixElement(kNum, theInterference->GetM2());
-              } else if (interferenceType == "RE") {
-                T1 = this->GetTMatrixElement(kNum, theInterference->GetM1());
-                T2 = this->GetECTMatrixElement(kNum, theInterference->GetM2());
-              } else if (interferenceType == "EE") {
-                T1 = this->GetECTMatrixElement(kNum, theInterference->GetM1());
-                T2 = this->GetECTMatrixElement(kNum, theInterference->GetM2());
-              }
-              rt_wl_[lOrder] += theInterference->GetZ1Z2() * T1 * conj(T2);
-            }
-          }
-          this->BuildCoulombInterference(theDecay, aa == exitPairNum);
-          rt_decay_ = theDecay;
+          this->BuildCoulombInterference(P, theDecay, aa == exitPairNum);
+          rt_decay_ = &theDecay;
         }
         for (size_t l = 0; l < rt_wl_.size(); l++)
           if (rt_wl_[l] != complex(0.0, 0.0)) sum += rt_wl_[l] * point->GetLegendreP((int)l);
       } else
-      for (int kL = 1; kL <= theDecay->NumKLGroups(); kL++) {
-        for (int inter = 1; inter <= theDecay->GetKLGroup(kL)
-                                         ->NumInterferences();
-             inter++) {
-          Interference *theInterference = theDecay->GetKLGroup(kL)
-                                              ->GetInterference(inter);
+      {
+        for (int inter = 0; inter < theDecay.num_interferences; inter++) {
+          const azure2::FlatInterference &theInterference = P.interferences[theDecay.first_interference + inter];
+          const azure2::SpinGroupRow &theKGroup = P.Group(theDecay, theInterference.k);
           complex T1(0.0, 0.0), T2(0.0, 0.0);
-          const std::string &interferenceType = theInterference->GetInterferenceType();
+          const std::string interferenceType{theInterference.r1, theInterference.r2};
           if (aa != exitPairNum && exitPairDiff->GetPType() == 0) {
             // Different entrance and exit pairs with particle exit - may be UPOS
-            double sp1 = theDecay->GetKGroup(theDecay->GetKLGroup(kL)->GetK())->GetSp();
-            double sp2 = theDecay->GetKGroup(theDecay->GetKLGroup(kL)->GetK())->GetSp2();
-            MGroup *theMGroup1 = theDecay->GetKGroup(theDecay->GetKLGroup(kL)->GetK())->GetMGroup(theInterference->GetM1());
-            int lp1 = compound()->GetJGroup(theMGroup1->GetJNum())->GetChannel(theMGroup1->GetChpNum())->GetL();
-            MGroup *theMGroup2 = theDecay->GetKGroup(theDecay->GetKLGroup(kL)->GetK())->GetMGroup(theInterference->GetM2());
-            int lp2 = compound()->GetJGroup(theMGroup2->GetJNum())->GetChannel(theMGroup2->GetChpNum())->GetL();
+            double sp1 = theKGroup.sp;
+            double sp2 = theKGroup.sp2;
+            const azure2::InternalRow &theMGroup1 = P.Internal(theKGroup, theInterference.m1);
+            int lp1 = compound()->GetJGroup(theMGroup1.group)->GetChannel(theMGroup1.chp)->GetL();
+            const azure2::InternalRow &theMGroup2 = P.Internal(theKGroup, theInterference.m2);
+            int lp2 = compound()->GetJGroup(theMGroup2.group)->GetChannel(theMGroup2.chp)->GetL();
             if (sp1 == sp2 && !point->IsUPOS()) {
               // Normal angular distribution (filter by sp1==sp2)
               if (interferenceType == "RR") {
-                T1 = this->GetTMatrixElement(theDecay->GetKLGroup(kL)->GetK(), theInterference->GetM1());
-                T2 = this->GetTMatrixElement(theDecay->GetKLGroup(kL)->GetK(), theInterference->GetM2());
+                T1 = this->GetTMatrixElement(theInterference.k, theInterference.m1);
+                T2 = this->GetTMatrixElement(theInterference.k, theInterference.m2);
               } else if (interferenceType == "ER") {
-                T1 = this->GetECTMatrixElement(theDecay->GetKLGroup(kL)->GetK(), theInterference->GetM1());
-                T2 = this->GetTMatrixElement(theDecay->GetKLGroup(kL)->GetK(), theInterference->GetM2());
+                T1 = this->GetECTMatrixElement(theInterference.k, theInterference.m1);
+                T2 = this->GetTMatrixElement(theInterference.k, theInterference.m2);
               } else if (interferenceType == "RE") {
-                T1 = this->GetTMatrixElement(theDecay->GetKLGroup(kL)->GetK(), theInterference->GetM1());
-                T2 = this->GetECTMatrixElement(theDecay->GetKLGroup(kL)->GetK(), theInterference->GetM2());
+                T1 = this->GetTMatrixElement(theInterference.k, theInterference.m1);
+                T2 = this->GetECTMatrixElement(theInterference.k, theInterference.m2);
               } else if (interferenceType == "EE") {
-                T1 = this->GetECTMatrixElement(theDecay->GetKLGroup(kL)->GetK(), theInterference->GetM1());
-                T2 = this->GetECTMatrixElement(theDecay->GetKLGroup(kL)->GetK(), theInterference->GetM2());
+                T1 = this->GetECTMatrixElement(theInterference.k, theInterference.m1);
+                T2 = this->GetECTMatrixElement(theInterference.k, theInterference.m2);
               }
-              int lOrder = theDecay->GetKLGroup(kL)->GetLOrder();
-              sum += theInterference->GetZ1Z2() * T1 * conj(T2) *
+              int lOrder = theInterference.l;
+              sum += theInterference.z * T1 * conj(T2) *
                   point->GetLegendreP(lOrder);
               if ((lOrder < (int)angularCoeff.size()) && point->IsAngularDist()) {
                 double tempCoeff = angularCoeff[lOrder] +
-                    real(theInterference->GetZ1Z2() * T1 * conj(T2)) * point->GetGeometricalFactor() *
+                    real(theInterference.z * T1 * conj(T2)) * point->GetGeometricalFactor() *
                         compound()->GetPair(aa)->GetI1I2Factor() / 100. * 4. / angleIntegratedXS;
                 angularCoeff[lOrder] = tempCoeff;
               }
@@ -362,10 +334,10 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point, azure2::Results &re
             if (lp1 == lp2 && point->IsUPOS()) {
               // Unobserved primary, observed secondary: only RR interference
               if (interferenceType == "RR") {
-                T1 = this->GetTMatrixElement(theDecay->GetKLGroup(kL)->GetK(), theInterference->GetM1());
-                T2 = this->GetTMatrixElement(theDecay->GetKLGroup(kL)->GetK(), theInterference->GetM2());
+                T1 = this->GetTMatrixElement(theInterference.k, theInterference.m1);
+                T2 = this->GetTMatrixElement(theInterference.k, theInterference.m2);
               }
-              int lOrder = theDecay->GetKLGroup(kL)->GetLOrder();
+              int lOrder = theInterference.l;
               double finalL = (double)point->GetSecondaryDecayL();
               double Ic = point->GetIc();
               // the residual nucleus of the EXIT PAIR: ir is the decay index within the entrance pair's list,
@@ -388,11 +360,11 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point, azure2::Results &re
                   R_L = (R_L + 2. * delta * R_LLp + delta * delta * R_LpLp) / (1. + delta * delta);
                 }
               }
-              sum += theInterference->GetZ1Z2_UPOS() * T1 * conj(T2) *
+              sum += theInterference.z_upos * T1 * conj(T2) *
                   pow(2. * lOrder + 1., 0.5) / (4.) * R_L * point->GetLegendreP(lOrder);
               if ((lOrder < (int)angularCoeff.size()) && point->IsAngularDist()) {
                 double tempCoeff = angularCoeff[lOrder] +
-                    real(theInterference->GetZ1Z2_UPOS() * T1 * conj(T2)) * point->GetGeometricalFactor() *
+                    real(theInterference.z_upos * T1 * conj(T2)) * point->GetGeometricalFactor() *
                         compound()->GetPair(aa)->GetI1I2Factor() / 100. * pow(2. * lOrder + 1., 0.5) * R_L / angleIntegratedXS;
                 angularCoeff[lOrder] = tempCoeff;
               }
@@ -400,24 +372,24 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point, azure2::Results &re
           } else {
             // Standard case: entrance==exit or gamma exit
             if (interferenceType == "RR") {
-              T1 = this->GetTMatrixElement(theDecay->GetKLGroup(kL)->GetK(), theInterference->GetM1());
-              T2 = this->GetTMatrixElement(theDecay->GetKLGroup(kL)->GetK(), theInterference->GetM2());
+              T1 = this->GetTMatrixElement(theInterference.k, theInterference.m1);
+              T2 = this->GetTMatrixElement(theInterference.k, theInterference.m2);
             } else if (interferenceType == "ER") {
-              T1 = this->GetECTMatrixElement(theDecay->GetKLGroup(kL)->GetK(), theInterference->GetM1());
-              T2 = this->GetTMatrixElement(theDecay->GetKLGroup(kL)->GetK(), theInterference->GetM2());
+              T1 = this->GetECTMatrixElement(theInterference.k, theInterference.m1);
+              T2 = this->GetTMatrixElement(theInterference.k, theInterference.m2);
             } else if (interferenceType == "RE") {
-              T1 = this->GetTMatrixElement(theDecay->GetKLGroup(kL)->GetK(), theInterference->GetM1());
-              T2 = this->GetECTMatrixElement(theDecay->GetKLGroup(kL)->GetK(), theInterference->GetM2());
+              T1 = this->GetTMatrixElement(theInterference.k, theInterference.m1);
+              T2 = this->GetECTMatrixElement(theInterference.k, theInterference.m2);
             } else if (interferenceType == "EE") {
-              T1 = this->GetECTMatrixElement(theDecay->GetKLGroup(kL)->GetK(), theInterference->GetM1());
-              T2 = this->GetECTMatrixElement(theDecay->GetKLGroup(kL)->GetK(), theInterference->GetM2());
+              T1 = this->GetECTMatrixElement(theInterference.k, theInterference.m1);
+              T2 = this->GetECTMatrixElement(theInterference.k, theInterference.m2);
             }
-            int lOrder = theDecay->GetKLGroup(kL)->GetLOrder();
-            sum += theInterference->GetZ1Z2() * T1 * conj(T2) *
+            int lOrder = theInterference.l;
+            sum += theInterference.z * T1 * conj(T2) *
                 point->GetLegendreP(lOrder);
             if ((lOrder < (int)angularCoeff.size()) && point->IsAngularDist()) {
               double tempCoeff = angularCoeff[lOrder] +
-                  real(theInterference->GetZ1Z2() * T1 * conj(T2)) * point->GetGeometricalFactor() *
+                  real(theInterference.z * T1 * conj(T2)) * point->GetGeometricalFactor() *
                       compound()->GetPair(aa)->GetI1I2Factor() / 100. * 4. / angleIntegratedXS;
               angularCoeff[lOrder] = tempCoeff;
             }
@@ -492,23 +464,24 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point, azure2::Results &re
         }
 
         sum = complex(0., 0.);
-        if (rt_decay_ == theDecay && rt_it_built_) {
+        if (rt_decay_ == &theDecay && rt_it_built_) {
           // The angle-independent factors, summed per (channel spin, l) once
           // per T-matrix (BuildCoulombInterference).
           for (const CoulombTerm &e : rt_it_) sum += point->GetCoulombAmplitude(e.s) * e.c * point->GetLegendreP(e.l);
         } else
-        for (int k = 1; k <= theDecay->NumKGroups(); k++) {
-          for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
-            MGroup *theMGroup = theDecay->GetKGroup(k)->GetMGroup(m);
-            AChannel *entranceChannel = compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChNum());
-            AChannel *exitChannel = compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChpNum());
+        for (int k = 1; k <= theDecay.num_groups; k++) {
+          const azure2::SpinGroupRow &g = P.Group(theDecay, k);
+          for (int m = 1; m <= g.num_internal; m++) {
+            const azure2::InternalRow &theMGroup = P.Internal(g, m);
+            AChannel *entranceChannel = compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.ch);
+            AChannel *exitChannel = compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.chp);
             // The Coulomb amplitude is that of the channel's own spin: it
             // differs between channel spins only for identical particles with
             // spin, and is the one stored amplitude otherwise.
             if (entranceChannel == exitChannel)
-              sum += theMGroup->GetStatSpinFactor() *
+              sum += theMGroup.stat_spin_factor *
                   point->GetCoulombAmplitude(entranceChannel->GetS()) * conj(this->GetTMatrixElement(k, m)) *
-                  point->GetLegendreP(compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChNum())->GetL());
+                  point->GetLegendreP(compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.ch)->GetL());
           }
         }
         IT = complex(0., 1.) / sqrt(pi) * sum * point->GetGeometricalFactor() * itFactor;
@@ -523,17 +496,18 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point, azure2::Results &re
       const double segmentS = point->GetPhaseS();
       PPair *entrancePair = compound()->GetPair(aa);
       this->ClearTempTMatrices();
-      for (int k = 1; k <= theDecay->NumKGroups(); k++) {
-        for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
-          MGroup *theMGroup = theDecay->GetKGroup(k)->GetMGroup(m);
-          double jValue = compound()->GetJGroup(theMGroup->GetJNum())->GetJ();
-          AChannel *entranceChannel = compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChNum());
+      for (int k = 1; k <= theDecay.num_groups; k++) {
+        const azure2::SpinGroupRow &g = P.Group(theDecay, k);
+        for (int m = 1; m <= g.num_internal; m++) {
+          const azure2::InternalRow &theMGroup = P.Internal(g, m);
+          double jValue = compound()->GetJGroup(theMGroup.group)->GetJ();
+          AChannel *entranceChannel = compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.ch);
           int lValue = entranceChannel->GetL();
-          AChannel *exitChannel = compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChpNum());
+          AChannel *exitChannel = compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.chp);
           if (jValue == segmentJ && lValue == segmentL && entranceChannel == exitChannel &&
               (segmentS < 0.0 || std::fabs(entranceChannel->GetS() - segmentS) < 1.0e-6)) {
-            complex expCoulPhaseSquared = point->GetExpCoulombPhase(theMGroup->GetJNum(), theMGroup->GetChNum()) *
-                point->GetExpCoulombPhase(theMGroup->GetJNum(), theMGroup->GetChNum());
+            complex expCoulPhaseSquared = point->GetExpCoulombPhase(theMGroup.group, theMGroup.ch) *
+                point->GetExpCoulombPhase(theMGroup.group, theMGroup.ch);
             complex theUMatrix = (expCoulPhaseSquared - this->GetTMatrixElement(k, m)) / expCoulPhaseSquared;
             int tempTNum = this->IsTempTMatrix(jValue, lValue, lValue);
             if (!tempTNum) {
@@ -798,6 +772,12 @@ double GenMatrixFunc::GetRk(double j2f, double finalL, double finalLp, double Ic
 }
 
 
+std::string GenMatrixFunc::NoPathwayMessage(int entrancePair, int exitPair) const {
+  return "no reaction pathway leads from pair " + std::to_string(compound()->GetPair(entrancePair)->GetPairKey()) +
+         " to pair " + std::to_string(compound()->GetPair(exitPair)->GetPairKey()) +
+         " (no R-matrix level couples them, and no external capture leads there)";
+}
+
 bool GenMatrixFunc::CalculateAmplitudeMatrix(EPoint *point, double *spinSum,
                                              double *analyzingPower) {
   if (spinSum) *spinSum = 0.0;
@@ -810,23 +790,20 @@ bool GenMatrixFunc::CalculateAmplitudeMatrix(EPoint *point, double *spinSum,
   if (compound()->GetPair(aaPair)->GetPType() != 0 ||
       compound()->GetPair(irPair)->GetPType() != 0) return false;
 
-  int ir = 0;
-  while (ir < compound()->GetPair(aaPair)->NumDecays()) {
-    ir++;
-    if (compound()->GetPair(aaPair)->GetDecay(ir)->GetPairNum() == irPair) break;
-  }
-  if (ir > compound()->GetPair(aaPair)->NumDecays()) return false;
-  Decay *theDecay = compound()->GetPair(aaPair)->GetDecay(ir);
+  const azure2::EntrancePathways &P = compound()->Pathways().Entrance(aaPair);
+  const int ir = P.ExitOf(irPair);
+  if (!ir) throw std::runtime_error(NoPathwayMessage(aaPair, irPair));
+  const azure2::ExitRow &theDecay = P.exits[ir - 1];
 
   Polarization::AmplitudeMatrix M(compound(), point, aaPair, irPair);
 
-  for (int k = 1; k <= theDecay->NumKGroups(); k++) {
+  for (int k = 1; k <= theDecay.num_groups; k++) {
+    const azure2::SpinGroupRow &g = P.Group(theDecay, k);
     // A cross-spin UPOS group repeats pathways of the equal-spin groups.
-    if (theDecay->GetKGroup(k)->IsCrossSpin()) continue;
-    for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
-      MGroup *g = theDecay->GetKGroup(k)->GetMGroup(m);
-      M.AddPathway(g->GetJNum(), g->GetChNum(), g->GetChpNum(),
-                   this->GetTMatrixElement(k, m));
+    if (g.CrossSpin()) continue;
+    for (int m = 1; m <= g.num_internal; m++) {
+      const azure2::InternalRow &r = P.Internal(g, m);
+      M.AddPathway(r.group, r.ch, r.chp, this->GetTMatrixElement(k, m));
     }
   }
 
@@ -920,31 +897,18 @@ bool GenMatrixFunc::CalculateCaptureAnalyzingPower(EPoint *point, const azure2::
  * statSpin f_C(s) conj(T) P_l, summed per (s, l) without the angle-dependent
  * f_C(s) P_l, for the T-matrix held now.  Only for an elastic decay.
  */
-void GenMatrixFunc::BuildCoulombInterference(Decay *theDecay, bool elastic) {
+void GenMatrixFunc::BuildCoulombInterference(const azure2::EntrancePathways &P, const azure2::ExitRow &exit,
+                                             bool elastic) {
   rt_it_.clear();
   rt_it_built_ = elastic;
   if (!elastic) return;
-  if (theDecay->TablesBuilt()) {
-    for (const DiagonalPathway &d : theDecay->DiagonalPathways()) {
-      size_t i = 0;
-      while (i < rt_it_.size() && !(rt_it_[i].s == d.s && rt_it_[i].l == d.l)) i++;
-      if (i == rt_it_.size()) rt_it_.push_back(CoulombTerm{d.s, d.l, complex(0.0, 0.0)});
-      rt_it_[i].c += d.statSpin * conj(this->GetTMatrixElement(d.k, d.m));
-    }
-    return;
-  }
-  for (int k = 1; k <= theDecay->NumKGroups(); k++) {
-    for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
-      MGroup *theMGroup = theDecay->GetKGroup(k)->GetMGroup(m);
-      AChannel *entranceChannel = compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChNum());
-      AChannel *exitChannel = compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChpNum());
-      if (entranceChannel != exitChannel) continue;
-      const double sValue = entranceChannel->GetS();
-      const int lValue = entranceChannel->GetL();
-      size_t i = 0;
-      while (i < rt_it_.size() && !(rt_it_[i].s == sValue && rt_it_[i].l == lValue)) i++;
-      if (i == rt_it_.size()) rt_it_.push_back(CoulombTerm{sValue, lValue, complex(0.0, 0.0)});
-      rt_it_[i].c += theMGroup->GetStatSpinFactor() * conj(this->GetTMatrixElement(k, m));
-    }
+  // The pathways with equal entrance and exit channel; an exit without interference lists (a beta entrance) has none
+  // and is never elastic.
+  for (int n = 0; n < exit.num_diagonal; n++) {
+    const azure2::DiagonalPathway &d = P.diagonal[exit.first_diagonal + n];
+    size_t i = 0;
+    while (i < rt_it_.size() && !(rt_it_[i].s == d.s && rt_it_[i].l == d.l)) i++;
+    if (i == rt_it_.size()) rt_it_.push_back(CoulombTerm{d.s, d.l, complex(0.0, 0.0)});
+    rt_it_[i].c += d.statSpin * conj(this->GetTMatrixElement(d.k, d.m));
   }
 }

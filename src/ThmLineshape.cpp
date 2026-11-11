@@ -121,9 +121,10 @@ double ThmLevelWidth(CNuc *compound, JGroup *jgroup, ALevel *level, const Config
     char type = channel->GetRadType();
     if (type == 'P') {
       ChannelFunc channelFunc(pair, useGSL);
-      normSum += channelFunc.ShiftDerivative(channel->GetL(), localEnergy) * gamma * gamma;
+      const int twoJ = pair->SpinOrbitTwoJ(jgroup->GetJ());
+      normSum += channelFunc.ShiftDerivative(channel->GetL(), twoJ, localEnergy) * gamma * gamma;
       if (!channelFunc.IsClosed(localEnergy))
-        particle += 2.0 * gamma * gamma * channelFunc.Penetrability(channel->GetL(), localEnergy);
+        particle += 2.0 * gamma * gamma * channelFunc.Penetrability(channel->GetL(), twoJ, localEnergy);
     } else if (type == 'M' || type == 'E') {
       // A ground-state transition parametrizes a moment, not a width.  Told
       // by the level's energy as read, as CNuc::TransformOut does, so that a

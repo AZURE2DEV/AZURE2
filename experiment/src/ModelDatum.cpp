@@ -66,15 +66,15 @@ class Builder {
     if (!known) return;  // a datum quantity of the table without an evaluation: repo_consistency check 27
     d.unit = value->unit->token;
     d.unitFactor = value->unit->factor;
-    d.value = value->number.value * value->unit->factor;
-    d.error = error->number.value * error->unit->factor;
+    d.value = ToBase(value->number.value, value->unit);
+    d.error = ToBase(error->number.value, error->unit);
     if (const Value *s = r.Get("source")) d.source = s->word;
     if (const Value *im = r.Get("imag")) {
       const Value *ie = r.Get("imag_error");
       if (!im->unit || !ie || !ie->unit) return;
       d.hasImag = true;
-      d.imag = im->number.value * im->unit->factor;
-      d.imagError = ie->number.value * ie->unit->factor;
+      d.imag = ToBase(im->number.value, im->unit);
+      d.imagError = ToBase(ie->number.value, ie->unit);
     }
     if (d.quantity == ModelQuantity::ScatteringLength) {
       ScatteringLengthPair(d);

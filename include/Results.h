@@ -52,7 +52,7 @@ struct Results {
 
   /*!
    * What the data set predicts, apart from the leaf values above (docs/upgrade/data_model.md section 2.1, step S4):
-   * one record per point of a data or test segment -- not of a component segment or a sub-point --, laid out with the
+   * one record per point of a data or test segment -- not of a leaf or a sub-point --, laid out with the
    * leaf records (EData::LayoutResults; the point keeps its offset, EPoint::SetModelRecord).  A record holds the model
    * value m_i, the segment's combination (SUM, RATIO, sample, transform, the E1 or E2 part) of its points' leaf
    * values, which the residual compares with the datum; then, for a point with an angular-distribution capacity

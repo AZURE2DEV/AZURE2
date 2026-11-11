@@ -687,12 +687,71 @@ effects of a target are ``<target>.areal_density``, ``<target>.doppler``,
 ``<target>.screening``, an isotope's abundance ``<target>.isotope.<nuclide>``.
 ``AZURE2 --convert ... --to 3`` reports the map from the old names
 (``segment_2_norm``) to these in its ``--json-report`` (``parameters``) and
-renames the rows of ``<parameterSettings>`` by it.  Windows, shifts, fixed
-term angles and a detector resolution are converted to the engine's units; a
-unit other than the engine's is refused for now (``E_NOT_BUILT``) in a data
-set's ``unit`` and ``columns``, a target's ``areal_density`` (atoms/cm\ :sup:`2`;
-a neutron sample's atoms/b), ``stopping`` (MeV cm\ :sup:`2`/atom) and
-``screening`` (eV), and a beam ``spread`` formula (MeV).
+renames the rows of ``<parameterSettings>`` by it.
+
+Units.  Every number may be written in any unit of its dimension in the unit
+table (:doc:`format3`); the engine converts it to its own unit (MeV, deg, b,
+b/sr, MeV b, atoms/cm\ :sup:`2`, MeV cm\ :sup:`2`/atom, eV for U\ :sub:`e`,
+keV\ :sup:`1/2` for a straggling coefficient) with the table's factor, in one
+function: a factor that is a power of ten divides by the exact integer, so a
+value written as ``12.5 mb`` is the same double as ``0.0125 b`` (a value exact in
+the written unit gives the correctly rounded engine value).  The fields a record
+holds (windows, shifts, grids, a target's ``areal_density`` -- atoms/b or
+atoms/cm\ :sup:`2`, for a layer and for a neutron sample --, U\ :sub:`e`, beam
+spread and profile, detector resolution, UDR times and flight path, a
+``stopping`` or ``spread`` formula, whose value is then multiplied by the unit's
+factor) are converted when the project is read.  The columns of a data file are
+converted row by row where the points are made: the energy column
+(``E_lab[keV]``, ``E_cm[MeV]`` -- a c.m. energy is taken to the lab energy with
+the entrance pair's ``<levels>`` masses, as a ``cm`` grid --, and the
+``window_lo``, ``window_hi`` columns with it), the angle column (``[rad]``), and
+the value and error columns (the data set's ``unit``).  The ``energy_window`` is in
+the frame and unit of the energy column.  Outputs (``AZUREOut*``,
+``normalizations.out``, ...) list the data in the engine's units.  An
+extrapolation in another unit than the engine's is computed in that unit (the
+model times the inverse factor: ``unit mb`` lists millibarn).  Refused
+(``E_NOT_BUILT``): a value unit other than the engine's on a data set with a
+``covariance`` file (the file's absolute entries are in the engine unit and are
+shared by data sets), an ``E_cm`` column with ``window_lo``/``window_hi`` (the
+windows of a beam-profile kernel are lab energies).  Mass-thickness units
+(µg/cm\ :sup:`2`) are not in the table, so they are refused as unknown units.
+
+S factor.  ``quantity sfactor`` (units ``MeV*b``, ``keV*b``, ``eV*b``; an ``E_lab``
+or ``E_cm`` column; a charged entrance pair) compares the data with
+:math:`S(E) = E\,\sigma(E)\,e^{2\pi\eta(E)}` of the model, with :math:`E` the
+c.m. energy of each point as the model evaluates it -- after a fitted energy
+shift, which therefore moves the factor -- and :math:`\eta = Z_1 Z_2 \alpha
+\sqrt{\mu c^2/2E}` (non-relativistic, whatever ``relativistic`` says) with the
+pair's ``<levels>`` masses.  The data are not converted to a cross section.  With
+a target or beam fold the model is :math:`E e^{2\pi\eta(E)}\langle\sigma\rangle` at
+the point's energy.  An extrapolation of ``quantity sfactor`` lists S, and an
+adaptive grid of it refines on S: on the Coulomb slope below a resonance, where
+the cross section falls by orders of magnitude and S is smooth, the relative test
+on S needs a fraction of the points the test on the cross section takes (10
+against 125 for 12C(p,γ) at 0.05 -- 0.25 MeV, ``tests/units_scales``); with a
+narrow peak in the range both are governed by its floor (10\ :sup:`-3` of the
+largest value).  Refused: an uncharged entrance
+(``E_REACTION_NOT_ALLOWED``) and a THM data set (``E_NOT_BUILT``).  In the
+``AZUREOut`` files of such a data set the cross-section columns hold S and the
+S-factor columns S times :math:`E e^{2\pi\eta}`.
+
+Yields.  ``quantity yield`` on a ``target`` of kind ``infinite`` compares the
+data with the thick-target yield the engine folds,
+:math:`Y(E_0) = 10^{-24}\int_{1\,\mathrm{keV}}^{E_0}\langle\sigma\rangle/\varepsilon\,dE`
+(reactions per incident particle; ``1/particle``, or ``1/particle/sr`` with a lab
+angle).  Per unit of beam charge (``1/uC``, ``1/mC``, ``1/C``, with
+``charge_state q``) the model is multiplied by the beam particles per unit charge,
+:math:`10^{-6}\,\mathrm{C}/(q e)` for 1/µC; counts per unit charge
+(``counts/uC``, ...) need ``efficiency``, a fixed number that multiplies the model
+as well (a fitted efficiency is refused: it cannot be told apart from the
+normalization; give its uncertainty as the norm's prior); ``arbitrary`` needs a
+free norm without prior.  A ``kind layer`` target is refused for a yield
+(``E_NOT_BUILT``): this engine folds a layer into the target-averaged cross
+section (give that as ``quantity sigma`` with the target), and a yield
+:math:`N\,10^{-24}\langle\sigma\rangle` with the areal density in the prefactor is
+not built yet.  A per-charge unit without ``charge_state`` is
+``E_FIELD_REQUIRED``.  The worked example is ``tests/units_scales``
+(``models/yield_story.azr``).
 
 .. _extrapolation-grids:
 
@@ -759,7 +818,8 @@ are converted to MeV (deg).  The same forms describe an angle grid
    that count and the run warns with the largest deviation left and where.
    ``f`` is the value the point pass computes, before the output's frame and
    S-factor conversions: the c.m. cross section (or differential cross
-   section, phase shift, analyzing power).  With an angle grid the energies are
+   section, phase shift, analyzing power), and for ``quantity sfactor`` the S
+   factor.  With an angle grid the energies are
    refined at every angle at once: an energy joins the grid, at all angles,
    when any angle needs it (one grid for all angles).  The run log reports the
    count (``Adaptive grid of extrapolation #1: 251 energies (...)``); the

@@ -13,6 +13,9 @@ physics::HybridPotential HybridPotentialSetting::Potential() const {
   p.coulomb_radius_fm = coulomb_radius_fm;
   p.matching_radius_fm = matching_radius_fm;
   p.step_fm = step_fm;
+  if (spin_orbit)
+    p.spin_orbit = physics::WoodsSaxonSpinOrbit(spin_orbit->depth_MeV, spin_orbit->form.radius_fm,
+                                                spin_orbit->form.diffuseness_fm, spin_orbit->acts_on);
   return p;
 }
 

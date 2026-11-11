@@ -217,13 +217,14 @@ class EData {
   std::string ECSignature(CNuc *, const Config &);
   /// The sidecar that records the signature of an intEC file: the file name with ".sig" appended.
   static std::string ECSignaturePath(const std::string &integralsFile);
-  /// Set up the entrance/exit pairs of the component segments in the compound nucleus.
-  int InitializeComponentSegments(CNuc *, const Config &);
+  /// The leaves after the segments: their frames with their own pairs, energy-dependent values, Legendre
+  /// polynomials, Coulomb amplitudes and external-capture amplitudes (appended to the intEC file).
+  int InitializeLeaves(CNuc *, const Config &);
   /// Validates a component's pair keys (both present, one compound nucleus) and flags its entrance pair; false with the error printed otherwise.
   bool CheckComponentPairs(CNuc *, const ESegment &baseSegment, int entranceKey, int exitKey, const Config &);
-  /// A component segment: a copy of baseSegment with these pairs (and, for a RATIO denominator, a fixed angle, deg).
-  ESegment *CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey,
-                                   std::optional<double> fixedAngle = std::nullopt);
+  /// A leaf of `base` (ESegment::AddLeaf) with these pairs, a fixed lab angle (deg; a RATIO denominator) or none and a
+  /// scale, its key from the data set's counter; returns its term.
+  int AddLeaf(ESegment &base, int entranceKey, int exitKey, std::optional<double> fixedAngle, double scaling);
   /// A transmission or yield segment after its components exist: checks, plain components, the yield's total term.
   bool FinishTransformedSegment(CNuc *, ESegment *, int key, bool isTest, const Config &);
   /// Every term of a transmission or yield segment on the base point's sub-point grid (after the target effects).
@@ -235,21 +236,28 @@ class EData {
   /// The compound nucleus tells which segments have a particle exit; null is conservative.
   /// Then the calculation plan is built from the mapping and checked (CalculationPlan.h).
   void MapData(CNuc *theCNuc = nullptr);
-  /// The mapping inside segments with components (MapData calls it last), appended to `mapping` as (host, mapped).
-  void MapComponentSegments(CNuc *theCNuc, std::vector<std::pair<azure2::PointRef, azure2::PointRef>> &mapping);
+  /// The mapping of the leaves onto their segment's points (MapData calls it last), appended to `mapping` as (host,
+  /// mapped).
+  void MapLeaves(CNuc *theCNuc, std::vector<std::pair<azure2::PointRef, azure2::PointRef>> &mapping);
   /// The calculation plan: which task calculates which point (CalculationPlan.h).
   const azure2::CalculationPlan &Plan() const { return plan_; }
-  /// A point of the plan, by position (list 0: segments, 1: component segments).
+  /// A point of the plan, by position (list 0: the segments' own points, 1: the leaves', LeafRef).
   EPoint *PlanPoint(const azure2::PointRef &r) {
-    ESegment &seg = r.list == azure2::PointRef::kSegments ? segments_[r.segment] : componentSegments_[r.segment];
-    return &seg.GetPoints()[r.point];
+    if (r.list == azure2::PointRef::kSegments) return &segments_[r.segment].GetPoints()[r.point];
+    const LeafRef &leaf = leafRefs_[r.segment];
+    return &segments_[leaf.first].TermPoints(leaf.second)[r.point];
   }
   int NumPlanSegments(int list) const {
-    return list == azure2::PointRef::kSegments ? (int)segments_.size() : (int)componentSegments_.size();
+    return list == azure2::PointRef::kSegments ? (int)segments_.size() : (int)leafRefs_.size();
   }
-  ESegment *PlanSegment(int list, int s) {
-    return list == azure2::PointRef::kSegments ? &segments_[s] : &componentSegments_[s];
+  int NumPlanPoints(int list, int s) const {
+    if (list == azure2::PointRef::kSegments) return segments_[s].NumPoints();
+    return (int)segments_[leafRefs_[s].first].TermPoints(leafRefs_[s].second).size();
   }
+  /// Every leaf of the data set as (0-based position of its segment, its term), in segment order and term order: the
+  /// order the leaves are set up, laid out and written to the intEC file in.
+  using LeafRef = std::pair<int, int>;
+  const std::vector<LeafRef> &LeafRefs() const { return leafRefs_; }
   /// Append a target-effect definition.
   void AddTargetEffect(TargetEffect);
   void SetNormParamOffset(int);
@@ -333,8 +341,8 @@ class EData {
   /// their segments are appended to \p reshift; the others are energised here.
   /// Returns the number of points whose grid changed.  Called by
   /// FillEnergyShiftsFromParams.
-  int ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const std::vector<ESegment *> &shiftActive,
-                           std::vector<ESegment *> &reshift);
+  int ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const std::vector<TermRef> &shiftActive,
+                           std::vector<TermRef> &reshift);
   /// Drop the last segment.
   void DeleteLastSegment();
   /// Segment \p i, 1-based.
@@ -453,7 +461,7 @@ class EData {
   EDataIterator end();
   std::vector<ESegment> &GetSegments();
   /*!
-   * Calculates every point of \p segments and of their component segments in
+   * Calculates every point of \p segments and of their leaves in
    * one OpenMP pass, largest items first.  A host point also fills the points
    * mapped onto it, so mapped points are not items of their own.  A point whose
    * calculation throws gets a fit cross section of 0.  Returns the number of
@@ -468,11 +476,11 @@ class EData {
  private:
   std::vector<TargetEffect> targetEffects_;
   std::vector<ESegment> segments_;
-  std::deque<ESegment> componentSegments_;  // Separate storage for component segments (deque avoids pointer invalidation)
+  std::vector<LeafRef> leafRefs_;  // LeafRefs
   azure2::CalculationPlan plan_;  // built by MapData; positions only, so a copy of the data set copies it as it is
-  /// The key of the next component segment (CreateComponentSegment): -1000, -1001, ... in creation order, one counter
-  /// per data set, so a component's key depends on its project alone (not on what else the process loaded) and no
-  /// two components share one (data_model.md section 1.3, H10).
+  /// The key of the next leaf (AddLeaf): -1000, -1001, ... in creation order, one counter per data set, so a leaf's key
+  /// depends on its project alone (not on what else the process loaded) and no two leaves share one (data_model.md
+  /// section 1.3, H10).
   int nextComponentKey_ = -1000;
   std::map<std::string, std::shared_ptr<DataCovariance::File>> covFiles_;  // only while filling
   std::vector<std::shared_ptr<DataCovariance::Group>> covGroups_;         // shared by every copy
@@ -529,7 +537,7 @@ class EData {
   /// segments (Results.h, LayoutResults; the data set holds the layout, never the values), and its model values
   /// (Results::model).
   std::size_t resultsSize_ = 0, modelSize_ = 0;
-  /// One record per point and sub-point, in the order of segments_ then componentSegments_, each point before its
+  /// One record per point and sub-point, in the order of the segments' points then the leaves', each point before its
   /// sub-points: each gets its offset (EPoint::SetResultRecord); and one model record per point of segments_
   /// (EPoint::SetModelRecord).  With `results`, the buffer of the layout the points
   /// had, a point's record keeps the values it held there; a point new to the layout starts at 0, as a newly
@@ -539,7 +547,7 @@ class EData {
   template <class F>
   void ForEachResultUnit(F f);
   void FillEnergyShiftsFromParamsImpl(const vector_r &, CNuc *theCNuc, const Config *configure);
-  /// Redraws the progress bar of the external-capture loops (CalculateECAmplitudes, InitializeComponentSegments)
+  /// Redraws the progress bar of the external-capture loops (CalculateECAmplitudes, InitializeLeaves)
   /// from inside their OpenMP loops, under the named critical section ec_progress.
   static void ECProgressRedraw(const Config &configure, const char *segmentKeyOut, const std::atomic<int> &pointIndex,
                                int numPoints, time_t &startTime);
@@ -557,7 +565,7 @@ class EData {
   // The tables of re-placed sub-point nodes, shared by this EData and its copies (NodeTableCache.h).
   std::shared_ptr<NodeTableCache> nodeCache_ = std::make_shared<NodeTableCache>();
   /// The stage's channel table (docs/upgrade/channel_table.md): built by CalcEDependentValues and
-  /// InitializeComponentSegments before their point loops, read-only afterwards, replaced, never written.
+  /// InitializeLeaves before their point loops, read-only afterwards, replaced, never written.
   std::shared_ptr<const ChannelTable> channelTable_;
   std::shared_ptr<const ChannelTable> BuildChannelTable(CNuc *, const Config &, const std::vector<EPoint *> &points);
 };

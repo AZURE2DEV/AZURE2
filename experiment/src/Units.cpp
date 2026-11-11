@@ -3,6 +3,7 @@
 
 #include <cctype>
 #include <cmath>
+#include <stdexcept>
 
 #include "azure2/physics/Constants.h"
 
@@ -119,6 +120,27 @@ const Dimension *FindDimension(const std::string &name) {
   for (const Dimension &d : Dimensions())
     if (name == d.name) return &d;
   return nullptr;
+}
+
+double Rescale(double value, double factor) {
+  if (factor == 1.0) return value;
+  if (factor >= 1.0) {
+    const double n = std::round(factor);
+    return std::fabs(factor - n) <= 1e-12 * n ? value * n : value * factor;
+  }
+  const double inverse = 1.0 / factor, n = std::round(inverse);
+  return std::fabs(inverse - n) <= 1e-12 * n ? value / n : value * factor;
+}
+
+double FactorBetween(const Unit &from, const Unit &to) { return from.factor / to.factor; }
+
+double ToBase(double value, const Unit *unit) { return unit ? Rescale(value, unit->factor) : value; }
+
+double ToUnit(double value, const Unit *from, const std::string &to) {
+  const Unit *target = FindUnit(to);
+  if (!target || (from && std::string(from->dimension) != target->dimension))
+    throw std::invalid_argument("experiment::ToUnit: " + std::string(from ? from->token : "(none)") + " -> " + to);
+  return from ? Rescale(value, FactorBetween(*from, *target)) : value;
 }
 
 double ParticlesPerUnitCharge(const Unit &unit, int chargeState) {

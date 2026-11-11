@@ -96,11 +96,11 @@ std::vector<double> TermKey(PPair *pair, const Config &configure, const CoulFunc
  * carries it, and it turns with energy).  Both are exact and cheap (the
  * Coulomb table answers them at the channel radius).
  */
-bool Reduction(PPair *pair, CoulFunc &coul, int li, double outEnergy, bool isChannelCapture, complex &n) {
+bool Reduction(PPair *pair, CoulFunc &coul, int li, int twoJi, double outEnergy, bool isChannelCapture, complex &n) {
   if (isChannelCapture)
-    n = coul.HardSpherePhase(li, pair->GetChRad(), outEnergy);
+    n = coul.HardSpherePhase(li, twoJi, pair->GetChRad(), outEnergy);
   else
-    n = complex(sqrt(coul.Penetrability(li, pair->GetChRad(), outEnergy)), 0.0);
+    n = complex(sqrt(coul.Penetrability(li, twoJi, pair->GetChRad(), outEnergy)), 0.0);
   return std::isfinite(n.real()) && std::isfinite(n.imag()) && std::abs(n) > 0.0;
 }
 
@@ -143,10 +143,12 @@ complex ECTable::Integral(PPair *finalPair, const Config &configure,
   if (!RateMode(configure)) coul.SetRadialScratch(true);
   complex reduction;
   // sqrt(P) or exp(-i phi) at a_c from the point's channel table where it holds the open channel (same function).
-  const ChannelTable::Row *row = table ? table->Find(finalPairNum, li, outEnergy) : nullptr;
+  // the entrance channel's 2J key: its waves depend on J_i when the pair has a spin-orbit term
+  const int twoJi = finalPair->SpinOrbitTwoJ(ji);
+  const ChannelTable::Row *row = table ? table->Find({finalPairNum, li, twoJi, outEnergy}) : nullptr;
   if (row && row->P > 0.0)
     reduction = isChannelCapture ? row->expHSP : complex(sqrt(row->P), 0.0);
-  else if (!(outEnergy > 0.0) || !Reduction(finalPair, coul, li, outEnergy, isChannelCapture, reduction)) {
+  else if (!(outEnergy > 0.0) || !Reduction(finalPair, coul, li, twoJi, outEnergy, isChannelCapture, reduction)) {
     ++g_direct;
     return Direct(finalPair, configure, li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy,
                   isChannelCapture);
@@ -193,7 +195,7 @@ complex ECTable::Integral(PPair *finalPair, const Config &configure,
     const double nodeOut = exp((double)(first + s) * h);
     try {
       complex n;
-      if (Reduction(finalPair, coul, li, nodeOut, isChannelCapture, n)) {
+      if (Reduction(finalPair, coul, li, twoJi, nodeOut, isChannelCapture, n)) {
         complex v = Converged(finalPair, configure, li, lf, si, sf, ji, jf, multL, radType, nodeOut + threshold,
                               levelEnergy, isChannelCapture) / n;
         node.ok = std::isfinite(v.real()) && std::isfinite(v.imag());

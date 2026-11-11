@@ -38,7 +38,7 @@ namespace {
  * density, through which the kernel interpolates E_bar(N) -- exact at N0, smooth in N.
  */
 static void AddTargetFallbackNodes(EPoint *point, TargetEffect *te, double cmConversion, const Config &configure,
-                                   ESegment *segment) {
+                                   const TermRef &segment) {
   const double e = point->GetCMEnergy();
   std::vector<double> nodes;
   if (te->HasDensityFit()) {
@@ -52,9 +52,8 @@ static void AddTargetFallbackNodes(EPoint *point, TargetEffect *te, double cmCon
     nodes = {e - point->GetTargetFallbackDepth()};
   }
   for (double sub : nodes) {
-    EPoint subPoint(point->GetCMAngle(), sub, segment);
-    subPoint.SetCoefficientOrder(point->GetCoefficientOrder());
-    subPoint.SetCoefficientAbsolute(point->GetCoefficientAbsolute());
+    EPoint subPoint(point->GetCMAngle(), sub, segment.segment, segment.term);
+    subPoint.BelongToRowOf(*point);
     subPoint.SetStoppingPower(cmConversion * te->GetStoppingPowerEq()->Evaluate(configure, sub / cmConversion));
     point->AddSubPoint(subPoint);
   }
@@ -100,18 +99,18 @@ static bool CheckTargetWindows(TargetEffect *te, int segmentKey, std::ostream &o
  * from).  The windows are fixed for the session: a fit that moves a narrow level by more than w leaves it
  * outside; a new session from the fitted file places them again.
  */
-static std::vector<std::pair<double, double> > TargetWindowsFor(TargetEffect *te, CNuc *compound, ESegment *segment,
+static std::vector<std::pair<double, double> > TargetWindowsFor(TargetEffect *te, CNuc *compound, const TermRef &segment,
                                                                  double cmConversion, const Config &configure,
                                                                  int reportKey, bool report) {
   std::vector<std::pair<double, double> > windows = te->GetRanges();
-  if (!te->IsAutoWindows() || !compound || segment->NumPoints() == 0) return windows;
+  if (!te->IsAutoWindows() || !compound || segment.NumPoints() == 0) return windows;
   double eLo = 1.0e300, eHi = 0.0;
-  for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
+  for (EPointIterator point = segment.GetPoints().begin(); point < segment.GetPoints().end(); point++) {
     eLo = std::min(eLo, point->GetLabEnergy());
     eHi = std::max(eHi, point->GetLabEnergy());
   }
   AdaptiveIntegrationGrid::GridConfig gc;
-  gc.entranceKey = segment->GetEntranceKey();
+  gc.entranceKey = segment.GetEntranceKey();
   gc.inputWidthsArePhysical = (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->IsTransformedIn();
   AdaptiveIntegrationGrid finder(gc);
   // every level up to well above the data: a window reaches below its resonance only by w
@@ -140,7 +139,7 @@ static std::vector<std::pair<double, double> > TargetWindowsFor(TargetEffect *te
   // Particle thresholds of the same compound nucleus: a target that straddles one sees the cusp of the channel
   // opening, which no single energy reproduces (13C+alpha ND2021r: 15 % at the 16O(6.05) n1 threshold).
   int thresholds = 0;
-  PPair *entrance = compound->GetPairFromKey(segment->GetEntranceKey());
+  PPair *entrance = compound->GetPairFromKey(segment.GetEntranceKey());
   if (entrance) {
     const double eEntrance = entrance->GetSepE() + entrance->GetExE();
     for (int i = 1; i <= compound->NumPairs(); i++) {
@@ -168,11 +167,11 @@ static std::vector<std::pair<double, double> > TargetWindowsFor(TargetEffect *te
       merged.push_back(w);
   }
   int inside = 0;
-  for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++)
+  for (EPointIterator point = segment.GetPoints().begin(); point < segment.GetPoints().end(); point++)
     if (te->BlendWeight(point->GetLabEnergy(), merged) > 0.0) inside++;
   std::ostringstream note;
   note << "Note: segment #" << reportKey << ": automatic target-integration windows (tolerance " << tol
-       << ", margin " << margin << "): " << narrow << " narrow level(s), " << thresholds << " threshold(s), " << inside << " of " << segment->NumPoints()
+       << ", margin " << margin << "): " << narrow << " narrow level(s), " << thresholds << " threshold(s), " << inside << " of " << segment.NumPoints()
        << " points integrated";
   if (!merged.empty()) {
     note << "; windows (lab MeV)";
@@ -209,7 +208,7 @@ namespace {
 // Does this segment need external-capture amplitudes at its sub-points?  They are
 // integrals computed once at initialization (CalculateECAmplitudes), so its grid
 // cannot be re-placed.
-bool SegmentNeedsEC(ESegment &segment, CNuc *theCNuc, const Config &configure) {
+bool SegmentNeedsEC(const TermRef &segment, CNuc *theCNuc, const Config &configure) {
   if (!(configure.paramMask & Config::USE_EXTERNAL_CAPTURE)) return false;
   const int ir = theCNuc->GetPairNumFromKey(segment.GetExitKey());
   for (int j = 1; j <= theCNuc->NumJGroups(); j++)
@@ -244,39 +243,39 @@ bool SegmentNeedsEC(ESegment &segment, CNuc *theCNuc, const Config &configure) {
  * otherwise the point gets the new grid, so the grid depends on the current
  * parameters alone (docs/upgrade/fit_threads.md).
  */
-int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const std::vector<ESegment *> &shiftActive,
-                                std::vector<ESegment *> &reshift) {
+int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const std::vector<TermRef> &shiftActive,
+                                std::vector<TermRef> &reshift) {
   if (!configure.replaceSubPointGrids || !configure.useAdaptiveGrid || !theCNuc) return 0;
   const auto t0 = std::chrono::steady_clock::now();
 
-  struct Item { ESegment *seg; int i; double offset; bool shifted; };
+  struct Item { TermRef seg; int i; double offset; bool shifted; };
   std::vector<Item> work;
-  struct Owner { ESegment *seg; bool shifted; bool replaceable; };
+  struct Owner { TermRef seg; bool shifted; bool replaceable; };
   std::unordered_map<const EPoint *, Owner> mappedSegment;  // the segment of each mapped point
   static std::atomic<bool> ecNoted{false};
-  auto collect = [&](ESegment *seg) {
+  auto collect = [&](const TermRef &seg) {
     // Mapped points are registered first, also in segments whose grids are not
     // re-placed: a host with such a mapped point keeps its grid too.
-    for (int i = 1; i <= seg->NumPoints(); i++)
-      if (seg->GetPoint(i)->IsMapped()) mappedSegment[seg->GetPoint(i)] = {seg, false, false};
+    for (int i = 1; i <= seg.NumPoints(); i++)
+      if (seg.GetPoint(i)->IsMapped()) mappedSegment[seg.GetPoint(i)] = {seg, false, false};
     bool any = false;
-    for (int i = 1; i <= seg->NumPoints() && !any; i++) any = seg->GetPoint(i)->GetSubGridSpec().valid;
+    for (int i = 1; i <= seg.NumPoints() && !any; i++) any = seg.GetPoint(i)->GetSubGridSpec().valid;
     if (!any) return;
-    if (SegmentNeedsEC(*seg, theCNuc, configure)) {
+    if (SegmentNeedsEC(seg, theCNuc, configure)) {
       if (!ecNoted.exchange(true))
         configure.outStream << "Note: the sub-point grids of segments with external capture are not re-placed "
                                "(their capture integrals are computed once)." << std::endl;
       return;
     }
     const bool shifted = std::find(shiftActive.begin(), shiftActive.end(), seg) != shiftActive.end();
-    PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(seg->GetEntranceKey()));
-    PPair *exitPair = theCNuc->GetPairFromKey(seg->GetExitKey());  // nullptr for total capture (-1)
+    PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(seg.GetEntranceKey()));
+    PPair *exitPair = theCNuc->GetPairFromKey(seg.GetExitKey());  // nullptr for total capture (-1)
     // The c.m./lab factor the shift step uses for sub-points (ESegment::UpdatePointEnergyWithShift).
     const double cmFactor = ESegment::CMEnergyFactor(entrancePair, exitPair);
-    for (int i = 1; i <= seg->NumPoints(); i++) {
-      EPoint *point = seg->GetPoint(i);
+    for (int i = 1; i <= seg.NumPoints(); i++) {
+      EPoint *point = seg.GetPoint(i);
       if (!point->GetSubGridSpec().valid) continue;
-      // A mapped point keeps its host's grid: the mapping (MapData, MapComponentSegments) was made because the
+      // A mapped point keeps its host's grid: the mapping (MapData, MapLeaves) was made because the
       // two grids are identical, and the host's calculation fills the mapped point's sub-points node by node
       // (EPoint::Calculate).  It is re-placed with its host below, never on its own.
       if (point->IsMapped()) {
@@ -284,12 +283,12 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
         continue;
       }
       // the parent's shift, which is what moves every sub-point (ESegment::UpdatePointEnergyWithShift)
-      const double offset = shifted ? cmFactor * seg->TotalEnergyShift(point->GetOriginalEnergy()) : 0.0;
+      const double offset = shifted ? cmFactor * seg.segment->TotalEnergyShift(point->GetOriginalEnergy()) : 0.0;
       work.push_back({seg, i, offset, shifted});
     }
   };
-  for (ESegment &seg : segments_) collect(&seg);
-  for (ESegment &seg : componentSegments_) collect(&seg);
+  for (ESegment &seg : segments_) collect({&seg, 0});
+  for (const LeafRef &leaf : leafRefs_) collect({&segments_[leaf.first], leaf.second});
   if (work.empty()) return 0;
 
   // The observed parameters of the current fit values, on the private copy.
@@ -314,9 +313,9 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
   // largest node move (MeV) of a grid that changed.
   std::vector<double> moved(work.size(), 0.0);
   std::mutex reshiftMutex;
-  std::vector<ESegment *> mappedShifted;  // shifted segments of mapped points re-placed with their hosts
+  std::vector<TermRef> mappedShifted;  // shifted segments of mapped points re-placed with their hosts
   auto replace = [&](const Item &it, size_t q) {
-    EPoint *point = it.seg->GetPoint(it.i);
+    EPoint *point = it.seg.GetPoint(it.i);
     const EPoint::SubGridSpec &spec = point->GetSubGridSpec();
     AdaptiveIntegrationGrid::GridConfig gc;
     gc.maxPoints = spec.maxPoints;
@@ -352,9 +351,9 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
     // cloned from: a copy re-placing its grids then adds tables only for the
     // nodes that moved.
     long reused = 0, fromOtherCopies = 0;
-    auto layOut = [&](EPoint *target, ESegment *seg, bool shifted) {
+    auto layOut = [&](EPoint *target, const TermRef &seg, bool shifted) {
       const EPoint::SubGridSpec &tspec = target->GetSubGridSpec();
-      TargetEffect *effect = this->GetTargetEffect(seg->GetTargetEffectNum());
+      TargetEffect *effect = this->GetTargetEffect(seg.GetTargetEffectNum());
       TargetEffect *qEffect = effect->IsQCoefficients() ? effect : nullptr;
       std::vector<EPoint> &tsubs = target->GetSubPoints();
       std::vector<EPoint::EDependentShare> old;
@@ -367,9 +366,8 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
       tsubs.clear();
       for (size_t k = 0; k < grid.size(); k++) {
         const double e = grid[k];
-        EPoint sub(target->GetCMAngle(), e, seg);
-        sub.SetCoefficientOrder(target->GetCoefficientOrder());
-        sub.SetCoefficientAbsolute(target->GetCoefficientAbsolute());
+        EPoint sub(target->GetCMAngle(), e, seg.segment, seg.term);
+        sub.BelongToRowOf(*target);
         if (tspec.targetIntegration)
           sub.SetStoppingPower(tspec.stoppingConversion *
                                effect->GetStoppingPowerEq()->Evaluate(configure, e / tspec.stoppingConversion));
@@ -379,7 +377,7 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
         if (o != old.end() && sub.AdoptEDependentValues(*o)) {
           sub.CalcCoulombAmplitude(theCNuc);  // depends on the angle; cheap
           reused++;
-        } else if (!shifted && nodeCache_->Find(seg->GetSegmentKey(), sub.GetCMEnergy(), sub.GetCMAngle(), cached) &&
+        } else if (!shifted && nodeCache_->Find(seg.GetSegmentKey(), sub.GetCMEnergy(), sub.GetCMAngle(), cached) &&
                    sub.AdoptEDependentValues(cached)) {
           sub.CalcCoulombAmplitude(theCNuc);  // another copy placed this node: its tables
           fromOtherCopies++;
@@ -391,7 +389,7 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
             sub.CalcCoulombAmplitude(theCNuc);
           }
         }
-        if (!shifted) nodeCache_->Store(seg->GetSegmentKey(), sub.ShareEDependentValues());
+        if (!shifted) nodeCache_->Store(seg.GetSegmentKey(), sub.ShareEDependentValues());
         target->AddSubPoint(sub);
       }
     };
@@ -425,7 +423,7 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
   if (changed > 0)
     for (const Item &it : work)
       if (it.shifted && std::find(reshift.begin(), reshift.end(), it.seg) == reshift.end()) reshift.push_back(it.seg);
-  for (ESegment *seg : mappedShifted)
+  for (const TermRef &seg : mappedShifted)
     if (std::find(reshift.begin(), reshift.end(), seg) == reshift.end()) reshift.push_back(seg);
 
   // The invariant point mapping rests on (SharesCalculation): a host and its
@@ -437,7 +435,7 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
   // energies.  Fail loudly rather than calculate on mismatched grids.
   if (changed > 0)
     for (const Item &it : work) {
-      EPoint *host = it.seg->GetPoint(it.i);
+      EPoint *host = it.seg.GetPoint(it.i);
       const std::vector<EPoint> &hs = host->GetSubPoints();
       const azure2::MappedPoints mapped = host->PlanMapped();
       for (int m = 0; m < mapped.size(); m++) {
@@ -445,7 +443,7 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
         bool same = ms.size() == hs.size();
         for (size_t k = 0; same && k < hs.size(); k++) same = ms[k].GetOriginalEnergy() == hs[k].GetOriginalEnergy();
         if (!same)
-          throw std::logic_error("EData::ReplaceSubPointGrids: segment " + std::to_string(it.seg->GetSegmentKey()) +
+          throw std::logic_error("EData::ReplaceSubPointGrids: segment " + std::to_string(it.seg.GetSegmentKey()) +
                                  " point " + std::to_string(it.i) + " and a point mapped onto it have different "
                                  "sub-point grids (" + std::to_string(hs.size()) + " and " +
                                  std::to_string(ms.size()) + " nodes)");
@@ -523,11 +521,9 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
               segment->SetTargetEffectNum(this->NumTargetEffects());
               // If segment has components, set the target effect to these as
               // well -- again a copy each, since each is converted below.
-              if (segment->HasComponents()) {
-                for (auto component : segment->GetComponentSegments()) {
-                  this->AddTargetEffect(targetEffect);
-                  component->SetTargetEffectNum(this->NumTargetEffects());
-                }
+              for (int t = 1; t < segment->NumTerms(); t++) {
+                this->AddTargetEffect(targetEffect);
+                segment->SetTermTargetEffectNum(t, this->NumTargetEffects());
               }
             }
           }
@@ -574,7 +570,7 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
       if (!CheckTargetWindows(targetEffect, segment->GetSegmentKey(), configure.outStream)) return -1;
       const bool thinTarget = targetEffect->IsTargetIntegration() && !targetEffect->IsThickTarget();
       const std::vector<std::pair<double, double> > windows =
-          TargetWindowsFor(targetEffect, compound, &*segment, cmConversion, configure, segment->GetSegmentKey(), true);
+          TargetWindowsFor(targetEffect, compound, {&*segment, 0}, cmConversion, configure, segment->GetSegmentKey(), true);
       for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
         // An effect restricted to energy ranges leaves points outside them
         // untouched: they never receive the effect number, so the whole
@@ -620,7 +616,7 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
                                                                                       targetEffect->GetDensity()));
             if (blendWeight <= 0.) {
               point->SetTargetFallbackOnly(true);
-              AddTargetFallbackNodes(&*point, targetEffect, cmConversion, configure, &*segment);
+              AddTargetFallbackNodes(&*point, targetEffect, cmConversion, configure, {&*segment, 0});
               continue;
             }
           }
@@ -736,9 +732,8 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
 
           for (size_t i = 0; i < energyGrid.size(); i++) {
             double subEnergy = energyGrid[i];
-            EPoint subPoint(point->GetCMAngle(), subEnergy, &*segment);
-            subPoint.SetCoefficientOrder(point->GetCoefficientOrder());
-            subPoint.SetCoefficientAbsolute(point->GetCoefficientAbsolute());
+            EPoint subPoint(point->GetCMAngle(), subEnergy, &*segment, 0);
+            subPoint.BelongToRowOf(*point);
             if (targetEffect->IsTargetIntegration()) {
               double stoppingPower = cmConversion * targetEffect->GetStoppingPowerEq()->Evaluate(configure, subEnergy / cmConversion);
               subPoint.SetStoppingPower(stoppingPower);
@@ -748,26 +743,26 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
         }
       }
     }
-    if (segment->HasComponents()) {
-      for (auto component : segment->GetComponentSegments()) {
+    {
+      for (int t = 1; t < segment->NumTerms(); t++) {
+        const TermRef component{&*segment, t};
         // The component's grid, kinematics and lab<->c.m. factor belong to the
         // pair the component calculates -- for a natural target another
         // compound nucleus with its own masses -- not to the base segment's.
         // The points were copied from the base segment with its c.m.
         // energies; convert them for this pair before the grid is laid out
         // (EData::Initialize repeats this, idempotently, from the lab energy).
-        PPair *compEntrance = compound->GetPair(compound->GetPairNumFromKey(component->GetEntranceKey()));
-        PPair *compExit = compound->GetPairFromKey(component->GetExitKey());
+        PPair *compEntrance = compound->GetPair(compound->GetPairNumFromKey(component.GetEntranceKey()));
+        PPair *compExit = compound->GetPairFromKey(component.GetExitKey());
         const double compConversion = ESegment::CMEnergyFactor(compEntrance, compExit);
-        for (EPointIterator point = component->GetPoints().begin(); point < component->GetPoints().end(); point++)
-          ESegment::ConvertPointEnergyToCM(&*point, compEntrance, compExit);
-        if (component->IsTargetEffect()) {
-          TargetEffect *targetEffect = this->GetTargetEffect(component->GetTargetEffectNum());
+        for (int i = 0; i < component.NumPoints(); i++) segment->ConvertRowEnergyToCM(t, i, compEntrance, compExit);
+        if (segment->IsTargetEffect()) {
+          TargetEffect *targetEffect = this->GetTargetEffect(component.GetTargetEffectNum());
           const int bohrZ1 = (compEntrance->GetPType() == 20) ? 0 : compEntrance->GetZ(1);
           const int bohrZ2 = compEntrance->GetZ(2);
           if (targetEffect->IsUdr()) {
             double eMin = 1.0e300, eMax = 0.0;
-            for (EPointIterator point = component->GetPoints().begin(); point < component->GetPoints().end(); point++) {
+            for (EPointIterator point = component.GetPoints().begin(); point < component.GetPoints().end(); point++) {
               eMin = std::min(eMin, point->GetLabEnergy());
               eMax = std::max(eMax, point->GetLabEnergy());
             }
@@ -780,10 +775,10 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
           const std::vector<std::pair<double, double> > windows =
               TargetWindowsFor(targetEffect, compound, component, compConversion, configure, segment->GetSegmentKey(),
                                false);
-          for (EPointIterator point = component->GetPoints().begin(); point < component->GetPoints().end(); point++) {
+          for (EPointIterator point = component.GetPoints().begin(); point < component.GetPoints().end(); point++) {
             double blendWeight = targetEffect->BlendWeight(point->GetLabEnergy(), windows);
             if (blendWeight <= 0. && !thinTarget) continue;  // see the base segment's loop above
-            point->SetTargetEffectNum(component->GetTargetEffectNum());
+            point->SetTargetEffectNum(component.GetTargetEffectNum());
             point->SetTargetBlendWeight(std::max(blendWeight, 0.0));
             point->SetTargetKinematics(compConversion, bohrZ1, bohrZ2);
 
@@ -822,11 +817,11 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
               // How far the grid reaches above and below the point for this effect (beam spread, target, straggling).
               targetEffect->GridExtent(point->GetCMEnergy(), targetThickness, configure, compConversion, bohrZ1, bohrZ2, forwardDepth, backwardDepth);
               // A THM (HOES) segment's Gaussian fold reaches thmConvolutionRange sigma (5), as above.
-              if (component->IsTHM() && targetEffect->IsGaussian() && !targetEffect->IsTargetIntegration())
+              if (segment->IsTHM() && targetEffect->IsGaussian() && !targetEffect->IsTargetIntegration())
                 forwardDepth = backwardDepth =
                     TargetEffect::thmConvolutionRange * targetEffect->SigmaCM(point->GetCMEnergy(), configure, compConversion);
 
-              // Generate adaptive integration grid for component segment
+              // Generate adaptive integration grid for the leaf
               double startEnergy = point->GetCMEnergy() + forwardDepth;
               double endEnergy;
 
@@ -837,8 +832,8 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
               component's own entrance pair, since an advanced (sum/ratio) component
               can have a different entrance channel than its master segment.
               */
-              PPair *componentEntrancePair = compound->GetPair(compound->GetPairNumFromKey(component->GetEntranceKey()));
-              double minSubEnergy = component->IsTHM() ? TargetEffect::minIntegrationEnergy - (componentEntrancePair->GetSepE() + componentEntrancePair->GetExE()) : TargetEffect::minIntegrationEnergy;
+              PPair *componentEntrancePair = compound->GetPair(compound->GetPairNumFromKey(component.GetEntranceKey()));
+              double minSubEnergy = segment->IsTHM() ? TargetEffect::minIntegrationEnergy - (componentEntrancePair->GetSepE() + componentEntrancePair->GetExE()) : TargetEffect::minIntegrationEnergy;
 
               if (targetEffect->IsTargetIntegration()) {
                 endEnergy = point->GetCMEnergy() - backwardDepth;
@@ -860,7 +855,7 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
                 targetEffect->BeamProfileSupport(low, high);  // lab
                 low *= compConversion; high *= compConversion;
                 double s = compConversion * targetEffect->GetBeamTpcSigma();
-                double tails = component->IsTHM() ? TargetEffect::thmConvolutionRange : 4.0;
+                double tails = segment->IsTHM() ? TargetEffect::thmConvolutionRange : 4.0;
                 if (point->HasBinWindow()) {
                   low = std::max(low, point->GetBinLowCM() - tails * s);
                   high = std::min(high, point->GetBinHighCM() + tails * s);
@@ -900,7 +895,7 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
                 AdaptiveIntegrationGrid::GridConfig gridConfig;
                 gridConfig.maxPoints = numPoints;
                 // The component's own entrance pair: its resonances, on its energy axis, are what the grid must resolve.
-                gridConfig.entranceKey = component->GetEntranceKey();
+                gridConfig.entranceKey = component.GetEntranceKey();
                 gridConfig.inputWidthsArePhysical = (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->IsTransformedIn();
                 gridConfig.baseEnergyStep = (startEnergy - endEnergy) / numPoints;
                 gridConfig.resonanceWidthMultiplier = targetEffect->GetResonanceWidthMultiplier();
@@ -916,9 +911,8 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
 
               for (size_t i = 0; i < energyGrid.size(); i++) {
                 double subEnergy = energyGrid[i];
-                EPoint subPoint(point->GetCMAngle(), subEnergy, &*component);
-                subPoint.SetCoefficientOrder(point->GetCoefficientOrder());
-                subPoint.SetCoefficientAbsolute(point->GetCoefficientAbsolute());
+                EPoint subPoint(point->GetCMAngle(), subEnergy, &*segment, t);
+                subPoint.BelongToRowOf(*point);
                 if (targetEffect->IsTargetIntegration()) {
                   double stoppingPower = compConversion * targetEffect->GetStoppingPowerEq()->Evaluate(configure, subEnergy / compConversion);
                   subPoint.SetStoppingPower(stoppingPower);

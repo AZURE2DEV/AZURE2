@@ -22,6 +22,7 @@ ThmVertexBoundary::ThmVertexBoundary(const Config &configure, PPair *pair, JGrou
     : rule_(RuleOf(configure)),
       channel_(channel),
       l_(jgroup->GetChannel(channel)->GetL()),
+      two_j_(pair->SpinOrbitTwoJ(jgroup->GetJ())),
       lowest_(0),
       fixed_(jgroup->GetChannel(channel)->GetBoundaryCondition()),
       channelFunc_(pair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC)) {
@@ -37,7 +38,7 @@ ThmVertexBoundary::ThmVertexBoundary(const Config &configure, PPair *pair, JGrou
   // (A J group without levels in the R matrix has no level term; its
   // level-free term, if any, takes S_c at the excitation energy 0.)
   if (rule_ == LOWEST_LEVEL_SHIFT)
-    fixed_ = ShiftAtLevelEnergy(pair, l_, eMin, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+    fixed_ = ShiftAtLevelEnergy(pair, l_, two_j_, eMin, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
 }
 
 double ThmVertexBoundary::Level(const ALevel *level) const {
@@ -45,7 +46,7 @@ double ThmVertexBoundary::Level(const ALevel *level) const {
 }
 
 complex ThmVertexBoundary::OnShellAt(double e) const {
-  return complex(channelFunc_.Shift(l_, e), channelFunc_.Penetrability(l_, e));
+  return complex(channelFunc_.Shift(l_, two_j_, e), channelFunc_.Penetrability(l_, two_j_, e));
 }
 
 /*
@@ -59,9 +60,9 @@ complex ThmVertexBoundary::OnShellAt(double e) const {
  * 35.99 instead of 208.6 for the same parameters).  Within one evaluation
  * every point asks for the same few (pair, l, energy) triples.
  */
-double ThmVertexBoundary::ShiftAtLevelEnergy(PPair *pair, int l, double levelEnergy, bool useGSL) {
+double ThmVertexBoundary::ShiftAtLevelEnergy(PPair *pair, int l, int two_j, double levelEnergy, bool useGSL) {
   struct Entry {
-    int z1, z2; double redmass, radius; std::optional<azure2::physics::HybridPotential> potential; int l; double e; bool gsl; const void *table; double s;
+    int z1, z2; double redmass, radius; std::optional<azure2::physics::HybridPotential> potential; int l, two_j; double e; bool gsl; const void *table; double s;
   };
   static const int kMemo = 32;
   thread_local Entry memo[kMemo];
@@ -76,12 +77,12 @@ double ThmVertexBoundary::ShiftAtLevelEnergy(PPair *pair, int l, double levelEne
   for (int i = 0; i < filled; i++) {
     const Entry &m = memo[i];
     if (m.z1 == z1 && m.z2 == z2 && m.redmass == redmass && m.radius == radius &&
-        m.potential == potential && m.l == l && m.e == resonanceEnergy && m.gsl == useGSL && m.table == table)
+        m.potential == potential && m.l == l && m.two_j == two_j && m.e == resonanceEnergy && m.gsl == useGSL && m.table == table)
       return m.s;
   }
   // Continuous through threshold, and at it (ChannelFunc).
-  double s = ChannelFunc(pair, useGSL).Shift(l, resonanceEnergy);
-  memo[next] = Entry{z1, z2, redmass, radius, potential, l, resonanceEnergy, useGSL, table, s};
+  double s = ChannelFunc(pair, useGSL).Shift(l, two_j, resonanceEnergy);
+  memo[next] = Entry{z1, z2, redmass, radius, potential, l, two_j, resonanceEnergy, useGSL, table, s};
   next = (next + 1) % kMemo;
   if (filled < kMemo) filled++;
   return s;

@@ -1,10 +1,12 @@
-#ifndef DATALINE_H
-#define DATALINE_H
+#ifndef AZURE2_EXPERIMENT_DATALINE_H
+#define AZURE2_EXPERIMENT_DATALINE_H
 
 #include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
+
+#include "azure2/experiment/DataRows.h"
 
 /// A class to read and store a line from a data file.
 
@@ -56,6 +58,13 @@ class DataLine {
       return;
     }
     atEnd_ = true;           // no data line left in the file
+  };
+  /*!
+   * The row in the engine's units and frame (format 3: the units of the column roles and of the values, an E_cm
+   * column; experiment/DataRows.h).  The identity leaves every bit as read.
+   */
+  void ToEngineUnits(const azure2::experiment::ColumnConversion &c) {
+    azure2::experiment::RowToEngine(c, energy_, angle_, crossSection_, error_, extra_);
   };
   /*!
    * True when the constructor found no further line to read: the file is

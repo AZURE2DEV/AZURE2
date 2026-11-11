@@ -574,8 +574,8 @@ int AZUREAPI::UpdateData() {
     for (int k = 0; k < data.size(); ++k) {
       energies.push_back(data[k].GetCMEnergy());
       angles.push_back(data[k].GetCMAngle());
-      cross.push_back(data[k].GetCMCrossSection());
-      crossErr.push_back(data[k].GetCMCrossSectionError());
+      cross.push_back(segments[i].CMValue(k));
+      crossErr.push_back(segments[i].CMError(k));
       conv.push_back(data[k].GetSFactorConversion());
       excitationEnergies.push_back(data[k].GetExcitationEnergy());
     }
@@ -833,7 +833,7 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
 
     const double norm = ld->NormUsed(i, results());
     for (int pid = 0; pid < segment->NumPoints(); pid++) {
-      const double r = azure2::PointResidual(*segment->GetPoint(pid + 1), results(), norm).Pull();
+      const double r = azure2::PointResidual(*segment, pid, results(), norm).Pull();
       if (!profiled) segChi += r * r;
       if (res) res->push_back(r);
     }
@@ -1000,8 +1000,8 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
     EPoint *pt = seg->GetPoint(pid + 1);
     if (!pt) return 0.0;
     double norm = seg->GetNorm();
-    double dataval = pt->GetCMCrossSection();
-    double cmErr = pt->GetCMCrossSectionError();
+    double dataval = seg->CMValue(pid);
+    double cmErr = seg->CMError(pid);
     const azure2::Residual res = azure2::DataResidual(model, dataval, cmErr, norm);
     const double r = res.difference, err = res.error;
     if (err == 0.0) return 0.0;
@@ -1664,57 +1664,6 @@ vector_r AZUREAPI::GetPairsInfo() const {
 // ---------------------------------------------------------------------------
 
 /*!
- * Coulomb wave functions, penetrability, shift function and hard-sphere phase
- * on a requested energy grid; below threshold the shift function alone.
- *
- * These are ordinary R-matrix quantities that AZURE2 has always computed
- * internally; what is new is being able to ask for them.  The values follow the
- * run's own configuration, so the same call returns the accurate Coulomb
- * routine's answer, GSL's, or the Numerov solution through a nuclear potential,
- * according to how the calculation was set up -- which is how one sees what the
- * hybrid model actually does to the external region.
- */
-vector_r AZUREAPI::GetCoulombFunctions(const vector_r &request) const {
-  vector_r out;
-  if (request.size() < 4) return out;
-
-  int pairKey = static_cast<int>(std::lround(request[0]));
-  int lValue = static_cast<int>(std::lround(request[1]));
-  double radius = request[2];
-  int nE = static_cast<int>(std::lround(request[3]));
-  if (nE < 0 || request.size() < static_cast<size_t>(4 + nE)) return out;
-
-  if (!compound_ || !compound_->IsPairKey(pairKey)) return out;
-  PPair *pair = compound_->GetPair(compound_->GetPairNumFromKey(pairKey));
-  if (!pair) return out;
-  if (radius <= 0.0) radius = pair->GetChRad();  // the channel radius by default
-
-  CoulFunc coul(pair, !!(configure().paramMask & Config::USE_GSL_COULOMB_FUNC));
-
-  out.push_back(static_cast<double>(nE));
-  for (int i = 0; i < nE; ++i) {
-    double energy = request[4 + i];
-    double F = 0., dF = 0., G = 0., dG = 0., P = 0., S = 0., delta = 0.;
-    if (energy > 0.0 && !ChannelFunc::IsCoulombThreshold(pair, energy)) {
-      try {
-        CoulWaves w = coul(lValue, radius, energy);
-        F = w.F, dF = w.dF, G = w.G, dG = w.dG;
-        P = coul.Penetrability(lValue, radius, energy);
-        S = coul.PEShift(lValue, radius, energy);
-        delta = -std::atan2(w.F, w.G);
-      } catch (...) {
-        // A failed evaluation returns zeros for that energy rather than aborting the grid.
-        F = dF = G = dG = P = S = delta = 0.;
-      }
-    } else if (radius == pair->GetChRad()) {  // closed (E <= 0, eta > 100): S through threshold (ChannelFunc)
-      S = ChannelFunc(pair, !!(configure().paramMask & Config::USE_GSL_COULOMB_FUNC)).Shift(lValue, energy);
-    }
-    out.insert(out.end(), {F, dF, G, dG, P, S, delta});
-  }
-  return out;
-}
-
-/*!
  * External-capture radial integrals on a requested energy grid.
  *
  * Walks exactly the pathway structure EPoint::CalculateECAmplitudes walks --
@@ -1747,31 +1696,29 @@ vector_r AZUREAPI::GetECIntegrals(const vector_r &request) const {
       if (!ecLevel->IsECLevel()) continue;
       int ir = ecLevel->GetECPairNum();
       if (ir < 1 || ir > compound_->NumPairs()) continue;
+      // The exit to the final state's photon pair; none when no pathway leads there from this entrance.
+      const azure2::EntrancePathways &P = compound_->Pathways().Entrance(aa);
+      const int exit = P.ExitOf(ir);
+      if (!exit) continue;
 
-      for (int k = 1; k <= entrancePair->GetDecay(ir)->NumKGroups(); k++) {
-        KGroup *theKGroup = entrancePair->GetDecay(ir)->GetKGroup(k);
-        for (int ecm = 1; ecm <= theKGroup->NumECMGroups(); ecm++) {
-          ECMGroup *g = theKGroup->GetECMGroup(ecm);
+      for (int k = 1; k <= P.exits[exit - 1].num_groups; k++) {
+        const azure2::SpinGroupRow &theKGroup = P.Group(P.exits[exit - 1], k);
+        for (int ecm = 1; ecm <= theKGroup.num_external; ecm++) {
+          const azure2::ExternalRow &g = P.External(theKGroup, ecm);
 
           AChannel *finalChannel =
-              compound_->GetJGroup(j)->GetChannel(g->GetFinalChannel());
+              compound_->GetJGroup(j)->GetChannel(g.final_channel);
           PPair *finalPair = compound_->GetPair(finalChannel->GetPairNum());
 
           int liValue;
           double siValue;
-          if (g->IsChannelCapture()) {
-            MGroup *cc = entrancePair->GetDecay(g->GetChanCapDecay())
-                             ->GetKGroup(g->GetChanCapKGroup())
-                             ->GetMGroup(g->GetChanCapMGroup());
-            liValue = compound_->GetJGroup(cc->GetJNum())
-                          ->GetChannel(cc->GetChpNum())
-                          ->GetL();
-            siValue = compound_->GetJGroup(cc->GetJNum())
-                          ->GetChannel(cc->GetChpNum())
-                          ->GetS();
+          if (g.channel_capture) {
+            const azure2::InternalRow &cc = P.internal[g.cc_row];
+            liValue = compound_->GetJGroup(cc.group)->GetChannel(cc.chp)->GetL();
+            siValue = compound_->GetJGroup(cc.group)->GetChannel(cc.chp)->GetS();
           } else {
-            liValue = g->GetL();
-            siValue = theKGroup->GetS();
+            liValue = g.l;
+            siValue = theKGroup.s;
           }
 
           vector_r block;
@@ -1779,11 +1726,13 @@ vector_r AZUREAPI::GetECIntegrals(const vector_r &request) const {
           block.push_back(static_cast<double>(finalChannel->GetL()));
           block.push_back(2.0 * siValue);
           block.push_back(2.0 * finalChannel->GetS());
-          block.push_back(static_cast<double>(g->GetMult()));
-          block.push_back(g->GetRadType() == 'E' ? 1.0 : 0.0);
+          block.push_back(static_cast<double>(g.mult));
+          block.push_back(g.rad_type == 'E' ? 1.0 : 0.0);
 
           ECIntegral theECIntegral(finalPair, configure());
-          double levelEnergy = ecLevel->GetE();
+          // The final state's capture energy, as the engine's integrals use it (ALevel::GetECEnergy, set by
+          // CNuc::SetUpECFinalBlocks): in the formal basis GetE() is the formal energy, not that one.
+          double levelEnergy = ecLevel->GetECEnergy();
           for (int i = 0; i < nE; ++i) {
             double inEnergy = energies[i] + entrancePair->GetSepE() + entrancePair->GetExE();
             complex v(0., 0.);
@@ -1791,10 +1740,10 @@ vector_r AZUREAPI::GetECIntegrals(const vector_r &request) const {
               try {
                 v = theECIntegral(liValue, finalChannel->GetL(),
                                   siValue, finalChannel->GetS(),
-                                  g->GetJ(), compound_->GetJGroup(j)->GetJ(),
-                                  g->GetMult(), g->GetRadType(),
+                                  g.J, compound_->GetJGroup(j)->GetJ(),
+                                  g.mult, g.rad_type,
                                   inEnergy, levelEnergy,
-                                  g->IsChannelCapture());
+                                  g.channel_capture);
               } catch (...) {
                 v = complex(0., 0.);
               }

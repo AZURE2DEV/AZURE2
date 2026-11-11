@@ -420,7 +420,7 @@ V EPoint::IntegrateKernelsImpl(const Config &configure, Read rd) {
     // The energy shift moved the point (and the sub-point grid); the window
     // is stored unshifted, so shift it by the same c.m. amount.
     double cmPerLab = (lab_energy_ != 0.0) ? cm_energy_ / lab_energy_ : 1.0;
-    double originalCM = original_energy_ * cmPerLab;
+    double originalCM = this->GetOriginalEnergy() * cmPerLab;
     double delta = cm_energy_ - originalCM;
     double a = bin_low_cm_ + delta;
     double b = bin_high_cm_ + delta;

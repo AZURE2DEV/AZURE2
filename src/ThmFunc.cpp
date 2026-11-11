@@ -463,12 +463,15 @@ complex coulombTermUncached(PPair *pair, int l, double E, double p) {
   } else if (E < 0.0) {
     const double kappa = std::sqrt(-2.0 * mu * E) / hbarc;
     WhitFunc wf(pair);
+    // The THM vertex is not built for a pair with a potential (ThmVertexAllowsPair, E_THM_HYBRID_POTENTIAL): W of
+    // the point-Coulomb problem, which has no J.
+    const int twoJ = azure2::physics::kNoSpinOrbit;
     double sa;
-    const double ma = wf.Scaled(l, a, -E, sa);
+    const double ma = wf.Scaled(l, twoJ, a, -E, sa);
     if (ma == 0.0) return complex(0.0, 0.0);
     auto ratio = [&](double r) -> complex {
       double s;
-      double m = wf.Scaled(l, r, -E, s);
+      double m = wf.Scaled(l, twoJ, r, -E, s);
       double e = s - sa;
       return complex((e < -300.0) ? 0.0 : m / ma * std::pow(10.0, e), 0.0);
     };

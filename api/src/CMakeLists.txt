@@ -1,6 +1,6 @@
 include_directories(../include ${AZURE2_SOURCE_DIR}/include)
 
-set (AZUREAPI_SOURCES AZUREAPI.cpp AZUREAPIModelData.cpp)
+set (AZUREAPI_SOURCES AZUREAPI.cpp AZUREAPIChannelFunctions.cpp AZUREAPIModelData.cpp)
 
 set (AZUREAPI_HEADERS ../include/AZUREAPI.h)
 

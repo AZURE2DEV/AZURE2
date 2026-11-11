@@ -590,10 +590,13 @@ holds the measured reaction data; LiveChart/ENSDF the evaluated level schemes.
    hits = nds.search_exfor(target="C-13", reaction="p,g", quantity="SIG")
    # -> [ExforDataset O2599004 6-C-13(P,G)7-N-14,,SIG,,SFC n=31 ...]
 
-   # fetch one dataset, convert to an AZURE2 data file + segment kwargs
+   # fetch one dataset; an S factor becomes a format-3 data set of quantity sfactor
    data = nds.fetch_exfor("O2599004")                 # S-factor, B*KEV
-   kw = data.to_azr("run/data", entrance=1, exit=2,
-                    observable="total-capture")       # lab E, barns
+   record = data.to_sfactor_dataset("run/data", "S_luna", norm="1 fit prior 1 5%")
+   # 'dataset S_luna\n    reaction 13C(p,g)14N\n    quantity sfactor\n    unit MeV*b ...'
+   # a cross section: an AZURE2 data file + segment kwargs
+   xs = nds.fetch_exfor(entry_id)                      # an entry in B, MB, ... (not SFC)
+   kw = xs.to_azr("run/data", entrance=1, exit=2, observable="total-capture")
    AzrModel.from_file("13N.azr").add_data_segment(**kw).write("13N_new.azr")
 
    # without the network, or when the IAEA answers with a challenge page:
@@ -610,8 +613,15 @@ holds the measured reaction data; LiveChart/ENSDF the evaluated level schemes.
    doi = nds.resolve_doi(ref)   # -> 10.1103/physrevlett.131.162701
 
 Frames and units are handled automatically: ``EN-CM`` energies are converted
-to lab, ``B*KEV`` S-factors to barns via the Sommerfeld factor, ``NB/SR``
-differentials to b/sr.  Pick ``observable`` to match the data's angle frame
+to lab, ``NB/SR`` differentials to b/sr.  S-factor data (``B*KEV``, an ``SFC``
+code) are format-3 quantity ``sfactor``: ``to_sfactor_dataset`` writes them as S
+(MeV b, the energy as EXFOR gives it, ``E_cm`` for ``EN-CM``), and the engine
+multiplies its model by :math:`E e^{2\pi\eta}` at each point with the masses of
+``<levels>``; ``to_azr`` refuses them (until November 2026 it converted them to
+barns with mass numbers, which moves the cross section by +6.7 % for
+p + :sup:`12`\ C at 100 keV).  ``sfactor_to_cross_section(S, E_cm_kev, z1, z2, m1_u,
+m2_u)`` converts by hand with the engine's function and the atomic masses
+(``_azure2.sfactor_conversion`` gives the factor).  Pick ``observable`` to match the data's angle frame
 (EXFOR ``ANG-CM`` → ``"differential-cm"`` or ``"analyzing-power"``; lab
 ``ANG`` → ``"differential"``).  See the ``azure2-setup`` skill for the full
 quantity/unit reference and failure modes.
@@ -936,6 +946,25 @@ and 0.0275 fm (the run log notes it). Lengths and energies may be written in any
 unit of the unit table (``keV``, ``m``). The fields, their diagnostics and the
 refusals (a photon or beta pair, two records for one pair, ``relativistic=1``,
 the entrance pair of THM data) are in :doc:`../reference/format3`.
+A pair with one spinning particle can have a spin–orbit term (FRESCO's
+convention, operator :math:`2\,\mathbf{l}\cdot\mathbf{i}`; :doc:`../theory/hybrid_potential`):
+the record's ``spin_orbit woods_saxon depth 6 MeV radius 3.6 fm diffuseness 0.6 fm on light operator 2l.s``,
+or in pyazr
+
+.. code-block:: python
+
+   azr.set_nuclear_potential(1, spin_orbit={"depth": 6.0, "radius": 3.6,
+                                            "diffuseness": 0.6, "on": "light"})
+   azr.nuclear_potential(1).spin_orbit        # the dict, or None
+   azr.set_nuclear_potential(1, spin_orbit=False)   # remove it
+   azr.coulomb_functions(1, energies, L=1, J=1.5)   # J required for such a pair
+
+The channel functions of such a pair depend on J: ``coulomb_functions`` needs
+``J`` for it (``E_SO_NEEDS_J``) and refuses one for any other pair
+(``E_SO_NO_TERM``).  A term on a pair whose two particles both have spin
+(``E_SO_TWO_SPINS``), on a spin-0 particle (``E_SO_ZERO_SPIN``) or on the
+default ``pair=0`` is refused with a ``ValueError``.
+
 ``save_fit`` of a format-3 project writes the session's potentials as these
 records when ``set_nuclear_potential`` changed them (the converter's writer: a
 session default becomes one record per particle pair it applies to).

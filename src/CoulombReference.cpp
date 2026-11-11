@@ -1,4 +1,5 @@
-// The Coulomb leaf of a ratio to the Rutherford or Mott cross section (CoulombReference.h).
+// The Coulomb leaf of a ratio to the Rutherford or Mott cross section, and the S-factor conversion of a point
+// (CoulombReference.h).
 #include "CoulombReference.h"
 
 #include <cmath>
@@ -14,6 +15,7 @@
 #include "Kinematics.h"
 #include "PPair.h"
 #include "TargetEffect.h"
+#include "azure2/physics/AstrophysicalFactor.h"
 #include "azure2/physics/CoulombScattering.h"
 
 namespace azure2 {
@@ -40,6 +42,11 @@ double CoulombReferenceValue(EPoint *point, experiment::LeafPart part, CNuc *com
   const double blend = point->GetTargetBlendWeight();
   if (!thinTarget && blend < 1.0) folded = blend * folded + (1.0 - blend) * at(point);
   return folded;
+}
+
+double SFactorConversionValue(const EPoint *point, CNuc *compound) {
+  PPair *pair = compound->GetPair(compound->GetPairNumFromKey(point->GetEntranceKey()));
+  return physics::sfactor_conversion(Kinematics::Channel(pair).Physics(), point->GetCMEnergy());
 }
 
 }  // namespace azure2

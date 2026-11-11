@@ -74,8 +74,8 @@ void EData::PrintData(const Config &configure) {
           << std::setw(15) << data.point()->GetLabEnergy()
           << std::setw(15) << data.point()->GetCMEnergy()
           << std::setw(15) << data.point()->GetCMAngle()
-          << std::setw(20) << data.point()->GetCMCrossSection()
-          << std::setw(22) << data.point()->GetCMCrossSectionError();
+          << std::setw(20) << data.segment()->CMValue((int)(data.point() - data.segment()->GetPoints().begin()))
+          << std::setw(22) << data.segment()->CMError((int)(data.point() - data.segment()->GetPoints().begin()));
       if (data.point()->IsMapped()) {
         EnergyMap map = data.point()->GetMap();
         char tempMap[25];

@@ -12,7 +12,8 @@
 #include "CoulFunc.h"
 #include "Kinematics.h"
 #include "ExperimentAdapter.h"
-#include "DataLine.h"
+#include "azure2/experiment/Frames.h"
+#include "azure2/experiment/Measurement.h"
 #include "ECIntegral.h"
 #include "ECAmplitudeCache.h"
 #include "ECTable.h"
@@ -53,32 +54,19 @@
  * the EPoint object.
  */
 
-EPoint::EPoint(DataLine dataLine, ESegment *parent) {
+EPoint::EPoint(const azure2::experiment::MeasurementRows &rows, int row, ESegment *parent) : rows_(&rows), row_(row) {
   entrance_key_ = parent->GetEntranceKey();
   exit_key_ = parent->GetExitKey();
-  cm_angle_ = dataLine.angle();
-  lab_angle_ = dataLine.angle();
-  original_energy_ = dataLine.energy();
-  if (dataLine.numExtra() >= 2) {
-    bin_low_lab_ = dataLine.extra(0);
-    bin_high_lab_ = dataLine.extra(1);
-    bin_low_cm_ = bin_low_lab_;
-    bin_high_cm_ = bin_high_lab_;
-  }
-  double shiftedEnergy = dataLine.energy();  //+ parent->GetEnergyShift();
-  // Don't allow energies below 0.005 MeV
-  if (shiftedEnergy < 0.005) {
-    shiftedEnergy = dataLine.energy();
-  }
-  cm_energy_ = dataLine.energy();
-  lab_energy_ = shiftedEnergy;
-  excitation_energy_ = dataLine.energy();
+  cm_angle_ = rows.angle[row];
+  lab_angle_ = rows.angle[row];
+  nominal_energy_ = 0.0;  // a row reads its energy from the rows
+  bin_low_cm_ = rows.binLow[row];
+  bin_high_cm_ = rows.binHigh[row];
+  cm_energy_ = rows.energy[row];
+  lab_energy_ = rows.energy[row];
+  excitation_energy_ = rows.energy[row];
   crossSectionComponent_ = parent ? parent->GetCrossSectionComponent() : 0;
   segment_key_ = parent->GetSegmentKey();
-  cm_crosssection_ = dataLine.crossSection();
-  cm_dcrosssection_ = dataLine.error();
-  lab_crosssection_ = dataLine.crossSection();
-  lab_dcrosssection_ = dataLine.error();
   geofactor_ = 0.;
   sfactorconv_ = 0.;
   is_differential_ = parent->IsDifferential();
@@ -104,7 +92,6 @@ EPoint::EPoint(DataLine dataLine, ESegment *parent) {
   targetEffectNum_ = 0;
   parentData_ = NULL;
   stoppingPower_ = 0.0;
-  crossSectionKinFactor_ = 1.0;
 }
 
 /*!
@@ -113,21 +100,17 @@ EPoint::EPoint(DataLine dataLine, ESegment *parent) {
  * the EPoint object.
  */
 
-EPoint::EPoint(double angle, double energy, ESegment *parent) {
-  entrance_key_ = parent->GetEntranceKey();
-  exit_key_ = parent->GetExitKey();
+EPoint::EPoint(double angle, double energy, const ESegment *parent, int term) {
+  entrance_key_ = parent->TermEntranceKey(term);
+  exit_key_ = parent->TermExitKey(term);
   lab_angle_ = angle;
   cm_angle_ = angle;
-  original_energy_ = energy;
+  nominal_energy_ = energy;
   lab_energy_ = energy;
   cm_energy_ = energy;
   excitation_energy_ = energy;
   crossSectionComponent_ = parent ? parent->GetCrossSectionComponent() : 0;
-  segment_key_ = parent->GetSegmentKey();
-  cm_crosssection_ = 0.;
-  cm_dcrosssection_ = 0.1;
-  lab_crosssection_ = 0.;
-  lab_dcrosssection_ = 0.1;
+  segment_key_ = parent->TermKey(term);
   geofactor_ = 0.;
   sfactorconv_ = 0.;
   is_differential_ = parent->IsDifferential();
@@ -153,7 +136,6 @@ EPoint::EPoint(double angle, double energy, ESegment *parent) {
   targetEffectNum_ = 0;
   parentData_ = NULL;
   stoppingPower_ = 0.0;
-  crossSectionKinFactor_ = 1.0;
 }
 
 /*!
@@ -169,15 +151,11 @@ EPoint::EPoint(double angle, double energy, int entranceKey,
   exit_key_ = exitKey;
   lab_angle_ = angle;
   cm_angle_ = angle;
-  original_energy_ = energy;
+  nominal_energy_ = energy;
   lab_energy_ = energy;
   cm_energy_ = energy;
   excitation_energy_ = energy;
   crossSectionComponent_ = 0;
-  cm_crosssection_ = 0.;
-  cm_dcrosssection_ = 0.1;
-  lab_crosssection_ = 0.;
-  lab_dcrosssection_ = 0.1;
   geofactor_ = 0.;
   sfactorconv_ = 0.;
   is_differential_ = isDifferential;
@@ -377,39 +355,39 @@ double EPoint::GetExcitationEnergy() const {
 }
 
 double EPoint::GetOriginalEnergy() const {
-  return original_energy_;
+  return IsRow() ? rows_->energy[row_] : nominal_energy_;
 }
 
 /*!
- * Returns the experimental cross section in the laboratory frame.
+ * The measured value and its uncertainty as read (lab frame for lab data), from the point's row; 0 and 0.1 for a
+ * point that is no row.
  */
-
 double EPoint::GetLabCrossSection() const {
-  return lab_crosssection_;
+  return IsRow() ? rows_->value[row_] : 0.0;
 }
-
-/*!
- * Returms the experimental cross section in the center of mass frame.
- */
-
-double EPoint::GetCMCrossSection() const {
-  return cm_crosssection_;
-}
-
-/*!
- * Returns the experimental uncertainty in the laboratory frame.
- */
 
 double EPoint::GetLabCrossSectionError() const {
-  return lab_dcrosssection_;
+  return IsRow() ? rows_->error[row_] : 0.1;
+}
+
+int EPoint::GetFileRecord() const {
+  return IsRow() ? rows_->record[row_] : 0;
 }
 
 /*!
- * Returns the experimental uncertainty in the center of mass frame.
+ * An angular-coefficient row or a sub-point of one (the angle column is the Legendre order k): its order and whether
+ * the value is A_k.
  */
+bool EPoint::IsCoefficient() const {
+  return rows_ && rows_->angleIsLegendreOrder;
+}
 
-double EPoint::GetCMCrossSectionError() const {
-  return cm_dcrosssection_;
+int EPoint::GetCoefficientOrder() const {
+  return IsCoefficient() ? (int)std::round(rows_->angle[row_]) : -1;
+}
+
+bool EPoint::GetCoefficientAbsolute() const {
+  return IsCoefficient() && rows_->absolute;
 }
 
 /*!
@@ -435,14 +413,6 @@ double EPoint::GetStoppingPower() const {
 
 double EPoint::GetTargetThickness() const {
   return targetThickness_;
-}
-
-/*!
- * Returns the kinematic factor to convert cross section from lab to cm angle;
- */
-
-double EPoint::GetCrossSectionKinFactor() const {
-  return crossSectionKinFactor_;
 }
 
 /*!
@@ -491,47 +461,24 @@ void EPoint::Initialize(CNuc *compound, const Config &configure) {
 // relativistic Jacobian kept at its load-time value where an energy shift moved the point beyond the kinematic
 // range).  ESegment::ConvertPointToCM is the one sequence that calls them.
 
-void EPoint::ApplyAngleLimit(const azure2::experiment::AngleLimit &lim) const {
+void EPoint::NoteAngleLimit(const azure2::experiment::AngleLimit &lim) const {
   if (lim.maxSet) labAngleMax_ = lim.max;
   if (!lim.why.empty()) labAngleWhy_ = lim.why;
 }
 
-/*!
- * Calculates center of mass energy.  When a data point is initialized, the same energy is copied into
- * the attributes for center of mass and lab energy.  If this function is called, the center of mass energy
- * attribute is overwritten with the value calculated from the lab energy attribute.
- */
-
-void EPoint::ConvertLabEnergy(PPair *pPair) {
-  // E_x = E_cm + S + E* of the pair (audit 01 B3, 2026-10-28)
-  const azure2::experiment::BeamEnergiesCM e = azure2::experiment::BeamToCM(
-      PartitionOf(pPair), this->GetLabEnergy(), bin_low_lab_, bin_high_lab_, Kinematics::Relativistic());
-  cm_energy_ = e.eCM;
-  excitation_energy_ = e.eX;
-  bin_low_cm_ = e.binLowCM;
-  bin_high_cm_ = e.binHighCM;
+void EPoint::SetFrame(const azure2::experiment::FrameRow &row) {
+  cm_energy_ = row.eCM;
+  excitation_energy_ = row.eX;
+  bin_low_cm_ = row.binLowCM;
+  bin_high_cm_ = row.binHighCM;
+  cm_angle_ = row.thetaCM;
 }
 
 /*!
- * Calculates excitation energy. When a data point is initialized, only the excitation energy is calculated
- * if the data is already in the center of mass frame. Else it is calculated by ConvertLabEnergy.
+ * Calculates the excitation energy from the c.m. energy: E_x = E_cm + S + E* of the pair.
  */
-
 void EPoint::ConvertExcitationEnergy(PPair *pPair) {
   excitation_energy_ = azure2::experiment::ExcitationEnergy(cm_energy_, PartitionOf(pPair));
-}
-
-/*!
- * Calculates the total decay energy from the light particle decay energy, assuming the parent nucleus was at
- * rest when it decayed.  When a data point is initialized, the same energy is copied into
- * the attributes for center of mass and lab energy.  If this function is called, the center of mass energy
- * attribute is overwritten with the value calculated from the lab energy attribute.
- */
-
-void EPoint::ConvertDecayEnergy(PPair *pPair) {
-  const azure2::experiment::Partition p = PartitionOf(pPair);
-  cm_energy_ = azure2::experiment::DecayToCM(p, this->GetLabEnergy(), Kinematics::Relativistic());
-  excitation_energy_ = azure2::experiment::ExcitationEnergy(cm_energy_, p);
 }
 
 /*!
@@ -546,108 +493,15 @@ bool EPoint::RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nr
   const bool ok = azure2::experiment::RelativisticLabToCM(PartitionOf(entrancePair), PartitionOf(exitPair),
                                                           this->GetCMEnergy(), this->GetLabAngle(), nrCMAngle, cmAngle,
                                                           factor, lim);
-  this->ApplyAngleLimit(lim);
+  this->NoteAngleLimit(lim);
   return ok;
-}
-
-/*!
- * Calculates center of mass angles for elastic scattering (azure2::experiment::ElasticLabToCM; relativistic=1:
- * RelativisticLabToCM, with the non-relativistic angle as the branch).  False beyond the kinematic maximum.
- */
-bool EPoint::ConvertLabAngle(PPair *pPair) {
-  azure2::experiment::AngleLimit lim;
-  double nrAngle;
-  const bool ok = azure2::experiment::ElasticLabToCM(PartitionOf(pPair), this->GetLabAngle(), nrAngle, lim);
-  this->ApplyAngleLimit(lim);
-  if (!ok) return false;
-  cm_angle_ = nrAngle;
-  double cmAngle, factor;
-  if (Kinematics::Relativistic()) {
-    if (!this->RelativisticLabToCM(pPair, pPair, cm_angle_, cmAngle, factor)) return false;  // why: set by the map
-    cm_angle_ = cmAngle;
-  }
-  return true;
-}
-
-/*!
- * Calculates center of mass angles.  When a data point is initialized, the same angle is copied into
- * the attributes for center of mass and lab angles.  If this function is called, the center of mass angle
- * attribute is overwritten with the value calculated from the lab angle attribute.  This version of the
- * overloaded function is for non-elastic particle channels.
- */
-
-bool EPoint::ConvertLabAngle(PPair *entrancePair, PPair *exitPair, const Config &configure) {
-  // relativistic=1: the relativistic map (RelativisticLabToCM) decides whether the lab angle is reached and gives
-  // the c.m. angle; the Marion-Young angle below only picks the branch.  Until 2026-10-29 its non-relativistic
-  // limits decided, so a point between the two maxima was converted with the NON-relativistic angle and Jacobian
-  // without a word (7Li(p,n) at 1.90 MeV, 44.9 deg: c.m. angle off by 0.3 deg, Jacobian by 9.5 %).
-  if (Kinematics::Relativistic()) {
-    const bool nrOk = this->ConvertLabAngleNR(entrancePair, exitPair);
-    double relAngle, relFactor;
-    // no non-relativistic angle (beyond its maximum or threshold): the forward root
-    if (!this->RelativisticLabToCM(entrancePair, exitPair, nrOk ? cm_angle_ : 0.0, relAngle, relFactor)) return false;
-    cm_angle_ = relAngle;
-    return true;
-  }
-  if (!this->ConvertLabAngleNR(entrancePair, exitPair)) return false;
-  return true;
-}
-
-/*!
- * The non-relativistic (Marion-Young) lab -> c.m. angle of a reaction exit (azure2::experiment::ReactionLabToCM);
- * false below the exit threshold or beyond the maximum lab angle (labAngleWhy_, labAngleMax_), cm_angle_ otherwise.
- */
-bool EPoint::ConvertLabAngleNR(PPair *entrancePair, PPair *exitPair) {
-  azure2::experiment::AngleLimit lim;
-  double cmAngle;
-  const bool ok = azure2::experiment::ReactionLabToCM(PartitionOf(entrancePair), PartitionOf(exitPair),
-                                                      this->GetLabEnergy(), this->GetLabAngle(), cmAngle, lim);
-  this->ApplyAngleLimit(lim);
-  if (!ok) return false;
-  cm_angle_ = cmAngle;
-  return true;
-}
-
-/*!
- * Calculates center of mass angles for gamma rays: the aberration of a photon emitted with the centre-of-mass
- * velocity beta, cos(theta_cm) = (cos(theta_lab) - beta) / (1 - beta cos(theta_lab)).
- */
-void EPoint::ConvertLabAngleGammas(PPair *entrancePair) {
-  const double beta = azure2::experiment::CMVelocity(PartitionOf(entrancePair), this->GetLabEnergy());
-  cm_angle_ = azure2::experiment::PhotonLabToCM(beta, this->GetLabAngle());
-}
-
-/*!
- * Calculates center of mass cross sections.  When a data point is initialized, the same cross section is copied into
- * the attributes for center of mass and lab cross section.  If this function is called, the center of mass cross section
- * attribute is overwritten with the value calculated from the lab cross section attribute.
- */
-
-void EPoint::ConvertCrossSection(PPair *entrancePair, PPair *exitPair) {
-  double conversionFactor;
-  double relAngle;
-  if (Kinematics::Relativistic()) {
-    // Unreached only for a point an energy shift moved past the kinematic limit mid-fit (the angle converter
-    // warned): the factor stays the one the point was loaded with (KeepLoadFrame), not a non-relativistic one.
-    if (this->RelativisticLabToCM(entrancePair, exitPair, this->GetCMAngle(), relAngle, conversionFactor))
-      crossSectionKinFactor_ = conversionFactor;
-    cm_crosssection_ = this->GetLabCrossSection() * crossSectionKinFactor_;
-    cm_dcrosssection_ = this->GetLabCrossSectionError() * crossSectionKinFactor_;
-    return;
-  }
-  conversionFactor = azure2::experiment::ParticleJacobian(PartitionOf(entrancePair), PartitionOf(exitPair),
-                                                          this->GetLabEnergy(), this->GetLabAngle(), this->GetCMAngle());
-  cm_crosssection_ = this->GetLabCrossSection() * conversionFactor;
-  cm_dcrosssection_ = this->GetLabCrossSectionError() * conversionFactor;
-  crossSectionKinFactor_ = conversionFactor;
 }
 
 /*!
  * dOmega_lab/dOmega_cm of a particle at this point, without storing it (the RATIO frame factors,
  * ESegment::RatioTermFrameFactor).  Relativistic=1: the relativistic map's factor where it reaches the lab angle,
- * otherwise -- unlike ConvertCrossSection, which keeps the load-time factor -- the non-relativistic one.
+ * otherwise -- unlike the frame of the data, which keeps the load-time factor -- the non-relativistic one.
  */
-
 double EPoint::CalculateCrossSectionConversionFactor(PPair *entrancePair, PPair *exitPair) {
   double conversionFactor;
   double relAngle;
@@ -659,26 +513,8 @@ double EPoint::CalculateCrossSectionConversionFactor(PPair *entrancePair, PPair 
 }
 
 /*!
- * Calculates center of mass cross sections for gamma rays.
+ * The lab-to-c.m. conversion factor for gamma rays (the RATIO path of azure2::EvaluateModelPoint).
  */
-
-void EPoint::ConvertCrossSectionGammas(PPair *entrancePair) {
-  // dsigma/dOmega_cm = dsigma/dOmega_lab * dOmega_lab/dOmega_cm, dOmega_lab/dOmega_cm = (1 - beta cos theta_lab)^2 /
-  // (1 - beta^2) (azure2::experiment::PhotonJacobian).  (Before 2026-10-23 this was (1 - beta)^2/(1 - beta cos
-  // theta_lab), wrong at first order in beta: an overall -2 beta and a P1-shaped 3 beta cos(theta) -- -1.9 % at
-  // 90 deg and -4.8 % at 167 deg for 12C(a,g) at 3 MeV.)
-  double conversionFactor = this->CalculateCrossSectionGammaConversionFactor(entrancePair);
-  cm_crosssection_ = this->GetLabCrossSection() * conversionFactor;
-  cm_dcrosssection_ = this->GetLabCrossSectionError() * conversionFactor;
-  // the output files take the fitted c.m. cross section back to the lab with this factor (EData::WriteOutputFiles)
-  crossSectionKinFactor_ = conversionFactor;
-}
-
-/*!
- * The lab-to-c.m. conversion factor for gamma rays (the one ConvertCrossSectionGammas stores; also the
- * RATIO path of azure2::EvaluateModelPoint).
- */
-
 double EPoint::CalculateCrossSectionGammaConversionFactor(PPair *entrancePair) {
   return azure2::experiment::PhotonJacobian(PartitionOf(entrancePair), this->GetLabEnergy(), this->GetLabAngle());
 }

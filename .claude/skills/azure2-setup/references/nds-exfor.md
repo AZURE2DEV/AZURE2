@@ -68,8 +68,9 @@ AzrModel.from_file("13N.azr").add_data_segment(**kw).write("13N_new.azr")
 ```
 
 - `EN-CM` → lab by E_lab = E_c.m.(m_t + m_p)/m_t; `EN` is passed through as lab.
-- S factor → σ with `sfactor_to_cross_section`, using AZURE2's own Sommerfeld constant (0.157488), so the barns
-  reproduce the reported S exactly.
+- S-factor data (`B*KEV`, `SFC`) are refused by `to_azr`: `to_sfactor_dataset(data_dir, name, norm=...)` writes a
+  format-3 `quantity sfactor` data set (S in MeV b) and the engine converts its model with the `<levels>` masses
+  (`data_formats.rst`, "S factor"). `sfactor_to_cross_section(S, E_cm_kev, z1, z2, m1_u, m2_u)` converts by hand.
 - Angles are written unchanged; choose `observable` to match their frame:
 
 | EXFOR gives | observable= | AZURE2 code |

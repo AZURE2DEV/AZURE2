@@ -182,7 +182,7 @@ void EPoint::ChannelKeys(CNuc *theCNuc, std::vector<ChannelTable::Key> &keys, bo
       if (thePair->GetPType() != 0) continue;
       double localEnergy = inEnergy - thePair->GetSepE() - thePair->GetExE();
       if (fabs(localEnergy) <= ScatteringLength::kThresholdTolerance) continue;
-      keys.push_back({theChannel->GetPairNum(), theChannel->GetL(), localEnergy});
+      keys.push_back({theChannel->GetPairNum(), theChannel->GetL(), thePair->SpinOrbitTwoJ(theJGroup->GetJ()), localEnergy});
     }
   }
   if (includeSubPoints)
@@ -249,12 +249,12 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   const int nucleus = entrancePair->GetNucleus();
   std::vector<std::pair<ChannelTable::Key, ChannelTable::Row>> ownRows;
   // ownRows: the distinct rows this point used, from the tables or computed; rows->used receives them once.
-  auto channelRow = [&](int pairNum, PPair *pair, int l, double e) -> ChannelTable::Row {
-    const ChannelTable::Key key{pairNum, l, e};
+  auto channelRow = [&](int pairNum, PPair *pair, int l, int two_j, double e) -> ChannelTable::Row {
+    const ChannelTable::Key key{pairNum, l, two_j, e};
     for (const auto &kr : ownRows)
       if (kr.first == key) return kr.second;
-    const ChannelTable::Row *r = rows ? rows->Find(pairNum, l, e) : nullptr;
-    ownRows.emplace_back(key, r ? *r : ChannelTable::Compute(pair, l, e, configure));
+    const ChannelTable::Row *r = rows ? rows->Find(key) : nullptr;
+    ownRows.emplace_back(key, r ? *r : ChannelTable::Compute(pair, l, two_j, e, configure));
     return ownRows.back().second;
   };
   for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
@@ -279,7 +279,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
           } else {
             // P, S, exp(-i phi), exp(i(sigma_l - sigma_0)) of (pair, l, E_c): from the stage's channel table, or
             // computed once per (pair, l, E_c) of this point (docs/upgrade/channel_table.md).
-            const ChannelTable::Row row = channelRow(theChannel->GetPairNum(), thePair, lValue, localEnergy);
+            const ChannelTable::Row row = channelRow(theChannel->GetPairNum(), thePair, lValue, thePair->SpinOrbitTwoJ(theJGroup->GetJ()), localEnergy);
             complex loElement(row.S - theChannel->GetBoundaryCondition(), row.P);
             this->AddLoElement(j, ch, loElement);
             this->AddSqrtPenetrability(j, ch, sqrt(row.P));

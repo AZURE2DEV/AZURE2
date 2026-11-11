@@ -95,6 +95,12 @@ const std::vector<DiagnosticCode> &DiagnosticCodes() {
       {kPotentialRelativistic, E, "a potential record in a project with relativistic kinematics"},
       {kThmHybridPotential, E, "a THM data set or extrapolation whose entrance pair has a potential record"},
       {kOldPotentialBlock, E, "the old <potential> block in a format-3 project (AZURE2 --convert writes potential records)"},
+      {kSoTwoSpins, E, "a spin-orbit term on a pair whose two particles both have spin (the coupled treatment is not implemented)"},
+      {kSoZeroSpin, E, "a spin-orbit term acting on a particle of spin 0 (it would vanish)"},
+      {kSoRelativistic, E, "a spin-orbit term in a project with relativistic kinematics"},
+      {kSoThm, E, "a THM data set or extrapolation whose entrance pair's potential has a spin-orbit term"},
+      {kSoNeedsJ, E, "channel functions of a pair with a spin-orbit term asked for without J (pyazr, the API)"},
+      {kSoNoTerm, E, "channel functions of a pair without a spin-orbit term asked for with a J (pyazr, the API)"},
       // Warnings
       {kNotMeasurable, Severity::Warning, "a data set of a quantity that is computed for tests and comparison, not measured"},
       {kBroadLevel, Severity::Warning, "a resonance strength of a level with Gamma / E_r > 1 %: eq. (8) and the area of the resonance differ"},

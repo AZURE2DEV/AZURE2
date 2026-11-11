@@ -37,6 +37,7 @@ class WhitFunc {
     redmass_ = (double)pPair->GetRedMass();
     kin_ = Kinematics::Channel(pPair);
     potential_ = pPair->GetHybridPotential();
+    pair_ = pPair;
   };
   /*!
    * Returns the atomic number of the first particle in the pair.
@@ -58,12 +59,13 @@ class WhitFunc {
   };
   /*!
    * The parenthesis operator is defined to make the class instance callable as a function.  The orbital
-   * angular momentum, binding energy, and radius are the dependent variables.
+   * angular momentum, the channel's 2J key (PPair::SpinOrbitTwoJ: the distorted W~ of a spin-orbit pair depends on
+   * J), radius and binding energy are the dependent variables.
    * The function returns the value of the Whittaker function.
    */
-  double operator()(int l, double radius, double energy) const {
+  double operator()(int l, int two_j, double radius, double energy) const {
     if (potential_) {
-      const azure2::physics::DecayingValue d = Distorted(l, radius, energy);
+      const azure2::physics::DecayingValue d = Distorted(l, two_j, radius, energy);
       return d.sign * std::exp(d.log_W);
     }
     double etaB, rho;
@@ -88,9 +90,9 @@ class WhitFunc {
    * well conditioned, so the exponent has to be carried rather than discarded:
    * whittaker_scaled sums in logarithms and returns the power of ten separately.
    */
-  double Scaled(int l, double radius, double energy, double &log10Scale) const {
+  double Scaled(int l, int two_j, double radius, double energy, double &log10Scale) const {
     log10Scale = 0.0;
-    if (potential_) return DistortedScaled(l, radius, energy, log10Scale);
+    if (potential_) return DistortedScaled(l, two_j, radius, energy, log10Scale);
     double etaB, rho;
     if (!Arguments(radius, energy, etaB, rho) || !(rho > 0.0)) return 0.0;
     namespace co = azure2::physics::coulomb;
@@ -105,9 +107,9 @@ class WhitFunc {
    * factor of ECIntegral's data path, which GSL's qagiu samples at the same radii for every entrance energy
    * (docs/upgrade/coulomb.md, step 3b (ii)).  At most kMemoEntries per thread; cleared when full.
    */
-  double ScaledMemo(int l, double radius, double energy, double &log10Scale) const {
+  double ScaledMemo(int l, int two_j, double radius, double energy, double &log10Scale) const {
     log10Scale = 0.0;
-    if (potential_) return DistortedScaled(l, radius, energy, log10Scale);  // the memo key has no potential
+    if (potential_) return DistortedScaled(l, two_j, radius, energy, log10Scale);  // the memo key has no potential
     double etaB, rho;
     if (!Arguments(radius, energy, etaB, rho) || !(rho > 0.0)) return 0.0;
     struct Key {
@@ -150,11 +152,12 @@ class WhitFunc {
  private:
   /// A hybrid pair: W~_l(r) of the radial equation with the potential (physics/ DecayingSolution; non-relativistic,
   /// the hybrid model refuses relativistic=1), equal to W beyond the matching radius.
-  azure2::physics::DecayingValue Distorted(int l, double radius, double energy) const {
-    return azure2::physics::DecayingSolution(*potential_, z1_, z2_, redmass_ * uconv, l, radius, energy);
+  azure2::physics::DecayingValue Distorted(int l, int two_j, double radius, double energy) const {
+    return azure2::physics::DecayingSolution(*potential_, z1_, z2_, redmass_ * uconv, l, pair_->SpinOrbitFactor(l, two_j),
+                                             radius, energy);
   }
-  double DistortedScaled(int l, double radius, double energy, double &log10Scale) const {
-    const azure2::physics::DecayingValue d = Distorted(l, radius, energy);
+  double DistortedScaled(int l, int two_j, double radius, double energy, double &log10Scale) const {
+    const azure2::physics::DecayingValue d = Distorted(l, two_j, radius, energy);
     const double log10W = d.log_W / std::log(10.0);
     log10Scale = std::floor(log10W);
     return d.sign * std::pow(10.0, log10W - log10Scale);
@@ -173,6 +176,8 @@ class WhitFunc {
   Kinematics::Channel kin_;
   /// The pair's hybrid potential (PPair::GetHybridPotential); none: the point-Coulomb W.
   std::optional<azure2::physics::HybridPotential> potential_;
+  /// The pair (PPair::SpinOrbitFactor gives <2 l.i> of a two_j key).
+  const PPair *pair_;
 };
 
 #endif

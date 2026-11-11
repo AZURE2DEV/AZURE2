@@ -43,6 +43,7 @@ add_test(NAME channel_table_unit
                  ${CMAKE_CURRENT_SOURCE_DIR}/T1/T1.azr
                  ${CMAKE_CURRENT_SOURCE_DIR}/T2/T2.azr
                  ${CMAKE_CURRENT_SOURCE_DIR}/T3/T3.azr
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../spin_orbit_potential/spin_orbit_potential.azr
          WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 set_tests_properties(channel_table_unit PROPERTIES TIMEOUT 300)
 
@@ -59,6 +60,14 @@ target_link_libraries(pathways_from_cnuc_test PRIVATE AZURE2Core)
 add_test(NAME physics_pathways_from_cnuc COMMAND pathways_from_cnuc_test ${CMAKE_SOURCE_DIR}/tests
          WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 set_tests_properties(physics_pathways_from_cnuc PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 900)
+
+# Properties of the pathway table checked against the loaded CNuc without the builder's loops, on every .azr under
+# tests/ (docs/upgrade/cnuc_split.md section 11.6 step 1); it stays when the trees go.
+add_executable(pathway_table_test pathway_table_test.cpp)
+target_link_libraries(pathway_table_test PRIVATE AZURE2Core)
+add_test(NAME physics_pathway_table COMMAND pathway_table_test ${CMAKE_SOURCE_DIR}/tests
+         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+set_tests_properties(physics_pathway_table PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 900)
 
 # physics/ central_derivative against GSL's gsl_deriv_central, bit for bit (docs/upgrade/coulomb.md section 1.4).
 add_executable(derivatives_gsl_test derivatives_gsl_test.cpp)

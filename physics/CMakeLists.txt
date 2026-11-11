@@ -19,6 +19,7 @@ endif()
 
 add_library(azure2_physics STATIC
   src/AngularCoupling.cpp
+  src/AstrophysicalFactor.cpp
   src/ChannelFunctions.cpp
   src/CoulombScattering.cpp
   src/Derivatives.cpp
@@ -130,6 +131,15 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(physics_hybrid_potential_test PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 add_test(NAME physics_hybrid_potential COMMAND physics_hybrid_potential_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/hybrid_bound.csv)
+
+# The spin-orbit term: its angular factor against an m-scheme, the radial term, a delta-shell closed form, and the
+# channel functions against an independent integration (tests/data/spin_orbit.csv, make_spin_orbit_reference.py).
+add_executable(physics_spin_orbit_test tests/spin_orbit_test.cpp)
+target_link_libraries(physics_spin_orbit_test PRIVATE azure2_physics)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(physics_spin_orbit_test PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+add_test(NAME physics_spin_orbit COMMAND physics_spin_orbit_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/spin_orbit.csv)
 
 # Element symbols by Z against the AME2020 table the masses come from (pyazr/data/mass_1.mas20).
 add_executable(physics_elements_test tests/elements_test.cpp)

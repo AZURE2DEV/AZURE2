@@ -70,4 +70,4 @@ __all__ = ["azure2", "convert_azr", "ScatteringLength", "ScatteringLengthLine", 
            "prior_from_fit", "read_prior", "write_prior", "read_covariance_dat",
            "schema", "validate", "describe", "predictions", "ModelDatum", "model_data",
            "extrapolation_grid", "refine_grid"]
-__version__ = '2.23.0'
+__version__ = '2.29.0'

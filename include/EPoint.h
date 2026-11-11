@@ -44,9 +44,10 @@ class TargetEffect;
 namespace azure2 {
 namespace experiment {
 struct AngleLimit;
+struct FrameRow;
+struct MeasurementRows;
 }
 }  // namespace azure2
-class DataLine;
 class Config;
 struct ThmWeightTable;
 class ThmDistortion;
@@ -101,10 +102,13 @@ class EPoint {
   EDependentShare ShareEDependentValues() const;
   /// Takes a share made at exactly this point's energy, angle and pairs; returns false and changes nothing otherwise.
   bool AdoptEDependentValues(const EDependentShare &);
-  /// Build from a line of a data file, taking its conventions from the parent segment.
-  EPoint(DataLine, ESegment *);
-  /// Build at a given energy and angle, for a segment generated from a grid.
-  EPoint(double, double, ESegment *);
+  /// The point of row `row` (0-based) of a measurement, taking its conventions from the segment.  The point reads
+  /// what was measured there (energy, value, uncertainty, bins, file record, Legendre order) from the rows, which the
+  /// segment's measurement keeps alive and never changes.
+  EPoint(const azure2::experiment::MeasurementRows &rows, int row, ESegment *);
+  /// A point at a given c.m. energy and angle that is no row of a measurement (a sub-point of a target effect), with
+  /// the conventions of term `term` of the segment (ESegment::TermEntranceKey ...).
+  EPoint(double angle, double energy, const ESegment *segment, int term);
   /// Build with every convention given explicitly, rather than inherited from a segment.
   EPoint(double, double, int, int, bool, bool, bool, double, int, int);
   /// Differential cross section?
@@ -241,11 +245,9 @@ class EPoint {
   int GetMaxAngDistOrder() const;
   /// An angular-coefficient data point (segment isDiff 9): the fit value is the Legendre
   /// coefficient of this order, a_k = A_k / A_0 (or A_k itself, b/sr, when absolute).
-  bool IsCoefficient() const { return coefficient_order_ >= 0; };
-  int GetCoefficientOrder() const { return coefficient_order_; };
-  bool GetCoefficientAbsolute() const { return coefficient_absolute_; };
-  void SetCoefficientOrder(int k) { coefficient_order_ = k; };
-  void SetCoefficientAbsolute(bool a) { coefficient_absolute_ = a; };
+  bool IsCoefficient() const;
+  int GetCoefficientOrder() const;
+  bool GetCoefficientAbsolute() const;
   /// A_0 = sigma_int / 4 pi (b/sr) of an angular-distribution point, set with its coefficients.
   double GetAngDistA0(const azure2::Results &r) const { return Rec(r)[azure2::Results::kA0]; };
   void SetAngDistA0(azure2::Results &r, double a0) { Rec(r)[azure2::Results::kA0] = a0; };
@@ -267,19 +269,20 @@ class EPoint {
   double GetLegendreP(int) const;
   /// Measured cross section, lab frame.
   double GetLabCrossSection() const;
-  /// Measured cross section, centre-of-mass frame.
-  double GetCMCrossSection() const;
   /// Measured uncertainty, lab frame.
   double GetLabCrossSectionError() const;
   /// 1-based number of the point's data row in its file (comments and blank lines not
   /// counted); 0 for a point not read from a file.  Rows of a data covariance file.
-  int GetFileRecord() const { return fileRecord_; }
-  void SetFileRecord(int k) { fileRecord_ = k; }
-  /// Replace the uncertainty read from the file (lab and c.m. alike: call before the
-  /// lab-to-c.m. conversion), as a data covariance file does with sqrt(C_ii).
-  void SetDataError(double e) { lab_dcrosssection_ = cm_dcrosssection_ = e; }
-  /// Measured uncertainty, centre-of-mass frame.
-  double GetCMCrossSectionError() const;
+  int GetFileRecord() const;
+  /// The point's row in its segment's measurement (0-based), -1 for a point that is no row (a sub-point).
+  int Row() const { return IsRow() ? row_ : -1; }
+  /// Make this point a sub-point of `parent`'s row: it takes the row's Legendre order (an angular-coefficient row)
+  /// but none of its data.
+  void BelongToRowOf(const EPoint &parent) {
+    rows_ = parent.rows_;
+    row_ = parent.row_;
+    is_sub_point_ = true;
+  }
   /// Geometrical factor \f$\pi/k^2\f$.
   double GetGeometricalFactor() const;
   /// Cross section AZURE2 calculated here.
@@ -318,8 +321,6 @@ class EPoint {
   /// fitted density recomputes it at the same energy (EData::FillDensitiesFromParams).
   double GetTargetLabEnergy() const { return targetLabEnergy_; }
   void SetTargetLabEnergy(double e) { targetLabEnergy_ = e; }
-  /// Jacobian converting the cross section from lab to centre of mass.
-  double GetCrossSectionKinFactor() const;
   /// Final-state spin. UPOS points only.
   double GetIc() const;
   /// Multipole mixing ratio. UPOS points only.
@@ -348,53 +349,24 @@ class EPoint {
   EnergyMap GetMap() const;
   /// Compute everything that depends on energy but not on the fit parameters. Run once before fitting.
   void Initialize(CNuc *, const Config &);
-  /// Fill the centre-of-mass energy from the lab energy.
-  void ConvertLabEnergy(PPair *);
-  /// Fill the compound excitation energy.
+  /// Fill the compound excitation energy from the c.m. energy (a sub-point moved by an energy shift).
   void ConvertExcitationEnergy(PPair *);
-  /// Total decay energy from the light particle's, with the parent at rest.
-  void ConvertDecayEnergy(PPair *);
-  /// Fill the centre-of-mass angle from the lab angle (elastic).  False when the lab angle is beyond the
-  /// kinematic maximum (m1 > m2: asin(m2/m1)); GetLabAngleMax() then holds that maximum.  Only the forward
-  /// branch is modelled.  Until 2026-10-27 the angle silently became NaN (audit 2026-10-25, item 31).
-  bool ConvertLabAngle(PPair *);
-  /// As above for a reaction with different entrance and exit pairs: false beyond the maximum lab angle where
-  /// two c.m. angles reach one lab angle (near the threshold of an endothermic exit); before, a message and an
-  /// assert that release builds compile out, then NaN.
-  bool ConvertLabAngle(PPair *, PPair *, const Config &);
-  /// The non-relativistic (Marion-Young) part of the above: cm_angle_, or false with labAngleWhy_ set.
-  bool ConvertLabAngleNR(PPair *, PPair *);
-  /// The kinematic maximum lab angle (degrees) found by the last ConvertLabAngle that returned false.
+  /// Take the energies, c.m. angle and c.m. bin edges of the point's row from its segment's frame
+  /// (ESegment::ConvertToCM, experiment::ConvertRow).
+  void SetFrame(const azure2::experiment::FrameRow &row);
+  /// Record what the angle maps of a conversion reported (the maximum lab angle, the reason), for the messages.
+  void NoteAngleLimit(const azure2::experiment::AngleLimit &lim) const;
+  /// The kinematic maximum lab angle (degrees) found by the last conversion that did not reach the point's angle.
   double GetLabAngleMax() const { return labAngleMax_; };
-  /// Why the last ConvertLabAngle returned false (a sentence for the error message).
+  /// Why the last conversion did not reach the angle (a sentence for the error message).
   const std::string &GetLabAngleWhy() const { return labAngleWhy_; };
-  /// The frame state the lab -> c.m. conversion keeps where it cannot convert (the c.m. angle and the cross-section
-  /// factor), as the point holds it once loaded (ESegment::Fill, the component and test-segment loads).
-  /// ESegment::ConvertPointToCM restores it before it converts a shifted energy, so a point an energy shift moves
-  /// beyond the kinematic range keeps its load-time values, not those an earlier evaluation of its copy left
-  /// (docs/upgrade/data_model.md section 1.3, H4).  The kinematic-limit report is set by the failing conversion.
-  void KeepLoadFrame() { loadFrame_ = {cm_angle_, crossSectionKinFactor_}; }
-  void RestoreLoadFrame() {
-    if (std::isnan(loadFrame_.cmAngle)) return;  // never loaded through ConvertPointToCM
-    cm_angle_ = loadFrame_.cmAngle;
-    crossSectionKinFactor_ = loadFrame_.crossSectionKinFactor;
-  }
-  /// Fill the centre-of-mass cross section and uncertainty from the lab ones.
-  void ConvertCrossSection(PPair *, PPair *);
-  /// Centre-of-mass gamma angle, with the relativistic correction.
-  void ConvertLabAngleGammas(PPair *);
-  /// Centre-of-mass gamma cross section.
-  void ConvertCrossSectionGammas(PPair *);
-  double CalculateCrossSectionConversionFactor(PPair *, PPair *);
   /// Relativistic lab -> c.m. angle and dOmega_lab/dOmega_cm of the detected particle (relativistic=1).
   bool RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nrCMAngle, double &cmAngle, double &factor) const;
- private:
-  /// Store what an angle map reported (the maximum lab angle, the reason), as the maps always did.
-  void ApplyAngleLimit(const azure2::experiment::AngleLimit &lim) const;
-
- public:
+  /// dOmega_lab/dOmega_cm of a particle at the point, not stored (the RATIO frame factors).
+  double CalculateCrossSectionConversionFactor(PPair *, PPair *);
   /// Lab motion (g, boost gamma) of the detected exit particle for the attenuation coefficients; false: Q as entered.
   bool QLabBoost(PPair *entrancePair, PPair *exitPair, double &g, double &gb) const;
+  /// dOmega_lab/dOmega_cm of a photon at the point (the RATIO frame factors).
   double CalculateCrossSectionGammaConversionFactor(PPair *);
   /// Append the next Legendre polynomial; they are stored in order L = 0, 1, 2, ...
   void AddLegendreP(double);
@@ -577,14 +549,13 @@ class EPoint {
   void IntegrateTargetEffectComponents(const Config &, azure2::Results &results);
   /// Per-point energy window (columns 5-6 of the data file) of a beam-profile
   /// effect: the detector-reconstructed energy slice the point was built from.
-  bool HasBinWindow() const { return bin_low_lab_ == bin_low_lab_ && bin_high_lab_ == bin_high_lab_; };
-  /// Set the per-point energy window directly, in the frame the point is
-  /// already in.  EData::Fill normally reads it from columns 5-6 of the data
-  /// file and converts it with the point; this is for a point built outside
-  /// that path, as the beam-profile reference test does.
+  bool HasBinWindow() const { return bin_low_cm_ == bin_low_cm_ && bin_high_cm_ == bin_high_cm_; };
+  /// Set the per-point energy window directly, in the c.m. frame.  A row of a measurement takes it from columns 5-6
+  /// of the data file through its frame; this is for a point built outside that path, as the beam-profile
+  /// reference test does.
   void SetBinWindow(double low, double high) {
-    bin_low_lab_ = bin_low_cm_ = low;
-    bin_high_lab_ = bin_high_cm_ = high;
+    bin_low_cm_ = low;
+    bin_high_cm_ = high;
   };
   double GetBinLowCM() const { return bin_low_cm_; };
   double GetBinHighCM() const { return bin_high_cm_; };
@@ -635,24 +606,25 @@ class EPoint {
   int segment_key_;
   int l_value_;
   int targetEffectNum_;
-  int fileRecord_ = 0;
   double target_blend_weight_ = 1.0;
   bool target_fallback_only_ = false;   ///< see SetTargetFallbackOnly
   bool target_fallback_now_ = false;    ///< see TargetFallbackScope
   double target_fallback_depth_ = 0.0;  ///< D = E - E_bar, c.m. MeV (see SetTargetFallbackOnly)
   int max_ang_dist_order_;
   double cm_angle_;
-  double lab_angle_;
-  double original_energy_;
+  double lab_angle_;       ///< the lab angle the point is calculated at: its row's, a fixed angle, or a parent's
+  double nominal_energy_;  ///< a point that is no row: its energy before any shift (MeV)
+  /// The rows of the measurement the point belongs to and its row there (shared, immutable); null and -1 for a point
+  /// that is no row.
+  const azure2::experiment::MeasurementRows *rows_ = nullptr;
+  int row_ = -1;
+  /// The point is a row of a measurement (not a sub-point of one, not a free point).
+  bool IsRow() const { return rows_ && !is_sub_point_; }
   double cm_energy_;
   double lab_energy_;
   double excitation_energy_;
   std::shared_ptr<const UdrKernel> udr_kernel_;
   double udr_mass_ = 0.0;
-  double cm_crosssection_;
-  double cm_dcrosssection_;
-  double lab_crosssection_;
-  double lab_dcrosssection_;
   double geofactor_;
   double sfactorconv_;
   double screen_k_ = 0.0;
@@ -665,15 +637,8 @@ class EPoint {
   double targetLabEnergy_ = 0.0;
   mutable double labAngleMax_ = 180.;  ///< kinematic maximum lab angle of the last failed conversion
   mutable std::string labAngleWhy_;    ///< the reason of the last failed conversion (set by the const relativistic map too)
-  double crossSectionKinFactor_;
-  struct LoadFrame {
-    double cmAngle = std::numeric_limits<double>::quiet_NaN(), crossSectionKinFactor = 1.0;
-  } loadFrame_;  ///< KeepLoadFrame
-  // Beam-profile effect: per-point energy window (lab as read, c.m. after
-  // conversion; NaN when the data file has no such columns) and the inverse
-  // reaction kinematics for the detailed-balance weight.
-  double bin_low_lab_ = std::numeric_limits<double>::quiet_NaN();
-  double bin_high_lab_ = std::numeric_limits<double>::quiet_NaN();
+  // Beam-profile effect: per-point energy window (c.m.; NaN when the data file has no such columns) and the
+  // inverse reaction kinematics for the detailed-balance weight.
   double bin_low_cm_ = std::numeric_limits<double>::quiet_NaN();
   double bin_high_cm_ = std::numeric_limits<double>::quiet_NaN();
   double photo_qgamma_ = 0.0;
@@ -693,8 +658,6 @@ class EPoint {
   // setup and on an energy shift; shared between EData clones (see
   // EDependentTables below) and written only through MutableLegendre().
   SharedTable<vector_r> legendreP_;
-  int coefficient_order_ = -1;
-  bool coefficient_absolute_ = false;
   // The energy-dependent channel tables, one row per J group: L_o elements,
   // square roots of the penetrabilities, Coulomb and hard-sphere phase factors.
   // They are filled at setup and rewritten only when the point's energy or grid

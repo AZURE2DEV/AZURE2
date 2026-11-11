@@ -2,9 +2,11 @@
 #include "azure2/experiment/Describe.h"
 
 #include <filesystem>
+#include <fstream>
 #include <sstream>
 
 #include "azure2/experiment/Json.h"
+#include "azure2/experiment/Measurement.h"
 
 namespace azure2 {
 namespace experiment {
@@ -86,6 +88,36 @@ std::vector<Term> Terms(const ValidatedRecord &r, const ReactionSpec &spec) {
   return terms;
 }
 
+/// The unit of the values as written and the engine's, the factors of the data file's columns and the factor on the
+/// model (BuildUnits.cpp): lines only where something is converted or scaled ("" otherwise).
+std::string UnitsText(const ValidatedRecord &r, const ValueScale &scale, const ColumnConversion *columns) {
+  std::ostringstream out;
+  const Value *u = r.Get("unit");
+  const std::string written = u && u->unit ? u->unit->token : "", engine = r.quantity ? r.quantity->engineUnit : "";
+  if (!written.empty() && (written != engine || !scale.Identity())) {
+    out << "  values in " << written << " (engine unit " << engine << ")";
+    if (columns && columns->value != 1.0) out << ": x " << columns->value << " where the points are made";
+    out << "\n";
+  }
+  if (scale.sFactor)
+    out << "  the model is the S factor E sigma exp(2 pi eta), E the point's c.m. energy after the energy shift, eta of the "
+           "entrance pair (MeV b)\n";
+  if (scale.factor != 1.0) out << "  the model " << scale.text << "\n";
+  if (!columns) return out.str();
+  const Value *cols = r.Get("columns");
+  const ColumnRole *energy = cols ? cols->columns.EnergyRole() : nullptr;
+  if (energy && energy->unit && (columns->energy != 1.0 || columns->energyCM)) {
+    out << "  energy column " << energy->role << "[" << energy->unit->token << "]";
+    if (columns->energy != 1.0) out << ": x " << columns->energy << " to MeV";
+    if (columns->energyCM) out << (columns->energy != 1.0 ? ", " : ": ") << "c.m. to lab with the entrance pair's masses";
+    out << "\n";
+  }
+  const ColumnRole *angle = cols ? cols->columns.AngleRole() : nullptr;
+  if (angle && angle->unit && columns->angle != 1.0)
+    out << "  angle column " << angle->role << "[" << angle->unit->token << "]: x " << columns->angle << " to deg\n";
+  return out.str();
+}
+
 struct Parameter {
   std::string name, kind, status;
 };
@@ -122,6 +154,41 @@ std::string ResolvedPath(const std::string &projectDir, const std::string &file)
   return ec ? path.string() : absolute.string();
 }
 
+/// What a data set's file holds as its measurement: the rows read and kept (inside the window) and the lab-energy
+/// range of the kept rows, by the reader the engine builds its measurements with (Measurement.h).  `error` is why
+/// the file could not be read ("" when it was).
+struct RowsOfFile {
+  MeasurementProvenance provenance;
+  std::string error;
+};
+RowsOfFile ReadRows(const Format3Project &p, const DatasetSpec &d) {
+  RowsOfFile out;
+  std::ifstream in(ResolvedPath(p.projectDir, d.dataFile));
+  if (!in) {
+    out.error = "the data file cannot be opened";
+    return out;
+  }
+  MeasurementRows rows;
+  std::string error;
+  if (!ReadMeasurementRows(in, d.dataFile, WindowOf(d), d.columns,
+                           d.reaction.observable == Observable::AngularCoefficients, nullptr, rows, out.provenance,
+                           error))
+    out.error = error.substr(0, error.find('\n'));
+  return out;
+}
+
+std::string Fmt(double x);
+
+std::string RowsText(const RowsOfFile &r) {
+  if (!r.error.empty()) return "  rows: " + r.error + "\n";
+  std::ostringstream out;
+  out << "  rows: " << r.provenance.rowsRead << " read, " << r.provenance.rowsKept << " kept";
+  if (r.provenance.rowsKept > 0)
+    out << ", E_lab " << Fmt(r.provenance.minEnergy) << " - " << Fmt(r.provenance.maxEnergy) << " MeV";
+  out << "\n";
+  return out.str();
+}
+
 /// The records of one kind in input order, the n-th of which is the spec with key n.
 std::vector<const ValidatedRecord *> RecordsOf(const Format3Project &p, const std::string &kind) {
   std::vector<const ValidatedRecord *> out;
@@ -149,6 +216,15 @@ std::string CentralText(const HybridPotentialSetting &s) {
   return "Woods-Saxon V0 " + Fmt(s.V0) + " MeV, R " + Fmt(s.R) + " fm, a " + Fmt(s.a) + " fm";
 }
 
+/// "; spin-orbit Woods-Saxon V_so 6 MeV, R_so 3.6 fm, a_so 0.6 fm on the light particle, operator 2 l.i" or "".
+std::string SpinOrbitText(const HybridPotentialSetting &s) {
+  if (!s.spin_orbit) return "";
+  const physics::SpinOrbitTerm &t = *s.spin_orbit;
+  return "\n  spin-orbit Woods-Saxon V_so " + Fmt(t.depth_MeV) + " MeV, R_so " + Fmt(t.form.radius_fm) + " fm, a_so " +
+         Fmt(t.form.diffuseness_fm) + " fm on the " + (t.acts_on == physics::SpinOrbitParticle::Heavy ? "heavy" : "light") +
+         " particle; v_so(r) = V_so (2.000 fm^2) (1/r) df/dr times <2 l.i> = j(j+1) - l(l+1) - i(i+1)";
+}
+
 }  // namespace
 
 std::string DescribeText(const Format3Project &p) {
@@ -163,7 +239,7 @@ std::string DescribeText(const Format3Project &p) {
     if (!d.active) continue;
     out << "  " << (r.quantity ? r.quantity->name : "?") << ": " << ObservableName(d.reaction.observable)
         << (reaction ? " of " + reaction->reaction.Tree() : "") << "\n";
-    out << ReferenceText(d.reaction);
+    out << ReferenceText(d.reaction) << UnitsText(r, d.reaction.scale, &d.columns);
     for (const Term &t : Terms(r, d.reaction))
       out << "    " << t.text << ": entrance pair " << Pair(p, t.entrance) << ", exit pair " << Pair(p, t.exit)
           << (t.scale != 1.0 ? ", scale " + Fmt(t.scale) : "") << (t.hasAngle ? ", at " + Fmt(t.angle) + " deg lab" : "") << "\n";
@@ -172,6 +248,7 @@ std::string DescribeText(const Format3Project &p) {
       out << ", theta_" << (d.reaction.observable == Observable::DifferentialLab ? "lab " : "lab (data converted to c.m.) ")
           << Fmt(d.minA) << " - " << Fmt(d.maxA) << " deg";
     out << "\n  data file " << ResolvedPath(p.projectDir, d.dataFile) << "\n";
+    out << RowsText(ReadRows(p, d));
     for (const std::string &e : Effects(p.built.data.targetEffects, d.key)) out << "  effect: " << e << "\n";
     if (d.reaction.sample != "0") out << "  sample: " << d.reaction.sample << "\n";
     out << "  parameters:";
@@ -188,7 +265,7 @@ std::string DescribeText(const Format3Project &p) {
     if (!x.active) continue;
     out << "  " << (r.quantity ? r.quantity->name : "?") << ": " << ObservableName(x.reaction.observable)
         << (reaction ? " of " + reaction->reaction.Tree() : "") << "\n";
-    out << ReferenceText(x.reaction);
+    out << ReferenceText(x.reaction) << UnitsText(r, x.reaction.scale, nullptr);
     for (const Term &t : Terms(r, x.reaction))
       out << "    " << t.text << ": entrance pair " << Pair(p, t.entrance) << ", exit pair " << Pair(p, t.exit) << "\n";
     out << "  grid: " << x.energies.size() << (x.adaptive.on ? " start energies" : " energies") << " E_lab " << Fmt(x.minE)
@@ -216,7 +293,8 @@ std::string DescribeText(const Format3Project &p) {
     const auto r = p.built.potentialRecords.find(x.first);
     out << "potential " << (r != p.built.potentialRecords.end() ? r->second.first + " (line " + std::to_string(r->second.second) + ")" : "?")
         << ": pair " << Pair(p, x.first) << "\n  central " << CentralText(s) << "; Coulomb radius R_C " << Fmt(s.coulomb_radius_fm)
-        << " fm; matching radius " << Fmt(s.matching_radius_fm) << " fm, step " << Fmt(s.step_fm) << " fm\n";
+        << " fm; matching radius " << Fmt(s.matching_radius_fm) << " fm, step " << Fmt(s.step_fm) << " fm"
+        << SpinOrbitText(s) << "\n";
   }
   return out.str();
 }
@@ -230,6 +308,9 @@ std::string DescribeJson(const Format3Project &p) {
     j.Key("observable").String(ObservableName(spec.observable));
     j.Key("tree").String(reaction ? reaction->reaction.Tree() : "");
     j.Key("coulomb_reference").String(ReferenceName(spec.coulombReference));
+    const Value *u = r.Get("unit");
+    j.Key("unit").String(u && u->unit ? u->unit->token : "").Key("engine_unit").String(r.quantity ? r.quantity->engineUnit : "");
+    j.Key("model_factor").Number(spec.scale.factor).Key("sfactor").Bool(spec.scale.sFactor);
     j.Key("terms").BeginArray();
     for (const Term &t : Terms(r, spec)) {
       j.BeginObject().Key("reaction").String(t.text).Key("entrance_pair").Integer(t.entrance).Key("exit_pair").Integer(t.exit);
@@ -245,9 +326,18 @@ std::string DescribeJson(const Format3Project &p) {
     j.BeginObject().Key("name").String(r.name).Key("key").Integer(d.key).Key("line").Integer(r.line).Key("active").Bool(d.active);
     j.Key("quantity").String(r.quantity ? r.quantity->name : "");
     reactionTree(r, d.reaction);
+    j.Key("columns").BeginObject().Key("value_factor").Number(d.columns.value).Key("energy_factor").Number(d.columns.energy);
+    j.Key("energy_frame").String(d.columns.energyCM ? "cm" : "lab").Key("angle_factor").Number(d.columns.angle).EndObject();
     j.Key("E_lab_window_MeV").BeginArray().Number(d.minE).Number(d.maxE).EndArray();
     if (AngleObservable(d.reaction.observable)) j.Key("angle_window_deg").BeginArray().Number(d.minA).Number(d.maxA).EndArray();
     j.Key("data_file").String(d.dataFile).Key("data_file_resolved").String(ResolvedPath(p.projectDir, d.dataFile));
+    if (d.active) {
+      const RowsOfFile rows = ReadRows(p, d);
+      j.Key("rows_read").Integer(rows.provenance.rowsRead).Key("rows_kept").Integer(rows.provenance.rowsKept);
+      j.Key("rows_error").String(rows.error);
+      if (rows.error.empty() && rows.provenance.rowsKept > 0)
+        j.Key("kept_E_lab_MeV").BeginArray().Number(rows.provenance.minEnergy).Number(rows.provenance.maxEnergy).EndArray();
+    }
     j.Key("effects").StringArray(Effects(p.built.data.targetEffects, d.key));
     j.Key("sample").String(d.reaction.sample == "0" ? "" : d.reaction.sample);
     j.Key("parameters").BeginArray();
@@ -287,7 +377,13 @@ std::string DescribeJson(const Format3Project &p) {
     else
       j.Key("radius_fm").Number(s.R).Key("diffuseness_fm").Number(s.a);
     j.Key("coulomb_radius_fm").Number(s.coulomb_radius_fm).Key("matching_radius_fm").Number(s.matching_radius_fm);
-    j.Key("step_fm").Number(s.step_fm).EndObject();
+    j.Key("step_fm").Number(s.step_fm);
+    if (s.spin_orbit)
+      j.Key("spin_orbit").BeginObject().Key("form").String("woods_saxon").Key("depth_MeV").Number(s.spin_orbit->depth_MeV)
+          .Key("radius_fm").Number(s.spin_orbit->form.radius_fm).Key("diffuseness_fm").Number(s.spin_orbit->form.diffuseness_fm)
+          .Key("on").String(s.spin_orbit->acts_on == physics::SpinOrbitParticle::Heavy ? "heavy" : "light")
+          .Key("operator").String("2l.s").EndObject();
+    j.EndObject();
   }
   j.EndArray().EndObject();
   return j.Str();

@@ -12,6 +12,7 @@
 #include <cmath>
 #include <map>
 #include <set>
+#include <sstream>
 
 #include "azure2/experiment/BuildContext.h"
 
@@ -57,8 +58,27 @@ bool FreeNuisance(const ValidatedRecord *t, const std::string &field) {
   return v && (v->nuisance.mode == NuisanceMode::Fit || v->nuisance.hasPrior || v->nuisance.hasGridMax);
 }
 
-// The text of a nuisance's prior width as the old reader kept it ("10%" or "0.5").
-std::string WidthText(const Nuisance &n) { return n.hasPrior ? n.priorWidth.text + (n.priorPercent ? "%" : "") : ""; }
+// The text of a nuisance's prior width as the old reader kept it ("10%" or "0.5"), in the engine's unit of its
+// dimension: the text as written for a percentage or a value in that unit, else the converted number.
+std::string WidthText(const Nuisance &n) {
+  if (!n.hasPrior) return "";
+  if (n.priorPercent) return n.priorWidth.text + "%";
+  if (!n.unit || n.unit->factor == 1.0) return n.priorWidth.text;
+  std::ostringstream s;
+  s.precision(17);
+  s << ToBase(n.priorWidth.value, n.unit);
+  return s.str();
+}
+
+// A formula's value (x in MeV) in the engine's unit: the expression as written for the engine's unit, else
+// (expression)*factor.
+std::string FormulaInBase(const std::string &expression, const Unit *unit) {
+  if (!unit || unit->factor == 1.0) return expression;
+  std::ostringstream s;
+  s.precision(17);
+  s << "(" << expression << ")*" << unit->factor;
+  return s.str();
+}
 
 void TargetInto(Context &c, const ValidatedRecord &t, const ValidatedRecord &user, TargetEffectSpec &e) {
   const std::string kind = t.Get("kind") ? t.Get("kind")->word : "none";
@@ -66,14 +86,12 @@ void TargetInto(Context &c, const ValidatedRecord &t, const ValidatedRecord &use
     e.targetIntegration = true;
     if (const Value *d = t.Get("areal_density")) {
       const Nuisance &n = d->nuisance;
-      if (n.unit && n.unit->factor != 1.0)
-        c.Error(codes::kNotBuilt, t, "areal_density", "this engine takes a layer's areal density in atoms/cm2");
-      e.density = n.value.value;
+      e.density = ToBase(n.value.value, n.unit);
       if (n.mode == NuisanceMode::Fit || n.hasPrior || n.hasGridMax) {
         e.densityFit = true;
         e.densityVary = n.mode == NuisanceMode::Fit;
         e.densitySigmaText = n.hasPrior ? WidthText(n) : "0";
-        if (n.hasGridMax) e.densityMax = n.gridMax.value;
+        if (n.hasGridMax) e.densityMax = ToBase(n.gridMax.value, n.unit);
         if (n.hasPrior && n.priorCentre.value != n.value.value)
           c.Error(codes::kNotBuilt, t, "areal_density", "a prior centred away from the value: this engine centres it on the value");
       }
@@ -82,15 +100,13 @@ void TargetInto(Context &c, const ValidatedRecord &t, const ValidatedRecord &use
       if (s->word != "formula") {
         c.Error(codes::kNotBuilt, t, "stopping", "stopping " + s->word + ": this engine takes a formula (Phase 5)");
       } else if (const Value *f = s->Get("expression")) {
-        e.stoppingPowerEquation = f->formula.expression;
+        const Value *u = s->Get("unit");
+        e.stoppingPowerEquation = FormulaInBase(f->formula.expression, u ? u->unit : nullptr);
         for (std::size_t i = 0; i < f->formula.params.size(); i++) {
           if (f->formula.params[i].name != "a" + std::to_string(i))
             c.Error(codes::kNotBuilt, t, "stopping", "this engine names the formula's parameters a0, a1, ... in order");
           e.stoppingPowerParameters.push_back(f->formula.params[i].value.value);
         }
-        const Value *u = s->Get("unit");
-        if (u && u->unit && u->unit->factor != 1.0)
-          c.Error(codes::kNotBuilt, t, "stopping", "this engine takes the stopping in MeV*cm2/atom");
       }
     }
     if (const Value *s = t.Get("straggling")) {
@@ -98,7 +114,8 @@ void TargetInto(Context &c, const ValidatedRecord &t, const ValidatedRecord &use
       e.straggling = s->word != "none";
       e.hasStragglingCoefficient = true;
       const Value *v = s->Get("value");
-      e.stragglingCoefficient = s->word == "coefficient" && v ? v->number.value : 0.0;
+      // the engine's c_s is in keV^1/2 (TargetEffect: sigma_cm = c_s sqrt(dE_cm [keV]))
+      e.stragglingCoefficient = s->word == "coefficient" && v ? ToUnit(v->number.value, v->unit, "keV^1/2") : 0.0;
     }
   }
   if (const Value *d = t.Get("doppler")) {
@@ -117,12 +134,11 @@ void TargetInto(Context &c, const ValidatedRecord &t, const ValidatedRecord &use
   }
   if (const Value *s = t.Get("screening")) {
     const Nuisance &n = s->nuisance;
-    if (n.unit && std::string(n.unit->token) != "eV")
-      c.Error(codes::kNotBuilt, t, "screening", "this engine takes U_e in eV");
+    // the engine's U_e and its prior width are in eV (TargetEffect)
     e.screening = true;
-    e.screeningUe = n.value.value;
+    e.screeningUe = ToUnit(n.value.value, n.unit, "eV");
     e.screeningVary = n.mode == NuisanceMode::Fit;
-    e.screeningSigma = n.hasPrior ? n.priorWidth.value : 0.0;
+    e.screeningSigma = n.hasPrior ? (n.priorPercent ? n.priorWidth.value / 100.0 * e.screeningUe : ToUnit(n.priorWidth.value, n.unit, "eV")) : 0.0;
   }
   (void)user;
 }
@@ -134,12 +150,11 @@ void BeamInto(Context &c, const ValidatedRecord &b, TargetEffectSpec &e) {
     if (s->word == "formula") {
       const Value *f = s->Get("expression");
       e.convolutionCoefficients = true;
-      e.convolutionEquation = f ? f->formula.expression : "";
+      const Value *u = s->Get("unit");
+      e.convolutionEquation = f ? FormulaInBase(f->formula.expression, u ? u->unit : nullptr) : "";
       if (f)
         for (const auto &p : f->formula.params) e.convolutionCoefficientValues.push_back(p.value.value);
       e.sigmaLab = lab;
-      const Value *u = s->Get("unit");
-      if (u && u->unit && u->unit->factor != 1.0) c.Error(codes::kNotBuilt, b, "spread", "this engine takes a formula's sigma in MeV");
     } else if (const Value *sigma = s->Get("sigma")) {
       if (!lab) c.Error(codes::kNotBuilt, b, "spread", "a constant sigma in the c.m. frame: this engine takes it in the lab");
       e.convolution = true;
@@ -176,8 +191,8 @@ void DetectorInto(Context &c, const ValidatedRecord &d, TargetEffectSpec &e) {
     e.udr = true;
     if (const Value *v = u->Get("file")) e.udrFile = v->word;
     if (const Value *v = u->Get("flight_path")) e.udrFlightPath = Context::InBase(v->number, v->unit);
-    if (const Value *v = u->Get("burst")) e.udrBurstFwhm = v->number.value;
-    if (const Value *v = u->Get("channel")) e.udrChannelWidth = v->number.value;
+    if (const Value *v = u->Get("burst")) e.udrBurstFwhm = Context::InBase(v->number, v->unit);
+    if (const Value *v = u->Get("channel")) e.udrChannelWidth = Context::InBase(v->number, v->unit);
     if (const Value *v = u->Get("centred")) e.udrCentred = v->word == "yes";
   }
 }
@@ -320,15 +335,16 @@ void SampleThickness(Context &c, std::vector<Member> &members, bool isData) {
     const Value *d = target ? target->Get("areal_density") : nullptr;
     if (!d) continue;
     const Nuisance &n = d->nuisance;
-    if (!n.unit || std::string(n.unit->token) != "atoms/b")
-      c.Error(codes::kNotBuilt, *target, "areal_density", "this engine takes a sample thickness in atoms/b");
+    // the engine's sample thickness and its prior width are in atoms/b (ESegment)
     ReactionSpec &r = isData ? c.out_.data.datasets.items[i].spec.reaction : c.out_.extrapolations.extrapolations.items[i].spec.reaction;
-    (q == "transmission" ? r.transmission : r.yieldThickness) = n.value.value;
+    (q == "transmission" ? r.transmission : r.yieldThickness) = ToUnit(n.value.value, n.unit, "atoms/b");
     if (!isData) continue;
     DatasetSpec &ds = c.out_.data.datasets.items[i].spec;
     ds.thicknessFit = n.mode == NuisanceMode::Fit || n.hasPrior;
     ds.thicknessVary = n.mode == NuisanceMode::Fit;
-    ds.thicknessSigma = n.hasPrior ? n.priorWidth.value : 0.0;
+    ds.thicknessSigma = !n.hasPrior ? 0.0
+                        : n.priorPercent ? n.priorWidth.value / 100.0 * (q == "transmission" ? r.transmission : r.yieldThickness)
+                                         : ToUnit(n.priorWidth.value, n.unit, "atoms/b");
     if (ds.thicknessFit && users[target->name] > 1) ds.thicknessGroup = target->name;
     if (ds.thicknessFit) ds.names.thickness = target->name + ".areal_density";  // a follower's: Build's NameParameters
   }

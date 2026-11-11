@@ -65,6 +65,8 @@ struct FactorRef {
   enum class Kind {
     TermFrame,   ///< J_0 / J_k of a SUM or transform term k: the term into the frame of term 0 (ESegment::TermFrameFactor)
     RatioFrame,  ///< J_k of a RATIO term k, its own lab-to-c.m. factor (ESegment::RatioTermFrameFactor)
+    SFactor,     ///< E exp(2 pi eta(E)) of term k's entrance pair at its point's c.m. energy E (MeV; S = this x sigma,
+                 ///< physics/AstrophysicalFactor.h)
   };
   Kind kind = Kind::TermFrame;
   int term = 0;
@@ -88,6 +90,7 @@ enum class TreeKind {
   Transmission,  ///< T = exp(-n s) of the weighted terms, at every sub-point before the kernel
   Yield,         ///< Y0 = (s / s_t)(1 - exp(-n s_t)), s_t the yield's total term
   CoulombRatio,  ///< dsigma/dOmega over the Rutherford or Mott cross section at the same point, both folded alike
+  Scaled,        ///< c [x E exp(2 pi eta)] x the tree of another kind (ReactionSpec::scale: S factor, yield per charge)
 };
 
 /// A built prediction: the tree and what its inputs, factors and parameters refer to (indices into these lists).
@@ -111,7 +114,8 @@ struct TreeKindRow {
 /// The table: one row per TreeKind, in the order of the enum.
 const std::vector<TreeKindRow> &TreeKinds();
 
-/// The kind of tree a setup needs (the one place that decides it): a transmission or a yield by its thickness, else a
+/// The kind of tree a setup needs (the one place that decides it): a factor on the model value (ReactionSpec::scale)
+/// first, whose builder wraps the tree of the kind the setup has without it; then a transmission or a yield by its thickness, else a
 /// RATIO, else a SUM (a SUM line or a total capture), else a ratio to a Coulomb cross section, else the observable
 /// alone.
 TreeKind TreeKindOf(const PredictionSetup &setup);
@@ -123,7 +127,7 @@ Prediction BuildPrediction(const PredictionSetup &setup);
 /// The tree as one line of text (data_model.md section 3): leaves "sigma(1->2)", "dsdo_cm(1->2)", ...; "sum(a, b)",
 /// "c*J0/J1*a" (a SUM term: its factor and the frame factor J_0/J_1), "abundance(<sample>, <nucleus>)*a",
 /// "ratio(a, b)*J1/J0", "transmission(n=<n>, a)", "yield(n=<n>, a, b)"; the Coulomb leaves "rutherford(1->1)",
-/// "mott(1->1)".
+/// "mott(1->1)"; a factor on the value "c*S(1)*a" (c omitted when 1, S(k) the S-factor conversion of term k).
 std::string PredictionText(const Prediction &prediction);
 
 }  // namespace experiment

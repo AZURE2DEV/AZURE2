@@ -143,6 +143,21 @@ check("a missing entry", raises(lambda: N.fetch_exfor("T9999002", source="local"
 check("a malformed ID", raises(lambda: N.fetch_exfor("bad", source="local"), ValueError, "not an EXFOR dataset ID"))
 check("a bad source", raises(lambda: N.fetch_exfor("T0001002", source="ftp"), ValueError, "source must be"))
 
+print("\n6. S-factor data (format-3 quantity sfactor, not converted to a cross section)")
+import tempfile  # noqa: E402
+with tempfile.TemporaryDirectory() as work:
+    check("to_azr refuses S-factor data, naming to_sfactor_dataset",
+          raises(lambda: d.to_azr(work, 1, 2), ValueError, "to_sfactor_dataset"))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        text = d.to_sfactor_dataset(work, "S1", norm="1 fixed", file_name="s1")
+    rows = [l.split() for l in open(os.path.join(work, "s1.dat")) if not l.startswith("#")]
+    check("the record: quantity sfactor in MeV*b, E_lab[MeV] (EXFOR EN), the norm given",
+          "quantity       sfactor" in text and "unit           MeV*b" in text and "columns        E_lab[MeV] _ value error" in text
+          and "reaction       12C(a,g)16O" in text and "norm           1 fixed" in text, text)
+    check("the file: E in MeV (EN in keV x 1e-3), S in MeV b (B*KEV x 1e-3), the values as S",
+          len(rows) == 3 and same([float(r[2]) for r in rows], [1.23e-7, 2.5e-7, 3.0e-7]) and same([float(r[0]) for r in rows], [1.0, 1.5, 2.0]), rows)
+
 print()
 if failures:
     print(f"FAILED: {len(failures)} check(s): " + ", ".join(failures))

@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "azure2/experiment/ProjectReader.h"
+#include "azure2/experiment/SpinOrbitChecks.h"
 #include "azure2/io/Document.h"
 #include "azure2/io/RecordReader.h"
 
@@ -56,7 +57,7 @@ LevelTables Pairs() {
 }
 
 BuiltProject BuildText(const std::string &text, bool relativistic = false, bool readFiles = false,
-                       DataFiles dataFiles = DataFiles::Required) {
+                       DataFiles dataFiles = DataFiles::Required, const LevelTables &pairs = Pairs()) {
   const Document doc = Document::Parse(text);
   std::vector<SectionRecords> sections;
   for (const Document::Section &s : doc.Sections()) {
@@ -74,7 +75,7 @@ BuiltProject BuildText(const std::string &text, bool relativistic = false, bool 
   o.relativistic = relativistic;
   o.readDataFiles = readFiles;
   o.dataFiles = dataFiles;
-  return Schema::Build(v, Pairs(), o);
+  return Schema::Build(v, pairs, o);
 }
 
 const std::string kDataset =
@@ -114,6 +115,77 @@ void ExpectOne(const std::string &code, const BuiltProject &b) {
   check(code + " alone", ok);
   if (!ok)
     for (const Diagnostic &d : b.diagnostics) std::printf("        got %s: %s\n", d.code.c_str(), d.message.c_str());
+}
+
+// Units (project_format3.md sections 3.3, 7.2): the factor of every number Build holds and of every column of a data
+// file comes from the unit table; a per-charge yield and an S factor are factors on the model.
+void UnitCases(const std::string &targets) {
+  auto data = [](const BuiltProject &b) -> const DatasetSpec & { return b.data.datasets.items.at(0).spec; };
+  const BuiltProject mb = BuildText(Data(Set(kDataset, "unit", "    unit mb")));
+  check("unit mb: the value column times 1e-3 at the points, the model unscaled",
+        mb.Ok() && data(mb).columns.value == 1e-3 && data(mb).reaction.scale.Identity() && data(mb).columns.energy == 1.0);
+  const BuiltProject keV = BuildText(Data(Set(Set(kDataset, "columns", "    columns E_cm[keV] _ value error"), "energy_window",
+                                              "    energy_window 200 1400 keV")));
+  {
+    const DatasetSpec &d = data(keV);
+    const double lab = 16.00793 / 15.0001;  // E_lab / E_cm of pair 1 (masses of Pairs())
+    check("E_cm[keV]: energy factor 1e-3, c.m. with pair 1's masses; the window in c.m. keV to lab MeV",
+          keV.Ok() && d.columns.energy == 1e-3 && d.columns.energyCM && d.columns.lightMass == 1.00783 &&
+              d.columns.heavyMass == 15.0001 && std::fabs(d.minE - 0.2 * lab) < 1e-15 && std::fabs(d.maxE - 1.4 * lab) < 1e-15);
+  }
+  const BuiltProject rad = BuildText(Data(Set(Set(Set(kDataset, "quantity", "    quantity dsigma_domega"), "columns",
+                                                  "    columns E_lab[MeV] theta_lab[rad] value error"),
+                                              "unit", "    unit mb/sr")));
+  check("theta_lab[rad], mb/sr: angle factor 180/pi, value 1e-3",
+        rad.Ok() && data(rad).columns.angle == 180.0 / 3.14159265358979323846 && data(rad).columns.value == 1e-3);
+  ExpectOne("E_NOT_BUILT", BuildText(Data(Set(kDataset, "unit", "    unit mb") + "    covariance cov.txt\n")));
+  // an extrapolation in another unit: the model in that unit
+  const BuiltProject xmb = BuildText("<extrapolations>\nextrapolation x1\n    reaction 15N(p,g)16O\n    quantity sigma\n    unit mb\n"
+                                     "    energies list 0.3 MeV lab\n</extrapolations>\n");
+  check("an extrapolation in mb: the model x 1000", xmb.Ok() && xmb.extrapolations.extrapolations.items[0].spec.reaction.scale.factor == 1000.0);
+  // a wrong dimension is the validator's (the unit is not one of the quantity's)
+  ExpectOne("E_UNIT_NOT_ALLOWED", BuildText(Data(Set(kDataset, "unit", "    unit MeV*b"))));
+  // the S factor: a factor on the model, defined for a charged entrance
+  const BuiltProject sf = BuildText(Data(Set(Set(kDataset, "quantity", "    quantity sfactor"), "unit", "    unit keV*b")));
+  check("sfactor keV*b: an S-factor factor on the model, the values times 1e-3 (to MeV b)",
+        sf.Ok() && data(sf).reaction.scale.sFactor && data(sf).reaction.scale.factor == 1.0 && data(sf).columns.value == 1e-3 &&
+            data(sf).reaction.observable == Observable::CrossSection);
+  ExpectOne("E_REACTION_NOT_ALLOWED", BuildText(Data(Set(Set(Set(kDataset, "quantity", "    quantity sfactor"), "unit", "    unit keV*b"),
+                                                         "reaction", "    reaction 16O(g,a)12C"))));
+  // yields: per particle and per uC on an infinite target; a layer, a fitted efficiency and no charge state refused
+  {
+    const std::string inf = targets.substr(0, targets.size() - std::string("</targets>\n").size()) +
+                            "target t9\n    kind infinite\n    active 15N\n    stopping formula \"a0\" a0=1e-20 MeV*cm2/atom\n"
+                            "    straggling none\n</targets>\n";
+    const std::string y = Set(Set(kDataset, "quantity", "    quantity yield"), "unit", "    unit 1/uC") + "    quadrature points 20\n";
+    const BuiltProject q2 = BuildText(Data(y + "    target t9\n    charge_state 2\n") + inf);
+    const double perUC = 1e-6 / (2 * 1.602176634e-19);
+    check("yield 1/uC, q = 2: the model x 1e-6 C / (2 e)",
+          q2.Ok() && std::fabs(data(q2).reaction.scale.factor / perUC - 1) < 1e-15 && !data(q2).reaction.scale.sFactor);
+    const BuiltProject c = BuildText(Data(Set(y, "unit", "    unit counts/mC") + "    target t9\n    charge_state 1\n    efficiency 0.5 fixed\n") + inf);
+    check("yield counts/mC, q = 1, efficiency 0.5: the model x 1e-3 C / e x 0.5",
+          c.Ok() && std::fabs(data(c).reaction.scale.factor / (0.5e-3 / 1.602176634e-19) - 1) < 1e-15);
+    const BuiltProject p = BuildText(Data(Set(y, "unit", "    unit 1/particle") + "    target t9\n") + inf);
+    check("yield 1/particle: no factor", p.Ok() && data(p).reaction.scale.Identity());
+    ExpectOne("E_NOT_BUILT", BuildText(Data(y + "    target t1\n    charge_state 2\n") + inf));
+    ExpectOne("E_NOT_BUILT", BuildText(Data(Set(y, "unit", "    unit counts/uC") + "    target t9\n    charge_state 1\n"
+                                                                                      "    efficiency 0.5 fit prior 0.5 3%\n") + inf));
+    ExpectOne("E_FIELD_REQUIRED", BuildText(Data(y + "    target t9\n") + inf));
+  }
+  // targets: areal density in atoms/b, U_e in keV, a stopping formula in keV*cm2/atom
+  {
+    std::string t = Set(Set(targets, "areal_density", "    areal_density 1e-6 atoms/b fit prior 1e-6 2e-7"), "screening",
+                        "    screening 1 keV fit prior 1 0.2");
+    t = Set(t, "stopping", "    stopping formula \"a0\" a0=1e-17 keV*cm2/atom");
+    const BuiltProject b = BuildText(Data(kDataset + "    target t1\n    quadrature points 20\n") + t);
+    const bool one = b.Ok() && b.data.targetEffects.items.size() == 1;
+    const TargetEffectSpec *e = one ? &b.data.targetEffects.items[0].spec : nullptr;
+    check("target: 1e-6 atoms/b = 1e18 atoms/cm2 (prior 2e17), U_e 1 keV = 1000 eV (prior 200 eV), stopping (a0)*0.001",
+          e && e->density == 1e18 && e->densitySigmaText == "2e+17" && e->screeningUe == 1000.0 && e->screeningSigma == 200.0 &&
+              e->stoppingPowerEquation == "(a0)*0.001");
+    if (!one)
+      for (const Diagnostic &d : b.diagnostics) std::printf("        got %s: %s\n", d.code.c_str(), d.message.c_str());
+  }
 }
 
 }  // namespace
@@ -204,7 +276,7 @@ int main() {
   }
   check("the data file read in the valid case", BuildText(Data(kDataset), false, true).diagnostics.empty());
   ExpectOne("E_DATA_FILE", BuildText(Data(Set(kDataset, "columns", "    columns E_lab[MeV] _ value error _ _")), false, true));
-  ExpectOne("E_NOT_BUILT", BuildText(Data(Set(kDataset, "unit", "    unit mb"))));
+  UnitCases(targets);
   const std::string thm = Set(Set(kDataset, "norm", "    norm profiled"), "unit", "    unit arbitrary") + "    thm global\n";
   check("a THM data set builds", BuildText(Data(thm)).diagnostics.empty());
   ExpectOne("E_THM_RELATIVISTIC", BuildText(Data(thm), true));
@@ -370,6 +442,51 @@ int main() {
     ExpectOne("E_OUT_OF_RANGE", BuildText(potentials(Set(gauss, "central", "    central gaussian depth 40 MeV width 0 fm"))));
     ExpectOne("E_UNIT_NOT_ALLOWED", BuildText(potentials(Set(pot, "matching_radius", "    matching_radius 16 MeV"))));
     ExpectOne("E_PART_MISSING", BuildText(potentials(Set(pot, "central", "    central woods_saxon depth 20 MeV radius 3.6 fm"))));
+    // a spin-orbit term (spin_orbit): the term member by member (keV converted), the potential value carries it;
+    // one case per refusal
+    {
+      const std::string so = "    spin_orbit woods_saxon depth 6000 keV radius 3.5 fm diffuseness 0.65 fm on light operator 2l.s\n";
+      const BuiltProject s = BuildText(potentials(pot + so));
+      for (const Diagnostic &d : s.diagnostics) std::printf("        %s: %s\n", d.code.c_str(), d.message.c_str());
+      const bool built = s.Ok() && s.diagnostics.empty() && s.potentials.pairs.count(7) && s.potentials.pairs.at(7).spin_orbit;
+      check("p12C with a spin-orbit term builds", built);
+      if (built) {
+        const azure2::physics::SpinOrbitTerm &t = *s.potentials.pairs.at(7).spin_orbit;
+        check("spin_orbit: 6000 keV = 6 MeV, R_so 3.5 fm, a_so 0.65 fm, on the light particle",
+              t.depth_MeV == 6000 * 1e-3 && t.form.radius_fm == 3.5 && t.form.diffuseness_fm == 0.65 &&
+                  t.acts_on == azure2::physics::SpinOrbitParticle::Light && t.form.shape == azure2::physics::FormShape::WoodsSaxon);
+        check("the potential value carries the term", s.potentials.pairs.at(7).Potential().spin_orbit == t);
+      }
+      check("a record without spin_orbit has none", !b.potentials.pairs.at(7).spin_orbit);
+      ExpectOne("E_SO_ZERO_SPIN", BuildText(potentials(pot + Set(so, "spin_orbit",
+                                                                 "    spin_orbit woods_saxon depth 6 MeV radius 3.5 fm diffuseness 0.65 fm on heavy operator 2l.s"))));
+      const std::string soN = "    spin_orbit woods_saxon depth 6 MeV radius 3.5 fm diffuseness 0.65 fm on light operator 2l.s\n";
+      ExpectOne("E_SO_TWO_SPINS", BuildText(potentials(gauss + soN)));
+      ExpectOne("E_SO_RELATIVISTIC", BuildText(potentials(pot + so), true));
+      // THM through p+15N with the spin of 15N set to 0 (one spinning particle): E_SO_THM in place of E_THM_HYBRID_POTENTIAL
+      LevelTables oneSpin = Pairs();
+      oneSpin.pairs[0].twoJHeavy = 0;
+      ExpectOne("E_SO_THM", BuildText(Data(thm) + potentials(gauss + soN), false, false, DataFiles::Required, oneSpin));
+      ExpectOne("E_THM_HYBRID_POTENTIAL", BuildText(Data(thm) + potentials(gauss), false, false, DataFiles::Required, oneSpin));
+      // the validator's: the operator is 2l.s only (an l.s strength is half), the shape woods_saxon only
+      ExpectOne("E_NOT_IN_LIST", BuildText(potentials(pot + Set(so, "spin_orbit",
+                                                         "    spin_orbit woods_saxon depth 6 MeV radius 3.5 fm diffuseness 0.65 fm on light operator l.s"))));
+      ExpectOne("E_PART_MISSING", BuildText(potentials(pot + Set(so, "spin_orbit",
+                                                                 "    spin_orbit woods_saxon depth 6 MeV radius 3.5 fm diffuseness 0.65 fm on light"))));
+      ExpectOne("E_OUT_OF_RANGE", BuildText(potentials(pot + Set(so, "spin_orbit",
+                                                                 "    spin_orbit woods_saxon depth 0 MeV radius 3.5 fm diffuseness 0.65 fm on light operator 2l.s"))));
+    }
+    // the refusals shared with pyazr and the API (SpinOrbitChecks.h)
+    {
+      using azure2::physics::SpinOrbitParticle;
+      check("one spinning particle, the term on it: allowed",
+            !SpinOrbitPairRefusal(1, 0, SpinOrbitParticle::Light, "p+12C") && !SpinOrbitPairRefusal(0, 3, SpinOrbitParticle::Heavy, "a+7Li"));
+      check("E_SO_TWO_SPINS: both spins non-zero", SpinOrbitPairRefusal(1, 1, SpinOrbitParticle::Light, "p+15N").code == "E_SO_TWO_SPINS");
+      check("E_SO_ZERO_SPIN: the term on the spin-0 particle", SpinOrbitPairRefusal(1, 0, SpinOrbitParticle::Heavy, "p+12C").code == "E_SO_ZERO_SPIN");
+      check("E_SO_NEEDS_J: channel functions of a spin-orbit pair without J", ChannelFunctionsJRefusal(true, false, "1").code == "E_SO_NEEDS_J");
+      check("E_SO_NO_TERM: a J for a pair without a spin-orbit term", ChannelFunctionsJRefusal(false, true, "1").code == "E_SO_NO_TERM");
+      check("J with a spin-orbit pair, none without: allowed", !ChannelFunctionsJRefusal(true, true, "1") && !ChannelFunctionsJRefusal(false, false, "1"));
+    }
     // the old block in a format-3 project (the reading path: ProjectReader)
     {
       Format3ReadOptions read;

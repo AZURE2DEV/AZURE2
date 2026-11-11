@@ -15,7 +15,7 @@ namespace experiment {
 namespace {
 
 // The value in the engine's unit of its dimension (BuildContext.h's InBase: bit-exact for factor 1).
-double InBase(double value, const Unit *unit) { return unit && unit->factor != 1.0 ? value * unit->factor : value; }
+double InBase(double value, const Unit *unit) { return ToBase(value, unit); }
 
 GridValues Fail(const char *code, const std::string &why) {
   GridValues g;

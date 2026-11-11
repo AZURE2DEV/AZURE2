@@ -893,6 +893,15 @@ later `M1` …, M8); Legendre expansions; grid kinds (`range`, `list`, `file`, `
 `TargetEffect.cpp:24-28`, logged when used; `points` has no default and is required on a data set with a fold, as every
 `<targetInt>` line states it today, `TargetEffect.cpp:61`).
 
+**[Implemented (brief J, 2026-11-10): units, `sfactor`, yields per charge.]** Every number in any unit of its
+dimension (`Units.h` `Rescale`: a power-of-ten factor divides by the exact integer, so a value exact in the written
+unit gives the correctly rounded engine value); the columns of a data file by `DatasetSpec::columns`
+(`experiment/DataRows.h`, applied by `ESegment::Fill` before the point is made; an `E_cm` column taken to the lab).
+`sfactor` and the per-charge, counts and arbitrary units of `yield` are `ReactionSpec::scale`, a factor on the model
+(tree kind `Scaled`: `c [x S(0)] x` the tree), never a conversion of the data.  A `yield` on a `layer` is refused
+(Phase 5 kernel; §9.1's example is in `tests/units_scales` on an infinite target), a fitted `efficiency` is refused
+(it is the normalization).  An extrapolation in another unit is computed in it.  User page: `data_formats.rst`.
+
 ### 7.3 Where it lives and how it is read
 
 - `io/` (no engine headers, `project.md` §2) gets one generic `RecordReader`: it splits a section into records and

@@ -589,6 +589,14 @@ data 26: dsdo_cm(1->1)
 data 27: dsdo_cm(1->1)
 data 28: dsdo_cm(1->1)
 extrapolation 1: dsdo_cm(1->1)
+== tests/spin_orbit_potential/models/capture.azr
+data skowronski_luna_hpge: sigma(1->2)
+== tests/spin_orbit_potential/models/phase.azr
+extrapolation p1half: phase(1->1; J=0.5; l=1; s=0.5)
+extrapolation p3half: phase(1->1; J=1.5; l=1; s=0.5)
+extrapolation s1half: phase(1->1; J=0.5; l=0; s=0.5)
+== tests/spin_orbit_potential/spin_orbit_potential.azr
+data meyer_144: dsdo_cm(1->1)
 == tests/sum_lab_frame/models/extrap.azr
 extrapolation 1: dsdo_cm(2->3)
 extrapolation 2: dsdo_cm(2->5)
@@ -625,6 +633,9 @@ extrapolation 1: sum(sigma(1->2))
 extrapolation 1: sum(sigma(1->2))
 == tests/transform_level_order/models/desc_fit.azr
 extrapolation 1: sum(sigma(1->2))
+== tests/units_scales/models/yield_story.azr
+data Y_curve: 113595465155.1859*sigma(1->2)
+extrapolation Y_thick: sigma(1->2)
 == tests/upgrade/T1/T1.azr
 data 1: dsdo_cm(1->1)
 data 2: dsdo_cm(1->1)

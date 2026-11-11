@@ -1,0 +1,60 @@
+<config>
+true                                                                                                #Perform A-Matrix Calculation
+output/                                                                                             #Full Path to Output Directory
+checks/                                                                                             #Full Path to Checks Directory
+none                                                                                                #Compond Nucleus Check
+none                                                                                                #Boundary Condition Check
+none                                                                                                #Data Check
+none                                                                                                #Lo-Matrix and Penetrability Check
+none                                                                                                #Legendre Polynomial Check
+none                                                                                                #Coulomb Amplitudes Check
+none                                                                                                #Reaction Pathway Check
+none                                                                                                #Angular Distributions Check
+useAdaptiveGrid=1
+format=3
+</config>
+<potentials>
+potential p12C
+    pair           p+12C
+    coulomb_radius 3.5 fm
+    central        woods_saxon depth 20 MeV radius 3.6 fm diffuseness 0.6 fm
+    spin_orbit     woods_saxon depth 6 MeV radius 3.6 fm diffuseness 0.6 fm on light operator 2l.s
+</potentials>
+<levels>
+0.5 -1 20 1 1 1 1 2 1 1 0 0 0.5 1 0 1 0 1.00728 12 1 6 1.94351 1.94351 0 0 0.0 0 3.6 0 0 0
+
+1.5 -1 20 1 1 1 1 2 2 1 0 0 0.5 1 0 1 0 1.00728 12 1 6 1.94351 1.94351 0 0 0.0 0 3.6 0 0 0
+
+0.5 1 20 1 1 1 1 0 3 1 0 0 0.5 1 0 1 0 1.00728 12 1 6 1.94351 1.94351 0 0 0.0 0 3.6 0 0 0
+
+</levels>
+<data>
+</data>
+<extrapolations>
+extrapolation p1half
+    reaction       12C(p,p)12C
+    quantity       phase_shift
+    unit           deg
+    energies       list 0.5 1.0 2.0 3.0 MeV cm
+    J              1/2
+    l              1
+    s              1/2
+extrapolation p3half
+    reaction       12C(p,p)12C
+    quantity       phase_shift
+    unit           deg
+    energies       list 0.5 1.0 2.0 3.0 MeV cm
+    J              3/2
+    l              1
+    s              1/2
+extrapolation s1half
+    reaction       12C(p,p)12C
+    quantity       phase_shift
+    unit           deg
+    energies       list 0.5 1.0 2.0 3.0 MeV cm
+    J              1/2
+    l              0
+    s              1/2
+</extrapolations>
+<targets>
+</targets>

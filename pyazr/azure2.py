@@ -2038,14 +2038,14 @@ class azure2(_HybridPotentials):
 
     # -- the external region, and the caches that make it affordable ----------
 
-    def coulomb_functions(self, pair, energies, L=0, radius=0.0):
+    def coulomb_functions(self, pair, energies, L=0, radius=0.0, J=None):
         """Coulomb wave functions on an energy grid.
 
         Parameters
         ----------
         pair : particle-pair key (1-based, as in the .azr).
         energies : centre-of-mass energies in MeV.
-        L : orbital angular momentum.
+        L : orbital angular momentum; J : the channel's total J, required (and only allowed) for a spin-orbit pair.
         radius : evaluation radius in fm; 0 means the pair's channel radius,
             which is where penetrabilities and hard-sphere phases are wanted.
 
@@ -2062,7 +2062,7 @@ class azure2(_HybridPotentials):
         construction), or the hybrid model's Numerov solution: compare them.
         """
         e = np.asarray(energies, float).ravel()
-        req = np.concatenate([[pair, L, radius, e.size], e])
+        req = np.concatenate([[pair, L, -1 if J is None else round(2 * J), radius, e.size], e])
         resp = np.asarray(self.sess.coulomb_functions(req), dtype=float)
         n = int(round(resp[0]))
         block = resp[1:].reshape(n, 7)

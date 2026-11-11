@@ -56,12 +56,6 @@ double FailedSample(const ESegment &segment, EPoint *basePoint, CNuc *cnuc, azur
   return kNaN;
 }
 
-/// The segment of term t: the segment itself (0) or its t-th component segment.
-ESegment *TermSegment(ESegment &segment, int term) {
-  if (term == 0) return &segment;
-  const std::vector<ESegment *> &c = segment.GetComponentSegments();
-  return (term - 1 < static_cast<int>(c.size())) ? c[term - 1] : nullptr;
-}
 
 using azure2::experiment::FactorRef;
 using azure2::experiment::LeafPart;
@@ -85,11 +79,10 @@ class LocalArray {
   std::vector<T> heap_;
 };
 
-/// The point of term t (0: the segment's own, k: its k-th component segment's) at pointIndex; null if it has none.
+/// The point of term t (0: the segment's own, k: its k-th leaf's) at pointIndex; null if it has none.
 EPoint *TermPoint(ESegment &segment, int term, int pointIndex) {
-  if (term == 0) return segment.GetPoint(pointIndex + 1);
-  ESegment *c = TermSegment(segment, term);
-  return (c && pointIndex < c->NumPoints()) ? c->GetPoint(pointIndex + 1) : nullptr;
+  if (term < 0 || term >= segment.NumTerms() || pointIndex >= (int)segment.TermPoints(term).size()) return nullptr;
+  return segment.GetTermPoint(term, pointIndex + 1);
 }
 
 double LeafValue(const EPoint *p, LeafPart part, const azure2::Results &results) {
@@ -105,8 +98,7 @@ double LeafValue(const EPoint *p, LeafPart part, const azure2::Results &results)
 const char *TermRole(const Prediction &p, const ESegment &segment, int term) {
   if (term == 0) return "base term";
   if (p.kind == azure2::experiment::TreeKind::Ratio) return "RATIO denominator";
-  const ESegment *c = segment.GetComponentSegments()[term - 1];
-  return c->IsYieldTotalTerm() ? "yield total" : "SUM component";
+  return segment.IsYieldTotalLeaf(term) ? "yield total" : "SUM component";
 }
 
 /*!
@@ -203,9 +195,13 @@ struct PointInputs {
     for (std::size_t f = 0; f < nf; f++) {
       const FactorRef &r = p.factors[f];
       EPoint *termPoint = TermPoint(segment, r.term, pointIndex);
-      factorValue[f] = (r.kind == FactorRef::Kind::TermFrame)
-                           ? ESegment::TermFrameFactor(basePoint, termPoint)
-                           : ESegment::RatioTermFrameFactor(termPoint, TermSegment(segment, r.term), cnuc);
+      switch (r.kind) {
+        case FactorRef::Kind::TermFrame:
+          factorValue[f] = basePoint && termPoint ? segment.TermFrameFactor(r.term, pointIndex) : 1.0;
+          break;
+        case FactorRef::Kind::RatioFrame: factorValue[f] = segment.RatioTermFrameFactor(r.term, termPoint, cnuc); break;
+        case FactorRef::Kind::SFactor: factorValue[f] = azure2::SFactorConversionValue(termPoint, cnuc); break;
+      }
       factorArray[f] = {&factorValue[f], 1};
     }
     for (std::size_t q = 0; q < np; q++) {
@@ -263,7 +259,7 @@ double ComposeModelValue(ESegment &segment, int pointIndex, CNuc *cnuc, const Co
   // The terms' points, calculated here when the leaves are not in yet (in term order, the base first).
   for (const azure2::experiment::LeafSelector &leaf : p.leaves) {
     EPoint *termPoint = TermPoint(segment, leaf.term, pointIndex);
-    if (!termPoint) return FailedSample(segment, basePoint, cnuc, results);  // component segments copy the base's points
+    if (!termPoint) return FailedSample(segment, basePoint, cnuc, results);  // a leaf has a point at every row
     if (azure2::experiment::IsCoulombReference(leaf.part)) continue;  // analytic: nothing to calculate
     if (CalculatesItself(termPoint, leaves) &&
         !CalculatePoint(termPoint, TermRole(p, segment, leaf.term), cnuc, configure, results))
@@ -359,8 +355,8 @@ bool ModelPointBackward(ESegment &segment, int pointIndex, CNuc *compound, const
   return ok;
 }
 
-Residual PointResidual(const EPoint &point, const Results &results, double norm) {
-  return DataResidual(point.GetModelValue(results), point.GetCMCrossSection(), point.GetCMCrossSectionError(), norm);
+Residual PointResidual(const ESegment &segment, int i, const Results &results, double norm) {
+  return DataResidual(segment.GetPoints()[i].GetModelValue(results), segment.CMValue(i), segment.CMError(i), norm);
 }
 
 }  // namespace azure2

@@ -7,7 +7,10 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include "CNuc.h"
 #include "Config.h"
+#include "PPair.h"
+#include "azure2/experiment/SpinOrbitChecks.h"
 #include "azure2/convert/PotentialRecords.h"
 #include "azure2/experiment/ProjectReader.h"
 #include "azure2/io/RecordReader.h"
@@ -15,8 +18,11 @@
 namespace py = pybind11;
 using azure2::experiment::HybridPotentialSetting;
 
+// spinOrbit: {} (none) or {V_so (MeV), R_so (fm), a_so (fm), on (0 light, 1 heavy)}; refused on the default (pair 0,
+// which would give the term to every pair) and where SpinOrbitPairRefusal refuses it for the pair of `compound`.
 HybridPotentialSetting SessionPotentialSetting(const std::string &type, bool enabled, double V0, double R, double a,
-                                               double r0, double coulombRadius_fm) {
+                                               double r0, double coulombRadius_fm, const std::vector<double> &spinOrbit,
+                                               CNuc *compound, int pair) {
   HybridPotentialSetting s;
   s.enabled = enabled;
   if (type == "WoodsSaxon")
@@ -30,6 +36,19 @@ HybridPotentialSetting SessionPotentialSetting(const std::string &type, bool ena
   s.a = a;
   s.r0 = r0;
   s.coulomb_radius_fm = coulombRadius_fm;
+  if (!spinOrbit.empty()) {
+    if (spinOrbit.size() != 4) throw std::invalid_argument("spin_orbit needs [V_so, R_so, a_so, on]");
+    if (!pair) throw std::invalid_argument("a spin-orbit term belongs to one pair: name the pair (the default would give it to every pair)");
+    const azure2::physics::SpinOrbitParticle on =
+        spinOrbit[3] != 0.0 ? azure2::physics::SpinOrbitParticle::Heavy : azure2::physics::SpinOrbitParticle::Light;
+    s.spin_orbit = azure2::physics::WoodsSaxonSpinOrbit(spinOrbit[0], spinOrbit[1], spinOrbit[2], on);
+    if (compound && compound->IsPairKey(pair)) {
+      const PPair *p = compound->GetPair(compound->GetPairNumFromKey(pair));
+      const azure2::experiment::SpinOrbitRefusal r = azure2::experiment::SpinOrbitPairRefusal(
+          (int)std::lround(2.0 * p->GetJ(1)), (int)std::lround(2.0 * p->GetJ(2)), on, std::to_string(pair));
+      if (r) throw std::invalid_argument("ERROR (" + r.code + "): " + r.message);
+    }
+  }
   s.Potential();  // throws std::invalid_argument when a parameter is not positive
   return s;
 }
@@ -38,7 +57,11 @@ py::tuple SessionPotentialView(const Config &config, int pair) {
   const azure2::experiment::HybridPotentialSettings &p = config.potentials;
   const HybridPotentialSetting &s = pair ? p.For(pair) : p.defaults;
   const bool own = pair ? p.pairs.count(pair) > 0 : true;
-  return py::make_tuple(s.enabled, s.ShapeName(), s.V0, s.R, s.a, s.r0, own, s.coulomb_radius_fm);
+  std::vector<double> spinOrbit;
+  if (s.spin_orbit)
+    spinOrbit = {s.spin_orbit->depth_MeV, s.spin_orbit->form.radius_fm, s.spin_orbit->form.diffuseness_fm,
+                 s.spin_orbit->acts_on == azure2::physics::SpinOrbitParticle::Heavy ? 1.0 : 0.0};
+  return py::make_tuple(s.enabled, s.ShapeName(), s.V0, s.R, s.a, s.r0, own, s.coulomb_radius_fm, spinOrbit);
 }
 
 py::tuple SessionPotentialRecords(const Config &config) {

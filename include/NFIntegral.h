@@ -29,10 +29,10 @@ class NFIntegral {
   ~NFIntegral() = default;
   /*!
    * The parenthesis operator is defined so the instance can be callable as
-   * a function.  The final channel orbital angular momentum and final state
+   * a function.  The final channel orbital angular momentum, its 2J key (PPair::SpinOrbitTwoJ) and final state
    * energy in the compound system are passed as dependent variables.
    */
-  double operator()(int lFinal, double levelEnergy);
+  double operator()(int lFinal, int twoJFinal, double levelEnergy);
   /*!
    * Returns the channel radius of the particle pair.
    */
@@ -47,6 +47,7 @@ class NFIntegral {
   typedef struct Params {
     std::unique_ptr<WhitFunc> whitFunc;
     int lfValue;
+    int twoJf;  ///< the final channel's 2J key (PPair::SpinOrbitTwoJ)
     double bindingEnergy;
     double whitChRadSquaredValue;
   } Params;
