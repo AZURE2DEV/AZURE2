@@ -20,9 +20,9 @@ namespace azure2 {
  * energies, target effect and sub-point grid, and for the components of a SUM, RATIO or total-capture segment the
  * base point's level matrix) are the host's to calculate, with their sub-points, in the order listed -- the
  * component points grouped by exit, so each exit's T-matrix is built once (EPoint::Calculate).  A point holds the
- * index of the task that calculates it (EPoint::PlanTask), never a pointer to another point; the plan holds points by
- * position (PointRef) and is resolved in the data set that owns it, so a copy of the data set copies its plan as it
- * is.
+ * index of the task that calculates it (EPoint::PlanTask), never a pointer to another point; the plan names points
+ * by their index in the data set's units (PointRef, EData::Unit; the points keep their indices after the set-up), so
+ * a copy of the data set copies its plan as it is.
  *
  * What a task writes: the fixed quantities and the angular-distribution coefficients of the record (Results.h) of
  * every point it calculates and of every sub-point of those points; nothing else.  The natural-term slots of a
@@ -34,12 +34,7 @@ namespace azure2 {
  * pass also checks at run time that each task writes only its own slots and no slot is written twice
  * (EData::CalculatePointsInParallel).
  */
-struct PointRef {
-  enum List : int { kSegments = 0, kLeaves = 1 };
-  int list = kSegments;  ///< which list of the data set: the points of its segments, or of its leaves (EData::LeafRef)
-  int segment = 0;       ///< 0-based position of the segment, or of the leaf, in that list
-  int point = 0;         ///< 0-based position of the point in its segment
-};
+using PointRef = int;  ///< a point by its index in the data set's units (EData::Unit)
 
 struct CalculationTask {
   PointRef host;                ///< the point that calculates itself and the points below
@@ -49,7 +44,7 @@ struct CalculationTask {
 class CalculationPlan {
  public:
   /// The plan of `data` from its mapping (EData::MapData): one task per point that is not mapped, in data order (the
-  /// segments' own points, then the leaves' (EData::LeafRefs)), and each (host, mapped) pair of `mapping` appended to its host's task in
+  /// segments' own points, then the leaves' (EData::PlanUnits)), and each (host, mapped) pair of `mapping` appended to its host's task in
   /// the order given; every point's task index set (EPoint::SetPlanTask).  Then Check: a plan that breaks it throws
   /// std::logic_error.
   void Build(EData &data, const std::vector<std::pair<PointRef, PointRef>> &mapping);

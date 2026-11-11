@@ -150,7 +150,7 @@ std::vector<double> CaptureAyValues(Loaded &l) {
     ESegment &s = *l.data->GetSegment(i);
     if (!s.IsAnalyzingPower() || !c.IsPairKey(s.GetExitKey())) continue;
     if (c.GetPair(c.GetPairNumFromKey(s.GetExitKey()))->GetPType() != 10) continue;
-    for (int k = 1; k <= s.NumPoints(); k++) values.push_back(s.GetPoint(k)->GetFitCrossSection(results));
+    for (int k = 1; k <= s.NumPoints(); k++) values.push_back(s.GetPoint(*l.data, k)->GetFitCrossSection(results));
   }
   return values;
 }

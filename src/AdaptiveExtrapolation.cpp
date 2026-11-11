@@ -109,7 +109,7 @@ class SweepModel {
     std::vector<std::vector<double>> values(nE, std::vector<double>(nA));
     for (std::size_t a = 0; a < nA; a++)
       for (std::size_t e = 0; e < nE; e++)
-        values[e][a] = segment->GetPoint((int)(a * nE + e) + 1)->GetModelValue(results);
+        values[e][a] = segment->GetPoint(data, (int)(a * nE + e) + 1)->GetModelValue(results);
     return values;
   }
 

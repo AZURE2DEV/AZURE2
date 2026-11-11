@@ -117,8 +117,18 @@ Milestone 1 (what was measured exists once; done, commits 0439701a and 9db6b59a)
    points are term 0, a leaf term k, and the shift step, the frame, the grids and the target set-up take
    (segment, term) (`TermRef`); `EData::LeafRefs` lists the leaves in creation order (plan, layout, intEC file).
 5. `--describe` shows rows read, kept and the kept range.
-Milestone 2 (the working copy is flat): the unit vector with sub-points as ranges; settings out of the units; plan
-by index; `Clone` becomes a copy. Milestone 3 (the old names are gone): `DataSet` and `WorkingCopy` apart, callers
+Milestone 2 (the working copy is flat), done: the settings of a term are one shared immutable record
+(`TermSettings`), which a unit names by a plain `const` pointer (the term owns the shared pointer); a point has no
+rows pointer (its row index, Legendre order, nominal energy and angle only) and no pointer to its data set (the
+folds, `Calculate`, the plan lookup, the model pass and the gradient take the data set as an argument); every point
+of every term and every sub-point is a unit of one vector of the working copy (`EData::Units`,
+`src/WorkingCopyUnits.cpp`), a term's points and a point's sub-points are ranges of it, and the accessors
+(`GetPoints`, `GetPoint`, `TermPoints`, `GetSubPoint`, `GetSubPoints`) are views that take the data set; sub-points
+given at set-up and re-placed grids are placed single-threaded as new ranges and the vector is compacted (points
+first, in data order; they keep their indices after the set-up); the plan names units by index (`PointRef` is an
+int); `EData::Clone` is the copy constructor, after which the copy's points drop the set-up's external-capture
+amplitudes (as before; they recompute them at their energies); the S factor has one formula.
+Milestone 3 (the old names are gone): `DataSet` and `WorkingCopy` apart, callers
 moved, the three classes and their files deleted, docs.
 
 ## 5. Bits

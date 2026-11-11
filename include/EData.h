@@ -8,6 +8,8 @@
 #include "EDataIterator.h"
 #include "NodeTableCache.h"
 #include "ThmExperiment.h"
+#include "ThmGroup.h"
+#include "EvaluationCount.h"
 #include "Results.h"
 #include "ParameterKind.h"
 #include <memory>
@@ -241,19 +243,37 @@ class EData {
   void MapLeaves(CNuc *theCNuc, std::vector<std::pair<azure2::PointRef, azure2::PointRef>> &mapping);
   /// The calculation plan: which task calculates which point (CalculationPlan.h).
   const azure2::CalculationPlan &Plan() const { return plan_; }
-  /// A point of the plan, by position (list 0: the segments' own points, 1: the leaves', LeafRef).
-  EPoint *PlanPoint(const azure2::PointRef &r) {
-    if (r.list == azure2::PointRef::kSegments) return &segments_[r.segment].GetPoints()[r.point];
-    const LeafRef &leaf = leafRefs_[r.segment];
-    return &segments_[leaf.first].TermPoints(leaf.second)[r.point];
+  /// A point of the plan, by its unit.
+  EPoint *PlanPoint(azure2::PointRef r) { return &Unit(r); }
+  /// The units of every point of every term in data order: the segments' own points, then the leaves' (LeafRefs).
+  std::vector<azure2::PointRef> PlanUnits() const;
+
+  /// The calculation units of the working copy (data_structure.md section 1.4), src/WorkingCopyUnits.cpp: every point
+  /// of every term and every sub-point in one vector; a term's points and a point's sub-points are ranges of it.
+  EPoint &Unit(int i) { return units_[i]; }
+  const EPoint &Unit(int i) const { return units_[i]; }
+  int NumUnits() const { return (int)units_.size(); }
+  UnitRange<EPoint> Units(int first, int count) { return UnitRange<EPoint>(units_.data() + first, count); }
+  UnitRange<const EPoint> Units(int first, int count) const {
+    return UnitRange<const EPoint>(units_.data() + first, count);
   }
-  int NumPlanSegments(int list) const {
-    return list == azure2::PointRef::kSegments ? (int)segments_.size() : (int)leafRefs_.size();
+  /// Append a unit (a point of a term, at set-up); returns its index.
+  int AppendUnit(EPoint unit) {
+    units_.push_back(std::move(unit));
+    return (int)units_.size() - 1;
   }
-  int NumPlanPoints(int list, int s) const {
-    if (list == azure2::PointRef::kSegments) return segments_[s].NumPoints();
-    return (int)segments_[leafRefs_[s].first].TermPoints(leafRefs_[s].second).size();
-  }
+  /// Give `point` (a unit of this data set) the sub-point `sub` after those already given; held until
+  /// CommitSubPoints, so that no unit moves while the set-up holds pointers to points.
+  void AddSubPoint(EPoint &point, EPoint sub);
+  /// Place the sub-points given since the last commit (each point's replace any it had) and lay the units out again
+  /// (CompactUnits).  Single-threaded.
+  void CommitSubPoints();
+  /// Per work item of a grid re-placement: (a point's unit, its new sub-points).  PlaceSubPointGrids puts a grid with
+  /// as many nodes as the old one in its place, any other in a new layout of the units.  Single-threaded.
+  using SubPointGrids = std::vector<std::vector<std::pair<int, std::vector<EPoint>>>>;
+  void PlaceSubPointGrids(SubPointGrids &grids);
+  /// Lay the units out again (see Units), dropping every unit no term and no point refers to.
+  void CompactUnits();
   /// Every leaf of the data set as (0-based position of its segment, its term), in segment order and term order: the
   /// order the leaves are set up, laid out and written to the intEC file in.
   using LeafRef = std::pair<int, int>;
@@ -351,49 +371,8 @@ class EData {
   ESegment *GetSegmentFromKey(int);
   EData *Clone() const;
 
-  /*!
-   * A THM experiment (<thm> experiment[<name>] ..., ThmExperiment.h) as the
-   * data see it: the segments that share one profiled norm and background.
-   */
-  struct ThmGroup {
-    std::string name;
-    int terms = 0;              ///< background terms, 0..3
-    std::vector<int> segments;  ///< 1-based indices into the segments, ascending
-    /// One segment and no background: exactly the per-segment profile of
-    /// ESegment::ProfileNormChiSquared, which then handles it.
-    bool trivial = false;
-    /// Coulomb line shape (lineshape=on), or null; shared with its segments.
-    std::shared_ptr<const ThmLineshape> lineshape;
-    /// Spectator-momentum window (ps=hulthen|gauss|table), or null; shared
-    /// with its segments.
-    std::shared_ptr<const ThmSpectatorWindow> window;
-    /// Distortion factor R(E) (distortion=...), or null; shared with its segments.
-    std::shared_ptr<const ThmDistortion> distortion;
-    /// Distorted-wave entrance vertex (vertexModel=dw), or null; shared with
-    /// its segments.  It replaces R(E): distortion is then null.
-    std::shared_ptr<const ThmDwVertex> dwVertex;
-    /// Angular window of the exit pair (theta=thmin-thmax), or null; shared
-    /// with its segments.
-    std::shared_ptr<const ThmAngleWindow> angle;
-    /// Entrance pair key of its segments (0 if they differ).
-    int pairKey = 0;
-    /// Coherent background (cbackground=), or null; shared with its segments.
-    std::shared_ptr<const ThmCoherentBackground> coherent;
-  };
-  /*!
-   * The fit parameters of the THM coherent backgrounds (cbackground=), the
-   * last block of the parameter vector after the energy shifts (none without
-   * the key): Re c0, Im c0 [, Re c1, Im c1] of each combination, in the order
-   * of the experiments and their terms.  `value` is the current value.
-   */
-  struct ThmCoherentParam {
-    std::string name;
-    std::string experiment;
-    double value = 0.0;
-    bool fixed = false;
-    int jGroup = -1, entrance = -1, exit = -1;  ///< the combination's J group and channels in it (1-based)
-    int term = -1;                              ///< 0 Re c0, 1 Im c0, 2 Re c1, 3 Im c1
-  };
+  using ThmGroup = ::ThmGroup;                  // ThmGroup.h
+  using ThmCoherentParam = ::ThmCoherentParam;  // ThmGroup.h
   int NumThmCoherentParams() const { return (int)thmCoherentParams_.size(); }
   const ThmCoherentParam &GetThmCoherentParam(int k) const { return thmCoherentParams_[k]; }
   /// Reads the coherent-background block of a full parameter vector (if it
@@ -457,11 +436,12 @@ class EData {
   bool ThmDistortionTable(const std::string &name, const std::vector<double> &energies, ThmDistortionReport &out,
                           std::string &why);
   TargetEffect *GetTargetEffect(int);
+  const TargetEffect *GetTargetEffect(int n) const { return const_cast<EData *>(this)->GetTargetEffect(n); }
   EDataIterator begin();
   EDataIterator end();
   std::vector<ESegment> &GetSegments();
   /*!
-   * Calculates every point of \p segments and of their leaves in
+   * Calculates every point of \p segments (segments of this data set) and of their leaves in
    * one OpenMP pass, largest items first.  A host point also fills the points
    * mapped onto it, so mapped points are not items of their own.  A point whose
    * calculation throws gets a fit cross section of 0.  Returns the number of
@@ -470,12 +450,15 @@ class EData {
    * AZURE_SERIAL_CHI2 set.  The caller then reads the points with
    * azure2::EvaluateModelPoint(..., LeafValues::Ready).
    */
-  static int CalculatePointsInParallel(const std::vector<ESegment *> &segments, CNuc *theCNuc,
-                                       const Config &configure, azure2::Results &results);
+  int CalculatePointsInParallel(const std::vector<ESegment *> &segments, CNuc *theCNuc, const Config &configure,
+                                azure2::Results &results);
 
  private:
+  void LayOutUnits(std::vector<std::vector<EPoint> *> *fresh);  // CompactUnits, PlaceSubPointGrids
   std::vector<TargetEffect> targetEffects_;
   std::vector<ESegment> segments_;
+  std::vector<EPoint> units_;  // Unit
+  std::vector<std::vector<EPoint>> pendingSubPoints_;  // AddSubPoint: per point's unit, until the commit
   std::vector<LeafRef> leafRefs_;  // LeafRefs
   azure2::CalculationPlan plan_;  // built by MapData; positions only, so a copy of the data set copies it as it is
   /// The key of the next leaf (AddLeaf): -1000, -1001, ... in creation order, one counter per data set, so a leaf's key
@@ -486,7 +469,7 @@ class EData {
   std::vector<std::shared_ptr<DataCovariance::Group>> covGroups_;         // shared by every copy
   bool covarianceError_ = false;              // a covariance file could not be read (CovarianceFileFor)
   bool kinematicsError_ = false;              // a lab angle beyond the kinematic maximum (audit 2026-10-25, item 31)
-  std::atomic<int> iterations_{0};  // objective evaluations; incremented from every thread of a parallel gradient
+  EvaluationCount iterations_;  // objective evaluations (EvaluationCount.h)
   int normParamOffset_;
   int energyShiftParamOffset_;
   int energyShiftSqrtParamOffset_;
@@ -569,5 +552,7 @@ class EData {
   std::shared_ptr<const ChannelTable> channelTable_;
   std::shared_ptr<const ChannelTable> BuildChannelTable(CNuc *, const Config &, const std::vector<EPoint *> &points);
 };
+
+#include "SubPointAccess.h"
 
 #endif

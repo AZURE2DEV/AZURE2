@@ -91,7 +91,7 @@ narrow s_dense sfactor 'keV*b' "range 0.05 0.25 MeV cm step 0.0001"
 narrow x_dense sigma b "range 0.05 0.25 MeV cm step 0.0001"
 for n in s_adapt x_adapt s_dense x_dense; do run "$n" 3 "$OMP_NUM_THREADS"; done
 if [ -s "$WORK/s_adapt/$OUT" ] && [ -s "$WORK/x_adapt/$OUT" ] && [ -s "$WORK/s_dense/$OUT" ] && [ -s "$WORK/x_dense/$OUT" ]; then
-  # E_cm (column 1) and S: column 4 of an sfactor grid (keV b), column 5 of a sigma grid (MeV b) x 1000
+  # E_cm (column 1), sigma (column 4, b) and S (column 5, MeV b) of every grid, sigma or sfactor alike; S x 1000 in keV b
   res="$(python3 - "$WORK" "$OUT" <<'PY'
 import sys
 import numpy as np
@@ -99,12 +99,14 @@ work, out = sys.argv[1:3]
 def load(name, col, scale):
     a = np.loadtxt(f"{work}/{name}/{out}", comments="#")
     return a[:, 0], a[:, col] * scale
-es, ss = load("s_adapt", 3, 1.0)
+es, ss = load("s_adapt", 4, 1000.0)
 ex, sx = load("x_adapt", 4, 1000.0)
-ed, sd = load("s_dense", 3, 1.0)
+ed, sd = load("s_dense", 4, 1000.0)
 _, s_from_sigma = load("x_dense", 4, 1000.0)
-# 4: the S extrapolation (keV b) = the sigma extrapolation's S column (MeV b, the engine's EPoint conversion) x 1000
-agree = np.max(np.abs(sd / s_from_sigma - 1))
+_, sigma_s = load("s_dense", 3, 1.0)
+_, sigma_x = load("x_dense", 3, 1.0)
+# 4: the S extrapolation = the sigma extrapolation, in its S column and in its sigma column
+agree = max(np.max(np.abs(sd / s_from_sigma - 1)), np.max(np.abs(sigma_s / sigma_x - 1)))
 worst = lambda e, s: np.max(np.abs(np.interp(ed, e, s) / sd - 1))
 print(f"{len(es)} {len(ex)} {worst(es, ss):.2e} {worst(ex, sx):.2e} {agree:.2e}")
 PY
@@ -116,7 +118,7 @@ PY
     bad "adaptive S against sigma below the level: S grid $ns points $errs, sigma grid $nx points $errx"
   fi
   if awk -v a="$agree" 'BEGIN { exit !(a <= 1e-9) }'; then
-    ok "sfactor extrapolation in keV*b = the sigma extrapolation's S column x 1000 to $agree"
+    ok "sfactor extrapolation (keV*b) = the sigma extrapolation, sigma and S columns, to $agree"
   else
     bad "sfactor extrapolation against the S column of the sigma extrapolation: $agree"
   fi

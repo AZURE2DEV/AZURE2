@@ -72,7 +72,7 @@ int EData::ResolveCovarianceGroups(const Config &configure) {
     covGroups_[g]->numSegments++;
     const std::string canonicalData = DataCovariance::CanonicalPath(seg->GetDataFile());
     for (int pid = 0; pid < seg->NumPoints(); pid++) {
-      const int row = fit->second->RowOf(canonicalData, seg->GetPoint(pid + 1)->GetFileRecord());
+      const int row = fit->second->RowOf(canonicalData, seg->FileRecord(pid));
       if (row < 0) return -1;  // cannot happen: Fill checked the file and the record count
       items[g].push_back({row, s, pid});
     }
@@ -108,9 +108,9 @@ int EData::ResolveCovarianceGroups(const Config &configure) {
       grp.members[a] = {it[a].seg, it[a].pid};
       grp.rows[a] = it[a].row;
       ESegment *seg = this->GetSegment(it[a].seg);
-      EPoint *pt = seg->GetPoint(it[a].pid + 1);
-      grp.sigma[a] = pt->GetLabCrossSectionError();
-      grp.data[a] = pt->GetLabCrossSection();
+      EPoint *pt = seg->GetPoint(*this, it[a].pid + 1);
+      grp.sigma[a] = seg->LabError(it[a].pid);
+      grp.data[a] = seg->LabValue(it[a].pid);
       std::ostringstream lab;
       lab << seg->GetSegmentKey() << " " << pt->GetLabEnergy() << " " << pt->GetLabAngle();
       grp.label[a] = lab.str();
@@ -158,8 +158,8 @@ double EData::CovarianceChi2Correction(azure2::Results &results, std::vector<dou
     double diag = 0.0;
     for (int a = 0; a < g.n; a++) {
       ESegment *seg = this->GetSegment(g.members[a].first);
-      EPoint *pt = seg->GetPoint(g.members[a].second + 1);
-      r[a] = azure2::PointResidual(*seg, g.members[a].second, results, seg->GetNorm()).Pull();
+      EPoint *pt = seg->GetPoint(*this, g.members[a].second + 1);
+      r[a] = azure2::PointResidual(*this, *seg, g.members[a].second, results, seg->GetNorm()).Pull();
       diag += r[a] * r[a];
     }
     g.EnsureFactored(r);
@@ -170,7 +170,7 @@ double EData::CovarianceChi2Correction(azure2::Results &results, std::vector<dou
     g.WhitenTranspose(z.data());
     correction += q - diag;
     for (int a = 0; a < g.n; a++)
-      this->GetSegment(g.members[a].first)->GetPoint(g.members[a].second + 1)->SetCovarianceSeed(results, z[a]);
+      this->GetSegment(g.members[a].first)->GetPoint(*this, g.members[a].second + 1)->SetCovarianceSeed(results, z[a]);
     // Per-segment chi2: the exact partition sum_i r_i (M^-1 r)_i of the group's chi2.
     std::map<int, double> part;
     for (int a = 0; a < g.n; a++) part[g.members[a].first] += r[a] * z[a];
@@ -233,8 +233,8 @@ void EData::WriteCovarianceSummary(const Config &configure, const azure2::Result
     double diag = 0.0;
     for (int a = 0; a < g.n; a++) {
       ESegment *seg = this->GetSegment(g.members[a].first);
-      EPoint *pt = seg->GetPoint(g.members[a].second + 1);
-      r[a] = azure2::PointResidual(*seg, g.members[a].second, results, seg->GetNorm()).Pull();
+      EPoint *pt = seg->GetPoint(*this, g.members[a].second + 1);
+      r[a] = azure2::PointResidual(*this, *seg, g.members[a].second, results, seg->GetNorm()).Pull();
       diag += r[a] * r[a];
     }
     g.EnsureFactored(r);
@@ -269,7 +269,7 @@ void EData::PrepareCovarianceSeeds(CNuc *theCNuc, const Config &configure, azure
 #pragma omp parallel for schedule(dynamic) if (!omp_in_parallel())
   for (int k = 0; k < (int)work.size(); k++) {
     ScopedPointMappingOff noPointMapping;
-    azure2::EvaluateModelPoint(*work[k].first, work[k].second, theCNuc, configure, results, azure2::LeafValues::Calculate);
+    azure2::EvaluateModelPoint(*this, *work[k].first, work[k].second, theCNuc, configure, results, azure2::LeafValues::Calculate);
   }
   this->CovarianceChi2Correction(results);
 }

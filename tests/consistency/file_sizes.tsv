@@ -14,7 +14,7 @@ src/AMatrixFunc.cpp	2806
 src/AZURE2.cpp	1659
 src/AZURECalc.cpp	2075
 src/AZURECalcMCMC.cpp	1434
-src/AZUREGrad.cpp	1850
+src/AZUREGrad.cpp	1847
 src/CNuc.cpp	1777
-src/EData.cpp	1860
+src/EData.cpp	1826
 src/ThmExperiment.cpp	1026

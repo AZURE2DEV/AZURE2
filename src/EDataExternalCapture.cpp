@@ -71,7 +71,7 @@ struct LeafView {
   int GetEntranceKey() const { return segment->TermEntranceKey(term); }
   int GetExitKey() const { return segment->TermExitKey(term); }
   int GetSegmentKey() const { return segment->TermKey(term); }
-  std::vector<EPoint> &GetPoints() const { return segment->TermPoints(term); }
+  UnitRange<EPoint> GetPoints(EData &data) const { return segment->TermPoints(data, term); }
 };
 
 /// The leaves of `data` in the order InitializeLeaves writes their amplitudes.
@@ -82,7 +82,7 @@ std::vector<LeafView> LeafViews(EData &data) {
 }
 
 template <class Segments>
-long long WalkECAmplitudes(Segments &segments, CNuc *theCNuc, ECSignatureHash *hash,
+long long WalkECAmplitudes(EData &data, Segments &segments, CNuc *theCNuc, ECSignatureHash *hash,
                            std::set<int> *pairs) {
   long long count = 0;
   for (auto segment = segments.begin(); segment != segments.end(); segment++) {
@@ -135,7 +135,7 @@ long long WalkECAmplitudes(Segments &segments, CNuc *theCNuc, ECSignatureHash *h
         }
         // Every point carries its own amplitudes, mapped or not (see
         // CalculateECAmplitudes), so the intEC file does not depend on mapping.
-        for (auto point = segment->GetPoints().begin(); point != segment->GetPoints().end(); point++) {
+        for (auto point = segment->GetPoints(data).begin(); point != segment->GetPoints(data).end(); point++) {
           for (int k = 1; k <= decay->NumKGroups(); k++)
             for (int ecm = 1; ecm <= decay->GetKGroup(k)->NumECMGroups(); ecm++)
               count += 1 + (long long)point->NumSubPoints();
@@ -149,7 +149,7 @@ long long WalkECAmplitudes(Segments &segments, CNuc *theCNuc, ECSignatureHash *h
             hash->Add(point->GetLabEnergy());
             hash->Add(point->GetCMEnergy());
             hash->Add(point->NumSubPoints());
-            for (auto subPoint = point->GetSubPoints().begin(); subPoint != point->GetSubPoints().end(); subPoint++)
+            for (auto subPoint = point->GetSubPoints(data).begin(); subPoint != point->GetSubPoints(data).end(); subPoint++)
               hash->Add(subPoint->GetCMEnergy());
           }
         }
@@ -175,7 +175,7 @@ long long WalkECAmplitudes(Segments &segments, CNuc *theCNuc, ECSignatureHash *h
 
 long long EData::CountECAmplitudes(CNuc *theCNuc, const Config &configure) {
   std::vector<LeafView> leaves = LeafViews(*this);
-  return WalkECAmplitudes(GetSegments(), theCNuc, nullptr, nullptr) + WalkECAmplitudes(leaves, theCNuc, nullptr, nullptr);
+  return WalkECAmplitudes(*this, GetSegments(), theCNuc, nullptr, nullptr) + WalkECAmplitudes(*this, leaves, theCNuc, nullptr, nullptr);
 }
 
 /*!
@@ -231,10 +231,10 @@ std::string EData::ECSignature(CNuc *theCNuc, const Config &configure) {
 
   std::set<int> pairs;
   hash.Add("data segments");
-  WalkECAmplitudes(GetSegments(), theCNuc, &hash, &pairs);
+  WalkECAmplitudes(*this, GetSegments(), theCNuc, &hash, &pairs);
   hash.Add("component segments");
   std::vector<LeafView> leaves = LeafViews(*this);
-  WalkECAmplitudes(leaves, theCNuc, &hash, &pairs);
+  WalkECAmplitudes(*this, leaves, theCNuc, &hash, &pairs);
 
   for (std::set<int>::const_iterator it = pairs.begin(); it != pairs.end(); ++it) {
     PPair *pair = theCNuc->GetPair(*it);
@@ -450,13 +450,13 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
 #pragma omp parallel for shared(configure, localStop, pointIndex, startTime)
                 for (int i = 1; i <= numPoints; i++) {
                   if (configure.stopFlag || localStop) continue;
-                  EPoint *point = segment->GetPoint(i);
+                  EPoint *point = segment->GetPoint(*this, i);
                   // Mapped points compute their own amplitudes too: the
                   // amplitudes are a one-off setup cost, and the intEC file
                   // then has the same layout with and without point mapping.
                   {
                     try {
-                      point->CalculateECAmplitudes(theCNuc, configure, channelTable_.get());
+                      point->CalculateECAmplitudes(this, theCNuc, configure, channelTable_.get());
                     } catch (GSLException e) {
 #pragma omp critical(ec_progress)
                       {
@@ -477,22 +477,22 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
                   configure.outStream << "\r\tSegment #" << std::setw(12) << segmentKeyOut
                                       << std::setw(0) << " [*************************] 100%" << std::endl;
               }
-              for (EPointIterator point = segment->GetPoints().begin();
-                   point < segment->GetPoints().end(); point++) {
+              for (EPointIterator point = segment->GetPoints(*this).begin();
+                   point < segment->GetPoints(*this).end(); point++) {
                 {
                   for (int k = 1; k <= entrancePair->GetDecay(ir)->NumKGroups(); k++) {
                     for (int ecm = 1; ecm <= entrancePair->GetDecay(ir)->GetKGroup(k)->NumECMGroups(); ecm++) {
                       if (!usePrevious) {
                         if (out.is_open()) out << point->GetECAmplitude(k, ecm) << std::endl;
-                        for (EPointIterator subPoint = point->GetSubPoints().begin();
-                             subPoint < point->GetSubPoints().end(); subPoint++)
+                        for (EPointIterator subPoint = point->GetSubPoints(*this).begin();
+                             subPoint < point->GetSubPoints(*this).end(); subPoint++)
                           if (out.is_open()) out << subPoint->GetECAmplitude(k, ecm) << std::endl;
                       } else {
                         complex ecAmplitude(0.0, 0.0);
                         in >> ecAmplitude;
                         point->AddECAmplitude(k, ecm, ecAmplitude);
-                        for (EPointIterator subPoint = point->GetSubPoints().begin();
-                             subPoint < point->GetSubPoints().end(); subPoint++) {
+                        for (EPointIterator subPoint = point->GetSubPoints(*this).begin();
+                             subPoint < point->GetSubPoints(*this).end(); subPoint++) {
                           ecAmplitude = complex(0.0, 0.0);
                           in >> ecAmplitude;
                           subPoint->AddECAmplitude(k, ecm, ecAmplitude);

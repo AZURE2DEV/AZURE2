@@ -854,14 +854,14 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
             // Calculate cross sections for all data points
             for (EDataIterator data = localData->begin(); data != localData->end(); data++) {
               if (!data.point()->IsMapped()) {
-                data.point()->Calculate(localCompound, g_mcmc_for_callbacks->configure(), localResults);
+                data.point()->Calculate(localData, localCompound, g_mcmc_for_callbacks->configure(), localResults);
               }
             }
             // The model values (ModelPass.h): the points above are calculated; the iterator skips the component
             // segments, so those of a segment that assembles its value are calculated by the model pass.
             for (int s = 1; s <= localData->NumSegments(); s++) {
               ESegment *seg = localData->GetSegment(s);
-              azure2::EvaluateModelSegment(*seg, localCompound, g_mcmc_for_callbacks->configure(), localResults,
+              azure2::EvaluateModelSegment(*localData, *seg, localCompound, g_mcmc_for_callbacks->configure(), localResults,
                                            seg->NeedsAssembly() ? azure2::LeafValues::Calculate : azure2::LeafValues::Ready);
             }
 
