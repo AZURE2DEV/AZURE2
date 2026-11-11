@@ -41,18 +41,18 @@ data thm_lc2007_tab3_sigma: sigma(1->2)
 data redder82: sigma(1->2)
 data schardt52: sigma(1->2)
 == examples/natural_neon/natural_neon.azr
-data 1: sum(abundance(1, 1)*sigma(2->2), abundance(1, 1)*J0/J1*sigma(2->1), abundance(1, 1)*J0/J2*sigma(2->3), abundance(1, 2)*J0/J3*sigma(4->4), abundance(1, 2)*J0/J4*sigma(4->5), abundance(1, 3)*J0/J5*sigma(6->6), abundance(1, 3)*J0/J6*sigma(6->7))
-data 2: sum(abundance(1, 1)*sigma(2->2), abundance(1, 1)*J0/J1*sigma(2->1), abundance(1, 1)*J0/J2*sigma(2->3), abundance(1, 2)*J0/J3*sigma(4->4), abundance(1, 2)*J0/J4*sigma(4->5), abundance(1, 3)*J0/J5*sigma(6->6), abundance(1, 3)*J0/J6*sigma(6->7))
-data 3: sum(sigma(2->2), J0/J1*sigma(2->1), J0/J2*sigma(2->3))
-data 4: sum(abundance(1, 1)*sigma(2->2), abundance(1, 1)*J0/J1*sigma(2->1), abundance(1, 1)*J0/J2*sigma(2->3), abundance(1, 2)*J0/J3*sigma(4->4), abundance(1, 2)*J0/J4*sigma(4->5), abundance(1, 3)*J0/J5*sigma(6->6), abundance(1, 3)*J0/J6*sigma(6->7))
-data 5: sum(abundance(1, 1)*sigma(2->2), abundance(1, 1)*J0/J1*sigma(2->1), abundance(1, 1)*J0/J2*sigma(2->3), abundance(1, 2)*J0/J3*sigma(4->4), abundance(1, 2)*J0/J4*sigma(4->5), abundance(1, 3)*J0/J5*sigma(6->6), abundance(1, 3)*J0/J6*sigma(6->7))
-data 6: sum(sigma(6->6), J0/J1*sigma(6->7))
-data 7: sum(sigma(6->6), J0/J1*sigma(6->7))
-data 8: sum(sigma(4->4), J0/J1*sigma(4->5))
-data 9: sum(sigma(4->4), J0/J1*sigma(4->5))
-data 10: sum(sigma(4->4), J0/J1*sigma(4->5))
-data 11: sum(sigma(2->2), J0/J1*sigma(2->1), J0/J2*sigma(2->3))
-extrapolation 1: sum(abundance(1, 1)*sigma(2->2), abundance(1, 1)*J0/J1*sigma(2->1), abundance(1, 1)*J0/J2*sigma(2->3), abundance(1, 2)*J0/J3*sigma(4->4), abundance(1, 2)*J0/J4*sigma(4->5), abundance(1, 3)*J0/J5*sigma(6->6), abundance(1, 3)*J0/J6*sigma(6->7))
+data Junghans2020_natNe_ntot: sum(abundance(natural, 1)*sigma(2->2), abundance(natural, 1)*J0/J1*sigma(2->1), abundance(natural, 1)*J0/J2*sigma(2->3), abundance(natural, 2)*J0/J3*sigma(4->4), abundance(natural, 2)*J0/J4*sigma(4->5), abundance(natural, 3)*J0/J5*sigma(6->6), abundance(natural, 3)*J0/J6*sigma(6->7))
+data Vaughn1960_natNe_ntot: sum(abundance(natural, 1)*sigma(2->2), abundance(natural, 1)*J0/J1*sigma(2->1), abundance(natural, 1)*J0/J2*sigma(2->3), abundance(natural, 2)*J0/J3*sigma(4->4), abundance(natural, 2)*J0/J4*sigma(4->5), abundance(natural, 3)*J0/J5*sigma(6->6), abundance(natural, 3)*J0/J6*sigma(6->7))
+data Hinterberger_20Ne_ntot: sum(sigma(2->2), J0/J1*sigma(2->1), J0/J2*sigma(2->3))
+data Almeida1983_natNe_ntot_lo: sum(abundance(natural, 1)*sigma(2->2), abundance(natural, 1)*J0/J1*sigma(2->1), abundance(natural, 1)*J0/J2*sigma(2->3), abundance(natural, 2)*J0/J3*sigma(4->4), abundance(natural, 2)*J0/J4*sigma(4->5), abundance(natural, 3)*J0/J5*sigma(6->6), abundance(natural, 3)*J0/J6*sigma(6->7))
+data Almeida1983_natNe_ntot_hi: sum(abundance(natural, 1)*sigma(2->2), abundance(natural, 1)*J0/J1*sigma(2->1), abundance(natural, 1)*J0/J2*sigma(2->3), abundance(natural, 2)*J0/J3*sigma(4->4), abundance(natural, 2)*J0/J4*sigma(4->5), abundance(natural, 3)*J0/J5*sigma(6->6), abundance(natural, 3)*J0/J6*sigma(6->7))
+data Almeida1983_21Ne_ntot_lo: sum(sigma(6->6), J0/J1*sigma(6->7))
+data Almeida1983_21Ne_ntot_hi: sum(sigma(6->6), J0/J1*sigma(6->7))
+data Almeida1983_22Ne_ntot_lo: sum(sigma(4->4), J0/J1*sigma(4->5))
+data Almeida1983_22Ne_ntot_hi: sum(sigma(4->4), J0/J1*sigma(4->5))
+data Sikkema1958_22Ne_ntot: sum(sigma(4->4), J0/J1*sigma(4->5))
+data Sikkema1958_20Ne_ntot: sum(sigma(2->2), J0/J1*sigma(2->1), J0/J2*sigma(2->3))
+extrapolation x1: sum(abundance(natural, 1)*sigma(2->2), abundance(natural, 1)*J0/J1*sigma(2->1), abundance(natural, 1)*J0/J2*sigma(2->3), abundance(natural, 2)*J0/J3*sigma(4->4), abundance(natural, 2)*J0/J4*sigma(4->5), abundance(natural, 3)*J0/J5*sigma(6->6), abundance(natural, 3)*J0/J6*sigma(6->7))
 == examples/o17_guardo/o17_guardo.azr
 data o17_guardo: thm_sigma(1->2)
 extrapolation x1: thm_sigma(1->2)
@@ -329,54 +329,52 @@ data 5: ay(1->1)
 data: set-up failed
 exit 1
 == tests/natural_neon/natural_neon.azr
-data 1: sum(abundance(1, 1)*sigma(2->2), abundance(1, 1)*J0/J1*sigma(2->1), abundance(1, 1)*J0/J2*sigma(2->3), abundance(1, 2)*J0/J3*sigma(4->4), abundance(1, 2)*J0/J4*sigma(4->5), abundance(1, 3)*J0/J5*sigma(6->6), abundance(1, 3)*J0/J6*sigma(6->7))
-data 2: sum(abundance(1, 1)*sigma(2->2), abundance(1, 1)*J0/J1*sigma(2->1), abundance(1, 1)*J0/J2*sigma(2->3), abundance(1, 2)*J0/J3*sigma(4->4), abundance(1, 2)*J0/J4*sigma(4->5), abundance(1, 3)*J0/J5*sigma(6->6), abundance(1, 3)*J0/J6*sigma(6->7))
-data 3: sum(sigma(6->6), J0/J1*sigma(6->7))
-data 4: sum(sigma(4->4), J0/J1*sigma(4->5))
-data 5: sum(sigma(4->4), J0/J1*sigma(4->5))
-data 6: sum(sigma(2->2), J0/J1*sigma(2->1), J0/J2*sigma(2->3))
-data 7: sum(abundance(1, 1)*sigma(2->2), abundance(1, 1)*J0/J1*sigma(2->1), abundance(1, 1)*J0/J2*sigma(2->3), abundance(1, 2)*J0/J3*sigma(4->4), abundance(1, 2)*J0/J4*sigma(4->5), abundance(1, 3)*J0/J5*sigma(6->6), abundance(1, 3)*J0/J6*sigma(6->7))
-extrapolation 1: sum(abundance(1, 1)*sigma(2->2), abundance(1, 1)*J0/J1*sigma(2->1), abundance(1, 1)*J0/J2*sigma(2->3), abundance(1, 2)*J0/J3*sigma(4->4), abundance(1, 2)*J0/J4*sigma(4->5), abundance(1, 3)*J0/J5*sigma(6->6), abundance(1, 3)*J0/J6*sigma(6->7))
-extrapolation 2: sum(sigma(2->2), J0/J1*sigma(2->1), J0/J2*sigma(2->3))
-extrapolation 3: sum(sigma(4->4), J0/J1*sigma(4->5))
-extrapolation 4: sum(sigma(6->6), J0/J1*sigma(6->7))
+data Vaughn_ntot: sum(abundance(natural, 1)*sigma(2->2), abundance(natural, 1)*J0/J1*sigma(2->1), abundance(natural, 1)*J0/J2*sigma(2->3), abundance(natural, 2)*J0/J3*sigma(4->4), abundance(natural, 2)*J0/J4*sigma(4->5), abundance(natural, 3)*J0/J5*sigma(6->6), abundance(natural, 3)*J0/J6*sigma(6->7))
+data Almeida1983_20Ne_ntot_lo: sum(abundance(natural, 1)*sigma(2->2), abundance(natural, 1)*J0/J1*sigma(2->1), abundance(natural, 1)*J0/J2*sigma(2->3), abundance(natural, 2)*J0/J3*sigma(4->4), abundance(natural, 2)*J0/J4*sigma(4->5), abundance(natural, 3)*J0/J5*sigma(6->6), abundance(natural, 3)*J0/J6*sigma(6->7))
+data Almeida1983_21Ne_ntot_lo: sum(sigma(6->6), J0/J1*sigma(6->7))
+data Almeida1983_22Ne_ntot_lo: sum(sigma(4->4), J0/J1*sigma(4->5))
+data Sikkema1958_22Ne_ntot: sum(sigma(4->4), J0/J1*sigma(4->5))
+data Sikkema_20Ne_ntot: sum(sigma(2->2), J0/J1*sigma(2->1), J0/J2*sigma(2->3))
+data Junghans_ntotal: sum(abundance(natural, 1)*sigma(2->2), abundance(natural, 1)*J0/J1*sigma(2->1), abundance(natural, 1)*J0/J2*sigma(2->3), abundance(natural, 2)*J0/J3*sigma(4->4), abundance(natural, 2)*J0/J4*sigma(4->5), abundance(natural, 3)*J0/J5*sigma(6->6), abundance(natural, 3)*J0/J6*sigma(6->7))
+extrapolation x1: sum(abundance(natural, 1)*sigma(2->2), abundance(natural, 1)*J0/J1*sigma(2->1), abundance(natural, 1)*J0/J2*sigma(2->3), abundance(natural, 2)*J0/J3*sigma(4->4), abundance(natural, 2)*J0/J4*sigma(4->5), abundance(natural, 3)*J0/J5*sigma(6->6), abundance(natural, 3)*J0/J6*sigma(6->7))
+extrapolation x2: sum(sigma(2->2), J0/J1*sigma(2->1), J0/J2*sigma(2->3))
+extrapolation x3: sum(sigma(4->4), J0/J1*sigma(4->5))
+extrapolation x4: sum(sigma(6->6), J0/J1*sigma(6->7))
 == tests/natural_target/models/A.azr
-extrapolation 1: sigma(1->1)
+extrapolation x1: sigma(1->1)
 == tests/natural_target/models/A_thick.azr
-extrapolation 1: sigma(1->1)
+extrapolation x1: sigma(1->1)
 == tests/natural_target/models/B.azr
-extrapolation 1: sigma(2->2)
+extrapolation x1: sigma(2->2)
 == tests/natural_target/models/B_thick.azr
-extrapolation 1: sigma(2->2)
+extrapolation x1: sigma(2->2)
 == tests/natural_target/models/M.azr
-extrapolation 1: sigma(1->1)
-extrapolation 2: sigma(2->2)
-extrapolation 3: sum(abundance(1, 1)*sigma(1->1), abundance(1, 2)*J0/J1*sigma(2->2))
-extrapolation 4: abundance(1, 2)*sigma(2->2)
+extrapolation x1: sigma(1->1)
+extrapolation x2: sigma(2->2)
+extrapolation x3: sum(abundance(natural, 1)*sigma(1->1), abundance(natural, 2)*J0/J1*sigma(2->2))
+extrapolation x4: abundance(natural, 2)*sigma(2->2)
 == tests/natural_target/models/M_data.azr
+data: set-up failed
+exit 1
 == tests/natural_target/models/M_samples.azr
-extrapolation 1: sigma(1->1)
-extrapolation 2: sigma(2->2)
-extrapolation 3: sum(abundance(1, 1)*sigma(1->1), abundance(1, 2)*J0/J1*sigma(2->2))
-extrapolation 4: abundance(1, 2)*sigma(2->2)
-extrapolation 5: sum(abundance(enr, 1)*sigma(1->1), abundance(enr, 2)*J0/J1*sigma(2->2))
-extrapolation 6: abundance(enr, 2)*sigma(2->2)
+extrapolation x1: sigma(1->1)
+extrapolation x2: sigma(2->2)
+extrapolation x3: sum(abundance(natural, 1)*sigma(1->1), abundance(natural, 2)*J0/J1*sigma(2->2))
+extrapolation x4: abundance(natural, 2)*sigma(2->2)
+extrapolation x5: sum(abundance(enr, 1)*sigma(1->1), abundance(enr, 2)*J0/J1*sigma(2->2))
+extrapolation x6: abundance(enr, 2)*sigma(2->2)
 == tests/natural_target/models/M_samples_data.azr
+data: set-up failed
+exit 1
 == tests/natural_target/models/M_thick.azr
 extrapolation 1: sigma(1->1)
 extrapolation 2: sigma(2->2)
 extrapolation 3: sum(abundance(1, 1)*sigma(1->1), abundance(1, 2)*J0/J1*sigma(2->2))
 extrapolation 4: abundance(1, 2)*sigma(2->2)
-== tests/natural_target/models/bad_key.azr
-extrapolation: set-up failed
-exit 1
 == tests/natural_target/models/bad_level.azr
 project: <levels> cannot be set up
 exit 1
 == tests/natural_target/models/bad_ratio.azr
-extrapolation: set-up failed
-exit 1
-== tests/natural_target/models/bad_sample.azr
 extrapolation: set-up failed
 exit 1
 == tests/norm_groups/norm_groups.azr

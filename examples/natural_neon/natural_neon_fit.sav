@@ -501,38 +501,38 @@
                   width_86_1  5.7996973e-02  0.0000000e+00
                   width_86_2  0.0000000e+00  0.0000000e+00
                   width_86_3  0.0000000e+00  0.0000000e+00
-             abundance_10_21  9.0480000e-01  0.0000000e+00
-             abundance_10_23  9.2500000e-02  0.0000000e+00
-             abundance_10_22  2.7000000e-03  0.0000000e+00
-              segment_2_norm  1.0429882e+00  0.0000000e+00
-              segment_3_norm  9.6271109e-01  0.0000000e+00
-              segment_4_norm  1.0247991e+00  0.0000000e+00
-              segment_5_norm  8.8928113e-01  0.0000000e+00
-              segment_6_norm  9.1535196e-01  0.0000000e+00
-              segment_7_norm  7.9928313e-01  0.0000000e+00
-              segment_8_norm  1.0086012e+00  0.0000000e+00
-              segment_9_norm  1.0264585e+00  0.0000000e+00
-             segment_10_norm  1.0817206e+00  0.0000000e+00
-             segment_11_norm  1.0134644e+00  0.0000000e+00
-      segment_1_energy_shift  0.0000000e+00  0.0000000e+00
-      segment_2_energy_shift  0.0000000e+00  0.0000000e+00
-      segment_3_energy_shift  -1.8398086e-03  0.0000000e+00
-      segment_4_energy_shift  0.0000000e+00  0.0000000e+00
-      segment_5_energy_shift  0.0000000e+00  0.0000000e+00
-      segment_6_energy_shift  0.0000000e+00  0.0000000e+00
-      segment_7_energy_shift  0.0000000e+00  0.0000000e+00
-      segment_8_energy_shift  0.0000000e+00  0.0000000e+00
-      segment_9_energy_shift  0.0000000e+00  0.0000000e+00
-     segment_10_energy_shift  0.0000000e+00  0.0000000e+00
-     segment_11_energy_shift  0.0000000e+00  0.0000000e+00
- segment_1_energy_shift_sqrt  0.0000000e+00  0.0000000e+00
- segment_2_energy_shift_sqrt  0.0000000e+00  0.0000000e+00
- segment_3_energy_shift_sqrt  0.0000000e+00  0.0000000e+00
- segment_4_energy_shift_sqrt  0.0000000e+00  0.0000000e+00
- segment_5_energy_shift_sqrt  0.0000000e+00  0.0000000e+00
- segment_6_energy_shift_sqrt  0.0000000e+00  0.0000000e+00
- segment_7_energy_shift_sqrt  0.0000000e+00  0.0000000e+00
- segment_8_energy_shift_sqrt  0.0000000e+00  0.0000000e+00
- segment_9_energy_shift_sqrt  0.0000000e+00  0.0000000e+00
-segment_10_energy_shift_sqrt  0.0000000e+00  0.0000000e+00
-segment_11_energy_shift_sqrt  0.0000000e+00  0.0000000e+00
+        natural.isotope.20Ne  9.0480000e-01  0.0000000e+00
+        natural.isotope.22Ne  9.2500000e-02  0.0000000e+00
+        natural.isotope.21Ne  2.7000000e-03  0.0000000e+00
+  Vaughn1960_natNe_ntot.norm  1.0429882e+00  0.0000000e+00
+ Hinterberger_20Ne_ntot.norm  9.6271109e-01  0.0000000e+00
+Almeida1983_natNe_ntot_lo.norm  1.0247991e+00  0.0000000e+00
+Almeida1983_natNe_ntot_hi.norm  8.8928113e-01  0.0000000e+00
+Almeida1983_21Ne_ntot_lo.norm  9.1535196e-01  0.0000000e+00
+Almeida1983_21Ne_ntot_hi.norm  7.9928313e-01  0.0000000e+00
+Almeida1983_22Ne_ntot_lo.norm  1.0086012e+00  0.0000000e+00
+Almeida1983_22Ne_ntot_hi.norm  1.0264585e+00  0.0000000e+00
+  Sikkema1958_22Ne_ntot.norm  1.0817206e+00  0.0000000e+00
+  Sikkema1958_20Ne_ntot.norm  1.0134644e+00  0.0000000e+00
+Junghans2020_natNe_ntot.shift.offset  0.0000000e+00  0.0000000e+00
+Vaughn1960_natNe_ntot.shift.offset  0.0000000e+00  0.0000000e+00
+Hinterberger_20Ne_ntot.shift.offset  -1.8398086e-03  0.0000000e+00
+Almeida1983_natNe_ntot_lo.shift.offset  0.0000000e+00  0.0000000e+00
+Almeida1983_natNe_ntot_hi.shift.offset  0.0000000e+00  0.0000000e+00
+Almeida1983_21Ne_ntot_lo.shift.offset  0.0000000e+00  0.0000000e+00
+Almeida1983_21Ne_ntot_hi.shift.offset  0.0000000e+00  0.0000000e+00
+Almeida1983_22Ne_ntot_lo.shift.offset  0.0000000e+00  0.0000000e+00
+Almeida1983_22Ne_ntot_hi.shift.offset  0.0000000e+00  0.0000000e+00
+Sikkema1958_22Ne_ntot.shift.offset  0.0000000e+00  0.0000000e+00
+Sikkema1958_20Ne_ntot.shift.offset  0.0000000e+00  0.0000000e+00
+Junghans2020_natNe_ntot.shift.sqrt  0.0000000e+00  0.0000000e+00
+Vaughn1960_natNe_ntot.shift.sqrt  0.0000000e+00  0.0000000e+00
+Hinterberger_20Ne_ntot.shift.sqrt  0.0000000e+00  0.0000000e+00
+Almeida1983_natNe_ntot_lo.shift.sqrt  0.0000000e+00  0.0000000e+00
+Almeida1983_natNe_ntot_hi.shift.sqrt  0.0000000e+00  0.0000000e+00
+Almeida1983_21Ne_ntot_lo.shift.sqrt  0.0000000e+00  0.0000000e+00
+Almeida1983_21Ne_ntot_hi.shift.sqrt  0.0000000e+00  0.0000000e+00
+Almeida1983_22Ne_ntot_lo.shift.sqrt  0.0000000e+00  0.0000000e+00
+Almeida1983_22Ne_ntot_hi.shift.sqrt  0.0000000e+00  0.0000000e+00
+Sikkema1958_22Ne_ntot.shift.sqrt  0.0000000e+00  0.0000000e+00
+Sikkema1958_20Ne_ntot.shift.sqrt  0.0000000e+00  0.0000000e+00

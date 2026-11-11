@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# "transmission <n>" and "yield <n>" on a segment line: the transmission T = exp(-n sigma_t) of a sample n atoms/barn
-# thick, and SAMMY's self-shielded capture or reaction yield Y0 = (sigma / sigma_t)(1 - exp(-n sigma_t)), sigma_t the
+# Quantities transmission and neutron_yield on a target of kind sample (areal_density n atoms/b): the transmission
+# T = exp(-n sigma_t) of a sample n atoms/barn thick, and SAMMY's self-shielded capture or reaction yield Y0 = (sigma / sigma_t)(1 - exp(-n sigma_t)), sigma_t the
 # total cross section of the (neutral) entrance pair by the optical theorem.  Under a sub-point target effect the
 # transform is applied at every sub-point BEFORE the kernel (SAMMY manual III.E.1), never to the broadened cross
 # section.  Models (make_models.py) from tests/reaction_rate/models/n12C.azr (n + 12C, s-wave 1/2+ resonance at
@@ -17,29 +17,32 @@
 #       finite-difference step of the 1/2+ energy or width otherwise re-places the sub-point grids around it, and the
 #       difference quotient then differs from the derivative at fixed grids by 1e-2 on those two parameters (as for
 #       any sub-point segment, transformed or not);
-#   (e) refused, with an ERROR and no output: transmission and yield on one line, yield on the elastic total,
-#       transmission on a differential segment, a charged entrance pair, a natural sum under a sub-point spread
-#       (its nuclei's terms are on different grids), and yield on a sample segment;
+#   (e) refused, with an ERROR and no output: a yield of the elastic total, a charged entrance pair, a natural sum
+#       under a sub-point spread (its nuclei's terms are on different grids), and a yield on a natural sample (a
+#       transmission and a yield on one line, and a transmission of a differential cross section, have no format-3
+#       form: the converter refuses the old lines, convert_constructs);
 #   (f) test segments (mode 3): the transmission and yield curves are the formula of the plain curves, to 1e-9;
 #   (g) a yield's sigma_t is the total, not the elastic: n + 20Ne with 1 keV widths in the reaction channels, a yield
 #       to alpha + 17O equals the formula with "total 1" to 1e-9 where the elastic is > 1e-3 off the total.
 #
 #
-# The fitted sample thickness ("transmission n vary sigma", "yield n vary sigma", "thicknessgroup <label>"):
+# The fitted sample thickness ("areal_density n atoms/b fit [prior n sigma]" on the sample; a sample shared by
+# several data sets is one parameter):
 #
-#   (h) data = the model's T (and Y0) at n = 0.18 atoms/b, 1 % errors, every level fixed: from "transmission 0.15 1 0"
-#       (and "yield 0.15 1 0") MIGRAD (--use-gradient) and --use-lm recover segment_1_thickness = 0.18 to 1e-4;
-#   (i) a thicknessgroup of the transmission and the yield: one parameter from both, the follower's fixed
-#       segment_2_thickness written as the leader's value;
+#   (h) data = the model's T (and Y0) at n = 0.18 atoms/b, 1 % errors, every level fixed: from "0.15 atoms/b fit"
+#       MIGRAD (--use-gradient) and --use-lm recover Sd.areal_density (Sg.areal_density) = 0.18 to 1e-4;
+#   (i) one sample for the transmission and the yield: one parameter S.areal_density from both, the second data
+#       set's row S.areal_density[g] in param.sav written as its value;
 #   (j) AZURE_GRAD_CHECK with seven thicknesses free with every width: lines without a target effect, under a
 #       Gaussian spread (with a prior), under doppler alone (a thickness group) and under doppler + the Gaussian:
 #       analytic = finite differences to 1e-6 of the largest, the Jacobian path to 1e-10;
-#   (k) a prior: "transmission 0.15 1 0.01" on 20 % data holds n between 0.15 and 0.18, and chiSquared.out's
+#   (k) a prior: "0.15 atoms/b fit prior 0.15 0.01" on 20 % data holds n between 0.15 and 0.18, and chiSquared.out's
 #       Total-Thickness-Chi-Squared = ((n - 0.15)/0.01)^2;
-#   (l) refused with an ERROR naming the segment: vary 2, sigma < 0, sigma missing, n = 0, thicknessgroup without
-#       a label, a thicknessgroup member without its own transmission / yield block;
-#   (m) with REF_AZURE2 set (a build from before the fit form, e.g. 7377779): the plain "transmission n" / "yield n"
-#       outputs are byte-identical to it.
+#   (l) refused with an ERROR naming the field: a negative or missing prior width, n = 0, a cross section on the sample
+#       of a transmission (the old "vary 2" and a thicknessgroup without its label or its own block are the
+#       converter's refusals, convert_constructs);
+#   (m) with REF_AZURE2 set (a reference build that reads format 3): the plain transmission / yield outputs are
+#       byte-identical to it.
 #
 #   ./tests/transmission_yield/check.sh path/to/AZURE2
 #   REF_AZURE2=path/to/reference/AZURE2 ./tests/transmission_yield/check.sh path/to/AZURE2
@@ -158,20 +161,19 @@ if le "$w" 1e-9 && gt "$sep" 1e-3; then
   ok "(g) Y0 of n+20Ne -> alpha+17O uses the total (max rel $w, $npts open points; elastic is $sep off the total)"
 else bad "(g) Y0 to alpha+17O: max rel $w vs the formula with the total ($npts points; elastic vs total $sep)"; fi
 
-# (e) refusals
+# (e) refusals: NAME DATA the text of the run's ERROR
 refuse() {
   local name="$1" data="$2" want="$3"
   run "$name" "$name" 1 "$data"
-  if grep -q "ERROR: segment #[0-9]* ($want" "$WORK/$name/run.log" && [ ! -s "$WORK/$name/output/chiSquared.out" ]; then
+  if grep -q "ERROR: .*$want" "$WORK/$name/run.log" && [ ! -s "$WORK/$name/output/chiSquared.out" ]; then
     ok "(e) refused: $name"
   else bad "(e) not refused: $name"; grep -m2 -E 'ERROR|WARN' "$WORK/$name/run.log"; fi
 }
-refuse refuse_both n12C transmission
-refuse refuse_yield_total n12C yield
-refuse refuse_diff n12C transmission
-refuse refuse_charged n12C transmission
-refuse refuse_natsub neon transmission
-refuse refuse_natyield neon yield
+refuse refuse_yield_total n12C "segment #1 (yield): Y0 is a capture or reaction yield"
+refuse refuse_charged n12C "d.reaction: error E_REACTION_NOT_ALLOWED: .*transmission is a neutron quantity"
+refuse refuse_natsub neon "segment #7 (transmission): its terms do not share"
+refuse refuse_natyield neon "segment #1 (yield): not on a sample"
+
 
 # ---------------------------------------------------------------------------------------------------------------
 # The fitted sample thickness
@@ -193,25 +195,26 @@ if "$PY" -I "$HERE/make_models.py" fitdata "$HERE/../reaction_rate/models/n12C.a
     m="${v%%:*}"; what="${v#*:}"
     for flags in --use-gradient --use-lm; do
       fit "${m}$flags" "$m" "$flags"
-      n="$(par "${m}$flags" segment_1_thickness)"
-      if near "$n" 0.18 1e-4; then ok "(h) $what, $flags: segment_1_thickness = $n from 0.15 (data at 0.18)"
-      else bad "(h) $what, $flags: segment_1_thickness '${n}' (data at 0.18)"; tail -3 "$WORK/${m}$flags/run.log"; fi
+      p="$( [ "$m" = fitT ] && echo Sd || echo Sg ).areal_density"
+      n="$(par "${m}$flags" "$p")"
+      if near "$n" 0.18 1e-4; then ok "(h) $what, $flags: $p = $n from 0.15 (data at 0.18)"
+      else bad "(h) $what, $flags: $p '${n}' (data at 0.18)"; tail -3 "$WORK/${m}$flags/run.log"; fi
     done
   done
   for flags in --use-gradient --use-lm; do
     fit "fitG$flags" fitG "$flags"
-    n1="$(par "fitG$flags" segment_1_thickness)"; n2="$(par "fitG$flags" segment_2_thickness)"
-    if near "$n1" 0.18 1e-4 && [ "$n1" = "$n2" ] && grep -q "thickness group 's': segments #1 + 2 share" "$WORK/fitG$flags/run.log"; then
+    n1="$(par "fitG$flags" S.areal_density)"; n2="$(par "fitG$flags" "S.areal_density[g]")"
+    if near "$n1" 0.18 1e-4 && [ "$n1" = "$n2" ] && grep -q "thickness group 'S': segments #1 + 2 share" "$WORK/fitG$flags/run.log"; then
       ok "(i) thicknessgroup, $flags: one thickness $n1 from the transmission and the yield (follower's parameter $n2)"
-    else bad "(i) thicknessgroup, $flags: segment_1_thickness '${n1}', segment_2_thickness '${n2}'"; tail -3 "$WORK/fitG$flags/run.log"; fi
+    else bad "(i) one sample, $flags: S.areal_density '${n1}', S.areal_density[g] '${n2}'"; tail -3 "$WORK/fitG$flags/run.log"; fi
   done
   # (k) a prior
   fit prior fitP --use-gradient
-  n="$(par prior segment_1_thickness)"; tc="$(chi prior Total-Thickness-Chi-Squared)"
+  n="$(par prior Sd.areal_density)"; tc="$(chi prior Total-Thickness-Chi-Squared)"
   if [ -n "$n" ] && [ -n "$tc" ] && awk -v n="$n" -v s="$tc" -v re="$num" 'BEGIN { p = ((n - 0.15) / 0.01)^2; d = s - p
          if (d < 0) d = -d; exit !(n ~ re && s ~ re && n > 0.151 && n < 0.179 && d <= 1e-5 * (p + 1)) }'; then
     ok "(k) a 0.01 atoms/b prior holds n at $n (data alone: 0.18); Total-Thickness-Chi-Squared $tc = ((n - 0.15)/0.01)^2"
-  else bad "(k) prior fit: segment_1_thickness '${n}', Total-Thickness-Chi-Squared '${tc}'"; tail -3 "$WORK/prior/run.log"; fi
+  else bad "(k) prior fit: Sd.areal_density '${n}', Total-Thickness-Chi-Squared '${tc}'"; tail -3 "$WORK/prior/run.log"; fi
 else bad "(h) fit data not built"; fi
 
 # (j) gradient check with the thicknesses free
@@ -243,16 +246,14 @@ fi
 refuse_t() {
   local name="$1" want="$2"
   run "$name" "$name" 1 n12C
-  if grep -q "ERROR: [A-Za-z ]*segment #[0-9]*: .*$want" "$WORK/$name/run.log" && [ ! -s "$WORK/$name/output/chiSquared.out" ]; then
+  if grep -q "ERROR: .*$want" "$WORK/$name/run.log" && [ ! -s "$WORK/$name/output/chiSquared.out" ]; then
     ok "(l) refused: $name ($(grep -m1 -o 'ERROR: .*' "$WORK/$name/run.log" | cut -c1-110))"
   else bad "(l) not refused: $name"; grep -m2 -E 'ERROR|WARN' "$WORK/$name/run.log"; fi
 }
-refuse_t refuse_t_vary "vary 0 or 1"
-refuse_t refuse_t_sigma "sigma must be >= 0"
-refuse_t refuse_t_nosigma "needs the prior width sigma"
-refuse_t refuse_t_zero "needs the sample thickness n > 0"
-refuse_t refuse_t_nolabel "thicknessgroup needs a label"
-refuse_t refuse_t_member "thicknessgroup 's' needs the segment's own transmission or yield block"
+refuse_t refuse_t_sigma "S.areal_density: error E_PRIOR_SYNTAX: .*a width > 0"
+refuse_t refuse_t_nosigma "S.areal_density: error E_PRIOR_SYNTAX: .*'prior' needs its centre and width"
+refuse_t refuse_t_zero "S.areal_density: error E_OUT_OF_RANGE: .*must be > 0 atoms/b"
+refuse_t refuse_t_member "g.target: error E_TARGET_KIND: .*target 'S' is of kind sample"
 
 # (m) plain "transmission n" / "yield n" byte-identical to a reference build (optional)
 if [ -n "${REF_AZURE2:-}" ]; then

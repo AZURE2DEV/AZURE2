@@ -10,9 +10,9 @@
 #
 # Model: tests/natural_target/models/M.azr (p + 12C and p + 13C in one project), test segments at 90 deg lab:
 #   P:   1 -> 1 and 2 -> 2 alone;
-#   Q:   the SUM of 1 -> 1 and 2 -> 2 (a 1 -> 1 line with the 2 -> 2 component), no target effect;
-#   Qc:  the same SUM with a beam-resolution convolution of sigma = 0.1 keV (a sub-point effect that changes nothing
-#        but the sub-point bookkeeping).
+#   Q:   the SUM 12C(p,p)12C + 13C(p,p)13C (1 -> 1 and 2 -> 2), no target effect;
+#   Qc:  the same SUM with a beam spread of sigma = 0.1 keV lab (a sub-point effect that changes nothing but the
+#        sub-point bookkeeping).
 #   (a) Qc equals Q to 1e-6 (the second term's sub-points at the p + 13C angle, 94.4 deg, not the p + 12C 94.8 deg);
 #   (b) in the lab output (kinflag.dat = 1) Q equals P1 + P2 to 1e-5 (2e-6 observed): the SUM of lab-differential terms is their lab
 #       sum (the default c.m. output of a SUM is the lab sum taken to the BASE pair's c.m. frame, so there the
@@ -36,18 +36,18 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/component_subpoint_angle.XXXXXX")"
 failures=0
 ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
-# model NAME EFFECT-LINE TEST-LINE...: M.azr with the given test lines and <targetInt> content, run in mode 3
+# model NAME TARGETS EXTRAPOLATION...: M.azr with the given extrapolation records and <targets> records, run in mode 3
 model() {
-  local name="$1" effect="$2"; shift 2
+  local name="$1" targets="$2"; shift 2
   mkdir -p "$WORK/$name/output" "$WORK/$name/checks"
   [ -d "$(dirname "$SRC")/data" ] && cp -r "$(dirname "$SRC")/data" "$WORK/$name/"
   echo 1 > "$WORK/$name/kinflag.dat"   # lab-frame output files
-  # the lines go through the environment: BSD awk (macOS) refuses a newline in -v ("newline in string")
-  LINES="$(printf '%s\n' "$@")" EFFECT="$effect" awk '
-    /<segmentsTest>/ { print; print ENVIRON["LINES"]; skip = 1; next }
-    /<\/segmentsTest>/ { skip = 0 }
-    /<targetInt>/ { print; if (ENVIRON["EFFECT"] != "") print ENVIRON["EFFECT"]; skip = 1; next }
-    /<\/targetInt>/ { skip = 0 }
+  # the records go through the environment: BSD awk (macOS) refuses a newline in -v ("newline in string")
+  RECORDS="$(printf '%s\n\n' "$@")" TARGETS="$targets" awk '
+    /^<extrapolations>$/ { print; print ENVIRON["RECORDS"]; skip = 1; next }
+    /^<\/extrapolations>$/ { skip = 0 }
+    /^<targets>$/ { print; if (ENVIRON["TARGETS"] != "") print ENVIRON["TARGETS"]; skip = 1; next }
+    /^<\/targets>$/ { skip = 0 }
     !skip { print }' "$SRC" > "$WORK/$name/m.azr"
   (cd "$WORK/$name" && printf '3\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1; echo "exit $?" >> run.log)
 }
@@ -55,12 +55,21 @@ model() {
 col() { awk 'NF { print $4 }' "$1"; }
 maxrel() { paste "$1" "$2" | awk '{ d = $1 - $2; if (d < 0) d = -d; s = ($2 < 0 ? -$2 : $2); r = (s > 0 ? d / s : d); if (r > m) m = r } END { printf "%.3e", m + 0 }'; }
 
-L1="1 1 1 1.0 3.0 0.1 90 90 0 1"
-L2="1 2 2 1.0 3.0 0.1 90 90 0 1"
-LS="1 1 1 1.0 3.0 0.1 90 90 0 1 1 0 1 2 2 -999"
+# 1.0 to 3.0 MeV lab in 0.1 MeV steps (accumulated, as the old test lines), dsigma/dOmega at 90 deg lab
+E="list $(awk 'BEGIN { for (e = 1.0; e <= 3.0; e += 0.1) printf "%.17g ", e }')MeV lab"
+x() {  # x NAME REACTION [MORE FIELDS]: an extrapolation record
+  local name="$1" reaction="$2"; shift 2
+  printf 'extrapolation %s\n    reaction       %s\n    quantity       dsigma_domega\n    unit           b/sr\n' "$name" "$reaction"
+  printf '    energies       %s\n    angles         list 90 deg lab' "$E"
+  for f in "$@"; do printf '\n    %s' "$f"; done
+}
+L1="$(x x1 '12C(p,p)12C')"
+L2="$(x x2 '13C(p,p)13C')"
+LS="$(x x1 '12C(p,p)12C + 13C(p,p)13C')"
+LSc="$(x x1 '12C(p,p)12C + 13C(p,p)13C' 'beam           B' 'quadrature     points 50 width_multiplier 20 per_width 50')"
 model P "" "$L1" "$L2"
 model Q "" "$LS"
-model Qc '1 "1" 50 1 0.0001 0 0 "" 0 0 0 0 "" 0 0 0.04 20 50' "$LS"
+model Qc "$(printf 'beam B\n    spread         0.0001 MeV lab')" "$LSc"
 for n in P Q Qc; do grep -q "^exit 0" "$WORK/$n/run.log" || bad "$n did not run: $(tail -1 "$WORK/$n/run.log"); $(grep -m1 ERROR "$WORK/$n/run.log")"; done
 
 col "$WORK/Q/output/AZUREOut_aa=1_R=1.extrap" > "$WORK/q.txt"

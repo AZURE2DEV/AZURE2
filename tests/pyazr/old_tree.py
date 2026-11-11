@@ -7,6 +7,9 @@ original instead of the tree's file:
     original(path)        the original of a tree file (absolute path), or the file itself when it was not converted
     copytree(src, dst)    shutil.copytree of a tree folder, with the originals of its converted projects laid over
 
+The old model generators of tests/doppler_fgm and tests/transmission_yield (make_models.py) are kept there too, for
+the tests of the old reader that build their models (original(path) of the generator, run on the original n12C).
+
 They go with the old reader.
 """
 import os

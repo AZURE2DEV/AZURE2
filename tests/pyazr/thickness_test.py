@@ -25,6 +25,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SUITE = os.path.join(ROOT, "tests", "transmission_yield")
 sys.path.insert(0, ROOT)
+sys.path.insert(0, HERE)
+import old_tree  # noqa: E402  (the old generator and n12C: these models are the old file class's)
 
 try:
     from pyazr.azrfile import AzrModel  # noqa: E402
@@ -49,10 +51,10 @@ def data_lines(path):
 
 tmp = tempfile.mkdtemp(prefix="pyazr_thickness_")
 try:
-    spec = importlib.util.spec_from_file_location("ty_models", os.path.join(SUITE, "make_models.py"))
+    spec = importlib.util.spec_from_file_location("ty_models", old_tree.original(os.path.join(SUITE, "make_models.py")))
     mm = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mm)
-    mm.n12c_models(os.path.join(ROOT, "tests", "reaction_rate", "models", "n12C.azr"), tmp)
+    mm.n12c_models(old_tree.original(os.path.join(ROOT, "tests", "reaction_rate", "models", "n12C.azr")), tmp)
 
     # --- AzrModel and datasets (no engine) ------------------------------------------------------
     m = AzrModel.from_file(os.path.join(tmp, "thin.azr"))

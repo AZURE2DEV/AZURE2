@@ -1,7 +1,7 @@
 # shared_effect_pairs
 
-A `<targetInt>` line shared by segments of different entrance pairs converts its lab energies with
-each point's own pair.
+A beam record (the old `<targetInt>` line) shared by data sets of different entrance pairs converts its lab
+energies with each point's own pair.
 
 Every segment listed on a `<targetInt>` line, and every component of a SUM/RATIO or natural-target
 segment, points to the same `TargetEffect`. Up to dev 1599725 the Gaussian sigma (and a `sigmalab`
@@ -18,8 +18,8 @@ point converts them with its own factor and charges (`EPoint::SetTargetKinematic
 Model from `tests/natural_neon` (n + 20Ne pair 2, n + 22Ne pair 4): two plain angle-integrated
 elastic data segments at the same 41 lab energies, 0.85 to 1.25 MeV, and a 30 keV lab beam sigma.
 
-- (a) one line `"1,2"` equals one line per segment on both segments to 1e-9;
-- (b) a split model whose 22Ne line carries the sigma scaled by f(20Ne)/f(22Ne), which is what the
+- (a) one beam record for both data sets equals one beam record per data set on both to 1e-9;
+- (b) a split model whose 22Ne beam carries the spread scaled by f(20Ne)/f(22Ne), which is what the
   old build computed for the shared line, differs from the correct split on the 22Ne segment by
   more than 1e-5 somewhere (4e-5 here), with the 20Ne segment untouched.
 

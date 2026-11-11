@@ -26,6 +26,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SUITE = os.path.join(ROOT, "tests", "doppler_fgm")
 sys.path.insert(0, ROOT)
+sys.path.insert(0, HERE)
+import old_tree  # noqa: E402  (the old generator and n12C: these models are the old file class's)
 
 try:
     from pyazr.azrfile import AzrModel  # noqa: E402
@@ -44,10 +46,10 @@ def check(name, ok, detail=""):
 
 tmp = tempfile.mkdtemp(prefix="pyazr_doppler_")
 try:
-    spec = importlib.util.spec_from_file_location("doppler_models", os.path.join(SUITE, "make_models.py"))
+    spec = importlib.util.spec_from_file_location("doppler_models", old_tree.original(os.path.join(SUITE, "make_models.py")))
     mm = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mm)
-    mm.main(os.path.join(ROOT, "tests", "reaction_rate", "models", "n12C.azr"), tmp)
+    mm.main(old_tree.original(os.path.join(ROOT, "tests", "reaction_rate", "models", "n12C.azr")), tmp)
 
     # --- AzrModel (no engine) ---------------------------------------------------------------------
     b = AzrModel.from_file(os.path.join(tmp, "bare.azr"))
