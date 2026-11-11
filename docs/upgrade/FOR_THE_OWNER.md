@@ -163,12 +163,13 @@ reads `CLAUDE.md` first, so it is given the recipes and is stopped by the checks
 
 ## What is in work and what comes next
 
-In work now: the last third of the test tree and the examples to format 3, and pyazr's own modules off its second
-file grammar; external-capture amplitudes read from the pathway table and the old pathway trees deleted; and, beside
-Phase 4 because they depend on nothing in it, the stopping-power library (`stopping/`), the transfer library for
-the THM vertices (`physics/`, benchmarked against FRESCO) and the design note of Phase 5. Merged on 2026-11-11: the
-data classes replaced (`DataSet`, `WorkingCopy`, `Segment`, `Unit`); 126 of 185 project files in format 3; validation
-that reports what a run would refuse; pyazr's per-data-set functions on a format-3 project.
+In work now: the THM projects to format 3 (the last seven files) and the gaps format 3 still has; external-capture
+amplitudes read from the pathway table and the old pathway trees deleted; and the first three branches of Phase 5
+(one level-matrix solve per distinct compound energy, the yield of a finite layer as a quantity, data compared in the
+laboratory frame). Merged on 2026-11-11: the data classes replaced (`DataSet`, `WorkingCopy`, `Segment`, `Unit`);
+176 of the 183 convertible project files in format 3 (the THM projects are left); validation that reports what a run
+would refuse; pyazr's functions on a format-3 project, with edits of levels, `<config>` and `<thm>` done by the
+engine; the design note of Phase 5 (`energy_grid.md`) with its decisions taken.
 
 Then, to close Phase 4: the old reading path deleted (with `pyazr/azrfile.py`, 3,756 lines of
 a second grammar in Python); external-capture amplitudes computed at set-up and the old pathway trees deleted; the
