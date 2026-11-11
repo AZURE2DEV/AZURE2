@@ -64,9 +64,12 @@ kept, `save_fit` on 13N, `<thm>` on `examples/o18_lacognata2010`).
 `rebuild_resources`, `light_excitation` (the 32nd column read and written by the old class), `level_grouping`, `azr_layout`,
 `sav_fixed_params`, `zero_width_fixed` (the old writer's bytes): to move or to delete with the file, one by one.
 
-**Groups 6-8, still old in this tree** (left as they are): `natural_target`, `doppler`, `thickness` (group 6); every
-`thm_*` test, `model_average`, `tabulate_thm`, `extrapolation_frame`, `geometry_no_transform`, `save_fit_norms` (its
-7Li_p_a part) (group 7); `apply_fit`, `output_dir`, `radius_override`, `relativistic`, `scattering_length` (group 8 and the
+**Groups 6-8, still old in this tree** (left as they are): `natural_target`, `doppler`, `thickness` (group 6); of group 7
+(converted 2026-11-11, `format3_tree.md` §5) the tests of AzrModel's THM API read the originals through `old_tree.py`
+(`thm_experiment`, `thm_lineshape`, `thm_spectator_window`, `thm_distortion`, `thm_fixed_angle`, `thm_dw_vertex`,
+`thm_spectator_angles`, `thm_coherent_background`, `thm_model_average`, `thm_vertex_reach`, `tabulate_thm`,
+`extrapolation_frame`, `geometry_no_transform`, the 7Li_p_a parts of `roundtrip` and `save_fit_norms`), while
+`thm_park`, `thm_adjoint`, `thm_nonbrune_grid` edit records (`tests/pyazr/thm_records.py`); `apply_fit`, `output_dir`, `radius_override`, `relativistic`, `scattering_length` (group 8 and the
 rest).
 
 ## Edits of the nuclear part
