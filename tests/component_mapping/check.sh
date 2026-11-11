@@ -26,7 +26,13 @@
 #       as the parts model, for the data (mode 1) and the extrapolation (mode 3) -- one per distinct compound energy;
 #   (c) without the ratio: a fit with the analytic gradient starts from the chi2 of the calculation, the gradient
 #       (one level-matrix adjoint per compound energy for all terms of a composite point, src/GradEnergyTasks.cpp)
-#       agrees with finite differences, and the Jacobian path with the adjoint (AZURE_GRAD_CHECK).
+#       agrees with finite differences, and the Jacobian path with the adjoint (AZURE_GRAD_CHECK);
+#   (d) a capture pair that is only a component gets its external capture: the SUM elastic + 1000 x capture as the
+#       only extrapolation is elastic + 1000 x capture of the parts, point by point (1e-10 of the sum; the capture
+#       term is 1e-5 to 2e-2 of it), and the run writes intEC.extrap.  Until 2026-11-11 the command line switched
+#       external capture on from the leading terms alone (src/ProjectSetup.cpp, ProjectReactionPairs), so this run
+#       had none and its capture term was 0.54 to 2.9 times the right one; with the second extrapolation of (a) in
+#       the project the same SUM was right.  Found by the agent that rewrote this check, 2026-11-11.
 #
 #   ./tests/component_mapping/check.sh path/to/AZURE2
 
@@ -123,6 +129,25 @@ if [ -s "$sum" ] && [ -s "$cap" ]; then
   else bad "(a) extrapolated SUM against its terms: $n and $m rows, $nbad energies differ, worst $worst"; fi
 else
   bad "(a) extrapolation files missing"; ls "$WORK/xcomp/output" "$WORK/xparts/output"
+fi
+
+# (d) the SUM elastic + 1000 x capture alone: no other extrapolation has the capture pair as its leading term
+awk '/^extrapolation cap1001$/ { skip = 1 } /^<\/extrapolations>$/ { skip = 0 } !skip' "$WORK/t.azr" > "$WORK/alone.azr"
+if [ "$(grep -c '^extrapolation ' "$WORK/alone.azr")" != 1 ]; then bad "(d) model not built"
+elif run xalone alone.azr 3 X=0; then
+  sum="$WORK/xalone/output/AZUREOut_aa=1_R=1.extrap"; el="$WORK/xparts/output/AZUREOut_aa=1_R=1.extrap"
+  res="$(awk '{ sub(/\r$/, "") } NF < 4 { next }
+              FILENAME == ARGV[1] { s[++n] = $4; e[n] = $1; next }
+              FILENAME == ARGV[2] { a[++k] = $4; if ($1 != e[k]) bad++; next }
+              { m++; if ($1 != e[m]) bad++; x = a[m] + 1000 * $4; d = s[m] - x; if (d < 0) d = -d
+                r = d / (x < 0 ? -x : x); if (r > w) w = r }
+              END { printf "%d %d %d %.2e", n, m, bad + 0, w }' "$sum" "$el" "$cap")"
+  read -r n m nbad worst <<< "$res"
+  if [ "$n" -ge 100 ] && [ "$n" = "$m" ] && [ "$nbad" = 0 ] && awk -v w="$worst" 'BEGIN { exit !(w + 0 <= 1e-10) }'; then
+    ok "(d) SUM elastic + 1000 x capture alone = its terms at $n energies (worst $worst of the sum)"
+  else bad "(d) SUM elastic + 1000 x capture alone against its terms: $n and $m rows, $nbad energies differ, worst $worst of the sum"; fi
+  if [ -s "$WORK/xalone/output/intEC.extrap" ]; then ok "(d) the run calculated external capture (intEC.extrap written)"
+  else bad "(d) no intEC.extrap: the run had no external capture"; fi
 fi
 
 # (c) the gradient check of tests/13N on the composite model
