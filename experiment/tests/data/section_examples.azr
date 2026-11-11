@@ -30,7 +30,7 @@ detector D90
     energy_resolution 4 keV lab
     udr            file "res.udr" flight_path 20 m burst 5 ns channel 1 ns centred yes
 detector DRECT                                  # a table kernel's form (experiment/Kernels.h)
-    energy_resolution rectangular width 20 keV
+    energy_resolution rectangular width 20 keV fit prior 20 2 grid_max 30
 target natNe                                    # section 8.1, natural_neon
     kind           none
     isotope        20Ne 0.9048 fixed

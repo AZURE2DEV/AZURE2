@@ -2,6 +2,42 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, apparatus parameters) — one fit-parameter kind for the numbers of apparatus records (`feature/upgrade-5-apparatus-parameters`)
+
+**Done.**
+- Map of the path a fitted apparatus parameter takes (density, Doppler, thickness, stopping scale), the generic kind,
+  what the other three would need, the measured cost: `docs/upgrade/apparatus_parameters.md`.
+- Kind 12 is `apparatus` (it was the stopping scale, one day old): rows in `ApparatusRows()` (`include/ApparatusParameters.h`),
+  `stopping_scale` (`src/StoppingScale.cpp`, now its row and its follow-up) and `kernel` (any table kernel's parameter
+  with `fittable`); one engine file `src/ApparatusParameters.cpp` (groups by sharing key, vector slots, hand-over,
+  prior and its `chiSquared.out` line, labels, index map); every switch over the kinds has one case `Apparatus`.
+  Names: the owner's values joined by `.` (`stopping_scale.TiN.1H`, `det_fit.energy_resolution.width`). Same code and
+  place in the vector (last); API key `apparatus` instead of `stopping_scale`.
+- Format 3: a fittable kernel parameter is generated with the nuisance grammar (`width 14 keV fit prior 14 2 grid_max 30`);
+  a parameter only when `fit`, a prior or grid_max is written; the grid spans the layout value
+  (`KernelParameters::layoutValues`, read by `EffectSupport`). `tests/rectangular_resolution/models/rect.azr` gains
+  `fixed` (the grammar has no default mode); its outputs are unchanged.
+- Proofs: `tests/rectangular_resolution/check.sh` (c)-(g): the width fitted from 1 %-noise pseudo-data at 20 keV
+  (20.026 ± 0.013 keV), noise-free (19.999998 keV), with a prior, one parameter for two data sets/effects, six refusals;
+  the stopping scale's fit byte-identical to the base build.
+- Drill: a triangular resolution with a fitted base width (`experiment/src/KernelTriangular.cpp`), 0 engine files,
+  about 6 minutes (commit bea56a6f).
+
+**Verified** (binary `work/b-appar`, head bea56a6f; scratch `work/appar/`): all projects × 3 bases against `tab-trial23g`
+(tag `tab-appar-final`, 2 jobs): 780 / 753 / 780 identical, the new `fit.azr`'s 6 files per basis only-new;
+`ctest -LE slow` 203/203; `tests/run_tests.sh` 152 passed, 0 failed; fits at 1 thread identical to the base build's
+(director's `repro23`: T2 --use-gradient, MIGRAD, --use-lm, 13N, stopping_yield fit, layer_yield fit; fitStatus.out
+and param.fit excluded); the same fits at 1 and 2 threads identical (3 threads not run: budget 2 at the time);
+converted-tree gate (`REF=tab-trial8`, tag `gate-appar`, 3 jobs) 483 (456) identical, 38 classified, 0 differ, 0 missing. Injected errors shown to fail: the fold not reading the fitted width, one
+parameter per effect, the stopping scale's change not followed.
+
+**Open.** The kernels' analytic `derivative` is not used by the gradient (central differences of the whole χ²; the
+cotangent list `'a'`, `'d'`, `'t'` of `GradEnergyTasks.cpp` is untouched); density, Doppler, thickness keep their own
+kinds; a refusal of a shared record is printed once per effect (twice for two effects); `TargetEffect::
+GetStoppingScaleMinimum` is now unused; Sphinx not built. For the merge with the node-layout branch: one line in
+`src/PointFold.cpp`; `WorkingCopy::SetUpStoppingScaleParams` forwards to `SetUpApparatusParams` (its call is in
+`src/TargetSetup.cpp`).
+
 ## 2026-11-11 (director, 22:00) — a check of every fit route on every kind of free-parameter set; a second crash found by it, older than the upgrade
 
 Branch `feature/upgrade-5-fit-modes-check` (the director's own, from the head of 21:00), merged into

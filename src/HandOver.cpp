@@ -199,7 +199,7 @@ void WorkingCopy::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNu
   // Screening first: sub-points rebuilt below (ReplaceSubPointGrids) inherit their parent's U_e.
   this->FillScreeningFromParams(p);
   // Fitted target densities: the thickness of each point of their lines (the grids stay put).
-  if (configure) this->FillStoppingScalesFromParams(p, *configure);
+  if (configure) this->FillApparatusFromParams(p, *configure);
   if (configure) this->FillDensitiesFromParams(p, *configure);
   // Fitted Doppler temperatures: only the kernel values move (the grids and pieces stay put).
   this->FillDopplerFromParams(p, configure);

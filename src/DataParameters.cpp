@@ -447,7 +447,7 @@ void WorkingCopy::FillMnParams(AZUREParams &params) {
   auto SegmentPosition = [this](SegmentIterator it) { return (int)(it - Data().GetSegments().begin()) + 1; };
   // The layout is the data set's; laid out again by a later call (pyazr) only if it moved (ReviseDataSet).
   struct Layout {
-    int norm, shift, shiftSqrt, shiftFn, screening, density, doppler, thickness, thmCoherent, stoppingScale;
+    int norm, shift, shiftSqrt, shiftFn, screening, density, doppler, thickness, thmCoherent, apparatus;
   } layout;
   layout.norm = (int)p.Params().size();
   for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
@@ -565,28 +565,15 @@ void WorkingCopy::FillMnParams(AZUREParams &params) {
                ParameterRecord::ThmCoherent(c.experiment, c.jGroup, c.entrance, c.exit, c.term));
     if (c.fixed) p.Fix(c.name);
   }
-  // Stopping scales (dimensionless): one per (material, projectile) of the targets (DataSet::NumStoppingScaleParams),
-  // after every other kind.  A fitted one is bounded by the scale the sub-point grids span and a tenth of its start.
-  layout.stoppingScale = Data().NumStoppingScaleParams() == 0 ? -1 : (int)p.Params().size();
-  for (int k = 1; k <= Data().NumStoppingScaleParams(); k++) {
-    const TargetEffect *te = Data().GetStoppingScaleTargetEffect(k);
-    const std::string &varname = te->GetStoppingScaleName();
-    const double s = EffectValues(Data().GetStoppingScaleLeadCopy(k)).stoppingScale;
-    params.Add(varname, s, (te->GetStoppingScaleSigma() > 0.0) ? 0.1 * te->GetStoppingScaleSigma() : 0.01 * s,
-               ParameterRecord::StoppingScale(Data().GetStoppingScaleLeadCopy(k), te->GetStoppingScaleMaterial(),
-                                              te->GetStoppingScaleProjectile()));
-    if (!te->IsStoppingScaleVaried()) {
-      p.Fix(varname);
-      continue;
-    }
-    p.SetLimits(varname, te->GetStoppingScaleMinimum(), te->GetLayoutStoppingScale());
-  }
+  // Parameters of apparatus records (stopping scales, a kernel's width), after every other kind (ApparatusParameters.h).
+  layout.apparatus = Data().NumApparatusParams() == 0 ? -1 : (int)p.Params().size();
+  AddApparatusParams(*this, params);
   const DataSet &d = Data();
   if (d.normParamOffset_ != layout.norm || d.energyShiftParamOffset_ != layout.shift ||
       d.energyShiftSqrtParamOffset_ != layout.shiftSqrt || d.energyShiftFnParamOffset_ != layout.shiftFn ||
       d.screeningParamOffset_ != layout.screening || d.densityParamOffset_ != layout.density ||
       d.dopplerParamOffset_ != layout.doppler || d.thicknessParamOffset_ != layout.thickness ||
-      d.thmCoherentParamOffset_ != layout.thmCoherent || d.stoppingScaleParamOffset_ != layout.stoppingScale)
+      d.thmCoherentParamOffset_ != layout.thmCoherent || d.apparatusParamOffset_ != layout.apparatus)
     ReviseDataSet([&layout](DataSet &next) {
       next.normParamOffset_ = layout.norm;
       next.energyShiftParamOffset_ = layout.shift;
@@ -597,7 +584,7 @@ void WorkingCopy::FillMnParams(AZUREParams &params) {
       next.dopplerParamOffset_ = layout.doppler;
       next.thicknessParamOffset_ = layout.thickness;
       next.thmCoherentParamOffset_ = layout.thmCoherent;
-      next.stoppingScaleParamOffset_ = layout.stoppingScale;
+      next.apparatusParamOffset_ = layout.apparatus;
     });
 }
 

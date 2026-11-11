@@ -2,6 +2,7 @@
 #define PARAMETERKIND_H
 
 #include <string>
+#include <utility>
 #include <vector>
 
 /*!
@@ -36,7 +37,7 @@ enum class ParamKind {
   Doppler = 9,          ///< fitted free-gas Doppler temperature of a <targetInt> line
   Thickness = 10,       ///< fitted sample thickness of a transmission / yield segment
   ThmCoherent = 11,     ///< Re or Im of a THM coherent-background coefficient (cbackground=)
-  StoppingScale = 12    ///< stopping scale s of a (material, projectile): epsilon -> s epsilon (energy_grid.md 6.2)
+  Apparatus = 12        ///< a number of an apparatus record (ApparatusParameters.h: a stopping scale, a kernel's width)
 };
 
 /// One row per kind: what a maintainer and the API need to know about it.
@@ -85,9 +86,9 @@ inline const std::vector<ParamKindRow> &ParamKindTable() {
       {ParamKind::ThmCoherent, "cbkg", "HOES amplitude units (c1: per MeV)",
        "thmExperiment, jGroup, channel (entrance), exitChannel, thmTerm", false, false, false,
        "Re or Im of c0 or c1 of a THM coherent background c(E) = c0 + c1 E (cbackground=)"},
-      {ParamKind::StoppingScale, "stopping_scale", "1", "effect, material, projectile", true, false, true,
-       "stopping scale s of a (material, projectile): every target of that material crossed by that projectile has "
-       "its stopping s epsilon (format 3: the target's 'stopping ... scale' field)"},
+      {ParamKind::Apparatus, "apparatus", "the row's (apparatusUnit)", "effect, apparatus, owner", true, false, true,
+       "a number of an apparatus record a fit may vary, one per sharing key (docs/upgrade/apparatus_parameters.md): "
+       "the stopping scale of a (material, projectile), a table kernel's parameter (format 3: written as a nuisance)"},
   };
   return table;
 }
@@ -113,15 +114,20 @@ struct ParameterRecord {
   int segmentKey = -1;  ///< that segment's key (its <segmentsData> line)
   int fnTerm = -1;      ///< j of a_j (EnergyShiftFn)
 
-  int effect = -1;  ///< the <targetInt> line's effect number (Screening, Density, Doppler; StoppingScale: its first)
+  int effect = -1;  ///< the <targetInt> line's effect number (Screening, Density, Doppler; Apparatus: its first)
 
   int sample = -1;          ///< sample of the <abundances> block (Abundance)
   std::string sampleName;   ///< its name, empty for the unnamed sample (Abundance)
   int nucleus = -1;         ///< compound nucleus of the block (Abundance)
   int nucleusZ = -1, nucleusA = -1;
 
-  std::string material;    ///< the material's label, "TiN" or a target's name (StoppingScale)
-  std::string projectile;  ///< the projectile, "1H" (StoppingScale)
+  std::string apparatus;      ///< the row of ApparatusRows() (Apparatus): "stopping_scale", "kernel"
+  std::string apparatusUnit;  ///< the value's unit (Apparatus)
+  /// What it belongs to (Apparatus), in the order of its name, whose parts these values are joined by '.':
+  /// (quantity, stopping_scale), (material, TiN), (projectile, 1H) for stopping_scale.TiN.1H; (record, det1),
+  /// (field, energy_resolution),
+  /// (parameter, width) for det1.energy_resolution.width.
+  std::vector<std::pair<std::string, std::string>> owner;
 
   std::string thmExperiment;  ///< THM experiment (ThmCoherent)
   int exitChannel = -1;       ///< exit channel within the J group (ThmCoherent)
@@ -163,11 +169,13 @@ struct ParameterRecord {
     r.effect = effect;
     return r;
   }
-  /// The stopping scale of a material and projectile; \p effect its first target effect.
-  static ParameterRecord StoppingScale(int effect, const std::string &material, const std::string &projectile) {
-    ParameterRecord r = OfEffect(ParamKind::StoppingScale, effect);
-    r.material = material;
-    r.projectile = projectile;
+  /// A parameter of an apparatus record (ApparatusParameters.h); \p effect its first target effect.
+  static ParameterRecord Apparatus(int effect, const std::string &row, const std::string &unit,
+                                   const std::vector<std::pair<std::string, std::string>> &owner) {
+    ParameterRecord r = OfEffect(ParamKind::Apparatus, effect);
+    r.apparatus = row;
+    r.apparatusUnit = unit;
+    r.owner = owner;
     return r;
   }
   static ParameterRecord Abundance(int sample, const std::string &sampleName, int nucleus, int z, int a) {

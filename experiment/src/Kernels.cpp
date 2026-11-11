@@ -15,6 +15,7 @@ Kernel BeamProfileKernel();
 Kernel UdrKernelRow();
 Kernel DopplerKernel();
 Kernel RectangularKernel();
+Kernel TriangularKernel();
 
 const std::vector<Kernel> &Kernels() {
   static const std::vector<Kernel> table = {
@@ -24,6 +25,7 @@ const std::vector<Kernel> &Kernels() {
       UdrKernelRow(),
       DopplerKernel(),
       RectangularKernel(),
+      TriangularKernel(),
   };
   return table;
 }
@@ -125,7 +127,10 @@ void BroadeningWeights(const EffectKernels &k, const KernelParameters &p, const 
 
 void EffectSupport(const EffectKernels &k, const KernelParameters &p, const SupportPoint &s, double &high, double &low) {
   if (k.resolution) {
-    k.resolution->support(p, s, high, low);
+    // the grid spans the parameters' layout values, so that a fitted width never folds beyond its nodes
+    KernelParameters layout = p;
+    if (p.layoutValues) layout.values = p.layoutValues;
+    k.resolution->support(layout, s, high, low);
   } else {
     high = s.energy;
     low = s.energy;

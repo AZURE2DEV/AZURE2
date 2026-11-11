@@ -66,8 +66,8 @@ def name_from_record(r, project):
         return f"energy_{r['level_number']}"
     if k == "width":
         return f"width_{r['level_number']}_{r['channel']}"
-    if k == "stopping_scale":
-        return f"stopping_scale.{r['material']}.{r['projectile']}"
+    if k == "apparatus":  # the owner's values joined by '.' (ApparatusDeclaration::Name)
+        return ".".join(v for _, v in r["owner"])
     if k == "cbkg":
         part = ("re0", "im0", "re1", "im1")[r["thm_term"]]
         return f"cbkg_{r['thm_experiment']}_{r['thm_jpi']}_{r['thm_exit_key']}_{r['thm_channels']}_{part}"
@@ -169,15 +169,15 @@ kinds = parameter_kinds()
 check("codes 0..12 in order", [k["code"] for k in kinds] == list(range(13)), [k["code"] for k in kinds])
 keys = [k["key"] for k in kinds]
 check("keys", keys == ["energy", "width", "norm", "shift", "shift_sqrt", "shift_fn", "abundance", "screening",
-                       "density", "doppler", "thickness", "cbkg", "stopping_scale"], keys)
+                       "density", "doppler", "thickness", "cbkg", "apparatus"], keys)
 check("every row has a unit, owner and doc", all(k["unit"] and k["owner"] and k["doc"] for k in kinds))
 check("own_prior: the nuisance kinds 2..10 and 12",
-      [k["key"] for k in kinds if k["own_prior"]] == keys[2:11] + ["stopping_scale"])
+      [k["key"] for k in kinds if k["own_prior"]] == keys[2:11] + ["apparatus"])
 check("segment_field: norm, the shifts, thickness",
       [k["key"] for k in kinds if k["segment_field"]] == ["norm", "shift", "shift_sqrt", "shift_fn", "thickness"])
-check("vary_from_project: the shifts, screening, density, Doppler, thickness, stopping scale",
+check("vary_from_project: the shifts, screening, density, Doppler, thickness, apparatus parameters",
       [k["key"] for k in kinds if k["vary_from_project"]] ==
-      ["shift", "shift_sqrt", "shift_fn", "screening", "density", "doppler", "thickness", "stopping_scale"])
+      ["shift", "shift_sqrt", "shift_fn", "screening", "density", "doppler", "thickness", "apparatus"])
 
 seen = set()
 with tempfile.TemporaryDirectory() as tmp:
@@ -219,9 +219,17 @@ with tempfile.TemporaryDirectory() as tmp:
     shutil.copytree(os.path.join(ROOT, "tests", "stopping_yield", "models"), d)
     for sub in ("output", "checks"):
         os.makedirs(os.path.join(d, sub))
-    kinds_sy = check_project("stopping_yield", os.path.join(d, "fit.azr"), d, {"stopping_scale", "density"})
-    check("stopping_yield: one stopping_scale for the two targets", kinds_sy.get("stopping_scale") == 1, kinds_sy)
+    kinds_sy = check_project("stopping_yield", os.path.join(d, "fit.azr"), d, {"apparatus", "density"})
+    check("stopping_yield: one stopping scale (kind apparatus) for the two targets", kinds_sy.get("apparatus") == 1, kinds_sy)
     seen |= set(kinds_sy)
+
+    print("tests/rectangular_resolution/models/fit.azr: one fitted width of a detector named by two data sets")
+    d = os.path.join(tmp, "rect")
+    shutil.copytree(os.path.join(ROOT, "tests", "rectangular_resolution", "models"), d)
+    for sub in ("output", "checks"):
+        os.makedirs(os.path.join(d, sub))
+    kinds_rr = check_project("rectangular_resolution", os.path.join(d, "fit.azr"), d, {"apparatus"})
+    check("rectangular_resolution: one apparatus parameter for the two data sets", kinds_rr.get("apparatus") == 1, kinds_rr)
 
 check("the projects hold every kind", seen == set(keys), sorted(set(keys) - seen))
 

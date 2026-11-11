@@ -36,7 +36,7 @@ std::tuple<int, int, int, int> IdentityKey(const ParamDesc &d) {
     case ParamKind::Density: return std::make_tuple(kind, d.density, -1, -1);
     case ParamKind::Doppler: return std::make_tuple(kind, d.doppler, -1, -1);
     case ParamKind::Thickness: return std::make_tuple(kind, d.segment, -1, -1);
-    case ParamKind::StoppingScale: return std::make_tuple(kind, d.stoppingScale, -1, -1);
+    case ParamKind::Apparatus: return std::make_tuple(kind, d.apparatus, -1, -1);
   }
   return std::make_tuple(kind, -1, -1, -1);
 }

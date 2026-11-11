@@ -232,12 +232,14 @@ Forms MakeForms() {
                         "one skewed Gaussian of the beam energy distribution")}};
   f.resolution = {{Unkeyed({Pos("sigma", WithUnit("energy")), Pos("frame", Words({"lab", "cm"}))}, "a Gaussian energy resolution")}};
   // The table kernels of a detector's energy resolution (Kernels.h, Kernel::tableForm): one form per row, named by the
-  // last word of its keyword, a keyword part per parameter (a positive value with a unit of its dimension).
+  // last word of its keyword, a keyword part per parameter: a positive value with a unit of its dimension, or, for a
+  // parameter a fit may vary (KernelParameter::fittable), the nuisance every fitted number of a record is written with.
   const std::string resolutionField = "detector.energy_resolution ";
   for (const Kernel &k : Kernels()) {
     if (!k.tableForm || k.keyword.compare(0, resolutionField.size(), resolutionField) != 0) continue;
     std::vector<PartSpec> parts;
-    for (const KernelParameter &p : k.parameters) parts.push_back(Kw(p.name, PositiveWithUnit(p.dimension), p.doc));
+    for (const KernelParameter &p : k.parameters)
+      parts.push_back(Kw(p.name, p.fittable ? Nuis(p.dimension) : PositiveWithUnit(p.dimension), p.doc));
     f.resolution.alternatives.push_back(Keyword(k.keyword.substr(resolutionField.size()), parts, k.doc));
   }
   f.udr = {{Unkeyed({Kw("file", Spec(ValueType::Path)), Kw("flight_path", PositiveWithUnit("length")), Kw("burst", WithUnit("time")),

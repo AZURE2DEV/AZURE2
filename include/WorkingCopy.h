@@ -122,11 +122,14 @@ class WorkingCopy {
   void FillDensitiesFromParams(const vector_r &, const Config &);
   /// Sum of the density priors ((N - N0)/sigma)^2.
   double DensityPenalty() const;
-  /// Stopping scales from the parameter vector (StoppingScale.cpp): the working copy's s of every effect of a scale
-  /// parameter, then the stopping of the sub-points and the thickness of the points of the effects whose s changed.
-  void FillStoppingScalesFromParams(const vector_r &, const Config &);
-  /// The sum of the stopping-scale priors ((s - s0)/sigma)^2 (TargetEffect::StoppingScalePenalty).
-  double StoppingScalePenalty() const;
+  /// The apparatus parameters from the parameter vector (ApparatusParameters.cpp): each row writes the values of the
+  /// effects of its parameters, then what follows them (the stopping scale: the sub-points' stopping, the thickness).
+  void FillApparatusFromParams(const vector_r &, const Config &);
+  /// The sum of the priors ((x - x0)/sigma)^2 of the apparatus parameters of row `row` (-1: of every row).
+  double ApparatusPenalty(int row = -1) const;
+  /// What follows a change of the stopping scale of the effects marked in `changed` (0-based): the stopping of their
+  /// sub-points and the thickness of their points (StoppingScale.cpp, the row's follow-up).
+  void FollowStoppingScales(const std::vector<char> &changed, const Config &);
   /// Set the fitted temperatures from a parameter vector (clamped to [T0/4, layout temperature], with a warning
   /// printed once), called by FillEnergyShiftsFromParams so every evaluation sees the vector's values.
   void FillDopplerFromParams(const vector_r &, const Config *configure);
@@ -416,8 +419,10 @@ class WorkingCopy {
   EvaluationCount iterations_;  // objective evaluations (EvaluationCount.h)
   /// Group the densityfit / densitygroup lines into parameters (SetUpTargetEffects); -1 on an error.
   int SetUpDensityParams(const Config &);
-  /// Groups the effects into stopping-scale parameters by TargetEffect::GetStoppingScaleKey (StoppingScale.cpp).
-  void SetUpStoppingScaleParams(const Config &);
+  /// Groups the effects' declarations into apparatus parameters by their key (ApparatusParameters.cpp).
+  void SetUpApparatusParams(const Config &);
+  /// The set-up's call (src/TargetSetup.cpp, the node-layout branch's file) under its former name.
+  void SetUpStoppingScaleParams(const Config &configure) { SetUpApparatusParams(configure); }
   /// The set-up refusals of a library stopping (evaluation, table): its data, and its range at every sub-point
   /// (StoppingChecks.h); the source of each target's stopping in the log, once per target.  false after a refusal.
   bool CheckTargetStoppings(const Config &);

@@ -217,6 +217,25 @@ struct StoppingSpec {
   std::string scaleName;         ///< its fit parameter's name, stopping_scale.<material>.<projectile>
 };
 
+/*!
+ * A number of an apparatus record that a fit may vary (docs/upgrade/apparatus_parameters.md): the engine's parameter of
+ * kind `apparatus`, written with the nuisance grammar `<value> [<unit>] fixed|fit [prior <c> <w>[%]] [grid_max <v>]`.
+ * Entries of several effects with one `key` are one fit parameter.
+ */
+struct ApparatusParameterSpec {
+  std::string row;        ///< the engine's row (ApparatusRows(): "kernel"), how the value reaches the calculation
+  int slot = 0;           ///< kernel: the parameter's place in Kernel::parameters (KernelParameters::values[slot])
+  std::string key;        ///< what shares one parameter: "<record>|<field>|<parameter>"
+  /// What it belongs to, in the order that makes its name (the values joined by '.'): (field, value) pairs, e.g.
+  /// ("record", "det1"), ("field", "energy_resolution"), ("parameter", "width") for det1.energy_resolution.width.
+  std::vector<std::pair<std::string, std::string>> owner;
+  std::string unit;         ///< the engine unit of the value ("MeV")
+  double value = 0.0;       ///< start value and prior centre, engine unit
+  bool vary = false;
+  double priorWidth = 0.0;  ///< absolute, engine unit; 0 = no prior
+  double gridMax = 0.0;     ///< the largest value the sub-point grids must span, engine unit; 0 = the default
+};
+
 /// An apparatus effect (target integration, beam resolution, beam profile, Doppler, UDR, screening) and the data
 /// sets it applies to.  Grammar and meaning of every field: docs/source/reference/data_formats.rst, <targetInt>.
 struct TargetEffectSpec {
@@ -294,6 +313,9 @@ struct TargetEffectSpec {
   /// order of its row's parameters, in their engine units; "" = the kernel the fields above select.
   std::string kernel;
   std::vector<double> kernelParameters;
+  /// Those of the kernel's parameters a fit may vary (KernelParameter::fittable, written as a nuisance): one entry each
+  /// (docs/upgrade/apparatus_parameters.md).
+  std::vector<ApparatusParameterSpec> apparatusParameters;
 };
 
 /// One row of the abundances of the samples, in the order given: rows are applied in that order (a sample exists from

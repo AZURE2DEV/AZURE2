@@ -222,14 +222,10 @@ class TargetEffect {
   double GetLayoutStoppingScale() const;
   /// The smallest scale a fit may take: s0 / 10.
   double GetStoppingScaleMinimum() const { return 0.1 * stoppingScaleNominal_; }
-  void ReplaceStoppingScalePrior() { stoppingScalePriorReplaced_ = true; }
-  bool IsStoppingScalePriorReplaced() const { return stoppingScalePriorReplaced_; }
-  /// ((s - s0)/sigma)^2 at the present scale, or 0 without a prior or when s is fixed (objective.md D5).
-  double StoppingScalePenalty(double scale) const {
-    if (!hasStoppingScale_ || !stoppingScaleVary_ || stoppingScalePriorReplaced_ || stoppingScaleSigma_ <= 0.0) return 0.0;
-    const double r = (scale - stoppingScaleNominal_) / stoppingScaleSigma_;
-    return r * r;
-  }
+  /// A table kernel's parameter values as written (engine units, KernelParameters::values), and those a fit may vary
+  /// (ApparatusParameters.h, row `kernel`).
+  const std::vector<double> &GetKernelValues() const { return kernelValues_; }
+  const std::vector<azure2::experiment::ApparatusParameterSpec> &GetKernelParameterFits() const { return kernelFits_; }
   Equation *GetConvolutionEq();
 
   // Energy straggling (a parameter of the target kernel: azure2::experiment::StragglingSigma, BohrStragglingSigma)
@@ -381,6 +377,8 @@ class TargetEffect {
   std::string targetName_;
   azure2::experiment::EffectKernels kernels_;  ///< Kernels
   std::vector<double> kernelValues_;           ///< a table kernel's parameter values (KernelParameters::values)
+  std::vector<double> kernelLayoutValues_;     ///< the values its grid is laid out for (KernelParameters::layoutValues)
+  std::vector<azure2::experiment::ApparatusParameterSpec> kernelFits_;  ///< GetKernelParameterFits
   std::string kernelErrorText_;                ///< HasKernelError
   struct UdrTable {
     std::string file;
@@ -423,7 +421,6 @@ class TargetEffect {
   bool stoppingScaleVary_ = false;
   double stoppingScaleSigma_ = 0.0;
   bool stoppingScaleSigmaDefault_ = false;
-  bool stoppingScalePriorReplaced_ = false;
   std::string stoppingScaleKey_, stoppingScaleName_, stoppingScaleMaterial_, stoppingScaleProjectile_;
   std::vector<int> datasetKeys_;  ///< the data sets it applies to (DatasetSpec::key)
   vector_r qCoefficients_;

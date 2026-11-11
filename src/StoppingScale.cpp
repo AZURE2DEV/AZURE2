@@ -1,72 +1,62 @@
 // The stopping of the targets from the stopping/ library at set-up (its refusals and its source in the log), and the
-// stopping-scale nuisance s (docs/upgrade/energy_grid.md section 6.2, decision D6): one parameter per (material,
-// projectile), its hand-over to the effects' sub-points and points, and its prior.
+// stopping scale s (docs/upgrade/energy_grid.md section 6.2, decision D6): its row of the apparatus parameters
+// (ApparatusParameters.h), one parameter per (material, projectile), and what follows a change of s.
 #include <algorithm>
-#include <atomic>
 #include <cmath>
-#include <map>
 #include <set>
 #include <sstream>
 
-#include "AZUREGrad.h"
+#include "ApparatusParameters.h"
 #include "Config.h"
 #include "WorkingCopy.h"
 #include "azure2/experiment/StoppingChecks.h"
 
-void WorkingCopy::SetUpStoppingScaleParams(const Config &configure) {
-  Draft().stoppingScaleLeads_.clear();
-  Draft().stoppingScaleParamOfEffect_.assign(Draft().NumTargetEffects(), 0);
-  std::map<std::string, int> byKey;
-  for (int n = 1; n <= Draft().NumTargetEffects(); n++) {
-    const TargetEffect *te = Draft().GetTargetEffect(n);
-    if (!te->IsTargetIntegration() || !te->HasStoppingScale()) continue;
-    auto it = byKey.find(te->GetStoppingScaleKey());
-    if (it == byKey.end()) {
-      Draft().stoppingScaleLeads_.push_back(n);
-      it = byKey.emplace(te->GetStoppingScaleKey(), (int)Draft().stoppingScaleLeads_.size()).first;
-      if (te->IsStoppingScaleVaried() && te->IsStoppingScaleSigmaDefault()) {
-        std::ostringstream note;
-        note << "Note: stopping scale " << te->GetStoppingScaleName() << " is fitted with the prior width "
-             << te->GetStoppingScaleSigma() << ", SRIM's stated accuracy for the projectile class (stopping.md section 7); "
-             << "write 'scale <s> fit prior <s> <width>' to give another.";
-        configure.Note(note.str());
-      }
-    }
-    Draft().stoppingScaleParamOfEffect_[n - 1] = it->second;
+namespace {
+
+// One declaration per target-integration effect with a scale, keyed by (material, projectile) (BuildEffects.cpp
+// ScaleOf): stopping_scale.<material>.<projectile>.
+void DeclareStoppingScale(const TargetEffect &te, std::vector<ApparatusDeclaration> &out) {
+  if (!te.IsTargetIntegration() || !te.HasStoppingScale()) return;
+  ApparatusDeclaration d;
+  d.key = te.GetStoppingScaleKey();
+  d.owner = {{"quantity", "stopping_scale"}, {"material", te.GetStoppingScaleMaterial()}, {"projectile", te.GetStoppingScaleProjectile()}};
+  d.unit = "1";
+  d.nominal = te.GetStoppingScaleNominal();
+  d.vary = te.IsStoppingScaleVaried();
+  d.sigma = te.GetStoppingScaleSigma();
+  d.layout = te.GetLayoutStoppingScale();
+  if (d.vary && te.IsStoppingScaleSigmaDefault()) {
+    std::ostringstream note;
+    note << "Note: stopping scale " << te.GetStoppingScaleName() << " is fitted with the prior width " << d.sigma
+         << ", SRIM's stated accuracy for the projectile class (stopping.md section 7); "
+         << "write 'scale <s> fit prior <s> <width>' to give another.";
+    d.note = note.str();
   }
+  out.push_back(d);
 }
 
-void WorkingCopy::FillStoppingScalesFromParams(const vector_r &p, const Config &configure) {
-  if (Data().NumStoppingScaleParams() == 0 || set_->stoppingScaleParamOffset_ < 0) return;
-  std::vector<char> changed(Data().NumTargetEffects(), 0);
-  bool any = false;
-  for (int k = 1; k <= Data().NumStoppingScaleParams(); k++) {
-    const int idx = set_->stoppingScaleParamOffset_ + k - 1;
-    if (idx < 0 || idx >= (int)p.size()) return;  // a vector without the stopping-scale block
-    const TargetEffect *lead = Data().GetStoppingScaleTargetEffect(k);
-    double v = p[idx];
-    // The sub-point grids span the layout scale (as the layout density): beyond it the depth integral would run off.
-    const double vMax = lead->GetLayoutStoppingScale(), vMin = lead->GetStoppingScaleMinimum();
-    if (v > vMax || !(v >= vMin)) {
-      static std::atomic<bool> warned{false};
-      if (!warned.exchange(true))
-        configure.outStream << "WARNING: " << lead->GetStoppingScaleName() << " = " << v << " is outside [" << vMin << ", "
-                            << vMax << "], the range its sub-point grids span; the calculation uses the nearest end."
-                            << " (Printed once.)" << std::endl;
-      v = (v > vMax) ? vMax : vMin;
-    }
-    for (int n = 1; n <= Data().NumTargetEffects(); n++) {
-      if (Data().StoppingScaleParamOfEffect(n) != k) continue;
-      TargetEffectValues &values = EffectValues(n);
-      if (values.stoppingScale == v) continue;
-      values.stoppingScale = v;
-      changed[n - 1] = 1;
-      any = true;
-    }
-  }
-  if (!any) return;
-  // Where s x epsilon enters: the stopping of every sub-point (read by the target kernel and the layer's E_out), and
-  // the thickness and the sigma(E_bar) depth of every point, each recomputed from its energy as the set-up made it.
+bool WriteStoppingScale(const TargetEffect &, int, double v, TargetEffectValues &values) {
+  if (values.stoppingScale == v) return false;
+  values.stoppingScale = v;
+  return true;
+}
+
+double ReadStoppingScale(const TargetEffect &, int, const TargetEffectValues &values) { return values.stoppingScale; }
+
+void FollowStoppingScale(WorkingCopy &data, const std::vector<char> &changed, const Config &configure) {
+  data.FollowStoppingScales(changed, configure);
+}
+
+}  // namespace
+
+ApparatusRow StoppingScaleRow() {
+  return {"stopping_scale", "stopping scale", "Stopping-Scale", "epsilon -> s epsilon for that material and projectile",
+          DeclareStoppingScale, WriteStoppingScale, ReadStoppingScale, FollowStoppingScale};
+}
+
+// Where s x epsilon enters: the stopping of every sub-point (read by the target kernel and the layer's E_out), and the
+// thickness and the sigma(E_bar) depth of every point, each recomputed from its energy as the set-up made it.
+void WorkingCopy::FollowStoppingScales(const std::vector<char> &changed, const Config &configure) {
   auto update = [&](const TermRef &seg) {
     if (!seg.segment->IsTargetEffect()) return;
     const int n = seg.GetTargetEffectNum();
@@ -87,13 +77,6 @@ void WorkingCopy::FillStoppingScalesFromParams(const vector_r &p, const Config &
   };
   for (const Segment &seg : set_->segments_) update({&seg, 0});
   for (const LeafRef &leaf : set_->leafRefs_) update({&set_->segments_[leaf.first], leaf.second});
-}
-
-double WorkingCopy::StoppingScalePenalty() const {
-  double chi2 = 0.0;
-  for (int k = 1; k <= Data().NumStoppingScaleParams(); k++)
-    chi2 += Data().GetStoppingScaleTargetEffect(k)->StoppingScalePenalty(EffectValues(Data().GetStoppingScaleLeadCopy(k)).stoppingScale);
-  return chi2;
 }
 
 bool WorkingCopy::CheckTargetStoppings(const Config &configure) {
@@ -151,14 +134,4 @@ bool WorkingCopy::CheckSubPointStoppings(const Config &configure) {
     }
   }
   return true;
-}
-
-void AppendStoppingScaleParams(ParamIndexMap &map, WorkingCopy *data, int &i) {
-  if (!data) return;
-  for (int k = 1; k <= data->Data().NumStoppingScaleParams(); k++, i++) {
-    map.stoppingScaleIndex_[k] = i;
-    ParamDesc d{ParamKind::StoppingScale, -1, -1, -1, -1, false};
-    d.stoppingScale = k;
-    map.desc_.push_back(d);
-  }
 }
