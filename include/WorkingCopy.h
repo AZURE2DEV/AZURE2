@@ -220,6 +220,8 @@ class WorkingCopy {
   Unit &UnitAt(int i) { return units_[i]; }
   const Unit &UnitAt(int i) const { return units_[i]; }
   int NumUnits() const { return (int)units_.size(); }
+  /// The index of a unit of this working copy (UnitAt(UnitIndex(u)) is u).
+  int UnitIndex(const Unit *u) const { return (int)(u - units_.data()); }
   UnitRange<Unit> Units(int first, int count) { return UnitRange<Unit>(units_.data() + first, count); }
   UnitRange<const Unit> Units(int first, int count) const {
     return UnitRange<const Unit>(units_.data() + first, count);
@@ -382,9 +384,15 @@ class WorkingCopy {
    */
   int CalculatePointsInParallel(const std::vector<const Segment *> &segments, CNuc *theCNuc, const Config &configure,
                                 azure2::Results &results);
+  /// The energy tasks of the point pass over \p segments (the ones CalculatePointsInParallel runs): the analytic
+  /// gradient back-propagates through the same tasks (src/GradEnergyTasks.cpp).
+  const azure2::EnergyTaskList &EnergyTasksOf(const std::vector<const Segment *> &segments, CNuc *theCNuc,
+                                              const Config &configure);
 
  private:
   void LayOutUnits(std::vector<std::vector<Unit> *> *fresh);  // CompactUnits, PlaceSubPointGrids
+  /// The plan tasks of the points of \p segments and their leaves, in data order (src/EnergyPass.cpp).
+  std::vector<int> PassWork(const std::vector<const Segment *> &segments) const;
   /// The data set (shared, immutable) and, during the set-up only, the same object writable (Draft).
   std::shared_ptr<const DataSet> set_;
   std::shared_ptr<DataSet> draft_;

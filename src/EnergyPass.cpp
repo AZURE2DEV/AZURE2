@@ -200,6 +200,24 @@ long CheckEnergyTasks(WorkingCopy &data, CNuc *cnuc, const Config &configure, co
 
 }  // namespace azure2
 
+std::vector<int> WorkingCopy::PassWork(const std::vector<const Segment *> &segments) const {
+  // The plan tasks of the segments (each point that is no other's mapped point hosts one), in data order.
+  std::vector<int> work;
+  std::set<const Segment *> seen;
+  for (const Segment *seg : segments) {
+    if (!seg || !seen.insert(seg).second) continue;
+    for (int t = 0; t < seg->NumTerms(); t++)
+      for (const Unit &pt : seg->TermPoints(*this, t))
+        if (!pt.IsMapped()) work.push_back(pt.PlanTask());
+  }
+  return work;
+}
+
+const azure2::EnergyTaskList &WorkingCopy::EnergyTasksOf(const std::vector<const Segment *> &segments, CNuc *theCNuc,
+                                                         const Config &configure) {
+  return plan_.EnergyTasks(*this, theCNuc, configure, PassWork(segments));
+}
+
 /*!
  * One parallel pass over the points of an evaluation, shared by the CLI
  * (AZURECalc::PrecalculatePoints) and the API's calculations (AZUREAPI).
@@ -214,15 +232,7 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
 #endif
   if (ScopedPointMappingOff::Active()) return -1;
   if (std::getenv("AZURE_SERIAL_CHI2")) return -1;
-  // The plan tasks of the segments (each point that is no other's mapped point hosts one), in data order.
-  std::vector<int> work;
-  std::set<const Segment *> seen;
-  for (const Segment *seg : segments) {
-    if (!seg || !seen.insert(seg).second) continue;
-    for (int t = 0; t < seg->NumTerms(); t++)
-      for (Unit &pt : seg->TermPoints(*this, t))
-        if (!pt.IsMapped()) work.push_back(pt.PlanTask());
-  }
+  const std::vector<int> work = PassWork(segments);
   AZUREProfile::Timer profileTimer(AZUREProfile::kPoints);
   // A plan task whose calculation threw: the reason (empty: none).  Its points get NaN (Unit::MarkFailed) after the
   // pass, and its folds do not run.
