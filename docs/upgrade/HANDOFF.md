@@ -2,6 +2,45 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, validation follow-ups) — validation reaches the run's refusals; pyazr's session on format 3 (`feature/upgrade-4-validation`)
+
+**Done.**
+- `--validate` / `pyazr.validate` / every `Project` edit (a build that uses the data; the engine's own build in
+  `Config` does not, its set-up refuses at run time as before) now report what a run refuses: every row of a data file
+  that does not parse (`E_DATA_ROW`, line, column, text found; `experiment::CheckDataRows` beside
+  `ReadMeasurementRows`), a row with fewer columns than the roles (`E_DATA_FILE`, every row not the first), an
+  angular-coefficient row without a Legendre order (`E_DATA_ROW`), a non-positive uncertainty in the window
+  (`W_DATA_ERROR`, a warning: the chi^2 skips a 0); the covariance file (`E_COVARIANCE_FILE`: missing, unreadable,
+  row counts, data file not listed, a variance <= 0 in the window; its one reader moved to
+  `experiment/CovarianceFile`, the engine's `DataCovariance::Read` calls it); the final state of external capture
+  (`E_FINAL_STATE_NOT_LEVEL`, `E_FINAL_STATE_SHARED`: one rule, `experiment::ExternalCaptureFinalStates`, called by
+  `CNuc::ParseExternalCapture` with its messages unchanged and by `Schema::Build` under `BuildOptions::setUpChecks`).
+- `AZURE2 --describe FILE --record NAME`; an open energy window reads "all energies (no energy_window)" (the expected
+  describe texts of `ratio_to_rutherford` and `units_scales` follow).
+- One function names an abundance parameter (`experiment::AbundanceParameterName`; `CNuc::AbundanceParamName`'s body
+  calls it); `experiment::ParameterNamesOf` / `_azure2.parameter_names`; `Project.rename` maps the engine's names.
+- pyazr 2.31.0: `azure2.datasets`, `active_datasets`, `extrapolations`, `dataset_chi2` on a format-3 session from the
+  engine's description (`pyazr/described.py`); `Project.set` keeps comments between repeats;
+  `pyazr.records_from_csv`; `pyazr.describe(path, record=)`; the inventory of `azrfile.py` uses:
+  `docs/upgrade/pyazr_on_records.md`.
+- Tests: `tests/validate_run_refusals` (format-3 fixtures `*.f3`), `pyazr_session_records`, build_test cases of the
+  five new codes, `convert_spec_equivalence` reads with the engine's options.
+
+**Verified** (build `work/b-valid`, 0 warnings, 5 threads): all projects x 3 bases against `tab-trial13` (tag
+`tab-valid1`): 726 / 699 / 726 identical; converted-tree gate (`REF=tab-trial8`, tag `gvalid1`): 483 (456) identical,
+38 classified, 0 differ, 0 missing, no converted file's bytes moved; `tests/run_tests.sh` 146 passed, 0 failed (the new
+`validate_run_refusals`); consistency test: 28 flags, 80 diagnostic codes; `--validate` of T2's conversion 4.6 ms
+against 4.0 ms on `b-trial13` (minimum of 20); `ctest -LE slow` 183/183; 13N, T1, T2 and the final-state models at 4
+threads: 47 output files byte-identical to the 1-thread run.
+
+**Open.** Refusals validation does not predict (survey of the converted tree and of the check.sh models): `<levels>`
+rows whose level ID has channels of two nuclei and the other `CNuc::Fill` row checks; a lab angle beyond the
+kinematic maximum (`relativistic/models/li7pn_edge_rel.azr`); two fitted rows of one covariance file from overlapping
+windows; a covariance matrix not positive definite. `ESegment::Fill` still compares a covariance variance with 0 by
+itself (the validation reads the variance through the shared reader); EData's `EffectParameterName` should give its
+names through experiment (`ParameterNamesOf` copies its three suffixes). An unparseable data row: the run drops the
+data set with a WARNING ("Could Not Fill Segment"), validation refuses it.
+
 ## 2026-11-11 (director, early morning) — the eighth wave, first part merged: the project as records in Python; capture analyzing power at set-up
 
 **Merged into `feature/upgrade-4-data`** (`--no-ff`, in this order; rehearsed together in one scratch worktree, built
