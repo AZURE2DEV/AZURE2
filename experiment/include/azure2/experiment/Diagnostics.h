@@ -137,10 +137,13 @@ constexpr const char *kNotBuilt = "E_NOT_BUILT";
 constexpr const char *kThmRelativistic = "E_THM_RELATIVISTIC";
 constexpr const char *kThmCovariance = "E_THM_COVARIANCE";
 constexpr const char *kThmExperimentUnknown = "E_THM_EXPERIMENT_UNKNOWN";  // ReadFormat3Project: <thm> lacks the name
+constexpr const char *kThmOldList = "E_THM_OLD_LIST";  // ReadFormat3Project: segments= / weight[k]= in a format-3 <thm>
 constexpr const char *kFoldConflict = "E_FOLD_CONFLICT";
 // A yield on a layer, refused by the engine's set-up, which evaluates the stopping on the sub-point grid (LayerChecks.h)
 constexpr const char *kLayerStopping = "E_LAYER_STOPPING";
 constexpr const char *kLayerExitBelowModel = "E_LAYER_EXIT_BELOW_MODEL";
+// A laboratory-frame differential datum at the kinematic maximum lab angle, refused by the engine's set-up (Frames.h)
+constexpr const char *kLabJacobianAtLimit = "E_LAB_JACOBIAN_AT_LIMIT";
 // Hybrid potentials (`potential` records: BuildPotentials; the old block in a format-3 file: ReadFormat3Project)
 constexpr const char *kPotentialTwice = "E_POTENTIAL_TWICE";
 constexpr const char *kPotentialPairKind = "E_POTENTIAL_PAIR_KIND";

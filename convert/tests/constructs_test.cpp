@@ -424,6 +424,24 @@ int main(int argc, char **argv) {
              {"columns", "E_lab[MeV] _ value error"}, {"energy_window", "0.1 2 MeV"}, {"norm", "1 fixed"}, {"target", "natNe"}});
     check("covariance, total, samples: converted", r.ok);
   }
+  // ---- an inactive line keeps the sample it names: its data set names the sample's target (switched on, it means what
+  //      the old line meant); a sample only inactive lines name has no target to keep: refused with the reason
+  {
+    const std::string abund = "<abundances>\nnatNe: 10 21 0.9048 1 0.01\nnatNe: sum 0.001\n</abundances>\n";
+    const ConvertResult r = Convert({"1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 nat.dat sample natNe\n"
+                                     "0 5 5 0.1 2 0 180 0 1 0 0 0 0 0 off.dat sample natNe\n",
+                                     "0 5 5 0.5 2.0 0.5 0 0 0 0 sample natNe\n", "", abund, ""});
+    check("inactive lines of a used sample: converted", r.ok);
+    const std::size_t off = r.text.find("dataset off"), x1 = r.text.find("extrapolation x1");
+    const std::string offRecord = off == std::string::npos ? "" : r.text.substr(off, r.text.find("\n\n", off) - off);
+    const std::string x1Record = x1 == std::string::npos ? "" : r.text.substr(x1, r.text.find("\n\n", x1) - x1);
+    check("... the inactive data set names the sample's target",
+          offRecord.find("target         natNe") != std::string::npos && offRecord.find("active         no") != std::string::npos);
+    check("... the inactive extrapolation names it too", x1Record.find("target         natNe") != std::string::npos);
+    const ConvertResult o = Convert({"0 5 5 0.1 2 0 180 0 1 0 0 0 0 0 off.dat sample natNe\n", "", "", abund, ""});
+    check("a sample only an inactive line names: refused",
+          !o.ok && o.refusal.find("data line 1 is inactive and names sample \"natNe\", which no active line uses") != std::string::npos);
+  }
   // ---- transmission n vary sigma (a fitted sample thickness, SegLine.h); thicknessgroup: one target
   {
     const ConvertResult r = Convert({"1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 tr1.dat transmission 0.05 1 0.002 thicknessgroup S\n"

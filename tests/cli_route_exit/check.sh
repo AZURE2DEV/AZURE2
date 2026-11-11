@@ -11,6 +11,7 @@
 #
 # Exit status.  Before 2026-11-01 AZURE2 exited 0 whatever happened, also after "Calculation was aborted." or a
 # refused project, so a script or job chain could not tell.  Now 1, also for a format-3 project refused when it is read
+# or by its set-up (a covariance file: the refusal is the last line),
 # or for its data files; a project file that cannot be opened exits 255 with its own message.
 #
 # Checked on tests/13N (with its capture segment and target integration) and tests/7Li_p_ay --no-brune (refused: no
@@ -29,6 +30,7 @@ export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/cli_route_exit.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
+. "$HERE/../lib/edit_guard.sh"
 failures=0
 ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
@@ -128,6 +130,21 @@ grep -q "E_DATA_FILE: dataset baumann_1658, field file: cannot read data/baumann
   && [ "$rc" = 1 ] && [ "$last" = "$REFUSED" ] && ! grep -q "Could not fill data object" "$dir/run.log" \
   && ok "a data file that cannot be read: E_DATA_FILE, the refusal line, exit 1" \
   || bad "a data file that cannot be read: exit $rc (want 1), last line '$last'"
+
+# A refusal of the set-up other than a data file (here a covariance file that cannot be read) ends the run the same
+# way: its ERROR line is the last before "Thanks for using AZURE2.", without "Could not fill data object from file."
+# after it, exit 1.
+dir="$WORK/nocov"; mkdir -p "$dir/output" "$dir/checks"
+cp -R "$HERE/../13N/data" "$dir/data"
+edited "$HERE/../13N/13N.azr" "$dir/13N.azr" \
+  awk '$1 == "dataset" { ds = $2 } { print } ds == "artemov" && $1 == "file" { print "    covariance     no_such_cov.txt" }' \
+  || bad "nocov: the covariance field was not added"
+(cd "$dir" && printf '1\n\n\n7\n' | "$AZURE2_BIN" --no-gui --no-readline 13N.azr > run.log 2>&1); rc=$?
+last="$(grep -v '^ *$' "$dir/run.log" | grep -v '^Thanks for using AZURE2' | tail -n 1)"
+case "$last" in "ERROR: Covariance file: "*no_such_cov.txt*) last_ok=1 ;; *) last_ok=0 ;; esac
+[ "$rc" = 1 ] && [ "$last_ok" = 1 ] && ! grep -q "Could not fill data object" "$dir/run.log" \
+  && ok "a covariance file that cannot be read: its ERROR line last, exit 1" \
+  || bad "a covariance file that cannot be read: exit $rc (want 1), last line '$last'"
 
 # A project file that does not exist keeps its own message (and exit status 255).
 dir="$WORK/nofile"; mkdir -p "$dir"

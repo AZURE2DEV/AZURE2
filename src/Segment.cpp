@@ -440,6 +440,18 @@ int Segment::Fill(CNuc *theCNuc, WorkingCopy *theData, const Config &configure) 
       theData->SetKinematicsError();
       return -1;
     }
+    // At the kinematic maximum itself the angle converts but dOmega_lab/dOmega_cm is 0: the lab-frame comparison
+    // would divide the model by it (Frames.h, kMinLabJacobian).
+    const double jacobian = Segment::Jacobian(theData->State(*this), 0, i);
+    if (!(jacobian > azure2::experiment::kMinLabJacobian) || !std::isfinite(jacobian)) {
+      const Unit *converted = this->GetPoint(*theData, i + 1);
+      const std::string where = "segment #" + std::to_string(this->GetSegmentKey()) + " (" + infile + ")";
+      configure.outStream << "ERROR: "
+                          << azure2::experiment::LabJacobianAtLimit(where, converted->GetLabEnergy(), converted->GetLabAngle(), jacobian).ToText()
+                          << std::endl;
+      theData->SetKinematicsError();
+      return -1;
+    }
   }
   this->KeepLoadFrame(*theData, 0);
   return 0;

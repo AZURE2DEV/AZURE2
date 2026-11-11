@@ -221,6 +221,24 @@ double PhotonJacobian(const Partition &in, double eLab, double thetaLab) {
   return pow(1.0 - beta * cos(thetaLab * pi / 180.0), 2.0) / (1.0 - beta * beta);
 }
 
+Diagnostic LabJacobianAtLimit(const std::string &where, double eLab, double thetaLab, double jacobian) {
+  Diagnostic d;
+  d.code = codes::kLabJacobianAtLimit;
+  d.section = "data";
+  d.recordKind = "dataset";
+  std::ostringstream s;
+  s.precision(12);
+  s << where << ": the point at E_lab = " << eLab << " MeV, theta_lab = " << thetaLab
+    << " deg lies at the kinematic maximum lab angle: dOmega_lab/dOmega_cm = " << jacobian
+    << ", so the model in the lab frame diverges there; drop the point or give it in the c.m. frame (code 4 / 5)";
+  std::ostringstream f;
+  f << jacobian;
+  d.hasFound = true;
+  d.found = f.str();
+  d.message = s.str();
+  return d;
+}
+
 FrameRow UnconvertedRow(double eLab, double thetaLab, double binLowLab, double binHighLab) {
   FrameRow r;
   r.eLab = eLab;

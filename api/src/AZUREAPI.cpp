@@ -150,7 +150,7 @@ int AZUREAPI::Initialize() {
         return -1;
       }
     } else {
-      if (data()->MakePoints(configure(), compound()) == -1 || SessionRefusesAdaptiveGrids(configure())) {
+      if (data()->MakePoints(configure(), compound()) != 0 || SessionRefusesAdaptiveGrids(configure())) {
         return -1;
       } else if (data()->Data().NumSegments() == 0) {
         // configure().outStream << "Extrapolation segments produce no data." << std::endl;
@@ -717,7 +717,7 @@ bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
   if (configure().paramMask & Config::CALCULATE_WITH_DATA) {
     if (data()->Fill(configure(), compound()) != 0) return false;
   } else {
-    if (data()->MakePoints(configure(), compound()) == -1 || SessionRefusesAdaptiveGrids(configure())) return false;
+    if (data()->MakePoints(configure(), compound()) != 0 || SessionRefusesAdaptiveGrids(configure())) return false;
   }
   if (data()->Data().NumSegments() == 0) return false;
 

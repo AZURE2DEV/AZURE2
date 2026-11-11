@@ -40,6 +40,7 @@ add_library(azure2_experiment STATIC
   src/Grids.cpp
   src/HybridPotentialSettings.cpp
   src/LayerChecks.cpp
+  src/ThmSectionLines.cpp
   src/SpinOrbitChecks.cpp
   src/Json.cpp
   src/ModelDatum.cpp

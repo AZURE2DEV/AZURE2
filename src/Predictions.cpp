@@ -109,7 +109,7 @@ std::vector<std::string> ProjectPredictions(const std::string &projectFile, std:
     lines.push_back("data: set-up failed");
   else
     AppendLines(data, "data", RecordNames(configure, "dataset"), lines);
-  if (extrapolations.MakePoints(configure, &compound) == -1)
+  if (extrapolations.MakePoints(configure, &compound) != 0)
     lines.push_back("extrapolation: set-up failed");
   else
     AppendLines(extrapolations, "extrapolation", RecordNames(configure, "extrapolation"), lines);

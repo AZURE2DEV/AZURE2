@@ -1124,8 +1124,8 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
         return -1;
       }
     } else {
-      if (data->MakePoints(configure, compound) == -1) {
-        configure.outStream << "Could not fill data object from file." << std::endl;
+      if (const int made = data->MakePoints(configure, compound); made != 0) {
+        if (made != WorkingCopy::kFillRefused) configure.outStream << "Could not fill data object from file." << std::endl;
         delete compound;
         delete data;
         return -1;

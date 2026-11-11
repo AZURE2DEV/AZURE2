@@ -1870,6 +1870,9 @@ Diagnostic codes
    * - ``E_THM_EXPERIMENT_UNKNOWN``
      - error
      - a thm field naming an experiment that <thm> has no experiment[<name>] line for
+   * - ``E_THM_OLD_LIST``
+     - error
+     - an old member or weight list in <thm> (segments=, weight[<k>]=, weightTest[<k>]=): in format 3 the data set's thm and thm_weight fields say it
    * - ``E_FOLD_CONFLICT``
      - error
      - data sets sharing a target with a free parameter differ in beam, detector or quadrature
@@ -1879,6 +1882,9 @@ Diagnostic codes
    * - ``E_LAYER_EXIT_BELOW_MODEL``
      - error
      - a yield on a layer the beam does not leave above the lowest energy the model is evaluated at (set-up)
+   * - ``E_LAB_JACOBIAN_AT_LIMIT``
+     - error
+     - a laboratory-frame differential datum at the kinematic maximum lab angle, where dOmega_lab/dOmega_cm is 0 and the lab-frame model diverges (set-up)
    * - ``E_POTENTIAL_TWICE``
      - error
      - two potential records for one pair
