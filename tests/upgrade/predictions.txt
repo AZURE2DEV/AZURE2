@@ -85,9 +85,9 @@ data baumann_1779: ay(1->1)
 data capture_xs: dsdo_cm(1->2)
 data capture_ay: ay(1->2)
 == tests/15N_p_a/15N_p_a.azr
-data 1: sigma(1->2)
-data 2: sigma(1->2)
-data 3: sigma(1->2)
+data lacognata_a: sigma(1->2)
+data lacognata_b: sigma(1->2)
+data schardt: sigma(1->2)
 == tests/17O/17O.azr
 data 1: thm_sigma(1->2)
 extrapolation 1: thm_sigma(1->2)
@@ -355,8 +355,8 @@ exit 1
 extrapolation: set-up failed
 exit 1
 == tests/norm_groups/norm_groups.azr
-data 1: dsdo_cm(1->1)
-data 2: dsdo_cm(1->1)
+data xs_40_s08: dsdo_cm(1->1)
+data xs_90_s09: dsdo_cm(1->1)
 == tests/pyazr/data/shift_fn_groups/shift_fn_groups.azr
 data 1: dsdo_cm(1->1)
 data 2: dsdo_cm(1->1)

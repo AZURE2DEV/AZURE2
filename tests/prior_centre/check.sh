@@ -1,29 +1,25 @@
 #!/usr/bin/env bash
 #
-# Explicit prior centres: rows "segment_N_norm prior_centre c" and
-# "segment_N_energy_shift prior_centre c" of <parameterSettings>
-# (EData::ApplyPriorCentres) move the centre of that segment's prior away from
-# the norm / shift field of its <segmentsData> line, which stays the start
-# value.  Without a row the field is both, as it always was.
+# Explicit prior centres.  Old files had rows "segment_N_norm prior_centre c" and "segment_N_energy_shift prior_centre
+# c" of <parameterSettings> (EData::ApplyPriorCentres) that moved the centre of that segment's prior away from the
+# norm / shift field of its <segmentsData> line, which stayed the start value.  Format 3 writes the centre in the field
+# ("norm <start> fit prior <centre> <width>"); the rows are the converter's (it folds them into the fields).
 #
-# Model: tests/15N_p_a, segment 3 (Schardt) has norm 0.9950877877494786 with a
-# 15 % prior; calculate with data, so every norm and shift stays at its field.
-#   none  classic file                          -> chi2_0, norm term 0
-#   same  centre = the field                    -> stdout and chiSquared.out
-#                                                  byte-identical to none
+# Model: tests/15N_p_a, data set 3 (schardt) has norm 0.9950877877494786 with a 15 % prior; calculate with data, so
+# every norm and shift stays at its field.
+#   none  the file as it is                     -> chi2_0, norm term 0
+#   same  "prior 0.9950877877494786 15%" written again (centre = the start value)
+#                                               -> stdout and chiSquared.out byte-identical to none
 #   one   centre 1                              -> chi2_0 + ((n - 1)/0.15)^2
-#   shift segment 3 shift free, error 0.01 MeV, centre 0.005 MeV
+#   shift data set 3's shift free, error 0.01 MeV, centre 0.005 MeV
 #                                               -> + ((0 - 0.005)/0.01)^2 = 0.25
-#   stale segment 2's line made inactive, a row for segment 2
-#                                               -> warning, the chi2 of the same
-#                                                  file without the row
-#   unknown a row for segment 9 (no such line), and a misspelt
-#         "segment_3_nrom": a prior that is silently not applied is a
-#         wrong fit that looks right       -> refused, no chi-squared
-#   bad   "segment_3_norm prior_centre abc", and a centre 0 for a norm
-#                                               -> refused, no chi-squared
-# The "Total Chi-Squared:" line on stdout includes the priors; chiSquared.out
-# gives the norm term separately (Total-Norm-Chi-Squared).
+#   stale the original with data set 2's line inactive and a row for it, converted: the row is dropped, the chi2 of
+#         the same file without the row
+#   unknown, typo, bad, nonpos: rows of the original naming no line (segment_9_norm), misspelt (segment_3_nrom),
+#         malformed (abc) or a norm centre 0: the conversion is refused (a prior that is silently not applied is a
+#         wrong fit that looks right)
+# The "Total Chi-Squared:" line on stdout includes the priors; chiSquared.out gives the norm term separately
+# (Total-Norm-Chi-Squared).
 #
 #   ./tests/prior_centre/check.sh path/to/AZURE2
 
@@ -40,23 +36,33 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/prior_centre.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
 # run NAME "ROWS (\n-separated) or empty" [free-shift] [inactive2] -> the run directory
+# run NAME CENTRE [SHIFT-CENTRE] [inactive2]: data set 3's norm prior centred at CENTRE (its 15 % width), its shift
+# free (prior width 0.01 MeV) centred at SHIFT-CENTRE when given, data set 2 inactive when the fourth argument is set
 run() {
-  local d="$WORK/$1" rows="$2" shift3="${3:-}" off2="${4:-}"
+  local d="$WORK/$1" centre="$2" shift3="${3:-}" off2="${4:-}"
   mkdir -p "$d/output" "$d/checks"
   cp -r "$SRC/data" "$d/"
-  awk -v rows="$rows" -v shift3="$shift3" -v off2="$off2" '
+  awk -v c="$centre" -v shift3="$shift3" -v off2="$off2" '
     { sub(/\r$/, "") }
-    /^<segmentsData>/ {seg = 1; n = 0; print; next}
-    /^<\/segmentsData>/ {seg = 0}
-    seg && NF {
-      n++
-      if (n == 3 && shift3 != "") { $12 = "0"; $13 = "0.01"; $14 = "1" }
-      if (n == 2 && off2 != "") { $1 = "0" }
-    }
-    /^<\/parameterSettings>/ && rows != "" {print rows}
+    /^dataset / { n++; print; if (n == 2 && off2 != "") print "    active         no"; if (n == 3 && shift3 != "") print "    shift          offset 0 MeV fit prior " shift3 " 0.01"; next }
+    n == 3 && $1 == "norm" { $0 = "    norm           " $2 " fit prior " c " 15%" }
     {print}
   ' "$SRC/15N_p_a.azr" > "$d/run.azr"
   (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 2000000 > run.log)
+  echo "$d"
+}
+# old NAME ROW [inactive2]: the original (tests/convert/fixtures) with a prior_centre row, segment 2 inactive when the
+# third argument is set, converted to $WORK/NAME/run.azr; the converter's log in convert.log
+OLD="$HERE/../convert/fixtures/tests/15N_p_a/15N_p_a.azr"
+old() {
+  local d="$WORK/$1"
+  mkdir -p "$d/output" "$d/checks"
+  cp -r "$SRC/data" "$d/"
+  awk -v row="$2" -v off2="${3:-}" '{ sub(/\r$/, "") }
+    /^<segmentsData>/ { seg = 1; n = 0; print; next } /^<\/segmentsData>/ { seg = 0 }
+    seg && NF { n++; if (n == 2 && off2 != "") $1 = "0" }
+    /^<\/parameterSettings>/ { print row } { print }' "$OLD" > "$d/old.azr"
+  (cd "$d" && $RUN "$AZURE2_BIN" --convert old.azr run.azr --to 3 > convert.log 2>&1)
   echo "$d"
 }
 total() { grep -oE 'Total Chi-Squared: [0-9.eE+-]+' "$1/run.log" | awk '{print $3}'; }
@@ -69,17 +75,18 @@ close() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN{d=a-b; if(d<0)d=-d; exit !(d<
 
 grep -q "<parameterSettings>" "$SRC/15N_p_a.azr" || { echo "  FAIL  tests/15N_p_a has no <parameterSettings>"; exit 1; }
 
-d0="$(run none "")";             c0="$(total "$d0")"
-ds="$(run same "segment_3_norm prior_centre 0.9950877877494786")"
-d1="$(run one "segment_3_norm prior_centre 1")"; c1="$(total "$d1")"
-dz="$(run shift0 "" free)";      cz="$(total "$dz")"
-dh="$(run shift "segment_3_energy_shift prior_centre 0.005" free)"; ch="$(total "$dh")"
-dy="$(run off2 "" "" inactive2)"; cy="$(total "$dy")"
-dx="$(run stale "segment_2_norm prior_centre 1" "" inactive2)"; cx="$(total "$dx")"
-du="$(run unknown "segment_9_norm prior_centre 1")"; cu="$(total "$du")"
-dt="$(run typo "segment_3_nrom prior_centre 1")"; ct="$(total "$dt")"
-db="$(run bad "segment_3_norm prior_centre abc")"; cb="$(total "$db")"
-dn="$(run nonpos "segment_3_norm prior_centre 0")"; cn="$(total "$dn")"
+d0="$(run none 0.9950877877494786)";   c0="$(total "$d0")"
+ds="$(run same 0.9950877877494786)"
+d1="$(run one 1)"; c1="$(total "$d1")"
+dz="$(run shift0 0.9950877877494786 0)"; cz="$(total "$dz")"
+dh="$(run shift 0.9950877877494786 0.005)"; ch="$(total "$dh")"
+dy="$(run off2 0.9950877877494786 "" inactive2)"; cy="$(total "$dy")"
+dx="$(old stale "segment_2_norm prior_centre 1" inactive2)"
+(cd "$dx" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 2000000 > run.log); cx="$(total "$dx")"
+du="$(old unknown "segment_9_norm prior_centre 1")"
+dt="$(old typo "segment_3_nrom prior_centre 1")"
+db="$(old bad "segment_3_norm prior_centre abc")"
+dn="$(old nonpos "segment_3_norm prior_centre 0")"
 
 echo "  chi2: classic $c0   centre 1 $c1   free shift $cz   its centre 0.005 $ch   line 2 inactive $cy, with its row $cx"
 for v in "$c0" "$c1" "$cz" "$ch" "$cy" "$cx"; do
@@ -106,28 +113,19 @@ if close "$(awk -v a="$ch" -v z="$cz" 'BEGIN{print a-z}')" 0.25 1e-6; then
 else
   fail "shift centre added $(awk -v a="$ch" -v z="$cz" 'BEGIN{print a-z}'), expected 0.25"
 fi
-if [ "$cx" = "$cy" ] && grep -q "names no active data segment" "$dx/run.log"; then
-  pass "a row for an inactive segment line: warned, ignored"
+if [ "$cx" = "$cy" ] && grep -q "prior_centre row(s) folded" "$dx/convert.log"; then
+  pass "a row for an inactive segment line: dropped by the converter, the chi2 without it"
 else
-  fail "a row for an inactive segment line: chi2 $cx (without the row $cy), warning $(grep -c 'names no active' "$dx/run.log")"
+  fail "a row for an inactive segment line: chi2 $cx (without the row $cy), converter: $(tail -1 "$dx/convert.log")"
 fi
-for c in "unknown:$du:$cu" "typo:$dt:$ct"; do
-  IFS=: read -r what dir chi <<< "$c"
-  if [ -z "$chi" ] && grep -q "names no parameter a prior_centre row can move" "$dir/run.log"; then
-    pass "a row naming no segment line ($what) is refused"
+for c in "unknown:$du:names no parameter a prior_centre row can move" "typo:$dt:cannot be read" "bad:$db:cannot be read" \
+         "nonpos:$dn:must be positive"; do
+  IFS=: read -r what dir msg <<< "$c"
+  if [ ! -f "$dir/run.azr" ] && grep -q "not converted: <parameterSettings> row .*$msg" "$dir/convert.log"; then
+    pass "the row of the original ($what) is refused by the converter"
   else
-    fail "a row naming no segment line ($what) was not refused (chi2 '$chi')"
+    fail "the row of the original ($what) was not refused ($(grep -m1 ERROR "$dir/convert.log"))"
   fi
 done
-if [ -z "$cb" ] && grep -q "is not \"segment_N_norm prior_centre value\"" "$db/run.log"; then
-  pass "a malformed row is refused"
-else
-  fail "a malformed row was not refused (chi2 '$cb')"
-fi
-if [ -z "$cn" ] && grep -q "must be positive" "$dn/run.log"; then
-  pass "a norm centre 0 is refused"
-else
-  fail "a norm centre 0 was not refused (chi2 '$cn')"
-fi
 [ "$bad" -eq 0 ] && echo "  ok    explicit prior centres"
 exit "$bad"

@@ -47,6 +47,8 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import old_tree  # noqa: E402  (the old originals of converted projects)
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SOURCE = os.path.join(ROOT, "tests", "15N_p_a")
 AZR = "15N_p_a.azr"
@@ -75,7 +77,7 @@ AzrModel = _azrfile.AzrModel
 
 
 def fresh_copy(dst):
-    shutil.copytree(SOURCE, dst)
+    old_tree.copytree(SOURCE, dst)  # with the old file (format3_tree.md)
     for junk in ("output", "checks"):
         shutil.rmtree(os.path.join(dst, junk), ignore_errors=True)
         os.makedirs(os.path.join(dst, junk))
@@ -96,7 +98,7 @@ def segment_lines(path):
 # 1. -------------------------------------------------------------------------
 print("1. AzrModel segment values")
 with tempfile.TemporaryDirectory() as tmp:
-    src = os.path.join(SOURCE, AZR)
+    src = old_tree.original(os.path.join(SOURCE, AZR))
     m = AzrModel.from_file(src)
     v = m.segment_values()
     check("three segments, keys 1-3", sorted(v) == [1, 2, 3], v)
@@ -118,7 +120,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
 print("1b. AzrModel prior centres")
 with tempfile.TemporaryDirectory() as tmp:
-    src = os.path.join(SOURCE, AZR)
+    src = old_tree.original(os.path.join(SOURCE, AZR))
     plain = os.path.join(ROOT, "tests", "7Li_p_a", "7Li_p_a.azr")
     text = open(plain).read()
     check("tests/7Li_p_a has no <parameterSettings>", "<parameterSettings>" not in text)

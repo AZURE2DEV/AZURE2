@@ -32,6 +32,8 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import old_tree  # noqa: E402  (the old originals of converted projects)
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SOURCE = os.path.join(ROOT, "tests", "15N_p_a")
 
@@ -71,7 +73,7 @@ with tempfile.TemporaryDirectory() as tmp:
     for d in ("output", "checks"):
         os.makedirs(os.path.join(work, d))
     azr = [f for f in os.listdir(SOURCE) if f.endswith(".azr")][0]
-    mdl = AzrModel.from_file(os.path.join(SOURCE, azr))
+    mdl = AzrModel.from_file(old_tree.original(os.path.join(SOURCE, azr)))  # the old file
     mdl.clear_extrapolations()
     for k in range(5):
         mdl.add_extrapolation(1, 2, 0.1 + 0.1 * k, 0.2 + 0.1 * k, 0.05)
