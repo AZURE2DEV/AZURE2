@@ -2,6 +2,38 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, Phase 5 branch 7 part 1) — point mapping deleted, tools for the shared mesh, the node table beside the sub-points (`feature/upgrade-5-grid-nodes`)
+
+**Done.**
+- The point mapping is deleted (`MapData`, `MapLeaves`, `SharesCalculation`, `AZURE_NO_*_MAPPING`, the mapped clauses
+  in 15 engine files; one plan task per point, `WorkingCopy::BuildPlan`). Checks that compared with/without the
+  switches now test what is still true (`component_mapping`, `angle_mapping`, `shift_fn_groups`, `sum_lab_frame`,
+  `composite_gradient_test`, `failed_point_test`, `plan_test`); consistency check 29 forbids the deleted names.
+- Tools for part 2: `AZURE_REFINE_QUADRATURE=k` (every sub-point grid k-fold finer; an environment variable, not the
+  flag of `energy_grid.md` §7.2, because `src/AZURE2.cpp` is at its size limit), `tools/classify_quadrature.py`,
+  `tests/upgrade/node_count` (node counts per folded project: table in `energy_grid.md` §8, largest mesh/today 1.07),
+  `tests/layer_yield` (K') the thick layer against an independent integral (engine +1.54e-4, recorded as the bound;
+  second order in the node spacing).
+- The node table beside the sub-point units (`include/NodeTable.h`, `AZURE_NODE_CHECK=1`): clean on the whole tree.
+
+**Verified** (logs in `work/nodes/logs/`, binary `work/nodes/AZURE2-m2` = 2feb5ce0): tree x 3 bases after the
+deletion (`tab-nodes-m0`) identical but the Coulomb-lookup line of `run.log` in `angle_mapping` and
+`sum_lab_frame/models/plain_data`; the tree with `AZURE_NODE_CHECK=1` (`tab-nodes-m2chk`): every output file identical,
+0 rows and 0 slots differ in 271 passes; `ctest -LE slow` 203/203; `tests/run_tests.sh` 152 passed, 0 failed; the
+converted-tree gate 483 (456) identical, 38 classified, 0 differ, 0 missing; fits (T2 `--use-gradient`, `--use-lm`, 13N,
+`layer_yield/fit.azr`) identical at 1 and 2 threads and to `b-trial23` at 1 thread; calculations of eight folded
+projects identical at 1 and 3 threads. Speed (menu 1, 1 thread, 6 alternated runs, load from other agents): T2, 13N,
+thick target, THM within ±2 %; `natural_neon` median +3.0 %, paired mean +1.2 % (the node table's set-up pass; not
+resolved from the noise). Peak RSS unchanged within 0.5 %. Not run: Sphinx (no sphinx-build in the environment),
+ThreadSanitizer, fits at 3 threads (budget 2 until late).
+
+**Open (part 2).** The node table's readers are not moved: the energy pass, the kernels (`PointFold.cpp` gathers from
+sub-points), the gradient's cotangents and `Results`' sub-point records still use sub-point `Unit`s; no overflow table
+(re-placed and shifted nodes are "off the table"); `SubPointAccess.h`, `NodeTableCache.h`, copy-on-write tables not
+deleted. The planner to replace: the two grid loops of `WorkingCopy::SetUpTargetEffects` and
+`ReplaceSubPointGrids` (`src/TargetSetup.cpp`). `classify_quadrature.py` with k = 2 as "fine" fails a k = 4 run on 5
+of 92 files per basis (non-asymptotic values): part 2's gate may need k = 4 as its reference.
+
 ## 2026-11-11 (agent, Phase 5 branch 2) — the gradient over the energy tasks (`feature/upgrade-5-energy-tasks-gradient`)
 
 **Done.** (1) The 5-thread regression of branch 1: measured with a new profile stage "energy tasks: set-up" and the
