@@ -141,7 +141,7 @@ int NumParameters(CNuc *compound, WorkingCopy *data) {
     n += data->Data().NumDensityParams();    // fitted target densities
     n += data->Data().NumDopplerParams();    // fitted Doppler temperatures
     n += data->Data().NumThicknessParams();  // fitted sample thicknesses
-    n += data->Data().NumStoppingScaleParams();   // stopping scales
+    n += data->Data().NumApparatusParams();   // apparatus parameters (stopping scales, kernel widths)
   }
   return n;
 }
@@ -268,10 +268,8 @@ std::string Parameter(CNuc *compound, WorkingCopy *data, int minuitIndex) {
       return "THM coherent background " + data->Data().GetThmCoherentParam(k).name;
     index++;
   }
-  for (int k = 1; k <= data->Data().NumStoppingScaleParams(); k++) {
-    if (index == minuitIndex)
-      return "stopping scale " + data->Data().GetStoppingScaleTargetEffect(k)->GetStoppingScaleName() +
-             " (epsilon -> s epsilon for that material and projectile)";
+  for (int k = 1; k <= data->Data().NumApparatusParams(); k++) {
+    if (index == minuitIndex) return ApparatusLabel(data->Data(), k);
     index++;
   }
 

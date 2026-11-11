@@ -183,6 +183,12 @@ int main() {
     width = 0.02;
     EffectSupport(ek, p, sp, hi, lo);
     Check("support: the window [E0 - f w/2, E0 + f w/2]", hi == 1.0 + 0.5 * w && lo == 1.0 - 0.5 * w);
+    // a fitted width: the grid spans the layout value, the fold the present one
+    double layout = 0.03;
+    p.layoutValues = &layout;
+    EffectSupport(ek, p, sp, hi, lo);
+    Check("support of a fitted width: the window at its layout value", hi == 1.0 + 0.5 * f * layout && lo == 1.0 - 0.5 * f * layout);
+    p.layoutValues = nullptr;
     p.values = nullptr;
     p.numValues = 0;
   }

@@ -1535,7 +1535,7 @@
     "energy_resolution": {
      "title": "Energy resolution",
      "type": "structured",
-     "grammar": "<number> <energy unit> lab|cm | rectangular width <number> <energy unit>",
+     "grammar": "<number> <energy unit> lab|cm | rectangular width <value> <energy unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
      "required": false,
      "alternatives": [
       {
@@ -1567,12 +1567,11 @@
         {
          "name": "width",
          "keyword": true,
-         "type": "number_with_unit",
-         "grammar": "<number> <energy unit>",
+         "type": "nuisance",
+         "grammar": "<value> <energy unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
          "optional": false,
          "dimension": "energy",
          "units": ["MeV", "keV", "eV", "meV", "ueV"],
-         "positive": true,
          "doc": "full width w of the window, lab"
         }
        ],

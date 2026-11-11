@@ -1280,7 +1280,7 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const st
         if (fixed_[f]) continue;
         const ParamKind kind = pmap.Desc(f).kind;
         if (kind != ParamKind::EnergyShift && kind != ParamKind::EnergyShiftSqrt && kind != ParamKind::EnergyShiftFn &&
-            kind != ParamKind::Density && kind != ParamKind::StoppingScale)
+            kind != ParamKind::Density && kind != ParamKind::Apparatus)
           continue;
         const int packed = pmap.FullToPacked(f);
         if (packed < 0 || packed >= (int)params.size() || skip[packed]) continue;
@@ -1615,10 +1615,10 @@ vector_r AZUREAPI::GetParameterInfo() const {
     }
   }
 
-  // Stopping scales, last (type 12): field 6 the scale's first target effect, 5 its start value, 14 its prior sigma (0 = none), 8 its layout scale.
-  for (int k = 1; k <= data()->Data().NumStoppingScaleParams(); ++k) {
-    const TargetEffect *te = data()->Data().GetStoppingScaleTargetEffect(k);
-    push(12, -1, -1, 0, -1, te->GetStoppingScaleNominal(), data()->Data().GetStoppingScaleLeadCopy(k), -1, te->GetLayoutStoppingScale(), -1, -1, -1, te->IsStoppingScaleVaried() ? te->GetStoppingScaleSigma() : 0.0, -1);
+  // Apparatus parameters, last (type 12, ApparatusParameters.h): field 6 the first target effect, 5 the start value, 14 the prior sigma (0 = none), 8 the layout value.
+  for (int k = 1; k <= data()->Data().NumApparatusParams(); ++k) {
+    const ApparatusDeclaration &d = data()->Data().GetApparatusParam(k).declaration;
+    push(12, -1, -1, 0, -1, d.nominal, data()->Data().GetApparatusParam(k).lead, -1, d.layout, -1, -1, -1, d.vary ? d.sigma : 0.0, -1);
   }
   return info;
 }

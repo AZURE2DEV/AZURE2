@@ -308,7 +308,7 @@ cross section per active nucleus (lab MeV cm²).
 | beam profile | Σ_i G W D σ / Σ_i G W (skewed Gaussians G, window W by erf, detailed balance D) | `BeamProfileSupport` | ∂/∂(shift of the window) from ∂W/∂a, ∂W/∂b (Gaussians) | `TargetFold.cpp` beam-profile branch; `TargetEffect::BeamProfileWeight` |
 | UDR (time of flight) | w_i = ∫ R(τ) φ_i(τ) dτ, φ_i hat functions on the delay axis, Simpson exact | the table's τ range | no fitted parameter; ∂/∂E₀ through t(E₀) | `TargetFold.cpp` UDR branch; `TargetEffect::BuildUdrKernel, LoadUdrTable` |
 | Doppler (free gas) | SAMMY free-gas kernel in √E, 4-point Gauss–Legendre pieces | `TargetEffect::DopplerWindow` | ∂/∂T exists (`Unit::DopplerTemperatureDerivative`) | `TargetFold.cpp: Unit::DopplerWeights` |
-| rectangular resolution (branch 6, added by the recipe) | Y = (1/w) ∫_{E₀−w/2}^{E₀+w/2} σ dE, w lab × the pair's c.m./lab factor; format 3: `detector … energy_resolution rectangular width <w>` | [E₀ − w/2, E₀ + w/2] | ∂Y/∂w = [σ(E₀+w/2) + σ(E₀−w/2)]/(2w) − Y/w (`derivative`; not yet a fit parameter) | nothing: `experiment/src/KernelRectangular.cpp` |
+| rectangular resolution (branch 6, added by the recipe) | Y = (1/w) ∫_{E₀−w/2}^{E₀+w/2} σ dE, w lab × the pair's c.m./lab factor; format 3: `detector … energy_resolution rectangular width <w>` | [E₀ − w/2, E₀ + w/2] | ∂Y/∂w = [σ(E₀+w/2) + σ(E₀−w/2)]/(2w) − Y/w (`derivative`, tested; the fit takes central differences); w is a fit parameter (`width 14 keV fit`, kind `apparatus`, `apparatus_parameters.md`) | nothing: `experiment/src/KernelRectangular.cpp` |
 | energy shift, folded data | the point's kernel centred at E₀(ν) = E + a + b√E + f(E; p) on fixed nodes | that kernel's | ∂w/∂ν = ∂w/∂E₀ · ∂E₀/∂ν | `ShiftFrames.cpp: Segment::UpdatePointEnergyWithShift` (rigid move of sub-points); `AZURECalc.cpp: FillShiftColumns` (central differences) |
 | energy shift, unfolded data | exact node at E₀(ν) (§2.5); interpolated mode: linear or cubic weights | one node (or 2–4) | dO/dE · ∂E₀/∂ν | the same, and `WorkingCopy::FillEnergyShiftsFromParamsImpl` |
 | detector attenuation Q_L, angular convolution | diagonal in L: row P_L(cos θ) Q_L | — | none fitted | `UnitLegendre.cpp: Unit::CalcLegendreP` (Q coefficients, `QTransformRule`) |
@@ -325,6 +325,12 @@ set-up lays the grid over). `src/TargetFold.cpp` is deleted; the engine's fold i
 it gathers the nodes and the point and makes one indirect call per point. Nodes and quadrature are unchanged, every
 output is byte-identical. The derivative columns above are not yet written as kernel functions, except the
 temperature derivative of `doppler` (`broadenDT`); a table kernel may carry `derivative` (∂/∂ its own parameter).
+
+**Status (`feature/upgrade-5-apparatus-parameters`).** A table kernel's parameter whose row says `fittable` is a fit
+parameter whenever the project writes it `fit` (the nuisance grammar the density and the stopping scale use): kind 12,
+`apparatus`, one parameter per record and parameter, shared by every data set naming the record; its grid is laid out
+at its layout value (`KernelParameters::layoutValues`); its derivative is central differences of the whole χ².  The
+stopping scale is the first row of the same kind (`apparatus_parameters.md`).  No engine file names a kernel parameter.
 
 The roadmap lists SUM, RATIO, natural targets and the S factor as kernel builders. They are already one table of
 expression nodes with `value` and `backward`, tested alone; re-implementing them as kernels would write them twice.

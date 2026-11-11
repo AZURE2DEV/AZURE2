@@ -355,9 +355,9 @@ class Session {
           if (r.kind == ParamKind::EnergyShiftFn) d["fn_term"] = r.fnTerm;
           break;
         case ParamKind::Screening:
-        case ParamKind::Density: case ParamKind::Doppler: case ParamKind::StoppingScale:
+        case ParamKind::Density: case ParamKind::Doppler: case ParamKind::Apparatus:
           d["effect"] = r.effect;
-          if (r.kind == ParamKind::StoppingScale) d["material"] = r.material, d["projectile"] = r.projectile;
+          if (r.kind == ParamKind::Apparatus) d["apparatus"] = r.apparatus, d["unit"] = r.apparatusUnit, d["owner"] = r.owner;
           break;
         case ParamKind::Abundance:
           d["sample"] = r.sample;

@@ -521,6 +521,9 @@ extrapolation x5: sigma(1->2)
 extrapolation x6: sigma(1->2)
 == tests/rectangular_resolution/models/bare.azr
 extrapolation fine: sigma(1->3)
+== tests/rectangular_resolution/models/fit.azr
+data d1: sigma(1->3)
+data d2: sigma(1->3)
 == tests/rectangular_resolution/models/rect.azr
 extrapolation r1: sigma(1->3)
 extrapolation r2: sigma(1->3)

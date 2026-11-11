@@ -115,12 +115,15 @@ vector:
      - ``cbkg_<experiment>_...``
      - HOES amplitude (:math:`c_1` per MeV)
      - Re or Im of a THM coherent-background coefficient
-   * - ``stopping_scale``
-     - ``stopping_scale.<material>.<projectile>``
-     - 1
-     - stopping scale :math:`s` of one material and projectile: every target of that material crossed by that
-       projectile has the stopping :math:`s\,\epsilon` (format 3, the target's ``stopping ... scale`` field); last in
-       the vector
+   * - ``apparatus``
+     - ``stopping_scale.<material>.<projectile>``, ``<record>.<field>.<parameter>``
+     - the parameter's (1 for a stopping scale, MeV for a resolution width)
+     - a number of an apparatus record a fit varies, last in the vector, one per sharing key: the stopping scale
+       :math:`s` of one material and projectile (every target of that material crossed by that projectile has the
+       stopping :math:`s\,\epsilon`; the target's ``stopping ... scale`` field), or a table kernel's own parameter
+       written as a nuisance (``detector D`` with ``energy_resolution rectangular width 14 keV fit``:
+       ``D.energy_resolution.width``, one for every data set naming ``D``).  Its prior adds
+       ``Total-Stopping-Scale-Chi-Squared`` or ``Total-Kernel-Parameter-Chi-Squared`` to ``chiSquared.out``.
 
 param.fit
 ^^^^^^^^^

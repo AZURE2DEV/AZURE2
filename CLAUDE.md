@@ -252,8 +252,28 @@ The objective gets no new term: T9, `ModelDataTerm`, evaluates every row of `<mo
 
 **A CLI flag.** `parseOptions`, `printHelp` and `docs/source/reference/command_line.rst` [check 1].
 
-**A new kind of fit parameter** (a nuisance, an apparatus parameter; `docs/upgrade/parameter_kinds.md`). What a
-parameter is lives in its record, never in its name [check 23: no prefix or suffix test of a parameter name].
+**A fit parameter of an apparatus effect** (a number of a target, beam or detector record that a fit varies;
+`docs/upgrade/apparatus_parameters.md`). A table kernel's own parameter needs no engine code: it is kind 12,
+`apparatus`, through the row `kernel` of `ApparatusRows()`.
+1. In the kernel's row, the parameter's `KernelParameter` says `fittable = true` (its name, dimension, engine unit); the
+   kernel reads its value from `KernelParameters::values[k]`, k its place in the row; the fold's grid is laid out at the
+   parameter's layout value through `KernelParameters::layoutValues` (`EffectSupport`; nothing in the kernel).
+2. The format-3 form is generated with the nuisance grammar `<value> <unit> fixed|fit [prior <c> <w>[%]] [grid_max
+   <v>]` (`Schema.cpp`); `BuildEffects.cpp` makes an `ApparatusParameterSpec` when the value is `fit` or has a prior
+   or grid_max: name `<record>.<field>.<parameter>`, shared by every data set naming the record.
+3. Tests: the kernel's `derivative` against central differences (`kernels_test.cpp`); a fit of pseudo-data made at a
+   known value, with a prior, shared by two data sets, and the refusals (`tests/rectangular_resolution/check.sh` (c)-(f)
+   is the pattern); the schema (`AZURE2 --schema`, `tools/gen_schema_docs.py`).
+4. Docs: the kernel's row in `energy_grid.md` section 3.3 and its user-guide paragraph.
+A number that reaches the calculation some other way than a kernel's values (as the stopping scale re-sets the
+sub-points' stopping) is a new *row* of `ApparatusRows()`: one function file with its declare / write / read / follow
+functions (`src/StoppingScale.cpp`, `StoppingScaleRow`) and its line in the table; nothing else in the engine.
+Derivative: central differences of the whole chi^2 (`AZURECalc.cpp`, as a density); an analytic one is not wired.
+
+**A new kind of fit parameter** (a nuisance that is not a number of an apparatus record: of a segment, of the level
+scheme, of a THM experiment; `docs/upgrade/parameter_kinds.md`). An apparatus record's number is the recipe above,
+not a kind. What a parameter is lives in its record, never in its name [check 23: no prefix or suffix test of a
+parameter name].
 1. `include/ParameterKind.h`: the enum value (the next code) and its `ParamKindTable()` row (key, unit, owner fields,
    `ownPrior` / `segmentField` / `varyFromProject`, doc); a `ParameterRecord` factory for new owner fields.
 2. Create it with `AZUREParams::Add(name, value, step, ParameterRecord::...)` in `CNuc::FillMnParams` or
@@ -363,9 +383,8 @@ The engine is not edited: the fold (`src/PointFold.cpp`), the grid's extent (`Ef
 the gradient's weights (`FoldWeights`) read the table. Limits (2026-11): a table kernel cannot be combined with a
 target, a beam spread, a beam profile or a UDR on one data set (refused in `TargetEffect::SelectKernels`; kernels are
 chained by the grid branch); a kernel that needs a new datum of the point or a non-scalar parameter adds it to
-`KernelPoint`/`KernelParameters` and to `TargetEffect::KernelParametersFor`; a parameter a fit varies needs its
-parameter kind (recipe "A new kind of fit parameter"): kernel parameters are not yet fit parameters, whatever the
-row's `fittable` says.
+`KernelPoint`/`KernelParameters` and to `TargetEffect::KernelParametersFor`; a parameter with `fittable = true` is a fit parameter when the project says `fit` (recipe "A fit parameter of an
+apparatus effect").
 
 **A new material or a measured stopping table** (`stopping/`, `docs/upgrade/stopping.md`). A material is data, not
 code: `MaterialFromFormula("Ta2O5")` or `MaterialFromFractions(...)`, then set its fields: `phase` (SRIM's default is

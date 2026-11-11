@@ -1,5 +1,6 @@
 #include "InputFiles.h"
 #include "TargetEffect.h"
+#include "ApparatusParameters.h"
 #include "AdaptiveIntegrationGrid.h"
 #include <sstream>
 #include <iostream>
@@ -225,6 +226,12 @@ void TargetEffect::SelectKernels(const azure2::experiment::TargetEffectSpec &lin
   if (!line.kernel.empty()) {
     kernels_.resolution = KernelNamed(line.kernel);
     kernelValues_ = line.kernelParameters;
+    // a fitted parameter's grid spans its layout value (ApparatusParameters.h), the others' their value
+    kernelFits_ = line.apparatusParameters;
+    kernelLayoutValues_ = kernelValues_;
+    for (const azure2::experiment::ApparatusParameterSpec &a : kernelFits_)
+      if (a.slot >= 0 && a.slot < (int)kernelLayoutValues_.size())
+        kernelLayoutValues_[a.slot] = a.gridMax > 0.0 ? a.gridMax : ApparatusLayout(a.value, a.vary, a.priorWidth);
     if (!kernels_.resolution) kernelErrorText_ = "no kernel named \"" + line.kernel + "\"";
     if (isTargetIntegration_ || this->IsGaussian() || isUdr_ || isBeamProfile_)
       kernelErrorText_ = "the " + line.kernel + " kernel cannot be combined with a target, a beam spread, a beam profile or a UDR";
@@ -270,6 +277,7 @@ azure2::experiment::KernelParameters TargetEffect::KernelParametersFor(const Con
   p.dopplerLayout = this->GetDopplerLayoutTemperature();
   p.values = kernelValues_.data();
   p.numValues = static_cast<int>(kernelValues_.size());
+  p.layoutValues = kernelLayoutValues_.empty() ? nullptr : kernelLayoutValues_.data();
   return p;
 }
 
@@ -633,7 +641,7 @@ double TargetEffect::TargetThickness(double energy, const Config &configure) con
 double TargetEffect::GetLayoutStoppingScale() const {
   if (!hasStoppingScale_ || !stoppingScaleVary_) return stoppingScaleNominal_;
   const double s0 = stoppingScaleNominal_;
-  return (stoppingScaleSigma_ > 0.0) ? std::max(s0 + 3.0 * stoppingScaleSigma_, 1.1 * s0) : 1.5 * s0;
+  return ApparatusLayout(s0, true, stoppingScaleSigma_);  // the rule of every fitted apparatus parameter
 }
 
 double TargetEffect::TargetThickness(double energy, const Config &configure, double density, double scale) const {
