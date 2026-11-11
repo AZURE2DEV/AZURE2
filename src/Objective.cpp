@@ -265,71 +265,71 @@ std::vector<std::string> ReplaceDiagonalPriors(CNuc *compound, WorkingCopy *data
   const ParamIndexMap pmap = BuildParamIndexMap(compound, data, std::vector<bool>());
   // The flags are settings of the data set: one revision of it (WorkingCopy::ReviseDataSet) for all of them.
   data->ReviseDataSet([&](DataSet &ds) {
-  for (size_t a = 0; a < pc.FullIndex().size(); a++) {
-    const int f = pc.FullIndex()[a];
-    if (f < 0 || f >= pmap.NumFull()) continue;
-    const ParamDesc &d = pmap.Desc(f);
-    bool had = false;
-    switch (d.kind) {
-      case ParamKind::Norm: {
-        Segment *seg = ds.GetSegment(d.segment);
-        had = seg->GetNormError() != 0.0;
-        seg->ReplaceNormPrior();
-        break;
+    for (size_t a = 0; a < pc.FullIndex().size(); a++) {
+      const int f = pc.FullIndex()[a];
+      if (f < 0 || f >= pmap.NumFull()) continue;
+      const ParamDesc &d = pmap.Desc(f);
+      bool had = false;
+      switch (d.kind) {
+        case ParamKind::Norm: {
+          Segment *seg = ds.GetSegment(d.segment);
+          had = seg->GetNormError() != 0.0;
+          seg->ReplaceNormPrior();
+          break;
+        }
+        case ParamKind::EnergyShift: {
+          Segment *seg = ds.GetSegment(d.segment);
+          had = seg->GetEnergyShiftError() != 0.0;
+          seg->ReplaceShiftPrior();
+          break;
+        }
+        case ParamKind::EnergyShiftSqrt: {
+          Segment *seg = ds.GetSegment(d.segment);
+          had = seg->GetEnergyShiftSqrtError() != 0.0;
+          seg->ReplaceShiftSqrtPrior();
+          break;
+        }
+        case ParamKind::EnergyShiftFn: {
+          Segment *seg = ds.GetSegment(d.segment);
+          had = d.fnTerm >= 0 && d.fnTerm < (int)seg->GetShiftFnErrors().size() && seg->GetShiftFnErrors()[d.fnTerm] != 0.0;
+          seg->ReplaceShiftFnPrior(d.fnTerm);
+          break;
+        }
+        case ParamKind::Thickness: {
+          Segment *seg = ds.GetSegment(ds.GetThicknessSegment(d.thickness));
+          had = seg->GetThicknessSigma() > 0.0;
+          seg->ReplaceThicknessPrior();
+          break;
+        }
+        case ParamKind::Screening: {
+          TargetEffect *te = ds.GetScreeningTargetEffect(d.screening);
+          had = te->GetScreeningSigma() > 0.0;
+          te->ReplaceScreeningPrior();
+          break;
+        }
+        case ParamKind::Density: {
+          TargetEffect *te = ds.GetDensityTargetEffect(d.density);
+          had = te->GetDensitySigma() > 0.0;
+          te->ReplaceDensityPrior();
+          break;
+        }
+        case ParamKind::Doppler: {
+          TargetEffect *te = ds.GetDopplerTargetEffect(d.doppler);
+          had = te->GetDopplerSigma() > 0.0;
+          te->ReplaceDopplerPrior();
+          break;
+        }
+        case ParamKind::Abundance: {
+          SampleAbundance &e = compound->GetSample(d.sample)->entries[d.nucleus - 1];
+          had = e.sigma > 0.0;
+          e.priorReplaced = true;
+          break;
+        }
+        default:  // levels and THM coherent background: a nuisance prior, skipped by index
+          break;
       }
-      case ParamKind::EnergyShift: {
-        Segment *seg = ds.GetSegment(d.segment);
-        had = seg->GetEnergyShiftError() != 0.0;
-        seg->ReplaceShiftPrior();
-        break;
-      }
-      case ParamKind::EnergyShiftSqrt: {
-        Segment *seg = ds.GetSegment(d.segment);
-        had = seg->GetEnergyShiftSqrtError() != 0.0;
-        seg->ReplaceShiftSqrtPrior();
-        break;
-      }
-      case ParamKind::EnergyShiftFn: {
-        Segment *seg = ds.GetSegment(d.segment);
-        had = d.fnTerm >= 0 && d.fnTerm < (int)seg->GetShiftFnErrors().size() && seg->GetShiftFnErrors()[d.fnTerm] != 0.0;
-        seg->ReplaceShiftFnPrior(d.fnTerm);
-        break;
-      }
-      case ParamKind::Thickness: {
-        Segment *seg = ds.GetSegment(ds.GetThicknessSegment(d.thickness));
-        had = seg->GetThicknessSigma() > 0.0;
-        seg->ReplaceThicknessPrior();
-        break;
-      }
-      case ParamKind::Screening: {
-        TargetEffect *te = ds.GetScreeningTargetEffect(d.screening);
-        had = te->GetScreeningSigma() > 0.0;
-        te->ReplaceScreeningPrior();
-        break;
-      }
-      case ParamKind::Density: {
-        TargetEffect *te = ds.GetDensityTargetEffect(d.density);
-        had = te->GetDensitySigma() > 0.0;
-        te->ReplaceDensityPrior();
-        break;
-      }
-      case ParamKind::Doppler: {
-        TargetEffect *te = ds.GetDopplerTargetEffect(d.doppler);
-        had = te->GetDopplerSigma() > 0.0;
-        te->ReplaceDopplerPrior();
-        break;
-      }
-      case ParamKind::Abundance: {
-        SampleAbundance &e = compound->GetSample(d.sample)->entries[d.nucleus - 1];
-        had = e.sigma > 0.0;
-        e.priorReplaced = true;
-        break;
-      }
-      default:  // levels and THM coherent background: a nuisance prior, skipped by index
-        break;
+      if (had) replaced.push_back(pc.Names()[a]);
     }
-    if (had) replaced.push_back(pc.Names()[a]);
-  }
   });
   return replaced;
 }

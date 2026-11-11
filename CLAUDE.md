@@ -77,7 +77,7 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
 
 | Path | What | Notes |
 |---|---|---|
-| `src/`, `include/` | C++ engine | `AZURE2.cpp` (main, CLI flags) → `AZUREMain` → `CNuc` (levels, channels) + `EData` (segments, data, experimental effects) → `AZURECalc` (χ²), `AZUREGrad` (gradients), `AZURECalcMCMC` |
+| `src/`, `include/` | C++ engine | `AZURE2.cpp` (main, CLI flags) → `AZUREMain` → `CNuc` (levels, channels) + `DataSet` (the data as set up, immutable: segments, measurements, target effects, covariance; `include/DataSet.h`) held by each `WorkingCopy` (what an evaluation changes: norms, shifts, frames, the flat vector of calculation `Unit`s; `include/WorkingCopy.h`) → `AZURECalc` (χ²), `AZUREGrad` (gradients), `AZURECalcMCMC` |
 | `api/` | `AZUREAPI` + pybind11 module `_azure2` | Builds `pyazr/_azure2*.so` in place |
 | `io/` | The `.azr` document and its format conversion | Standalone (no engine headers); the engine and pyazr read the file through it |
 | `experiment/` | Model expressions (what a data set measures), lab → c.m. frames, the table of project format 3 | Uses `physics/` and `io/`'s `Record.h` only (no engine headers); `experiment/README.md` |
@@ -149,7 +149,7 @@ how each was checked:
   it fails. If it cannot be fixed now, stop and tell the user.
 - **Cached results carry a signature.** If a change alters what a cache
   (`intEC.dat`, `intEC.extrap`, EC tables, the Coulomb table, parameter files)
-  would contain, bump its signature or version (e.g. `EData::ECSignature`) so
+  would contain, bump its signature or version (e.g. `WorkingCopy::ECSignature`) so
   old files are recomputed, not silently reused. Add a stale-file case to the
   test.
 - **Old inputs keep working.** `.azr` files, `param.sav`/`param.par`/`param.fit`
@@ -193,7 +193,9 @@ bypassed. Run it first (under a second), then the build and the tests of "Defini
 **A segment or extrapolation keyword** (as `shiftfngroup`, `normgroup`).
 1. Parse it in `include/SegLine.h` or `ExtrapLine.h` (the one tokenizer; pyazr reads lines through
    `_azure2.parse_segment_line` / `parse_extrapolation_line`, so it gets the keyword with no Python parser).
-2. Use it in the owning class (`ESegment`, `EData`); refuse invalid combinations at start-up with a message.
+2. Use it in the owning class: a setting in `Segment` (part of the immutable `DataSet`, written only by the set-up through
+   `WorkingCopy::Draft`), a value an evaluation changes in `SegmentState`; refuse invalid combinations at start-up with a
+   message.
 3. Add it to `_KEYWORDS` in `pyazr/datasets.py` (the writer's list) [check 6: engine and pyazr keyword sets equal].
 4. Docs: `reference/data_formats.rst` and the user-guide page; a `tests/<name>/` project or a pyazr test.
 
@@ -245,7 +247,7 @@ parameter is lives in its record, never in its name [check 23: no prefix or suff
 1. `include/ParameterKind.h`: the enum value (the next code) and its `ParamKindTable()` row (key, unit, owner fields,
    `ownPrior` / `segmentField` / `varyFromProject`, doc); a `ParameterRecord` factory for new owner fields.
 2. Create it with `AZUREParams::Add(name, value, step, ParameterRecord::...)` in `CNuc::FillMnParams` or
-   `EData::FillMnParams`, the name built there by one function; every later question asks `params.Record(i)`.
+   `WorkingCopy::FillMnParams`, the name built there by one function; every later question asks `params.Record(i)`.
 3. Follow the layout in `BuildParamIndexMap` and `AZUREAPI::GetParameterInfo` (it throws on a kind that disagrees
    with the record); owner fields in the binding's `parameter_records()` and pyazr's `Parameter.from_record`.
 4. Docs: the kinds table of `reference/output_files.rst` and `parameter_kinds.md` section 1 [check 23]; a project
@@ -304,9 +306,9 @@ one), the schema and docs as above; later its tree builder (step 3).
    its `TreeKind` and builder; `TreeKindOf` decides) and, for a value the R-matrix does not compute, a `LeafPart`.
    Such a leaf's value at a point is computed in `PointInputs` (`src/ModelPass.cpp`) by a function of its own file
    (`src/CoulombReference.cpp`: the Rutherford / Mott leaf, folded on the point's own sub-points with
-   `EPoint::IntegrateSubPointValues`, never a second quadrature); `ComposeModelValue` does not calculate a point for
+   `Unit::IntegrateSubPointValues`, never a second quadrature); `ComposeModelValue` does not calculate a point for
    it, and `ModelPointBackward` drops it from the leaves when no level parameter moves it.  A data value that is the
-   same in the lab and c.m. frames (a ratio) answers `ESegment::IsDimensionlessRatio`, so it is not converted at load.
+   same in the lab and c.m. frames (a ratio) answers `Segment::IsDimensionlessRatio`, so it is not converted at load.
    Then `python3 tests/upgrade/predictions_test.py --binary <AZURE2> --write` (lines added for new projects only).
 4. A test: a case in `experiment/tests/build_test.cpp` (the spec member by member, and its refusals), a case in
    `experiment/tests/prediction_test.cpp` for a new tree, and when an old

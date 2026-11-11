@@ -99,7 +99,7 @@ AzrModel.from_file("13N.azr").add_data_segment(**kw).write("13N_new.azr")
   the c.m. Rutherford cross section at the **lab** angle (1.13× off for p+¹⁶O, 1.8–2.2× for α+¹²C) and called every
   angle column c.m. Regenerate data files made from a lab-angle `,,RTH` set with such a build.
 - **The light/heavy assignment.** AZURE2 converts lab to c.m. with E_c.m. = E_lab·m₂/(m₁ + m₂), m₁ the light member
-  (`src/EPoint.cpp`), and its angle transform asin(m₁/m₂ sin θ) needs m₁ < m₂. EXFOR names target and projectile as
+  (`src/Unit.cpp`), and its angle transform asin(m₁/m₂ sin θ) needs m₁ < m₂. EXFOR names target and projectile as
   the experiment ran: ³He(α,γ)⁷Be is `2-HE-3(A,G)4-BE-7`, target ³He. Letting `to_azr` infer the masses there writes
   E_lab too large by 4/3. State the assignment on every fetch, with atomic masses from `pyazr.masses`:
 

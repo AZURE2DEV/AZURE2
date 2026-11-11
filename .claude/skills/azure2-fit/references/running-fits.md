@@ -84,7 +84,7 @@ ones are a defect to report.
 
 ## Long fits on a batch cluster
 
-- **Memory.** A mode-2 fit holds max(4, `OMP_NUM_THREADS`) + 1 copies of the model and data (CNuc + EData), plus one for
+- **Memory.** A mode-2 fit holds max(4, `OMP_NUM_THREADS`) + 1 copies of the model and data (CNuc + WorkingCopy), plus one for
   the `param.fit` snapshots. Each copy is the whole data set including every target-integration and convolution
   sub-point, so heavy target-effect models are large: 4,600 points with many `<targetInt>` segments took about 3.4 GB
   per copy, 80–100 GB at 24 threads, steady for days. Measure the peak (`maxvmem` in the scheduler's accounting) and

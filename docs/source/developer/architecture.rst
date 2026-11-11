@@ -55,10 +55,10 @@ A run, from the command line
      for the heavy partner's own state (a gamma pair's final level). ``CNuc::Initialize`` builds the channels, the
      :math:`J^\pi` groups and the boundary conditions, and transforms the
      input parameters.
-   * ``EData::Fill`` reads ``<segmentsData>`` / ``<segmentsTest>`` (through
-     ``SegLine`` / ``ExtrapLine``) and the data files into ``ESegment`` and
-     ``EPoint`` objects, plus ``<targetInt>`` (experimental effects).
-     ``EData::Initialize`` sets up kinematics, external-capture integrals,
+   * ``WorkingCopy::Fill`` reads ``<segmentsData>`` / ``<segmentsTest>`` (through
+     ``SegLine`` / ``ExtrapLine``) and the data files into ``Segment`` and
+     ``Unit`` objects, plus ``<targetInt>`` (experimental effects).
+     ``WorkingCopy::Initialize`` sets up kinematics, external-capture integrals,
      Coulomb functions and the experimental-effect grids.
    * ``AZUREParams`` lays the fit parameters out for Minuit2.
    * ``AZURECalc`` is the objective: the total :math:`\chi^2` including the
@@ -66,7 +66,7 @@ A run, from the command line
      ``AZUREGrad`` supplies its analytic gradient and Jacobian, and
      ``AZURECalcMCMC`` the likelihood for ``numcmc``.
    * Minuit2's MIGRAD (or one of the least-squares minimizers) fits. Then
-     ``EData::WriteOutputFiles`` writes ``output/``, and ``ReactionRate``
+     ``WorkingCopy::WriteOutputFiles`` writes ``output/``, and ``ReactionRate``
      integrates rates when asked.
 
 3. The R-matrix itself: ``AMatrixFunc`` (the level matrix), ``GenMatrixFunc``,
@@ -82,7 +82,7 @@ The Python path
 
 ``pyazr.azure2`` creates an ``AZUREAPI`` session (``api/src/AZUREAPI.cpp``)
 inside the Python process through ``_azure2``. The session holds a filled
-``CNuc`` and ``EData``, and evaluates :math:`\chi^2`, gradients, residuals and
+``CNuc`` and ``WorkingCopy``, and evaluates :math:`\chi^2`, gradients, residuals and
 observables on parameter vectors without writing files. ``AZUREAPI`` has its
 own entry points for the objective and its gradient. A change to what
 ``AZURECalc`` or ``AZUREGrad`` computes therefore has to be made there too,
@@ -94,7 +94,7 @@ One file, three readers
 The ``.azr`` file is parsed independently by:
 
 * the engine: ``Config.cpp`` (``<config>``), ``CNuc.cpp`` with ``io/`` ``LevelRows.h``
-  (``<levels>``), ``EData.cpp`` with ``SegLine.h`` / ``ExtrapLine.h``
+  (``<levels>``), ``WorkingCopy.cpp`` with ``SegLine.h`` / ``ExtrapLine.h``
   (segments and experimental effects), plus the pre-scans in ``AZURE2.cpp``;
 * pyazr: ``pyazr/azrfile.py`` (``AzrModel``) and ``pyazr/datasets.py``
   (``SegmentSet``).
@@ -113,6 +113,6 @@ Expensive intermediate results are written next to the project and reused:
 external-capture integrals (``output/intEC.dat``, ``intEC.extrap``), their
 energy tables, and the Coulomb-function table (``~/.azure2/coulomb_table.bin``).
 Each file carries a signature of everything that determines its contents (for
-example ``EData::ECSignature``) and is recomputed when the signature does not
+example ``WorkingCopy::ECSignature``) and is recomputed when the signature does not
 match. A change that alters what a cache would contain must change its
 signature, or old files are silently reused with the old physics.

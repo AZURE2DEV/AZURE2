@@ -97,13 +97,40 @@ exit; they hold no data. The order of the units (base first, leaves in term orde
 | `ESegment` components | `componentSegments_` (pointers), `componentScaling_` | leaves of the prediction (§1.5) |
 | `EData` | segments, component deque, target effects, covariance, offsets, THM groups, plan, grids cache | data set (fixed) and working copy (state) |
 
-## 3. Files at the end
+## 3. The files and the picture (milestone 3, done)
 
-`experiment/`: `Measurement.h/.cpp` (rows, reader, provenance), `Frames.h/.cpp` (+ `ConvertRow`, the frame).
-`src/`: `DataSet.h/.cpp` (set-up from specs, refusals), `WorkingCopy.h/.cpp` (the unit vector, copy), `Unit.h`
-(the record), `HandOver.cpp`, `ChannelTables.cpp`, `TargetFold.cpp`, `TargetSetup.cpp`, `ExternalCaptureSetup.cpp`,
-`ShiftFrames.cpp`, `PointPass.cpp`, `ThmNorm.cpp`, `ThmReports.cpp`, `DataCovariance*.cpp`, `DataOutputFiles.cpp`,
-`DataCheckFiles.cpp`, `DataParameters.cpp`. No `EData*`, `EPoint*`, `ESegment*` file.
+```
+  io::Document --specs--> set-up (WorkingCopy::Fill / MakePoints / Initialize, writing the draft)
+                                |
+  experiment::Measurement  <----+   rows, provenance, prediction           (immutable, shared_ptr<const>)
+             |
+             v
+  DataSet  (include/DataSet.h)      segments (Segment: settings, start values, priors, terms, frame at load),
+             |                      target effects, leaves, PointSetUp records (grid layout, UDR kernel),
+             |                      covariance groups, THM experiments, parameter layout, prior covariance
+             |                      -- frozen at the end of Initialize; shared_ptr<const DataSet> in every copy
+             v
+  WorkingCopy (include/WorkingCopy.h)  per segment a SegmentState (norm, shifts, shift function, thickness; per term
+             |                         the unit range, the present frame, the shift tables), TargetEffectValues
+             |                         (U_e, density, Doppler T), THM coherent values, the calculation plan, one
+             |                         vector of Units (include/Unit.h) -- copied by a plain copy (Clone)
+             v
+  Results  (include/Results.h)      leaf records, model values, objective values -- the caller's
+```
+
+`include/`: `DataSet.h`, `SegmentState.h`, `WorkingCopy.h`, `Segment.h`, `Unit.h`, `UnitTables.h`, `UnitRange.h`,
+`SubPointAccess.h`, `TermSettings.h`.  `src/`: `DataSet.cpp` (lookups), `WorkingCopy.cpp` (set-up from the specs with
+its refusals, Initialize, the copy, the result layout, the mapping, the parallel point pass), `WorkingCopyUnits.cpp`,
+`HandOver.cpp`, `DataParameters.cpp`, `TargetSetup.cpp`, `ExternalCaptureSetup.cpp`, `DataCovarianceGroups.cpp`
+(`DataCovariance.cpp` is the file reader of another branch), `ThmNorm.cpp`, `ThmReports.cpp`, `DataOutputFiles.cpp`,
+`DataCheckFiles.cpp`, `Segment.cpp`, `SegmentParameters.cpp`, `ShiftFrames.cpp`, `Unit.cpp`, `PointPass.cpp`,
+`ChannelTables.cpp`, `TargetFold.cpp`, `UnitLegendre.cpp`, `UnitExternalCapture.cpp`.  No `EData*`, `EPoint*`,
+`ESegment*` file or class (consistency check 31).
+
+Shared and written after the set-up, on purpose, and nothing else: a covariance group's frozen relvector model (under
+the group's mutex; DataSet.h) and the node tables of re-placed sub-points (`NodeTableCache.h`, under its shards'
+mutexes).  A setting changed after the set-up (a prior covariance from pyazr, a parameter layout laid out again) makes
+a new DataSet (`WorkingCopy::ReviseDataSet`).
 
 ## 4. Order of the commits
 
@@ -128,8 +155,11 @@ given at set-up and re-placed grids are placed single-threaded as new ranges and
 first, in data order; they keep their indices after the set-up); the plan names units by index (`PointRef` is an
 int); `EData::Clone` is the copy constructor, after which the copy's points drop the set-up's external-capture
 amplitudes (as before; they recompute them at their energies); the S factor has one formula.
-Milestone 3 (the old names are gone): `DataSet` and `WorkingCopy` apart, callers
-moved, the three classes and their files deleted, docs.
+Milestone 3 (the old names are gone), done: `DataSet` (immutable, shared) and `WorkingCopy` apart, the
+segment's state in `SegmentState`, the target-effect values and THM coherent values in the copy, the unit 608 -> 480
+bytes (its grid layout and UDR kernel are data-set records, the angle-limit message is returned, not kept), the data
+iterator gone, the files and classes renamed (`WorkingCopy`, `Segment`, `Unit`).  Still in the unit: the external-capture
+amplitudes of the set-up, which a copy drops in `Clone` (the next pathway branch computes them at set-up).
 
 ## 5. Bits
 

@@ -2,6 +2,40 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, brief X3, milestone 3) — `DataSet` and `WorkingCopy` apart; the old data classes gone (`feature/upgrade-4-data-structure-3`)
+
+**Done** (commits 075af6db, b1d3daaf, the file moves, the class renames, these docs).
+- `DataSet` (`include/DataSet.h`, `src/DataSet.cpp`): what the set-up leaves fixed -- the segments (`Segment`, settings
+  and start values, priors, measurement, terms with their settings and frame at load), the target effects, the leaves,
+  the `PointSetUp` records of the points (adaptive-grid layout, UDR kernel), the covariance groups, the THM
+  experiments, the parameter layout, the prior covariance, the nuclei.  A working copy holds it as
+  `shared_ptr<const DataSet>`: the set-up writes it through `WorkingCopy::Draft()`, `Initialize` freezes it, a copy
+  shares it; a setting changed later (pyazr's prior covariance, `ReplaceDiagonalPriors`, a parameter layout laid out
+  again by `FillMnParams`) makes a new one (`ReviseDataSet`).  Shared and written after the set-up, named in the
+  headers: a covariance group's frozen relvector model (its mutex; refrozen only between minimizations) and the
+  node-table cache (its shards' mutexes).
+- `WorkingCopy` (was `EData`): per segment a `SegmentState` (`include/SegmentState.h`: norm, shifts with their last
+  applied values, the shift function `Equation` with its parameters, sample thickness; per term the unit range, the
+  present frame, the shift tables), `TargetEffectValues` (U_e, density, Doppler T: the fold and the penalties read
+  them there), the THM coherent values, the calculation plan (rebuilt when a shift moves), the unit vector.
+  `Segment`'s functions that touch state take the working copy or the state and are const.
+- The unit (`Unit`, was `EPoint`) 608 -> 480 bytes: its grid layout and UDR kernel are data-set records named by an
+  index, and the angle-limit message of a failed lab -> c.m. map is returned by `Segment::ConvertRowToCM`.  The data
+  iterator is gone.  The external-capture amplitudes stay in the unit (`Clone` drops the set-up's, as before).
+- Files and classes renamed (`data_structure.md` §3 lists them); consistency check 31 keeps the old names out.
+- `history_test`: a copy shares its source's data set; evaluations at A and B and the copy histories leave a
+  fingerprint of it unchanged (shown failing with a write of a segment's nominal norm in the hand-over).
+
+**Verified** on 075af6db (stage A; binary `work/ds3/AZURE2-A`, clean build 0 warnings): every project x 3 bases
+(tag `tab-ds3A`) against `tab-trial14`: 737 / 710 / 737 identical; `ctest -LE slow` 182/182; `tests/run_tests.sh`
+145 passed, 0 failed; the rest of the stage-A set and the final set are in the agent's report.
+
+**Open.** pyazr's Python comments (`pyazr/azrfile.py`, `datasets.py`) and two files of the validation branch
+(`experiment/src/Build.cpp`, `BuildEffects.cpp`, excepted in check 31) still name the old classes; the
+`intEC.dat.sig` header keeps "see EData::ECSignature" (byte identity; change it with the next signature version).
+The UDR fold through a point has no project test (only the kernel's reference test).  The external-capture
+amplitudes of the set-up move out of the unit with the second pathway branch.
+
 ## 2026-11-11 (agent, brief X2, milestone 2, rest) — the flat working copy (`feature/upgrade-4-data-structure`)
 
 **Done** (four commits after a724d6ba: cfe7a91d, 044928ed, b0759ed8, 60bcb381).
