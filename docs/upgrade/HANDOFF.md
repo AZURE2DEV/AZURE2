@@ -27,6 +27,14 @@ Update this file at the end of every work session: what changed, what is next, w
 - ERYA removed: `external/erya`, `USE_ERYA`, `SRIM2013.xml`, `tests/reference/compound_stopping_reference_test.cpp`
   (its check is `stopping_convention` now).
 
+**Verified** (binary `work/stopwire/AZURE2-final`, HEAD a7b9cac2): all projects × 3 bases against `tab-trial21a`
+(tag `tab-stopwire1`, 6 jobs): 766 / 739 / 766 identical, the 12 files per basis of `tests/stopping_yield` only-new;
+`ctest -LE slow` 202/202 (`-j3`, OMP 2); `tests/run_tests.sh` (OMP 2) 149 passed, 0 failed; converted-tree gate
+(`REF=tab-trial8`, tag `gstopwire1`, 3 jobs) 483 (456) identical, 38 classified, 0 differ, 0 missing; calculations at 1
+and 3 threads identical (stopping_yield's two models, layer_yield's two); a fresh build of the tree without
+`stopping/data/srim/` (0 warnings): with `AZURE2_SRIM_DATA_DIR` the outputs equal the compiled-in build's, without it
+`E_STOPPING_DATA` and exit 1.  Scratch: `work/stopwire/`.
+
 **Open.** §6.4 step 2 (the old integrators on the module's integrals) not done; TRIM straggling for an evaluated
 target (the `straggling` field still gives none, Bohr or a coefficient); the scale's analytic derivative (kernels
 branch); a scale in an extrapolation's data set is not tested.
