@@ -115,10 +115,9 @@ refused at once with the engine's message. An edit changes only the lines it tou
 
 ## What users notice
 
-- Old `.azr` files still load today. When the test tree is converted (half of it is; the rest is in work) the
-  engine will read format 3 only
-  and refuse an old file with a message that names the converter. Decision taken with Jakub: no backward
-  compatibility inside the engine, a converter instead.
+- Old `.azr` files still load today. When the test tree is converted (half of it is; the rest is in work) the engine
+  will read format 3 only and refuse an old file with a message that names the converter. Decision taken with Jakub:
+  no backward compatibility inside the engine, a converter instead.
 - pyazr needs the compiled engine module to read a project: there is one reader, the engine's.
 - No Qt GUI on this branch: a local web interface built on the same records and schema replaces it (Phase 9),
   checked against a 201-item parity list taken from the Qt code.
