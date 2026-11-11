@@ -72,7 +72,7 @@ int EData::ResolveCovarianceGroups(const Config &configure) {
     covGroups_[g]->numSegments++;
     const std::string canonicalData = DataCovariance::CanonicalPath(seg->GetDataFile());
     for (int pid = 0; pid < seg->NumPoints(); pid++) {
-      const int row = fit->second->RowOf(canonicalData, seg->GetPoint(pid + 1)->GetFileRecord());
+      const int row = fit->second->RowOf(canonicalData, seg->FileRecord(pid));
       if (row < 0) return -1;  // cannot happen: Fill checked the file and the record count
       items[g].push_back({row, s, pid});
     }
@@ -109,8 +109,8 @@ int EData::ResolveCovarianceGroups(const Config &configure) {
       grp.rows[a] = it[a].row;
       ESegment *seg = this->GetSegment(it[a].seg);
       EPoint *pt = seg->GetPoint(it[a].pid + 1);
-      grp.sigma[a] = pt->GetLabCrossSectionError();
-      grp.data[a] = pt->GetLabCrossSection();
+      grp.sigma[a] = seg->LabError(it[a].pid);
+      grp.data[a] = seg->LabValue(it[a].pid);
       std::ostringstream lab;
       lab << seg->GetSegmentKey() << " " << pt->GetLabEnergy() << " " << pt->GetLabAngle();
       grp.label[a] = lab.str();

@@ -238,10 +238,10 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   // channels of the entrance pair share an l; ThmCoulombTerm's small memo
   // cannot hold them once a window has more than 32 nodes).
   std::map<int, std::vector<complex>> psCoulByL;
-  if (this->IsTHM() && thm_window_) {
+  if (this->IsTHM() && settings_->thmWindow) {
     // The accepted directions at this point's energy (or, for a folding
     // sub-point beyond the reach of the window, at the nearest data point).
-    thm_window_->Nodes(this->GetCMEnergy(), psNodes);
+    settings_->thmWindow->Nodes(this->GetCMEnergy(), psNodes);
     psTable = std::make_shared<ThmPsTable>();
     psTable->nodes = (int)psNodes.size();
     psTable->offset.assign(theCNuc->NumJGroups() + 1, 0);
@@ -317,7 +317,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
         double thmJl = 0.0;
         double thmRhoDjl = 0.0;
         complex thmCoul(0.0, 0.0);
-        const ThmSpectatorWindow *window = this->IsTHM() ? thm_window_ : nullptr;
+        const ThmSpectatorWindow *window = this->IsTHM() ? settings_->thmWindow : nullptr;
         if (window) {
           // Spectator-momentum window (ps=..., ThmLineshape.h): the pieces at
           // every node p_k of this energy, with T_k = p_k^2/2 mu_sx added to

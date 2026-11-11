@@ -54,40 +54,20 @@
  * the EPoint object.
  */
 
-EPoint::EPoint(const azure2::experiment::MeasurementRows &rows, int row, ESegment *parent) : rows_(&rows), row_(row) {
-  entrance_key_ = parent->GetEntranceKey();
-  exit_key_ = parent->GetExitKey();
+EPoint::EPoint(const azure2::experiment::MeasurementRows &rows, int row, const ESegment *parent, int term)
+    : settings_(parent->TermSettingsOf(term)), row_(row) {
   cm_angle_ = rows.angle[row];
   lab_angle_ = rows.angle[row];
-  nominal_energy_ = 0.0;  // a row reads its energy from the rows
+  nominal_energy_ = rows.energy[row];
+  if (rows.angleIsLegendreOrder) legendre_order_ = (int)std::round(rows.angle[row]);
   bin_low_cm_ = rows.binLow[row];
   bin_high_cm_ = rows.binHigh[row];
   cm_energy_ = rows.energy[row];
   lab_energy_ = rows.energy[row];
   excitation_energy_ = rows.energy[row];
-  crossSectionComponent_ = parent ? parent->GetCrossSectionComponent() : 0;
   segment_key_ = parent->GetSegmentKey();
   geofactor_ = 0.;
   sfactorconv_ = 0.;
-  is_differential_ = parent->IsDifferential();
-  is_phase_ = parent->IsPhase();
-  is_thm_ = parent->IsTHM();
-  thm_weight_ = parent->GetThmWeight();
-  thm_lineshape_ = parent->GetThmLineshape();
-  thm_window_ = parent->GetThmSpectatorWindow();
-  thm_distortion_ = parent->GetThmDistortion();
-  thm_dw_ = parent->GetThmDwVertex();
-  thm_angle_ = parent->GetThmAngleWindow();
-  thm_coherent_ = parent->GetThmCoherent();
-  is_ang_dist_ = parent->IsAngularDist() || parent->IsCoefficients();
-  max_ang_dist_order_ = parent->GetMaxAngDistOrder();
-  j_value_ = parent->GetJ();
-  phase_s_value_ = parent->GetPhaseS();
-  l_value_ = parent->GetL();
-  isUPOS_ = parent->IsUPOS();
-  secondaryDecayL_ = parent->GetSecondaryDecayL();
-  Ic_ = parent->GetIc();
-  delta_ = parent->GetDelta();
   is_mapped_ = false;
   targetEffectNum_ = 0;
   parentData_ = NULL;
@@ -95,43 +75,19 @@ EPoint::EPoint(const azure2::experiment::MeasurementRows &rows, int row, ESegmen
 }
 
 /*!
- * This constructor is used if the data point is to be created with no experimental data.
- * A pointer to the parent segment is passed to the constructor for the intialization of
- * the EPoint object.
+ * A point that is no row (a sub-point of a target effect), with the settings of term `term` of the segment.
  */
 
-EPoint::EPoint(double angle, double energy, const ESegment *parent, int term) {
-  entrance_key_ = parent->TermEntranceKey(term);
-  exit_key_ = parent->TermExitKey(term);
+EPoint::EPoint(double angle, double energy, const ESegment *parent, int term) : settings_(parent->TermSettingsOf(term)) {
   lab_angle_ = angle;
   cm_angle_ = angle;
   nominal_energy_ = energy;
   lab_energy_ = energy;
   cm_energy_ = energy;
   excitation_energy_ = energy;
-  crossSectionComponent_ = parent ? parent->GetCrossSectionComponent() : 0;
   segment_key_ = parent->TermKey(term);
   geofactor_ = 0.;
   sfactorconv_ = 0.;
-  is_differential_ = parent->IsDifferential();
-  is_phase_ = parent->IsPhase();
-  is_thm_ = parent->IsTHM();
-  thm_weight_ = parent->GetThmWeight();
-  thm_lineshape_ = parent->GetThmLineshape();
-  thm_window_ = parent->GetThmSpectatorWindow();
-  thm_distortion_ = parent->GetThmDistortion();
-  thm_dw_ = parent->GetThmDwVertex();
-  thm_angle_ = parent->GetThmAngleWindow();
-  thm_coherent_ = parent->GetThmCoherent();
-  is_ang_dist_ = parent->IsAngularDist() || parent->IsCoefficients();
-  max_ang_dist_order_ = parent->GetMaxAngDistOrder();
-  j_value_ = parent->GetJ();
-  phase_s_value_ = parent->GetPhaseS();
-  l_value_ = parent->GetL();
-  isUPOS_ = parent->IsUPOS();
-  secondaryDecayL_ = parent->GetSecondaryDecayL();
-  Ic_ = parent->GetIc();
-  delta_ = parent->GetDelta();
   is_mapped_ = false;
   targetEffectNum_ = 0;
   parentData_ = NULL;
@@ -142,33 +98,29 @@ EPoint::EPoint(double angle, double energy, const ESegment *parent, int term) {
  * This constructor is used if the data point is to be created with no experimental data
  * and no parent segment.  Such a point is used if AZURE is to be called as an energy-
  * dependent function for reaction rate and target effect calculations with dynamic
- * integration. All options must be set manually.
+ * integration. All options must be set manually; the point holds settings of its own.
  */
 
 EPoint::EPoint(double angle, double energy, int entranceKey,
                int exitKey, bool isDifferential, bool isPhase, bool isAngularDist, double jValue, int lValue, int maxAngDistOrder) {
-  entrance_key_ = entranceKey;
-  exit_key_ = exitKey;
+  auto settings = std::make_shared<TermSettings>();
+  settings->entranceKey = entranceKey;
+  settings->exitKey = exitKey;
+  settings->differential = isDifferential;
+  settings->phase = isPhase;
+  settings->angularDist = isAngularDist;
+  settings->maxAngDistOrder = maxAngDistOrder;
+  settings->j = jValue;
+  settings->l = lValue;
+  settings_ = std::move(settings);
   lab_angle_ = angle;
   cm_angle_ = angle;
   nominal_energy_ = energy;
   lab_energy_ = energy;
   cm_energy_ = energy;
   excitation_energy_ = energy;
-  crossSectionComponent_ = 0;
   geofactor_ = 0.;
   sfactorconv_ = 0.;
-  is_differential_ = isDifferential;
-  is_phase_ = isPhase;
-  is_thm_ = false;
-  is_ang_dist_ = isAngularDist;
-  max_ang_dist_order_ = maxAngDistOrder;
-  j_value_ = jValue;
-  l_value_ = lValue;
-  isUPOS_ = false;
-  secondaryDecayL_ = 0;
-  Ic_ = 0.0;
-  delta_ = 0.0;
   is_mapped_ = false;
   targetEffectNum_ = 0;
   parentData_ = NULL;
@@ -180,7 +132,7 @@ EPoint::EPoint(double angle, double energy, int entranceKey,
  */
 
 bool EPoint::IsDifferential() const {
-  return is_differential_;
+  return settings_->differential;
 }
 
 /*!
@@ -188,7 +140,7 @@ bool EPoint::IsDifferential() const {
  */
 
 bool EPoint::IsPhase() const {
-  return is_phase_;
+  return settings_->phase;
 }
 
 /*!
@@ -196,7 +148,7 @@ bool EPoint::IsPhase() const {
  */
 
 bool EPoint::IsTHM() const {
-  return is_thm_;
+  return settings_->thm;
 }
 
 /*!
@@ -204,7 +156,7 @@ bool EPoint::IsTHM() const {
  */
 
 bool EPoint::IsAngularDist() const {
-  return is_ang_dist_;
+  return settings_->angularDist;
 }
 
 /*!
@@ -234,7 +186,7 @@ bool EPoint::IsTargetEffect() const {
  */
 
 bool EPoint::IsUPOS() const {
-  return isUPOS_;
+  return settings_->upos;
 }
 
 /*!
@@ -242,7 +194,7 @@ bool EPoint::IsUPOS() const {
  */
 
 int EPoint::GetSecondaryDecayL() const {
-  return secondaryDecayL_;
+  return settings_->secondaryDecayL;
 }
 
 /*!
@@ -250,7 +202,7 @@ int EPoint::GetSecondaryDecayL() const {
  */
 
 double EPoint::GetIc() const {
-  return Ic_;
+  return settings_->ic;
 }
 
 /*!
@@ -258,7 +210,7 @@ double EPoint::GetIc() const {
  */
 
 double EPoint::GetDelta() const {
-  return delta_;
+  return settings_->delta;
 }
 
 /*!
@@ -268,7 +220,7 @@ double EPoint::GetDelta() const {
  */
 
 int EPoint::GetEntranceKey() const {
-  return entrance_key_;
+  return settings_->entranceKey;
 }
 
 /*!
@@ -278,7 +230,7 @@ int EPoint::GetEntranceKey() const {
  */
 
 int EPoint::GetExitKey() const {
-  return exit_key_;
+  return settings_->exitKey;
 }
 
 /*!
@@ -287,7 +239,7 @@ int EPoint::GetExitKey() const {
  */
 
 int EPoint::GetL() const {
-  return l_value_;
+  return settings_->l;
 }
 
 /*!
@@ -311,7 +263,7 @@ int EPoint::GetTargetEffectNum() const {
  */
 
 int EPoint::GetMaxAngDistOrder() const {
-  return max_ang_dist_order_;
+  return settings_->maxAngDistOrder;
 }
 
 /*!
@@ -355,23 +307,7 @@ double EPoint::GetExcitationEnergy() const {
 }
 
 double EPoint::GetOriginalEnergy() const {
-  return IsRow() ? rows_->energy[row_] : nominal_energy_;
-}
-
-/*!
- * The measured value and its uncertainty as read (lab frame for lab data), from the point's row; 0 and 0.1 for a
- * point that is no row.
- */
-double EPoint::GetLabCrossSection() const {
-  return IsRow() ? rows_->value[row_] : 0.0;
-}
-
-double EPoint::GetLabCrossSectionError() const {
-  return IsRow() ? rows_->error[row_] : 0.1;
-}
-
-int EPoint::GetFileRecord() const {
-  return IsRow() ? rows_->record[row_] : 0;
+  return nominal_energy_;
 }
 
 /*!
@@ -379,15 +315,15 @@ int EPoint::GetFileRecord() const {
  * the value is A_k.
  */
 bool EPoint::IsCoefficient() const {
-  return rows_ && rows_->angleIsLegendreOrder;
+  return legendre_order_ >= 0;
 }
 
 int EPoint::GetCoefficientOrder() const {
-  return IsCoefficient() ? (int)std::round(rows_->angle[row_]) : -1;
+  return legendre_order_;
 }
 
 bool EPoint::GetCoefficientAbsolute() const {
-  return IsCoefficient() && rows_->absolute;
+  return IsCoefficient() && settings_->coefficientAbsolute;
 }
 
 /*!
@@ -396,7 +332,7 @@ bool EPoint::GetCoefficientAbsolute() const {
  */
 
 double EPoint::GetJ() const {
-  return j_value_;
+  return settings_->j;
 }
 
 /*!
@@ -555,16 +491,10 @@ void EPoint::SetCMAngle(double angle) {
  * Sets the exit key to the given value;
  */
 
-void EPoint::SetExitKey(int key) {
-  exit_key_ = key;
-}
 
 /*!
  * Sets the entrance key for the data point
  */
-void EPoint::SetEntranceKey(int key) {
-  entrance_key_ = key;
-}
 
 /*!
  * If a point is mapped, sets the internal attribute indicating which point it is mapped to.
@@ -599,47 +529,18 @@ void EPoint::SetTargetEffectNum(int targetEffectNum) {
 }
 
 /// Sets the line shape of the point and of its sub-points.
-void EPoint::SetThmLineshape(const ThmLineshape *l) {
-  thm_lineshape_ = l;
-  for (EPoint &sub : integrationPoints_) sub.thm_lineshape_ = l;
-}
 
-void EPoint::SetThmSpectatorWindow(const ThmSpectatorWindow *w) {
-  thm_window_ = w;
-  for (EPoint &sub : integrationPoints_) sub.thm_window_ = w;
-}
 
-void EPoint::SetThmDistortion(const ThmDistortion *d) {
-  thm_distortion_ = d;
-  for (EPoint &sub : integrationPoints_) sub.thm_distortion_ = d;
-}
 
-void EPoint::SetThmDwVertex(const ThmDwVertex *v) {
-  thm_dw_ = v;
-  for (EPoint &sub : integrationPoints_) sub.thm_dw_ = v;
-}
 
-void EPoint::SetThmCoherent(const ThmCoherentBackground *c) {
-  thm_coherent_ = c;
-  for (EPoint &sub : integrationPoints_) sub.thm_coherent_ = c;
-}
 
-void EPoint::SetThmAngleWindow(const ThmAngleWindow *w) {
-  thm_angle_ = w;
-  for (EPoint &sub : integrationPoints_) sub.thm_angle_ = w;
-}
 
 /*!
  * Adds a sub-point to the current point object for target effect integration.
  */
 
 void EPoint::AddSubPoint(EPoint subPoint) {
-  // A sub-point is a copy made before the observable was stamped on the parent,
-  // so it has to inherit it here. Without this an analyzing-power segment that
-  // also carries target effects is integrated as though it were a cross
-  // section, and A_y is never computed at all.
-  subPoint.is_analyzing_power_ = this->is_analyzing_power_;
-  subPoint.is_total_ = this->is_total_;
+  // A sub-point shares its term's settings (the observable, A_y or total included) with its parent.
   subPoint.is_sub_point_ = true;
   subPoint.screen_ue_ = this->screen_ue_;
   subPoint.screen_param_ = this->screen_param_;

@@ -262,10 +262,11 @@ void EData::WriteSegmentFiles(const Config &configure, const azure2::Results &re
               << std::setw(18) << std::scientific << columns.S(fitCrossSection, *point);
           if (!output.IsExtrap()) {
             double dataNorm = NormUsed((int)(thisSegment - GetSegments().begin()) + 1, results);
-            out << std::setw(18) << std::scientific << columns.Sigma(point->GetLabCrossSection() * dataNorm, *point)
-                << std::setw(18) << std::scientific << columns.Sigma(point->GetLabCrossSectionError() * dataNorm, *point)
-                << std::setw(18) << std::scientific << columns.S(point->GetLabCrossSection() * dataNorm, *point)
-                << std::setw(18) << std::scientific << columns.S(point->GetLabCrossSectionError() * dataNorm, *point)
+            const int row = (int)(point - segment->GetPoints().begin());
+            out << std::setw(18) << std::scientific << columns.Sigma(segment->LabValue(row) * dataNorm, *point)
+                << std::setw(18) << std::scientific << columns.Sigma(segment->LabError(row) * dataNorm, *point)
+                << std::setw(18) << std::scientific << columns.S(segment->LabValue(row) * dataNorm, *point)
+                << std::setw(18) << std::scientific << columns.S(segment->LabError(row) * dataNorm, *point)
                 << std::endl;
           } else
             out << std::endl;

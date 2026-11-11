@@ -122,6 +122,11 @@ class ESegment {
   /// The grid of an extrapolation as its measurement: one row per (angle, energy), energies varying fastest, value
   /// 0 and uncertainty 0.1 (lab MeV, deg).
   void SetGridRows(const std::vector<double> &energies, const std::vector<double> &angles, EData *data);
+  /// Row i (0-based) of the measurement as read: the value, its uncertainty (after a covariance file), its data-file
+  /// record.
+  double LabValue(int i) const { return measurement_->rows->value[i]; }
+  double LabError(int i) const { return measurement_->rows->error[i]; }
+  int FileRecord(int i) const { return measurement_->rows->record[i]; }
   /// The c.m. value, its uncertainty and dOmega_lab/dOmega_cm of row i (0-based) at the present energy shift; the
   /// Jacobian of term t (the leaf's own exit pair) for a SUM or RATIO frame factor.
   double CMValue(int i) const { return own_.frame.rows[i].yCM; }
@@ -154,6 +159,8 @@ class ESegment {
   const std::vector<EPoint> &TermPoints(int t) const { return Units(t).points; }
   /// Point i (1-based) of term t.
   EPoint *GetTermPoint(int t, int i) { return &Units(t).points[i - 1]; }
+  /// What term t's points compute (shared by them and their sub-points; immutable once set up).
+  const std::shared_ptr<const TermSettings> &TermSettingsOf(int t) const { return Units(t).settings; }
   int TermEntranceKey(int t) const { return t ? leaves_[t - 1].entranceKey : entrancekey_; }
   int TermExitKey(int t) const { return t ? leaves_[t - 1].exitKey : exitkey_; }
   /// The key of the term in caches and the intEC file: the segment key, or the leaf's (negative, from the data set's
@@ -503,6 +510,7 @@ class ESegment {
   /// What a term holds of the working state: its points (calculation units at the rows), its frame, and the channel
   /// tables of its last shift states.
   struct TermUnits {
+    std::shared_ptr<const TermSettings> settings;  ///< what the term's points compute (TermSettings.h)
     std::vector<EPoint> points;
     azure2::experiment::MeasurementFrame frame;  ///< the rows in the c.m. frame at the present shift
     std::shared_ptr<const azure2::experiment::MeasurementFrame> loadFrame;  ///< KeepLoadFrame (shared by every copy)
@@ -521,6 +529,13 @@ class ESegment {
   TermUnits own_;
   std::vector<Leaf> leaves_;
   TermUnits &Units(int t) { return t ? leaves_[t - 1].units : own_; }
+  /// The settings of the segment's own term from its members; given to its points (SetTermSettings).
+  std::shared_ptr<TermSettings> MakeOwnSettings() const;
+  void SetTermSettings(int t, std::shared_ptr<const TermSettings> settings);
+  /// After a set-up change of the segment's pairs or THM attachments.
+  void RefreshOwnSettings();
+  /// Leaf t's settings: the segment's with the leaf's pairs and role.
+  void SetLeafSettings(int t);
   const TermUnits &Units(int t) const { return t ? leaves_[t - 1].units : own_; }
   ChannelRowSource ShiftRowSource(int t, int i);
   std::vector<double> ShiftState() const;

@@ -336,7 +336,7 @@ void EPoint::CalculateThinTarget(CNuc *theCNuc, const Config &configure, azure2:
  * sub-points' cross-section slot, exactly as the analyzing power is handled.
  */
 void EPoint::IntegrateTargetEffectComponents(const Config &configure, azure2::Results &results) {
-  if (crossSectionComponent_ == 0) return;
+  if (settings_->crossSectionComponent == 0) return;
   const int n = this->NumSubPoints();
   if (n <= 0) return;
   std::vector<double> sigma(n);

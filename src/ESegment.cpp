@@ -455,12 +455,13 @@ void ESegment::SetMeasurementRows(std::shared_ptr<const azure2::experiment::Meas
   m->provenance = provenance;
   measurement_ = m;
   const azure2::experiment::MeasurementRows &r = *measurement_->rows;
+  own_.settings = MakeOwnSettings();
   own_.points.clear();
   own_.points.reserve(r.Size());
   own_.frame.rows.clear();
   own_.frame.rows.reserve(r.Size());
   for (int i = 0; i < r.Size(); i++) {
-    this->AddPoint(EPoint(r, i, this));
+    this->AddPoint(EPoint(r, i, this, 0));
     own_.points.back().SetParentData(data);
     own_.frame.rows.push_back(azure2::experiment::UnconvertedRow(r.energy[i], r.angle[i], r.value[i], r.error[i],
                                                             r.binLow[i], r.binHigh[i]));
@@ -554,8 +555,6 @@ int ESegment::AddLeaf(int entranceKey, int exitKey, std::optional<double> fixedA
   leaf.units.loadFrame = own_.loadFrame;
   for (int i = 0; i < (int)leaf.units.points.size(); i++) {
     EPoint &point = leaf.units.points[i];
-    point.SetEntranceKey(entranceKey);
-    point.SetExitKey(exitKey);
     if (fixedAngle) {
       point.SetCMAngle(*fixedAngle);
       point.SetLabAngle(*fixedAngle);
@@ -564,13 +563,22 @@ int ESegment::AddLeaf(int entranceKey, int exitKey, std::optional<double> fixedA
   }
   leaves_.push_back(std::move(leaf));
   const int t = (int)leaves_.size();
-  for (EPoint &point : leaves_.back().units.points) point.SetIsTotal(IsTermTotal(t));
+  SetLeafSettings(t);
   return t;
 }
 
 void ESegment::MakeYieldTotalLeaf(int t) {
   leaves_[t - 1].yieldTotal = true;
-  for (EPoint &point : leaves_[t - 1].units.points) point.SetIsTotal(IsTermTotal(t));
+  SetLeafSettings(t);
+}
+
+void ESegment::SetLeafSettings(int t) {
+  // The segment's settings as they stand when the leaf is made, with the leaf's pairs and role.
+  auto settings = std::make_shared<TermSettings>(*own_.settings);
+  settings->entranceKey = leaves_[t - 1].entranceKey;
+  settings->exitKey = leaves_[t - 1].exitKey;
+  settings->total = IsTermTotal(t);
+  SetTermSettings(t, std::move(settings));
 }
 
 bool ESegment::IsTermTotal(int t) const {
@@ -719,11 +727,50 @@ int ESegment::GetLegacyOperationType() const {
  */
 
 void ESegment::AddPoint(EPoint point) {
-  // The observable is a property of the segment; stamp it on the point so the
-  // calculation does not have to look back up.
-  point.SetIsAnalyzingPower(this->IsAnalyzingPower());
-  point.SetIsTotal(this->IsTotalTerm());
   own_.points.push_back(point);
+}
+
+std::shared_ptr<TermSettings> ESegment::MakeOwnSettings() const {
+  auto t = std::make_shared<TermSettings>();
+  t->entranceKey = entrancekey_;
+  t->exitKey = exitkey_;
+  t->differential = IsDifferential();
+  t->phase = IsPhase();
+  t->thm = IsTHM();
+  t->angularDist = IsAngularDist() || IsCoefficients();
+  t->analyzingPower = IsAnalyzingPower();
+  t->total = IsTotalTerm();
+  t->upos = IsUPOS();
+  t->coefficientAbsolute = IsCoefficientAbsolute();
+  t->maxAngDistOrder = GetMaxAngDistOrder();
+  t->j = GetJ();
+  t->l = GetL();
+  t->phaseS = GetPhaseS();
+  t->secondaryDecayL = GetSecondaryDecayL();
+  t->ic = GetIc();
+  t->delta = GetDelta();
+  t->crossSectionComponent = GetCrossSectionComponent();
+  t->thmWeight = thmWeight_.get();
+  t->thmLineshape = thmLineshape_.get();
+  t->thmWindow = thmWindow_.get();
+  t->thmDistortion = thmDistortion_.get();
+  t->thmDw = thmDwVertex_.get();
+  t->thmAngle = thmAngle_.get();
+  t->thmCoherent = thmCoherent_.get();
+  return t;
+}
+
+void ESegment::SetTermSettings(int t, std::shared_ptr<const TermSettings> settings) {
+  TermUnits &u = Units(t);
+  u.settings = std::move(settings);
+  for (EPoint &point : u.points) {
+    point.UseSettings(u.settings);
+    for (EPoint &sub : point.GetSubPoints()) sub.UseSettings(u.settings);
+  }
+}
+
+void ESegment::RefreshOwnSettings() {
+  SetTermSettings(0, MakeOwnSettings());
 }
 
 /*!
@@ -758,8 +805,7 @@ void ESegment::SetNorm(double norm) {
 
 void ESegment::SetExitKey(int key) {
   exitkey_ = key;
-  for (int i = 1; i <= this->NumPoints(); i++)
-    this->GetPoint(i)->SetExitKey(key);
+  RefreshOwnSettings();
 }
 
 /*!
@@ -767,8 +813,7 @@ void ESegment::SetExitKey(int key) {
  */
 void ESegment::SetEntranceKey(int key) {
   entrancekey_ = key;
-  for (int i = 1; i <= this->NumPoints(); i++)
-    this->GetPoint(i)->SetEntranceKey(key);
+  RefreshOwnSettings();
 }
 
 /*!
@@ -866,30 +911,30 @@ bool ESegment::HasSubPointIntegration(EPoint *point) {
 
 void ESegment::SetThmLineshape(std::shared_ptr<const ThmLineshape> l) {
   thmLineshape_ = l;
-  for (EPoint &point : own_.points) point.SetThmLineshape(l.get());
+  RefreshOwnSettings();
 }
 
 void ESegment::SetThmDistortion(std::shared_ptr<const ThmDistortion> d) {
   thmDistortion_ = d;
-  for (EPoint &point : own_.points) point.SetThmDistortion(d.get());
+  RefreshOwnSettings();
 }
 
 void ESegment::SetThmDwVertex(std::shared_ptr<const ThmDwVertex> v) {
   thmDwVertex_ = v;
-  for (EPoint &point : own_.points) point.SetThmDwVertex(v.get());
+  RefreshOwnSettings();
 }
 
 void ESegment::SetThmCoherent(std::shared_ptr<const ThmCoherentBackground> c) {
   thmCoherent_ = c;
-  for (EPoint &point : own_.points) point.SetThmCoherent(c.get());
+  RefreshOwnSettings();
 }
 
 void ESegment::SetThmAngleWindow(std::shared_ptr<const ThmAngleWindow> w) {
   thmAngle_ = w;
-  for (EPoint &point : own_.points) point.SetThmAngleWindow(w.get());
+  RefreshOwnSettings();
 }
 
 void ESegment::SetThmSpectatorWindow(std::shared_ptr<const ThmSpectatorWindow> w) {
   thmWindow_ = w;
-  for (EPoint &point : own_.points) point.SetThmSpectatorWindow(w.get());
+  RefreshOwnSettings();
 }
