@@ -19,7 +19,7 @@ def extrapolation_grid(grid, masses=None, relativistic=False, project_dir="", an
     refinement needs the model: :func:`refine_grid`, or the engine's extrapolation run).  A grid that does not parse
     or cannot be built raises ``ValueError`` with the engine's message.
     """
-    from .azrfile import _engine_module
+    from .described import _engine as _engine_module
     m1, m2 = masses if masses is not None else (0.0, 0.0)
     ok, values, message = _engine_module().extrapolation_grid(str(grid), float(m1), float(m2), bool(relativistic),
                                                               str(project_dir), bool(angles))
@@ -39,7 +39,7 @@ def refine_grid(start, model, tolerance, max_points):
     (one list of components per point), ``budget_reached``, ``largest_deviation`` and ``largest_deviation_at`` (when
     stopped by ``max_points``), ``sweeps``, ``evaluations``.
     """
-    from .azrfile import _engine_module
+    from .described import _engine as _engine_module
 
     def batch(xs):
         out = []

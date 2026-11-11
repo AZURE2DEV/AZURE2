@@ -19,7 +19,7 @@ def schema():
     ``general_norm_rules``, ``units``, ``dimensions``, ``column_roles``, ``lists`` and ``diagnostic_codes``.
     Needs the compiled engine module.
     """
-    from .azrfile import _engine_module
+    from .described import _engine as _engine_module
     return _engine_module().schema()
 
 
@@ -36,7 +36,7 @@ def validate(path):
     Needs the compiled engine module.
     """
     import json
-    from .azrfile import _engine_module
+    from .described import _engine as _engine_module
     with open(path, "rb") as f:
         text = f.read()  # bytes, as the engine reads a file
     refusal, diagnostics, skipped = _engine_module().validate_format3_text(text, str(path))
@@ -57,14 +57,14 @@ def predictions(path):
     project is set up as a calculation would set it up, its data files read relative to the working directory.  A
     set-up that fails raises ``ValueError`` with the engine's messages.  Needs the compiled engine module.
     """
-    from .azrfile import _engine_module
+    from .described import _engine as _engine_module
     lines, messages = _engine_module().predictions(str(path))
     if any(line.endswith(": set-up failed") or line.startswith("project: ") for line in lines):
         raise ValueError(f"{path}: the project cannot be set up:\n{messages}")
     return list(lines)
 
 
-def describe(path, as_json=False):
+def describe(path, as_json=False, record=None):
     """What the engine made of the format-3 project ``path``, as ``AZURE2 --describe [--json]`` prints it.
 
     For every data set and extrapolation: the quantity, the observable computed, the reaction tree with the ``<levels>``
@@ -74,13 +74,15 @@ def describe(path, as_json=False):
     effects linked to it and its fit parameters with their names and kinds; then the model data (docs/upgrade/project_format3.md section 6.3).  Returns the text, or with
     ``as_json`` a dict (``datasets``, ``extrapolations``, ``model_data``).  A project with an error raises
     ``ValueError`` with its diagnostics; a format-1 or format-2 file raises ``ValueError`` with the conversion command.
+    ``record``: only the data set, extrapolation, datum or potential of that name (``AZURE2 --describe --record``).
     Needs the compiled engine module.
     """
     import json
-    from .azrfile import _engine_module
+    from .described import _engine as _engine_module
     with open(path, "rb") as f:
         text = f.read()
-    refusal, diagnostics, description = _engine_module().describe_format3_text(text, str(path), bool(as_json))
+    refusal, diagnostics, description = _engine_module().describe_format3_text(text, str(path), bool(as_json), "",
+                                                                                record or "")
     if refusal:
         raise ValueError(refusal)
     if not description:

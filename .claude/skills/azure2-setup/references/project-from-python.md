@@ -25,3 +25,7 @@ reference and parameter name (`<parameterSettings>`, the prior-covariance file w
 refused while referenced. Read fields with `p[name].field` or `p[name]["field"]`; the record's own kind is
 `record_kind` (`kind` is a target's field). Fitted values back into the records: `m.save_fit(path, x,
 norms="fitted")` writes norms, shift terms and isotope abundances into their nuisances.
+
+Data sets declared in a spreadsheet: `pyazr.records_from_csv("datasets.csv", project=p)` (header row = field keys,
+`name` required, quote reactions); every refused row comes back at once with its row number. On a format-3 session
+`m.datasets` / `m.dataset_chi2()` are by record name (the engine's description).

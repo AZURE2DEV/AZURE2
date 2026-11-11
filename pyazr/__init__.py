@@ -41,7 +41,9 @@ from .priors import prior_from_fit, read_prior, write_prior, read_covariance_dat
 from .schema import schema, validate, describe, predictions
 from .grids import extrapolation_grid, refine_grid
 from .model_data import ModelDatum, model_data
-from .project import Project, Record, Nuisance, FormatError
+from .described import (DescribedDataset, DescribedDatasets, DescribedExtrapolation,
+                        DescribedExtrapolations)
+from .project import Project, Record, Nuisance, FormatError, records_from_csv
 
 __all__ = ["azure2", "convert_azr", "ScatteringLength", "ScatteringLengthLine", "whittaker_wave",
            "tabulate", "TabulatedCrossSection",
@@ -71,5 +73,6 @@ __all__ = ["azure2", "convert_azr", "ScatteringLength", "ScatteringLengthLine", 
            "prior_from_fit", "read_prior", "write_prior", "read_covariance_dat",
            "schema", "validate", "describe", "predictions", "ModelDatum", "model_data",
            "extrapolation_grid", "refine_grid",
-           "Project", "Record", "Nuisance", "FormatError"]
-__version__ = '2.30.0'
+           "Project", "Record", "Nuisance", "FormatError", "records_from_csv",
+           "DescribedDataset", "DescribedDatasets", "DescribedExtrapolation", "DescribedExtrapolations"]
+__version__ = '2.31.0'

@@ -304,19 +304,16 @@ class azure2(_HybridPotentials):
             cache.clear()
             cache["stamp"] = stamp
         if kind not in cache:
-            if kind == "datasets":
-                from .datasets import SegmentSet
-                cache[kind] = SegmentSet.from_file(self.file)
+            if kind in ("datasets", "extrapolations"):  # format 3: the engine's description; older: the lines
+                from .described import session_records
+                cache[kind] = session_records(kind, self.file, self.cwd)
             elif kind == "active":
                 active = self._parsed("datasets").active
                 if len(active) != self.nsegments:
                     raise RuntimeError(
-                        f"{len(active)} active <segmentsData> lines in {self.file} but "
+                        f"{len(active)} active data sets in {self.file} but "
                         f"the engine reports {self.nsegments} segments.")
                 cache[kind] = active
-            elif kind == "extrapolations":
-                from .datasets import TestSegmentSet
-                cache[kind] = TestSegmentSet.from_file(self.file)
             elif kind == "model":
                 cache[kind] = AzrModel.from_file(self.file)
             else:
@@ -463,9 +460,8 @@ class azure2(_HybridPotentials):
 
     @property
     def datasets(self):
-        """Per-segment dataset provenance parsed from the ``.azr`` file.
-
-        A :class:`~pyazr.datasets.SegmentSet`: for each data segment, the data
+        """Per-segment dataset provenance (format 3: a :class:`~pyazr.described.DescribedDatasets`, the engine's
+        description; older formats: a :class:`~pyazr.datasets.SegmentSet`): for each data segment, the data
         file it came from, the reaction channel (entrance/exit pairs), energy /
         angle range, observable type, and normalization systematic error.
         ``print(azr.datasets.table())`` gives an overview; ``azr.datasets
@@ -476,7 +472,7 @@ class azure2(_HybridPotentials):
 
     @property
     def extrapolations(self):
-        """Per-segment extrapolation grids parsed from the ``.azr`` file.
+        """Per-segment extrapolation grids (format 3: :class:`~pyazr.described.DescribedExtrapolations`).
 
         A :class:`~pyazr.datasets.TestSegmentSet`: for each ``<segmentsTest>``
         entry, the reaction channel, the energy / angle grid, and the observable
@@ -1671,7 +1667,8 @@ class azure2(_HybridPotentials):
         An experiment often owns several segments -- one per angle, or one per
         final state -- so the per-segment split is finer than the question
         being asked.  Returns ``{name: (chi2, points, segments)}`` keyed by the
-        data file's name, in first-appearance order.
+        data file's name (a format-3 project: the data set's record name, one
+        segment each), in first-appearance order.
         """
         seg = self.segment_chi2(params)
         out = {}

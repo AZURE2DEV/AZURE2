@@ -61,3 +61,20 @@ Edits after the first save change only the lines of the fields they name:
 ``<parameterSettings>`` and in the prior-covariance file), ``p.remove(name)``
 (refused while another record names it, with the referrers).  A project opened
 and saved without an edit is written back byte for byte.
+A whole-line comment between repeats of a field that ``set`` replaces stays
+where it was.  ``rename`` takes the parameter names from the engine (the names
+it gives the project before and after, compared whole).
+
+**Data sets from a sheet.** ``pyazr.records_from_csv(path, kind="dataset",
+project=p)`` reads a CSV file whose header row holds field keys (a ``name``
+column among them; one row per data set: ``name, reaction, quantity, unit, file,
+columns, norm, ...``; a value with a comma, as a reaction, in quotes).  Every row
+is checked by the engine against the project as it would stand; all refusals
+come at once in one :class:`pyazr.FormatError`, each diagnostic with its
+``row``.  It returns ``(kind, name, fields)`` triples for ``p.add``.
+
+**The session's data sets.** On a format-3 project ``m.datasets``,
+``m.active_datasets`` and ``m.extrapolations`` are the engine's description of
+the built project (:class:`pyazr.DescribedDatasets`: record name, quantity,
+reaction with pair keys, windows, data file, rows read and kept, parameters),
+and ``m.dataset_chi2()`` is keyed by the data sets' record names.

@@ -821,3 +821,10 @@ add_test(NAME pyazr_ec_integrals_formal
                  ${CMAKE_CURRENT_SOURCE_DIR}/ec_integrals_formal_test.py)
 set_tests_properties(pyazr_ec_integrals_formal PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+
+# pyazr on a format-3 project without the old file class: the session's data sets from the engine's description, rename
+# with the engine's parameter names, set keeping comments between repeats, records_from_csv.
+add_test(NAME pyazr_session_records
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/session_records_test.py)
+set_tests_properties(pyazr_session_records PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
