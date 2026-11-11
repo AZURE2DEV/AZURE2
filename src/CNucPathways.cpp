@@ -54,7 +54,10 @@ const azure2::PathwayTable &CNuc::Pathways() const {
 }
 
 void CNuc::RequestCaptureAy(int entrancePair, int exitPair) {
-  captureAyRequests_.push_back(std::make_pair(entrancePair, exitPair));
+  const std::pair<int, int> request(entrancePair, exitPair);
+  for (const std::pair<int, int> &r : captureAyRequests_)
+    if (r == request) return;
+  captureAyRequests_.push_back(request);
 }
 
 /*!

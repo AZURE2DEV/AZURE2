@@ -97,10 +97,11 @@ class GenMatrixFunc {
    * coefficients of R. G. Seyler and H. R. Weller, Phys. Rev. C \b 20 (1979)
    * 453, Eqs. (20) and (21):
    * \f$A_y = \sum_k b_k P_k^1(\cos\theta) / \sum_k a_k P_k(\cos\theta)\f$.
-   * The coefficient table is built on first use by
-   * CNuc::CalcCaptureAnalyzingPower; the T-matrix elements are the ones this
-   * object has already computed, external capture included.
-   * Returns false for anything that is not a photon exit channel.
+   * The coefficients are the exit's capture-A_y rows of the pathway table,
+   * built at set-up for the reactions the data sets name; the T-matrix
+   * elements are the ones this object has already computed, external capture
+   * included.  Returns false for anything that is not a photon exit channel;
+   * throws when the exit's terms were not requested.
    */
   bool CalculateCaptureAnalyzingPower(EPoint *point, const azure2::Results &results, double *unpolarized,
                                       double *analyzingPower);
@@ -149,6 +150,8 @@ class GenMatrixFunc {
   double GetRk(double, double, double, double, int);
   /// The refusal of a point whose exit pair no pathway of its entrance pair reaches (pair numbers, 1-based).
   std::string NoPathwayMessage(int entrancePair, int exitPair) const;
+  /// The refusal of a capture-A_y point whose terms were not requested at set-up (CNuc::RequestCaptureAy).
+  std::string CaptureAyNotBuiltMessage(const EPoint *point) const;
 
   /*!
    *This virtual function in implemented in the child class.

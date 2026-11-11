@@ -15,6 +15,7 @@
 #include "Config.h"
 #include "CNuc.h"
 #include "CNucReport.h"
+#include "CaptureAyRequests.h"
 #include "PPair.h"
 #include "EData.h"
 #include "ESegment.h"
@@ -126,13 +127,10 @@ int AZUREAPI::Initialize() {
   data_ = new EData();
   compound_ = new CNuc();
 
-  // configure().outStream << "Filling Compound Nucleus..." << std::endl;
   // With the session's radius overrides: Initialize runs again on every mode switch.
   if (compound()->Fill(configure(), radiusOverrides_) == -1) {
-    // configure().outStream << "Could not fill compound nucleus from file." << std::endl;
     return -1;
   } else if (compound()->NumPairs() == 0 || compound()->NumJGroups() == 0) {
-    // configure().outStream << "No nuclear data exists. Calculation not possible." << std::endl;
     return -1;
   }
   if ((configure().screenCheckMask | configure().fileCheckMask) &
@@ -170,7 +168,8 @@ int AZUREAPI::Initialize() {
     }
   }
 
-  // Initialize compound nucleus object
+  // Initialize compound nucleus object, with the capture-A_y terms the data sets need
+  RequestCaptureAyTerms(*compound(), *data());
   try {
     compound()->Initialize(configure());
   } catch (GSLException e) {
@@ -723,6 +722,7 @@ bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
   if (data()->NumSegments() == 0) return false;
 
   configure().paramMask &= ~Config::USE_PREVIOUS_INTEGRALS;
+  RequestCaptureAyTerms(*compound(), *data());
   try {
     compound()->Initialize(configure());
   } catch (GSLException e) {

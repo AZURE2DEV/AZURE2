@@ -15,6 +15,7 @@
 #include "AZUREMain.h"
 #include "ProjectCommands.h"
 #include "ProjectSetup.h"
+#include "CaptureAyRequests.h"
 #include "Config.h"
 #include "azure2/io/LevelRows.h"
 #include "GSLException.h"
@@ -1092,11 +1093,9 @@ static int FindMcmcPriorParameter(const std::string &token, const AZUREParams &p
 
 int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
   try {
-    // Create compound nucleus and experimental data objects
     CNuc *compound = new CNuc();
     EData *data = new EData();
 
-    // Fill compound nucleus from configuration file
     configure.outStream << "Filling Compound Nucleus..." << std::endl;
     if (compound->Fill(configure) == -1) {
       configure.outStream << "Could not fill compound nucleus from file." << std::endl;
@@ -1138,7 +1137,8 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
       }
     }
 
-    // Initialize compound nucleus
+    // Initialize compound nucleus, with the capture-A_y terms the data sets need
+    RequestCaptureAyTerms(*compound, *data);
     try {
       compound->Initialize(configure);
     } catch (GSLException e) {

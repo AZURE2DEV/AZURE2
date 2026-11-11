@@ -6,12 +6,8 @@
 #include "Config.h"
 #include "EPoint.h"
 #include "AZUREGrad.h"
-#include "Decay.h"
-#include "KGroup.h"
 #include "azure2/physics/ExternalCapture.h"
-#include "KLGroup.h"
 #include <stdexcept>
-#include "MGroup.h"
 #include "Interference.h"
 #include "JGroup.h"
 #include "ALevel.h"
@@ -853,11 +849,9 @@ bool AMatrixFunc::PointTBar(EPoint *point, const azure2::Results &results, doubl
       //        dA_y/dT2* = [ +i bk P_k^1 T1 - A_y ak P_k T1 ] / (2 D),
       //      and the cotangent convention of this function supplies the 2. ----
       const int maxL = point->GetMaxLOrder();
-      compound()->CalcCaptureAnalyzingPower(aa, ir, maxL);
-      // The capture-A_y terms are still the tree's (they move to the table with their build at set-up); the decay
-      // has the position of the table's exit.
-      Decay *treeDecay = compound()->GetPair(aa)->GetDecay(ir);
-      const int nTerms = treeDecay->NumCaptureAyTerms();
+      // The forward pass has refused a point whose terms were not requested (CalculateCaptureAnalyzingPower).
+      if (!theDecay.has_capture_ay) return false;
+      const int nTerms = theDecay.num_capture_ay;
       if (nTerms == 0) return false;
 
       const double xCos = cos(point->GetCMAngle() * pi / 180.0);
@@ -869,8 +863,8 @@ bool AMatrixFunc::PointTBar(EPoint *point, const azure2::Results &results, doubl
                     : this->GetTMatrixElement(kg, p);
       };
       double num = 0.0, den = 0.0;
-      for (int i = 1; i <= nTerms; i++) {
-        const CaptureAyTerm *t = treeDecay->GetCaptureAyTerm(i);
+      for (int i = 0; i < nTerms; i++) {
+        const azure2::CaptureAyTerm *t = &P.capture_ay[theDecay.first_capture_ay + i];
         if (t->kOrder > maxL) continue;
         complex prod = element(t->kGroup1, t->path1, t->isEC1) * conj(element(t->kGroup2, t->path2, t->isEC2));
         if (t->ak != 0.0) den += t->ak * real(prod) * point->GetLegendreP(t->kOrder);
@@ -880,8 +874,8 @@ bool AMatrixFunc::PointTBar(EPoint *point, const azure2::Results &results, doubl
       const double ay = num / den;
 
       const complex I2(0.0, 1.0);
-      for (int i = 1; i <= nTerms; i++) {
-        const CaptureAyTerm *t = treeDecay->GetCaptureAyTerm(i);
+      for (int i = 0; i < nTerms; i++) {
+        const azure2::CaptureAyTerm *t = &P.capture_ay[theDecay.first_capture_ay + i];
         if (t->kOrder > maxL) continue;
         const complex T1 = element(t->kGroup1, t->path1, t->isEC1);
         const complex T2 = element(t->kGroup2, t->path2, t->isEC2);

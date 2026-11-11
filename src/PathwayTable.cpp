@@ -137,14 +137,17 @@ void AddInterferences(const phys::System &system, int entrancePair, int maxL, En
   exit.num_diagonal = (int)P.diagonal.size() - exit.first_diagonal;
 }
 
-/// The capture analyzing-power terms of a photon exit (CNuc::CalcCaptureAnalyzingPower): every ordered pair of its
-/// pathways, internal and external, across spin groups, for k = 0 ... maxL.  None for a spinless projectile.
+/// The capture analyzing-power terms of a photon exit (Seyler and Weller, PRC 20 (1979) 453, Eqs. 20, 21): every
+/// ordered pair of its pathways, internal and external, across spin groups, for k = 0 ... maxL.  None for a spinless
+/// projectile or a beta entrance.
 void AddCaptureAy(const phys::System &system, int entrancePair, int maxL, EntrancePathways &P, ExitRow &exit) {
   exit.has_capture_ay = true;
   exit.first_capture_ay = (int)P.capture_ay.size();
   exit.num_capture_ay = 0;
   const phys::Partition &entrance = system.partition(entrancePair - 1);
   const phys::Partition &exitPartition = system.partition(exit.pair - 1);
+  // A beta entrance has no projectile to polarize; the readers refuse it before they look at the terms.
+  if (entrance.kind != phys::PartitionKind::Particle) return;
   if (exitPartition.kind != phys::PartitionKind::Photon) return;
   const int two_x = entrance.two_j[0], two_a = entrance.two_j[1], two_c = exitPartition.two_j[1];
   if (two_x <= 0) return;  // no vector polarization to have
@@ -257,13 +260,16 @@ std::shared_ptr<const PathwayTable> BuildPathwayTable(const CNucSystem &structur
     if (system.partition(aa - 1).kind == phys::PartitionKind::Beta) continue;
     for (ExitRow &exit : P.exits) AddInterferences(system, aa, options.max_l_order, P, exit);
   }
-  for (const std::pair<int, int> &request : options.capture_ay) {
-    const int aa = request.first;
-    if (aa < 1 || aa > (int)system.num_partitions()) continue;
+  // The requested capture-A_y terms, entrance by entrance and exit by exit in the table's order, so that the table
+  // does not depend on the order of the requests.  A request for a pair no pathway reaches builds nothing.
+  for (int aa = 1; aa <= (int)system.num_partitions(); aa++) {
     EntrancePathways &P = table->entrances_[aa - 1];
-    const int e = P.ExitOf(request.second);
-    if (e == 0 || P.exits[e - 1].has_capture_ay) continue;
-    AddCaptureAy(system, aa, options.max_l_order, P, P.exits[e - 1]);
+    for (ExitRow &exit : P.exits) {
+      bool requested = false;
+      for (const std::pair<int, int> &request : options.capture_ay)
+        requested = requested || (request.first == aa && request.second == exit.pair);
+      if (requested) AddCaptureAy(system, aa, options.max_l_order, P, exit);
+    }
   }
   return table;
 }

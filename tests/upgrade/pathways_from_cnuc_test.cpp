@@ -276,9 +276,8 @@ void OldSortPathways(CNuc &c, const Config &configure) {
 }
 
 // The pathway table against the trees: one line per row of either, every field, doubles as hexadecimal floats (so
-// equal lines mean equal bits).  The trees' capture-A_y terms are built here (CNuc::CalcCaptureAnalyzingPower at
-// maxLOrder, as the first capture-A_y point builds them); the table holds them for every photon exit, requested
-// before CNuc::Initialize.
+// equal lines mean equal bits).  The capture-A_y terms are the table's alone (built at set-up for the reactions the
+// data sets name); physics_pathway_table and upgrade_capture_ay_requests check them.
 void Line(std::vector<std::string> &out, const char *format, ...) {
   char buf[1024];
   va_list args;
@@ -288,14 +287,12 @@ void Line(std::vector<std::string> &out, const char *format, ...) {
   out.push_back(buf);
 }
 
-std::vector<std::string> DumpTrees(CNuc &c, int maxL) {
+std::vector<std::string> DumpTrees(CNuc &c) {
   std::vector<std::string> out;
   for (int a = 1; a <= c.NumPairs(); a++) {
     PPair *p = c.GetPair(a);
     for (int d = 1; d <= p->NumDecays(); d++) {
       Decay *dec = p->GetDecay(d);
-      const bool photon = c.GetPair(dec->GetPairNum())->GetPType() == 10;
-      if (photon) c.CalcCaptureAnalyzingPower(a, d, maxL);
       Line(out, "entrance %d exit %d -> pair %d: %d groups, interferences %d, %zu pathways, %d orders, %zu diagonal",
            a, d, dec->GetPairNum(), dec->NumKGroups(), (int)dec->TablesBuilt(), dec->InterferencePathways().size(),
            dec->NumInterferenceOrders(), dec->DiagonalPathways().size());
@@ -341,14 +338,6 @@ std::vector<std::string> DumpTrees(CNuc &c, int maxL) {
       for (const InterferencePathway &q : dec->InterferencePathways()) Line(out, "  pathway k %d m %d %c", q.k, q.m, q.rad);
       for (const DiagonalPathway &q : dec->DiagonalPathways())
         Line(out, "  diagonal k %d m %d s %a l %d stat %a", q.k, q.m, q.s, q.l, q.statSpin);
-      if (photon) {
-        Line(out, "  capture A_y: %d terms", dec->NumCaptureAyTerms());
-        for (int t = 1; t <= dec->NumCaptureAyTerms(); t++) {
-          const CaptureAyTerm *q = dec->GetCaptureAyTerm(t);
-          Line(out, "    k %d: %d/%d/%d %d/%d/%d a %a b %a", q->kOrder, q->kGroup1, q->path1, (int)q->isEC1, q->kGroup2,
-               q->path2, (int)q->isEC2, q->ak, q->bk);
-        }
-      }
     }
   }
   return out;
@@ -361,7 +350,6 @@ std::vector<std::string> DumpTable(CNuc &c) {
     const azure2::EntrancePathways &P = table.Entrance(a);
     for (int d = 1; d <= (int)P.exits.size(); d++) {
       const azure2::ExitRow &x = P.exits[d - 1];
-      const bool photon = c.GetPair(x.pair)->GetPType() == 10;
       Line(out, "entrance %d exit %d -> pair %d: %d groups, interferences %d, %d pathways, %d orders, %d diagonal", a, d,
            x.pair, x.num_groups, (int)x.has_interferences, x.num_interference_pathways, x.num_orders, x.num_diagonal);
       for (int k = 1; k <= x.num_groups; k++) {
@@ -405,14 +393,6 @@ std::vector<std::string> DumpTable(CNuc &c) {
       for (int i = 0; i < x.num_diagonal; i++) {
         const azure2::DiagonalPathway &q = P.diagonal[x.first_diagonal + i];
         Line(out, "  diagonal k %d m %d s %a l %d stat %a", q.k, q.m, q.s, q.l, q.statSpin);
-      }
-      if (photon) {
-        Line(out, "  capture A_y: %d terms", x.has_capture_ay ? x.num_capture_ay : -1);
-        for (int t = 0; t < x.num_capture_ay; t++) {
-          const azure2::CaptureAyTerm &q = P.capture_ay[x.first_capture_ay + t];
-          Line(out, "    k %d: %d/%d/%d %d/%d/%d a %a b %a", q.kOrder, q.kGroup1, q.path1, (int)q.isEC1, q.kGroup2, q.path2,
-               (int)q.isEC2, q.ak, q.bk);
-        }
       }
     }
   }
@@ -502,10 +482,6 @@ int main(int argc, char **argv) {
       // superset of what any project's data select.
       for (int a = 1; a <= compound.NumPairs(); a++)
         if (compound.GetPair(a)->GetPType() != 10) compound.GetPair(a)->SetEntrance();
-      // The table's capture-A_y terms for every photon exit of every entrance.
-      for (int a = 1; a <= compound.NumPairs(); a++)
-        for (int p = 1; p <= compound.NumPairs(); p++)
-          if (compound.GetPair(a)->GetPType() != 10 && compound.GetPair(p)->GetPType() == 10) compound.RequestCaptureAy(a, p);
       try {
         compound.Initialize(cfg);
       } catch (const std::exception &x) {
@@ -513,7 +489,7 @@ int main(int argc, char **argv) {
         continue;
       }
       {
-        const std::vector<std::string> table = DumpTable(compound), trees = DumpTrees(compound, cfg.maxLOrder);
+        const std::vector<std::string> table = DumpTable(compound), trees = DumpTrees(compound);
         tableRows += (long)table.size();
         size_t n = 0;
         while (n < table.size() && n < trees.size() && table[n] == trees[n]) n++;
