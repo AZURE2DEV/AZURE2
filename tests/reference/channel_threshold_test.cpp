@@ -49,6 +49,9 @@ Config *g_config = nullptr;
 
 namespace {
 
+// The pairs of these tests have no potential: every channel key is kNoSpinOrbit (PPair::SpinOrbitTwoJ).
+const int kNoSO = azure2::physics::kNoSpinOrbit;
+
 struct PairSpec {
   const char *name;
   int z1, z2;
@@ -106,9 +109,9 @@ int main(int argc, char **argv) {
       double S[3], P[3], D[3];
       for (int i = 0; i < 3; i++) {
         auto t0 = std::chrono::steady_clock::now();
-        S[i] = cf.Shift(l, es[i]);
-        P[i] = cf.Penetrability(l, es[i]);
-        D[i] = cf.ShiftDerivative(l, es[i]);
+        S[i] = cf.Shift(l, kNoSO, es[i]);
+        P[i] = cf.Penetrability(l, kNoSO, es[i]);
+        D[i] = cf.ShiftDerivative(l, kNoSO, es[i]);
         double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
         maxMs = std::max(maxMs, ms);
         char e[64];
@@ -129,9 +132,9 @@ int main(int argc, char **argv) {
         check(relDiff(D[0], D[1]) < 1e-4 && relDiff(D[2], D[1]) < 1e-4,
               t + " dS/dE continuous through threshold");
       // One-sided reference from below, Richardson-extrapolated.
-      const double s0 = cf.Shift(l, 0.0);
-      const double d1 = (s0 - cf.Shift(l, -1e-4)) / 1e-4;
-      const double d2 = (s0 - cf.Shift(l, -1e-5)) / 1e-5;
+      const double s0 = cf.Shift(l, kNoSO, 0.0);
+      const double d1 = (s0 - cf.Shift(l, kNoSO, -1e-4)) / 1e-4;
+      const double d2 = (s0 - cf.Shift(l, kNoSO, -1e-5)) / 1e-5;
       const double ref = (10.0 * d2 - d1) / 9.0;
       if (verbose) std::printf("      %s dS/dE(0) reference %.10g\n", tag, ref);
       // A neutral l <= 1 channel has S - S(0) ~ sqrt(B) below threshold: dS/dE
@@ -146,28 +149,28 @@ int main(int argc, char **argv) {
         const double eta1 = std::sqrt(uconv / 2.) * fstruc * spec.z1 * spec.z2 *
                             std::sqrt(pair.GetRedMass());
         const double e100 = std::pow(eta1 / ChannelFunc::kEtaClosed, 2.0);
-        const double sb = cf.Shift(l, e100 * (1 - 1e-9));
-        const double sa = cf.Shift(l, e100 * (1 + 1e-9));
+        const double sb = cf.Shift(l, kNoSO, e100 * (1 - 1e-9));
+        const double sa = cf.Shift(l, kNoSO, e100 * (1 + 1e-9));
         if (verbose) std::printf("      %s eta=100 at e=%.4g MeV: S %.12g | %.12g\n", tag, e100, sb, sa);
         check(std::isfinite(sb) && std::isfinite(sa) &&
                   std::fabs(sa - sb) <= 1e-5 * (1 + std::fabs(sa)),
               t + " S continuous at eta = 100");
-        check(cf.Penetrability(l, e100 * (1 - 1e-9)) == 0.0 &&
-                  cf.Penetrability(l, e100 * (1 + 1e-9)) >= 0.0,
+        check(cf.Penetrability(l, kNoSO, e100 * (1 - 1e-9)) == 0.0 &&
+                  cf.Penetrability(l, kNoSO, e100 * (1 + 1e-9)) >= 0.0,
               t + " P at eta = 100");
       }
 
       // Bit for bit the old routines away from threshold.
       CoulFunc coul(&pair, false);
       ShftFunc shft(&pair);
-      check(cf.Shift(l, 1.0) == coul.PEShift(l, spec.a, 1.0), t + " S(+1) = CoulFunc::PEShift");
-      check(cf.Penetrability(l, 1.0) == coul.Penetrability(l, spec.a, 1.0),
+      check(cf.Shift(l, kNoSO, 1.0) == coul.PEShift(l, kNoSO, spec.a, 1.0), t + " S(+1) = CoulFunc::PEShift");
+      check(cf.Penetrability(l, kNoSO, 1.0) == coul.Penetrability(l, kNoSO, spec.a, 1.0),
             t + " P(+1) = CoulFunc::Penetrability");
       const double h1 = ChannelFunc::DerivativeStep(1.0);
-      check(cf.ShiftDerivative(l, 1.0) == coul.PEShift_dE(l, spec.a, 1.0, h1),
+      check(cf.ShiftDerivative(l, kNoSO, 1.0) == coul.PEShift_dE(l, kNoSO, spec.a, 1.0, h1),
             t + " dS/dE(+1) = CoulFunc::PEShift_dE");
-      check(cf.Shift(l, -1.0) == shft(l, spec.sepE - 1.0), t + " S(-1) = ShftFunc");
-      check(cf.ShiftDerivative(l, -1.0) == shft.EnergyDerivative(l, spec.sepE - 1.0, h1),
+      check(cf.Shift(l, kNoSO, -1.0) == shft(l, kNoSO, spec.sepE - 1.0), t + " S(-1) = ShftFunc");
+      check(cf.ShiftDerivative(l, kNoSO, -1.0) == shft.EnergyDerivative(l, kNoSO, spec.sepE - 1.0, h1),
             t + " dS/dE(-1) = ShftFunc::EnergyDerivative");
       // dS/dE is not round-off dominated: started from half the step it
       // agrees to 1e-6 (the 1 eV step AZURE2 used before was off by up to
@@ -177,17 +180,17 @@ int main(int argc, char **argv) {
       // keeps a factor ten on both sides.
       for (double e : {1.0, -1.0, 0.3, -0.3}) {
         double h = ChannelFunc::DerivativeStep(e);
-        double d1 = cf.ShiftDerivative(l, e);
-        double d2 = (e > 0) ? coul.PEShift_dE(l, spec.a, e, 0.5 * h)
-                            : shft.EnergyDerivative(l, spec.sepE + e, 0.5 * h);
-        double d6 = (e > 0) ? coul.PEShift_dE(l, spec.a, e, 1e-6)
-                            : shft.EnergyDerivative(l, spec.sepE + e, 1e-6);
+        double d1 = cf.ShiftDerivative(l, kNoSO, e);
+        double d2 = (e > 0) ? coul.PEShift_dE(l, kNoSO, spec.a, e, 0.5 * h)
+                            : shft.EnergyDerivative(l, kNoSO, spec.sepE + e, 0.5 * h);
+        double d6 = (e > 0) ? coul.PEShift_dE(l, kNoSO, spec.a, e, 1e-6)
+                            : shft.EnergyDerivative(l, kNoSO, spec.sepE + e, 1e-6);
         if (verbose) std::printf("      %s dS/dE(%g) %.15g | half step %.15g | 1 eV step %.15g\n", tag, e, d1, d2, d6);
         std::ostringstream what;
         what << t << " dS/dE(" << e << ") independent of the step";
         check(std::isfinite(d1) && std::fabs(d1 - d2) <= 1e-6 * (1e-3 + std::fabs(d1)), what.str());
       }
-      check(cf.Penetrability(l, -1.0) == 0.0, t + " P(-1) = 0");
+      check(cf.Penetrability(l, kNoSO, -1.0) == 0.0, t + " P(-1) = 0");
     }
   }
   std::printf("slowest threshold call %.2f ms\n", maxMs);

@@ -8,15 +8,16 @@ double NFIntegral::Integrand(double x, void *p) {
   double bindingEnergy = (params->bindingEnergy);
   double whitChRadSquaredValue = (params->whitChRadSquaredValue);
 
-  double whit = whitFunc->operator()(lfValue, x, bindingEnergy);
+  double whit = whitFunc->operator()(lfValue, params->twoJf, x, bindingEnergy);
   return pow(whit, 2.0) / whitChRadSquaredValue;
 }
 
-double NFIntegral::operator()(int lf, double levelEnergy) {
+double NFIntegral::operator()(int lf, int twoJf, double levelEnergy) {
   params_.lfValue = lf;
+  params_.twoJf = twoJf;
   params_.bindingEnergy = fabs(levelEnergy - totalSepE());
 
-  params_.whitChRadSquaredValue = pow(params_.whitFunc->operator()(lf, chanRad(), params_.bindingEnergy), 2.0);
+  params_.whitChRadSquaredValue = pow(params_.whitFunc->operator()(lf, twoJf, chanRad(), params_.bindingEnergy), 2.0);
 
   gsl_integration_workspace *w = gsl_integration_workspace_alloc(1000);
 

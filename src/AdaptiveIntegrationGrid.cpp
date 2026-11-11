@@ -396,8 +396,9 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
             ChannelFunc channelFunc(chPair, false);
             if (channelFunc.IsClosed(localEnergy)) continue;
             if (isRWA) {
-              double pene = channelFunc.Penetrability(channel->GetL(), localEnergy);
-              double dSdE = channelFunc.ShiftDerivative(channel->GetL(), localEnergy);
+              const int twoJ = chPair->SpinOrbitTwoJ(jgroup->GetJ());
+              double pene = channelFunc.Penetrability(channel->GetL(), twoJ, localEnergy);
+              double dSdE = channelFunc.ShiftDerivative(channel->GetL(), twoJ, localEnergy);
               rwaParticleMeV += 2.0 * gamma * gamma * pene;
               rwaNormSum += dSdE * gamma * gamma;
             } else {
@@ -441,8 +442,9 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
         double gamma = std::abs(levelGamma(level, ch));
         if (gamma <= 0.0) continue;
         double radius = chPair->GetChRad();
-        double pene = channelFunc.Penetrability(channel->GetL(), localEnergy);
-        double dSdE = channelFunc.ShiftDerivative(channel->GetL(), localEnergy);
+        const int twoJ = chPair->SpinOrbitTwoJ(jgroup->GetJ());
+        double pene = channelFunc.Penetrability(channel->GetL(), twoJ, localEnergy);
+        double dSdE = channelFunc.ShiftDerivative(channel->GetL(), twoJ, localEnergy);
         totalWidth += 2.0 * gamma * gamma * pene;
         normSum += dSdE * gamma * gamma;
         if (DebugGridEnabled()) {

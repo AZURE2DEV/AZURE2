@@ -946,6 +946,25 @@ and 0.0275 fm (the run log notes it). Lengths and energies may be written in any
 unit of the unit table (``keV``, ``m``). The fields, their diagnostics and the
 refusals (a photon or beta pair, two records for one pair, ``relativistic=1``,
 the entrance pair of THM data) are in :doc:`../reference/format3`.
+A pair with one spinning particle can have a spin–orbit term (FRESCO's
+convention, operator :math:`2\,\mathbf{l}\cdot\mathbf{i}`; :doc:`../theory/hybrid_potential`):
+the record's ``spin_orbit woods_saxon depth 6 MeV radius 3.6 fm diffuseness 0.6 fm on light operator 2l.s``,
+or in pyazr
+
+.. code-block:: python
+
+   azr.set_nuclear_potential(1, spin_orbit={"depth": 6.0, "radius": 3.6,
+                                            "diffuseness": 0.6, "on": "light"})
+   azr.nuclear_potential(1).spin_orbit        # the dict, or None
+   azr.set_nuclear_potential(1, spin_orbit=False)   # remove it
+   azr.coulomb_functions(1, energies, L=1, J=1.5)   # J required for such a pair
+
+The channel functions of such a pair depend on J: ``coulomb_functions`` needs
+``J`` for it (``E_SO_NEEDS_J``) and refuses one for any other pair
+(``E_SO_NO_TERM``).  A term on a pair whose two particles both have spin
+(``E_SO_TWO_SPINS``), on a spin-0 particle (``E_SO_ZERO_SPIN``) or on the
+default ``pair=0`` is refused with a ``ValueError``.
+
 ``save_fit`` of a format-3 project writes the session's potentials as these
 records when ``set_nuclear_potential`` changed them (the converter's writer: a
 session default becomes one record per particle pair it applies to).

@@ -118,7 +118,16 @@ class PPair {
   /// The nuclear potential of the hybrid model for this pair (spin_orbit_potential.md section 1.1), none for a pair
   /// with plain Coulomb functions.  Set by CNuc::Fill from Config::potentials.
   const std::optional<azure2::physics::HybridPotential> &GetHybridPotential() const { return hybrid_potential_; }
-  void SetHybridPotential(const std::optional<azure2::physics::HybridPotential> &p) { hybrid_potential_ = p; }
+  /// Throws std::invalid_argument (with the code of experiment/SpinOrbitChecks.h) for a spin-orbit term the pair cannot
+  /// have: both particles spinning, or the term on a particle of spin 0.
+  void SetHybridPotential(const std::optional<azure2::physics::HybridPotential> &p);
+  /// The 2J of the keys of this pair's channel functions (channel table, radial scratch, shift-derivative memo, EC
+  /// scratch) for a channel of total J: 2J when the pair's potential has a spin-orbit term (its functions depend on
+  /// J), azure2::physics::kNoSpinOrbit otherwise.  Every call site forms the key with this function.
+  int SpinOrbitTwoJ(double J) const;
+  /// <2 l.i> of the pair's spin-orbit term for a channel of orbital l and key two_j (SpinOrbitTwoJ): 0 for
+  /// kNoSpinOrbit, else j(j+1) - l(l+1) - i(i+1) with i the spin of the particle the term acts on.
+  double SpinOrbitFactor(int l, int two_j) const;
   void AddDecay(Decay);
   /// Removes every Decay (tests/upgrade/pathways_from_cnuc_test.cpp rebuilds the trees with the code before step 6a).
   void ClearDecays();

@@ -5,6 +5,7 @@
 #include <map>
 
 #include "azure2/experiment/BuildContext.h"
+#include "azure2/experiment/SpinOrbitChecks.h"
 
 namespace azure2 {
 namespace experiment {
@@ -34,6 +35,18 @@ void ReadCentral(const Value &central, HybridPotentialSetting &s) {
   s.shape = physics::FormShape::WoodsSaxon;
   if (const Value *r = central.Get("radius")) s.R = InBase(*r);
   if (const Value *a = central.Get("diffuseness")) s.a = InBase(*a);
+}
+
+/// The spin-orbit term of the record (spin_orbit woods_saxon depth radius diffuseness on light|heavy operator 2l.s).
+physics::SpinOrbitTerm ReadSpinOrbit(const Value &so) {
+  physics::SpinOrbitTerm t;
+  if (const Value *d = so.Get("depth")) t.depth_MeV = InBase(*d);
+  t.form.shape = physics::FormShape::WoodsSaxon;
+  if (const Value *r = so.Get("radius")) t.form.radius_fm = InBase(*r);
+  if (const Value *a = so.Get("diffuseness")) t.form.diffuseness_fm = InBase(*a);
+  const Value *on = so.Get("on");
+  t.acts_on = on && on->word == "heavy" ? physics::SpinOrbitParticle::Heavy : physics::SpinOrbitParticle::Light;
+  return t;
 }
 
 /// "potential p12C: step not given, 0.0275 fm (the default)", the default as the schema row states it.
@@ -72,6 +85,11 @@ void BuildPotentials(Context &c) {
       continue;
     }
     recordOfPair[key] = &r;
+    const Value *spinOrbit = r.Get("spin_orbit");
+    if (spinOrbit && c.opt_.relativistic) {
+      c.Error(codes::kSoRelativistic, r, "spin_orbit", "a spin-orbit term cannot be combined with relativistic=1 (<config>)");
+      continue;
+    }
     if (c.opt_.relativistic) {
       // The potential acts in a Schroedinger equation between a_c and the matching radius: no relativistic form.
       c.Error(codes::kPotentialRelativistic, r, "", "a hybrid potential cannot be combined with relativistic=1 (<config>)");
@@ -80,6 +98,16 @@ void BuildPotentials(Context &c) {
     HybridPotentialSetting s;
     s.enabled = true;
     ReadCentral(*central, s);
+    if (spinOrbit) {
+      s.spin_orbit = ReadSpinOrbit(*spinOrbit);
+      const SpinOrbitRefusal refusal = info ? SpinOrbitPairRefusal(info->twoJLight, info->twoJHeavy, s.spin_orbit->acts_on,
+                                                                   std::to_string(key) + " (" + PairLabel(*info) + ")")
+                                            : SpinOrbitRefusal();
+      if (refusal) {
+        c.Error(refusal.code.c_str(), r, "spin_orbit", refusal.message);
+        continue;
+      }
+    }
     s.coulomb_radius_fm = InBase(*coulomb);
     // r_m and the step: the table's defaults (HybridPotentialSetting's, the solver's) when absent, written to the log
     if (const Value *m = r.Get("matching_radius"))
@@ -102,10 +130,11 @@ void BuildPotentials(Context &c) {
       const auto p = recordOfPair.find(m.entranceKey);
       if (p == recordOfPair.end()) continue;
       const PairInfo *info = c.Pair(m.entranceKey);
-      c.Error(codes::kThmHybridPotential, *m.record, "thm",
+      const bool spinOrbit = p->second->Has("spin_orbit");
+      c.Error(spinOrbit ? codes::kSoThm : codes::kThmHybridPotential, *m.record, "thm",
               "the entrance pair " + std::to_string(m.entranceKey) + " (" + (info ? PairLabel(*info) : std::string("?")) +
-                  ") has a hybrid potential (potential " + p->second->name +
-                  "); the THM vertex uses point-Coulomb waves and is not built with a potential");
+                  ") has a hybrid potential" + (spinOrbit ? " with a spin-orbit term" : "") + " (potential " +
+                  p->second->name + "); the THM vertex uses point-Coulomb waves and is not built with a potential");
     }
 }
 

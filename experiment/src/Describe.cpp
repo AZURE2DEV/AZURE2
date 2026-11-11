@@ -216,6 +216,15 @@ std::string CentralText(const HybridPotentialSetting &s) {
   return "Woods-Saxon V0 " + Fmt(s.V0) + " MeV, R " + Fmt(s.R) + " fm, a " + Fmt(s.a) + " fm";
 }
 
+/// "; spin-orbit Woods-Saxon V_so 6 MeV, R_so 3.6 fm, a_so 0.6 fm on the light particle, operator 2 l.i" or "".
+std::string SpinOrbitText(const HybridPotentialSetting &s) {
+  if (!s.spin_orbit) return "";
+  const physics::SpinOrbitTerm &t = *s.spin_orbit;
+  return "\n  spin-orbit Woods-Saxon V_so " + Fmt(t.depth_MeV) + " MeV, R_so " + Fmt(t.form.radius_fm) + " fm, a_so " +
+         Fmt(t.form.diffuseness_fm) + " fm on the " + (t.acts_on == physics::SpinOrbitParticle::Heavy ? "heavy" : "light") +
+         " particle; v_so(r) = V_so (2.000 fm^2) (1/r) df/dr times <2 l.i> = j(j+1) - l(l+1) - i(i+1)";
+}
+
 }  // namespace
 
 std::string DescribeText(const Format3Project &p) {
@@ -284,7 +293,8 @@ std::string DescribeText(const Format3Project &p) {
     const auto r = p.built.potentialRecords.find(x.first);
     out << "potential " << (r != p.built.potentialRecords.end() ? r->second.first + " (line " + std::to_string(r->second.second) + ")" : "?")
         << ": pair " << Pair(p, x.first) << "\n  central " << CentralText(s) << "; Coulomb radius R_C " << Fmt(s.coulomb_radius_fm)
-        << " fm; matching radius " << Fmt(s.matching_radius_fm) << " fm, step " << Fmt(s.step_fm) << " fm\n";
+        << " fm; matching radius " << Fmt(s.matching_radius_fm) << " fm, step " << Fmt(s.step_fm) << " fm"
+        << SpinOrbitText(s) << "\n";
   }
   return out.str();
 }
@@ -367,7 +377,13 @@ std::string DescribeJson(const Format3Project &p) {
     else
       j.Key("radius_fm").Number(s.R).Key("diffuseness_fm").Number(s.a);
     j.Key("coulomb_radius_fm").Number(s.coulomb_radius_fm).Key("matching_radius_fm").Number(s.matching_radius_fm);
-    j.Key("step_fm").Number(s.step_fm).EndObject();
+    j.Key("step_fm").Number(s.step_fm);
+    if (s.spin_orbit)
+      j.Key("spin_orbit").BeginObject().Key("form").String("woods_saxon").Key("depth_MeV").Number(s.spin_orbit->depth_MeV)
+          .Key("radius_fm").Number(s.spin_orbit->form.radius_fm).Key("diffuseness_fm").Number(s.spin_orbit->form.diffuseness_fm)
+          .Key("on").String(s.spin_orbit->acts_on == physics::SpinOrbitParticle::Heavy ? "heavy" : "light")
+          .Key("operator").String("2l.s").EndObject();
+    j.EndObject();
   }
   j.EndArray().EndObject();
   return j.Str();

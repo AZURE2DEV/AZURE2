@@ -105,7 +105,7 @@ double CoulombOnly(double tolerance) {
         const coulomb::CoulombWaves w = coulomb::coulomb(l, eta, k * r);
         return std::complex<double>(w.G, w.F);
       };
-      const RadialValue h = IntegrateInward(p, 1, 6, kMu_MeV, l, a, E, outgoing);
+      const RadialValue h = IntegrateInward(p, 1, 6, kMu_MeV, l, 0.0, a, E, outgoing);
       const double rho = k * a;
       const std::complex<double> dH = h.du_dr / k;
       const double P = rho / std::norm(h.u), S = rho * std::real(dH * std::conj(h.u)) / std::norm(h.u);
@@ -150,14 +150,14 @@ std::vector<RefRow> ReadReference(const char *path) {
 
 // S at E (MeV) of p + 12C with the potential p: HybridBoundShift below and at threshold, rho H'/H above.
 double ShiftAt(const HybridPotential &p, int l, double E) {
-  if (E <= 0.0) return HybridBoundShift(p, 1, 6, kMu_MeV, l, 3.6, -E);
+  if (E <= 0.0) return HybridBoundShift(p, 1, 6, kMu_MeV, l, 0.0, 3.6, -E);
   const double eta = 6 * kFineStructure * std::sqrt(kMu_MeV / 2.0) / std::sqrt(E);
   const double k = std::sqrt(2.0 * kMu_MeV * E) / kHbarC_MeV_fm;
   auto outgoing = [&](double r) {
     const coulomb::CoulombWaves w = coulomb::coulomb(l, eta, k * r);
     return std::complex<double>(w.G, w.F);
   };
-  const RadialValue h = IntegrateInward(p, 1, 6, kMu_MeV, l, 3.6, E, outgoing);
+  const RadialValue h = IntegrateInward(p, 1, 6, kMu_MeV, l, 0.0, 3.6, E, outgoing);
   return 3.6 * std::real(h.du_dr * std::conj(h.u)) / std::norm(h.u);
 }
 
@@ -182,7 +182,7 @@ void AgainstReference(const char *path) {
         ++failures;
       }
     } else if (r.kind == "logW") {
-      const DecayingValue v = DecayingSolution(ws, 1, 6, kMu_MeV, r.l, 3.6, -r.E);
+      const DecayingValue v = DecayingSolution(ws, 1, 6, kMu_MeV, r.l, 0.0, 3.6, -r.E);
       const double d = std::fabs(v.log_W - r.value);
       worstW = std::max(worstW, d);
       if (d > 1e-6 || v.sign != 1.0) {
@@ -193,7 +193,7 @@ void AgainstReference(const char *path) {
       // int_a^inf W~^2 dr: Simpson on [a, 15] (W~ from DecayingSolution at each node) and on [15, 60] (W itself, the
       // same function beyond r_m); the tail beyond 60 fm is below 1e-20 of the integral for these bindings.
       auto W2 = [&](double x) {
-        const DecayingValue v = DecayingSolution(ws, 1, 6, kMu_MeV, r.l, x, -r.E);
+        const DecayingValue v = DecayingSolution(ws, 1, 6, kMu_MeV, r.l, 0.0, x, -r.E);
         return std::exp(2.0 * v.log_W);
       };
       auto simpson = [&](double a, double b, int n) {

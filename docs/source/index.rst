@@ -50,6 +50,7 @@ A. M. Lane and R. G. Thomas, *Reviews of Modern Physics* **30**, 257 (1958).
 
    examples/natural_neon
    examples/ratio_to_rutherford
+   examples/spin_orbit_potential
 
 .. toctree::
    :maxdepth: 2
@@ -60,6 +61,7 @@ A. M. Lane and R. G. Thomas, *Reviews of Modern Physics* **30**, 257 (1958).
    theory/polarization_implementation
    theory/thm_implementation
    theory/scattering_length
+   theory/hybrid_potential
    theory/external_capture_operator
 
 .. toctree::

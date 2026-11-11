@@ -49,12 +49,13 @@ class ChannelFunc {
   /// Closed to double precision: e <= 0, or a Coulomb threshold.  P = 0 there.
   bool IsClosed(double e) const;
 
+  /// The functions below are of a channel (l, two_j), two_j the key PPair::SpinOrbitTwoJ makes from its J.
   /// Shift function S_l(e), continuous through threshold.
-  double Shift(int l, double e);
+  double Shift(int l, int two_j, double e);
   /// Penetrability P_l(e); 0 wherever IsClosed(e).
-  double Penetrability(int l, double e);
+  double Penetrability(int l, int two_j, double e);
   /// dS_l/dE at e (MeV^-1).
-  double ShiftDerivative(int l, double e);
+  double ShiftDerivative(int l, int two_j, double e);
 
   /// Sommerfeld parameter above which a positive-energy channel counts as closed.
   static constexpr double kEtaClosed = 100.0;

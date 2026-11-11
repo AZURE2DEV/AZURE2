@@ -2,9 +2,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <stdexcept>
 
 #include <limits>
+#include <string>
 
 #include "azure2/physics/ChannelFunctions.h"
 #include "azure2/physics/Constants.h"
@@ -25,9 +27,34 @@ bool operator==(const FormFactor &a, const FormFactor &b) {
          a.width_fm == b.width_fm;
 }
 
+bool operator==(const SpinOrbitTerm &a, const SpinOrbitTerm &b) {
+  return a.depth_MeV == b.depth_MeV && a.form == b.form && a.acts_on == b.acts_on;
+}
+
 bool operator==(const HybridPotential &a, const HybridPotential &b) {
   return a.coulomb_radius_fm == b.coulomb_radius_fm && a.central_depth_MeV == b.central_depth_MeV &&
-         a.central == b.central && a.matching_radius_fm == b.matching_radius_fm && a.step_fm == b.step_fm;
+         a.central == b.central && a.matching_radius_fm == b.matching_radius_fm && a.step_fm == b.step_fm &&
+         a.spin_orbit == b.spin_orbit;
+}
+
+double TwoLDotI(int l, int two_j, int two_i) {
+  if (l < 0 || two_i < 0 || two_j < std::abs(2 * l - two_i) || two_j > 2 * l + two_i || (two_j + two_i) % 2 != 0)
+    throw std::invalid_argument("TwoLDotI: j = " + std::to_string(two_j) + "/2 is not in |l - i| ... l + i for l = " +
+                                std::to_string(l) + ", i = " + std::to_string(two_i) + "/2");
+  // j(j+1) - l(l+1) - i(i+1) with j = two_j/2, i = two_i/2: exact in double (multiples of 1/4)
+  return (two_j * (two_j + 2) - two_i * (two_i + 2)) / 4.0 - l * (l + 1);
+}
+
+SpinOrbitTerm WoodsSaxonSpinOrbit(double depth_MeV, double radius_fm, double diffuseness_fm, SpinOrbitParticle on) {
+  if (!(depth_MeV > 0.0) || !(radius_fm > 0.0) || !(diffuseness_fm > 0.0))
+    throw std::invalid_argument("spin-orbit Woods-Saxon: V_so, R_so, a_so must be positive");
+  SpinOrbitTerm t;
+  t.depth_MeV = depth_MeV;
+  t.form.shape = FormShape::WoodsSaxon;
+  t.form.radius_fm = radius_fm;
+  t.form.diffuseness_fm = diffuseness_fm;
+  t.acts_on = on;
+  return t;
 }
 
 HybridPotential WoodsSaxonPotential(double depth_MeV, double radius_fm, double diffuseness_fm) {
@@ -58,7 +85,14 @@ double NuclearTerm(const HybridPotential &p, double r) {
   return -p.central_depth_MeV / (1.0 + std::exp((r - p.central.radius_fm) / p.central.diffuseness_fm));
 }
 
-double RadialPotential(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double r) {
+double SpinOrbitRadialTerm(const SpinOrbitTerm &t, double r) {
+  // f = 1/(1 + e^x), x = (r - R)/a: df/dr = -(1/a) e^x / (1 + e^x)^2, written with e^-|x| (symmetric in x, no overflow)
+  const double e = std::exp(-std::fabs((r - t.form.radius_fm) / t.form.diffuseness_fm));
+  const double df_dr = -e / (t.form.diffuseness_fm * (1.0 + e) * (1.0 + e));
+  return t.depth_MeV * kSpinOrbitLengthSquared_fm2 * df_dr / r;
+}
+
+double RadialPotential(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double r) {
   const double Rc = p.coulomb_radius_fm;
   // Coulomb: uniformly charged sphere inside R_C, point charge outside.
   double Vc;
@@ -74,16 +108,22 @@ double RadialPotential(const HybridPotential &p, int z1, int z2, double mu_MeV, 
     double hbar2_over_2mu = (kHbarC_MeV_fm * kHbarC_MeV_fm) / (2.0 * mu_MeV);
     V_centrifugal = hbar2_over_2mu * l * (l + 1) / (r * r);
   }
-  return Vc + V_nuclear + V_centrifugal;
+  double V = Vc + V_nuclear + V_centrifugal;
+  if (p.spin_orbit && two_l_dot_i != 0.0 && r > 0.0) V += SpinOrbitRadialTerm(*p.spin_orbit, r) * two_l_dot_i;
+  return V;
 }
 
 std::vector<double> PotentialKey(const std::optional<HybridPotential> &p) {
   if (!p) return {0.0};
-  return {1.0, (double)p->central.shape, p->central_depth_MeV, p->central.radius_fm, p->central.diffuseness_fm,
-          p->central.width_fm, p->coulomb_radius_fm, p->matching_radius_fm, p->step_fm};
+  std::vector<double> key{1.0, (double)p->central.shape, p->central_depth_MeV, p->central.radius_fm, p->central.diffuseness_fm,
+                          p->central.width_fm, p->coulomb_radius_fm, p->matching_radius_fm, p->step_fm};
+  if (p->spin_orbit)
+    key.insert(key.end(), {p->spin_orbit->depth_MeV, p->spin_orbit->form.radius_fm, p->spin_orbit->form.diffuseness_fm,
+                           p->spin_orbit->acts_on == SpinOrbitParticle::Heavy ? 1.0 : 0.0});
+  return key;
 }
 
-RadialValue IntegrateInward(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double a_fm, double E_MeV,
+RadialValue IntegrateInward(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm, double E_MeV,
                             const std::function<std::complex<double>(double r_fm)> &outer) {
   // The grid: a step close to step_fm with a on node n_a; the two nodes beyond r_m carry the outer solution.
   const int n_a = std::max(2, static_cast<int>(std::lround(a_fm / p.step_fm)));
@@ -99,7 +139,7 @@ RadialValue IntegrateInward(const HybridPotential &p, int z1, int z2, double mu_
     const double r = i * dr;
     if (i >= npts - 2) u[i] = outer(r);
     // g(r) = 2 mu / hbar^2 (E - V(r)), fm^-2
-    g[i] = 2.0 * mu_MeV / (kHbarC_MeV_fm * kHbarC_MeV_fm) * (E_MeV - RadialPotential(p, z1, z2, mu_MeV, l, r));
+    g[i] = 2.0 * mu_MeV / (kHbarC_MeV_fm * kHbarC_MeV_fm) * (E_MeV - RadialPotential(p, z1, z2, mu_MeV, l, two_l_dot_i, r));
   }
 
   // Numerov, inward from r_m.
@@ -142,7 +182,8 @@ double OuterLogDecaying(int l, double c_fm, double mu_MeV, double B_MeV, double 
 
 }  // namespace
 
-DecayingValue DecayingSolution(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double r_fm, double B_MeV) {
+DecayingValue DecayingSolution(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double r_fm,
+                               double B_MeV) {
   const double c = z1 * z2 * kFineStructure * mu_MeV / kHbarC_MeV_fm;  // eta_b kappa (fm^-1)
   DecayingValue v;
   if (r_fm > p.matching_radius_fm) {  // the point-Coulomb solution (B = 0: its log-derivative by a centred difference)
@@ -158,19 +199,20 @@ DecayingValue DecayingSolution(const HybridPotential &p, int z1, int z2, double 
   }
   const double ref = OuterLogDecaying(l, c, mu_MeV, B_MeV, p.matching_radius_fm);
   auto outer = [&](double r) { return std::complex<double>(std::exp(OuterLogDecaying(l, c, mu_MeV, B_MeV, r) - ref), 0.0); };
-  const RadialValue u = IntegrateInward(p, z1, z2, mu_MeV, l, r_fm, -B_MeV, outer);
+  const RadialValue u = IntegrateInward(p, z1, z2, mu_MeV, l, two_l_dot_i, r_fm, -B_MeV, outer);
   v.sign = u.u.real() < 0.0 ? -1.0 : 1.0;
   v.log_W = std::log(std::fabs(u.u.real())) + u.log_scale + ref;
   v.rho_dlog = r_fm * u.du_dr.real() / u.u.real();
   return v;
 }
 
-double HybridBoundShift(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double a_fm, double B_MeV) {
+double HybridBoundShift(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
+                        double B_MeV) {
   // As coulomb_bound_shift: closer to threshold than eta_b = 1000, the linear interpolation between S(-B_min) and S(0).
   const double kEtaMax = 1000.0;
   const double c = z1 * z2 * kFineStructure * mu_MeV / kHbarC_MeV_fm;
   const double bindingMin = (c > 0.0) ? std::pow(kHbarC_MeV_fm * c / kEtaMax, 2.0) / (2.0 * mu_MeV) : 0.0;
-  auto S = [&](double B) { return DecayingSolution(p, z1, z2, mu_MeV, l, a_fm, B).rho_dlog; };
+  auto S = [&](double B) { return DecayingSolution(p, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, B).rho_dlog; };
   if (B_MeV >= bindingMin && B_MeV > 0.0) return S(B_MeV);
   const double s0 = S(0.0);
   if (!(B_MeV > 0.0)) return s0;

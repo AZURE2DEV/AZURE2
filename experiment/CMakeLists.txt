@@ -36,6 +36,7 @@ add_library(azure2_experiment STATIC
   src/Measurement.cpp
   src/Grids.cpp
   src/HybridPotentialSettings.cpp
+  src/SpinOrbitChecks.cpp
   src/Json.cpp
   src/ModelDatum.cpp
   src/Prediction.cpp

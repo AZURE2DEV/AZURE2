@@ -654,9 +654,9 @@ int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPa
       double ecConvert = 0.;
       if (theFinalPair->GetPType() == 0) {
         NFIntegral newNFIntegral(theFinalPair);
-        nfIntegralValue = newNFIntegral(this->GetJGroup(jGroupNum)->GetChannel(ch)->GetL(), exitPair->GetHeavyExE());
+        nfIntegralValue = newNFIntegral(this->GetJGroup(jGroupNum)->GetChannel(ch)->GetL(), theFinalPair->SpinOrbitTwoJ(jValue), exitPair->GetHeavyExE());
         WhitFunc newWhitFunc(theFinalPair);
-        double whitConv = newWhitFunc(this->GetJGroup(jGroupNum)->GetChannel(ch)->GetL(),
+        double whitConv = newWhitFunc(this->GetJGroup(jGroupNum)->GetChannel(ch)->GetL(), theFinalPair->SpinOrbitTwoJ(jValue),
                                       theFinalPair->GetChRad(),
                                       fabs(exitPair->GetHeavyExE() - theFinalPair->GetSepE() - theFinalPair->GetExE()));
         ecConvert = sqrt(2.0 * theFinalPair->GetRedMass() * theFinalPair->GetChRad() * uconv / pow(hbarc, 2.0)) / whitConv;
@@ -1553,14 +1553,14 @@ namespace {
  * when it grows past kShiftDerivMemoMax.
  */
 struct ShiftDerivKey {
-  int z1, z2, l;
+  int z1, z2, l, two_j;  ///< two_j: PPair::SpinOrbitTwoJ
   bool gsl;
   std::vector<double> hybrid;  ///< azure2::physics::PotentialKey of the pair's potential
   bool table, relativistic;
   double redmass, mass, radius, threshold, energy;
   bool operator<(const ShiftDerivKey &o) const {
-    return std::tie(z1, z2, l, gsl, hybrid, table, relativistic, redmass, mass, radius, threshold, energy) <
-        std::tie(o.z1, o.z2, o.l, o.gsl, o.hybrid, o.table, o.relativistic, o.redmass, o.mass, o.radius, o.threshold,
+    return std::tie(z1, z2, l, two_j, gsl, hybrid, table, relativistic, redmass, mass, radius, threshold, energy) <
+        std::tie(o.z1, o.z2, o.l, o.two_j, o.gsl, o.hybrid, o.table, o.relativistic, o.redmass, o.mass, o.radius, o.threshold,
                  o.energy);
   }
 };
@@ -1595,7 +1595,7 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
   struct Derivative {
     ALevel *level;
     PPair *pair;
-    int ch, l;
+    int ch, l, two_j;  ///< two_j: the channel's 2J key (PPair::SpinOrbitTwoJ)
     double energy;
     bool first, second;
     double d1, d2;
@@ -1637,14 +1637,14 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
               if (recompute) {
                 // S as everywhere else (ChannelFunc: continuous through threshold).
                 ChannelFunc channelFunc(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-                theLevel->SetShiftFunction(ch, channelFunc.Shift(lValue, resonanceEnergy));
+                theLevel->SetShiftFunction(ch, channelFunc.Shift(lValue, thePair->SpinOrbitTwoJ(theJGroup->GetJ()), resonanceEnergy));
               }
               if (parkP && (recompute || second)) {
                 // Channels that differ only in the channel spin share the derivative.
                 int source = -1;
                 for (int k = firstOfLevel; k < (int)derivatives.size() && source < 0; k++)
-                  if (derivatives[k].source < 0 && derivatives[k].pair == thePair && derivatives[k].l == lValue) source = k;
-                derivatives.push_back({theLevel, thePair, ch, lValue, levelEnergy, recompute, second, 0.0, 0.0, source});
+                  if (derivatives[k].source < 0 && derivatives[k].pair == thePair && derivatives[k].l == lValue && derivatives[k].two_j == thePair->SpinOrbitTwoJ(theJGroup->GetJ())) source = k;
+                derivatives.push_back({theLevel, thePair, ch, lValue, thePair->SpinOrbitTwoJ(theJGroup->GetJ()), levelEnergy, recompute, second, 0.0, 0.0, source});
               }
             } else {
               theLevel->SetShiftFunction(ch, theJGroup->GetLevel(1)->GetShiftFunction(1));
@@ -1671,7 +1671,7 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
       const double threshold = d.pair->GetSepE() + d.pair->GetExE();
       const double resonanceEnergy = d.energy - threshold;
       CoulFunc theCoulombFunction(d.pair, gslCoulomb);
-      const ShiftDerivKey key{d.pair->GetZ(1), d.pair->GetZ(2), d.l, gslCoulomb, azure2::physics::PotentialKey(theCoulombFunction.HybridPotential()),
+      const ShiftDerivKey key{d.pair->GetZ(1), d.pair->GetZ(2), d.l, d.two_j, gslCoulomb, azure2::physics::PotentialKey(theCoulombFunction.HybridPotential()),
                               theCoulombFunction.UsesTable(), Kinematics::Relativistic(), d.pair->GetRedMass(),
                               d.pair->GetM(1) + d.pair->GetM(2), d.pair->GetChRad(), threshold, d.energy};
       bool need1 = d.first, need2 = d.second;
@@ -1694,14 +1694,14 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
       // under Brune); d^2S/dE^2 from the branch the level is on.
       if (need1) {
         ChannelFunc channelFunc(d.pair, gslCoulomb);
-        d.d1 = channelFunc.ShiftDerivative(d.l, resonanceEnergy);
+        d.d1 = channelFunc.ShiftDerivative(d.l, d.two_j, resonanceEnergy);
       }
       if (need2) {
         if (resonanceEnergy < 0.0) {
           ShftFunc theShiftFunction(d.pair);
-          d.d2 = theShiftFunction.EnergySecondDerivative(d.l, d.energy);
+          d.d2 = theShiftFunction.EnergySecondDerivative(d.l, d.two_j, d.energy);
         } else {
-          d.d2 = theCoulombFunction.PEShift_d2E(d.l, d.pair->GetChRad(), resonanceEnergy);
+          d.d2 = theCoulombFunction.PEShift_d2E(d.l, d.two_j, d.pair->GetChRad(), resonanceEnergy);
         }
       }
       std::lock_guard<std::mutex> lock(g_shiftDerivMutex);

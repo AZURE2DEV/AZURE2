@@ -23,17 +23,17 @@
  *
  * without Coulomb (c = 0) u = r^-l and S_l(0) = -l.
  */
-double ShftFunc::ZeroEnergyLimit(int l) const {
+double ShftFunc::ZeroEnergyLimit(int l, int two_j) const {
   const WhitFunc &w = *params_.whitFunc;
   if (potential_)  // the zero-energy decaying solution of the radial equation with the potential
-    return azure2::physics::HybridBoundShift(*potential_, w.z1(), w.z2(), w.redmass() * uconv, l, radius(), 0.0);
+    return azure2::physics::HybridBoundShift(*potential_, w.z1(), w.z2(), w.redmass() * uconv, l, pair_->SpinOrbitFactor(l, two_j), radius(), 0.0);
   const double c = w.z1() * w.z2() * fstruc * w.redmass() * uconv / hbarc;
   return azure2::physics::zero_energy_shift(c, radius(), l);  // K_n without GSL (coulomb.md section 1.4)
 }
 
 double ShftFunc::theWhitFunc(double x, void *p) {
   Params *params = (Params *)p;
-  return params->whitFunc->operator()(params->lValue, x, params->bindingEnergy);
+  return params->whitFunc->operator()(params->lValue, params->twoJ, x, params->bindingEnergy);
 }
 
 /*!
@@ -53,14 +53,15 @@ double ShftFunc::theWhitFunc(double x, void *p) {
  * interpolation between S(-bindingMin) and S(0), so S is smooth through
  * threshold.
  */
-double ShftFunc::operator()(int l, double energy) {
+double ShftFunc::operator()(int l, int two_j, double energy) {
   const double binding = fabs(energy - totalSepE());
-  if (!(binding > 0.0)) return ZeroEnergyLimit(l);
+  if (!(binding > 0.0)) return ZeroEnergyLimit(l, two_j);
   params_.bindingEnergy = binding;
   params_.lValue = l;
+  params_.twoJ = two_j;
   if (potential_) {
     const WhitFunc &w = *params_.whitFunc;
-    return azure2::physics::HybridBoundShift(*potential_, w.z1(), w.z2(), w.redmass() * uconv, l, radius(), binding);
+    return azure2::physics::HybridBoundShift(*potential_, w.z1(), w.z2(), w.redmass() * uconv, l, pair_->SpinOrbitFactor(l, two_j), radius(), binding);
   }
 
   // Neutral channel: the Whittaker function is rho k_l(rho) up to a constant,
@@ -128,8 +129,9 @@ bool ShftFunc::BoundTableOk(int l, double energy) const {
   return table_->LookupBound(l, etaB, rhoB, s);
 }
 
-double ShftFunc::EnergyDerivative(int l, double energy, double step) {
+double ShftFunc::EnergyDerivative(int l, int two_j, double energy, double step) {
   params_.lValue = l;
+  params_.twoJ = two_j;
 
   // central_derivative (GSL's gsl_deriv_central, ported to physics/) samples E +- h and E +- h/2: one route for all four (the table only when it covers
   // every one of them), so the table's edge cannot put a jump into the derivative (dev, audit 2026-10-25,
@@ -137,13 +139,13 @@ double ShftFunc::EnergyDerivative(int l, double energy, double step) {
   const double h = step;
   forceExact_ = table_ && !(BoundTableOk(l, energy + h) && BoundTableOk(l, energy - h) &&
                             BoundTableOk(l, energy + 0.5 * h) && BoundTableOk(l, energy - 0.5 * h));
-  const double result = azure2::physics::central_derivative([this, l](double e) { return operator()(l, e); }, energy, h);
+  const double result = azure2::physics::central_derivative([this, l, two_j](double e) { return operator()(l, two_j, e); }, energy, h);
   forceExact_ = false;
 
   return result;
 }
 
-double ShftFunc::EnergySecondDerivative(int l, double energy) {
+double ShftFunc::EnergySecondDerivative(int l, int two_j, double energy) {
   // Richardson-extrapolated central second difference (O(h^4), 10 keV step),
   // kept below the threshold where the Whittaker form holds: a backward
   // stencil when the level is within 4h of it.
@@ -157,7 +159,7 @@ double ShftFunc::EnergySecondDerivative(int l, double energy) {
     ExactScope(bool &f) : flag(f), saved(f) { flag = true; }
     ~ExactScope() { flag = saved; }
   } exact(forceExact_);
-  return azure2::physics::second_derivative([this, l](double e) { return operator()(l, e); }, energy, h, 1.0e-3,
+  return azure2::physics::second_derivative([this, l, two_j](double e) { return operator()(l, two_j, e); }, energy, h, 1.0e-3,
                                             binding < 4.0 * h, azure2::physics::Side::Below);
 }
 

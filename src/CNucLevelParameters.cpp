@@ -25,21 +25,22 @@ phys::ChannelFunctions ChannelFunctionsFromCNuc(CNuc &compound, const CNucSystem
     PPair *pair = cn->GetPair(channel->GetPairNum());
     const double Ec = E - pair->GetSepE() - pair->GetExE();  // (E_x - S) - e, as at a data point
     const int l = channel->GetL();
+    const int twoJ = pair->SpinOrbitTwoJ(group->GetJ());
     phys::ChannelValues v;
     const char type = channel->GetRadType();
     if (type == 'P') {
       ChannelFunc cf(pair, gsl);
-      v.S = cf.Shift(l, Ec);
+      v.S = cf.Shift(l, twoJ, Ec);
       if (Ec > 0.0) {
-        v.P = cf.Penetrability(l, Ec);
+        v.P = cf.Penetrability(l, twoJ, Ec);
       } else if (Ec < 0.0) {
         // The ANC conversion factor mu a / (hbar^2 W_l(2 kappa a)^2) (level_parameters.md section 1).
         const double radius = pair->GetChRad();
         WhitFunc whit(pair);
-        const double W = whit(l, radius, std::fabs(Ec));
+        const double W = whit(l, twoJ, radius, std::fabs(Ec));
         v.P = pair->GetRedMass() * radius * uconv / std::pow(hbarc, 2.0) / std::pow(W, 2.0);
       }
-      v.dS_dE = cf.ShiftDerivative(l, Ec);
+      v.dS_dE = cf.ShiftDerivative(l, twoJ, Ec);
     } else if (type == 'E' || type == 'M') {
       if (std::fabs(E - pair->GetHeavyExE()) < 1.e-3 && group->GetJ() == pair->GetJ(2) && group->GetPi() == pair->GetPi(2)) {
         // A static moment (CNuc.cpp TransformIn, "Static moments" in conventions.rst).

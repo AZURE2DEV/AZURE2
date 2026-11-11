@@ -40,6 +40,10 @@ scripts; a calculation under different flags is a different model.
 - The potential changes the radial solution between a_c and the matching radius, hence P, S, the phases and the EC
   entrance wave, and below threshold the decaying solution (S, ANC conversion, bound-state tail of EC). Behaviour:
   `docs/source/user_guide/pyazr.rst`.
+- Optional `spin_orbit woods_saxon depth .. radius .. diffuseness .. on light|heavy operator 2l.s` for a pair with
+  one spinning particle (FRESCO's convention: a strength quoted for l.s without the 2 is twice V_so); the channel
+  functions then depend on J (`coulomb_functions(..., J=)` needs it).  Pairs with two spins are refused
+  (`E_SO_TWO_SPINS`).  Theory: `docs/source/theory/hybrid_potential.rst`.
 - A pyazr session owns its potential: several sessions with different potentials in one process stay independent
   (`tests/pyazr/potential_sessions_test.py`). Builds before 2026-10-27 (expires: 2027-02-01) shared one potential per
   process (the last session opened set it for all) and had an O(dr) derivative of the Numerov solution at a_c (shift

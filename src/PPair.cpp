@@ -1,7 +1,9 @@
 #include "azure2/io/LevelRows.h"
 #include "PPair.h"
+#include "azure2/experiment/SpinOrbitChecks.h"
 #include <assert.h>
 #include <cmath>
+#include <stdexcept>
 
 /*!
  * A particle pair object is created from and entry in the nuclear input file.
@@ -321,4 +323,27 @@ void PPair::SetEntrance() {
 Decay *PPair::GetDecay(int decayNum) {
   Decay *b = &decays_[decayNum - 1];
   return b;
+}
+
+int PPair::SpinOrbitTwoJ(double J) const {
+  if (!hybrid_potential_ || !hybrid_potential_->spin_orbit) return azure2::physics::kNoSpinOrbit;
+  return static_cast<int>(std::lround(2.0 * J));
+}
+
+double PPair::SpinOrbitFactor(int l, int two_j) const {
+  if (two_j == azure2::physics::kNoSpinOrbit) return 0.0;
+  if (!hybrid_potential_ || !hybrid_potential_->spin_orbit)
+    throw std::logic_error("PPair::SpinOrbitFactor: a 2J key for a pair without a spin-orbit term");
+  const int particle = hybrid_potential_->spin_orbit->acts_on == azure2::physics::SpinOrbitParticle::Heavy ? 2 : 1;
+  return azure2::physics::TwoLDotI(l, two_j, static_cast<int>(std::lround(2.0 * GetJ(particle))));
+}
+
+void PPair::SetHybridPotential(const std::optional<azure2::physics::HybridPotential> &p) {
+  if (p && p->spin_orbit) {
+    const azure2::experiment::SpinOrbitRefusal r = azure2::experiment::SpinOrbitPairRefusal(
+        static_cast<int>(std::lround(2.0 * GetJ(1))), static_cast<int>(std::lround(2.0 * GetJ(2))), p->spin_orbit->acts_on,
+        std::to_string(GetPairKey()));
+    if (r) throw std::invalid_argument("ERROR (" + r.code + "): " + r.message);
+  }
+  hybrid_potential_ = p;
 }

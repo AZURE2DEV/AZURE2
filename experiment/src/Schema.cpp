@@ -175,7 +175,7 @@ std::vector<FieldDef> Concat(std::vector<std::vector<FieldDef>> lists) {
 // ---------------------------------------------------------------- structured values (sections 3.3-3.10)
 struct Forms {
   FormSpec shift, quadrature, foldWindows, secondaryGamma, orders, function, param, epoch, stopping, straggling,
-      isotope, isotopeSum, doppler, spread, profile, resolution, udr, channelSpin, central;
+      isotope, isotopeSum, doppler, spread, profile, resolution, udr, channelSpin, central, spinOrbit;
 };
 
 Forms MakeForms() {
@@ -231,6 +231,12 @@ Forms MakeForms() {
                         "V_N(r) = -V0 / (1 + exp((r - R)/a))"),
                 Keyword("gaussian", {Kw("depth", PositiveWithUnit("energy"), "V0 > 0, attractive"), Kw("width", PositiveWithUnit("length"), "r0")},
                         "V_N(r) = -V0 exp(-(r/r0)^2)")}};
+  f.spinOrbit = {{Keyword("woods_saxon",
+                          {Kw("depth", PositiveWithUnit("energy"), "V_so > 0: lowers j = l + i"), Kw("radius", PositiveWithUnit("length"), "R_so"),
+                           Kw("diffuseness", PositiveWithUnit("length"), "a_so"),
+                           Kw("on", Words({"light", "heavy"}), "the particle whose spin i the term couples to l (the one particle of the pair with spin)"),
+                           Kw("operator", Words({"2l.s"}), "2 l.i = j(j+1) - l(l+1) - i(i+1), FRESCO's convention: a strength quoted for l.s is twice this V_so")},
+                          "v_so(r) <2 l.i>, v_so = V_so (2.000 fm^2) (1/r) df/dr, f = 1/(1 + exp((r - R_so)/a_so))")}};
   return f;
 }
 
@@ -464,6 +470,8 @@ RecordKind PotentialKind() {
               Req("coulomb_radius", "Coulomb radius", PositiveWithUnit("length"),
                   "R_C of the uniformly charged sphere of the Coulomb term (the old <potential> block: 3.5 fm)"),
               Req("central", "Central term", Structured(f.central), "the central nuclear term V_N(r)"),
+              Opt("spin_orbit", "Spin-orbit term", Structured(f.spinOrbit),
+                  "a spin-orbit term for a pair with one spinning particle (spin_orbit_potential.md section 2.1); absent: none"),
               Defaulted(Opt("matching_radius", "Matching radius", PositiveWithUnit("length"),
                             "r_m: beyond it the solution is the point-Coulomb one; above every channel radius of the pair"),
                         "15 fm"),

@@ -1812,6 +1812,72 @@
      ],
      "doc": "the central nuclear term V_N(r)"
     },
+    "spin_orbit": {
+     "title": "Spin-orbit term",
+     "type": "structured",
+     "grammar": "woods_saxon depth <number> <energy unit> radius <number> <length unit> diffuseness <number> <length unit> on light|heavy operator 2l.s",
+     "required": false,
+     "alternatives": [
+      {
+       "keyword": "woods_saxon",
+       "parts": [
+        {
+         "name": "depth",
+         "keyword": true,
+         "type": "number_with_unit",
+         "grammar": "<number> <energy unit>",
+         "optional": false,
+         "dimension": "energy",
+         "units": ["MeV", "keV", "eV", "meV", "ueV"],
+         "positive": true,
+         "doc": "V_so > 0: lowers j = l + i"
+        },
+        {
+         "name": "radius",
+         "keyword": true,
+         "type": "number_with_unit",
+         "grammar": "<number> <length unit>",
+         "optional": false,
+         "dimension": "length",
+         "units": ["fm", "m"],
+         "positive": true,
+         "doc": "R_so"
+        },
+        {
+         "name": "diffuseness",
+         "keyword": true,
+         "type": "number_with_unit",
+         "grammar": "<number> <length unit>",
+         "optional": false,
+         "dimension": "length",
+         "units": ["fm", "m"],
+         "positive": true,
+         "doc": "a_so"
+        },
+        {
+         "name": "on",
+         "keyword": true,
+         "type": "enum",
+         "grammar": "light|heavy",
+         "optional": false,
+         "values": ["light", "heavy"],
+         "doc": "the particle whose spin i the term couples to l (the one particle of the pair with spin)"
+        },
+        {
+         "name": "operator",
+         "keyword": true,
+         "type": "enum",
+         "grammar": "2l.s",
+         "optional": false,
+         "values": ["2l.s"],
+         "doc": "2 l.i = j(j+1) - l(l+1) - i(i+1), FRESCO's convention: a strength quoted for l.s is twice this V_so"
+        }
+       ],
+       "doc": "v_so(r) <2 l.i>, v_so = V_so (2.000 fm^2) (1/r) df/dr, f = 1/(1 + exp((r - R_so)/a_so))"
+      }
+     ],
+     "doc": "a spin-orbit term for a pair with one spinning particle (spin_orbit_potential.md section 2.1); absent: none"
+    },
     "matching_radius": {
      "title": "Matching radius",
      "type": "number_with_unit",
@@ -3575,6 +3641,30 @@
   "E_OLD_POTENTIAL_BLOCK": {
    "severity": "error",
    "meaning": "the old <potential> block in a format-3 project (AZURE2 --convert writes potential records)"
+  },
+  "E_SO_TWO_SPINS": {
+   "severity": "error",
+   "meaning": "a spin-orbit term on a pair whose two particles both have spin (the coupled treatment is not implemented)"
+  },
+  "E_SO_ZERO_SPIN": {
+   "severity": "error",
+   "meaning": "a spin-orbit term acting on a particle of spin 0 (it would vanish)"
+  },
+  "E_SO_RELATIVISTIC": {
+   "severity": "error",
+   "meaning": "a spin-orbit term in a project with relativistic kinematics"
+  },
+  "E_SO_THM": {
+   "severity": "error",
+   "meaning": "a THM data set or extrapolation whose entrance pair's potential has a spin-orbit term"
+  },
+  "E_SO_NEEDS_J": {
+   "severity": "error",
+   "meaning": "channel functions of a pair with a spin-orbit term asked for without J (pyazr, the API)"
+  },
+  "E_SO_NO_TERM": {
+   "severity": "error",
+   "meaning": "channel functions of a pair without a spin-orbit term asked for with a J (pyazr, the API)"
   },
   "W_NOT_MEASURABLE": {
    "severity": "warning",

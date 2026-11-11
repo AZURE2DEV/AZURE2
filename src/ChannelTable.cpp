@@ -15,19 +15,19 @@
 #include <omp.h>
 #endif
 
-ChannelTable::Row ChannelTable::Compute(PPair *pair, int l, double energy, const Config &configure) {
+ChannelTable::Row ChannelTable::Compute(PPair *pair, int l, int two_j, double energy, const Config &configure) {
   const bool gsl = !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC);
   ChannelFunc channelFunc(pair, gsl);
   if (channelFunc.IsClosed(energy)) {
     // At and below threshold, and just above it where the Coulomb barrier makes P = 0 to double precision: the
     // shift function continued through E = 0 (ChannelFunc).  The Coulomb-wave routines are not usable there.
-    return Row{0.0, channelFunc.Shift(l, energy), 1.0, 1.0};
+    return Row{0.0, channelFunc.Shift(l, two_j, energy), 1.0, 1.0};
   }
   CoulFunc coulomb(pair, gsl);
   const double radius = pair->GetChRad();
   Row row;
-  row.P = coulomb.Penetrability(l, radius, energy);
-  row.S = coulomb.PEShift(l, radius, energy);
+  row.P = coulomb.Penetrability(l, two_j, radius, energy);
+  row.S = coulomb.PEShift(l, two_j, radius, energy);
   // exp(i(sigma_l - sigma_0)) = prod_{l'=1}^{l} (l' + i eta) / |l' + i eta|  (conventions.rst, conv-phases)
   const double eta = Kinematics::Channel(pair).Eta(energy);
   std::complex<double> expCP(1.0, 0.0);
@@ -35,13 +35,13 @@ ChannelTable::Row ChannelTable::Compute(PPair *pair, int l, double energy, const
     expCP *= std::complex<double>((double)ll / sqrt(pow(eta, 2.0) + pow((double)ll, 2.0)),
                                   eta / sqrt(pow(eta, 2.0) + pow((double)ll, 2.0)));
   row.expCP = expCP;
-  row.expHSP = coulomb.HardSpherePhase(l, radius, energy);
+  row.expHSP = coulomb.HardSpherePhase(l, two_j, radius, energy);
   return row;
 }
 
 namespace {
 
-// Everything a row depends on besides (l, E_c), per pair: a previous table is reused only when these agree.
+// Everything a row depends on besides (l, 2J, E_c), per pair: a previous table is reused only when these agree.
 std::vector<std::vector<double>> PairSignatures(CNuc *cnuc, const Config &configure) {
   std::vector<std::vector<double>> s;
   for (int p = 1; p <= cnuc->NumPairs(); p++) {
@@ -73,7 +73,7 @@ std::shared_ptr<const ChannelTable> ChannelTable::Build(CNuc *cnuc, const Config
   std::vector<int> todo;
   for (int i = 0; i < (int)table->keys_.size(); i++) {
     const Key &k = table->keys_[i];
-    const Row *old = previous ? previous->Find(k.pair, k.l, k.energy) : nullptr;
+    const Row *old = previous ? previous->Find(k) : nullptr;
     if (old)
       table->rows_[i] = *old;
     else
@@ -91,7 +91,7 @@ std::shared_ptr<const ChannelTable> ChannelTable::Build(CNuc *cnuc, const Config
   for (int t = 0; t < n; t++) {
     try {
       const Key &k = table->keys_[todo[t]];
-      table->rows_[todo[t]] = Compute(cnuc->GetPair(k.pair), k.l, k.energy, configure);
+      table->rows_[todo[t]] = Compute(cnuc->GetPair(k.pair), k.l, k.two_j, k.energy, configure);
     } catch (...) {
 #ifdef _OPENMP
 #pragma omp critical(channel_table_error)
@@ -123,8 +123,7 @@ bool ChannelTable::SameSystem(CNuc *cnuc, const Config &configure) const {
   return pairSignatures_ == PairSignatures(cnuc, configure);
 }
 
-const ChannelTable::Row *ChannelTable::Find(int pair, int l, double energy) const {
-  const Key k{pair, l, energy};
+const ChannelTable::Row *ChannelTable::Find(const Key &k) const {
   auto it = std::lower_bound(keys_.begin(), keys_.end(), k);
   if (it == keys_.end() || !(*it == k)) return nullptr;
   return &rows_[it - keys_.begin()];

@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "azure2/experiment/ProjectReader.h"
+#include "azure2/experiment/SpinOrbitChecks.h"
 #include "azure2/io/Document.h"
 #include "azure2/io/RecordReader.h"
 
@@ -56,7 +57,7 @@ LevelTables Pairs() {
 }
 
 BuiltProject BuildText(const std::string &text, bool relativistic = false, bool readFiles = false,
-                       DataFiles dataFiles = DataFiles::Required) {
+                       DataFiles dataFiles = DataFiles::Required, const LevelTables &pairs = Pairs()) {
   const Document doc = Document::Parse(text);
   std::vector<SectionRecords> sections;
   for (const Document::Section &s : doc.Sections()) {
@@ -74,7 +75,7 @@ BuiltProject BuildText(const std::string &text, bool relativistic = false, bool 
   o.relativistic = relativistic;
   o.readDataFiles = readFiles;
   o.dataFiles = dataFiles;
-  return Schema::Build(v, Pairs(), o);
+  return Schema::Build(v, pairs, o);
 }
 
 const std::string kDataset =
@@ -441,6 +442,51 @@ int main() {
     ExpectOne("E_OUT_OF_RANGE", BuildText(potentials(Set(gauss, "central", "    central gaussian depth 40 MeV width 0 fm"))));
     ExpectOne("E_UNIT_NOT_ALLOWED", BuildText(potentials(Set(pot, "matching_radius", "    matching_radius 16 MeV"))));
     ExpectOne("E_PART_MISSING", BuildText(potentials(Set(pot, "central", "    central woods_saxon depth 20 MeV radius 3.6 fm"))));
+    // a spin-orbit term (spin_orbit): the term member by member (keV converted), the potential value carries it;
+    // one case per refusal
+    {
+      const std::string so = "    spin_orbit woods_saxon depth 6000 keV radius 3.5 fm diffuseness 0.65 fm on light operator 2l.s\n";
+      const BuiltProject s = BuildText(potentials(pot + so));
+      for (const Diagnostic &d : s.diagnostics) std::printf("        %s: %s\n", d.code.c_str(), d.message.c_str());
+      const bool built = s.Ok() && s.diagnostics.empty() && s.potentials.pairs.count(7) && s.potentials.pairs.at(7).spin_orbit;
+      check("p12C with a spin-orbit term builds", built);
+      if (built) {
+        const azure2::physics::SpinOrbitTerm &t = *s.potentials.pairs.at(7).spin_orbit;
+        check("spin_orbit: 6000 keV = 6 MeV, R_so 3.5 fm, a_so 0.65 fm, on the light particle",
+              t.depth_MeV == 6000 * 1e-3 && t.form.radius_fm == 3.5 && t.form.diffuseness_fm == 0.65 &&
+                  t.acts_on == azure2::physics::SpinOrbitParticle::Light && t.form.shape == azure2::physics::FormShape::WoodsSaxon);
+        check("the potential value carries the term", s.potentials.pairs.at(7).Potential().spin_orbit == t);
+      }
+      check("a record without spin_orbit has none", !b.potentials.pairs.at(7).spin_orbit);
+      ExpectOne("E_SO_ZERO_SPIN", BuildText(potentials(pot + Set(so, "spin_orbit",
+                                                                 "    spin_orbit woods_saxon depth 6 MeV radius 3.5 fm diffuseness 0.65 fm on heavy operator 2l.s"))));
+      const std::string soN = "    spin_orbit woods_saxon depth 6 MeV radius 3.5 fm diffuseness 0.65 fm on light operator 2l.s\n";
+      ExpectOne("E_SO_TWO_SPINS", BuildText(potentials(gauss + soN)));
+      ExpectOne("E_SO_RELATIVISTIC", BuildText(potentials(pot + so), true));
+      // THM through p+15N with the spin of 15N set to 0 (one spinning particle): E_SO_THM in place of E_THM_HYBRID_POTENTIAL
+      LevelTables oneSpin = Pairs();
+      oneSpin.pairs[0].twoJHeavy = 0;
+      ExpectOne("E_SO_THM", BuildText(Data(thm) + potentials(gauss + soN), false, false, DataFiles::Required, oneSpin));
+      ExpectOne("E_THM_HYBRID_POTENTIAL", BuildText(Data(thm) + potentials(gauss), false, false, DataFiles::Required, oneSpin));
+      // the validator's: the operator is 2l.s only (an l.s strength is half), the shape woods_saxon only
+      ExpectOne("E_NOT_IN_LIST", BuildText(potentials(pot + Set(so, "spin_orbit",
+                                                         "    spin_orbit woods_saxon depth 6 MeV radius 3.5 fm diffuseness 0.65 fm on light operator l.s"))));
+      ExpectOne("E_PART_MISSING", BuildText(potentials(pot + Set(so, "spin_orbit",
+                                                                 "    spin_orbit woods_saxon depth 6 MeV radius 3.5 fm diffuseness 0.65 fm on light"))));
+      ExpectOne("E_OUT_OF_RANGE", BuildText(potentials(pot + Set(so, "spin_orbit",
+                                                                 "    spin_orbit woods_saxon depth 0 MeV radius 3.5 fm diffuseness 0.65 fm on light operator 2l.s"))));
+    }
+    // the refusals shared with pyazr and the API (SpinOrbitChecks.h)
+    {
+      using azure2::physics::SpinOrbitParticle;
+      check("one spinning particle, the term on it: allowed",
+            !SpinOrbitPairRefusal(1, 0, SpinOrbitParticle::Light, "p+12C") && !SpinOrbitPairRefusal(0, 3, SpinOrbitParticle::Heavy, "a+7Li"));
+      check("E_SO_TWO_SPINS: both spins non-zero", SpinOrbitPairRefusal(1, 1, SpinOrbitParticle::Light, "p+15N").code == "E_SO_TWO_SPINS");
+      check("E_SO_ZERO_SPIN: the term on the spin-0 particle", SpinOrbitPairRefusal(1, 0, SpinOrbitParticle::Heavy, "p+12C").code == "E_SO_ZERO_SPIN");
+      check("E_SO_NEEDS_J: channel functions of a spin-orbit pair without J", ChannelFunctionsJRefusal(true, false, "1").code == "E_SO_NEEDS_J");
+      check("E_SO_NO_TERM: a J for a pair without a spin-orbit term", ChannelFunctionsJRefusal(false, true, "1").code == "E_SO_NO_TERM");
+      check("J with a spin-orbit pair, none without: allowed", !ChannelFunctionsJRefusal(true, true, "1") && !ChannelFunctionsJRefusal(false, false, "1"));
+    }
     // the old block in a format-3 project (the reading path: ProjectReader)
     {
       Format3ReadOptions read;

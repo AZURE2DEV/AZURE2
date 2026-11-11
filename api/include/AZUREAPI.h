@@ -489,8 +489,8 @@ class AZUREAPI {
   /*!
    * Coulomb wave functions on a requested energy grid.
    *
-   * Request: [pairKey, l, radius, nE, E_1 ... E_nE], energies in MeV (centre of
-   * mass), radius in fm.  A radius of zero means "use the pair's own channel
+   * Request: [pairKey, l, 2J (< 0: none; required for a pair with a spin-orbit term, refused otherwise), radius,
+   * nE, E_1 ... E_nE], energies in MeV (centre of mass), radius in fm.  A radius of zero means "use the pair's own channel
    * radius", which is where a penetrability or a hard-sphere phase is wanted.
    *
    * Response: [nE, then per energy: F, dF, G, dG, P, S, deltaHS], with P the
