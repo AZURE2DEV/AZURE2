@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # Convert a copy of the test tree to format 3 and summarise (docs/upgrade/project_format3.md section 8.5, the
-# preparation of step 3b's gate).  Every .azr under tests/ and examples/ of SRC is converted with
+# preparation of step 3b's gate).  Every .azr under tests/ and examples/ of SRC is converted (an original kept in
+# tests/convert/fixtures/ takes the place of its committed conversion first) with
 #   AZURE2 --convert OLD OLD.f3.azr --to 3 --json-report OLD.report.json [CONVERT_OPTIONS]
 # in a copy of the tree (the originals are never touched), then checked with AZURE2 --validate --json.  Every
 # report and validation is kept beside its file.  Prints the per-file result and the table of section 8.1: per
@@ -36,6 +37,17 @@ mkdir -p "$OUT"
 for d in tests examples; do
   [ -d "$SRC/$d" ] && cp -r "$SRC/$d" "$OUT/$d"
 done
+# A converted tree keeps its originals in tests/convert/fixtures/<path from the repository root>
+# (docs/upgrade/format3_tree.md): each goes back to its own place, over its conversion, so the originals are what is
+# converted; the fixtures folder itself is not a project folder.
+if [ -d "$OUT/tests/convert/fixtures" ]; then
+  (cd "$OUT/tests/convert/fixtures" && find . -type f -name '*.azr') | while read -r rel; do
+    rel="${rel#./}"
+    mkdir -p "$OUT/$(dirname "$rel")"
+    cp "$OUT/tests/convert/fixtures/$rel" "$OUT/$rel"
+  done
+  rm -rf "$OUT/tests/convert"
+fi
 # outputs of earlier runs are not projects
 find "$OUT" -path '*/output/*' -name '*.azr' -delete
 
