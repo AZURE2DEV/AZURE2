@@ -504,7 +504,7 @@ Every changed number found by `tools/cls.sh` is put in one class; anything else 
 
 | # | branch (`feature/upgrade-5-…`) | what it changes | files | deletes | gate | size | can run with |
 |---|---|---|---|---|---|---|---|
-| 1 | `energy-tasks` | the plan's task is one compound energy (nucleus, E_x bits) with every unit at it: one level-matrix fill and solve per task, one T-matrix per (entrance, exit), the cross section per unit; sub-points are calculated in the energy pass, folds after it (the automatic-tolerance and fallback decisions read values already computed, so they choose the same) | `include/CalculationPlan.h`, `src/CalculationPlan.cpp`, `src/WorkingCopy.cpp` (`MapData`, `MapLeaves`, `CalculatePointsInParallel`), `src/PointPass.cpp`, `include/Unit.h`, `tests/upgrade/plan_test.cpp` | point mapping by (pairs, E) and `SharesCalculation`; the sub-point recursion of `Unit::Calculate`; probe copies | identical; a check mode (`AZURE_PLAN_CHECK`) compares the shared solve with a per-unit solve bit for bit on the whole tree; solves per evaluation reported (§1.2) | ~600 lines, 8–12 h | 3, 4, 5 |
+| 1 (done) | `energy-tasks` | the plan's task is one compound energy (nucleus, E_x bits) with every unit at it: one level-matrix fill and solve per task, one T-matrix per (entrance, exit), the cross section per unit; sub-points are calculated in the energy pass, folds after it (the automatic-tolerance and fallback decisions read values already computed, so they choose the same) | `include/CalculationPlan.h`, `src/CalculationPlan.cpp`, `src/WorkingCopy.cpp` (`MapData`, `MapLeaves`, `CalculatePointsInParallel`), `src/PointPass.cpp`, `include/Unit.h`, `tests/upgrade/plan_test.cpp` | point mapping by (pairs, E) and `SharesCalculation`; the sub-point recursion of `Unit::Calculate`; probe copies | identical; a check mode (`AZURE_PLAN_CHECK`) compares the shared solve with a per-unit solve bit for bit on the whole tree; solves per evaluation reported (§1.2) | ~600 lines, 8–12 h | 3, 4, 5 |
 | 2 | `energy-tasks-gradient` | the analytic gradient per energy: cotangents of all units at E_n summed, one level-matrix adjoint per E_n | `src/AZUREGrad.cpp`, `src/AMatrixFunc.cpp` (adjoint entry points) | the grouped gradient by host (`BuildGradItems`), `ScopedPointMappingOff` | rounding (gradient sums reordered) | ~500, 8–12 h | after the pathway branch (it edits `AMatrixFunc`'s readers); with 3, 4, 5 |
 | 3 | `lab-frame` | M3 (b): residual on y^lab, δy^lab and m/J(ν); frames keep kinematics only; the writer computes c.m. data for display | `experiment/.../Frames.h`, `experiment/src/Frames.cpp`, `include/Segment.h`, `src/Segment.cpp`, `src/ModelPass.cpp`, `src/AZURECalc.cpp` (`FitBarFn`), `src/DataOutputFiles.cpp` | `FrameRow::yCM, dyCM`, `CMValue/CMError` | rounding (§4.4) | ~250, 3–5 h | 1, 4, 5; **starts now** |
 | 4 | `layer-yield` | `yield` on a `layer` (formula stopping), the closed-form test project | `experiment/src/Quantities.cpp`, `experiment/src/Build*.cpp`, `src/TargetFold.cpp` (per-particle normalization), `src/TargetSetup.cpp`, `tests/layer_yield/`, `docs/source/…/data_formats.rst` | the refusal | identical (new quantity only) + the six tests of §5.3 | ~350 + test, 5–8 h | 1, 3; **starts now** |
@@ -528,6 +528,35 @@ merges, {2, 6} next, {7}, then {8, 9}, then {10}.
 one T-matrix per (energy, reaction), 13N's point pass goes from 258 ms to about 100 ms (fill+solve 77 → 5 ms, T-matrix
 88 → 5 ms, cross sections unchanged), `thick_target_resonance`'s from 795 to about 230 ms, T2's from 70 to about
 40 ms. Branch 9 then makes the per-unit cross section a short dot product.
+
+**Branch 1 done (2026-11-11, `feature/upgrade-5-energy-tasks`), measured.** The point pass runs the plan's energy tasks
+(`CalculationPlan::EnergyTasks`, `src/EnergyPass.cpp`): one fill and factorisation per (nucleus, route, E_x bits), one
+T-matrix per group (entrance, exit, source of the external-capture amplitudes), the observable of every unit; then the
+folds (`Unit::FoldSubPoints`). Every output of the tree is identical in the three bases. `AZURE_PLAN_CHECK=1` solved
+every unit of the tree alone and compared it with its shared solve (three bases, 3,727,625 units): 0 differ, with the
+key (nucleus, E_x bits) as designed -- but the T-matrix needs one more key than the pair: points and sub-points at one
+energy may hold set-up external-capture amplitudes that differ in the last bits (found on
+`tests/electron_screening/grad.azr`, 1,602 of 10,125 units, not on the tree's own projects; its gradient fit moved).
+Per evaluation of a fit, 1 thread, median of `AZURE_PROFILE` (load 17–22 on 24 cores, ms; base = `b-trial18`):
+
+| project | point pass, base → new | inferred | solves | T-matrices |
+|---|---|---|---|---|
+| T1 | 1.0 → 0.9 | — | 206 → 137 | 206 → 198 |
+| T3 | 1.6 → 1.6 | — | 414 → 315 | 412 → 412 |
+| T2 | 106.4 → 44.6 | 70 → 40 | 24,299 → 5,483 | 19,267 → 5,333 |
+| 13N | 316.5 → 131.9 | 258 → 100 | 45,871 → 2,727 | 45,871 → 2,731 |
+| `thick_target_resonance` | 1,102 → 264 | 795 → 230 | 48,237 → 2,148 | 48,237 → 15,036 |
+| `natural_neon` | 3,207 → 1,718 | — | 291,838 → 56,696 | 292,742 → 131,199 |
+| `18O_p_a_thm` | 23.5 → 23.4 | — | 14,688 → 703 | (THM) |
+
+The cross sections are unchanged (now the largest stage: 13N 88 of 132 ms, `natural_neon` 896 of 1,718). THM gains
+nothing: its fill was 7 of 23.5 ms, and the half-off-shell cross section, which reads each unit's channel rows, now
+finds them out of cache (perf: `Unit::GetLoElement` 12 % of the run, from the fill's unit to the cross section's).
+Whole runs (`perf stat` cycles, alternated with the base): fits of 8 MIGRAD calls 13N 1.95×, T2 1.66×, thick target
+1.95×, T1 1.02×, T3 1.07×; calculations (6 runs each, set-up dominated) thick target 2.0×, `natural_neon` 1.34×, T2
+1.11×, T1, T3, 13N, THM and `target_effect_ranges` within their scatter (±10–20 % at this load). Peak RSS within 2 %.
+A 200-call T2 fit is not faster as a whole: at 1 thread 0.96× (its gradients' forward solves are still per host:
+29.0 of 53 s), at 5 threads 0.89× (17.0 s against 14.8, two runs each; not explained, see HANDOFF).
 
 ## 9. Decisions for the PI, and risks
 

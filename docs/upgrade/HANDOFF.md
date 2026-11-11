@@ -2,6 +2,64 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, Phase 5 branch 1) — one level-matrix solve per compound energy (`feature/upgrade-5-energy-tasks`)
+
+**Done** (commits 3b757db4, a7eef25c, 43c1c5bc and the documents).
+- The point pass (`WorkingCopy::CalculatePointsInParallel`, now in `src/EnergyPass.cpp`) runs the plan's energy tasks
+  (`CalculationPlan::EnergyTasks`): every unit -- a point without a fold or a sub-point -- with the same nucleus, route
+  (A-matrix, THM, R-matrix) and bits of E_x (`AMatrixFunc::InEnergy`, now also a public static) is one task: one fill
+  and factorisation, one T-matrix per group (entrance, exit, `ECAmplitudeSource`), one observable per unit
+  (`azure2::SolveAtOneEnergy`); then the folds in a second parallel loop (`Unit::FoldSubPoints`, `FoldThinTarget`),
+  which read the values already there. Tasks are kept between passes and rebuilt when a unit, its E_x or an
+  amplitude source changes; largest first (1 + T-matrices + units), dynamic schedule.
+- `Unit::Calculate` (the serial paths: model pass with `LeafValues::Calculate`, gradient, MCMC, reaction rates) has
+  no sub-point recursion: a host and its mapped points once per sub-point index through the same `SolveAtOneEnergy`,
+  then the fold. The external-capture re-energising of sub-points moved to `Unit::PrepareSubPoints` (before the pass).
+- `AZURE_PLAN_CHECK=1`: the write check over energy tasks and folds (batched above 2,000 steps), then every unit solved
+  alone and compared bit for bit with its shared solve (`CheckEnergyTasks`: routes and g^T A g of every J-group,
+  T-matrix from the unit's provider, record). `AZURE_PROFILE` counts energy tasks and their units.
+- The T-matrix key: the pair is not enough. A capture T-matrix carries the unit's external-capture amplitudes, and the
+  set-up's amplitudes of two units at one energy can differ in the last bits (`tests/electron_screening/grad.azr`:
+  1,602 of 10,125 units; outputs equal at their printed digits, the gradient fit diverged from the base at call 140).
+  Groups are now (entrance, exit, source): computed amplitudes together, held ones by a hash of their bits (a shared
+  hash with other bits is refused), by segment without the EC table.
+
+**Verified** (on 43c1c5bc unless said; base `work/b-trial18`, reference `tab-trial18`; load 16–26 on 24 cores).
+- All projects x 3 bases against `tab-trial18`: brune 728, no-brune 701, use-park 728 files, all identical (tag
+  `tab-etasks2`; the same on a7eef25c, `tab-etasks`).
+- `AZURE_PLAN_CHECK=1` on the whole tree, three bases: 262 checked evaluations, 3,727,625 units, 0 differ; the screening
+  gradient fit under the check: 544 evaluations, 0 differ.
+- `ctest -LE slow` 183/183; `upgrade_plan` (151 projects, 116,454 energy tasks for 1,014,989 units), `upgrade_plan_runtime`
+  (now also thick target, `target_effect_ranges`, the screening model), `upgrade_history` pass.
+- Calculations at 1 and 5 threads identical: T1, T2, T3, 13N, natural_neon, thick target, energy_shift_sqrt, shift_fn,
+  18O_p_a_thm, target_effect_ranges.
+- Fits at 1 thread byte-identical to the base: T2 `--use-lm` and `--use-gradient` (200 calls), 13N (200 calls),
+  energy_shift_sqrt, the screening fit (`electron_screening/grad.azr` on 13N's data, `--use-gradient`), 18O_p_a_thm.
+- `tests/run_tests.sh` (OMP 2): 145 passed, 1 failed -- `component_mapping`, its check (b), see Open.
+- Converted-tree gate (`REF=tab-trial8`, tag `getasks`): 483 identical (456 formal), 38 classified, 0 differ, 0 missing,
+  exit 0.
+- Speed: `energy_grid.md` §8 (per evaluation T2 106 → 45 ms, 13N 317 → 132, thick target 1,102 → 264, natural_neon
+  3,207 → 1,718; T1, T3 not slower; THM unchanged). A 200-call T2 fit at 1 thread is not faster as a whole (cycles
+  0.96x, within the ±12 % scatter): its 206 evaluations take 24.0 s instead of 28.9, its 19 gradients 29.0 s
+  instead of 33.7 (their forward solves are still per host), and the hand-over and Legendre tables are unchanged.
+  At 5 threads (2 runs each, load 16–18) the same fit took 17.0 s instead of 14.8 (cycles 0.89x, scatter ±10 %):
+  not explained; candidates are the serial rebuild of the energy tasks (each pooled copy and each segment-local
+  shift pass rebuilds them: 1.7 % of the 1-thread run) and the units of a task scattered in memory.
+  `target_effect_ranges`: solves 5,862 → 2,208 per calculation (2,164 tasks and 44 probes), the point pass not slower
+  although every sub-point is now calculated.
+
+**Kept, on purpose.** The mapping (`MapData`, `MapLeaves`, `SharesCalculation`): it still groups the folds and their
+automatic-tolerance decision, the energy-dependent values and external-capture amplitudes of mapped points (and the
+layout of `intEC.dat`), the serial paths and the analytic gradient (`BuildGradItems`), which must keep its grouping
+until the per-energy gradient. The probe copies: the bare value of blended and automatic-tolerance points.
+
+**Open.** `tests/component_mapping/check.sh` (b) fails (`run_tests.sh`): it asserts that the component mapping saves
+level-matrix solutions, and the energy tasks now share them with or without it (2,769 = 2,769; extrapolation 271 =
+271); its outputs (a) and gradients (c) pass. The check belongs to `tests/` (not edited here): it needs the director's
+decision (compare against the base count, or drop (b)). The mapping goes with the per-energy gradient branch; THM gains nothing (cache misses on the units' rows);
+in a fit with THM-only finite differences the energy tasks are rebuilt each time the work list alternates (2 % of a
+THM fit); ThreadSanitizer not run.
+
 ## 2026-11-11 (agent, Phase 5 design) — the energy grid, kernels, lab-frame comparison, finite layers (`feature/upgrade-5-design`)
 
 **Done.** The design note `docs/upgrade/energy_grid.md`, measured on 2363abac (no code changed). Measured with an
