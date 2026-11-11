@@ -153,7 +153,8 @@ add_executable(plan_test plan_test.cpp)
 target_link_libraries(plan_test PRIVATE AZURE2Core)
 add_test(NAME upgrade_plan COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/plan_test.sh $<TARGET_FILE:plan_test> ${CMAKE_SOURCE_DIR}/tests)
 set_tests_properties(upgrade_plan PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 1800)
-# ... and at run time (AZURE_PLAN_CHECK=1) on T1-T3, 13N, natural_neon, a THM project, a transmission and a yield.
+# ... and at run time (AZURE_PLAN_CHECK=1: writes, and every unit's shared solve against its own) on T1-T3, 13N,
+# natural_neon, a THM project, a transmission and a yield, thick_target_resonance and target_effect_ranges.
 add_test(NAME upgrade_plan_runtime COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/plan_runtime.sh $<TARGET_FILE:AZURE2>)
 set_tests_properties(upgrade_plan_runtime PROPERTIES TIMEOUT 1800)
 

@@ -18,7 +18,8 @@
 #
 #   (a) every output file identical with and without the component mapping (AZURE_NO_COMPONENT_MAPPING=1), for the
 #       data (mode 1) and the extrapolation (mode 3);
-#   (b) the mapping is used: fewer level-matrix solutions (AZURE_PROFILE);
+#   (b) the level-matrix solutions do not depend on the mapping (AZURE_PROFILE): since the energy tasks
+#       (docs/upgrade/energy_grid.md section 8) there is one per distinct compound energy with or without it;
 #   (c) without the ratio: a fit with the analytic gradient starts from the chi2 of the calculation, the gradient
 #       (one level-matrix solution for all terms of a composite point, AZUREGrad GradOnePoint) agrees with finite
 #       differences of the mapped evaluation, and the Jacobian path with the adjoint (AZURE_GRAD_CHECK).
@@ -97,8 +98,8 @@ read -r n d <<< "$(same_outputs "$WORK/on" "$WORK/off")"
 if [ "$n" -ge 3 ] && [ "$d" = 0 ]; then ok "(a) data: all $n output files identical with and without the mapping"
 else bad "(a) data: $d of $n output files differ"; fi
 fon="$(fills "$WORK/on")"; foff="$(fills "$WORK/off")"
-if [ -n "$fon" ] && [ -n "$foff" ] && [ "$fon" -lt "$foff" ]; then ok "(b) level-matrix solutions $foff -> $fon"
-else bad "(b) level-matrix solutions '$foff' -> '$fon'"; fi
+if [ -n "$fon" ] && [ -n "$foff" ] && [ "$fon" -eq "$foff" ]; then ok "(b) level-matrix solutions $fon with and without the mapping"
+else bad "(b) level-matrix solutions '$foff' without, '$fon' with the mapping (must be equal)"; fi
 
 run xon  x.azr 3 X=0 || exit 1
 run xoff x.azr 3 AZURE_NO_COMPONENT_MAPPING=1 || exit 1
@@ -106,8 +107,8 @@ read -r n d <<< "$(same_outputs "$WORK/xon" "$WORK/xoff")"
 if [ "$n" -ge 1 ] && [ "$d" = 0 ]; then ok "(a) extrapolation: all $n output files identical"
 else bad "(a) extrapolation: $d of $n output files differ"; fi
 fon="$(fills "$WORK/xon")"; foff="$(fills "$WORK/xoff")"
-if [ -n "$fon" ] && [ -n "$foff" ] && [ "$fon" -lt "$foff" ]; then ok "(b) extrapolation: level-matrix solutions $foff -> $fon"
-else bad "(b) extrapolation: level-matrix solutions '$foff' -> '$fon'"; fi
+if [ -n "$fon" ] && [ -n "$foff" ] && [ "$fon" -eq "$foff" ]; then ok "(b) extrapolation: level-matrix solutions $fon with and without the mapping"
+else bad "(b) extrapolation: level-matrix solutions '$foff' without, '$fon' with the mapping (must be equal)"; fi
 
 # (c) the gradient check of tests/13N on the composite model
 mkdir -p "$WORK/fit/output" "$WORK/fit/checks"; ln -s "$REF/data" "$WORK/fit/data"; cp "$WORK/g.azr" "$WORK/fit/t.azr"

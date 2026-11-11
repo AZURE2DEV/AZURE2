@@ -183,7 +183,10 @@ amplitudes read from the pathway table and the old pathway trees deleted; and th
 laboratory frame). Merged on 2026-11-11: the data classes replaced (`DataSet`, `WorkingCopy`, `Segment`, `Unit`);
 176 of the 183 convertible project files in format 3 (the THM projects are left); validation that reports what a run
 would refuse; pyazr's functions on a format-3 project, with edits of levels, `<config>` and `<thm>` done by the
-engine; the design note of Phase 5 (`energy_grid.md`) with its decisions taken.
+engine; the design note of Phase 5 (`energy_grid.md`) with its decisions taken. First branch of Phase 5
+(in the merge batch being verified): the level matrix is solved once per compound energy instead of once per data
+point or sub-point, so a fit evaluation of 13N takes 132 ms instead of 317 and of the thick-target project 264 ms
+instead of 1,102, every output unchanged.
 
 Then, to close Phase 4: the old reading path deleted (with `pyazr/azrfile.py`, 3,756 lines of
 a second grammar in Python); the rest of `CNuc` (the parameter vector and the set-up from the level rows).

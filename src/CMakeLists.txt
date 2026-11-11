@@ -7,7 +7,7 @@ PPair.cpp AZURECalc.cpp Objective.cpp
 ReactionRate.cpp AZUREMain.cpp WorkingCopy.cpp DataCovariance.cpp ShftFunc.cpp ScatteringLength.cpp ModelData.cpp CNucObserved.cpp
 RMatrixFunc.cpp AZUREOutput.cpp    TargetEffect.cpp
 AZUREParams.cpp Unit.cpp CNuc.cpp Equation.cpp
-JGroup.cpp Config.cpp Segment.cpp ModelPass.cpp CoulombReference.cpp Predictions.cpp CalculationPlan.cpp IntegratedFermiFunc.cpp
+JGroup.cpp Config.cpp Segment.cpp ModelPass.cpp CoulombReference.cpp Predictions.cpp CalculationPlan.cpp EnergyPass.cpp IntegratedFermiFunc.cpp
 EffectiveCharge.cpp  GSLException.cpp ParameterLimitsManager.cpp
 AdaptiveIntegrationGrid.cpp AdaptiveExtrapolation.cpp AZUREGrad.cpp ThmFunc.cpp
 DataOutputFiles.cpp

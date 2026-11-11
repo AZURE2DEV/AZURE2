@@ -455,14 +455,58 @@ class Unit {
   void AddECAmplitude(int, int, complex);
   void AddECAmplitude(int, int, complex, double);
   void ClearECAmplitudes();
-  /// Calculate the point (and the points mapped onto it, its sub-points) for the current parameters, writing the
-  /// values into `results`, the buffer of the evaluation laid out by `data`, the data set that holds the point: its
-  /// plan names the points mapped onto it, its target effects the fold.  Null for a point outside any data set (no
-  /// target effect, no plan: a reaction-rate point).
-  void Calculate(WorkingCopy *data, CNuc *, const Config &configure, azure2::Results &results, Unit *parent = NULL,
-                 int subPointNum = 0);
-  /// The sub-point stage of a thin-target integration, with its sigma(E_bar) fallback (see the .cpp).
-  void CalculateThinTarget(WorkingCopy &data, CNuc *, const Config &configure, azure2::Results &results, const TargetEffect *effect);
+  /// The external-capture amplitudes the point holds at c.m. energy `energy` (MeV) -- the set-up's, which
+  /// GetECAmplitudeWithShift returns there instead of computing them; they need not agree to the last bit between
+  /// points at one energy -- as a 64-bit hash of their positions and bits (FNV-1a), 0 when it holds none there.
+  std::uint64_t ECAmplitudesHeldAt(double energy) const {
+    std::uint64_t h = 1469598103934665603ULL;
+    bool any = false;
+    auto mix = [&h](const void *p, std::size_t n) {
+      for (std::size_t i = 0; i < n; i++) h = (h ^ static_cast<const unsigned char *>(p)[i]) * 1099511628211ULL;
+    };
+    for (std::size_t k = 0; k < ec_energies_.size(); k++)
+      for (std::size_t m = 0; m < ec_energies_[k].size(); m++) {
+        if (ec_energies_[k][m] != energy || k >= ec_amplitudes_.size() || m >= ec_amplitudes_[k].size()) continue;
+        any = true;
+        mix(&k, sizeof k), mix(&m, sizeof m), mix(&ec_amplitudes_[k][m], sizeof(complex));
+      }
+    return any ? (h ? h : 1) : 0;
+  }
+  /// Whether `other` holds at its c.m. energy bit for bit the amplitudes this point holds at its own
+  /// (ECAmplitudesHeldAt).
+  bool SameECAmplitudesAs(const Unit &other) const {
+    auto held = [](const Unit &u) {
+      const double energy = u.GetCMEnergy();
+      std::vector<std::pair<std::pair<std::size_t, std::size_t>, complex>> v;
+      for (std::size_t k = 0; k < u.ec_energies_.size(); k++)
+        for (std::size_t m = 0; m < u.ec_energies_[k].size(); m++)
+          if (u.ec_energies_[k][m] == energy && k < u.ec_amplitudes_.size() && m < u.ec_amplitudes_[k].size())
+            v.push_back({{k, m}, u.ec_amplitudes_[k][m]});
+      return v;
+    };
+    const auto a = held(*this), b = held(other);
+    if (a.size() != b.size()) return false;
+    for (std::size_t i = 0; i < a.size(); i++)
+      if (a[i].first != b[i].first || std::memcmp(&a[i].second, &b[i].second, sizeof(complex)) != 0) return false;
+    return true;
+  }
+  /// Calculate the point (and the points mapped onto it, its sub-points, its fold) for the current parameters,
+  /// outside the energy pass (WorkingCopy::CalculatePointsInParallel), writing the values into `results`, the buffer
+  /// of the evaluation laid out by `data`, the data set that holds the point: its plan names the points mapped onto
+  /// it, its target effects the fold.  One solve at the point's energy for it and its mapped points, or one per
+  /// sub-point index (azure2::SolveAtOneEnergy), then FoldSubPoints.  Null `data` for a point outside any data set
+  /// (no target effect, no plan: a reaction-rate point).
+  void Calculate(WorkingCopy *data, CNuc *, const Config &configure, azure2::Results &results);
+  /// The test hook of failed points: true when AZURE_TEST_FAIL_E (and AZURE_TEST_FAIL_EXIT, if set) name this point.
+  bool InjectedFailure() const;
+  /// Before its sub-points are calculated: with external capture, their energy-dependent values at their energies.
+  void PrepareSubPoints(WorkingCopy *data, CNuc *, const Config &configure);
+  /// The fold of this point and of the points mapped onto it, from their sub-points' values already in `results`:
+  /// the bare probes, the automatic tolerance and edge blending, the thin-target fallback, the integrations.
+  void FoldSubPoints(WorkingCopy *data, CNuc *, const Config &configure, azure2::Results &results);
+  /// The fold of a thin-target integration, with its sigma(E_bar) fallback (see the .cpp).
+  void FoldThinTarget(WorkingCopy &data, azure2::Results &results, const Config &configure, const TargetEffect *effect,
+                      const azure2::MappedPoints &mappedPts);
   void SetMap(int, int);
   void ClearMapping();
   /// A mapped point that keeps its own energy-dependent values: a component of a SUM, RATIO or total-capture segment
