@@ -1,0 +1,18 @@
+p + 15N elastic at E_lab = 5 MeV, spin-orbit
+NAMELIST
+ &FRESCO hcm=0.025 rmatch=25.0 
+     jtmin=0.0 jtmax=20.5 absend=-1 
+     thmin=10.0 thmax=180.0 thinc=5.0
+     iter=0 iblock=0 chans=1 smats=2 xstabl=1 treneg=1
+     unitmass=1.0000004718 finec=137.03604742
+     elab(1)=5.0 /
+ &PARTITION namep='p' massp=1.0 zp=1 nex=1 namet='15N' masst=15.0 zt=7 qval=0.0 /
+ &STATES jp=0.5 ptyp=1 ep=0.0 cpot=1 jt=0.0 ptyt=1 et=0.0 /
+ &partition /
+ &pot kp=1 type=0 p(1:3)= 15.0 0.0 1.25 /
+ &pot kp=1 type=1 p(1:6)= 50.0 1.2 0.65 1.0 1.3 0.5 /
+ &pot kp=1 type=2 p(1:6)= 0.0 1.3 0.5 6.0 1.3 0.5 /
+ &pot kp=1 type=3 p(1:3)= 6.0 1.1 0.6 /
+ &pot /
+ &overlap /
+ &coupling /

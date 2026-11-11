@@ -33,6 +33,10 @@ whoever asks for a calculation, and a project file that says in words what each 
 with shell, Barkas and Bloch corrections, ZBL nuclear stopping, Bohr straggling propagated through the target, each
 value with an uncertainty and its source; `docs/upgrade/stopping.md`), built beside the engine and not yet used by it.
 
+Phase 7 has begun as a separate library that the engine does not use yet: optical potentials, bound states,
+distorted waves and the DWBA transfer to a bound state, which agree with FRESCO to better than 0.2 %
+(`docs/upgrade/transfer.md`).
+
 **How every step is checked.** Each merge is verified as a whole: the 183 project files of the test suite run in
 three bases (Brune, formal, Park) and every output file is compared byte for byte with the previous head (726 + 699
 + 726 files); 182 unit and pyazr tests; the 145 regression projects with their own checks; calculations at 1
