@@ -42,6 +42,9 @@ struct BuildOptions {
   /// external capture, FinalStates.h): on for --validate, --describe and pyazr; off in the engine's own build, so a
   /// run refuses them once, at set-up, with the set-up's message.
   bool setUpChecks = true;
+  /// Build every data set and extrapolation as if it were active (`active no` ignored): the names its parameters get
+  /// when it is switched on (pyazr's Project.rename).  Never for a run.
+  bool allRecordsActive = false;
 };
 
 /*!

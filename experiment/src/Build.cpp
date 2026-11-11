@@ -86,6 +86,7 @@ void Context::Warn(const char *code, const ValidatedRecord &record, const std::s
                    const std::string &found) {
   Error(code, record, field, message);
   out_.diagnostics.back().severity = Severity::Warning;
+  out_.diagnostics.back().hasFound = !found.empty();
   out_.diagnostics.back().found = found;
 }
 
@@ -453,7 +454,6 @@ bool CheckDataFile(Context &c, const ValidatedRecord &r, const DatasetSpec &d, s
     const bool kept = p.kind == DataRowProblem::Kind::RefusedKept;
     if (kept && !cov) {  // the run computes the chi^2 without the point (chi_squared.rst): a warning
       c.Warn(codes::kDataError, r, "file", p.message, p.found);
-      c.out_.diagnostics.back().hasFound = true;
       continue;
     }
     const char *code = kept ? codes::kCovarianceFile
@@ -823,7 +823,7 @@ BuiltProject Schema::Build(const ValidationResult &validated, const LevelTables 
     Member m;
     m.record = &r;
     m.isData = r.kind == "dataset";
-    m.active = Word(r, "active", "yes") != "no";
+    m.active = options.allRecordsActive || Word(r, "active", "yes") != "no";
     if (m.isData) {
       SpecList<DatasetSpec>::Item item;
       item.spec.key = m.key = (int)c.data_.size() + 1;

@@ -33,6 +33,12 @@ Update this file at the end of every work session: what changed, what is next, w
 against 4.0 ms on `b-trial13` (minimum of 20); `ctest -LE slow` 183/183; 13N, T1, T2 and the final-state models at 4
 threads: 47 output files byte-identical to the 1-thread run.
 
+**Corrections after the director's review.** `Project.rename` asks the engine for the names with every record taken as
+active (`BuildOptions::allRecordsActive`, `parameter_names(text, all_active)`), so the rows of an inactive data set
+follow and apply once it is switched on; rows that still contain the old name (no parameter the engine gives) are
+listed in a warning.  `Context::Warn` sets `hasFound`: the JSON of `W_DATA_FILE_NOT_READ` carries the path (no
+committed expected file held it).
+
 **Open.** Refusals validation does not predict (survey of the converted tree and of the check.sh models): `<levels>`
 rows whose level ID has channels of two nuclei and the other `CNuc::Fill` row checks; a lab angle beyond the
 kinematic maximum (`relativistic/models/li7pn_edge_rel.azr`); two fitted rows of one covariance file from overlapping

@@ -274,6 +274,8 @@ int main() {
     check("W_DATA_FILE_NOT_READ: a warning, the project builds, the path in 'found'",
           b.Ok() && !b.diagnostics.empty() && b.diagnostics[0].severity == Severity::Warning &&
               b.diagnostics[0].found == "no_such_file.dat" && b.data.datasets.items.size() == 1);
+    check("W_DATA_FILE_NOT_READ: the JSON carries the path as 'found'",
+          !b.diagnostics.empty() && b.diagnostics[0].ToJson().find("\"found\": \"no_such_file.dat\"") != std::string::npos);
   }
   check("the data file read in the valid case", BuildText(Data(kDataset), false, true).diagnostics.empty());
   ExpectOne("E_DATA_FILE", BuildText(Data(Set(kDataset, "columns", "    columns E_lab[MeV] _ value error _ _")), false, true));

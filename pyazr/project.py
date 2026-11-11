@@ -512,8 +512,10 @@ class Project:
                 if b[start:start + len(_bytes(old))] != _bytes(old):
                     raise RuntimeError(f"line {line}: '{old}' not at column {col}")
                 doc.replace_lines(line - 1, line, [b[:start] + _bytes(new) + b[start + len(_bytes(old)):]])
-            try:  # the names the engine gives, before and after; the same parameters in the same order
-                before, after = engine.parameter_names(self._doc.write()), engine.parameter_names(doc.write())
+            try:  # the names the engine gives, before and after, inactive records taken as active (their rows apply when
+                # they are switched on); the same parameters in the same order
+                before = engine.parameter_names(self._doc.write(), True)
+                after = engine.parameter_names(doc.write(), True)
             except ValueError:
                 warnings.warn(f"rename {old!r}: the project has errors, so the engine names no parameters: "
                               f"<parameterSettings>, <mcmc> and the prior covariance are left as they are", stacklevel=3)
@@ -521,12 +523,18 @@ class Project:
             if len(before) != len(after):
                 raise RuntimeError(f"rename {old!r}: {len(before)} parameter names before, {len(after)} after")
             names.update((_bytes(b), _bytes(a)) for b, a in zip(before, after) if b != a)
+            unnamed = []  # rows that still hold the old name after the engine's names are renamed
             for s in _sections_named(doc, _PARAMETER_SECTIONS):
                 for i in range(s[1] + 1, s[2]):
                     b = doc.line(i)
                     renamed = _rename_parameters(b, names)
                     if renamed != b:
                         doc.replace_lines(i, i + 1, [renamed])
+                    if _bytes(old) in renamed:
+                        unnamed.append(f"{i + 1}: {_text(renamed).strip()}")
+            if unnamed:
+                warnings.warn(f"rename {old!r}: these rows contain {old!r} but name no parameter the engine gives the "
+                              f"project; left as they are: " + "; ".join(unnamed), stacklevel=3)
 
         self._apply(f"rename {old!r} to {new!r}", edit)
         cov = self._prior_covariance_renamed(names)

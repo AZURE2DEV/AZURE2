@@ -7,7 +7,8 @@
      and equals the old-format T2's per data set (the same data); extrapolations of a format-3 project likewise;
   2. Project.rename takes the parameter names from the engine: a target's isotope abundance (natN.isotope.15N) and a
      shared normalization's follower name (D.value[s03_diff150]) in <parameterSettings> follow, a word that only
-     contains the name does not;
+     contains the name does not (and a warning lists its row); an inactive data set's <parameterSettings> and <mcmc>
+     rows follow its rename and name the engine's parameters once it is switched on;
   3. Project.set keeps a whole-line comment between two repeats of the field it replaces;
   4. records_from_csv: data sets declared in a sheet, each row checked by the engine against the project, every
      refusal at once with its row; a valid sheet's records are added and the project validates.
@@ -117,6 +118,31 @@ def rename(work):
     check("the renamed project validates", p.validate() == [], p.validate())
 
 
+def rename_inactive(work):
+    print("2b. rename of an inactive data set: its rows follow, and apply once it is switched on")
+    f3 = t2_dir(work, "T2inactive")
+    with open(f3) as f:
+        text = f.read().replace("<parameterSettings>\n", "<parameterSettings>\n"
+                                "s04_thick.norm 1 0 0 0.03 0 1 norm 0\n"
+                                "natN_note 1 0 0 0 0 1 note 0\n")
+    text = text.rstrip("\n") + "\n<mcmc>\nnwalkers 10\n<parameters>\ns04_thick.norm 1 0.03\n</parameters>\n</mcmc>\n"
+    with open(f3, "w") as f:
+        f.write(text)
+    p = Project.open(f3)
+    p["s04_thick"].set(active="no")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        p.rename("s04_thick", "thick4")
+        p.rename("natN", "natY")  # a row that contains the name but names no parameter: a warning lists it
+    p["thick4"].set(active="yes")
+    rows = [l.split()[0] for l in p.text.splitlines() if l.startswith(("thick4.", "s04_thick."))]
+    names = pyazr._azure2.parameter_names(p.to_bytes())
+    check("the inactive data set's <parameterSettings> and <mcmc> rows follow the rename", rows == ["thick4.norm"] * 2, rows)
+    check("activated: the rows name parameters the engine gives", all(r in names for r in rows), (rows, names[:8]))
+    check("a row the engine cannot name is listed in a warning",
+          any("natN_note" in str(w.message) for w in caught), [str(w.message) for w in caught])
+
+
 def comments(work):
     print("3. set keeps comments between repeats")
     f3 = t2_dir(work, "T2set")
@@ -172,6 +198,7 @@ def main():
             warnings.simplefilter("ignore")
             session(work)
             rename(work)
+            rename_inactive(work)
             comments(work)
             csv_records(work)
     finally:
