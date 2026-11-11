@@ -2,6 +2,33 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, Phase 5 branch 4) — the yield of a layer of finite thickness (`feature/upgrade-5-layer-yield`)
+
+**Done.** `quantity yield` on a `target` of `kind layer`: Y(E₀) = 10⁻²⁴ ∫_{E_out}^{E₀} ⟨σ⟩/ε dE, ∫ dE/ε = N (lab ε per
+active nucleus, the user's stopping formula), per particle or per µC. Today's target kernel (`src/TargetFold.cpp`)
+without the division by N; E_out solved on the point's own sub-points with `GridQuadrature`'s rule
+(`include/LayerExit.h`), so a constant σ gives 10⁻²⁴ σ N to 1e-15; the grid spans 2 % beyond the layer. A layer yield
+is an effect of its own (`TargetEffectSpec::layerYield`, set in `experiment/src/BuildEffects.cpp`); fold windows on it
+are refused; the set-up refuses a non-positive stopping and a layer the beam does not leave (`src/TargetLayer.cpp`,
+codes `E_LAYER_STOPPING`, `E_LAYER_EXIT_BELOW_MODEL`). ∂Y/∂N stays central differences. Test project
+`tests/layer_yield` (README with the derivations; check.py computes every closed form); `layer_kernel` and
+`pyazr_layer_yield` in ctest. Docs: `data_formats.rst`, `format3.rst` (generated), `data_kinds.md` §4.6,
+`project_format3.md` §7.2/§9.1, `energy_grid.md` §8, ROADMAP, FOR_THE_OWNER, the targets skill.
+
+**Verified.** All projects × 3 bases against `tab-trial18`: 728 / 701 / 728 identical, the new project's files only-new;
+`ctest -LE slow` 185 (after `predictions.txt` got the two new projects: 17 lines added); `tests/run_tests.sh` 146 passed,
+1 failed (`cli_help` under load; passes alone on this build and on the base); spec equivalence 200 files, 185
+converted, 183 equal, 2 recorded, 0 differ, 15 not converted; converted-tree gate (REF tab-trial8) 483 / 456 / 483
+identical, 38 classified, 0 differ, 0 missing; menu 1 at 1 and 4 threads identical on the new project and T2 (4, not 6:
+the thread budget); the fit of `tests/layer_yield` identical at 1 and 2 threads but for Minuit's call count.
+
+**Open.** The stopping module (scale nuisance, stoichiometric active fraction) plugs in where the sub-points' stopping
+is set; an analytic ∂Y/∂N = 10⁻²⁴ σ_lin(E_out) in `AZUREGrad.cpp` if wanted; a target with a free screening or
+temperature used by a layer yield and a σ data set is refused (two effects, `E_FOLD_CONFLICT`); the comment in
+`tests/units_scales/models/yield_story.azr` still calls the layer yield a Phase 5 kernel (an existing test's .azr, not
+edited); `convert/tests/spec_equivalence_test.cpp` does not compare `layerYield` (old lines never set it; convert/ is
+out of scope).
+
 ## 2026-11-11 (agent, Phase 5 design) — the energy grid, kernels, lab-frame comparison, finite layers (`feature/upgrade-5-design`)
 
 **Done.** The design note `docs/upgrade/energy_grid.md`, measured on 2363abac (no code changed). Measured with an
