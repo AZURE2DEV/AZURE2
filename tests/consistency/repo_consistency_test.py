@@ -313,11 +313,8 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, "io")):
 
 # 32. stopping/ is a leaf on physics/ (docs/upgrade/stopping.md section 1): its headers ("azure2/stopping/..."),
 #     physics/'s ("azure2/physics/..."), the C++ standard library, and the bare names of its own files where they live
-#     (src/'s generated-table header, the tests' check.h).  The one exception is the comparison with ERYA,
-#     tools/erya_compare.cpp, which reads ERYA's SRIMUtilities.h to print the comparison table and is no part of the
-#     library.
+#     (src/'s generated-table header, the tests' check.h).
 STOPPING_OWN = {"src": {"TableText.h"}, "tests": {"check.h"}}
-STOPPING_EXCEPT = {(os.path.join("stopping", "tools", "erya_compare.cpp"), '"SRIMUtilities.h"')}
 for dirpath, _, files in os.walk(os.path.join(ROOT, "stopping")):
     for name in sorted(files):
         if not name.endswith((".h", ".hpp", ".cpp", ".in")):
@@ -330,8 +327,6 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, "stopping")):
             if inc.startswith('"') and inc[1:-1] in STOPPING_OWN.get(part, set()):
                 continue
             if inc.startswith("<") and re.fullmatch(r"[a-z_]+", inc[1:-1]):
-                continue
-            if (rel, inc) in STOPPING_EXCEPT:
                 continue
             problems.append(f"{rel}: includes {inc}; stopping/ may include only azure2/stopping/ and azure2/physics/ "
                             "headers, its own files and the C++ standard library (check 32)")

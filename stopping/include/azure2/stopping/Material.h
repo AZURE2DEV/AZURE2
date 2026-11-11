@@ -20,7 +20,10 @@ namespace stopping {
  */
 constexpr double kStoppingToMeVcm2 = 1.0e-21;  ///< eV/(1e15 atoms/cm^2) -> MeV cm^2
 
-/// A projectile: charge number and atomic mass (u).
+/// A projectile: charge number and atomic mass (u).  The mass enters the stopping only through the energy per mass
+/// unit E/M1 (SRIM's keV/u) and the nuclear stopping's kinematics; it is always the caller's (LunaSRIM's default is
+/// the mass of the most abundant isotope, SCOEF03.DAT column 3: pass that mass to reproduce a LunaSRIM run that
+/// left it out).
 struct Projectile {
   int z = 1;
   double mass_u = 1.00782503;
@@ -61,13 +64,21 @@ struct UserStopping {
 };
 
 /*!
- * A target material: elements with atomic fractions, phase, optional mass density (g/cm^3; 0 = not given, needed
- * only to convert to or from lengths), and user stopping that overrides the evaluation for given projectiles.
+ * A target material: elements with atomic fractions, phase, SRIM's compound correction factor, optional mass density
+ * (g/cm^3; 0 = not given, needed only to convert to or from lengths), and user stopping that overrides the evaluation
+ * for given projectiles.
+ *
+ * phase: solid or gas (stopping.md section 6).  MaterialFromFormula / MaterialFromFractions set DefaultPhase(); set
+ *   the field to override it (a gaseous compound such as CH4 or CO2 must be said: the default of a compound is solid).
+ * compound_correction: SRIM's factor C of Bragg's rule (the electronic stopping of the compound over the Bragg sum at
+ *   low velocity, faded out at high velocity); 1 = Bragg's rule.  SRIM's compound dictionary lists C for its
+ *   compounds (the "Stopping in Compounds" window of SRIM, file Compound.dat); here it is a number the user gives.
  */
 struct Material {
   std::string name;
   std::vector<Constituent> constituents;
   Phase phase = Phase::kSolid;
+  double compound_correction = 1.0;
   double mass_density_g_cm3 = 0.0;
   std::vector<UserStopping> user_stopping;
 };
@@ -76,12 +87,17 @@ struct Material {
 /// ElementSymbol, counts optional and possibly decimal: "Ti0.5Al0.5N") into normalised atomic fractions.  Repeated
 /// elements are summed.  Throws std::invalid_argument for an unknown symbol, an element above Z = 92 or a bad count.
 std::vector<Constituent> ParseFormula(const std::string &formula);
-/// A material from a formula; the name is the formula.
-Material MaterialFromFormula(const std::string &formula, Phase phase, double mass_density_g_cm3);
-/// A material from explicit fractions (normalised here; each z in 1..92, fractions > 0).
-Material MaterialFromFractions(const std::string &name, const std::vector<Constituent> &constituents, Phase phase,
-                               double mass_density_g_cm3);
-/// The atom-fraction-weighted standard atomic weight (u): mass per atom of the material.
+/// True for the elements that are gases in their natural state (lunasrim/stopping.py GAS_ELEMENTS: H, He, N, O, F,
+/// Ne, Cl, Ar, Br, Kr, I, Xe, At, Rn); SRIM's phase factor and default phase use the list.
+bool IsNaturalGas(int z);
+/// SRIM's default phase: gas for a material of one element that is a gas in its natural state (IsNaturalGas),
+/// solid for everything else.
+Phase DefaultPhase(const std::vector<Constituent> &constituents);
+/// A material from a formula; the name is the formula, the phase DefaultPhase(), no density, no compound correction.
+Material MaterialFromFormula(const std::string &formula);
+/// A material from explicit fractions (normalised here; each z in 1..92, fractions > 0); defaults as above.
+Material MaterialFromFractions(const std::string &name, const std::vector<Constituent> &constituents);
+/// The atom-fraction-weighted atomic weight (u, SRIM's isotope-averaged weights): mass per atom of the material.
 double MeanAtomicWeight(const Material &material);
 /// The atom fraction of element \p z in the material (0 if absent): divide a per-atom stopping cross section by it
 /// to get one per atom of that element.

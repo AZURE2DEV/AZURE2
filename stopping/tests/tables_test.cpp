@@ -1,5 +1,7 @@
-// The compiled tables (docs/upgrade/stopping.md sections 3 and 4): complete, every row with its source, and the
-// parsers refuse malformed text with the file and line.
+// SRIM-2013's data files (docs/upgrade/stopping.md section 3): parsed completely, the columns where LunaSRIM's reader
+// puts them, read from a directory exactly as from the compiled copy, and the parser refuses malformed text.  Run a
+// second time (ctest stopping_srim_directory) with AZURE2_SRIM_DATA_DIR set: then SrimTables() must be the directory's.
+#include <cstdlib>
 #include <stdexcept>
 #include <string>
 
@@ -9,51 +11,74 @@
 
 using namespace azure2::stopping;
 
-int main(int, char **) {
-  const auto &elements = ElementTable();
-  check::True("elements.tsv: 92 elements", elements.size() == 92);
-  bool symbols = true, positive = true;
-  for (const auto &e : elements) {
-    symbols = symbols && e.symbol == azure2::physics::ElementSymbol(e.z);
-    positive = positive && e.atomic_weight_u > 0.0 && e.mean_excitation_eV > 0.0 && !e.atomic_weight_source.empty();
+namespace {
+template <std::size_t N>
+bool Same(const std::array<double, N> &a, const std::array<double, N> &b) {
+  for (std::size_t k = 0; k < N; ++k) {
+    if (a[k] != b[k]) return false;
   }
-  check::True("elements.tsv: symbols are physics/'s ElementSymbol(Z)", symbols);
-  check::True("elements.tsv: A_r, I > 0 and a source on every row", positive);
-  check::Rel("A_r(Au) (CIAAW 196.97)", Element(79).atomic_weight_u, 196.97, 1e-12);
-  check::Rel("I(Al) (ICRU 37: 166 eV)", Element(13).mean_excitation_eV, 166.0, 1e-12);
-  check::True("O is a gas, Ta a solid", Element(8).phase == Phase::kGas && Element(73).phase == Phase::kSolid);
+  return true;
+}
+}  // namespace
 
-  const auto &rows = CoefficientTable();
-  check::True("electronic_coefficients.tsv: 184 rows (92 p, 92 He)", rows.size() == 184);
-  bool complete = true;
+int main(int argc, char **argv) {
+  const std::string dir = argc > 2 ? argv[2] : "../data/srim";
+  const char *env = std::getenv(kSrimDataDirVariable);
+  const SrimData &d = SrimTables();
+  if (env != nullptr && env[0] != '\0') {
+    check::True(std::string("with ") + kSrimDataDirVariable + " set, SrimTables() reads that directory", d.source == env);
+  } else {
+    check::True("without the variable, SrimTables() is the compiled copy", d.source.find("compiled in") != std::string::npos);
+  }
+  check::True("92 elements, 92 x 92 nuclear pairs", d.elements.size() == 92 && d.nuclear.size() == 92 * 92);
+  bool symbols = true, positive = true, symmetric = true;
   for (int z = 1; z <= 92; ++z) {
-    for (int p = 1; p <= 2; ++p) {
-      const CoefficientRow &r = Coefficients(z, p);
-      complete = complete && !r.source.empty() && r.rel_uncertainty > 0.0 && r.origin.find(".tsv:") != std::string::npos;
-    }
+    const SrimElement &e = ElementData(d, z);
+    symbols = symbols && e.z == z && e.symbol == azure2::physics::ElementSymbol(z);
+    positive = positive && e.atomic_weight_u > 0 && e.mean_excitation_solid_eV > 0 && e.most_abundant_mass_u > 0;
+    for (int z2 = 1; z2 <= 92; ++z2) symmetric = symmetric && NuclearCoefficients(d, z, z2) == NuclearCoefficients(d, z2, z);
   }
-  check::True("every element has a p and a He row with source, uncertainty and origin", complete);
-  check::Rel("Al p row A3 (ICRU 49: 2766)", Coefficients(13, 1).a[2], 2766.0, 1e-12);
-  check::Rel("Au He row A1 (Ziegler 1977: 2.892)", Coefficients(79, 2).a[0], 2.892, 1e-12);
+  check::True("SCOEF03.DAT: Z = 1..92 in order, symbols are physics/'s ElementSymbol(Z)", symbols);
+  check::True("SCOEF03.DAT: masses and I > 0", positive);
+  check::True("SNUC03.dat: coefficients symmetric in (Z1, Z2)", symmetric);
+  // Columns, values read off SCOEF03.DAT's first line (H) and SNUC03.dat's first line (1 1) by eye.
+  const SrimElement &h = ElementData(d, 1);
+  check::Rel("H: column 3, most abundant isotope 1.0078 u", h.most_abundant_mass_u, 1.0078, 0.0);
+  check::Rel("H: column 4, atomic weight 1.0079 u", h.atomic_weight_u, 1.0079, 0.0);
+  check::Rel("H: column 11, first proton coefficient", h.proton[0], 0.0137722064, 0.0);
+  check::Rel("H: column 18, eighth proton coefficient", h.proton[7], 0.251198273, 0.0);
+  check::Rel("H: column 21, first helium coefficient", h.helium[0], 1.62392840E-2, 0.0);
+  check::Rel("H: column 67, I solid 19.4 eV", h.mean_excitation_solid_eV, 19.4, 0.0);
+  check::Rel("H: column 69, I gas (Z1 > 1) 19.7 eV", h.mean_excitation_gas_eV[1], 19.7, 0.0);
+  check::Rel("H: column 70, first shell_c coefficient", h.shell_c[0], 2.70659733E-2, 0.0);
+  check::Rel("H: column 88, last shell_d coefficient", h.shell_d[7], 1.11332707E-9, 0.0);
+  check::Rel("SNUC03.dat (1, 1): first coefficient", NuclearCoefficients(d, 1, 1)[0], 3.31122449, 0.0);
+  check::Rel("SNUC03.dat (92, 92): last coefficient", NuclearCoefficients(d, 92, 92)[3], 0.243177191, 0.0);
+  check::True("row origins name the file and line", h.origin.find("SCOEF03.DAT:1") != std::string::npos);
 
-  check::Throws<std::out_of_range>("Element(0) refused", [] { Element(0); });
-  check::Throws<std::out_of_range>("Coefficients(93, 1) refused", [] { Coefficients(93, 1); });
-  const std::string header = "Z\tprojectile\tform\tA1\tA2\tA3\tA4\tA5\tfit_max_MeV_u\trel_unc\tsource\tnote\n";
-  check::Throws<std::invalid_argument>("a wrong header is refused", [] { ParseCoefficientTable("Z\tfoo\n", "t"); });
-  check::Throws<std::invalid_argument>("a non-number is refused", [&] {
-    ParseCoefficientTable(header + "1\tp\tAZ_p\t1\tx\t1\t1\t1\t1\t0.04\ts\t-\n", "t");
+  // The directory reader gives the same numbers as the compiled copy (or as the variable's directory).
+  const SrimData r = ReadSrimData(dir);
+  bool same = r.nuclear == d.nuclear;
+  for (int z = 1; z <= 92; ++z) {
+    const SrimElement &a = r.elements[z - 1], &b = d.elements[z - 1];
+    same = same && a.symbol == b.symbol && a.name == b.name && a.atomic_weight_u == b.atomic_weight_u &&
+           a.most_abundant_mass_u == b.most_abundant_mass_u && Same(a.proton, b.proton) && Same(a.helium, b.helium) &&
+           Same(a.lithium, b.lithium) && Same(a.ion_poly, b.ion_poly) && Same(a.target_poly, b.target_poly) &&
+           a.mean_excitation_solid_eV == b.mean_excitation_solid_eV &&
+           Same(a.mean_excitation_gas_eV, b.mean_excitation_gas_eV) && Same(a.shell_c, b.shell_c) &&
+           Same(a.shell_d, b.shell_d) && Same(a.high_energy_charge, b.high_energy_charge);
+  }
+  check::True("ReadSrimData(" + dir + ") equals SrimTables() in every number", same);
+  check::Throws<std::runtime_error>("a directory without the files is refused", [] { ReadSrimData("/nonexistent-srim-dir"); });
+
+  check::Throws<std::out_of_range>("ElementData(0) refused", [] { ElementData(0); });
+  check::Throws<std::out_of_range>("NuclearCoefficients(93, 1) refused", [&] { NuclearCoefficients(d, 93, 1); });
+  const std::string h_line = "\" H\" \"Hydrogen\" 1 1 1.0078 1.0079" + std::string(" 0.5") + "\n";
+  check::Throws<std::invalid_argument>("a short SCOEF03.DAT row is refused", [&] { ParseSrimData(h_line, "", "t"); });
+  check::Throws<std::invalid_argument>("a SNUC03.dat row with five fields is refused", [] {
+    ParseSrimData("", " 1  1 3.3 0.005 0.45\n", "t");
   });
-  check::Throws<std::invalid_argument>("a He row in the proton form is refused", [&] {
-    ParseCoefficientTable(header + "1\tHe\tAZ_p\t1\t1\t1\t1\t1\t1\t0.04\ts\t-\n", "t");
-  });
-  check::Throws<std::invalid_argument>("a missing column is refused", [&] {
-    ParseCoefficientTable(header + "1\tp\tAZ_p\t1\t1\t1\t1\t1\t1\t0.04\ts\n", "t");
-  });
-  check::Throws<std::invalid_argument>("a gap in Z is refused", [] {
-    ParseElementTable("Z\tsymbol\tA_r\tA_r_unc\tA_r_source\tI_eV\tphase\n2\tHe\t4\t0\ts\t41.8\tgas\n", "t");
-  });
-  check::Throws<std::invalid_argument>("an unknown phase is refused", [] {
-    ParseElementTable("Z\tsymbol\tA_r\tA_r_unc\tA_r_source\tI_eV\tphase\n1\tH\t1\t0\ts\t19\tplasma\n", "t");
-  });
+  check::Throws<std::invalid_argument>("an incomplete SCOEF03.DAT is refused (no row for Z = 1)", [] { ParseSrimData("", "", "t"); });
+  check::Throws<std::invalid_argument>("phase 'liquid' is refused (SRIM knows solid and gas)", [] { PhaseFromName("liquid"); });
   return check::Done();
 }
