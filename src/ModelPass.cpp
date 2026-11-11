@@ -198,7 +198,9 @@ struct PointInputs {
           factorValue[f] = basePoint && termPoint ? Segment::TermFrameFactor(data.State(segment), r.term, pointIndex) : 1.0;
           break;
         case FactorRef::Kind::RatioFrame: factorValue[f] = segment.RatioTermFrameFactor(r.term, termPoint, cnuc); break;
-        case FactorRef::Kind::SFactor: factorValue[f] = azure2::SFactorConversionValue(termPoint, cnuc); break;
+        case FactorRef::Kind::SFactor:
+          factorValue[f] = azure2::SFactorConversionValue(termPoint, cnuc, r.shape_perMeV);
+          break;
       }
       factorArray[f] = {&factorValue[f], 1};
     }

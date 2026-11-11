@@ -128,6 +128,8 @@ int main() {
        {{"dataset", DS("15N(p,a)12C", "dsigma_domega", "b/sr", MA), false, "", true},
         {"dataset", DS("12C(p,p)12C / 12C(p,p)12C @ 90 deg cm", "dsigma_domega", "1", MA), true, "", true}}},
       {"sfactor", {{"dataset", DS("12C(p,g)13N", "sfactor", "keV*b", "E_cm[keV] value error")}}},
+      {"modified_sfactor",
+       {{"dataset", DS("12C(p,g)13N", "modified_sfactor", "MeV*b", "E_cm[keV] value error", {{"shape", "0.46 1/MeV"}})}}},
       {"ratio_to_rutherford", {{"dataset", DS("12C(a,a)12C", "ratio_to_rutherford", "1", MA), false, "", true}}},
       {"ratio_to_mott", {{"dataset", DS("4He(a,a)4He", "ratio_to_mott", "1", MA), false, "", true}}},
       {"legendre", {}},
@@ -172,7 +174,7 @@ int main() {
       {"target", "t1"}, {"beam", "b1"}, {"detector", "d1"}, {"J", "1/2"}, {"l", "0"}, {"s", "1/2"},
       {"expansion", "absolute"}, {"multipole", "E1"}, {"secondary_gamma", "L 1 Ic 1 delta 0"}, {"charge_state", "1"},
       {"efficiency", "0.1 fixed"}, {"thm", "global"}, {"level", "1"}, {"reaction", "15N(p,a)12C"}, {"frame", "E_x"},
-      {"pair", "p+15N"}, {"imag", "1 fm"}, {"imag_error", "1 fm"}, {"orders", "0 2"}};
+      {"pair", "p+15N"}, {"imag", "1 fm"}, {"imag_error", "1 fm"}, {"orders", "0 2"}, {"shape", "0.46 1/MeV"}};
 
   for (const Quantity &q : Quantities()) {
     const auto it = variants.find(q.name);

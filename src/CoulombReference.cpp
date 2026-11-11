@@ -46,9 +46,9 @@ double CoulombReferenceValue(const WorkingCopy &data, Unit *point, experiment::L
   return folded;
 }
 
-double SFactorConversionValue(const Unit *point, CNuc *compound) {
+double SFactorConversionValue(const Unit *point, CNuc *compound, double shape_perMeV) {
   PPair *pair = compound->GetPair(compound->GetPairNumFromKey(point->GetEntranceKey()));
-  return physics::sfactor_conversion(Kinematics::Channel(pair).Physics(), point->GetCMEnergy());
+  return physics::modified_sfactor_conversion(Kinematics::Channel(pair).Physics(), point->GetCMEnergy(), shape_perMeV);
 }
 
 }  // namespace azure2

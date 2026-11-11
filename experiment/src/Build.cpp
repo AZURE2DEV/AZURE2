@@ -251,7 +251,8 @@ bool ReadPhaseShift(Context &c, const ValidatedRecord &r, ReactionSpec &spec) {
 }
 
 // The S factor S = E sigma exp(2 pi eta) of the angle-integrated cross section (data_kinds.md section 4.1): a factor
-// on the model at the point's c.m. energy, defined for a charged entrance pair.
+// on the model at the point's c.m. energy, defined for a charged entrance pair; the modified S factor multiplies it by
+// exp(g E), g the record's 'shape' (the validator required it and checked its unit).
 bool SFactorOf(Context &c, const ValidatedRecord &r, ReactionSpec &spec) {
   const PairInfo *p = c.Pair(spec.entranceKey);
   if (p && (p->kind != 0 || p->lightZ * p->heavyZ == 0)) {
@@ -267,6 +268,7 @@ bool SFactorOf(Context &c, const ValidatedRecord &r, ReactionSpec &spec) {
     return false;
   }
   spec.scale.sFactor = true;
+  if (const Value *g = r.Get("shape")) spec.scale.sFactorShape_perMeV = ToBase(g->number.value, g->unit);
   return true;
 }
 
@@ -297,13 +299,13 @@ bool ReadObservable(Context &c, const ValidatedRecord &r, const std::string &ang
   const bool data = r.kind == "dataset";
   using O = Observable;
   if (q == "sigma" || q == "sigma_nuclear" || q == "sigma_total" || q == "beta_delayed_spectrum" || q == "transmission" ||
-      q == "neutron_yield" || q == "sfactor" || (q == "yield" && angleFrame.empty())) {
+      q == "neutron_yield" || q == "sfactor" || q == "modified_sfactor" || (q == "yield" && angleFrame.empty())) {
     const std::string multipole = Word(r, "multipole");
     spec.observable = multipole == "E1" ? O::CrossSectionE1 : multipole == "E2" ? O::CrossSectionE2 : O::CrossSection;
     if (spec.exitKey == -1 && spec.combination == ReactionSpec::Combination::None) spec.observable = O::TotalCapture;
     spec.total = q == "sigma_total";
     if (!PairsDecideElastic(c, r, spec)) return false;
-    if (q == "sfactor") return SFactorOf(c, r, spec);
+    if (q == "sfactor" || q == "modified_sfactor") return SFactorOf(c, r, spec);
     if (q == "beta_delayed_spectrum") {
       const PairInfo *p = c.Pair(spec.entranceKey);
       if (p && p->kind != 20) {

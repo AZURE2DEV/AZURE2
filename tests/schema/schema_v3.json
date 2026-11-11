@@ -140,9 +140,9 @@
     "quantity": {
      "title": "Quantity",
      "type": "enum",
-     "grammar": "sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum",
+     "grammar": "sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum",
      "required": true,
-     "values": ["sigma", "sigma_nuclear", "sigma_total", "dsigma_domega", "sfactor", "ratio_to_rutherford", "ratio_to_mott", "legendre", "analyzing_power", "phase_shift", "yield", "transmission", "neutron_yield", "beta_delayed_spectrum"],
+     "values": ["sigma", "sigma_nuclear", "sigma_total", "dsigma_domega", "sfactor", "modified_sfactor", "ratio_to_rutherford", "ratio_to_mott", "legendre", "analyzing_power", "phase_shift", "yield", "transmission", "neutron_yield", "beta_delayed_spectrum"],
      "aliases": {
       "cross_section": "sigma",
       "dsdo": "dsigma_domega",
@@ -431,6 +431,15 @@
      "values": ["E1", "E2"],
      "doc": "the photon multipole the cross section is filtered to (M8)"
     },
+    "shape": {
+     "title": "Shape constant g",
+     "type": "number_with_unit",
+     "grammar": "<number> <inverse_energy unit>",
+     "by_quantity": true,
+     "dimension": "inverse_energy",
+     "units": ["1/MeV", "1/keV"],
+     "doc": "g of the modified S factor E sigma exp(2 pi eta + g E), e.g. 0.46 1/MeV for 12C + 12C"
+    },
     "secondary_gamma": {
      "title": "Secondary gamma",
      "type": "structured",
@@ -675,9 +684,9 @@
     "quantity": {
      "title": "Quantity",
      "type": "enum",
-     "grammar": "sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum",
+     "grammar": "sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum",
      "required": true,
-     "values": ["sigma", "sigma_nuclear", "sigma_total", "dsigma_domega", "sfactor", "ratio_to_rutherford", "ratio_to_mott", "legendre", "analyzing_power", "phase_shift", "yield", "transmission", "neutron_yield", "beta_delayed_spectrum"],
+     "values": ["sigma", "sigma_nuclear", "sigma_total", "dsigma_domega", "sfactor", "modified_sfactor", "ratio_to_rutherford", "ratio_to_mott", "legendre", "analyzing_power", "phase_shift", "yield", "transmission", "neutron_yield", "beta_delayed_spectrum"],
      "aliases": {
       "cross_section": "sigma",
       "dsdo": "dsigma_domega",
@@ -908,6 +917,15 @@
      "by_quantity": true,
      "values": ["E1", "E2"],
      "doc": "the photon multipole the cross section is filtered to (M8)"
+    },
+    "shape": {
+     "title": "Shape constant g",
+     "type": "number_with_unit",
+     "grammar": "<number> <inverse_energy unit>",
+     "by_quantity": true,
+     "dimension": "inverse_energy",
+     "units": ["1/MeV", "1/keV"],
+     "doc": "g of the modified S factor E sigma exp(2 pi eta + g E), e.g. 0.46 1/MeV for 12C + 12C"
     },
     "secondary_gamma": {
      "title": "Secondary gamma",
@@ -2309,6 +2327,56 @@
     }
    ]
   },
+  "modified_sfactor": {
+   "title": "Modified S factor of heavy-ion fusion",
+   "doc": "S*(E) = E sigma(E) exp(2 pi eta + g E), g the field 'shape' (Patterson et al. 1969; data_kinds.md section 4.1).",
+   "record_kinds": ["dataset", "extrapolation"],
+   "engine_unit": "MeV*b",
+   "units": {
+    "MeV*b": 1,
+    "keV*b": 0.001,
+    "eV*b": 1e-06
+   },
+   "columns": {
+    "energy": ["E_cm", "E_lab"],
+    "angle": [],
+    "angle_axis": "none",
+    "order": false,
+    "windows": false
+   },
+   "reaction": {
+    "rule": "charged entrance",
+    "flags": ["charged_entrance"]
+   },
+   "fields": {
+    "shape": {
+     "required": true
+    },
+    "multipole": {
+     "required": false,
+     "when": {
+      "if": "gamma_exit",
+      "text": "the reaction has a photon exit"
+     }
+    }
+   },
+   "tree": "Scale_SF*(E; g) o Sigma(r)",
+   "exfor": [],
+   "refusals": [
+    {
+     "code": "E_REACTION_NOT_ALLOWED",
+     "rule": "neutral",
+     "message": "the modified S factor is defined for charged particles (Gamow factor)",
+     "checked_by": "validate"
+    },
+    {
+     "code": "E_FIELD_REQUIRED",
+     "rule": "no shape",
+     "message": "the constant g of exp(g E) is given, never guessed",
+     "checked_by": "validate"
+    }
+   ]
+  },
   "ratio_to_rutherford": {
    "title": "Ratio to Rutherford",
    "doc": "dsigma/dOmega(c.m.) divided by the Rutherford cross section at the same c.m. angle.",
@@ -3256,6 +3324,16 @@
    "factor": 1e-06,
    "engine_unit": "MeV*b"
   },
+  "1/MeV": {
+   "dimension": "inverse_energy",
+   "factor": 1,
+   "engine_unit": "1/MeV"
+  },
+  "1/keV": {
+   "dimension": "inverse_energy",
+   "factor": 1e+03,
+   "engine_unit": "1/MeV"
+  },
   "1": {
    "dimension": "dimensionless",
    "factor": 1,
@@ -3399,6 +3477,10 @@
   "sfactor": {
    "engine_unit": "MeV*b",
    "doc": "astrophysical S factors"
+  },
+  "inverse_energy": {
+   "engine_unit": "1/MeV",
+   "doc": "the constant g of a modified S factor exp(g E)"
   },
   "dimensionless": {
    "engine_unit": "1",

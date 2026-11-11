@@ -370,6 +370,14 @@ void TestScaled() {
   }
   check("value = S sigma, bit for bit", ok);
   check("backward: g S", okBack);
+  s.reaction.scale.sFactorShape_perMeV = 0.46;
+  const Prediction pm = BuildPrediction(s);
+  check("modified S factor: text S*(0;g=0.46/MeV)", PredictionText(pm) == "S*(0;g=0.46/MeV)*sigma(1->2)", PredictionText(pm));
+  check("modified S factor: the factor of term 0 carries g", pm.factors.size() == 1 &&
+                                                                pm.factors[0].kind == FactorRef::Kind::SFactor &&
+                                                                pm.factors[0].shape_perMeV == 0.46);
+  check("S factor: g = 0 in its factor", p.factors[0].shape_perMeV == 0.0);
+  s.reaction.scale.sFactorShape_perMeV = 0.0;
   s.reaction.scale.sFactor = false;
   s.reaction.scale.factor = 3.1e12;
   check("a constant: c*sigma", PredictionText(BuildPrediction(s)) == "3100000000000*sigma(1->2)", PredictionText(BuildPrediction(s)));

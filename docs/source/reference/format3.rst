@@ -137,7 +137,7 @@ Data set, in ``<data>``.  Measured values of one quantity in one data file (sect
      - only when the reaction is one reaction (no sum, no ratio); optional
      - the <levels> pair key of the exit pair, only where the reaction label names two pairs
    * - ``quantity``
-     - ``sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
+     - ``sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
      - required
      - what the numbers are (section 7.2)
    * - ``unit``
@@ -216,6 +216,10 @@ Data set, in ``<data>``.  Measured values of one quantity in one data file (sect
      - ``E1|E2``
      - by quantity
      - the photon multipole the cross section is filtered to (M8)
+   * - ``shape``
+     - ``<number> <inverse_energy unit>``
+     - by quantity
+     - g of the modified S factor E sigma exp(2 pi eta + g E), e.g. 0.46 1/MeV for 12C + 12C
    * - ``secondary_gamma``
      - ``L <integer >= 1> Ic <J> delta <number>``
      - by quantity
@@ -325,7 +329,7 @@ Extrapolation, in ``<extrapolations>``.  Model values on a grid, without data (s
      - only when the reaction is one reaction (no sum, no ratio); optional
      - the <levels> pair key of the exit pair, only where the reaction label names two pairs
    * - ``quantity``
-     - ``sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
+     - ``sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
      - required
      - what is computed (section 7.2)
    * - ``unit``
@@ -388,6 +392,10 @@ Extrapolation, in ``<extrapolations>``.  Model values on a grid, without data (s
      - ``E1|E2``
      - by quantity
      - the photon multipole the cross section is filtered to (M8)
+   * - ``shape``
+     - ``<number> <inverse_energy unit>``
+     - by quantity
+     - g of the modified S factor E sigma exp(2 pi eta + g E), e.g. 0.46 1/MeV for 12C + 12C
    * - ``secondary_gamma``
      - ``L <integer >= 1> Ic <J> delta <number>``
      - by quantity
@@ -849,6 +857,36 @@ Astrophysical S factor (``dataset``, ``extrapolation``).  S(E) = E sigma(E) exp(
      - ``,SIG,,SFC``, ``PAR,SIG,,SFC``, ``EP/PAR,SIG,,SFC``
    * - refused (validate)
      - neutral: the S factor is defined for charged particles (Gamow factor) (``E_REACTION_NOT_ALLOWED``)
+
+modified_sfactor
+~~~~~~~~~~~~~~~~
+
+Modified S factor of heavy-ion fusion (``dataset``, ``extrapolation``).  S\*(E) = E sigma(E) exp(2 pi eta + g E), g the field 'shape' (Patterson et al. 1969; data_kinds.md section 4.1).
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - property
+     - value
+   * - engine unit
+     - ``MeV*b``
+   * - units
+     - ``MeV*b`` (1), ``keV*b`` (0.001), ``eV*b`` (1e-06)
+   * - energy column
+     - ``E_cm``, ``E_lab``
+   * - reaction
+     - charged entrance
+   * - ``shape``
+     - required
+   * - ``multipole``
+     - allowed when the reaction has a photon exit
+   * - tree
+     - ``Scale_SF*(E; g) o Sigma(r)``
+   * - refused (validate)
+     - neutral: the modified S factor is defined for charged particles (Gamow factor) (``E_REACTION_NOT_ALLOWED``)
+   * - refused (validate)
+     - no shape: the constant g of exp(g E) is given, never guessed (``E_FIELD_REQUIRED``)
 
 ratio_to_rutherford
 ~~~~~~~~~~~~~~~~~~~
@@ -1513,6 +1551,16 @@ A value written in a unit is multiplied by its factor to give the engine unit of
      - ``sfactor``
      - 1e-06
      - ``MeV*b``
+     -
+   * - ``1/MeV``
+     - ``inverse_energy``
+     - 1
+     - ``1/MeV``
+     -
+   * - ``1/keV``
+     - ``inverse_energy``
+     - 1000
+     - ``1/MeV``
      -
    * - ``1``
      - ``dimensionless``

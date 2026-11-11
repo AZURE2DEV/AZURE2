@@ -331,6 +331,8 @@ class Segment {
   /// The model value is an S factor, c E sigma exp(2 pi eta) with c the scale's constant (ReactionSpec::scale; 1 for a
   /// data set, 1 / (unit factor) for an extrapolation in another unit than MeV b).
   bool ModelIsSFactor() const { return reaction_.scale.sFactor; }
+  /// g (1/MeV) of a modified S factor exp(2 pi eta + g E); 0 for the S factor and every other quantity.
+  double ModelSFactorShape() const { return reaction_.scale.sFactorShape_perMeV; }
   double ModelScaleFactor() const { return reaction_.scale.factor; }
   /// Give the measurement its prediction (a new measurement that shares the rows: the points read them).
   void SetPrediction(std::shared_ptr<const azure2::experiment::Prediction> p);

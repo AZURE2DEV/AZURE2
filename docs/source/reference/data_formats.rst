@@ -732,8 +732,24 @@ against 125 for 12C(p,γ) at 0.05 -- 0.25 MeV, ``tests/units_scales``); with a
 narrow peak in the range both are governed by its floor (10\ :sup:`-3` of the
 largest value).  Refused: an uncharged entrance
 (``E_REACTION_NOT_ALLOWED``) and a THM data set (``E_NOT_BUILT``).  In the
-``AZUREOut`` files of such a data set the cross-section columns hold S and the
-S-factor columns S times :math:`E e^{2\pi\eta}`.
+``AZUREOut`` files of such a data set the cross-section columns hold
+:math:`\sigma = S/(E e^{2\pi\eta})` and the S-factor columns S.
+
+Modified S factor.  ``quantity modified_sfactor`` with the field ``shape <g>
+1/MeV`` (or ``1/keV``) compares the data with the modified S factor of
+heavy-ion fusion, :math:`S^*(E) = E\,\sigma(E)\,e^{2\pi\eta(E) + gE}`
+(Patterson, Winkler and Zaidins, ApJ 157 (1969) 367), in the units of
+``quantity sfactor``, with the same :math:`E` and :math:`\eta`; everything said
+above of the S factor holds for it (energy shifts, folds, adaptive grids).  The
+constant :math:`g` is given, never computed: 0.46 /MeV for
+:sup:`12`\ C + :sup:`12`\ C, in general
+:math:`0.122\sqrt{\mu R^3/(Z_1 Z_2)}` /MeV with :math:`\mu` in u and the
+radius :math:`R` in fm.  With ``shape 0 1/MeV`` the model is the S factor bit
+for bit.  Refused: no ``shape`` (``E_FIELD_REQUIRED``), a ``shape`` that is no
+inverse energy (``E_UNIT_NOT_ALLOWED``), an uncharged entrance
+(``E_REACTION_NOT_ALLOWED``), a THM data set (``E_NOT_BUILT``).  In the
+``AZUREOut`` files the cross-section columns hold :math:`\sigma` and the
+S-factor columns :math:`S^*` (``tests/modified_sfactor``).
 
 Yields.  ``quantity yield`` on a ``target`` of kind ``infinite`` compares the
 data with the thick-target yield the engine folds,

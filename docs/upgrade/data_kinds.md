@@ -325,6 +325,11 @@ factor of 5000 for ³He(α,γ) at 93 keV (`nds.py:66-71`). A partial cross secti
 `Scale`); the branching comes from ENSDF with its uncertainty as a nuisance. Apparatus: none for σ itself; target and
 resolution folds when the data are not deconvolved.
 
+The modified S factor of heavy-ion fusion (`quantity modified_sfactor`; Patterson, Winkler and Zaidins, ApJ 157
+(1969) 367), S*(E) = E σ(E) exp(2πη + gE), is the same `Scale` node with the factor E exp(2πη + gE): g (1/MeV, the
+record field `shape`) removes the slow fall of S where the barrier is thick (12C + 12C: g = 0.46 /MeV; in general
+g = 0.122 sqrt(μ R³ / (Z1 Z2)) /MeV, μ in u, R in fm). The user gives g; the engine does not choose R.
+
 ### 4.2 Differential cross sections and Jacobians
 
 dσ/dΩ_cm(E, θ) = |f_C(θ)δ_{αβ} + f_N(θ)|² summed over spin projections; the Coulomb amplitude f_C is not a finite

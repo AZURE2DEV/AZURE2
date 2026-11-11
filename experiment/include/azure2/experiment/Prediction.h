@@ -65,11 +65,12 @@ struct FactorRef {
   enum class Kind {
     TermFrame,   ///< J_0 / J_k of a SUM or transform term k: the term into the frame of term 0 (Segment::TermFrameFactor)
     RatioFrame,  ///< J_k of a RATIO term k, its own lab-to-c.m. factor (Segment::RatioTermFrameFactor)
-    SFactor,     ///< E exp(2 pi eta(E)) of term k's entrance pair at its point's c.m. energy E (MeV; S = this x sigma,
-                 ///< physics/AstrophysicalFactor.h)
+    SFactor,     ///< E exp(2 pi eta(E) + g E) of term k's entrance pair at its point's c.m. energy E (MeV; S = this x
+                 ///< sigma, physics/AstrophysicalFactor.h; g = shape_perMeV, 0 for the S factor)
   };
   Kind kind = Kind::TermFrame;
   int term = 0;
+  double shape_perMeV = 0.0;  ///< SFactor: g of the modified S factor (1/MeV)
 };
 
 /// What a parameter of the tree is.
@@ -127,7 +128,8 @@ Prediction BuildPrediction(const PredictionSetup &setup);
 /// The tree as one line of text (data_model.md section 3): leaves "sigma(1->2)", "dsdo_cm(1->2)", ...; "sum(a, b)",
 /// "c*J0/J1*a" (a SUM term: its factor and the frame factor J_0/J_1), "abundance(<sample>, <nucleus>)*a",
 /// "ratio(a, b)*J1/J0", "transmission(n=<n>, a)", "yield(n=<n>, a, b)"; the Coulomb leaves "rutherford(1->1)",
-/// "mott(1->1)"; a factor on the value "c*S(1)*a" (c omitted when 1, S(k) the S-factor conversion of term k).
+/// "mott(1->1)"; a factor on the value "c*S(1)*a" (c omitted when 1, S(k) the S-factor conversion of term k; "S*(k;
+/// g=<g>/MeV)" the modified S factor's).
 std::string PredictionText(const Prediction &prediction);
 
 }  // namespace experiment

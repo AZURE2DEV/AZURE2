@@ -297,6 +297,8 @@ std::vector<FieldDef> QuantityFields() {
           ByQ("expansion", "Legendre expansion", Words({"a_over_a0", "absolute", "rsl", "2l2", "4pi"}),
               "the normalisation of the Legendre coefficients (data_kinds.md section 5.2)"),
           ByQ("multipole", "Multipole", Words({"E1", "E2"}), "the photon multipole the cross section is filtered to (M8)"),
+          ByQ("shape", "Shape constant g", WithUnit("inverse_energy"),
+              "g of the modified S factor E sigma exp(2 pi eta + g E), e.g. 0.46 1/MeV for 12C + 12C"),
           ByQ("secondary_gamma", "Secondary gamma", Structured(f.secondaryGamma), "UPOS: L, Ic, delta"),
           ByQ("charge_state", "Charge state", IntAtLeast(1), "the beam's charge state q; per-charge units need it (F8)"),
           ByQ("efficiency", "Efficiency x branching", Nuis(""), "detection efficiency times branching of counted photons (F9)"),

@@ -170,7 +170,9 @@ void BuildScaled(const PredictionSetup &s, Prediction &p) {
   inner.reaction.scale = ValueScale();
   TreeKinds()[static_cast<std::size_t>(TreeKindOf(inner))].build(inner, p);
   const ValueScale &scale = s.reaction.scale;
-  p.tree.Scale(scale.factor, p.tree.Root(), scale.sFactor ? AddFactor(FactorRef::Kind::SFactor, 0, p) : -1);
+  const int factor = scale.sFactor ? AddFactor(FactorRef::Kind::SFactor, 0, p) : -1;
+  if (factor >= 0) p.factors[factor].shape_perMeV = scale.sFactorShape_perMeV;
+  p.tree.Scale(scale.factor, p.tree.Root(), factor);
 }
 
 void BuildTransmission(const PredictionSetup &s, Prediction &p) { BuildTransform(s, p, TransformSpec::Kind::Transmission); }
@@ -181,6 +183,8 @@ void BuildYield(const PredictionSetup &s, Prediction &p) { BuildTransform(s, p, 
 std::string FactorText(const Prediction &p, int f) {
   if (f < 0) return "";
   const FactorRef &r = p.factors[f];
+  if (r.kind == FactorRef::Kind::SFactor && r.shape_perMeV != 0.0)
+    return "S*(" + std::to_string(r.term) + ";g=" + Number(r.shape_perMeV) + "/MeV)";
   if (r.kind == FactorRef::Kind::SFactor) return "S(" + std::to_string(r.term) + ")";
   return r.kind == FactorRef::Kind::TermFrame ? "J0/J" + std::to_string(r.term) : "J" + std::to_string(r.term);
 }

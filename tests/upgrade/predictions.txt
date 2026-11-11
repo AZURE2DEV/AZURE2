@@ -357,6 +357,15 @@ data res_bare: sigma(1->2)
 == tests/mcmc_physical_norm/13N_fast.azr
 data: set-up failed
 exit 1
+== tests/modified_sfactor/models/fit_sigma.azr
+data pa: sigma(1->2)
+== tests/modified_sfactor/models/fit_sstar.azr
+data pa: S*(0;g=0.46/MeV)*sigma(1->2)
+== tests/modified_sfactor/models/pa_extrap.azr
+extrapolation sigma: sigma(1->2)
+extrapolation S: S(0)*sigma(1->2)
+extrapolation Sstar: S*(0;g=0.46/MeV)*sigma(1->2)
+extrapolation Sstar_g0: S(0)*sigma(1->2)
 == tests/natural_neon/natural_neon.azr
 data Vaughn_ntot: sum(abundance(natural, 1)*sigma(2->2), abundance(natural, 1)*J0/J1*sigma(2->1), abundance(natural, 1)*J0/J2*sigma(2->3), abundance(natural, 2)*J0/J3*sigma(4->4), abundance(natural, 2)*J0/J4*sigma(4->5), abundance(natural, 3)*J0/J5*sigma(6->6), abundance(natural, 3)*J0/J6*sigma(6->7))
 data Almeida1983_20Ne_ntot_lo: sum(abundance(natural, 1)*sigma(2->2), abundance(natural, 1)*J0/J1*sigma(2->1), abundance(natural, 1)*J0/J2*sigma(2->3), abundance(natural, 2)*J0/J3*sigma(4->4), abundance(natural, 2)*J0/J4*sigma(4->5), abundance(natural, 3)*J0/J5*sigma(6->6), abundance(natural, 3)*J0/J6*sigma(6->7))

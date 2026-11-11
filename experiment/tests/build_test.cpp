@@ -153,6 +153,20 @@ void UnitCases(const std::string &targets) {
             data(sf).reaction.observable == Observable::CrossSection);
   ExpectOne("E_REACTION_NOT_ALLOWED", BuildText(Data(Set(Set(Set(kDataset, "quantity", "    quantity sfactor"), "unit", "    unit keV*b"),
                                                          "reaction", "    reaction 16O(g,a)12C"))));
+  // the modified S factor: the S factor's factor with g from 'shape' in 1/MeV (1/keV x 1e3), refused without it
+  const std::string msf = Set(Set(kDataset, "quantity", "    quantity modified_sfactor"), "unit", "    unit MeV*b");
+  const BuiltProject ms = BuildText(Data(msf + "    shape 0.46 1/MeV\n"));
+  check("modified_sfactor, shape 0.46 1/MeV: the S-factor factor with g = 0.46 /MeV, values in MeV b",
+        ms.Ok() && data(ms).reaction.scale.sFactor && data(ms).reaction.scale.sFactorShape_perMeV == 0.46 &&
+            data(ms).reaction.scale.factor == 1.0 && data(ms).columns.value == 1.0 &&
+            data(ms).reaction.observable == Observable::CrossSection);
+  const BuiltProject mk = BuildText(Data(msf + "    shape 4.6e-4 1/keV\n"));
+  check("modified_sfactor, shape 4.6e-4 1/keV: g = 0.46 /MeV",
+        mk.Ok() && std::fabs(data(mk).reaction.scale.sFactorShape_perMeV - 0.46) < 1e-15);
+  check("sfactor: g = 0", sf.Ok() && data(sf).reaction.scale.sFactorShape_perMeV == 0.0);
+  ExpectOne("E_FIELD_REQUIRED", BuildText(Data(msf)));
+  ExpectOne("E_UNIT_NOT_ALLOWED", BuildText(Data(msf + "    shape 0.46 MeV\n")));
+  ExpectOne("E_REACTION_NOT_ALLOWED", BuildText(Data(Set(msf, "reaction", "    reaction 16O(g,a)12C") + "    shape 0.46 1/MeV\n")));
   // yields: per particle and per uC on an infinite target and on a layer; a fitted efficiency and no charge state refused
   {
     const std::string inf = targets.substr(0, targets.size() - std::string("</targets>\n").size()) +

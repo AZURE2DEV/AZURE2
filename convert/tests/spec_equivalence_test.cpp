@@ -174,6 +174,7 @@ void CompareReaction(const std::string &w, const ReactionSpec &a, const Reaction
   Eq(w + " Coulomb reference", (int)a.coulombReference, (int)b.coulombReference);
   Bits(w + " model factor", a.scale.factor, b.scale.factor);
   Eq(w + " S factor", a.scale.sFactor, b.scale.sFactor);
+  Eq(w + " S factor shape g", a.scale.sFactorShape_perMeV, b.scale.sFactorShape_perMeV);
 }
 
 // The first active member of each group of `label`.

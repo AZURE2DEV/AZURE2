@@ -200,6 +200,25 @@ Quantity SFactor() {
   return q;
 }
 
+Quantity ModifiedSFactor() {
+  Quantity q;
+  q.name = "modified_sfactor";
+  q.title = "Modified S factor of heavy-ion fusion";
+  q.doc = "S*(E) = E sigma(E) exp(2 pi eta + g E), g the field 'shape' (Patterson et al. 1969; data_kinds.md section 4.1).";
+  q.recordKinds = kDataKinds;
+  q.engineUnit = "MeV*b";
+  q.units = {AnyUnitOf("sfactor")};
+  q.energyRoles = {"E_cm", "E_lab"};
+  q.reaction = {R::kChargedEntrance, "charged entrance"};
+  q.fields = {Requires("shape"), Allows("multipole", kGammaExit)};
+  q.tree = "Scale_SF*(E; g) o Sigma(r)";
+  // no EXFOR code: S* is not an EXFOR quantity (its data are SIG, which the importer maps to sigma)
+  q.refusals = {RefusedAtValidation("E_REACTION_NOT_ALLOWED", "neutral",
+                                    "the modified S factor is defined for charged particles (Gamow factor)"),
+                RefusedAtValidation("E_FIELD_REQUIRED", "no shape", "the constant g of exp(g E) is given, never guessed")};
+  return q;
+}
+
 Quantity RatioToRutherford() {
   Quantity q;
   q.name = "ratio_to_rutherford";
@@ -530,7 +549,7 @@ const std::vector<NormRule> &GeneralNormRules() {
 const std::vector<Quantity> &Quantities() {
   static const std::vector<Quantity> rows = {
       // data sets and extrapolations
-      Sigma(), SigmaNuclear(), SigmaTotal(), DsigmaDomega(), SFactor(), RatioToRutherford(), RatioToMott(), Legendre(),
+      Sigma(), SigmaNuclear(), SigmaTotal(), DsigmaDomega(), SFactor(), ModifiedSFactor(), RatioToRutherford(), RatioToMott(), Legendre(),
       AnalyzingPower(), PhaseShift(), Yield(), Transmission(), NeutronYield(), BetaDelayedSpectrum(),
       // model data
       ResonanceStrength(), ResonanceEnergy(), TotalWidth(), PartialWidth(), BranchingRatio(), Anc(),
