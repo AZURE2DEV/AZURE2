@@ -153,6 +153,11 @@ refused at once with the engine's message. An edit changes only the lines it tou
     warning); an extrapolation run does not need the data files.
   - data given in the lab frame are compared with the model in the lab frame (the model divided by
     dΩ_lab/dΩ_c.m., the datum and its error as read), as the PI decided: χ² and fits are the same to rounding.
+  - two resolution kernels on one data set (two of: a target integration, a beam spread without a target, a beam
+    profile, a UDR) are refused; before, one of them was not applied, without a message (a target integration
+    with a beam spread is one kernel and works as before);
+  - a THM data set that names an experiment the `<thm>` section does not define is refused at reading
+    (`E_THM_EXPERIMENT_UNKNOWN`).
 
 ## Speed
 
@@ -213,8 +218,15 @@ kernel"): a rectangular energy resolution of full width w (`energy_resolution re
 detector). It took one new kernel file (69 lines), one line in the table, one in the CMake list, tests (cases in
 `experiment/tests/kernels_test.cpp`, a fixture line, a test project `tests/rectangular_resolution/`), the regenerated
 schema and three documentation rows -- and no engine file. The yield of a finite layer, added a week earlier before
-this table existed, had touched 11 engine files. One thing is not yet a table row: a kernel parameter that a fit
-varies (w here is fixed) still needs its own kind of fit parameter.
+this table existed, had touched 11 engine files. **The limits of that count** (director's review, 2026-11-11):
+(1) it holds for a resolution kernel that stands alone and has scalar parameters; a kernel that needs a new datum of
+the point (as Doppler needs the temperature) also edits the two parameter blocks of `Kernels.h` and the engine
+function that fills them (`TargetEffect::KernelParametersFor`); (2) kernels do not compose yet: the new kernel on a
+data set that also has a target, a beam spread, a beam profile or a UDR is refused, so it cannot fold a
+target-integrated yield until the shared grid (Phase 5, branch 7) chains kernels; (3) its width is declared fittable
+in its row but cannot be fitted: a parameter a fit varies still needs its own kind of fit parameter, and a new kind
+is not cheap -- the stopping scale of branch 5 edited 20 existing files. One generic kind that reads the kernel
+table's rows is the planned remedy.
 
 Then, to close Phase 4: the old reading path deleted (with `pyazr/azrfile.py`, 3,756 lines of
 a second grammar in Python); the rest of `CNuc` (the parameter vector and the set-up from the level rows).

@@ -360,8 +360,12 @@ parameters; the engine applies whatever the table holds.
 4. Docs: its row in `energy_grid.md` section 3.3, its form in `reference/data_formats.rst` (generated part) and a line in
    `developer/edata_and_target_effects.rst`.
 The engine is not edited: the fold (`src/PointFold.cpp`), the grid's extent (`EffectSupport`, `src/TargetSetup.cpp`) and
-the gradient's weights (`FoldWeights`) read the table. A parameter a fit varies needs its parameter kind (recipe "A new
-kind of fit parameter"): kernel parameters are not yet fit parameters.
+the gradient's weights (`FoldWeights`) read the table. Limits (2026-11): a table kernel cannot be combined with a
+target, a beam spread, a beam profile or a UDR on one data set (refused in `TargetEffect::SelectKernels`; kernels are
+chained by the grid branch); a kernel that needs a new datum of the point or a non-scalar parameter adds it to
+`KernelPoint`/`KernelParameters` and to `TargetEffect::KernelParametersFor`; a parameter a fit varies needs its
+parameter kind (recipe "A new kind of fit parameter"): kernel parameters are not yet fit parameters, whatever the
+row's `fittable` says.
 
 **A new material or a measured stopping table** (`stopping/`, `docs/upgrade/stopping.md`). A material is data, not
 code: `MaterialFromFormula("Ta2O5")` or `MaterialFromFractions(...)`, then set its fields: `phase` (SRIM's default is
