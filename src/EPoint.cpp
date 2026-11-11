@@ -594,7 +594,8 @@ complex EPoint::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, CNuc *th
     if (memo.valid && memo.energy == currentEnergy) return memo.amplitude;
 
     PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
-    int ir = theCNuc->GetPairNumFromKey(this->GetExitKey());
+    // decay number of the exit pair in the entrance pair's list (not the pair number)
+    int ir = entrancePair->IsDecay(theCNuc->GetPairNumFromKey(this->GetExitKey()));
     KGroup *theKGroup = entrancePair->GetDecay(ir)->GetKGroup(kGroupNum);
     ECMGroup *theECMGroup = theKGroup->GetECMGroup(ecMGroupNum);
     int j = theECMGroup->GetJGroupNum();
@@ -1788,9 +1789,12 @@ void EPoint::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
         if (theCNuc->GetJGroup(j)->GetLevel(la)->IsECLevel()) {
           ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
           int ir = theCNuc->GetPairNumFromKey(this->GetExitKey());
-          if (ecLevel->GetECPairNum() == ir) {
-            for (int k = 1; k <= entrancePair->GetDecay(ir)->NumKGroups(); k++) {
-              KGroup *theKGroup = entrancePair->GetDecay(ir)->GetKGroup(k);
+          // The decay list is indexed by decay number, which equals the pair number only while
+          // every pair of the project is a decay of this entrance pair (one compound nucleus).
+          int irDecay = entrancePair->IsDecay(ir);
+          if (ecLevel->GetECPairNum() == ir && irDecay) {
+            for (int k = 1; k <= entrancePair->GetDecay(irDecay)->NumKGroups(); k++) {
+              KGroup *theKGroup = entrancePair->GetDecay(irDecay)->GetKGroup(k);
               for (int ecm = 1; ecm <= theKGroup->NumECMGroups(); ecm++) {
                 ECMGroup *theECMGroup = theKGroup->GetECMGroup(ecm);
                 complex ecAmplitude = ECPathwayAmplitude(theCNuc, configure, entrancePair, j, ecLevel->GetE(),
