@@ -2,12 +2,14 @@
 # Every way of fitting on every kind of free-parameter set (2026-11-11).
 #
 # The four minimizer routes (MIGRAD with the numerical gradient, --use-gradient, --use-lm, --use-gsl-lm), each with
-# --covariance-band, on four projects that differ in what is free:
+# --covariance-band, on five projects that differ in what is free:
 #
 #   none     tests/thick_target_resonance      no free parameter at all
 #   levels   tests/upgrade/T1 (T1_start.azr)   level parameters and data-set norms
 #   mixed    tests/layer_yield/models/fit.azr  level parameters and a target's areal density
 #   target   tests/stopping_yield/models/fit.azr   two areal densities and a stopping scale, no level parameter
+#   apparatus  tests/rectangular_resolution/models/fit.azr   the width of a detector's resolution alone (the generic
+#              kind `apparatus`: one parameter, shared by two data sets, no level parameter, no target)
 #
 # Why it exists.  The head of 2026-11-11 19:25 ended with a segmentation fault in "none" with --use-lm (the row pass
 # sized a buffer by a column count of 0) and passed the whole verification, because no test fitted a project without
@@ -23,7 +25,7 @@
 # --use-gsl-lm runs of "target" take half a minute each: only --use-gradient and --use-lm are run there.)
 #
 # Fails on the build of 19:25 (b8c970b0) in all four routes of "none", and on the build after the first fix
-# (6cc1e76e) in "none" with MIGRAD (plain and --use-gradient).  About 95 s at 2 threads.
+# (6cc1e76e) in "none" with MIGRAD (plain and --use-gradient).  About 100 s at 2 threads.
 #
 # Usage:
 #   ./tests/fit_modes/check.sh path/to/AZURE2
@@ -105,6 +107,9 @@ fitted mixed "$HERE/../layer_yield/models" fit.azr yes $MODES
 
 echo "target: two areal densities and a stopping scale (tests/stopping_yield/models/fit.azr)"
 fitted target "$HERE/../stopping_yield/models" fit.azr no --use-gradient --use-lm
+
+echo "apparatus: the width of a detector's resolution alone (tests/rectangular_resolution/models/fit.azr)"
+fitted apparatus "$HERE/../rectangular_resolution/models" fit.azr no $MODES
 
 echo
 if [ "$failures" = 0 ]; then echo "fit_modes: all checks passed"; else echo "fit_modes: $failures check(s) FAILED"; fi
