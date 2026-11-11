@@ -104,6 +104,18 @@ flat working copy with the previous head flags exactly `sum_data`, `sum_free` (r
 - Memory of a fit: T2 at 1 thread 328 MB (was 355), `natural_neon` 1.50 GB (was 1.55); one copy of the working copy
   15 MB for T2 (was 18.6).
 
+**Checks run after the merge** (head c285a312, build `work/b-trial16`; `work/director/extra_trial16.out`):
+- Calculations at 1 against 8 threads: 12 of 12 identical.
+- T2 benchmark against the head after Phase 3 (28a33359), three alternated repetitions, median (`work/bench-p4w8.tsv`):
+  calculation 1.18 s against 1.16 s at 1 thread, 0.39 s against 0.41 s at 6; fit of 200 calls 70.9 s against 72.9 s
+  at 1 thread, 38.7 s against 38.5 s at 6; chi-squared 691.608 in every run. Peak memory: calculation 57 MB against
+  63 MB; fit at 1 thread 240 MB against 276 MB; fit at 6 threads 570 MB against 505 MB (13 % more: cause not looked
+  for; to be measured again after milestone 3, where the copies share the data set).
+- `ctest -L slow`: 7 of 10 pass. `pyazr_inactive_lines`, `pyazr_shared_state` and `pyazr_rmatrix_pole` **fail on
+  this head**: they edit or load project files that the first tree branch converted to format 3 (the agent and the
+  director ran `-LE slow` only). Given to the agent that converts the rest of the tree; `ctest -L slow` is now
+  part of the director's verification (`work/director/full_verify.sh`).
+
 **Running now** (Opus agents; briefs in `/data0/skowrons/AZURE2-upgrade/work/briefs/`):
 - Milestone 3 of the data structure (`X3_dataset_workingcopy.md`; `feature/upgrade-4-data-structure-3`): an
   immutable `DataSet` and a small `WorkingCopy` apart, the unit slimmed, the names `EData`, `ESegment`, `EPoint` and
