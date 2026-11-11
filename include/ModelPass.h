@@ -8,9 +8,9 @@
 
 class CNuc;
 class Config;
-class EData;
-class EPoint;
-class ESegment;
+class WorkingCopy;
+class Unit;
+class Segment;
 
 /*!
  * The model pass (docs/upgrade/data_model.md section 2.4, step S4): after the point pass has filled the leaf values
@@ -27,7 +27,7 @@ class ESegment;
 namespace azure2 {
 
 /// Whether the leaf values the model reads are in the buffer already (the parallel point pass,
-/// EData::CalculatePointsInParallel, ran for these parameters), or each unmapped point is calculated where the model
+/// WorkingCopy::CalculatePointsInParallel, ran for these parameters), or each unmapped point is calculated where the model
 /// needs it (inside an enclosing parallel region, without point mapping, or serially in data order).
 enum class LeafValues { Ready, Calculate };
 
@@ -35,13 +35,13 @@ enum class LeafValues { Ready, Calculate };
 /// angular-distribution coefficients of such a point, and the per-nucleus terms of a sample segment in the base
 /// point's leaf record) and returned.  A point whose calculation throws, or a RATIO whose denominator is 0, is NaN.
 /// `data` is the data set that holds the segment (its plan, its target effects); below too.
-double EvaluateModelPoint(EData &data, const ESegment &segment, int pointIndex, CNuc *compound, const Config &config,
+double EvaluateModelPoint(WorkingCopy &data, const Segment &segment, int pointIndex, CNuc *compound, const Config &config,
                           Results &results, LeafValues leaves);
 /// Every point of one segment, in order.
-void EvaluateModelSegment(EData &data, const ESegment &segment, CNuc *compound, const Config &config, Results &results,
+void EvaluateModelSegment(WorkingCopy &data, const Segment &segment, CNuc *compound, const Config &config, Results &results,
                           LeafValues leaves);
 /// Every point of every segment of the data set, segment by segment, point by point.
-void EvaluateModel(EData &data, CNuc *compound, const Config &config, Results &results, LeafValues leaves);
+void EvaluateModel(WorkingCopy &data, CNuc *compound, const Config &config, Results &results, LeafValues leaves);
 
 /// The cotangents of one point's model value m (step S11): g dm/d(leaf) for every leaf of the segment's tree that the
 /// R-matrix computes (a Coulomb reference leaf, which no level parameter moves, is left out), at the
@@ -51,7 +51,7 @@ void EvaluateModel(EData &data, CNuc *compound, const Config &config, Results &r
 /// the leaves' own adjoint (the R-matrix part) is the caller's.
 struct ModelCotangents {
   struct Leaf {
-    EPoint *point = nullptr;  ///< the term's point
+    Unit *point = nullptr;  ///< the term's point
     int xsComponent = 0;      ///< which value it reads: 0 the observable, 1 / 2 the E1 / E2 part
     double cotangent = 0.0;   ///< at the point (no sub-point stage)
     std::vector<double> sub;  ///< at its sub-points 1..n (subPoints)
@@ -65,7 +65,7 @@ struct ModelCotangents {
 /// The cotangents of point `pointIndex` of a data or test segment for the cotangent g of its model value, from the
 /// leaf values in `results` (the point pass, or the caller, calculated them).  False where the composition has no
 /// exact adjoint (a missing term point, a kernel that is not linear): the caller falls back to finite differences.
-bool ModelPointBackward(EData &data, const ESegment &segment, int pointIndex, CNuc *compound, const Config &config,
+bool ModelPointBackward(WorkingCopy &data, const Segment &segment, int pointIndex, CNuc *compound, const Config &config,
                         const Results &results, double g, ModelCotangents &out);
 
 /// The residual of one datum: f - y n and dy n, as one expression for every path (the objective, the per-segment
@@ -80,7 +80,7 @@ struct Residual {
 };
 inline Residual DataResidual(double model, double y, double dy, double norm) { return {model - y * norm, dy * norm}; }
 /// The residual of row i (0-based) of a segment: its model value in `results` against its c.m. datum, with the norm n.
-Residual PointResidual(const EData &data, const ESegment &segment, int i, const Results &results, double norm);
+Residual PointResidual(const WorkingCopy &data, const Segment &segment, int i, const Results &results, double norm);
 
 }  // namespace azure2
 

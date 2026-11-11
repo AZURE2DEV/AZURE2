@@ -185,7 +185,7 @@ int Config::ReadThmBlock() {
           break;
         case ThmOptionLine::WEIGHT: {
           // Which segments exist, and whether they are THM, is checked once
-          // the data are read (EData::Fill / MakePoints).
+          // the data are read (WorkingCopy::Fill / MakePoints).
           std::shared_ptr<ThmWeightTable> table = std::make_shared<ThmWeightTable>();
           table->name = o.file;
           table->path = thmRelativePath(o.file);

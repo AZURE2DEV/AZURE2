@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """chiSquared.out written through pyazr carries the penalty totals (audit 2026-10-25, item 30; 2026-10-27).
 
-`EData::WriteOutputFiles` prints the Park, abundance and scattering-length totals from fields on the EData object.
+`WorkingCopy::WriteOutputFiles` prints the Park, abundance and scattering-length totals from fields on the WorkingCopy object.
 The CLI's chi-squared path stores them there; the API's `CalculateChi2RWA` never did (pyazr adds those terms on the
 Python side), so a `write_output_files()` from a session wrote 0 for all three -- "Total-Scattering-Length-Chi-Squared"
 was missing from the file -- or, after a session had been through the CLI path, a stale value.  `AZUREAPI::WriteOutputFiles`

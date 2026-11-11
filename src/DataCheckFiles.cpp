@@ -26,7 +26,7 @@ std::vector<std::pair<int, int>> PlainPointRows(const DataSet &data) {
 }
 }  // namespace
 
-void EData::PrintData(const Config &configure) {
+void WorkingCopy::PrintData(const Config &configure) {
   std::streambuf *sbuffer;
   std::filebuf fbuffer;
   if (configure.fileCheckMask & Config::CHECK_DATA) {
@@ -52,7 +52,7 @@ void EData::PrintData(const Config &configure) {
         << std::setw(11) << "Max Angle"
         << std::setw(25) << "Data File"
         << std::endl;
-    for (ESegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
+    for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
       out << std::setw(11) << segment - Data().GetSegments().begin() + 1
           << std::setw(17) << segment->GetSegmentKey()
           << std::setw(17) << segment->GetEntranceKey()
@@ -82,15 +82,15 @@ void EData::PrintData(const Config &configure) {
         << std::endl;
     for (const std::pair<int, int> &row : PlainPointRows(Data())) {
       const int s = row.first, p = row.second;
-      const ESegment &seg = Data().GetSegments()[s];
-      EPoint *pt = seg.GetPoint(*this, p + 1);
+      const Segment &seg = Data().GetSegments()[s];
+      Unit *pt = seg.GetPoint(*this, p + 1);
       out << std::setw(11) << s + 1
           << std::setw(14) << p + 1
           << std::setw(15) << pt->GetLabEnergy()
           << std::setw(15) << pt->GetCMEnergy()
           << std::setw(15) << pt->GetCMAngle()
-          << std::setw(20) << ESegment::CMValue(State(seg), p)
-          << std::setw(22) << ESegment::CMError(State(seg), p);
+          << std::setw(20) << Segment::CMValue(State(seg), p)
+          << std::setw(22) << Segment::CMError(State(seg), p);
       if (pt->IsMapped()) {
         EnergyMap map = pt->GetMap();
         char tempMap[25];
@@ -117,10 +117,10 @@ void EData::PrintData(const Config &configure) {
 }
 
 /*!
- * Prints the Legendre polynomials for each point in the EData object.
+ * Prints the Legendre polynomials for each point in the WorkingCopy object.
  */
 
-void EData::PrintLegendreP(const Config &configure) {
+void WorkingCopy::PrintLegendreP(const Config &configure) {
   std::streambuf *sbuffer;
   std::filebuf fbuffer;
   if (configure.fileCheckMask & Config::CHECK_LEGENDRE) {
@@ -144,8 +144,8 @@ void EData::PrintLegendreP(const Config &configure) {
         << std::setw(15) << "Leg. Poly." << std::endl;
     for (const std::pair<int, int> &row : PlainPointRows(Data())) {
       const int s = row.first, p = row.second;
-      const ESegment &seg = Data().GetSegments()[s];
-      EPoint *pt = seg.GetPoint(*this, p + 1);
+      const Segment &seg = Data().GetSegments()[s];
+      Unit *pt = seg.GetPoint(*this, p + 1);
       for (int lOrder = 0; lOrder <= pt->GetMaxLOrder(); lOrder++) {
         out << std::setw(10) << s + 1
             << std::setw(10) << p + 1
@@ -162,10 +162,10 @@ void EData::PrintLegendreP(const Config &configure) {
 }
 
 /*!
- * Prints the values calculated by EPoint::CalcEDependentValues for each point in the entire EData object.
+ * Prints the values calculated by Unit::CalcEDependentValues for each point in the entire WorkingCopy object.
  */
 
-void EData::PrintEDependentValues(const Config &configure, CNuc *theCNuc) {
+void WorkingCopy::PrintEDependentValues(const Config &configure, CNuc *theCNuc) {
   std::streambuf *sbuffer;
   std::filebuf fbuffer;
   if (configure.fileCheckMask & Config::CHECK_ENERGY_DEP) {
@@ -192,8 +192,8 @@ void EData::PrintEDependentValues(const Config &configure, CNuc *theCNuc) {
         << std::setw(25) << "expHSP" << std::endl;
     for (const std::pair<int, int> &row : PlainPointRows(Data())) {
       const int s = row.first, p = row.second;
-      const ESegment &seg = Data().GetSegments()[s];
-      EPoint *pt = seg.GetPoint(*this, p + 1);
+      const Segment &seg = Data().GetSegments()[s];
+      Unit *pt = seg.GetPoint(*this, p + 1);
       PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(seg.GetEntranceKey()));
       double inEnergy = pt->GetCMEnergy() + entrancePair->GetSepE();
       for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
@@ -226,10 +226,10 @@ void EData::PrintEDependentValues(const Config &configure, CNuc *theCNuc) {
 }
 
 /*!
- * Prints the values calculated by EPoint::CalcCoulombAmplitude for each point in the entire EData object.
+ * Prints the values calculated by Unit::CalcCoulombAmplitude for each point in the entire WorkingCopy object.
  */
 
-void EData::PrintCoulombAmplitude(const Config &configure, CNuc *theCNuc) {
+void WorkingCopy::PrintCoulombAmplitude(const Config &configure, CNuc *theCNuc) {
   std::streambuf *sbuffer;
   std::filebuf fbuffer;
   if (configure.fileCheckMask & Config::CHECK_COUL_AMPLITUDES) {
@@ -252,9 +252,9 @@ void EData::PrintCoulombAmplitude(const Config &configure, CNuc *theCNuc) {
         << std::setw(15) << "angle"
         << std::setw(25) << "coulomb amplitude"
         << std::endl;
-    for (ESegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
+    for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
       if (segment->GetEntranceKey() == segment->GetExitKey()) {
-        for (EPointIterator point = segment->GetPoints(*this).begin(); point < segment->GetPoints(*this).end(); point++) {
+        for (UnitIterator point = segment->GetPoints(*this).begin(); point < segment->GetPoints(*this).end(); point++) {
           out << std::setw(10) << segment - Data().GetSegments().begin() + 1
               << std::setw(10) << point - segment->GetPoints(*this).begin() + 1
               << std::setw(10) << theCNuc->GetPairNumFromKey(segment->GetEntranceKey())

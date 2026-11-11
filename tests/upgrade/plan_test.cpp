@@ -1,9 +1,9 @@
 // The calculation plan gives every point one writer (include/CalculationPlan.h, docs/upgrade/data_model.md S5), on
-// every project given: the set-up of a calculation (Config, CNuc::Fill, EData::Fill, the Initialize steps), which
-// builds the plan with the mapping (EData::MapData) and checks it there -- a plan that breaks the assertion throws.
+// every project given: the set-up of a calculation (Config, CNuc::Fill, WorkingCopy::Fill, the Initialize steps), which
+// builds the plan with the mapping (WorkingCopy::MapData) and checks it there -- a plan that breaks the assertion throws.
 // For each project that sets up, also: the plan checks again here (CalculationPlan::Check), every point of the data
-// set is a task's host or a point the plan maps onto one, a host's mapped points are those whose EPoint::PlanTask is
-// the host's, and a copy of the data set (EData::Clone) holds the same plan, valid in the copy, whose hosts are the
+// set is a task's host or a point the plan maps onto one, a host's mapped points are those whose Unit::PlanTask is
+// the host's, and a copy of the data set (WorkingCopy::Clone) holds the same plan, valid in the copy, whose hosts are the
 // copy's own points.  No evaluation is run.  A project that does not set up (missing data files: the projects whose
 // data their check.sh writes) is listed and counted, not a failure.
 //
@@ -36,11 +36,11 @@ void Fail(const std::string &project, const std::string &why) {
 }
 
 // What the check of this test adds to CalculationPlan::Check: the points' task indices against the plan, on `data`.
-std::string CrossCheck(EData &data) {
+std::string CrossCheck(WorkingCopy &data) {
   const azure2::CalculationPlan &plan = data.Plan();
   for (int t = 0; t < plan.NumTasks(); t++) {
     const azure2::CalculationTask &task = plan.Task(t);
-    EPoint *host = data.PlanPoint(task.host);
+    Unit *host = data.PlanPoint(task.host);
     const azure2::MappedPoints m = host->PlanMapped(&data);
     if (m.size() != (int)task.mapped.size()) return "task " + std::to_string(t) + ": its host does not see its mapped points";
     for (int k = 0; k < m.size(); k++)
@@ -60,7 +60,7 @@ void RunProject(const std::string &path) {
   cfg.configfile = file;
   g_config = &cfg;
   CNuc compound;
-  EData data;
+  WorkingCopy data;
   AZUREParams params;
   try {
     if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg) == -1 || data.Fill(cfg, &compound) == -1) {
@@ -86,7 +86,7 @@ void RunProject(const std::string &path) {
   setUp++;
   std::string why = CrossCheck(data);
   if (!why.empty()) return Fail(path, why);
-  std::unique_ptr<EData> copy(data.Clone());
+  std::unique_ptr<WorkingCopy> copy(data.Clone());
   if (copy->Plan().NumTasks() != data.Plan().NumTasks()) return Fail(path, "the copy has another plan");
   why = CrossCheck(*copy);
   if (!why.empty()) return Fail(path, "in the copy: " + why);

@@ -32,7 +32,7 @@ yield F = Y₀ = (s/s_t)(1 − exp(−n s_t)); n is the sample thickness (atoms/
 weighted sum of the reaction terms and s_t the total term of a yield, with weights w_q = (c_q J_q,i) a_q.
 
 **Order of operations.** Every value is formed as the model pass forms it today (`src/ModelPass.cpp`: ComposeModelValue,
-TransformedValue; `src/ESegment.cpp`: Transmission, YieldY0, TermFrameFactor): a SUM starts from the base
+TransformedValue; `src/Segment.cpp`: Transmission, YieldY0, TermFrameFactor): a SUM starts from the base
 term and adds the terms in component order; a term is (c J) v and then times a; a ratio is num/den times (J_den/J_num);
 inside a transform the weight w = (c J) a is formed first and then multiplied by v, and s starts from 0. The test
 `experiment_expression` compares each node and each composition with these expressions written out, bit for bit, on
@@ -56,8 +56,8 @@ kernel. The library does not know the kernel: the caller passes a `SubPointFold`
 returns the layout at that point (`TransformStage`: no sub-points, or nsp sub-points; an optional linear map of them
 before F, the free-gas Doppler broadening that SAMMY applies first, in compressed rows; whether a kernel follows), the
 kernel applied to a local vector of values, and the kernel's exact weights for the backward pass. In the engine this
-is `EPoint::IntegrateKernelsImpl` with a reader over the local vector, under `DopplerAppliedScope`, and
-`EPoint::TargetEffectWeights`; nothing is written into the sub-points (W4 of the note goes). A kernel that is not linear
+is `Unit::IntegrateKernelsImpl` with a reader over the local vector, under `DopplerAppliedScope`, and
+`Unit::TargetEffectWeights`; nothing is written into the sub-points (W4 of the note goes). A kernel that is not linear
 makes `Backward` return false, as AZUREGrad falls back to finite differences there.
 
 **Storage and evaluation.** A `Tree` is a vector of `Node` values in creation order. A node is created after its
@@ -82,7 +82,7 @@ set-up made (`PredictionSetup`: term 0 the data set's own points, then its compo
 fixed angles and compound nuclei, a sample and a thickness), one builder per kind in the table `TreeKinds()`
 (observable, SUM -- also a total capture --, RATIO, transmission, yield; `TreeKindOf` decides), and lists what each
 leaf, factor and parameter refers to; `PredictionText` prints it (`AZURE2 --print-predictions`, `pyazr.predictions`).
-The engine builds every segment's tree once (`EData::BuildPredictions`, `src/Predictions.cpp`), shares it between
+The engine builds every segment's tree once (`WorkingCopy::BuildPredictions`, `src/Predictions.cpp`), shares it between
 working copies, evaluates it in the model pass (`src/ModelPass.cpp`, `ComposeModelValue`) and takes the adjoint of the
 composition from `Backward` (`azure2::ModelPointBackward`, used by every route of `src/AZUREGrad.cpp`).  Its gradient
 vectors, Jacobians and model rows on T1-T3, natural_neon, a transmission/yield project with and without a spread and a
@@ -106,11 +106,11 @@ The library holds these formulas as functions of plain numbers (masses in u, ene
 the relativistic energy maps `CMFromLab`, `LabFromCM`, `CMFromDecay` (which `include/Kinematics.h` now calls). A map
 that does not reach the lab angle returns false with an `AngleLimit` (the maximum lab angle and the reason).
 
-The engine keeps the state rules: `EPoint`'s conversion functions read the point's lab values and pairs, call the
-library and store the results (and the maximum and reason, as before); `ESegment::ConvertPointToCM` is the one
-sequence (energy, angle, value) that `ESegment::Fill`, `UpdatePointEnergyWithShift`, the test segments and the
+The engine keeps the state rules: `Unit`'s conversion functions read the point's lab values and pairs, call the
+library and store the results (and the maximum and reason, as before); `Segment::ConvertPointToCM` is the one
+sequence (energy, angle, value) that `Segment::Fill`, `UpdatePointEnergyWithShift`, the test segments and the
 component segments call. Where the lab angle is beyond the kinematic maximum a caller either stops (load) or converts
-at the last valid angle (an energy shift mid-fit). `ESegment::CMEnergyFactor` is the one E_c.m./E_lab factor of the
+at the last valid angle (an energy shift mid-fit). `Segment::CMEnergyFactor` is the one E_c.m./E_lab factor of the
 sub-point shift and the target-effect grids.
 
 Tests (`experiment_frames`): the engine's expressions before S6 written out, against the library on 20 000 random

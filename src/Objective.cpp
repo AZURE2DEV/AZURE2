@@ -24,7 +24,7 @@ class SegmentTerms : public ObjectiveTerm {
  public:
   std::string Name() const override { return "data, normalizations and energy shifts"; }
   void Add(const ObjectiveContext &c, double &chi2) const override {
-    EData *ld = c.data;
+    WorkingCopy *ld = c.data;
     if (c.segmentChi2) c.segmentChi2->assign(ld->Data().NumSegments() + 1, 0.0);
     ObjectiveContext::SegmentPriors *out = c.segmentPriorsOut;
     if (out) {
@@ -34,7 +34,7 @@ class SegmentTerms : public ObjectiveTerm {
       out->shiftFn.assign(ld->Data().NumSegments() + 1, 0.0);
     }
     for (int i = 1; i <= ld->Data().NumSegments(); i++) {
-      const ESegment *segment = ld->Data().GetSegment(i);
+      const Segment *segment = ld->Data().GetSegment(i);
       if (!segment) continue;
       if (c.thmOnly && !segment->IsTHM()) continue;
       // A THM segment with a free norm has an arbitrary overall scale: during a fit it is profiled out
@@ -80,7 +80,7 @@ class SegmentTerms : public ObjectiveTerm {
 };
 
 // T2: r^T M^-1 r over each covariance group in place of its points' r_i^2.  (A THM segment carries no covariance
-// block: EData refuses one.)
+// block: WorkingCopy refuses one.)
 class DataCovarianceTerm : public ObjectiveTerm {
  public:
   std::string Name() const override { return "data covariance"; }
@@ -260,10 +260,10 @@ double Objective::Chi2(const ObjectiveContext &c) const {
   return chi2;
 }
 
-std::vector<std::string> ReplaceDiagonalPriors(CNuc *compound, EData *data, const PriorCovariance &pc) {
+std::vector<std::string> ReplaceDiagonalPriors(CNuc *compound, WorkingCopy *data, const PriorCovariance &pc) {
   std::vector<std::string> replaced;
   const ParamIndexMap pmap = BuildParamIndexMap(compound, data, std::vector<bool>());
-  // The flags are settings of the data set: one revision of it (EData::ReviseDataSet) for all of them.
+  // The flags are settings of the data set: one revision of it (WorkingCopy::ReviseDataSet) for all of them.
   data->ReviseDataSet([&](DataSet &ds) {
   for (size_t a = 0; a < pc.FullIndex().size(); a++) {
     const int f = pc.FullIndex()[a];
@@ -272,31 +272,31 @@ std::vector<std::string> ReplaceDiagonalPriors(CNuc *compound, EData *data, cons
     bool had = false;
     switch (d.kind) {
       case ParamKind::Norm: {
-        ESegment *seg = ds.GetSegment(d.segment);
+        Segment *seg = ds.GetSegment(d.segment);
         had = seg->GetNormError() != 0.0;
         seg->ReplaceNormPrior();
         break;
       }
       case ParamKind::EnergyShift: {
-        ESegment *seg = ds.GetSegment(d.segment);
+        Segment *seg = ds.GetSegment(d.segment);
         had = seg->GetEnergyShiftError() != 0.0;
         seg->ReplaceShiftPrior();
         break;
       }
       case ParamKind::EnergyShiftSqrt: {
-        ESegment *seg = ds.GetSegment(d.segment);
+        Segment *seg = ds.GetSegment(d.segment);
         had = seg->GetEnergyShiftSqrtError() != 0.0;
         seg->ReplaceShiftSqrtPrior();
         break;
       }
       case ParamKind::EnergyShiftFn: {
-        ESegment *seg = ds.GetSegment(d.segment);
+        Segment *seg = ds.GetSegment(d.segment);
         had = d.fnTerm >= 0 && d.fnTerm < (int)seg->GetShiftFnErrors().size() && seg->GetShiftFnErrors()[d.fnTerm] != 0.0;
         seg->ReplaceShiftFnPrior(d.fnTerm);
         break;
       }
       case ParamKind::Thickness: {
-        ESegment *seg = ds.GetSegment(ds.GetThicknessSegment(d.thickness));
+        Segment *seg = ds.GetSegment(ds.GetThicknessSegment(d.thickness));
         had = seg->GetThicknessSigma() > 0.0;
         seg->ReplaceThicknessPrior();
         break;

@@ -293,7 +293,7 @@ std::string BuildThmSpectatorWindow(const ThmExperiment &x, double muSx, const T
   std::string why = acc->Setup(xc, k, eLo);
   if (!why.empty()) return why;
   // The branches of a lab window up to 0.5 MeV above the data, short of the
-  // spectator's threshold (EData::BuildThmGroups for R(E)).
+  // spectator's threshold (WorkingCopy::BuildThmGroups for R(E)).
   acc->SetAngleSlots(std::min(eHi + 0.5, acc->eAA - k.bind - 0.5 * acc->EsF(eHi)));
   out.acc = acc;
   for (double e : out.dataE) {

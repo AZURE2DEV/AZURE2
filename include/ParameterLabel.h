@@ -4,7 +4,7 @@
 #include <string>
 
 class CNuc;
-class EData;
+class WorkingCopy;
 class JGroup;
 class ALevel;
 
@@ -52,19 +52,19 @@ std::string LevelAndChannel(CNuc *compound, JGroup *jgroup, ALevel *level,
 
 /*!
  * Describe the fit parameter at \p minuitIndex (0-based, in the order
- * CNuc::FillMnParams then EData::FillMnParams add them).  \p data may be null,
+ * CNuc::FillMnParams then WorkingCopy::FillMnParams add them).  \p data may be null,
  * in which case only the R-matrix parameters are described.
  *
  * Returns an empty string if the index is out of range, so callers can fall
  * back to the raw Minuit name.
  */
-std::string Parameter(CNuc *compound, EData *data, int minuitIndex);
+std::string Parameter(CNuc *compound, WorkingCopy *data, int minuitIndex);
 
 /*!
  * Total number of parameters the walk covers; matches the size of the Minuit
  * parameter list built from the same compound nucleus and data.
  */
-int NumParameters(CNuc *compound, EData *data);
+int NumParameters(CNuc *compound, WorkingCopy *data);
 
 }  // namespace AZURELabel
 

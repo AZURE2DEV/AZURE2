@@ -23,7 +23,7 @@
  * analyzing power are left as they are, while an analyzing-power sub-point keeps its (screened) cross
  * section as the weight of the target average.  The E1 and E2 components are scaled with the total.
  */
-void GenMatrixFunc::CalculateCrossSection(EPoint *point, azure2::Results &results) {
+void GenMatrixFunc::CalculateCrossSection(Unit *point, azure2::Results &results) {
   AZUREProfile::Timer profileTimer(AZUREProfile::kCrossSection);
   this->CalculateBareCrossSection(point, results);
   if (point->GetScreeningParam() == 0) return;
@@ -36,7 +36,7 @@ void GenMatrixFunc::CalculateCrossSection(EPoint *point, azure2::Results &result
   point->SetFitE2CrossSection(results, f * point->GetFitE2CrossSection(results));
 }
 
-void GenMatrixFunc::CalculateBareCrossSection(EPoint *point, azure2::Results &results) {
+void GenMatrixFunc::CalculateBareCrossSection(Unit *point, azure2::Results &results) {
   complex sum(0., 0.);
   complex sumE1(0., 0.);
   complex sumE2(0., 0.);
@@ -416,7 +416,7 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point, azure2::Results &re
       // every channel CNuc admits (l+s even; forbidden ones are refused when
       // the model is read) -- so |F_N|^2 = 4|f_N|^2 and 2 Re[F_C* F_N] =
       // 4 Re[F_C,s* f_N] for any spin. Only the Coulomb amplitude depends on
-      // s: for j = 0 there is just s = 0 and EPoint stores the symmetrized
+      // s: for j = 0 there is just s = 0 and Unit stores the symmetrized
       // F_C; for j != 0 it is taken per channel spin, in CT below and in the
       // interference sum through GetCoulombAmplitude(s). Here we apply the
       // remaining factors 4 to RT and 2 to IT.
@@ -490,7 +490,7 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point, azure2::Results &re
       double segmentJ = point->GetJ();
       int segmentL = point->GetL();
       // The channel spin the phase belongs to ("spin <s>" on the segment line); without it the
-      // segment must have a single spin for its (J, l), which EData::Initialize enforces: summing
+      // segment must have a single spin for its (J, l), which WorkingCopy::Initialize enforces: summing
       // the U-matrix elements of two channel spins (as happened up to 2026-10-27) is not a phase.
       const double segmentS = point->GetPhaseS();
       PPair *entrancePair = compound()->GetPair(aa);
@@ -777,14 +777,14 @@ std::string GenMatrixFunc::NoPathwayMessage(int entrancePair, int exitPair) cons
          " (no R-matrix level couples them, and no external capture leads there)";
 }
 
-std::string GenMatrixFunc::CaptureAyNotBuiltMessage(const EPoint *point) const {
+std::string GenMatrixFunc::CaptureAyNotBuiltMessage(const Unit *point) const {
   return "the capture analyzing power of data set " + std::to_string(point->GetSegmentKey()) + " (pair " +
          std::to_string(point->GetEntranceKey()) + " to pair " + std::to_string(point->GetExitKey()) +
          ") has no terms: they are built at set-up for the reactions the data sets name (RequestCaptureAyTerms), and "
          "this one was not named";
 }
 
-bool GenMatrixFunc::CalculateAmplitudeMatrix(EPoint *point, double *spinSum,
+bool GenMatrixFunc::CalculateAmplitudeMatrix(Unit *point, double *spinSum,
                                              double *analyzingPower) {
   if (spinSum) *spinSum = 0.0;
   if (analyzingPower) *analyzingPower = 0.0;
@@ -825,7 +825,7 @@ bool GenMatrixFunc::CalculateAmplitudeMatrix(EPoint *point, double *spinSum,
   return true;
 }
 
-bool GenMatrixFunc::CalculateCaptureAnalyzingPower(EPoint *point, const azure2::Results &results,
+bool GenMatrixFunc::CalculateCaptureAnalyzingPower(Unit *point, const azure2::Results &results,
                                                    double *unpolarized,
                                                    double *analyzingPower) {
   if (unpolarized) *unpolarized = 0.0;
@@ -847,7 +847,7 @@ bool GenMatrixFunc::CalculateCaptureAnalyzingPower(EPoint *point, const azure2::
   if (nTerms == 0) return false;
 
   // P_k^1 is not among the polynomials the point caches, so it is evaluated
-  // here at the same centre-of-mass angle EPoint::CalcLegendreP uses.
+  // here at the same centre-of-mass angle Unit::CalcLegendreP uses.
   const double x = cos(point->GetCMAngle() * pi / 180.0);
   std::vector<double> assocP(maxL + 1, 0.0);
   for (int k = 1; k <= maxL; k++) assocP[k] = AngCoeff::LegendreP1(k, x);

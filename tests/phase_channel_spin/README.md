@@ -11,8 +11,8 @@ half the argument of the sum (audit 2026-10-25, checklist t3-23). For a spin-0 t
 `assert(NumTempTMatrices() <= 1)` could not see it because both spins landed in one entry.
 
 Now a segment line (data or test) may end with `spin <s>` (SegLine / ExtrapLine keyword blocks,
-`ESegment::GetPhaseS`, `EPoint::GetPhaseS`); the phase branch keeps only that channel spin, and
-`EData::Initialize` refuses a phase-shift segment whose (J, l) has several channel spins in the
+`Segment::GetPhaseS`, `Unit::GetPhaseS`); the phase branch keeps only that channel spin, and
+`WorkingCopy::Initialize` refuses a phase-shift segment whose (J, l) has several channel spins in the
 level scheme without the keyword, or whose spin has no channel, naming the spins. The GUI segment
 dialogs have an **s** field next to J and l (`SegmentKeywords::phaseSpin / withPhaseSpin`), pyazr
 reads the keyword into `Segment.phase_S` / `TestSegment.phase_S`, and older engines ignore it.

@@ -121,7 +121,7 @@ std::string LevelAndChannel(CNuc *compound, JGroup *jgroup, ALevel *level,
       Channel(compound, jgroup, channelIndex);
 }
 
-int NumParameters(CNuc *compound, EData *data) {
+int NumParameters(CNuc *compound, WorkingCopy *data) {
   int n = 0;
   if (compound) {
     for (int j = 1; j <= compound->NumJGroups(); j++) {
@@ -131,7 +131,7 @@ int NumParameters(CNuc *compound, EData *data) {
     n += compound->NumAbundanceParams();
   }
   if (data) {
-    const std::vector<ESegment> &segments = data->Data().GetSegments();
+    const std::vector<Segment> &segments = data->Data().GetSegments();
     for (size_t s = 0; s < segments.size(); s++)
       if (segments[s].IsVaryNorm()) n++;
     n += 2 * (int)segments.size();  // energy shift and sqrt(E) coefficient, every segment
@@ -145,7 +145,7 @@ int NumParameters(CNuc *compound, EData *data) {
   return n;
 }
 
-std::string Parameter(CNuc *compound, EData *data, int minuitIndex) {
+std::string Parameter(CNuc *compound, WorkingCopy *data, int minuitIndex) {
   if (minuitIndex < 0) return std::string();
 
   // Same order CNuc::FillMnParams uses: per J-group, per level, one energy
@@ -181,10 +181,10 @@ std::string Parameter(CNuc *compound, EData *data, int minuitIndex) {
 
   if (!data) return std::string();
 
-  // Then EData::FillMnParams: norms for segments that vary one (a free THM
+  // Then WorkingCopy::FillMnParams: norms for segments that vary one (a free THM
   // norm is profiled, not a parameter), then an energy shift and a sqrt(E)
   // coefficient for every segment, then the THM coherent backgrounds.
-  const std::vector<ESegment> &segments = data->Data().GetSegments();
+  const std::vector<Segment> &segments = data->Data().GetSegments();
   for (size_t s = 0; s < segments.size(); s++) {
     if (!segments[s].IsVaryNorm() || segments[s].IsProfiledNorm()) continue;
     if (index == minuitIndex) {
@@ -254,7 +254,7 @@ std::string Parameter(CNuc *compound, EData *data, int minuitIndex) {
   for (int k = 1; k <= data->Data().NumThicknessParams(); k++) {
     if (index == minuitIndex) {
       std::ostringstream out;
-      const ESegment *seg = data->Data().GetSegment(data->Data().GetThicknessSegment(k));
+      const Segment *seg = data->Data().GetSegment(data->Data().GetThicknessSegment(k));
       out << "sample thickness (atoms/barn) of the " << (seg->IsTransmission() ? "transmission" : "yield")
           << " of segment " << seg->GetSegmentKey();
       if (!seg->GetThicknessGroup().empty()) out << " (thickness group " << seg->GetThicknessGroup() << ")";

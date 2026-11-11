@@ -1,6 +1,6 @@
-// What the THM experiments report: output/thm_experiments.out (EData::WriteThmExperiments) and the tables pyazr
-// reads (ThmLineshapeTable, ThmDistortionTable, ThmVertexTable).  Members of EData; the groups they read are built
-// and profiled in EDataThm.cpp.
+// What the THM experiments report: output/thm_experiments.out (WorkingCopy::WriteThmExperiments) and the tables pyazr
+// reads (ThmLineshapeTable, ThmDistortionTable, ThmVertexTable).  Members of WorkingCopy; the groups they read are built
+// and profiled in ThmNorm.cpp.
 #include <gsl/gsl_sf_bessel.h>
 
 #include <algorithm>
@@ -25,7 +25,7 @@
 #include "ThmReports.h"
 #include "ThmVertexBoundary.h"
 
-void EData::WriteThmExperiments(const Config &configure, const azure2::Results &results) {
+void WorkingCopy::WriteThmExperiments(const Config &configure, const azure2::Results &results) {
   std::string file = configure.outputdir + "thm_experiments.out";
   std::ofstream out(file.c_str());
   if (!out) {
@@ -84,13 +84,13 @@ void EData::WriteThmExperiments(const Config &configure, const azure2::Results &
         out << std::left << std::setw(16) << "<T_s>" << std::right << std::setw(18) << e << std::setw(18)
             << w.MeanEs(e) << "\n";
       }
-      // Memory of the per-point node tables (EPoint::ThmPsTable): points
+      // Memory of the per-point node tables (Unit::ThmPsTable): points
       // including the folding sub-points, the stored entrance channels summed
       // over the points (x nodes = entries), and their bytes.
       size_t tablePoints = 0, tableBytes = 0;
       for (int s : group.segments)
         for (int p = 1; p <= Data().GetSegment(s)->NumPoints(); p++) {
-          EPoint *point = Data().GetSegment(s)->GetPoint(*this, p);
+          Unit *point = Data().GetSegment(s)->GetPoint(*this, p);
           tablePoints++;
           tableBytes += point->ThmPsTableBytes();
           for (int q = 1; q <= point->NumSubPoints(); q++) {
@@ -182,7 +182,7 @@ void EData::WriteThmExperiments(const Config &configure, const azure2::Results &
   }
 }
 
-bool EData::ThmLineshapeTable(const std::string &name, const std::vector<double> &energies, CNuc *compound,
+bool WorkingCopy::ThmLineshapeTable(const std::string &name, const std::vector<double> &energies, CNuc *compound,
                               const Config &configure, ThmLineshapeReport &out, std::string &why) {
   const ThmGroup *group = nullptr;
   for (const ThmGroup &g : set_->thmGroups_)
@@ -253,7 +253,7 @@ bool EData::ThmLineshapeTable(const std::string &name, const std::vector<double>
   return true;
 }
 
-bool EData::ThmDistortionTable(const std::string &name, const std::vector<double> &energies, ThmDistortionReport &out,
+bool WorkingCopy::ThmDistortionTable(const std::string &name, const std::vector<double> &energies, ThmDistortionReport &out,
                                std::string &why) {
   const ThmGroup *group = nullptr;
   for (const ThmGroup &g : set_->thmGroups_)
@@ -308,7 +308,7 @@ bool EData::ThmDistortionTable(const std::string &name, const std::vector<double
   return true;
 }
 
-bool EData::ThmVertexTable(const std::string &name, const std::vector<double> &energies, CNuc *compound,
+bool WorkingCopy::ThmVertexTable(const std::string &name, const std::vector<double> &energies, CNuc *compound,
                            const Config &configure, ThmVertexReport &out, std::string &why) {
   const ThmGroup *group = nullptr;
   for (const ThmGroup &g : set_->thmGroups_)
@@ -371,7 +371,7 @@ bool EData::ThmVertexTable(const std::string &name, const std::vector<double> &e
     }
   }
   const double mu = pair->GetRedMass() * uconv;
-  // M_l = (B - 1) j_l - rho j_l' + C_l at E with T_s = es added to E + B (EPoint::CalcEDependentValues).
+  // M_l = (B - 1) j_l - rho j_l' + C_l at E with T_s = es added to E + B (Unit::CalcEDependentValues).
   struct Pieces {
     double jl = 0.0, rhoDjl = 0.0;
     complex coul = complex(0.0, 0.0);

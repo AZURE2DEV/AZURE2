@@ -169,7 +169,7 @@ void TestSum() {
       ok = ok && same(m, sum);
       okNat = okNat && same(nat[0], natOld[0]) && same(nat[1], natOld[1]);
     }
-    check(natural ? "sample SUM = ESegment's, bit for bit" : "SUM = ESegment's, bit for bit", ok);
+    check(natural ? "sample SUM = Segment's, bit for bit" : "SUM = Segment's, bit for bit", ok);
     if (natural) check("sample SUM decomposition", okNat);
   }
   check("sample SUM text", PredictionText(p) == "sum(abundance(1, 1)*dsdo_cm(1->2), abundance(1, 1)*0.5*J0/J1*dsdo_cm(1->3), "
@@ -198,7 +198,7 @@ void TestRatio() {
     const double ref = (v[1] == 0.0) ? NAN : v[0] / v[1] * (J[1] / J[0]);  // ComposeModelValue's RATIO
     ok = ok && (std::isnan(ref) ? std::isnan(m) : same(m, ref));
   }
-  check("RATIO = ESegment's, bit for bit (NaN at a zero denominator)", ok);
+  check("RATIO = Segment's, bit for bit (NaN at a zero denominator)", ok);
   s.terms.resize(1);
   bool threw = false;
   try {
@@ -234,7 +234,7 @@ void TestTransforms() {
     Workspace ws;
     double nat[2] = {0.0, 0.0};
     const double m = p.tree.Value(pv.in, 0, ws, nat);
-    // ESegment::TransformTerms and TransformedValue's `transform`
+    // Segment::TransformTerms and TransformedValue's `transform`
     const double w0 = a[1];
     const double scale1 = s.terms[1].scaling * TermFrameFactor(J[0], J[1]);
     const double w1 = scale1 * a[2];

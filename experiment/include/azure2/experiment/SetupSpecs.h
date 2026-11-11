@@ -124,7 +124,7 @@ struct DatasetSpec {
   std::string dataFile;
   ColumnConversion columns;       ///< the rows of dataFile into the engine's units and frame
   bool absolute = false;          ///< AngularCoefficients: the data are A_k (b/sr), not a_k = A_k / A_0
-  // Normalization n: the model is compared with n x data ... (EData; value, uncertainty in percent, vary).
+  // Normalization n: the model is compared with n x data ... (WorkingCopy; value, uncertainty in percent, vary).
   double norm = 1.0;
   double normError = 0.0;          ///< prior width (%), 0 = no prior
   bool varyNorm = false;
@@ -292,7 +292,7 @@ struct SpecList {
   std::string error;  ///< the whole message, "ERROR: ..." ("" = none)
 };
 
-/// The data sets of a project and what they link to, as EData::Fill consumes them.
+/// The data sets of a project and what they link to, as WorkingCopy::Fill consumes them.
 struct DataSpecs {
   SpecList<DatasetSpec> datasets;
   /// A prior-centre row the old-line reader refused; reported where the old engine reported it (after the groups of
@@ -301,7 +301,7 @@ struct DataSpecs {
   SpecList<TargetEffectSpec> targetEffects;
 };
 
-/// The extrapolations of a project and what they link to, as EData::MakePoints consumes them.
+/// The extrapolations of a project and what they link to, as WorkingCopy::MakePoints consumes them.
 struct ExtrapolationSpecs {
   SpecList<ExtrapolationSpec> extrapolations;
   SpecList<TargetEffectSpec> targetEffects;

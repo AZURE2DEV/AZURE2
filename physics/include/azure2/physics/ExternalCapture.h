@@ -11,7 +11,7 @@
  *   capture_mask                   the --ignore-externals mask of channel capture in the formal basis, Eq. (5)
  *
  * Plain arrays in physical units; nothing of the engine.  The per-point unit amplitudes of Eq. (3) stay with the data
- * points (EPoint), the radial integral with ECIntegral until the Whittaker functions are in physics/ (step 3b (i)).
+ * points (Unit), the radial integral with ECIntegral until the Whittaker functions are in physics/ (step 3b (i)).
  */
 
 #include <complex>

@@ -52,7 +52,7 @@ except Exception as err:  # pragma: no cover
 
 def name_from_record(r):
     """The name the creation sites give a parameter, from its record alone (CNuc::FillMnParams,
-    CNuc::AbundanceParamName, EData::SegmentParameterName, EData::FillMnParams, ThmCoherentParamStem)."""
+    CNuc::AbundanceParamName, WorkingCopy::SegmentParameterName, WorkingCopy::FillMnParams, ThmCoherentParamStem)."""
     k = r["kind"]
     if k == "energy":
         return f"energy_{r['level_number']}"

@@ -1,6 +1,6 @@
 // TEMPORARY (step 3d deletes it): the old sections as set-up specs (SpecsFromOldLines.h).  The loops are the old
-// engine's reading loops (EData::Fill, EData::MakePoints, EData::ReadTargetEffectsFile, CNuc::ReadAbundances,
-// EData::ReadPriorCentres) with the set-up taken out: what they printed while reading a line is printed here, in the
+// engine's reading loops (WorkingCopy::Fill, WorkingCopy::MakePoints, WorkingCopy::ReadTargetEffectsFile, CNuc::ReadAbundances,
+// WorkingCopy::ReadPriorCentres) with the set-up taken out: what they printed while reading a line is printed here, in the
 // same words, and everything else is left to the engine, which sets up the specs.
 #include "azure2/convert/SpecsFromOldLines.h"
 
@@ -35,7 +35,7 @@ bool Blank(const std::string &line) {
 }
 
 // isDiff of a <segmentsData> line without the THM offset of 10.  A code the old engine gave no meaning computed the
-// angle-integrated cross section (no flag of ESegment set): it is kept so.
+// angle-integrated cross section (no flag of Segment set): it is kept so.
 Observable DataObservable(int code) {
   switch (code) {
     case 1: return Observable::DifferentialLab;
@@ -220,7 +220,7 @@ SpecList<DatasetSpec> DatasetSpecsFromOldLines(std::istream &in, bool relativist
       return stop();
     }
     if (segment.isDiff() >= 10 && !segment.covarianceFile().empty()) {
-      // A THM segment's chi^2 is its experiment's (profiled norm, EDataThm), not a sum a covariance could amend.
+      // A THM segment's chi^2 is its experiment's (profiled norm, ThmNorm.cpp), not a sum a covariance could amend.
       message << "ERROR: Data segment #" << numTotalSegments
               << " is a THM segment with a covariance block; a data covariance is not supported on"
               << " THM segments.";

@@ -68,7 +68,7 @@
  * Coulomb amplitude out), total capture, composites, samples, "total", UPOS, and a free
  * normalization on normalised coefficients (a_k / a_0 has no scale; use "absolute 1" for A_k).
  */
-static bool CoefficientsAllowed(CNuc *theCNuc, const ESegment &segment, int number, const Config &configure) {
+static bool CoefficientsAllowed(CNuc *theCNuc, const Segment &segment, int number, const Config &configure) {
   if (!segment.IsCoefficients()) return true;
   std::string why;
   if (segment.GetExitKey() == -1)
@@ -90,7 +90,7 @@ static bool CoefficientsAllowed(CNuc *theCNuc, const ESegment &segment, int numb
   return false;
 }
 
-static bool AnalyzingPowerAllowed(CNuc *theCNuc, const ESegment &segment, int number, bool isTest,
+static bool AnalyzingPowerAllowed(CNuc *theCNuc, const Segment &segment, int number, bool isTest,
                                   const Config &configure) {
   if (!segment.IsAnalyzingPower()) return true;
   PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetEntranceKey()));
@@ -113,7 +113,7 @@ static bool AnalyzingPowerAllowed(CNuc *theCNuc, const ESegment &segment, int nu
  * light ejectile of the exit pair, which is right for a gamma measured in coincidence with it and not otherwise
  * (segments.rst, UPOS).  Say so instead of converting silently (audit 2026-10-25, item 31).
  */
-static void UPOSLabNote(const ESegment &segment, int key, bool isTest, const Config &configure) {
+static void UPOSLabNote(const Segment &segment, int key, bool isTest, const Config &configure) {
   if (!segment.IsUPOS() || !segment.IsDifferential() || segment.IsCMDifferential() || segment.IsPhase()) return;
   configure.outStream << "WARNING: " << (isTest ? "test segment #" : "segment #") << key
                       << " (UPOS, lab differential): the lab angle is converted with the kinematics of particle b, "
@@ -128,7 +128,7 @@ static void UPOSLabNote(const ESegment &segment, int key, bool isTest, const Con
  * mode 3 with "1 1 -1 ... 0" read pairs_[-1] and crashed in the external-capture lookup (13N), and a model
  * without external capture gave meaningless numbers (audit 2026-10-25, item 32).
  */
-static bool TotalCaptureCodeOk(const ESegment &segment, int key, bool isTest, const Config &configure) {
+static bool TotalCaptureCodeOk(const Segment &segment, int key, bool isTest, const Config &configure) {
   const bool keyTotal = segment.GetExitKey() == -1;
   const bool codeTotal = segment.IsTotalCapture() != 0;
   if (keyTotal == codeTotal) return true;
@@ -152,7 +152,7 @@ static bool TotalCaptureCodeOk(const ESegment &segment, int key, bool isTest, co
  * <levels> line, 2026-11-05) the gamma ray would come from the light particle, which that formula does not
  * describe -- refuse instead of computing the heavy partner's correlation silently.
  */
-static bool UPOSAllowed(CNuc *theCNuc, const ESegment &segment, int key, bool isTest, const Config &configure) {
+static bool UPOSAllowed(CNuc *theCNuc, const Segment &segment, int key, bool isTest, const Config &configure) {
   if (!segment.IsUPOS() || !theCNuc->IsPairKey(segment.GetExitKey())) return true;
   PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetExitKey()));
   if (exitPair->GetLightExE() == 0.) return true;
@@ -163,7 +163,7 @@ static bool UPOSAllowed(CNuc *theCNuc, const ESegment &segment, int key, bool is
   return false;
 }
 
-static bool TotalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTest, const Config &configure) {
+static bool TotalAllowed(CNuc *theCNuc, Segment &segment, int key, bool isTest, const Config &configure) {
   if (!segment.IsTotal()) return true;
   const char *what = isTest ? "test segment" : "segment";
   auto refuse = [&](const std::string &why) {
@@ -187,8 +187,8 @@ static bool TotalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTest,
 }
 
 // A beta-delayed spectrum (entrance pair of type 20) is the energy distribution of one decay pair: its energies are
-// converted with that pair's masses (ESegment::ConvertPointEnergyToCM), so a segment without one (exit -1) is refused.
-static bool BetaDelayedAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTest, const Config &configure) {
+// converted with that pair's masses (Segment::ConvertPointEnergyToCM), so a segment without one (exit -1) is refused.
+static bool BetaDelayedAllowed(CNuc *theCNuc, Segment &segment, int key, bool isTest, const Config &configure) {
   if (!theCNuc->IsPairKey(segment.GetEntranceKey()) || segment.GetExitKey() != -1) return true;
   if (theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetEntranceKey()))->GetPType() != 20) return true;
   configure.outStream << "ERROR: " << (isTest ? "test segment" : "segment") << " #" << key << ": a beta-delayed "
@@ -197,7 +197,7 @@ static bool BetaDelayedAllowed(CNuc *theCNuc, ESegment &segment, int key, bool i
   return false;
 }
 
-static bool NaturalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTest, const Config &configure) {
+static bool NaturalAllowed(CNuc *theCNuc, Segment &segment, int key, bool isTest, const Config &configure) {
   const char *what = isTest ? "test segment" : "segment";
   const std::string &token = segment.GetNaturalToken();
   if (token == "0") return true;   // not a natural segment
@@ -231,7 +231,7 @@ static bool NaturalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTes
 
 
 /*!
- * The EData object has a private attribute containing the number of iterations needed to find the best fit parameters.
+ * The WorkingCopy object has a private attribute containing the number of iterations needed to find the best fit parameters.
  * At creation, this attribute is set to 0.
  */
 
@@ -253,7 +253,7 @@ std::shared_ptr<const ThmWeightTable> ThmWeightFor(
  */
 int CheckThmWeights(const Config &configure,
                     const std::map<int, std::shared_ptr<const ThmWeightTable>> &tables,
-                    const char *keyName, const char *blockName, int numLines, EData *data) {
+                    const char *keyName, const char *blockName, int numLines, WorkingCopy *data) {
   for (const auto &entry : tables) {
     const int key = entry.first;
     const ThmWeightTable &table = *entry.second;
@@ -262,7 +262,7 @@ int CheckThmWeights(const Config &configure,
                           << numLines << " line(s)." << std::endl;
       return -1;
     }
-    const ESegment *segment = nullptr;
+    const Segment *segment = nullptr;
     for (int s = 1; s <= data->Data().NumSegments(); s++)
       if (data->Data().GetSegment(s)->GetSegmentKey() == key) segment = data->Data().GetSegment(s);
     if (!segment) {
@@ -291,7 +291,7 @@ int CheckThmWeights(const Config &configure,
 
 }  // namespace
 
-EData::EData() : draft_(std::make_shared<DataSet>()) {
+WorkingCopy::WorkingCopy() : draft_(std::make_shared<DataSet>()) {
   set_ = draft_;
   isFit_ = true;
   isErrorAnalysis_ = false;
@@ -301,11 +301,11 @@ EData::EData() : draft_(std::make_shared<DataSet>()) {
 
 /*!
  * This function fills the data object with segments from the segment data files.
- * After a segment is created, the ESegment::Fill method is called for that segment.
+ * After a segment is created, the Segment::Fill method is called for that segment.
  * Returns -1 if the input files could not be read, otherwise returns 0.
  */
 
-int EData::Fill(const Config &configure, CNuc *theCNuc, const azure2::experiment::DataSpecs &specs) {
+int WorkingCopy::Fill(const Config &configure, CNuc *theCNuc, const azure2::experiment::DataSpecs &specs) {
   const int numTotalSegments_ = (int)specs.datasets.items.size();
   for (const auto &item : specs.datasets.items) {
     {
@@ -314,7 +314,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc, const azure2::experiment
       if (!item.warning.empty()) configure.outStream << "WARNING: " << item.warning << std::endl;
       if (!item.note.empty()) configure.Note(item.note);
       if (segment.active) {
-        ESegment NewSegment(segment);
+        Segment NewSegment(segment);
 
         if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
           PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
@@ -368,7 +368,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc, const azure2::experiment
               if (NewSegment.IsAdvanced()) {
                 // Set the operation type from the segment data
                 OperationType operation = (NewSegment.GetLegacyOperationType() == 0) ? SUM : RATIO;
-                ESegment *filledSegment = Draft().GetSegment(Draft().NumSegments());
+                Segment *filledSegment = Draft().GetSegment(Draft().NumSegments());
                 filledSegment->SetOperationType(operation);
 
                 // One leaf per component (spec: entrance, exit, optional fixed angle, scaling)
@@ -381,7 +381,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc, const azure2::experiment
 
               int thisSegmentNum = Draft().NumSegments();
               if (Draft().GetSegment(thisSegmentNum)->IsTotalCapture()) {
-                ESegment *baseSegment = Draft().GetSegment(thisSegmentNum);
+                Segment *baseSegment = Draft().GetSegment(thisSegmentNum);
                 int numCapturePairs = 0;
 
                 // Set operation type to SUM for total capture
@@ -450,11 +450,11 @@ int EData::Fill(const Config &configure, CNuc *theCNuc, const azure2::experiment
 
 /*!
  * If the AZURE calculation is not data driven, this function is called in place
- * of the EData::Fill function to create points at specified energies and angles.
+ * of the WorkingCopy::Fill function to create points at specified energies and angles.
  * Returns -1 if the input files could not be read, otherwise returns 0.
  */
 
-int EData::MakePoints(const Config &configure, CNuc *theCNuc, const azure2::experiment::ExtrapolationSpecs &specs) {
+int WorkingCopy::MakePoints(const Config &configure, CNuc *theCNuc, const azure2::experiment::ExtrapolationSpecs &specs) {
   const int numTotalSegments_ = (int)specs.extrapolations.items.size();
   for (const auto &item : specs.extrapolations.items) {
     {
@@ -463,7 +463,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc, const azure2::expe
       if (!item.warning.empty()) configure.outStream << "WARNING: " << item.warning << std::endl;
       if (!item.note.empty()) configure.Note(item.note);
       if (segment.active) {
-        ESegment NewSegment(segment);
+        Segment NewSegment(segment);
         if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
           PPair *segEntrance = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
           if (!AnalyzingPowerAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
@@ -497,19 +497,19 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc, const azure2::expe
             NewSegment.SetSegmentKey(numTotalSegments);
             if (NewSegment.IsTHM()) NewSegment.SetThmWeight(ThmWeightFor(configure.thm.weightByTestSegment, numTotalSegments));
             this->AddSegment(NewSegment);
-            ESegment *theSegment = Draft().GetSegment(Draft().NumSegments());
+            Segment *theSegment = Draft().GetSegment(Draft().NumSegments());
 
             theCNuc->GetPair(theCNuc->GetPairNumFromKey(theSegment->GetEntranceKey()))->SetEntrance();
             PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(theSegment->GetEntranceKey()));
             PPair *exitPair = theCNuc->GetPairFromKey(theSegment->GetExitKey());  // nullptr for total capture (-1)
             theSegment->SetGridRows(*this, segment.energies, segment.angles);
             for (int i = 0; i < theSegment->NumPoints(); i++) {
-              // A ratio is dimensionless: no cross-section conversion (as ESegment::Fill for data segments;
+              // A ratio is dimensionless: no cross-section conversion (as Segment::Fill for data segments;
               // the stored factor would otherwise divide the ratio in the lab output, kinflag.dat = 1).
               azure2::experiment::AngleLimit lim;
               if (!theSegment->ConvertRowToCM(*this, 0, i, entrancePair, exitPair, !theSegment->IsDimensionlessRatio(),
-                                              ESegment::BeyondRange::Stop, lim)) {
-                const EPoint *thePoint = theSegment->GetPoint(*this, i + 1);
+                                              Segment::BeyondRange::Stop, lim)) {
+                const Unit *thePoint = theSegment->GetPoint(*this, i + 1);
                 configure.outStream << "ERROR: " << "test segment #" << theSegment->GetSegmentKey() << ": lab angle " << thePoint->GetLabAngle() << " deg at E_lab = " << thePoint->GetLabEnergy()
                                     << " MeV: " << lim.why << "." << std::endl;
                 return -1;
@@ -536,7 +536,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc, const azure2::expe
             } else {
               int thisSegmentNum = Draft().NumSegments();
               if (Draft().GetSegment(thisSegmentNum)->IsTotalCapture()) {
-                ESegment *baseSegment = Draft().GetSegment(thisSegmentNum);
+                Segment *baseSegment = Draft().GetSegment(thisSegmentNum);
                 int numCapturePairs = 0;
 
                 // Set operation type to SUM for total capture
@@ -597,10 +597,10 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc, const azure2::expe
 
 /*!
  * Returns true if the data is to be fit, otherwise returns false.  Used in the AZURECalc function class
- * to determine if a clone of the CNuc and EData objects should be made for thread safety.
+ * to determine if a clone of the CNuc and WorkingCopy objects should be made for thread safety.
  */
 
-bool EData::IsFit() const {
+bool WorkingCopy::IsFit() const {
   return isFit_;
 }
 
@@ -609,7 +609,7 @@ bool EData::IsFit() const {
  * class to suppress transformation and file output during error analysis.
  */
 
-bool EData::IsErrorAnalysis() const {
+bool WorkingCopy::IsErrorAnalysis() const {
   return isErrorAnalysis_;
 }
 
@@ -623,7 +623,7 @@ bool EData::IsErrorAnalysis() const {
  * thread safety.
  */
 
-void EData::SetFit(bool fit) {
+void WorkingCopy::SetFit(bool fit) {
   isFit_ = fit;
 }
 
@@ -631,7 +631,7 @@ void EData::SetFit(bool fit) {
  * Sets the boolean indicating if the call to the function is for error analysis via Minos.
  */
 
-void EData::SetErrorAnalysis(bool errorAnalysis) {
+void WorkingCopy::SetErrorAnalysis(bool errorAnalysis) {
   isErrorAnalysis_ = errorAnalysis;
 }
 
@@ -641,16 +641,16 @@ void EData::SetErrorAnalysis(bool errorAnalysis) {
  * gradient each receive a distinct number. Relaxed order suffices: the counter orders no other memory.
  */
 
-int EData::Iterate() {
+int WorkingCopy::Iterate() {
   return iterations_.n.fetch_add(1, std::memory_order_relaxed);
 }
 
 /*!
- * This function is identical in role to the EPoint::Initialize function, except that it initializes
- * and entire EData object instead of a single EPoint object.
+ * This function is identical in role to the Unit::Initialize function, except that it initializes
+ * and entire WorkingCopy object instead of a single Unit object.
  */
 
-int EData::Initialize(CNuc *compound, const Config &configure) {
+int WorkingCopy::Initialize(CNuc *compound, const Config &configure) {
   // The last step of the set-up: the data set is written once more (the nuclei, the leaves' frames at load) and then
   // frozen.  A second Initialize (a session set up again) works on a new data set.
   if (!draft_) {
@@ -667,7 +667,7 @@ int EData::Initialize(CNuc *compound, const Config &configure) {
   // for these (no matching channel), which is easy to misread as "no nuclear
   // interaction" rather than "this partial wave does not exist".
   for (int s = 1; s <= Draft().NumSegments(); s++) {
-    const ESegment *seg = Draft().GetSegment(s);
+    const Segment *seg = Draft().GetSegment(s);
     if (!seg->IsPhase()) continue;
     int aa = compound->GetPairNumFromKey(seg->GetEntranceKey());
     if (aa == 0) continue;
@@ -705,7 +705,7 @@ int EData::Initialize(CNuc *compound, const Config &configure) {
   // whose (J, l) has several channel spins in the level scheme must say which with "spin <s>", and a
   // given s must exist.
   for (int s = 1; s <= Draft().NumSegments(); s++) {
-    const ESegment *seg = Draft().GetSegment(s);
+    const Segment *seg = Draft().GetSegment(s);
     if (!seg->IsPhase()) continue;
     int aa = compound->GetPairNumFromKey(seg->GetEntranceKey());
     if (aa == 0) continue;
@@ -790,10 +790,10 @@ int EData::Initialize(CNuc *compound, const Config &configure) {
 }
 
 /*!
- * Adds a segment to the ESegment vector.
+ * Adds a segment to the Segment vector.
  */
 
-void EData::AddSegment(ESegment segment) {
+void WorkingCopy::AddSegment(Segment segment) {
   // The segment's state in this copy starts at the segment's start values, with its own term and no points yet.
   SegmentState state;
   state.norm = segment.StartNorm();
@@ -807,7 +807,7 @@ void EData::AddSegment(ESegment segment) {
 }
 
 // A copy shares the data set; one copied while the set-up still writes it gets the data set as it stands, frozen.
-EData::EData(const EData &other)
+WorkingCopy::WorkingCopy(const WorkingCopy &other)
     : set_(other.draft_ ? std::make_shared<const DataSet>(*other.draft_) : other.set_),
       segmentStates_(other.segmentStates_),
       effectValues_(other.effectValues_),
@@ -831,48 +831,48 @@ EData::EData(const EData &other)
       nodeCache_(other.nodeCache_),
       channelTable_(other.channelTable_) {}
 
-DataSet &EData::Draft() {
-  if (!draft_) throw std::logic_error("EData::Draft: the data set is frozen after the set-up (ReviseDataSet changes it)");
+DataSet &WorkingCopy::Draft() {
+  if (!draft_) throw std::logic_error("WorkingCopy::Draft: the data set is frozen after the set-up (ReviseDataSet changes it)");
   return *draft_;
 }
 
-void EData::SetPriorCovariance(std::shared_ptr<const PriorCovariance> prior) {
+void WorkingCopy::SetPriorCovariance(std::shared_ptr<const PriorCovariance> prior) {
   ReviseDataSet([&](DataSet &d) { d.priorCov_ = std::move(prior); });
 }
 
 /*!
- * Calls EPoint::CalcLegendreP for each point in the entire EData object.
+ * Calls Unit::CalcLegendreP for each point in the entire WorkingCopy object.
  */
 
-void EData::CalcLegendreP(int maxL, CNuc *theCNuc) {
-  for (ESegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
+void WorkingCopy::CalcLegendreP(int maxL, CNuc *theCNuc) {
+  for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     const TargetEffect *effect = (segment->IsTargetEffect() &&
                             Data().GetTargetEffect(segment->GetTargetEffectNum())->IsQCoefficients())
         ? Data().GetTargetEffect(segment->GetTargetEffectNum())
         : NULL;
 #pragma omp parallel for
     for (int i = 1; i <= segment->NumPoints(); i++) {
-      EPoint *point = segment->GetPoint(*this, i);
+      Unit *point = segment->GetPoint(*this, i);
       point->CalcLegendreP(this, maxL, theCNuc, effect);
     }
   }
 }
 
 /*!
- * Calls EPoint::CalcEDependentValues for each point in the entire EData object.
+ * Calls Unit::CalcEDependentValues for each point in the entire WorkingCopy object.
  */
 
 /*!
  * The channel table of the given points and their sub-points, built before the threads that fill them start
  * (docs/upgrade/channel_table.md).  Rows the current table holds are copied from it.
  */
-std::shared_ptr<const ChannelTable> EData::BuildChannelTable(CNuc *theCNuc, const Config &configure,
-                                                             const std::vector<EPoint *> &points) {
+std::shared_ptr<const ChannelTable> WorkingCopy::BuildChannelTable(CNuc *theCNuc, const Config &configure,
+                                                             const std::vector<Unit *> &points) {
   // Each point's keys are made unique before they are added: its slots repeat (pair, l, E_c) once per channel spin
   // and J^pi block, and the full list was the peak memory of the build (natural_neon: 11 M keys).
   std::vector<ChannelTable::Key> keys, own;
   std::size_t requested = 0;
-  for (EPoint *point : points) {
+  for (Unit *point : points) {
     own.clear();
     point->ChannelKeys(this, theCNuc, own);
     requested += own.size();
@@ -887,10 +887,10 @@ std::shared_ptr<const ChannelTable> EData::BuildChannelTable(CNuc *theCNuc, cons
   return table;
 }
 
-int EData::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
+int WorkingCopy::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
   {
-    std::vector<EPoint *> points;
-    for (ESegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++)
+    std::vector<Unit *> points;
+    for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++)
       for (int i = 1; i <= segment->NumPoints(); i++)
         if (!segment->GetPoint(*this, i)->IsMapped()) points.push_back(segment->GetPoint(*this, i));
     try {
@@ -903,12 +903,12 @@ int EData::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
   ChannelRowSource rows;
   rows.tables.push_back(channelTable_.get());
   const ChannelRowSource *table = &rows;
-  for (ESegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
+  for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     bool localStop = false;
 #pragma omp parallel for shared(localStop, configure)
     for (int i = 1; i <= segment->NumPoints(); i++) {
       if (configure.stopFlag || localStop) continue;
-      EPoint *point = segment->GetPoint(*this, i);
+      Unit *point = segment->GetPoint(*this, i);
       if (!(point->IsMapped())) {
         try {
           point->CalcEDependentValues(this, theCNuc, configure, true, this, table);
@@ -928,27 +928,27 @@ int EData::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
 }
 
 /*!
- * Calls EPoint::CalcCoulombAmplitude for each point in the entire EData object.
+ * Calls Unit::CalcCoulombAmplitude for each point in the entire WorkingCopy object.
  */
 
-void EData::CalcCoulombAmplitude(CNuc *theCNuc) {
-  for (ESegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
+void WorkingCopy::CalcCoulombAmplitude(CNuc *theCNuc) {
+  for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
 #pragma omp parallel for
     for (int i = 1; i <= segment->NumPoints(); i++) {
-      EPoint *point = segment->GetPoint(*this, i);
+      Unit *point = segment->GetPoint(*this, i);
       point->CalcCoulombAmplitude(this, theCNuc);
     }
   }
 }
 
 /*!
- * Sets up the leaves of every segment (ESegment::AddLeaf: the components of SUM, RATIO, sample and total-capture
+ * Sets up the leaves of every segment (Segment::AddLeaf: the components of SUM, RATIO, sample and total-capture
  * segments, the total term of a yield): their pairs in the compound nucleus, their frames with their own pairs, their
  * energy-dependent values, Legendre polynomials, Coulomb amplitudes and external-capture amplitudes (appended to the
  * intEC file after those of the segments).  The run log still calls them component segments.
  */
 
-int EData::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
+int WorkingCopy::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
   // The leaves go through the steps of the segments' own points
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Initializing Component Segments (" << Draft().leafRefs_.size() << " components)..." << std::endl;
@@ -1001,13 +1001,13 @@ int EData::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
 
     // Apply the same conversions that are done for test segment points
     for (int i = 1; i <= (int)Draft().segments_[leaf.first].TermPoints(*this, leaf.second).size(); i++) {
-      EPoint *point = Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
+      Unit *point = Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
 
       if (entrancePair && exitPair) {
         // The base segment's sequence, with the component's own pairs; a component's value is always converted.
         azure2::experiment::AngleLimit lim;
         if (!Draft().segments_[leaf.first].ConvertRowToCM(*this, leaf.second, i - 1, entrancePair, exitPair, true,
-                                                          ESegment::BeyondRange::Stop, lim)) {
+                                                          Segment::BeyondRange::Stop, lim)) {
           configure.outStream << "ERROR: " << "component (" << entranceKey << " -> " << exitKey << ") of segment #" << Draft().segments_[leaf.first].TermKey(leaf.second) << ": lab angle " << point->GetLabAngle() << " deg at E_lab = " << point->GetLabEnergy()
                               << " MeV: " << lim.why << "." << std::endl;
           return -1;
@@ -1027,12 +1027,12 @@ int EData::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
   }
 
   // CalcEDependentValues for the leaves, in parallel as for the data segments
-  // (EData::CalcEDependentValues).  Each point writes only itself, its sub-points and its local
+  // (WorkingCopy::CalcEDependentValues).  Each point writes only itself, its sub-points and its local
   // mapped points that do not own their values; those are never computed here (the condition
   // below) and each has exactly one host, so no two threads write the same point.  Serial, this
   // loop was 9 of the 17.6 s of a natural_neon calculation on 24 threads.
   {
-    std::vector<EPoint *> points;
+    std::vector<Unit *> points;
     for (const std::pair<int, int> &leaf : Draft().leafRefs_)
       for (int i = 1; i <= (int)Draft().segments_[leaf.first].TermPoints(*this, leaf.second).size(); i++)
         if (!(Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i)->IsMapped()) || Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i)->OwnsEDependentValues())
@@ -1054,7 +1054,7 @@ int EData::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
 #pragma omp parallel for shared(localStop, configure)
     for (int i = 1; i <= (int)Draft().segments_[leaf.first].TermPoints(*this, leaf.second).size(); i++) {
       if (configure.stopFlag || localStop) continue;
-      EPoint *point = Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
+      Unit *point = Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
       if (!(point->IsMapped()) || point->OwnsEDependentValues()) {
         try {
           point->CalcEDependentValues(this, theCNuc, configure, true, this, componentTable);
@@ -1081,7 +1081,7 @@ int EData::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
       }
     }
     for (int i = 1; i <= (int)Draft().segments_[leaf.first].TermPoints(*this, leaf.second).size(); i++) {
-      EPoint *point = Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
+      Unit *point = Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
       point->CalcLegendreP(this, configure.maxLOrder, theCNuc, effect);
     }
   }
@@ -1089,7 +1089,7 @@ int EData::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
   // CalcCoulombAmplitude for the leaves
   for (const std::pair<int, int> &leaf : Draft().leafRefs_) {
     for (int i = 1; i <= (int)Draft().segments_[leaf.first].TermPoints(*this, leaf.second).size(); i++) {
-      EPoint *point = Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
+      Unit *point = Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
       point->CalcCoulombAmplitude(this, theCNuc);
     }
   }
@@ -1148,7 +1148,7 @@ int EData::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
 #pragma omp parallel for shared(configure, localStop, pointIndex, startTime)
                   for (int i = 1; i <= numPoints; i++) {
                     if (configure.stopFlag || localStop) continue;
-                    EPoint *point = Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
+                    Unit *point = Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
                     if (!(point->IsMapped()) || point->OwnsEDependentValues()) {
                       try {
                         point->CalculateECAmplitudes(this, theCNuc, configure, channelTable_.get());
@@ -1180,21 +1180,21 @@ int EData::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
                 // Write the freshly calculated amplitudes to the file, or read the
                 // previously saved ones back in.  The iteration order matches the
                 // regular-segment loop in CalculateECAmplitudes exactly.
-                for (EPointIterator point = Draft().segments_[leaf.first].TermPoints(*this, leaf.second).begin();
+                for (UnitIterator point = Draft().segments_[leaf.first].TermPoints(*this, leaf.second).begin();
                      point < Draft().segments_[leaf.first].TermPoints(*this, leaf.second).end(); point++) {
                   if (!(point->IsMapped()) || point->OwnsEDependentValues()) {
                     for (int k = 1; k <= entrancePair->GetDecay(ir)->NumKGroups(); k++) {
                       for (int ecm = 1; ecm <= entrancePair->GetDecay(ir)->GetKGroup(k)->NumECMGroups(); ecm++) {
                         if (!usePrevious) {
                           if (out.is_open()) out << point->GetECAmplitude(k, ecm) << std::endl;
-                          for (EPointIterator subPoint = point->GetSubPoints(*this).begin();
+                          for (UnitIterator subPoint = point->GetSubPoints(*this).begin();
                                subPoint < point->GetSubPoints(*this).end(); subPoint++)
                             if (out.is_open()) out << subPoint->GetECAmplitude(k, ecm) << std::endl;
                         } else {
                           complex ecAmplitude(0.0, 0.0);
                           in >> ecAmplitude;
                           point->AddECAmplitude(k, ecm, ecAmplitude);
-                          for (EPointIterator subPoint = point->GetSubPoints(*this).begin();
+                          for (UnitIterator subPoint = point->GetSubPoints(*this).begin();
                                subPoint < point->GetSubPoints(*this).end(); subPoint++) {
                             ecAmplitude = complex(0.0, 0.0);
                             in >> ecAmplitude;
@@ -1237,11 +1237,11 @@ int EData::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
  * compound nucleus), and the component's entrance pair is flagged as an
  * entrance HERE, while CNuc::Initialize -- which builds the reaction pathways
  * of every entrance pair -- still lies ahead.  Flagging it only in
- * EData::Initialize, as was done, left a pair used by components alone (the
+ * WorkingCopy::Initialize, as was done, left a pair used by components alone (the
  * second isotope of a natural target) without pathways: GetDecay(0).
  * Returns false, with the error printed, when the component cannot be made.
  */
-bool EData::CheckComponentPairs(CNuc *theCNuc, const ESegment &baseSegment, int entranceKey, int exitKey,
+bool WorkingCopy::CheckComponentPairs(CNuc *theCNuc, const Segment &baseSegment, int entranceKey, int exitKey,
                                 const Config &configure) {
   if (!theCNuc->IsPairKey(entranceKey) || !theCNuc->IsPairKey(exitKey)) {
     configure.outStream << "ERROR: segment #" << baseSegment.GetSegmentKey() << ": component " << entranceKey
@@ -1262,11 +1262,11 @@ bool EData::CheckComponentPairs(CNuc *theCNuc, const ESegment &baseSegment, int 
 }
 
 /*!
- * A transmission or yield segment (ESegment::IsTransformed), once its components exist: refuse what the transform
+ * A transmission or yield segment (Segment::IsTransformed), once its components exist: refuse what the transform
  * cannot mean, make every component a plain cross section, and give a yield its hidden total-cross-section term
  * (entrance pair to itself, "total 1", by the optical theorem), the s_t of Y0 = (s / s_t)(1 - exp(-n s_t)).
  */
-bool EData::FinishTransformedSegment(CNuc *theCNuc, ESegment *seg, int key, bool isTest, const Config &configure) {
+bool WorkingCopy::FinishTransformedSegment(CNuc *theCNuc, Segment *seg, int key, bool isTest, const Config &configure) {
   if (!seg || !seg->IsTransformed()) return true;
   const std::string what = std::string(isTest ? "test segment #" : "segment #") + std::to_string(key) + " (" +
                            (seg->IsTransmission() ? "transmission" : "yield") + "): ";
@@ -1308,16 +1308,16 @@ bool EData::FinishTransformedSegment(CNuc *theCNuc, ESegment *seg, int key, bool
  * and an effect blended in at range edges or skipped by an automatic tolerance is not one kernel on transformed
  * values.  Refused here rather than computed wrongly.
  */
-bool EData::CheckTransformedSegments(const Config &configure) {
-  for (const ESegment &seg : Draft().GetSegments()) {
+bool WorkingCopy::CheckTransformedSegments(const Config &configure) {
+  for (const Segment &seg : Draft().GetSegments()) {
     if (!seg.IsTransformed()) continue;
     const std::string what = "segment #" + std::to_string(seg.GetSegmentKey()) + " (" +
                              (seg.IsTransmission() ? "transmission" : "yield") + "): ";
     for (int p = 1; p <= seg.NumPoints(); p++) {
-      EPoint *base = seg.GetPoint(*this, p);
-      if (!ESegment::HasSubPointIntegration(*this, base)) {
+      Unit *base = seg.GetPoint(*this, p);
+      if (!Segment::HasSubPointIntegration(*this, base)) {
         for (int t = 1; t < seg.NumTerms(); t++)
-          if (p <= (int)seg.TermPoints(*this, t).size() && ESegment::HasSubPointIntegration(*this, seg.GetTermPoint(*this, t, p))) {
+          if (p <= (int)seg.TermPoints(*this, t).size() && Segment::HasSubPointIntegration(*this, seg.GetTermPoint(*this, t, p))) {
             configure.outStream << "ERROR: " << what << "a term is integrated over sub-points at E_lab "
                                 << base->GetLabEnergy() << " MeV where the segment's own point is not." << std::endl;
             return false;
@@ -1325,7 +1325,7 @@ bool EData::CheckTransformedSegments(const Config &configure) {
         continue;
       }
       TargetEffect *te = Draft().GetTargetEffect(base->GetTargetEffectNum());
-      // A thin-target integration blends with sigma(E_bar) inside its kernel (EPoint::TargetFallbackImpl), which is
+      // A thin-target integration blends with sigma(E_bar) inside its kernel (Unit::TargetFallbackImpl), which is
       // still one linear kernel on the transformed values; other kernels blend with a plain point outside it.
       const bool thinTarget = te && te->IsTargetIntegration() && !te->IsThickTarget();
       if ((base->GetTargetBlendWeight() < 1.0 && !thinTarget) || (te && te->GetAutoTolerance() > 0.0)) {
@@ -1335,7 +1335,7 @@ bool EData::CheckTransformedSegments(const Config &configure) {
         return false;
       }
       for (int t = 1; t < seg.NumTerms(); t++) {
-        EPoint *cp = p <= (int)seg.TermPoints(*this, t).size() ? seg.GetTermPoint(*this, t, p) : nullptr;
+        Unit *cp = p <= (int)seg.TermPoints(*this, t).size() ? seg.GetTermPoint(*this, t, p) : nullptr;
         bool same = cp && cp->NumSubPoints() == base->NumSubPoints();
         for (int j = 1; same && j <= base->NumSubPoints(); j++) {
           const double a = base->GetSubPoint(*this, j)->GetCMEnergy(), b = cp->GetSubPoint(*this, j)->GetCMEnergy();
@@ -1355,11 +1355,11 @@ bool EData::CheckTransformedSegments(const Config &configure) {
 }
 
 /*!
- * A leaf of a SUM, RATIO, sample, total-capture or yield segment (ESegment::AddLeaf): its pairs, a fixed angle (deg;
+ * A leaf of a SUM, RATIO, sample, total-capture or yield segment (Segment::AddLeaf): its pairs, a fixed angle (deg;
  * a RATIO denominator at one angle) or none, its scale, and a key of its own from the data set's counter (negative:
  * not a segment of the file; the caches and the intEC file are keyed by it).  Returns its term.
  */
-int EData::AddLeaf(ESegment &base, int entranceKey, int exitKey, std::optional<double> fixedAngle, double scaling) {
+int WorkingCopy::AddLeaf(Segment &base, int entranceKey, int exitKey, std::optional<double> fixedAngle, double scaling) {
   const int t = base.AddLeaf(*this, entranceKey, exitKey, fixedAngle, scaling, Draft().nextComponentKey_--);
   Draft().leafRefs_.push_back({(int)(&base - Draft().segments_.data()), t});
   return t;
@@ -1374,7 +1374,7 @@ namespace {
 // CalculateCrossSection on the point itself (angle, Coulomb amplitude,
 // observable type) may differ.  Whether `a` and `b` may sit in different
 // segments is the caller's question (ShiftsAgree).
-bool SharesCalculation(EData &data, EPoint &a, EPoint &b, bool sameExit = true) {
+bool SharesCalculation(WorkingCopy &data, Unit &a, Unit &b, bool sameExit = true) {
   if (a.GetEntranceKey() != b.GetEntranceKey() || (sameExit && a.GetExitKey() != b.GetExitKey())) return false;
   if (a.GetOriginalEnergy() != b.GetOriginalEnergy() || a.GetLabEnergy() != b.GetLabEnergy() ||
       a.GetCMEnergy() != b.GetCMEnergy())
@@ -1387,8 +1387,8 @@ bool SharesCalculation(EData &data, EPoint &a, EPoint &b, bool sameExit = true) 
   if (a.IsCoefficient() != b.IsCoefficient()) return false;
   if (a.IsCoefficient() && a.GetCoefficientAbsolute() != b.GetCoefficientAbsolute()) return false;
   if (a.NumSubPoints() != b.NumSubPoints()) return false;
-  const UnitRange<EPoint> sa = a.GetSubPoints(data);
-  const UnitRange<EPoint> sb = b.GetSubPoints(data);
+  const UnitRange<Unit> sa = a.GetSubPoints(data);
+  const UnitRange<Unit> sb = b.GetSubPoints(data);
   for (int i = 0; i < sa.size(); i++) {
     if (sa[i].GetOriginalEnergy() != sb[i].GetOriginalEnergy() ||
         sa[i].GetCMEnergy() != sb[i].GetCMEnergy() ||
@@ -1415,9 +1415,9 @@ struct ShiftForm {
   std::vector<double> fnValues;
 };
 
-ShiftForm ShiftFormOf(const EData &data, int pos) {
-  const std::vector<ESegment> &segments = data.Data().GetSegments();
-  const ESegment &seg = segments[pos];
+ShiftForm ShiftFormOf(const WorkingCopy &data, int pos) {
+  const std::vector<Segment> &segments = data.Data().GetSegments();
+  const Segment &seg = segments[pos];
   const SegmentState &state = data.State(seg);
   ShiftForm f;
   const int lead = seg.GetShiftLeaderPos() >= 0 ? seg.GetShiftLeaderPos() : pos;
@@ -1454,7 +1454,7 @@ bool ShiftsAgree(const ShiftForm &a, const ShiftForm &b) {
  * and T-matrix of the point and of each target-effect sub-point) is done once
  * per energy; each mapped point then only forms its own observable (angle,
  * Coulomb amplitude, A_y) from it and integrates its own target effect
- * (EPoint::Calculate).
+ * (Unit::Calculate).
  *
  * Points are mapped within a segment and across segments.  Two points share a
  * calculation (SharesCalculation) when they have the same entrance and exit
@@ -1466,13 +1466,13 @@ bool ShiftsAgree(const ShiftForm &a, const ShiftForm &b) {
  * are at the same energy whatever a fit or a finite-difference step does to
  * the shifts.  Segments whose shifts merely coincide at the current values are
  * mapped too, but only while they coincide: every change of a shift or of a
- * sub-point grid rebuilds the mapping (EData::FillEnergyShiftsFromParams).
+ * sub-point grid rebuilds the mapping (WorkingCopy::FillEnergyShiftsFromParams).
  * Normalizations play no part: they scale the data, not the model.
  *
  * The host of a group is its first point in data order (segment, then point
  * index): every loop that calculates the whole data set walks it in that order,
  * so a host is calculated before the points that read from it
- * (azure2::EvaluateModelPoint; ESegment::
+ * (azure2::EvaluateModelPoint; Segment::
  * UpdatePointEnergiesWithShift for the energy-dependent values, within a
  * segment).  The parallel loops (AZURECalc::PrecalculatePoints) hand out hosts
  * only, each of which calculates its mapped points.  The analytic gradient
@@ -1485,13 +1485,13 @@ bool ShiftsAgree(const ShiftForm &a, const ShiftForm &b) {
  * AZURE_NO_CROSS_SEGMENT_MAPPING=1 keeps it within each segment only.
  */
 
-void EData::MapData(CNuc *theCNuc) {
-  for (ESegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
-    for (EPointIterator point = segment->GetPoints(*this).begin(); point < segment->GetPoints(*this).end(); point++)
+void WorkingCopy::MapData(CNuc *theCNuc) {
+  for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
+    for (UnitIterator point = segment->GetPoints(*this).begin(); point < segment->GetPoints(*this).end(); point++)
       point->ClearMapping();
   }
   for (const std::pair<int, int> &leaf : Data().leafRefs_)
-    for (EPoint &point : Data().segments_[leaf.first].TermPoints(*this, leaf.second)) point.ClearMapping();
+    for (Unit &point : Data().segments_[leaf.first].TermPoints(*this, leaf.second)) point.ClearMapping();
   // (host, mapped point) in the order each host calculates its mapped points
   std::vector<std::pair<azure2::PointRef, azure2::PointRef>> mapping;
   const char *off = std::getenv("AZURE_NO_POINT_MAPPING");
@@ -1499,7 +1499,7 @@ void EData::MapData(CNuc *theCNuc) {
   const char *crossOff = std::getenv("AZURE_NO_CROSS_SEGMENT_MAPPING");
   const bool crossSegment = !(crossOff && *crossOff && std::string(crossOff) != "0");
 
-  const std::vector<ESegment> &segments = Data().GetSegments();
+  const std::vector<Segment> &segments = Data().GetSegments();
   const int numSegments = (int)segments.size();
   std::vector<ShiftForm> shiftForms(numSegments);
   for (int s = 0; s < numSegments; s++) shiftForms[s] = ShiftFormOf(*this, s);
@@ -1539,12 +1539,12 @@ void EData::MapData(CNuc *theCNuc) {
     if (segments[s].HasComponents() || segments[s].IsTotalCapture()) continue;
     for (int p = 0; p < segments[s].NumPoints(); p++) refs.push_back({s, p});
   }
-  auto pointOf = [this, &segments](const Ref &r) -> EPoint & { return segments[r.seg].GetPoints(*this)[r.point]; };
+  auto pointOf = [this, &segments](const Ref &r) -> Unit & { return segments[r.seg].GetPoints(*this)[r.point]; };
 
   // Group by pair and energy; a stable sort keeps data order inside a group,
   // so the first point of a group is its first point in data order.
   std::stable_sort(refs.begin(), refs.end(), [&](const Ref &x, const Ref &y) {
-    EPoint &a = pointOf(x), &b = pointOf(y);
+    Unit &a = pointOf(x), &b = pointOf(y);
     if (a.GetEntranceKey() != b.GetEntranceKey()) return a.GetEntranceKey() < b.GetEntranceKey();
     if (a.GetExitKey() != b.GetExitKey()) return a.GetExitKey() < b.GetExitKey();
     if (a.GetOriginalEnergy() != b.GetOriginalEnergy()) return a.GetOriginalEnergy() < b.GetOriginalEnergy();
@@ -1555,10 +1555,10 @@ void EData::MapData(CNuc *theCNuc) {
   const int n = (int)refs.size();
   int start = 0;
   while (start < n) {
-    EPoint &first = pointOf(refs[start]);
+    Unit &first = pointOf(refs[start]);
     int end = start + 1;
     while (end < n) {
-      EPoint &e = pointOf(refs[end]);
+      Unit &e = pointOf(refs[end]);
       if (e.GetEntranceKey() != first.GetEntranceKey() || e.GetExitKey() != first.GetExitKey() ||
           e.GetOriginalEnergy() != first.GetOriginalEnergy() || e.GetCMEnergy() != first.GetCMEnergy())
         break;
@@ -1566,7 +1566,7 @@ void EData::MapData(CNuc *theCNuc) {
     }
     hosts.clear();
     for (int k = start; k < end; k++) {
-      EPoint &p = pointOf(refs[k]);
+      Unit &p = pointOf(refs[k]);
       bool mapped = false;
       for (const Ref &h : hosts) {
         if (h.seg != refs[k].seg && !(crossSegment && !ownOnly[h.seg] && !ownOnly[refs[k].seg] &&
@@ -1593,7 +1593,7 @@ void EData::MapData(CNuc *theCNuc) {
  * Point mapping inside a segment with components (SUM, RATIO, total capture): each component's point i is mapped onto
  * the base segment's point i.  A component has its own exit pair but the base's entrance pair, energies, sub-point
  * grid and energy shift, so its level matrix is the host's: the host's calculation builds only the component's
- * T-matrix and observable (EPoint::Calculate).  Before 2026-10-24 every term was a calculation of its own, and a
+ * T-matrix and observable (Unit::Calculate).  Before 2026-10-24 every term was a calculation of its own, and a
  * neutron total cross section summed over nine exit pairs cost nine level-matrix solutions per point (13C+a: 87 % of
  * an evaluation).
  *
@@ -1601,29 +1601,29 @@ void EData::MapData(CNuc *theCNuc) {
  * (OwnsEDependentValues).  A beta-delayed entrance is left out: its energy-dependent values depend on the exit pair.
  * AZURE_NO_COMPONENT_MAPPING=1 switches this off (and AZURE_NO_POINT_MAPPING=1 all mapping).
  */
-void EData::MapLeaves(CNuc *theCNuc, std::vector<std::pair<azure2::PointRef, azure2::PointRef>> &mapping) {
+void WorkingCopy::MapLeaves(CNuc *theCNuc, std::vector<std::pair<azure2::PointRef, azure2::PointRef>> &mapping) {
   if (!theCNuc) return;
   const char *off = std::getenv("AZURE_NO_COMPONENT_MAPPING");
   if (off && *off && std::string(off) != "0") return;
   std::map<std::pair<int, int>, int> leafPos;  // (segment, term) -> position in the plan's leaf list
   for (int c = 0; c < (int)Data().leafRefs_.size(); c++) leafPos[Data().leafRefs_[c]] = c;
-  const std::vector<ESegment> &segments = Data().GetSegments();
+  const std::vector<Segment> &segments = Data().GetSegments();
   for (int s = 0; s < (int)segments.size(); s++) {
-    const ESegment &seg = segments[s];
+    const Segment &seg = segments[s];
     if (!seg.HasComponents() && !seg.IsTotalCapture()) continue;
     const int entrancePair = theCNuc->GetPairNumFromKey(seg.GetEntranceKey());
     if (entrancePair < 1 || theCNuc->GetPair(entrancePair)->GetPType() == 20) continue;
-    const UnitRange<EPoint> points = seg.GetPoints(*this);
+    const UnitRange<Unit> points = seg.GetPoints(*this);
     const int n = points.size();
     // Each component's point i onto the base's point i (components in turn, so a host's mapped points come grouped
-    // by exit and EPoint::Calculate builds each exit's T-matrix once).  The base's points stay unmapped among
+    // by exit and Unit::Calculate builds each exit's T-matrix once).  The base's points stay unmapped among
     // themselves, as before: the external-capture amplitudes and their file (intEC.dat) skip mapped points, so
     // mapping them would change that file's layout.
     for (int t = 1; t < seg.NumTerms(); t++) {
-      const UnitRange<EPoint> leafPoints = seg.TermPoints(*this, t);
+      const UnitRange<Unit> leafPoints = seg.TermPoints(*this, t);
       if (leafPoints.size() != n || !leafPos.count({s, t})) continue;
       for (int p = 0; p < n; p++) {
-        EPoint *cp = &leafPoints[p];
+        Unit *cp = &leafPoints[p];
         if (!SharesCalculation(*this, points[p], *cp, false)) continue;
         cp->SetMap(s + 1, p + 1);
         cp->SetOwnsEDependentValues(true);
@@ -1637,7 +1637,7 @@ void EData::MapLeaves(CNuc *theCNuc, std::vector<std::pair<azure2::PointRef, azu
  * Adds a TargetEffect object to the vector contained within the present object.
  */
 
-void EData::AddTargetEffect(TargetEffect targetEffect) {
+void WorkingCopy::AddTargetEffect(TargetEffect targetEffect) {
   TargetEffectValues values;
   values.screeningUe = targetEffect.GetScreeningUe();
   values.density = targetEffect.GetDensity();
@@ -1651,35 +1651,35 @@ void EData::AddTargetEffect(TargetEffect targetEffect) {
  * Deletes the last segment from the segment vector.
  */
 
-void EData::DeleteLastSegment() {
+void WorkingCopy::DeleteLastSegment() {
   Draft().segments_.pop_back();
   segmentStates_.pop_back();
 }
 
 template <class F>
-void EData::ForEachResultUnit(F f) {
+void WorkingCopy::ForEachResultUnit(F f) {
   const int nNatural = set_->numNuclei_;
-  auto segment = [&](const ESegment &seg, int t) {
+  auto segment = [&](const Segment &seg, int t) {
     const int nat = (t == 0 && seg.IsNatural()) ? nNatural : 0;
-    for (EPoint &point : seg.TermPoints(*this, t)) {
+    for (Unit &point : seg.TermPoints(*this, t)) {
       f(point, point.ResultAngularCapacity(), nat);
-      for (EPoint &sub : point.GetSubPoints(*this)) f(sub, sub.ResultAngularCapacity(), 0);
+      for (Unit &sub : point.GetSubPoints(*this)) f(sub, sub.ResultAngularCapacity(), 0);
     }
   };
-  for (const ESegment &seg : set_->segments_) segment(seg, 0);
+  for (const Segment &seg : set_->segments_) segment(seg, 0);
   for (const std::pair<int, int> &leaf : set_->leafRefs_) segment(set_->segments_[leaf.first], leaf.second);
 }
 
-void EData::LayoutResults(azure2::Results *results) {
+void WorkingCopy::LayoutResults(azure2::Results *results) {
   size_t total = 0;
-  ForEachResultUnit([&](EPoint &, int nAng, int nNat) { total += azure2::Results::RecordSize(nAng, nNat); });
+  ForEachResultUnit([&](Unit &, int nAng, int nNat) { total += azure2::Results::RecordSize(nAng, nNat); });
   std::vector<double> next(results ? total : 0, 0.0);
   size_t offset = 0;
-  ForEachResultUnit([&](EPoint &point, int nAng, int nNat) {
+  ForEachResultUnit([&](Unit &point, int nAng, int nNat) {
     if (results) {
       const size_t from = point.ResultSlot();
       const int fromAng = point.ResultAngularSlots(), fromNat = point.ResultNaturalSlots();
-      if (from != EPoint::kNoRecord && from + azure2::Results::RecordSize(fromAng, fromNat) <= results->slot.size())
+      if (from != Unit::kNoRecord && from + azure2::Results::RecordSize(fromAng, fromNat) <= results->slot.size())
         azure2::CopyRecord(results->slot.data() + from, fromAng, fromNat, next.data() + offset, nAng, nNat);
     }
     point.SetResultRecord(offset, nAng, nNat);
@@ -1688,17 +1688,17 @@ void EData::LayoutResults(azure2::Results *results) {
   resultsSize_ = total;
   if (results) results->slot.swap(next);
   modelSize_ = 0;
-  for (const ESegment &seg : set_->segments_)
-    for (EPoint &point : seg.GetPoints(*this)) {
+  for (const Segment &seg : set_->segments_)
+    for (Unit &point : seg.GetPoints(*this)) {
       point.SetModelRecord(modelSize_, point.ResultAngularCapacity());
       modelSize_ += azure2::Results::ModelRecordSize(point.ResultAngularCapacity());
     }
 }
 
-void EData::BeginEvaluation(azure2::Results &results) {
+void WorkingCopy::BeginEvaluation(azure2::Results &results) {
   size_t offset = 0;
   bool laidOut = true;
-  ForEachResultUnit([&](EPoint &point, int nAng, int nNat) {
+  ForEachResultUnit([&](Unit &point, int nAng, int nNat) {
     if (!laidOut) return;
     laidOut = point.ResultSlot() == offset && point.ResultAngularSlots() == nAng && point.ResultNaturalSlots() == nNat;
     offset += azure2::Results::RecordSize(nAng, nNat);
@@ -1709,18 +1709,18 @@ void EData::BeginEvaluation(azure2::Results &results) {
 }
 
 /*!
- * Creates a new copy of the EData object in memory and returns a pointer to the new object.
+ * Creates a new copy of the WorkingCopy object in memory and returns a pointer to the new object.
  * Used in AZURECalc function class for thread safety.
  */
 
-EData *EData::Clone() const {
+WorkingCopy *WorkingCopy::Clone() const {
   // A plain copy: the units, the plan and the points' task indices are values and positions, valid in the copy as
   // they are (no unit points to another or to its data set); the measurements, the term settings, the covariance
   // groups, the node tables and the prior covariance are shared and immutable (or, the two caches, shared on
   // purpose).  A copy has no grid nucleus of its own (GridNucleus).
-  EData *dataCopy = new EData(*this);
+  WorkingCopy *dataCopy = new WorkingCopy(*this);
   // The copy's points (not their sub-points) start without the external-capture amplitudes of the set-up: a working
-  // copy evaluates them at its points' energies (EPoint::GetECAmplitudeWithShift).
+  // copy evaluates them at its points' energies (Unit::GetECAmplitudeWithShift).
   for (azure2::PointRef u : dataCopy->PlanUnits()) dataCopy->units_[u].ClearECAmplitudes();
   return dataCopy;
 }
@@ -1730,7 +1730,7 @@ EData *EData::Clone() const {
  * (AZURECalc::PrecalculatePoints) and the API's calculations (AZUREAPI).
  */
 
-int EData::CalculatePointsInParallel(const std::vector<const ESegment *> &segments, CNuc *theCNuc, const Config &configure,
+int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &segments, CNuc *theCNuc, const Config &configure,
                                      azure2::Results &results) {
 #ifdef _OPENMP
   if (omp_in_parallel()) return -1;
@@ -1739,15 +1739,15 @@ int EData::CalculatePointsInParallel(const std::vector<const ESegment *> &segmen
 #endif
   if (ScopedPointMappingOff::Active()) return -1;
   if (std::getenv("AZURE_SERIAL_CHI2")) return -1;
-  std::vector<EPoint *> work;
-  std::set<const ESegment *> seen;
-  for (const ESegment *seg : segments) {
+  std::vector<Unit *> work;
+  std::set<const Segment *> seen;
+  for (const Segment *seg : segments) {
     if (!seg || !seen.insert(seg).second) continue;
     for (int t = 0; t < seg->NumTerms(); t++)
-      for (EPoint &pt : seg->TermPoints(*this, t))
+      for (Unit &pt : seg->TermPoints(*this, t))
         if (!pt.IsMapped()) work.push_back(&pt);
   }
-  // A host also calculates every point mapped onto it (EData::MapData), so
+  // A host also calculates every point mapped onto it (WorkingCopy::MapData), so
   // its work grows with that number: one Fowler-type angular distribution at
   // a single energy is one item.  Largest items first, one at a time, so such
   // an item does not end up last on one thread.  Each item is calculated the
@@ -1758,17 +1758,17 @@ int EData::CalculatePointsInParallel(const std::vector<const ESegment *> &segmen
   std::vector<size_t> order(work.size());
   for (size_t k = 0; k < order.size(); k++) order[k] = k;
   std::stable_sort(order.begin(), order.end(), [&cost](size_t a, size_t b) { return cost[a] > cost[b]; });
-  std::vector<EPoint *> sorted(work.size());
+  std::vector<Unit *> sorted(work.size());
   for (size_t k = 0; k < order.size(); k++) sorted[k] = work[order[k]];
   work.swap(sorted);
   int failed = 0;
   AZUREProfile::Timer profileTimer(AZUREProfile::kPoints);
   // One item per task of the plan: its host calculates itself and the points the plan maps onto it.
-  auto runTask = [&](EPoint *host) {
+  auto runTask = [&](Unit *host) {
     try {
       host->Calculate(this, theCNuc, configure, results);
     } catch (const std::exception &e) {
-      // NaN on the point and the points mapped onto it, reported once (EPoint::MarkFailed); 0 on the point alone,
+      // NaN on the point and the points mapped onto it, reported once (Unit::MarkFailed); 0 on the point alone,
       // silently, before 2026-11-01 -- and the CLI's objective takes these values (PrecalculatePoints).
       host->MarkFailed(this, results, "point", configure, e.what());
       return 1;
@@ -1779,7 +1779,7 @@ int EData::CalculatePointsInParallel(const std::vector<const ESegment *> &segmen
     return 0;
   };
   if (azure2::CalculationPlan::RunTimeCheckRequested() && !work.empty()) {
-    azure2::CalculationPlan::RunChecked(*this, work, results, [&](EPoint *h) { failed += runTask(h); });
+    azure2::CalculationPlan::RunChecked(*this, work, results, [&](Unit *h) { failed += runTask(h); });
     return failed;
   }
 #pragma omp parallel for schedule(dynamic, 1) reduction(+ : failed)

@@ -1,5 +1,5 @@
-#ifndef ESEGMENT_H
-#define ESEGMENT_H
+#ifndef SEGMENT_H
+#define SEGMENT_H
 
 #include "Unit.h"
 #include "Equation.h"
@@ -18,7 +18,7 @@ struct Prediction;
 }  // namespace experiment
 }  // namespace azure2
 
-class EData;
+class WorkingCopy;
 class CNuc;
 class Config;
 struct ThmWeightTable;
@@ -29,8 +29,8 @@ struct ThmCoherentBackground;
 struct ThmLineshape;
 struct ThmSpectatorWindow;
 
-class ESegment;
-typedef std::vector<ESegment>::const_iterator ESegmentIterator;
+class Segment;
+typedef std::vector<Segment>::const_iterator SegmentIterator;
 
 enum OperationType {
   SUM = 0,
@@ -38,14 +38,14 @@ enum OperationType {
 };
 
 /// A data set of the project: its measurement, its settings and the terms of its prediction (its points are units of
-/// the data set that holds it, EData::Units).
+/// the data set that holds it, WorkingCopy::Units).
 
-class ESegment {
+class Segment {
  public:
   /// Build a data segment from its spec (experiment/'s SetupSpecs.h).
-  explicit ESegment(const azure2::experiment::DatasetSpec &);
+  explicit Segment(const azure2::experiment::DatasetSpec &);
   /// Build an extrapolation segment from its spec -- points on a grid, no data file.
-  explicit ESegment(const azure2::experiment::ExtrapolationSpec &);
+  explicit Segment(const azure2::experiment::ExtrapolationSpec &);
   /// Differential cross section in the lab frame?
   bool IsDifferential() const;
   /// Differential cross section in the centre-of-mass frame?
@@ -62,8 +62,8 @@ class ESegment {
   bool IsProfiledNorm() const;
   /// The normalization that minimizes this segment's chi^2 at the model values in `results` (profiledNorm) and that
   /// minimum chi^2 (returned).  Used for profiled (THM) norms; the segment's own norm is not changed.
-  double ProfileNormChiSquared(const EData &data, const azure2::Results &results, double &profiledNorm) const;
-  /// The segment's position (0-based) among the data set's segments: its state in a working copy (EData::State).
+  double ProfileNormChiSquared(const WorkingCopy &data, const azure2::Results &results, double &profiledNorm) const;
+  /// The segment's position (0-based) among the data set's segments: its state in a working copy (WorkingCopy::State).
   int Pos() const { return pos_; }
   void SetPos(int pos) { pos_ = pos; }
   /// Does the segment carry target effects?
@@ -114,17 +114,17 @@ class ESegment {
   int GetExitKey() const;
   /// Read the data file and keep the rows inside the energy and angle ranges (the segment's measurement), one point
   /// per row of the working copy `data` (set-up), converted from the lab frame where needed.
-  int Fill(CNuc *, EData *, const Config &);
+  int Fill(CNuc *, WorkingCopy *, const Config &);
   /// What the segment measured: its rows (shared, never written after set-up), their provenance, its prediction.
   const azure2::experiment::Measurement &GetMeasurement() const { return *measurement_; }
   bool HasMeasurement() const { return measurement_ != nullptr; }
   /// Make `rows` the segment's measurement and one point per row (a data file's rows, or the grid of an
   /// extrapolation), in the frame as read; ConvertRowToCM converts them.
-  void SetMeasurementRows(EData &data, std::shared_ptr<const azure2::experiment::MeasurementRows> rows,
+  void SetMeasurementRows(WorkingCopy &data, std::shared_ptr<const azure2::experiment::MeasurementRows> rows,
                           const azure2::experiment::MeasurementProvenance &provenance, bool extrapolation);
   /// The grid of an extrapolation as its measurement: one row per (angle, energy), energies varying fastest, value
   /// 0 and uncertainty 0.1 (lab MeV, deg).
-  void SetGridRows(EData &data, const std::vector<double> &energies, const std::vector<double> &angles);
+  void SetGridRows(WorkingCopy &data, const std::vector<double> &energies, const std::vector<double> &angles);
   /// Row i (0-based) of the measurement as read: the value, its uncertainty (after a covariance file), its data-file
   /// record.
   double LabValue(int i) const { return measurement_->rows->value[i]; }
@@ -144,14 +144,14 @@ class ESegment {
   /// energy shift (Convert) and of the leaves, written into the term's frame and point.  With convertValue (false for
   /// a ratio: dimensionless) the value and its uncertainty carry dOmega_lab/dOmega_cm.  False where the lab angle is
   /// beyond the kinematic maximum, with the maximum and the reason in `limit`; the caller reports it.
-  bool ConvertRowToCM(EData &data, int t, int i, PPair *entrancePair, PPair *exitPair, bool convertValue,
+  bool ConvertRowToCM(WorkingCopy &data, int t, int i, PPair *entrancePair, PPair *exitPair, bool convertValue,
                       BeyondRange beyond, azure2::experiment::AngleLimit &limit) const;
   /// E_c.m., E_x and the c.m. bin edges of row i of term t alone (the leaf grids are laid out before the leaves'
   /// angles are converted).
-  void ConvertRowEnergyToCM(EData &data, int t, int i, PPair *entrancePair, PPair *exitPair) const;
+  void ConvertRowEnergyToCM(WorkingCopy &data, int t, int i, PPair *entrancePair, PPair *exitPair) const;
   /// The frame of term t as it stands now in `data` becomes the frame an energy shift starts from
   /// (BeyondRange::Convert); set-up.
-  void KeepLoadFrame(const EData &data, int t);
+  void KeepLoadFrame(const WorkingCopy &data, int t);
 
   // ---- The terms of the segment's prediction (docs/upgrade/data_structure.md section 1.5).  Term 0 is the
   // segment's own; term k >= 1 is its k-th leaf: a component of a SUM, RATIO or total-capture segment, or the total
@@ -160,14 +160,14 @@ class ESegment {
   // the segment.
   int NumTerms() const { return 1 + (int)leaves_.size(); }
   /// The points of term t: units [TermFirstUnit, + NumTermPoints) of `data`, a working copy of the data set that
-  /// holds the segment (EData::Units; every function here that takes `data` means one).  One point per row of the
+  /// holds the segment (WorkingCopy::Units; every function here that takes `data` means one).  One point per row of the
   /// measurement in every term.
-  UnitRange<EPoint> TermPoints(EData &data, int t) const;
-  UnitRange<const EPoint> TermPoints(const EData &data, int t) const;
+  UnitRange<Unit> TermPoints(WorkingCopy &data, int t) const;
+  UnitRange<const Unit> TermPoints(const WorkingCopy &data, int t) const;
   int NumTermPoints(int) const { return NumPoints(); }
-  int TermFirstUnit(const EData &data, int t) const;
+  int TermFirstUnit(const WorkingCopy &data, int t) const;
   /// Point i (1-based) of term t.
-  EPoint *GetTermPoint(EData &data, int t, int i) const;
+  Unit *GetTermPoint(WorkingCopy &data, int t, int i) const;
   /// What term t's points compute (shared by them and their sub-points; immutable once set up).
   const std::shared_ptr<const TermSettings> &TermSettingsOf(int t) const { return Fixed(t).settings; }
   int TermEntranceKey(int t) const { return t ? leaves_[t - 1].entranceKey : entrancekey_; }
@@ -186,15 +186,15 @@ class ESegment {
   double LeafScaling(int t) const { return t ? leaves_[t - 1].scaling : 1.0; }
   /// Add a leaf with these pairs, a fixed lab angle (deg; a RATIO denominator) or none, a scale factor and its key:
   /// its points are the segment's (at the rows, with the frame at load) with the leaf's pairs.  Returns its term.
-  int AddLeaf(EData &data, int entranceKey, int exitKey, std::optional<double> fixedAngle, double scaling, int key);
+  int AddLeaf(WorkingCopy &data, int entranceKey, int exitKey, std::optional<double> fixedAngle, double scaling, int key);
   /// Make leaf t the total-cross-section term of a yield segment.
-  void MakeYieldTotalLeaf(EData &data, int t);
+  void MakeYieldTotalLeaf(WorkingCopy &data, int t);
   /// E_c.m. / E_lab of the segment's points, non-relativistic: (M1 + M2) / M2 of the decay pair for a beta-delayed
   /// point, M2 / (M1 + M2) of the entrance pair otherwise (the rigid shift of sub-points, the target-effect grids).
   static double CMEnergyFactor(PPair *entrancePair, PPair *exitPair);
   /// Orbital angular momentum. Phase-shift segments only.
   int GetL() const;
-  /// 1-based position of the TargetEffect in the parent EData.
+  /// 1-based position of the TargetEffect in the parent WorkingCopy.
   int GetTargetEffectNum() const;
   /// Segment key -- its position in the input file, counting inactive segments too.
   int GetSegmentKey() const;
@@ -212,9 +212,9 @@ class ESegment {
   double GetMaxAngle() const;
   /// Total spin. Phase-shift segments only.
   double GetJ() const;
-  /// Channel spin of a phase-shift segment ("spin <s>"), or -1 when the line gives none; see EData::Initialize.
+  /// Channel spin of a phase-shift segment ("spin <s>"), or -1 when the line gives none; see WorkingCopy::Initialize.
   double GetPhaseS() const { return phaseS_; }
-  /// The normalization, energy shifts and sample thickness a working copy starts from (EData::AddSegment): the
+  /// The normalization, energy shifts and sample thickness a working copy starts from (WorkingCopy::AddSegment): the
   /// spec's values (a group follower: its leader's).
   double StartNorm() const { return startNorm_; }
   double StartEnergyShift() const { return startEnergyShift_; }
@@ -242,7 +242,7 @@ class ESegment {
   bool IsVaryEnergyShiftSqrt() const;
   /// Shift-group label ("" if none): segments with one label share one constant shift.
   std::string GetShiftGroup() const;
-  /// Position (0-based, in EData's segment vector) of the group member whose shift
+  /// Position (0-based, in WorkingCopy's segment vector) of the group member whose shift
   /// parameter this segment uses; -1 for a segment that uses its own.
   int GetShiftLeaderPos() const;
   /// Does this segment take its constant shift from another segment of its group?
@@ -256,7 +256,7 @@ class ESegment {
   std::string GetShiftFnGroup() const;
   /// Normalization-group label ("" if none): segments with one label share one norm.
   std::string GetNormGroup() const;
-  /// Position (0-based, in EData's segment vector) of the group member whose norm this
+  /// Position (0-based, in WorkingCopy's segment vector) of the group member whose norm this
   /// segment uses; -1 for a segment that uses its own.
   int GetNormLeaderPos() const;
   /// Does this segment take its normalization from another segment of its group?
@@ -265,9 +265,9 @@ class ESegment {
   /// member's norm and nominal norm, and carries no norm penalty of its own.
   void SetNormGroupFollower(int pos, double norm, double nominal);
   /// Data-covariance file of the segment ("" if none): the segments naming one file
-  /// share one covariance matrix (EData::ResolveCovarianceGroups).
+  /// share one covariance matrix (WorkingCopy::ResolveCovarianceGroups).
   const std::string &GetCovarianceFile() const { return covarianceFile_; }
-  /// Index of the segment's covariance group in EData (-1 if it has none).
+  /// Index of the segment's covariance group in WorkingCopy (-1 if it has none).
   int GetCovarianceGroup() const { return covGroup_; }
   void SetCovarianceGroup(int g) { covGroup_ = g; }
   /// The whole lab-energy shift of the segment's `state` at a point's original lab energy: a + b*sqrt(E) + f(E).
@@ -294,17 +294,17 @@ class ESegment {
   std::string GetShiftFnExpression() const;
   /// Number of parameters of the applied shift function.
   int NumShiftFnParams() const { return numShiftFnParams_; }
-  /// Position (0-based, in EData's segment vector) of the segment that owns the applied
+  /// Position (0-based, in WorkingCopy's segment vector) of the segment that owns the applied
   /// shift function's parameters (this segment or its group leader); -1 if none.
   int GetShiftFnSourcePos() const;
-  /// Owners: index of the function's first parameter within EData's shift-function block.
+  /// Owners: index of the function's first parameter within WorkingCopy's shift-function block.
   int GetShiftFnParamStart() const;
   void SetShiftFnParamStart(int);
   /// Set parameter j of the applied shift function in the segment's `state`.
   void SetShiftFnValue(SegmentState &state, int j, double value) const;
   /// Apply the shift function owned by the segment at position ownerPos (this one, or its
   /// group leader) to this segment and to its `state`; its parameters start at the owner's declared values.
-  void InstallShiftFn(SegmentState &state, const ESegment &owner, int ownerPos, const Config &);
+  void InstallShiftFn(SegmentState &state, const Segment &owner, int ownerPos, const Config &);
   /// f(x) alone, at original lab energy x (MeV), of the segment's `state`; 0 without a shift function.
   double ShiftFnTerm(const SegmentState &state, double labEnergy) const;
   /// Is this a composite segment, combining others by sum or ratio?
@@ -321,7 +321,7 @@ class ESegment {
     return (IsAdvanced() && GetLegacyOperationType() == 1) ||
            reaction_.coulombReference != azure2::experiment::CoulombReference::None;
   }
-  /// What the segment predicts at its points (src/Predictions.cpp, EData::BuildPredictions): built once at set-up,
+  /// What the segment predicts at its points (src/Predictions.cpp, WorkingCopy::BuildPredictions): built once at set-up,
   /// immutable, shared by the working copies; null before it is built.
   const azure2::experiment::Prediction *GetPrediction() const {
     return measurement_ ? measurement_->prediction.get() : nullptr;
@@ -334,7 +334,7 @@ class ESegment {
   void SetPrediction(std::shared_ptr<const azure2::experiment::Prediction> p);
   /// Path of the data file this segment reads.
   std::string GetDataFile() const;
-  /// Point the segment at a TargetEffect in the parent EData.
+  /// Point the segment at a TargetEffect in the parent WorkingCopy.
   void SetTargetEffectNum(int);
   void SetSegmentKey(int);
   /// Move the centre of the normalization prior away from the norm field (an
@@ -350,47 +350,47 @@ class ESegment {
   /// Attach the Coulomb line shape of this segment's THM experiment
   /// (lineshape=on) to the segment and to every point it has (and sub-points
   /// created afterwards).  The segment keeps it alive.
-  void SetThmLineshape(EData &data, std::shared_ptr<const ThmLineshape> l);
+  void SetThmLineshape(WorkingCopy &data, std::shared_ptr<const ThmLineshape> l);
   const ThmLineshape *GetThmLineshape() const { return thmLineshape_.get(); }
   /// Attach the spectator-momentum window of this segment's THM experiment
   /// (ps=...), as SetThmLineshape.
-  void SetThmSpectatorWindow(EData &data, std::shared_ptr<const ThmSpectatorWindow> w);
+  void SetThmSpectatorWindow(WorkingCopy &data, std::shared_ptr<const ThmSpectatorWindow> w);
   const ThmSpectatorWindow *GetThmSpectatorWindow() const { return thmWindow_.get(); }
   /// Attach the distortion factor R(E) of this segment's THM experiment
   /// (distortion=...), as SetThmLineshape.
-  void SetThmDistortion(EData &data, std::shared_ptr<const ThmDistortion> d);
+  void SetThmDistortion(WorkingCopy &data, std::shared_ptr<const ThmDistortion> d);
   const ThmDistortion *GetThmDistortion() const { return thmDistortion_.get(); }
-  void SetThmDwVertex(EData &data, std::shared_ptr<const ThmDwVertex> v);
+  void SetThmDwVertex(WorkingCopy &data, std::shared_ptr<const ThmDwVertex> v);
   const ThmDwVertex *GetThmDwVertex() const { return thmDwVertex_.get(); }
   /// Attach the angular window of this segment's THM experiment
   /// (theta=thmin-thmax), as SetThmLineshape.
-  void SetThmAngleWindow(EData &data, std::shared_ptr<const ThmAngleWindow> w);
+  void SetThmAngleWindow(WorkingCopy &data, std::shared_ptr<const ThmAngleWindow> w);
   const ThmAngleWindow *GetThmAngleWindow() const { return thmAngle_.get(); }
   /// THM coherent background (cbackground=), as SetThmLineshape.
-  void SetThmCoherent(EData &data, std::shared_ptr<const ThmCoherentBackground> c);
+  void SetThmCoherent(WorkingCopy &data, std::shared_ptr<const ThmCoherentBackground> c);
   const ThmCoherentBackground *GetThmCoherent() const { return thmCoherent_.get(); }
   /// Re-apply the current energy shift of the segment's state in `data` to every point of every term, undoing the
   /// previous one.
-  void UpdatePointEnergiesWithShift(EData &data, CNuc *theCNuc, const Config *configure) const;
+  void UpdatePointEnergiesWithShift(WorkingCopy &data, CNuc *theCNuc, const Config *configure) const;
   /// The same for point i (0-based) of term t and its sub-points.
-  void UpdatePointEnergyWithShift(EData &data, int t, int i, CNuc *theCNuc, const Config *configure) const;
+  void UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, CNuc *theCNuc, const Config *configure) const;
   /// Point i (0-based) of term t and, after it, every point of the term mapped onto it; nothing if point i is itself
   /// mapped onto an earlier point of the term (its host does it).  The unit for parallel re-energising.
-  void UpdatePointGroupEnergyWithShift(EData &data, int t, int i, CNuc *theCNuc, const Config *configure) const;
+  void UpdatePointGroupEnergyWithShift(WorkingCopy &data, int t, int i, CNuc *theCNuc, const Config *configure) const;
   /// The earlier point of term t that its point i (0-based) is mapped onto, or NULL.
-  EPoint *ShiftHost(EData &data, int t, int i) const;
+  Unit *ShiftHost(WorkingCopy &data, int t, int i) const;
   /// Change the exit pair key.
-  void SetExitKey(EData &data, int);
+  void SetExitKey(WorkingCopy &data, int);
   /// Change the entrance pair key, for this segment and every point in it.
-  void SetEntranceKey(EData &data, int);
+  void SetEntranceKey(WorkingCopy &data, int);
   /// Number of segments to sum for total capture; 0 if not total capture.
   void SetIsTotalCapture(int);
   void SetMinAngle(double);
   void SetMaxAngle(double);
   /// Point \p i (1-based) of the segment's own term, and its points.
-  EPoint *GetPoint(EData &data, int i) const { return GetTermPoint(data, 0, i); }
-  UnitRange<EPoint> GetPoints(EData &data) const { return TermPoints(data, 0); }
-  UnitRange<const EPoint> GetPoints(const EData &data) const { return TermPoints(data, 0); }
+  Unit *GetPoint(WorkingCopy &data, int i) const { return GetTermPoint(data, 0, i); }
+  UnitRange<Unit> GetPoints(WorkingCopy &data) const { return TermPoints(data, 0); }
+  UnitRange<const Unit> GetPoints(const WorkingCopy &data) const { return TermPoints(data, 0); }
 
   /// How the components combine: SUM or RATIO.
   void SetOperationType(OperationType operation);
@@ -402,7 +402,7 @@ class ESegment {
   /// by the isotopic abundance of the term's entrance pair's compound nucleus
   /// in the segment's sample (the trailing "natural <1|sample>" token of the
   /// line, resolved to a 1-based sample of the <abundances> block by
-  /// EData::Fill; 0 = not a natural segment).
+  /// WorkingCopy::Fill; 0 = not a natural segment).
   bool IsNatural() const { return naturalSample_ > 0; }
   /// "total 1" on the line: every term of the segment whose exit pair is its entrance pair is the total cross
   /// section of that pair, from the optical theorem (GenMatrixFunc::CalculateBareCrossSection); a term to another
@@ -426,8 +426,8 @@ class ESegment {
   bool IsYield() const { return yield_ > 0.0; }
   bool IsTransformed() const { return transmission_ > 0.0 || yield_ > 0.0; }
   /// n in atoms/barn of a transmission or yield segment, 0 otherwise: the value the transform uses -- the line's n,
-  /// a thickness group's leader's (EData::ResolveThicknessGroups), or the fit parameter segment_<key>_thickness
-  /// (EData::FillThicknessFromParams): the value in the segment's `state`.
+  /// a thickness group's leader's (WorkingCopy::ResolveThicknessGroups), or the fit parameter segment_<key>_thickness
+  /// (WorkingCopy::FillThicknessFromParams): the value in the segment's `state`.
   double GetSampleThickness(const SegmentState &state) const { return IsTransformed() ? state.thickness : 0.0; }
   /// The line's own n (the prior centre of the fit form), 0 for a segment without the transform.
   double GetNominalThickness() const { return transmission_ > 0.0 ? transmission_ : yield_; }
@@ -436,9 +436,9 @@ class ESegment {
   bool HasThicknessFit() const { return thicknessFit_; }
   bool IsThicknessVaried() const { return thicknessFit_ && thicknessVary_ == 1 && thicknessLeaderPos_ < 0; }
   double GetThicknessSigma() const { return thicknessSigma_; }
-  /// "thicknessgroup <label>" ("" = none); the follower's leader position in EData's segment list (-1: none).
+  /// "thicknessgroup <label>" ("" = none); the follower's leader position in WorkingCopy's segment list (-1: none).
   const std::string &GetThicknessGroup() const { return thicknessGroup_; }
-  /// The names of the segment's fit parameters, as its spec gives them (EData::FillMnParams).
+  /// The names of the segment's fit parameters, as its spec gives them (WorkingCopy::FillMnParams).
   const azure2::experiment::ParameterNames &GetParameterNames() const { return parameterNames_; }
   int GetThicknessLeaderPos() const { return thicknessLeaderPos_; }
   bool IsThicknessGroupFollower() const { return thicknessLeaderPos_ >= 0; }
@@ -456,8 +456,8 @@ class ESegment {
   /// The value the fit compares with the data is formed by the segment, not read off its points: components, a
   /// sample's abundance weights or a transmission / yield transform.
   bool NeedsAssembly() const { return HasComponents() || IsNatural() || IsTransformed(); }
-  /// True when the point, a point of `data`, is integrated over sub-points (EPoint::IntegrateTargetEffect).
-  static bool HasSubPointIntegration(const EData &data, const EPoint *point);
+  /// True when the point, a point of `data`, is integrated over sub-points (Unit::IntegrateTargetEffect).
+  static bool HasSubPointIntegration(const WorkingCopy &data, const Unit *point);
   /// IsTotal for the segment's own term: the segment is "total" and its exit pair is its entrance pair.
   bool IsTotalTerm() const { return IsTermTotal(0); }
   int GetNaturalSample() const { return naturalSample_; }
@@ -475,18 +475,18 @@ class ESegment {
   /// with the TERM's own entrance and exit pair and the Jacobian of its own exit
   /// type (photon or particle).  1 unless the ratio is a lab-frame differential
   /// one (the term's points were then never converted, so nothing is stored on
-  /// them: the RATIO data value is dimensionless and ESegment::Fill skips the
+  /// them: the RATIO data value is dimensionless and Segment::Fill skips the
   /// cross-section conversion).  Before 2026-10-27 the denominator's factor was
   /// computed with the BASE segment's pairs (audit item 15).
-  double RatioTermFrameFactor(int t, EPoint *point, CNuc *cnuc) const;
+  double RatioTermFrameFactor(int t, Unit *point, CNuc *cnuc) const;
 
   /// Free-shift refills (docs/upgrade/channel_table.md section 2.1, interim until the objective has the analytic
   /// shift derivative): BeginShiftRefill, single-threaded before the parallel re-energise loop, keeps the tables of
   /// the segment's last kShiftTables shift states for UpdatePointEnergyWithShift to read (exact keys) and has every
   /// point record the rows it used; CommitShiftTable, single-threaded after the loop, turns those rows into the table
   /// of the present state (the shift values, bitwise), replacing the oldest; nothing writes a stored table.
-  void BeginShiftRefill(EData &data, int t, CNuc *, const Config &) const;
-  void CommitShiftTable(EData &data, int t, CNuc *, const Config &) const;
+  void BeginShiftRefill(WorkingCopy &data, int t, CNuc *, const Config &) const;
+  void CommitShiftTable(WorkingCopy &data, int t, CNuc *, const Config &) const;
   static constexpr std::size_t kShiftTables = 3;
 
  private:
@@ -513,11 +513,11 @@ class ESegment {
   TermFixed &Fixed(int t) { return t ? leaves_[t - 1].fixed : own_; }
   /// The settings of the segment's own term from its members; given to its points (SetTermSettings).
   std::shared_ptr<TermSettings> MakeOwnSettings() const;
-  void SetTermSettings(EData &data, int t, std::shared_ptr<const TermSettings> settings);
+  void SetTermSettings(WorkingCopy &data, int t, std::shared_ptr<const TermSettings> settings);
   /// After a set-up change of the segment's pairs or THM attachments.
-  void RefreshOwnSettings(EData &data);
+  void RefreshOwnSettings(WorkingCopy &data);
   /// Leaf t's settings: the segment's with the leaf's pairs and role.
-  void SetLeafSettings(EData &data, int t);
+  void SetLeafSettings(WorkingCopy &data, int t);
   const TermFixed &Fixed(int t) const { return t ? leaves_[t - 1].fixed : own_; }
   static ChannelRowSource ShiftRowSource(TermState &term, int i);
   static std::vector<double> ShiftState(const SegmentState &state);
@@ -616,14 +616,14 @@ class ESegment {
  * the grid re-placement queue; it answers what they ask of a term, the term's pairs, key, target effect and points.
  */
 struct TermRef {
-  const ESegment *segment = nullptr;
+  const Segment *segment = nullptr;
   int term = 0;
   bool operator==(const TermRef &o) const { return segment == o.segment && term == o.term; }
   bool operator!=(const TermRef &o) const { return !(*this == o); }
   int NumPoints() const { return segment->NumTermPoints(term); }
   /// Point i, 1-based, in the units of `data`, the data set that holds the segment.
-  EPoint *GetPoint(EData &data, int i) const { return segment->GetTermPoint(data, term, i); }
-  UnitRange<EPoint> GetPoints(EData &data) const { return segment->TermPoints(data, term); }
+  Unit *GetPoint(WorkingCopy &data, int i) const { return segment->GetTermPoint(data, term, i); }
+  UnitRange<Unit> GetPoints(WorkingCopy &data) const { return segment->TermPoints(data, term); }
   int GetEntranceKey() const { return segment->TermEntranceKey(term); }
   int GetExitKey() const { return segment->TermExitKey(term); }
   int GetSegmentKey() const { return segment->TermKey(term); }

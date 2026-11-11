@@ -14,9 +14,9 @@
 #include "ThmReports.h"
 
 class Config;
-class EData;
+class WorkingCopy;
 class CNuc;
-class EPoint;
+class Unit;
 struct GradAccum;
 class ParamIndexMap;
 
@@ -32,13 +32,13 @@ class ParamIndexMap;
 class AZUREAPI {
  public:
   /*!
-   * The AZUREAPI object is created with reference to an EData and CNuc object.
+   * The AZUREAPI object is created with reference to an WorkingCopy and CNuc object.
    *. The runtime configurations are also passed through a Config structure.
    */
   // Defined in the .cpp (Config is incomplete here).
   AZUREAPI(Config &configure);
 
-  // Defined in the .cpp: EData and CNuc are incomplete here, and deleting an
+  // Defined in the .cpp: WorkingCopy and CNuc are incomplete here, and deleting an
   // incomplete type is undefined.
   ~AZUREAPI();
 
@@ -211,9 +211,9 @@ class AZUREAPI {
    */
   Config &configure() const { return configure_; };
   /*!
-   * Returns a pointer to the EData object.
+   * Returns a pointer to the WorkingCopy object.
    */
-  EData *data() const { return data_; };
+  WorkingCopy *data() const { return data_; };
   /// The buffer every evaluation of this session writes and every array the session returns reads: the session owns
   /// it (docs/upgrade/data_model.md S3).
   azure2::Results &results() const { return results_; }
@@ -458,9 +458,9 @@ class AZUREAPI {
   /// (the last evaluation's parameters).  False and `why` if unavailable.
   bool GetThmLineshape(const std::string &name, const vector_r &energies, ThmLineshapeReport &out,
                        std::string &why);
-  /// The window-averaged THM entrance vertex of experiment `name` (EData::ThmVertexTable).
+  /// The window-averaged THM entrance vertex of experiment `name` (WorkingCopy::ThmVertexTable).
   bool GetThmVertex(const std::string &name, const vector_r &energies, ThmVertexReport &out, std::string &why);
-  /// The distortion factor R(E) of experiment `name` (EData::ThmDistortionTable).
+  /// The distortion factor R(E) of experiment `name` (WorkingCopy::ThmDistortionTable).
   bool GetThmDistortion(const std::string &name, const vector_r &energies, ThmDistortionReport &out,
                         std::string &why);
 
@@ -530,7 +530,7 @@ class AZUREAPI {
  private:
   /// The arrays of UpdateSegments* (the model value of every point, its E1 / E2 parts, frame and coefficients) for
   /// the hand-over already made into the session's compound and data.  Returns the number of segments reported.
-  int ReportSegments(CNuc *localCompound, EData *localData);
+  int ReportSegments(CNuc *localCompound, WorkingCopy *localData);
   /// The nuisance priors of <parameterSettings> (useAsNuisance), read once: chi^2 and gradient at the full vector,
   /// without the parameters of the prior covariance (D3).
   double NuisanceChi2(const vector_r &full) const;
@@ -589,7 +589,7 @@ class AZUREAPI {
 
   // Configuration
   Config &configure_;
-  EData *data_;
+  WorkingCopy *data_;
   CNuc *compound_;
   // The results of this session's evaluations (results()); mutable as data_ is: the const evaluations write both.
   mutable azure2::Results results_;

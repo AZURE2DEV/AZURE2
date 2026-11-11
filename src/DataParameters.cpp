@@ -31,11 +31,11 @@
  * segment matches a spec.
  */
 
-int EData::ApplyPriorCentres(const Config &configure, const azure2::experiment::DataSpecs &specs) {
+int WorkingCopy::ApplyPriorCentres(const Config &configure, const azure2::experiment::DataSpecs &specs) {
   for (const auto &item : specs.datasets.items) {
     const azure2::experiment::DatasetSpec &d = item.spec;
     if (!d.hasNormCentre && !d.hasShiftCentre) continue;
-    ESegment *segment = nullptr;
+    Segment *segment = nullptr;
     for (int s = 1; s <= Draft().NumSegments(); s++)
       if (Draft().GetSegment(s)->GetSegmentKey() == d.key) segment = Draft().GetSegment(s);
     if (d.hasNormCentre) {
@@ -68,10 +68,10 @@ int EData::ApplyPriorCentres(const Config &configure, const azure2::experiment::
  * in the fit.  A note per group lists the members.
  */
 
-int EData::ResolveShiftGroups(const Config &configure) {
+int WorkingCopy::ResolveShiftGroups(const Config &configure) {
   std::vector<std::pair<std::string, int>> leaders;  // label, leader position
   for (int pos = 0; pos < (int)Draft().segments_.size(); pos++) {
-    ESegment &seg = Draft().segments_[pos];
+    Segment &seg = Draft().segments_[pos];
     const std::string label = seg.GetShiftGroup();
     if (label.empty()) continue;
     auto it = std::find_if(leaders.begin(), leaders.end(),
@@ -80,15 +80,15 @@ int EData::ResolveShiftGroups(const Config &configure) {
       leaders.push_back({label, pos});
       continue;
     }
-    ESegment &leader = Draft().segments_[it->second];
+    Segment &leader = Draft().segments_[it->second];
     seg.SetShiftGroupFollower(it->second, State(leader).energyShift);
     State(seg).energyShift = State(leader).energyShift;
   }
   for (const auto &g : leaders) {
-    ESegment &leader = Draft().segments_[g.second];
+    Segment &leader = Draft().segments_[g.second];
     std::ostringstream members;
     int n = 0;
-    for (ESegment &seg : Draft().segments_)
+    for (Segment &seg : Draft().segments_)
       if (seg.GetShiftLeaderPos() == g.second) {
         members << " " << seg.GetSegmentKey();
         n++;
@@ -139,14 +139,14 @@ std::set<int> ShiftFnParamRefs(const std::string &expression) {
  * is an error.  One log line per function.
  */
 
-int EData::ResolveShiftFunctions(const Config &configure) {
+int WorkingCopy::ResolveShiftFunctions(const Config &configure) {
   // Shift-function groups: the first segment with a label (file order) declares the
   // function; the others apply it and keep their own constant shifts.
   std::vector<int> fnGroupLeader(Draft().segments_.size(), -1);
   {
     std::vector<std::pair<std::string, int>> fnLeaders;  // label, leader position
     for (int pos = 0; pos < (int)Draft().segments_.size(); pos++) {
-      ESegment &seg = Draft().segments_[pos];
+      Segment &seg = Draft().segments_[pos];
       const std::string label = seg.GetShiftFnGroup();
       if (label.empty()) continue;
       if (!seg.GetShiftGroup().empty()) {
@@ -178,7 +178,7 @@ int EData::ResolveShiftFunctions(const Config &configure) {
   }
   int fnStart = 0;
   for (int pos = 0; pos < (int)Draft().segments_.size(); pos++) {
-    ESegment &owner = Draft().segments_[pos];
+    Segment &owner = Draft().segments_[pos];
     if (!owner.OwnsShiftFn()) continue;
     const int key = owner.GetSegmentKey();
     const std::string expression = owner.GetDeclaredShiftFn();
@@ -228,7 +228,7 @@ int EData::ResolveShiftFunctions(const Config &configure) {
       const int constOwner = Draft().segments_[m].GetShiftLeaderPos() >= 0 ? Draft().segments_[m].GetShiftLeaderPos() : m;
       std::vector<double> e;
       for (int pid = 1; pid <= Draft().segments_[m].NumPoints(); pid++) {
-        EPoint *pt = Draft().segments_[m].GetPoint(*this, pid);
+        Unit *pt = Draft().segments_[m].GetPoint(*this, pid);
         e.push_back(pt->GetOriginalEnergy() > 0 ? pt->GetOriginalEnergy() : pt->GetLabEnergy());
       }
       std::sort(e.begin(), e.end());
@@ -338,7 +338,7 @@ int EData::ResolveShiftFunctions(const Config &configure) {
  * its group leader's, so that param.sav / param.fit read back unchanged.
  */
 
-void EData::SyncShiftGroupParams(ROOT::Minuit2::MnUserParameters &p) const {
+void WorkingCopy::SyncShiftGroupParams(ROOT::Minuit2::MnUserParameters &p) const {
   const int off = set_->energyShiftParamOffset_;
   if (off < 0) return;
   for (int pos = 0; pos < (int)set_->segments_.size(); pos++) {
@@ -357,10 +357,10 @@ void EData::SyncShiftGroupParams(ROOT::Minuit2::MnUserParameters &p) const {
  * note per group lists the members.
  */
 
-void EData::ResolveNormGroups(const Config &configure) {
+void WorkingCopy::ResolveNormGroups(const Config &configure) {
   std::vector<std::pair<std::string, int>> leaders;  // label, leader position
   for (int pos = 0; pos < (int)Draft().segments_.size(); pos++) {
-    ESegment &seg = Draft().segments_[pos];
+    Segment &seg = Draft().segments_[pos];
     const std::string label = seg.GetNormGroup();
     if (label.empty()) continue;
     auto it = std::find_if(leaders.begin(), leaders.end(),
@@ -369,15 +369,15 @@ void EData::ResolveNormGroups(const Config &configure) {
       leaders.push_back({label, pos});
       continue;
     }
-    ESegment &leader = Draft().segments_[it->second];
+    Segment &leader = Draft().segments_[it->second];
     seg.SetNormGroupFollower(it->second, State(leader).norm, leader.GetNominalNorm());
     State(seg).norm = State(leader).norm;
   }
   for (const auto &g : leaders) {
-    ESegment &leader = Draft().segments_[g.second];
+    Segment &leader = Draft().segments_[g.second];
     std::ostringstream members;
     int n = 0;
-    for (ESegment &seg : Draft().segments_)
+    for (Segment &seg : Draft().segments_)
       if (seg.GetNormLeaderPos() == g.second) {
         members << " " << seg.GetSegmentKey();
         n++;
@@ -399,7 +399,7 @@ void EData::ResolveNormGroups(const Config &configure) {
  * unchanged.
  */
 
-void EData::SyncNormGroupParams(ROOT::Minuit2::MnUserParameters &p) const {
+void WorkingCopy::SyncNormGroupParams(ROOT::Minuit2::MnUserParameters &p) const {
   const int off = Data().GetNormParamOffset();
   if (off < 0) return;
   std::vector<int> index(set_->segments_.size(), -1);  // norm parameter of each segment, -1 = none
@@ -416,7 +416,7 @@ void EData::SyncNormGroupParams(ROOT::Minuit2::MnUserParameters &p) const {
   // Thickness-group followers likewise: their (fixed) segment_<key>_thickness is written as the leader's value.
   if (set_->thicknessParamOffset_ >= 0) {
     for (int k = 1; k <= Data().NumThicknessParams(); k++) {
-      const ESegment &seg = set_->segments_[set_->thicknessSegments_[k - 1] - 1];
+      const Segment &seg = set_->segments_[set_->thicknessSegments_[k - 1] - 1];
       const int idx = set_->thicknessParamOffset_ + k - 1;
       if (!seg.IsThicknessGroupFollower() || idx >= (int)p.Params().size()) continue;
       const int lk = Data().ThicknessParamOfSegment(set_->thicknessSegments_[k - 1]);
@@ -428,7 +428,7 @@ void EData::SyncNormGroupParams(ROOT::Minuit2::MnUserParameters &p) const {
 }
 
 /*!
- * Fills the Minuit parameter array from initial values in the EData object.
+ * Fills the Minuit parameter array from initial values in the WorkingCopy object.
  */
 
 namespace {
@@ -441,16 +441,16 @@ std::string EffectParameterName(const TargetEffect &te, const char *oldKind, con
 
 }  // namespace
 
-void EData::FillMnParams(AZUREParams &params) {
+void WorkingCopy::FillMnParams(AZUREParams &params) {
   ROOT::Minuit2::MnUserParameters &p = params.GetMinuitParams();
   // 1-based position of a segment in the list (the records' and ParamIndexMap's numbering).
-  auto SegmentPosition = [this](ESegmentIterator it) { return (int)(it - Data().GetSegments().begin()) + 1; };
+  auto SegmentPosition = [this](SegmentIterator it) { return (int)(it - Data().GetSegments().begin()) + 1; };
   // The layout is the data set's; laid out again by a later call (pyazr) only if it moved (ReviseDataSet).
   struct Layout {
     int norm, shift, shiftSqrt, shiftFn, screening, density, doppler, thickness, thmCoherent;
   } layout;
   layout.norm = (int)p.Params().size();
-  for (ESegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
+  for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     if (segment->IsVaryNorm() && !segment->IsProfiledNorm()) {
       const std::string &varname = segment->GetParameterNames().norm;
       const double norm = State(*segment).norm;
@@ -466,7 +466,7 @@ void EData::FillMnParams(AZUREParams &params) {
 
   // Add energy shift parameters FOR ALL SEGMENTS (like normalization)
   layout.shift = (int)p.Params().size();
-  for (ESegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
+  for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     // Always add energy shift parameter, regardless of IsVaryEnergyShift()
     const std::string &varname = segment->GetParameterNames().energyShift;
     double stepSize = (segment->GetEnergyShiftError() > 0.0) ? segment->GetEnergyShiftError() * 0.01 : 0.0005;
@@ -483,7 +483,7 @@ void EData::FillMnParams(AZUREParams &params) {
   // A segment without a "sqrtshift" block carries a fixed 0 here, so a model
   // written before the term existed fits exactly as before.
   layout.shiftSqrt = (int)p.Params().size();
-  for (ESegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
+  for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     const std::string &varname = segment->GetParameterNames().energyShiftSqrt;
     double stepSize = (segment->GetEnergyShiftSqrtError() > 0.0) ? segment->GetEnergyShiftSqrtError() * 0.01 : 0.0005;
     params.Add(varname, State(*segment).energyShiftSqrt, stepSize,
@@ -494,7 +494,7 @@ void EData::FillMnParams(AZUREParams &params) {
   // Shift-function parameters: only segments that declare a "shiftfn" block have
   // any, so a model without one gets no new parameter at all.
   layout.shiftFn = (int)p.Params().size();
-  for (ESegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
+  for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     if (!segment->OwnsShiftFn() || !segment->HasShiftFn()) continue;
     for (int j = 0; j < segment->NumShiftFnParams(); j++) {
       const std::string &varname = segment->GetParameterNames().shiftFunction.at(j);
@@ -547,7 +547,7 @@ void EData::FillMnParams(AZUREParams &params) {
   // 'n vary sigma', none otherwise.  A thickness-group follower's is fixed (its value is its leader's).
   layout.thickness = (int)p.Params().size();
   for (int k = 1; k <= Data().NumThicknessParams(); k++) {
-    const ESegment *seg = Data().GetSegment(Data().GetThicknessSegment(k));
+    const Segment *seg = Data().GetSegment(Data().GetThicknessSegment(k));
     const std::string &varname = seg->GetParameterNames().thickness;
     const double n = seg->GetSampleThickness(State(*seg));
     params.Add(varname, n, (seg->GetThicknessSigma() > 0.0) ? 0.1 * seg->GetThicknessSigma() : 0.01 * n,
@@ -584,10 +584,10 @@ void EData::FillMnParams(AZUREParams &params) {
     });
 }
 
-int EData::ResolveThicknessGroups(const Config &configure) {
+int WorkingCopy::ResolveThicknessGroups(const Config &configure) {
   std::vector<std::pair<std::string, int>> leaders;  // label, leader position (0-based)
   for (int pos = 0; pos < (int)Draft().segments_.size(); pos++) {
-    ESegment &seg = Draft().segments_[pos];
+    Segment &seg = Draft().segments_[pos];
     const std::string label = seg.GetThicknessGroup();
     if (label.empty()) continue;
     if (!seg.IsTransformed()) {
@@ -602,15 +602,15 @@ int EData::ResolveThicknessGroups(const Config &configure) {
       leaders.push_back({label, pos});
       continue;
     }
-    const ESegment &leader = Draft().segments_[it->second];
+    const Segment &leader = Draft().segments_[it->second];
     seg.SetThicknessGroupFollower(it->second, leader.GetSampleThickness(State(leader)));
     State(seg).thickness = leader.GetSampleThickness(State(leader));
   }
   for (const auto &g : leaders) {
-    ESegment &leader = Draft().segments_[g.second];
+    Segment &leader = Draft().segments_[g.second];
     std::ostringstream members;
     int n = 0;
-    for (ESegment &seg : Draft().segments_)
+    for (Segment &seg : Draft().segments_)
       if (seg.GetThicknessLeaderPos() == g.second) {
         members << " " << seg.GetSegmentKey();
         n++;
@@ -639,7 +639,7 @@ int EData::ResolveThicknessGroups(const Config &configure) {
  * by line (TargetEffect::GetLineNumber): the first copy of a line decides, the other copies follow it.  A
  * line that lists no existing segment has no copy and so no parameter (dev makes one that moves nothing).
  */
-int EData::SetUpDensityParams(const Config &configure) {
+int WorkingCopy::SetUpDensityParams(const Config &configure) {
   Draft().densityEffects_.clear();
   Draft().densityLeadCopies_.clear();
   Draft().densityParamOfEffect_.assign(Draft().NumTargetEffects(), 0);

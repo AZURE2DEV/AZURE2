@@ -2,7 +2,7 @@
 
 Sub-points move rigidly with their data point under an energy-dependent shift.
 
-A segment's energy shift is a calibration of the measured beam energy.  `ESegment::UpdatePointEnergyWithShift`
+A segment's energy shift is a calibration of the measured beam energy.  `Segment::UpdatePointEnergyWithShift`
 moved each sub-point of a target-integration / resolution grid by the shift at the sub-point's OWN energy,
 which for a `sqrtshift` or a `shiftfn` (never for a constant shift) had two effects (audit item 11, findings 3
 and 4 of 05_experimental_effects_chi2.md, fixed 2026-10-26):
@@ -10,7 +10,7 @@ and 4 of 05_experimental_effects_chi2.md, fixed 2026-10-26):
 - the integration window of the no-spread target-integration branch stretched by `1 + ds/dE`, a yield factor
   (1.9 % for b = 0.02 at 0.28 MeV in a flat region) that a fit could trade against b, and inconsistent with the
   beam-spread / straggling branch, which clips the window to its physical width;
-- the resonance-anchored fine grid, placed by `EData::ReplaceSubPointGrids` with the data point's shift s(E0),
+- the resonance-anchored fine grid, placed by `WorkingCopy::ReplaceSubPointGrids` with the data point's shift s(E0),
   sat off a narrow resonance a depth d inside the target by s' x d (b = 0.02, d = 38 keV: 0.7 keV, more than the
   +-0.2 keV lattice of a 10 eV resonance).
 

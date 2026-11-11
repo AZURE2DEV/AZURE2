@@ -33,11 +33,11 @@ std::vector<std::string> RecordNames(const Config &configure, const std::string 
   return names;
 }
 
-/// The trees of one EData as lines "<what> <label>: <tree>", the label the data set's name where the project gives
+/// The trees of one WorkingCopy as lines "<what> <label>: <tree>", the label the data set's name where the project gives
 /// one (format 3), else its key.
-void AppendLines(EData &data, const char *what, const std::vector<std::string> &names, std::vector<std::string> &lines) {
+void AppendLines(WorkingCopy &data, const char *what, const std::vector<std::string> &names, std::vector<std::string> &lines) {
   for (int s = 1; s <= data.Data().NumSegments(); s++) {
-    const ESegment &segment = *data.Data().GetSegment(s);
+    const Segment &segment = *data.Data().GetSegment(s);
     const experiment::Prediction *p = segment.GetPrediction();
     const int key = segment.GetSegmentKey();
     const bool named = key >= 1 && key <= (int)names.size() && !names[key - 1].empty();
@@ -48,7 +48,7 @@ void AppendLines(EData &data, const char *what, const std::vector<std::string> &
 
 }  // namespace
 
-experiment::PredictionSetup PredictionSetupOf(const ESegment &segment, CNuc &compound) {
+experiment::PredictionSetup PredictionSetupOf(const Segment &segment, CNuc &compound) {
   experiment::PredictionSetup s;
   s.reaction = segment.GetReaction();
   s.absolute = segment.IsCoefficientAbsolute();
@@ -66,7 +66,7 @@ experiment::PredictionSetup PredictionSetupOf(const ESegment &segment, CNuc &com
   base.total = segment.IsTotalTerm();
   s.terms.push_back(base);
   // The leaves: the line's components first (with their fixed angles), then the further capture pairs of
-  // a total capture, then a yield's total term (EData::Fill, FinishTransformedSegment).
+  // a total capture, then a yield's total term (WorkingCopy::Fill, FinishTransformedSegment).
   const std::vector<experiment::ComponentSpec> &line = segment.GetComponents();
   for (int leaf = 1; leaf < segment.NumTerms(); leaf++) {
     const std::size_t k = leaf - 1;
@@ -104,7 +104,7 @@ std::vector<std::string> ProjectPredictions(const std::string &projectFile, std:
     lines.push_back("project: <levels> cannot be set up");
     return lines;
   }
-  EData data, extrapolations;
+  WorkingCopy data, extrapolations;
   if (data.Fill(configure, &compound) == -1)
     lines.push_back("data: set-up failed");
   else
@@ -118,9 +118,9 @@ std::vector<std::string> ProjectPredictions(const std::string &projectFile, std:
 
 }  // namespace azure2
 
-bool EData::BuildPredictions(CNuc *compound, const Config &configure) {
+bool WorkingCopy::BuildPredictions(CNuc *compound, const Config &configure) {
   for (int s = 1; s <= this->Draft().NumSegments(); s++) {
-    ESegment *segment = this->Draft().GetSegment(s);
+    Segment *segment = this->Draft().GetSegment(s);
     try {
       segment->SetPrediction(std::make_shared<const azure2::experiment::Prediction>(
           azure2::experiment::BuildPrediction(azure2::PredictionSetupOf(*segment, *compound))));

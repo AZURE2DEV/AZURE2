@@ -90,7 +90,7 @@ std::shared_ptr<File> Read(const std::string &path, std::string &err, bool cache
 
 /// One covariance group: the fitted points of the segments naming one file, in row order,
 /// and the whitening W of M = D^-1 C D^-1 (W^T W = M^-1).  Shared (one object) by every
-/// copy of the EData, so a freeze of the model is seen by all of them.
+/// copy of the WorkingCopy, so a freeze of the model is seen by all of them.
 struct Group {
   std::string path;                                 ///< the covariance file
   std::vector<std::pair<int, int>> members;         ///< (1-based segment, 0-based point), row order

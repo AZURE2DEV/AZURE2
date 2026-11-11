@@ -11,17 +11,17 @@
 
 /*!
  * The energy-dependent tables of re-placed sub-points, by node, shared by an
- * EData and all its copies (EData::Clone copies the pointer).
+ * WorkingCopy and all its copies (WorkingCopy::Clone copies the pointer).
  *
  * Every pooled copy of a fit re-places the sub-point grids for its own
- * parameters (EData::ReplaceSubPointGrids).  A node that moved gets new tables,
+ * parameters (WorkingCopy::ReplaceSubPointGrids).  A node that moved gets new tables,
  * and a copy used to keep its own for every node that no longer coincided with
  * one of the data it was cloned from: memory grew towards a full copy per
  * pooled copy as the levels drifted (natural neon: 11 -> 17 GB in 50 min).  But
  * the copies evaluate parameter sets that differ in one parameter, and a grid's
  * nodes depend only on the levels inside its window, so most copies place most
  * nodes at exactly the same energies.  The first copy to compute a node
- * publishes it here; the others take its tables (EPoint::AdoptEDependentValues
+ * publishes it here; the others take its tables (Unit::AdoptEDependentValues
  * re-checks energy, angle and pairs exactly).
  *
  * Keyed by (segment key, c.m. energy, c.m. angle), bit for bit: the Legendre
@@ -43,7 +43,7 @@
  */
 class NodeTableCache {
  public:
-  bool Find(int segmentKey, double energy, double angle, EPoint::EDependentShare &out) const {
+  bool Find(int segmentKey, double energy, double angle, Unit::EDependentShare &out) const {
     const Key key = MakeKey(segmentKey, energy, angle);
     const Shard &s = shards_[ShardOf(key)];
     std::lock_guard<std::mutex> lock(s.mutex);
@@ -54,14 +54,14 @@ class NodeTableCache {
     out.legendre = it->second.legendre.lock();
     return out.tables && out.legendre;
   }
-  void Store(int segmentKey, const EPoint::EDependentShare &share) {
+  void Store(int segmentKey, const Unit::EDependentShare &share) {
     if (!share.tables || !share.legendre) return;
     const Key key = MakeKey(segmentKey, share.energy, share.angle);
     Entry e;
     e.share = share;
     e.share.tables.reset();
     e.share.legendre.reset();
-    e.tables = SharedTable<EPoint::EDependentTables>::Weak(share.tables);
+    e.tables = SharedTable<Unit::EDependentTables>::Weak(share.tables);
     e.legendre = SharedTable<vector_r>::Weak(share.legendre);
     Shard &s = shards_[ShardOf(key)];
     std::lock_guard<std::mutex> lock(s.mutex);
@@ -87,8 +87,8 @@ class NodeTableCache {
     static std::uint64_t h0(int s) { return (std::uint64_t)(unsigned)s * 0xBF58476D1CE4E5B9ULL; }
   };
   struct Entry {
-    EPoint::EDependentShare share;  ///< without its pointers
-    SharedTable<EPoint::EDependentTables>::Weak tables;
+    Unit::EDependentShare share;  ///< without its pointers
+    SharedTable<Unit::EDependentTables>::Weak tables;
     SharedTable<vector_r>::Weak legendre;
   };
   struct Shard {

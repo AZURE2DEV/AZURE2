@@ -13,7 +13,7 @@
  * Returns the nominal energy shift value for the data segment.
  */
 
-double ESegment::GetNominalEnergyShift() const {
+double Segment::GetNominalEnergyShift() const {
   return energyShiftNominal_;
 }
 
@@ -21,7 +21,7 @@ double ESegment::GetNominalEnergyShift() const {
  * Returns the energy shift error for the data segment.
  */
 
-double ESegment::GetEnergyShiftError() const {
+double Segment::GetEnergyShiftError() const {
   return energyShiftError_;
 }
 
@@ -29,7 +29,7 @@ double ESegment::GetEnergyShiftError() const {
  * Returns true if the energy shift is varied in the fit.
  */
 
-bool ESegment::IsVaryEnergyShift() const {
+bool Segment::IsVaryEnergyShift() const {
   return varyEnergyShift_;
 }
 
@@ -37,7 +37,7 @@ bool ESegment::IsVaryEnergyShift() const {
  * Returns the uncertainty of the sqrt(E) coefficient.
  */
 
-double ESegment::GetEnergyShiftSqrtError() const {
+double Segment::GetEnergyShiftSqrtError() const {
   return energyShiftSqrtError_;
 }
 
@@ -45,27 +45,27 @@ double ESegment::GetEnergyShiftSqrtError() const {
  * Returns true if the sqrt(E) coefficient is a fit parameter.
  */
 
-std::string ESegment::GetShiftGroup() const { return shiftGroup_; }
+std::string Segment::GetShiftGroup() const { return shiftGroup_; }
 
-int ESegment::GetShiftLeaderPos() const { return shiftLeaderPos_; }
+int Segment::GetShiftLeaderPos() const { return shiftLeaderPos_; }
 
-bool ESegment::IsShiftGroupFollower() const { return shiftLeaderPos_ >= 0; }
+bool Segment::IsShiftGroupFollower() const { return shiftLeaderPos_ >= 0; }
 
-std::string ESegment::GetShiftFnGroup() const { return shiftFnGroup_; }
+std::string Segment::GetShiftFnGroup() const { return shiftFnGroup_; }
 
-void ESegment::SetShiftGroupFollower(int pos, double shift) {
+void Segment::SetShiftGroupFollower(int pos, double shift) {
   shiftLeaderPos_ = pos;
   varyEnergyShift_ = false;  // the group's parameter belongs to its first member
   startEnergyShift_ = shift;
 }
 
-std::string ESegment::GetNormGroup() const { return normGroup_; }
+std::string Segment::GetNormGroup() const { return normGroup_; }
 
-int ESegment::GetNormLeaderPos() const { return normLeaderPos_; }
+int Segment::GetNormLeaderPos() const { return normLeaderPos_; }
 
-bool ESegment::IsNormGroupFollower() const { return normLeaderPos_ >= 0; }
+bool Segment::IsNormGroupFollower() const { return normLeaderPos_ >= 0; }
 
-void ESegment::SetNormGroupFollower(int pos, double norm, double nominal) {
+void Segment::SetNormGroupFollower(int pos, double norm, double nominal) {
   normLeaderPos_ = pos;
   // The group's norm, its nominal value and its penalty belong to the first member.
   // varyNorm_ is kept: a follower with a varied norm keeps its (fixed) parameter, so
@@ -75,7 +75,7 @@ void ESegment::SetNormGroupFollower(int pos, double norm, double nominal) {
   dataNormError_ = 0.0;
 }
 
-bool ESegment::IsVaryEnergyShiftSqrt() const {
+bool Segment::IsVaryEnergyShiftSqrt() const {
   return varyEnergyShiftSqrt_;
 }
 
@@ -86,35 +86,35 @@ bool ESegment::IsVaryEnergyShiftSqrt() const {
  * same function E -> E + a + b*sqrt(E) for every point and every call.
  */
 
-double ESegment::TotalEnergyShift(const SegmentState &state, double labEnergy) const {
+double Segment::TotalEnergyShift(const SegmentState &state, double labEnergy) const {
   const double shift = (state.energyShiftSqrt == 0.0) ? state.energyShift
                                                       : state.energyShift + state.energyShiftSqrt * sqrt(fabs(labEnergy));
   if (!hasShiftFn_) return shift;
   return shift + state.shiftFn.Evaluate(*shiftFnConfig_, labEnergy);
 }
 
-double ESegment::ShiftFnTerm(const SegmentState &state, double labEnergy) const {
+double Segment::ShiftFnTerm(const SegmentState &state, double labEnergy) const {
   return hasShiftFn_ ? state.shiftFn.Evaluate(*shiftFnConfig_, labEnergy) : 0.0;
 }
 
-bool ESegment::OwnsShiftFn() const { return !shiftFnDeclared_.empty(); }
-std::string ESegment::GetDeclaredShiftFn() const { return shiftFnDeclared_; }
-const std::vector<double> &ESegment::GetNominalShiftFnValues() const { return shiftFnNominal_; }
-const std::vector<double> &ESegment::GetShiftFnErrors() const { return shiftFnError_; }
-bool ESegment::IsVaryShiftFn(int j) const { return j >= 0 && j < (int)shiftFnVary_.size() && shiftFnVary_[j]; }
-bool ESegment::HasSqrtShiftBlock() const { return hasSqrtShiftBlock_; }
-bool ESegment::HasShiftFn() const { return hasShiftFn_; }
-std::string ESegment::GetShiftFnExpression() const { return hasShiftFn_ ? shiftFnExpression_ : std::string(); }
-int ESegment::GetShiftFnSourcePos() const { return shiftFnSourcePos_; }
-int ESegment::GetShiftFnParamStart() const { return shiftFnParamStart_; }
-void ESegment::SetShiftFnParamStart(int start) { shiftFnParamStart_ = start; }
-void ESegment::SetShiftFnValue(SegmentState &state, int j, double value) const {
+bool Segment::OwnsShiftFn() const { return !shiftFnDeclared_.empty(); }
+std::string Segment::GetDeclaredShiftFn() const { return shiftFnDeclared_; }
+const std::vector<double> &Segment::GetNominalShiftFnValues() const { return shiftFnNominal_; }
+const std::vector<double> &Segment::GetShiftFnErrors() const { return shiftFnError_; }
+bool Segment::IsVaryShiftFn(int j) const { return j >= 0 && j < (int)shiftFnVary_.size() && shiftFnVary_[j]; }
+bool Segment::HasSqrtShiftBlock() const { return hasSqrtShiftBlock_; }
+bool Segment::HasShiftFn() const { return hasShiftFn_; }
+std::string Segment::GetShiftFnExpression() const { return hasShiftFn_ ? shiftFnExpression_ : std::string(); }
+int Segment::GetShiftFnSourcePos() const { return shiftFnSourcePos_; }
+int Segment::GetShiftFnParamStart() const { return shiftFnParamStart_; }
+void Segment::SetShiftFnParamStart(int start) { shiftFnParamStart_ = start; }
+void Segment::SetShiftFnValue(SegmentState &state, int j, double value) const {
   if (!hasShiftFn_ || j < 0 || j >= (int)state.shiftFnValues.size()) return;
   state.shiftFnValues[j] = value;
   state.shiftFn.SetParameter(j, value, *shiftFnConfig_);
 }
 
-void ESegment::InstallShiftFn(SegmentState &state, const ESegment &owner, int ownerPos, const Config &configure) {
+void Segment::InstallShiftFn(SegmentState &state, const Segment &owner, int ownerPos, const Config &configure) {
   const int n = (int)owner.shiftFnNominal_.size();
   state.shiftFn = Equation(owner.shiftFnDeclared_, n, configure);
   shiftFnExpression_ = state.shiftFn.GetEquation();
@@ -134,7 +134,7 @@ void ESegment::InstallShiftFn(SegmentState &state, const ESegment &owner, int ow
 // the penalty from 0").  The normalization penalty is unchanged (measured from the nominal norm).  On thm an
 // explicit "segment_N_energy_shift prior_centre c" row of <parameterSettings> moves the constant term's centre
 // to c (GetNominalEnergyShift); without one it is 0, as on dev.
-void ESegment::AddShiftPenalty(const SegmentState &state, double &chi) const {
+void Segment::AddShiftPenalty(const SegmentState &state, double &chi) const {
   // A prior the prior covariance replaces is not added (objective.md D3).
   if (varyEnergyShift_ && energyShiftError_ != 0.0 && !shiftPriorReplaced_)
     chi += pow((state.energyShift - energyShiftNominal_) / energyShiftError_, 2.0);  // nominal: 0 or the prior_centre row
@@ -145,7 +145,7 @@ void ESegment::AddShiftPenalty(const SegmentState &state, double &chi) const {
       if (shiftFnVary_[j] && shiftFnError_[j] != 0.0 && !IsShiftFnPriorReplaced(j)) chi += pow(state.shiftFnValues[j] / shiftFnError_[j], 2.0);
 }
 
-void ESegment::ShiftPenaltyParts(const SegmentState &state, double &constant, double &sqrtTerm, double &function) const {
+void Segment::ShiftPenaltyParts(const SegmentState &state, double &constant, double &sqrtTerm, double &function) const {
   constant = sqrtTerm = function = 0.0;
   if (varyEnergyShift_ && energyShiftError_ != 0.0 && !shiftPriorReplaced_)
     constant = pow((state.energyShift - energyShiftNominal_) / energyShiftError_, 2.0);

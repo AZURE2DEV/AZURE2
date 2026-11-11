@@ -20,7 +20,7 @@
 
 namespace azure2 {
 
-double CoulombReferenceValue(const EData &data, EPoint *point, experiment::LeafPart part, CNuc *compound,
+double CoulombReferenceValue(const WorkingCopy &data, Unit *point, experiment::LeafPart part, CNuc *compound,
                              const Config &configure) {
   if (!experiment::IsCoulombReference(part))
     throw std::logic_error("CoulombReferenceValue: the leaf is not a Coulomb reference");
@@ -28,15 +28,15 @@ double CoulombReferenceValue(const EData &data, EPoint *point, experiment::LeafP
   const physics::ChannelKinematics kin = Kinematics::Channel(pair).Physics();
   const int twoS = static_cast<int>(std::lround(2.0 * pair->GetJ(1)));
   const bool mott = part == experiment::LeafPart::Mott;
-  auto at = [&](const EPoint *p) {
+  auto at = [&](const Unit *p) {
     return mott ? physics::mott_cross_section(kin, twoS, p->GetCMEnergy(), p->GetCMAngle()).value
                 : physics::rutherford_cross_section(kin, p->GetCMEnergy(), p->GetCMAngle()).value;
   };
-  if (!ESegment::HasSubPointIntegration(data, point)) return at(point);
+  if (!Segment::HasSubPointIntegration(data, point)) return at(point);
   std::vector<double> sub(static_cast<std::size_t>(point->NumSubPoints()));
   for (int j = 1; j <= point->NumSubPoints(); j++) sub[j - 1] = at(point->GetSubPoint(data, j));
   double folded = point->IntegrateSubPointValues(data, configure, sub);
-  // EPoint::Calculate blends a folded value with the bare one at a window edge outside a thin-target integration (a
+  // Unit::Calculate blends a folded value with the bare one at a window edge outside a thin-target integration (a
   // thin target blends inside its kernel, which IntegrateSubPointValues applies).
   const TargetEffect *effect = data.Data().GetTargetEffect(point->GetTargetEffectNum());
   const bool thinTarget = effect->IsTargetIntegration() && !effect->IsThickTarget();
@@ -45,7 +45,7 @@ double CoulombReferenceValue(const EData &data, EPoint *point, experiment::LeafP
   return folded;
 }
 
-double SFactorConversionValue(const EPoint *point, CNuc *compound) {
+double SFactorConversionValue(const Unit *point, CNuc *compound) {
   PPair *pair = compound->GetPair(compound->GetPairNumFromKey(point->GetEntranceKey()));
   return physics::sfactor_conversion(Kinematics::Channel(pair).Physics(), point->GetCMEnergy());
 }

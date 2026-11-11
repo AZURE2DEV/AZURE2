@@ -17,7 +17,7 @@ void Builder::BuildApparatus() {
     Apparatus a;
     a.line = &e;
     const std::string n = std::to_string(e.activeIndex);
-    // The data and test lines it applies to (EData::ReadTargetEffectsFile: a listed key that is an active segment).
+    // The data and test lines it applies to (WorkingCopy::ReadTargetEffectsFile: a listed key that is an active segment).
     for (int k : e.segments) {
       const bool data = activeData_.count(k) != 0, test = activeTest_.count(k) != 0;
       if (!data && !test) {
@@ -195,7 +195,7 @@ void Builder::BuildApparatus() {
       Note(Construct::kEffectLine, "", "<targetInt> line " + std::to_string(e.index) + " applies no effect: dropped");
       continue;
     }
-    // Later lines take over a key (EData::ReadTargetEffectsFile overwrites the segment's effect number).
+    // Later lines take over a key (WorkingCopy::ReadTargetEffectsFile overwrites the segment's effect number).
     const int index = (int)apparatus_.size();
     for (int k : a.dataKeys) {
       if (apparatusOfData_.count(k))

@@ -8,7 +8,7 @@ carry one shift value or none before the data file. `SegLine.h` decided the layo
 `>> double` read succeeded, so a file whose name starts with digits in the no-shift layout
 (`... normErr 12C_p.dat`) was read as a 12 MeV shift with the file `C_p.dat`, and the one-shift
 layout (`... normErr 0.001 data/foo.dat`) left the stream failed and the file empty; in both cases
-`EData` printed "Could Not Fill Segment" and the fit went on without the data. The layout is now
+`WorkingCopy` printed "Could Not Fill Segment" and the fit went on without the data. The layout is now
 decided by whole tokens (`WholeNumber`: a token is a number only if `strtod` consumes all of it).
 
 A `<segmentsTest>` line's keyword reader (`ExtrapLine.h`) knew `sample`, `total`, `covariance`

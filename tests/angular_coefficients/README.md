@@ -11,10 +11,10 @@ computed (`GenMatrixFunc::CalculateCrossSection`: each interference term of orde
 angle-integrated cross section, so a_0 = 1); the trailing keyword `absolute 1` makes the data the absolute
 A_k in b/sr instead (A_0 = sigma_int / 4 pi).
 
-- The points are angular-distribution points; `EPoint::IsCoefficient` / `GetCoefficientOrder` select the
+- The points are angular-distribution points; `Unit::IsCoefficient` / `GetCoefficientOrder` select the
   order, `GetAngDistA0` carries A_0.  Energy shifts move them like any point.
 - Target integration and resolution folding act on the absolute A_k, which are linear in the cross
-  section, and the ratio is formed afterwards (`EPoint::IntegrateTargetEffectForObservable`, the A_y
+  section, and the ratio is formed afterwards (`Unit::IntegrateTargetEffectForObservable`, the A_y
   pattern); absolute A_k take the plain path.
 - A normalised coefficient has no scale, so a free normalization is refused ("absolute 1" for A_k);
   an elastic pair (the expansion leaves the Coulomb amplitude out), total capture, composites, samples,

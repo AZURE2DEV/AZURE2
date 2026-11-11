@@ -4,7 +4,7 @@
 azure2::EvaluateModelPoint evaluates a segment's base point and the points of its components.  Before
 2026-11-01 it caught every exception there: a failed base point gave 0, a failed SUM component was left out of the sum
 (as was a component whose value was NaN or inf), a failed RATIO denominator gave 0, all without a word; the parallel
-pre-pass (EData::CalculatePointsInParallel) also set a failed point to 0.  Seen with tests/natural_neon on the R-matrix
+pre-pass (WorkingCopy::CalculatePointsInParallel) also set a failed point to 0.  Seen with tests/natural_neon on the R-matrix
 route (Brune), where a singular matrix made 84 points of the natural SUM segments 0.  Now such a point is NaN and a
 warning naming the segment, energy and error is printed once.
 

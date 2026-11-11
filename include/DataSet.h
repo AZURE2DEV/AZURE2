@@ -18,17 +18,17 @@ class PriorCovariance;
  * The data of a project as the set-up leaves it (docs/upgrade/data_structure.md section 1.3): the data sets (segments)
  * with their measurements, settings and the terms of their predictions; the target effects (lines, kernels, priors);
  * the covariance groups; the THM experiments; the parameter layout.  Built once by the set-up
- * and then never written: every working copy (EData) holds it through a std::shared_ptr<const DataSet>, so a copy of
+ * and then never written: every working copy (WorkingCopy) holds it through a std::shared_ptr<const DataSet>, so a copy of
  * a working copy shares it and an evaluation can only read it.  The set-up writes the object before it is frozen
- * (EData::Draft, EData::Freeze); a later change of a setting (a prior covariance given by the caller) makes a new
- * DataSet (EData::ReviseDataSet), which copies made before do not see.
+ * (WorkingCopy::Draft, WorkingCopy::Freeze); a later change of a setting (a prior covariance given by the caller) makes a new
+ * DataSet (WorkingCopy::ReviseDataSet), which copies made before do not see.
  *
  * Shared and written after the set-up, on purpose (named here so that nobody adds another):
  *  - a covariance group's frozen model of its relvector terms (DataCovariance::Group, held through a shared pointer
  *    to a non-const group): every copy must use the one model frozen at the first evaluation of a minimization.  It
  *    is frozen by Group::EnsureFactored under the group's mutex (double-checked through an atomic flag, so the
  *    evaluations that run at once on several copies freeze it once and then only read it); it is forgotten by
- *    EData::RefreezeCovariance, which the CLI calls between two minimizations, when no evaluation runs.
+ *    WorkingCopy::RefreezeCovariance, which the CLI calls between two minimizations, when no evaluation runs.
  */
 class DataSet {
  public:
@@ -37,13 +37,13 @@ class DataSet {
   // ---- the data sets
   int NumSegments() const { return (int)segments_.size(); }
   /// Segment i, 1-based.
-  const ESegment *GetSegment(int i) const { return &segments_[i - 1]; }
-  ESegment *GetSegment(int i) { return &segments_[i - 1]; }
-  const std::vector<ESegment> &GetSegments() const { return segments_; }
-  std::vector<ESegment> &GetSegments() { return segments_; }
+  const Segment *GetSegment(int i) const { return &segments_[i - 1]; }
+  Segment *GetSegment(int i) { return &segments_[i - 1]; }
+  const std::vector<Segment> &GetSegments() const { return segments_; }
+  std::vector<Segment> &GetSegments() { return segments_; }
   /// The segment with this key (its data set number in the file), or null.
-  const ESegment *GetSegmentFromKey(int key) const;
-  ESegment *GetSegmentFromKey(int key) { return const_cast<ESegment *>(static_cast<const DataSet *>(this)->GetSegmentFromKey(key)); }
+  const Segment *GetSegmentFromKey(int key) const;
+  Segment *GetSegmentFromKey(int key) { return const_cast<Segment *>(static_cast<const DataSet *>(this)->GetSegmentFromKey(key)); }
   bool IsSegmentKey(int key) const { return GetSegmentFromKey(key) != nullptr; }
   /// Every leaf as (0-based position of its segment, its term), in segment order and term order: the order the leaves
   /// are set up, laid out and written to the intEC file in.
@@ -51,26 +51,26 @@ class DataSet {
 
   /*!
    * What the set-up worked out for one point (a row of a term) that its evaluations read again: the layout of its
-   * adaptive sub-point grid (EData::ReplaceSubPointGrids lays it out again for other levels) and its user-defined
+   * adaptive sub-point grid (WorkingCopy::ReplaceSubPointGrids lays it out again for other levels) and its user-defined
    * resolution kernel with the projectile rest energy (MeV) its time-of-flight conversion uses.  A unit names its
-   * record by EPoint::SetUpIndex; the record is shared by every copy.
+   * record by Unit::SetUpIndex; the record is shared by every copy.
    */
   struct PointSetUp {
-    EPoint::SubGridSpec grid;
+    Unit::SubGridSpec grid;
     std::shared_ptr<const UdrKernel> udr;
     double udrMass = 0.0;
   };
   /// The record of point `p`, null when the set-up gave it none.
-  const PointSetUp *SetUpOf(const EPoint &p) const {
+  const PointSetUp *SetUpOf(const Unit &p) const {
     return p.SetUpIndex() >= 0 ? &pointSetUps_[p.SetUpIndex()] : nullptr;
   }
   /// The layout of the adaptive grid of point `p` (an invalid one without).
-  const EPoint::SubGridSpec &GridSpecOf(const EPoint &p) const {
-    static const EPoint::SubGridSpec none;
+  const Unit::SubGridSpec &GridSpecOf(const Unit &p) const {
+    static const Unit::SubGridSpec none;
     return p.SetUpIndex() >= 0 ? pointSetUps_[p.SetUpIndex()].grid : none;
   }
   /// The set-up: the record of point `p`, made on first use.
-  PointSetUp &SetUpFor(EPoint &p) {
+  PointSetUp &SetUpFor(Unit &p) {
     if (p.SetUpIndex() < 0) {
       p.SetSetUpIndex((int)pointSetUps_.size());
       pointSetUps_.emplace_back();
@@ -87,7 +87,7 @@ class DataSet {
     return (n >= 1 && n <= (int)targetEffects_.size()) ? &targetEffects_[n - 1] : nullptr;
   }
 
-  // ---- the parameter layout (EData::FillMnParams)
+  // ---- the parameter layout (WorkingCopy::FillMnParams)
   int GetNormParamOffset() const { return normParamOffset_; }
   int GetEnergyShiftParamOffset() const { return energyShiftParamOffset_; }
   int GetEnergyShiftSqrtParamOffset() const { return energyShiftSqrtParamOffset_; }
@@ -96,7 +96,7 @@ class DataSet {
    * Electron screening.  The <targetInt> lines with a `screening` block, in line order, each with one parameter
    * `screening_<n>` (n = the effect number: its place among the active <targetInt> lines; format 3:
    * `<target>.screening`), U_e in eV, after the shift-function parameters.  A line listing several segments has one
-   * copy of its effect per segment (EData::SetUpTargetEffects); the parameter is the line's, shared by every copy.
+   * copy of its effect per segment (WorkingCopy::SetUpTargetEffects); the parameter is the line's, shared by every copy.
    */
   int NumScreeningParams() const { return (int)screeningEffects_.size(); }
   int GetScreeningEffect(int k) const { return screeningEffects_[k - 1]; }
@@ -131,7 +131,7 @@ class DataSet {
   /// The Doppler parameter (1-based) of effect \p n, 0 if its temperature is not a fit parameter.
   int DopplerParamOfEffect(int n) const;
   /*!
-   * Fitted sample thicknesses (ESegment::HasThicknessFit).  One parameter (atoms/barn) per data segment whose line has
+   * Fitted sample thicknesses (Segment::HasThicknessFit).  One parameter (atoms/barn) per data segment whose line has
    * the fit form, in segment order, after the Doppler temperatures; a thickness-group follower's is fixed at its
    * leader's value.
    */
@@ -175,12 +175,12 @@ class DataSet {
   int NumNuclei() const { return numNuclei_; }
 
  private:
-  friend class EData;  // the set-up writes the draft (EData::Draft)
-  std::vector<ESegment> segments_;
+  friend class WorkingCopy;  // the set-up writes the draft (WorkingCopy::Draft)
+  std::vector<Segment> segments_;
   std::vector<TargetEffect> targetEffects_;
   std::vector<LeafRef> leafRefs_;
   std::vector<PointSetUp> pointSetUps_;  // SetUpOf
-  /// The key of the next leaf (EData::AddLeaf): -1000, -1001, ... in creation order, one counter per data set, so a
+  /// The key of the next leaf (WorkingCopy::AddLeaf): -1000, -1001, ... in creation order, one counter per data set, so a
   /// leaf's key depends on its project alone and no two leaves share one (data_model.md section 1.3, H10).
   int nextComponentKey_ = -1000;
   std::vector<std::shared_ptr<DataCovariance::Group>> covGroups_;

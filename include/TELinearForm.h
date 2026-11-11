@@ -7,9 +7,9 @@
 
 /*!
  * A linear form sum_k c_k s_{j_k} in the sub-point values s_j of a
- * target-effect point.  EPoint::IntegrateTargetEffect is linear in those
+ * target-effect point.  Unit::IntegrateTargetEffect is linear in those
  * values, so evaluating it on this type instead of double yields its exact
- * weights in one pass (EPoint::TargetEffectWeights), which the analytic
+ * weights in one pass (Unit::TargetEffectWeights), which the analytic
  * gradient needs for every target-integrated point.  Only the operations the
  * integrator performs are provided; a nonzero constant marks the form invalid.
  */

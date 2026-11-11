@@ -14,7 +14,7 @@ The two are the same measurement, so the model at every point (column 4 of
 
 What it guards (fixed 2026-09-28):
 
-- `ESegment::UpdatePointEnergiesWithShift` moved only points and folding
+- `Segment::UpdatePointEnergiesWithShift` moved only points and folding
   sub-points with original energy > 0. The guard (with the floor of
   `ShiftedEnergy`) keeps an ordinary segment's energies positive; a THM
   segment has points and sub-points below the entrance threshold, and those
@@ -22,7 +22,7 @@ What it guards (fixed 2026-09-28):
   every point within reach of threshold mixed shifted and unshifted
   sub-points. For THM segments every point and sub-point now shifts, with no
   floor; ordinary segments are unchanged.
-- `EPoint::RefreshSubPointGrid` did not rebuild the grid of a shifted segment,
+- `Unit::RefreshSubPointGrid` did not rebuild the grid of a shifted segment,
   so the lattice built around the narrow level at the unshifted energies sat
   a whole shift away from it (30-40 % off near 74 keV). A THM segment's grid
   is now built in the frame of its unshifted data around the anchors moved

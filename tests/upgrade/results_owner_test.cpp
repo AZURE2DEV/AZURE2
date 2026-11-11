@@ -14,7 +14,7 @@
 //   4. every model value (the per-point loop of the objective) equal to the reference's, bit for bit.
 // The test sets AZURE_POISON_RESULTS=1, so every buffer is NaN on entry to each evaluation and holds exactly what that
 // evaluation wrote: a slot no evaluation writes is NaN everywhere, and buffers can be compared whole.
-// Shown to fail (2026-11-10) with EPoint::Rec writing into the first buffer it ever saw instead of the one it is
+// Shown to fail (2026-11-10) with Unit::Rec writing into the first buffer it ever saw instead of the one it is
 // given -- a buffer shared behind the caller's back, as a point's pointer into its data set's buffer was before S3 (b).
 //
 //   results_owner_test <T2.azr>   (run in a directory holding T2's data/, cov_diff.txt and prior_cov.txt)
@@ -70,7 +70,7 @@ bool SameBits(const std::vector<double> &a, const std::vector<double> &b, std::s
 
 // One evaluation, as AZURECalc::Chi2On does it: the hand-over into `results`, then every point's model value
 // (Results::model).
-std::vector<double> Evaluate(CNuc *lc, EData *ld, azure2::Results &results, const vector_r &p, const Config &cfg) {
+std::vector<double> Evaluate(CNuc *lc, WorkingCopy *ld, azure2::Results &results, const vector_r &p, const Config &cfg) {
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
   ld->FillEnergyShiftsFromParams(p, results, lc, &cfg);
@@ -81,7 +81,7 @@ std::vector<double> Evaluate(CNuc *lc, EData *ld, azure2::Results &results, cons
 
 struct Copy {
   std::unique_ptr<CNuc> compound;
-  std::unique_ptr<EData> data;
+  std::unique_ptr<WorkingCopy> data;
   azure2::Results results;
   std::vector<double> models;
 };
@@ -100,7 +100,7 @@ int main(int argc, char **argv) {
   cfg.configfile = argv[1];
   g_config = &cfg;
   CNuc compound;
-  EData data;
+  WorkingCopy data;
   AZUREParams params;
   if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg) == -1 || data.Fill(cfg, &compound) == -1) {
     check("T2 loads", false, sink.str().substr(0, 400));
@@ -125,7 +125,7 @@ int main(int argc, char **argv) {
   }
   check("p1 moves " + std::to_string(moved) + " level parameters", moved > 0);
 
-  auto copyOf = [](CNuc *c, EData *d) {
+  auto copyOf = [](CNuc *c, WorkingCopy *d) {
     Copy k;
     k.compound.reset(c->Clone());
     k.data.reset(d->Clone());

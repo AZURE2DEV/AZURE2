@@ -67,7 +67,7 @@ void Check(const std::string &what, double got, double want, double tol, double 
                 want, rel, tol);
 }
 
-const double kAmu = 931.49410242;  // EData::BuildThmGroups
+const double kAmu = 931.49410242;  // WorkingCopy::BuildThmGroups
 const double kN14 = 13.9992355671, kC12 = 11.9967096429, kD = 2.0135532134, kP = 1.0072764675,
              kN = 1.0086649159, kF19 = 18.9934652;
 

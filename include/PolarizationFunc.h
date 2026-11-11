@@ -6,7 +6,7 @@
 #include "Constants.h"
 
 class CNuc;
-class EPoint;
+class Unit;
 
 /*!
  * Polarization observables from the channel-spin amplitude matrix.
@@ -64,7 +64,7 @@ struct Amplitude {
  */
 class AmplitudeMatrix {
  public:
-  AmplitudeMatrix(CNuc *compound, EPoint *point, int aa, int ir);
+  AmplitudeMatrix(CNuc *compound, Unit *point, int aa, int ir);
 
   //! Add the contribution of one pathway: T element for (jNum, ch, chp).
   void AddPathway(int jNum, int chNum, int chpNum, complex tMatrixElement);
@@ -73,7 +73,7 @@ class AmplitudeMatrix {
    * Coulomb amplitude term, added once per (s, v) diagonal element. The
    * amplitude is the point's own, taken per channel spin: for two identical
    * particles with spin the exchange term enters as (-1)^s f_C(pi - theta)
-   * (see EPoint::GetCoulombAmplitude(double)).
+   * (see Unit::GetCoulombAmplitude(double)).
    */
   void AddCoulomb();
 
@@ -128,7 +128,7 @@ class AmplitudeMatrix {
   double IdenticalFactor(int lp, double sp) const;
 
   CNuc *compound_;
-  EPoint *point_;
+  Unit *point_;
   int aa_, ir_;
   double theta_;
   std::vector<double> entranceSpins_, exitSpins_;

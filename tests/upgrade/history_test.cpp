@@ -100,7 +100,7 @@ std::uint64_t DataSetFingerprint(const DataSet &d) {
   f.Add(d.GetEnergyShiftFnParamOffset()), f.Add(d.ScreeningParamOffset()), f.Add(d.DensityParamOffset());
   f.Add(d.DopplerParamOffset()), f.Add(d.ThicknessParamOffset()), f.Add(d.ThmCoherentParamOffset());
   for (const DataSet::LeafRef &leaf : d.LeafRefs()) f.Add(leaf.first), f.Add(leaf.second);
-  for (const ESegment &s : d.GetSegments()) {
+  for (const Segment &s : d.GetSegments()) {
     f.Add(s.GetSegmentKey()), f.Add(s.Pos()), f.Add(s.NumTerms()), f.Add(s.NumPoints());
     f.Add(s.StartNorm()), f.Add(s.GetNominalNorm()), f.Add(s.GetNormError()), f.Add(s.IsVaryNorm());
     f.Add(s.StartEnergyShift()), f.Add(s.GetNominalEnergyShift()), f.Add(s.GetEnergyShiftError());
@@ -139,19 +139,19 @@ struct Evaluation {
 
 struct Copy {
   std::unique_ptr<CNuc> compound;
-  std::unique_ptr<EData> data;
+  std::unique_ptr<WorkingCopy> data;
   azure2::Results results;
 };
 
 // One evaluation, as AZURECalc::Chi2On: hand-over, point pass, model values, objective.
 Evaluation Evaluate(Copy &c, const vector_r &p, const Config &cfg) {
   CNuc *lc = c.compound.get();
-  EData *ld = c.data.get();
+  WorkingCopy *ld = c.data.get();
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
   ld->FillEnergyShiftsFromParams(p, c.results, lc, &cfg);
   if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(cfg, false);
-  std::vector<const ESegment *> segments;
+  std::vector<const Segment *> segments;
   for (int i = 1; i <= ld->Data().NumSegments(); i++) segments.push_back(ld->Data().GetSegment(i));
   const bool pre = ld->CalculatePointsInParallel(segments, lc, cfg, c.results) >= 0;
   Evaluation e;
@@ -184,7 +184,7 @@ int RunProject(const std::string &path) {
   cfg.configfile = file;
   g_config = &cfg;
   CNuc compound;
-  EData data;
+  WorkingCopy data;
   AZUREParams params;
   if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg) == -1 || data.Fill(cfg, &compound) == -1) {
     check("loads", false, sink.str().substr(0, 400));
@@ -204,7 +204,7 @@ int RunProject(const std::string &path) {
     Config cfg2(sink2);
     cfg2.configfile = file;
     CNuc compound2;
-    EData data2;
+    WorkingCopy data2;
     AZUREParams params2;
     const bool loaded = cfg2.ReadConfigFile() >= 0 && compound2.Fill(cfg2) != -1 && data2.Fill(cfg2, &compound2) != -1;
     if (loaded) {
@@ -214,7 +214,7 @@ int RunProject(const std::string &path) {
     }
     check("a second load in the same process", loaded && data2.Initialize(&compound2, cfg2) != -1);
     g_config = &cfg;
-    auto keys = [](EData &d) {
+    auto keys = [](WorkingCopy &d) {
       std::vector<int> k;
       for (int i = 1; i <= d.Data().NumSegments(); i++)
         for (int t = 1; t < d.Data().GetSegment(i)->NumTerms(); t++) k.push_back(d.Data().GetSegment(i)->TermKey(t));
@@ -275,7 +275,7 @@ int RunProject(const std::string &path) {
   Evaluate(back, pA, cfg);
   Compare("pooled A -> B -> A -> B = fresh B", Evaluate(back, pB, cfg), eB);
 
-  // A copy of a working copy shares no mutable state with its source (EData::Clone is a plain copy): the source
+  // A copy of a working copy shares no mutable state with its source (WorkingCopy::Clone is a plain copy): the source
   // evaluated at other parameters after the copy was made moves neither the copy's buffer nor its next evaluation.
   // D is B with every free energy shift moved 1 keV further, so that the source re-energises its points.
   {

@@ -21,7 +21,7 @@ struct ThmGroup {
   int terms = 0;              ///< background terms, 0..3
   std::vector<int> segments;  ///< 1-based indices into the segments, ascending
   /// One segment and no background: exactly the per-segment profile of
-  /// ESegment::ProfileNormChiSquared, which then handles it.
+  /// Segment::ProfileNormChiSquared, which then handles it.
   bool trivial = false;
   /// Coulomb line shape (lineshape=on), or null; shared with its segments.
   std::shared_ptr<const ThmLineshape> lineshape;

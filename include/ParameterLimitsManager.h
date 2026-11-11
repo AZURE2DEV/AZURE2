@@ -10,7 +10,7 @@
 // Forward declarations
 class Config;
 class CNuc;
-class EData;
+class WorkingCopy;
 
 // Structure to hold parameter settings
 struct ParameterSetting {
@@ -31,7 +31,7 @@ struct ParameterSetting {
 
 class ParameterLimitsManager {
  public:
-  ParameterLimitsManager(const Config *config, CNuc *compound, EData *data, AZUREParams *params);
+  ParameterLimitsManager(const Config *config, CNuc *compound, WorkingCopy *data, AZUREParams *params);
 
   // Read parameter settings from AZURE2 file
   bool ReadParameterSettings();
@@ -64,7 +64,7 @@ class ParameterLimitsManager {
  private:
   const Config *config_;
   CNuc *compound_;
-  EData *data_;
+  WorkingCopy *data_;
   AZUREParams *params_;
   std::map<std::string, ParameterSetting> parameterSettings_;
   /// Settings entry that governs each enumerated non-fixed parameter, or NULL.

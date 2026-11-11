@@ -25,7 +25,7 @@
 
 /// Returns the geometrical cross section factor \f$ \frac{\pi}{k^2} \f$.
 
-double EPoint::GetGeometricalFactor() const {
+double Unit::GetGeometricalFactor() const {
   return geofactor_;
 }
 
@@ -33,7 +33,7 @@ double EPoint::GetGeometricalFactor() const {
  * Returns the multiplicative conversion factor from cross section to s-factor.
  */
 
-double EPoint::GetSFactorConversion() const {
+double Unit::GetSFactorConversion() const {
   return sfactorconv_;
 }
 
@@ -42,7 +42,7 @@ double EPoint::GetSFactorConversion() const {
  * positions in the JGroup and subsequent AChannel vectors.
  */
 
-double EPoint::GetSqrtPenetrability(int jGroupNum, int channelNum) const {
+double Unit::GetSqrtPenetrability(int jGroupNum, int channelNum) const {
   return edep_->penetrabilities[edep_->At(jGroupNum, channelNum)];
 }
 
@@ -54,7 +54,7 @@ double EPoint::GetSqrtPenetrability(int jGroupNum, int channelNum) const {
  * not stored (e.g. non-entrance channels, or non-THM points).
  */
 
-complex EPoint::GetThmFormFactor(int jGroupNum, int channelNum, complex boundary) const {
+complex Unit::GetThmFormFactor(int jGroupNum, int channelNum, complex boundary) const {
   if (!edep_) return 0.0;
   const EDependentTables &t = *edep_;
   if (jGroupNum - 1 >= (int)t.thm_jl.size()) return 0.0;
@@ -63,7 +63,7 @@ complex EPoint::GetThmFormFactor(int jGroupNum, int channelNum, complex boundary
          + t.thm_coul[jGroupNum - 1][channelNum - 1];
 }
 
-complex EPoint::GetThmFormFactor(int jGroupNum, int channelNum, complex boundary, int node) const {
+complex Unit::GetThmFormFactor(int jGroupNum, int channelNum, complex boundary, int node) const {
   const ThmPsTable *t = thm_ps_.get();
   if (!t || node < 0 || node >= t->nodes) return 0.0;
   if (jGroupNum < 1 || jGroupNum >= (int)t->offset.size() || channelNum < 1) return 0.0;
@@ -81,7 +81,7 @@ complex EPoint::GetThmFormFactor(int jGroupNum, int channelNum, complex boundary
  * by positions in the JGroup and subsequent AChannel vectors.
  */
 
-complex EPoint::GetLoElement(int jGroupNum, int channelNum) const {
+complex Unit::GetLoElement(int jGroupNum, int channelNum) const {
   return edep_->lo_elements[edep_->At(jGroupNum, channelNum)];
 }
 
@@ -91,7 +91,7 @@ complex EPoint::GetLoElement(int jGroupNum, int channelNum) const {
  * by positions in the JGroup and subsequent AChannel vectors.
  */
 
-complex EPoint::GetExpCoulombPhase(int jGroupNum, int channelNum) const {
+complex Unit::GetExpCoulombPhase(int jGroupNum, int channelNum) const {
   return edep_->coulombphase[edep_->At(jGroupNum, channelNum)];
 }
 
@@ -101,7 +101,7 @@ complex EPoint::GetExpCoulombPhase(int jGroupNum, int channelNum) const {
  * by positions in the JGroup and subsequent AChannel vectors.
  */
 
-complex EPoint::GetExpHardSpherePhase(int jGroupNum, int channelNum) const {
+complex Unit::GetExpHardSpherePhase(int jGroupNum, int channelNum) const {
   return edep_->hardspherephase[edep_->At(jGroupNum, channelNum)];
 }
 
@@ -109,11 +109,11 @@ complex EPoint::GetExpHardSpherePhase(int jGroupNum, int channelNum) const {
  * Returns the Coulomb amplitude \f$ C_\alpha \f$ for the data point.
  */
 
-complex EPoint::GetCoulombAmplitude() const {
+complex Unit::GetCoulombAmplitude() const {
   return coulombamplitude_;
 }
 
-complex EPoint::GetCoulombAmplitude(double s) const {
+complex Unit::GetCoulombAmplitude(double s) const {
   // Every pair but an identical one with spin returns the stored amplitude
   // untouched, so the spin-0 and distinguishable results cannot move.
   if (!spinDependentCoulomb_) return coulombamplitude_;
@@ -127,7 +127,7 @@ complex EPoint::GetCoulombAmplitude(double s) const {
  * Sets the geometrical cross section factor \f$ \frac{\pi}{k^2} \f$.
  */
 
-void EPoint::SetGeometricalFactor(double geoFactor) {
+void Unit::SetGeometricalFactor(double geoFactor) {
   geofactor_ = geoFactor;
 }
 
@@ -135,7 +135,7 @@ void EPoint::SetGeometricalFactor(double geoFactor) {
  * Sets the multiplicative conversion from cross section to s-factor.
  */
 
-void EPoint::SetSFactorConversion(double conversion) {
+void Unit::SetSFactorConversion(double conversion) {
   sfactorconv_ = conversion;
 }
 
@@ -160,14 +160,14 @@ void WarnThmBelowB(const Config &configure, double energy, double bindingE) {
  * and hard sphere phase shfits.
  */
 
-double EPoint::CompoundEnergy(CNuc *theCNuc) {
+double Unit::CompoundEnergy(CNuc *theCNuc) {
   PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
   PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
   if (entrancePair->GetPType() == 20) return this->GetCMEnergy() + exitPair->GetSepE() + exitPair->GetExE();
   return this->GetCMEnergy() + entrancePair->GetSepE() + entrancePair->GetExE();
 }
 
-void EPoint::ChannelKeys(EData *data, CNuc *theCNuc, std::vector<ChannelTable::Key> &keys, bool includeSubPoints) {
+void Unit::ChannelKeys(WorkingCopy *data, CNuc *theCNuc, std::vector<ChannelTable::Key> &keys, bool includeSubPoints) {
   // The walk of CalcEDependentValues: the blocks of the entrance pair's compound nucleus, their particle channels,
   // E_c by the same expression; the exact threshold of a scattering length is not a row.
   PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
@@ -189,8 +189,8 @@ void EPoint::ChannelKeys(EData *data, CNuc *theCNuc, std::vector<ChannelTable::K
     for (int i = 1; i <= this->NumSubPoints(); i++) this->GetSubPoint(*data, i)->ChannelKeys(data, theCNuc, keys, true);
 }
 
-void EPoint::CalcEDependentValues(EData *data, CNuc *theCNuc, const Config &configure, bool includeSubPoints,
-                                  EData *shareWithMappedOf, const ChannelRowSource *rows) {
+void Unit::CalcEDependentValues(WorkingCopy *data, CNuc *theCNuc, const Config &configure, bool includeSubPoints,
+                                  WorkingCopy *shareWithMappedOf, const ChannelRowSource *rows) {
   AZUREProfile::Timer profileTimer(AZUREProfile::kEDependent);
   PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
   PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
@@ -412,12 +412,12 @@ void EPoint::CalcEDependentValues(EData *data, CNuc *theCNuc, const Config &conf
   // shift (RecalcEDependentValues, shareWithMapped false): there every mapped
   // point is re-energised by its own segment, a point mapped from another
   // segment possibly on another thread at the same moment
-  // (EData::FillEnergyShiftsFromParams), and two threads assigning the same
+  // (WorkingCopy::FillEnergyShiftsFromParams), and two threads assigning the same
   // shared_ptr freed the tables under the other's copy-on-write
   // (heap-use-after-free, AddressSanitizer 2026-11-06; macOS CI aborts).
   const azure2::MappedPoints mappedPts = this->PlanMapped(shareWithMappedOf);
   for (int i = 1; i <= mappedPts.size(); i++) {
-    EPoint *mappedPoint = mappedPts[i - 1];
+    Unit *mappedPoint = mappedPts[i - 1];
     if (mappedPoint->OwnsEDependentValues()) continue;
     mappedPoint->geofactor_ = geofactor_;
     mappedPoint->sfactorconv_ = sfactorconv_;
@@ -426,7 +426,7 @@ void EPoint::CalcEDependentValues(EData *data, CNuc *theCNuc, const Config &conf
     mappedPoint->thm_ps_ = thm_ps_;
     if (!includeSubPoints) continue;
     for (int ii = 1; ii <= this->NumSubPoints(); ii++) {
-      EPoint *subMappedPoint = mappedPoint->GetSubPoint(*data, ii);
+      Unit *subMappedPoint = mappedPoint->GetSubPoint(*data, ii);
       subMappedPoint->geofactor_ = this->GetSubPoint(*data, ii)->geofactor_;
       subMappedPoint->sfactorconv_ = this->GetSubPoint(*data, ii)->sfactorconv_;
       subMappedPoint->screen_k_ = this->GetSubPoint(*data, ii)->screen_k_;
@@ -441,7 +441,7 @@ void EPoint::CalcEDependentValues(EData *data, CNuc *theCNuc, const Config &conf
 /*!
  * Empties the per-JGroup rows of the energy-dependent arrays, keeping their storage.
  */
-void EPoint::ClearEDependentRows() {
+void Unit::ClearEDependentRows() {
   if (!edep_) return;
   if (!edep_.SoleOwner()) {
     // Shared with another point: start a table of our own with the same rows,
@@ -463,7 +463,7 @@ void EPoint::ClearEDependentRows() {
  * Recalculates energy-dependent values using the current (possibly shifted) energy.
  * This is needed when energy shifts are applied after initialization.
  */
-void EPoint::RecalcEDependentValues(EData *data, CNuc *theCNuc, const Config &configure, bool includeSubPoints,
+void Unit::RecalcEDependentValues(WorkingCopy *data, CNuc *theCNuc, const Config &configure, bool includeSubPoints,
                                     const ChannelRowSource *rows) {
   // Nothing to do while the energy is the one the values were computed at.
   // Every sub-point of a target-effect point used to pay for this on every
@@ -484,7 +484,7 @@ void EPoint::RecalcEDependentValues(EData *data, CNuc *theCNuc, const Config &co
   // doubled storage would now be kept.  The callers re-energise and recalculate
   // each sub-point afterwards in any case.
   //
-  // ESegment::UpdatePointEnergiesWithShift passes includeSubPoints = false: it
+  // Segment::UpdatePointEnergiesWithShift passes includeSubPoints = false: it
   // moves each sub-point to its shifted energy and recalculates it right
   // after, so recomputing the sub-points here, still at their OLD energies,
   // only doubled the cost of every shift step (all Coulomb functions of every
@@ -494,7 +494,7 @@ void EPoint::RecalcEDependentValues(EData *data, CNuc *theCNuc, const Config &co
 
   // Recalculate with current energy.  The points mapped onto this one are not
   // touched: each is re-energised itself, from its host's values
-  // (CopyEDependentValuesFrom) or anew (ESegment::UpdatePointEnergyWithShift).
+  // (CopyEDependentValuesFrom) or anew (Segment::UpdatePointEnergyWithShift).
   this->CalcEDependentValues(data, theCNuc, configure, includeSubPoints, nullptr, rows);
 
   // Also recalculate Coulomb amplitude with current energy
@@ -503,13 +503,13 @@ void EPoint::RecalcEDependentValues(EData *data, CNuc *theCNuc, const Config &co
 
 /*!
  * This point's energy-dependent tables, writable.  The tables are shared
- * between copies of the point (EData clones, the points mapped onto it); if
+ * between copies of the point (WorkingCopy clones, the points mapped onto it); if
  * another point still holds them, this point gets its own copy first, so a
  * write never changes what another point -- another thread's clone -- reads.
  * SharedTable::SoleOwner orders the other holders' reads before the write.
  */
 
-EPoint::EDependentTables &EPoint::MutableEDep() {
+Unit::EDependentTables &Unit::MutableEDep() {
   if (!edep_)
     edep_ = SharedTable<EDependentTables>::Make();
   else if (!edep_.SoleOwner())
@@ -521,7 +521,7 @@ EPoint::EDependentTables &EPoint::MutableEDep() {
  * This point's Legendre polynomials, writable (copy-on-write, as MutableEDep).
  */
 
-vector_r &EPoint::MutableLegendre() {
+vector_r &Unit::MutableLegendre() {
   if (!legendreP_)
     legendreP_ = SharedTable<vector_r>::Make();
   else if (!legendreP_.SoleOwner())
@@ -534,7 +534,7 @@ vector_r &EPoint::MutableLegendre() {
  * a share: the tables by pointer, the scalars by value.
  */
 
-EPoint::EDependentShare EPoint::ShareEDependentValues() const {
+Unit::EDependentShare Unit::ShareEDependentValues() const {
   EDependentShare share;
   share.energy = this->GetCMEnergy();
   share.angle = this->GetCMAngle();
@@ -558,7 +558,7 @@ EPoint::EDependentShare EPoint::ShareEDependentValues() const {
  * the share is empty.
  */
 
-bool EPoint::AdoptEDependentValues(const EDependentShare &share) {
+bool Unit::AdoptEDependentValues(const EDependentShare &share) {
   if (!share.tables || !share.legendre || share.energy != this->GetCMEnergy() || share.angle != this->GetCMAngle() ||
       share.entranceKey != this->GetEntranceKey() || share.exitKey != this->GetExitKey())
     return false;
@@ -577,11 +577,11 @@ bool EPoint::AdoptEDependentValues(const EDependentShare &share) {
  * Copies the energy-dependent values (geometrical factor, S-factor conversion,
  * L_o elements, penetrabilities, Coulomb and hard-sphere phases) from another
  * point at exactly the same c.m. energy and with the same entrance pair --
- * a host of point mapping (EData::MapData) or its sub-point.  Those values do
+ * a host of point mapping (WorkingCopy::MapData) or its sub-point.  Those values do
  * not depend on the angle; the Coulomb amplitude does, and is not copied.
  * Returns false, and copies nothing, if the energies differ.
  */
-bool EPoint::CopyEDependentValuesFrom(const EPoint &other) {
+bool Unit::CopyEDependentValuesFrom(const Unit &other) {
   if (other.GetCMEnergy() != this->GetCMEnergy() || other.GetEntranceKey() != this->GetEntranceKey() ||
       other.GetExitKey() != this->GetExitKey() || !other.eDependentValid_ ||
       other.eDependentEnergy_ != other.GetCMEnergy())
@@ -601,7 +601,7 @@ bool EPoint::CopyEDependentValuesFrom(const EPoint &other) {
  * AChannel vectors.
  */
 
-void EPoint::AddLoElement(int jGroupNum, int channelNum, complex loElement) {
+void Unit::AddLoElement(int jGroupNum, int channelNum, complex loElement) {
   EDependentTables &t = MutableEDep();
   EDependentTables::Put(t.lo_elements, t.Slot(jGroupNum, channelNum), loElement);
 }
@@ -611,7 +611,7 @@ void EPoint::AddLoElement(int jGroupNum, int channelNum, complex loElement) {
  * AChannel vectors.
  */
 
-void EPoint::AddSqrtPenetrability(int jGroupNum, int channelNum, double sqrtPene) {
+void Unit::AddSqrtPenetrability(int jGroupNum, int channelNum, double sqrtPene) {
   EDependentTables &t = MutableEDep();
   EDependentTables::Put(t.penetrabilities, t.Slot(jGroupNum, channelNum), sqrtPene);
 }
@@ -623,7 +623,7 @@ void EPoint::AddSqrtPenetrability(int jGroupNum, int channelNum, double sqrtPene
  * (one entry per channel), so a non-entrance channel stores 0.
  */
 
-void EPoint::AddThmFormFactor(int jGroupNum, int channelNum, double jl, double rhoDjl, complex coul) {
+void Unit::AddThmFormFactor(int jGroupNum, int channelNum, double jl, double rhoDjl, complex coul) {
   vector_r d;
   vector_c dc;
   EDependentTables &t = MutableEDep();
@@ -641,7 +641,7 @@ void EPoint::AddThmFormFactor(int jGroupNum, int channelNum, double jl, double r
  * AChannel vectors.
  */
 
-void EPoint::AddExpCoulombPhase(int jGroupNum, int channelNum, complex expShift) {
+void Unit::AddExpCoulombPhase(int jGroupNum, int channelNum, complex expShift) {
   EDependentTables &t = MutableEDep();
   EDependentTables::Put(t.coulombphase, t.Slot(jGroupNum, channelNum), expShift);
 }
@@ -651,7 +651,7 @@ void EPoint::AddExpCoulombPhase(int jGroupNum, int channelNum, complex expShift)
  * AChannel vectors.
  */
 
-void EPoint::AddExpHardSpherePhase(int jGroupNum, int channelNum, complex expShift) {
+void Unit::AddExpHardSpherePhase(int jGroupNum, int channelNum, complex expShift) {
   EDependentTables &t = MutableEDep();
   EDependentTables::Put(t.hardspherephase, t.Slot(jGroupNum, channelNum), expShift);
 }
@@ -660,7 +660,7 @@ void EPoint::AddExpHardSpherePhase(int jGroupNum, int channelNum, complex expShi
  * Calculates the Coulomb amplitude \f$ C_\alpha \f$ for the data point.
  */
 
-void EPoint::CalcCoulombAmplitude(EData *data, CNuc *theCNuc, bool includeSubPoints) {
+void Unit::CalcCoulombAmplitude(WorkingCopy *data, CNuc *theCNuc, bool includeSubPoints) {
   if (this->GetEntranceKey() == this->GetExitKey()) {
     PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
     int z1 = entrancePair->GetZ(1);
@@ -710,6 +710,6 @@ void EPoint::CalcCoulombAmplitude(EData *data, CNuc *theCNuc, bool includeSubPoi
  * Sets the Coulomb amplitude \f$ C_\alpha \f$ for the data point.
  */
 
-void EPoint::SetCoulombAmplitude(complex amplitude) {
+void Unit::SetCoulombAmplitude(complex amplitude) {
   coulombamplitude_ = amplitude;
 }

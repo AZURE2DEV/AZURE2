@@ -16,7 +16,7 @@ namespace azure2 {
  * What one evaluation of the model produces (docs/upgrade/data_model.md section 2.1, decision M2 (c)): the values
  * every calculation unit (a data or test point, and each of its sub-points) computes for the current level
  * parameters and nuisances.  A unit owns one record, a fixed range of `slot` at an offset assigned when the units
- * are laid out (EData::LayoutResults); nothing is looked up or allocated while the points are calculated.
+ * are laid out (WorkingCopy::LayoutResults); nothing is looked up or allocated while the points are calculated.
  *
  * A record holds, in this order:
  *   kSigma    the unit's observable: sigma (b), dsigma/dOmega_c.m. (b/sr), a phase shift (deg), A_y (1), a
@@ -31,7 +31,7 @@ namespace azure2 {
  *   then N abundance-weighted terms, one per compound nucleus (written with the model value, EvaluateModelPoint).
  *
  * Who holds what.  The layout -- where each unit's record starts and how many angular and natural slots it has -- is
- * a property of the data set and of every copy of it (EData::LayoutResults; a unit keeps its offset).  The storage
+ * a property of the data set and of every copy of it (WorkingCopy::LayoutResults; a unit keeps its offset).  The storage
  * belongs to whoever starts the evaluation: the CLI's calculation, each pooled working copy of a fit or of the MCMC,
  * the Python session, a probe or a reaction-rate point.  A unit holds no pointer to a buffer, so a copy of a unit or
  * of a data set cannot write into its original's values.
@@ -40,7 +40,7 @@ namespace azure2 {
  * argument, `const Results &` to read and `Results &` to write -- `point->GetFitCrossSection(results)`,
  * `point->Calculate(cnuc, config, results)`, `azure2::EvaluateModelPoint(segment, i, cnuc, config, results,
  * leaves)`.  There is no default buffer, no global and no thread-local one.  The owner hands its buffer to
- * EData::FillEnergyShiftsFromParams, the last step of the hand-over (EData::BeginEvaluation), which sizes it for the
+ * WorkingCopy::FillEnergyShiftsFromParams, the last step of the hand-over (WorkingCopy::BeginEvaluation), which sizes it for the
  * data set's layout and, under AZURE_POISON_RESULTS=1, fills it with NaN.
  *
  * The struct is plain (no engine headers; ThmProfile.h is plain too), so it can move to the experiment library.
@@ -53,7 +53,7 @@ struct Results {
   /*!
    * What the data set predicts, apart from the leaf values above (docs/upgrade/data_model.md section 2.1, step S4):
    * one record per point of a data or test segment -- not of a leaf or a sub-point --, laid out with the
-   * leaf records (EData::LayoutResults; the point keeps its offset, EPoint::SetModelRecord).  A record holds the model
+   * leaf records (WorkingCopy::LayoutResults; the point keeps its offset, Unit::SetModelRecord).  A record holds the model
    * value m_i, the segment's combination (SUM, RATIO, sample, transform, the E1 or E2 part) of its points' leaf
    * values, which the residual compares with the datum; then, for a point with an angular-distribution capacity
    * K > 0, the number of coefficients and K coefficients a_0 .. a_{K-1}.  Written by azure2::EvaluateModelPoint
@@ -64,14 +64,14 @@ struct Results {
   /*!
    * What the objective (Objective.h) writes, index = segment number (1-based; [0] unused): the normalization the
    * segment's data were compared with (the parameter's, or the profiled n* of a THM segment), its data chi^2 (a THM
-   * experiment's segments: each one's share of the profile), the profile of each THM experiment (EData::thmGroups_
+   * experiment's segments: each one's share of the profile), the profile of each THM experiment (WorkingCopy::thmGroups_
    * order), and the totals of the terms that are not per segment.  The writers and the API read them from here.
    */
   struct ObjectiveValues {
     std::vector<double> norm, segmentChi2;
-    /// The covariance seed (M^-1 r)_i of every point in a data-covariance group (EData::CovarianceChi2Correction):
+    /// The covariance seed (M^-1 r)_i of every point in a data-covariance group (WorkingCopy::CovarianceChi2Correction):
     /// the point's share of d(chi^2)/d(r_i) / 2, which the gradient reads.  Indexed as Results::model (the point's
-    /// model record, EPoint::SetModelRecord); sized only when the data set has a covariance group.
+    /// model record, Unit::SetModelRecord); sized only when the data set has a covariance group.
     std::vector<double> covarianceSeed;
     std::vector<ThmProfile> thmProfiles;
     double nuisance = 0.0, park = 0.0, abundance = 0.0, scatteringLength = 0.0, priorCovariance = 0.0;

@@ -93,7 +93,7 @@ with tempfile.TemporaryDirectory() as tmp:
                for f in sorted(glob.glob(os.path.join(outdir, "*")))
                if os.path.isfile(f) and not os.path.basename(f).startswith("intEC")}
 
-    # EData::WriteOutputFiles owns the data files. A CLI run additionally
+    # WorkingCopy::WriteOutputFiles owns the data files. A CLI run additionally
     # leaves param.par (written at initialization) and parameters.out (from
     # WriteParametersOut at the end); neither belongs to this call, so
     # compare what it does own and say what it does not.

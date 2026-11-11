@@ -149,7 +149,7 @@ int AZUREMain::operator()() {
   // refined now, at the run's parameters, and the extrapolations are made again on the refined grids before anything
   // is computed on them (AdaptiveExtrapolation.h).
   if (refinesAdaptiveGrids) {
-    std::unique_ptr<EData> refined = MakeRefinedExtrapolations(configure(), compound(), params.GetMinuitParams().Params());
+    std::unique_ptr<WorkingCopy> refined = MakeRefinedExtrapolations(configure(), compound(), params.GetMinuitParams().Params());
     if (!refined) return -1;
     delete data_;
     data_ = refined.release();
@@ -743,7 +743,7 @@ int AZUREMain::operator()() {
     if (configure().paramMask & Config::CALCULATE_WITH_DATA) {
       configure().outStream << std::endl
                             << std::endl;
-      for (ESegmentIterator segment = data()->Data().GetSegments().begin();
+      for (SegmentIterator segment = data()->Data().GetSegments().begin();
            segment < data()->Data().GetSegments().end(); segment++) {
         configure().outStream << "Segment #"
                               << segment->GetSegmentKey()
@@ -774,7 +774,7 @@ int AZUREMain::operator()() {
           double chi2data = 0.;
           int nData = 0;
           for (int s = 1; s <= data()->Data().NumSegments(); s++) {
-            const ESegment *seg = data()->Data().GetSegment(s);
+            const Segment *seg = data()->Data().GetSegment(s);
             if (!seg) continue;
             chi2data += results.objective.segmentChi2[s];
             nData += seg->NumPoints();
@@ -845,7 +845,7 @@ int AZUREMain::operator()() {
                                 << std::endl;
         }
         // BuildBandData computes the per-point sensitivities on the real
-        // compound/data objects (its gradient map is keyed by the real EPoint*),
+        // compound/data objects (its gradient map is keyed by the real Unit*),
         // and that forward+adjoint solve overwrites each point's stored best-fit
         // cross section.  Re-run the best-fit forward pass so the plotted and
         // written segments are the best fit, not the last gradient probe; the

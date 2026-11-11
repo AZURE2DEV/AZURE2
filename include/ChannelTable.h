@@ -41,7 +41,7 @@ class ChannelTable {
   };
 
   /// The one formula of a row: an open channel from CoulFunc, a closed one (ChannelFunc::IsClosed) from
-  /// ChannelFunc::Shift with P = 0.  Not for |E_c| <= ScatteringLength::kThresholdTolerance (EPoint's own case).
+  /// ChannelFunc::Shift with P = 0.  Not for |E_c| <= ScatteringLength::kThresholdTolerance (Unit's own case).
   static Row Compute(PPair *pair, int l, int two_j, double energy, const Config &configure);
 
   /// The table of the given keys (any order, duplicates allowed).  Rows of keys held by `previous` are copied from
@@ -71,7 +71,7 @@ class ChannelTable {
   std::size_t computed_ = 0;
 };
 
-/// Where a point takes its rows from (EPoint::CalcEDependentValues): the tables, searched in order by exact key, then
+/// Where a point takes its rows from (Unit::CalcEDependentValues): the tables, searched in order by exact key, then
 /// ChannelTable::Compute once per (pair, l, 2J, E_c) of the point; `used`, when set, receives every row the point used.
 struct ChannelRowSource {
   std::vector<const ChannelTable *> tables;

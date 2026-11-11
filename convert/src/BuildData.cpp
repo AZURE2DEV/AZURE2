@@ -213,7 +213,7 @@ void Builder::BuildData() {
       quantity = "beta_delayed_spectrum";
       unit = "arbitrary";
     }
-    const bool profiled = thm && s.varyNorm() == 1;  // ESegment::IsProfiledNorm
+    const bool profiled = thm && s.varyNorm() == 1;  // Segment::IsProfiledNorm
     if (profiled) unit = "arbitrary";
     Add(r, "quantity", quantity, quantityComment);
     if (!quantityNote.empty()) unit = Implicit(Construct::kDataCode, name, "unit", unit, quantityNote);
@@ -269,7 +269,7 @@ void Builder::BuildData() {
       Add(r, "angle_window", NumberText(s.minA(), d.text) + " " + NumberText(s.maxA(), d.text) + " deg");
     }
 
-    // norm (ESegment: the prior is about the nominal norm, the prior_centre row's value when there is one)
+    // norm (Segment: the prior is about the nominal norm, the prior_centre row's value when there is one)
     Count(Construct::kNorm);
     if (!s.normGroup().empty() && normName.count(s.normGroup())) {
       if (normLeader[s.normGroup()] != d.key && (s.dataNorm() != activeData_[normLeader[s.normGroup()]]->parsed->dataNorm() ||
@@ -473,7 +473,7 @@ void Builder::BuildExtrapolations() {
       }
       Add(r, "s", spin);
     }
-    // the energy grid: the old loop accumulates energy += step from Emin while energy <= Emax (EData::MakePoints)
+    // the energy grid: the old loop accumulates energy += step from Emin while energy <= Emax (WorkingCopy::MakePoints)
     // (one pass when the step is 0)
     const std::string lo = NumberText(s.minE(), t.text), hi = NumberText(s.maxE(), t.text), step = NumberText(s.eStep(), t.text);
     std::vector<double> energyValues;
@@ -514,7 +514,7 @@ void Builder::BuildExtrapolations() {
     }
     if (app && Implicit(Construct::kEffectLine, name, "apparatus", "yes",
                         "the <targetInt> line that lists line " + std::to_string(t.key) +
-                            " also folded this extrapolation (the same index, EData::MakePoints); written explicitly") != "yes")
+                            " also folded this extrapolation (the same index, WorkingCopy::MakePoints); written explicitly") != "yes")
       app = nullptr;
     if (app) {
       const std::string comment = TakeComment();

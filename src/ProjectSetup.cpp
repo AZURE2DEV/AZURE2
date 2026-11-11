@@ -2,7 +2,7 @@
 // project was read once by Config::ReadConfigFile (records -> Validate -> <levels> tables -> Build, Config::format3);
 // an old (format 1/2) project is read here from its sections through convert/'s old-line adaptor
 // (SpecsFromOldLines.h).  The old branch is TEMPORARY: step 3d deletes it with the adaptor.  Either way the engine's
-// set-up (EData::Fill, MakePoints, CNuc::SetAbundances) consumes the same specs.
+// set-up (WorkingCopy::Fill, MakePoints, CNuc::SetAbundances) consumes the same specs.
 #include "ProjectSetup.h"
 
 #include <istream>
@@ -71,7 +71,7 @@ bool ReportUnreadDataFiles(const Config &configure, bool dataRun) {
 
 }  // namespace
 
-int EData::Fill(const Config &configure, CNuc *theCNuc) {
+int WorkingCopy::Fill(const Config &configure, CNuc *theCNuc) {
   if (configure.format3) {
     if (ReportUnreadDataFiles(configure, true)) return -1;
     return this->Fill(configure, theCNuc, configure.format3->built.data);
@@ -81,7 +81,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
   return present ? this->Fill(configure, theCNuc, specs) : -1;
 }
 
-int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
+int WorkingCopy::MakePoints(const Config &configure, CNuc *theCNuc) {
   if (configure.format3) {
     ReportUnreadDataFiles(configure, false);
     return this->MakePoints(configure, theCNuc, configure.format3->built.extrapolations);

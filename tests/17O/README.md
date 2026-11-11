@@ -2,7 +2,7 @@
 
 Guards the modified R-matrix / half-off-shell path, which nothing else in
 `tests/` touches. Without it, a change to the ordinary on-shell machinery can
-break THM silently, because the two share `ESegment`, `EPoint`, `AZURECalc` and
+break THM silently, because the two share `Segment`, `Unit`, `AZURECalc` and
 the gradient code but diverge at the observable.
 
 ## The reaction

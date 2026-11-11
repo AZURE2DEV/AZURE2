@@ -51,14 +51,14 @@ class TargetEffect {
   /*!
    * Electron screening (`screening Ue vary sigma`, Ue and sigma in eV): every point and sub-point of the
    * effect's segments gets its bare cross section times exp(pi eta U_e / E).  U_e is a fit parameter
-   * (EData::FillMnParams) when vary is 1, with a Gaussian prior of width sigma about the value read when
+   * (WorkingCopy::FillMnParams) when vary is 1, with a Gaussian prior of width sigma about the value read when
    * sigma > 0.  The line need not carry convolution or target integration.
    */
   bool HasScreening() const { return hasScreening_; }
   /*!
    * Its place among the active <targetInt> lines (1-based; 0 until read).  A
    * line listing several segments gives each segment its own copy of the
-   * effect (EData::ReadTargetEffectsFile), so effect numbers and lines differ;
+   * effect (WorkingCopy::ReadTargetEffectsFile), so effect numbers and lines differ;
    * a screening parameter belongs to the line, shared by its copies.
    */
   int GetLineNumber() const { return lineNumber_; }
@@ -88,7 +88,7 @@ class TargetEffect {
   }
   /*!
    * Fitted target density (`densityfit vary sigma` on a target-integration line, sigma in atoms/cm^2 or as a
-   * percentage of the line's density, "2.3%"): the areal density is a fit parameter `density_<n>` (EData::
+   * percentage of the line's density, "2.3%"): the areal density is a fit parameter `density_<n>` (WorkingCopy::
    * FillMnParams), with a Gaussian prior ((N - N0)/sigma)^2 about the line's value when sigma > 0.  It moves only
    * the target thickness, dE with int_{E-dE}^{E} dE'/epsilon = N, i.e. the depth window and the straggling with
    * depth: the yield is the integral over the window divided by the same N, so the depth-averaged cross section
@@ -97,7 +97,7 @@ class TargetEffect {
    *
    * The sub-point grids are laid out once for the largest density the fit is expected to reach
    * (GetLayoutDensity: N0 + 3 sigma, at least 1.1 N0; 1.5 N0 without a prior) and the depth integral is cut at
-   * E0 - dE(N), so the yield moves smoothly with N and the grids stay put (EPoint::IntegrateTargetEffect).
+   * E0 - dE(N), so the yield moves smoothly with N and the grids stay put (Unit::IntegrateTargetEffect).
    */
   bool HasDensityFit() const { return hasDensityFit_; }
   /// A malformed `densityfit` / `densitygroup` block, or one on a line that does not integrate a thin target.
@@ -167,7 +167,7 @@ class TargetEffect {
   /// E_bar = int E' dE'/epsilon / int dE'/epsilon over [E - Delta, E] (Delta = TargetThickness).  The cross section
   /// at E_bar equals the target average for a cross section linear across the target; the remainder is about
   /// sigma'' Delta^2 / 24.  It is the single energy a thin-target point is evaluated at outside the windows of an
-  /// energy-restricted target integration (EPoint fallback, 2026-11-05).  0 for a thick target.
+  /// energy-restricted target integration (Unit fallback, 2026-11-05).  0 for a thick target.
   double MeanEnergyLoss(double, const Config &, double density) const;
   /// Attenuation coefficient of the given order.
   double GetQCoefficient(int) const;
@@ -199,7 +199,7 @@ class TargetEffect {
   /// 0 = point untouched.  Always 1 when no ranges are given.
   double BlendWeight(double labEnergy) const;
   /// The same for a given window list: the line's own ranges together with the automatic windows of one
-  /// segment (EData, IsAutoWindows).  An empty list is "no window": 1 without "auto", 0 with it (no level
+  /// segment (WorkingCopy, IsAutoWindows).  An empty list is "no window": 1 without "auto", 0 with it (no level
   /// asked for a window, so every point takes the effect's fallback).
   double BlendWeight(double labEnergy, const std::vector<std::pair<double, double> > &windows) const;
   /// "auto" in the windows token (2026-11-06): each segment of a thin-target integration gets windows placed
@@ -269,7 +269,7 @@ class TargetEffect {
    * number, as screening_<n>), with a Gaussian prior ((T - T0)/sigma)^2 about the line's T0 when sigma > 0.  The
    * sub-point grids and the integration windows are laid out once for the layout temperature
    * (GetDopplerLayoutTemperature: Tmax, else T0 + 3 sigma but at least 1.21 T0, or 2 T0 without a prior) and the
-   * Gauss-Legendre pieces for T0 (EPoint::DopplerWeights), so the broadened cross section is smooth in T and
+   * Gauss-Legendre pieces for T0 (Unit::DopplerWeights), so the broadened cross section is smooth in T and
    * neither moves during a fit.
    */
   bool HasDopplerFit() const { return dopplerFit_; }
@@ -311,7 +311,7 @@ class TargetEffect {
   bool IsBeamPhotodissociation() const;
   // Every energy the line carries (the Gaussian sigma, a `sigmalab` expression, the beam-profile
   // components and TPC sigma, the stopping cross section) is kept in the LAB frame of the input file and
-  // converted at the point: each kernel takes the point's own c.m./lab factor (EPoint::SetTargetKinematics).
+  // converted at the point: each kernel takes the point's own c.m./lab factor (Unit::SetTargetKinematics).
   // Up to 2026-10-27 the sigma and the profile were converted once, with the factor of the first segment
   // on the line, so a line shared by entrance pairs of different mass ratio (natural-target components,
   // segments of several pairs) used the wrong factor for the others (audit 2026-10-25, tier 3 entry 3).

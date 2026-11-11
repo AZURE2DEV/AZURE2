@@ -14,32 +14,32 @@
 #include "Config.h"
 #include "WorkingCopy.h"
 
-void EData::FillThicknessFromParams(const vector_r &p) {
+void WorkingCopy::FillThicknessFromParams(const vector_r &p) {
   if (set_->thicknessSegments_.empty() || set_->thicknessParamOffset_ < 0) return;
   for (int k = 1; k <= Data().NumThicknessParams(); k++) {
     const int idx = set_->thicknessParamOffset_ + k - 1;
     if (idx < 0 || idx >= (int)p.size()) return;  // a vector without the thickness block
-    const ESegment &seg = set_->segments_[set_->thicknessSegments_[k - 1] - 1];
+    const Segment &seg = set_->segments_[set_->thicknessSegments_[k - 1] - 1];
     if (seg.IsThicknessGroupFollower()) continue;
     State(seg).thickness = std::max(0.0, p[idx]);
   }
-  for (const ESegment &seg : set_->segments_)
+  for (const Segment &seg : set_->segments_)
     if (seg.IsThicknessGroupFollower()) {
-      const ESegment &leader = set_->segments_[seg.GetThicknessLeaderPos()];
+      const Segment &leader = set_->segments_[seg.GetThicknessLeaderPos()];
       State(seg).thickness = leader.GetSampleThickness(State(leader));
     }
 }
 
-double EData::ThicknessPenalty() const {
+double WorkingCopy::ThicknessPenalty() const {
   double chi2 = 0.0;
   for (int k = 1; k <= Data().NumThicknessParams(); k++) {
-    const ESegment &seg = set_->segments_[set_->thicknessSegments_[k - 1] - 1];
+    const Segment &seg = set_->segments_[set_->thicknessSegments_[k - 1] - 1];
     chi2 += seg.ThicknessPenalty(State(seg));
   }
   return chi2;
 }
 
-void EData::FillDopplerFromParams(const vector_r &p, const Config *configure) {
+void WorkingCopy::FillDopplerFromParams(const vector_r &p, const Config *configure) {
   if (set_->dopplerEffects_.empty() || set_->dopplerParamOffset_ < 0) return;
   for (int k = 1; k <= Data().NumDopplerParams(); k++) {
     const int idx = set_->dopplerParamOffset_ + k - 1;
@@ -63,14 +63,14 @@ void EData::FillDopplerFromParams(const vector_r &p, const Config *configure) {
   }
 }
 
-double EData::DopplerPenalty() const {
+double WorkingCopy::DopplerPenalty() const {
   double chi2 = 0.0;
   for (int k = 1; k <= Data().NumDopplerParams(); k++)
     chi2 += Data().GetDopplerTargetEffect(k)->DopplerPenalty(EffectValues(Data().DopplerCopies(k).front()).dopplerTemperature);
   return chi2;
 }
 
-void EData::FillDensitiesFromParams(const vector_r &p, const Config &configure) {
+void WorkingCopy::FillDensitiesFromParams(const vector_r &p, const Config &configure) {
   if (set_->densityEffects_.empty() || set_->densityParamOffset_ < 0) return;
   std::vector<char> changed(Data().NumTargetEffects(), 0);
   bool any = false;
@@ -106,27 +106,27 @@ void EData::FillDensitiesFromParams(const vector_r &p, const Config &configure) 
     if (n < 1 || n > (int)changed.size() || !changed[n - 1]) return;
     const TargetEffect *te = Data().GetTargetEffect(n);
     const double density = EffectValues(n).density;
-    for (EPointIterator point = seg.GetPoints(*this).begin(); point < seg.GetPoints(*this).end(); point++) {
+    for (UnitIterator point = seg.GetPoints(*this).begin(); point < seg.GetPoints(*this).end(); point++) {
       if (point->GetTargetEffectNum() != n || !(point->GetTargetThickness() > 0.0)) continue;
       point->SetTargetThickness(point->GetCMFactor() * te->TargetThickness(point->GetTargetLabEnergy(), configure, density));
-      // E_bar of the sigma(E_bar) fallback moves with the density too (EPoint::SetTargetFallbackOnly)
+      // E_bar of the sigma(E_bar) fallback moves with the density too (Unit::SetTargetFallbackOnly)
       if (!te->IsThickTarget())
         point->SetTargetFallbackDepth(point->GetCMFactor() *
                                       te->MeanEnergyLoss(point->GetTargetLabEnergy(), configure, density));
     }
   };
-  for (const ESegment &seg : set_->segments_) update({&seg, 0});
+  for (const Segment &seg : set_->segments_) update({&seg, 0});
   for (const LeafRef &leaf : set_->leafRefs_) update({&set_->segments_[leaf.first], leaf.second});
 }
 
-double EData::DensityPenalty() const {
+double WorkingCopy::DensityPenalty() const {
   double chi2 = 0.0;
   for (int k = 1; k <= Data().NumDensityParams(); k++)
     chi2 += Data().GetDensityTargetEffect(k)->DensityPenalty(EffectValues(Data().GetDensityLeadCopy(k)).density);
   return chi2;
 }
 
-void EData::ApplyScreening() {
+void WorkingCopy::ApplyScreening() {
   if (set_->screeningEffects_.empty()) return;
   std::vector<int> paramOf(Data().NumTargetEffects() + 1, 0);
   for (int k = 1; k <= Data().NumScreeningParams(); k++)
@@ -136,16 +136,16 @@ void EData::ApplyScreening() {
     if (te <= 0 || te >= (int)paramOf.size() || paramOf[te] == 0) return;
     const double ueMeV = EffectValues(te).screeningUe * 1.0e-6;
     for (int i = 1; i <= seg.NumPoints(); i++) {
-      EPoint *point = seg.GetPoint(*this, i);
+      Unit *point = seg.GetPoint(*this, i);
       point->SetScreening(ueMeV, paramOf[te]);
       for (int j = 1; j <= point->NumSubPoints(); j++) point->GetSubPoint(*this, j)->SetScreening(ueMeV, paramOf[te]);
     }
   };
-  for (const ESegment &seg : set_->segments_) apply({&seg, 0});
+  for (const Segment &seg : set_->segments_) apply({&seg, 0});
   for (const LeafRef &leaf : set_->leafRefs_) apply({&set_->segments_[leaf.first], leaf.second});
 }
 
-void EData::FillScreeningFromParams(const vector_r &p) {
+void WorkingCopy::FillScreeningFromParams(const vector_r &p) {
   if (set_->screeningEffects_.empty() || set_->screeningParamOffset_ < 0) return;
   for (int k = 1; k <= Data().NumScreeningParams(); k++) {
     const int idx = set_->screeningParamOffset_ + k - 1;
@@ -155,7 +155,7 @@ void EData::FillScreeningFromParams(const vector_r &p) {
   this->ApplyScreening();
 }
 
-double EData::ScreeningPenalty() const {
+double WorkingCopy::ScreeningPenalty() const {
   double chi2 = 0.0;
   for (int k = 1; k <= Data().NumScreeningParams(); k++)
     chi2 += Data().GetScreeningTargetEffect(k)->ScreeningPenalty(EffectValues(Data().ScreeningCopies(k).front()).screeningUe);
@@ -166,9 +166,9 @@ double EData::ScreeningPenalty() const {
  * Fills the Normalizations from the Minuit parameter array.
  */
 
-void EData::FillNormsFromParams(const vector_r &p) {
+void WorkingCopy::FillNormsFromParams(const vector_r &p) {
   int i = Data().GetNormParamOffset();
-  for (ESegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
+  for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     if (segment->IsVaryNorm() && !segment->IsProfiledNorm()) {
       State(*segment).norm = p[i];
       i++;
@@ -176,7 +176,7 @@ void EData::FillNormsFromParams(const vector_r &p) {
     // With component segments, no need to skip - total capture is handled within the segment
   }
   // Norm-group followers take their leader's norm (a follower's own parameter is fixed).
-  for (ESegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++)
+  for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++)
     if (segment->IsNormGroupFollower()) State(*segment).norm = State(Data().GetSegments()[segment->GetNormLeaderPos()]).norm;
 }
 
@@ -184,13 +184,13 @@ void EData::FillNormsFromParams(const vector_r &p) {
  * Fills the Energy Shifts from the Minuit parameter array.
  */
 
-void EData::FillEnergyShiftsFromParams(const vector_r &p, azure2::Results &results, CNuc *theCNuc,
+void WorkingCopy::FillEnergyShiftsFromParams(const vector_r &p, azure2::Results &results, CNuc *theCNuc,
                                        const Config *configure) {
   this->FillEnergyShiftsFromParamsImpl(p, theCNuc, configure);
   this->BeginEvaluation(results);
 }
 
-void EData::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNuc, const Config *configure) {
+void WorkingCopy::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNuc, const Config *configure) {
   // The THM coherent backgrounds, the block after the shifts (none without
   // cbackground=): every caller fills the shifts right after the norms, with
   // the compound the model will run on.
@@ -207,7 +207,7 @@ void EData::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNuc, con
   int j = Data().GetEnergyShiftSqrtParamOffset();
   bool anyEnergyShifted = false;
 
-  // Re-energising a point (ESegment::UpdatePointEnergyWithShift: Coulomb
+  // Re-energising a point (Segment::UpdatePointEnergyWithShift: Coulomb
   // functions of the point and its sub-points) touches only that point, so
   // the shift values are set here in the original order and the points of
   // the segments that moved are re-energised afterwards in parallel, each
@@ -220,12 +220,12 @@ void EData::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNuc, con
   auto queueTerm = [&toUpdate](const TermRef &t) {
     if (std::find(toUpdate.begin(), toUpdate.end(), t) == toUpdate.end()) toUpdate.push_back(t);
   };
-  auto queueUpdate = [&queueTerm](const ESegment *s) {
+  auto queueUpdate = [&queueTerm](const Segment *s) {
     for (int t = 0; t < s->NumTerms(); t++) queueTerm({s, t});
   };
   // The terms of the segments whose points carry an energy shift, moved or not.
   std::vector<TermRef> shiftActiveSegments;
-  for (ESegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
+  for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     // Both terms are present for every segment: the constant shift at p[i]
     // and the sqrt(E) coefficient at p[j].  Either moving the points means
     // the segment must be re-shifted (the mapping E -> E + a + b*sqrt(E) is
@@ -286,16 +286,16 @@ void EData::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNuc, con
       for (const TermRef &t : toUpdate) t.segment->BeginShiftRefill(*this, t.term, theCNuc, *configure);
     // One work item per point (with its sub-points), largest first, so a
     // segment with thousands of sub-points per point does not serialize.
-    // A point mapped onto another (EData::MapData) copies its values from
+    // A point mapped onto another (WorkingCopy::MapData) copies its values from
     // that host, so it is re-energised with it, on the same thread, after
-    // it (ESegment::UpdatePointGroupEnergyWithShift); it gets no item of its
+    // it (Segment::UpdatePointGroupEnergyWithShift); it gets no item of its
     // own.  A mapped point costs little (a copy, its Coulomb amplitudes).
     struct Item { double cost; TermRef seg; int i; };
     std::vector<Item> work;
     for (const TermRef &s : toUpdate)
       for (int i = 0; i < s.NumPoints(); i++) {
         if (s.segment->ShiftHost(*this, s.term, i)) continue;
-        EPoint *pt = s.GetPoint(*this, i + 1);
+        Unit *pt = s.GetPoint(*this, i + 1);
         const double nsp = pt ? pt->NumSubPoints() : 0;
         const double nMapped = pt ? pt->PlanMapped(this).size() : 0;
         work.push_back({(1.0 + nsp) * (1.0 + 0.1 * nMapped), s, i});

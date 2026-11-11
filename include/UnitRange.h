@@ -2,7 +2,7 @@
 #define AZURE2_UNITRANGE_H
 
 /*!
- * A view of a run of calculation units in the working copy's unit vector (EData::Units, docs/upgrade/
+ * A view of a run of calculation units in the working copy's unit vector (WorkingCopy::Units, docs/upgrade/
  * data_structure.md section 1.4): the points of a term, or the sub-points of a point.  Made on demand from the
  * owner's vector and a (first, count) range, never stored: a copy of the working copy holds ranges, not views.
  */

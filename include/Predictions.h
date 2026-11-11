@@ -8,19 +8,19 @@
 #include "azure2/experiment/Prediction.h"
 
 class CNuc;
-class ESegment;
+class Segment;
 
 /*!
  * The expression trees of the engine's data sets and extrapolations (docs/upgrade/data_model.md sections 2.3 and 3,
- * step S10).  A segment's tree is built once, after EData::Fill or MakePoints has attached its components, resolved
- * its pairs and its sample (EData::BuildPredictions), from what the segment then holds; the model pass
+ * step S10).  A segment's tree is built once, after WorkingCopy::Fill or MakePoints has attached its components, resolved
+ * its pairs and its sample (WorkingCopy::BuildPredictions), from what the segment then holds; the model pass
  * (src/ModelPass.cpp) evaluates it at every point.
  */
 namespace azure2 {
 
 /// The setup of a segment's tree: its reaction as read, and its terms as the set-up made them (term 0 the segment's own
 /// points, then its leaves in order), with the compound nucleus of each entrance pair.
-experiment::PredictionSetup PredictionSetupOf(const ESegment &segment, CNuc &compound);
+experiment::PredictionSetup PredictionSetupOf(const Segment &segment, CNuc &compound);
 
 /// One line per data set and extrapolation of a project, "data <label>: <tree>" then "extrapolation <label>: <tree>",
 /// in the order of the file (AZURE2 --print-predictions, pyazr.predictions); the label is the record's name in a

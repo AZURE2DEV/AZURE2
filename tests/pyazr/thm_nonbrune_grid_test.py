@@ -2,7 +2,7 @@
 """The sub-point grid of a folded THM point follows a narrow level moved by a
 fit also when the formal parameters are fitted (Brune formalism off).
 
-EData::ReplaceSubPointGrids (EPoint::RefreshSubPointGrid on thm before the
+WorkingCopy::ReplaceSubPointGrids (Unit::RefreshSubPointGrid on thm before the
 merge of dev, October 2026) rebuilds a point's grid when the current fit
 parameters anchor a narrow level differently from the ones it was built with
 (tests/thm_narrow_fold, part B, checks it under Brune, from the CLI).  It did

@@ -3,7 +3,7 @@
 
 A segment's energy shift starts at the value on its line, but its points start unshifted.  Up to 2026-10-29
 the "last applied" shift started at 0, so a first request of exactly 0 (constant shift or sqrt(E) coefficient)
-was taken as already applied and skipped; the sub-point grid re-placement (EData::ReplaceSubPointGrids) then
+was taken as already applied and skipped; the sub-point grid re-placement (WorkingCopy::ReplaceSubPointGrids) then
 re-energised the segment's points with the shift still set from the file.  The first call returned the chi2 of
 the FILE's shift (17O+a Kunz profile, 2026-10-29: 0 keV gave the +8 keV chi2 to every digit).  It needs a
 nonzero shift on the line and a <targetInt> sub-point effect on the segment.

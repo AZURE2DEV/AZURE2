@@ -7,7 +7,7 @@
 class ALevel;
 class CNuc;
 class Config;
-class ESegment;
+class Segment;
 class JGroup;
 class PPair;
 
@@ -18,7 +18,7 @@ class PPair;
  * Physics.  The HOES vertex is the surface term the prior-form transfer
  * amplitude leaves on the channel surface r = a after Green's theorem:
  *
- *   M_l = (B - 1) j_l(rho) - rho j_l'(rho) [+ C_l]   plane waves (EPoint),
+ *   M_l = (B - 1) j_l(rho) - rho j_l'(rho) [+ C_l]   plane waves (Unit),
  *   M_l = (B - 1) a_l - d_l                          DW vertex (ThmDwVertex),
  *
  * where B multiplies the value of the transferred wave and stands for the
@@ -41,7 +41,7 @@ class PPair;
  * takes the level-free value: B_c under perlevel, else as above.
  *
  * Every user of the vertex goes through this class: the model
- * (THMMatrixFunc), the vertex report (EData::ThmVertexTable, pyazr
+ * (THMMatrixFunc), the vertex report (WorkingCopy::ThmVertexTable, pyazr
  * thm_vertex) and the GUI diagnostics.  The model passes in its own on-shell
  * value, L_o + B_c from the point; the report and the GUI, which work on an
  * energy grid of their own, take OnShellAt(E) from the Coulomb functions.
@@ -96,6 +96,6 @@ class ThmVertexBoundary {
  * ERROR E_THM_HYBRID_POTENTIAL written, for a THM segment (or test segment, isTest) #key whose entrance pair has a
  * potential (docs/upgrade/spin_orbit_potential.md section 3.4); true otherwise.
  */
-bool ThmVertexAllowsPair(CNuc *compound, const ESegment &segment, int key, bool isTest, const Config &configure);
+bool ThmVertexAllowsPair(CNuc *compound, const Segment &segment, int key, bool isTest, const Config &configure);
 
 #endif

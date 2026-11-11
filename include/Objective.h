@@ -32,7 +32,7 @@
  */
 struct ObjectiveContext {
   CNuc *compound;
-  EData *data;
+  WorkingCopy *data;
   /// The buffer of the evaluation: the model value of every point of `data` (azure2::EvaluateModel) in, what the terms
   /// store out (Results::objective: profiled norms, THM profiles, segment chi^2, totals; the writer reads them).
   azure2::Results &results;
@@ -107,14 +107,14 @@ class Objective {
 
 // The shift penalties as (full parameter index, nominal, sigma), for the code
 // that needs a penalty's derivatives rather than its value: d/dx = 2 (x - nominal)
-// / sigma^2, curvature 2 / sigma^2.  Exactly the terms ESegment::AddShiftPenalty
+// / sigma^2, curvature 2 / sigma^2.  Exactly the terms Segment::AddShiftPenalty
 // adds, so the gradient, G2 and the least-squares priors stay consistent with
 // chi^2.  The nominal is 0 for every shift term since 2026-10-25 (the file's value
 // is only the start).
 template <class F>
-inline void ForEachShiftPenalty(EData *data, const ParamIndexMap &pmap, F f) {
+inline void ForEachShiftPenalty(WorkingCopy *data, const ParamIndexMap &pmap, F f) {
   for (int s = 1; s <= data->Data().NumSegments(); s++) {
-    const ESegment *seg = data->Data().GetSegment(s);
+    const Segment *seg = data->Data().GetSegment(s);
     if (!seg) continue;
     int idx;
     if (seg->IsVaryEnergyShift() && seg->GetEnergyShiftError() != 0.0 && !seg->IsShiftPriorReplaced() &&
@@ -132,9 +132,9 @@ inline void ForEachShiftPenalty(EData *data, const ParamIndexMap &pmap, F f) {
 }
 
 // The electron-screening priors ((U_e - nominal)/sigma)^2, U_e in eV: f(full index, nominal, sigma) for each
-// screening parameter with sigma > 0 (EData::ScreeningPenalty is their sum).
+// screening parameter with sigma > 0 (WorkingCopy::ScreeningPenalty is their sum).
 template <class F>
-inline void ForEachScreeningPrior(EData *data, const ParamIndexMap &pmap, F f) {
+inline void ForEachScreeningPrior(WorkingCopy *data, const ParamIndexMap &pmap, F f) {
   for (int k = 1; k <= data->Data().NumScreeningParams(); k++) {
     const TargetEffect *te = data->Data().GetScreeningTargetEffect(k);
     if (te->GetScreeningSigma() <= 0.0 || !te->IsScreeningVaried() || te->IsScreeningPriorReplaced()) continue;
@@ -144,9 +144,9 @@ inline void ForEachScreeningPrior(EData *data, const ParamIndexMap &pmap, F f) {
 }
 
 // The fitted-density priors ((N - N0)/sigma)^2, N in atoms/cm^2: f(full index, nominal, sigma) for each density
-// parameter with sigma > 0 (EData::DensityPenalty is their sum).
+// parameter with sigma > 0 (WorkingCopy::DensityPenalty is their sum).
 template <class F>
-inline void ForEachDensityPrior(EData *data, const ParamIndexMap &pmap, F f) {
+inline void ForEachDensityPrior(WorkingCopy *data, const ParamIndexMap &pmap, F f) {
   for (int k = 1; k <= data->Data().NumDensityParams(); k++) {
     const TargetEffect *te = data->Data().GetDensityTargetEffect(k);
     if (te->GetDensitySigma() <= 0.0 || !te->IsDensityVaried() || te->IsDensityPriorReplaced()) continue;
@@ -156,9 +156,9 @@ inline void ForEachDensityPrior(EData *data, const ParamIndexMap &pmap, F f) {
 }
 
 // The fitted-Doppler-temperature priors ((T - T0)/sigma)^2, T in K: f(full index, nominal, sigma) for each Doppler
-// parameter with sigma > 0 (EData::DopplerPenalty is their sum).
+// parameter with sigma > 0 (WorkingCopy::DopplerPenalty is their sum).
 template <class F>
-inline void ForEachDopplerPrior(EData *data, const ParamIndexMap &pmap, F f) {
+inline void ForEachDopplerPrior(WorkingCopy *data, const ParamIndexMap &pmap, F f) {
   for (int k = 1; k <= data->Data().NumDopplerParams(); k++) {
     const TargetEffect *te = data->Data().GetDopplerTargetEffect(k);
     if (te->GetDopplerSigma() <= 0.0 || !te->IsDopplerVaried() || te->IsDopplerPriorReplaced()) continue;
@@ -168,12 +168,12 @@ inline void ForEachDopplerPrior(EData *data, const ParamIndexMap &pmap, F f) {
 }
 
 // The fitted-sample-thickness priors ((n - n0)/sigma)^2, n in atoms/barn: f(full index, nominal, sigma) for each
-// thickness parameter with sigma > 0 that owns its value (EData::ThicknessPenalty is their sum; a thickness-group
+// thickness parameter with sigma > 0 that owns its value (WorkingCopy::ThicknessPenalty is their sum; a thickness-group
 // follower's parameter is fixed and carries no prior).
 template <class F>
-inline void ForEachThicknessPrior(EData *data, const ParamIndexMap &pmap, F f) {
+inline void ForEachThicknessPrior(WorkingCopy *data, const ParamIndexMap &pmap, F f) {
   for (int k = 1; k <= data->Data().NumThicknessParams(); k++) {
-    const ESegment *seg = data->Data().GetSegment(data->Data().GetThicknessSegment(k));
+    const Segment *seg = data->Data().GetSegment(data->Data().GetThicknessSegment(k));
     if (seg->GetThicknessSigma() <= 0.0 || !seg->IsThicknessVaried() || seg->IsThicknessPriorReplaced()) continue;
     const int idx = pmap.ThicknessIndex(k);
     if (idx >= 0) f(idx, seg->GetNominalThickness(), seg->GetThicknessSigma());
@@ -183,9 +183,9 @@ inline void ForEachThicknessPrior(EData *data, const ParamIndexMap &pmap, F f) {
 // Every diagonal prior: normalizations (T3), energy shifts (T4), screening, density, Doppler and thickness (T8),
 // abundances (T7, per nucleus; the sum-to-one term couples them and is not diagonal).
 template <class F>
-inline void ForEachDiagonalPrior(EData *data, CNuc *compound, const ParamIndexMap &pmap, F f) {
+inline void ForEachDiagonalPrior(WorkingCopy *data, CNuc *compound, const ParamIndexMap &pmap, F f) {
   for (int s = 1; s <= data->Data().NumSegments(); s++) {
-    const ESegment *seg = data->Data().GetSegment(s);
+    const Segment *seg = data->Data().GetSegment(s);
     int idx;
     if (!seg || !seg->IsVaryNorm() || seg->IsNormPriorReplaced() || (idx = pmap.NormIndex(s)) < 0) continue;
     const double n0 = seg->GetNominalNorm(), nerr = n0 / 100.0 * seg->GetNormError();
@@ -211,7 +211,7 @@ inline void ForEachDiagonalPrior(EData *data, CNuc *compound, const ParamIndexMa
  * The prior covariance (<config> priorCovariance=) replaces the diagonal prior of each of its parameters
  * (docs/upgrade/objective.md D3): marks those priors on the segments, target effects and abundances (nuisance priors
  * are skipped by index, AZURECalc::NuisancePriorOf).  Returns the names of the parameters whose own prior it
- * replaced, for a note.  Call once, after the covariance is set (EData::SetPriorCovariance).
+ * replaced, for a note.  Call once, after the covariance is set (WorkingCopy::SetPriorCovariance).
  */
 /*!
  * The least-squares rows of the model terms that are sums of squares but not single-parameter priors
@@ -224,6 +224,6 @@ void AppendModelRows(CNuc *compound, const Config &config, const ParamIndexMap *
                      vector_r *jac);
 
 class PriorCovariance;
-std::vector<std::string> ReplaceDiagonalPriors(CNuc *compound, EData *data, const PriorCovariance &pc);
+std::vector<std::string> ReplaceDiagonalPriors(CNuc *compound, WorkingCopy *data, const PriorCovariance &pc);
 
 #endif

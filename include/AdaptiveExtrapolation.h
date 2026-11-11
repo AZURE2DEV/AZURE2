@@ -8,7 +8,7 @@
 
 class CNuc;
 class Config;
-class EData;
+class WorkingCopy;
 
 /*!
  * The extrapolation run's adaptive energy grids (docs/upgrade/project_format3.md section 3.8).  An adaptive grid is a
@@ -22,7 +22,7 @@ class EData;
  * total width Gamma_lambda of the open channels, CNuc::ObservedWidthsAt; the formal energy alone if the observed
  * values cannot be computed; no seeds for a beta-delayed extrapolation) that fall inside its range, is refined by
  * experiment::RefineGrid.  Each sweep's batch of energies is computed by the point pass of the run (AZURECalc on an
- * extrapolation data set made by EData::MakePoints from the project's specs, the batch as this extrapolation's grid
+ * extrapolation data set made by WorkingCopy::MakePoints from the project's specs, the batch as this extrapolation's grid
  * and every other extrapolation reduced to its first point, so that the parameter vector's layout is the run's), in
  * a scratch directory for the external-capture integrals and without messages.  The value refined is the point
  * pass's model value at each angle of the extrapolation (the union grid: an energy is added at every angle when any
@@ -37,9 +37,9 @@ bool HasAdaptiveGrids(const Config &configure);
 /// true, after an error message saying so, when the project has an adaptive grid (AZUREAPI's set-up refuses it).
 bool SessionRefusesAdaptiveGrids(const Config &configure);
 
-/// The extrapolation data set on the refined grids, made by EData::MakePoints and laid out on the parameter vector as
+/// The extrapolation data set on the refined grids, made by WorkingCopy::MakePoints and laid out on the parameter vector as
 /// the run's data set, for the parameters `params` (the run's vector); nullptr after an error message.  The
 /// compound nucleus is initialized and its pairs marked as the run's MakePoints marked them.
-std::unique_ptr<EData> MakeRefinedExtrapolations(const Config &configure, CNuc *compound, const vector_r &params);
+std::unique_ptr<WorkingCopy> MakeRefinedExtrapolations(const Config &configure, CNuc *compound, const vector_r &params);
 
 #endif

@@ -567,7 +567,7 @@ double TargetEffect::BohrStragglingSigma(double arealDensity, double cmFactor, i
  * thickness below, and with a beam spread the window is padded by a further factor 5 (kept from the
  * original code, which sized the grid that way for the nested integral); straggling adds its own
  * convolutionRange sigma at the back of the target. One function for what used to be written out
- * eight times in EData.cpp.
+ * eight times in WorkingCopy.cpp.
  */
 
 void TargetEffect::GridExtent(double eCM, double thicknessCM, const Config &configure, double cmFactor, int z1, int z2, double &forward, double &backward) const {

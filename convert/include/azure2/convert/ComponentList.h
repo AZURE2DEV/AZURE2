@@ -13,7 +13,7 @@
  *   <n> e1 x1 angle1 ... en xn anglen              (angle -999 = the segment's own angles)
  *   -1 <n> e1 x1 angle1 scaling1 ...               (scaling -999 = none, i.e. 1)
  *   <n> e1 x1 ... en xn                            (old GUI files: entrance and exit only)
- * componentsList receives "Entrance: e, Exit: x[, Angle: a][, Scaling: s]" entries joined by ';' (parsed by EData).
+ * componentsList receives "Entrance: e, Exit: x[, Angle: a][, Scaling: s]" entries joined by ';' (parsed by WorkingCopy).
  * Returns "" on success, else what could not be read; the caller fails the line with it.  A non-empty `warning` is
  * a note the caller prints with the segment number.  Shared by SegLine and ExtrapLine.
  *

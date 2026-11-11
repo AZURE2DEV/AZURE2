@@ -1,7 +1,7 @@
 # gamma_lab_frame — lab-to-c.m. conversion of capture angular distributions
 
 Capture data given in the lab frame (`isDiff 1` with a photon exit pair) are converted to the c.m. frame by
-`EPoint::ConvertLabAngleGammas` and `EPoint::ConvertCrossSectionGammas`, using the photon aberration with the c.m.
+`Unit::ConvertLabAngleGammas` and `Unit::ConvertCrossSectionGammas`, using the photon aberration with the c.m.
 velocity β:
 
 - cos θ* = (cos θ − β)/(1 − β cos θ)

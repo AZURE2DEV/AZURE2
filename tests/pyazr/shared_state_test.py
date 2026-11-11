@@ -7,7 +7,7 @@ computed wrong residuals from then on -- capture segments only, by up to 28 %,
 silently, and still after the second session was closed.  Cause: the external-
 capture amplitude cache (`g_ecAmplitudeCache`) was one process-global object,
 keyed by (k-group, EC m-group, entrance, exit, segment key) with nothing that
-identifies the session; `EPoint::GetECAmplitudeWithShift`, which every capture
+identifies the session; `Unit::GetECAmplitudeWithShift`, which every capture
 point goes through, interpolates from it at the point's energy.  Creating the
 second session re-created the global (deleting the first session's entries)
 and then filled it with the second model's grid under colliding keys, so the

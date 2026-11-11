@@ -1094,7 +1094,7 @@ static int FindMcmcPriorParameter(const std::string &token, const AZUREParams &p
 int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
   try {
     CNuc *compound = new CNuc();
-    EData *data = new EData();
+    WorkingCopy *data = new WorkingCopy();
 
     configure.outStream << "Filling Compound Nucleus..." << std::endl;
     if (compound->Fill(configure) == -1) {
@@ -1630,7 +1630,7 @@ int main(int argc, char *argv[]) {
 #endif
       // Create instance of main AZURE function, print start message,
       //  and execute.  On the heap and deliberately never deleted: the process
-      //  ends right after this, and freeing the millions of EPoint objects one by
+      //  ends right after this, and freeing the millions of Unit objects one by
       //  one took 2.3-3.7 s of a natural_neon calculation (more with more threads)
       //  after every output file had been written.  No engine object holds a file
       //  or another resource its destructor would release; the OS reclaims the

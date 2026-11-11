@@ -3,8 +3,8 @@
 
 #include <algorithm>
 
-const ESegment *DataSet::GetSegmentFromKey(int key) const {
-  for (const ESegment &segment : segments_)
+const Segment *DataSet::GetSegmentFromKey(int key) const {
+  for (const Segment &segment : segments_)
     if (segment.GetSegmentKey() == key) return &segment;
   return nullptr;
 }

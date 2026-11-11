@@ -178,12 +178,12 @@ void AMatrixFunc::ClearMatrices() {
  * This function creates the inverted A-Matrix from the parameters in the CNuc object.
  */
 
-void AMatrixFunc::FillMatrices(EPoint *point) {
+void AMatrixFunc::FillMatrices(Unit *point) {
   AZUREProfile::Timer profileTimer(AZUREProfile::kFill);
   const double inEnergy = this->InEnergy(point);
   lastInEnergy_ = inEnergy;
   // Groups of another compound nucleus are not part of this point's matrices
-  // (EPoint::CalcEDependentValues left their rows empty).
+  // (Unit::CalcEDependentValues left their rows empty).
   activeNucleus_ = compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetNucleus();
   const bool channelSpace = !level_only_ && ChannelSpace::Enabled();
   for (int j = 1; j <= compound()->NumJGroups(); j++) {
@@ -219,7 +219,7 @@ void AMatrixFunc::FillMatrices(EPoint *point) {
  * The level matrix of J-group j at one energy (the level route).
  */
 
-void AMatrixFunc::FillLevelMatrix(int j, EPoint *point, double inEnergy) {
+void AMatrixFunc::FillLevelMatrix(int j, Unit *point, double inEnergy) {
   const bool park = (configure().paramMask & Config::USE_PARK_FORMALISM);
   {
     const int act = (int)active_levels_[j - 1].size();
@@ -507,7 +507,7 @@ complex AMatrixFunc::GetChannelCaptureBilinear(int jGroupNum, int chNum, int chp
  * This function calculates the T-Matrix for each reaction pathway based on the A-Matrix.
  */
 
-void AMatrixFunc::CalculateTMatrix(EPoint *point) {
+void AMatrixFunc::CalculateTMatrix(Unit *point) {
   AZUREProfile::Timer profileTimer(AZUREProfile::kTMatrix);
   tbar_decay_ = nullptr;
   int entranceKey = point->GetEntranceKey();
@@ -644,7 +644,7 @@ void AMatrixFunc::AddAInvMatrixElement(int jGroupNum, int lambdaNum, int muNum, 
  * interference sum + elastic Coulomb interference).  Returns false (touching
  * nothing) for configurations outside the supported standard path.
  */
-bool AMatrixFunc::PointAdjoint(EPoint *point, const azure2::Results &results, double fitBar, GradAccum &accum,
+bool AMatrixFunc::PointAdjoint(Unit *point, const azure2::Results &results, double fitBar, GradAccum &accum,
                                const vector_matrix_r *shiftDeriv, int xsComponent,
                                bool ayCrossSection) {
   TMatrixCotangent bar;
@@ -658,7 +658,7 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, const azure2::Results &results, do
  * (see PointAdjoint).  Reads the T-matrix held by this object and the
  * angle-dependent quantities of `point`.
  */
-bool AMatrixFunc::PointTBar(EPoint *point, const azure2::Results &results, double fitBar, TMatrixCotangent &bar,
+bool AMatrixFunc::PointTBar(Unit *point, const azure2::Results &results, double fitBar, TMatrixCotangent &bar,
                             int xsComponent,
                             bool ayCrossSection) {
   AZUREProfile::Timer profileTimer(AZUREProfile::kGradTBar);
@@ -979,7 +979,7 @@ bool AMatrixFunc::PointTBar(EPoint *point, const azure2::Results &results, doubl
       }
     }
     double cR = geom * i1i2 * rtFactor / (pi * 100.0);
-    // An angular-coefficient point (ESegment isDiff 9): the forward value is
+    // An angular-coefficient point (Segment isDiff 9): the forward value is
     //   a_k = (4 geom i1i2 / (100 sigma_int)) sum_{L=k} z T1 T2*   (normalised)   or   A_k = a_k sigma_int / 4 pi,
     // i.e. the differential model's Legendre coefficient of order k, coeff_k = cR sum_{L=k} z T1 T2*, times
     // 4 pi / (rtFactor sigma_int) (normalised) or 1 / rtFactor (absolute).  So the differential machinery below
@@ -1116,12 +1116,12 @@ bool AMatrixFunc::PointTBar(EPoint *point, const azure2::Results &results, doubl
  * T -> level energies and reduced widths (see PointAdjoint), at the energy of
  * `energyPoint`, whose T-matrix this object holds.
  */
-void AMatrixFunc::TBarAdjoint(EPoint *energyPoint, const TMatrixCotangent &bar, GradAccum &accum,
+void AMatrixFunc::TBarAdjoint(Unit *energyPoint, const TMatrixCotangent &bar, GradAccum &accum,
                               const vector_matrix_r *shiftDeriv) {
   AZUREProfile::Timer profileTimer(AZUREProfile::kGradBackprop);
   const complex I(0.0, 1.0);
   for (const auto &s : bar.screen) accum.AddScreening(s.first, s.second);
-  EPoint *point = energyPoint;
+  Unit *point = energyPoint;
   // Brune formalism: the boundary/shift terms change the M-construction kernel
   // (handled in the structural gamma step via cached shift values) and add
   // explicit E_lambda dependence through S(E_lambda) (handled in the structural
@@ -1377,7 +1377,7 @@ void AMatrixFunc::TBarAdjoint(EPoint *energyPoint, const TMatrixCotangent &bar, 
   }
 }
 
-void AMatrixFunc::TBarAdjointMany(const std::vector<EPoint *> &points, const std::vector<TMatrixCotangent> &bars,
+void AMatrixFunc::TBarAdjointMany(const std::vector<Unit *> &points, const std::vector<TMatrixCotangent> &bars,
                                   GradAccum &accum, const vector_matrix_r *shiftDeriv) {
   if (points.empty()) return;
   static const bool dense = [] {
@@ -1411,7 +1411,7 @@ void AMatrixFunc::TBarAdjointMany(const std::vector<EPoint *> &points, const std
 /*!
  * Beam energy in the compound system, as FillMatrices takes it.
  */
-double AMatrixFunc::InEnergy(EPoint *point) {
+double AMatrixFunc::InEnergy(Unit *point) {
   if (compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetPType() == 20) {
     int ep = compound()->GetPairNumFromKey(point->GetExitKey());
     return point->GetCMEnergy() + compound()->GetPair(ep)->GetSepE() + compound()->GetPair(ep)->GetExE();
@@ -1426,11 +1426,11 @@ double AMatrixFunc::InEnergy(EPoint *point) {
  * of the standard, Brune and Park level matrices (exactly mirroring
  * FillMatrices).
  */
-void AMatrixFunc::LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix_c &Mbar, double inEnergy,
+void AMatrixFunc::LevelMatrixAdjoint(Unit *energyPoint, int jNum, const matrix_c &Mbar, double inEnergy,
                                      GradAccum &accum, const vector_matrix_r *shiftDeriv, const complex *lambda,
                                      const std::vector<int> *levelOf) {
   AZUREProfile::Timer profileTimer(AZUREProfile::kGradLevelMatrix);
-  EPoint *point = energyPoint;
+  Unit *point = energyPoint;
   // Active level r (1-based) -> its level number (THM blocks, levelOf), else r.
   auto lev = [levelOf](int r) -> int { return levelOf ? (*levelOf)[r] : r; };
   const bool brune = (configure().paramMask & Config::USE_BRUNE_FORMALISM);
@@ -1701,7 +1701,7 @@ void AMatrixFunc::LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix
  * active level r (1-based); null when every level is in the R matrix.  Used
  * by the THM (HOES) adjoint, THMMatrixFunc::THMPointAdjoint.
  */
-void AMatrixFunc::LevelMatrixABarAdjoint(EPoint *point, int jNum, const matrix_c &aBar, double inEnergy,
+void AMatrixFunc::LevelMatrixABarAdjoint(Unit *point, int jNum, const matrix_c &aBar, double inEnergy,
                                          const vector_matrix_r *shiftDeriv, GradAccum &accum,
                                          const std::vector<int> *levelOf) {
   const matrix_c &A = this->GetAMatrix(jNum);
@@ -1814,7 +1814,7 @@ const vector_c &AMatrixFunc::GetRawChannelSolve(int jGroupNum, int chNum) {
  * LevelMatrixAdjoint takes it: the Lo-matrix element, plus the boundary
  * condition for the particle channels of the Brune and Park level matrices.
  */
-const std::vector<complex> &AMatrixFunc::KernelLambda(EPoint *point, int j) {
+const std::vector<complex> &AMatrixFunc::KernelLambda(Unit *point, int j) {
   JGroup *jg = compound()->GetJGroup(j);
   const bool park = (configure().paramMask & Config::USE_PARK_FORMALISM);
   const bool brune = (configure().paramMask & Config::USE_BRUNE_FORMALISM);
@@ -1838,9 +1838,9 @@ const std::vector<complex> &AMatrixFunc::KernelLambda(EPoint *point, int j) {
  *   beta = conj(2i sqrtP_en sqrtP_ex) conj(-uphase) tbar.
  * Pathways of one J-group sharing a channel pair add their betas.
  */
-bool AMatrixFunc::CollectBilinearTerms(EPoint *energyPoint, const TMatrixCotangent &bar,
+bool AMatrixFunc::CollectBilinearTerms(Unit *energyPoint, const TMatrixCotangent &bar,
                                        std::vector<std::vector<BilinearTerm>> &terms) {
-  EPoint *point = energyPoint;
+  Unit *point = energyPoint;
   const complex I(0.0, 1.0);
   int aa = compound()->GetPairNumFromKey(point->GetEntranceKey());
   int exitPairNum = compound()->GetPairNumFromKey(point->GetExitKey());
@@ -1891,7 +1891,7 @@ bool AMatrixFunc::CollectBilinearTerms(EPoint *energyPoint, const TMatrixCotange
  * the same matrix the dense path forms with two n^3 products; its structural
  * part is LevelMatrixAdjoint.
  */
-void AMatrixFunc::BilinearAdjoint(EPoint *energyPoint, int jNum, const std::vector<BilinearTerm> &terms,
+void AMatrixFunc::BilinearAdjoint(Unit *energyPoint, int jNum, const std::vector<BilinearTerm> &terms,
                                   GradAccum &accum, const vector_matrix_r *shiftDeriv) {
   if (terms.empty()) return;
   if (jNum < 1 || jNum > (int)solvers_.size()) return;
@@ -2000,7 +2000,7 @@ void AMatrixFunc::BilinearAdjoint(EPoint *energyPoint, int jNum, const std::vect
  * general BilinearAdjoint takes every level of the group as active, so groups with a level left out
  * of the R-matrix are refused here, as is the RMC formalism.
  */
-bool AMatrixFunc::BilinearAdjoint(EPoint *point, int jGroupNum, int chNum, complex mBar, GradAccum &accum,
+bool AMatrixFunc::BilinearAdjoint(Unit *point, int jGroupNum, int chNum, complex mBar, GradAccum &accum,
                                   const vector_matrix_r *shiftDeriv) {
   if (configure().paramMask & Config::USE_RMC_FORMALISM) return false;
   if (jGroupNum < 1 || jGroupNum > (int)solvers_.size()) return false;
@@ -2023,7 +2023,7 @@ bool AMatrixFunc::BilinearAdjoint(EPoint *point, int jGroupNum, int chNum, compl
  * Woodbury form loses digits the level matrix keeps, or when \f$1 - R\Lambda\f$
  * is ill-conditioned.
  */
-bool AMatrixFunc::SolveChannelSpace(int j, EPoint *point, double inEnergy) {
+bool AMatrixFunc::SolveChannelSpace(int j, Unit *point, double inEnergy) {
   const ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
   ChannelState &st = chan_[j - 1];
   const int n = f.n, nch = f.nch, m = (int)f.act.size();
@@ -2595,7 +2595,7 @@ void AMatrixFunc::ResolveFormalCotangents(GradAccum &accum, const vector_matrix_
  * LU-factored in double and in extended precision, and reports each new worst
  * difference (relative to the largest form of the J-group) on std::cerr.
  */
-void AMatrixFunc::VerifyChannelSpace(int j, EPoint *point, double inEnergy) {
+void AMatrixFunc::VerifyChannelSpace(int j, Unit *point, double inEnergy) {
   typedef std::complex<long double> cld;
   static double worst = 0.0;
   this->FillLevelMatrix(j, point, inEnergy);
@@ -2710,7 +2710,7 @@ bool AMatrixFunc::TBarProducts(const azure2::EntrancePathways &P, const azure2::
  * receives the derivatives (ch = -1: the level energy).
  */
 template <class Add>
-bool AMatrixFunc::LevelAdjoint(EPoint *energyPoint, int j, const std::vector<BilinearTerm> &terms,
+bool AMatrixFunc::LevelAdjoint(Unit *energyPoint, int j, const std::vector<BilinearTerm> &terms,
                                const FreeMask &mask, const vector_matrix_r *shiftDeriv, Add add) {
   if (j < 1 || j > (int)route_.size() || j > (int)mask.e.size()) return false;
   const bool channel = (route_[j - 1] == kRouteChannel);
@@ -2792,7 +2792,7 @@ bool AMatrixFunc::LevelAdjoint(EPoint *energyPoint, int j, const std::vector<Bil
   return true;
 }
 
-bool AMatrixFunc::LevelBasis(EPoint *energyPoint, int j, const BilinearTerm &term, const FreeMask &mask,
+bool AMatrixFunc::LevelBasis(Unit *energyPoint, int j, const BilinearTerm &term, const FreeMask &mask,
                              const vector_matrix_r *shiftDeriv, std::vector<double> &block) {
   const int n = (int)active_levels_[j - 1].size(), nch = compound()->GetJGroup(j)->NumChannels();
   block.assign((size_t)n * (1 + nch), 0.0);
