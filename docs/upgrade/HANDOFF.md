@@ -26,9 +26,18 @@ Update this file at the end of every work session: what changed, what is next, w
 - `history_test`: a copy shares its source's data set; evaluations at A and B and the copy histories leave a
   fingerprint of it unchanged (shown failing with a write of a segment's nominal norm in the hand-over).
 
-**Verified** on 075af6db (stage A; binary `work/ds3/AZURE2-A`, clean build 0 warnings): every project x 3 bases
-(tag `tab-ds3A`) against `tab-trial14`: 737 / 710 / 737 identical; `ctest -LE slow` 182/182; `tests/run_tests.sh`
-145 passed, 0 failed; the rest of the stage-A set and the final set are in the agent's report.
+**Verified** (clean builds, 0 warnings).  On 075af6db (the data set apart; binary `work/ds3/AZURE2-A`): every
+project x 3 bases (tag `tab-ds3A`) against `tab-trial14` 737 / 710 / 737 identical; `ctest -LE slow` 182/182;
+`tests/run_tests.sh` 145 / 0; calculations at 1 and 3 threads identical (T1-T3, 13N, natural_neon, energy_shift_sqrt,
+shift_sqrt_subpoints/dense, shift_fn, 18O_p_a_thm; three bases, 27/27); fits at 1 thread byte-identical to
+`b-trial14` (T2 `--use-lm` and `--use-gradient` 200 calls, 13N, energy_shift_sqrt, screening_6li/fit, 18O_p_a_thm);
+the converted-tree gate 483 (456) identical, 38 classified, 0 differ, 0 missing.  The same set on 2bde09d3 (renames,
+docs; tag `tab-ds3F`): the same results, but `convert_fixtures` failed (the converter's comment text, fixed in
+ef4aebb6); on ef4aebb6: `ctest -LE slow` 182/182 and the gate (`g3ds3G`) as above.  Cycles (perf stat, 1 thread, min
+of 6, alternated with `b-trial14`): T2 calculation 645.3 M against 647.8 M, 200-call T2 fit 49.41 G against 50.00 G;
+peak RSS T2 fit 305 / 427 MB at 1 / 3 threads against 324 / 452, natural_neon calculation 1465 / 1468 against
+1499 / 1506 MB.  One copy after Initialize: T2 11.87 MB in 95 allocations, natural_neon 142.7 MB in 508 (15.06 MB /
+236 and 180.6 MB / 779 at the milestone-2 head).
 
 **Open.** pyazr's Python comments (`pyazr/azrfile.py`, `datasets.py`) and two files of the validation branch
 (`experiment/src/Build.cpp`, `BuildEffects.cpp`, excepted in check 31) still name the old classes; the
