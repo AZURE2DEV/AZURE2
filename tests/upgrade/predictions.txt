@@ -673,6 +673,13 @@ extrapolation p3half: phase(1->1; J=1.5; l=1; s=0.5)
 extrapolation s1half: phase(1->1; J=0.5; l=0; s=0.5)
 == tests/spin_orbit_potential/spin_orbit_potential.azr
 data meyer_144: dsdo_cm(1->1)
+== tests/stopping_yield/models/fit.azr
+data scan1: sigma(1->2)
+data scan2: sigma(1->2)
+== tests/stopping_yield/models/stopping_yield.azr
+data plateau: sigma(1->2)
+data plateau_table: sigma(1->2)
+data step: sigma(1->2)
 == tests/sum_lab_frame/models/extrap.azr
 extrapolation x1: dsdo_cm(2->3)
 extrapolation x2: dsdo_cm(2->5)

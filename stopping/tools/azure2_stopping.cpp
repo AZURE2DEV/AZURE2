@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
         const double e = e1 * std::pow(e2 / e1, static_cast<double>(i) / (n - 1));
         if (command == "stopping") {
           const StoppingValue v = Stopping(m, p, e);
-          std::printf("%.6g\t%.6g\t%.6g\t%.6g\t%.3g\n", e, v.electronic, v.nuclear, v.total, v.rel_uncertainty);
+          std::printf("%.10g\t%.10g\t%.10g\t%.10g\t%.3g\n", e, v.electronic, v.nuclear, v.total, v.rel_uncertainty);
         } else {
           std::printf("%.6g\t%.6g\n", e, Range(m, p, e));
         }
