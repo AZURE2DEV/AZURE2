@@ -87,7 +87,7 @@ done
 for flags in "" "--use-gradient"; do
   name="fit${flags:+_grad}"
   run "$name" "$HERE/fit.azr" 2 "$flags"
-  got="$(for i in 1 2 3; do printf '%s ' "$(par "$name" "screening_$i")"; done)"
+  got="$(for t in tgt_cruz_metal tgt_cruz_insulator tgt_cruz_pdli; do printf '%s ' "$(par "$name" "$t.screening")"; done)"
   read -r a b c <<< "$got"
   if near "$a" "${UE[0]}" "$(awk -v s="${DUE[0]}" 'BEGIN { print 0.05 * s }')" &&
      near "$b" "${UE[1]}" "$(awk -v s="${DUE[1]}" 'BEGIN { print 0.05 * s }')" &&

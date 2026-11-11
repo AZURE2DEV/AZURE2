@@ -324,6 +324,21 @@ int main(int argc, char **argv) {
     const ConvertResult o = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 o.dat 1 2 1 1 2\n", "", "", "", ""});
     check("operation type 2: refused", !o.ok && o.refusal.find("neither 0 (sum) nor 1 (ratio)") != std::string::npos);
   }
+  // ---- exit key -1 (total capture) with a data type that is not total capture: the old engine refused the line
+  //      (src/EData.cpp, TotalCaptureCodeOk), so the converter refuses it with that reason instead of writing [total];
+  //      the line inactive, or with the total-capture type, converts
+  {
+    const ConvertResult d = Convert({"1 1 -1 0.2 1.4 0 180 0 1 0 0 0 0 0 c.dat\n", "", "", "", ""});
+    check("exit -1 with data type 0: refused", !d.ok && d.refusal.find("data line 1: the exit key -1 (total capture) needs the "
+                                                                      "total-capture data type (3 on a data line)") != std::string::npos);
+    const ConvertResult t = Convert({"", "1 1 -1 0.5 2.0 0.5 0 0 0 0\n", "", "", ""});
+    check("exit -1 with test type 0: refused", !t.ok && t.refusal.find("test line 1: the exit key -1 (total capture) needs the "
+                                                                      "total-capture data type (4 on a test line)") != std::string::npos);
+    const ConvertResult i = Convert({"0 1 -1 0.2 1.4 0 180 0 1 0 0 0 0 0 c.dat\n", "", "", "", ""});
+    check("exit -1 with data type 0 on an inactive line: converted", i.ok);
+    const ConvertResult k = Convert({"", "1 1 -1 0.5 2.0 0.5 0 0 0 4\n", "", "", ""});
+    check("exit -1 with test type 4: converted to [total]", k.ok && k.text.find("[total]") != std::string::npos);
+  }
   // ---- a sample's row of a compound nucleus no line reaches is kept: its isotope from the pair of <levels> that forms it
   //      with the lines' light particle (n + 22Ne -> 23Ne); a row no pair forms is a question, never a silent drop
   {
@@ -455,6 +470,43 @@ int main(int argc, char **argv) {
     check("density_2 -> tgt_y2.areal_density", Param(r, "density_2") == "tgt_y2.areal_density");
     check("screening_2 -> tgt_y2.screening", Param(r, "screening_2") == "tgt_y2.screening");
     check("doppler_3 -> tgt_y3.doppler", Param(r, "doppler_3") == "tgt_y3.doppler");
+  }
+  // ---- a shiftfn block on a follower of a shift group or of a shift-function group, or a line in both kinds of group:
+  //      the old engine refused each (EData's group set-up), so the converter refuses it instead of dropping the block
+  {
+    const ConvertResult r = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 a.dat 0 0 shiftgroup G\n"
+                                     "1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 b.dat 0 0 shiftgroup G shiftfn \"a0*x\" 1 0 0 0\n",
+                                     "", "", "", ""});
+    check("shiftfn on a follower: refused", !r.ok && r.refusal.find("data line 2 declares a shiftfn, but it is not the first "
+                                                                    "segment of shift group 'G'") != std::string::npos);
+    const ConvertResult f = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 a.dat 0 0 shiftfngroup F shiftfn \"a0*x\" 1 0 0 0\n"
+                                     "1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 b.dat 0 0 shiftfngroup F shiftfn \"a0*x\" 1 0 0 0\n",
+                                     "", "", "", ""});
+    check("shiftfn on a later member of a shift-function group: refused",
+          !f.ok && f.refusal.find("data line 2 declares a shiftfn, but it is not the first segment of shift-function group 'F'") != std::string::npos);
+    const ConvertResult b = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 a.dat 0 0 shiftgroup G shiftfngroup F shiftfn \"a0*x\" 1 0 0 0\n",
+                                     "", "", "", ""});
+    check("a line in a shift group and a shift-function group: refused",
+          !b.ok && b.refusal.find("is in shift group 'G' and in shift-function group 'F'") != std::string::npos);
+  }
+  // ---- densityfit on a line without target integration: refused by the old engine (TargetEffect), so by the converter
+  {
+    const ConvertResult r = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 y1.dat\n", "",
+                                     "1 \"1\" 40 1 0.0008 0 1e18 \"a0\" 1 6e-20 0 0 0 \"\" 0 densityfit 1 10%\n", "", ""});
+    check("densityfit without target integration: refused",
+          !r.ok && r.refusal.find("densityfit / densitygroup need target integration with a density > 0") != std::string::npos);
+  }
+  // ---- an automatic tolerance without windows (an empty ranges token, then blend and tolerance): the tolerance applied
+  //      to every point (TargetEffect), written as one window over every energy with that tolerance, and a note;
+  //      never dropped (the outputs of the conversion equal the old line's: compared on tests/identical_pp_res with a
+  //      convolution at tolerances 1e-12, 1e-3, 3e-2)
+  {
+    const ConvertResult r = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 y1.dat\n", "",
+                                     "1 \"1\" 40 1 0.0008 1 2e+17 \"a0\" 1 6e-20 0 0 0 \"\" 0 1 0 10 20 \"\" 0 0.001\n", "", ""});
+    check("tolerance without windows: converted", r.ok);
+    check("tolerance without windows: one window over every energy",
+          Block(r.text, "dataset y1").find("    fold_windows   0-1e+06 MeV auto_tolerance 0.001\n") != std::string::npos);
+    check("tolerance without windows: a note", HasNote(r, "an automatic tolerance without windows"));
   }
   // ---- densitygroup: one target, the first line's density; a member's own density is a note (EData::SetUpDensityParams)
   {

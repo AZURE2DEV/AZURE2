@@ -15,7 +15,7 @@
 #
 # Runs (24 walkers, 100 steps, level-energy spread 0.5 keV, physical
 # parameters, a few seconds each):
-#   pp_sqrt     tests/energy_shift_sqrt with segment 1's norm (5 %), shift
+#   pp_sqrt     tests/energy_shift_sqrt with data set 1's norm (5 %), shift
 #               (2 keV) and sqrt(E) coefficient (0.001) free: 1 automatic norm
 #               prior, 2 shift priors;
 #   pp_plain    the same with the sqrt(E) coefficient fixed: 1 and 1;
@@ -118,14 +118,19 @@ check() {
 ESQ="$HERE/../energy_shift_sqrt"
 TOY="$HERE/../thm_coherent_background/toy"
 
-# Segment 1 of energy_shift_sqrt: norm free (5 %), shift free (0.004 +- 0.002
-# MeV), sqrt(E) coefficient free (0.003 +- 0.001) or fixed.
+# Data set xs_40 of energy_shift_sqrt: norm free (5 %), shift free (0.004 MeV, prior 0 +- 0.002 MeV), sqrt(E)
+# coefficient free (0.003, prior 0 +- 0.001) or fixed.
+free_xs40() {  # SOURCE SQRT(free|fixed)
+  awk -v sq="$2" '/^dataset / { r = $2 } /^$/ { r = "" }
+    r == "xs_40" && $1 == "norm" { $0 = "    norm           1 fit prior 1 5%" }
+    r == "xs_40" && $1 == "shift" && $2 == "offset" { $0 = "    shift          offset 0.004 MeV fit prior 0 0.002" }
+    r == "xs_40" && $1 == "shift" && $2 == "sqrt" && sq == "free" { $0 = "    shift          sqrt 0.003 MeV^1/2 fit prior 0 0.001" }
+    { print }' "$1"
+}
 stage pp_sqrt "$ESQ" energy_shift_sqrt.azr
-awk '!done && index($0, "data/xs_40.dat") { $10 = 1; $11 = 5; $13 = 0.002; $14 = 1; sub(/sqrtshift 0.003 0 0/, "sqrtshift 0.003 0.001 1"); done = 1 } { print }' \
-  "$WORK/pp_sqrt/source.azr" > "$WORK/pp_sqrt/run.azr"
+free_xs40 "$WORK/pp_sqrt/source.azr" free > "$WORK/pp_sqrt/run.azr"
 stage pp_plain "$ESQ" energy_shift_sqrt.azr
-awk '!done && index($0, "data/xs_40.dat") { $10 = 1; $11 = 5; $13 = 0.002; $14 = 1; done = 1 } { print }' \
-  "$WORK/pp_plain/source.azr" > "$WORK/pp_plain/run.azr"
+free_xs40 "$WORK/pp_plain/source.azr" fixed > "$WORK/pp_plain/run.azr"
 # The toy's level energy free (field 4 of both channel lines).
 free_toy() { awk '/<levels>/ { l = 1; print; next } /<\/levels>/ { l = 0 } l && NF > 12 { $4 = 0 } { print }' "$1"; }
 stage thm "$TOY" toy.azr

@@ -19,6 +19,8 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import old_tree  # noqa: E402  (the old originals of converted projects)
 
 failures = []
 
@@ -37,7 +39,7 @@ except Exception as err:                       # numpy or the engine missing
     print(f"skip: pyazr not importable ({type(err).__name__}: {err})")
     sys.exit(77)
 
-AZR = os.path.join(ROOT, "tests", "energy_shift_sqrt", "energy_shift_sqrt.azr")
+AZR = old_tree.original(os.path.join(ROOT, "tests", "energy_shift_sqrt", "energy_shift_sqrt.azr"))  # the old file (format3_tree.md)
 
 print("1. the sqrtshift block is read, and only from the lines that carry it")
 segs = SegmentSet.from_file(AZR)

@@ -24,6 +24,8 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import old_tree  # noqa: E402  (the old originals of converted projects)
 
 failures = []
 
@@ -45,13 +47,13 @@ except Exception as err:                       # same skip as the other pyazr te
 PROJECT = os.path.join(ROOT, "tests", "data_covariance")
 
 print("1. the covariance block is read and written")
-s = list(SegmentSet.from_file(os.path.join(PROJECT, "dense.azr")))
+s = list(SegmentSet.from_file(old_tree.original(os.path.join(PROJECT, "dense.azr"))))
 with_cov = [x.key for x in s if x.covariance == "cov_dense.txt"]
 check("eight segments name cov_dense.txt", len(with_cov) == 8, with_cov)
 shifted = [x for x in s if x.shift_group == "G"]
 check("... next to a shiftgroup block, which is still read", len(shifted) == 2 and all(x.covariance for x in shifted),
       [(x.key, x.shift_group, x.covariance) for x in shifted])
-m = AzrModel.from_file(os.path.join(PROJECT, "plain.azr"))
+m = AzrModel.from_file(old_tree.original(os.path.join(PROJECT, "plain.azr")))
 m.add_data_segment("data/p12c_90.dat", 1, 1, observable="differential", norm_group="N", covariance="cov.txt")
 lines = [l for l in m.to_text().splitlines() if l.strip()]
 last = lines[[i for i, l in enumerate(lines) if l.strip() == "</segmentsData>"][0] - 1]
@@ -76,7 +78,7 @@ def project(work, model):
     for f in os.listdir(PROJECT):
         if f.startswith("cov_"):
             shutil.copy(os.path.join(PROJECT, f), d)
-    shutil.copy(os.path.join(PROJECT, model + ".azr"), os.path.join(d, "t.azr"))
+    shutil.copy(old_tree.original(os.path.join(PROJECT, model + ".azr")), os.path.join(d, "t.azr"))
     return os.path.join(d, "t.azr"), d
 
 

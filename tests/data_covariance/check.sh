@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Data covariance matrices ("covariance <file>" on segment lines), on the p+12C/p+13C project of
+# Data covariance matrices (the "covariance <file>" field of a data set), on the p+12C/p+13C project of
 # tests/angle_mapping (models written by make_models.py; see README.md):
 #
 #   (a) a diagonal covariance diag(e_i^2) gives the chi2 of no covariance, segment by segment;
@@ -15,7 +15,7 @@
 #       fixed (fit.azr: norms, shifts and abundances free, one minimum) to the same chi2;
 #   (f) broken inputs stop the run with an ERROR: wrong record count, a data file missing from
 #       the header, overlapping windows on one file, a matrix that is not positive definite, an
-#       asymmetric block, a covariance block on a test segment.
+#       asymmetric block, a covariance file on an extrapolation (refused by validation: an extrapolation has no data).
 #
 #   ./tests/data_covariance/check.sh path/to/AZURE2
 
@@ -158,16 +158,17 @@ broken() {  # NAME MODE "description" EXPECTED-ERROR-REGEX : edit the copy with 
 }
 broken b_count 1 "a header with a wrong record count" "has 61 data rows, the header says 60" \
   sed -i.bak 's|^file data/p12c_90.dat 61|file data/p12c_90.dat 60|' cov_dense.txt
-broken b_missing 1 "a segment's data file missing from the header" "not among the" \
-  sed -i.bak 's|data/p12c_90s.dat 0 0|data/p12c_90s.dat 0 0 covariance cov_dense.txt|' t.azr
-broken b_overlap 1 "two segments fitting one record" "fitted twice" \
-  sed -i.bak 's|0.3 2.3 145 155 1|0.3 2.3 115 125 1|' t.azr
+broken b_missing 1 "a data set's file missing from the header" "not among the" \
+  sed -i.bak 's|^    file           data/p12c_90s.dat$|&\
+    covariance     cov_dense.txt|' t.azr
+broken b_overlap 1 "two data sets fitting one record" "fitted twice" \
+  sed -i.bak 's|^    angle_window   145 155 deg$|    angle_window   115 125 deg|' t.azr
 broken b_notpd 1 "a matrix that is not positive definite" "not positive definite" \
   sh -c "printf 'block 2\\n1 2\\n0 10 10 0\\n' >> cov_dense.txt"
 broken b_asym 1 "an asymmetric block" "not symmetric" \
   sh -c "printf 'block 2\\n1 2\\n0 1e-3 2e-3 0\\n' >> cov_dense.txt"
-broken b_test 3 "a covariance block on a test segment" "carries a covariance block" \
-  sed -i.bak 's|^</segmentsTest>|1 1 1 0.5 2.0 0.1 60 60 0 1 covariance cov_dense.txt\n</segmentsTest>|' t.azr
+broken b_test 3 "a covariance file on an extrapolation" "E_FIELD_NOT_APPLICABLE.*an extrapolation has no data" \
+  sed -i.bak 's|^</extrapolations>|extrapolation x_cov\n    reaction       12C(p,p)12C\n    quantity       dsigma_domega\n    unit           b/sr\n    energies       range 0.5 2.0 MeV lab step 0.1\n    angles         list 60 deg lab\n    covariance     cov_dense.txt\n</extrapolations>|' t.azr
 
 echo
 if [ "$failures" -eq 0 ]; then echo "data_covariance: all checks passed"; else echo "data_covariance: $failures check(s) FAILED"; fi

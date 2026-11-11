@@ -18,6 +18,8 @@ ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SRC = os.path.join(ROOT, "tests", "electron_screening")
 DATA = os.path.join(ROOT, "tests", "13N", "data")
 sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import old_tree  # noqa: E402  (the old originals of converted projects)
 
 try:
     from pyazr.azrfile import AzrModel  # noqa: E402
@@ -42,7 +44,7 @@ def close(a, b, tol):
 tmp = tempfile.mkdtemp(prefix="pyazr_screening_")
 try:
     # --- AzrModel: the block (no engine) ----------------------------------------------------------
-    m = AzrModel.from_file(os.path.join(SRC, "scr.azr"))
+    m = AzrModel.from_file(old_tree.original(os.path.join(SRC, "scr.azr")))
     check("scr.azr: one screening line, effect 1 (13N's own lines are inactive)",
           m.screenings == {1: (1000.0, False, 0.0)}, m.screenings)
     m.set_screening(1, ue=900.0, vary=True, sigma=100.0)
@@ -52,7 +54,7 @@ try:
           AzrModel.from_file(path).screenings)
     m.set_screening(1, sigma=0.0)
     check("set_screening keeps the values not given", m.screenings == {1: (900.0, True, 0.0)}, m.screenings)
-    b = AzrModel.from_file(os.path.join(SRC, "bare.azr"))
+    b = AzrModel.from_file(old_tree.original(os.path.join(SRC, "bare.azr")))
     check("bare.azr: no screening", b.screenings == {}, b.screenings)
     b.add_target_effect("6", gaussian_sigma=0.001)
     b.add_target_effect("7", screening=(500.0, True, 50.0))
@@ -81,7 +83,7 @@ try:
         work = os.path.join(tmp, "grad")
         os.makedirs(os.path.join(work, "output"))
         os.makedirs(os.path.join(work, "checks"))
-        shutil.copy(os.path.join(SRC, "grad.azr"), work)
+        shutil.copy(old_tree.original(os.path.join(SRC, "grad.azr")), work)
         os.symlink(DATA, os.path.join(work, "data"))
         session = azure2(os.path.join(work, "grad.azr"))
 

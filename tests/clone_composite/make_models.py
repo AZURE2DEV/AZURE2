@@ -1,48 +1,48 @@
 #!/usr/bin/env python3
 """Models for tests/clone_composite, built at run time (check.sh) into a work directory.
 
-From tests/target_density (12C(p,p) at 84.3 deg lab, segment 3, every level fixed, a thin target with a fitted areal
-density), with segment 3 made a SUM of its own elastic term and one identical elastic component (2 sigma), so the
-fitted density acts on a segment that holds components:
+From tests/target_density (format 3; 12C(p,p) at 84.3 deg lab, data set meyer_84, every level fixed, a thin target
+with a fitted areal density), with meyer_84 made a sum of its own elastic term and one identical elastic component
+(2 sigma, "12C(p,p)12C + 12C(p,p)12C"), the only active data set, so the fitted density acts on a data set that holds
+components:
 
-  true.azr   N = 1.1e18, the SUM segment alone (check.sh makes the fit data from its output)
-  fit.azr    N free from 1e18 ("densityfit 1 0"), data from true.azr
+  true.azr   N = 1.1e18 (check.sh makes the fit data from its output)
+  fit.azr    N free from 1e18, data from true.azr
 
     python3 make_models.py <tests/target_density> <workdir>
 """
 import sys
 
 src, work = sys.argv[1], sys.argv[2]
-SUM_TAIL = " 1 0 1 1 1 -999 0"
+SUM = "12C(p,p)12C + 12C(p,p)12C"
 
 
-def sum_segment3(text, data_dir):
-    lines = text.split("\n")
-    i0, i1 = lines.index("<segmentsData>"), lines.index("</segmentsData>")
-    n3 = 0
-    for k, i in enumerate(range(i0 + 1, i1), start=1):
-        f = lines[i].split()
-        if not f:
+def sum_meyer_84(text, data_dir):
+    """Every data set but meyer_84 inactive; meyer_84 active, the sum, its data file in data_dir."""
+    out, name, found = [], None, 0
+    for line in text.split("\n"):
+        f = line.split()
+        if line.startswith("dataset "):
+            name = f[1]
+            out.append(line)
+            out.append("    active         " + ("yes" if name == "meyer_84" else "no"))
             continue
-        if k == 3:
-            f[0] = "1"
-            f[14] = f[14].replace("fitdata/", "data/").replace("data/", data_dir + "/")
-            if f[15:17] != ["0", "0"]:
-                sys.exit("make_models: segment 3 is not a plain line")
-            lines[i] = " ".join(f[:15]) + SUM_TAIL
-            n3 += 1
-        else:
-            f[0] = "0"
-            lines[i] = " ".join(f)
-    if n3 != 1:
-        sys.exit("make_models: segment 3 not found")
-    j0, j1 = lines.index("<targetInt>"), lines.index("</targetInt>")
-    keep = [l for l in lines[j0 + 1:j1] if l.split()[:2] == ["1", '"3"']]
-    if len(keep) != 1:
-        sys.exit("make_models: no <targetInt> line for segment 3")
-    lines[j0 + 1:j1] = keep
-    return "\n".join(lines)
+        if not f or line.startswith("<"):
+            name = None
+        if name and f[0] == "active":
+            continue  # written after the header
+        if name == "meyer_84" and f[0] == "reaction":
+            if f[1:] != ["12C(p,p)12C"]:
+                sys.exit("make_models: meyer_84 is not a plain elastic data set")
+            line = "    reaction       " + SUM
+            found += 1
+        elif name == "meyer_84" and f[0] == "file":
+            line = "    file           " + data_dir + "/" + f[1].split("/")[-1]
+        out.append(line)
+    if found != 1:
+        sys.exit("make_models: data set meyer_84 not found")
+    return "\n".join(out)
 
 
-open(work + "/true.azr", "w").write(sum_segment3(open(src + "/true.azr").read(), "data"))
-open(work + "/fit.azr", "w").write(sum_segment3(open(src + "/fit.azr").read(), "fitdata"))
+open(work + "/true.azr", "w").write(sum_meyer_84(open(src + "/true.azr").read(), "data"))
+open(work + "/fit.azr", "w").write(sum_meyer_84(open(src + "/fit.azr").read(), "fitdata"))

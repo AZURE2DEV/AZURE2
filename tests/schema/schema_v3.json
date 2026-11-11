@@ -3490,6 +3490,10 @@
    "severity": "error",
    "meaning": "a prior that is not 'prior <centre> <width>[%]' with a width > 0"
   },
+  "E_PRIOR_CENTRE": {
+   "severity": "error",
+   "meaning": "a fitted norm whose prior is centred at 0 or below (its width is relative to the centre)"
+  },
   "E_PART_MISSING": {
    "severity": "error",
    "meaning": "a structured value without one of its required keywords"

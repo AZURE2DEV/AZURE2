@@ -8,10 +8,10 @@
 #   - their hosts kept the original's mapped-point list next to the copy's, so every copy also computed and wrote
 #     the original's component points (twice the component work, unsynchronised writes between threads).
 #
-# Model (make_models.py): tests/target_density with segment 3 (12C(p,p), 84.3 deg) made a SUM of its own term and an
-# identical elastic component, the only active segment, under a thin target with a fitted density:
+# Model (make_models.py): tests/target_density with data set meyer_84 (12C(p,p), 84.3 deg) made a sum of its own term and an
+# identical elastic component, the only active data set, under a thin target with a fitted density:
 #
-#   (a) MIGRAD (--use-gradient) recovers density_1 = 1.1e18 from 1e18 to 1e-4 with chi2 < 1e-2 (data made at 1.1e18);
+#   (a) MIGRAD (--use-gradient) recovers N = 1.1e18 from 1e18 to 1e-4 with chi2 < 1e-2 (data made at 1.1e18);
 #       before the fix the copies saw the SUM segment at the starting density, so its chi2 did not respond;
 #   (b) the gradient check (AZURE_GRAD_CHECK): d chi2/d N from finite differences on the copies agrees with the
 #       analytic and Jacobian paths.
@@ -70,10 +70,10 @@ fi
 
 # (a)
 run fit "$WORK/fit.azr" 2 "--use-gradient"
-n="$(par fit density_1)"; c="$(chi fit Total-Chi-Squared)"
+n="$(par fit tgt_meyer_84.areal_density)"; c="$(chi fit Total-Chi-Squared)"
 if [ -n "$n" ] && near "$n" 1.1e18 1e-4 && awk -v c="${c:-1e9}" 'BEGIN { exit !(c < 1e-2) }'; then
-  ok "(a) a SUM segment under a fitted density: density_1 $n from 1e18 (truth 1.1e18), chi2 $c"
-else bad "(a) a SUM segment under a fitted density: density_1 ${n:-missing}, chi2 ${c:-missing}"; tail -3 "$WORK/fit/run.log"; fi
+  ok "(a) a SUM segment under a fitted density: N $n from 1e18 (truth 1.1e18), chi2 $c"
+else bad "(a) a SUM segment under a fitted density: N ${n:-missing}, chi2 ${c:-missing}"; tail -3 "$WORK/fit/run.log"; fi
 
 # (b)
 run grad "$WORK/fit.azr" 2 "--use-gradient" AZURE_GRAD_CHECK=exit
