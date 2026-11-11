@@ -4,6 +4,7 @@
 // written `c.`), on the same loaded CNuc.  Every field of every node, in order, must be equal (doubles with ==).
 // Arguments: .azr files or directories (every *.azr below, outside output/); each is loaded, from its own directory, as AZUREAPI does (external capture on), in the Brune and the formal basis.
 #include <algorithm>
+#include <cstdarg>
 #include <cmath>
 #include <filesystem>
 #include <cstdio>
@@ -17,7 +18,13 @@
 #include "CNuc.h"
 #include "Config.h"
 #include "Constants.h"
+#include "Decay.h"
 #include "ECAmplitudeCache.h"
+#include "ECMGroup.h"
+#include "KGroup.h"
+#include "KLGroup.h"
+#include "MGroup.h"
+#include "PathwayTable.h"
 
 Config *g_config = nullptr;  // defined by the executable; the library reads it
 
@@ -268,6 +275,150 @@ void OldSortPathways(CNuc &c, const Config &configure) {
   }
 }
 
+// The pathway table against the trees: one line per row of either, every field, doubles as hexadecimal floats (so
+// equal lines mean equal bits).  The trees' capture-A_y terms are built here (CNuc::CalcCaptureAnalyzingPower at
+// maxLOrder, as the first capture-A_y point builds them); the table holds them for every photon exit, requested
+// before CNuc::Initialize.
+void Line(std::vector<std::string> &out, const char *format, ...) {
+  char buf[1024];
+  va_list args;
+  va_start(args, format);
+  std::vsnprintf(buf, sizeof buf, format, args);
+  va_end(args);
+  out.push_back(buf);
+}
+
+std::vector<std::string> DumpTrees(CNuc &c, int maxL) {
+  std::vector<std::string> out;
+  for (int a = 1; a <= c.NumPairs(); a++) {
+    PPair *p = c.GetPair(a);
+    for (int d = 1; d <= p->NumDecays(); d++) {
+      Decay *dec = p->GetDecay(d);
+      const bool photon = c.GetPair(dec->GetPairNum())->GetPType() == 10;
+      if (photon) c.CalcCaptureAnalyzingPower(a, d, maxL);
+      Line(out, "entrance %d exit %d -> pair %d: %d groups, interferences %d, %zu pathways, %d orders, %zu diagonal",
+           a, d, dec->GetPairNum(), dec->NumKGroups(), (int)dec->TablesBuilt(), dec->InterferencePathways().size(),
+           dec->NumInterferenceOrders(), dec->DiagonalPathways().size());
+      for (int k = 1; k <= dec->NumKGroups(); k++) {
+        KGroup *g = dec->GetKGroup(k);
+        Line(out, "  k %d: s %a s' %a s2' %a cross %d, %d internal, %d external", k, g->GetS(), g->GetSp(), g->GetSp2(),
+             (int)g->IsCrossSpin(), g->NumMGroups(), g->NumECMGroups());
+        for (int m = 1; m <= g->NumMGroups(); m++) {
+          MGroup *mg = g->GetMGroup(m);
+          Line(out, "    m %d: J-group %d ch %d ch' %d stat %a", m, mg->GetJNum(), mg->GetChNum(), mg->GetChpNum(),
+               mg->GetStatSpinFactor());
+        }
+        for (int m = 1; m <= g->NumECMGroups(); m++) {
+          ECMGroup *e = g->GetECMGroup(m);
+          std::string through = "direct";
+          if (e->IsChannelCapture()) {
+            MGroup *cc = p->GetDecay(e->GetChanCapDecay())->GetKGroup(e->GetChanCapKGroup())->GetMGroup(e->GetChanCapMGroup());
+            through = "through J-group " + std::to_string(cc->GetJNum()) + " ch " + std::to_string(cc->GetChNum()) +
+                      " ch' " + std::to_string(cc->GetChpNum());
+          }
+          Line(out, "    ec %d: %c%d l %d J %a final ch %d J-group %d level %d cc %d %d/%d/%d %s photon ch %d", m,
+               e->GetRadType(), e->GetMult(), e->GetL(), e->GetJ(), e->GetFinalChannel(), e->GetJGroupNum(),
+               e->GetLevelNum(), (int)e->IsChannelCapture(), e->GetChanCapDecay(), e->GetChanCapKGroup(),
+               e->GetChanCapMGroup(), through.c_str(), e->GetIntChannelNum());
+        }
+      }
+      // The (k, L) groups in order, against the flat list built from them.
+      const std::vector<FlatInterference> &flat = dec->FlatInterferences();
+      std::size_t i = 0;
+      for (int kl = 1; kl <= dec->NumKLGroups(); kl++) {
+        const KLGroup *g = dec->GetKLGroup(kl);
+        for (int n = 1; n <= g->NumInterferences(); n++, i++) {
+          const Interference *itf = g->GetInterference(n);
+          const FlatInterference f = i < flat.size() ? flat[i] : FlatInterference{};
+          Line(out, "  interference k %d L %d m1 %d m2 %d %s z %a z_upos %a | flat k %d L %d m1 %d m2 %d %c%c z %a "
+                    "z_upos %a sp equal %d s1 %d s2 %d",
+               g->GetK(), g->GetLOrder(), itf->GetM1(), itf->GetM2(), itf->GetInterferenceType().c_str(),
+               itf->GetZ1Z2(), itf->GetZ1Z2_UPOS(), f.k, f.l, f.m1, f.m2, f.r1, f.r2, f.z, f.z_upos, (int)f.spEqual,
+               f.s1, f.s2);
+        }
+      }
+      if (i != flat.size()) Line(out, "  flat list of %zu for %zu interferences", flat.size(), i);
+      for (const InterferencePathway &q : dec->InterferencePathways()) Line(out, "  pathway k %d m %d %c", q.k, q.m, q.rad);
+      for (const DiagonalPathway &q : dec->DiagonalPathways())
+        Line(out, "  diagonal k %d m %d s %a l %d stat %a", q.k, q.m, q.s, q.l, q.statSpin);
+      if (photon) {
+        Line(out, "  capture A_y: %d terms", dec->NumCaptureAyTerms());
+        for (int t = 1; t <= dec->NumCaptureAyTerms(); t++) {
+          const CaptureAyTerm *q = dec->GetCaptureAyTerm(t);
+          Line(out, "    k %d: %d/%d/%d %d/%d/%d a %a b %a", q->kOrder, q->kGroup1, q->path1, (int)q->isEC1, q->kGroup2,
+               q->path2, (int)q->isEC2, q->ak, q->bk);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+std::vector<std::string> DumpTable(CNuc &c) {
+  std::vector<std::string> out;
+  const azure2::PathwayTable &table = c.Pathways();
+  for (int a = 1; a <= c.NumPairs(); a++) {
+    const azure2::EntrancePathways &P = table.Entrance(a);
+    for (int d = 1; d <= (int)P.exits.size(); d++) {
+      const azure2::ExitRow &x = P.exits[d - 1];
+      const bool photon = c.GetPair(x.pair)->GetPType() == 10;
+      Line(out, "entrance %d exit %d -> pair %d: %d groups, interferences %d, %d pathways, %d orders, %d diagonal", a, d,
+           x.pair, x.num_groups, (int)x.has_interferences, x.num_interference_pathways, x.num_orders, x.num_diagonal);
+      for (int k = 1; k <= x.num_groups; k++) {
+        const azure2::SpinGroupRow &g = P.Group(x, k);
+        Line(out, "  k %d: s %a s' %a s2' %a cross %d, %d internal, %d external", k, g.s, g.sp, g.sp2, (int)g.CrossSpin(),
+             g.num_internal, g.num_external);
+        for (int m = 1; m <= g.num_internal; m++) {
+          const azure2::InternalRow &r = P.Internal(g, m);
+          Line(out, "    m %d: J-group %d ch %d ch' %d stat %a", m, r.group, r.ch, r.chp, r.stat_spin_factor);
+        }
+        for (int m = 1; m <= g.num_external; m++) {
+          const azure2::ExternalRow &e = P.External(g, m);
+          std::string through = "direct";
+          if (e.channel_capture) {
+            const azure2::InternalRow &cc = P.internal[e.cc_row];
+            through = "through J-group " + std::to_string(cc.group) + " ch " + std::to_string(cc.ch) + " ch' " +
+                      std::to_string(cc.chp);
+            // The row and the position triple name the same pathway.
+            const azure2::ExitRow &ccExit = P.exits[e.cc_exit - 1];
+            if (P.Group(ccExit, e.cc_group).first_internal + e.cc_pathway - 1 != e.cc_row) through += " (cc_row differs)";
+          } else if (e.cc_row != -1) {
+            through += " (cc_row set)";
+          }
+          Line(out, "    ec %d: %c%d l %d J %a final ch %d J-group %d level %d cc %d %d/%d/%d %s photon ch %d", m,
+               e.rad_type, e.mult, e.l, e.J, e.final_channel, e.final_group, e.final_level, (int)e.channel_capture,
+               e.cc_exit, e.cc_group, e.cc_pathway, through.c_str(), e.photon_channel);
+        }
+      }
+      for (int i = 0; i < x.num_interferences; i++) {
+        const azure2::FlatInterference &f = P.interferences[x.first_interference + i];
+        const std::string type{f.r1, f.r2};
+        Line(out, "  interference k %d L %d m1 %d m2 %d %s z %a z_upos %a | flat k %d L %d m1 %d m2 %d %c%c z %a "
+                  "z_upos %a sp equal %d s1 %d s2 %d",
+             f.k, f.l, f.m1, f.m2, type.c_str(), f.z, f.z_upos, f.k, f.l, f.m1, f.m2, f.r1, f.r2, f.z, f.z_upos,
+             (int)f.spEqual, f.s1, f.s2);
+      }
+      for (int i = 0; i < x.num_interference_pathways; i++) {
+        const azure2::InterferencePathway &q = P.interference_pathways[x.first_interference_pathway + i];
+        Line(out, "  pathway k %d m %d %c", q.k, q.m, q.rad);
+      }
+      for (int i = 0; i < x.num_diagonal; i++) {
+        const azure2::DiagonalPathway &q = P.diagonal[x.first_diagonal + i];
+        Line(out, "  diagonal k %d m %d s %a l %d stat %a", q.k, q.m, q.s, q.l, q.statSpin);
+      }
+      if (photon) {
+        Line(out, "  capture A_y: %d terms", x.has_capture_ay ? x.num_capture_ay : -1);
+        for (int t = 0; t < x.num_capture_ay; t++) {
+          const azure2::CaptureAyTerm &q = P.capture_ay[x.first_capture_ay + t];
+          Line(out, "    k %d: %d/%d/%d %d/%d/%d a %a b %a", q.kOrder, q.kGroup1, q.path1, (int)q.isEC1, q.kGroup2, q.path2,
+               (int)q.isEC2, q.ak, q.bk);
+        }
+      }
+    }
+  }
+  return out;
+}
+
 // One line per node, every field at full precision.
 std::vector<std::string> Dump(CNuc &c) {
   std::vector<std::string> out;
@@ -322,7 +473,7 @@ int main(int argc, char **argv) {
   std::sort(files.begin(), files.end());
   const fs::path start = fs::current_path();
   int failures = 0;
-  long nodes = 0;
+  long nodes = 0, tableRows = 0;
   for (const std::string &file : files)
     for (int formal = 0; formal <= 1; formal++) {
       const std::string tag = file + (formal ? " (formal)" : " (Brune)");
@@ -351,11 +502,27 @@ int main(int argc, char **argv) {
       // superset of what any project's data select.
       for (int a = 1; a <= compound.NumPairs(); a++)
         if (compound.GetPair(a)->GetPType() != 10) compound.GetPair(a)->SetEntrance();
+      // The table's capture-A_y terms for every photon exit of every entrance.
+      for (int a = 1; a <= compound.NumPairs(); a++)
+        for (int p = 1; p <= compound.NumPairs(); p++)
+          if (compound.GetPair(a)->GetPType() != 10 && compound.GetPair(p)->GetPType() == 10) compound.RequestCaptureAy(a, p);
       try {
         compound.Initialize(cfg);
       } catch (const std::exception &x) {
         std::printf("  skip  %s: Initialize throws (%s)\n", tag.c_str(), x.what());
         continue;
+      }
+      {
+        const std::vector<std::string> table = DumpTable(compound), trees = DumpTrees(compound, cfg.maxLOrder);
+        tableRows += (long)table.size();
+        size_t n = 0;
+        while (n < table.size() && n < trees.size() && table[n] == trees[n]) n++;
+        if (n != table.size() || n != trees.size()) {
+          std::printf("  FAIL  %s: table and trees differ at line %zu of %zu / %zu\n    table: %s\n    trees: %s\n",
+                      tag.c_str(), n, table.size(), trees.size(), n < table.size() ? table[n].c_str() : "(end)",
+                      n < trees.size() ? trees[n].c_str() : "(end)");
+          failures++;
+        }
       }
       const std::vector<std::string> now = Dump(compound);
       for (int a = 1; a <= compound.NumPairs(); a++) compound.GetPair(a)->ClearDecays();
@@ -374,10 +541,15 @@ int main(int argc, char **argv) {
       }
     }
   fs::current_path(start);
+  if (tableRows == 0) {
+    std::printf("  FAIL  no table rows at all\n");
+    failures++;
+  }
   if (nodes == 0) {
     std::printf("  FAIL  no pathways at all\n");
     failures++;
   }
-  std::printf("%s: %zu files, %ld nodes, %d project(s) differ\n", failures ? "FAIL" : "PASS", files.size(), nodes, failures);
+  std::printf("%s: %zu files, %ld nodes, %ld table lines, %d project(s) differ\n", failures ? "FAIL" : "PASS", files.size(),
+              nodes, tableRows, failures);
   return failures ? 1 : 0;
 }

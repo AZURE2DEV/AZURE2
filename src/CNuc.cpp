@@ -21,6 +21,7 @@
 #include "CNucLevelParameters.h"
 #include "CNucSystem.h"
 #include "CNucChecks.h"
+#include "CNucPathways.h"
 #include "CNucReport.h"
 #include "CNucTransformMessages.h"
 #include "CoulFunc.h"
@@ -698,6 +699,7 @@ void CNuc::Initialize(const Config &configure) {
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Sorting Reaction Pathways..." << std::endl;
   this->SortPathways(configure);
+  this->BuildPathways(configure);
   this->SetUpFormalCaptureMasks(configure);
   if ((configure.fileCheckMask | configure.screenCheckMask) & Config::CHECK_PATHWAYS)
     WritePathwaysCheck(*this, configure);
@@ -896,25 +898,9 @@ void CNuc::SortPathways(const Config &configure) {
   // The external-capture final states, in J-group and level order.
   std::vector<phys::FinalState> finalStates;
   std::vector<std::pair<int, int> > finalLevel;  // (J-group, level) of each
-  for (int j = 1; j <= this->NumJGroups(); j++) {
-    JGroup *theFinalJGroup = this->GetJGroup(j);
-    for (int la = 1; la <= theFinalJGroup->NumLevels(); la++) {
-      ALevel *theFinalLevel = theFinalJGroup->GetLevel(la);
-      if (!theFinalLevel->IsECLevel()) continue;
-      phys::FinalState f;
-      f.two_J = Twice(theFinalJGroup->GetJ());
-      f.parity = theFinalJGroup->GetPi();
-      f.photon_partition = theFinalLevel->GetECPairNum() - 1;
-      f.multipoles = theFinalLevel->GetECMultMask();
-      for (int chp = 1; chp <= theFinalJGroup->NumChannels(); chp++) {
-        AChannel *finalChannel = theFinalJGroup->GetChannel(chp);
-        f.channels.push_back(phys::FinalStateChannel{finalChannel->GetPairNum() - 1,
-                                                     this->GetPair(finalChannel->GetPairNum())->GetPType() == 0,
-                                                     finalChannel->GetL(), Twice(finalChannel->GetS())});
-      }
-      finalStates.push_back(f);
-      finalLevel.push_back(std::make_pair(j, la));
-    }
+  for (const azure2::PathwayFinalState &f : ECFinalStates(*this)) {
+    finalStates.push_back(f.state);
+    finalLevel.push_back(std::make_pair(f.group, f.level));
   }
   phys::PathwayOptions options;
   options.rmatrix_capture = (configure.paramMask & Config::USE_RMC_FORMALISM) != 0;

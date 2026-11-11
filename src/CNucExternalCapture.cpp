@@ -11,10 +11,6 @@
 #include "CNuc.h"
 #include "CNucLevelParameters.h"
 #include "CNucSystem.h"
-#include "Decay.h"
-#include "ECMGroup.h"
-#include "KGroup.h"
-#include "MGroup.h"
 #include "Config.h"
 #include "ECIntegral.h"
 #include "JGroup.h"
@@ -237,23 +233,19 @@ void CNuc::SetUpFormalCaptureMasks(const Config &configure) {
       BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure), {},
       !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC), !!(configure.paramMask & Config::USE_RMC_FORMALISM)});
   const CNucSystemMap &map = setup->structure.map;
-  for (int p = 1; p <= this->NumPairs(); p++)
-    for (int d = 1; d <= this->GetPair(p)->NumDecays(); d++)
-      for (int k = 1; k <= this->GetPair(p)->GetDecay(d)->NumKGroups(); k++) {
-        KGroup *kg = this->GetPair(p)->GetDecay(d)->GetKGroup(k);
-        for (int m = 1; m <= kg->NumECMGroups(); m++) {
-          ECMGroup *ec = kg->GetECMGroup(m);
-          if (!ec->IsChannelCapture() || !ec->GetIntChannelNum()) continue;
-          MGroup *chan = this->GetPair(p)->GetDecay(ec->GetChanCapDecay())->GetKGroup(ec->GetChanCapKGroup())->GetMGroup(ec->GetChanCapMGroup());
-          const int group = chan->GetJNum(), channel = ec->GetIntChannelNum();
-          for (std::size_t b = 0; b < map.groupOfBlock.size(); b++) {
-            if (map.groupOfBlock[b] != group || map.levelOfBlockLevel[b].size() < 2) continue;
-            bool known = false;
-            for (const CaptureMaskSetup::Slot &s : setup->slots) known = known || (s.group == group && s.channel == channel);
-            if (!known) setup->slots.push_back({b, group, channel});
-          }
-        }
+  for (int p = 1; p <= this->NumPairs(); p++) {
+    const azure2::EntrancePathways &P = this->Pathways().Entrance(p);
+    for (const azure2::ExternalRow &ec : P.external) {
+      if (!ec.channel_capture || !ec.photon_channel) continue;
+      const int group = P.internal[ec.cc_row].group, channel = ec.photon_channel;
+      for (std::size_t b = 0; b < map.groupOfBlock.size(); b++) {
+        if (map.groupOfBlock[b] != group || map.levelOfBlockLevel[b].size() < 2) continue;
+        bool known = false;
+        for (const CaptureMaskSetup::Slot &s : setup->slots) known = known || (s.group == group && s.channel == channel);
+        if (!known) setup->slots.push_back({b, group, channel});
       }
+    }
+  }
   if (setup->slots.empty()) return;
   captureMaskSetup_ = setup;
   for (const CaptureMaskSetup::Slot &s : setup->slots) {

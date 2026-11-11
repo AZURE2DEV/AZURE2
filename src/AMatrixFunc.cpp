@@ -10,6 +10,7 @@
 #include "KGroup.h"
 #include "azure2/physics/ExternalCapture.h"
 #include "KLGroup.h"
+#include <stdexcept>
 #include "MGroup.h"
 #include "Interference.h"
 #include "JGroup.h"
@@ -513,11 +514,11 @@ complex AMatrixFunc::GetChannelCaptureBilinear(int jGroupNum, int chNum, int chp
 void AMatrixFunc::CalculateTMatrix(EPoint *point) {
   AZUREProfile::Timer profileTimer(AZUREProfile::kTMatrix);
   tbar_decay_ = nullptr;
-  // Cache frequently accessed values to avoid repeated function calls
   int entranceKey = point->GetEntranceKey();
   int exitKey = point->GetExitKey();
   int aa = compound()->GetPairNumFromKey(entranceKey);
   int exitPairNum = compound()->GetPairNumFromKey(exitKey);
+  const azure2::EntrancePathways &P = compound()->Pathways().Entrance(aa);
 
   int irEnd;
   int irStart;
@@ -525,30 +526,22 @@ void AMatrixFunc::CalculateTMatrix(EPoint *point) {
   if ((configure().paramMask & Config::USE_RMC_FORMALISM) &&
       compound()->GetPair(exitPairNum)->GetPType() == 10) {
     irStart = 1;
-    irEnd = compound()->GetPair(aa)->NumDecays();
+    irEnd = (int)P.exits.size();
     isRMC = true;
   } else {
-    irStart = 0;
-    int numDecays = compound()->GetPair(aa)->NumDecays();
-    while (irStart < numDecays) {
-      irStart++;
-      if (compound()->GetPair(aa)->GetDecay(irStart)->GetPairNum() == exitPairNum) break;
-    }
+    irStart = P.ExitOf(exitPairNum);
+    if (!irStart) throw std::runtime_error(NoPathwayMessage(aa, exitPairNum));
     irEnd = irStart;
   }
   for (int ir = irStart; ir <= irEnd; ir++) {
-    Decay *theDecay = compound()->GetPair(aa)->GetDecay(ir);
-    for (int k = 1; k <= theDecay->NumKGroups(); k++) {
-      for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
-        MGroup *theMGroup = theDecay->GetKGroup(k)->GetMGroup(m);
-        // Cache frequently accessed values to avoid repeated function calls
-        int jNum = theMGroup->GetJNum();
-        int chNum = theMGroup->GetChNum();
-        int chpNum = theMGroup->GetChpNum();
-
-        JGroup *theJGroup = compound()->GetJGroup(jNum);
-        AChannel *entranceChannel = theJGroup->GetChannel(chNum);
-        AChannel *exitChannel = theJGroup->GetChannel(chpNum);
+    const azure2::ExitRow &theDecay = P.exits[ir - 1];
+    for (int k = 1; k <= theDecay.num_groups; k++) {
+      const azure2::SpinGroupRow &theKGroup = P.Group(theDecay, k);
+      for (int m = 1; m <= theKGroup.num_internal; m++) {
+        const azure2::InternalRow &theMGroup = P.Internal(theKGroup, m);
+        const int jNum = theMGroup.group;
+        const int chNum = theMGroup.ch;
+        const int chpNum = theMGroup.chp;
 
         // Cache phase calculations
         complex coulombPhaseEn = point->GetExpCoulombPhase(jNum, chNum);
@@ -574,11 +567,11 @@ void AMatrixFunc::CalculateTMatrix(EPoint *point) {
           this->AddTMatrixElement(k, m, tmatrix);
         }
       }
-      for (int m = 1; m <= theDecay->GetKGroup(k)->NumECMGroups(); m++) {
-        ECMGroup *theECMGroup = theDecay->GetKGroup(k)->GetECMGroup(m);
-        ALevel *finalLevel = compound()->GetJGroup(theECMGroup->GetJGroupNum())->GetLevel(theECMGroup->GetLevelNum());
-        double ecNormParam = finalLevel->GetECGamma(theECMGroup->GetFinalChannel()) *
-            finalLevel->GetSqrtNFFactor() * finalLevel->GetECConversionFactor(theECMGroup->GetFinalChannel());
+      for (int m = 1; m <= theKGroup.num_external; m++) {
+        const azure2::ExternalRow &theECMGroup = P.External(theKGroup, m);
+        ALevel *finalLevel = compound()->GetJGroup(theECMGroup.final_group)->GetLevel(theECMGroup.final_level);
+        double ecNormParam = finalLevel->GetECGamma(theECMGroup.final_channel) *
+            finalLevel->GetSqrtNFFactor() * finalLevel->GetECConversionFactor(theECMGroup.final_channel);
         // Use energy-shift aware EC amplitude calculation if energy shifts are active
         complex ecAmplitude;
         if (configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {
@@ -589,14 +582,14 @@ void AMatrixFunc::CalculateTMatrix(EPoint *point) {
           ecAmplitude = point->GetECAmplitude(k, m);
         }
         complex tmatrix = ecNormParam * ecAmplitude;
-        if (theECMGroup->IsChannelCapture()) {
-          int internalChannel = theECMGroup->GetIntChannelNum();
-          MGroup *chanMGroup = compound()->GetPair(aa)->GetDecay(theECMGroup->GetChanCapDecay())->GetKGroup(theECMGroup->GetChanCapKGroup())->GetMGroup(theECMGroup->GetChanCapMGroup());
+        if (theECMGroup.channel_capture) {
+          int internalChannel = theECMGroup.photon_channel;
+          const azure2::InternalRow &chanMGroup = P.internal[theECMGroup.cc_row];
           int maskChannel = (configure().paramMask & Config::IGNORE_ZERO_WIDTHS) ? internalChannel : 0;
           complex umatrix = 2.0 * complex(0.0, 1.0) *
-              point->GetSqrtPenetrability(chanMGroup->GetJNum(), chanMGroup->GetChNum()) *
-              this->GetChannelCaptureBilinear(chanMGroup->GetJNum(), chanMGroup->GetChNum(),
-                                              chanMGroup->GetChpNum(), maskChannel);
+              point->GetSqrtPenetrability(chanMGroup.group, chanMGroup.ch) *
+              this->GetChannelCaptureBilinear(chanMGroup.group, chanMGroup.ch,
+                                              chanMGroup.chp, maskChannel);
           tmatrix = tmatrix * umatrix;
         }
         this->AddECTMatrixElement(k, m, tmatrix);
@@ -698,13 +691,11 @@ bool AMatrixFunc::PointTBar(EPoint *point, const azure2::Results &results, doubl
   // ClearMatrices records it).
   if (!all_levels_active_) return false;
 
-  // Locate the decay matching the exit pair (mirror CalculateCrossSection).
-  int ir = 0;
-  while (ir < compound()->GetPair(aa)->NumDecays()) {
-    ir++;
-    if (compound()->GetPair(aa)->GetDecay(ir)->GetPairNum() == exitPairNum) break;
-  }
-  Decay *theDecay = compound()->GetPair(aa)->GetDecay(ir);
+  // The exit of the point's exit pair (CalculateTMatrix has refused a point without one).
+  const azure2::EntrancePathways &P = compound()->Pathways().Entrance(aa);
+  const int ir = P.ExitOf(exitPairNum);
+  if (!ir) return false;
+  const azure2::ExitRow &theDecay = P.exits[ir - 1];
 
   const double geom = point->GetGeometricalFactor();
   const double i1i2 = compound()->GetPair(aa)->GetI1I2Factor();
@@ -733,25 +724,25 @@ bool AMatrixFunc::PointTBar(EPoint *point, const azure2::Results &results, doubl
   // === Cross-section -> T:  build the T-matrix cotangents. ===
   // tBar  : cotangents of the internal T(k,m).
   // ecBar : cotangents of the external-capture T(k,ecm).
-  int nK = theDecay->NumKGroups();
+  int nK = theDecay.num_groups;
   std::vector<vector_c> &tBar = bar.t, &ecBar = bar.ec;
   tBar.assign(nK, vector_c());
   ecBar.assign(nK, vector_c());
   for (int k = 1; k <= nK; k++) {
-    tBar[k - 1].assign(theDecay->GetKGroup(k)->NumMGroups(), complex(0.0, 0.0));
-    ecBar[k - 1].assign(theDecay->GetKGroup(k)->NumECMGroups(), complex(0.0, 0.0));
+    tBar[k - 1].assign(P.Group(theDecay, k).num_internal, complex(0.0, 0.0));
+    ecBar[k - 1].assign(P.Group(theDecay, k).num_external, complex(0.0, 0.0));
   }
 
   // Keep only the contributions feeding the requested cross-section component
   // (0 = full, 1 = E1, 2 = E2); E1/E2 select electric channels of that L.
-  auto includeInternal = [&](MGroup *mg) -> bool {
+  auto includeInternal = [&](const azure2::InternalRow *mg) -> bool {
     if (xsComponent == 0) return true;
-    AChannel *ex = compound()->GetJGroup(mg->GetJNum())->GetChannel(mg->GetChpNum());
+    AChannel *ex = compound()->GetJGroup(mg->group)->GetChannel(mg->chp);
     return ex->GetRadType() == 'E' && ex->GetL() == xsComponent;
   };
-  auto includeEC = [&](ECMGroup *ecg) -> bool {
+  auto includeEC = [&](const azure2::ExternalRow *ecg) -> bool {
     if (xsComponent == 0) return true;
-    return ecg->GetRadType() == 'E' && ecg->GetMult() == xsComponent;
+    return ecg->rad_type == 'E' && ecg->mult == xsComponent;
   };
 
   // The angle-integrated cotangent as a function of its own cotangent `bar`: the chain below calls it with
@@ -764,10 +755,10 @@ bool AMatrixFunc::PointTBar(EPoint *point, const azure2::Results &results, doubl
     for (int k = 1; k <= nK; k++) {
       // Mirror the angle-integrated UPOS over-counting guard.
       if (aa != exitPairNum && compound()->GetPair(exitPairNum)->GetPType() == 0) {
-        if (theDecay->GetKGroup(k)->GetSp() != theDecay->GetKGroup(k)->GetSp2()) continue;
+        if (P.Group(theDecay, k).sp != P.Group(theDecay, k).sp2) continue;
       }
-      int numM = theDecay->GetKGroup(k)->NumMGroups();
-      int numEC = theDecay->GetKGroup(k)->NumECMGroups();
+      int numM = P.Group(theDecay, k).num_internal;
+      int numEC = P.Group(theDecay, k).num_external;
       struct Group {
         double j;
         int l;
@@ -785,21 +776,21 @@ bool AMatrixFunc::PointTBar(EPoint *point, const azure2::Results &results, doubl
       };
       // Internal pathways T(k,m), grouped by (J,l,l').
       for (int m = 1; m <= numM; m++) {
-        MGroup *mg = theDecay->GetKGroup(k)->GetMGroup(m);
+        const azure2::InternalRow *mg = &P.Internal(P.Group(theDecay, k), m);
         if (!includeInternal(mg)) continue;
-        JGroup *jg = compound()->GetJGroup(mg->GetJNum());
+        JGroup *jg = compound()->GetJGroup(mg->group);
         int gi = findGroup(jg->GetJ(),
-                           jg->GetChannel(mg->GetChNum())->GetL(),
-                           jg->GetChannel(mg->GetChpNum())->GetL());
+                           jg->GetChannel(mg->ch)->GetL(),
+                           jg->GetChannel(mg->chp)->GetL());
         groups[gi].tsum += this->GetTMatrixElement(k, m);
         mGroupIdx[m] = gi;
       }
       // External-capture pathways T(k,ecm), grouped by (J, L, mult) and merged
       // with the matching internal group (forward: same temp T-matrix list).
       for (int m = 1; m <= numEC; m++) {
-        ECMGroup *ecg = theDecay->GetKGroup(k)->GetECMGroup(m);
+        const azure2::ExternalRow *ecg = &P.External(P.Group(theDecay, k), m);
         if (!includeEC(ecg)) continue;
-        int gi = findGroup(ecg->GetJ(), ecg->GetL(), ecg->GetMult());
+        int gi = findGroup(ecg->J, ecg->l, ecg->mult);
         groups[gi].tsum += this->GetECTMatrixElement(k, m);
         ecGroupIdx[m] = gi;
       }
@@ -823,11 +814,11 @@ bool AMatrixFunc::PointTBar(EPoint *point, const azure2::Results &results, doubl
     //      is real. ----
     if (xsComponent != 0 || isDiff) return false;
     for (int k = 1; k <= nK; k++) {
-      if (theDecay->GetKGroup(k)->IsCrossSpin()) continue;
-      for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
-        MGroup *mg = theDecay->GetKGroup(k)->GetMGroup(m);
-        if (mg->GetChNum() != mg->GetChpNum()) continue;
-        const double jValue = compound()->GetJGroup(mg->GetJNum())->GetJ();
+      if (P.Group(theDecay, k).CrossSpin()) continue;
+      for (int m = 1; m <= P.Group(theDecay, k).num_internal; m++) {
+        const azure2::InternalRow *mg = &P.Internal(P.Group(theDecay, k), m);
+        if (mg->ch != mg->chp) continue;
+        const double jValue = compound()->GetJGroup(mg->group)->GetJ();
         tBar[k - 1][m - 1] += fitBar * geom * i1i2 / 100. * 2. * (2. * jValue + 1.);
       }
     }
@@ -839,7 +830,7 @@ bool AMatrixFunc::PointTBar(EPoint *point, const azure2::Results &results, doubl
     //      Hence d(model)/dT*(k,m) = (25/100) T(k,m), and the factor of two is
     //      the cotangent convention used throughout this function. ----
     for (int k = 1; k <= nK; k++)
-      for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++)
+      for (int m = 1; m <= P.Group(theDecay, k).num_internal; m++)
         tBar[k - 1][m - 1] += fitBar * (2.0 * 25.0 / 100.0) * this->GetTMatrixElement(k, m);
   } else if (point->IsAnalyzingPower() && !ayCrossSection) {
     // ---- Vector analyzing power. A_y is built from the channel-spin amplitude
@@ -863,7 +854,10 @@ bool AMatrixFunc::PointTBar(EPoint *point, const azure2::Results &results, doubl
       //      and the cotangent convention of this function supplies the 2. ----
       const int maxL = point->GetMaxLOrder();
       compound()->CalcCaptureAnalyzingPower(aa, ir, maxL);
-      const int nTerms = theDecay->NumCaptureAyTerms();
+      // The capture-A_y terms are still the tree's (they move to the table with their build at set-up); the decay
+      // has the position of the table's exit.
+      Decay *treeDecay = compound()->GetPair(aa)->GetDecay(ir);
+      const int nTerms = treeDecay->NumCaptureAyTerms();
       if (nTerms == 0) return false;
 
       const double xCos = cos(point->GetCMAngle() * pi / 180.0);
@@ -876,7 +870,7 @@ bool AMatrixFunc::PointTBar(EPoint *point, const azure2::Results &results, doubl
       };
       double num = 0.0, den = 0.0;
       for (int i = 1; i <= nTerms; i++) {
-        const CaptureAyTerm *t = theDecay->GetCaptureAyTerm(i);
+        const CaptureAyTerm *t = treeDecay->GetCaptureAyTerm(i);
         if (t->kOrder > maxL) continue;
         complex prod = element(t->kGroup1, t->path1, t->isEC1) * conj(element(t->kGroup2, t->path2, t->isEC2));
         if (t->ak != 0.0) den += t->ak * real(prod) * point->GetLegendreP(t->kOrder);
@@ -887,7 +881,7 @@ bool AMatrixFunc::PointTBar(EPoint *point, const azure2::Results &results, doubl
 
       const complex I2(0.0, 1.0);
       for (int i = 1; i <= nTerms; i++) {
-        const CaptureAyTerm *t = theDecay->GetCaptureAyTerm(i);
+        const CaptureAyTerm *t = treeDecay->GetCaptureAyTerm(i);
         if (t->kOrder > maxL) continue;
         const complex T1 = element(t->kGroup1, t->path1, t->isEC1);
         const complex T2 = element(t->kGroup2, t->path2, t->isEC2);
@@ -909,10 +903,10 @@ bool AMatrixFunc::PointTBar(EPoint *point, const azure2::Results &results, doubl
     } else {
       Polarization::AmplitudeMatrix M(compound(), point, aa, exitPairNum);
       for (int k = 1; k <= nK; k++) {
-        if (theDecay->GetKGroup(k)->IsCrossSpin()) continue;  // as the forward sum
-        for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
-          MGroup *mg = theDecay->GetKGroup(k)->GetMGroup(m);
-          M.AddPathway(mg->GetJNum(), mg->GetChNum(), mg->GetChpNum(),
+        if (P.Group(theDecay, k).CrossSpin()) continue;  // as the forward sum
+        for (int m = 1; m <= P.Group(theDecay, k).num_internal; m++) {
+          const azure2::InternalRow *mg = &P.Internal(P.Group(theDecay, k), m);
+          M.AddPathway(mg->group, mg->ch, mg->chp,
                        this->GetTMatrixElement(k, m));
         }
       }
@@ -921,11 +915,11 @@ bool AMatrixFunc::PointTBar(EPoint *point, const azure2::Results &results, doubl
 
       const std::vector<complex> bar = M.AnalyzingPowerBar();
       for (int k = 1; k <= nK; k++) {
-        if (theDecay->GetKGroup(k)->IsCrossSpin()) continue;
-        for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
-          MGroup *mg = theDecay->GetKGroup(k)->GetMGroup(m);
+        if (P.Group(theDecay, k).CrossSpin()) continue;
+        for (int m = 1; m <= P.Group(theDecay, k).num_internal; m++) {
+          const azure2::InternalRow *mg = &P.Internal(P.Group(theDecay, k), m);
           if (!includeInternal(mg)) continue;
-          tBar[k - 1][m - 1] += fitBar * M.PathwayAdjoint(mg->GetJNum(), mg->GetChNum(), mg->GetChpNum(), bar);
+          tBar[k - 1][m - 1] += fitBar * M.PathwayAdjoint(mg->group, mg->ch, mg->chp, bar);
         }
       }
     }
@@ -943,13 +937,13 @@ bool AMatrixFunc::PointTBar(EPoint *point, const azure2::Results &results, doubl
     std::vector<PM> matches;
     complex U(0.0, 0.0);
     for (int k = 1; k <= nK; k++) {
-      for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
-        MGroup *mg = theDecay->GetKGroup(k)->GetMGroup(m);
-        JGroup *jg = compound()->GetJGroup(mg->GetJNum());
-        AChannel *en = jg->GetChannel(mg->GetChNum());
-        AChannel *ex = jg->GetChannel(mg->GetChpNum());
+      for (int m = 1; m <= P.Group(theDecay, k).num_internal; m++) {
+        const azure2::InternalRow *mg = &P.Internal(P.Group(theDecay, k), m);
+        JGroup *jg = compound()->GetJGroup(mg->group);
+        AChannel *en = jg->GetChannel(mg->ch);
+        AChannel *ex = jg->GetChannel(mg->chp);
         if (jg->GetJ() == segJ && en->GetL() == segL && en == ex) {
-          complex expCP = point->GetExpCoulombPhase(mg->GetJNum(), mg->GetChNum());
+          complex expCP = point->GetExpCoulombPhase(mg->group, mg->ch);
           complex expCP2 = expCP * expCP;
           U += (expCP2 - this->GetTMatrixElement(k, m)) / expCP2;
           matches.push_back(PM{k, m, 1.0 / expCP2});
@@ -1027,39 +1021,40 @@ bool AMatrixFunc::PointTBar(EPoint *point, const azure2::Results &results, doubl
     // Away from UPOS the sum is linear in the Legendre polynomials with
     // angle-independent coefficients: the cotangent of each pathway is a sum
     // over orders of products taken once per T-matrix (TBarProducts).
-    if (!(inelasticParticle && point->IsUPOS()) && this->TBarProducts(theDecay, inelasticParticle)) {
+    if (!(inelasticParticle && point->IsUPOS()) && this->TBarProducts(P, theDecay, inelasticParticle)) {
       const complex scale = fitBar * cR;
-      const std::vector<InterferencePathway> &paths = theDecay->InterferencePathways();
-      const int nl = theDecay->NumInterferenceOrders();
+      const azure2::InterferencePathway *paths = P.interference_pathways.data() + theDecay.first_interference_pathway;
+      const size_t numPaths = theDecay.num_interference_pathways;
+      const int nl = theDecay.num_orders;
       tbar_legendre_.assign(nl, 0.0);
       const int nP = std::min(nl, point->GetMaxLOrder() + 1);
       for (int l = 0; l < nP; l++) tbar_legendre_[l] = pl(l);
-      for (size_t p = 0; p < paths.size(); p++) {
+      for (size_t p = 0; p < numPaths; p++) {
         const complex *q = &tbar_q_[p * nl];
         complex s(0.0, 0.0);
         for (int l = 0; l < nl; l++) s += q[l] * tbar_legendre_[l];
         if (s != complex(0.0, 0.0)) Tadd(paths[p].k, paths[p].m, paths[p].rad, scale * s);
       }
     } else
-    for (int kL = 1; kL <= theDecay->NumKLGroups(); kL++) {
-      int K = theDecay->GetKLGroup(kL)->GetK();
-      int lOrder = theDecay->GetKLGroup(kL)->GetLOrder();
+    for (int inter = 0; inter < theDecay.num_interferences; inter++) {
+      const azure2::FlatInterference &itf = P.interferences[theDecay.first_interference + inter];
+      int K = itf.k;
+      int lOrder = itf.l;
       double legP = pl(lOrder);
-      KGroup *kg = theDecay->GetKGroup(K);
-      for (int inter = 1; inter <= theDecay->GetKLGroup(kL)->NumInterferences(); inter++) {
-        Interference *itf = theDecay->GetKLGroup(kL)->GetInterference(inter);
-        const std::string &type = itf->GetInterferenceType();  // "RR","ER","RE","EE"
-        if (type.size() != 2) return false;
+      const azure2::SpinGroupRow &kg = P.Group(theDecay, K);
+      {
+        if (!((itf.r1 == 'R' || itf.r1 == 'E') && (itf.r2 == 'R' || itf.r2 == 'E'))) return false;
+        const std::string type{itf.r1, itf.r2};  // "RR","ER","RE","EE"
         char rad1 = type[0], rad2 = type[1];  // 'R' internal, 'E' external
-        int m1 = itf->GetM1(), m2 = itf->GetM2();
+        int m1 = itf.m1, m2 = itf.m2;
 
         if (inelasticParticle) {
           // Inelastic particle exit: pick the normal or UPOS sub-case.
-          double sp1 = kg->GetSp(), sp2 = kg->GetSp2();
-          int lp1 = compound()->GetJGroup(kg->GetMGroup(m1)->GetJNum())->GetChannel(kg->GetMGroup(m1)->GetChpNum())->GetL();
-          int lp2 = compound()->GetJGroup(kg->GetMGroup(m2)->GetJNum())->GetChannel(kg->GetMGroup(m2)->GetChpNum())->GetL();
+          double sp1 = kg.sp, sp2 = kg.sp2;
+          int lp1 = compound()->GetJGroup(P.Internal(kg, m1).group)->GetChannel(P.Internal(kg, m1).chp)->GetL();
+          int lp2 = compound()->GetJGroup(P.Internal(kg, m2).group)->GetChannel(P.Internal(kg, m2).chp)->GetL();
           if (sp1 == sp2 && !point->IsUPOS()) {
-            addQuad(K, m1, rad1, m2, rad2, cR * itf->GetZ1Z2() * legP);
+            addQuad(K, m1, rad1, m2, rad2, cR * itf.z * legP);
           }
           if (lp1 == lp2 && point->IsUPOS() && type == "RR") {
             // R_L coefficient (constant w.r.t. parameters), even lOrder only.
@@ -1078,12 +1073,12 @@ bool AMatrixFunc::PointTBar(EPoint *point, const azure2::Results &results, doubl
                 R_L = (R_L + 2.0 * delta * R_LLp + delta * delta * R_LpLp) / (1.0 + delta * delta);
               }
             }
-            double W = cR * itf->GetZ1Z2_UPOS() * std::pow(2.0 * lOrder + 1.0, 0.5) / 4.0 * R_L * legP;
+            double W = cR * itf.z_upos * std::pow(2.0 * lOrder + 1.0, 0.5) / 4.0 * R_L * legP;
             addQuad(K, m1, 'R', m2, 'R', W);
           }
         } else {
           // Standard case (entrance==exit pair, or gamma exit).
-          addQuad(K, m1, rad1, m2, rad2, cR * itf->GetZ1Z2() * legP);
+          addQuad(K, m1, rad1, m2, rad2, cR * itf.z * legP);
         }
       }
     }
@@ -1093,24 +1088,25 @@ bool AMatrixFunc::PointTBar(EPoint *point, const azure2::Results &results, doubl
       integratedBar(-fitBar * point->GetFitCrossSection(results) / sigmaInt, 1.0);
     }
 
-    if (!coef && aa == exitPairNum && theDecay->TablesBuilt()) {  // elastic Coulomb-nuclear interference
+    if (!coef && aa == exitPairNum && theDecay.has_interferences) {  // elastic Coulomb-nuclear interference
       const complex cI = I * geom * itFactor / (std::sqrt(pi) * 100.0);
-      for (const DiagonalPathway &d : theDecay->DiagonalPathways()) {
+      for (int n = 0; n < theDecay.num_diagonal; n++) {
+        const azure2::DiagonalPathway &d = P.diagonal[theDecay.first_diagonal + n];
         const complex B = cI * d.statSpin * point->GetCoulombAmplitude(d.s) * point->GetLegendreP(d.l);
         tBar[d.k - 1][d.m - 1] += fitBar * B;
       }
     } else if (!coef && aa == exitPairNum) {  // elastic Coulomb-nuclear interference
       complex cI = I * geom * itFactor / (std::sqrt(pi) * 100.0);
       for (int k = 1; k <= nK; k++) {
-        for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
-          MGroup *mg = theDecay->GetKGroup(k)->GetMGroup(m);
-          AChannel *en = compound()->GetJGroup(mg->GetJNum())->GetChannel(mg->GetChNum());
-          AChannel *ex = compound()->GetJGroup(mg->GetJNum())->GetChannel(mg->GetChpNum());
+        for (int m = 1; m <= P.Group(theDecay, k).num_internal; m++) {
+          const azure2::InternalRow *mg = &P.Internal(P.Group(theDecay, k), m);
+          AChannel *en = compound()->GetJGroup(mg->group)->GetChannel(mg->ch);
+          AChannel *ex = compound()->GetJGroup(mg->group)->GetChannel(mg->chp);
           if (en == ex) {
             int l = en->GetL();
             // Per channel spin, as in the forward sum: only an identical pair
             // with spin has a Coulomb amplitude that depends on it.
-            complex B = cI * mg->GetStatSpinFactor() * point->GetCoulombAmplitude(en->GetS()) * point->GetLegendreP(l);
+            complex B = cI * mg->stat_spin_factor * point->GetCoulombAmplitude(en->GetS()) * point->GetLegendreP(l);
             // model += Re(B conj T)  ->  Tbar += fitBar B.
             tBar[k - 1][m - 1] += fitBar * B;
           }
@@ -1143,19 +1139,18 @@ void AMatrixFunc::TBarAdjoint(EPoint *energyPoint, const TMatrixCotangent &bar, 
   const bool park = (configure().paramMask & Config::USE_PARK_FORMALISM);
   int aa = compound()->GetPairNumFromKey(point->GetEntranceKey());
   int exitPairNum = compound()->GetPairNumFromKey(point->GetExitKey());
-  int ir = 0;
-  while (ir < compound()->GetPair(aa)->NumDecays()) {
-    ir++;
-    if (compound()->GetPair(aa)->GetDecay(ir)->GetPairNum() == exitPairNum) break;
-  }
-  Decay *theDecay = compound()->GetPair(aa)->GetDecay(ir);
+  // The exit of the point's exit pair (CalculateTMatrix has refused a point without one).
+  const azure2::EntrancePathways &P = compound()->Pathways().Entrance(aa);
+  const int ir = P.ExitOf(exitPairNum);
+  if (!ir) return;
+  const azure2::ExitRow &theDecay = P.exits[ir - 1];
   bool hasEC = false;
-  for (int k = 1; k <= theDecay->NumKGroups(); k++)
-    if (theDecay->GetKGroup(k)->NumECMGroups() > 0) {
+  for (int k = 1; k <= theDecay.num_groups; k++)
+    if (P.Group(theDecay, k).num_external > 0) {
       hasEC = true;
       break;
     }
-  const int nK = theDecay->NumKGroups();
+  const int nK = theDecay.num_groups;
   const std::vector<vector_c> &tBar = bar.t;
   const std::vector<vector_c> &ecBar = bar.ec;
 
@@ -1200,14 +1195,14 @@ void AMatrixFunc::TBarAdjoint(EPoint *energyPoint, const TMatrixCotangent &bar, 
     const bool useEC = (configure().paramMask & Config::USE_EXTERNAL_CAPTURE);
     const bool ignoreZero = (configure().paramMask & Config::IGNORE_ZERO_WIDTHS);
     for (int k = 1; k <= nK; k++) {
-      int numEC = theDecay->GetKGroup(k)->NumECMGroups();
+      int numEC = P.Group(theDecay, k).num_external;
       for (int m = 1; m <= numEC; m++) {
         complex eb = ecBar[k - 1][m - 1];
         if (eb == complex(0.0, 0.0)) continue;
-        ECMGroup *ecg = theDecay->GetKGroup(k)->GetECMGroup(m);
-        int jf = ecg->GetJGroupNum();
-        int lf = ecg->GetLevelNum();
-        int fc = ecg->GetFinalChannel();
+        const azure2::ExternalRow *ecg = &P.External(P.Group(theDecay, k), m);
+        int jf = ecg->final_group;
+        int lf = ecg->final_level;
+        int fc = ecg->final_channel;
         ALevel *finalLevel = compound()->GetJGroup(jf)->GetLevel(lf);
         JGroup *jgf = compound()->GetJGroup(jf);
         double sqrtNF = finalLevel->GetSqrtNFFactor();
@@ -1223,12 +1218,12 @@ void AMatrixFunc::TBarAdjoint(EPoint *energyPoint, const TMatrixCotangent &bar, 
         // gamma_fc / sqrtNF derivatives (= ecAmp for direct capture).
         complex effAmp = ecAmp;
 
-        if (ecg->IsChannelCapture()) {
-          int internalChannel = ecg->GetIntChannelNum();
-          MGroup *ccMg = compound()->GetPair(aa)->GetDecay(ecg->GetChanCapDecay())->GetKGroup(ecg->GetChanCapKGroup())->GetMGroup(ecg->GetChanCapMGroup());
-          int jcc = ccMg->GetJNum();
-          int ccChN = ccMg->GetChNum();
-          int ccChpN = ccMg->GetChpNum();
+        if (ecg->channel_capture) {
+          int internalChannel = ecg->photon_channel;
+          const azure2::InternalRow *ccMg = &P.internal[ecg->cc_row];
+          int jcc = ccMg->group;
+          int ccChN = ccMg->ch;
+          int ccChpN = ccMg->chp;
           JGroup *jgcc = compound()->GetJGroup(jcc);
           int ccLevels = jgcc->NumLevels();
           complex sqrtPcc = point->GetSqrtPenetrability(jcc, ccChN);  // single sqrtP
@@ -1305,14 +1300,14 @@ void AMatrixFunc::TBarAdjoint(EPoint *energyPoint, const TMatrixCotangent &bar, 
 
   // === T -> U -> A (+ explicit gamma), back-propagating tBar over all pathways. ===
   for (int k = 1; k <= nK; k++) {
-    int numM = theDecay->GetKGroup(k)->NumMGroups();
+    int numM = P.Group(theDecay, k).num_internal;
     for (int m = 1; m <= numM; m++) {
       complex tb = tBar[k - 1][m - 1];
       if (tb == complex(0.0, 0.0)) continue;
-      MGroup *mg = theDecay->GetKGroup(k)->GetMGroup(m);
-      int jNum = mg->GetJNum();
-      int chNum = mg->GetChNum();
-      int chpNum = mg->GetChpNum();
+      const azure2::InternalRow *mg = &P.Internal(P.Group(theDecay, k), m);
+      int jNum = mg->group;
+      int chNum = mg->ch;
+      int chpNum = mg->chp;
       JGroup *jg = compound()->GetJGroup(jNum);
 
       complex uphase = point->GetExpCoulombPhase(jNum, chNum) *
@@ -1855,24 +1850,23 @@ bool AMatrixFunc::CollectBilinearTerms(EPoint *energyPoint, const TMatrixCotange
   const complex I(0.0, 1.0);
   int aa = compound()->GetPairNumFromKey(point->GetEntranceKey());
   int exitPairNum = compound()->GetPairNumFromKey(point->GetExitKey());
-  int ir = 0;
-  while (ir < compound()->GetPair(aa)->NumDecays()) {
-    ir++;
-    if (compound()->GetPair(aa)->GetDecay(ir)->GetPairNum() == exitPairNum) break;
-  }
-  Decay *theDecay = compound()->GetPair(aa)->GetDecay(ir);
+  // The exit of the point's exit pair (CalculateTMatrix has refused a point without one).
+  const azure2::EntrancePathways &P = compound()->Pathways().Entrance(aa);
+  const int ir = P.ExitOf(exitPairNum);
+  if (!ir) return false;
+  const azure2::ExitRow &theDecay = P.exits[ir - 1];
   terms.assign(compound()->NumJGroups(), std::vector<BilinearTerm>());
-  for (int k = 1; k <= theDecay->NumKGroups(); k++)
-    if (theDecay->GetKGroup(k)->NumECMGroups() > 0) return false;
-  for (int k = 1; k <= theDecay->NumKGroups() && k <= (int)bar.t.size(); k++) {
-    const int numM = theDecay->GetKGroup(k)->NumMGroups();
+  for (int k = 1; k <= theDecay.num_groups; k++)
+    if (P.Group(theDecay, k).num_external > 0) return false;
+  for (int k = 1; k <= theDecay.num_groups && k <= (int)bar.t.size(); k++) {
+    const int numM = P.Group(theDecay, k).num_internal;
     for (int m = 1; m <= numM && m <= (int)bar.t[k - 1].size(); m++) {
       const complex tb = bar.t[k - 1][m - 1];
       if (tb == complex(0.0, 0.0)) continue;
-      MGroup *mg = theDecay->GetKGroup(k)->GetMGroup(m);
-      const int jNum = mg->GetJNum();
-      const int chNum = mg->GetChNum();
-      const int chpNum = mg->GetChpNum();
+      const azure2::InternalRow *mg = &P.Internal(P.Group(theDecay, k), m);
+      const int jNum = mg->group;
+      const int chNum = mg->ch;
+      const int chpNum = mg->chp;
       complex uphase = point->GetExpCoulombPhase(jNum, chNum) * point->GetExpHardSpherePhase(jNum, chNum) *
           point->GetExpCoulombPhase(jNum, chpNum) * point->GetExpHardSpherePhase(jNum, chpNum);
       complex uBar = conj(-uphase) * tb;
@@ -2687,15 +2681,16 @@ void AMatrixFunc::VerifyChannelSpace(int j, EPoint *point, double inEnergy) {
  * k-groups of equal channel spins, as the forward sum.  False (nothing built)
  * for an interference type the adjoint does not know.
  */
-bool AMatrixFunc::TBarProducts(Decay *theDecay, bool particleExit) {
-  if (tbar_decay_ == theDecay && tbar_particle_ == particleExit) return true;
-  if (!theDecay->TablesBuilt()) return false;
-  const std::vector<FlatInterference> &flat = theDecay->FlatInterferences();
-  const int nl = theDecay->NumInterferenceOrders();
-  const size_t np = theDecay->InterferencePathways().size();
+bool AMatrixFunc::TBarProducts(const azure2::EntrancePathways &P, const azure2::ExitRow &theDecay, bool particleExit) {
+  if (tbar_decay_ == &theDecay && tbar_particle_ == particleExit) return true;
+  if (!theDecay.has_interferences) return false;
+  const azure2::FlatInterference *flat = P.interferences.data() + theDecay.first_interference;
+  const int nl = theDecay.num_orders;
+  const size_t np = theDecay.num_interference_pathways;
   tbar_q_.assign(np * nl, complex(0.0, 0.0));
   const std::vector<vector_c> *T = tmatrix_.empty() ? nullptr : &tmatrix_[0];
-  for (const FlatInterference &f : flat) {
+  for (const azure2::FlatInterference *fp = flat; fp != flat + theDecay.num_interferences; fp++) {
+    const azure2::FlatInterference &f = *fp;
     if (particleExit && !f.spEqual) continue;
     if (!f.r1 || !f.r2) {  // an interference type the adjoint does not know
       tbar_decay_ = nullptr;
@@ -2706,7 +2701,7 @@ bool AMatrixFunc::TBarProducts(Decay *theDecay, bool particleExit) {
     tbar_q_[(size_t)f.s1 * nl + f.l] += f.z * T2;
     tbar_q_[(size_t)f.s2 * nl + f.l] += f.z * T1;
   }
-  tbar_decay_ = theDecay;
+  tbar_decay_ = &theDecay;
   tbar_particle_ = particleExit;
   return true;
 }

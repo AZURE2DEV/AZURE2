@@ -2,6 +2,47 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (agent, brief Y) — the pathway table, read by everything outside the data classes (`feature/upgrade-4-pathway-table-1`)
+
+**Done** (`cnuc_split.md` §11.6 steps 1, 2, 4, 5 and 7 without capture A_y; §11.11 decisions 1, 4, 5, 6, 7).
+- `include/PathwayTable.h`, `src/PathwayTable.cpp`: the immutable `PathwayTable` (per entrance pair: exits, spin
+  groups, internal and external rows, flat interferences with `z_upos`, interference pathways, diagonal pathways,
+  capture-A_y terms), built by `BuildPathwayTable` from `reaction_pathways` and the coupling coefficients.
+  `CNuc::Initialize` builds it (`CNuc::BuildPathways`, `src/CNucPathways.cpp`) and holds a
+  `shared_ptr<const PathwayTable>` (`CNuc::Pathways()`), shared by every clone.  Capture-A_y terms are built for the
+  (entrance, exit) pairs given to `CNuc::RequestCaptureAy` before `Initialize`; the engine requests none yet.
+- Readers moved: the pathways and angular-distributions check files, `SetUpFormalCaptureMasks`,
+  `AZUREAPI::GetECIntegrals`, `RMatrixFunc::CalculateTMatrix`, `AMatrixFunc::CalculateTMatrix`,
+  `GenMatrixFunc::CalculateBareCrossSection` / `CalculateAmplitudeMatrix` / `BuildCoulombInterference`, and the
+  gradient (`PointTBar`, `TBarAdjoint`, `CollectBilinearTerms`, `TBarProducts`).  `rt_decay_` and `tbar_decay_` are
+  `const ExitRow *`.  A point whose exit pair no pathway reaches stops with a message (it read the last decay).
+  The `TablesBuilt() == false` fall-backs of `GenMatrixFunc` are deleted (an abort run of every project first).
+- Fix: `GetECIntegrals` (pyazr `ec_integrals`) uses the final state's capture energy `GetECEnergy()`, not the formal
+  energy (test `pyazr_ec_integrals_formal`: formal against Brune 2.995 before, 1.3e-13 after).
+- Tests: `physics_pathways_from_cnuc` compares table and trees field by field on every `.azr` (Brune, formal);
+  `physics_pathway_table` checks properties without the builder (it stays when the trees go).
+
+**Verified** (final code, build `work/b-pathtab-s7`, 0 warnings): 183 x 3 against `tab-trial8` (tag `tab-ptfinal`):
+704 / 677 / 704 identical; `ctest -LE slow` 173/173; `tests/run_tests.sh` 142 passed, 0 failed; 1 against 3 threads on T1-T3,
+13N, beta_delayed_alpha, ec_e1m1_phase (6 models), identical_entrance_reaction (3) in three bases: 43 x 3 runs
+identical, upos_pair_index and light_excitation (their check.sh at 1 and 3 threads, work trees identical); R-matrix
+route (T1, T3, 13N, beam_profile_kernel with `<config>` false and `--no-ignore-externals`, Brune and formal) and
+`--use-rmc` (T1, 13N, Brune and formal), base against branch: 12 cases, every output file identical; the four check
+files of T1, T3, 13N, beam_profile_kernel: 16 identical; converted-tree gate (tag `gptfinal`): exit 0, 483 (456)
+identical, 38 classified, 0 differ, 0 missing; fits at 1 thread (T2 `--use-lm` 200 calls, T2 MIGRAD with the
+analytic gradient, 13N MIGRAD): every output file identical.  Before the fall-backs were deleted, a run of every
+project with an abort in them (tag `tab-ptabort`) reached neither.  Cost (1 thread, `--no-coulomb-table`, base
+`b-trial11` alternated with the branch): T2 calculation cycles -0.6 %, instructions -0.13 %; T2 200-call fit cycles
+-1.3 %, instructions -0.49 %; peak RSS unchanged (64 MB, 275 MB).  Largest table (beam_profile_kernel, every
+particle and beta pair an entrance): 396,483 rows, 24.1 MB, 0.59 s to build; it is built beside the trees until
+they are deleted.
+
+**Open (second branch, after the data classes are replaced)**: step 3 (external-capture amplitudes at set-up in
+`EDataExternalCapture.cpp`, `EPointExternalCapture.cpp`, with the decay-position defect, decision 3), step 6
+(capture-A_y requests from the data sets, `CalculateCaptureAnalyzingPower` and the capture-A_y block of `PointTBar`
+on the table, the static mutex deleted), step 8 (the trees deleted).  `GenMatrixFunc.cpp` keeps 4 tree accesses and
+`AMatrixFunc.cpp` 4, all in the capture-A_y code.
+
 ## 2026-11-10 (agent, brief W) — the spin-orbit term of the hybrid potential (`feature/upgrade-4-spin-orbit`)
 
 **Done** (`spin_orbit_potential.md` §5 steps 4 and 5, option (a): pairs with one spinning particle).

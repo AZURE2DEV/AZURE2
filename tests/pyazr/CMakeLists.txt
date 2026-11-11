@@ -791,3 +791,10 @@ add_test(NAME pyazr_composite_gradient
                  ${CMAKE_CURRENT_SOURCE_DIR}/composite_gradient_test.py)
 set_tests_properties(pyazr_composite_gradient PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77
                      TIMEOUT 900)
+
+# azure2.ec_integrals at the energy the engine uses for the final state (ALevel::GetECEnergy) in every basis: the
+# formal basis gives the Brune basis's integrals on tests/13N (they were at the formal energy before 2026-11-10).
+add_test(NAME pyazr_ec_integrals_formal
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/ec_integrals_formal_test.py)
+set_tests_properties(pyazr_ec_integrals_formal PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

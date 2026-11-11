@@ -1696,31 +1696,29 @@ vector_r AZUREAPI::GetECIntegrals(const vector_r &request) const {
       if (!ecLevel->IsECLevel()) continue;
       int ir = ecLevel->GetECPairNum();
       if (ir < 1 || ir > compound_->NumPairs()) continue;
+      // The exit to the final state's photon pair; none when no pathway leads there from this entrance.
+      const azure2::EntrancePathways &P = compound_->Pathways().Entrance(aa);
+      const int exit = P.ExitOf(ir);
+      if (!exit) continue;
 
-      for (int k = 1; k <= entrancePair->GetDecay(ir)->NumKGroups(); k++) {
-        KGroup *theKGroup = entrancePair->GetDecay(ir)->GetKGroup(k);
-        for (int ecm = 1; ecm <= theKGroup->NumECMGroups(); ecm++) {
-          ECMGroup *g = theKGroup->GetECMGroup(ecm);
+      for (int k = 1; k <= P.exits[exit - 1].num_groups; k++) {
+        const azure2::SpinGroupRow &theKGroup = P.Group(P.exits[exit - 1], k);
+        for (int ecm = 1; ecm <= theKGroup.num_external; ecm++) {
+          const azure2::ExternalRow &g = P.External(theKGroup, ecm);
 
           AChannel *finalChannel =
-              compound_->GetJGroup(j)->GetChannel(g->GetFinalChannel());
+              compound_->GetJGroup(j)->GetChannel(g.final_channel);
           PPair *finalPair = compound_->GetPair(finalChannel->GetPairNum());
 
           int liValue;
           double siValue;
-          if (g->IsChannelCapture()) {
-            MGroup *cc = entrancePair->GetDecay(g->GetChanCapDecay())
-                             ->GetKGroup(g->GetChanCapKGroup())
-                             ->GetMGroup(g->GetChanCapMGroup());
-            liValue = compound_->GetJGroup(cc->GetJNum())
-                          ->GetChannel(cc->GetChpNum())
-                          ->GetL();
-            siValue = compound_->GetJGroup(cc->GetJNum())
-                          ->GetChannel(cc->GetChpNum())
-                          ->GetS();
+          if (g.channel_capture) {
+            const azure2::InternalRow &cc = P.internal[g.cc_row];
+            liValue = compound_->GetJGroup(cc.group)->GetChannel(cc.chp)->GetL();
+            siValue = compound_->GetJGroup(cc.group)->GetChannel(cc.chp)->GetS();
           } else {
-            liValue = g->GetL();
-            siValue = theKGroup->GetS();
+            liValue = g.l;
+            siValue = theKGroup.s;
           }
 
           vector_r block;
@@ -1728,11 +1726,13 @@ vector_r AZUREAPI::GetECIntegrals(const vector_r &request) const {
           block.push_back(static_cast<double>(finalChannel->GetL()));
           block.push_back(2.0 * siValue);
           block.push_back(2.0 * finalChannel->GetS());
-          block.push_back(static_cast<double>(g->GetMult()));
-          block.push_back(g->GetRadType() == 'E' ? 1.0 : 0.0);
+          block.push_back(static_cast<double>(g.mult));
+          block.push_back(g.rad_type == 'E' ? 1.0 : 0.0);
 
           ECIntegral theECIntegral(finalPair, configure());
-          double levelEnergy = ecLevel->GetE();
+          // The final state's capture energy, as the engine's integrals use it (ALevel::GetECEnergy, set by
+          // CNuc::SetUpECFinalBlocks): in the formal basis GetE() is the formal energy, not that one.
+          double levelEnergy = ecLevel->GetECEnergy();
           for (int i = 0; i < nE; ++i) {
             double inEnergy = energies[i] + entrancePair->GetSepE() + entrancePair->GetExE();
             complex v(0., 0.);
@@ -1740,10 +1740,10 @@ vector_r AZUREAPI::GetECIntegrals(const vector_r &request) const {
               try {
                 v = theECIntegral(liValue, finalChannel->GetL(),
                                   siValue, finalChannel->GetS(),
-                                  g->GetJ(), compound_->GetJGroup(j)->GetJ(),
-                                  g->GetMult(), g->GetRadType(),
+                                  g.J, compound_->GetJGroup(j)->GetJ(),
+                                  g.mult, g.rad_type,
                                   inEnergy, levelEnergy,
-                                  g->IsChannelCapture());
+                                  g.channel_capture);
               } catch (...) {
                 v = complex(0., 0.);
               }
