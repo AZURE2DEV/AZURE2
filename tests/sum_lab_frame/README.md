@@ -14,7 +14,7 @@ in the forward calculation and in both gradient paths (`AZUREGrad.cpp`), and the
 c.m. SUM, an angle-integrated SUM, a component of the same pair or gamma terms of one entrance pair
 get a factor of 1 and are unchanged.
 
-## Models (`make_models.py`)
+## Models (`make_models.py` (deleted; see "How the models were made"))
 
 13C + α in 17O, two levels (5/2+ at E_x 11.0, 3/2+ at 11.1 MeV), exits n + 16O(6.05, 0+) (key 3) and
 n + 16O(6.13, 3−) (key 5): the same masses, different Q values, so the two Jacobians differ at the
@@ -39,3 +39,30 @@ same lab angle (2.4 % at most on this grid).  No external capture; a run takes a
 dev 9e34f1c (before the fix): (a) lab SUM off by 2.5 %, the scaled SUM by 1.9 %, the lab SUM equal to
 the plain c.m. sum; (b) χ² 47.0 on 36 points at 1 % errors; (c) passes (the gradient matched the wrong
 model).  Fixed build: (a) 5e-11, (b) 4e-17, (c) 4e-9.
+
+## How the models were made
+
+The committed models are the reference.  They were written by `make_models.py` in the old project format and converted
+to format 3 with `tools/format3_tree_convert.sh` (`AZURE2 --convert ... --to 3 --exact-grids`); the generator
+was deleted with the old format (it is in the repository's history: `git show eda8e9aa:tests/sum_lab_frame/make_models.py`).  To change a
+model, edit its records.  The generator's description of what it wrote:
+
+```text
+Models for the lab-frame SUM test (audit item 7, 2026-10-26).
+
+13C + alpha in 17O with two neutron exit pairs of the same masses and different Q values,
+n + 16O(6.05, 0+) (key 3) and n + 16O(6.13, 3-) (key 5): the lab-to-c.m. Jacobians of the two
+differ at the same lab angle, so a lab-frame differential SUM of the two is the place where the
+per-term frame factor (Segment::TermFrameFactor) matters.  Two levels, 5/2+ and 3/2+, with
+widths to all three pairs; no external capture.
+
+  extrap     : test segments (mode 3), lab (isDiff 1) and c.m. (isDiff 5):
+               T1 a -> n0+, T2 a -> n3-, T3 = SUM(T1 + T2) lab, T4 = SUM of the same pair twice,
+               T5/T6/T7 the c.m. versions of T1/T2/T3, T8 = T1 + 0.5 T2 (scaling token)
+  plain_data : two plain lab data segments (a -> n0+, a -> n3-) with a fixed 0.05 MeV energy shift
+  sum_data   : the SUM data segment of the two, same shift; check.sh writes data/sum.dat from the
+               plain segments' fitted lab values, so its chi2 must be ~0
+  sum_free   : sum_data with the widths free, for the AZURE_GRAD_CHECK gradient test
+
+Run from this directory: python3 make_models.py  (writes models/ and models/data/).
+```

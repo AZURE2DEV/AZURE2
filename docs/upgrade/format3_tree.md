@@ -170,14 +170,15 @@ messages of `prior_covariance` (and two gradient agreements at the 1e-15 level),
   old grammar and call `AZURE2 --convert --to 3 --exact-grids`; they give the committed files byte for byte): the
   generators of T1–T3 (`tests/upgrade/lib/upgrade_project.py`, `T1/generate.py`, `T3/generate.py`, `T2/make_t2.py`).
   Rewritten with group 6 to write format 3: `doppler_fgm`, `transmission_yield`; `natural_target/make_models.py` is deleted.
-  **Still writing old files, run by nothing** (developer tools whose committed output is converted; to regenerate, run
-  and convert the output, or rewrite them): `angular_coefficients`, `capture_ay_coupling`, `convolution_unify`,
+  **Deleted** (branch `feature/upgrade-4-format3-gaps`; they wrote old files, their committed output, converted, is
+  what the tests use): the generators of `angular_coefficients`, `capture_ay_coupling`, `convolution_unify`,
   `convolution_window`, `data_covariance`, `ec_e1m1_phase`, `ec_m1_exact`, `ec_threshold`, `electron_screening`,
-  `gamma_lab_frame`, `hard_sphere`, `mcmc_physical_norm/make_model.py`, `q_attenuation`, `ratio_frame`,
+  `gamma_lab_frame`, `hard_sphere`, `mcmc_physical_norm` (`make_model.py`), `q_attenuation`, `ratio_frame`,
   `relativistic`, `scattering_length`, `screening_6li`, `secondary_gamma`, `shift_sqrt_subpoints`,
-  `shift_subpoint_angle`, `sum_lab_frame`, `target_density`, `transform_level_order` (23); also `reaction_rate`
-  and, of group 7, `18O_p_a_thm/make_inputs.py`. Not rewritten in group 8's branch (the time went
-  to the projects and their readers); the T1–T3 helpers show the pattern (compose, then convert with the engine).
+  `shift_subpoint_angle`, `sum_lab_frame`, `target_density`, `transform_level_order` and `reaction_rate`
+  (`make_truth.sh` reads the committed `*_truth.azr`); each README has a section "How the models were made" with the
+  generator's description and the commit that holds it.  Left: `18O_p_a_thm/make_inputs.py` (group 7, another
+  branch).
 - The old generators `tests/convert/fixtures/tests/doppler_fgm/make_models.py`, `.../transmission_yield/make_models.py`
   (on the original n12C), for the pyazr tests `doppler`, `thickness`, `parameter_kinds` of the old file class.
 

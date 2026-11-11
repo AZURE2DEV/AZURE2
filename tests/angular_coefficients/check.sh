@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Angular-coefficient data segments (isDiff 9, 2026-10-26): the Legendre coefficients a_k = A_k / A_0 of a reaction's
-# c.m. angular distribution (or the absolute A_k with "absolute 1") fitted as data.  Models from make_models.py
+# c.m. angular distribution (or the absolute A_k with "absolute 1") fitted as data.  Models from make_models.py (deleted; README.md: how the models were made)
 # (13C + alpha -> n + 16O(3-), two levels, no external capture); data written by verify.py from the model's own
 # extrapolation, so the engine's convention is pinned by (a) and the plumbing by the rest:
 #

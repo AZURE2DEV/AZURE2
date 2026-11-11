@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Secondary gamma rays following particle emission (UPOS segments; Brune and deBoer, PRC 102, 024628 (2020)),
-# 13C + alpha in 17O (models from make_models.py):
+# 13C + alpha in 17O (models from make_models.py (deleted; README.md: how the models were made)):
 #
 #   (a) n + 16O(6.13, 3-): two exit channel spins (5/2, 7/2).  The E3 gamma angular distribution of a single level
 #       against a substate calculation that uses neither Eq. (22) nor R_k (truth.py): the 5/2-7/2 interference with

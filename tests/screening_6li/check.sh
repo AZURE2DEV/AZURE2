@@ -2,7 +2,7 @@
 #
 # Electron screening benchmark on real data: 6Li(p,a)3He from Cruz et al. 2005 (EXFOR O1282005-007) on Li metal,
 # a Li2WO4 insulator and a PdLi alloy, against J. Skowronski's 7Be R-matrix evaluation held fixed (models and data
-# from make_models.py; README.md has the source and the numbers).
+# from make_models.py (deleted; README.md: how the models were made); README.md has the source and the numbers).
 #
 #   1. screened / bare = exp(pi eta U_e / E) at every point of the three segments;
 #   2. at the benchmark minimum the chi2 of each segment is the benchmark's;
@@ -49,7 +49,7 @@ close() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a / b - 1; if (d < 0) d
 # |a - b| <= t
 near() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a - b; if (d < 0) d = -d; exit !(a != "" && d <= t) }'; }
 
-UE=(1211.1217 322.6758 3432.9061)          # make_models.py BEST_UE (metal, insulator, PdLi)
+UE=(1211.1217 322.6758 3432.9061)          # make_models.py (deleted; README.md: how the models were made) BEST_UE (metal, insulator, PdLi)
 CHI=(12.491650 2.952962 8.261932)          # the benchmark's chi2 at that minimum
 DUE=(65 98 231)                            # its Delta chi2 = 1 half-widths (eV); the fits must land within 5 % of them
 

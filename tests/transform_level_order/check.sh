@@ -11,7 +11,7 @@
 # is the same whatever the labels), which is why nothing warned.  Only runs with --no-brune (or the Brune
 # box unchecked in the GUI) go through the transformation.
 #
-# Models (make_models.py): a 1+ group of n + 15N with levels 3.491 (energy free) and 3.791 (energy fixed),
+# Models (make_models.py (deleted; README.md: how the models were made)): a 1+ group of n + 15N with levels 3.491 (energy free) and 3.791 (energy fixed),
 # listed ascending (asc) and with the 3.791 level first (desc); truth = asc with the free level at 3.471.
 #
 #   (a) mode 3 with --no-brune: asc and desc give the same cross sections (labels do not matter);

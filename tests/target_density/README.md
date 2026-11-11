@@ -14,7 +14,7 @@ the fit is expected to reach (`max`, by default N0 + 3 sigma but at least 1.1 N0
 prior), and the depth integral is cut at E0 − ΔE(N): the yield moves smoothly with N and no grid is
 rebuilt. Beyond `max` the engine computes at `max` and warns once; MIGRAD has it as the parameter's limit.
 
-Models (`make_models.py`, from `tests/13N`): 12C(p,p) at 84.3° (and 114.5°) lab from 0.3 to 0.9 MeV
+Models (`make_models.py` (deleted; see "How the models were made"), from `tests/13N`): 12C(p,p) at 84.3° (and 114.5°) lab from 0.3 to 0.9 MeV
 across the 0.457 MeV resonance, every level fixed, a constant stopping cross section of 1e-20 MeV cm²/atom
 (10 keV lab at 1e18).
 
@@ -42,3 +42,19 @@ against a plain line at the same N; the group; penalties; the Jacobian column) i
 `tests/pyazr/target_density_test.py`. The GUI side (the dialog's Fitted Target Density box, its refusals,
 the read/write of both blocks, a group member) is `tests/gui/target_int_tab_test.cpp`, and the Fitting tab's
 Target Densities rows `tests/gui/density_fitting_test.cpp`.
+
+## How the models were made
+
+The committed models are the reference.  They were written by `make_models.py` in the old project format and converted
+to format 3 with `tools/format3_tree_convert.sh` (`AZURE2 --convert ... --to 3 --exact-grids`); the generator
+was deleted with the old format (it is in the repository's history: `git show f272a35e:tests/target_density/make_models.py`).  To change a
+model, edit its records.  The generator's description of what it wrote:
+
+```text
+Writes the target_density models from tests/13N/13N.azr (see README.md).
+
+12C(p,p) at 84.3 and 114.5 deg lab (Meyer, segments 3 and 4) from 0.3 to 0.9 MeV, every level fixed, every other
+segment inactive, a thin target with a constant stopping cross section of 1e-20 MeV cm^2/atom (10 keV at 1e18).
+
+    python3 tests/target_density/make_models.py
+```

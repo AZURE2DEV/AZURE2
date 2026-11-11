@@ -1,4 +1,4 @@
-# tests/data_covariance: dense absolute covariance (see make_models.py)
+# tests/data_covariance: dense absolute covariance (see make_models.py (deleted; README.md: how the models were made))
 file data/p12c_60.dat 61
 file data/p12c_90.dat 61
 file data/p12c_120_150.dat 122

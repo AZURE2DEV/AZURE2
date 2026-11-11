@@ -9,7 +9,7 @@ the Sommerfeld parameter of the entrance pair and E the c.m. energy. With
 
 The models are `tests/13N` (12C(p,γ)13N) with only the low-energy capture
 segments 6 and 7 (LUNA HPGe and BGO) and 8 (FELS) active and 13N's own effects
-switched off; `make_models.py` writes them, and `check.sh` links in
+switched off; `make_models.py` (deleted; see "How the models were made") writes them, and `check.sh` links in
 `tests/13N/data`.
 
 | model | what it is |
@@ -37,3 +37,27 @@ switched off; `make_models.py` writes them, and `check.sh` links in
 The pyazr side (helpers, parameter record, penalties, gradient and Jacobian
 column) is `tests/pyazr/screening_test.py`; the GUI round trip and the
 adiabatic limit are in `tests/gui/target_int_tab_test.cpp`.
+
+## How the models were made
+
+The committed models are the reference.  They were written by `make_models.py` in the old project format and converted
+to format 3 with `tools/format3_tree_convert.sh` (`AZURE2 --convert ... --to 3 --exact-grids`); the generator
+was deleted with the old format (it is in the repository's history: `git show ff356ab8:tests/electron_screening/make_models.py`).  To change a
+model, edit its records.  The generator's description of what it wrote:
+
+```text
+Models of tests/electron_screening, built from tests/13N (12C(p,g)13N).
+
+Only the low-energy capture segments stay active: 6 (LUNA HPGe), 7 (LUNA BGO) and 8 (FELS); 13N's own
+<targetInt> lines are switched off.  Written next to this script:
+
+  bare.azr        no screening
+  scr.azr         screening 1000 eV, fixed, on segments 6 and 7 (8 stays bare)
+  conv.azr        the same inside a Gaussian beam spread of 1e-6 MeV (sub-points)
+  grad.azr        U_e free with a 200 eV prior about 1000 eV, a beam spread of 2 keV
+  bad.azr         a screening block without its sigma (must be refused)
+
+The fit models (fit.azr, fit_prior.azr) need data generated from scr.azr; check.sh writes them.
+
+Run from anywhere: python3 tests/electron_screening/make_models.py
+```

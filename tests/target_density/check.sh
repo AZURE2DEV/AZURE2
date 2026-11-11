@@ -2,7 +2,7 @@
 #
 # Fitted target density (areal_density ... fit [prior ...] on a target record; one target record named by several data
 # sets is a density group; the old "densityfit" and "densitygroup" blocks of a <targetInt> line are the converter's).
-# Models from make_models.py: tests/13N, 12C(p,p) at 84.3 (and 114.5) deg lab, 0.3-0.9 MeV, levels fixed, a thin
+# Models from make_models.py (deleted; README.md: how the models were made): tests/13N, 12C(p,p) at 84.3 (and 114.5) deg lab, 0.3-0.9 MeV, levels fixed, a thin
 # target with a constant stopping cross section (10 keV at 1e18 atoms/cm^2).
 #
 #   1. data made at N = 1.1e18 (true.azr, 1 % errors): MIGRAD with the analytic gradient, --use-lm and --use-gsl-lm

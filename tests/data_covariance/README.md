@@ -13,7 +13,7 @@ relvector terms. Introduced 2026-10-21 for the MANA 10B(a,n) and 10B(a,p/d/a) da
 per-detector efficiencies as relvector terms.
 
 Model: `tests/angle_mapping` (p+12C and p+13C, thirteen segments on one energy grid, data
-taken from there). `make_models.py` writes the four models and three covariance files (all
+taken from there). `make_models.py` (deleted; see "How the models were made") writes the four models and three covariance files (all
 committed). Every model splits the two-angle file `p12c_120_150.dat` into two segments by
 angle window and cuts segment 2 at 2.0 MeV. The covariance covers eight segments: a free
 norm, A_y, a shift group with a free shift, and a free sqrt(E) shift. Its header also lists
@@ -58,3 +58,37 @@ through pyazr:
 - sum w^2 = chi2
 - the gradient matches central differences and 2 J^T w
 - `refreeze_covariance()` works
+
+## How the models were made
+
+The committed models are the reference.  They were written by `make_models.py` in the old project format and converted
+to format 3 with `tools/format3_tree_convert.sh` (`AZURE2 --convert ... --to 3 --exact-grids`); the generator
+was deleted with the old format (it is in the repository's history: `git show 07581f03:tests/data_covariance/make_models.py`).  To change a
+model, edit its records.  The generator's description of what it wrote:
+
+```text
+Write the models and covariance files of tests/data_covariance (run once; outputs are committed).
+
+    python3 make_models.py
+
+Base: tests/angle_mapping/angle_mapping.azr (p+12C and p+13C, thirteen segments on one energy
+grid).  Changes, in every model:
+  * segment 3 (data/p12c_120_150.dat, two angles in one file) is split into two segments by
+    angle window (115-125 and 145-155 lab degrees): one data file, two segments;
+  * segment 2 (90 deg) is cut at 2.0 MeV, so rows of the covariance file drop out.
+The covariance (models with "covariance <file>") covers segments 1 (free norm), 2, 3a, 3b,
+4 (A_y), 6 and 7 (shift group with a free shift) and 8 (free sqrt shift); its header also lists
+data/p12c_165.dat, which no covariance segment uses (its rows drop out as well).
+
+  plain.azr   no covariance
+  diag.azr    covariance cov_diag.txt  = diagonal(e_i^2): chi2 identical to plain.azr
+  dense.azr   covariance cov_dense.txt = 0.5 diag(e^2) + one block per beam energy (all
+              rows at that energy, non-contiguous: 0.4 e_i e_j off the diagonal) + per file
+              an absolute 2 % vector + one smooth global vector
+  rel.azr     covariance cov_rel.txt   = cov_dense.txt with the per-file 2 % vectors as
+              relvector 0.02 (model-scaled) instead
+  fit.azr     dense.azr with every level energy and width fixed: only the norms, shifts and
+              abundances are free, a problem with one minimum, for the fitter comparison
+              (with the levels free, MIGRAD, LM and GSL reach different minima of this
+              synthetic model, depending on the platform)
+```
