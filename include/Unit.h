@@ -454,6 +454,41 @@ class Unit {
   void AddECAmplitude(int, int, complex);
   void AddECAmplitude(int, int, complex, double);
   void ClearECAmplitudes();
+  /// The external-capture amplitudes the point holds at c.m. energy `energy` (MeV) -- the set-up's, which
+  /// GetECAmplitudeWithShift returns there instead of computing them; they need not agree to the last bit between
+  /// points at one energy -- as a 64-bit hash of their positions and bits (FNV-1a), 0 when it holds none there.
+  std::uint64_t ECAmplitudesHeldAt(double energy) const {
+    std::uint64_t h = 1469598103934665603ULL;
+    bool any = false;
+    auto mix = [&h](const void *p, std::size_t n) {
+      for (std::size_t i = 0; i < n; i++) h = (h ^ static_cast<const unsigned char *>(p)[i]) * 1099511628211ULL;
+    };
+    for (std::size_t k = 0; k < ec_energies_.size(); k++)
+      for (std::size_t m = 0; m < ec_energies_[k].size(); m++) {
+        if (ec_energies_[k][m] != energy || k >= ec_amplitudes_.size() || m >= ec_amplitudes_[k].size()) continue;
+        any = true;
+        mix(&k, sizeof k), mix(&m, sizeof m), mix(&ec_amplitudes_[k][m], sizeof(complex));
+      }
+    return any ? (h ? h : 1) : 0;
+  }
+  /// Whether `other` holds at its c.m. energy bit for bit the amplitudes this point holds at its own
+  /// (ECAmplitudesHeldAt).
+  bool SameECAmplitudesAs(const Unit &other) const {
+    auto held = [](const Unit &u) {
+      const double energy = u.GetCMEnergy();
+      std::vector<std::pair<std::pair<std::size_t, std::size_t>, complex>> v;
+      for (std::size_t k = 0; k < u.ec_energies_.size(); k++)
+        for (std::size_t m = 0; m < u.ec_energies_[k].size(); m++)
+          if (u.ec_energies_[k][m] == energy && k < u.ec_amplitudes_.size() && m < u.ec_amplitudes_[k].size())
+            v.push_back({{k, m}, u.ec_amplitudes_[k][m]});
+      return v;
+    };
+    const auto a = held(*this), b = held(other);
+    if (a.size() != b.size()) return false;
+    for (std::size_t i = 0; i < a.size(); i++)
+      if (a[i].first != b[i].first || std::memcmp(&a[i].second, &b[i].second, sizeof(complex)) != 0) return false;
+    return true;
+  }
   /// Calculate the point (and the points mapped onto it, its sub-points, its fold) for the current parameters,
   /// outside the energy pass (WorkingCopy::CalculatePointsInParallel), writing the values into `results`, the buffer
   /// of the evaluation laid out by `data`, the data set that holds the point: its plan names the points mapped onto

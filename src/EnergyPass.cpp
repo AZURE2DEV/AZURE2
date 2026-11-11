@@ -1,5 +1,5 @@
 // The point pass of an evaluation (WorkingCopy::CalculatePointsInParallel); the calculation at one compound energy (CalculationPlan.h, EnergyTask): one fill and factorisation of the level
-// matrix, one T-matrix per (entrance, exit) pair, the observable of every unit; and the check (AZURE_PLAN_CHECK=1) that
+// matrix, one T-matrix per group (entrance, exit, amplitude source), the observable of every unit; and the check (AZURE_PLAN_CHECK=1) that
 // this shared solve gives every unit what its own solve gives, bit for bit.
 #include <algorithm>
 #include <cstdlib>
@@ -33,23 +33,18 @@ namespace azure2 {
 
 namespace {
 
-// The T-matrix of `u`'s pair held by `func` (`held`: the pair of the T-matrix held now; {0, 0} none): built anew when
-// the pair changes, else kept.  The first T-matrix after a fill is built directly, every later one through
-// RecalculateTMatrix (which drops the elements held), as a host and its mapped points always did.
-void TMatrixFor(GenMatrixFunc &func, Unit *u, std::pair<int, int> &held) {
-  const std::pair<int, int> pair{u->GetEntranceKey(), u->GetExitKey()};
-  if (pair == held) return;
-  if (held == std::pair<int, int>{0, 0})
-    func.CalculateTMatrix(u);
-  else
-    func.RecalculateTMatrix(u);
-  held = pair;
+// Whether unit k starts a T-matrix group: by `tGroups`, or, if null, by a change of (entrance, exit) pair.
+bool StartsTMatrix(Unit *const *units, int k, const int *tGroups) {
+  if (k == 0) return true;
+  if (tGroups) return tGroups[k] != tGroups[k - 1];
+  return units[k]->GetEntranceKey() != units[k - 1]->GetEntranceKey() ||
+         units[k]->GetExitKey() != units[k - 1]->GetExitKey();
 }
 
 }  // namespace
 
 void SolveAtOneEnergy(CNuc *cnuc, const Config &configure, Results &results, Unit *const *units, int n,
-                      int *progress) {
+                      const int *tGroups, int *progress) {
   if (progress) *progress = 0;
   if (n <= 0) return;
   if (units[0]->IsTHM()) {
@@ -81,10 +76,14 @@ void SolveAtOneEnergy(CNuc *cnuc, const Config &configure, Results &results, Uni
   func->ClearMatrices();
   func->FillMatrices(units[0]);
   func->InvertMatrices();
-  std::pair<int, int> held{0, 0};
+  // The first T-matrix after a fill is built directly, every later one through RecalculateTMatrix (which drops the
+  // elements held), as a host and its mapped points always did.
   for (int k = 0; k < n; k++) {
     if (progress) *progress = k;
-    TMatrixFor(*func, units[k], held);
+    if (k == 0)
+      func->CalculateTMatrix(units[k]);
+    else if (StartsTMatrix(units, k, tGroups))
+      func->RecalculateTMatrix(units[k]);
     func->CalculateCrossSection(units[k], results);
   }
 }
@@ -151,7 +150,6 @@ long CheckEnergyTasks(WorkingCopy &data, CNuc *cnuc, const Config &configure, co
     s->ClearMatrices();
     s->FillMatrices(first);
     s->InvertMatrices();
-    std::pair<int, int> held{0, 0};
     for (int k = 0; k < n; k++) {
       Unit *u = &data.UnitAt(task.units[k]);
       std::string why;
@@ -163,8 +161,11 @@ long CheckEnergyTasks(WorkingCopy &data, CNuc *cnuc, const Config &configure, co
       if (why.empty() && task.route != 'R')
         why = CompareLevelMatrices(cnuc, task.nucleus, *static_cast<AMatrixFunc *>(s), *static_cast<AMatrixFunc *>(o));
       if (!thm) {
-        o->CalculateTMatrix(u);
-        TMatrixFor(*s, u, held);
+        o->CalculateTMatrix(&data.UnitAt(task.providers[k]));  // as its host would, from the provider
+        if (k == 0)
+          s->CalculateTMatrix(u);
+        else if (task.tGroups[k] != task.tGroups[k - 1])
+          s->RecalculateTMatrix(u);
         if (why.empty() && !s->SameTMatrix(*o)) why = "T-matrix";
       }
       // The unit's record from its own solve, then from the shared one.
@@ -254,7 +255,8 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
     while (start < n) {
       int progress = 0;
       try {
-        azure2::SolveAtOneEnergy(theCNuc, configure, results, units.data() + start, n - start, &progress);
+        azure2::SolveAtOneEnergy(theCNuc, configure, results, units.data() + start, n - start,
+                                 task.tGroups.data() + start, &progress);
         return;
       } catch (const std::exception &e) {
         taskFailures[k].push_back({task.owners[start + progress], e.what()});
@@ -283,7 +285,7 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
   };
   if (azure2::CalculationPlan::RunTimeCheckRequested()) {
     // One step after the other, each checked to write only its own records (the energy tasks: their units'; a fold:
-    // its points' and their sub-points'); then every unit's shared solve against its own.
+    // its points'); then every unit's shared solve against its own.
     const int numTasks = (int)tasks.size();
     azure2::CalculationPlan::RunChecked(
         results, numTasks + (int)folds.size(),
@@ -293,8 +295,12 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
             for (azure2::UnitRef u : tasks[k].units) azure2::CalculationPlan::AddRecordRange(units_[u], ranges);
             if (k == numTasks - 1) collectFailures();
           } else {
+            // A fold writes its points' records; it swaps values into its sub-points' slots and restores them.
             runFold(k - numTasks);
-            plan_.WriteRanges(*this, folds[k - numTasks], ranges);
+            Unit *host = plan_.Host(*this, folds[k - numTasks]);
+            azure2::CalculationPlan::AddRecordRange(*host, ranges);
+            const azure2::MappedPoints mapped = host->PlanMapped(this);
+            for (int m = 0; m < mapped.size(); m++) azure2::CalculationPlan::AddRecordRange(*mapped[m], ranges);
           }
         },
         [&](int k) {

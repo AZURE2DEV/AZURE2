@@ -604,7 +604,8 @@ are compound energies, not hosts (``CalculationPlan::EnergyTasks``).  Every
 unit -- a point without a fold, or a sub-point -- whose nucleus, route
 (A-matrix, THM, R-matrix) and :math:`E_x` (``AMatrixFunc::InEnergy``, bit for
 bit) agree is calculated by one task: one fill and factorisation of the level
-matrix, one T-matrix per (entrance, exit) pair, the observable of each unit;
+matrix, one T-matrix per (entrance, exit) pair (and source of the external-capture
+amplitudes: those of the set-up or computed), the observable of each unit;
 then the folds of the points with sub-points, which read the values already
 there (``Unit::FoldSubPoints``).  Units of different segments, entrance pairs
 and data sets share a solve whenever their energies agree, mapped or not; the

@@ -15,6 +15,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <unistd.h>
 
 #include "AMatrixFunc.h"
@@ -57,7 +58,7 @@ std::string CrossCheck(WorkingCopy &data) {
 // The energy tasks of every plan task (CalculationPlan::EnergyTasks): every unit of the plan tasks -- a point, or each
 // sub-point of a point with a sub-point fold -- in exactly one energy task, with the plan task of its point; inside a
 // task one nucleus, one route and the same bits of E_x (AMatrixFunc::InEnergy), the units by (entrance, exit) pair
-// and numPairs their count; the tasks by decreasing cost.  Counts the solves of a pass (energy tasks) against the
+// (and external-capture amplitude source: the T-matrix groups) and numTMatrices their count; the tasks by decreasing cost.  Counts the solves of a pass (energy tasks) against the
 // units.
 long energyTasks = 0, energyUnits = 0;
 std::string CheckEnergyTasks(WorkingCopy &data, CNuc &compound, const Config &cfg) {
@@ -82,7 +83,7 @@ std::string CheckEnergyTasks(WorkingCopy &data, CNuc &compound, const Config &cf
     const azure2::EnergyTask &task = tasks[k];
     const std::string where = "energy task " + std::to_string(k);
     if (task.units.empty() || task.owners.size() != task.units.size()) return where + " is empty or has no owners";
-    const double cost = 1.0 + task.numPairs + task.units.size();
+    const double cost = 1.0 + task.numTMatrices + task.units.size();
     if (cost > lastCost) return where + " is out of the order of cost";
     lastCost = cost;
     int pairs = 0;
@@ -97,15 +98,27 @@ std::string CheckEnergyTasks(WorkingCopy &data, CNuc &compound, const Config &cf
       if (compound.GetPair(compound.GetPairNumFromKey(u.GetEntranceKey()))->GetNucleus() != task.nucleus)
         return where + ": a unit of another nucleus";
       if ((u.IsTHM() ? 'T' : 'A') != task.route && task.route != 'R') return where + ": a unit of another route";
+      if (task.tGroups.size() != task.units.size() || task.providers.size() != task.units.size())
+        return where + ": no T-matrix group or provider for every unit";
+      Unit &prov = data.UnitAt(task.providers[i]);
+      const std::tuple<int, int, long long> b{u.GetEntranceKey(), u.GetExitKey(), azure2::ECAmplitudeSource(prov, cfg)};
+      if (prov.GetEntranceKey() != u.GetEntranceKey() || prov.GetExitKey() != u.GetExitKey())
+        return where + ": a provider of another pair";
       if (i > 0) {
         Unit &p = data.UnitAt(task.units[i - 1]);
-        const std::pair<int, int> a{p.GetEntranceKey(), p.GetExitKey()}, b{u.GetEntranceKey(), u.GetExitKey()};
-        if (b < a) return where + ": units not ordered by (entrance, exit)";
+        const std::tuple<int, int, long long> a{p.GetEntranceKey(), p.GetExitKey(),
+                                                azure2::ECAmplitudeSource(data.UnitAt(task.providers[i - 1]), cfg)};
+        if (b < a) return where + ": units not ordered by T-matrix group";
+        if ((b != a) != (task.tGroups[i] != task.tGroups[i - 1])) return where + ": T-matrix groups wrong";
         if (b != a) pairs++;
       } else
         pairs = 1;
+      // a group's first unit is its own provider
+      if ((i == 0 || task.tGroups[i] != task.tGroups[i - 1]) && task.providers[i] != task.units[i])
+        return where + ": a T-matrix group whose first unit is not its own provider";
     }
-    if (pairs != task.numPairs) return where + ": numPairs " + std::to_string(task.numPairs) + ", pairs " + std::to_string(pairs);
+    if (pairs != task.numTMatrices)
+      return where + ": numTMatrices " + std::to_string(task.numTMatrices) + ", groups " + std::to_string(pairs);
     seen += (long)task.units.size();
   }
   if (seen != expected) return std::to_string(expected - seen) + " units of the plan tasks in no energy task";

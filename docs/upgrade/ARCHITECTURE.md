@@ -74,7 +74,7 @@ calculation plan and one flat vector of calculation `Unit`s; copied by a plain c
 working copy and the caller's `Results`.  Its point pass (`WorkingCopy::CalculatePointsInParallel`) runs the plan's
 energy tasks (`CalculationPlan::EnergyTasks`, since Phase 5): one task per compound energy E_x (nucleus and the bits of
 `AMatrixFunc::InEnergy`) with every unit at it -- points without a fold and sub-points alike -- one level-matrix fill
-and factorisation, one T-matrix per (entrance, exit) pair, one observable per unit (`azure2::SolveAtOneEnergy`); then
+and factorisation, one T-matrix per (entrance, exit) pair and external-capture amplitude source, one observable per unit (`azure2::SolveAtOneEnergy`); then
 the folds, on values already computed (`Unit::FoldSubPoints`).  Each task writes only its units' records.
 
 ## 3. Module contents (physical objects; physics stages are functions, not classes)

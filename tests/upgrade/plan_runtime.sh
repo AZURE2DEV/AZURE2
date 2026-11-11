@@ -5,10 +5,12 @@
 # bit for bit with the solve it shares at its compound energy (azure2::CheckEnergyTasks; a difference stops the run).
 # Mode-1 calculations of T1, T2 (with a SUM and a RATIO), T3, 13N, natural_neon (sample sums), 18O_p_a_thm (THM),
 # thick_target_resonance (seven capture exits under a thick target), target_effect_ranges (automatic tolerance,
-# windows, probes) and tests/transmission_yield's conv (a transmission and a yield under a Gaussian spread), with and
+# windows, probes), electron_screening's grad.azr (see below) and tests/transmission_yield's conv (a transmission and
+# a yield under a Gaussian spread), with and
 # without the check: each run exits 0, the checked run reports "0 differ", and every output file is byte for byte the
 # same.  Shown failing with a task that also calculated the next task's host (injected once: "writes slot ...,
-# outside its records") and with a T-matrix kept across exit pairs (injected once: "T-matrix differs").
+# outside its records"), with a T-matrix kept across exit pairs (injected once: "T-matrix differs"), and on the
+# screening model by T-matrix groups without the amplitude source (about 1,600 units differ).
 #   plan_runtime.sh path/to/AZURE2
 set -u
 export LC_ALL=C OMP_NUM_THREADS=2
@@ -25,6 +27,9 @@ mkdir -p "$WORK/ty"
 python3 -I "$TESTS/transmission_yield/make_models.py" "$TESTS/reaction_rate/models/n12C.azr" \
   "$TESTS/natural_neon/natural_neon.azr" "$WORK/ty" > "$WORK/ty.log" 2>&1 || { bad "transmission_yield models"; tail -3 "$WORK/ty.log"; }
 cp -r "$TESTS/natural_neon/data" "$WORK/ty/" 2>/dev/null
+# 13N's capture data under Gaussian spreads with electron screening (tests/electron_screening/grad.azr): points and
+# sub-points of two data sets at one energy hold set-up external-capture amplitudes that differ in the last bits.
+mkdir -p "$WORK/scr" && cp "$TESTS/electron_screening/grad.azr" "$WORK/scr/" && cp -r "$TESTS/13N/data" "$WORK/scr/"
 # run NAME SRC_DIR AZR CHECK -> $WORK/NAME.CHECK (exit code in .rc)
 run() {
   local d="$WORK/$1.$4"
@@ -34,7 +39,7 @@ run() {
 for p in "T1:$TESTS/upgrade/T1:T1.azr" "T2:$TESTS/upgrade/T2:T2.azr" "T3:$TESTS/upgrade/T3:T3.azr" "13N:$TESTS/13N:13N.azr" \
          "natural_neon:$TESTS/natural_neon:natural_neon.azr" "thm:$TESTS/18O_p_a_thm:18O_p_a_thm.azr" "conv:$WORK/ty:conv.azr" \
          "thick:$TESTS/thick_target_resonance:thick_target_resonance.azr" \
-         "ranges:$TESTS/target_effect_ranges:target_effect_ranges.azr"; do
+         "ranges:$TESTS/target_effect_ranges:target_effect_ranges.azr" "screening:$WORK/scr:grad.azr"; do
   IFS=: read -r name src azr <<< "$p"
   run "$name" "$src" "$azr" 0
   run "$name" "$src" "$azr" 1
