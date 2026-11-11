@@ -101,7 +101,8 @@ Batch rehearsal `rehearsal/trial25` (worktree `wt-trial25`, build `work/b-trial2
 - For the shared mesh's brief: the quadrature gate's "fine" reference should be k = 4 (the agent's classifier
   failed a k = 4 run on 5 of 92 files per basis with k = 2 as reference: `natural_neon`, `T2_true`,
   `layer_yield` const are not asymptotic at k = 2).
-- `tests/fit_modes` has no case "apparatus parameter only" (the rectangular width fit): to add.
+- `tests/fit_modes` has a fifth case since 23:30, "apparatus" (the rectangular width alone, four routes, band skipped
+  with its message): 37 checks pass.
 
 ## 2026-11-11 (agent, Phase 5 branch 7 part 1) — point mapping deleted, tools for the shared mesh, the node table beside the sub-points (`feature/upgrade-5-grid-nodes`)
 
