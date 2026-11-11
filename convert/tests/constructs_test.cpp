@@ -432,9 +432,16 @@ int main(int argc, char **argv) {
                                      "0 5 5 0.1 2 0 180 0 1 0 0 0 0 0 off.dat sample natNe\n",
                                      "0 5 5 0.5 2.0 0.5 0 0 0 0 sample natNe\n", "", abund, ""});
     check("inactive lines of a used sample: converted", r.ok);
-    const std::size_t off = r.text.find("dataset off"), x1 = r.text.find("extrapolation x1");
-    const std::string offRecord = off == std::string::npos ? "" : r.text.substr(off, r.text.find("\n\n", off) - off);
-    const std::string x1Record = x1 == std::string::npos ? "" : r.text.substr(x1, r.text.find("\n\n", x1) - x1);
+    // a record: from its header to the next blank line, header, comment or section tag
+    const auto record = [&r](const std::string &header) {
+      const std::size_t a = r.text.find(header + "\n");
+      if (a == std::string::npos) return std::string();
+      std::size_t b = r.text.size();
+      for (const char *end : {"\n\n", "\n#", "\n<", "\ndataset ", "\nextrapolation ", "\ntarget "})
+        b = std::min(b, r.text.find(end, a + 1));
+      return r.text.substr(a, b - a);
+    };
+    const std::string offRecord = record("dataset off"), x1Record = record("extrapolation x1");
     check("... the inactive data set names the sample's target",
           offRecord.find("target         natNe") != std::string::npos && offRecord.find("active         no") != std::string::npos);
     check("... the inactive extrapolation names it too", x1Record.find("target         natNe") != std::string::npos);
