@@ -20,8 +20,9 @@
 #       central finite differences of chi^2 for every free parameter (levels,
 #       norms, shifts, abundances) -- Brune (default), Lane-Thomas
 #       (--no-brune) and Park (--use-park);
-#   (d) the energy-grouped gradient equals the point-by-point one
-#       (AZURE_NO_GROUPED_GRADIENT=1) to 1e-10 of its largest component.
+#   (d) the analytic gradient (adjoint and residual-Jacobian paths) is the same, bit for bit, at one thread and at
+#       the thread count of (c): its sums are formed in an order fixed by the energy tasks, not by the threads
+#       (src/GradEnergyTasks.cpp).
 #
 #   ./tests/angle_mapping/check.sh path/to/AZURE2
 
@@ -136,16 +137,14 @@ for mode in brune:"" lanethomas:"--no-brune" park:"--use-park"; do
   else
     bad "$tag: gradient vs finite differences, worst $worst of the largest (> $tol); $summary"
   fi
-  # the point-by-point gradient
-  gradcheck "p_$tag" "$flags" AZURE_NO_GROUPED_GRADIENT=1
-  same="$(join "$WORK/g_$tag.rows" "$WORK/p_$tag.rows" | awk '{ a = $2 < 0 ? -$2 : $2; if (a > m) m = a
-              d = $2 - $5; if (d < 0) d = -d; if (d > w) w = d
-              if ($4 != "-" && $7 != "-") { e = $4 - $7; if (e < 0) e = -e; if (e > w) w = e }; n++ }
-              END { if (n == 0 || m == 0) print "nan"; else printf "%.2e %d", w / m, n }')"
-  if awk -v s="$same" 'BEGIN { split(s, x, " "); exit !(x[2] > 0 && x[1] + 0 <= 1e-10) }'; then
-    ok "$tag: energy-grouped gradient = point-by-point gradient (${same% *} of the largest, ${same#* } parameters)"
+  # the same gradient at one thread
+  gradcheck "p_$tag" "$flags" OMP_NUM_THREADS=1
+  same="$(join "$WORK/g_$tag.rows" "$WORK/p_$tag.rows" | awk '{ n++; if ($2 != $5 || $4 != $7) d++ }
+              END { printf "%d %d", d + 0, n + 0 }')"
+  if awk -v s="$same" 'BEGIN { split(s, x, " "); exit !(x[2] > 0 && x[1] == 0) }'; then
+    ok "$tag: gradient at 1 and $OMP_NUM_THREADS threads identical (${same#* } parameters)"
   else
-    bad "$tag: energy-grouped vs point-by-point gradient: $same"
+    bad "$tag: gradient at 1 and $OMP_NUM_THREADS threads: ${same% *} of ${same#* } parameters differ"
   fi
 done
 

@@ -60,10 +60,24 @@ struct EnergyTask {
   char route = 'A';            ///< 'A' A-matrix, 'T' THM (THMMatrixFunc), 'R' R-matrix (RMatrixFunc)
   double energy = 0.0;         ///< E_x, MeV (AMatrixFunc::InEnergy), the same bits for every unit
   int numTMatrices = 0;        ///< T-matrix groups: the T-matrices the task builds
-  std::vector<UnitRef> units;  ///< in the order calculated: by T-matrix group, then in plan order
-  std::vector<int> tGroups;    ///< the T-matrix group of each unit (0, 1, ...; non-decreasing)
+  int begin = 0;               ///< the task's units are [begin, begin + size) of the arrays of its EnergyTaskList
+  int size = 0;
+};
+
+/*!
+ * The energy tasks of a pass with their units in four parallel arrays, the units of one task side by side (a task is a
+ * range of them, EnergyTask::begin and size): no allocation per task, so a rebuild (every evaluation that moves an
+ * energy shift or a sub-point grid) costs one sort of the units, and a task reads its units' references from one
+ * stretch of memory.
+ */
+struct EnergyTaskList {
+  std::vector<EnergyTask> tasks;   ///< by decreasing cost (1 + T-matrices + units), ties in energy order
+  std::vector<UnitRef> units;      ///< in the order calculated: by T-matrix group, then in plan order
+  std::vector<int> tGroups;        ///< the T-matrix group of each unit (0, 1, ... inside its task; non-decreasing)
   std::vector<UnitRef> providers;  ///< the unit whose T-matrix each unit's observable is formed from (TaskUnits)
-  std::vector<int> owners;     ///< the plan task (CalculationTask) of each unit: its point's
+  std::vector<int> owners;         ///< the plan task (CalculationTask) of each unit: its point's
+  int size() const { return (int)tasks.size(); }
+  const EnergyTask &operator[](int k) const { return tasks[k]; }
 };
 
 /*!
@@ -102,8 +116,8 @@ class CalculationPlan {
    * check walks the units, it does not sort).  Ordered by decreasing cost (1 + T-matrices + units), so the largest
    * tasks start first on a dynamic schedule.
    */
-  const std::vector<EnergyTask> &EnergyTasks(WorkingCopy &data, CNuc *cnuc, const Config &configure,
-                                              const std::vector<int> &work);
+  const EnergyTaskList &EnergyTasks(WorkingCopy &data, CNuc *cnuc, const Config &configure,
+                                    const std::vector<int> &work);
   /// The units of the plan task `task` in plan order (the host, then each mapped point; a point with a sub-point
   /// fold by its sub-points), appended to `units`; and to `providers`, if given, the unit each one's T-matrix comes
   /// from where a host calculates its mapped points (Unit::Calculate): the first unit at the same sub-point index
@@ -128,7 +142,7 @@ class CalculationPlan {
  private:
   std::vector<CalculationTask> tasks_;
   // The energy tasks of the last pass and what they were built from: the work, every unit with its E_x.
-  std::vector<EnergyTask> energy_tasks_;
+  EnergyTaskList energy_tasks_;
   std::vector<int> energy_work_;
   std::vector<UnitRef> energy_units_;
   std::vector<double> energy_keys_;
@@ -148,7 +162,7 @@ void SolveAtOneEnergy(CNuc *cnuc, const Config &configure, Results &results, Uni
 /// every J-group, the route, the T-matrix, the record), written into a copy of `results`.  Prints the counts and the first differences to stderr; returns
 /// the number of units that differ.
 long CheckEnergyTasks(WorkingCopy &data, CNuc *cnuc, const Config &configure, const Results &results,
-                      const std::vector<EnergyTask> &tasks);
+                      const EnergyTaskList &tasks);
 
 /// Whether `point` carries a sub-point fold (a target effect whose kernel is evaluated on sub-points): its sub-points
 /// are the units of the energy pass, and the fold runs after it.

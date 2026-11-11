@@ -58,31 +58,6 @@ struct ThmSpectatorWindow;
  * several flags that determine the type of data (angle integrated or differential) to be analysed.
  */
 
-/*!
- * While an object of this type is alive on a thread, point mapping
- * (WorkingCopy::MapData) is ignored by the calculations made on THAT thread: a host
- * point's Unit::Calculate no longer fills its mapped points, and
- * azure2::EvaluateModelPoint calculates a mapped point itself
- * instead of reading back the value its host left there.  Every mapped point
- * carries its own sub-points and energy-dependent values, so the result is the
- * same; only the sharing is lost.  The analytic-gradient loops (AZUREGrad.cpp)
- * use it: they run the points of a segment in parallel, and sharing there would
- * have a mapped point read -- and finite-difference -- sub-point values its
- * host is writing on another thread.
- */
-class ScopedPointMappingOff {
- public:
-  ScopedPointMappingOff();
-  ~ScopedPointMappingOff();
-  ScopedPointMappingOff(const ScopedPointMappingOff &) = delete;
-  ScopedPointMappingOff &operator=(const ScopedPointMappingOff &) = delete;
-  /// True while mapping is switched off on the calling thread.
-  static bool Active();
-
- private:
-  bool previous_;
-};
-
 class Unit {
  private:
   using ThmPsTable = ::ThmPsTable;  // UnitTables.h

@@ -240,35 +240,24 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, WorkingCopy *ld, azure2::Results &re
   }
   // Residuals of one segment's rows, in row order, exactly as
   // ComputeResidualJacobian forms them.
-  auto segmentResiduals = [&](const Segment *seg, vector_r &out, bool parallel) {
-    const int nPts = seg->NumPoints();
+  auto segmentResiduals = [&](const Segment *seg, vector_r &out, azure2::LeafValues leaves) {
     const double norm = ld->State(*seg).norm;
-    std::vector<double> byPoint(nPts, 0.0);
-    std::vector<char> present(nPts, 0);
-    auto one = [&](int pid) {
-      Unit *pt = seg->GetPoint(*ld, pid + 1);
-      if (!pt) return;
-      present[pid] = 1;
-      azure2::EvaluateModelPoint(*ld, *seg, pid, lc, config, results, azure2::LeafValues::Calculate);
-      byPoint[pid] = azure2::PointResidual(*ld, *seg, pid, results, norm).Pull();
-    };
-    // No parallel construct inside an enclosing parallel region.  In parallel each point is calculated on
-    // its own, without point mapping (ScopedPointMappingOff, as in the
-    // AZUREGrad.cpp loops): a mapped point would otherwise read a value its
-    // host may not have calculated yet.  Serially, index order puts every
-    // host first and the sharing is kept.
-    if (parallel && !InParallelRegion()) {
-#pragma omp parallel for schedule(dynamic)
-      for (int pid = 0; pid < nPts; pid++) {
-        ScopedPointMappingOff noPointMapping;
-        one(pid);
-      }
-    } else {
-      for (int pid = 0; pid < nPts; pid++) one(pid);
-    }
     out.clear();
-    for (int pid = 0; pid < nPts; pid++)
-      if (present[pid]) out.push_back(byPoint[pid]);
+    for (int pid = 0; pid < seg->NumPoints(); pid++) {
+      if (!seg->GetPoint(*ld, pid + 1)) continue;
+      azure2::EvaluateModelPoint(*ld, *seg, pid, lc, config, results, leaves);
+      out.push_back(azure2::PointResidual(*ld, *seg, pid, results, norm).Pull());
+    }
+  };
+  // The residuals of the segments `segs` (each into its own vector): one point pass over them (their energy
+  // tasks, then their folds) and each point from the records it wrote; serially (inside a parallel region, or a
+  // failed point) segment by segment, point by point, where index order puts every host first.
+  auto groupResiduals = [&](const std::vector<int> &segs, std::vector<vector_r> &out) {
+    std::vector<const Segment *> group;
+    for (int s : segs) group.push_back(ld->Data().GetSegment(s));
+    const bool pre = !InParallelRegion() && ld->CalculatePointsInParallel(group, lc, config, results) == 0;
+    for (size_t m = 0; m < group.size(); m++)
+      segmentResiduals(group[m], out[m], pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
   };
   // Every row, forward only: one parallel pass over the points (as a
   // chi-squared evaluation), then the residuals in row order.  If a point
@@ -342,10 +331,10 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, WorkingCopy *ld, azure2::Results &re
     const double d0 = ls.target.Get(ld);
     ls.target.Set(ld, x0 + h);
     for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->Data().GetSegment(segs[m]));
-    for (size_t m = 0; m < segs.size(); m++) segmentResiduals(ld->Data().GetSegment(segs[m]), rP[m], true);
+    groupResiduals(segs, rP);
     ls.target.Set(ld, x0 - h);
     for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->Data().GetSegment(segs[m]));
-    for (size_t m = 0; m < segs.size(); m++) segmentResiduals(ld->Data().GetSegment(segs[m]), rM[m], true);
+    groupResiduals(segs, rM);
     ls.target.Set(ld, d0);
     for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->Data().GetSegment(segs[m]));
     for (size_t m = 0; m < segs.size(); m++) {
@@ -1152,7 +1141,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
           if (nAll[k]) std::cerr << " " << kindName[k] << " " << nBadJ[k] << "/" << nAll[k];
       }
       std::cerr << std::endl;
-      // Full precision, so two runs (e.g. AZURE_NO_GROUPED_GRADIENT) can be
+      // Full precision, so two runs (e.g. two builds, or two thread counts) can be
       // compared value by value; AZURE_GRAD_CHECK_ROWS lists more than 60.
       const std::streamsize prec = std::cerr.precision(15);
       const int maxRows = std::getenv("AZURE_GRAD_CHECK_ROWS") ? std::atoi(std::getenv("AZURE_GRAD_CHECK_ROWS")) : 60;

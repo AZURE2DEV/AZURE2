@@ -9,9 +9,14 @@
 #include <sstream>
 #include <stdexcept>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 #include "AMatrixFunc.h"
 #include "CNuc.h"
 #include "Config.h"
+#include "Profile.h"
 #include "TargetEffect.h"
 #include "WorkingCopy.h"
 #include "Unit.h"
@@ -38,7 +43,7 @@ Unit *CalculationPlan::Host(WorkingCopy &data, int task) const { return data.Pla
 
 void CalculationPlan::Build(WorkingCopy &data, const std::vector<std::pair<PointRef, PointRef>> &mapping) {
   tasks_.clear();
-  energy_tasks_.clear(), energy_work_.clear(), energy_units_.clear(), energy_keys_.clear(), energy_sources_.clear();
+  energy_tasks_ = EnergyTaskList(), energy_work_.clear(), energy_units_.clear(), energy_keys_.clear(), energy_sources_.clear();
   for (PointRef u : data.PlanUnits()) {
     Unit *point = data.PlanPoint(u);
     point->SetPlanTask(-1);
@@ -197,6 +202,26 @@ std::uint64_t Bits(double x) {
   return b;
 }
 
+// Sorts `v` by `less` (a strict total order): pieces of it in parallel, then merged pairwise.
+template <class T, class Less>
+void SortInPieces(std::vector<T> &v, Less less) {
+  const int n = (int)v.size();
+  int pieces = 1;
+#ifdef _OPENMP
+  if (n > 4096) pieces = std::min(8, omp_get_max_threads());
+#endif
+  std::vector<int> bound(pieces + 1);
+  for (int p = 0; p <= pieces; p++) bound[p] = (int)((long long)n * p / pieces);
+#pragma omp parallel for schedule(static) if (pieces > 1)
+  for (int p = 0; p < pieces; p++) std::sort(v.begin() + bound[p], v.begin() + bound[p + 1], less);
+  for (int width = 1; width < pieces; width *= 2) {
+#pragma omp parallel for schedule(static) if (pieces > 2 * width)
+    for (int p = 0; p < pieces - width; p += 2 * width)
+      std::inplace_merge(v.begin() + bound[p], v.begin() + bound[p + width],
+                         v.begin() + bound[std::min(pieces, p + 2 * width)], less);
+  }
+}
+
 char RouteOf(const Unit &u, const Config &configure) {
   if (u.IsTHM()) return 'T';
   return (configure.paramMask & Config::USE_AMATRIX) ? 'A' : 'R';
@@ -204,18 +229,23 @@ char RouteOf(const Unit &u, const Config &configure) {
 
 }  // namespace
 
-const std::vector<EnergyTask> &CalculationPlan::EnergyTasks(WorkingCopy &data, CNuc *cnuc, const Config &configure,
-                                                            const std::vector<int> &work) {
+const EnergyTaskList &CalculationPlan::EnergyTasks(WorkingCopy &data, CNuc *cnuc, const Config &configure,
+                                                  const std::vector<int> &work) {
   // The units of the work in plan order, with their providers and plan tasks, their E_x and amplitude sources now.
   std::vector<UnitRef> units, providers;
   std::vector<int> owners;
+  units.reserve(energy_units_.size()), providers.reserve(energy_units_.size()), owners.reserve(energy_units_.size());
   for (int t : work) {
     TaskUnits(data, t, units, &providers);
     owners.resize(units.size(), t);
   }
-  std::vector<double> keys(units.size());
-  std::vector<long long> sources(units.size());
-  for (std::size_t k = 0; k < units.size(); k++) {
+  const int n = (int)units.size();
+  std::vector<double> keys(n);
+  std::vector<long long> sources(n);
+  // Each unit's key is its own (reads only), so they are formed in parallel: a fit that moves an energy shift
+  // rebuilds the tasks at every evaluation, and this serial section is what the other threads wait for.
+#pragma omp parallel for schedule(static) if (n > 4096)
+  for (int k = 0; k < n; k++) {
     keys[k] = AMatrixFunc::InEnergy(cnuc, &data.UnitAt(units[k]));
     sources[k] = ECAmplitudeSource(data.UnitAt(providers[k]), configure);
   }
@@ -223,25 +253,28 @@ const std::vector<EnergyTask> &CalculationPlan::EnergyTasks(WorkingCopy &data, C
                     keys.size() == energy_keys_.size() &&
                     (keys.empty() || std::memcmp(keys.data(), energy_keys_.data(), keys.size() * sizeof(double)) == 0);
   if (same) return energy_tasks_;
+  AZUREProfile::Count(AZUREProfile::kEnergyTaskBuilds);
 
   struct Key {
     int nucleus;
     char route;
-    double energy;
-    std::uint64_t bits;
+    double energy;       // E_x, MeV
+    std::uint64_t bits;  // of E_x
     int entrance, exit;
     long long source;
-    std::size_t ordinal;
+    int ordinal;
   };
-  std::vector<Key> order(units.size());
-  for (std::size_t k = 0; k < units.size(); k++) {
+  std::vector<Key> order(n);
+#pragma omp parallel for schedule(static) if (n > 4096)
+  for (int k = 0; k < n; k++) {
     Unit &u = data.UnitAt(units[k]);
-    order[k] = {cnuc->GetPair(cnuc->GetPairNumFromKey(u.GetEntranceKey()))->GetNucleus(), RouteOf(u, configure), keys[k],
-                Bits(keys[k]), u.GetEntranceKey(), u.GetExitKey(), sources[k], k};
+    order[k] = {cnuc->GetPair(cnuc->GetPairNumFromKey(u.GetEntranceKey()))->GetNucleus(), RouteOf(u, configure),
+                keys[k], Bits(keys[k]), u.GetEntranceKey(), u.GetExitKey(), sources[k], k};
   }
   // By task key (nucleus, route, E_x, bits), then by T-matrix group (entrance, exit, amplitude source), then in plan
-  // order (a group's first unit is then its own provider: a provider comes before the units it provides for).
-  std::sort(order.begin(), order.end(), [](const Key &a, const Key &b) {
+  // order (a group's first unit is then its own provider: a provider comes before the units it provides for).  The
+  // order is total (the ordinal last), so sorting pieces in parallel and merging them gives the one serial result.
+  auto before = [](const Key &a, const Key &b) {
     if (a.nucleus != b.nucleus) return a.nucleus < b.nucleus;
     if (a.route != b.route) return a.route < b.route;
     if (a.energy != b.energy) return a.energy < b.energy;
@@ -250,36 +283,55 @@ const std::vector<EnergyTask> &CalculationPlan::EnergyTasks(WorkingCopy &data, C
     if (a.exit != b.exit) return a.exit < b.exit;
     if (a.source != b.source) return a.source < b.source;
     return a.ordinal < b.ordinal;
-  });
-  std::vector<EnergyTask> tasks;
-  for (std::size_t k = 0; k < order.size(); k++) {
+  };
+  SortInPieces(order, before);
+  // The tasks in energy order, each a run of `order` (its first index in `start`).
+  EnergyTaskList list;
+  std::vector<int> start, group(n);
+  int head = 0;  // the first index (in `order`) of the current T-matrix group
+  for (int k = 0; k < n; k++) {
     const Key &o = order[k];
     if (k == 0 || o.nucleus != order[k - 1].nucleus || o.route != order[k - 1].route || o.bits != order[k - 1].bits) {
-      tasks.emplace_back();
-      tasks.back().nucleus = o.nucleus, tasks.back().route = o.route, tasks.back().energy = o.energy;
+      list.tasks.emplace_back();
+      EnergyTask &t = list.tasks.back();
+      t.nucleus = o.nucleus, t.route = o.route, t.energy = o.energy;
+      start.push_back(k);
     }
-    EnergyTask &task = tasks.back();
-    if (task.units.empty() || o.entrance != order[k - 1].entrance || o.exit != order[k - 1].exit ||
-        o.source != order[k - 1].source)
+    EnergyTask &task = list.tasks.back();
+    if (task.size == 0 || o.entrance != order[k - 1].entrance || o.exit != order[k - 1].exit ||
+        o.source != order[k - 1].source) {
       task.numTMatrices++;
-    else if (o.source < 0) {
+      head = k;
+    } else if (o.source < 0) {
       // Amplitudes held: the hash agrees with the group's first unit; so must the amplitudes, bit for bit.
-      const Unit &first = data.UnitAt(task.providers[task.units.size() - 1]);
       const Unit &self = data.UnitAt(providers[o.ordinal]);
-      if (!self.SameECAmplitudesAs(first))
+      if (!self.SameECAmplitudesAs(data.UnitAt(providers[order[head].ordinal])))
         throw std::logic_error("CalculationPlan: two sets of external-capture amplitudes with one hash at E_x " +
                                std::to_string(o.energy) + " MeV");
     }
-    task.units.push_back(units[o.ordinal]);
-    task.tGroups.push_back(task.numTMatrices - 1);
-    task.providers.push_back(providers[o.ordinal]);
-    task.owners.push_back(owners[o.ordinal]);
+    group[k] = task.numTMatrices - 1;
+    task.size++;
   }
   // Largest first (one fill and factorisation, one T-matrix per group, one observable per unit); ties in energy order.
-  std::stable_sort(tasks.begin(), tasks.end(), [](const EnergyTask &a, const EnergyTask &b) {
-    return 1 + a.numTMatrices + a.units.size() > 1 + b.numTMatrices + b.units.size();
+  std::vector<int> rank(list.tasks.size());
+  for (std::size_t t = 0; t < rank.size(); t++) rank[t] = (int)t;
+  std::stable_sort(rank.begin(), rank.end(), [&list](int a, int b) {
+    return 1 + list.tasks[a].numTMatrices + list.tasks[a].size > 1 + list.tasks[b].numTMatrices + list.tasks[b].size;
   });
-  energy_tasks_.swap(tasks);
+  std::vector<EnergyTask> sorted(rank.size());
+  list.units.resize(n), list.tGroups.resize(n), list.providers.resize(n), list.owners.resize(n);
+  int next = 0;
+  for (std::size_t r = 0; r < rank.size(); r++) {
+    sorted[r] = list.tasks[rank[r]];
+    sorted[r].begin = next;
+    for (int i = 0; i < sorted[r].size; i++, next++) {
+      const int k = start[rank[r]] + i, o = order[k].ordinal;
+      list.units[next] = units[o], list.tGroups[next] = group[k], list.providers[next] = providers[o];
+      list.owners[next] = owners[o];
+    }
+  }
+  list.tasks.swap(sorted);
+  energy_tasks_ = std::move(list);
   energy_work_ = work;
   energy_units_.swap(units);
   energy_keys_.swap(keys);

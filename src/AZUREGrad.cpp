@@ -1,4 +1,5 @@
 #include "AZUREGrad.h"
+#include "GradEnergyTasks.h"
 #include "ModelPass.h"
 #include "Profile.h"
 #include <atomic>
@@ -6,6 +7,7 @@
 #include <iostream>
 #include <cstdlib>
 #include "CNuc.h"
+#include "CalculationPlan.h"
 #include "WorkingCopy.h"
 #include "JGroup.h"
 #include "ALevel.h"
@@ -475,11 +477,12 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, WorkingCopy *data,
 
 namespace {
 
-// Forward + adjoint for one target-effect (sub-point integrated) point.  The
-// integrator IntegrateTargetEffect is a fixed linear functional of the values
-// in the sub-points' cross-section slots, Y = sum_i c_i s_i, so the weights
-// c_i = dY/ds_i come from central differences on that cheap combiner (exact up
-// to rounding); each sub-point is then back-propagated with PointAdjoint.
+// The cotangents of the sub-points of one target-effect (sub-point integrated)
+// point.  The integrator IntegrateTargetEffect is a fixed linear functional of
+// the values in the sub-points' cross-section slots, Y = sum_i c_i s_i, so the
+// weights c_i = dY/ds_i come from one pass of the integrator on a linear form
+// (or central differences on it); each sub-point's cotangent is then fitBar c_i,
+// back-propagated with the other units at its energy (GradEnergyTasks.cpp).
 //
 // A cross section (or E1/E2 component) is Y itself.  A target-averaged
 // analyzing power is the ratio of two such functionals with the SAME weights
@@ -490,13 +493,12 @@ namespace {
 //     d<A> = sum_i c_i [ s_i dA_i + (A_i - <A>) ds_i ] / D,
 // so each sub-point contributes an A_y cotangent fitBar c_i s_i / D and a
 // differential-cross-section cotangent fitBar c_i (A_i - <A>) / D.
-// AZURE_GRAD_TIMING: thread-summed time in the target-effect combiner weights
-// (central differences on IntegrateTargetEffect) and in the sub-point adjoints.
-std::atomic<long long> g_teCombinerNs{0}, g_teAdjointNs{0};
+// AZURE_GRAD_TIMING: thread-summed time in the target-effect combiner weights.
+std::atomic<long long> g_teCombinerNs{0};
 
 bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &results, double fitBar, GradAccum &accum,
-                             const vector_matrix_r *shiftDeriv, int xsComponent,
-                             CNuc *compound, const Config &config) {
+                             int xsComponent, CNuc *compound, const Config &config, int row,
+                             std::vector<azure2::UnitCotangent> &out) {
   int nsp = point->NumSubPoints();
   if (nsp <= 0) return true;
 
@@ -521,19 +523,12 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
   // an a_k cotangent fitBar c_i A0_i / D (PointTBar's coefficient form) and an A_0 cotangent fitBar c_i (a_i - <a_k>) / D
   // (PointTBar with xsComponent -1).  An absolute A_k is linear in the sub-point values and takes the plain route.
   const bool isCoefNorm = point->IsCoefficient() && !point->GetCoefficientAbsolute();
-  if (isCoefNorm) {
-    if (xsComponent != 0) return false;
-    if (!ScopedPointMappingOff::Active() && (point->IsMapped() || point->PlanMapped(&data).size() > 0)) return false;
-  }
+  if (isCoefNorm && xsComponent != 0) return false;
   if (isAy) {
-    // Supported: particle-exit A_y, full observable, no point mapping in
-    // effect (a mapped point's sub-points would be written by another point's
-    // calculation).  GradOnePoint holds a ScopedPointMappingOff, so there every
-    // point, mapped or not, carries and calculates its own sub-points.  Capture
-    // A_y keeps its refusal: the attenuation folded into P_k has no
-    // counterpart for the P_k^1 of the numerator.
+    // Supported: particle-exit A_y, full observable (every point's sub-points are units of the point pass, with their
+    // own records).  Capture A_y keeps its refusal: the attenuation folded into P_k has no counterpart for the P_k^1
+    // of the numerator.
     if (xsComponent != 0) return false;
-    if (!ScopedPointMappingOff::Active() && (point->IsMapped() || point->PlanMapped(&data).size() > 0)) return false;
     const int exitPairNum = compound->GetPairNumFromKey(point->GetExitKey());
     if (compound->GetPair(exitPairNum)->GetPType() != 0) return false;
   }
@@ -647,50 +642,23 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
   const auto tc1 = std::chrono::steady_clock::now();
   g_teCombinerNs += std::chrono::duration_cast<std::chrono::nanoseconds>(tc1 - tc0).count();
 
-  bool ok = true;
-  for (int i = 1; i <= nsp && ok; i++) {
+  auto emit = [&](int i, double value, int component, bool ayCrossSection) {
+    if (value != 0.0) out.push_back({point->SubPointFirst() + i - 1, row, value, component, ayCrossSection});
+  };
+  for (int i = 1; i <= nsp; i++) {
     if (c[i - 1] == 0.0) continue;
     Unit *sp = point->GetSubPoint(data, i);
-    AMatrixFunc amf(compound, config);
-    amf.ClearMatrices();
-    amf.FillMatrices(sp);
-    amf.InvertMatrices();
-    amf.CalculateTMatrix(sp);
     if (!isAy && !isCoefNorm) {
-      if (!amf.PointAdjoint(sp, results, fitBar * c[i - 1], accum, shiftDeriv, xsComponent)) ok = false;
-      continue;
+      emit(i, fitBar * c[i - 1], xsComponent, false);
+    } else if (isCoefNorm) {
+      emit(i, fitBar * c[i - 1] * sp->GetAngDistA0(results) / den, 0, false);
+      emit(i, fitBar * c[i - 1] * (sigma[i - 1] - avg) / den, -1, false);
+    } else {
+      emit(i, fitBar * c[i - 1] * sigma[i - 1] / den, 0, false);
+      emit(i, fitBar * c[i - 1] * (sp->GetAnalyzingPower(results) - avg) / den, 0, true);
     }
-    if (isCoefNorm) {
-      const double a0 = sp->GetAngDistA0(results);
-      const double akBar = fitBar * c[i - 1] * a0 / den;
-      const double a0Bar = fitBar * c[i - 1] * (sigma[i - 1] - avg) / den;
-      if (akBar != 0.0 && !amf.PointAdjoint(sp, results, akBar, accum, shiftDeriv, 0)) ok = false;
-      if (ok && a0Bar != 0.0 && !amf.PointAdjoint(sp, results, a0Bar, accum, shiftDeriv, -1)) ok = false;
-      continue;
-    }
-    const double ayBar = fitBar * c[i - 1] * sigma[i - 1] / den;
-    const double xsBar = fitBar * c[i - 1] * (sp->GetAnalyzingPower(results) - avg) / den;
-    if (ayBar != 0.0 && !amf.PointAdjoint(sp, results, ayBar, accum, shiftDeriv, 0, false)) ok = false;
-    if (ok && xsBar != 0.0 && !amf.PointAdjoint(sp, results, xsBar, accum, shiftDeriv, 0, true)) ok = false;
   }
-  g_teAdjointNs += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - tc1).count();
-  return ok;
-}
-
-// Forward + adjoint for one data point (target-effect or direct A-matrix).
-bool GradAdjointPoint(WorkingCopy &data, Unit *point, azure2::Results &results, int xsComponent, double fitBar,
-                      GradAccum &accum, const vector_matrix_r *shiftDeriv, CNuc *compound, const Config &config) {
-  const TargetEffect *te = point->IsTargetEffect() ? data.Data().GetTargetEffect(point->GetTargetEffectNum()) : nullptr;
-  bool subpointTE = te && te->IsSubPointEffect();
-  if (subpointTE)
-    return GradTargetEffectAdjoint(data, point, results, fitBar, accum, shiftDeriv, xsComponent, compound, config);
-
-  AMatrixFunc amf(compound, config);
-  amf.ClearMatrices();
-  amf.FillMatrices(point);
-  amf.InvertMatrices();
-  amf.CalculateTMatrix(point);
-  return amf.PointAdjoint(point, results, fitBar, accum, shiftDeriv, xsComponent);
+  return true;
 }
 
 // The parameters' share of a point's model cotangents (ModelPass.h): each weighted term's abundance, a transform's
@@ -714,144 +682,37 @@ void AddParamCotangents(const azure2::ModelCotangents &c, const Segment *segment
   }
 }
 
-// The leaves' share: each term's point (or sub-point) back-propagated through the R-matrix with its cotangent --
-// sub-points of a Doppler map term by term, others sub-point by sub-point, as their sums were formed.
-bool AdjointOfLeaves(WorkingCopy &data, const azure2::ModelCotangents &c, azure2::Results &results, GradAccum &accum,
-                     const vector_matrix_r *shiftDeriv, CNuc *compound, const Config &config) {
-  auto subAdjoint = [&](const azure2::ModelCotangents::Leaf &l, std::size_t k) {
-    Unit *sp = l.point->GetSubPoint(data, static_cast<int>(k) + 1);
-    AMatrixFunc amf(compound, config);
-    amf.ClearMatrices();
-    amf.FillMatrices(sp);
-    amf.InvertMatrices();
-    amf.CalculateTMatrix(sp);
-    return amf.PointAdjoint(sp, results, l.sub[k], accum, shiftDeriv, l.xsComponent);
+}  // namespace
+
+bool azure2::PointCotangents(WorkingCopy &data, const GradPoint &p, CNuc *compound, const Config &config,
+                             azure2::Results &results, double fitBar, int row, GradAccum &params,
+                             std::vector<UnitCotangent> &out) {
+  if (fitBar == 0.0) return true;
+  // The cotangents of the point's expression tree: its leaves (points, or sub-points of a transform's terms) and its
+  // parameters.
+  ModelCotangents c;
+  if (!ModelPointBackward(data, *p.segment, p.pointIdx, compound, config, results, fitBar, c)) return false;
+  AddParamCotangents(c, p.segment, p.point, data, p.segNum, compound, params);
+  auto emit = [&](const Unit *u, double value, int component) {
+    if (value != 0.0) out.push_back({data.UnitIndex(u), row, value, component, false});
   };
-  if (!c.subPoints) {
-    for (const azure2::ModelCotangents::Leaf &l : c.leaves)
-      if (l.cotangent != 0.0 &&
-          !GradAdjointPoint(data, l.point, results, l.xsComponent, l.cotangent, accum, shiftDeriv, compound, config))
-        return false;
+  if (c.subPoints) {
+    for (const ModelCotangents::Leaf &l : c.leaves)
+      for (std::size_t k = 0; k < l.sub.size(); k++) emit(l.point->GetSubPoint(data, (int)k + 1), l.sub[k], l.xsComponent);
     return true;
   }
-  if (c.dopplerOrder) {
-    for (const azure2::ModelCotangents::Leaf &l : c.leaves)
-      for (std::size_t k = 0; k < l.sub.size(); k++)
-        if (l.sub[k] != 0.0 && !subAdjoint(l, k)) return false;
-    return true;
+  for (const ModelCotangents::Leaf &l : c.leaves) {
+    if (l.cotangent == 0.0) continue;
+    if (!HasSubPointFold(data, *l.point))
+      emit(l.point, l.cotangent, l.xsComponent);
+    else if (!GradTargetEffectAdjoint(data, l.point, results, l.cotangent, params, l.xsComponent, compound, config, row,
+                                      out))
+      return false;
   }
-  const std::size_t nsp = c.leaves.empty() ? 0 : c.leaves[0].sub.size();
-  for (std::size_t k = 0; k < nsp; k++)
-    for (const azure2::ModelCotangents::Leaf &l : c.leaves)
-      if (k < l.sub.size() && l.sub[k] != 0.0 && !subAdjoint(l, k)) return false;
   return true;
 }
 
-// Forward + adjoint for one (segment, point): returns the combined model in
-// `outModel` and accumulates fitBar * d(model)/d(E,gamma) into `accum`, where
-// fitBar = fitBarFn(segment, i, pointIdx, model).  The composition's adjoint is
-// the segment's expression tree's (azure2::ModelPointBackward): the cotangents of
-// its leaves and parameters, then each leaf through the R-matrix.  Plain points
-// share one forward between model and adjoint, as do SUM / RATIO terms at one
-// energy.  Returns false on an unsupported configuration.
-bool GradOnePoint(const Segment *segment, WorkingCopy *data, azure2::Results &results, int i, int pointIdx,
-                  CNuc *compound, const Config &config,
-                  const vector_matrix_r *shiftDeriv, const FitBarFn &fitBarFn,
-                  GradAccum &accum, double &outModel) {
-  // The points of a segment are processed in parallel here, so each one is
-  // calculated on its own, without point mapping (see ScopedPointMappingOff).
-  ScopedPointMappingOff noPointMapping;
-  Unit *point = segment->GetPoint(*data, pointIdx + 1);
-  outModel = 0.0;
-  if (!point) return true;
-  const bool hasComp = segment->HasComponents();
-  const TargetEffect *te = point->IsTargetEffect() ? data->Data().GetTargetEffect(point->GetTargetEffectNum()) : nullptr;
-  const bool subpointTE = te && te->IsSubPointEffect();
-  azure2::ModelCotangents c;
-  auto backward = [&](double fitBar) {
-    if (!azure2::ModelPointBackward(*data, *segment, pointIdx, compound, config, results, fitBar, c)) return false;
-    AddParamCotangents(c, segment, point, *data, i, compound, accum);
-    return true;
-  };
-
-  // Fast path: plain point, single forward reused for model and adjoint.
-  if (!segment->IsTransformed() && !hasComp && !subpointTE) {
-    AMatrixFunc amf(compound, config);
-    amf.ClearMatrices();
-    amf.FillMatrices(point);
-    amf.InvertMatrices();
-    amf.CalculateTMatrix(point);
-    amf.GenMatrixFunc::CalculateCrossSection(point, results);
-    outModel = azure2::EvaluateModelPoint(*data, *segment, pointIdx, compound, config, results, azure2::LeafValues::Ready);
-    const double fitBar = fitBarFn(segment, i, pointIdx, outModel);
-    if (fitBar == 0.0) return true;
-    if (!backward(fitBar)) return false;
-    return amf.PointAdjoint(point, results, c.leaves[0].cotangent, accum, shiftDeriv, c.leaves[0].xsComponent);
-  }
-
-  // A SUM or RATIO segment whose components share the base point's energy (WorkingCopy::MapLeaves): one
-  // level-matrix solution for every term, each term's T-matrix and cotangent in turn, and one back-propagation of
-  // the merged cotangents (TBarAdjointMany).  AZURE_NO_COMPONENT_MAPPING=1 keeps the per-term route below.
-  static const bool componentMappingOff = [] {
-    const char *e = std::getenv("AZURE_NO_COMPONENT_MAPPING");
-    return e && *e && std::string(e) != "0";
-  }();
-  if (!segment->IsTransformed() && hasComp && !subpointTE && !componentMappingOff) {
-    std::vector<Unit *> pts{point};
-    bool shared = true;
-    for (int t = 1; t < segment->NumTerms(); t++) {
-      if (pointIdx >= (int)segment->TermPoints(*data, t).size()) continue;
-      Unit *cp = segment->GetTermPoint(*data, t, pointIdx + 1);
-      if (!cp) continue;
-      if (cp->GetEntranceKey() != point->GetEntranceKey() || cp->GetCMEnergy() != point->GetCMEnergy() ||
-          cp->NumSubPoints() != 0)
-        shared = false;
-      pts.push_back(cp);
-    }
-    if (segment->GetOperationType() != SUM && pts.size() < 2) shared = false;
-    if (shared) {
-      AMatrixFunc amf(compound, config);
-      amf.ClearMatrices();
-      amf.FillMatrices(point);
-      amf.InvertMatrices();
-      int tExit = point->GetExitKey();
-      amf.CalculateTMatrix(point);
-      auto useExitOf = [&](Unit *p) {
-        if (p->GetExitKey() == tExit) return;
-        amf.RecalculateTMatrix(p);
-        tExit = p->GetExitKey();
-      };
-      for (Unit *p : pts) {
-        useExitOf(p);
-        amf.GenMatrixFunc::CalculateCrossSection(p, results);
-      }
-      outModel = azure2::EvaluateModelPoint(*data, *segment, pointIdx, compound, config, results, azure2::LeafValues::Ready);
-      const double fitBar = fitBarFn(segment, i, pointIdx, outModel);
-      if (fitBar == 0.0) return true;
-      if (!backward(fitBar)) return false;
-      std::vector<Unit *> barPts;
-      std::vector<TMatrixCotangent> bars;
-      for (const azure2::ModelCotangents::Leaf &l : c.leaves) {
-        if (l.cotangent == 0.0) continue;
-        useExitOf(l.point);
-        TMatrixCotangent bar;
-        if (!amf.PointTBar(l.point, results, l.cotangent, bar, l.xsComponent)) return false;
-        barPts.push_back(l.point);
-        bars.push_back(std::move(bar));
-      }
-      amf.TBarAdjointMany(barPts, bars, accum, shiftDeriv);
-      return true;
-    }
-  }
-
-  // Every other composition (components at other energies, sub-point effects, transmission and yield): the model
-  // from the calculated terms, then each leaf -- or each sub-point of a transform's terms -- on its own.
-  outModel = azure2::EvaluateModelPoint(*data, *segment, pointIdx, compound, config, results, azure2::LeafValues::Calculate);
-  const double fitBar = fitBarFn(segment, i, pointIdx, outModel);
-  if (fitBar == 0.0) return true;
-  if (!backward(fitBar)) return false;
-  return AdjointOfLeaves(*data, c, results, accum, shiftDeriv, compound, config);
-}
+namespace {
 
 // ---------------------------------------------------------------------------
 // THM (HOES) model derivative of one point -- a point or a mapped point, with
@@ -901,314 +762,6 @@ bool ThmPointModelGradient(WorkingCopy &data, Unit *point, azure2::Results &resu
   return true;
 }
 
-// ---------------------------------------------------------------------------
-// Energy groups.  Point mapping (WorkingCopy::MapData) collects the points that share
-// one energy-dependent calculation -- one level matrix and T-matrix -- within a
-// segment and across segments.  The gradient works on the same groups: one
-// forward solve per group, each member's observable from the shared T-matrix,
-// and the back-propagation through the level matrix once per group.
-// ---------------------------------------------------------------------------
-
-struct GroupMember {
-  const Segment *seg;
-  int segNum;    // 1-based
-  int pointIdx;  // 0-based
-  Unit *pt;
-};
-
-struct GradItem {
-  std::vector<GroupMember> members;  // members[0] is the host
-  bool grouped;                      // false: every member on its own (GradOnePoint)
-};
-
-// A point whose gradient can be taken from a shared T-matrix: no components
-// (SUM/RATIO) and no sub-point target effect.  The others keep GradOnePoint.
-bool Groupable(const WorkingCopy &data, const Segment *seg, Unit *pt) {
-  if (seg->HasComponents() || seg->IsTransformed()) return false;
-  if (pt->IsTargetEffect()) {
-    const TargetEffect *te = data.Data().GetTargetEffect(pt->GetTargetEffectNum());
-    if (te && te->IsSubPointEffect()) return false;
-  }
-  return true;
-}
-
-bool GroupedGradientOff() {
-  static const bool off = [] {
-    const char *e = std::getenv("AZURE_NO_GROUPED_GRADIENT");
-    return e && *e && std::string(e) != "0";
-  }();
-  return off;
-}
-
-// The work items of one gradient pass: each groupable host with the groupable
-// points mapped onto it, and every other point on its own.  Largest first, so
-// a big group does not end up last on one thread.
-//
-// THM (HOES) segments are left out when `skipTHM` (every caller but a
-// ComputeModelGradients without it): their observable is THMMatrixFunc's, not
-// the T-matrix one differentiated here, and their rows come from the HOES
-// adjoint (ComputeTHMRows) or the THM-only differences of AZURECalc::Gradient.
-// WorkingCopy::MapData maps a THM point only within its own segment and never maps
-// a classic point onto a THM one, so no group straddles the two.
-std::vector<GradItem> BuildGradItems(WorkingCopy *data, bool skipTHM) {
-  const bool off = GroupedGradientOff();
-  std::unordered_map<const Unit *, std::pair<int, int>> where;
-  for (int s = 1; s <= data->Data().NumSegments(); s++) {
-    const Segment *seg = data->Data().GetSegment(s);
-    if (!seg) continue;
-    for (int p = 1; p <= seg->NumPoints(); p++) where[seg->GetPoint(*data, p)] = {s, p - 1};
-  }
-  auto hostOf = [&](Unit *pt) -> Unit * {
-    if (!pt->IsMapped()) return nullptr;
-    EnergyMap m = pt->GetMap();
-    if (m.segment < 1 || m.segment > data->Data().NumSegments()) return nullptr;
-    const Segment *hs = data->Data().GetSegment(m.segment);
-    if (m.point < 1 || m.point > hs->NumPoints()) return nullptr;
-    Unit *h = hs->GetPoint(*data, m.point);
-    if (!Groupable(*data, hs, h) || h->GetCMEnergy() != pt->GetCMEnergy()) return nullptr;
-    const azure2::MappedPoints mapped = h->PlanMapped(data);
-    for (int k = 0; k < mapped.size(); k++)
-      if (mapped[k] == pt) return h;
-    return nullptr;
-  };
-  std::vector<GradItem> items;
-  for (int s = 1; s <= data->Data().NumSegments(); s++) {
-    const Segment *seg = data->Data().GetSegment(s);
-    if (!seg) continue;
-    if (skipTHM && seg->IsTHM()) continue;
-    for (int p = 1; p <= seg->NumPoints(); p++) {
-      Unit *pt = seg->GetPoint(*data, p);
-      if (!pt) continue;
-      const bool g = !off && Groupable(*data, seg, pt);
-      if (g && hostOf(pt)) continue;  // its host's item calculates it
-      GradItem it;
-      it.grouped = g;
-      it.members.push_back({seg, s, p - 1, pt});
-      if (g) {
-        const azure2::MappedPoints mapped = pt->PlanMapped(data);
-        for (int k = 0; k < mapped.size(); k++) {
-          Unit *m = mapped[k];
-          auto w = where.find(m);
-          if (w == where.end()) continue;
-          const Segment *ms = data->Data().GetSegment(w->second.first);
-          if (skipTHM && ms->IsTHM()) continue;
-          if (Groupable(*data, ms, m) && hostOf(m) == pt) it.members.push_back({ms, w->second.first, w->second.second, m});
-        }
-      }
-      items.push_back(std::move(it));
-    }
-  }
-  std::stable_sort(items.begin(), items.end(),
-                   [](const GradItem &a, const GradItem &b) { return a.members.size() > b.members.size(); });
-  return items;
-}
-
-void AddCotangent(TMatrixCotangent &dst, const TMatrixCotangent &src) {
-  if (dst.t.empty() && dst.ec.empty()) {
-    dst = src;
-    return;
-  }
-  for (size_t k = 0; k < src.t.size() && k < dst.t.size(); k++)
-    for (size_t m = 0; m < src.t[k].size() && m < dst.t[k].size(); m++) dst.t[k][m] += src.t[k][m];
-  for (size_t k = 0; k < src.ec.size() && k < dst.ec.size(); k++)
-    for (size_t m = 0; m < src.ec[k].size() && m < dst.ec[k].size(); m++) dst.ec[k][m] += src.ec[k][m];
-  dst.screen.insert(dst.screen.end(), src.screen.begin(), src.screen.end());
-}
-
-// The forward solve of a group, at its host's energy, and each member's model
-// from the shared T-matrix (the plain-point forward of GradOnePoint), its model
-// value (ModelPass.h).
-void GroupForward(WorkingCopy &data, AMatrixFunc &amf, const GradItem &it, azure2::Results &results, CNuc *compound,
-                  std::vector<double> &model) {
-  Unit *host = it.members[0].pt;
-  AZUREProfile::Timer profileTimer(AZUREProfile::kGradForward);
-  amf.ClearMatrices();
-  amf.FillMatrices(host);
-  amf.InvertMatrices();
-  amf.CalculateTMatrix(host);
-  const size_t g = it.members.size();
-  model.assign(g, 0.0);
-  for (size_t q = 0; q < g; q++) {
-    const GroupMember &m = it.members[q];
-    amf.GenMatrixFunc::CalculateCrossSection(m.pt, results);
-    model[q] = azure2::EvaluateModelPoint(data, *m.seg, m.pointIdx, compound, amf.configure(), results, azure2::LeafValues::Ready);
-  }
-}
-
-// A group member's cotangents for fitBar (its tree's backward: the leaf, and a sample's abundance into `accum`).
-bool MemberCotangents(WorkingCopy &data, AMatrixFunc &amf, const GroupMember &m, azure2::Results &results,
-                      CNuc *compound, double fitBar, azure2::ModelCotangents &c) {
-  return azure2::ModelPointBackward(data, *m.seg, m.pointIdx, compound, amf.configure(), results, fitBar, c);
-}
-
-// The scalar-objective adjoint of a group: the members' T-matrix cotangents are
-// summed (the back-propagation is linear in them) and back-propagated once.
-bool GroupGradient(WorkingCopy &data, AMatrixFunc &amf, const GradItem &it, azure2::Results &results, CNuc *compound, const vector_matrix_r *shiftDeriv,
-                   const FitBarFn &fitBarFn, GradAccum &accum) {
-  std::vector<double> model;
-  GroupForward(data, amf, it, results, compound, model);
-  TMatrixCotangent sum, bar;
-  bool any = false;
-  azure2::ModelCotangents c;
-  for (size_t q = 0; q < it.members.size(); q++) {
-    const GroupMember &m = it.members[q];
-    const double fitBar = fitBarFn(m.seg, m.segNum, m.pointIdx, model[q]);
-    if (fitBar == 0.0) continue;
-    if (!MemberCotangents(data, amf, m, results, compound, fitBar, c)) return false;
-    AddParamCotangents(c, m.seg, m.pt, data, m.segNum, compound, accum);
-    if (!amf.PointTBar(m.pt, results, c.leaves[0].cotangent, bar, c.leaves[0].xsComponent)) return false;
-    AddCotangent(sum, bar);
-    any = true;
-  }
-  if (any) amf.TBarAdjoint(it.members[0].pt, sum, accum, shiftDeriv);
-  return true;
-}
-
-// d(member model)/d(E, gamma) for every member of a group, as rows.  For each
-// member `rowFn(q, model, accum)` receives the member's combined model and its
-// gradient (scaled by fitBarOf(q, model)) in `accum`.
-//
-// The derivatives of the level matrix and T-matrix are taken once per group:
-// each member's row is a combination, with its own angle-dependent
-// coefficients, of the derivatives of the group's bilinear forms g_c^T A g_c'
-// (AMatrixFunc::BilinearAdjoint with the cotangents 1 and i, the real and
-// imaginary parts of the derivative).  A member then costs one contraction
-// with that basis instead of a back-propagation through the level matrix.
-// Where the basis would cost more than the members (few members, many channel
-// pairs) or the decay has external capture, each member is back-propagated on
-// its own -- still from the one shared forward solve.
-template <class FitBarOf, class RowFn>
-bool GroupRows(WorkingCopy &data, AMatrixFunc &amf, const GradItem &it, azure2::Results &results, CNuc *compound, const vector_matrix_r *shiftDeriv,
-               FitBarOf fitBarOf, RowFn rowFn, GradAccum &accum, GradAccum &scratch,
-               const AMatrixFunc::FreeMask *mask) {
-  std::vector<double> model;
-  GroupForward(data, amf, it, results, compound, model);
-  Unit *host = it.members[0].pt;
-  const size_t g = it.members.size();
-  std::vector<double> fitBar(g);
-  std::vector<azure2::ModelCotangents> cots(g);
-  std::vector<TMatrixCotangent> bars(g);
-  std::vector<std::vector<std::vector<BilinearTerm>>> terms(g);
-  bool bilinear = true;
-  for (size_t q = 0; q < g; q++) {
-    const GroupMember &m = it.members[q];
-    fitBar[q] = fitBarOf(q, model[q]);
-    if (fitBar[q] == 0.0) continue;
-    if (!MemberCotangents(data, amf, m, results, compound, fitBar[q], cots[q])) return false;
-    if (!amf.PointTBar(m.pt, results, cots[q].leaves[0].cotangent, bars[q], cots[q].leaves[0].xsComponent))
-      return false;
-    if (bilinear && !amf.CollectBilinearTerms(host, bars[q], terms[q])) bilinear = false;
-  }
-
-  // Cost of the two routes, in units of level-matrix elements.
-  struct Key { int j, ch, chp; };
-  std::vector<Key> keys;
-  std::vector<std::vector<int>> keyOf(g);
-  double costMembers = 0.0, costBasis = 0.0;
-  const bool levelBasis = (mask != nullptr);
-  std::vector<double> freeCount;
-  if (levelBasis) {
-    freeCount.assign(mask->e.size(), 0.0);
-    for (size_t j = 0; j < mask->e.size(); j++)
-      for (size_t la = 0; la < mask->e[j].size(); la++) {
-        freeCount[j] += mask->e[j][la];
-        for (char f : mask->g[j][la]) freeCount[j] += f;
-      }
-  }
-  if (bilinear) {
-    for (size_t q = 0; q < g; q++) {
-      for (int j = 1; j <= (int)terms[q].size(); j++) {
-        if (terms[q][j - 1].empty()) continue;
-        JGroup *jg = compound->GetJGroup(j);
-        const double n2 = (double)jg->NumLevels() * jg->NumLevels();
-        costMembers += n2 * (terms[q][j - 1].size() + jg->NumChannels());
-        for (const BilinearTerm &t : terms[q][j - 1]) {
-          int k = 0;
-          while (k < (int)keys.size() && !(keys[k].j == j && keys[k].ch == t.ch && keys[k].chp == t.chp)) k++;
-          if (k == (int)keys.size()) {
-            keys.push_back({j, t.ch, t.chp});
-            // LevelBasis: O(n) per free parameter of the group; else the
-            // structural adjoint, O(n^2 c).
-            costBasis += (levelBasis ? 2.0 * freeCount[j - 1] * jg->NumLevels() : 2.0 * n2 * (1.0 + jg->NumChannels()));
-          }
-          keyOf[q].push_back(k);
-          costBasis += 2.0 * jg->NumLevels() * (1.0 + jg->NumChannels());
-        }
-      }
-    }
-  }
-  const bool useBasis = bilinear && costBasis < costMembers;
-
-  if (!useBasis) {
-    for (size_t q = 0; q < g; q++) {
-      const GroupMember &m = it.members[q];
-      accum.Zero();
-      if (fitBar[q] != 0.0) {
-        AddParamCotangents(cots[q], m.seg, m.pt, data, m.segNum, compound, accum);
-        amf.TBarAdjoint(host, bars[q], accum, shiftDeriv);
-      }
-      rowFn(q, model[q], accum);
-    }
-    return true;
-  }
-
-  // The basis: for each channel pair, the J-group block (E then gamma, level by
-  // level) of the adjoint with cotangent 1 and with cotangent i.
-  std::vector<std::vector<double>> basisRe(keys.size()), basisIm(keys.size());
-  AZUREProfile::Timer profileBasis(AZUREProfile::kGradBackprop);
-  for (size_t k = 0; k < keys.size(); k++) {
-    const int j = keys[k].j;
-    JGroup *jg = compound->GetJGroup(j);
-    const int n = jg->NumLevels(), nch = jg->NumChannels();
-    for (int part = 0; part < 2; part++) {
-      std::vector<double> &block = part ? basisIm[k] : basisRe[k];
-      // The rank-two derivatives of the level matrix by free parameter
-      // (LevelBasis), O(n) each, where they apply.
-      const BilinearTerm term{keys[k].ch, keys[k].chp, part ? complex(0.0, 1.0) : complex(1.0, 0.0)};
-      if (mask && amf.LevelBasis(host, j, term, *mask, shiftDeriv, block)) continue;
-      for (int la = 0; la < n; la++) {
-        scratch.e[j - 1][la] = 0.0;
-        std::fill(scratch.gamma[j - 1][la].begin(), scratch.gamma[j - 1][la].end(), 0.0);
-      }
-      std::vector<BilinearTerm> one{{keys[k].ch, keys[k].chp, part ? complex(0.0, 1.0) : complex(1.0, 0.0)}};
-      amf.BilinearAdjoint(host, j, one, scratch, shiftDeriv);
-      block.assign((size_t)n * (1 + nch), 0.0);
-      for (int la = 0; la < n; la++) {
-        block[la] = scratch.e[j - 1][la];
-        for (int d = 0; d < nch; d++) block[n + (size_t)la * nch + d] = scratch.gamma[j - 1][la][d];
-      }
-    }
-  }
-  profileBasis.Stop();
-  AZUREProfile::Timer profileRows(AZUREProfile::kGradRows);
-  for (size_t q = 0; q < g; q++) {
-    const GroupMember &m = it.members[q];
-    accum.Zero();
-    if (fitBar[q] != 0.0) {
-      AddParamCotangents(cots[q], m.seg, m.pt, data, m.segNum, compound, accum);
-      // The electron-screening derivative is not in the bilinear forms (TBarAdjoint adds it on the other route).
-      for (const auto &s : bars[q].screen) accum.AddScreening(s.first, s.second);
-      size_t t = 0;
-      for (int j = 1; j <= (int)terms[q].size(); j++)
-        for (const BilinearTerm &term : terms[q][j - 1]) {
-          const int k = keyOf[q][t++];
-          const double a = std::real(term.beta), b = std::imag(term.beta);
-          const std::vector<double> &re = basisRe[k], &im = basisIm[k];
-          JGroup *jg = compound->GetJGroup(j);
-          const int n = jg->NumLevels(), nch = jg->NumChannels();
-          for (int la = 0; la < n; la++) {
-            accum.e[j - 1][la] += a * re[la] + b * im[la];
-            double *gr = &accum.gamma[j - 1][la][0];
-            const double *r0 = &re[n + (size_t)la * nch], *i0 = &im[n + (size_t)la * nch];
-            for (int d = 0; d < nch; d++) gr[d] += a * r0[d] + b * i0[d];
-          }
-        }
-    }
-    rowFn(q, model[q], accum);
-  }
-  return true;
-}
-
 void ReportBail(WorkingCopy &data, const char *what, const Segment *segment, int i) {
   if (!std::getenv("AZURE_GRAD_DEBUG") || !segment) return;
   Unit *pt = segment->GetPoint(data, 1);
@@ -1246,68 +799,14 @@ bool AccumulateEGammaGradient(CNuc *compound, WorkingCopy *data, azure2::Results
                               const vector_matrix_r *shiftDeriv,
                               const FitBarFn &fitBarFn,
                               GradAccum &accum) {
-  // The work items (energy groups and single points, BuildGradItems) are
-  // independent and only read the shared `compound`, so they run in parallel.
-  // The one shared write is the accumulation into `accum`, so each thread
-  // accumulates into its OWN GradAccum and they are summed once at the end (a
-  // reduction).  The norm gradient is accumulated through `fitBarFn`'s side
-  // effect, which the callers guard with `#pragma omp atomic`.
-#ifdef _OPENMP
-  const int nThreads = std::max(1, omp_get_max_threads());
-#else
-  const int nThreads = 1;
-#endif
-  std::vector<GradAccum> threadAccum(nThreads);
-  for (GradAccum &ta : threadAccum) {
-    ta.Init(compound);
-    // A scalar pass: the Brune and Park level-matrix adjoints are summed in the
-    // formal parameters and resolved once below.
-    ta.formal = true;
-  }
-
   // THM (HOES) segments are computed by THMMatrixFunc, not the T-matrix
   // observable this adjoint differentiates; they are left out here. Their
   // contribution to the gradient is added in AZURECalc::Gradient by the HOES
   // adjoint or finite differences of a chi^2 restricted to THM segments, so
   // mixed THM+direct datasets keep the analytic speed-up on the direct part.
   if (FormalPartsOutsideAdjoint(compound, pmap)) return false;
-  const std::vector<GradItem> items = BuildGradItems(data, /*skipTHM=*/true);
-  bool bail = false;
   int bailSeg = 0;
-#pragma omp parallel shared(bail, bailSeg)
-  {
-    AMatrixFunc amf(compound, config);
-#pragma omp for schedule(dynamic, 1)
-    for (int k = 0; k < (int)items.size(); k++) {
-      if (bail) continue;
-#ifdef _OPENMP
-      GradAccum &local = threadAccum[omp_get_thread_num()];
-#else
-      GradAccum &local = threadAccum[0];
-#endif
-      const GradItem &it = items[k];
-      bool ok = true;
-      if (it.grouped && it.members.size() > 1) {
-        ok = GroupGradient(*data, amf, it, results, compound, shiftDeriv, fitBarFn, local);
-      } else {
-        for (const GroupMember &m : it.members) {
-          double model;
-          if (!GradOnePoint(m.seg, data, results, m.segNum, m.pointIdx, compound, config, shiftDeriv, fitBarFn, local, model)) {
-            ok = false;
-            break;
-          }
-        }
-      }
-      if (!ok) {
-#pragma omp critical
-        {
-          if (!bail) bailSeg = it.members[0].segNum;
-          bail = true;
-        }
-      }
-    }
-  }
-  if (bail) {
+  if (!azure2::EnergyTaskGradient(compound, data, results, config, shiftDeriv, fitBarFn, accum, bailSeg)) {
     if (std::getenv("AZURE_GRAD_DEBUG")) {
       static std::atomic<bool> told{false};
       if (!told.exchange(true)) {
@@ -1328,11 +827,9 @@ bool AccumulateEGammaGradient(CNuc *compound, WorkingCopy *data, azure2::Results
                   << "R-matrix J group: " << (inactiveLevel ? "YES" : "no") << std::endl;
       }
     }
-    // On bail the caller ignores `accum` and falls back to finite differences,
-    // so leave it untouched.
+    // On bail the caller ignores `accum` and falls back to finite differences.
     return false;
   }
-  for (const GradAccum &ta : threadAccum) accum.Add(ta);
   if (accum.formalUsed) {
     AMatrixFunc amf(compound, config);
     amf.ResolveFormalCotangents(accum, shiftDeriv);
@@ -1342,11 +839,6 @@ bool AccumulateEGammaGradient(CNuc *compound, WorkingCopy *data, azure2::Results
 
 namespace {
 
-// Rows of d(model)/d(theta) for every point, through the energy groups:
-// writeRow(member, model, accum) receives each point's combined model and
-// fitBarOf(member) times its gradient.  Shared by the residual Jacobian and the
-// model gradients.  Returns false, with `bailSeg` set, if a point is outside
-// the analytic path.
 // The free level parameters of the packed vector, per J-group (FormalBasis).
 AMatrixFunc::FreeMask BuildFreeMask(CNuc *compound, const ParamIndexMap &pmap) {
   AMatrixFunc::FreeMask mask;
@@ -1365,61 +857,6 @@ AMatrixFunc::FreeMask BuildFreeMask(CNuc *compound, const ParamIndexMap &pmap) {
     }
   }
   return mask;
-}
-
-template <class FitBarOf, class WriteRow>
-bool ForEachRow(CNuc *compound, WorkingCopy *data, azure2::Results &results, const Config &config, const vector_matrix_r *shiftDeriv,
-                FitBarOf fitBarOf, WriteRow writeRow, int &bailSeg, int &numGroups, bool skipTHM,
-                const ParamIndexMap &pmap, const AMatrixFunc::FreeMask *mask) {
-  const std::vector<GradItem> items = BuildGradItems(data, skipTHM);
-  numGroups = 0;
-  if (FormalPartsOutsideAdjoint(compound, pmap) && data->Data().NumSegments() > 0) {
-    bailSeg = 1;
-    return false;
-  }
-  for (const GradItem &it : items)
-    if (it.grouped && it.members.size() > 1) numGroups++;
-  bool bail = false;
-  bailSeg = 0;
-#pragma omp parallel shared(bail, bailSeg)
-  {
-    GradAccum accum, scratch;  // per-thread, reused across its rows
-    accum.Init(compound);
-    scratch.Init(compound);
-    accum.mask = mask;
-    AMatrixFunc amf(compound, config);
-#pragma omp for schedule(dynamic, 1)
-    for (int k = 0; k < (int)items.size(); k++) {
-      if (bail) continue;
-      const GradItem &it = items[k];
-      bool ok = true;
-      if (it.grouped && it.members.size() > 1) {
-        auto fb = [&](size_t q, double) { return fitBarOf(it.members[q]); };
-        auto row = [&](size_t q, double model, GradAccum &acc) { writeRow(it.members[q], model, acc); };
-        ok = GroupRows(*data, amf, it, results, compound, shiftDeriv, fb, row, accum, scratch, mask);
-      } else {
-        for (const GroupMember &m : it.members) {
-          const double fitBar = fitBarOf(m);
-          FitBarFn oneFitBar = [fitBar](const Segment *, int, int, double) -> double { return fitBar; };
-          accum.Zero();
-          double model = 0.0;
-          if (!GradOnePoint(m.seg, data, results, m.segNum, m.pointIdx, compound, config, shiftDeriv, oneFitBar, accum, model)) {
-            ok = false;
-            break;
-          }
-          writeRow(m, model, accum);
-        }
-      }
-      if (!ok) {
-#pragma omp critical
-        {
-          if (!bail) bailSeg = it.members[0].segNum;
-          bail = true;
-        }
-      }
-    }
-  }
-  return !bail;
 }
 
 }  // namespace
@@ -1443,14 +880,11 @@ bool ComputeResidualJacobian(CNuc *compound, WorkingCopy *data, azure2::Results 
     for (int i = 1; i <= data->Data().NumSegments(); i++)
       if (data->Data().GetSegment(i) && data->Data().GetSegment(i)->IsTHM()) return false;
 
-  // Each (non-null) point is one independent row, so pre-assign every point a
-  // global row index (mirroring the serial null-skip) and pre-size the outputs.
-  // Rows can then be filled in parallel with no contention -- each work item
-  // writes only the rows of its own points.
+  // One row per (non-null) point, segments in order (THM rows left zero).
   const int nSeg = data->Data().NumSegments();
   std::vector<std::vector<int>> rowOf(nSeg + 1);
   std::vector<double> norm(nSeg + 1, 0.0);
-  std::vector<int> normFull(nSeg + 1, -1);
+  std::vector<int> normPacked(nSeg + 1, -1);
   int totalRows = 0;
   for (int i = 1; i <= nSeg; i++) {
     const Segment *segment = data->Data().GetSegment(i);
@@ -1462,55 +896,60 @@ bool ComputeResidualJacobian(CNuc *compound, WorkingCopy *data, azure2::Results 
     norm[i] = data->State(*segment).norm;
     // A norm-group follower's rows depend on its leader's norm parameter.
     const int normOwner = data->Data().NormOwner(i);
-    normFull[i] = data->Data().GetSegment(normOwner)->IsVaryNorm() ? pmap.NormIndex(normOwner) : -1;
+    const int full = data->Data().GetSegment(normOwner)->IsVaryNorm() ? pmap.NormIndex(normOwner) : -1;
+    normPacked[i] = (full >= 0 && full < pmap.NumFull()) ? pmap.FullToPacked(full) : -1;
   }
   residuals.assign(totalRows, 0.0);
   jacobian.assign((size_t)totalRows * nCols, 0.0);
+  if (FormalPartsOutsideAdjoint(compound, pmap) && nSeg > 0) {
+    residuals.clear();
+    jacobian.clear();
+    return false;
+  }
 
   const bool timing = std::getenv("AZURE_GRAD_TIMING") != nullptr;
-  const long long comb0 = g_teCombinerNs.load(), adj0 = g_teAdjointNs.load();
+  const long long comb0 = g_teCombinerNs.load();
   const auto ts0 = std::chrono::steady_clock::now();
 
   // r = (model/J - data*n)/(err*n) (DataResidual); d r/d model = 1/(err*n*J) yields d r/d(E,gamma) directly.
-  auto fitBarOf = [&](const GroupMember &m) {
-    const double denom = m.seg->LabError(m.pointIdx) * norm[m.segNum];
-    return (denom != 0.0) ? 1.0 / denom / Segment::Jacobian(data->State(*m.seg), 0, m.pointIdx) : 0.0;
+  auto fitBarOf = [&](const azure2::GradPoint &m, double) {
+    const double denom = m.segment->LabError(m.pointIdx) * norm[m.segNum];
+    return (denom != 0.0) ? 1.0 / denom / Segment::Jacobian(data->State(*m.segment), 0, m.pointIdx) : 0.0;
   };
-  static thread_local vector_r fullRow;
-  auto writeRow = [&](const GroupMember &m, double model, const GradAccum &accum) {
-    const int row = rowOf[m.segNum][m.pointIdx];
-    if (row < 0) return;
-    const double n = norm[m.segNum];
-    const double labErr = m.seg->LabError(m.pointIdx), jac = Segment::Jacobian(data->State(*m.seg), 0, m.pointIdx);
-    const azure2::Residual res = azure2::DataResidual(model, jac, m.seg->LabValue(m.pointIdx), labErr, n);
-    residuals[row] = res.Pull();
-    // Scatter this row's d r / d(E,gamma) into the packed columns.
-    fullRow.assign(pmap.NumFull(), 0.0);
-    accum.Scatter(pmap, fullRow);
-    // Norm column:  d r / d n = -(model/J)/(err*n^2).
-    if (normFull[m.segNum] >= 0 && labErr != 0.0 && n != 0.0) fullRow[normFull[m.segNum]] += -res.model / (labErr * n * n);
-    const size_t base = (size_t)row * nCols;
-    for (int f = 0; f < pmap.NumFull(); f++) {
-      int packed = pmap.FullToPacked(f);
-      if (packed >= 0 && packed < nCols) jacobian[base + packed] = fullRow[f];
-    }
-  };
-  int bailSeg = 0, numGroups = 0;
   const AMatrixFunc::FreeMask mask = BuildFreeMask(compound, pmap);
-  const bool ok = ForEachRow(compound, data, results, config, shiftDeriv, fitBarOf, writeRow, bailSeg, numGroups,
-                             /*skipTHM=*/true, pmap, &mask);
-  if (!ok) ReportBail(*data, "Jacobian/gradient", data->Data().GetSegment(bailSeg), bailSeg);
+  std::vector<azure2::GradPoint> points;
+  std::vector<double> models, rows;
+  int bailSeg = 0, numTasks = 0;
+  const bool ok = azure2::EnergyTaskRows(compound, data, results, config, shiftDeriv, pmap, &mask, fitBarOf, points,
+                                         models, rows, bailSeg, numTasks);
+  if (!ok) {
+    ReportBail(*data, "Jacobian/gradient", data->Data().GetSegment(bailSeg), bailSeg);
+  } else {
+    for (std::size_t k = 0; k < points.size(); k++) {
+      const azure2::GradPoint &m = points[k];
+      const int row = rowOf[m.segNum][m.pointIdx];
+      if (row < 0) continue;
+      const double n = norm[m.segNum];
+      const double labErr = m.segment->LabError(m.pointIdx), jac = Segment::Jacobian(data->State(*m.segment), 0, m.pointIdx);
+      const azure2::Residual res = azure2::DataResidual(models[k], jac, m.segment->LabValue(m.pointIdx), labErr, n);
+      residuals[row] = res.Pull();
+      double *out = jacobian.data() + (size_t)row * nCols;
+      std::copy(rows.begin() + k * nCols, rows.begin() + (k + 1) * nCols, out);
+      // Norm column:  d r / d n = -(model/J)/(err*n^2).
+      const int np = normPacked[m.segNum];
+      if (np >= 0 && np < nCols && labErr != 0.0 && n != 0.0) out[np] += -res.model / (labErr * n * n);
+    }
+  }
 
   if (timing) {
     static std::atomic<int> calls{0};
     const int c = ++calls;
     if (c <= 3 || c % 50 == 0)
-      std::cerr << "[grad-timing] Jacobian rows " << c << ": " << totalRows << " rows, " << numGroups
-                << " energy groups, "
+      std::cerr << "[grad-timing] Jacobian rows " << c << ": " << totalRows << " rows, " << numTasks
+                << " energy tasks, "
                 << std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - ts0).count()
                 << " ms; target-effect combiner weights " << (g_teCombinerNs.load() - comb0) / 1.0e6
-                << " ms, sub-point adjoints " << (g_teAdjointNs.load() - adj0) / 1.0e6 << " ms (thread-summed)"
-                << std::endl;
+                << " ms (thread-summed)" << std::endl;
   }
 
   if (!ok) {
@@ -1528,41 +967,36 @@ bool ComputeModelGradients(CNuc *compound, WorkingCopy *data, azure2::Results &r
   gradByPoint.clear();
   const int nCols = pmap.NumPacked();
   const int nSeg = data->Data().NumSegments();
-
-  // Pre-create every point's (zero-initialized) packed row so the parallel loop
-  // only writes into slots that already exist -- std::map insertion is not
-  // thread-safe, so all keys must be present before the parallel region.
+  // The rows of THM (HOES) points come from the HOES adjoint (ComputeTHMRows): without skipTHM their presence takes
+  // the caller off the analytic path; with it they are left zero for the caller to fill.
   for (int i = 1; i <= nSeg; i++) {
     const Segment *segment = data->Data().GetSegment(i);
     if (!segment) continue;
+    if (segment->IsTHM() && !skipTHM) return false;
     for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
       Unit *pt = segment->GetPoint(*data, pointIdx + 1);
       if (pt) gradByPoint[pt] = vector_r(nCols, 0.0);
     }
   }
-
+  if (FormalPartsOutsideAdjoint(compound, pmap) && nSeg > 0) {
+    gradByPoint.clear();
+    return false;
+  }
   // fitBar = d(model)/d(model) = 1 gives d(model)/d(E,gamma) directly.
-  auto fitBarOf = [](const GroupMember &) { return 1.0; };
-  static thread_local vector_r fullRow;
-  auto writeRow = [&](const GroupMember &m, double, const GradAccum &accum) {
-    fullRow.assign(pmap.NumFull(), 0.0);
-    accum.Scatter(pmap, fullRow);
-    vector_r &row = gradByPoint[m.pt];  // key pre-inserted above
-    for (int f = 0; f < pmap.NumFull(); f++) {
-      int packed = pmap.FullToPacked(f);
-      if (packed >= 0 && packed < nCols) row[packed] = fullRow[f];
-    }
-  };
-  int bailSeg = 0, numGroups = 0;
+  auto fitBarOf = [](const azure2::GradPoint &, double) { return 1.0; };
   const AMatrixFunc::FreeMask mask = BuildFreeMask(compound, pmap);
-  // skipTHM: the rows of THM (HOES) points are left zero for the caller.
-  const bool ok = ForEachRow(compound, data, results, config, shiftDeriv, fitBarOf, writeRow, bailSeg, numGroups, skipTHM,
-                             pmap, &mask);
-  if (!ok) {
+  std::vector<azure2::GradPoint> points;
+  std::vector<double> models, rows;
+  int bailSeg = 0, numTasks = 0;
+  if (!azure2::EnergyTaskRows(compound, data, results, config, shiftDeriv, pmap, &mask, fitBarOf, points, models, rows,
+                              bailSeg, numTasks)) {
     ReportBail(*data, "Jacobian/gradient", data->Data().GetSegment(bailSeg), bailSeg);
     gradByPoint.clear();
+    return false;
   }
-  return ok;
+  for (std::size_t k = 0; k < points.size(); k++)
+    std::copy(rows.begin() + k * nCols, rows.begin() + (k + 1) * nCols, gradByPoint[points[k].point].begin());
+  return true;
 }
 
 // THM (HOES) rows: see the declaration in AZUREGrad.h.  Shared by the API

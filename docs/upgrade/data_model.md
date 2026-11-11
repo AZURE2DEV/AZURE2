@@ -280,8 +280,7 @@ An evaluation in Phase 4:
 
 Nothing in `GenMatrixFunc`, `AMatrixFunc` or the folds changes except where a value is stored: `point->SetFitCrossSection(x)`
 becomes a write to the unit's slot in the `Results` the task was given. The lazy path used inside an enclosing
-parallel region (`pre = false`) runs the plan's tasks serially and then the tree pass; `ScopedPointMappingOff` is a
-plan with no mapping.
+parallel region (`pre = false`) runs the plan's tasks serially and then the tree pass.
 
 ### 2.5 Library placement
 

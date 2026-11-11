@@ -20,14 +20,6 @@
 #include "Unit.h"
 #include "TargetEffect.h"
 
-namespace {
-thread_local bool tlPointMappingOff = false;
-}
-
-ScopedPointMappingOff::ScopedPointMappingOff() : previous_(tlPointMappingOff) { tlPointMappingOff = true; }
-ScopedPointMappingOff::~ScopedPointMappingOff() { tlPointMappingOff = previous_; }
-bool ScopedPointMappingOff::Active() { return tlPointMappingOff; }
-
 void Unit::MarkFailed(WorkingCopy *data, azure2::Results &results, const char *role, const Config &configure,
                         const char *why) {
   // Every fixed quantity NaN and no angular-distribution coefficient, on this point and every point mapped onto it.
@@ -58,9 +50,8 @@ bool Unit::InjectedFailure() const {
 
 void Unit::Calculate(WorkingCopy *data, CNuc *theCNuc, const Config &configure, azure2::Results &results) {
   if (this->InjectedFailure()) throw std::runtime_error("injected failure (AZURE_TEST_FAIL_E).");
-  // Points mapped onto this one (WorkingCopy::MapData): they share its energy, and each of its sub-points' energies,
-  // unless mapping is switched off on this thread (ScopedPointMappingOff).
-  const azure2::MappedPoints mappedPts = ScopedPointMappingOff::Active() ? azure2::MappedPoints() : this->PlanMapped(data);
+  // Points mapped onto this one (WorkingCopy::MapData): they share its energy, and each of its sub-points' energies.
+  const azure2::MappedPoints mappedPts = this->PlanMapped(data);
   const int numMapped = mappedPts.size();
   std::vector<Unit *> units(1 + numMapped);
   if (!this->IsTargetEffect() || !azure2::HasSubPointFold(*data, *this)) {
@@ -90,7 +81,7 @@ void Unit::PrepareSubPoints(WorkingCopy *data, CNuc *theCNuc, const Config &conf
 }
 
 void Unit::FoldSubPoints(WorkingCopy *data, CNuc *theCNuc, const Config &configure, azure2::Results &results) {
-  const azure2::MappedPoints mappedPts = ScopedPointMappingOff::Active() ? azure2::MappedPoints() : this->PlanMapped(data);
+  const azure2::MappedPoints mappedPts = this->PlanMapped(data);
   const int numMapped = mappedPts.size();
   const TargetEffect *effect = data->Data().GetTargetEffect(this->GetTargetEffectNum());
   if (effect->IsTargetIntegration() && !effect->IsThickTarget()) {

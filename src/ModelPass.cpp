@@ -49,7 +49,7 @@ bool CalculatePoint(WorkingCopy &data, Unit *point, const char *role, CNuc *cnuc
 
 // Whether the combination calculates `point` itself: the leaves are not in yet, and the point is its own host.
 bool CalculatesItself(const Unit *point, azure2::LeafValues leaves) {
-  return leaves == azure2::LeafValues::Calculate && (!point->IsMapped() || ScopedPointMappingOff::Active());
+  return leaves == azure2::LeafValues::Calculate && !point->IsMapped();
 }
 
 // A sample segment's point whose combination fails: its per-nucleus terms are NaN too (written by this evaluation).

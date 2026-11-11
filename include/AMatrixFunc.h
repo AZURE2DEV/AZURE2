@@ -13,7 +13,7 @@ class JGroup;
 /*!
  * Cotangents of the T-matrix elements of one decay (AMatrixFunc::PointTBar):
  * t[k-1][m-1] for the internal pathways T(k,m), ec[k-1][m-1] for the
- * external-capture ones.  Same convention as PointAdjoint: zbar = dL/dRe(z) +
+ * external-capture ones.  Convention: zbar = dL/dRe(z) +
  * i dL/dIm(z).
  */
 struct TMatrixCotangent {
@@ -148,35 +148,6 @@ class AMatrixFunc : public GenMatrixFunc {
                                     int maskChannel);
 
   /*!
-   * Reverse-mode (adjoint) gradient of one energy point's cross section
-   * (angle-integrated or differential).  Assumes FillMatrices/InvertMatrices/
-   * CalculateTMatrix have already been run for `point`.  `fitBar` is the
-   * cotangent dlnL/dmodel; the resulting dlnL/dE and dlnL/dgamma are
-   * accumulated into `accum`.
-   *
-   * Under the Brune formalism the level-energy gradient acquires explicit terms
-   * through S(E_lambda); pass `shiftDeriv` (from BuildShiftDerivTable) to have
-   * them included analytically.  If `shiftDeriv` is null the energy gradient
-   * omits those terms (only valid for non-Brune models).
-   *
-   * Handles angle-integrated, differential (incl. UPOS) and phase-shift cross
-   * sections.  `xsComponent` selects which cross-section component the cotangent
-   * refers to (0 = full, 1 = E1, 2 = E2), used for E1/E2 component segments.
-   *
-   * Returns false (accumulating nothing) when the point's configuration is
-   * outside the supported path (RMC / active-level compaction / angular-dist
-   * coefficients), so the caller can fall back to finite differences.  See
-   * PLAN.md Phases 2-4, 6.
-   *
-   * `ayCrossSection` (analyzing-power points only): back-propagate the
-   * differential cross section the point carries alongside A_y instead of A_y
-   * itself.  A target-integrated A_y weights each sub-point's A_y by that cross
-   * section, so its adjoint needs both (GradTargetEffectAdjoint).
-   */
-  bool PointAdjoint(Unit *point, const azure2::Results &results, double fitBar, GradAccum &accum,
-                    const vector_matrix_r *shiftDeriv = nullptr,
-                    int xsComponent = 0, bool ayCrossSection = false);
-  /*!
    * The level-matrix part of the THM (HOES) adjoint: given the cotangent
    * `aBar` of the level matrix A of J group `jNum` (active-level indexing, as
    * GetAMatrix), accumulates its contribution to dE and dgamma -- the inverse
@@ -191,31 +162,28 @@ class AMatrixFunc : public GenMatrixFunc {
                               const std::vector<int> *levelOf = nullptr);
 
   /*!
-   * The first half of PointAdjoint: the cotangents of the T-matrix elements
+   * Reverse mode, first half (the gradient over the energy tasks, GradEnergyTasks.cpp, sums these over the units
+   * of a T-matrix group): the cotangents of the T-matrix elements
    * held by this object, for `fitBar` times the derivative of `point`'s
-   * observable.  The T-matrix may be that of another point at the same energy
-   * (a host of point mapping, WorkingCopy::MapData): only the angle-dependent parts
+   * observable.  The T-matrix may be that of another unit at the same energy
+   * (the provider of the unit's T-matrix group, CalculationPlan.h): only the angle-dependent parts
    * (Legendre polynomials, Coulomb amplitude, A_y coefficients) are read from
-   * `point`.  Returns false, with `bar` unusable, where PointAdjoint would.
+   * `point`.  Handles angle-integrated, differential (incl. UPOS), phase-shift, A_y and angular-coefficient
+   * observables; `xsComponent` selects the cross-section component (0 full, 1 E1, 2 E2, -1 the angle-integrated
+   * A_0 of an angular distribution), `ayCrossSection` the differential cross section an A_y point carries
+   * instead of A_y.  Returns false, with `bar` unusable, where the configuration is outside the analytic path
+   * (RMC, active-level compaction, angular-distribution test points): finite differences then.
    */
   bool PointTBar(Unit *point, const azure2::Results &results, double fitBar, TMatrixCotangent &bar,
                  int xsComponent = 0, bool ayCrossSection = false);
   /*!
-   * The second half of PointAdjoint: back-propagates T-matrix cotangents to the
+   * Reverse mode, second half: back-propagates T-matrix cotangents to the
    * level energies and reduced widths, at the energy of `energyPoint` (whose
    * T-matrix this object holds).  Linear in `bar`, so the cotangents of all the
    * points sharing one T-matrix may be summed first.
    */
   void TBarAdjoint(Unit *energyPoint, const TMatrixCotangent &bar, GradAccum &accum,
                    const vector_matrix_r *shiftDeriv = nullptr);
-  /*!
-   * TBarAdjoint for the T-matrix cotangents of several points at one energy whose exit pairs may differ (the terms of
-   * a SUM or RATIO segment): bars[q] belongs to points[q]'s decay.  The decays without external capture enter only
-   * through bilinear forms g_c^T A g_c', which do not depend on the exit, so their terms are merged by channel pair
-   * and back-propagated once per J-group; a decay with external capture is back-propagated on its own.
-   */
-  void TBarAdjointMany(const std::vector<Unit *> &points, const std::vector<TMatrixCotangent> &bars,
-                       GradAccum &accum, const vector_matrix_r *shiftDeriv = nullptr);
   /*!
    * The internal-pathway cotangents of `bar` as bilinear-form terms, per
    * J-group (terms[j-1]), merged by channel pair.  False if the decay has
@@ -238,7 +206,7 @@ class AMatrixFunc : public GenMatrixFunc {
   /*!
    * The derivative of one bilinear term beta g_ch^T A g_chp of J-group j, at
    * the energy held now, with respect to the free level parameters of `mask`,
-   * as the block GroupRows uses (energies, then widths level by level; zero for
+   * as the basis of the rows of an energy task uses (GradEnergyTasks.cpp; energies, then widths level by level; zero for
    * fixed parameters).  A level parameter changes the level matrix
    * M = K - E N - G Lambda G^T by rank two in its level's row and column,
    * dK = e_l k^T + k e_l^T and dN = e_l q^T + q e_l^T with k, q kept per

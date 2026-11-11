@@ -339,7 +339,7 @@ intEC signature hashes it (formal-basis files are recomputed once; Brune and Par
 6.049 MeV capture still differed by 0.48. (2) Only final states above the lowest level of their block are recomputed:
 the lowest level's formal parameters are its Brune ones (B_c is taken there), and recomputing them sent `tests/13N`'s
 ground state through the gradient fall-back. (3) The analytic gradient falls back to finite differences in the formal
-basis when such a final state exists (`AZUREGrad.cpp`, `ForEachRow`). (4) The default `--ignore-externals` still makes
+basis when such a final state exists (`AZUREGrad.cpp`, `FormalPartsOutsideAdjoint`). (4) The default `--ignore-externals` still makes
 the bases differ (below).
 
 **Evidence.** Engine before (9d50667f) and after (09e7b3d0), GCC 11.5, Release, GUI off, all 179 `.azr` under `tests/`,

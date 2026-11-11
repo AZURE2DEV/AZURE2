@@ -470,7 +470,7 @@ ThmAdjointContext BuildThmAdjointContext(CNuc *compound, const Config &configure
  *     bucket vertices v, per exit channel and bucket the amplitude
  *       amp = sum_{la,lap} gEx_la [N_C(la)] A_{la,lap} v_lap  [+ c(E) u],
  *     and sigma (as the forward, the same sums in the same order);
- *  2. ampBar = d sigma/d amp (cotangent convention of PointAdjoint:
+ *  2. ampBar = d sigma/d amp (cotangent convention of AMatrixFunc::PointTBar:
  *     zbar = d/dRe z + i d/dIm z): 2 W amp for an incoherent |amp|^2 term of
  *     weight W, or through the Legendre sum of the angular window;
  *  3. amp -> gEx (explicit, also for a width under the cutoff the forward

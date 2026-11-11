@@ -29,7 +29,7 @@ independent checks do that:
    machine precision, which is what pins the pathway enumeration, the coupling
    order and every hat factor.
 3. **Against central differences.** The analytic adjoint in
-   `AMatrixFunc::PointAdjoint` agrees with numerical derivatives of `A_y` to
+   `AMatrixFunc::PointTBar` with `TBarAdjoint` agrees with numerical derivatives of `A_y` to
    ~1e-6 of the column scale over all points and all R-matrix parameters,
    external capture included.
 
