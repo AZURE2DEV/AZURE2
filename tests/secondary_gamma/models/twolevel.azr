@@ -10,6 +10,7 @@ none #Legendre Polynomial Check
 none #Coulomb Amplitudes Check
 none #Reaction Pathway Check
 none #Angular Distributions Check
+format=3
 </config>
 <levels>
 2.5  1  11.0  1  1  2  1  6  1  1  1  3000.0  0  1  0.5  -1  0  4.0026  13.0033  2  6  4.14313  6.35869  0  0  0.0  0  5.4  0  0  0
@@ -21,11 +22,34 @@ none #Angular Distributions Check
 1.5  1  11.1  1  1  6  3  6  2  1  1  6000.0  0  1  1.5  -1  3.6845  4.0026  13.0033  2  6  4.14313  6.35869  0  0  0.0  0  5.4  0  0  0
 
 </levels>
-<segmentsData>
-1  2  6  5.904580  6.366143  0  180  4  1  0  0  0  0.02  1  data/twolevel_upos.dat  0  1  1  0.5  -0.094
-1  2  6  5.904580  6.366143  0  180  4  1  0  0  0  0.02  1  data/twolevel_upos2.dat  0  1  1  0.5  0
-</segmentsData>
-<segmentsTest>
-</segmentsTest>
-<targetInt>
-</targetInt>
+<data>
+# <segmentsData> line 1
+dataset twolevel_upos
+    reaction        13C(a,a)13C[3.6845]
+    quantity        dsigma_domega
+    unit            b/sr
+    secondary_gamma L 1 Ic 1/2 delta -0.094
+    file            data/twolevel_upos.dat
+    columns         E_lab[MeV] theta_cm[deg] value error
+    energy_window   5.904580 6.366143 MeV
+    angle_window    0 180 deg
+    norm            1 fixed
+    shift           offset 0 MeV fit prior 0 0.02
+
+# <segmentsData> line 2
+dataset twolevel_upos2
+    reaction        13C(a,a)13C[3.6845]
+    quantity        dsigma_domega
+    unit            b/sr
+    secondary_gamma L 1 Ic 1/2 delta 0
+    file            data/twolevel_upos2.dat
+    columns         E_lab[MeV] theta_cm[deg] value error
+    energy_window   5.904580 6.366143 MeV
+    angle_window    0 180 deg
+    norm            1 fixed
+    shift           offset 0 MeV fit prior 0 0.02
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+</targets>

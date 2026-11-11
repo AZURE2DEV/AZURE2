@@ -1,6 +1,7 @@
 #!/bin/bash
 # The build-time assertion of the calculation plan on every project of tests/ (plan_test.cpp): the tests/ tree is
-# copied to a scratch directory (set-up may write output/ and checks/), every .azr outside output/ is set up there.
+# copied to a scratch directory (set-up may write output/ and checks/), every .azr outside output/ is set up there
+# (not the originals kept in tests/convert/, which have no data files).
 #   plan_test.sh path/to/plan_test path/to/tests
 set -u
 export LC_ALL=C
@@ -13,6 +14,6 @@ cd "$WORK/tests"
 projects=()
 while IFS= read -r f; do
   d="$(dirname "$f")"; mkdir -p "$d/output" "$d/checks"; projects+=("$WORK/tests/$f")
-done < <(find . -name '*.azr' -not -path '*/output/*' | sed 's|^\./||' | sort)
+done < <(find . -name '*.azr' -not -path '*/output/*' -not -path './convert/*' | sed 's|^\./||' | sort)
 echo "${#projects[@]} projects"
 "$BIN" "${projects[@]}"

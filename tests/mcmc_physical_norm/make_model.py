@@ -3,11 +3,15 @@
 capture integrals are what make a 13N evaluation cost 0.7 s), every <targetInt> line inactive,
 and the normalization of the meyer_84 elastic segment free with a 5 % systematic error
 (segment-line fields 10 and 11): 314 elastic points, an evaluation in milliseconds, one
-normalization for the chain to sample.  Regenerate with  python3 make_model.py  from here."""
+normalization for the chain to sample.  Regenerate with  python3 make_model.py  from here.
+
+It edits the old lines of the original of tests/13N/13N.azr (tests/convert/fixtures/tests/13N/13N.azr) and writes the
+old form; the committed 13N_fast.azr is its format-3 conversion (tools/format3_tree_convert.sh 13N_fast.azr after
+writing it; docs/upgrade/format3_tree.md)."""
 import os, re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-text = open(os.path.join(HERE, "..", "13N", "13N.azr")).read()
+text = open(os.path.join(HERE, "..", "convert", "fixtures", "tests", "13N", "13N.azr")).read()
 
 def edit_block(text, tag, fn):
     a = text.index("<%s>" % tag) + len("<%s>" % tag)

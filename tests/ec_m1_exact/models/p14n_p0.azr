@@ -10,6 +10,7 @@ none #Legendre Polynomial Check
 none #Coulomb Amplitudes Check
 none #Reaction Pathway Check
 none #Angular Distributions Check
+format=3
 </config>
 <levels>
 1.5 -1 7.0971 1 1 1 3 2 1 1 1 5.0 0.5 1 1 1 0 1.007276 13.999234 1 7 7.2971 7.2971 0 0 0.0 0 5 0.0 0.0 0
@@ -28,10 +29,18 @@ none #Angular Distributions Check
 2.5 -1 30 1 1 3 3 2 4 1 1 0 1 1 1.5 -1 7.0971 0 15.003066 0 8 7.2971 0 0 0 0.0 10 0 0 0 2
 
 </levels>
-<segmentsData>
-1 1 3 0.097195 3.225857 0 0 0 1 0 0 0 0 0 data/ecm_p14n.dat 0 0
-</segmentsData>
-<segmentsTest>
-</segmentsTest>
-<targetInt>
-</targetInt>
+<data>
+# <segmentsData> line 1
+dataset ecm_p14n
+    reaction       14N(p,g)15O[7.0971]
+    quantity       sigma
+    unit           b
+    file           data/ecm_p14n.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0.097195 3.225857 MeV
+    norm           1 fixed
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+</targets>

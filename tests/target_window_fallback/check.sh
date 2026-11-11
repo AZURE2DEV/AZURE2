@@ -63,24 +63,41 @@ A1=0.8
 DENS=1.0e18
 WIN="0.27-0.32"
 F="$(awk 'BEGIN { printf "%.10f", 14.0031 / (1.00783 + 14.0031) }')"   # c.m. / lab
-LINE="1  \"1\"  200  0  0  1  $DENS  \"a0/x^a1\"  2  $A0  $A1  0  0  0  \"\"  0  0  0  20  50"
+WFOLD="$(echo "$WIN" | tr ',' ' ') MeV"
 
-# model NAME TARGETINT-LINE [EXIT]: the resonance project with the thin-target segment and the truth table, both
-# for exit key EXIT (default -1, the total capture of all 12 capture pairs, a composite)
+# model NAME FOLD [EXIT] [TARGET]: the resonance project with the thin-target data set and the truth table, both
+# for exit key EXIT (default -1, the total capture of all 12 capture pairs, [total]; 3, the 6.79 MeV state alone).
+# FOLD: the data set's fold_windows ("" none).  TARGET: fixed (default; a layer of DENS atoms/cm2, stopping a0/x^a1,
+# 200 sub-points), fit (its areal density fitted, no prior), thick (kind infinite), doppler (free-gas 300 K)
 model() {
-  local d="$WORK/$1" exit="${3:--1}" typ=3
-  [ "$exit" = "-1" ] || typ=0   # data type 3 is the total capture whatever the exit key; 0 = one pair, angle-integrated
+  local d="$WORK/$1" fold="$2" exit="${3:--1}" kind="${4:-fixed}" state="[total]"
+  [ "$exit" = "-1" ] || state="[6.7931]"
   mkdir -p "$d/output" "$d/checks" "$d/data"
   awk 'BEGIN { for (i = 0; i <= 56; i++) printf "%.3f 0 1.0e-06 1.0e-07\n", 0.240 + i * 0.005 }' > "$d/data/thin.dat"
   awk 'BEGIN { for (i = 0; i <= 3300; i++) printf "%.4f 0 1.0e-06 1.0e-07\n", 0.20 + i * 0.0001 }' > "$d/data/fine.dat"
-  awk -v tline="$2" \
-      -v s1="1 1 $exit 0 6 0 180 $typ 1 0 0 0 0 0 data/thin.dat 0 0" \
-      -v s2="1 1 $exit 0 6 0 180 $typ 1 0 0 0 0 0 data/fine.dat 0 0" '
+  local q=sigma u=b dens="    areal_density  $DENS atoms/cm2 fixed" layer=layer dop=""
+  case "$kind" in
+    fit) dens="    areal_density  $DENS atoms/cm2 fit" ;;
+    thick) q=yield; u=1/particle; dens=""; layer=infinite ;;
+    doppler) dop="
+    doppler        free_gas 300 K fixed" ;;
+  esac
+  ds() {  # NAME FILE [TARGET]
+    printf 'dataset %s\n    reaction       14N(p,g)15O%s\n    quantity       %s\n    unit           %s\n' "$1" "$state" "$3" "$4"
+    printf '    file           %s\n    columns        E_lab[MeV] _ value error\n    energy_window  0 6 MeV\n    norm           1 fixed\n' "$2"
+    [ -n "${5:-}" ] && printf '    target         %s\n    quadrature     points 200 width_multiplier 20 per_width 50\n' "$5"
+    [ -n "${5:-}" ] && [ -n "$fold" ] && printf '    fold_windows   %s\n' "$fold"
+  }
+  export DS="$(ds thin data/thin.dat "$q" "$u" tgt; ds fine data/fine.dat sigma b)" TGT="target tgt
+    kind           $layer
+    active         14N${dens:+
+$dens}
+    stopping       formula \"a0/x^a1\" a0=$A0 a1=$A1 MeV*cm2/atom
+    straggling     none$dop"
+  awk '
     { sub(/\r$/, "") }
-    /^<targetInt>$/ { print; print tline; skip = 1; next }
-    /^<segmentsData>$/ { print; print s1; print s2; skip = 1; next }
-    /^<segmentsTest>$/ { print; skip = 1; next }
-    /^<\/targetInt>$|^<\/segmentsData>$|^<\/segmentsTest>$/ { skip = 0 }
+    /^<data>$|^<extrapolations>$|^<targets>$/ { print; if ($0 == "<data>") print ENVIRON["DS"]; if ($0 == "<targets>") print ENVIRON["TGT"]; skip = 1; next }
+    /^<\/data>$|^<\/extrapolations>$|^<\/targets>$/ { skip = 0 }
     !skip { print }' "$BASE/thick_target_resonance.azr" > "$d/t.azr"
 }
 # run NAME MODE FLAGS [ENV...]
@@ -93,16 +110,18 @@ OUTNAME="AZUREOut_aa=1_TOTAL_CAPTURE.out"
 block() { awk -v k="$2" 'BEGIN { RS = ""; FS = "\n" } NR == k { print }' "$WORK/$1/output/${OUT:-$OUTNAME}" 2> /dev/null |
           awk '{ sub(/\r$/, "") } NF >= 5 { print $1, $4 }'; }
 
-model full "$LINE";                      run full 1 ""
-model win "$LINE  \"$WIN\"  0";          run win 1 ""
-model blend "$LINE  \"$WIN\"  0.01";     run blend 1 ""
+model full "";                           run full 1 ""
+model win "$WFOLD";                      run win 1 ""
+model blend "$WFOLD blend 0.01 MeV";    run blend 1 ""
 for m in full win blend; do block $m 1 > "$WORK/$m.y"; done
 block full 2 > "$WORK/sigma"
 # the plain segment (exit 3, one capture pair): full, windows, automatic tolerance
 OUT3="AZUREOut_aa=1_R=3.out"
-model full3 "$LINE" 3;                   run full3 1 ""
-model win3 "$LINE  \"$WIN\"  0" 3;       run win3 1 ""
-model auto "$LINE  \"\"  0  0.001" 3;    run auto 1 ""
+model full3 "" 3;                        run full3 1 ""
+model win3 "$WFOLD" 3;                   run win3 1 ""
+# the automatic per-point tolerance without windows (old line: an empty ranges token and the tolerance 0.001):
+# format 3 states the tolerance only inside fold_windows, so one window spans every point (no point falls back)
+model auto "0-10 MeV auto_tolerance 0.001" 3; run auto 1 ""
 for m in full3 win3 auto; do OUT="$OUT3" block $m 1 > "$WORK/$m.y"; done
 OUT="$OUT3" block full3 2 > "$WORK/sigma3"
 nf="$(wc -l < "$WORK/full.y" | tr -d ' ')"; ns="$(wc -l < "$WORK/sigma" | tr -d ' ')"
@@ -174,13 +193,13 @@ if le "$wauto" 1e-3 && [ "$nlet" -ge 10 ] && [ "$nres" -ge 4 ]; then ok "(e) aut
 else bad "(e) automatic tolerance: up to $wauto from the full integration (limit 1e-3), $nlet let off (want >= 10), $nres resonance points integrated (want >= 4)"; fi
 
 # (f) fitted density with windows: three fallback nodes, and the analytic gradient
-model fitwin "$LINE  \"$WIN\"  0  densityfit 1 0"
+model fitwin "$WFOLD" -1 fit
 run fitwin 1 ""
 block fitwin 1 > "$WORK/fitwin.y"
 read nfit wfit <<< "$(paste "$WORK/win.y" "$WORK/fitwin.y" | awk '{ r = ($4 / $2 - 1); if (r < 0) r = -r; if (r > w) w = r; c++ } END { printf "%d %.3e", c, w }')"
 if [ "$nfit" -eq 57 ] && le "$wfit" 1e-4; then ok "(f) fitted density, windows: at the nominal density within $wfit of the fixed-density run"
 else bad "(f) fitted density, windows: $nfit points, up to $wfit from the fixed-density run (limit 1e-4)"; tail -3 "$WORK/fitwin/run.log"; fi
-model grad "$LINE  \"$WIN\"  0.01  densityfit 1 0"   # with the blend: linear in the kernel now
+model grad "$WFOLD blend 0.01 MeV" -1 fit   # with the blend: linear in the kernel now
 run grad 2 "--use-gradient" AZURE_GRAD_CHECK=exit
 line="$(grep "components with relative disagreement" "$WORK/grad/run.log" | head -1)"
 if echo "$line" | grep -q "analytic block used;.*density 0/1;.*Jacobian path: density 0/1"; then
@@ -188,18 +207,18 @@ if echo "$line" | grep -q "analytic block used;.*density 0/1;.*Jacobian path: de
 else bad "(f) gradient check: ${line:-no [grad-check] line}"; grep -m2 "unsupported\|grad-check" "$WORK/grad/run.log"; fi
 
 # (g) refusals
-model thick "1  \"1\"  200  0  0  1  0  \"a0/x^a1\"  2  $A0  $A1  0  0  0  \"\"  0  0  0  20  50  \"$WIN\"  0"
+model thick "$WFOLD" -1 thick
 run thick 1 ""
 if grep -q "ERROR.*THICK-target" "$WORK/thick/run.log" && [ ! -s "$WORK/thick/output/$OUTNAME" ]; then ok "(g) windows on a thick target: refused, no output"
 else bad "(g) windows on a thick target were not refused"; tail -3 "$WORK/thick/run.log"; fi
-model dop "$LINE  \"$WIN\"  0  doppler 300"
+model dop "$WFOLD" -1 doppler
 run dop 1 ""
 if grep -q "ERROR.*doppler" "$WORK/dop/run.log" && [ ! -s "$WORK/dop/output/$OUTNAME" ]; then ok "(g) windows on a line with doppler: refused, no output"
 else bad "(g) windows on a line with doppler were not refused"; tail -3 "$WORK/dop/run.log"; fi
 
 # (h) optional: the line without windows is unchanged
 if [ -n "${REF_AZURE2:-}" ]; then
-  model ref "$LINE"
+  model ref ""
   (cd "$WORK/ref" && printf '1\n\n\n7\n' | run_limited 900 "$REF_AZURE2" --no-gui --no-readline t.azr > run.log 2>&1)
   if "${PY:-python3}" -I -c 'import sys; sys.exit(open(sys.argv[1], "rb").read() != open(sys.argv[2], "rb").read())' \
        "$WORK/ref/output/$OUTNAME" "$WORK/full/output/$OUTNAME"; then ok "(h) without windows: byte-identical to $REF_AZURE2"

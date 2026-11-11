@@ -28,6 +28,8 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import old_tree  # noqa: E402  (the old originals of converted projects)
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 
 failures = []
@@ -50,7 +52,7 @@ except Exception as err:                                   # engine not built
 
 with tempfile.TemporaryDirectory() as tmp:
     work = os.path.join(tmp, "13N")
-    shutil.copytree(os.path.join(ROOT, "tests", "13N"), work)
+    old_tree.copytree(os.path.join(ROOT, "tests", "13N"), work)  # the old file
     for junk in ("output", "checks"):
         shutil.rmtree(os.path.join(work, junk), ignore_errors=True)
     os.makedirs(os.path.join(work, "output"))
@@ -142,7 +144,7 @@ print()
 print("\n5. shiftgroup followers are not penalised twice")
 with tempfile.TemporaryDirectory() as tmp:
     work = os.path.join(tmp, "sg")
-    shutil.copytree(os.path.join(ROOT, "tests", "shift_groups"), work)
+    old_tree.copytree(os.path.join(ROOT, "tests", "shift_groups"), work)  # the old file
     for junk in ("output", "checks"):
         shutil.rmtree(os.path.join(work, junk), ignore_errors=True)
     os.makedirs(os.path.join(work, "output"))

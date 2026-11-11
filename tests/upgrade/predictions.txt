@@ -19,27 +19,27 @@ extrapolation 10: sigma(6->3)
 extrapolation 11: sigma(6->4)
 extrapolation 12: sigma(6->5)
 == examples/f19_pag_thm/f19_pag_thm.azr
-data 1: thm_sigma(1->6)
-data 2: sigma(1->6)
-data 3: sigma(1->6)
+data thm_su2025: thm_sigma(1->6)
+data juna_zhang2022: sigma(1->6)
+data spyrou2000_S: sigma(1->6)
 == examples/li6_pizzone2011/li6_pizzone2011.azr
-data 1: sigma(1->4)
-data 2: sigma(1->4)
-data 3: sigma(1->4)
-data 4: sigma(1->4)
-data 5: sigma(1->4)
-extrapolation 2: dsdo_cm(5->5)
+data pizzone_thm: sigma(1->4)
+data engstler1992inv: sigma(1->4)
+data elwyn1977: sigma(1->4)
+data mcclenahan1975: sigma(1->4)
+data jeronymo1962: sigma(1->4)
+extrapolation x2: dsdo_cm(5->5)
 == examples/li7_tumino2006/li7_tumino2006.azr
-data 1: dsdo_cm(5->4)
-data 2: sigma(5->4)
-data 3: sigma(5->4)
-data 4: sigma(5->4)
-data 5: sigma(5->4)
-extrapolation 2: dsdo_cm(5->5)
+data tumino_thm: dsdo_cm(5->4)
+data rolfs1986: sigma(5->4)
+data cruz2009: sigma(5->4)
+data cassagnou1962: sigma(5->4)
+data mani1964: sigma(5->4)
+extrapolation x2: dsdo_cm(5->5)
 == examples/n15_lacognata2007/n15_lacognata2007.azr
-data 1: sigma(1->2)
-data 2: sigma(1->2)
-data 3: sigma(1->2)
+data thm_lc2007_tab3_sigma: sigma(1->2)
+data redder82: sigma(1->2)
+data schardt52: sigma(1->2)
 == examples/natural_neon/natural_neon.azr
 data 1: sum(abundance(1, 1)*sigma(2->2), abundance(1, 1)*J0/J1*sigma(2->1), abundance(1, 1)*J0/J2*sigma(2->3), abundance(1, 2)*J0/J3*sigma(4->4), abundance(1, 2)*J0/J4*sigma(4->5), abundance(1, 3)*J0/J5*sigma(6->6), abundance(1, 3)*J0/J6*sigma(6->7))
 data 2: sum(abundance(1, 1)*sigma(2->2), abundance(1, 1)*J0/J1*sigma(2->1), abundance(1, 1)*J0/J2*sigma(2->3), abundance(1, 2)*J0/J3*sigma(4->4), abundance(1, 2)*J0/J4*sigma(4->5), abundance(1, 3)*J0/J5*sigma(6->6), abundance(1, 3)*J0/J6*sigma(6->7))
@@ -54,40 +54,40 @@ data 10: sum(sigma(4->4), J0/J1*sigma(4->5))
 data 11: sum(sigma(2->2), J0/J1*sigma(2->1), J0/J2*sigma(2->3))
 extrapolation 1: sum(abundance(1, 1)*sigma(2->2), abundance(1, 1)*J0/J1*sigma(2->1), abundance(1, 1)*J0/J2*sigma(2->3), abundance(1, 2)*J0/J3*sigma(4->4), abundance(1, 2)*J0/J4*sigma(4->5), abundance(1, 3)*J0/J5*sigma(6->6), abundance(1, 3)*J0/J6*sigma(6->7))
 == examples/o17_guardo/o17_guardo.azr
-data 1: thm_sigma(1->2)
-extrapolation 1: thm_sigma(1->2)
+data o17_guardo: thm_sigma(1->2)
+extrapolation x1: thm_sigma(1->2)
 == examples/o17_guardo2017_fit/o17_guardo2017_fit.azr
 data 1: thm_sigma(1->2)
 == examples/o18_lacognata2008/o18_lacognata2008.azr
-data 1: thm_sigma(1->2)
+data thm_lc2008_hoes_bkgsub: thm_sigma(1->2)
 == examples/o18_lacognata2010/o18_lacognata2010.azr
-data 1: thm_sigma(1->2)
-data 2: sigma(1->2)
-data 3: dsdo_cm(1->2)
+data thm_lc2010_hoes_authbkg: thm_sigma(1->2)
+data mak78: sigma(1->2)
+data amsel67: dsdo_cm(1->2)
 == tests/13N/13N.azr
-data 1: sigma(1->2)
-data 2: sigma(1->2)
-data 3: dsdo_cm(1->1)
-data 4: dsdo_cm(1->1)
-data 5: dsdo_cm(1->1)
-data 6: sigma(1->2)
-data 7: sigma(1->2)
-data 8: sigma(1->2)
-data 9: dsdo_cm(1->2)
-data 10: dsdo_cm(1->2)
-data 11: ay(1->1)
-data 12: ay(1->1)
-data 13: ay(1->1)
-data 14: ay(1->1)
-data 15: ay(1->1)
-data 16: ay(1->1)
+data artemov: sigma(1->2)
+data seagrave: sigma(1->2)
+data meyer_84: dsdo_cm(1->1)
+data meyer_114: dsdo_cm(1->1)
+data meyer_144: dsdo_cm(1->1)
+data skowronski_luna_hpge: sigma(1->2)
+data skowronski_luna_bgo: sigma(1->2)
+data skowronski_fels: sigma(1->2)
+data kettner_0: dsdo_cm(1->2)
+data kettner_55: dsdo_cm(1->2)
+data baumann_1618: ay(1->1)
+data baumann_1658: ay(1->1)
+data baumann_1708: ay(1->1)
+data baumann_1738: ay(1->1)
+data baumann_1758: ay(1->1)
+data baumann_1779: ay(1->1)
 == tests/13N_capture_ay/13N_capture_ay.azr
-data 1: dsdo_cm(1->2)
-data 2: ay(1->2)
+data capture_xs: dsdo_cm(1->2)
+data capture_ay: ay(1->2)
 == tests/15N_p_a/15N_p_a.azr
-data 1: sigma(1->2)
-data 2: sigma(1->2)
-data 3: sigma(1->2)
+data lacognata_a: sigma(1->2)
+data lacognata_b: sigma(1->2)
+data schardt: sigma(1->2)
 == tests/17O/17O.azr
 data 1: thm_sigma(1->2)
 extrapolation 1: thm_sigma(1->2)
@@ -101,23 +101,23 @@ extrapolation 2: dsdo_cm(5->5)
 data 1: thm_sigma(5->4)
 extrapolation 2: dsdo_cm(5->5)
 == tests/7Li_p_ay/7Li_p_ay.azr
-data 1: ay(5->5)
-data 2: ay(5->5)
-extrapolation 2: dsdo_cm(5->5)
+data deineko_130: ay(5->5)
+data deineko_160: ay(5->5)
+extrapolation x2: dsdo_cm(5->5)
 == tests/angle_mapping/angle_mapping.azr
-data 1: dsdo_cm(1->1)
-data 2: dsdo_cm(1->1)
-data 3: dsdo_cm(1->1)
-data 4: ay(1->1)
-data 5: ay(1->1)
-data 6: dsdo_cm(1->1)
-data 7: dsdo_cm(1->1)
-data 8: dsdo_cm(1->1)
-data 9: dsdo_cm(1->1)
-data 10: abundance(1, 2)*dsdo_cm(2->2)
-data 11: abundance(1, 2)*dsdo_cm(2->2)
-data 12: dsdo_cm(2->2)
-data 13: dsdo_cm(1->1)
+data p12c_60: dsdo_cm(1->1)
+data p12c_90: dsdo_cm(1->1)
+data p12c_120_150: dsdo_cm(1->1)
+data p12c_ay100: ay(1->1)
+data p12c_ay140: ay(1->1)
+data p12c_75: dsdo_cm(1->1)
+data p12c_135: dsdo_cm(1->1)
+data p12c_105: dsdo_cm(1->1)
+data p12c_165: dsdo_cm(1->1)
+data p13c_60: abundance(natural, 2)*dsdo_cm(2->2)
+data p13c_120: abundance(natural, 2)*dsdo_cm(2->2)
+data p13c_150: dsdo_cm(2->2)
+data p12c_90s: dsdo_cm(1->1)
 == tests/angular_coefficients/models/bad_elastic.azr
 data: set-up failed
 exit 1
@@ -146,8 +146,8 @@ data 1: sigma(2->1)
 extrapolation: set-up failed
 exit 1
 == tests/capture_ay_coupling/models/twolevel.azr
-extrapolation 1: ay(1->2)
-extrapolation 2: dsdo_cm(1->2)
+extrapolation x1: ay(1->2)
+extrapolation x2: dsdo_cm(1->2)
 == tests/channel_space/channel_space.azr
 data 1: dsdo_cm(1->1)
 data 2: dsdo_cm(1->1)
@@ -156,25 +156,25 @@ data 4: sigma(1->3)
 == tests/convolution_unify/models/bare.azr
 extrapolation 1: dsdo_cm(1->1)
 == tests/convolution_unify/models/fixed.azr
-extrapolation 1: dsdo_cm(1->1)
+extrapolation x1: dsdo_cm(1->1)
 == tests/convolution_unify/models/lab_E.azr
-extrapolation 1: dsdo_cm(1->1)
+extrapolation x1: dsdo_cm(1->1)
 == tests/convolution_unify/models/lab_const.azr
-extrapolation 1: dsdo_cm(1->1)
+extrapolation x1: dsdo_cm(1->1)
 == tests/convolution_unify/models/legacy_cm_E.azr
-extrapolation 1: dsdo_cm(1->1)
+extrapolation x1: dsdo_cm(1->1)
 == tests/convolution_unify/models/legacy_cm_const.azr
-extrapolation 1: dsdo_cm(1->1)
+extrapolation x1: dsdo_cm(1->1)
 == tests/convolution_unify/models/tgt.azr
-extrapolation 1: dsdo_cm(1->1)
+extrapolation x1: dsdo_cm(1->1)
 == tests/convolution_unify/models/tgt_fixed.azr
-extrapolation 1: dsdo_cm(1->1)
+extrapolation x1: dsdo_cm(1->1)
 == tests/convolution_unify/models/tgt_lab_const.azr
-extrapolation 1: dsdo_cm(1->1)
+extrapolation x1: dsdo_cm(1->1)
 == tests/convolution_unify/models/tgt_legacy_const.azr
-extrapolation 1: dsdo_cm(1->1)
+extrapolation x1: dsdo_cm(1->1)
 == tests/convolution_unify/models/tgt_straggle.azr
-extrapolation 1: dsdo_cm(1->1)
+extrapolation x1: dsdo_cm(1->1)
 == tests/convolution_window/models/bare.azr
 extrapolation 1: sigma(1->3)
 == tests/convolution_window/models/conv.azr
@@ -191,49 +191,57 @@ extrapolation 10: sigma(1->3)
 extrapolation 11: sigma(1->3)
 extrapolation 12: sigma(1->3)
 == tests/coulomb_nuclear_sign/models/hard_sphere_pc.azr
-extrapolation 1: dsdo_cm(1->1)
-extrapolation 2: sigma(1->1)
+extrapolation x1: dsdo_cm(1->1)
+extrapolation x2: sigma(1->1)
 == tests/data_covariance/dense.azr
 == tests/data_covariance/diag.azr
 == tests/data_covariance/fit.azr
 == tests/data_covariance/plain.azr
 == tests/data_covariance/rel.azr
 == tests/data_file_comments/data_file_comments.azr
-data 1: ay(5->5)
-data 2: ay(5->5)
-extrapolation 2: dsdo_cm(5->5)
+data deineko_130: ay(5->5)
+data deineko_160: ay(5->5)
+extrapolation x2: dsdo_cm(5->5)
 == tests/ec_e1m1_phase/models/p_1.azr
-data 1: dsdo_cm(1->3)
+data dsdo: dsdo_cm(1->3)
 == tests/ec_e1m1_phase/models/p_2.azr
-data 1: dsdo_cm(1->3)
+data dsdo: dsdo_cm(1->3)
 == tests/ec_e1m1_phase/models/p_3.azr
-data 1: dsdo_cm(1->3)
+data dsdo: dsdo_cm(1->3)
 == tests/ec_e1m1_phase/models/s_1.azr
-data 1: dsdo_cm(1->3)
+data dsdo: dsdo_cm(1->3)
 == tests/ec_e1m1_phase/models/s_2.azr
-data 1: dsdo_cm(1->3)
+data dsdo: dsdo_cm(1->3)
 == tests/ec_e1m1_phase/models/s_3.azr
-data 1: dsdo_cm(1->3)
+data dsdo: dsdo_cm(1->3)
 == tests/ec_final_state_listed/models/listed.azr
+data: set-up failed
+exit 1
 == tests/ec_final_state_listed/models/missing_group.azr
+data: set-up failed
+exit 1
 == tests/ec_final_state_listed/models/missing_level.azr
+data: set-up failed
+exit 1
 == tests/ec_final_state_listed/models/unused.azr
+data: set-up failed
+exit 1
 == tests/ec_m1_exact/models/a12c.azr
-data 1: sigma(1->2)
+data ecm_a: sigma(1->2)
 == tests/ec_m1_exact/models/e1.azr
-data 1: sigma(1->3)
+data ecm: sigma(1->3)
 == tests/ec_m1_exact/models/m1.azr
-data 1: sigma(1->3)
+data ecm: sigma(1->3)
 == tests/ec_m1_exact/models/p14n_p.azr
-data 1: sigma(1->3)
+data ecm_p14n: sigma(1->3)
 == tests/ec_m1_exact/models/p14n_p0.azr
-data 1: sigma(1->3)
+data ecm_p14n: sigma(1->3)
 == tests/ec_m1_exact/models/p14n_s1.azr
-data 1: sigma(1->3)
+data ecm_p14n: sigma(1->3)
 == tests/ec_m1_exact/models/p14n_s3.azr
-data 1: sigma(1->3)
+data ecm_p14n: sigma(1->3)
 == tests/ec_threshold/models/ng.azr
-data 1: sigma(1->3)
+data ng: sigma(1->3)
 == tests/electron_screening/bad.azr
 == tests/electron_screening/bare.azr
 == tests/electron_screening/conv.azr
@@ -246,8 +254,10 @@ data 3: ay(1->1)
 data 4: ay(1->1)
 data 5: dsdo_cm(1->1)
 == tests/gamma_lab_frame/models/cm.azr
-data 1: dsdo_cm(1->2)
+data cm: dsdo_cm(1->2)
 == tests/gamma_lab_frame/models/lab.azr
+data: set-up failed
+exit 1
 == tests/hard_sphere/models/no_dummies.azr
 extrapolation 1: dsdo_cm(1->1)
 extrapolation 2: sigma(1->1)
@@ -259,13 +269,13 @@ data 1: dsdo_cm(1->1)
 data 2: dsdo_cm(1->1)
 data 3: dsdo_cm(1->1)
 == tests/identical_dd_mott/identical_dd_mott.azr
-data 1: dsdo_cm(1->1)
-data 2: dsdo_cm(1->1)
-data 3: dsdo_cm(1->1)
-data 4: dsdo_cm(1->1)
-data 5: dsdo_cm(1->1)
-data 6: dsdo_cm(1->1)
-data 7: dsdo_cm(1->1)
+data mott_20: dsdo_cm(1->1)
+data mott_45: dsdo_cm(1->1)
+data mott_70: dsdo_cm(1->1)
+data mott_90: dsdo_cm(1->1)
+data mott_110: dsdo_cm(1->1)
+data mott_135: dsdo_cm(1->1)
+data mott_160: dsdo_cm(1->1)
 == tests/identical_entrance_reaction/projects/be8.azr
 data 1: sigma(1->2)
 data 2: sigma(2->1)
@@ -277,13 +287,13 @@ data 3: sigma(1->1)
 data 1: sigma(1->2)
 data 2: dsdo_cm(1->2)
 == tests/identical_pp_mott/identical_pp_mott.azr
-data 1: dsdo_cm(1->1)
-data 2: dsdo_cm(1->1)
-data 3: dsdo_cm(1->1)
-data 4: dsdo_cm(1->1)
-data 5: dsdo_cm(1->1)
-data 6: dsdo_cm(1->1)
-data 7: dsdo_cm(1->1)
+data mott_20: dsdo_cm(1->1)
+data mott_45: dsdo_cm(1->1)
+data mott_70: dsdo_cm(1->1)
+data mott_90: dsdo_cm(1->1)
+data mott_110: dsdo_cm(1->1)
+data mott_135: dsdo_cm(1->1)
+data mott_160: dsdo_cm(1->1)
 == tests/identical_pp_res/identical_pp_res.azr
 data 1: dsdo_cm(1->1)
 data 2: dsdo_cm(1->1)
@@ -291,6 +301,8 @@ data 3: dsdo_cm(1->1)
 data 4: ay(1->1)
 data 5: ay(1->1)
 == tests/mcmc_physical_norm/13N_fast.azr
+data: set-up failed
+exit 1
 == tests/natural_neon/natural_neon.azr
 data 1: sum(abundance(1, 1)*sigma(2->2), abundance(1, 1)*J0/J1*sigma(2->1), abundance(1, 1)*J0/J2*sigma(2->3), abundance(1, 2)*J0/J3*sigma(4->4), abundance(1, 2)*J0/J4*sigma(4->5), abundance(1, 3)*J0/J5*sigma(6->6), abundance(1, 3)*J0/J6*sigma(6->7))
 data 2: sum(abundance(1, 1)*sigma(2->2), abundance(1, 1)*J0/J1*sigma(2->1), abundance(1, 1)*J0/J2*sigma(2->3), abundance(1, 2)*J0/J3*sigma(4->4), abundance(1, 2)*J0/J4*sigma(4->5), abundance(1, 3)*J0/J5*sigma(6->6), abundance(1, 3)*J0/J6*sigma(6->7))
@@ -343,19 +355,19 @@ exit 1
 extrapolation: set-up failed
 exit 1
 == tests/norm_groups/norm_groups.azr
-data 1: dsdo_cm(1->1)
-data 2: dsdo_cm(1->1)
+data xs_40_s08: dsdo_cm(1->1)
+data xs_90_s09: dsdo_cm(1->1)
 == tests/pyazr/data/shift_fn_groups/shift_fn_groups.azr
 data 1: dsdo_cm(1->1)
 data 2: dsdo_cm(1->1)
 == tests/q_attenuation/models/plain.azr
-extrapolation 1: dsdo_cm(2->5)
+extrapolation x1: dsdo_cm(2->5)
 == tests/q_attenuation/models/q.azr
-extrapolation 1: dsdo_cm(2->5)
+extrapolation x1: dsdo_cm(2->5)
 == tests/q_attenuation/models/q1.azr
-extrapolation 1: dsdo_cm(2->5)
+extrapolation x1: dsdo_cm(2->5)
 == tests/q_attenuation/models/q5.azr
-extrapolation 1: dsdo_cm(2->5)
+extrapolation x1: dsdo_cm(2->5)
 == tests/ratio_frame/models/fixed_angle.azr
 extrapolation 1: dsdo_cm(2->3)
 extrapolation 2: ratio(dsdo_cm(2->3), dsdo_cm(2->2; angle=60))*J1/J0
@@ -364,49 +376,51 @@ extrapolation 4: ratio(dsdo_cm(2->3), dsdo_cm(2->2; angle=60))*J1/J0
 extrapolation 5: dsdo_cm(2->2)
 extrapolation 6: dsdo_cm(2->2)
 == tests/ratio_frame/models/gamma.azr
-extrapolation 1: dsdo_cm(1->2)
-extrapolation 2: dsdo_cm(1->2)
-extrapolation 3: dsdo_cm(1->1)
-extrapolation 4: dsdo_cm(1->1)
-extrapolation 5: ratio(dsdo_cm(1->2), dsdo_cm(1->2; angle=90))*J1/J0
-extrapolation 6: ratio(dsdo_cm(1->2), dsdo_cm(1->1; angle=60))*J1/J0
-extrapolation 7: ratio(dsdo_cm(1->1), dsdo_cm(1->2; angle=90))*J1/J0
+extrapolation x1: dsdo_cm(1->2)
+extrapolation x2: dsdo_cm(1->2)
+extrapolation x3: dsdo_cm(1->1)
+extrapolation x4: dsdo_cm(1->1)
+extrapolation x5: ratio(dsdo_cm(1->2), dsdo_cm(1->2; angle=90))*J1/J0
+extrapolation x6: ratio(dsdo_cm(1->2), dsdo_cm(1->1; angle=60))*J1/J0
+extrapolation x7: ratio(dsdo_cm(1->1), dsdo_cm(1->2; angle=90))*J1/J0
 == tests/ratio_frame/models/particle.azr
-extrapolation 1: dsdo_cm(2->3)
-extrapolation 2: dsdo_cm(2->5)
-extrapolation 3: dsdo_cm(2->2)
-extrapolation 4: dsdo_cm(2->5)
-extrapolation 5: dsdo_cm(2->5)
-extrapolation 6: dsdo_cm(2->3)
-extrapolation 7: dsdo_cm(2->5)
-extrapolation 8: sigma(2->3)
-extrapolation 9: sigma(2->5)
-extrapolation 10: ratio(dsdo_cm(2->3), dsdo_cm(2->5))*J1/J0
-extrapolation 11: ratio(dsdo_cm(2->3), dsdo_cm(2->2; angle=60))*J1/J0
-extrapolation 12: ratio(dsdo_cm(2->3), dsdo_cm(2->5; angle=30))*J1/J0
-extrapolation 13: ratio(dsdo_cm(2->3), dsdo_cm(2->5; angle=0))*J1/J0
-extrapolation 14: ratio(dsdo_cm(2->3), dsdo_cm(2->3; angle=60))*J1/J0
-extrapolation 15: ratio(dsdo_cm(2->3), dsdo_cm(2->5))*J1/J0
-extrapolation 16: ratio(sigma(2->3), sigma(2->5))*J1/J0
+extrapolation x1: dsdo_cm(2->3)
+extrapolation x2: dsdo_cm(2->5)
+extrapolation x3: dsdo_cm(2->2)
+extrapolation x4: dsdo_cm(2->5)
+extrapolation x5: dsdo_cm(2->5)
+extrapolation x6: dsdo_cm(2->3)
+extrapolation x7: dsdo_cm(2->5)
+extrapolation x8: sigma(2->3)
+extrapolation x9: sigma(2->5)
+extrapolation x10: ratio(dsdo_cm(2->3), dsdo_cm(2->5))*J1/J0
+extrapolation x11: ratio(dsdo_cm(2->3), dsdo_cm(2->2; angle=60))*J1/J0
+extrapolation x12: ratio(dsdo_cm(2->3), dsdo_cm(2->5; angle=30))*J1/J0
+extrapolation x13: ratio(dsdo_cm(2->3), dsdo_cm(2->5; angle=0))*J1/J0
+extrapolation x14: ratio(dsdo_cm(2->3), dsdo_cm(2->3; angle=60))*J1/J0
+extrapolation x15: ratio(dsdo_cm(2->3), dsdo_cm(2->5))*J1/J0
+extrapolation x16: ratio(sigma(2->3), sigma(2->5))*J1/J0
 == tests/ratio_frame/models/particle_rel.azr
-extrapolation 1: dsdo_cm(2->3)
-extrapolation 2: dsdo_cm(2->5)
-extrapolation 3: dsdo_cm(2->2)
-extrapolation 4: dsdo_cm(2->5)
-extrapolation 5: dsdo_cm(2->5)
-extrapolation 6: dsdo_cm(2->3)
-extrapolation 7: dsdo_cm(2->5)
-extrapolation 8: sigma(2->3)
-extrapolation 9: sigma(2->5)
-extrapolation 10: ratio(dsdo_cm(2->3), dsdo_cm(2->5))*J1/J0
-extrapolation 11: ratio(dsdo_cm(2->3), dsdo_cm(2->2; angle=60))*J1/J0
-extrapolation 12: ratio(dsdo_cm(2->3), dsdo_cm(2->5; angle=30))*J1/J0
-extrapolation 13: ratio(dsdo_cm(2->3), dsdo_cm(2->5; angle=0))*J1/J0
-extrapolation 14: ratio(dsdo_cm(2->3), dsdo_cm(2->3; angle=60))*J1/J0
-extrapolation 15: ratio(dsdo_cm(2->3), dsdo_cm(2->5))*J1/J0
-extrapolation 16: ratio(sigma(2->3), sigma(2->5))*J1/J0
+extrapolation x1: dsdo_cm(2->3)
+extrapolation x2: dsdo_cm(2->5)
+extrapolation x3: dsdo_cm(2->2)
+extrapolation x4: dsdo_cm(2->5)
+extrapolation x5: dsdo_cm(2->5)
+extrapolation x6: dsdo_cm(2->3)
+extrapolation x7: dsdo_cm(2->5)
+extrapolation x8: sigma(2->3)
+extrapolation x9: sigma(2->5)
+extrapolation x10: ratio(dsdo_cm(2->3), dsdo_cm(2->5))*J1/J0
+extrapolation x11: ratio(dsdo_cm(2->3), dsdo_cm(2->2; angle=60))*J1/J0
+extrapolation x12: ratio(dsdo_cm(2->3), dsdo_cm(2->5; angle=30))*J1/J0
+extrapolation x13: ratio(dsdo_cm(2->3), dsdo_cm(2->5; angle=0))*J1/J0
+extrapolation x14: ratio(dsdo_cm(2->3), dsdo_cm(2->3; angle=60))*J1/J0
+extrapolation x15: ratio(dsdo_cm(2->3), dsdo_cm(2->5))*J1/J0
+extrapolation x16: ratio(sigma(2->3), sigma(2->5))*J1/J0
 == tests/ratio_frame/models/ratio_data.azr
 == tests/ratio_frame/models/ratio_free.azr
+data: set-up failed
+exit 1
 == tests/ratio_to_rutherford/models/aC_data.azr
 data rth: ratio(dsdo_cm(1->1), rutherford(1->1))
 == tests/ratio_to_rutherford/models/aC_hs.azr
@@ -422,35 +436,35 @@ extrapolation mott_cm: ratio(dsdo_cm(1->1), mott(1->1))
 == tests/reaction_rate/models/moved.azr
 == tests/reaction_rate/models/moved_azr.azr
 == tests/reaction_rate/models/moved_azr_truth.azr
-extrapolation 1: sum(sigma(1->2))
-extrapolation 2: sum(sigma(1->2))
-extrapolation 3: sum(sigma(1->2))
-extrapolation 4: sum(sigma(1->2))
-extrapolation 5: sum(sigma(1->2))
-extrapolation 6: sum(sigma(1->2))
-extrapolation 7: sum(sigma(1->2))
+extrapolation x1: sigma(1->2)
+extrapolation x2: sigma(1->2)
+extrapolation x3: sigma(1->2)
+extrapolation x4: sigma(1->2)
+extrapolation x5: sigma(1->2)
+extrapolation x6: sigma(1->2)
+extrapolation x7: sigma(1->2)
 == tests/reaction_rate/models/n12C.azr
 == tests/reaction_rate/models/n12C_pert.azr
 == tests/reaction_rate/models/n12C_truth.azr
-extrapolation 1: sum(sigma(1->2))
-extrapolation 2: sum(sigma(1->2))
-extrapolation 3: sum(sigma(1->2))
-extrapolation 4: sum(sigma(1->2))
-extrapolation 5: sum(sigma(1->2))
-extrapolation 6: sum(sigma(1->2))
-extrapolation 7: sum(sigma(1->2))
-extrapolation 8: sum(sigma(1->2))
-extrapolation 9: sum(sigma(1->2))
+extrapolation x1: sigma(1->2)
+extrapolation x2: sigma(1->2)
+extrapolation x3: sigma(1->2)
+extrapolation x4: sigma(1->2)
+extrapolation x5: sigma(1->2)
+extrapolation x6: sigma(1->2)
+extrapolation x7: sigma(1->2)
+extrapolation x8: sigma(1->2)
+extrapolation x9: sigma(1->2)
 == tests/reaction_rate/models/p12C.azr
 == tests/reaction_rate/models/p12C_2g.azr
 == tests/reaction_rate/models/p12C_2g_pert.azr
 == tests/reaction_rate/models/p12C_truth.azr
-extrapolation 1: sum(sigma(1->2))
-extrapolation 2: sum(sigma(1->2))
-extrapolation 3: sum(sigma(1->2))
-extrapolation 4: sum(sigma(1->2))
-extrapolation 5: sum(sigma(1->2))
-extrapolation 6: sum(sigma(1->2))
+extrapolation x1: sigma(1->2)
+extrapolation x2: sigma(1->2)
+extrapolation x3: sigma(1->2)
+extrapolation x4: sigma(1->2)
+extrapolation x5: sigma(1->2)
+extrapolation x6: sigma(1->2)
 == tests/relativistic/models/he5.azr
 data 1: sigma(2->1)
 data 2: sigma(1->2)
@@ -511,28 +525,28 @@ data 3: sigma(2->1)
 == tests/secondary_gamma/models/grad.azr
 data 1: dsdo_cm(2->5; upos L=3; Ic=0; delta=0)
 == tests/secondary_gamma/models/mixing.azr
-data 1: dsdo_cm(2->6; upos L=1; Ic=0.5; delta=-0.094)
-data 2: sigma(2->6)
-data 3: dsdo_cm(2->6)
+data mixing_upos: dsdo_cm(2->6; upos L=1; Ic=0.5; delta=-0.094)
+data mixing_int: sigma(2->6)
+data mixing_part: dsdo_cm(2->6)
 == tests/secondary_gamma/models/spin2_minus.azr
-data 1: dsdo_cm(2->5; upos L=3; Ic=0; delta=0)
-data 2: sigma(2->5)
-data 3: dsdo_cm(2->5)
+data spin2_minus_upos: dsdo_cm(2->5; upos L=3; Ic=0; delta=0)
+data spin2_minus_int: sigma(2->5)
+data spin2_minus_part: dsdo_cm(2->5)
 == tests/secondary_gamma/models/spin2_multil.azr
-data 1: dsdo_cm(2->5; upos L=3; Ic=0; delta=0)
-data 2: sigma(2->5)
-data 3: dsdo_cm(2->5)
+data spin2_multil_upos: dsdo_cm(2->5; upos L=3; Ic=0; delta=0)
+data spin2_multil_int: sigma(2->5)
+data spin2_multil_part: dsdo_cm(2->5)
 == tests/secondary_gamma/models/spin2_plus.azr
-data 1: dsdo_cm(2->5; upos L=3; Ic=0; delta=0)
-data 2: sigma(2->5)
-data 3: dsdo_cm(2->5)
+data spin2_plus_upos: dsdo_cm(2->5; upos L=3; Ic=0; delta=0)
+data spin2_plus_int: sigma(2->5)
+data spin2_plus_part: dsdo_cm(2->5)
 == tests/secondary_gamma/models/spin2_zero.azr
-data 1: dsdo_cm(2->5; upos L=3; Ic=0; delta=0)
-data 2: sigma(2->5)
-data 3: dsdo_cm(2->5)
+data spin2_zero_upos: dsdo_cm(2->5; upos L=3; Ic=0; delta=0)
+data spin2_zero_int: sigma(2->5)
+data spin2_zero_part: dsdo_cm(2->5)
 == tests/secondary_gamma/models/twolevel.azr
-data 1: dsdo_cm(2->6; upos L=1; Ic=0.5; delta=-0.094)
-data 2: dsdo_cm(2->6; upos L=1; Ic=0.5; delta=0)
+data twolevel_upos: dsdo_cm(2->6; upos L=1; Ic=0.5; delta=-0.094)
+data twolevel_upos2: dsdo_cm(2->6; upos L=1; Ic=0.5; delta=0)
 == tests/shift_fn/shift_fn.azr
 data 1: dsdo_cm(1->1)
 data 2: dsdo_cm(1->1)
@@ -545,57 +559,58 @@ data 7: dsdo_cm(1->1)
 data 1: dsdo_cm(1->1)
 data 2: dsdo_cm(1->1)
 == tests/shift_sqrt_subpoints/models/const.azr
-data 1: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
-data 2: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
-data 3: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
-data 4: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
-extrapolation 1: sigma(1->3)
-extrapolation 2: sigma(1->3)
+data yield_1: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
+data yield_2: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
+data yield_3: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
+data yield_4: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
+extrapolation x1: sigma(1->3)
+extrapolation x2: sigma(1->3)
 == tests/shift_sqrt_subpoints/models/dense.azr
-data 1: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
-extrapolation 1: sigma(1->3)
-extrapolation 2: sigma(1->3)
+data yield_scan: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
+extrapolation x1: sigma(1->3)
+extrapolation x2: sigma(1->3)
 == tests/shift_sqrt_subpoints/models/narrow_const.azr
-data 1: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
-data 2: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
-data 3: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
-data 4: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
-extrapolation 1: sigma(1->3)
-extrapolation 2: sigma(1->3)
+data yield_1: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
+data yield_2: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
+data yield_3: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
+data yield_4: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
+extrapolation x1: sigma(1->3)
+extrapolation x2: sigma(1->3)
 == tests/shift_sqrt_subpoints/models/narrow_sqrt.azr
-data 1: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
-extrapolation 1: sigma(1->3)
-extrapolation 2: sigma(1->3)
+data yield_scan: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
+extrapolation x1: sigma(1->3)
+extrapolation x2: sigma(1->3)
 == tests/shift_sqrt_subpoints/models/noshift.azr
-data 1: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
-extrapolation 1: sigma(1->3)
-extrapolation 2: sigma(1->3)
+data yield_scan: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
+extrapolation x1: sigma(1->3)
+extrapolation x2: sigma(1->3)
 == tests/shift_sqrt_subpoints/models/shiftfn.azr
-data 1: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
-extrapolation 1: sigma(1->3)
-extrapolation 2: sigma(1->3)
+data yield_scan: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
+extrapolation x1: sigma(1->3)
+extrapolation x2: sigma(1->3)
 == tests/shift_sqrt_subpoints/models/sqrt.azr
-data 1: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
-extrapolation 1: sigma(1->3)
-extrapolation 2: sigma(1->3)
+data yield_scan: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
+extrapolation x1: sigma(1->3)
+extrapolation x2: sigma(1->3)
 == tests/shift_subpoint_angle/models/a0.azr
+data: set-up failed
+exit 1
 == tests/shift_subpoint_angle/models/a1.azr
+data: set-up failed
+exit 1
 == tests/shift_subpoint_angle/models/av.azr
+data: set-up failed
+exit 1
 == tests/shift_subpoint_angle/models/g0.azr
+data: set-up failed
+exit 1
 == tests/shift_subpoint_angle/models/g1.azr
+data: set-up failed
+exit 1
 == tests/shift_subpoint_angle/template.azr
-data 18: dsdo_cm(1->1)
-data 19: dsdo_cm(1->1)
-data 20: dsdo_cm(1->1)
-data 21: dsdo_cm(1->1)
-data 22: dsdo_cm(1->1)
-data 23: dsdo_cm(1->1)
-data 24: dsdo_cm(1->1)
-data 25: dsdo_cm(1->1)
-data 26: dsdo_cm(1->1)
-data 27: dsdo_cm(1->1)
-data 28: dsdo_cm(1->1)
-extrapolation 1: dsdo_cm(1->1)
+data: set-up failed
+extrapolation x1: dsdo_cm(1->1)
+exit 1
 == tests/spin_orbit_potential/models/capture.azr
 data skowronski_luna_hpge: sigma(1->2)
 == tests/spin_orbit_potential/models/phase.azr
@@ -614,34 +629,36 @@ extrapolation 6: dsdo_cm(2->5)
 extrapolation 7: sum(dsdo_cm(2->3), J0/J1*dsdo_cm(2->5))
 extrapolation 8: sum(dsdo_cm(2->3), 0.5*J0/J1*dsdo_cm(2->5))
 == tests/sum_lab_frame/models/plain_data.azr
-data 1: dsdo_cm(2->3)
-data 2: dsdo_cm(2->5)
+data d1: dsdo_cm(2->3)
+data d2: dsdo_cm(2->5)
 == tests/sum_lab_frame/models/sum_data.azr
 data 1: sum(dsdo_cm(2->3), J0/J1*dsdo_cm(2->5))
 == tests/sum_lab_frame/models/sum_free.azr
-data 1: sum(dsdo_cm(2->3), J0/J1*dsdo_cm(2->5))
+data sum: sum(dsdo_cm(2->3), J0/J1*dsdo_cm(2->5))
 == tests/target_density/bad.azr
 == tests/target_density/fit.azr
 == tests/target_density/fit_group.azr
 == tests/target_density/fit_prior.azr
 == tests/target_density/true.azr
 == tests/target_effect_ranges/target_effect_ranges.azr
-data 1: ay(5->5)
-data 2: ay(5->5)
-extrapolation 2: dsdo_cm(5->5)
+data deineko_130: ay(5->5)
+data deineko_160: ay(5->5)
+extrapolation x2: dsdo_cm(5->5)
 == tests/thick_target_resonance/thick_target_resonance.azr
-data 1: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
-data 2: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
-extrapolation 1: sigma(1->3)
-extrapolation 2: sigma(1->3)
+data yield_scan: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
+data yield_scan_2: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
+extrapolation x1: sigma(1->3)
+extrapolation x2: sigma(1->3)
 == tests/thm_coherent_background/toy/toy.azr
 data 1: thm_sigma(1->2)
 == tests/transform_level_order/models/asc.azr
-extrapolation 1: sum(sigma(1->2))
+extrapolation x1: sum(sigma(1->2))
 == tests/transform_level_order/models/desc.azr
-extrapolation 1: sum(sigma(1->2))
+extrapolation x1: sum(sigma(1->2))
 == tests/transform_level_order/models/desc_fit.azr
-extrapolation 1: sum(sigma(1->2))
+data: set-up failed
+extrapolation x1: sum(sigma(1->2))
+exit 1
 == tests/units_scales/models/yield_story.azr
 data Y_curve: 113595465155.1859*sigma(1->2)
 extrapolation Y_thick: sigma(1->2)

@@ -36,16 +36,14 @@ failures=0
 ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
-# make_variant NAME REL: the 13N project with only its first data segment active, and relativistic=1 added when REL = 1
+# make_variant NAME REL: the 13N project with only its first data set active (the others 'active no'), and relativistic=1 added when REL = 1
 make_variant() {
   local dir="$WORK/$1"
   mkdir -p "$dir/output" "$dir/checks"
   cp -R "$SRC/data" "$dir/data"
   awk -v rel="$2" '
     { sub(/\r$/, "") }
-    /<segmentsData>/ { inseg = 1; n = 0; print; next }
-    /<\/segmentsData>/ { inseg = 0 }
-    inseg && NF { n++; if (n > 1) $1 = 0 }
+    /^dataset / { n++; if (n > 1) { print; print "    active         no"; next } }
     /^<\/config>$/ && rel == 1 { print "relativistic=1" }
     { print }' "$SRC/13N.azr" > "$dir/13N.azr"
 }

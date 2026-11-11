@@ -63,26 +63,36 @@ relclose() { awk -v a="$1" -v b="$2" -v t="$3" -v re="$num" 'BEGIN { if (!(a ~ r
 absclose() { awk -v a="$1" -v b="$2" -v t="$3" -v re="$num" 'BEGIN { if (!(a ~ re && b ~ re)) exit 1
   d = a - b; if (d < 0) d = -d; exit !(d <= t) }'; }
 
-# mk NAME LEVELS PRIOR SEGMENT_LINE... -> $WORK/NAME/t.azr (+ data/ with xs_90_big.dat, the 90-degree file with
-# its errors x 1e8).  LEVELS: fixall (every energy and width fixed), fixE (energies fixed), free.  PRIOR: the
-# priorCovariance value, or "" for none.
+# mk NAME LEVELS PRIOR RECORD... -> $WORK/NAME/t.azr (+ data/ with xs_90_big.dat, the 90-degree file with
+# its errors x 1e8), the records (format 3) as its <data> section, the k-th data set named s<k> (its parameters
+# s<k>.norm, s<k>.shift.offset).  LEVELS: fixall (every energy and width fixed), fixE (energies fixed), free.
+# PRIOR: the priorCovariance value, or "" for none.
 mk() {
   local name="$1" levels="$2" prior="$3"; shift 3
-  local dir="$WORK/$name"
+  local dir="$WORK/$name" k=0 r
   mkdir -p "$dir/output" "$dir/checks"
   cp -R "$ROOT/tests/norm_groups/data" "$dir/data"
   awk '{ $4 = $4 * 1e8; print }' "$dir/data/xs_90_s09.dat" > "$dir/data/xs_90_big.dat"
-  printf '%s\n' "$@" > "$dir/segs.txt"
+  : > "$dir/segs.txt"
+  for r in "$@"; do k=$((k + 1)); printf '%s\n' "${r//@N@/s$k}" >> "$dir/segs.txt"; done
   awk -v lv="$levels" -v pc="$prior" -v segs="$dir/segs.txt" '
     /<levels>/ { inlev = 1; print; next }
     /<\/levels>/ { inlev = 0 }
     inlev && NF > 12 && lv == "fixall" { $4 = 1; $11 = 1; print; next }
     inlev && NF > 12 && lv == "fixE" { $4 = 1; print; next }
     /<\/config>/ && pc != "" { print "priorCovariance=" pc }
-    /<segmentsData>/ { print; while ((getline l < segs) > 0) print l; skip = 1; next }
-    /<\/segmentsData>/ { skip = 0 }
+    /^<data>$/ { print; while ((getline l < segs) > 0) print l; skip = 1; next }
+    /^<\/data>$/ { skip = 0 }
     skip { next }
     { print }' "$BASE" > "$dir/t.azr"
+}
+# seg FILE ANGLE NORM [SHIFT]: a data set record of 1H(p,p) dsigma/dOmega at one c.m. angle (deg); its name is @N@
+seg() {
+  printf 'dataset @N@\n    reaction       1H(p,p)1H\n    quantity       dsigma_domega\n    unit           b/sr\n'
+  printf '    file           data/%s\n    columns        E_lab[MeV] theta_cm[deg] value error\n' "$1"
+  printf '    energy_window  0 100 MeV\n    angle_window   %s %s deg\n    norm           %s' "$2" "$2" "$3"
+  [ -n "${4:-}" ] && printf '\n    shift          %s' "$4"
+  printf '\n'
 }
 # run NAME INPUT FLAGS: the CLI in $WORK/NAME, log in run.log; the exit status is kept in $WORK/NAME/status
 run() {
@@ -101,19 +111,19 @@ setpar() {
        ($1 in v) { $2 = v[$1] } { print }' "$in" > "$out"
 }
 
-SEG1='1 1 1 0 100 40 40 4 1 1 10 0 0 0 data/xs_40_s08.dat 0 0'
-SEG2='1 1 1 0 100 90 90 4 1 1 5 0 0 0 data/xs_90_s09.dat 0 0'
-SEG1_0='1 1 1 0 100 40 40 4 1 1 0 0 0 0 data/xs_40_s08.dat 0 0'
-SEG2_0='1 1 1 0 100 90 90 4 1 1 0 0 0 0 data/xs_90_s09.dat 0 0'
+SEG1="$(seg xs_40_s08.dat 40 "1 fit prior 1 10%")"
+SEG2="$(seg xs_90_s09.dat 90 "1 fit prior 1 5%")"
+SEG1_0="$(seg xs_40_s08.dat 40 "1 fit")"
+SEG2_0="$(seg xs_90_s09.dat 90 "1 fit")"
 
 # ---- (a) a diagonal prior = the normError priors -------------------------------------------------------------------
 mk a_norm fixall "" "$SEG1" "$SEG2"
 mk a_prior fixall prior.txt "$SEG1_0" "$SEG2_0"
-printf '# the normError priors of the two segments: 10 %% and 5 %% of 1\nsegment_1_norm segment_2_norm\n1 1\n0.01 0\n0 0.0025\n' \
+printf '# the normError priors of the two segments: 10 %% and 5 %% of 1\ns1.norm s2.norm\n1 1\n0.01 0\n0 0.0025\n' \
   > "$WORK/a_prior/prior.txt"
 run a_norm '1\n\n\n7\n' ""
 if need a_norm; then
-  setpar "$WORK/a_norm/output/param.par" "$WORK/moved.par" segment_1_norm=1.07 segment_2_norm=0.96
+  setpar "$WORK/a_norm/output/param.par" "$WORK/moved.par" s1.norm=1.07 s2.norm=0.96
   for d in a_norm a_prior; do cp "$WORK/moved.par" "$WORK/$d/moved.par"; run $d '1\nmoved.par\n\n7\n' ""; done
   if need a_norm && need a_prior; then
     want=1.13   # ((1.07 - 1)/0.1)^2 + ((0.96 - 1)/0.05)^2 = 0.49 + 0.64
@@ -133,7 +143,7 @@ if need a_norm; then
   cp "$WORK/a_prior/prior.txt" "$WORK/a_prior_fit/"
   run a_norm_fit '2\n\n\n\n7\n' "--use-lm"; run a_prior_fit '2\n\n\n\n7\n' "--use-lm"
   if need a_norm_fit && need a_prior_fit; then
-    f1="$(par a_norm_fit segment_1_norm) $(par a_norm_fit segment_2_norm)"; f2="$(par a_prior_fit segment_1_norm) $(par a_prior_fit segment_2_norm)"
+    f1="$(par a_norm_fit s1.norm) $(par a_norm_fit s2.norm)"; f2="$(par a_prior_fit s1.norm) $(par a_prior_fit s2.norm)"
     t1="$(chi a_norm_fit Total-Chi-Squared)"; t2="$(chi a_prior_fit Total-Chi-Squared)"
     n1="$(chi a_norm_fit Total-Norm-Chi-Squared)"; p2="$(chi a_prior_fit Total-Prior-Covariance-Chi-Squared)"
     set -- $f1 $f2
@@ -145,10 +155,10 @@ fi
 
 # ---- (b) a correlated 2x2 prior: the quadratic form -----------------------------------------------------------------
 mk b free prior.txt "$SEG1_0" "$SEG2_0"
-printf 'segment_1_norm width_1_1\n1.02 0.6\n0.0004 0.00012\n0.00012 0.0009\n' > "$WORK/b/prior.txt"
+printf 's1.norm width_1_1\n1.02 0.6\n0.0004 0.00012\n0.00012 0.0009\n' > "$WORK/b/prior.txt"
 run b '1\n\n\n7\n' ""
 if need b; then
-  setpar "$WORK/b/output/param.par" "$WORK/b/moved.par" segment_1_norm=1.07 width_1_1=0.63
+  setpar "$WORK/b/output/param.par" "$WORK/b/moved.par" s1.norm=1.07 width_1_1=0.63
   run b '1\nmoved.par\n\n7\n' ""
   if need b; then
     p="$(chi b Total-Prior-Covariance-Chi-Squared)"
@@ -160,12 +170,12 @@ if need b; then
 fi
 
 # ---- (c) gradient check --------------------------------------------------------------------------------------------
-SEG1_SHIFT='1 1 1 0 100 40 40 4 1 1 10 0.002 0.01 1 data/xs_40_s08.dat 0 0'
-SEG2_10='1 1 1 0 100 90 90 4 1 1 10 0 0 0 data/xs_90_s09.dat 0 0'
+SEG1_SHIFT="$(seg xs_40_s08.dat 40 "1 fit prior 1 10%" "offset 0.002 MeV fit prior 0 0.01")"
+SEG2_10="$(seg xs_90_s09.dat 90 "1 fit prior 1 10%")"
 mk c_prior free prior.txt "$SEG1_SHIFT" "$SEG2_10"
 mk c_none free "" "$SEG1_SHIFT" "$SEG2_10"
 cat > "$WORK/c_prior/prior.txt" <<'EOF'
-segment_1_norm width_2_1 segment_1_energy_shift
+s1.norm width_2_1 s1.shift.offset
 1.05 0.7 0.004
 1e-4 2e-5 1e-7
 2e-5 1e-3 -2e-6
@@ -173,7 +183,7 @@ segment_1_norm width_2_1 segment_1_energy_shift
 EOF
 run c_none '1\n\n\n7\n' ""
 if [ -s "$WORK/c_none/output/param.par" ]; then
-  setpar "$WORK/c_none/output/param.par" "$WORK/c_start.par" segment_1_norm=1 width_2_1=0.75 segment_1_energy_shift=0.002
+  setpar "$WORK/c_none/output/param.par" "$WORK/c_start.par" s1.norm=1 width_2_1=0.75 s1.shift.offset=0.002
   for d in c_prior c_none; do
     cp "$WORK/c_start.par" "$WORK/$d/start.par"
     (cd "$WORK/$d" && printf '2\n\nstart.par\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
@@ -226,23 +236,23 @@ else
 fi
 
 # ---- (d) an unconstrained parameter: the prior mean / the conditional mean -----------------------------------------
-SEGA='1 1 1 0 100 40 40 4 1 1 0 0 0 0 data/xs_40_s08.dat 0 0'
-SEGB='1 1 1 0 100 90 90 4 1 1 0 0 0 0 data/xs_90_big.dat 0 0'
+SEGA="$(seg xs_40_s08.dat 40 "1 fit")"
+SEGB="$(seg xs_90_big.dat 90 "1 fit")"
 for m in "--use-gradient" "--use-lm"; do
   tag="${m#--use-}"
   mk "d1_$tag" fixall prior.txt "$SEGA" "$SEGB"
-  printf 'segment_2_norm\n0.9\n0.0004\n' > "$WORK/d1_$tag/prior.txt"
+  printf 's2.norm\n0.9\n0.0004\n' > "$WORK/d1_$tag/prior.txt"
   run "d1_$tag" '2\n\n\n\n7\n' "$m"
   if need "d1_$tag"; then
-    b="$(par "d1_$tag" segment_2_norm)"; a="$(par "d1_$tag" segment_1_norm)"
+    b="$(par "d1_$tag" s2.norm)"; a="$(par "d1_$tag" s1.norm)"
     if absclose "$b" 0.9 1e-4 && absclose "$a" 1.25 1e-3; then ok "(d) $m: the unconstrained norm at the prior mean ($b; 0.9), the other at the data's ($a)"
     else bad "(d) $m: unconstrained norm $b (prior mean 0.9), other $a (data 1.25)"; fi
   fi
   mk "d2_$tag" fixall prior.txt "$SEGA" "$SEGB"
-  printf 'segment_1_norm segment_2_norm\n1.2 0.9\n0.01 0.00475\n0.00475 0.0025\n' > "$WORK/d2_$tag/prior.txt"
+  printf 's1.norm s2.norm\n1.2 0.9\n0.01 0.00475\n0.00475 0.0025\n' > "$WORK/d2_$tag/prior.txt"
   run "d2_$tag" '2\n\n\n\n7\n' "$m"
   if need "d2_$tag"; then
-    b="$(par "d2_$tag" segment_2_norm)"; a="$(par "d2_$tag" segment_1_norm)"
+    b="$(par "d2_$tag" s2.norm)"; a="$(par "d2_$tag" s1.norm)"
     want="$(awk -v a="$a" 'BEGIN { printf "%.10g", 0.9 + 0.00475 / 0.01 * (a - 1.2) }')"
     if absclose "$b" "$want" 1e-4 && gt "$(awk -v b="$b" 'BEGIN { print b - 0.9 }')" 0.01; then
       ok "(d) $m: correlated prior moves it to mu_B + C_AB/C_AA (A - mu_A) = $want ($b; A = $a)"
@@ -261,28 +271,28 @@ refuse() {  # NAME WHAT PRIOR-TEXT...: refused with an ERROR, nothing written
     ok "(e) $what: refused ($(grep -m1 '^\*\*ERROR: priorCovariance' "$WORK/$name/run.log" | cut -c1-110)...), no output"
   else bad "(e) $what: not refused cleanly (output: '${out}', status $(cat "$WORK/$name/status"))"; tail -3 "$WORK/$name/run.log"; fi
 }
-refuse e_unknown "unknown name" 'segment_1_norm segment_9_norm' '1 1' '0.01 0' '0 0.01'
-refuse e_nonsym "non-symmetric" 'segment_1_norm segment_2_norm' '1 1' '0.01 0.001' '0.0011 0.01'
-refuse e_nonpd "not positive definite" 'segment_1_norm segment_2_norm' '1 1' '0.01 0.02' '0.02 0.01'
-refuse e_means "names/means mismatch" 'segment_1_norm segment_2_norm' '1' '0.01 0' '0 0.01'
-refuse e_rows "too many rows" 'segment_1_norm segment_2_norm' '1 1' '0.01 0' '0 0.01' '0 0'
-refuse e_rowlen "row length" 'segment_1_norm segment_2_norm' '1 1' '0.01 0 0' '0 0.01'
-refuse e_tag "#parametrization 2 in a Brune run" '#parametrization 2' 'segment_1_norm segment_2_norm' '1 1' '0.01 0' '0 0.01'
+refuse e_unknown "unknown name" 's1.norm s9.norm' '1 1' '0.01 0' '0 0.01'
+refuse e_nonsym "non-symmetric" 's1.norm s2.norm' '1 1' '0.01 0.001' '0.0011 0.01'
+refuse e_nonpd "not positive definite" 's1.norm s2.norm' '1 1' '0.01 0.02' '0.02 0.01'
+refuse e_means "names/means mismatch" 's1.norm s2.norm' '1' '0.01 0' '0 0.01'
+refuse e_rows "too many rows" 's1.norm s2.norm' '1 1' '0.01 0' '0 0.01' '0 0'
+refuse e_rowlen "row length" 's1.norm s2.norm' '1 1' '0.01 0 0' '0 0.01'
+refuse e_tag "#parametrization 2 in a Brune run" '#parametrization 2' 's1.norm s2.norm' '1 1' '0.01 0' '0 0.01'
 mk e_missing fixall nothere.txt "$SEG1_0" "$SEG2_0"
 run e_missing '1\n\n\n7\n' ""
 if grep -q '^\*\*ERROR: priorCovariance: cannot open' "$WORK/e_missing/run.log" && [ -z "$(ls "$WORK/e_missing/output")" ]; then
   ok "(e) missing file: refused, no output"; else bad "(e) missing file not refused cleanly"; fi
 mk e_tagok fixall prior.txt "$SEG1_0" "$SEG2_0"
-printf '#parametrization 1.000000e+00 0.000000e+00\nsegment_1_norm segment_2_norm\n1 1\n0.01 0\n0 0.01\n' > "$WORK/e_tagok/prior.txt"
+printf '#parametrization 1.000000e+00 0.000000e+00\ns1.norm s2.norm\n1 1\n0.01 0\n0 0.01\n' > "$WORK/e_tagok/prior.txt"
 run e_tagok '1\n\n\n7\n' ""
 if need e_tagok && isnum "$(chi e_tagok Total-Prior-Covariance-Chi-Squared)"; then ok "(e) the run's own tag (param.sav form) is accepted"
 else bad "(e) the run's own tag was not accepted"; fi
 # a listed parameter fixed in the run (energy_2: every level fixed) -> marginalized
 mk e_fixed fixall prior.txt "$SEG1_0" "$SEG2_0"
-printf 'segment_1_norm energy_2\n1.02 0.81\n0.0004 0.00015\n0.00015 0.0001\n' > "$WORK/e_fixed/prior.txt"
+printf 's1.norm energy_2\n1.02 0.81\n0.0004 0.00015\n0.00015 0.0001\n' > "$WORK/e_fixed/prior.txt"
 run e_fixed '1\n\n\n7\n' ""
 if need e_fixed; then
-  setpar "$WORK/e_fixed/output/param.par" "$WORK/e_fixed/moved.par" segment_1_norm=1.07
+  setpar "$WORK/e_fixed/output/param.par" "$WORK/e_fixed/moved.par" s1.norm=1.07
   run e_fixed '1\nmoved.par\n\n7\n' ""
   p="$(chi e_fixed Total-Prior-Covariance-Chi-Squared)"
   want="$(awk 'BEGIN { printf "%.17g", (1.07 - 1.02)^2 / 0.0004 }')"
@@ -292,8 +302,8 @@ if need e_fixed; then
 fi
 
 # ---- (f) prior_from_fit round trip ---------------------------------------------------------------------------------
-SEGF1='1 1 1 0 100 40 40 4 1.25 0 0 0 0 0 data/xs_40_s08.dat 0 0'
-SEGF2='1 1 1 0 100 90 90 4 1.25 0 0 0 0 0 data/xs_90_s09.dat 0 0'
+SEGF1="$(seg xs_40_s08.dat 40 "1.25 fixed")"
+SEGF2="$(seg xs_90_s09.dat 90 "1.25 fixed")"
 mk f_a fixE "" "$SEGF1" "$SEGF2"
 run f_a '2\n\n\n7\n' "--use-lm --covariance-band"
 if need f_a && [ -s "$WORK/f_a/output/covariance.dat" ]; then
@@ -345,9 +355,9 @@ else
 fi
 
 # ---- (g) MCMC --------------------------------------------------------------------------------------------------------
-SEGB_10='1 1 1 0 100 90 90 4 1 1 10 0 0 0 data/xs_90_big.dat 0 0'
+SEGB_10="$(seg xs_90_big.dat 90 "1 fit prior 1 10%")"
 mk g_mcmc fixall prior.txt "$SEGA" "$SEGB_10"
-printf 'segment_2_norm\n0.9\n0.0004\n' > "$WORK/g_mcmc/prior.txt"
+printf 's2.norm\n0.9\n0.0004\n' > "$WORK/g_mcmc/prior.txt"
 run g_mcmc '6\n\n\n16\n400\n1\n\n2\nyes\nyes\n' ""
 if [ -s "$WORK/g_mcmc/output/samples.mcmc" ]; then
   read -r lpd mean sd <<< "$("$PY" -I - "$WORK/g_mcmc/output/samples.mcmc" <<'PYEOF'
@@ -360,7 +370,7 @@ s = d[d[:, 0] > 150, 6]
 print(f"{np.max(np.abs(lp - d[:, 4])):.2e} {s.mean():.6f} {s.std():.6f}")
 PYEOF
 )"
-  if le "$lpd" 1e-10 && grep -q "replaces the diagonal prior of segment_2_norm" "$WORK/g_mcmc/run.log"; then
+  if le "$lpd" 1e-10 && grep -q "replaces the diagonal prior of s2.norm" "$WORK/g_mcmc/run.log"; then
     ok "(g) MCMC logprior = the prior's Gaussian log density ($lpd), replacing the normError auto prior (noted)"
   else bad "(g) MCMC logprior off by $lpd, replacement note $(grep -c 'replaces the diagonal' "$WORK/g_mcmc/run.log")"; fi
   if absclose "$mean" 0.9 0.006 && absclose "$sd" 0.02 0.005; then ok "(g) the unconstrained norm's chain: mean $mean, sd $sd (prior 0.9 +- 0.02)"

@@ -34,6 +34,8 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import old_tree  # noqa: E402  (the old originals of converted projects)
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
 
@@ -56,7 +58,7 @@ except Exception as err:                       # same skip as the other pyazr te
 # numpy >= 2.0 renamed trapz to trapezoid; the linux CI job runs Ubuntu 22.04's numpy 1.21, which has only trapz.
 _trapezoid = getattr(np, "trapezoid", None) or np.trapz
 
-SRC = os.path.join(ROOT, "tests", "13N", "13N.azr")
+SRC = old_tree.original(os.path.join(ROOT, "tests", "13N", "13N.azr"))  # the old file (format3_tree.md)
 N0, EPS = 1.0e18, 1.0e-20
 STOP = f'"a0" 1 {EPS:g}'
 TARGET = {

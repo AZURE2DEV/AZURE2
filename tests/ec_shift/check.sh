@@ -34,24 +34,27 @@ ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
 ACTIVE=" 1 6 8 10 "
-# model SHIFT MOVED(0|1) OUT.azr: 13N with target integration off, only $ACTIVE on;
-# MOVED=0 puts SHIFT (lab MeV) on those segments, MOVED=1 reads moved/<file> with no shift.
+# model S MOVED OUT: tests/13N without its target effects (every data set's target, beam, detector and quadrature
+# removed; the thick-target yield of data set 1 is then a cross section, as the old engine read it with its
+# <targetInt> lines inactive), only the data sets of ACTIVE active, each with a fixed energy shift S (MeV) or, MOVED,
+# none and its data file taken from moved/
 model() {
   awk -v S="$1" -v moved="$2" -v active="$ACTIVE" '
-    /<targetInt>/ { ti = 1; print; next }
-    /<\/targetInt>/ { ti = 0 }
-    /<segmentsData>/ { sd = 1; print; next }
-    /<\/segmentsData>/ { sd = 0 }
-    ti && NF > 0 { sub(/^[ \t]*1/, "0") }
-    sd && NF > 0 {
-      n++
-      if (index(active, " " n " ") == 0) { $1 = 0 }
-      else if (moved == 1) { $12 = 0; f = $15; sub(/.*\//, "", f); $15 = "moved/" f }
-      else { $12 = S }
+    { sub(/\r$/, "") }
+    /^[a-z_]+ [A-Za-z0-9_-]+$/ { rec = $0; isdata = ($1 == "dataset") }
+    isdata && $1 == "dataset" {
+      n++; print
+      if (index(active, " " n " ") == 0) print "    active         no"
+      else if (moved != 1 && S + 0 != 0) print "    shift          offset " S " MeV fixed"
+      next
     }
+    isdata && ($1 == "target" || $1 == "beam" || $1 == "detector" || $1 == "quadrature" || $1 == "shift" || $1 == "#") { next }
+    isdata && $1 == "quantity" && $2 == "yield" { $0 = "    quantity       sigma" }
+    isdata && $1 == "unit" && $2 == "1/particle" { $0 = "    unit           b" }
+    isdata && moved == 1 && $1 == "file" { f = $2; sub(/.*\//, "", f); $0 = "    file           moved/" f }
+    /^<\/data>$/ { isdata = 0 }
     { print }' "$SRC/13N.azr" > "$3"
 }
-# run NAME AZR FLAGS -> $WORK/NAME/output/AZUREOut_aa=1_R=2.out
 run() {
   local dir="$WORK/$1"
   mkdir -p "$dir/output" "$dir/checks"

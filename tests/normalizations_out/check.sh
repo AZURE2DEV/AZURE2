@@ -10,8 +10,8 @@
 #
 #   (a) tests/13N with the norm of segment 3 varied (5 %): the file is the header plus exactly one row, of ten fields,
 #       starting "3,data/meyer_84.dat,8.4300e+01,8.4300e+01,Lab,";
-#   (b) tests/norm_groups with the two normgroup D members' norms varied (the other segments fixed): the rows are
-#       exactly those two, ten fields each.
+#   (b) tests/norm_groups with the normalization record D of its two data sets fitted: the rows are exactly those two,
+#       ten fields each.
 # dev f18b36e: (a) 16 rows, 15 of them with six fields; (b) passes there too (both of that model's segments are varied).
 #
 #   ./tests/normalizations_out/check.sh path/to/AZURE2
@@ -35,10 +35,11 @@ fields() { awk -F, 'NR > 1 { print NF }' "$1" | sort -n | uniq -c | awk '{ print
 
 # ---- (a) 13N, one varied norm -----------------------------------------------------------------------------------
 mkdir -p "$WORK/a/output" "$WORK/a/checks" && cp -r "$HERE/../13N/data" "$WORK/a/"
-# data line: active ent exit minE maxE minA maxA isDiff norm varyNorm normErr ... ; the third data segment
-awk 'BEGIN { n = 0 } /<segmentsData>/ { inb = 1 } /<\/segmentsData>/ { inb = 0 }
-     { sub(/\r$/, ""); if (inb && $0 !~ /segmentsData/ && NF > 10) { n++; if (n == 3) { $10 = 1; $11 = 5; $1 = $1 } } print }' \
+# the third data set, meyer_84 (its norm "1 fixed prior 1 5%"), with its norm fitted
+awk '{ sub(/\r$/, "") } /^[a-z_]+ [A-Za-z0-9_-]+$/ { rec = $0 }
+     rec == "dataset meyer_84" && $1 == "norm" { $0 = "    norm           1 fit prior 1 5%" } { print }' \
     "$HERE/../13N/13N.azr" > "$WORK/a/t.azr"
+grep -q '^    norm           1 fit prior 1 5%$' "$WORK/a/t.azr" || bad "(a) the model: tests/13N/13N.azr has no data set meyer_84 with a norm"
 run a
 f="$WORK/a/output/normalizations.out"
 if [ -s "$f" ]; then
@@ -56,12 +57,12 @@ fi
 
 # ---- (b) norm groups ----------------------------------------------------------------------------------------------
 mkdir -p "$WORK/b/output" "$WORK/b/checks" && cp -r "$HERE/../norm_groups/data" "$WORK/b/"
-# the two normgroup members with their norms varied (5 %); the other segments keep fixed norms
-awk '/<segmentsData>/ { inb = 1 } /<\/segmentsData>/ { inb = 0 }
-     { sub(/\r$/, ""); if (inb && $0 ~ /normgroup/) { $10 = 1; $11 = 5; $1 = $1 } print }' "$HERE/../norm_groups/norm_groups.azr" > "$WORK/b/t.azr"
+# the normalization record D of the two data sets fitted (5 %); format 3 has no other data sets here
+awk '/^normalization D$/ { inr = 1 } /^dataset / { inr = 0 }
+     { sub(/\r$/, ""); if (inr && $1 == "value") $0 = "    value          " $2 " fit prior " $2 " 5%"; print }' "$HERE/../norm_groups/norm_groups.azr" > "$WORK/b/t.azr"
 run b
 f="$WORK/b/output/normalizations.out"
-want="$(awk '/<segmentsData>/ { inb = 1; next } /<\/segmentsData>/ { inb = 0 } inb && NF > 10 && $1 == 1 && $10 == 1 { n++ } END { print n + 0 }' "$WORK/b/t.azr")"
+want="$(grep -c '^    norm           D$' "$WORK/b/t.azr")"   # the data sets on the fitted record
 if [ -s "$f" ]; then
   nrows="$(awk 'NR > 1' "$f" | wc -l | tr -d ' ')"
   nbad="$(awk -F, 'NR > 1 && NF != 10' "$f" | wc -l | tr -d ' ')"

@@ -10,29 +10,91 @@ none #Legendre Polynomial Check
 none #Coulomb Amplitudes Check
 none #Reaction Pathway Check
 none #Angular Distributions Check
+format=3
 </config>
 <levels>
 4 1 30.0 1 1 1 0 8 1 1 1 0.0 1.0 1 1.0 1 0 2.0135532127 2.0135532127 1 1 -1.0 -1.0 0 0 0.0 0 4.0 0 0 0
 
 </levels>
-<segmentsData>
-1 1 1 0 100 20 20 4 1 0 0 0 0 0 data/mott_20.dat 0 0
-1 1 1 0 100 45 45 4 1 0 0 0 0 0 data/mott_45.dat 0 0
-1 1 1 0 100 70 70 4 1 0 0 0 0 0 data/mott_70.dat 0 0
-1 1 1 0 100 90 90 4 1 0 0 0 0 0 data/mott_90.dat 0 0
-1 1 1 0 100 110 110 4 1 0 0 0 0 0 data/mott_110.dat 0 0
-1 1 1 0 100 135 135 4 1 0 0 0 0 0 data/mott_135.dat 0 0
-1 1 1 0 100 160 160 4 1 0 0 0 0 0 data/mott_160.dat 0 0
-</segmentsData>
-<segmentsTest>
-</segmentsTest>
-<targetInt>
-</targetInt>
-<lastRun>
-9997
-"output/param.sav"
-""
-0 0
-0 ""
--1. -1. -1.
-</lastRun>
+<data>
+# <segmentsData> line 1
+dataset mott_20
+    reaction       2H(d,d)2H
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/mott_20.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0 100 MeV
+    angle_window   20 20 deg
+    norm           1 fixed
+
+# <segmentsData> line 2
+dataset mott_45
+    reaction       2H(d,d)2H
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/mott_45.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0 100 MeV
+    angle_window   45 45 deg
+    norm           1 fixed
+
+# <segmentsData> line 3
+dataset mott_70
+    reaction       2H(d,d)2H
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/mott_70.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0 100 MeV
+    angle_window   70 70 deg
+    norm           1 fixed
+
+# <segmentsData> line 4
+dataset mott_90
+    reaction       2H(d,d)2H
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/mott_90.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0 100 MeV
+    angle_window   90 90 deg
+    norm           1 fixed
+
+# <segmentsData> line 5
+dataset mott_110
+    reaction       2H(d,d)2H
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/mott_110.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0 100 MeV
+    angle_window   110 110 deg
+    norm           1 fixed
+
+# <segmentsData> line 6
+dataset mott_135
+    reaction       2H(d,d)2H
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/mott_135.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0 100 MeV
+    angle_window   135 135 deg
+    norm           1 fixed
+
+# <segmentsData> line 7
+dataset mott_160
+    reaction       2H(d,d)2H
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/mott_160.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0 100 MeV
+    angle_window   160 160 deg
+    norm           1 fixed
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+</targets>

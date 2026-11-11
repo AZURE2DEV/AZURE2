@@ -24,7 +24,9 @@ def projects():
     found = []
     for top in ("tests", "examples"):
         for dirpath, dirnames, filenames in os.walk(os.path.join(ROOT, top)):
-            dirnames[:] = sorted(d for d in dirnames if d not in ("output", "checks"))
+            # tests/convert/: the originals of converted projects, the converter's fixtures (docs/upgrade/format3_tree.md)
+            dirnames[:] = sorted(d for d in dirnames if d not in ("output", "checks")
+                                 and os.path.join(dirpath, d) != os.path.join(ROOT, "tests", "convert"))
             for name in sorted(filenames):
                 if name.endswith(".azr"):
                     found.append(os.path.relpath(os.path.join(dirpath, name), ROOT))

@@ -41,7 +41,7 @@ par() { awk -v n="$2" '$1 == n { print $2 }' "$1/output/param.sav" 2>/dev/null; 
 relclose() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a - b; if (d < 0) d = -d; m = b < 0 ? -b : b; if (m == 0) m = 1e-300; exit !(d <= t * m) }'; }
 absclose() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a - b; if (d < 0) d = -d; exit !(d < t) }'; }
 
-# mk NAME LEVELS_FIXED SEGMENT_LINE... -> $WORK/NAME/t.azr with those <segmentsData> lines
+# mk NAME LEVELS_FIXED RECORD... -> $WORK/NAME/t.azr with those records as its <data> section (format 3)
 mk() {
   local name="$1" fix="$2"; shift 2
   local dir="$WORK/$name"
@@ -52,11 +52,23 @@ mk() {
     /<levels>/ { inlev = 1; print; next }
     /<\/levels>/ { inlev = 0 }
     inlev && fix && NF > 12 { $4 = 1; $11 = 1; print; next }   # fix every energy and width
-    /<segmentsData>/ { print; while ((getline l < segs) > 0) print l; skip = 1; next }
-    /<\/segmentsData>/ { skip = 0 }
+    /^<data>$/ { print; while ((getline l < segs) > 0) print l; skip = 1; next }
+    /^<\/data>$/ { skip = 0 }
     skip { next }
     { print }' "$HERE/norm_groups.azr" > "$dir/t.azr"
 }
+# ds FILE-STEM ANGLE NORM [SHIFT]: a data set of 1H(p,p) dsigma/dOmega at one c.m. angle (deg), named after its file;
+# NORM a nuisance ("1.2 fixed") or the name of a normalization record; SHIFT the value of a shift field
+ds() {
+  printf 'dataset %s\n    reaction       1H(p,p)1H\n    quantity       dsigma_domega\n    unit           b/sr\n' "$1"
+  printf '    file           data/%s.dat\n    columns        E_lab[MeV] theta_cm[deg] value error\n' "$1"
+  printf '    energy_window  0 100 MeV\n    angle_window   %s %s deg\n    norm           %s' "$2" "$2" "$3"
+  [ -n "${4:-}" ] && printf '\n    shift          %s' "$4"
+  printf '\n'
+}
+# nr LABEL VALUE: a normalization record shared by the data sets that name it (format 3; old "normgroup LABEL", the
+# value of the group's first line)
+nr() { printf 'normalization %s\n    value          %s\n' "$1" "$2"; }
 run() {  # NAME MODE EXTRA_FLAGS
   local input
   if [ "$2" = 1 ]; then input='1\n\n\n7\n'; else input='2\n\n\n\n7\n'; fi
@@ -71,15 +83,9 @@ run() {  # NAME MODE EXTRA_FLAGS
 
 # ---- 1. a follower takes the leader's norm -----------------------------------
 # Segment 2's own norm (1, and "free with 10%") is ignored: it uses segment 1's 1.2.
-mk group 0 \
-  "1 1 1 0 100 40 40 4 1.2 0 0 0 0 0 data/xs_40_s08.dat 0 0 normgroup D" \
-  "1 1 1 0 100 90 90 4 1 1 10 0 0 0 data/xs_90_s09.dat 0 0 normgroup D"
-mk direct 0 \
-  "1 1 1 0 100 40 40 4 1.2 0 0 0 0 0 data/xs_40_s08.dat 0 0" \
-  "1 1 1 0 100 90 90 4 1.2 0 0 0 0 0 data/xs_90_s09.dat 0 0"
-mk plain 0 \
-  "1 1 1 0 100 40 40 4 1.2 0 0 0 0 0 data/xs_40_s08.dat 0 0" \
-  "1 1 1 0 100 90 90 4 1 0 0 0 0 0 data/xs_90_s09.dat 0 0"
+mk group 0 "$(nr D "1.2 fixed")" "$(ds xs_40_s08 40 D)" "$(ds xs_90_s09 90 D)"
+mk direct 0 "$(ds xs_40_s08 40 "1.2 fixed")" "$(ds xs_90_s09 90 "1.2 fixed")"
+mk plain 0 "$(ds xs_40_s08 40 "1.2 fixed")" "$(ds xs_90_s09 90 "1 fixed")"
 if run group 1 "" && run direct 1 "" && run plain 1 ""; then
   g1="$(seg "$WORK/group" 1)"; g2="$(seg "$WORK/group" 2)"; d1="$(seg "$WORK/direct" 1)"; d2="$(seg "$WORK/direct" 2)"; p2="$(seg "$WORK/plain" 2)"
   if relclose "$g1" "$d1" 1e-10; then ok "leader keeps its own norm (chi2 $g1 = $d1)"; else bad "leader: grouped $g1 != direct $d1"; fi
@@ -90,15 +96,16 @@ if run group 1 "" && run direct 1 "" && run plain 1 ""; then
 fi
 
 # ---- 1b. a fixed leader keeps the group fixed ----------------------------------
-# Leader fixed at 1.2, follower's own line "free, 10%": no free norm may appear.
+# The group's value fixed at 1.2: no free norm may appear.
 # Only the leader's shift is free (the data want 0), so the fit has one parameter.
-mk fixedleader 1 \
-  "1 1 1 0 100 40 40 4 1.2 0 0 0.001 0.01 1 data/xs_40_s08.dat 0 0 normgroup D" \
-  "1 1 1 0 100 90 90 4 1 1 10 0 0 0 data/xs_90_s09.dat 0 0 normgroup D"
+mk fixedleader 1 "$(nr D "1.2 fixed")" "$(ds xs_40_s08 40 D "offset 0.001 MeV fit prior 0 0.01")" "$(ds xs_90_s09 90 D)"
 if run fixedleader 2 ""; then
-  n1="$(par "$WORK/fixedleader" segment_1_norm)"; n2="$(par "$WORK/fixedleader" segment_2_norm)"
-  if [ -z "$n1" ] && relclose "$n2" 1.2 1e-12; then ok "fixed leader: the follower's norm stays at the leader's 1.2 ($n2)"
-  else bad "fixed leader: segment_1_norm '$n1', segment_2_norm '$n2' (expected none and 1.2)"; fi
+  # format 3 states the group's value once: a fixed group has no norm parameter at all (the old file kept the
+  # follower's own "free" flag as a fixed follower row at the leader's 1.2; that flag cannot be written now)
+  nrows="$(awk '$1 ~ /^D[.]value/' "$WORK/fixedleader/output/param.sav" 2>/dev/null | wc -l | tr -d ' ')"
+  sh="$(par "$WORK/fixedleader" xs_40_s08.shift.offset)"
+  if [ -s "$WORK/fixedleader/output/param.sav" ] && [ "$nrows" = 0 ] && [ -n "$sh" ]; then ok "fixed leader: no norm parameter of the group, the leader's shift fitted ($sh)"
+  else bad "fixed leader: $nrows rows of D.value in param.sav, shift '$sh'"; fi
   if grep -q "share one normalization (segment #1's, fixed)" "$WORK/fixedleader/run.log"; then ok "fixed leader: the log calls the group fixed"; else bad "fixed leader: no 'fixed' group note"; fi
 fi
 
@@ -106,12 +113,10 @@ fi
 # Both files are the model times 0.8: n = 1.25 is the chi2 = 0 minimum.  The
 # follower's own line says "free, 10%": ignored (its parameter is fixed).
 fit_common() {  # NAME EXTRA_FLAGS
-  mk "$1" 1 \
-    "1 1 1 0 100 40 40 4 1 1 0 0 0 0 data/xs_40_s08.dat 0 0 normgroup F" \
-    "1 1 1 0 100 90 90 4 1 1 10 0 0 0 data/xs_90_s08.dat 0 0 normgroup F"
+  mk "$1" 1 "$(nr F "1 fit")" "$(ds xs_40_s08 40 F)" "$(ds xs_90_s08 90 F)"
   run "$1" 2 "$2" || return
   local n1 n2 t dir="$WORK/$1"
-  n1="$(par "$dir" segment_1_norm)"; n2="$(par "$dir" segment_2_norm)"; t="$(total "$dir")"
+  n1="$(par "$dir" F.value)"; n2="$(par "$dir" "F.value[xs_90_s08]")"; t="$(total "$dir")"
   if absclose "$n1" 1.25 1e-4; then ok "$1: shared norm n = $n1 (truth 1.25)"; else bad "$1: shared norm n = $n1, expected 1.25"; fi
   if relclose "$n2" "$n1" 1e-12; then ok "$1: follower written with the shared value ($n2)"; else bad "$1: follower written as $n2, leader $n1"; fi
   if awk -v t="$t" 'BEGIN { exit !(t + 0 < 1e-3) }'; then ok "$1: chi2 = 0 at the truth (chi2 $t)"; else bad "$1: chi2 $t, expected ~0"; fi
@@ -121,11 +126,9 @@ fit_common fit_analytic "--use-gradient"
 fit_common fit_lm "--use-lm"
 
 # ---- 3. different scales -> one compromise -----------------------------------
-mk compromise 1 \
-  "1 1 1 0 100 40 40 4 1 1 0 0 0 0 data/xs_40_s08.dat 0 0 normgroup F" \
-  "1 1 1 0 100 90 90 4 1 1 0 0 0 0 data/xs_90_s09.dat 0 0 normgroup F"
+mk compromise 1 "$(nr F "1 fit")" "$(ds xs_40_s08 40 F)" "$(ds xs_90_s09 90 F)"
 if run compromise 2 "--use-gradient"; then
-  n1="$(par "$WORK/compromise" segment_1_norm)"; n2="$(par "$WORK/compromise" segment_2_norm)"
+  n1="$(par "$WORK/compromise" F.value)"; n2="$(par "$WORK/compromise" "F.value[xs_90_s09]")"
   if awk -v n="$n1" 'BEGIN { exit !(n > 1.1112 && n < 1.2499) }' && relclose "$n2" "$n1" 1e-12; then
     ok "one norm for both, between the two truths (n = $n1; truths 1.111 / 1.25)"
   else
@@ -137,11 +140,9 @@ fi
 # Leader and follower both say "1 +- 10%"; data want 1.25, so the penalty pulls.
 # Grouped: chi2 + ((n-1)/0.1)^2 once.  Total-Norm-Chi-Squared must be that one
 # term, and the follower's own row must show no penalty.
-mk penalty 1 \
-  "1 1 1 0 100 40 40 4 1 1 10 0 0 0 data/xs_40_s08.dat 0 0 normgroup F" \
-  "1 1 1 0 100 90 90 4 1 1 10 0 0 0 data/xs_90_s08.dat 0 0 normgroup F"
+mk penalty 1 "$(nr F "1 fit prior 1 10%")" "$(ds xs_40_s08 40 F)" "$(ds xs_90_s08 90 F)"
 if run penalty 2 "--use-gradient"; then
-  n="$(par "$WORK/penalty" segment_1_norm)"; pt="$(normtotal "$WORK/penalty")"; p2="$(segnormchi "$WORK/penalty" 2)"
+  n="$(par "$WORK/penalty" F.value)"; pt="$(normtotal "$WORK/penalty")"; p2="$(segnormchi "$WORK/penalty" 2)"
   want="$(awk -v n="$n" 'BEGIN { printf "%.10g", ((n - 1) / 0.1) ^ 2 }')"
   if relclose "$pt" "$want" 1e-4 && [ "$p2" = 0 ]; then ok "one penalty ((n-1)/0.1)^2 = $pt at n = $n; follower row 0"
   else bad "norm penalty $pt (follower row $p2), expected one term $want at n = $n"; fi
@@ -152,9 +153,7 @@ fi
 # Leader's norm free, follower's fixed: the follower's points must enter the
 # leader's column.  The follower's shift is free too, so the check is not
 # about a single component.
-mk gradcheck 1 \
-  "1 1 1 0 100 40 40 4 1.1 1 10 0 0 0 data/xs_40_s08.dat 0 0 normgroup G" \
-  "1 1 1 0 100 90 90 4 1 1 10 0.001 0.01 1 data/xs_90_s09.dat 0 0 normgroup G"
+mk gradcheck 1 "$(nr G "1.1 fit prior 1.1 10%")" "$(ds xs_40_s08 40 G)" "$(ds xs_90_s09 90 G "offset 0.001 MeV fit prior 0 0.01")"
 (cd "$WORK/gradcheck" && printf '2\n\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 "$AZURE2_BIN" --use-gradient --no-gui --no-readline t.azr > check.log 2>&1)
 line="$(grep 'components with relative' "$WORK/gradcheck/check.log")"
 if echo "$line" | grep -q "norm 0/1 .*Jacobian path: norm 0/1"; then ok "leader's norm: adjoint and Jacobian gradients = finite difference"

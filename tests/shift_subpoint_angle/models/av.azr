@@ -10,6 +10,7 @@ none                                                                            
 none                                                                                                #Coulomb Amplitudes Check
 none                                                                                                #Reaction Pathway Check
 none                                                                                                #Angular Distributions Check
+format=3
 </config>
 <levels>
  0.5   -1        3.104    1    1    1    1    2    1    1    1               19000  0.5    1    0    1            0 1.00783 15.9949    1    8      0.60027      0.60027    0    0          0.0     0       5       5.5857            0       0
@@ -122,21 +123,166 @@ none                                                                            
  5.5    1           10    1    1    2    5    6   21    1    0                   0    1    1  2.5    1            0       0 17.0021    0    9      0.60027            0    0    0          0.0    10       0            0            0       7
 
 </levels>
-<segmentsData>
-1 1 1 0 10 37.05 37.05 1 1 0 0 0 0 1 data/Harris_pp.dat
-1 1 1 0 10 51.89 51.89 1 1 0 0 0 0 1 data/Harris_pp.dat
-1 1 1 0 10 60.68 60.68 1 1 0 0 0 0 1 data/Harris_pp.dat
-1 1 1 0 10 86.39 86.39 1 1 0 0 0 0 1 data/Harris_pp.dat
-1 1 1 0 10 99.9 99.9 1 1 0 0 0 0 1 data/Harris_pp.dat
-1 1 1 0 10 111.29 111.29 1 1 0 0 0 0 1 data/Harris_pp.dat
-1 1 1 0 10 122.2 122.2 1 1 0 0 0 0 1 data/Harris_pp.dat
-1 1 1 0 10 128.56 128.56 1 1 0 0 0 0 1 data/Harris_pp.dat
-1 1 1 0 10 138.36 138.36 1 1 0 0 0 0 1 data/Harris_pp.dat
-1 1 1 0 10 147.49 147.49 1 1 0 0 0 0 1 data/Harris_pp.dat
-1 1 1 0 10 160.05 160.05 1 1 0 0 0 0 1 data/Harris_pp.dat
-</segmentsData>
-<segmentsTest>
-</segmentsTest>
-<targetInt>
-1 "1-11" 20 1 0.0001 0 0 "" 0 0 0 0 "" 0
-</targetInt>
+<data>
+# <segmentsData> line 1
+dataset Harris_pp
+    reaction       16O(p,p)16O
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/Harris_pp.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    energy_window  0 10 MeV
+    angle_window   37.05 37.05 deg
+    norm           1 fixed
+    shift          offset 0 MeV fit
+    beam           beam_targetInt1
+    quadrature     points 20
+
+# <segmentsData> line 2
+dataset Harris_pp_2
+    reaction       16O(p,p)16O
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/Harris_pp.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    energy_window  0 10 MeV
+    angle_window   51.89 51.89 deg
+    norm           1 fixed
+    shift          offset 0 MeV fit
+    beam           beam_targetInt1
+    quadrature     points 20
+
+# <segmentsData> line 3
+dataset Harris_pp_3
+    reaction       16O(p,p)16O
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/Harris_pp.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    energy_window  0 10 MeV
+    angle_window   60.68 60.68 deg
+    norm           1 fixed
+    shift          offset 0 MeV fit
+    beam           beam_targetInt1
+    quadrature     points 20
+
+# <segmentsData> line 4
+dataset Harris_pp_4
+    reaction       16O(p,p)16O
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/Harris_pp.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    energy_window  0 10 MeV
+    angle_window   86.39 86.39 deg
+    norm           1 fixed
+    shift          offset 0 MeV fit
+    beam           beam_targetInt1
+    quadrature     points 20
+
+# <segmentsData> line 5
+dataset Harris_pp_5
+    reaction       16O(p,p)16O
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/Harris_pp.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    energy_window  0 10 MeV
+    angle_window   99.9 99.9 deg
+    norm           1 fixed
+    shift          offset 0 MeV fit
+    beam           beam_targetInt1
+    quadrature     points 20
+
+# <segmentsData> line 6
+dataset Harris_pp_6
+    reaction       16O(p,p)16O
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/Harris_pp.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    energy_window  0 10 MeV
+    angle_window   111.29 111.29 deg
+    norm           1 fixed
+    shift          offset 0 MeV fit
+    beam           beam_targetInt1
+    quadrature     points 20
+
+# <segmentsData> line 7
+dataset Harris_pp_7
+    reaction       16O(p,p)16O
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/Harris_pp.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    energy_window  0 10 MeV
+    angle_window   122.2 122.2 deg
+    norm           1 fixed
+    shift          offset 0 MeV fit
+    beam           beam_targetInt1
+    quadrature     points 20
+
+# <segmentsData> line 8
+dataset Harris_pp_8
+    reaction       16O(p,p)16O
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/Harris_pp.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    energy_window  0 10 MeV
+    angle_window   128.56 128.56 deg
+    norm           1 fixed
+    shift          offset 0 MeV fit
+    beam           beam_targetInt1
+    quadrature     points 20
+
+# <segmentsData> line 9
+dataset Harris_pp_9
+    reaction       16O(p,p)16O
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/Harris_pp.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    energy_window  0 10 MeV
+    angle_window   138.36 138.36 deg
+    norm           1 fixed
+    shift          offset 0 MeV fit
+    beam           beam_targetInt1
+    quadrature     points 20
+
+# <segmentsData> line 10
+dataset Harris_pp_10
+    reaction       16O(p,p)16O
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/Harris_pp.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    energy_window  0 10 MeV
+    angle_window   147.49 147.49 deg
+    norm           1 fixed
+    shift          offset 0 MeV fit
+    beam           beam_targetInt1
+    quadrature     points 20
+
+# <segmentsData> line 11
+dataset Harris_pp_11
+    reaction       16O(p,p)16O
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/Harris_pp.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    energy_window  0 10 MeV
+    angle_window   160.05 160.05 deg
+    norm           1 fixed
+    shift          offset 0 MeV fit
+    beam           beam_targetInt1
+    quadrature     points 20
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+# <targetInt> line 1
+beam beam_targetInt1
+    # CONVERTED: a Gaussian convolution is written as the beam's energy spread (the kernel is the same; the old line does not say whether it was a detector resolution)
+    spread         0.0001 MeV lab
+</targets>

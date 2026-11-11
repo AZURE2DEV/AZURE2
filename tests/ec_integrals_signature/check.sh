@@ -35,13 +35,13 @@ RUN="$(guard_command "${TEST_TIMEOUT:-900}")"
 failures=0
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
-# make_variant NAME STRAGGLING RADIUS: a copy of the model with only segment 1
-# (Artemov) active, the straggling flag of the "1,2" target effect set, and the
-# 12C+p channel radius set.  The trailing fields of a <targetInt> line are
-# isStraggling stragglingCoefficient widthMultiplier pointsPerWidth; the last
-# is lowered from 50 to 10 to keep the runs short -- the test compares the
-# model with itself, so the grid need not be converged.  In a <levels> line,
-# field 6 is the pair key and field 28 the channel radius.
+# make_variant NAME STRAGGLING RADIUS: a copy of the model with only data set 1
+# (Artemov) active, the straggling of its thick target tgt_targetInt2 set (0:
+# none, 1: the coefficient 0.04 keV^1/2 cm the old line carried), and the 12C+p channel radius set.  The points per width of
+# the data sets on that target are lowered from 50 to 10 to keep the runs
+# short -- the test compares the model with itself, so the grid need not be
+# converged.  In a <levels> line, field 6 is the pair key and field 28 the
+# channel radius.
 make_variant() {
   local dir="$WORK/$1"
   mkdir -p "$dir/output" "$dir/checks"
@@ -50,12 +50,10 @@ make_variant() {
     /<levels>/ { inlev = 1; print; next }
     /<\/levels>/ { inlev = 0 }
     inlev && NF > 27 && $6 == 1 { $28 = radius }
-    /<segmentsData>/ { inseg = 1; n = 0; print; next }
-    /<\/segmentsData>/ { inseg = 0 }
-    inseg && NF { n++; if (n > 1) $1 = 0 }
-    /<targetInt>/ { inte = 1; print; next }
-    /<\/targetInt>/ { inte = 0 }
-    inte && $2 == "\"1,2\"" { $(NF - 3) = strag; $NF = 10 }
+    /^[a-z_]+ [A-Za-z0-9_-]+$/ { rec = $0 }
+    /^dataset / { n++; if (n > 1) { print; print "    active         no"; next } }
+    $1 == "quadrature" && $NF == 50 && $(NF - 1) == "per_width" { $NF = 10; $0 = "    " $0 }
+    rec == "target tgt_targetInt2" && $1 == "straggling" { $0 = "    straggling     " (strag == 1 ? "coefficient 0.04 keV^1/2 cm" : "none") }
     { print }' "$SRC/13N.azr" > "$dir/13N.azr"
 }
 

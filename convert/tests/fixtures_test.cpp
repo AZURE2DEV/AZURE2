@@ -6,6 +6,7 @@
 //  3. T2's conversion has the records of the hand-written T2 of section 3.11 (experiment/tests/data/T2_format3.azr),
 //     field by field (comments aside);
 //  4. a project with questions is not converted without answers; with allowQuestions it is, with '?' placeholders.
+// The projects are read as their originals (tests/convert/fixtures/<path> once <path> is converted).
 //   convert_fixtures_test <repository root>
 // With AZURE2_WRITE_CONVERT_FIXTURES=1 the fixtures are written instead of compared (after a deliberate change of
 // the converter's output; the diff is then reviewed).
@@ -46,6 +47,12 @@ bool Slurp(const std::string &path, std::string &out) {
   s << in.rdbuf();
   out = s.str();
   return true;
+}
+
+// The old text of a project of the repository: its original in tests/convert/fixtures/<rel> once the tree holds its
+// conversion (docs/upgrade/format3_tree.md), else the file itself.
+bool Original(const std::string &root, const std::string &rel, std::string &out) {
+  return Slurp(root + "/tests/convert/fixtures/" + rel, out) || Slurp(root + "/" + rel, out);
 }
 
 std::string Dir(const std::string &path) {
@@ -96,7 +103,7 @@ int main(int argc, char **argv) {
   std::string t2;
   for (const auto &item : set) {
     std::string old;
-    check(item.second + ": read " + item.first, Slurp(root + "/" + item.first, old));
+    check(item.second + ": read " + item.first, Original(root, item.first, old));
     ConvertOptions o;
     o.projectDir = Dir(root + "/" + item.first);
     const ConvertResult r = ConvertToFormat3(old, o);
@@ -151,7 +158,7 @@ int main(int argc, char **argv) {
   {
     std::string old;
     const std::string path = root + "/examples/c12c12_tumino2018/c12c12_tumino2018.azr";
-    check("questions: read", Slurp(path, old));
+    check("questions: read", Original(root, "examples/c12c12_tumino2018/c12c12_tumino2018.azr", old));
     ConvertOptions o;
     o.projectDir = Dir(path);
     const ConvertResult plain = ConvertToFormat3(old, o);

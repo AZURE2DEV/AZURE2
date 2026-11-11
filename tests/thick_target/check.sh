@@ -12,11 +12,12 @@
 # thick target.  Now TargetEffect::IsThickTarget is set from the density, each thick-target point integrates from
 # its energy down to 1 keV, the yield is not divided, and a non-positive stopping power on a thin target is an ERROR.
 #
-# Models are made at run time from tests/13N/13N.azr (p + 12C; its line "1,2" is a thick target with no spread):
+# Models are made at run time from tests/13N/13N.azr (p + 12C; its target tgt_targetInt2 of data sets 1 and 2 is
+# thick, kind infinite, with no spread):
 #   (a) the file as it is: the 13N total (expected/chiSquared.out);
-#   (b) the thick line with a 2 keV beam spread: every yield of segments 1 and 2 is positive and the first point of
+#   (b) the thick target with a 2 keV beam spread (a beam record): every yield of segments 1 and 2 is positive and the first point of
 #       segment 1 is within 1 % of its value without the spread (the spread moves the neighbours by ~0.3 %);
-#   (c) the thick line with straggling (coefficient 0.04): the same;
+#   (c) the thick target with straggling (coefficient 0.04 keV^1/2 cm): the same;
 #   (d) a THIN target (density 1e18) with the stopping cross section a0 x + a1 = x - 0.5, negative below 0.5 MeV:
 #       the run stops with an ERROR naming the segment and energy, and writes no chiSquared.out.
 # dev 5df7024: (b) and (c) first point 0 (b: 0 vs 2.85e-14), (d) runs and writes negative yields (chi2 436,536).
@@ -40,16 +41,18 @@ ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 near() { awk -v a="$1" -v b="$2" -v tol="$3" 'BEGIN { d = a - b; if (d < 0) d = -d; exit !(d <= tol) }'; }
 
-LINE_PREFIX='1  "1,2"  10  0  0  1  0  '
-grep -qF "$LINE_PREFIX" "$BASE/13N.azr" || { echo "  FAIL  tests/13N/13N.azr no longer holds the thick-target line '$LINE_PREFIX...'"; exit 1; }
+# the thick target of segments 1 and 2 (data sets artemov, seagrave): target tgt_targetInt2, kind infinite
+TGT='target tgt_targetInt2'
+grep -q "^$TGT\$" "$BASE/13N.azr" && grep -q '^    kind           infinite$' "$BASE/13N.azr" ||
+  { echo "  FAIL  tests/13N/13N.azr no longer holds the thick target '$TGT' (kind infinite)"; exit 1; }
 
-# make_model NAME AWK-PROGRAM : the 13N project with its thick-target line rewritten (fields: 1 active, 2 segments,
-# 3 sub-points, 4 convolution, 5 sigma, 6 target integration, 7 density, 8 equation, 9 n, 10.. parameters,
-# then Q coefficients, convolution coefficients, 23 straggling, 24 coefficient, 25 widths, 26 points per width)
+# make_model NAME AWK-PROGRAM : the 13N project with the awk program applied to every line (records of format 3:
+# a line is a field "    <key> <value>" of the record whose header was seen last; the program sees the record's
+# header in rec)
 make_model() {
   mkdir -p "$WORK/$1/output" "$WORK/$1/checks"
   cp -r "$BASE/data" "$WORK/$1/"
-  awk -v pre="$LINE_PREFIX" "{ sub(/\r\$/, \"\"); if (index(\$0, pre) == 1) { $2 } print }" "$BASE/13N.azr" > "$WORK/$1/t.azr"
+  awk '{ sub(/\r$/, "") } /^[a-z_]+ [A-Za-z0-9_-]+$/ { rec = $0 } { '"$2"' } { print }' "$BASE/13N.azr" > "$WORK/$1/t.azr"
 }
 run() { (cd "$WORK/$1" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1); }
 total() { awk '{ sub(/\r$/, "") } /^Total-Chi-Squared:/ { print $2 }' "$WORK/$1/output/chiSquared.out" 2> /dev/null; }
@@ -82,13 +85,16 @@ check_spread() {  # TAG NAME
     bad "$tag first point of segment 1: '$f' vs $first without the spread"; tail -2 "$WORK/$name/run.log"
   fi
 }
-make_model conv '$4 = 1; $5 = 0.002;'
+# (b): a beam record with a constant lab spread, named by both data sets of the thick target
+make_model conv 'if ($0 == "</targets>") print "beam spread2\n    spread         0.002 MeV lab"; if (rec == "dataset artemov" || rec == "dataset seagrave") if ($1 == "target") { print; $0 = "    beam           spread2" }'
 check_spread "(b) 2 keV beam spread:" conv
-make_model strag '$23 = 1; $24 = 0.04;'
+make_model strag 'if (rec == "target tgt_targetInt2" && $1 == "straggling") $0 = "    straggling     coefficient 0.04 keV^1/2 cm"'
 check_spread "(c) straggling:" strag
 
 # ---- (d) a thin target with a negative stopping cross section --------------------------------------------------------
-make_model negstop '$7 = 1e18; $8 = "\"a0*x+a1\""; $9 = 2; $10 = 1; $11 = -0.5; for (i = 12; i <= 17; i++) $i = ""; $0 = $0; $1 = $1;'
+# a layer: what the old line with a density meant, a target-averaged cross section (quantity sigma in b)
+make_model negstop 'if (rec == "dataset artemov" || rec == "dataset seagrave") { if ($1 == "quantity") $0 = "    quantity       sigma"; if ($1 == "unit") $0 = "    unit           b" }
+  if (rec == "target tgt_targetInt2") { if ($1 == "kind") $0 = "    kind           layer\n    areal_density  1e18 atoms/cm2 fixed"; if ($1 == "stopping") $0 = "    stopping       formula \"a0*x+a1\" a0=1 a1=-0.5 MeV*cm2/atom" }'
 run negstop
 if grep -q "^ERROR: target integration of segment #1 at E_lab = 0.19 MeV" "$WORK/negstop/run.log" && [ ! -s "$WORK/negstop/output/chiSquared.out" ]; then
   ok "(d) a thin target with a negative stopping cross section stops with an ERROR"

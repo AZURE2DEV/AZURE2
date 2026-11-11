@@ -23,10 +23,12 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import old_tree  # noqa: E402  (the old originals of converted projects)
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
 
-SRC = os.path.join(ROOT, "tests", "13N", "13N.azr")
+SRC = old_tree.original(os.path.join(ROOT, "tests", "13N", "13N.azr"))  # the old file (format3_tree.md)
 # <segmentsData> lines kept: capture (0-5 MeV) and the 84.3 deg elastic, whose middle point is hit.  The R-matrix
 # variants keep the elastic only: their capture is not the A-matrix's (no external capture, and NaN above the
 # 1/2+ resonance in the standard formalism, with or without the extra level -- a separate matter).

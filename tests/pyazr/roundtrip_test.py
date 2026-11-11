@@ -24,6 +24,8 @@ spec = importlib.util.spec_from_file_location(
 azrfile = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(azrfile)
 AzrModel = azrfile.AzrModel
+sys.path.insert(0, HERE)
+import old_tree  # noqa: E402
 
 failures = []
 
@@ -36,6 +38,11 @@ def check(name, ok, detail=""):
 
 print("1. every project file in tests/ round-trips unchanged")
 files = sorted(glob.glob(os.path.join(ROOT, "tests", "*", "*.azr")))
+# and the old originals of the converted ones (tests/convert/fixtures, docs/upgrade/format3_tree.md); the edits below
+# are made on the original of the first project, an old file
+originals = [old_tree.original(f) for f in files]
+files += sorted(f for f in originals if f not in files)
+first = originals[0] if originals else None
 if not files:
     check("found project files", False, "no .azr under tests/")
 for f in files:
@@ -43,7 +50,7 @@ for f in files:
     check(os.path.relpath(f, ROOT), AzrModel.from_file(f).to_text() == src)
 
 print("\n2. an edit changes that field and nothing else")
-model = AzrModel.from_file(files[0])
+model = AzrModel.from_file(first)
 before = [c.to_line() for lv in model.levels for c in lv.channels]
 channel = model.levels[0].channels[0]
 original_gamma = channel.gamma
@@ -61,16 +68,16 @@ check("line length unchanged", len(after[0]) == len(before[0]),
       f"{len(before[0])} -> {len(after[0])}")
 
 print("\n4. setting a field to what it already holds is not an edit")
-model2 = AzrModel.from_file(files[0])
+model2 = AzrModel.from_file(first)
 level = model2.levels[0]
 level.set_energy(level.energy)
 level.set_fixed(level.fixed)
-check("still byte-identical", model2.to_text() == open(files[0]).read())
+check("still byte-identical", model2.to_text() == open(first).read())
 
 print("\n5. renumbering on every write does not disturb the lines")
-model3 = AzrModel.from_file(files[0])
+model3 = AzrModel.from_file(first)
 model3.to_text()
-check("second write identical to the first", model3.to_text() == open(files[0]).read())
+check("second write identical to the first", model3.to_text() == open(first).read())
 
 print("\n6. a channel built from tokens, with no raw line, still emits")
 tokens = model.levels[0].channels[0].tokens
@@ -84,7 +91,7 @@ print("\n7. a <thm> options block survives edits wherever it sits")
 # The engine reads <thm> from anywhere in the file (Config::ReadThmBlock);
 # AzrModel interprets only <levels>, so the block has to come back verbatim.
 thm = "<thm>\nkinematics=kf3body   # data / full three-body KF\nspectatorEnergy[5]=0.5\n</thm>\n"
-src7 = open(files[0]).read()
+src7 = open(first).read()
 at_end = src7 + "\n" + thm
 before_levels = src7.replace("<levels>", thm + "<levels>", 1)
 import tempfile
@@ -105,7 +112,7 @@ for label, text in (("at end of file", at_end), ("before <levels>", before_level
 print("\n8. every edit keeps the file's final newline -- or its absence")
 # "\n".join(text.splitlines()) drops it, and every splicer of the blocks after
 # <levels> did exactly that.
-src8 = open(files[0]).read().rstrip("\n")
+src8 = open(first).read().rstrip("\n")
 edits = [
     ("clear_data_segments", lambda m: m.clear_data_segments()),
     ("clear_target_effects", lambda m: m.clear_target_effects()),

@@ -10,7 +10,7 @@
 # Besides the garbled log (and the flaky tests/light_excitation log compare on the macOS and Windows runners), the
 # GUI's output stream is not thread-safe.  Now the counter is atomic and one thread at a time draws a whole bar.
 #
-# Model: tests/13N (external capture on every capture segment), and the same with segment 1 a SUM of its own term
+# Model: tests/13N (external capture on every capture segment), and the same with data set 6 a SUM of its own term
 # and one identical capture component (the component-segment loop), mode 1, OMP_NUM_THREADS=8 (THREADS), RUNS runs
 # each (default 3).
 #   (a) every progress line of the log, split at \r, is a sequence of whole bars
@@ -38,16 +38,17 @@ failures=0
 ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
-# models: plain 13N, and segment 1 (artemov, 12C(p,g)) a SUM of itself and one identical capture component
+# models: plain 13N, and data set 6 (skowronski_luna_hpge, 12C(p,g) sigma; the thick-target yield of data set 1, the
+# old model, takes one reaction in format 3) a SUM of itself and one identical capture component
 cp "$SRC/13N.azr" "$WORK/plain.azr"
 "$PY" -I - "$SRC/13N.azr" "$WORK/sum.azr" <<'PYEOF' || { bad "models not built"; exit 1; }
 import sys
 lines = open(sys.argv[1]).read().split("\n")
-i0 = lines.index("<segmentsData>")
-f = lines[i0 + 1].split()
-if f[14] != "data/artemov.dat" or f[15:17] != ["0", "0"]:
-    sys.exit("segment 1 is not the plain artemov line")
-lines[i0 + 1] = " ".join(f[:15]) + " 1 0 1 1 2 -999 0"   # SUM, one component: entrance 1, exit 2, same angles
+i0 = lines.index("dataset skowronski_luna_hpge")
+i = i0 + 1
+if lines[i] != "    reaction       12C(p,g)13N" or "    file           data/skowronski_luna_hpge.dat" not in lines[i0:i0 + 8]:
+    sys.exit("data set skowronski_luna_hpge is not the plain 12C(p,g)13N data set of its file")
+lines[i] = "    reaction       12C(p,g)13N + 12C(p,g)13N"   # SUM: its own term and one identical component
 open(sys.argv[2], "w").write("\n".join(lines))
 PYEOF
 
