@@ -464,7 +464,7 @@ class Session {
     vector_r v = to_vector(p), out;
     expect_all(v, "tie_all_rwa");
     {
-      ConfigScope guard(config_, &ecCache_);
+      ConfigScope guard(config_, &ecCache_, &potentials_);
       out = api_->TieAllRWA(v);
     }
     return to_array(out);
