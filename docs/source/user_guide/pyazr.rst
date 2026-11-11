@@ -920,8 +920,11 @@ Two things that will bite:
 
 ``coulomb_radius`` (fm, default 3.5) is the radius :math:`R_C` of the uniformly
 charged sphere of the potential's Coulomb term; ``nuclear_potential(p).coulomb_radius``
-reads it back. The matching radius (15 fm) and the Numerov step (0.0275 fm) are
-fields of a format-3 record (below) and are not set from pyazr.
+reads it back. ``matching_radius`` (fm) is where the solution inside the
+potential is matched to the Coulomb functions and ``step`` (fm) the radial step
+of the integration (15 fm and 0.0275 fm unless the record states others);
+``set_nuclear_potential(1, matching_radius=12.0, step=0.02)`` sets them and
+``nuclear_potential(p).matching_radius`` / ``.step`` read them back.
 
 In a project of format 3 a potential is a ``potential`` record of the
 ``<potentials>`` section, one per particle pair; a pair without a record has
@@ -967,7 +970,10 @@ default ``pair=0`` is refused with a ``ValueError``.
 
 ``save_fit`` of a format-3 project writes the session's potentials as these
 records when ``set_nuclear_potential`` changed them (the converter's writer: a
-session default becomes one record per particle pair it applies to).
+session default becomes one record per particle pair it applies to).  An older
+project's ``<potential>`` block is not written: ``save_fit`` of a format-1/2
+project whose potential the session changed raises ``ValueError`` with the
+conversion command (``pyazr.convert_azr(old, new, to=3)``).
 
 An older project has the ``<potential>`` block instead, where keys before the
 first ``pair=`` are the default and a ``pair=`` line opens a section that starts
@@ -1017,6 +1023,51 @@ before. A fit that moves a free energy shift keeps the tables of the
 measurement's last three shift states, so the gradient's steps back to an
 earlier shift do not recompute them. The Coulomb table (``--build-coulomb-table``)
 remains the way to make P, S and the phases fast.
+
+A project as records (format 3)
+-------------------------------
+
+:class:`pyazr.Project` builds and edits a format-3 project as named records
+(``docs/upgrade/project_format3.md`` section 4); the recipe from schema to
+calculation is :doc:`project_from_python`.
+
+.. code-block:: python
+
+   from pyazr import Project, Nuisance, FormatError
+   p = Project.open("T2.azr")            # a format-1/2 file: FormatError with the conversion command
+   p["s02_diff090"].norm                 # 'D': the field's text; p["s02_diff090"]["norm"] too
+   p["s01_int_thin"].set(norm="1.05 fit prior 1 5%")   # replaces that one line
+   p.add_normalization("D2", value=Nuisance(1, "fit", prior=(1, "8%")))
+   p.rename("D2", "D_late")              # every reference and parameter name follows
+   p.remove("D_late")                    # refused while a record names it
+   p.validate()                          # [] or the engine's diagnostics (AZURE2 --validate --json)
+   print(p.describe("s09_ratio"))        # AZURE2 --describe of that record
+   p.save("T2_edited.azr")
+   with p.session() as m:                # pyazr.azure2 on the saved project
+       print(sum(m.segment_chi2()))
+
+``Project.new(path, nuclear_part=file)`` starts from another format-3 file's
+``<config>``, ``<levels>`` and other sections without records.  There is one
+``add_<kind>`` per record kind of the engine's table (``add_dataset``,
+``add_normalization``, ``add_energy_scale``, ``add_extrapolation``,
+``add_target``, ``add_beam``, ``add_detector``, ``add_datum``,
+``add_potential``), generated at import from ``pyazr.schema()``:
+``help(Project.add_dataset)`` lists the fields with their help text and units.
+A value is the file's text, a number, a ``(value, "unit")`` tuple, a
+:class:`pyazr.Nuisance` or a list (a field given more than once); ``#`` starts
+the field's comment, as in the file.  Every edit is checked by the engine's
+validator on the project as it would stand and refused with
+:class:`pyazr.FormatError` (``.diagnostics``, ``.codes``: the engine's) when
+it adds an error; the project is then unchanged.  The project is the engine's
+lossless document: opened and saved without an edit it is written byte for
+byte, and an edit changes only the lines of the fields it names.
+
+``save_fit(path, x, norms="fitted")`` of a format-3 project writes the free
+norms, shift terms (offset and square-root) and shift-function parameters into
+the nuisances of their records (a shared normalization's or energy scale's
+own), each in the unit it is written in, and the target isotopes' abundances;
+the priors keep their stated centres, so the snapshot run alone gives the fit's
+chi-squared and priors.
 
 Model averaging
 ---------------

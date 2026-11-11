@@ -25,6 +25,7 @@ Needs the compiled module and AZURE2_BIN (ctest sets it).  Run:  AZURE2_BIN=<bui
 import difflib
 import filecmp
 import glob
+import inspect
 import os
 import re
 import shutil
@@ -146,6 +147,20 @@ def sections(tmp):
                 bad.append(f)
     check(f"Project.open(f).save(g) == f for {len(files)} format-3 files ({len(sources)} projects of tests/, "
           f"{not_converted} the converter refuses without answers)", not bad and len(files) > 150, bad[:5])
+    # The converter ends every line with LF: a variant with CR LF and no final line ending, unedited and edited.
+    with open(os.path.join(FIXTURES, "T2.f3.azr"), "rb") as f:
+        crlf = f.read().replace(b"\n", b"\r\n").rstrip(b"\r\n")
+    v = os.path.join(tmp, "crlf.azr")
+    with open(v, "wb") as f:
+        f.write(crlf)
+    q = Project.open(v)
+    q.save(os.path.join(tmp, "crlf2.azr"))
+    check("CR LF and no final line ending: written back byte for byte", open(os.path.join(tmp, "crlf2.azr"), "rb").read() == crlf)
+    q["s01_int_thin"].set(norm="1.05 fit prior 1 5%")
+    edited = q.to_bytes()
+    check("  an edit keeps the line's CR LF and changes nothing else",
+          edited == crlf.replace(b"    norm           1 fit prior 1 5%\r\n", b"    norm           1.05 fit prior 1 5%\r\n", 1)
+          and edited != crlf)
 
     print("2. one edit, one line")
     t2 = workdir(tmp, "T2", os.path.join(TESTS, "upgrade", "T2", "data"))
@@ -293,8 +308,14 @@ def sections(tmp):
     import pydoc
     text = pydoc.render_doc(Project.add_dataset, renderer=pydoc.plaintext)
     keys = list(pyazr.schema()["records"]["dataset"]["fields"])
-    missing = [k for k in keys if not re.search(rf"\b{re.escape(k)}\b", text)]
-    check(f"help(add_dataset) holds every one of the {len(keys)} field keys of the schema's dataset", not missing, missing)
+    sig = str(inspect.signature(Project.add_dataset))
+    missing = [k for k in keys if f"\n    {k}: " not in Project.add_dataset.__doc__ or not re.search(rf"\b{k}\b", sig)
+               or not re.search(rf"^ *{re.escape(k)}: ", text, re.M)]
+    check(f"help(add_dataset): each of the {len(keys)} field keys of the schema's dataset in the signature and with its "
+          f"own line of help", not missing, missing)
+    f = pyazr.schema()["records"]["dataset"]["fields"]["charge_state"]
+    check("  the help line is the table's (charge_state: title, grammar)", f"    charge_state: {f['title']}; {f['grammar']}"
+          in Project.add_dataset.__doc__)
     check("every record kind of the schema has its add_<kind>",
           all(hasattr(Project, "add_" + k) for k in pyazr.schema()["records"]))
 

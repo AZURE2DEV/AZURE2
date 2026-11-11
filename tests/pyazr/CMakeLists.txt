@@ -773,6 +773,13 @@ add_test(NAME pyazr_save_fit_format3
                  ${CMAKE_CURRENT_SOURCE_DIR}/save_fit_format3_test.py)
 set_tests_properties(pyazr_save_fit_format3 PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# The recipe "write a project from Python" (docs/source/user_guide/project_from_python.rst, the azure2-setup skill):
+# pyazr/examples/project_from_python.py runs, and its chi^2 is the committed story's.
+add_test(NAME pyazr_project_recipe
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/project_recipe_test.py)
+set_tests_properties(pyazr_project_recipe PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
+
 # A test that cannot run its engine part -- numpy, scipy or the compiled
 # _azure2 module missing (pybind11 absent at configure time builds no module),
 # or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so
