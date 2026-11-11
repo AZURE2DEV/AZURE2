@@ -168,7 +168,8 @@ State on 2026-11-11:
       named targets and thick-target yields per particle or per charge; model-level data (ωγ, resonance energy,
       widths, branching ratio, ANC, scattering length); Legendre coefficients with their expansions; extrapolations
       on a list, a file, a logarithmic range or an adaptive grid; the spin–orbit term of the hybrid potential.
-      Open: the yield of a layer of finite thickness (Phase 5, with the stopping module).
+      The yield of a layer of finite thickness with the user's stopping formula (Phase 5, branch 4,
+      `tests/layer_yield`); with the evaluated stopping when the stopping module is wired (Phase 5, branch 5).
 - [ ] Recipe "a new kind of data" in `CLAUDE.md` with its checks.
 Gate: outputs of all test projects × 3 bases bit-identical through the restructuring; for format 3, the outputs of
 the converted projects identical to the originals' but for the classified differences of the gate.

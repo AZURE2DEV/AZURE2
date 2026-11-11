@@ -739,18 +739,32 @@ Yields.  ``quantity yield`` on a ``target`` of kind ``infinite`` compares the
 data with the thick-target yield the engine folds,
 :math:`Y(E_0) = 10^{-24}\int_{1\,\mathrm{keV}}^{E_0}\langle\sigma\rangle/\varepsilon\,dE`
 (reactions per incident particle; ``1/particle``, or ``1/particle/sr`` with a lab
-angle).  Per unit of beam charge (``1/uC``, ``1/mC``, ``1/C``, with
+angle).  On a ``target`` of kind ``layer`` the integral stops at the back of the
+layer, :math:`Y(E_0) = 10^{-24}\int_{E_{out}}^{E_0}\langle\sigma\rangle/\varepsilon\,dE`
+with :math:`\int_{E_{out}}^{E_0}dE/\varepsilon = N`: :math:`E_0` and :math:`E_{out}`
+lab energies (MeV), :math:`\sigma` in b (c.m., at :math:`E_{cm} = E\,m_A/(m_a+m_A)`),
+:math:`\varepsilon` the target's stopping formula (lab MeV cm\ :sup:`2` per active
+nucleus, the nucleus :math:`N` counts) and :math:`N` its ``areal_density``
+(atoms/cm\ :sup:`2`; fitted when the field says ``fit``).  The engine finds
+:math:`E_{out}` with the quadrature of the yield itself, so a constant cross section
+gives :math:`10^{-24}\sigma N`; a narrow resonance gives the arctan step whose
+plateau is :math:`10^{-24}(\lambda_r^2/2)\,\omega\gamma\,(m_a+m_A)/(m_A\varepsilon)`
+(``tests/layer_yield``, README).  The same target with ``quantity sigma`` is the
+target-averaged cross section, the yield divided by :math:`10^{-24}N`.  An
+``isotope`` line multiplies the yield by its abundance (then :math:`\varepsilon` and
+:math:`N` count atoms of the element).  Per unit of beam charge (``1/uC``, ``1/mC``, ``1/C``, with
 ``charge_state q``) the model is multiplied by the beam particles per unit charge,
 :math:`10^{-6}\,\mathrm{C}/(q e)` for 1/µC; counts per unit charge
 (``counts/uC``, ...) need ``efficiency``, a fixed number that multiplies the model
 as well (a fitted efficiency is refused: it cannot be told apart from the
 normalization; give its uncertainty as the norm's prior); ``arbitrary`` needs a
-free norm without prior.  A ``kind layer`` target is refused for a yield
-(``E_NOT_BUILT``): this engine folds a layer into the target-averaged cross
-section (give that as ``quantity sigma`` with the target), and a yield
-:math:`N\,10^{-24}\langle\sigma\rangle` with the areal density in the prefactor is
-not built yet.  A per-charge unit without ``charge_state`` is
-``E_FIELD_REQUIRED``.  The worked example is ``tests/units_scales``
+free norm without prior.  A per-charge unit without ``charge_state`` is
+``E_FIELD_REQUIRED``.  On a layer, ``fold_windows`` are refused
+(``E_FIELD_NOT_APPLICABLE``: outside a window the integration is a cross section at
+one energy, not a yield); the set-up refuses a stopping that is not positive and
+finite at an energy the layer's integration reaches (``E_LAYER_STOPPING``) and a
+layer the beam does not leave above the lowest energy the model is evaluated at, 1
+keV c.m. (``E_LAYER_EXIT_BELOW_MODEL``: use ``kind infinite``).  The worked example is ``tests/units_scales``
 (``models/yield_story.azr``).
 
 .. _extrapolation-grids:

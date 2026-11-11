@@ -898,8 +898,9 @@ dimension (`Units.h` `Rescale`: a power-of-ten factor divides by the exact integ
 unit gives the correctly rounded engine value); the columns of a data file by `DatasetSpec::columns`
 (`experiment/DataRows.h`, applied by `ESegment::Fill` before the point is made; an `E_cm` column taken to the lab).
 `sfactor` and the per-charge, counts and arbitrary units of `yield` are `ReactionSpec::scale`, a factor on the model
-(tree kind `Scaled`: `c [x S(0)] x` the tree), never a conversion of the data.  A `yield` on a `layer` is refused
-(Phase 5 kernel; §9.1's example is in `tests/units_scales` on an infinite target), a fitted `efficiency` is refused
+(tree kind `Scaled`: `c [x S(0)] x` the tree), never a conversion of the data.  A `yield` on a `layer` is the yield of
+a layer of finite thickness, reactions per incident particle (Phase 5, branch 4; `energy_grid.md` §5,
+`tests/layer_yield`; §9.1's example is in `tests/units_scales` on an infinite target), a fitted `efficiency` is refused
 (it is the normalization).  An extrapolation in another unit is computed in it.  User page: `data_formats.rst`.
 
 ### 7.3 Where it lives and how it is read
@@ -1182,9 +1183,10 @@ branching ε.
 | GUI | Data → "+ Data set": reaction p + ¹³C → γ + ¹⁴N (g.s.); quantity "Yield"; unit drop-down → "counts/µC" makes "Charge state q" and "Efficiency × branching" appear; Target "+ New target…" opens the target form (kind "Layer" shows active nucleus, composition, areal density with Fit and prior, stopping, straggling, phase); the second data set picks C13A from the drop-down. Preview: "yield of ¹³C(p,γ)¹⁴N(g.s.) over target C13A (layer of ¹³C, N fitted, prior 15 %, stopping evaluation with scale fitted), beam spread 0.3 keV, × 10⁻⁶ C/(1·e) × ε (fitted, prior 3 %) → counts/µC; parameters C13A.areal_density, C13A.stopping.scale, Y_curve.efficiency" |
 | agent | reads `quantities.yield` in `--schema` (requires target; `counts/uC` ⇒ `charge_state`, `efficiency`); writes the three records; `--validate --json` → `[]`; `--describe --record Y_curve --json` → `Scale(1e-6/(q e)) · Scale(ε) · Fold_layer(C13A)[sigma(13C(p,g)14N)]` |
 
-Note: a yield per particle on a finite layer, N·10⁻²⁴⟨σ⟩, with N fitted in the prefactor as well as in the energy
-window, is a Phase 5 kernel; today's thin target divides by N (`data_kinds.md` eq. 2) and today's density fit moves only
-the window (`TargetEffect.h:89-101`).
+Note: the yield per particle on a finite layer, 10⁻²⁴ ∫_{E_out}^{E₀} ⟨σ⟩/ε dE with ∫ dE/ε = N, is built since Phase 5
+branch 4 (`energy_grid.md` §5, `tests/layer_yield`) with the user's stopping formula; a fitted N moves E_out, and the
+thin target (`quantity sigma` on the layer) stays the yield divided by 10⁻²⁴ N (`data_kinds.md` eq. 2).  `stopping
+evaluation` waits for the stopping module (branch 5).
 
 ### 9.2 (b) α + ¹²C elastic scattering as ratio to Rutherford, lab frame, five angles, 3 % common normalization
 
