@@ -2,6 +2,40 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (pyazr off the old file class, branch `feature/upgrade-4-pyazr-format3`) — pyazr reads format 3 only
+
+**Done.** `pyazr/azrfile.py` (`AzrModel`, 3,756 lines), `pyazr/datasets.py` (`SegmentSet`), `tests/pyazr/old_tree.py`
+and the old generators of `doppler_fgm` / `transmission_yield` (under `tests/convert/fixtures/`) are deleted; pyazr
+is 3.0.0.dev0 (the version lives in `pyazr/__init__.py`, which `pyproject.toml` reads; the consistency test now
+accepts a `.devN` suffix). An old file handed to a session, `Project.open` or any function that opens a project raises
+one `FormatError` with the engine's message naming `AZURE2 --convert OLD NEW --to 3` (`project.require_format3`,
+binding `not_format3_message`). Every pyazr test that used the old class is moved to the tree's format-3 project
+(same committed numbers), kept as a converter test, or (only `roundtrip`) deleted with its counterpart named: the
+table and the coverage lost are in `pyazr_on_records.md`. New: `experiment::MergeLevelRows` (binding
+`merge_level_rows`) and `merge_projects` on format 3; `SetPair` sets the excitation energies (`set_pair(light_excitation=,
+heavy_excitation=)`); `masses.mass_check` / `fill_masses` on a Project; `snapshot.place_level_values`;
+`set_thm_experiment(datasets=)`; `load_sav` matches names by `experiment::MatchParameterFileNames` (binding
+`match_parameter_file_names`); `convert_azr` in `pyazr/convert.py` (default `to=3`); `fitted_norms` in
+`pyazr/outputs.py`; the examples, `scripts/thm_model_average.py` and the three resonance-search scripts use Project.
+Documents: `pyazr_on_records.md` (done), `format3_tree.md` §5 (what is left: the engine and the GUI), the user guide,
+the skills, `CLAUDE.md`, `FOR_THE_OWNER.md`.
+
+**Verified** (own runs, 2 threads in all): all projects x 3 bases against `tab-trial22`: 766 / 739 / 766 identical
+(`tab-pyoff1`); the converted-tree gate (REF tab-trial8): 483 (456 formal) identical, 38 classified, 0 differ, 0
+missing; `ctest -LE slow` 200/200 (one fix on the way: `pyazr_park_dsde` composed an old model at run time, now
+converted); `ctest -L slow` 10/10; pyazr tests 112 (113 before, `roundtrip` deleted), all pass; `tests/run_tests.sh`
+150/150; consistency test passes. Injected errors (each failed, then reverted): natural_target (no pair-key offset in
+the merge), thm_experiment, norm_group, prior_covariance, screening. Not run: 1 against several threads (no engine
+computation changed), Sphinx, the GUI, `pyazr/examples/exfor_fetch.py` and `save_fit_to_azr.py` (network / a
+parameter file; the other six examples were run once).
+
+**Open.** The engine's refusal of old files (next branch); bindings with no Python caller left (listed in
+`pyazr_on_records.md`); defects found: `Project.set_config(output_dir=)` neither appends "/" nor creates the
+directory; a refused THM edit repeats its prefix; a new THM experiment without data sets is refused with old wording
+("segments= is required"); `Project.set` of an unknown record raises KeyError, not FormatError; the engine's
+out-of-range warning of a fitted density still says `density_1` and "densityfit"; `sav_fixed_params` and
+`inactive_lines` look for the CLI under `build*/` and skip their cross-check in a separate build directory.
+
 ## 2026-11-11 (director, 16:39) — merged: seven branches (finite-layer yield, pathway table 2, one solve per energy, SRIM stopping, lab frame, THM projects in format 3, format-3 gaps)
 
 **State.** `feature/upgrade-4-data` holds the seven branches, merged in this order; the tree is the one the director
