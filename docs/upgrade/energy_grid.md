@@ -568,6 +568,19 @@ tested against 10⁻²⁴ σ(E_out). Where the stopping module plugs in: ε ente
 `TargetSetup.cpp`'s set-up loops and `ReplaceSubPointGrids`) and is read by `GridQuadrature` and `LayerExitEnergy`
 alike, so the scale s multiplies it there, once. Tests: `tests/layer_yield` (README).
 
+**Branch 6, done (2026-11-11, `feature/upgrade-5-kernels`).** The folds of `src/TargetFold.cpp` (502 lines, deleted)
+are kernels of `experiment/` listed in `Kernels()` (`experiment/src/Kernels.cpp`): `target`, `gaussian`,
+`beam_profile`, `udr`, the broadening `doppler`, one file each, with the shared quadrature in `KernelQuadrature.h`;
+`LayerExit.h`, `UdrKernel.h` and the linear form (`LinearForm.h`) moved to `experiment/`. A kernel row holds its
+name, format-3 keyword, parameters, fold on double and on `LinearForm`, support and (optionally) a parameter
+derivative; `TargetEffect` keeps the parameters as read and chooses its kernels once (`Kernels()`,
+`KernelParametersFor`). The engine's fold is `src/PointFold.cpp` (one indirect call per point; the per-node work
+stays inside the kernel, except a beam-spread formula, which is called through `EnergyFunction` as `SigmaCM` was).
+Unit lost its ten fold members. The set-up takes the grid's interval from `EffectSupport` (the two copies of
+`GridExtent`, the beam-profile, UDR and Doppler windows in `TargetSetup.cpp` are one call each). Every output of the
+tree byte-identical. The proof of extension: the rectangular resolution (§3.3, last row) was added by the recipe in
+`CLAUDE.md` with no engine file edited (the layer yield of branch 4 had touched 11 engine files).
+
 **First steps before Phase 4's last branches are merged.** `lab-frame` (3) and `layer-yield` (4) touch no file of
 the pathway branch (`CNuc*`, `GenMatrixFunc`, `AMatrixFunc` readers, `UnitExternalCapture`, `ExternalCaptureSetup`)
 nor of the tree conversion (tests) nor of pyazr's file class; they can start at once. `lab-frame` touches

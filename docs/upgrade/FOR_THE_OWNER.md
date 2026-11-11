@@ -192,6 +192,18 @@ engine; the design note of Phase 5 (`energy_grid.md`) with its decisions taken. 
 point or sub-point, so a fit evaluation of 13N takes 132 ms instead of 317 and of the thick-target project 264 ms
 instead of 1,102, every output unchanged.
 
+**What an apparatus effect costs now (Phase 5, branch 6).** The folds (target, beam spread, beam profile, UDR,
+Doppler) are no longer branches inside the engine's point class: each is a kernel of `experiment/` in a file of its
+own, listed in one table (`experiment/src/Kernels.cpp`) with its format-3 keyword, its parameters and the interval its
+grid must span; the engine calls whatever the table holds, and the gradient reads the same code. Every output is
+unchanged. As the test of that claim a new effect was added by the written recipe (`CLAUDE.md`, "A new apparatus
+kernel"): a rectangular energy resolution of full width w (`energy_resolution rectangular width 20 keV` on a
+detector). It took one new kernel file (69 lines), one line in the table, one in the CMake list, tests (cases in
+`experiment/tests/kernels_test.cpp`, a fixture line, a test project `tests/rectangular_resolution/`), the regenerated
+schema and three documentation rows -- and no engine file. The yield of a finite layer, added a week earlier before
+this table existed, had touched 11 engine files. One thing is not yet a table row: a kernel parameter that a fit
+varies (w here is fixed) still needs its own kind of fit parameter.
+
 Then, to close Phase 4: the old reading path deleted (with `pyazr/azrfile.py`, 3,756 lines of
 a second grammar in Python); the rest of `CNuc` (the parameter vector and the set-up from the level rows).
 

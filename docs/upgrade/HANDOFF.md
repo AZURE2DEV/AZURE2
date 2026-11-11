@@ -2,6 +2,35 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, Phase 5 branch 6) — apparatus folds as kernel functions in one table (`feature/upgrade-5-kernels`)
+
+**Done.**
+- 14c0cc26: the folds of `src/TargetFold.cpp` (502 lines, deleted) are kernels of `experiment/`
+  (`azure2/experiment/Kernels.h`, table `Kernels()` in `experiment/src/Kernels.cpp`): `KernelTarget.cpp`,
+  `KernelGaussian.cpp`, `KernelBeamProfile.cpp`, `KernelUdr.cpp`, `KernelDoppler.cpp` (broadening), quadrature in
+  `KernelQuadrature.h`; `LinearForm.h` (was `include/TELinearForm.h`), `LayerExit.h`, `UdrKernel.h` moved to
+  `experiment/`. Engine fold: `src/PointFold.cpp` (`FoldPoint`, `FoldValues`, `FoldWeights`,
+  `FoldTemperatureDerivative`, `FoldBroadeningWeights`), one indirect call per point. `TargetEffect` keeps the
+  parameters, chooses its kernels once (`Kernels()`, `KernelParametersFor`), refuses two resolution kernels on one effect
+  (`HasKernelError`). `TargetSetup.cpp`: both copies of the extent code are one `EffectSupport` call. Unit lost 10 fold
+  members (717 -> 671 lines), including the hidden-state `DopplerAppliedScope` (now `Broadening::kAlreadyApplied`).
+  `AZUREGrad.cpp`: 13 call lines + 1 include line changed (for the merge with the gradient branch).
+- d06be05f: docs; CLAUDE.md recipe "A new apparatus kernel".
+- 1d3a35ac: rectangular resolution (`KernelRectangular.cpp`) by the recipe alone, no engine file; test project
+  `tests/rectangular_resolution/`; f7dab67c adds its lines to `tests/upgrade/predictions.txt` (step added to the recipe).
+
+**Verified** (scratch `work/kernels/`): all projects x 3 bases vs `tab-trial21a` (tag `tab-kernels-final`, JOBS 6):
+766 / 739 / 766 identical, only-new = the new project's run.log; ctest -LE slow 201/202 at -j1, the failure
+(`upgrade_predictions`) fixed in f7dab67c and re-run alone; `tests/run_tests.sh` (OMP 2) 149 passed, 0 failed; 1 vs 4 threads identical on 7 folded projects x 3 bases;
+fits at 1 thread byte-identical to `b-trial21` (T2 --use-gradient, --use-lm, 13N, layer_yield/fit.azr); gate `gkernels`
+483 (456) identical, 38 classified, 0 differ, 0 missing; user-space instructions new/base 13N 0.9999, thick target
+0.9989, T2 0.9876 (cycles too noisy on the shared machine). Note: the quick comparison needs
+`AZURE2_COULOMB_TABLE` set, else three projects differ from the reference in the 10th digit (base and new alike).
+
+**Open.** Kernel parameters are not fit parameters (no generic parameter kind); the derivative columns of
+`energy_grid.md` §3.3 are not yet kernel functions (except Doppler's d/dT); comments in `AZUREGrad.cpp` still name
+`Unit::TargetFallbackImpl`/`TargetEffectWeights` (left for the gradient branch's merge).
+
 ## 2026-11-11 (agent, Phase 5 branch 3) — lab data compared in the lab frame (`feature/upgrade-5-lab-frame`)
 
 **Done** (decision M3 (b), `energy_grid.md` §4 and its new §4.2a with the measured sizes).
