@@ -737,76 +737,19 @@ class LevelWidthTransformer:
 # Adapters
 # ---------------------------------------------------------------------------
 
-def _radiation_type(azr_channel) -> str:
-    """``AChannel::AChannel(LevelRow, int)``: pType -> 'P' / 'E' / 'M' / 'F' / 'G'."""
-    ptype = azr_channel.ptype
-    if ptype == 0:
-        return "P"
-    if ptype == 10:
-        return ("E" if azr_channel.levelPi * azr_channel.parity2
-                == (-1) ** azr_channel.L else "M")
-    if ptype == 20:
-        return "F" if azr_channel.L == 0 else "G"
-    raise ValueError(f"unknown pType {ptype}")
-
-
 def levels_from_azr(model, gammas: Optional[Dict[Tuple[int, int], Sequence[float]]] = None,
                     *, active_only: bool = True) -> List[Level]:
-    """Build :class:`Level` objects from a project: a :class:`pyazr.Project`, a path, or an AzrModel (older
-    formats).
+    """Build :class:`Level` objects from a format-3 project: a :class:`pyazr.Project` or its path.
 
     The ``<levels>`` rows carry the *physical* widths, not reduced ones, so supply the reduced-width amplitudes
     yourself -- from ``output/param.par``, an MCMC sample, whatever.  ``gammas`` is keyed by ``(jgroup, level)``,
-    the engine's numbering (a format-3 project: :attr:`pyazr.nuclear_part.Level.group` and ``.level``; older
-    formats: J-groups in first-seen J^pi order); omit it to get channels with ``gamma = 0`` that you fill in later.
+    the engine's numbering (:attr:`pyazr.ProjectLevel.group` and ``.level``); omit it to get channels with
+    ``gamma = 0`` that you fill in later.
     """
-    from .project import Project, _is_format3
+    from .project import Project
     if isinstance(model, (str, os.PathLike)):
-        if _is_format3(model):
-            model = Project.open(model)
-        else:
-            from .azrfile import AzrModel
-            model = AzrModel.from_file(os.fspath(model))
-    if isinstance(model, Project):
-        return _levels_from_project(model, gammas, active_only)
-
-    jgroup_of: Dict[Tuple[float, int], int] = {}
-    counter: Dict[int, int] = {}
-    levels: List[Level] = []
-
-    for azr_level in model.levels:
-        if active_only and not any(c.active for c in azr_level.channels):
-            continue
-        key = (azr_level.J, azr_level.parity)
-        if key not in jgroup_of:
-            jgroup_of[key] = len(jgroup_of) + 1
-        jg = jgroup_of[key]
-        counter[jg] = counter.get(jg, 0) + 1
-        idx = counter[jg]
-
-        chans = []
-        for c in azr_level.channels:
-            chans.append(Channel(
-                L=c.L, S=c.S, pair=c.pair,
-                radiation_type=_radiation_type(c),
-                Z1=c.Z1, Z2=c.Z2, M1=c.M1, M2=c.M2,
-                channel_radius=c.channel_radius,
-                sep_energy=c.sep_energy, excitation=c.excitation,
-                pair_J2=c.J2, pair_parity2=c.parity2))
-
-        lv = Level(energy=azr_level.energy, channels=chans,
-                   J=azr_level.J, parity=azr_level.parity,
-                   jgroup=jg, level=idx)
-        if gammas and (jg, idx) in gammas:
-            g = gammas[(jg, idx)]
-            if len(g) != len(chans):
-                raise ValueError(f"level ({jg},{idx}) has {len(chans)} channels, "
-                                 f"got {len(g)} gammas")
-            for c, v in zip(chans, g):
-                c.gamma = float(v)
-        levels.append(lv)
-
-    return levels
+        model = Project.open(os.fspath(model))
+    return _levels_from_project(model, gammas, active_only)
 
 
 def _levels_from_project(project, gammas, active_only):

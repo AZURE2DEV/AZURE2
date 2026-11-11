@@ -34,21 +34,15 @@ os.environ.setdefault("OMP_NUM_THREADS", "4")
 
 import numpy as np
 
-from pyazr import AzrModel, azure2
+from pyazr import Project, azure2
 
 
-def pair_masses(mdl: AzrModel, pair: int) -> tuple[float, float]:
-    """(beam, target) masses of a particle pair, from any channel that uses it.
-
-    The masses are carried on the channel lines of the <levels> block rather
-    than in a pair table of their own, so the first channel with this pair
-    number answers the question.
-    """
-    for lvl in mdl.levels:
-        for ch in lvl.channels:
-            if ch.pair == pair and not ch.is_photon:
-                return float(ch.M1), float(ch.M2)
-    raise SystemExit(f"no particle channel found for pair {pair}")
+def entrance_pair(mdl: Project, pair: int):
+    """The particle pair ``pair`` of the project (masses in u, charges)."""
+    for q in mdl.pairs():
+        if q.key == pair and q.kind == 0:
+            return q
+    raise SystemExit(f"no particle pair with key {pair}")
 
 
 def main() -> int:
@@ -66,19 +60,22 @@ def main() -> int:
                     help="keep the generated .azr instead of removing it")
     args = ap.parse_args()
 
-    mdl = AzrModel.from_file(args.azr)
-    beam, target = pair_masses(mdl, args.entrance)
+    mdl = Project.open(args.azr)
+    q = entrance_pair(mdl, args.entrance)
+    beam, target = q.light_mass, q.heavy_mass
     cm2lab = target / (beam + target)
     print(f"entrance pair {args.entrance}: m1 = {beam:.5f}, m2 = {target:.5f} u; "
           f"E_cm = {cm2lab:.5f} E_lab")
 
     step = (args.emax - args.emin) / max(args.npts - 1, 1)
-    mdl.clear_extrapolations()
-    mdl.add_extrapolation(entrance=args.entrance, exit=args.exit_pair,
-                          e_min=args.emin / cm2lab, e_max=args.emax / cm2lab,
-                          e_step=step / cm2lab, observable="angle-integrated")
+    for name, r in mdl.records().items():
+        if r.record_kind == "extrapolation":
+            mdl.remove(name)
+    # sigma on a c.m. grid of the entrance pair (the engine takes it to lab energies)
+    mdl.add_extrapolation("grid", reaction=mdl.reaction(args.entrance, args.exit_pair), quantity="sigma", unit="b",
+                          energies=f"range {args.emin!r} {args.emax!r} MeV cm step {step!r}")
     out = args.azr.with_name("_sfactor.azr")
-    mdl.write(out)
+    mdl.save(out)
 
     stale = args.azr.parent / "output" / "intEC.extrap"
     if stale.exists():

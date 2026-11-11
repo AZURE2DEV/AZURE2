@@ -26,6 +26,9 @@ their channel by (pair, l, s) and an unlisted channel gets a zero, fixed width;
 both must give the as-written chi-squared, and save_fit must write a snapshot
 of the short model that reads back.
 
+pyazr.Project offers no reordering of a level's rows (the order is not physics); the variants are made here by
+moving and deleting whole rows of the file, at the lines Project.levels() gives for each channel.
+
 Needs the compiled engine; skips cleanly without it.
 
 Run from anywhere:  python3 tests/pyazr/channel_order_test.py
@@ -53,7 +56,7 @@ try:
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
     from pyazr import azure2
-    from pyazr.azrfile import AzrModel
+    from pyazr import Project
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -71,43 +74,61 @@ with tempfile.TemporaryDirectory() as tmp:
     os.makedirs(os.path.join(work, "checks"))
 
     plain = os.path.join(work, "13N.azr")
-    model = AzrModel.from_file(plain)
-    photon_first = 0
-    for lv in model.levels:
-        lv.channels = list(reversed(lv.channels))
-        if lv.channels[0].is_photon:
-            photon_first += 1
-    reversed_path = os.path.join(work, "reversed.azr")
-    model.write(reversed_path)
+    levels = Project.open(plain).levels()
+    pairs = {q.key: q for q in Project.open(plain).pairs()}
+    text = open(plain).read().split("\n")
+
+    def variant_of(order):
+        """The file with each level's rows replaced by `order(level)` (a list of its channels, or None to keep)."""
+        lines = list(text)
+        for lv in levels:
+            new = order(lv)
+            if new is None:
+                continue
+            at = sorted(c.line - 1 for c in lv.channels)
+            rows = [text[c.line - 1] for c in new]
+            for i in reversed(at):
+                del lines[i]
+            lines[at[0]:at[0]] = rows
+            # the following levels' lines move with the length of this one
+            if len(rows) != len(at):
+                raise AssertionError("one level shortened at most, the last edit")
+        return "\n".join(lines)
+
+    def write(name, body):
+        path = os.path.join(work, name)
+        open(path, "w").write(body)
+        return path
+
+    reversed_path = write("reversed.azr", variant_of(lambda lv: list(reversed(lv.channels))))
+    photon_first = sum(1 for lv in levels if pairs[lv.channels[-1].pair].kind == 10)
     check("the reversed file leads with a photon channel", photon_first > 0,
           "nothing to test: no level starts with one")
 
-    # One level out of step with its group: the second level of each J-group
+    # One level out of step with its group: the second level of a J-group
     # (whose channel order the group took from its first level) reversed.
-    model = AzrModel.from_file(plain)
-    seen, odd = set(), 0
-    for lv in model.levels:
-        if (lv.J, lv.parity) in seen and len(lv.channels) > 1 and odd == 0:
-            lv.channels = list(reversed(lv.channels))
-            odd += 1
+    seen, odd = set(), []
+    for lv in levels:
+        if (lv.J, lv.parity) in seen and len(lv.channels) > 1 and not odd:
+            odd.append(lv.label)
         seen.add((lv.J, lv.parity))
-    one_path = os.path.join(work, "one_level.azr")
-    model.write(one_path)
-    check("one level reversed", odd == 1)
+    one_path = write("one_level.azr", variant_of(lambda lv: list(reversed(lv.channels)) if lv.label in odd else None))
+    check("one level reversed", len(odd) == 1)
 
-    # A short level: a later level of its group without the line of a zero-width
-    # channel that is neither its first nor its last.
-    model = AzrModel.from_file(plain)
+    # A short level: a later level of its group without the row of a zero-width
+    # channel that is neither its first nor its last (rows deleted from the end of the file backwards, so the
+    # line numbers of the levels before it hold).
     seen, dropped = set(), None
-    for lv in model.levels:
+    for lv in levels:
         if (lv.J, lv.parity) in seen and dropped is None and len(lv.channels) > 2:
-            mid = [c for c in lv.channels[1:-1] if c.gamma == 0.0]
+            mid = [c for c in lv.channels[1:-1] if c.width == 0.0]
             if mid:
-                dropped = (lv.jpi, lv.energy, mid[0].pair, mid[0].L)
-                lv.channels = [c for c in lv.channels if c is not mid[0]]
+                dropped = (lv.jpi, lv.energy, mid[0].pair, mid[0].l, mid[0].line)
         seen.add((lv.J, lv.parity))
-    short_path = os.path.join(work, "short.azr")
-    model.write(short_path)
+    lines = list(text)
+    if dropped is not None:
+        del lines[dropped[4] - 1]
+    short_path = write("short.azr", "\n".join(lines))
     check("one level short", dropped is not None)
 
     # Every variant gets its own output directory. AZURE2 caches its
@@ -122,10 +143,9 @@ with tempfile.TemporaryDirectory() as tmp:
             tag = f"{name.replace(' ', '_')}_{brune}"
             outdir = os.path.join(work, "out_" + tag)
             os.makedirs(outdir, exist_ok=True)
-            variant = AzrModel.from_file(source)
-            variant.set_output_dir(outdir)
-            path = os.path.join(work, tag + ".azr")
-            variant.write(path)
+            variant = Project.open(source)
+            variant.set_config(output_dir=outdir + "/")
+            path = variant.save(os.path.join(work, tag + ".azr"))
             try:
                 with azure2(path, cwd=work, use_brune=brune) as m:
                     x = np.asarray(m.params_rwa, float)
@@ -149,18 +169,18 @@ with tempfile.TemporaryDirectory() as tmp:
     # included: it has no line to go on, and must not make the snapshot refuse.
     outdir = os.path.join(work, "out_short_save")
     os.makedirs(outdir, exist_ok=True)
-    variant = AzrModel.from_file(short_path)
-    variant.set_output_dir(outdir)
-    variant.write(os.path.join(work, "short_save.azr"))
+    variant = Project.open(short_path)
+    variant.set_config(output_dir=outdir + "/")
+    variant.save(os.path.join(work, "short_save.azr"))
     try:
         with azure2(os.path.join(work, "short_save.azr"), cwd=work) as m:
             snap, _ = m.save_fit(os.path.join(work, "short_snapshot.azr"))
         # read back from an empty output directory, not the save run's (intEC cache, above)
         fresh = os.path.join(work, "out_short_back")
         os.makedirs(fresh, exist_ok=True)
-        back_model = AzrModel.from_file(snap)
-        back_model.set_output_dir(fresh)
-        back_model.write(snap)
+        back_model = Project.open(snap)
+        back_model.set_config(output_dir=fresh + "/")
+        back_model.save(snap)
         with azure2(snap, cwd=work) as back:
             c = float(np.sum(back.calculate_chi2_rwa(np.asarray(back.params_rwa, float))))
         a = results[("as written", True)]

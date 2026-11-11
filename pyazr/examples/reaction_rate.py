@@ -35,7 +35,7 @@ os.environ.setdefault("OMP_NUM_THREADS", "4")
 
 import numpy as np
 
-from pyazr import AzrModel, azure2
+from pyazr import Project, azure2
 
 NA = 6.02214076e23            # 1/mol
 KB = 8.617333262e-2           # MeV / GK
@@ -47,12 +47,12 @@ T9 = np.array([0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 1.0, 1.5, 2.0,
                3.0, 5.0, 10.0])
 
 
-def pair_masses(mdl: AzrModel, pair: int) -> tuple[float, float]:
-    for lvl in mdl.levels:
-        for ch in lvl.channels:
-            if ch.pair == pair and not ch.is_photon:
-                return float(ch.M1), float(ch.M2)
-    raise SystemExit(f"no particle channel found for pair {pair}")
+def entrance_pair(mdl: Project, pair: int):
+    """The particle pair ``pair`` of the project (masses in u, charges)."""
+    for q in mdl.pairs():
+        if q.key == pair and q.kind == 0:
+            return q
+    raise SystemExit(f"no particle pair with key {pair}")
 
 
 def main() -> int:
@@ -69,18 +69,21 @@ def main() -> int:
                     help="keep the generated .azr instead of removing it")
     args = ap.parse_args()
 
-    mdl = AzrModel.from_file(args.azr)
-    m1, m2 = pair_masses(mdl, args.entrance)
+    mdl = Project.open(args.azr)
+    q = entrance_pair(mdl, args.entrance)
+    m1, m2 = q.light_mass, q.heavy_mass
     mu = m1 * m2 / (m1 + m2)          # amu
     cm2lab = m2 / (m1 + m2)
 
     step = (args.emax - args.emin) / max(args.npts - 1, 1)
-    mdl.clear_extrapolations()
-    mdl.add_extrapolation(entrance=args.entrance, exit=args.exit_pair,
-                          e_min=args.emin / cm2lab, e_max=args.emax / cm2lab,
-                          e_step=step / cm2lab, observable="angle-integrated")
+    for name, r in mdl.records().items():
+        if r.record_kind == "extrapolation":
+            mdl.remove(name)
+    # sigma on a c.m. grid of the entrance pair (the engine takes it to lab energies)
+    mdl.add_extrapolation("grid", reaction=mdl.reaction(args.entrance, args.exit_pair), quantity="sigma", unit="b",
+                          energies=f"range {args.emin!r} {args.emax!r} MeV cm step {step!r}")
     out = args.azr.with_name("_rate.azr")
-    mdl.write(out)
+    mdl.save(out)
 
     stale = args.azr.parent / "output" / "intEC.extrap"
     if stale.exists():
@@ -114,14 +117,7 @@ def main() -> int:
         rate = NA * v_pref * kt ** -1.5 * np.trapezoid(w, e)
 
         # Gamow peak and its 1/e width, for reporting the window integrated.
-        eta_c = 0.0
-        for lvl in mdl.levels:
-            for ch in lvl.channels:
-                if ch.pair == args.entrance and not ch.is_photon:
-                    eta_c = 0.1574854 * ch.Z1 * ch.Z2 * np.sqrt(mu)
-                    break
-            if eta_c:
-                break
+        eta_c = 0.1574854 * q.light[0] * q.heavy[0] * np.sqrt(mu)
         e0 = (0.5 * eta_c * np.pi * kt) ** (2.0 / 3.0) if eta_c else np.nan
         dw = 4.0 * np.sqrt(e0 * kt / 3.0) if eta_c else np.nan
         flag = "  <- grid ends inside" if e[-1] < e0 + dw / 2 else ""

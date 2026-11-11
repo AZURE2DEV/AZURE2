@@ -5,7 +5,7 @@ A THM result depends on choices the data cannot make -- the channel radius,
 the entrance vertex (plane or distorted waves), the vertex representation,
 the optical potentials, the spectator-momentum window.  This driver takes a
 project and a small variant grid, writes one project per variant (through
-AzrModel, so every refusal AzrModel or the engine knows applies), refits
+pyazr.Project, so every refusal of the engine's edits applies), refits
 each with scipy's least_squares on pyazr's residuals and Jacobian, and hands
 the results to pyazr's model averaging (``pyazr/modelavg.py``), which keeps
 the statistical and the model spread apart.  See
@@ -104,17 +104,8 @@ ROOT = os.path.normpath(os.path.join(HERE, ".."))
 sys.path.insert(0, ROOT)                          # this checkout's pyazr
 
 
-def _load(name):
-    """pyazr/<name>.py without the package (no numpy needed)."""
-    spec = importlib.util.spec_from_file_location(
-        name, os.path.join(ROOT, "pyazr", f"{name}.py"))
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-AzrModel = _load("azrfile").AzrModel
-ma = _load("modelavg")
+from pyazr import Project                          # noqa: E402  (the engine's edits of the project)
+from pyazr import modelavg as ma                  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -212,15 +203,20 @@ def label_of(s):
     return re.sub(r"[^A-Za-z0-9_.+~=-]", "_", "_".join(bits)) or "project"
 
 
+def _experiments(model):
+    """{name: {key: text}} of the project's <thm> experiments."""
+    return (model.thm() or {"experiments": {}})["experiments"]
+
+
 def apply_variant(model, s, spec):
-    """Edit an AzrModel into the variant.  Raises ValueError/KeyError for a
-    variant AzrModel refuses (the model is then not usable)."""
+    """Edit a pyazr.Project into the variant.  Raises ValueError/KeyError for
+    a variant the engine's edits refuse (the project is then unchanged)."""
     if "radius" in s:
         for k in spec["radius_pairs"]:
-            model.set_channel_radius(int(k), float(s["radius"]))
+            model.set_pair(int(k), radius=float(s["radius"]))
     if "vertex" in s:
-        model.set_thm_option("vertex", s["vertex"])
-    exps = model.thm_experiments()
+        model.set_thm(vertex=s["vertex"])
+    exps = _experiments(model)
     want = spec.get("experiment") or list(exps)
     if any(k in s for k in ("vertex_model", "optical", "ps", "lineshape",
                             "distortion")):
@@ -256,7 +252,7 @@ def apply_variant(model, s, spec):
             if "lineshape" in s:
                 if s["lineshape"] not in ("on", "off"):
                     raise ValueError(f"--lineshape {s['lineshape']!r}: on or off.")
-                rec["lineshape"] = s["lineshape"] == "on"
+                rec["lineshape"] = s["lineshape"]
             d = s.get("distortion", "-")
             if d == "none":
                 for k in ("distortion", "opticalAA", "opticalSF", "distortionRef",
@@ -274,8 +270,9 @@ def apply_variant(model, s, spec):
                 rec["distortion"] = "optical"
             elif d != "-":
                 raise ValueError(f"--distortion {d!r}: none, coulomb or optical.")
-            seg = rec.pop("segments")
-            model.set_thm_experiment(name, seg, **rec)
+            keys = {k: rec.get(k) for k in set(exps[name]) | set(rec)}   # None: the key removed
+            model.set_thm_experiment(name, **{k: v for k, v in keys.items()
+                                             if v != exps[name].get(k)})
     return model
 
 
@@ -284,32 +281,32 @@ def apply_variant(model, s, spec):
 # ---------------------------------------------------------------------------
 
 def penalty_rows(np, m, x):
-    """AZURE2's norm and shift priors as signed residual rows and their
-    Jacobian (pyazr.azure2.penalties gives them squared)."""
-    rows, jac = [], []
+    """AZURE2's norm and shift priors as residual rows and their Jacobian:
+    one row per segment and prior kind, r = sqrt(t) with t the engine's term
+    (pyazr.azure2.penalties; the engine owns the priors and their centres),
+    dr/dx = (dt/dx)/(2r) from central differences of t over the free norm and
+    shift parameters (the only ones t depends on).  sum(r^2) is the sum of the
+    terms; for a term of one parameter, ((p - c)/sigma)^2, the row is
+    |p - c|/sigma, whose J^T r and J^T J are those of the signed row."""
+    kinds = ("norm", "shift", "shift_sqrt", "shift_fn")
+
+    def terms(xx):
+        p = m.penalties(xx)
+        return np.concatenate([np.asarray(p[k], float) for k in kinds])
+
     n = len(x)
-    norms = {p.segment_key: p for p in m.parameters.norms}
-    shifts = {p.segment_key: p for p in m.parameters.shifts}
-    for d in m.active_datasets:
-        p = norms.get(d.key)
-        if p is not None and not p.fixed and p.free_index is not None:
-            # nominal_norm: the explicit prior centre, else the norm field.
-            nom = getattr(d, "nominal_norm", d.norm)
-            sig = nom / 100.0 * d.norm_error
-            if sig:
-                rows.append((x[p.free_index] - nom) / sig)
-                j = np.zeros(n)
-                j[p.free_index] = 1.0 / sig
-                jac.append(j)
-        q = shifts.get(d.key)
-        if (d.vary_shift and d.energy_shift_error and q is not None
-                and not q.fixed and q.free_index is not None):
-            rows.append((x[q.free_index] - getattr(d, "nominal_shift", d.energy_shift))
-                        / d.energy_shift_error)
-            j = np.zeros(n)
-            j[q.free_index] = 1.0 / d.energy_shift_error
-            jac.append(j)
-    return np.asarray(rows, float), (np.asarray(jac) if jac else np.zeros((0, n)))
+    t = terms(x)
+    cols = [p.free_index for p in m.parameters.free
+            if ("norm" in p.kind or "shift" in p.kind) and p.free_index is not None]
+    dt = np.zeros((t.size, n))
+    for c in cols:
+        h = 1e-6 * max(abs(x[c]), 1e-3)
+        xp = np.array(x, float); xp[c] += h
+        xm = np.array(x, float); xm[c] -= h
+        dt[:, c] = (terms(xp) - terms(xm)) / (2 * h)
+    live = t > 0
+    r = np.sqrt(t[live])
+    return r, dt[live] / (2 * r[:, None]) if r.size else np.zeros((0, n))
 
 
 def hook_rows(np, hook, m, x):
@@ -348,8 +345,10 @@ def profiled_count(m, x):
     for r in m.thm_experiments(x).values():
         k += 1 + len(r["b"])
         in_exp.update(r["segments"])
+    project = Project.open(m.file)           # a THM data set with a profiled norm: field thm, norm profiled
     for d in m.active_datasets:
-        if d.thm and d.vary_norm and d.key not in in_exp:
+        rec = project[d.name]
+        if "thm" in rec and str(rec.get("norm", "")).split()[:1] == ["profiled"] and d.key not in in_exp:
             k += 1
     return k
 
@@ -742,7 +741,7 @@ def main(argv=None):
     project = os.path.abspath(args.project)
     src_dir, azr_name = os.path.split(project)
     spec = build_spec(args)
-    exps = AzrModel.from_file(project).thm_experiments()
+    exps = _experiments(Project.open(project))
     project_dw = any(exps[n].get("vertexModel") == "dw"
                      for n in (spec.get("experiment") or list(exps)) if n in exps)
     grid = variant_grid(spec, args.pw_distortion, project_dw)
@@ -769,7 +768,7 @@ def main(argv=None):
     checked = []
     for label, s in grid:
         try:
-            apply_variant(AzrModel.from_file(project), s, spec)
+            apply_variant(Project.open(project), s, spec)
             note = ""
         except (ValueError, KeyError) as err:
             note = f"  -- refused: {err}"
@@ -801,10 +800,12 @@ def main(argv=None):
                    reason="", chi2="", npoints="", nfree="", chi2_nu="",
                    nev="", seconds="")
         try:
-            mdl = apply_variant(AzrModel.from_file(os.path.join(work, azr_name)), s, spec)
+            mdl = apply_variant(Project.open(os.path.join(work, azr_name)), s, spec)
             vdir = os.path.join(work, f"output_{label}")
-            mdl.set_output_dir(vdir)          # own caches: the radius changes them
-            path = mdl.write(os.path.join(work, f"{label}.azr"))
+            os.makedirs(vdir, exist_ok=True)  # own caches: the radius changes them
+            mdl.set_config(output_dir=vdir.rstrip("/") + "/")
+            path = os.path.join(work, f"{label}.azr")
+            mdl.save(path)
             if args.subprocess:
                 r = fit_in_subprocess(path, work, argv, os.path.join(out, "run.log"))
             else:

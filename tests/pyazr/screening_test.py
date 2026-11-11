@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Electron screening through pyazr: the AzrModel helpers for the ``screening`` block of a <targetInt>
-line (pure Python), the ``screening_<n>`` parameter record, its prior in penalties() / objective(),
+"""Electron screening through pyazr: the ``screening`` field of a format-3 target record (Project: read, set,
+added, refused), the ``<target>.screening`` parameter record, its prior in penalties() / objective(),
 and the U_e entries of chi2_and_grad and residual_jacobian against central finite differences.
 Model: tests/electron_screening/grad.azr (12C(p,g), LUNA segments, U_e free with a 200 eV prior).
 
@@ -18,11 +18,9 @@ ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SRC = os.path.join(ROOT, "tests", "electron_screening")
 DATA = os.path.join(ROOT, "tests", "13N", "data")
 sys.path.insert(0, ROOT)
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old originals of converted projects)
 
 try:
-    from pyazr.azrfile import AzrModel  # noqa: E402
+    from pyazr import Project, Nuisance, FormatError  # noqa: E402
 except ImportError as e:  # as the other pyazr tests: no package dependencies (e.g. mpmath) -> nothing to test
     print(f"pyazr not importable ({e}); nothing to test")
     sys.exit(77)
@@ -43,31 +41,33 @@ def close(a, b, tol):
 
 tmp = tempfile.mkdtemp(prefix="pyazr_screening_")
 try:
-    # --- AzrModel: the block (no engine) ----------------------------------------------------------
-    m = AzrModel.from_file(old_tree.original(os.path.join(SRC, "scr.azr")))
-    check("scr.azr: one screening line, effect 1 (13N's own lines are inactive)",
-          m.screenings == {1: (1000.0, False, 0.0)}, m.screenings)
-    m.set_screening(1, ue=900.0, vary=True, sigma=100.0)
+    # --- the target records (no engine session) ---------------------------------------------------
+    def screenings(p):
+        return {n: r["screening"] for n, r in p.records().items() if r.record_kind == "target" and "screening" in r}
+
+    m = Project.open(os.path.join(SRC, "scr.azr"))
+    check("scr.azr: one screening target, named by the two LUNA data sets",
+          screenings(m) == {"tgt_targetInt3": "1000 eV fixed"} and
+          [n for n, r in m.records().items() if r.get("target") == "tgt_targetInt3"]
+          == ["skowronski_luna_hpge", "skowronski_luna_bgo"], screenings(m))
+    m.set("tgt_targetInt3", screening=Nuisance(900, "fit", unit="eV", prior=(900, 100)))
     path = os.path.join(tmp, "set.azr")
-    m.write(path)
-    check("set_screening round trip", AzrModel.from_file(path).screenings == {1: (900.0, True, 100.0)},
-          AzrModel.from_file(path).screenings)
-    m.set_screening(1, sigma=0.0)
-    check("set_screening keeps the values not given", m.screenings == {1: (900.0, True, 0.0)}, m.screenings)
-    b = AzrModel.from_file(old_tree.original(os.path.join(SRC, "bare.azr")))
-    check("bare.azr: no screening", b.screenings == {}, b.screenings)
-    b.add_target_effect("6", gaussian_sigma=0.001)
-    b.add_target_effect("7", screening=(500.0, True, 50.0))
-    check("add_target_effect(screening=...): numbered among the active lines",
-          b.screenings == {2: (500.0, True, 50.0)}, b.screenings)
-    b.set_screening(1, ue=700.0)
-    check("set_screening adds a block to a line without one",
-          b.screenings == {1: (700.0, False, 0.0), 2: (500.0, True, 50.0)}, b.screenings)
+    m.save(path)
+    check("set screening round trip", screenings(Project.open(path)) == {"tgt_targetInt3": "900 eV fit prior 900 100"},
+          screenings(Project.open(path)))
+    b = Project.open(os.path.join(SRC, "bare.azr"))
+    check("bare.azr: no screening", screenings(b) == {}, screenings(b))
+    b.add("target", "scr7", kind="none", screening=Nuisance(500, "fit", unit="eV", prior=(500, 50)))
+    b.set("skowronski_luna_hpge", target="scr7")
+    check("a new target with screening, named by a data set",
+          screenings(b) == {"scr7": "500 eV fit prior 500 50"} and b["skowronski_luna_hpge"]["target"] == "scr7",
+          screenings(b))
     try:
-        b.set_screening(5, ue=1.0)
-        check("set_screening refuses a missing line", False)
-    except ValueError:
-        check("set_screening refuses a missing line", True)
+        b.set("scr7", screening="700 MeV/sr fixed")
+        check("a screening of the wrong unit is refused", False)
+    except FormatError as err:
+        check("a screening of the wrong unit is refused", "E_UNKNOWN_UNIT" in err.codes and
+              screenings(b)["scr7"] == "500 eV fit prior 500 50", err.codes)
 
     # --- engine ----------------------------------------------------------------------------------
     try:
@@ -83,7 +83,7 @@ try:
         work = os.path.join(tmp, "grad")
         os.makedirs(os.path.join(work, "output"))
         os.makedirs(os.path.join(work, "checks"))
-        shutil.copy(old_tree.original(os.path.join(SRC, "grad.azr")), work)
+        shutil.copy(os.path.join(SRC, "grad.azr"), work)
         os.symlink(DATA, os.path.join(work, "data"))
         session = azure2(os.path.join(work, "grad.azr"))
 
@@ -91,8 +91,8 @@ try:
         scr = list(session.parameters.screenings)
         check("one screening parameter", len(scr) == 1, scr)
         p = scr[0]
-        check("screening_1: free, U_e 1000 eV, prior 1000 +- 200, effect 1",
-              p.name == "screening_1" and not p.fixed and close(p.value, 1000.0, 1e-12)
+        check("tgt_targetInt3.screening: free, U_e 1000 eV, prior 1000 +- 200, effect 1",
+              p.name == "tgt_targetInt3.screening" and not p.fixed and close(p.value, 1000.0, 1e-12)
               and p.effect == 1 and close(p.prior_nominal, 1000.0, 1e-12) and close(p.prior_sigma, 200.0, 1e-12), p)
 
         x = np.asarray(session.params_rwa, float).copy()

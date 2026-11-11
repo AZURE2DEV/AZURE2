@@ -7,21 +7,20 @@ its own point and the FULL cross section of each component (src/ModelPass.cpp; b
 On 12C(p,g)13N (tests/13N levels; the 3/2- level decays by E1 and M1/E2, so sigma_E1, sigma_E2 and sigma differ), with
 synthetic data at 0.4-1.7 MeV, the gradient of the objective (pyazr objective_and_grad) is compared with central
 differences of the objective, for E1 and E2 SUMs, by the shared-component route and by the per-term route
-(AZURE_NO_COMPONENT_MAPPING=1, a process of its own).  Tolerance: |analytic - FD| <= 1e-5 of the largest gradient
+(AZURE_NO_COMPONENT_MAPPING=1, a process of its own).  In project format 3 the SUM is a data set with reaction
+"12C(p,g)13N + 12C(p,g)13N" and ``multipole E1`` (or E2), without a target: format 3 does not state a thick-target
+yield of a sum (``quantity yield`` takes one reaction), which the old file's <targetInt> line applied here.  Tolerance: |analytic - FD| <= 1e-5 of the largest gradient
 entry (the differences themselves agree to ~1e-8 here).
 
   PYAZR_ENGINE_DIR=<build>/pyazr-out python3 tests/pyazr/composite_gradient_test.py
 Needs the compiled engine; skips (exit 77) without it.
 """
 import os
-import re
 import subprocess
 import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old originals of converted projects)
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 TOL = 1e-5
 
@@ -37,21 +36,19 @@ except ImportError as e:
 ENERGIES = [0.40, 0.44, 0.46, 0.50, 1.40, 1.52, 1.56, 1.60, 1.70]
 
 
-def make_project(work, isdiff):
-    """tests/13N with one data set: a SUM of the E1 (isDiff 5) or E2 (6) part of p + 12C -> 13N + g and, as its
+def make_project(work, part):
+    """tests/13N's nuclear part with one data set: a SUM of the PART (E1 or E2) of p + 12C -> 13N + g and, as its
     component, the full cross section of the same pair."""
-    with open(old_tree.original(os.path.join(ROOT, "tests", "13N", "13N.azr"))) as f:
-        text = f.read()
-    line = f"1 1 2 0.3 1.8 0 180 {isdiff} 1 0 0 0 0 0 data/sum.dat 1 0 1 1 2 -999\n"
-    text = re.sub(r"<segmentsData>.*?</segmentsData>", "<segmentsData>\n" + line + "</segmentsData>", text, flags=re.S)
     os.makedirs(os.path.join(work, "data"), exist_ok=True)
     os.makedirs(os.path.join(work, "output"), exist_ok=True)
     os.makedirs(os.path.join(work, "checks"), exist_ok=True)
     with open(os.path.join(work, "data", "sum.dat"), "w") as f:
         for e in ENERGIES:
             f.write(f"{e} 0 1.0e-6 1.0e-7\n")
-    with open(os.path.join(work, "p.azr"), "w") as f:
-        f.write(text)
+    p = pyazr.Project.new(os.path.join(work, "p.azr"), nuclear_part=os.path.join(ROOT, "tests", "13N", "13N.azr"))
+    p.add("dataset", "sum", reaction="12C(p,g)13N + 12C(p,g)13N", quantity="sigma", unit="b", multipole=part,
+          file="data/sum.dat", columns="E_lab[MeV] _ value error", energy_window="0.3 1.8 MeV", norm="1 fixed")
+    p.save()
 
 
 def check_one(work):
@@ -78,10 +75,10 @@ if __name__ == "__main__" and len(sys.argv) == 2:  # one case, in its own proces
 
 failures = []
 with tempfile.TemporaryDirectory() as tmp:
-    for isdiff, part in ((5, "E1"), (6, "E2")):
+    for part in ("E1", "E2"):
         for route, env in (("shared-component route", {}), ("per-term route", {"AZURE_NO_COMPONENT_MAPPING": "1"})):
             work = os.path.join(tmp, f"{part}_{len(env)}")
-            make_project(work, isdiff)
+            make_project(work, part)
             r = subprocess.run([sys.executable, os.path.abspath(__file__), work], stdout=subprocess.PIPE,
                                stderr=subprocess.DEVNULL, env=dict(os.environ, OMP_NUM_THREADS="1", **env), text=True)
             last = r.stdout.strip().splitlines()[-1] if r.stdout.strip() else ""

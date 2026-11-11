@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""pyazr.masses (the AME2020 table) and AzrModel.mass_check / fill_masses.
+"""pyazr.masses (the AME2020 table) and masses.mass_check / fill_masses on a pyazr.Project.
 
 1. The table reads every nuclide, and the reference rows below, copied from the AME2020 file, come back exactly
    (mass excess in keV, atomic mass in u, the '#' estimated flag).  Mass excess and atomic mass agree to 2e-9 u
@@ -7,9 +7,9 @@
 2. Names: shorthands, "12C" / "C12" / "c-12", (Z, A); "h" and unknown symbols are refused.
 3. Separation energies from mass excesses equal (m1 + m2 - M) times the engine's u (931.49410242 MeV) to 5 eV,
    so a pair filled from the table passes the engine's 1 keV load-time check by five orders of magnitude.
-4. AzrModel.fill_masses on tests/13N/13N.azr (a bare-proton 1.00728 u next to atomic masses, S_p 20 eV high):
-   the changes are exactly M1 and S of pair 1 and M2 of the gamma pair; only those columns (and the entrance-S
-   copies) change in the written file; separation=False keeps S; pairs= restricts; an unknown key is refused.
+4. masses.fill_masses on tests/13N/13N.azr (a bare-proton 1.00728 u next to atomic masses, S_p 20 eV high):
+   the changes are exactly M1 and S of pair 1 and M2 of the gamma pair; nothing else of the pairs and levels
+   changes, and every row carries the new S (pair 1's rows, and the entrance-S copy of every row); separation=False keeps S; pairs= restricts; an unknown key is refused.
    A mass-number model (every mass rounded) is filled to the same numbers.
 
 Run from anywhere:  python3 tests/pyazr/masses_test.py
@@ -23,7 +23,7 @@ ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
 try:
     import pyazr  # noqa: E402
-    from pyazr import masses, AzrModel  # noqa: E402
+    from pyazr import masses, Project  # noqa: E402
 except ImportError as e:  # as the other pyazr tests: a missing package dependency -> nothing to test
     print(f"pyazr not importable ({e}); nothing to test")
     sys.exit(0)
@@ -110,62 +110,58 @@ def separation():
 def fill():
     src = os.path.join(ROOT, "tests", "13N", "13N.azr")
     work = tempfile.mkdtemp(prefix="pyazr_masses_")
-    before = AzrModel.from_file(src)
-    rows = before.mass_check()
+    before = Project.open(src)
+    rows = masses.mass_check(before)
     check([r.pair for r in rows] == [1, 2] and abs(rows[0].dS_kev - 0.0199) < 1e-3 and rows[1].S_table is None,
           f"mass_check on 13N.azr: pair 1 S {rows[0].dS_kev:+.4f} keV from the table, gamma pair not compared")
 
-    m = AzrModel.from_file(src)
-    changes = m.fill_masses()
+    m = Project.open(src)
+    changes = masses.fill_masses(m)
     want = [(1, "M1", 1.00728, 1.007825031898), (1, "S", 1.94351, 1.943490064), (2, "M2", 13.0057, 13.005738609)]
     check(changes == want, f"fill_masses changes {changes}")
-    out = m.write(os.path.join(work, "filled.azr"))
-    after = AzrModel.from_file(out)
-    check(all(abs(r.dS_kev) < 1e-9 for r in after.mass_check() if r.S_table is not None)
-          and all(r.mass_offset == 0.0 for r in after.mass_check()),
+    out = m.save(os.path.join(work, "filled.azr"))
+    after = Project.open(out)
+    check(all(abs(r.dS_kev) < 1e-9 for r in masses.mass_check(after) if r.S_table is not None)
+          and all(r.mass_offset == 0.0 for r in masses.mass_check(after)),
           "the written file agrees with the table exactly")
-    # only the mass and S columns moved
-    cols = {"m1": 17, "m2": 18, "entranceSepE": 21, "sepE": 22}
-    moved = set()
-    for c0, c1 in zip([c for lv in before.levels for c in lv.channels], [c for lv in after.levels for c in lv.channels]):
-        for i, (a, b) in enumerate(zip(c0.tokens, c1.tokens)):
-            if a != b:
-                moved.add(i)
-    check(moved <= set(cols.values()) and {17, 18, 21, 22} >= moved and 22 in moved and 21 in moved,
-          f"only the mass, S and entrance-S columns changed (columns {sorted(moved)})")
-    ent = {c.entrance_sep_energy for lv in after.levels for c in lv.channels}
-    check(ent == {1.943490064}, f"every line's entrance-S copy is pair 1's new S ({ent})")
+    # nothing else of the pairs and the levels moved
+    import dataclasses
+    unchanged = lambda q: dataclasses.replace(q, light_mass=0.0, heavy_mass=0.0, separation_energy=0.0, threshold=0.0)
+    check([unchanged(q) for q in before.pairs()] == [unchanged(q) for q in after.pairs()]
+          and [(lv.label, [(c.pair, c.l, c.s, c.width_text, c.fixed) for c in lv.channels]) for lv in before.levels()]
+          == [(lv.label, [(c.pair, c.l, c.s, c.width_text, c.fixed) for c in lv.channels]) for lv in after.levels()],
+          "only the masses and S of the pairs changed")
+    rows_after = [after.text.split("\n")[c.line - 1] for lv in after.levels() for c in lv.channels]
+    check(all("1.943490064" in r.split() and "1.94351" not in r.split() for r in rows_after),
+          "every row carries pair 1's new S (its own column on pair 1's rows, the entrance-S copy on all)")
 
-    m = AzrModel.from_file(src)
-    ch = m.fill_masses(separation=False)
-    check(all(c[1] != "S" for c in ch) and m.mass_check()[0].S == 1.94351, "separation=False keeps S")
-    m = AzrModel.from_file(src)
-    ch = m.fill_masses(pairs=[2])
+    m = Project.open(src)
+    ch = masses.fill_masses(m, separation=False)
+    check(all(c[1] != "S" for c in ch) and masses.mass_check(m)[0].S == 1.94351, "separation=False keeps S")
+    m = Project.open(src)
+    ch = masses.fill_masses(m, pairs=[2])
     check(ch == [(2, "M2", 13.0057, 13.005738609)], f"pairs=[2] touches pair 2 only ({ch})")
     try:
-        AzrModel.from_file(src).fill_masses(pairs=[7])
+        masses.fill_masses(Project.open(src), pairs=[7])
         check(False, "an unknown pair key is refused")
     except KeyError:
         check(True, "an unknown pair key is refused")
 
     d = rows[0].describe()
     check("<-- mass" not in d, "describe: a bare-proton mass (5e-4 u off) is listed, not flagged")
-    m = AzrModel.from_file(src)
-    for lv in m.levels:
-        for c in lv.channels:
-            if c.pair == 1:
-                c.M1 = 1.08664          # the 17O+a typo for 1.00866
-    d = m.mass_check()[0].describe()
-    check("<-- mass" in d and abs(m.mass_check()[0].dS_kev - 0.0199) < 1e-3,
+    m = Project.open(src)
+    m.set_pair(1, light_mass=1.08664)   # the 17O+a typo for 1.00866
+    d = masses.mass_check(m)[0].describe()
+    check("<-- mass" in d and abs(masses.mass_check(m)[0].dS_kev - 0.0199) < 1e-3,
           f"describe: a mistyped mass (1.08664 u) is flagged, S still compared through the identified 1H ({d})")
 
     # a mass-number model fills to the same numbers
-    m = AzrModel.from_file(src)
-    for lv in m.levels:
-        for c in lv.channels:
-            c.M1, c.M2 = float(round(c.M1)), float(round(c.M2))
-    m.fill_masses()
-    same = [(r.M1, r.M2, r.S) for r in m.mass_check()] == [(r.M1, r.M2, r.S) for r in after.mass_check()]
+    m = Project.open(src)
+    for q in m.pairs():
+        m.set_pair(q.key, heavy_mass=float(round(q.heavy_mass)),
+                   light_mass=float(round(q.light_mass)) if q.light_mass > 0.5 else None)
+    masses.fill_masses(m)
+    same = [(r.M1, r.M2, r.S) for r in masses.mass_check(m)] == [(r.M1, r.M2, r.S) for r in masses.mass_check(after)]
     check(same, "a model with mass numbers as masses fills to the same masses and S")
 
 

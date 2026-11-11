@@ -9,11 +9,10 @@ Checks:
   (a) beam_profile_kernel: the free parameters of the formal basis (--no-brune) are those of the Brune basis, by name;
   (b) tests/13N with the photon width of the 20 MeV 1/2+ level set to 0 and --no-ignore-externals (where the
       amplitude is gamma^int = -Re gamma^ext, not 0): that parameter is fixed, in the Brune and formal bases;
-  (c) apply_fit in strict mode, fixed parameters included, places the formal-basis vector save_fit writes for
-      beam_profile_kernel.  This guards the round trip only: no test project has a fixed width on a channel its level
-      does not list (scan of the 75 projects that load in the formal basis, 2026-11-08), so the azrfile.py branch
-      that skips such a width whatever its value is not exercised here, and (c) passes on a18fe89e too; that branch
-      is tested in apply_fit_test.py ("fixed 5, no line").
+  (c) save_fit places the formal-basis vector of beam_profile_kernel, fixed parameters included, in the rows they
+      come from (it refuses a free value it cannot place).  This guards the round trip only: no test project has a
+      fixed width on a channel its level does not list (scan of the 75 projects that load in the formal basis,
+      2026-11-08).
 
 Run from anywhere:  python3 tests/pyazr/zero_width_fixed_test.py
 """
@@ -35,20 +34,19 @@ def prepare(work, project):
     os.makedirs(os.path.join(work, "output"))
     os.makedirs(os.path.join(work, "checks"))
     if project == "13N":
-        from pyazr import AzrModel
-        m = AzrModel.from_file(os.path.join(src, "13N.azr"))
-        level = [lv for lv in m.levels if lv.J == 0.5 and lv.parity == +1 and lv.energy == 20.0][0]
-        [c for c in level.channels if c.pair == 2][0].gamma = 0.0
-        path = os.path.join(work, "m.azr")
-        m.write(path)
-        return path
+        from pyazr import Project
+        m = Project.open(os.path.join(src, "13N.azr"))
+        level = [lv for lv in m.levels() if lv.J == 0.5 and lv.parity == +1 and lv.energy == 20.0][0]
+        c = [c for c in level.channels if c.pair == 2][0]
+        m.set_channel(level, c.pair, c.l, c.s, width=0.0)
+        return m.save(os.path.join(work, "m.azr"))
     shutil.copy(os.path.join(src, project + ".azr"), work)
     return os.path.join(work, project + ".azr")
 
 
 def worker(project, brune, ignore, out):
     import numpy as np
-    from pyazr import AzrModel, azure2
+    from pyazr import azure2
     work = tempfile.mkdtemp(prefix="pyazr_zero_fixed_")
     try:
         azr = prepare(work, project)
@@ -58,14 +56,12 @@ def worker(project, brune, ignore, out):
                                  if p.kind in ("energy", "width") and not p.fixed)
             res["fixed"] = sorted(p.name for p in a.parameters if p.kind == "width" and p.fixed)
             if project == "beam_profile_kernel" and brune == "0":
-                # the vector save_fit writes: every parameter, physical (apply_fit refuses include_fixed with transform=)
-                want = np.asarray(a.transform_all_rwa(a._all_rwa(np.array(a.params_rwa, float)), include_fixed=True), float)
-                try:
-                    AzrModel.from_file(azr).apply_fit(a.parameters, want, physical=True, pairs=a.pairs, strict=True,
-                                                      include_fixed=True)
-                    res["apply_fit"] = "ok"
+                try:  # every parameter, physical, into the rows they come from
+                    a.save_fit(os.path.join(work, "snapshot.azr"), np.array(a.params_rwa, float), param_sav=False,
+                               verify=False)
+                    res["save_fit"] = "ok"
                 except Exception as err:
-                    res["apply_fit"] = f"{type(err).__name__}: {str(err)[:300]}"
+                    res["save_fit"] = f"{type(err).__name__}: {str(err)[:300]}"
         json.dump(res, open(out, "w"))
     finally:
         shutil.rmtree(work, ignore_errors=True)
@@ -112,8 +108,8 @@ def main():
         for label, r in (("Brune", n_brune), ("formal", n_formal)):
             check(f"(b) 13N, photon width 0, --no-ignore-externals, {label}: width_4_2 fixed",
                   "width_4_2" in r["fixed"] and "width_4_2" not in r["free"])
-        check(f"(c) apply_fit strict, formal basis, fixed included: {bpk_formal.get('apply_fit')}",
-              bpk_formal.get("apply_fit") == "ok")
+        check(f"(c) save_fit, formal basis, fixed included: {bpk_formal.get('save_fit')}",
+              bpk_formal.get("save_fit") == "ok")
     print()
     if failures:
         print(f"FAIL: {len(failures)} check(s)")

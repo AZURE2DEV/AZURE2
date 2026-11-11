@@ -25,7 +25,7 @@ sys.path.insert(0, ROOT)
 try:
     import numpy as np
     from pyazr import azure2
-    from pyazr.azrfile import AzrModel
+    from pyazr import Project
     import pyazr._azure2  # noqa: F401
 except Exception as err:
     print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
@@ -48,7 +48,7 @@ def check(name, ok, detail=""):
 def evaluate(path, transform, where):
     os.makedirs(os.path.join(where, "output")); os.makedirs(os.path.join(where, "checks"))
     local = os.path.join(where, "m.azr")
-    AzrModel.from_file(path).write(local)
+    Project.open(path).save(local)
     with azure2(local, data_mode=False, use_brune=False, ignore_externals=False, transform=transform) as m:
         x = np.array(m.params_rwa)
         return [np.array(seg) for seg in m.calculate_rwa(x)]

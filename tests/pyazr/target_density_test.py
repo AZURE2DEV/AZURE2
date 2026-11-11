@@ -1,30 +1,30 @@
 #!/usr/bin/env python3
-"""Fitted target density (``densityfit`` / ``densitygroup`` on a <targetInt> line).
+"""Fitted target density (``areal_density ... fit`` on a format-3 target record of kind ``layer``).
 
-The areal density N of a thin target is a fit parameter ``density_<effect>``.  It moves the energy-loss window
-dE (int_{E-dE}^{E} dE'/epsilon = N) and nothing else: the yield is the integral over the window divided by the same
-N, so the computed value is the depth average of the cross section, with no factor of N.
+The areal density N of a thin target is a fit parameter ``<target>.areal_density``.  It moves the energy-loss
+window dE (int_{E-dE}^{E} dE'/epsilon = N) and nothing else: the yield is the integral over the window divided by
+the same N, so the computed value is the depth average of the cross section, with no factor of N.  A density
+shared by several data sets is one target record that those data sets name.
 
-Model (tests/13N, 12C(p,p) at 84.3 deg lab, Meyer, 0.3-0.9 MeV across the 0.457 MeV resonance), a constant stopping
-cross section eps = 1e-20 MeV cm^2/atom, N0 = 1e18 /cm^2 (10 keV lab, 9.2 keV c.m.):
-  key 3   the data, target integration, ``densityfit 1 5%``            (effect 1: density_1, prior 5e16, max 1.15e18)
-  key 17  a 0.25 keV grid at the same angle, no experimental effect    (the bare cross section)
-  key 18  the data, a plain line at N = 1.1 N0                         (effect 2: no parameter)
-  key 19  the data, ``densityfit 1 1e16 densitygroup g`` at N0          (effect 3: density_3, max 1.1e18)
-  key 20  the data, ``densitygroup g`` at 2 N0 (takes the group's N)    (effect 4: follows density_3)
-Elastic scattering keeps the c.m. angle of a fixed lab angle at every energy, so key 17 is the bare c.m. cross
-section the sub-points of keys 3, 18-20 sample.
+Model (tests/13N, 12C(p,p) at 84.3 deg lab, Meyer, 0.3-0.9 MeV across the 0.457 MeV resonance; every other data set
+inactive), a constant stopping cross section eps = 1e-20 MeV cm^2/atom, N0 = 1e18 /cm^2 (10 keV lab, 9.2 keV c.m.):
+  meyer_84  the data, target d1: density N0 fit, prior 5 %                     (d1.areal_density, max 1.15e18)
+  fine      a 0.25 keV grid at the same angle, no target                     (the bare cross section)
+  plain     the data, target p: N = 1.1 N0 fixed                             (no parameter)
+  g_a, g_b  the data, both naming target g: N0 fit, prior 1e16               (g.areal_density, max 1.1e18)
+Elastic scattering keeps the c.m. angle of a fixed lab angle at every energy, so `fine` is the bare c.m. cross
+section the sub-points of the others sample.
 
-1. the parameters: two densities, their priors (5 % converted), their maxima, the follower has none
-2. the window, and no factor of N: key 3 at N = 0.9, 1.0, 1.1 N0 equals the average of key 17 over
+1. the parameters: two densities, their priors (5 % converted), their maxima
+2. the window, and no factor of N: meyer_84 at N = 0.9, 1.0, 1.1 N0 equals the average of `fine` over
    [E_cm - F eps N, E_cm] (F = m2/(m1+m2)), 3e-4 relative (adaptive sub-point grid against a 0.25 keV trapezoid)
-3. a fitted density at 1.1 N0 = the plain line at 1.1 N0 (key 18), 3e-4
-4. the group: keys 19 and 20 identical, both follow density_3, and equal key 3 at the same N (3e-4)
+3. a fitted density at 1.1 N0 = the plain target at 1.1 N0, 3e-4
+4. the shared target: g_a and g_b identical, and equal meyer_84 at the same N (3e-4)
 5. penalties()["density"] = sum ((N - N0)/sigma)^2 and objective() includes it
-6. the residual-Jacobian column of density_1 = central differences of the residuals, 1e-3
-7. an energy shift on key 3 moves the window with the point: equal to the bare average below the shifted energy
+6. the residual-Jacobian column of d1.areal_density = central differences of the residuals, 1e-3
+7. an energy shift on meyer_84 moves the window with the point: equal to the bare average below the shifted energy
 8. beyond its maximum a density is computed at the maximum (warned once), the penalty with it
-9. refused at load: densityfit on a line without target integration, a group whose first line has no densityfit
+9. refused: an areal density on a target of kind none, and on a thick (infinite) target
 
 Run from anywhere:  python3 tests/pyazr/target_density_test.py
 """
@@ -34,8 +34,6 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old originals of converted projects)
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
 
@@ -50,7 +48,7 @@ def check(name, ok, detail=""):
 
 try:
     import numpy as np                         # noqa: E402
-    from pyazr import azure2                   # noqa: E402
+    from pyazr import azure2, Project, FormatError  # noqa: E402
 except Exception as err:                       # same skip as the other pyazr tests
     print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
     sys.exit(0)
@@ -58,41 +56,47 @@ except Exception as err:                       # same skip as the other pyazr te
 # numpy >= 2.0 renamed trapz to trapezoid; the linux CI job runs Ubuntu 22.04's numpy 1.21, which has only trapz.
 _trapezoid = getattr(np, "trapezoid", None) or np.trapz
 
-SRC = old_tree.original(os.path.join(ROOT, "tests", "13N", "13N.azr"))  # the old file (format3_tree.md)
+SRC = os.path.join(ROOT, "tests", "13N", "13N.azr")
 N0, EPS = 1.0e18, 1.0e-20
-STOP = f'"a0" 1 {EPS:g}'
-TARGET = {
-    3: f'1 "3" 50 0 0 1 {N0:g} {STOP} 0 0 0 "" 0 0 densityfit 1 5%',
-    18: f'1 "18" 50 0 0 1 {1.1 * N0:g} {STOP} 0 0 0 "" 0 0',
-    19: f'1 "19" 50 0 0 1 {N0:g} {STOP} 0 0 0 "" 0 0 densityfit 1 1e16 densitygroup g',
-    20: f'1 "20" 50 0 0 1 {2 * N0:g} {STOP} 0 0 0 "" 0 0 densitygroup g',
+STOPPING = f'formula "a0" a0={EPS:g} MeV*cm2/atom'
+LAYER = dict(kind="layer", active="12C", stopping=STOPPING, straggling="none")
+TARGETS = {  # name: areal density
+    "d1": f"{N0:g} atoms/cm2 fit prior {N0:g} 5%",
+    "p": f"{1.1 * N0:g} atoms/cm2 fixed",
+    "g": f"{N0:g} atoms/cm2 fit prior {N0:g} 1e16",
 }
+DATA = (("fine", None), ("plain", "p"), ("g_a", "g"), ("g_b", "g"))  # added after meyer_84, in this order
 
 
-def make_model(work, shift=None, target=None):
-    lines = open(SRC).read().split("\n")
-    i0, i1 = lines.index("<segmentsData>"), lines.index("</segmentsData>")
-    seg = [l.split() for l in lines[i0 + 1:i1] if l.split()]
-    meyer = list(seg[2])
-    meyer[3], meyer[4] = "0.3", "0.9"
-    for f in seg:
-        f[0] = "0"
-    a = list(meyer)
-    if shift is not None:
-        a[11], a[13] = f"{shift:g}", "1"
-    seg[2] = a
-    fine = list(meyer)
-    fine[3], fine[4], fine[14] = "0.28", "0.92", "data/fine_84.dat"
-    seg += [fine, list(meyer), list(meyer), list(meyer)]          # keys 17-20
-    lines[i0 + 1:i1] = [" ".join(f) for f in seg]
-    j0, j1 = lines.index("<targetInt>"), lines.index("</targetInt>")
-    lines[j0 + 1:j1] = target if target is not None else [TARGET[k] for k in (3, 18, 19, 20)]
-    path = os.path.join(work, "density.azr")
-    open(path, "w").write("\n".join(lines))
+def make_model(work, shift=None):
+    """The model above; SHIFT (MeV) a free energy offset on meyer_84."""
+    path = os.path.join(work, "density.azr")  # beside the work directory's data
+    shutil.copy(SRC, path)
+    proj = Project.open(path)
+    for name, r in proj.records().items():
+        if r.record_kind == "dataset":
+            proj.set(name, active="no")
+    for name, density in TARGETS.items():
+        proj.add("target", name, areal_density=density, **LAYER)
+    meyer = {k: v for k, v in proj["meyer_84"].fields.items() if k not in ("active", "target")}
+    meyer["energy_window"] = "0.3 0.9 MeV"
+    meyer["quadrature"] = "points 50"
+    proj.set("meyer_84", active=None, energy_window=meyer["energy_window"], target="d1",
+             quadrature=meyer["quadrature"], shift=None if shift is None else f"offset {shift:g} MeV fit")
+    for name, target in DATA:
+        if name == "fine":
+            proj.add("dataset", name, **dict(meyer, file="data/fine_84.dat", energy_window="0.28 0.92 MeV",
+                                             quadrature=None))
+        else:
+            proj.add("dataset", name, target=target, **meyer)
+    proj.save()
+    return path
+
+
+def write_fine(work):
     e = np.arange(0.28, 0.92 + 1e-9, 0.00025)
     np.savetxt(os.path.join(work, "data", "fine_84.dat"), np.column_stack([e, np.full_like(e, 84.3), np.ones_like(e),
                                                                            np.full_like(e, 0.01)]), fmt="%.6f")
-    return path
 
 
 def bare_average(e_fine, s_fine, lo, hi):
@@ -111,26 +115,28 @@ try:
     shutil.copytree(os.path.join(ROOT, "tests", "13N", "data"), os.path.join(work, "data"))
     os.makedirs(os.path.join(work, "output"))
     os.makedirs(os.path.join(work, "checks"))
+    write_fine(work)
 
     print("1. parameters")
     a = session(work)
     dens = list(a.parameters.densities)
     names = [p.name for p in dens]
-    check("two density parameters, density_1 and density_3", names == ["density_1", "density_3"], names)
+    check("two density parameters, d1.areal_density and g.areal_density",
+          names == ["d1.areal_density", "g.areal_density"], names)
     if len(dens) == 2:
         d1, d3 = dens
-        check("density_1: free, N0, prior 5 % = 5e16, max 1.15 N0",
+        check("d1.areal_density: free, N0, prior 5 % = 5e16, max 1.15 N0",
               not d1.fixed and d1.value == N0 and d1.prior_nominal == N0 and abs(d1.prior_sigma - 5e16) < 1e4
               and abs(d1.density_max - 1.15e18) < 1e6, d1)
-        check("density_3 (group g): prior 1e16, max 1.1 N0", abs(d3.prior_sigma - 1e16) < 1e4
+        check("g.areal_density (shared by g_a, g_b): prior 1e16, max 1.1 N0", abs(d3.prior_sigma - 1e16) < 1e4
               and abs(d3.density_max - 1.1e18) < 1e6, d3)
     free = [p for p in a.parameters if not p.fixed]
-    k1 = [i for i, p in enumerate(free) if p.name == "density_1"][0]
-    k3 = [i for i, p in enumerate(free) if p.name == "density_3"][0]
+    k1 = [i for i, p in enumerate(free) if p.name == "d1.areal_density"][0]
+    k3 = [i for i, p in enumerate(free) if p.name == "g.areal_density"][0]
     x0 = np.array(a.params_rwa, float)
 
-    # result segments are the active ones in order: 3, 17, 18, 19, 20; F = m2/(m1+m2) of p + 12C from the
-    # session's own conversion, E_cm / E_lab of the fine grid
+    # result segments are the active data sets in order: meyer_84 (3), fine (17), plain (18), g_a (19), g_b (20);
+    # F = m2/(m1+m2) of p + 12C from the session's own conversion, E_cm / E_lab of the fine grid
     seg = {key: i for i, key in enumerate((3, 17, 18, 19, 20))}
     en = a.calculate_energies(a.params)
     e_fine = np.asarray(en[seg[17]], float)
@@ -161,15 +167,15 @@ try:
     rel = np.max(np.abs(v[3] / v[18] - 1))
     check(f"key 3 at 1.1 N0 = key 18 (plain, 1.1 N0) (worst {rel:.1e})", rel < 3e-4, rel)
 
-    print("\n4. the density group")
+    print("\n4. the shared target")
     x = x0.copy()
     x[k1] = 0.95 * N0
     x[k3] = 0.95 * N0
     v = values(x)
-    check("keys 19 and 20 identical (20's own 2 N0 replaced by the group's)", np.array_equal(v[19], v[20]),
+    check("g_a and g_b identical", np.array_equal(v[19], v[20]),
           np.max(np.abs(v[19] - v[20])))
     rel = np.max(np.abs(v[19] / v[3] - 1))
-    check(f"the group at 0.95 N0 = key 3 at 0.95 N0 (worst {rel:.1e})", rel < 3e-4, rel)
+    check(f"the shared target at 0.95 N0 = key 3 at 0.95 N0 (worst {rel:.1e})", rel < 3e-4, rel)
 
     print("\n5. penalties")
     x = x0.copy()
@@ -196,7 +202,7 @@ try:
     col = J[:, k1]
     scale = np.max(np.abs(fd))
     err = np.max(np.abs(col - fd)) / scale if scale > 0 else np.inf
-    check(f"Jacobian column of density_1 = central differences (worst {err:.1e} of the largest entry)",
+    check(f"Jacobian column of d1.areal_density = central differences (worst {err:.1e} of the largest entry)",
           scale > 0 and err < 1e-3, err)
 
     print("\n7. an energy shift moves the window with the point")
@@ -222,17 +228,17 @@ try:
     x[k1] = 1.3 * N0
     check("and penalised there", abs(a.penalties(x)["density"] - (0.15 * N0 / 5e16) ** 2) < 1e-9)
 
-    print("\n9. refused at load")
-    for label, bad in (("densityfit on a Gaussian-only line", ['1 "3" 50 1 0.002 0 0 "" 0 0 0 0 "" 0 densityfit 1 5%']),
-                       ("densityfit on a thick target (density 0)", [f'1 "3" 50 0 0 1 0 {STOP} 0 0 0 "" 0 0 densityfit 1 5%']),
-                       ("a group whose first line has no densityfit",
-                        [f'1 "3" 50 0 0 1 {N0:g} {STOP} 0 0 0 "" 0 0 densitygroup g',
-                         f'1 "18" 50 0 0 1 {N0:g} {STOP} 0 0 0 "" 0 0 densityfit 1 5% densitygroup g'])):
+    print("\n9. refused")
+    for label, kind in (("a fitted density on a target of kind none", "none"),
+                        ("a fitted density on a thick (infinite) target", "infinite")):
+        proj = Project.open(make_model(work))
         try:
-            session(work, target=bad)
-            check(f"{label}: refused", False, "loaded")
-        except Exception as e:
-            check(f"{label}: refused", True)
+            proj.set("d1", kind=kind)
+            check(f"{label}: refused", False, "accepted")
+        except FormatError as err:
+            check(f"{label}: refused", any(d["code"] == "E_FIELD_NOT_APPLICABLE" and
+                                           "target 'd1', field 'areal_density'" in d["message"]
+                                           for d in err.diagnostics), err)
 finally:
     shutil.rmtree(work, ignore_errors=True)
 

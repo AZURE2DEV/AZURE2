@@ -5,9 +5,7 @@
      norms (a data set's own, a shared normalization), shift terms (an offset in keV, a sqrt term, a shared energy
      scale's offset) and the shift function's parameter are written into the records' nuisances in their units, the
      priors untouched; verify=True reopens the snapshot and finds the fit's chi^2 and priors (it raised before);
-  2. save_fit of a format-1/2 project after set_nuclear_potential is refused with the conversion command (before, the
-     file was written without the changed potential);
-  3. set_nuclear_potential(..., matching_radius=, step=) (fm): the view reports them, the channel functions equal
+  2. set_nuclear_potential(..., matching_radius=, step=) (fm): the view reports them, the channel functions equal
      those of a record stating them, bit for bit, and save_fit writes them into the format-3 record.
 
 Needs the compiled module.  Run from anywhere:  python3 tests/pyazr/save_fit_format3_test.py
@@ -23,8 +21,7 @@ ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 T2 = os.path.join(ROOT, "tests", "upgrade", "T2")
 HYBRID = os.path.join(ROOT, "tests", "hybrid_potential")
 FIXTURES = os.path.join(ROOT, "convert", "tests", "fixtures")
-sys.path.insert(0, HERE)
-import old_tree  # noqa: E402  (the old originals of converted projects)
+ORIGINALS = os.path.join(ROOT, "tests", "convert", "fixtures", "tests")  # the originals of converted projects
 
 failures = []
 
@@ -105,25 +102,12 @@ def fitted(work):
 
 
 def potentials(work):
-    print("2. a changed potential in a format-1/2 project")
+    print("2. matching radius and step")
     d = os.path.join(work, "hybrid")
     os.makedirs(os.path.join(d, "output"))
     shutil.copytree(os.path.join(HYBRID, "data"), os.path.join(d, "data"))
     old = os.path.join(d, "hybrid_potential.azr")
-    shutil.copy(old_tree.original(os.path.join(HYBRID, "hybrid_potential.azr")), old)  # the old file
-    with azure2(old, cwd=d) as m:
-        m.save_fit(os.path.join(d, "unchanged.azr"), verify=False, norms="nominal")
-        check("save_fit of an old project with no potential change: written", os.path.exists(os.path.join(d, "unchanged.azr")))
-        m.set_nuclear_potential(1, coulomb_radius=5.0)
-        try:
-            m.save_fit(os.path.join(d, "changed.azr"), verify=False, norms="nominal")
-            check("save_fit of an old project after set_nuclear_potential: refused with the conversion command", False,
-                  "written")
-        except ValueError as e:
-            check("save_fit of an old project after set_nuclear_potential: refused with the conversion command",
-                  "convert" in str(e) and not os.path.exists(os.path.join(d, "changed.azr")), str(e))
-
-    print("3. matching radius and step")
+    shutil.copy(os.path.join(ORIGINALS, "hybrid_potential", "hybrid_potential.azr"), old)  # the original
     f3 = os.path.join(d, "f3.azr")
     convert_azr(old, f3, to=3)
     text = open(f3).read()

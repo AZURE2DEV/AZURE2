@@ -8,10 +8,10 @@ docs/source/theory/thm_implementation.rst, "Coherent background").  Re and Im
 of c are ordinary fit parameters, the last block of the parameter vector.
 Checked on tests/18O_p_a_thm with its six R-matrix parameters freed:
 
-  1. AzrModel: set_thm_experiment(cbackground=...) / thm_experiments /
-     set_thm_cbackground round trip; what AZURE2 refuses raises and leaves the
-     model unchanged (syntax, an exit pair no segment has, a J^pi the model
-     lacks, entranceL=coherent in either order).
+  1. Project: set_thm_experiment(cbackground=...) / thm() round trip; what
+     AZURE2 refuses is refused, by the edit or when a session is made, and
+     the project is unchanged (syntax, an exit pair no data set has, a J^pi
+     the model lacks, entranceL=coherent in either order).
   2. The engine: the parameters (kind "cbkg", names, values, fixed flags),
      calculate_chi2_rwa == the CLI, thm_experiments reports the values; a
      background fixed at zero gives residuals and Jacobian bit for bit those
@@ -37,7 +37,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SOURCE = os.path.join(ROOT, "tests", "18O_p_a_thm")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old original: a test of the old file class, format3_tree.md section 5)
+from thm_records import datasets, refusal, set_experiment, thm_datasets, thm_set  # noqa: E402
 AZR = "18O_p_a_thm.azr"
 
 failures = []
@@ -55,16 +55,15 @@ def rel(a, b):
 
 sys.path.insert(0, ROOT)
 os.environ.setdefault("OMP_NUM_THREADS", "1")
-import importlib.util                                          # noqa: E402
-_spec = importlib.util.spec_from_file_location(
-    "azrfile", os.path.join(ROOT, "pyazr", "azrfile.py"))
-_azrfile = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_azrfile)
-AzrModel = _azrfile.AzrModel
+try:
+    from pyazr import Project
+except Exception as err:                                   # engine not built
+    print(f"skip: engine not available ({type(err).__name__}: {err})")
+    sys.exit(77)
 
 
 def fresh_copy(dst):
-    old_tree.copytree(SOURCE, dst)
+    shutil.copytree(SOURCE, dst)
     for junk in ("output", "checks"):
         shutil.rmtree(os.path.join(dst, junk), ignore_errors=True)
         os.makedirs(os.path.join(dst, junk))
@@ -82,68 +81,72 @@ def refuses(what, fn, frag):
 
 
 with tempfile.TemporaryDirectory() as tmp:
-    # -- 1. AzrModel ------------------------------------------------------------
-    print("1. AzrModel: cbackground=")
+    # -- 1. Project -------------------------------------------------------------
+    print("1. Project: cbackground=")
     proj = os.path.join(tmp, "model")
     fresh_copy(proj)
-    m = AzrModel.from_file(os.path.join(proj, AZR))
-    m.set_thm_experiment("E", [1, 2], cbackground="1/2+:2:0.5,0,0.5,1:linear=0.25,-0.5f,0,1e-3")
-    rec = m.thm_experiments()["E"]
-    check("record: canonical value", rec.get("cbackground") ==
-          "1/2+:2:1/2,0,1/2,1:linear=0.25,-0.5f,0,0.001", rec)
+    src = os.path.join(proj, AZR)
+    m = Project.open(src)
+    set_experiment(m, "E", [1, 2], cbackground="1/2+:2:0.5,0,0.5,1:linear=0.25,-0.5f,0,1e-3")
+    rec = m.thm()["experiments"]["E"]
+    check("record: the value as written", rec == {"cbackground": "1/2+:2:0.5,0,0.5,1:linear=0.25,-0.5f,0,1e-3"}, rec)
     one = os.path.join(proj, "one.azr")
-    m.write(one)
+    m.save(one)
     text = open(one).read()
-    check("one canonical line", "experiment[E] segments=1,2 cbackground=1/2+:2:1/2,0,1/2,1:linear="
-          "0.25,-0.5f,0,0.001\n" in text, text[-200:])
-    m2 = AzrModel.from_file(one)
-    check("reloaded: same record", m2.thm_experiments() == m.thm_experiments())
-    m2.write(os.path.join(proj, "again.azr"))
+    check("one line", "experiment[E] cbackground=1/2+:2:0.5,0,0.5,1:linear=0.25,-0.5f,0,1e-3\n" in text,
+          text[text.find("<thm>"):text.find("</thm>")])
+    m2 = Project.open(one)
+    check("reloaded: same record", m2.thm() == m.thm())
+    m2.save(os.path.join(proj, "again.azr"))
     check("untouched: byte-identical write", open(os.path.join(proj, "again.azr")).read() == text)
-    m.set_thm_experiment("E", [1, 2], cbackground=["1/2+:2", "1/2+:2:1/2,0,1/2,1"])
+    set_experiment(m, "E", [1, 2], cbackground=["1/2+:2", "1/2+:2:1/2,0,1/2,1"])
     check("a list of terms is joined with ';'",
-          m.thm_experiments()["E"]["cbackground"] == "1/2+:2;1/2+:2:1/2,0,1/2,1")
-    m2.set_thm_cbackground("E", "1/2+:2=1.5,2f")
-    check("set_thm_cbackground replaces the value in place",
-          m2.thm_experiments()["E"]["cbackground"] == "1/2+:2=1.5,2f" and
-          m2.thm_experiments()["E"]["segments"] == [1, 2])
-    before = str(m2._suffix) + str(m2._prefix)
-    for what, fn, frag in [
-        ("no parity", lambda: m2.set_thm_experiment("E", [1], cbackground="1/2:2"), "J^pi '1/2'"),
-        ("bad exit key", lambda: m2.set_thm_experiment("E", [1], cbackground="1/2+:x"), "exit pair key"),
-        ("two values for linear", lambda: m2.set_thm_experiment("E", [1], cbackground="1/2+:2:linear=1,2"),
-         "expected 4 values"),
-        ("bad channels", lambda: m2.set_thm_experiment("E", [1], cbackground="1/2+:2:1/2,0"), "channels"),
-        ("empty term", lambda: m2.set_thm_experiment("E", [1], cbackground="1/2+:2;"), "an empty term"),
-        ("exit pair of no segment", lambda: m2.set_thm_experiment("E", [1], cbackground="1/2+:1"),
-         "no segment of the experiment has exit pair 1"),
-        ("J^pi not in the model", lambda: m2.set_thm_experiment("E", [1], cbackground="3/2-:2"),
-         "no J^pi = 3/2- group"),
-        ("set_thm_cbackground: bad value", lambda: m2.set_thm_cbackground("E", "1/2+:2=a,b"), "value 'a'"),
-        ("entranceL=coherent after", lambda: m2.set_thm_option("entranceL", "coherent"), "entranceL=coherent"),
-        ("with lineshape=on", lambda: m2.set_thm_experiment("E", [1], beam="18O", target="d", spectator="n",
-                                                             Ebeam=54, lineshape=True, cbackground="1/2+:2"),
+          m.thm()["experiments"]["E"]["cbackground"] == "1/2+:2;1/2+:2:1/2,0,1/2,1")
+    m2.set_thm_experiment("E", cbackground="1/2+:2=1.5,2f")
+    check("set_thm_experiment(cbackground=) replaces the value in place, the data sets stay",
+          m2.thm()["experiments"]["E"]["cbackground"] == "1/2+:2=1.5,2f"
+          and [m2[n]["thm"] for n in thm_datasets(m2)] == ["E", "E"])
+    before = m2.to_bytes()
+    bad = os.path.join(proj, "refused.azr")
+
+    def refuses_both(what, make, frag):  # refused by the edit, or (rules that need the model) when a session is made
+        msg = refusal(make, bad)
+        lines = [ln for ln in (msg or "").splitlines() if frag in ln]
+        check(f"refused: {what} ({lines[0].strip()[:110] if lines else ''})", bool(lines), msg and msg[-400:])
+
+    def cb(value, **keys):
+        return lambda: set_experiment(Project.open(one), "E", [1], cbackground=value, **keys)
+
+    def coherent_after():
+        p = Project.open(one)
+        p.set_thm(entranceL="coherent")
+        return p
+
+    for what, make, frag in [
+        ("no parity", cb("1/2:2"), "J^pi '1/2'"),
+        ("bad exit key", cb("1/2+:x"), "exit pair key"),
+        ("two values for linear", cb("1/2+:2:linear=1,2"), "expected 4 values"),
+        ("bad channels", cb("1/2+:2:1/2,0"), "channels"),
+        ("empty term", cb("1/2+:2;"), "an empty term"),
+        ("exit pair of no data set", cb("1/2+:1"), "no segment of the experiment has exit pair 1"),
+        ("J^pi not in the model", cb("3/2-:2"), "no J^pi = 3/2- group"),
+        ("bad value", lambda: Project.open(one).set_thm_experiment("E", cbackground="1/2+:2=a,b"), "value 'a'"),
+        ("entranceL=coherent after", coherent_after, "entranceL=coherent"),
+        ("with lineshape=on", cb("1/2+:2", beam="18O", target="d", spectator="n", Ebeam=54, lineshape=True),
          "lineshape=on and cbackground= cannot be combined"),
     ]:
-        refuses(what, fn, frag)
-    check("model unchanged after the refusals", str(m2._suffix) + str(m2._prefix) == before)
-    m3 = AzrModel.from_file(os.path.join(proj, AZR))
-    m3.set_thm_option("entranceL", "coherent")
-    refuses("entranceL=coherent before", lambda: m3.set_thm_experiment("E", [1], cbackground="1/2+:2"),
-            "entranceL=coherent")
-    try:
-        AzrModel.from_file(os.path.join(proj, AZR)).set_thm_cbackground("E", "1/2+:2")
-        check("set_thm_cbackground without the key raises KeyError", False)
-    except KeyError:
-        check("set_thm_cbackground without the key raises KeyError", True)
+        refuses_both(what, make, frag)
+    check("project unchanged after the refusals", m2.to_bytes() == before)
+
+    def coherent_before():
+        p = Project.open(src)
+        p.set_thm(entranceL="coherent")
+        return set_experiment(p, "E", [1], cbackground="1/2+:2")
+    refuses_both("entranceL=coherent before", coherent_before, "entranceL=coherent")
 
     # -- the engine -----------------------------------------------------------
-    try:
-        import numpy as np
-        from pyazr import azure2
-    except Exception as err:                                   # engine not built
-        print(f"skip the engine part: engine not available ({type(err).__name__}: {err})")
-        sys.exit(1 if failures else 77)
+    import numpy as np
+    from pyazr import azure2
     binary = os.environ.get("AZURE2_BIN")
     if not binary:
         cands = [c for c in glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))
@@ -156,18 +159,19 @@ with tempfile.TemporaryDirectory() as tmp:
     def project(name, block):
         d = os.path.join(tmp, name)
         fresh_copy(d)
-        mm = AzrModel.from_file(os.path.join(d, AZR))
-        for lv in mm.levels:                                   # free all six parameters
-            lv.set_fixed(False)
+        mm = Project.open(os.path.join(d, AZR))
+        for lv in mm.levels():                                 # free all six parameters
+            mm.set_level(lv, fixed=False)
             for c in lv.channels:
-                c.channel_fixed = False
-        mm.write(os.path.join(d, "run.azr"))
-        if block:
-            with open(os.path.join(d, "run.azr"), "a") as f:
-                f.write("\n<thm>\n" + block + "\n</thm>\n")
+                mm.set_channel(lv, c.pair, c.l, c.s, fixed=False)
+        text = mm.text
+        if block:  # the block's one experiment joined by both data sets
+            text = thm_set(text, block, datasets(text))
+        with open(os.path.join(d, "run.azr"), "w") as f:
+            f.write(text)
         return d
 
-    block = ("experiment[E] segments=1,2 background=linear "
+    block = ("experiment[E] background=linear "
              "cbackground=1/2+:2:linear=0.3,-0.2,0.05,0.1")
     cli_dir, py_dir = project("cli", block), project("py", block)
     proc = subprocess.run([binary, "--no-gui", "--no-readline", "run.azr"], cwd=cli_dir,
@@ -181,7 +185,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # An experiment whose name holds "norm" and "shift": its cbkg parameters
     # are neither (they were taken for both by a substring test).
-    named = project("named", "experiment[normshift] segments=1,2 cbackground=1/2+:2=0.3,-0.2")
+    named = project("named", "experiment[normshift] cbackground=1/2+:2=0.3,-0.2")
     with azure2(os.path.join(named, "run.azr"), cwd=named) as s:
         cbi = [p.free_index for p in s.parameters.cbkg]
         norms = {int(round(i)) for i in s.norm_indices()}
@@ -243,18 +247,18 @@ with tempfile.TemporaryDirectory() as tmp:
         xs[-4:] = [0.31, -0.19, 0.04, 0.12]
         chi_s = float(s.calculate_chi2_rwa(xs)[0])
         path, sav = s.save_fit(os.path.join(py_dir, "fit.azr"), x=xs, param_sav=False)
-    fit = AzrModel.from_file(path)
+    fit = Project.open(path)
     check("the snapshot's cbackground carries the values",
-          fit.thm_experiments()["E"]["cbackground"] == "1/2+:2:1/2,0,1/2,1:linear=0.31,-0.19,0.04,0.12",
-          fit.thm_experiments()["E"])
+          fit.thm()["experiments"]["E"]["cbackground"] == "1/2+:2:1/2,0,1/2,1:linear=0.31,-0.19,0.04,0.12",
+          fit.thm()["experiments"]["E"])
     with azure2(path, cwd=py_dir) as s:
         y = np.asarray(s.params_rwa, float)
         check("reloaded: same parameter vector", np.allclose(y, xs, rtol=1e-12, atol=0), f"{y} vs {xs}")
         check("reloaded: same chi2", rel(float(s.calculate_chi2_rwa(y)[0]), chi_s) < 1e-9)
 
-    zero_dir = project("zero", "experiment[E] segments=1,2 background=linear "
+    zero_dir = project("zero", "experiment[E] background=linear "
                                "cbackground=1/2+:2:linear=0f,0f,0f,0f")
-    none_dir = project("none", "experiment[E] segments=1,2 background=linear")
+    none_dir = project("none", "experiment[E] background=linear")
     with azure2(os.path.join(none_dir, "run.azr"), cwd=none_dir) as s:
         x = np.asarray(s.params_rwa, float)
         r0, J0 = s.residual_jacobian(x)

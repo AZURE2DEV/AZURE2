@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Data covariance matrices as pyazr sees them.
 
-A <segmentsData> line may end with ``covariance <file>`` (include/SegLine.h, include/
-DataCovariance.h, tests/data_covariance): the segments naming one file share one data
-covariance matrix and their chi2 is r^T M^-1 r.  pyazr must read and write the block and,
+A format-3 data set may name ``covariance <file>`` (include/DataCovariance.h, tests/data_covariance):
+the data sets naming one file share one data covariance matrix and their chi2 is r^T M^-1 r.
+pyazr must read and write the field and,
 with the engine, give a chi2, gradient and whitened residual Jacobian consistent with it:
 
-  1. the block is read, written (add_data_segment) and read back;
+  1. the field is read, written on a new data set (Project.add) and read back;
   2. a diagonal covariance diag(e_i^2) gives the chi2 of no covariance;
   3. dense covariance: sum of the whitened residuals squared = calculate_chi2_rwa, the
      analytic gradient (chi2_and_grad) = central differences of calculate_chi2_rwa, and
@@ -24,8 +24,6 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old originals of converted projects)
 
 failures = []
 
@@ -38,28 +36,38 @@ def check(name, ok, detail=""):
 
 try:                                           # pyazr itself needs numpy
     import numpy as np                         # noqa: E402
-    from pyazr.datasets import SegmentSet      # noqa: E402
-    from pyazr.azrfile import AzrModel         # noqa: E402
+    from pyazr import Project                  # noqa: E402
 except Exception as err:                       # same skip as the other pyazr tests
     print(f"skip: pyazr not importable ({type(err).__name__}: {err})")
     sys.exit(0)
 
 PROJECT = os.path.join(ROOT, "tests", "data_covariance")
 
-print("1. the covariance block is read and written")
-s = list(SegmentSet.from_file(old_tree.original(os.path.join(PROJECT, "dense.azr"))))
-with_cov = [x.key for x in s if x.covariance == "cov_dense.txt"]
-check("eight segments name cov_dense.txt", len(with_cov) == 8, with_cov)
-shifted = [x for x in s if x.shift_group == "G"]
-check("... next to a shiftgroup block, which is still read", len(shifted) == 2 and all(x.covariance for x in shifted),
-      [(x.key, x.shift_group, x.covariance) for x in shifted])
-m = AzrModel.from_file(old_tree.original(os.path.join(PROJECT, "plain.azr")))
-m.add_data_segment("data/p12c_90.dat", 1, 1, observable="differential", norm_group="N", covariance="cov.txt")
-lines = [l for l in m.to_text().splitlines() if l.strip()]
-last = lines[[i for i, l in enumerate(lines) if l.strip() == "</segmentsData>"][0] - 1]
-check("add_data_segment writes the block", last.split()[-4:] == ["normgroup", "N", "covariance", "cov.txt"], last)
-back = SegmentSet._parse(last.split(), 99)
-check("... and reads it back", back.covariance == "cov.txt" and back.norm_group == "N", (back.covariance, back.norm_group))
+print("1. the covariance field is read and written")
+dense = Project.open(os.path.join(PROJECT, "dense.azr"))
+sets = [r for r in dense.records().values() if r.record_kind == "dataset"]
+with_cov = [r.record_name for r in sets if r.get("covariance") == "cov_dense.txt"]
+check("eight data sets name cov_dense.txt", len(with_cov) == 8, with_cov)
+shifted = [r for r in sets if r.get("shift") == "G"]
+check("... beside a shared energy scale, which is still read", len(shifted) == 2 and all(r.get("covariance") for r in shifted),
+      [(r.record_name, r.get("shift"), r.get("covariance")) for r in shifted])
+rt = tempfile.mkdtemp(prefix="pyazr_covariance_rt_")  # the project beside its data (tests/angle_mapping/data)
+shutil.copy(os.path.join(PROJECT, "plain.azr"), rt)
+os.symlink(os.path.join(ROOT, "tests", "angle_mapping", "data"), os.path.join(rt, "data"))
+with open(os.path.join(rt, "cov.txt"), "w") as fh:  # the validator reads the file: 61 points of p12c_60
+    fh.write("file data/p12c_60.dat 61\ndiagonal\n" + " ".join(["1e-2"] * 61) + "\n")
+m = Project.open(os.path.join(rt, "plain.azr"))
+spec = {k: v for k, v in m[[n for n, r in m.records().items() if r.record_kind == "dataset"][0]].fields.items()
+        if k not in ("norm", "shift", "covariance")}
+m.add("normalization", "N", value="1 fixed")
+m.add("dataset", "extra", norm="N", covariance="cov.txt", **spec)
+check("the new data set holds the fields", {"    norm           N", "    covariance     cov.txt"}
+      <= set(m["extra"].text.split("\n")), m["extra"].text)
+out = os.path.join(rt, "rt.azr")
+m.save(out)
+back = Project.open(out)["extra"]
+check("... and reads it back", back["covariance"] == "cov.txt" and back["norm"] == "N", back.fields)
+shutil.rmtree(rt, ignore_errors=True)
 
 print("\n2-4. with the engine")
 try:
@@ -78,7 +86,7 @@ def project(work, model):
     for f in os.listdir(PROJECT):
         if f.startswith("cov_"):
             shutil.copy(os.path.join(PROJECT, f), d)
-    shutil.copy(old_tree.original(os.path.join(PROJECT, model + ".azr")), os.path.join(d, "t.azr"))
+    shutil.copy(os.path.join(PROJECT, model + ".azr"), os.path.join(d, "t.azr"))
     return os.path.join(d, "t.azr"), d
 
 

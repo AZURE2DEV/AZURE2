@@ -51,7 +51,7 @@ import numpy as np                                            # noqa: E402
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))))
 
-from pyazr import azure2, AzrModel                            # noqa: E402
+from pyazr import azure2, Project                             # noqa: E402
 
 
 def load_params(model, path):
@@ -92,13 +92,13 @@ def main():
     args = ap.parse_args()
 
     here = os.path.dirname(os.path.abspath(args.azr)) or "."
-    mdl = AzrModel.from_file(os.path.abspath(args.azr))
+    mdl = Project.open(os.path.abspath(args.azr))
 
     for spec in args.radius:
         pair, _, fm = spec.partition("=")
-        mdl.set_channel_radius(int(pair), float(fm))
+        mdl.set_pair(int(pair), radius=float(fm))
     if args.radius:
-        print(f"channel radii: {mdl.channel_radii()}")
+        print(f"channel radii: {({q.key: q.radius for q in mdl.pairs() if q.kind == 0})}")
         # AZURE2 caches its external-capture integrals in output/intEC*, and
         # those belong to the radii they were built with -- it will silently
         # reuse them on the new ones.  They are only a cache; drop them.
@@ -110,7 +110,7 @@ def main():
 
     # The instance must be built from the model we are about to write into --
     # same radii, same channels -- or the parameter metadata will not line up.
-    src = mdl.to_tempfile() if args.radius else os.path.abspath(args.azr)
+    src = mdl.save(os.path.join(here, "_radii.azr")) if args.radius else os.path.abspath(args.azr)
 
     with azure2(src, cwd=here) as m:
         x = load_params(m, args.params)

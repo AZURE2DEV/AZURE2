@@ -1,20 +1,15 @@
-# The .azr round-trip test.  Pure Python and no compiled engine needed --
-# AzrModel parses the file itself -- so it runs wherever python3 exists.
+# The pyazr tests.
 
 find_package(Python3 COMPONENTS Interpreter)
 if(NOT Python3_Interpreter_FOUND)
-    message(STATUS "python3 not found; skipping the pyazr round-trip test")
+    message(STATUS "python3 not found; skipping the pyazr tests")
     return()
 endif()
 
 # Tests that compare pyazr with the CLI take the binary from AZURE2_BIN: the
 # one this build made, not the newest build*/src/AZURE2 of the checkout.
-add_test(NAME pyazr_roundtrip
-         COMMAND ${Python3_EXECUTABLE}
-                 ${CMAKE_CURRENT_SOURCE_DIR}/roundtrip_test.py)
 
-# apply_fit needs the engine for its last section, and skips it when the
-# module is not built -- so it is registered unconditionally like the above.
+# save_fit's placement of level values (snapshot.place_level_values); needs the engine and skips (77) without it.
 add_test(NAME pyazr_apply_fit
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/apply_fit_test.py)
@@ -127,48 +122,48 @@ add_test(NAME pyazr_fixed_width_roundtrip
                  ${CMAKE_CURRENT_SOURCE_DIR}/fixed_width_roundtrip_test.py)
 set_tests_properties(pyazr_fixed_width_roundtrip PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
-# add_extrapolation(frame="lab"|"cm"): the engine evaluates the grid asked for.
+# an extrapolation grid in frame lab or cm: the engine evaluates the grid asked for.
 add_test(NAME pyazr_extrapolation_frame
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/extrapolation_frame_test.py)
 set_tests_properties(pyazr_extrapolation_frame PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
 # THM experiments (<thm> experiment[...]): shared profiled norm and background
-# in AzrModel, chi2, output files and derivatives, against the CLI.
+# by Project edits, chi2, output files and derivatives, against the CLI.
 add_test(NAME pyazr_thm_experiment
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_experiment_test.py)
 set_tests_properties(pyazr_thm_experiment PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
 # Coulomb line shape of the THM spectator (experiment[...] lineshape=on):
-# AzrModel, CLI == pyazr, thm_lineshape against the formulas, model ratio.
+# Project edits, CLI == pyazr, thm_lineshape against the formulas, model ratio.
 add_test(NAME pyazr_thm_lineshape
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_lineshape_test.py)
 set_tests_properties(pyazr_thm_lineshape PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
 # Spectator-momentum window of a THM experiment (experiment[...] ps=...):
-# AzrModel, CLI == pyazr, thm_vertex against the formulas, linearity in the nodes.
+# Project edits, CLI == pyazr, thm_vertex against the formulas, linearity in the nodes.
 add_test(NAME pyazr_thm_spectator_window
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_spectator_window_test.py)
 set_tests_properties(pyazr_thm_spectator_window PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
 # Distortion factor R(E) of a THM experiment (experiment[...] distortion=...):
-# AzrModel, CLI == pyazr, thm_distortion against mpmath, model ratio, a table.
+# Project edits, CLI == pyazr, thm_distortion against mpmath, model ratio, a table.
 add_test(NAME pyazr_thm_distortion
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_distortion_test.py)
 set_tests_properties(pyazr_thm_distortion PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
-# Fixed-angle THM observable (experiment[...] theta=...): AzrModel, CLI ==
+# Fixed-angle THM observable (experiment[...] theta=...): Project edits, CLI ==
 # pyazr, 0-180 == angle-integrated / 4 pi, symmetry of an identical exit.
 add_test(NAME pyazr_thm_fixed_angle
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_fixed_angle_test.py)
 set_tests_properties(pyazr_thm_fixed_angle PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
-# Distorted-wave entrance vertex (experiment[...] vertexModel=dw): AzrModel and
+# Distorted-wave entrance vertex (experiment[...] vertexModel=dw): Project edits and
 # its refusals, CLI == pyazr, thm_vertex (plane-wave limit), model ratio ==
 # vertex ratio.
 add_test(NAME pyazr_thm_dw_vertex
@@ -176,7 +171,7 @@ add_test(NAME pyazr_thm_dw_vertex
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_dw_vertex_test.py)
 set_tests_properties(pyazr_thm_dw_vertex PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
-# Spectator-direction window (experiment[...] spectatorAngles=...): AzrModel and
+# Spectator-direction window (experiment[...] spectatorAngles=...): Project edits and
 # its refusals, CLI == pyazr for R(E) and the DW vertex, thm_distortion and
 # thm_vertex with a window (the reported vertex is the one the model uses).
 add_test(NAME pyazr_thm_spectator_angles
@@ -184,7 +179,7 @@ add_test(NAME pyazr_thm_spectator_angles
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_spectator_angles_test.py)
 set_tests_properties(pyazr_thm_spectator_angles PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
-# THM coherent background (cbackground=): AzrModel, CLI == session, Jacobian
+# THM coherent background (cbackground=): Project edits, CLI == session, Jacobian
 # of the R-matrix and cbkg columns against differences, save_fit.
 add_test(NAME pyazr_thm_coherent_background
          COMMAND ${Python3_EXECUTABLE}
@@ -219,7 +214,7 @@ set_tests_properties(pyazr_thm_vertex_memo_sessions PROPERTIES ENVIRONMENT "OMP_
 # save_fit writes the fitted direct-segment norms into the snapshot (the
 # default) with explicit prior_centre rows, so it reproduces the fit's
 # chi-squared and priors when run alone; or keeps the segment lines
-# (norms="nominal") with the fitted values in the .sav.  AzrModel.
+# (norms="nominal") with the fitted values in the .sav.
 # prior_centres / set_prior_centres.
 add_test(NAME pyazr_save_fit_norms
          COMMAND ${Python3_EXECUTABLE}
@@ -245,8 +240,8 @@ add_test(NAME pyazr_geometry_no_transform
                  ${CMAKE_CURRENT_SOURCE_DIR}/geometry_no_transform_test.py)
 set_tests_properties(pyazr_geometry_no_transform PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
-# pyazr.tabulate drops the <thm> keys that name data segments (experiment
-# lines, weight[k]) along with the segments, so a THM project tabulates.
+# pyazr.tabulate drops the THM experiments and weights along with the data
+# sets, so a THM project tabulates.
 add_test(NAME pyazr_tabulate_thm
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/tabulate_thm_test.py)
@@ -373,8 +368,8 @@ add_test(NAME pyazr_list_args
                  ${CMAKE_CURRENT_SOURCE_DIR}/list_args_test.py)
 set_tests_properties(pyazr_list_args PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# Several compound nuclei in one project: the <abundances> block, natural
-# segments, the abundance fit parameters and merge_projects, against the engine.
+# Several compound nuclei in one project: a target with isotopes, the abundance fit parameters and merge_projects
+# (the engine's merge of the <levels> rows), against the engine.
 add_test(NAME pyazr_natural_target
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/natural_target_test.py)
@@ -416,15 +411,15 @@ add_test(NAME pyazr_nds_rutherford
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/nds_rutherford_test.py)
 
-# Angular-coefficient data segments (isDiff 9): add_data_segment(observable="angular-coefficients",
-# absolute=...), the datasets reader, and the engine evaluating such a segment on the model's own
+# Angular-coefficient data sets (quantity legendre, expansion a_over_a0 / absolute): the record, and the engine
+# evaluating such a data set on the model's own
 # Legendre coefficients (tests/angular_coefficients models).
 add_test(NAME pyazr_angular_coefficients
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/angular_coefficients_test.py)
 set_tests_properties(pyazr_angular_coefficients PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# Relativistic kinematics: AzrModel.relativistic, and an engine session on the n + 4He hard-sphere model of
+# Relativistic kinematics: Project.config()/set_config(relativistic=), and an engine session on the n + 4He hard-sphere model of
 # tests/relativistic against sigma = 4 pi sin^2(ka)/k^2 with k from the invariant mass.
 add_test(NAME pyazr_relativistic
          COMMAND ${Python3_EXECUTABLE}
@@ -461,7 +456,7 @@ add_test(NAME pyazr_units_scales
                  ${CMAKE_CURRENT_SOURCE_DIR}/units_scales_test.py)
 set_tests_properties(pyazr_units_scales PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" SKIP_RETURN_CODE 77)
 
-# Electron screening: the AzrModel helpers for the screening block of a <targetInt> line, the
+# Electron screening: the target record's screening field (Project), the
 # screening_<n> parameter and its prior, and its analytic gradient and Jacobian column.
 add_test(NAME pyazr_screening
          COMMAND ${Python3_EXECUTABLE}
@@ -550,17 +545,17 @@ add_test(NAME pyazr_convert_azr
                  ${CMAKE_CURRENT_SOURCE_DIR}/convert_azr_test.py)
 set_tests_properties(pyazr_convert_azr PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# AzrModel groups <levels> lines as the engine does (io::LevelGrouper; docs/upgrade/project.md P2): interleaved lines
-# give the same levels, in AzrModel and in the engine.
+# Project.levels() groups <levels> rows as the engine does (io::LevelGrouper): interleaved rows give the same levels,
+# in Project and in the engine.
 add_test(NAME pyazr_level_grouping
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/level_grouping_test.py)
 set_tests_properties(pyazr_level_grouping PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# AzrModel keeps a file's own layout (docs/upgrade/project.md section 5, step 4): unedited round trips of every
+# Project keeps a file's own layout (the lossless document): unedited round trips of every
 # project file and of CRLF / no-blank-line / interleaved variants; a field edit changes only its lines.
 # One mass table (docs/upgrade/project.md section 5, step 5): the engine's THM nuclei carry the nuclear masses of
-# pyazr/data/mass_1.mas20, the file fill_masses reads.
+# pyazr/data/mass_1.mas20, the file pyazr.masses reads.
 add_test(NAME pyazr_thm_nuclide_masses
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_nuclide_masses_test.py)
@@ -584,7 +579,7 @@ add_test(NAME pyazr_coulomb_memo_transform
 set_tests_properties(pyazr_coulomb_memo_transform PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
 # pyazr.masses reads the AME2020 table (pyazr/data/mass_1.mas20) exactly, its separation energies equal the
-# engine's (m1 + m2 - M) c^2, and AzrModel.fill_masses rewrites only a pair's mass and S columns (2026-10-29).
+# engine's (m1 + m2 - M) c^2, and masses.fill_masses (Project.set_pair) rewrites only a pair's masses and S (2026-10-29).
 add_test(NAME pyazr_masses
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/masses_test.py)
@@ -686,16 +681,16 @@ add_test(NAME pyazr_composite_terms
                  ${CMAKE_CURRENT_SOURCE_DIR}/composite_terms_test.py)
 set_tests_properties(pyazr_composite_terms PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# Free-gas Doppler broadening: add_target_effect(doppler=T) and the engine's Doppler step through the API
-# (tests/doppler_fgm models).
+# Free-gas Doppler broadening: the engine's Doppler step through the API and the fitted temperature (<target>.doppler)
+# (tests/doppler_fgm models, format 3).
 add_test(NAME pyazr_doppler
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/doppler_test.py)
 set_tests_properties(pyazr_doppler PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# The fitted sample thickness of transmission / yield segments ("transmission n vary sigma", thicknessgroup):
-# AzrModel helpers, type-10 records, penalties()["thickness"], chi2_and_grad and residual_jacobian columns
-# (tests/transmission_yield models).
+# The fitted sample thickness of transmission / yield data sets (a sample target's fitted areal_density):
+# type-10 records, penalties()["thickness"], chi2_and_grad and residual_jacobian columns
+# (tests/transmission_yield models, format 3).
 add_test(NAME pyazr_thickness
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/thickness_test.py)
@@ -709,8 +704,8 @@ add_test(NAME pyazr_parameter_kinds
                  ${CMAKE_CURRENT_SOURCE_DIR}/parameter_kinds_test.py)
 set_tests_properties(pyazr_parameter_kinds PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# The light particle's excitation energy, column 32 of a <levels> line (2026-11-05): AzrModel keeps the column
-# (and adds or drops it only when e1 changes to or from 0), Pair carries light_excitation (and still reads an
+# The light particle's excitation energy, column 32 of a <levels> line (2026-11-05): Project keeps the column
+# (Project.set_pair(light_excitation=) writes it, a row without it gets it only for a value other than 0), Pair carries light_excitation (and still reads an
 # older engine's 19-field record), and the excitation moved between the partners gives the same cross sections
 # (tests/light_excitation models).
 add_test(NAME pyazr_light_excitation
@@ -719,7 +714,7 @@ add_test(NAME pyazr_light_excitation
 set_tests_properties(pyazr_light_excitation PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
 # The prior parameter covariance ("priorCovariance=<file>" in <config>, 2026-11-05): pyazr.priors (write_prior /
-# read_prior, read_covariance_dat, prior_from_fit), AzrModel.prior_covariance, and through the engine
+# read_prior, read_covariance_dat, prior_from_fit), Project.config()/set_config(priorCovariance=), and through the engine
 # penalties()["prior_covariance"], objective(), the residual_jacobian rows L^-1 (p - mu) against central differences,
 # the marginalization of a fixed listed parameter and a refused file (tests/norm_groups model).
 add_test(NAME pyazr_prior_covariance
@@ -785,8 +780,8 @@ set_tests_properties(pyazr_project_recipe PROPERTIES ENVIRONMENT "OMP_NUM_THREAD
 # or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so
 # ctest lists it as Skipped rather than Passed.  An exit of 0 there once hid
 # that CI had never run a single CLI == pyazr comparison.  Set on every test
-# in this directory, so a new one only has to follow the convention; the
-# numpy-free roundtrip test never exits 77.  Keep this block LAST: it applies
+# in this directory, so a new one only has to follow the convention.
+# Keep this block LAST: it applies
 # to the tests registered above it only (sqrt_shift, park_gradient and
 # sav_readers, added after it, went without it until October 2026).
 get_property(_pyazr_tests DIRECTORY PROPERTY TESTS)

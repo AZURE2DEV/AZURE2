@@ -32,7 +32,7 @@ def validate(path):
     The checks that need ``<levels>`` or the data files are made too (the engine's build of the project, model data
     included; data files are read relative to the working directory, as the engine opens them); when they cannot be
     made (an error of the validation, no readable ``<levels>``) their number is given as a warning.  A format-1 or
-    format-2 file raises ``ValueError`` with the conversion command (section 8.4).
+    format-2 file raises ``ValueError`` with the conversion command (section 8.4; ``AZURE2 --convert ... --to 3``).
     Needs the compiled engine module.
     """
     import json

@@ -5,8 +5,7 @@ engine made of them -- the quantity, the observable it computes, the reaction tr
 the lab-energy window, the data file and its rows read and kept, the effects and the fit parameters -- is the engine's
 description of the built project (``AZURE2 --describe --json``, ``pyazr.describe``).  This module turns that
 description into the objects a calculation session hands out (:attr:`pyazr.azure2.datasets`,
-:attr:`~pyazr.azure2.active_datasets`, :attr:`~pyazr.azure2.extrapolations`); nothing here reads the file.  The old
-formats' segment lines are read by :mod:`pyazr.datasets` instead.
+:attr:`~pyazr.azure2.active_datasets`, :attr:`~pyazr.azure2.extrapolations`); nothing here reads the file.
 """
 
 import json
@@ -21,12 +20,6 @@ def _engine():
     return _azure2
 
 
-def is_format3(path):
-    """Is the project file ``path`` in format 3 (the engine's reading of its ``<config>``)?"""
-    with open(path, "rb") as f:
-        return _engine().project_format(f.read()) == 3
-
-
 def describe_project(path, cwd):
     """The engine's description of the format-3 project ``path`` as a dict (``AZURE2 --describe --json``), its data
     files read relative to ``cwd`` as a session opens them.  RuntimeError when the engine does not describe it."""
@@ -39,12 +32,8 @@ def describe_project(path, cwd):
 
 
 def session_records(kind, path, cwd):
-    """What a calculation session hands out as ``kind`` ("datasets" or "extrapolations") for the project ``path``:
-    of a format-3 project the engine's description (:class:`DescribedDatasets`, :class:`DescribedExtrapolations`), of
-    an older one its segment lines (:class:`pyazr.datasets.SegmentSet`, :class:`~pyazr.datasets.TestSegmentSet`)."""
-    from .datasets import SegmentSet, TestSegmentSet
-    if not is_format3(path):
-        return (SegmentSet if kind == "datasets" else TestSegmentSet).from_file(path)
+    """What a calculation session hands out as ``kind`` ("datasets" or "extrapolations") for the format-3 project
+    ``path``: the engine's description (:class:`DescribedDatasets`, :class:`DescribedExtrapolations`)."""
     described = DescribedDatasets if kind == "datasets" else DescribedExtrapolations
     return described.from_description(describe_project(path, cwd))
 
@@ -104,7 +93,7 @@ class DescribedDataset:
                    parameters=tuple(dict(p) for p in d.get("parameters", [])))
 
     def reaction(self, pairs=None):
-        """The reaction as written (its tree); ``pairs`` is accepted as by :meth:`pyazr.datasets.Segment.reaction`."""
+        """The reaction as written (its tree); ``pairs`` is accepted and not needed (the tree names the pairs)."""
         return self.tree
 
     def describe(self):

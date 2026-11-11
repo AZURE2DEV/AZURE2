@@ -69,7 +69,7 @@ def main():
     sys.path.insert(0, ROOT)
     try:
         import numpy as np
-        from pyazr import azure2, AzrModel
+        from pyazr import azure2, Project
         import pyazr._azure2  # noqa: F401
     except Exception as e:  # pragma: no cover
         print(f"SKIP: engine not importable ({e})")
@@ -84,10 +84,10 @@ def main():
             shutil.copytree(os.path.join(src, "data"), os.path.join(d, "data"))
             for sub in ("output", "checks"):
                 os.makedirs(os.path.join(d, sub), exist_ok=True)
-            mdl = AzrModel.from_file(os.path.join(src, "angle_mapping.azr"))
+            mdl = Project.open(os.path.join(src, "angle_mapping.azr"))
             if radius is not None:
-                mdl.set_channel_radius(1, radius)
-            azr = mdl.write(os.path.join(d, "m.azr"))
+                mdl.set_pair(1, radius=radius)
+            azr = mdl.save(os.path.join(d, "m.azr"))
             if edit:
                 edit(d)
             return d, azr

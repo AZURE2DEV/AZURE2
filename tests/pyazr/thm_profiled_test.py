@@ -52,7 +52,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2, AzrModel
+    from pyazr import azure2, Project
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -170,13 +170,13 @@ with tempfile.TemporaryDirectory() as tmp:
     print("\n2. derivatives through the profiled norm (2+ 20.1 MeV level free)")
     small = os.path.join(tmp, "small")
     fresh_copy(small)
-    model = AzrModel.from_file(os.path.join(small, "7Li_p_a.azr"))
-    for lv in model.levels:
+    model = Project.open(os.path.join(small, "7Li_p_a.azr"))
+    for lv in model.levels():
         keep = lv.jpi == "2+" and abs(lv.energy - 20.1) < 1e-6
-        lv.set_fixed(not keep)
+        model.set_level(lv, fixed=not keep)
         for c in lv.channels:
-            c.channel_fixed = not keep
-    model.write(os.path.join(small, "small.azr"))
+            model.set_channel(lv, c.pair, c.l, c.s, fixed=not keep)
+    model.save(os.path.join(small, "small.azr"))
 
     with azure2(os.path.join(small, "small.azr"), cwd=small) as m:
         x = np.asarray(m.params_rwa, float)

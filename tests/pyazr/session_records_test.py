@@ -4,7 +4,7 @@
   1. a calculation session on a format-3 project (T2's conversion): datasets, active_datasets and dataset_chi2 come
      from the engine's description of the built project: the data sets' record names in file order, one per segment
      the engine evaluates, rows kept as --describe counts them; the chi^2 per data set adds up to the session's chi^2
-     and equals the old-format T2's per data set (the same data); extrapolations of a format-3 project likewise;
+     and equals that of the tree's T2 (tests/upgrade/T2, converted with exact grids; the same data); extrapolations of a format-3 project likewise;
   2. Project.rename takes the parameter names from the engine: a target's isotope abundance (natN.isotope.15N) and a
      shared normalization's follower name (D.value[s03_diff150]) in <parameterSettings> follow, a word that only
      contains the name does not (and a warning lists its row); an inactive data set's <parameterSettings> and <mcmc>
@@ -25,8 +25,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 T2 = os.path.join(ROOT, "tests", "upgrade", "T2")
 FIXTURES = os.path.join(ROOT, "convert", "tests", "fixtures")
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old originals of converted projects)
 RTH = os.path.join(ROOT, "tests", "ratio_to_rutherford", "models")
 
 failures = []
@@ -50,17 +48,13 @@ except ImportError as err:
     sys.exit(0)
 
 
-def t2_dir(work, name, fmt3=True):
+def t2_dir(work, name):
     d = os.path.join(work, name)
     os.makedirs(os.path.join(d, "output"))
     os.symlink(os.path.join(T2, "data"), os.path.join(d, "data"))
     shutil.copy(os.path.join(T2, "cov_diff.txt"), d)
-    if fmt3:
-        shutil.copy(os.path.join(FIXTURES, "T2.prior_cov.f3.txt"), os.path.join(d, "prior_cov.f3.txt"))
-        shutil.copy(os.path.join(FIXTURES, "T2.f3.azr"), os.path.join(d, "T2.azr"))
-    else:
-        shutil.copy(os.path.join(T2, "prior_cov.txt"), d)
-        shutil.copy(old_tree.original(os.path.join(T2, "T2.azr")), d)  # the old T2
+    shutil.copy(os.path.join(FIXTURES, "T2.prior_cov.f3.txt"), os.path.join(d, "prior_cov.f3.txt"))
+    shutil.copy(os.path.join(FIXTURES, "T2.f3.azr"), os.path.join(d, "T2.azr"))
     return os.path.join(d, "T2.azr")
 
 
@@ -83,9 +77,11 @@ def session(work):
               list(chi) == [d.name for d in active] and abs(sum(v[0] for v in chi.values()) - total) <= 1e-9 * total,
               (sum(v[0] for v in chi.values()), total))
         del described
-    with azure2(t2_dir(work, "T2old", fmt3=False)) as m:
+    tree = shutil.copytree(T2, os.path.join(work, "T2tree"))
+    os.makedirs(os.path.join(tree, "output"), exist_ok=True)
+    with azure2(os.path.join(tree, "T2.azr"), cwd=tree) as m:
         old = m.dataset_chi2()
-    check("dataset_chi2 equals the old-format T2's per data set",
+    check("dataset_chi2 equals the tree's T2's per data set",
           set(old) == set(chi) and all(abs(old[k][0] - chi[k][0]) <= 1e-9 * max(1.0, old[k][0]) and old[k][1] == chi[k][1]
                                        for k in old), [(k, old[k], chi.get(k)) for k in old][:3])
     d = os.path.join(work, "rth")

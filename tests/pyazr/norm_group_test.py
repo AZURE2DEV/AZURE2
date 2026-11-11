@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 """Normalization groups as pyazr sees them.
 
-A <segmentsData> line may end with ``normgroup <label>`` (see include/SegLine.h,
-tests/norm_groups): the segments carrying one label share the normalization of
-the first of them (its value, vary flag and penalty).  A follower whose own line
-varies its norm keeps that parameter, fixed, so the parameter layout does not
-depend on the groups.  pyazr must read the block, write it, and -- with the
-engine -- list the follower's norm as fixed, penalise the group once and
-difference the shared norm exactly as AZURE2 does.
+A format-3 ``normalization`` record is shared by the data sets whose ``norm`` field names it (tests/norm_groups,
+docs/upgrade/project_format3.md): the engine gives each data set its own norm parameter, the first data set's free
+(the record's value, mode and prior), every later one fixed and tied to it, so the parameter layout does not depend
+on the groups.  pyazr must read the records, refuse a data set naming no normalization, and -- with the engine --
+list the follower's norm as fixed, penalise the group once and difference the shared norm exactly as AZURE2 does.
 
 Run from anywhere:  python3 tests/pyazr/norm_group_test.py
 """
@@ -17,8 +15,6 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old originals of converted projects)
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
 
@@ -33,43 +29,30 @@ def check(name, ok, detail=""):
 
 try:                                           # pyazr itself needs numpy
     import numpy as np                         # noqa: E402
-    from pyazr.datasets import SegmentSet      # noqa: E402
-    from pyazr.azrfile import AzrModel         # noqa: E402
+    from pyazr import Project, Nuisance, FormatError  # noqa: E402
 except Exception as err:                       # same skip as the other pyazr tests
     print(f"skip: pyazr not importable ({type(err).__name__}: {err})")
     sys.exit(0)
 
 PROJECT = os.path.join(ROOT, "tests", "norm_groups")
-AZR = old_tree.original(os.path.join(PROJECT, "norm_groups.azr"))  # the old file (format3_tree.md)
+AZR = os.path.join(PROJECT, "norm_groups.azr")
 
-print("1. the normgroup block is read")
-s = {x.key: x for x in SegmentSet.from_file(AZR)}
-check("segments 1 and 2: group D", s[1].norm_group == "D" and s[2].norm_group == "D",
-      (s[1].norm_group, s[2].norm_group))
-check("no shift group", s[1].shift_group is None and s[2].shift_group is None)
-check("data files still parsed", s[1].data_file == "data/xs_40_s08.dat" and s[2].data_file == "data/xs_90_s09.dat",
-      (s[1].data_file, s[2].data_file))
-
-print("\n2. the block round-trips through AzrModel")
-m = AzrModel.from_file(AZR)
-check("byte-identical re-write", m.to_text() == open(AZR).read())
-m.add_data_segment("data/xs_90_s08.dat", 1, 1, observable="differential-cm", angle_min=90, angle_max=90,
-                   norm_group="E", shift_group="H", natural=True)
-lines = [l for l in m.to_text().splitlines() if l.strip()]
-last = lines[[i for i, l in enumerate(lines) if l.strip() == "</segmentsData>"][0] - 1]
-check("add_data_segment writes normgroup before the sample block",
-      last.split()[-6:] == ["shiftgroup", "H", "normgroup", "E", "sample", "1"], last)
-back = SegmentSet._parse(last.split(), 99)
-check("... and reads back", back.norm_group == "E" and back.shift_group == "H" and back.natural,
-      (back.norm_group, back.shift_group, back.natural))
+print("1. the group as records")
+proj = Project.open(AZR)
+check("data sets xs_40_s08 and xs_90_s09 name normalization D",
+      proj["xs_40_s08"]["norm"] == "D" and proj["xs_90_s09"]["norm"] == "D",
+      (proj["xs_40_s08"]["norm"], proj["xs_90_s09"]["norm"]))
+check("D is a normalization record, 1.2 fixed",
+      proj["D"].record_kind == "normalization" and proj["D"]["value"] == "1.2 fixed", proj["D"].fields)
+check("data files still read", proj["xs_40_s08"]["file"] == "data/xs_40_s08.dat"
+      and proj["xs_90_s09"]["file"] == "data/xs_90_s09.dat")
 try:
-    SegmentSet._parse(last.split()[:-3], 99)     # "... normgroup" with no label
-    check("a normgroup without a label is refused", False, "no error")
-except ValueError as err:
-    # The engine's message (pyazr reads segment lines through SegLine since Phase 3 step 3; project.md section 5).
-    check("a normgroup without a label is refused", "normgroup needs a label" in str(err), str(err))
+    proj.set("xs_90_s09", norm="E")              # names no normalization record
+    check("a norm naming no normalization is refused", False, "no error")
+except FormatError as err:
+    check("a norm naming no normalization is refused", proj["xs_90_s09"]["norm"] == "D", str(err))
 
-print("\n3. with the engine: parameters, penalty, chi2 and Jacobian")
+print("\n2. with the engine: parameters, penalty, chi2 and Jacobian")
 try:
     from pyazr import azure2
     have_engine = True
@@ -82,12 +65,10 @@ if have_engine:
         shutil.copytree(os.path.join(PROJECT, "data"), os.path.join(work, "data"))
         os.makedirs(os.path.join(work, "output"))
         os.makedirs(os.path.join(work, "checks"))
-        # Leader: norm 1.2, free, 10 %.  Follower: its own line "1, free, 10 %" -- ignored.
-        text = open(AZR).read() \
-            .replace("4 1.2 0 0 0 0 0 data/xs_40_s08.dat", "4 1.2 1 10 0 0 0 data/xs_40_s08.dat") \
-            .replace("4 1 0 0 0 0 0 data/xs_90_s09.dat", "4 1 1 10 0 0 0 data/xs_90_s09.dat")
+        # The group's norm: 1.2, free, prior 10 %.
+        proj.set("D", value=Nuisance(1.2, "fit", prior=(1.2, "10%")))
         azr = os.path.join(work, "t.azr")
-        open(azr, "w").write(text)
+        proj.save(azr)
         expected = {}
         for l in open(os.path.join(PROJECT, "expected", "chiSquared.out")):
             t = l.strip().split(",")

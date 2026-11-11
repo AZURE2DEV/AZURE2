@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """The sqrt(E) energy-shift term as pyazr sees it.
 
-A <segmentsData> line may end with ``sqrtshift b bError vary`` (see
-include/SegLine.h): E' = E + shift + b*sqrt(E/MeV).  pyazr must read the
-block, write it, and -- with the engine -- count its parameter and its penalty
-exactly as AZURE2 does.
+A format-3 data set may carry ``shift sqrt <b> MeV^1/2 <mode> [prior ...]`` (docs/upgrade/project_format3.md):
+E' = E + offset + b*sqrt(E/MeV).  pyazr must read the field, write it on a new data set, and -- with the engine --
+count its parameter and its penalty exactly as AZURE2 does.
 
 Needs numpy and the compiled engine (importing the pyazr package loads
 both); exits 77 (skipped) without them.
@@ -19,8 +18,6 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old originals of converted projects)
 
 failures = []
 
@@ -33,42 +30,43 @@ def check(name, ok, detail=""):
 
 try:
     import numpy as np
-    from pyazr.datasets import SegmentSet
-    from pyazr.azrfile import AzrModel
+    from pyazr import Project
 except Exception as err:                       # numpy or the engine missing
     print(f"skip: pyazr not importable ({type(err).__name__}: {err})")
     sys.exit(77)
 
-AZR = old_tree.original(os.path.join(ROOT, "tests", "energy_shift_sqrt", "energy_shift_sqrt.azr"))  # the old file (format3_tree.md)
+AZR = os.path.join(ROOT, "tests", "energy_shift_sqrt", "energy_shift_sqrt.azr")
 
-print("1. the sqrtshift block is read, and only from the lines that carry it")
-segs = SegmentSet.from_file(AZR)
-s = {x.key: x for x in segs}
-check("segment 1: a = 0.004", abs(s[1].energy_shift - 0.004) < 1e-12, s[1].energy_shift)
-check("segment 1: b = 0.003, fixed", abs(s[1].energy_shift_sqrt - 0.003) < 1e-12
-      and not s[1].vary_shift_sqrt, (s[1].energy_shift_sqrt, s[1].vary_shift_sqrt))
-check("segment 3: b = -0.002", abs(s[3].energy_shift_sqrt + 0.002) < 1e-12, s[3].energy_shift_sqrt)
-check("segments 2, 4, 5: no sqrt term",
-      all(s[k].energy_shift_sqrt == 0.0 and not s[k].vary_shift_sqrt for k in (2, 4, 5)))
-check("data file still parsed", s[1].data_file == "data/xs_40.dat", s[1].data_file)
-check("no composite flagged", all(not x.composite for x in segs))
 
-print("\n2. the block round-trips through AzrModel")
-m = AzrModel.from_file(AZR)
-check("byte-identical re-write", m.to_text() == open(AZR).read())
-m.add_data_segment("data/xs_90.dat", 1, 1, observable="differential-cm",
-                   angle_min=90, angle_max=90, energy_shift_sqrt=0.001,
-                   energy_shift_sqrt_error=0.002, vary_shift_sqrt=True)
-last = [l for l in m.to_text().splitlines() if l.strip()]
-last = last[[i for i, l in enumerate(last) if l.strip() == "</segmentsData>"][0] - 1]
-check("add_data_segment writes the keyword block", last.split()[-4:] == ["sqrtshift", "0.001", "0.002", "1"], last)
-m2 = AzrModel.from_file(AZR)
-m2.add_data_segment("data/xs_90.dat", 1, 1, observable="differential-cm")
-last2 = [l for l in m2.to_text().splitlines() if l.strip()]
-last2 = last2[[i for i, l in enumerate(last2) if l.strip() == "</segmentsData>"][0] - 1]
-check("a plain segment line is unchanged", "sqrtshift" not in last2, last2)
+def shifts(record):
+    v = record.get("shift", [])
+    return v if isinstance(v, list) else [v]
 
-print("\n3. with the engine: one parameter per segment, and the penalty")
+
+print("1. the sqrt term is read, and only from the data sets that carry it")
+proj = Project.open(AZR)
+names = [n for n, r in proj.records().items() if r.record_kind == "dataset"]
+check("five data sets", names == ["xs_40", "xs_40_preshifted", "ay_60", "ay_60_preshifted", "xs_90"], names)
+check("xs_40: offset 0.004 MeV, sqrt 0.003 MeV^1/2, fixed",
+      shifts(proj["xs_40"]) == ["offset 0.004 MeV fixed", "sqrt 0.003 MeV^1/2 fixed"], shifts(proj["xs_40"]))
+check("ay_60: sqrt -0.002 MeV^1/2", shifts(proj["ay_60"]) == ["sqrt -0.002 MeV^1/2 fixed"], shifts(proj["ay_60"]))
+check("the other three: no sqrt term",
+      all(not any(t.startswith("sqrt") for t in shifts(proj[n])) for n in ("xs_40_preshifted", "ay_60_preshifted", "xs_90")))
+check("data file still read", proj["xs_40"]["file"] == "data/xs_40.dat", proj["xs_40"]["file"])
+
+print("\n2. a new data set with the term, and one without")
+spec = dict(reaction="1H(p,p)1H", quantity="dsigma_domega", unit="b/sr", file="data/xs_90.dat",
+            columns="E_lab[MeV] theta_cm[deg] value error", energy_window="0 100 MeV", angle_window="90 90 deg",
+            norm="1 fixed")
+m = Project.open(AZR)
+m.add("dataset", "xs_90_sqrt", shift="sqrt 0.001 MeV^1/2 fit prior 0 0.002", **spec)
+check("the field is written on the new data set",
+      "    shift          sqrt 0.001 MeV^1/2 fit prior 0 0.002" in m["xs_90_sqrt"].text, m["xs_90_sqrt"].text)
+m.add("dataset", "xs_90_plain", **spec)
+check("a plain data set has no shift", "shift" not in m["xs_90_plain"] and "shift" not in m["xs_90_plain"].text,
+      m["xs_90_plain"].text)
+
+print("\n3. with the engine: one parameter per data set, and the penalty")
 try:
     from pyazr import azure2
     have_engine = True
@@ -83,15 +81,15 @@ if have_engine:
         os.makedirs(os.path.join(work, "checks"))
         # Free the sqrt coefficient of segment 1 with a 0.001 penalty, so the
         # objective differs from the data chi-squared by a known amount.
-        text = open(AZR).read().replace("sqrtshift 0.003 0 0", "sqrtshift 0.003 0.001 1")
+        proj.set("xs_40", shift=["offset 0.004 MeV fixed", "sqrt 0.003 MeV^1/2 fit prior 0 0.001"])
         azr = os.path.join(work, "t.azr")
-        open(azr, "w").write(text)
+        proj.save(azr)
         with azure2(azr, cwd=work) as mdl:
             sq = mdl.parameters.sqrt_shifts
-            check("five sqrt_shift parameters (one per segment)", len(sq) == 5, len(sq))
+            check("five sqrt_shift parameters (one per data set)", len(sq) == 5, len(sq))
             free = [p for p in sq if not p.fixed]
             check("exactly segment 1's is free", [p.segment_key for p in free] == [1], [p.segment_key for p in free])
-            check("named segment_1_energy_shift_sqrt", free[0].name == "segment_1_energy_shift_sqrt", free[0].name)
+            check("named xs_40.shift.sqrt", free[0].name == "xs_40.shift.sqrt", free[0].name)
             check("value read from the file", abs(free[0].value - 0.003) < 1e-12, free[0].value)
             idx = free[0].free_index
             x0 = np.asarray(mdl.params_rwa, float)

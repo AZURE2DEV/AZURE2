@@ -13,7 +13,7 @@ to=3), pair 1 (p + 12C, Woods-Saxon
       fm rows differ from those by more than 1e-4, so the check sees the radius;
   (3) the record as it was converted (3.5 fm) gives the 3.5 fm rows;
   (4) the session view reads coulomb_radius 5.0 for pair 1 and no default; set_nuclear_potential(coulomb_radius=5)
-      on the old project gives the record's channel functions bit for bit;
+      on the conversion (3.5 fm) gives the 5 fm record's channel functions bit for bit;
   (5) save_fit of the format-3 project after set_nuclear_potential(1, coulomb_radius=5) writes the record with
       coulomb_radius 5 fm, and the written project gives the same channel functions; without a change the
       <potentials> section is written as it was read.
@@ -32,7 +32,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SRC = os.path.join(ROOT, "tests", "hybrid_potential")
 sys.path.insert(0, HERE)
-import old_tree  # noqa: E402  (the old originals of converted projects)
 REF = os.path.join(HERE, "data", "coulomb_radius.csv")
 
 failures = []
@@ -90,7 +89,8 @@ try:
     os.makedirs(os.path.join(work, "output"))
     shutil.copytree(os.path.join(SRC, "data"), os.path.join(work, "data"))
     old = os.path.join(work, "hybrid_potential.azr")
-    shutil.copy(old_tree.original(os.path.join(SRC, "hybrid_potential.azr")), old)  # the old file
+    shutil.copy(os.path.join(ROOT, "tests", "convert", "fixtures", "tests", "hybrid_potential", "hybrid_potential.azr"),
+                old)  # the original, kept for the converter
     f35 = os.path.join(work, "f3_35.azr")
     convert_azr(old, f35, to=3)
     text = open(f35).read()
@@ -114,22 +114,17 @@ try:
     p1 = A50.nuclear_potential(1)
     check("(4) the view: pair 1 enabled, own, coulomb_radius 5.0; no default",
           p1.enabled and p1.own and p1.coulomb_radius == 5.0 and not A50.nuclear_potential(0).enabled, repr(p1))
-    B = azure2(old, cwd=work)
-    check("(4) the old block's Coulomb radius is 3.5 fm", B.nuclear_potential(1).coulomb_radius == 3.5)
+    B = azure2(f35, cwd=work)
+    check("(4) the converted record's Coulomb radius is 3.5 fm", B.nuclear_potential(1).coulomb_radius == 3.5)
     B.set_nuclear_potential(1, coulomb_radius=5.0)
     vB = functions(B)
     check("(4) set_nuclear_potential(1, coulomb_radius=5) = the record, bit for bit", vB == v50,
           str(max(abs(vB[k] - v50[k]) for k in v50)))
-    try:
-        B.potential_records()
-        check("(4) a format-2 session has no potential records to write (refused)", False)
-    except ValueError:
-        check("(4) a format-2 session has no potential records to write (refused)", True)
 
     # (5) the writer
     C = azure2(f35, cwd=work)
     same = os.path.join(work, "same.azr")
-    C.save_fit(same, verify=False, norms="nominal")  # "fitted" reads <segmentsData> (format 2 only)
+    C.save_fit(same, verify=False, norms="nominal")
     check("(5) save_fit without a change keeps <potentials> as read", section(open(same).read(), "potentials") == pot)
     C.set_nuclear_potential(1, coulomb_radius=5.0)
     moved = os.path.join(work, "moved.azr")

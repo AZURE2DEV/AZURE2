@@ -6,10 +6,13 @@ with its key, unit and flags.  Each parameter's record (``Session.parameter_reco
 it belongs to (level and channel, segment key, target effect, sample, THM combination).  Checked on projects that
 together hold every kind (tests/upgrade/T2: levels, abundance, norms, the three shift kinds, density;
 tests/screening_6li/fit.azr: screening; the grad_fit models of tests/doppler_fgm and tests/transmission_yield:
-Doppler temperature and sample thickness; tests/18O_p_a_thm with a cbackground=: THM coherent background):
+Doppler temperature and sample thickness; tests/18O_p_a_thm with a cbackground=: THM coherent background; all in
+project format 3, whose parameter names are made from the records' names, docs/upgrade/project_format3.md):
 
-  1. every parameter's name, rebuilt from its record alone by the naming rules of the creation sites, is the
-     engine's name -- the record says the same thing the name does, for every kind;
+  1. every parameter's name, rebuilt from its record and the project's records (the data set of its segment key,
+     the normalization, energy scale or target that data set names; the sample of an abundance; the THM
+     combination) by the naming rules of format 3, is the engine's name -- the record says the same thing the
+     name does, for every kind;
   2. the record's code is the type code of parameter_info, its owner fields agree with parameter_info's numeric
      ones (segment key, effect), and its ordinal counts the parameters of its kind;
   3. pyazr's Parameter.kind is the record's key, an abundance's sample its record's sample name, and a cbkg
@@ -28,8 +31,8 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old originals of converted projects)
+sys.path.insert(0, HERE)
+import thm_records  # noqa: E402  (a <thm> experiment and its members, on the records)
 os.environ.setdefault("OMP_NUM_THREADS", "2")
 
 failures = []
@@ -45,45 +48,76 @@ try:
     import numpy as np
     from pyazr import azure2
     from pyazr import _azure2
-    from pyazr.azrfile import AzrModel
+    from pyazr import Project
     from pyazr.parameters import parameter_kinds
 except Exception as err:  # pragma: no cover
     print(f"skip: the engine module is not available ({type(err).__name__}: {err})")
     sys.exit(77)
 
 
-def name_from_record(r):
-    """The name the creation sites give a parameter, from its record alone (CNuc::FillMnParams,
-    CNuc::AbundanceParamName, WorkingCopy::SegmentParameterName, WorkingCopy::FillMnParams, ThmCoherentParamStem)."""
+def name_from_record(r, project):
+    """The name format 3 gives a parameter, from its record and the project's records (experiment::ParameterNamesOf):
+    a level's as in CNuc::FillMnParams; a data set's own nuisance <data set>.<field>; a nuisance of a record shared by
+    several data sets <record>.<field> for the first of them, <record>.<field>[<data set>] for the others; an
+    abundance <sample>.isotope.<isotope>; a target effect <target>.<field>; a THM coherent background as
+    ThmCoherentParamStem."""
     k = r["kind"]
     if k == "energy":
         return f"energy_{r['level_number']}"
     if k == "width":
         return f"width_{r['level_number']}_{r['channel']}"
-    if k == "abundance":
-        sample = f"{r['sample_name']}_" if r["sample_name"] else ""
-        return f"abundance_{sample}{r['nucleus_Z']}_{r['nucleus_A']}"
-    field = {"norm": "norm", "shift": "energy_shift", "shift_sqrt": "energy_shift_sqrt", "thickness": "thickness"}
-    if k in field:
-        return f"segment_{r['segment_key']}_{field[k]}"
-    if k == "shift_fn":
-        return f"segment_{r['segment_key']}_energy_shift_fn{r['fn_term']}"
-    if k in ("screening", "density", "doppler"):
-        return f"{k}_{r['effect']}"
     if k == "cbkg":
         part = ("re0", "im0", "re1", "im1")[r["thm_term"]]
         return f"cbkg_{r['thm_experiment']}_{r['thm_jpi']}_{r['thm_exit_key']}_{r['thm_channels']}_{part}"
-    return None
+    if k == "abundance":
+        isotopes = project[r["sample_name"]].get("isotope", [])
+        isotopes = isotopes if isinstance(isotopes, list) else [isotopes]
+        return [f"{r['sample_name']}.isotope.{i.split()[0]}" for i in isotopes]  # one of the sample's isotopes
+    if k in ("screening", "density", "doppler"):
+        field = "areal_density" if k == "density" else k
+        return [f"{n}.{field}" for n, t in project.records().items() if t.record_kind == "target" and field in t]
+    sets = [n for n, x in project.records().items() if x.record_kind == "dataset"]
+    ds = sets[r["segment_key"] - 1]
+
+    def shared(record, field, named_by):  # the record's nuisance FIELD; NAMED_BY: the data sets' field naming it
+        users = [n for n in sets if record in _values(project[n], named_by)]
+        return f"{record}.{field}" + ("" if users[0] == ds else f"[{ds}]")
+
+    if k == "norm":
+        n = project[ds]["norm"]
+        return shared(n, "value", "norm") if n in project else f"{ds}.norm"
+    if k == "thickness":
+        return shared(project[ds]["target"], "areal_density", "target")
+    term = {"shift": "offset", "shift_sqrt": "sqrt"}.get(k)
+    scales = [v for v in _values(project[ds], "shift") if v in project]
+    if k == "shift_fn":
+        params = _values(project[scales[0]], "param")
+        return f"{scales[0]}.{params[r['fn_term']].split()[0]}"
+    holder = [g for g in scales if term in project[g]]
+    return shared(holder[0], term, "shift") if holder else f"{ds}.shift.{term}"
+
+
+def _values(record, field):
+    v = record.get(field, [])
+    return v if isinstance(v, list) else [v]
 
 
 def check_project(label, path, cwd, want_kinds):
+    project = Project.open(path)
     with azure2(path, cwd=cwd) as s:
         sess = s.sess
         records = sess.parameter_records()
         n = len(records)
         names = [sess.params_names(i) for i in range(n)]
         info = np.asarray(sess.parameter_info(), float).reshape(n, -1)
-        bad = [(names[i], name_from_record(r)) for i, r in enumerate(records) if name_from_record(r) != names[i]]
+        rebuilt = [name_from_record(r, project) for r in records]
+        bad = [(names[i], want) for i, want in enumerate(rebuilt)
+               if (names[i] not in want if isinstance(want, list) else names[i] != want)]
+        effects = {}  # a target-effect number is one target: the same name for the same effect
+        for i, r in enumerate(records):
+            if "effect" in r and isinstance(rebuilt[i], list):
+                effects.setdefault((r["kind"], r["effect"]), set()).add(names[i])
+        bad += [e for e, n in effects.items() if len(n) != 1]
         check(f"{label}: all {n} names rebuilt from their records", not bad, bad[:5])
         check(f"{label}: record code == parameter_info type code",
               all(r["code"] == int(round(info[i][0])) for i, r in enumerate(records)))
@@ -114,8 +148,7 @@ def check_project(label, path, cwd, want_kinds):
 
 
 def copy_project(src_dir, dst):
-    # the old originals of converted projects: the names are rebuilt here by the old scheme (segment_<k>_norm, ...)
-    old_tree.copytree(src_dir, dst, ignore=shutil.ignore_patterns("output", "checks", "run.log"))
+    shutil.copytree(src_dir, dst, ignore=shutil.ignore_patterns("output", "checks", "run.log"))
     os.makedirs(os.path.join(dst, "output"), exist_ok=True)
     os.makedirs(os.path.join(dst, "checks"), exist_ok=True)
     return dst
@@ -160,9 +193,9 @@ with tempfile.TemporaryDirectory() as tmp:
         print(f"tests/{suite} grad_fit")
         gen = os.path.join(tmp, suite)
         os.makedirs(gen)
-        # the old generator and the old n12C (tests/convert/fixtures): these models are the old file class's
-        mm = load_module(suite + "_models", old_tree.original(os.path.join(ROOT, "tests", suite, "make_models.py")))
-        getattr(mm, maker)(old_tree.original(os.path.join(ROOT, "tests", "reaction_rate", "models", "n12C.azr")), gen)
+        # the suite's generator (format 3) on the tree's n12C
+        mm = load_module(suite + "_models", os.path.join(ROOT, "tests", suite, "make_models.py"))
+        getattr(mm, maker)(os.path.join(ROOT, "tests", "reaction_rate", "models", "n12C.azr"), gen)
         work = os.path.join(gen, "run")
         os.makedirs(os.path.join(work, "output"))
         os.makedirs(os.path.join(work, "checks"))
@@ -172,9 +205,11 @@ with tempfile.TemporaryDirectory() as tmp:
 
     print("tests/18O_p_a_thm with a linear cbackground=")
     d = copy_project(os.path.join(ROOT, "tests", "18O_p_a_thm"), os.path.join(tmp, "thm"))
-    m = AzrModel.from_file(os.path.join(d, "18O_p_a_thm.azr"))
-    m.set_thm_experiment("E", [1, 2], cbackground="1/2+:2:0.5,0,0.5,1:linear=0.25,-0.5f,0,1e-3")
-    m.write(os.path.join(d, "cb.azr"))
+    # experiment E of both data sets (they name it in their thm field) with the background
+    text = thm_records.thm_set(open(os.path.join(d, "18O_p_a_thm.azr")).read(),
+                               "experiment[E] cbackground=1/2+:2:0.5,0,0.5,1:linear=0.25,-0.5f,0,1e-3",
+                               thm_records.datasets(open(os.path.join(d, "18O_p_a_thm.azr")).read()))
+    open(os.path.join(d, "cb.azr"), "w").write(text)
     seen |= set(check_project("18O_p_a_thm", os.path.join(d, "cb.azr"), d, {"cbkg"}))
 
 check("the projects hold every kind", seen == set(keys), sorted(set(keys) - seen))

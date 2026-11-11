@@ -27,7 +27,6 @@ Needs the compiled engine; skips cleanly without it.
 Run from anywhere:  python3 tests/pyazr/thm_vertex_memo_sessions_test.py
 """
 import glob
-import importlib.util
 import os
 import shutil
 import subprocess
@@ -54,14 +53,9 @@ def rel(a, b):
     return abs(a - b) / max(abs(b), 1e-300)
 
 
-_spec = importlib.util.spec_from_file_location("azrfile", os.path.join(ROOT, "pyazr", "azrfile.py"))
-_azrfile = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_azrfile)
-AzrModel = _azrfile.AzrModel
-
 try:
     import numpy as np                                          # noqa: F401
-    from pyazr import azure2
+    from pyazr import azure2, Project
 except Exception as err:                                       # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -86,9 +80,9 @@ with tempfile.TemporaryDirectory() as tmp:
             os.makedirs(os.path.join(d, junk))
         for f in glob.glob(os.path.join(d, "run.log")):
             os.remove(f)
-        m = AzrModel.from_file(os.path.join(d, AZR))
-        m.set_channel_radius(1, r)
-        m.write(os.path.join(d, AZR))
+        m = Project.open(os.path.join(d, AZR))
+        m.set_pair(1, radius=r)
+        m.save()
         proj[r] = d
 
     fresh = {}

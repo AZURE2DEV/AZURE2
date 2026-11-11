@@ -11,9 +11,9 @@ Until October 2026 the weight was |phi|^2 p^2 dp; the checks of 3 and 4
 changed with it.  Checked on tests/18O_p_a_thm, whose reaction 2H(18O,a15N)n
 has a deuteron Trojan horse (x = p, s = n):
 
-  1. AzrModel: set_thm_experiment(..., ps=..., psNodes=...) round trip; the
-     refusals AZURE2 makes (no kinematics, bad values, psNodes alone, a window
-     together with spectatorEnergy for the same pair).
+  1. Project: an experiment with ps=... psNodes=... round trip; the
+     refusals AZURE2 makes (no kinematics, bad values, psNodes alone; a window
+     together with spectatorEnergy for the same pair, when a session is made).
   2. The engine against the CLI with a Hulthen window: calculate_chi2_rwa
      (rel 1e-9) and the output files written by write_output_files.
   3. thm_vertex: at every energy the Gauss-Legendre nodes in cos(theta_cm) on
@@ -44,9 +44,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SOURCE = os.path.join(ROOT, "tests", "18O_p_a_thm")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old original: a test of the old file class, format3_tree.md section 5)
+from thm_records import datasets, session_refusal, set_experiment, thm_set  # noqa: E402
 AZR = "18O_p_a_thm.azr"
 KIN = "beam=18O target=d spectator=n Ebeam=54"
+KINKEYS = dict(beam="18O", target="d", spectator="n", Ebeam=54)
 
 failures = []
 
@@ -63,18 +64,15 @@ def rel(a, b):
 
 sys.path.insert(0, ROOT)
 os.environ.setdefault("OMP_NUM_THREADS", "2")
-# AzrModel is pure Python: load azrfile.py directly, so these checks run
-# where numpy (needed by the pyazr package) is missing.
-import importlib.util                                          # noqa: E402
-_spec = importlib.util.spec_from_file_location(
-    "azrfile", os.path.join(ROOT, "pyazr", "azrfile.py"))
-_azrfile = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_azrfile)
-AzrModel = _azrfile.AzrModel
+try:
+    from pyazr import Project
+except Exception as err:                                   # engine not built
+    print(f"skip: engine not available ({type(err).__name__}: {err})")
+    sys.exit(77)
 
 
 def fresh_copy(dst):
-    old_tree.copytree(SOURCE, dst)
+    shutil.copytree(SOURCE, dst)
     for junk in ("output", "checks"):
         shutil.rmtree(os.path.join(dst, junk), ignore_errors=True)
         os.makedirs(os.path.join(dst, junk))
@@ -131,65 +129,51 @@ def nodes(e, pmin, pmax, n):
 
 
 with tempfile.TemporaryDirectory() as tmp:
-    # -- 1. AzrModel ----------------------------------------------------------
-    print("1. AzrModel: ps and psNodes")
+    # -- 1. Project -----------------------------------------------------------
+    print("1. Project: ps and psNodes")
     proj = os.path.join(tmp, "model")
     fresh_copy(proj)
     src = os.path.join(proj, AZR)
-    m = AzrModel.from_file(src)
-    m.set_thm_experiment("A", [1, 2], beam="18O", target="d", spectator="n", Ebeam=54,
-                         ps="hulthen:0-40", psNodes=8)
-    rec = {"segments": [1, 2], "background": "none", "beam": "18O", "target": "d",
-           "spectator": "n", "Ebeam": 54.0, "ps": "hulthen:0-40", "psNodes": 8}
-    check("record carries ps and psNodes", m.thm_experiments() == {"A": rec}, m.thm_experiments())
+    m = Project.open(src)
+    set_experiment(m, "A", [1, 2], **KINKEYS, ps="hulthen:0-40", psNodes=8)
+    rec = {"beam": "18O", "target": "d", "spectator": "n", "Ebeam": "54", "ps": "hulthen:0-40", "psNodes": "8"}
+    check("record carries ps and psNodes", m.thm()["experiments"] == {"A": rec}, m.thm())
     one = os.path.join(proj, "one.azr")
-    m.write(one)
+    m.save(one)
     check("canonical line ends in ps=... psNodes=...",
-          f"experiment[A] segments=1,2 {KIN} ps=hulthen:0-40 psNodes=8\n" in open(one).read())
-    check("reloaded: same record", AzrModel.from_file(one).thm_experiments() == {"A": rec})
-    m = AzrModel.from_file(src)
-    m.set_thm_experiment("A", [1, 2], ps="delta")
-    check("ps=delta needs no kinematics", m.thm_experiments()["A"].get("ps") == "delta")
+          f"experiment[A] {KIN} ps=hulthen:0-40 psNodes=8\n" in open(one).read())
+    check("reloaded: same record", Project.open(one).thm()["experiments"] == {"A": rec})
+    m = Project.open(src)
+    set_experiment(m, "A", [1, 2], ps="delta")
+    check("ps=delta needs no kinematics", m.thm()["experiments"]["A"].get("ps") == "delta")
     for kw, frag in [(dict(ps="hulthen:0-40"), "needs the kinematics"),
-                     (dict(ps="hulthen:40-20", beam="18O", target="d", spectator="n", Ebeam=54),
-                      "expected delta, hulthen"),
-                     (dict(ps="hulthen:1.2,0.2:0-40", beam="18O", target="d", spectator="n",
-                           Ebeam=54), "Hulthen a,b"),
-                     (dict(ps="gauss:0:0-40", beam="18O", target="d", spectator="n", Ebeam=54),
-                      "FWHM"),
+                     (dict(ps="hulthen:40-20", **KINKEYS), "expected delta, hulthen"),
+                     (dict(ps="hulthen:1.2,0.2:0-40", **KINKEYS), "Hulthen a,b"),
+                     (dict(ps="gauss:0:0-40", **KINKEYS), "FWHM"),
                      (dict(psNodes=8), "psNodes= needs a ps window"),
-                     (dict(ps="hulthen:0-40", psNodes=0, beam="18O", target="d", spectator="n",
-                           Ebeam=54), "1 to 64")]:
+                     (dict(ps="hulthen:0-40", psNodes=0, **KINKEYS), "1 to 64")]:
         try:
-            AzrModel.from_file(src).set_thm_experiment("A", [1, 2], **kw)
+            set_experiment(Project.open(src), "A", [1, 2], **kw)
             check(f"refused: {kw}", False, "no ValueError")
         except ValueError as err:
             check(f"refused like AZURE2: {frag}", frag in str(err), str(err))
-    for opt in ("spectatorEnergy", "spectatorEnergy[1]"):
-        m = AzrModel.from_file(src)
-        m.set_thm_option(opt, 0.4)
-        try:
-            m.set_thm_experiment("A", [1, 2], beam="18O", target="d", spectator="n", Ebeam=54,
-                                 ps="gauss:60:0-40")
-            check(f"refused: window with {opt}", False, "no ValueError")
-        except ValueError as err:
-            check(f"refused: window with {opt}", "spectatorEnergy both set" in str(err), str(err))
-    path = os.path.join(proj, "bad.azr")
-    with open(path, "w") as f:
-        f.write(open(src).read().rstrip("\n") + "\n<thm>\nexperiment[A] segments=1 theta=10-0\n</thm>\n")
+    # A window and spectatorEnergy for the same entrance pair: the edit is taken (the <thm> check of an edit does
+    # not know the pairs), the engine refuses the project when it builds the experiment.
+    for k, opt in enumerate(("spectatorEnergy", "spectatorEnergy[1]")):
+        m = Project.open(src)
+        m.set_thm({opt: 0.4})
+        set_experiment(m, "A", [1, 2], **KINKEYS, ps="gauss:60:0-40")
+        refused, out = session_refusal(m, os.path.join(proj, f"window_se{k}.azr"))
+        check(f"refused by the engine: window with {opt}", refused and "spectatorEnergy both set" in out, out[-400:])
     try:
-        AzrModel.from_file(path).thm_experiments()
+        set_experiment(Project.open(src), "A", [1], theta="10-0")
         check("a reversed theta window is refused", False, "no ValueError")
     except ValueError as err:
         check("a reversed theta window is refused", "expected all or thmin-thmax" in str(err), str(err))
 
     # -- the engine -----------------------------------------------------------
-    try:
-        import numpy as np
-        from pyazr import azure2
-    except Exception as err:                                   # engine not built
-        print(f"skip the engine part: engine not available ({type(err).__name__}: {err})")
-        sys.exit(1 if failures else 77)
+    import numpy as np
+    from pyazr import azure2
     binary = os.environ.get("AZURE2_BIN")
     if not binary:
         cands = [c for c in glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))
@@ -203,8 +187,8 @@ with tempfile.TemporaryDirectory() as tmp:
         d = os.path.join(tmp, name)
         fresh_copy(d)
         text = open(os.path.join(d, AZR)).read()
-        if block:
-            text = text.rstrip("\n") + "\n<thm>\n" + block + "\n</thm>\n"
+        if block:  # the block's one experiment joined by both data sets
+            text = thm_set(text, block, datasets(text))
         with open(os.path.join(d, "run.azr"), "w") as f:
             f.write(text)
         return d
@@ -215,7 +199,7 @@ with tempfile.TemporaryDirectory() as tmp:
                 for f in sorted(glob.glob(os.path.join(out, "*")))
                 if os.path.isfile(f) and not os.path.basename(f).startswith("intEC")}
 
-    block = f"experiment[A] segments=1,2 {KIN} ps=hulthen:0-40"
+    block = f"experiment[A] {KIN} ps=hulthen:0-40"
     cli_dir, py_dir = project("cli", block), project("py", block)
     proc = subprocess.run([binary, "--no-gui", "--no-readline", "run.azr"], cwd=cli_dir,
                           input="1\n\n\n7\n", text=True, capture_output=True, timeout=600)
@@ -301,21 +285,21 @@ with tempfile.TemporaryDirectory() as tmp:
           from_cli["thm_experiments.out"].count("ps_node") == 32)
 
     print("4. one direction: ps=hulthen:30-30 == spectatorEnergy = 30^2/2mu_sx")
-    one_dir = project("one", f"experiment[A] segments=1,2 {KIN} ps=hulthen:30-30")
+    one_dir = project("one", f"experiment[A] {KIN} ps=hulthen:30-30")
     with azure2(os.path.join(one_dir, "run.azr"), cwd=one_dir) as s:
         x = np.asarray(s.params_rwa, float)
         m_one = np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)])
         r = s.thm_vertex("A", [0.6], x)
     d = project("se30", f"spectatorEnergy={30.0 * 30.0 / (2 * MU_SX)!r}\n"
-                        f"experiment[A] segments=1,2 {KIN}")
+                        f"experiment[A] {KIN}")
     with azure2(os.path.join(d, "run.azr"), cwd=d) as s:
         m_se = np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)])
     worst = float(np.max(np.abs(m_one / m_se - 1)))
     check(f"one node at q = 30 MeV/c, weight 1 ({r['p_s'][0]})",
           len(r["p_s"][0]) == 1 and abs(r["p_s"][0][0] - 30.0) < 1e-9 and r["weights"][0][0] == 1.0)
     check(f"model == spectatorEnergy session at {m_one.size} points (worst {worst:.1e})", worst < 1e-9)
-    nokey_dir = project("nokey", f"experiment[A] segments=1,2 {KIN}")
-    delta_dir = project("delta", f"experiment[A] segments=1,2 {KIN} ps=delta")
+    nokey_dir = project("nokey", f"experiment[A] {KIN}")
+    delta_dir = project("delta", f"experiment[A] {KIN} ps=delta")
     with azure2(os.path.join(nokey_dir, "run.azr"), cwd=nokey_dir) as s:
         r_nokey = s.residuals(x)
     with azure2(os.path.join(delta_dir, "run.azr"), cwd=delta_dir) as s:
