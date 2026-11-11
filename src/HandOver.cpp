@@ -5,6 +5,8 @@
 #include <atomic>
 #include <cmath>
 #include <iostream>
+#include <stdexcept>
+#include <string>
 #include <vector>
 #ifdef _OPENMP
 #include <omp.h>
@@ -275,13 +277,21 @@ void WorkingCopy::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNu
 
   // The sub-point grids, for the levels and shifts just set.  Sub-points of
   // shifted segments are moved and energised by the step below.
+  // The plan tasks whose units move (re-placed grids, shifted points): their slots are looked up again at the end.
+  std::vector<int> movedTasks;
   if (theCNuc && configure) {
     std::vector<TermRef> reshift;
-    this->ReplaceSubPointGrids(theCNuc, *configure, shiftActiveSegments, reshift);
+    this->ReplaceSubPointGrids(theCNuc, *configure, shiftActiveSegments, reshift, movedTasks);
     for (const TermRef &t : reshift) queueTerm(t);
   }
 
-  if (!toUpdate.empty()) {
+  const bool reenergise = !toUpdate.empty();
+  if (reenergise) {
+    this->ReleaseOverflowRows();
+    for (const TermRef &s : toUpdate)
+      for (int i = 0; i < s.NumPoints(); i++)
+        if (const Unit *pt = s.GetPoint(*this, i + 1))
+          if (pt->PlanTask() >= 0) movedTasks.push_back(pt->PlanTask());
     if (theCNuc && configure)
       for (const TermRef &t : toUpdate) t.segment->BeginShiftRefill(*this, t.term, theCNuc, *configure);
     // One work item per point (with its sub-points), largest first, so a
@@ -312,5 +322,16 @@ void WorkingCopy::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNu
     }
     if (theCNuc && configure)
       for (const TermRef &t : toUpdate) t.segment->CommitShiftTable(*this, t.term, theCNuc, *configure);
+  }
+  this->PlaceOverflowNodes(theCNuc, movedTasks, reenergise);
+  if (azure2::NodeCheckRequested() && theCNuc) {
+    // Every unit of every plan task on a node of the tables, as the hand-over leaves them (the point pass checks its
+    // own tasks again; an evaluation inside an enclosing parallel region has no point pass).
+    std::vector<int> all(plan_.NumTasks());
+    for (int t = 0; t < plan_.NumTasks(); t++) all[t] = t;
+    long differ;
+#pragma omp critical(azure_node_check)
+    differ = this->CheckNodeTable(theCNuc, all);
+    if (differ) throw std::logic_error("AZURE_NODE_CHECK: " + std::to_string(differ) + " differ (listed above)");
   }
 }

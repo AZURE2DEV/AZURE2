@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <tuple>
+#include <unordered_map>
 #include <vector>
 
 #include "SharedTable.h"
@@ -16,41 +18,98 @@ class Config;
 
 namespace azure2 {
 
+/// A node by (compound nucleus, route, bits of E_x): route 1 for a THM unit (its rows carry the vertex pieces), else 0.
+using NodeKey = std::tuple<int, char, std::uint64_t>;
+
 /*!
- * The node table of a fit stage (docs/upgrade/energy_grid.md section 2.6; branch 7, part 1): every compound energy at
- * which the point pass solves the level matrix -- a point without a sub-point fold, or a sub-point of one -- once per
- * (compound nucleus, bits of E_x), exact duplicates merged as the energy tasks group them (CalculationPlan::EnergyTasks),
- * with the channel rows there (L_o, sqrt(P), Coulomb and hard-sphere phases of every channel of every J group: they
- * depend on E_x alone).  Built once at the end of the set-up (WorkingCopy::Initialize) from the units the set-up
- * placed, immutable, and held by every copy of the working copy through a shared_ptr<const>.
- *
- * Beside it, per plan task of a point with a sub-point fold, the point's slots: for each of its sub-points (in order) the
- * node it is at, as an index of the table, or -1 for a node the stage table does not hold (a sub-point re-placed or
- * moved by an energy shift inside the stage: what part 2 puts in the working copy's own overflow table).
- *
- * In this part the table and the slots stand beside the sub-point units, which still carry the calculation; the check
- * mode AZURE_NODE_CHECK=1 shows, at every point pass, that they say what the units say, bit for bit
- * (WorkingCopy::CheckNodeTable).  E_x in MeV (AMatrixFunc::InEnergy).
+ * A list of nodes: compound energies at which the point pass solves the level matrix, each with the channel rows there
+ * (L_o, sqrt(P), Coulomb and hard-sphere phases of every channel of every J group: they depend on E_x alone).  The
+ * rows are a holder of the rows the first unit at the node computed, not a second copy.  E_x in MeV
+ * (AMatrixFunc::InEnergy).
  */
-struct NodeTable {
+struct NodeList {
   std::vector<int> nucleus;                         ///< compound nucleus of each node (1-based, PPair::GetNucleus)
-  std::vector<double> energy;                       ///< E_x of each node, MeV; sorted by (nucleus, bits)
-  std::vector<SharedTable<EDependentTables>> rows;  ///< the channel rows at the node (shared with the unit they came from)
+  std::vector<double> energy;                       ///< E_x of each node, MeV
+  std::vector<SharedTable<EDependentTables>> rows;  ///< the channel rows at the node (shared with a unit there)
   std::vector<char> thm;                            ///< 1: a THM node (its rows carry the THM vertex pieces as well)
-  /// The slots of the point of each plan task: [slotBegin[t], slotBegin[t + 1]) of slotNode (empty without a fold).
-  std::vector<int> slotBegin;
-  std::vector<int> slotNode;  ///< node index of each slot, -1 when no node of the table
   int Size() const { return (int)energy.size(); }
-  /// The node at (nucleus, E_x) bit for bit, or -1.
-  int Find(int nucleus, double energy) const;
+  NodeKey Key(int n) const;
+  void Append(const NodeKey &key, double ex, SharedTable<EDependentTables> nodeRows);
+  void Clear();
   /// Bytes held (the rows counted once per node, shared or not).
   std::size_t Bytes() const;
 };
 
-/// The node table of `data` as its units are now (one pass over the plan tasks' units; see NodeTable).
-std::shared_ptr<const NodeTable> BuildNodeTable(WorkingCopy &data, CNuc *cnuc, const Config &configure);
+/*!
+ * The slots of the plan tasks of a working copy: for task t, [begin[t], begin[t + 1]) of `node`, one slot per unit the
+ * task calculates (CalculationPlan::TaskUnits: its point, or its sub-points in order when it carries a sub-point fold),
+ * holding the node that unit is at.  A node index below the stage table's size is a node of the stage table, any
+ * other one of the working copy's overflow table (NodeOverflow), at index - stage size.
+ */
+struct NodeSlots {
+  std::vector<int> begin{0};
+  std::vector<int> node;
+  std::vector<char> overflow;  ///< per task: 1 when a slot of it is on the overflow table
+};
 
-/// AZURE_NODE_CHECK=1: the node table of `data` against its units, bit for bit (see WorkingCopy::CheckNodeTable).
+/*!
+ * The node table of a fit stage (docs/upgrade/energy_grid.md section 2.6): every compound energy at which the point
+ * pass solves the level matrix -- a point without a sub-point fold, or a sub-point of one -- once per (compound nucleus,
+ * route, bits of E_x), exact duplicates merged as the energy tasks group them (CalculationPlan::EnergyTasks), sorted by
+ * that key.  Built once at the end of the set-up (WorkingCopy::Initialize) from the units the set-up placed, immutable,
+ * and held by every copy of the working copy through a shared_ptr<const>; with it the slots of every plan task as the
+ * set-up placed them (each on a node of this table).
+ */
+struct NodeTable : NodeList {
+  NodeSlots slots;
+  /// The node at `key` bit for bit, or -1.
+  int Find(const NodeKey &key) const;
+  /// Bytes held by the nodes and the slots.
+  std::size_t Bytes() const;
+};
+
+/*!
+ * The overflow table of a working copy (docs/upgrade/energy_grid.md section 2.6): the nodes of its units that the stage
+ * table does not hold, placed in the copy's hand-over (WorkingCopy::PlaceOverflowNodes) and a function of the
+ * parameter vector the copy was handed alone.  Two kinds of node live here:
+ *  - nodes re-placed inside a stage: a level's quantized anchor moved and WorkingCopy::ReplaceSubPointGrids laid the
+ *    point's sub-point grid out again (the rule kept bit for bit);
+ *  - the nodes of points of a segment with an energy shift: a point without a fold moves with the shift
+ *    (energy_grid.md section 2.5), and the sub-points of a folded point move rigidly with their point
+ *    (Segment::UpdatePointEnergyWithShift).
+ *
+ * The seam for the shift-kernel branch (energy_grid.md section 8, branch 8): on the shared mesh the sub-points of a
+ * shifted folded point stay on the mesh and the kernel moves instead.  That branch deletes the second kind for folded
+ * points (the rigid move of sub-points in Segment::UpdatePointEnergyWithShift, the `offset` of re-placed grids in
+ * ReplaceSubPointGrids and the reshift list it returns, and the overflow entries they make here); what stays is the
+ * node of each unfolded shifted point and the re-placed nodes of section 2.3.
+ */
+struct NodeOverflow : NodeList {
+  struct KeyHash {
+    std::size_t operator()(const NodeKey &k) const;
+  };
+  std::unordered_map<NodeKey, int, KeyHash> index;
+  /// The node at `key`, appended with `nodeRows` if it is not held yet.
+  int Place(const NodeKey &key, double ex, const SharedTable<EDependentTables> &nodeRows);
+  void Clear() {
+    NodeList::Clear();
+    index.clear();
+  }
+};
+
+/// What a working copy holds of the nodes: the stage table (shared by every copy), its slots (the stage table's, or the
+/// copy's own once a unit moved off it), and its overflow table.
+struct NodeState {
+  std::shared_ptr<const NodeTable> table;
+  std::shared_ptr<const NodeSlots> slots;
+  NodeOverflow overflow;
+};
+
+/// The node state of `data` as its units are now (one pass over the plan tasks' units; see NodeTable): the stage table
+/// with its slots, an empty overflow table.
+NodeState BuildNodeTable(WorkingCopy &data, CNuc *cnuc, const Config &configure);
+
+/// AZURE_NODE_CHECK=1: the node tables and slots of `data` against its units, bit for bit (WorkingCopy::CheckNodeTable).
 bool NodeCheckRequested();
 
 }  // namespace azure2

@@ -517,14 +517,16 @@ per distance follows the points per width).  A folded value moves by the error
 of the grid it was computed on; an unfolded one does not move.  K is a whole
 number from 1 (the default) to 64; anything else stops the run.
 
-``AZURE_NODE_CHECK=1``: before every parallel point pass, the stage's node table
-(one entry per compound nucleus and bits of :math:`E_x` of the units the set-up
-placed, with the channel rows there) and the folded points' slots on it are
-compared bit for bit with the units: the channel rows of every unit on a node of
-the table equal the node's, and every slot names the node its sub-point is at.
-Units and slots moved inside the stage (re-placed grids, energy shifts) are
-counted, not compared.  The counts go to standard error (``AZURE_NODE_CHECK:
-...``); a difference stops the run.  The output files do not change.
+``AZURE_NODE_CHECK=1``: at the end of every hand-over of a parameter vector and
+before every parallel point pass, every unit of every plan task (a point without
+a fold, or a sub-point of a folded point) is compared bit for bit with the node
+its slot names: the stage's node table (one entry per compound nucleus, route
+and bits of :math:`E_x` of the units the set-up placed, with the channel rows
+there) or the working copy's overflow table (the nodes the hand-over moved off
+the stage table: re-placed sub-point grids, energy shifts).  The node's nucleus,
+route, :math:`E_x` and channel rows must be the unit's.  The counts go to
+standard error (``AZURE_NODE_CHECK: ...``); a unit off the tables, on a wrong
+node or with other rows stops the run.  The output files do not change.
 
 ``AZURE_PLAN_CHECK=1``: the points of an evaluation are calculated by the
 energy tasks of the data set's calculation plan, one task per compound energy
