@@ -42,6 +42,7 @@ std::string Text(const Value *v) {
 struct Combination {
   const ValidatedRecord *target = nullptr, *beam = nullptr, *detector = nullptr;
   const Value *quadrature = nullptr, *windows = nullptr;
+  bool decay = false;  ///< its data sets are beta-delayed spectra (no beam: the energy is the particle's in the decay)
   std::string signature;
   int position = 0;  ///< the first of its records in the file
   std::vector<int> keys;
@@ -177,7 +178,10 @@ void BeamInto(Context &c, const ValidatedRecord &b, TargetEffectSpec &e) {
   if (const Value *v = b.Get("detailed_balance")) e.beamDetailedBalance = v->word == "yes";
 }
 
-void DetectorInto(Context &c, const ValidatedRecord &d, TargetEffectSpec &e) {
+// A detector's energy resolution: with a beam profile the profile's TPC resolution; on a beta-delayed spectrum (no
+// beam) a Gaussian fold of the model in the observed particle energy, the engine's convolution kernel on the lab energy
+// (for a decay at rest the energy the data give); elsewhere not built (a beam's spread states a Gaussian there).
+void DetectorInto(Context &c, const ValidatedRecord &d, bool decay, TargetEffectSpec &e) {
   if (const Value *q = d.Get("attenuation")) {
     e.qCoefficients = true;
     for (const Number &n : q->numbers) e.qCoefficientValues.push_back(n.value);
@@ -185,9 +189,16 @@ void DetectorInto(Context &c, const ValidatedRecord &d, TargetEffectSpec &e) {
   if (const Value *r = d.Get("energy_resolution")) {
     const Value *sigma = r->Get("sigma");
     const Value *frame = r->Get("frame");
-    if (!e.beamProfile || (frame && frame->word != "lab"))
+    if (frame && frame->word != "lab")
+      c.Error(codes::kNotBuilt, d, "energy_resolution", "a detector resolution in the c.m. frame: this engine takes it in the lab");
+    else if (decay && !e.beamProfile) {
+      e.convolution = true;
+      if (sigma) e.sigma = Context::InBase(sigma->number, sigma->unit);
+      return;
+    } else if (!e.beamProfile)
       c.Error(codes::kNotBuilt, d, "energy_resolution",
-              "this engine applies a detector resolution (lab) only with a beam profile (the TPC sigma of the profile)");
+              "this engine applies a detector resolution (lab) only with a beam profile (the TPC sigma of the profile) or "
+              "on a beta-delayed spectrum; a Gaussian on the beam energy is the beam's spread");
     if (sigma) e.beamTpcSigma = Context::InBase(sigma->number, sigma->unit);
   }
   if (const Value *u = d.Get("udr")) {
@@ -277,9 +288,10 @@ SpecList<TargetEffectSpec> Effects(Context &c, const std::vector<Member> &member
     if (!x.target && !x.beam && !x.detector) continue;
     x.quadrature = r.Get("quadrature");
     x.windows = r.Get("fold_windows");
+    x.decay = r.quantity && r.quantity->name == "beta_delayed_spectrum";
     CoulombRatioFolds(c, r, x);
     x.signature = (x.target ? x.target->name : "") + "|" + (x.beam ? x.beam->name : "") + "|" +
-                  (x.detector ? x.detector->name : "") + "|" + Text(x.quadrature) + "|" + Text(x.windows);
+                  (x.detector ? x.detector->name : "") + "|" + Text(x.quadrature) + "|" + Text(x.windows) + (x.decay ? "|decay" : "");
     x.position = 1 << 30;
     for (const ValidatedRecord *p : {x.target, x.beam, x.detector})
       if (p) x.position = std::min(x.position, c.Position(p));
@@ -317,7 +329,7 @@ SpecList<TargetEffectSpec> Effects(Context &c, const std::vector<Member> &member
       }
     }
     if (x.beam) BeamInto(c, *x.beam, e);
-    if (x.detector) DetectorInto(c, *x.detector, e);
+    if (x.detector) DetectorInto(c, *x.detector, x.decay, e);
     QuadratureInto(x.quadrature, x.windows, e);
     out.items.push_back(item);
   }

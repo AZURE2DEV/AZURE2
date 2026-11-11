@@ -294,7 +294,7 @@ causes it:
 | electron screening (depends on the target's electrons) | `screening Ue vary σ` | `target` | `screening <nuisance eV>` |
 | beam energy spread, constant or σ(E) | `isConvolution σ`, `isConvCoefficients "expr"`, `sigmalab` | `beam` | `spread` |
 | beam energy distribution of skewed Gaussians | `beamprofile` | `beam` | `profile` (repeatable), `truncation`, `detailed_balance` |
-| detector energy resolution of a reconstructed energy (TPC σ, THM c.m. resolution) | the `beamprofile` TPC σ; a Gaussian for THM | `detector` | `energy_resolution` |
+| detector energy resolution of a reconstructed energy (TPC σ, THM c.m. resolution) | the `beamprofile` TPC σ; a Gaussian for THM; on a β-delayed spectrum (no beam) the Gaussian fold of the measured particle energy (the old `<targetInt>` convolution on such a line), lab frame only | `detector` | `energy_resolution` |
 | finite-solid-angle attenuation Q_k | `isQCoefficients n Q…` | `detector` | `attenuation` |
 | time-of-flight resolution (SAMMY UDR) | `udr` | `detector` | `udr` |
 | sub-point grid: points, resonance width multiplier, points per width | positional | `dataset` / `extrapolation` | `quadrature` |

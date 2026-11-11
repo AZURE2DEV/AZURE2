@@ -6,8 +6,11 @@
 #       refused at load: its energies would be converted with the beta pair's masses, as a beam;
 #   (b) a target (a target integration), (c) a beam (a beam profile) and (d) a target with electron screening are
 #       refused (E_FIELD_NOT_APPLICABLE): a decay has no beam and the beta pair's charges are not a reaction's;
-#   (e) a Gaussian resolution (old grammar only, see below) and (f) an energy shift of the measured particle energy run (a detector
-#       resolution and a calibration; the sub-points move by the shift times the decay pair's c.m. factor).
+#   (e) a Gaussian resolution of the detector (`detector ... energy_resolution 0.02 MeV lab`: the engine's Gaussian fold
+#       on the measured particle energy) and (f) an energy shift of the measured particle energy run (a detector
+#       resolution and a calibration; the sub-points move by the shift times the decay pair's c.m. factor); (e) gives
+#       the outputs of the old <targetInt> line with the same Gaussian (its conversion: the converter writes that
+#       detector), file for file but param.par; the resolution in the c.m. frame is refused (E_NOT_BUILT).
 #
 #   ./tests/beta_delayed_alpha/check.sh path/to/AZURE2
 
@@ -61,17 +64,28 @@ variant d '    target         screened' 'target screened\n    kind           non
 if refused d "$NA 'target' does not belong here: quantity 'beta_delayed_spectrum' does not use it"; then ok "(d) electron screening: refused"
 else bad "(d) electron screening: $(grep -m1 ERROR "$WORK/d/run.log")"; fi
 
-# (e) is not stated in format 3: a detector's energy_resolution is built only with a beam profile (E_NOT_BUILT), and a
-# beam spread does not apply to a decay (E_FIELD_NOT_APPLICABLE); the converter refuses the old line for that reason.
-# It runs on the old original (tests/convert/fixtures) with the old <targetInt> line until the engine's old reading
-# path goes (docs/upgrade/format3_tree.md section 4).
-mkdir -p "$WORK/e/output" "$WORK/e/checks"
-cp -r "$HERE/data" "$WORK/e/"
+# (e) the detector's resolution; the old line with the same Gaussian, converted (tests/convert/fixtures: the original)
+variant e '    detector       det\n    quadrature     points 20 width_multiplier 20 per_width 50' 'detector det\n    energy_resolution 0.02 MeV lab\n'
+if ran e; then ok "(e) detector resolution: runs ($(grep '^Total' "$WORK/e/output/chiSquared.out"))"
+else bad "(e) detector resolution: $(grep -m1 ERROR "$WORK/e/run.log")"; fi
+mkdir -p "$WORK/eold" "$WORK/econv/output" "$WORK/econv/checks"
+cp -r "$HERE/data" "$WORK/eold/"; cp -r "$HERE/data" "$WORK/econv/"
 awk '{ print } /^<targetInt>$/ { print "1 \"1\" 20 1 0.02 0 0 \"\" 0 0 0 0 \"\" 0 0 0.04 20 50" }' \
-  "$HERE/../convert/fixtures/tests/beta_delayed_alpha/16N.azr" > "$WORK/e/m.azr"
-(cd "$WORK/e" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1)
-if ran e; then ok "(e) Gaussian resolution: runs ($(grep '^Total' "$WORK/e/output/chiSquared.out"))"
-else bad "(e) Gaussian resolution: $(grep -m1 ERROR "$WORK/e/run.log")"; fi
+  "$HERE/../convert/fixtures/tests/beta_delayed_alpha/16N.azr" > "$WORK/eold/m.azr"
+(cd "$WORK/eold" && "$AZURE2_BIN" --convert m.azr "$WORK/econv/m.azr" --to 3 --exact-grids > convert.log 2>&1)
+grep -q "^    energy_resolution 0.02 MeV lab$" "$WORK/econv/m.azr" 2> /dev/null \
+  && ok "(e) the old line converts to the detector's energy resolution" || bad "(e) conversion: $(tail -1 "$WORK/eold/convert.log")"
+(cd "$WORK/econv" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1)
+same=0; n=0
+for f in "$WORK/e/output/"*; do
+  case "$(basename "$f")" in param.par) continue ;; esac
+  n=$((n + 1)); cmp -s "$f" "$WORK/econv/output/$(basename "$f")" && same=$((same + 1))
+done
+[ "$n" -gt 2 ] && [ "$same" = "$n" ] && ok "(e) the record and the converted old line: $n output files identical" \
+  || bad "(e) the record and the converted old line: $same of $n output files identical"
+variant ecm '    detector       det\n    quadrature     points 20' 'detector det\n    energy_resolution 0.02 MeV cm\n'
+if refused ecm "E_NOT_BUILT: detector det, field energy_resolution: a detector resolution in the c.m. frame"; then ok "(e) resolution in the c.m. frame: refused"
+else bad "(e) resolution in the c.m. frame: $(grep -m1 ERROR "$WORK/ecm/run.log")"; fi
 
 variant f '    shift          offset 0.01 MeV fixed'
 if ran f; then ok "(f) energy shift: runs ($(grep '^Total' "$WORK/f/output/chiSquared.out"))"

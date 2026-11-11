@@ -147,9 +147,21 @@ void Builder::BuildApparatus() {
       }
       if (!l.densityGroup.empty()) Count(Construct::kDensityGroup);
     }
-    // beam: a Gaussian spread or a beam profile
+    // beam: a Gaussian spread or a beam profile.  On beta-delayed lines only (a decay has no beam) a constant Gaussian is
+    // the detector's resolution of the observed particle energy: the same kernel on the same (lab) energy.
     const bool constant = l.isConvolution == 1, formula = l.isConvCoefficients == 1;
-    if (constant || formula || l.isBeamProfile) {
+    bool decays = !a.dataKeys.empty() || !a.testKeys.empty();
+    for (int k : a.dataKeys) decays = decays && Pair(activeData_.at(k)->parsed->entranceKey()) && Pair(activeData_.at(k)->parsed->entranceKey())->pType == 20;
+    for (int k : a.testKeys) decays = decays && Pair(activeTest_.at(k)->parsed->entranceKey()) && Pair(activeTest_.at(k)->parsed->entranceKey())->pType == 20;
+    const bool decayResolution = decays && constant && !formula && !l.isBeamProfile;
+    if (decayResolution) {
+      Count(Construct::kSpread);
+      a.hasDetector = true;
+      a.detector.kind = "detector";
+      Add(a.detector, "energy_resolution", NumberText(l.sigma, e.text) + " MeV lab");
+      Note(Construct::kSpread, "", "<targetInt> line " + std::to_string(e.index) +
+                                       ": a Gaussian convolution on beta-delayed data is written as the detector's energy resolution");
+    } else if (constant || formula || l.isBeamProfile) {
       a.hasBeam = true;
       a.beam.kind = "beam";
       if (constant && formula)
@@ -205,7 +217,7 @@ void Builder::BuildApparatus() {
       }
     }
     // the fold's numerical settings, on the data sets
-    a.folded = a.hasBeam || integrates || l.isDoppler || l.isBeamProfile || l.isUdr;
+    a.folded = a.hasBeam || integrates || l.isDoppler || l.isBeamProfile || l.isUdr || decayResolution;
     if (a.folded) {
       // the multiplier and the points per width only where the old line gives them: left out, a pure Gaussian
       // convolution takes its smaller core (TargetEffect::GetResonanceWidthMultiplier)
