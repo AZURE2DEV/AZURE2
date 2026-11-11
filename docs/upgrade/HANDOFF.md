@@ -2,6 +2,33 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, tree to format 3) — the test tree converted, first half (`feature/upgrade-4-tree-format3`)
+
+**Done** (`AA_tree_to_format3.md`; plan and state: `docs/upgrade/format3_tree.md`). 92 of the 185 convertible
+project files of `tests/` and `examples/` are format 3, in place under their own names; the originals are in
+`tests/convert/fixtures/<path>` and stay the converter's fixtures (the gate, `convert_spec_equivalence` and
+`convert_fixtures` read them there; `tools/convert_tree.sh` lays them back before converting). Groups done: 1 (81
+self-contained projects and 7 examples), 2 (13N family and 7Li_p_ay), 3 (thick_target_resonance), 4a (norm_groups,
+15N_p_a). 22 checks rewritten to edit format-3 records (or write them); `segline_formats` and parts of
+`total_capture_code`, `prior_centre`, `ec_final_state_ambiguous` test old lines through `AZURE2 --convert`. pyazr tests
+of the old file class (14) read the originals (`tests/pyazr/old_tree.py`). Tools: `tools/format3_tree_convert.sh`
+(convert files in place, originals to the fixtures).
+
+**Verified how**: per group, the touched directories' regression projects and checks, the rewritten checks against
+the base checks on the base build (same output, differences listed in the page), `scripts/check.sh --quick`
+(ctest -LE slow 182/182). At the last commit: converted-tree gate (`gtree3a`) 483 (456) identical, 38 classified, 0
+differ, 0 missing; spec equivalence 197 files, 185 converted, 183 equal, 2 recorded, 0 differ; `convert_fixtures` 86
+checks; T1–T3 and 13N at 1 and 4 threads identical; reference tag of this tree: `tab-tree3`
+(page §3a); `tests/run_tests.sh` whole: see the report.
+
+**Open** (the page, §3–§5): groups 4b (shifts), 5 (targets and apparatus), 6 (natural targets), 7 (THM, the largest:
+about 20 scripts and 12 pyazr tests), 8 (T1–T3, relativistic, scattering lengths, ...); the refusal switch (blocked:
+pyazr tests load old files through `pyazr/azrfile.py`; the old `make_models.py` generators). For the director: the
+converter writes an old exit −1 / data-type mismatch as `[total]` (the old engine refused it); format 3 cannot state
+automatic windows plus explicit ranges, nor an automatic tolerance without windows (the converter drops the latter
+without a note); `norm … prior 0 15%` is accepted (a zero-width prior, not applied) where the old engine refused a
+centre 0.
+
 ## 2026-11-11 (director, early morning) — the eighth wave, first part merged: the project as records in Python; capture analyzing power at set-up
 
 **Merged into `feature/upgrade-4-data`** (`--no-ff`, in this order; rehearsed together in one scratch worktree, built

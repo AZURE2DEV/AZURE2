@@ -70,6 +70,16 @@ and 12 pyazr tests), so the groups follow the projects, not the directory names.
 | 8. the rest | `upgrade/T1–T3`, `relativistic`, `scattering_length`, `channel_space`, `beta_delayed_alpha`, `identical_entrance_reaction`, `identical_pp_res`, `hybrid_potential`, `sum_lab_frame` (`sum_data`, `extrap`), `ratio_frame/models/ratio_data`, `ec_m1_exact/models/m1` | `upgrade`, `format3_engine`, `model_data`, `fit_threads`, `relativistic`, `scattering_length`, `phase_channel_spin`, `channel_space`, `beta_delayed_alpha`, `fixed_param_par`, `mass_separation_check`; `upgrade_poison_results`; pyazr tests | to do |
 | 9. the refusal switch | — | §8.4 of `project_format3.md` | not started; only when nothing loads an old file |
 
+## 3a. State at the last commit (verification)
+
+92 of the 185 convertible files are converted (85 projects of `tests/`, 7 examples); 4 are not converted by the
+converter and 8 are format 3 already (§2). The converted-tree gate on this tree (`REF=tab-trial8`, tag `gtree3a`)
+gives the base's counts: 483 (456 formal) identical, 38 classified, 0 differ, 0 missing (the originals laid back by
+`convert_tree.sh`). The tree's own run, `tab-tree3` (all projects × 3 bases), is the reference for the next agent: every
+output of a converted project equals the gate's conversion of its original (`classify.py tab-gtree3a tab-tree3`: the 39
+projects that differ are all unconverted ones, old against converted), and every output of an unconverted project
+equals `tab-trial13` (the 41 projects that differ from `tab-trial13` are all converted ones, by the gate's classes).
+
 ## 4. Kept old on purpose, and checks that changed their model
 
 | file or check | what | why |
