@@ -13,16 +13,27 @@
 #include "azure2/experiment/Describe.h"
 #include "azure2/experiment/ParameterFileNames.h"
 #include "azure2/experiment/ProjectReader.h"
+#include "azure2/io/ProjectFormat.h"
 
 namespace py = pybind11;
 
 void BindConvert(py::module_ &m) {
   m.def(
       "not_format3_message",
-      [](const std::string &text, const std::string &fileName) { return azure2::convert::NotFormat3Message(text, fileName); },
+      [](const std::string &text, const std::string &fileName) { return azure2::io::NotFormat3Message(text, fileName); },
       py::arg("text"), py::arg("file_name"),
-      "The engine's refusal of a text that is not a format-3 project (convert::NotFormat3Message: the format, the "
-      "first old section, the command AZURE2 --convert ... --to 3), or '' for a format-3 text.");
+      "The engine's refusal of a text that is not a format-3 project (io::NotFormat3Message: the format, the "
+      "first old section, the command AZURE2 --convert OLD NEW), or '' for a format-3 text.");
+  m.def(
+      "convert_parameter_file",
+      [](const std::string &parameterText, const std::string &oldProjectText, const std::string &projectDir) {
+        const azure2::convert::ParameterFileConversion c =
+            azure2::convert::ConvertParameterFile(parameterText, oldProjectText, projectDir);
+        return py::make_tuple(c.refusal, py::bytes(c.text), c.renamed);
+      },
+      py::arg("parameter_text"), py::arg("old_project_text"), py::arg("project_dir"),
+      "A parameter file of an old project renamed for the project's format-3 conversion (AZURE2 --convert-params; "
+      "convert::ConvertParameterFile): (refusal or '', the renamed file as bytes, [(old name, new name)]).");
   m.def(
       "match_parameter_file_names",
       [](const std::string &file, const std::vector<std::string> &inFile, const std::vector<std::string> &ofRun,
@@ -44,7 +55,7 @@ void BindConvert(py::module_ &m) {
   m.def(
       "validate_format3_text",
       [](const std::string &text, const std::string &fileName, const std::string &projectDir) -> py::tuple {
-        const std::string refusal = azure2::convert::NotFormat3Message(text, fileName);
+        const std::string refusal = azure2::io::NotFormat3Message(text, fileName);
         if (!refusal.empty()) return py::make_tuple(refusal, std::string("[]"), 0);  // section 8.4
         azure2::experiment::Format3ReadOptions read;
         read.fileName = fileName;
@@ -64,7 +75,7 @@ void BindConvert(py::module_ &m) {
       "describe_format3_text",
       [](const std::string &text, const std::string &fileName, bool json, const std::string &projectDir,
          const std::string &record) -> py::tuple {
-        const std::string refusal = azure2::convert::NotFormat3Message(text, fileName);
+        const std::string refusal = azure2::io::NotFormat3Message(text, fileName);
         if (!refusal.empty()) return py::make_tuple(refusal, std::string("[]"), std::string());
         azure2::experiment::Format3ReadOptions read;
         read.fileName = fileName;

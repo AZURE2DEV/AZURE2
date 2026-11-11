@@ -32,6 +32,7 @@ A. M. Lane and R. G. Thomas, *Reviews of Modern Physics* **30**, 257 (1958).
    :maxdepth: 2
    :caption: User Guide
 
+   user_guide/older_projects
    user_guide/graphical_interface
    user_guide/configure_menu
    user_guide/particle_pairs

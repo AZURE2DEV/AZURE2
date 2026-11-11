@@ -79,10 +79,6 @@ class CNuc {
   bool HasAbundanceBlock() const { return hasAbundanceBlock_; }
   /// The model data (ModelData.h): the rows of the objective's term T9, read by Fill.
   const ModelDataSet &GetModelData() const { return *modelData_; }
-  /// The lines of the optional <scatteringLengths> block as read (ScatteringLength::ReadConstraints), for the report.
-  const std::vector<ScatteringLength::Constraint> &ScatteringLengthConstraints() const {
-    return modelData_->scatteringLengthLines;
-  }
   /// Number of samples the <abundances> block defines (0 without the block).
   int NumSamples() const { return (int)samples_.size(); }
   /// Sample \p s, 1-based.

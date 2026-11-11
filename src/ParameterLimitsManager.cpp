@@ -3,6 +3,10 @@
 #include "CNuc.h"
 #include "WorkingCopy.h"
 #include "AZUREParams.h"
+#include "azure2/experiment/Build.h"
+#include "azure2/experiment/ParameterFileNames.h"
+#include "azure2/experiment/ProjectReader.h"
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -121,14 +125,17 @@ bool ParameterLimitsManager::ReadParameterSettings() {
     std::ifstream test(config_->configfile.c_str());
     if (!test.is_open()) return false;
   }
-  std::unique_ptr<std::istream> section = config_->SectionStream("parameterSettings");
+  int lineNumber = 0;  // the section's opening tag, then each line
+  std::unique_ptr<std::istream> section = config_->SectionStream("parameterSettings", &lineNumber);
   if (!section) return true;  // no settings
   std::istream &file = *section;
+  lineNumber--;
 
   std::string line;
   bool inParameterSettings = false;
 
   while (std::getline(file, line)) {
+    lineNumber++;
     // Trim whitespace
     size_t start = line.find_first_not_of(" \t\r\n");
     if (start == std::string::npos) continue;
@@ -167,6 +174,7 @@ bool ParameterLimitsManager::ReadParameterSettings() {
         setting.category = parts[7];
         setting.minuitIndex = std::stoi(parts[8]);  // Store Minuit2 index
         setting.parameterNameForm = true;
+        setting.line = lineNumber;
 
         parameterSettings_[setting.name] = setting;
       } else if (parts.size() == 12) {
@@ -305,6 +313,19 @@ void ParameterLimitsManager::BuildIndexMap(const AZUREParams &params) {
   }
 }
 
+void ParameterLimitsManager::WarnUnknownSettings(const AZUREParams &params) const {
+  std::vector<std::string> known =
+      azure2::experiment::ParameterNamesOf(config_->project->built);
+  for (unsigned int i = 0; i < params.GetMinuitParams().Params().size(); i++) known.push_back(params.GetMinuitParams().GetName(i));
+  std::vector<azure2::experiment::ParameterSettingRow> rows;
+  for (const auto &entry : parameterSettings_)
+    if (entry.second.parameterNameForm) rows.push_back({entry.second.name, entry.second.line});
+  std::sort(rows.begin(), rows.end(), [](const azure2::experiment::ParameterSettingRow &a,
+                                         const azure2::experiment::ParameterSettingRow &b) { return a.line < b.line; });
+  for (const azure2::experiment::Diagnostic &d : azure2::experiment::UnknownParameterSettings(config_->configfile, rows, known))
+    config_->outStream << "WARNING: " << d.ToText() << std::endl;
+}
+
 ParameterSetting *ParameterLimitsManager::SettingForIndex(int nonFixedIndex) const {
   if (nonFixedIndex < 0 || nonFixedIndex >= (int)indexToSetting_.size()) return NULL;
   return indexToSetting_[nonFixedIndex];
@@ -321,6 +342,7 @@ void ParameterLimitsManager::ApplyAllParameterSettings(AZUREParams &params) {
   }
 
   BuildIndexMap(params);
+  WarnUnknownSettings(params);
 
   // Apply settings using non-fixed parameter indices
   for (int nonFixedIndex = 0; nonFixedIndex < (int)nonFixedToActualIndex.size(); nonFixedIndex++) {

@@ -124,15 +124,17 @@ bool ThmExperimentEdits(const std::vector<std::string> &lines, const std::string
                         const std::string &value, ThmChange change, std::vector<ThmLineEdit> &edits, std::string &why) {
   edits.clear();
   if (key == "segments") {
-    why = "experiment[" + name + "]: segments= is not written in format 3: a data set names its experiment (thm " + name + ")";
+    why = "segments= is not written in format 3: a data set names its experiment (thm " + name + ")";
     return false;
   }
   if (change == ThmChange::Set) {
-    // The key and value as the reader takes them, on a line of their own.
+    // The key and value as the reader takes them, on a line of their own; the reader's message without the
+    // experiment it names first (the caller names it).
     std::vector<ThmExperiment> probe;
     why = ParseThmExperimentLine("experiment[" + name + "] " + key + "=" + value, probe);
     if (!why.empty()) {
-      why = "<thm> " + why;
+      const std::string own = "experiment[" + name + "]: ";
+      if (why.compare(0, own.size(), own) == 0) why = why.substr(own.size());
       return false;
     }
   }
@@ -196,30 +198,6 @@ std::vector<std::string> ApplyThmLineEdits(const std::vector<std::string> &lines
       out.erase(out.begin() + e.line);
     else
       out.insert(out.begin() + e.line, e.text);
-  }
-  return out;
-}
-
-std::vector<std::string> Format3ThmLines(const std::vector<std::string> &section,
-                                         const azure2::experiment::ThmMembershipSpec &thm) {
-  const std::vector<std::string> members = MemberExperiments(thm);
-  std::vector<std::string> out;
-  for (std::string line : section) {
-    const azure2::experiment::ThmSectionLine l = azure2::experiment::ReadThmSectionLine(line);
-    if (l.experiment && l.text.find(']') != std::string::npos) {
-      if (std::find(members.begin(), members.end(), l.name) == members.end()) continue;
-      for (const auto &x : thm.experiments) {
-        if (x.name != l.name) continue;
-        std::string keys;
-        for (int k : x.datasetKeys) keys += (keys.empty() ? "" : ",") + std::to_string(k);
-        line = line.substr(0, line.find('#')) + " segments=" + keys;
-      }
-    }
-    if (l.text == "</thm>") {
-      for (const auto &w : thm.datasetWeights) out.push_back("weight[" + std::to_string(w.first) + "]=" + w.second);
-      for (const auto &w : thm.extrapolationWeights) out.push_back("weightTest[" + std::to_string(w.first) + "]=" + w.second);
-    }
-    out.push_back(line);
   }
   return out;
 }

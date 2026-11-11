@@ -51,7 +51,7 @@ bool AZUREParams::ReadUserParameters(const Config &configure) {
   // normalization and energy shift to TEST segment k by name and move the requested grid (audit 2026-10-25,
   // item 12; tests/extrap_sav_segments).  Test segments carry no shift: those entries are skipped.
   const std::vector<std::string> projectNames =
-      configure.format3 ? azure2::experiment::ParameterNamesOf(configure.format3->built) : std::vector<std::string>();
+      azure2::experiment::ParameterNamesOf(configure.project->built);
   return ApplyUserParameterFile(configure.paramfile, configure.outStream,
                                 (configure.paramMask & Config::CALCULATE_WITH_DATA) != 0, projectNames);
 }
@@ -153,7 +153,7 @@ bool AZUREParams::ApplyUserParameterFile(const std::string &filename, std::ostre
         // A level parameter or a normalization fixed at zero is freed by a nonzero .sav value, and a free one fixed
         // by a zero.  An energy shift is not: it follows the vary flag of its .azr segment line, because its penalty
         // does (a freed shift would float with no penalty).  The .sav still sets its value.  A screening potential, a
-        // fitted target density and a fitted Doppler temperature likewise follow their <targetInt> vary flags, and a
+        // fitted target density and a fitted Doppler temperature likewise follow the fit mode of their target fields, and a
         // fitted sample thickness the vary flag of its segment line (ParamKindRow::varyFromProject).
         const bool varyFromProject = Record(i).Row().varyFromProject;
         if (!varyFromProject && GetMinuitParams().Value(i) == 0.0 && values[ii] != 0.0 &&

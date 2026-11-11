@@ -68,9 +68,7 @@ py::tuple SessionPotentialView(const Config &config, int pair) {
 }
 
 py::tuple SessionPotentialRecords(const Config &config) {
-  if (!config.format3)
-    throw std::invalid_argument("the session's project is not in format 3: its potentials are the <potential> block");
-  const azure2::experiment::Format3Project &f = *config.format3;
+  const azure2::experiment::Format3Project &f = *config.project;
   // changed: a particle pair's potential differs from the one the project's records give
   bool changed = false;
   for (const azure2::experiment::PairInfo &pair : f.levels.pairs)

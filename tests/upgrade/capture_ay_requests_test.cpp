@@ -166,7 +166,8 @@ int main(int argc, char **argv) {
   const fs::path tests = fs::absolute(argv[1]), scratch = fs::absolute(argv[2]);
   std::vector<fs::path> files;
   for (const auto &e : fs::recursive_directory_iterator(tests))
-    if (e.is_regular_file() && e.path().extension() == ".azr" && e.path().string().find("/output/") == std::string::npos)
+    if (e.is_regular_file() && e.path().extension() == ".azr" && e.path().string().find("/output/") == std::string::npos &&
+        e.path().string().find("/convert/fixtures/") == std::string::npos)  // the converter's old originals: refused
       files.push_back(e.path());
   std::sort(files.begin(), files.end());
   fs::remove_all(scratch);

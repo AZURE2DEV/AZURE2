@@ -142,10 +142,10 @@ class Config {
   /// The <thm> block (ThmOptions.h); Config::ThmOptions as before.
   typedef ::ThmOptions ThmOptions;
   ThmOptions thm;
-  /// A format-3 project as ReadConfigFile read it once (records -> Validate -> <levels> tables -> Schema::Build): the
-  /// <levels> rows and the specs the set-up consumes (src/ProjectSetup.cpp).  Null for an old project, whose specs
-  /// are read from its old sections when the set-up needs them (until step 3d).
-  std::shared_ptr<const azure2::experiment::Format3Project> format3;
+  /// The project as ReadConfigFile read it once (records -> Validate -> <levels> tables -> Schema::Build): the <levels>
+  /// rows and the specs the set-up consumes (src/ProjectSetup.cpp).  Set by every successful ReadConfigFile (a file
+  /// that is not format 3 is refused before it); null only before it.
+  std::shared_ptr<const azure2::experiment::Format3Project> project;
   /// Take P, S and the hard-sphere phase of charged channels from the universal Coulomb
   /// table (CoulombTable) where it covers them; on by default (--no-coulomb-table turns it
   /// off).  Without a table file the run warns once and uses the exact routines.
@@ -215,11 +215,15 @@ class Config {
   static const int maxLOrder = 20;
   /// What ReadConfigFile returns besides 0.
   static constexpr int kConfigUnreadable = -1;      ///< the file cannot be read or has no <config> section
-  static constexpr int kConfigBlockMalformed = -2;  ///< an optional block (<potential>, <thm>) is malformed; reported
+  static constexpr int kConfigBlockMalformed = -2;  ///< the <thm> section is malformed; reported
   static constexpr int kConfigRefused = -3;         ///< a format-3 project is refused; its diagnostics are printed
-  /// Read the <config> block, then the optional <potential> and <thm> blocks: 0, or one of the codes above.
+  /// the file is not a format-3 project (format 1 or 2, or not a project): refused before anything is read, with
+  /// io::NotFormat3Message (docs/upgrade/project_format3.md section 8.4); the command line exits with 3
+  static constexpr int kConfigNotFormat3 = -4;
+  /// Read the project (format 3 only: the records into `project`), its <config> block, its potentials and <thm>: 0, or
+  /// one of the codes above.
   int ReadConfigFile();
-  /// The format-3 branch of ReadConfigFile: reads the project into `format3`; kConfigRefused (with every diagnostic
+  /// The format-3 branch of ReadConfigFile: reads the project into `project`; kConfigRefused (with every diagnostic
   /// printed, the last line from ReportFormat3Refused) when it is refused.
   int ReadFormat3Project(const azure2::io::Document &doc);
   /// The last line of a refused format-3 project, after its diagnostics: the file is refused and --validate lists
@@ -230,11 +234,11 @@ class Config {
    * line ending read as "\n"; to the end of the file if the section is not closed), or null when the file cannot be
    * read or has no such top-level section.  The file is read through InputFiles (cached per cacheInputFiles, so the
    * section is that of the file as it now is) and parsed as an io::Document (docs/upgrade/project.md, Phase 3): a tag
-   * is a whole trimmed line.
+   * is a whole trimmed line.  `openLine`, when given, gets the 1-based line of the section's opening tag.
    */
-  std::unique_ptr<std::istream> SectionStream(const std::string &name) const;
-  /// Reads the <potential> block of the configuration file, if it has one.
-  int ReadPotentialBlock();
+  std::unique_ptr<std::istream> SectionStream(const std::string &name, int *openLine = nullptr) const;
+  /// The hybrid potentials of the project's <potentials> records (project->built.potentials) into `potentials`.
+  void ReadPotentials();
   /// Reads the optional <thm> block. -1 on an unknown key or an unterminated block.
   int ReadThmBlock();
   /// The R-matrix route (<config> first line false) implements neither IGNORE_ZERO_WIDTHS (the A-matrix route leaves

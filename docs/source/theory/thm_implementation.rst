@@ -73,13 +73,17 @@ with every key at its default, gives identical results
    coulombIntegral=0        # 0 | 1
    spectatorEnergy=0        # MeV, every THM entrance pair
    spectatorEnergy[5]=0.4   # MeV, entrance pair 5 only (overrides the above)
-   weight[1]=R_E.dat        # w(E) multiplying the model of <segmentsData> line 1
-   weightTest[2]=R_E.dat    # the same for <segmentsTest> line 2
-   experiment[E1] segments=1,2 background=linear   # see "THM experiments" below
-   experiment[E2] segments=3 beam=14N target=12C spectator=d Ebeam=30 distortion=coulomb
-   experiment[E3] segments=4 theta=50-70   # dsigma/dOmega averaged over theta_cm = 50-70 deg
-   experiment[E4] segments=5 cbackground=1/2+:2=0.1,-0.05   # interfering THM-only background
+   experiment[E1] background=linear   # see "THM experiments" below
+   experiment[E2] beam=14N target=12C spectator=d Ebeam=30 distortion=coulomb
+   experiment[E3] theta=50-70   # dsigma/dOmega averaged over theta_cm = 50-70 deg
+   experiment[E4] cbackground=1/2+:2=0.1,-0.05   # interfering THM-only background
    </thm>
+
+   # in <data>: a data set joins an experiment by its field thm, and takes a weight table w(E) by thm_weight
+   dataset lc10_a0
+       ...
+       thm            E1
+       thm_weight     R_E.dat
 
 An unknown key, an unknown value, a negative spectator energy, a missing
 ``</thm>`` or a bad weight (below) prints ``ERROR: <thm> ...``, and AZURE2
@@ -276,18 +280,13 @@ engine would refuse is not opened in the editor (it is kept as it is).
    that range instead ("Spectator-momentum window" below). The two exclude
    each other for one entrance pair.
 
-``weight`` — energy-dependent weight of one segment's model
-   ``weight[k]=<file>`` multiplies the THM model cross section of segment
-   ``k`` by :math:`w(E)` at every point and at every sub-point of the
+``thm_weight`` — energy-dependent weight of one data set's model
+   The data set's (or extrapolation's) field ``thm_weight <file>`` multiplies
+   its THM model cross section by :math:`w(E)` at every point and at every sub-point of the
    experimental-effect (resolution) folding, i.e. before the folding, with
    :math:`E` the c.m. energy of the THM entrance pair at that (sub-)point.
-   ``k`` is the segment's line number in ``<segmentsData>``, counting inactive
-   lines — the numbering of ``segment_<k>_norm``, of the first column of
-   ``normalizations.out`` and of ``chiSquared.out``, and of the output files
-   (``Segment::GetSegmentKey``). ``weightTest[k]=<file>`` does the same for
-   line ``k`` of ``<segmentsTest>`` (extrapolation of a THM segment with the
-   weighted model; ``<segmentsTest>`` lines are numbered on their own, from 1).
-   A relative path is taken from the directory of the ``.azr`` file; a path
+   On an extrapolation the field does the same for the extrapolated THM
+   model. A relative path is taken from the directory of the ``.azr`` file; a path
    cannot contain ``#`` (it starts a comment).
 
    The file has two columns, :math:`E` (MeV) and :math:`w(E) > 0`, one row per
@@ -422,12 +421,11 @@ in the ``<thm>`` block groups them. Keys may be spread over several lines of
 the same name (they merge; a key given twice is an error). ``<name>`` is
 letters, digits and ``_ - . +``.
 
-``segments=`` (required)
-   ``<segmentsData>`` line numbers, counting inactive lines (the numbering of
-   ``weight[k]``, of ``chiSquared.out`` and of ``normalizations.out``), as a
-   comma list with ranges: ``1,2,5-7``. Each must be a THM segment with a free
-   norm, and in no other experiment. An inactive line is left out with a
-   ``WARNING``.
+The members (no key of the line)
+   A THM data set joins the experiment by its field ``thm <name>`` (format 3;
+   an old ``segments=`` list is refused, ``E_THM_OLD_LIST``, and the converter
+   writes it as these fields). Each member must have a free norm. An
+   experiment that no active data set names is ignored with a ``WARNING``.
 ``background=none|const|linear|quadratic``
    A smooth background added to the model (default ``none``), below.
 ``beam=``, ``target=``, ``spectator=``, ``Ebeam=``
@@ -926,8 +924,8 @@ it -- but the neglected :math:`\eta_{sb} \approx 0.13` is as large as
 :math:`\zeta`. For 2H(18O,α15N)n the spectator is a neutron: :math:`N_C = 1`.
 For 12C(14N,α20Ne / p23Na)d at 30 MeV (Tumino et al. 2018; ``examples/
 c12c12_tumino2018`` at its parameters, the four THM segments one experiment,
-as the example's own line ``experiment[E1] segments=1-4 beam=14N
-target=12C spectator=d Ebeam=30`` has them: ``lineshape=on`` and
+as the example's own line ``experiment[E1] beam=14N
+target=12C spectator=d Ebeam=30`` (its four THM data sets name ``thm E1``) has them: ``lineshape=on`` and
 ``distortion=`` can be switched on there, also in the GUI's THM workspace;
 with both off the example gives data :math:`\chi^2` 111.661, THM 61.02):
 :math:`E_{sF}` = 2.76-0.88 MeV over :math:`E` = 0.82-2.69 MeV,

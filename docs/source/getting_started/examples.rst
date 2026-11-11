@@ -73,7 +73,7 @@ THM (HOES) fits
        557 (2018) 687, Fig. 1; direct: Spillane 2007 (γ-ray production), Tan 2024,
        Nippert 2025, Jiang 2018
      - four exit channels as one experiment with one profiled norm
-       (``experiment[E1] segments=1-4`` with the three-body kinematics, so
+       (``experiment[E1]`` with the three-body kinematics, named by the four THM data sets, so
        the line shape, :math:`R(E)` and the DW vertex can be switched on);
        an identical-boson entrance pair
      - 112.086 (111.661 + 0.425) / 247; THM 61.02 / 192; direct norms

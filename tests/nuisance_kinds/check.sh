@@ -17,6 +17,8 @@
 #   cbkg        tests/thm_coherent_background/toy with cbackground=1/2+:2=0.05,-0.08 (Re c0, Im c0 free), row
 #               "cbkg_E_1/2+_2_1/2,0,1/2,0_re0 0 0 0 0.01 0 1 ..." -> chi2 of the run without the row
 #               + ((0.05 - 0)/0.01)^2 = 25 (rel 1e-6): the prior is applied with its centre and width as given
+#   unknown     the screening row under the old name screening_1, which no parameter has -> ignored with
+#               W_PARAMETER_SETTING_UNKNOWN (its line and name), chi2 of the run without the row
 # The "Total Chi-Squared:" line on stdout includes the priors.
 #
 #   ./tests/nuisance_kinds/check.sh path/to/AZURE2
@@ -54,6 +56,7 @@ THM='<thm>\nexperiment[E] cbackground=1/2+:2=0.05,-0.08\n</thm>\n'
 s0="$(run s0 "$SCR" fit.azr "")"
 SCREENING=tgt_cruz_metal.screening
 s1="$(run s1 "$SCR" fit.azr "<parameterSettings>\n$SCREENING 300 0 1000 50 0 1 screening 0\n</parameterSettings>\n")"
+s2="$(run s2 "$SCR" fit.azr "<parameterSettings>\nscreening_1 300 0 1000 50 0 1 screening 0\n</parameterSettings>\n")"
 t0="$(run t0 "$TOY" toy.azr "$THM")"
 t1="$(run t1 "$TOY" toy.azr "$THM"'<parameterSettings>\ncbkg_E_1/2+_2_1/2,0,1/2,0_re0 0 0 0 0.01 0 1 level 0\n</parameterSettings>\n')"
 echo "  chi2: screening $s0, with its nuisance row $s1;  cbkg $t0, with its nuisance row $t1"
@@ -65,6 +68,14 @@ elif [ "$(cat "$WORK/s1/status")" = 0 ] && [ -n "$s1" ] && [ "$s1" = "$s0" ]; th
   echo "  ok    screening: a nuisance row on $SCREENING runs and adds nothing (its own prior)"
 else
   echo "  FAIL  screening: status $(cat "$WORK/s1/status"), chi2 '$s1' (without the row '$s0')"; tail -3 "$WORK/s1/run.log"; bad=1
+fi
+# a row naming no parameter (the old name of the screening potential) is ignored with a warning: its line and name
+row=$(( $(tr -d '\r' < "$SCR/fit.azr" | wc -l) + 2 ))
+UNKNOWN="WARNING: run.azr:$row: warning W_PARAMETER_SETTING_UNKNOWN: <parameterSettings> names 'screening_1', which is no parameter of this project; the row is ignored"
+if [ "$(grep -cF "$UNKNOWN" "$WORK/s2/run.log")" -ge 1 ] && [ "$s2" = "$s0" ] && ! grep -q W_PARAMETER_SETTING_UNKNOWN "$WORK/s1/run.log"; then
+  echo "  ok    a row naming no parameter (screening_1): W_PARAMETER_SETTING_UNKNOWN with its line and name, chi2 unchanged"
+else
+  echo "  FAIL  a row naming no parameter: '$(grep -m1 W_PARAMETER_SETTING "$WORK/s2/run.log")', chi2 '$s2' (without the row '$s0')"; bad=1
 fi
 if [ "$(cat "$WORK/t1/status")" = 0 ] && [ -n "$t0" ] && [ -n "$t1" ] &&
    awk -v a="$t1" -v z="$t0" 'BEGIN { d = (a - z) / 25 - 1; if (d < 0) d = -d; exit !(d < 1e-6) }'; then

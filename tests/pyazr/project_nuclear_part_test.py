@@ -215,6 +215,9 @@ for what, call, text in (
         check(f"(g) {what} refused", False, "no error")
     except FormatError as e:
         check(f"(g) {what} refused, the project unchanged", t.to_bytes() == before and text in str(e), str(e)[:200])
+        if "experiment key" in what or what == "segments=":
+            check(f"(g) {what}: the experiment named once ('{str(e)[:40]}...')",
+                  str(e).startswith("<thm> experiment[LC10]: ") and str(e).count("experiment[LC10]") == 1, str(e)[:200])
 
 print()
 if failures:

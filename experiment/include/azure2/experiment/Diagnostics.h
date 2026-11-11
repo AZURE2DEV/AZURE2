@@ -160,6 +160,8 @@ constexpr const char *kOldPotentialBlock = "E_OLD_POTENTIAL_BLOCK";
 // The names of a parameter file given as a run's start (ParameterFileNames.h)
 constexpr const char *kParameterFileNoMatch = "E_PARAMETER_FILE_NO_MATCH";
 constexpr const char *kParameterFileNames = "W_PARAMETER_FILE_NAMES";
+// A <parameterSettings> row that names no parameter (ParameterFileNames.h)
+constexpr const char *kParameterSettingUnknown = "W_PARAMETER_SETTING_UNKNOWN";
 // Spin-orbit terms (a potential record's spin_orbit, pyazr, the API: SpinOrbitChecks.h)
 constexpr const char *kSoTwoSpins = "E_SO_TWO_SPINS";
 constexpr const char *kSoZeroSpin = "E_SO_ZERO_SPIN";

@@ -1,4 +1,4 @@
-// The converter old -> format 3 (Convert.h): format 2 first (io::ConvertToFormat2), the old sections read
+// The converter old -> format 3 (Convert.h): format 2 first (ConvertToFormat2, Format2.cpp), the old sections read
 // (OldProject.cpp), the records built (Build.cpp), the document assembled here and validated with the table.
 #include "azure2/convert/Convert.h"
 
@@ -9,7 +9,7 @@
 #include "azure2/experiment/Json.h"
 #include "azure2/experiment/ProjectReader.h"
 #include "azure2/experiment/Schema.h"
-#include "azure2/io/Convert.h"
+#include "azure2/io/ProjectFormat.h"
 #include "azure2/io/Document.h"
 #include "azure2/io/RecordReader.h"
 
@@ -111,27 +111,50 @@ std::string ReadAnswersJson(const std::string &text, std::map<std::string, std::
   }
 }
 
-std::string NotFormat3Message(const std::string &text, const std::string &fileName) {
-  const io::Document doc = io::Document::Parse(text);
-  if (io::FormatOf(doc) == 3) {
-    for (const std::string &name : kOldSections)
-      if (const io::Document::Section *s = doc.Find(name))
-        return fileName + " says format=3 but holds <" + name + "> (line " + std::to_string(s->open + 1) +
-               "), a section of format 2; convert the original with AZURE2 --convert OLD NEW --to 3";
-    return "";
-  }
-  std::string where;
-  for (const std::string &name : kOldSections)
-    if (const io::Document::Section *s = doc.Find(name)) {
-      where = " (<" + name + "> at line " + std::to_string(s->open + 1) + ")";
-      break;
+std::string RenameParameterFile(const std::string &text, const std::vector<std::pair<std::string, std::string>> &names,
+                                std::vector<std::pair<std::string, std::string>> &renamed) {
+  const std::map<std::string, std::string> map(names.begin(), names.end());
+  std::string out;
+  std::size_t start = 0;
+  while (start < text.size()) {
+    std::size_t end = text.find('\n', start);
+    end = end == std::string::npos ? text.size() : end + 1;
+    const std::string line = text.substr(start, end - start);
+    start = end;
+    const std::size_t a = line.find_first_not_of(" \t");
+    const std::size_t b = a == std::string::npos ? a : line.find_first_of(" \t\r\n", a);
+    const auto it = a == std::string::npos ? map.end() : map.find(line.substr(a, b - a));
+    if (it == map.end()) {
+      out += line;
+      continue;
     }
-  const std::string format = std::to_string(io::FormatOf(doc));
-  return fileName + " is a format-" + format + " project" + where +
-         ". This command reads format 3 only.\n"
-         "       Convert it:  AZURE2 --convert " + fileName + " NEW.azr --to 3     (or pyazr.convert_azr(\"" + fileName +
-         "\", \"NEW.azr\", to=3))\n"
-         "       The converter keeps " + fileName + " unchanged and reports every change it makes.";
+    renamed.push_back(*it);
+    // the name ends where it ended (a right-aligned column), or one blank after a line start that had blanks
+    const std::size_t width = b, size = it->second.size();
+    const std::size_t pad = a == 0 ? 0 : (width > size + 1 ? width - size : 1);
+    out += std::string(pad, ' ') + it->second + line.substr(b);
+  }
+  return out;
+}
+
+ParameterFileConversion ConvertParameterFile(const std::string &parameterText, const std::string &oldProjectText,
+                                             const std::string &projectDir) {
+  ParameterFileConversion out;
+  if (io::FormatOf(io::Document::Parse(oldProjectText)) == 3) {
+    out.refusal = "the project is format 3; give the old project the parameter file was written for (the converter "
+                  "keeps it unchanged): the names come from its conversion";
+    return out;
+  }
+  ConvertOptions o;
+  o.projectDir = projectDir;
+  o.allowQuestions = true;
+  const ConvertResult r = ConvertToFormat3(oldProjectText, o);
+  if (!r.ok) {
+    out.refusal = "the project is not converted: " + r.refusal;
+    return out;
+  }
+  out.text = RenameParameterFile(parameterText, r.parameterNames, out.renamed);
+  return out;
 }
 
 ConvertResult ConvertToFormat3(const std::string &oldText, const ConvertOptions &options) {
@@ -145,7 +168,7 @@ ConvertResult ConvertToFormat3(const std::string &oldText, const ConvertOptions 
     res.refusal = "the project's sections cannot be read: " + p;
     return res;
   }
-  res.format2Changes = io::ConvertToFormat2(doc);
+  res.format2Changes = ConvertToFormat2(doc);
 
   OldProject old;
   std::string why = ReadOldProject(doc, old);

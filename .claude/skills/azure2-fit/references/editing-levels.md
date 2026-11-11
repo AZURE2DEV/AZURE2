@@ -1,7 +1,7 @@
 # Editing the model and snapshotting a fit
 
 The engine reads its model from the `.azr`, so an edited level scheme is applied by writing a new `.azr` and opening a
-fresh session on it. `pyazr.Project` (format 3 only; an old file is refused with `AZURE2 --convert OLD NEW --to 3`)
+fresh session on it. `pyazr.Project` (format 3 only; an old file is refused with `AZURE2 --convert OLD NEW`)
 edits the `<levels>` rows, the records, `<config>` and `<thm>` through the engine's grammars; the lines an edit does
 not touch keep their bytes and nothing is written until `save`. This page covers adding, removing and deactivating
 levels and channels, other edits, and `save_fit`, which writes a fit back to a `.azr` plus its `param.sav`. Building a

@@ -10,7 +10,8 @@
 #   2. the gradient: d chi2 / d N from finite differences agrees with the Jacobian path (AZURE_GRAD_CHECK);
 #   3. a 2 % prior about 1e18 pulls the fit between the two, Total-Density-Chi-Squared = ((N - 1e18)/2e16)^2;
 #   4. a density group: two segments, one parameter (t.areal_density, no other), recovered from both;
-#   5. densityfit on a line without target integration is refused.
+#   5. densityfit on a line without target integration is refused (by the converter);
+#   6. a density beyond the target's grid_max (from a parameter file): one warning with the parameter's name.
 #
 #   ./tests/target_density/check.sh path/to/AZURE2
 
@@ -113,6 +114,17 @@ else bad "no converter note about the group member's own density"; fi
 if grep -q "densityfit / densitygroup need target integration" "$WORK/bad_conv.log" && [ ! -f "$WORK/bad_conv.azr" ]; then
   ok "densityfit on a line without target integration is refused (by the converter)"
 else bad "densityfit without target integration was not refused"; tail -3 "$WORK/bad_conv.log"; fi
+
+# ---- 6. a value beyond the grids ----------------------------------------------------------------
+# a parameter file that puts the group's density above its grid_max (1.5e18): the calculation uses the grid's end and
+# says so once, naming the parameter by its format-3 name and the field to widen
+run over "$HERE/fit_group.azr" 1 ""
+printf '    t.areal_density   2.0000000e+18   1.0000000e+16\n' > "$WORK/over/over.sav"
+(cd "$WORK/over" && printf '1\nover.sav\n\n7\n' | run_limited 900 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+said="$(grep -c "WARNING: t.areal_density = 2e+18 is outside \[1e+16, 1.5e+18\], the range its sub-point grids span; the calculation uses the nearest end.  Give the target's areal_density a larger grid_max." "$WORK/over/run.log")"
+if [ "$said" = 1 ] && ! grep -q "density_[0-9]\|densityfit" "$WORK/over/run.log"; then
+  ok "a density beyond grid_max: one warning naming t.areal_density and grid_max"
+else bad "a density beyond grid_max: warning lines $said: $(grep -m1 'is outside' "$WORK/over/run.log")"; fi
 
 if [ "$failures" -eq 0 ]; then echo "PASS target_density"; exit 0; fi
 echo "FAIL target_density ($failures)"; exit 1

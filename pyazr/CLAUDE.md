@@ -19,8 +19,9 @@ public names are a contract.
   project must round-trip **byte for byte** (any layout, any line ending), and
   an edit changes only the lines it edits (`tests/pyazr/project_test.py`,
   `azr_layout_test.py`). A format-1/2 file is refused in one place,
-  `project.require_format3` (the engine's message names `AZURE2 --convert
-  OLD NEW --to 3`); `convert.py` is the converter's binding.
+  `project.require_format3` (the engine's message, io::NotFormat3Message, names
+  `AZURE2 --convert OLD NEW`); `convert.py` is the converter's binding
+  (`convert_azr`, `convert_params`).
 - `transform.py` is a Python port of the engine's `TransformOut`, and
   `widths.py` and `bands.py` re-derive engine quantities. Any such duplicate
   needs a test against the engine (see `tests/pyazr/`). Where possible, call

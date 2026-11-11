@@ -57,7 +57,7 @@ class TargetEffect {
    */
   bool HasScreening() const { return hasScreening_; }
   /*!
-   * Its place among the active <targetInt> lines (1-based; 0 until read).  A
+   * Its place among the active target effects (1-based; 0 until read).  A
    * line listing several segments gives each segment its own copy of the
    * effect (WorkingCopy::ReadTargetEffectsFile), so effect numbers and lines differ;
    * a screening parameter belongs to the line, shared by its copies.
@@ -107,7 +107,7 @@ class TargetEffect {
   bool IsDensityVaried() const { return densityVary_; }
   /// The line's density, the centre of the prior (atoms/cm^2).
   double GetDensityNominal() const { return densityNominal_; }
-  /// The target's name in format 3, which names the effect's parameters ("" for an old <targetInt> line).
+  /// The name of the target record, which names the effect's parameters ("" for an effect without a target).
   const std::string &GetTargetName() const { return targetName_; }
   /// Prior width in atoms/cm^2 (a percentage already converted), 0 = no prior.
   double GetDensitySigma() const { return densitySigma_; }
@@ -284,7 +284,7 @@ class TargetEffect {
   /// a Gaussian detector-resolution window per point and, optionally, the
   /// detailed-balance weight of an inverse photodissociation measurement.
   /// Written as the trailing block `beamprofile N {xi omega alpha w}xN
-  /// tpcSigma nCut dbFlag` of a targetInt line, energies in the lab frame.
+  /// tpcSigma nCut dbFlag` of the old line (a beam's profile field in format 3), energies in the lab frame.
   bool IsBeamProfile() const;
   /// Any effect whose yield is an integral over sub-points.
   bool IsSubPointEffect() const;
@@ -354,7 +354,7 @@ class TargetEffect {
   /// SAMMY's UDR format, convolved with a Gaussian burst and a rectangular
   /// channel width.  Written as the trailing block
   /// `udr "<file>" flightPath_m burstFWHM_ns channel_ns centred` of a
-  /// targetInt line; a negative channel value is |n| bins per decade of
+  /// the old line (a detector's udr field in format 3); a negative channel value is |n| bins per decade of
   /// energy (logarithmic binning), i.e. a width of t ln(10)/(2n) in time.
   bool IsUdr() const;
   const std::string &GetUdrFile() const;

@@ -14,7 +14,7 @@ class Config;
 /*!
  * The stopping of one target, the one place the engine asks for it (docs/upgrade/energy_grid.md section 6.1):
  * epsilon_active(E), lab MeV cm^2 per atom of the active element, at lab energy E (MeV) of the projectile, from one of
- *   - formula:    the record's expression (the Equation of the old <targetInt> line), already per active nucleus;
+ *   - formula:    the record's expression (an Equation), already per active nucleus;
  *   - evaluation: SRIM-2013's stopping of the composition (stopping/'s Stopping(): Bragg's rule with SRIM's phase factor
  *                 and compound correction; cite SRIM, stopping::kSrimCitation);
  *   - table:      a user table of the composition's stopping (stopping/'s UserStopping, read by ReadStoppingTable).

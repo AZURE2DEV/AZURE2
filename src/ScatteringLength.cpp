@@ -1,5 +1,4 @@
 #include "ScatteringLength.h"
-#include "azure2/convert/ScatteringLengthLine.h"
 #include "AMatrixFunc.h"
 #include "AZUREGrad.h"
 #include "AChannel.h"
@@ -142,45 +141,6 @@ std::string ResolveConstraint(CNuc *compound, Constraint &c) {
   return "";
 }
 
-int ReadConstraints(CNuc *compound, const Config &configure, std::vector<Constraint> &constraints) {
-  constraints.clear();
-  std::unique_ptr<std::istream> section = configure.SectionStream("scatteringLengths");
-  if (!section) return 0;
-  std::istream &in = *section;
-  std::string line;
-  getline(in, line);  // <scatteringLengths>
-  int n = 0;
-  auto error = [&](const std::string &what) {
-    configure.outStream << "ERROR: <scatteringLengths> line " << n << ": " << what << "." << std::endl;
-    return -1;
-  };
-  while (getline(in, line)) {
-    if (line.find("</scatteringLengths>") != std::string::npos) break;
-    n++;
-    // The line's fields (convert/'s ScatteringLengthLine.h: the one reader of the old grammar, shared with the
-    // converter to format 3).
-    const azure2::convert::ScatteringLengthLine read = azure2::convert::ReadScatteringLengthLine(line);
-    if (read.kind == azure2::convert::ScatteringLengthLine::Blank) continue;
-    if (read.kind == azure2::convert::ScatteringLengthLine::Malformed) return error(read.error);
-    Constraint c;
-    c.pairKey = read.pairKey;
-    c.s = read.s;
-    c.value = read.value;
-    c.sigma = read.sigma;
-    if (read.hasImaginary) {
-      c.imValue = read.imValue;
-      c.imSigma = read.imSigma;
-    }
-    c.active = (read.active != 0);
-    c.line = n;
-    if (c.sigma < 0.0 || c.imSigma < 0.0) return error("uncertainties must not be negative");
-    const std::string why = ResolveConstraint(compound, c);
-    if (!why.empty()) return error(why);
-    constraints.push_back(c);
-  }
-  return (int)constraints.size();
-}
-
 complex ConstraintValue(CNuc *compound, const Config &configure, const Constraint &c) {
   complex a(0.0, 0.0);
   for (size_t t = 0; t < c.terms.size(); t++) a += c.weights[t] * Evaluate(compound, configure, c.terms[t]).a0;
@@ -192,30 +152,11 @@ int NumResiduals(const Constraint &c) {
   return (c.sigma > 0.0 ? 1 : 0) + (c.imSigma > 0.0 ? 1 : 0);
 }
 
-int NumResiduals(const std::vector<Constraint> &constraints) {
-  int n = 0;
-  for (const Constraint &c : constraints) n += NumResiduals(c);
-  return n;
-}
-
 void ConstraintResiduals(CNuc *compound, const Config &configure, const Constraint &c, std::vector<double> &r) {
   if (!c.active || (c.sigma <= 0.0 && c.imSigma <= 0.0)) return;
   complex a = ConstraintValue(compound, configure, c);
   if (c.sigma > 0.0) r.push_back((std::real(a) - c.value) / c.sigma);
   if (c.imSigma > 0.0) r.push_back((std::imag(a) - c.imValue) / c.imSigma);
-}
-
-void Residuals(CNuc *compound, const Config &configure, const std::vector<Constraint> &constraints,
-               std::vector<double> &r) {
-  for (const Constraint &c : constraints) ConstraintResiduals(compound, configure, c, r);
-}
-
-double Chi2(CNuc *compound, const Config &configure, const std::vector<Constraint> &constraints) {
-  std::vector<double> r;
-  Residuals(compound, configure, constraints, r);
-  double chi2 = 0.0;
-  for (double x : r) chi2 += x * x;
-  return chi2;
 }
 
 bool ConstraintGradient(CNuc *compound, const Config &configure, const Constraint &c, GradAccum &accum,
@@ -240,22 +181,7 @@ bool ConstraintGradient(CNuc *compound, const Config &configure, const Constrain
   return true;
 }
 
-bool Chi2Gradient(CNuc *compound, const Config &configure, const std::vector<Constraint> &constraints,
-                  GradAccum &accum, const vector_matrix_r *shiftDeriv, int residual) {
-  int first = 0;  // the first row of constraint c
-  for (const Constraint &c : constraints) {
-    const int n = NumResiduals(c);
-    if (residual < 0) {
-      if (!ConstraintGradient(compound, configure, c, accum, shiftDeriv, -1)) return false;
-    } else if (residual < first + n) {
-      return ConstraintGradient(compound, configure, c, accum, shiftDeriv, residual - first);
-    }
-    first += n;
-  }
-  return true;
-}
-
-std::string Report(CNuc *compound, const Config &configure, const std::vector<Constraint> &constraints) {
+std::string Report(CNuc *compound, const Config &configure) {
   std::ostringstream out;
   out << "s-wave scattering lengths at each particle pair's threshold" << std::endl
       << "(a0 = -a [M/(x^2 K1^2) - 2 I1/(x^2 K1)], M = gamma^T A gamma at E = 0; Paneru et al., "
@@ -276,27 +202,6 @@ std::string Report(CNuc *compound, const Config &configure, const std::vector<Co
       out << std::defaultfloat << std::endl;
     }
   }
-  bool any = false;
-  double total = 0.0;
-  for (const Constraint &c : constraints) {
-    if (!any) {
-      out << "Constraints (<scatteringLengths>):" << std::endl;
-      any = true;
-    }
-    complex a = ConstraintValue(compound, configure, c);
-    double chi2 = 0.0;
-    if (c.active && c.sigma > 0.0) chi2 += pow((std::real(a) - c.value) / c.sigma, 2);
-    if (c.active && c.imSigma > 0.0) chi2 += pow((std::imag(a) - c.imValue) / c.imSigma, 2);
-    total += chi2;
-    out << "  line " << c.line << ": pair " << c.pairKey << ", "
-        << (c.s < 0.0 ? std::string("coherent (spin-weighted)") : "s = " + AZURELabel::Spin(c.s))
-        << (c.active ? "" : " (inactive)") << ": model " << std::real(a);
-    if (std::imag(a) != 0.0) out << (std::imag(a) < 0 ? " - " : " + ") << fabs(std::imag(a)) << " i";
-    out << " fm, measured " << c.value << " +- " << c.sigma;
-    if (c.imSigma > 0.0) out << ", Im " << c.imValue << " +- " << c.imSigma;
-    out << " fm, chi2 " << chi2 << std::endl;
-  }
-  if (any) out << "  total scattering-length chi2 " << total << std::endl;
   return out.str();
 }
 

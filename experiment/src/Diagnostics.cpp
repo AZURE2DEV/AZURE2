@@ -113,6 +113,7 @@ const std::vector<DiagnosticCode> &DiagnosticCodes() {
       {kOldPotentialBlock, E, "the old <potential> block in a format-3 project (AZURE2 --convert writes potential records)"},
       {kParameterFileNoMatch, E, "a parameter file (param.sav as a run's start) none of whose names is a parameter of the run"},
       {kParameterFileNames, Severity::Warning, "a parameter file with names the project has no parameter for, or without names of parameters it has"},
+      {kParameterSettingUnknown, Severity::Warning, "a <parameterSettings> row that names no parameter of the project (ignored)"},
       {kSoTwoSpins, E, "a spin-orbit term on a pair whose two particles both have spin (the coupled treatment is not implemented)"},
       {kSoZeroSpin, E, "a spin-orbit term acting on a particle of spin 0 (it would vanish)"},
       {kSoRelativistic, E, "a spin-orbit term in a project with relativistic kinematics"},

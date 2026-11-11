@@ -27,6 +27,7 @@ struct ParameterSetting {
   int minuitIndex;  // Minuit2 parameter index
   /// Stored under a parameter's own name (the one-token form): matched by that name or not at all.
   bool parameterNameForm = false;
+  int line = 0;  ///< 1-based line of the row in the project file
 };
 
 class ParameterLimitsManager {
@@ -99,6 +100,9 @@ class ParameterLimitsManager {
    * matched.  Must be called before any ...ByIndex() lookup.
    */
   void BuildIndexMap(const AZUREParams &params);
+  /// W_PARAMETER_SETTING_UNKNOWN for each row stored under a name that is no parameter of the project
+  /// (experiment::UnknownParameterSettings): such a row is ignored.
+  void WarnUnknownSettings(const AZUREParams &params) const;
   ParameterSetting *SettingForIndex(int nonFixedIndex) const;
 };
 
