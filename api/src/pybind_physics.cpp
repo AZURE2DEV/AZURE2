@@ -164,7 +164,10 @@ py::array_t<double> SFactorConversions(const azure2::physics::ChannelKinematics 
 
 }  // namespace
 
+void BindStopping(py::module_ &parent);  // pybind_stopping.cpp: stopping/, the submodule _azure2.stopping
+
 void BindPhysics(py::module_ &m) {
+  BindStopping(m);
   m.def(
       "sfactor_conversion",
       [](int z1, int z2, double m1_u, double m2_u, const Array &e_cm) {

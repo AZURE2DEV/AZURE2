@@ -829,6 +829,22 @@ copy of the engine's GSL path.
    w = pyazr.whittaker_wave(1, eta_b=2.3, rho=np.linspace(0.1, 10, 100))
    w["W"], w["rho_dlog"]
 
+Stopping powers need no session either: ``pyazr.stopping`` is AZURE2's stopping library, SRIM-2013's stopping
+powers ported from LunaSRIM (cite SRIM: ``pyazr.stopping.CITATION``), the same numbers a target with ``stopping
+evaluation`` uses.  Energies are lab MeV of the projectile, stopping cross sections eV/(10\ :sup:`15` atoms/cm\ :sup:`2`)
+per atom of the material, areal densities atoms/cm\ :sup:`2` of the material, widths MeV:
+
+.. code-block:: python
+
+   from pyazr import stopping
+   ta2o5 = stopping.Material("Ta2O5")                    # solid; phase="gas" for a gaseous compound
+   eps = stopping.stopping(ta2o5, "p", [0.2, 0.5, 1.0])  # dict: electronic, nuclear, total, rel_uncertainty
+   per_o = eps["total"] / ta2o5.atom_fraction(8)         # per O atom: the engine's stopping per active 18O
+   stopping.energy_after(ta2o5, "p", [1.0], [1e18])      # MeV after 1e18 atoms/cm2
+   stopping.straggling(ta2o5, "a", [2.0], [1e18], beam_sigma=[0.001])["total"]
+   stopping.range_of(ta2o5, (6, 12.0), [10.0])           # a 12C ion: (Z1, mass in u)
+   print(stopping.provenance(ta2o5, "p"))                # SRIM-2013, the citation, the data per element
+
 A rebuild of the model (``set_channel_radius``, a nuclear-potential change, a mode switch) reads no input
 file that has not changed on disk (the ``input_files_*`` counters, for the whole process) and does not
 print the setup ``Note:`` lines again: a session prints each once. Before

@@ -12,6 +12,7 @@ from .parameters import (Pair, PairSet, Parameter, ParameterSet, LevelKey,
 from .scheme import LevelScheme, SchemeLevel, SchemeChannel
 from .azrfile import AzrModel, AzrLevel, AzrChannel, ScatteringLengthLine, PairMassCheck, convert_azr
 from . import masses
+from . import stopping
 from .physics import whittaker_wave
 from .datasets import (Segment, SegmentSet, TestSegment, TestSegmentSet,
                        fitted_norms)
@@ -52,7 +53,7 @@ __all__ = ["azure2", "convert_azr", "ScatteringLength", "ScatteringLengthLine", 
            "Pair", "PairSet", "Parameter", "ParameterSet", "LevelKey",
            "NuclearPotential",
            "LevelScheme", "SchemeLevel", "SchemeChannel",
-           "AzrModel", "AzrLevel", "AzrChannel", "PairMassCheck", "masses",
+           "AzrModel", "AzrLevel", "AzrChannel", "PairMassCheck", "masses", "stopping",
            "Segment", "SegmentSet", "TestSegment", "TestSegmentSet",
            "fitted_norms",
            "ExforData", "ExforDataset", "GroundState", "Gamma",
@@ -77,4 +78,4 @@ __all__ = ["azure2", "convert_azr", "ScatteringLength", "ScatteringLengthLine", 
            "Project", "Record", "Nuisance", "FormatError", "records_from_csv",
            "ProjectLevel", "ProjectChannel", "ProjectPair",
            "DescribedDataset", "DescribedDatasets", "DescribedExtrapolation", "DescribedExtrapolations"]
-__version__ = '2.32.0'
+__version__ = '2.33.0'

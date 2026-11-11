@@ -836,3 +836,10 @@ add_test(NAME pyazr_project_nuclear_part
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/project_nuclear_part_test.py)
 set_tests_properties(pyazr_project_nuclear_part PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# pyazr.stopping: the binding of stopping/ (SRIM-2013 through LunaSRIM) against LunaSRIM's reference values
+# (stopping/tests/data/srim_reference.csv), the same tolerances as the C++ tests.
+add_test(NAME pyazr_stopping
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/stopping_test.py)
+set_tests_properties(pyazr_stopping PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
