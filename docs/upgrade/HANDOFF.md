@@ -28,9 +28,19 @@ components, largest relative difference to central differences 1.2e-9, the same 
 (1 thread, `--no-coulomb-table`, 5 runs alternated with `b-trial12`, minimum): T2 calculation 3.310e9 against 3.303e9
 (+0.2 %), 13N_capture_ay calculation 6.765e9 against 6.762e9 (+0.05 %); instructions +0.002 % and -0.004 %.
 
-**Open.** Steps 3 and 8 (after the data classes are replaced).  Found: two photon pairs with the same final state load,
-and capture into the first runs without external capture and without a message (`ParseExternalCapture`, §11.12);
-two final states cannot share one photon pair.
+**Two photon pairs with one final state are refused** (the director's decision): `ParseExternalCapture` stops with an
+ERROR naming both pair keys and the level (`FinalStateOfAnotherPair`, `src/CNucExternalCapture.cpp`); before, the
+second pair took the level and capture into the first ran without its external part and without a message
+(1.95e-9 against 4.32e-9).  Format 3 goes through the same function.  `tests/ec_final_state_ambiguous/check.sh` (d) the
+two-pair model, (e) its format-3 conversion (converted, refused when run); shown failing with the check disabled.
+Verified on that commit: 183 x 3 against `tab-trial12` (tag `tab-twopair`) 726 / 699 / 726 identical, no project
+newly refused; `ctest -LE slow` 178/178; `tests/run_tests.sh` 145 passed, 0 failed (the cases are in the existing
+project, so the count stays 145); gate (`gtwopair`) 483 (456) identical, 38 classified, 0 differ, 0 missing.  Two final states cannot share one photon pair
+(a second level in the 1 keV window is refused already).
+
+**Open.** Steps 3 and 8 (after the data classes are replaced).  Follow-up: the format-3 validation could refuse two
+photon pairs with one final state earlier, with a diagnostic code (not added: the schema and validation of
+`experiment/` are being edited by another agent); today the converter writes such a file and the run refuses it.
 
 ## 2026-11-11 (director, night) — the seventh wave merged: units, the measurement held once, spin–orbit, the pathway table
 
