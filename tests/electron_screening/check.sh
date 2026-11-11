@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
-# Electron screening (a "screening Ue vary sigma" block on a <targetInt> line).  Models from
-# make_models.py: tests/13N with only the low-energy capture segments 6, 7 (LUNA) and 8 (FELS) active.
+# Electron screening (the "screening <U_e> eV fixed|fit [prior c s]" field of a target record).  Models: tests/13N with
+# only the low-energy capture data sets 6, 7 (LUNA) and 8 (FELS) active (made by make_models.py from the old 13N, then
+# converted; bad.azr, the old block without its numbers, stays old: the converter's refusal).
 #
 #   1. screened / bare = exp(pi eta U_e / E) point by point on segments 6 and 7, segment 8 untouched;
 #   2. the factor acts inside a target effect: a Gaussian beam spread of 1e-6 MeV gives the plain result;
@@ -9,7 +10,8 @@
 #      spread of 2 keV (sub-points) and a prior;
 #   4. MIGRAD and --use-lm recover U_e = 1000 eV from data made with it (levels fixed), and a prior pulls
 #      the fit towards its centre, with Total-Screening-Chi-Squared in chiSquared.out;
-#   5. a screening block without its three numbers is refused.
+#   5. an old screening block without its three numbers is refused (by the converter; the old file
+#      tests/convert/fixtures/tests/electron_screening/bad.azr).
 #
 #   ./tests/electron_screening/check.sh path/to/AZURE2
 
@@ -108,7 +110,7 @@ if [ -s "$(out scr)" ]; then
       lv && NF > 20 { $4 = 1; $11 = 1 }
       { sub(/data\/skowronski_luna_hpge.dat/, "fitdata/skowronski_luna_hpge.dat")
         sub(/data\/skowronski_luna_bgo.dat/, "fitdata/skowronski_luna_bgo.dat")
-        sub(/screening  1000  0  0/, "screening  " ue "  1  " sig) }
+        if ($1 == "screening") $0 = "    screening      " ue " eV fit" (sig > 0 ? " prior " ue " " sig : "") }
       { print }' "$HERE/scr.azr"
   }
   mkfit 300 0 > "$WORK/fit.azr"
@@ -116,13 +118,13 @@ if [ -s "$(out scr)" ]; then
   for v in "fit:--use-gradient" "fit_lm:--use-lm"; do
     name="${v%%:*}"; flags="${v#*:}"
     run "$name" "$WORK/fit.azr" 2 "$flags" OMP_NUM_THREADS="$OMP_NUM_THREADS"
-    ue="$(par "$name" screening_1)"
+    ue="$(par "$name" tgt_targetInt3.screening)"
     if [ -n "$ue" ] && awk -v u="$ue" 'BEGIN { d = u / 1000 - 1; if (d < 0) d = -d; exit !(d < 1e-3) }'; then
       ok "$name ($flags): U_e $ue eV from 300 (truth 1000)"
     else bad "$name ($flags): U_e ${ue:-missing}, expected 1000"; tail -5 "$WORK/$name/run.log"; fi
   done
   run fit_prior "$WORK/fit_prior.azr" 2 "--use-gradient" OMP_NUM_THREADS="$OMP_NUM_THREADS"
-  ue="$(par fit_prior screening_1)"
+  ue="$(par fit_prior tgt_targetInt3.screening)"
   sc="$(sed -n 's/.*Total-Screening-Chi-Squared: \([^ ]*\).*/\1/p' "$WORK/fit_prior/output/chiSquared.out" | head -1)"
   if [ -n "$ue" ] && [ -n "$sc" ] && awk -v u="$ue" -v s="$sc" 'BEGIN { p = ((u - 300) / 50)^2; d = s - p; if (d < 0) d = -d
          exit !(u > 300 && u < 1000 && d <= 1e-4 * (p + 1)) }'; then
@@ -133,10 +135,10 @@ else
 fi
 
 # ---- 5. a malformed block ---------------------------------------------------------------
-run bad "$HERE/bad.azr" 1 "" OMP_NUM_THREADS="$OMP_NUM_THREADS"
-if grep -q "a screening block is 'screening Ue_eV vary sigma_eV'" "$WORK/bad/run.log" && [ ! -s "$(out bad)" ]; then
-  ok "a screening block without its sigma is refused"
-else bad "a malformed screening block was not refused"; tail -5 "$WORK/bad/run.log"; fi
+(cd "$HERE" && "$AZURE2_BIN" --convert "$HERE/../convert/fixtures/tests/electron_screening/bad.azr" "$WORK/bad.azr" --to 3 > "$WORK/bad.log" 2>&1)
+if grep -q "a screening block is 'screening Ue_eV vary sigma_eV'" "$WORK/bad.log" && [ ! -f "$WORK/bad.azr" ]; then
+  ok "a screening block without its sigma is refused (by the converter)"
+else bad "a malformed screening block was not refused"; tail -5 "$WORK/bad.log"; fi
 
 if [ "$failures" -eq 0 ]; then echo "PASS electron_screening"; exit 0; fi
 echo "FAIL electron_screening ($failures)"; exit 1

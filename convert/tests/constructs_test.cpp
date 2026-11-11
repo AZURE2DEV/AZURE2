@@ -489,6 +489,13 @@ int main(int argc, char **argv) {
     check("a line in a shift group and a shift-function group: refused",
           !b.ok && b.refusal.find("is in shift group 'G' and in shift-function group 'F'") != std::string::npos);
   }
+  // ---- densityfit on a line without target integration: refused by the old engine (TargetEffect), so by the converter
+  {
+    const ConvertResult r = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 y1.dat\n", "",
+                                     "1 \"1\" 40 1 0.0008 0 1e18 \"a0\" 1 6e-20 0 0 0 \"\" 0 densityfit 1 10%\n", "", ""});
+    check("densityfit without target integration: refused",
+          !r.ok && r.refusal.find("densityfit / densitygroup need target integration with a density > 0") != std::string::npos);
+  }
   // ---- an automatic tolerance without windows (an empty ranges token, then blend and tolerance): the tolerance applied
   //      to every point (TargetEffect), written as one window over every energy with that tolerance, and a note;
   //      never dropped (the outputs of the conversion equal the old line's: compared on tests/identical_pp_res with a

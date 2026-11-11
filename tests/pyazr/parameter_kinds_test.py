@@ -28,6 +28,8 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import old_tree  # noqa: E402  (the old originals of converted projects)
 os.environ.setdefault("OMP_NUM_THREADS", "2")
 
 failures = []
@@ -112,7 +114,8 @@ def check_project(label, path, cwd, want_kinds):
 
 
 def copy_project(src_dir, dst):
-    shutil.copytree(src_dir, dst, ignore=shutil.ignore_patterns("output", "checks", "run.log"))
+    # the old originals of converted projects: the names are rebuilt here by the old scheme (segment_<k>_norm, ...)
+    old_tree.copytree(src_dir, dst, ignore=shutil.ignore_patterns("output", "checks", "run.log"))
     os.makedirs(os.path.join(dst, "output"), exist_ok=True)
     os.makedirs(os.path.join(dst, "checks"), exist_ok=True)
     return dst

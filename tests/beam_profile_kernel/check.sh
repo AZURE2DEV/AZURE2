@@ -40,8 +40,10 @@ for basis in brune no-brune; do
   D="$WORK/$ext/$basis"
   mkdir -p "$D/output" "$D/checks"
   cp -r "$HERE/data" "$D/"
-  awk '/<segmentsTest>/ { print; print "1 1 8 1.0 3.0 0.2 90 90 0 1"; print "1 1 4 1.0 3.0 0.2 90 90 0 1"; skip = 1; next }
-       /<\/segmentsTest>/ { skip = 0 } !skip' "$HERE/beam_profile_kernel.azr" > "$D/t.azr"
+  # the records the converter writes for the old test lines "1 1 8 1.0 3.0 0.2 90 90 0 1" and "1 1 4 ...": the
+  # energies as the old grid computed them, folded by the beams and detector of the data sets 1 and 2
+  awk '/^<extrapolations>/ { print; while ((getline l < recs) > 0) print l; skip = 1; next }
+       /^<\/extrapolations>/ { skip = 0 } !skip' recs="$HERE/extrapolations.txt" "$HERE/beam_profile_kernel.azr" > "$D/t.azr"
   flag=""
   [ "$basis" = no-brune ] && flag=--no-brune
   (cd "$D" && printf '3\nn\n\n\n7\n' |

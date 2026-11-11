@@ -19,6 +19,19 @@ void Builder::BuildApparatus() {
       continue;
     }
     const TargetIntLine &l = e.line;
+    // A fitted density the old engine refused (TargetEffect: a thin target needed, no beam profile or UDR kernel): a
+    // conversion must not make the file run with the density fixed.
+    if (l.densityFitRead || !l.densityGroup.empty()) {
+      const char *why = nullptr;
+      if (l.isTargetIntegration != 1 || !(l.density > 0.0))
+        why = "densityfit / densitygroup need target integration with a density > 0 (a thin target)";
+      else if (l.isBeamProfile || l.isUdr)
+        why = "densityfit / densitygroup cannot be combined with a beam profile or a UDR kernel";
+      if (why) {
+        res_.refusal = "<targetInt> line " + std::to_string(e.index) + ": " + why + ", which the old engine refused";
+        return;
+      }
+    }
     Apparatus a;
     a.line = &e;
     const std::string n = std::to_string(e.activeIndex);
