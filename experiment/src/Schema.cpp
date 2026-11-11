@@ -8,6 +8,8 @@
 // its value type one of Values.h's, its structure (if any) a FormSpec of StructuredValues().
 #include "azure2/experiment/Schema.h"
 
+#include "azure2/experiment/Kernels.h"
+
 #include <utility>
 
 namespace azure2 {
@@ -221,6 +223,15 @@ Forms MakeForms() {
                         {Kw("xi", WithUnit("energy")), Kw("omega", PositiveWithUnit("energy")), Kw("alpha", Num()), Kw("weight", PositiveNum())},
                         "one skewed Gaussian of the beam energy distribution")}};
   f.resolution = {{Unkeyed({Pos("sigma", WithUnit("energy")), Pos("frame", Words({"lab", "cm"}))}, "a Gaussian energy resolution")}};
+  // The table kernels of a detector's energy resolution (Kernels.h, Kernel::tableForm): one form per row, named by the
+  // last word of its keyword, a keyword part per parameter (a positive value with a unit of its dimension).
+  const std::string resolutionField = "detector.energy_resolution ";
+  for (const Kernel &k : Kernels()) {
+    if (!k.tableForm || k.keyword.compare(0, resolutionField.size(), resolutionField) != 0) continue;
+    std::vector<PartSpec> parts;
+    for (const KernelParameter &p : k.parameters) parts.push_back(Kw(p.name, PositiveWithUnit(p.dimension), p.doc));
+    f.resolution.alternatives.push_back(Keyword(k.keyword.substr(resolutionField.size()), parts, k.doc));
+  }
   f.udr = {{Unkeyed({Kw("file", Spec(ValueType::Path)), Kw("flight_path", PositiveWithUnit("length")), Kw("burst", WithUnit("time")),
                      Kw("channel", WithUnit("time")), Kw("centred", Words({"yes", "no"}))},
                     "SAMMY's time-of-flight resolution (UDR)")}};

@@ -15,6 +15,7 @@
 #include "CNuc.h"
 #include "CalculationPlan.h"
 #include "Config.h"
+#include "PointFold.h"
 #include "WorkingCopy.h"
 #include "Unit.h"
 #include "TargetEffect.h"
@@ -263,12 +264,12 @@ void Unit::IntegrateTargetEffectComponents(const WorkingCopy &data, const Config
 
   for (int i = 1; i <= n; i++)
     this->GetSubPoint(data, i)->SetFitCrossSection(results, this->GetSubPoint(data, i)->GetFitE1CrossSection(results));
-  this->IntegrateTargetEffect(data, configure, results);
+  FoldPoint(*this, data, configure, results);
   this->SetFitE1CrossSection(results, this->GetFitCrossSection(results));
 
   for (int i = 1; i <= n; i++)
     this->GetSubPoint(data, i)->SetFitCrossSection(results, this->GetSubPoint(data, i)->GetFitE2CrossSection(results));
-  this->IntegrateTargetEffect(data, configure, results);
+  FoldPoint(*this, data, configure, results);
   this->SetFitE2CrossSection(results, this->GetFitCrossSection(results));
 
   for (int i = 1; i <= n; i++) this->GetSubPoint(data, i)->SetFitCrossSection(results, sigma[i - 1]);
@@ -304,17 +305,17 @@ void Unit::IntegrateTargetEffectForObservable(const WorkingCopy &data, const Con
       a0[i - 1] = this->GetSubPoint(data, i)->GetAngDistA0(results);
     }
     for (int i = 1; i <= n; i++) this->GetSubPoint(data, i)->SetFitCrossSection(results, a0[i - 1]);
-    this->IntegrateTargetEffect(data, configure, results);
+    FoldPoint(*this, data, configure, results);
     const double denominator = this->GetFitCrossSection(results);
     for (int i = 1; i <= n; i++) this->GetSubPoint(data, i)->SetFitCrossSection(results, ak[i - 1] * a0[i - 1]);
-    this->IntegrateTargetEffect(data, configure, results);
+    FoldPoint(*this, data, configure, results);
     const double numerator = this->GetFitCrossSection(results);
     for (int i = 1; i <= n; i++) this->GetSubPoint(data, i)->SetFitCrossSection(results, ak[i - 1]);
     this->SetFitCrossSection(results, std::fabs(denominator) > 0.0 ? numerator / denominator : 0.0);
     return;
   }
   if (!this->IsAnalyzingPower()) {
-    this->IntegrateTargetEffect(data, configure, results);
+    FoldPoint(*this, data, configure, results);
     this->IntegrateTargetEffectComponents(data, configure, results);
     return;
   }
@@ -323,12 +324,12 @@ void Unit::IntegrateTargetEffectForObservable(const WorkingCopy &data, const Con
   std::vector<double> sigma(n);
   for (int i = 1; i <= n; i++) sigma[i - 1] = this->GetSubPoint(data, i)->GetFitCrossSection(results);
 
-  this->IntegrateTargetEffect(data, configure, results);
+  FoldPoint(*this, data, configure, results);
   const double denominator = this->GetFitCrossSection(results);
 
   for (int i = 1; i <= n; i++)
     this->GetSubPoint(data, i)->SetFitCrossSection(results, sigma[i - 1] * this->GetSubPoint(data, i)->GetAnalyzingPower(results));
-  this->IntegrateTargetEffect(data, configure, results);
+  FoldPoint(*this, data, configure, results);
   const double numerator = this->GetFitCrossSection(results);
 
   for (int i = 1; i <= n; i++) this->GetSubPoint(data, i)->SetFitCrossSection(results, sigma[i - 1]);

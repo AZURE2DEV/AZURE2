@@ -308,12 +308,23 @@ cross section per active nucleus (lab MeV cm²).
 | beam profile | Σ_i G W D σ / Σ_i G W (skewed Gaussians G, window W by erf, detailed balance D) | `BeamProfileSupport` | ∂/∂(shift of the window) from ∂W/∂a, ∂W/∂b (Gaussians) | `TargetFold.cpp` beam-profile branch; `TargetEffect::BeamProfileWeight` |
 | UDR (time of flight) | w_i = ∫ R(τ) φ_i(τ) dτ, φ_i hat functions on the delay axis, Simpson exact | the table's τ range | no fitted parameter; ∂/∂E₀ through t(E₀) | `TargetFold.cpp` UDR branch; `TargetEffect::BuildUdrKernel, LoadUdrTable` |
 | Doppler (free gas) | SAMMY free-gas kernel in √E, 4-point Gauss–Legendre pieces | `TargetEffect::DopplerWindow` | ∂/∂T exists (`Unit::DopplerTemperatureDerivative`) | `TargetFold.cpp: Unit::DopplerWeights` |
+| rectangular resolution (branch 6, added by the recipe) | Y = (1/w) ∫_{E₀−w/2}^{E₀+w/2} σ dE, w lab × the pair's c.m./lab factor; format 3: `detector … energy_resolution rectangular width <w>` | [E₀ − w/2, E₀ + w/2] | ∂Y/∂w = [σ(E₀+w/2) + σ(E₀−w/2)]/(2w) − Y/w (`derivative`; not yet a fit parameter) | nothing: `experiment/src/KernelRectangular.cpp` |
 | energy shift, folded data | the point's kernel centred at E₀(ν) = E + a + b√E + f(E; p) on fixed nodes | that kernel's | ∂w/∂ν = ∂w/∂E₀ · ∂E₀/∂ν | `ShiftFrames.cpp: Segment::UpdatePointEnergyWithShift` (rigid move of sub-points); `AZURECalc.cpp: FillShiftColumns` (central differences) |
 | energy shift, unfolded data | exact node at E₀(ν) (§2.5); interpolated mode: linear or cubic weights | one node (or 2–4) | dO/dE · ∂E₀/∂ν | the same, and `WorkingCopy::FillEnergyShiftsFromParamsImpl` |
 | detector attenuation Q_L, angular convolution | diagonal in L: row P_L(cos θ) Q_L | — | none fitted | `UnitLegendre.cpp: Unit::CalcLegendreP` (Q coefficients, `QTransformRule`) |
 | electron screening | diagonal per node: f = exp(π η U_e / E) on σ before the fold | node | ∂f/∂U_e = (π η/E) f (exists) | `Unit::ScreeningFactor`, applied in `CalcEDependentValues` |
 | THM fold | c.m. Gaussian, QF-window weights, OES S-fold (`THM.md` §2) | ±5σ | ∂/∂σ as Gaussian | the THM sub-point fold of `THMMatrixFunc` / `ThmNumerics` |
 | SUM, RATIO, natural target, S factor, transmission | not energy kernels: expression nodes `Sum`, `Ratio`, `Weighted` (abundance, ∂ analytic), `Scaled`, `Transform` (Phase 4) | — | as in Phase 4 | nothing; they stay |
+
+**Status (branch 6, `feature/upgrade-5-kernels`).** The kernels of the first five rows are rows of one table,
+`Kernels()` in `experiment/src/Kernels.cpp` (`experiment/include/azure2/experiment/Kernels.h`): `target`
+(`KernelTarget.cpp`: thin, thick, layer yield, with beam spread and straggling, the σ(Ē) fallback and the edge blend),
+`gaussian`, `beam_profile`, `udr` (one file each) and the broadening `doppler` (`KernelDoppler.cpp`), each a fold
+template on V = double (value) and V = `LinearForm` (the gradient's weights) and a support function (the interval the
+set-up lays the grid over). `src/TargetFold.cpp` is deleted; the engine's fold is `FoldPoint` (`src/PointFold.cpp`):
+it gathers the nodes and the point and makes one indirect call per point. Nodes and quadrature are unchanged, every
+output is byte-identical. The derivative columns above are not yet written as kernel functions, except the
+temperature derivative of `doppler` (`broadenDT`); a table kernel may carry `derivative` (∂/∂ its own parameter).
 
 The roadmap lists SUM, RATIO, natural targets and the S factor as kernel builders. They are already one table of
 expression nodes with `value` and `backward`, tested alone; re-implementing them as kernels would write them twice.
@@ -556,6 +567,19 @@ NaN, and the set-up refuses that case and a stopping that is not positive (`E_LA
 tested against 10⁻²⁴ σ(E_out). Where the stopping module plugs in: ε enters only as the sub-points' stopping (set in
 `TargetSetup.cpp`'s set-up loops and `ReplaceSubPointGrids`) and is read by `GridQuadrature` and `LayerExitEnergy`
 alike, so the scale s multiplies it there, once. Tests: `tests/layer_yield` (README).
+
+**Branch 6, done (2026-11-11, `feature/upgrade-5-kernels`).** The folds of `src/TargetFold.cpp` (502 lines, deleted)
+are kernels of `experiment/` listed in `Kernels()` (`experiment/src/Kernels.cpp`): `target`, `gaussian`,
+`beam_profile`, `udr`, the broadening `doppler`, one file each, with the shared quadrature in `KernelQuadrature.h`;
+`LayerExit.h`, `UdrKernel.h` and the linear form (`LinearForm.h`) moved to `experiment/`. A kernel row holds its
+name, format-3 keyword, parameters, fold on double and on `LinearForm`, support and (optionally) a parameter
+derivative; `TargetEffect` keeps the parameters as read and chooses its kernels once (`Kernels()`,
+`KernelParametersFor`). The engine's fold is `src/PointFold.cpp` (one indirect call per point; the per-node work
+stays inside the kernel, except a beam-spread formula, which is called through `EnergyFunction` as `SigmaCM` was).
+Unit lost its ten fold members. The set-up takes the grid's interval from `EffectSupport` (the two copies of
+`GridExtent`, the beam-profile, UDR and Doppler windows in `TargetSetup.cpp` are one call each). Every output of the
+tree byte-identical. The proof of extension: the rectangular resolution (§3.3, last row) was added by the recipe in
+`CLAUDE.md` with no engine file edited (the layer yield of branch 4 had touched 11 engine files).
 
 **First steps before Phase 4's last branches are merged.** `lab-frame` (3) and `layer-yield` (4) touch no file of
 the pathway branch (`CNuc*`, `GenMatrixFunc`, `AMatrixFunc` readers, `UnitExternalCapture`, `ExternalCaptureSetup`)

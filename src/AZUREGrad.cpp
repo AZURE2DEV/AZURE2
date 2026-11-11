@@ -20,7 +20,7 @@
 #include "CoulFunc.h"
 #include "ShftFunc.h"
 #include "THMMatrixFunc.h"
-#include <cstdlib>
+#include "PointFold.h"
 #include <cstring>
 #include <iostream>
 #include <cmath>
@@ -556,17 +556,17 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
       double s0 = sigma[i - 1];
       double h = 1.0e-3 * (std::fabs(s0) + 1.0);
       point->GetSubPoint(data, i)->SetFitCrossSection(results, s0 + h);
-      point->IntegrateTargetEffect(data, config, results);
+      FoldPoint(*point, data, config, results);
       double yp = point->GetFitCrossSection(results);
       point->GetSubPoint(data, i)->SetFitCrossSection(results, s0 - h);
-      point->IntegrateTargetEffect(data, config, results);
+      FoldPoint(*point, data, config, results);
       double ym = point->GetFitCrossSection(results);
       point->GetSubPoint(data, i)->SetFitCrossSection(results, s0);
       w[i - 1] = (yp - ym) / (2.0 * h);
     }
   };
   std::vector<double> c;
-  if (std::getenv("AZURE_TE_WEIGHTS_FD") || !point->TargetEffectWeights(data, config, c)) {
+  if (std::getenv("AZURE_TE_WEIGHTS_FD") || !FoldWeights(*point, data, config, c)) {
     fdWeights(c);
   } else if (const char *wc = std::getenv("AZURE_TE_WEIGHTS_CHECK")) {
     static std::atomic<int> nChecked{0};
@@ -579,7 +579,7 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
         dmax = std::max(dmax, std::fabs(c[i] - cfd[i]));
         yW += c[i] * sigma[i];
       }
-      point->IntegrateTargetEffect(data, config, results);
+      FoldPoint(*point, data, config, results);
       const double yI = point->GetFitCrossSection(results);
 #pragma omp critical
       std::cerr << "[te-weights] entrance " << point->GetEntranceKey() << " exit " << point->GetExitKey() << " E " << point->GetCMEnergy() << " nsp " << nsp
@@ -591,11 +591,11 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
   // calls the forward pass makes.
   double den = 0.0, avg = 0.0;
   if (isAy) {
-    point->IntegrateTargetEffect(data, config, results);
+    FoldPoint(*point, data, config, results);
     den = point->GetFitCrossSection(results);
     for (int i = 1; i <= nsp; i++)
       point->GetSubPoint(data, i)->SetFitCrossSection(results, sigma[i - 1] * point->GetSubPoint(data, i)->GetAnalyzingPower(results));
-    point->IntegrateTargetEffect(data, config, results);
+    FoldPoint(*point, data, config, results);
     const double num = point->GetFitCrossSection(results);
     for (int i = 1; i <= nsp; i++) point->GetSubPoint(data, i)->SetFitCrossSection(results, sigma[i - 1]);
     // The forward pass returns 0 for D = 0, a constant: no gradient.
@@ -606,11 +606,11 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
     avg = num / den;
   } else if (isCoefNorm) {
     for (int i = 1; i <= nsp; i++) point->GetSubPoint(data, i)->SetFitCrossSection(results, point->GetSubPoint(data, i)->GetAngDistA0(results));
-    point->IntegrateTargetEffect(data, config, results);
+    FoldPoint(*point, data, config, results);
     den = point->GetFitCrossSection(results);
     for (int i = 1; i <= nsp; i++)
       point->GetSubPoint(data, i)->SetFitCrossSection(results, sigma[i - 1] * point->GetSubPoint(data, i)->GetAngDistA0(results));
-    point->IntegrateTargetEffect(data, config, results);
+    FoldPoint(*point, data, config, results);
     const double num = point->GetFitCrossSection(results);
     for (int i = 1; i <= nsp; i++) point->GetSubPoint(data, i)->SetFitCrossSection(results, sigma[i - 1]);
     if (!(std::fabs(den) > 0.0)) {
@@ -631,8 +631,8 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
         weight[i - 1] = isAy ? sigma[i - 1] : point->GetSubPoint(data, i)->GetAngDistA0(results);
       for (int i = 1; i <= nsp; i++)
         vals[i - 1] = weight[i - 1] * (isAy ? point->GetSubPoint(data, i)->GetAnalyzingPower(results) : sigma[i - 1]);
-      const double dN = point->DopplerTemperatureDerivative(data, config, vals);
-      const double dD = point->DopplerTemperatureDerivative(data, config, weight);
+      const double dN = FoldTemperatureDerivative(*point, data, config, vals);
+      const double dD = FoldTemperatureDerivative(*point, data, config, weight);
       dT = (dN - avg * dD) / den;
     } else {
       for (int i = 1; i <= nsp; i++) {
@@ -640,7 +640,7 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
         vals[i - 1] = (xsComponent == 1) ? sp->GetFitE1CrossSection(results)
                       : (xsComponent == 2) ? sp->GetFitE2CrossSection(results) : sigma[i - 1];
       }
-      dT = point->DopplerTemperatureDerivative(data, config, vals);
+      dT = FoldTemperatureDerivative(*point, data, config, vals);
     }
     accum.AddDoppler(dk, fitBar * dT);
   }
@@ -885,10 +885,10 @@ bool ThmPointModelGradient(WorkingCopy &data, Unit *point, azure2::Results &resu
   for (int i = 1; i <= nsp; i++) {
     const double s0 = sigma[i - 1], h = 1.0e-3 * (std::fabs(s0) + 1.0);
     point->GetSubPoint(data, i)->SetFitCrossSection(results, s0 + h);
-    point->IntegrateTargetEffect(data, config, results);
+    FoldPoint(*point, data, config, results);
     const double yp = point->GetFitCrossSection(results);
     point->GetSubPoint(data, i)->SetFitCrossSection(results, s0 - h);
-    point->IntegrateTargetEffect(data, config, results);
+    FoldPoint(*point, data, config, results);
     const double ym = point->GetFitCrossSection(results);
     point->GetSubPoint(data, i)->SetFitCrossSection(results, s0);
     c[i - 1] = (yp - ym) / (2.0 * h);

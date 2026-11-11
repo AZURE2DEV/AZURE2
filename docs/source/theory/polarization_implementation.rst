@@ -232,13 +232,13 @@ existing yield integrator twice — once on :math:`\sigma`, once on the product
 .. code-block:: cpp
 
    for (int i=1;i<=n;i++) sigma[i-1] = GetSubPoint(i)->GetFitCrossSection();
-   IntegrateTargetEffect(configure);
+   FoldPoint(*this, data, configure, results);
    const double denominator = GetFitCrossSection();
 
    for (int i=1;i<=n;i++)
      GetSubPoint(i)->SetFitCrossSection(sigma[i-1] *
                                         GetSubPoint(i)->GetAnalyzingPower());
-   IntegrateTargetEffect(configure);
+   FoldPoint(*this, data, configure, results);
    const double numerator = GetFitCrossSection();
 
    for (int i=1;i<=n;i++) GetSubPoint(i)->SetFitCrossSection(sigma[i-1]);

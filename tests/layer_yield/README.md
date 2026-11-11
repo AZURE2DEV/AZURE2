@@ -2,7 +2,7 @@
 
 `quantity yield` on a target of `kind layer` (docs/upgrade/energy_grid.md section 5, data_kinds.md section 4.6):
 reactions per incident particle (or per µC) of a beam that crosses a layer of N active nuclei per cm². The engine's
-kernel is the target integration of `src/TargetFold.cpp` on the point's sub-points, not divided by N, with the back of
+kernel is the target integration of `experiment/src/KernelTarget.cpp` on the point's sub-points, not divided by N, with the back of
 the layer found on the same nodes (`include/LayerExit.h`).
 
 ## Formulas (frames and units written out)

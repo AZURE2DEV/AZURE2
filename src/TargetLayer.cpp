@@ -5,12 +5,12 @@
 #include <iostream>
 
 #include "Config.h"
-#include "LayerExit.h"
 #include "Segment.h"
 #include "TargetEffect.h"
 #include "Unit.h"
 #include "WorkingCopy.h"
 #include "azure2/experiment/LayerChecks.h"
+#include "azure2/experiment/LayerExit.h"
 
 int RefuseLayerAtBeamEnergy(const TargetEffect &effect, const Unit &point, const std::string &dataFile, const Config &configure) {
   const azure2::experiment::LayerPoint where{effect.GetTargetName(), dataFile, point.GetLabEnergy()};
@@ -38,7 +38,7 @@ bool CheckPoint(const WorkingCopy &data, const Unit &point, const TargetEffect &
   const bool noSpread = !te.IsGaussian() && !te.IsStraggling();
   const double top = (noSpread && n > 0) ? point.GetSubPoint(data, 1)->GetCMEnergy() : point.GetCMEnergy();
   double eOut = 0.0;
-  if (LayerExitEnergy(
+  if (azure2::experiment::LayerExitEnergy(
           n, [&](int j) { return point.GetSubPoint(data, j)->GetCMEnergy(); },
           [&](int j) { return point.GetSubPoint(data, j)->GetStoppingPower(); }, top, te.GetLayoutDensity(), eOut))
     return true;

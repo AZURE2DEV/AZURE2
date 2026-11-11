@@ -1472,7 +1472,7 @@
     "energy_resolution": {
      "title": "Energy resolution",
      "type": "structured",
-     "grammar": "<number> <energy unit> lab|cm",
+     "grammar": "<number> <energy unit> lab|cm | rectangular width <number> <energy unit>",
      "required": false,
      "alternatives": [
       {
@@ -1497,6 +1497,23 @@
         }
        ],
        "doc": "a Gaussian energy resolution"
+      },
+      {
+       "keyword": "rectangular",
+       "parts": [
+        {
+         "name": "width",
+         "keyword": true,
+         "type": "number_with_unit",
+         "grammar": "<number> <energy unit>",
+         "optional": false,
+         "dimension": "energy",
+         "units": ["MeV", "keV", "eV", "meV", "ueV"],
+         "positive": true,
+         "doc": "full width w of the window, lab"
+        }
+       ],
+       "doc": "a rectangular energy resolution: the average of the cross section over [E0 - w/2, E0 + w/2]"
       }
      ],
      "doc": "resolution of a reconstructed energy"

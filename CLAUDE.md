@@ -340,6 +340,29 @@ factor, a yield per unit charge) is `ReactionSpec::scale` (`experiment/src/Build
 `io/include/azure2/io/Record.h`), its row in `DiagnosticCodes()` and a case in `experiment/tests/diagnostics_test.cpp`
 that triggers it alone [check 24].
 
+**A new apparatus kernel** (a resolution or broadening of a folded point: `experiment/include/azure2/experiment/Kernels.h`,
+`docs/upgrade/energy_grid.md` section 3.3). A kernel is plain functions of the point's nodes, the point and the effect's
+parameters; the engine applies whatever the table holds.
+1. One file `experiment/src/Kernel<Name>.cpp` (`KernelGaussian.cpp` is the pattern): the fold as a template on V
+   (`double` gives the value, `LinearForm` the exact weights the gradient reads: the same arithmetic), its support (the
+   c.m. interval the point's nodes must span; the set-up lays the grid over it) and `Kernel <Name>Kernel()` filling its
+   row member by member. Its own parameters are `KernelParameter` rows (name, dimension, engine unit, fittable) whose
+   values arrive in `KernelParameters::values`; with `tableForm = true` and the keyword `detector.energy_resolution
+   <form>` the format-3 form is generated from those rows (`Schema.cpp`) and read by `BuildEffects.cpp`: no parser
+   code. An analytic derivative in a parameter goes in `derivative`.
+2. Its line in `Kernels()` (`experiment/src/Kernels.cpp`) and the file in `experiment/CMakeLists.txt`.
+3. Tests: cases in `experiment/tests/kernels_test.cpp` against closed forms (the table's own checks run on every row),
+   a derivative against central differences; a format-3 fixture that validates (`experiment/tests/data/`, listed in
+   `schema_test.cpp`); `AZURE2 --schema > tests/schema/schema_v3.json`, `python3 tools/gen_schema_docs.py` [check 18,
+   21]. A test project of its own (`tests/rectangular_resolution/` is the pattern: the folded run against an average of
+   the unfolded one) also adds its lines to `tests/upgrade/predictions.txt` (`python3 tests/upgrade/predictions_test.py
+   --binary <AZURE2> --write`, lines added for the new project only) [`upgrade_predictions`].
+4. Docs: its row in `energy_grid.md` section 3.3, its form in `reference/data_formats.rst` (generated part) and a line in
+   `developer/edata_and_target_effects.rst`.
+The engine is not edited: the fold (`src/PointFold.cpp`), the grid's extent (`EffectSupport`, `src/TargetSetup.cpp`) and
+the gradient's weights (`FoldWeights`) read the table. A parameter a fit varies needs its parameter kind (recipe "A new
+kind of fit parameter"): kernel parameters are not yet fit parameters.
+
 **A new material or a measured stopping table** (`stopping/`, `docs/upgrade/stopping.md`). A material is data, not
 code: `MaterialFromFormula("Ta2O5")` or `MaterialFromFractions(...)`, then set its fields: `phase` (SRIM's default is
 gas only for a single natural-gas element; a gaseous compound such as CH4 needs `Phase::kGas`), `compound_correction`
