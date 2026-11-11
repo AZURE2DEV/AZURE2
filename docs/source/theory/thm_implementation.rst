@@ -2727,7 +2727,7 @@ angle-integrated sum is incoherent in the exit channels.
 
 *Legendre form.* Summing :math:`|F|^2` over the spin projections with the
 Racah algebra gives the Blatt-Biedenharn form (RMP 24 (1952) 258) that
-AZURE2 uses for ordinary angular distributions (``CNuc::CalcAngularDists``,
+AZURE2 uses for ordinary angular distributions (the interferences of the pathway table,
 the same :math:`\bar Z` and the same :math:`(-1)^{s'-s}/4`):
 
 .. math::
@@ -2746,7 +2746,7 @@ the same :math:`\bar Z` and the same :math:`(-1)^{s'-s}/4`):
 the double sum over the partial amplitudes of all :math:`J^\pi` groups with
 the same entrance channel spin :math:`s` and the same exit :math:`s'` (the
 spins are unpolarized and unobserved: different channel spins add
-incoherently). The Decay/KGroup objects of ordinary segments are not reused
+incoherently). The pathway table of ordinary segments is not reused
 -- the THM segment has no T matrix -- but the algebra is theirs, and the
 direct sum above equals it (checked to :math:`10^{-16}`, below). Since
 :math:`4 b_0 = \sum_J (2J+1)\sum |x|^2`, the :math:`4\pi` integral of the

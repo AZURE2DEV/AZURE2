@@ -21,6 +21,7 @@
 #include <optional>
 #include "DataCovariance.h"
 #include <memory>
+#include <fstream>
 #include <ios>
 
 // THM types WorkingCopy holds by pointer or takes by reference (ThmNorm.cpp).
@@ -436,6 +437,9 @@ class WorkingCopy {
   template <class F>
   void ForEachResultUnit(F f);
   void FillEnergyShiftsFromParamsImpl(const vector_r &, CNuc *theCNuc, const Config *configure);
+  /// The external-capture amplitudes of the leaves (InitializeLeaves): computed and appended to `out`, or read from
+  /// `in` where the data segments' amplitudes end (usePrevious); -1 when stopped or a GSL error ends the loop.
+  int LeafECAmplitudes(CNuc *, const Config &, bool usePrevious, std::ifstream &in, std::ofstream &out);
   /// Redraws the progress bar of the external-capture loops (CalculateECAmplitudes, InitializeLeaves)
   /// from inside their OpenMP loops, under the named critical section ec_progress.
   static void ECProgressRedraw(const Config &configure, const char *segmentKeyOut, const std::atomic<int> &pointIndex,

@@ -101,51 +101,6 @@ int PPair::GetPType() const {
 }
 
 /*!
- * Returns the number of decay particle pairs for a given pair.  Size of Decay vector will only be nonzero if PPair object is
- * an entrance pair.
- */
-
-int PPair::NumDecays() const {
-  return decays_.size();
-}
-
-/*!
- * Tests a given decay particle pair to determine if it is in the Decay vector.  If the decay particle pair exists
- * in the vector, the position in the vector is returned.  Otherwise, the function returns 0.
- */
-
-int PPair::IsDecay(Decay decay) {
-  bool b = false;
-  int c = 0;
-  while (!b && c < this->NumDecays()) {
-    if (decay.GetPairNum() == this->GetDecay(c + 1)->GetPairNum()) b = true;
-    c++;
-  }
-  if (b)
-    return c;
-  else
-    return 0;
-}
-
-/*!
- * Tests a given particle pair number to determine if there exists a corresponding particle pair decay in the Decay vector.
- * If the object exists, the position in the vector is returned.  Otherwise, the function returns 0.
- */
-
-int PPair::IsDecay(int pairNum) {
-  bool b = false;
-  int c = 0;
-  while (!b && c < this->NumDecays()) {
-    if (pairNum == this->GetDecay(c + 1)->GetPairNum()) b = true;
-    c++;
-  }
-  if (b)
-    return c;
-  else
-    return 0;
-}
-
-/*!
  * Returns the pair key for the particle pair.
  */
 
@@ -297,32 +252,11 @@ double PPair::GetEntranceSymmetryFactor() const {
 }
 
 /*!
- * Adds a decay particle pair to the Decay vector.
- */
-
-void PPair::AddDecay(Decay decay) {
-  decays_.push_back(decay);
-}
-
-void PPair::ClearDecays() {
-  decays_.clear();
-}
-
-/*!
  * Sets the particle pair to be an internal entrance pair.
  */
 
 void PPair::SetEntrance() {
   entrance_ = true;
-}
-
-/*!
- * Returns a pointer to the decay particle pair specified by a position in the Decay vector.
- */
-
-Decay *PPair::GetDecay(int decayNum) {
-  Decay *b = &decays_[decayNum - 1];
-  return b;
 }
 
 int PPair::SpinOrbitTwoJ(double J) const {

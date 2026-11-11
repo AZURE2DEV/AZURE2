@@ -1667,8 +1667,8 @@ vector_r AZUREAPI::GetPairsInfo() const {
  * External-capture radial integrals on a requested energy grid.
  *
  * Walks exactly the pathway structure Unit::CalculateECAmplitudes walks --
- * every EC level whose final pair matches, every KGroup of the entrance pair's
- * decay, every ECMGroup within it -- and evaluates the integral at each
+ * every EC level whose final pair matches, every spin group of the exit to it in
+ * the pathway table, every external pathway within it -- and evaluates the integral at each
  * requested energy instead of at a data point's energy.  The quantum numbers of
  * each pathway come back with it, so no bookkeeping is needed on the caller's
  * side.

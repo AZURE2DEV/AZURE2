@@ -162,12 +162,8 @@ class CNuc {
   /// Boundary condition per channel, evaluated at the energy of the group's
   /// first level.
   void CalcBoundaryConditions(const Config &);
-  /// Build the internal (MGroup) and external (ECMGroup) reaction pathways.
-  void SortPathways(const Config &);
   /// Build the pathway table (Pathways()); CNucPathways.cpp.
   void BuildPathways(const Config &);
-  /// Build the KLGroup and Interference structure and its \f$Z_1Z_2\f$ coefficients.
-  void CalcAngularDists(int);
   /// Recompute the shift functions at the current level energies. Needed every
   /// iteration under the Brune parameterization, where they move with the fit.
   /// In the Park formalism also dS/dE and J, and, unless `secondDerivatives`

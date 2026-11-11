@@ -15,7 +15,7 @@
  * m_l = 0, exactly like the plane (or Coulomb) wave of an ordinary unpolarized
  * beam along z.  The spin-summed angular distribution of the exit pair is then
  * the Blatt-Biedenharn form that AZURE2 uses for differential cross sections
- * (CNuc::CalcAngularDists, GenMatrixFunc), with the T-matrix element replaced
+ * (the interferences of the pathway table, GenMatrixFunc), with the T-matrix element replaced
  * by the HOES partial amplitude x of each J^pi group, entrance (s, l) and exit
  * (s', l'):
  *

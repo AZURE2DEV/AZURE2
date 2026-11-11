@@ -2,6 +2,45 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, brief Y2) — external capture reads the pathway table; the trees are deleted (`feature/upgrade-4-pathway-table-2`)
+
+**Done** (`docs/upgrade/cnuc_split.md` §11.12 has the detail).
+- Defect 1 of §11.9 fixed first: external capture found the exit to the photon pair at the photon pair's *number* in
+  the list of exits; with a beta pair or a pair of another nucleus numbered below it, it read another exit or past the
+  end.  Now `ExternalCaptureExit` (`include/ExternalCaptureExit.h`) looks the exit up by pair and refuses an entrance
+  without a pathway, naming the data segment.  Test project `tests/ec_exit_position` (the base: empty `intEC.dat`,
+  SIGSEGV) and ctest `upgrade_external_capture_exit`.
+- The memo of the shifted capture amplitude cannot depend on the history of a copy (the final state's capture energy
+  is written once, in `CNuc::Initialize`); it now keeps (energy, amplitude) only.  `history_test` gained a project with
+  external capture and a fitted shift (`--external-capture`) and the sequence B -> C on every project.
+- External capture reads the table (step 3): `src/ExternalCaptureSetup.cpp` (walk, signature, amplitude loops of the
+  data segments and of the leaves, the latter moved from `WorkingCopy.cpp` as `LeafECAmplitudes`),
+  `src/UnitExternalCapture.cpp`.  The intEC signature is unchanged; base and new builds read each other's files.
+- The trees are deleted (step 8), after a commit that ran every project with them unbuilt and their accessors
+  aborting: `SortPathways`, `CalcAngularDists`, `PPair::decays_`, the classes `Decay`, `KGroup`, `MGroup`, `ECMGroup`,
+  `KLGroup`, `Interference` (12 files, 971 lines), `tests/upgrade/pathways_from_cnuc_test.cpp`.  `CNuc.cpp` 1,774 ->
+  1,548 lines.
+- The double final state is refused since the capture-A_y branch, and `tests/ec_final_state_ambiguous` (d), (e) test
+  exactly that case: nothing added.
+
+**Verified** (build `work/b-path2`, 0 warnings): all projects x 3 bases (tag `tab-path2-final`) against `tab-trial18`: 728 / 701 / 728
+identical (every `intEC.dat` among them), 22 files per basis new (the two projects of `tests/ec_exit_position`); the
+same on the commit with the trees unbuilt and their accessors aborting (`tab-path2-abort`, no abort); `ctest -LE
+slow` 182/183 (the failure: `upgrade_predictions`, the two new projects missing from `predictions.txt`; regenerated,
+12 lines added, passes); `ctest -L slow` 10/10; `tests/run_tests.sh` 146 passed, 1 failed (`cli_help`, under load;
+passes alone, as with the base); the converted-tree gate 483 (456) identical, 38 classified, 0 differ, 0 missing;
+calculations at 1 against 5 threads byte-identical (T1-T3, 13N, `beam_profile_kernel`, `energy_shift_sqrt`, the
+shifted external-capture project of `history_test`); fits at 1 thread byte-identical to the base (T2 `--use-lm
+--max-calls=200`, 13N and `energy_shift_sqrt` `--max-calls=200`); `--no-ec-table` on 13N and the shifted project
+identical to the base; 13N's `intEC.dat` written by each build read by the other without recomputation.  Cycles
+(perf stat, 1 thread, `--no-coulomb-table`, min of 6-8 alternated with `b-trial18`, a loaded machine): T2 calculation
+3.294 G against 3.304 G, 13N 25.28 G against 25.39 G, set-up (13N with one point) 0.987 G against 1.026 G;
+instructions -0.05 %, -0.08 %, -0.36 %; peak RSS 57.4 / 149.9 / 12.1 MB against 57.6 / 150.3 / 12.6 MB.
+
+**Open.** The external-capture amplitudes of the set-up still live in the units of the set-up's working copy; a copy
+drops them and recomputes each at its first evaluation.  A comment in `src/ECIntegral.cpp` (out of scope) still names
+`CNuc::SortPathways`.  Steps left of `CNuc`: the `GetPair`/`GetJGroup` readers of channel data and step 7.
+
 ## 2026-11-11 (agent, Phase 5 branch 4) — the yield of a layer of finite thickness (`feature/upgrade-5-layer-yield`)
 
 **Done.** `quantity yield` on a `target` of `kind layer`: Y(E₀) = 10⁻²⁴ ∫_{E_out}^{E₀} ⟨σ⟩/ε dE, ∫ dE/ε = N (lab ε per

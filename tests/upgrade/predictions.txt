@@ -232,6 +232,18 @@ data dsdo: dsdo_cm(1->3)
 data dsdo: dsdo_cm(1->3)
 == tests/ec_e1m1_phase/models/s_3.azr
 data dsdo: dsdo_cm(1->3)
+== tests/ec_exit_position/models/neutron_pair_first.azr
+data luna_hpge: sigma(1->2)
+data luna_hpge_total: sum(sigma(1->2))
+data luna_hpge_sum: sum(sigma(1->2), 0.5*J0/J1*sigma(1->2))
+data kettner_55: dsdo_cm(1->2)
+data meyer_84: dsdo_cm(1->1)
+== tests/ec_exit_position/models/photon_pair_first.azr
+data luna_hpge: sigma(1->2)
+data luna_hpge_total: sum(sigma(1->2))
+data luna_hpge_sum: sum(sigma(1->2), 0.5*J0/J1*sigma(1->2))
+data kettner_55: dsdo_cm(1->2)
+data meyer_84: dsdo_cm(1->1)
 == tests/ec_final_state_listed/models/listed.azr
 data: set-up failed
 exit 1

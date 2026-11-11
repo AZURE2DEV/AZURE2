@@ -1257,19 +1257,45 @@ that every capture-A_y caller asks for `maxLOrder` (§11.2); that `channelOfBloc
    route and `--use-rmc` are compared separately at the steps that touch them (§11.6), since no project of
    `tests/` selects them.
 
-### 11.12 Status (2026-11-11)
+### 11.12 Status (2026-11-11, evening)
 
-Done: steps 1, 2, 4, 5 and 7 (`feature/upgrade-4-pathway-table-1`), step 6 (`feature/upgrade-4-capture-ay`).
+Done: steps 1, 2, 4, 5 and 7 (`feature/upgrade-4-pathway-table-1`), step 6 (`feature/upgrade-4-capture-ay`), steps 3
+and 8 (`feature/upgrade-4-pathway-table-2`, below).
 Capture A_y at set-up: `RequestCaptureAyTerms` (`src/CaptureAyRequests.cpp`) names, after the data are filled and
 before `CNuc::Initialize`, every term (own and leaf) of an analyzing-power data set or extrapolation with a photon
 exit; it runs in the four set-up paths (`AZUREMain`, `runMCMC`, `AZUREAPI`'s session set-up and `RebuildImpl`).
 `BuildPathwayTable` builds the requested terms in the table's order (independent of the order of the requests) and
 none for a beta entrance.  A capture-A_y point without its terms is refused with a message naming the data set.
 
-Tree accesses left (the names of §11.1): `src/CNuc.cpp` 67 (`SortPathways`, `CalcAngularDists`: the writers of the
-trees), `src/EDataExternalCapture.cpp` 16, `src/EPointExternalCapture.cpp` 12, `src/EData.cpp` 6 (step 3); none in
-the matrix functions, the gradient, the check files, `CNucExternalCapture.cpp` or `AZUREAPI.cpp`.  Open: step 3
-(with decision 3) and step 8, after the data classes are replaced.
+Step 3 and step 8 (`feature/upgrade-4-pathway-table-2`, 2026-11-11), with decision 3 first:
+- Defect 1 is fixed (its own commit): the external-capture code finds the exit to the photon pair by the pair's number
+  (`ExternalCaptureExit`, `include/ExternalCaptureExit.h`, in `src/ExternalCaptureSetup.cpp`), and an entrance without
+  a pathway to it is refused at the signature walk, naming the data segment and both pair keys.  Test project
+  `tests/ec_exit_position` (13N with a 13C level whose n + 12C pair is numbered below or above the photon pair): the
+  base wrote an empty `intEC.dat` and died with SIGSEGV on the first order; now both orders give the same outputs byte
+  for byte; ctest `upgrade_external_capture_exit` checks the position and the refusal.
+- The memo of the shifted amplitude (`Unit::GetECAmplitudeWithShift`) recorded the final level's energy at the first
+  shifted evaluation of a copy.  That energy cannot depend on the copy's history: `ALevel::GetECEnergy` is written only
+  by `CNuc::SetUpECFinalBlocks` in `CNuc::Initialize`.  The memo keeps (energy, amplitude) and reads the set-up energy;
+  `history_test` has a project `ec` (external capture, a fitted shift, the final state's energy free) and a sequence
+  B -> C against fresh C on every project (shown failing with the energy recorded per copy from the fit energy).
+- Step 3: the walk of the intEC count and signature, the amplitude loops of the data segments and of the leaves (the
+  latter moved verbatim from `WorkingCopy.cpp` to `WorkingCopy::LeafECAmplitudes`), `Unit::CalculateECAmplitudes`,
+  `Unit::GetECAmplitudeWithShift` and `ECPathwayAmplitude` (`src/UnitExternalCapture.cpp`) read the table.  The
+  signature is unchanged: files written by the base and by the table build are identical and each reads the other's.
+- Step 8: one commit ran every project in the three bases with the trees not built and their accessors aborting
+  (identical to `tab-trial18`); the next deleted `SortPathways`, `CalcAngularDists`, `PPair::decays_` and its
+  accessors, the classes `Decay`, `KGroup`, `MGroup`, `ECMGroup`, `KLGroup`, `Interference` (12 files, 971 lines) and
+  `tests/upgrade/pathways_from_cnuc_test.cpp` (531 lines).  `CNuc.cpp`: 1,774 -> 1,548 lines.  The pathways check
+  file is written from the table (byte-identical).
+- The double final state (two photon pairs with one final state): refused at set-up (`FinalStateOfAnotherPair`);
+  `tests/ec_final_state_ambiguous` (d) and (e) are exactly the case met in step 6 (13N with a copy of its photon
+  pair), so no test was added.
+
+The pathways now exist once, in the table.  What remains of step 6 of §10 is the other half of `CNuc`'s readers:
+`GetPair`/`GetJGroup` for channel data in the matrix functions and the per-(J-group, channel) tables of the points
+(§11.9 "What remains"); step 7 (the parameter vector, the abundances and penalties, the set-up from the level rows,
+the handle to the table) is open.
 
 Met while doing step 6:
 - The trees built capture-A_y terms for a beta entrance; both readers return before the terms for a non-particle
