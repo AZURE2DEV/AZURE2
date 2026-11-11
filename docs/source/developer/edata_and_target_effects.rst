@@ -274,6 +274,8 @@ kernel             format-3 keyword                                file
                                                                    applied first)
 ``rectangular``    ``detector.energy_resolution rectangular``      ``KernelRectangular.cpp``: the
                    ``width <w>``                                   average over [E0 - w/2, E0 + w/2]
+``triangular``     ``detector.energy_resolution triangular``       ``KernelTriangular.cpp``: weight
+                   ``width <w>``                                   1 - |E - E0|/(w/2)
 =================  ==============================================  ====================================
 
 An effect has at most one broadening and one resolution kernel

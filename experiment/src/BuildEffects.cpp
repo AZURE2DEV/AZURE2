@@ -231,6 +231,34 @@ void BeamInto(Context &c, const ValidatedRecord &b, TargetEffectSpec &e) {
   if (const Value *v = b.Get("detailed_balance")) e.beamDetailedBalance = v->word == "yes";
 }
 
+// A table kernel's parameter written as a nuisance (KernelParameter::fittable): its entry of the effect's apparatus
+// parameters (SetupSpecs.h ApparatusParameterSpec), shared by every effect whose data sets name this record, and where
+// its fitted value is written back.  Nothing here depends on the kernel.
+void ApparatusParameterInto(Context &c, const ValidatedRecord &record, const std::string &field, const KernelParameter &p,
+                            int slot, const Nuisance &n, TargetEffectSpec &e) {
+  ApparatusParameterSpec a;
+  a.row = "kernel";
+  a.slot = slot;
+  a.key = record.name + "|" + field + "|" + p.name;
+  a.owner = {{"record", record.name}, {"field", field}, {"parameter", p.name}};
+  a.unit = p.unit;
+  a.value = ToBase(n.value.value, n.unit);
+  a.vary = n.mode == NuisanceMode::Fit;
+  if (!(a.value > 0.0)) c.Error(codes::kOutOfRange, record, field, "the " + p.name + " must be > 0, not " + n.value.text);
+  if (n.hasPrior) {
+    if (n.priorCentre.value != n.value.value)
+      c.Error(codes::kNotBuilt, record, field, "a prior centred away from the value: this engine centres it on the value");
+    a.priorWidth = n.priorPercent ? n.priorWidth.value / 100.0 * a.value : ToBase(n.priorWidth.value, n.unit);
+  }
+  if (n.hasGridMax) {
+    a.gridMax = ToBase(n.gridMax.value, n.unit);
+    if (!(a.gridMax >= a.value))
+      c.Error(codes::kOutOfRange, record, field, "grid_max " + n.gridMax.text + " is below the value " + n.value.text);
+  }
+  c.out_.parameterSources[a.owner[0].second + "." + field + "." + p.name] = {record.name, field, 0, p.name};
+  e.apparatusParameters.push_back(a);
+}
+
 // A detector's energy resolution: with a beam profile the profile's TPC resolution; on a beta-delayed spectrum (no
 // beam) a Gaussian fold of the model in the observed particle energy, the engine's convolution kernel on the lab energy
 // (for a decay at rest the energy the data give); elsewhere not built (a beam's spread states a Gaussian there).
@@ -245,7 +273,17 @@ void DetectorInto(Context &c, const ValidatedRecord &d, bool decay, TargetEffect
     e.kernel = k->name;
     for (const KernelParameter &p : k->parameters) {
       const Value *v = r->Get(p.name);
-      e.kernelParameters.push_back(v ? Context::InBase(v->number, v->unit) : 0.0);
+      // fitted, or with a prior or a grid_max (as an areal density): a parameter; a fixed value is a constant of the kernel
+      const Nuisance *n = (v && v->type == ValueType::Nuisance) ? &v->nuisance : nullptr;
+      if (n && (n->mode == NuisanceMode::Fit || n->hasPrior || n->hasGridMax)) {
+        ApparatusParameterInto(c, d, "energy_resolution", p, (int)e.kernelParameters.size(), *n, e);
+        e.kernelParameters.push_back(e.apparatusParameters.back().value);
+      } else if (n) {
+        e.kernelParameters.push_back(ToBase(n->value.value, n->unit));
+        if (!(e.kernelParameters.back() > 0.0)) c.Error(codes::kOutOfRange, d, "energy_resolution", "the " + p.name + " must be > 0, not " + n->value.text);
+      } else {
+        e.kernelParameters.push_back(v ? Context::InBase(v->number, v->unit) : 0.0);
+      }
     }
   } else if (r) {
     const Value *sigma = r->Get("sigma");

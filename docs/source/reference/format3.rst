@@ -527,7 +527,7 @@ Detector, in ``<targets>``.  Finite solid angle, energy resolution, time-of-flig
      - optional
      - Q_0 ... Q_k, lab
    * - ``energy_resolution``
-     - ``<number> <energy unit> lab|cm | rectangular width <number> <energy unit>``
+     - ``<number> <energy unit> lab|cm | rectangular width <value> <energy unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>] | triangular width <value> <energy unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]``
      - optional
      - resolution of a reconstructed energy
    * - ``udr``

@@ -1,0 +1,58 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+format=3
+</config>
+<levels>
+0.5 1 0.4953 1 1 1 1 0 1 1 1 84 0.5 1 0 1 0 1.007276 15.99053 1 8 0.599607 0.599607 0 0 0.0 0 5 5.5857 0 0
+0.5 1 0.4953 1 1 3 1 2 1 1 1 0 1 1 0.5 1 0.4953 0 17.0021 0 9 0.599607 0 0 0 0.0 10 0 0 0 0
+
+0.5 -1 30 1 1 1 1 2 2 1 1 1e-06 0.5 1 0 1 0 1.007276 15.99053 1 8 0.599607 0.599607 0 0 0.0 0 5 5.5857 0 0
+0.5 -1 30 1 1 3 1 2 2 1 1 0 1 1 0.5 1 0.4953 0 17.0021 0 9 0.599607 0 0 0 0.0 10 0 0 0 0
+
+1.5 -1 30 1 1 1 1 2 3 1 1 1e-06 0.5 1 0 1 0 1.007276 15.99053 1 8 0.599607 0.599607 0 0 0.0 0 5 5.5857 0 0
+1.5 -1 30 1 1 3 1 2 3 1 1 0 1 1 0.5 1 0.4953 0 17.0021 0 9 0.599607 0 0 0 0.0 10 0 0 0 0
+
+0.5 1 30 1 1 1 1 0 4 1 1 1e-06 0.5 1 0 1 0 1.007276 15.99053 1 8 0.599607 0.599607 0 0 0.0 0 5 5.5857 0 0
+0.5 1 30 1 1 3 1 2 4 1 1 0 1 1 0.5 1 0.4953 0 17.0021 0 9 0.599607 0 0 0 0.0 10 0 0 0 0
+
+0.5 -1 1.4 1 1 1 1 2 5 1 1 1000.0 0.5 1 0 1 0 1.007276 15.99053 1 8 0.599607 0.599607 0 0 0.0 0 5 5.5857 0 0
+0.5 -1 1.4 1 1 3 1 2 5 1 1 1.0 1 1 0.5 1 0.4953 0 17.0021 0 9 0.599607 0 0 0 0.0 10 0 0 0 0
+
+</levels>
+<data>
+# Pseudo-data at a 20 keV rectangular resolution (make_models.py --data); the width starts at 14 keV and is fitted
+dataset d1
+    reaction       16O(p,g)17F[0.4953]
+    quantity       sigma
+    unit           b
+    file           data/d1.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    detector       det_fit
+    quadrature     points 50 width_multiplier 20 per_width 50
+dataset d2
+    reaction       16O(p,g)17F[0.4953]
+    quantity       sigma
+    unit           b
+    file           data/d2.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    detector       det_fit
+    quadrature     points 60 width_multiplier 20 per_width 50
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+detector det_fit
+    energy_resolution rectangular width 14 keV fit
+</targets>

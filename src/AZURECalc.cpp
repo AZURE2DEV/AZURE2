@@ -286,14 +286,14 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, WorkingCopy *ld, azure2::Results &re
     if (fixed[f]) continue;
     const ParamKind kind = pmap.Desc(f).kind;
     if (kind != ParamKind::EnergyShift && kind != ParamKind::EnergyShiftSqrt && kind != ParamKind::EnergyShiftFn &&
-        kind != ParamKind::Density && kind != ParamKind::StoppingScale) continue;
+        kind != ParamKind::Density && kind != ParamKind::Apparatus) continue;
     const int packed = pmap.FullToPacked(f);
     if (packed < 0 || packed >= nCols) continue;
     // Columns the caller holds fixed: not differenced.
     if (skipPacked && packed < (int)skipPacked->size() && (*skipPacked)[packed]) continue;
-    // A fitted target density, or a stopping scale, moves the depth window of every point of its lines: full
-    // re-evaluation (the scale's analytic dY/ds = (-Y + 1e-24 N <sigma>(E_out))/s comes with the kernels branch).
-    if (kind == ParamKind::Density || kind == ParamKind::StoppingScale) {
+    // A fitted target density, or an apparatus parameter (a stopping scale moves the depth window of every point of
+    // its lines, a kernel's width every fold of its effects): full re-evaluation.
+    if (kind == ParamKind::Density || kind == ParamKind::Apparatus) {
       fullShifts.push_back(f);
       continue;
     }
@@ -1058,7 +1058,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   if (const char *gc = std::getenv("AZURE_GRAD_CHECK")) {
     if (!gradChecked.exchange(true)) {
       static const char *kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt", "shift_fn", "abundance", "screening",
-                                       "density", "doppler", "thickness", "cbkg", "stopping_scale"};
+                                       "density", "doppler", "thickness", "cbkg", "apparatus"};
       struct Row { double score, g, fd; int idx; ParamDesc d; double gj, scoreJ; };
       std::vector<Row> rows;
       constexpr int kNumKinds = sizeof(kindName) / sizeof(kindName[0]);  // one per ParamKind

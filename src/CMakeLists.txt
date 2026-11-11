@@ -16,6 +16,7 @@ DataCovarianceGroups.cpp
 TargetSetup.cpp
 TargetStopping.cpp
 StoppingScale.cpp
+ApparatusParameters.cpp
 ExternalCaptureSetup.cpp
 DataParameters.cpp
 HandOver.cpp

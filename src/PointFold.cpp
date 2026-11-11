@@ -28,6 +28,7 @@ struct PointKernelInput {
   PointKernelInput(const Unit &unit, const WorkingCopy &data, const Config &configure)
       : effect(data.Data().GetTargetEffect(unit.GetTargetEffectNum())), parameters(effect->KernelParametersFor(configure)) {
     const TargetEffectValues &values = data.EffectValues(unit.GetTargetEffectNum());
+    if (!values.kernelValues.empty()) parameters.values = values.kernelValues.data();  // a fitted kernel parameter's value
     const azure2::experiment::Kernel *resolution = effect->Kernels().resolution;
     const bool target = resolution && resolution->usesTarget;
     point.energy = unit.GetCMEnergy();
