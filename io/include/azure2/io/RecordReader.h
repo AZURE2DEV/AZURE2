@@ -42,8 +42,8 @@ RecordReadResult ReadRecords(const std::vector<std::string> &lines, int firstLin
 RecordReadResult ReadRecords(const Document &doc, const Document::Section &section, const std::vector<std::string> &kinds);
 
 /// The canonical text of `set`, one line per element (no endings), ready for Document::ReplaceLines: records separated
-/// by one blank line, fields indented by four spaces with the value from column 20 (or one blank after a longer
-/// key), comments kept where they were attached, tokens quoted when they were or when they hold a blank, '#' or
+/// by one blank line, fields indented by four spaces, the values of a record in one column (column 20, or one blank
+/// after the record's longest key when that key has 15 characters or more), comments kept where they were attached, tokens quoted when they were or when they hold a blank, '#' or
 /// nothing.  A token holding '"' cannot be written so that it reads back the same (the reader has no escapes).
 std::vector<std::string> WriteRecords(const RecordSet &set);
 
