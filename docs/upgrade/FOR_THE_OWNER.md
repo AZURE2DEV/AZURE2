@@ -181,16 +181,25 @@ reads `CLAUDE.md` first, so it is given the recipes and is stopped by the checks
 
 ## What is in work and what comes next
 
-In work now: the THM projects to format 3 (the last seven files) and the gaps format 3 still has; external-capture
-amplitudes read from the pathway table and the old pathway trees deleted; and the first three branches of Phase 5
-(one level-matrix solve per distinct compound energy, the yield of a finite layer as a quantity, data compared in the
-laboratory frame). Merged on 2026-11-11: the data classes replaced (`DataSet`, `WorkingCopy`, `Segment`, `Unit`);
-176 of the 183 convertible project files in format 3 (the THM projects are left); validation that reports what a run
-would refuse; pyazr's functions on a format-3 project, with edits of levels, `<config>` and `<thm>` done by the
-engine; the design note of Phase 5 (`energy_grid.md`) with its decisions taken. First branch of Phase 5
-(in the merge batch being verified): the level matrix is solved once per compound energy instead of once per data
-point or sub-point, so a fit evaluation of 13N takes 132 ms instead of 317 and of the thick-target project 264 ms
-instead of 1,102, every output unchanged.
+In work now (2026-11-11, evening): the engine takes its stopping powers from the stopping library (a target says
+`stopping evaluation`; one stopping scale per material and projectile as a nuisance parameter with a prior; ERYA
+removed); the analytic gradient per compound energy (the old point mapping deleted); the apparatus effects (target,
+resolution, beam profile, UDR, Doppler, layer yield) as kernel functions in one table, with a new kernel added by
+the recipe as the proof; pyazr moved off its old file class; an audit that every regression check still tests what
+it says after the conversion.
+
+Merged on 2026-11-11: the data classes replaced (`DataSet`, `WorkingCopy`, `Segment`, `Unit`); **all 183
+convertible project files in format 3**, the THM projects included; validation that reports what a run would
+refuse, and a refused project that ends with its refusal as the last line; pyazr's functions on a format-3 project,
+with edits of levels, `<config>` and `<thm>` done by the engine; the old pathway trees deleted (external capture
+reads the pathway table; a crash on one ordering of the particle pairs fixed); the design note of Phase 5
+(`energy_grid.md`) with its decisions taken, and its first branches: the level matrix solved once per compound
+energy instead of once per data point or sub-point (a fit evaluation of 13N 132 ms instead of 317, of the
+thick-target project 264 ms instead of 1,102, every output unchanged; a fit with the analytic gradient does not gain
+yet and is 7 % slower at 5 threads until the gradient branch lands); the yield of a layer of finite thickness as a
+quantity (its accuracy over a narrow resonance on a thick layer is 1.5e-4, the present quadrature's); laboratory
+data compared in the laboratory frame (last-digit rounding in 23 projects); SRIM-2013's stopping powers in
+`stopping/`, ported from LunaSRIM (agreement with LunaSRIM to the printing precision).
 
 Then, to close Phase 4: the old reading path deleted (with `pyazr/azrfile.py`, 3,756 lines of
 a second grammar in Python); the rest of `CNuc` (the parameter vector and the set-up from the level rows).
