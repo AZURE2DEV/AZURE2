@@ -39,9 +39,11 @@ add_library(azure2_experiment STATIC
   src/FinalStates.cpp
   src/Grids.cpp
   src/HybridPotentialSettings.cpp
+  src/LayerChecks.cpp
   src/SpinOrbitChecks.cpp
   src/Json.cpp
   src/ModelDatum.cpp
+  src/ParameterFileNames.cpp
   src/Prediction.cpp
   src/LevelTables.cpp
   src/Quantities.cpp

@@ -3,7 +3,7 @@
 # The capture analyzing power couples the channel spin light particle first, like the rest of AZURE2
 # (audit item 9, 2026-10-26).  Seyler and Weller's b_k (CNuc::CalcCaptureAnalyzingPower) couple it target
 # first; the (-1)^(s - s') that takes their Eq. (21) to AZURE2's convention was missing, so for a target
-# with spin the capture A_y had every channel-spin off-diagonal term sign-flipped.  Models from make_models.py.
+# with spin the capture A_y had every channel-spin off-diagonal term sign-flipped.  Models from make_models.py (deleted; README.md: how the models were made).
 #
 #   (a) twolevel (n + 1/2- target, channel spins 0 and 1, two 1+ levels decaying by M1): the engine's A_y
 #       against a magnetic-substate calculation from the engine's own reduced-width amplitudes (verify.py);

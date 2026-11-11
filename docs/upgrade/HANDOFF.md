@@ -2,6 +2,417 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (director, 16:39) — merged: seven branches (finite-layer yield, pathway table 2, one solve per energy, SRIM stopping, lab frame, THM projects in format 3, format-3 gaps)
+
+**State.** `feature/upgrade-4-data` holds the seven branches, merged in this order; the tree is the one the director
+verified as a rehearsal (`wt-trial21`, then `wt-trial22`). All 183 convertible projects are format 3. In work (three
+agents, from the head before the last two merges): the engine uses `stopping/` (`feature/upgrade-5-stopping-wire`),
+the gradient per compound energy (`feature/upgrade-5-energy-tasks-gradient`), the folds as kernel functions
+(`feature/upgrade-5-kernels`). Launched after this entry: pyazr off the old file class (brief AQ), the audit of the
+checks' text edits (brief AR).
+
+**Director's verification** (own runs, `work/director/full_verify2.sh`; logs `work/director/v2_trial21a.*`,
+`v2_trial22.*`):
+- First five branches against the outputs before them (`tab-trial19`): every file identical except the rounding
+  class of the lab-frame branch and the two files of `sum_lab_frame`; new projects `layer_yield`, `ec_exit_position`.
+- THM and gaps on top (`tab-trial22` against `tab-trial21a`), 766 / 739 / 766 files (Brune / formal / Park):
+  721 / 696 / 721 identical. What differs, all expected: `param.par` of the THM projects (parameter names by record:
+  `o17_guardo.shift.offset` for `segment_1_energy_shift`), 17O's `normalizations.out` (a THM data set's angle range
+  printed 0–180 instead of 0–0), and 39 `run.log` per basis (the refusal line of a project whose data files a check
+  writes; `M_thick` no longer announced as an old file; the THM projects' names).
+- `ctest -LE slow` 201/201, `ctest -L slow` 10/10, `tests/run_tests.sh` 149 passed and 1 failed, repaired below;
+  1 against 6 threads identical; spec equivalence 202 files, 184 converted and equal, 18 not converted (12 written in
+  format 3 from the start, 6 old on purpose); the converted-tree gate 483 (456 formal) identical, 38 classified, 0
+  differ, 0 missing.
+- **The one failure was a meeting of two branches**: both refuse a THM experiment that no `<thm>` line defines, the
+  gaps branch when the project is read (`E_THM_EXPERIMENT_UNKNOWN`, with record and field), the THM branch at run
+  time. The reading-time one now comes first, so `tests/thm_experiment` (undefined) expected a message that can no
+  longer appear. The director changed the check to expect the reading-time diagnostic (it passes); uniting the two
+  refusals and the twice-written experiment-name grammar is in brief AR.
+- Not run: Sphinx, ThreadSanitizer (owed by the gradient branch), the GUI.
+
+**Open, for the owner or the PI:** SRIM's terms against the GPL repository (below); fits at several threads are not
+reproducible run to run (1e-10 in χ² terms, also before these branches; cause not shown); the sub-point quadrature
+over a narrow resonance on a thick layer is good to 1.5e-4 (the grid branch's test case).
+
+### Finite-layer yield (`feature/upgrade-5-layer-yield`) — director's review
+
+- What it adds: a data set with `quantity yield` on a target of `kind layer` is Y(E₀) = 10⁻²⁴ ∫ ⟨σ⟩/ε dE from the
+  exit energy to the beam energy, the exit energy being where the layer's areal density is used up
+  (`include/LayerExit.h`), on the point's own sub-points. Refusals at set-up: `E_LAYER_STOPPING`,
+  `E_LAYER_EXIT_BELOW_MODEL`.
+- **What it cost (the extensibility count the PI asked for):** 11 existing engine files, about 100 lines, and 5 new
+  files. The yield is a branch inside the target fold (`Unit::IntegrateKernelsImpl`), not yet a kernel of its own:
+  that is the kernels branch. A new quantity is therefore not yet "a few named places"; say so to the owner.
+- **Director's independent check** (`work/director/layercheck/`, own trapezoid integral of σ/ε on a fine grid of
+  the bare cross section written by the engine, 38,197 points, analytic exit energy):
+  thin layer 1–3e-7; scan over a narrow resonance, largest |ΔY| 1.2e-5 of the plateau (4e-4 relative on the rising
+  edge, median 3e-6); **thick layer (N = 1.1e19 atoms/cm², 60 quadrature points) the engine is 1.5e-4 above the
+  integral**, and it converges slowly with the number of points (120: 1.5e-4, 240: 1.4e-4, 480: 1.07e-4). This is
+  the accuracy of the present sub-point quadrature over a narrow resonance; the infinite-target yield has it too.
+  The agent's 3.2e-6 for the thick layer compares the engine with its own infinite-target yield: a consistency
+  number, not an accuracy. The grid branch (decision D2) gets this case as a test with the director's integral as
+  the reference.
+- Limits to know: ∂Y/∂N by central differences; a layer shared by a cross-section data set and a yield data set with
+  free screening or temperature is refused (`E_FOLD_CONFLICT`); `convert/tests/spec_equivalence_test.cpp` does not
+  compare `layerYield`; a stale comment in `tests/units_scales/models/yield_story.azr`.
+
+### Pathway table, second branch (`feature/upgrade-4-pathway-table-2`) — director's review
+
+- Defect 1 of `cnuc_split.md` §11.9 is fixed: external capture finds the exit to the photon pair by the pair's
+  number (`include/ExternalCaptureExit.h`). The base read past the end of the exit list when a pair without a
+  pathway from the entrance was numbered below the photon pair: an empty `intEC.dat` and a segmentation fault
+  (reproduced by the director with `work/b-trial19`). New test directory `tests/ec_exit_position`.
+- Director's own run (`work/director/pathcheck/`): the two models of that directory with an energy shift added to
+  two capture data sets (the shifted amplitude takes the same look-up), with the energy tables and with
+  `--no-ec-table`: every output file equal in the two orders of the pairs.
+- The memo of the shifted amplitude keeps (energy, amplitude) only: the final level's energy has one writer at
+  set-up (`CNuc::SetUpECFinalBlocks`), so it cannot depend on the history of a copy; `history_test` project `ec`
+  holds that.
+- The pathway trees are deleted (`Decay`, `KGroup`, `MGroup`, `ECMGroup`, `KLGroup`, `Interference`: 12 files, 971
+  lines; `SortPathways`, `CalcAngularDists`). `CNuc.cpp` 1,774 → 1,548 lines.
+- Left: a stale comment in `src/ECIntegral.cpp:438` that names `CNuc::SortPathways` (outside the branch's scope);
+  the set-up amplitudes could be shared between copies instead of copied (would move fit bits: not done).
+- `cli_help` of `tests/run_tests.sh` failed once under load for two agents and passes alone (cause not shown).
+
+### One solve per compound energy (`feature/upgrade-5-energy-tasks`, Phase 5 branch 1) — director's review
+
+- What it does: the point pass groups the units (points and sub-points) by (nucleus, route, compound energy bits)
+  and fills, factorises and solves the level matrix once per group (`src/EnergyPass.cpp`: `SolveAtOneEnergy`);
+  units whose external-capture amplitudes differ get their own T-matrix inside the group. `AZURE_PLAN_CHECK=1`
+  recomputes every unit the old way and compares: 3,727,625 units over the tree, 0 differ. Outputs of every project
+  are byte-identical (director's run of the whole tree on the merged batch).
+- Measured by the agent (point pass per evaluation, 1 thread): T2 106 → 45 ms, 13N 317 → 132 ms, thick-target
+  project 1,102 → 264 ms, `natural_neon` 3,207 → 1,718 ms, THM unchanged.
+- **Director's own timing, the caveat:** the 200-call T2 fit (MIGRAD) at 5 threads, alternated three times, is about
+  7 % slower in wall time (base 15.7 / 14.3 / 15.6 s, new 16.2 / 16.3 / 16.4 s; user time equal, 58 s); at 1 thread
+  equal (44.4 against 43.6 s). The analytic gradient still solves per host point, so a gradient fit gains nothing
+  yet, and a serial section grew. Accepted for the merge; removing it is the first item and an acceptance test of
+  the gradient branch (brief AO).
+- **Kept on purpose:** the point mapping (`MapData`, `MapLeaves`, `SharesCalculation`, `ScopedPointMappingOff`) and
+  `BuildGradItems`; they go with the gradient branch. `tests/component_mapping/check.sh` part (b) asserted that the
+  mapping saves level-matrix solutions; that is no longer true (2,769 with and without it), so the director changed
+  (b) to assert the two counts are equal.
+- **Found on the way:** a fit at several threads is not reproducible run to run, also in the base build (two runs
+  of `b-trial19` at 5 threads differ in 8 output files, χ² terms at 1e-10). Fits are compared at 1 thread only.
+  Whether the cause is the order of an OpenMP reduction is not shown; the gradient branch owes a ThreadSanitizer run.
+- Not run by the agent: ThreadSanitizer, Sphinx, `ctest -L slow`.
+
+### SRIM-2013 stopping through LunaSRIM (`feature/upgrade-5-stopping-2`) — director's review
+
+- PI's decision (2026-11-11): the stopping powers are SRIM's as implemented in the PI's LunaSRIM, SRIM cited.
+  `stopping/` now holds a C++ port (`Electronic.cpp`, `Nuclear.cpp`), SRIM's two coefficient files in
+  `stopping/data/srim/` (compiled in; `AZURE2_SRIM_DATA_DIR` reads them from a directory instead), the phase of a
+  material (solid | gas), the compound correction, TRIM's straggling beside Bohr's. Nothing in the engine calls it
+  yet (branch `stopping-wire`).
+- **Director's own comparison** (`work/director/srimcheck/own.py`, the installed lunasrim 1.0.0 against the
+  `azure2-stopping` tool, 9 ion–material cases the agent did not choose): worst relative difference 5.8e-6, which is
+  the tool's printing precision; layers: p 0.3 MeV in Ta₂O₅ 1e18 atoms/cm² exit 283.05601 against 283.05604 keV,
+  straggling 2.687 against 2.6874 keV; ¹⁴N 1 MeV in Au 3e17 atoms/cm² 901.22377 against 901.22407 keV, 16.88 against
+  16.881 keV. Regenerating the committed reference table with the committed generator reproduces it byte for byte.
+  The two data files have the SHA-256 of LunaSRIM's.
+- Decision accepted by the director: the compound correction is applied once (as SRIM's table mode, TRIM and
+  LunaSRIM's `energy_loss`); LunaSRIM's `compound_stopping` applies it a second time below 10 MeV (SR module list
+  mode), documented in LunaSRIM's own physics note.
+- **To know:** the uncertainties (H 4.0 %, He 3.9 %, Li 4.8 %, heavier 5.8 %) are SRIM's stated mean deviations from
+  the measurements, used as one standard deviation: an interpretation, not a statement by SRIM; nuclear 10 % is
+  provisional. Below about 10 keV/u SRIM and PSTAR/ASTAR differ by tens of per cent (p in He −84 % at 2 keV, α in H
+  +60 % at 1 keV): `stopping.md` §9.2.
+- **For the owner, not decided here:** SRIM's terms, as LunaSRIM's README states them, allow free copying for
+  personal, non-commercial use and exclude commercial use without a licence from SRIM.org. AZURE2's public repository
+  is GPL. Whether the public repository ships `SCOEF03.DAT` and `SNUC03.dat` is the owner's decision; the library
+  works without them when `AZURE2_SRIM_DATA_DIR` points to a copy (`stopping/data/srim/README.md`).
+
+### Data compared in their own frame (`feature/upgrade-5-lab-frame`, Phase 5 branch 3) — director's review
+
+- A laboratory-frame differential data point is no longer converted to the centre of mass at set-up; the model is
+  divided by the Jacobian at comparison (`DataResidual`). `FrameRow` loses the stored c.m. value and error.
+- Outputs: identical except for last-digit rounding in 23 projects (class `lab-frame-rounding`: 1e-14 relative or
+  one unit of the last printed digit) and the `run.log` of `sum_lab_frame`, whose χ² is itself rounding noise
+  (4e-17; it moves by 7e-23). The class was not loosened for it: the two files are a listed, explained difference.
+  Fit end points move by at most 9.1e-6 relative (`angle_mapping`, one width).
+- Open, not blocking: a Jacobian of exactly 0 (the kinematic limit) would give an infinite pull where the old code
+  dropped the point: should be a set-up refusal; the pyazr docstrings of `residuals` and `residual_jacobian` still
+  say c.m. error; THM lab-differential data are untested.
+
+### The THM projects in format 3 (`feature/upgrade-4-tree-format3-5`, Phase 4 group 7) — director's review
+
+- All 183 convertible projects of the tree are format 3. A THM data set names its experiment on its record
+  (`thm <name>`, `thm_weight`); `<thm>` keeps the options and the `experiment[...]` lines and is built empty when
+  records name experiments and the file has no section (`src/ConfigThm.cpp`: `Format3ThmSection`).
+- Engine diff read by the director: `ConfigThm.cpp`, `ThmBlockEdits.cpp/.h` (`ThmExperimentsWithoutMembers`; idle
+  experiment lines skipped), `convert/src/OldProject.cpp` (five refusals of old member/weight forms). 20 checks
+  rewritten on records (`tests/lib/thm_records.sh`, `tests/pyazr/thm_records.py`).
+- **Known defects, given to the audit branch (brief AR):** a format-3 `<thm>` still accepts the old `segments=`
+  list; an experiment no data set names is refused in one place with "segments= is required" and warned about in
+  another; **checks whose text edits no longer hit anything in a converted project can pass without testing**
+  (`thm_fit` was one, found and repaired by the agent; the others are not audited yet).
+- The 13 pyazr tests of the old file class's THM API still read the originals (brief AQ moves them).
+
+### What format 3 could not yet say (`feature/upgrade-4-format3-gaps`) — director's review
+
+- A refused format-3 project ends with exit 1 and its refusal as the last line (was "Could not open …");
+  `tests/cli_route_exit`. New diagnostics `E_THM_EXPERIMENT_UNKNOWN`, `E_PARAMETER_FILE_NO_MATCH`,
+  `W_PARAMETER_FILE_NAMES` (86 codes in all).
+- New in the format: `sigma_total` as a sum of elastic terms on a target with isotopes; `total_optical` on records;
+  a detector's `energy_resolution` on β-delayed spectra; with pair keys, the keys decide elasticity. Converter:
+  a Doppler-only `<targetInt>` on neutron samples becomes the sample's `doppler` field; `M_thick.azr` converted.
+- 24 old-format generators deleted; each README says how the models were made and which commit holds the script.
+- `AZURE_PROFILE` prints three reports (set-up, calculation, final evaluation); `tests/profile_report`.
+- **Merge with the THM branch** (director): `experiment/src/BuildEffects.cpp` keeps both flags of an effect
+  (`layerYield`, `decay`) and both suffixes of its signature. The undefined-experiment refusal now exists twice
+  (reading time in `ProjectReader.cpp`, run time in `ThmBlockEdits.cpp`), the experiment-name grammar twice: brief
+  AR unites them.
+- Left (brief AR): a set-up refusal other than a missing data file still ends with "Could not fill data object from
+  file."; the converter writes an inactive natural-target line without its sample target. Left (brief AQ):
+  `load_sav` does not check parameter names. Noted: the adjoint gradient's rounding depends on the order of the
+  fields of a record (1e-14).
+- Not run by the agent: Sphinx, the full `scripts/check.sh`; `tests/run_tests.sh` was not repeated after the last
+  fix (the director's batch verification does).
+
+## 2026-11-11 (agent, format-3 gaps) — what format 3 could not say, and the reading path's defects (`feature/upgrade-4-format3-gaps`)
+
+**Done** (`AL_format3_gaps.md`; one commit per item):
+- A refused format-3 project exits 1 with its diagnostics and the refusal line last (`Config::kConfigRefused`,
+  `ReportFormat3Refused`), also when a data run cannot read a data file (`E_DATA_FILE`, `WorkingCopy::kFillRefused`);
+  a missing project file keeps "Could not open", exit 255. `cli_route_exit`.
+- A `thm <name>` that names no `experiment[<name>]` of `<thm>` is refused when the project is read
+  (`E_THM_EXPERIMENT_UNKNOWN`, `ProjectReader.cpp`).
+- A parameter file given as a run's start is checked by name (`experiment/ParameterFileNames.h`): no name of the run
+  refuses it (`E_PARAMETER_FILE_NO_MATCH`, exit 1), a partial match warns with both sides (`W_PARAMETER_FILE_NAMES`);
+  the project's other run's names and fixed data-set/extrapolation parameters are not reported. `param_file_names`.
+- `sigma_total` takes a sum of elastic terms on a target with isotopes (the natural total); `total_optical` runs on
+  records (outputs equal to the old models' but param.par names and sample headers).
+- A detector's `energy_resolution` on a beta-delayed spectrum is the Gaussian fold of the measured energy;
+  `beta_delayed_alpha` (e) on records; the converter writes that detector for the old line.
+- With `entrance_pair` / `exit_pair` the keys decide whether a reaction is elastic (`PairsDecideElastic`), not the label.
+- Converter: a Doppler-only `<targetInt>` line on neutron-sample lines becomes the samples' `doppler` field; a target
+  shared by lines of a sample and of none is copied for the sample (M_thick's four questions); `M_thick.azr` is format 3.
+- The 24 generators that wrote old files are deleted; each README says how the models were made.
+- `AZURE_PROFILE` reports the set-up apart and labels a calculation's report.
+
+**Verified how** (on the last code commit; tag `tab-f3gaps`, the new reference): all projects x 3 bases against
+`tab-trial19`: the same files, every output file identical; run.log differs in 33 projects per basis (data files not
+in the folder: the refusal line of item 1 replaces "Could not fill data object from file.") and in M_thick (its
+old-format note gone). Converted-tree gate (`REF=tab-trial8`, `gf3gaps`): 483 (456) identical, 38 classified, 0
+differ, 0 missing. Spec equivalence: 198 files, 184 converted (M_thick added), 184 equal, 0 differ, 14 not converted.
+`ctest -LE slow` 186/186, `OMP_NUM_THREADS=2 ctest -L slow` 10/10, `tests/run_tests.sh` 147 passed, 1 failed
+(model_data: the thm check refused inactive data sets; fixed in the last commit, model_data rerun: passed). 1 vs 4
+threads: T1, T1_start, T2, T3, 13N, natural_neon menu 1 byte-identical.
+
+**Open**: pyazr's `load_sav` does not check parameter-file names (pyazr/*.py not touched); the converter writes an
+inactive old natural line without its sample target (it would change meaning when switched on); the adjoint gradient
+differs from the old path's at 1e-14 relative and moves with the order of a data set's target/beam fields (FD and
+Jacobian path identical); `18O_p_a_thm/make_inputs.py` (group 7); `energy_grid.md` section 11 not edited (Phase 5's page).
+
+## 2026-11-11 (agent, tree to format 3, group 7) — the THM projects in format 3; all 183 convertible files converted (`feature/upgrade-4-tree-format3-5`)
+
+**Done** (`AK_tree_thm.md`; plan and state: `docs/upgrade/format3_tree.md`, group 7 row, §3a, §4, §5). The seven THM
+files are format 3 (`18O_p_a_thm`, `17O`, `7Li_p_a`, `6Li_d`, `thm_coherent_background/toy`, examples `c12c12_tumino2018`,
+`o17_guardo2017_fit`): the whole test tree is converted. The checks edit THM records through `tests/lib/thm_records.sh`
+(a data set joins an experiment by `thm <experiment>`, weights are `thm_weight`, folds are beam records) and
+`tests/pyazr/thm_records.py`; the old member and weight lists go through the converter on the originals. Engine fixes
+(`src/ThmBlockEdits.cpp`, `src/ConfigThm.cpp`): an experiment of inactive data sets only is ignored with the old warning
+(was refused with "'segments=' is not key=value"); a project without a `<thm>` section no longer drops its data sets'
+`thm_weight` tables silently, and an active data set naming an experiment no section defines is refused (it ran as global).
+The converter refuses five more THM member/weight forms the old engine refused. pyazr tests of AzrModel's THM API read
+the originals (`old_tree.py`; list in the page's §5).
+
+**Verified how**: page §3a (gate with the base counts; `tab-tree3e2`, the new reference, against `tab-trial19`:
+only names, one listed class and run.log in the converted projects; `ctest -LE slow` 186/186, `-L slow` 10/10; 1 vs 4
+threads identical; the 18O THM fit equal to the base's fit of the original; every rewritten check number for number
+the base's; `tests/run_tests.sh` 145/1, the failure, `model_data`, fixed in the last commit and rerun).
+
+**Open**: the refusal switch (what still reads old files: page §5, now without unconverted groups); the THM pyazr tests
+of the old file class to move to `Project`; the engine accepts an old `segments=` list in a format-3 `<thm>` section,
+and an experiment no data set names is refused with the old key's message "segments= is required" (both listed, not
+fixed: `src/` beyond the brief).
+
+## 2026-11-11 (agent, Phase 5 branch 3) — lab data compared in the lab frame (`feature/upgrade-5-lab-frame`)
+
+**Done** (decision M3 (b), `energy_grid.md` §4 and its new §4.2a with the measured sizes).
+- Stage 1 (1ba9772d): `FrameRow` keeps kinematics only (E, θ_c.m., J); `yCM`, `dyCM` and the value arguments of
+  `ConvertRow`/`UnconvertedRow` are gone; `Segment::CMValue`/`CMError` are members computing J·y, J·δy for display
+  (writers, API, diagnostics).  Byte-identical: all projects × 3 bases against `tab-trial18` (tag `tab-labframe1b`,
+  728 / 701 / 728 identical).  One copy after Initialize: T2 11,872,460 -> 11,866,380 bytes, natural_neon
+  142,705,164 -> 142,604,828, angle_mapping 501,376 -> 487,712 (probe `work/labframe/cb`).
+- Stage 2 (ec234914): one residual, `DataResidual(f, J, y, δy, n)` = (f/J − n y)/(n δy), in the objective, the
+  profiled norm, the least-squares rows and norm column, both analytic gradients (model cotangent × 1/J), the
+  covariance pulls, the shift columns, the THM profiles (model and columns divided by J; `THMRows::m, Jm` stay c.m.
+  for the band).  J = 1 gives the old bits.  `tools/classify.py --class=lab-frame-rounding` (cls.sh forwards it) with
+  the probed list of projects with lab-differential rows; `tests/consistency/classify_test.py` and
+  `tests/upgrade/lab_frame_residual_test.cpp` (T2; shown failing with f·J).
+- Measured (scratch `work/labframe/`): outputs identical as printed except the χ² of `sum_lab_frame/models/sum_data`,
+  `sum_free` (3.99e-17, data equal to the model; 1–2e-6 of itself, 7e-23 absolute); model values bit-identical; pulls
+  within 1.3 ε of their natural scale (relative to the pull up to 2.7e-12, 1.2e-2 for the 1e-9 pulls of
+  sum_lab_frame); χ² ≤ 2e-15 at the start and ≤ 2.5e-15 at the reference fits' end points (sum_free 2e-9);
+  fit end points up to 9e-6 in a parameter (angle_mapping), χ² up to 4.3e-9 (spin_orbit_potential).
+
+**Verified on ec234914** (binary `work/labframe/AZURE2-final`, scripts `work/labframe/final.sh`, `bench.sh`): all
+projects × 3 bases (tag `tab-labframe2`) identical to `tab-labframe2a`; against `tab-trial18` with the class: 726 / 697
+/ 724 identical, 0 / 2 / 2 lab-frame rounding, the 2 `run.log` of `sum_lab_frame` per basis differing; `ctest -LE
+slow` 184/184 (check.sh --quick); `tests/run_tests.sh` 146 passed, 0 failed; calculations at 1 and 4 threads
+identical (11 projects × 3 bases, 33/33); fits at 1 thread of stage 1 byte-identical to `b-trial18` (T2 lm, grad,
+migrad, angle_mapping); converted-tree gate (`glab`) 483 (456) identical, 38 classified, 0 differ, 0 missing.
+Cycles (perf stat, 1 thread, min of 6, alternated with `b-trial18`, load average about 18): T2 calculation 649.0 M
+against 646.0 M (+0.5 %), 200-call T2 fit 50.32 G against 49.82 G (+1.0 %); a first series gave +1.0 % and +5.3 %
+(spread of single runs 50–80 G); stage 2 against stage 1 on the fit, min of 4: −0.7 %.
+
+**Open.**  The class does not accept the `run.log` χ² of `sum_lab_frame` (12 printed digits of a rounding-noise χ²): a
+decision for the director (an absolute floor for a χ² that is zero to rounding, or the change as it is).  Reference
+tag from this tree: `tab-labframe2` (= `tab-labframe2a`).  pyazr's docstrings (`azure2.py` `residuals`,
+`residual_jacobian`) still write the residual with the c.m. error (pyazr is another branch's).
+
+## 2026-11-11 (agent, SRIM stopping) — `stopping/` computes SRIM-2013's stopping powers, ported from LunaSRIM (`feature/upgrade-5-stopping-2`)
+
+**Done.** The first branch's transcribed coefficients (Geant4's ICRU 49 rows, `elements.tsv`, Barkas table, joins,
+Pierce–Blann scaling, ZBL universal fit, Chu/Yang forms, the ERYA comparison tool) are gone. `stopping/` now ports
+LunaSRIM 1.0.0's `stopping.py` and `straggling.py` to C++ with SRIM's `SCOEF03.DAT` and `SNUC03.dat`
+(`stopping/data/srim/`, unchanged, README with SHA-256, terms, citation; compiled in, or read from
+`AZURE2_SRIM_DATA_DIR`): electronic stopping of any ion in any element, solid or gas with SRIM's phase factor;
+pair-specific nuclear stopping; Bragg's rule with SRIM's compound correction (applied once, as SRIM's tables, TRIM and
+LunaSRIM's energy loss do; LunaSRIM's `compound_stopping` applies it twice, following the SR module's list mode);
+break points of the integrals at the branch boundaries and at the nuclear stopping's jump (reduced energy 30);
+straggling TRIM (default) or Bohr; SRIM's published accuracy as the uncertainty (H 4.0 %, He 3.9 %, Li 4.8 %,
+heavier 5.8 %; nuclear 10 % provisional); SRIM cited in the provenance text and in every `azure2-stopping` output.
+Documents: `stopping.md` rewritten, `ARCHITECTURE.md` §7, `energy_grid.md`, `ROADMAP.md`, `FOR_THE_OWNER.md`,
+`CLAUDE.md`, the summary page.
+
+**Verified how.** Build 0 warnings; `ctest -R "stopping|consistency"`; tests against LunaSRIM's own values
+(`stopping/tools/make_srim_reference.py`, 8889 rows): electronic (8 projectiles, 25 elements, both phases for gases,
+every branch boundary) and compounds to 1e-10 (largest 1.6e-11), nuclear to 1e-10 (largest 1.1e-12, `log1p`),
+eight layers' energy loss and straggling to 1e-5 (largest 4.6e-6, LunaSRIM's integrator); a shifted coefficient
+column fails 1001 rows. `ctest -LE slow` (see the branch report). One ε 0.8–1.1 µs (before 3.1–3.5), one E_out
+0.6–0.9 ms (before 1.6–2.3).
+
+**Open.** Whether the public repository ships SRIM's two files (owner; LunaSRIM's README reads SRIM's terms as
+non-commercial use only); the compound correction by name from `Compound.dat` (not done, the user gives a number);
+a source for the nuclear uncertainty; the Python binding and the wiring (next branch).
+
+## 2026-11-11 (agent, Phase 5 branch 1) — one level-matrix solve per compound energy (`feature/upgrade-5-energy-tasks`)
+
+**Done** (commits 3b757db4, a7eef25c, 43c1c5bc and the documents).
+- The point pass (`WorkingCopy::CalculatePointsInParallel`, now in `src/EnergyPass.cpp`) runs the plan's energy tasks
+  (`CalculationPlan::EnergyTasks`): every unit -- a point without a fold or a sub-point -- with the same nucleus, route
+  (A-matrix, THM, R-matrix) and bits of E_x (`AMatrixFunc::InEnergy`, now also a public static) is one task: one fill
+  and factorisation, one T-matrix per group (entrance, exit, `ECAmplitudeSource`), one observable per unit
+  (`azure2::SolveAtOneEnergy`); then the folds in a second parallel loop (`Unit::FoldSubPoints`, `FoldThinTarget`),
+  which read the values already there. Tasks are kept between passes and rebuilt when a unit, its E_x or an
+  amplitude source changes; largest first (1 + T-matrices + units), dynamic schedule.
+- `Unit::Calculate` (the serial paths: model pass with `LeafValues::Calculate`, gradient, MCMC, reaction rates) has
+  no sub-point recursion: a host and its mapped points once per sub-point index through the same `SolveAtOneEnergy`,
+  then the fold. The external-capture re-energising of sub-points moved to `Unit::PrepareSubPoints` (before the pass).
+- `AZURE_PLAN_CHECK=1`: the write check over energy tasks and folds (batched above 2,000 steps), then every unit solved
+  alone and compared bit for bit with its shared solve (`CheckEnergyTasks`: routes and g^T A g of every J-group,
+  T-matrix from the unit's provider, record). `AZURE_PROFILE` counts energy tasks and their units.
+- The T-matrix key: the pair is not enough. A capture T-matrix carries the unit's external-capture amplitudes, and the
+  set-up's amplitudes of two units at one energy can differ in the last bits (`tests/electron_screening/grad.azr`:
+  1,602 of 10,125 units; outputs equal at their printed digits, the gradient fit diverged from the base at call 140).
+  Groups are now (entrance, exit, source): computed amplitudes together, held ones by a hash of their bits (a shared
+  hash with other bits is refused), by segment without the EC table.
+
+**Verified** (on 43c1c5bc unless said; base `work/b-trial18`, reference `tab-trial18`; load 16–26 on 24 cores).
+- All projects x 3 bases against `tab-trial18`: brune 728, no-brune 701, use-park 728 files, all identical (tag
+  `tab-etasks2`; the same on a7eef25c, `tab-etasks`).
+- `AZURE_PLAN_CHECK=1` on the whole tree, three bases: 262 checked evaluations, 3,727,625 units, 0 differ; the screening
+  gradient fit under the check: 544 evaluations, 0 differ.
+- `ctest -LE slow` 183/183; `upgrade_plan` (151 projects, 116,454 energy tasks for 1,014,989 units), `upgrade_plan_runtime`
+  (now also thick target, `target_effect_ranges`, the screening model), `upgrade_history` pass.
+- Calculations at 1 and 5 threads identical: T1, T2, T3, 13N, natural_neon, thick target, energy_shift_sqrt, shift_fn,
+  18O_p_a_thm, target_effect_ranges.
+- Fits at 1 thread byte-identical to the base: T2 `--use-lm` and `--use-gradient` (200 calls), 13N (200 calls),
+  energy_shift_sqrt, the screening fit (`electron_screening/grad.azr` on 13N's data, `--use-gradient`), 18O_p_a_thm.
+- `tests/run_tests.sh` (OMP 2): 145 passed, 1 failed -- `component_mapping`, its check (b), see Open.
+- Converted-tree gate (`REF=tab-trial8`, tag `getasks`): 483 identical (456 formal), 38 classified, 0 differ, 0 missing,
+  exit 0.
+- Speed: `energy_grid.md` §8 (per evaluation T2 106 → 45 ms, 13N 317 → 132, thick target 1,102 → 264, natural_neon
+  3,207 → 1,718; T1, T3 not slower; THM unchanged). A 200-call T2 fit at 1 thread is not faster as a whole (cycles
+  0.96x, within the ±12 % scatter): its 206 evaluations take 24.0 s instead of 28.9, its 19 gradients 29.0 s
+  instead of 33.7 (their forward solves are still per host), and the hand-over and Legendre tables are unchanged.
+  At 5 threads (2 runs each, load 16–18) the same fit took 17.0 s instead of 14.8 (cycles 0.89x, scatter ±10 %):
+  not explained; candidates are the serial rebuild of the energy tasks (each pooled copy and each segment-local
+  shift pass rebuilds them: 1.7 % of the 1-thread run) and the units of a task scattered in memory.
+  `target_effect_ranges`: solves 5,862 → 2,208 per calculation (2,164 tasks and 44 probes), the point pass not slower
+  although every sub-point is now calculated.
+
+**Kept, on purpose.** The mapping (`MapData`, `MapLeaves`, `SharesCalculation`): it still groups the folds and their
+automatic-tolerance decision, the energy-dependent values and external-capture amplitudes of mapped points (and the
+layout of `intEC.dat`), the serial paths and the analytic gradient (`BuildGradItems`), which must keep its grouping
+until the per-energy gradient. The probe copies: the bare value of blended and automatic-tolerance points.
+
+**Open.** `tests/component_mapping/check.sh` (b) fails (`run_tests.sh`): it asserts that the component mapping saves
+level-matrix solutions, and the energy tasks now share them with or without it (2,769 = 2,769; extrapolation 271 =
+271); its outputs (a) and gradients (c) pass. The check belongs to `tests/` (not edited here): it needs the director's
+decision (compare against the base count, or drop (b)). The mapping goes with the per-energy gradient branch; THM gains nothing (cache misses on the units' rows);
+in a fit with THM-only finite differences the energy tasks are rebuilt each time the work list alternates (2 % of a
+THM fit); ThreadSanitizer not run.
+
+## 2026-11-11 (agent, brief Y2) — external capture reads the pathway table; the trees are deleted (`feature/upgrade-4-pathway-table-2`)
+
+**Done** (`docs/upgrade/cnuc_split.md` §11.12 has the detail).
+- Defect 1 of §11.9 fixed first: external capture found the exit to the photon pair at the photon pair's *number* in
+  the list of exits; with a beta pair or a pair of another nucleus numbered below it, it read another exit or past the
+  end.  Now `ExternalCaptureExit` (`include/ExternalCaptureExit.h`) looks the exit up by pair and refuses an entrance
+  without a pathway, naming the data segment.  Test project `tests/ec_exit_position` (the base: empty `intEC.dat`,
+  SIGSEGV) and ctest `upgrade_external_capture_exit`.
+- The memo of the shifted capture amplitude cannot depend on the history of a copy (the final state's capture energy
+  is written once, in `CNuc::Initialize`); it now keeps (energy, amplitude) only.  `history_test` gained a project with
+  external capture and a fitted shift (`--external-capture`) and the sequence B -> C on every project.
+- External capture reads the table (step 3): `src/ExternalCaptureSetup.cpp` (walk, signature, amplitude loops of the
+  data segments and of the leaves, the latter moved from `WorkingCopy.cpp` as `LeafECAmplitudes`),
+  `src/UnitExternalCapture.cpp`.  The intEC signature is unchanged; base and new builds read each other's files.
+- The trees are deleted (step 8), after a commit that ran every project with them unbuilt and their accessors
+  aborting: `SortPathways`, `CalcAngularDists`, `PPair::decays_`, the classes `Decay`, `KGroup`, `MGroup`, `ECMGroup`,
+  `KLGroup`, `Interference` (12 files, 971 lines), `tests/upgrade/pathways_from_cnuc_test.cpp`.  `CNuc.cpp` 1,774 ->
+  1,548 lines.
+- The double final state is refused since the capture-A_y branch, and `tests/ec_final_state_ambiguous` (d), (e) test
+  exactly that case: nothing added.
+
+**Verified** (build `work/b-path2`, 0 warnings): all projects x 3 bases (tag `tab-path2-final`) against `tab-trial18`: 728 / 701 / 728
+identical (every `intEC.dat` among them), 22 files per basis new (the two projects of `tests/ec_exit_position`); the
+same on the commit with the trees unbuilt and their accessors aborting (`tab-path2-abort`, no abort); `ctest -LE
+slow` 182/183 (the failure: `upgrade_predictions`, the two new projects missing from `predictions.txt`; regenerated,
+12 lines added, passes); `ctest -L slow` 10/10; `tests/run_tests.sh` 146 passed, 1 failed (`cli_help`, under load;
+passes alone, as with the base); the converted-tree gate 483 (456) identical, 38 classified, 0 differ, 0 missing;
+calculations at 1 against 5 threads byte-identical (T1-T3, 13N, `beam_profile_kernel`, `energy_shift_sqrt`, the
+shifted external-capture project of `history_test`); fits at 1 thread byte-identical to the base (T2 `--use-lm
+--max-calls=200`, 13N and `energy_shift_sqrt` `--max-calls=200`); `--no-ec-table` on 13N and the shifted project
+identical to the base; 13N's `intEC.dat` written by each build read by the other without recomputation.  Cycles
+(perf stat, 1 thread, `--no-coulomb-table`, min of 6-8 alternated with `b-trial18`, a loaded machine): T2 calculation
+3.294 G against 3.304 G, 13N 25.28 G against 25.39 G, set-up (13N with one point) 0.987 G against 1.026 G;
+instructions -0.05 %, -0.08 %, -0.36 %; peak RSS 57.4 / 149.9 / 12.1 MB against 57.6 / 150.3 / 12.6 MB.
+
+**Open.** The external-capture amplitudes of the set-up still live in the units of the set-up's working copy; a copy
+drops them and recomputes each at its first evaluation.  A comment in `src/ECIntegral.cpp` (out of scope) still names
+`CNuc::SortPathways`.  Steps left of `CNuc`: the `GetPair`/`GetJGroup` readers of channel data and step 7.
+
+## 2026-11-11 (agent, Phase 5 branch 4) — the yield of a layer of finite thickness (`feature/upgrade-5-layer-yield`)
+
+**Done.** `quantity yield` on a `target` of `kind layer`: Y(E₀) = 10⁻²⁴ ∫_{E_out}^{E₀} ⟨σ⟩/ε dE, ∫ dE/ε = N (lab ε per
+active nucleus, the user's stopping formula), per particle or per µC. Today's target kernel (`src/TargetFold.cpp`)
+without the division by N; E_out solved on the point's own sub-points with `GridQuadrature`'s rule
+(`include/LayerExit.h`), so a constant σ gives 10⁻²⁴ σ N to 1e-15; the grid spans 2 % beyond the layer. A layer yield
+is an effect of its own (`TargetEffectSpec::layerYield`, set in `experiment/src/BuildEffects.cpp`); fold windows on it
+are refused; the set-up refuses a non-positive stopping and a layer the beam does not leave (`src/TargetLayer.cpp`,
+codes `E_LAYER_STOPPING`, `E_LAYER_EXIT_BELOW_MODEL`). ∂Y/∂N stays central differences. Test project
+`tests/layer_yield` (README with the derivations; check.py computes every closed form); `layer_kernel` and
+`pyazr_layer_yield` in ctest. Docs: `data_formats.rst`, `format3.rst` (generated), `data_kinds.md` §4.6,
+`project_format3.md` §7.2/§9.1, `energy_grid.md` §8, ROADMAP, FOR_THE_OWNER, the targets skill.
+
+**Verified.** All projects × 3 bases against `tab-trial18`: 728 / 701 / 728 identical, the new project's files only-new;
+`ctest -LE slow` 185 (after `predictions.txt` got the two new projects: 17 lines added); `tests/run_tests.sh` 146 passed,
+1 failed (`cli_help` under load; passes alone on this build and on the base); spec equivalence 200 files, 185
+converted, 183 equal, 2 recorded, 0 differ, 15 not converted; converted-tree gate (REF tab-trial8) 483 / 456 / 483
+identical, 38 classified, 0 differ, 0 missing; menu 1 at 1 and 4 threads identical on the new project and T2 (4, not 6:
+the thread budget); the fit of `tests/layer_yield` identical at 1 and 2 threads but for Minuit's call count.
+
+**Open.** The stopping module (scale nuisance, stoichiometric active fraction) plugs in where the sub-points' stopping
+is set; an analytic ∂Y/∂N = 10⁻²⁴ σ_lin(E_out) in `AZUREGrad.cpp` if wanted; a target with a free screening or
+temperature used by a layer yield and a σ data set is refused (two effects, `E_FOLD_CONFLICT`); the comment in
+`tests/units_scales/models/yield_story.azr` still calls the layer yield a Phase 5 kernel (an existing test's .azr, not
+edited); `convert/tests/spec_equivalence_test.cpp` does not compare `layerYield` (old lines never set it; convert/ is
+out of scope).
+
 ## 2026-11-11 (director, 14:00) — merged: the stopping library and the DWBA transfer library (leaves); stopping powers will be SRIM's
 
 Merged on the data branch (`--no-ff`), not pushed: `feature/upgrade-5-stopping-1` (`stopping/`) and

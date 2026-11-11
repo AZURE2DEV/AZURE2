@@ -24,7 +24,7 @@ A_k in b/sr instead (A_0 = sigma_int / 4 pi).
   -a_k / sigma_int; under a target effect the A_y structure with A_0 in place of the cross section
   (`AZUREGrad.cpp`, `GradTargetEffectAdjoint`).
 
-## Models (`make_models.py`, the two-level 13C + alpha model of tests/sum_lab_frame, exit n + 16O(3-))
+## Models (`make_models.py` (deleted; see "How the models were made"), the two-level 13C + alpha model of tests/sum_lab_frame, exit n + 16O(3-))
 
 `extrap` (test segments: the coefficients, the c.m. differential cross section, the angle-integrated one),
 `data` (a normalised and an absolute coefficient segment; data written by `verify.py` from `extrap`),
@@ -45,3 +45,35 @@ and on the differential test segment), `fit` (free widths, data a few per cent o
   gradients = finite differences to 1.5e-8 over the 7 widths, with normalised, absolute and folded
   segments;
 - (g) the refusals.
+
+## How the models were made
+
+The committed models are the reference.  They were written by `make_models.py` in the old project format and converted
+to format 3 with `tools/format3_tree_convert.sh` (`AZURE2 --convert ... --to 3 --exact-grids`); the generator
+was deleted with the old format (it is in the repository's history: `git show 13bed879:tests/angular_coefficients/make_models.py`).  To change a
+model, edit its records.  The generator's description of what it wrote:
+
+```text
+Models for the angular-coefficient data segments (isDiff 9), 2026-10-26.
+
+13C + alpha in 17O (the two-level model of tests/sum_lab_frame: 5/2+ and 3/2+, exits n + 16O(0+) key 3 and
+n + 16O(3-) key 5, no external capture), reaction alpha + 13C -> n + 16O(3-), whose angular distribution has
+Legendre orders up to 4 from the 5/2+ / 3/2+ interference.
+
+  extrap    : test segments at lab 5.9-6.4 MeV, step 0.05: T1 the Legendre coefficients (isDiff 3, order 6),
+              T2 the c.m. differential cross section 0-180 deg step 5 (isDiff 5), T3 the angle-integrated
+              cross section (isDiff 0); verify.py projects T2 on P_k and compares with T1 and T3
+  data      : two angular-coefficient DATA segments on the four energies 6.0-6.3: normalised a_k (k = 1-4)
+              and absolute A_k ("absolute 1"), data written by verify.py from the extrapolation
+  shift     : the normalised segment with a fixed 0.05 MeV energy shift (the model moves to E + 0.05)
+  conv      : the normalised and the absolute segments under a 30 keV Gaussian beam-energy spread
+              (<targetInt> convolution, 60 sub-points), and the same spread on the T2 test segment, so the
+              folded coefficients can be compared with the projection of the folded distribution
+  fit       : the normalised, absolute and convolved segments with the seven widths free and the data a few
+              per cent off the model, for the AZURE_GRAD_CHECK gradient test
+  bad_norm  : the normalised segment with a free normalization (refused)
+  bad_elastic: a coefficient segment on the entrance pair (refused)
+  bad_test  : isDiff 9 in <segmentsTest> (refused)
+
+Run from this directory: python3 make_models.py  (writes models/; data/ is written by verify.py at check time).
+```

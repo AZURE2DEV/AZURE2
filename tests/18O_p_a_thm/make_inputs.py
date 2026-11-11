@@ -8,7 +8,10 @@ the level lines, digitize/ for the digitized Fig. 4) and numpy, scipy, mpmath.
 
 Writes, next to this file:
   18O_p_a_thm.azr            Table 3 row R (B_c = S_c(E1)) as Brune parameters,
-                             two THM segments, 17 keV (c.m. sigma) folding
+                             two THM data sets, 17 keV (c.m. sigma) folding,
+                             in format 3 (the committed file is the format-3
+                             conversion of this script's earlier output: the
+                             same records, plus the converter's comments)
   data/lc723_thm_points.dat  segment 1: the digitized THM S(E) points of Fig. 4
   data/lc723_band_mid.dat    segment 2: the digitized band mid-line
   lc723_band.txt             reference curve read by check.sh
@@ -67,13 +70,31 @@ with open(os.path.join(HERE, 'data', 'lc723_thm_points.dat'), 'w') as f:
         f.write('%.6f 0.0 %.6e %.6e\n' % (lab(e), (s - np.polyval(bgc, e)) / c, de / c))
 
 sig_lab = 0.017 * (M_P + M_18O) / M_18O
-seg = '1  1  2  %.4f  %.4f  0  180  10  1.0  1  0  0  0  0  %s  0  0'
-txt = [B.CONFIG, '<levels>', B.level_lines(B.params('R', 1)), '</levels>', '<segmentsData>',
-       seg % (lab(Ep[0]) - 0.001, lab(Ep[-1]) + 0.001, 'data/lc723_thm_points.dat'),
-       seg % (lab(Eg[0]) - 0.001, lab(Eg[-1]) + 0.001, 'data/lc723_band_mid.dat'),
-       '</segmentsData>', '<segmentsTest>', '</segmentsTest>', '<targetInt>',
-       '1              "1,2"          50             1              %.6f          0              0               '
-       '"" 0               0              0               0               "" 0               0 0.04 5 50' % sig_lab,
-       '</targetInt>']
+
+
+def dataset(name, lo, hi):
+    """A THM data set of 18O(p,a)15N (format 3, project_format3.md section 3.9): profiled norm, the beam's fold."""
+    return ['dataset %s' % name,
+            '    reaction       18O(p,a)15N',
+            '    quantity       sigma',
+            '    unit           arbitrary',
+            '    file           data/%s.dat' % name,
+            '    columns        E_lab[MeV] _ value error',
+            '    energy_window  %.4f %.4f MeV' % (lo, hi),
+            '    norm           profiled',
+            '    beam           beam_targetInt1',
+            '    quadrature     points 50 width_multiplier 5 per_width 50',
+            '    thm            global']
+
+
+# The project in format 3.  B.CONFIG is the reproduction's <config> section (the ten positional lines).
+txt = ([B.CONFIG.rstrip('\n').replace('</config>', 'format=3\n</config>'), '<levels>', B.level_lines(B.params('R', 1)),
+        '</levels>', '<data>']
+       + dataset('lc723_thm_points', lab(Ep[0]) - 0.001, lab(Ep[-1]) + 0.001) + ['']
+       + dataset('lc723_band_mid', lab(Eg[0]) - 0.001, lab(Eg[-1]) + 0.001)
+       + ['</data>', '<extrapolations>', '</extrapolations>', '<targets>',
+          'beam beam_targetInt1',
+          '    spread         %.6f MeV lab' % sig_lab,   # the 17 keV c.m. Gaussian resolution, as a beam spread
+          '</targets>'])
 with open(os.path.join(HERE, '18O_p_a_thm.azr'), 'w') as f:
     f.write('\n'.join(txt) + '\n')

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Data covariance matrices (the "covariance <file>" field of a data set), on the p+12C/p+13C project of
-# tests/angle_mapping (models written by make_models.py; see README.md):
+# tests/angle_mapping (models written by make_models.py (deleted; README.md: how the models were made); see README.md):
 #
 #   (a) a diagonal covariance diag(e_i^2) gives the chi2 of no covariance, segment by segment;
 #   (b) dense covariance (blocks across files, absolute vectors, rows of unused records and of

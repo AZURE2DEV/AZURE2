@@ -437,9 +437,13 @@ void Validator::CheckReaction(Work &w, const Value &v, const std::string &field)
       (v.reaction.op == ReactionExpr::Ratio && !rule.Has(ReactionRule::kRatio)))
     return refuse("composite", nullptr, std::string("takes one reaction, not a ") +
                                              (v.reaction.op == ReactionExpr::Sum ? "sum" : "ratio"));
+  // With entrance_pair or exit_pair given, the label names several pairs (alike in particles and states) and the keys
+  // choose among them: whether the reaction is elastic is then whether the keys are one pair, which Build decides
+  // (PairsDecideElastic); the label's particles still decide the charge and identity rules.
+  const bool keysGiven = w.given.count("entrance_pair") || w.given.count("exit_pair");
   for (const ReactionTerm &t : v.reaction.terms) {
     const SingleReaction &r = t.reaction;
-    if (rule.Has(ReactionRule::kElastic) && !r.Elastic()) return refuse("inelastic", &r, "is defined for elastic scattering only");
+    if (rule.Has(ReactionRule::kElastic) && !keysGiven && !r.Elastic()) return refuse("inelastic", &r, "is defined for elastic scattering only");
     if (rule.Has(ReactionRule::kChargedEntrance) && !r.ChargedEntrance())
       return refuse("neutral", &r, "needs two charged entrance particles");
     if (rule.Has(ReactionRule::kNeutralEntrance) && r.ChargedEntrance())
@@ -448,7 +452,7 @@ void Validator::CheckReaction(Work &w, const Value &v, const std::string &field)
       return refuse("non_identical", &r, "needs identical particles");
     if (rule.Has(ReactionRule::kNotIdentical) && r.IdenticalEntrance())
       return refuse("identical", &r, "is not defined for identical particles");
-    if (rule.Has(ReactionRule::kNoChargedElastic) && r.Elastic() && r.ChargedEntrance())
+    if (rule.Has(ReactionRule::kNoChargedElastic) && !keysGiven && r.Elastic() && r.ChargedEntrance())
       return refuse("charged_elastic", &r, "is not defined for charged-particle elastic scattering");
     if (rule.Has(ReactionRule::kNoTotal) && r.state.kind == ResidualState::Total)
       return refuse("total", &r, "does not take the [total] exit");

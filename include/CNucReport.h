@@ -13,11 +13,11 @@ class Config;
 
 /// checks/compoundnucleus.chk: pairs, J-groups, levels and channels as read (before Initialize).
 void WriteCompoundNucleusCheck(const CNuc &compound, const Config &configure);
-/// checks/pathways.chk: the internal and external reaction pathways (after SortPathways).
+/// checks/pathways.chk: the internal and external reaction pathways of the pathway table.
 void WritePathwaysCheck(const CNuc &compound, const Config &configure);
 /// checks/boundaryconditions.chk: B_c of every channel of the R-matrix groups.
 void WriteBoundaryConditionsCheck(const CNuc &compound, const Config &configure);
-/// checks/angulardistributions.chk: the interference terms and their coefficients (after CalcAngularDists).
+/// checks/angulardistributions.chk: the interference terms and their coefficients, from the pathway table.
 void WriteAngularDistributionsCheck(const CNuc &compound, const Config &configure);
 
 /// parameters.out: every level's Brune (Park) energy and, per channel, the observed width, ANC, moment or B with the

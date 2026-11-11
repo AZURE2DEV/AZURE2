@@ -235,6 +235,12 @@ A reaction is `<target nucleus>(<projectile>,<ejectile>)<residual>[<state>]`:
   data set takes the pair carrying the THM columns" was not taken: the old engine uses the key written, the two pairs
   of that file carry different channels (pair 1 has eight levels pair 6 lacks), and the THM columns are read only by the
   THM vertex (`EDataThm.cpp`, `EPoint.cpp`); the rule would hold in that file but is no meaning the old engine has.]**
+- **With pair keys, the label says the particles and the keys say the pairs.** A label that needs keys names pairs
+  that are alike in particles and states (`tests/light_excitation`'s `aC_light_noex`: `12C(a,a)12C` from pair 1 to
+  pair 2, a second α + ¹²C opening at a threshold); whether the reaction is elastic is then whether the keys name one
+  pair, not how the label reads. The validator leaves a quantity's elastic rules (`elastic`, `no charged-particle
+  elastic`) to the set-up for such a record, which checks them on the keys (`Build.cpp` `PairsDecideElastic`,
+  `E_REACTION_NOT_ALLOWED` on `exit_pair`); the charge and identity rules stay the label's (they are the particles').
 
 Ordinal labels (`a1`, `p2`) are refused: an ordinal counts the states the project happens to include, which is a
 position. `a0`, `p0`, `n0`, `g0` are accepted as aliases of the ground state.
@@ -294,7 +300,7 @@ causes it:
 | electron screening (depends on the target's electrons) | `screening Ue vary σ` | `target` | `screening <nuisance eV>` |
 | beam energy spread, constant or σ(E) | `isConvolution σ`, `isConvCoefficients "expr"`, `sigmalab` | `beam` | `spread` |
 | beam energy distribution of skewed Gaussians | `beamprofile` | `beam` | `profile` (repeatable), `truncation`, `detailed_balance` |
-| detector energy resolution of a reconstructed energy (TPC σ, THM c.m. resolution) | the `beamprofile` TPC σ; a Gaussian for THM | `detector` | `energy_resolution` |
+| detector energy resolution of a reconstructed energy (TPC σ, THM c.m. resolution) | the `beamprofile` TPC σ; a Gaussian for THM; on a β-delayed spectrum (no beam) the Gaussian fold of the measured particle energy (the old `<targetInt>` convolution on such a line), lab frame only | `detector` | `energy_resolution` |
 | finite-solid-angle attenuation Q_k | `isQCoefficients n Q…` | `detector` | `attenuation` |
 | time-of-flight resolution (SAMMY UDR) | `udr` | `detector` | `udr` |
 | sub-point grid: points, resonance width multiplier, points per width | positional | `dataset` / `extrapolation` | `quadrature` |
@@ -384,7 +390,8 @@ User page: `data_formats.rst`, "Extrapolation Grids".]**
 ### 3.9 THM data
 
 A THM data set is the same record with `thm <experiment>` (today isDiff + 10, `ESegment.cpp:38-43`), naming an
-`experiment[<name>]` of `<thm>`, or `thm global` for one without an experiment. `segments=` disappears from `<thm>`
+`experiment[<name>]` of `<thm>`, or `thm global` for one without an experiment (a name `<thm>` has no
+`experiment[<name>]` line for is refused when the project is read: `E_THM_EXPERIMENT_UNKNOWN`). `segments=` disappears from `<thm>`
 (today `src/ThmExperiment.cpp:77-87` parses an index list); the experiment's members are the data sets that name it.
 `norm profiled` is the norm mode of THM data sets in an experiment. Target integration on a THM data set stays refused
 (`src/EData.cpp:1504-1515`).
@@ -861,7 +868,7 @@ units 1/uC, 1/mC, 1/C, with the model scaled by 10⁻⁶ C/(q e) for 1/uC etc., 
 |---|---|---|---|---|---|---|
 | `sigma` | b family; `1` with a `/` reaction; `arbitrary` | E_lab, E_cm, E_decay; none | allows `multipole E1|E2`, `secondary_gamma`, `target` (thin layer: target-averaged σ, `data_kinds.md` eq. 2), `beam`, `detector`, `thm` | σ(r) [filter], Sum/Scale/Ratio from the reaction, Weighted if the target has isotopes, folds inside the leaf (M4) | `,SIG`, `PAR,SIG`, `,SIG,,TTA`; `/`, `+` combinations | charged-particle elastic σ ("infinite; give dsigma_domega or ratio_to_rutherford", LEXFOR p. S.2); `multipole` with a particle exit; target `kind infinite` ("use quantity yield") |
 | `sigma_nuclear` [step 3a, D1] | b family; `1` with a `/` reaction | E_lab, E_cm; none | every term elastic with a charged entrance; sums and ratios as for `sigma` (a natural target's isotopes, `tests/natural_target`); allows `target`, `beam`, `detector` | the angle-integrated elastic cross section of the nuclear amplitude alone, π/k² Σ g \|T\|² (`GenMatrixFunc`); for a charged pair it leaves out the Coulomb amplitude and its interference and is not a measurable cross section: for tests, diagnostics and comparison with phase-shift formulas | — | inelastic; neutral entrance (there `sigma` is the same integral and the one name); in a `dataset` the warning `W_NOT_MEASURABLE` |
-| `sigma_total` | b family | E_lab, E_cm; none | reaction elastic, neutral entrance | σ_tot(a→a) by the optical theorem (`GM` 103–119) | `,SIG` with SF3 `TOT` | charged entrance |
+| `sigma_total` | b family | E_lab, E_cm; none | reaction elastic, neutral entrance; on a target with isotopes a sum, one elastic term per nucleus (`20Ne(n,n)20Ne + 22Ne(n,n)22Ne + 21Ne(n,n)21Ne`, the old `natural 1 total 1` with components) | σ_tot(a→a) by the optical theorem (`GM` 103–119); on isotopes Σ_i x_i σ_tot,i, x_i the abundances of the target | `,SIG` with SF3 `TOT` | charged entrance; a sum without isotopes on the target, two terms on one pair, a factor on a term, a term whose exit pair is not its entrance pair (set-up, `E_REACTION_NOT_ALLOWED`) |
 | `dsigma_domega` | b/sr family | E_lab, E_cm; theta_lab, theta_cm (value in the angle's frame) | allows `secondary_gamma`, target, beam, detector, thm | dσ/dΩ_cm(r, θ), lab data converted at load | `,DA`, `PAR,DA` | `[total]` exit; `,DA,,REL` without `norm fit` |
 | `sfactor` | MeV·b, keV·b, eV·b | E_cm, E_lab; none | allows `multipole` | Scale_SF(E)∘σ, S = Eσe^{2πη} with the engine's η and atomic masses (`data_kinds.md` §4.1) | `,SIG,,SFC`, `PAR,SIG,,SFC`, `EP/PAR,SIG,,SFC` | neutral entrance |
 | `ratio_to_rutherford` | 1 | E_lab, E_cm; theta_lab, theta_cm | reaction elastic, charged, not identical | Ratio(Fold[dσ/dΩ], Fold[σ_R]); new leaf `rutherford` (S14) | `,DA,,RTH`, `PAR,DA,,RTH` (elastic) | identical particles ("use ratio_to_mott", K2); neutral; inelastic ("not defined: give dsigma_domega") |
@@ -898,8 +905,9 @@ dimension (`Units.h` `Rescale`: a power-of-ten factor divides by the exact integ
 unit gives the correctly rounded engine value); the columns of a data file by `DatasetSpec::columns`
 (`experiment/DataRows.h`, applied by `ESegment::Fill` before the point is made; an `E_cm` column taken to the lab).
 `sfactor` and the per-charge, counts and arbitrary units of `yield` are `ReactionSpec::scale`, a factor on the model
-(tree kind `Scaled`: `c [x S(0)] x` the tree), never a conversion of the data.  A `yield` on a `layer` is refused
-(Phase 5 kernel; §9.1's example is in `tests/units_scales` on an infinite target), a fitted `efficiency` is refused
+(tree kind `Scaled`: `c [x S(0)] x` the tree), never a conversion of the data.  A `yield` on a `layer` is the yield of
+a layer of finite thickness, reactions per incident particle (Phase 5, branch 4; `energy_grid.md` §5,
+`tests/layer_yield`; §9.1's example is in `tests/units_scales` on an infinite target), a fitted `efficiency` is refused
 (it is the normalization).  An extrapolation in another unit is computed in it.  User page: `data_formats.rst`.
 
 ### 7.3 Where it lives and how it is read
@@ -1182,9 +1190,10 @@ branching ε.
 | GUI | Data → "+ Data set": reaction p + ¹³C → γ + ¹⁴N (g.s.); quantity "Yield"; unit drop-down → "counts/µC" makes "Charge state q" and "Efficiency × branching" appear; Target "+ New target…" opens the target form (kind "Layer" shows active nucleus, composition, areal density with Fit and prior, stopping, straggling, phase); the second data set picks C13A from the drop-down. Preview: "yield of ¹³C(p,γ)¹⁴N(g.s.) over target C13A (layer of ¹³C, N fitted, prior 15 %, stopping evaluation with scale fitted), beam spread 0.3 keV, × 10⁻⁶ C/(1·e) × ε (fitted, prior 3 %) → counts/µC; parameters C13A.areal_density, C13A.stopping.scale, Y_curve.efficiency" |
 | agent | reads `quantities.yield` in `--schema` (requires target; `counts/uC` ⇒ `charge_state`, `efficiency`); writes the three records; `--validate --json` → `[]`; `--describe --record Y_curve --json` → `Scale(1e-6/(q e)) · Scale(ε) · Fold_layer(C13A)[sigma(13C(p,g)14N)]` |
 
-Note: a yield per particle on a finite layer, N·10⁻²⁴⟨σ⟩, with N fitted in the prefactor as well as in the energy
-window, is a Phase 5 kernel; today's thin target divides by N (`data_kinds.md` eq. 2) and today's density fit moves only
-the window (`TargetEffect.h:89-101`).
+Note: the yield per particle on a finite layer, 10⁻²⁴ ∫_{E_out}^{E₀} ⟨σ⟩/ε dE with ∫ dE/ε = N, is built since Phase 5
+branch 4 (`energy_grid.md` §5, `tests/layer_yield`) with the user's stopping formula; a fitted N moves E_out, and the
+thin target (`quantity sigma` on the layer) stays the yield divided by 10⁻²⁴ N (`data_kinds.md` eq. 2).  `stopping
+evaluation` waits for the stopping module (branch 5).
 
 ### 9.2 (b) α + ¹²C elastic scattering as ratio to Rutherford, lab frame, five angles, 3 % common normalization
 

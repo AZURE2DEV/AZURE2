@@ -39,10 +39,11 @@ class AZUREParams {
   /// Index of the parameter whose name is exactly `name`, or -1: how a name in a file (param.sav, priors,
   /// <parameterSettings>) is resolved to its parameter.  Whole names only, never a prefix.
   int IndexOfName(const std::string &name) const;
-  /// Read starting parameters from the configured external parameter file.
-  void ReadUserParameters(const Config &);
-  /// Read starting parameters from a named file.
-  void ReadUserParameters(const std::string &);
+  /// Read starting parameters from the configured external parameter file.  False (after the error) when no name of
+  /// the file is a parameter of the run; a partial match is a warning (experiment/ParameterFileNames.h).
+  bool ReadUserParameters(const Config &);
+  /// Read starting parameters from a named file; false as above.
+  bool ReadUserParameters(const std::string &);
   /// Write the current parameters to param.sav.
   void WriteUserParameters(const Config &, bool);
   /// Write Minos asymmetric errors to param.errors.
@@ -67,8 +68,10 @@ class AZUREParams {
   /// The body of both ReadUserParameters overloads; "could not read" goes to out.  With
   /// segmentEntries false (a run without data: extrapolation, reaction rates) the file's rows for
   /// data-segment parameters (ParamKindRow::segmentField: normalizations, energy shifts, thicknesses)
-  /// are not applied.
-  void ApplyUserParameterFile(const std::string &filename, std::ostream &out, bool segmentEntries = true);
+  /// are not applied.  `otherRunNames`: the names the project gives to parameters of another run (a format-3
+  /// project's data sets in an extrapolation run and the reverse), neither applied nor unknown.
+  bool ApplyUserParameterFile(const std::string &filename, std::ostream &out, bool segmentEntries = true,
+                              const std::vector<std::string> &otherRunNames = {});
   ROOT::Minuit2::MnUserParameters params_;
   std::vector<ParameterRecord> records_;  ///< one per entry of params_, in its order
   std::vector<int> kindCount_;            ///< parameters of each kind so far (the next ordinal)

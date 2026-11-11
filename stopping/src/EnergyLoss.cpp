@@ -67,33 +67,45 @@ double InverseStopping(const StoppingFunction &epsilon, double energy_MeV) {
 
 }  // namespace
 
-double IntegrateInSqrtE(const std::function<double(double)> &f, double a_MeV, double b_MeV, double rel_tol) {
+double IntegrateInSqrtE(const std::function<double(double)> &f, double a_MeV, double b_MeV, double rel_tol,
+                        const std::vector<double> &breaks_MeV) {
   if (!(a_MeV >= 0.0) || !(b_MeV >= a_MeV)) throw std::invalid_argument("stopping: integral needs 0 <= a <= b");
   if (a_MeV == b_MeV) return 0.0;
   const auto g = [&f](double u) { return u > 0.0 ? 2.0 * u * f(u * u) : 0.0; };
-  const double ua = std::sqrt(a_MeV);
-  const double ub = std::sqrt(b_MeV);
-  const double first = std::fabs(Panel(g, ua, ub).first);
-  return Adaptive(g, ua, ub, std::max(rel_tol * first, 1e-300), 0);
+  // the pieces in u, cut at the break points strictly inside (a, b)
+  std::vector<double> nodes{std::sqrt(a_MeV)};
+  for (double e : breaks_MeV) {
+    if (e > a_MeV && e < b_MeV) nodes.push_back(std::sqrt(e));
+  }
+  nodes.push_back(std::sqrt(b_MeV));
+  std::sort(nodes.begin(), nodes.end());
+  double first = 0.0;
+  for (std::size_t k = 0; k + 1 < nodes.size(); ++k) first += std::fabs(Panel(g, nodes[k], nodes[k + 1]).first);
+  const double piece_tol = std::max(rel_tol * first / static_cast<double>(nodes.size() - 1), 1e-300);
+  double sum = 0.0;
+  for (std::size_t k = 0; k + 1 < nodes.size(); ++k) sum += Adaptive(g, nodes[k], nodes[k + 1], piece_tol, 0);
+  return sum;
 }
 
-double ArealDensityBetween(const StoppingFunction &epsilon, double energy_in_MeV, double energy_out_MeV) {
+double ArealDensityBetween(const StoppingFunction &epsilon, double energy_in_MeV, double energy_out_MeV,
+                           const std::vector<double> &breaks_MeV) {
   if (!(energy_out_MeV >= 0.0) || !(energy_in_MeV >= energy_out_MeV)) {
     throw std::invalid_argument("stopping: areal density between E_in and E_out needs E_in >= E_out >= 0");
   }
   return IntegrateInSqrtE([&epsilon](double e) { return InverseStopping(epsilon, e); }, energy_out_MeV, energy_in_MeV,
-                          kQuadratureRelTol);
+                          kQuadratureRelTol, breaks_MeV);
 }
 
-double Range(const StoppingFunction &epsilon, double energy_MeV) {
-  return ArealDensityBetween(epsilon, energy_MeV, 0.0);
+double Range(const StoppingFunction &epsilon, double energy_MeV, const std::vector<double> &breaks_MeV) {
+  return ArealDensityBetween(epsilon, energy_MeV, 0.0, breaks_MeV);
 }
 
-double EnergyAfter(const StoppingFunction &epsilon, double energy_in_MeV, double areal_density) {
+double EnergyAfter(const StoppingFunction &epsilon, double energy_in_MeV, double areal_density,
+                   const std::vector<double> &breaks_MeV) {
   if (!(areal_density >= 0.0)) throw std::invalid_argument("stopping: areal density must be >= 0");
   if (!(energy_in_MeV > 0.0)) throw std::invalid_argument("stopping: energy must be > 0");
   if (areal_density == 0.0) return energy_in_MeV;
-  const double range = Range(epsilon, energy_in_MeV);
+  const double range = Range(epsilon, energy_in_MeV, breaks_MeV);
   if (areal_density >= range) {
     std::ostringstream o;
     o << "stopping: the projectile stops: areal density " << areal_density << " atoms/cm^2 >= range " << range;
@@ -104,7 +116,7 @@ double EnergyAfter(const StoppingFunction &epsilon, double energy_in_MeV, double
   double hi = energy_in_MeV;
   double e = std::clamp(energy_in_MeV - areal_density * epsilon(energy_in_MeV) * kStoppingToMeVcm2, 0.0, energy_in_MeV);
   for (int iteration = 0; iteration < 200; ++iteration) {
-    const double g = ArealDensityBetween(epsilon, energy_in_MeV, e) - areal_density;
+    const double g = ArealDensityBetween(epsilon, energy_in_MeV, e, breaks_MeV) - areal_density;
     if (g > 0.0) lo = e; else hi = e;
     double next = e + g * epsilon(e) * kStoppingToMeVcm2;
     if (!(next > lo && next < hi)) next = 0.5 * (lo + hi);
@@ -120,28 +132,32 @@ StoppingFunction MaterialStopping(const Material &material, const Projectile &pr
 
 double ArealDensityBetween(const Material &material, const Projectile &projectile, double energy_in_MeV,
                            double energy_out_MeV) {
-  return ArealDensityBetween(MaterialStopping(material, projectile), energy_in_MeV, energy_out_MeV);
+  return ArealDensityBetween(MaterialStopping(material, projectile), energy_in_MeV, energy_out_MeV,
+                             StoppingBreakpoints(material, projectile));
 }
 
 double EnergyAfter(const Material &material, const Projectile &projectile, double energy_in_MeV, double areal_density) {
-  return EnergyAfter(MaterialStopping(material, projectile), energy_in_MeV, areal_density);
+  return EnergyAfter(MaterialStopping(material, projectile), energy_in_MeV, areal_density,
+                     StoppingBreakpoints(material, projectile));
 }
 
 double Range(const Material &material, const Projectile &projectile, double energy_MeV) {
-  return Range(MaterialStopping(material, projectile), energy_MeV);
+  return Range(MaterialStopping(material, projectile), energy_MeV, StoppingBreakpoints(material, projectile));
 }
 
-double ArealDensityScaleDerivative(const StoppingFunction &epsilon, double energy_in_MeV, double energy_out_MeV) {
-  return -ArealDensityBetween(epsilon, energy_in_MeV, energy_out_MeV);
+double ArealDensityScaleDerivative(const StoppingFunction &epsilon, double energy_in_MeV, double energy_out_MeV,
+                                   const std::vector<double> &breaks_MeV) {
+  return -ArealDensityBetween(epsilon, energy_in_MeV, energy_out_MeV, breaks_MeV);
 }
 
-double EnergyAfterScaleDerivative(const StoppingFunction &epsilon, double energy_in_MeV, double areal_density) {
-  const double e_out = EnergyAfter(epsilon, energy_in_MeV, areal_density);
+double EnergyAfterScaleDerivative(const StoppingFunction &epsilon, double energy_in_MeV, double areal_density,
+                                  const std::vector<double> &breaks_MeV) {
+  const double e_out = EnergyAfter(epsilon, energy_in_MeV, areal_density, breaks_MeV);
   return -areal_density * epsilon(e_out) * kStoppingToMeVcm2;
 }
 
-double RangeScaleDerivative(const StoppingFunction &epsilon, double energy_MeV) {
-  return -Range(epsilon, energy_MeV);
+double RangeScaleDerivative(const StoppingFunction &epsilon, double energy_MeV, const std::vector<double> &breaks_MeV) {
+  return -Range(epsilon, energy_MeV, breaks_MeV);
 }
 
 }  // namespace stopping

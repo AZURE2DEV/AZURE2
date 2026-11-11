@@ -136,13 +136,20 @@ constexpr const char *kFinalStateShared = "E_FINAL_STATE_SHARED";
 constexpr const char *kNotBuilt = "E_NOT_BUILT";
 constexpr const char *kThmRelativistic = "E_THM_RELATIVISTIC";
 constexpr const char *kThmCovariance = "E_THM_COVARIANCE";
+constexpr const char *kThmExperimentUnknown = "E_THM_EXPERIMENT_UNKNOWN";  // ReadFormat3Project: <thm> lacks the name
 constexpr const char *kFoldConflict = "E_FOLD_CONFLICT";
+// A yield on a layer, refused by the engine's set-up, which evaluates the stopping on the sub-point grid (LayerChecks.h)
+constexpr const char *kLayerStopping = "E_LAYER_STOPPING";
+constexpr const char *kLayerExitBelowModel = "E_LAYER_EXIT_BELOW_MODEL";
 // Hybrid potentials (`potential` records: BuildPotentials; the old block in a format-3 file: ReadFormat3Project)
 constexpr const char *kPotentialTwice = "E_POTENTIAL_TWICE";
 constexpr const char *kPotentialPairKind = "E_POTENTIAL_PAIR_KIND";
 constexpr const char *kPotentialRelativistic = "E_POTENTIAL_RELATIVISTIC";
 constexpr const char *kThmHybridPotential = "E_THM_HYBRID_POTENTIAL";
 constexpr const char *kOldPotentialBlock = "E_OLD_POTENTIAL_BLOCK";
+// The names of a parameter file given as a run's start (ParameterFileNames.h)
+constexpr const char *kParameterFileNoMatch = "E_PARAMETER_FILE_NO_MATCH";
+constexpr const char *kParameterFileNames = "W_PARAMETER_FILE_NAMES";
 // Spin-orbit terms (a potential record's spin_orbit, pyazr, the API: SpinOrbitChecks.h)
 constexpr const char *kSoTwoSpins = "E_SO_TWO_SPINS";
 constexpr const char *kSoZeroSpin = "E_SO_ZERO_SPIN";

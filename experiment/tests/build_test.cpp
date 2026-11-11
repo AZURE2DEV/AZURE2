@@ -153,7 +153,7 @@ void UnitCases(const std::string &targets) {
             data(sf).reaction.observable == Observable::CrossSection);
   ExpectOne("E_REACTION_NOT_ALLOWED", BuildText(Data(Set(Set(Set(kDataset, "quantity", "    quantity sfactor"), "unit", "    unit keV*b"),
                                                          "reaction", "    reaction 16O(g,a)12C"))));
-  // yields: per particle and per uC on an infinite target; a layer, a fitted efficiency and no charge state refused
+  // yields: per particle and per uC on an infinite target and on a layer; a fitted efficiency and no charge state refused
   {
     const std::string inf = targets.substr(0, targets.size() - std::string("</targets>\n").size()) +
                             "target t9\n    kind infinite\n    active 15N\n    stopping formula \"a0\" a0=1e-20 MeV*cm2/atom\n"
@@ -168,7 +168,30 @@ void UnitCases(const std::string &targets) {
           c.Ok() && std::fabs(data(c).reaction.scale.factor / (0.5e-3 / 1.602176634e-19) - 1) < 1e-15);
     const BuiltProject p = BuildText(Data(Set(y, "unit", "    unit 1/particle") + "    target t9\n") + inf);
     check("yield 1/particle: no factor", p.Ok() && data(p).reaction.scale.Identity());
-    ExpectOne("E_NOT_BUILT", BuildText(Data(y + "    target t1\n    charge_state 2\n") + inf));
+    // a yield on a layer (energy_grid.md section 5): its own effect, per incident particle, the layer's density, the
+    // per-uC factor; a cross section on the same layer (its screening free: E_FOLD_CONFLICT across two effects) is
+    // another effect, the target-averaged one; fold windows on the yield are refused
+    {
+      const std::string noScreening = Set(targets, "screening", "");
+      const BuiltProject l = BuildText(Data(y + "    target t1\n    charge_state 2\n" +
+                                            Rename(kDataset + "    target t1\n    quadrature points 20\n", "s1")) +
+                                       noScreening.substr(0, noScreening.size() - std::string("</targets>\n").size()) +
+                                       inf.substr(inf.find("target t9")));
+      const auto &fx = l.data.targetEffects.items;
+      const bool two = l.Ok() && fx.size() == 2;
+      const TargetEffectSpec *ey = nullptr, *es = nullptr;
+      for (const auto &item : fx) (item.spec.layerYield ? ey : es) = &item.spec;
+      check("yield on a layer: an effect of its own (layerYield, the layer's 1e18 atoms/cm2), the per-uC factor; "
+            "sigma on the same layer: the target-averaged effect",
+            two && ey && es && ey->density == 1e18 && ey->targetIntegration && ey->datasetKeys == std::vector<int>{1} &&
+                es->datasetKeys == std::vector<int>{2} && std::fabs(data(l).reaction.scale.factor / perUC - 1) < 1e-15 &&
+                ey->source.find("yield per incident particle on the layer") != std::string::npos);
+      if (!two)
+        for (const Diagnostic &d : l.diagnostics) std::printf("        got %s: %s\n", d.code.c_str(), d.message.c_str());
+      ExpectOne("E_FOLD_CONFLICT", BuildText(Data(y + "    target t1\n    charge_state 2\n" +
+                                                  Rename(kDataset + "    target t1\n    quadrature points 20\n", "s1")) + inf));
+      ExpectOne("E_FIELD_NOT_APPLICABLE", BuildText(Data(y + "    target t1\n    charge_state 2\n    fold_windows 0.2-0.4 MeV\n") + inf));
+    }
     ExpectOne("E_NOT_BUILT", BuildText(Data(Set(y, "unit", "    unit counts/uC") + "    target t9\n    charge_state 1\n"
                                                                                       "    efficiency 0.5 fit prior 0.5 3%\n") + inf));
     ExpectOne("E_FIELD_REQUIRED", BuildText(Data(y + "    target t9\n") + inf));
@@ -266,6 +289,21 @@ int main() {
   ExpectOne("E_AMBIGUOUS_PAIR", BuildText(Data(dd)));
   ExpectOne("E_PAIR_KEY", BuildText(Data(kDataset + "    entrance_pair 1\n")));
   ExpectOne("E_PAIR_KEY", BuildText(Data(dd + "    entrance_pair 1\n    exit_pair 5\n")));
+  {
+    // a label that names several pairs (d+12C twice): the keys choose, and whether the reaction is elastic is whether
+    // they are one pair (PairsDecideElastic), not how the label reads
+    const std::string sigma = Set(dd, "quantity", "    quantity sigma");
+    const BuiltProject across = BuildText(Data(sigma + "    entrance_pair 5\n    exit_pair 6\n"));
+    check("sigma of 12C(d,d)12C from pair 5 to pair 6: inelastic, builds", across.diagnostics.empty());
+    const BuiltProject same = BuildText(Data(sigma + "    entrance_pair 5\n    exit_pair 5\n"));
+    ExpectOne("E_REACTION_NOT_ALLOWED", same);
+    check("sigma of 12C(d,d)12C on pair 5 alone: refused by the set-up as charged-particle elastic",
+          same.diagnostics.size() == 1 && same.diagnostics[0].message.find("(validation)") == std::string::npos &&
+              same.diagnostics[0].message.find("charged-particle elastic") != std::string::npos);
+    check("sigma_nuclear of 12C(d,d)12C on pair 6 alone: elastic, builds",
+          BuildText(Data(dd + "    entrance_pair 6\n    exit_pair 6\n")).diagnostics.empty());
+    ExpectOne("E_REACTION_NOT_ALLOWED", BuildText(Data(dd + "    entrance_pair 6\n    exit_pair 5\n")));
+  }
   ExpectOne("E_DATA_FILE", BuildText(Data(Set(kDataset, "file", "    file no_such_file.dat")), false, true));
   // a run that does not use the data (an extrapolation): the same file is a warning, and the project builds
   {
@@ -352,6 +390,24 @@ int main() {
           finals.size() == 2 && finals[0].sharedWithPairKey == 0 && finals[1].sharedWithPairKey == 4);
   }
   UnitCases(targets);
+  {
+    // sigma_total: the total of the entrance pair, its elastic term; the pairs decide, not the label (two n+12C pairs)
+    LevelTables t = Pairs();
+    for (int key : {10, 11}) {
+      PairInfo n;
+      n.key = key;
+      n.lightZ = 0;
+      n.lightA = 1;
+      n.heavyZ = 6;
+      n.heavyA = 12;
+      n.twoJLight = 1;
+      t.pairs.push_back(n);
+    }
+    const std::string total = Set(Set(kDataset, "reaction", "    reaction 12C(n,n)12C"), "quantity", "    quantity sigma_total");
+    check("sigma_total, entrance and exit pair 10: builds",
+          BuildText(Data(total + "    entrance_pair 10\n    exit_pair 10\n"), false, false, DataFiles::Required, t).diagnostics.empty());
+    ExpectOne("E_REACTION_NOT_ALLOWED", BuildText(Data(total + "    entrance_pair 10\n    exit_pair 11\n"), false, false, DataFiles::Required, t));
+  }
   const std::string thm = Set(Set(kDataset, "norm", "    norm profiled"), "unit", "    unit arbitrary") + "    thm global\n";
   check("a THM data set builds", BuildText(Data(thm)).diagnostics.empty());
   ExpectOne("E_THM_RELATIVISTIC", BuildText(Data(thm), true));
@@ -572,6 +628,31 @@ int main() {
       check("E_OLD_POTENTIAL_BLOCK alone, at the block's line, naming the converter", one);
       if (!one)
         for (const Diagnostic &d : p.diagnostics) std::printf("        got %s: %s\n", d.code.c_str(), d.message.c_str());
+    }
+    // a thm field naming an experiment <thm> lacks (the reading path: ProjectReader)
+    {
+      Format3ReadOptions read;
+      read.build = false;
+      const std::string thm = Set(Set(kDataset, "norm", "    norm profiled"), "unit", "    unit arbitrary");
+      const std::string block = "<thm>\n  # a comment\n  experiment[LC09] beam=15N target=d spectator=n Ebeam=60 # x\n</thm>\n";
+      const auto codesOf = [&read](const std::string &text) {
+        std::vector<std::string> out;
+        for (const Diagnostic &d : ReadFormat3Text(text, read).diagnostics) out.push_back(d.code + "@" + std::to_string(d.line));
+        return out;
+      };
+      const std::vector<std::string> named = codesOf(Data(thm + "    thm LC09\n") + block);
+      const std::vector<std::string> global = codesOf(Data(thm + "    thm global\n"));
+      const std::vector<std::string> wrong = codesOf(Data(thm + "    thm LC10\n") + block);
+      const std::vector<std::string> none = codesOf(Data(thm + "    thm LC09\n"));
+      check("thm naming an experiment of <thm>, or global: no diagnostic", named.empty() && global.empty());
+      check("E_THM_EXPERIMENT_UNKNOWN alone, at the thm field's line (a name <thm> lacks; no <thm> at all)",
+            wrong == std::vector<std::string>{"E_THM_EXPERIMENT_UNKNOWN@10"} && none == wrong);
+      const std::string inactive = Data(thm + "    thm LC10\n    active no\n") + block;
+      check("an inactive data set's thm is checked when it is switched on", codesOf(inactive).empty());
+      read.allRecordsActive = true;
+      check("... with every record active it is refused", codesOf(inactive) == std::vector<std::string>{"E_THM_EXPERIMENT_UNKNOWN@10"});
+      if (wrong.size() != 1)
+        for (const std::string &c : wrong) std::printf("        got %s\n", c.c_str());
     }
   }
 

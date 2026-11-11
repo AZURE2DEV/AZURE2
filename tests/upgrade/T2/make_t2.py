@@ -313,7 +313,8 @@ experiment[LC09] segments=11,12 beam=15N target=d spectator=n Ebeam=60
 
 def project(fit, only=None, data_dir="data", cov=True):
     """The project text in the old grammar.  only=(k, ...): the truth run of these segments; the THM experiment is
-    left out of a run without its segments (a format-3 experiment whose data sets are all inactive is refused)."""
+    left out of a run without its segments (an experiment whose data sets are all inactive would only be ignored with
+    a warning)."""
     extra = "priorCovariance=prior_cov.txt\n" if (fit and cov) else ""
     return (CONFIG.format(extra=extra) + level_lines(fit) + abundance_lines(fit) + segment_lines(fit, only, data_dir, cov)
             + target_lines(fit, only) + "<parameterSettings>\n</parameterSettings>\n" + TAIL

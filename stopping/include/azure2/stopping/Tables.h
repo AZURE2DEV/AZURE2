@@ -9,72 +9,77 @@ namespace azure2 {
 namespace stopping {
 
 /*!
- * The data tables of the stopping module (docs/upgrade/stopping.md sections 3 and 4).  Both are text files in
- * stopping/data/, compiled into the library at build time; every row carries its source.
+ * SRIM-2013's data files (docs/upgrade/stopping.md section 3; stopping/data/srim/README.md): SCOEF03.DAT, one row
+ * per element Z = 1..92 with the electronic stopping coefficients and the element's masses, densities and mean
+ * excitation energies, and SNUC03.dat, the coefficients of the nuclear stopping fit for every pair (Z1, Z2).  They
+ * are J. F. Ziegler's (www.srim.org), copied unchanged from LunaSRIM 1.0.0 (github.com/skowrons94/LunaSRIM), whose
+ * reader (lunasrim/data_files.py) documents the column layout this parser follows.
  *
- *   elements.tsv                 Z = 1..92: standard atomic weight (u), mean excitation energy I (eV), phase.
- *   electronic_coefficients.tsv  per element and projectile (p, He): the low-energy fit coefficients A1..A5, the
- *                                energy per nucleon up to which they are used alone, the assigned relative
- *                                uncertainty, the source and a note.
- *
- * ElementTable() and CoefficientTable() parse the compiled text once and return a const reference (the constant
- * tables of docs/upgrade/ARCHITECTURE.md section 9).  The parsers are public so that a test or a user can read a
- * table of the same format from any text.
+ * SrimTables() is the constant table of docs/upgrade/ARCHITECTURE.md section 9, parsed once: from the directory named
+ * by the environment variable AZURE2_SRIM_DATA_DIR if it is set, otherwise from the copy compiled into the library
+ * (when the build found stopping/data/srim/; otherwise it refuses and says how to get the files).  ReadSrimData()
+ * reads a directory the caller names into a table the caller owns.
  */
 
-/// The state of a material, or of an element at room temperature and pressure.
-enum class Phase { kSolid, kLiquid, kGas };
+/// The state of a material: SRIM distinguishes solid and gas targets (mean excitation energy, shell correction,
+/// low-energy phase factor).  A liquid is a solid for SRIM.
+enum class Phase { kSolid, kGas };
 
-/// "solid", "liquid", "gas".
+/// "solid", "gas".
 std::string PhaseName(Phase phase);
 /// The inverse of PhaseName; throws std::invalid_argument for any other word.
 Phase PhaseFromName(const std::string &name);
 
-/// One row of elements.tsv.
-struct ElementRecord {
-  int z = 0;
-  std::string symbol;
-  double atomic_weight_u = 0.0;       ///< standard atomic weight A_r (u)
-  double atomic_weight_unc_u = 0.0;   ///< its stated interval (u)
-  std::string atomic_weight_source;
-  double mean_excitation_eV = 0.0;    ///< I (eV), ICRU 37 / ICRU 49
-  Phase phase = Phase::kSolid;        ///< state at room temperature and pressure
+/// One row of SCOEF03.DAT (columns numbered as lunasrim/data_files.py numbers them, 1-based after the two names).
+struct SrimElement {
+  int z = 0;                              ///< column 1
+  std::string symbol;                     ///< the first quoted name, without padding
+  std::string name;                       ///< the second quoted name, without padding
+  double most_abundant_mass_u = 0.0;      ///< column 3: mass of the most abundant isotope (u)
+  double atomic_weight_u = 0.0;           ///< column 4: isotope-averaged atomic weight (u)
+  double solid_density_g_cm3 = 0.0;       ///< column 5
+  double gas_density_g_cm3 = 0.0;         ///< column 9
+  std::array<double, 10> proton{};        ///< columns 11-20: proton stopping fit
+  std::array<double, 10> helium{};        ///< columns 21-30: helium stopping fit
+  std::array<double, 10> lithium{};       ///< columns 31-40: lithium stopping fit
+  std::array<double, 13> ion_poly{};      ///< columns 41-53: heavy-ion scaling polynomial (this element as the ion)
+  std::array<double, 13> target_poly{};   ///< columns 54-66: heavy-ion scaling polynomial (this element as target)
+  double mean_excitation_solid_eV = 0.0;  ///< column 67
+  std::array<double, 2> mean_excitation_gas_eV{};  ///< columns 68-69: gas, for Z1 = 1 and for Z1 > 1
+  std::array<double, 11> shell_c{};       ///< columns 70-80: shell correction polynomial in ln(E [MeV/u])
+  std::array<double, 8> shell_d{};        ///< columns 81-88: second shell polynomial (solids only)
+  std::array<double, 5> high_energy_charge{};  ///< columns 89-93: high-energy effective charge (this element as ion)
+  std::string origin;                     ///< "<file>:<line>" the row was read from
 };
 
-/// The two fit forms of the low-energy electronic stopping (stopping.md section 4.1).
-enum class FitForm {
-  kAndersenZieglerProton,  ///< "AZ_p": protons, T in keV
-  kZieglerHelium           ///< "Z_He": helium-4, T in MeV
+/// SRIM's data: the 92 element rows and the nuclear stopping coefficients of every pair.
+struct SrimData {
+  std::vector<SrimElement> elements;            ///< index z - 1
+  std::vector<std::array<double, 4>> nuclear;   ///< index (z1 - 1) * 92 + (z2 - 1), symmetric in z1, z2
+  std::string source;                           ///< where the files were read from
 };
 
-/// One row of electronic_coefficients.tsv.
-struct CoefficientRow {
-  int z = 0;                       ///< target element
-  int projectile_z = 0;            ///< 1 (p) or 2 (He)
-  FitForm form = FitForm::kAndersenZieglerProton;
-  std::array<double, 5> a{};       ///< A1..A5 as published
-  double fit_max_MeV_u = 0.0;      ///< energy per nucleon up to which the row is used alone (MeV/u)
-  double rel_uncertainty = 0.0;    ///< assigned relative 1-sigma uncertainty of the row
-  std::string source;
-  std::string note;                ///< "-" when none
-  std::string origin;              ///< "<file>:<line>" the row was read from
-};
+constexpr int kSrimMaxZ = 92;
 
-/// Parse elements.tsv text (comment lines start with '#', one header line, tab-separated columns).  Throws
-/// std::invalid_argument naming \p origin and the line for a malformed row.
-std::vector<ElementRecord> ParseElementTable(const std::string &text, const std::string &origin);
-/// Parse electronic_coefficients.tsv text; throws std::invalid_argument as above.
-std::vector<CoefficientRow> ParseCoefficientTable(const std::string &text, const std::string &origin);
+/// Parse the text of SCOEF03.DAT and SNUC03.dat.  Throws std::invalid_argument naming \p source and the line for a
+/// malformed row, a missing element or a missing pair.
+SrimData ParseSrimData(const std::string &scoef_text, const std::string &snuc_text, const std::string &source);
+/// Read SCOEF03.DAT and SNUC03.dat from \p directory (file names matched without regard to case, as LunaSRIM does).
+/// Throws std::runtime_error if a file is missing.
+SrimData ReadSrimData(const std::string &directory);
 
-/// The compiled elements.tsv, index z - 1.
-const std::vector<ElementRecord> &ElementTable();
-/// The compiled electronic_coefficients.tsv.
-const std::vector<CoefficientRow> &CoefficientTable();
+/// The environment variable that points SrimTables() to a directory with the two files.
+constexpr const char *kSrimDataDirVariable = "AZURE2_SRIM_DATA_DIR";
+/// The data every function without an explicit SrimData uses (see above).  Throws std::runtime_error if neither the
+/// variable nor a compiled-in copy gives the files.
+const SrimData &SrimTables();
 
-/// The record of element z; throws std::out_of_range outside 1..92.
-const ElementRecord &Element(int z);
-/// The coefficient row of target z for projectile charge 1 or 2; throws std::out_of_range if there is none.
-const CoefficientRow &Coefficients(int z, int projectile_z);
+/// The row of element \p z of \p data; throws std::out_of_range outside 1..92.
+const SrimElement &ElementData(const SrimData &data, int z);
+/// The same in SrimTables().
+const SrimElement &ElementData(int z);
+/// The four SNUC03.dat coefficients of the pair (z1, z2); throws std::out_of_range outside 1..92.
+const std::array<double, 4> &NuclearCoefficients(const SrimData &data, int z1, int z2);
 
 }  // namespace stopping
 }  // namespace azure2

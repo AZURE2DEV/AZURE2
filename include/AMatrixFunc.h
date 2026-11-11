@@ -9,7 +9,6 @@
 struct GradAccum;
 struct FreeLevelMask;
 class JGroup;
-class Decay;
 
 /*!
  * Cotangents of the T-matrix elements of one decay (AMatrixFunc::PointTBar):
@@ -119,6 +118,13 @@ class AMatrixFunc : public GenMatrixFunc {
    * Instantiated in the parent class.
    */
   void CalculateCrossSection();
+
+  /*!
+   * The compound-system energy E_x (MeV) at which FillMatrices solves the level matrix of `point`: E_c.m. plus the
+   * separation and excitation energies of the entrance pair (of the exit pair for a beta-delayed entrance).  Units
+   * with the same nucleus and the same bits of this number share one solve (CalculationPlan.h, EnergyTask).
+   */
+  static double InEnergy(CNuc *compound, Unit *point);
 
   /// Level-matrix element at (J-group, level, level'), all 1-based.
   complex GetAMatrixElement(int, int, int) const;
@@ -272,7 +278,7 @@ class AMatrixFunc : public GenMatrixFunc {
   /// (the adjoint differentiates the widths as they are), cached per energy.
   const vector_c &GetRawChannelSolve(int jGroupNum, int chNum);
   /// Beam energy in the compound system, as FillMatrices takes it.
-  double InEnergy(Unit *point);
+  double InEnergy(Unit *point) { return InEnergy(compound(), point); }
   /// d(level matrix) part of the adjoint of one J-group, given the level-matrix
   /// cotangent Mbar (n x n): structural energy and reduced-width gradients of
   /// the standard, Brune and Park level matrices.  The channel kernel is read

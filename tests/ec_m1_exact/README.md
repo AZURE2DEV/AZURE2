@@ -83,3 +83,44 @@ capture (the orbital term has sqrt(l(l+1))). (p) checks the signature bump to v4
 pair line). The radial integral uses the level energy. The 16O+p model these numbers come from had 0.49533 MeV
 on the pair and 0.4953 MeV on the level; that 0.03 keV difference moves the external capture by 0.16 %. Keep the
 two equal.
+
+## How the models were made
+
+The committed models are the reference.  They were written by `make_models.py` in the old project format and converted
+to format 3 with `tools/format3_tree_convert.sh` (`AZURE2 --convert ... --to 3 --exact-grids`); the generator
+was deleted with the old format (it is in the repository's history: `git show b408e70f:tests/ec_m1_exact/make_models.py`).  To change a
+model, edit its records.  The generator's description of what it wrote:
+
+```text
+Build the external-capture (EC) test models: p + 16O -> 17F(0.495 MeV, 1/2+) + gamma, external capture only.
+
+The final state is an s-wave proton bound by 105 keV (ANC 84 fm^-1/2).  Entrance J-groups 1/2-, 3/2- (p-wave, E1) and
+1/2+ (s-wave, M1) hold one far level each (30 MeV, proton width 1e-6 eV), so the resonant and resonant-external
+terms are negligible (< 1e-12 relative) and the cross section is the hard-sphere external capture alone.  The photon
+pair's multipolarity mask selects the term:
+
+  e1.azr : E1 only (mask 1);   m1.azr : M1 only (mask 2)
+
+Each has one angle-integrated segment of 16O(p,g)17F(0.495) at the energies in ECM.
+
+  a12c.azr : 12C(a,g)16O(g.s.), external capture only, E1 (l = 1) and E2 (l = 2) (mask 5), ANC 100 fm^-1/2,
+             a = 5.43 fm, one 30 MeV level (alpha width 1e-6 eV) in 1- and in 2+; energies ECM_A.  An N = Z pair: the
+             long-wavelength E1 charge nearly vanishes (-0.00098), so the exact form and its convection-current term
+             are large here.
+
+  p14n_s1.azr, p14n_s3.azr : p + 14N -> 15O(1/2+) or 15O(3/2+), a fictitious s-wave proton state bound by 0.2 MeV
+             (ANC 5 fm^-1/2, a = 5 fm), M1 external capture only (mask 2) from the s-wave entrance J-groups 1/2+ and
+             3/2+.  Both clusters carry a moment (g_p 5.5857, g(14N) 0.4038) and the target spin is 1, so the M1
+             spin term has a g1 S1 and a g2 S2 piece and channel spin 1/2 <-> 3/2 transitions.  With l = 0 the
+             orbital term vanishes.  Final channel spin 1/2 (s1) or 3/2 (s3).  Energies ECM.
+
+  p14n_p.azr, p14n_p0.azr : p + 14N -> 15O(3/2-), a fictitious p-wave state (l = 1, s = 3/2) bound by 0.2 MeV, M1
+             only, from the p-wave entrance J-groups 1/2-, 3/2- (channel spins 1/2 and 3/2) and 5/2- (s = 3/2).
+             Orbital and spin terms interfere on the s = 3/2 pathways; the s = 1/2 pathways flip the channel spin
+             and carry the spin term alone.  p14n_p0 has both g-factors 0 (orbital term only).  Energies ECM.
+
+truth.py computes the same cross sections independently; check.sh runs the models with and without
+--no-long-wavelength and --no-ec-convection-current.
+
+Run from this directory: python3 make_models.py   (writes models/)
+```

@@ -168,7 +168,8 @@ State on 2026-11-11:
       named targets and thick-target yields per particle or per charge; model-level data (ωγ, resonance energy,
       widths, branching ratio, ANC, scattering length); Legendre coefficients with their expansions; extrapolations
       on a list, a file, a logarithmic range or an adaptive grid; the spin–orbit term of the hybrid potential.
-      Open: the yield of a layer of finite thickness (Phase 5, with the stopping module).
+      The yield of a layer of finite thickness with the user's stopping formula (Phase 5, branch 4,
+      `tests/layer_yield`); with the evaluated stopping when the stopping module is wired (Phase 5, branch 5).
 - [ ] Recipe "a new kind of data" in `CLAUDE.md` with its checks.
 Gate: outputs of all test projects × 3 bases bit-identical through the restructuring; for format 3, the outputs of
 the converted projects identical to the originals' but for the classified differences of the gate.
@@ -198,9 +199,11 @@ classes), the pathway trees deleted, the parameter vector and the set-up out, `C
 - [ ] Lab data with a fitted shift compared in the frame of the data (decision M3 (b) of `data_model.md`, taken by
       the PI 2026-11-10): the model goes to the lab, the measured values and errors stay fixed. Every fit it moves
       is listed with its size.
-- [ ] Stopping module (`ARCHITECTURE.md` §7): `Material`, ZBL nuclear, Bethe with corrections, straggling with
-      Tschalär propagation, user tables; then the fitted low-energy evaluation for p and α (IAEA data), gases; then
-      compounds and heavier ions; ERYA and `SRIM2013.xml` removed; licence check of any shipped table.
+- [ ] Stopping module (`ARCHITECTURE.md` §7): the leaf library `stopping/` with SRIM-2013's stopping powers
+      ported from LunaSRIM (any ion, any element, solid or gas, compound correction; decision of 2026-11-11),
+      TRIM and Bohr straggling with Tschalär propagation, user tables (done, `stopping.md`); then wired into the
+      engine with the stopping-scale nuisance; ERYA and `SRIM2013.xml` removed; the owner decides whether SRIM's
+      two data files are shipped.
 - [ ] THM (`THM.md` §1–2): σ_HOES observable with plane-wave and full-form-factor vertices, THM kernel (c.m.
       resolution, QF window, OES S-fold), free or double-ratio normalization, legacy K options marked.
 Gate: outputs within the stated quadrature tolerance, each difference explained; smooth χ² in shifts; gradient = FD.

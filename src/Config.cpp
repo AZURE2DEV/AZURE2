@@ -126,18 +126,22 @@ int Config::ReadFormat3Project(const azure2::io::Document &doc) {
     if (d.code != azure2::experiment::codes::kDataFileNotRead) outStream << (d.severity == azure2::experiment::Severity::Error ? "ERROR: " : "WARNING: ") << d.ToText() << std::endl;
   if (!project->Ok() || !project->levelsRead) {
     if (project->Ok()) outStream << "ERROR: " << configfile << ": the <levels> section is missing or malformed." << std::endl;
-    outStream << "ERROR: " << configfile << " (format 3) is refused; AZURE2 --validate " << configfile
-              << " lists the same diagnostics." << std::endl;
-    return -1;
+    ReportFormat3Refused();
+    return kConfigRefused;
   }
   format3 = project;
   return 0;
 }
 
+void Config::ReportFormat3Refused() const {
+  outStream << "ERROR: " << configfile << " (format 3) is refused; AZURE2 --validate " << configfile
+            << " lists the same diagnostics." << std::endl;
+}
+
 int Config::ReadConfigFile() {
   // The <config> section of the project (io::Document; a tag is a whole trimmed line).
   std::unique_ptr<std::istream> section = SectionStream("config");
-  if (!section) return -1;
+  if (!section) return kConfigUnreadable;
   // The file's structural problems (an unclosed or repeated section, crossing tags), once per read.
   {
     std::unique_ptr<std::istream> file = InputFiles::Open(configfile, cacheInputFiles);
@@ -147,7 +151,7 @@ int Config::ReadConfigFile() {
     for (const std::string &problem : doc.Problems())
       outStream << "WARNING: " << configfile << ": " << problem << std::endl;
     format3.reset();
-    if (azure2::io::FormatOf(doc) == 3 && ReadFormat3Project(doc) != 0) return -1;
+    if (azure2::io::FormatOf(doc) == 3 && ReadFormat3Project(doc) != 0) return kConfigRefused;
     if (azure2::io::FormatOf(doc) == 1) {
       const std::vector<std::string> changes = azure2::io::ConvertToFormat2(doc);
       std::string list;
@@ -205,11 +209,11 @@ int Config::ReadConfigFile() {
       useAdaptiveGrid = (value == "1" || value == "true");
     // "format" is the file format (docs/upgrade/project.md section 4), read by io::FormatOf
   }
-  if (!config.closed) return -1;
+  if (!config.closed) return kConfigUnreadable;
   // A malformed optional block has already been reported: -2, so the caller
   // does not add a misleading "could not open" on top.
-  if (this->ReadPotentialBlock() != 0) return -2;
-  return this->ReadThmBlock() != 0 ? -2 : 0;
+  if (this->ReadPotentialBlock() != 0) return kConfigBlockMalformed;
+  return this->ReadThmBlock() != 0 ? kConfigBlockMalformed : 0;
 }
 
 /*!

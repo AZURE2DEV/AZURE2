@@ -51,6 +51,8 @@ enum Counter {
   kDeflated,           ///< channel space with levels near a pole deflated
   kWhitMemoHit,        ///< final-state Whittaker of ECIntegral's data path from the memo (WhitFunc::ScaledMemo)
   kWhitMemoMiss,       ///< ... computed and stored
+  kEnergyTasks,        ///< energy tasks of the point pass: one level-matrix fill and factorisation each (CalculationPlan.h)
+  kEnergyUnits,        ///< units (points and sub-points) calculated by those tasks
   kNumCounters
 };
 
@@ -70,6 +72,12 @@ void Add(Stage stage, long long ns);
 void CountEvent(Counter counter);
 inline void Count(Counter counter) {
   if (Enabled()) CountEvent(counter);
+}
+
+/// Counts `n` events at once (only when profiling).
+void CountEvents(Counter counter, long long n);
+inline void CountMany(Counter counter, long long n) {
+  if (Enabled()) CountEvents(counter, n);
 }
 
 /// Writes the stages accumulated since the last report under `label`, then clears them.

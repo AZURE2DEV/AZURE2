@@ -31,10 +31,12 @@ whoever asks for a calculation, and a project file that says in words what each 
 
 **Stopping.** AZURE2 has its own stopping and straggling library, `stopping/` (materials by formula, energy loss,
 exit energy and range of a layer, straggling propagated through the target, each value with an uncertainty and its
-source; `docs/upgrade/stopping.md`), built beside the engine and not yet used by it. Its stopping powers are being
-changed to SRIM-2013's, ported from the LunaSRIM package with SRIM's two coefficient files and SRIM cited (decision
-of 2026-11-11). One point is yours: those two files stay under the terms of SRIM's authors, so whether the public
-repository ships them or asks the user to fetch them is for you to say.
+source; `docs/upgrade/stopping.md`), built beside the engine and not yet used by it. Its stopping powers are
+SRIM-2013's for any ion in any element, solid or gas, ported to C++ from the LunaSRIM package (they agree with it to
+rounding) with SRIM's two data files, and every output cites SRIM (decision of 2026-11-11). One point is yours:
+those two files stay under the terms of SRIM's authors (LunaSRIM's README reads them as free for non-commercial use),
+so whether the public repository ships them or asks the user to fetch them is for you to say; the library works
+either way (`stopping/data/srim/README.md`).
 
 Phase 7 has begun as a separate library that the engine does not use yet: optical potentials, bound states,
 distorted waves and the DWBA transfer to a bound state, which agree with FRESCO to better than 0.2 %
@@ -73,8 +75,8 @@ already or are files that exist to test a refusal.
 **What a user can fit now that could not be fitted before:**
 
 - ratio to Rutherford and to Mott; the S factor as a quantity (the engine converts with the pair's masses);
-- thick-target yields per charge or per particle, linked to a named target (infinitely thick so far; a finite layer
-  is the first item of Phase 5);
+- yields per charge or per particle, linked to a named target, thick or a layer of finite thickness (a resonance scan
+  through a target of known or fitted areal density; with the user's stopping formula until the stopping module);
 - values from the literature compared with functions of the level parameters, as χ² terms of their own
   (`<modelData>`): resonance strength ωγ, resonance energy, total and partial width, branching ratio, ANC,
   scattering length;
@@ -115,9 +117,10 @@ refused at once with the engine's message. An edit changes only the lines it tou
   instead of 18.6 MB for the largest test project); a point is one entry of a flat array (`Unit`, 480 bytes; it was
   608), which still carries the apparatus fold as member functions until Phase 5. The code is in files with one job
   each (the largest has 1,788 lines; it was 5,457), and the old class names are kept out by the consistency test.
-- `CNuc.cpp` went from 2,907 to 1,774 lines: printing, checks, messages, the `<levels>` grammar and the reaction
+- `CNuc.cpp` went from 2,907 to 1,548 lines: printing, checks, messages, the `<levels>` grammar and the reaction
   pathways are files of their own. The pathways of a run are one immutable table built at set-up and shared by all
-  threads; the capture analyzing-power terms are built at set-up too (a lazily built table behind a mutex is gone).
+  threads, read by every observable and by external capture; the six classes of the old pathway trees are deleted;
+  the capture analyzing-power terms are built at set-up too (a lazily built table behind a mutex is gone).
 - State rule (`ARCHITECTURE.md` §9): the only singletons are constant tables; whatever an evaluation writes is owned
   by its caller; an extension is one explicit table row, never a self-registering class.
 - No source file may grow: `tests/consistency/file_sizes.tsv` lists the 15 hand-written files above 1,000 lines; the
@@ -141,8 +144,12 @@ refused at once with the engine's message. An edit changes only the lines it tou
   - a project with the same final state on two photon pairs was read without a message and gave a wrong capture
     cross section for the first pair (a factor 2.2 in the test); it is now refused, naming both pairs;
   - a point whose exit pair no pathway of its entrance reaches is refused (the last decay was read before);
+  - external capture with a beta pair or a pair of another nucleus numbered below the photon pair read the wrong
+    pathways (a crash in the test); it now finds the photon pair's pathways by the pair;
   - in format 3 a data run with an unreadable data file is refused (the old engine skipped the segment with a
     warning); an extrapolation run does not need the data files.
+  - data given in the lab frame are compared with the model in the lab frame (the model divided by
+    dΩ_lab/dΩ_c.m., the datum and its error as read), as the PI decided: χ² and fits are the same to rounding.
 
 ## Speed
 
@@ -174,17 +181,28 @@ reads `CLAUDE.md` first, so it is given the recipes and is stopped by the checks
 
 ## What is in work and what comes next
 
-In work now: the THM projects to format 3 (the last seven files) and the gaps format 3 still has; external-capture
-amplitudes read from the pathway table and the old pathway trees deleted; and the first three branches of Phase 5
-(one level-matrix solve per distinct compound energy, the yield of a finite layer as a quantity, data compared in the
-laboratory frame). Merged on 2026-11-11: the data classes replaced (`DataSet`, `WorkingCopy`, `Segment`, `Unit`);
-176 of the 183 convertible project files in format 3 (the THM projects are left); validation that reports what a run
-would refuse; pyazr's functions on a format-3 project, with edits of levels, `<config>` and `<thm>` done by the
-engine; the design note of Phase 5 (`energy_grid.md`) with its decisions taken.
+In work now (2026-11-11, evening): the engine takes its stopping powers from the stopping library (a target says
+`stopping evaluation`; one stopping scale per material and projectile as a nuisance parameter with a prior; ERYA
+removed); the analytic gradient per compound energy (the old point mapping deleted); the apparatus effects (target,
+resolution, beam profile, UDR, Doppler, layer yield) as kernel functions in one table, with a new kernel added by
+the recipe as the proof; pyazr moved off its old file class; an audit that every regression check still tests what
+it says after the conversion.
+
+Merged on 2026-11-11: the data classes replaced (`DataSet`, `WorkingCopy`, `Segment`, `Unit`); **all 183
+convertible project files in format 3**, the THM projects included; validation that reports what a run would
+refuse, and a refused project that ends with its refusal as the last line; pyazr's functions on a format-3 project,
+with edits of levels, `<config>` and `<thm>` done by the engine; the old pathway trees deleted (external capture
+reads the pathway table; a crash on one ordering of the particle pairs fixed); the design note of Phase 5
+(`energy_grid.md`) with its decisions taken, and its first branches: the level matrix solved once per compound
+energy instead of once per data point or sub-point (a fit evaluation of 13N 132 ms instead of 317, of the
+thick-target project 264 ms instead of 1,102, every output unchanged; a fit with the analytic gradient does not gain
+yet and is 7 % slower at 5 threads until the gradient branch lands); the yield of a layer of finite thickness as a
+quantity (its accuracy over a narrow resonance on a thick layer is 1.5e-4, the present quadrature's); laboratory
+data compared in the laboratory frame (last-digit rounding in 23 projects); SRIM-2013's stopping powers in
+`stopping/`, ported from LunaSRIM (agreement with LunaSRIM to the printing precision).
 
 Then, to close Phase 4: the old reading path deleted (with `pyazr/azrfile.py`, 3,756 lines of
-a second grammar in Python); external-capture amplitudes computed at set-up and the old pathway trees deleted; the
-rest of `CNuc` (the parameter vector and the set-up from the level rows).
+a second grammar in Python); the rest of `CNuc` (the parameter vector and the set-up from the level rows).
 
 Phases 5–9 (`ROADMAP.md`): one energy grid with the apparatus as kernels, AZURE2's own stopping module, yields on
 finite layers, the comparison of energy-shifted data in the lab frame, and the THM observable (5); evaluation without

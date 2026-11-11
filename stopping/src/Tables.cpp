@@ -1,6 +1,10 @@
 #include "azure2/stopping/Tables.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <sstream>
 #include <stdexcept>
 
@@ -10,18 +14,6 @@ namespace azure2 {
 namespace stopping {
 
 namespace {
-
-std::vector<std::string> SplitTabs(const std::string &line) {
-  std::vector<std::string> fields;
-  std::string::size_type start = 0;
-  while (true) {
-    const auto tab = line.find('\t', start);
-    fields.push_back(line.substr(start, tab == std::string::npos ? std::string::npos : tab - start));
-    if (tab == std::string::npos) break;
-    start = tab + 1;
-  }
-  return fields;
-}
 
 [[noreturn]] void Fail(const std::string &where, const std::string &what) {
   throw std::invalid_argument(where + ": " + what);
@@ -34,128 +26,190 @@ double Number(const std::string &text, const std::string &where) {
   return v;
 }
 
-int Integer(const std::string &text, const std::string &where) {
-  const double v = Number(text, where);
-  if (v != static_cast<int>(v)) Fail(where, "'" + text + "' is not an integer");
-  return static_cast<int>(v);
+std::string Trim(const std::string &s) {
+  const auto a = s.find_first_not_of(' ');
+  if (a == std::string::npos) return "";
+  return s.substr(a, s.find_last_not_of(' ') - a + 1);
 }
 
-/// The data rows of a table: comment lines and empty lines skipped, the header checked and skipped.
-std::vector<std::pair<std::string, std::vector<std::string>>> DataRows(const std::string &text, const std::string &origin,
-                                                                       const std::string &header) {
-  std::vector<std::pair<std::string, std::vector<std::string>>> rows;
-  std::istringstream in(text);
-  std::string line;
-  int number = 0;
-  bool header_seen = false;
-  const std::size_t columns = SplitTabs(header).size();
-  while (std::getline(in, line)) {
-    ++number;
-    if (!line.empty() && line.back() == '\r') line.pop_back();
-    if (line.empty() || line[0] == '#') continue;
-    const std::string where = origin + ":" + std::to_string(number);
-    if (!header_seen) {
-      if (line != header) Fail(where, "header is not '" + header + "'");
-      header_seen = true;
-      continue;
+/// A line of SCOEF03.DAT: two quoted names, then numbers separated by blanks.
+std::vector<std::string> ScoefTokens(const std::string &line, const std::string &where) {
+  std::vector<std::string> tokens;
+  std::size_t i = 0;
+  while (i < line.size()) {
+    if (std::isspace(static_cast<unsigned char>(line[i]))) {
+      ++i;
+    } else if (line[i] == '"') {
+      const auto close = line.find('"', i + 1);
+      if (close == std::string::npos) Fail(where, "unterminated quoted name");
+      tokens.push_back(line.substr(i + 1, close - i - 1));
+      i = close + 1;
+    } else {
+      const auto start = i;
+      while (i < line.size() && !std::isspace(static_cast<unsigned char>(line[i]))) ++i;
+      tokens.push_back(line.substr(start, i - start));
     }
-    auto fields = SplitTabs(line);
-    if (fields.size() != columns) {
-      Fail(where, std::to_string(fields.size()) + " columns, " + std::to_string(columns) + " expected");
-    }
-    rows.emplace_back(where, fields);
   }
-  if (!header_seen) Fail(origin, "no header line");
-  return rows;
+  return tokens;
+}
+
+template <std::size_t N>
+void Columns(std::array<double, N> &out, const std::vector<double> &col, int first) {
+  for (std::size_t k = 0; k < N; ++k) out[k] = col[static_cast<std::size_t>(first) + k];
+}
+
+/// The text of a file, carriage returns kept (the parsers drop them).
+std::string FileText(const std::filesystem::path &path) {
+  std::ifstream in(path, std::ios::binary);
+  if (!in) throw std::runtime_error("stopping: cannot read " + path.string());
+  std::ostringstream text;
+  text << in.rdbuf();
+  return text.str();
+}
+
+/// \p name in \p directory, or a file whose name differs only in case.
+std::filesystem::path FindFile(const std::string &directory, const std::string &name) {
+  const std::filesystem::path exact = std::filesystem::path(directory) / name;
+  if (std::filesystem::exists(exact)) return exact;
+  std::string lower = name;
+  std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
+  std::error_code error;
+  for (const auto &entry : std::filesystem::directory_iterator(directory, error)) {
+    std::string candidate = entry.path().filename().string();
+    std::transform(candidate.begin(), candidate.end(), candidate.begin(), [](unsigned char c) { return std::tolower(c); });
+    if (candidate == lower) return entry.path();
+  }
+  throw std::runtime_error("stopping: no " + name + " in '" + directory + "' (SRIM-2013's data file; see " +
+                           "stopping/data/srim/README.md)");
 }
 
 }  // namespace
 
-std::string PhaseName(Phase phase) {
-  switch (phase) {
-    case Phase::kSolid: return "solid";
-    case Phase::kLiquid: return "liquid";
-    case Phase::kGas: return "gas";
-  }
-  return "solid";
-}
+std::string PhaseName(Phase phase) { return phase == Phase::kGas ? "gas" : "solid"; }
 
 Phase PhaseFromName(const std::string &name) {
   if (name == "solid") return Phase::kSolid;
-  if (name == "liquid") return Phase::kLiquid;
   if (name == "gas") return Phase::kGas;
-  throw std::invalid_argument("phase '" + name + "': expected solid, liquid or gas");
+  throw std::invalid_argument("phase '" + name + "': expected solid or gas");
 }
 
-std::vector<ElementRecord> ParseElementTable(const std::string &text, const std::string &origin) {
-  std::vector<ElementRecord> table;
-  for (const auto &[where, f] : DataRows(text, origin, "Z\tsymbol\tA_r\tA_r_unc\tA_r_source\tI_eV\tphase")) {
-    ElementRecord r;
-    r.z = Integer(f[0], where);
-    r.symbol = f[1];
-    r.atomic_weight_u = Number(f[2], where);
-    r.atomic_weight_unc_u = Number(f[3], where);
-    r.atomic_weight_source = f[4];
-    r.mean_excitation_eV = Number(f[5], where);
-    r.phase = PhaseFromName(f[6]);
-    if (r.z != static_cast<int>(table.size()) + 1) Fail(where, "Z must run 1, 2, 3, ... without gaps");
-    if (!(r.atomic_weight_u > 0.0) || !(r.mean_excitation_eV > 0.0)) Fail(where, "A_r and I must be positive");
-    table.push_back(r);
+SrimData ParseSrimData(const std::string &scoef_text, const std::string &snuc_text, const std::string &source) {
+  SrimData data;
+  data.source = source;
+  data.elements.resize(kSrimMaxZ);
+  std::vector<bool> seen(kSrimMaxZ, false);
+  {
+    std::istringstream in(scoef_text);
+    std::string line;
+    int number = 0;
+    while (std::getline(in, line)) {
+      ++number;
+      if (!line.empty() && line.back() == '\r') line.pop_back();
+      const std::string where = source + "/SCOEF03.DAT:" + std::to_string(number);
+      const auto tokens = ScoefTokens(line, where);
+      if (tokens.empty()) continue;
+      if (tokens.size() != 95) Fail(where, std::to_string(tokens.size()) + " fields, 95 expected (2 names, 93 numbers)");
+      std::vector<double> col(94);  // col[1..93], as lunasrim/data_files.py numbers them
+      for (int k = 1; k <= 93; ++k) col[k] = Number(tokens[k + 1], where);
+      const int z = static_cast<int>(col[1]);
+      if (z != col[1] || z < 1 || z > kSrimMaxZ) Fail(where, "Z outside 1..92");
+      if (seen[z - 1]) Fail(where, "element Z = " + std::to_string(z) + " given twice");
+      seen[z - 1] = true;
+      SrimElement &e = data.elements[z - 1];
+      e.z = z;
+      e.symbol = Trim(tokens[0]);
+      e.name = Trim(tokens[1]);
+      e.most_abundant_mass_u = col[3];
+      e.atomic_weight_u = col[4];
+      e.solid_density_g_cm3 = col[5];
+      e.gas_density_g_cm3 = col[9];
+      Columns(e.proton, col, 11);
+      Columns(e.helium, col, 21);
+      Columns(e.lithium, col, 31);
+      Columns(e.ion_poly, col, 41);
+      Columns(e.target_poly, col, 54);
+      e.mean_excitation_solid_eV = col[67];
+      Columns(e.mean_excitation_gas_eV, col, 68);
+      Columns(e.shell_c, col, 70);
+      Columns(e.shell_d, col, 81);
+      Columns(e.high_energy_charge, col, 89);
+      e.origin = where;
+      if (!(e.atomic_weight_u > 0.0) || !(e.mean_excitation_solid_eV > 0.0)) Fail(where, "mass and I must be > 0");
+    }
   }
-  return table;
-}
-
-std::vector<CoefficientRow> ParseCoefficientTable(const std::string &text, const std::string &origin) {
-  std::vector<CoefficientRow> table;
-  const std::string header = "Z\tprojectile\tform\tA1\tA2\tA3\tA4\tA5\tfit_max_MeV_u\trel_unc\tsource\tnote";
-  for (const auto &[where, f] : DataRows(text, origin, header)) {
-    CoefficientRow r;
-    r.z = Integer(f[0], where);
-    if (f[1] == "p") r.projectile_z = 1;
-    else if (f[1] == "He") r.projectile_z = 2;
-    else Fail(where, "projectile '" + f[1] + "': expected p or He");
-    if (f[2] == "AZ_p") r.form = FitForm::kAndersenZieglerProton;
-    else if (f[2] == "Z_He") r.form = FitForm::kZieglerHelium;
-    else Fail(where, "form '" + f[2] + "': expected AZ_p or Z_He");
-    if ((r.form == FitForm::kAndersenZieglerProton) != (r.projectile_z == 1)) Fail(where, "form does not fit projectile");
-    for (int k = 0; k < 5; ++k) r.a[k] = Number(f[3 + k], where);
-    r.fit_max_MeV_u = Number(f[8], where);
-    r.rel_uncertainty = Number(f[9], where);
-    r.source = f[10];
-    r.note = f[11];
-    r.origin = where;
-    if (r.z < 1 || r.z > 92) Fail(where, "Z outside 1..92");
-    if (!(r.fit_max_MeV_u > 0.0) || !(r.rel_uncertainty > 0.0)) Fail(where, "fit_max and rel_unc must be positive");
-    table.push_back(r);
+  for (int z = 1; z <= kSrimMaxZ; ++z) {
+    if (!seen[z - 1]) Fail(source + "/SCOEF03.DAT", "no row for Z = " + std::to_string(z));
   }
-  return table;
-}
-
-const std::vector<ElementRecord> &ElementTable() {
-  static const std::vector<ElementRecord> table = ParseElementTable(ElementsTableText(), "stopping/data/elements.tsv");
-  return table;
-}
-
-const std::vector<CoefficientRow> &CoefficientTable() {
-  static const std::vector<CoefficientRow> table =
-      ParseCoefficientTable(CoefficientsTableText(), "stopping/data/electronic_coefficients.tsv");
-  return table;
-}
-
-const ElementRecord &Element(int z) {
-  const auto &table = ElementTable();
-  if (z < 1 || z > static_cast<int>(table.size())) {
-    throw std::out_of_range("stopping: element Z = " + std::to_string(z) + " outside 1.." + std::to_string(table.size()));
+  data.nuclear.assign(kSrimMaxZ * kSrimMaxZ, std::array<double, 4>{});
+  std::vector<bool> pair(kSrimMaxZ * kSrimMaxZ, false);
+  {
+    std::istringstream in(snuc_text);
+    std::string line;
+    int number = 0;
+    while (std::getline(in, line)) {
+      ++number;
+      std::istringstream fields(line);
+      std::vector<std::string> f;
+      std::string token;
+      while (fields >> token) f.push_back(token);
+      if (f.empty()) continue;
+      const std::string where = source + "/SNUC03.dat:" + std::to_string(number);
+      if (f.size() != 6) Fail(where, std::to_string(f.size()) + " fields, 6 expected (Z1 Z2 and 4 coefficients)");
+      const double z1d = Number(f[0], where), z2d = Number(f[1], where);
+      const int z1 = static_cast<int>(z1d), z2 = static_cast<int>(z2d);
+      if (z1 != z1d || z2 != z2d || z1 < 1 || z2 < 1 || z1 > kSrimMaxZ || z2 > kSrimMaxZ) Fail(where, "Z outside 1..92");
+      std::array<double, 4> c{};
+      for (int k = 0; k < 4; ++k) c[k] = Number(f[2 + k], where);
+      for (const auto &[a, b] : {std::pair<int, int>{z1, z2}, std::pair<int, int>{z2, z1}}) {
+        data.nuclear[(a - 1) * kSrimMaxZ + (b - 1)] = c;
+        pair[(a - 1) * kSrimMaxZ + (b - 1)] = true;
+      }
+    }
   }
-  return table[z - 1];
+  for (int k = 0; k < kSrimMaxZ * kSrimMaxZ; ++k) {
+    if (!pair[k]) {
+      Fail(source + "/SNUC03.dat", "no row for the pair (" + std::to_string(k / kSrimMaxZ + 1) + ", " +
+                                       std::to_string(k % kSrimMaxZ + 1) + ")");
+    }
+  }
+  return data;
 }
 
-const CoefficientRow &Coefficients(int z, int projectile_z) {
-  for (const auto &row : CoefficientTable()) {
-    if (row.z == z && row.projectile_z == projectile_z) return row;
+SrimData ReadSrimData(const std::string &directory) {
+  return ParseSrimData(FileText(FindFile(directory, "SCOEF03.DAT")), FileText(FindFile(directory, "SNUC03.dat")),
+                       directory);
+}
+
+const SrimData &SrimTables() {
+  static const SrimData data = [] {
+    const char *directory = std::getenv(kSrimDataDirVariable);
+    if (directory != nullptr && directory[0] != '\0') return ReadSrimData(directory);
+    const std::string scoef = EmbeddedScoefText();
+    if (scoef.empty()) {
+      throw std::runtime_error(std::string("stopping: SRIM-2013's data files are not compiled into this build; set ") +
+                               kSrimDataDirVariable + " to a directory holding SCOEF03.DAT and SNUC03.dat (e.g. " +
+                               "the data folder of LunaSRIM; see stopping/data/srim/README.md)");
+    }
+    return ParseSrimData(scoef, EmbeddedSnucText(), "stopping/data/srim (compiled in)");
+  }();
+  return data;
+}
+
+const SrimElement &ElementData(const SrimData &data, int z) {
+  if (z < 1 || z > static_cast<int>(data.elements.size())) {
+    throw std::out_of_range("stopping: element Z = " + std::to_string(z) + " outside 1..92");
   }
-  throw std::out_of_range("stopping: no electronic stopping coefficients for Z2 = " + std::to_string(z) +
-                          " and projectile charge " + std::to_string(projectile_z));
+  return data.elements[z - 1];
+}
+
+const SrimElement &ElementData(int z) { return ElementData(SrimTables(), z); }
+
+const std::array<double, 4> &NuclearCoefficients(const SrimData &data, int z1, int z2) {
+  if (z1 < 1 || z2 < 1 || z1 > kSrimMaxZ || z2 > kSrimMaxZ) {
+    throw std::out_of_range("stopping: nuclear stopping pair (" + std::to_string(z1) + ", " + std::to_string(z2) +
+                            ") outside 1..92");
+  }
+  return data.nuclear[(z1 - 1) * kSrimMaxZ + (z2 - 1)];
 }
 
 }  // namespace stopping

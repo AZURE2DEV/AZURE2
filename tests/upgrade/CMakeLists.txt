@@ -53,21 +53,22 @@ add_executable(observable_coupling_gsl_test observable_coupling_gsl_test.cpp)
 target_link_libraries(observable_coupling_gsl_test PRIVATE AZURE2Core)
 add_test(NAME physics_observable_coupling_gsl COMMAND observable_coupling_gsl_test)
 
-# The pathway trees built from physics/ reaction_pathways against a verbatim copy of the SortPathways they replaced,
-# on every .azr under tests/, Brune and formal basis (docs/upgrade/cnuc_split.md section 10 (b)).
-add_executable(pathways_from_cnuc_test pathways_from_cnuc_test.cpp)
-target_link_libraries(pathways_from_cnuc_test PRIVATE AZURE2Core)
-add_test(NAME physics_pathways_from_cnuc COMMAND pathways_from_cnuc_test ${CMAKE_SOURCE_DIR}/tests
-         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-set_tests_properties(physics_pathways_from_cnuc PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 900)
-
 # Properties of the pathway table checked against the loaded CNuc without the builder's loops, on every .azr under
-# tests/ (docs/upgrade/cnuc_split.md section 11.6 step 1); it stays when the trees go.
+# tests/ (docs/upgrade/cnuc_split.md section 11.6 step 1).
 add_executable(pathway_table_test pathway_table_test.cpp)
 target_link_libraries(pathway_table_test PRIVATE AZURE2Core)
 add_test(NAME physics_pathway_table COMMAND pathway_table_test ${CMAKE_SOURCE_DIR}/tests
          WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 set_tests_properties(physics_pathway_table PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 900)
+
+# The external-capture exit is found by the photon pair's number, and an exit without a pathway is refused naming the
+# data segment (include/ExternalCaptureExit.h; docs/upgrade/cnuc_split.md section 11.9, defect 1).
+add_executable(external_capture_exit_test external_capture_exit_test.cpp)
+target_link_libraries(external_capture_exit_test PRIVATE AZURE2Core)
+file(COPY ${CMAKE_SOURCE_DIR}/tests/ec_exit_position/models/ DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/ec_exit_position)
+add_test(NAME upgrade_external_capture_exit
+         COMMAND external_capture_exit_test ${CMAKE_CURRENT_BINARY_DIR}/ec_exit_position/neutron_pair_first.azr)
+set_tests_properties(upgrade_external_capture_exit PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 300)
 
 # physics/ central_derivative against GSL's gsl_deriv_central, bit for bit (docs/upgrade/coulomb.md section 1.4).
 add_executable(derivatives_gsl_test derivatives_gsl_test.cpp)
@@ -87,6 +88,18 @@ file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/T2/data ${CMAKE_CURRENT_SOURCE_DIR}/T2/cov
 add_test(NAME upgrade_results_owner COMMAND results_owner_test ${CMAKE_CURRENT_SOURCE_DIR}/T2/T2.azr
          WORKING_DIRECTORY ${_results_owner_dir})
 set_tests_properties(upgrade_results_owner PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 600)
+
+# The residual in the frame of the datum (docs/upgrade/energy_grid.md section 4): on T2, every pull equals the c.m.
+# comparison to rounding, bit for bit where J = 1, at the start and with the shifts moved.  On a copy of T2's inputs.
+add_executable(lab_frame_residual_test lab_frame_residual_test.cpp)
+target_link_libraries(lab_frame_residual_test PRIVATE AZURE2Core)
+set(_lab_frame_dir ${CMAKE_CURRENT_BINARY_DIR}/lab_frame_residual)
+file(MAKE_DIRECTORY ${_lab_frame_dir}/output ${_lab_frame_dir}/checks)
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/T2/data ${CMAKE_CURRENT_SOURCE_DIR}/T2/cov_diff.txt
+          ${CMAKE_CURRENT_SOURCE_DIR}/T2/prior_cov.txt DESTINATION ${_lab_frame_dir})
+add_test(NAME upgrade_lab_frame_residual COMMAND lab_frame_residual_test ${CMAKE_CURRENT_SOURCE_DIR}/T2/T2.azr
+         WORKING_DIRECTORY ${_lab_frame_dir})
+set_tests_properties(upgrade_lab_frame_residual PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 600)
 
 # A working copy that evaluated other parameters before gives a fresh copy's bits (docs/upgrade/data_model.md S1):
 # per-segment chi^2 and model values, on T2, natural_neon, shift_sqrt_subpoints (sqrt, shiftfn), 18O_p_a_thm and a
@@ -112,10 +125,37 @@ string(REPLACE "<segmentsData>\n" "<segmentsData>\n1 5 2 1.8 2.0 0 180 1 1 0 0 -
 file(WRITE ${_history_dir}/pn/pn.azr "${_pn}")
 file(WRITE ${_history_dir}/pn/data/pn13.dat "1.90 13 1.0 0.1\n")
 file(COPY ${CMAKE_SOURCE_DIR}/tests/7Li_p_ay/data/ DESTINATION ${_history_dir}/pn/data)
+# ec: tests/ec_exit_position/models/photon_pair_first.azr (external capture into the 13N ground state, a component)
+# with a fitted energy shift of 5 keV on the LUNA capture data set and the ground state's energy free.  At A and B the
+# shifted points take their capture amplitudes from the memo of the shifted amplitude (Unit::GetECAmplitudeWithShift);
+# B moves the final state's energy by 2 keV.  A copy that evaluated B before A must give fresh A's bits: the final
+# state enters external capture at the energy of the set-up (ALevel::GetECEnergy), whatever the copy evaluated first.
+file(MAKE_DIRECTORY ${_history_dir}/ec/output ${_history_dir}/ec/checks)
+file(COPY ${CMAKE_SOURCE_DIR}/tests/ec_exit_position/models/data DESTINATION ${_history_dir}/ec)
+file(READ ${CMAKE_SOURCE_DIR}/tests/ec_exit_position/models/photon_pair_first.azr _ec)
+set(_ec_edits
+    "dataset luna_hpge\n    reaction       12C(p,g)13N\n    quantity       sigma\n    unit           b\n    file           data/skowronski_luna_hpge.dat\n    columns        E_lab[MeV] _ value error\n    energy_window  0 5 MeV\n    norm           1 fixed\n"
+    "dataset luna_hpge\n    reaction       12C(p,g)13N\n    quantity       sigma\n    unit           b\n    file           data/skowronski_luna_hpge.dat\n    columns        E_lab[MeV] _ value error\n    energy_window  0 5 MeV\n    norm           1 fixed\n    shift          offset 0.005 MeV fit\n"
+    "\n 0.5   -1            0    1    1    1    1    2    1 " "\n 0.5   -1            0    0    1    1    1    2    1 "
+    "\n 0.5   -1            0    1    1    2    1    2    1 " "\n 0.5   -1            0    0    1    2    1    2    1 ")
+list(LENGTH _ec_edits _ec_n)
+math(EXPR _ec_last "${_ec_n} - 1")
+foreach(_i RANGE 0 ${_ec_last} 2)
+  math(EXPR _j "${_i} + 1")
+  list(GET _ec_edits ${_i} _from)
+  list(GET _ec_edits ${_j} _to)
+  string(FIND "${_ec}" "${_from}" _at)
+  if(_at EQUAL -1)
+    message(FATAL_ERROR "history ec model: tests/ec_exit_position/models/photon_pair_first.azr no longer holds '${_from}'")
+  endif()
+  string(REPLACE "${_from}" "${_to}" _ec "${_ec}")
+endforeach()
+file(WRITE ${_history_dir}/ec/ec.azr "${_ec}")
 add_test(NAME upgrade_history
          COMMAND history_test ${_history_dir}/T2/T2.azr ${_history_dir}/natural_neon/natural_neon.azr
                  ${_history_dir}/shift_sqrt/sqrt.azr ${_history_dir}/shift_sqrt/shiftfn.azr
                  ${_history_dir}/thm/18O_p_a_thm.azr ${_history_dir}/pn/pn.azr
+                 --external-capture ${_history_dir}/ec/ec.azr
          WORKING_DIRECTORY ${_history_dir})
 set_tests_properties(upgrade_history PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 900)
 
@@ -125,7 +165,8 @@ add_executable(plan_test plan_test.cpp)
 target_link_libraries(plan_test PRIVATE AZURE2Core)
 add_test(NAME upgrade_plan COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/plan_test.sh $<TARGET_FILE:plan_test> ${CMAKE_SOURCE_DIR}/tests)
 set_tests_properties(upgrade_plan PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 1800)
-# ... and at run time (AZURE_PLAN_CHECK=1) on T1-T3, 13N, natural_neon, a THM project, a transmission and a yield.
+# ... and at run time (AZURE_PLAN_CHECK=1: writes, and every unit's shared solve against its own) on T1-T3, 13N,
+# natural_neon, a THM project, a transmission and a yield, thick_target_resonance and target_effect_ranges.
 add_test(NAME upgrade_plan_runtime COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/plan_runtime.sh $<TARGET_FILE:AZURE2>)
 set_tests_properties(upgrade_plan_runtime PROPERTIES TIMEOUT 1800)
 

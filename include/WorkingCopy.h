@@ -21,6 +21,7 @@
 #include <optional>
 #include "DataCovariance.h"
 #include <memory>
+#include <fstream>
 #include <ios>
 
 // THM types WorkingCopy holds by pointer or takes by reference (ThmNorm.cpp).
@@ -95,8 +96,10 @@ class WorkingCopy {
   int Fill(const Config &, CNuc *, const azure2::experiment::DataSpecs &);
   /// Build points from the extrapolation grids instead of data files, for a run with no data.  Returns -1 on failure.
   int MakePoints(const Config &, CNuc *, const azure2::experiment::ExtrapolationSpecs &);
-  /// TEMPORARY (step 3d): the same from the old sections of the project (src/ProjectSetup.cpp).
+  /// TEMPORARY (step 3d): the same from the old sections of the project (src/ProjectSetup.cpp).  A format-3 data run
+  /// whose data files cannot be read returns kFillRefused (the files and the refusal line printed).
   int Fill(const Config &, CNuc *);
+  static constexpr int kFillRefused = -2;
   int MakePoints(const Config &, CNuc *);
   /*!
    * The prior centres of the data sets' normalizations and energy shifts (DatasetSpec::normCentre, shiftCentre):
@@ -371,13 +374,12 @@ class WorkingCopy {
   bool ThmDistortionTable(const std::string &name, const std::vector<double> &energies, ThmDistortionReport &out,
                           std::string &why);
   /*!
-   * Calculates every point of \p segments (segments of this data set) and of their leaves in
-   * one OpenMP pass, largest items first.  A host point also fills the points
-   * mapped onto it, so mapped points are not items of their own.  A point whose
-   * calculation throws gets a fit cross section of 0.  Returns the number of
-   * such points, or -1 when nothing was calculated: no OpenMP, already inside a
-   * parallel region, point mapping switched off on this thread, or
-   * AZURE_SERIAL_CHI2 set.  The caller then reads the points with
+   * Calculates every point of \p segments (segments of this data set) and of their leaves (src/EnergyPass.cpp):
+   * the energy tasks of their plan tasks (CalculationPlan::EnergyTasks: one level-matrix solve per compound energy,
+   * points and sub-points alike) in one OpenMP pass, largest first, then the folds of the points with sub-points in
+   * a second.  A plan task whose calculation throws gets NaN on its points (Unit::MarkFailed).  Returns the number of
+   * such plan tasks, or -1 when nothing was calculated: no OpenMP, already inside a parallel region, point mapping
+   * switched off on this thread, or AZURE_SERIAL_CHI2 set.  The caller then reads the points with
    * azure2::EvaluateModelPoint(..., LeafValues::Ready).
    */
   int CalculatePointsInParallel(const std::vector<const Segment *> &segments, CNuc *theCNuc, const Config &configure,
@@ -436,6 +438,9 @@ class WorkingCopy {
   template <class F>
   void ForEachResultUnit(F f);
   void FillEnergyShiftsFromParamsImpl(const vector_r &, CNuc *theCNuc, const Config *configure);
+  /// The external-capture amplitudes of the leaves (InitializeLeaves): computed and appended to `out`, or read from
+  /// `in` where the data segments' amplitudes end (usePrevious); -1 when stopped or a GSL error ends the loop.
+  int LeafECAmplitudes(CNuc *, const Config &, bool usePrevious, std::ifstream &in, std::ofstream &out);
   /// Redraws the progress bar of the external-capture loops (CalculateECAmplitudes, InitializeLeaves)
   /// from inside their OpenMP loops, under the named critical section ec_progress.
   static void ECProgressRedraw(const Config &configure, const char *segmentKeyOut, const std::atomic<int> &pointIndex,

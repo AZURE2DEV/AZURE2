@@ -16,7 +16,7 @@ The same commit refuses an analyzing-power segment whose projectile is not spin-
 returned 0 for any other spin, the capture route ran and returned `3 <S_y> / (x + 1)`, which is the Madison
 `A_y` only for `x = 1/2` (1.5 times Ohlsen's Cartesian `A_y` for a deuteron).
 
-## Models (`make_models.py`)
+## Models (`make_models.py` (deleted; see "How the models were made"))
 
 `twolevel`: n + a 1/2- target (channel spins 0 and 1) into a fictitious compound nucleus with a 0+ ground
 state; two 1+ levels decaying by M1 to it, level A (E_cm 1.0 MeV) with a neutron width in channel spin 0
@@ -45,3 +45,28 @@ projectile.
 
 dev 7d10253 (before the fix): (a) the engine's `A_y` is the exact negative of the truth (worst 0.37 against
 it, 6.6e-7 against its negative); (b) the deuteron segment ran.  Fixed build: (a) 6.6e-7, (b) refused, (c) unchanged.
+
+## How the models were made
+
+The committed models are the reference.  They were written by `make_models.py` in the old project format and converted
+to format 3 with `tools/format3_tree_convert.sh` (`AZURE2 --convert ... --to 3 --exact-grids`); the generator
+was deleted with the old format (it is in the repository's history: `git show 4f206e28:tests/capture_ay_coupling/make_models.py`).  To change a
+model, edit its records.  The generator's description of what it wrote:
+
+```text
+Models for the capture analyzing-power coupling-order test (audit item 9, 2026-10-26).
+
+twolevel: n + "15N" (1/2+ on 1/2-: channel spins 0 and 1) into a fictitious compound nucleus with a
+0+ ground state, two 1+ levels that decay by M1 to it:  level A (E_cm 1.0 MeV) with a neutron width
+in channel spin 0 only, level B (E_cm 1.3 MeV) in channel spin 1 only, both l = 1.  The two levels
+share no particle channel, so the level matrix is diagonal and the two capture amplitudes are
+T_s = gamma_s gamma_gamma / D_lambda(E) with D = E_lambda - E - gamma^2 [S(E) - S(E_lambda)] - i gamma^2 P(E)
+(the Brune form), which verify.py evaluates from the engine's own reduced-width amplitudes
+(parameters.out) and the closed-form neutral l = 1 shift and penetrability.  Between the levels
+the two amplitudes have different phases, so A_y is not zero and its sign is the coupling order.
+The gamma widths are tiny (1 meV) so the photon channel cannot matter anywhere else.
+
+deuteron: the same with a spin-1 projectile and an analyzing-power test segment -- refused.
+
+Run from this directory: python3 make_models.py  (writes models/).
+```

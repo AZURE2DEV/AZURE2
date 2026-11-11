@@ -4,12 +4,13 @@
 # engine and moves the THM observable by the pinned amount, the defaults are
 # what a file without the block gets, and a malformed block stops the run.
 #
-# Model: tests/7Li_p_a (THM segment, entrance pair 5 = 7Li+p with two entrance
+# Model: tests/7Li_p_a (THM data set, entrance pair 5 = 7Li+p with two entrance
 # l in one channel spin, 30 keV Gaussian).  Each case copies the project into a
-# temporary directory, appends "\n<thm>\n...\n</thm>\n" (the .azr has no
-# trailing newline) and reads the total chi2 from output/chiSquared.out.
+# temporary directory, appends "\n<thm>\n...\n</thm>\n" and reads the total
+# chi2 from output/chiSquared.out.
 # Section (h) also runs tests/6Li_d, both projects with the 3He binding energy.
-# Section (i) is the per-segment weight table weight[k]=<file>.
+# Section (i) is the weight table of a THM data set or extrapolation (its field
+# thm_weight <file>; the old weight[k]= lines through the converter).
 #
 #   ./tests/thm_options/check.sh path/to/AZURE2
 
@@ -23,6 +24,7 @@ export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/thm_options.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 . "$HERE/../lib/guard.sh"
+. "$HERE/../lib/thm_records.sh"
 RUN="$(guard_command "${TEST_TIMEOUT:-600}")"
 
 fail=0
@@ -37,22 +39,38 @@ fail=0
 # exact.
 TOL_WIDE=5e-3
 
+# x2 switched off, x3 made a THM extrapolation of 7Li(p,a)4He on lab 0.5-3 MeV (0.5 MeV steps).
+XTHM_EDIT='$1 == "extrapolation" { x = $2 }
+  x == "x2" && $1 == "reaction" { print "    active         no" }
+  x == "x3" && $1 == "extrapolation" { print; print "    reaction       7Li(p,a)4He"; print "    quantity       sigma"
+                                       print "    unit           b"; print "    energies       list 0.5 1 1.5 2 2.5 3 MeV lab"
+                                       print "    thm            global"; skip = 1; next }
+  skip && (NF == 0 || /^<\/extrapolations>/) { skip = 0 }
+  !skip { print }'
+
 # run NAME BLOCK -> prints total chi2 (empty if none); AZURE2's exit status is
 # left in $WORK/NAME/status (run is called in a subshell).
 # BLOCK is the literal text appended after the last line of the .azr ("" = none).
+# WEIGHT=<record>=<table> run ...: that data set or extrapolation weighted by the
+# table (thm_weight); XTHM=1 run ...: extrapolation x3 made a THM one (XTHM_EDIT).
 run() {
   local d="$WORK/$1"
   mkdir -p "$d/output" "$d/checks"
   cp -r "$SRC/data" "$d/"
   cp "$SRC/7Li_p_a.azr" "$d/run.azr"
+  [ -z "${XTHM:-}" ] || { awk "$XTHM_EDIT" "$d/run.azr" > "$d/run.azr.tmp" && mv "$d/run.azr.tmp" "$d/run.azr"; }
+  [ -z "${WEIGHT:-}" ] || thm_weight "$d/run.azr" "${WEIGHT%%=*}" "${WEIGHT#*=}"
   [ -z "$2" ] || printf '%b' "$2" >> "$d/run.azr"
   [ "${3:-}" != sorted ] || sort_levels "$d/run.azr"
-  # nonthm: a second <segmentsData> line, the same data read as an ordinary
-  # angle-integrated segment (isDiff 0), so segment 2 is not THM.
+  # nonthm: a second data set, the same data read as an ordinary angle-integrated
+  # cross section (no thm field), weighted by two.dat.
   # (awk to a temporary file: sed -i is not portable to BSD/macOS sed.)
   if [ "${3:-}" = nonthm ]; then
-    awk '{ print } /^1  5  4  0  8\.2  0  180  10  / { sub(/  180  10  /, "  180  0  "); print }' \
-      "$d/run.azr" > "$d/run.azr.tmp" && mv "$d/run.azr.tmp" "$d/run.azr"
+    awk '/^<\/data>/ { print ""; print "dataset plain"; print "    reaction       7Li(p,a)4He"; print "    quantity       sigma"
+                       print "    unit           b"; print "    file           data/tumino_thm.dat"
+                       print "    columns        E_lab[MeV] _ value error"; print "    energy_window  0 8.2 MeV"
+                       print "    norm           0.000597139 fit"; print "    thm_weight     two.dat" }
+         { print }' "$d/run.azr" > "$d/run.azr.tmp" && mv "$d/run.azr.tmp" "$d/run.azr"
   fi
   (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
   echo $? > "$d/status"
@@ -189,13 +207,13 @@ wfile() { mkdir -p "$WORK/$1"; printf '%b' "$3" > "$WORK/$1/$2"; }
 # norm NAME: the norm column of segment 1 in chiSquared.out
 norm() { awk -F, '$1 == 1 {print $4}' "$WORK/$1/output/chiSquared.out" 2>/dev/null; }
 wfile w1 unit.dat "# w = 1\n-1 1\n20 1\n"
-w1="$(run w1 "$(block "weight[1]=unit.dat")")"
-expect "weight[1] w=1 == no block" "$w1" "$none" 0
-expect "weight[1] w=1: norm unchanged" "$(norm w1)" "$(norm none)" 0
+w1="$(WEIGHT=tumino_thm=unit.dat run w1 "")"
+expect "thm_weight w=1 == no weight" "$w1" "$none" 0
+expect "thm_weight w=1: norm unchanged" "$(norm w1)" "$(norm none)" 0
 wfile w2 two.dat "0 2\n10 2   # constant\n"
-w2="$(run w2 "$(block "weight[1]=two.dat")")"
-expect "weight[1] w=2 == no block (profiled norm absorbs it)" "$w2" "$none" 0
-expect "weight[1] w=2: norm doubled" "$(norm w2)" \
+w2="$(WEIGHT=tumino_thm=two.dat run w2 "")"
+expect "thm_weight w=2 == no weight (profiled norm absorbs it)" "$w2" "$none" 0
+expect "thm_weight w=2: norm doubled" "$(norm w2)" \
   "$(awk -v n="$(norm none)" 'BEGIN{printf "%.6g", 2*n}')" 1e-5
 if grep -q "WARNING: <thm> weight 'two.dat' is evaluated at E = .* outside its table" "$WORK/w2/log"; then
   echo "  ok    folding sub-points below the table: one warning, end value used"
@@ -208,33 +226,31 @@ fi
 wfile wabs two.dat "0 2\n10 2\n"
 wabs="$WORK/wabs/two.dat"
 if command -v cygpath > /dev/null 2>&1; then wabs="$(cygpath -m "$wabs")"; fi
-expect "weight[1] absolute path == relative" \
-  "$(run wabs "$(block "weight[1]=$wabs")")" "$w2" 0
+expect "thm_weight absolute path == relative" \
+  "$(WEIGHT="tumino_thm=$wabs" run wabs "")" "$w2" 0
 # w = 1 + E_cm as piecewise log-linear rows: a different chi2
 wfile ramp ramp.dat "# w = 1 + E\n0 1\n1 2\n2 3\n3 4\n4 5\n5 6\n6 7\n7 8\n8 9\n9 10\n10 11\n"
-expect "weight[1] ramp w = 1 + E" "$(run ramp "$(block "weight[1]=ramp.dat")")" 869.55 "$TOL_WIDE"
-# weightTest[k] names a <segmentsTest> line and is only read for extrapolation
+expect "thm_weight ramp w = 1 + E" "$(WEIGHT=tumino_thm=ramp.dat run ramp "")" 869.55 "$TOL_WIDE"
+# A weight on an extrapolation (x3 made THM, as below) is only read for that extrapolation.
 wfile wtest two.dat "0 2\n10 2\n"
-expect "weightTest[2] does not touch the data segments" \
-  "$(run wtest "$(block "weightTest[2]=two.dat")")" "$none" 0
+expect "thm_weight on an extrapolation does not touch the data sets" \
+  "$(XTHM=1 WEIGHT=x3=two.dat run wtest "")" "$none" 0
 
-# weightTest[k] in an extrapolation ("Calculate Segments Without Data"):
-# <segmentsTest> line 3 made a THM line (5 -> 4, isDiff 10, lab 0.5-3 MeV),
-# line 2 switched off.  With w = 4^(E/5) (two rows, log-linear) the model is
-# exactly the unweighted one times 4^(E_cm/5).
+# thm_weight in an extrapolation ("Calculate Segments Without Data"): x3
+# made a THM extrapolation (7Li(p,a)4He, lab 0.5-3 MeV), x2 switched off.
+# With w = 4^(E/5) (two rows, log-linear) the model is exactly the unweighted
+# one times 4^(E_cm/5).
 runx() {
   local d="$WORK/$1"
   mkdir -p "$d/output" "$d/checks"
   cp -r "$SRC/data" "$d/"
-  awk '/^<segmentsTest>/ { t = 1; n = 0; print; next } /^<\/segmentsTest>/ { t = 0 }
-       t { n++; if (n == 2) sub(/^1/, "0"); if (n == 3) $0 = "1 5 4 0.5 3 0.5 0 180 0 10" }
-       { print }' "$SRC/7Li_p_a.azr" > "$d/run.azr"
-  [ -z "$2" ] || printf '%b' "$2" >> "$d/run.azr"
+  awk "$XTHM_EDIT" "$SRC/7Li_p_a.azr" > "$d/run.azr"
+  [ -z "${WEIGHT:-}" ] || thm_weight "$d/run.azr" "${WEIGHT%%=*}" "${WEIGHT#*=}"
   (cd "$d" && printf '3\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
 }
 wfile xw ramp4.dat "0 1\n5 4\n"
-runx xn ""
-runx xw "$(block "weightTest[3]=ramp4.dat")"
+runx xn
+WEIGHT=x3=ramp4.dat runx xw
 xo="output/AZUREOut_aa=5_R=4.extrap"
 if [ -s "$WORK/xn/$xo" ] && [ -s "$WORK/xw/$xo" ] &&
    paste "$WORK/xn/$xo" "$WORK/xw/$xo" | awk -v h=$(( $(head -1 "$WORK/xn/$xo" | wc -w) )) '
@@ -242,38 +258,53 @@ if [ -s "$WORK/xn/$xo" ] && [ -s "$WORK/xw/$xo" ] &&
        if (NF < 8 || a + 0 == 0) next
        m++; r = b / a / exp(e / 5 * log(4)); if (r < 1 - 1e-6 || r > 1 + 1e-6) bad++ }
      END { exit !(m >= 5 && !bad) }'; then
-  echo "  ok    weightTest[3]: extrapolated THM model x 4^(E/5) at every energy"
+  echo "  ok    thm_weight on x3: extrapolated THM model x 4^(E/5) at every energy"
 else
-  echo "  FAIL  weightTest[3] in an extrapolation"; tail -5 "$WORK/xw/log"; fail=1
+  echo "  FAIL  thm_weight in an extrapolation"; tail -5 "$WORK/xw/log"; fail=1
 fi
 
-refuse wmissing  "$(block "weight[1]=nothere.dat")" "ERROR: <thm> weight.1.: cannot read the weight file"
+WEIGHT=tumino_thm=nothere.dat refuse wmissing "" "ERROR: <thm> weight.1.: cannot read the weight file"
 wfile wdecr decr.dat "0 1\n5 2\n5 3\n"
-refuse wdecr     "$(block "weight[1]=decr.dat")"     "ERROR: <thm> weight.1.: .* the energies must be strictly increasing"
+WEIGHT=tumino_thm=decr.dat refuse wdecr "" "ERROR: <thm> weight.1.: .* the energies must be strictly increasing"
 wfile wneg neg.dat "0 1\n5 0\n"
-refuse wneg      "$(block "weight[1]=neg.dat")"      "ERROR: <thm> weight.1.: .* the weight must be finite and > 0"
+WEIGHT=tumino_thm=neg.dat refuse wneg "" "ERROR: <thm> weight.1.: .* the weight must be finite and > 0"
 wfile wcols cols.dat "0 1 3\n5 2 3\n"
-refuse wcols     "$(block "weight[1]=cols.dat")"     "ERROR: <thm> weight.1.: .* expected two numbers"
+WEIGHT=tumino_thm=cols.dat refuse wcols "" "ERROR: <thm> weight.1.: .* expected two numbers"
 wfile wrange short.dat "1 1\n10 1\n"
-refuse wrange    "$(block "weight[1]=short.dat")"    "ERROR: <thm> weight.1.: segment 1 has a point at E_cm = .* outside the table"
-wfile wbeyond two.dat "0 2\n10 2\n"
-refuse wbeyond   "$(block "weight[2]=two.dat")"      "ERROR: <thm> weight.2.: <segmentsData> has only 1 line"
-refuse wkey      "$(block "weight[0]=two.dat")"      "ERROR: <thm> line not understood: 'weight.0.=two.dat'"
-# weight on a segment that is not THM (a second, isDiff 0 line)
+WEIGHT=tumino_thm=short.dat refuse wrange "" "ERROR: <thm> weight.1.: segment 1 has a point at E_cm = .* outside the table"
+# a weight on a data set that is not THM (a second data set without thm)
 wfile wnonthm two.dat "0 2\n10 2\n"
-c="$(run wnonthm "$(block "weight[2]=two.dat")" nonthm)"
+c="$(run wnonthm "" nonthm)"
 if [ -z "$c" ] && [ "$(cat "$WORK/wnonthm/status")" -ne 0 ] &&
-   grep -q "ERROR: <thm> weight.2.: segment 2 of <segmentsData> is not a THM segment" "$WORK/wnonthm/log"; then
+   grep -q "E_FIELD_NOT_APPLICABLE: dataset 'plain', field 'thm_weight'" "$WORK/wnonthm/log"; then
   echo "  ok    wnonthm refused: $(grep -m1 'ERROR' "$WORK/wnonthm/log")"
 else
   echo "  FAIL  wnonthm: exit $(cat "$WORK/wnonthm/status"), chi2 '${c}'"; tail -5 "$WORK/wnonthm/log"; fail=1
 fi
+# The old weight[k]= lines are the converter's: one the old engine refused is not converted, with its reason.
+convrefuse() {  # convrefuse NAME TEXT PATTERN [AWK]: the original 7Li_p_a with TEXT appended, through AZURE2 --convert
+  local d="$WORK/$1"
+  mkdir -p "$d"
+  if [ -n "${4:-}" ]; then awk "$4" "$ORIG" > "$d/old.azr"; else cp "$ORIG" "$d/old.azr"; fi
+  printf '%b' "$2" >> "$d/old.azr"
+  (cd "$d" && "$AZURE2_BIN" --convert old.azr new.azr --to 3 > log 2>&1; echo $? > status)
+  if [ "$(cat "$d/status")" -ne 0 ] && [ ! -f "$d/new.azr" ] && grep -q "$3" "$d/log"; then
+    echo "  ok    $1 refused by the converter: $(grep -m1 'ERROR' "$d/log")"
+  else
+    echo "  FAIL  $1: not refused by the converter (exit $(cat "$d/status"))"; tail -3 "$d/log" | sed 's/^/        /'; fail=1
+  fi
+}
+ORIG="$HERE/../convert/fixtures/tests/7Li_p_a/7Li_p_a.azr"
+convrefuse wbeyond "$(block "weight[2]=two.dat")" "<thm> weight.2.: <segmentsData> has only 1 line"
+convrefuse wkey "$(block "weight[0]=two.dat")" "<thm> line \"weight.0.=two.dat\" cannot be read"
+convrefuse wnonthm_old "$(block "weight[2]=two.dat")" "<thm> weight.2.: segment 2 is not a THM segment" \
+  '{ print } /^1  5  4  0  8\.2  0  180  10  / { sub(/  180  10  /, "  180  0  "); print }'
 
 # (j) a hybrid nuclear potential on the THM entrance pair (pair 5): the vertex uses point-Coulomb waves, so the
 # run is refused with E_THM_HYBRID_POTENTIAL (ThmVertexAllowsPair) instead of mixing the two models silently.
-c="$(run hybrid "\n<potential>\nuseHybridPotential=0\npotentialType=0\nV0=20\nR=3.0\na=0.6\npair=5\nuseHybridPotential=1\n</potential>\n")"
+c="$(run hybrid "\n<potentials>\npotential p7Li\n    pair            p+7Li\n    coulomb_radius  3.5 fm\n    central         woods_saxon depth 20 MeV radius 3 fm diffuseness 0.6 fm\n    matching_radius 15 fm\n    step            0.0275 fm\n</potentials>\n")"
 if [ -z "$c" ] && [ "$(cat "$WORK/hybrid/status")" -ne 0 ] &&
-   grep -q "ERROR (E_THM_HYBRID_POTENTIAL): segment #1 (THM): entrance pair 5" "$WORK/hybrid/log"; then
+   grep -q "E_THM_HYBRID_POTENTIAL: dataset tumino_thm, field thm: the entrance pair 5 (p+7Li) has a hybrid potential" "$WORK/hybrid/log"; then
   echo "  ok    hybrid entrance pair refused: $(grep -m1 'E_THM_HYBRID' "$WORK/hybrid/log")"
 else
   echo "  FAIL  hybrid: exit $(cat "$WORK/hybrid/status"), chi2 '${c}'"; tail -5 "$WORK/hybrid/log"; fail=1

@@ -71,7 +71,11 @@ covariance groups, parameter layout; immutable, one object shared by every worki
 `shared_ptr<const DataSet>`), and the working copy (`WorkingCopy`, `include/WorkingCopy.h`: per segment a
 `SegmentState` of norms, shifts, frames and shift tables, the present values of the target-effect parameters, the
 calculation plan and one flat vector of calculation `Unit`s; copied by a plain copy).  An evaluation writes only its
-working copy and the caller's `Results`.
+working copy and the caller's `Results`.  Its point pass (`WorkingCopy::CalculatePointsInParallel`) runs the plan's
+energy tasks (`CalculationPlan::EnergyTasks`, since Phase 5): one task per compound energy E_x (nucleus and the bits of
+`AMatrixFunc::InEnergy`) with every unit at it -- points without a fold and sub-points alike -- one level-matrix fill
+and factorisation, one T-matrix per (entrance, exit) pair and external-capture amplitude source, one observable per unit (`azure2::SolveAtOneEnergy`); then
+the folds, on values already computed (`Unit::FoldSubPoints`).  Each task writes only its units' records.
 
 ## 3. Module contents (physical objects; physics stages are functions, not classes)
 
@@ -100,7 +104,8 @@ working copy and the caller's `Results`.
   narrow-resonance term for resonances narrower than the grid can follow.
 
 ### experiment/
-- `Measurement`: data arrays (E, θ, y, δy) already converted to c.m. at load (frames are a load-time function), the
+- `Measurement`: data arrays (E, θ, y, δy) as read, in the frame they were given in; the model is compared with them in
+  that frame, r = (f/J − n y)/(n δy), the frame of a row (`MeasurementFrame`) holding only its kinematics and J, the
   **model expression** that predicts them (below), apparatus settings, provenance.
 - **Model expressions (decision 12, Jakub, 2026-11-07): what a data set measures is written, not coded.** A
   measurement's prediction is a small expression tree, so a new kind of data is a new combination, not new engine code.
@@ -178,22 +183,27 @@ the tests. The algorithms cross-check each other as an identity test.
 Prerequisites in pycoulomb (owner: Jakub; see `ROADMAP.md` Phase 1): licence file, library target without Python,
 stateless thread-safe call, Whittaker functions, no committed build products, tests against mpmath.
 
-## 7. Stopping and straggling (no SRIM, no ERYA, no LunaSRIM)
+## 7. Stopping and straggling: SRIM-2013 through LunaSRIM (no ERYA)
 
-- Today: a user formula, or ERYA, which ships SRIM's coefficient file `SRIM2013.xml` (SRIM's non-commercial terms,
-  inside a GPL code). Straggling is c·√ΔE or plain Bohr. Both go.
-- Electronic stopping, protons and α: AZURE2's own evaluation per element in the ICRU 49 functional form
-  (velocity-proportional at low energy, Bethe with shell, Barkas and Bloch corrections at high energy), coefficients
-  and covariance fitted to the IAEA measured-stopping database; gas and solid separately where data exist.
-  d, t from protons and ³He from α at the same velocity; heavier ions by effective-charge scaling, with a larger
-  stated uncertainty. Nuclear stopping: ZBL universal. Compounds: Bragg additivity plus a core-and-bond correction
-  where measured compound data show one.
-- Each evaluation carries its uncertainty, used as the prior of a stopping-scale nuisance per material.
-- Straggling: Bohr with Chu's correction and the charge-state term (Yang, O'Connor, Wang 1991), propagated through
-  the target, σ²(x) = S(E(x))² ∫ (dΩ²/dx′)/S(E(x′))² dx′ (Tschalär); beam spread in quadrature.
+- Before: a user formula, or ERYA, which ships SRIM's coefficient file `SRIM2013.xml` inside a GPL code and evaluates
+  it with one formula at all energies. Straggling was c·√ΔE or plain Bohr. Both go (ERYA in the wiring branch).
+- **Decision of the PI, 2026-11-11:** "I would use the SRIM stopping powers from my LunaSRIM repository. They are free
+  to use as long as SRIM is cited." This replaces the earlier plan of an own evaluation fitted to the IAEA database.
+  So the stopping library `stopping/` (`docs/upgrade/stopping.md`) computes SRIM-2013's stopping powers, ported to
+  C++ from LunaSRIM (github.com/skowrons94/LunaSRIM, MIT; a re-implementation of SRIM-2013 that reproduces its
+  tables), with SRIM's data files `SCOEF03.DAT` and `SNUC03.dat` (`stopping/data/srim/`, not under AZURE2's licence;
+  whether the public repository ships them is the owner's decision, the library can read them from a directory):
+  electronic stopping of any ion Z₁ = 1–92 in any element, solid or gas with SRIM's phase factor; SRIM's
+  pair-specific nuclear stopping; compounds by Bragg's rule with SRIM's compound correction (a number the user
+  gives). Agreement with LunaSRIM: to rounding (10⁻¹⁰ in the tests). SRIM is cited in the data directory, in the
+  provenance text and in every output file of `azure2-stopping`.
+- Each evaluation carries its uncertainty — SRIM's published accuracy for the ion (4.0 % H, 3.9 % He, 4.8 % Li,
+  5.8 % heavier) — used as the prior of a stopping-scale nuisance per material.
+- Straggling: TRIM's (Bohr with TRIM's relativistic factor and low-energy limit), plain Bohr selectable, propagated
+  through the target, σ²(x) = S(E(x))² ∫ (dΩ²/dx′)/S(E(x′))² dx′ (Tschalär); beam spread in quadrature.
 - User-measured tables or formulas override, with provenance.
-- Before any third-party table is shipped (NIST PSTAR/ASTAR, IAEA data), check its redistribution terms; until then
-  they are used for fitting and comparison only.
+- Before any other third-party table is shipped (NIST PSTAR/ASTAR, IAEA data), check its redistribution terms; until
+  then they are used for comparison only.
 
 ## 8. Physics explorer (web UI) — every physics function is plottable
 

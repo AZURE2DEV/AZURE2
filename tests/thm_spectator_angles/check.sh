@@ -43,8 +43,10 @@ WP="$WORK"; if command -v cygpath > /dev/null 2>&1; then WP="$(cygpath -m "$WORK
 trap 'rm -rf "$WORK"' EXIT
 . "$HERE/../lib/guard.sh"
 . "$HERE/../lib/check_common.sh"
+. "$HERE/../lib/thm_records.sh"
 RUN="$(guard_command "${TEST_TIMEOUT:-300}")"
 OUT="AZUREOut_aa=1_R=2.out"
+BOTH="lc723_thm_points lc723_band_mid"   # the THM data sets of the experiment
 KIN="beam=18O target=d spectator=n Ebeam=54"
 fail=0
 
@@ -59,7 +61,7 @@ run() {
   cp "$O18/18O_p_a_thm.azr" "$d/run.azr"
   local edit
   for edit in ${3:-}; do awk "${!edit}" "$d/run.azr" > "$d/tmp.azr" && mv "$d/tmp.azr" "$d/run.azr"; done
-  [ -z "$2" ] || printf '\n<thm>\n%s\n</thm>\n' "$2" >> "$d/run.azr"
+  [ -z "$2" ] || thm_set "$d/run.azr" "$2" $BOTH
   (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 1000000 > log;
    echo "${PIPESTATUS[1]}" > status)
 }
@@ -78,8 +80,8 @@ rowdiff() {
          END { printf "%.2e %d", m, n }'
 }
 small() { awk -v v="${1% *}" -v n="${1#* }" -v t="$2" -v k="${3:-3}" 'BEGIN { exit !(n >= k && v < t) }'; }
-NOFOLD='/<targetInt>/ { print; T = 1; next } /<\/targetInt>/ { T = 0 } T { next } { print }'
-L="experiment[A] segments=1,2 $KIN"
+NOFOLD="$THM_NOFOLD"
+L="experiment[A] $KIN"
 
 # (a) ----------------------------------------------------------------------
 echo "(a) a window of zero width is its direction"
@@ -96,7 +98,7 @@ run d_win "$L distortion=coulomb vertexModel=dw spectatorAngles=cm:25-25" "NOFOL
 if ran d_one && ran d_win; then
   r="$(moddiff d_one d_win)"; small "$r" 1e-8 && ok "DW: cm:25-25 == spectatorAngle=cm:25, model ${r% *} at ${r#* } points" || bad "DW cm:25-25: $r"
 fi
-K100="experiment[A] segments=1,2 beam=18O target=d spectator=n Ebeam=100"
+K100="experiment[A] beam=18O target=d spectator=n Ebeam=100"
 run h_one "$K100 distortion=coulomb spectatorAngle=12"
 run h_win "$K100 distortion=coulomb spectatorAngles=12-12"
 run hd_one "$K100 distortion=coulomb vertexModel=dw spectatorAngle=12" "NOFOLD"

@@ -8,7 +8,7 @@ scattering length a0 = -a [M/(x^2 K1^2) - 2 I1/(x^2 K1)], M = gamma^T A gamma at
 (Paneru et al., PRC 99, 045807 (2019), Eq. 7), written to `output/scatteringLengths.out`, and the
 `<scatteringLengths>` chi2 term.  Theory: docs/source/theory/scattering_length.rst.
 
-Models (built by `make_models.py`, which needs mpmath; widths are observed Brune widths
+Models (built by `make_models.py` (deleted; see "How the models were made"), which needs mpmath; widths are observed Brune widths
 Gamma = 2 P gamma~^2 / (1 + sum gamma~^2 S') so that AZURE2 recovers the published gamma~):
 
 | model | content | reference a0 (fm) |
@@ -39,3 +39,26 @@ Checks:
 7. Malformed block lines are refused with the line named.
 
 Runs in about 6 s on two threads.
+
+## How the models were made
+
+The committed models are the reference.  They were written by `make_models.py` in the old project format and converted
+to format 3 with `tools/format3_tree_convert.sh` (`AZURE2 --convert ... --to 3 --exact-grids`); the generator
+was deleted with the old format (it is in the repository's history: `git show 8506786e:tests/scattering_length/make_models.py`).  To change a
+model, edit its records.  The generator's description of what it wrote:
+
+```text
+Builds the scattering-length test models (committed; rerun only to change them).
+
+he3he4.azr  3He+4He, Paneru et al., PRC 109, 015802 (2024) Table V: the 1/2+ background level
+            (Ex 14.000 MeV, gamma~ 1.683 MeV^1/2, a = 4.2 fm), the only s-wave term.  a0 = 33.10 fm.
+be7p.azr    7Be+p, Paneru et al., PRC 99, 045807 (2019) Table II, a = 4.3 fm: the 2- level (Ex 3.520,
+            gamma~(S=2) 1.700) and the 1- background (Ex 9.000, gamma~_el(S=1) 1.433, gamma~ in
+            7Be*(0.429)+p (S=1) -1.822, closed at the 7Be+p threshold).
+n16o.azr    n+16O with one 1/2+ level (Ex 6.0 MeV in 17O, gamma~ 0.8 MeV^1/2, a = 4.0 fm): neutral, so
+            a0 = a (1 - gamma~^2 / E~) in closed form (S = 0 for l = 0).
+Widths are written as observed (Brune) partial widths in eV, Gamma~_c = 2 P_c gamma~_c^2 / (1 + sum gamma~^2 S'),
+so that AZURE2 recovers the published gamma~ (parameters.out g_int); each model has
+a phase-shift test segment at low energy for the effective-range check of check.sh.
+Needs mpmath.
+```

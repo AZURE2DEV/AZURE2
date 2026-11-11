@@ -197,6 +197,9 @@ struct TargetEffectSpec {
   double sigma = 0.0;            ///< its width (MeV; frame: sigmaLab)
   bool targetIntegration = false;
   double density = 0.0;          ///< target thickness (atoms/cm^2); <= 0: an infinitely thick target
+  /// A yield on a layer (quantity yield, target kind layer): the fold is reactions per incident particle,
+  /// 1e-24 int_{E_out}^{E0} sigma/epsilon dE, not the target-averaged cross section (docs/upgrade/energy_grid.md section 5)
+  bool layerYield = false;
   std::string stoppingPowerEquation;
   std::vector<double> stoppingPowerParameters;
   bool qCoefficients = false;

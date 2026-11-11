@@ -1,5 +1,5 @@
-// Shared by the stopping tests: relative checks, a refusal check, and the reference rows of reference.csv
-// (make_reference.py).
+// Shared by the stopping tests: relative checks, a refusal check, and the reference rows of srim_reference.csv
+// (stopping/tools/make_srim_reference.py, LunaSRIM's values).
 #ifndef AZURE2_STOPPING_TESTS_CHECK_H
 #define AZURE2_STOPPING_TESTS_CHECK_H
 
@@ -41,9 +41,9 @@ void Throws(const std::string &what, F f) {
   True(what, thrown);
 }
 
-/// The rows of reference.csv whose first field is \p kind, as numbers (the kind dropped).
-inline std::vector<std::vector<double>> Reference(const std::string &path, const std::string &kind) {
-  std::vector<std::vector<double>> out;
+/// The rows of the reference file whose first field is \p kind, as text fields (the kind dropped).
+inline std::vector<std::vector<std::string>> Rows(const std::string &path, const std::string &kind) {
+  std::vector<std::vector<std::string>> out;
   std::ifstream in(path);
   if (!in) {
     std::printf("cannot read %s\n", path.c_str());
@@ -57,8 +57,8 @@ inline std::vector<std::vector<double>> Reference(const std::string &path, const
     std::string field;
     std::getline(fields, field, ',');
     if (field != kind) continue;
-    std::vector<double> row;
-    while (std::getline(fields, field, ',')) row.push_back(std::stod(field));
+    std::vector<std::string> row;
+    while (std::getline(fields, field, ',')) row.push_back(field);
     out.push_back(row);
   }
   if (out.empty()) {
@@ -66,6 +66,34 @@ inline std::vector<std::vector<double>> Reference(const std::string &path, const
     ++failures;
   }
   return out;
+}
+
+/// The largest relative deviation seen by Track, per label, printed by Summary (the report's table).
+struct Largest {
+  std::vector<std::pair<std::string, double>> worst;
+  void Track(const std::string &label, double got, double want) {
+    const double dev = std::fabs(got - want) / (std::fabs(want) > 0.0 ? std::fabs(want) : 1.0);
+    for (auto &w : worst) {
+      if (w.first == label) {
+        if (dev > w.second) w.second = dev;
+        return;
+      }
+    }
+    worst.emplace_back(label, dev);
+  }
+  void Summary(const std::string &title) const {
+    std::printf("largest relative deviation, %s:\n", title.c_str());
+    for (const auto &w : worst) std::printf("    %-40s %.2e\n", w.first.c_str(), w.second);
+  }
+};
+
+/// A quiet relative check for long tables: counts a failure and prints only failing rows.
+inline void RelQuiet(const std::string &what, double got, double want, double rel) {
+  const double dev = std::fabs(got - want) / (std::fabs(want) > 0.0 ? std::fabs(want) : 1.0);
+  if (!(dev <= rel)) {
+    std::printf("%-78s FAIL  got %.15g want %.15g (rel %.2e, tol %.1e)\n", what.c_str(), got, want, dev, rel);
+    ++failures;
+  }
 }
 
 inline int Done() {

@@ -1,0 +1,76 @@
+<config>
+true                                                                                                #Perform A-Matrix Calculation
+output/                                                                                             #Full Path to Output Directory
+checks/                                                                                             #Full Path to Checks Directory
+none                                                                                                #Compond Nucleus Check
+none                                                                                                #Boundary Condition Check
+none                                                                                                #Data Check
+none                                                                                                #Lo-Matrix and Penetrability Check
+none                                                                                                #Legendre Polynomial Check
+none                                                                                                #Coulomb Amplitudes Check
+none                                                                                                #Reaction Pathway Check
+none                                                                                                #Angular Distributions Check
+</config>
+<potential>
+useHybridPotential=0
+useAdaptiveGrid=1
+potentialType=0
+V0=150
+R=3.6
+a=0.6
+</potential>
+<levels>
+1  -1  1.811  1  1  1  4  2  1  1  0  0.2398904  0.5  1  2.5  1  0  1  17  0  8  1.817  1.817  0  0  0.0  0  4.643  0  0  0  2.225  1
+1  -1  1.811  1  1  2  0  2  1  1  0  0.3357966  0  1  0  1  0  4  14  2  6  1.817  0  0  0  0.0  0  5.197  0  0  0  0  1
+
+2  1  1.989  1  1  1  4  4  2  1  0  0.4132097  0.5  1  2.5  1  0  1  17  0  8  1.817  1.817  0  0  0.0  0  4.643  0  0  0  2.225  1
+2  1  1.989  1  1  2  0  4  2  1  0  0.532538  0  1  0  1  0  4  14  2  6  1.817  0  0  0  0.0  0  5.197  0  0  0  0  1
+
+3  -1  2.057  1  1  1  4  2  3  1  0  0.1612181  0.5  1  2.5  1  0  1  17  0  8  1.817  1.817  0  0  0.0  0  4.643  0  0  0  2.225  1
+3  -1  2.057  1  1  2  0  6  3  1  0  0.4016803  0  1  0  1  0  4  14  2  6  1.817  0  0  0  0.0  0  5.197  0  0  0  0  1
+
+5  -1  1.891  1  1  1  4  6  4  1  0  0.1735202  0.5  1  2.5  1  0  1  17  0  8  1.817  1.817  0  0  0.0  0  4.643  0  0  0  2.225  1
+5  -1  1.891  1  1  2  0  10  4  1  0  0.5696341  0  1  0  1  0  4  14  2  6  1.817  0  0  0  0.0  0  5.197  0  0  0  0  1
+
+</levels>
+<segmentsData>
+1  1  2  -0.06  0.31  0  0  10  2.63145e-05  1  0  0  0  0  data/o17_guardo.dat  0  0
+</segmentsData>
+<segmentsTest>
+1              1              2              -0.105882      0.338824       0.002118       0              0              0              10 0
+</segmentsTest>
+<targetInt>
+1              "1"            150            1              0.021          0              0               "" 0               0              0               0               "" 0               0 0.04 5 50
+</targetInt>
+<parameterSettings>
+# Fitting parameter settings (only non-fixed parameters shown)
+# Format: name value lower_limit upper_limit error fit_error nuisance category minuit_index
+Level 1 Channel 1 Width (MeV^(1/2)) 0.1275 0 0 0.01275 0 0 level 0
+Level 1 Channel 2 Width (MeV^(1/2)) 0.1085 0 0 0.01085 0 0 level 1
+Level 2 Channel 3 Width (MeV^(1/2)) 0.197 0 0 0.0197 0 0 level 2
+Level 2 Channel 4 Width (MeV^(1/2)) 0.136 0 0 0.0136 0 0 level 3
+Level 3 Channel 5 Width (MeV^(1/2)) 0.117 0 0 0.0117 0 0 level 4
+Level 3 Channel 6 Width (MeV^(1/2)) 0.77 0 0 0.077 0 0 level 5
+Level 4 Channel 7 Width (MeV^(1/2)) 0.26 0 0 0.026 0 0 level 6
+Level 4 Channel 8 Width (MeV^(1/2)) 0.5 0 0 0.05 0 0 level 7
+segment_1_norm 2.63145e-05 0 0 0 0 1 norm 8
+segment_1_energy_shift 0 0 0 0 0 0 shift 9
+</parameterSettings>
+<lastRun>
+9997
+""
+""
+0 0
+0 ""
+-1. -1. -1.
+</lastRun>
+<mcmc>
+nwalkers 50
+nsteps 10000
+chainspread 5
+energyspread 1
+nthreads 4
+usereducedwidths 0
+<parameters>
+</parameters>
+</mcmc>

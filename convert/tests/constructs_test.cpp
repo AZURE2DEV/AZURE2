@@ -228,6 +228,31 @@ int main(int argc, char **argv) {
     check("THM: segments= and weight[1] leave <thm>",
           r.text.find("experiment[X1] beam=15N target=d spectator=n Ebeam=60\n</thm>") != std::string::npos);
   }
+  // ---- members of a THM experiment the old engine refused (CheckThmExperiments, ThmNorm.cpp): a line in two
+  //      experiments, a number past the last data line, a line in use that is not THM; an inactive non-THM line converts
+  {
+    const std::string two = "1 1 2 0.03 0.6 0 180 10 1 1 0 0 0 0 h1.dat\n1 1 2 0.03 0.6 0 180 10 1 1 0 0 0 0 h2.dat\n";
+    const ConvertResult a = Convert({two, "", "", "<thm>\nexperiment[A] segments=1,2\nexperiment[B] segments=2\n</thm>\n", ""});
+    check("THM line in two experiments: refused",
+          !a.ok && a.refusal.find("<thm> experiment[B]: segment 2 is already in experiment[A], which the old engine refused") !=
+                       std::string::npos);
+    const ConvertResult b = Convert({two, "", "", "<thm>\nexperiment[A] segments=1-3\n</thm>\n", ""});
+    check("THM segment past the last data line: refused",
+          !b.ok && b.refusal.find("<thm> experiment[A]: segment 3: <segmentsData> has only 2 line(s)") != std::string::npos);
+    const std::string plain = "1 1 2 0.03 0.6 0 180 10 1 1 0 0 0 0 h1.dat\n1 1 2 0.03 0.6 0 180 0 1 1 0 0 0 0 h2.dat\n";
+    const ConvertResult c = Convert({plain, "", "", "<thm>\nexperiment[A] segments=1,2\n</thm>\n", ""});
+    check("non-THM line in an experiment: refused",
+          !c.ok && c.refusal.find("<thm> experiment[A]: segment 2 is not a THM segment (isDiff < 10)") != std::string::npos);
+    const std::string idle = "1 1 2 0.03 0.6 0 180 10 1 1 0 0 0 0 h1.dat\n0 1 2 0.03 0.6 0 180 0 1 1 0 0 0 0 h2.dat\n";
+    const ConvertResult d = Convert({idle, "", "", "<thm>\nexperiment[A] segments=1,2\n</thm>\n", ""});
+    check("inactive non-THM line in an experiment: converted", d.ok);
+    const ConvertResult e = Convert({two, "", "", "<thm>\nweight[3]=w.txt\n</thm>\n", ""});
+    check("THM weight past the last data line: refused",
+          !e.ok && e.refusal.find("<thm> weight[3]: <segmentsData> has only 2 line(s)") != std::string::npos);
+    const ConvertResult f = Convert({plain, "", "", "<thm>\nweight[2]=w.txt\n</thm>\n", ""});
+    check("THM weight on a non-THM line: refused",
+          !f.ok && f.refusal.find("<thm> weight[2]: segment 2 is not a THM segment (isDiff < 10)") != std::string::npos);
+  }
   // ---- composite: SUM "1 0 n e x angle", RATIO "1 1 1 e x angle" (ComponentList.h), the -1 layout with a scaling, a fixed
   //      angle in the frame of the line; the short list: a plain reaction and a note
   {
@@ -379,7 +404,8 @@ int main(int argc, char **argv) {
   {
     const ConvertResult r = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 v1.dat covariance cov.txt\n"
                                      "1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 tot.dat total 1\n"
-                                     "1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 nat.dat 1 0 1 6 6 -999 sample natNe\n",
+                                     "1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 nat.dat 1 0 1 6 6 -999 sample natNe\n"
+                                     "1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 nattot.dat 1 0 1 6 6 -999 sample natNe total 1\n",
                                      "", "",
                                      "<abundances>\nnatNe: 10 21 0.9048 1 0.01\nnatNe: sum 0.001\n</abundances>\n", ""});
     Expect("covariance", r, "dataset v1", Sigma("v1.dat") + F{{"energy_window", "0.2 1.4 MeV"}, {"norm", "1 fixed"}, {"covariance", "cov.txt"}});
@@ -392,6 +418,11 @@ int main(int argc, char **argv) {
     Expect("sample data set", r, "dataset nat",
            Sigma("nat.dat", "20Ne(n,n)20Ne + 22Ne(n,n)22Ne") + F{{"energy_window", "0.1 2 MeV"}, {"norm", "1 fixed"}, {"target", "natNe"}});
     check("sample: abundance_natNe_10_21 -> natNe.isotope.20Ne", Param(r, "abundance_natNe_10_21") == "natNe.isotope.20Ne");
+    // a sample's total: the abundance-weighted sum of the nuclei's totals, one elastic term per nucleus
+    Expect("sample total", r, "dataset nattot",
+           F{{"reaction", "20Ne(n,n)20Ne + 22Ne(n,n)22Ne"}, {"quantity", "sigma_total"}, {"unit", "b"}, {"file", "nattot.dat"},
+             {"columns", "E_lab[MeV] _ value error"}, {"energy_window", "0.1 2 MeV"}, {"norm", "1 fixed"}, {"target", "natNe"}});
+    check("covariance, total, samples: converted", r.ok);
   }
   // ---- transmission n vary sigma (a fitted sample thickness, SegLine.h); thicknessgroup: one target
   {
@@ -406,6 +437,43 @@ int main(int argc, char **argv) {
            F{{"reaction", "20Ne(n,n)20Ne"}, {"quantity", "neutron_yield"}, {"unit", "1"}, {"file", "tr2.dat"},
              {"columns", "E_lab[MeV] _ value error"}, {"energy_window", "0.1 2 MeV"}, {"norm", "1 fixed"}, {"target", "S"}});
     check("transmission: segment_1_thickness -> S.areal_density", Param(r, "segment_1_thickness") == "S.areal_density");
+  }
+  // ---- a <targetInt> target over a line of a sample and a line of none (natural_target/models/M_thick): the sample's
+  //      line gets a copy of the target with the isotopes; with a fitted density it stays a question
+  {
+    const std::string lines = "1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 a.dat\n"
+                              "1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 b.dat 0 0 sample natNe\n";
+    const std::string abundances = "<abundances>\nnatNe: 10 21 0.9 0 0\n</abundances>\n";
+    const ConvertResult r = Convert({lines, "", "1 \"1,2\" 20 0 0 1 1e18 \"a0\" 1 1e-20 0 0 0 \"\" 0 0\n", abundances, ""});
+    check("shared layer over a sample's line and a plain line: converted without a question", r.ok && r.questions.empty());
+    const std::string a = Block(r.text, "dataset a"), b = Block(r.text, "dataset b");
+    check("the plain line on the layer, the sample's line on its copy",
+          a.find("target         tgt_a\n") != std::string::npos && b.find("target         tgt_b\n") != std::string::npos);
+    const std::string copy = Block(r.text, "target tgt_b"), plain = Block(r.text, "target tgt_a");
+    check("the copy carries the isotopes, the layer none",
+          copy.find("isotope        20Ne 0.9 fixed") != std::string::npos && copy.find("areal_density  1e18 atoms/cm2 fixed") != std::string::npos &&
+              !plain.empty() && plain.find("isotope") == std::string::npos);
+    const ConvertResult q = Convert({lines, "", "1 \"1,2\" 20 0 0 1 1e18 \"a0\" 1 1e-20 0 0 0 \"\" 0 0 densityfit 1 10%\n", abundances, ""});
+    check("the same with a fitted density: a question", !q.ok && !q.questions.empty());
+  }
+  // ---- a Doppler-only <targetInt> line on transmission lines: one sample target with the doppler field (no question
+  //      "two areal densities"); a fitted temperature on one line keeps its parameter; on two lines it stays a question
+  {
+    const ConvertResult r = Convert({"1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 tr1.dat transmission 0.05\n"
+                                     "1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 tr2.dat transmission 0.05\n"
+                                     "1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 tr3.dat transmission 0.05\n",
+                                     "", "1 \"1,2\" 20 0 0 0 0 \"\" 0 0 0 0 \"\" 0 doppler 300\n"
+                                         "1 \"3\" 20 0 0 0 0 \"\" 0 0 0 0 \"\" 0 doppler 300 1 30\n", "", ""});
+    check("doppler on transmission lines: converted without a question", r.ok && r.questions.empty());
+    Expect("doppler on the sample target", r, "target tgt_tr1",
+           F{{"kind", "sample"}, {"active", "20Ne"}, {"areal_density", "0.05 atoms/b fixed"}, {"doppler", "free_gas 300 K fixed"}});
+    Expect("fitted doppler on the sample target", r, "target tgt_tr3",
+           F{{"kind", "sample"}, {"active", "20Ne"}, {"areal_density", "0.05 atoms/b fixed"}, {"doppler", "free_gas 300 K fit prior 300 30"}});
+    check("doppler_2 -> tgt_tr3.doppler", Param(r, "doppler_2") == "tgt_tr3.doppler");
+    const ConvertResult q = Convert({"1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 tr1.dat transmission 0.05\n"
+                                     "1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 tr2.dat transmission 0.05\n",
+                                     "", "1 \"1,2\" 20 0 0 0 0 \"\" 0 0 0 0 \"\" 0 doppler 300 1 30\n", "", ""});
+    check("a fitted doppler shared by two transmission lines: still the question", !q.ok && !q.questions.empty());
   }
   // ---- a line with transmission and yield, and a thicknessgroup member without its own block: the old engine refused
   //      them (WorkingCopy::FinishTransformedSegment, ResolveThicknessGroups), so the converter refuses them with that reason

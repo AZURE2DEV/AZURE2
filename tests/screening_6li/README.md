@@ -17,7 +17,7 @@ screening potentials the authors derived:
 EXFOR tags the energy column `EN` (laboratory), but it is the c.m. energy:
 the paper's 30–100 keV proton beam gives these c.m. energies, and read as
 laboratory energies the metals come out 26–27 % below the published U_e.
-`make_models.py` converts S to σ = S/E · exp(−2πη) with AZURE2's constants
+`make_models.py` (deleted; see "How the models were made") converts S to σ = S/E · exp(−2πη) with AZURE2's constants
 and the model's masses (1.00782, 6.0151), and writes `data/cruz_*.dat`
 (E_lab in MeV, 0, σ and its statistical error in b).
 
@@ -61,3 +61,29 @@ for p + Li is 182 eV (NIST total electron binding energies).
 The full study (both readings of the energy column, engine-vs-profile
 checks, the pyazr fit and its gradient) is in the deBoer R-matrix archive,
 `6Li+p/3He+a/AZURE2_evaluation/10-21-26_screening_benchmark/`.
+
+## How the models were made
+
+The committed models are the reference.  They were written by `make_models.py` in the old project format and converted
+to format 3 with `tools/format3_tree_convert.sh` (`AZURE2 --convert ... --to 3 --exact-grids`); the generator
+was deleted with the old format (it is in the repository's history: `git show 8506786e:tests/screening_6li/make_models.py`).  To change a
+model, edit its records.  The generator's description of what it wrote:
+
+```text
+Models and data of tests/screening_6li: electron screening of 6Li(p,a)3He, Cruz et al. 2005 (Phys. Lett. B 624, 181;
+EXFOR O1282005-007) on a Li2WO4 insulator, Li metal and a PdLi alloy, against J. Skowronski's 7Be R-matrix evaluation held
+fixed.
+
+The levels are that evaluation's best fit (Supplemental 7Be.azr + param.sav, written into <levels> with pyazr save_fit and
+checked on re-read), every energy and width fixed; the evaluation's own segments are removed (it has no 6Li(p,a) data below
+E_p = 100 keV, so these points are out of sample).  Only the three Cruz sets remain, each with its own <targetInt> line
+carrying a screening block.  Written next to this script:
+
+  data/cruz_{metal,insulator,pdli}.dat   E_lab (MeV), 0, sigma (b), dsigma (b) from the EXFOR S-factors
+  bare.azr     U_e = 0 on all three, norms 1
+  scr.azr      U_e and norms at the benchmark minimum, fixed
+  fit.azr      U_e (start 500 eV) and the norms free, no priors
+
+Run:  python3 tests/screening_6li/make_models.py path/to/7Be_fit.azr
+(the snapshot is R-matrix/6Li+p/3He+a/AZURE2_evaluation/10-21-26_screening_benchmark/7Be_fit.azr in the deBoer archive.)
+```

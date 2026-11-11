@@ -16,6 +16,12 @@ Output (standard output, tab-separated): one line per file that differs, exists 
 difference over numeric tokens (|a-b| / max(|a|,|b|), sign flips left out), the same of the absolute values, the
 counts of differing numbers, sign flips and non-numeric tokens, and the change in the line count; then per basis "## <basis>: N files, M identical" and one "##   <kind>: ..." line per kind of file
 (run.log, a checks/ file, param.par, chiSquared.out, ..., "observable:<suffix>") that has a difference.
+With --class lab-frame-rounding, a file of a project listed in LAB_FRAME_PROJECTS that differs only by rounding is
+counted in that class (listed with "lab-frame-rounding" and added to the summary line) instead of differing: the same
+lines and tokens, and every differing number within LAB_FRAME_LIMIT relative or within one unit of the last printed
+digit of either token (two values that agree to 1e-14 can print one last digit apart).  The class is the comparison
+of the residual in the frame of the datum (docs/upgrade/energy_grid.md section 4.4): only the projects with
+lab-differential data, whose outputs move by rounding, are listed; every other project must stay identical.
 Exit 2 on a usage error, else 0.
 """
 import os
@@ -71,6 +77,73 @@ def compare(a, b):
     return worst, nnum, nsign, ntext, len(b) - len(a)
 
 
+# The lab-frame rounding class: the projects (".res-<folder>/<file>.azr" of runall.sh) whose outputs may move by
+# rounding when lab-differential data are compared in the lab frame, and the limit on any output number.
+LAB_FRAME_LIMIT = 1e-14
+# Listed from a probe of every project of tests/ (outside tests/convert/) that loads without generated files: the
+# project files with a data row whose dOmega_lab/dOmega_cm is not 1.
+LAB_FRAME_PROJECTS = {
+    '.res-13N/13N.azr',
+    '.res-angle_mapping/angle_mapping.azr',
+    '.res-channel_space/channel_space.azr',
+    '.res-hybrid_potential/hybrid_potential.azr',
+    '.res-identical_entrance_reaction__projects/c12c12.azr',
+    '.res-identical_entrance_reaction__projects/dd_pt.azr',
+    '.res-relativistic__models/he5_ang.azr',
+    '.res-relativistic__models/he5_ang_rel.azr',
+    '.res-relativistic__models/li7pn_ang.azr',
+    '.res-relativistic__models/li7pn_ang_rel.azr',
+    '.res-relativistic__models/li7pn_edge.azr',
+    '.res-relativistic__models/pa_ang.azr',
+    '.res-relativistic__models/pa_ang_rel.azr',
+    '.res-spin_orbit_potential/spin_orbit_potential.azr',
+    '.res-sum_lab_frame__models/plain_data.azr',
+    '.res-sum_lab_frame__models/sum_data.azr',
+    '.res-sum_lab_frame__models/sum_free.azr',
+    '.res-upgrade__T1/T1.azr',
+    '.res-upgrade__T1/T1_start.azr',
+    '.res-upgrade__T2/T2.azr',
+    '.res-upgrade__T2/T2_true.azr',
+    '.res-upgrade__T3/T3.azr',
+    '.res-upgrade__T3/T3_start.azr',
+}
+
+
+def last_place(t):
+    """One unit in the last printed digit of the numeric token t ('2.19e+00' -> 0.01, '692' -> 1)."""
+    m = re.match(r'^[-+]?(\d*)(?:\.(\d*))?(?:[eE]([-+]?\d+))?$', t)
+    decimals = len(m.group(2) or '')
+    exponent = int(m.group(3) or 0)
+    return 10.0 ** (exponent - decimals)
+
+
+def within_rounding(a, b, limit):
+    """True when the token lines a and b differ only in numbers, each pair within `limit` relative or one unit of
+    the last printed digit."""
+    if len(a) != len(b):
+        return False
+    for la, lb in zip(a, b):
+        if len(la) != len(lb):
+            return False
+        for ta, tb in zip(la, lb):
+            if ta == tb:
+                continue
+            if not (NUM.match(ta) and NUM.match(tb)):
+                return False
+            x, y = float(ta), float(tb)
+            # (1 + 1e-6): the difference of two decimal tokens one unit apart is not exactly one unit in binary
+            if abs(x - y) > max(limit * max(abs(x), abs(y)), last_place(ta), last_place(tb)) * (1 + 1e-6):
+                return False
+    return True
+
+
+def project_of(k):
+    """'.res-<folder>/<file>.azr' of a relative path of collect()."""
+    parts = k.split('/')
+    i = [j for j, p in enumerate(parts) if p.startswith('.res-')][0]
+    return '/'.join(parts[i:i + 2])
+
+
 def kind(rel):
     base = os.path.basename(rel)
     if base == 'run.log':
@@ -101,14 +174,24 @@ def main():
     if len(sys.argv) < 4:
         sys.stderr.write(__doc__)
         return 2
-    work, ref, new = sys.argv[1:4]
-    modes = sys.argv[4:] or ['brune', 'no-brune', 'use-park']
+    args = [a for a in sys.argv[1:] if not a.startswith('--class')]
+    classes = [a.split('=', 1)[1] if '=' in a else '' for a in sys.argv[1:] if a.startswith('--class')]
+    if any(c != 'lab-frame-rounding' for c in classes):
+        sys.stderr.write('classify.py: the only class is --class=lab-frame-rounding\n')
+        return 2
+    lab_frame = bool(classes)
+    if len(args) < 3:
+        sys.stderr.write(__doc__)
+        return 2
+    work, ref, new = args[0:3]
+    modes = args[3:] or ['brune', 'no-brune', 'use-park']
     for m in modes:
         rroot, nroot = os.path.join(work, m, ref), os.path.join(work, m, new)
         rf, nf = collect(rroot), collect(nroot)
         allk = sorted(set(rf) | set(nf))
         summary = defaultdict(lambda: [0, 0, 0.0, 0, 0, 0.0])  # files, differing, max rel, sign flips, text diffs
         ident = 0
+        rounding = 0
         for k in allk:
             # rel = <dir>/.res-<name>/<azr>/<output|checks|run.log>/...
             parts = k.split('/')
@@ -136,13 +219,17 @@ def main():
             if nn == 0 and nt == 0 and dl == 0:
                 ident += 1
                 continue
+            if lab_frame and project_of(k) in LAB_FRAME_PROJECTS and within_rounding(a, b, LAB_FRAME_LIMIT):
+                rounding += 1
+                print(f"{m}\t{k}\tlab-frame-rounding\tmaxrel={w:.3g}\tnumdiff={nn}")
+                continue
             s[1] += 1
             s[2] = max(s[2], w)
             s[3] += ns
             s[4] += nt
             s[5] = max(s[5], ABSW)
             print(f"{m}\t{k}\tabsrel={ABSW:.3g}\tmaxrel={w:.3g}\tnumdiff={nn}\tsignflip={ns}\ttextdiff={nt}\tdlines={dl}")
-        print(f"## {m}: {len(allk)} files, {ident} identical")
+        print(f"## {m}: {len(allk)} files, {ident} identical" + (f", {rounding} lab-frame rounding" if lab_frame else ""))
         for kd in sorted(summary):
             s = summary[kd]
             if s[1]:

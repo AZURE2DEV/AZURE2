@@ -40,8 +40,10 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/thm_lineshape.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 . "$HERE/../lib/guard.sh"
 . "$HERE/../lib/check_common.sh"
+. "$HERE/../lib/thm_records.sh"
 RUN="$(guard_command "${TEST_TIMEOUT:-300}")"
 OUT="AZUREOut_aa=1_R=2.out"
+BOTH="lc723_thm_points lc723_band_mid"   # the THM data sets of the experiment
 KIN="beam=18O target=3He spectator=d Ebeam=115"
 fail=0
 
@@ -57,28 +59,29 @@ run() {
   cp "$SRC/18O_p_a_thm.azr" "$d/run.azr"
   local edit
   for edit in ${3:-}; do awk "${!edit}" "$d/run.azr" > "$d/tmp.azr" && mv "$d/tmp.azr" "$d/run.azr"; done
-  [ -z "$2" ] || printf '\n<thm>\n%s\n</thm>\n' "$2" >> "$d/run.azr"
+  [ -z "$2" ] || thm_set "$d/run.azr" "$2" ${MEMBERS-$BOTH}
   (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline ${4:-} run.azr 2>&1 | head -c 1000000 > log;
    echo "${PIPESTATUS[1]}" > status)
 }
 
 # awk programs editing the .azr
-NOFOLD='/<targetInt>/ { print; T = 1; next } /<\/targetInt>/ { T = 0 } T { next } { print }'
+NOFOLD="$THM_NOFOLD"
 ONELEVEL='/<levels>/ { L = 1 } /<\/levels>/ { L = 0 } L && $3 == "8.805800" { next } { print }'
 # level 2 kept, its a+15N width set to zero
 NOEXIT2='/<levels>/ { L = 1 } /<\/levels>/ { L = 0 } L && $3 == "8.805800" && $6 == 2 { $12 = 0 } { print }'
 
 # (a) ----------------------------------------------------------------------
 echo "(a) lineshape=off == no key"
-run nokey "experiment[A] segments=1,2 $KIN"
-run off "experiment[A] segments=1,2 $KIN lineshape=off"
+run nokey "experiment[A] $KIN"
+run off "experiment[A] $KIN lineshape=off"
 ran nokey && ran off
 for f in chiSquared.out normalizations.out parameters.out thm_experiments.out "$OUT"; do
   same "$WORK/nokey/output/$f" "$WORK/off/output/$f" && ok "$f byte-identical" || bad "$f differs"
 done
 run base ""
-run offone "experiment[A] segments=1 lineshape=off
-experiment[B] segments=2 lineshape=off"
+JOINAB='$1 == "dataset" { ds = $2 } $1 == "thm" { $0 = sprintf("    %-14s %s", "thm", ds == "lc723_thm_points" ? "A" : "B") } { print }'
+MEMBERS= run offone "experiment[A] lineshape=off
+experiment[B] lineshape=off" "JOINAB"
 ran base && ran offone
 for f in chiSquared.out normalizations.out parameters.out "$OUT"; do
   same "$WORK/base/output/$f" "$WORK/offone/output/$f" && ok "one-segment, lineshape=off: $f == no <thm> block" \
@@ -87,8 +90,8 @@ done
 
 # (b) ----------------------------------------------------------------------
 echo "(b) neutral spectator: N_C = 1"
-run noff "experiment[A] segments=1,2 beam=18O target=d spectator=n Ebeam=54"
-run non "experiment[A] segments=1,2 beam=18O target=d spectator=n Ebeam=54 lineshape=on"
+run noff "experiment[A] beam=18O target=d spectator=n Ebeam=54"
+run non "experiment[A] beam=18O target=d spectator=n Ebeam=54 lineshape=on"
 ran noff && ran non
 for f in chiSquared.out normalizations.out parameters.out "$OUT"; do
   same "$WORK/noff/output/$f" "$WORK/non/output/$f" && ok "spectator n: $f byte-identical" || bad "spectator n: $f differs"
@@ -129,17 +132,17 @@ ratio_check() {  # ratio_check TAG ON OFF
   fi
 }
 echo "(c) isolated level: model ratio = |N_C|^2"
-run c_off "experiment[A] segments=1,2 $KIN" "NOFOLD ONELEVEL"
-run c_on "experiment[A] segments=1,2 $KIN lineshape=on" "NOFOLD ONELEVEL"
+run c_off "experiment[A] $KIN" "NOFOLD ONELEVEL"
+run c_on "experiment[A] $KIN lineshape=on" "NOFOLD ONELEVEL"
 ran c_off && ran c_on && ratio_check one c_on c_off
-run c2_off "experiment[A] segments=1,2 $KIN" "NOFOLD NOEXIT2"
-run c2_on "experiment[A] segments=1,2 $KIN lineshape=on" "NOFOLD NOEXIT2"
+run c2_off "experiment[A] $KIN" "NOFOLD NOEXIT2"
+run c2_on "experiment[A] $KIN lineshape=on" "NOFOLD NOEXIT2"
 ran c2_off && ran c2_on && ratio_check interfering c2_on c2_off
 same "$WORK/c_off/output/$OUT" "$WORK/c2_off/output/$OUT" && bad "the second level changes nothing" \
   || ok "the second level does change the model (it interferes through the level matrix)"
 # ... and with both levels decaying, the factor is not a common one.
-run c3_off "experiment[A] segments=1,2 $KIN" "NOFOLD"
-run c3_on "experiment[A] segments=1,2 $KIN lineshape=on" "NOFOLD"
+run c3_off "experiment[A] $KIN" "NOFOLD"
+run c3_on "experiment[A] $KIN lineshape=on" "NOFOLD"
 if ran c3_off && ran c3_on; then
   keep=$fail
   ratio_check two c3_on c3_off > "$WORK/two.txt" 2>&1  # expected to fail
@@ -157,9 +160,13 @@ fi
 
 # (d) ----------------------------------------------------------------------
 echo "(d) zeta < 0: the peak moves up"
-GRID='/<segmentsData>/ { S = 1; print; next } /<\/segmentsData>/ { S = 0 } S && NF > 8 { S++; if (S == 2) { $4 = 0.3; $5 = 1.0; $15 = "data/grid.dat" } else $1 = 0 } { print }'
-run d_off "experiment[A] segments=1 $KIN" "NOFOLD ONELEVEL GRID"
-run d_on "experiment[A] segments=1 $KIN lineshape=on" "NOFOLD ONELEVEL GRID"
+# data set 1 on a fine grid (data/grid.dat, 0.3-1.0 MeV), data set 2 off
+GRID='$1 == "dataset" { ds = $2 }
+      ds == "lc723_thm_points" && $1 == "energy_window" { $0 = "    energy_window  0.3 1.0 MeV" }
+      ds == "lc723_thm_points" && $1 == "file" { $0 = "    file           data/grid.dat" }
+      ds == "lc723_band_mid" && $1 == "thm" { print "    active         no" } { print }'
+MEMBERS=lc723_thm_points run d_off "experiment[A] $KIN" "NOFOLD ONELEVEL GRID"
+MEMBERS=lc723_thm_points run d_on "experiment[A] $KIN lineshape=on" "NOFOLD ONELEVEL GRID"
 for r in d_off d_on; do
   awk 'BEGIN { for (e = 0.40; e <= 0.8200001; e += 0.0005) printf "%.4f 0.0 1.0 0.1\n", e }' > "$WORK/$r/data/grid.dat"
   (cd "$WORK/$r" && rm -rf output && mkdir output && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 1000000 > log)
@@ -188,10 +195,10 @@ refuse() {  # refuse NAME MESSAGE-FRAGMENT BLOCK [EDITS [FLAGS]]
     bad "$1: not refused with '$2' (status $(cat "$WORK/$1/status"))"; tail -3 "$WORK/$1/log" | sed 's/^/        /'
   fi
 }
-refuse no_kinematics "lineshape=on needs the kinematics" "experiment[A] segments=1,2 lineshape=on"
-refuse bad_value "expected on or off" "experiment[A] segments=1,2 $KIN lineshape=1"
-refuse no_energy "the spectator has no energy left" "experiment[A] segments=1,2 beam=18O target=3He spectator=d Ebeam=40 lineshape=on"
-refuse formal "needs the Brune parameterization" "experiment[A] segments=1,2 $KIN lineshape=on" "" "--use-rmc"
+refuse no_kinematics "lineshape=on needs the kinematics" "experiment[A] lineshape=on"
+refuse bad_value "expected on or off" "experiment[A] $KIN lineshape=1"
+refuse no_energy "the spectator has no energy left" "experiment[A] beam=18O target=3He spectator=d Ebeam=40 lineshape=on"
+refuse formal "needs the Brune parameterization" "experiment[A] $KIN lineshape=on" "" "--use-rmc"
 
 echo
 if [ "$fail" -eq 0 ]; then echo "PASS: THM Coulomb line shape"; else echo "FAIL"; exit 1; fi

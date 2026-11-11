@@ -9,7 +9,7 @@
 #       with the SAMPLED norm (a mode-1 calculation from param.mcmc with that norm), not with the
 #       start norm.
 # The 2026-10-26 build passes both; dev dfc64e1 fails both (param.mcmc norm = 1, chi2 off by the
-# norm's effect).  Model: 13N_fast.azr (make_model.py), 4 walkers x 100 steps, ~15 s.
+# norm's effect).  Model: 13N_fast.azr (make_model.py (deleted; README.md: how the models were made)), 4 walkers x 100 steps, ~15 s.
 set -u
 [ $# -ge 1 ] || { echo "usage: check.sh path/to/AZURE2"; exit 2; }
 AZURE2_BIN="$1"

@@ -137,7 +137,7 @@ for ending in ("\n", ""):
 
 print("\n9. the <thm> block: read, set, clear -- the GUI's rules")
 # tests/7Li_p_a has a THM segment (line 1 of <segmentsData>) and no block.
-thm_src = os.path.join(ROOT, "tests", "7Li_p_a", "7Li_p_a.azr")
+thm_src = old_tree.original(os.path.join(ROOT, "tests", "7Li_p_a", "7Li_p_a.azr"))
 tmpdir = tempfile.mkdtemp()
 
 

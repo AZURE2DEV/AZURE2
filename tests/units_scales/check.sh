@@ -11,7 +11,7 @@
 #      has fewer than a fifth of the sigma grid's points and still interpolates S within the tolerance against a
 #      dense grid (with the level inside the range both grids are governed by its peak and coincide);
 #   4. the S-factor extrapolation in keV*b equals the sigma extrapolation times E exp(2 pi eta) x 1000;
-#   5. refusals: a yield on a target layer (the layer kernel of Phase 5), a yield per uC without its charge state.
+#   5. a yield on a target layer is built (tests/layer_yield tests it); a yield per uC without its charge state is refused.
 #
 #   ./tests/units_scales/check.sh path/to/AZURE2
 
@@ -130,10 +130,10 @@ fi
 sed -e 's|    kind           infinite|    kind           layer\n    areal_density  1e18 atoms/cm2 fixed|' \
   "$HERE/models/yield_story.azr" > "$WORK/layer.azr"
 msg="$(cd "$WORK/story" && "$AZURE2_BIN" --describe "$WORK/layer.azr" 2>&1)"
-if echo "$msg" | grep -q "E_NOT_BUILT" && echo "$msg" | grep -q "Phase 5"; then
-  ok "a yield on a target layer is refused, naming Phase 5"
+if echo "$msg" | grep -q "yield per incident particle on the layer"; then
+  ok "a yield on a target layer is built (the layer kernel; its limits: tests/layer_yield)"
 else
-  bad "the layer refusal: $msg"
+  bad "a yield on a target layer: $msg"
 fi
 grep -v '^    charge_state' "$HERE/models/yield_story.azr" > "$WORK/noq.azr"
 msg="$("$AZURE2_BIN" --validate "$WORK/noq.azr" 2>&1)"

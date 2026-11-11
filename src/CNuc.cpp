@@ -695,7 +695,6 @@ void CNuc::Initialize(const Config &configure) {
   // Sort reaction pathways
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Sorting Reaction Pathways..." << std::endl;
-  this->SortPathways(configure);
   this->BuildPathways(configure);
   this->SetUpFormalCaptureMasks(configure);
   if ((configure.fileCheckMask | configure.screenCheckMask) & Config::CHECK_PATHWAYS)
@@ -705,7 +704,6 @@ void CNuc::Initialize(const Config &configure) {
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Calculating Angular Distribution Coefficients..." << std::endl;
   WarnTruncatedLegendreOrders(*this, configure);
-  this->CalcAngularDists(configure.maxLOrder);
   if ((configure.fileCheckMask | configure.screenCheckMask) & Config::CHECK_ANGULAR_DISTS)
     WriteAngularDistributionsCheck(*this, configure);
 }
@@ -883,80 +881,6 @@ bool CNuc::TransformIn(const Config &configure) {
 }
 
 /*!
- * Calculates internal and external reaction pathways.
- */
-
-void CNuc::SortPathways(const Config &configure) {
-  // The enumeration is physics/ reaction_pathways (docs/upgrade/cnuc_split.md section 10); the trees on PPair are
-  // filled from it in its order, through the System map (block -> J-group, block channel -> group channel).
-  namespace phys = azure2::physics;
-  const CNucSystem structure = BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure);
-  const CNucSystemMap &map = structure.map;
-  // The external-capture final states, in J-group and level order.
-  std::vector<phys::FinalState> finalStates;
-  std::vector<std::pair<int, int> > finalLevel;  // (J-group, level) of each
-  for (const azure2::PathwayFinalState &f : ECFinalStates(*this)) {
-    finalStates.push_back(f.state);
-    finalLevel.push_back(std::make_pair(f.group, f.level));
-  }
-  phys::PathwayOptions options;
-  options.rmatrix_capture = (configure.paramMask & Config::USE_RMC_FORMALISM) != 0;
-
-  for (int aa = 1; aa <= this->NumPairs(); aa++) {
-    PPair *entrancePair = this->GetPair(aa);
-    if (!entrancePair->IsEntrance()) continue;
-    const std::vector<phys::ExitPathways> exits = phys::reaction_pathways(structure.system, aa - 1, finalStates, options);
-    for (const phys::ExitPathways &exit : exits) {
-      Decay NewDecay(map.pairOfPartition[exit.partition]);
-      int decayNum = entrancePair->IsDecay(NewDecay);
-      if (!decayNum) {
-        entrancePair->AddDecay(NewDecay);
-        decayNum = entrancePair->IsDecay(NewDecay);
-      }
-      Decay *theDecay = entrancePair->GetDecay(decayNum);
-      for (const phys::SpinGroup &g : exit.groups) {
-        KGroup NewKGroup = g.has_sp2 ? KGroup(g.two_s / 2., g.two_sp / 2., g.two_sp2 / 2.) : KGroup(g.two_s / 2., g.two_sp / 2.);
-        int kGroupNum = theDecay->IsKGroup(NewKGroup, g.has_sp2);
-        if (!kGroupNum) {
-          theDecay->AddKGroup(NewKGroup);
-          kGroupNum = theDecay->IsKGroup(NewKGroup, g.has_sp2);
-        }
-        KGroup *theKGroup = theDecay->GetKGroup(kGroupNum);
-        for (const phys::InternalPathway &p : g.internal) {
-          MGroup NewMGroup(map.groupOfBlock[p.block], map.channelOfBlockChannel[p.block][p.k_in],
-                           map.channelOfBlockChannel[p.block][p.k_out]);
-          int mGroupNum = theKGroup->IsMGroup(NewMGroup);
-          if (!mGroupNum) {
-            theKGroup->AddMGroup(NewMGroup);
-            mGroupNum = theKGroup->IsMGroup(NewMGroup);
-          }
-          if (p.has_stat_spin_factor) theKGroup->GetMGroup(mGroupNum)->SetStatSpinFactor(p.stat_spin_factor);
-        }
-      }
-    }
-    // External pathways, after the internal ones of this entrance (they refer to them by position).
-    for (std::size_t e = 0; e < exits.size(); e++) {
-      Decay *theDecay = entrancePair->GetDecay(entrancePair->IsDecay(map.pairOfPartition[exits[e].partition]));
-      for (std::size_t g = 0; g < exits[e].groups.size(); g++)
-        for (const phys::ExternalPathway &x : exits[e].groups[g].external) {
-          const char radType = (x.X == phys::Multipole::E) ? 'E' : 'M';
-          const int chp = (int)x.final_channel + 1;
-          const int j = finalLevel[x.final_state].first, la = finalLevel[x.final_state].second;
-          KGroup *theKGroup = theDecay->GetKGroup((int)g + 1);
-          if (!x.channel_capture) {
-            theKGroup->AddECMGroup(ECMGroup(radType, x.L, x.l, x.two_J / 2., chp, j, la));
-            continue;
-          }
-          const phys::InternalPathway &cc = exits[x.cc_exit].groups[x.cc_group].internal[x.cc_pathway];
-          const int internalChannel = x.photon_channel < 0 ? 0 : map.channelOfBlockChannel[cc.block][x.photon_channel];
-          theKGroup->AddECMGroup(ECMGroup(radType, x.L, x.l, x.two_J / 2., chp, j, la, (int)x.cc_exit + 1,
-                                          (int)x.cc_group + 1, (int)x.cc_pathway + 1, internalChannel));
-        }
-    }
-  }
-}
-
-/*!
  * Calculates the boundary conditions: B_c = S_c at the lowest R-matrix level of each \f$ J^\pi \f$ group.
  */
 
@@ -995,156 +919,6 @@ void CNuc::CalcBoundaryConditions(const Config &configure) {
     throw GSLException(std::string("Boundary conditions: ") + e.what());
   }
 }
-
-/*!
- * Creates and sorts the KLGroup and Interference objects and calculates the appropriate coefficients.
- */
-
-void CNuc::CalcAngularDists(int maxL) {
-  for (int aa = 1; aa <= this->NumPairs(); aa++) {
-    PPair *entrancePair = this->GetPair(aa);
-    if (entrancePair->GetPType() == 20) continue;
-    for (int ir = 1; ir <= this->GetPair(aa)->NumDecays(); ir++) {
-      Decay *theDecay = this->GetPair(aa)->GetDecay(ir);
-      for (int k = 1; k <= theDecay->NumKGroups(); k++) {
-        for (int lOrder = 0; lOrder <= maxL; lOrder++) {
-          for (int m1 = 1; m1 <= theDecay->GetKGroup(k)->NumMGroups() + theDecay->GetKGroup(k)->NumECMGroups(); m1++) {
-            for (int m2 = 1; m2 <= theDecay->GetKGroup(k)->NumMGroups() + theDecay->GetKGroup(k)->NumECMGroups(); m2++) {
-              std::string interferenceType;
-              double j1, j2, l1, l1p, l2, l2p;
-              double s1pCh = -1., s2pCh = -1.;  // exit channel spins of internal pathways
-              int w1p, w2p, path1, path2;
-              if (m1 > theDecay->GetKGroup(k)->NumMGroups()) {
-                int m1_ec = m1 - theDecay->GetKGroup(k)->NumMGroups();
-                ECMGroup *theECMGroup1 = theDecay->GetKGroup(k)->GetECMGroup(m1_ec);
-                j1 = theECMGroup1->GetJ();
-                l1 = (double)theECMGroup1->GetL();
-                l1p = (double)theECMGroup1->GetMult();
-                if (theECMGroup1->GetRadType() == 'M')
-                  w1p = 0;
-                else
-                  w1p = 1;
-                interferenceType = 'E';
-                path1 = m1_ec;
-              } else {
-                JGroup *jgroup1 = this->GetJGroup(theDecay->GetKGroup(k)->GetMGroup(m1)->GetJNum());
-                AChannel *channel1 = jgroup1->GetChannel(theDecay->GetKGroup(k)->GetMGroup(m1)->GetChNum());
-                AChannel *channel1p = jgroup1->GetChannel(theDecay->GetKGroup(k)->GetMGroup(m1)->GetChpNum());
-                j1 = jgroup1->GetJ();
-                l1 = (double)channel1->GetL();
-                l1p = (double)channel1p->GetL();
-                s1pCh = channel1p->GetS();
-                if (channel1p->GetRadType() == 'M' || channel1p->GetRadType() == 'P')
-                  w1p = 0;
-                else
-                  w1p = 1;
-                interferenceType = 'R';
-                path1 = m1;
-              }
-              if (m2 > theDecay->GetKGroup(k)->NumMGroups()) {
-                int m2_ec = m2 - theDecay->GetKGroup(k)->NumMGroups();
-                ECMGroup *theECMGroup2 = theDecay->GetKGroup(k)->GetECMGroup(m2_ec);
-                j2 = theECMGroup2->GetJ();
-                l2 = (double)theECMGroup2->GetL();
-                l2p = (double)theECMGroup2->GetMult();
-                if (theECMGroup2->GetRadType() == 'M')
-                  w2p = 0;
-                else
-                  w2p = 1;
-                interferenceType += 'E';
-                path2 = m2_ec;
-              } else {
-                JGroup *jgroup2 = this->GetJGroup(theDecay->GetKGroup(k)->GetMGroup(m2)->GetJNum());
-                AChannel *channel2 = jgroup2->GetChannel(theDecay->GetKGroup(k)->GetMGroup(m2)->GetChNum());
-                AChannel *channel2p = jgroup2->GetChannel(theDecay->GetKGroup(k)->GetMGroup(m2)->GetChpNum());
-                j2 = jgroup2->GetJ();
-                l2 = (double)channel2->GetL();
-                l2p = (double)channel2p->GetL();
-                s2pCh = channel2p->GetS();
-                if (channel2p->GetRadType() == 'M' || channel2p->GetRadType() == 'P')
-                  w2p = 0;
-                else
-                  w2p = 1;
-                interferenceType += 'R';
-                path2 = m2;
-              }
-              double s = theDecay->GetKGroup(k)->GetS();
-              double sp = theDecay->GetKGroup(k)->GetSp();
-              if ((int)(l1 + l2 + lOrder) % 2 == 0 && (int)(l1p + l2p + w1p + w2p + lOrder) % 2 == 0) {
-                double z1z2 = 0.0;
-                if (this->GetPair(theDecay->GetPairNum())->GetPType() == 0) {
-                  z1z2 = azure2::physics::particle_interference((int)l1, (int)l1p, Twice(j1), (int)l2, (int)l2p, Twice(j2),
-                                                                Twice(s), Twice(sp), lOrder);
-                  // A cross-spin UPOS group mixes two exit channel spins; only the
-                  // secondary-gamma coefficient below applies to it.
-                  if (theDecay->GetKGroup(k)->IsCrossSpin()) z1z2 = 0.;
-                } else if (this->GetPair(theDecay->GetPairNum())->GetPType() == 10) {
-                  double jf = this->GetPair(theDecay->GetPairNum())->GetJ(2);
-                  z1z2 = azure2::physics::photon_interference((int)l1, (int)l1p, Twice(j1), (int)l2, (int)l2p, Twice(j2),
-                                                              Twice(s), Twice(jf), lOrder);
-                }
-                // Calculate z1z2_upos for Unobserved Primary, Observed Secondary (UPOS) case
-                double z1z2_upos = 0.;
-                // Eq. (22) of Brune and deBoer, PRC 102, 024628 (2020): the first
-                // amplitude has exit channel spin s' = sp, the second s2' = sp2.  Eq. (22)
-                // as printed corresponds to coupling the exit channel spin as
-                // (I_B I_b | s'); AZURE2 couples the light particle first, (I_b I_B | s'),
-                // as Eq. (17) of the paper and the analyzing-power code (PolarizationFunc)
-                // do, which multiplies each amplitude by (-1)^(I_b+I_B-s') and the product
-                // by (-1)^(sp-sp2).
-                const double sp2 = theDecay->GetKGroup(k)->GetSp2();
-                if (this->GetPair(theDecay->GetPairNum())->GetPType() == 0 && aa != theDecay->GetPairNum() &&
-                    s1pCh == sp && s2pCh == sp2) {
-                  double j1f = this->GetPair(theDecay->GetPairNum())->GetJ(1);
-                  double j2f = this->GetPair(theDecay->GetPairNum())->GetJ(2);
-                  z1z2_upos = azure2::physics::upos_interference((int)l1, (int)l1p, Twice(j1), (int)l2, Twice(j2), Twice(s),
-                                                                 Twice(sp), Twice(sp2), Twice(j1f), Twice(j2f), lOrder);
-                }
-                if (fabs(z1z2) > 1e-10 || fabs(z1z2_upos) > 1e-10) {
-                  KLGroup NewKLGroup(k, lOrder);
-                  int KLGroupNum = theDecay->IsKLGroup(NewKLGroup);
-                  if (!KLGroupNum) {
-                    theDecay->AddKLGroup(NewKLGroup);
-                    KLGroupNum = theDecay->IsKLGroup(NewKLGroup);
-                  }
-                  if (aa == theDecay->GetPairNum() || this->GetPair(theDecay->GetPairNum())->GetPType() == 10) {
-                    // Standard interference (elastic or gamma capture)
-                    Interference NewInterference(path1, path2, z1z2, interferenceType);
-                    int InterNum = theDecay->GetKLGroup(KLGroupNum)->IsInterference(NewInterference);
-                    if (!InterNum) {
-                      theDecay->GetKLGroup(KLGroupNum)->AddInterference(NewInterference);
-                      InterNum = theDecay->GetKLGroup(KLGroupNum)->IsInterference(NewInterference);
-                    }
-                  } else {
-                    // UPOS interference (particle exit, different entrance/exit pair)
-                    Interference NewInterference(path1, path2, z1z2, z1z2_upos, interferenceType);
-                    int InterNum = theDecay->GetKLGroup(KLGroupNum)->IsInterference(NewInterference);
-                    if (!InterNum) {
-                      theDecay->GetKLGroup(KLGroupNum)->AddInterference(NewInterference);
-                      InterNum = theDecay->GetKLGroup(KLGroupNum)->IsInterference(NewInterference);
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-      theDecay->BuildFlatInterferences();
-      std::vector<DiagonalPathway> diag;
-      for (int k = 1; k <= theDecay->NumKGroups(); k++)
-        for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
-          MGroup *mg = theDecay->GetKGroup(k)->GetMGroup(m);
-          AChannel *en = this->GetJGroup(mg->GetJNum())->GetChannel(mg->GetChNum());
-          AChannel *ex = this->GetJGroup(mg->GetJNum())->GetChannel(mg->GetChpNum());
-          if (en == ex) diag.push_back(DiagonalPathway{k, m, en->GetS(), en->GetL(), mg->GetStatSpinFactor()});
-        }
-      theDecay->SetDiagonalPathways(diag);
-      theDecay->SetTablesBuilt();
-    }
-  }
-}
-
 
 /*!
  * Fills the Minuit parameter array from initial values in the CNuc object.

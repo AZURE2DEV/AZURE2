@@ -48,8 +48,10 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/thm_spectator_window.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 . "$HERE/../lib/guard.sh"
 . "$HERE/../lib/check_common.sh"
+. "$HERE/../lib/thm_records.sh"
 RUN="$(guard_command "${TEST_TIMEOUT:-300}")"
 OUT="AZUREOut_aa=1_R=2.out"
+BOTH="lc723_thm_points lc723_band_mid"   # the THM data sets of the experiment
 KIN="beam=18O target=d spectator=n Ebeam=54"
 # mu_sx (MeV) from the built-in nuclear masses of p and n, as the engine.
 MUSX="$(awk 'BEGIN { mp = 1.0072764675; mn = 1.0086649159; printf "%.15e", mp * mn / (mp + mn) * 931.49410242 }')"
@@ -66,7 +68,7 @@ run() {
   cp "$SRC/18O_p_a_thm.azr" "$d/run.azr"
   local edit
   for edit in ${3:-}; do awk "${!edit}" "$d/run.azr" > "$d/tmp.azr" && mv "$d/tmp.azr" "$d/run.azr"; done
-  [ -z "$2" ] || printf '\n<thm>\n%s\n</thm>\n' "$2" >> "$d/run.azr"
+  [ -z "$2" ] || thm_set "$d/run.azr" "$2" $BOTH
   [ -z "${TABLE:-}" ] || printf '%b' "$TABLE" > "$d/ps.dat"
   (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 | head -c 1000000 > log;
    echo "${PIPESTATUS[1]}" > status)
@@ -79,25 +81,25 @@ worst() {
 }
 T_of() { awk -v p="$1" -v mu="$MUSX" 'BEGIN { printf "%.17g", p * p / (2 * mu) }'; }
 
-NOFOLD='/<targetInt>/ { print; T = 1; next } /<\/targetInt>/ { T = 0 } T { next } { print }'
+NOFOLD="$THM_NOFOLD"
 
 # (a) ----------------------------------------------------------------------
 echo "(a) ps=delta == no key"
-run nokey "experiment[A] segments=1,2 $KIN"
-run delta "experiment[A] segments=1,2 $KIN ps=delta"
+run nokey "experiment[A] $KIN"
+run delta "experiment[A] $KIN ps=delta"
 ran nokey && ran delta
 for f in chiSquared.out normalizations.out parameters.out thm_experiments.out "$OUT"; do
   same "$WORK/nokey/output/$f" "$WORK/delta/output/$f" && ok "$f byte-identical" || bad "$f differs"
 done
-run nokin "experiment[A] segments=1,2"
-run deltanokin "experiment[A] segments=1,2 ps=delta"
+run nokin "experiment[A]"
+run deltanokin "experiment[A] ps=delta"
 ran nokin && ran deltanokin
 same "$WORK/nokin/output/$OUT" "$WORK/deltanokin/output/$OUT" && ok "no kinematics: ps=delta byte-identical" \
   || bad "no kinematics: ps=delta differs"
 run se "spectatorEnergy=0.4
-experiment[A] segments=1,2 $KIN"
+experiment[A] $KIN"
 run sedelta "spectatorEnergy=0.4
-experiment[A] segments=1,2 $KIN ps=delta"
+experiment[A] $KIN ps=delta"
 ran se && ran sedelta
 same "$WORK/se/output/$OUT" "$WORK/sedelta/output/$OUT" && ok "spectatorEnergy=0.4: ps=delta byte-identical" \
   || bad "spectatorEnergy=0.4: ps=delta differs"
@@ -107,10 +109,10 @@ same "$WORK/nokey/output/$OUT" "$WORK/se/output/$OUT" && bad "spectatorEnergy=0.
 echo "(b) a window shrinking to a point == spectatorEnergy = p^2/2mu_sx (mu_sx = $MUSX MeV)"
 T30="$(T_of 30)"
 run pt_se "spectatorEnergy=$T30
-experiment[A] segments=1,2 $KIN"
-run pt_one "experiment[A] segments=1,2 $KIN ps=hulthen:30-30"
-run pt_narrow "experiment[A] segments=1,2 $KIN ps=hulthen:29.9999-30.0001"
-run pt_gauss "experiment[A] segments=1,2 $KIN ps=gauss:60:29.9999-30.0001"
+experiment[A] $KIN"
+run pt_one "experiment[A] $KIN ps=hulthen:30-30"
+run pt_narrow "experiment[A] $KIN ps=hulthen:29.9999-30.0001"
+run pt_gauss "experiment[A] $KIN ps=gauss:60:29.9999-30.0001"
 if ran pt_se && ran pt_one && ran pt_narrow && ran pt_gauss; then
   for r in pt_one pt_narrow pt_gauss; do
     read -r n w <<< "$(worst $r pt_se)"
@@ -122,13 +124,13 @@ fi
 
 # (c) ----------------------------------------------------------------------
 echo "(c) flat |phi|^2 on [20, 40] MeV/c == Simpson average, weight q, of 41 spectatorEnergy runs"
-TABLE='# p_s (MeV/c)  w\n20 1\n40 1\n' run flat "experiment[A] segments=1,2 $KIN ps=table:ps.dat"
+TABLE='# p_s (MeV/c)  w\n20 1\n40 1\n' run flat "experiment[A] $KIN ps=table:ps.dat"
 ran flat
 : > "$WORK/simpson.txt"
 for i in $(seq 0 40); do
   p="$(awk -v i=$i 'BEGIN { printf "%.1f", 20 + i / 2 }')"
   run "se$i" "spectatorEnergy=$(T_of $p)
-experiment[A] segments=1,2 $KIN"
+experiment[A] $KIN"
   ran "se$i" || continue
   c=$(( i == 0 || i == 40 ? 1 : (i % 2 == 1 ? 4 : 2) ))
   model "se$i" | awk -v c=$c -v p="$p" '{ printf "%d %s %.15e\n", NR, $1, c * p * $2 }' >> "$WORK/simpson.txt"
@@ -144,9 +146,9 @@ awk -v w="$w" -v n="$n" 'BEGIN { exit !(n > 30 && w < 1e-6) }' \
 same "$WORK/flat/output/$OUT" "$WORK/se20/output/$OUT" && bad "the flat window equals its midpoint" || true
 read -r n w <<< "$(worst flat se20)"
 ok "(size) flat window vs its midpoint p_s = 30 MeV/c: worst rel $w"
-run h16 "experiment[A] segments=1,2 $KIN ps=hulthen:0-40"
-run h8 "experiment[A] segments=1,2 $KIN ps=hulthen:0-40 psNodes=8"
-run h32 "experiment[A] segments=1,2 $KIN ps=hulthen:0-40 psNodes=32"
+run h16 "experiment[A] $KIN ps=hulthen:0-40"
+run h8 "experiment[A] $KIN ps=hulthen:0-40 psNodes=8"
+run h32 "experiment[A] $KIN ps=hulthen:0-40 psNodes=32"
 if ran h16 && ran h8 && ran h32; then
   read -r n w16 <<< "$(worst h16 h32)"
   read -r n w8 <<< "$(worst h8 h32)"
@@ -176,8 +178,8 @@ fi
 
 # (d) ----------------------------------------------------------------------
 echo "(d) a vertex node: p_s = 24 MeV/c vs the window [0, 40] (no folding)"
-run node "experiment[A] segments=1,2 $KIN ps=hulthen:24-24" NOFOLD
-run fill "experiment[A] segments=1,2 $KIN ps=hulthen:0-40" NOFOLD
+run node "experiment[A] $KIN ps=hulthen:24-24" NOFOLD
+run fill "experiment[A] $KIN ps=hulthen:0-40" NOFOLD
 if ran node && ran fill; then
   read -r en mn mx wn wx <<< "$(paste -d' ' <(model node) <(model fill) |
     awk 'NR == 1 || $2 < mn { mn = $2; en = $1; wn = $4 } $2 > mx { mx = $2 } $4 > wx { wx = $4 } END { print en, mn, mx, wn, wx }')"
@@ -197,38 +199,38 @@ refuse() {  # refuse NAME MESSAGE-FRAGMENT BLOCK
     bad "$1: not refused with '$2' (status $(cat "$WORK/$1/status"))"; tail -3 "$WORK/$1/log" | sed 's/^/        /'
   fi
 }
-refuse no_kinematics "needs the kinematics of the reaction" "experiment[A] segments=1,2 ps=hulthen:0-40"
-refuse reversed "expected delta, hulthen" "experiment[A] segments=1,2 $KIN ps=hulthen:40-20"
-refuse negative "expected delta, hulthen" "experiment[A] segments=1,2 $KIN ps=gauss:50:-10-40"
-refuse unknown_kind "expected delta, hulthen" "experiment[A] segments=1,2 $KIN ps=lorentz:0-40"
-refuse bad_ab "Hulthen a,b" "experiment[A] segments=1,2 $KIN ps=hulthen:1.2,0.2:0-40"
-refuse bad_fwhm "FWHM" "experiment[A] segments=1,2 $KIN ps=gauss:0:0-40"
-refuse no_table "cannot read the ps table" "experiment[A] segments=1,2 $KIN ps=table:missing.dat"
-TABLE='20 1\n10 1\n' refuse table_order "strictly increasing" "experiment[A] segments=1,2 $KIN ps=table:ps.dat"
-TABLE='20 0\n40 0\n' refuse table_zero "zero in every row" "experiment[A] segments=1,2 $KIN ps=table:ps.dat"
-TABLE='20 1\n' refuse table_short "at least two rows" "experiment[A] segments=1,2 $KIN ps=table:ps.dat"
-TABLE='20 1\n30\n' refuse table_columns "line 2: expected two numbers" "experiment[A] segments=1,2 $KIN ps=table:ps.dat"
-TABLE='20 -1\n30 1\n' refuse table_negative "must be finite and >= 0" "experiment[A] segments=1,2 $KIN ps=table:ps.dat"
-refuse nodes_range "1 to 64" "experiment[A] segments=1,2 $KIN ps=hulthen:0-40 psNodes=65"
-refuse nodes_alone "psNodes= needs a ps window" "experiment[A] segments=1,2 $KIN psNodes=8"
-refuse twice "given twice" "experiment[A] segments=1,2 $KIN ps=hulthen:0-40
+refuse no_kinematics "needs the kinematics of the reaction" "experiment[A] ps=hulthen:0-40"
+refuse reversed "expected delta, hulthen" "experiment[A] $KIN ps=hulthen:40-20"
+refuse negative "expected delta, hulthen" "experiment[A] $KIN ps=gauss:50:-10-40"
+refuse unknown_kind "expected delta, hulthen" "experiment[A] $KIN ps=lorentz:0-40"
+refuse bad_ab "Hulthen a,b" "experiment[A] $KIN ps=hulthen:1.2,0.2:0-40"
+refuse bad_fwhm "FWHM" "experiment[A] $KIN ps=gauss:0:0-40"
+refuse no_table "cannot read the ps table" "experiment[A] $KIN ps=table:missing.dat"
+TABLE='20 1\n10 1\n' refuse table_order "strictly increasing" "experiment[A] $KIN ps=table:ps.dat"
+TABLE='20 0\n40 0\n' refuse table_zero "zero in every row" "experiment[A] $KIN ps=table:ps.dat"
+TABLE='20 1\n' refuse table_short "at least two rows" "experiment[A] $KIN ps=table:ps.dat"
+TABLE='20 1\n30\n' refuse table_columns "line 2: expected two numbers" "experiment[A] $KIN ps=table:ps.dat"
+TABLE='20 -1\n30 1\n' refuse table_negative "must be finite and >= 0" "experiment[A] $KIN ps=table:ps.dat"
+refuse nodes_range "1 to 64" "experiment[A] $KIN ps=hulthen:0-40 psNodes=65"
+refuse nodes_alone "psNodes= needs a ps window" "experiment[A] $KIN psNodes=8"
+refuse twice "given twice" "experiment[A] $KIN ps=hulthen:0-40
 experiment[A] ps=delta"
 refuse with_se "spectatorEnergy both set" "spectatorEnergy=0.4
-experiment[A] segments=1,2 $KIN ps=hulthen:0-40"
+experiment[A] $KIN ps=hulthen:0-40"
 refuse with_se_pair "spectatorEnergy both set" "spectatorEnergy[1]=0.4
-experiment[A] segments=1,2 $KIN ps=gauss:60:0-40"
-refuse theta "expected all or thmin-thmax" "experiment[A] segments=1,2 theta=10-0"
-refuse out_of_reach "do not overlap the ps window" "experiment[A] segments=1,2 $KIN ps=hulthen:200-300"
+experiment[A] $KIN ps=gauss:60:0-40"
+refuse theta "expected all or thmin-thmax" "experiment[A] theta=10-0"
+refuse out_of_reach "do not overlap the ps window" "experiment[A] $KIN ps=hulthen:200-300"
 refuse with_angle "spectatorAngle= (one direction) and a ps window" \
-  "experiment[A] segments=1,2 $KIN ps=hulthen:0-40 distortion=coulomb spectatorAngle=10"
+  "experiment[A] $KIN ps=hulthen:0-40 distortion=coulomb spectatorAngle=10"
 refuse angle_nodes "the nodes are spectatorAngleNodes" \
-  "experiment[A] segments=1,2 $KIN ps=hulthen:0-40 psNodes=8 spectatorAngles=cm:120-180"
-refuse angles_alone "it has nothing to average" "experiment[A] segments=1,2 $KIN spectatorAngles=cm:120-180"
+  "experiment[A] $KIN ps=hulthen:0-40 psNodes=8 spectatorAngles=cm:120-180"
+refuse angles_alone "it has nothing to average" "experiment[A] $KIN spectatorAngles=cm:120-180"
 
 # (f) ----------------------------------------------------------------------
 echo "(f) one acceptance: ps= alone == spectatorAngles=cm:0-180 with the cut"
-run all16 "experiment[A] segments=1,2 $KIN ps=hulthen:0-40 spectatorAngles=cm:0-180 spectatorAngleNodes=16"
-run cm160 "experiment[A] segments=1,2 $KIN ps=hulthen:0-40 spectatorAngles=cm:160-180 spectatorAngleNodes=16"
+run all16 "experiment[A] $KIN ps=hulthen:0-40 spectatorAngles=cm:0-180 spectatorAngleNodes=16"
+run cm160 "experiment[A] $KIN ps=hulthen:0-40 spectatorAngles=cm:160-180 spectatorAngleNodes=16"
 if ran h16 && ran all16 && ran cm160; then
   same "$WORK/h16/output/$OUT" "$WORK/all16/output/$OUT" && ok "ps=hulthen:0-40 == + spectatorAngles=cm:0-180 (16 nodes): byte-identical" \
     || { read -r n w <<< "$(worst h16 all16)"; bad "ps alone vs cm:0-180: $n points, worst rel $w"; }

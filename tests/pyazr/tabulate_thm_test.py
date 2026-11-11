@@ -25,6 +25,8 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SOURCE = os.path.join(ROOT, "tests", "18O_p_a_thm")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import old_tree  # noqa: E402  (the old original: a test of the old file class, format3_tree.md section 5)
 AZR = "18O_p_a_thm.azr"
 
 failures = []
@@ -49,7 +51,7 @@ except Exception as err:                                       # engine not buil
 
 
 def fresh_copy(dst):
-    shutil.copytree(SOURCE, dst)
+    old_tree.copytree(SOURCE, dst)
     for junk in ("output", "checks"):
         shutil.rmtree(os.path.join(dst, junk), ignore_errors=True)
         os.makedirs(os.path.join(dst, junk))

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # External capture, absolute, against an independent golden-rule calculation (truth.py -> expected/sigma*.dat),
-# hard-sphere external capture only (models from make_models.py):
+# hard-sphere external capture only (models from make_models.py (deleted; README.md: how the models were made)):
 #
 #   p + 16O -> 17F(0.495 MeV, 1/2+) + gamma
 #   (a) E1 in the long-wavelength approximation;

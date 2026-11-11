@@ -36,7 +36,14 @@ The prompts come in this order:
    chi-squared = 1? (y/n)" (mode 4 asks for the allowed chi-squared variance
    before both);
 3. the external parameter file (blank: start from the ``<levels>`` of the
-   project);
+   project).  Its lines are applied by name.  A file none of whose names is a
+   parameter of the run is refused (``E_PARAMETER_FILE_NO_MATCH``, exit 1:
+   nothing of it would be applied); a file with names the project has no
+   parameter for, or without names of parameters the run has, is applied with
+   ``W_PARAMETER_FILE_NAMES``, which lists both sides.  Names the project
+   gives to the parameters of its other run (the data sets' in a run without
+   data, the extrapolations' in a run with data) and fixed data-set or
+   extrapolation parameters the file leaves out are not reported;
 4. the external capture amplitude file (blank: compute them);
 5. the menu again (``7`` exits).
 
@@ -345,11 +352,16 @@ Exit status
 -----------
 
 AZURE2 exits with 0 when the run completed and 1 when it was aborted or
-refused ("Calculation was aborted.", a project that cannot be read or that
-AZURE2 refuses with ``ERROR: ...`` -- e.g. a malformed ``<thm>`` block or a
-``<thm>`` weight that does not fit the data --, a failed fill, initialization
-or parameter transformation, a failed MCMC run), so that a script or a job
-chain can tell.  Before November 2026 it exited with 0 in every case on
+refused ("Calculation was aborted.", a project that AZURE2 refuses with
+``ERROR: ...`` -- e.g. a malformed ``<thm>`` block or a ``<thm>`` weight that
+does not fit the data --, a failed fill, initialization or parameter
+transformation, a failed MCMC run), so that a script or a job chain can tell.
+A format-3 project refused when it is read, or in a run with data because a
+data file cannot be read (``E_DATA_FILE``), prints its diagnostics and then,
+as its last error line, ``ERROR: <file> (format 3) is refused; AZURE2
+--validate <file> lists the same diagnostics.``  A project file that cannot be
+opened prints ``Could not open <file>.  Check that file exists.`` and exits
+with -1 (255 on POSIX systems).  Before November 2026 it exited with 0 in every case on
 ``dev``, and with -1 (255 on POSIX systems) after a failed run on the ``thm``
 branch.
 
@@ -439,7 +451,11 @@ in the same way.  Two environment variables control and report this:
        the channel solves, the cross-section sums, the Coulomb functions and
        penetrabilities, and the stages of the gradient, with the number of
        channel-space and level-matrix solves and why a group fell back to the
-       level matrix.  No cost when unset.
+       level matrix.  The set-up's stages (every point's Coulomb functions,
+       penetrabilities and shifts, computed once) come first in a report of
+       their own (``[profile] set-up``); a calculation (menu 1) reports under
+       ``calculation``, the evaluation after a fit under ``final evaluation``.
+       No cost when unset.
 
 ``AZURE_CHANNEL_VERIFY=1`` (slow) compares every channel-space solve with the
 level matrix and reports the largest difference seen so far;
@@ -494,12 +510,21 @@ angle-integrated cross section become NaN, since they are never calculated
 there (0 without the variable).
 
 ``AZURE_PLAN_CHECK=1``: the points of an evaluation are calculated by the
-tasks of the data set's calculation plan, one task per point that calculates
-itself and the points of equal energy mapped onto it (one writer per value,
-checked when the plan is built).  With the variable set, the parallel point
-pass runs the tasks one after the other and checks that each writes only the
-values of its own points and sub-points and that no value is written by two
-tasks; a breach stops the run with a message naming the task and the point.
+energy tasks of the data set's calculation plan, one task per compound energy
+with every point and sub-point at it, then the folds of the points with
+sub-points (one writer per value, checked when the plan is built).  With the
+variable set, the parallel point pass runs the tasks and folds one after the
+other and checks that each writes only the values of its own points and
+sub-points and that no value is written by two of them (compared after each
+one, or after each batch in a pass of more than 2,000); a breach stops the run
+with a message naming the task and the slot.
+Then every unit of the pass (a point, or a sub-point of a fold) is solved
+alone -- level-matrix fill and factorisation, its T-matrix, its record -- and
+compared bit for bit with the solve it shares with the other units at the same
+compound energy (the same nucleus and the same bits of E_x; the bilinear forms
+of every J-group's level matrix, the T-matrix of its entrance and exit pair, and
+its record).  The counts go to standard error (``AZURE_PLAN_CHECK: ... units in
+... energy tasks ...: 0 differ``); a unit that differs stops the run.
 A test of the engine, slow, single-threaded; the output files do not change.
 
 Examples

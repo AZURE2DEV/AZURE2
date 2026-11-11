@@ -182,6 +182,9 @@ struct Apparatus {
   bool profileWindows = false;  ///< a beam profile: data columns 5-6 are the reconstructed-energy windows
   std::vector<int> dataKeys, testKeys;
   std::string targetName, beamName, detectorName;
+  /// A Doppler-only target whose lines are all neutron samples (transmission / yield): its doppler field moves onto
+  /// each line's sample target (one target with both, no second areal density); empty otherwise.
+  std::vector<io::Token> dopplerOnSample;
 };
 
 /// One sample of <abundances>.
@@ -314,6 +317,8 @@ class Builder {
   // ---------------------------------------------------------------- parts
   void BuildApparatus();
   void BuildSamples();
+  void MoveDopplerToSamples();
+  void AddSampleDoppler(const std::string &target, const Apparatus *app, int key, bool isData);
   void BuildData();
   void BuildExtrapolations();
   void NameApparatus();

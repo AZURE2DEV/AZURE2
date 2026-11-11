@@ -48,7 +48,7 @@ run() {
   cp -r "$SRC/data" "$d/"
   awk -v row="$row" '
     {print}
-    /<\/targetInt>/ && row != "" {print "<parameterSettings>"; print row; print "</parameterSettings>"}
+    /<\/targets>/ && row != "" {print "<parameterSettings>"; print row; print "</parameterSettings>"}
   ' "$SRC/7Li_p_a.azr" > "$d/run.azr"
   # Relative to the run directory: read from stdin, a POSIX /tmp/... path is
   # not translated by MSYS and the native Windows binary cannot open it.

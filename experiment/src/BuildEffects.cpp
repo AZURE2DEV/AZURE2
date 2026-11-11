@@ -42,6 +42,8 @@ std::string Text(const Value *v) {
 struct Combination {
   const ValidatedRecord *target = nullptr, *beam = nullptr, *detector = nullptr;
   const Value *quadrature = nullptr, *windows = nullptr;
+  bool layerYield = false;  ///< a yield on a layer: per incident particle, not the target-averaged cross section
+  bool decay = false;  ///< its data sets are beta-delayed spectra (no beam: the energy is the particle's in the decay)
   std::string signature;
   int position = 0;  ///< the first of its records in the file
   std::vector<int> keys;
@@ -177,7 +179,10 @@ void BeamInto(Context &c, const ValidatedRecord &b, TargetEffectSpec &e) {
   if (const Value *v = b.Get("detailed_balance")) e.beamDetailedBalance = v->word == "yes";
 }
 
-void DetectorInto(Context &c, const ValidatedRecord &d, TargetEffectSpec &e) {
+// A detector's energy resolution: with a beam profile the profile's TPC resolution; on a beta-delayed spectrum (no
+// beam) a Gaussian fold of the model in the observed particle energy, the engine's convolution kernel on the lab energy
+// (for a decay at rest the energy the data give); elsewhere not built (a beam's spread states a Gaussian there).
+void DetectorInto(Context &c, const ValidatedRecord &d, bool decay, TargetEffectSpec &e) {
   if (const Value *q = d.Get("attenuation")) {
     e.qCoefficients = true;
     for (const Number &n : q->numbers) e.qCoefficientValues.push_back(n.value);
@@ -185,9 +190,16 @@ void DetectorInto(Context &c, const ValidatedRecord &d, TargetEffectSpec &e) {
   if (const Value *r = d.Get("energy_resolution")) {
     const Value *sigma = r->Get("sigma");
     const Value *frame = r->Get("frame");
-    if (!e.beamProfile || (frame && frame->word != "lab"))
+    if (frame && frame->word != "lab")
+      c.Error(codes::kNotBuilt, d, "energy_resolution", "a detector resolution in the c.m. frame: this engine takes it in the lab");
+    else if (decay && !e.beamProfile) {
+      e.convolution = true;
+      if (sigma) e.sigma = Context::InBase(sigma->number, sigma->unit);
+      return;
+    } else if (!e.beamProfile)
       c.Error(codes::kNotBuilt, d, "energy_resolution",
-              "this engine applies a detector resolution (lab) only with a beam profile (the TPC sigma of the profile)");
+              "this engine applies a detector resolution (lab) only with a beam profile (the TPC sigma of the profile) or "
+              "on a beta-delayed spectrum; a Gaussian on the beam energy is the beam's spread");
     if (sigma) e.beamTpcSigma = Context::InBase(sigma->number, sigma->unit);
   }
   if (const Value *u = d.Get("udr")) {
@@ -277,9 +289,15 @@ SpecList<TargetEffectSpec> Effects(Context &c, const std::vector<Member> &member
     if (!x.target && !x.beam && !x.detector) continue;
     x.quadrature = r.Get("quadrature");
     x.windows = r.Get("fold_windows");
+    x.decay = r.quantity && r.quantity->name == "beta_delayed_spectrum";
     CoulombRatioFolds(c, r, x);
+    // A yield on a layer folds the same sub-points to another quantity (reactions per incident particle): an effect of
+    // its own, whose areal density is shared with the target's other effects as below.
+    x.layerYield = x.target && x.target->Get("kind") && x.target->Get("kind")->word == "layer" && r.quantity &&
+                   r.quantity->name == "yield";
     x.signature = (x.target ? x.target->name : "") + "|" + (x.beam ? x.beam->name : "") + "|" +
-                  (x.detector ? x.detector->name : "") + "|" + Text(x.quadrature) + "|" + Text(x.windows);
+                  (x.detector ? x.detector->name : "") + "|" + Text(x.quadrature) + "|" + Text(x.windows) +
+                  (x.layerYield ? "|yield" : "") + (x.decay ? "|decay" : "");
     x.position = 1 << 30;
     for (const ValidatedRecord *p : {x.target, x.beam, x.detector})
       if (p) x.position = std::min(x.position, c.Position(p));
@@ -303,10 +321,13 @@ SpecList<TargetEffectSpec> Effects(Context &c, const std::vector<Member> &member
     e.active = true;
     e.datasetKeys = x.keys;
     e.source = "target " + (x.target ? x.target->name : std::string("-")) + ", beam " + (x.beam ? x.beam->name : std::string("-")) +
-               ", detector " + (x.detector ? x.detector->name : std::string("-"));
+               ", detector " + (x.detector ? x.detector->name : std::string("-")) +
+               (x.layerYield ? "; yield per incident particle on the layer: 1e-24 int_{E_out}^{E_0} <sigma>/epsilon dE, "
+                               "int_{E_out}^{E_0} dE/epsilon = N" : "");
     if (x.target) {
       e.targetName = x.target->name;
       TargetInto(c, *x.target, *x.target, e);
+      e.layerYield = x.layerYield;
       if (usesOfTarget[x.target] > 1) {
         if ((x.target->Has("screening") || FreeNuisance(x.target, "doppler")) && !reported.count(x.target) &&
             reported.insert(x.target).second)
@@ -317,7 +338,7 @@ SpecList<TargetEffectSpec> Effects(Context &c, const std::vector<Member> &member
       }
     }
     if (x.beam) BeamInto(c, *x.beam, e);
-    if (x.detector) DetectorInto(c, *x.detector, e);
+    if (x.detector) DetectorInto(c, *x.detector, x.decay, e);
     QuadratureInto(x.quadrature, x.windows, e);
     out.items.push_back(item);
   }
@@ -423,6 +444,45 @@ void Abundances(Context &c) {
   }
 }
 
+// The total cross section of a target with isotopes (quantity sigma_total with a sum): the abundance-weighted sum of
+// each nucleus's total by the optical theorem, one elastic term per nucleus.  A sum means nothing else: refused
+// without isotopes on the target, with two terms on one pair, or with a factor on a term (the abundance is the
+// weight).  A term is elastic by its label (a term of a sum carries no pair keys); a single reaction with keys by
+// its keys (Build.cpp PairsDecideElastic).  An inactive record is checked when it is
+// switched on (BuildOptions::allRecordsActive): the converter writes an old inactive line without its sample.
+void NaturalTotals(Context &c, const std::vector<Member> &members) {
+  for (const Member &m : members) {
+    const ValidatedRecord &r = *m.record;
+    if (!m.active || !r.quantity || r.quantity->name != "sigma_total") continue;
+    const ReactionSpec &spec = m.isData ? c.out_.data.datasets.items[m.key - 1].spec.reaction
+                                        : c.out_.extrapolations.extrapolations.items[m.key - 1].spec.reaction;
+    std::vector<ComponentSpec> terms = {ComponentSpec{spec.entranceKey, spec.exitKey}};
+    terms.insert(terms.end(), spec.components.begin(), spec.components.end());
+    if (spec.combination != ReactionSpec::Combination::Sum) continue;
+    const Value *name = r.Get("target");
+    const ValidatedRecord *target = name ? c.Record(name->word, "target") : nullptr;
+    if (!target || !target->Has("isotope")) {
+      c.Error(codes::kReactionNotAllowed, r, "reaction",
+              "a sum of total cross sections is the total of a target with isotopes (their abundances weight the terms): "
+              "give the data set a target with 'isotope' fields, or one reaction");
+      continue;
+    }
+    std::set<int> pairs;
+    for (const ComponentSpec &t : terms) {
+      if (!pairs.insert(t.entranceKey).second) {
+        c.Error(codes::kReactionNotAllowed, r, "reaction",
+                "two terms on pair " + std::to_string(t.entranceKey) + ": a target's total has one term per nucleus");
+        break;
+      }
+      if (t.scaling != 1.0) {
+        c.Error(codes::kReactionNotAllowed, r, "reaction",
+                "a factor on a term of a target's total: the abundance of the term's nucleus is its weight");
+        break;
+      }
+    }
+  }
+}
+
 }  // namespace
 
 void BuildEffects(Context &c) {
@@ -431,6 +491,8 @@ void BuildEffects(Context &c) {
   SampleThickness(c, c.data_, true);
   SampleThickness(c, c.extrapolations_, false);
   Abundances(c);
+  NaturalTotals(c, c.data_);
+  NaturalTotals(c, c.extrapolations_);
 }
 
 }  // namespace build

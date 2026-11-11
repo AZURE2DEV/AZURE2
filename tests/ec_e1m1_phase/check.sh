@@ -9,7 +9,7 @@
 # p + 16O capture from the dipole interaction -d.E - mu.B between the Coulomb + hard-sphere scattering state (beam
 # along z, each partial wave with its Coulomb and hard-sphere phase) and the ANC-normalized bound state, summed over
 # magnetic substates and photon helicities: no multipole phase convention enters.  Two final states
-# (make_models.py):
+# (make_models.py (deleted; README.md: how the models were made)):
 #   s : 17F(0.4953, 1/2+), E1 from l = 1 and M1 (spin term) from l = 0.  With a spin-0 target and an unpolarized beam
 #       these CANNOT interfere (E1 spin-diagonal, the spin operator traceless): dsigma/dOmega(E1 + M1) = E1 + M1 exactly.
 #   p : a fictitious 1/2- state (l_f = 1), E1 from l = 0 and 2, M1 (orbital + spin) from l = 1: the orbital M1

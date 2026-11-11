@@ -13,7 +13,7 @@ belong to the detector, so they act on the **lab** angular distribution. For a p
 The lab angle comes from g = v_cm/v₃* (with `relativistic=1`, the relativistic boost). Photon exits, UPOS, A_y,
 charged-particle elastic scattering and g ≥ 1 multiply P_L by Q_L as entered.
 
-`make_models.py` builds the models from `tests/secondary_gamma/models/grad.azr`. That model is
+`make_models.py` (deleted; see "How the models were made") builds the models from `tests/secondary_gamma/models/grad.azr`. That model is
 ¹³C(α,n)¹⁶O*(6.13) close to threshold, so g is 0.33–0.37. The output is a c.m. differential test segment at
 E_lab 5.9–6.3 MeV and θ* = 0–180° in 5° steps. `check.sh` checks three things:
 
@@ -35,3 +35,21 @@ distribution. The dev build before the fix fails all three checks:
 A non-particle entrance pair also set every factor to 0. Archive fits affected: see
 `R-matrix/Brune_vs_Park_Claude_eval/10-25-26_qcoeff_scan/readme` (old ¹³C(α,n) and ¹⁵N(p,α) fits; the 2026
 campaigns use photon/UPOS exits only).
+
+## How the models were made
+
+The committed models are the reference.  They were written by `make_models.py` in the old project format and converted
+to format 3 with `tools/format3_tree_convert.sh` (`AZURE2 --convert ... --to 3 --exact-grids`); the generator
+was deleted with the old format (it is in the repository's history: `git show a22b99ab:tests/q_attenuation/make_models.py`).  To change a
+model, edit its records.  The generator's description of what it wrote:
+
+```text
+Models for tests/q_attenuation (finite-geometry attenuation coefficients on a particle exit).
+
+From tests/secondary_gamma/models/grad.azr (13C(a,n)16O*(6.13), two levels, n exit d and i waves; Q = -3.914 MeV,
+so g = v_cm / v_n* = 0.33-0.37 near threshold):
+  plain.azr  c.m. differential test segment 2 -> 5 (isDiff 5), E 5.9-6.3 step 0.1, theta* 0-180 step 5; data line inactive
+  q.azr      the same + <targetInt> Q_0..Q_39 of a uniform cone of half-angle 15 degrees (Rose: cone average of P_K)
+  q1.azr     the same + 40 coefficients all 1
+  q5.azr     the same + only Q_0..Q_4 of the cone (as archive fits give them)
+```

@@ -361,6 +361,34 @@ What M3 (b) does change: the per-ν data frame loses y^c.m. and δy^c.m. (`Frame
 CMError`), the residual has one form for every data set, the written c.m. data columns become a display computed
 as J·y^lab, and the lab-frame fold of §4.3 becomes expressible.
 
+### 4.2a Status (branch `feature/upgrade-5-lab-frame`, 2026-11-11): done, and measured
+
+The frame of a row holds kinematics only (`FrameRow`: E, θ_c.m., J); y and δy stay as read in the `Measurement`.
+Every comparison is `DataResidual(f, J, y, δy, n)` = (f/J − n y)/(n δy) (`include/ModelPass.h`): the objective,
+the per-segment χ², the profiled norms, the least-squares rows and their norm columns, both analytic gradients (the
+model cotangent carries 1/J), the covariance pulls, the shift columns and the THM profiles.  The c.m. data columns
+of the writers and of the API are J y and J δy, computed where they are read (byte-identical to before).
+Measured against the same tree with the c.m. comparison (the branch's first commit, itself identical to the base):
+- Projects that can move: those with a row whose J ≠ 1 (a probe of every project that loads without generated
+  files): 13N, angle_mapping, channel_space, hybrid_potential, spin_orbit_potential, identical_entrance_reaction
+  (c12c12, dd_pt), relativistic (he5_ang, li7pn_ang, pa_ang, each with _rel, li7pn_edge), sum_lab_frame (plain_data,
+  sum_data, sum_free), T1, T1_start, T2, T2_true, T3, T3_start (`tools/classify.py` `LAB_FRAME_PROJECTS`).  Every
+  other project: identical in three bases.
+- Calculations (all projects × 3 bases, `tools/cls.sh`): every output file identical as printed, except
+  `sum_lab_frame/models/sum_data` and `sum_free`, whose χ² is 3.99 × 10⁻¹⁷ (data equal to the model: χ² is rounding
+  noise) and moves by 1–2 × 10⁻⁶ of itself, 7 × 10⁻²³ absolute.
+- Model values: bit-identical (the model does not depend on the frame of the comparison).
+- Per-point pulls, measured against the natural rounding scale ε (|f/J| + n|y|)/(n δy) of the two forms: at most
+  1.3 ε (limit of §4.4: 8 ulp).  Relative to the pull itself the change is up to 2.7 × 10⁻¹² (T1) and 1.2 × 10⁻² for
+  the pulls of 10⁻⁹ of `sum_lab_frame`: a pull that is a difference of two nearly equal numbers has no relative
+  precision in either form.
+- χ² at the start: ≤ 2 × 10⁻¹⁵ relative, except the 3.99 × 10⁻¹⁷ of `sum_lab_frame` (1.8 × 10⁻⁶).  χ² at the end
+  point of the reference fit (restart from its `param.sav`): ≤ 2.5 × 10⁻¹⁵, except `sum_lab_frame/sum_free`
+  (2 × 10⁻⁹ of 4 × 10⁻¹⁷).
+- Fits at their ends (1 thread, Brune; MIGRAD unless named): end points move by rounding through MIGRAD's path, up to
+  9 × 10⁻⁶ relative in a parameter (angle_mapping, a width), χ² up to 4.3 × 10⁻⁹ (spin_orbit_potential); the
+  `--use-lm` fit of T2 is byte-identical.
+
 ### 4.3 A real difference it makes possible (decision D5)
 
 Today a folded lab-differential point is folded at a fixed θ_c.m. (the point's) and compared through J at the point's
@@ -397,8 +425,8 @@ dataset Y1
     file           "data/y1.dat" columns E_lab value error
 ```
 
-The quantity `yield` on `kind layer` is refused today ("Phase 5 kernel", `project_format3.md` §7.2); the branch lifts
-that refusal. Units: E_lab (MeV), N (atoms cm⁻², active nuclei), ε (MeV cm² per active nucleus, lab), σ (b), Y
+The quantity `yield` on `kind layer` was refused ("Phase 5 kernel", `project_format3.md` §7.2); branch 4 lifted the
+refusal (status below §8). Units: E_lab (MeV), N (atoms cm⁻², active nuclei), ε (MeV cm² per active nucleus, lab), σ (b), Y
 reactions per incident particle; per µC: Y × 10⁻⁶ C / (q e).
 
 ### 5.2 The formula, with the stopping module
@@ -464,8 +492,10 @@ has no scale unless the record gives one.
 - **User table** (`stopping table "file" <units>`): the module's tabulated override, with provenance.
 - **ERYA is not called by the engine.** `external/erya` (with SRIM's `SRIM2013.xml`) is built under `USE_ERYA`
   (`CMakeLists.txt` 61, 375–388) and used only by `tests/reference/compound_stopping_reference_test.cpp`; the Qt GUI
-  that used it is gone. No test project names it. Its removal is the CMake option, the directory and that test, whose
-  comparison moves to `stopping/tools/` (SRIM values for comparison only, never committed).
+  that used it is gone. No test project names it. Its removal is the CMake option, the directory and that test. The
+  module's own stopping powers are SRIM-2013's since 2026-11-11 (ported from LunaSRIM, decision of the PI;
+  `stopping.md`), and its tests compare them with LunaSRIM's values (`stopping/tests/data/srim_reference.csv`), so
+  ERYA's SRIM file is no longer needed as a reference.
 
 ### 6.4 Order of removal
 
@@ -504,16 +534,28 @@ Every changed number found by `tools/cls.sh` is put in one class; anything else 
 
 | # | branch (`feature/upgrade-5-…`) | what it changes | files | deletes | gate | size | can run with |
 |---|---|---|---|---|---|---|---|
-| 1 | `energy-tasks` | the plan's task is one compound energy (nucleus, E_x bits) with every unit at it: one level-matrix fill and solve per task, one T-matrix per (entrance, exit), the cross section per unit; sub-points are calculated in the energy pass, folds after it (the automatic-tolerance and fallback decisions read values already computed, so they choose the same) | `include/CalculationPlan.h`, `src/CalculationPlan.cpp`, `src/WorkingCopy.cpp` (`MapData`, `MapLeaves`, `CalculatePointsInParallel`), `src/PointPass.cpp`, `include/Unit.h`, `tests/upgrade/plan_test.cpp` | point mapping by (pairs, E) and `SharesCalculation`; the sub-point recursion of `Unit::Calculate`; probe copies | identical; a check mode (`AZURE_PLAN_CHECK`) compares the shared solve with a per-unit solve bit for bit on the whole tree; solves per evaluation reported (§1.2) | ~600 lines, 8–12 h | 3, 4, 5 |
+| 1 (done) | `energy-tasks` | the plan's task is one compound energy (nucleus, E_x bits) with every unit at it: one level-matrix fill and solve per task, one T-matrix per (entrance, exit), the cross section per unit; sub-points are calculated in the energy pass, folds after it (the automatic-tolerance and fallback decisions read values already computed, so they choose the same) | `include/CalculationPlan.h`, `src/CalculationPlan.cpp`, `src/WorkingCopy.cpp` (`MapData`, `MapLeaves`, `CalculatePointsInParallel`), `src/PointPass.cpp`, `include/Unit.h`, `tests/upgrade/plan_test.cpp` | point mapping by (pairs, E) and `SharesCalculation`; the sub-point recursion of `Unit::Calculate`; probe copies | identical; a check mode (`AZURE_PLAN_CHECK`) compares the shared solve with a per-unit solve bit for bit on the whole tree; solves per evaluation reported (§1.2) | ~600 lines, 8–12 h | 3, 4, 5 |
 | 2 | `energy-tasks-gradient` | the analytic gradient per energy: cotangents of all units at E_n summed, one level-matrix adjoint per E_n | `src/AZUREGrad.cpp`, `src/AMatrixFunc.cpp` (adjoint entry points) | the grouped gradient by host (`BuildGradItems`), `ScopedPointMappingOff` | rounding (gradient sums reordered) | ~500, 8–12 h | after the pathway branch (it edits `AMatrixFunc`'s readers); with 3, 4, 5 |
 | 3 | `lab-frame` | M3 (b): residual on y^lab, δy^lab and m/J(ν); frames keep kinematics only; the writer computes c.m. data for display | `experiment/.../Frames.h`, `experiment/src/Frames.cpp`, `include/Segment.h`, `src/Segment.cpp`, `src/ModelPass.cpp`, `src/AZURECalc.cpp` (`FitBarFn`), `src/DataOutputFiles.cpp` | `FrameRow::yCM, dyCM`, `CMValue/CMError` | rounding (§4.4) | ~250, 3–5 h | 1, 4, 5; **starts now** |
-| 4 | `layer-yield` | `yield` on a `layer` (formula stopping), the closed-form test project | `experiment/src/Quantities.cpp`, `experiment/src/Build*.cpp`, `src/TargetFold.cpp` (per-particle normalization), `src/TargetSetup.cpp`, `tests/layer_yield/`, `docs/source/…/data_formats.rst` | the refusal | identical (new quantity only) + the six tests of §5.3 | ~350 + test, 5–8 h | 1, 3; **starts now** |
+| 4 | `layer-yield` (**done**, below) | `yield` on a `layer` (formula stopping), the closed-form test project | `experiment/src/Quantities.cpp`, `experiment/src/Build*.cpp`, `src/TargetFold.cpp` (per-particle normalization), `src/TargetSetup.cpp`, `tests/layer_yield/`, `docs/source/…/data_formats.rst` | the refusal | identical (new quantity only) + the six tests of §5.3 | ~350 + test, 5–8 h | 1, 3; **starts now** |
 | 5 | `stopping-wire` | §6: the kernel calls `stopping/`; `stopping evaluation` and `table`; the scale nuisance and its prior; ERYA removed | `src/TargetEffect.cpp`, `include/TargetEffect.h`, `src/HandOver.cpp`, `src/DataParameters.cpp`, `src/Objective.cpp`, `experiment/src/Validate.cpp`, `CMakeLists.txt`, `external/erya` (removed), `tests/reference/compound_stopping_reference_test.cpp` (moved) | `TargetThickness`'s integrator (step 2 of §6.4), ERYA | identical for formula projects (step 1); quadrature class for step 2 (its brief must name `external/erya`, which agents may not edit otherwise) | ~600, 8–12 h | after `stopping-1` is merged; with 1, 3 (after 4 or in coordination: both touch the target set-up) |
 | 6 | `kernels` | the folds leave the unit: kernel functions of `experiment/` on (node energies, node values, kernel parameters), forward by the same templated integrator, gradient weights by the same code on `TELinearForm` | new `experiment/include/azure2/experiment/Kernels.h`, `experiment/src/Kernel*.cpp`; `src/TargetFold.cpp` (emptied, deleted), `src/AZUREGrad.cpp` (`GradTargetEffectAdjoint` calls the kernels) | `TargetFold.cpp`, the fold members of `Unit` | identical | ~900 moved, ~300 new, 6–10 h | after 1 and 4; with 2, 5 |
 | 7 | `grid` | the shared mesh (§2.2–2.6); sub-points stop being units; the stage node table; kernel rows on mesh nodes; re-placement by anchors in the hand-over | new `experiment/.../EnergyGrid.h`, `experiment/src/EnergyGrid.cpp` (with `AdaptiveIntegrationGrid` moved in), `src/TargetSetup.cpp`, `src/WorkingCopyUnits.cpp`, `src/HandOver.cpp`, `include/Unit.h` | `ReplaceSubPointGrids`, `NodeTableCache.h`, sub-point units, `SubPointAccess.h`, per-unit sub-point tables; per D3 the automatic tolerance, windows, blend, fallback | quadrature (§7.1), unfolded projects identical | ~1,500, 16–24 h | after 6; alone (it touches the set-up) |
 | 8 | `shift-kernel` | folded shifted data: the kernel moves on fixed nodes, ∂K/∂ν analytic; unfolded: exact node, ∂m/∂ν from dO/dE | `src/ShiftFrames.cpp`, `src/HandOver.cpp`, `src/AZURECalc.cpp` (`FillShiftColumns` for folded segments goes) | the rigid move of sub-points, shift tables of sub-points | quadrature; χ² smooth in shifts | ~400, 6–8 h | after 7; with 9 |
 | 9 | `observables` | O_n = Legendre coefficients, elastic amplitudes, A_y numerators per (E_n, reaction); angle rows in the kernels; amplitude filters on dσ/dΩ (M8); lab-frame per-node fold if D5 | `src/GenMatrixFunc.cpp`, `src/UnitLegendre.cpp`, `src/PolarizationFunc.cpp`, `experiment/src/Kernel*.cpp` | per-unit angular sums, per-unit Legendre and Coulomb tables | rounding for the reordered angular sums; physics for D5 | ~1,200, 16–24 h | after 7 and after the pathway branch; with 8 |
 | 10 | THM on the grid | σ_HOES at E_n, the THM kernel (`THM.md` §1–2) | `src/THMMatrixFunc.cpp`, `src/Thm*.cpp` | THM sub-point folds, THM-only mapping | quadrature | per `THM.md` | after 7 and 9 |
+
+**Branch 4, done (2026-11-11, `feature/upgrade-5-layer-yield`).** The kernel is today's target integration
+(`src/TargetFold.cpp`) not divided by N for an effect with `TargetEffect::IsLayerYield` (an effect of its own per data
+set kind, so a σ and a yield on one layer share only the density, through the density group); E_out solves
+∫ dE/ε = N with `GridQuadrature`'s rule on the point's own sub-points (`include/LayerExit.h`), not with
+`TargetThickness`'s Newton–Simpson, which differs from it by the quadrature's error (up to 8 × 10⁻⁴ on the test's
+coarsest grid). The grid reaches 2 % beyond the layer at its layout density; a grid that ends inside the layer gives
+NaN, and the set-up refuses that case and a stopping that is not positive (`E_LAYER_EXIT_BELOW_MODEL`,
+`E_LAYER_STOPPING`, `src/TargetLayer.cpp`). ∂Y/∂N stays central differences (the apparatus route of `AZURECalc.cpp`),
+tested against 10⁻²⁴ σ(E_out). Where the stopping module plugs in: ε enters only as the sub-points' stopping (set in
+`TargetSetup.cpp`'s set-up loops and `ReplaceSubPointGrids`) and is read by `GridQuadrature` and `LayerExitEnergy`
+alike, so the scale s multiplies it there, once. Tests: `tests/layer_yield` (README).
 
 **First steps before Phase 4's last branches are merged.** `lab-frame` (3) and `layer-yield` (4) touch no file of
 the pathway branch (`CNuc*`, `GenMatrixFunc`, `AMatrixFunc` readers, `UnitExternalCapture`, `ExternalCaptureSetup`)
@@ -528,6 +570,35 @@ merges, {2, 6} next, {7}, then {8, 9}, then {10}.
 one T-matrix per (energy, reaction), 13N's point pass goes from 258 ms to about 100 ms (fill+solve 77 → 5 ms, T-matrix
 88 → 5 ms, cross sections unchanged), `thick_target_resonance`'s from 795 to about 230 ms, T2's from 70 to about
 40 ms. Branch 9 then makes the per-unit cross section a short dot product.
+
+**Branch 1 done (2026-11-11, `feature/upgrade-5-energy-tasks`), measured.** The point pass runs the plan's energy tasks
+(`CalculationPlan::EnergyTasks`, `src/EnergyPass.cpp`): one fill and factorisation per (nucleus, route, E_x bits), one
+T-matrix per group (entrance, exit, source of the external-capture amplitudes), the observable of every unit; then the
+folds (`Unit::FoldSubPoints`). Every output of the tree is identical in the three bases. `AZURE_PLAN_CHECK=1` solved
+every unit of the tree alone and compared it with its shared solve (three bases, 3,727,625 units): 0 differ, with the
+key (nucleus, E_x bits) as designed -- but the T-matrix needs one more key than the pair: points and sub-points at one
+energy may hold set-up external-capture amplitudes that differ in the last bits (found on
+`tests/electron_screening/grad.azr`, 1,602 of 10,125 units, not on the tree's own projects; its gradient fit moved).
+Per evaluation of a fit, 1 thread, median of `AZURE_PROFILE` (load 17–22 on 24 cores, ms; base = `b-trial18`):
+
+| project | point pass, base → new | inferred | solves | T-matrices |
+|---|---|---|---|---|
+| T1 | 1.0 → 0.9 | — | 206 → 137 | 206 → 198 |
+| T3 | 1.6 → 1.6 | — | 414 → 315 | 412 → 412 |
+| T2 | 106.4 → 44.6 | 70 → 40 | 24,299 → 5,483 | 19,267 → 5,333 |
+| 13N | 316.5 → 131.9 | 258 → 100 | 45,871 → 2,727 | 45,871 → 2,731 |
+| `thick_target_resonance` | 1,102 → 264 | 795 → 230 | 48,237 → 2,148 | 48,237 → 15,036 |
+| `natural_neon` | 3,207 → 1,718 | — | 291,838 → 56,696 | 292,742 → 131,199 |
+| `18O_p_a_thm` | 23.5 → 23.4 | — | 14,688 → 703 | (THM) |
+
+The cross sections are unchanged (now the largest stage: 13N 88 of 132 ms, `natural_neon` 896 of 1,718). THM gains
+nothing: its fill was 7 of 23.5 ms, and the half-off-shell cross section, which reads each unit's channel rows, now
+finds them out of cache (perf: `Unit::GetLoElement` 12 % of the run, from the fill's unit to the cross section's).
+Whole runs (`perf stat` cycles, alternated with the base): fits of 8 MIGRAD calls 13N 1.95×, T2 1.66×, thick target
+1.95×, T1 1.02×, T3 1.07×; calculations (6 runs each, set-up dominated) thick target 2.0×, `natural_neon` 1.34×, T2
+1.11×, T1, T3, 13N, THM and `target_effect_ranges` within their scatter (±10–20 % at this load). Peak RSS within 2 %.
+A 200-call T2 fit is not faster as a whole: at 1 thread 0.96× (its gradients' forward solves are still per host:
+29.0 of 53 s), at 5 threads 0.89× (17.0 s against 14.8, two runs each; not explained, see HANDOFF).
 
 ## 9. Decisions for the PI, and risks
 

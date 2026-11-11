@@ -17,7 +17,7 @@ and 4 of 05_experimental_effects_chi2.md, fixed 2026-10-26):
 Every sub-point now moves by the data point's own shift (c.m.), so the window keeps its width and the fine grid
 is exactly on the shifted resonance.
 
-## Models (`make_models.py`, from `tests/thick_target_resonance`: 14N(p,g) across the 259.7 keV resonance,
+## Models (`make_models.py` (deleted; see "How the models were made"), from `tests/thick_target_resonance`: 14N(p,g) across the 259.7 keV resonance,
 Gamma_p 0.975 keV, 3.2e19 at/cm2, four yield points at lab 272-320 keV, no external capture)
 
 - `sqrt`: one four-point segment with `sqrtshift 0.02 0 0`;  `const`: four one-point segments, each with the
@@ -37,3 +37,29 @@ Gamma_p 0.975 keV, 3.2e19 at/cm2, four yield points at lab 272-320 keV, no exter
 dev 81abfd4 (before the fix): (a) 7.9e-4 off (the window stretch, diluted by the resonance's dominance of the
 yield), (e) 2.1 (213 %) off: the fine grid missed the shifted narrow resonance; (b), (c), (d) pass.  Fixed build:
 (a) 5e-11, (c) 2.8e-5, (e) 5e-11.
+
+## How the models were made
+
+The committed models are the reference.  They were written by `make_models.py` in the old project format and converted
+to format 3 with `tools/format3_tree_convert.sh` (`AZURE2 --convert ... --to 3 --exact-grids`); the generator
+was deleted with the old format (it is in the repository's history: `git show f56e02a9:tests/shift_sqrt_subpoints/make_models.py`).  To change a
+model, edit its records.  The generator's description of what it wrote:
+
+```text
+Models for the energy-dependent-shift sub-point test (audit item 11, 2026-10-26).
+
+All from tests/thick_target_resonance (14N(p,g) across the 0.97 keV-wide 259.7 keV resonance, 3.2e19 at/cm2
+target, no external capture), the x20 target-integration line, four yield points at lab 272-320 keV:
+
+  sqrt    : one segment, sqrtshift b = 0.02 MeV^1/2 (fixed), constant shift 0
+  const   : four one-point segments, each with the CONSTANT shift b sqrt(E_k) of its own point -- the same
+            calibration point by point, so the yields must be identical if sub-points move rigidly with
+            their data point
+  shiftfn : one segment, shiftfn "a0*sqrt(x)" with a0 = b (the same shift through the other code path)
+  dense   : the sqrt model on a uniform 2000-point sub-point grid (useAdaptiveGrid=0), a grid-free check
+  noshift : the sqrt model with b = 0 (to show the shift matters)
+  narrow_sqrt, narrow_const : sqrt and const with the resonance's proton width 100x smaller (9.7 eV), where
+            the fine grid's position matters: the old engine's grid missed the shifted resonance
+
+Run from this directory: python3 make_models.py  (writes models/ and models/data/).
+```

@@ -14,7 +14,7 @@ namespace physics {
  * The reaction pathways of one entrance partition (docs/upgrade/cnuc_split.md section 10): for every exit partition,
  * the channel-spin groups and in each the internal pathways (level-matrix elements of one block) and the external
  * (direct- and channel-capture) pathways to the external-capture final states.  The lists are in the order the
- * engine's pathway trees (Decay, KGroup, MGroup, ECMGroup) hold them, and indices into them are 0-based.
+ * engine's pathway table (include/PathwayTable.h) holds them, and indices into them are 0-based.
  */
 
 /// The multipoles a final state is captured into: bits as the engine's isE1, isM1, isE2.
@@ -91,7 +91,7 @@ struct PathwayOptions {
 
 /*!
  * The pathways from entrance partition alpha (an entrance of the project) of the System (R-matrix blocks only) and
- * the external-capture final states.  Exit kinds (as the engine's SortPathways):
+ * the external-capture final states.  Exit kinds:
  *  - beta entrance: for l = 0, 1, the pathways of entrance channels with that l to any non-beta exit; group (2l, 0);
  *  - elastic (particle, alpha' = alpha): groups (s, s');
  *  - particle exit alpha' != alpha: groups (s, s', s2'), a pathway in every group whose s' or s2' is its exit spin;

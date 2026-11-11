@@ -221,7 +221,7 @@ double PhotonJacobian(const Partition &in, double eLab, double thetaLab) {
   return pow(1.0 - beta * cos(thetaLab * pi / 180.0), 2.0) / (1.0 - beta * beta);
 }
 
-FrameRow UnconvertedRow(double eLab, double thetaLab, double y, double dy, double binLowLab, double binHighLab) {
+FrameRow UnconvertedRow(double eLab, double thetaLab, double binLowLab, double binHighLab) {
   FrameRow r;
   r.eLab = eLab;
   r.eCM = eLab;
@@ -230,8 +230,6 @@ FrameRow UnconvertedRow(double eLab, double thetaLab, double y, double dy, doubl
   r.binHighCM = binHighLab;
   r.thetaCM = thetaLab;
   r.jacobian = 1.0;
-  r.yCM = y;
-  r.dyCM = dy;
   return r;
 }
 
@@ -294,20 +292,15 @@ bool ParticleAngle(const FrameRule &r, FrameRow &row, double thetaLab, AngleLimi
   return ReactionAngleNR(r, row, thetaLab, row.thetaCM, lim);
 }
 
-// y and dy of a detected particle in the c.m. frame (Unit::ConvertCrossSection before).  Relativistic: where the
-// map does not reach the lab angle the Jacobian the row started with is kept.
-void ParticleValue(const FrameRule &r, FrameRow &row, double thetaLab, double y, double dy, AngleLimit &lim) {
+// dOmega_lab/dOmega_cm of a detected particle at the row's angles.  Relativistic: where the map does not reach the
+// lab angle the Jacobian the row started with is kept.
+void ParticleRowJacobian(const FrameRule &r, FrameRow &row, double thetaLab, AngleLimit &lim) {
   if (r.relativistic) {
     double relAngle, factor;
     if (RelativisticAngle(r.entrance, r.exit, row, thetaLab, row.thetaCM, relAngle, factor, lim)) row.jacobian = factor;
-    row.yCM = y * row.jacobian;
-    row.dyCM = dy * row.jacobian;
     return;
   }
-  const double j = ParticleJacobian(r.entrance, r.exit, row.eLab, thetaLab, row.thetaCM);
-  row.yCM = y * j;
-  row.dyCM = dy * j;
-  row.jacobian = j;
+  row.jacobian = ParticleJacobian(r.entrance, r.exit, row.eLab, thetaLab, row.thetaCM);
 }
 
 }  // namespace
@@ -326,24 +319,19 @@ void ConvertRowEnergy(const FrameRule &r, double eLab, double binLowLab, double 
   }
 }
 
-bool ConvertRow(const FrameRule &r, double eLab, double thetaLab, double y, double dy, double binLowLab,
-                double binHighLab, bool atLoad, FrameRow &row, AngleLimit &lim) {
+bool ConvertRow(const FrameRule &r, double eLab, double thetaLab, double binLowLab, double binHighLab, bool atLoad,
+                FrameRow &row, AngleLimit &lim) {
   ConvertRowEnergy(r, eLab, binLowLab, binHighLab, row);
   if (r.exitKind == ExitKind::None || !r.labDifferential) return true;
   bool inRange = true;
   if (r.exitKind == ExitKind::Particle) {
     inRange = ParticleAngle(r, row, thetaLab, lim);
     if (!inRange && atLoad) return false;
-    if (r.convertValue) ParticleValue(r, row, thetaLab, y, dy, lim);
+    if (r.convertValue) ParticleRowJacobian(r, row, thetaLab, lim);
   }
   if (r.exitKind == ExitKind::Photon) {
     row.thetaCM = PhotonLabToCM(CMVelocity(r.entrance, eLab), thetaLab);
-    if (r.convertValue) {
-      const double j = PhotonJacobian(r.entrance, eLab, thetaLab);
-      row.yCM = y * j;
-      row.dyCM = dy * j;
-      row.jacobian = j;
-    }
+    if (r.convertValue) row.jacobian = PhotonJacobian(r.entrance, eLab, thetaLab);
   }
   return inRange;
 }

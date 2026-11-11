@@ -23,7 +23,7 @@ energy, and `TransformOut` follows the rank of the level's formal energy. For a
 file in energy order both mappings are the identity, so every existing
 result is unchanged.
 
-## Models (`make_models.py`)
+## Models (`make_models.py` (deleted; see "How the models were made"))
 
 From `tests/capture_ay_coupling/models/twolevel.azr` (n + 15N, one 1+ group,
 every width fixed):
@@ -54,3 +54,24 @@ levels; (d) took its truth at 3.4688.
 Old build: (b) `energy_1` = 3.4888, (c) 3.491 listed first, (d) the fixed flag
 sat on the 3.491 level, the fit moved the 3.791 level to 3.7912 and chi2
 stayed at 203702.
+
+## How the models were made
+
+The committed models are the reference.  They were written by `make_models.py` in the old project format and converted
+to format 3 with `tools/format3_tree_convert.sh` (`AZURE2 --convert ... --to 3 --exact-grids`); the generator
+was deleted with the old format (it is in the repository's history: `git show 8c238222:tests/transform_level_order/make_models.py`).  To change a
+model, edit its records.  The generator's description of what it wrote:
+
+```text
+Models for tests/transform_level_order (audit item 13, 2026-10-27).
+
+Derived from tests/capture_ay_coupling/models/twolevel.azr (n + 15N, one 1+ group with two levels,
+every width fixed):
+
+  asc.azr       levels in energy order: 3.491 (energy free), 3.791 (energy fixed)
+  desc.azr      the same two levels with the 3.791 level listed FIRST
+  desc_fit.azr  desc with a total-capture data segment on data/cap.dat (written by check.sh from desc
+                with the 3.491 level's formal energy lowered by 0.02 MeV)
+
+Run from anywhere:  python3 tests/transform_level_order/make_models.py
+```

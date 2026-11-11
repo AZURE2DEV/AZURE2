@@ -1,0 +1,40 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+format=3
+</config>
+<levels>
+1 -1 13.027400 1 1 1 2 0 1 1 0 45 0.5 1 0.5 -1 0.0 1.007825 15.000109 1 7 12.1274 12.1274 0 0 0.0 0 4.85 0 0 0
+1 -1 13.027400 1 1 2 0 2 1 1 1 40 0 1 0 1 0.0 4.002603 12.0 2 6 12.1274 7.16192 0 0 0.0 0 5.43 0 0 0
+
+0.5 1 30.000000 1 1 3 1 0 2 1 1 0 0.5 1 0 1 0.0 1.008665 12.0 0 6 4.94636 4.94636 0 0 0.0 0 0.1 0 0 0
+</levels>
+<data>
+# Synthetic resonance scan (make_project.py): the arctan form at N = 1.2e18, Gamma_p = 60 eV, times 1 + 2 % noise (seed 20261111)
+dataset scan
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/fit.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         TF
+    quadrature     points 40
+</data>
+<targets>
+target TF
+    kind           layer
+    active         15N
+    areal_density  1e18 atoms/cm2 fit
+    stopping       formula "a0" a0=5e-21 MeV*cm2/atom
+    straggling     none
+</targets>

@@ -29,6 +29,7 @@ computes, with its equations, is in `docs/source/user_guide/experimental_effects
 |---|---|---|
 | Charged beam on a solid target, ΔE comparable with a resonance width Γ | target integration, density N > 0 (thin) | "Target Integration" |
 | Yield per incident particle from a target thicker than the range | target integration, density 0 (thick) | "Target Integration" |
+| Yield per particle or per µC from a layer of finite thickness (a resonance scan) | format 3 only: `quantity yield` on a `target` of `kind layer` | `docs/source/reference/data_formats.rst`, "Yields" |
 | Beam energy spread or detector resolution, Gaussian | Gaussian convolution, σ_b in MeV, lab | "Gaussian Beam Spread" |
 | Neutron TOF with an energy-dependent width | Gaussian with an expression of E_lab and `sigmalab` | "Gaussian Beam Spread" |
 | Neutron TOF with a tabulated response (n_TOF) | `udr "<file>" L burstFWHM channel centred` | "User-defined numerical resolution function" |
@@ -42,6 +43,8 @@ computes, with its equations, is in `docs/source/user_guide/experimental_effects
 A thin-target point is the depth average Y(E_0) = (1/N) ∫_{E_0−Δ}^{E_0} σ(E′)/ε(E′) dE′, with N the areal density
 (atoms cm⁻²), ε the stopping cross section and Δ the energy loss defined by ∫ dE′/ε = N (exact range integral, not
 ε(E_0)N). A thick-target point (density 0) is ∫_0^{E_0} σ/ε dE without division by N, integrated down to 1 keV.
+A layer yield (format 3, `quantity yield` on `kind layer`) is 10⁻²⁴ ∫_{E_out}^{E_0} σ/ε dE, not divided by N: it is the
+data a resonance scan gives; N (fitted or fixed) sets the width of a narrow resonance's plateau, not its height.
 
 **Which kernel the paper describes.**
 - **A foil thickness (μg cm⁻²) or "the energy loss in the target was X keV" means target integration**, with an areal

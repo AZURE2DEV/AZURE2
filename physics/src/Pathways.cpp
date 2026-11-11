@@ -64,7 +64,7 @@ std::vector<ExitPathways> reaction_pathways(const System &system, std::size_t al
   const bool betaEntrance = entrance.kind == PartitionKind::Beta;
 
   auto channelOf = [&](const JpiBlock &block, std::size_t k) -> const Channel & { return channels[block.channel(k)]; };
-  // (2J + 1) / ((2 I_1' + 1)(2 I_2' + 1)) of exit partition alpha', as the engine's MGroup::SetStatSpinFactor.
+  // (2J + 1) / ((2 I_1' + 1)(2 I_2' + 1)) of exit partition alpha', as the engine has always defined it.
   auto statSpinFactor = [&](const JpiBlock &block, std::size_t exit) {
     const Partition &p = partitions[exit];
     return (block.two_J() + 1.) * (1.0 / (p.two_j[0] + 1.0) / (p.two_j[1] + 1.0));

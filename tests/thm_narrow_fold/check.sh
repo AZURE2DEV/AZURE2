@@ -4,10 +4,10 @@
 # the fold of the unfolded curve -- pointwise, and with the resonance's area
 # conserved -- and must keep doing so when a fit moves the resonance.
 #
-# Model: tests/17O (a THM segment, 21 keV lab Gaussian; its 5- level at
+# Model: tests/17O (a THM data set, 21 keV lab Gaussian; its 5- level at
 # E_cm = 74 keV is 46 eV wide).  Three checks:
 #
-#  A. The <targetInt> fold at 38 energies across the resonance against a
+#  A. The beam's fold at 38 energies across the resonance against a
 #     trapezoid fold, done here in awk, of AZURE2's own UNFOLDED curve on a
 #     0.5 eV / 20 eV grid, over the same +-5 sigma window: once with the
 #     default grid settings and once with the "5 50" (resonanceWidthMultiplier,
@@ -37,28 +37,37 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/thm_narrow_fold.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 fail=0
 
-SIGMA_LAB=0.021            # the targetInt sigma of tests/17O (lab)
+SIGMA_LAB=0.021            # the beam spread of tests/17O (lab)
 SIGMA_CM=$(awk -v s=$SIGMA_LAB 'BEGIN { printf "%.12g", s * 17 / 18 }')  # n + 17O, masses 1 and 17
 LEVEL_EX=1.891             # the narrow 5- level (E_cm = 74 keV)
 TOL_POINT=1e-3             # pointwise, relative
 TOL_AREA=5e-4              # area of the folded curve across the resonance
 
-# project DIR DATAFILE TARGETINT-LINE LEVEL-EX: a copy of tests/17O reading
-# DATAFILE (lab energies) with the given targetInt line (empty = unfolded),
-# the narrow level at LEVEL-EX with a free energy, and no <parameterSettings>
-# overrides (so an external parameter file is not overridden in turn).
+# project DIR DATAFILE QUADRATURE LEVEL-EX: a copy of tests/17O whose one data
+# set reads DATAFILE (lab energies; a THM data set with its norm fixed at 1),
+# folded by the project's beam (spread SIGMA_LAB) on the sub-point grid
+# QUADRATURE (the value of the field; empty = unfolded), its extrapolation
+# folded the same way, the narrow level at LEVEL-EX with a free energy, and no
+# <parameterSettings> overrides (so an external parameter file is not
+# overridden in turn).
 project() {
-  local d="$1" data="$2" tline="$3" ex="$4"
+  local d="$1" data="$2" quad="$3" ex="$4"
   mkdir -p "$d/data" "$d/output" "$d/checks"
   cp "$data" "$d/data/pts.dat"
-  awk -v tline="$tline" -v ex="$ex" -v lev="$LEVEL_EX" '
-    /^<segmentsData>/ { print; print "1 1 2 -1 1 0 180 10 1.0 0 0 0 0 0 data/pts.dat 0 0"; skip = 1; next }
-    /^<\/segmentsData>/ { skip = 0 }
-    /^<targetInt>/ { print; if (tline != "") print tline; skip = 1; next }
-    /^<\/targetInt>/ { skip = 0 }
+  awk -v quad="$quad" -v ex="$ex" -v lev="$LEVEL_EX" '
+    /^<data>/ { print; print "dataset pts"; print "    reaction       17O(n,a)14C"; print "    quantity       sigma"
+                print "    unit           b"; print "    file           data/pts.dat"; print "    columns        E_lab[MeV] _ value error"
+                print "    energy_window  -1 1.0 MeV"; print "    norm           1.0 fixed"
+                if (quad != "") { print "    beam           beam_o17_guardo"; print "    quadrature     " quad }
+                print "    thm            global"; skip = 1; next }
+    /^<\/data>/ { skip = 0 }
+    /^<targets>/ { print; skip = (quad == ""); next }
+    /^<\/targets>/ { skip = 0 }
     /^<parameterSettings>/ { print; skip = 1; next }
     /^<\/parameterSettings>/ { skip = 0 }
     skip { next }
+    $1 == "quadrature" { if (quad != "") print "    quadrature     " quad; next }
+    $1 == "beam" && $2 == "beam_o17_guardo" && quad == "" { next }
     NF > 30 && $3 == lev { $3 = ex; $4 = 0 }
     { print }' "$SRC/17O.azr" > "$d/run.azr"
 }
@@ -87,12 +96,12 @@ awk -v s="$SIGMA_CM" 'BEGIN {
   for (e = er - 0.002; e <= er + 0.002; e += 5.0e-7) printf "%.10f 0 1 0.1\n", e * 18 / 17
 }' | sort -g > "$WORK/dense.dat"
 
-TL_DEFAULT="1 \"1\" 150 1 $SIGMA_LAB 0 0 \"\" 0 0 0 0 \"\" 0"
-TL_17O="$TL_DEFAULT 0 0.04 5 50"
+Q_DEFAULT="points 150"                                  # the default grid around each level
+Q_17O="points 150 width_multiplier 5 per_width 50"      # tests/17O's grid
 
-project "$WORK/ref" "$WORK/dense.dat" "" "$LEVEL_EX";         run "$WORK/ref"
-project "$WORK/def" "$WORK/eval.dat" "$TL_DEFAULT" "$LEVEL_EX"; run "$WORK/def"
-project "$WORK/x5"  "$WORK/eval.dat" "$TL_17O" "$LEVEL_EX";     run "$WORK/x5"
+project "$WORK/ref" "$WORK/dense.dat" "" "$LEVEL_EX";          run "$WORK/ref"
+project "$WORK/def" "$WORK/eval.dat" "$Q_DEFAULT" "$LEVEL_EX"; run "$WORK/def"
+project "$WORK/x5"  "$WORK/eval.dat" "$Q_17O" "$LEVEL_EX";     run "$WORK/x5"
 
 # compare NAME FOLDED: pointwise and area comparison with the reference fold
 compare() {
@@ -126,8 +135,8 @@ compare "A. tests/17O grid (5 widths, 50/width)" "$WORK/x5"
 
 # B. level moved through an external parameter file
 MOVED=$(awk -v e="$LEVEL_EX" 'BEGIN { printf "%.6f", e + 0.0015 }')
-project "$WORK/moved" "$WORK/eval.dat" "$TL_DEFAULT" "$MOVED"; run "$WORK/moved"
-project "$WORK/par" "$WORK/eval.dat" "$TL_DEFAULT" "$LEVEL_EX"; run "$WORK/par" "$WORK/moved/output/param.par"
+project "$WORK/moved" "$WORK/eval.dat" "$Q_DEFAULT" "$MOVED"; run "$WORK/moved"
+project "$WORK/par" "$WORK/eval.dat" "$Q_DEFAULT" "$LEVEL_EX"; run "$WORK/par" "$WORK/moved/output/param.par"
 paste <(curve "$WORK/par") <(curve "$WORK/moved") | awk '
   { r = $2 / $4 - 1; if (r < 0) r = -r; if (r > w) w = r }
   END { printf "  %-34s max |rel diff| %.2e against a grid built at the moved energy\n", "B. level moved 1.5 keV by param file", w

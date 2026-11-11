@@ -220,10 +220,10 @@ void WorkingCopy::WriteSegmentFiles(const Config &configure, const azure2::Resul
           if (!output.IsExtrap()) {
             double dataNorm = NormUsed((int)(thisSegment - Data().GetSegments().begin()) + 1, results);
             const int row = (int)(point - segment->GetPoints(*this).begin());
-            out << std::setw(18) << std::scientific << columns.Sigma(Segment::CMValue(State(*segment), row) * dataNorm, *point)
-                << std::setw(18) << std::scientific << columns.Sigma(Segment::CMError(State(*segment), row) * dataNorm, *point)
-                << std::setw(18) << std::scientific << columns.S(Segment::CMValue(State(*segment), row) * dataNorm, *point)
-                << std::setw(18) << std::scientific << columns.S(Segment::CMError(State(*segment), row) * dataNorm, *point)
+            out << std::setw(18) << std::scientific << columns.Sigma(segment->CMValue(State(*segment), row) * dataNorm, *point)
+                << std::setw(18) << std::scientific << columns.Sigma(segment->CMError(State(*segment), row) * dataNorm, *point)
+                << std::setw(18) << std::scientific << columns.S(segment->CMValue(State(*segment), row) * dataNorm, *point)
+                << std::setw(18) << std::scientific << columns.S(segment->CMError(State(*segment), row) * dataNorm, *point)
                 << std::endl;
           } else
             out << std::endl;

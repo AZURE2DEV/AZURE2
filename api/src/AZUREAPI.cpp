@@ -142,7 +142,7 @@ int AZUREAPI::Initialize() {
     //   center of mass conversions, s-factor conversions, etc.
     // configure().outStream << "Filling Data Structures..." << std::endl;
     if (configure().paramMask & Config::CALCULATE_WITH_DATA) {
-      if (data()->Fill(configure(), compound()) == -1) {
+      if (data()->Fill(configure(), compound()) != 0) {
         // configure().outStream << "Could not fill data object from file." << std::endl;
         return -1;
       } else if (data()->Data().NumSegments() == 0 && compound()->GetModelData().NumResiduals() == 0) {
@@ -181,8 +181,8 @@ int AZUREAPI::Initialize() {
 
   UpdateParameters();
   if (!SetUpPriorCovariance()) return -1;
-
   if (data()->Initialize(compound(), configure()) == -1) return -1;
+  AZUREProfile::Report(std::cerr, "api set-up");
   // The session's buffer for the new layout, at 0 until an evaluation writes it (a read before any evaluation, such
   // as GetThmExperiments, sees 0 as it did when the data set held the buffer).
   results_ = azure2::Results();
@@ -573,8 +573,8 @@ int AZUREAPI::UpdateData() {
     for (int k = 0; k < data.size(); ++k) {
       energies.push_back(data[k].GetCMEnergy());
       angles.push_back(data[k].GetCMAngle());
-      cross.push_back(Segment::CMValue(localData->State(segments[i]), k));
-      crossErr.push_back(Segment::CMError(localData->State(segments[i]), k));
+      cross.push_back(segments[i].CMValue(localData->State(segments[i]), k));
+      crossErr.push_back(segments[i].CMError(localData->State(segments[i]), k));
       conv.push_back(data[k].GetSFactorConversion());
       excitationEnergies.push_back(data[k].GetExcitationEnergy());
     }
@@ -715,7 +715,7 @@ bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
   // Mirror the branch taken at startup: data mode reads the data segments,
   // extrapolation mode builds its points from <segmentsTest>.
   if (configure().paramMask & Config::CALCULATE_WITH_DATA) {
-    if (data()->Fill(configure(), compound()) == -1) return false;
+    if (data()->Fill(configure(), compound()) != 0) return false;
   } else {
     if (data()->MakePoints(configure(), compound()) == -1 || SessionRefusesAdaptiveGrids(configure())) return false;
   }
@@ -985,11 +985,11 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
   GradAccum accum;
   accum.Init(lc);
 
-  // chi2 = sum (fit - data*n)^2/(cmErr*n)^2.  d(chi2)/d(model) = 2 r / err^2;
+  // chi2 = sum (fit/J - data*n)^2/(err*n)^2 (ModelPass.h DataResidual).  d(chi2)/d(model) = 2 r / err^2 / J;
   // the same model gives the data-term norm gradient, accumulated per segment.
   std::vector<double> normData(ld->Data().NumSegments() + 1, 0.0);
   double chi2 = 0.0;
-  // A data covariance couples the points: their cotangent 2 (M^-1 r)_i / (cmErr n) needs
+  // A data covariance couples the points: their cotangent 2 (M^-1 r)_i / (err n J) needs
   // every residual of the group first (one forward pass of those points), and the
   // group's chi2 is r^T M^-1 r in place of the sum of r_i^2 accumulated below.
   if (ld->Data().HasCovariance()) {
@@ -1000,9 +1000,8 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
     Unit *pt = seg->GetPoint(*ld, pid + 1);
     if (!pt) return 0.0;
     double norm = ld->State(*seg).norm;
-    double dataval = Segment::CMValue(ld->State(*seg), pid);
-    double cmErr = Segment::CMError(ld->State(*seg), pid);
-    const azure2::Residual res = azure2::DataResidual(model, dataval, cmErr, norm);
+    const double dataval = seg->LabValue(pid), labErr = seg->LabError(pid), jac = Segment::Jacobian(ld->State(*seg), 0, pid);
+    const azure2::Residual res = azure2::DataResidual(model, jac, dataval, labErr, norm);
     const double r = res.difference, err = res.error;
     if (err == 0.0) return 0.0;
     // chi2 falls out of the same residual the gradient uses (so value and
@@ -1010,20 +1009,20 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
 #pragma omp atomic
     chi2 += (r * r) / (err * err);
     if (seg->GetCovarianceGroup() >= 0) {
-      // d chi2/d r_i = 2 z_i, z = M^-1 r; d r_i/d model = 1/(cmErr n), d r_i/d n = -model/(cmErr n^2).
+      // d chi2/d r_i = 2 z_i, z = M^-1 r; d r_i/d model = 1/(err n J), d r_i/d n = -(model/J)/(err n^2).
       const double z = pt->GetCovarianceSeed(results());
       const int o = ld->Data().NormOwner(i);
       if (norm != 0.0 && o >= 1 && o < (int)normData.size() && ld->Data().GetSegment(o)->IsVaryNorm()) {
-        const double dNorm = -2.0 * z * model / (cmErr * norm * norm);
+        const double dNorm = -2.0 * z * res.model / (labErr * norm * norm);
 #pragma omp atomic
         normData[o] += dNorm;
       }
-      return 2.0 * z / err;
+      return 2.0 * z / err / res.jacobian;
     }
     // A norm-group follower's points move its leader's norm (o), the one parameter.
     const int o = ld->Data().NormOwner(i);
     if (norm != 0.0 && o >= 1 && o < (int)normData.size() && ld->Data().GetSegment(o)->IsVaryNorm()) {
-      double e2 = cmErr * cmErr;
+      double e2 = labErr * labErr;
       // fitBarFn runs inside the parallel point loop of AccumulateEGammaGradient,
       // and all points of a segment share the same normData[o], so guard the
       // accumulation.
@@ -1031,7 +1030,7 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
 #pragma omp atomic
       normData[o] += dNorm;
     }
-    return 2.0 * r / (err * err);
+    return 2.0 * r / (err * err) / res.jacobian;
   };
 
   bool ok = AccumulateEGammaGradient(lc, ld, results(), configure(), pmap, sdp, fb, accum);
@@ -1667,8 +1666,8 @@ vector_r AZUREAPI::GetPairsInfo() const {
  * External-capture radial integrals on a requested energy grid.
  *
  * Walks exactly the pathway structure Unit::CalculateECAmplitudes walks --
- * every EC level whose final pair matches, every KGroup of the entrance pair's
- * decay, every ECMGroup within it -- and evaluates the integral at each
+ * every EC level whose final pair matches, every spin group of the exit to it in
+ * the pathway table, every external pathway within it -- and evaluates the integral at each
  * requested energy instead of at a data point's energy.  The quantum numbers of
  * each pathway come back with it, so no bookkeeping is needed on the caller's
  * side.

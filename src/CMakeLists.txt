@@ -1,13 +1,13 @@
 # Core sources, shared by the AZURE2 executable and the _azure2 Python module.
 set(AZURE2_CORE_SOURCES AChannel.cpp CoulFunc.cpp CoulombWavesAt.cpp ChannelTable.cpp InputFiles.cpp GenMatrixFunc.cpp
-KLGroup.cpp ALevel.cpp Decay.cpp PathwayTable.cpp CNucPathways.cpp CaptureAyRequests.cpp AngCoeff.cpp MGroup.cpp
+ALevel.cpp PathwayTable.cpp CNucPathways.cpp CaptureAyRequests.cpp AngCoeff.cpp
 AMatrixFunc.cpp  DoubleFactorial.cpp EigenFunc.cpp  NFIntegral.cpp
 ECIntegral.cpp ECTable.cpp ECAmplitudeCache.cpp MatrixInv.cpp LevelMatrixSolver.cpp Profile.cpp ChannelSpace.cpp
 PPair.cpp AZURECalc.cpp Objective.cpp
-ECMGroup.cpp ReactionRate.cpp AZUREMain.cpp WorkingCopy.cpp DataCovariance.cpp ShftFunc.cpp ScatteringLength.cpp ModelData.cpp CNucObserved.cpp
+ReactionRate.cpp AZUREMain.cpp WorkingCopy.cpp DataCovariance.cpp ShftFunc.cpp ScatteringLength.cpp ModelData.cpp CNucObserved.cpp
 RMatrixFunc.cpp AZUREOutput.cpp    TargetEffect.cpp
-AZUREParams.cpp Unit.cpp Interference.cpp CNuc.cpp Equation.cpp
-JGroup.cpp Config.cpp Segment.cpp ModelPass.cpp CoulombReference.cpp Predictions.cpp CalculationPlan.cpp KGroup.cpp IntegratedFermiFunc.cpp
+AZUREParams.cpp Unit.cpp CNuc.cpp Equation.cpp
+JGroup.cpp Config.cpp Segment.cpp ModelPass.cpp CoulombReference.cpp Predictions.cpp CalculationPlan.cpp EnergyPass.cpp IntegratedFermiFunc.cpp
 EffectiveCharge.cpp  GSLException.cpp ParameterLimitsManager.cpp
 AdaptiveIntegrationGrid.cpp AdaptiveExtrapolation.cpp AZUREGrad.cpp ThmFunc.cpp
 DataOutputFiles.cpp
@@ -20,6 +20,7 @@ HandOver.cpp
 WorkingCopyUnits.cpp DataSet.cpp
 PointPass.cpp
 TargetFold.cpp
+TargetLayer.cpp
 ChannelTables.cpp
 UnitLegendre.cpp
 UnitExternalCapture.cpp

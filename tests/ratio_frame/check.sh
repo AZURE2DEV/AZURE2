@@ -12,7 +12,7 @@
 # In mode 3 the lab output (kinflag.dat = 1) of a RATIO test segment was also divided by J_base, because
 # EData::MakePoints converted the test points' cross sections while ESegment::Fill skips that for a ratio.
 #
-# Models from make_models.py (13C + alpha with two neutron exits of the same masses and different Q, the
+# Models from make_models.py (deleted; README.md: how the models were made) (13C + alpha with two neutron exits of the same masses and different Q, the
 # tests/sum_lab_frame model; 12C(a,g) external capture, the tests/gamma_lab_frame model), all test segments in
 # mode 3 with lab output; the expected ratio is the ratio of the plain segments' lab values:
 #   (a) particle, non-relativistic: R1 = n0+/n3- at the same angles, R2 = n0+/(a,a)(60 deg), R3 = n0+/n3-(30 deg),
@@ -188,7 +188,7 @@ fi
 # R=3 file: T1 (c.m. n0+), FC, T2 (lab n0+), FL ; R=2 file: T3 (a,a) at 60 deg c.m., T4 (a,a) at 75.46 deg c.m.
 # FC: in c.m. data the term's angle is the fixed angle itself, FC = T1 / T3.  FL: in lab data the term's 60 deg lab
 # is converted with the term's pair, theta_cm = 60 + asin((m1/m2) sin 60) = 75.4606 deg (the angle of T4, computed in
-# make_models.py), and J = sin^2(60) / sin^2(theta_cm) cos(theta_cm - 60), so FL = T2 / (T4 / J).
+# make_models.py (deleted; README.md: how the models were made)), and J = sin^2(60) / sin^2(theta_cm) cos(theta_cm - 60), so FL = T2 / (T4 / J).
 run fixed_angle fixed_angle 3 1
 fa="$WORK/fixed_angle/output/AZUREOut_aa=2_R=3.extrap"; fb="$WORK/fixed_angle/output/AZUREOut_aa=2_R=2.extrap"
 if [ -s "$fa" ] && [ -s "$fb" ]; then

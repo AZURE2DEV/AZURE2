@@ -741,7 +741,7 @@ Nuclear elastic integral (``dataset``, ``extrapolation``).  Angle-integrated ela
 sigma_total
 ~~~~~~~~~~~
 
-Total cross section (``dataset``, ``extrapolation``).  Total cross section of a neutral projectile, from the optical theorem.
+Total cross section (``dataset``, ``extrapolation``).  Total cross section of a neutral projectile, from the optical theorem; on a target with isotopes the abundance-weighted sum of its nuclei's totals, one elastic term per nucleus (20Ne(n,n)20Ne + 22Ne(n,n)22Ne).
 
 .. list-table::
    :header-rows: 1
@@ -756,7 +756,7 @@ Total cross section (``dataset``, ``extrapolation``).  Total cross section of a 
    * - energy column
      - ``E_lab``, ``E_cm``
    * - reaction
-     - elastic, neutral entrance
+     - elastic, neutral entrance; on a target with isotopes a sum, one term per nucleus
    * - ``target``
      - allowed
    * - ``beam``
@@ -1043,7 +1043,7 @@ Phase shift (``dataset``, ``extrapolation``).  The elastic phase shift delta_{J 
 yield
 ~~~~~
 
-Yield (``dataset``, ``extrapolation``).  Reactions (or detected counts) per incident particle or per unit of beam charge, on a target layer or an infinite target (data_kinds.md eqs. 3, 6).
+Yield (``dataset``, ``extrapolation``).  Reactions (or detected counts) per incident particle or per unit of beam charge, on a target layer, 1e-24 int_{E_out}^{E_0} <sigma>/epsilon dE with int_{E_out}^{E_0} dE/epsilon = N, or on an infinite target (E_out = 1 keV); epsilon the lab stopping per active nucleus (data_kinds.md eqs. 3, 6; energy_grid.md section 5).
 
 .. list-table::
    :header-rows: 1
@@ -1076,13 +1076,19 @@ Yield (``dataset``, ``extrapolation``).  Reactions (or detected counts) per inci
    * - target kinds
      - ``layer``, ``infinite``
    * - tree
-     - ``Fold_target o sigma (or dsdo) x N 1e-24 for a layer, integral sigma/epsilon for an infinite target; x 1e-6 C/(q e) per uC; x efficiency for counts``
+     - ``Fold_target o sigma (or dsdo): 1e-24 integral of sigma/epsilon from E_out to E_0 (a layer: E_out where the integral of 1/epsilon reaches N; infinite: 1 keV); x 1e-6 C/(q e) per uC; x efficiency for counts``
    * - EXFOR
      - ``,MLT,,TT``, ``,PY,,TT``, ``TT/CH``, ``PAR,MLT,G,TT/CH``
    * - refused (validate)
      - target kind none or sample: a yield needs a target with a thickness (layer) or a thick (infinite) target (``E_TARGET_KIND``)
    * - refused (validate)
      - per-charge unit without charge_state: the number of beam particles per uC depends on the charge state q (``E_FIELD_REQUIRED``)
+   * - refused (build)
+     - fold_windows on a layer: outside a window the integration is a cross section at one energy, not a yield (``E_FIELD_NOT_APPLICABLE``)
+   * - refused (setup)
+     - a stopping not positive and finite in the layer: give a stopping defined at every energy the beam has in the layer (``E_LAYER_STOPPING``)
+   * - refused (setup)
+     - the beam stops in the layer: use a target of kind infinite, or the areal density the beam crosses (``E_LAYER_EXIT_BELOW_MODEL``)
    * - refused (importer)
      - TTY activation yields: not supported (K9) (``E_NOT_IN_LIST``)
 
@@ -1861,9 +1867,18 @@ Diagnostic codes
    * - ``E_THM_COVARIANCE``
      - error
      - a covariance file on a THM data set (its chi^2 is its experiment's profiled one)
+   * - ``E_THM_EXPERIMENT_UNKNOWN``
+     - error
+     - a thm field naming an experiment that <thm> has no experiment[<name>] line for
    * - ``E_FOLD_CONFLICT``
      - error
      - data sets sharing a target with a free parameter differ in beam, detector or quadrature
+   * - ``E_LAYER_STOPPING``
+     - error
+     - a yield on a layer whose stopping is not positive and finite at an energy of its sub-point grid (set-up)
+   * - ``E_LAYER_EXIT_BELOW_MODEL``
+     - error
+     - a yield on a layer the beam does not leave above the lowest energy the model is evaluated at (set-up)
    * - ``E_POTENTIAL_TWICE``
      - error
      - two potential records for one pair
@@ -1879,6 +1894,12 @@ Diagnostic codes
    * - ``E_OLD_POTENTIAL_BLOCK``
      - error
      - the old <potential> block in a format-3 project (AZURE2 --convert writes potential records)
+   * - ``E_PARAMETER_FILE_NO_MATCH``
+     - error
+     - a parameter file (param.sav as a run's start) none of whose names is a parameter of the run
+   * - ``W_PARAMETER_FILE_NAMES``
+     - warning
+     - a parameter file with names the project has no parameter for, or without names of parameters it has
    * - ``E_SO_TWO_SPINS``
      - error
      - a spin-orbit term on a pair whose two particles both have spin (the coupled treatment is not implemented)

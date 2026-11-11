@@ -77,7 +77,9 @@ Further forms, all on the same line **[V]**:
   (`SegLine.h:316-320`; `data_formats.rst:325-436`). Refused for a RATIO (`EData.cpp:209`).
 - **UPOS.** `isUPOS L Ic δ` after the file: the secondary γ of B → C + γ instead of the undetected particle
   (`SegLine.h:199-210`; `segments.rst:512-552`).
-- **Neutron total, transmission, self-shielded yield.** `total 1`: the optical-theorem total cross section;
+- **Neutron total, transmission, self-shielded yield.** `total 1`: the optical-theorem total cross section (with
+  `natural 1` and components: the abundance-weighted sum of the components' totals; format 3: `sigma_total` with a sum
+  of elastic terms on a target with isotopes);
   `transmission n`: e^{−nσ}; `yield n`: (σ_x/σ_t)(1 − e^{−nσ_t}), n in atoms/b, optionally fitted and shared with
   `thicknessgroup` (`SegLine.h:328-350`; `ESegment.h:366-418`). Neutral entrance pair only (`segments.rst:727`).
 - **β-delayed spectra.** A segment whose entrance pair is a β pair (type 20): the energy column is the light
@@ -479,6 +481,17 @@ thick-target yield and need nothing new; entered as an ωγ, they are §4.7.
 eq. (6) neglects multiple scattering and the angular spread of the beam, and the energy dependence of the detection
 (angular distribution, Q-coefficients) across the target; screening (`screening U_e`) multiplies σ before the fold.
 Each needs its tolerance stated in the Phase 5 kernel note.
+
+**Status (Phase 5, branch 4, 2026-11-11).** `quantity yield` on a `target` of `kind layer` is built, with the beam spread
+and straggling of today's kernel: Y = 10⁻²⁴ ∫_{E_out}^{E₀} ⟨σ⟩/ε dE with
+∫ dE/ε = N, reactions per incident particle (per µC with `charge_state`), on the target kernel of eq. (2) without its
+division by N; E_out is found on the kernel's own nodes and quadrature (`include/LayerExit.h`), so a constant σ gives
+10⁻²⁴ σ N to rounding. Note on eq. (2): with a beam spread the kernel averages σ/ε over the Gaussian at each depth
+(not ⟨σ⟩/ε(E)); the two differ by the curvature of 1/ε across the Gaussian. The limits of `energy_grid.md` §5.3 are
+tested against closed forms in `tests/layer_yield` (README: the derivations with their frames; eq. (7) there with λ_r
+c.m. and ε lab: plateau (λ_r²/2) ωγ (m_a + m_A)/(m_A ε)). The stopping is the user's formula per active nucleus; an
+`isotope` line multiplies the yield by its abundance (the isotopic part of the active fraction). The evaluated
+stopping, its scale nuisance and the stoichiometric active fraction come with the stopping module.
 
 ### 4.7 Resonance strength, energy and widths (treated fully)
 

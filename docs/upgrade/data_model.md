@@ -170,7 +170,7 @@ interference 516, phase shift 566, A_y 573–589, screening 25–36), `src/THMMa
 | state | type | owner, lifetime | written |
 |---|---|---|---|
 | what was measured, and what the model must predict | `Measurement` | built once at load, `std::shared_ptr<const Measurement>`, shared by every working copy (never cloned) | never after load |
-| what depends on ν | `MeasurementFrame` (E_c.m., E_x, θ_c.m., Jacobian, y_c.m., δy_c.m. per point) and, in Phase 4 still, the calculation units (`EPoint`s) with their tables and sub-point grids | the working copy (Phase 4), the stage's tables (Phase 6) | in the single-threaded hand-over when ν or θ changes, never during the point pass |
+| what depends on ν | `MeasurementFrame` (E_c.m., E_x, θ_c.m., Jacobian per point; since Phase 5 no datum) and, in Phase 4 still, the calculation units (`EPoint`s) with their tables and sub-point grids | the working copy (Phase 4), the stage's tables (Phase 6) | in the single-threaded hand-over when ν or θ changes, never during the point pass |
 | what an evaluation produces | `Results` (leaf values per calculation slot, model value per measured point, per-nucleus terms, profiled norms, χ² per measurement) | the caller of the evaluation; reused storage is poisoned on entry under `AZURE_POISON_RESULTS=1` | by the evaluation only, each slot by exactly one task |
 
 The rule that follows: no object writes into another object; a calculation task writes only the result slots the plan
@@ -275,8 +275,8 @@ An evaluation in Phase 4:
    `EPoint::Calculate`, `GenMatrixFunc`, `THMMatrixFunc` and the fold, writing into its slots.
 4. Tree pass: for every measurement and point, m_i = prediction.value(i). Each m_i depends only on slots, so the
    order of points does not matter and the pass may run in parallel by measurement.
-5. The objective reads `Results::model`, the frame's y_c.m. and δy_c.m., and the norms (the residual becomes one
-   function used by every path, §1.6).
+5. The objective reads `Results::model`, the frame's Jacobian, the measured y and δy as read, and the norms (the
+   residual is one function used by every path, §1.6; since Phase 5 in the frame of the datum, (f/J − n y)/(n δy)).
 
 Nothing in `GenMatrixFunc`, `AMatrixFunc` or the folds changes except where a value is stored: `point->SetFitCrossSection(x)`
 becomes a write to the unit's slot in the `Results` the task was given. The lazy path used inside an enclosing
@@ -420,7 +420,8 @@ becomes.
 hand-over into a per-ν `MeasurementFrame`; (b) compare in the frame of the data: m_lab = m_c.m./J(ν), weights 1/δy_lab
 fixed. Recommendation: (a) in Phase 4 (bit-identical); (b) proposed for Phase 5, since a χ² weight that moves with a
 nuisance is a model choice nobody made; it moves fits with shifted lab-differential data and is classified there.
-**Decided by the PI, 2026-11-10: (b) is the aim, in Phase 5;** (a) stays until then.
+**Decided by the PI, 2026-11-10: (b) is the aim, in Phase 5;** done in Phase 5 (branch `lab-frame`,
+`energy_grid.md` §4): the frame keeps the Jacobian only, and every residual is (f/J − n y_lab)/(n δy_lab).
 
 **M4. Folds in Phase 4.** (a) Inside the leaf (today's per-point fold), `Transform` as the only node that reads
 sub-point values; (b) explicit `Fold` nodes now. Recommendation (a): the folds are entangled with mapping, probes,

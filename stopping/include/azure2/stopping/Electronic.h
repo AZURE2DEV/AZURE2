@@ -1,6 +1,8 @@
 #ifndef AZURE2_STOPPING_ELECTRONIC_H
 #define AZURE2_STOPPING_ELECTRONIC_H
 
+#include <array>
+
 #include "azure2/stopping/Material.h"
 #include "azure2/stopping/Tables.h"
 
@@ -8,54 +10,78 @@ namespace azure2 {
 namespace stopping {
 
 /*!
- * Electronic stopping of an ion in one element (docs/upgrade/stopping.md section 4).  All values in
- * eV/(1e15 atoms/cm^2).
+ * SRIM-2013's electronic stopping (docs/upgrade/stopping.md section 4), ported from LunaSRIM 1.0.0
+ * (lunasrim/stopping.py; the function each one comes from is named at it).  Inside, SRIM's variable is the energy per
+ * mass unit e = E [keV] / M1 [u] in keV/u, M1 the caller's projectile mass; stopping cross sections are in
+ * eV/(1e15 atoms/cm^2) per atom of the target element.  The public function ElectronicStopping takes the library's
+ * units (MeV, lab).  Arithmetic is std::pow, std::log, std::exp: LunaSRIM's vbmath (Visual Basic's x87 arithmetic) is
+ * not reproduced, so the agreement with LunaSRIM is to rounding (stopping.md section 9).
  *
- * Protons and helium-4: the low-energy fit of the coefficient table (Andersen-Ziegler 1977 / Ziegler 1977 forms as
- * adopted in ICRU Report 49, 1993) up to T1 = fit_max of the row (1 MeV/u), Bethe's formula with shell, Barkas and
- * Bloch corrections from T2 = kBetheFrom_MeV_u (3 MeV/u), and linear interpolation in log S - log T between them.
- * d and t use the proton row at the same velocity, 3He the helium row at the same velocity.  Heavier ions:
- * the proton value at the same velocity times the squared effective charge (Pierce and Blann 1968), with a larger
- * stated uncertainty.
+ *   H (Z1 = 1):  SRIM's 10-parameter fit from 2 keV/u to 1000 keV/u, linear in e to Bethe at 1.2 x 1000 keV/u, Bethe
+ *                above; below 2 keV/u proportional to the velocity.
+ *   He, Li:      the same with their own coefficients, fit to 2000 keV/u, Bethe above 2400 keV/u.
+ *   Z1 >= 4:     helium at the same e times the ion polynomial (of Z1) and the target polynomial (of Z2) in ln e, and
+ *                Z1^2 / 4, for 2 .. 30000 keV/u; velocity-proportional below; above 30 MeV/u scaled with helium's
+ *                Bethe value and SRIM's high-energy effective charge.
+ *   Phase:       a gas target uses the gas mean excitation energy and no second shell term in Bethe, and the
+ *                low-energy phase factor 0.92 (or 1/0.92) applies when the phase differs from the element's natural
+ *                one (not for noble gases), faded out with velocity together with the compound correction.
  */
-constexpr double kBetheFrom_MeV_u = 3.0;          ///< Bethe alone from this energy per nucleon (MeV/u)
-constexpr double kBetheRelUncertainty = 0.02;     ///< assigned to the Bethe region (stopping.md section 7)
-constexpr double kHeavyIonRelUncertainty = 0.20;  ///< effective-charge scaling, v >= v0 Z1^(2/3)
-constexpr double kSlowHeavyIonRelUncertainty = 0.50;  ///< effective-charge scaling below that velocity
+constexpr double kSrimVelocityLimit_keV_u = 2.0;           ///< velocity-proportional below (all ions)
+constexpr double kProtonFitMax_keV_u = 1000.0;             ///< end of the proton fit
+constexpr double kHeliumLithiumFitMax_keV_u = 2000.0;      ///< end of the helium and lithium fits
+constexpr double kBetheJoinFactor = 1.2;                   ///< light ions: Bethe alone above 1.2 x the end of the fit
+constexpr double kHeavyIonScalingMax_keV_u = 30000.0;      ///< heavy ions: helium scaling up to here
+constexpr double kSrimMaxEnergy_keV_u = 1.0e7;             ///< refused above (SRIM's stopping is 0 there)
+constexpr double kSrimPhaseFactor = 0.92;                  ///< lunasrim/stopping.py PHASE_FACTOR
 
-/// The proton fit (form AZ_p) at proton energy \p t_keV: velocity-proportional below 10 keV.
-double ProtonFitStopping(const CoefficientRow &row, double t_keV);
-/// The helium fit (form Z_He) at helium-4 energy \p t_MeV: velocity-proportional below 1 keV.
-double HeliumFitStopping(const CoefficientRow &row, double t_MeV);
-
-/// The terms of the stopping number L = L0 - C/Z2 + z1 L1 + z1^2 L2 (stopping.md section 4.2).
-struct BetheTerms {
-  double l0 = 0.0;      ///< ln(2 m c^2 beta^2 gamma^2 / I) - beta^2
-  double shell = 0.0;   ///< C/Z2, Barkas and Berger (1964), held at eta = 0.13 below
-  double barkas = 0.0;  ///< L1, Ashley, Ritchie and Brandt (1972)
-  double bloch = 0.0;   ///< L2, Bloch (1933)
-};
-/// The terms at \p beta2 = (v/c)^2 for an ion of charge \p z1 on element \p z2 with mean excitation energy I (eV).
-BetheTerms BetheStoppingTerms(int z1, int z2, double mean_excitation_eV, double beta2);
-/// Bethe's stopping cross section K z1^2 Z2 / beta^2 x L, K = 4 pi r_e^2 m_e c^2 (eV/(1e15 atoms/cm^2)).
-double BetheStopping(int z1, int z2, double mean_excitation_eV, double beta2);
-/// Bloch's correction L2 = -y^2 sum_n 1/(n (n^2 + y^2)), y = z1 alpha / beta.
-double BlochCorrection(double y);
-/// Barkas and Berger's shell correction C (not divided by Z2) at eta = beta gamma >= 0.13, I in eV.
-double ShellCorrectionBarkasBerger(double mean_excitation_eV, double eta);
-/// Ashley-Ritchie-Brandt Barkas term L1 = F(b / x^1/2) / (Z2^1/2 x^3/2), x = beta^2 / (alpha^2 Z2).
-double BarkasCorrection(int z2, double beta2);
-
-/// The equilibrium charge fraction q/z1 = 1 - exp(-0.95 v_r), v_r = v / (v0 z1^(2/3)) (Pierce and Blann 1968).
-double EffectiveChargeFraction(int z1, double beta2);
+/// SRIM's 10-parameter fit at \p e_keV_u (lunasrim _fit).
+double SrimFit(const std::array<double, 10> &c, double e_keV_u);
+/// Bethe-Bloch with SRIM's shell, Barkas and Bloch terms for ion charge \p z1 in \p target (lunasrim bethe).
+double SrimBethe(const SrimElement &target, int z1, double e_keV_u, Phase phase);
+/// H, He, Li: the fit \p c up to \p fit_max_keV_u, linear join to Bethe, velocity-proportional below 2 keV/u
+/// (lunasrim _light_ion).
+double SrimLightIon(const SrimElement &target, const std::array<double, 10> &c, int z1, double e_keV_u,
+                    double fit_max_keV_u, Phase phase);
+/// The high-energy effective-charge factor of a heavy ion with parameters \p hi (lunasrim _hi_charge).
+double SrimHighEnergyCharge(const std::array<double, 5> &hi, double e_keV_u);
+/// Ion \p z1 in element \p z2 without the phase factor (lunasrim electronic_stopping_element).
+double SrimElementStopping(const SrimData &data, int z1, int z2, double e_keV_u, Phase phase);
+/// The low-energy phase factor: 1 for noble gases and for an element in its natural phase, 0.92 for a natural gas
+/// as a solid, 1/0.92 for a natural solid as a gas (lunasrim phase_factor).
+double SrimPhaseFactor(int z2, Phase phase);
+/// \p factor applied fully at low velocity and faded out at high velocity (around 1.2 MeV/u for H, 400 keV/u for
+/// heavier ions): 1 + (factor - 1) / (1 + exp(1.48 (sqrt(e/25) - c))), c = 7 for H, 4 otherwise
+/// (lunasrim fade_correction).
+double SrimFadeOut(double factor, double e_keV_u, int z1);
 
 /// An electronic stopping value and its relative uncertainty.
 struct StoppingWithUncertainty {
   double value = 0.0;            ///< eV/(1e15 atoms/cm^2)
   double rel_uncertainty = 0.0;
 };
-/// The electronic stopping of \p projectile in element \p z2 at lab energy \p energy_MeV.
-StoppingWithUncertainty ElectronicStopping(const Projectile &projectile, int z2, double energy_MeV);
+
+/*!
+ * The electronic stopping of \p projectile in element \p z2 at lab energy \p energy_MeV in a target of phase \p phase
+ * whose compound correction is \p compound_correction (1 for Bragg's rule): SrimElementStopping times
+ * SrimFadeOut(SrimPhaseFactor x compound_correction) (lunasrim electronic_stopping).  The uncertainty is SRIM's
+ * published accuracy for the projectile (ElectronicRelUncertainty).  Throws std::domain_error for E <= 0 or above
+ * kSrimMaxEnergy_keV_u, std::out_of_range for Z1 or Z2 outside 1..92, std::invalid_argument for a compound
+ * correction <= 0 (LunaSRIM reads 0 as 1, the convention of SRIM's SR.IN; here it must be said).
+ */
+StoppingWithUncertainty ElectronicStopping(const SrimData &data, const Projectile &projectile, int z2, double energy_MeV,
+                                           Phase phase, double compound_correction);
+/// The same with SrimTables().
+StoppingWithUncertainty ElectronicStopping(const Projectile &projectile, int z2, double energy_MeV, Phase phase,
+                                           double compound_correction);
+
+/*!
+ * SRIM's published accuracy of its electronic stopping: the average deviation of the experimental stopping powers
+ * from SRIM-2010's (the stopping of SRIM-2013), in the table "Accuracy of SRIM Stopping Power Calculations" of
+ * www.srim.org/SRIM/SRIM2011.htm (read 2026-11-11): H ions 4.0 % (about 8300 data points), He ions 3.9 % (6500),
+ * Li ions 4.8 % (1400), Be-U ions 5.8 % (9000).  Used as the relative 1-sigma uncertainty.
+ */
+double ElectronicRelUncertainty(int z1);
 
 }  // namespace stopping
 }  // namespace azure2
