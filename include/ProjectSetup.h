@@ -18,7 +18,8 @@ class Config;
 /// false when the project has no <levels> section
 bool ProjectLevelSection(const Config &, azure2::io::LevelSection &out);
 std::set<int> ProjectExitPairKeys(const Config &);
-/// The (entrance, exit) pair keys of the active data sets (`data`) or extrapolations, in order; false when the project
+/// The (entrance, exit) pair keys of every term (the leading one and the components of a SUM or RATIO) of the active
+/// data sets (`data`) or extrapolations, in order; false when the project
 /// has none of those sections (an old project) or its specs could not be read.
 bool ProjectReactionPairs(const Config &, bool data, std::vector<std::pair<int, int>> &pairs);
 /// An active data set with a THM observable.

@@ -100,6 +100,9 @@ struct KernelParameters {
   /// The values of a table kernel's own parameters (Kernel::parameters, in that order, in their engine units).
   const double *values = nullptr;
   int numValues = 0;
+  /// The values the sub-point grids are laid out for (the support): a fitted parameter's layout value
+  /// (docs/upgrade/apparatus_parameters.md), the value itself for the others.  Null: `values`.
+  const double *layoutValues = nullptr;
 };
 
 /// The c.m. energy interval a point's nodes must span for a kernel (KernelSupport): what the set-up reads.

@@ -8,6 +8,7 @@
 #include "Segment.h"
 #include "TargetEffect.h"
 #include "NodeTableCache.h"
+#include "NodeTable.h"
 #include "ThmExperiment.h"
 #include "ThmGroup.h"
 #include "EvaluationCount.h"
@@ -122,11 +123,14 @@ class WorkingCopy {
   void FillDensitiesFromParams(const vector_r &, const Config &);
   /// Sum of the density priors ((N - N0)/sigma)^2.
   double DensityPenalty() const;
-  /// Stopping scales from the parameter vector (StoppingScale.cpp): the working copy's s of every effect of a scale
-  /// parameter, then the stopping of the sub-points and the thickness of the points of the effects whose s changed.
-  void FillStoppingScalesFromParams(const vector_r &, const Config &);
-  /// The sum of the stopping-scale priors ((s - s0)/sigma)^2 (TargetEffect::StoppingScalePenalty).
-  double StoppingScalePenalty() const;
+  /// The apparatus parameters from the parameter vector (ApparatusParameters.cpp): each row writes the values of the
+  /// effects of its parameters, then what follows them (the stopping scale: the sub-points' stopping, the thickness).
+  void FillApparatusFromParams(const vector_r &, const Config &);
+  /// The sum of the priors ((x - x0)/sigma)^2 of the apparatus parameters of row `row` (-1: of every row).
+  double ApparatusPenalty(int row = -1) const;
+  /// What follows a change of the stopping scale of the effects marked in `changed` (0-based): the stopping of their
+  /// sub-points and the thickness of their points (StoppingScale.cpp, the row's follow-up).
+  void FollowStoppingScales(const std::vector<char> &changed, const Config &);
   /// Set the fitted temperatures from a parameter vector (clamped to [T0/4, layout temperature], with a warning
   /// printed once), called by FillEnergyShiftsFromParams so every evaluation sees the vector's values.
   void FillDopplerFromParams(const vector_r &, const Config *configure);
@@ -208,15 +212,15 @@ class WorkingCopy {
   /// The expression tree of every segment (src/Predictions.cpp), once its components, pairs and sample are resolved;
   /// false, with a message, if one cannot be built.
   bool BuildPredictions(CNuc *, const Config &);
-  /// Map points at equal energies onto one another, so a shared energy is calculated once.
-  /// The compound nucleus tells which segments have a particle exit; null is conservative.
-  /// Then the calculation plan is built from the mapping and checked (CalculationPlan.h).
-  void MapData(CNuc *theCNuc = nullptr);
-  /// The mapping of the leaves onto their segment's points (MapData calls it last), appended to `mapping` as (host,
-  /// mapped).
-  void MapLeaves(CNuc *theCNuc, std::vector<std::pair<azure2::PointRef, azure2::PointRef>> &mapping);
-  /// The calculation plan: which task calculates which point (CalculationPlan.h).  The working copy's: the mapping
-  /// is rebuilt when a shift or a sub-point grid changes (FillEnergyShiftsFromParams).
+  /// The calculation plan of the data set, one task per point, built and checked (CalculationPlan.h).
+  void BuildPlan();
+  /// The node table of the stage (NodeTable.h), built at the end of Initialize and shared by the copies; null before.
+  const azure2::NodeTable *Nodes() const { return nodeTable_.get(); }
+  /// AZURE_NODE_CHECK=1 (the point pass, before its tasks): the node table and slots against the units of the plan
+  /// tasks `work`, bit for bit; prints the counts to stderr and returns the number that differ (src/NodeTable.cpp).
+  long CheckNodeTable(CNuc *cnuc, const std::vector<int> &work);
+  /// The calculation plan: which task calculates which point (CalculationPlan.h).  Positions only: a shift or a
+  /// re-placed sub-point grid leaves it as it is (the energy tasks it gives are rebuilt from the units).
   const azure2::CalculationPlan &Plan() const { return plan_; }
   /// A point of the plan, by its unit.
   Unit *PlanPoint(azure2::PointRef r) { return &UnitAt(r); }
@@ -409,15 +413,17 @@ class WorkingCopy {
   std::vector<double> thmCoherentValues_;       // ThmCoherentValue: one per coherent-background parameter
   std::vector<Unit> units_;  // Unit
   std::vector<std::vector<Unit>> pendingSubPoints_;  // AddSubPoint: per point's unit, until the commit
-  azure2::CalculationPlan plan_;  // built by MapData; positions only, so a copy copies it as it is
+  azure2::CalculationPlan plan_;  // built by BuildPlan; positions only, so a copy copies it as it is
   std::map<std::string, std::shared_ptr<DataCovariance::File>> covFiles_;  // only while filling
   bool covarianceError_ = false;              // a covariance file could not be read (CovarianceFileFor)
   bool kinematicsError_ = false;              // a lab angle beyond the kinematic maximum (audit 2026-10-25, item 31)
   EvaluationCount iterations_;  // objective evaluations (EvaluationCount.h)
   /// Group the densityfit / densitygroup lines into parameters (SetUpTargetEffects); -1 on an error.
   int SetUpDensityParams(const Config &);
-  /// Groups the effects into stopping-scale parameters by TargetEffect::GetStoppingScaleKey (StoppingScale.cpp).
-  void SetUpStoppingScaleParams(const Config &);
+  /// Groups the effects' declarations into apparatus parameters by their key (ApparatusParameters.cpp).
+  void SetUpApparatusParams(const Config &);
+  /// The set-up's call (src/TargetSetup.cpp, the node-layout branch's file) under its former name.
+  void SetUpStoppingScaleParams(const Config &configure) { SetUpApparatusParams(configure); }
   /// The set-up refusals of a library stopping (evaluation, table): its data, and its range at every sub-point
   /// (StoppingChecks.h); the source of each target's stopping in the log, once per target.  false after a refusal.
   bool CheckTargetStoppings(const Config &);
@@ -482,6 +488,7 @@ class WorkingCopy {
   /// The stage's channel table (docs/upgrade/channel_table.md): built by CalcEDependentValues and
   /// InitializeLeaves before their point loops, read-only afterwards, replaced, never written.
   std::shared_ptr<const ChannelTable> channelTable_;
+  std::shared_ptr<const azure2::NodeTable> nodeTable_;  // Nodes(): the stage's, immutable, shared by the copies
   std::shared_ptr<const ChannelTable> BuildChannelTable(CNuc *, const Config &, const std::vector<Unit *> &points);
 };
 

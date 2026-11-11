@@ -16,10 +16,11 @@ DataCovarianceGroups.cpp
 TargetSetup.cpp
 TargetStopping.cpp
 StoppingScale.cpp
+ApparatusParameters.cpp
 ExternalCaptureSetup.cpp
 DataParameters.cpp
 HandOver.cpp
-WorkingCopyUnits.cpp DataSet.cpp
+WorkingCopyUnits.cpp NodeTable.cpp DataSet.cpp
 PointPass.cpp
 PointFold.cpp
 TargetLayer.cpp

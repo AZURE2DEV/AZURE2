@@ -190,7 +190,7 @@ void Unit::ChannelKeys(WorkingCopy *data, CNuc *theCNuc, std::vector<ChannelTabl
 }
 
 void Unit::CalcEDependentValues(WorkingCopy *data, CNuc *theCNuc, const Config &configure, bool includeSubPoints,
-                                  WorkingCopy *shareWithMappedOf, const ChannelRowSource *rows) {
+                                  const ChannelRowSource *rows) {
   AZUREProfile::Timer profileTimer(AZUREProfile::kEDependent);
   PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
   PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
@@ -404,34 +404,7 @@ void Unit::CalcEDependentValues(WorkingCopy *data, CNuc *theCNuc, const Config &
   }
   if (includeSubPoints) {
     for (int i = 1; i <= this->NumSubPoints(); i++) {
-      this->GetSubPoint(*data, i)->CalcEDependentValues(data, theCNuc, configure, true, nullptr, rows);
-    }
-  }
-  // The points mapped onto this one share its tables -- at setup and on a grid
-  // re-placement, where nothing else writes them meanwhile.  Not on an energy
-  // shift (RecalcEDependentValues, shareWithMapped false): there every mapped
-  // point is re-energised by its own segment, a point mapped from another
-  // segment possibly on another thread at the same moment
-  // (WorkingCopy::FillEnergyShiftsFromParams), and two threads assigning the same
-  // shared_ptr freed the tables under the other's copy-on-write
-  // (heap-use-after-free, AddressSanitizer 2026-11-06; macOS CI aborts).
-  const azure2::MappedPoints mappedPts = this->PlanMapped(shareWithMappedOf);
-  for (int i = 1; i <= mappedPts.size(); i++) {
-    Unit *mappedPoint = mappedPts[i - 1];
-    if (mappedPoint->OwnsEDependentValues()) continue;
-    mappedPoint->geofactor_ = geofactor_;
-    mappedPoint->sfactorconv_ = sfactorconv_;
-    mappedPoint->screen_k_ = screen_k_;
-    mappedPoint->edep_ = edep_;  // shared; either point copies before it writes
-    mappedPoint->thm_ps_ = thm_ps_;
-    if (!includeSubPoints) continue;
-    for (int ii = 1; ii <= this->NumSubPoints(); ii++) {
-      Unit *subMappedPoint = mappedPoint->GetSubPoint(*data, ii);
-      subMappedPoint->geofactor_ = this->GetSubPoint(*data, ii)->geofactor_;
-      subMappedPoint->sfactorconv_ = this->GetSubPoint(*data, ii)->sfactorconv_;
-      subMappedPoint->screen_k_ = this->GetSubPoint(*data, ii)->screen_k_;
-      subMappedPoint->edep_ = this->GetSubPoint(*data, ii)->edep_;
-      subMappedPoint->thm_ps_ = this->GetSubPoint(*data, ii)->thm_ps_;
+      this->GetSubPoint(*data, i)->CalcEDependentValues(data, theCNuc, configure, true, rows);
     }
   }
   eDependentEnergy_ = this->GetCMEnergy();
@@ -492,10 +465,8 @@ void Unit::RecalcEDependentValues(WorkingCopy *data, CNuc *theCNuc, const Config
   if (includeSubPoints)
     for (int i = 1; i <= this->NumSubPoints(); i++) this->GetSubPoint(*data, i)->ClearEDependentRows();
 
-  // Recalculate with current energy.  The points mapped onto this one are not
-  // touched: each is re-energised itself, from its host's values
-  // (CopyEDependentValuesFrom) or anew (Segment::UpdatePointEnergyWithShift).
-  this->CalcEDependentValues(data, theCNuc, configure, includeSubPoints, nullptr, rows);
+  // Recalculate with current energy.
+  this->CalcEDependentValues(data, theCNuc, configure, includeSubPoints, rows);
 
   // Also recalculate Coulomb amplitude with current energy
   this->CalcCoulombAmplitude(data, theCNuc, includeSubPoints);
@@ -503,7 +474,7 @@ void Unit::RecalcEDependentValues(WorkingCopy *data, CNuc *theCNuc, const Config
 
 /*!
  * This point's energy-dependent tables, writable.  The tables are shared
- * between copies of the point (WorkingCopy clones, the points mapped onto it); if
+ * between copies of the point (WorkingCopy clones, sub-points that kept a node); if
  * another point still holds them, this point gets its own copy first, so a
  * write never changes what another point -- another thread's clone -- reads.
  * SharedTable::SoleOwner orders the other holders' reads before the write.
@@ -569,29 +540,6 @@ bool Unit::AdoptEDependentValues(const EDependentShare &share) {
   legendreP_ = share.legendre;
   thm_ps_ = share.thmPs;
   eDependentEnergy_ = this->GetCMEnergy();
-  eDependentValid_ = true;
-  return true;
-}
-
-/*!
- * Copies the energy-dependent values (geometrical factor, S-factor conversion,
- * L_o elements, penetrabilities, Coulomb and hard-sphere phases) from another
- * point at exactly the same c.m. energy and with the same entrance pair --
- * a host of point mapping (WorkingCopy::MapData) or its sub-point.  Those values do
- * not depend on the angle; the Coulomb amplitude does, and is not copied.
- * Returns false, and copies nothing, if the energies differ.
- */
-bool Unit::CopyEDependentValuesFrom(const Unit &other) {
-  if (other.GetCMEnergy() != this->GetCMEnergy() || other.GetEntranceKey() != this->GetEntranceKey() ||
-      other.GetExitKey() != this->GetExitKey() || !other.eDependentValid_ ||
-      other.eDependentEnergy_ != other.GetCMEnergy())
-    return false;
-  geofactor_ = other.geofactor_;
-  sfactorconv_ = other.sfactorconv_;
-  screen_k_ = other.screen_k_;
-  edep_ = other.edep_;  // shared; either point copies before it writes
-  thm_ps_ = other.thm_ps_;  // immutable, shared like the tables
-  eDependentEnergy_ = other.eDependentEnergy_;
   eDependentValid_ = true;
   return true;
 }

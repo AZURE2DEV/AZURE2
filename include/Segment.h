@@ -374,13 +374,9 @@ class Segment {
   /// Re-apply the current energy shift of the segment's state in `data` to every point of every term, undoing the
   /// previous one.
   void UpdatePointEnergiesWithShift(WorkingCopy &data, CNuc *theCNuc, const Config *configure) const;
-  /// The same for point i (0-based) of term t and its sub-points.
+  /// The same for point i (0-based) of term t and its sub-points: the unit of parallel re-energising (it writes that
+  /// point and its sub-points only).
   void UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, CNuc *theCNuc, const Config *configure) const;
-  /// Point i (0-based) of term t and, after it, every point of the term mapped onto it; nothing if point i is itself
-  /// mapped onto an earlier point of the term (its host does it).  The unit for parallel re-energising.
-  void UpdatePointGroupEnergyWithShift(WorkingCopy &data, int t, int i, CNuc *theCNuc, const Config *configure) const;
-  /// The earlier point of term t that its point i (0-based) is mapped onto, or NULL.
-  Unit *ShiftHost(WorkingCopy &data, int t, int i) const;
   /// Change the exit pair key.
   void SetExitKey(WorkingCopy &data, int);
   /// Change the entrance pair key, for this segment and every point in it.

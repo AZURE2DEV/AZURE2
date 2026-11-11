@@ -8,6 +8,8 @@
 #      abundance and a beam spread; thin layer against N sigma(E0 - Delta/2) and against the thin-target sigma; thick
 #      layer against the infinite target; the narrow resonance against the arctan form; per uC for charge states 1 and
 #      2), each to its stated tolerance;
+#   3b. the same with every sub-point grid refined twofold (AZURE_REFINE_QUADRATURE=2): the unfolded data sets do not
+#      move, the folded ones move by less than 1/p^2, the thick layer comes closer to its independent integral;
 #   4. the fit (models/fit.azr: a scan of the resonance with 2 % noise, N and Gamma_p free) recovers N and Gamma_p
 #      within two standard errors, with chi^2/nu near 1, and gives the same output at 1 and 2 threads;
 #   5. the refusals that remain: a layer without an areal density, a yield per uC without charge_state, fold windows on
@@ -79,6 +81,56 @@ else
   bad "a limit outside its tolerance:"
 fi
 sed 's/^/        /' "$WORK/limits.txt"
+
+# ---- 3b. the refined quadrature (AZURE_REFINE_QUADRATURE=2: every sub-point grid twice as fine, the diagnostic of the
+#      quadrature gate, docs/upgrade/energy_grid.md section 7): the data sets without a target (thin_bare, deriv_bare,
+#      res_bare) do not move; every folded yield moves by less than the grid's own error estimate, 1/p^2 of the largest
+#      value of its data set (p = 50 points per resonance width: the linear interpolation over a width, section 2.4;
+#      measured 1.2e-4, thick_inf), and at least one moves;
+#      the thick layer comes closer to the independent integral (models/thick_reference.json).
+setup fine "$HERE/models/layer_yield.azr"
+(export AZURE_REFINE_QUADRATURE=2; run fine 1 2)
+res="$(python3 -I - "$WORK/calc/output" "$WORK/fine/output" "$HERE/models/thick_reference.json" <<'PY'
+import json, sys
+def blocks(path):
+    out, cur = [], []
+    for line in open(path):
+        if line.strip():
+            cur.append([float(x) for x in line.split()])
+        elif cur:
+            out.append(cur); cur = []
+    if cur:
+        out.append(cur)
+    return out
+names = ["thin", "thin_sigma", "thin_bare", "thick", "thick_inf", "res", "res_q1", "res_q2", "deriv", "deriv_bare", "res_bare"]
+unfolded = {"thin_bare", "deriv_bare", "res_bare"}
+a = dict(zip(names, blocks(sys.argv[1] + "/AZUREOut_aa=1_R=2.out")))
+b = dict(zip(names, blocks(sys.argv[2] + "/AZUREOut_aa=1_R=2.out")))
+na, nb = blocks(sys.argv[1] + "/AZUREOut_aa=3_R=3.out"), blocks(sys.argv[2] + "/AZUREOut_aa=3_R=3.out")
+for k, (x, y) in enumerate(zip(na, nb)):
+    a["n%d" % k], b["n%d" % k] = x, y
+bound = 1.0 / 50 ** 2
+moved_unfolded, worst, moved = [], 0.0, 0
+for name in a:
+    scale = max(abs(r[3]) for r in a[name])  # a yield relative to the largest of its data set (a plateau, a peak)
+    for ra, rb in zip(a[name], b[name]):
+        d = abs(rb[3] - ra[3]) / scale
+        if name in unfolded:
+            if ra[3] != rb[3]:
+                moved_unfolded.append(name)
+        else:
+            worst = max(worst, d)
+            moved += d > 0
+ref = json.load(open(sys.argv[3]))
+closer = all(abs(yb / r - 1) < abs(ya / r - 1)
+             for ya, yb, r in zip([x[3] for x in a["thick"]], [x[3] for x in b["thick"]], ref["Y_reference"]))
+dev = max(abs(x[3] / r - 1) for x, r in zip(b["thick"], ref["Y_reference"]))
+good = not moved_unfolded and moved > 0 and worst <= bound and closer
+print(int(good), f"unfolded moved: {sorted(set(moved_unfolded)) or 'none'}; {moved} folded values moved, the largest by "
+      f"{worst:.2e} of its data set's largest value (bound {bound:.0e}); thick layer {dev:.2e} from the independent integral ({'closer' if closer else 'NOT closer'})")
+PY
+)"
+if [ "${res%% *}" = 1 ]; then ok "refined quadrature: ${res#* }"; else bad "refined quadrature: ${res#* }"; fi
 
 # ---- 4. the fit
 setup fit "$HERE/models/fit.azr"

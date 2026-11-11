@@ -13,7 +13,7 @@
 #       (the c.m. SUM is not the sum of the lab outputs);
 #   (b) mode 1: a SUM data segment with a fixed 0.05 MeV energy shift, whose data are the fitted lab values of the
 #       two plain segments under the same shift, has chi2 ~ 0 (the frame factors follow the shift);
-#   (c) the analytic gradient (mapped-components path and the per-term path) = finite differences on the SUM
+#   (c) the analytic gradient (adjoint and Jacobian paths) = finite differences on the SUM
 #       segment with free widths (AZURE_GRAD_CHECK).
 #
 #   ./tests/sum_lab_frame/check.sh path/to/AZURE2
@@ -141,8 +141,7 @@ gradcheck() {  # NAME ENV...
   fi
 }
 if [ -s "$WORK/sum.dat" ]; then
-  gradcheck mapped
-  gradcheck perterm AZURE_NO_COMPONENT_MAPPING=1
+  gradcheck composite
 else
   bad "(c) no data for the gradient check"
 fi

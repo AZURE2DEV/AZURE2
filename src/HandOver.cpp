@@ -199,7 +199,7 @@ void WorkingCopy::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNu
   // Screening first: sub-points rebuilt below (ReplaceSubPointGrids) inherit their parent's U_e.
   this->FillScreeningFromParams(p);
   // Fitted target densities: the thickness of each point of their lines (the grids stay put).
-  if (configure) this->FillStoppingScalesFromParams(p, *configure);
+  if (configure) this->FillApparatusFromParams(p, *configure);
   if (configure) this->FillDensitiesFromParams(p, *configure);
   // Fitted Doppler temperatures: only the kernel values move (the grids and pieces stay put).
   this->FillDopplerFromParams(p, configure);
@@ -207,7 +207,6 @@ void WorkingCopy::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNu
   this->FillThicknessFromParams(p);
   int i = Data().GetEnergyShiftParamOffset();
   int j = Data().GetEnergyShiftSqrtParamOffset();
-  bool anyEnergyShifted = false;
 
   // Re-energising a point (Segment::UpdatePointEnergyWithShift: Coulomb
   // functions of the point and its sub-points) touches only that point, so
@@ -267,7 +266,6 @@ void WorkingCopy::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNu
       for (int q = 0; q < (int)fnValues.size(); q++) segment->SetShiftFnValue(state, q, fnValues[q]);
       if (segment->HasShiftFn()) state.lastShiftFnValues = fnValues;
       queueUpdate(&*segment);
-      anyEnergyShifted = true;
 
     }
 
@@ -279,7 +277,7 @@ void WorkingCopy::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNu
   // shifted segments are moved and energised by the step below.
   if (theCNuc && configure) {
     std::vector<TermRef> reshift;
-    if (this->ReplaceSubPointGrids(theCNuc, *configure, shiftActiveSegments, reshift) > 0) anyEnergyShifted = true;
+    this->ReplaceSubPointGrids(theCNuc, *configure, shiftActiveSegments, reshift);
     for (const TermRef &t : reshift) queueTerm(t);
   }
 
@@ -288,19 +286,12 @@ void WorkingCopy::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNu
       for (const TermRef &t : toUpdate) t.segment->BeginShiftRefill(*this, t.term, theCNuc, *configure);
     // One work item per point (with its sub-points), largest first, so a
     // segment with thousands of sub-points per point does not serialize.
-    // A point mapped onto another (WorkingCopy::MapData) copies its values from
-    // that host, so it is re-energised with it, on the same thread, after
-    // it (Segment::UpdatePointGroupEnergyWithShift); it gets no item of its
-    // own.  A mapped point costs little (a copy, its Coulomb amplitudes).
     struct Item { double cost; TermRef seg; int i; };
     std::vector<Item> work;
     for (const TermRef &s : toUpdate)
       for (int i = 0; i < s.NumPoints(); i++) {
-        if (s.segment->ShiftHost(*this, s.term, i)) continue;
         Unit *pt = s.GetPoint(*this, i + 1);
-        const double nsp = pt ? pt->NumSubPoints() : 0;
-        const double nMapped = pt ? pt->PlanMapped(this).size() : 0;
-        work.push_back({(1.0 + nsp) * (1.0 + 0.1 * nMapped), s, i});
+        work.push_back({1.0 + (pt ? pt->NumSubPoints() : 0), s, i});
       }
     std::stable_sort(work.begin(), work.end(), [](const Item &x, const Item &y) { return x.cost > y.cost; });
 #ifdef _OPENMP
@@ -313,18 +304,13 @@ void WorkingCopy::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNu
     // indexed by thread number would then be shared between the outer threads.
     if (serial) {
       for (size_t q = 0; q < work.size(); q++)
-        work[q].seg.segment->UpdatePointGroupEnergyWithShift(*this, work[q].seg.term, work[q].i, theCNuc, configure);
+        work[q].seg.segment->UpdatePointEnergyWithShift(*this, work[q].seg.term, work[q].i, theCNuc, configure);
     } else {
 #pragma omp parallel for schedule(dynamic, 1)
       for (int q = 0; q < (int)work.size(); q++)
-        work[q].seg.segment->UpdatePointGroupEnergyWithShift(*this, work[q].seg.term, work[q].i, theCNuc, configure);
+        work[q].seg.segment->UpdatePointEnergyWithShift(*this, work[q].seg.term, work[q].i, theCNuc, configure);
     }
     if (theCNuc && configure)
       for (const TermRef &t : toUpdate) t.segment->CommitShiftTable(*this, t.term, theCNuc, *configure);
-  }
-
-  // The energy-based point mapping (MapData) follows the shifted energies.
-  if (anyEnergyShifted) {
-    this->MapData(theCNuc);
   }
 }

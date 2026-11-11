@@ -54,7 +54,7 @@ the compound nucleus (1e-11 relative on a 9-exit case) and cannot leave a channe
 natural-target SUM every elastic component becomes its nucleus's total. Refused for charged or identical pairs, other
 exits, differential data, `--use-rmc`. Engines that predate the keyword ignore it and compute the elastic cross
 section alone: check the build before trusting a `total 1` file. All terms of a SUM, RATIO or total-capture segment
-share one level-matrix solution per point; `AZURE_NO_COMPONENT_MAPPING=1` restores the per-term route (same numbers).
+share one level-matrix solution per energy.
 
 ## 3. Several compound nuclei: natural targets and samples
 

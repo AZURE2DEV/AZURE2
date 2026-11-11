@@ -578,20 +578,18 @@ int WorkingCopy::LeafECAmplitudes(CNuc *theCNuc, const Config &configure, bool u
                 for (int i = 1; i <= numPoints; i++) {
                   if (configure.stopFlag || localStop) continue;
                   Unit *point = Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
-                  if (!(point->IsMapped()) || point->OwnsEDependentValues()) {
-                    try {
-                      point->CalculateECAmplitudes(this, theCNuc, configure, channelTable_.get());
-                    } catch (GSLException e) {
+                  try {
+                    point->CalculateECAmplitudes(this, theCNuc, configure, channelTable_.get());
+                  } catch (GSLException e) {
 #pragma omp critical(ec_progress)
-                      {
-                        configure.outStream << e.what() << std::endl;
-                        localStop = true;
-                      }
-                    } catch (...) {
+                    {
+                      configure.outStream << e.what() << std::endl;
+                      localStop = true;
+                    }
+                  } catch (...) {
 #pragma omp critical(ec_progress)
-                      {
-                        configure.outStream << "Warning: EC amplitude calculation failed for component segment point" << std::endl;
-                      }
+                    {
+                      configure.outStream << "Warning: EC amplitude calculation failed for component segment point" << std::endl;
                     }
                   }
                   ++pointIndex;
@@ -613,24 +611,22 @@ int WorkingCopy::LeafECAmplitudes(CNuc *theCNuc, const Config &configure, bool u
                   *theCNuc, aa, ir, Draft().segments_[leaf.first].TermKey(leaf.second));
               for (UnitIterator point = Draft().segments_[leaf.first].TermPoints(*this, leaf.second).begin();
                    point < Draft().segments_[leaf.first].TermPoints(*this, leaf.second).end(); point++) {
-                if (!(point->IsMapped()) || point->OwnsEDependentValues()) {
-                  for (int k = 1; k <= exit.num_groups; k++) {
-                    for (int ecm = 1; ecm <= P.Group(exit, k).num_external; ecm++) {
-                      if (!usePrevious) {
-                        if (out.is_open()) out << point->GetECAmplitude(k, ecm) << std::endl;
-                        for (UnitIterator subPoint = point->GetSubPoints(*this).begin();
-                             subPoint < point->GetSubPoints(*this).end(); subPoint++)
-                          if (out.is_open()) out << subPoint->GetECAmplitude(k, ecm) << std::endl;
-                      } else {
-                        complex ecAmplitude(0.0, 0.0);
+                for (int k = 1; k <= exit.num_groups; k++) {
+                  for (int ecm = 1; ecm <= P.Group(exit, k).num_external; ecm++) {
+                    if (!usePrevious) {
+                      if (out.is_open()) out << point->GetECAmplitude(k, ecm) << std::endl;
+                      for (UnitIterator subPoint = point->GetSubPoints(*this).begin();
+                           subPoint < point->GetSubPoints(*this).end(); subPoint++)
+                        if (out.is_open()) out << subPoint->GetECAmplitude(k, ecm) << std::endl;
+                    } else {
+                      complex ecAmplitude(0.0, 0.0);
+                      in >> ecAmplitude;
+                      point->AddECAmplitude(k, ecm, ecAmplitude);
+                      for (UnitIterator subPoint = point->GetSubPoints(*this).begin();
+                           subPoint < point->GetSubPoints(*this).end(); subPoint++) {
+                        ecAmplitude = complex(0.0, 0.0);
                         in >> ecAmplitude;
-                        point->AddECAmplitude(k, ecm, ecAmplitude);
-                        for (UnitIterator subPoint = point->GetSubPoints(*this).begin();
-                             subPoint < point->GetSubPoints(*this).end(); subPoint++) {
-                          ecAmplitude = complex(0.0, 0.0);
-                          in >> ecAmplitude;
-                          subPoint->AddECAmplitude(k, ecm, ecAmplitude);
-                        }
+                        subPoint->AddECAmplitude(k, ecm, ecAmplitude);
                       }
                     }
                   }

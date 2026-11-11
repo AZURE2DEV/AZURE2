@@ -618,6 +618,34 @@ the flight path, the burst and channel widths and the centring choice.
 In a format-3 project the UDR is a field of a ``detector`` record, added and
 edited from a script with :class:`pyazr.Project` (``add_detector``, ``set``).
 
+Rectangular energy resolution
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+A detector record of a format-3 project may give its energy resolution as a window of full width :math:`w` (lab):
+
+.. code-block:: text
+
+   detector D
+       energy_resolution rectangular width 20 keV fixed
+
+The point's value is then the average of the cross section over :math:`[E_0 - fw/2, E_0 + fw/2]` (c.m.; :math:`f` the
+pair's c.m./lab energy factor).  The width is written as every fitted number of a record is (the areal density, the
+Doppler temperature, the stopping scale): ``fixed``, or ``fit`` with an optional Gaussian prior centred on the value
+and an optional ``grid_max``, the largest width the sub-point grid must span (default: :math:`w_0 + 3\sigma`, at
+least :math:`1.1\,w_0`, with a prior; :math:`1.5\,w_0` without):
+
+.. code-block:: text
+
+   detector D
+       energy_resolution rectangular width 14 keV fit prior 14 2
+
+A fitted width is one parameter ``D.energy_resolution.width`` (MeV) for every data set that names ``D``, bounded by
+:math:`w_0/10` and the grid's width; its prior adds ``Total-Kernel-Parameter-Chi-Squared`` to ``chiSquared.out``.  Its
+derivative is taken by central differences of the whole :math:`\chi^2`.  The window cannot yet be combined with a
+target, a beam spread, a beam profile or a UDR on one data set (refused).  ``energy_resolution triangular width <w>
+<unit> fixed|fit ...`` is a triangular window of base width :math:`w` (the weight :math:`1 - |E - E_0|/(fw/2)`, full
+width at half maximum :math:`w/2`), written and fitted the same way.
+
 Free-Gas Doppler Broadening
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

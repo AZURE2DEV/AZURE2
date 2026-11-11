@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Point mapping across segments and the energy-grouped analytic gradient, on a
+# Points at one energy across segments, angles and observables, and the energy-grouped analytic gradient, on a
 # synthetic multi-angle project (angle_mapping.azr): two compound nuclei (p+12C,
 # p+13C, the model of tests/natural_target), thirteen data segments on one energy
 # grid, most of them one angle each -- cross sections at nine angles, one
@@ -9,13 +9,13 @@
 # group with a free shift, a free sqrt(E) shift, a free shift function and a
 # fixed shift of its own.
 #
-#   (a) every output file of "calculate with data" is byte-identical with
-#       mapping across segments (the default), with AZURE_NO_CROSS_SEGMENT_MAPPING=1
-#       (within each segment only) and with AZURE_NO_POINT_MAPPING=1;
-#   (b) the data check shows the mapping: points of one-angle segments are
-#       mapped onto other segments; the two shift-group members only onto each
-#       other; the segments with their own free sqrt shift, free shift function
-#       or different fixed shift onto none;
+#   (a) the points of all segments at one compound energy share one level-matrix solve (the energy tasks,
+#       docs/upgrade/energy_grid.md section 8), and that gives every unit, bit for bit, what its own solve gives
+#       (AZURE_PLAN_CHECK=1: 0 units differ), with every output file of "calculate with data" byte-identical to the
+#       run without the check;
+#   (b) the sharing is real: fewer energy tasks than units (the one-angle segments, the A_y segments and the
+#       natural-target segments sit at the energies of others).  (Until 2026-11-11 a point mapping made one point
+#       calculate the others; it is deleted.)
 #   (c) the analytic gradient (adjoint and residual-Jacobian paths) agrees with
 #       central finite differences of chi^2 for every free parameter (levels,
 #       norms, shifts, abundances) -- Brune (default), Lane-Thomas
@@ -60,46 +60,30 @@ run() {
    printf "$mode\n\n\n7\n" | run_limited 900 "$AZURE2_BIN" $flags --no-gui --no-readline t.azr > run.log 2>&1)
 }
 
-# ---- (a) model outputs with and without mapping --------------------------------------------------
-run map 1 ""
-run within 1 "" AZURE_NO_CROSS_SEGMENT_MAPPING=1
-run nomap 1 "" AZURE_NO_POINT_MAPPING=1
-n="$(ls "$WORK/map/output" | wc -l | tr -d ' ')"
-if [ "$n" -lt 3 ] || [ ! -s "$WORK/map/output/chiSquared.out" ]; then
-  bad "calculation wrote no output ($n files)"; tail -5 "$WORK/map/run.log"
+# ---- (a), (b) the shared solves against each unit's own -------------------------------------------
+run plain 1 ""
+run planchk 1 "" AZURE_PLAN_CHECK=1
+n="$(ls "$WORK/plain/output" | wc -l | tr -d ' ')"
+if [ "$n" -lt 3 ] || [ ! -s "$WORK/plain/output/chiSquared.out" ]; then
+  bad "calculation wrote no output ($n files)"; tail -5 "$WORK/plain/run.log"
 else
-  for other in within nomap; do
-    diffs=""
-    for f in "$WORK/map/output"/*; do
-      same_file "$f" "$WORK/$other/output/$(basename "$f")" || diffs="$diffs $(basename "$f")"
-    done
-    if [ -z "$diffs" ]; then ok "outputs ($n files) byte-identical with mapping across segments and '$other'"
-    else bad "outputs differ between mapping across segments and '$other':$diffs"; fi
+  diffs=""
+  for f in "$WORK/plain/output"/*; do
+    same_file "$f" "$WORK/planchk/output/$(basename "$f")" || diffs="$diffs $(basename "$f")"
   done
+  if [ -z "$diffs" ]; then ok "(a) outputs ($n files) byte-identical with and without AZURE_PLAN_CHECK"
+  else bad "(a) outputs differ under AZURE_PLAN_CHECK:$diffs"; fi
 fi
-
-# ---- (b) what is mapped onto what ---------------------------------------------------------------
-dir="$WORK/datachk"
-mkdir -p "$dir/output" "$dir/checks"
-cp -r "$HERE/data" "$dir/"
-sed 's/^none #Data Check/file #Data Check/' "$HERE/angle_mapping.azr" > "$dir/t.azr"
-(cd "$dir" && printf '1\n\n\n7\n' | run_limited 900 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
-chk="$dir/checks/data.chk"
-if [ ! -s "$chk" ]; then
-  bad "no data check written"
-else
-  # per segment: "host segments" of its mapped points, as a sorted list
-  hosts() { awk -v s="$1" '$1 == s && $8 ~ /^\(/ { split(substr($8, 2), h, ","); print h[1] }' "$chk" | sort -un | tr '\n' ' ' | sed 's/ $//'; }
-  [ "$(hosts 2)" = "1" ] && ok "segment 2 (90 deg) mapped onto segment 1 (60 deg)" || bad "segment 2 mapped onto segments '$(hosts 2)', want '1'"
-  [ "$(hosts 3)" = "1" ] && ok "segment 3 (120 and 150 deg) mapped onto segment 1" || bad "segment 3 mapped onto '$(hosts 3)', want '1'"
-  [ "$(hosts 5)" = "4" ] && ok "A_y segment 5 mapped onto A_y segment 4, not onto cross sections" || bad "segment 5 mapped onto '$(hosts 5)', want '4'"
-  [ "$(hosts 7)" = "6" ] && [ -z "$(hosts 6)" ] && ok "shift-group members (free shared shift) mapped onto each other only" \
-    || bad "shift group: segment 7 onto '$(hosts 7)', segment 6 onto '$(hosts 6)'"
-  [ -z "$(hosts 8)$(hosts 9)$(hosts 13)" ] && ok "free sqrt shift, free shift function, other fixed shift: not mapped" \
-    || bad "segments 8, 9, 13 mapped onto '$(hosts 8)' '$(hosts 9)' '$(hosts 13)'"
-  [ "$(hosts 11)" = "10" ] && [ "$(hosts 12)" = "10" ] && ok "p+13C segments (natural and not) mapped onto segment 10" \
-    || bad "p+13C: segment 11 onto '$(hosts 11)', 12 onto '$(hosts 12)'"
-fi
+# "AZURE_PLAN_CHECK: <units> units in <tasks> energy tasks (<shared> units at a shared energy) against their own solves:
+# <differ> differ", once per pass
+line="$(grep -m1 '^AZURE_PLAN_CHECK: .* units in .* energy tasks' "$WORK/planchk/run.log")"
+read -r units tasks shared differ <<< "$(echo "$line" | awk '{ print $2, $5, substr($8, 2), $(NF - 1) }')"
+if [ -n "$line" ] && [ "$differ" = 0 ] && ! grep -q '^AZURE_PLAN_CHECK: .* [1-9][0-9]* differ' "$WORK/planchk/run.log"; then
+  ok "(a) every unit's shared solve = its own solve ($units units, 0 differ)"
+else bad "(a) AZURE_PLAN_CHECK: '$line'"; fi
+if [ -n "$line" ] && [ "$tasks" -lt "$units" ] && [ "$shared" -gt 0 ]; then
+  ok "(b) $units units on $tasks energy tasks ($shared units at a shared energy)"
+else bad "(b) no sharing: '$line'"; fi
 
 # ---- (c), (d) gradients ------------------------------------------------------------------------
 # rows NAME -> "idx analytic fd jacobian" of every checked parameter

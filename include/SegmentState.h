@@ -54,6 +54,9 @@ struct TargetEffectValues {
   double density = 0.0;             ///< areal density of the target (atoms/cm^2)
   double dopplerTemperature = 0.0;  ///< free-gas temperature (K)
   double stoppingScale = 1.0;       ///< stopping scale s (TargetEffect::StoppingAt), dimensionless
+  /// A table kernel's parameters (KernelParameters::values), engine units, when one is fitted (ApparatusParameters.h);
+  /// empty: the effect's own (TargetEffect::GetKernelValues).
+  std::vector<double> kernelValues;
 };
 
 #endif

@@ -55,11 +55,10 @@ and initialization of all data:
 2. **Convert to CM frame** -- laboratory energies and angles are converted to
    center-of-mass frame values using the kinematics of the entrance/exit pair.
 
-3. **Map points at a shared energy** -- points of the same reaction at the
-   same energy, in one segment or in several, share one energy-dependent
-   calculation: the first of them in data order (the host) calculates it and
-   the others are mapped onto it via ``EnergyMap`` (see
-   `Point mapping across segments`_ below).
+3. **Plan the calculation** -- one task per point (``CalculationPlan``); the
+   points and sub-points at one compound energy, in one segment or in several,
+   share one level-matrix solve in the energy pass (see
+   `Points at one energy across segments`_ below).
 
 4. **Create sub-points** -- for each data point that has an associated target
    effect, a grid of sub-points is generated for numerical integration
@@ -248,7 +247,7 @@ effects follows this order:
    ``CalculationPlan::EnergyTasks``).
 
 2. **Integrate** -- after the energy pass, ``Unit::FoldSubPoints()`` runs on
-   the parent point (and the points mapped onto it): the bare probes, the
+   the parent point: the bare probe, the
    automatic tolerance and blending, then ``FoldPoint()`` (``src/PointFold.cpp``)
    on the sub-point cross sections, yielding the effective yield that accounts for
    target and beam effects.
@@ -274,6 +273,8 @@ kernel             format-3 keyword                                file
                                                                    applied first)
 ``rectangular``    ``detector.energy_resolution rectangular``      ``KernelRectangular.cpp``: the
                    ``width <w>``                                   average over [E0 - w/2, E0 + w/2]
+``triangular``     ``detector.energy_resolution triangular``       ``KernelTriangular.cpp``: weight
+                   ``width <w>``                                   1 - |E - E0|/(w/2)
 =================  ==============================================  ====================================
 
 An effect has at most one broadening and one resolution kernel
@@ -496,8 +497,7 @@ carry the effect; edge blending mixes the integrated and bare values with a
 smoothstep weight, and the automatic decision probes the first, central and
 last sub-point to estimate the size of the effect (curvature across the
 window, plus the centroid shift under target integration), using the bare
-value outright when the estimate is below the tolerance.  Points with mapped
-observables skip only when every mapped observable passes its own estimate.
+value outright when the estimate is below the tolerance.
 
 A **thin-target integration** is different (2026-11-05): its data carry the beam
 energy, so neither a plain point nor the bare probe is the right stand-in --
@@ -549,8 +549,8 @@ Transmission and yield segments
 A ``transmission <n>`` or ``yield <n>`` segment (``Segment::IsTransformed``) is
 a nonlinear function of its cross sections, so it cannot be one more linear
 combination of integrated point values.  Its points, base and components, keep
-the plain cross sections -- they can still be mapped onto other segments' points
-and share their calculations -- and ``TransformedValue`` of ``src/ModelPass.cpp`` forms the
+the plain cross sections -- they share the solves of other segments' points at
+their energies -- and ``TransformedValue`` of ``src/ModelPass.cpp`` forms the
 observable: the terms (``Segment::TransformTerms``: weight = component scaling,
 frame factor and sample abundance; a yield's hidden ``total 1`` component,
 ``IsYieldTotalTerm``, made by ``WorkingCopy::FinishTransformedSegment``, is its
@@ -585,8 +585,8 @@ step, into ``GradAccum::thickness`` (``ParamKind::Thickness``).  The prior is
 ``Segment::ThicknessPenalty`` / ``WorkingCopy::ThicknessPenalty`` and
 ``ForEachThicknessPrior`` in ``AZURECalc``; API record type 10.
 
-Point mapping across segments
------------------------------
+Points at one energy across segments
+------------------------------------
 
 Angular distributions are often stored one angle per segment (an EXFOR entry
 per angle, say): sixteen one-angle segments of 12 000 points at 800 distinct
@@ -597,34 +597,9 @@ matrix, its factorization and the T-matrix -- is the same for all the angles
 at one energy, and only the observable (Legendre polynomials, Coulomb
 amplitude, :math:`A_y`) differs.
 
-``WorkingCopy::MapData`` therefore groups the points of all segments (except
-composite SUM/RATIO and total-capture segments) by entrance pair, exit pair and
-energy, and maps each point onto the first point in data order (segment, then
-point index) that shares its calculation (``SharesCalculation``): the same
-original, laboratory and c.m. energies, the same target effect, blend weight
-and sub-point grid (energies and stopping powers, point by point), and the
-same kind of observable (cross section or :math:`A_y`, angular-distribution
-coefficients or not).  The observable type may otherwise differ: an
-angle-integrated and a differential point share the T-matrix.  The
-normalization plays no part, since it scales the data, not the model.
-
-Across segments the energy shifts must also agree *as functions of the fit
-parameters* (``ShiftsAgree``): the same free parameters (a shift group's
-shared constant shift, a shared shift function), no free :math:`\sqrt{E}`
-coefficient (it is each segment's own), and the same fixed values.  Two
-segments mapped onto each other are then at the same energy whatever a fit or
-a finite-difference step does to the shifts; segments whose shifts only
-coincide at the current values are not mapped.  Every change of a shift or of
-a sub-point grid rebuilds the mapping (``WorkingCopy::FillEnergyShiftsFromParams``).
-The segment-local energy-shift derivatives of ``AZURECalc::Gradient`` and of
-the residual Jacobian (``FillShiftColumns``, shared by
-``AZURECalc::ResidualJacobian`` and pyazr's ``residual_jacobian``) stay local as long as a parameter's segments
-are mapped only among themselves; they move all of them before calculating
-any.
-
-The host is calculated first by every serial loop over the whole data set,
-and calculates the observables of the points mapped onto it
-(``Unit::Calculate``).  The parallel pass over an evaluation's points,
+Every point is a task of its own in the calculation plan (``CalculationPlan``,
+one task per point, the segments' points then the leaves'), and a serial loop
+calculates it alone (``Unit::Calculate``).  The parallel pass over an evaluation's points,
 ``WorkingCopy::CalculatePointsInParallel`` (the CLI's ``AZURECalc::PrecalculatePoints``
 and, since 2026-10-30, the API calls behind pyazr), goes further: its tasks
 are compound energies, not hosts (``CalculationPlan::EnergyTasks``).  Every
@@ -635,9 +610,8 @@ matrix, one T-matrix per (entrance, exit) pair (and source of the external-captu
 amplitudes: those of the set-up or computed), the observable of each unit;
 then the folds of the points with sub-points, which read the values already
 there (``Unit::FoldSubPoints``).  Units of different segments, entrance pairs
-and data sets share a solve whenever their energies agree, mapped or not; the
-mapping still groups the folds, the energy-dependent values and the analytic
-gradient.  ``AZURE_PLAN_CHECK=1`` compares every unit's shared solve with its
+and data sets share a solve whenever their energies agree; the analytic
+gradient runs over the same tasks.  ``AZURE_PLAN_CHECK=1`` compares every unit's shared solve with its
 own, bit for bit.  The angle-independent products :math:`Z_1Z_2\,T_1T_2^*` of the
 differential sum are formed once per T-matrix and summed by Legendre order
 (``GenMatrixFunc::CalculateCrossSection``, from the flat interference table of
@@ -645,7 +619,15 @@ the exit in the pathway table, ``EntrancePathways::interferences``), as are the 
 interference terms of elastic scattering per channel spin and :math:`l`
 (``BuildCoulombInterference``); every point that shares the T-matrix then
 needs one term per order.  Particle exits other than UPOS take the same path.
-The results are byte-identical with and without mapping.  The adjoint does the
+Until 2026-11-11 a point mapping (``WorkingCopy::MapData``, ``MapLeaves``,
+``SharesCalculation``) also made one point calculate the others at its energy;
+the energy tasks made it redundant and it is deleted (every output identical).
+The same grouping is kept as a table: ``azure2::NodeTable`` (``include/NodeTable.h``)
+lists every compound energy of the pass once per nucleus with its channel rows,
+and per folded point the node of each sub-point; it is built at the end of the
+set-up and shared by every working copy, and ``AZURE_NODE_CHECK=1`` compares it
+with the units before each point pass.  It is the first half of turning the
+sub-points into entries of that table (``docs/upgrade/energy_grid.md`` section 2.6).  The adjoint does the
 same: the T-matrix cotangents of a differential point are, per pathway, a sum
 over orders of coefficients taken once per T-matrix
 (``AMatrixFunc::TBarProducts``).
@@ -653,16 +635,8 @@ over orders of coefficients taken once per T-matrix
 THM segments
 ^^^^^^^^^^^^
 
-A THM (HOES) segment is mapped within itself only, and no point of another
-segment is mapped onto one of its points.  Its model comes from
-``THMMatrixFunc`` and from options that ``SharesCalculation`` does not compare
-(the observable, vertex model, kinematics, spectator and angle windows, line
-shape, distortion, the THM experiment with its profiled norm and background,
-the coherent background, the 5-sigma fold); and the THM gradient rows
-(``ComputeTHMRows``) and the THM-only differences of ``AZURECalc::Gradient``
-calculate the THM segments alone, so a host in another segment would not be
-up to date there.  Within one THM segment every option is shared, and the
-points at one energy are mapped as before.  The energy-grouped gradient below
+A THM (HOES) unit is solved on the THM route (``THMMatrixFunc``), which is part of
+the key of an energy task, so it shares a solve only with other THM units.  The energy-grouped gradient below
 leaves THM segments out; their rows come from the HOES adjoint
 (``THMMatrixFunc::THMPointAdjoint``) or THM-only differences.
 
@@ -774,18 +748,12 @@ capture enter only through the bilinear forms :math:`g_c^T A g_{c'}`, which do
 not depend on the exit pair, so their cotangents are merged by channel pair and
 back-propagated once per task.
 
-Segments with components (SUM, RATIO, total capture) are mapped as well, since
-October 2026 (``WorkingCopy::MapComponentSegments``): each component's point is
-mapped onto the base segment's point at the same energy.  A component has its
-own exit pair, so the host's calculation builds the component's T-matrix from
-the solved level matrix (``GenMatrixFunc::RecalculateTMatrix``) before its
-observable; the mapped points of a host come grouped by exit, so each exit's
-T-matrix is built once.  A component keeps and re-energises its own
-energy-dependent values and external-capture amplitudes
-(``Unit::OwnsEDependentValues``): its segment is shifted in parallel with the
-base segment.  A family is not mapped with other segments, and the base's
-points stay unmapped among themselves (the external-capture file layout
-depends on which points are mapped).  On the 13C+alpha project of
+The points of a component of a SUM, RATIO or total-capture segment lie at the
+energies of the base segment's points, so they share the base points' energy
+tasks: one level-matrix solve per energy, and per exit pair one T-matrix
+(``GenMatrixFunc::RecalculateTMatrix`` after the first).  Until 2026-11-11 each
+component point was mapped onto its base point (``WorkingCopy::MapLeaves``),
+which did the same inside the base point's calculation.  On the 13C+alpha project of
 ``13C+a/10-22-26_merged_non16o_non1``, whose neutron total cross section sums
 nine exit pairs over 13 129 points, one evaluation went from 13.1 s to 4.4 s
 (136 136 level-matrix solutions to 23 203) and one residual Jacobian from
@@ -805,18 +773,6 @@ adjoint gradient) and 17.5 s (two threads: 0.21 s, 0.75 s and 11 s).
 Environment switches
 ^^^^^^^^^^^^^^^^^^^^
 
-``AZURE_NO_CROSS_SEGMENT_MAPPING=1``
-   Map points within each segment only, as before October 2026.  (A shifted
-   capture segment is always mapped within itself only: its external-capture
-   amplitudes at a shifted energy may be interpolated from its own points.
-   So is a THM segment, see below.)
-``AZURE_NO_POINT_MAPPING=1``
-   No point mapping at all: every point calculates its own energy-dependent
-   values and T-matrix.
-``AZURE_NO_COMPONENT_MAPPING=1``
-   Every term of a SUM, RATIO or total-capture segment is a point of its own in
-   the calculation plan, as before October 2026 (the gradient runs over the
-   energy tasks either way).
 ``AZURE_GRAD_DENSE=1``
    Back-propagate through the level matrix with the dense
    :math:`A^H \bar A A^H` products.
@@ -836,8 +792,8 @@ Failed points
 ^^^^^^^^^^^^^
 
 A point whose calculation throws (a singular matrix, a Coulomb function out of
-range, ...) is marked failed (``Unit::MarkFailed``): its cross sections and
-those of the points mapped onto it are NaN, and a warning naming the segment,
+range, ...) is marked failed (``Unit::MarkFailed``): its cross sections are
+NaN, and a warning naming the segment,
 the energy and the error is printed the first time in a run.  Both evaluation
 paths do this, the parallel pre-pass (``WorkingCopy::CalculatePointsInParallel``,
 whose values the CLI's objective takes) and the per-point path
@@ -848,8 +804,7 @@ point was 0, a failed or non-finite SUM term was left out and a failed RATIO
 denominator gave 0, all silently (the natural SUM segments of
 ``tests/natural_neon`` on the R-matrix route came back 0 at 84 points).  A RATIO
 whose denominator is exactly 0 is NaN too, with its own one-time warning, but
-only that term: the base point and the points mapped onto it keep their values
-(before 2026-11-01: 0).
+only that term: the base point keeps its values (before 2026-11-01: 0).
 
 Memory: shared per-point tables
 -------------------------------
@@ -865,8 +820,8 @@ cost about 7.7 GB, so a fit at four threads needed about 41 GB.
 
 Since November 2026 these tables are held by ``std::shared_ptr<const ...>``
 and shared, not copied: a clone points at the tables of the data it was
-cloned from, a mapped point at its host's (``Unit::CalcEDependentValues``,
-``Unit::CopyEDependentValuesFrom``).  Every write goes through one accessor
+cloned from, a re-placed sub-point whose node did not move at the old
+sub-point's (``Unit::AdoptEDependentValues``).  Every write goes through one accessor
 per table (``Unit::MutableEDep``, ``Unit::MutableLegendre``) that makes a
 private copy first if the table is shared, so a point that recomputes its
 values (a shifted segment moving its sub-points, an API call refilling a
@@ -949,13 +904,6 @@ neon, in dev 2d97b1f0 too).  Two races, both fixed on 2026-11-05:
    coulfunc_transient_scope_test.cpp``).  While another thread held a scope, a
    thread outside any scope also put its entries in its scratch, where they were
    lost; they are now permanent, as intended.
-
-A mapped point is also re-placed together with its host, on the host's grid,
-rather than on its own: point mapping requires the two grids to be identical
-(``SharesCalculation``), and the host fills the mapped point's sub-points node
-by node.  A host whose mapped point cannot be re-placed (a segment with
-external capture) keeps its grid.  After every re-placement the grids of hosts
-and mapped points are compared, and a mismatch throws.
 
 None of this changes a result: the copies' own points were always filled
 correctly (the stray writes went to the original's points), and the outputs of

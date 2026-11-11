@@ -1,0 +1,31 @@
+{
+ "doc": "make_thick_reference.py: Y = 1e-24 int sigma/eps dE of the data set `thick` (target TK), the trapezoid rule on the engine's bare sigma at the nodes, E_out in closed form; engine_today and bound: the engine's deviation when this file was written (check.py fails above the bound)",
+ "E0": [
+  1.0,
+  1.05,
+  1.1
+ ],
+ "E_out": [
+  0.3747913718537601,
+  0.4605126347015347,
+  0.5396689043144566
+ ],
+ "Y_reference": [
+  2.0213987130622523e-09,
+  2.021955637498238e-09,
+  2.0221310952995952e-09
+ ],
+ "nodes": 34516,
+ "trapezoid_check": 3.6763256014982204e-06,
+ "engine_today": [
+  2.0217088968e-09,
+  2.0222698316e-09,
+  2.0224441083e-09
+ ],
+ "deviation_today": [
+  0.00015345005205702478,
+  0.00015539119451224437,
+  0.00015479362398029828
+ ],
+ "bound": 0.000156
+}

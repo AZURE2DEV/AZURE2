@@ -91,5 +91,5 @@ extrapolation r7
 </extrapolations>
 <targets>
 detector det_rect
-    energy_resolution rectangular width 20 keV
+    energy_resolution rectangular width 20 keV fixed
 </targets>

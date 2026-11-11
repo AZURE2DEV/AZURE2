@@ -168,42 +168,6 @@ ShiftParamTarget ShiftTargets(WorkingCopy *ld, const ParamDesc &d) {
   return t;
 }
 
-// For each segment (1-based), the other segments its points share a calculation
-// with through point mapping across segments (WorkingCopy::MapData): those whose
-// points are mapped onto its points, and those its points are mapped onto.
-std::vector<std::vector<int>> CrossSegmentPartners(WorkingCopy *ld) {
-  std::vector<std::vector<int>> partners(ld->Data().NumSegments() + 1);
-  for (int s = 1; s <= ld->Data().NumSegments(); s++) {
-    const Segment *seg = ld->Data().GetSegment(s);
-    if (!seg) continue;
-    for (int pid = 1; pid <= seg->NumPoints(); pid++) {
-      Unit *pt = seg->GetPoint(*ld, pid);
-      if (!pt || !pt->IsMapped()) continue;
-      const int h = pt->GetMap().segment;
-      if (h == s || h < 1 || h > ld->Data().NumSegments()) continue;
-      partners[s].push_back(h);
-      partners[h].push_back(s);
-    }
-  }
-  for (std::vector<int> &v : partners) {
-    std::sort(v.begin(), v.end());
-    v.erase(std::unique(v.begin(), v.end()), v.end());
-  }
-  return partners;
-}
-
-// True when no point of `segs` shares a calculation with a point outside them.
-// A shift parameter that moves exactly `segs` can then be differenced on their
-// rows alone: WorkingCopy::MapData maps across segments only where the shifts agree
-// as functions of the parameters, so mapped partners move together, and the
-// host -- first in data order -- is calculated first (`segs` is ascending).
-bool MappingConfined(const std::vector<std::vector<int>> &partners, const std::vector<int> &segs) {
-  for (int s : segs)
-    for (int q : partners[s])
-      if (std::find(segs.begin(), segs.end(), q) == segs.end()) return false;
-  return true;
-}
-
 }  // namespace
 
 ShiftColumnCount FillShiftColumns(CNuc *lc, WorkingCopy *ld, azure2::Results &results, const Config &config,
@@ -213,13 +177,12 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, WorkingCopy *ld, azure2::Results &re
   ShiftColumnCount count;
 
   // A shift of a self-contained segment (no components, not a total-capture
-  // sum, no point mapping onto other segments) moves only that segment's rows, so
+  // sum) moves only that segment's rows, so
   // its column is differenced on those rows alone; every other row of a full
   // re-evaluation would difference to exactly zero.  With 55 free shifts on
   // 11B+a the full path took over an hour per gradient.  Same criterion as the
   // segment-local shift gradient in Gradient().
   bool rowLayoutUnknown = false;
-  const std::vector<std::vector<int>> partners = CrossSegmentPartners(ld);
   std::vector<int> rowStart(ld->Data().NumSegments() + 2, 0);
   std::vector<const Segment *> segments;
   {
@@ -286,24 +249,21 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, WorkingCopy *ld, azure2::Results &re
     if (fixed[f]) continue;
     const ParamKind kind = pmap.Desc(f).kind;
     if (kind != ParamKind::EnergyShift && kind != ParamKind::EnergyShiftSqrt && kind != ParamKind::EnergyShiftFn &&
-        kind != ParamKind::Density && kind != ParamKind::StoppingScale) continue;
+        kind != ParamKind::Density && kind != ParamKind::Apparatus) continue;
     const int packed = pmap.FullToPacked(f);
     if (packed < 0 || packed >= nCols) continue;
     // Columns the caller holds fixed: not differenced.
     if (skipPacked && packed < (int)skipPacked->size() && (*skipPacked)[packed]) continue;
-    // A fitted target density, or a stopping scale, moves the depth window of every point of its lines: full
-    // re-evaluation (the scale's analytic dY/ds = (-Y + 1e-24 N <sigma>(E_out))/s comes with the kernels branch).
-    if (kind == ParamKind::Density || kind == ParamKind::StoppingScale) {
+    // A fitted target density, or an apparatus parameter (a stopping scale moves the depth window of every point of
+    // its lines, a kernel's width every fold of its effects): full re-evaluation.
+    if (kind == ParamKind::Density || kind == ParamKind::Apparatus) {
       fullShifts.push_back(f);
       continue;
     }
     const int sNum = pmap.Desc(f).segment;
     if (!rowLayoutUnknown && sNum >= 1 && sNum <= ld->Data().NumSegments()) {
       const ShiftParamTarget target = ShiftTargets(ld, pmap.Desc(f));
-      // Mapping across segments keeps the column local while it stays among
-      // the parameter's segments (MappingConfined): they are all moved, then
-      // all evaluated, below.
-      if (target.Local(ld) && MappingConfined(partners, target.segs)) {
+      if (target.Local(ld)) {
         localCols.push_back({f, packed, target});
         continue;
       }
@@ -317,7 +277,7 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, WorkingCopy *ld, azure2::Results &re
   auto updateSegment = [&](const Segment *seg) {
     if (!InParallelRegion()) {
 #pragma omp parallel for schedule(dynamic, 1)
-      for (int pid = 0; pid < seg->NumPoints(); pid++) seg->UpdatePointGroupEnergyWithShift(*ld, 0, pid, lc, &config);
+      for (int pid = 0; pid < seg->NumPoints(); pid++) seg->UpdatePointEnergyWithShift(*ld, 0, pid, lc, &config);
     } else {
       seg->UpdatePointEnergiesWithShift(*ld, lc, &config);
     }
@@ -914,13 +874,9 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   }
 
   // Segment-local energy-shift gradient is exact only when a shift's effect is
-  // confined to its own segments' data term.  Point mapping across segments
-  // (WorkingCopy::MapData) keeps it so as long as the mapped partners of those
-  // segments are among them (MappingConfined): partners move together, and
-  // groupChi re-energises them all before it calculates them, host first.
-  // Nuisance penalties handled by the limits manager can couple a shift to the
-  // global chi^2, so disable the local path when one is active.
-  const std::vector<std::vector<int>> partners = CrossSegmentPartners(ld);
+  // confined to its own segments' data term.  Nuisance penalties handled by the
+  // limits manager can couple a shift to the global chi^2, so disable the local
+  // path when one is active.
   const bool localShiftOk = !HasNuisanceParameters();
   // Components taken by a finite difference of the whole chi2 (Chi2Value) already hold the prior-covariance term;
   // every other one (analytic, or a segment-local shift difference) gets its gradient added below.
@@ -979,12 +935,10 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
         inThmGroup = inThmGroup || ld->Data().ThmGroupOf(m) >= 0;
         inCovariance = inCovariance || ld->Data().GetSegment(m)->GetCovarianceGroup() >= 0;
       }
-      if (!inCovariance && target.Local(ld) && !inThmGroup && MappingConfined(partners, target.segs)) {
+      if (!inCovariance && target.Local(ld) && !inThmGroup) {
         auto groupChi = [&](double v) {
           target.Set(ld, v);
-          // Every segment is moved before any is calculated: a host calculates
-          // the observables of points mapped onto it from other segments, with
-          // their energy-dependent values (Unit::Calculate).
+          // Every segment the parameter moves is moved before any is calculated.
           for (int m : target.segs) ld->Data().GetSegment(m)->UpdatePointEnergiesWithShift(*ld, lc, &configure());
           double c = 0.0;
           for (int m : target.segs) c += SegmentLocalChi2(ld->Data().GetSegment(m), lc, configure(), ld, results);
@@ -1058,7 +1012,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   if (const char *gc = std::getenv("AZURE_GRAD_CHECK")) {
     if (!gradChecked.exchange(true)) {
       static const char *kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt", "shift_fn", "abundance", "screening",
-                                       "density", "doppler", "thickness", "cbkg", "stopping_scale"};
+                                       "density", "doppler", "thickness", "cbkg", "apparatus"};
       struct Row { double score, g, fd; int idx; ParamDesc d; double gj, scoreJ; };
       std::vector<Row> rows;
       constexpr int kNumKinds = sizeof(kindName) / sizeof(kindName[0]);  // one per ParamKind

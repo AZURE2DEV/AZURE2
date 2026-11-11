@@ -150,6 +150,11 @@ refused at once with the engine's message. An edit changes only the lines it tou
   - a point whose exit pair no pathway of its entrance reaches is refused (the last decay was read before);
   - external capture with a beta pair or a pair of another nucleus numbered below the photon pair read the wrong
     pathways (a crash in the test); it now finds the photon pair's pathways by the pair;
+  - a SUM or RATIO whose capture reaction appears only as a later term (no data set or extrapolation of the
+    project has that capture as its own reaction) ran from the command line **without external capture and without
+    a message**: in the test the capture term was 0.54 to 2.9 times the right one, depending on the energy. The
+    switch looked at the first term of each reaction only; the same is in `dev`. Every term counts now
+    (`tests/component_mapping`, case (d)). pyazr always had external capture on and was not affected;
   - in format 3 a data run with an unreadable data file is refused (the old engine skipped the segment with a
     warning); an extrapolation run does not need the data files.
   - data given in the lab frame are compared with the model in the lab frame (the model divided by
@@ -211,11 +216,14 @@ reads `CLAUDE.md` first, so it is given the recipes and is stopped by the checks
 
 ## What is in work and what comes next
 
-In work now (2026-11-11, night): the sub-points of a folded data point stop being objects of their own and become
-entries of one node table per compound nucleus (the old point mapping deleted; every output must stay the same: the
-structural half of the shared energy grid); one generic kind of fit parameter for the parameters of apparatus
-effects, so that a kernel's width or a target's stopping scale is fitted without new engine code; the engine
-refusing old files, with its old reading path deleted (the close of Phase 4).
+In work now (2026-11-11, late night): the engine refusing old files, with its old reading path deleted (the close of
+Phase 4); the sub-points of a folded data point becoming entries of one node table per compound nucleus. Of the
+second, the first half is merged: the old point mapping is deleted (every output identical; the energy tasks share
+the solves it used to share), and a node table of the compound energies is built beside the sub-points and checked
+against them on the whole tree, with the tools the next step needs (a refined quadrature, its classifier, node
+counts per project). No reader uses the table yet: moving the readers onto it and deleting the sub-point objects
+is the next branch, before the shared energy mesh. Merged in the same batch: one generic kind of fit parameter for
+the parameters of apparatus effects (see "How to add a feature now").
 
 **Do the checks still test what they say? (merged 2026-11-11, evening.)** A regression check that edits a project's
 text can go on passing after the conversion to format 3 because its pattern no longer matches anything and it
@@ -275,10 +283,22 @@ this table existed, had touched 11 engine files. **The limits of that count** (d
 the point (as Doppler needs the temperature) also edits the two parameter blocks of `Kernels.h` and the engine
 function that fills them (`TargetEffect::KernelParametersFor`); (2) kernels do not compose yet: the new kernel on a
 data set that also has a target, a beam spread, a beam profile or a UDR is refused, so it cannot fold a
-target-integrated yield until the shared grid (Phase 5, branch 7) chains kernels; (3) its width is declared fittable
-in its row but cannot be fitted: a parameter a fit varies still needs its own kind of fit parameter, and a new kind
-is not cheap -- the stopping scale of branch 5 edited 20 existing files. One generic kind that reads the kernel
-table's rows is the planned remedy.
+target-integrated yield until the shared grid (Phase 5, branch 7) chains kernels; (3) a fitted parameter of an apparatus record
+cost a kind of its own -- the stopping scale of branch 5 edited 20 existing engine files.
+
+**What a fitted apparatus parameter costs now** (`docs/upgrade/apparatus_parameters.md`). One parameter kind,
+`apparatus`, carries every number of a target, beam or detector record that a fit varies: the stopping scale and a
+kernel's own parameter.  A kernel parameter declared fittable in its table row is written in the project with the
+words every fitted number already uses (`width 14 keV fit prior 14 2`), is one parameter for every data set that
+names the record, and goes through one engine file for its slot in the vector, its hand-over, its prior and its
+outputs.  The test of that claim: the rectangular width is fitted (pseudo-data made at 20 keV: 20.026 ± 0.013 keV;
+without noise 19.999998 keV), the stopping scale moved onto the kind with every output of its fit unchanged, and a
+triangular resolution with a fitted width was added by the written recipe: one kernel file (68 lines), two lines in
+the table, one CMake line, tests, the regenerated schema, three documentation rows -- **0 engine files, about 6
+minutes** (before: 20 engine files).  The limits: the fit takes central differences of the whole χ² for it (the
+kernel's analytic derivative is tested but not used yet); a number that reaches the calculation other than as a
+kernel's value is a new row of the kind's table (one function file, one table line); the density, Doppler
+temperature and sample thickness keep their own kinds (moving them would reorder every project's parameters).
 
 pyazr reads format 3 only since 3.0.0.dev0 (2026-11-11): `pyazr/azrfile.py` (3,756 lines of a second grammar in
 Python) and `datasets.py` are deleted, every pyazr test runs on the tree's format-3 projects, and a session or

@@ -371,15 +371,8 @@ void WorkingCopy::WriteChiSquaredFile(const Config &configure, const azure2::Res
       if (Data().GetDensityTargetEffect(k)->GetDensitySigma() > 0.0) anyPrior = true;
     if (anyPrior) chiOut << " Total-Density-Chi-Squared: " << this->DensityPenalty();
   }
-  // Stopping scales: their priors, when one is fitted with a prior.
-  {
-    bool anyPrior = false;
-    for (int k = 1; k <= Data().NumStoppingScaleParams(); k++) {
-      const TargetEffect *te = Data().GetStoppingScaleTargetEffect(k);
-      if (te->IsStoppingScaleVaried() && te->GetStoppingScaleSigma() > 0.0) anyPrior = true;
-    }
-    if (anyPrior) chiOut << " Total-Stopping-Scale-Chi-Squared: " << this->StoppingScalePenalty();
-  }
+  // Apparatus parameters (stopping scales, a kernel's width): one line per row with a fitted prior.
+  WriteApparatusChiSquared(*this, chiOut);
   // Fitted Doppler temperatures: their priors.
   if (Data().NumDopplerParams() > 0) {
     bool anyPrior = false;

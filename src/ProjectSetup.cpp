@@ -112,6 +112,17 @@ bool ProjectLevelSection(const Config &configure, azure2::io::LevelSection &out)
   return true;
 }
 
+namespace {
+// The pairs a reaction exits into: its leading term's and those of its components (the other terms of a SUM or a
+// RATIO).  A capture pair that is only a component needs its external capture as much as a leading one: until
+// 2026-11-11 only the leading terms were listed, and "elastic + 1000 x capture" ran without the external capture of
+// its second term unless another data set had the capture as its leading term (tests/component_mapping (d)).
+template <class F> void ForEachTermPair(const azure2::experiment::ReactionSpec &reaction, F &&f) {
+  f(reaction.entranceKey, reaction.exitKey);
+  for (const azure2::experiment::ComponentSpec &component : reaction.components) f(component.entranceKey, component.exitKey);
+}
+}  // namespace
+
 std::set<int> ProjectExitPairKeys(const Config &configure) {
   std::set<int> keys;
   bool present = false;
@@ -119,25 +130,27 @@ std::set<int> ProjectExitPairKeys(const Config &configure) {
       configure.format3 ? configure.format3->built.data : OldDataSpecs(configure, present);
   const azure2::experiment::ExtrapolationSpecs extrapolations =
       configure.format3 ? configure.format3->built.extrapolations : OldExtrapolationSpecs(configure, present);
+  auto add = [&keys](int, int exitKey) { keys.insert(exitKey); };
   for (const auto &item : data.datasets.items)
-    if (item.spec.active) keys.insert(item.spec.reaction.exitKey);
+    if (item.spec.active) ForEachTermPair(item.spec.reaction, add);
   for (const auto &item : extrapolations.extrapolations.items)
-    if (item.spec.active) keys.insert(item.spec.reaction.exitKey);
+    if (item.spec.active) ForEachTermPair(item.spec.reaction, add);
   if (configure.paramMask & Config::CALCULATE_REACTION_RATE) keys.insert(configure.rateParams.exitPair);
   return keys;
 }
 
 bool ProjectReactionPairs(const Config &configure, bool data, std::vector<std::pair<int, int>> &pairs) {
   bool present = configure.format3 != nullptr;
+  auto add = [&pairs](int entranceKey, int exitKey) { pairs.push_back({entranceKey, exitKey}); };
   if (data) {
     const azure2::experiment::DataSpecs specs = configure.format3 ? configure.format3->built.data : OldDataSpecs(configure, present);
     for (const auto &item : specs.datasets.items)
-      if (item.spec.active) pairs.push_back({item.spec.reaction.entranceKey, item.spec.reaction.exitKey});
+      if (item.spec.active) ForEachTermPair(item.spec.reaction, add);
   } else {
     const azure2::experiment::ExtrapolationSpecs specs =
         configure.format3 ? configure.format3->built.extrapolations : OldExtrapolationSpecs(configure, present);
     for (const auto &item : specs.extrapolations.items)
-      if (item.spec.active) pairs.push_back({item.spec.reaction.entranceKey, item.spec.reaction.exitKey});
+      if (item.spec.active) ForEachTermPair(item.spec.reaction, add);
   }
   return present;
 }

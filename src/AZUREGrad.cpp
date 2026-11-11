@@ -453,7 +453,7 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, WorkingCopy *data,
       map.desc_.push_back(ParamDesc{ParamKind::ThmCoherent, -1, -1, k + 1, -1, false});
       i++;
     }
-  AppendStoppingScaleParams(map, data, i);  // the stopping scales, last (StoppingScale.cpp)
+  AppendApparatusParams(map, data, i);  // the apparatus parameters, last (ApparatusParameters.cpp)
   // --- Apply the fixed mask and build packed<->full lookups. ---
   const int nFull = (int)map.desc_.size();
   map.fullToPacked_.assign(nFull, -1);
@@ -1029,8 +1029,7 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, WorkingCopy *ld, azure2::Results &
   // read), so they are evaluated in parallel: this runs 2 x (free E and gamma
   // columns) + 1 times per Jacobian, and serially it left all but one thread
   // idle -- 280 s for the 230 columns of the 12C+12C THM example against a
-  // 0.67 s forward pass.  A mapped point is filled by its host's calculation,
-  // so the mapped ones are read afterwards.
+  // 0.67 s forward pass.
   std::vector<std::pair<int, int>> order;  // (row block t, point index pid)
   for (size_t t = 0; t < rows.size(); t++) {
     const Segment *seg = ld->Data().GetSegment(rows[t].segment);
@@ -1048,15 +1047,8 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, WorkingCopy *ld, azure2::Results &
 #pragma omp parallel for schedule(dynamic)
     for (long k = 0; k < n; k++) {
       const Segment *seg = ld->Data().GetSegment(rows[order[k].first].segment);
-      if (seg->GetPoint(*ld, order[k].second + 1)->IsMapped()) continue;
       out[order[k].first][slot[k]] =
           azure2::EvaluateModelPoint(*ld, *seg, order[k].second, lc, config, results, azure2::LeafValues::Calculate);
-    }
-    for (long k = 0; k < n; k++) {
-      const Segment *seg = ld->Data().GetSegment(rows[order[k].first].segment);
-      if (seg->GetPoint(*ld, order[k].second + 1)->IsMapped())
-        out[order[k].first][slot[k]] =
-            azure2::EvaluateModelPoint(*ld, *seg, order[k].second, lc, config, results, azure2::LeafValues::Calculate);
     }
   };
   auto fillCompound = [&](const vector_r &p) {

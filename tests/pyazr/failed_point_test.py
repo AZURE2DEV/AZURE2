@@ -9,7 +9,7 @@ route (Brune), where a singular matrix made 84 points of the natural SUM segment
 warning naming the segment, energy and error is printed once.
 
 The failure is injected with the engine's test hook AZURE_TEST_FAIL_E=<lab energy> (AZURE_TEST_FAIL_EXIT=<exit pair
-key> to fail one term only; AZURE_NO_COMPONENT_MAPPING=1 so that the component is a point of its own).  Models: tests/sum_lab_frame/models/sum_data.azr (2->3 plus 2->5) and
+key> to fail one term only: each term is a point of its own).  Models: tests/sum_lab_frame/models/sum_data.azr (2->3 plus 2->5) and
 tests/ratio_frame/models/ratio_data.azr (2->3 over 2->2 at 60 deg), with data files written here.  For the base term
 and for the component/denominator alone: the injected point is NaN, every other point is unchanged, and the warning is
 printed.  Each case runs in its own process (the hook is read once).
@@ -86,10 +86,9 @@ def main():
                 check(f"{model}: reference run", False, log0[-800:])
                 continue
             k = ENERGIES.index(FAIL)
-            # The other term alone: with AZURE_NO_COMPONENT_MAPPING=1 it is a point of its own (mapped onto the base
-            # point, it is solved inside the base point's calculation, whose failure is the first case).
+            # The other term alone: it is a point of its own.
             for label, exit_key, what, extra in (("base term", base_exit, "base term", {}),
-                                                 (role, other_exit, role, {"AZURE_NO_COMPONENT_MAPPING": "1"})):
+                                                 (role, other_exit, role, {})):
                 vals, log = run(dict({"AZURE_TEST_FAIL_E": repr(float(FAIL) + shift),
                                       "AZURE_TEST_FAIL_EXIT": str(exit_key)}, **extra))
                 if vals is None:

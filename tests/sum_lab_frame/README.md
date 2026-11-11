@@ -33,8 +33,8 @@ same lab angle (2.4 % at most on this grid).  No external capture; a run takes a
 - (a) lab output: T3 = T1 + T2, T8 = T1 + 0.5 T2, T4 = 2 T1 (1e-9, 104 points); the c.m. SUM T7 =
   T5 + T6; and the frames really differ (the lab SUM in c.m. output is not the plain c.m. sum).
 - (b) the SUM data segment under the shift against the shifted plain segments' lab sum: χ² ~ 0.
-- (c) `AZURE_GRAD_CHECK` on `sum_free` (data a few % off the model), mapped-components path and
-  `AZURE_NO_COMPONENT_MAPPING=1`: adjoint and Jacobian-path gradients = finite differences.
+- (c) `AZURE_GRAD_CHECK` on `sum_free` (data a few % off the model): adjoint and Jacobian-path gradients = finite
+  differences.
 
 dev 9e34f1c (before the fix): (a) lab SUM off by 2.5 %, the scaled SUM by 1.9 %, the lab SUM equal to
 the plain c.m. sum; (b) χ² 47.0 on 36 points at 1 % errors; (c) passes (the gradient matched the wrong
