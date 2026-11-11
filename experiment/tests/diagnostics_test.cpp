@@ -189,6 +189,7 @@ int main() {
       {"E_MODE_NOT_ALLOWED", Data(Set(kDataset, "norm", "    norm profiled"))},
       {"E_MODE_NOT_ALLOWED", Data(Set(Set(kDataset, "unit", "    unit arbitrary"), "norm", "    norm 1 fit prior 1 5%"))},
       {"E_PRIOR_SYNTAX", Data(Set(kDataset, "norm", "    norm 1 fit prior 1"))},
+      {"E_PRIOR_CENTRE", Data(Set(kDataset, "norm", "    norm 1 fit prior 0 15%"))},
       {"E_PART_MISSING", "<targets>\nbeam b1\n    profile skewed_gaussian xi 0.3 MeV omega 0.03 MeV alpha 1\n"
                          "    truncation 0\n    detailed_balance no\n</targets>\n"},
       {"E_PART_TWICE", "<targets>\nbeam b1\n    profile skewed_gaussian xi 0.3 MeV xi 0.3 MeV omega 0.03 MeV alpha 1 weight 1\n"

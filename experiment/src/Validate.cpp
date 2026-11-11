@@ -530,6 +530,15 @@ void Validator::CheckNorm(Work &w) {
                                                        "(thm <experiment> or thm global, section 3.9)");
     return;
   }
+  // The engine reads a norm's prior width relative to its centre (a per cent of it, AZURECalc): a centre at 0 or below
+  // makes the width mean nothing (the old engine refused such a centre too: "must be positive").
+  if (n->mode == NuisanceMode::Fit && n->hasPrior && !(n->priorCentre.value > 0)) {
+    d.hasFound = true;
+    d.found = n->priorCentre.text;
+    Emit(d, codes::kPriorCentre, Where(w, "norm") + via + ": the prior of a fitted norm is centred at " + n->priorCentre.text +
+                                     ": the centre must be > 0 (the width is relative to it)");
+    return;
+  }
   std::vector<const NormRule *> rules;
   for (const NormRule &r : w.vr.quantity->norm) rules.push_back(&r);
   for (const NormRule &r : GeneralNormRules()) rules.push_back(&r);

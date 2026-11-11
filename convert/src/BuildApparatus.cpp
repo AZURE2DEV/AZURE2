@@ -5,6 +5,11 @@
 namespace azure2 {
 namespace convert {
 
+namespace {
+// MeV: the upper edge of the one window that stands for "every point" (above every lab energy a project holds).
+constexpr double kEveryEnergyMeV = 1.0e6;
+}  // namespace
+
 // ================================================================ <targetInt>
 void Builder::BuildApparatus() {
   for (const OldEffectLine &e : old_.effects) {
@@ -171,10 +176,16 @@ void Builder::BuildApparatus() {
       if (l.hasResonanceWidthMultiplier) q += " width_multiplier " + NumberText(l.resonanceWidthMultiplier, e.text);
       if (l.hasPointsPerWidth) q += " per_width " + NumberText(l.pointsPerWidth, e.text);
       a.quadrature = Words(q);
-      if (l.hasRangesToken && (l.autoWindows || !l.ranges.empty())) {
+      if (l.hasRangesToken && (l.autoWindows || !l.ranges.empty() || l.autoTolerance > 0)) {
         Count(Construct::kWindows);
         std::string w;
-        if (l.autoWindows) {
+        if (!l.autoWindows && l.ranges.empty()) {
+          // An automatic tolerance with no windows (an empty ranges token) applies to every point; format 3 states the
+          // tolerance inside fold_windows, so the line becomes one window over every lab energy.
+          w = "0-" + ShortestText(kEveryEnergyMeV) + " MeV";
+          Note(Construct::kWindows, "", "<targetInt> line " + std::to_string(e.index) + ": an automatic tolerance without windows; format 3 writes one window over every energy (0-" +
+                                            ShortestText(kEveryEnergyMeV) + " MeV) with that tolerance");
+        } else if (l.autoWindows) {
           w = "auto";
           if (l.hasAutoWindowTolerance) w += ":" + ShortestText(l.autoWindowTolerance);
           if (l.hasAutoWindowMargin) w += ":" + ShortestText(l.autoWindowMargin);

@@ -1747,6 +1747,9 @@ Diagnostic codes
    * - ``E_PRIOR_SYNTAX``
      - error
      - a prior that is not 'prior <centre> <width>[%]' with a width > 0
+   * - ``E_PRIOR_CENTRE``
+     - error
+     - a fitted norm whose prior is centred at 0 or below (its width is relative to the centre)
    * - ``E_PART_MISSING``
      - error
      - a structured value without one of its required keywords

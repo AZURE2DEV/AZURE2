@@ -132,6 +132,13 @@ void Builder::BuildData() {
     const bool thickTarget = app && app->hasTarget && app->line->line.isTargetIntegration == 1 && !(app->line->line.density > 0.0);
     const bool thinTarget = app && app->hasTarget && app->line->line.isTargetIntegration == 1 && app->line->line.density > 0.0;
     const bool ratio = s.isAdvanced() == 1 && s.operationType() == 1 && !s.components().empty();
+    // The old engine refused the exit key -1 with any data type but total capture (src/EData.cpp, TotalCaptureCodeOk):
+    // format 3 writes both halves as one token ([total]), so converting the line would make a refused file run.
+    if (active && in && s.exitKey() == -1 && code != 3) {
+      res_.refusal = "data line " + std::to_string(d.key) +
+                     ": the exit key -1 (total capture) needs the total-capture data type (3 on a data line); the old engine refused it";
+      return;
+    }
 
     // reaction
     const std::string angleFrame = (code == 4 || code == 7) ? "cm" : "lab";
@@ -395,6 +402,12 @@ void Builder::BuildExtrapolations() {
     if (thm) Count(Construct::kThm);
     const OldPair *in = Pair(s.entranceKey());
     const bool ratio = s.isAdvanced() == 1 && s.operationType() == 1 && !s.components().empty();
+    // As for a data line: exit key -1 needs the total-capture type (4 on a test line), or the old engine refused it.
+    if (active && in && s.exitKey() == -1 && code != 4) {
+      res_.refusal = "test line " + std::to_string(t.key) +
+                     ": the exit key -1 (total capture) needs the total-capture data type (4 on a test line); the old engine refused it";
+      return;
+    }
     const std::string angleFrame = (code == 5 || code == 7) ? "cm" : "lab";
     std::vector<io::Token> reaction;
     std::vector<std::pair<std::string, std::string>> pairKeys;
