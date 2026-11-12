@@ -153,6 +153,30 @@ third column is the absolute :math:`A_k` in b/sr (:math:`A_0 = \sigma/4\pi`).
 A normalised coefficient carries no normalization (the segment's norm must stay
 fixed at 1).
 
+In format 3 (``quantity legendre``, ``columns E_lab[MeV] order value error``)
+the field ``expansion`` names the normalisation, for data sets and
+extrapolations alike (EXFOR's codes in brackets), with
+:math:`d\sigma/d\Omega_\text{cm} = \sum_L A_L P_L(\cos\theta_\text{cm})`:
+
+==============  ==============================  ===========  ==============
+``expansion``   coefficient of order :math:`L`  unit         EXFOR
+==============  ==============================  ===========  ==============
+``a_over_a0``   :math:`A_L/A_0`                 ``1``        ``LEG/RS``
+``absolute``    :math:`A_L`                     b/sr         ``LEG``
+``rsl``         :math:`A_L/((2L+1)A_0)`         ``1``        ``LEG/RSL``
+``2l2``         :math:`2A_L/(2L+1)`             b/sr         ``LEG/2L2``
+``4pi``         :math:`4\pi A_L`                b            ``LEG/4PI``
+==============  ==============================  ===========  ==============
+
+The normalised forms (``a_over_a0``, ``rsl``) keep their norm fixed; the
+engine computes :math:`A_L/A_0` or :math:`A_L` and multiplies by the factor of
+:math:`L` the table implies, so a fold, an energy shift and the gradient act
+on all five alike.  An extrapolation writes :math:`L = 0 \ldots K` of its
+``orders 0 K`` in its expansion (the ``.acoeff`` file and pyazr's
+``calculate_angular_dists``).  ``tests/legendre_expansions`` checks every
+order against a Gauss--Legendre projection of the engine's own
+:math:`d\sigma/d\Omega`.
+
 Temperature Files
 ^^^^^^^^^^^^^^^^^
 
@@ -732,8 +756,39 @@ against 125 for 12C(p,γ) at 0.05 -- 0.25 MeV, ``tests/units_scales``); with a
 narrow peak in the range both are governed by its floor (10\ :sup:`-3` of the
 largest value).  Refused: an uncharged entrance
 (``E_REACTION_NOT_ALLOWED``) and a THM data set (``E_NOT_BUILT``).  In the
-``AZUREOut`` files of such a data set the cross-section columns hold S and the
-S-factor columns S times :math:`E e^{2\pi\eta}`.
+``AZUREOut`` files of such a data set the cross-section columns hold
+:math:`\sigma = S/(E e^{2\pi\eta})` and the S-factor columns S.
+
+Modified S factor.  ``quantity modified_sfactor`` with the field ``shape <g>
+1/MeV`` (or ``1/keV``) compares the data with the modified S factor of
+heavy-ion fusion, :math:`S^*(E) = E\,\sigma(E)\,e^{2\pi\eta(E) + gE}`
+(Patterson, Winkler and Zaidins, ApJ 157 (1969) 367), in the units of
+``quantity sfactor``, with the same :math:`E` and :math:`\eta`; everything said
+above of the S factor holds for it (energy shifts, folds, adaptive grids).  The
+constant :math:`g` is given, never computed: 0.46 /MeV for
+:sup:`12`\ C + :sup:`12`\ C, in general
+:math:`0.122\sqrt{\mu R^3/(Z_1 Z_2)}` /MeV with :math:`\mu` in u and the
+radius :math:`R` in fm.  With ``shape 0 1/MeV`` the model is the S factor bit
+for bit.  Refused: no ``shape`` (``E_FIELD_REQUIRED``), a ``shape`` that is no
+inverse energy (``E_UNIT_NOT_ALLOWED``), an uncharged entrance
+(``E_REACTION_NOT_ALLOWED``), a THM data set (``E_NOT_BUILT``).  In the
+``AZUREOut`` files the cross-section columns hold :math:`\sigma` and the
+S-factor columns :math:`S^*` (``tests/modified_sfactor``).
+
+Ratio to a reference cross section.  ``quantity ratio_to_reference`` (unit
+``1``; an ``E_lab`` or ``E_cm`` column) with ``reference <file> [unit <u>]``
+compares the data with :math:`\langle\sigma\rangle/\langle\sigma_\text{ref}\rangle`:
+the file has two columns, the energy in the data set's energy role, frame and
+unit (an extrapolation: its grid's) and the reference cross section (``b``
+unless ``unit`` names another cross-section unit); between rows it is
+interpolated linearly in :math:`\ln\sigma` against :math:`E`, and never
+extrapolated.  With a target or beam fold the reference is folded on the
+point's own sub-points, as the Rutherford reference is.  Refused: no
+``reference`` (``E_FIELD_REQUIRED``), a file that is not a table (fewer than two
+rows, energies not increasing), a value :math:`\le 0`, a data row or grid point
+outside the table (``E_REFERENCE_TABLE``).  A fold's sub-point or a shifted
+energy outside the table makes that point's model NaN: give a table that covers
+the fold.  ``tests/ratio_to_reference``.
 
 Yields.  ``quantity yield`` on a ``target`` of kind ``infinite`` compares the
 data with the thick-target yield the engine folds,

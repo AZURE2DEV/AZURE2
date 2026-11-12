@@ -104,6 +104,7 @@ const std::vector<DiagnosticCode> &DiagnosticCodes() {
       {kStoppingActive, E, "a stopping evaluation or table whose composition does not contain the active nucleus's element"},
       {kStoppingScaleConflict, E, "two targets that share a stopping scale (one material and projectile) and write it differently"},
       {kStoppingData, E, "a stopping evaluation in an engine built without SRIM's data files and no AZURE2_SRIM_DATA_DIR, or a stopping table that cannot be read (set-up)"},
+      {kReferenceTable, E, "the reference table of a ratio_to_reference record: unreadable, not increasing in energy, a value <= 0, or not covering an energy of the data set or grid (build)"},
       {kStoppingRange, E, "a target's stopping asked for at an energy outside its range: SRIM's above 1e7 keV/u, or a table's ends (set-up)"},
       {kLabJacobianAtLimit, E, "a laboratory-frame differential datum at the kinematic maximum lab angle, where dOmega_lab/dOmega_cm is 0 and the lab-frame model diverges (set-up)"},
       {kPotentialTwice, E, "two potential records for one pair"},

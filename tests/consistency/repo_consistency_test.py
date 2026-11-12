@@ -872,6 +872,21 @@ for top in ("src", "include", "api", "io", "experiment"):
 if not OLD_WORDS.search("<segmentsData> line 3") or OLD_WORDS.search("bool targetIntegration = false;"):
     problems.append("check 34: the old-word pattern no longer matches the forms it guards; update this check")
 
+# 35. A leaf the R-matrix does not compute (a Coulomb reference, a tabulated reference) is asked for with
+#     IsReferenceLeaf (experiment/Prediction.h) wherever the model pass skips or drops it (ComposeModelValue,
+#     ModelPointBackward): a test with the narrower IsCoulombReference would miss a new reference leaf.  In src/ it is
+#     named only where the Coulomb value itself is chosen: once in src/ModelPass.cpp, and in src/CoulombReference.cpp.
+NARROW_LEAF = re.compile(r"\bIsCoulombReference\(")
+for rel in sorted(f"src/{n}" for n in os.listdir(os.path.join(ROOT, "src")) if n.endswith(".cpp")):
+    if rel == "src/CoulombReference.cpp":
+        continue
+    hits = [n for n, line in enumerate(read(rel).splitlines(), 1) if NARROW_LEAF.search(line)]
+    if len(hits) > (1 if rel == "src/ModelPass.cpp" else 0):
+        problems.append(f"{rel}:{hits[-1]}: IsCoulombReference where a reference leaf is skipped or dropped; ask "
+                        "IsReferenceLeaf (check 35)")
+if not NARROW_LEAF.search("if (azure2::experiment::IsCoulombReference(part))") or NARROW_LEAF.search("IsReferenceLeaf(p)"):
+    problems.append("check 35: the pattern no longer matches the form it guards; update this check")
+
 if problems:
     for p in problems:
         print("FAIL", p)
@@ -879,4 +894,4 @@ if problems:
     sys.exit(1)
 print(f"repository consistent: {len(flags)} CLI flags, test registration, check.sh modes, pyazr version and exports, "
       f"format-3 reference page, {len(declared)} diagnostic codes, file sizes, one model pass and residual, one calculation plan, "
-      f"no machine paths, no old data class names, no old section in the engine")
+      f"no machine paths, no old data class names, no old section in the engine, reference leaves by one predicate")

@@ -122,6 +122,7 @@ DatasetSpec DatasetOf(const SegLine &s, int key, std::string &why) {
   d.maxA = s.maxA();
   d.dataFile = s.dataFile();
   d.absolute = s.absolute() == 1;
+  if (d.absolute) d.reaction.legendre = azure2::experiment::LegendreExpansion::Absolute;  // "absolute 1": A_k (b/sr)
   d.norm = s.dataNorm();
   d.normError = s.dataNormError();
   d.varyNorm = s.varyNorm() == 1;

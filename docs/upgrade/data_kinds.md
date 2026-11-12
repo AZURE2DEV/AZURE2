@@ -325,6 +325,11 @@ factor of 5000 for ³He(α,γ) at 93 keV (`nds.py:66-71`). A partial cross secti
 `Scale`); the branching comes from ENSDF with its uncertainty as a nuisance. Apparatus: none for σ itself; target and
 resolution folds when the data are not deconvolved.
 
+The modified S factor of heavy-ion fusion (`quantity modified_sfactor`; Patterson, Winkler and Zaidins, ApJ 157
+(1969) 367), S*(E) = E σ(E) exp(2πη + gE), is the same `Scale` node with the factor E exp(2πη + gE): g (1/MeV, the
+record field `shape`) removes the slow fall of S where the barrier is thick (12C + 12C: g = 0.46 /MeV; in general
+g = 0.122 sqrt(μ R³ / (Z1 Z2)) /MeV, μ in u, R in fm). The user gives g; the engine does not choose R.
+
 ### 4.2 Differential cross sections and Jacobians
 
 dσ/dΩ_cm(E, θ) = |f_C(θ)δ_{αβ} + f_N(θ)|² summed over spin projections; the Coulomb amplitude f_C is not a finite
@@ -407,7 +412,9 @@ dσ/dΩ_cm = Σ_L A_L P_L(cos θ_cm) with A₀ = σ/4π. AZURE2's normalized coe
 `LEG/RS` W_L; its `absolute 1` A_L is EXFOR's `LEG` a_L (b/sr). The other forms are fixed linear maps: `LEG/RSL`
 B_L = W_L/(2L+1); `LEG/2L2` a_L = 2A_L/(2L+1); `LEG/4PI` a_L = 4πA_L; `LEG/RS0`, `LEG/RSD` divide by
 Σ_L A_L P_L(1) or Σ_L A_L P_L(0) with the normalization of §3.2 finding 3; `LEG/1K2` multiplies by k² (energy
-dependent). Cosine forms are a triangular linear map of the Legendre ones. Only c.m. coefficients (`NUMBER-CM`) are
+dependent). The engine builds the first five (`quantity legendre`, `expansion a_over_a0 | absolute | rsl | 2l2 |
+4pi`, data and extrapolations; `experiment/LegendreExpansion.h`); the definitions are this section's (the
+ambiguity of §3.2 finding 3 concerns `RSD`/`RS0` only; LEXFOR's text was not re-read when they were built). Cosine forms are a triangular linear map of the Legendre ones. Only c.m. coefficients (`NUMBER-CM`) are
 a linear function of the c.m. A_L; lab-frame Legendre fits of particle distributions are not, and must be refused.
 Elastic scattering of charged particles has no finite expansion; `LEG/RTH` coefficients of the Rutherford ratio are
 the only form that can exist there, and they need the ratio of §4.3 projected on P_L **[I]**.
@@ -555,6 +562,21 @@ per kind (resonance strength, energy, total width, partial width, branching rati
 N_A⟨σv⟩(T) is an integral of σ over a Maxwellian (LEXFOR p. T.6). A measured rate does not exist: an `SGV` value in
 EXFOR is derived from cross sections or resonance parameters, often the same ones in the fit. Refuse as data;
 compare rates as outputs.
+
+### 4.9 Cross sections relative to a tabulated reference
+
+Many EXFOR entries give σ(E)/σ_ref(E), a measurement relative to a monitor reaction or a standard (the monitor in
+`MONITOR`, `MONIT-REF`). `quantity ratio_to_reference` with `reference <file> [unit <u>]` compares such data with
+⟨σ⟩/⟨σ_ref⟩: σ_ref is the table of the file (two columns: the energy in the data set's energy role, frame and unit,
+an extrapolation's in its grid's; the cross section, b unless `unit` says otherwise), interpolated linearly in ln σ
+against E between the rows around E; Build takes the energies to the entrance pair's lab frame once (a linear map
+of E_cm, so the interpolant is the same). The ratio is the same in both frames and not converted at load. With an
+apparatus fold σ_ref is folded on the point's own sub-points by the point's own kernel (the Coulomb reference's
+seam, `FoldReferenceAtPoint`), so the model is the ratio of the two folds. Refused: no `reference`
+(`E_FIELD_REQUIRED`), a file that is not a table, a value ≤ 0, a data row or grid point outside the table
+(`E_REFERENCE_TABLE`; the table is never extrapolated). A fold's sub-point or a shifted energy outside the table makes
+that point's model NaN (a failed point): the table must cover the fold's extent. Differential data relative to a
+reference (an angle-dependent table) are not built.
 
 ## 5. Proposal
 

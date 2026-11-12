@@ -1,6 +1,8 @@
 #ifndef AZURE2_COULOMBREFERENCE_H
 #define AZURE2_COULOMBREFERENCE_H
 
+#include <functional>
+
 #include "azure2/experiment/Prediction.h"
 
 class CNuc;
@@ -28,12 +30,22 @@ double CoulombReferenceValue(const WorkingCopy &data, Unit *point, experiment::L
                              const Config &configure);
 
 /*!
- * The factor E exp(2 pi eta(E)) (MeV) that takes the cross section of a point to its S factor (experiment::FactorRef::
- * SFactor; physics/AstrophysicalFactor.h): E the point's present c.m. energy (after an energy shift that re-energised
- * it), eta of its entrance pair with the pair's masses and charges.  Under a fold it is taken at the point's energy:
- * the model is E exp(2 pi eta(E)) <sigma>, the S factor of the folded cross section at the point.
+ * A reference value the R-matrix does not compute, at a point as its observable is: at(point) without a sub-point
+ * effect; else at(sub-point) folded by the point's own kernel (FoldValues, the one quadrature) with the edge blend
+ * w fold + (1 - w) at(point) of Unit::Calculate where that applies.  The Coulomb leaf above and the tabulated
+ * reference (ReferenceTableLeaf.h) use it.
  */
-double SFactorConversionValue(const Unit *point, CNuc *compound);
+double FoldReferenceAtPoint(const WorkingCopy &data, Unit *point, const Config &configure,
+                            const std::function<double(const Unit *)> &at);
+
+/*!
+ * The factor E exp(2 pi eta(E) + g E) (MeV) that takes the cross section of a point to its S factor (g = 0) or its
+ * modified S factor (g = shape_perMeV, 1/MeV; experiment::FactorRef::SFactor; physics/AstrophysicalFactor.h): E the
+ * point's present c.m. energy (after an energy shift that re-energised it), eta of its entrance pair with the pair's
+ * masses and charges.  Under a fold it is taken at the point's energy: the model is E exp(2 pi eta(E) + g E) <sigma>,
+ * the S factor of the folded cross section at the point.
+ */
+double SFactorConversionValue(const Unit *point, CNuc *compound, double shape_perMeV);
 
 }  // namespace azure2
 

@@ -11,6 +11,7 @@
 #include "azure2/experiment/BuildContext.h"
 #include "azure2/experiment/CovarianceFile.h"
 #include "azure2/experiment/FinalStates.h"
+#include "azure2/experiment/Frames.h"
 #include "azure2/experiment/Grids.h"
 #include "azure2/experiment/Measurement.h"
 #include "azure2/experiment/ModelDatum.h"
@@ -251,7 +252,8 @@ bool ReadPhaseShift(Context &c, const ValidatedRecord &r, ReactionSpec &spec) {
 }
 
 // The S factor S = E sigma exp(2 pi eta) of the angle-integrated cross section (data_kinds.md section 4.1): a factor
-// on the model at the point's c.m. energy, defined for a charged entrance pair.
+// on the model at the point's c.m. energy, defined for a charged entrance pair; the modified S factor multiplies it by
+// exp(g E), g the record's 'shape' (the validator required it and checked its unit).
 bool SFactorOf(Context &c, const ValidatedRecord &r, ReactionSpec &spec) {
   const PairInfo *p = c.Pair(spec.entranceKey);
   if (p && (p->kind != 0 || p->lightZ * p->heavyZ == 0)) {
@@ -267,6 +269,7 @@ bool SFactorOf(Context &c, const ValidatedRecord &r, ReactionSpec &spec) {
     return false;
   }
   spec.scale.sFactor = true;
+  if (const Value *g = r.Get("shape")) spec.scale.sFactorShape_perMeV = ToBase(g->number.value, g->unit);
   return true;
 }
 
@@ -297,13 +300,13 @@ bool ReadObservable(Context &c, const ValidatedRecord &r, const std::string &ang
   const bool data = r.kind == "dataset";
   using O = Observable;
   if (q == "sigma" || q == "sigma_nuclear" || q == "sigma_total" || q == "beta_delayed_spectrum" || q == "transmission" ||
-      q == "neutron_yield" || q == "sfactor" || (q == "yield" && angleFrame.empty())) {
+      q == "neutron_yield" || q == "sfactor" || q == "modified_sfactor" || q == "ratio_to_reference" || (q == "yield" && angleFrame.empty())) {
     const std::string multipole = Word(r, "multipole");
     spec.observable = multipole == "E1" ? O::CrossSectionE1 : multipole == "E2" ? O::CrossSectionE2 : O::CrossSection;
     if (spec.exitKey == -1 && spec.combination == ReactionSpec::Combination::None) spec.observable = O::TotalCapture;
     spec.total = q == "sigma_total";
     if (!PairsDecideElastic(c, r, spec)) return false;
-    if (q == "sfactor") return SFactorOf(c, r, spec);
+    if (q == "sfactor" || q == "modified_sfactor") return SFactorOf(c, r, spec);
     if (q == "beta_delayed_spectrum") {
       const PairInfo *p = c.Pair(spec.entranceKey);
       if (p && p->kind != 20) {
@@ -364,12 +367,7 @@ bool ReadObservable(Context &c, const ValidatedRecord &r, const std::string &ang
   }
   if (q == "legendre") {
     spec.observable = data ? O::AngularCoefficients : O::AngularDistribution;
-    const std::string expansion = Word(r, "expansion", "a_over_a0");
-    if (expansion != "a_over_a0" && (!data || expansion != "absolute")) {
-      c.Error(codes::kNotBuilt, r, "expansion", "expansion " + expansion + ": this engine has a_over_a0" +
-                                                    std::string(data ? " and absolute" : "") + " only");
-      return false;
-    }
+    spec.legendre = LegendreExpansionOf(Word(r, "expansion", "a_over_a0"));
     return true;
   }
   c.Error(codes::kNotBuilt, r, "quantity", "quantity " + q + ": this engine cannot set it up yet (a later step)");
@@ -378,6 +376,56 @@ bool ReadObservable(Context &c, const ValidatedRecord &r, const std::string &ang
 
 // A data file's path as the engine opens it: relative to the project directory ("" = the working directory).
 std::string DataPath(const Context &c, const std::string &file) { return c.ProjectPath(file); }
+
+// The reference table of a ratio_to_reference record (ReferenceTable.h): read once, its energies taken from the data
+// set's energy column (an extrapolation: its grid) -- `toMeV` MeV per unit, c.m. of the entrance pair when `cm` --
+// to the pair's lab frame in MeV, its values to b.  E_REFERENCE_TABLE for a file that cannot be read or is not a table.
+bool ReferenceInto(Context &c, const ValidatedRecord &r, double toMeV, bool cm, ReactionSpec &spec) {
+  const Value *ref = r.Get("reference");
+  if (!ref) return true;
+  const Value *file = ref->Get("file");
+  const Value *unit = ref->Get("unit");
+  if (!file) return false;  // the validator refused it
+  const std::string path = DataPath(c, file->word);
+  std::ifstream in(path);
+  std::vector<double> energy, value;
+  const std::string why = in ? ReadReferenceRows(in, energy, value) : "cannot be read";
+  if (!why.empty()) {
+    c.Error(codes::kReferenceTable, r, "reference", "reference table " + path + ": " + why);
+    return false;
+  }
+  const PairInfo *p = c.Pair(spec.entranceKey);
+  if (cm && !p) return false;  // the pair was refused already
+  Partition entrance;
+  if (p) {
+    entrance.m1 = p->lightMass;
+    entrance.m2 = p->heavyMass;
+  }
+  ReferenceTable &t = spec.reference;
+  t.file = file->word;
+  const double toBarn = unit && unit->unit ? unit->unit->factor : 1.0;
+  for (std::size_t i = 0; i < energy.size(); i++) {
+    const double e = energy[i] * toMeV;
+    t.energyLab_MeV.push_back(cm ? BeamLabFromCM(entrance, e, c.opt_.relativistic) : e);
+    t.sigma_b.push_back(value[i] * toBarn);
+  }
+  return true;
+}
+
+// E_REFERENCE_TABLE for each lab energy (MeV) of `energies` outside the reference table (none: true).
+bool InsideReference(Context &c, const ValidatedRecord &r, const ReferenceTable &t, const std::vector<double> &energies,
+                     const std::string &what) {
+  bool ok = true;
+  for (double e : energies) {
+    if (!std::isnan(ReferenceAt(t, e))) continue;
+    std::ostringstream m;
+    m << what << " at E_lab = " << e << " MeV is outside the reference table " << t.file << " (E_lab " << t.energyLab_MeV.front()
+      << " - " << t.energyLab_MeV.back() << " MeV): the table is not extrapolated";
+    c.Error(codes::kReferenceTable, r, "reference", m.str());
+    ok = false;
+  }
+  return ok;
+}
 
 // The data file exists and its first row holds every column the roles name (a run that may not read the data).
 bool CheckFirstDataRow(Context &c, const ValidatedRecord &r, const std::string &path, std::ifstream &in, std::size_t columns) {
@@ -447,7 +495,9 @@ bool CheckDataFile(Context &c, const ValidatedRecord &r, const DatasetSpec &d, s
     c.Error(codes::kDataFile, r, "file", "cannot read " + path);
     return false;
   }
-  if (c.opt_.dataFiles == DataFiles::NotUsed) return CheckFirstDataRow(c, r, path, in, columns);
+  // A ratio to a reference table reads every row in every run: the table must cover each kept energy.
+  if (c.opt_.dataFiles == DataFiles::NotUsed && d.reaction.reference.Empty()) return CheckFirstDataRow(c, r, path, in, columns);
+  std::vector<double> keptEnergies;
   bool ok = true;
   std::shared_ptr<CovarianceFile> cov;
   if (!d.covarianceFile.empty()) {
@@ -456,6 +506,7 @@ bool CheckDataFile(Context &c, const ValidatedRecord &r, const DatasetSpec &d, s
   }
   const std::string canonicalData = cov ? CanonicalPath(path) : "";
   auto checkKept = [&](const DataRow &row) -> std::string {
+    keptEnergies.push_back(row.energy);
     if (cov) {  // the set-up takes sqrt(C_ii) as the row's uncertainty (Segment::Fill)
       const int fileRow = cov->RowOf(canonicalData, row.record);
       const double v = fileRow < 0 ? 0.0 : cov->Variance(fileRow, row.value);
@@ -489,6 +540,7 @@ bool CheckDataFile(Context &c, const ValidatedRecord &r, const DatasetSpec &d, s
     c.Error(codes::kDataFile, r, "file", path + " holds no data row");
     ok = false;
   }
+  if (!d.reaction.reference.Empty()) ok = InsideReference(c, r, d.reaction.reference, keptEnergies, "the row") && ok;
   return ok;
 }
 
@@ -564,7 +616,7 @@ bool BuildDataset(Context &c, const ValidatedRecord &r, DatasetSpec &d, Member &
   if (!ok) return false;
   ok = ReadObservable(c, r, angleFrame, d.reaction) && ok;
   ok = build::ValueUnit(c, r, d.reaction, &d.columns) && ok;
-  d.absolute = Word(r, "expansion") == "absolute";
+  d.absolute = !LegendreExpansionNormalised(d.reaction.legendre);
   if (const Value *w = r.Get("angle_window")) {
     d.minA = Context::InBase(w->lo, w->unit);
     d.maxA = Context::InBase(w->hi, w->unit);
@@ -576,6 +628,7 @@ bool BuildDataset(Context &c, const ValidatedRecord &r, DatasetSpec &d, Member &
   if (cols) {
     const std::string second = angleRole ? angleRole->role : (r.quantity && r.quantity->name == "legendre") ? "order" : "_";
     ok = build::DataColumns(c, r, cols->columns, second, d) && ok;
+    if (ok) ok = ReferenceInto(c, r, d.columns.energy, d.columns.energyCM, d.reaction) && ok;
   }
   build::EnergyWindow(r, d);
   // norm: its own nuisance, or a shared normalization record (its values in every member; the engine takes the group's
@@ -692,6 +745,11 @@ bool BuildExtrapolation(Context &c, const ValidatedRecord &r, ExtrapolationSpec 
   ok = build::ValueUnit(c, r, x.reaction, nullptr) && ok;
   if (const Value *e = r.Get("energies")) {
     ok = ReadGrid(c, r, "energies", e->grid, c.Pair(x.reaction.entranceKey), x.energies, x.minE, x.maxE, &x.gridFile) && ok;
+    if (ok && r.Has("reference")) {
+      ok = ReferenceInto(c, r, e->grid.unit ? e->grid.unit->factor : 1.0, e->grid.frame == "cm", x.reaction);
+      const std::vector<double> ends = x.energies.empty() ? std::vector<double>{x.minE, x.maxE} : x.energies;
+      if (ok) ok = InsideReference(c, r, x.reaction.reference, ends, "the grid point");
+    }
     if (e->grid.kind == "adaptive") {
       x.adaptive.on = true;
       x.adaptive.tolerance = e->grid.tolerance.value;
