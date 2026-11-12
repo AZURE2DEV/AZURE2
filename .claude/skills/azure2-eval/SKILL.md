@@ -539,19 +539,48 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   scattering did not move, and nothing warned. Now such a final state is
   marked at load, its on-resonance amplitude and N_f are recomputed from
   the group's formal parameters at every parameter update, and the EC
-  integrals use its input energy. Consequences to know: (1) the sign of
-  the ANC in the `.azr` sets the sign of the EC term for a marked state;
-  (2) a formal fit with that ANC or a same-J^pi level free moves the
-  group's pole off the input energy (formal energy fixed is not observed
-  energy fixed): beyond 1 keV the run ends with "external-capture final
-  state in the formal parametrization: the pole of its J-group is now ...
-  keV from the bound-state energy", restart from the output; (3)
-  `--use-gradient` falls back to finite differences for the whole model
-  ("analytic block BAILED", "Analytic G2 unavailable"); (4)
-  `--no-transform` gets a warning, not a correction. Final states first in
-  their group, and every Brune run, are unchanged. Suspect any old
-  `--no-brune` capture fit whose final state is not first in its J^pi
-  group.
+  integrals use its input energy. A formal fit with that ANC or a
+  same-J^pi level free moves the group's pole off the input energy (formal
+  energy fixed is not observed energy fixed): beyond 1 keV the run ends
+  with "external-capture final state in the formal parametrization: the
+  pole of its J-group is now ... keV from the bound-state energy", restart
+  from the output. Final states first in their group, and every Brune run,
+  are unchanged. Suspect any old `--no-brune` capture fit whose final state
+  is not first in its J^pi group.
+  **Second pass, 786e1f3b (2026-11-12; builds from 081dddf9 up to it,
+  e.g. e3d67399, behave as in the "before" of each item):**
+  (1) *Sign.* The EC amplitude of EVERY final state lies along the ANC as
+  entered in the `.azr`, and `parameters.out`/`param.par` report the level
+  with that sign. Before, only a not-first final state followed the ANC,
+  and the reported row could come back with the opposite sign. Then the
+  gamma widths REPORTED for the initial levels were wrong (their external
+  part had the wrong relative sign: 1.228 eV printed for an entered
+  480 meV in the three-level test model) although the cross sections were
+  right; re-entering those widths changed the capture by up to 74 %. Do
+  not carry `parameters.out` gamma widths of a `--no-brune` capture run of
+  such a build into a new `.azr` when the final state is not first in its
+  group. An ANC of exactly zero gives no direction; a row derived by an
+  `<isospin>` tie is set by the tie.
+  (2) *`--use-gradient`* is used for these models (the on-resonance
+  amplitude is differentiated through the group's eigenvector). Before:
+  finite differences for the whole model ("analytic block BAILED",
+  "Analytic G2 unavailable").
+  (3) *`--no-transform`* (level lines hold formal E in MeV and gamma in
+  MeV^1/2, as in `output/param.par` of a `--no-brune` run): the final
+  state of a capture pair is the in-R-matrix level of its J^pi nearest in
+  formal energy to the pair's excitation energy (a NOTE names it when none
+  is within 1 keV), corrected as in a transformed run, so `param.par`
+  round-trips in any level order. A WARNING with the distance appears only
+  when the group has no pole within 1 keV of the pair's energy. Before:
+  real formal parameters with the ground state not first stopped with
+  "none is listed within 1 keV in that J^pi group", and a level that did
+  match was used uncorrected.
+  (4) *Static moment.* A ground state not first in its group has its M1/E2
+  line to its own pair printed as "mu ="/"Q =" again. Before:
+  "G = 0.000000 meV".
+  (5) *Pole distance* in the end-of-run message is one Newton step,
+  (lambda - E_f) N_f. Before: the raw eigenvalue difference, too large by
+  1/N_f (63.6 keV printed for a true 50 keV).
 - **MIGRAD nuisance priors on level parameters hit the wrong parameter**
   (fixed 2026-10-27, audit item 14, `tests/nuisance_level_index`): a
   `<parameterSettings>` entry with nuisance 1 on a level energy or width
