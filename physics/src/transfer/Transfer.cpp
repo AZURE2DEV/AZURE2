@@ -7,6 +7,7 @@
 #include "azure2/physics/AngularCoupling.h"
 #include "azure2/physics/Constants.h"
 #include "azure2/physics/transfer/RadialNumerics.h"
+#include "azure2/physics/transfer/TransferAmplitudes.h"
 #include "azure2/physics/transfer/TransferKernel.h"
 
 namespace azure2 {
@@ -23,8 +24,6 @@ void CheckReaction(const TransferReaction &r, const DistortedWaves &in, const Di
     throw std::invalid_argument("transfer: masses must be positive");
   if (!(r.mass_s_u < r.mass_a_u) || !(r.mass_A_u < r.mass_F_u))
     throw std::invalid_argument("transfer: m_s < m_a and m_A < m_F");
-  if (in.spin_orbit || out.spin_orbit)
-    throw std::invalid_argument("transfer: distorted waves with a spin-orbit term are not implemented");
   const Overlap *ov[2] = {&r.projectile, &r.residual};
   for (const Overlap *o : ov) {
     if (!triangle(2 * o->radial.l, r.two_s_x, o->radial.two_j) ||
@@ -32,50 +31,57 @@ void CheckReaction(const TransferReaction &r, const DistortedWaves &in, const Di
       throw std::invalid_argument("transfer: an overlap's angular momenta do not couple");
     if (o->radial.u.empty() || !(o->radial.step_fm > 0.0)) throw std::invalid_argument("transfer: an empty overlap");
   }
+  (void)in;
+  (void)out;
 }
 
-/*!
- * sum over M_a, M_A, M_s, M_F of |T|^2 (Eq. (6.5) of the note) from the orbital amplitudes O[(m_F + l_F)(2 l_a + 1) +
- * m_a + l_a]: the overlaps ((l, s_x) j, J_core; J_composite) contracted over the projection of s_x.
- */
-double SpinSum(const TransferReaction &r, const std::vector<cplx> &O) {
-  const Overlap &pa = r.projectile, &pf = r.residual;
-  const int la = pa.radial.l, lF = pf.radial.l, ja = pa.radial.two_j, jF = pf.radial.two_j;
-  const int sx = r.two_s_x;
-  double sum = 0.0;
-  for (int Ma = -pa.two_J_composite; Ma <= pa.two_J_composite; Ma += 2)
-    for (int Ms = -pa.two_J_core; Ms <= pa.two_J_core; Ms += 2) {
-      const int mua = Ma - Ms;
-      if (std::abs(mua) > ja) continue;
-      const double ca = clebsch_gordan(ja, mua, pa.two_J_core, Ms, pa.two_J_composite, Ma);
-      if (ca == 0.0) continue;
-      for (int MF = -pf.two_J_composite; MF <= pf.two_J_composite; MF += 2)
-        for (int MA = -pf.two_J_core; MA <= pf.two_J_core; MA += 2) {
-          const int muF = MF - MA;
-          if (std::abs(muF) > jF) continue;
-          const double cF = clebsch_gordan(jF, muF, pf.two_J_core, MA, pf.two_J_composite, MF);
-          if (cF == 0.0) continue;
-          cplx t = 0.0;
-          for (int sig = -sx; sig <= sx; sig += 2) {
-            const int ma2 = mua - sig, mF2 = muF - sig;  // 2 m_a, 2 m_F
-            if (std::abs(ma2) > 2 * la || std::abs(mF2) > 2 * lF) continue;
-            const double c = clebsch_gordan(2 * la, ma2, sx, sig, ja, mua) * clebsch_gordan(2 * lF, mF2, sx, sig, jF, muF);
-            t += c * O[(mF2 / 2 + lF) * (2 * la + 1) + ma2 / 2 + la];
-          }
-          sum += std::norm(ca * cF * t);
-        }
+/// R_{wf wi} = int dR u_wf(c_f R) u_F(R) u_wi(c_i R) / R (fm^-1/2 times the unit of u_F) on the residual overlap's
+/// grid, as far as both waves reach, for every pair of waves (Eq. (6.7)).
+std::vector<cplx> ZeroRangeRadialIntegrals(const RadialOverlap &state, const DistortedWaves &in,
+                                           const DistortedWaves &out, double c_i, double c_f) {
+  const double hb = state.step_fm;
+  const double r_in = (Wave(in, 0).size() - 1) * in.step_fm, r_out = (Wave(out, 0).size() - 1) * out.step_fm;
+  const int n = std::min<int>(static_cast<int>(state.u.size()),
+                              static_cast<int>(std::floor(std::min(r_in / c_i, r_out / c_f) / hb)) + 1);
+  const std::size_t nwi = in.waves.size(), nwf = out.waves.size();
+  std::vector<std::vector<cplx>> ui(nwi), uf(nwf);
+  for (std::size_t k = 0; k < nwi; ++k) {
+    ui[k].resize(n);
+    for (int p = 0; p < n; ++p) ui[k][p] = InterpolateOnGrid(Wave(in, k), in.step_fm, c_i * p * hb);
+  }
+  for (std::size_t k = 0; k < nwf; ++k) {
+    uf[k].resize(n);
+    for (int p = 0; p < n; ++p) uf[k][p] = InterpolateOnGrid(Wave(out, k), out.step_fm, c_f * p * hb);
+  }
+  std::vector<cplx> R(nwf * nwi, 0.0), f(n);
+  for (std::size_t kf = 0; kf < nwf; ++kf)
+    for (std::size_t ki = 0; ki < nwi; ++ki) {
+      const int lf = out.waves[kf].l, li = in.waves[ki].l;
+      if ((li + lf + state.l) % 2 != 0 || li < std::abs(lf - state.l) || li > lf + state.l) continue;
+      f[0] = 0.0;
+      for (int p = 1; p < n; ++p) f[p] = uf[kf][p] * state.u[p] * ui[ki][p] / (p * hb);
+      R[kf * nwi + ki] = Simpson(f, hb) / (c_i * c_f);
     }
-  return sum * std::pow(pa.amplitude * pf.amplitude, 2);
+  return R;
 }
 
-/// Eq. (6.6): mb/sr from sum |T|^2 (MeV^2 fm^6).
-double CrossSection(const TransferReaction &r, const DistortedWaves &in, const DistortedWaves &out, double spin_sum) {
-  const double mu_i = r.mass_a_u * r.mass_A_u / (r.mass_a_u + r.mass_A_u) * kAtomicMassUnit_MeV;
-  const double mu_f = r.mass_s_u * r.mass_F_u / (r.mass_s_u + r.mass_F_u) * kAtomicMassUnit_MeV;
-  const double hc2 = kHbarC_MeV_fm * kHbarC_MeV_fm;
-  const double factor = mu_i * mu_f / std::pow(2.0 * kPi * hc2, 2) * (out.k_fm / in.k_fm) /
-                        ((r.projectile.two_J_composite + 1.0) * (r.residual.two_J_core + 1.0));
-  return 10.0 * factor * spin_sum;
+/// sqrt((2l_f+1)(2l_i+1)/(4 pi (2l+1))) <l_f 0 l_i 0 | l 0>: the angular integral of Eq. (6.7).
+double Gaunt0(int lf, int li, int l) {
+  return std::sqrt((2 * lf + 1.0) * (2 * li + 1.0) / (4.0 * kPi * (2 * l + 1.0))) *
+         clebsch_gordan(2 * lf, 0, 2 * li, 0, 2 * l, 0);
+}
+
+/// The observables at each angle from the radial integrals and the prefactor of Eq. (19.5).
+TransferObservables ObservablesOf(const TransferReaction &r, const DistortedWaves &in, const DistortedWaves &out,
+                                  const KernelIntegrals &K, double prefactor, const std::vector<double> &theta_deg) {
+  const AngularCoefficients c = AngularCoefficientsOf(r, in, out, K, prefactor);
+  TransferObservables obs;
+  for (double th : theta_deg) {
+    const AmplitudeTable t = AmplitudesAt(r, c, th);
+    obs.cross_section.push_back(CrossSectionOf(r, in, out, t));
+    obs.analysing_power_iT11.push_back(VectorAnalysingPowerOf(t));
+  }
+  return obs;
 }
 
 }  // namespace
@@ -83,39 +89,22 @@ double CrossSection(const TransferReaction &r, const DistortedWaves &in, const D
 std::vector<cplx> ZeroRangeOrbitalIntegral(const RadialOverlap &state, const DistortedWaves &in, const DistortedWaves &out,
                                            double c_i, double c_f, double theta_deg) {
   if (!(c_i > 0.0) || !(c_f > 0.0)) throw std::invalid_argument("zero range: scale factors must be positive");
+  if (in.spin_orbit || out.spin_orbit)
+    throw std::invalid_argument("zero range orbital integral: waves without a spin-orbit term (one per l)");
   const int lF = state.l;
   const int li_max = MaxL(in), lf_max = MaxL(out);
-  const double hb = state.step_fm;
-  // Radial integrals R_{l_f l_i} = int dR u_lf(c_f R) u_F(R) u_li(c_i R) / R on the bound state's grid, as far as
-  // both waves reach.
-  const double r_in = (Wave(in, 0).size() - 1) * in.step_fm, r_out = (Wave(out, 0).size() - 1) * out.step_fm;
-  const int n = std::min<int>(static_cast<int>(state.u.size()),
-                              static_cast<int>(std::floor(std::min(r_in / c_i, r_out / c_f) / hb)) + 1);
+  const std::vector<cplx> radial = ZeroRangeRadialIntegrals(state, in, out, c_i, c_f);
   const std::vector<double> y = SphericalHarmonicsAtPhiZero(lf_max, lF, std::cos(theta_deg * kPi / 180.0));
   std::vector<cplx> O(2 * lF + 1, 0.0);
-  std::vector<cplx> f(n);
-  std::vector<std::vector<cplx>> ui(li_max + 1), uf(lf_max + 1);
-  for (int l = 0; l <= li_max; ++l) {
-    ui[l].resize(n);
-    for (int k = 0; k < n; ++k) ui[l][k] = InterpolateOnGrid(Wave(in, l), in.step_fm, c_i * k * hb);
-  }
-  for (int l = 0; l <= lf_max; ++l) {
-    uf[l].resize(n);
-    for (int k = 0; k < n; ++k) uf[l][k] = InterpolateOnGrid(Wave(out, l), out.step_fm, c_f * k * hb);
-  }
   for (int lf = 0; lf <= lf_max; ++lf)
     for (int li = std::abs(lf - lF); li <= std::min(li_max, lf + lF); ++li) {
       if ((li + lf + lF) % 2 != 0) continue;
-      f[0] = 0.0;
-      for (int k = 1; k < n; ++k) f[k] = uf[lf][k] * state.u[k] * ui[li][k] / (k * hb);
-      const cplx radial = Simpson(f, hb) / (c_i * c_f);
-      const double gaunt0 = std::sqrt((2 * lf + 1.0) * (2 * li + 1.0) / (4.0 * kPi * (2 * lF + 1.0))) *
-                            clebsch_gordan(2 * lf, 0, 2 * li, 0, 2 * lF, 0);
       const cplx phase = IPower(li - lf) * std::exp(cplx(0.0, in.sigma[li] + out.sigma[lf])) *
                          std::sqrt((2 * li + 1.0) / (4.0 * kPi));
       for (int m = -lF; m <= lF; ++m) {
         if (std::abs(m) > lf) continue;
-        O[m + lF] += phase * Ylm(y, lF + 1, lf, m) * gaunt0 * clebsch_gordan(2 * lf, 2 * m, 2 * li, 0, 2 * lF, 2 * m) * radial;
+        O[m + lF] += phase * Ylm(y, lF + 1, lf, m) * Gaunt0(lf, li, lF) *
+                     clebsch_gordan(2 * lf, 2 * m, 2 * li, 0, 2 * lF, 2 * m) * radial[lf * (li_max + 1) + li];
       }
     }
   const double pref = 16.0 * kPi * kPi / (in.k_fm * out.k_fm);
@@ -123,56 +112,46 @@ std::vector<cplx> ZeroRangeOrbitalIntegral(const RadialOverlap &state, const Dis
   return O;
 }
 
-std::vector<double> ZeroRangeCrossSection(const TransferReaction &r, double d0, const DistortedWaves &in,
-                                          const DistortedWaves &out, const std::vector<double> &theta_deg) {
+TransferObservables ZeroRangeObservables(const TransferReaction &r, double d0, const DistortedWaves &in,
+                                         const DistortedWaves &out, const std::vector<double> &theta_deg) {
   CheckReaction(r, in, out);
   if (r.projectile.radial.l != 0) throw std::invalid_argument("zero range: the projectile overlap must have l = 0");
   const double alpha = r.mass_A_u / r.mass_F_u;
-  std::vector<double> xs;
-  for (double th : theta_deg) {
-    std::vector<cplx> O = ZeroRangeOrbitalIntegral(r.residual.radial, in, out, 1.0, alpha, th);
-    for (cplx &o : O) o *= d0;
-    xs.push_back(CrossSection(r, in, out, SpinSum(r, O)));
-  }
-  return xs;
+  const int lF = r.residual.radial.l;
+  // The zero range as the kernel table of Eq. (6.4) with l_a = 0, L = l_F (section 19): I = D0 g R.
+  const std::vector<cplx> radial = ZeroRangeRadialIntegrals(r.residual.radial, in, out, 1.0, alpha);
+  KernelIntegrals K;
+  K.L_lo = lF;
+  K.nL = 1;
+  K.n_exit = static_cast<int>(out.waves.size());
+  K.n_entrance = static_cast<int>(in.waves.size());
+  K.I.assign(radial.size(), 0.0);
+  for (int kf = 0; kf < K.n_exit; ++kf)
+    for (int ki = 0; ki < K.n_entrance; ++ki) {
+      const cplx v = radial[static_cast<std::size_t>(kf) * K.n_entrance + ki];
+      if (v != 0.0) K.I[K.Index(0, kf, ki)] = d0 * Gaunt0(out.waves[kf].l, in.waves[ki].l, lF) * v;
+    }
+  return ObservablesOf(r, in, out, K, 16.0 * kPi * kPi / (in.k_fm * out.k_fm), theta_deg);
+}
+
+std::vector<double> ZeroRangeCrossSection(const TransferReaction &r, double d0, const DistortedWaves &in,
+                                          const DistortedWaves &out, const std::vector<double> &theta_deg) {
+  return ZeroRangeObservables(r, d0, in, out, theta_deg).cross_section;
+}
+
+TransferObservables FiniteRangeObservables(const TransferReaction &r, const DistortedWaves &in,
+                                           const DistortedWaves &out, const TransferGrid &grid,
+                                           const std::vector<double> &theta_deg) {
+  CheckReaction(r, in, out);
+  const double alpha = r.mass_A_u / r.mass_F_u, beta = r.mass_s_u / r.mass_a_u, jac = 1.0 - alpha * beta;
+  const KernelIntegrals K = FiniteRangeIntegrals(r, in, out, grid);
+  return ObservablesOf(r, in, out, K, 16.0 * kPi * kPi / (in.k_fm * out.k_fm * jac * jac * jac), theta_deg);
 }
 
 std::vector<double> FiniteRangeCrossSection(const TransferReaction &r, const DistortedWaves &in,
                                             const DistortedWaves &out, const TransferGrid &grid,
                                             const std::vector<double> &theta_deg) {
-  CheckReaction(r, in, out);
-  const double alpha = r.mass_A_u / r.mass_F_u, beta = r.mass_s_u / r.mass_a_u, jac = 1.0 - alpha * beta;
-  const int la = r.projectile.radial.l, lF = r.residual.radial.l;
-  const KernelIntegrals K = FiniteRangeIntegrals(r, in, out, grid);
-  const int Mmax = la + lF;
-  // O_{m_F m_a}(theta) (Eq. (6.3)) and the cross section.
-  const double pref = 16.0 * kPi * kPi / (in.k_fm * out.k_fm * jac * jac * jac);
-  std::vector<double> xs;
-  for (double th : theta_deg) {
-    const std::vector<double> yk = SphericalHarmonicsAtPhiZero(K.lf_max, Mmax, std::cos(th * kPi / 180.0));
-    std::vector<cplx> O((2 * lF + 1) * (2 * la + 1), 0.0);
-    for (int mF = -lF; mF <= lF; ++mF)
-      for (int ma = -la; ma <= la; ++ma) {
-        const int M = ma - mF;
-        cplx o = 0.0;
-        for (int iL = 0; iL < K.nL; ++iL) {
-          const int L = K.L_lo + iL;
-          if (std::abs(M) > L) continue;
-          const double cv = clebsch_gordan(2 * lF, -2 * mF, 2 * la, 2 * ma, 2 * L, 2 * M);
-          if (cv == 0.0) continue;
-          for (int lf = std::abs(M); lf <= K.lf_max; ++lf)
-            for (int li = std::abs(lf - L); li <= std::min(K.li_max, lf + L); ++li) {
-              if ((li + lf + la + lF) % 2 != 0) continue;
-              o += cv * IPower(li - lf) * std::exp(cplx(0.0, in.sigma[li] + out.sigma[lf])) *
-                   std::sqrt((2 * li + 1.0) / (4.0 * kPi)) * Ylm(yk, Mmax + 1, lf, M) *
-                   clebsch_gordan(2 * lf, 2 * M, 2 * li, 0, 2 * L, 2 * M) * K.I[K.Index(iL, lf, li)];
-            }
-        }
-        O[(mF + lF) * (2 * la + 1) + ma + la] = ((mF % 2 != 0) ? -1.0 : 1.0) * pref * o;
-      }
-    xs.push_back(CrossSection(r, in, out, SpinSum(r, O)));
-  }
-  return xs;
+  return FiniteRangeObservables(r, in, out, grid, theta_deg).cross_section;
 }
 
 }  // namespace transfer

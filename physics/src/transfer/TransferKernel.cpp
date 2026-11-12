@@ -27,8 +27,8 @@ int MaxL(const DistortedWaves &w) {
   return l_max;
 }
 
-const std::vector<cplx> &Wave(const DistortedWaves &w, int l) {
-  const PartialWave &pw = WaveOf(w, l, 2 * l);
+const std::vector<cplx> &Wave(const DistortedWaves &w, std::size_t k) {
+  const PartialWave &pw = w.waves.at(k);
   if (pw.u.empty()) throw std::invalid_argument("transfer: the distorted waves were solved without keeping u");
   return pw.u;
 }
@@ -46,9 +46,20 @@ KernelIntegrals FiniteRangeIntegrals(const TransferReaction &r, const DistortedW
   KernelIntegrals K;
   K.L_lo = std::abs(lF - la);
   K.nL = lF + la - K.L_lo + 1;
-  K.lf_max = MaxL(out);
-  K.li_max = MaxL(in);
-  const int L_lo = K.L_lo, nL = K.nL, Mmax = lF + la, nM = 2 * Mmax + 1, lf_max = K.lf_max, li_max = K.li_max;
+  K.n_exit = static_cast<int>(out.waves.size());
+  K.n_entrance = static_cast<int>(in.waves.size());
+  const int L_lo = K.L_lo, nL = K.nL, Mmax = lF + la, nM = 2 * Mmax + 1, lf_max = MaxL(out), li_max = MaxL(in);
+  const int nwf = K.n_exit, nwi = K.n_entrance;
+  // The waves of each l: positions first[l] ... first[l + 1] - 1 (one per l without a spin-orbit term, one per j with).
+  auto first_of = [](const DistortedWaves &w, int l_max) {
+    std::vector<int> first(l_max + 2, 0);
+    for (const PartialWave &pw : w.waves) ++first[pw.l + 1];
+    for (int l = 0; l <= l_max; ++l) first[l + 1] += first[l];
+    for (std::size_t k = 0; k < w.waves.size(); ++k)
+      if (k > 0 && w.waves[k].l < w.waves[k - 1].l) throw std::invalid_argument("transfer: waves not ordered by l");
+    return first;
+  };
+  const std::vector<int> first_f = first_of(out, lf_max), first_i = first_of(in, li_max);
   const double h = grid.step_fm;
   auto stride_of = [&](const DistortedWaves &w) {
     const double s = h / w.step_fm;
@@ -86,25 +97,25 @@ KernelIntegrals FiniteRangeIntegrals(const TransferReaction &r, const DistortedW
       for (int m2 = -la; m2 <= la; ++m2)
         cg_vertex[cg_index(iL, m1, m2)] = clebsch_gordan(2 * lF, 2 * m1, 2 * la, 2 * m2, 2 * (L_lo + iL), 2 * (m1 + m2));
 
-  // acc[L][l_f][M][l_i] = sum over the (r_i, r_f) grid of h^2 r_i r_f u_lf(r_f) u_li(r_i) h^L_{lf M}(r_f, r_i),
-  // h^L_{lf M} = int dx Y_lf,M(x) G_LM(x) (Eq. (6.4) of the note).
-  auto acc_index = [&](int iL, int lf, int M, int li) {
-    return ((static_cast<std::size_t>(iL) * (lf_max + 1) + lf) * nM + M + Mmax) * (li_max + 1) + li;
+  // acc[L][wf][M][wi] = sum over the (r_i, r_f) grid of h^2 r_i r_f u_wf(r_f) u_wi(r_i) h^L_{lf M}(r_f, r_i),
+  // h^L_{lf M} = int dx Y_lf,M(x) G_LM(x) (Eq. (6.4) of the note); wf, wi the waves of l_f, l_i.
+  auto acc_index = [&](int iL, int wf, int M, int wi) {
+    return ((static_cast<std::size_t>(iL) * nwf + wf) * nM + M + Mmax) * nwi + wi;
   };
-  std::vector<cplx> acc(static_cast<std::size_t>(nL) * (lf_max + 1) * nM * (li_max + 1), 0.0);
+  std::vector<cplx> acc(static_cast<std::size_t>(nL) * nwf * nM * nwi, 0.0);
   std::vector<cplx> hker(static_cast<std::size_t>(nL) * nM * (lf_max + 1));
   std::vector<double> gx, gw;
   GaussLegendre(grid.angle_nodes, gx, gw);
   std::vector<cplx> G(nL * nM);
   const double reach = jac * grid.vertex_range_fm;
-  std::vector<const std::vector<cplx> *> wi(li_max + 1), wf(lf_max + 1);
-  for (int l = 0; l <= li_max; ++l) wi[l] = &Wave(in, l);
-  for (int l = 0; l <= lf_max; ++l) wf[l] = &Wave(out, l);
-  std::vector<cplx> ufv(lf_max + 1), uiv(li_max + 1);
+  std::vector<const std::vector<cplx> *> wi(nwi), wf(nwf);
+  for (int k = 0; k < nwi; ++k) wi[k] = &Wave(in, k);
+  for (int k = 0; k < nwf; ++k) wf[k] = &Wave(out, k);
+  std::vector<cplx> ufv(nwf), uiv(nwi);
 
   for (int i = 1; i < n; ++i) {
     const double ri = i * h;
-    for (int l = 0; l <= li_max; ++l) uiv[l] = (*wi[l])[i * si];
+    for (int k = 0; k < nwi; ++k) uiv[k] = (*wi[k])[i * si];
     const int f_lo = std::max(1, static_cast<int>(std::ceil((alpha * ri - reach) / h)));
     const int f_hi = std::min(n - 1, static_cast<int>(std::floor((alpha * ri + reach) / h)));
     for (int f = f_lo; f <= f_hi; ++f) {
@@ -155,33 +166,37 @@ KernelIntegrals FiniteRangeIntegrals(const TransferReaction &r, const DistortedW
         }
       }
       const double weight = h * h * ri * rf;
-      for (int l = 0; l <= lf_max; ++l) ufv[l] = (*wf[l])[f * sf] * weight;
+      for (int k = 0; k < nwf; ++k) ufv[k] = (*wf[k])[f * sf] * weight;
       for (int iL = 0; iL < nL; ++iL) {
         const int L = L_lo + iL;
         for (int M = -L; M <= L; ++M) {
           const cplx *hk = &hker[(static_cast<std::size_t>(iL) * nM + M + Mmax) * (lf_max + 1)];
           for (int lf = std::abs(M); lf <= lf_max; ++lf) {
             if (hk[lf] == 0.0) continue;
-            const cplx hv = hk[lf] * ufv[lf];
-            for (int li = std::abs(lf - L); li <= std::min(li_max, lf + L); ++li)
-              if ((li + lf + la + lF) % 2 == 0) acc[acc_index(iL, lf, M, li)] += hv * uiv[li];
+            for (int kf = first_f[lf]; kf < first_f[lf + 1]; ++kf) {
+              const cplx hv = hk[lf] * ufv[kf];
+              for (int li = std::abs(lf - L); li <= std::min(li_max, lf + L); ++li)
+                if ((li + lf + la + lF) % 2 == 0)
+                  for (int ki = first_i[li]; ki < first_i[li + 1]; ++ki) acc[acc_index(iL, kf, M, ki)] += hv * uiv[ki];
+            }
           }
         }
       }
     }
   }
 
-  // I^L_{lf li} (Eq. (6.4)).
-  K.I.assign(static_cast<std::size_t>(nL) * (lf_max + 1) * (li_max + 1), 0.0);
+  // I^L of each pair of waves (Eq. (6.4)).
+  K.I.assign(static_cast<std::size_t>(nL) * nwf * nwi, 0.0);
   for (int iL = 0; iL < nL; ++iL) {
     const int L = L_lo + iL;
-    for (int lf = 0; lf <= lf_max; ++lf)
-      for (int li = std::abs(lf - L); li <= std::min(li_max, lf + L); ++li) {
-        if ((li + lf + la + lF) % 2 != 0) continue;
+    for (int kf = 0; kf < nwf; ++kf)
+      for (int ki = 0; ki < nwi; ++ki) {
+        const int lf = out.waves[kf].l, li = in.waves[ki].l;
+        if ((li + lf + la + lF) % 2 != 0 || li < std::abs(lf - L) || li > lf + L) continue;
         cplx s = 0.0;
         for (int M = -std::min(L, lf); M <= std::min(L, lf); ++M)
-          s += clebsch_gordan(2 * lf, 2 * M, 2 * li, 0, 2 * L, 2 * M) * acc[acc_index(iL, lf, M, li)];
-        K.I[K.Index(iL, lf, li)] = 8.0 * kPi * kPi / (2 * L + 1.0) * std::sqrt((2 * li + 1.0) / (4.0 * kPi)) * s;
+          s += clebsch_gordan(2 * lf, 2 * M, 2 * li, 0, 2 * L, 2 * M) * acc[acc_index(iL, kf, M, ki)];
+        K.I[K.Index(iL, kf, ki)] = 8.0 * kPi * kPi / (2 * L + 1.0) * std::sqrt((2 * li + 1.0) / (4.0 * kPi)) * s;
       }
   }
   return K;

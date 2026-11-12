@@ -87,6 +87,12 @@ continuum exists (scattering states, FRESCO's bins, d²σ/dΩ dE as the narrow-b
 exterior part of 9 % (a = 5 fm) to 0.5 % (7 fm) (`transfer.md` §16); the prior form and the remnants (post = prior
 to 10⁻³). Open: the ⁶Li bins against FRESCO (FRESCO loses accuracy there), ³He and ¹⁴N, global sets, wiring.
 
+Status (2026-11-12, branch `feature/upgrade-7-transfer-3`, `transfer.md` §19–§23): spin-orbit in the distorted waves
+of a transfer (both channels; the projectile's iT11 from the same amplitudes), FRESCO to 2e-4 for ¹⁵N(d,n); the ³He
+Trojan horse ¹⁸O(³He,d)¹⁹F (g.s. and 5/2⁺, finite and zero range, with and without spin-orbit) to ≤ 8.9e-4 and the
+¹⁴N Trojan horse ¹²C(¹⁴N,d)²⁴Mg to ¹²C + ¹²C states (0⁺, 2⁺, finite range) to ≤ 8.3e-4 of FRESCO. The ⁶Li bins remain
+open: Frescox 7.4 shows FRESCO 3.5's numerics (§23). Open: ³He and ¹⁴N to the continuum, global sets, wiring.
+
 Open questions for Catania (formula sheet Q2): their potential geometry and radius convention (r0·A^{1/3} vs
 r0·(A1^{1/3} + A2^{1/3})), spin–orbit, Coulomb radius, node rule for clusters, whether the interaction radius equals
 the channel radius, which boundary condition fixes the level function, whether u is normalised inside a, and one

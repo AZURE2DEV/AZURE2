@@ -2,6 +2,111 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (director, 21:47) — merged: physics/transfer, third part (spin-orbit in the distorted waves, the ³He and ¹⁴N Trojan horses, the ⁶Li bins against Frescox)
+
+**Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed): `feature/upgrade-7-transfer-3` (the
+agent's four entries below say what was done, by file). A leaf library: nothing of the engine calls it, the diff
+outside `physics/` and `docs/` is empty, no output number of a project can change.
+
+**What it is.** The kernel integrals are indexed by pairs of partial waves (l, j); one function does the angular and
+spin sums with or without spin-orbit, in finite and zero range (`TransferAmplitudes.cpp`, `transfer.md` §19), and
+gives the cross section and the projectile's iT11. Against FRESCO 3.5: ¹⁵N(d,n) with spin-orbit 2e-4; ¹⁸O(³He,d)¹⁹F
+(two states, finite and zero range, with and without spin-orbit) ≤ 8.9e-4; ¹²C(¹⁴N,d)²⁴Mg to two ¹²C + ¹²C states,
+finite range, ≤ 8.3e-4 (asked: 1 %).
+
+**Verified by the director** (fresh build `work/b-dwba3v` of the branch head).
+Fresh build of the branch head (`work/b-dwba3v`): 0 warnings. `ctest -R physics`: 34 of 34. `repo_consistency_test.py`: consistent. The three new tests run by hand print the accuracies the agent reported: ¹⁵N(d,n) with spin-orbit 2.0e-4 (iT11 1.0e-4), zero range 6e-6; ¹⁸O(³He,d)¹⁹F worst 8.9e-4 (5/2⁺ state, finite range), FRESCO's own reference against its refined run up to 1.8e-3 for the ground state; ¹²C(¹⁴N,d)²⁴Mg 8.3e-4 and 3.3e-4 (FRESCO's own refinement 1.0e-3 and 3.1e-4); without spin-orbit the earlier cross sections are reproduced to 7e-16. Four benchmark cases regenerated with the director's own runs of FRESCO 3.5 and Frescox 7.4 (`he3d_gs_finite_range_so`, `n14d_2p_finite_range`, `dn_finite_range_so`, `li6d_bin_wide_frx`): identical to the committed files. Not run by the director: the whole tree, the fits, the gate (no file they read is touched); the narrow ⁶Li bin with Frescox (the agent did not run it either).
+
+**Reviewed.** `TransferAmplitudes.{h,cpp}` read: the index arithmetic of the projection sets, the vertex couplings
+of (19.6), the normalisation of iT11 (√3/2 A_y for spin 1, A_y/√2 for spin ½) and the trace Tr(T S_y T†); no mutable
+state. The FRESCO comparisons, with the reduction test (waves flagged with a vanishing spin-orbit term against waves
+without, 7e-16), are the evidence for the algebra; it was not re-derived by the director.
+
+**Limits to keep in mind.** FRESCO's own step refinement moves its ³He finite-range results by up to 1.8e-3 (0.2 %
+was asked of it); the ¹⁴N cases use test potentials and unsymmetrised ¹²C + ¹²C (the exchange term is described in
+`transfer.md` §21, not implemented); zero range is meaningless for ¹⁴N; two ANC checks have their own stated
+tolerances (3e-5 for p + d, 1e-4 for ¹²C + ¹²C). The transferred cluster is one overlap component (no deuteron
+d-state); spins above 1 are refused by the distorted waves.
+
+**The ⁶Li bins (the PI's request, with Frescox 7.4, approved by the PI on 2026-11-12).** Frescox was installed under
+`opt/frescox` (outside the repository; built with the system gfortran 11.5, as FRESCO 3.5 was, because the conda
+environment has no Fortran compiler; accepted). It reproduces FRESCO 3.5 to 5e-4 on the wide ⁶Li bin and has the same
+loss of accuracy at high L, as expected of the same lineage. At a cut of 12 fm our extrapolation in the step is within
+0.004–0.4 % of Frescox's refined run from 0° to 60° and 1.2 % at 90°; neither code is converged to 0.2 % on a bin cut
+where it is not small. So 1 % is not shown for the ⁶Li bins and the remaining 1 % at 90° is not attributed. The narrow
+⁶Li bin was not run. The agent's proposal, a bin whose envelope has a node at the cut radius (no first-order step
+error in either code), is the next benchmark object if this is pursued.
+
+**Not done.** ³He and ¹⁴N to the continuum (item 4 of the brief).
+
+**Open** (carried). The wiring into the THM observable (`transfer.md` §12, after the Phase 6 branches); a spin-dependent
+THM weight needs the amplitude table public (`AmplitudesAt`); the engine's `ThmDistortion` is spinless.
+
+## 2026-11-12 (agent, branch `feature/upgrade-7-transfer-3`) — physics/transfer, third part, item 3b: the ⁶Li bins against Frescox
+
+**Done** (`transfer.md` §23): Frescox 7.4 cloned from github.com/LLNL/Frescox (eca88f3) to `opt/frescox-src`, built
+with the system gfortran 11.5 (3 jobs; the conda environment has no Fortran compiler), binary `opt/frescox/bin/frescox`,
+README beside it; five distribution test jobs equal its gfortran reference outputs. Generator: `--frescox` and
+cases marked `code="frescox"`; data `li6d_bin_wide_frx` (not compared by a test).
+
+**Found**: Frescox reproduces FRESCO 3.5 to 5e-4 on part 2's ⁶Li bin and shares its ERWIN accuracy loss (L = 26–35);
+at RSP 20–30 fm it does not converge (results change by factors with rmatch), so it cannot settle the RSP question.
+At RSP 12 fm neither code is converged to 0.2 % (Frescox 0.3–0.6 % in its step; ours first order in h because the
+bin is cut where it is not small); ours extrapolated is 0.004–0.4 % from Frescox's refined run at 0–60° and 1.2 % at
+90°. Asked 1 %: not shown. Not done: a narrow ⁶Li bin with Frescox.
+
+**End of branch** (build `work/b-dwba3`, 0 warnings): `scripts/check.sh --quick` with JOBS=1: 219/219 (the
+standalone physics build included); T1, T2, T3 and 13N in three bases (`tools/runall.sh`, tag `dwba3-sub1`, a tree of
+those four folders): every output and check file identical to `tab-thm5`; `git diff --stat 0800944c -- src include
+api pyazr experiment convert stopping external tools tests`: empty. Not run: the whole tree, `run_tests.sh`, the gate,
+fits (nothing they test is touched); item 4 (³He and ¹⁴N to the continuum).
+
+## 2026-11-12 (agent, branch `feature/upgrade-7-transfer-3`) — physics/transfer, third part, item 3: the ¹⁴N Trojan horse
+
+**Done** (`transfer.md` §21, §22): ¹²C(¹⁴N,d)²⁴Mg at E_lab = 30 MeV to the 0⁺ g.s. (l = 0, six nodes) and the 2⁺
+(l = 2, five nodes) ¹²C + ¹²C states, finite range, unsymmetrised; FRESCO data `n14d_*` (generator: `N14_*`, a
+`cutr` setting; the bound-state listing parser takes FRESCO's `*******`); new test `physics_transfer_n14_fresco`.
+Zero range shown meaningless by numbers (ZR/FR 1.2–211); what symmetrising the two ¹²C would add is in the note.
+
+**Verified**: ours against FRESCO 8.3e-4 (g.s.), 3.3e-4 (2⁺); ours converged to 2.5e-4 (0.9 and 2.8 s at one thread).
+FRESCO converges only with rnl ≥ 13 fm and its integration started 12 fm inside the Coulomb turning point (cutr);
+with cuts ∝ L it is 1–3 % off, without them ERWIN loses 14 digits (table in §21). The ¹²C + ¹²C ANC: FRESCO's u/W
+still rises at 12 fm; the test allows 1e-4 there. Injected error: the Jacobian (1 − αβ)² instead of ³ (both cases
+fail by 14 %).
+
+## 2026-11-12 (agent, branch `feature/upgrade-7-transfer-3`) — physics/transfer, third part, item 2: the ³He Trojan horse
+
+**Done** (`transfer.md` §20, §22): ¹⁸O(³He,d)¹⁹F at E_lab = 25 MeV to the ½⁺ ground state and the 5/2⁺ state, finite
+and zero range, with and without spin-orbit in both distortions: eight FRESCO cases `he3d_*` (generator: `HE3_*`;
+FRESCO needs cutl here, ERWIN at L ≥ 35 otherwise spoils its transfer), new test `physics_transfer_he3_fresco`. The
+generator reads FRESCO's bound-state listing by number pattern (columns can run together); part 1's regenerated
+`dn_finite_range` and `li6d_finite_range` data are identical.
+
+**Verified**: the new test passes: ours against FRESCO ≤ 8.9e-4 (FR), ≤ 9.2e-5 (ZR), iT11 ≤ 4.3e-4. FRESCO's own
+refinement moves its FR results by up to 1.8e-3 (asked 0.2 %: not reached by FRESCO; ours converged to 2e-4). The
+p + d ANC differs from FRESCO's by 2.2e-5 (unresolved; the test allows 3e-5 for it). Injected error: the sign of the
+S_− term of S_y (iT11 of ³He fails in three cases).
+
+## 2026-11-12 (agent, branch `feature/upgrade-7-transfer-3`) — physics/transfer, third part, item 1: spin-orbit in the distorted waves of a transfer
+
+**Done** (leaf library, nothing of the engine touched; `transfer.md` §19, §22):
+- The transfer amplitude with (l, j)-dependent distorted waves in both channels (projectile spin J_a, ejectile spin
+  J_s; target spin a spectator): the kernel integrals (6.4) per pair of waves (`TransferKernel.cpp`), the angular and
+  spin sums in one function for all cases (`TransferAmplitudes.{h,cpp}`, new): without spin-orbit the j sums are the
+  identity (19.7) and part 1's numbers return (8e-15). Zero range goes through the same sums.
+- The projectile's vector analysing power iT11 (Madison) from the same amplitudes: `FiniteRangeObservables`,
+  `ZeroRangeObservables` (`Transfer.h`).
+- FRESCO data `dn_finite_range_so`, `dn_zero_range_so` (generator: `pol` lines, `drop` of unread lines); the shared
+  FRESCO checks moved into `transfer_fresco_common.h`; new test `physics_transfer_spin_orbit`.
+
+**Verified** (build `work/b-dwba3`, 0 warnings): `ctest -R physics` 32/32; the printed lines of the seven earlier
+transfer tests identical before/after; new test: reduction 6.7e-16, reflection 2e-16, FRESCO FR 2.0e-4, ZR 6.2e-6,
+iT11 ≤ 1.0e-4. Injected errors, each failed: j sum without spin-orbit missing j = l + s (reduction), Y_{l,|n|} for
+negative n (reflection and iT11), the kernel taking the first j wave of l_i (FRESCO FR), the sign of m_i in the
+entrance coupling (FRESCO FR and ZR).
+
+**Open**: items 2 (³He), 3 (¹⁴N), 3b (⁶Li bins against Frescox), 4.
+
 ## 2026-11-12 (director, 19:05) — merged: physics/transfer, second part (transfer to the x + A continuum, FRESCO bins, prior form and remnants)
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed): `feature/upgrade-7-transfer-2` (the
