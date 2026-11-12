@@ -533,7 +533,6 @@ extrapolation x5: sigma(1->2)
 extrapolation x6: sigma(1->2)
 extrapolation x7: sigma(1->2)
 == tests/reaction_rate/models/n12C.azr
-== tests/reaction_rate/models/n12C_pert.azr
 == tests/reaction_rate/models/n12C_truth.azr
 extrapolation x1: sigma(1->2)
 extrapolation x2: sigma(1->2)
@@ -546,7 +545,6 @@ extrapolation x8: sigma(1->2)
 extrapolation x9: sigma(1->2)
 == tests/reaction_rate/models/p12C.azr
 == tests/reaction_rate/models/p12C_2g.azr
-== tests/reaction_rate/models/p12C_2g_pert.azr
 == tests/reaction_rate/models/p12C_truth.azr
 extrapolation x1: sigma(1->2)
 extrapolation x2: sigma(1->2)
