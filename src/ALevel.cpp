@@ -13,6 +13,7 @@ std::uint64_t ALevel::NewStamp() {
 
 ALevel::ALevel(NucLine nucLine) :
   level_e_(nucLine.levelE()),
+  input_e_(nucLine.levelE()),
   fitlevel_e_(0.0),
   isinrmatrix_(true),
   sqrt_nf_factor_(1.0),
@@ -33,6 +34,7 @@ ALevel::ALevel(NucLine nucLine) :
 ALevel::ALevel(double energy) :
   energyfixed_(true),
   level_e_(energy),
+  input_e_(energy),
   fitlevel_e_(0.0),
   isinrmatrix_(false),
   sqrt_nf_factor_(1.0),
@@ -278,6 +280,7 @@ void ALevel::SetGamma(int channelNum, double reducedWidth) {
 
 void ALevel::SetE(double energy) {
   level_e_ = energy;
+  input_e_ = energy;
 }
 
 /*!

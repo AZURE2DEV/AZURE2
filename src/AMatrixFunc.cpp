@@ -25,6 +25,8 @@
 #include <vector>
 #include <cmath>
 #include <limits>
+#include <map>
+#include <utility>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -1177,6 +1179,21 @@ void AMatrixFunc::TBarAdjoint(EPoint *energyPoint, const TMatrixCotangent &bar, 
   if (hasEC) {
     const bool useEC = (configure().paramMask & Config::USE_EXTERNAL_CAPTURE);
     const bool ignoreZero = (configure().paramMask & Config::IGNORE_ZERO_WIDTHS);
+    // A final state marked in the formal parametrization (ALevel::HasECFinalState) does not use its own
+    // fitted amplitudes but the on-resonance ones, a function of every formal parameter of its group
+    // (CNuc::UpdateFormalECFinalStates).  The cotangents of those amplitudes are collected here per final
+    // level and pulled back onto the group's energies and amplitudes after the loop.
+    std::map<std::pair<int, int>, vector_r> finalBar;
+    auto addFinalGamma = [&](int jGroup, int level, int channel, double v) {
+      ALevel *theLevel = compound()->GetJGroup(jGroup)->GetLevel(level);
+      if (!theLevel->HasECFinalState()) {
+        accum.AddGamma(jGroup, level, channel, v);
+        return;
+      }
+      vector_r &bar = finalBar[std::make_pair(jGroup, level)];
+      if (bar.empty()) bar.assign(compound()->GetJGroup(jGroup)->NumChannels(), 0.0);
+      bar[channel - 1] += v;
+    };
     for (int k = 1; k <= nK; k++) {
       int numEC = theDecay->GetKGroup(k)->NumECMGroups();
       for (int m = 1; m <= numEC; m++) {
@@ -1188,13 +1205,13 @@ void AMatrixFunc::TBarAdjoint(EPoint *energyPoint, const TMatrixCotangent &bar, 
         int fc = ecg->GetFinalChannel();
         ALevel *finalLevel = compound()->GetJGroup(jf)->GetLevel(lf);
         JGroup *jgf = compound()->GetJGroup(jf);
-        double sqrtNF = finalLevel->GetSqrtNFFactor();
+        double sqrtNF = finalLevel->GetECSqrtNFFactor();
         double conv = finalLevel->GetECConversionFactor(fc);
         complex ecAmp = useEC ? point->GetECAmplitudeWithShift(k, m, compound(), configure())
                               : point->GetECAmplitude(k, m);
 
         // base = gamma_fc * sqrtNF * conv * ecAmp  (the part without umatrix_cc).
-        double gamma_fc = finalLevel->GetFitGamma(fc);
+        double gamma_fc = finalLevel->GetECFitGamma(fc);
         complex base = gamma_fc * sqrtNF * conv * ecAmp;
 
         // "effective amplitude" carrying the umatrix_cc factor for the
@@ -1252,7 +1269,7 @@ void AMatrixFunc::TBarAdjoint(EPoint *energyPoint, const TMatrixCotangent &bar, 
         }
 
         // Explicit gamma_fc:  d T_ec / d gamma_fc = sqrtNF * conv * effAmp.
-        accum.AddGamma(jf, lf, fc, std::real(conj(eb) * (sqrtNF * conv * effAmp)));
+        addFinalGamma(jf, lf, fc, std::real(conj(eb) * (sqrtNF * conv * effAmp)));
 
         // sqrtNF couples to every NF channel d of the final level:
         //   nFSum = 1 + sum_d A_d gamma_d^2,  A_d = 2 chRad redMass uconv/hbarc^2 NF_d,
@@ -1272,10 +1289,22 @@ void AMatrixFunc::TBarAdjoint(EPoint *energyPoint, const TMatrixCotangent &bar, 
           if (parkFinal && jgf->GetChannel(d)->GetRadType() == 'P' && pd->GetPType() == 0)
             Ad -= finalLevel->GetShiftDerivative(d);
           if (Ad == 0.0) continue;
-          double gd = finalLevel->GetFitGamma(d);
+          double gd = finalLevel->GetECFitGamma(d);
           double dSqrtNF = -Ad * gd * sqrtNF3;
-          accum.AddGamma(jf, lf, d, std::real(conj(eb) * (pre * dSqrtNF)));
+          addFinalGamma(jf, lf, d, std::real(conj(eb) * (pre * dSqrtNF)));
         }
+      }
+    }
+    for (const auto &entry : finalBar) {
+      std::vector<int> levels;
+      vector_r eBar;
+      matrix_r gammaBar;
+      if (!compound()->FormalECFinalPullback(entry.first.first, entry.first.second, entry.second, levels, eBar,
+                                             gammaBar)) continue;  // no eigen-system: the amplitudes are NaN
+      for (size_t i = 0; i < levels.size(); i++) {
+        accum.AddE(entry.first.first, levels[i], eBar[i]);
+        for (size_t ch = 0; ch < gammaBar[i].size(); ch++)
+          if (gammaBar[i][ch] != 0.0) accum.AddGamma(entry.first.first, levels[i], (int)ch + 1, gammaBar[i][ch]);
       }
     }
   }

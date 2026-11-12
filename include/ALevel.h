@@ -17,7 +17,9 @@ class NucLine;
  * its \f$J^\pi\f$ group, in three parallel sets that are easy to confuse:
  *
  *  - **input / formal** -- GetE, GetGamma: what the nuclear input file said,
- *    in the formal R-matrix parameterization.
+ *    in the formal R-matrix parameterization.  After CNuc::TransformIn these
+ *    hold the FORMAL values; GetInputE keeps the energy as it was entered,
+ *    which is what identifies a level with a pair's excited state.
  *  - **fitted** -- GetFitE, GetFitGamma: the working values the minimizer
  *    moves. This is the set a calculation actually reads.
  *  - **physical / transformed** -- GetTransformE, GetTransformGamma and
@@ -55,8 +57,15 @@ class ALevel {
   int GetLevelID() const { return levelID_; }
 
   // -- input / formal parameters ---------------------------------------------
-  /// Level energy as read from the input file (MeV).
+  /// Level energy as read from the input file (MeV); the formal energy once CNuc::TransformIn has run.
   double GetE() const;
+  /// Level energy as entered (MeV): the observed energy for physical input.  CNuc::TransformIn does not
+  /// change it, so it is the one to compare with a pair's excitation energy (static-moment channels).
+  double GetInputE() const { return input_e_; }
+  /// Energy that says which state of the compound nucleus the level is: the kept bound-state energy of a
+  /// marked external-capture final state (see HasECFinalState), else GetInputE.  The static-moment channel
+  /// tests compare this with the pair's excitation energy; GetE would be the formal energy there.
+  double GetStateE() const { return ec_final_ ? ec_energy_ : input_e_; }
   /// Formal internal reduced width amplitude for a channel.
   double GetGamma(int) const;
 
@@ -92,8 +101,11 @@ class ALevel {
    * the working values are those.  In the formal parametrization (--no-brune) they are only for the level
    * the boundary conditions were taken from, the first of its \f$J^\pi\f$ group; for any other level the
    * formal energy and amplitude differ from the observed ones.  CNuc::TransformIn marks such a final state
-   * here and keeps its observed energy; CNuc::FillCompoundFromParams then recomputes its on-resonance
-   * amplitudes from the group's formal parameters at every update (CNuc::UpdateFormalECFinalStates).
+   * here and keeps its observed energy (for formal input without the transformation CNuc::Initialize does,
+   * at the excitation energy of the final state's pair); CNuc::FillCompoundFromParams then recomputes its
+   * on-resonance amplitudes from the group's formal parameters at every update
+   * (CNuc::UpdateFormalECFinalStates), and the analytic gradient differentiates them
+   * (CNuc::FormalECFinalPullback).
    */
   bool HasECFinalState() const { return ec_final_; }
   /// Final-state energy for the external-capture integrals: the observed energy when marked, else GetE.
@@ -108,7 +120,8 @@ class ALevel {
   double GetECReferenceGamma(int ch) const { return ec_ref_gammas_[ch - 1]; }
   /// \f$S_c(E_f)-B_c\f$ of a marked level for a channel (0 for a channel without a shift function).
   double GetECShiftDifference(int ch) const { return ec_deltas_[ch - 1]; }
-  /// Distance of the group's pole from the kept observed energy at the last update (MeV); 0 when not marked.
+  /// Distance of the group's pole from the kept observed energy at the last update (MeV), to first order in
+  /// that distance (one Newton step, CNuc::FormalECOnResonance); 0 when not marked.
   double GetECPoleOffset() const { return ec_final_ ? ec_pole_offset_ : 0.0; }
   /// Mark the level: observed energy, observed amplitudes and \f$S_c(E_f)-B_c\f$ per channel.
   void SetECFinalState(double energy, const vector_r &refGammas, const vector_r &deltas);
@@ -142,7 +155,10 @@ class ALevel {
   /// Append a channel with the given initial reduced width amplitude.
   void AddGamma(double);
   void SetGamma(int, double);
+  /// Set the input energy: GetE and GetInputE.
   void SetE(double);
+  /// Set only GetE, to the formal energy of the input transformation; GetInputE keeps the entered value.
+  void SetFormalE(double energy) { level_e_ = energy; }
   void SetFitGamma(int, double);
   void SetFitE(double);
   void AddNFIntegral(double);
@@ -194,6 +210,7 @@ class ALevel {
   unsigned char ecMultMask_;
   int levelID_ = 0;
   double level_e_;
+  double input_e_;
   double fitlevel_e_;
   double sqrt_nf_factor_;
   double transform_e_;

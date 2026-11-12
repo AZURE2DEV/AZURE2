@@ -94,13 +94,14 @@ Available Options
        for a final state that is not the first level of its J^pi group
        these are recomputed from the group's formal parameters at every
        step, so the capture cross section does not depend on the order of
-       the level lines.  The radial integrals stay at the bound-state
+       the level lines, and the analytic gradient (``--use-gradient``)
+       carries the derivative of that amplitude.  The sign of the
+       external-capture term is the sign of the ANC in the input file, for
+       every final state.  The radial integrals stay at the bound-state
        energy of the input file: when a fit moves the group's pole away
        from it by more than 1 keV the run says so at its end, and the fit
-       is restarted from its output.  The analytic gradient is not
-       available for such a project (finite differences are used).  With
-       ``--no-transform`` there are no observed values to go by and the
-       run warns that the formal values are used.
+       is restarted from its output.  For formal input parameters see
+       ``--no-transform``.
    * - ``--use-park``
      - Use Park's level-dependent boundary conditions (Phys. Rev. C 104,
        064612) in place of Brune's alternative level matrix.  The fit
@@ -184,7 +185,20 @@ Available Options
        keep their grids either way.
    * - ``--no-transform``
      - Do not perform parameter transformations; input formal R-matrix
-       parameters directly (equivalent to the GUI option).
+       parameters directly (equivalent to the GUI option).  With
+       ``--no-brune`` the level lines then hold formal energies (MeV) and
+       formal reduced width amplitudes (MeV\ :sup:`1/2`), the values
+       ``output/param.par`` of a ``--no-brune`` run lists.  The final state
+       of an external-capture pair is the level of its J^pi group nearest
+       in formal energy to the pair's excitation energy (a NOTE names the
+       level when none is within 1 keV).  Its on-resonance amplitude is
+       calculated from the group's formal parameters at the pair's
+       excitation energy, where the radial integrals are taken, so the
+       formal parameters of a ``--no-brune`` run reproduce that run in any
+       order of the level lines.  A WARNING at start-up and at the end
+       gives the distance when the group has no pole within 1 keV of the
+       pair's energy: the amplitude and the integrals then belong to an
+       energy that is not the bound state's.
    * - ``--ec-table``, ``--ec-convection-current``, ``--grid-replacement``
      - The defaults, stated explicitly.  Options are applied in order, so each
        undoes its ``--no-`` form given earlier.

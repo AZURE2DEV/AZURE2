@@ -237,9 +237,20 @@ class CNuc {
   /// As above, for a vector already in physical rather than formal parameters.
   void FillCompoundFromParamsPhysical(const vector_r &);
   /// Formal parametrization with external capture: does any final state take its external-capture amplitude
-  /// from UpdateFormalECFinalStates (a final state that is not the first level of its group)?  The analytic
-  /// gradient has no derivative of that amplitude and hands such a model to finite differences.
+  /// from UpdateFormalECFinalStates (a final state that is not the first level of its group, or any final
+  /// state of formal input without the input transformation)?  The analytic gradient differentiates that
+  /// amplitude through FormalECFinalPullback.
   bool HasFormalECFinalStates() const { return formalECFinalStates_; }
+  /*!
+   * Reverse-mode derivative of a marked final state's on-resonance amplitudes with respect to the formal
+   * parameters of its J-group, at the last FillCompoundFromParams.  \p gBar holds the cotangent of the
+   * amplitude of every channel (0-based).  On return \p levels are the 1-based level numbers of the group's
+   * R-matrix levels, \p eBar[i] the cotangent of the fitted energy of levels[i] and \p gammaBar[i][ch-1] that
+   * of its fitted amplitude.  False (nothing filled) when the level is not marked or its eigenvalue problem
+   * failed.
+   */
+  bool FormalECFinalPullback(int jGroup, int level, const vector_r &gBar, std::vector<int> &levels, vector_r &eBar,
+                             matrix_r &gammaBar) const;
   /// Warn when a marked final state's pole has moved from the energy its integrals were calculated at.
   void WarnFormalECFinalStates(const Config &);
   void PrintCompoundFromParams();
@@ -287,6 +298,27 @@ class CNuc {
   /// the fitted formal parameters; called by FillCompoundFromParams.
   void UpdateFormalECFinalStates();
   bool formalECFinalStates_ = false;
+  /// Eigen-system a marked external-capture final state took its on-resonance amplitudes from at the last
+  /// update (formal parametrization); what FormalECFinalPullback differentiates.
+  struct FormalECFinal {
+    int jGroup = 0;            ///< 1-based J-group
+    int level = 0;             ///< 1-based level number of the final state in its group
+    std::vector<int> levels;   ///< 1-based level numbers of the group's R-matrix levels: the matrix index
+    vector_r values;           ///< eigenvalues
+    matrix_r vectors;          ///< eigenvectors, vectors[mu][i]
+    int k = -1;                ///< the eigenvector taken; -1 when the eigenvalue problem failed
+    double sign = 1.0;         ///< sign applied to it
+  };
+  std::vector<FormalECFinal> formalECFinals_;
+  /// Marks \p theLevel as an external-capture final state at observed energy \p energy with the reference
+  /// amplitudes \p refGammas: computes S_c(energy) - B_c per channel and calls ALevel::SetECFinalState.
+  void MarkFormalECFinalState(const Config &, JGroup *theJGroup, ALevel *theLevel, double energy,
+                              const vector_r &refGammas);
+  /// On-resonance amplitudes (every channel), N_f^(1/2) and pole offset of the marked level \p la of group
+  /// \p j, from the group's fitted (\p fitValues) or input/formal (GetE, GetGamma) parameters.  NaN and false
+  /// when the eigenvalue problem fails.  \p keep, when given, receives the eigen-system.
+  bool FormalECOnResonance(int j, int la, bool fitValues, vector_r &gammas, double &sqrtNF, double &offset,
+                           FormalECFinal *keep = nullptr);
 };
 
 extern double DoubleFactorial(int);
