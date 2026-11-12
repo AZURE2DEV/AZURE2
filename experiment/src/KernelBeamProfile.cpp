@@ -73,8 +73,8 @@ template <class V>
 V FoldBeamProfile(const KernelParameters &p, const KernelPoint &point, const KernelNodes &nodes, const V *values) {
   const int numPoints = nodes.n;
   if (numPoints < 2) return V(0.0);
-  const double eHigh = nodes.Energy(1);
-  const double eLow = nodes.Energy(numPoints);
+  const double eHigh = nodes.High();
+  const double eLow = nodes.Low();
   const double cmFactor = point.cmFactor;
   const double s = cmFactor * p.tpcSigma;  // the record's lab sigma, this pair's frame
   const bool window = point.binLow == point.binLow && point.binHigh == point.binHigh;

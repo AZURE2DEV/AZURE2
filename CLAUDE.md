@@ -404,7 +404,9 @@ that triggers it alone [check 24].
 parameters; the engine applies whatever the table holds.
 1. One file `experiment/src/Kernel<Name>.cpp` (`KernelGaussian.cpp` is the pattern): the fold as a template on V
    (`double` gives the value, `LinearForm` the exact weights the gradient reads: the same arithmetic), its support (the
-   c.m. interval the point's nodes must span; the set-up lays the grid over it) and `Kernel <Name>Kernel()` filling its
+   c.m. interval the point's nodes must span; the set-up gives the point the shared mesh's nodes over it, whose two
+   outer nodes lie up to one interval beyond it: the fold integrates over `nodes.Low()` .. `nodes.High()`, never over
+   the end nodes' span) and `Kernel <Name>Kernel()` filling its
    row member by member. Its own parameters are `KernelParameter` rows (name, dimension, engine unit, fittable) whose
    values arrive in `KernelParameters::values`; with `tableForm = true` and the keyword `detector.energy_resolution
    <form>` the format-3 form is generated from those rows (`Schema.cpp`) and read by `BuildEffects.cpp`: no parser
@@ -456,6 +458,7 @@ Reference commits: `git show --stat 062b1bfe` (segment keyword `shiftfngroup`), 
 `docs/upgrade/ARCHITECTURE.md` section 10). Run every project of a `tests/` tree with each engine, then compare:
 ```bash
 export SRC_TESTS=$PWD/tests WORK=<scratch> JOBS=<runs at once, one thread each; default 1>
+export AZURE2_COULOMB_TABLE=<the table file the reference used>  # required: without it every charged channel moves
 tools/runall.sh <absolute path of the reference engine> tab-ref   # once per reference
 tools/runall.sh <absolute path of the new engine> tab-new         # a fresh tag for every run
 tools/cls.sh tab-ref tab-new; grep '^## ' $WORK/cls-tab-new.tsv   # "## <basis>: N files, N identical" when nothing moved

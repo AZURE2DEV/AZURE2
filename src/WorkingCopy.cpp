@@ -819,6 +819,7 @@ WorkingCopy::WorkingCopy(const WorkingCopy &other)
       modelSize_(other.modelSize_),
       gridNuc_(other.gridNuc_),
       nodeCache_(other.nodeCache_),
+      meshAnchors_(other.meshAnchors_),
       channelTable_(other.channelTable_), nodes_(other.nodes_) {}
 
 DataSet &WorkingCopy::Draft() {

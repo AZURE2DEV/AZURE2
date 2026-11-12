@@ -54,8 +54,9 @@ namespace azure2 {
  * of all lattices active at E.  F's interval containing E has length lambda <= l_F(E) = h(E) (a tail interval is as
  * long as the step at its inner end); a Y dominating it would be finer than h(E) at E, so the interval is kept, and
  * the mesh interval containing E is no longer (the half in the rule only makes domination harder).  Since L <= S and the
- * anchor lattices extend at least as far as today's, h(E) <= D(E).  The support's edges add no node: the quadrature clips the interval containing an edge, whose outer
- * node lies at most one interval outside the support.
+ * anchor lattices extend at least as far as today's, h(E) <= D(E).  A soft edge of a support adds no node: the
+ * quadrature clips the interval containing it, whose outer node lies at most one interval outside the support.  A
+ * hard edge (MeshSupport::lowHard, highHard: a physical floor) is a node, and the support's range ends at it.
  *
  * Determinism: each node is computed by the formula of its kind from the anchor or n alone (one multiplication and one
  * addition, or the tail recurrence from o_0); which intervals are kept depends on the set of supports and anchors, not
@@ -85,6 +86,10 @@ struct MeshSupport {
   double low = 0.0, high = 0.0;  ///< the kernel is non-zero on [low, high]
   double smoothStep = 0.0;       ///< the step asked for away from levels, MeV (today window / number of sub-points)
   MeshSettings settings;
+  /// A hard edge lies at a physical floor (a thick target's lower limit, the entrance threshold, a THM floor): it is a
+  /// node of the mesh and the support's range starts (ends) at it, so no node beyond the floor is evaluated for this
+  /// support.  A soft edge adds no node: the quadrature clips the interval containing it.
+  bool lowHard = false, highHard = false;
   int dataSet = 0;  ///< index of the data set, for the caller (the plan does not depend on it)
 };
 
@@ -95,7 +100,8 @@ struct MeshTailConstants {
 };
 
 /// The nodes a support's quadrature uses: nodes[first] <= low and nodes[last] >= high (the outer nodes of the
-/// intervals that contain the edges), or first == last for a support narrower than MeshZeroWidth().
+/// intervals that contain the edges; a hard edge is itself the end node), or first == last for a support narrower
+/// than MeshZeroWidth().
 struct MeshNodeRange {
   std::size_t first = 0, last = 0;
 };

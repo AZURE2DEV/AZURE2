@@ -519,6 +519,9 @@ class WorkingCopy {
   // The tables of re-placed sub-point nodes, shared by this working copy and its copies, and written by them during
   // an evaluation: on purpose, each entry under its shard's mutex, never a table in place (NodeTableCache.h).
   std::shared_ptr<NodeTableCache> nodeCache_ = std::make_shared<NodeTableCache>();
+  // Per shared mesh of the data set (DataSet::Meshes): the quantized anchors its points' slots are placed for now.  Set
+  // by the set-up; the hand-over (ReplaceSubPointGrids) re-places the slots in the changed region when they move.
+  std::vector<std::vector<azure2::MeshAnchor>> meshAnchors_;
   /// The stage's channel table (docs/upgrade/channel_table.md): built by CalcEDependentValues and
   /// InitializeLeaves before their point loops, read-only afterwards, replaced, never written.
   std::shared_ptr<const ChannelTable> channelTable_;
