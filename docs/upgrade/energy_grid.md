@@ -767,15 +767,37 @@ it for about half the numbers by chance.  For the shared mesh a file is **quadra
 reference's, no number that the refinement leaves unchanged has moved, and its largest relative distance to the fine
 reference over its folded numbers, max |m_new − m_fine| / |m_fine| (m_ref ≠ m_fine), is not larger than **1.2 ×** the
 same maximum of today's engine, **and** the root mean square of the same relative distances over all the file's folded
-numbers, sqrt(mean (m_new − m_fine)² / m_fine²), is **not larger than today's** (no factor).  Both are taken over
-every folded number of the file, also those the new engine left in place.  Measured with a mesh that drops every other
+numbers, sqrt(mean (m_new − m_fine)² / m_fine²), is **not larger than 1.03 × today's**.  The 3 % is the resolution
+of the comparison, not a tolerance for the engine: the k = 8 reference is itself 1/64 of today's distance from the
+converged value, so the ratio of two distances to it is known to about 2/64.  Both are taken over every folded number
+of the file, also those the new engine left in place.  Two further clauses, each a line of the tool: a file whose
+largest new distance is at most **10⁻⁷** passes (both engines are converged there; 10⁻⁷ is the size by which the
+Coulomb table moves a charged-channel number), and a project in the tool's table `NAMED` passes with its own factor
+and is printed and counted as **named**, never as quadrature — one row today, `hybrid_potential` (factor 1.25), for
+the reason in the table below.  Measured with a mesh that drops every other
 node in the lower half of each point's range (13 folded projects of the quick set, Brune, against `tab-fine8` /
 `tab-fine4`): the maximum alone fails 7 projects, the rms adds `13N`, `beam_profile_kernel`, `ratio_to_reference`
 `folded` and `T2` (`T2_true` χ²); `thick_target_resonance` and `T2`'s own outputs pass both (the mesh there is finer
-than today's grid by more than the dropped nodes cost).  The engine without the error fails the rule in `13N` (rms
-1.002 × and χ² 1.006 × today's), `layer_yield` `aa=3` (a fold exact to 3 × 10⁻⁸: 1.18 × and 1.44 ×) and
-`hybrid_potential` (1.21 ×, a pre-asymptotic difference, see the branch's HANDOFF).  A file above either bound is a
-failure to explain; the factors are not widened.  `tools/classify_quadrature.py` prints both classes per
+than today's grid by more than the dropped nodes cost).  With "no factor" on the rms (the first form of the rule) the engine
+without the error failed in `13N` (rms 1.002 × and χ² 1.006 × today's: inside the resolution, hence the 3 %),
+`layer_yield` `aa=3` (a fold exact to 3 × 10⁻⁸: 1.18 × and 1.44 ×, hence the 10⁻⁷ clause) and `hybrid_potential`
+(1.21 ×).  A file above a bound is a failure to explain; the factors are not widened without a measured reason
+written here.
+
+`hybrid_potential`, the named project (measured by the agent, two rows re-run by the director; relative distance of
+its 76 folded values to today's engine at k = 64, the largest and the rms agree to 0.3 %, the error has one sign):
+
+| k | today's engine | shared mesh | mesh / today |
+|---|---|---|---|
+| 1 | 5.14 × 10⁻² | 6.17 × 10⁻² | 1.20 |
+| 2 | 2.00 × 10⁻² | 1.71 × 10⁻² | 0.85 |
+| 4 | 5.14 × 10⁻³ | 5.13 × 10⁻³ | 1.00 |
+| 8 | 1.35 × 10⁻³ | 1.35 × 10⁻³ | 1.00 |
+| 16 | 3.43 × 10⁻⁴ | 3.52 × 10⁻⁴ | 1.03 |
+
+Both engines converge at second order to the same value; at the project's own settings both are 5–6 % from it (the
+step is set by the resonance tails, 0.05 |E − E_r|; `points` has no effect: 10, 20, 40, 80 give the same bits), which
+is before the asymptotic regime.  The finding for the owner is the 5 %, not the factor 1.2.  `tools/classify_quadrature.py` prints both classes per
 file (the per-file one decides the summary and the exit status; the strict per-number count is printed beside it as
 information) with the largest and rms distances of both engines.
 
