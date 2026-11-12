@@ -44,8 +44,8 @@ struct TermSettings;
  * experiment's settings, and multiplying them at the node is today's arithmetic, in today's order.
  */
 enum class SiteObservable : std::uint8_t {
-  /// The finished value at the site's own energy and angle (sigma, a phase shift, the total cross section, A_y, THM):
-  /// the reader's angle is the site's, so a site of this kind is keyed by the angle.
+  /// A scalar at the site's energy, without an angle (sigma, a phase shift, the total cross section): the record's
+  /// sigma, read as it is by every reader.
   kValue,
   /// B_L (b/sr) of dsigma/dOmega_c.m. = sum_L B_L P_L(cos theta), L = 0 .. K-1, and A_0 = sigma_int / 4 pi of an
   /// angular distribution; no angle.  Every reaction whose exit pair is not its entrance pair, and the angular
@@ -61,6 +61,10 @@ enum class SiteObservable : std::uint8_t {
   /// cross section (kElastic's for elastic scattering, else kLegendre's) and the coefficients of A_y, without an angle
   /// (ay_record).  The reader's row adds the angle; its contraction gives the cross section and A_y.
   kAnalyzingPower,
+  /// The half-off-shell cross section of THM data (above): a scalar at the site's energy, without an angle, the record's
+  /// sigma read as it is.  Written by the HOES formula (THMMatrixFunc.h, HoesCrossSection) on the level matrix of the
+  /// node, differentiated by its adjoint (THMMatrixFunc::THMPointAdjoint).
+  kHoes,
 };
 
 /// The layout of the angular part of a kElastic record, packed after its counts: r[kNumB] = n B_L, r[kNumL] = m D_l
@@ -143,7 +147,11 @@ struct SiteObservableRow {
 };
 
 /// The rows, indexed by the kind.
-extern const SiteObservableRow kSiteObservables[4];
+extern const SiteObservableRow kSiteObservables[5];
+
+/// Whether a kind's readers bring an angular row to its record (SiteObservableRow::contract): B_L, the elastic
+/// amplitudes, A_y.  A scalar kind (kValue, kHoes) is read as it is.
+inline bool ReadThroughRow(SiteObservable kind) { return kSiteObservables[(int)kind].contract != nullptr; }
 
 /// The kind of the sites of a term.
 SiteObservable ObservableOf(const TermSettings &settings);

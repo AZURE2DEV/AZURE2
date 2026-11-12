@@ -2,6 +2,33 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, Phase 5 branch 10, milestone 2) — sigma_HOES a kind of the table; one solve per node for THM and direct readers (`feature/upgrade-5-thm-mesh`)
+
+**Done.**  `SiteObservable::kHoes` (`SiteObservable.h`, its row in `kSiteObservables`): the half-off-shell cross
+section, a scalar without an angle (the record's sigma, read as it is; no row, no contraction).  `Site::AngleFree()` is
+now "the kind's readers bring a row" (`ReadThroughRow`, the row's `contract`), so kValue and kHoes are both scalars.
+The HOES formula is a function of a filled level matrix (`HoesCrossSection(const AMatrixFunc &, Site *, Results &)`,
+`THMMatrixFunc::CalculateTHMCrossSection` calls it).  The plan has no THM route: an energy task is (nucleus, route of
+the configuration, E_x bits), whatever its kinds; `SolveAtOneEnergy` fills with the first unit that reads a T-matrix
+and gives each kHoes unit `HoesCrossSection` on that fill when no J-group took the channel route
+(`AMatrixFunc::LevelSpaceThroughout`), else on a level-space fill of the task's THM units; the T-matrix groups skip
+the THM units.  `CheckEnergyTasks` (`AZURE_PLAN_CHECK`) compares every unit's record from the task's shared solve with
+its own solve, of its own kind, and prints the THM tasks and how many share one fill.  `NodeKey`'s THM flag stays: it
+keeps the rows a THM site holds beside the channel rows (j_l, rho j_l', the Coulomb term, the window's table) on a node
+of their own; the solve is the task's.  The sharing key compares a data set's THM weight table by value
+(`SameThmWeight`; check 37 reads `SameX(a.f, b.f)` as a comparison); the experiment's attachments by identity (one
+object per experiment).
+**Numbers.**  Quick set x 3 bases against milestone 1 (`thm-m1a`): 360 of 360 files identical, run.log included.
+**Solves.**  T2: 4,227 energy tasks -> 3,055; 1,172 of its 1,192 THM nodes are solved with the direct readers at
+the node, every one by one fill (all J-groups of 16O take the level route at those nodes).  `18O_p_a_thm` (THM only):
+656 tasks, unchanged (on milestone 1 its 14,688 units of the base became 656 slots of one block).
+**Tests.**  `upgrade_plan_runtime` asserts T2's shared fills; injected once a THM task reading a level matrix it did not
+fill: 18O "656 differ", abort.  `upgrade_node_check`: T2's s11/s12 weighted by two tables with equal rows keep 9
+blocks, with other rows 10; with the tables compared by pointer (injected once) 10 and 10.  `upgrade_plan`'s route
+check: a task is on the configuration's route.
+**Ran**: build 0 warnings; consistency; ctest subset (58; `upgrade_plan` failed on the old route rule, fixed, then the
+four plan/node/consistency tests again: pass); AZURE_PLAN_CHECK and AZURE_NODE_CHECK on T2 and 18O_p_a_thm: 0 differ.
+
 ## 2026-11-12 (agent, Phase 5 branch 10, milestone 1) — THM data on the shared mesh (`feature/upgrade-5-thm-mesh`)
 
 **Design** (the six questions, answered in the headers that own them, commit 485badd7): `SiteObservable.h` (what a THM

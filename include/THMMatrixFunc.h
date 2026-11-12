@@ -68,6 +68,13 @@ struct ThmAdjointContext {
 ThmAdjointContext BuildThmAdjointContext(CNuc *compound, const Config &configure, const vector_matrix_r *shiftDeriv,
                                          bool lineshape);
 
+/*!
+ * sigma_HOES of `point` (a site of kind kHoes, SiteObservable.h) into its record, from the level matrix `levels` holds
+ * at the point's energy, filled in level space for every J-group of its nucleus (THMMatrixFunc, or an AMatrixFunc with
+ * LevelSpaceThroughout(): the energy pass, CalculationPlan.h).
+ */
+void HoesCrossSection(const AMatrixFunc &levels, Site *point, azure2::Results &results);
+
 class THMMatrixFunc : public AMatrixFunc {
  public:
   THMMatrixFunc(CNuc *compound, const Config &configure);

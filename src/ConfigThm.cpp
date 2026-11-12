@@ -229,6 +229,11 @@ std::string ThmWeightTable::Read(const std::string &file) {
   return "";
 }
 
+bool SameThmWeight(const ThmWeightTable *a, const ThmWeightTable *b) {
+  if (a == b) return true;
+  return a && b && a->e == b->e && a->w == b->w && a->lnw == b->lnw;
+}
+
 /*!
  * w(E), linear in E and in ln w between the rows of the table; the end value
  * beyond either end (*outside is then set).  Two rows of equal w give that w

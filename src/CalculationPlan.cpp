@@ -166,10 +166,9 @@ void SortInPieces(std::vector<T> &v, Less less) {
   }
 }
 
-char RouteOf(bool thm, const Config &configure) {
-  if (thm) return 'T';
-  return (configure.paramMask & Config::USE_AMATRIX) ? 'A' : 'R';
-}
+// The route of the level matrix's fill: one per configuration.  A THM site at a node is solved with the node's other
+// readers (SolveAtOneEnergy: the HOES formula reads the fill's level matrix, or a level-space fill of its own).
+char RouteOf(const Config &configure) { return (configure.paramMask & Config::USE_AMATRIX) ? 'A' : 'R'; }
 
 }  // namespace
 
@@ -228,7 +227,7 @@ const EnergyTaskList &CalculationPlan::EnergyTasks(WorkingCopy &data, const Conf
     const Site &u = data.SiteAt(units[k]);
     const NodeList &list = nodeList(nodes[k]);
     const int i = at(nodes[k]);
-    order[k] = {list.nucleus[i], RouteOf(list.thm[i] != 0, configure), keys[k], Bits(keys[k]), u.GetEntranceKey(),
+    order[k] = {list.nucleus[i], RouteOf(configure), keys[k], Bits(keys[k]), u.GetEntranceKey(),
                 u.GetExitKey(), sources[k], k};
   }
   // By task key (nucleus, route, E_x, bits), then by T-matrix group (entrance, exit, amplitude source), then in plan

@@ -203,11 +203,13 @@ THMMatrixFunc::THMMatrixFunc(CNuc *compound, const Config &configure) :
  * level matrix A (shared interior). Uses the entrance transfer form factors
  * M_l and exit penetrabilities stored on the point by CalcEDependentValues.
  */
-void THMMatrixFunc::CalculateTHMCrossSection(Site *point, azure2::Results &results) {
-  int aa = compound()->GetPairNumFromKey(point->GetEntranceKey());
-  int exitPairNum = compound()->GetPairNumFromKey(point->GetExitKey());
-  PPair *entrancePair = compound()->GetPair(aa);
-  PPair *exitPair = compound()->GetPair(exitPairNum);
+void HoesCrossSection(const AMatrixFunc &levels, Site *point, azure2::Results &results) {
+  CNuc *const compound = levels.compound();
+  const Config &configure = levels.configure();
+  int aa = compound->GetPairNumFromKey(point->GetEntranceKey());
+  int exitPairNum = compound->GetPairNumFromKey(point->GetExitKey());
+  PPair *entrancePair = compound->GetPair(aa);
+  PPair *exitPair = compound->GetPair(exitPairNum);
 
   // The entrance c.m. energy sets the compound-system energy; the exit
   // channel energy is that minus the exit pair threshold. Below the exit
@@ -221,7 +223,7 @@ void THMMatrixFunc::CalculateTHMCrossSection(Site *point, azure2::Results &resul
     point->SetFitCrossSection(results, 0.0);
     return;
   }
-  const double fluxFactor = ThmFluxFactor(configure(), entrancePair, point, kf, muf);
+  const double fluxFactor = ThmFluxFactor(configure, entrancePair, point, kf, muf);
 
   // Coulomb line shape of the spectator (<thm> experiment[...] lineshape=on,
   // ThmLineshape.h): the exit amplitude of level lambda -- the level that
@@ -233,7 +235,7 @@ void THMMatrixFunc::CalculateTHMCrossSection(Site *point, azure2::Results &resul
     int light = exitPair->GetM(1) <= exitPair->GetM(2) ? 1 : 2;
     zeta = lineshape->Zeta(point->GetCMEnergy(), exitPair->GetZ(3 - light), exitPair->GetM(3 - light));
     if (!(lineshape->EsF(point->GetCMEnergy()) > 0.0) && !lineshape->warned.exchange(true))
-      configure().outStream << "WARNING: <thm> experiment[" << lineshape->experiment << "] lineshape: at E = "
+      configure.outStream << "WARNING: <thm> experiment[" << lineshape->experiment << "] lineshape: at E = "
                             << point->GetCMEnergy() << " MeV the spectator has no energy left (E_sF <= 0); "
                             << "E_sF = 1 keV is used there (reported once)." << std::endl;
   }
@@ -249,7 +251,7 @@ void THMMatrixFunc::CalculateTHMCrossSection(Site *point, azure2::Results &resul
   if (dw) {
     dw->Evaluate(point->GetCMEnergy(), dwAt);
     if (dwAt.outside && !dw->warned.exchange(true))
-      configure().outStream << "WARNING: <thm> experiment[" << dw->experiment
+      configure.outStream << "WARNING: <thm> experiment[" << dw->experiment
                             << "]: the DW vertex is evaluated at E = " << point->GetCMEnergy()
                             << " MeV, outside its grid; the end value is used there (reported once)." << std::endl;
     window = nullptr;
@@ -271,11 +273,11 @@ void THMMatrixFunc::CalculateTHMCrossSection(Site *point, azure2::Results &resul
   // ThmCoherentBackground): c(E) times the bucket's vertex M_l (no width),
   // added to the resonant amplitude of its combinations before squaring.
   const ThmCoherentBackground *coherent = point->GetThmCoherent();
-  const std::vector<double> &coherentValues = compound()->ThmCoherentValues();
+  const std::vector<double> &coherentValues = compound->ThmCoherentValues();
 
   double sigma = 0.0;
-  for (int j = 1; j <= compound()->NumJGroups(); j++) {
-    JGroup *jg = compound()->GetJGroup(j);
+  for (int j = 1; j <= compound->NumJGroups(); j++) {
+    JGroup *jg = compound->GetJGroup(j);
     if (!jg->IsInRMatrix()) continue;
     int numLevels = jg->NumLevels();
     int numChannels = jg->NumChannels();
@@ -303,7 +305,7 @@ void THMMatrixFunc::CalculateTHMCrossSection(Site *point, azure2::Results &resul
         ALevel *level = jg->GetLevel(la);
         if (!level->IsInRMatrix()) continue;
         nc[la] = ThmLineshapeFactor(zeta, level->GetFitE() - inEnergy,
-                                    ThmLevelWidth(compound(), jg, level, configure()));
+                                    ThmLevelWidth(compound, jg, level, configure));
       }
     }
 
@@ -322,7 +324,7 @@ void THMMatrixFunc::CalculateTHMCrossSection(Site *point, azure2::Results &resul
       const int node = numNodes > 0 ? pass : -1;
       BucketVertices vbys;
       BucketUnitVertices unitVertex;
-      ThmEntranceVertices(configure(), compound(), point, jg, j, aa, pass, node, dw, dwAt, coherentJ, vbys,
+      ThmEntranceVertices(configure, compound, point, jg, j, aa, pass, node, dw, dwAt, coherentJ, vbys,
                           unitVertex);
 
       // Exit channels (incoherent), each with sqrt(2 P) folded in as 2 P outside.
@@ -335,7 +337,7 @@ void THMMatrixFunc::CalculateTHMCrossSection(Site *point, azure2::Results &resul
 
         double term = 0.0;
         for (BucketVertices::iterator it = vbys.begin(); it != vbys.end(); ++it) {
-          complex amp = ThmExitAmplitude(*this, jg, j, ch, act, it->second, lineshape ? &nc : nullptr);
+          complex amp = ThmExitAmplitude(levels, jg, j, ch, act, it->second, lineshape ? &nc : nullptr);
           if (coherentJ) {
             BucketUnitVertices::const_iterator u = unitVertex.find(it->first);
             const ThmCoherentBackground::Combo *cb = u != unitVertex.end() ? coherent->Find(j, u->second.first, ch)
@@ -384,8 +386,12 @@ void THMMatrixFunc::CalculateTHMCrossSection(Site *point, azure2::Results &resul
     }
   }
 
-  ThmApplyWeights(configure(), point, sigma);
+  ThmApplyWeights(configure, point, sigma);
   point->SetFitCrossSection(results, sigma);
+}
+
+void THMMatrixFunc::CalculateTHMCrossSection(Site *point, azure2::Results &results) {
+  HoesCrossSection(*this, point, results);
 }
 
 // ===========================================================================
