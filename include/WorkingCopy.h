@@ -172,6 +172,9 @@ class WorkingCopy {
    * again (the hand-over); a point that is not a reader holds none.
    */
   void BuildRowSets(CNuc *, const Config &);
+  /// The conversion of every unit whose term's angle is given in the lab (Segment::TermFrameRule, experiment::
+  /// AngleIsLab): rules[ruleOf[u]] for unit u, -1 for a unit of a term without one.
+  std::vector<int> LabFrameRules(CNuc *, std::vector<azure2::experiment::FrameRule> &rules) const;
   /// The contracted values of every row set into `results` (Results::contracted): one task per set, after the energy
   /// pass and before the folds (CalculatePointsInParallel).
   void ContractRowSets(azure2::Results &results) const;
@@ -243,10 +246,12 @@ class WorkingCopy {
   /// the counts (and up to ten breaches) to stderr; returns the number of breaches.
   long CheckSlotGroups() const;
   /// Part of CheckNodeTable (src/WorkingCopyUnits.cpp): every reader of slots without an angle (Site::AngleFree) reads,
-  /// at each slot, from its row set (RowSet.h) the angular row and the Coulomb amplitudes of its own angle at the
-  /// slot's energy (Site::RowP, CoulombAt), bit for bit as Site::LegendreRowAt and Site::CoulombAmplitudesAt give them
-  /// there, and its slots lie in the set's range.  Reported on a line of its own; returns the number of slots that
-  /// differ.
+  /// at each slot, from its row set (RowSet.h) the angle (its own, or for data given at a lab angle theta_cm(E_n;
+  /// theta_lab) and the Jacobian, experiment::LabAngleAt at the slot's lab energy), the angular row, the Coulomb
+  /// amplitudes and the A_y factors at that angle and the slot's energy (Site::SlotAngle, SlotJacobian, RowP,
+  /// CoulombAt), bit for bit as LabAngleAt, Site::LegendreRowAt, CoulombAmplitudesAt, Polarization::HarmonicTable give
+  /// them there, and its slots lie in the set's range.  Reported on a line of its own; returns the number of slots
+  /// that differ.
   long CheckReaderRows(CNuc *cnuc) const;
   /// The slots of every plan task in this copy (NodeTable.h): the stage table's until the hand-over moves a unit off it.
   const azure2::NodeSlots *Slots() const { return nodes_.slots.get(); }

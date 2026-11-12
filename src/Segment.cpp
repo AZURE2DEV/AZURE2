@@ -543,6 +543,10 @@ bool Segment::ConvertRowToCM(WorkingCopy &data, int t, int i, PPair *entrancePai
   return ok;
 }
 
+azure2::experiment::FrameRule Segment::TermFrameRule(int t, PPair *entrancePair, PPair *exitPair) const {
+  return RuleOf(*this, t, entrancePair, exitPair, true);
+}
+
 void Segment::ConvertRowEnergyToCM(WorkingCopy &data, int t, int i, PPair *entrancePair, PPair *exitPair) const {
   TermState &u = data.State(*this).terms[t];
   Unit &point = data.UnitAt(u.first + i);

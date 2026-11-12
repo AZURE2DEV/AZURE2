@@ -61,6 +61,20 @@ Notes on Data Files
   cross sections without the transformation; with :math:`\beta \approx 0.01`
   (:sup:`12`\ C(:math:`\alpha,\gamma`) at a few MeV) the difference is a few
   percent and angle dependent, so enter such data as **Lab**.
+  A point at a lab angle that is folded over energy (a target, a beam spread,
+  a detector resolution) is folded in the laboratory: at every energy
+  :math:`E` of its fold the c.m. angle :math:`\theta_{cm}(E;\theta_{lab})` and
+  the Jacobian :math:`J(E;\theta_{lab}) = d\Omega_{lab}/d\Omega_{cm}` are those
+  of its lab angle at :math:`E`, so the model is the kernel's average of the
+  lab cross section :math:`\sigma_{cm}(E,\theta_{cm}(E))/J(E)`.  Until
+  2026-11-12 every energy of the fold took the point's own c.m. angle and
+  Jacobian; the difference grows with the window's width and with the slope
+  of the angle and the cross section across it (measured: up to
+  :math:`2.6\times10^{-5}` relative for a 2 keV beam spread on
+  :sup:`15`\ N(p,\ :math:`\alpha`) at 150° lab; :math:`2.2\times10^{-2}`
+  for a 300 keV window 0.4 MeV above the :sup:`7`\ Li(p,n) threshold at 30°
+  lab, ``tests/lab_frame_fold``).  An analysing power is given at c.m. angles
+  only.
 - **Units**: energies in MeV, angles in degrees, cross sections in barns
   (angle-integrated) or barns/sr (differential).
 - **Format**: columns can be separated by spaces or tabs.

@@ -163,7 +163,12 @@ bool Site::RowDependsOnEnergy(CNuc *theCNuc, const TargetEffect *targetEffect) c
 }
 
 void Site::LegendreRowAt(double cmEnergy, int maxL, CNuc *theCNuc, const TargetEffect *targetEffect, double *p) const {
-  const double x = cos(this->GetCMAngle() * pi / 180.0);
+  this->LegendreRowAt(cmEnergy, this->GetCMAngle(), maxL, theCNuc, targetEffect, p);
+}
+
+void Site::LegendreRowAt(double cmEnergy, double cmAngle, int maxL, CNuc *theCNuc, const TargetEffect *targetEffect,
+                         double *p) const {
+  const double x = cos(cmAngle * pi / 180.0);
   LegendreSeries(maxL, x, p);
   const int numQ = targetEffect ? targetEffect->NumQCoefficients() : 0;
   if (numQ > 0) {

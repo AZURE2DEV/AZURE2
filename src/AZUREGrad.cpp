@@ -616,7 +616,7 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
         vals[i - 1] = (xsComponent == 1) ? sp->GetFitE1CrossSection(results)
                       : (xsComponent == 2) ? sp->GetFitE2CrossSection(results) : sigma[i - 1];
       }
-      dT = FoldTemperatureDerivative(*point, data, config, vals);
+      dT = point->LabFoldFactor() * FoldTemperatureDerivative(*point, data, config, vals);
     }
     accum.AddDoppler(dk, fitBar * dT);
   }
@@ -627,17 +627,22 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
     if (value != 0.0)
       out.push_back({data.SlotSite(*point, i), row, value, component, ayCrossSection, point->PlanTask(), point, i});
   };
+  // Read through a lab-frame row set (RowSet.h) a slot's value is its observable over J_i and the fold is multiplied
+  // by the point's own Jacobian: the cotangent of the observable is the slot's times LabFoldFactor / J_i (both 1
+  // otherwise); A_y itself is not divided.
+  const double labFactor = point->LabFoldFactor();
   for (int i = 1; i <= nsp; i++) {
     if (c[i - 1] == 0.0) continue;
     Site *sp = point->GetSubPoint(data, i);
     if (!isAy && !isCoefNorm) {
-      emit(i, fitBar * c[i - 1], xsComponent, false);
+      emit(i, fitBar * c[i - 1] * labFactor / point->SlotJacobian(i), xsComponent, false);
     } else if (isCoefNorm) {
       emit(i, fitBar * c[i - 1] * sp->GetAngDistA0(results) / den, 0, false);
       emit(i, fitBar * c[i - 1] * (sigma[i - 1] - avg) / den, -1, false);
     } else {
       emit(i, fitBar * c[i - 1] * sigma[i - 1] / den, 0, false);
-      emit(i, fitBar * c[i - 1] * (point->SlotAnalyzingPower(*sp, i, results) - avg) / den, 0, true);
+      emit(i, fitBar * c[i - 1] * (point->SlotAnalyzingPower(*sp, i, results) - avg) / den / point->SlotJacobian(i), 0,
+           true);
     }
   }
   return true;

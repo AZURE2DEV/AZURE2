@@ -109,7 +109,6 @@ void Segment::UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, CNuc *
     Unit *point = &TermPoints(data, t)[i];
     if (point && (thm || point->GetOriginalEnergy() > 0)) {
       double originalEnergy = point->GetOriginalEnergy();
-      const double angleBefore = point->GetCMAngle();
       double shiftedEnergy = thm ? originalEnergy + TotalEnergyShift(state, originalEnergy)
                                  : ShiftedEnergy(originalEnergy, TotalEnergyShift(state, originalEnergy));
 
@@ -149,13 +148,16 @@ void Segment::UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, CNuc *
         }
         const ChannelRowSource rows = ShiftRowSource(state.terms[t], i);
         point->OwnSite().RecalcEDependentValues(&data, theCNuc, *configure, &rows);
-        // On the shared mesh the nodes stay and the kernel moves with the point (ShiftedFold.h); the c.m. angle of a
-        // lab-frame differential point, converted above at its shifted energy, is its row's (below), not its sites'.
-        if (data.Data().GridSpecOf(*point).mesh < 0) MoveOwnGridSlots(data, t, *point, theCNuc, *configure, rows);
-        // The point's rows at its slots' energies, for its moved angle or slots (Site::RowP).
-        if (point->GetCMAngle() != angleBefore || data.Data().GridSpecOf(*point).mesh < 0) {
+        // On the shared mesh the nodes stay and the kernel moves with the point (ShiftedFold.h): its row set does not
+        // depend on the shift (the c.m. angle of a point given at a lab angle is the row set's at each node, a function
+        // of the node's energy and the lab angle: RowSet.h).  A grid of its own moves with the point: its rows at its
+        // slots' new energies, a set of its own (Site::RowP).
+        if (data.Data().GridSpecOf(*point).mesh < 0) {
+          MoveOwnGridSlots(data, t, *point, theCNuc, *configure, rows);
           const TargetEffect *te = this->IsTargetEffect() ? data.Data().GetTargetEffect(this->TermTargetEffectNum(t)) : nullptr;
-          point->CalcNodeRows(data, configure->maxLOrder, theCNuc, (te && te->IsQCoefficients()) ? te : nullptr);
+          const azure2::experiment::FrameRule rule = this->TermFrameRule(t, entrancePair, exitPair);
+          point->CalcNodeRows(data, configure->maxLOrder, theCNuc, (te && te->IsQCoefficients()) ? te : nullptr,
+                              azure2::experiment::AngleIsLab(rule) ? &rule : nullptr);
         }
       }
     }

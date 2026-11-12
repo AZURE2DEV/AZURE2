@@ -110,11 +110,20 @@ class Unit : public Site {
   /// The Site functions of the same names for the point's own site and then for each slot of its fold, in order.
   void CalcLegendreP(WorkingCopy *data, int maxL, CNuc *, const TargetEffect *);
   /// A row set of the point's own over its slots (RowSet.h, not cached), where it reads angle-free slots; after its
-  /// own rows and whenever its slots or its angle change.  WorkingCopy::BuildRowSets replaces it by a shared one.
-  void CalcNodeRows(const WorkingCopy &data, int maxL, CNuc *, const TargetEffect *);
+  /// own rows and whenever its slots move (a grid of its own moved by an energy shift).  WorkingCopy::BuildRowSets
+  /// replaces it by a shared one.  `labFrame`: its term's conversion where its angle is given in the lab, else null.
+  void CalcNodeRows(const WorkingCopy &data, int maxL, CNuc *, const TargetEffect *,
+                    const azure2::experiment::FrameRule *labFrame);
   /// The rows of the point's angular identity over the slots [first, first + count) of `data` (RowSet.h; its own
-  /// Legendre rows, or per slot where they depend on the energy, and f_C per slot for elastic scattering).
-  azure2::RowSet RowSetOver(const WorkingCopy &data, int first, int count, int maxL, CNuc *, const TargetEffect *) const;
+  /// Legendre rows, or per slot where they depend on the energy, f_C per slot for elastic scattering; with `labFrame`,
+  /// the conversion of a lab angle, the c.m. angle and the Jacobian of every slot).  Throws where the lab angle is
+  /// beyond the kinematic maximum at a slot.
+  azure2::RowSet RowSetOver(const WorkingCopy &data, int first, int count, int maxL, CNuc *, const TargetEffect *,
+                            const azure2::experiment::FrameRule *labFrame) const;
+  /// The factor of a fold read through a lab-frame row set (RowSet.h): the point's own dOmega_lab/dOmega_cm as its
+  /// frame holds it (SetFrame; 1 for a ratio), so that the fold, a lab value, is the c.m. value the point's comparison
+  /// divides by the same Jacobian.  1 for every other point.
+  double LabFoldFactor() const { return (RowSetOf() && RowSetOf()->labFrame) ? frame_jacobian_ : 1.0; }
   void CalcEDependentValues(WorkingCopy *data, CNuc *, const Config &, const ChannelRowSource *rows = nullptr);
   void ChannelKeys(WorkingCopy *data, CNuc *, std::vector<ChannelTable::Key> &);
   void CalcCoulombAmplitude(WorkingCopy *data, CNuc *);
@@ -170,6 +179,7 @@ class Unit : public Site {
   double bin_high_cm_ = std::numeric_limits<double>::quiet_NaN();
   double photo_qgamma_ = 0.0;
   double photo_mcn_ = 0.0;
+  double frame_jacobian_ = 1.0;  ///< dOmega_lab/dOmega_cm of the point's frame row (SetFrame; LabFoldFactor)
   int plan_task_ = -1;  // see PlanTask
   int sub_first_ = 0, sub_count_ = 0;  ///< the slots: [first, first + count) of WorkingCopy::SlotAt
   std::uint16_t num_model_ang_ = 0;  // see SetModelRecord

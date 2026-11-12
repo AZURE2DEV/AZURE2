@@ -361,6 +361,7 @@ void Unit::SetFrame(const azure2::experiment::FrameRow &row) {
   bin_low_cm_ = row.binLowCM;
   bin_high_cm_ = row.binHighCM;
   cm_angle_ = row.thetaCM;
+  frame_jacobian_ = row.jacobian;
 }
 
 /*!
@@ -563,54 +564,87 @@ void Unit::CalcLegendreP(WorkingCopy *data, int maxL, CNuc *theCNuc, const Targe
     if (data->WritesSlot(*this, i)) GetSubPoint(*data, i)->CalcLegendreP(data, maxL, theCNuc, targetEffect);
 }
 
-void Unit::CalcNodeRows(const WorkingCopy &data, int maxL, CNuc *theCNuc, const TargetEffect *targetEffect) {
+void Unit::CalcNodeRows(const WorkingCopy &data, int maxL, CNuc *theCNuc, const TargetEffect *targetEffect,
+                        const azure2::experiment::FrameRule *labFrame) {
   rowset_.reset();
   rowset_at_ = 0;
   if (!AngleFree() || IsCoefficient() || NumSubPoints() <= 0 || !theCNuc) return;
   // The point's own row set over its slots, not cached (RowSet.h); WorkingCopy::BuildRowSets shares them.
   ReadWithRowSet(SharedTable<azure2::RowSet>::Make(RowSetOver(data, SubPointFirst(), NumSubPoints(), maxL, theCNuc,
-                                                                targetEffect)),
+                                                                targetEffect, labFrame)),
                  0);
 }
 
 azure2::RowSet Unit::RowSetOver(const WorkingCopy &data, int first, int count, int maxL, CNuc *theCNuc,
-                                const TargetEffect *targetEffect) const {
+                                const TargetEffect *targetEffect, const azure2::experiment::FrameRule *labFrame) const {
   azure2::RowSet set;
   set.kind = Observable();
   set.first = first;
   set.count = count;
   set.valuesPerSlot = kSiteObservables[(int)set.kind].values;
+  set.labFrame = labFrame != nullptr;
+  set.perSlot = set.labFrame || (maxL >= 0 && RowDependsOnEnergy(theCNuc, targetEffect));
+  const int positions = set.perSlot ? count : 1;
+  if (!set.labFrame) {
+    set.angles.assign(1, GetCMAngle());
+  } else {
+    // a lab angle: theta_cm(E_n; theta_lab) and J(E_n; theta_lab) at each slot's lab energy (energy_grid.md 4.3)
+    set.frame = *labFrame;
+    set.thetaLab = GetLabAngle();
+    set.angles.resize((std::size_t)count);
+    set.jacobian.resize((std::size_t)count);
+    for (int k = 0; k < count; k++) {
+      const Site &slot = data.SlotAt(first + k);
+      azure2::experiment::AngleLimit lim;
+      if (!azure2::experiment::LabAngleAt(set.frame, slot.GetCMEnergy(), set.thetaLab, set.angles[k], set.jacobian[k],
+                                          lim)) {
+        std::ostringstream why;
+        why << "segment #" << GetSegmentKey() << ": the lab angle " << set.thetaLab << " deg of the point at E_lab = "
+            << GetLabEnergy() << " MeV is beyond the kinematic maximum at the fold node E_cm = " << slot.GetCMEnergy()
+            << " MeV of its fold (" << (lim.why.empty() ? "dOmega_lab/dOmega_cm " + std::to_string(set.jacobian[k])
+                                                         : lim.why)
+            << "): a point given at a lab angle is folded with the c.m. angle and Jacobian of every node "
+               "(docs/upgrade/energy_grid.md section 4.3); narrow its target, resolution or beam spread";
+        throw std::runtime_error(why.str());
+      }
+    }
+  }
+  if (!set.perSlot) {
+    set.rowLength = legendreP_->size();
+    set.rows = *legendreP_;
+  } else {
+    set.rowLength = (std::size_t)std::max(maxL + 1, 0);
+    set.rows.resize(set.rowLength * (std::size_t)count);
+    for (int k = 0; k < count; k++)
+      LegendreRowAt(data.SlotAt(first + k).GetCMEnergy(), set.AngleAt(k), maxL, theCNuc, targetEffect,
+                    set.rows.data() + (std::size_t)k * set.rowLength);
+  }
   if (set.kind == SiteObservable::kAnalyzingPower) {
     // the factors of A_y at the readers' angle: Y_l'^mu (particle exits) and P_k^1 (capture)
-    const double theta = GetCMAngle() * pi / 180.0;
     PPair *in = theCNuc->GetPair(theCNuc->GetPairNumFromKey(GetEntranceKey()));
     PPair *out = theCNuc->GetPair(theCNuc->GetPairNumFromKey(GetExitKey()));
     set.muMax = Polarization::MaxProjection(in->GetJ(1), in->GetJ(2), out->GetJ(1), out->GetJ(2));
-    Polarization::HarmonicTable(theta, Config::maxLOrder, set.muMax, set.harmonics);
-    set.p1.assign(legendreP_->size(), 0.0);
-    for (std::size_t k = 1; k < set.p1.size(); k++) set.p1[k] = AngCoeff::LegendreP1((int)k, std::cos(theta));
+    set.p1.assign(set.rowLength * (std::size_t)positions, 0.0);
+    vector_c table;
+    for (int k = 0; k < positions; k++) {
+      const double theta = set.AngleAt(k) * pi / 180.0;
+      Polarization::HarmonicTable(theta, Config::maxLOrder, set.muMax, table);
+      set.harmonicsLength = table.size();
+      set.harmonics.insert(set.harmonics.end(), table.begin(), table.end());
+      double *p1 = set.p1.data() + (std::size_t)k * set.rowLength;
+      for (std::size_t l = 1; l < set.rowLength; l++) p1[l] = AngCoeff::LegendreP1((int)l, std::cos(theta));
+    }
   }
   if (set.kind == SiteObservable::kElastic ||
       (set.kind == SiteObservable::kAnalyzingPower && GetEntranceKey() == GetExitKey())) {
-    // f_C depends on the energy: the reader's amplitudes at its angle and the energies of the slots
+    // f_C depends on the energy: at the readers' angle and the energies of the slots
     PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(GetEntranceKey()));
     set.coulomb.resize(2 * (std::size_t)count);
     bool spinDependent = false;
     for (int k = 0; k < count; k++)
-      CoulombAmplitudesAt(pair, data.SlotAt(first + k).GetCMEnergy(), GetCMAngle(), set.coulomb[2 * (std::size_t)k],
+      CoulombAmplitudesAt(pair, data.SlotAt(first + k).GetCMEnergy(), set.AngleAt(k), set.coulomb[2 * (std::size_t)k],
                           set.coulomb[2 * (std::size_t)k + 1], spinDependent);
   }
-  set.rowPerSlot = maxL >= 0 && RowDependsOnEnergy(theCNuc, targetEffect);
-  if (!set.rowPerSlot) {
-    set.rowLength = legendreP_->size();
-    set.rows = *legendreP_;
-    return set;
-  }
-  set.rowLength = (std::size_t)maxL + 1;
-  set.rows.resize(set.rowLength * (std::size_t)count);
-  for (int k = 0; k < count; k++)
-    LegendreRowAt(data.SlotAt(first + k).GetCMEnergy(), maxL, theCNuc, targetEffect,
-                  set.rows.data() + (std::size_t)k * set.rowLength);
   return set;
 }
 

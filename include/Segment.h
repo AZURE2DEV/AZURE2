@@ -148,6 +148,9 @@ class Segment {
   /// beyond the kinematic maximum, with the maximum and the reason in `limit`; the caller reports it.
   bool ConvertRowToCM(WorkingCopy &data, int t, int i, PPair *entrancePair, PPair *exitPair, bool convertValue,
                       BeyondRange beyond, azure2::experiment::AngleLimit &limit) const;
+  /// How the rows of term t with these pairs are converted (experiment::FrameRule, the rule of ConvertRowToCM; the
+  /// value converted).  experiment::AngleIsLab of it: the term's angle is given in the lab.
+  azure2::experiment::FrameRule TermFrameRule(int t, PPair *entrancePair, PPair *exitPair) const;
   /// E_c.m., E_x and the c.m. bin edges of row i of term t alone (the leaf grids are laid out before the leaves'
   /// angles are converted).
   void ConvertRowEnergyToCM(WorkingCopy &data, int t, int i, PPair *entrancePair, PPair *exitPair) const;

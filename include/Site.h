@@ -164,7 +164,8 @@ class Site {
   /// A_y of this site as `reader` sees it (kAnalyzingPower: the second value of the contraction), else the record's.
   double AnalyzingPowerFor(const Site &reader, int slot, const azure2::Results &r) const;
   /// The values of this site at slot k (0-based) of the row set `set` (RowSet.h) into values[0 .. set.valuesPerSlot):
-  /// the set's row contracted with the record, as ValueFor (and AnalyzingPowerFor) give them to each reader of the set.
+  /// the set's row contracted with the record, as ValueFor (and AnalyzingPowerFor) give them to each reader of the set,
+  /// the first divided by the slot's Jacobian (RowSet::JacobianAt: 1 but for data given at a lab angle).
   void ValuesWith(const azure2::RowSet &set, int k, const azure2::Results &r, double *values) const;
   /// The same contraction on a record `record` (laid out as a site's of kind `kind`) that is not in a result buffer.
   static double ContractRecord(SiteObservable kind, const double *record, const Site &reader, int slot,
@@ -200,8 +201,16 @@ class Site {
    */
   double SlotValue(const Site &site, int slot, const azure2::Results &r) const {
     if (rowset_ && rowset_->valueOffset >= 0) return r.contracted[rowset_->ValueIndex(rowset_at_ + slot - 1, 0)];
-    return site.ValueFor(*this, slot, r);
+    return site.ValueFor(*this, slot, r) / SlotJacobian(slot);
   }
+  /// The reader's c.m. angle (deg) at its slot `slot` (1-based; 0: its own): its row set's (RowSet::AngleAt; for data
+  /// given at a lab angle theta_cm(E_n; theta_lab)), else its own.
+  double SlotAngle(int slot) const {
+    return (slot > 0 && rowset_) ? rowset_->AngleAt(rowset_at_ + slot - 1) : GetCMAngle();
+  }
+  /// dOmega_lab/dOmega_cm at the reader's slot `slot` (RowSet::JacobianAt): SlotValue is the contraction divided by
+  /// it, 1 but for data given at a lab angle.
+  double SlotJacobian(int slot) const { return (slot > 0 && rowset_) ? rowset_->JacobianAt(rowset_at_ + slot - 1) : 1.0; }
   /// A_y of this reader's slot `slot` (an analysing power; SlotValue is the cross section that weights it).
   double SlotAnalyzingPower(const Site &site, int slot, const azure2::Results &r) const {
     if (rowset_ && rowset_->valueOffset >= 0 && rowset_->valuesPerSlot > 1)
@@ -211,8 +220,10 @@ class Site {
   /// Whether the point's angular row depends on the energy: Q coefficients on a particle-to-particle reaction that is
   /// not charged elastic scattering, UPOS or A_y (the detector averages the lab distribution: CalcLegendreP).
   bool RowDependsOnEnergy(CNuc *, const TargetEffect *) const;
-  /// The row P_L Q-transformed at c.m. energy `cmEnergy` (MeV) and the point's c.m. angle, L = 0 .. maxL, into p.
+  /// The row P_L Q-transformed at c.m. energy `cmEnergy` (MeV) and c.m. angle `cmAngle` (deg; the point's own where
+  /// not given), L = 0 .. maxL, into p.
   void LegendreRowAt(double cmEnergy, int maxL, CNuc *, const TargetEffect *, double *p) const;
+  void LegendreRowAt(double cmEnergy, double cmAngle, int maxL, CNuc *, const TargetEffect *, double *p) const;
   /// The number K of Legendre coefficients the record holds (AngleFree) and the first of them.
   int NumLegendreCoefficients(const azure2::Results &r) const {
     return num_ang_slots_ ? (int)Rec(r)[azure2::Results::AngularOffset()] : 0;

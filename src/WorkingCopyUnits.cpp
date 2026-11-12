@@ -89,14 +89,17 @@ void WorkingCopy::CompactUnits() { LayOutUnits(nullptr); }
 
 namespace {
 
-/// What readers of one block must have in common to share a row set (WorkingCopy::BuildRowSets).
+/// What readers of one block must have in common to share a row set (WorkingCopy::BuildRowSets): the angle as the data
+/// give it -- the c.m. angle bits, or, for data given at a lab angle, the lab angle alone (the c.m. angle at a node is
+/// a function of the node's energy and the lab angle: RowSet.h).
 struct RowIdentity {
   int block, kind, pair;
+  bool lab;
   std::uint64_t cmAngle, labAngle;
   const TargetEffect *qEffect;
   bool operator<(const RowIdentity &o) const {
-    return std::tie(block, kind, pair, cmAngle, labAngle, qEffect) <
-           std::tie(o.block, o.kind, o.pair, o.cmAngle, o.labAngle, o.qEffect);
+    return std::tie(block, kind, pair, lab, cmAngle, labAngle, qEffect) <
+           std::tie(o.block, o.kind, o.pair, o.lab, o.cmAngle, o.labAngle, o.qEffect);
   }
 };
 
@@ -108,19 +111,38 @@ std::uint64_t Bits(double x) {
 
 }  // namespace
 
+std::vector<int> WorkingCopy::LabFrameRules(CNuc *theCNuc, std::vector<azure2::experiment::FrameRule> &rules) const {
+  std::vector<int> ruleOf((std::size_t)NumUnits(), -1);
+  rules.clear();
+  for (const Segment &segment : Data().GetSegments())
+    for (int t = 0; t < segment.NumTerms(); t++) {
+      if (!theCNuc->IsPairKey(segment.TermEntranceKey(t))) continue;
+      PPair *entrance = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.TermEntranceKey(t)));
+      PPair *exit = theCNuc->GetPairFromKey(segment.TermExitKey(t));  // nullptr for total capture (-1)
+      const azure2::experiment::FrameRule rule = segment.TermFrameRule(t, entrance, exit);
+      if (!azure2::experiment::AngleIsLab(rule)) continue;
+      rules.push_back(rule);
+      const int first = segment.TermFirstUnit(*this, t);
+      for (int i = 0; i < segment.NumTermPoints(t); i++) ruleOf[(std::size_t)(first + i)] = (int)rules.size() - 1;
+    }
+  return ruleOf;
+}
+
 void WorkingCopy::BuildRowSets(CNuc *theCNuc, const Config &configure) {
   rowSets_.clear();
   contractedSize_ = 0;
   if (!theCNuc) return;
+  std::vector<azure2::experiment::FrameRule> rules;
+  const std::vector<int> ruleOf = LabFrameRules(theCNuc, rules);
   std::map<RowIdentity, std::vector<int>> readers;  // in unit order
-  std::map<RowIdentity, const TargetEffect *> effects;
   for (int u = 0; u < NumUnits(); u++) {
     Unit &p = units_[u];
     if (!p.AngleFree() || p.IsCoefficient() || p.NumSubPoints() <= 0) continue;
     const TargetEffect *te = p.IsTargetEffect() ? Data().GetTargetEffect(p.GetTargetEffectNum()) : nullptr;
     const TargetEffect *qEffect = (te && te->IsQCoefficients()) ? te : nullptr;
-    const RowIdentity id{SlotBlockOf(p.SubPointFirst()), (int)p.Observable(), p.GetEntranceKey(),
-                         Bits(p.GetCMAngle()), Bits(p.GetLabAngle()), qEffect};
+    const bool lab = ruleOf[(std::size_t)u] >= 0;
+    const RowIdentity id{SlotBlockOf(p.SubPointFirst()), (int)p.Observable(), p.GetEntranceKey(), lab,
+                         lab ? 0 : Bits(p.GetCMAngle()), Bits(p.GetLabAngle()), qEffect};
     readers[id].push_back(u);
   }
   for (const auto &group : readers) {
@@ -129,8 +151,10 @@ void WorkingCopy::BuildRowSets(CNuc *theCNuc, const Config &configure) {
       first = std::min(first, units_[u].SubPointFirst());
       end = std::max(end, units_[u].SubPointFirst() + units_[u].NumSubPoints());
     }
+    const int rule = ruleOf[(std::size_t)group.second.front()];
     azure2::RowSet set = units_[group.second.front()].RowSetOver(*this, first, end - first, configure.maxLOrder,
-                                                                   theCNuc, group.first.qEffect);
+                                                                   theCNuc, group.first.qEffect,
+                                                                   rule >= 0 ? &rules[(std::size_t)rule] : nullptr);
     set.valueOffset = (long)contractedSize_;
     contractedSize_ += (std::size_t)(end - first) * (std::size_t)set.valuesPerSlot;
     rowSets_.push_back(SharedTable<azure2::RowSet>::Make(std::move(set)));
@@ -168,6 +192,13 @@ long WorkingCopy::CheckReaderRows(CNuc *theCNuc) const {
   std::vector<std::string> reports;
   const int maxL = Config::maxLOrder;
   std::vector<double> row(maxL + 1);
+  std::vector<azure2::experiment::FrameRule> rules;
+  const std::vector<int> ruleOf = LabFrameRules(theCNuc, rules);
+  auto same = [](const void *a, const void *b, std::size_t n) { return std::memcmp(a, b, n) == 0; };
+  auto report = [&](int u, const Unit &p, const std::string &what) {
+    if (reports.size() < 10)
+      reports.push_back("unit " + std::to_string(u) + " (segment " + std::to_string(p.GetSegmentKey()) + ")" + what);
+  };
   for (int u = 0; u < NumUnits(); u++) {
     const Unit &p = units_[u];
     if (!p.AngleFree() || p.NumSubPoints() <= 0 || p.IsCoefficient()) continue;
@@ -175,62 +206,64 @@ long WorkingCopy::CheckReaderRows(CNuc *theCNuc) const {
     const TargetEffect *qEffect = (te && te->IsQCoefficients()) ? te : nullptr;
     const bool ay = p.Observable() == SiteObservable::kAnalyzingPower;
     const bool elastic = p.Observable() == SiteObservable::kElastic || (ay && p.GetEntranceKey() == p.GetExitKey());
+    const azure2::experiment::FrameRule *lab = ruleOf[(std::size_t)u] >= 0 ? &rules[(std::size_t)ruleOf[u]] : nullptr;
     PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(p.GetEntranceKey()));
     readers++;
     const azure2::RowSet *set = p.RowSetOf();
-    if (set && ay) {
-      // the A_y factors at the reader's angle: Y_l'^mu and P_k^1, bit for bit
-      const double theta = p.GetCMAngle() * pi / 180.0;
-      vector_c y;
-      Polarization::HarmonicTable(theta, Config::maxLOrder, set->muMax, y);
-      bool same = y.size() == set->harmonics.size() &&
-                  std::memcmp(y.data(), set->harmonics.data(), y.size() * sizeof(complex)) == 0;
-      for (std::size_t k = 1; k < set->p1.size() && same; k++) {
-        const double p1 = AngCoeff::LegendreP1((int)k, std::cos(theta));
-        same = std::memcmp(&p1, &set->p1[k], sizeof p1) == 0;
-      }
-      if (!same) {
-        differ += p.NumSubPoints();
-        if (reports.size() < 10)
-          reports.push_back("unit " + std::to_string(u) + " (segment " + std::to_string(p.GetSegmentKey()) +
-                            "): the A_y factors of its row set are not those of its angle");
-        continue;
-      }
-    }
     if (!set || p.RowSetIndex(1) < 0 || p.RowSetIndex(p.NumSubPoints()) >= set->count ||
-        set->first + p.RowSetIndex(1) != p.SubPointFirst()) {
+        set->first + p.RowSetIndex(1) != p.SubPointFirst() || set->labFrame != (lab != nullptr)) {
       differ += p.NumSubPoints();
-      if (reports.size() < 10)
-        reports.push_back("unit " + std::to_string(u) + " (segment " + std::to_string(p.GetSegmentKey()) +
-                          "): its slots are not in its row set");
+      report(u, p, set && set->labFrame != (lab != nullptr) ? ": its row set's frame is not its data's"
+                                                            : ": its slots are not in its row set");
       continue;
     }
     for (int j = 1; j <= p.NumSubPoints(); j++) {
-      const double e = p.GetSubPoint(*this, j)->GetCMEnergy();
+      const Site &slot = *p.GetSubPoint(*this, j);
+      const double e = slot.GetCMEnergy();
       slots++;
-      p.LegendreRowAt(e, maxL, theCNuc, qEffect, row.data());
-      bool bad = false;
-      for (int l = 0; l <= maxL && !bad; l++) {
-        const double held = p.RowP(j, l);
-        bad = std::memcmp(&row[l], &held, sizeof held) != 0;
+      // the reader's angle at the slot: its own, or for a lab angle theta_cm(E_n; theta_lab) with J(E_n; theta_lab)
+      double angle = p.GetCMAngle(), jacobian = 1.0;
+      std::string what;
+      if (lab) {
+        azure2::experiment::AngleLimit lim;
+        azure2::experiment::LabAngleAt(*lab, slot.GetCMEnergy(), p.GetLabAngle(), angle, jacobian, lim);
       }
-      std::string what = bad ? "angular row" : "";
+      const double heldAngle = p.SlotAngle(j), heldJacobian = p.SlotJacobian(j);
+      if (!same(&angle, &heldAngle, sizeof angle) || !same(&jacobian, &heldJacobian, sizeof jacobian))
+        what += " angle or Jacobian";
+      p.LegendreRowAt(e, angle, maxL, theCNuc, qEffect, row.data());
+      for (int l = 0; l <= maxL && what.empty(); l++) {
+        const double held = p.RowP(j, l);
+        if (!same(&row[l], &held, sizeof held)) what += " angular row";
+      }
       if (elastic) {
         complex d, x, rd, rx;
         bool spin;
-        Site::CoulombAmplitudesAt(pair, e, p.GetCMAngle(), d, x, spin);
+        Site::CoulombAmplitudesAt(pair, e, angle, d, x, spin);
         p.CoulombAt(j, rd, rx);
-        if (std::memcmp(&d, &rd, sizeof d) != 0 || std::memcmp(&x, &rx, sizeof x) != 0) what += " Coulomb amplitude";
+        if (!same(&d, &rd, sizeof d) || !same(&x, &rx, sizeof x)) what += " Coulomb amplitude";
+      }
+      if (ay) {
+        // the A_y factors at the angle: Y_l'^mu and P_k^1, bit for bit
+        const AngularRow held = set->RowAt(p.RowSetIndex(j));
+        const double theta = angle * pi / 180.0;
+        vector_c y;
+        Polarization::HarmonicTable(theta, Config::maxLOrder, set->muMax, y);
+        bool factors = held.y && y.size() == set->harmonicsLength && same(y.data(), held.y, y.size() * sizeof(complex));
+        for (int k = 1; k < held.length && factors && held.p1; k++) {
+          const double p1 = AngCoeff::LegendreP1(k, std::cos(theta));
+          factors = same(&p1, &held.p1[k], sizeof p1);
+        }
+        if (!factors) what += " A_y factors";
       }
       if (what.empty()) continue;
       differ++;
-      if (reports.size() < 10)
-        reports.push_back("unit " + std::to_string(u) + " (segment " + std::to_string(p.GetSegmentKey()) + ") slot " +
-                          std::to_string(j) + " at " + std::to_string(e) + " MeV:" + what);
+      report(u, p, " slot " + std::to_string(j) + " at " + std::to_string(e) + " MeV:" + what);
     }
   }
+  const long labSets = std::count_if(rowSets_.begin(), rowSets_.end(), [](const auto &set) { return set->labFrame; });
   std::cerr << "AZURE_NODE_CHECK: reader rows: " << readers << " readers of slots without an angle (" << rowSets_.size()
-            << " row sets), " << slots << " slots, " << differ << " differ" << std::endl;
+            << " row sets, " << labSets << " at a lab angle), " << slots << " slots, " << differ << " differ" << std::endl;
   for (const std::string &r : reports) std::cerr << "AZURE_NODE_CHECK:   " << r << std::endl;
   return differ;
 }

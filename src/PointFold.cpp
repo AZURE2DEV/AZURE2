@@ -93,7 +93,9 @@ void FoldPoint(Unit &unit, const WorkingCopy &data, const Config &configure, azu
   const int n = unit.NumSubPoints();
   std::vector<double> values(n > 0 ? n : 0);
   for (int j = 1; j <= n; j++) values[j - 1] = unit.SlotValue(*unit.GetSubPoint(data, j), j, results);
-  unit.SetFitCrossSection(results, FoldValues(unit, data, configure, values, Broadening::kApply));
+  // read through a lab-frame row set the fold is a lab value; the point's own Jacobian makes it the c.m. value its
+  // comparison divides by the same Jacobian (RowSet.h)
+  unit.SetFitCrossSection(results, unit.LabFoldFactor() * FoldValues(unit, data, configure, values, Broadening::kApply));
 }
 
 bool FoldWeights(const Unit &unit, const WorkingCopy &data, const Config &configure, std::vector<double> &c,

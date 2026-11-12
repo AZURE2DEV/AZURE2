@@ -843,7 +843,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
       const int nTerms = theDecay.num_capture_ay;
       if (nTerms == 0) return false;
 
-      const double xCos = cos(angles->GetCMAngle() * pi / 180.0);
+      const double xCos = cos(angles->SlotAngle(rowSlot) * pi / 180.0);  // the reader's angle at the slot
       std::vector<double> assocP(maxL + 1, 0.0);
       for (int k = 1; k <= maxL; k++) assocP[k] = AngCoeff::LegendreP1(k, xCos);
 
@@ -884,7 +884,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
     } else if (compound()->GetPair(exitPairNum)->GetPType() != 0) {
       return false;
     } else {
-      Polarization::AmplitudeMatrix M(compound(), angles->GetCMAngle(), aa, exitPairNum);  // the reader's angle
+      Polarization::AmplitudeMatrix M(compound(), angles->SlotAngle(rowSlot), aa, exitPairNum);  // the reader's, at the slot
       for (int k = 1; k <= nK; k++) {
         if (P.Group(theDecay, k).CrossSpin()) continue;  // as the forward sum
         for (int m = 1; m <= P.Group(theDecay, k).num_internal; m++) {

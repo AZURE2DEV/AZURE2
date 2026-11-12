@@ -182,14 +182,10 @@ double CoefficientValue(const double *rec, const Site &reader) {
 AngularRow RowOf(const Site &reader, int slot) {
   AngularRow row;
   const azure2::RowSet *set = slot > 0 ? reader.RowSetOf() : nullptr;
-  if (set) {
-    const int k = reader.RowSetIndex(slot);
-    row = set->RowAt(k);
-  } else {
-    row.p = reader.Row(slot);
-    row.length = reader.GetMaxLOrder() + 1;
-    reader.CoulombAt(slot, row.fd, row.fx);
-  }
+  if (set) return set->RowAt(reader.RowSetIndex(slot));
+  row.p = reader.Row(slot);
+  row.length = reader.GetMaxLOrder() + 1;
+  reader.CoulombAt(slot, row.fd, row.fx);
   row.theta = reader.GetCMAngle() * pi / 180.0;
   return row;
 }
@@ -266,7 +262,8 @@ double Site::ContractRecord(SiteObservable kind, const double *record, const Sit
 
 void Site::ValuesWith(const azure2::RowSet &set, int k, const azure2::Results &results, double *values) const {
   const SiteObservableRow &row = kSiteObservables[(int)set.kind];
-  values[0] = row.contract(Angular(Rec(results)), set.RowAt(k), row.values > 1 ? values + 1 : nullptr);
+  values[0] = row.contract(Angular(Rec(results)), set.RowAt(k), row.values > 1 ? values + 1 : nullptr) /
+              set.JacobianAt(k);
 }
 
 void Site::CoulombAt(int slot, complex &direct, complex &exchange) const {
