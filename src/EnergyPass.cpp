@@ -76,7 +76,7 @@ void SolveAtOneEnergy(CNuc *cnuc, const Config &configure, Results &results, Sit
   }
   // sigma_HOES reads the level matrix's elements in level space: the fill above where it took no channel route (the
   // same matrices bit for bit), else a level-space fill of its own (THMMatrixFunc.h).
-  const AMatrixFunc *levels = nullptr;
+  AMatrixFunc *levels = nullptr;
   if (firstHoes >= 0) {
     if (amatrix && func == amatrix && amatrix->LevelSpaceThroughout()) {
       levels = amatrix;

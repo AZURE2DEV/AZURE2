@@ -7,12 +7,6 @@ api/include/AZUREAPI.h	nuisanceParams_	mutable	pending (milestone 3, an evaluati
 api/include/AZUREAPI.h	nuisanceRead_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): the session's nuisance layout read lazily and its Results, written by const evaluations
 api/include/AZUREAPI.h	nuisance_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): the session's nuisance layout read lazily and its Results, written by const evaluations
 api/include/AZUREAPI.h	results_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): the session's nuisance layout read lazily and its Results, written by const evaluations
-include/AMatrixFunc.h	cached_max_channels_	mutable	pending (evaluation.md milestone 1, scratch of the energy task): buffers of a solver object (the energy task's scratch) written by const methods
-include/AMatrixFunc.h	cached_max_levels_	mutable	pending (evaluation.md milestone 1, scratch of the energy task): buffers of a solver object (the energy task's scratch) written by const methods
-include/AMatrixFunc.h	levelDecoupled_	mutable	pending (evaluation.md milestone 1, scratch of the energy task): buffers of a solver object (the energy task's scratch) written by const methods
-include/AMatrixFunc.h	levelEnergies_	mutable	pending (evaluation.md milestone 1, scratch of the energy task): buffers of a solver object (the energy task's scratch) written by const methods
-include/AMatrixFunc.h	levelGammas_	mutable	pending (evaluation.md milestone 1, scratch of the energy task): buffers of a solver object (the energy task's scratch) written by const methods
-include/AMatrixFunc.h	shiftFunctions_	mutable	pending (evaluation.md milestone 1, scratch of the energy task): buffers of a solver object (the energy task's scratch) written by const methods
 include/AZURECalc.h	cnuc_pool_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the pooled CNuc copies of a fit and their lock
 include/AZURECalc.h	edata_pool_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): pooled working copies and the snapshot copies of a fit
 include/AZURECalc.h	fixedMask_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the fitter's state written by const methods (free mask, G2 with the last gradient, last gradient for a dump)
@@ -51,11 +45,7 @@ include/CoulombTable.h	misses_	static	pending (milestone 5, the diagnostics reco
 include/GSLException.h	h	static	table: GSL's error handler is process-wide by GSL's design: the saved handler, a nesting count and their lock
 include/GSLException.h	m	static	table: GSL's error handler is process-wide by GSL's design: the saved handler, a nesting count and their lock
 include/GSLException.h	n	static	table: GSL's error handler is process-wide by GSL's design: the saved handler, a nesting count and their lock
-include/LevelMatrixSolver.h	inverse_	mutable	pending (evaluation.md milestone 1, scratch of the energy task): buffers of a solver object (the energy task's scratch) written by const methods
-include/LevelMatrixSolver.h	inverse_valid_	mutable	pending (evaluation.md milestone 1, scratch of the energy task): buffers of a solver object (the energy task's scratch) written by const methods
-include/LevelMatrixSolver.h	work_	mutable	pending (evaluation.md milestone 1, scratch of the energy task): buffers of a solver object (the energy task's scratch) written by const methods
 include/Site.h	ec_shifted_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): per site, the EC amplitude at the last shifted energy (EC unit amplitudes per mesh energy later)
-include/ThmVertexBoundary.h	channelFunc_	mutable	pending (evaluation.md milestone 1, scratch of the energy task): a ChannelFunc whose calls are non-const (its last-value cache)
 src/ALevel.cpp	counter	static	table: the stamp generator: names level states uniquely in the process (the keys of ChannelSpace::Memo), holds no value of a calculation
 src/AMatrixFunc.cpp	worst	static	pending (milestone 5, the diagnostics record): call counter, worst value or saved gradient of a diagnostic print (AZURE_GRAD_CHECK, AZURE_GRAD_TIMING, AZURE_DUMP_NONFINITE, AZURE_CHANNEL_VERIFY)
 src/AZURE2.cpp	g_last_printed_step	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)

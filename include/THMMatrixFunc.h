@@ -73,7 +73,7 @@ ThmAdjointContext BuildThmAdjointContext(CNuc *compound, const Config &configure
  * at the point's energy, filled in level space for every J-group of its nucleus (THMMatrixFunc, or an AMatrixFunc with
  * LevelSpaceThroughout(): the energy pass, CalculationPlan.h).
  */
-void HoesCrossSection(const AMatrixFunc &levels, Site *point, azure2::Results &results);
+void HoesCrossSection(AMatrixFunc &levels, Site *point, azure2::Results &results);
 
 class THMMatrixFunc : public AMatrixFunc {
  public:

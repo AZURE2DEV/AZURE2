@@ -59,15 +59,15 @@ class LevelMatrixSolver {
   void SolveInto(const vector_c &b, vector_c &x) const;
 
   /*!
-   * Returns \f$ u^T M^{-1} v \f$ using a single triangular solve.
+   * Returns \f$ u^T M^{-1} v \f$ using a single triangular solve (in the object's work vector).
    */
-  complex Bilinear(const vector_c &u, const vector_c &v) const;
+  complex Bilinear(const vector_c &u, const vector_c &v);
 
   /*!
    * Returns the full inverse, computed on the first call following Decompose()
    * and cached thereafter.
    */
-  const matrix_c &Inverse() const;
+  const matrix_c &Inverse();
 
  private:
   int n_;
@@ -76,9 +76,9 @@ class LevelMatrixSolver {
   std::vector<complex> lu_;
   /// Row interchanges chosen by partial pivoting.
   std::vector<int> piv_;
-  mutable bool inverse_valid_;
-  mutable matrix_c inverse_;
-  mutable vector_c work_;
+  bool inverse_valid_;
+  matrix_c inverse_;
+  vector_c work_;
 };
 
 #endif
