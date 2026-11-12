@@ -665,10 +665,6 @@ data yield_3: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma
 data yield_4: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
 extrapolation x1: sigma(1->3)
 extrapolation x2: sigma(1->3)
-== tests/shift_sqrt_subpoints/models/dense.azr
-data yield_scan: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
-extrapolation x1: sigma(1->3)
-extrapolation x2: sigma(1->3)
 == tests/shift_sqrt_subpoints/models/narrow_const.azr
 data yield_1: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
 data yield_2: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
