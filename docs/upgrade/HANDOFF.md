@@ -2,6 +2,45 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, follow-ups 2) — thin shifted layers, unknown options, the gradient's gates, runall tags (`feature/upgrade-5-followups-2`)
+
+**Done** (one commit each).
+- *A layer below 1 eV on a data set with an energy shift.*  The point was NaN ("the lower edge of the moved support ...
+  is outside the point's planned nodes"): its planned support is still below `MeshZeroWidth()` (fixed shift: no reach;
+  varied without a prior: reach 3 support widths), the planner gives one node (its upper edge), and `ShiftedFoldNodes`
+  compared the moved support's edges with it to 1e-9 MeV.  For one node it now checks that the moved support lies
+  within `MeshZeroWidth()` below the node and the thin limit folds it (`src/ShiftedFold.cpp`; header paragraph on
+  single nodes).  `tests/thin_layer_limit/check.sh` gained a shift scan at 1e14 and the 1e14–1e16 scan with +20 keV
+  fixed and varied, against the bare data set at the shifted energies; fails on the base.
+- *An unknown command-line option is an error* (exit 2, the usage line), also in `AZURE_OPTIONS_FILE`; `--no-readline`
+  is accepted in every build.  `tests/cli_option_values`.
+- *The gradient's gates.*  In `AMatrixFunc::PointTBar` the gates no input reaches are assertions (`std::logic_error`
+  naming the broken invariant; the reason at each), one deleted; `GradTargetEffectAdjoint`'s E1/E2 gates likewise.
+  `park_chi2_fallback` variant D: `--use-rmc` (the fallback against central differences).
+- *`tools/runall.sh` / `run_one.sh`.*  A file's results are replaced as a whole; a failed move is an error (run_one
+  exit 1, runall "FAILED", exit 1); an existing tag is refused unless `REPLACE_TAG=1`.  `tests/consistency/runall_test.py`.
+
+**Verified** (scratch `work/small2/`): builds 0 warnings; consistency test; `cli_option_values`, `cli_help`,
+`cli_route_exit`, `thin_layer_limit`, `park_chi2_fallback`, `tools_runall`; T1–T3, 13N, 13N_capture_ay,
+thick_target_resonance, layer_yield/models, shift_sqrt_subpoints/models, shift_subpoint_angle(+/models),
+thin_layer_limit/models in three bases byte-identical to `tab-small1`; each new test shown failing on the base or with
+an injection; `scripts/check.sh --quick` (JOBS=1) at the end.
+
+**Not run**: the whole tree × 3, `run_tests.sh`, the converted-tree gate, the fits of the tree.
+
+**Open** (details in the report).
+- A varied shift on a thin layer: the analytic gradient's shift column (`--use-gradient`, `--use-lm`, `--use-gsl-lm`)
+  ends the process (`std::logic_error` from `ShiftedFoldNodes` inside the parallel refold) when the reach is below the
+  difference step (~1 eV): seen at 3e14, 1e15 and 1e16 atoms/cm² on the base too.  MIGRAD's numerical gradient works.
+- A prior of keV on such a layer: the planned support keeps the layer grid's smooth step (millions of nodes, 28 GB).
+- A varied shift without a prior on a single node: chi^2(nu) is a staircase of sigma' x 2R; MIGRAD's error of the
+  shift comes out 10x too small at 1e14.
+- An analyzing-power data set on a beta-delayed reaction is accepted and calculated as 0; its analytic gradient is
+  wrong by ~1e-3 (PointTBar treats the point as the beta-delayed spectrum).
+- Gates of PointTBar not settled (kept as refusals): beta-delayed with an E1/E2 part, the A_y sub-point gate
+  (`ayCrossSection`), the capture-A_y term gates, a vanishing denominator, an empty amplitude matrix, an A_y exit that
+  is neither particle nor photon.
+
 ## 2026-11-12 (agent, follow-ups) — six small items after the shared mesh and the shift kernel (`feature/upgrade-5-followups-1`)
 
 **Done** (one commit each, on 7ba01de7).
