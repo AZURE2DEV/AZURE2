@@ -278,6 +278,35 @@ multiplier 5 and 20; the yields differ by 2.0 × 10⁻³ (relative) at 253.8 keV
 - The **interpolated mode** of `ARCHITECTURE.md` §1 (observables on a fixed mesh, an unfolded shifted point as
   interpolation weights) stays opt-in, with its check against the exact mode.
 
+**Design of the shifted fold on the fixed nodes (branch 8 `shift-kernel`, 2026-11-12; the full text is the comment of
+`include/ShiftedFold.h`, which owns it).**  Δ_i(ν) = E_cm,i(ν) − E_cm,i(0) is the c.m. shift of point i; the kernel is
+translated rigidly, K_i(E; ν) = K_i(E − Δ_i; 0), which is the engine's fold before in exact arithmetic.
+
+1. *The planner's support.*  The unshifted support [a_i, b_i] moved by a centre c_i and widened by a reach R_i on each
+   side (never below the integration floor, a hard edge there).  R_i = 3 Σ_k |Δ_i(ν_0 + σ_k e_k) − Δ_i(ν_0)| over the
+   varied shift parameters k (a follower: its leader's; a shift-function group: the owner's), σ_k the prior width; a
+   varied parameter without a prior adds b_i − a_i; R_i = 0 when nothing of the point's shift varies (a fixed shift
+   moves the support once, no node added).  From what the project already says (the priors), no new field.
+2. *Leaving the reach.*  c_i = Δ_i(ν_0) + 2R_i round((Δ_i(ν) − Δ_i(ν_0))/(2R_i)) (R_i = 0: c_i = Δ_i(ν)), a function of ν
+   alone, so the moved support stays inside the planned one.  A change of some c_i re-plans the nucleus in the
+   hand-over with the copy's supports and re-places the groups whose nodes changed, the path of a moved narrow level
+   (§2.3); deterministic at any thread count, counted in `run.log`; χ² steps by the quadrature difference there.
+3. *The sites a point reads.*  Its slots are its planned range (fixed for the stage); the fold reads the tightest
+   sub-range enclosing the moved support [a_i + Δ_i, b_i + Δ_i] (at least two nodes), the kernel clips there; the block
+   is not rewritten.  What depends on ν besides the kernel's centre: the stopping the target kernel reads, ε(E_n − Δ_i)
+   (the fold before kept each sub-point's stopping at its unshifted energy: the depth profile and T are the point's as
+   measured), computed in the gather from the target's stopping — the point's, not the site's; and the c.m. angle of a
+   lab-frame differential point (converted at its shifted energy), which its group's sites carry: their Legendre rows
+   and Coulomb amplitude are recomputed by the slot's writer when it changes (the channel rows stay), and the group key
+   holds the point's nominal lab energy so that every reader of a block has the same angle at every ν.
+4. *Writers.*  Ranges, blocks, writers, plan tasks and the energy pass's task list are those of the planned ranges, fixed
+   for the stage; every site of a block is computed (the margin is the cost).
+5. *Gradient.*  A shift column of a folded segment is the central difference of the fold on the fixed nodes: at ν ± h
+   the points move and are folded again from the node values of ν (the same `FoldValues`), no node recomputed, no level
+   matrix solved; shift kinds enter through Δ_i only.  The analytic ∂K/∂E_0 is open for every kernel (it needs the
+   kernels' energy arithmetic on a dual type).  A lab-frame differential segment's column still recomputes its sites'
+   observables at the moved angle (open for the observables per node, branch 9).
+
 ### 2.6 What replaces the node-table cache
 
 The node table of a stage — per node its channel-table rows, per (point, node) its angle rows (Legendre polynomials,
