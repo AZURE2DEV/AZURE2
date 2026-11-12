@@ -411,10 +411,18 @@ reach adds nodes). Only the projects with a folded shifted data set change (T2, 
 know of.** (1) The fitted shifts of T2 move by 0.13 of their errors, onto the refined engine's fit (within 0.01 σ).
 (2) When a fit walks a shift beyond the planned reach, the mesh is planned again and χ² steps by the quadrature
 difference there (measured 1.3e-2 in 10,500); a prior on the shift sets the reach. The old engine had steps of that
-size inside the range a fit visits. (3) A thick- or thin-target fold of a shifted point reads the stopping power at
-the node's energy minus the shift, as the old rigid move did, so that numbers stay; reading it at the true energy is
-a physics choice left for you. Two defects of the first version were found in the review and fixed with tests before
+size inside the range a fit visits. (3) A thick- or thin-target fold of a shifted point read the stopping power at
+the node's energy minus the shift, as the old rigid move did, so that numbers stayed; the PI decided on 2026-11-12 to
+read it at the true energy (the paragraph below). Two defects of the first version were found in the review and fixed with tests before
 the merge (a stopping formula called at negative energy; an error stop for shifted data with external capture).
+
+**An energy shift is the true beam energy (branch of 2026-11-13).** A folded data set with an energy shift took the
+stopping power, the target thickness and the depth window at the measured (unshifted) beam energy and only moved them
+with the shift, so a yield on a resonance was off by (d ln ε/d ln E) × shift/E, 0.9 % for a 10 keV shift at 270 keV;
+now a shifted point is folded exactly as the same point without a shift at the shifted energy.  Your files change only
+where a data set has both an energy shift and a target integration with an energy-dependent stopping: in the test tree
+T2's truth file (0.21 % at most, χ² 330.43 → 330.84) and the `shift_sqrt_subpoints` models (−0.89 to −0.97 %); a
+fitted shift on such data moves accordingly.
 
 **Six follow-ups (merged 2026-11-12).** What a user sees of them: a yield on a target layer thinner than 1 eV is
 σ(E)·N (the file was refused before, with a misleading message; with an energy shift on the data set it is still a

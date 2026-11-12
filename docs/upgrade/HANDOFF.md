@@ -2,6 +2,40 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-5-true-energy-stopping`) — an energy shift is the true beam energy
+
+**Done.** The PI's rule of 2026-11-12: the fold of a point measured at E with the shift s is the fold of the same point
+without a shift at E + s.  Stated once in `include/ShiftedFold.h` (head of the comment, questions 1, 3, 5) and in
+`energy_grid.md` section 2.5.  Before, the target kernel of a shifted point read eps(E_n - Delta) (`TranslatedStopping`,
+deleted) and the thickness and window of the nominal energy.  Now:
+- `MoveTargetToShift` (ShiftedFold.cpp), called by the shift step (`Segment::UpdatePointEnergyWithShift`), sets the
+  point's target lab energy and thickness at the true energy (`TargetEffect::KernelThickness`) and
+  `Unit::SupportThicknessChange`, dT, the growth of the support's target thickness (`TargetEffect::SupportThickness`, the
+  one formula the set-up also lays the support out with; `SubGridSpec::supportThickness` holds the set-up's value);
+- the moved support is [a + Delta - dT, b + Delta] (`MovedSupport`); the kernel reads each node's own stopping
+  (`PointFold.cpp`);
+- the planner's support of a shifted point is widened below by G, the largest dT over the reach plus the spread of
+  three samples (`PlannedShiftSupport`, `SupportThicknessChange`; the bound is derived in the header).  dT = 0 bit for
+  bit for a constant stopping and for kernels without a target.
+- The gradient's shift column (a central difference of the fold on the fixed nodes) carries the kernel's E_0 dependence,
+  since the move goes through `MoveTargetToShift`.
+
+**Tests.** New `tests/shift_true_energy` (identity of 36 shifted data sets with twins at the shifted energies, one
+mesh 0 / tol 1e-9, two meshes 1.04e-6 / tol 3e-6; gradient of a fitted offset on a 72 keV layer against a central
+difference of chi^2, 3.9e-7 / tol 1e-5).  `tests/shift_sqrt_subpoints` check (g): the analytic plateau on narrow_sqrt
+(2.06e-4 / tol 5e-4; refined x8 8.3e-5) with the new model `narrow_sqrt_nores`.  Injected errors shown failing (README
+of shift_true_energy).  `tests/upgrade/predictions.txt` regenerated for the new projects (additions only).
+
+**Numbers that moved** (all projects x 3 bases against `tab-gridm-1`, tag `truestop-full1`): only T2 (T2.azr 1.2e-6,
+quadrature of the wider planned support; T2_true.azr 0.21 %, chi2 330.425 -> 330.835) and shift_sqrt_subpoints const,
+narrow_const, narrow_sqrt, shiftfn, sqrt (-0.89 to -0.97 %); new files of the new models.  T2 fits: chi2 297.568 ->
+297.860, shifts within 0.1 sigma, fewer evaluations.  Instruction counts within 0.2 % (T2_true -1.4 %).
+
+**Open.** The beam profile reads the nominal energy for its window and detailed-balance norm; the Gaussian beam spread
+with an energy-dependent sigma has its support clipped at 5 sigma of the nominal energy; a UDR kernel is built at the
+nominal energy.  None depends on the stopping; each is a candidate for the same rule (the director's call).  A thin
+target whose set-up support was clipped at the 1 keV floor keeps the floor clip (header, question 3).
+
 ## 2026-11-12 (director, 22:55) — merged: one grid (the key `useAdaptiveGrid` and the uniform grid of a point's own removed)
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed): `feature/upgrade-5-one-grid` (the
