@@ -239,8 +239,10 @@ section (check 34).
    contraction with a reader's row, `Site::ValueFor`); `ObservableOf` names the terms of that kind.
 2. Its formula at E_n, one branch of `GenMatrixFunc::CalculateBareCrossSection`; its adjoint in
    `AMatrixFunc::PointTBar` (checked with `AZURE_GRAD_CHECK`).
-3. Anything a reader needs per slot (angular row, Coulomb amplitude) beside `Site::node_rows_` in
-   `Unit::CalcNodeRows`, checked by `WorkingCopy::CheckReaderRows` (`AZURE_NODE_CHECK`).
+3. Anything a reader needs per slot (angular row, Coulomb amplitude, A_y factors) in its row set (`include/RowSet.h`,
+   built by `Unit::RowSetOver`; shared by the readers of one angle, `WorkingCopy::BuildRowSets`), checked by
+   `WorkingCopy::CheckReaderRows` (`AZURE_NODE_CHECK`).  A kind with two values per slot (A_y and its weight) folds
+   them in `Unit::FoldSubPoints` and its fold adjoint in `AZUREGrad.cpp`.
 
 **A new optical potential term** (`physics/transfer`, `docs/upgrade/transfer.md` §2).
 1. A field in `OpticalPotential` (`physics/include/azure2/physics/transfer/OpticalPotential.h`, with its formula, unit
