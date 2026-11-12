@@ -829,6 +829,35 @@ is before the asymptotic regime.  The finding for the owner is the 5 %, not the 
 file (the per-file one decides the summary and the exit status; the strict per-number count is printed beside it as
 information) with the largest and rms distances of both engines.
 
+**Measured on the merged engine** (director, 2026-11-12; whole tree, Brune basis, the shared mesh with shared sites
+against the engine before the mesh; per project the largest value over its output files of the largest and of the rms
+relative distance to the fine reference; `work/director/clsq_trial31.txt`).  Summary of the classifier: 577 files, 542
+identical, 33 quadrature, 2 named, 0 failures (no-brune 550 / 517 / 31 / 2 / 0; use-park 577 / 542 / 33 / 2 / 0).
+
+| project | largest, before | largest, mesh | rms, before | rms, mesh |
+|---|---|---|---|---|
+| `hybrid_potential` (named) | 5 × 10⁻² | 6 × 10⁻² | 5 × 10⁻² | 6 × 10⁻² |
+| `ratio_to_reference`, folded | 1.1 × 10⁻² | 3.6 × 10⁻³ | 2.8 × 10⁻³ | 9.1 × 10⁻⁴ |
+| T2 | 5.4 × 10⁻³ | 5.4 × 10⁻³ | 5.6 × 10⁻⁴ | 5.5 × 10⁻⁴ |
+| `T2_true` | 4.8 × 10⁻³ | 4.8 × 10⁻³ | 5.3 × 10⁻⁴ | 5.2 × 10⁻⁴ |
+| `stopping_yield`, fit | 4.2 × 10⁻³ | 2.0 × 10⁻³ | 8.2 × 10⁻⁴ | 3.8 × 10⁻⁴ |
+| `thick_target_resonance` | 3.2 × 10⁻³ | 4.2 × 10⁻⁴ | 1.2 × 10⁻³ | 2.0 × 10⁻⁴ |
+| `layer_yield`, fit | 2.1 × 10⁻³ | 9.9 × 10⁻⁴ | 9.6 × 10⁻⁴ | 4.4 × 10⁻⁴ |
+| `shift_sqrt_subpoints`, unshifted | 1.3 × 10⁻³ | 6.7 × 10⁻⁴ | 6.2 × 10⁻⁴ | 3.4 × 10⁻⁴ |
+| `layer_yield` | 8.5 × 10⁻⁴ | 4.9 × 10⁻⁴ | 2.0 × 10⁻⁴ | 8.3 × 10⁻⁵ |
+| `natural_neon` | 7.8 × 10⁻⁴ | 2.9 × 10⁻⁴ | 1.1 × 10⁻⁴ | 5.1 × 10⁻⁵ |
+| `target_effect_ranges` | 3.7 × 10⁻⁴ | 3.1 × 10⁻⁴ | 1.1 × 10⁻⁴ | 9.2 × 10⁻⁵ |
+| `stopping_yield` | 2.6 × 10⁻⁴ | 1.1 × 10⁻⁴ | 1.1 × 10⁻⁴ | 5.6 × 10⁻⁵ |
+| `rectangular_resolution`, fit | 1.4 × 10⁻⁴ | 5.3 × 10⁻⁵ | 5.4 × 10⁻⁵ | 2.6 × 10⁻⁵ |
+| 13N | 1.4 × 10⁻⁴ | 1.4 × 10⁻⁴ | 3.5 × 10⁻⁵ | 3.5 × 10⁻⁵ |
+| `beam_profile_kernel` | 8.5 × 10⁻⁵ | 4.7 × 10⁻⁵ | 3.5 × 10⁻⁵ | 2.1 × 10⁻⁵ |
+
+The mesh is closer to the fine reference than the engine before it, or equal, in every project but the named one.
+Where it gains most, two data sets or two segments fold over the same resonance and the mesh takes the finer of
+their settings for both.  Fits (eight, 1 thread): the fitted parameters move by at most 0.14 of their fitted error
+(`stopping_yield`, areal density, 7 × 10⁻⁵ relative) and, checked on that fit, towards the fit of the engine before
+the mesh refined eightfold.
+
 **The fine reference** is today's engine with k-fold refined grids (`AZURE_REFINE_QUADRATURE=k`): `tab-fine8` (k = 8)
 wherever it has the file, `tab-fine4` (k = 4) otherwise (`beam_profile_kernel`, whose k = 8 run is too slow); the
 classifier takes them as one argument, finest first (`tab-fine8,tab-fine4`), and prints the tag each file used.  The
