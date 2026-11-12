@@ -2,6 +2,27 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, branch `feature/upgrade-7-transfer-2`) — physics/transfer, second part: the x + A continuum
+
+**Done** (leaf library, nothing of the engine touched; `docs/upgrade/transfer.md` §11, §12, §14–§18):
+- Scattering states of x + A (`Continuum.h`: amplitude 1, δ(k − k'), δ(E − E') normalisations) and FRESCO's bins
+  (ISC 2, 4, 12, 14; FRESCO's k rule or Simpson's; FRESCO's listing).
+- Overlap kinds as one table (`Overlap.h`: bound state, bin, scattering state → one `RadialOverlap` for the kernel);
+  the interaction as a sum of terms (`Interaction.h`: post, prior, core-core and optical remnants); the finite-range
+  kernel in its own file (`TransferKernel.cpp`), complex G.
+- d²σ/dΩ dE to the continuum and the narrow-bin limit; the interior part against the level function (§16 table); post
+  = prior with remnants.
+- FRESCO data: `dn_bin_{nonresonant,narrow,wide}_{fr,zr}`, `li6d_bin_wide_fr`, `dn_prior`, `dn_prior_remnant`,
+  `dn_post_remnant` (generator updated; `rsp` and NK settings).
+
+**Verified** (build `work/b-dwba2`): new tests `physics_transfer_continuum`, `_continuum_transfer`,
+`_continuum_fresco` pass; `physics_transfer_fresco` gives part 1's numbers unchanged. Injected errors, each failed its
+test and was removed: bin scale √(2.1/πN) (continuum: narrow-bin factor and norm), sign of −U_aA (continuum_transfer:
+post ≠ prior by ×180), cos δ for the ISC = 4 weight (continuum_fresco: listing and cross sections).
+
+**Open**: ⁶Li bins, zero range to bins, prior/remnant against FRESCO (FRESCO's numerics, §15, §17); ³He and ¹⁴N
+Trojan horses; global optical sets; the wiring (§12).
+
 ## 2026-11-12 (director, 17:01) — merged: the second batch of follow-ups (thin layers with a shift, unknown options, the gradient's gates, a node budget, the runner)
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (the source of `rehearsal/trial36` = the observables

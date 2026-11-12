@@ -1,12 +1,14 @@
-# physics/transfer: optical potentials, bound states, distorted waves and DWBA transfer (part 1)
+# physics/transfer: optical potentials, bound states, distorted waves and DWBA transfer
 
 The Trojan-horse vertices of `THM.md` §3 need distorted waves and a DWBA transfer amplitude that are checked against an
 independent reaction code. This note describes the leaf library `physics/transfer` (namespace
 `azure2::physics::transfer`, CMake target `azure2_physics_transfer`): an optical potential as a value, the bound state
 of two clusters, distorted waves with spin 0, ½ and 1, the transfer A(a, s)F of a cluster x (a = s + x, F = A + x) to
 a bound state of F in zero range and in finite range (post form), and the plane-wave limit of the THM entrance
-vertex. Every part is compared with a closed form or with FRESCO 3.5 (§9). Nothing of the engine uses the library
-yet; the transfer to the x + A continuum and the wiring are the next parts (§11, §12).
+vertex (part 1, §2–§10); the scattering states and continuum bins of x + A, the transfer to them, the narrow-bin limit,
+the interior part against the level function, and the prior form with the remnants (part 2, §14–§18). Every part is
+compared with a closed form or with FRESCO 3.5 (§9, §18). Nothing of the engine uses the library yet; the wiring is
+§12.
 
 Units: MeV, fm, mb/sr; c.m. frame of the pair named; masses in u (×931.49410242 MeV, `physics/Constants.h`).
 Kinematics are non-relativistic, as FRESCO's default. The equations below are derived in this note from the
@@ -23,9 +25,12 @@ Satchler's *Direct Nuclear Reactions* or of Thompson, Comput. Phys. Rep. 7 (1988
 | `.../RadialNumerics.h`, `src/transfer/RadialNumerics.cpp` | Numerov outward and inward, Lagrange interpolation, Simpson, Gauss-Legendre, Y_lm(θ, 0), Coulomb functions for matching (§7) |
 | `.../BoundState.h`, `src/transfer/BoundState.cpp` | Eq. (3.1), depth search, ANC, D0, analytic tails |
 | `.../DistortedWaves.h`, `src/transfer/DistortedWaves.cpp` | Eqs. (4.1)–(4.4) |
-| `.../Transfer.h`, `src/transfer/Transfer.cpp` | Eqs. (5.1)–(6.7) |
+| `.../Continuum.h`, `src/transfer/Continuum.cpp` | Eqs. (14.1)–(14.3): scattering states, bins, FRESCO's bin listing |
+| `.../Overlap.h`, `src/transfer/Overlap.cpp` | the overlap kinds (bound state, bin, scattering state): one table, one radial form for the kernel |
+| `.../Interaction.h`, `src/transfer/Interaction.cpp` | Eq. (17.1): the interaction as a sum of terms (post, prior, remnants), one table |
+| `.../Transfer.h`, `src/transfer/Transfer.cpp`, `src/transfer/TransferKernel.{h,cpp}` | Eqs. (5.1)–(6.7); the kernel (6.4) with any interaction of (17.1) |
 | `.../ThmVertex.h`, `src/transfer/ThmVertex.cpp` | Eqs. (8.1)–(8.3) |
-| `physics/tests/transfer_*_test.cpp`, `physics/tests/data/fresco/`, `physics/tests/data/make_fresco_benchmarks.py` | §9 |
+| `physics/tests/transfer_*_test.cpp`, `transfer_fresco_common.h`, `physics/tests/data/fresco/`, `physics/tests/data/make_fresco_benchmarks.py` | §9, §18 |
 
 ## 2. Optical potential
 
@@ -252,29 +257,32 @@ data and not tested.
   (l ≤ 12, ρ_tp < ρ < ρ_tp + 34) found one such point at η = 0.1 (l = 0, ρ = 7.5943) and one at η = 0.493; none at
   η = 0, 1.55, 3. The physics_coulomb test does not hit them. The engine uses COULSM by default; any user of COULCC
   beyond the turning point is exposed. Not fixed here.
-- Not implemented in this part: spin-orbit in the distorted waves of a transfer (refused), the remnant term, prior
-  form, transfer to unbound states (§11), global optical potentials, relativistic kinematics, target spin in the
-  distortion (spin-spin), tensor forces, l > 40.
+- Not implemented: spin-orbit in the distorted waves of a transfer (refused), global optical potentials, relativistic
+  kinematics, target spin in the distortion (spin-spin), tensor forces, l > 40, complex (optical or coupled-channel)
+  bins, the ³He and ¹⁴N benchmarks. Part 2 added the continuum, the prior form and the remnants (§14–§17); their
+  limits are in §18.
 
-## 11. The continuum part (next)
+## 11. The continuum part
 
-THM needs the transfer to x + A at E > 0 inside the channel radius: in (6.2) the bound overlap φ_{l_F}(r) of F is
-replaced by the x + A scattering function at E (or its interior part, the level function of §8), and the cross
-section becomes the triple-differential one of `THM.md` §1. In the code: `Overlap` gains a continuum kind (u at E with
-its normalisation), the kernel (6.4) is unchanged (it only needs u_F on a grid), and the vertex of §8 becomes the
-projection of the kernel on the x + A channel inside a. FRESCO benchmarks there: continuum bins (`&OVERLAP` with BE < 0,
-ISC = 2 or 4, ER, NK) for transfer to x + A, which are normalised averages of scattering states over an energy bin; our
-amplitude with the same bin average must reproduce FRESCO's bin cross sections (first for a non-resonant bin, then a
-resonant one), and the narrow-bin limit gives the transfer to a single energy. Also the prior form with remnant (to
-compare post and prior, which agree when both remnants are kept).
+THM needs the transfer to x + A at E > 0: in (6.2) the bound overlap of F is replaced by the x + A scattering function
+at E or a bin of them, and the vertex of §8 is the interior part of that amplitude. This is part 2, §14–§18.
 
 ## 12. Wiring (later branch)
 
-The engine's `ThmDistortion` (zero-range prior M(E)) and `ThmDwVertex` (prior surface vertex) become callers of this
-library: M(E) is (6.7) with c_i = β, c_f = 1 (§13); the optical potentials of `ThmOptical` become `OpticalPotential`
-values filled by a global-set table (Koning–Delaroche, An–Cai, GDP08, Avrigeanu: one table, one row each, a test per
-row); the vertex tables are built once per fit stage from `EntranceVertex`. That needs Phase 5's σ_HOES observable; it
-is not done here.
+What the engine's THM observable (Phase 5, σ_HOES on the shared energy mesh) will call, once per fit stage:
+
+- the distortions: `SolveDistortedWaves(OpticalPotential, ScatteringRequest)` for a + A and s + F at each mesh energy,
+  the potentials from a global-set table (Koning–Delaroche, An–Cai, GDP08, Avrigeanu: one row each, moved from
+  `ThmOptical`, a test per row; never a second copy of the numbers);
+- the Trojan horse: `SolveBoundState(well, BoundStateRequest)` → `RadialOverlapOf(BoundState)`;
+- per level λ and channel: the level function u_λ (u_E at E_λ inside a, §16) and the vertex
+  `EntranceVertex(LevelFunction, w, w'(a), ε, B)` with w the projection of the DWBA source on the channel; the
+  zero-range prior weight M(E) is `ZeroRangeOrbitalIntegral(RadialOverlap, in, out, β, 1, θ)` (§13);
+- checks and the full DWBA where wanted: `FiniteRangeCrossSection(TransferReaction, in, out, TransferGrid, θ)` with
+  the residual a `ScatteringState` (d²σ/dΩ dE, §15) and `interaction = PriorFormWithRemnant(...)` or the post form.
+
+`ThmDistortion` becomes a caller of `ZeroRangeOrbitalIntegral` (no physics of its own), `ThmDwVertex` of
+`EntranceVertex` with the distorted w; their tables stay owned by the stage. Not done here.
 
 ## 13. The engine's THM weight with this library
 
@@ -293,3 +301,203 @@ potentials in both channels; the masses, energies and potentials of that test, o
 The library covers the same integral; the replacement needs no new physics, only the THM kinematics (k_sF, k_aA and
 their angle) from the engine, which stay with the THM observable of Phase 5. Scratch driver:
 `work/dwba/drivers/engine_m.cpp` (not in the repository).
+
+## 14. Scattering states and bins of x + A
+
+**Scattering state.** In a real potential V (Coulomb, Woods–Saxon, spin-orbit times ⟨2 l·s⟩ for the (l, j) asked) the
+regular solution of (3.1) at −B = E > 0 is, beyond the nuclear range, a combination of F_l and G_l. Of the distorted
+wave (4.2), u = (i/2)(H⁻ − S H⁺) with S = e^{2iδ} (|S| = 1 for a real V),
+
+```
+(i/2)(H⁻ − e^{2iδ} H⁺) = e^{iδ} [cos δ F_l + sin δ G_l],   so   u_E ≡ e^{−iδ} u = cos δ F_l + sin δ G_l,          (14.1)
+```
+
+real, with asymptotic amplitude 1: u_E → sin(kr − lπ/2 − η ln 2kr + σ_l + δ). `SolveScatteringState` returns u_E,
+δ in (−π/2, π/2] and V on the grid (it calls the distorted-wave solver of §4 and multiplies by e^{−iδ}).
+
+**Normalisations.** For two such states of one Hamiltonian, (k² − k'²)∫₀ᴿ u_k u_k' dr = [u_k u'_k' − u'_k u_k']_R (the
+radial equations multiplied crosswise and integrated). With the asymptotic forms the bracket is
+½[(k + k') sin(a − b) + (k' − k) sin(a + b)] (a = kR + φ, b = k'R + φ'), and
+sin((k − k')R + ...)/(k − k') → π δ(k − k') as R → ∞, so ∫₀^∞ u_k u_k' dr = (π/2) δ(k − k'). Hence
+
+```
+δ(k − k'):  u_k = √(2/π) u_E (fm^1/2);      δ(E − E'):  u^(E) = √(2μ/(πħ²k)) u_E (MeV^−1/2 fm^−1/2),           (14.2)
+```
+
+the second from δ(k − k') = (dE/dk) δ(E − E') = (ħ²k/μ) δ(E − E'). `NormalisationFactor` gives the factors.
+
+**Bins** (FRESCO's `&OVERLAP` with BE < 0; its namelist manual, "CONTINUUM BINS", and the bin listing of its output):
+
+```
+u_bin(r) = √(2/(πN)) ∫_{k_min}^{k_max} dk w(k) u_E(k)(r),   N = ∫ dk w(k)²,                                     (14.3)
+```
+
+w = 1 (ISC = 2: FRESCO weights its wave e^{iδ}u_E by e^{−iδ}), w = sin δ (ISC = 4: by T* = e^{−iδ} sin δ), times k for
+ISC = 12, 14; E_min = max(E − |ER|/2, 10⁻⁵ MeV), E_max = E_min + |ER|. By (14.2), ∫|u_bin|² = (2/(πN))(π/2)∫w² = 1,
+and two bins of one potential over disjoint intervals, or a bin and a bound state of it, are orthogonal. δ is
+continued across the bin from its principal value at k_min (a jump of more than π/2 between nodes adds π, as
+FRESCO does), so that u_E(k) is continuous in k. The k integral: FRESCO's rule (NK equally spaced nodes including
+both ends, each weighted (k_max − k_min)/(NK − 1), in the integral and in N; it converges as 1/NK) or Simpson's rule.
+FRESCO builds the bin on [0, RSP] (RSP = rmatch unless set) and leaves the value at its last node unnormalised
+(ours is normalised there; the listing of §18 compares the other nodes).
+
+**The 1/R tails.** Beyond the potential (neutral, l = 0, w = 1) integrating (14.3) by parts gives
+u_bin ≈ √(2/(πΔk)) [cos(k_min r + δ₁) − cos(k_max r + δ₂)]/r + O(r⁻²), so ∫_R^∞ u_bin² dr = 2/(πΔk R) + O(R⁻²) and,
+for two adjacent bins sharing k₂, ∫_R^∞ u_b u_b' dr = −1/(π√(ΔkΔk') R) + O(R⁻²). The test of orthonormality uses
+these (§18). The same tails make the transfer to a bin depend on how far the bin is kept (§15).
+
+## 15. Transfer to the continuum, FRESCO's bins and the narrow-bin limit
+
+**Kernel.** The kernel (6.4) reads only u_F and V on a grid: the residual overlap is a row of the table
+`OverlapKinds()` (bound state, bin, scattering state) and enters through `RadialOverlap`; the bound state and the bin go
+through the same code. The exit channel s + F* has E_f = E_i − B_a − E (B_a the binding of x in a, E the x + A
+energy; FRESCO: Q of the ground state and the state energy E_x = S_x + E).
+
+**d²σ/dΩ dE.** Let the final x + A states be normalised to δ(E − E') per partial wave (l, j, J_F). The sum over final
+states of the golden rule becomes ∫dE over each partial wave, and the projections of different partial waves are
+orthogonal when the x + A direction is not observed, so they add incoherently:
+
+```
+d²σ/dΩ_s dE = (μ_i μ_f/(2πħ²)²) (k_f(E)/k_i) Σ|T(E)|² / ((2J_a + 1)(2J_A + 1)),   u_F = u^(E) of (14.2),           (15.1)
+```
+
+the formula (6.6) with u^(E) in place of a bound state: mb/(sr MeV). The phase e^{−iδ} of the incoming-wave final
+state is a constant per partial wave and drops out of |T|². **Narrow-bin limit:** for a bin of width ΔE around E
+(w = 1), u_bin = √(2/(πΔk))∫u_E dk; with u_E = u^(E)/√(2μ/(πħ²k)) and dk = (μ/(ħ²k))dE, u_bin ≈ √ΔE u^(E)(1 + O(ΔE²)),
+so σ_bin/ΔE → d²σ/dΩ dE with an O(ΔE²) error (checked: ratio of errors 4.00 between ΔE = 50 and 25 keV, §18).
+
+**Relation to THM.md §1.** With plane-wave normalised continuum states ψ_k (∫d³k/(2π)³|ψ_k⟩⟨ψ_k| = 1 on the x + A
+continuum) and d³k_xA = k_xA²dk_xA dΩ_xA = (μ_xA k_xA/ħ²) dE dΩ_xA, the three-body cross section of A(a, s)[x + A] is
+
+```
+d³σ/(dΩ_s dE dΩ_xA) = (μ_i μ_f/(2πħ²)²)(k_f/k_i) (μ_xA k_xA/((2π)³ħ²)) Σ|T(k_f, k_xA)|² / ((2J_a + 1)(2J_A + 1)),   (15.2)
+```
+
+whose integral over Ω_xA is (15.1) (the partial-wave expansion of ψ_k gives the δ(E) states of (14.2)). The measured
+variables of THM are the lab energy and angles of the two fragments c, C of x + A → c + C (for elastic x + A, c = x,
+C = A) with s undetected. The phase space of three free particles, ∫δ⁴(P_f − P_i) d³p_c d³p_C d³p_s, integrated
+over p_s (momentum) and over |p_C| (energy, with p_s = P − p_c − p_C), with d³p_c = m_c p_c dE_c dΩ_c, gives
+
+```
+d³σ/(dE_c dΩ_c dΩ_C) ∝ |T|² · m_c p_c p_C² / |p_C/m_C − (p_s·p̂_C)/m_s|   (the kinematic factor KF of THM.md §1),   (15.3)
+```
+
+and with the same |T|² the ratio of (15.3) to (15.2) is the Jacobian between (E_c, Ω_c, Ω_C) and (Ω_s, E, Ω_xA). In
+the plane-wave impulse limit T factorises into the momentum distribution φ(p_s) of x in a and the x + A → c + C
+half-off-shell amplitude, which is THM.md §1's KF |φ(p_s)|² dσ^HOES/dΩ; (15.1) is the d²σ/dΩ dE at the vertex the
+library computes with distortions, and its interior part is §16.
+
+**FRESCO's bins.** FRESCO builds the bin on [0, RSP]. The transfer to a bin then depends strongly on RSP when the bin
+reaches far (15N(d,n), narrow resonance, ER = 1 MeV: 88 mb/sr at 0° with RSP = rmatch = 40 fm, 58 mb/sr at 60 fm, in
+both codes): the distorted waves are not absorbed outside the nucleus and the bin's tail (§14) is momentum-matched over
+tens of fm. The benchmark keeps RSP = 40 fm fixed (the `&FRESCO` variable `rsp`) and converges rmatch separately, and
+chooses the bins' widths so that the bin's envelope has a node near RSP (its value at the cut is 1–4 % of its
+maximum): a bin cut where it is large makes the integrand discontinuous and both codes' steps then matter at 1 %.
+The three bins (p + 15N, kp 5, no spin-orbit; 15N(d,n) at E_lab = 10 MeV):
+
+| Bin | l, V | E (MeV) | Resonance | Weight |
+|---|---|---|---|---|
+| non-resonant | 1, 50 MeV | 1.055–2.945 | none below 8 MeV | ISC = 2 |
+| narrow | 2, 53 MeV | 1.445–2.355 | E_r = 1.9015 MeV, Γ = 95 keV (2/(dδ/dE) at δ = π/2) < width | ISC = 4 |
+| wide | 0, 47 MeV | 1.000–2.160 | E_r ≈ 1.58 MeV, Γ ≈ 3.3 MeV (2/(dδ/dE), 10 keV scan) > width | ISC = 4 |
+
+**FRESCO's limits met.** (1) Zero range (KIND = 5, INH = 2) to a bin is not consistent with FRESCO's own finite range
+(narrow bin: 554 against 78.5 mb/sr at 0°; non-resonant: an oscillating shape), while ours is within 4 % of our finite
+range, as for the bound state; with INH = 0 FRESCO gives a smooth distribution again (no recoil, a different
+quantity). The zero-range bin data are kept, not compared. (2) For ¹²C(⁶Li,d) to α + ¹²C bins FRESCO's ERWIN loses 14
+or more digits in the d + ¹⁶O* channel at high L (exit energies 8–10 MeV, turning points beyond rmatch): its results
+move by 5–40 % with cutl at RSP = 20–30 fm. With RSP = 12 fm it is stable to cutl to 0.5 % (`li6d_bin_wide_fr`, data
+only) and agrees with ours to 0.1–1.7 %, where ours moves by up to 1.6 % with the step because the cut is a step of
+the integrand. Not a benchmark; numbers in §18.
+
+## 16. The interior part and the level function
+
+Inside the channel radius a, a scattering state of a potential with an isolated resonance is, up to the energy
+dependence, the level function of §8. Let u_λ be u_E at E_λ = E_r on [0, a], normalised there; its boundary value is
+B = a u_λ'(a)/u_λ(a) (so the shift vanishes at E_r, THM.md §3 item 2), γ_λ = √(ħ²/(2μa)) u_λ(a). For any E,
+multiplying the radial equations of u_E and u_λ crosswise and integrating over [0, a] (Green's identity, as for (8.2)):
+
+```
+A_λ(E) ≡ ∫₀ᵃ u_λ u_E dr = (ħ²/2μ) u_λ(a) [u_E'(a) − (B/a) u_E(a)] / (E − E_λ),                                   (16.1)
+∫₀ᵃ w V u_E dr = Σ_μ A_μ(E) W_μ,   W_μ = ∫₀ᵃ w V u_μ dr   (the vertex (8.1) of the level μ),                           (16.2)
+```
+
+(16.2) from the completeness of the levels of B on [0, a]. Near E_r the term μ = λ dominates; at E_r it is the whole
+sum (u_E ∝ u_λ inside a). If λ alone is kept, u_E(a) = Σ_μ u_μ(a)A_μ gives A_λ ≈ √(ħ²/(2μa)) u_E(a)/γ_λ, and with
+(14.1) u_E(a) = |H⁺(ka)| sin(δ − φ) (φ the hard-sphere phase), i.e. the Breit–Wigner amplitude
+√(Γ(E)/2)/|E_λ − E − iΓ/2| in the δ(E − E') normalisation up to √(1/π). The table: p + 15N, l = 2, V = 53 MeV
+(E_r = 1.901482 MeV, Γ = 95.19 keV), w = r j₂(pr) with ε = ħ²p²/2μ = E + 2.2246 MeV (the d → p + n Trojan horse at
+zero spectator energy), u_E in the δ(E − E') normalisation, h = 0.01 fm:
+
+| a (fm) | E | ∫₀ᵃ wVu_E dr | A_λ W_λ | remainder (1 − A_λW_λ/∫) | exterior ∫_a^∞ w V_N u_E / interior | A_λ | one-level A |
+|---|---|---|---|---|---|---|---|
+| 5 | E_r − Γ | −8.8469 | −8.8581 | −1.26 × 10⁻³ | 9.29 × 10⁻² | 0.9613 | 0.9815 |
+| 5 | E_r | −21.4201 | −21.4201 | 5 × 10⁻¹⁶ | 8.76 × 10⁻² | 2.2786 | 2.2786 |
+| 5 | E_r + Γ | 10.2293 | 10.2162 | 1.28 × 10⁻³ | 8.24 × 10⁻² | −1.0658 | −1.0434 |
+| 6 | E_r − Γ | −8.6247 | −8.6805 | −6.47 × 10⁻³ | 2.32 × 10⁻² | 1.0227 | 1.0793 |
+| 6 | E_r | −20.9120 | −20.9120 | 2 × 10⁻¹⁵ | 2.06 × 10⁻² | 2.4145 | 2.4145 |
+| 6 | E_r + Γ | 10.0007 | 9.9363 | 6.44 × 10⁻³ | 1.81 × 10⁻² | −1.1249 | −1.0623 |
+| 7 | E_r − Γ | −7.9803 | −8.1297 | −1.87 × 10⁻² | 5.84 × 10⁻³ | 1.0602 | 1.1879 |
+| 7 | E_r | −19.5028 | −19.5028 | 2 × 10⁻¹⁵ | 4.71 × 10⁻³ | 2.4904 | 2.4904 |
+| 7 | E_r + Γ | 9.3979 | 9.2273 | 1.82 × 10⁻² | 3.65 × 10⁻³ | −1.1544 | −1.0139 |
+
+(MeV fm^3/2 MeV^−1/2 for the vertices.) What it shows about the engine's vertex: the interior continuum amplitude is the
+level's vertex times A_λ(E), exactly at E_r and to 0.13–1.9 % at E_r ± Γ (the other levels of B: they grow with a);
+the exterior nuclear part, which the engine's surface/full form factor leaves to the channel, is 9 % at a = 5 fm and
+0.5 % at 7 fm (V_N at a: 2.6 and 0.12 MeV). The one-level Breit–Wigner amplitude differs from the projection A_λ by
+2–14 % at E_r ± Γ for the same reason. So the engine's form factor is the right limit when a lies beyond the nuclear
+potential and one level dominates; the remainder is the background the R-matrix puts in other levels.
+
+## 17. Prior form and the remnants
+
+With H = T + V_sx + V_xA + V_sA, the exact final state ⟨χ_f I_F| satisfies (E − T_f − U_sF − H_F) = 0 on the left and the
+initial state (E − T_i − U_aA − H_a)|I_a χ_i⟩ = 0, so T = ⟨χ_f I_F| H − T − U_sF − H_F + ... ⟩ gives the two forms
+
+```
+V_post = V_sx(r_sx) + [V_sA(r_sA) − U_sF(r_sF)],     V_prior = V_xA(r_xA) + [V_sA(r_sA) − U_aA(r_aA)],                (17.1)
+```
+
+with r_sA = r + ρ (vectors of §5); they give the same DWBA amplitude when both remnants are kept (the difference
+⟨χ_f I_F|(H − E)... − (H − E)|I_a χ_i⟩ vanishes because each state solves its own equation; with complex optical
+potentials this needs χ⁽⁻⁾* to solve the equation with U, not U*, which is how §4 defines it). In the kernel the
+interaction is a sum of `InteractionTerm`s (`Interaction.h`), one row each in `InteractionKinds()`: the binding term
+of the projectile (post) or the residual (prior) is tabulated as V u on its overlap's grid, the others (V_sA,
+−U_sF, −U_aA, complex) are evaluated at every kernel node from (r, ρ) and multiply u_F(r) u_a(ρ). Nothing beyond a
+potential difference on the kernel's grid was needed. The prior form and the remnants multiply u_a, not V_sx u_a: the
+deuteron's tail needs ρ ≤ 40 fm (post = prior to 1.1 × 10⁻³ there, 4 × 10⁻⁵ at 0°; at ρ ≤ 20 fm they differ by 5 %).
+
+FRESCO (KIND = 7, IP1 = 1 prior, IP2 = −1 complex remnant, IP3 = KPCORE) does not converge in its non-local range
+for these runs: with the remnant the 0° cross section is 0.29, 0.37, 1.10 mb/sr for rnl = 20, 26, 32 fm (ours,
+converged in ρ: 0.3833 post, 0.3833 prior); the prior form without remnant (ours, converged: 9.617 mb/sr at 0°) is 9.685, 9.590, 9.815 mb/sr
+for rnl = 20, 26, 32 fm: within 0.3–2.1 % of ours at 0–90°, but FRESCO itself moves by 2 % with rnl (ERWIN accuracy
+warnings in every run). Data in `dn_prior*`, `dn_post_remnant`; not compared
+by the test.
+
+## 18. Validation of part 2
+
+Tests: `transfer_continuum`, `transfer_continuum_transfer`, `transfer_continuum_fresco` (and `transfer_fresco`
+unchanged in its numbers). Each was run once with an injected error and failed (HANDOFF entry of 2026-11-12).
+
+| Test | Compared with | Asked | Reached (worst, where) |
+|---|---|---|---|
+| Scattering state, no potential, l ≤ 6 | F_l(η, kr), δ = 0 (η = 0, 0.49) | 1e-10 | 1.2e-11 (h = 0.004 fm) |
+| Neutral square well, l = 0 | δ and u from K cot KR = k cot(kR + δ) | 1e-6 | 4.5e-8 (δ), 6.0e-8 (u) at h = 2e-4 fm |
+| δ(E − E') normalisation (14.2) | bin of ΔE = 0.1 keV / √ΔE | 1e-6 | 1.6e-10 |
+| ⟨bound \| bin⟩, one well | 0 | 1e-6 | 4.7e-9 |
+| ∫u_bin² on [0, R], adjacent and separated bins | 1 − 2/(πΔkR), 1/(πΔkR), 0 (§14) | 1e-5 | 2.1e-6, 4.7e-6, 1.5e-6 (R = 1000 fm) |
+| FRESCO bin listing (3 bins) | energies, δ at the nodes, Norm, RMS, D0, u(r) | its digits | equal; δ to 1.7e-3 deg (3 decimals printed); u 1.6e-4 of max |
+| FRESCO ¹⁵N(d,n) → non-resonant bin, finite range | dσ/dΩ, 0–90°, > 1 % of peak, NK = 1600 / 3200 | 1 % | 4.3e-3 / 1.1e-3 (25°, a minimum); FRESCO steps 3.2e-3, rmatch 2.9e-4, rnl 2.9e-4, NK 1600→3200 8e-3 |
+| FRESCO ¹⁵N(d,n) → narrow-resonance bin | same | 1 % | 1.8e-3 / 8.7e-4 (85°); FRESCO steps 8.6e-4, rmatch 3.0e-4, rnl 2.7e-4 |
+| FRESCO ¹⁵N(d,n) → wide-resonance bin | same | 1 % | 5.2e-3 / 2.6e-3 (85–90°); FRESCO steps 4.7e-3, rmatch 3e-5, rnl 1.3e-4 |
+| FRESCO zero range to bins | — | 1 % | not reached: FRESCO's INH = 2 to a bin is inconsistent with its own finite range (×7, §15) |
+| FRESCO ¹²C(⁶Li,d) → wide-resonance bin (RSP 12 fm) | its refined run | 1 % | 1.1e-3, 6e-3, 1.5e-2, 1.1e-2 at 0, 30, 60, 90°: not reached; FRESCO moves by 0.3–0.6 % with hcm and cutl, ours by up to 1.6 % with h (the cut at RSP) |
+| Narrow-bin limit (15) | d²σ/dΩ dE from u^(E) | 1e-3 | 6.3e-4 at ΔE = 25 keV; error ratio 4.00 between 50 and 25 keV |
+| Interior vertex (16.2) | A_λ W_λ, table of §16 | 1e-10 at E_r; table 1e-3 | 2e-15; reproduced |
+| Post = prior with remnants (17.1) | each other | numerics | 1.1e-3 (35°), 8e-5 at 0° (ρ ≤ 40 fm) |
+| FRESCO prior form / remnant | dσ/dΩ | 1 % | not reached: FRESCO does not converge in rnl (§17) |
+
+FRESCO's convergence asked was 0.2 %: its step refinement (hcm 0.025 → 0.0125) moves the bin cross sections by
+0.09 %, 0.32 % and 0.47 % at their worst angles (minima near 1 % of the peak); its k rule moves them by 1/NK (0.8 %
+from NK 1600 to 3200 at the non-resonant minimum, the same in ours with the same rule: ours − FRESCO 1.1e-3 at NK
+3200). Simpson's rule (also in the library) converges as 1/NK⁴; it is used for the narrow bins of §15.
+

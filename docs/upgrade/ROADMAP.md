@@ -224,11 +224,16 @@ Gate: thread-count independence by construction; memory one problem regardless o
 - [x] `physics/transfer`, first part (`transfer.md`; branch `feature/upgrade-7-transfer-1`): optical potentials with
       explicit numbers, bound states, distorted waves (spin 0, ½, 1), zero-range and finite-range post-form DWBA to a
       bound state, the plane-wave THM vertex.
-- [ ] Global optical sets; level functions; transfer to the x + A continuum (the THM vertex); the wiring into the
-      THM observable (after Phase 5).
+- [x] `physics/transfer`, second part (`transfer.md` §14–§18; branch `feature/upgrade-7-transfer-2`): scattering
+      states and FRESCO's bins of x + A, the transfer to them (finite and zero range), d²σ/dΩ dE and the narrow-bin
+      limit, the interior part against the level function, the prior form and the remnants.
+- [ ] Global optical sets; the wiring into the THM observable (after Phase 5).
 - [x] Validation, first part: plane-wave limit to 1e-6; FRESCO benchmarks for the d and ⁶Li Trojan horses to a bound
       state (¹⁵N(d,n)¹⁶O, ¹²C(⁶Li,d)¹⁶O: < 0.2 %), committed with inputs and outputs (`physics/tests/data/fresco`).
-- [ ] Validation, continuum: FRESCO bins; ³He and ¹⁴N Trojan horses (¹⁸O(³He,d)¹⁹F, ¹²C(¹⁴N,d)²⁴Mg).
+- [x] Validation, continuum: FRESCO bins for ¹⁵N(d,n) (non-resonant, narrow and wide resonance, finite range: < 0.3 %),
+      committed; post = prior with remnants (10⁻³). Not reached: zero range and ⁶Li bins, prior form and remnant
+      against FRESCO (FRESCO's own numerics, `transfer.md` §15, §17).
+- [ ] Validation: ³He and ¹⁴N Trojan horses (¹⁸O(³He,d)¹⁹F, ¹²C(¹⁴N,d)²⁴Mg).
 Gate: benchmarks committed with their FRESCO inputs and outputs.
 
 ## Phase 8 — pyazr 3.0

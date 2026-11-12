@@ -80,6 +80,13 @@ post-form transfer of item 4 to a *bound* state in zero and finite range (FRESCO
 item 2 inside a, the transfer to the x + A continuum (FRESCO bins), the global optical sets, the ³He and ¹⁴N
 benchmarks, the wiring (`transfer.md` §11–12).
 
+Status (2026-11-12, branch `feature/upgrade-7-transfer-2`, `transfer.md` §14–§18): the transfer to the x + A
+continuum exists (scattering states, FRESCO's bins, d²σ/dΩ dE as the narrow-bin limit, finite and zero range), within
+0.3 % of FRESCO for ¹⁵N(d,n) to three p + ¹⁵N bins; the interior continuum amplitude is the level function's vertex
+(item 2's level function: u_E at E_λ inside a) times A_λ(E), exactly at E_λ and to 0.1–1.9 % at E_λ ± Γ, with an
+exterior part of 9 % (a = 5 fm) to 0.5 % (7 fm) (`transfer.md` §16); the prior form and the remnants (post = prior
+to 10⁻³). Open: the ⁶Li bins against FRESCO (FRESCO loses accuracy there), ³He and ¹⁴N, global sets, wiring.
+
 Open questions for Catania (formula sheet Q2): their potential geometry and radius convention (r0·A^{1/3} vs
 r0·(A1^{1/3} + A2^{1/3})), spin–orbit, Coulomb radius, node rule for clusters, whether the interaction radius equals
 the channel radius, which boundary condition fixes the level function, whether u is normalised inside a, and one

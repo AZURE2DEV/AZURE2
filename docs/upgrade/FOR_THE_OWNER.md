@@ -42,7 +42,9 @@ either way (`stopping/data/srim/README.md`).
 
 Phase 7 has begun as a separate library that the engine does not use yet: optical potentials, bound states,
 distorted waves and the DWBA transfer to a bound state, which agree with FRESCO to better than 0.2 %
-(`docs/upgrade/transfer.md`).
+(`docs/upgrade/transfer.md`). It now also computes the transfer into the unbound x + A system (FRESCO's continuum
+bins, within 0.3 % of FRESCO for the deuteron), and shows that inside the channel radius this amplitude is the
+level's vertex times the resonance's energy dependence, which is what the THM fit assumes.
 
 **How every step is checked.** Each merge is verified as a whole: the 183 project files of the test suite run in
 three bases (Brune, formal, Park) and every output file is compared byte for byte with the previous head (726 + 699
