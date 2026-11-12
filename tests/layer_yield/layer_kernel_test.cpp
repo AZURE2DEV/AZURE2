@@ -12,7 +12,10 @@
  *   3. E_out of a constant epsilon is E_0 - N epsilon to 1e-14 (the rule is exact for it);
  *   4. a cross section linear in E folds to 1e-24 N sigma(E_bar_Q) with E_bar_Q the weighted mean energy of the nodes,
  *      checked against a constant epsilon, where E_bar = E_0 - N epsilon / 2 exactly: 1e-13;
- *   5. a grid that ends before the layer does (E_out below the lowest node) gives NaN, never a truncated yield.
+ *   5. a grid that ends before the layer does (E_out below the lowest node) gives NaN, never a truncated yield;
+ *   6. a single node (a support narrower than MeshZeroWidth(), a layer losing less than 1 eV) is the thin limit, to
+ *      rounding: 1e-24 sigma N for the layer (weight 1e-24 N), sigma for the thin target (weight 1), and
+ *      1e-24 sigma T / eps for the infinitely thick target (density 0, T its thickness) -- each was 0 before.
  *
  * Run:  <build>/tests/layer_yield/layer_kernel_test          (ctest: layer_kernel)
  */
@@ -171,6 +174,24 @@ int main() {
     const bool nan = std::isnan(y.value);
     std::printf("  %s  5. a grid that ends inside the layer gives NaN (got %g)\n", nan ? "ok  " : "FAIL", y.value);
     if (!nan) failures++;
+  }
+
+  // 6. a single node: the thin limit of each kind of target
+  {
+    const double e0 = 0.6, s1 = 0.41;
+    const std::vector<double> one = {e0};
+    const TargetEffect layer = Layer(configure, 3.0e14, "a0*x^a1", {a0, a1}, true);
+    Fold y = Run(configure, layer, one, 1.0, [&](double) { return s1; }, 1.0e-7);
+    check("6. one node, layer: Y = 1e-24 sigma N", y.value, 1e-24 * s1 * 3.0e14, 1e-15);
+    check("6. one node, layer: the weight is 1e-24 N", y.weightSum, 1e-24 * 3.0e14, 1e-15);
+    const TargetEffect thin = Layer(configure, 3.0e14, "a0*x^a1", {a0, a1}, false);
+    y = Run(configure, thin, one, 1.0, [&](double) { return s1; }, 1.0e-7);
+    check("6. one node, thin target: sigma", y.value, s1, 1e-15);
+    check("6. one node, thin target: the weight is 1", y.weightSum, 1.0, 1e-15);
+    const TargetEffect thick = Layer(configure, 0.0, "a0*x^a1", {a0, a1}, false);
+    const double t = 4.0e-7, eps = thick.StoppingAt(e0, configure, 1.0);
+    y = Run(configure, thick, one, 1.0, [&](double) { return s1; }, t);
+    check("6. one node, thick target: 1e-24 sigma T / eps", y.value, 1e-24 * s1 * t / eps, 1e-15);
   }
 
   if (failures) {

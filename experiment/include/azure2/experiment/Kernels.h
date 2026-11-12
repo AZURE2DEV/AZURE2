@@ -145,6 +145,10 @@ using BroadenFunction = void (*)(const KernelParameters &, const KernelPoint &, 
 /// if dwdT is given, their derivatives in the temperature on the same nodes.
 using BroadeningWeightsFunction = void (*)(const KernelParameters &, const KernelPoint &, const KernelNodes &, double e,
                                            std::vector<std::pair<int, double>> &w, std::vector<std::pair<int, double>> *dwdT);
+/// The thin limit of a kernel: the weight w with fold = w x value(node 1) when the point has a single node (its
+/// support narrower than MeshZeroWidth(), e.g. a layer losing less than 1 eV), the cross section constant across the
+/// support.  An average (a resolution kernel normalised by its own integral, a broadening): 1 (AverageThinLimit).
+using ThinLimitFunction = double (*)(const KernelParameters &, const KernelPoint &, const KernelNodes &);
 
 /*!
  * One row of the table of kernels.  A resolution kernel folds the node values into the point's value (fold on
@@ -172,8 +176,14 @@ struct Kernel {
   BroadenFunction<LinearForm> broadenForm = nullptr;
   BroadenFunction<double> broadenDT = nullptr;
   BroadeningWeightsFunction broadeningWeights = nullptr;
+  /// The weight of the single node (ThinLimitFunction); null for a kernel whose support is never that narrow (the
+  /// fold of a single node is then NaN, a failed point, never a silent 0).
+  ThinLimitFunction thinLimit = nullptr;
   std::string doc;
 };
+
+/// The thin limit of an average (ThinLimitFunction): 1.
+double AverageThinLimit(const KernelParameters &, const KernelPoint &, const KernelNodes &);
 
 /// The table of kernels (src/Kernels.cpp), in a fixed order.
 const std::vector<Kernel> &Kernels();
@@ -195,8 +205,10 @@ enum class Broadening { kApply, kAlreadyApplied };
 
 /*!
  * The effect's value at the point from its node values: the broadening at every node (or at the point, without a
- * resolution kernel), then the resolution kernel.  V = double gives the value, V = LinearForm (values the unit forms
- * of the nodes) its exact weights.  The one dispatch of the fold: one indirect call per point.
+ * resolution kernel), then the resolution kernel.  A point with a single node (a support narrower than
+ * MeshZeroWidth()) is the thin limit: the node's value times the product of its kernels' Kernel::thinLimit.
+ * V = double gives the value, V = LinearForm (values the unit forms of the nodes) its exact weights.  The one dispatch
+ * of the fold: one indirect call per point.
  */
 double Fold(const EffectKernels &, Broadening, const KernelParameters &, const KernelPoint &, const KernelNodes &,
             const double *values);

@@ -157,6 +157,7 @@ Kernel DopplerKernel() {
   k.broadenForm = BroadenDoppler<LinearForm>;
   k.broadenDT = BroadenDopplerDT;
   k.broadeningWeights = DopplerWeights;
+  k.thinLimit = AverageThinLimit;
   k.support = DopplerSupport;
   k.doc = "SAMMY's free-gas Doppler broadening of the cross section, applied before the resolution kernel";
   return k;

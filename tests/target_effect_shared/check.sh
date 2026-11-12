@@ -11,7 +11,7 @@
 # narrowed the kernel of its parent (22Ne+a, 10-1-26: Harms "4-6" chi2 2037
 # shared vs 1379 split).  TargetEffect::ConvertSigmaToCM now converts once.
 #
-# Model: tests/target_effect_ranges (two Deineko data sets naming one beam record, beam_targetInt1, as the old
+# Model: tests/beam_spread_ay (two Deineko data sets naming one beam record, beam_targetInt1, as the old
 # "1,2" line); the split variant gives the second its own copy of the record.
 #
 #   ./tests/target_effect_shared/check.sh path/to/AZURE2
@@ -20,7 +20,7 @@ set -uo pipefail
 export LC_ALL=C
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SRC="$HERE/../target_effect_ranges"
+SRC="$HERE/../beam_spread_ay"
 AZURE2_BIN="${1:?usage: check.sh path/to/AZURE2}"
 AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
 # A hang fails the check instead of stalling the suite (tests/lib/guard.sh).
@@ -47,7 +47,7 @@ make_variant() {
   local dir="$WORK/$1"
   mkdir -p "$dir/output" "$dir/checks"
   cp -R "$SRC/data" "$dir/data"
-  cp "$SRC/target_effect_ranges.azr" "$dir/t.azr"
+  cp "$SRC/beam_spread_ay.azr" "$dir/t.azr"
   [ "$2" = 1 ] || return 0
   edited "$dir/t.azr" "$dir/t.azr" awk "$SPLIT" || bad "$1: the beam record was not split"
   [ "$(grep -c '^beam beam_' "$dir/t.azr")" -eq 2 ] && [ "$(grep -c '^    beam           beam_split$' "$dir/t.azr")" -eq 1 ] \

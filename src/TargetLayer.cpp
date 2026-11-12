@@ -35,6 +35,8 @@ bool CheckPoint(const WorkingCopy &data, const Unit &point, const TargetEffect &
       return false;
     }
   }
+  // a single node (a layer losing less than MeshZeroWidth()): the kernel's thin limit 1e-24 N sigma needs no E_out
+  if (n == 1) return true;
   const bool noSpread = !te.IsGaussian() && !te.IsStraggling();
   const double top = (noSpread && n > 0) ? point.GetSubPoint(data, 1)->GetCMEnergy() : point.GetCMEnergy();
   double eOut = 0.0;

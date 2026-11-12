@@ -81,10 +81,10 @@ struct Results;
  *    depend on nu through the angle: its column recomputes the observables of its sites at the moved angle (channel
  *    rows kept), as before; open for the branch of observables per node (Legendre coefficients at the nodes).
  *
- * A support narrower than MeshZeroWidth() (a layer losing less than 1 eV) gets a single node from the planner and
- * the kernels return 0 for it (a defect before the mesh, not of this branch).  A shifted point with a reach has a
- * planned support of width 2 R_i, hence more nodes; its fold reads at least two of them, so the zero is not made
- * worse; a fixed shift of such a point keeps the single node and the zero.
+ * A support narrower than MeshZeroWidth() (a layer losing less than 1 eV) gets a single node from the planner, and
+ * the fold of a single node is the kernels' thin limit (Kernel::thinLimit).  A shifted point with a reach has a
+ * planned support of width 2 R_i, hence more nodes, and its fold reads at least two of them; a fixed shift of such a
+ * point keeps the single node and the thin limit.
  *
  * Not here: THM (off the mesh, its sub-points still move rigidly: Segment::MoveOwnGridSlots, branch 10); a point
  * with a uniform grid of its own (useAdaptiveGrid off), which moves rigidly as well; unfolded shifted points (an exact

@@ -216,7 +216,11 @@ under `useAdaptiveGrid` off (a uniform grid of `points` intervals, the old optio
 mesh interval is an ordinary folded point: the rule of §2.4 clipped at its support integrates the linear interpolant of
 the two enclosing nodes over [E0 − Δ, E0], i.e. the interpolated σ at the depth-averaged energy (exactly so for 1/ε
 constant across the target) — the linear-interpolation case of the deleted fallback, with the nodes of the mesh, whose
-interval near a level of width Γ is at most Γ/p.  Moved: `tests/target_effect_ranges` (the project of the tree that
+interval near a level of width Γ is at most Γ/p.  A support narrower than `MeshZeroWidth()` (1 eV) is one node at its
+high edge, and the fold of one node is the thin limit of the effect's kernels (`Kernel::thinLimit`, applied in
+`Compose` of `Kernels.cpp`): 1 for an average, 1e-24 N for a layer yield, 1e-24 T/ε for a thick target; the beam
+profile, whose support is at least 1 keV, has none (a single node would give NaN, a failed point).  Before, every kernel
+returned 0 for one node.  Moved: `tests/beam_spread_ay` (the project of the tree that
 used them), χ² 3838.66 → 3760.95, the beam spread now folded outside its old window (largest A_y change 0.046, 1.5 data
 σ); its numbers equal the engine before the deletion run without the windows, bit for bit.
 
@@ -480,7 +484,7 @@ nodes); the smallest such ratio.
 | `shift_sqrt_subpoints/models/sqrt` | 36841 | 2089 | 2125 | 2059 | 0.99 | 25 | 4 | 1.23 | 0 | 1.00 |
 | `stopping_yield/models/fit` | 176270 | 5014 | 2331 | 2130 | 0.42 | 3 | 2 | 1.34 | 0 | 1.01 |
 | `stopping_yield` | 199089 | 7295 | 2552 | 2175 | 0.30 | 3 | 2 | 1.60 | 0 | 1.01 |
-| `target_effect_ranges` | 5686 | 2164 | 1191 | 541 | 0.25 | 117 | 4 | 1.34 | 0 | 1.15 |
+| `beam_spread_ay` | 5686 | 2164 | 1191 | 541 | 0.25 | 117 | 4 | 1.34 | 0 | 1.15 |
 | `thick_target_resonance` | 48237 | 2148 | 2197 | 2068 | 0.96 | 19 | 4 | 1.23 | 0 | 1.01 |
 | `units_scales/models/yield_story` | 37372 | 1782 | 1830 | 1751 | 0.98 | 2 | 2 | 1.57 | 0 | 1.00 |
 | `upgrade/T2/T2` | 24319 | 5442 | 2782 | 2917 | 0.54 | 513 | 3 | 1.80 | 0 | 1.36 |
@@ -489,7 +493,7 @@ nodes); the smallest such ratio.
 No project's mesh exceeds 1.2 × today's distinct energies (largest 1.04, `beam_profile_kernel`: its grids already
 coincide on the anchored lattice, and the ladder adds 1.61 × the smooth nodes there). The ladder costs 1.15–1.80 × the
 smooth nodes; the mesh still saves where data sets overlap (T2 0.54, `natural_neon` 0.37, the stopping and layer
-projects 0.30–0.69, `target_effect_ranges` 0.25, whose fallback and window points have uniform grids today). The
+projects 0.30–0.69, `beam_spread_ay` 0.25, whose fallback and window points have uniform grids today). The
 supports with fewer nodes (`natural_neon` 8, `rectangular_resolution` 5) have ratio ≥ 0.99: one node, the accounting of
 today's edge nodes against the mesh's outer nodes. The shift projects are planned at their unshifted anchors (the
 set-up's grids of a shifted data set are offset by its shift, `GridConfig::resonanceOffset`): shifted folded points
@@ -910,7 +914,7 @@ identical, 33 quadrature, 2 named, 0 failures (no-brune 550 / 517 / 31 / 2 / 0; 
 | `shift_sqrt_subpoints`, unshifted | 1.3 × 10⁻³ | 6.7 × 10⁻⁴ | 6.2 × 10⁻⁴ | 3.4 × 10⁻⁴ |
 | `layer_yield` | 8.5 × 10⁻⁴ | 4.9 × 10⁻⁴ | 2.0 × 10⁻⁴ | 8.3 × 10⁻⁵ |
 | `natural_neon` | 7.8 × 10⁻⁴ | 2.9 × 10⁻⁴ | 1.1 × 10⁻⁴ | 5.1 × 10⁻⁵ |
-| `target_effect_ranges` | 3.7 × 10⁻⁴ | 3.1 × 10⁻⁴ | 1.1 × 10⁻⁴ | 9.2 × 10⁻⁵ |
+| `beam_spread_ay` | 3.7 × 10⁻⁴ | 3.1 × 10⁻⁴ | 1.1 × 10⁻⁴ | 9.2 × 10⁻⁵ |
 | `stopping_yield` | 2.6 × 10⁻⁴ | 1.1 × 10⁻⁴ | 1.1 × 10⁻⁴ | 5.6 × 10⁻⁵ |
 | `rectangular_resolution`, fit | 1.4 × 10⁻⁴ | 5.3 × 10⁻⁵ | 5.4 × 10⁻⁵ | 2.6 × 10⁻⁵ |
 | 13N | 1.4 × 10⁻⁴ | 1.4 × 10⁻⁴ | 3.5 × 10⁻⁵ | 3.5 × 10⁻⁵ |
@@ -1032,7 +1036,7 @@ nothing: its fill was 7 of 23.5 ms, and the half-off-shell cross section, which 
 finds them out of cache (perf: `Unit::GetLoElement` 12 % of the run, from the fill's unit to the cross section's).
 Whole runs (`perf stat` cycles, alternated with the base): fits of 8 MIGRAD calls 13N 1.95×, T2 1.66×, thick target
 1.95×, T1 1.02×, T3 1.07×; calculations (6 runs each, set-up dominated) thick target 2.0×, `natural_neon` 1.34×, T2
-1.11×, T1, T3, 13N, THM and `target_effect_ranges` within their scatter (±10–20 % at this load). Peak RSS within 2 %.
+1.11×, T1, T3, 13N, THM and `beam_spread_ay` within their scatter (±10–20 % at this load). Peak RSS within 2 %.
 A 200-call T2 fit is not faster as a whole: at 1 thread 0.96× (its gradients' forward solves are still per host:
 29.0 of 53 s), at 5 threads 0.89× (17.0 s against 14.8, two runs each; not explained, see HANDOFF).
 
@@ -1135,7 +1139,7 @@ with the switch.
 | shift_sqrt_subpoints/models/narrow_{const,sqrt} | 28 | 28 | 44,212 | 2,158 | 2,192 | 1.02 |
 | stopping_yield/models/fit | 93 | 93 | 176,270 | 5,014 | 2,331 | 0.46 |
 | stopping_yield/models/stopping_yield | 175 | 175 | 199,089 | 7,295 | 2,552 | 0.35 |
-| target_effect_ranges | 72 | 44 | 5,686 | 2,164 | 1,191 | 0.55 |
+| beam_spread_ay | 72 | 44 | 5,686 | 2,164 | 1,191 | 0.55 |
 | thick_target_resonance | 56 | 56 | 48,237 | 2,148 | 2,197 | 1.02 |
 | units_scales/models/yield_story | 33 | 33 | 37,372 | 1,782 | 1,830 | 1.03 |
 | upgrade/T2 | 380 | 309 | 24,319 | 5,442 | 2,782 | 0.51 |
@@ -1162,7 +1166,7 @@ points. Recommendation (a), for memory and deletion, not for speed.
 
 **D3. Automatic tolerance, fold windows, edge blending, the σ(Ē) fallback.** They exist to skip per-point sub-points;
 on a shared mesh a node costs the same whoever uses it. (a) Delete them in branch 7 (the projects that use them move
-by at most their own tolerance: in the tree `tests/target_effect_ranges`, and external projects such as 13C+α
+by at most their own tolerance: in the tree `tests/beam_spread_ay`, and external projects such as 13C+α
 ND2021r); (b) keep them as options. Recommendation (a), with the moved projects listed.
 
 **D4. M3 (b).** It is an identity for the χ² (§4.2). (a) Implement it as the simplification it is (branch 3: one
@@ -1189,7 +1193,7 @@ gradients and fits move by rounding. Recommendation: accept, with the rounding c
   every unit of the tree (`AZURE_PLAN_CHECK`). If one differs, the key becomes (entrance pair, E_x) and the T2 gain
   drops (measure: distinct (nucleus, entrance, E_x)).
 - *Computing every sub-point where the automatic tolerance skipped most* can make branch 1 slower on such projects.
-  Measure on `tests/target_effect_ranges` and the 13C+α project before and after.
+  Measure on `tests/beam_spread_ay` and the 13C+α project before and after.
 - *Branch 7's mesh near many overlapping narrow resonances* takes the densest data set's step everywhere they overlap;
   the estimate of §1.2 says ≤ today's distinct-node count, but a project with very different `quadrature` settings
   per data set may grow. Measure the mesh size against the union of today's grids on every folded project first.
@@ -1242,7 +1246,7 @@ Status of the decisions of §9:
 - D2, D3, D5, D6, D7: **taken by the PI on 2026-11-11 ("yes to all")**, as recommended in §9:
   - D2: the shared mesh is built (branch 7).
   - D3: the automatic tolerance, the fold windows, the edge blending and the σ(Ē) fallback are deleted with branch 7.
-    `tests/target_effect_ranges` is rewritten on the mesh's error bound; the converter turns the old options into a
+    `tests/beam_spread_ay` is rewritten on the mesh's error bound; the converter turns the old options into a
     note of the conversion report, and projects outside the tree that use them (13C+α ND2021r) are converted with it.
   - D5: lab-differential data are folded with θ_c.m. and the Jacobian per node (branch 9, physics class: every moved
     project listed with the size).

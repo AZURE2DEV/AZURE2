@@ -176,6 +176,16 @@ for flag in sorted(set(re.findall(r"\\t(--[a-z0-9-]+)", help_text))):
     if flag not in flags | handled_in_main:
         problems.append(f"{flag}: offered by printHelp() but not accepted by parseOptions()")
 
+# 36. A value-taking flag reads its value through include/CommandLineValues.h (OptionWholeNumber, OptionText), which
+#     refuses a missing or unparseable value with the usage line and exit 2; a value parsed by hand in parseOptions
+#     (atoi, strtol, substr past the "--") was ignored with a warning or read as 0 (--max-calls N,
+#     --refreeze-covariance=x).
+VALUE_BY_HAND = re.compile(r"\b(atoi|atol|strtol|strtod|stoi|stol|stod|substr)\((?!0, 2\))")
+for bad in VALUE_BY_HAND.findall(parser):
+    problems.append(f"src/AZURE2.cpp parseOptions: a flag's value read with {bad}; read it with OptionWholeNumber or "
+                    "OptionText (include/CommandLineValues.h, check 36)")
+if not VALUE_BY_HAND.search("std::atoi(it->substr(22).c_str())") or VALUE_BY_HAND.search('arg.substr(0, 2) == "--"'):
+    problems.append("check 36: the pattern no longer matches the form it guards; update this check")
 
 # 2. Every test source is registered with CTest.  An unregistered test is never
 #    run, by CI or anyone else, and looks exactly like a passing one.

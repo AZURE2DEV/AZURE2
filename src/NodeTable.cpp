@@ -7,14 +7,20 @@
 #include <iostream>
 #include <stdexcept>
 #include <tuple>
+#include <vector>
 
 #include "AMatrixFunc.h"
 #include "CNuc.h"
 #include "CalculationPlan.h"
 #include "Config.h"
 #include "PPair.h"
+#include "Segment.h"
 #include "Unit.h"
 #include "WorkingCopy.h"
+
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 namespace azure2 {
 
@@ -201,6 +207,30 @@ void WorkingCopy::ReleaseOverflowRows() {
   // The rows of the overflow table are holders of the units' own; a unit about to be re-energised writes them in
   // place only when it is their sole holder (SharedTable copy-on-write), so they are let go first.
   for (auto &r : nodes_.overflow.rows) r = SharedTable<EDependentTables>();
+}
+
+void WorkingCopy::MoveSegmentsToShift(const std::vector<const Segment *> &segments, CNuc *cnuc,
+                                      const Config &configure) {
+  ReleaseOverflowRows();
+#ifdef _OPENMP
+  const bool serial = omp_in_parallel();
+#else
+  const bool serial = true;
+#endif
+  std::vector<int> moved;
+  for (const Segment *seg : segments)
+    for (int t = 0; t < seg->NumTerms(); t++) {
+      // No parallel construct inside a parallel region: an inactive nested team renumbers its thread 0 (HandOver.cpp).
+      if (serial) {
+        for (int i = 0; i < seg->NumPoints(); i++) seg->UpdatePointEnergyWithShift(*this, t, i, cnuc, &configure);
+      } else {
+#pragma omp parallel for schedule(dynamic, 1)
+        for (int i = 0; i < seg->NumPoints(); i++) seg->UpdatePointEnergyWithShift(*this, t, i, cnuc, &configure);
+      }
+      for (const Unit &pt : seg->TermPoints(*this, t))
+        if (pt.PlanTask() >= 0) moved.push_back(pt.PlanTask());
+    }
+  PlaceOverflowNodes(cnuc, moved, true);
 }
 
 long WorkingCopy::CheckNodeTable(CNuc *cnuc, const std::vector<int> &work) {
