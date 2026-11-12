@@ -215,6 +215,25 @@ in both); the fits are the gradient agent's series, read by the director from it
 gain is one level-matrix solve per distinct compound energy instead of one per data point or sub-point. A plain
 MIGRAD fit of a project without target integration gains little, as T2 shows.
 
+The shared energy mesh (merged 2026-11-12; one calculation, 1 thread, best of three runs, time and peak memory):
+
+| project | before the mesh | with the mesh and shared sites |
+|---|---|---|
+| `natural_neon` | 6.2 s, 1390 MB | 1.3 s, 340 MB |
+| `thick_target_resonance` | 0.91 s, 388 MB | 0.59 s, 272 MB |
+| T2 | 0.26 s, 138 MB | 0.26 s, 134 MB |
+| 13N | 8.3 s, 225 MB | 7.7 s, 122 MB |
+| `stopping_yield` | 0.68 s, 333 MB | 0.11 s, 105 MB |
+| `layer_yield` | 0.30 s, 200 MB | 0.10 s, 113 MB |
+| `hybrid_potential` | 1.7 s, 338 MB | 1.1 s, 106 MB |
+
+Against the code at the branch point with `dev`, `natural_neon` went from 41 s and 4.5 GB to 1.3 s and 0.34 GB. Fits:
+the gradient fit of the stopping-yield test 43 s → 8 s, of 13N 27 s → 18 s, of T2 36 s → 34 s. The gain comes from
+two things together: one mesh of energies per compound nucleus, so that data sets folded over the same energies use
+the same level-matrix solves, and one stored calculation site per mesh node for all the points of a data set that
+read it. The mesh without the shared sites was slower than the code before it (7.0 s and 1.7 GB on `natural_neon`);
+it was never merged alone.
+
 ## How to add a feature now
 
 `CLAUDE.md` (section "Recipes") lists, for each kind of addition — a field of a record, a quantity, a unit, a new
@@ -267,7 +286,7 @@ checked against the LEXFOR text itself; differential data relative to a referenc
 
 ## What is in work and what comes next
 
-In work now (2026-11-12, night): the shared energy mesh. Merged tonight, each after the whole verification: the
+Merged in the night of 2026-11-12, each after the whole verification: the
 engine refusing old files, with its old reading path deleted (the close of Phase 4 except the rest of `CNuc`); the
 nodes of a folded data point as entries of a node table (the old point mapping and the sub-point objects are
 deleted: a data point is a `Unit`, each of its nodes a `Site`, every output identical, the fit as fast as before
@@ -275,15 +294,33 @@ and natural_neon's peak memory 2.5 % lower); the extension drill (previous secti
 mesh as a pure function with its tests (`include/MeshPlanner.h`): one mesh per compound nucleus, planned from the
 kernels' supports, the levels and each data set's numerical settings, so that two data sets folded over the same
 resonance share their level-matrix solves. On the projects of the tree the planned mesh has at most 1.04 times
-today's distinct energies and far fewer where data sets overlap (T2 0.54, natural_neon 0.37). The engine is being
-moved onto it now. **This is the first step of the upgrade that changes numbers on purpose**: folded yields move by
-about the quadrature error they have today, which was measured first by refining today's quadrature four times
-(largest relative distance of today's default to the refined run: 5e-3 on T2, 3e-3 on the thick-target project,
-1e-4 on 13N, 4e-2 on one data set that asks for only 10 quadrature points). A changed number is accepted only if it
-is at least as close to the refined reference as today's. After the mesh, four mechanisms that exist only to make a
-point's private grid affordable are deleted (the automatic tolerance, the fold windows, the edge blending, the
-σ(Ē) fallback). Merged in the earlier batch: one generic kind of fit parameter for the parameters of apparatus
-effects (see "How to add a feature now").
+today's distinct energies and far fewer where data sets overlap (T2 0.54, natural_neon 0.37).
+
+**The engine is on the shared mesh (merged 2026-11-12, morning). This is the first step of the upgrade that changes
+numbers on purpose.** Folded yields (target integration, beam resolution, any apparatus kernel) move by about the
+quadrature error they had; unfolded numbers do not move at all. What was measured before merging:
+
+- *How far the old default was from a converged fold.* The old engine was run with its quadrature refined eightfold
+  (and fourfold where eightfold is too slow). Largest relative distance of the old default to that reference: 5e-3
+  on T2, 3e-3 on the thick-target project, 1e-4 on 13N, and 5 % on `hybrid_potential`, a project whose own settings
+  are too coarse in both engines (a finding about that project's input, not about the mesh).
+- *That every changed number is at least as good.* Of 577 compared output files (Brune basis) 542 are identical, 33
+  moved and are as close to the refined reference as before or closer (thick-target project 3.2e-3 → 4.2e-4,
+  `natural_neon` 7.8e-4 → 2.9e-4, the stopping-yield fit 4.2e-3 → 2.0e-3; T2 and 13N unchanged in size), 2 belong to
+  `hybrid_potential` (6 % against 5 %), none failed. The table per project is in `docs/upgrade/energy_grid.md` §7.1.
+  **The acceptance rule is ours and should be confirmed by you**: a file passes when its largest distance to the
+  refined reference is at most 1.2 times the old engine's and its root-mean-square distance at most 1.03 times
+  (the 3 % is the resolution of the comparison).
+- *What it does to fits.* Eight test fits: fitted parameters move by at most 0.14 of their fitted error (an areal
+  density, 7e-5 relative), and, checked on that fit, towards the result of the refined engine.
+- *Stored expectations.* Six regression checks compared with numbers of the old quadrature; each new number was shown
+  to be the closer one before the expectation was regenerated. One check runs with a wider tolerance (1e-5 instead of
+  1e-6) until a data set with a fitted energy shift is on the mesh too (the next branch).
+
+In work now: four mechanisms that existed only to make a point's private grid affordable are being deleted (the
+automatic tolerance, the fold windows, the edge blending, the σ(Ē) fallback): fewer fields in the input format and
+fewer cases in the engine. Merged in the earlier batch: one generic kind of fit parameter for the parameters of
+apparatus effects (see "How to add a feature now").
 
 **Do the checks still test what they say? (merged 2026-11-11, evening.)** A regression check that edits a project's
 text can go on passing after the conversion to format 3 because its pattern no longer matches anything and it
