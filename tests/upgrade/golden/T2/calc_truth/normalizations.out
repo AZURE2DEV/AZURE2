@@ -1,3 +1,3 @@
 segment_key_#, file_name, low_angle_bound, high_angle_bound, aframe, low_energy_bound, high_energy_bound, eframe, norm, shift
-11,data/s11_thm_hoes_a.dat,0.0000e+00,1.8000e+02,Lab,3.2015e-02,6.4031e-01,Lab,2.0426e-03,0.0000e+00
-12,data/s12_thm_hoes_b.dat,0.0000e+00,1.8000e+02,Lab,4.2687e-02,6.1897e-01,Lab,2.0426e-03,0.0000e+00
+11,data/s11_thm_hoes_a.dat,0.0000e+00,1.8000e+02,Lab,3.2015e-02,6.4031e-01,Lab,2.0422e-03,0.0000e+00
+12,data/s12_thm_hoes_b.dat,0.0000e+00,1.8000e+02,Lab,4.2687e-02,6.1897e-01,Lab,2.0422e-03,0.0000e+00

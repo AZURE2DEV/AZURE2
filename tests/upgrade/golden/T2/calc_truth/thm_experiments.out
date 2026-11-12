@@ -9,8 +9,8 @@ experiment: LC09
 segments: 11,12
 background: none
 points: 58
-chi2: 5.9462292487e+01
+chi2: 5.9459100698e+01
 status: profiled
-norm    2.0425578129e-03  1.8549765916e-05
+norm    2.0422271034e-03  1.8546760092e-05
 covariance:
-norm    3.4409381555e-10
+norm    3.4398230992e-10
