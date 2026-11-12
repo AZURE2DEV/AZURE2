@@ -9,3 +9,8 @@ re-pinned: calc_start and calc_truth, files AZUREOut_aa=1_R=2.out and chiSquared
   (regen_compare.py --regenerate --only calc_start --only calc_truth); the shared mesh moves the folded segments 5-8
   (docs/upgrade/energy_grid.md section 7.1); every other file of calc_start and calc_truth is unchanged.
   fit/ is still the 2026-11-07 run above (not regenerated: tests/convert_params reads its param.sav in the old names).
+re-pinned: calc_start and calc_truth, files AZUREOut_aa=1_R=2.out and chiSquared.out only, 2026-11-12 with the engine of
+  feature/upgrade-5-shift-kernel 8f542232 (build work/b-shift), --no-coulomb-table, OMP_NUM_THREADS=2
+  (regen_compare.py --regenerate --only calc_start --only calc_truth): the shifted folded segments 1-4 fold on the
+  fixed nodes of the shared mesh (include/ShiftedFold.h), and their widened supports move the mesh of segments 5-6 too;
+  per-file quadrature against the refined engine (docs/upgrade/energy_grid.md section 7.1).
