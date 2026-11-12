@@ -189,6 +189,21 @@ void TargetSupport(const KernelParameters &p, const SupportPoint &s, double &hig
   if (low < s.minimumEnergy) low = s.minimumEnergy;
 }
 
+/*!
+ * The thin limit (Kernel::thinLimit) of a target that loses less than MeshZeroWidth() (1 eV): sigma constant across
+ * it.  A thin target's quantity is the target-averaged cross section, weight 1; a layer yield 1e-24 N (reactions per
+ * incident particle, sigma in b, N atoms/cm^2); a thick target 1e-24 T / epsilon, T its c.m. thickness down to 1 keV
+ * and epsilon the node's c.m. stopping (dE_cm / eps_cm = dE_lab / eps_lab).
+ */
+double TargetThinLimit(const KernelParameters &p, const KernelPoint &point, const KernelNodes &nodes) {
+  if (p.layerYield) return 1.0e-24 * point.density;
+  if (p.thickTarget) {
+    const double eps = nodes.Stopping(1);
+    return (eps > 0.0) ? 1.0e-24 * point.targetThickness / eps : std::numeric_limits<double>::quiet_NaN();
+  }
+  return 1.0;
+}
+
 }  // namespace
 
 Kernel TargetKernel() {
@@ -199,6 +214,7 @@ Kernel TargetKernel() {
   k.fold = FoldTarget<double>;
   k.weights = FoldTarget<LinearForm>;
   k.support = TargetSupport;
+  k.thinLimit = TargetThinLimit;
   k.doc = "the depth integral over a thin target (the target-averaged cross section), a thick target or a layer "
           "(the yield per incident particle), with the beam spread and the straggling as a Gaussian at each depth";
   return k;

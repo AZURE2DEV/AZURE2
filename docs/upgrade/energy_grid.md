@@ -216,7 +216,11 @@ under `useAdaptiveGrid` off (a uniform grid of `points` intervals, the old optio
 mesh interval is an ordinary folded point: the rule of §2.4 clipped at its support integrates the linear interpolant of
 the two enclosing nodes over [E0 − Δ, E0], i.e. the interpolated σ at the depth-averaged energy (exactly so for 1/ε
 constant across the target) — the linear-interpolation case of the deleted fallback, with the nodes of the mesh, whose
-interval near a level of width Γ is at most Γ/p.  Moved: `tests/target_effect_ranges` (the project of the tree that
+interval near a level of width Γ is at most Γ/p.  A support narrower than `MeshZeroWidth()` (1 eV) is one node at its
+high edge, and the fold of one node is the thin limit of the effect's kernels (`Kernel::thinLimit`, applied in
+`Compose` of `Kernels.cpp`): 1 for an average, 1e-24 N for a layer yield, 1e-24 T/ε for a thick target; the beam
+profile, whose support is at least 1 keV, has none (a single node would give NaN, a failed point).  Before, every kernel
+returned 0 for one node.  Moved: `tests/target_effect_ranges` (the project of the tree that
 used them), χ² 3838.66 → 3760.95, the beam spread now folded outside its old window (largest A_y change 0.046, 1.5 data
 σ); its numbers equal the engine before the deletion run without the windows, bit for bit.
 

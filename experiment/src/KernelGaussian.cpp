@@ -45,6 +45,7 @@ Kernel GaussianKernel() {
   k.keyword = "beam.spread";
   k.fold = FoldGaussian<double>;
   k.weights = FoldGaussian<LinearForm>;
+  k.thinLimit = AverageThinLimit;
   k.support = GaussianSupport;
   k.doc = "a Gaussian beam-energy spread, sigma constant or a formula of the energy, normalised over its window";
   return k;

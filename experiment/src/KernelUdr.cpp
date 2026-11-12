@@ -97,6 +97,7 @@ Kernel UdrKernelRow() {
   k.keyword = "detector.udr";
   k.fold = FoldUdr<double>;
   k.weights = FoldUdr<LinearForm>;
+  k.thinLimit = AverageThinLimit;
   k.support = UdrSupport;
   k.doc = "SAMMY's user-defined time-of-flight resolution (UDR): a tabulated delay distribution convolved with the "
           "burst and the channel width";
