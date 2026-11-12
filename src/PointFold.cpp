@@ -39,10 +39,6 @@ struct PointKernelInput {
     point.z2 = unit.GetTargetCharge();
     point.targetThickness = target ? unit.GetTargetThickness() : 0.0;
     point.density = values.density;
-    point.blendWeight = unit.GetTargetBlendWeight();
-    point.fallbackOnly = unit.IsTargetFallbackOnly();
-    point.fallbackNow = unit.IsTargetFallbackNow();
-    point.fallbackDepth = unit.GetTargetFallbackDepth();
     point.binLow = unit.GetBinLowCM();
     point.binHigh = unit.GetBinHighCM();
     point.photoQ = unit.GetPhotoQ();

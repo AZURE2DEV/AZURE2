@@ -158,8 +158,7 @@ class TargetEffect {
    * energy_grid.md section 5): reactions per incident particle, Y(E0) = 1e-24 int_{E_out}^{E0} <sigma>/epsilon dE
    * with int_{E_out}^{E0} dE/epsilon = N (the working copy's density, fitted or not), E_out found on the point's own
    * sub-points with the yield's own quadrature (LayerExit.h).  Not divided by N, unlike a thin target's
-   * target-averaged cross section; no sigma(E_bar) fallback (windows and automatic tolerance are refused).  The
-   * grid reaches LayerGridMargin() beyond the layer at its layout density.
+   * target-averaged cross section.  The grid reaches LayerGridMargin() beyond the layer at its layout density.
    */
   bool IsLayerYield() const { return isLayerYield_; }
   /// The factor on the layout thickness (TargetThickness) the sub-point grid of a layer yield spans, so that E_out of
@@ -172,12 +171,6 @@ class TargetEffect {
   double TargetThickness(double, const Config &) const;
   /// The same for an areal density \p density (atoms/cm^2) and a stopping scale \p scale instead of the line's.
   double TargetThickness(double, const Config &, double density, double scale) const;
-  /// Depth-averaged energy loss (lab MeV) in the target at lab energy E: E - E_bar with
-  /// E_bar = int E' dE'/epsilon / int dE'/epsilon over [E - Delta, E] (Delta = TargetThickness).  The cross section
-  /// at E_bar equals the target average for a cross section linear across the target; the remainder is about
-  /// sigma'' Delta^2 / 24.  It is the single energy a thin-target point is evaluated at outside the windows of an
-  /// energy-restricted target integration (Unit fallback, 2026-11-05).  0 for a thick target.
-  double MeanEnergyLoss(double, const Config &, double density, double scale) const;
   /// Attenuation coefficient of the given order.
   double GetQCoefficient(int) const;
   /// Convolution coefficient of the given order.
@@ -235,31 +228,6 @@ class TargetEffect {
   // Adaptive integration grid parameters
   double GetResonanceWidthMultiplier() const;
   double GetPointsPerWidth() const;
-
-  /// Optional lab-energy windows the effect is restricted to; empty = whole segment.
-  const std::vector<std::pair<double, double> > &GetRanges() const;
-  /// Width (MeV, lab) of the smooth blend at each range edge; 0 = hard edges.
-  double GetTransitionWidth() const;
-  /// Relative tolerance for automatic per-point application; 0 = always apply.
-  double GetAutoTolerance() const;
-  /// Blend weight in [0,1] at the given lab energy: 1 = effect fully applied,
-  /// 0 = point untouched.  Always 1 when no ranges are given.
-  double BlendWeight(double labEnergy) const;
-  /// The same for a given window list: the line's own ranges together with the automatic windows of one
-  /// segment (WorkingCopy, IsAutoWindows).  An empty list is "no window": 1 without "auto", 0 with it (no level
-  /// asked for a window, so every point takes the effect's fallback).
-  double BlendWeight(double labEnergy, const std::vector<std::pair<double, double> > &windows) const;
-  /// "auto" in the windows token (2026-11-06): each segment of a thin-target integration gets windows placed
-  /// from the level scheme, around every resonance narrow enough for the sigma(E_bar) fallback to miss it by
-  /// more than GetAutoWindowTolerance() at its peak (Delta^2/(3 Gamma^2) for a Lorentzian of total width
-  /// Gamma under a target of thickness Delta), reaching GetAutoWindowMargin() x max(Gamma, Delta) beyond the
-  /// points whose target holds the resonance.  "auto:<tol>" and "auto:<tol>:<margin>" set them; explicit
-  /// ranges in the same token are added.  Older engines read no range from it and integrate everywhere.
-  bool IsAutoWindows() const { return autoWindows_; }
-  double GetAutoWindowTolerance() const { return autoWindowTolerance_; }
-  double GetAutoWindowMargin() const { return autoWindowMargin_; }
-  /// Any window at all, explicit or automatic.
-  bool HasWindows() const { return !ranges_.empty() || autoWindows_; }
 
   /// The multiple of sigma above and below centroid energy to use as integration range
   /// (5 since dev 7d24c88: at 3 the 0.27 % of kernel weight beyond the window was dropped and the rest rescaled).
@@ -452,16 +420,6 @@ class TargetEffect {
   double resonanceWidthMultiplier_ = 0.0;  ///< set from AdaptiveIntegrationGrid::GridConfig in the constructor
   bool explicitResonanceWidthMultiplier_ = false;
   double pointsPerWidth_ = 0.0;            ///< likewise
-
-  // Optional restriction of the effect to lab-energy windows, with a smooth
-  // blend of the given width at each edge, and/or automatic per-point
-  // application controlled by a relative tolerance.
-  std::vector<std::pair<double, double> > ranges_;
-  double transitionWidth_ = 0.0;
-  double autoTolerance_ = 0.0;
-  bool autoWindows_ = false;            ///< "auto" in the windows token (IsAutoWindows)
-  double autoWindowTolerance_ = 0.01;   ///< peak error of the fallback a resonance may have outside a window
-  double autoWindowMargin_ = 3.0;       ///< window reach beyond the target, in units of max(Gamma, Delta)
 
   // Beam-profile kernel (see IsBeamProfile).
   bool isBeamProfile_ = false;

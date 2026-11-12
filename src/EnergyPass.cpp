@@ -289,7 +289,7 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
     const int t = folds[k];
     if (!failure[t].empty()) return;
     try {
-      plan_.Point(*this, t)->FoldSubPoints(this, theCNuc, configure, results);
+      plan_.Point(*this, t)->FoldSubPoints(*this, configure, results);
     } catch (const std::exception &e) {
       failure[t] = e.what();
     } catch (...) {

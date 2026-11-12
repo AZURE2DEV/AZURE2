@@ -91,14 +91,6 @@ bool ParseNumberToken(TokenCursor &cur, ParseContext &ctx, Number &out, const st
   return true;
 }
 
-bool SplitRange(const std::string &text, Number &lo, Number &hi) {
-  for (std::size_t p = 1; p + 1 < text.size(); p++) {
-    if (text[p] != '-' || text[p - 1] == 'e' || text[p - 1] == 'E') continue;
-    return ParseNumberText(text.substr(0, p), lo) && ParseNumberText(text.substr(p + 1), hi);
-  }
-  return false;
-}
-
 bool ParseNuisance(const ValueSpec &spec, TokenCursor &cur, ParseContext &ctx, Value &out) {
   if (!NeedToken(cur, ctx, "the value")) return false;
   Nuisance &n = out.nuisance;
@@ -183,46 +175,6 @@ bool ParseNuisance(const ValueSpec &spec, TokenCursor &cur, ParseContext &ctx, V
     }
   }
   return true;
-}
-
-bool ParseWindows(const ValueSpec &spec, TokenCursor &cur, ParseContext &ctx, FoldWindows &w) {
-  if (!NeedToken(cur, ctx, "the windows")) return false;
-  const io::Token &first = cur.Peek();
-  if (first.text.compare(0, 4, "auto") == 0) {
-    std::vector<std::string> parts;
-    std::size_t a = 0;
-    for (std::size_t b; (b = first.text.find(':', a)) != std::string::npos; a = b + 1) parts.push_back(first.text.substr(a, b - a));
-    parts.push_back(first.text.substr(a));
-    bool ok = parts[0] == "auto" && parts.size() <= 3;
-    if (ok && parts.size() >= 2) ok = (w.hasTolerance = ParseNumberText(parts[1], w.tolerance));
-    if (ok && parts.size() == 3) ok = (w.hasMargin = ParseNumberText(parts[2], w.margin));
-    if (!ok) {
-      ctx.Error(codes::kWindowSyntax, first.col, first.text, {"auto", "auto:<tolerance>", "auto:<tolerance>:<margin>"},
-                ctx.Where() + ": '" + first.text + "' is not auto, auto:<tolerance> or auto:<tolerance>:<margin>");
-      return false;
-    }
-    w.automatic = true;
-    cur.Next();
-    return true;
-  }
-  while (!cur.AtEnd()) {
-    FoldWindows::Window win;
-    const io::Token &t = cur.Peek();
-    if (!SplitRange(t.text, win.lo, win.hi)) break;
-    if (win.lo.value > win.hi.value) {
-      ctx.Error(codes::kEmptyRange, t.col, t.text, {"<lo>-<hi> with lo <= hi"},
-                ctx.Where() + ": the window " + t.text + " is empty (lo > hi)");
-      return false;
-    }
-    w.windows.push_back(win);
-    cur.Next();
-  }
-  if (w.windows.empty()) {
-    ctx.Error(codes::kWindowSyntax, first.col, first.text, {"<lo>-<hi> ... <unit>", "auto[:tol[:margin]]"},
-              ctx.Where() + ": '" + first.text + "' is not a window <lo>-<hi> (e.g. 0.2-0.4) or auto[:tol[:margin]]");
-    return false;
-  }
-  return ParseUnitToken(spec.dimension, cur, ctx, w.unit, "the windows");
 }
 
 bool ParseForm(const ValueSpec &spec, TokenCursor &cur, ParseContext &ctx, Value &out) {
@@ -649,8 +601,6 @@ bool ParseValue(const ValueSpec &spec, TokenCursor &cur, ParseContext &ctx, Valu
       return ParseColumns(cur, ctx, out.columns);
     case ValueType::Grid:
       return ParseGrid(spec, cur, ctx, out.grid);
-    case ValueType::Windows:
-      return ParseWindows(spec, cur, ctx, out.windows);
     case ValueType::Form:
       return ParseForm(spec, cur, ctx, out);
   }

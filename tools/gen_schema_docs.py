@@ -112,6 +112,9 @@ def generate(schema):
             out += ["At least one of: " + "; ".join(", ".join(lit(k) for k in g) for g in rec["one_of"]) + ".", ""]
         if rec.get("refused"):
             out += ["Refused here: " + "; ".join(f"{lit(k)} ({esc(v)})" for k, v in rec["refused"].items()) + ".", ""]
+        if rec.get("deleted"):
+            out += ["Deleted from format 3 (``E_FIELD_DELETED``): " +
+                    "; ".join(f"{lit(k)} ({esc(v)})" for k, v in rec["deleted"].items()) + ".", ""]
 
     out += heading("Quantities", "-")
     out += ["``quantity`` of a ``dataset``, ``extrapolation`` or ``datum``.  The units of the value column are listed with "

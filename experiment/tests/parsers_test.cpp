@@ -161,11 +161,6 @@ int main() {
     check("grid frame", Code(Parse(g, "list 1 2 MeV lb")) == "E_NOT_IN_LIST");
     check("grid none only for angles", Code(Parse(g, "none")) == "E_NOT_IN_LIST");
     check("grid adaptive needs all three", Code(Parse(g, "adaptive 0 1 MeV cm tolerance 1e-3")) == "E_PART_MISSING");
-    ValueSpec w = S(ValueType::Windows, "energy");
-    check("windows: auto:1e-3:0.1", Parse(w, "auto:1e-3:0.1").ok && Parse(w, "auto:1e-3:0.1").value.windows.margin.text == "0.1");
-    check("windows: exponents in ranges", Parse(w, "1e-3-2e-3 MeV").ok &&
-                                              Parse(w, "1e-3-2e-3 MeV").value.windows.windows[0].hi.value == 2e-3);
-    check("windows: empty", Code(Parse(w, "0.4-0.2 MeV")) == "E_EMPTY_RANGE");
   }
   // The unit table.
   {

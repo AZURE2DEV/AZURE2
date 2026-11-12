@@ -64,7 +64,8 @@ because the engine also searches the whole file for them.
       target-integration flag, density (atoms/cm²), `"stopping equation"`, n parameters, parameters, attenuation
       flag, n, Q coefficients, energy-dependent convolution flag, `"σ(E) equation"`, n, coefficients, straggling flag,
       straggling coefficient, width multiplier, points per width (`TargetIntTab.cpp`)
-- [ ] `<targetInt>` optional tail, written only when used: `"ranges" blend tolerance`, `sigmalab`,
+- [ ] `<targetInt>` optional tail, written only when used: `sigmalab` (the `"ranges" blend tolerance` tail has no
+      format-3 counterpart: deleted with decision D3, nothing to build),
       `screening U_e vary sigma`, `densityfit vary sigma [max]`, `densitygroup <label>`, `doppler T [vary sigma
       [Tmax]]`, `beamprofile n {ξ ω α w} σ_det truncation detailedBalance`, `udr "<file>" L burst channel centred`
       (`TargetIntTab.cpp`)
@@ -305,9 +306,9 @@ because the engine also searches the whole file for them.
 
 - [ ] Table of effect lines with `+`, `-`, double-click edit; columns include Segment List, Int. Points, flags and
       parameters of each effect, Effects summary (`TargetIntTab.cpp`, `TargetIntModel.cpp`)
-- [ ] Segments List ("5, 8, 13", "4-12", "3,6,7-14"); Apply in Energy Ranges (lab, MeV), empty = whole segment,
-      `auto` from the level scheme; Blend Width [MeV]; Auto Tolerance; Number of Integration Points
-      (`AddTargetIntDialog.cpp`)
+- [ ] Segments List ("5, 8, 13", "4-12", "3,6,7-14"); Number of Integration Points (`AddTargetIntDialog.cpp`).
+      Not to be built: Apply in Energy Ranges, Blend Width, Auto Tolerance (deleted with decision D3: every point of
+      a folded data set is folded)
 - [ ] Adaptive grid: Resonance Width Multiplier, Points Per Width (`AddTargetIntDialog.cpp`)
 - [ ] Gaussian convolution: σ [MeV, lab] as a number or expression of lab energy x; parameters of σ(E) table;
       lab or legacy c.m. reading; Convert to lab form (`AddTargetIntDialog.cpp`)

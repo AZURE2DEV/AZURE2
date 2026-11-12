@@ -729,8 +729,7 @@ type 0, or 3 for total capture); neither is allowed on a **Ratio**, and a line
 cannot carry both. Not implemented yet, and refused with an error rather than
 computed wrongly: ``yield`` on a sample segment (the total of a mixture), a
 sample transmission under a sub-point target effect (the nuclides' terms sit on
-different sub-point grids), and a target effect that is blended in at range
-edges or has an automatic tolerance. The optical-theorem total leaves capture
+different sub-point grids). The optical-theorem total leaves capture
 out (photon channels have no width in the level matrix), which matters only
 where capture is not small against the total; for a transmission add the
 capture pairs as **Sum** components if it does. The multiple-scattering terms

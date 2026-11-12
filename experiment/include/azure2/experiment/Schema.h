@@ -91,6 +91,9 @@ struct RecordKind {
   std::vector<std::vector<std::string>> oneOf;  ///< at least one field of each group
   /// Keys of other kinds that a user may write here by mistake, with the reason they do not belong.
   std::vector<std::pair<std::string, std::string>> refused;
+  /// Keys this kind had in an earlier format 3 and no longer has, with what to do instead (E_FIELD_DELETED): a file
+  /// that still writes one is refused, never read.
+  std::vector<std::pair<std::string, std::string>> deleted;
   const FieldDef *Find(const std::string &key) const;
 };
 

@@ -486,7 +486,7 @@ namespace {
 //
 // A cross section (or E1/E2 component) is Y itself.  A target-averaged
 // analyzing power is the ratio of two such functionals with the SAME weights
-// (Unit::IntegrateTargetEffectForObservable runs the one integrator on s_i
+// (Unit::FoldSubPoints runs the one integrator on s_i
 // and on s_i A_i, s_i being the sub-point's differential cross section at the
 // point's angle):
 //     <A> = N / D,   N = sum_i c_i s_i A_i,   D = sum_i c_i s_i,
@@ -502,23 +502,9 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
   int nsp = point->NumSubPoints();
   if (nsp <= 0) return true;
 
-  // Unit::Calculate blends the integrated value with the bare one at the
-  // edge of an energy-restricted effect (blend < 1) and, with an automatic
-  // tolerance, may replace it by the bare value altogether.  Neither is the
-  // pure integrator differentiated below, so leave such points to finite
-  // differences.
-  {
-    const TargetEffect *te = data.Data().GetTargetEffect(point->GetTargetEffectNum());
-    // A thin-target integration blends with sigma(E_bar) inside its linear kernel (Unit::TargetFallbackImpl),
-    // so its window edges and the points outside its windows are linear in the sub-point values (2026-11-05).
-    const bool thinTarget = te && te->IsTargetIntegration() && !te->IsThickTarget();
-    if (point->GetTargetBlendWeight() < 1.0 && !thinTarget) return false;
-    if (te && te->GetAutoTolerance() > 0.) return false;
-  }
-
   const bool isAy = point->IsAnalyzingPower();
   // A normalised Legendre coefficient under a target effect is the same ratio structure as A_y, with A_0 = sigma_int / 4 pi
-  // in place of the differential cross section:  <a_k> = sum c_i A0_i a_i / sum c_i A0_i  (Unit::IntegrateTargetEffectForObservable),
+  // in place of the differential cross section:  <a_k> = sum c_i A0_i a_i / sum c_i A0_i  (Unit::FoldSubPoints),
   //   d<a_k> = sum c_i [ A0_i da_i + (a_i - <a_k>) dA0_i ] / D,
   // an a_k cotangent fitBar c_i A0_i / D (PointTBar's coefficient form) and an A_0 cotangent fitBar c_i (a_i - <a_k>) / D
   // (PointTBar with xsComponent -1).  An absolute A_k is linear in the sub-point values and takes the plain route.
@@ -714,10 +700,8 @@ namespace {
 // its folding if it has one -- by the HOES adjoint (THMMatrixFunc::
 // THMPointAdjoint): d m/d(E, gamma) into `accum`, d m/d(coherent value k)
 // into coherentBar[k].  A folded point is linear in its sub-point cross
-// sections; the weights come from the combiner as in GradTargetEffectAdjoint,
-// and an edge blend adds (1 - w) times the bare point.  The automatic
-// application of a target effect (a tolerance) switches between the folded
-// and the bare value by a test on the sub-points: not covered (false).
+// sections; the weights come from the combiner as in GradTargetEffectAdjoint.
+// A folded analyzing power (a ratio of two folds): not covered (false).
 bool ThmPointModelGradient(WorkingCopy &data, Unit *point, azure2::Results &results, CNuc *compound, const Config &config,
                            const ThmAdjointContext &ctx,
                            GradAccum &accum, std::vector<double> &coherentBar) {
@@ -732,7 +716,7 @@ bool ThmPointModelGradient(WorkingCopy &data, Unit *point, azure2::Results &resu
   };
   const TargetEffect *te = point->IsTargetEffect() ? data.Data().GetTargetEffect(point->GetTargetEffectNum()) : nullptr;
   if (!(te && te->IsSubPointEffect())) return adjoint(point, 1.0);
-  if (point->IsAnalyzingPower() || te->GetAutoTolerance() > 0.0) return false;
+  if (point->IsAnalyzingPower()) return false;
   const int nsp = point->NumSubPoints();
   if (nsp <= 0) return true;
   std::vector<double> sigma(nsp), c(nsp, 0.0);
@@ -747,10 +731,8 @@ bool ThmPointModelGradient(WorkingCopy &data, Unit *point, azure2::Results &resu
     v[i - 1] = s0;
     c[i - 1] = (yp - ym) / (2.0 * h);
   }
-  const double blend = point->GetTargetBlendWeight();
   for (int i = 1; i <= nsp; i++)
-    if (c[i - 1] != 0.0 && !adjoint(point->GetSubPoint(data, i), blend * c[i - 1])) return false;
-  if (blend < 1.0 && !adjoint(point, 1.0 - blend)) return false;
+    if (c[i - 1] != 0.0 && !adjoint(point->GetSubPoint(data, i), c[i - 1])) return false;
   return true;
 }
 

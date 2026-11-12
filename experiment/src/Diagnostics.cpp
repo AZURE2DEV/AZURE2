@@ -37,6 +37,7 @@ const std::vector<DiagnosticCode> &DiagnosticCodes() {
       {kFieldTwice, E, "a field that is not repeatable, given twice"},
       {kFieldRequired, E, "a required or conditionally required field is missing (fix: the field with '?')"},
       {kFieldNotApplicable, E, "a field that does not apply to the record's kind, quantity or other fields"},
+      {kFieldDeleted, E, "a field an earlier format 3 had and this one does not (fix: remove it, as the message says)"},
       {kValueMissing, E, "a key without a value"},
       {kPlaceholder, E, "a value that is '?': a value is needed (F18)"},
       // Values
@@ -61,7 +62,6 @@ const std::vector<DiagnosticCode> &DiagnosticCodes() {
       {kNucleusSyntax, E, "a nuclide that is not <A><Symbol>, or with A < Z"},
       {kUnknownElement, E, "an element symbol that is not in the table (physics/Elements.h)"},
       {kPairSyntax, E, "a particle pair that is not <particle>+<nucleus>[<E_x>]"},
-      {kWindowSyntax, E, "fold windows that are not <lo>-<hi> ... <unit> or auto[:tol[:margin]]"},
       // Reactions
       {kReactionSyntax, E, "a reaction expression that does not follow section 3.5"},
       {kReactionOrdinal, E, "an ordinal particle label (a1, p2): name the state by its excitation energy (F4)"},

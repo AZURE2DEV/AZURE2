@@ -2,7 +2,53 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
-## 2026-11-12 (director, 07:15) — merged: the engine on the shared mesh, the shared sites, the expectations the mesh moves
+## 2026-11-12 (director, 08:10) — merged: fold windows, edge blending, the automatic tolerance and the σ(Ē) fallback are deleted
+
+**Merged** into `feature/upgrade-4-data` and `feature/upgrade` (one merge commit, tree of `rehearsal/trial33`; nothing
+pushed): `feature/upgrade-5-d3-deletions` (the agent's entry below says what went, by file).  A folded data set now
+names its effect and, optionally, the settings of the mesh; every point of it is folded with the whole kernel.
+
+**Verified by the director** (build `work/b-trial33`, reference `tab-trial31` = the shared mesh as merged).
+All projects in three bases: 820 of 823, 796 of 796, 820 of 823 files identical; the three that differ per basis are
+`target_effect_ranges`' observable file, `chiSquared.out` and `run.log`.  `ctest -LE slow` 207/207 (1010 s), slow
+10/10; `tests/run_tests.sh` 155 passed, 0 failed (2817 s; the two deleted checks gone); spec equivalence 215 files,
+184 converted, 184 equal; the converted-tree gate against the rehearsal's own run 623/596/623 identical; 1 against 3
+threads identical; the eight fits at 1 thread byte-identical to the shared mesh as merged (`work/director/fits_t33_t31`).
+Speed and memory are the agent's measurement (equal to a base built the same way), not repeated by the director.
+
+**Reviewed.**  The engine's diff (`src/PointPass.cpp`, `src/AZUREGrad.cpp`, `src/TargetSetup.cpp`,
+`experiment/src/KernelTarget.cpp`) is deletion only; no branch of the fold or of the adjoint was rewritten.
+
+**The one moved project, accepted.**  `tests/target_effect_ranges` (a Gaussian beam spread folded into A_y data inside
+a window 1.95–2.55 MeV, blend 0.12 MeV, automatic tolerance 0.002): χ² 3838.66 → 3760.95; outside the old window the
+largest change of A_y is 0.046 (1.5 of the datum's σ), inside 0.004.  This is larger than the brief's stop condition
+(the old tolerance), so the agent stopped and asked.  Repeated by the director: the engine **before** the deletion on
+the old file with the window widened to 0–1000 MeV gives both output files of the new engine bit for bit
+(`diff -rq`), so the new numbers are the old engine's full fold and the move is entirely the points the window left
+unfolded.  The window was a restriction of the physics (a point outside it was compared without the beam spread), not
+an approximation with a bound; decision D3 removes it.  **For the PI and the owner**: an old file with windows
+converts with a note that names the line, and its numbers outside the windows change by the size of the fold there.
+
+**Found beside it, not caused by it** (present in the engine before the mesh, `work/b-trial30`, with the same
+numbers): a layer whose energy loss is below 1 eV (`MeshZeroWidth()`; `thick_target_resonance` with
+`areal_density 3.2e+14`) is a single node, and every kernel returns 0 for fewer than two nodes — a silent zero where
+the thin limit σ(E)·N is meant.  At 3.2e+15 (1 eV) and above the engine before the mesh and this one agree to 3e-5
+or better.  To do: the single-node case returns the node's value times the kernel's norm, or the project is refused;
+a test of the thin limit.
+
+**Corrections.**  The entry below was headed 07:15; its commits are of 07:03 (header corrected).  `FOR_THE_OWNER.md` said `dev`'s
+automatic target-effect windows "port as they are": with D3 the two commits (442610f3, 3a104e06) are obsolete, and
+the `azure2-eval` skill's notes on windowed refits will need a sentence at the merge with `dev`.
+
+**Open** (carried, in the order they will be met).  The shift kernel (`feature/upgrade-5-shift-kernel`, started from
+this tree): shifted folded segments on the fixed nodes, `shift_subpoint_angle` (b) back to 1e-6, `NodeTableCache.h`
+and the rigid move deleted.  The two loops of `SetUpTargetEffects` are near copies (merge them when the placement of
+slots is next touched).  `park_chi2_fallback` no longer exercises the finite-difference fallback of the gradient: a
+construct the adjoint does not cover is needed for that test, or the fallback goes.  `tests/target_effect_ranges` has a
+historical name (it is now "a beam spread folded into A_y").  The acceptance rule of changed folded numbers still waits
+for the PI's confirmation.
+
+## 2026-11-12 (director, 07:03) — merged: the engine on the shared mesh, the shared sites, the expectations the mesh moves
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (one merge commit, tree of `rehearsal/trial32`; nothing
 pushed): `feature/upgrade-5-shared-mesh` (the engine places a folded point's nodes from one plan per compound nucleus;
@@ -80,6 +126,68 @@ of a data set held its own copy of the mesh's nodes in its range); the shared si
   order: a rounding-class change, to do with the gradient's next branch); the serial `Unit::Calculate` path still
   solves all of a point's slots; `NodeTableCache` stays until shifted points are on fixed nodes.
 - In work: the deletion of the four mechanisms of decision D3 (`feature/upgrade-5-d3-deletions`).
+
+## 2026-11-12 (agent, Phase 5 branch 7 part 2, milestone 3) — fold windows, edge blending, the automatic tolerance and the σ(Ē) fallback deleted (`feature/upgrade-5-d3-deletions`)
+
+**Done (decision D3).** Every point of a folded data set is folded with the whole kernel on the shared mesh; a user
+sets for a folded data set the effect (`target`, `beam`, `detector`) and, optionally, the mesh's settings
+(`quadrature`), nothing else.
+- Engine: `src/TargetSetup.cpp` loses `AddTargetFallbackNodes`, `CheckTargetWindows`, `TargetWindowsFor` and the
+  window and fallback branches of both loops of `SetUpTargetEffects` (968 -> 762 lines; the function 405 -> 365 lines,
+  54 -> 46 `if`, 8 -> 4 `continue`).  `Unit` loses the blend weight, the fallback flags, depth and scope,
+  `FoldThinTarget`, the probe (`DetachFromPlan`, the two-argument `Site::UsePrivateRecord`); `Unit::FoldSubPoints` is
+  the one fold (it was `IntegrateTargetEffectForObservable`, behind a probe/tolerance front).  `TargetEffect` loses
+  ranges, blend width, both tolerances, the automatic-window settings, `BlendWeight` (two), `GetRanges`,
+  `GetTransitionWidth`, `GetAutoTolerance`, `IsAutoWindows`, `GetAutoWindowTolerance`, `GetAutoWindowMargin`,
+  `HasWindows`, `MeanEnergyLoss`.  The hand-over and the stopping scale no longer track E_bar; the Coulomb reference no
+  longer blends; `AZUREGrad.cpp` loses the two guards of `GradTargetEffectAdjoint` and the THM blend; the transform no
+  longer refuses a blend (`WorkingCopy::CheckTransformedSegments`).
+- Kernels: `KernelPoint` loses `blendWeight`, `fallbackOnly`, `fallbackNow`, `fallbackDepth`; `KernelTarget.cpp` loses
+  `TargetFallback` and the blend.  A thin target inside one mesh interval is an ordinary folded point (the kernel's
+  comment and `energy_grid.md` §2.2 say what it gives: the interpolated σ at the depth-averaged energy).
+- Format 3: `fold_windows` (its form, the `Windows` value type, `FoldWindows`, `ParseWindows`, `SplitRange`,
+  `E_WINDOW_SYNTAX`, the layer and Rutherford-ratio refusals of it) deleted.  A file that writes it is refused with the
+  new `E_FIELD_DELETED` from a per-kind list `RecordKind::deleted` (exported in the schema JSON, printed in
+  `format3.rst`).  The `quadrature` line never had a tolerance (`points`, `width_multiplier`, `per_width`): nothing
+  of it is deleted; the `tolerance` of an extrapolation's adaptive grid is another thing and stays.
+- Converter: an old `<targetInt>` line with ranges, `auto` windows or a tolerance converts with a note naming the
+  line, what was dropped and what moves; a blend without windows (no effect in the old engine) is no note.
+  `convert_spec_equivalence` requires one such note per windowed active line (shown failing without the note).
+- Tests deleted: `tests/target_auto_windows` (automatic windows from the level scheme: placement, Note, threshold
+  windows, refusals), `tests/target_window_fallback` (σ(Ē) outside the windows against a truth table, the
+  |σ''|Δ²/24 error, blend in the kernel, refusals).  `tests/target_effect_ranges` is kept as a beam spread folded into
+  A_y data (README rewritten), re-pinned in its own commit; `target_effect_shared` no longer strips the field;
+  `layer_yield` expects `E_FIELD_DELETED`; `park_chi2_fallback` variant B is a convolved A_y on the adjoint.
+
+**Moved numbers.** Only `tests/target_effect_ranges` (the one project of the tree, and of the old originals under
+`tests/convert/fixtures/` and `examples/`, that set windows, a blend or a tolerance): χ² 3838.66 -> 3760.95; outside
+its old window the largest A_y change is 0.046 (1.5 data σ), inside 0.004 (0.13 σ); 31 of 72 points keep their bits.
+The base engine on the file without windows, and on the old file with the window widened to 0-1000 MeV, gives the
+new outputs bit for bit.  This is larger than the old tolerance (5e-3 on χ², 0.002 per point) and than the data's σ:
+the windows of a beam spread were a restriction of the physics, not an approximation.  Decision for the director.
+
+**Verified how** (build `work/b-d3`, scripts `work/d3/`: `qset.sh`, `measure.sh`, `cmp_ter.py`).  Build 0 warnings;
+consistency test; `ctest -R "experiment|convert|kernels|grad|upgrade_plan|upgrade_node|upgrade_mesh|consistency|schema"`
+41/41 and `park_chi2|target_effect_line|parsers|schema` 5/5; `check.sh` of `target_effect_shared` and `layer_yield`
+pass; T1, T2, T3, 13N, natural_neon, thick_target_resonance, layer_yield/models byte-identical to `tab-trial31`
+(Brune, 109 files, run.log without timing lines), also under `AZURE_PLAN_CHECK=1 AZURE_NODE_CHECK=1` (outputs
+identical, every check line "0 differ" / "0 off the tables" / "0 slots with a wrong writer").  The refusal
+(`E_FIELD_DELETED`, one per field) and the conversion note shown on the old `target_effect_ranges` files; all 189 old
+originals converted: one note, that file's.  Injected once each (then removed): the dataset kind's `deleted` list
+emptied (`experiment_diagnostics` fails 3 checks) and the converter's note suppressed (`convert_constructs` 3,
+`convert_spec_equivalence` 1).  `AZURE_GRAD_CHECK=exit` on T2 and `layer_yield/models/fit.azr` (1 thread): every
+printed component equal to the base's (only the timing line differs).  Speed and memory, 1 thread, 7 alternated runs,
+medians, base = commit ab54094a built the same way (`work/b-d3-base`): T2 0.25 / 0.25 s, 134 / 134 MB;
+natural_neon 1.26 / 1.27 s (user 1.12 / 1.10 s), 340 / 340 MB; thick_target_resonance 0.57 / 0.57 s, 272 / 272 MB;
+target_effect_ranges 0.59 -> 0.72 s, 104 -> 106 MB (the old file left 34 of 72 points unfolded; on the same windowless
+file the two engines take 0.73 / 0.72 s, 109 / 109 MB).  Not run (the director's, on the last commit): the whole tree x
+3 bases, `tests/run_tests.sh`, the gate, the fits, other thread counts.  `scripts/check.sh --quick` (JOBS=1,
+OMP_NUM_THREADS=2) on commit e28c9812: 207 tests, 0 failed.
+
+**Open.** The base and component loops of `SetUpTargetEffects` are now near copies (placement of slots: not in this
+step's scope).  `park_chi2_fallback` no longer exercises the finite-difference fallback of the gradient (no p+p
+construct the adjoint misses is left).  `.claude/skills/rmfit-campaign/references/policy-and-objective.md` describes
+rmfit's own copy of the windows (another program; not edited).
 
 ## 2026-11-12 (agent, Phase 5 branch 7 part 2) — the stored expectations the shared mesh moves
 

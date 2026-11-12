@@ -92,10 +92,6 @@
    "grammar": "range <lo> <hi> <unit> lab|cm step <s> | range <lo> <hi> <unit> lab|cm points <n> [log] | list <v> ... <unit> lab|cm | file <path> <unit> lab|cm | adaptive <lo> <hi> <unit> lab|cm tolerance <t> max_points <n> start_step <s>",
    "doc": "an energy or angle grid; range: E_k = lo + k step (F10)"
   },
-  "windows": {
-   "grammar": "<lo>-<hi> ... <unit> | auto[:<tolerance>[:<margin>]]",
-   "doc": "lab-energy windows of a fold"
-  },
   "structured": {
    "doc": "a structured value: a leading keyword chooses the alternative, then its parts"
   }
@@ -346,53 +342,6 @@
      ],
      "doc": "sub-point grid of the fold"
     },
-    "fold_windows": {
-     "title": "Fold windows",
-     "type": "structured",
-     "grammar": "<lo>-<hi> ... <energy unit> | auto[:<tolerance>[:<margin>]] [blend <number> <energy unit>] [auto_tolerance <number > 0>]",
-     "applies_when": {
-      "if": "fold",
-      "text": "the record is folded (a target layer or infinite target, a Doppler-broadening target, a beam, or a detector resolution)"
-     },
-     "required": false,
-     "alternatives": [
-      {
-       "keyword": "",
-       "parts": [
-        {
-         "name": "windows",
-         "keyword": false,
-         "type": "windows",
-         "grammar": "<lo>-<hi> ... <energy unit> | auto[:<tolerance>[:<margin>]]",
-         "optional": false,
-         "dimension": "energy",
-         "units": ["MeV", "keV", "eV", "meV", "ueV"],
-         "doc": "lab-energy windows, or auto[:tolerance[:margin]]"
-        },
-        {
-         "name": "blend",
-         "keyword": true,
-         "type": "number_with_unit",
-         "grammar": "<number> <energy unit>",
-         "optional": true,
-         "dimension": "energy",
-         "units": ["MeV", "keV", "eV", "meV", "ueV"],
-         "doc": "blend width at a window edge"
-        },
-        {
-         "name": "auto_tolerance",
-         "keyword": true,
-         "type": "number",
-         "grammar": "<number > 0>",
-         "optional": true,
-         "positive": true,
-         "doc": "tolerance of the automatic windows"
-        }
-       ]
-      }
-     ],
-     "doc": "lab-energy windows of the fold"
-    },
     "J": {
      "title": "J",
      "type": "spin",
@@ -569,6 +518,9 @@
      "required": false,
      "doc": "the DOI of the publication"
     }
+   },
+   "deleted": {
+    "fold_windows": "remove it; the shared mesh folds every point of the data set, and energy windows, the blend at their edges and the automatic tolerance no longer exist"
    }
   },
   "normalization": {
@@ -867,53 +819,6 @@
      ],
      "doc": "sub-point grid of the fold"
     },
-    "fold_windows": {
-     "title": "Fold windows",
-     "type": "structured",
-     "grammar": "<lo>-<hi> ... <energy unit> | auto[:<tolerance>[:<margin>]] [blend <number> <energy unit>] [auto_tolerance <number > 0>]",
-     "applies_when": {
-      "if": "fold",
-      "text": "the record is folded (a target layer or infinite target, a Doppler-broadening target, a beam, or a detector resolution)"
-     },
-     "required": false,
-     "alternatives": [
-      {
-       "keyword": "",
-       "parts": [
-        {
-         "name": "windows",
-         "keyword": false,
-         "type": "windows",
-         "grammar": "<lo>-<hi> ... <energy unit> | auto[:<tolerance>[:<margin>]]",
-         "optional": false,
-         "dimension": "energy",
-         "units": ["MeV", "keV", "eV", "meV", "ueV"],
-         "doc": "lab-energy windows, or auto[:tolerance[:margin]]"
-        },
-        {
-         "name": "blend",
-         "keyword": true,
-         "type": "number_with_unit",
-         "grammar": "<number> <energy unit>",
-         "optional": true,
-         "dimension": "energy",
-         "units": ["MeV", "keV", "eV", "meV", "ueV"],
-         "doc": "blend width at a window edge"
-        },
-        {
-         "name": "auto_tolerance",
-         "keyword": true,
-         "type": "number",
-         "grammar": "<number > 0>",
-         "optional": true,
-         "positive": true,
-         "doc": "tolerance of the automatic windows"
-        }
-       ]
-      }
-     ],
-     "doc": "lab-energy windows of the fold"
-    },
     "J": {
      "title": "J",
      "type": "spin",
@@ -1078,6 +983,9 @@
     "covariance": "an extrapolation has no data (F20)",
     "energy_window": "the grid is the extrapolation's energy range (F20)",
     "angle_window": "the grid is the extrapolation's angle range (F20)"
+   },
+   "deleted": {
+    "fold_windows": "remove it; the shared mesh folds every point of the data set, and energy windows, the blend at their edges and the automatic tolerance no longer exist"
    }
   },
   "target": {
@@ -2882,12 +2790,6 @@
      "checked_by": "validate"
     },
     {
-     "code": "E_FIELD_NOT_APPLICABLE",
-     "rule": "fold_windows on a layer",
-     "message": "outside a window the integration is a cross section at one energy, not a yield",
-     "checked_by": "build"
-    },
-    {
      "code": "E_LAYER_STOPPING",
      "rule": "a stopping not positive and finite in the layer",
      "message": "give a stopping defined at every energy the beam has in the layer",
@@ -3744,6 +3646,10 @@
    "severity": "error",
    "meaning": "a field that does not apply to the record's kind, quantity or other fields"
   },
+  "E_FIELD_DELETED": {
+   "severity": "error",
+   "meaning": "a field an earlier format 3 had and this one does not (fix: remove it, as the message says)"
+  },
   "E_VALUE_MISSING": {
    "severity": "error",
    "meaning": "a key without a value"
@@ -3835,10 +3741,6 @@
   "E_PAIR_SYNTAX": {
    "severity": "error",
    "meaning": "a particle pair that is not <particle>+<nucleus>[<E_x>]"
-  },
-  "E_WINDOW_SYNTAX": {
-   "severity": "error",
-   "meaning": "fold windows that are not <lo>-<hi> ... <unit> or auto[:tol[:margin]]"
   },
   "E_REACTION_SYNTAX": {
    "severity": "error",

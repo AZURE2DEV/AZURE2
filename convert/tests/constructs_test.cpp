@@ -574,7 +574,7 @@ int main(int argc, char **argv) {
     check("an inactive <targetInt> line: a note", HasNote(r, "line 3 is inactive"));
   }
   // ---- thick target (density 0): yield in 1/particle (data_kinds.md 2.3); densityfit vary sigma% max; screening; doppler
-  //      fit form; fold windows
+  //      fit form; energy windows with a blend: dropped with a note (format 3 folds every point)
   {
     const ConvertResult r = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 y1.dat\n"
                                      "1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 y2.dat\n"
@@ -593,9 +593,13 @@ int main(int argc, char **argv) {
     Expect("densityfit and screening", r, "target tgt_y2",
            F{{"kind", "layer"}, {"active", "15N"}, {"areal_density", "2e+17 atoms/cm2 fit prior 2e+17 10% grid_max 3e+17"},
              {"stopping", "formula \"a0\" a0=6e-20 MeV*cm2/atom"}, {"straggling", "bohr"}, {"screening", "1000 eV fit prior 1000 200"}});
-    Expect("fold windows", r, "dataset y2",
+    Expect("energy windows dropped", r, "dataset y2",
            Sigma("y2.dat") + F{{"energy_window", "0.2 1.4 MeV"}, {"norm", "1 fixed"}, {"target", "tgt_y2"}, {"beam", "beam_y2"},
-                               {"quadrature", "points 40 width_multiplier 10 per_width 20"}, {"fold_windows", "0.2-0.4 0.6-0.8 MeV blend 0.01 MeV"}});
+                               {"quadrature", "points 40 width_multiplier 10 per_width 20"}});
+    check("energy windows dropped: a note that names the line, the windows, the blend and what moves",
+          HasNote(r, "<targetInt> line 2: the lab-energy windows 0.2-0.4, 0.6-0.8 MeV and the blend of 0.01 MeV at their "
+                     "edges dropped (format 3 folds every point of a data set); the numbers of its data sets move outside "
+                     "the windows by the whole fold"));
     Expect("doppler fit form", r, "target tgt_y3",
            F{{"kind", "layer"}, {"active", "15N"}, {"areal_density", "1e18 atoms/cm2 fixed"}, {"stopping", "formula \"a0\" a0=1e-20 MeV*cm2/atom"},
              {"straggling", "none"}, {"doppler", "free_gas 300 K fit prior 300 30 grid_max 600"}});
@@ -646,17 +650,22 @@ int main(int argc, char **argv) {
     check("densityfit without target integration: refused",
           !r.ok && r.refusal.find("densityfit / densitygroup need target integration with a density > 0") != std::string::npos);
   }
-  // ---- an automatic tolerance without windows (an empty ranges token, then blend and tolerance): the tolerance applied
-  //      to every point (TargetEffect), written as one window over every energy with that tolerance, and a note;
-  //      never dropped (the outputs of the conversion equal the old line's: compared on tests/identical_pp_res with a
-  //      convolution at tolerances 1e-12, 1e-3, 3e-2)
+  // ---- an automatic tolerance without windows (an empty ranges token, then blend and tolerance), and automatic windows:
+  //      dropped, each with a note (format 3 folds every point); a blend without windows did nothing and is no note
   {
-    const ConvertResult r = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 y1.dat\n", "",
-                                     "1 \"1\" 40 1 0.0008 1 2e+17 \"a0\" 1 6e-20 0 0 0 \"\" 0 1 0 10 20 \"\" 0 0.001\n", "", ""});
+    const ConvertResult r = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 y1.dat\n1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 y2.dat\n"
+                                     "1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 y3.dat\n", "",
+                                     "1 \"1\" 40 1 0.0008 1 2e+17 \"a0\" 1 6e-20 0 0 0 \"\" 0 1 0 10 20 \"\" 0 0.001\n"
+                                     "1 \"2\" 40 1 0.0008 1 2e+17 \"a0\" 1 6e-20 0 0 0 \"\" 0 1 0 10 20 \"auto:0.003\" 0.01\n"
+                                     "1 \"3\" 40 1 0.0008 1 2e+17 \"a0\" 1 6e-20 0 0 0 \"\" 0 1 0 10 20 \"\" 0.01\n", "", ""});
     check("tolerance without windows: converted", r.ok);
-    check("tolerance without windows: one window over every energy",
-          Block(r.text, "dataset y1").find("    fold_windows   0-1e+06 MeV auto_tolerance 0.001\n") != std::string::npos);
-    check("tolerance without windows: a note", HasNote(r, "an automatic tolerance without windows"));
+    check("tolerance without windows: no fold_windows field", r.text.find("fold_windows") == std::string::npos);
+    check("tolerance without windows: a note with the tolerance and what moves",
+          HasNote(r, "<targetInt> line 1: the automatic tolerance 0.001 dropped (format 3 folds every point of a data set); "
+                     "the numbers of its data sets move at a point the tolerance left unfolded by at most 0.001 relative"));
+    check("automatic windows: a note", HasNote(r, "<targetInt> line 2: the automatic windows \"auto:0.003\" and the blend of "
+                                                  "0.01 MeV at their edges dropped"));
+    check("a blend without windows: no note", !HasNote(r, "<targetInt> line 3:"));
   }
   // ---- densitygroup: one target, the first line's density; a member's own density is a note (WorkingCopy::SetUpDensityParams)
   {

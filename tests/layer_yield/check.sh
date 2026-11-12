@@ -12,8 +12,8 @@
 #      move, the folded ones move by less than 1/p^2, the thick layer comes closer to its independent integral;
 #   4. the fit (models/fit.azr: a scan of the resonance with 2 % noise, N and Gamma_p free) recovers N and Gamma_p
 #      within two standard errors, with chi^2/nu near 1, and gives the same output at 1 and 2 threads;
-#   5. the refusals that remain: a layer without an areal density, a yield per uC without charge_state, fold windows on
-#      a layer yield, a stopping not positive in the layer, a layer the beam does not leave;
+#   5. the refusals that remain: a layer without an areal density, a yield per uC without charge_state, the deleted
+#      fold_windows field, a stopping not positive in the layer, a layer the beam does not leave;
 #   6. pyazr (pyazr_layer_test.py: the records built in Python, the arctan form, dY/dN against 1e-24 sigma(E_out))
 #      when the compiled module can be imported (PYAZR_ENGINE_DIR), else a skip.
 #
@@ -185,7 +185,7 @@ write("stops", text.replace(t, t.replace("1e+20 atoms/cm2", "1.7e+20 atoms/cm2")
 PY
 refused "a layer without areal_density" E_FIELD_REQUIRED "areal_density" no_density.azr
 refused "a yield per uC without charge_state" E_FIELD_REQUIRED "charge_state" no_charge.azr
-refused "fold_windows on a yield on a layer" E_FIELD_NOT_APPLICABLE "fold_windows" windows.azr
+refused "fold_windows (deleted from format 3)" E_FIELD_DELETED "fold_windows" windows.azr
 refused "a stopping not positive at the beam energy" E_LAYER_STOPPING "not positive and finite" stopping.azr
 refused "a stopping not positive below the beam energy" E_LAYER_STOPPING "not positive and finite" stopping_deep.azr
 refused "a layer the beam does not leave" E_LAYER_EXIT_BELOW_MODEL "use a target of kind infinite" stops.azr

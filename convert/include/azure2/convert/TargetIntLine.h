@@ -63,15 +63,11 @@ struct TargetIntLine {
   bool hasPointsPerWidth = false;
   double pointsPerWidth = 0.0;
 
-  // the optional energy windows
+  // the optional energy windows, read only for the converter's note (format 3 folds every point)
   bool hasRangesToken = false;
   std::string rangesToken;  ///< as read, quotes removed
   std::vector<std::pair<double, double>> ranges;
-  bool autoWindows = false;
-  bool hasAutoWindowTolerance = false;
-  double autoWindowTolerance = 0.0;
-  bool hasAutoWindowMargin = false;
-  double autoWindowMargin = 0.0;
+  bool autoWindows = false;      ///< "auto[:tol[:margin]]" among the ranges
   double transitionWidth = 0.0;  ///< 0 when absent
   double autoTolerance = 0.0;    ///< 0 when absent
 
@@ -221,18 +217,6 @@ inline void ReadTargetIntLine(std::istream &stream, TargetIntLine &out) {
         if (item.compare(0, 4, "auto") == 0) {
           // "auto", "auto:<tol>", "auto:<tol>:<margin>": windows from the level scheme
           out.autoWindows = true;
-          std::istringstream as(item.substr(4));
-          char colon = 0;
-          double v = 0.0;
-          if (as >> colon && colon == ':' && as >> v && v > 0.) {
-            out.autoWindowTolerance = v;
-            out.hasAutoWindowTolerance = true;
-          }
-          colon = 0;
-          if (as >> colon && colon == ':' && as >> v && v > 0.) {
-            out.autoWindowMargin = v;
-            out.hasAutoWindowMargin = true;
-          }
           continue;
         }
         std::size_t dash = item.find('-', 1);  // energies are positive; skip a leading sign

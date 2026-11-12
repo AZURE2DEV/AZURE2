@@ -406,7 +406,6 @@ void Builder::BuildData() {
       if (app->hasBeam) Add(r, "beam", app->beamName);
       if (app->hasDetector) Add(r, "detector", app->detectorName);
       if (app->folded) Add(r, "quadrature", app->quadrature);
-      if (!app->foldWindows.empty()) Add(r, "fold_windows", app->foldWindows);
     }
     if (sampleTargetOfData_.count(d.key) && !(app && app->hasTarget)) Add(r, "target", sampleTargetOfData_[d.key]);
     if (sampleThickness && active) {
@@ -592,7 +591,6 @@ void Builder::BuildExtrapolations() {
       if (app->hasBeam) Add(r, "beam", app->beamName, app->hasTarget ? "" : comment);
       if (app->hasDetector) Add(r, "detector", app->detectorName, app->hasTarget || app->hasBeam ? "" : comment);
       if (app->folded) Add(r, "quadrature", app->quadrature);
-      if (!app->foldWindows.empty()) Add(r, "fold_windows", app->foldWindows);
     }
     pendingComment_.clear();
     if (sampleTargetOfTest_.count(t.key) && !(app && app->hasTarget)) Add(r, "target", sampleTargetOfTest_[t.key]);

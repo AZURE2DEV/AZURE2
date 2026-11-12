@@ -351,15 +351,6 @@ TargetEffectSpec TargetEffectSpecFromOldLine(std::istream &stream, bool &readFai
   t.resonanceWidthMultiplier = line.resonanceWidthMultiplier;
   t.hasPointsPerWidth = line.hasPointsPerWidth;
   t.pointsPerWidth = line.pointsPerWidth;
-  t.hasRanges = line.hasRangesToken;
-  t.ranges = line.ranges;
-  t.autoWindows = line.autoWindows;
-  t.hasAutoWindowTolerance = line.hasAutoWindowTolerance;
-  t.autoWindowTolerance = line.autoWindowTolerance;
-  t.hasAutoWindowMargin = line.hasAutoWindowMargin;
-  t.autoWindowMargin = line.autoWindowMargin;
-  t.transitionWidth = line.transitionWidth;
-  t.autoTolerance = line.autoTolerance;
   t.beamProfile = line.isBeamProfile;
   for (const TargetIntLine::ProfileComponent &p : line.beamProfile) {
     TargetEffectSpec::ProfileComponent c;
