@@ -1,6 +1,7 @@
 #ifndef AZURE2_SHIFTEDFOLD_H
 #define AZURE2_SHIFTEDFOLD_H
 
+#include <functional>
 #include <vector>
 
 #include "MeshPlanner.h"
@@ -74,7 +75,10 @@ struct Results;
  * 5. The gradient.  The column of a shift parameter of a folded segment is the central difference of the fold on
  *    the fixed nodes (RefoldShiftedSegments): at nu +- h the points move (their centre, support, translated stopping),
  *    and each point is folded again from the node values already computed at nu with the same fold (FoldValues: one
- *    implementation of each fold); no node is recomputed and no level matrix solved.  Kinds of shift enter through
+ *    implementation of each fold); no node is recomputed and no level matrix solved.  The column does not plan again,
+ *    so its step keeps every moved support inside the planned nodes (InsideShiftStep: the step halved; failing that,
+ *    the caller's path that plans for each side): a reach below the step, or a shift near the edge of its window, made
+ *    ShiftedFoldNodes throw inside the parallel refold before.  Kinds of shift enter through
  *    Delta_i(nu) only.  An analytic dK/dE0 is not within reach of this branch: it would need every kernel's energy
  *    arithmetic (its centre in sigma(E0), the clip limits, the Gaussian, the depth window) on a dual type, the kernels'
  *    folds beyond their centre; open for every kernel.  Exception: a lab-frame differential segment, whose node values
@@ -134,6 +138,16 @@ struct ShiftedNodes {
 /// For a point on the shared mesh whose data set has an energy shift (Unit::SubGridSpec::shifted); throws if the moved
 /// support leaves the point's planned nodes (a planning defect: question 2 keeps it inside).
 ShiftedNodes ShiftedFoldNodes(const Unit &point, const WorkingCopy &data);
+
+/// Whether the moved support of every point of `segments` on the shared mesh with an energy shift lies inside its
+/// planned nodes, the condition of ShiftedFoldNodes (question 5: a shift column moves the points without a re-plan).
+bool ShiftedSupportsInside(const WorkingCopy &data, const std::vector<const Segment *> &segments);
+/// The step of a central difference of a shift parameter at x0 that keeps the points of the data sets
+/// `segmentNumbers` (1-based) inside their planned nodes on both sides (question 5): h, halved until move(x0 +- step)
+/// does; 0 when 40 halvings do not (the caller then takes a path that plans again).  move(v) sets the parameter to v
+/// and moves the points; it is left at x0.
+double InsideShiftStep(const WorkingCopy &data, const std::vector<int> &segmentNumbers, double x0, double h,
+                       const std::function<void(double)> &move);
 
 /// The stopping the target kernel reads at slots [first, first + count) of a shifted point: the target's stopping at
 /// each node's energy minus the point's c.m. shift (question 3), held at the nominal support's lower edge for an outer

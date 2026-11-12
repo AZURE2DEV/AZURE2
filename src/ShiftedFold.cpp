@@ -20,6 +20,9 @@ namespace {
 constexpr double kNodeRounding = 1.0e-9;
 /// The reach in prior widths (question 1).
 constexpr double kReachWidths = 3.0;
+/// The halvings of a shift column's difference step before the column is left to the caller's path (question 5):
+/// 40 take 1e-6 MeV to 1e-18 MeV.
+constexpr int kStepHalvings = 40;
 
 /// The part of a segment's state TotalEnergyShift reads, copied.
 SegmentState ShiftPart(const SegmentState &state) {
@@ -94,37 +97,45 @@ bool IsShiftedOnMesh(const Unit &point, const WorkingCopy &data) {
   return spec.mesh >= 0 && (spec.shifted || data.MeshCentre(spec) != 0.0);
 }
 
-ShiftedNodes ShiftedFoldNodes(const Unit &point, const WorkingCopy &data) {
+namespace {
+/// The moved support of a shifted point (r.delta, r.low, r.high, clipped to its planned nodes within rounding); the
+/// edge ("upper", "lower") that leaves the planned nodes by more than that, nullptr when none does.
+const char *MovedSupport(const Unit &point, const WorkingCopy &data, ShiftedNodes &r) {
   const Unit::SubGridSpec &spec = data.Data().GridSpecOf(point);
-  ShiftedNodes r;
   r.delta = point.GetCMEnergy() - spec.centreEnergy;
   r.high = spec.startEnergy + r.delta;
   r.low = std::max(spec.endEnergy + r.delta, spec.floorEnergy);
   const int n = point.NumSubPoints();
-  if (n == 0) return r;
-  auto energy = [&](int j) { return point.GetSubPoint(data, j)->GetCMEnergy(); };  // j = 1 .. n, descending
-  auto outside = [&](const char *edge, double e) {
-    throw std::logic_error(std::string("shifted fold: the ") + edge + " edge of the moved support of segment " +
-                           std::to_string(point.GetSegmentKey()) + " at E_cm " + std::to_string(e) +
-                           " MeV is outside the point's planned nodes [" + std::to_string(energy(n)) + ", " +
-                           std::to_string(energy(1)) + "] (ShiftedFold.h, question 2)");
-  };
+  if (n == 0) return nullptr;
+  const double top = point.GetSubPoint(data, 1)->GetCMEnergy(), bottom = point.GetSubPoint(data, n)->GetCMEnergy();
   if (n == 1) {
     // A single planned node, the exact upper edge of a planned support narrower than MeshZeroWidth(): the fold is the
     // thin limit at the node whatever the shift (header, "A support narrower than ...").  The moved support lies inside
-    // the planned one, so at most MeshZeroWidth() below the node; anything else is a planning defect.
-    if (r.high - energy(1) > kNodeRounding) outside("upper", r.high);
-    if (energy(1) - r.low > MeshZeroWidth() + kNodeRounding) outside("lower", r.low);
+    // the planned one, so at most MeshZeroWidth() below the node.
+    if (r.high - top > kNodeRounding) return "upper";
+    return top - r.low > MeshZeroWidth() + kNodeRounding ? "lower" : nullptr;
+  }
+  if (r.high - top > kNodeRounding) return "upper";
+  if (bottom - r.low > kNodeRounding) return "lower";
+  r.high = std::min(r.high, top);
+  r.low = std::max(r.low, bottom);
+  return nullptr;
+}
+}  // namespace
+
+ShiftedNodes ShiftedFoldNodes(const Unit &point, const WorkingCopy &data) {
+  ShiftedNodes r;
+  const int n = point.NumSubPoints();
+  auto energy = [&](int j) { return point.GetSubPoint(data, j)->GetCMEnergy(); };  // j = 1 .. n, descending
+  if (const char *edge = MovedSupport(point, data, r))
+    throw std::logic_error(std::string("shifted fold: the ") + edge + " edge of the moved support of segment " +
+                           std::to_string(point.GetSegmentKey()) + " at E_cm " +
+                           std::to_string(edge[0] == 'u' ? r.high : r.low) + " MeV is outside the point's planned nodes [" +
+                           std::to_string(energy(n)) + ", " + std::to_string(energy(1)) + "] (ShiftedFold.h, question 2)");
+  if (n == 0) return r;
+  if (n == 1) {
     r.count = 1;
     return r;
-  }
-  if (r.high > energy(1)) {
-    if (r.high - energy(1) > kNodeRounding) outside("upper", r.high);
-    r.high = energy(1);
-  }
-  if (r.low < energy(n)) {
-    if (energy(n) - r.low > kNodeRounding) outside("lower", r.low);
-    r.low = energy(n);
   }
   int first = 1, last = n;
   while (first < n && energy(first + 1) >= r.high) first++;
@@ -133,6 +144,30 @@ ShiftedNodes ShiftedFoldNodes(const Unit &point, const WorkingCopy &data) {
   r.first = first - 1;
   r.count = last - first + 1;
   return r;
+}
+
+bool ShiftedSupportsInside(const WorkingCopy &data, const std::vector<const Segment *> &segments) {
+  ShiftedNodes r;
+  for (const Segment *segment : segments)
+    for (int t = 0; t < segment->NumTerms(); t++)
+      for (const Unit &point : segment->TermPoints(data, t))
+        if (IsShiftedOnMesh(point, data) && MovedSupport(point, data, r)) return false;
+  return true;
+}
+
+double InsideShiftStep(const WorkingCopy &data, const std::vector<int> &segmentNumbers, double x0, double h,
+                       const std::function<void(double)> &move) {
+  std::vector<const Segment *> segments;
+  for (int s : segmentNumbers) segments.push_back(data.Data().GetSegment(s));
+  double step = 0.0;
+  for (int k = 0; k < kStepHalvings && step == 0.0; k++, h *= 0.5) {
+    move(x0 + h);
+    if (!ShiftedSupportsInside(data, segments)) continue;
+    move(x0 - h);
+    if (ShiftedSupportsInside(data, segments)) step = h;
+  }
+  move(x0);
+  return step;
 }
 
 void TranslatedStopping(const Unit &point, const WorkingCopy &data, const Config &configure, const ShiftedNodes &nodes,

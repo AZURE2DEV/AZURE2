@@ -99,6 +99,19 @@ add_test(NAME park_chi2_fallback
          WORKING_DIRECTORY ${_park_chi2_dir})
 set_tests_properties(park_chi2_fallback PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 300)
 
+# A shift column's difference step stays inside the planned nodes (ShiftedFold.h, question 5): a varied shift without
+# a prior on a thin layer (tests/thin_layer_limit's model at three densities), its gradient and residual Jacobian near
+# the edge of the reach against central differences.  Before, the process ended (std::logic_error in the refold).
+add_executable(shift_column_inside_test shift_column_inside_test.cpp)
+target_link_libraries(shift_column_inside_test PRIVATE AZURE2Core)
+set(_shift_column_dir ${CMAKE_CURRENT_BINARY_DIR}/shift_column_inside)
+file(MAKE_DIRECTORY ${_shift_column_dir}/output ${_shift_column_dir}/checks)
+file(COPY ${CMAKE_SOURCE_DIR}/tests/thin_layer_limit/models/data DESTINATION ${_shift_column_dir})
+add_test(NAME shift_column_inside
+         COMMAND shift_column_inside_test ${CMAKE_SOURCE_DIR}/tests/thin_layer_limit/models/thin_limit.azr
+         WORKING_DIRECTORY ${_shift_column_dir})
+set_tests_properties(shift_column_inside PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 300)
+
 # User-defined numerical resolution function: kernel moments against closed
 # forms (unit integral, centring, burst/channel widths in quadrature, energy
 # interpolation) and the time-of-flight conversions.  Writes and removes a
