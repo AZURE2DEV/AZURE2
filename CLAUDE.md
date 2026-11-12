@@ -185,8 +185,12 @@ how each was checked:
   in (`Results`, per-stage tables, scratch); a point or a data set holds where
   its record lies, never a buffer [`repo_consistency_test.py` check 25]. Do not add a function-level
   `static` or `thread_local` that holds a computed value, or a cache keyed by
-  the last call. The mutable statics still in `src/` go in Phase 6
-  (`docs/upgrade/ARCHITECTURE.md` section 9).
+  the last call. State lives in one of three owned places: the energy task's
+  scratch (`include/TaskScratch.h`, in the caller's `Results`), the run's
+  per-thread scratch (`include/RunScratch.h`, `Config::scratch`), the run's
+  once-only warnings (`Config::FirstTime`). The rest still on the allow-list
+  goes by the milestones of `docs/upgrade/evaluation.md`
+  [check 38, `tests/consistency/allowed_state.tsv`; recipe "Add a cache"].
 - **Extension is a table row.** A new quantity, χ² term, kernel or stopping
   model is one row in the one table of its kind, with its test. No class that
   registers itself from a static object, no factory hierarchy.
@@ -469,6 +473,17 @@ is computed in one place, `TargetStopping::PerActiveNucleus` (`src/TargetStoppin
    "A format-3 field".
 
 Reference commits: `git show --stat 062b1bfe` (segment keyword `shiftfngroup`), `3e13fb28` (`normgroup`).
+
+**Add a cache** (a value recomputed often enough to matter, e.g. a table of penetrabilities per mesh energy).  First
+measure that it buys something (user-space instructions, `perf stat -e instructions:u`, are load independent).
+Keys known at set-up (mesh energies, channels, the l range) make it a table: build it once in the set-up, hold it
+`const` in the problem (the stage's node table, the channel table) and pass it to the readers.  Keys that move with
+the parameters make it scratch: a member of `azure2::TaskScratch` (`include/TaskScratch.h`) when energy tasks read
+it, of `azure2::ThreadScratch` (`include/RunScratch.h`) when set-up or hand-over code without a task reads it.  Key
+it by everything the value depends on (never an address alone), bound its size, and give it a test that a changed
+input misses.  Never a `static`, `thread_local`, namespace-scope variable or `mutable` member: check 38 refuses them
+outside `tests/consistency/allowed_state.tsv`, and a row is never added for new code.  A warning printed once is
+`if (configure.FirstTime("key"))`.
 
 **Comparing the outputs of two engines** (a change that must not move any number; the full text is
 `docs/upgrade/ARCHITECTURE.md` section 10). Run every project of a `tests/` tree with each engine, then compare:

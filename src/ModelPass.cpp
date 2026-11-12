@@ -5,7 +5,6 @@
 #include "ModelPass.h"
 
 #include <algorithm>
-#include <atomic>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -286,8 +285,7 @@ double ComposeModelValue(WorkingCopy &data, const Segment &segment, int pointInd
   if (p.kind == azure2::experiment::TreeKind::Ratio && inputs.leafValue[1] == 0.0) {
     // No ratio exists (e.g. the denominator's exit channel is closed at this energy): NaN and a warning, once.
     // Before 2026-11-01 the point was 0, which a fit compared with the datum as if it were a calculated ratio.
-    static std::atomic<bool> reported(false);
-    if (!reported.exchange(true)) {
+    if (configure.FirstTime("ratio denominator 0")) {
 #pragma omp critical(azure_failed_point)
       configure.outStream << "WARNING: the RATIO denominator of segment " << basePoint->GetSegmentKey()
                           << " is 0 at E_lab " << basePoint->GetLabEnergy() << " MeV, angle "

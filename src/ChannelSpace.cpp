@@ -29,22 +29,21 @@ bool Enabled() {
   return on;
 }
 
-std::shared_ptr<FormalLevels> Cached(const JGroup *jg) {
-  // Keyed by address only: Update() checks the levels themselves.  Bounded,
-  // for processes that build many compound nuclei (pyazr sessions); entries in
-  // use stay alive through their shared pointers.
-  thread_local std::unordered_map<const JGroup *, std::shared_ptr<FormalLevels>> cache;
+std::shared_ptr<FormalLevels> Cached(Memo &memo, const JGroup *jg) {
+  // Keyed by address only: Update() checks the levels themselves.  Bounded, for callers that see many compound
+  // nuclei; entries in use stay alive through their shared pointers.
+  auto &cache = memo.formal;
   auto it = cache.find(jg);
   if (it != cache.end()) return it->second;
-  if (cache.size() >= 1024) cache.clear();
+  if (cache.size() >= Memo::kMaxGroups) cache.clear();
   std::shared_ptr<FormalLevels> f = std::make_shared<FormalLevels>();
   cache.emplace(jg, f);
   return f;
 }
 
-const LevelArrays &CurrentLevelArrays(JGroup *jg) {
-  thread_local std::unordered_map<const JGroup *, LevelArrays> cache;
-  if (cache.size() >= 1024 && cache.find(jg) == cache.end()) cache.clear();
+const LevelArrays &CurrentLevelArrays(Memo &memo, JGroup *jg) {
+  auto &cache = memo.arrays;
+  if (cache.size() >= Memo::kMaxGroups && cache.find(jg) == cache.end()) cache.clear();
   LevelArrays &a = cache[jg];
   const int n = jg->NumLevels(), nch = jg->NumChannels();
   std::vector<std::uint64_t> key(2 + 2 * (size_t)n);
@@ -96,12 +95,12 @@ const LevelArrays &CurrentLevelArrays(JGroup *jg) {
  *   energy E_l:  k_l = (J_ll + sum_c g_lc^2 (S'_lc - E_l S''_lc))/2, q_l = -sum_c g_lc^2 S''_lc / 2.
  * Standard: k = e_l / 2 for the energy, nothing for a width.
  */
-const LevelDerivatives &CurrentLevelDerivatives(JGroup *jg, int mode, const std::vector<char> &particleIn,
+const LevelDerivatives &CurrentLevelDerivatives(Memo &memo, JGroup *jg, int mode, const std::vector<char> &particleIn,
                                                 const std::vector<char> &freeE,
                                                 const std::vector<std::vector<char>> &freeG,
                                                 const std::vector<std::vector<double>> *shiftDeriv) {
-  thread_local std::unordered_map<const JGroup *, LevelDerivatives> cache;
-  if (cache.size() >= 1024 && cache.find(jg) == cache.end()) cache.clear();
+  auto &cache = memo.derivatives;
+  if (cache.size() >= Memo::kMaxGroups && cache.find(jg) == cache.end()) cache.clear();
   LevelDerivatives &ld = cache[jg];
   const int n = jg->NumLevels(), nch = jg->NumChannels();
   const bool park = (mode == 2);
@@ -124,7 +123,7 @@ const LevelDerivatives &CurrentLevelDerivatives(JGroup *jg, int mode, const std:
   if (key == ld.key) return ld;
   ld.key.swap(key);
   ld.entries.clear();
-  const LevelArrays &a = CurrentLevelArrays(jg);
+  const LevelArrays &a = CurrentLevelArrays(memo, jg);
   auto Sp = [&](int i, int c) {
     if (park) return jg->GetLevel(i + 1)->GetShiftDerivative(c + 1);
     return shiftDeriv ? (*shiftDeriv)[i][c] : 0.0;

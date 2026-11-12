@@ -49,18 +49,14 @@
 namespace {
 void setEnvVar(const char *name, const char *value) {
 #ifdef _WIN32
-  static thread_local std::string entry;
-  entry = std::string(name) + "=" + value;
-  _putenv(entry.c_str());
+  _putenv((std::string(name) + "=" + value).c_str());  // _putenv copies its argument
 #else
   setenv(name, value, 1);
 #endif
 }
 void unsetEnvVar(const char *name) {
 #ifdef _WIN32
-  static thread_local std::string entry;
-  entry = std::string(name) + "=";
-  _putenv(entry.c_str());
+  _putenv((std::string(name) + "=").c_str());  // _putenv copies its argument
 #else
   unsetenv(name);
 #endif
@@ -1001,7 +997,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   static std::atomic<bool> gradChecked{false};
   if (const char *gc = std::getenv("AZURE_GRAD_CHECK")) {
     if (!gradChecked.exchange(true)) {
-      static const char *kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt", "shift_fn", "abundance", "screening",
+      static const char *const kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt", "shift_fn", "abundance", "screening",
                                        "density", "doppler", "thickness", "cbkg", "apparatus"};
       struct Row { double score, g, fd; int idx; ParamDesc d; double gj, scoreJ; };
       std::vector<Row> rows;

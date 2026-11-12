@@ -63,6 +63,9 @@ struct BilinearTerm {
 class AMatrixFunc : public GenMatrixFunc {
  public:
   AMatrixFunc(CNuc *, const Config &configure);
+  /// Keep the channel-space route's values in `memo` (an energy task's scratch, which outlives this object's use)
+  /// instead of the object's own; null: the own one again.
+  void ShareChannelMemo(ChannelSpace::Memo *memo) { sharedMemo_ = memo; }
   /*!
    * Returns a pointer to the compound nucleus object.
    */
@@ -389,6 +392,11 @@ class AMatrixFunc : public GenMatrixFunc {
   std::vector<char> route_;
   /// Formal representation of each J-group (per parameter set).
   std::vector<std::shared_ptr<ChannelSpace::FormalLevels>> formal_;
+  /// What the channel-space route keeps between energies: the object's own, or the energy task's scratch's
+  /// (ShareChannelMemo), which the point pass's and the gradient's solvers of one thread then share.
+  ChannelSpace::Memo ownMemo_;
+  ChannelSpace::Memo *sharedMemo_ = nullptr;
+  ChannelSpace::Memo &ChannelMemo() { return sharedMemo_ ? *sharedMemo_ : ownMemo_; }
   /// J-group each entry of formal_ belongs to (the object may be Reset to another compound).
   std::vector<const JGroup *> formal_jgroup_;
   /// Channel-space state of each J-group (per energy).

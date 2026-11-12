@@ -2,7 +2,6 @@
 // shifted points), sample thicknesses, target densities, Doppler temperatures and screening potentials go into
 // the segments, target effects and points, and the prior penalties of the target-effect parameters.
 #include <algorithm>
-#include <atomic>
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
@@ -52,8 +51,7 @@ void WorkingCopy::FillDopplerFromParams(const vector_r &p, const Config *configu
     // (laid out for T0) would be too wide for the kernel.
     const double vMax = te->GetDopplerLayoutTemperature(), vMin = te->GetDopplerMinimum();
     if (v > vMax || !(v >= vMin)) {
-      static std::atomic<bool> warned{false};
-      if (!warned.exchange(true))
+      if (Config::FirstTimeIn(configure ? configure->printedOnce : nullptr, "doppler range"))
         (configure ? configure->outStream : std::cout)
             << "WARNING: doppler_" << Data().GetDopplerEffect(k) << " = " << v << " K is outside [" << vMin << ", "
             << vMax << "] K, the range its sub-point grids and integration pieces span; the calculation uses the"
@@ -84,8 +82,7 @@ void WorkingCopy::FillDensitiesFromParams(const vector_r &p, const Config &confi
     // The sub-point grids span the layout density: beyond it the depth integral would run off the grid.
     const double vMax = lead->GetLayoutDensity(), vMin = 0.01 * lead->GetDensityNominal();
     if (v > vMax || !(v >= vMin)) {
-      static std::atomic<bool> warned{false};
-      if (!warned.exchange(true))
+      if (configure.FirstTime("areal density range"))
         configure.outStream << "WARNING: " << lead->GetTargetName() << ".areal_density = " << v << " is outside ["
                             << vMin << ", " << vMax << "], the range its sub-point grids span; the calculation uses the"
                             << " nearest end.  Give the target's areal_density a larger grid_max."

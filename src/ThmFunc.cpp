@@ -504,36 +504,7 @@ complex coulombTermUncached(PPair *pair, int l, double E, double p) {
 
 }  // namespace
 
-/*
- * Unit::CalcEDependentValues asks for the term once per (J group, channel),
- * so the same (pair, l, E, p) comes back several times in a row for one point
- * (7x on average in tests/7Li_p_a).  A small per-thread memo of the last
- * results makes the repeats free.  The key holds everything the value depends
- * on, compared exactly.
- */
 complex ThmCoulombTerm(PPair *pair, int l, double E, double p, bool useGSL) {
   (void)useGSL;  // O_l is built from its asymptotic expansion, see above
-  struct Entry {
-    const PPair *pair;
-    int zz, l;
-    double mu, a, E, p;
-    complex value;
-  };
-  // 64: a spectator-momentum window (ps=...) asks for up to psNodes momenta
-  // per (l, E), each a few times.
-  static const int kMemo = 64;
-  thread_local Entry memo[kMemo];
-  thread_local int filled = 0, next = 0;
-  const int zz = pair->GetZ(1) * pair->GetZ(2);
-  const double mu = pair->GetRedMass(), a = pair->GetChRad();
-  for (int i = 0; i < filled; i++) {
-    const Entry &e = memo[i];
-    if (e.pair == pair && e.zz == zz && e.l == l && e.mu == mu && e.a == a && e.E == E && e.p == p)
-      return e.value;
-  }
-  complex v = coulombTermUncached(pair, l, E, p);
-  memo[next] = Entry{pair, zz, l, mu, a, E, p, v};
-  next = (next + 1) % kMemo;
-  if (filled < kMemo) filled++;
-  return v;
+  return coulombTermUncached(pair, l, E, p);
 }

@@ -37,7 +37,7 @@ namespace ModelData {
 
 namespace {
 
-const char *kSection = "modelData";
+const char *const kSection = "modelData";
 
 /// Central-difference steps of the level quantities' derivatives: an energy (MeV) by kEnergyStep max(1, |E|), an
 /// amplitude (MeV^1/2) by kAmplitudeStep max(|gamma|, kAmplitudeFloor).  The observed widths are smooth in both

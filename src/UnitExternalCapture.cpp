@@ -2,6 +2,7 @@
 // of the exit in the pathway table, PathwayTable.h) at the point's
 // energy and at each of its sub-points, their storage, and their value at an energy an energy shift has moved the
 // point to (from the energy tables, or interpolated between the segment's points).
+#include "RunScratch.h"
 #include <cmath>
 #include <complex>
 #include <iostream>
@@ -122,8 +123,9 @@ static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, int en
   double inEnergy = cmEnergy + entrancePair->GetSepE() + entrancePair->GetExE();
   // entrance Phase Calculations;
   CoulFunc theCoulombFunction(entrancePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-  // Every pathway of this point with the same l asks for the same exp(-i phi) at a_c (CoulFunc::SetRadialScratch).
-  if (!(configure.paramMask & Config::CALCULATE_REACTION_RATE)) theCoulombFunction.SetRadialScratch(true);
+  // Every pathway of this point with the same l asks for the same exp(-i phi) at a_c (CoulFunc::SetRadialMemo).
+  if (!(configure.paramMask & Config::CALCULATE_REACTION_RATE))
+    theCoulombFunction.SetRadialMemo(&configure.scratch->ForThisThread().ec.radial);
 
   double eta = Kinematics::Channel(entrancePair).Eta(cmEnergy);
   complex expCP(1.0, 0.0);

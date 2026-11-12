@@ -169,7 +169,7 @@ void ThmApplyWeights(const Config &configure, const Site *point, double &sigma) 
   if (const ThmWeightTable *weight = point->GetThmWeight()) {
     bool outside = false;
     sigma *= (*weight)(point->GetCMEnergy(), &outside);
-    if (outside && !weight->warned.exchange(true))
+    if (outside && configure.FirstTime("thm weight outside " + weight->path))
       configure.outStream << "WARNING: <thm> weight '" << weight->name << "' is evaluated at E = "
                           << point->GetCMEnergy() << " MeV, outside its table ["
                           << weight->e.front() << ", " << weight->e.back()
@@ -178,7 +178,7 @@ void ThmApplyWeights(const Config &configure, const Site *point, double &sigma) 
   if (const ThmDistortion *distortion = point->GetThmDistortion()) {
     bool outside = false;
     sigma *= distortion->Weight(point->GetCMEnergy(), &outside);
-    if (outside && !distortion->warned.exchange(true))
+    if (outside && configure.FirstTime("thm distortion outside " + distortion->experiment))
       configure.outStream << "WARNING: <thm> experiment[" << distortion->experiment
                           << "]: the distortion factor is evaluated at E = " << point->GetCMEnergy()
                           << " MeV, outside its grid; the end value is used there (reported once)." << std::endl;
@@ -234,7 +234,7 @@ void HoesCrossSection(const AMatrixFunc &levels, Site *point, azure2::Results &r
   if (lineshape) {
     int light = exitPair->GetM(1) <= exitPair->GetM(2) ? 1 : 2;
     zeta = lineshape->Zeta(point->GetCMEnergy(), exitPair->GetZ(3 - light), exitPair->GetM(3 - light));
-    if (!(lineshape->EsF(point->GetCMEnergy()) > 0.0) && !lineshape->warned.exchange(true))
+    if (!(lineshape->EsF(point->GetCMEnergy()) > 0.0) && configure.FirstTime("thm lineshape E_sF " + lineshape->experiment))
       configure.outStream << "WARNING: <thm> experiment[" << lineshape->experiment << "] lineshape: at E = "
                             << point->GetCMEnergy() << " MeV the spectator has no energy left (E_sF <= 0); "
                             << "E_sF = 1 keV is used there (reported once)." << std::endl;
@@ -250,7 +250,7 @@ void HoesCrossSection(const AMatrixFunc &levels, Site *point, azure2::Results &r
   ThmDwVertex::At dwAt;
   if (dw) {
     dw->Evaluate(point->GetCMEnergy(), dwAt);
-    if (dwAt.outside && !dw->warned.exchange(true))
+    if (dwAt.outside && configure.FirstTime("thm dw vertex outside " + dw->experiment))
       configure.outStream << "WARNING: <thm> experiment[" << dw->experiment
                             << "]: the DW vertex is evaluated at E = " << point->GetCMEnergy()
                             << " MeV, outside its grid; the end value is used there (reported once)." << std::endl;
@@ -380,8 +380,9 @@ void HoesCrossSection(const AMatrixFunc &levels, Site *point, azure2::Results &r
     // window (and over the spectator-window nodes with their weights).
     // (theta= with vertexModel=dw is refused, CheckThmExperiments: no DW weights here.)
     std::vector<double> b;
+    const ThmAngularCoupling coupling = ThmAngularCouplingOf(waves);
     for (size_t k = 0; k < partial.size(); k++) {
-      ThmLegendreCoefficients(waves, partial[k], b);
+      ThmLegendreCoefficients(coupling, partial[k], b);
       sigma += (numNodes > 0 ? point->GetThmPsWeight((int)k) : 1.0) * angle->Mean(b);
     }
   }
@@ -671,14 +672,15 @@ bool THMMatrixFunc::THMPointAdjoint(Site *point, double fitBar, GradAccum &accum
   std::vector<std::vector<complex>> xBar(partial.size());
   if (angle) {
     std::vector<double> bL;
+    const ThmAngularCoupling coupling = ThmAngularCouplingOf(waves);
     for (size_t k = 0; k < partial.size(); k++) {
       const double pw = numNodes > 0 ? point->GetThmPsWeight((int)k) : 1.0;
-      ThmLegendreCoefficients(waves, partial[k], bL);
+      ThmLegendreCoefficients(coupling, partial[k], bL);
       sigma += pw * angle->Mean(bL);
       // sigma_k = (1/pi) sum_L b_L meanP[L]  (ThmAngleWindow::Mean)
       std::vector<double> wL(angle->meanP.size());
       for (size_t L = 0; L < wL.size(); L++) wL[L] = fitBar * weightFactor * pw * angle->meanP[L] / M_PI;
-      ThmLegendreAdjoint(waves, partial[k], wL, xBar[k]);
+      ThmLegendreAdjoint(coupling, partial[k], wL, xBar[k]);
     }
   }
   sigma *= weightFactor;

@@ -99,9 +99,8 @@ complex &AmplitudeMatrix::At(double s, double v, double sp, double vp) {
     if (Same(a.s, s) && Same(a.v, v) && Same(a.sp, sp) && Same(a.vp, vp))
       return a.value;
   }
-  static complex dummy(0.0, 0.0);
-  dummy = complex(0.0, 0.0);
-  return dummy;
+  discarded_ = complex(0.0, 0.0);
+  return discarded_;
 }
 
 complex AmplitudeMatrix::Get(double s, double v, double sp, double vp) const {

@@ -1,6 +1,4 @@
 #include "ThmLineshape.h"
-#include "CoulombTable.h"
-#include <cstdint>
 
 #include "ALevel.h"
 #include "AChannel.h"
@@ -74,42 +72,6 @@ double ThmLevelWidth(CNuc *compound, JGroup *jgroup, ALevel *level, const Config
   const bool park = !!(configure.paramMask & Config::USE_PARK_FORMALISM);
   const double energy = level->GetFitE();
 
-  // Per-thread memo: within one evaluation every point asks for the same few
-  // levels.  The key is everything the width depends on, by value: the memo
-  // outlives a CNuc (thread_local), and a later session can get the same
-  // level address back (the S_c memo of THMMatrixFunc was keyed by address
-  // once and leaked across sessions, 49b6c30).
-  struct Entry {
-    std::vector<double> key;
-    double width;
-  };
-  static const int kMemo = 64;
-  thread_local std::vector<Entry> memo;
-  thread_local int next = 0;
-  thread_local std::vector<double> key;  // reused: no allocation per call
-  key.clear();
-  key.push_back(useGSL);
-  key.push_back(rmc);
-  key.push_back(park);
-  key.push_back(jgroup->GetJ());
-  key.push_back(jgroup->GetPi());
-  key.push_back(energy);
-  key.push_back(level->GetE());  // the ground-state test below
-  // The Coulomb table in use (P and dS/dE come from it where it covers a channel).
-  key.push_back((double)reinterpret_cast<std::uintptr_t>(
-      (g_config && g_config->useCoulombTable) ? CoulombTable::Shared(g_config->coulombTablePath) : nullptr));
-  for (int ch = 1; ch <= numChannels; ch++) {
-    AChannel *channel = jgroup->GetChannel(ch);
-    PPair *pair = compound->GetPair(channel->GetPairNum());
-    const double values[] = {level->GetFitGamma(ch), (double)channel->GetL(), (double)channel->GetRadType(),
-                             (double)pair->GetZ(1), (double)pair->GetZ(2), pair->GetRedMass(), pair->GetChRad(),
-                             pair->GetSepE(), pair->GetExE(), pair->GetJ(2), (double)pair->GetPi(2)};
-    key.insert(key.end(), values, values + sizeof(values) / sizeof(values[0]));
-    const std::vector<double> potential = azure2::physics::PotentialKey(pair->GetHybridPotential());
-    key.insert(key.end(), potential.begin(), potential.end());
-  }
-  for (const Entry &m : memo)
-    if (m.key == key) return m.width;
 
   double particle = 0.0, radiative = 0.0, normSum = 0.0;
   for (int ch = 1; ch <= numChannels; ch++) {
@@ -139,12 +101,6 @@ double ThmLevelWidth(CNuc *compound, JGroup *jgroup, ALevel *level, const Config
   double width = park ? particle + radiative : (particle + radiative) / (1.0 + normSum);
   if (!(1.0 + normSum > 0.0) || !std::isfinite(width)) width = particle + radiative;
 
-  if ((int)memo.size() < kMemo) {
-    memo.push_back(Entry{key, width});
-  } else {
-    memo[next] = Entry{key, width};
-    next = (next + 1) % kMemo;
-  }
   return width;
 }
 

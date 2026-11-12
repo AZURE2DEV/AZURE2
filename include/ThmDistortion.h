@@ -178,7 +178,6 @@ class ThmDistortion {
   bool pwSignChange = false;
   /// Table form (distortion=table:<file>).
   std::shared_ptr<const ThmWeightTable> table;
-  mutable std::atomic<bool> warned{false};
 
   /// Sets up everything and fills the grid on [eLo, eHi] (MeV).  "" or what is wrong.
   std::string Build(const ThmExperiment &x, const Kinematics &k, double eLo, double eHi, double eRefDefault);

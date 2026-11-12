@@ -325,7 +325,7 @@ void BindNuclearPart(py::module_ &m) {
   m.def(
       "config_keys",
       []() {
-        static const char *kinds[] = {"bool", "int", "number", "path", "version"};
+        static const char *const kinds[] = {"bool", "int", "number", "path", "version"};
         py::list out;
         for (const io::ConfigKey &k : io::ConfigKeys()) out.append(py::make_tuple(k.name, kinds[k.kind], k.doc));
         return py::make_tuple(io::ConfigPositionalNames(), out);

@@ -8,6 +8,7 @@
 #include <limits>
 #include <vector>
 
+#include "TaskScratch.h"
 #include "ThmProfile.h"
 
 namespace azure2 {
@@ -84,6 +85,10 @@ struct Results {
     double modelData = 0.0;
     bool hasModelData = false;
   } objective;
+
+  /// The scratch of the energy tasks that write this buffer, one per thread (TaskScratch.h): solvers and their
+  /// buffers, never a value of the evaluation.  A copy of the buffer starts with empty scratch.
+  TaskScratchSet scratch;
 
   /// Length of a model record with angular capacity nAng.
   static std::size_t ModelRecordSize(std::size_t nAng) { return 1 + (nAng ? 1 + nAng : 0); }

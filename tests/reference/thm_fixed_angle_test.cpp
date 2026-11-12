@@ -137,7 +137,7 @@ int main(int argc, char **argv) {
       x.push_back(complex(w.re, w.im));
     }
     std::vector<double> b;
-    ThmLegendreCoefficients(waves, x, b);
+    ThmLegendreCoefficients(ThmAngularCouplingOf(waves), x, b);
     std::string n = c.name;
 
     std::printf("(d) %s: Legendre coefficients, dsigma/dOmega and windows against the M-sum\n", c.name);

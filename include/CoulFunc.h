@@ -5,6 +5,7 @@
 #include <complex>
 #include <memory>
 #include <optional>
+#include <unordered_map>
 #include <gsl/gsl_sf_coulomb.h>
 #include "Kinematics.h"
 #include "azure2/physics/ChannelFunctions.h"
@@ -55,6 +56,40 @@ inline std::complex<double> CoulombHardSpherePhase(const CoulWaves &c) { return 
  * derivative and penetrabilities.
  */
 
+/*!
+ * The Coulomb waves of each (pair, l, 2J, energy) block at the radii asked for, keyed by the exact radius: what the
+ * external-capture integrals of one entrance l and energy share (the adaptive quadrature asks for the same radii for
+ * every term).  Everything CoulFunc::operator() depends on besides (l, radius, energy) is in the block's key, so a
+ * stored value is the value operator() computes.  Owned by the caller (the run's per-thread scratch, RunScratch.h),
+ * handed to a CoulFunc with SetRadialMemo; at most kMaxRadii radii, emptied when full.
+ */
+struct CoulRadialMemo {
+  struct Key {
+    int z1, z2, l, two_j;
+    double redmass, mtot, energy;
+    std::optional<azure2::physics::HybridPotential> potential;
+    bool gsl;
+    bool operator==(const Key &o) const {
+      return z1 == o.z1 && z2 == o.z2 && l == o.l && two_j == o.two_j && redmass == o.redmass && mtot == o.mtot &&
+             energy == o.energy && potential == o.potential && gsl == o.gsl;
+    }
+  };
+  struct Hash {
+    std::size_t operator()(const Key &k) const {
+      std::size_t h = std::hash<double>()(k.energy);
+      for (std::size_t v : {std::hash<int>()(k.z1), std::hash<int>()(k.z2), std::hash<int>()(k.l), std::hash<int>()(k.two_j),
+                            std::hash<double>()(k.redmass), std::hash<double>()(k.mtot),
+                            std::hash<double>()(k.potential ? k.potential->central_depth_MeV : -1.0),
+                            std::hash<bool>()(k.gsl)})
+        h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+      return h;
+    }
+  };
+  std::unordered_map<Key, std::unordered_map<double, CoulWaves>, Hash> blocks;
+  std::size_t size = 0;
+  static constexpr std::size_t kMaxRadii = std::size_t(1) << 20;
+};
+
 class CoulFunc {
  public:
   /// Build for a particle pair, with that pair's hybrid nuclear potential if it has one.
@@ -99,10 +134,10 @@ class CoulFunc {
   bool UsesTable() const { return table_ != nullptr; }
 
   /// The external-capture integrals ask for F, G at the radii the adaptive quadrature chooses, the same radii for
-  /// every term of one entrance l and energy.  With this on, operator() keeps the waves of each (pair, l, energy)
-  /// block of the calling thread, keyed by the exact radius (at most 2^20 radii): a thread-private scratch whose
-  /// values are what recomputing gives (docs/upgrade/channel_table.md section 3).
-  void SetRadialScratch(bool use) { radialScratch_ = use; }
+  /// every term of one entrance l and energy.  With a memo (the caller's, used by one thread at a time), operator()
+  /// keeps the waves there, keyed by the block and the exact radius: values that recomputing gives
+  /// (docs/upgrade/channel_table.md section 3).  Null: none.
+  void SetRadialMemo(CoulRadialMemo *memo) { radialMemo_ = memo; }
 
  private:
   /// The waves of the radial equation with the pair's potential (spin_orbit_potential.md section 1.1): the
@@ -113,7 +148,7 @@ class CoulFunc {
   CoulWaves PlainWaves(int l, double radius, double energy) const;
 
   bool useGSLFunctions_;
-  bool radialScratch_ = false;
+  CoulRadialMemo *radialMemo_ = nullptr;
   int z1_;
   int z2_;
   int lLast_;

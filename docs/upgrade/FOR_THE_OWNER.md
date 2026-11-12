@@ -297,6 +297,19 @@ Open from the drill: the three non-default Legendre definitions follow `docs/upg
 checked against the LEXFOR text itself; differential data relative to a reference are not built; pyazr's
 `calculate_sfactor` knows only the plain S factor.
 
+## No hidden state
+
+Every number the engine prints now depends only on the project, the command line and a short list of environment
+switches (`docs/upgrade/evaluation.md` section 2), not on what ran before in the same process or on how many threads
+ran it.  What the engine keeps between calls for speed lives in objects that a run owns: the scratch of the energy
+tasks (in the evaluation's result buffer), the run's per-thread scratch of the external-capture integrals and the THM
+vertex (in the run's `Config`), and the warnings printed once per run.  Two pyazr sessions, or the web UI serving two
+users, therefore never share a value; `tests/pyazr/session_isolation_test.py` runs three projects in one process in
+both orders at 1 and 3 threads and checks the bytes.  What you must not do: add a `static` or `thread_local` variable
+that keeps a value, a global pointer, or a `mutable` member; a consistency check refuses them.  The list of what is
+still left (diagnostic counters, the fitter's pooled copies, two global pointers, the MCMC's progress) is
+`tests/consistency/allowed_state.tsv`, each row with the step that removes it.
+
 ## What is in work and what comes next
 
 Merged in the night of 2026-11-12, each after the whole verification: the

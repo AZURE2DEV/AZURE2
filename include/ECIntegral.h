@@ -4,9 +4,60 @@
 #include "CoulFunc.h"
 #include "WhitFunc.h"
 #include "Config.h"
+#include <gsl/gsl_integration.h>
+
+#include <map>
 #include <memory>
+#include <vector>
 
 class EffectiveCharge;
+
+
+/// The reaction-rate mode's fixed radial grid of one final channel (ECIntegral.cpp, getRateGrid): its key and nodes.
+struct ECRateGridKey {
+  int z1, z2;
+  double redmass;
+  int lf;
+  int twoJf;                       ///< the final channel's 2J key (PPair::SpinOrbitTwoJ)
+  std::vector<double> potential;  ///< physics::PotentialKey of the pair's potential (the final state is W~ of it)
+  double bindingEnergy;
+  double chanrad;
+  bool operator<(const ECRateGridKey &o) const {
+    if (z1 != o.z1) return z1 < o.z1;
+    if (z2 != o.z2) return z2 < o.z2;
+    if (redmass != o.redmass) return redmass < o.redmass;
+    if (lf != o.lf) return lf < o.lf;
+    if (twoJf != o.twoJf) return twoJf < o.twoJf;
+    if (potential != o.potential) return potential < o.potential;
+    if (bindingEnergy != o.bindingEnergy) return bindingEnergy < o.bindingEnergy;
+    return chanrad < o.chanrad;
+  }
+};
+struct ECRateGridEntry {
+  std::vector<double> x;        // radial nodes
+  std::vector<double> W;        // effective weights (Laguerre weight * e^{+b(x-a)})
+  std::vector<double> whitOut;  // scaled final Whittaker at each node (ref subtracted)
+  double refOut;                // log10 reference decades of the final Whittaker
+  bool ok;
+};
+
+/*!
+ * What the external-capture integrals of one thread keep between calls: the GSL workspace, the entrance Coulomb
+ * waves at the quadrature's radii (CoulRadialMemo), the final-state Whittaker values (WhitScaledMemo) and the rate
+ * mode's radial grids.  Each value is keyed by everything it depends on, so a stored value is the value a
+ * computation gives.  Owned by the run (RunScratch.h: one per thread of the run), never process-wide.
+ */
+struct ECScratch {
+  ECScratch();
+  ~ECScratch();
+  ECScratch(const ECScratch &) = delete;
+  ECScratch &operator=(const ECScratch &) = delete;
+  gsl_integration_workspace *workspace;  ///< 1000 intervals
+  CoulRadialMemo radial;
+  WhitScaledMemo whittaker;
+  std::map<ECRateGridKey, ECRateGridEntry> rateGrids;
+};
+
 
 /// A function class to calculate external capture integrals
 
@@ -42,22 +93,18 @@ class ECIntegral {
     double log10RefIn;
     double log10RefOut;
     bool useScaledWhittaker;
+    /// F, G and the scaled final W at the radii of one FW/GW pair, which share them (cleared per Integrate).
+    struct FG {
+      double F, G, whit;
+    };
+    std::map<double, FG> fgMemo;
   } Params;
   /*!
    * The ECIntegral object is created with reference to a PPair object.
    * The PPair object is used to create new instances of the CoulFunc and
    * WhitFunc objects.
    */
-  ECIntegral(PPair *pPair, const Config &configure) {
-    params_.coulFunc = std::make_unique<CoulFunc>(pPair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-    // The terms of one l_i and energy share their radii (not in the reaction-rate mode, whose energies never recur).
-    if (!(configure.paramMask & Config::CALCULATE_REACTION_RATE)) params_.coulFunc->SetRadialScratch(true);
-    params_.whitFunc = std::make_unique<WhitFunc>(pPair);
-    params_.useLongWavelengthApprox = !!(configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX);
-    params_.useChargeFunction = false;  // set per term in CalculateDirect
-    pair_ = pPair;
-    configure_ = &configure;
-  };
+  ECIntegral(PPair *pPair, const Config &configure);
   /*!
    * The CoulFunc and WhitFunc objects are automatically destroyed with the object.
    */
@@ -85,9 +132,6 @@ class ECIntegral {
   static double GWIntegrand(double, void *);
   /// GSL integrand: Whittaker against Whittaker, for a bound entrance channel.
   static double WWIntegrand(double, void *);
-  /// Clears the per-x FW/GW memo (see ECIntegral.cpp); called before the
-  /// FW/GW pair so the two integrands share their expensive evaluations.
-  static void ClearFGMemo();
   /// Coulomb functions of this pair.
   CoulFunc *coulfunction() const { return params_.coulFunc.get(); };
   /// Whittaker functions of this pair.
@@ -97,6 +141,8 @@ class ECIntegral {
   double FW() const { return FW_; };
   double GW() const { return GW_; };
   Params params_;
+  /// The run's scratch of this thread (ECScratch).
+  ECScratch &scratch_;
   PPair *pair_;
   const Config *configure_;
   double FW_;
