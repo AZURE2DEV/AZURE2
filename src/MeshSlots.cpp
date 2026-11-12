@@ -11,6 +11,7 @@
 #include "CNuc.h"
 #include "Config.h"
 #include "PPair.h"
+#include "ShiftedFold.h"
 #include "TargetEffect.h"
 #include "WorkingCopy.h"
 
@@ -29,14 +30,11 @@ const PPair *FramePair(const PPair *entrance, const PPair *exit) {
   return entrance->GetPType() == 20 ? exit : entrance;
 }
 
-/// Whether a segment's folded points take their slots from the shared mesh.  Not a segment with an energy shift (its
-/// slots move rigidly with the shift until the shifted fold puts it on fixed nodes, branch 8), not THM (its kinematics
-/// on the mesh are branch 10).
+/// Whether a segment's folded points take their slots from the shared mesh: every segment but THM (its kinematics on
+/// the mesh are branch 10).  A segment with an energy shift is folded there with the kernel moving on the fixed nodes
+/// (ShiftedFold.h).
 bool OnSharedMesh(const Segment &segment, const PPair *entrance, const PPair *exit) {
   if (segment.IsTHM()) return false;
-  if (segment.IsVaryEnergyShift() || segment.StartEnergyShift() != 0.0 || segment.GetShiftLeaderPos() >= 0 ||
-      segment.HasShiftFn() || segment.IsVaryEnergyShiftSqrt() || segment.StartEnergyShiftSqrt() != 0.0)
-    return false;
   return FramePair(entrance, exit) != nullptr;
 }
 
@@ -62,18 +60,24 @@ MeshPoint QueueMeshPoint(std::vector<DataSet::NucleusMesh> &meshes, Unit &point,
   const std::pair<int, double> frameKey(term.GetEntranceKey(), spec.frameShift);
   if (std::find(mesh.anchorFrames.begin(), mesh.anchorFrames.end(), frameKey) == mesh.anchorFrames.end())
     mesh.anchorFrames.push_back(frameKey);
+  spec.lowHard = lowHard;
+  const azure2::MeshSupport nominal = NominalMeshSupport(spec, term.GetSegmentKey());
+  spec.mesh = (int)m;
+  spec.meshSupport = (int)mesh.supports.size();
+  mesh.supports.push_back(spec.shifted ? PlannedShiftSupport(nominal, spec, spec.startShift) : nominal);
+  return {&point, term, (int)m};
+}
+
+azure2::MeshSupport NominalMeshSupport(const Unit::SubGridSpec &spec, int dataSet) {
   azure2::MeshSupport support;
   support.low = spec.endEnergy + spec.frameShift;
   support.high = spec.startEnergy + spec.frameShift;
   support.smoothStep = spec.baseEnergyStep;
   support.settings.pointsPerWidth = spec.pointsPerWidth;
   support.settings.coreWidths = spec.resonanceWidthMultiplier;
-  support.lowHard = lowHard;
-  support.dataSet = term.GetSegmentKey();
-  spec.mesh = (int)m;
-  spec.meshSupport = (int)mesh.supports.size();
-  mesh.supports.push_back(support);
-  return {&point, term, (int)m};
+  support.lowHard = spec.lowHard;
+  support.dataSet = dataSet;
+  return support;
 }
 
 /// The quantized anchors of a nucleus's mesh, in E_x: the levels as each entrance pair of its folded points sees them
@@ -152,6 +156,10 @@ SlotGroupKey MeshGroupKey(const WorkingCopy &data, const Unit &point, const Term
   key.frameShift = bits(spec.frameShift);
   key.screeningUe = bits(point.GetScreeningUe());
   key.screeningParam = point.GetScreeningParam();
+  // A lab-frame differential point with an energy shift converts its angle at its shifted energy: the readers of a
+  // block must have one nominal energy, so that they keep one angle at every shift (ShiftedFold.h, question 3).
+  if (spec.shifted && term.segment->IsDifferential() && !term.segment->IsCMDifferential())
+    key.nominalEnergy = bits(point.GetOriginalEnergy());
   return key;
 }
 

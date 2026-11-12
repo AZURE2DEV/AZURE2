@@ -20,7 +20,9 @@
  *     geometrical and S-factor conversion factors, the screening k, the external-capture amplitudes -- one per node;
  *   - segment and term: the term's settings (observable, pairs), the segment key, the frame shift E_x - E_cm of the
  *     pair, the external-capture pathways -- in the key;
- *   - angle: the c.m. angle (its Legendre rows, the Coulomb amplitude) -- in the key, bit for bit; the lab angle of a
+ *   - angle: the c.m. angle (its Legendre rows, the Coulomb amplitude) -- in the key, bit for bit, and for a lab-frame
+ *     differential data set with an energy shift the point's nominal lab energy too, since its c.m. angle moves with
+ *     the shift (the slot's writer gives the sites the new angle, Segment::UpdatePointEnergyWithShift); the lab angle of a
  *     base segment's slot is the c.m. one (Site's constructor); a leaf's slots take their point's angles converted
  *     with the leaf's pairs after the grouping (WorkingCopy::InitializeLeaves); a point whose converted angles differ
  *     from its group's writer's gets slots of its own then (WorkingCopy::SeparateSlotsByAngle);
@@ -36,8 +38,9 @@
  * set-up's values (Legendre rows, channel rows, Coulomb and external-capture amplitudes, screening, stopping), the
  * energy pass (CalculationPlan::TaskUnits gives a plan task the slots its point writes), the result layout (one record
  * per site).  Every point of the group reads it: the fold, the model pass, the gradient (a site's cotangent is the sum
- * of its readers', summed in their plan order: UnitCotangent::reader).  A point off the shared mesh (a
- * segment with an energy shift, THM, a uniform grid with useAdaptiveGrid off) is a group of its own.
+ * of its readers', summed in their plan order: UnitCotangent::reader).  A point off the shared mesh (THM, a uniform
+ * grid with useAdaptiveGrid off) is a group of its own.  A point with an energy shift reads its planned range (fixed
+ * for the stage), so who writes a slot does not depend on the shift (ShiftedFold.h, question 4).
  */
 namespace azure2 {
 
@@ -64,11 +67,14 @@ struct SlotGroupKey {
   int legendreOrder = -1;
   std::uint64_t angle = 0, conversion = 0, frameShift = 0, screeningUe = 0;
   int screeningParam = 0;
+  /// The nominal lab energy of a lab-frame differential point with an energy shift (0 otherwise): its c.m. angle,
+  /// which the sites carry, moves with the shift and is the same at every shift for one nominal energy and lab angle.
+  std::uint64_t nominalEnergy = 0;
   bool operator==(const SlotGroupKey &o) const {
     return segment == o.segment && term == o.term && mesh == o.mesh && targetEffect == o.targetEffect &&
            legendreOrder == o.legendreOrder && angle == o.angle &&
            conversion == o.conversion && frameShift == o.frameShift && screeningUe == o.screeningUe &&
-           screeningParam == o.screeningParam;
+           screeningParam == o.screeningParam && nominalEnergy == o.nominalEnergy;
   }
 };
 

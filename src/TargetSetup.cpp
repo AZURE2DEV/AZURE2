@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -18,6 +19,7 @@
 #include "AdaptiveIntegrationGrid.h"
 #include "CalculationPlan.h"
 #include "MeshSlots.h"
+#include "ShiftedFold.h"
 #include "CNuc.h"
 #include "Config.h"
 #include "TargetLayer.h"
@@ -55,6 +57,20 @@ Unit::SubGridSpec MakeSubGridSpec(const AdaptiveIntegrationGrid::GridConfig &gc,
   spec.targetIntegration = effect->IsTargetIntegration();
   spec.stoppingConversion = conversion;
   return spec;
+}
+
+/// What the fold of a point with an energy shift on the shared mesh needs of its layout (ShiftedFold.h): the c.m.
+/// energy the support was laid out at, the integration floor, and for a data set whose shift is active its c.m. shift
+/// at the start values and its reach.
+void SetShiftLayout(Unit::SubGridSpec &spec, const std::vector<Segment> &segments, const Segment &segment,
+                    const SegmentState &state, const Unit &point, double floor) {
+  spec.centreEnergy = point.GetCMEnergy();
+  spec.floorEnergy = floor;
+  spec.shifted = azure2::HasEnergyShift(segment);
+  if (!spec.shifted) return;
+  spec.startShift = azure2::PointShift(segment, state, point.GetOriginalEnergy(), spec.stoppingConversion);
+  spec.shiftReach = azure2::ShiftReach(segments, segment, state, point.GetOriginalEnergy(), spec.stoppingConversion,
+                                       spec.startEnergy - spec.endEnergy);
 }
 }  // namespace
 
@@ -94,9 +110,12 @@ bool SegmentNeedsEC(const TermRef &segment, CNuc *theCNuc, const Config &configu
  * its saved file would place.  Only points whose grid changed get new
  * sub-points; their Coulomb functions are table lookups.
  *
- * Energy shifts: the sub-points are laid out at the unshifted energies and moved
- * with the data by the shift step; the resonances are offset by the point's c.m.
- * shift so the dense part of the grid lands on each resonance after the move.
+ * Energy shifts: a folded point on the shared mesh keeps its nodes; its support
+ * moves with its shift, and when the shift leaves the reach its nodes were planned
+ * for, the mesh is planned again for the moved support (ShiftedFold.h, question 2).
+ * A grid of its own (THM) is laid out at the unshifted energies and moved with the
+ * data by the shift step; the resonances are offset by the point's c.m. shift so the
+ * dense part of the grid lands on each resonance after the move.
  *
  * A grid is kept only if every node is bit for bit where the new one puts it;
  * otherwise the point gets the new grid, so the grid depends on the current
@@ -104,8 +123,14 @@ bool SegmentNeedsEC(const TermRef &segment, CNuc *theCNuc, const Config &configu
  */
 int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const std::vector<TermRef> &shiftActive,
                                 std::vector<TermRef> &reshift, std::vector<int> &replacedTasks) {
-  if (!configure.replaceSubPointGrids || !configure.useAdaptiveGrid || !theCNuc) return 0;
+  if (!configure.useAdaptiveGrid || !theCNuc) return 0;
+  // Without grid replacement (--no-grid-replacement) the anchors stay; the supports of shifted points still follow
+  // their shifts (ShiftedFold.h, question 2), which their folds need.
+  const bool replaceGrids = configure.replaceSubPointGrids;
   const auto t0 = std::chrono::steady_clock::now();
+  // Per shared mesh: the supports whose centre moves now, with the grid record of their point.
+  struct MovedSupport { const Unit::SubGridSpec *spec; double centre; };
+  std::vector<std::vector<MovedSupport>> movedSupports(Data().Meshes().size());
 
   // A point with a grid of its own, or (group non-empty) the points of a sharing group on a shared mesh (SlotGroup.h),
   // by their numbers in the segment, which are re-placed together.
@@ -116,13 +141,31 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
     bool any = false;
     for (int i = 1; i <= seg.NumPoints() && !any; i++) any = Data().GridSpecOf(*seg.GetPoint(*this, i)).valid;
     if (!any) return;
-    if (SegmentNeedsEC(seg, theCNuc, configure)) {
+    const bool shifted = std::find(shiftActive.begin(), shiftActive.end(), seg) != shiftActive.end();
+    // The centre of each shifted point's support on its mesh, a function of its c.m. shift alone.
+    bool supportMoved = false;
+    for (int i = 1; i <= seg.NumPoints(); i++) {
+      const Unit *point = seg.GetPoint(*this, i);
+      const Unit::SubGridSpec &spec = Data().GridSpecOf(*point);
+      if (spec.mesh < 0 || (!shifted && MeshCentre(spec) == 0.0)) continue;
+      const double delta = shifted ? azure2::PointShift(*seg.segment, State(*seg.segment), point->GetOriginalEnergy(),
+                                                        spec.stoppingConversion)
+                                   : 0.0;
+      const double centre = azure2::ShiftCentre(delta, spec.startShift, spec.shiftReach);
+      if (centre == MeshCentre(spec)) continue;
+      movedSupports[(size_t)spec.mesh].push_back({&spec, centre});
+      supportMoved = true;
+    }
+    // External capture: grids are not re-placed for a moved level (the set-up's integrals are kept), but the blocks of
+    // a shifted point whose support moved are: their new sites take their capture amplitudes at their energies from the
+    // tables, as a shifted site always has (Site::GetECAmplitudeWithShift).
+    const bool ec = SegmentNeedsEC(seg, theCNuc, configure);
+    if (ec && !supportMoved) {
       if (!ecNoted.exchange(true))
         configure.outStream << "Note: the sub-point grids of segments with external capture are not re-placed "
                                "(their capture integrals are computed once)." << std::endl;
       return;
     }
-    const bool shifted = std::find(shiftActive.begin(), shiftActive.end(), seg) != shiftActive.end();
     PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(seg.GetEntranceKey()));
     PPair *exitPair = theCNuc->GetPairFromKey(seg.GetExitKey());  // nullptr for total capture (-1)
     // The c.m./lab factor the shift step uses for sub-points (Segment::UpdatePointEnergyWithShift).
@@ -132,7 +175,8 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
       Unit *point = seg.GetPoint(*this, i);
       if (!Data().GridSpecOf(*point).valid) continue;
       if (Data().GridSpecOf(*point).mesh >= 0) {
-        // On a shared mesh (never shifted: OnSharedMesh): with the other points of the block it reads.
+        // On a shared mesh: with the other points of the block it reads (a shifted point's slots do not move with
+        // its shift: ShiftedFold.h).
         const int block = point->NumSubPoints() ? SlotBlockOf(point->SubPointFirst()) : -1;
         std::size_t at = 0;
         while (at < blocks.size() && (block < 0 || blocks[at].first != block)) at++;
@@ -143,7 +187,8 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
         work[blocks[at].second].group.push_back(i);
         continue;
       }
-      // the parent's shift, which is what moves every sub-point (Segment::UpdatePointEnergyWithShift)
+      if (!replaceGrids || ec) continue;
+      // A grid of its own (THM): the parent's shift, which is what moves every sub-point (Segment::MoveOwnGridSlots)
       const double offset = shifted ? cmFactor * seg.segment->TotalEnergyShift(State(*seg.segment), point->GetOriginalEnergy()) : 0.0;
       work.push_back({seg, i, offset, shifted, {}});
     }
@@ -153,39 +198,60 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
   if (work.empty()) return 0;
 
   // The observed parameters of the current fit values, on the private copy.
-  if (!gridNuc_.nuc) gridNuc_.nuc.reset(theCNuc->Clone());
-  CNuc *g = gridNuc_.nuc.get();
-  for (int j = 1; j <= theCNuc->NumJGroups(); j++)
-    for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++) {
-      ALevel *from = theCNuc->GetJGroup(j)->GetLevel(la);
-      ALevel *to = g->GetJGroup(j)->GetLevel(la);
-      to->SetFitE(from->GetFitE());
-      for (int ch = 1; ch <= theCNuc->GetJGroup(j)->NumChannels(); ch++) to->SetFitGamma(ch, from->GetFitGamma(ch));
-    }
-  g->TransformOut(configure);
-  g->FillCompoundFromParamsPhysical(g->GetTransformParams(configure));
+  CNuc *g = nullptr;
+  if (replaceGrids) {
+    if (!gridNuc_.nuc) gridNuc_.nuc.reset(theCNuc->Clone());
+    g = gridNuc_.nuc.get();
+    for (int j = 1; j <= theCNuc->NumJGroups(); j++)
+      for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++) {
+        ALevel *from = theCNuc->GetJGroup(j)->GetLevel(la);
+        ALevel *to = g->GetJGroup(j)->GetLevel(la);
+        to->SetFitE(from->GetFitE());
+        for (int ch = 1; ch <= theCNuc->GetJGroup(j)->NumChannels(); ch++) to->SetFitGamma(ch, from->GetFitGamma(ch));
+      }
+    g->TransformOut(configure);
+    g->FillCompoundFromParamsPhysical(g->GetTransformParams(configure));
+  }
   const auto t1 = std::chrono::steady_clock::now();
 
-  // The shared meshes: the anchors of the current parameters; where they differ from the copy's, the new plan and the
-  // region where its nodes differ from the present one's.
+  // The shared meshes: the anchors of the current parameters and the supports of the shifted points at their present
+  // centres; where they differ from the copy's, the new plan and the region where its nodes differ from the present
+  // one's (for a moved support, the whole mesh: every group is compared node by node).
   const std::vector<DataSet::NucleusMesh> &meshes = Data().Meshes();
   std::vector<std::vector<azure2::MeshAnchor>> newAnchors(meshes.size());
   std::vector<azure2::MeshPlan> newPlans(meshes.size());
   std::vector<std::vector<std::pair<double, double>>> regions(meshes.size());
   std::vector<char> meshMoved(meshes.size(), 0);
+  std::size_t supportsMoved = 0;
   for (size_t m = 0; m < meshes.size(); m++) {
-    newAnchors[m] = MeshAnchorsOf(g, meshes[m], true);
-    if (SameAnchors(newAnchors[m], meshAnchors_[m])) continue;
+    newAnchors[m] = replaceGrids ? MeshAnchorsOf(g, meshes[m], true) : meshAnchors_[m];
+    const bool anchorsMoved = !SameAnchors(newAnchors[m], meshAnchors_[m]);
+    if (!anchorsMoved && movedSupports[m].empty()) continue;
     meshMoved[m] = 1;
-    newPlans[m] = azure2::PlanMesh(newAnchors[m], meshes[m].supports, MeshTails());
-    regions[m] = azure2::MeshChangedRegion(meshAnchors_[m], newAnchors[m], meshes[m].supports, MeshTails());
+    for (const MovedSupport &moved : movedSupports[m]) {
+      const std::size_t k = (std::size_t)moved.spec->meshSupport;
+      meshSupports_[m][k] = azure2::PlannedShiftSupport(azure2::NominalMeshSupport(*moved.spec, meshes[m].supports[k].dataSet),
+                                                        *moved.spec, moved.centre);
+      meshCentres_[m][k] = moved.centre;
+      supportsMoved++;
+    }
+    newPlans[m] = azure2::PlanMesh(newAnchors[m], meshSupports_[m], MeshTails());
+    if (movedSupports[m].empty())
+      regions[m] = azure2::MeshChangedRegion(meshAnchors_[m], newAnchors[m], meshSupports_[m], MeshTails());
+    else
+      regions[m] = {{-std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity()}};
+  }
+  if (supportsMoved > 0) {
+#pragma omp critical(azure_shift_replan)
+    configure.outStream << "Note: the energy shifts moved " << supportsMoved << " folded point(s) beyond the reach their "
+                        << "mesh nodes were planned for; the mesh was planned again for them (ShiftedFold.h)." << std::endl;
   }
   const bool planCheck = azure2::CalculationPlan::RunTimeCheckRequested();
   std::atomic<long> outsideRegionMoved{0};
   const auto t2 = std::chrono::steady_clock::now();
 
   std::atomic<int> changed{0};
-  std::atomic<long> newSubPoints{0}, reusedSubPoints{0}, sharedSubPoints{0};
+  std::atomic<long> newSubPoints{0}, reusedSubPoints{0};
   // For AZURE_GRID_TIMING: per work item, -1 = a different number of nodes, else the
   // largest node move (MeV) of a grid that changed.
   std::vector<double> moved(work.size(), 0.0);
@@ -196,7 +262,7 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
   // CalcEDependentValues and CalcLegendreP would compute); they are usually still shared with the copy's source, so a
   // copy re-placing its grids adds tables only for the nodes that moved.
   auto laySites = [&](Unit *target, const TermRef &seg, bool shifted, const std::vector<double> &grid,
-                      const UnitRange<Site> &present, long &reused, long &fromOtherCopies) {
+                      const UnitRange<Site> &present, long &reused) {
     const Unit::SubGridSpec &tspec = Data().GridSpecOf(*target);
     const TargetEffect *effect = Data().GetTargetEffect(seg.GetTargetEffectNum());
     const TargetEffect *qEffect = effect->IsQCoefficients() ? effect : nullptr;
@@ -219,23 +285,17 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
                                                 EffectValues(seg.GetTargetEffectNum()).stoppingScale));
       auto o = std::lower_bound(old.begin(), old.end(), sub.GetCMEnergy(),
                                 [](const Unit::EDependentShare &x, double v) { return x.energy < v; });
-      Unit::EDependentShare cached;
       if (o != old.end() && sub.AdoptEDependentValues(*o)) {
         sub.CalcCoulombAmplitude(this, theCNuc);  // depends on the angle; cheap
         reused++;
-      } else if (!shifted && nodeCache_->Find(seg.GetSegmentKey(), sub.GetCMEnergy(), sub.GetCMAngle(), cached) &&
-                 sub.AdoptEDependentValues(cached)) {
-        sub.CalcCoulombAmplitude(this, theCNuc);  // another copy placed this node: its tables
-        fromOtherCopies++;
       } else {
         sub.CalcLegendreP(this, configure.maxLOrder, theCNuc, qEffect);
-        // A shifted segment's sub-points are moved and energised by the shift step.
+        // A sub-point of a THM segment (a grid of its own) is moved and energised by the shift step.
         if (!shifted) {
           sub.CalcEDependentValues(this, theCNuc, configure);
           sub.CalcCoulombAmplitude(this, theCNuc);
         }
       }
-      if (!shifted) nodeCache_->Store(seg.GetSegmentKey(), sub.ShareEDependentValues());
       target->MakeSubPoint(sub);
       fresh.push_back(std::move(sub));
     }
@@ -255,7 +315,7 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
     for (int i : it.group) {
       const Unit *point = it.seg.GetPoint(*this, i);
       const Unit::SubGridSpec &pspec = Data().GridSpecOf(*point);
-      const azure2::MeshSupport &support = meshes[m].supports[pspec.meshSupport];
+      const azure2::MeshSupport &support = meshSupports_[m][(size_t)pspec.meshSupport];
       double low = support.low, high = support.high;
       if (point->NumSubPoints() > 0) {
         low = std::min(low, point->GetSubPoint(*this, point->NumSubPoints())->GetOriginalEnergy() + pspec.frameShift);
@@ -297,16 +357,15 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
       for (int k = 0; same && k < size; k++) same = SlotAt(first + k).GetOriginalEnergy() == grid[k];
       if (same) return;
     }
-    long reused = 0, fromOtherCopies = 0;
+    long reused = 0;
     azure2::SlotBlock block;
-    block.sites = laySites(lead, it.seg, false, grid, Slots(first, size), reused, fromOtherCopies);
+    block.sites = laySites(lead, it.seg, false, grid, Slots(first, size), reused);
     for (size_t j = 0; j < it.group.size(); j++)
       if (ranges[j].second > 0)
         block.members.push_back({static_cast<int>(it.seg.GetPoint(*this, it.group[j]) - &this->UnitAt(0)),
                                  ranges[j].first, ranges[j].second});
     placed[q].push_back(std::move(block));
     reusedSubPoints += reused;
-    sharedSubPoints += fromOtherCopies;
     newSubPoints += (long)grid.size();
   };
   auto replace = [&](const Item &it, size_t q) {
@@ -332,13 +391,12 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
       moved[q] = -1.0;
     else
       for (int k = 0; k < subs.size(); k++) moved[q] = std::max(moved[q], std::fabs(subs[k].GetOriginalEnergy() - grid[k]));
-    long reused = 0, fromOtherCopies = 0;
+    long reused = 0;
     azure2::SlotBlock block;
-    block.sites = laySites(point, it.seg, it.shifted, grid, subs, reused, fromOtherCopies);
+    block.sites = laySites(point, it.seg, it.shifted, grid, subs, reused);
     block.members.push_back({static_cast<int>(point - &this->UnitAt(0)), 0, (int)grid.size()});
     placed[q].push_back(std::move(block));
     reusedSubPoints += reused;
-    sharedSubPoints += fromOtherCopies;
     changed++;
     newSubPoints += (long)grid.size();
   };
@@ -383,8 +441,7 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
       std::cerr << "[grid] call " << c << ": " << work.size() << " grids, " << changed.load() << " re-placed ("
                 << newSubPoints.load() << " sub-points; " << resized << " with a new node count, largest node move "
                 << maxMove * 1.0e6 << " eV otherwise; " << reusedSubPoints.load()
-                << " sub-points kept their tables, " << sharedSubPoints.load()
-                << " took another copy's); observed parameters " << ms(t0, t1) << " ms, mesh plans "
+                << " sub-points kept their tables); observed parameters " << ms(t0, t1) << " ms, mesh plans "
                 << ms(t1, t2) << " ms (" << std::count(meshMoved.begin(), meshMoved.end(), 1) << " of "
                 << meshes.size() << " moved), grids " << ms(t2, std::chrono::steady_clock::now()) << " ms"
                 << std::endl;
@@ -581,6 +638,7 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
             gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth() * configure.refineQuadrature;
             Unit::SubGridSpec &spec = Draft().SetUpFor(*point).grid;
             spec = MakeSubGridSpec(gridConfig, startEnergy, endEnergy, targetEffect, cmConversion);
+            SetShiftLayout(spec, Draft().GetSegments(), *segment, State(*segment), *point, minSubEnergy);
             if (OnSharedMesh(*segment, entrancePair, exitPair)) {
               meshPending.push_back(QueueMeshPoint(Draft().meshes_, *point, {&*segment, 0}, spec, entrancePair, exitPair,
                                                    EdgeAtFloor(*targetEffect, endEnergy, minSubEnergy)));
@@ -696,6 +754,7 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
                 gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth() * configure.refineQuadrature;
                 Unit::SubGridSpec &spec = Draft().SetUpFor(*point).grid;
                 spec = MakeSubGridSpec(gridConfig, startEnergy, endEnergy, targetEffect, compConversion);
+                SetShiftLayout(spec, Draft().GetSegments(), *segment, State(*segment), *point, minSubEnergy);
                 if (OnSharedMesh(*segment, compEntrance, compExit)) {
                   meshPending.push_back(QueueMeshPoint(Draft().meshes_, *point, component, spec, compEntrance, compExit,
                                                        EdgeAtFloor(*targetEffect, endEnergy, minSubEnergy)));
@@ -718,13 +777,21 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
   // The shared mesh of each compound nucleus: one plan from its supports and the anchors of the input levels, and
   // every point queued above takes the mesh's nodes of its range as its slots.
   meshAnchors_.assign(Draft().meshes_.size(), {});
+  meshSupports_.assign(Draft().meshes_.size(), {});
+  meshCentres_.assign(Draft().meshes_.size(), {});
   for (size_t m = 0; m < Draft().meshes_.size(); m++) {
     DataSet::NucleusMesh &mesh = Draft().meshes_[m];
     mesh.anchors = MeshAnchorsOf(compound, mesh,
                                  (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->IsTransformedIn());
     meshAnchors_[m] = mesh.anchors;
+    meshSupports_[m] = mesh.supports;
+    meshCentres_[m].assign(mesh.supports.size(), 0.0);
     const azure2::MeshPlan plan = azure2::PlanMesh(mesh.anchors, mesh.supports, MeshTails());
     azure2::AddMeshSlotGroups(*this, plan, (int)m, meshPending, configure);
+  }
+  for (const MeshPoint &q : meshPending) {  // the centres of the shifted supports: their c.m. shifts at the start
+    const Unit::SubGridSpec &spec = Draft().GridSpecOf(*q.point);
+    if (spec.shifted) meshCentres_[(size_t)spec.mesh][(size_t)spec.meshSupport] = spec.startShift;
   }
   this->CommitSubPoints();  // the sub-points given above take their places in the units
   if (!this->CheckSubPointStoppings(configure)) return -1;  // and at every energy of the sub-point grids

@@ -1,16 +1,16 @@
 Segment#, Chi-Squared,  N,  Norm,  Norm-Chi-Squared 
-1,692.29,40,1,0
-2,99.1257,30,1,0
-3,414.758,30,1,0
-4,283.208,30,1,0
-5,3032.58,26,1,0
-6,375.038,25,1,0
+1,697.326,40,1,0
+2,99.168,30,1,0
+3,414.736,30,1,0
+4,286.444,30,1,0
+5,3032.33,26,1,0
+6,375.055,25,1,0
 7,195.096,10,1,0
-8,554.901,30,1,0
+8,554.9,30,1,0
 9,301.084,20,1,0
 10,102.72,15,1,0
 11,92.0754,30,0.00196991,0
 12,121.489,28,0.00196991,0
 13,4632.42,16,1,0
-Total-Chi-Squared: 10896.8 Total-Norm-Chi-Squared: 0 Total-N: 330 Total-Shift-Chi-Squared: 0 Total-Density-Chi-Squared: 0 Total-Prior-Covariance-Chi-Squared: 4.90254073
+Total-Chi-Squared: 10904.8 Total-Norm-Chi-Squared: 0 Total-N: 330 Total-Shift-Chi-Squared: 0 Total-Density-Chi-Squared: 0 Total-Prior-Covariance-Chi-Squared: 4.90254073
 

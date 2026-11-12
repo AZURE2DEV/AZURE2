@@ -3,10 +3,11 @@
 # every hand-over and every point pass checks that each unit of each plan task is at the node its slot names -- on the
 # stage table or on the working copy's overflow table -- with the node's channel rows bit for bit (a breach stops the
 # run).  Runs: a short MIGRAD fit of T2 (re-placed grids and shifted folded segments: the overflow table is used), the
-# calculations of shift_sqrt_subpoints/models/sqrt.azr (folded points under a sqrt(E) shift), 18O_p_a_thm (THM nodes)
+# calculations of shift_sqrt_subpoints/models/sqrt.azr (folded points under a sqrt(E) shift: on the fixed nodes of the
+# shared mesh, so none on the overflow table), 18O_p_a_thm (THM nodes)
 # and natural_neon (folded points of several compound nuclei), each with and without the check: each run exits 0,
-# every check line reports 0 units off the tables, 0 on a wrong node and 0 rows that differ, the shifted runs use the
-# overflow table, and the calculations' output files are byte for byte the same.  Shown failing with a slot of a
+# every check line reports 0 units off the tables, 0 on a wrong node and 0 rows that differ, the fit uses the overflow
+# table and the shifted calculation does not, and the calculations' output files are byte for byte the same.  Shown failing with a slot of a
 # re-placed grid pointing at the next node (injected once: "on a wrong node").  Each check also checks the sharing
 # groups of the slots (include/SlotGroup.h: every range in one block, the writer an earlier reader, one group per
 # block, the slots of a point on a shared mesh at the nodes its plan gives), reported on its own line; shown failing
@@ -41,14 +42,15 @@ clean() {
 }
 CALC='1\n\n\n7\n'
 FIT='2\n\n\n\n7\n'
-for p in "sqrt:$TESTS/shift_sqrt_subpoints/models:sqrt.azr:1" "thm:$TESTS/18O_p_a_thm:18O_p_a_thm.azr:0" \
+for p in "sqrt:$TESTS/shift_sqrt_subpoints/models:sqrt.azr:none" "thm:$TESTS/18O_p_a_thm:18O_p_a_thm.azr:0" \
          "natural_neon:$TESTS/natural_neon:natural_neon.azr:0"; do
   IFS=: read -r name src azr wantOverflow <<< "$p"
   run "$name" "$src" "$azr" 0 "$CALC"
   run "$name" "$src" "$azr" 1 "$CALC"
   r0="$(cat "$WORK/$name.0/rc")"; r1="$(cat "$WORK/$name.1/rc")"
   n="$(ls "$WORK/$name.0/output" | wc -l | tr -d ' ')"
-  if [ "$r0" = 0 ] && [ "$r1" = 0 ] && [ "$n" -gt 0 ] && clean "$name" && { [ "$wantOverflow" = 0 ] || [ "$overflow" -gt 0 ]; } &&
+  if [ "$r0" = 0 ] && [ "$r1" = 0 ] && [ "$n" -gt 0 ] && clean "$name" && { [ "$wantOverflow" = 0 ] || { [ "$wantOverflow" = none ] && [ "$overflow" -eq 0 ]; } ||
+                                           { [ "$wantOverflow" = 1 ] && [ "$overflow" -gt 0 ]; }; } &&
      diff -rq "$WORK/$name.0/output" "$WORK/$name.1/output" > /dev/null; then
     ok "$name: $lines checks clean ($overflow with the overflow table), its $n output files identical"
   else
