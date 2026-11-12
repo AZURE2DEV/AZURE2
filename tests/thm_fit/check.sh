@@ -13,6 +13,8 @@
 #   - the chi2 it writes (output/chiSquared.out) is the chi2 of a
 #     calculation from its param.sav (rel 1e-6): what the fit minimizes is
 #     what a calculation of its result gives.
+# Then the analytic gradient of the folded project (with an experiment, and
+# with a ps window) against central differences.
 #
 #   ./tests/thm_fit/check.sh path/to/AZURE2
 
@@ -76,6 +78,30 @@ for v in experiment distortion dw lineshape ps; do
   c2="$(total "$WORK/$v.check")"
   awk -v a="$c1" -v b="$c2" 'BEGIN { d = (a - b) / b; if (d < 0) d = -d; exit !(b != "" && d < 1e-6) }' \
     && ok "$v: a calculation from param.sav gives it ($c2)" || bad "$v: fit chi2 $c1, calculation from param.sav $c2"
+done
+
+# The analytic gradient of folded THM data (ThmCotangents.h: the profiled model's cotangents, the HOES adjoint once per
+# site of the shared mesh) against central differences of chi^2 (AZURE_GRAD_CHECK), the fold kept, with and without a
+# spectator-momentum window.  Shown failing with the profiled scale left out of the cotangents (injected once: rel 0.998).
+for v in experiment ps; do
+  case $v in
+    experiment) block="experiment[A]" ;;
+    ps) block="experiment[A] $KIN ps=hulthen:0-40 psNodes=8" ;;
+  esac
+  d="$WORK/grad_$v"
+  mkdir -p "$d/output" "$d/checks"
+  cp -r "$SRC/data" "$d/"
+  awk '$3 == "8.602600" { $3 = "8.612600"; $4 = 0 } { print }' "$SRC/18O_p_a_thm.azr" > "$d/run.azr"
+  thm_set "$d/run.azr" "$block" lc723_thm_points lc723_band_mid
+  (cd "$d" && printf '2\nn\n\n\n' | AZURE_GRAD_CHECK=exit $RUN "$AZURE2_BIN" --use-gradient --no-gui --no-readline \
+     run.azr > log 2>&1)
+  line="$(grep -a '\[grad-check\] idx 0 energy' "$d/log")"
+  rel="$(printf '%s\n' "$line" | awk '{ print $NF }')"
+  if grep -aq 'analytic block used' "$d/log" && [ -n "$rel" ] && awk -v r="$rel" 'BEGIN { exit !(r < 1e-5) }'; then
+    ok "folded $v: the analytic gradient in the level energy agrees with central differences (rel $rel)"
+  else
+    bad "folded $v: $line"
+  fi
 done
 
 echo

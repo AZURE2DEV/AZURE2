@@ -8,6 +8,8 @@
 #include "AZUREGrad.h"
 #include "CalculationPlan.h"
 
+struct ThmAdjointContext;
+
 /*!
  * The analytic gradient over the energy tasks of the point pass (docs/upgrade/energy_grid.md section 8, second
  * branch; docs/upgrade/ARCHITECTURE.md, "The analytic gradient").  A pass has three steps:
@@ -77,11 +79,14 @@ bool PointCotangents(WorkingCopy &data, const GradPoint &p, CNuc *compound, cons
  * d(objective)/d(level parameters) over the energy tasks, added to `accum` (and the fold and expression parameters
  * of the points, abundances, Doppler temperatures, thicknesses); fitBarFn gives each point's cotangent from its
  * model, called once per point in data order (its side effects, the norm gradient, see the same order at any thread
- * count).  The THM (HOES) segments are left out (AZURECalc::Gradient adds them).  False, with `accum` untouched and
- * `bailSeg` the segment, where a point is outside the analytic path.
+ * count).  The THM (HOES) segments are left out unless `hoes`, the context of their adjoint, is given
+ * (ThmThroughEnergyTasks): then their cotangents come from their profiles (ThmModelCotangents) and each kHoes site's
+ * adjoint is taken once in its task.  False, with `accum` untouched and `bailSeg` the segment, where a point is outside
+ * the analytic path.
  */
 bool EnergyTaskGradient(CNuc *compound, WorkingCopy *data, azure2::Results &results, const Config &config,
-                        const vector_matrix_r *shiftDeriv, const FitBarFn &fitBarFn, GradAccum &accum, int &bailSeg);
+                        const vector_matrix_r *shiftDeriv, const FitBarFn &fitBarFn, GradAccum &accum, int &bailSeg,
+                        const ThmAdjointContext *hoes = nullptr);
 
 /*!
  * Rows d(model)/d(theta) times rowFitBar(point, model) over the energy tasks: for every point of the data segments

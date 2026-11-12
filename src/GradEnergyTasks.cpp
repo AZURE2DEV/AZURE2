@@ -16,6 +16,8 @@
 #include "Profile.h"
 #include "Results.h"
 #include "Segment.h"
+#include "THMMatrixFunc.h"
+#include "ThmCotangents.h"
 #include "Unit.h"
 #include "WorkingCopy.h"
 
@@ -79,12 +81,14 @@ struct Pass {
   std::vector<std::vector<ParamCotangent>> params;  // per point
 };
 
-// The points of the data segments but the THM ones, the forward pass over them, their models.
-void Forward(CNuc *compound, WorkingCopy &data, Results &results, const Config &config, Pass &pass) {
+// The points of the data segments (the THM ones only with `hoes`, the context of their adjoint), the forward pass over
+// them, their models.
+void Forward(CNuc *compound, WorkingCopy &data, Results &results, const Config &config, Pass &pass,
+             const ThmAdjointContext *hoes) {
   AZUREProfile::Timer timer(AZUREProfile::kGradForward);
   for (int s = 1; s <= data.Data().NumSegments(); s++) {
     const Segment *seg = data.Data().GetSegment(s);
-    if (!seg || seg->IsTHM()) continue;
+    if (!seg || (seg->IsTHM() && !hoes)) continue;
     pass.segments.push_back(seg);
     for (int p = 0; p < seg->NumPoints(); p++)
       if (Unit *pt = seg->GetPoint(data, p + 1)) pass.points.push_back({seg, s, p, pt});
@@ -147,10 +151,21 @@ bool Cotangents(CNuc *compound, WorkingCopy &data, Results &results, const Confi
   return true;
 }
 
+// Whether unit u reads a T-matrix (every kind but kHoes, whose HOES formula reads the level matrix's elements).
+bool ReadsTMatrix(WorkingCopy &data, UnitRef u) { return data.SiteAt(u).Observable() != SiteObservable::kHoes; }
+
 bool HasCotangents(const Pass &pass, const EnergyTaskList &list, const EnergyTask &task) {
   for (int i = task.begin; i < task.begin + task.size; i++)
     if (pass.cotFirst[list.units[i]] < pass.cotFirst[list.units[i] + 1]) return true;
   return false;
+}
+
+// The first unit of `task` that reads a T-matrix and has cotangents, or -1.
+int FirstTMatrixReader(WorkingCopy &data, const Pass &pass, const EnergyTaskList &list, const EnergyTask &task) {
+  for (int i = task.begin; i < task.begin + task.size; i++)
+    if (ReadsTMatrix(data, list.units[i]) && pass.cotFirst[list.units[i]] < pass.cotFirst[list.units[i] + 1])
+      return list.units[i];
+  return -1;
 }
 
 // The point whose row reads unit u's observable for cotangent k: the reader of a slot holding Legendre coefficients
@@ -229,14 +244,17 @@ bool ForEachGroup(AMatrixFunc &amf, WorkingCopy &data, const Pass &pass, const E
   const int *g = list.tGroups.data() + task.begin;
   bool built = false;
   for (int i = 0; i < task.size;) {
-    int end = i;
+    int end = i, provide = -1;  // the group's first unit that reads a T-matrix
     bool any = false;
     while (end < task.size && g[end] == g[i]) {
-      any = any || pass.cotFirst[u[end]] < pass.cotFirst[u[end] + 1];
+      if (ReadsTMatrix(data, u[end])) {
+        if (provide < 0) provide = end;
+        any = any || pass.cotFirst[u[end]] < pass.cotFirst[u[end] + 1];
+      }
       end++;
     }
     if (any) {
-      Site *provider = &data.SiteAt(u[i]);
+      Site *provider = &data.SiteAt(u[provide]);
       {
         AZUREProfile::Timer timer(AZUREProfile::kGradForward);
         if (!built)
@@ -252,13 +270,45 @@ bool ForEachGroup(AMatrixFunc &amf, WorkingCopy &data, const Pass &pass, const E
   return true;
 }
 
+// The THM sites of one task (kHoes) into `acc`: per site the cotangents of all its readers summed (in their order), and
+// the HOES adjoint taken once per site on a level-space fill at the task's energy (THMMatrixFunc::THMPointAdjoint).
+bool HoesTask(CNuc *compound, const Config &config, WorkingCopy &data, const Pass &pass, const EnergyTaskList &list,
+              const EnergyTask &task, const ThmAdjointContext &context, GradAccum &acc) {
+  static thread_local THMMatrixFunc thm(compound, config);
+  bool filled = false;
+  for (int i = task.begin; i < task.begin + task.size; i++) {
+    const UnitRef u = list.units[i];
+    if (ReadsTMatrix(data, u) || pass.cotFirst[u] == pass.cotFirst[u + 1]) continue;
+    double sum = 0.0;
+    for (int c = pass.cotFirst[u]; c < pass.cotFirst[u + 1]; c++) sum += pass.cot[c].value;
+    Site *site = &data.SiteAt(u);
+    if (!filled) {
+      AZUREProfile::Timer timer(AZUREProfile::kGradForward);
+      thm.Reset(compound, config);
+      thm.ClearMatrices();
+      thm.FillMatrices(site);
+      thm.InvertMatrices();
+      filled = true;
+    }
+    AZUREProfile::Timer timer(AZUREProfile::kGradBackprop);
+    if (!thm.THMPointAdjoint(site, sum, acc, context)) return false;
+  }
+  return true;
+}
+
 // The scalar adjoint of one task into `acc`: per T-matrix group the T-matrix cotangents of all its units summed;
 // the bilinear terms of the decays without external capture merged over the task and back-propagated once per
 // J-group, a decay with external capture on its own.
 bool ScalarTask(CNuc *compound, const Config &config, WorkingCopy &data, Results &results, const Pass &pass,
-                const EnergyTaskList &list, const EnergyTask &task, const vector_matrix_r *shiftDeriv, GradAccum &acc) {
+                const EnergyTaskList &list, const EnergyTask &task, const vector_matrix_r *shiftDeriv,
+                const ThmAdjointContext *hoes, GradAccum &acc) {
   if (!HasCotangents(pass, list, task)) return true;
-  Site *first = &data.SiteAt(list.units[task.begin]);
+  if (hoes && !HoesTask(compound, config, data, pass, list, task, *hoes, acc)) return false;
+  if (FirstTMatrixReader(data, pass, list, task) < 0) return true;
+  // filled with the task's first unit that reads a T-matrix, as the point pass (SolveAtOneEnergy)
+  int firstReader = task.begin;
+  while (!ReadsTMatrix(data, list.units[firstReader])) firstReader++;
+  Site *first = &data.SiteAt(list.units[firstReader]);
   AMatrixFunc &amf = SolveTask(compound, config, first);
   std::vector<std::vector<BilinearTerm>> merged(compound->NumJGroups()), terms;
   TMatrixCotangent bar;
@@ -271,6 +321,7 @@ bool ScalarTask(CNuc *compound, const Config &config, WorkingCopy &data, Results
     MergeSharedReads(data, pass, order, reads);
     for (const SharedRead &r : reads) {
       const UnitCotangent &k = pass.cot[r.cotangent];
+      if (!ReadsTMatrix(data, r.unit)) continue;  // a THM site: HoesTask
       if (!amf.PointTBar(&data.SiteAt(r.unit), results, r.value, bar, k.xsComponent, k.ayCrossSection, RowsOf(data, r.unit, k), RowSlotOf(data, r.unit, k))) return false;
       AddCotangent(sum, bar);
     }
@@ -440,17 +491,20 @@ bool RowTask(CNuc *compound, const Config &config, WorkingCopy &data, Results &r
 }  // namespace
 
 bool EnergyTaskGradient(CNuc *compound, WorkingCopy *data, Results &results, const Config &config,
-                        const vector_matrix_r *shiftDeriv, const FitBarFn &fitBarFn, GradAccum &accum, int &bailSeg) {
+                        const vector_matrix_r *shiftDeriv, const FitBarFn &fitBarFn, GradAccum &accum, int &bailSeg,
+                        const ThmAdjointContext *hoes) {
   bailSeg = 0;
   Pass pass;
-  Forward(compound, *data, results, config, pass);
-  // The objective's cotangent of each model, in data order (fitBarFn may accumulate the norm gradient).
+  Forward(compound, *data, results, config, pass, hoes);
+  // The objective's cotangent of each model, in data order (fitBarFn may accumulate the norm gradient); a THM point's
+  // through its profile (ThmCotangents.h).
   const int n = (int)pass.points.size();
   std::vector<double> fitBar(n);
   for (int k = 0; k < n; k++) {
     const GradPoint &p = pass.points[k];
     fitBar[k] = fitBarFn(p.segment, p.segNum, p.pointIdx, pass.models[k]);
   }
+  if (hoes) ThmModelCotangents(*data, results, pass.points, pass.models, fitBar);
   if (!Cotangents(compound, *data, results, config, fitBar, pass, bailSeg)) return false;
   const EnergyTaskList &list = data->EnergyTasksOf(pass.segments, config);
   const int chunks = std::max(1, std::min(kChunks, list.size()));
@@ -463,7 +517,7 @@ bool EnergyTaskGradient(CNuc *compound, WorkingCopy *data, Results &results, con
     // by the caller (AMatrixFunc::ResolveFormalCotangents).
     chunkAcc[c].formal = true;
     for (int t = c; t < list.size(); t += chunks)
-      if (!ScalarTask(compound, config, *data, results, pass, list, list[t], shiftDeriv, chunkAcc[c])) {
+      if (!ScalarTask(compound, config, *data, results, pass, list, list[t], shiftDeriv, hoes, chunkAcc[c])) {
         failedTask[c] = t;
         break;
       }
@@ -495,7 +549,7 @@ bool EnergyTaskRows(CNuc *compound, WorkingCopy *data, Results &results, const C
   bailSeg = 0;
   numTasks = 0;
   Pass pass;
-  Forward(compound, *data, results, config, pass);
+  Forward(compound, *data, results, config, pass, nullptr);
   const int n = (int)pass.points.size();
   std::vector<double> fitBar(n);
   for (int k = 0; k < n; k++) fitBar[k] = rowFitBar(pass.points[k], pass.models[k]);

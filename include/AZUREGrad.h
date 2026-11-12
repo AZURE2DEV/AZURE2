@@ -310,13 +310,15 @@ void AddAbundancePenaltyGradient(CNuc *compound, const Config &configure, GradAc
  * fitBarFn arguments: (segment, 1-based segment index, 0-based point index,
  * combined model value).
  */
+struct ThmAdjointContext;
 using FitBarFn = std::function<double(const Segment *, int, int, double)>;
 
+/// `hoes`: the THM data are taken in the same pass (azure2::ThmThroughEnergyTasks, ThmCotangents.h); null: left out.
 bool AccumulateEGammaGradient(CNuc *compound, WorkingCopy *data, azure2::Results &results, const Config &config,
                               const ParamIndexMap &pmap,
                               const vector_matrix_r *shiftDeriv,
                               const FitBarFn &fitBarFn,
-                              GradAccum &accum);
+                              GradAccum &accum, const ThmAdjointContext *hoes = nullptr);
 
 /*!
  * \brief Residual vector and its Jacobian for Gauss-Newton / Levenberg-Marquardt.
@@ -449,12 +451,14 @@ struct THMRows {
  * datum, 2 s (s m_i - d_i)/e_i^2 (with its covariance or experiment block when it has one).  A folded THM point gives
  * each node it reads the cotangent times its kernel weight (FoldWeights, the same weights as every other fold); the
  * cotangents of all readers of a kHoes site are summed, and the HOES adjoint (THMMatrixFunc::THMPointAdjoint) is taken
- * once per site in the energy tasks (GradEnergyTasks.cpp), beside the direct readers' adjoints at that node.  This
- * function stays for what needs rows (the covariance band, the residual Jacobian of the Levenberg-Marquardt and API
- * paths); its per-point sweep over a folded point's slots reads the kernel's weights, not central differences of the
- * fold.  What stays finite-difference, and why: the THM norm columns (a fixed or prior-carrying norm, with its penalty,
- * through the THM-only chi^2; a profiled norm has no column), the energy-shift columns (the fold on fixed nodes is
- * differenced, as for every folded data set, ShiftedFold.h question 5), and AZURE2_THM_FD=1 (the reference path).
+ * once per site in the energy tasks (GradEnergyTasks.cpp, HoesTask), beside the direct readers' adjoints at that node
+ * (ThmCotangents.h; the CLI gradient, AZURECalc::Gradient).  This function stays for what needs rows (the covariance
+ * band, the residual Jacobian of the Levenberg-Marquardt path, the API's gradient) and for what the scalar pass does
+ * not take (ThmThroughEnergyTasks: components, coherent-background parameters, RMC); its sweep over a folded point's
+ * slots still takes the fold's weights by central differences and one HOES adjoint per (point, slot).  What stays
+ * finite-difference, and why: the THM norm columns (a fixed or prior-carrying norm, with its penalty, through the
+ * THM-only chi^2; a profiled norm has no column), the energy-shift columns (the fold on fixed nodes is differenced, as
+ * for every folded data set, ShiftedFold.h question 5), and AZURE2_THM_FD=1 (the reference path).
  */
 std::vector<THMRows> ComputeTHMRows(CNuc *compound, WorkingCopy *data, azure2::Results &results, const Config &config,
                                     const vector_r &full, const ParamIndexMap &pmap);

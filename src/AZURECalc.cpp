@@ -25,6 +25,8 @@
 #include "AZUREParams.h"
 #include "AZUREGrad.h"
 #include "CovarianceBand.h"
+#include "THMMatrixFunc.h"
+#include "ThmCotangents.h"
 #include "GSLException.h"
 #include <iostream>
 #include <iomanip>
@@ -786,7 +788,9 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     return 2.0 * r / (err * err) / res.jacobian;
   };
 
-  bool eg = AccumulateEGammaGradient(lc, ld, results, configure(), pmap, sdp, fitBarFn, accum);
+  // THM data in the same pass where it can take them (ThmCotangents.h): hoes is their adjoint's context, else null.
+  const std::unique_ptr<ThmAdjointContext> hoes = azure2::ThmGradientContext(lc, *ld, configure(), sdp);
+  bool eg = AccumulateEGammaGradient(lc, ld, results, configure(), pmap, sdp, fitBarFn, accum, hoes.get());
   const auto tg1 = std::chrono::steady_clock::now();
   if (!eg && std::getenv("AZURE_GRAD_DEBUG")) {
     std::cerr << "[grad] analytic energy/gamma adjoint bailed -> full finite "
@@ -844,14 +848,11 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     if (seg && seg->IsTHM()) haveTHM = true;
   }
 
-  // THM rows by the HOES adjoint (ComputeTHMRows): the THM data term of chi^2
-  // is sum_i r_i^2 over its rows, the norm profiled as Chi2Value(.., true)
-  // does, so its energy / reduced-width / coherent-background gradient is
-  // 2 J^T r.  THM norms keep the central differences of the THM-only chi^2
-  // below (they also carry its norm penalty).  AZURE2_THM_FD=1 restores the
-  // differences for every THM column.
-  bool thmAnalytic = false;
-  if (eg && haveTHM && !ThmFiniteDifferencesRequested()) {
+  // Else THM rows by the HOES adjoint (ComputeTHMRows): the THM data term is sum_i r_i^2, the norm profiled as
+  // Chi2Value(.., true) does, so its level / coherent-background gradient is 2 J^T r.  THM norms keep the central
+  // differences of the THM-only chi^2 below (with its norm penalty); AZURE2_THM_FD=1 for every THM column.
+  bool thmAnalytic = eg && hoes;
+  if (eg && haveTHM && !hoes && !ThmFiniteDifferencesRequested()) {
     ParamIndexMap tmap = BuildParamIndexMap(lc, ld, fixedMask);
     std::vector<THMRows> thm = ComputeTHMRows(lc, ld, results, configure(), p, tmap);
     const int nCols = tmap.NumPacked();
