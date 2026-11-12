@@ -24,7 +24,8 @@ because the engine also searches the whole file for them.
       and > 0; no editor, carried through); `priorCovariance=<path>` (only when set) (`AZURESetup.cpp`)
 - [ ] An empty output or checks directory is set to the project directory on save, with a message box
       (`AZURESetup.cpp`)
-- [ ] `<potential>`: `useHybridPotential`, `useAdaptiveGrid`, then the default shape (`potentialType` 0 Woods-Saxon /
+- [ ] `<potential>`: `useHybridPotential`, `useAdaptiveGrid` (not in format 3: removed 2026-11-12, every fold is on the
+      shared mesh; the web UI has no control for it), then the default shape (`potentialType` 0 Woods-Saxon /
       1 Gaussian, `V0`, `R`, `a` or `r0`), then one `pair=<key>` section per pair with its own setting. The master
       switch is forced on when any pair is on. Optional on read (`NuclearPotentialTab.cpp`, `AZURESetup.cpp`)
 - [ ] `<levels>`: one line per channel; the pairs have no block of their own and are rebuilt from these lines.

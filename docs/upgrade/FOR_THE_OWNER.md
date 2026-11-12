@@ -194,6 +194,25 @@ refused at once with the engine's message. An edit changes only the lines it tou
     not depend on the energy without relativistic kinematics).  Where the window, or a fitted energy shift, reaches
     an energy at which the lab angle is beyond the kinematic maximum, the point fails with a warning that names the
     cause and the remedy (the model is NaN and χ² is 10¹⁰⁰); the file is not refused.
+  - the `<config>` key `useAdaptiveGrid` is gone (the PI, 2026-11-12). With it at 0 a folded point (a target, a beam
+    spread or profile, a detector resolution) was integrated on a uniform grid of its own, which misses a resonance
+    narrower than its step; now every folded point is integrated on the mesh, which places nodes on every level and is
+    never coarser than the uniform grid of the same number of points. A file that still has the line is refused with
+    a message that says to delete it (`E_CONFIG_KEY_REMOVED`); the converter drops it from an old file and, when it
+    was 0, says what changes. The reaction rate always takes the tabulated grid (the key at 0 chose a per-temperature
+    quadrature, which `tests/reaction_rate` had recorded as close to its reference as the tabulated grid; it stays
+    only as the fallback of a grid with fewer than three points of σ > 0). The check of the PI's condition, a 9.7 eV level of 14N(p,γ)
+    in a 3.2 × 10¹⁹ at/cm² layer (`tests/shift_sqrt_subpoints/models/narrow_sqrt.azr`), first yield:
+
+    | grid | default | 8 times the points | 64 times |
+    |---|---|---|---|
+    | mesh (the key at 1, now the only grid) | 2.18022e-6 | 2.17984e-6 | 2.17983e-6 |
+    | uniform (the key at 0) | 2.06e-8 | 6.00e-8 | 5.09e-7 |
+
+    Projects with the key at 1 give the same numbers as before, bit for bit. The ones with it at 0 move to the
+    converged fold: in the tree, `examples/c12c12_tumino2018` (12C+12C THM data with a beam profile) moves by up to
+    57 % in a folded value, χ² 111.661 → 117.516 (117.516 with 8 times the points), and the test model of the
+    uniform grid (`shift_sqrt_subpoints/models/dense`, now deleted) by 9.4 × 10⁻⁷.
 
 ## Speed
 
@@ -343,9 +362,8 @@ cheaper (18O(p,α): 88 → 9 ms), with the same agreement with finite difference
 was found on the way and is fixed: with the analytic gradient (`--use-gradient`), the component of a fitted energy
 shift on a THM data set with a profiled normalisation could hold only the derivative of the shift's prior (a fit of
 the 18O(p,α) THM data with the level energy and the shift free ended "invalid" with a wrong error of the energy; it
-converges now). Still open, and yours and the PI's to decide: the `<config>` key `useAdaptiveGrid`, which
-when off gives a folded point a uniform grid of its own (the last path beside the mesh) and also selects the grid of
-the reaction rates.
+converges now). The `<config>` key `useAdaptiveGrid`, which when off gave a folded point a uniform grid of its own
+(the last path beside the mesh), was removed afterwards (below, "What users notice").
 
 **Four mechanisms deleted (merged 2026-11-12).** The automatic tolerance, the fold windows, the edge blending and
 the σ(Ē) fallback existed only to make a point's private grid affordable. On the shared mesh a node costs the same

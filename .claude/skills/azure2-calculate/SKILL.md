@@ -263,7 +263,7 @@ interference = (full - off) - (only - bare)
   and `cross_section_grid.dat` (E_c.m., σ, S: plot it when a rate looks odd). The grid has 48 points per decade from
   0.1 eV to 50 MeV plus a cluster from 1/32 to 64 widths around every level; ln σ is splined against ln E. A 22 eV
   level is integrated to 10⁻⁴ (`tests/reaction_rate`), so narrow resonances need no hand-added terms.
-  `useAdaptiveGrid=0` in `<potential>` selects the older per-temperature quadrature (slower, same rate to 10⁻⁵).
+  There is no other path: `useAdaptiveGrid` is not a key of format 3 (a file with it is refused, `E_CONFIG_KEY_REMOVED`).
   Behaviour: `docs/source/user_guide/calculate.rst`, troubleshooting in
   `docs/source/reference/troubleshooting.rst`. Apply the extrapolation rules above (no `<targetInt>`, fresh caches).
 - **Total radiative capture rate**: give the exit pair `-1` at the "Reaction Rate Exit Pair" prompt. The rate integrates the sum over every capture pair (pType 10) of the entrance pair's
