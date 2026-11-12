@@ -2,6 +2,33 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, Phase 5 branch 10, milestones 3 and 4) — the THM gradient through the energy tasks; the documents (`feature/upgrade-5-thm-mesh`)
+
+**Gradient.**  The scalar pass (`EnergyTaskGradient`, CLI `AZURECalc::Gradient`) takes THM data when
+`ThmThroughEnergyTasks` holds (no components, no coherent-background parameter, not RMC, no AZURE2_THM_FD): a THM
+point's model cotangent is 2 r s f/e from its profile (`ThmModelCotangents`, `include/ThmCotangents.h`: at a profiled
+norm and background d chi^2/d s = 0, the envelope theorem), its fold's weights take it to its sites as for any datum,
+and `HoesTask` (`GradEnergyTasks.cpp`) sums the cotangents of all readers of a kHoes site and takes the HOES adjoint
+once per site on one level-space fill per task.  T-matrix groups and fills skip kHoes units (`ReadsTMatrix`).
+`ComputeTHMRows` stays for rows (band, LM, API) and for what the predicate refuses; its fold weights are still central
+differences, one adjoint per (point, slot).  Still finite-difference: THM norm columns (a fitted or prior norm, through
+the THM-only chi^2), shift columns, the coherent background (the old path), AZURE2_THM_FD=1.
+**Checks** (`AZURE_GRAD_CHECK=exit`, `--use-gradient`, base `b-obs5` against this branch, worst relative disagreement):
+T2 2.62e-6 = 2.62e-6 (19 components, 0 above 1e-2 in both); folded 18O variants with the 8.6026 level free (thm_fit's
+edit, fold kept) plain 4.9e-7 =, experiment 4.8e-7 =, lineshape 2.9e-7 =, ps window 3.7e-6 =, DW vertex 3.6e-8 =.
+Gradient time (`[grad-timing]`, 3 threads) 18O 88 -> 8.7 ms, T2 372 -> 316 ms.  1 against 3 threads: T2 and 18O-ps
+gradients identical to the last digit.  A fitted THM shift (18O plain, offset fit prior 0.002 0.003): the shift column
+disagrees with central differences in the base build and here alike (-1496 vs 4229; rel 0.9998) -- a defect of the
+shift column of a profiled THM segment, not of this branch (listed in the report, not fixed).  New test:
+`tests/thm_fit` (folded experiment, ps window: rel < 1e-5); shown failing with the profiled scale left out of the
+cotangent (rel 0.9987, 0.989).
+**Ran**: build 0 warnings; consistency; ctest subset 58/58; quick set x 3 identical to milestone 1; `tests/thm_fit`.
+**Documents** (milestone 4): `energy_grid.md` section 8 (row 10 and its status paragraph), `THM.md` section 5,
+`FOR_THE_OWNER.md` (a paragraph), the recipe "An observable of a reaction at a mesh energy" in `CLAUDE.md` (a kind that
+reads the level matrix's elements).  Not deleted (see the report): the leaves' angle copying and
+`SeparateSlotsByAngle` (they act on every scalar kind's leaves; no reader of the angle found, deletion not verified on
+the tree), the uniform grid's own path (a user-visible key; proposal in `ShiftedFold.h`).
+
 ## 2026-11-12 (agent, Phase 5 branch 10, milestone 2) — sigma_HOES a kind of the table; one solve per node for THM and direct readers (`feature/upgrade-5-thm-mesh`)
 
 **Done.**  `SiteObservable::kHoes` (`SiteObservable.h`, its row in `kSiteObservables`): the half-off-shell cross

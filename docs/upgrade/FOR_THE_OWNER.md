@@ -327,6 +327,17 @@ quadrature error they had; unfolded numbers do not move at all. What was measure
   to be the closer one before the expectation was regenerated. One check runs with a wider tolerance (1e-5 instead of
   1e-6) until a data set with a fitted energy shift is on the mesh too (the next branch).
 
+**Trojan-horse data on the shared mesh (branch of 2026-11-12, not yet merged).** A THM data point is now folded like
+any other: its half-off-shell cross section is computed once per mesh energy and shared by every point and data set of
+the same experiment that needs it, and at an energy where direct data are folded too the level matrix is solved once
+for both. The THM cross section at an energy depends on the energy, the reaction and the experiment's settings only,
+never on the data point, which is what makes this possible without new physics. The THM numbers move by the quadrature
+error they had and come closer to the converged fold in every file (18O(p,α) THM: largest distance 4.2e-4 → 2.7e-4);
+T2's direct data move a little too, because the THM points join the same mesh. One stored number changed: an option kept
+for old projects (`kinematics=lambda32`) divides by the entrance momentum, which vanishes at threshold, so its χ² rests on
+the quadrature there (5605 → 5562; the converged value is about 5507). The gradient of a THM fit is now ten times
+cheaper (18O(p,α): 88 → 9 ms), with the same agreement with finite differences as before.
+
 **Four mechanisms deleted (merged 2026-11-12).** The automatic tolerance, the fold windows, the edge blending and
 the σ(Ē) fallback existed only to make a point's private grid affordable. On the shared mesh a node costs the same
 whoever uses it, so they are gone: a folded data set names its effect and, optionally, the mesh's settings, and every
