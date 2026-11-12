@@ -360,7 +360,13 @@ for a thin target.  What a data set sets for its fold is the effect itself
 the mesh (``quadrature``).  A thin target whose energy loss is smaller than one
 interval of the mesh is folded like any other: the depth integral of the
 linearly interpolated cross section over the target, which for such a target is
-the interpolated cross section at its depth-averaged energy.
+the interpolated cross section at its depth-averaged energy.  A support narrower
+than 1 eV (a target losing less than 1 eV, ``MeshZeroWidth``) is a single node at
+its upper edge, and the fold is the thin limit: the cross section there for a
+thin target, :math:`10^{-24}\,\sigma N` for a yield on a layer (:math:`\sigma`
+in b, :math:`N` in atoms/cm\ :sup:`2`), and the plain value for the averaging
+kernels.  It differs from the depth average by at most
+:math:`\tfrac12\Delta\,|\mathrm{d}\sigma/\mathrm{d}E|` with :math:`\Delta < 1` eV.
 
 An old project whose ``<targetInt>`` line restricts an effect to energy ranges,
 blends it at their edges or applies it with an automatic tolerance converts with

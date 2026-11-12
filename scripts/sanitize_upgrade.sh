@@ -182,7 +182,7 @@ if want checks; then
 fi
 
 # ------------------------------------------------------------------ 3. regression projects without check.sh
-REGRESS="beam_profile_kernel target_effect_ranges thick_target_resonance"
+REGRESS="beam_profile_kernel beam_spread_ay thick_target_resonance"
 if want regress; then
   echo "== regression projects (menu 1)"
   for t in $REGRESS; do

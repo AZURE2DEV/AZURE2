@@ -2,6 +2,90 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (director, 13:35) — merged: six follow-ups (thin layers, the local shift column, value flags, a rename, two tests)
+
+**Merged** into `feature/upgrade-4-data` and `feature/upgrade` (the branch started from the integration head, so the
+merge's tree is the branch's plus this entry; nothing pushed): `feature/upgrade-5-followups-1` (the agent's entry
+below says what each item does, by file).
+
+**Verified by the director** (build `work/b-small`, reference `tab-trial35` = the shift kernel as merged; the new
+reference of the merged engine is `tab-small1c`).
+Every project on three bases under a fresh tag (`tab-small1c`; see the note on the runner below): 817 / 795 / 817 of
+835 / 803 / 835 files identical to `tab-trial35`, and every other entry belongs to the renamed project (only in the
+reference under its old name, only in the new run under its new one; its outputs equal the old folder's, `diff -rq`,
+three bases) or to the new project `thin_layer_limit`.  Eight fits (T2 LM, gradient, MIGRAD; 13N gradient, LM;
+`layer_yield` gradient; stopping-scale gradient, LM) end at the χ² of `b-trial35` to all printed digits.  Unit tests
+211/211, slow tests 10/10, `run_tests.sh` 157/157, converter equivalence 184/184, the converted-tree gate 628 / 601 /
+628 identical with none missing, 1 against 3 threads identical on T1, T2, T3, 13N in three bases.
+**A defect of the runner met on the way**: `tools/run_one.sh` does not replace an existing output folder of a tag
+(`mv` onto a non-empty directory fails and the error is discarded), so the first whole-tree run, under a tag that
+had been used at 10:31 for seven folders, compared old files for those and reported them identical; the gate's five
+"missing" files exposed it.  Everything above is from the fresh tag.  The fix is in the second batch of follow-ups.
+
+**Reviewed, with the director's own runs** (`work/director/small1_review_notes.md`, `work/director/thin_shift/`).
+- *A layer below 1 eV on a data set with an energy shift is still a failed point.*  `thin_limit.azr` at 1e14
+  atoms/cm² with `shift offset 0.02 MeV fixed`, `offset 0.02 MeV fit` or `offset 0 MeV fit` on its data set: a warning
+  ("shifted fold: the lower edge of the moved support … is outside the point's planned nodes [E, E]") and NaN in the
+  output; with `offset 0 MeV fixed` it gives the unshifted bytes, and at 1e16 with a shift it works.  The engine before
+  this branch refuses the file altogether (the false "beam does not leave the layer"), so nothing got worse, but the
+  item is complete only for unshifted data.  In work: `feature/upgrade-5-followups-2`.
+- *The old local shift column moved only the first term of a data set.*  In the Jacobian path (Levenberg–Marquardt)
+  the shift column of a segment moved the points of term 0 only; `MoveSegmentsToShift` moves every term, as the
+  hand-over does.  A summed data set (several reactions) with a shift of its own had a wrong shift column for its other
+  terms before.  No project of the tree has that combination, so no number moved and the old error is not measured.
+- *Two slips of the agent, both reported by itself and without consequence*: about six threads for three minutes
+  (budget four); a flag test run against the base build nearly wrote `~/.azure2/coulomb_table.bin` (stopped by its
+  60 s guard; the file's date is unchanged, 2026-10-26; the test now redirects `HOME`).
+
+**For the PI and the owner** (behaviour a user sees): a value flag without its value (`--max-calls`, an empty
+`--coulomb-table=`, a bad `AZURE_REFINE_QUADRATURE`) is an error with the usage line and exit code 2, where it was a
+warning or was ignored; a yield on a layer thinner than 1 eV is σ(E)·N, where the file was refused; the project
+`tests/target_effect_ranges` is `tests/beam_spread_ay`.
+
+**Open** (carried).  The second batch of follow-ups (`feature/upgrade-5-followups-2`): the thin layer with a shift, an
+unknown option as an error, the finite-difference fallback's gates one by one.  The observables branch
+(`feature/upgrade-5-observables`): milestones 1–3 checked by the director on the whole tree (`tab-obs2`, `tab-obs3`),
+milestone 4 (the lab-frame fold per node) and 5 (deletions) in work.
+
+## 2026-11-12 (agent, follow-ups) — six small items after the shared mesh and the shift kernel (`feature/upgrade-5-followups-1`)
+
+**Done** (one commit each, on 7ba01de7).
+- *A target layer thinner than 1 eV.*  A support narrower than `MeshZeroWidth()` is one node, and every kernel returned
+  0 for one node (a yield on such a layer was even refused at set-up as a layer "the beam does not leave").  The fold
+  of one node is now the thin limit, in one place (`Compose` in `experiment/src/Kernels.cpp`): the node's value times
+  each kernel's `Kernel::thinLimit` (1 for the averages; for the target kernel 1 / 1e-24 N / 1e-24 T/ε for a thin
+  target / a layer yield / a thick target; none for the beam profile, whose support is at least 1 keV: one node would
+  be NaN).  `src/TargetLayer.cpp` accepts one node.  Tests: `layer_kernel` case 6; `tests/thin_layer_limit/check.sh`
+  (33 areal densities 1e13–1e17: Y/(1e-24 N) and the averaged σ follow σ(E0) within T|σ'|/σ, equal it to 1e-9 with one
+  node, continuous across 1 eV).  New project in the tree: `tests/thin_layer_limit/models/thin_limit.azr`.
+- *`pyazr_shift_fn` under `AZURE_NODE_CHECK=1`.*  A defect of the Jacobian's local shift column (`FillShiftColumns`,
+  `src/AZURECalc.cpp`): it moved the points of its segments without looking their slots up again, so the point pass
+  grouped a moved unit with the energy it had left.  Numbers were right only because the units sharing a node moved
+  together.  `WorkingCopy::MoveSegmentsToShift` (`src/NodeTable.cpp`) does what the hand-over does.  Test
+  `pyazr_shift_fn_node_check`.  Jacobians bit-identical to the base build.
+- *`pyazr_shift_fold_ec`* compares the χ² of a shift moved from 0 to ±0.2, 0.05, 0.02 MeV with the same shift written
+  in the file, fixed and free (1e-12).
+- *Value-taking flags.*  `--max-calls` without `=N`, a bad `--max-calls=`, `--refreeze-covariance=`, an empty
+  `--coulomb-table=` or `--build-coulomb-table=`, and an empty or bad `AZURE_REFINE_QUADRATURE` are errors with the
+  usage line, exit 2 (`include/CommandLineValues.h`; pyazr raises ValueError for the variable instead of ending the
+  process).  Consistency check 36.  Test `tests/cli_option_values/check.sh`; `tests/fit_call_limit` case 4 changed
+  (it pinned the old warning).
+- *Rename.*  `tests/target_effect_ranges` is `tests/beam_spread_ay` (whole-tree folder
+  `.res-target_effect_ranges/target_effect_ranges.azr` → `.res-beam_spread_ay/beam_spread_ay.azr`).
+- *`park_chi2_fallback`* has a third variant that takes the finite-difference fallback of the gradient: a folded
+  capture analyzing power (13N_capture_ay with a beam spread), which the adjoint refuses.
+
+**Verified** (scratch `work/small/`): every commit builds with 0 warnings; consistency test; the unit tests of each
+item; T1, T2, T3, 13N and each item's projects in three bases byte-identical to `tab-trial35`; each new test shown
+failing (base build or an injection).  `scripts/check.sh --quick` (JOBS=1) at the end: consistency, build, `ctest -LE slow` 211/211 passed (2185 s).
+
+**Not run**: the whole tree × 3, `run_tests.sh`, the converted-tree gate, the fits (the director's).
+
+**Open.**  `tests/upgrade/predictions.txt` gained the new project's entry and the renamed path.  The other routes of
+the gradient's finite-difference fallback are listed in the report (formal-basis external-capture blocks and
+`--ignore-externals` projectors, `--use-rmc`, a few observable gates in `AMatrixFunc::PointTBar`); not tested one by one.
+An unknown option is still only a warning.
+
 ## 2026-11-12 (director, 10:20) — merged: folded data with an energy shift on the fixed nodes of the shared mesh
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (one merge commit, tree of `rehearsal/trial35`; nothing

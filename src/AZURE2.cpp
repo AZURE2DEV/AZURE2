@@ -16,6 +16,7 @@
 #include "ProjectCommands.h"
 #include "ProjectSetup.h"
 #include "CaptureAyRequests.h"
+#include "CommandLineValues.h"
 #include "Config.h"
 #include "azure2/io/LevelRows.h"
 #include "GSLException.h"
@@ -32,6 +33,7 @@
 #include <iomanip>
 #include <fstream>
 #include <sstream>
+#include <stdexcept>
 #include <cctype>
 #include <vector>
 #include <algorithm>
@@ -233,6 +235,7 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
     } else
       configure.outStream << "AZURE_OPTIONS_FILE variable set, but file not readable." << std::endl;
   }
+  configure.refineQuadrature = azure2::RefineQuadratureFromEnvironment();
   for (std::vector<std::string>::iterator it = options.begin(); it < options.end(); it++) {
 #ifndef NO_READLINE
     if (*it == "--no-readline")
@@ -256,7 +259,7 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
       configure.useCoulombTable = true;
     else if (it->compare(0, 16, "--coulomb-table=") == 0) {
       configure.useCoulombTable = true;
-      configure.coulombTablePath = it->substr(16);
+      configure.coulombTablePath = azure2::OptionText(*it, "--coulomb-table=");
     } else if (*it == "--no-coulomb-table")
       configure.useCoulombTable = false;
     else if (*it == "--ec-table")
@@ -292,17 +295,10 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
     else if (*it == "--refreeze-covariance")
       configure.refreezeCovariance = 5;
     else if (it->compare(0, 22, "--refreeze-covariance=") == 0)
-      configure.refreezeCovariance = std::max(0, std::atoi(it->substr(22).c_str()));
-    else if (it->compare(0, 12, "--max-calls=") == 0) {
-      char *end = nullptr;
-      const std::string v = it->substr(12);
-      const long n = std::strtol(v.c_str(), &end, 10);
-      if (v.empty() || *end != '\0' || n < 0)
-        configure.outStream << "WARNING: --max-calls needs a whole number >= 0 (0 = no limit); " << *it
-                            << " ignored." << std::endl;
-      else
-        configure.maxCalls = static_cast<unsigned int>(std::min(n, 1000000000L));
-    } else if (*it == "--covariance-band")
+      configure.refreezeCovariance = (int)azure2::OptionWholeNumber(*it, "--refreeze-covariance=", 0, 1000);
+    else if (azure2::OptionIs(*it, "--max-calls="))  // also given bare: an error, never the default
+      configure.maxCalls = (unsigned int)azure2::OptionWholeNumber(*it, "--max-calls=", 0, 1000000000L);
+    else if (*it == "--covariance-band")
       configure.paramMask |= Config::CALCULATE_COVARIANCE_BAND;
     else if (*it == "--scale-covariance")
       configure.paramMask |= Config::SCALE_COVARIANCE_BY_CHI2;
@@ -1497,6 +1493,7 @@ int main(int argc, char *argv[]) {
   for (int i = 1; i < argc; i++) {
     const std::string arg = argv[i];
     if (arg == "--build-coulomb-table") return buildCoulombTable("");
+    if (arg == "--build-coulomb-table=") return azure2::OptionError("--build-coulomb-table= needs a FILE");
     if (arg.compare(0, 22, "--build-coulomb-table=") == 0) return buildCoulombTable(arg.substr(22));
   }
 
@@ -1506,7 +1503,13 @@ int main(int argc, char *argv[]) {
   // Create new configuration structure, and parse the command line parameters
   Config configure(std::cout);
   g_config = &configure;  // Set global Config pointer for use across codebase
-  bool useReadline = parseOptions(argc, argv, configure);
+  // A value-taking flag without its value or with one that does not parse, or a bad AZURE_REFINE_QUADRATURE: exit 2
+  bool useReadline = false;
+  try {
+    useReadline = parseOptions(argc, argv, configure);
+  } catch (const std::invalid_argument &e) {
+    return azure2::OptionError(e.what());
+  }
 
   // The TCP/IP API server is gone; Python access is the in-process _azure2
   // module.  Refuse rather than fall through to the interactive shell, which

@@ -13,6 +13,12 @@ In one session: chi^2 at the file value, at +0.2 MeV (beyond the reach: the mesh
 value again.  Checked: finite chi^2 beyond the reach, and the file value's chi^2 again on return to 1e-12.  The value
 at +0.2 MeV is printed for the comparison with the engine before (which moved every sub-point with the shift).
 
+Then the shift moved from 0 to +0.2, -0.2, +0.05 and +0.02 MeV against the same shift written in the file, fixed (no
+reach: planned for exactly that shift) and free (planned around it): the three chi^2 agree to 1e-12 relative.  They
+are equal to all digits today, because the planner's nodes are a function of the anchors (the levels) alone and a
+re-planned support covers the same nodes as one planned at the shift from the start; a re-plan that depended on where
+the shift came from would break this (the director's measurement of the shift kernel's review, 2026-11-12).
+
 Run from anywhere:  python3 tests/pyazr/shift_fold_ec_test.py
 """
 import math
@@ -45,29 +51,57 @@ SRC = os.path.join(ROOT, "tests", "13N")
 FAR = float(os.environ.get("SHIFT_FOLD_EC_FAR", "0.2"))  # MeV lab
 
 work = tempfile.mkdtemp(prefix="pyazr_shift_ec_")
-try:
-    shutil.copytree(os.path.join(SRC, "data"), os.path.join(work, "data"))
-    os.makedirs(os.path.join(work, "output"))
-    os.makedirs(os.path.join(work, "checks"))
+
+
+def session(shift):
+    """A session of the model with skowronski_fels's shift record `shift` (format 3), in its own folder."""
+    folder = tempfile.mkdtemp(dir=work)
+    shutil.copytree(os.path.join(SRC, "data"), os.path.join(folder, "data"))
+    os.makedirs(os.path.join(folder, "output"))
+    os.makedirs(os.path.join(folder, "checks"))
     p = Project.open(os.path.join(SRC, "13N.azr"))
     for name, r in p.records().items():
         if r.record_kind == "dataset" and name != "skowronski_fels":
             p.set(name, active="no")
     p.add_beam("beam_fels", spread="0.002 MeV lab")
-    p.set("skowronski_fels", shift="offset 0 MeV fit", beam="beam_fels", quadrature="points 20")
-    a = azure2(p.save(os.path.join(work, "ec.azr")), cwd=work)
-    x0 = np.array(a.params_rwa, float)
+    p.set("skowronski_fels", shift=shift, beam="beam_fels", quadrature="points 20")
+    return azure2(p.save(os.path.join(folder, "ec.azr")), cwd=folder)
+
+
+def shift_index(a):
+    """The free parameter vector's index of the shift."""
     free = [q for q in a.parameters if not q.fixed]
-    k = [i for i, q in enumerate(free) if q.kind == "shift"][0]
-    c0 = a.segment_chi2(x0.copy())[0]
-    x = x0.copy()
-    x[k] = x0[k] + FAR
-    cfar = a.segment_chi2(x)[0]
-    cback = a.segment_chi2(x0.copy())[0]
+    return [i for i, q in enumerate(free) if q.kind == "shift"][0]
+
+
+try:
+    with session("offset 0 MeV fit") as a:
+        x0 = np.array(a.params_rwa, float)
+        k = shift_index(a)
+        c0 = a.segment_chi2(x0.copy())[0]
+        x = x0.copy()
+        x[k] = x0[k] + FAR
+        cfar = a.segment_chi2(x)[0]
+        cback = a.segment_chi2(x0.copy())[0]
     print(f"    chi2 at the file value {c0:.12g}, at +{FAR} MeV {cfar:.12g}, back {cback:.12g}")
     check("finite chi2 beyond the reach", math.isfinite(cfar), cfar)
     check("the shift moves chi2", abs(cfar - c0) > 1e-6 * abs(c0), (c0, cfar))
     check("the file value's chi2 again on return (1e-12)", abs(cback - c0) <= 1e-12 * abs(c0), (c0, cback))
+
+    for far in (0.2, -0.2, 0.05, 0.02):
+        with session("offset 0 MeV fit") as a:
+            x = np.array(a.params_rwa, float)
+            x[shift_index(a)] += far
+            moved = a.segment_chi2(x)[0]
+        with session(f"offset {far} MeV fixed") as a:
+            fixed = a.segment_chi2(np.array(a.params_rwa, float))[0]
+        with session(f"offset {far} MeV fit") as a:
+            free = a.segment_chi2(np.array(a.params_rwa, float))[0]
+        print(f"    shift {far:+.2f} MeV: moved from 0 {moved:.12g}, fixed in the file {fixed:.12g}, free in the file "
+              f"{free:.12g}")
+        check(f"shift {far:+.2f} MeV: moved from 0 = written in the file, fixed and free (1e-12)",
+              math.isfinite(fixed) and abs(moved - fixed) <= 1e-12 * abs(fixed)
+              and abs(free - fixed) <= 1e-12 * abs(fixed), (moved, fixed, free))
 finally:
     shutil.rmtree(work, ignore_errors=True)
 

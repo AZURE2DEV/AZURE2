@@ -81,16 +81,20 @@ target_link_libraries(thm_spectator_angles_test PRIVATE AZURE2Core)
 add_test(NAME thm_spectator_angles COMMAND thm_spectator_angles_test)
 
 # The Park J > 0 penalty in AZURECalc::Chi2Value: the finite-difference
-# fallback of the gradient (forced by a convolved analyzing-power segment) and
-# the analytic gradient agree with differences of the objective beyond the
-# wall.  A copy of tests/identical_pp_res's data, adapted by the test itself.
+# fallback of the gradient (taken for a folded capture analyzing power,
+# tests/13N_capture_ay with a beam spread) and the analytic gradient (p+p,
+# plain and with a convolved analyzing power) agree with differences of the
+# objective beyond the wall.  Copies of tests/identical_pp_res's and
+# tests/13N_capture_ay's data, adapted by the test itself.
 add_executable(park_chi2_fallback_test park_chi2_fallback_test.cpp)
 target_link_libraries(park_chi2_fallback_test PRIVATE AZURE2Core)
 set(_park_chi2_dir ${CMAKE_CURRENT_BINARY_DIR}/park_chi2_fallback)
 file(MAKE_DIRECTORY ${_park_chi2_dir}/output ${_park_chi2_dir}/checks)
 file(COPY ${CMAKE_SOURCE_DIR}/tests/identical_pp_res/data DESTINATION ${_park_chi2_dir})
+file(COPY ${CMAKE_SOURCE_DIR}/tests/13N_capture_ay/data DESTINATION ${_park_chi2_dir})
 add_test(NAME park_chi2_fallback
          COMMAND park_chi2_fallback_test ${CMAKE_SOURCE_DIR}/tests/identical_pp_res/identical_pp_res.azr
+                 ${CMAKE_SOURCE_DIR}/tests/13N_capture_ay/13N_capture_ay.azr
          WORKING_DIRECTORY ${_park_chi2_dir})
 set_tests_properties(park_chi2_fallback PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 300)
 

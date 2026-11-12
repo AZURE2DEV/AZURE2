@@ -287,6 +287,8 @@ Available Options
        limit, MIGRAD's EDM criterion ends the fit.  ``0`` also means no limit.
        How the fit ended is printed and written to ``fitStatus.out``.  Before
        2026-10-31 the limit was a fixed 50,000 and reaching it was silent.
+       ``N`` is a whole number from 0 to 10\ :sup:`9`; anything else, or the
+       flag without ``=N``, stops the run (exit 2).
    * - ``--refreeze-covariance[=N]``
      - For data covariances with ``relvector`` terms, whose model is frozen at
        the first evaluation of a run (the fit's starting point): rerun MIGRAD
@@ -294,7 +296,8 @@ Available Options
        parameters, until the objective stops changing.  Without the option the
        model is still re-frozen once after the fit, so the outputs match a
        calculation from ``param.sav``, and a warning is printed when the fit
-       and the re-frozen objective differ.
+       and the re-frozen objective differ.  ``N`` is a whole number from 0 to
+       1000; anything else stops the run (exit 2).
    * - ``--use-lm``
      - Fit with the Levenberg-Marquardt minimizer on the analytic Jacobian;
        falls back to MIGRAD.
@@ -320,7 +323,15 @@ Available Options
 
 Options can also be read from a file, one per line, named by the environment
 variable ``AZURE_OPTIONS_FILE``; they are applied after those on the command
-line.  An unknown option prints a warning and is otherwise ignored.
+line.  An unknown option prints a warning and is otherwise ignored.  A flag that
+takes a value (``--max-calls=N``, ``--refreeze-covariance=N``,
+``--coulomb-table=FILE``, ``--build-coulomb-table=FILE``) given without its
+value -- ``--max-calls`` alone, or ``--max-calls 50`` with a space -- or with a
+value that does not parse stops the run before anything is read: ``ERROR:``
+names the flag and the form it needs, the usage line follows, exit status 2
+(``tests/cli_option_values/check.sh``).  Before November 2026 ``--max-calls 50``
+was an unknown option and the fit ran without a limit, ``--max-calls=x`` printed
+a warning and ``--refreeze-covariance=x`` was read as 0.
 
 Multiple options can be combined:
 
@@ -360,6 +371,9 @@ refused ("Calculation was aborted.", a project that AZURE2 refuses with
 ``ERROR: ...`` -- e.g. a malformed ``<thm>`` block or a ``<thm>`` weight that
 does not fit the data --, a failed fill, initialization or parameter
 transformation, a failed MCMC run), so that a script or a job chain can tell.
+A flag that takes a value given without it or with a value that does not
+parse, or a bad ``AZURE_REFINE_QUADRATURE``, exits with 2 before the project
+is read (``ERROR: ...`` and the usage line).
 A format-3 project refused when it is read, or in a run with data because a
 data file cannot be read (``E_DATA_FILE``), prints its diagnostics and then,
 as its last error line, ``ERROR: <file> (format 3) is refused; AZURE2
@@ -530,7 +544,9 @@ experimental effect gets K times its points per resonance width and K times its
 smooth intervals (the smooth step divided by K; the step of the geometric tails
 per distance follows the points per width).  A folded value moves by the error
 of the grid it was computed on; an unfolded one does not move.  K is a whole
-number from 1 (the default) to 64; anything else stops the run.
+number from 1 (the default, the variable unset) to 64; anything else, an empty
+value included, stops the run with the usage line (exit 2), and in pyazr makes
+opening a session raise ``ValueError``.
 
 ``AZURE_NODE_CHECK=1``: at the end of every hand-over of a parameter vector and
 before every parallel point pass, every unit of every plan task (a point without

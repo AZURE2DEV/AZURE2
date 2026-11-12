@@ -1,6 +1,7 @@
 /*!
  * The Park J > 0 penalty in AZURECalc::Chi2Value, and so in the finite-
- * difference fallback of AZURECalc::Gradient.
+ * difference fallback of AZURECalc::Gradient, on a project whose gradient takes
+ * that fallback.
  *
  * Under --use-park the objective MIGRAD minimizes (AZURECalc::operator()) is
  * the data chi-squared plus sum_lambda (J_lambda / 1e-3)^2 over the levels with
@@ -21,19 +22,26 @@
  * The analytic adjoint applies to both (a convolved A_y made it bail until
  * dev's target-integrated A_y adjoint, 2e726db; the automatic-application
  * tolerance that made B bail after that is deleted: the shared mesh folds
- * every point).  Gradient() falls back to finite differences of Chi2Value only
- * for what the adjoint does not cover, and no construct of a p+p project is left
- * that it does not cover: Chi2Value = operator() below is what the fallback
- * needs.
+ * every point): no construct of a p+p project is left that the adjoint does
+ * not cover.  Variant C takes the fallback:
+ *   C  tests/13N_capture_ay (12C(p,g)13N, a capture analyzing power) with a
+ *      2 keV Gaussian beam spread on the analyzing power: a folded capture A_y,
+ *      which the adjoint refuses (GradTargetEffectAdjoint, src/AZUREGrad.cpp:
+ *      the attenuation folded into P_k has no counterpart for the P_k^1 of the
+ *      numerator), so Gradient() differentiates Chi2Value by central
+ *      differences; the 1/2- background level's proton width raised past the
+ *      bound and free, the 1/2+ resonance's proton width free.
  * Checked, at the starting point:
- *   - AccumulateEGammaGradient succeeds for A and B;
+ *   - AccumulateEGammaGradient succeeds for A and B and bails for C;
  *   - Chi2Value(p) = operator()(p), the penalty included (rel. 1e-10);
- *   - Gradient(p) = central differences of operator() (rel. 1e-5), A and B;
+ *   - Gradient(p) = central differences of operator() (rel. 1e-5), A, B and C
+ *     (for C the fallback's own differences of Chi2Value: without the penalty
+ *     in Chi2Value they differ by the penalty's derivative);
  *   - A and B agree on the wall width's derivative (rel. 1e-3: the two
  *     models differ by the convolution only).
  *
- * Run from the directory CMake prepares (data/, output/, checks/):
- *   park_chi2_fallback_test <path to identical_pp_res.azr>   (ctest: park_chi2_fallback)
+ * Run from the directory CMake prepares (data/ with both projects' data, output/, checks/):
+ *   park_chi2_fallback_test <path to identical_pp_res.azr> <path to 13N_capture_ay.azr>   (ctest: park_chi2_fallback)
  */
 #include <cmath>
 #include <cstdio>
@@ -47,6 +55,7 @@
 #include "AZUREGrad.h"
 #include "AZUREParams.h"
 #include "CNuc.h"
+#include "CaptureAyRequests.h"
 #include "Config.h"
 #include "WorkingCopy.h"
 #include "Segment.h"
@@ -56,6 +65,8 @@ Config *g_config = nullptr;
 namespace {
 
 int failures = 0;
+// The proton width (eV) of 13N_capture_ay's 1/2- background level in variant C: past Park's bound.
+const char *kCaptureWall = "1e+09";
 
 void check(const std::string &name, bool ok, const std::string &detail = "") {
   std::printf("  %s  %s%s%s\n", ok ? "ok  " : "FAIL", name.c_str(), ok || detail.empty() ? "" : "  -- ",
@@ -112,14 +123,60 @@ bool writeProject(const std::string &source, const std::string &target, bool con
   return wallDone;
 }
 
+// tests/13N_capture_ay with every energy and width fixed but two widths, the 1/2- background level's proton width
+// (20 MeV, 5e6 eV) raised past Park's bound, and a beam spread on the capture analyzing power (data set capture_ay).
+bool writeCaptureProject(const std::string &source, const std::string &target) {
+  std::ifstream in(source.c_str());
+  if (!in) return false;
+  std::ofstream out(target.c_str());
+  std::string line;
+  bool inLevels = false, wallDone = false, secondDone = false, inAy = false;
+  while (std::getline(in, line)) {
+    if (!line.empty() && line[line.size() - 1] == '\r') line.erase(line.size() - 1);
+    if (line == "<levels>") { inLevels = true; out << line << "\n"; continue; }
+    if (line == "</levels>") inLevels = false;
+    if (inLevels) {
+      std::istringstream fields(line);
+      std::vector<std::string> f;
+      std::string token;
+      while (fields >> token) f.push_back(token);
+      if (f.size() > 12) {
+        f[3] = "1";   // energy fixed
+        f[10] = "1";  // width fixed
+        if (!wallDone && f[0] == "0.5" && f[1] == "-1" && f[2] == "20" && f[11] == "5e+06") {
+          f[11] = kCaptureWall;  // past the bound, free
+          f[10] = "0";
+          wallDone = true;
+        } else if (!secondDone && f[2] == "2.3682" && f[11] == "34000") {  // the 1/2+ resonance's proton width: free
+          f[10] = "0";
+          secondDone = true;
+        }
+        for (size_t i = 0; i < f.size(); i++) out << (i ? " " : "") << f[i];
+        out << "\n";
+        continue;
+      }
+    }
+    if (line == "dataset capture_ay") inAy = true;
+    out << line << "\n";
+    if (inAy && line.find("    norm ") == 0) {
+      out << "    beam           spread_ay\n    quadrature     points 10\n";
+      inAy = false;
+    }
+    if (line == "<targets>") out << "beam spread_ay\n    spread         0.002 MeV lab\n\n";
+  }
+  return wallDone && secondDone;
+}
+
 struct Model {
   Config cfg;
   CNuc *compound = nullptr;
   WorkingCopy *data = nullptr;
   AZUREParams params;
-  explicit Model(const std::string &azr) : cfg(std::cout) {
+  // `externalCapture`: the project has external capture (as the CLI's checkExternalCapture sets it).
+  Model(const std::string &azr, bool externalCapture) : cfg(std::cout) {
     cfg.configfile = azr;
     cfg.paramMask |= (Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM);
+    if (externalCapture) cfg.paramMask |= Config::USE_EXTERNAL_CAPTURE;
   }
   ~Model() {
     delete compound;
@@ -131,6 +188,7 @@ struct Model {
     compound = new CNuc();
     data = new WorkingCopy();
     if (compound->Fill(cfg) == -1 || data->Fill(cfg, compound) != 0) return false;
+    RequestCaptureAyTerms(*compound, *data);  // as AZUREMain: a capture A_y's terms, built with the pathway table
     compound->Initialize(cfg);
     compound->FillMnParams(params, &cfg);
     data->FillMnParams(params);
@@ -159,10 +217,12 @@ bool AdjointApplies(Model &m, const vector_r &p) {
   return ok;
 }
 
-// Runs the checks on one variant; returns the gradient of the wall width.
-double Variant(const std::string &label, const std::string &azr, bool expectAdjoint) {
+// Runs the checks on one variant; returns the gradient of the wall width (the free parameter `wallIndex`, the first
+// free one).
+double Variant(const std::string &label, const std::string &azr, bool expectAdjoint, int wallIndex,
+               bool externalCapture) {
   std::printf("== %s\n", label.c_str());
-  Model m(azr);
+  Model m(azr, externalCapture);
   if (!m.Load()) {
     check(label + ": project loads", false, azr);
     return NAN;
@@ -177,8 +237,8 @@ double Variant(const std::string &label, const std::string &azr, bool expectAdjo
     fixed[i] = mp.Parameter(i).IsFixed();
     if (!fixed[i]) freeIdx.push_back(i);
   }
-  check(label + ": two free parameters (the 0+ width first)", freeIdx.size() == 2 && freeIdx[0] == 1,
-        std::to_string(freeIdx.size()));
+  check(label + ": two free parameters (the wall's width first)", freeIdx.size() == 2 && freeIdx[0] == wallIndex,
+        std::to_string(freeIdx.size()) + (freeIdx.empty() ? "" : ", first " + std::to_string(freeIdx[0])));
   if (freeIdx.size() != 2) return NAN;
 
   const bool adjoint = AdjointApplies(m, p);
@@ -221,16 +281,18 @@ double Variant(const std::string &label, const std::string &azr, bool expectAdjo
 }  // namespace
 
 int main(int argc, char **argv) {
-  if (argc < 2) {
-    std::fprintf(stderr, "usage: %s path/to/identical_pp_res.azr\n", argv[0]);
+  if (argc < 3) {
+    std::fprintf(stderr, "usage: %s path/to/identical_pp_res.azr path/to/13N_capture_ay.azr\n", argv[0]);
     return 2;
   }
-  if (!writeProject(argv[1], "park_a.azr", false) || !writeProject(argv[1], "park_b.azr", true)) {
-    std::fprintf(stderr, "cannot read or adapt %s\n", argv[1]);
+  if (!writeProject(argv[1], "park_a.azr", false) || !writeProject(argv[1], "park_b.azr", true) ||
+      !writeCaptureProject(argv[2], "park_c.azr")) {
+    std::fprintf(stderr, "cannot read or adapt %s or %s\n", argv[1], argv[2]);
     return 2;
   }
-  const double gA = Variant("A: analytic gradient", "park_a.azr", true);
-  const double gB = Variant("B: a convolved analyzing power", "park_b.azr", true);
+  const double gA = Variant("A: analytic gradient", "park_a.azr", true, 1, false);
+  const double gB = Variant("B: a convolved analyzing power", "park_b.azr", true, 1, false);
+  Variant("C: a folded capture analyzing power (the fallback)", "park_c.azr", false, 4, true);
   check("A and B agree on the wall width's derivative (" + num(gA) + " vs " + num(gB) + ")",
         std::fabs(gA - gB) <= 1e-3 * std::fabs(gA));
   std::printf("%s\n", failures ? "FAIL" : "PASS");

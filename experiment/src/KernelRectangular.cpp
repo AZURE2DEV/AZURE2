@@ -60,6 +60,7 @@ Kernel RectangularKernel() {
   k.fold = FoldRectangular<double>;
   k.weights = FoldRectangular<LinearForm>;
   k.derivative = RectangularDerivative;
+  k.thinLimit = AverageThinLimit;
   k.support = RectangularSupport;
   k.doc = "a rectangular energy resolution: the average of the cross section over [E0 - w/2, E0 + w/2]";
   return k;
