@@ -42,7 +42,9 @@ either way (`stopping/data/srim/README.md`).
 
 Phase 7 has begun as a separate library that the engine does not use yet: optical potentials, bound states,
 distorted waves and the DWBA transfer to a bound state, which agree with FRESCO to better than 0.2 %
-(`docs/upgrade/transfer.md`).
+(`docs/upgrade/transfer.md`). It now also computes the transfer into the unbound x + A system (FRESCO's continuum
+bins, within 0.5 % of FRESCO for the deuteron), and shows that inside the channel radius this amplitude is the
+level's vertex times the resonance's energy dependence, which is what the THM fit assumes.
 
 **How every step is checked.** Each merge is verified as a whole: the 183 project files of the test suite run in
 three bases (Brune, formal, Park) and every output file is compared byte for byte with the previous head (726 + 699
@@ -400,8 +402,9 @@ change, where it ran out of memory before. No number of the test tree moved. Kno
 layers below 1 eV the fitted error of an energy shift is too small (χ² is a staircase in the shift there), and the
 cost of a shifted data set grows with the width of the shift's prior over the width of the layer.
 
-In work now: the transfer amplitude to the continuum of x + A for the Trojan-horse vertices, a part of the
-`physics/` library checked against FRESCO (nothing of the engine uses it yet). Merged in the earlier batch: one generic kind of fit parameter for the parameters of
+In work now: a survey of every piece of state the engine keeps between two evaluations (static and per-thread
+caches, pooled copies, environment switches), and its removal where it is not an immutable table; no number may
+change. Merged in the earlier batch: one generic kind of fit parameter for the parameters of
 apparatus effects (see "How to add a feature now").
 
 **Do the checks still test what they say? (merged 2026-11-11, evening.)** A regression check that edits a project's

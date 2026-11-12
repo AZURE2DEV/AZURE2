@@ -4,8 +4,9 @@
 #include <complex>
 #include <vector>
 
-#include "azure2/physics/transfer/BoundState.h"
 #include "azure2/physics/transfer/DistortedWaves.h"
+#include "azure2/physics/transfer/Interaction.h"
+#include "azure2/physics/transfer/Overlap.h"
 
 namespace azure2 {
 namespace physics {
@@ -13,8 +14,10 @@ namespace transfer {
 
 /*!
  * The DWBA amplitude and cross section of the transfer A(a, s)F of a cluster x, a = s + x, F = A + x, to a bound
- * state of F (docs/upgrade/transfer.md sections 5-6).  Post form, the interaction the binding potential V_sx(r_sx)
- * of x in a (Coulomb included, as FRESCO's KIND=7, IP1=0), no remnant term (FRESCO's IP2 = 0):
+ * state of F, a bin or a scattering state of x + A (docs/upgrade/transfer.md sections 5-6, 15-17).  Written here for
+ * the post form with the binding potential V_sx(r_sx) of x in a as the interaction (Coulomb included, as FRESCO's
+ * KIND=7, IP1=0) and no remnant term (FRESCO's IP2 = 0); the prior form and the remnants are other sums of the
+ * terms of Interaction.h (Eq. (17.1)) in the same kernel:
  *
  *   T = < chi^(-)_f(r_sF) I_F | V_sx(r_sx) | I_a chi^(+)_i(r_aA) >,                                         (6.1)
  *
@@ -39,42 +42,32 @@ namespace transfer {
  * ZeroRangeConstant), then r_aA = r, r_sF = alpha r (FRESCO's KIND=5 with P2 = 0: no finite-range correction).
  */
 
-/// One overlap: the bound state of x relative to the core (its l, 2j), the spectroscopic amplitude and the spins.
-struct Overlap {
-  BoundState state;            ///< u(r) of x in the composite; its potential is the post-form interaction
-  double amplitude = 1.0;      ///< A (signed)
-  int two_J_core = 0;          ///< 2J of the core (s for the projectile, A for the residual)
-  int two_J_composite = 0;     ///< 2J of the composite (a, F)
-};
-
-/// The post-form interaction: the whole binding potential V_sx of the projectile overlap (FRESCO's default,
-/// KRPOT = KBPOT), or its nuclear part V_sx - V_C (FRESCO with KRPOT a potential without the Coulomb term).
-enum class PostInteraction { BindingPotential, NuclearPart };
-
-/// The reaction.
+/// The reaction.  The overlaps are those of Overlap.h (a bound state, a bin or a scattering state of F); the
+/// interaction is a sum of the terms of Interaction.h (default: the post form without remnant, Eq. (6.1)).
 struct TransferReaction {
   double mass_a_u = 0.0, mass_A_u = 0.0, mass_s_u = 0.0, mass_F_u = 0.0;  ///< masses (u)
   int two_s_x = 0;     ///< 2 s_x, the intrinsic spin of x
   Overlap projectile;  ///< x in a (core s)
   Overlap residual;    ///< x in F (core A)
-  PostInteraction interaction = PostInteraction::BindingPotential;
+  std::vector<InteractionTerm> interaction = PostForm();
 };
 
 /// The numerical settings of the finite-range amplitude.
 struct TransferGrid {
   double step_fm = 0.1;           ///< step of the r_aA, r_sF grid: a multiple of both waves' steps
   double r_max_fm = 20.0;         ///< largest r_aA, r_sF (<= the matching radius of both waves)
-  double vertex_range_fm = 10.0;  ///< V_sx(rho) u_a(rho) taken as 0 beyond this r_sx
+  double vertex_range_fm = 10.0;  ///< the projectile overlap (V_sx u_a, or u_a in a prior form or with a remnant) taken as 0 beyond this r_sx
   int angle_nodes = 48;           ///< Gauss-Legendre nodes in cos(r_aA, r_sF)
 };
 
-/// The finite-range post-form dsigma/dOmega (mb/sr) at the c.m. angles theta (deg) of s relative to a.
+/// The finite-range dsigma/dOmega at the c.m. angles theta (deg) of s relative to a, in the unit of the residual
+/// overlap's kind (mb/sr for a bound state or a bin, mb/(sr MeV) for a scattering state: OverlapKinds()).
 std::vector<double> FiniteRangeCrossSection(const TransferReaction &reaction, const DistortedWaves &entrance,
                                             const DistortedWaves &exit, const TransferGrid &grid,
                                             const std::vector<double> &theta_deg);
 
-/// The zero-range dsigma/dOmega (mb/sr) with the constant D0 (MeV fm^3/2); needs l_a = 0.  The radial integral runs
-/// on the residual overlap's grid.
+/// The zero-range dsigma/dOmega (unit as above) with the constant D0 (MeV fm^3/2); needs l_a = 0 and the post form
+/// without remnant (the interaction is not read).  The radial integral runs on the residual overlap's grid.
 std::vector<double> ZeroRangeCrossSection(const TransferReaction &reaction, double d0_MeV_fm32,
                                           const DistortedWaves &entrance, const DistortedWaves &exit,
                                           const std::vector<double> &theta_deg);
@@ -88,7 +81,7 @@ std::vector<double> ZeroRangeCrossSection(const TransferReaction &reaction, doub
  * c_i = 1, c_f = alpha; the engine's prior-form THM weight M(E) (src/ThmDistortion.h) is c_i = beta, c_f = 1 with
  * l = 0 and M = sqrt(4 pi) O_0 (its phi has no Y_00).
  */
-std::vector<std::complex<double>> ZeroRangeOrbitalIntegral(const BoundState &state, const DistortedWaves &entrance,
+std::vector<std::complex<double>> ZeroRangeOrbitalIntegral(const RadialOverlap &state, const DistortedWaves &entrance,
                                                            const DistortedWaves &exit, double c_i, double c_f,
                                                            double theta_deg);
 

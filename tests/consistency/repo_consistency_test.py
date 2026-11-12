@@ -286,6 +286,11 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, "physics")):
             # (docs/upgrade/coulomb.md section 1.3); a name that is a file of physics/coulomb/ is allowed there.
             if rel.startswith(os.path.join("physics", "coulomb") + os.sep) and inc.startswith('"') and inc[1:-1] in COULOMB_HEADERS:
                 continue
+            # physics/tests/: a test may include a helper header of physics/tests/ itself by bare name (shared
+            # readers of reference data, such as transfer_fresco_common.h).
+            if (rel.startswith(os.path.join("physics", "tests") + os.sep) and inc.startswith('"') and "/" not in inc
+                    and os.path.isfile(os.path.join(ROOT, "physics", "tests", inc[1:-1]))):
+                continue
             if inc.startswith("<") and re.fullmatch(r"[a-z_]+", inc[1:-1]):
                 continue
             problems.append(f"{rel}: includes {inc}; physics/ may include only azure2/physics/ headers and the C++ standard library")
