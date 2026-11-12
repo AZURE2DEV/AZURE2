@@ -177,7 +177,7 @@ void WorkingCopy::ContractRowSets(azure2::Results &results) const {
 
 void WorkingCopy::ContractRowSetOf(const Unit &point, azure2::Results &results) const {
   const azure2::RowSet *set = point.RowSetOf();
-  if (!set || set->valueOffset < 0) return;
+  if (!set) return;
   if (results.contracted.size() < set->ValueIndex(set->count, 0))
     throw std::logic_error("WorkingCopy::ContractRowSetOf: a buffer of " + std::to_string(results.contracted.size()) +
                            " contracted values, the point's row set ends at " +

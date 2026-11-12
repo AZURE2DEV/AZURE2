@@ -72,11 +72,6 @@ std::vector<MeshAnchor> MeshAnchorsOf(CNuc *nucleus, const DataSet::NucleusMesh 
 /// A point's slots on a mesh: the nodes of its support's range, as c.m. energies of its pair, descending.
 std::vector<double> MeshSlotEnergies(const MeshPlan &plan, const Unit::SubGridSpec &spec);
 
-/// Gives a folded point the slots at the c.m. energies of `grid` (descending), each with the stopping of its
-/// effect's target at that energy.
-void AddGridSlots(WorkingCopy &data, Unit &point, const TermRef &term, const std::vector<double> &grid,
-                  const TargetEffect &effect, double conversion, const Config &configure);
-
 /// The key of a folded point's sharing group on mesh `mesh` (SlotGroup.h).
 SlotGroupKey MeshGroupKey(const WorkingCopy &data, const Unit &point, const TermRef &term, const Unit::SubGridSpec &spec);
 

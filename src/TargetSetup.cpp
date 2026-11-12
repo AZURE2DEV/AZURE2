@@ -31,7 +31,6 @@
  * to be applied to the data.
  */
 
-using azure2::AddGridSlots;
 using azure2::EdgeAtFloor;
 using azure2::MeetsStretches;
 using azure2::MeshAnchorsOf;
@@ -113,8 +112,7 @@ bool SegmentNeedsEC(const TermRef &segment, CNuc *theCNuc, const Config &configu
  * Energy shifts: a folded point on the shared mesh keeps its nodes; its support
  * moves with its shift, and when the shift leaves the reach its nodes were planned
  * for, the mesh is planned again for the moved support (ShiftedFold.h, question 2).
- * Every folded point is on a shared mesh here: a grid of its own exists only with
- * useAdaptiveGrid off, which places nothing again.
+ * Every folded point is on a shared mesh (SetUpTargetEffects refuses one that has none).
  *
  * A grid is kept only if every node is bit for bit where the new one puts it;
  * otherwise the point gets the new grid, so the grid depends on the current
@@ -122,7 +120,7 @@ bool SegmentNeedsEC(const TermRef &segment, CNuc *theCNuc, const Config &configu
  */
 int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const std::vector<TermRef> &shiftActive,
                                       std::vector<int> &replacedTasks) {
-  if (!configure.useAdaptiveGrid || !theCNuc) return 0;
+  if (!theCNuc) return 0;
   // Without grid replacement (--no-grid-replacement) the anchors stay; the supports of shifted points still follow
   // their shifts (ShiftedFold.h, question 2), which their folds need.
   const bool replaceGrids = configure.replaceSubPointGrids;
@@ -171,7 +169,7 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
       if (!Data().GridSpecOf(*point).valid) continue;
       if (Data().GridSpecOf(*point).mesh < 0)
         throw std::logic_error("ReplaceSubPointGrids: a folded point of segment " + std::to_string(point->GetSegmentKey()) +
-                               " is off the shared mesh with useAdaptiveGrid on (MeshSlots.h, OnSharedMesh)");
+                               " is off the shared mesh (MeshSlots.h, OnSharedMesh)");
       // With the other points of the block it reads (a shifted point's slots do not move with its shift:
       // ShiftedFold.h).
       const int block = point->NumSubPoints() ? SlotBlockOf(point->SubPointFirst()) : -1;
@@ -478,16 +476,116 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
   if (!this->CheckTargetStoppings(configure)) return -1;
   Draft().meshes_.clear();
   std::vector<MeshPoint> meshPending;  // the folded points whose slots the shared mesh gives, in set-up order
+  // The folded points of one term (the base segment, t = 0, or a component), each with the pairs, the lab<->c.m.
+  // factor and the kinematics of the pair the term calculates: their target thickness, the support of their kernels,
+  // and their place in the shared mesh of their nucleus, whose nodes are their slots (placed below).
+  auto layOutTerm = [&](const TermRef &term, PPair *entrance, PPair *exit, double conversion) -> int {
+    const Segment &segment = *term.segment;
+    TargetEffect *targetEffect = Draft().GetTargetEffect(term.GetTargetEffectNum());
+    const std::string what = std::string(term.term ? "a component of " : "") + "segment #" +
+                             std::to_string(segment.GetSegmentKey());
+    // the line's energies stay in the lab frame; every point converts them with its own pair's factor
+    const int bohrZ1 = (entrance->GetPType() == 20) ? 0 : entrance->GetZ(1);
+    const int bohrZ2 = entrance->GetZ(2);
+    if (targetEffect->IsUdr()) {
+      double eMin = 1.0e300, eMax = 0.0;
+      for (UnitIterator point = term.GetPoints(*this).begin(); point < term.GetPoints(*this).end(); point++) {
+        eMin = std::min(eMin, point->GetLabEnergy());
+        eMax = std::max(eMax, point->GetLabEnergy());
+      }
+      if (eMax > 0.0 && !targetEffect->LoadUdrTable(eMin, eMax, configure.outStream, configure.cacheInputFiles)) return -1;
+    }
+    for (UnitIterator point = term.GetPoints(*this).begin(); point < term.GetPoints(*this).end(); point++) {
+      point->SetTargetEffectNum(term.GetTargetEffectNum());
+      point->SetTargetKinematics(conversion, bohrZ1, bohrZ2);
+      if (!targetEffect->IsSubPointEffect()) continue;
+      double targetThickness = 0.0;
+      if (targetEffect->IsTargetIntegration()) {
+        if (targetEffect->IsThickTarget()) {
+          // an infinitely thick target: the point integrates from its energy down to 1 keV
+          targetThickness = std::max(point->GetCMEnergy() - 0.001, 0.0);
+        } else {
+          // the grid spans the target at its layout density (a fitted density's largest expected value), and a
+          // layer yield's grid a margin beyond it (its E_out comes from the grid's own quadrature)
+          targetThickness = conversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure,
+                                                                       targetEffect->GetLayoutDensity(), targetEffect->GetLayoutStoppingScale());
+          if (targetEffect->IsLayerYield()) targetThickness *= TargetEffect::LayerGridMargin();
+          if (!(targetThickness > 0.0) && targetEffect->IsLayerYield())
+            return RefuseLayerAtBeamEnergy(*targetEffect, *point, segment.GetDataFile(), configure);
+          if (!(targetThickness > 0.0)) {
+            configure.outStream << "ERROR: target integration of " << what << " at E_lab = " << point->GetLabEnergy()
+                                << " MeV: the stopping cross section times the density is " << targetThickness / conversion
+                                << " (not positive).  A density of 0 means an infinitely thick target; otherwise the"
+                                << " stopping power must be positive at every point." << std::endl;
+            return -1;
+          }
+        }
+        point->SetTargetLabEnergy(point->GetLabEnergy());
+        point->SetTargetThickness((targetEffect->HasDensityFit() || targetEffect->IsLayerYield())
+                                      ? conversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure)
+                                      : targetThickness);
+      }
+      // the term's own entrance pair (an advanced component can have another entrance channel)
+      const double minSubEnergy = segment.IntegrationFloor(entrance);
+      // What the kernels read beyond the effect's parameters: the point's UDR kernel, from the effect's table, and the
+      // inverse kinematics of a beam profile's detailed-balance weight, Q = E_gamma - E_cm: the entrance pair's threshold
+      // (S plus its total excitation) minus the energy of the final level the gamma pair feeds (its heavy excitation).
+      azure2::experiment::SupportPoint support;
+      if (targetEffect->IsUdr()) {
+        const double mass = entrance->GetM(1) * uconv;
+        DataSet::PointSetUp &setUp = Draft().SetUpFor(*point);
+        setUp.udr = targetEffect->BuildUdrKernel(point->GetLabEnergy(), mass);
+        setUp.udrMass = mass;
+        support.udr = setUp.udr.get();
+        support.udrMass = mass;
+      }
+      if (targetEffect->IsBeamProfile())
+        point->SetPhotoKinematics(entrance->GetSepE() + entrance->GetExE() - exit->GetHeavyExE(),
+                                  (entrance->GetM(1) + entrance->GetM(2)) * uconv);
+      // The interval the nodes span: the support of the effect's kernels (azure2/experiment/Kernels.h).
+      support.energy = point->GetCMEnergy();
+      support.labEnergy = point->GetLabEnergy();
+      support.cmFactor = conversion;
+      support.z1 = bohrZ1;
+      support.z2 = bohrZ2;
+      support.targetThickness = targetThickness;
+      support.minimumEnergy = minSubEnergy;
+      support.thm = segment.IsTHM();
+      support.binLow = point->GetBinLowCM();
+      support.binHigh = point->GetBinHighCM();
+      double startEnergy = 0.0, endEnergy = 0.0;
+      azure2::experiment::EffectSupport(targetEffect->Kernels(), targetEffect->KernelParametersFor(configure), support,
+                                        startEnergy, endEnergy);
+      // AZURE_REFINE_QUADRATURE=k: k times the smooth intervals and the points per width
+      const int numPoints = targetEffect->NumSubPoints() * configure.refineQuadrature;
+      AdaptiveIntegrationGrid::GridConfig gridConfig;
+      gridConfig.maxPoints = numPoints;
+      // The term's own entrance pair: its resonances, on its energy axis, are what the mesh must resolve.
+      gridConfig.entranceKey = term.GetEntranceKey();
+      gridConfig.inputWidthsArePhysical = (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->IsTransformedIn();
+      gridConfig.baseEnergyStep = (startEnergy - endEnergy) / numPoints;
+      gridConfig.resonanceWidthMultiplier = targetEffect->GetResonanceWidthMultiplier();
+      gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth() * configure.refineQuadrature;
+      Unit::SubGridSpec &spec = Draft().SetUpFor(*point).grid;
+      spec = MakeSubGridSpec(gridConfig, startEnergy, endEnergy, targetEffect, conversion);
+      SetShiftLayout(spec, Draft().GetSegments(), segment, State(segment), *point, minSubEnergy);
+      // Every folded point is a support of the shared mesh; a pair without an E_x frame has no place on it.
+      if (!OnSharedMesh(segment, entrance, exit)) {
+        configure.outStream << "ERROR: " << what << ": its points are folded (a target, beam or detector effect), but its"
+                            << " pairs give no excitation energy of the compound nucleus (a beta-delayed spectrum without an exit pair), so the fold has"
+                            << " no nodes." << std::endl;
+        return -1;
+      }
+      meshPending.push_back(QueueMeshPoint(Draft().meshes_, *point, term, spec, entrance, exit,
+                                           EdgeAtFloor(*targetEffect, endEnergy, minSubEnergy)));
+    }
+    return 0;
+  };
   for (SegmentIterator segment = Draft().GetSegments().begin(); segment < Draft().GetSegments().end(); segment++) {
     PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(segment->GetEntranceKey()));
     PPair *exitPair = compound->GetPairFromKey(segment->GetExitKey());  // nullptr for total capture (-1)
-    const double cmConversion = Segment::CMEnergyFactor(entrancePair, exitPair);
-
     if (segment->IsTargetEffect()) {
-      TargetEffect *targetEffect = Draft().GetTargetEffect(segment->GetTargetEffectNum());
-      // the line's energies stay in the lab frame; every point converts them with its own pair's factor
-      const int bohrZ1 = (entrancePair->GetPType() == 20) ? 0 : entrancePair->GetZ(1);
-      const int bohrZ2 = entrancePair->GetZ(2);
+      const TargetEffect *targetEffect = Draft().GetTargetEffect(segment->GetTargetEffectNum());
       if (targetEffect->IsDoppler() && entrancePair->GetPType() != 0) {
         configure.outStream << "ERROR: segment #" << segment->GetSegmentKey() << ": free-gas Doppler broadening"
                             << " (doppler) needs a particle entrance pair (a beam on target atoms in thermal motion)"
@@ -503,222 +601,23 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
                             << " target integration, a beam profile or electron screening." << std::endl;
         return -1;
       }
-      if (targetEffect->IsUdr()) {
-        double eMin = 1.0e300, eMax = 0.0;
-        for (UnitIterator point = segment->GetPoints(*this).begin(); point < segment->GetPoints(*this).end(); point++) {
-          eMin = std::min(eMin, point->GetLabEnergy());
-          eMax = std::max(eMax, point->GetLabEnergy());
-        }
-        if (eMax > 0.0 && !targetEffect->LoadUdrTable(eMin, eMax, configure.outStream, configure.cacheInputFiles)) return -1;
-      }
-
-      for (UnitIterator point = segment->GetPoints(*this).begin(); point < segment->GetPoints(*this).end(); point++) {
-        point->SetTargetEffectNum(segment->GetTargetEffectNum());
-        point->SetTargetKinematics(cmConversion, bohrZ1, bohrZ2);
-
-        if (targetEffect->IsSubPointEffect()) {
-          double targetThickness = 0.0;
-          if (targetEffect->IsTargetIntegration()) {
-            if (targetEffect->IsThickTarget()) {
-              // an infinitely thick target: the point integrates from its energy down to 1 keV
-              targetThickness = std::max(point->GetCMEnergy() - 0.001, 0.0);
-            } else {
-              // the grid spans the target at its layout density (a fitted density's largest expected value), and a
-              // layer yield's grid a margin beyond it (its E_out comes from the grid's own quadrature)
-              targetThickness = cmConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure,
-                                                                             targetEffect->GetLayoutDensity(), targetEffect->GetLayoutStoppingScale());
-              if (targetEffect->IsLayerYield()) targetThickness *= TargetEffect::LayerGridMargin();
-              if (!(targetThickness > 0.0) && targetEffect->IsLayerYield())
-                return RefuseLayerAtBeamEnergy(*targetEffect, *point, segment->GetDataFile(), configure);
-              if (!(targetThickness > 0.0)) {
-                configure.outStream << "ERROR: target integration of segment #" << segment->GetSegmentKey()
-                                    << " at E_lab = " << point->GetLabEnergy() << " MeV: the stopping cross section times the"
-                                    << " density is " << targetThickness / cmConversion << " (not positive).  A density of 0"
-                                    << " means an infinitely thick target; otherwise the stopping power must be positive"
-                                    << " at every point." << std::endl;
-                return -1;
-              }
-            }
-            point->SetTargetLabEnergy(point->GetLabEnergy());
-            point->SetTargetThickness((targetEffect->HasDensityFit() || targetEffect->IsLayerYield())
-                                          ? cmConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure)
-                                          : targetThickness);
-          }
-          const double minSubEnergy = segment->IntegrationFloor(entrancePair);
-          // What the kernels read beyond the effect's parameters: the point's UDR kernel, from the effect's table, and the
-          // inverse kinematics of a beam profile's detailed-balance weight, Q = E_gamma - E_cm: the entrance pair's threshold
-          // (S plus its total excitation) minus the energy of the final level the gamma pair feeds (its heavy excitation).
-          azure2::experiment::SupportPoint support;
-          if (targetEffect->IsUdr()) {
-            const double mass = entrancePair->GetM(1) * uconv;
-            DataSet::PointSetUp &setUp = Draft().SetUpFor(*point);
-            setUp.udr = targetEffect->BuildUdrKernel(point->GetLabEnergy(), mass);
-            setUp.udrMass = mass;
-            support.udr = setUp.udr.get();
-            support.udrMass = mass;
-          }
-          if (targetEffect->IsBeamProfile())
-            point->SetPhotoKinematics(entrancePair->GetSepE() + entrancePair->GetExE() - exitPair->GetHeavyExE(),
-                                      (entrancePair->GetM(1) + entrancePair->GetM(2)) * uconv);
-          // The interval the nodes span: the support of the effect's kernels (azure2/experiment/Kernels.h).
-          support.energy = point->GetCMEnergy();
-          support.labEnergy = point->GetLabEnergy();
-          support.cmFactor = cmConversion;
-          support.z1 = bohrZ1;
-          support.z2 = bohrZ2;
-          support.targetThickness = targetThickness;
-          support.minimumEnergy = minSubEnergy;
-          support.thm = segment->IsTHM();
-          support.binLow = point->GetBinLowCM();
-          support.binHigh = point->GetBinHighCM();
-          double startEnergy = 0.0, endEnergy = 0.0;
-          azure2::experiment::EffectSupport(targetEffect->Kernels(), targetEffect->KernelParametersFor(configure), support,
-                                            startEnergy, endEnergy);
-          std::vector<double> energyGrid;
-          // AZURE_REFINE_QUADRATURE=k: k times the smooth intervals and the points per width
-          int numPoints = targetEffect->NumSubPoints() * configure.refineQuadrature;
-          if (configure.useAdaptiveGrid) {
-            AdaptiveIntegrationGrid::GridConfig gridConfig;
-            gridConfig.maxPoints = numPoints;
-            gridConfig.entranceKey = segment->GetEntranceKey();
-            gridConfig.inputWidthsArePhysical = (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->IsTransformedIn();
-            gridConfig.baseEnergyStep = (startEnergy - endEnergy) / numPoints;
-            gridConfig.resonanceWidthMultiplier = targetEffect->GetResonanceWidthMultiplier();
-            gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth() * configure.refineQuadrature;
-            Unit::SubGridSpec &spec = Draft().SetUpFor(*point).grid;
-            spec = MakeSubGridSpec(gridConfig, startEnergy, endEnergy, targetEffect, cmConversion);
-            SetShiftLayout(spec, Draft().GetSegments(), *segment, State(*segment), *point, minSubEnergy);
-            if (OnSharedMesh(*segment, entrancePair, exitPair)) {
-              meshPending.push_back(QueueMeshPoint(Draft().meshes_, *point, {&*segment, 0}, spec, entrancePair, exitPair,
-                                                   EdgeAtFloor(*targetEffect, endEnergy, minSubEnergy)));
-              continue;  // its slots are the mesh's nodes, placed below
-            }
-            AdaptiveIntegrationGrid gridGenerator(gridConfig);
-            energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
-          } else {
-            double step = (startEnergy - endEnergy) / numPoints;
-            for (int i = 0; i <= numPoints; i++)
-              energyGrid.push_back(startEnergy - i * step);
-          }
-          AddGridSlots(*this, *point, {&*segment, 0}, energyGrid, *targetEffect, cmConversion, configure);
-        }
-      }
+      if (layOutTerm({&*segment, 0}, entrancePair, exitPair, Segment::CMEnergyFactor(entrancePair, exitPair)) != 0)
+        return -1;
     }
-    {
-      for (int t = 1; t < segment->NumTerms(); t++) {
-        const TermRef component{&*segment, t};
-        // The component's grid, kinematics and lab<->c.m. factor belong to the
-        // pair the component calculates -- for a natural target another
-        // compound nucleus with its own masses -- not to the base segment's.
-        // The points were copied from the base segment with its c.m.
-        // energies; convert them for this pair before the grid is laid out
-        // (WorkingCopy::Initialize repeats this, idempotently, from the lab energy).
-        PPair *compEntrance = compound->GetPair(compound->GetPairNumFromKey(component.GetEntranceKey()));
-        PPair *compExit = compound->GetPairFromKey(component.GetExitKey());
-        const double compConversion = Segment::CMEnergyFactor(compEntrance, compExit);
-        for (int i = 0; i < component.NumPoints(); i++) segment->ConvertRowEnergyToCM(*this, t, i, compEntrance, compExit);
-        if (segment->IsTargetEffect()) {
-          TargetEffect *targetEffect = Draft().GetTargetEffect(component.GetTargetEffectNum());
-          const int bohrZ1 = (compEntrance->GetPType() == 20) ? 0 : compEntrance->GetZ(1);
-          const int bohrZ2 = compEntrance->GetZ(2);
-          if (targetEffect->IsUdr()) {
-            double eMin = 1.0e300, eMax = 0.0;
-            for (UnitIterator point = component.GetPoints(*this).begin(); point < component.GetPoints(*this).end(); point++) {
-              eMin = std::min(eMin, point->GetLabEnergy());
-              eMax = std::max(eMax, point->GetLabEnergy());
-            }
-            if (eMax > 0.0 && !targetEffect->LoadUdrTable(eMin, eMax, configure.outStream, configure.cacheInputFiles)) return -1;
-          }
-
-          for (UnitIterator point = component.GetPoints(*this).begin(); point < component.GetPoints(*this).end(); point++) {
-            point->SetTargetEffectNum(component.GetTargetEffectNum());
-            point->SetTargetKinematics(compConversion, bohrZ1, bohrZ2);
-
-            if (targetEffect->IsSubPointEffect()) {
-              double targetThickness = 0.0;
-              if (targetEffect->IsTargetIntegration()) {
-                if (targetEffect->IsThickTarget()) {
-                  targetThickness = std::max(point->GetCMEnergy() - 0.001, 0.0);
-                } else {
-                  targetThickness = compConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure,
-                                                                                   targetEffect->GetLayoutDensity(), targetEffect->GetLayoutStoppingScale());
-                  if (targetEffect->IsLayerYield()) targetThickness *= TargetEffect::LayerGridMargin();
-                  if (!(targetThickness > 0.0) && targetEffect->IsLayerYield())
-                    return RefuseLayerAtBeamEnergy(*targetEffect, *point, segment->GetDataFile(), configure);
-                  if (!(targetThickness > 0.0)) {
-                    configure.outStream << "ERROR: target integration of a component of segment #" << segment->GetSegmentKey()
-                                        << " at E_lab = " << point->GetLabEnergy() << " MeV: the stopping cross section times"
-                                        << " the density is " << targetThickness / compConversion << " (not positive)." << std::endl;
-                    return -1;
-                  }
-                }
-                point->SetTargetLabEnergy(point->GetLabEnergy());
-                point->SetTargetThickness((targetEffect->HasDensityFit() || targetEffect->IsLayerYield())
-                                              ? compConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure)
-                                              : targetThickness);
-              }
-              // the component's own entrance pair (an advanced component can have another entrance channel)
-              const double minSubEnergy = segment->IntegrationFloor(compEntrance);
-              // What the kernels read beyond the effect's parameters: the point's UDR kernel, from the effect's table, and the
-              // inverse kinematics of a beam profile's detailed-balance weight, Q = E_gamma - E_cm: the entrance pair's threshold
-              // (S plus its total excitation) minus the energy of the final level the gamma pair feeds (its heavy excitation).
-              azure2::experiment::SupportPoint support;
-              if (targetEffect->IsUdr()) {
-                const double mass = compEntrance->GetM(1) * uconv;
-                DataSet::PointSetUp &setUp = Draft().SetUpFor(*point);
-                setUp.udr = targetEffect->BuildUdrKernel(point->GetLabEnergy(), mass);
-                setUp.udrMass = mass;
-                support.udr = setUp.udr.get();
-                support.udrMass = mass;
-              }
-              if (targetEffect->IsBeamProfile())
-                point->SetPhotoKinematics(compEntrance->GetSepE() + compEntrance->GetExE() - compExit->GetHeavyExE(),
-                                          (compEntrance->GetM(1) + compEntrance->GetM(2)) * uconv);
-              // The interval the nodes span: the support of the effect's kernels (azure2/experiment/Kernels.h).
-              support.energy = point->GetCMEnergy();
-              support.labEnergy = point->GetLabEnergy();
-              support.cmFactor = compConversion;
-              support.z1 = bohrZ1;
-              support.z2 = bohrZ2;
-              support.targetThickness = targetThickness;
-              support.minimumEnergy = minSubEnergy;
-              support.thm = segment->IsTHM();
-              support.binLow = point->GetBinLowCM();
-              support.binHigh = point->GetBinHighCM();
-              double startEnergy = 0.0, endEnergy = 0.0;
-              azure2::experiment::EffectSupport(targetEffect->Kernels(), targetEffect->KernelParametersFor(configure), support,
-                                                startEnergy, endEnergy);
-              std::vector<double> energyGrid;
-              int numPoints = targetEffect->NumSubPoints() * configure.refineQuadrature;  // as the base's
-              if (configure.useAdaptiveGrid) {
-                AdaptiveIntegrationGrid::GridConfig gridConfig;
-                gridConfig.maxPoints = numPoints;
-                // The component's own entrance pair: its resonances, on its energy axis, are what the grid must resolve.
-                gridConfig.entranceKey = component.GetEntranceKey();
-                gridConfig.inputWidthsArePhysical = (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->IsTransformedIn();
-                gridConfig.baseEnergyStep = (startEnergy - endEnergy) / numPoints;
-                gridConfig.resonanceWidthMultiplier = targetEffect->GetResonanceWidthMultiplier();
-                gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth() * configure.refineQuadrature;
-                Unit::SubGridSpec &spec = Draft().SetUpFor(*point).grid;
-                spec = MakeSubGridSpec(gridConfig, startEnergy, endEnergy, targetEffect, compConversion);
-                SetShiftLayout(spec, Draft().GetSegments(), *segment, State(*segment), *point, minSubEnergy);
-                if (OnSharedMesh(*segment, compEntrance, compExit)) {
-                  meshPending.push_back(QueueMeshPoint(Draft().meshes_, *point, component, spec, compEntrance, compExit,
-                                                       EdgeAtFloor(*targetEffect, endEnergy, minSubEnergy)));
-                  continue;  // its slots are the mesh's nodes, placed below
-                }
-                AdaptiveIntegrationGrid gridGenerator(gridConfig);
-                energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
-              } else {
-                double step = (startEnergy - endEnergy) / numPoints;
-                for (int i = 0; i <= numPoints; i++)
-                  energyGrid.push_back(startEnergy - i * step);
-              }
-              AddGridSlots(*this, *point, component, energyGrid, *targetEffect, compConversion, configure);
-            }
-          }
-        }
-      }
+    for (int t = 1; t < segment->NumTerms(); t++) {
+      const TermRef component{&*segment, t};
+      // The component's grid, kinematics and lab<->c.m. factor belong to the
+      // pair the component calculates -- for a natural target another
+      // compound nucleus with its own masses -- not to the base segment's.
+      // The points were copied from the base segment with its c.m.
+      // energies; convert them for this pair before the grid is laid out
+      // (WorkingCopy::Initialize repeats this, idempotently, from the lab energy).
+      PPair *compEntrance = compound->GetPair(compound->GetPairNumFromKey(component.GetEntranceKey()));
+      PPair *compExit = compound->GetPairFromKey(component.GetExitKey());
+      for (int i = 0; i < component.NumPoints(); i++) segment->ConvertRowEnergyToCM(*this, t, i, compEntrance, compExit);
+      if (segment->IsTargetEffect() &&
+          layOutTerm(component, compEntrance, compExit, Segment::CMEnergyFactor(compEntrance, compExit)) != 0)
+        return -1;
     }
   }
   // The shared mesh of each compound nucleus: one plan from its supports and the anchors of the input levels, and
