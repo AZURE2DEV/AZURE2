@@ -15,6 +15,12 @@ At RSP 12 fm neither code is converged to 0.2 % (Frescox 0.3–0.6 % in its step
 bin is cut where it is not small); ours extrapolated is 0.004–0.4 % from Frescox's refined run at 0–60° and 1.2 % at
 90°. Asked 1 %: not shown. Not done: a narrow ⁶Li bin with Frescox.
 
+**End of branch** (build `work/b-dwba3`, 0 warnings): `scripts/check.sh --quick` with JOBS=1: 219/219 (the
+standalone physics build included); T1, T2, T3 and 13N in three bases (`tools/runall.sh`, tag `dwba3-sub1`, a tree of
+those four folders): every output and check file identical to `tab-thm5`; `git diff --stat 0800944c -- src include
+api pyazr experiment convert stopping external tools tests`: empty. Not run: the whole tree, `run_tests.sh`, the gate,
+fits (nothing they test is touched); item 4 (³He and ¹⁴N to the continuum).
+
 ## 2026-11-12 (agent, branch `feature/upgrade-7-transfer-3`) — physics/transfer, third part, item 3: the ¹⁴N Trojan horse
 
 **Done** (`transfer.md` §21, §22): ¹²C(¹⁴N,d)²⁴Mg at E_lab = 30 MeV to the 0⁺ g.s. (l = 0, six nodes) and the 2⁺
