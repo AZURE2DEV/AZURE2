@@ -28,6 +28,7 @@
 #include "AZUREAPI.h"
 #include "CNuc.h"
 #include "ParameterKind.h"
+#include "CommandLineValues.h"
 #include "Config.h"
 #include "GSLException.h"
 #include "ECAmplitudeCache.h"
@@ -191,7 +192,9 @@ class Session {
   Session(const std::string &configfile, const RuntimeOptions &opt) :
     config_(nullptr),
     api_(nullptr) {
+    const int refine = azure2::RefineQuadratureFromEnvironment();  // a bad value raises (ValueError), before any allocation
     config_ = new Config(std::cout);
+    config_->refineQuadrature = refine;
     config_->configfile = configfile;
     config_->paramMask |= Config::USE_API;  // silence the "Calculating ..." chatter
     apply_options(*config_, opt);
