@@ -307,6 +307,23 @@ translated rigidly, K_i(E; ν) = K_i(E − Δ_i; 0), which is the engine's fold 
    kernels' energy arithmetic on a dual type).  A lab-frame differential segment's column still recomputes its sites'
    observables at the moved angle (open for the observables per node, branch 9).
 
+**Measured (branch 8, build `work/b-shift`, 1 thread unless stated).**
+- *Moves* (classifier, three bases, against the engine before refined eightfold): every output file of T2, T2_true and
+  `shift_sqrt_subpoints` (const, sqrt, shiftfn, narrow_const, narrow_sqrt) is per-file quadrature and closer to the
+  refined value than before (T2 `AZUREOut`: largest 1.1e-3 against 5.4e-3, rms 1.7e-4 against 5.5e-4; T2 χ² of the
+  thin-target segment 692.29 → 697.33, refined 697.67; thick target 283.21 → 286.44, refined 286.53), **except T2's
+  `covariance.out`**: the correlated χ² of the two lab-frame segments, 513.884 → 513.904 against refined 513.771
+  (2.6e-4 against 2.2e-4, 1.15 × the old distance; each of the two segments' own χ² is closer than before).  It is the
+  same with every shift fixed (reach 0): a matter of the mesh's nodes for those segments, not of the reach.
+- *Cost of the reach in nodes*: T2 3919 energy tasks (distinct nodes solved; before 5157; with every reach 0: 3767) and
+  23602 slots (18172 with reach 0); `shift_sqrt_subpoints/sqrt` (fixed shift) 2057 tasks against 6738 before.
+- *Smoothness* (`pyazr_shift_fold_smooth`): 21 shifts across 0.2 keV lab of a thin layer whose back edge lies in a
+  20 eV core lattice: second differences −0.79 … −0.69, third differences 0.002 … 0.009; without the clip at the moved
+  support, third differences ±700.
+- *Gradient* (one gradient, `AZURE_PROFILE`): T2 158,929 → 48,526 level-matrix solves, 49,828 → 640 channel-function
+  sets; `shift_sqrt_subpoints/sqrt` with a varied sqrt shift 26,952 → 8,276 solves (the remainder is the adjoint's
+  forward pass), 141,582 → 84 channel-function sets, 2.5 s → 0.6 s.
+
 ### 2.6 What replaces the node-table cache
 
 The node table of a stage — per node its channel-table rows, per (point, node) its angle rows (Legendre polynomials,
@@ -350,6 +367,12 @@ moving with the levels) and the slots' copy-on-write rows (the node rows are hol
 hand-over re-places from the shifted anchors at every move of a shift, and mesh slots re-placed after an anchor change
 are the same nodes in every copy at the same parameters; the cache lets a copy adopt the rows another copy computed for
 them (on T2 most re-placed slots take another copy's rows).  It goes with branch 8, when no node moves with a shift.
+
+**Status, branch 8 (`feature/upgrade-5-shift-kernel`, 2026-11-12): deleted.**  `NodeTableCache.h`, its mutexes and
+`SharedTable::Weak` are gone; a copy that re-places a block after an anchor change computes the rows of its new nodes
+itself (only the nodes near a moved narrow level move on the shared mesh).  `NodeOverflow` and `PlaceOverflowNodes`
+stay: their users are the re-placed blocks of a moved narrow level and THM's sub-points, which still move with a
+shift (`Segment::MoveOwnGridSlots`, branch 10).
 
 **Status, shared sites (`feature/upgrade-5-shared-sites`, 2026-11-12).** The folded points of a data set that need the
 cross section at one mesh node with everything else equal share one `Site` there (`include/SlotGroup.h`: the key --
