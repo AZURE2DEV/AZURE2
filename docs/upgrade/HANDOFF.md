@@ -2,6 +2,21 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, branch `feature/upgrade-8-gamma-branchings`) — design note: total radiative width, branchings, mixing ratios
+
+**Done.** `docs/upgrade/gamma_parametrisation.md`: what exists (photon widths in `<levels>`, their amplitudes in the
+three bases, external capture, priors, what the datum kinds use for the total width), the parametrisation Γ_γ, b_f,
+δ_f and its map to the engine's amplitudes (`amplitudes_from_observed`, the engine's own conversion, at every fill),
+the Jacobian, the constraint (n − 1 branchings and a named remainder, so the vector keeps one parameter per photon
+channel), the record `gamma_decay` of a new section `<gammaDecays>`, and the decisions for the director.
+
+**Verified how.** The sign of δ by the engine's angular distributions (base engine `b-head3`): seven cases (M1/E2 and
+E1/M2, J = 3/2 and 5/2, J up and down, both parities), the engine against Krane-Steffen-Wheeler to 2e-7 in a2/a0 and
+a4/a0; widths of equal sign are δ_KSW < 0 in all seven (note section 2.3; scripts in `work/gammab/sign/`).
+
+**Open.** The implementation (Part B of the brief); item 4 (b) of the brief dropped by the PI (2026-11-12): the
+radiative widths stay out of the total width.
+
 ## 2026-11-12 (director, 22:55) — merged: one grid (the key `useAdaptiveGrid` and the uniform grid of a point's own removed)
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed): `feature/upgrade-5-one-grid` (the
