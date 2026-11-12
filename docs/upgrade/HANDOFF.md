@@ -56,7 +56,8 @@ medians, base = commit ab54094a built the same way (`work/b-d3-base`): T2 0.25 /
 natural_neon 1.26 / 1.27 s (user 1.12 / 1.10 s), 340 / 340 MB; thick_target_resonance 0.57 / 0.57 s, 272 / 272 MB;
 target_effect_ranges 0.59 -> 0.72 s, 104 -> 106 MB (the old file left 34 of 72 points unfolded; on the same windowless
 file the two engines take 0.73 / 0.72 s, 109 / 109 MB).  Not run (the director's, on the last commit): the whole tree x
-3 bases, `ctest -LE slow` beyond the sets above, `tests/run_tests.sh`, the gate, the fits, other thread counts.
+3 bases, `tests/run_tests.sh`, the gate, the fits, other thread counts.  `scripts/check.sh --quick` (JOBS=1,
+OMP_NUM_THREADS=2) on commit e28c9812: 207 tests, 0 failed.
 
 **Open.** The base and component loops of `SetUpTargetEffects` are now near copies (placement of slots: not in this
 step's scope).  `park_chi2_fallback` no longer exercises the finite-difference fallback of the gradient (no p+p
