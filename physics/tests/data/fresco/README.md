@@ -25,3 +25,9 @@ cases, further variants; the format is in the docstring of the script).
 | `li6d_finite_range` | 12C(6Li,d)16O(g.s.), E_lab = 20 MeV, finite range, post, no remnant, the nuclear part of V_alpha-d as interaction (KRPOT; `fort4.dat` cancels the Coulomb term); bound states alpha-d (1 node) and alpha-12C (2 nodes) |
 | `li6d_zero_range` | the same in zero range, D0 = 68.3056 MeV fm^3/2, `inh=2` |
 | `li6d_finite_range_coulomb` | finite range with the whole V_alpha-d (Coulomb tail): FRESCO does not converge in its non-local range (the variants); data for the note, not compared by the test |
+| `dn_bin_nonresonant_fr`, `dn_bin_narrow_fr`, `dn_bin_wide_fr` | 15N(d,n)[p + 15N] at E_lab = 10 MeV, finite range, post, no remnant, to a bin of p + 15N (kp 5, real, no spin-orbit) on [0, RSP = 40 fm]: l = 1 non-resonant (ISC = 2), l = 2 over a narrow resonance (ISC = 4), l = 0 inside a wide one (ISC = 4); NK = 1600; refined steps, rmatch 50, rnl 12 and NK 3200 as variants (`transfer_continuum_fresco_test`) |
+| `dn_bin_*_zr` | the same in zero range (`inh=2`): FRESCO's zero range to a bin is not consistent with its finite range (`transfer.md` §15); data, not compared |
+| `li6d_bin_wide_fr` | 12C(6Li,d)[alpha + 12C] at 20 MeV to a bin inside a wide d-wave resonance, RSP = 12 fm: FRESCO loses accuracy (ERWIN) at high L; data for `transfer.md` §15, not compared |
+| `dn_prior`, `dn_prior_remnant`, `dn_post_remnant` | 15N(d,n)16O(g.s.) in the prior form, and with the full complex remnant (core-core n + 15N, kp 5): FRESCO does not converge in rnl (20, 26, 32 fm); data for `transfer.md` §17, not compared |
+
+Generated 2026-11-12 (part 2), same command; FRESCO's bin listing is printed with `ipc=3` and read as the `bin*` lines.

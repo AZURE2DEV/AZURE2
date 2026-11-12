@@ -27,151 +27,13 @@
 
 #include "azure2/physics/Constants.h"
 #include "azure2/physics/transfer/Transfer.h"
+#include "transfer_fresco_common.h"
 
 using namespace azure2::physics;
 using namespace azure2::physics::transfer;
+using namespace fresco_reference;
 
 namespace {
-
-int failures = 0;
-std::string data_dir;
-
-void Check(bool ok, const std::string &what) {
-  if (!ok) {
-    std::printf("FAIL: %s\n", what.c_str());
-    ++failures;
-  }
-}
-
-// ---------------------------------------------------------------- the reference files
-using Line = std::vector<std::string>;
-/// The lines of each run ("reference", "refined", ...) of a case.
-std::map<std::string, std::vector<Line>> ReadCase(const std::string &name) {
-  std::ifstream in(data_dir + "/" + name + "/reference.txt");
-  if (!in) {
-    Check(false, "cannot read " + data_dir + "/" + name + "/reference.txt");
-    return {};
-  }
-  std::map<std::string, std::vector<Line>> runs;
-  std::string run, text;
-  while (std::getline(in, text)) {
-    if (text.empty() || text[0] == '#') continue;
-    std::istringstream s(text);
-    Line l;
-    for (std::string t; s >> t;) l.push_back(t);
-    if (l[0] == "run") {
-      run = l[1];
-      continue;
-    }
-    runs[run].push_back(l);
-  }
-  return runs;
-}
-
-std::vector<Line> Select(const std::vector<Line> &lines, const std::string &key) {
-  std::vector<Line> out;
-  for (const Line &l : lines)
-    if (l[0] == key) out.push_back(l);
-  return out;
-}
-
-double D(const std::string &s) { return std::stod(s); }
-
-// ---------------------------------------------------------------- the inputs of the jobs
-OpticalPotential Potential(RadiusConvention c, double At, double Ap, double rc) {
-  OpticalPotential p;
-  p.convention = c;
-  p.target_mass_number = At;
-  p.projectile_mass_number = Ap;
-  p.coulomb_r0_fm = rc;
-  return p;
-}
-
-OpticalPotential P15N() {  // p + 15N (p15N_elastic kp 1)
-  OpticalPotential p = Potential(RadiusConvention::TargetMass, 15, 0, 1.25);
-  p.real_volume = {50.0, 1.2, 0.65};
-  p.imaginary_volume = {1.0, 1.3, 0.5};
-  p.imaginary_surface = {6.0, 1.3, 0.5};
-  p.real_spin_orbit = {6.0, 1.1, 0.6};
-  return p;
-}
-OpticalPotential D15N(bool spin_orbit) {  // d + 15N (d15N_elastic kp 1; dn_* kp 1 without spin-orbit)
-  OpticalPotential p = Potential(RadiusConvention::TargetMass, 15, 0, 1.3);
-  p.real_volume = {90.0, 1.15, 0.75};
-  p.imaginary_volume = {2.0, 1.35, 0.6};
-  p.imaginary_surface = {10.0, 1.35, 0.6};
-  if (spin_orbit) p.real_spin_orbit = {6.0, 1.07, 0.66};
-  return p;
-}
-OpticalPotential N16O() {  // n + 16O (dn_* kp 2)
-  OpticalPotential p = Potential(RadiusConvention::TargetMass, 16, 0, 1.3);
-  p.real_volume = {48.0, 1.2, 0.65};
-  p.imaginary_volume = {1.0, 1.3, 0.5};
-  p.imaginary_surface = {6.0, 1.3, 0.5};
-  return p;
-}
-OpticalPotential NP() {  // n-p binding (dn_* kp 3)
-  OpticalPotential p = Potential(RadiusConvention::Absolute, 1, 0, 1.0);
-  p.real_volume = {60.0, 1.5, 0.5};
-  return p;
-}
-OpticalPotential P15NBound() {  // p-15N binding (dn_* kp 4)
-  OpticalPotential p = Potential(RadiusConvention::TargetMass, 15, 0, 1.25);
-  p.real_volume = {50.0, 1.25, 0.65};
-  p.real_spin_orbit = {6.0, 1.25, 0.65};
-  return p;
-}
-OpticalPotential Li6C12() {  // 6Li + 12C (li6* kp 1)
-  OpticalPotential p = Potential(RadiusConvention::BothMasses, 12, 6, 0.73);
-  p.real_volume = {120.0, 0.80, 0.85};
-  p.imaginary_volume = {35.0, 0.95, 0.85};
-  return p;
-}
-OpticalPotential D16O() {  // d + 16O (li6d_* kp 2)
-  OpticalPotential p = Potential(RadiusConvention::TargetMass, 16, 0, 1.3);
-  p.real_volume = {88.0, 1.17, 0.75};
-  p.imaginary_volume = {1.0, 1.32, 0.65};
-  p.imaginary_surface = {12.0, 1.32, 0.65};
-  return p;
-}
-OpticalPotential AlphaD() {  // alpha-d binding (li6d_* kp 3)
-  OpticalPotential p = Potential(RadiusConvention::Absolute, 1, 0, 1.9);
-  p.real_volume = {70.0, 1.9, 0.65};
-  return p;
-}
-OpticalPotential AlphaC12() {  // alpha-12C binding (li6d_* kp 4)
-  OpticalPotential p = Potential(RadiusConvention::BothMasses, 12, 4, 0.9);
-  p.real_volume = {100.0, 0.9, 0.65};
-  return p;
-}
-
-ScatteringRequest Scattering(int z1, int z2, double m1, double m2, int two_s, double E_cm_in, double Q, int l_max) {
-  ScatteringRequest q;
-  q.pair.z1 = z1;
-  q.pair.z2 = z2;
-  q.pair.mu_u = m1 * m2 / (m1 + m2);
-  q.two_s = two_s;
-  q.energy_MeV = E_cm_in + Q;
-  q.step_fm = 0.05;
-  q.matching_radius_fm = 30.0;
-  q.l_max = l_max;
-  return q;
-}
-
-BoundStateRequest Bound(int z1, int z2, double m_core, double m_x, int l, int two_j, int two_s, double B, int nodes) {
-  BoundStateRequest q;
-  q.pair.z1 = z1;
-  q.pair.z2 = z2;
-  q.pair.mu_u = m_core * m_x / (m_core + m_x);
-  q.l = l;
-  q.two_j = two_j;
-  q.two_s = two_s;
-  q.binding_MeV = B;
-  q.nodes = nodes;
-  q.step_fm = 0.05;
-  q.r_max_fm = 30.0;  // FRESCO's rmatch: the rms radius depends on it (the deuteron tail)
-  return q;
-}
 
 // ---------------------------------------------------------------- 1, 2. constants, kinematics, potentials
 void CheckConstants(const std::string &name, const std::vector<Line> &run) {
@@ -179,22 +41,6 @@ void CheckConstants(const std::string &name, const std::vector<Line> &run) {
     const double two_u = 2.0 * kAtomicMassUnit_MeV / (kHbarC_MeV_fm * kHbarC_MeV_fm), e2 = kFineStructure * kHbarC_MeV_fm;
     Check(std::fabs(D(l[1]) - two_u) < 6e-8 && std::fabs(D(l[2]) - e2) < 6e-6, name + ": FRESCO's 2u/hbar^2, e^2");
   }
-}
-
-void CheckKinematics(const std::string &name, const std::vector<Line> &run, const std::string &projectile,
-                     const ScatteringRequest &q) {
-  bool found = false;
-  for (const Line &l : Select(run, "kin")) {
-    if (l[1] != projectile) continue;
-    found = true;
-    const double k = rho(q.pair, 1.0, q.energy_MeV), et = eta(q.pair, q.energy_MeV);
-    char buf[200];
-    std::snprintf(buf, sizeof buf, "%s, %s: E %.5f k %.5f eta %.5f against FRESCO's %s %s %s", name.c_str(),
-                  projectile.c_str(), q.energy_MeV, k, et, l[2].c_str(), l[3].c_str(), l[4].c_str());
-    Check(std::fabs(D(l[2]) - q.energy_MeV) < 6e-6 && std::fabs(D(l[3]) - k) < 6e-6 && std::fabs(D(l[4]) - et) < 6e-6,
-          buf);
-  }
-  Check(found, name + ": no kinematics line for " + projectile);
 }
 
 void CheckPotentials(const std::string &name, const std::vector<Line> &run, const std::map<int, OpticalPotential> &kp) {
@@ -339,12 +185,14 @@ void TestDN() {
   CheckPotentials("dn_finite_range", ref, {{1, D15N(false)}, {2, N16O()}, {3, NP()}, {4, P15NBound()}});
   TransferReaction r;
   r.mass_a_u = 2.0, r.mass_A_u = 15.0, r.mass_s_u = 1.0, r.mass_F_u = 16.0, r.two_s_x = 1;
-  r.projectile.state = SolveBoundState(NP(), Bound(0, 1, 1.0, 1.0, 0, 1, 1, 2.2246, 0));
+  const BoundState np = SolveBoundState(NP(), Bound(0, 1, 1.0, 1.0, 0, 1, 1, 2.2246, 0));
+  r.projectile.radial = RadialOverlapOf(np);
   r.projectile.two_J_core = 1, r.projectile.two_J_composite = 2;
-  r.residual.state = SolveBoundState(P15NBound(), Bound(1, 7, 15.0, 1.0, 1, 1, 1, 12.1274, 0));
+  const BoundState p15n = SolveBoundState(P15NBound(), Bound(1, 7, 15.0, 1.0, 1, 1, 1, 12.1274, 0));
+  r.residual.radial = RadialOverlapOf(p15n);
   r.residual.two_J_core = 1, r.residual.two_J_composite = 0;
-  CheckBound("dn_finite_range", ref, 1, NP(), r.projectile.state, true);
-  CheckBound("dn_finite_range", ref, 2, P15NBound(), r.residual.state, false);
+  CheckBound("dn_finite_range", ref, 1, NP(), np, true);
+  CheckBound("dn_finite_range", ref, 2, P15NBound(), p15n, false);
   const DistortedWaves wi = SolveDistortedWaves(D15N(false), in), wf = SolveDistortedWaves(N16O(), out);
   TransferGrid g;
   g.step_fm = 0.1;
@@ -367,21 +215,23 @@ void TestLi6D() {
   CheckPotentials("li6d_finite_range", ref, {{1, Li6C12()}, {2, D16O()}, {3, AlphaD()}, {4, AlphaC12()}});
   TransferReaction r;
   r.mass_a_u = 6.0, r.mass_A_u = 12.0, r.mass_s_u = 2.0, r.mass_F_u = 16.0, r.two_s_x = 0;
-  r.projectile.state = SolveBoundState(AlphaD(), Bound(2, 1, 2.0, 4.0, 0, 0, 0, 1.4743, 1));
+  const BoundState ad = SolveBoundState(AlphaD(), Bound(2, 1, 2.0, 4.0, 0, 0, 0, 1.4743, 1));
+  r.projectile.radial = RadialOverlapOf(ad);
   r.projectile.two_J_core = 2, r.projectile.two_J_composite = 2;
-  r.residual.state = SolveBoundState(AlphaC12(), Bound(2, 6, 12.0, 4.0, 0, 0, 0, 7.162, 2));
+  const BoundState ac = SolveBoundState(AlphaC12(), Bound(2, 6, 12.0, 4.0, 0, 0, 0, 7.162, 2));
+  r.residual.radial = RadialOverlapOf(ac);
   r.residual.two_J_core = 0, r.residual.two_J_composite = 0;
-  CheckBound("li6d_finite_range", ref, 1, AlphaD(), r.projectile.state, false);  // its D0 is that of KRPOT
-  CheckBound("li6d_finite_range", ref, 2, AlphaC12(), r.residual.state, false);
+  CheckBound("li6d_finite_range", ref, 1, AlphaD(), ad, false);  // its D0 is that of KRPOT
+  CheckBound("li6d_finite_range", ref, 2, AlphaC12(), ac, false);
   const auto zr = ReadCase("li6d_zero_range");
-  if (!zr.empty()) CheckBound("li6d_zero_range", zr.at("reference"), 1, AlphaD(), r.projectile.state, true);
+  if (!zr.empty()) CheckBound("li6d_zero_range", zr.at("reference"), 1, AlphaD(), ad, true);
   const DistortedWaves wi = SolveDistortedWaves(Li6C12(), in), wf = SolveDistortedWaves(D16O(), out);
   TransferGrid g;
   g.step_fm = 0.1;
   g.r_max_fm = 25.0;
   g.vertex_range_fm = 12.0;
   g.angle_nodes = 48;
-  r.interaction = PostInteraction::NuclearPart;
+  r.interaction = {InteractionTerm{InteractionKind::ProjectileBindingNuclear, {}, 0}};
   CheckTransfer("li6d_finite_range", FiniteRangeCrossSection(r, wi, wf, g, Angles()), 0.01);
   CheckTransfer("li6d_zero_range", ZeroRangeCrossSection(r, 68.3056, wi, wf, Angles()), 0.01);
 }

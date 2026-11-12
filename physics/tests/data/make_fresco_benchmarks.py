@@ -29,6 +29,14 @@ Lines of reference.txt (whitespace-separated; '#' starts a comment):
   bound <kn> <scale> <rms> <D0> <ANC>   FRESCO's bound-state listing: depth scale factor (VR), rms radius (fm),
                                         D0 (MeV fm^3/2), ANC (fm^-1/2, at R = rmatch - h)
   ancratio <kn> <r> <value>             u(r)/W(2 kappa r) from fort.46 (the ANC plateau)
+  bin <E_min> <E_max> <NK>              a continuum bin's energies (MeV, c.m.) and nodes
+  binphase <ik> <k> <E> <delta>         its phase shift (deg) at node ik (every 20th node and the last)
+  binnorm <norm> <rms> <D0>             FRESCO's "Norm = ..., RMS = ... & D0 = ..." of the bin (on [0, RSP])
+  binwf <N> <u>                         the bin u(r) at r = (N - 1) hcm (every 50th point of FRESCO's listing)
+
+Continuum bins (BE < 0; FRESCO's namelist manual, "CONTINUUM BINS") are built on [0, RSP]; the &FRESCO variable rsp
+sets RSP apart from rmatch, so that the bin (the object compared) stays the same while rmatch is converged.  The
+bins' widths put a node of the bin's envelope near RSP (docs/upgrade/transfer.md section 15).
 """
 import argparse
 import datetime
@@ -207,6 +215,108 @@ CASES.update({
 })
 
 
+# 15N(d,n)[p + 15N] to continuum bins of p + 15N (E_lab = 10 MeV): the projectile overlap of DN_BODY, the bin of
+# l, j in the real Woods-Saxon (+ Coulomb) potential kp=5 (no spin-orbit), E_x = 12.1274 MeV + E (the p + 15N
+# threshold), the bin weight ISC.  The three bins (transfer.md section 15): non-resonant (l = 1), over a narrow
+# d-wave resonance (Gamma < width) and inside a wide s-wave resonance (Gamma > width).
+DN_BIN_BODY = """\
+ &PARTITION namep='d' massp=2.0 zp=1 nex=1 namet='15N' masst=15.0 zt=7 qval=0.0 /
+ &STATES jp=1.0 ptyp=1 ep=0.0 cpot=1 jt=0.5 ptyt=-1 et=0.0 /
+ &PARTITION namep='n' massp=1.0 zp=0 nex=1 namet='16O' masst=16.0 zt=8 qval=9.9028 /
+ &STATES jp=0.5 ptyp=1 ep=0.0 cpot=2 jt={JF} ptyt={PF} et={EX:.4f} /
+ &partition /
+ &pot kp=1 type=0 p(1:3)= 15.0 0.0 1.3 /
+ &pot kp=1 type=1 p(1:6)= 90.0 1.15 0.75 2.0 1.35 0.6 /
+ &pot kp=1 type=2 p(1:6)= 0.0 1.35 0.6 10.0 1.35 0.6 /
+ &pot kp=2 type=0 p(1:3)= 16.0 0.0 1.3 /
+ &pot kp=2 type=1 p(1:6)= 48.0 1.2 0.65 1.0 1.3 0.5 /
+ &pot kp=2 type=2 p(1:6)= 0.0 1.3 0.5 6.0 1.3 0.5 /
+ &pot kp=3 type=0 p(1:3)= 1.0 0.0 1.0 /
+ &pot kp=3 type=1 p(1:3)= 60.0 1.5 0.5 /
+ &pot kp=5 type=0 p(1:3)= 15.0 0.0 1.25 /
+ &pot kp=5 type=1 p(1:3)= {V} 1.25 0.65 /
+ &pot /
+ &overlap kn1=1 ic1=1 ic2=2 in=1 kind=0 nn=1 l=0 sn=0.5 j=0.5 kbpot=3 be=2.2246 isc=1 ipc=1 /
+ &overlap kn1=2 ic1=1 ic2=2 in=2 kind=0 nn=1 l={L} sn=0.5 j={J} kbpot=5 be={BE} isc={ISC} nk={{NK}} er={ER} ipc=3 /
+ &overlap /
+ &coupling icto=2 icfrom=1 {coupling} /
+ &cfp in=1 ib=1 ia=1 kn=1 a=1.0 /
+ &cfp in=-2 ib=1 ia=1 kn=2 a=1.0 /
+ &coupling /
+"""
+DN_BINS = {
+    "nonresonant": dict(L=1, J=0.5, JF=1.0, PF=1, V=50.0, E=2.0, ER=1.89, ISC=2),
+    "narrow": dict(L=2, J=2.5, JF=2.0, PF=-1, V=53.0, E=1.9, ER=0.91, ISC=4),
+    "wide": dict(L=0, J=0.5, JF=1.0, PF=-1, V=47.0, E=1.58, ER=1.16, ISC=4),
+}
+# The refined run refines the steps; NK is doubled in a variant of its own, because FRESCO's k rule (equal weights,
+# end points included) converges as 1/NK (transfer.md section 15).
+BIN_REF = dict(hcm=0.025, rmatch=60.0, rsp=40.0, rintp=0.05, hnl=0.025, rnl=10.0, centre=0.0, nnu=72, cutl=-3.2,
+               nk=1600)
+BIN_FINE = dict(hcm=0.0125, rmatch=60.0, rsp=40.0, rintp=0.025, hnl=0.0125, rnl=10.0, centre=0.0, nnu=72, cutl=-6.4,
+                nk=1600)
+for _name, _b in DN_BINS.items():
+    _body = dict(JF=_b["JF"], PF=_b["PF"], EX=12.1274 + _b["E"], V=_b["V"], L=_b["L"], J=_b["J"], BE=-_b["E"],
+                 ISC=_b["ISC"], ER=-_b["ER"])
+    CASES["dn_bin_%s_fr" % _name] = dict(
+        title="15N(d,n)[p+15N bin %s, l=%d, E=%g, ER=%g, ISC=%d] at E_lab = 10 MeV, finite range, post" %
+              (_name, _b["L"], _b["E"], _b["ER"], _b["ISC"]),
+        elab=10.0, jtmax=30, iter=1, iblock=1, thmin=0.0, body=DN_BIN_BODY.format(coupling=FR_DN, **_body),
+        reference=BIN_REF, refined=BIN_FINE,
+        also=[dict(BIN_REF, rmatch=50.0), dict(BIN_REF, rnl=12.0, nnu=96), dict(BIN_REF, nk=3200)])
+    # FRESCO's zero range (KIND=5, INH=2) to a bin is not consistent with its own finite range (transfer.md
+    # section 15): kept as data, not compared by the test.
+    CASES["dn_bin_%s_zr" % _name] = dict(
+        title="15N(d,n)[p+15N bin %s] at E_lab = 10 MeV, zero range D0 = -130.31 MeV fm^3/2, recoil (inh=2)" % _name,
+        elab=10.0, jtmax=30, iter=1, iblock=1, thmin=0.0, extra="inh=2",
+        body=DN_BIN_BODY.format(coupling="kind=5 p1=-130.31 p2=0.0", **_body),
+        reference={k: v for k, v in BIN_REF.items() if k not in ("rintp", "hnl", "rnl", "centre", "nnu")},
+        refined={k: v for k, v in BIN_FINE.items() if k not in ("rintp", "hnl", "rnl", "centre", "nnu")})
+
+# 15N(d,n)16O(g.s.) of DN_BODY in the prior form and with the remnant (transfer.md section 17): the core-core
+# potential n + 15N (kp=5, FRESCO's IP3 = KPCORE), the full complex remnant (IP2 = -1); FRESCO takes U_sF and U_aA
+# from the partitions' optical potentials and, in the prior form, the residual overlap's binding potential (kp=4,
+# Coulomb and spin-orbit included) as V_xA.
+DN_REM_BODY = DN_BODY.replace(" &pot /\n &overlap kn1=1", """ &pot kp=5 type=0 p(1:3)= 15.0 0.0 1.3 /
+ &pot kp=5 type=1 p(1:6)= 48.0 1.2 0.65 1.0 1.3 0.5 /
+ &pot kp=5 type=2 p(1:6)= 0.0 1.3 0.5 6.0 1.3 0.5 /
+ &pot /
+ &overlap kn1=1""", 1)
+# The kernel multiplies u_a (not V_sx u_a): the deuteron's tail needs a long non-local range, and FRESCO does not
+# converge in it (rnl 20, 26, 32 below; transfer.md section 17).  Data for the note, not compared by the test.
+_DN_FR_REF = dict(hcm=0.025, rmatch=30.0, rintp=0.05, hnl=0.025, rnl=20.0, centre=0.0, nnu=96)
+_DN_FR_FINE = dict(hcm=0.025, rmatch=30.0, rintp=0.05, hnl=0.025, rnl=26.0, centre=0.0, nnu=96)
+for _name, _coupling in (("dn_post_remnant", "kind=7 ip1=0 ip2=-1 ip3=5"),
+                         ("dn_prior_remnant", "kind=7 ip1=1 ip2=-1 ip3=5"),
+                         ("dn_prior", "kind=7 ip1=1 ip2=0 ip3=0")):
+    CASES[_name] = dict(
+        title="15N(d,n)16O(g.s.) at E_lab = 10 MeV, finite range, %s" % _coupling, elab=10.0, jtmax=30, iter=1,
+        iblock=1, thmin=0.0, extra="epc=0.00001", body=DN_REM_BODY.format(coupling=_coupling), reference=_DN_FR_REF,
+        refined=_DN_FR_FINE, also=[dict(_DN_FR_REF, rnl=32.0)])
+
+# 12C(6Li,d)[alpha + 12C] to a bin inside a wide d-wave resonance of alpha + 12C (kp=5, V = 90 MeV): FRESCO loses
+# 14 or more digits in the d + 16O* channel at high L (ERWIN) when the bin reaches far; with the bin cut at
+# RSP = 12 fm it is stable to its cutl to 0.5 %.  Data for the note (transfer.md section 15), not compared by the test.
+LI_BIN_BODY = LI_BODY.replace("et=0.0 /\n &partition /", "et=10.2720 /\n &partition /", 1).replace(
+    "jp=1.0 ptyp=1 ep=0.0 cpot=2 jt=0.0 ptyt=1", "jp=1.0 ptyp=1 ep=0.0 cpot=2 jt=2.0 ptyt=1").replace(
+    " &pot kp=4 type=0 p(1:3)= 12.0 4.0 0.9 /\n &pot kp=4 type=1 p(1:3)= 100.0 0.9 0.65 /\n",
+    " &pot kp=4 type=0 p(1:3)= 12.0 4.0 0.9 /\n &pot kp=4 type=1 p(1:3)= 90.0 0.9 0.65 /\n").replace(
+    "nn=3 l=0 sn=0.0 j=0.0 kbpot=4 be=7.1620 isc=1 ipc=1",
+    "nn=1 l=2 sn=0.0 j=2.0 kbpot=4 be=-3.11 isc=4 nk={{NK}} er=-0.4 ipc=3")
+CASES["li6d_bin_wide_fr"] = dict(
+    title="12C(6Li,d)[a+12C bin, l=2, E=3.11, ER=0.4, ISC=4, RSP=12] at E_lab = 20 MeV, finite range, post (nuclear "
+          "part of V_alpha-d)", elab=20.0, jtmax=40, iter=1, iblock=1, thmin=0.0, extra="epc=0.00001", table=True,
+    body=LI_BIN_BODY.format(kp5=LI_KP5, krpot="krpot=5", coupling=FR_DN),
+    reference=dict(hcm=0.025, rmatch=30.0, rsp=12.0, rintp=0.05, hnl=0.025, rnl=14.0, centre=-0.1, nnu=72, cutl=-6.4,
+                   nk=400),
+    refined=dict(hcm=0.0125, rmatch=30.0, rsp=12.0, rintp=0.025, hnl=0.0125, rnl=14.0, centre=-0.1, nnu=72,
+                 cutl=-12.8, nk=400),
+    also=[dict(hcm=0.025, rmatch=30.0, rsp=12.0, rintp=0.05, hnl=0.025, rnl=14.0, centre=-0.1, nnu=72, cutl=-9.6,
+               nk=400),
+          dict(hcm=0.025, rmatch=30.0, rsp=12.0, rintp=0.05, hnl=0.025, rnl=14.0, centre=-0.1, nnu=72, cutl=-3.2,
+               nk=400)])
+
+
 def coulomb_table(z1z2, rc, step, points):
     """-V_C of a uniformly charged sphere (MeV) on r = 0, step, ...: FRESCO's SHAPE=7 input, scaled by P1 = -1."""
     lines = ["V_C of the alpha-d binding potential (MeV), read with p1 = -1 to cancel it (Rc = %g fm)" % rc,
@@ -228,14 +338,19 @@ def table_for(settings):
 def job_text(case, settings):
     s = dict(settings)
     cutl = s.pop("cutl", None)
+    nk = s.pop("nk", None)
+    rsp = s.pop("rsp", None)
     nonlocal_keys = ("rintp", "hnl", "rnl", "centre", "nnu")
     nonlocal_part = " ".join("%s=%s" % (k, s[k]) for k in nonlocal_keys if k in s)
     extra = case.get("extra", "")
     if cutl is not None:
         extra = re.sub(r"cutl=\S+", "", extra) + " cutl=%s" % cutl
+    if rsp is not None:
+        nonlocal_part = ("rsp=%s " % rsp) + nonlocal_part
+    body = case["body"].replace("{NK}", str(nk)) if nk is not None else case["body"]
     return HEAD.format(title=case["title"], hcm=s["hcm"], rmatch=s["rmatch"], nonlocal_part=nonlocal_part,
                        jtmax=case["jtmax"], extra=extra, thmin=case["thmin"], iter=case["iter"],
-                       iblock=case["iblock"], unitmass=UNITMASS, finec=FINEC, elab=case["elab"]) + case["body"]
+                       iblock=case["iblock"], unitmass=UNITMASS, finec=FINEC, elab=case["elab"]) + body
 
 
 def run_fresco(fresco, case, settings):
@@ -306,6 +421,21 @@ def extract(out, forts):
             lines.append("bound %s %s %s %s %s" % (ln.split(":")[0].strip(), t[0].rstrip(";"), t[5], t[6], t[8]))
     for mm in re.finditer(r"ANC in ch\s+(\d+) is\s+([-0-9.E+]+)", out):
         lines.append("anc_printed %s %s" % (mm.group(1), mm.group(2)))
+    mm = re.search(r"Bin from\s+([0-9.]+) MeV to\s+([0-9.]+) MeV \(cm\) in\s*(\d+) steps", out)
+    if mm:
+        lines.append("bin %s %s %s" % mm.groups())
+        nk = int(mm.group(3))
+        for m2 in re.finditer(r"For #\s+(\d+) 1, K,BE =\s+([0-9.]+)\s+([0-9.]+): S =.*?& Del =\s*([-0-9.]+),", out):
+            ik = int(m2.group(1))
+            if ik % 20 == 1 or ik == nk:
+                lines.append("binphase %s %s %s %s" % m2.groups())
+    mm = re.search(r"Norm =\s*([0-9.]+) from =\s*[0-9.]+, RMS =\s*([0-9.]+) & D0 =\s*([-0-9.E+]+)", out)
+    if mm:
+        lines.append("binnorm %s %s %s" % mm.groups())
+        listing = out.split("For channel #  1 with L =")[1].split(" No. ")[0]
+        for m2 in re.finditer(r"(\d+)\s+([-0-9.]+E[-+]\d+)\s*([-0-9.]+E[-+]\d+)", listing):
+            if (int(m2.group(1)) - 1) % 50 == 0:
+                lines.append("binwf %s %s" % (m2.group(1), m2.group(2)))
     kn = 0
     for ln in forts.get("fort.46", "").splitlines():
         if ln.startswith("#"):
