@@ -2,6 +2,51 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, Phase 5 branch 7 part 2, after milestone 2) — the stops of the shared mesh resolved, a sharper rule
+
+**The moved unfolded numbers were the comparison, not the engine.** Mechanism, by experiment:
+1. d82f3518 run with the Coulomb table gives `param.par`, `parameters.out`, `scatteringLengths.out` of `7Li_p_a`,
+   `6Li_d`, `target_effect_ranges` and `ratio_to_reference` `fit_ratio`/`fit_sigma` byte-identical to `tab-trial30`
+   (also the director's `tab-mesh2`).
+2. The moved files of the earlier quick run (tag `q1`, written at 02:41, its `run.log`s 70 s later by another run) are
+   bit for bit the outputs of the same engine with `AZURE2_COULOMB_TABLE` unset: the engine then opens
+   `~/.azure2/coulomb_table.bin`, refuses it (format 1) and uses the exact Coulomb functions (charged channels move at
+   1e-7).
+3. The 53 "unfolded" fallback numbers of `target_effect_ranges` `aa=5` and the 24 of `ratio_to_reference` come from the
+   same no-table run.
+4. `natural_neon` `aa=2` line 723 is a folded number that k = 4 leaves at today's value to the last digit; against
+   `tab-fine8` it is folded and conform.
+5. Guard: `tools/run_one.sh` and `tools/runall.sh` refuse to run without `AZURE2_COULOMB_TABLE` naming a file (CLAUDE.md
+   recipe says so).
+
+**`hybrid_potential`.** `quadrature points` has no effect on either engine (10, 20, 40, 80 give the same bits): every
+interval is set by the resonance tails (step 0.05 |E − E_r| at `per_width 50`), never by the smooth step, so the node
+phase of the smooth lattice is not the cause.  In k (`AZURE_REFINE_QUADRATURE`, both engines, distance to today's engine
+at k = 64, rms over the 76 folded values): today 5.14e-2, 2.00e-2, 5.14e-3, 1.35e-3, 3.43e-4 at k = 1, 2, 4, 8, 16; mesh
+6.17e-2, 1.71e-2, 5.13e-3, 1.35e-3, 3.52e-4.  Both converge at second order to the same value; the mesh is 1.20 x
+further at k = 1, 0.85 x at k = 2, equal from k = 4. The error is one sign and nearly one size at every point (rms =
+max): a part of the integral common to all thick-target points.
+
+**Rule.** `tools/classify_quadrature.py`: per file also rms of the relative distances <= today's (no factor), both
+measures over every folded number of the file; the fine reference per file from a list (`tab-fine8,tab-fine4`), the tag
+printed.  Test `tests/consistency/classify_quadrature_test.py` (ctest `tools_classify_quadrature`).  `energy_grid.md`
+section 7.1.
+
+**Verified** (build `work/b-mesh3`, scripts `work/mesh3/`): build 0 warnings; consistency test; quick set plus the five
+projects, `hybrid_potential`, `17O` (`qset.sh m3-q1`): 138 unfolded files byte-identical to `tab-trial30`, 197 files:
+163 identical, 29 quadrature, 5 failure (13N twice, `layer_yield` `aa=3`, `hybrid_potential` twice).  Injected error
+(every other node dropped in the lower half of each range, `work/mesh3/inj/AZURE2`): 23 failures; the rms catches 13N,
+`beam_profile_kernel`, `ratio_to_reference`, `T2_true` that the maximum passes; `T2.azr` and `thick_target_resonance`
+pass both.  1 against 2 threads on T2 and 7Li_p_a identical.  Not run: the whole tree (the director's `tab-mesh2`), 3
+threads (budget 2).
+
+**Open.** The rms rule without a factor fails 13N by 0.2 % (rms) and 0.6 % (chi2), `layer_yield` `aa=3` (a fold exact to
+3e-8: 1.18 x, 1.44 x) and `hybrid_potential` (1.21 x): a decision of the director.  `layer_yield` `aa=3` (a layer, 1/E
+stopping, a nearly constant sigma): today's 10 intervals fit the point's energy loss exactly with both ends as nodes; the
+mesh's nodes are the nucleus's ladder (step <= today's) with the two edge intervals clipped at the support, whose
+interpolation error does not cancel as a full trapezoid's does (from the construction, not measured apart).  No engine
+file changed on this step.
+
 ## 2026-11-12 (agent, Phase 5 branch 7 part 2, milestone 2) — the engine on the shared mesh (`feature/upgrade-5-shared-mesh`)
 
 **Done.**

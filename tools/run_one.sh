@@ -15,9 +15,14 @@
 #
 # Output: CMP/<basis>/TAG/.res-<DIR with "/" as "__">/<file>.azr/{output,checks,run.log} for each .azr of DIR, where
 # <basis> is brune, no-brune or use-park.  The work copy CMP/<basis>/TAG/job-<...> is removed at the end.
-# Exit 2 on a usage error, 1 when DIR is not found in the copy.
+# Environment: AZURE2_COULOMB_TABLE, the Coulomb table file (required).
+# Exit 2 on a usage error or without the table, 1 when DIR is not found in the copy.
 
 [ $# -eq 6 ] || { echo "usage: run_one.sh SRC_TESTS CMP TAG ENGINE MODE DIR" >&2; exit 2; }
+# The reference outputs were made with the universal Coulomb table: without it (unset, or the default file of another
+# format) the engine uses the exact Coulomb functions and every charged-channel number moves at about 1e-7.
+[ -n "${AZURE2_COULOMB_TABLE:-}" ] && [ -f "$AZURE2_COULOMB_TABLE" ] ||
+  { echo "run_one.sh: set AZURE2_COULOMB_TABLE to the Coulomb table file the reference runs used" >&2; exit 2; }
 SRC=$1; WORK=$2; TAG=$3; BIN=$4; MODE=$5; DIR=$6
 M=${MODE:-brune}; M=${M#--}
 FLAT=${DIR//\//__}; TOP=${DIR%%/*}

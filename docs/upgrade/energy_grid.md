@@ -766,9 +766,26 @@ above compares number by number; a mesh whose nodes lie elsewhere than today's, 
 it for about half the numbers by chance.  For the shared mesh a file is **quadrature** when its structure is the
 reference's, no number that the refinement leaves unchanged has moved, and its largest relative distance to the fine
 reference over its folded numbers, max |m_new − m_fine| / |m_fine| (m_ref ≠ m_fine), is not larger than **1.2 ×** the
-same maximum of today's engine.  A file above 1.2 × is a failure to explain; the factor is not widened.
-`tools/classify_quadrature.py` prints both classes per file (the per-file one decides the summary and the exit status;
-the strict per-number count is printed beside it as information).
+same maximum of today's engine, **and** the root mean square of the same relative distances over all the file's folded
+numbers, sqrt(mean (m_new − m_fine)² / m_fine²), is **not larger than today's** (no factor).  Both are taken over
+every folded number of the file, also those the new engine left in place.  Measured with a mesh that drops every other
+node in the lower half of each point's range (13 folded projects of the quick set, Brune, against `tab-fine8` /
+`tab-fine4`): the maximum alone fails 7 projects, the rms adds `13N`, `beam_profile_kernel`, `ratio_to_reference`
+`folded` and `T2` (`T2_true` χ²); `thick_target_resonance` and `T2`'s own outputs pass both (the mesh there is finer
+than today's grid by more than the dropped nodes cost).  The engine without the error fails the rule in `13N` (rms
+1.002 × and χ² 1.006 × today's), `layer_yield` `aa=3` (a fold exact to 3 × 10⁻⁸: 1.18 × and 1.44 ×) and
+`hybrid_potential` (1.21 ×, a pre-asymptotic difference, see the branch's HANDOFF).  A file above either bound is a
+failure to explain; the factors are not widened.  `tools/classify_quadrature.py` prints both classes per
+file (the per-file one decides the summary and the exit status; the strict per-number count is printed beside it as
+information) with the largest and rms distances of both engines.
+
+**The fine reference** is today's engine with k-fold refined grids (`AZURE_REFINE_QUADRATURE=k`): `tab-fine8` (k = 8)
+wherever it has the file, `tab-fine4` (k = 4) otherwise (`beam_profile_kernel`, whose k = 8 run is too slow); the
+classifier takes them as one argument, finest first (`tab-fine8,tab-fine4`), and prints the tag each file used.  The
+error is of second order in k (measured by the director: today's default is about 64 times further from the converged
+value than k = 8, k = 4 about 16 times), so k = 8 bounds the distance of today's engine to about 1.6 % of itself. A
+number that k = 4 leaves unchanged to its last printed digit can still be folded (`natural_neon` `aa=2` line 723: k = 4
+equal to today's, k = 8 one digit away): with k = 4 alone it counted as an unfolded number that moved.
 
 ### 7.2 What the director runs (minutes)
 

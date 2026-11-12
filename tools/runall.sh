@@ -17,6 +17,7 @@
 #              holds output/, checks/ and run.log; <basis> is brune, no-brune or use-park, <folder> the project's
 #              folder under tests/ with "/" written "__"
 #   JOBS       runs at once, one thread each (default 1: the caller states its thread budget)
+#   AZURE2_COULOMB_TABLE  the Coulomb table file (required, as by the reference runs; checked by run_one.sh)
 #
 # Exit 2 on a usage error; otherwise 0 (a failed run shows as missing or different files in the comparison).
 
@@ -24,6 +25,7 @@ usage() { echo "usage: SRC_TESTS=<tests dir> WORK=<scratch> [JOBS=n] runall.sh E
 [ $# -ge 2 ] || usage
 [ -n "${SRC_TESTS:-}" ] || { echo "runall.sh: set SRC_TESTS to the tests/ directory of the source tree" >&2; usage; }
 [ -n "${WORK:-}" ] || { echo "runall.sh: set WORK to a scratch directory" >&2; usage; }
+[ -f "${AZURE2_COULOMB_TABLE:-}" ] || { echo "runall.sh: set AZURE2_COULOMB_TABLE to the Coulomb table file" >&2; usage; }
 HERE=$(cd "$(dirname "$0")" && pwd)
 BIN=$1; TAG=$2; shift 2
 MODES=("$@"); [ ${#MODES[@]} -eq 0 ] && MODES=("" "--no-brune" "--use-park")
