@@ -20,6 +20,28 @@ struct TermSettings;
  *
  * A new observable: a kind here, its row (slots, contraction) in SiteObservables.cpp, its formula in GenMatrixFunc,
  * its adjoint in AMatrixFunc::PointTBar.
+ *
+ * THM, the half-off-shell cross section (docs/upgrade/THM.md section 1; energy_grid.md section 3.2, row "THM
+ * sigma_HOES").  What a site of a THM term holds at E_n, and what its reader brings:
+ *
+ *   sigma_HOES(E_n) = W(E_n) R(E_n) sum_J (2J+1) sum_c' K(E_n) 2 P_c'(E_f) sum_k w_k(E_n) sum_(s,l)
+ *                     | sum_lambda,mu gamma_lambda,c' [N_C] A_lambda,mu(E_n) W_mu,(s,l)(p_k(E_n)) |^2
+ *
+ * Every factor is a function of the node energy, the reaction (the entrance and exit pairs) and the THM experiment:
+ * A from the level matrix at E_n; P_c' and the exit phases from the node's channel rows; K(E) the <thm> kinematics
+ * option; the vertex W of the experiment's model (plane wave with j_l, rho j_l' and the Coulomb term at p(E_n),
+ * spectatorEnergy per entrance pair; full form factor; DW tables evaluated at E_n); the spectator-momentum window's
+ * nodes p_k and weights w_k at E_n (ThmSpectatorWindow::Nodes: a function of E_n and the experiment, the fallback to
+ * the nearest data energy is the experiment's list); the line shape N_C; the angular window theta= of the exit pair
+ * (an average over the experiment's interval, ThmAngleWindow::Mean); the coherent background; the experiment's
+ * distortion R(E_n) and the data set's weight table W(E_n), multiplied at the node.  Nothing reads the data point: not
+ * its angle (the spectator angles of spectatorAngle=, spectatorAngles=, theta= are the experiment's), not its row.
+ * So a THM site is a scalar without an angle: one number per node, the record's sigma, read by every reader as it is
+ * (no contraction, one value per slot).  It is the kind kHoes, a row of kSiteObservables of its own so that the energy
+ * pass and the gradient choose the HOES formula and its adjoint by the kind of the site, not by asking IsTHM(); the
+ * reader's row is the identity, and the factors that belong to the point (the Gaussian resolution, a beam profile)
+ * are its kernel's (Kernels.h).  W and R stay on the site: they are functions of E_n and the data set's or the
+ * experiment's settings, and multiplying them at the node is today's arithmetic, in today's order.
  */
 enum class SiteObservable : std::uint8_t {
   /// The finished value at the site's own energy and angle (sigma, a phase shift, the total cross section, A_y, THM):

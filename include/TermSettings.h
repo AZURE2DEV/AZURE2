@@ -44,6 +44,14 @@ struct TermSettings {
 /// Whether the sites of two terms compute the same observable at an energy (the sharing key of the mesh, SlotGroup.h):
 /// every setting the energy pass reads (GenMatrixFunc, the external capture, THM), all but those of
 /// kReaderOnlyTermSettings below, which only the reader applies (Site::ValueFor).
+///
+/// THM (a site holds sigma_HOES at E_n without an angle, SiteObservable.h): every attachment enters the value at the
+/// node, so every one is compared.  The attachments of an experiment (line shape, spectator window, distortion, DW
+/// vertex, angular window, coherent background) are built once per <thm> experiment and held by each of its data sets
+/// (ThmNorm.cpp): the same object is the same experiment, which is what "equal settings" means for them (a window
+/// holds its experiment's data energies, a background its parameters).  The weight table is read per data set
+/// (thm_weight), so two data sets of one experiment that name equal tables hold two objects: it is compared by value
+/// (SameThmWeight), and such data sets share their sites.
 inline bool SameObservable(const TermSettings &a, const TermSettings &b) {
   return a.entranceKey == b.entranceKey && a.exitKey == b.exitKey && a.differential == b.differential &&
          a.phase == b.phase && a.thm == b.thm && a.angularDist == b.angularDist && a.analyzingPower == b.analyzingPower &&

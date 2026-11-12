@@ -34,9 +34,21 @@ struct MeshPoint {
 /// pair of a beta-delayed spectrum (entrance of type 20), the entrance pair otherwise.
 const PPair *FramePair(const PPair *entrance, const PPair *exit);
 
-/// Whether a segment's folded points take their slots from the shared mesh: every segment but THM (its kinematics on
-/// the mesh are branch 10).  A segment with an energy shift is folded there with the kernel moving on the fixed nodes
-/// (ShiftedFold.h).
+/// Whether a segment's folded points take their slots from the shared mesh: every segment whose pairs give an E_x
+/// frame.  A segment with an energy shift is folded there with the kernel moving on the fixed nodes (ShiftedFold.h).
+///
+/// THM data are folded points of the mesh like any other.  Their support is the kernel's (EffectSupport: the Gaussian
+/// resolution or a beam profile, tails reaching kThmConvolutionRange sigma) at the point's c.m. energy E_0 of x + A,
+/// clipped at the data kind's floor (Segment::IntegrationFloor): a HOES excitation function reaches below the
+/// entrance threshold, so its floor in E_cm is minIntegrationEnergy - (S + E_x of the entrance pair), the compound
+/// system's E_x = minIntegrationEnergy, and E_cm of its nodes may be negative.  The caller hands the planner the
+/// support in E_x, [max(E_0 - r sigma, floor) + S + E_x, E_0 + r sigma + S + E_x], with lowHard when the floor clips
+/// it: lowHard means what it means for a thick target -- a physical floor that is itself a node, below which no node is
+/// evaluated for this support.  The planner works in E_x and needs nothing else.  Nodes: a THM site at E_x and a
+/// direct site at the same E_x hold the same channel rows (L_o, P, the phases), and a THM site its vertex pieces
+/// besides (j_l, rho j_l', the Coulomb term, the window's table: Site::GetThmFormFactor).  The level matrix at E_x is
+/// the same for both; NodeKey's route flag (NodeTable.h) keeps the THM rows apart from the direct ones until the energy
+/// pass solves a node once for every reader (CalculationPlan.h).
 bool OnSharedMesh(const Segment &segment, const PPair *entrance, const PPair *exit);
 
 /// Whether a support's lower edge lies at a physical floor (a thick target's 1 keV, the integration floor or a

@@ -6,6 +6,30 @@
 /// Modified R-matrix (Trojan Horse Method) cross-section calculator.
 
 /*!
+ * THM on the shared mesh (docs/upgrade/energy_grid.md section 8, row 10).  sigma_HOES at a node E_n is one more
+ * observable of the reaction (SiteObservable.h, kHoes), and the THM fold one more use of the kernels' table.
+ *
+ * The kernel.  Today's THM fold is no arithmetic of its own: a THM point is folded by the rows of Kernels()
+ * (experiment/src/Kernels.cpp) -- the Gaussian resolution in the c.m. frame of x + A, normalised over its window, or a
+ * beam profile -- whose supports reach kThmConvolutionRange sigma for a THM point (SupportPoint::thm, set from the data
+ * kind).  Nothing of the fold is in this class or in ThmNumerics (Coulomb phases, the bound-state tail, a cubic
+ * Lagrange rule: pieces of the vertex at one energy).  The quasi-free window is not an energy fold: it is the average
+ * of sigma_HOES over the accepted spectator directions at one energy (ThmSpectatorWindow, 2017 eq. 34), so its weights
+ * w_k(E_n) are inside the site's value at the node.  The OES fold of S(E) (THM.md section 2) has no code today: OES
+ * points are compared with the on-shell S factor of an ordinary data set; a fold of S would be the diagonal factor
+ * sigma -> S per node before the kernel, as the screening factor is (not added here: no formula changes).  The
+ * diagonal factors THM has per node (the weight table W(E), the distortion R(E)) are functions of E_n and the data
+ * set or experiment, applied at the node inside the site's value, as before.
+ *
+ * The level matrix.  The HOES amplitude reads individual elements A_lambda,mu of the level matrix of the level-space
+ * route (SetLevelSpaceOnly).  A direct reader at the same node is solved by the route its J-group takes (channel
+ * space when it has fewer channels than levels).  The energy pass solves a node once for all its readers; a node whose
+ * direct readers take the channel route for some J-group is filled a second time in level space for its THM readers
+ * (the numbers of both kinds are then those of their own route, bit for bit); the task, its channel rows and the plan
+ * are shared either way.
+ */
+
+/*!
  * THMMatrixFunc reuses the shared R-matrix interior of AMatrixFunc
  * (ClearMatrices / FillMatrices / InvertMatrices give the level matrix A,
  * unchanged) and replaces only the channel-surface assembly with the
