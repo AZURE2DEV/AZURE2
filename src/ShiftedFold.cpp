@@ -9,6 +9,7 @@
 #include "CalculationPlan.h"
 #include "Config.h"
 #include "Segment.h"
+#include "ModelPass.h"
 #include "SegmentState.h"
 #include "TargetEffect.h"
 #include "WorkingCopy.h"
@@ -205,6 +206,34 @@ bool RefoldShiftedSegments(WorkingCopy &data, const std::vector<const Segment *>
     for (int t = 0; t < segment->NumTerms(); t++)
       for (Unit &point : segment->TermPoints(data, t)) point.FoldSubPoints(data, configure, results);
   return true;
+}
+
+double SegmentLocalChi2(const Segment &segment, CNuc *compound, const Config &config, WorkingCopy &data,
+                        Results &results, double norm) {
+  double chi = 0.0;
+  const bool refolded = RefoldShiftedSegments(data, {&segment}, config, results);
+  for (int pid = 0; pid < segment.NumPoints(); pid++) {
+    EvaluateModelPoint(data, segment, pid, compound, config, results,
+                       refolded ? LeafValues::Ready : LeafValues::Calculate);
+    chi += PointResidual(data, segment, pid, results, norm).Chi2();
+  }
+  segment.AddShiftPenalty(data.State(segment), chi);
+  return chi;
+}
+
+std::vector<double> HeldNorms(WorkingCopy &data, const std::vector<int> &segments, CNuc *compound, const Config &config,
+                              Results &results) {
+  std::vector<double> norms;
+  for (int s : segments) {
+    const Segment &segment = *data.Data().GetSegment(s);
+    double norm = data.State(segment).norm;
+    if (segment.IsProfiledNorm()) {
+      SegmentLocalChi2(segment, compound, config, data, results, norm);  // the models at the present shift
+      segment.ProfileNormChiSquared(data, results, norm);
+    }
+    norms.push_back(norm);
+  }
+  return norms;
 }
 
 }  // namespace azure2

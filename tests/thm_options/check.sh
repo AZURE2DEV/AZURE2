@@ -148,7 +148,10 @@ vertex=perlevel")")" 2741.85
 expect "kinematics=lacognata == no block" "$(run lacognata "$(block kinematics=lacognata)")" "$none" 0
 expect "kinematics=triple"    "$(run triple    "$(block kinematics=triple)")"    2381.01
 expect "kinematics=kf3body"   "$(run kf3body   "$(block kinematics=kf3body)")"   2625.33
-expect "kinematics=lambda32"  "$(run lambda32  "$(block kinematics=lambda32)")"  5604.98
+# lambda32's 1/k_i reaches 1/sqrt(1e-6 MeV) at the entrance threshold, inside the fold of the points near it: the
+# chi2 rests on the quadrature there.  On the shared mesh 5561.64 (before, on a grid of each point's own, 5604.98; the
+# engine before refined 8-fold 5510.14, 16-fold 5506.51; the THM curve is twice as close to the refined one as before).
+expect "kinematics=lambda32"  "$(run lambda32  "$(block kinematics=lambda32)")"  5561.64
 
 # (d) on-shell vertex and the external Coulomb term
 expect "vertex=onshell"    "$(run onshell "$(block vertex=onshell)")"    2070.75

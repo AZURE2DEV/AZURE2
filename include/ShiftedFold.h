@@ -7,6 +7,7 @@
 #include "MeshPlanner.h"
 #include "Unit.h"
 
+class CNuc;
 class Config;
 class Segment;
 class WorkingCopy;
@@ -98,9 +99,22 @@ struct Results;
  * MIGRAD sees (tests/thin_layer_limit; the follow-ups' report has the numbers).  A shifted point with a wider planned
  * support has more nodes, and its fold reads at least two of them.
  *
- * Not here: THM (off the mesh, its sub-points still move rigidly: Segment::MoveOwnGridSlots, branch 10); a point
- * with a uniform grid of its own (useAdaptiveGrid off), which moves rigidly as well; unfolded shifted points (an exact
- * evaluation energy that moves with nu, section 2.5).
+ * THM data with a shift are this case too.  A THM shift is not floored at zero energy (a HOES excitation function
+ * reaches below the entrance threshold, THM.md): Delta_i is the point's own c.m. shift, which the shift step leaves
+ * unfloored for such a data set, and the floor of the moved support is the data kind's (spec.floorEnergy, from
+ * Segment::IntegrationFloor: E_x = minIntegrationEnergy of the compound system), a hard edge of the planned support as
+ * a thick target's is.  The reach widens the support; the kernel moves on fixed nodes; nothing else is THM's.
+ *
+ * Not here: a point with a uniform grid of its own (useAdaptiveGrid off), which moves rigidly with its shift
+ * (Segment::MoveOwnGridSlots) and reads a row set of its own (Unit::CalcNodeRows), for every kind of data; unfolded
+ * shifted points (an exact evaluation energy that moves with nu, section 2.5).  The uniform grid is the last user of
+ * the rigid move.  Proposal (not decided here: useAdaptiveGrid is a user-visible key of <config>): its place on the
+ * mesh is a setting of the supports, MeshSettings::uniform -- the support's nodes the uniform lattice of `points`
+ * intervals from its high edge, no anchors -- planned like any other support, so the point reads fixed nodes and the
+ * rigid move, CalcNodeRows and the overflow nodes of moved sub-points go; the alternative is the key's removal with a
+ * note of the converter (the adaptive mesh is never coarser than the uniform grid of the same `points`, section 2.4).
+ * Keeping the own grid as it is costs MoveOwnGridSlots, Unit::CalcNodeRows and RowSet::valueOffset -1 (a set of a
+ * reader's own), the own-grid branch of SetUpTargetEffects, and the overflow placement of moved slots.
  */
 namespace azure2 {
 
@@ -164,6 +178,18 @@ bool FoldOnlyShift(const WorkingCopy &data, const Segment &segment);
 /// done, otherwise (the caller calculates them).
 bool RefoldShiftedSegments(WorkingCopy &data, const std::vector<const Segment *> &segments, const Config &configure,
                            Results &results);
+
+/// The chi^2 of `segment` alone at the shift its points hold now, its data compared at the norm `norm`, with its shift
+/// prior: the model of every point (refolded on the fixed nodes where FoldOnlyShift holds, else calculated), the
+/// residuals, the penalty.  The local central difference of a shift column (AZURECalc::Gradient).
+double SegmentLocalChi2(const Segment &segment, CNuc *compound, const Config &config, WorkingCopy &data,
+                        Results &results, double norm);
+/// The norm each of `segments` (1-based) is compared at in a local shift difference: the segment's own, or for a
+/// profiled norm (THM, Segment::IsProfiledNorm) its profile n* at the models of the present shift, held fixed while the
+/// shift moves -- at the profile d chi^2/d n* = 0, so the partial derivative at fixed n* is the total one (the envelope
+/// theorem).  Calculates the profiled segments' models at the present parameters.
+std::vector<double> HeldNorms(WorkingCopy &data, const std::vector<int> &segments, CNuc *compound, const Config &config,
+                              Results &results);
 
 }  // namespace azure2
 

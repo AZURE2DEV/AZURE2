@@ -9,6 +9,7 @@
 #include "DataCovariance.h"
 #include "WorkingCopy.h"
 #include "Segment.h"
+#include "TargetEffect.h"
 #include "ModelPass.h"
 #include "azure2/experiment/Expression.h"
 #include "ExperimentAdapter.h"
@@ -207,6 +208,11 @@ bool Segment::IsPhase() const {
 
 bool Segment::IsTHM() const {
   return isTHM_;
+}
+
+double Segment::IntegrationFloor(const PPair *entrance) const {
+  if (!IsTHM()) return TargetEffect::minIntegrationEnergy;
+  return TargetEffect::minIntegrationEnergy - (entrance->GetSepE() + entrance->GetExE());
 }
 
 /*!

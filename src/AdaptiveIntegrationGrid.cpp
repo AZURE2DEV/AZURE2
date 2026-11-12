@@ -337,7 +337,7 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
       if (!hasWidth) continue;  // skip levels with no widths
 
       // Convert to CM energy: E_cm = E_excitation - S - E_ex
-      double levelCMEnergy = levelExcitationEnergy - separationEnergy - excitationEnergy - config_.resonanceOffset;
+      double levelCMEnergy = levelExcitationEnergy - separationEnergy - excitationEnergy;
 
       // Total width Gamma_total = Gamma_particle + Gamma_radiative, in MeV.
       // The Breit-Wigner cross section carries the total width in its

@@ -899,7 +899,8 @@ if not NARROW_LEAF.search("if (azure2::experiment::IsCoulombReference(part))") o
 
 # 37. The sharing key of the mesh compares the term settings field by field (SameObservable, include/TermSettings.h):
 #     a field added to TermSettings and forgotten there makes two different observables share their sites silently.
-#     Every field is either compared in SameObservable (a.f == b.f) or named in kReaderOnlyTermSettings beside it,
+#     Every field is either compared in SameObservable (a.f == b.f, or by value: SameX(a.f, b.f)) or named in
+#     kReaderOnlyTermSettings beside it,
 #     never both, and both lists name fields that exist.
 def term_settings_problems(text):
     """The problems of check 37 in the text of TermSettings.h (a function, so that the check can be shown to bite)."""
@@ -918,7 +919,9 @@ def term_settings_problems(text):
             name = re.search(r"(\w+)\s*$", declarator.strip())
             if name:
                 fields.append(name.group(1))
-    compared = set(re.findall(r"\ba\.(\w+)\s*==\s*b\.\1\b", compare.group(1)))
+    # a.f == b.f, or a comparison by value of an attachment, SameX(a.f, b.f)
+    compared = set(re.findall(r"\ba\.(\w+)\s*==\s*b\.\1\b", compare.group(1))) | \
+        set(re.findall(r"\b\w+\(\s*a\.(\w+)\s*,\s*b\.\1\s*\)", compare.group(1)))
     reader_only = set(re.findall(r'"(\w+)"', listed.group(1)))
     for f in fields:
         if f not in compared and f not in reader_only:

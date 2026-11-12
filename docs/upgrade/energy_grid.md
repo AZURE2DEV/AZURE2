@@ -1003,7 +1003,7 @@ equal to today's, k = 8 one digit away): with k = 4 alone it counted as an unfol
 | 7 | `grid` | the shared mesh (§2.2–2.6); sub-points stop being units; the stage node table; kernel rows on mesh nodes; re-placement by anchors in the hand-over | new `experiment/.../EnergyGrid.h`, `experiment/src/EnergyGrid.cpp` (with `AdaptiveIntegrationGrid` moved in), `src/TargetSetup.cpp`, `src/WorkingCopyUnits.cpp`, `src/HandOver.cpp`, `include/Unit.h` | `ReplaceSubPointGrids`, `NodeTableCache.h`, sub-point units, `SubPointAccess.h`, per-unit sub-point tables; per D3 the automatic tolerance, windows, blend, fallback | quadrature (§7.1), unfolded projects identical | ~1,500, 16–24 h | after 6; alone (it touches the set-up) |
 | 8 | `shift-kernel` | folded shifted data: the kernel moves on fixed nodes, ∂K/∂ν analytic; unfolded: exact node, ∂m/∂ν from dO/dE | `src/ShiftFrames.cpp`, `src/HandOver.cpp`, `src/AZURECalc.cpp` (`FillShiftColumns` for folded segments goes) | the rigid move of sub-points, shift tables of sub-points | quadrature; χ² smooth in shifts | ~400, 6–8 h | after 7; with 9 |
 | 9 | `observables` | O_n = Legendre coefficients, elastic amplitudes, A_y numerators per (E_n, reaction); angle rows in the kernels; amplitude filters on dσ/dΩ (M8); lab-frame per-node fold if D5 | `src/GenMatrixFunc.cpp`, `src/UnitLegendre.cpp`, `src/PolarizationFunc.cpp`, `experiment/src/Kernel*.cpp` | per-unit angular sums, per-unit Legendre and Coulomb tables | rounding for the reordered angular sums; physics for D5 | ~1,200, 16–24 h | after 7 and after the pathway branch; with 8 |
-| 10 | THM on the grid | σ_HOES at E_n, the THM kernel (`THM.md` §1–2) | `src/THMMatrixFunc.cpp`, `src/Thm*.cpp` | THM sub-point folds, THM-only mapping | quadrature | per `THM.md` | after 7 and 9 |
+| 10 (milestones 1–3 done, below) | THM on the grid | σ_HOES at E_n, the THM kernel (`THM.md` §1–2) | `src/THMMatrixFunc.cpp`, `src/Thm*.cpp` | THM sub-point folds, THM-only mapping | quadrature | per `THM.md` | after 7 and 9 |
 
 **Branch 9 (`feature/upgrade-5-observables`), done (2026-11-12, milestones 1–5).**
 A site holds the observables of its reaction at E_n without an angle (`include/SiteObservable.h`: Legendre
@@ -1014,6 +1014,18 @@ tree only T2 moves (≤ 2.6 × 10⁻⁵).  A ratio observable (A_y, a normalised
 from the table.  Deleted: the per-site differential sums, the key's angle and order, `CalculateAmplitudeMatrix`,
 `CalculateCaptureAnalyzingPower`, the local-record path of differential scalar sites.  THM stays keyed by angle, off
 the mesh (branch 10).
+
+**Branch 10 (`feature/upgrade-5-thm-mesh`), milestones 1–3 done (2026-11-12).**  A THM site holds σ_HOES at E_n, a
+scalar without an angle (`SiteObservable::kHoes`; nothing of it reads the data point: `SiteObservable.h`), and THM
+points are folded points of the shared mesh like any other (their floor E_x = 1 keV of the compound system,
+`Segment::IntegrationFloor`; a shift is the shift kernel's case).  The THM fold is the kernels' table (the Gaussian or
+the beam profile, 5 σ); it had no arithmetic of its own.  The plan has no THM route: a node is one energy task for every
+kind, the HOES formula reads the same fill where it took the level route throughout (T2: 1,172 of 1,192 THM nodes) and
+a level-space fill of its own otherwise.  The scalar gradient takes THM data through the energy tasks: the profiled
+model's cotangent by the envelope theorem, one HOES adjoint per site (`ThmCotangents.h`).  Moves: the THM projects
+only, per-file quadrature, every file closer to the refined run (HANDOFF, milestone 1).  Open: the deletions of
+milestone 4 (the uniform grid's own path, `ComputeTHMRows`' central differences of the fold) and the proposal for
+`useAdaptiveGrid` off (`ShiftedFold.h`).
 
 **Branch 4, done (2026-11-11, `feature/upgrade-5-layer-yield`).** The kernel is today's target integration
 (`src/TargetFold.cpp`) not divided by N for an effect with `TargetEffect::IsLayerYield` (an effect of its own per data

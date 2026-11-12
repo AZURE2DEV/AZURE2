@@ -99,18 +99,17 @@ ChannelRowSource Segment::ShiftRowSource(TermState &u, int i) {
 void Segment::UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, CNuc *theCNuc, const Config *configure) const {
   // An ordinary segment's energies are positive and must stay so: points at
   // E <= 0 are left alone and a shift is floored above zero (ShiftedEnergy).
-  // A THM (HOES) segment has points and folding sub-points below the entrance
-  // threshold, and all of them shift: leaving the sub-points at E <= 0 behind
-  // (as the guard did) tore the fold of every point within its reach of
-  // threshold, and a point below threshold never moved at all.
-  const bool thm = this->IsTHM();
+  // Half-off-shell data have points below the entrance threshold, and all of
+  // them shift (ShiftIsFloored): a point below threshold that never moved tore
+  // its fold.
+  const bool floored = this->ShiftIsFloored();
   SegmentState &state = data.State(*this);
   {
     Unit *point = &TermPoints(data, t)[i];
-    if (point && (thm || point->GetOriginalEnergy() > 0)) {
+    if (point && (!floored || point->GetOriginalEnergy() > 0)) {
       double originalEnergy = point->GetOriginalEnergy();
-      double shiftedEnergy = thm ? originalEnergy + TotalEnergyShift(state, originalEnergy)
-                                 : ShiftedEnergy(originalEnergy, TotalEnergyShift(state, originalEnergy));
+      double shiftedEnergy = floored ? ShiftedEnergy(originalEnergy, TotalEnergyShift(state, originalEnergy))
+                                     : originalEnergy + TotalEnergyShift(state, originalEnergy);
 
       // Set the shifted energy
       point->SetLabEnergy(shiftedEnergy);
@@ -165,8 +164,7 @@ void Segment::UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, CNuc *
 }
 
 /*!
- * The sub-points of a point with a grid of its own (a THM segment, which is off the shared mesh until its kinematics
- * are there; a uniform grid with useAdaptiveGrid off) move rigidly with it, by the parent's own lab shift converted to
+ * The sub-points of a point with a grid of its own (a uniform grid with useAdaptiveGrid off) move rigidly with it, by the parent's own lab shift converted to
  * the c.m. frame: a shift is a calibration of the measured beam energy, and the depth or resolution grid keeps its
  * width (audit item 11, tests/shift_sqrt_subpoints).  A sub-point keeps its parent's c.m. angle at the shifted energy,
  * without the parent's lab-to-c.m. conversions (tests/shift_subpoint_angle).  A beta-delayed segment's sub-points
@@ -175,18 +173,18 @@ void Segment::UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, CNuc *
  */
 void Segment::MoveOwnGridSlots(WorkingCopy &data, int t, Unit &point, CNuc *theCNuc, const Config &configure,
                                const ChannelRowSource &rows) const {
-  const bool thm = this->IsTHM();
+  const bool floored = this->ShiftIsFloored();
   PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->TermEntranceKey(t)));
   PPair *exitPair = theCNuc->GetPairFromKey(this->TermExitKey(t));  // nullptr for total capture (-1)
-  // A THM segment's shift is not floored (its energies may lie below threshold), as for the point.
+  // Not floored where the data reach below threshold (ShiftIsFloored), as for the point.
   const double shiftCM = CMEnergyFactor(entrancePair, exitPair) * TotalEnergyShift(data.State(*this), point.GetOriginalEnergy());
   const TargetEffect *te = this->IsTargetEffect() ? data.Data().GetTargetEffect(this->TermTargetEffectNum(t)) : nullptr;
   const TargetEffect *qEffect = (te && te->IsQCoefficients()) ? te : nullptr;
   for (int j = 1; j <= point.NumSubPoints(); j++) {
     if (!data.WritesSlot(point, j)) continue;
     Site *subPoint = point.GetSubPoint(data, j);
-    if (!subPoint || !(thm || subPoint->GetOriginalEnergy() > 0)) continue;
-    const double e = thm ? subPoint->GetOriginalEnergy() + shiftCM : ShiftedEnergy(subPoint->GetOriginalEnergy(), shiftCM);
+    if (!subPoint || !(!floored || subPoint->GetOriginalEnergy() > 0)) continue;
+    const double e = floored ? ShiftedEnergy(subPoint->GetOriginalEnergy(), shiftCM) : subPoint->GetOriginalEnergy() + shiftCM;
     // both slots: CalcLegendreP reads the lab one for the Q coefficients
     subPoint->SetCMEnergy(e);
     subPoint->SetLabEnergy(e);

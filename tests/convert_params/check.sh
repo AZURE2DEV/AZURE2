@@ -13,8 +13,10 @@
 #       relative (the tolerance of golden/T2's calculations; the file prints 6 digits).  The engine that read old files
 #       gave the fit's own value there, 294.173 (golden/T2/fit/chiSquared.out); the shared mesh integrates the folded
 #       segments 5-8 on other nodes (docs/upgrade/energy_grid.md section 7.1) and gave 294.164 at the same parameters,
-#       and the shifted segments 1-4 folded on the fixed nodes of the mesh (include/ShiftedFold.h) give 293.703 (the
-#       engine before the mesh refined eightfold: 293.649), so the recorded value is the calculation's, not the fit's;
+#       the shifted segments 1-4 folded on the fixed nodes of the mesh (include/ShiftedFold.h) gave 293.703, and the
+#       Trojan-horse segments 11-12 folded on the mesh, whose supports add nodes under segments 1-4, give 293.675 (the
+#       engine refined eightfold, before and after: 293.647), so the recorded value is the calculation's, not the
+#       fit's;
 #   (c) the old file itself, read by the format-3 project, applies only the level parameters: the run warns with
 #       W_PARAMETER_FILE_NAMES and its chi-squared is not the fit's (the renaming is what makes (b) hold);
 #   (d) a format-3 project as the map's source is refused, with the reason, exit 1.

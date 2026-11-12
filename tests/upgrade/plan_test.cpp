@@ -104,7 +104,8 @@ std::string CheckEnergyTasks(WorkingCopy &data, CNuc &compound, const Config &cf
       if (std::memcmp(&e, &task.energy, sizeof e) != 0) return where + ": a unit at another E_x";
       if (compound.GetPair(compound.GetPairNumFromKey(u.GetEntranceKey()))->GetNucleus() != task.nucleus)
         return where + ": a unit of another nucleus";
-      if ((u.IsTHM() ? 'T' : 'A') != task.route && task.route != 'R') return where + ": a unit of another route";
+      // every kind of site at one node is one task (a THM site too: SolveAtOneEnergy), on the configuration's route
+      if (task.route != 'A' && task.route != 'R') return where + ": a task of another route";
       const std::tuple<int, int, long long> b{u.GetEntranceKey(), u.GetExitKey(), azure2::ECAmplitudeSource(u, cfg)};
       if (i > 0) {
         Site &p = data.SiteAt(taskUnits[i - 1]);

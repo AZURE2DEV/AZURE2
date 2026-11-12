@@ -39,16 +39,18 @@ using UnitRef = int;  ///< a unit (a point or a sub-point) by its index in the d
 /*!
  * One compound energy of the point pass (docs/upgrade/energy_grid.md section 8, first branch): every unit whose level
  * matrix is solved at that energy -- a point without a sub-point fold, or a sub-point of one -- with the same compound
- * nucleus, the same route (A-matrix, THM, R-matrix) and the same bits of E_x = AMatrixFunc::InEnergy.  The level
- * matrix is filled and factored once, with the first unit; the units are listed by T-matrix group -- (entrance, exit)
- * pair and the source of the external-capture amplitudes (ECAmplitudeSource) -- so each group's T-matrix is built
- * once, from its first unit; then each unit's observable is formed in turn
+ * nucleus, the same route (A-matrix, R-matrix) and the same bits of E_x = AMatrixFunc::InEnergy, whatever its kind of
+ * observable.  The level matrix is filled and factored once, with the first unit that reads a T-matrix; the units are
+ * listed by T-matrix group -- (entrance, exit) pair and the source of the external-capture amplitudes
+ * (ECAmplitudeSource) -- so each group's T-matrix is built once, from its first unit; a THM site (kHoes) reads the
+ * level matrix's elements instead, from the same fill where it took the level-space route throughout, else from a
+ * level-space fill of the task's THM sites (THMMatrixFunc.h); then each unit's observable is formed in turn
  * (SolveAtOneEnergy, PointPass.cpp).  AZURE_PLAN_CHECK=1 shows that this gives every unit the level matrix, T-matrix
  * and record its own solve gives, bit for bit (CheckEnergyTasks).
  */
 struct EnergyTask {
   int nucleus = 0;             ///< compound nucleus of the units (PPair::GetNucleus of their entrance pairs, 1-based)
-  char route = 'A';            ///< 'A' A-matrix, 'T' THM (THMMatrixFunc), 'R' R-matrix (RMatrixFunc)
+  char route = 'A';            ///< 'A' A-matrix, 'R' R-matrix (RMatrixFunc)
   double energy = 0.0;         ///< E_x, MeV (AMatrixFunc::InEnergy), the same bits for every unit
   int node = -1;               ///< the node of the units (WorkingCopy::Slots, NodeTable.h: stage, or overflow above it)
   int numTMatrices = 0;        ///< T-matrix groups: the T-matrices the task builds
@@ -135,8 +137,9 @@ class CalculationPlan {
   std::vector<long long> energy_sources_;
 };
 
-/// One energy task's calculation (EnergyPass.cpp): the level matrix filled and factored with units[0], then for each
-/// unit in turn a T-matrix built from it when it starts a T-matrix group, and its observable into `results`.  The
+/// One energy task's calculation (EnergyPass.cpp): the level matrix filled and factored with the first unit that reads
+/// a T-matrix, then for each unit in turn a T-matrix built from it when it starts a T-matrix group, and its observable
+/// into `results`; a THM site (kHoes) by the HOES formula on the same fill or a level-space fill of its own.  The
 /// units share the nucleus, route and E_x bits of units[0] (an EnergyTask, or one unit alone).  The groups are
 /// `tGroups` (one per unit, non-decreasing), or, if null, runs of one (entrance, exit) pair.  `progress`, if given,
 /// holds the index of the unit being calculated (so a caller that catches an exception knows whose it was: the fill's
