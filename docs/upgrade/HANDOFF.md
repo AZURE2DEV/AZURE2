@@ -48,7 +48,14 @@ gradient); removed.
 **Measured** (1 thread, 3 alternated runs, medians, menu 1, against `b-trial34`): T2 units of the energy pass
 23,673 -> 21,085, evaluation 60.4 -> 57.5 ms, wall 0.36 -> 0.34 s, peak 136 -> 133 MB; 13N, natural_neon,
 thick_target_resonance: units unchanged, wall and peak within 1 %.
-**Not run.**  The whole tree, `run_tests.sh`, the gate, the eight fits, 1-vs-3-thread comparison.
+**Not run.**  The whole tree, `run_tests.sh`, the gate, the eight fits, 1-vs-3-thread comparison (1 vs 2 threads,
+the budget: T2, 13N, angular_coefficients menu 1 identical).
+**Stopped here** (context of the session): milestones 2-5 not started.  Still keyed by angle: elastic differential
+data (Coulomb amplitude and Legendre rows on the site), A_y data, phase shifts, total, THM.  Their users keep
+`SlotGroupKey::nominalEnergy`, `Segment::ReangleSlots` and the recomputing shift column (`FoldOnlyShift` false):
+lab-frame differential elastic segments with a shift.  Next: milestone 2 (elastic: B_L^NN with s = 4 for identical
+pairs is already what `LegendreCoefficientsOf` gives for an elastic angular distribution; the Coulomb-nuclear terms
+rt_it_ per (s, l) go in the record, f_C per reader and slot beside `node_rows_`).
 
 ## 2026-11-12 (agent, Phase 5 branch 8) — folded data with an energy shift on the fixed nodes of the shared mesh (`feature/upgrade-5-shift-kernel`)
 
