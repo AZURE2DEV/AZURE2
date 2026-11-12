@@ -2,6 +2,44 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, branch `feature/upgrade-5-one-grid`) — one grid: `useAdaptiveGrid` removed, every folded point on the mesh
+
+**Done** (the PI's decision of the evening: the key may go, provided narrow resonances are covered by the mesh).
+- Engine: the uniform grid of a point's own is gone with everything only it used: the own-grid branches of
+  `SetUpTargetEffects` (its two near-copy loops, base segment and components, are one function `layOutTerm` now; a
+  folded point whose pairs give no E_x frame is refused there, it threw in `ReplaceSubPointGrids` before),
+  `AddGridSlots`, `Segment::MoveOwnGridSlots`, `Unit::CalcNodeRows`, the readers' branches for a row set with
+  `valueOffset` −1 (`Site.h`, `WorkingCopyUnits.cpp`, `GradEnergyTasks.cpp`), the key's early return in
+  `ReplaceSubPointGrids`, `Config::useAdaptiveGrid`; dead after it: `AdaptiveIntegrationGrid::GenerateGrid(CNuc*)`,
+  `GenerateGridWithInfo`, `GetExpectedPointCount`, `SetConfig`, `GridPoint`.
+- Rate: always the tabulated grid; the per-temperature quadrature (`RunPerTemperatureRateCalculation`) is only the
+  fallback of a grid with fewer than three points of σ > 0. `tests/reaction_rate` (c) and (h) and their models went.
+- Format: a file with the line is refused (`E_CONFIG_KEY_REMOVED`, "delete the line" and why); `io::ConfigKeys()`
+  no longer lists it; the converter drops it and notes what changes when it was 0. The line removed from every project
+  of the tree, the converter's expected outputs and the generators (the old originals in `tests/convert/fixtures` keep it).
+- Tests: `shift_sqrt_subpoints` without `dense`; (c) `sqrt` against itself refined eightfold (9.3e-5), (f)
+  `narrow_sqrt` against itself refined eightfold (5.4e-4, measured 1.78e-4): fails at 0.98 with the level anchors
+  taken out of the mesh plan.
+- Docs: `ShiftedFold.h`, `energy_grid.md` (status), `project_format3.md` §3.2, `FOR_THE_OWNER.md`, `ROADMAP.md`,
+  `qt_parity.md`, `project.md`, the `azure2-calculate` skill, `project_from_python.rst`.
+
+**Verified** (build `work/b-grid` of the last code commit). Whole tree × 3 bases against `tab-thm5` (tag `tab-grid-1`):
+every output file of a project with the key on identical; run.log of `electron_screening`, `target_density`,
+`mcmc_physical_norm/13N_fast` differ only in the line numbers of their data-file errors (one line fewer); files 835 /
+808 / 835 → 827 / 800 / 827 (the 6 files of `shift_sqrt_subpoints/models/dense` and the run.log of the two deleted
+rate models). `ctest -LE slow` 215/215 (without `pyazr_park_gradient` and `gsl_quiet`, which set 4 threads). 1 against
+3 threads, T1, T2, T3, 13N × 3 bases: outputs identical (run.log: progress bars, Coulomb lookup counts). Eight fits
+identical to `b-thm5`. `tests/reaction_rate`: rates and `cross_section_grid.dat` of p12C, n12C, p12C_2g, moved_azr
+byte-identical to `b-thm5`. `examples/c12c12_tumino2018` (the key at 0): with the key at 1 on `b-thm5` byte-identical
+to this branch; against this branch refined eightfold the old uniform grid was off by up to 57 % in a folded value,
+the mesh by 2.7e-5; χ² 111.661 → 117.516 (refined 117.516). Converted-tree gate with `tab-grid-1` as its reference:
+628 / 601 / 628 files identical, none classified, differing or missing. `tests/run_tests.sh`: 158 of 159 passed; the one
+failure, `cli_help` ("--answers is accepted but --help does not print it"), passed when run again alone, on this build
+and on `b-thm5` (no CLI code is touched); `thm_dw_vertex` was not run (it sets 4 threads, above the budget of 3).
+
+**Open**: the per-temperature quadrature of the rate has no test now (no model reaches its fallback). The refusal of a
+folded point without an E_x frame (a beta-delayed spectrum without an exit pair) is reached by no project.
+
 ## 2026-11-12 (director, 19:05) — merged: physics/transfer, second part (transfer to the x + A continuum, FRESCO bins, prior form and remnants)
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed): `feature/upgrade-7-transfer-2` (the
