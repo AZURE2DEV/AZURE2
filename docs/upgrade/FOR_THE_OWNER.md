@@ -324,7 +324,7 @@ point of it is folded with the whole kernel. In numbers: 44 engine, format and c
 against 161 added; the set-up of target effects 968 → 762 lines; `fold_windows` is no longer a field of the format (a
 file that writes it is refused with a message that names the field and says to remove it; an old file converts with a
 note that names the line). Every project of the test tree keeps its bytes except the one that used a window
-(`target_effect_ranges`: χ² 3838.66 → 3760.95, one A_y point by 1.5 of its error): its new numbers are, bit for bit,
+(`beam_spread_ay`: χ² 3838.66 → 3760.95, one A_y point by 1.5 of its error): its new numbers are, bit for bit,
 what the old engine gives with the window widened to all energies, so the move is the points the window had left
 without the beam spread. **This is a behaviour change you should know of**: a window was a restriction of the physics,
 not an approximation, and an analysis that relied on it gets the full fold. Speed and memory of the measured projects

@@ -142,6 +142,10 @@ exit 1
 == tests/beam_profile_kernel/beam_profile_kernel.azr
 data Haverson2026_eTPC_ag0_dcs_Eg8p51: dsdo_cm(1->4)
 data Haverson2026_eTPC_ag0_dcs_Eg9p85: dsdo_cm(1->4)
+== tests/beam_spread_ay/beam_spread_ay.azr
+data deineko_130: ay(5->5)
+data deineko_160: ay(5->5)
+extrapolation x2: dsdo_cm(5->5)
 == tests/beta_delayed_alpha/16N.azr
 data bda: sigma(2->1)
 == tests/capture_ay_coupling/models/deuteron.azr
@@ -748,10 +752,6 @@ exit 1
 == tests/target_density/true.azr
 data: set-up failed
 exit 1
-== tests/target_effect_ranges/target_effect_ranges.azr
-data deineko_130: ay(5->5)
-data deineko_160: ay(5->5)
-extrapolation x2: dsdo_cm(5->5)
 == tests/thick_target_resonance/thick_target_resonance.azr
 data yield_scan: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
 data yield_scan_2: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))

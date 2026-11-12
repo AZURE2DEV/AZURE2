@@ -1015,7 +1015,7 @@ never writes them. It never overwrites its input or a file it did not create; si
 | `udr "f" L burst channel centred` | `detector udr file … flight_path L m burst … ns channel … ns centred yes|no` | |
 | `screening Ue v σ` (`1 "6,7" 200 1 0.002 … screening 1000 1 200`, `tests/electron_screening`) | `target … screening 1000 eV fit prior 1000 200` | 13 |
 | `doppler T [v σ Tmax]` | `target … doppler free_gas T K …` | 2 |
-| ranges, auto windows, blend, tolerance | dropped, with a note per line that names what was dropped and what moves (decision D3: the shared mesh folds every point) | `tests/target_effect_ranges` |
+| ranges, auto windows, blend, tolerance | dropped, with a note per line that names what was dropped and what moves (decision D3: the shared mesh folds every point) | `tests/beam_spread_ay` |
 | `<abundances>` `Z A w v σ` per compound nucleus | `isotope <target nucleus> w …`, the target nucleus = the heavy particle of the entrance pairs whose compound nucleus is (Z, A) among the data sets using the sample; several different target nuclei for one compound nucleus → ask; `sum σ` and `abundanceSumSigma=` → `isotope_sum prior 1 σ` | `natural_neon`: 21Ne → 20Ne 0.9048, 23Ne → 22Ne 0.0925, 22Ne → 21Ne 0.0027 |
 | `<scatteringLengths>` `a pair s Re σ [Im σ]` | `datum` `scattering_length` | 4 files |
 | `<thm>` `segments=`, `weight[k]` | data-set field `thm <exp>`; `thm_weight` on the extrapolation | 10 files |
