@@ -4,7 +4,6 @@
 #include "ApparatusParameters.h"
 
 #include <algorithm>
-#include <atomic>
 #include <cmath>
 #include <map>
 #include <ostream>
@@ -127,8 +126,7 @@ void WorkingCopy::FillApparatusFromParams(const vector_r &p, const Config &confi
     // The sub-point grids span the layout value (as the layout density): beyond it the fold would run off its nodes.
     const double vMax = a.declaration.layout, vMin = 0.1 * a.declaration.nominal;
     if (v > vMax || !(v >= vMin)) {
-      static std::atomic<bool> warned{false};
-      if (!warned.exchange(true))
+      if (configure.FirstTime("apparatus parameter range"))
         configure.outStream << "WARNING: " << a.declaration.Name() << " = " << v << " is outside [" << vMin << ", " << vMax
                             << "], the range its sub-point grids span; the calculation uses the nearest end."
                             << " (Printed once.)" << std::endl;

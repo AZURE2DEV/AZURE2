@@ -1,6 +1,5 @@
 #include "CNucExternalCapture.h"
 
-#include <atomic>
 #include <cmath>
 #include <iostream>
 #include <memory>
@@ -34,10 +33,9 @@ phys::FormalToBruneOptions EvaluationIteration(bool wantTransform) {
   return options;
 }
 
-/// The first warning of an evaluation-time iteration, once per process (a fit evaluates thousands of times).
-void WarnOnce(const phys::LevelSet &set) {
-  static std::atomic<bool> told{false};
-  if (set.warnings.empty() || told.exchange(true)) return;
+/// The first warning of an evaluation-time iteration, once per run (a fit evaluates thousands of times).
+void WarnOnce(const phys::LevelSet &set, const std::shared_ptr<Config::NoteLog> &printedOnce) {
+  if (set.warnings.empty() || !Config::FirstTimeIn(printedOnce, "formal basis, evaluation")) return;
   std::cerr << "WARNING (formal basis, evaluation): " << set.warnings.front()
             << " (further such warnings are not shown)" << std::endl;
 }
@@ -122,6 +120,7 @@ struct CNuc::ECFinalBlocks {
   CNucSystem structure;
   std::vector<std::size_t> blocks;
   bool gslCoulomb = false, rmc = false;
+  std::shared_ptr<Config::NoteLog> printedOnce;  ///< the run's once-only warnings (Config::printedOnce)
 };
 
 void CNuc::SetUpECFinalBlocks(const Config &configure) {
@@ -136,7 +135,8 @@ void CNuc::SetUpECFinalBlocks(const Config &configure) {
     return;
   auto record = std::make_shared<ECFinalBlocks>(ECFinalBlocks{
       BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure), {},
-      !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC), !!(configure.paramMask & Config::USE_RMC_FORMALISM)});
+      !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC), !!(configure.paramMask & Config::USE_RMC_FORMALISM),
+      configure.printedOnce});
   for (std::size_t b = 0; b < record->structure.system.num_blocks(); b++) {
     const std::vector<int> &levels = record->structure.map.levelOfBlockLevel[b];
     // The lowest level of a block (B_c = S_c at its energy) has formal parameters equal to its Brune ones: the
@@ -171,7 +171,7 @@ void CNuc::SetUpECFinalBlocks(const Config &configure) {
     for (std::size_t k = 0; k < nc; k++) B[k] = group->GetChannel((int)k + 1)->GetBoundaryCondition();
     const phys::LevelSet brune = phys::brune_from_formal(record->structure.system, b, E, gamma, B, cf, options);
     ThrowIfFailed(brune);
-    WarnOnce(brune);
+    WarnOnce(brune, record->printedOnce);
     for (std::size_t lb = 0; lb < levels.size(); lb++)
       if (group->GetLevel(levels[lb])->IsECLevel()) group->GetLevel(levels[lb])->SetECEnergy(brune.E[lb]);
   }
@@ -197,7 +197,7 @@ void CNuc::ECFinalStatesFromFormal() {
     }
     for (std::size_t k = 0; k < nc; k++) B[k] = group->GetChannel((int)k + 1)->GetBoundaryCondition();
     const phys::LevelSet brune = phys::brune_from_formal(r.structure.system, b, E, gamma, B, cf, options);
-    WarnOnce(brune);
+    WarnOnce(brune, r.printedOnce);
     for (std::size_t lb = 0; lb < levels.size(); lb++) {
       ALevel *level = group->GetLevel(levels[lb]);
       if (!level->IsECLevel()) continue;
@@ -221,6 +221,7 @@ struct CNuc::CaptureMaskSetup {
   };
   std::vector<Slot> slots;
   bool gslCoulomb = false, rmc = false;
+  std::shared_ptr<Config::NoteLog> printedOnce;  ///< the run's once-only warnings (Config::printedOnce)
 };
 
 void CNuc::SetUpFormalCaptureMasks(const Config &configure) {
@@ -231,7 +232,8 @@ void CNuc::SetUpFormalCaptureMasks(const Config &configure) {
     return;
   auto setup = std::make_shared<CaptureMaskSetup>(CaptureMaskSetup{
       BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure), {},
-      !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC), !!(configure.paramMask & Config::USE_RMC_FORMALISM)});
+      !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC), !!(configure.paramMask & Config::USE_RMC_FORMALISM),
+      configure.printedOnce});
   const CNucSystemMap &map = setup->structure.map;
   for (int p = 1; p <= this->NumPairs(); p++) {
     const azure2::EntrancePathways &P = this->Pathways().Entrance(p);
@@ -291,7 +293,7 @@ void CNuc::FormalCaptureMasksFromParams() {
     }
     for (std::size_t k = 0; k < nc; k++) B[k] = group->GetChannel((int)k + 1)->GetBoundaryCondition();
     const phys::LevelSet brune = phys::brune_from_formal(r.structure.system, s.block, E, gamma, B, cf, options);
-    WarnOnce(brune);
+    WarnOnce(brune, r.printedOnce);
     mask.projector = phys::capture_mask(brune.transform, n, masked);
   }
 }

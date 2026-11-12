@@ -191,7 +191,7 @@ const ThmNuclide *ThmNuclide::Find(int Z, int A) {
 }
 
 const char *ThmExperiment::BackgroundName(int terms) {
-  static const char *names[] = {"none", "const", "linear", "quadratic"};
+  static const char *const names[] = {"none", "const", "linear", "quadratic"};
   return (terms >= 0 && terms <= 3) ? names[terms] : "?";
 }
 

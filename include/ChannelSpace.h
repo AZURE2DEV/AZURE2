@@ -4,6 +4,7 @@
 #include "Constants.h"
 #include <cstdint>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 class JGroup;
@@ -111,9 +112,10 @@ struct FormalLevels {
  * every AMatrixFunc the thread creates (the gradient creates one per point).
  * Valid only after Update().
  */
-std::shared_ptr<FormalLevels> Cached(const JGroup *jg);
+struct Memo;
+std::shared_ptr<FormalLevels> Cached(Memo &memo, const JGroup *jg);
 
-/// The level data LevelMatrixAdjoint reads, per J-group (levels 1..n), kept per thread.
+/// The level data LevelMatrixAdjoint reads, per J-group (levels 1..n), kept in the caller's Memo.
 struct LevelArrays {
   std::vector<std::uint64_t> key;  ///< levels and their ALevel::Stamp
   int n = 0, nch = 0;
@@ -130,7 +132,7 @@ struct LevelArrays {
  * divisions of `inv` are paid once per parameter set, not once per
  * level-matrix adjoint.
  */
-const LevelArrays &CurrentLevelArrays(JGroup *jg);
+const LevelArrays &CurrentLevelArrays(Memo &memo, JGroup *jg);
 
 /*!
  * Derivatives of K and N of a J-group's level matrix with respect to its free
@@ -159,7 +161,7 @@ struct LevelDerivatives {
  * terms (by channel, 0-based).  Kept per thread, rebuilt when a level's stamp
  * or the mask changes.
  */
-const LevelDerivatives &CurrentLevelDerivatives(JGroup *jg, int mode, const std::vector<char> &particle,
+const LevelDerivatives &CurrentLevelDerivatives(Memo &memo, JGroup *jg, int mode, const std::vector<char> &particle,
                                                 const std::vector<char> &freeE,
                                                 const std::vector<std::vector<char>> &freeG,
                                                 const std::vector<std::vector<double>> *shiftDeriv);
@@ -171,6 +173,20 @@ const LevelDerivatives &CurrentLevelDerivatives(JGroup *jg, int mode, const std:
  * would); the Brune and Park ones only when a parameter they depend on changed.
  */
 bool Update(JGroup *jg, const std::vector<int> &levels, const Config &configure, FormalLevels &f);
+
+/*!
+ * What the channel-space route keeps between the energies of one thread's tasks: per J group the formal-basis
+ * solver, the level arrays and the level-matrix derivatives of the present parameters.  Owned by the caller (the
+ * scratch of an energy task, azure2::TaskScratch, or an AMatrixFunc of its own), never process-wide.  Each entry is
+ * keyed by the J group's address and the stamps of its levels (ALevel::Stamp, unique in the process), so an entry is
+ * used only for the levels it was built from; at most kMaxGroups groups (cleared when full).
+ */
+struct Memo {
+  std::unordered_map<const JGroup *, std::shared_ptr<FormalLevels>> formal;
+  std::unordered_map<const JGroup *, LevelArrays> arrays;
+  std::unordered_map<const JGroup *, LevelDerivatives> derivatives;
+  static constexpr std::size_t kMaxGroups = 1024;
+};
 
 /*!
  * In-place LU factorization with partial pivoting of the m x m row-major

@@ -695,11 +695,9 @@ namespace {
 // sections; the weights come from the combiner as in GradTargetEffectAdjoint.
 // A folded analyzing power (a ratio of two folds): not covered (false).
 bool ThmPointModelGradient(WorkingCopy &data, Unit *point, azure2::Results &results, CNuc *compound, const Config &config,
-                           const ThmAdjointContext &ctx,
+                           const ThmAdjointContext &ctx, THMMatrixFunc &f,
                            GradAccum &accum, std::vector<double> &coherentBar) {
-  static thread_local THMMatrixFunc reusable(compound, config);
-  reusable.Reset(compound, config);
-  THMMatrixFunc &f = reusable;
+  f.Reset(compound, config);
   auto adjoint = [&](Site *pt, double weight) -> bool {
     f.ClearMatrices();
     f.FillMatrices(pt);
@@ -774,8 +772,7 @@ bool AccumulateEGammaGradient(CNuc *compound, WorkingCopy *data, azure2::Results
   int bailSeg = 0;
   if (!azure2::EnergyTaskGradient(compound, data, results, config, shiftDeriv, fitBarFn, accum, bailSeg, hoes)) {
     if (std::getenv("AZURE_GRAD_DEBUG")) {
-      static std::atomic<bool> told{false};
-      if (!told.exchange(true)) {
+      if (config.FirstTime("AZURE_GRAD_DEBUG energy-task gradient declined")) {
         bool inactiveLevel = false;
         for (int j = 1; j <= compound->NumJGroups(); j++) {
           JGroup *jg = compound->GetJGroup(j);
@@ -1067,6 +1064,7 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, WorkingCopy *ld, azure2::Results &
       accum.Init(lc);
       vector_r fullRow(pmap.NumFull(), 0.0);
       std::vector<double> coherentBar(nCoherent, 0.0);
+      THMMatrixFunc thm(lc, config);  // this thread's solver for the region (re-pointed per point)
 #pragma omp for schedule(dynamic)
       for (long k = 0; k < n; k++) {
         if (bail) continue;
@@ -1074,7 +1072,7 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, WorkingCopy *ld, azure2::Results &
         Unit *pt = seg->GetPoint(*ld, order[k].second + 1);
         accum.Zero();
         std::fill(coherentBar.begin(), coherentBar.end(), 0.0);
-        if (!ThmPointModelGradient(*ld, pt, results, lc, config, ctx, accum, coherentBar)) {
+        if (!ThmPointModelGradient(*ld, pt, results, lc, config, ctx, thm, accum, coherentBar)) {
 #pragma omp critical
           bail = true;
           continue;

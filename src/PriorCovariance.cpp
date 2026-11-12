@@ -166,7 +166,7 @@ bool PriorCovariance::Read(const std::string &path, File &out, std::string &err,
 bool PriorCovariance::Setup(const File &file, const std::vector<std::string> &paramNames,
                             const std::vector<bool> &fixed, int runBasis, std::string &err,
                             std::vector<std::string> &notes) {
-  static const char *basisName[] = {"0 (standard)", "1 (Brune)", "2 (Park)"};
+  static const char *const basisName[] = {"0 (standard)", "1 (Brune)", "2 (Park)"};
   if (file.basis >= 0 && file.basis != runBasis) {
     const std::string runName = (runBasis >= 0 && runBasis <= 2) ? basisName[runBasis] : "?";
     err = "the prior covariance file " + path_ + " holds parametrization " + basisName[file.basis] +

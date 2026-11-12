@@ -158,6 +158,8 @@ class AmplitudeMatrix {
   double IdenticalFactor(int lp, double sp) const;
 
   CNuc *compound_ = nullptr;
+  //! What At() hands out for a combination the matrix does not hold: written and discarded (zeroed at every such call).
+  complex discarded_ = complex(0.0, 0.0);
   int aa_ = 0, ir_ = 0;
   double theta_ = 0.0;
   double j1_ = 0.0, j2_ = 0.0;  //!< the entrance pair's spins (projectile, target)

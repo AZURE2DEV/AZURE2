@@ -2,6 +2,78 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (director, 22:13) — merged: Phase 6, first branch (the engine's state surveyed, the per-thread caches and warn-once flags owned by the caller, a check against new state)
+
+**Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed): `feature/upgrade-6-evaluation` (the
+agent's two entries below say what was done, by file). No output number of a project changed.
+
+**What it is.** `docs/upgrade/evaluation.md`: every object that outlives an evaluation, the 44 environment switches,
+what an evaluation costs, the target (an immutable problem, a parameter vector in, a `Results` out) and five
+milestones. In code: no `thread_local` is left (26) and no warn-once static (12); what was in them is scratch of the
+energy tasks (`include/TaskScratch.h`, in the caller's `Results`), scratch of the run (`include/RunScratch.h`,
+`Config::scratch`) or the run's once-only notices (`Config::FirstTime`), or was deleted where it bought nothing.
+Check 38 refuses a new `static`, `thread_local`, namespace-scope variable or `mutable` member outside
+`tests/consistency/allowed_state.tsv`; `tests/pyazr/session_isolation_test.py` runs sessions of three projects (and
+one project at two channel radii) one after another in one process, in both orders, at 1 and 3 threads.
+
+**"No hidden state" is not reached and the roadmap's box is not ticked.** The allow-list holds 10 permanent rows
+(tables, locks of output streams, GSL's error handler) and 107 pending ones. Of the pending, those that hold values
+of a calculation process-wide: `g_config` and `g_ecAmplitudeCache` (swapped per call by the binding: two sessions
+evaluating at the same time on two threads race; by reading, no test), the shift-derivative memo of `CNuc.cpp`, the
+external-capture term table of `ECTable.cpp`, the input-file bytes. The keys of the last two memos hold
+`useCoulombTable` but not the table's path (two sessions with two table files would share entries; by reading). The
+rest: the fitter's and sampler's pools and `mutable` members, the solvers' `mutable` buffers, diagnostic counters,
+numcmc's callback globals.
+
+**Verified by the director** (build `work/b-eval` of the branch head, reference `tab-thm5`).
+Whole tree × 3 bases (tag `tab-eval-d1`): every output file identical to `tab-thm5` (835 / 808 / 835). One `run.log` per basis differs, `thm_coherent_background/toy`: the line "Coulomb table: … (l = 0..10, …)" is no longer printed; the old shift memo of `ThmVertexBoundary` loaded the table only to form its key, and that project never looks the table up. The eight fits (T2 by three routes, 13N by two, layer yield, stopping yield by two): identical file by file to the base build. `ctest -LE slow` 217 of 217 (with `pyazr_session_isolation`), the slow tests 10 of 10, `run_tests.sh` 160 of 160, spec equivalence 184 equal, the converted-tree gate 633 / 606 / 633 identical, calculations at 1 against 3 threads identical (T1, T2, T3, 13N × 3 bases). Build: 0 warnings. After the merge with the third part of the transfer library, `repo_consistency_test.py` (with check 38 over the new `physics/transfer` files) passes on the merged tree; the merged tree itself was not rebuilt here (the two branches share no source file; it is built with the next branch).
+
+**Reviewed.** `TaskScratch`, `RunScratch`, the `Config` and `Results` changes and every call site of the two
+`ForThisThread`; the diffs of the passes, the gradient, the hand-over, `ECIntegral`, `CoulFunc`, `ThmVertexBoundary`;
+the scanner and the allow-list. Notes: (1) `TaskScratchSet` is indexed by the OpenMP thread number, which is safe
+because every concurrent evaluation owns its `Results` (true at the call sites read); (2) `RunScratch` is a map per
+OS thread behind a mutex taken once per `ECIntegral` object; its contention above 3 threads is not measured; (3)
+`Config` now carries shared mutable run state (`printedOnce`, `scratch`): an interim home until a run object exists
+(milestone 2); (4) the THM shift memo's key lost the Coulomb table pointer, correct because the memo now belongs to
+one run; (5) the scanner was tried on planted statics in lambdas, templates, nested blocks and class members: all
+found (a static inside a lambda without a parameter list is reported under the lambda's name).
+
+**Corrected by the director in the documents.** The owner note said that two sessions "never share a value"; they
+share the process-wide memos listed above, and two sessions at the same time are not safe yet. Rewritten.
+
+**Decided.** The continuation (`work/briefs/BO_phase6_no_pointers_no_pools.md`): the process-wide pointers and memos,
+the solvers' `mutable` buffers, then an evaluation of a fit that writes only its `Results` (the pools of working
+copies go), then a diagnostics record read once, with every switch keeping its name and effect.
+
+**For the PI** (not decided by the director; several of the switches are in the user manual): whether the
+number-changing environment switches (`AZURE2_COULOMB_TABLE`, `AZURE2_SRIM_DATA_DIR`, `AZURE_OPTIONS_FILE`,
+`AZURE_REFINE_QUADRATURE`) become command-line options shown by `--describe`; whether ten switches no test uses are
+deleted (`AZURE2_SWAP_COUPLING_ORDER`, `AZURE_BOUND_SHIFT_NUMERICAL`, `AZURE_NO_NEUTRAL_CLOSED_FORM`,
+`AZURE_SHIFT_DE_1EV`, `AZURE2_EC_TABLE_NODES`, `AZURE_GRAD_DENSE`, `AZURE_TE_WEIGHTS_FD`, `AZR_DEBUG_GRID`,
+`AZURE_GRAD_DEBUG`, `AZURE_CHANNEL_DEBUG`; eight are named in `docs/source`); whether one `--threads N` replaces
+`OMP_NUM_THREADS` as the stated budget.
+
+**Not run by anyone**: ThreadSanitizer or AddressSanitizer (the compiler here has none usable); a test that a
+once-only warning is printed again by a second run in one process.
+
+## 2026-11-12 (agent, Phase 6 branch 1, part 2) — no thread_local, caller-owned scratch, check 38 (`feature/upgrade-6-evaluation`)
+
+**Done** (`evaluation.md` section 7.3 by file).  Every `thread_local` is gone: the energy tasks' solvers and the
+channel-space values are `TaskScratch` in the caller's `Results`; the external-capture integrals' radial values,
+Whittaker values, workspace and rate grids and the THM vertex boundary's S_c are the run's per-thread scratch
+(`RunScratch`, `Config::scratch`); the THM level-width, Coulomb-term and angular-coupling memos and the per-thread
+Coulomb-table lookup are deleted (measured: they bought nothing).  Warnings printed once per process print once per
+run (`Config::FirstTime`).  Check 38 refuses new state outside `tests/consistency/allowed_state.tsv` (117 rows: 10
+tables, 107 pending with their milestone).  `tests/pyazr/session_isolation_test.py` (A B A in one process, 1 and 3
+threads) passes on the base and here with the same digests, fails with an injected process-wide memo.
+**Verified** (build of 41896d9f, `work/eval/bin/AZURE2-b1`): every project × 3 bases against `tab-thm5`
+(`tab-eval-b1`): 0 output files differ; one `run.log` differs (thm_coherent_background/toy: the line "Coulomb
+table: … loaded" is no longer printed, because the deleted THM memos loaded the table only to put its address in
+their keys; the project's numbers do not read the table).  `ctest -LE slow` 217/217.  1 against 3 threads (T1, T2,
+T3, 13N × 3 bases) identical.  The eight fits identical to the base file by file.  Instructions within 2 % (largest
++1.7 % on 18O's calculation).  `tests/run_tests.sh` 160 passed, 0 failed.  The converted-tree gate (`geval-b1`): 633 / 606 / 633 files identical, 0 differ.
+**Open.** The pending rows (milestones 1–5 of `evaluation.md`); part 3 of the brief (the pools) not started.
+
 ## 2026-11-12 (director, 21:47) — merged: physics/transfer, third part (spin-orbit in the distorted waves, the ³He and ¹⁴N Trojan horses, the ⁶Li bins against Frescox)
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed): `feature/upgrade-7-transfer-3` (the
@@ -169,6 +241,17 @@ post ≠ prior by ×180), cos δ for the ISC = 4 weight (continuum_fresco: listi
 
 **Open**: ⁶Li bins, zero range to bins, prior/remnant against FRESCO (FRESCO's numerics, §15, §17); ³He and ¹⁴N
 Trojan horses; global optical sets; the wiring (§12).
+
+## 2026-11-12 (agent, Phase 6 branch 1, part 1) — the state of the engine surveyed (`feature/upgrade-6-evaluation`)
+
+**Done.** `docs/upgrade/evaluation.md`: the state table (every `thread_local`, mutable static, namespace-scope
+variable, `mutable` member and member cache of `src/`, `include/`, `api/`, `physics/`, `experiment/`, `stopping/`,
+`convert/`, `io/`, with what it becomes), the 44 environment switches with a proposal each, the cost of an evaluation
+today (time and memory at 1 and 3 threads, the shares of a fit), the target, five milestones, decisions for the
+director.  Measured: pool copying is 0.02 % of a fit's time, its cost is memory (a natural_neon fit holds 812 MB
+against 343 MB for the calculation: about five copies of 95 MB, `max(4, threads)` plus the snapshot pair).  The
+A-B-A test on the base engine found no leak.
+**Open.** Parts 2 (no hidden state) and 3 of the brief follow on this branch.
 
 ## 2026-11-12 (director, 18:27) — merged: Trojan-horse data on the shared mesh, their gradient through the energy tasks, the shift column of a profiled THM data set
 

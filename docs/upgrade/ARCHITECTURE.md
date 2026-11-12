@@ -259,8 +259,24 @@ distorted waves, stopping and straggling versus E and depth, kernel rows K_i(E_n
 - *Everything an evaluation writes* belongs to the caller and is passed in: the `Results` buffer, the per-stage
   tables, per-task scratch. No function-level `static` or `thread_local` holds a value that a calculation reads back,
   and no cache is keyed by "the last call". Such state made calculations depend on the thread count (the Coulomb memo,
-  removed in Phase 1); what is left of it (about 50 mutable statics in `src/`, `NuclearPotentialManager`, the caches of
-  `ECIntegral.cpp`) goes in Phase 6, with a consistency check that refuses new ones.
+  removed in Phase 1).
+
+**State: the rule, the allow-list, the check** (Phase 6, `evaluation.md`).  The only process-wide objects are
+immutable tables built before the first evaluation; every other state is owned by the caller and passed down.  Where
+the code keeps something between calls, it is one of three owned kinds:
+- the energy task's scratch, `azure2::TaskScratch` (`include/TaskScratch.h`), one per thread in the caller's
+  `Results::scratch`: the level-matrix solvers with their buffers and the channel-space route's per-J-group values;
+- the run's per-thread scratch, `azure2::RunScratch` (`include/RunScratch.h`), held by the run's `Config`
+  (`Config::scratch`): the external-capture integrals' radial values and workspace, the THM vertex boundary's S_c;
+- the run's once-only warnings, `Config::printedOnce` (`Config::FirstTime(key)`), so a second run in the same process
+  prints them again.
+Each memo in them is keyed by everything its value depends on, so a hit returns what the computation gives.  The
+check (`tests/consistency/repo_consistency_test.py` check 38, scanner `tests/consistency/state_scan.py`) refuses any
+`thread_local`, non-`const` static or namespace-scope variable and `mutable` member of the engine's sources that is
+not a row of `tests/consistency/allowed_state.tsv` (file, symbol, kind, reason); a row whose symbol is gone fails too.
+Rows marked `table:` stay (the Coulomb tables read from files, GSL's error handler, locks of process-wide streams);
+rows marked `pending (milestone N)` name the milestone of `evaluation.md` §5 that removes them.  The test that two
+calculations in one process do not see each other: `tests/pyazr/session_isolation_test.py`.
 
 **Extension.** Each row of the table above is an explicit table in one source file, whose rows hold the name, what
 the front ends need (units, fields, documentation) and the function that does the work: the quantity table of

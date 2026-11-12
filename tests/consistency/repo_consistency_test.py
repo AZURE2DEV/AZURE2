@@ -946,6 +946,31 @@ _probe = read("include/TermSettings.h").replace("int maxAngDistOrder = 0;", "int
 if not any(" probe " in p for p in term_settings_problems(_probe)):
     problems.append("check 37: a field added to TermSettings is not caught; update this check")
 
+# 38. No hidden state (docs/upgrade/evaluation.md; ARCHITECTURE.md section 9): no thread_local, no non-const static or
+#     namespace-scope variable, no mutable member in the engine's sources (tests/consistency/state_scan.py) outside the
+#     allow-list tests/consistency/allowed_state.tsv (file, symbol, kind, reason); every allowed row still exists.  New
+#     state is a table built at set-up or scratch owned by the caller (CLAUDE.md, recipe "Add a cache").
+sys.path.insert(0, os.path.join(ROOT, "tests", "consistency"))
+import state_scan  # noqa: E402
+
+_allowed = state_scan.read_allowed(os.path.join(ROOT, "tests", "consistency", "allowed_state.tsv"))
+_found = state_scan.scan(ROOT)
+for (_f, _sym, _kind), _lines in sorted(_found.items()):
+    if (_f, _sym, _kind) not in _allowed:
+        problems.append(f"{_f}:{_lines[0]}: {_kind} {_sym} is state outside the rule (check 38): make it a table built "
+                        "at set-up or the caller's scratch, or a const (docs/upgrade/evaluation.md)")
+for (_f, _sym, _kind), _reason in sorted(_allowed.items()):
+    if _f == "?" or not _reason.strip():
+        problems.append(f"tests/consistency/allowed_state.tsv: a row without file, symbol, kind and reason: {_sym} (check 38)")
+    elif (_f, _sym, _kind) not in _found:
+        problems.append(f"tests/consistency/allowed_state.tsv: {_f} {_sym} ({_kind}) no longer exists; remove the row "
+                        "(check 38)")
+_planted = "namespace {\nint g_planted = 0;\n}\nvoid F() {\n  static double memo = 0.0;\n  thread_local int t;\n}\n" \
+           "struct S {\n  mutable int m_;\n  static const char *const kOk;\n};\n"
+if sorted(k for _, k, _ in state_scan.scan_text(_planted)) != ["mutable", "namespace", "static", "thread_local"]:
+    problems.append("check 38: a planted namespace variable, static, thread_local or mutable member is not caught; "
+                    "update tests/consistency/state_scan.py")
+
 if problems:
     for p in problems:
         print("FAIL", p)
@@ -954,4 +979,4 @@ if problems:
 print(f"repository consistent: {len(flags)} CLI flags, test registration, check.sh modes, pyazr version and exports, "
       f"format-3 reference page, {len(declared)} diagnostic codes, file sizes, one model pass and residual, one calculation plan, "
       f"no machine paths, no old data class names, no old section in the engine, reference leaves by one predicate, "
-      f"the sharing key's term settings")
+      f"the sharing key's term settings, {len(_allowed)} allowed state rows")

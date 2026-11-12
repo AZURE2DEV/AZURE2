@@ -365,6 +365,14 @@ add_test(NAME pyazr_shared_state
                  ${CMAKE_CURRENT_SOURCE_DIR}/shared_state_test.py)
 set_tests_properties(pyazr_shared_state PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# No hidden state (docs/upgrade/evaluation.md): projects A, B (and others) in one process in the orders A B A and
+# B A B, at 1 and 3 threads, each evaluation byte-identical to the project alone in a fresh process.  About 1.5 min;
+# its worker processes use up to 3 threads.
+add_test(NAME pyazr_session_isolation
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/session_isolation_test.py)
+set_tests_properties(pyazr_session_isolation PROPERTIES PROCESSORS 3 SKIP_RETURN_CODE 77)
+
 # Tests that take minutes rather than seconds (measured 2026-10-10 on a CRC
 # login node at their thread counts: park_gradient 41 min, shared_state 22,
 # objective 7, inactive_lines 6.5, channel_order 6).  CI excludes them with

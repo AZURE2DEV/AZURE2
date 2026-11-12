@@ -136,7 +136,6 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
   struct Item { TermRef seg; std::vector<int> group; };
   std::vector<Item> work;
   std::vector<std::pair<int, std::size_t>> blocks;  // (first slot of a block, its work item)
-  static std::atomic<bool> ecNoted{false};
   auto collect = [&](const TermRef &seg) {
     bool any = false;
     for (int i = 1; i <= seg.NumPoints() && !any; i++) any = Data().GridSpecOf(*seg.GetPoint(*this, i)).valid;
@@ -161,7 +160,7 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
     // tables, as a shifted site always has (Site::GetECAmplitudeWithShift).
     const bool ec = SegmentNeedsEC(seg, theCNuc, configure);
     if (ec && !supportMoved) {
-      if (!ecNoted.exchange(true))
+      if (configure.FirstTime("EC grids not re-placed"))
         configure.outStream << "Note: the sub-point grids of segments with external capture are not re-placed "
                                "(their capture integrals are computed once)." << std::endl;
       return;

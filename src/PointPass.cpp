@@ -2,7 +2,6 @@
 // they are calculated (Unit::FoldSubPoints, observable by observable), and the marking of a point whose calculation
 // failed.
 #include <algorithm>
-#include <atomic>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -23,8 +22,7 @@ void Site::MarkFailed(azure2::Results &results, const char *role, const Config &
   const double nan = std::numeric_limits<double>::quiet_NaN();
   std::fill(Rec(results), Rec(results) + azure2::Results::kNumFixed, nan);
   this->PoisonObservable(results);
-  static std::atomic<bool> reported(false);
-  if (!reported.exchange(true)) {
+  if (configure.FirstTime("failed point")) {
 #pragma omp critical(azure_failed_point)
     configure.outStream << "WARNING: the calculation failed at segment " << this->GetSegmentKey() << " (" << role
                         << "), E_lab " << this->GetLabEnergy() << " MeV, angle " << this->GetLabAngle() << " deg: " << why

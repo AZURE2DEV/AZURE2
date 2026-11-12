@@ -54,16 +54,17 @@ void SolveAtOneEnergy(CNuc *cnuc, const Config &configure, Results &results, Sit
     int &at = units[k]->Observable() == SiteObservable::kHoes ? firstHoes : first;
     if (at < 0) at = k;
   }
-  // The objects are reused across the energies of this thread: their per-J-group buffers are sized once (Reset repoints
-  // them at this compound and configuration first, so nothing of an earlier session is read); the R-matrix route
-  // builds its own.
-  static thread_local AMatrixFunc amatrix(cnuc, configure);
+  // The solvers are the caller's scratch for this thread (Results::scratch), reused across the energies of its tasks:
+  // their per-J-group buffers are sized once, and they are re-pointed at this compound and configuration first, so
+  // nothing of another evaluation is read; the R-matrix route builds its own.
+  TaskScratch &scratch = results.scratch.ForThisThread();
+  AMatrixFunc *amatrix = nullptr;
   std::unique_ptr<RMatrixFunc> rmatrix;
   GenMatrixFunc *func = nullptr;
   if (first >= 0) {
     if (configure.paramMask & Config::USE_AMATRIX) {
-      amatrix.Reset(cnuc, configure);
-      func = &amatrix;
+      amatrix = &scratch.PointSolver(cnuc, configure);
+      func = amatrix;
     } else {
       rmatrix.reset(new RMatrixFunc(cnuc, configure));
       func = rmatrix.get();
@@ -77,11 +78,10 @@ void SolveAtOneEnergy(CNuc *cnuc, const Config &configure, Results &results, Sit
   // same matrices bit for bit), else a level-space fill of its own (THMMatrixFunc.h).
   const AMatrixFunc *levels = nullptr;
   if (firstHoes >= 0) {
-    if (func == &amatrix && amatrix.LevelSpaceThroughout()) {
-      levels = &amatrix;
+    if (amatrix && func == amatrix && amatrix->LevelSpaceThroughout()) {
+      levels = amatrix;
     } else {
-      static thread_local THMMatrixFunc thm(cnuc, configure);
-      thm.Reset(cnuc, configure);
+      THMMatrixFunc &thm = scratch.PointThmSolver(cnuc, configure);
       if (progress) *progress = firstHoes;
       thm.ClearMatrices();
       thm.FillMatrices(units[firstHoes]);
@@ -269,7 +269,7 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
     const azure2::EnergyTask &task = tasks[k];
     const int n = task.size;
     AZUREProfile::CountMany(AZUREProfile::kEnergyUnits, n);
-    static thread_local std::vector<Site *> units;
+    std::vector<Site *> &units = results.scratch.ForThisThread().units;
     units.resize(n);
     for (int i = 0; i < n; i++) units[i] = &SiteAt(tasks.units[task.begin + i]);
     int start = 0;
