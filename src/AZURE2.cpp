@@ -12,6 +12,7 @@
 #include "azure2/io/Document.h"
 #include "azure2/experiment/Schema.h"
 #include "AZUREMain.h"
+#include "MeshPlanner.h"
 #include "Profile.h"
 #include "ProjectCommands.h"
 #include "ProjectSetup.h"
@@ -1633,7 +1634,11 @@ int main(int argc, char *argv[]) {
       AZUREMain *azureMain = new AZUREMain(configure);
       configure.outStream << std::endl;
       startMessage(configure);
-      returnValue = (*azureMain)();
+      try {
+        returnValue = (*azureMain)();
+      } catch (const azure2::MeshPlanBudgetError &e) {  // a plan too large for memory (MeshPlanner.h): refused
+        returnValue = (configure.outStream << "ERROR: " << e.what() << "\nCalculation was aborted." << std::endl, 1);
+      }
 #ifdef USE_MCMC
     }
 #endif
