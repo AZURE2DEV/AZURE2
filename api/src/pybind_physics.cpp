@@ -177,6 +177,21 @@ void BindPhysics(py::module_ &m) {
       "E exp(2 pi eta(E)) (MeV) of a pair of charges z1, z2 and atomic masses m1_u, m2_u (u), element-wise on E_cm "
       "(MeV): the factor S = sigma x this (S in MeV b, sigma in b; physics/AstrophysicalFactor.h, the engine's "
       "quantity sfactor).  eta is non-relativistic; NaN for E <= 0 or an uncharged pair.");
+  m.def(
+      "modified_sfactor_conversion",
+      [](int z1, int z2, double m1_u, double m2_u, double g_per_MeV, const Array &e_cm) {
+        const azure2::physics::ChannelKinematics kin = PairKinematics(z1, z2, m1_u, m2_u, false);
+        const auto E = e_cm.unchecked<1>();
+        py::array_t<double> out(E.shape(0));
+        auto O = out.mutable_unchecked<1>();
+        for (py::ssize_t i = 0; i < E.shape(0); i++)
+          O(i) = azure2::physics::modified_sfactor_conversion(kin, E(i), g_per_MeV);
+        return out;
+      },
+      py::arg("z1"), py::arg("z2"), py::arg("m1_u"), py::arg("m2_u"), py::arg("g_per_MeV"), py::arg("e_cm"),
+      "E exp(2 pi eta(E) + g E) (MeV), element-wise on E_cm (MeV): the factor S* = sigma x this of the modified S "
+      "factor of heavy-ion fusion (physics/AstrophysicalFactor.h, the engine's quantity modified_sfactor; g in 1/MeV, "
+      "0.46 for 12C + 12C).  NaN for E <= 0 or an uncharged pair.");
   m.def("statistical_factor", &StatisticalFactors, py::arg("two_J"), py::arg("two_ja"), py::arg("two_jA"),
         py::arg("identical"),
         "omega = (2J+1)(1+delta_aA)/((2j_a+1)(2j_A+1)) of a resonance strength (physics/ResonanceQuantities.h), "

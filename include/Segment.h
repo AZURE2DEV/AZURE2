@@ -321,7 +321,7 @@ class Segment {
   /// same in the lab and the c.m. frame: the data are not converted at load and the lab output does not divide it.
   bool IsDimensionlessRatio() const {
     return (IsAdvanced() && GetLegacyOperationType() == 1) ||
-           reaction_.coulombReference != azure2::experiment::CoulombReference::None;
+           reaction_.coulombReference != azure2::experiment::CoulombReference::None || !reaction_.reference.Empty();
   }
   /// What the segment predicts at its points (src/Predictions.cpp, WorkingCopy::BuildPredictions): built once at set-up,
   /// immutable, shared by the working copies; null before it is built.
@@ -331,6 +331,8 @@ class Segment {
   /// The model value is an S factor, c E sigma exp(2 pi eta) with c the scale's constant (ReactionSpec::scale; 1 for a
   /// data set, 1 / (unit factor) for an extrapolation in another unit than MeV b).
   bool ModelIsSFactor() const { return reaction_.scale.sFactor; }
+  /// g (1/MeV) of a modified S factor exp(2 pi eta + g E); 0 for the S factor and every other quantity.
+  double ModelSFactorShape() const { return reaction_.scale.sFactorShape_perMeV; }
   double ModelScaleFactor() const { return reaction_.scale.factor; }
   /// Give the measurement its prediction (a new measurement that shares the rows: the points read them).
   void SetPrediction(std::shared_ptr<const azure2::experiment::Prediction> p);
@@ -412,6 +414,10 @@ class Segment {
   /// whose fit value is their own order's coefficient.
   bool IsCoefficients() const { return isCoefficients_; }
   bool IsCoefficientAbsolute() const { return coefficientsAbsolute_; }
+  /// The Legendre coefficients of an angular-distribution point (an extrapolation of quantity legendre) as the
+  /// output and the API give them: the engine's A_L / A_0 (L = 0 ... K) mapped to the segment's expansion
+  /// (experiment/LegendreExpansion.h: times A_0 for an absolute one, times the factor of L) and its unit.
+  std::vector<double> LegendreCoefficients(const Unit &point, const azure2::Results &results) const;
   /// "transmission <n>": the segment is the transmission T = exp(-n s) of a sample n atoms/barn thick, s the
   /// segment's (assembled) cross section in barns -- the total cross section of the entrance pair.  "yield <n>":
   /// the self-shielded capture or reaction yield Y0 = (s / s_t)(1 - exp(-n s_t)) (SAMMY's Y0, manual III.D.1), s the

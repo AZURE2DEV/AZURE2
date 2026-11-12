@@ -370,7 +370,41 @@ void TestScaled() {
   }
   check("value = S sigma, bit for bit", ok);
   check("backward: g S", okBack);
+  s.reaction.scale.sFactorShape_perMeV = 0.46;
+  const Prediction pm = BuildPrediction(s);
+  check("modified S factor: text S*(0;g=0.46/MeV)", PredictionText(pm) == "S*(0;g=0.46/MeV)*sigma(1->2)", PredictionText(pm));
+  check("modified S factor: the factor of term 0 carries g", pm.factors.size() == 1 &&
+                                                                pm.factors[0].kind == FactorRef::Kind::SFactor &&
+                                                                pm.factors[0].shape_perMeV == 0.46);
+  check("S factor: g = 0 in its factor", p.factors[0].shape_perMeV == 0.0);
+  s.reaction.scale.sFactorShape_perMeV = 0.0;
   s.reaction.scale.sFactor = false;
+  {
+    // Legendre coefficient data: rsl, 2l2, 4pi are a factor of the point's order on the a_k or A_k leaf
+    PredictionSetup c;
+    c.reaction.observable = Observable::AngularCoefficients;
+    c.terms = {Term(1, 2, 1)};
+    c.reaction.legendre = LegendreExpansion::Rsl;
+    const Prediction pr = BuildPrediction(c);
+    check("legendre rsl: c_rsl(0)*ak", pr.kind == TreeKind::Scaled && PredictionText(pr) == "c_rsl(0)*ak(1->2)", PredictionText(pr));
+    check("legendre rsl: one Legendre factor", pr.factors.size() == 1 && pr.factors[0].kind == FactorRef::Kind::Legendre &&
+                                                    pr.factors[0].legendre == LegendreExpansion::Rsl);
+    c.absolute = true;
+    c.reaction.legendre = LegendreExpansion::FourPi;
+    check("legendre 4pi: c_4pi(0)*Ak", PredictionText(BuildPrediction(c)) == "c_4pi(0)*Ak(1->2)", PredictionText(BuildPrediction(c)));
+    c.reaction.legendre = LegendreExpansion::Absolute;
+    check("legendre absolute: the leaf alone", TreeKindOf(c) == TreeKind::Observable && PredictionText(BuildPrediction(c)) == "Ak(1->2)",
+          PredictionText(BuildPrediction(c)));
+    c.reaction.observable = Observable::AngularDistribution;
+    c.reaction.legendre = LegendreExpansion::TwoL2;
+    check("an extrapolation in 2l2: no factor in the tree (Segment::LegendreCoefficients maps the output)",
+          TreeKindOf(c) == TreeKind::Observable);
+    check("LegendreExpansionFactor: 1, 1, 1/(2L+1), 2/(2L+1), 4 pi at L = 3",
+          LegendreExpansionFactor(LegendreExpansion::AOverA0, 3) == 1.0 && LegendreExpansionFactor(LegendreExpansion::Absolute, 3) == 1.0 &&
+              LegendreExpansionFactor(LegendreExpansion::Rsl, 3) == 1.0 / 7.0 &&
+              LegendreExpansionFactor(LegendreExpansion::TwoL2, 3) == 2.0 / 7.0 &&
+              LegendreExpansionFactor(LegendreExpansion::FourPi, 3) == 4.0 * 3.14159265358979323846);
+  }
   s.reaction.scale.factor = 3.1e12;
   check("a constant: c*sigma", PredictionText(BuildPrediction(s)) == "3100000000000*sigma(1->2)", PredictionText(BuildPrediction(s)));
   s.reaction.combination = ReactionSpec::Combination::Sum;
@@ -381,10 +415,26 @@ void TestScaled() {
   check("the identity is no node (a sum)", TreeKindOf(s) == TreeKind::Sum);
 }
 
+/// A ratio to a reference table: sigma over the reference leaf of the same term, no frame factors.
+void TestReferenceRatio() {
+  std::printf("reference ratio\n");
+  PredictionSetup s;
+  s.reaction.observable = Observable::CrossSection;
+  s.terms = {Term(1, 2, 1)};
+  s.reaction.reference.energyLab_MeV = {0.1, 1.0};
+  s.reaction.reference.sigma_b = {1.0, 2.0};
+  const Prediction p = BuildPrediction(s);
+  check("kind reference_ratio", p.kind == TreeKind::ReferenceRatio && TreeKindOf(s) == TreeKind::ReferenceRatio);
+  check("text", PredictionText(p) == "ratio(sigma(1->2), reference(1->2))", PredictionText(p));
+  check("two leaves of term 0, the second the reference, no factors",
+        p.leaves.size() == 2 && p.leaves[1].part == LeafPart::Reference && p.leaves[1].term == 0 && p.factors.empty() &&
+            IsReferenceLeaf(LeafPart::Reference) && !IsCoulombReference(LeafPart::Reference));
+}
+
 void TestTable() {
   std::printf("table\n");
   const std::vector<TreeKindRow> &rows = TreeKinds();
-  bool ordered = rows.size() == 7;
+  bool ordered = rows.size() == static_cast<std::size_t>(TreeKind::ReferenceRatio) + 1;  // the enum's last kind
   for (std::size_t k = 0; k < rows.size(); k++) ordered = ordered && static_cast<std::size_t>(rows[k].kind) == k && rows[k].build;
   check("one row per kind, in the order of the enum", ordered);
   bool threw = false;
@@ -405,6 +455,7 @@ int main() {
   TestTransforms();
   TestCoulombRatio();
   TestScaled();
+  TestReferenceRatio();
   TestTable();
   if (failures) {
     std::printf("%d FAILURE(S)\n", failures);

@@ -50,6 +50,7 @@ LeafSelector Leaf(const PredictionSetup &s, int t, LeafPart part) {
   if (r.thm) kind = "thm_" + kind;
   if (part == LeafPart::Rutherford) kind = "rutherford";
   if (part == LeafPart::Mott) kind = "mott";
+  if (part == LeafPart::Reference) kind = "reference";
   if (part == LeafPart::E1) options += "; mult=E1";
   if (part == LeafPart::E2) options += "; mult=E2";
   if (s.upos) options += "; upos L=" + std::to_string(s.uposL) + "; Ic=" + Number(s.uposIc) + "; delta=" + Number(s.uposDelta);
@@ -77,6 +78,12 @@ int AddLeaf(const PredictionSetup &s, int t, LeafPart part, Prediction &p) {
 int AddFactor(FactorRef::Kind kind, int t, Prediction &p) {
   p.factors.push_back({kind, t});
   return static_cast<int>(p.factors.size()) - 1;
+}
+
+/// Coefficient data in an expansion whose coefficient is the engine's A_L / A_0 or A_L times a factor of L.
+bool LegendreFactorOnData(const ReactionSpec &r) {
+  return r.observable == Observable::AngularCoefficients && r.legendre != LegendreExpansion::AOverA0 &&
+         r.legendre != LegendreExpansion::Absolute;
 }
 
 int AddAbundance(const PredictionSetup &s, int t, Prediction &p) {
@@ -168,9 +175,32 @@ void BuildTransform(const PredictionSetup &s, Prediction &p, TransformSpec::Kind
 void BuildScaled(const PredictionSetup &s, Prediction &p) {
   PredictionSetup inner = s;
   inner.reaction.scale = ValueScale();
+  const bool legendre = LegendreFactorOnData(s.reaction);
+  if (legendre)
+    inner.reaction.legendre =
+        LegendreExpansionNormalised(s.reaction.legendre) ? LegendreExpansion::AOverA0 : LegendreExpansion::Absolute;
   TreeKinds()[static_cast<std::size_t>(TreeKindOf(inner))].build(inner, p);
   const ValueScale &scale = s.reaction.scale;
-  p.tree.Scale(scale.factor, p.tree.Root(), scale.sFactor ? AddFactor(FactorRef::Kind::SFactor, 0, p) : -1);
+  int factor = -1;
+  if (scale.sFactor) {
+    factor = AddFactor(FactorRef::Kind::SFactor, 0, p);
+    p.factors[factor].shape_perMeV = scale.sFactorShape_perMeV;
+  } else if (legendre) {
+    factor = AddFactor(FactorRef::Kind::Legendre, 0, p);
+    p.factors[factor].legendre = s.reaction.legendre;
+  }
+  p.tree.Scale(scale.factor, p.tree.Root(), factor);
+}
+
+/// term 0's cross section over the tabulated reference at its point (ReactionSpec::reference): no frame factors (an
+/// angle-integrated ratio; the data are not converted at load).  A sample, components and a THM observable are refused.
+void BuildReferenceRatio(const PredictionSetup &s, Prediction &p) {
+  const ReactionSpec &r = s.reaction;
+  if (s.terms.size() != 1 || s.sample > 0 || r.thm || r.combination != ReactionSpec::Combination::None)
+    throw std::invalid_argument("experiment::BuildPrediction: a ratio to a reference table is one term");
+  const int num = AddLeaf(s, 0, LeafPart::Value, p);
+  const int den = AddLeaf(s, 0, LeafPart::Reference, p);
+  p.tree.Ratio(num, den);
 }
 
 void BuildTransmission(const PredictionSetup &s, Prediction &p) { BuildTransform(s, p, TransformSpec::Kind::Transmission); }
@@ -181,6 +211,10 @@ void BuildYield(const PredictionSetup &s, Prediction &p) { BuildTransform(s, p, 
 std::string FactorText(const Prediction &p, int f) {
   if (f < 0) return "";
   const FactorRef &r = p.factors[f];
+  if (r.kind == FactorRef::Kind::Legendre)
+    return std::string("c_") + LegendreExpansionName(r.legendre) + "(" + std::to_string(r.term) + ")";
+  if (r.kind == FactorRef::Kind::SFactor && r.shape_perMeV != 0.0)
+    return "S*(" + std::to_string(r.term) + ";g=" + Number(r.shape_perMeV) + "/MeV)";
   if (r.kind == FactorRef::Kind::SFactor) return "S(" + std::to_string(r.term) + ")";
   return r.kind == FactorRef::Kind::TermFrame ? "J0/J" + std::to_string(r.term) : "J" + std::to_string(r.term);
 }
@@ -245,18 +279,20 @@ const std::vector<TreeKindRow> &TreeKinds() {
       {TreeKind::Yield, "yield", BuildYield},
       {TreeKind::CoulombRatio, "coulomb_ratio", BuildCoulombRatio},
       {TreeKind::Scaled, "scaled", BuildScaled},
+      {TreeKind::ReferenceRatio, "reference_ratio", BuildReferenceRatio},
   };
   return rows;
 }
 
 TreeKind TreeKindOf(const PredictionSetup &s) {
   const ReactionSpec &r = s.reaction;
-  if (!r.scale.Identity()) return TreeKind::Scaled;
+  if (!r.scale.Identity() || LegendreFactorOnData(r)) return TreeKind::Scaled;
   if (r.transmission > 0.0) return TreeKind::Transmission;
   if (r.yieldThickness > 0.0) return TreeKind::Yield;
   if (r.combination == ReactionSpec::Combination::Ratio) return TreeKind::Ratio;
   if (r.combination == ReactionSpec::Combination::Sum || r.observable == Observable::TotalCapture) return TreeKind::Sum;
   if (r.coulombReference != CoulombReference::None) return TreeKind::CoulombRatio;
+  if (!r.reference.Empty()) return TreeKind::ReferenceRatio;
   return TreeKind::Observable;
 }
 

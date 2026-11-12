@@ -15,6 +15,7 @@
 #include "CNuc.h"
 #include "Config.h"
 #include "CoulombReference.h"
+#include "ReferenceTableLeaf.h"
 #include "WorkingCopy.h"
 #include "Unit.h"
 #include "Segment.h"
@@ -185,7 +186,9 @@ struct PointInputs {
     for (std::size_t k = 0; k < nl; k++) {
       point[k] = TermPoint(data, segment, p.leaves[k].term, pointIndex);
       const LeafPart part = p.leaves[k].part;
-      leafValue[k] = azure2::experiment::IsCoulombReference(part)
+      leafValue[k] = part == LeafPart::Reference
+                         ? azure2::ReferenceTableValue(data, point[k], segment.GetReaction().reference, configure)
+                     : azure2::experiment::IsCoulombReference(part)
                          ? azure2::CoulombReferenceValue(data, point[k], part, cnuc, configure)
                          : LeafValue(point[k], part, results);
       leafArray[k] = {&leafValue[k], 1};
@@ -198,7 +201,12 @@ struct PointInputs {
           factorValue[f] = basePoint && termPoint ? Segment::TermFrameFactor(data.State(segment), r.term, pointIndex) : 1.0;
           break;
         case FactorRef::Kind::RatioFrame: factorValue[f] = segment.RatioTermFrameFactor(r.term, termPoint, cnuc); break;
-        case FactorRef::Kind::SFactor: factorValue[f] = azure2::SFactorConversionValue(termPoint, cnuc); break;
+        case FactorRef::Kind::SFactor:
+          factorValue[f] = azure2::SFactorConversionValue(termPoint, cnuc, r.shape_perMeV);
+          break;
+        case FactorRef::Kind::Legendre:
+          factorValue[f] = azure2::experiment::LegendreExpansionFactor(r.legendre, termPoint->GetCoefficientOrder());
+          break;
       }
       factorArray[f] = {&factorValue[f], 1};
     }
@@ -258,7 +266,7 @@ double ComposeModelValue(WorkingCopy &data, const Segment &segment, int pointInd
   for (const azure2::experiment::LeafSelector &leaf : p.leaves) {
     Unit *termPoint = TermPoint(data, segment, leaf.term, pointIndex);
     if (!termPoint) return FailedSample(segment, basePoint, cnuc, results);  // a leaf has a point at every row
-    if (azure2::experiment::IsCoulombReference(leaf.part)) continue;  // analytic: nothing to calculate
+    if (azure2::experiment::IsReferenceLeaf(leaf.part)) continue;  // not the R-matrix's: nothing to calculate
     if (leaves == azure2::LeafValues::Calculate &&
         !CalculatePoint(data, termPoint, TermRole(p, segment, leaf.term), cnuc, configure, results))
       return FailedSample(segment, basePoint, cnuc, results);
@@ -346,10 +354,11 @@ bool ModelPointBackward(WorkingCopy &data, const Segment &segment, int pointInde
     for (std::size_t k = 0; k < nl; k++)
       out.leaves[k].sub.assign(subCotangents.begin() + static_cast<std::ptrdiff_t>(inputs.subOffsets[2 * k]),
                                subCotangents.begin() + static_cast<std::ptrdiff_t>(inputs.subOffsets[2 * k + 1]));
-  // A Coulomb leaf depends on no parameter the caller back-propagates (its energy shift is differentiated by
-  // finite differences, as every leaf's): it leaves the list, whose entries go through the R-matrix adjoint.
+  // A Coulomb or table reference leaf depends on no parameter the caller back-propagates (its energy shift is
+  // differentiated by finite differences, as every leaf's): it leaves the list, whose entries go through the R-matrix
+  // adjoint.
   for (std::size_t k = nl; k-- > 0;)
-    if (experiment::IsCoulombReference(p.leaves[k].part))
+    if (experiment::IsReferenceLeaf(p.leaves[k].part))
       out.leaves.erase(out.leaves.begin() + static_cast<std::ptrdiff_t>(k));
   return ok;
 }

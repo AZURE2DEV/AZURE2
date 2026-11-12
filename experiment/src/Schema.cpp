@@ -178,6 +178,7 @@ std::vector<FieldDef> Concat(std::vector<std::vector<FieldDef>> lists) {
 struct Forms {
   FormSpec shift, quadrature, foldWindows, secondaryGamma, orders, function, param, epoch, stopping, straggling,
       isotope, isotopeSum, doppler, spread, profile, resolution, udr, channelSpin, central, spinOrbit;
+  FormSpec reference;
 };
 
 Forms MakeForms() {
@@ -197,6 +198,10 @@ Forms MakeForms() {
                                 Kw("delta", Num(), "mixing ratio")},
                                "unobserved primary, observed secondary photon (UPOS)")}};
   f.orders = {{Unkeyed({Pos("first", IntAtLeast(0)), Pos("last", IntAtLeast(0))}, "the Legendre orders first..last")}};
+  f.reference = {{Unkeyed({Pos("file", Spec(ValueType::Path), "two columns: energy (the data set's energy role, frame and "
+                                                                  "unit), cross section"),
+                           OptionalKw("unit", Spec(ValueType::Unit, "cross_section"), "unit of the cross-section column", "b")},
+                          "a tabulated reference cross section (ratio_to_reference)")}};
   f.function = {{Unkeyed({Pos("expression", Spec(ValueType::Formula), "x = E_lab of the point in MeV"),
                           Pos("unit", Spec(ValueType::Unit, "energy"))},
                          "a shift term function(x) in the stated unit; its parameters are 'param' fields")}};
@@ -297,10 +302,14 @@ std::vector<FieldDef> QuantityFields() {
           ByQ("expansion", "Legendre expansion", Words({"a_over_a0", "absolute", "rsl", "2l2", "4pi"}),
               "the normalisation of the Legendre coefficients (data_kinds.md section 5.2)"),
           ByQ("multipole", "Multipole", Words({"E1", "E2"}), "the photon multipole the cross section is filtered to (M8)"),
+          ByQ("shape", "Shape constant g", WithUnit("inverse_energy"),
+              "g of the modified S factor E sigma exp(2 pi eta + g E), e.g. 0.46 1/MeV for 12C + 12C"),
           ByQ("secondary_gamma", "Secondary gamma", Structured(f.secondaryGamma), "UPOS: L, Ic, delta"),
           ByQ("charge_state", "Charge state", IntAtLeast(1), "the beam's charge state q; per-charge units need it (F8)"),
           ByQ("efficiency", "Efficiency x branching", Nuis(""), "detection efficiency times branching of counted photons (F9)"),
           ByQ("thm", "THM experiment", Spec(ValueType::Name), "the experiment[<name>] of <thm>, or global"),
+          ByQ("reference", "Reference cross section", Structured(f.reference),
+              "the table sigma_ref(E) the values are divided by: interpolated linearly in log sigma against E"),
           OptionalWhen("thm_weight", "THM weight file", Spec(ValueType::Path), Condition::Present("thm"),
                        "the weight table of <thm> weight[k]")};
 }

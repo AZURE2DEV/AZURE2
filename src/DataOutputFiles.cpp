@@ -26,14 +26,20 @@
  */
 namespace {
 /// The cross-section and S-factor columns of an AZUREOut row from a model or data value v: sigma (b) and S = sigma E
-/// exp(2 pi eta) (MeV b; the point's factor).  For a data set or extrapolation of the S factor, v = c S (c the scale's
-/// constant, Segment::ModelScaleFactor), so sigma = (v / c) / (E exp(2 pi eta)) and S = v / c; otherwise v is the
-/// cross section (times the scale's constant of an extrapolation in another unit, as before) and S = v E exp(2 pi eta).
+/// exp(2 pi eta + g E) (MeV b; the point's factor times exp(g E), g = 0 but for the modified S factor, whose rows give
+/// S* in this column).  For a data set or extrapolation of the S factor, v = c S (c the scale's constant,
+/// Segment::ModelScaleFactor), so sigma = (v / c) / (E exp(2 pi eta + g E)) and S = v / c; otherwise v is the cross
+/// section (times the scale's constant of an extrapolation in another unit, as before) and S = v E exp(2 pi eta).
 struct SigmaAndS {
   bool modelIsS;
   double scale;
-  double Sigma(double v, const Unit &point) const { return modelIsS ? v / scale / point.GetSFactorConversion() : v; }
-  double S(double v, const Unit &point) const { return modelIsS ? v / scale : v * point.GetSFactorConversion(); }
+  double shape_perMeV;
+  double Conversion(const Unit &point) const {
+    const double c = point.GetSFactorConversion();
+    return shape_perMeV == 0.0 ? c : c * std::exp(shape_perMeV * point.GetCMEnergy());
+  }
+  double Sigma(double v, const Unit &point) const { return modelIsS ? v / scale / Conversion(point) : v; }
+  double S(double v, const Unit &point) const { return modelIsS ? v / scale : v * Conversion(point); }
 };
 }  // namespace
 
@@ -169,7 +175,7 @@ void WorkingCopy::WriteSegmentFiles(const Config &configure, const azure2::Resul
                                set_->thmGroups_[Data().ThmGroupOf(segmentIndex)].terms > 0;
     SegmentIterator thisSegment = segment;
     if (firstSumIterator != Data().GetSegments().end()) thisSegment = firstSumIterator;
-    const SigmaAndS columns{segment->ModelIsSFactor(), segment->ModelScaleFactor()};
+    const SigmaAndS columns{segment->ModelIsSFactor(), segment->ModelScaleFactor(), segment->ModelSFactorShape()};
 
     // Band stream for this segment (skip angular-coefficient extrap files, which
     // have no scalar cross section; other segments get a block for alignment).
@@ -199,8 +205,7 @@ void WorkingCopy::WriteSegmentFiles(const Config &configure, const azure2::Resul
         out.precision(10);
         if (segment->IsAngularDist()) {
           out << std::setw(18) << std::scientific << point->GetCMEnergy();
-          for (int i = 0; i < point->GetNumModelAngularDists(results); i++)
-            out << std::setw(18) << point->GetModelAngularDist(results, i);
+          for (double c : segment->LegendreCoefficients(*point, results)) out << std::setw(18) << c;
           out << std::endl;
           if (bandOut) WriteBandLine(*bandOut, point->GetCMEnergy(), point->GetExcitationEnergy(),
                                      point->GetCMAngle(), 0., 0., 0.);
@@ -231,7 +236,7 @@ void WorkingCopy::WriteSegmentFiles(const Config &configure, const azure2::Resul
             std::vector<double> g = pointBandGrad(point);
             double dxs = g.empty() ? 0. : band->dXS(g);
             WriteBandLine(*bandOut, point->GetCMEnergy(), point->GetExcitationEnergy(),
-                          point->GetCMAngle(), fitCrossSection, dxs, point->GetSFactorConversion());
+                          point->GetCMAngle(), fitCrossSection, dxs, columns.Conversion(*point));
           }
         }
       }
@@ -241,8 +246,7 @@ void WorkingCopy::WriteSegmentFiles(const Config &configure, const azure2::Resul
         out.precision(10);
         if (segment->IsAngularDist()) {
           out << std::setw(18) << std::scientific << point->GetCMEnergy();
-          for (int i = 0; i < point->GetNumModelAngularDists(results); i++)
-            out << std::setw(18) << point->GetModelAngularDist(results, i);
+          for (double c : segment->LegendreCoefficients(*point, results)) out << std::setw(18) << c;
           out << std::endl;
           if (bandOut) WriteBandLine(*bandOut, point->GetLabEnergy(), point->GetExcitationEnergy(),
                                      point->GetLabAngle(), 0., 0., 0.);
@@ -275,7 +279,7 @@ void WorkingCopy::WriteSegmentFiles(const Config &configure, const azure2::Resul
             double kin = Segment::Jacobian(State(*segment), 0, (int)(point - segment->GetPoints(*this).begin()));
             double dxs = g.empty() ? 0. : band->dXS(g) / kin;
             WriteBandLine(*bandOut, point->GetLabEnergy(), point->GetExcitationEnergy(),
-                          point->GetLabAngle(), fitCrossSection, dxs, point->GetSFactorConversion());
+                          point->GetLabAngle(), fitCrossSection, dxs, columns.Conversion(*point));
           }
         }
       }

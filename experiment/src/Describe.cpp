@@ -32,6 +32,13 @@ const char *ObservableName(Observable o) {
 
 /// For a ratio to a Coulomb cross section, what the observable is divided by ("" otherwise).
 std::string ReferenceText(const ReactionSpec &r) {
+  if (!r.reference.Empty()) {
+    std::ostringstream out;
+    out << "  divided by the reference cross section of " << r.reference.file << " (" << r.reference.energyLab_MeV.size()
+        << " rows, E_lab " << r.reference.energyLab_MeV.front() << " - " << r.reference.energyLab_MeV.back()
+        << " MeV, linear in ln sigma), at the point's lab energy, folded alike; not converted at load\n";
+    return out.str();
+  }
   switch (r.coulombReference) {
     case CoulombReference::None: return "";
     case CoulombReference::Rutherford:
@@ -100,7 +107,13 @@ std::string UnitsText(const ValidatedRecord &r, const ValueScale &scale, const C
     if (columns && columns->value != 1.0) out << ": x " << columns->value << " where the points are made";
     out << "\n";
   }
-  if (scale.sFactor)
+  if (const Value *e = r.quantity && r.quantity->name == "legendre" ? r.Get("expansion") : nullptr)
+    out << "  Legendre expansion " << e->word << ": the coefficient of order L is "
+        << LegendreExpansionFormula(LegendreExpansionOf(e->word)) << ", dsigma/dOmega_cm = sum_L A_L P_L(cos theta_cm)\n";
+  if (scale.sFactor && scale.sFactorShape_perMeV != 0.0)
+    out << "  the model is the modified S factor E sigma exp(2 pi eta + g E), g = " << scale.sFactorShape_perMeV
+        << " 1/MeV, E the point's c.m. energy after the energy shift, eta of the entrance pair (MeV b)\n";
+  else if (scale.sFactor)
     out << "  the model is the S factor E sigma exp(2 pi eta), E the point's c.m. energy after the energy shift, eta of the "
            "entrance pair (MeV b)\n";
   if (scale.factor != 1.0) out << "  the model " << scale.text << "\n";
@@ -325,6 +338,7 @@ std::string DescribeJson(const Format3Project &p, const std::string &only) {
     const Value *u = r.Get("unit");
     j.Key("unit").String(u && u->unit ? u->unit->token : "").Key("engine_unit").String(r.quantity ? r.quantity->engineUnit : "");
     j.Key("model_factor").Number(spec.scale.factor).Key("sfactor").Bool(spec.scale.sFactor);
+    if (spec.scale.sFactorShape_perMeV != 0.0) j.Key("sfactor_shape_per_MeV").Number(spec.scale.sFactorShape_perMeV);
     j.Key("terms").BeginArray();
     for (const Term &t : Terms(r, spec)) {
       j.BeginObject().Key("reaction").String(t.text).Key("entrance_pair").Integer(t.entrance).Key("exit_pair").Integer(t.exit);
