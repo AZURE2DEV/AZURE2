@@ -123,6 +123,17 @@ void Builder::RewriteConfigAndPriors() {
     out_.configEdits["abundanceSumSigma"] = "";
     Note(Construct::kAbundances, "", "<config> abundanceSumSigma= removed (format 3 writes isotope_sum on the target)");
   }
+  // useAdaptiveGrid: format 3 has one grid for every folded point, the shared mesh (the old value 1).
+  if (!old_.adaptiveGridText.empty()) {
+    out_.configEdits["useAdaptiveGrid"] = "";
+    Count(Construct::kAdaptiveGrid);
+    if (old_.adaptiveGridText != "1" && old_.adaptiveGridText != "true")
+      Note(Construct::kAdaptiveGrid, "",
+           "<config> useAdaptiveGrid=" + old_.adaptiveGridText + " removed: the uniform sub-point grid it chose no longer "
+           "exists; every folded point is on the shared mesh, which is never coarser than the uniform grid of the same "
+           "number of points, so a folded value changes by the uniform grid's quadrature error (over a narrow resonance "
+           "by a large factor, to the converged value)");
+  }
   // priorCovariance=f: a copy f.f3 with the parameters renamed; <mcmc> <parameters> likewise (renamed in place).
   const io::Document::Section *c = doc_.Find("config");
   std::string file;

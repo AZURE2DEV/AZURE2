@@ -112,6 +112,7 @@ const std::vector<DiagnosticCode> &DiagnosticCodes() {
       {kPotentialRelativistic, E, "a potential record in a project with relativistic kinematics"},
       {kThmHybridPotential, E, "a THM data set or extrapolation whose entrance pair has a potential record"},
       {kOldPotentialBlock, E, "the old <potential> block in a format-3 project (AZURE2 --convert writes potential records)"},
+      {kRemovedConfigKey, E, "a <config> key that format 3 no longer has (useAdaptiveGrid: every fold is on the shared mesh)"},
       {kParameterFileNoMatch, E, "a parameter file (param.sav as a run's start) none of whose names is a parameter of the run"},
       {kParameterFileNames, Severity::Warning, "a parameter file with names the project has no parameter for, or without names of parameters it has"},
       {kParameterSettingUnknown, Severity::Warning, "a <parameterSettings> row that names no parameter of the project (ignored)"},

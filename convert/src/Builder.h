@@ -166,6 +166,7 @@ struct Construct {
   static constexpr const char *kMcmc = "<mcmc> priors";
   static constexpr const char *kPriorCovariance = "priorCovariance";
   static constexpr const char *kPotential = "<potential>";
+  static constexpr const char *kAdaptiveGrid = "useAdaptiveGrid";
 };
 
 inline const char *const kChargedElastic =

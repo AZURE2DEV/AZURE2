@@ -29,7 +29,7 @@ Q_B = (M["8Li"] - M["8Be"]) * up.U_MEV              # 16.0045 MeV, 8Li(beta-)8Be
 SL_SIGMA = 0.1                                      # fm, uncertainty of the scattering-length constraints
 
 # The hybrid nuclear potential (Woods-Saxon) bends the alpha + alpha channel functions only.
-POTENTIAL = ("useHybridPotential=0\nuseAdaptiveGrid=1\npotentialType=0\nV0=10\nR=3.0\na=0.6\n"
+POTENTIAL = ("useHybridPotential=0\npotentialType=0\nV0=10\nR=3.0\na=0.6\n"
              "pair=1\nuseHybridPotential=1\npotentialType=0\nV0=10\nR=3.0\na=0.6\n")
 
 

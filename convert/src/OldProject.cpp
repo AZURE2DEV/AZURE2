@@ -334,6 +334,7 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
       if (eq == std::string::npos) continue;
       const std::string key = Trim(line.substr(0, eq)), value = Trim(line.substr(eq + 1));
       if (key == "includeAllJPi") out.includeAllJPi = value == "1" || value == "true";
+      if (key == "useAdaptiveGrid") out.adaptiveGridText = value;
       if (key != "abundanceSumSigma") continue;
       out.abundanceSumSigmaText = value;
       out.abundanceSumSigma = std::strtod(out.abundanceSumSigmaText.c_str(), nullptr);

@@ -137,8 +137,6 @@ class Config {
   /// Function-call limit of a MIGRAD or NLopt fit (--max-calls=N); 0 = none, so MIGRAD's EDM criterion (or NLopt's
   /// tolerances) ends the fit.  Before 2026-10-31 a fixed 50,000 that a fit of ~100+ free parameters reached silently.
   unsigned int maxCalls;
-  /// Use adaptive integration grid for target effects (false = uniform grid)
-  bool useAdaptiveGrid;
   /// The <thm> block (ThmOptions.h); Config::ThmOptions as before.
   typedef ::ThmOptions ThmOptions;
   ThmOptions thm;

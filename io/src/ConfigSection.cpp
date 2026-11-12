@@ -128,7 +128,6 @@ const std::vector<ConfigKey> &ConfigKeys() {
       {"relativistic", ConfigKey::Bool, 0, "relativistic two-body kinematics"},
       {"relativisticReferencePair", ConfigKey::Int, 1, "the pair whose masses define the relativistic frames"},
       {"priorCovariance", ConfigKey::Path, 0, "the prior parameter covariance file, relative to the project"},
-      {"useAdaptiveGrid", ConfigKey::Bool, 0, "adaptive sub-point grids of the target effects"},
       {"format", ConfigKey::Version, 0, "the project format (3)"}};
   return keys;
 }

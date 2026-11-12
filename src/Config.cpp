@@ -41,7 +41,6 @@ void Config::Reset() {
   potentials = azure2::experiment::HybridPotentialSettings();
   refreezeCovariance = 0;
   maxCalls = 0;
-  useAdaptiveGrid = true;   // Default to adaptive grid
   thm = ThmOptions();
   useCoulombTable = true;   // the universal Coulomb table where it covers a channel (--no-coulomb-table)
   replaceSubPointGrids = true;  // re-place the adaptive sub-point grids (--no-grid-replacement)
@@ -161,7 +160,6 @@ int Config::ReadConfigFile() {
   // The <config> section of the project (io::Document; a tag is a whole trimmed line).
   std::unique_ptr<std::istream> section = SectionStream("config");
   if (!section) return kConfigUnreadable;
-  useAdaptiveGrid = true;  // the default; the <config> key useAdaptiveGrid sets it
   // The section's one grammar (io/ConfigSection.h): eleven positional entries, then key=value lines.
   std::vector<std::string> lines;
   for (std::string line; std::getline(*section, line);) lines.push_back(line);
@@ -210,8 +208,6 @@ int Config::ReadConfigFile() {
       relativisticReferencePair = atoi(value.c_str());
     else if (key == "priorCovariance")
       priorCovariance = value;
-    else if (key == "useAdaptiveGrid")
-      useAdaptiveGrid = (value == "1" || value == "true");
     // "format" is the file format (docs/upgrade/project.md section 4), read by io::FormatOf
   }
   if (!config.closed) return kConfigUnreadable;
