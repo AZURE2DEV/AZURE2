@@ -2,6 +2,51 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, Phase 5 branch 7 part 3) — the sub-point units are gone: a slot of a folded point is a `Site` (`feature/upgrade-5-grid-readers2`)
+
+**Done.**
+- `include/Site.h`: one calculation site, what depends on a point at one energy (c.m./lab/compound energies, angle and
+  Legendre rows, channel rows, Coulomb amplitude, screening, stopping, EC amplitudes, its result record).  The formulas
+  (channel rows, Legendre rows, Coulomb amplitude, external capture) are `Site` functions writing that site only; the
+  `Unit` functions of the same names run them for the point and then each slot (the recursion that lived inside each
+  formula; `OwnSite()` for the point alone).  `Unit` (a data point) is a `Site` plus row, fold, plan task, model
+  record, fold settings.  `GenMatrixFunc`, `AMatrixFunc` (`PointTBar` too), `RMatrixFunc`, `THMMatrixFunc`, the
+  amplitude matrix, `SolveAtOneEnergy`, the Coulomb reference's callback (`at(const Site *)`) read a `Site`.
+- The slots are `Site`s in one vector of the working copy (`WorkingCopy::SlotAt`, `Slots`; a point's range
+  `SubPointFirst`/`NumSubPoints`), laid out with the points (`LayOutUnits`).  One site index for plan tasks, energy
+  tasks, node slots and cotangents: `SiteAt(s)`, the points then the slots at `NumUnits() + k` (`SlotSite`,
+  `SiteIndex`): the same numbers as the old one unit vector, so no task, node or record moved.  `SubPointAccess.h`
+  deleted; `UnitIndex` deleted.
+- Overflow table placed without its hash map (a slot shares the node placed just before at the same key, else a new
+  node; the energy tasks group by key).  `AZURE_NODE_CHECK` stays as the invariant check (every slot on a node of a
+  table, stage nodes in key order, the node's key equal to the site's key with E_x computed from its c.m. energy bit
+  for bit, rows the site's) and now also runs under `AZURE_PLAN_CHECK`.
+
+**Verified** (build `work/b-readers2`, scripts `work/readers2/qset.sh`, `bq.sh`, `speed.sh`; at every commit): build
+0 warnings; consistency test; `ctest -R "upgrade_plan|upgrade_history|upgrade_node|kernels|grad|consistency"` 22/22;
+`check.sh` of 13N, component_mapping, layer_yield, stopping_yield, rectangular_resolution, fit_modes all pass; T1, T2,
+T3, 13N, natural_neon, shift_sqrt_subpoints/models, 18O_p_a_thm, thick_target_resonance, layer_yield/models (Brune)
+159 files identical to `tab-trial26` (run.log without `%` lines); T2 and 13N `--use-gradient` (30 calls, 1 thread)
+identical to `b-trial27`.  `node_check.sh` shown failing with a slot on the previous overflow node (sqrt: 47165 on a
+wrong node; T2 fit: 6175), then clean.  Not run: the whole tree x 3 bases, full ctest, `run_tests.sh`, the gate.
+Speed, 1 thread, 6 alternated runs each, medians (machine shared, load about 9; logs `work/readers2/logs/speed1.txt`,
+`speed2.txt`): T2 MIGRAD 200 calls, final head 36.24 s against `b-trial25` 36.38 s (-0.4 %) and `b-trial27` 36.59 s
+(-1.0 %); after the slot commit (overflow still hashed) 35.80 / 35.91 / 36.55 s.  natural_neon calculation 6.05 s
+against 6.23 / 6.21 s.  Peak RSS: natural_neon calculation 1,424,604 kB against 1,460,656 kB (`b-trial27`, -2.5 %);
+T2 fit 326 MB against 345 MB.
+
+**Open.** `NodeTableCache.h` (re-placed slots share rows across copies through it; it goes when the shared mesh stops
+nodes from moving with the levels) and the slots' copy-on-write rows are not deleted.  The names still say
+"sub-point" (`GetSubPoint`, `NumSubPoints`, `AddSubPoint`, ...): a rename to "slot" is mechanical.  For the shared
+mesh: slots are placed in four places (`WorkingCopy::SetUpTargetEffects`, two branches, `src/TargetSetup.cpp` around
+the two `GenerateGrid` calls; `AddTargetFallbackNodes`, same file, the sigma(E_bar) fallback; `WorkingCopy::
+ReplaceSubPointGrids`, same file) and weighted in one (`FoldWeights` / `FoldValues` / `FoldPoint`, `src/PointFold.cpp`,
+through the kernels).  D3 lines deletable with a shared mesh: the automatic tolerance and the bare probe
+(`Unit::FoldSubPoints`, `src/PointPass.cpp`), the edge blend (`TargetBlendWeight`: `TargetSetup.cpp`, `PointPass.cpp`,
+`CoulombReference.cpp`, `AZUREGrad.cpp`), the sigma(E_bar) fallback (`AddTargetFallbackNodes`, `TargetFallbackScope`,
+`Unit::FoldThinTarget`), the fold windows of the set-up (`SetUpTargetEffects`).  A shifted folded point still moves
+its slots rigidly (`Segment::UpdatePointEnergyWithShift`) onto the overflow table until the shift-kernel branch.
+
 ## 2026-11-12 (agent, Phase 5 branch 7 part 2, first milestone) — the planner of the shared mesh, alone (`feature/upgrade-5-mesh-planner`)
 
 **Done.** `include/MeshPlanner.h`, `src/MeshPlanner.cpp`: `PlanMesh(anchors, supports, tails)`, a pure function (no

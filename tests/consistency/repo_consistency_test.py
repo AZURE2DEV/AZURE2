@@ -647,10 +647,10 @@ for other in ("include/AZUREGrad.h", "include/AZURECalcMCMC.h", "pyazr/parameter
 
 # 25. The results of an evaluation belong to its caller (docs/upgrade/data_model.md S3, include/Results.h): a point and a
 #     data set hold where a record lies, never the values, so a copy of either cannot write into another owner's
-#     buffer.  Unit.h (with UnitTables.h, its tables) and WorkingCopy.h declare no member of a type that names
+#     buffer.  Site.h, Unit.h (with UnitTables.h, its tables) and WorkingCopy.h declare no member of a type that names
 #     Results -- a value, pointer, reference, container or smart pointer.  Function declarations may name it (the
 #     buffer is passed in).
-for rel in ("include/Unit.h", "include/UnitTables.h", "include/WorkingCopy.h"):
+for rel in ("include/Site.h", "include/Unit.h", "include/UnitTables.h", "include/WorkingCopy.h"):
     text = re.sub(r"//[^\n]*|/\*.*?\*/|^\s*#[^\n]*", "", read(rel), flags=re.S | re.M)
     for stmt in re.split(r"[;{}]", text):
         if "(" in stmt or not re.search(r"\bResults\b", stmt):
@@ -711,7 +711,7 @@ if not PIECES.search("w = compound->GetAbundance(sample, nucleus) * Segment::Ter
 #     energies are the energy tasks'; (c) a plan position is turned into a point (WorkingCopy::PlanPoint) only by the
 #     plan (src/CalculationPlan.cpp) and the plan's tests -- everything else asks the plan.
 POINT_PTR = re.compile(r"^\s*(?:mutable\s+)?(?:std::\w+<\s*)?(?:const\s+)?Unit\s*\*(?:\s*>)?\s*\w+_\s*(?:=[^;]*)?;", re.M)
-eph = re.sub(r"//[^\n]*|/\*.*?\*/", "", read("include/Unit.h"), flags=re.S)
+eph = re.sub(r"//[^\n]*|/\*.*?\*/", "", read("include/Site.h") + read("include/Unit.h"), flags=re.S)
 # the RAII scopes nested in Unit (DopplerAppliedScope, ...) hold the point they set a flag on: not a member of Unit
 eph = re.sub(r"\bclass\s+\w+Scope\b[^{;]*\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\};", "", eph)
 if "plan_task_" not in eph:

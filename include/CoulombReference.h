@@ -9,6 +9,7 @@ class CNuc;
 class Config;
 class WorkingCopy;
 class Unit;
+class Site;
 
 namespace azure2 {
 
@@ -36,7 +37,7 @@ double CoulombReferenceValue(const WorkingCopy &data, Unit *point, experiment::L
  * reference (ReferenceTableLeaf.h) use it.
  */
 double FoldReferenceAtPoint(const WorkingCopy &data, Unit *point, const Config &configure,
-                            const std::function<double(const Unit *)> &at);
+                            const std::function<double(const Site *)> &at);
 
 /*!
  * The factor E exp(2 pi eta(E) + g E) (MeV) that takes the cross section of a point to its S factor (g = 0) or its
@@ -45,7 +46,7 @@ double FoldReferenceAtPoint(const WorkingCopy &data, Unit *point, const Config &
  * masses and charges.  Under a fold it is taken at the point's energy: the model is E exp(2 pi eta(E) + g E) <sigma>,
  * the S factor of the folded cross section at the point.
  */
-double SFactorConversionValue(const Unit *point, CNuc *compound, double shape_perMeV);
+double SFactorConversionValue(const Site *point, CNuc *compound, double shape_perMeV);
 
 }  // namespace azure2
 

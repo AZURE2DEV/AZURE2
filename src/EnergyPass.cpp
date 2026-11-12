@@ -35,7 +35,7 @@ namespace azure2 {
 namespace {
 
 // Whether unit k starts a T-matrix group: by `tGroups`, or, if null, by a change of (entrance, exit) pair.
-bool StartsTMatrix(Unit *const *units, int k, const int *tGroups) {
+bool StartsTMatrix(Site *const *units, int k, const int *tGroups) {
   if (k == 0) return true;
   if (tGroups) return tGroups[k] != tGroups[k - 1];
   return units[k]->GetEntranceKey() != units[k - 1]->GetEntranceKey() ||
@@ -44,7 +44,7 @@ bool StartsTMatrix(Unit *const *units, int k, const int *tGroups) {
 
 }  // namespace
 
-void SolveAtOneEnergy(CNuc *cnuc, const Config &configure, Results &results, Unit *const *units, int n,
+void SolveAtOneEnergy(CNuc *cnuc, const Config &configure, Results &results, Site *const *units, int n,
                       const int *tGroups, int *progress) {
   if (progress) *progress = 0;
   if (n <= 0) return;
@@ -109,7 +109,7 @@ std::string CompareLevelMatrices(CNuc *cnuc, int nucleus, AMatrixFunc &a, AMatri
   return std::string();
 }
 
-std::string Describe(const Unit &u, const EnergyTask &task) {
+std::string Describe(const Site &u, const EnergyTask &task) {
   std::ostringstream s;
   s.precision(17);
   s << "segment key " << u.GetSegmentKey() << ", entrance " << u.GetEntranceKey() << ", exit " << u.GetExitKey()
@@ -149,12 +149,12 @@ long CheckEnergyTasks(WorkingCopy &data, CNuc *cnuc, const Config &configure, co
       sharedR.reset(new RMatrixFunc(cnuc, configure)), ownR.reset(new RMatrixFunc(cnuc, configure));
       s = sharedR.get(), o = ownR.get();
     }
-    Unit *first = &data.UnitAt(taskUnits[0]);
+    Site *first = &data.SiteAt(taskUnits[0]);
     s->ClearMatrices();
     s->FillMatrices(first);
     s->InvertMatrices();
     for (int k = 0; k < n; k++) {
-      Unit *u = &data.UnitAt(taskUnits[k]);
+      Site *u = &data.SiteAt(taskUnits[k]);
       std::string why;
       if (AMatrixFunc::InEnergy(cnuc, u) != task.energy) why = "E_x is not the task's";
       // The unit's own solve.
@@ -266,9 +266,9 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
     const azure2::EnergyTask &task = tasks[k];
     const int n = task.size;
     AZUREProfile::CountMany(AZUREProfile::kEnergyUnits, n);
-    static thread_local std::vector<Unit *> units;
+    static thread_local std::vector<Site *> units;
     units.resize(n);
-    for (int i = 0; i < n; i++) units[i] = &units_[tasks.units[task.begin + i]];
+    for (int i = 0; i < n; i++) units[i] = &SiteAt(tasks.units[task.begin + i]);
     int start = 0;
     while (start < n) {
       int progress = 0;
@@ -311,7 +311,7 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
           if (k < numTasks) {
             runEnergyTask(k);
             for (int i = 0; i < tasks[k].size; i++)
-              azure2::CalculationPlan::AddRecordRange(units_[tasks.units[tasks[k].begin + i]], ranges);
+              azure2::CalculationPlan::AddRecordRange(SiteAt(tasks.units[tasks[k].begin + i]), ranges);
             if (k == numTasks - 1) collectFailures();
           } else {
             // A fold writes its point's record; it swaps values into its sub-points' slots and restores them.

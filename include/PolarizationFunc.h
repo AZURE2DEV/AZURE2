@@ -6,7 +6,7 @@
 #include "Constants.h"
 
 class CNuc;
-class Unit;
+class Site;
 
 /*!
  * Polarization observables from the channel-spin amplitude matrix.
@@ -64,7 +64,7 @@ struct Amplitude {
  */
 class AmplitudeMatrix {
  public:
-  AmplitudeMatrix(CNuc *compound, Unit *point, int aa, int ir);
+  AmplitudeMatrix(CNuc *compound, Site *point, int aa, int ir);
 
   //! Add the contribution of one pathway: T element for (jNum, ch, chp).
   void AddPathway(int jNum, int chNum, int chpNum, complex tMatrixElement);
@@ -128,7 +128,7 @@ class AmplitudeMatrix {
   double IdenticalFactor(int lp, double sp) const;
 
   CNuc *compound_;
-  Unit *point_;
+  Site *point_;
   int aa_, ir_;
   double theta_;
   std::vector<double> entranceSpins_, exitSpins_;

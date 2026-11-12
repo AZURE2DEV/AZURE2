@@ -14,6 +14,7 @@
 #include "EvaluationCount.h"
 #include "Results.h"
 #include "ParameterKind.h"
+#include <functional>
 #include <memory>
 #include <atomic>
 #include <ctime>
@@ -237,31 +238,54 @@ class WorkingCopy {
   /// The units of every point of every term in data order: the segments' own points, then the leaves' (LeafRefs).
   std::vector<azure2::PointRef> PlanUnits() const;
 
-  /// The calculation units of the working copy (data_structure.md section 1.4), src/WorkingCopyUnits.cpp: every point
-  /// of every term and every sub-point in one vector; a term's points and a point's sub-points are ranges of it.
+  /// The data points of the working copy (data_structure.md section 1.4), src/WorkingCopyUnits.cpp: every point of
+  /// every term in one vector; a term's points are a range of it.
   Unit &UnitAt(int i) { return units_[i]; }
   const Unit &UnitAt(int i) const { return units_[i]; }
   int NumUnits() const { return (int)units_.size(); }
-  /// The index of a unit of this working copy (UnitAt(UnitIndex(u)) is u).
-  int UnitIndex(const Unit *u) const { return (int)(u - units_.data()); }
   UnitRange<Unit> Units(int first, int count) { return UnitRange<Unit>(units_.data() + first, count); }
   UnitRange<const Unit> Units(int first, int count) const {
     return UnitRange<const Unit>(units_.data() + first, count);
   }
+  /// The slots of the folded points (the sites of their target-effect integrals), each point's a range of one vector
+  /// in the order of the points (Unit::SubPointFirst).
+  Site &SlotAt(int k) { return slots_[k]; }
+  const Site &SlotAt(int k) const { return slots_[k]; }
+  int NumSlots() const { return (int)slots_.size(); }
+  UnitRange<Site> Slots(int first, int count) { return UnitRange<Site>(slots_.data() + first, count); }
+  /// Every calculation site by one index (a plan task's units, the gradient's cotangents, the node slots): the points
+  /// first (UnitAt), then the slots (SlotAt, at NumUnits() + k).
+  int NumSites() const { return NumUnits() + NumSlots(); }
+  Site &SiteAt(int s) { return s < NumUnits() ? static_cast<Site &>(units_[s]) : slots_[s - NumUnits()]; }
+  const Site &SiteAt(int s) const { return s < NumUnits() ? static_cast<const Site &>(units_[s]) : slots_[s - NumUnits()]; }
+  /// The site index of `s`, a point or a slot of this working copy (SiteAt(SiteIndex(s)) is s).
+  int SiteIndex(const Site *s) const {
+    const std::less<const Site *> before;
+    if (!slots_.empty() && !before(s, slots_.data()) && before(s, slots_.data() + slots_.size()))
+      return NumUnits() + (int)(s - slots_.data());
+    return (int)(static_cast<const Unit *>(s) - units_.data());
+  }
+  /// The site index of slot i (1-based) of `point`.
+  int SlotSite(const Unit &point, int i) const { return NumUnits() + point.SubPointFirst() + i - 1; }
   /// Append a unit (a point of a term, at set-up); returns its index.
   int AppendUnit(Unit unit) {
     units_.push_back(std::move(unit));
     return (int)units_.size() - 1;
   }
+  /// Append a slot (a test that builds a fold by hand; the set-up gives slots with AddSubPoint); returns its index.
+  int AppendSlot(Site slot) {
+    slots_.push_back(std::move(slot));
+    return NumSlots() - 1;
+  }
   /// Give `point` (a unit of this data set) the sub-point `sub` after those already given; held until
   /// CommitSubPoints, so that no unit moves while the set-up holds pointers to points.
-  void AddSubPoint(Unit &point, Unit sub);
+  void AddSubPoint(Unit &point, Site sub);
   /// Place the sub-points given since the last commit (each point's replace any it had) and lay the units out again
   /// (CompactUnits).  Single-threaded.
   void CommitSubPoints();
   /// Per work item of a grid re-placement: (a point's unit, its new sub-points).  PlaceSubPointGrids puts a grid with
   /// as many nodes as the old one in its place, any other in a new layout of the units.  Single-threaded.
-  using SubPointGrids = std::vector<std::vector<std::pair<int, std::vector<Unit>>>>;
+  using SubPointGrids = std::vector<std::vector<std::pair<int, std::vector<Site>>>>;
   void PlaceSubPointGrids(SubPointGrids &grids);
   /// Lay the units out again (see Units), dropping every unit no term and no point refers to.
   void CompactUnits();
@@ -411,7 +435,7 @@ class WorkingCopy {
   const azure2::EnergyTaskList &EnergyTasksOf(const std::vector<const Segment *> &segments, const Config &configure);
 
  private:
-  void LayOutUnits(std::vector<std::vector<Unit> *> *fresh);  // CompactUnits, PlaceSubPointGrids
+  void LayOutUnits(std::vector<std::vector<Site> *> *fresh);  // CompactUnits, PlaceSubPointGrids
   /// The plan tasks of the points of \p segments and their leaves, in data order (src/EnergyPass.cpp).
   std::vector<int> PassWork(const std::vector<const Segment *> &segments) const;
   /// The data set (shared, immutable) and, during the set-up only, the same object writable (Draft).
@@ -421,7 +445,8 @@ class WorkingCopy {
   std::vector<TargetEffectValues> effectValues_;  // EffectValues: one per target effect
   std::vector<double> thmCoherentValues_;       // ThmCoherentValue: one per coherent-background parameter
   std::vector<Unit> units_;  // Unit
-  std::vector<std::vector<Unit>> pendingSubPoints_;  // AddSubPoint: per point's unit, until the commit
+  std::vector<Site> slots_;  // SlotAt
+  std::vector<std::vector<Site>> pendingSubPoints_;  // AddSubPoint: per point's unit, until the commit
   azure2::CalculationPlan plan_;  // built by BuildPlan; positions only, so a copy copies it as it is
   std::map<std::string, std::shared_ptr<DataCovariance::File>> covFiles_;  // only while filling
   bool covarianceError_ = false;              // a covariance file could not be read (CovarianceFileFor)
@@ -501,6 +526,13 @@ class WorkingCopy {
   std::shared_ptr<const ChannelTable> BuildChannelTable(CNuc *, const Config &, const std::vector<Unit *> &points);
 };
 
-#include "SubPointAccess.h"
+// The slots of a point (Unit.h), here where WorkingCopy is complete.
+inline Site *Unit::GetSubPoint(WorkingCopy &data, int i) {
+  return i <= sub_count_ ? &data.SlotAt(sub_first_ + i - 1) : nullptr;
+}
+inline const Site *Unit::GetSubPoint(const WorkingCopy &data, int i) const {
+  return i <= sub_count_ ? &data.SlotAt(sub_first_ + i - 1) : nullptr;
+}
+inline UnitRange<Site> Unit::GetSubPoints(WorkingCopy &data) { return data.Slots(sub_first_, sub_count_); }
 
 #endif

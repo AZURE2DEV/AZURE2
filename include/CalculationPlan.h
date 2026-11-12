@@ -11,6 +11,7 @@
 
 class WorkingCopy;
 class Unit;
+class Site;
 class CNuc;
 class Config;
 
@@ -79,7 +80,7 @@ struct EnergyTaskList {
  * Unit::SameECAmplitudesAs), so the T-matrix built from the first is the one each would build itself
  * (AZURE_PLAN_CHECK).
  */
-long long ECAmplitudeSource(const Unit &unit, const Config &configure);
+long long ECAmplitudeSource(const Site &unit, const Config &configure);
 
 class CalculationPlan {
  public:
@@ -121,7 +122,7 @@ class CalculationPlan {
                          const std::function<void(int, std::vector<std::pair<std::size_t, std::size_t>> &)> &run,
                          const std::function<std::string(int)> &name);
   /// The slots of `u`'s own record apart from the natural terms (the model pass's), appended to `ranges`.
-  static void AddRecordRange(const Unit &u, std::vector<std::pair<std::size_t, std::size_t>> &ranges);
+  static void AddRecordRange(const Site &u, std::vector<std::pair<std::size_t, std::size_t>> &ranges);
 
  private:
   std::vector<PointRef> points_;  // the point of each task
@@ -139,7 +140,7 @@ class CalculationPlan {
 /// `tGroups` (one per unit, non-decreasing), or, if null, runs of one (entrance, exit) pair.  `progress`, if given,
 /// holds the index of the unit being calculated (so a caller that catches an exception knows whose it was: the fill's
 /// and factorisation's are units[0]'s).
-void SolveAtOneEnergy(CNuc *cnuc, const Config &configure, Results &results, Unit *const *units, int n,
+void SolveAtOneEnergy(CNuc *cnuc, const Config &configure, Results &results, Site *const *units, int n,
                       const int *tGroups = nullptr, int *progress = nullptr);
 /// AZURE_PLAN_CHECK=1: every unit of `tasks` solved alone (fill and factorisation, T-matrix and record with it) and
 /// compared bit for bit with the shared solve of its task (the bilinear forms g^T A g of every J-group, the route, the

@@ -134,10 +134,10 @@ bool Cotangents(CNuc *compound, WorkingCopy &data, Results &results, const Confi
       bailSeg = pass.points[k].segNum;
       return false;
     }
-  pass.cotFirst.assign(data.NumUnits() + 1, 0);
+  pass.cotFirst.assign(data.NumSites() + 1, 0);
   for (const auto &list : perPoint)
     for (const UnitCotangent &c : list) pass.cotFirst[c.unit + 1]++;
-  for (int u = 0; u < data.NumUnits(); u++) pass.cotFirst[u + 1] += pass.cotFirst[u];
+  for (int u = 0; u < data.NumSites(); u++) pass.cotFirst[u + 1] += pass.cotFirst[u];
   pass.cot.resize(pass.cotFirst.back());
   std::vector<int> next(pass.cotFirst.begin(), pass.cotFirst.end() - 1);
   for (const auto &list : perPoint)
@@ -152,7 +152,7 @@ bool HasCotangents(const Pass &pass, const EnergyTaskList &list, const EnergyTas
 }
 
 // The solver of a task on this thread, filled and factored at the task's first unit.
-AMatrixFunc &SolveTask(CNuc *compound, const Config &config, Unit *first) {
+AMatrixFunc &SolveTask(CNuc *compound, const Config &config, Site *first) {
   static thread_local AMatrixFunc amf(compound, config);
   amf.Reset(compound, config);
   AZUREProfile::Timer timer(AZUREProfile::kGradForward);
@@ -178,7 +178,7 @@ bool ForEachGroup(AMatrixFunc &amf, WorkingCopy &data, const Pass &pass, const E
       end++;
     }
     if (any) {
-      Unit *provider = &data.UnitAt(u[i]);
+      Site *provider = &data.SiteAt(u[i]);
       {
         AZUREProfile::Timer timer(AZUREProfile::kGradForward);
         if (!built)
@@ -200,18 +200,18 @@ bool ForEachGroup(AMatrixFunc &amf, WorkingCopy &data, const Pass &pass, const E
 bool ScalarTask(CNuc *compound, const Config &config, WorkingCopy &data, Results &results, const Pass &pass,
                 const EnergyTaskList &list, const EnergyTask &task, const vector_matrix_r *shiftDeriv, GradAccum &acc) {
   if (!HasCotangents(pass, list, task)) return true;
-  Unit *first = &data.UnitAt(list.units[task.begin]);
+  Site *first = &data.SiteAt(list.units[task.begin]);
   AMatrixFunc &amf = SolveTask(compound, config, first);
   std::vector<std::vector<BilinearTerm>> merged(compound->NumJGroups()), terms;
   TMatrixCotangent bar;
   const bool dense = DenseAdjointRequested();
-  auto group = [&](int begin, int end, Unit *provider) {
+  auto group = [&](int begin, int end, Site *provider) {
     TMatrixCotangent sum;
     for (int i = begin; i < end; i++) {
       const UnitRef u = list.units[task.begin + i];
       for (int c = pass.cotFirst[u]; c < pass.cotFirst[u + 1]; c++) {
         const UnitCotangent &k = pass.cot[c];
-        if (!amf.PointTBar(&data.UnitAt(u), results, k.value, bar, k.xsComponent, k.ayCrossSection)) return false;
+        if (!amf.PointTBar(&data.SiteAt(u), results, k.value, bar, k.xsComponent, k.ayCrossSection)) return false;
         AddCotangent(sum, bar);
       }
     }
@@ -241,7 +241,7 @@ bool RowTask(CNuc *compound, const Config &config, WorkingCopy &data, Results &r
              std::vector<GradAccum> &rowAcc, GradAccum &scratch) {
   rowsOf.clear();
   if (!HasCotangents(pass, list, task)) return true;
-  Unit *first = &data.UnitAt(list.units[task.begin]);
+  Site *first = &data.SiteAt(list.units[task.begin]);
   AMatrixFunc &amf = SolveTask(compound, config, first);
   const bool dense = DenseAdjointRequested();
   std::vector<std::vector<std::vector<BilinearTerm>>> rowTerms;
@@ -263,7 +263,7 @@ bool RowTask(CNuc *compound, const Config &config, WorkingCopy &data, Results &r
     }
     return slotOfRow[row];
   };
-  auto group = [&](int begin, int end, Unit *provider) {
+  auto group = [&](int begin, int end, Site *provider) {
     groupSlots.clear();
     for (int i = begin; i < end; i++) {
       const UnitRef u = list.units[task.begin + i];
@@ -275,7 +275,7 @@ bool RowTask(CNuc *compound, const Config &config, WorkingCopy &data, Results &r
           groupSlots.push_back(slot);
           sums[slot] = TMatrixCotangent();
         }
-        if (!amf.PointTBar(&data.UnitAt(u), results, k.value, bar, k.xsComponent, k.ayCrossSection)) return false;
+        if (!amf.PointTBar(&data.SiteAt(u), results, k.value, bar, k.xsComponent, k.ayCrossSection)) return false;
         AddCotangent(sums[slot], bar);
       }
     }
