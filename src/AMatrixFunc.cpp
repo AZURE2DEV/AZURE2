@@ -826,7 +826,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
     //      applies, so the whole derivative is a contraction against those same
     //      coefficients. The Coulomb amplitude carries no parameter dependence
     //      and drops out. ----
-    if (compound()->GetPair(aa)->GetPType() != 0) return false;
+    if (compound()->GetPair(aa)->GetPType() != 0) UnreachableGate("an A_y needs a particle entrance (Build refuses)");
 
     if (compound()->GetPair(exitPairNum)->GetPType() == 10) {
       // ---- Capture analyzing power (Seyler and Weller, Phys. Rev. C 20
