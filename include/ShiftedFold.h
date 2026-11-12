@@ -81,10 +81,18 @@ struct Results;
  *    depend on nu through the angle: its column recomputes the observables of its sites at the moved angle (channel
  *    rows kept), as before; open for the branch of observables per node (Legendre coefficients at the nodes).
  *
- * A support narrower than MeshZeroWidth() (a layer losing less than 1 eV) gets a single node from the planner, and
- * the fold of a single node is the kernels' thin limit (Kernel::thinLimit).  A shifted point with a reach has a
- * planned support of width 2 R_i, hence more nodes, and its fold reads at least two of them; a fixed shift of such a
- * point keeps the single node and the thin limit.
+ * A support narrower than MeshZeroWidth() (a layer losing less than 1 eV) gets a single node from the planner, its
+ * upper edge, and the fold of a single node is the kernels' thin limit (Kernel::thinLimit).  The same holds for a
+ * shifted point whose planned support [a_i + c_i - R_i, b_i + c_i + R_i] is narrower than MeshZeroWidth(): a fixed
+ * shift (R_i = 0, the node at the moved support's upper edge b_i + Delta_i: the unshifted thin limit at the shifted
+ * energy), or a varied shift without a prior on a layer below about 1/7 eV (R_i = 3 (b_i - a_i)).  Its fold is the thin
+ * limit at the node b_i + c_i + R_i whatever nu: the moved support lies inside the planned one, so the node is at most
+ * the planned support's width (below 1 eV) above the moved support, and the fold is off by at most sigma' x 1 eV
+ * (ShiftedFoldNodes refuses a moved support that reaches farther than MeshZeroWidth() below the node).  Within one
+ * reach the fold does not change with nu; at a re-plan (nearly every step of a fit, the reach being a fraction of an
+ * eV) it steps by sigma' x 2 R_i, so chi^2(nu) is a staircase of that size, which a numerical second derivative of
+ * MIGRAD sees (tests/thin_layer_limit; the follow-ups' report has the numbers).  A shifted point with a wider planned
+ * support has more nodes, and its fold reads at least two of them.
  *
  * Not here: THM (off the mesh, its sub-points still move rigidly: Segment::MoveOwnGridSlots, branch 10); a point
  * with a uniform grid of its own (useAdaptiveGrid off), which moves rigidly as well; unfolded shifted points (an exact

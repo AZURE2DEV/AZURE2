@@ -18,3 +18,18 @@ The tolerance.  Above the boundary the depth integral gives σ at the depth-aver
 plus 1e-9 (the output's 11 digits).  Below it the single node is E0 itself, and both quantities equal σ(E0) to 1e-9.
 The step between the two neighbouring densities on either side of the boundary is then below the same tolerance: the
 yield over N is continuous through 1 eV (measured: 6e-6, 8e-6 and 9e-6 at the three energies, half the bound).
+
+**With an energy shift** (`ShiftedFold.h`, the paragraph on single nodes).  The check also runs the model at 1e14 with a
+shift on the two folded data sets (0, ±2 keV, ±20 keV fixed; ±20 keV varied without a prior; +20 keV and −2 keV varied
+with a 10 eV prior) and through 1e14–1e16 with +20 keV fixed and varied, against the bare data set calculated at the
+shifted energies (its data file shifted, the data set not).  A fixed shift keeps the single node at the shifted point's
+own energy: σ(E0 + s) to 1e-11.  A varied shift without a prior has a planned support 7 times the layer's (its reach is
+3 widths each side), still one node below about 2.4e14 at 0.6 MeV, its upper edge: σ at up to 7 T above E0 + s, 2e-6 off
+at 1e14 (3 T|σ′|/σ).  A 10 eV prior gives a planned support of many nodes and the depth integral (3.2e-7 = T/2 |σ′|/σ).
+Before, every shifted single-node point but s = 0 fixed was NaN.
+
+Not in the check: a prior of keV on this layer.  The planned support (± 3 prior widths) keeps the smooth step of the
+layer's own grid (its width over 20 points, quantized: about 3e-9 MeV), so a 3 keV prior asks for millions of nodes
+(28 GB after 3 minutes, stopped; 0.1 keV: 10.6 s and 2.4 GB).  And at −20 keV with a 10 eV prior the target-averaged
+σ is 6.2e-6 off (the yield 3.2e-7, as expected; +20 keV, −2 keV and 1e16 agree): not explained, listed in the
+follow-ups' report.

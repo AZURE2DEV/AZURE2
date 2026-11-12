@@ -109,6 +109,15 @@ ShiftedNodes ShiftedFoldNodes(const Unit &point, const WorkingCopy &data) {
                            " MeV is outside the point's planned nodes [" + std::to_string(energy(n)) + ", " +
                            std::to_string(energy(1)) + "] (ShiftedFold.h, question 2)");
   };
+  if (n == 1) {
+    // A single planned node, the exact upper edge of a planned support narrower than MeshZeroWidth(): the fold is the
+    // thin limit at the node whatever the shift (header, "A support narrower than ...").  The moved support lies inside
+    // the planned one, so at most MeshZeroWidth() below the node; anything else is a planning defect.
+    if (r.high - energy(1) > kNodeRounding) outside("upper", r.high);
+    if (energy(1) - r.low > MeshZeroWidth() + kNodeRounding) outside("lower", r.low);
+    r.count = 1;
+    return r;
+  }
   if (r.high > energy(1)) {
     if (r.high - energy(1) > kNodeRounding) outside("upper", r.high);
     r.high = energy(1);
