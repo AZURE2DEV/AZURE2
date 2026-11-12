@@ -3,6 +3,7 @@
 #include "ALevel.h"
 #include "JGroup.h"
 #include "PPair.h"
+#include "PolarizationFunc.h"
 #include <memory>
 #include "Profile.h"
 #include "AngCoeff.h"
@@ -360,6 +361,7 @@ void Unit::SetFrame(const azure2::experiment::FrameRow &row) {
   bin_low_cm_ = row.binLowCM;
   bin_high_cm_ = row.binHighCM;
   cm_angle_ = row.thetaCM;
+  frame_jacobian_ = row.jacobian;
 }
 
 /*!
@@ -491,18 +493,21 @@ void Site::SetTargetThickness(double targetThickness) {
   targetThickness_ = targetThickness;
 }
 
-/*!
- * Sets the angular distribution coefficients.
- */
-
-void Site::SetAngularDists(azure2::Results &results, vector_r dists) {
-  if (dists.size() > num_ang_slots_)
-    throw std::logic_error("Unit::SetAngularDists: " + std::to_string(dists.size()) + " coefficients, " +
-                           std::to_string(num_ang_slots_) + " result slots (segment " + std::to_string(segment_key_) +
-                           ")");
-  double *r = Rec(results) + azure2::Results::AngularOffset();
-  r[0] = (double)dists.size();
-  std::copy(dists.begin(), dists.end(), r + 1);
+void Unit::CopyAngularDistsToModel(azure2::Results &results) const {
+  if (!num_model_ang_) return;
+  double *to = results.model.data() + ModelRecord(results) + 1;
+  const double held = num_ang_slots_ ? Rec(results)[azure2::Results::AngularOffset()] : 0.0;
+  if (std::isnan(held)) {  // poisoned, never written: shows as such (GetNumModelAngularDists)
+    to[0] = held;
+    return;
+  }
+  if (!(held > 0.0) || std::isnan(GetAngDistA0(results))) {  // none, or a failed point (MarkFailed)
+    to[0] = 0.0;
+    return;
+  }
+  const int count = std::min<int>(num_model_ang_, Config::maxLOrder + 1);
+  to[0] = (double)count;
+  for (int k = 0; k < count; k++) to[1 + k] = CoefficientOfOrder(*this, results, k) / GetAngDistA0(results);
 }
 
 /*!
@@ -535,7 +540,7 @@ void Site::SetResultRecord(std::size_t slot, int nAng, int nNat) {
 }
 
 void Site::UsePrivateRecord(azure2::Results &scratch) {
-  const int nAng = this->ResultAngularCapacity();
+  const int nAng = this->ResultAngularCapacity(RecordCapacity{Config::maxLOrder + 1, 0});
   const int nNat = num_natural_slots_;
   scratch.slot.assign(azure2::Results::RecordSize(nAng, nNat), 0.0);
   // the caller's buffer of a new evaluation (a reaction-rate point): NaN under AZURE_POISON_RESULTS, as every other
@@ -557,6 +562,83 @@ void Unit::CalcLegendreP(WorkingCopy *data, int maxL, CNuc *theCNuc, const Targe
   Site::CalcLegendreP(data, maxL, theCNuc, targetEffect);
   for (int i = 1; i <= NumSubPoints(); i++)
     if (data->WritesSlot(*this, i)) GetSubPoint(*data, i)->CalcLegendreP(data, maxL, theCNuc, targetEffect);
+}
+
+void Unit::CalcNodeRows(const WorkingCopy &data, int maxL, CNuc *theCNuc, const TargetEffect *targetEffect,
+                        const azure2::experiment::FrameRule *labFrame) {
+  rowset_.reset();
+  rowset_at_ = 0;
+  if (!AngleFree() || IsCoefficient() || NumSubPoints() <= 0 || !theCNuc) return;
+  // The point's own row set over its slots, not cached (RowSet.h); WorkingCopy::BuildRowSets shares them.
+  ReadWithRowSet(SharedTable<azure2::RowSet>::Make(RowSetOver(data, SubPointFirst(), NumSubPoints(), maxL, theCNuc,
+                                                                targetEffect, labFrame)),
+                 0);
+}
+
+azure2::RowSet Unit::RowSetOver(const WorkingCopy &data, int first, int count, int maxL, CNuc *theCNuc,
+                                const TargetEffect *targetEffect, const azure2::experiment::FrameRule *labFrame) const {
+  azure2::RowSet set;
+  set.kind = Observable();
+  set.first = first;
+  set.count = count;
+  set.valuesPerSlot = kSiteObservables[(int)set.kind].values;
+  set.labFrame = labFrame != nullptr;
+  set.perSlot = set.labFrame || (maxL >= 0 && RowDependsOnEnergy(theCNuc, targetEffect));
+  const int positions = set.perSlot ? count : 1;
+  if (!set.labFrame) {
+    set.angles.assign(1, GetCMAngle());
+  } else {
+    // a lab angle: theta_cm(E_n; theta_lab) and J(E_n; theta_lab) at each slot's energy (energy_grid.md 4.3); NaN at
+    // a slot where the lab angle is beyond the kinematic maximum (a margin node of a shift's reach, say): a fold that
+    // reads it is a failed point (FoldPoint), one that does not is unaffected
+    set.frame = *labFrame;
+    set.thetaLab = GetLabAngle();
+    set.angles.resize((std::size_t)count);
+    set.jacobian.resize((std::size_t)count);
+    for (int k = 0; k < count; k++) {
+      azure2::experiment::AngleLimit lim;
+      if (!azure2::experiment::LabAngleAt(set.frame, data.SlotAt(first + k).GetCMEnergy(), set.thetaLab,
+                                          set.angles[k], set.jacobian[k], lim))
+        set.angles[k] = set.jacobian[k] = std::numeric_limits<double>::quiet_NaN();
+    }
+  }
+  if (!set.perSlot) {
+    set.rowLength = legendreP_->size();
+    set.rows = *legendreP_;
+  } else {
+    set.rowLength = (std::size_t)std::max(maxL + 1, 0);
+    set.rows.resize(set.rowLength * (std::size_t)count);
+    for (int k = 0; k < count; k++)
+      LegendreRowAt(data.SlotAt(first + k).GetCMEnergy(), set.AngleAt(k), maxL, theCNuc, targetEffect,
+                    set.rows.data() + (std::size_t)k * set.rowLength);
+  }
+  if (set.kind == SiteObservable::kAnalyzingPower) {
+    // the factors of A_y at the readers' angle: Y_l'^mu (particle exits) and P_k^1 (capture)
+    PPair *in = theCNuc->GetPair(theCNuc->GetPairNumFromKey(GetEntranceKey()));
+    PPair *out = theCNuc->GetPair(theCNuc->GetPairNumFromKey(GetExitKey()));
+    set.muMax = Polarization::MaxProjection(in->GetJ(1), in->GetJ(2), out->GetJ(1), out->GetJ(2));
+    set.p1.assign(set.rowLength * (std::size_t)positions, 0.0);
+    vector_c table;
+    for (int k = 0; k < positions; k++) {
+      const double theta = set.AngleAt(k) * pi / 180.0;
+      Polarization::HarmonicTable(theta, Config::maxLOrder, set.muMax, table);
+      set.harmonicsLength = table.size();
+      set.harmonics.insert(set.harmonics.end(), table.begin(), table.end());
+      double *p1 = set.p1.data() + (std::size_t)k * set.rowLength;
+      for (std::size_t l = 1; l < set.rowLength; l++) p1[l] = AngCoeff::LegendreP1((int)l, std::cos(theta));
+    }
+  }
+  if (set.kind == SiteObservable::kElastic ||
+      (set.kind == SiteObservable::kAnalyzingPower && GetEntranceKey() == GetExitKey())) {
+    // f_C depends on the energy: at the readers' angle and the energies of the slots
+    PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(GetEntranceKey()));
+    set.coulomb.resize(2 * (std::size_t)count);
+    bool spinDependent = false;
+    for (int k = 0; k < count; k++)
+      CoulombAmplitudesAt(pair, data.SlotAt(first + k).GetCMEnergy(), set.AngleAt(k), set.coulomb[2 * (std::size_t)k],
+                          set.coulomb[2 * (std::size_t)k + 1], spinDependent);
+  }
+  return set;
 }
 
 void Unit::CalcEDependentValues(WorkingCopy *data, CNuc *theCNuc, const Config &configure, const ChannelRowSource *rows) {

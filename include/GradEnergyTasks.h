@@ -41,6 +41,10 @@ struct UnitCotangent {
   /// shared by several points (SlotGroup.h) has a cotangent per reader, and a T-matrix group sums its cotangents in
   /// the order of their readers' plan tasks -- the order the sum had with one slot per point.
   int reader;
+  /// The point whose row reads the unit's observable where the unit is a slot holding Legendre coefficients (its
+  /// angle, Legendre rows, coefficient order: Site::ValueFor); null where the unit's own angle is the reader's.
+  const Site *rows = nullptr;
+  int rowSlot = 0;  ///< the unit's number among the slots of `rows` (1-based; Site::RowP)
 };
 
 /// One data point of a gradient pass, `row` its index among the pass's points.

@@ -96,8 +96,7 @@ __attribute__((noinline)) void LegendreSeries(int n, double x, double *p) {
  * g^2 = m1 m3 E / (m2 m4 (E + Q)) (E the c.m. energy; the same g as ConvertLabAngle's a13/a24); relativistic=1:
  * the c.m. boost gamma and beta / beta_3* of RelativisticLabToCM.  Returns false where the transform is not used.
  */
-bool Site::QLabBoost(PPair *entrancePair, PPair *exitPair, double &g, double &gb) const {
-  const double ti = this->GetCMEnergy();
+bool Site::QLabBoostAt(double ti, PPair *entrancePair, PPair *exitPair, double &g, double &gb) const {
   const double tf = ti + entrancePair->GetSepE() + entrancePair->GetExE() - exitPair->GetSepE() - exitPair->GetExE();
   if (ti <= 0.0 || tf <= 0.0) return false;
   if (Kinematics::Relativistic()) {
@@ -135,45 +134,69 @@ bool Site::QLabBoost(PPair *entrancePair, PPair *exitPair, double &g, double &gb
  */
 
 void Site::CalcLegendreP(WorkingCopy *data, int maxL, CNuc *theCNuc, const TargetEffect *targetEffect) {
+  if (theCNuc) {
+    const int entrance = theCNuc->GetPairNumFromKey(this->GetEntranceKey());
+    if (entrance > 0)
+      entrance_symmetry_ = LegendreSymmetryFactor(*theCNuc->GetPair(entrance), GetEntranceKey() == GetExitKey());
+  }
+  // A slot holding Legendre coefficients has no angle: its readers' rows apply them (ValueFor).
+  if (is_sub_point_ && AngleFree()) return;
   if (maxL >= 0) {
     std::vector<double> p(maxL + 1);
-    const double x = cos(this->GetCMAngle() * pi / 180.0);
-    LegendreSeries(maxL, x, p.data());
-    const int numQ = targetEffect ? targetEffect->NumQCoefficients() : 0;
-    if (numQ > 0) {
-      PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
-      PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
-      const bool elastic = this->GetEntranceKey() == this->GetExitKey();
-      const bool charged = entrancePair->GetZ(1) != 0 && entrancePair->GetZ(2) != 0;
-      double g = 0.0, gb = 1.0;
-      const bool labTransform = entrancePair->GetPType() == 0 && exitPair->GetPType() == 0 && !this->IsUPOS() &&
-          !this->IsAnalyzingPower() && !(elastic && charged) && this->QLabBoost(entrancePair, exitPair, g, gb);
-      if (!labTransform) {
-        for (int l = 0; l <= maxL && l < numQ; l++) p[l] *= targetEffect->GetQCoefficient(l);
-      } else {
-        const GaussLegendreRule &rule = QTransformRule();
-        const int n = static_cast<int>(rule.x.size());
-        auto toLab = [g, gb](double c) { return gb * (c + g) / sqrt(gb * gb * (c + g) * (c + g) + 1.0 - c * c); };
-        const double jac = gb * (1.0 + g * x) / pow(gb * gb * (g + x) * (g + x) + 1.0 - x * x, 1.5);
-        std::vector<double> pc((maxL + 1) * n), pl(numQ * n), pK(numQ);
-        for (int i = 0; i < n; i++) {
-          LegendreSeries(maxL, rule.x[i], &pc[i * (maxL + 1)]);
-          LegendreSeries(numQ - 1, toLab(rule.x[i]), &pl[i * numQ]);
-        }
-        LegendreSeries(numQ - 1, toLab(x), pK.data());
-        std::vector<double> add(maxL + 1, 0.0);
-        for (int K = 0; K < numQ; K++) {
-          const double dq = targetEffect->GetQCoefficient(K) - 1.0;
-          if (dq == 0.0) continue;
-          const double f = jac * dq * pK[K] * (2.0 * K + 1.0) / 2.0;
-          for (int i = 0; i < n; i++) {
-            const double wk = f * rule.w[i] * pl[i * numQ + K];
-            for (int l = 0; l <= maxL; l++) add[l] += wk * pc[i * (maxL + 1) + l];
-          }
-        }
-        for (int l = 0; l <= maxL; l++) p[l] += add[l];
-      }
-    }
+    this->LegendreRowAt(this->GetCMEnergy(), maxL, theCNuc, targetEffect, p.data());
     for (int l = 0; l <= maxL; l++) this->AddLegendreP(p[l]);
+  }
+}
+
+bool Site::RowDependsOnEnergy(CNuc *theCNuc, const TargetEffect *targetEffect) const {
+  if (!targetEffect || targetEffect->NumQCoefficients() <= 0 || !theCNuc) return false;
+  PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
+  PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
+  const bool elastic = this->GetEntranceKey() == this->GetExitKey();
+  const bool charged = entrancePair->GetZ(1) != 0 && entrancePair->GetZ(2) != 0;
+  return entrancePair->GetPType() == 0 && exitPair->GetPType() == 0 && !this->IsUPOS() && !this->IsAnalyzingPower() &&
+         !(elastic && charged);
+}
+
+void Site::LegendreRowAt(double cmEnergy, int maxL, CNuc *theCNuc, const TargetEffect *targetEffect, double *p) const {
+  this->LegendreRowAt(cmEnergy, this->GetCMAngle(), maxL, theCNuc, targetEffect, p);
+}
+
+void Site::LegendreRowAt(double cmEnergy, double cmAngle, int maxL, CNuc *theCNuc, const TargetEffect *targetEffect,
+                         double *p) const {
+  const double x = cos(cmAngle * pi / 180.0);
+  LegendreSeries(maxL, x, p);
+  const int numQ = targetEffect ? targetEffect->NumQCoefficients() : 0;
+  if (numQ > 0) {
+    PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
+    PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
+    double g = 0.0, gb = 1.0;
+    const bool labTransform =
+        this->RowDependsOnEnergy(theCNuc, targetEffect) && this->QLabBoostAt(cmEnergy, entrancePair, exitPair, g, gb);
+    if (!labTransform) {
+      for (int l = 0; l <= maxL && l < numQ; l++) p[l] *= targetEffect->GetQCoefficient(l);
+    } else {
+      const GaussLegendreRule &rule = QTransformRule();
+      const int n = static_cast<int>(rule.x.size());
+      auto toLab = [g, gb](double c) { return gb * (c + g) / sqrt(gb * gb * (c + g) * (c + g) + 1.0 - c * c); };
+      const double jac = gb * (1.0 + g * x) / pow(gb * gb * (g + x) * (g + x) + 1.0 - x * x, 1.5);
+      std::vector<double> pc((maxL + 1) * n), pl(numQ * n), pK(numQ);
+      for (int i = 0; i < n; i++) {
+        LegendreSeries(maxL, rule.x[i], &pc[i * (maxL + 1)]);
+        LegendreSeries(numQ - 1, toLab(rule.x[i]), &pl[i * numQ]);
+      }
+      LegendreSeries(numQ - 1, toLab(x), pK.data());
+      std::vector<double> add(maxL + 1, 0.0);
+      for (int K = 0; K < numQ; K++) {
+        const double dq = targetEffect->GetQCoefficient(K) - 1.0;
+        if (dq == 0.0) continue;
+        const double f = jac * dq * pK[K] * (2.0 * K + 1.0) / 2.0;
+        for (int i = 0; i < n; i++) {
+          const double wk = f * rule.w[i] * pl[i * numQ + K];
+          for (int l = 0; l <= maxL; l++) add[l] += wk * pc[i * (maxL + 1) + l];
+        }
+      }
+      for (int l = 0; l <= maxL; l++) p[l] += add[l];
+    }
   }
 }

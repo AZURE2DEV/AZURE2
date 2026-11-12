@@ -502,25 +502,22 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
   int nsp = point->NumSubPoints();
   if (nsp <= 0) return true;
 
-  const bool isAy = point->IsAnalyzingPower();
-  // A normalised Legendre coefficient under a target effect is the same ratio structure as A_y, with A_0 = sigma_int / 4 pi
-  // in place of the differential cross section:  <a_k> = sum c_i A0_i a_i / sum c_i A0_i  (Unit::FoldSubPoints),
-  //   d<a_k> = sum c_i [ A0_i da_i + (a_i - <a_k>) dA0_i ] / D,
-  // an a_k cotangent fitBar c_i A0_i / D (PointTBar's coefficient form) and an A_0 cotangent fitBar c_i (a_i - <a_k>) / D
-  // (PointTBar with xsComponent -1).  An absolute A_k is linear in the sub-point values and takes the plain route.
-  const bool isCoefNorm = point->IsCoefficient() && !point->GetCoefficientAbsolute();
-  if (isCoefNorm && xsComponent != 0) return false;
-  if (isAy) {
+  // A ratio (Unit::FoldsRatio: A_y over its cross section, a normalised coefficient a_k over A_0) is
+  //   <r> = N / D,  N = sum c_i w_i r_i,  D = sum c_i w_i,   d<r> = sum c_i [ w_i dr_i + (r_i - <r>) dw_i ] / D:
+  // an element cotangent fitBar c_i w_i / D (PointTBar on the observable) and a weight cotangent
+  // fitBar c_i (r_i - <r>) / D on the weight's route (Unit::RatioWeightRoute).  Anything else is linear in the slots.
+  const bool ratio = point->FoldsRatio();
+  if (ratio && xsComponent != 0) return false;
+  if (point->IsAnalyzingPower()) {
     // Supported: particle-exit A_y, full observable (every point's sub-points are units of the point pass, with their
     // own records).  Capture A_y keeps its refusal: the attenuation folded into P_k has no counterpart for the P_k^1
     // of the numerator.
-    if (xsComponent != 0) return false;
     const int exitPairNum = compound->GetPairNumFromKey(point->GetExitKey());
     if (compound->GetPair(exitPairNum)->GetPType() != 0) return false;
   }
 
   std::vector<double> sigma(nsp);
-  for (int i = 1; i <= nsp; i++) sigma[i - 1] = point->GetSubPoint(data, i)->GetFitCrossSection(results);
+  for (int i = 1; i <= nsp; i++) sigma[i - 1] = point->SlotValue(*point->GetSubPoint(data, i), i, results);
   double model = point->GetFitCrossSection(results);
 
   const auto tc0 = std::chrono::steady_clock::now();
@@ -567,28 +564,19 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
                 << " vs integrator " << yI << std::endl;
     }
   }
-  // For A_y: the denominator D and the average <A>, from the same integrator
-  // calls the forward pass makes.
+  // For a ratio: its weights, elements, the denominator D and the average <r>, from the same integrator calls the
+  // forward pass makes.
   double den = 0.0, avg = 0.0;
-  if (isAy) {
-    den = FoldValues(*point, data, config, sigma);
-    std::vector<double> product(nsp);
-    for (int i = 1; i <= nsp; i++) product[i - 1] = sigma[i - 1] * point->GetSubPoint(data, i)->GetAnalyzingPower(results);
+  std::vector<double> weight, element, product;
+  if (ratio) {
+    weight.resize(nsp), element.resize(nsp), product.resize(nsp);
+    for (int i = 1; i <= nsp; i++) {
+      point->RatioPartsAt(data, i, results, weight[i - 1], element[i - 1]);
+      product[i - 1] = weight[i - 1] * element[i - 1];
+    }
+    den = FoldValues(*point, data, config, weight);
     const double num = FoldValues(*point, data, config, product);
     // The forward pass returns 0 for D = 0, a constant: no gradient.
-    if (!(std::fabs(den) > 0.0)) {
-      point->SetFitCrossSection(results, model);
-      return true;
-    }
-    avg = num / den;
-  } else if (isCoefNorm) {
-    std::vector<double> a0(nsp), product(nsp);
-    for (int i = 1; i <= nsp; i++) {
-      a0[i - 1] = point->GetSubPoint(data, i)->GetAngDistA0(results);
-      product[i - 1] = sigma[i - 1] * a0[i - 1];
-    }
-    den = FoldValues(*point, data, config, a0);
-    const double num = FoldValues(*point, data, config, product);
     if (!(std::fabs(den) > 0.0)) {
       point->SetFitCrossSection(results, model);
       return true;
@@ -601,13 +589,8 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
   if (const int dk = data.Data().DopplerParamOfEffect(point->GetTargetEffectNum())) {
     std::vector<double> vals(nsp);
     double dT = 0.0;
-    if (isAy || isCoefNorm) {
-      std::vector<double> weight(nsp);
-      for (int i = 1; i <= nsp; i++)
-        weight[i - 1] = isAy ? sigma[i - 1] : point->GetSubPoint(data, i)->GetAngDistA0(results);
-      for (int i = 1; i <= nsp; i++)
-        vals[i - 1] = weight[i - 1] * (isAy ? point->GetSubPoint(data, i)->GetAnalyzingPower(results) : sigma[i - 1]);
-      const double dN = FoldTemperatureDerivative(*point, data, config, vals);
+    if (ratio) {
+      const double dN = FoldTemperatureDerivative(*point, data, config, product);
       const double dD = FoldTemperatureDerivative(*point, data, config, weight);
       dT = (dN - avg * dD) / den;
     } else {
@@ -616,7 +599,7 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
         vals[i - 1] = (xsComponent == 1) ? sp->GetFitE1CrossSection(results)
                       : (xsComponent == 2) ? sp->GetFitE2CrossSection(results) : sigma[i - 1];
       }
-      dT = FoldTemperatureDerivative(*point, data, config, vals);
+      dT = point->LabFoldFactor() * FoldTemperatureDerivative(*point, data, config, vals);
     }
     accum.AddDoppler(dk, fitBar * dT);
   }
@@ -624,19 +607,23 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
   g_teCombinerNs += std::chrono::duration_cast<std::chrono::nanoseconds>(tc1 - tc0).count();
 
   auto emit = [&](int i, double value, int component, bool ayCrossSection) {
-    if (value != 0.0) out.push_back({data.SlotSite(*point, i), row, value, component, ayCrossSection, point->PlanTask()});
+    if (value != 0.0)
+      out.push_back({data.SlotSite(*point, i), row, value, component, ayCrossSection, point->PlanTask(), point, i});
   };
+  // Read through a lab-frame row set (RowSet.h) a slot's value is its observable over J_i and the fold is multiplied
+  // by the point's own Jacobian: the cotangent of the observable is the slot's times LabFoldFactor / J_i (both 1
+  // otherwise); a ratio's element (A_y) is not divided, its weight (the cross section) is.
+  const double labFactor = point->LabFoldFactor();
+  int weightComponent = 0;
+  bool weightAy = false;
+  if (ratio) point->RatioWeightRoute(weightComponent, weightAy);
   for (int i = 1; i <= nsp; i++) {
     if (c[i - 1] == 0.0) continue;
-    Site *sp = point->GetSubPoint(data, i);
-    if (!isAy && !isCoefNorm) {
-      emit(i, fitBar * c[i - 1], xsComponent, false);
-    } else if (isCoefNorm) {
-      emit(i, fitBar * c[i - 1] * sp->GetAngDistA0(results) / den, 0, false);
-      emit(i, fitBar * c[i - 1] * (sigma[i - 1] - avg) / den, -1, false);
+    if (!ratio) {
+      emit(i, fitBar * c[i - 1] * labFactor / point->SlotJacobian(i), xsComponent, false);
     } else {
-      emit(i, fitBar * c[i - 1] * sigma[i - 1] / den, 0, false);
-      emit(i, fitBar * c[i - 1] * (sp->GetAnalyzingPower(results) - avg) / den, 0, true);
+      emit(i, fitBar * c[i - 1] * weight[i - 1] / den, 0, false);
+      emit(i, fitBar * c[i - 1] * (element[i - 1] - avg) / den / point->SlotJacobian(i), weightComponent, weightAy);
     }
   }
   return true;
@@ -674,18 +661,18 @@ bool azure2::PointCotangents(WorkingCopy &data, const GradPoint &p, CNuc *compou
   ModelCotangents c;
   if (!ModelPointBackward(data, *p.segment, p.pointIdx, compound, config, results, fitBar, c)) return false;
   AddParamCotangents(c, p.segment, p.point, data, p.segNum, compound, params);
-  auto emit = [&](const Unit *reader, const Site *u, double value, int component) {
-    if (value != 0.0) out.push_back({data.SiteIndex(u), row, value, component, false, reader->PlanTask()});
+  auto emit = [&](const Unit *reader, const Site *u, int slot, double value, int component) {
+    if (value != 0.0) out.push_back({data.SiteIndex(u), row, value, component, false, reader->PlanTask(), reader, slot});
   };
   if (c.subPoints) {
     for (const ModelCotangents::Leaf &l : c.leaves)
-      for (std::size_t k = 0; k < l.sub.size(); k++) emit(l.point, l.point->GetSubPoint(data, (int)k + 1), l.sub[k], l.xsComponent);
+      for (std::size_t k = 0; k < l.sub.size(); k++) emit(l.point, l.point->GetSubPoint(data, (int)k + 1), (int)k + 1, l.sub[k], l.xsComponent);
     return true;
   }
   for (const ModelCotangents::Leaf &l : c.leaves) {
     if (l.cotangent == 0.0) continue;
     if (!HasSubPointFold(data, *l.point))
-      emit(l.point, l.point, l.cotangent, l.xsComponent);
+      emit(l.point, l.point, 0, l.cotangent, l.xsComponent);
     else if (!GradTargetEffectAdjoint(data, l.point, results, l.cotangent, params, l.xsComponent, compound, config, row,
                                       out))
       return false;

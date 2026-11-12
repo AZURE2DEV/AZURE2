@@ -354,5 +354,25 @@ bool ConvertRow(const FrameRule &r, double eLab, double thetaLab, double binLowL
   return inRange;
 }
 
+bool AngleIsLab(const FrameRule &rule) {
+  return rule.labDifferential && (rule.exitKind == ExitKind::Particle || rule.exitKind == ExitKind::Photon);
+}
+
+bool LabAngleAt(const FrameRule &rule, double eCM, double thetaLab, double &thetaCM, double &jacobian,
+                AngleLimit &lim) {
+  lim = AngleLimit();
+  thetaCM = thetaLab;
+  jacobian = 1.0;
+  if (rule.betaDelayed) return false;
+  FrameRule withValue = rule;
+  withValue.convertValue = true;
+  const double eLab = BeamLabFromCM(rule.entrance, eCM, rule.relativistic);
+  FrameRow row = UnconvertedRow(eLab, thetaLab, eLab, eLab);
+  const bool inRange = ConvertRow(withValue, eLab, thetaLab, eLab, eLab, true, row, lim);
+  thetaCM = row.thetaCM;
+  jacobian = row.jacobian;
+  return inRange && std::isfinite(jacobian) && jacobian > kMinLabJacobian;
+}
+
 }  // namespace experiment
 }  // namespace azure2

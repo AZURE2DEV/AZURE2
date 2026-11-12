@@ -167,6 +167,22 @@ void ConvertRowEnergy(const FrameRule &rule, double eLab, double binLowLab, doub
 /// Merge what a later angle map reported into `into`: a maximum and a reason replace earlier ones when set.
 void Merge(AngleLimit &into, const AngleLimit &from);
 
+/// Whether rows converted with `rule` are given at a lab angle: lab-frame differential data with a particle or photon
+/// exit, whose c.m. angle ConvertRow takes from the lab angle (and so depends on the energy).
+bool AngleIsLab(const FrameRule &rule);
+
+/*!
+ * The c.m. angle (deg) and the Jacobian dOmega_lab/dOmega_cm of lab angle thetaLab (deg) at the c.m. energy eCM (MeV)
+ * of the entrance pair, for the rows of `rule` (AngleIsLab): ConvertRow at the beam's lab energy BeamLabFromCM(eCM),
+ * from the unconverted row, with the value converted whatever the rule says (the Jacobian of the cross section, also
+ * where the datum is a ratio).  The kinematics of a folded lab-frame point at one node of its fold (docs/upgrade/
+ * energy_grid.md section 4.3): at the point's own energy it is the point's angle and Jacobian, to rounding.  False
+ * where the lab angle is beyond the kinematic maximum there, the Jacobian is not above kMinLabJacobian (`lim` says why
+ * for the first), or the rule is a decay's (no beam).
+ */
+bool LabAngleAt(const FrameRule &rule, double eCM, double thetaLab, double &thetaCM, double &jacobian,
+                AngleLimit &lim);
+
 }  // namespace experiment
 }  // namespace azure2
 

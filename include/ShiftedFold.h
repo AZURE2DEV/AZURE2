@@ -57,10 +57,11 @@ struct Results;
  *      measured, translated with the beam energy.  The gather gives the kernel epsilon(E_n - Delta_i) at each node
  *      (TranslatedStopping), from the target's stopping and the copy's stopping scale: the point's, not the site's,
  *      which keeps epsilon(E_n) for every unshifted reader.  At Delta_i = 0 it is the site's value bit for bit.
- *    - the c.m. angle of a lab-frame differential point, which the point converts at its own shifted energy
- *      (Segment::ConvertRowToCM).  The sites of its sharing group carry that angle (the Legendre rows and the Coulomb
- *      amplitude, recomputed by the slot's writer when the angle changes; the channel rows stay); the group key holds
- *      the point's nominal lab energy, so that every reader of a block has the same angle at every nu.
+ *    - the Jacobian of a point given at a lab angle, which the point converts at its own shifted energy
+ *      (Segment::ConvertRowToCM) and multiplies its lab fold by (Unit::LabFoldFactor).  Its c.m. angle at a node is
+ *      not the point's: it is theta_cm(E_n; theta_lab), a function of the node's energy and the lab angle, held by the
+ *      row set shared by every reader of that lab angle (RowSet.h, energy_grid.md section 4.3), so the shift does not
+ *      move it.
  *    - nothing else: the node's energies, channel rows, Q coefficients (a function of the node energy), screening and
  *      external-capture amplitudes are the node's.  The kernel's own nu dependence (its centre E0 = the point's
  *      shifted c.m. energy; a beam-spread formula sigma(E) at the shifted depth energies) is in the kernel's input,
@@ -77,9 +78,8 @@ struct Results;
  *    implementation of each fold); no node is recomputed and no level matrix solved.  Kinds of shift enter through
  *    Delta_i(nu) only.  An analytic dK/dE0 is not within reach of this branch: it would need every kernel's energy
  *    arithmetic (its centre in sigma(E0), the clip limits, the Gaussian, the depth window) on a dual type, the kernels'
- *    folds beyond their centre; open for every kernel.  Exception: a lab-frame differential segment, whose node values
- *    depend on nu through the angle: its column recomputes the observables of its sites at the moved angle (channel
- *    rows kept), as before; open for the branch of observables per node (Legendre coefficients at the nodes).
+ *    folds beyond their centre; open for every kernel.  A segment given at a lab angle is no exception: its node
+ *    values and its row sets do not depend on the shift, only its points' own Jacobians.
  *
  * A support narrower than MeshZeroWidth() (a layer losing less than 1 eV) gets a single node from the planner, and
  * the fold of a single node is the kernels' thin limit (Kernel::thinLimit).  A shifted point with a reach has a
@@ -134,7 +134,7 @@ void TranslatedStopping(const Unit &point, const WorkingCopy &data, const Config
                         std::vector<double> &stopping);
 
 /// Whether the node values of `segment`'s folded points do not depend on its shift (question 5): every point of every
-/// term folded on the shared mesh, and not a lab-frame differential segment.
+/// term folded on the shared mesh.
 bool FoldOnlyShift(const WorkingCopy &data, const Segment &segment);
 /// The central difference of a shift on the fixed nodes (question 5): if FoldOnlyShift holds for every one of
 /// `segments` (their points moved to a new shift), each of their folded points is folded again from the node values in

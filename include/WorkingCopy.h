@@ -165,6 +165,26 @@ class WorkingCopy {
   void PrintData(const Config &);
   /// Unit::CalcLegendreP for every point.
   void CalcLegendreP(int, CNuc *);
+  /*!
+   * The row sets of the readers of angle-free slots (RowSet.h): readers of one block with the same angular identity
+   * (kind, c.m. and lab angle bits, Q-coefficient effect, entrance pair) share one set over the union of their slots,
+   * whose contracted values get their place in Results::contracted.  At the set-up and whenever slots are placed
+   * again (the hand-over); a point that is not a reader holds none.
+   */
+  void BuildRowSets(CNuc *, const Config &);
+  /// The conversion of every unit whose term's angle is given in the lab (Segment::TermFrameRule, experiment::
+  /// AngleIsLab): rules[ruleOf[u]] for unit u, -1 for a unit of a term without one.
+  std::vector<int> LabFrameRules(CNuc *, std::vector<azure2::experiment::FrameRule> &rules) const;
+  /// The contracted values of every row set into `results` (Results::contracted): one task per set, after the energy
+  /// pass and before the folds (CalculatePointsInParallel).
+  void ContractRowSets(azure2::Results &results) const;
+  /// The contracted values of `point`'s slots in its row set (a point calculated on its own: Unit::Calculate).
+  void ContractRowSetOf(const Unit &point, azure2::Results &results) const;
+  int NumRowSets() const { return (int)rowSets_.size(); }
+  /// What the records of the reactions of the compound must hold room for (Site::ResultAngularCapacity), set at the
+  /// set-up: one more than their largest Legendre order (the pathway table's exits; at most Config::maxLOrder + 1)
+  /// and the largest number of channel-spin amplitudes of a reaction between particle pairs.
+  const RecordCapacity &Capacity() const { return capacity_; }
   void PrintLegendreP(const Config &);
   /// Unit::CalcEDependentValues for every point -- penetrabilities, shifts and Coulomb phases at each energy.
   int CalcEDependentValues(CNuc *, const Config &);
@@ -225,6 +245,14 @@ class WorkingCopy {
   /// point on a shared mesh has at its slot k the node the mesh's plan for the present anchors gives it at k.  Prints
   /// the counts (and up to ten breaches) to stderr; returns the number of breaches.
   long CheckSlotGroups() const;
+  /// Part of CheckNodeTable (src/WorkingCopyUnits.cpp): every reader of slots without an angle (Site::AngleFree) reads,
+  /// at each slot, from its row set (RowSet.h) the angle (its own, or for data given at a lab angle theta_cm(E_n;
+  /// theta_lab) and the Jacobian, experiment::LabAngleAt at the slot's lab energy), the angular row, the Coulomb
+  /// amplitudes and the A_y factors at that angle and the slot's energy (Site::SlotAngle, SlotJacobian, RowP,
+  /// CoulombAt), bit for bit as LabAngleAt, Site::LegendreRowAt, CoulombAmplitudesAt, Polarization::HarmonicTable give
+  /// them there, and its slots lie in the set's range.  Reported on a line of its own; returns the number of slots
+  /// that differ.
+  long CheckReaderRows(CNuc *cnuc) const;
   /// The slots of every plan task in this copy (NodeTable.h): the stage table's until the hand-over moves a unit off it.
   const azure2::NodeSlots *Slots() const { return nodes_.slots.get(); }
   /// The copy's overflow table (NodeTable.h): the nodes of its units that the stage table does not hold.
@@ -390,6 +418,7 @@ class WorkingCopy {
   /// values and the objective's per-segment and per-experiment values.
   void SizeResults(azure2::Results &results) const {
     results.slot.resize(resultsSize_, 0.0);
+    results.contracted.resize(contractedSize_, 0.0);
     results.model.resize(modelSize_, 0.0);
     results.objective.norm.resize(Data().NumSegments() + 1, 0.0);
     results.objective.segmentChi2.resize(Data().NumSegments() + 1, 0.0);
@@ -534,6 +563,10 @@ class WorkingCopy {
   /// segments (Results.h, LayoutResults; the data set holds the layout, never the values), and its model values
   /// (Results::model).
   std::size_t resultsSize_ = 0, modelSize_ = 0;
+  RecordCapacity capacity_;  // Capacity
+  /// The shared row sets (BuildRowSets; immutable, shared by the copies) and the length of Results::contracted.
+  std::vector<SharedTable<azure2::RowSet>> rowSets_;
+  std::size_t contractedSize_ = 0;
   /// One record per point and slot, in the order of the segments' points then the leaves', each point before the slots
   /// it writes (WritesSlot): each gets its offset (Unit::SetResultRecord); and one model record per point of segments_
   /// (Unit::SetModelRecord).  With `results`, the buffer of the layout the points

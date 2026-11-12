@@ -144,7 +144,9 @@ void TranslatedStopping(const Unit &point, const WorkingCopy &data, const Config
 }
 
 bool FoldOnlyShift(const WorkingCopy &data, const Segment &segment) {
-  if (!segment.IsTargetEffect() || (segment.IsDifferential() && !segment.IsCMDifferential())) return false;
+  if (!segment.IsTargetEffect()) return false;
+  // The node values do not depend on the shift; neither does the row set of a point given at a lab angle (its c.m.
+  // angle at a node is a function of the node's energy and the lab angle, RowSet.h), only the point's own Jacobian.
   for (int t = 0; t < segment.NumTerms(); t++)
     for (const Unit &point : segment.TermPoints(data, t))
       if (!IsShiftedOnMesh(point, data) || !HasSubPointFold(data, point)) return false;

@@ -87,12 +87,10 @@ class Unit : public Site {
     return std::isnan(n) ? (int)num_model_ang_ : (int)n;
   }
   double GetModelAngularDist(const azure2::Results &r, int k) const { return r.model[ModelRecord(r) + 2 + k]; }
-  /// Copy the leaf record's angular-distribution count and coefficients into the model record (EvaluateModelPoint).
-  void CopyAngularDistsToModel(azure2::Results &r) const {
-    if (!num_model_ang_) return;
-    const double *from = Rec(r) + azure2::Results::AngularOffset();
-    std::copy(from, from + 1 + std::min<int>(num_model_ang_, num_ang_slots_), r.model.begin() + ModelRecord(r) + 1);
-  }
+  /// The coefficients a_k = B_k / (f A_0) of the point's angular distribution, k = 0 .. max_ang_dist_order, from the
+  /// Legendre coefficients its record holds, into the model record (EvaluateModelPoint).  A record without them (a
+  /// failed point) gives none.
+  void CopyAngularDistsToModel(azure2::Results &r) const;
   /// Calculate the point (its sub-points and its fold) for the current parameters, outside the energy pass
   /// (WorkingCopy::CalculatePointsInParallel), writing the values into `results`, the buffer of the evaluation laid out
   /// by `data`, the data set that holds the point (its target effects give the fold).  One solve at the point's energy,
@@ -111,6 +109,21 @@ class Unit : public Site {
   const Site &OwnSite() const { return *this; }
   /// The Site functions of the same names for the point's own site and then for each slot of its fold, in order.
   void CalcLegendreP(WorkingCopy *data, int maxL, CNuc *, const TargetEffect *);
+  /// A row set of the point's own over its slots (RowSet.h, not cached), where it reads angle-free slots; after its
+  /// own rows and whenever its slots move (a grid of its own moved by an energy shift).  WorkingCopy::BuildRowSets
+  /// replaces it by a shared one.  `labFrame`: its term's conversion where its angle is given in the lab, else null.
+  void CalcNodeRows(const WorkingCopy &data, int maxL, CNuc *, const TargetEffect *,
+                    const azure2::experiment::FrameRule *labFrame);
+  /// The rows of the point's angular identity over the slots [first, first + count) of `data` (RowSet.h; its own
+  /// Legendre rows, or per slot where they depend on the energy, f_C per slot for elastic scattering; with `labFrame`,
+  /// the conversion of a lab angle, the c.m. angle and the Jacobian of every slot, NaN at a slot where the lab angle is
+  /// beyond the kinematic maximum: a fold that reads it is a failed point, FoldPoint).
+  azure2::RowSet RowSetOver(const WorkingCopy &data, int first, int count, int maxL, CNuc *, const TargetEffect *,
+                            const azure2::experiment::FrameRule *labFrame) const;
+  /// The factor of a fold read through a lab-frame row set (RowSet.h): the point's own dOmega_lab/dOmega_cm as its
+  /// frame holds it (SetFrame; 1 for a ratio), so that the fold, a lab value, is the c.m. value the point's comparison
+  /// divides by the same Jacobian.  1 for every other point.
+  double LabFoldFactor() const { return (RowSetOf() && RowSetOf()->labFrame) ? frame_jacobian_ : 1.0; }
   void CalcEDependentValues(WorkingCopy *data, CNuc *, const Config &, const ChannelRowSource *rows = nullptr);
   void ChannelKeys(WorkingCopy *data, CNuc *, std::vector<ChannelTable::Key> &);
   void CalcCoulombAmplitude(WorkingCopy *data, CNuc *);
@@ -124,8 +137,18 @@ class Unit : public Site {
   /// The point's slots, a range of the slots of its working copy (WorkingCopy::SlotAt); set by the working copy.
   int SubPointFirst() const { return sub_first_; }
   void SetSubPointRange(int first, int count) { sub_first_ = first, sub_count_ = count; }
-  /// The fold of this point from its slots' values already in `results` (FoldPoint, include/PointFold.h; an analyzing
-  /// power and a normalised Legendre coefficient are the ratio of two folds).
+  /// Whether the point's fold is a ratio of two folds with the same kernel, (K.(w r))/(K.w): a kind with two values per
+  /// slot (SiteObservableRow::values, A_y over its cross section) or a normalised Legendre coefficient (a_k over A_0).
+  bool FoldsRatio() const;
+  /// The weight w and the ratio's element r of the point's slot `slot` (1-based) for FoldsRatio: the slot's values
+  /// (SlotValue, SlotAnalyzingPower; for a coefficient A_0 and a_k).
+  void RatioPartsAt(const WorkingCopy &data, int slot, const azure2::Results &results, double &weight,
+                    double &element) const;
+  /// Where the cotangent of the weight w goes (PointTBar's xsComponent, ayCrossSection): the cross section of an A_y
+  /// slot (0, true), A_0 of a coefficient (-1, false); the element's goes to the observable (0, false).
+  void RatioWeightRoute(int &component, bool &ayCrossSection) const;
+  /// The fold of this point from its slots' values already in `results` (FoldPoint, include/PointFold.h; a ratio,
+  /// FoldsRatio, is the ratio of two folds).
   void FoldSubPoints(const WorkingCopy &data, const Config &, azure2::Results &results);
   /// Integrate the E1 and E2 components of the cross section over the same
   /// sub-points as the total, for a segment compared against one component.
@@ -166,6 +189,7 @@ class Unit : public Site {
   double bin_high_cm_ = std::numeric_limits<double>::quiet_NaN();
   double photo_qgamma_ = 0.0;
   double photo_mcn_ = 0.0;
+  double frame_jacobian_ = 1.0;  ///< dOmega_lab/dOmega_cm of the point's frame row (SetFrame; LabFoldFactor)
   int plan_task_ = -1;  // see PlanTask
   int sub_first_ = 0, sub_count_ = 0;  ///< the slots: [first, first + count) of WorkingCopy::SlotAt
   std::uint16_t num_model_ang_ = 0;  // see SetModelRecord

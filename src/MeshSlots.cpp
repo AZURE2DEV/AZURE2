@@ -146,20 +146,18 @@ SlotGroupKey MeshGroupKey(const WorkingCopy &data, const Unit &point, const Term
     return b;
   };
   SlotGroupKey key;
-  key.segment = term.segment;
-  key.term = term.term;
+  key.settings = &point.Settings();
   key.mesh = spec.mesh;
-  key.targetEffect = point.GetTargetEffectNum();
-  key.legendreOrder = point.IsCoefficient() ? point.GetCoefficientOrder() : -1;
-  key.angle = bits(point.GetCMAngle());
+  // the target's line, not the segment's copy of it: the copies of one line share its parameters, so their slots'
+  // stopping is the same (DataSet.h, WorkingCopy::SetUpTargetEffects)
+  key.targetEffect = data.Data().GetTargetEffect(point.GetTargetEffectNum())->GetLineNumber();
+  // No angle and no Legendre order: a differential site holds its observables without an angle (its readers' rows
+  // apply it, Site::ValueFor), a scalar site (sigma, a phase shift, the total cross section) has none.  THM, whose
+  // sites are keyed by angle, is off the mesh: a group of its own.
   key.conversion = bits(spec.stoppingConversion);
   key.frameShift = bits(spec.frameShift);
   key.screeningUe = bits(point.GetScreeningUe());
   key.screeningParam = point.GetScreeningParam();
-  // A lab-frame differential point with an energy shift converts its angle at its shifted energy: the readers of a
-  // block must have one nominal energy, so that they keep one angle at every shift (ShiftedFold.h, question 3).
-  if (spec.shifted && term.segment->IsDifferential() && !term.segment->IsCMDifferential())
-    key.nominalEnergy = bits(point.GetOriginalEnergy());
   return key;
 }
 
