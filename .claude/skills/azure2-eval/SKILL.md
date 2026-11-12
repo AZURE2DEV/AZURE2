@@ -517,8 +517,9 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   unchanged. Suspect any old non-Brune fit whose param.par has
   `energy_N` values out of step with the file's levels.
 - **`--no-brune` external capture used the FORMAL amplitude and energy of
-  the final state** (fixed on branch `fix/formal-ec-final-state`,
-  2026-11-12, `tests/formal_ec_final_state`): the external-capture terms
+  the final state** (fixed on dev 081dddf9, 2026-11-12,
+  `tests/formal_ec_final_state`; older builds have the error): the
+  external-capture terms
   need the final state's observed energy and its on-resonance (Brune)
   amplitude, which is what the ANC is. In the formal parametrization the
   working values are those only for the level the boundary conditions come
