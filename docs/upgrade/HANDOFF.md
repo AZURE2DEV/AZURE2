@@ -56,7 +56,14 @@ its elastic data are excitation functions at three angles, unfolded.
 **Open.**  A memo of the contraction per (block, reader row) would remove the hybrid_potential loss where readers
 share an angle.  Milestone 3 not started (see the report): capture A_y has the Legendre cut (Seyler-Weller a_k, b_k);
 particle A_y (the amplitude matrix, `Polarization::AmplitudeMatrix`, with f_C) has no per-order form in the code.
-Not run: the whole tree, `run_tests.sh`, the gate, the eight fits, `check.sh --quick`.
+`scripts/check.sh --quick` (JOBS=1) on 879f5f68: 210/210 tests pass.  Not run: the whole tree, `run_tests.sh`, the gate,
+the eight fits, 1 vs 3 threads (the budget is 2).
+**Next (milestone 3).**  (1) Key without the segment: `MeshGroupKey` holds `term.segment`; what the writer reads from
+the settings must replace it (reaction pair keys, UPOS secondary L, I_c, delta, the E1/E2 component, THM/phase/total are
+kValue).  (2) Capture A_y: a kind holding B_L and the Seyler-Weller numerator per order (`CaptureAyTerm` ak, bk), reader
+P_L^1 rows.  (3) Particle A_y (`Polarization::AmplitudeMatrix`, Y_lmu at the point's angle, f_C) has no per-order
+form: a P_L^1 expansion would be a second derivation (a stop condition of the brief); it stays kValue and keeps
+`nominalEnergy`, `ReangleSlots` and the solving shift column for its lab-frame shifted segments.
 
 ## 2026-11-12 (agent, Phase 5 branch 9, milestone 1) — non-elastic angular data: a site holds Legendre coefficients, the point's row applies the angle (`feature/upgrade-5-observables`)
 
