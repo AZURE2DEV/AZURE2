@@ -80,8 +80,15 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   ratio x the free one, t3 = (Z-N)/2, light particle first; forbidden channels 0
   or a `mix` amplitude) and stay in the parameter list FIXED and synced. New
   parameters `isospin_shift_<Z>_<A>`, `isospin_mix_<k>` follow the abundances.
-  Brune/Park/RMC are refused; MCMC and pyazr take RWA parameters only (the
+  Park/RMC are refused; MCMC and pyazr take RWA parameters only (the
   physical-to-formal transform would mix stale derived members into free ones).
+  BRUNE RUNS (branch feature/isospin-brune-tie, 2026-11-12; builds without it
+  refuse `--use-brune`): the same ties then act on the Brune amplitudes and the
+  OBSERVED energies, with no B = -l. This is not Hale's formulation: the
+  amplitude tie is the same statement only for a level alone in its J^pi group,
+  and one shift per nucleus fits observed energies worse than formal ones (the
+  Thomas-Ehrman shift depends on the level), so give Brune energies a wide
+  `soft` sigma_E or fix them at the measured values.
   `soft <ID> <sigma_E> <sigma_gamma>` relaxes one level's tie into a penalty
   (derived slots free; MIGRAD/MCMC only, LM/GSL refused).
   Read the start-up factor table and `isospin.out` before trusting a model;

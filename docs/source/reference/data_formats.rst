@@ -452,7 +452,7 @@ after ``</levels>`` (and after ``</abundances>``)::
    soft 2 0.05 0.02                 # optional: soft-tie level 2 (sigma E MeV, sigma gamma MeV^1/2)
    </isospin>
 
-- In each nucleus, a level's formal reduced-width amplitude in a channel of
+- In each nucleus, a level's reduced-width amplitude in a channel of
   pair (a, b) is :math:`\langle t_a t_{3a}\, t_b t_{3b} | T T_3\rangle`
   times one amplitude per isospin channel (arrangement, l, s). Particle
   isospins default to :math:`t = |N-Z|/2`, :math:`t_3 = (Z-N)/2`; pairs whose
@@ -475,17 +475,33 @@ after ``</levels>`` (and after ``</abundances>``)::
   takes no ``mix`` lines, and the LM and GSL fitters refuse it (the penalty
   couples parameters); MIGRAD, with or without the analytic gradient, and MCMC
   (in the likelihood) carry it.
-- Every J-group holding an isospin level uses :math:`B_c = -l_c`, so
-  partners share their boundary values. Isospin levels need the standard
-  parametrization (``--no-brune``). The analytic gradient, the LM and GSL
+- The ties act on the fitted parameters of the run's parametrization.
+  With the standard (formal) parametrization (``--no-brune``, Hale's
+  formulation) these are the formal amplitudes and eigenenergies, and every
+  J-group holding an isospin level uses :math:`B_c = -l_c`, so partners share
+  their boundary values. With the Brune parametrization (the default) they
+  are the Brune (on-resonance) amplitudes and the observed energies, and no
+  boundary value enters. For a level alone in its J-group the Brune
+  amplitudes equal the formal ones, so the amplitude ties are the same
+  statement; with other levels of the same :math:`J^\pi` in the group
+  (background poles) the two differ through level mixing. The energy
+  relation differs in either case: an observed energy carries its nucleus's
+  boundary (Thomas-Ehrman) shift,
+  :math:`\tilde E = E_\lambda - \sum_c \gamma_c^2 (S_c(\tilde E) - B_c)`,
+  which depends on the level, so one shift :math:`\Delta_m` per nucleus
+  describes the formal energies better than the observed ones. In a Brune
+  run give the energies a ``soft`` tie with a wide :math:`\sigma_E`, or fix
+  them at their measured values, unless one level per nucleus is tied. The
+  Brune-Park parametrization (``--use-park``) and the RMC formalism are
+  refused. The analytic gradient, the LM and GSL
   least-squares fitters, MCMC and the API work through the ties (a derived
   slot's derivative passes to the free slots it follows); MCMC and the API
   take reduced-width amplitudes only, since the physical-to-formal transform
   would mix stale derived members into the free ones. pyazr lists the shifts
   and mixes as ``parameters.isospin`` (kind ``"isospin"``) and reports their
   priors as ``penalties()["isospin"]`` (already in the engine's chi-squared).
-- The start-up log prints every factor; ``isospin.out`` lists the formal
-  parameters of every member, and ``parameters.out`` labels the members.
+- The start-up log prints every factor; ``isospin.out`` lists the fitted
+  (formal, or Brune) parameters of every member, and ``parameters.out`` labels the members.
   The GUI keeps the block (its level IDs follow the levels it writes) but has
   no editor for it: edit the block as text.
 

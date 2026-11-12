@@ -18,14 +18,22 @@ class Config;
  *
  * A level whose channel lines span several compound nuclei (one level ID) is
  * one isospin level.  The <isospin> block gives its isospin T.  In every
- * nucleus it lives in, its formal reduced-width amplitudes are the
- * Clebsch-Gordan projection of one amplitude per isospin channel
- * (arrangement, l, s), and its formal eigenvalue is shifted by that nucleus's
- * internal Coulomb energy shift.  The member in the reference nucleus carries
- * the free parameters; the other members' parameters are derived from them.
- * Isospin-forbidden channels (Clebsch-Gordan factor 0) are zero unless a mix
- * line gives them a free amplitude.  Every group that holds an isospin level
- * uses B_c = -l_c, so partners share their boundary values.
+ * nucleus it lives in, its reduced-width amplitudes are the Clebsch-Gordan
+ * projection of one amplitude per isospin channel (arrangement, l, s), and
+ * its energy is shifted by that nucleus's internal Coulomb energy shift.  The
+ * member in the reference nucleus carries the free parameters; the other
+ * members' parameters are derived from them.  Isospin-forbidden channels
+ * (Clebsch-Gordan factor 0) are zero unless a mix line gives them a free
+ * amplitude.
+ *
+ * The ties act on the fitted parameters of the run's parametrization:
+ *  - formal (--no-brune; Hale's formulation): formal amplitudes and
+ *    eigenvalues, and every group that holds an isospin level uses
+ *    B_c = -l_c, so partners share their boundary values;
+ *  - Brune (the default): Brune (on-resonance) amplitudes and observed
+ *    energies, no boundary values.  Same amplitudes as the formal ones for a
+ *    level alone in its J-group; different through level mixing otherwise.
+ * The Brune-Park and RMC parametrizations are refused.
  *
  * Block (between </levels> or </abundances> and <segmentsData>):
  *   reference <Z> <A> <pair key>                 nucleus whose energies are the reference, and its threshold
@@ -128,8 +136,8 @@ class IsospinLevels {
   /// Whether the block declares this level ID (its lines may span nuclei).
   bool IsDeclared(int levelID) const;
   /// Resolves the declared levels against the filled compound nucleus: members,
-  /// factors, owners, parameter slots, and B = -l on their groups.  Reports
-  /// what it built.  -1 on an error (reported).
+  /// factors, owners, parameter slots, and (formal parametrization only)
+  /// B = -l on their groups.  Reports what it built.  -1 on an error (reported).
   int Resolve(const Config &configure, CNuc &compound);
 
   /// Adds the isospin parameters (shifts, then mixes) to the Minuit
@@ -187,6 +195,7 @@ class IsospinLevels {
 
  private:
   bool active_ = false;
+  bool brune_ = false;  ///< ties in Brune space (observed energies, Brune amplitudes); set by Resolve
   std::vector<IsospinShift> shifts_;
   std::vector<int> levelIDs_;
   std::vector<double> levelT_;

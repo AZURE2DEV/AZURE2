@@ -154,14 +154,24 @@ int IsospinLevels::Resolve(const Config &configure, CNuc &c) {
     return -1;
   };
 
-  // Hale's analysis is a formal fit with fixed boundary values; the ties are
-  // linear in the formal parameters only.
-  if (configure.paramMask & Config::USE_BRUNE_FORMALISM)
-    return fail("isospin levels need the standard (formal) parametrization: run with --no-brune (Brune is the default).");
+  // Two parameter spaces carry the ties, both linear in the fitted parameters:
+  //  - formal (--no-brune), Hale's analysis: formal amplitudes and eigenvalues at the fixed boundary values
+  //    B_c = -l_c, which this routine sets on the levels' J-groups;
+  //  - Brune (the default): the Brune (on-resonance) amplitudes and the observed energies.  No boundary
+  //    value enters.  For a level alone in its J-group the Brune amplitudes ARE the formal ones (they do not
+  //    depend on B), so the amplitude ties are the same statement; with other levels of the same J^pi in the
+  //    group (background poles) the two differ through level mixing.  The energy relation differs in any
+  //    case: observed energies carry each nucleus's boundary (Thomas-Ehrman) shift, which is level dependent,
+  //    so one shift per nucleus is a weaker description here than in the formal space (soft ties with a wide
+  //    sigma E leave the energies to the data).
+  // Park's orthogonalized amplitudes are not Clebsch-Gordan projections of one isospin amplitude (--use-park
+  // sets the Brune bit too, so it is tested first).
   if (configure.paramMask & Config::USE_PARK_FORMALISM)
-    return fail("isospin levels need the standard (formal) parametrization, not the Park formalism.");
+    return fail("isospin levels are not available with the Brune-Park parametrization: run with the Brune "
+                "parametrization (the default) or --no-brune (formal, Hale's B = -l).");
   if (configure.paramMask & Config::USE_RMC_FORMALISM)
     return fail("isospin levels are not available with the RMC formalism.");
+  brune_ = (configure.paramMask & Config::USE_BRUNE_FORMALISM) != 0;
 
   // Nuclei of the reference and shift lines, and their thresholds.
   int nRef = 0;
@@ -269,7 +279,7 @@ int IsospinLevels::Resolve(const Config &configure, CNuc &c) {
     // Widths: Clebsch-Gordan factors, isospin-channel keys.
     for (IsospinMember &m : L.members) {
       JGroup *g = c.GetJGroup(m.jGroup);
-      g->SetBoundaryMinusL(true);
+      if (!brune_) g->SetBoundaryMinusL(true);
       for (int ch = 1; ch <= g->NumChannels(); ch++) {
         AChannel *chan = g->GetChannel(ch);
         if (chan->GetRadType() != 'P')
@@ -433,7 +443,9 @@ int IsospinLevels::Resolve(const Config &configure, CNuc &c) {
 
   // Report.
   out << "Isospin levels: " << levels_.size() << " level(s); reference " << c.NucleusLabel(refNucleus)
-      << "; B_c = -l_c in their J-groups." << std::endl;
+      << (brune_ ? "; Brune parametrization: the ties act on the observed energies and the Brune (on-resonance) amplitudes."
+                 : "; B_c = -l_c in their J-groups.")
+      << std::endl;
   out << "  note: the GUI keeps the <isospin> block but has no editor for it; edit the block as text." << std::endl;
   for (const IsospinLevel &L : levels_) {
     JGroup *g = c.GetJGroup(L.members[L.ref].jGroup);
@@ -466,7 +478,7 @@ int IsospinLevels::Resolve(const Config &configure, CNuc &c) {
       if (!IsDeclared(c.GetJGroup(j)->GetLevel(la)->GetLevelID()))
         out << "  note: level ID " << c.GetJGroup(j)->GetLevel(la)->GetLevelID() << " in a J-group of "
             << c.NucleusLabel(c.GetJGroup(j)->GetNucleus())
-            << " has no isospin label; it is unconstrained (and uses B = -l like its group)." << std::endl;
+            << " has no isospin label; it is unconstrained" << (brune_ ? "." : " (and uses B = -l like its group).") << std::endl;
   // A nucleus the level's isospin allows, with pairs of its arrangements, but no line.
   for (const IsospinLevel &L : levels_) {
     std::set<std::string> arrs;
@@ -708,7 +720,10 @@ void IsospinLevels::Write(const Config &configure, CNuc &c) const {
   if (!active_) return;
   std::ofstream out((configure.outputdir + "isospin.out").c_str());
   if (!out) return;
-  out << "ISOSPIN LEVELS (formal parameters, B_c = -l_c in their J-groups)" << std::endl << std::endl;
+  out << (brune_ ? "ISOSPIN LEVELS (Brune parameters: observed energies and on-resonance amplitudes, no boundary values)"
+                 : "ISOSPIN LEVELS (formal parameters, B_c = -l_c in their J-groups)")
+      << std::endl
+      << std::endl;
   if (!softTerms_.empty()) out << "soft-tie penalty = " << std::setprecision(8) << SoftPenalty() << std::endl;
   for (const IsospinShift &e : shifts_) {
     out << (e.reference ? "reference " : "shift     ") << "Z=" << e.z << " A=" << e.a << "  threshold pair " << e.pairKey
@@ -728,13 +743,14 @@ void IsospinLevels::Write(const Config &configure, CNuc &c) const {
       const IsospinMember &m = L.members[i];
       ALevel *lev = c.GetJGroup(m.jGroup)->GetLevel(m.level);
       out << "  " << c.NucleusLabel(m.nucleus) << " (T3=" << m.t3 << ")" << ((int)i == L.ref ? "  reference" : "  derived")
-          << "  formal E = " << std::setprecision(14) << lev->GetFitE() << " MeV" << std::endl;
+          << (brune_ ? "  observed E = " : "  formal E = ") << std::setprecision(14) << lev->GetFitE() << " MeV" << std::endl;
       if (L.soft && (int)i != L.ref) out << "    (soft tie)" << std::endl;
       for (const IsospinWidth &w : m.widths) {
         AChannel *chan = c.GetJGroup(m.jGroup)->GetChannel(w.channel);
         out << "    pair " << std::setw(2) << c.GetPair(chan->GetPairNum())->GetPairKey() << "  l=" << chan->GetL()
-            << " s=" << chan->GetS() << "  B=" << chan->GetBoundaryCondition() << "  factor " << std::setw(10)
-            << std::setprecision(6) << w.cg;
+            << " s=" << chan->GetS();
+        if (!brune_) out << "  B=" << chan->GetBoundaryCondition();
+        out << "  factor " << std::setw(10) << std::setprecision(6) << w.cg;
         if (w.overridden) out << " (computed " << w.cgComputed << ")";
         out << "  gamma = " << std::setw(22) << std::setprecision(14) << lev->GetFitGamma(w.channel) << " MeV^1/2";
         if (w.ownerSlot == -1)

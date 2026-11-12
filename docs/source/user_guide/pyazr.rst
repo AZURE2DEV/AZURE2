@@ -417,7 +417,8 @@ join the levels and declare them on the merged model:
    m.add_isospin_mix(t1, pair=5, L=1, S=1, value=0.0, vary=True, sigma=0.1)
    m.write("A4_iso.azr")
 
-   s = azure2("A4_iso.azr", use_brune=False)   # isospin levels are a formal-parameter fit
+   s = azure2("A4_iso.azr", use_brune=False)   # Hale's formal ties (B = -l); use_brune=True ties the
+                                               # Brune amplitudes and observed energies instead
    s.parameters.isospin          # isospin_shift_<Z>_<A>, isospin_mix_<k>; kind "isospin"
    s.penalties()["isospin"]      # their priors (already inside calculate_chi2_rwa)
 

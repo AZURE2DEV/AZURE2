@@ -11,7 +11,7 @@
 # (b) The 4H member equals a standalone 4H project built from its formal parameters
 #     (--no-transform) to 1e-10 in the n+t cross section.
 # (c) Refused models: a cross-nucleus level without the block, unequal radii in one
-#     arrangement, mix on an allowed channel, T too small for a nucleus, --use-brune.
+#     arrangement, mix on an allowed channel, T too small for a nucleus, --use-park.
 # (d) Pseudo-data from iso_mix.azr (shifts -0.86 / -0.64, mix 0.05): MIGRAD (numerical and
 #     analytic gradient), LM and GSL least squares from -0.5 / -0.4 / 0 recover all three.
 # (e) AZURE_GRAD_CHECK on iso_free.azr (every reference parameter free, priors): the
@@ -24,6 +24,14 @@
 # (h) relativistic=1: isospin.out keeps the energy relations (excitation scale), the 4H member equals the
 #     standalone 4H project run relativistically, the key changes the tied cross section, and the gradient
 #     check passes through the ties.
+#
+# (i) Brune parametrization (the default; (a)-(h) run the formal one, --no-brune): the same ties act on the
+#     observed energies and the Brune amplitudes.  isospin.out obeys the relations of (a) and prints no boundary
+#     values; the 4H member equals a standalone 4H project built from its Brune parameters (--use-brune
+#     --no-transform) to 1e-10; the reference nucleus (one level in its group, same physical input) has the
+#     formal run's p+3He cross section while the tied n+t cross section differs (the energy relation is on
+#     observed, not formal, energies); the soft tie starts on the hard tie; the gradient check passes through
+#     the ties; a MIGRAD fit of Brune pseudo-data recovers both shifts and the mix (from -0.9 / -0.4 / 0).
 #
 # The models are written by make_models.py (committed).
 
@@ -137,7 +145,7 @@ refused undeclared "$M/bad_undeclared.azr" "--no-brune" 3 "has channels of two c
 refused radius "$M/bad_radius.azr" "--no-brune" 3 "need equal radii"
 refused mix_allowed "$M/bad_mix.azr" "--no-brune" 3 "isospin-allowed"
 refused T_too_small "$M/bad_T.azr" "--no-brune" 3 "has T=0 but lines in"
-refused brune "$M/iso.azr" "--use-brune" 3 "run with --no-brune"
+refused park "$M/iso.azr" "--use-park" 3 "not available with the Brune-Park parametrization"
 
 # ---- (d) recovery fit ----------------------------------------------------------------------------
 run truth "$M/iso_mix.azr" 3 "--no-brune"
@@ -291,6 +299,122 @@ if [ -s "$WORK/nt.dat" ]; then
   else
     bad "relativistic gradient check: '$line'"
   fi
+fi
+
+# ---- (i) Brune parametrization: ties on observed energies and Brune amplitudes -------------------------
+run isoB "$M/iso.azr" 3 "--use-brune"
+logB="$WORK/isoB/run.log"; isoB="$WORK/isoB/output/isospin.out"
+got="$(awk '/^Isospin levels:/ { on = 1; next } on && /factor/ { for (i = 1; i <= NF; i++) if ($i == "factor") printf "%s ", $(i + 1) } /^Filling Data/ { on = 0 }' "$logB" | sed 's/ $//')"
+if [ "$got" = "$want" ] && grep -q "^Isospin levels:.*Brune parametrization" "$logB"; then ok "Brune: start-up factors are Hale's A=4 relations, the report names the Brune ties"
+else bad "Brune start-up report: factors '$got'"; grep -i -m3 "error\|^Isospin levels" "$logB"; fi
+if [ -s "$isoB" ]; then
+  if python3 - "$isoB" <<'EOF'
+import sys, math
+lv, cur, mem, text = {}, None, None, open(sys.argv[1]).read()
+for raw in text.splitlines():
+    t = raw.split()
+    if raw.startswith("level ID"):
+        cur = int(t[2]); lv[cur] = {}
+    elif cur is not None and "observed E =" in raw:
+        mem = t[0] + t[1]; lv[cur][mem] = {"E": float(t[t.index("E") + 2]), "g": {}}
+    elif cur is not None and raw.strip().startswith("pair"):
+        lv[cur][mem]["g"][int(t[1])] = float(t[t.index("gamma") + 2])
+li, h, he = "Z=3A=4", "Z=1A=4", "Z=2A=4"
+r = math.sqrt(0.5)
+bad = 0
+try:
+    checks = [
+      ("E(4H)  = E(4Li) - 0.86", lv[1][h]["E"], lv[1][li]["E"] - 0.86),
+      ("E(4He) = E(4Li) + 19.8136 - 0.64", lv[1][he]["E"], lv[1][li]["E"] + 19.8136 - 0.64),
+      ("gamma(n+t) = gamma(p+3He)", lv[1][h]["g"][2], lv[1][li]["g"][1]),
+      ("gamma(p+t, T=1) = gamma(p+3He)/sqrt2", lv[1][he]["g"][3], r * lv[1][li]["g"][1]),
+      ("gamma(n+3He, T=1) = gamma(p+3He)/sqrt2", lv[1][he]["g"][4], r * lv[1][li]["g"][1]),
+      ("gamma(d+d, T=1) = 0", lv[1][he]["g"][5], 0.0),
+      ("gamma(n+3He, T=0) = -gamma(p+t, T=0)", lv[2][he]["g"][4], -lv[2][he]["g"][3]),
+    ]
+except KeyError as e:
+    print("  FAIL Brune isospin.out: member or channel missing (%s)" % e); sys.exit(1)
+for name, a, b in checks:
+    d = abs(a - b) / max(abs(b), 1.0)
+    print(("  ok   " if d < 1e-12 else "  FAIL ") + "Brune isospin.out: " + name + " (rel %.1e)" % d)
+    bad += d >= 1e-12
+head = "Brune parameters" in text and "B=" not in text and "formal E" not in text
+print(("  ok   " if head else "  FAIL ") + "Brune isospin.out: Brune header, observed energies, no boundary values")
+sys.exit(bad + (not head))
+EOF
+  then nok=$((nok + 8)); else nbad=$((nbad + 1)); fi
+  read -r e4h g4h < <(awk '/^level ID 1/ { on = 1 } on && /Z=1 A=4/ { for (i = 1; i <= NF; i++) if ($i == "E") e = $(i + 2); getline; for (i = 1; i <= NF; i++) if ($i == "gamma") g = $(i + 2); print e, g; exit }' "$isoB")
+  awk -v e="$e4h" -v g="$g4h" '/<levels>/ { print; getline; $3 = e; $12 = g; print; next } { print }' "$M/standalone_4H.azr" > "$WORK/standaloneB.azr"
+  run aloneB "$WORK/standaloneB.azr" 3 "--use-brune --no-transform"
+  a="$WORK/isoB/output/AZUREOut_aa=2_R=2.extrap"; b="$WORK/aloneB/output/AZUREOut_aa=2_R=2.extrap"
+  if [ -s "$a" ] && [ -s "$b" ]; then
+    xs "$a" > "$WORK/aB.xs"; xs "$b" > "$WORK/bB.xs"
+    r="$(maxrel "$WORK/aB.xs" "$WORK/bB.xs")"
+    if le "$r" 1e-10; then ok "Brune: 4H member == standalone 4H from its Brune parameters (max rel $r, $(wc -l < "$WORK/aB.xs") points)"; else bad "Brune: 4H member vs standalone 4H: max rel $r"; fi
+    # The reference nucleus has one level in its group and the same physical input in both runs: same p+3He
+    # cross section.  The tied 4H level sits elsewhere, because the shift now relates observed energies.
+    if [ -s "$WORK/a.xs" ] && [ -s "$WORK/iso/output/AZUREOut_aa=1_R=1.extrap" ] && [ -s "$WORK/isoB/output/AZUREOut_aa=1_R=1.extrap" ]; then
+      xs "$WORK/iso/output/AZUREOut_aa=1_R=1.extrap" > "$WORK/pF.xs"; xs "$WORK/isoB/output/AZUREOut_aa=1_R=1.extrap" > "$WORK/pB.xs"
+      r="$(maxrel "$WORK/pB.xs" "$WORK/pF.xs")"
+      if le "$r" 1e-6; then ok "Brune vs formal: same p+3He (reference nucleus, one level) cross section (max rel $r)"; else bad "Brune vs formal: p+3He differs (max rel $r)"; fi
+      r="$(maxrel "$WORK/aB.xs" "$WORK/a.xs")"
+      if ! le "$r" 1e-4; then ok "Brune vs formal: the tied n+t cross section differs (max rel $r): the shift relates observed energies"; else bad "Brune vs formal: tied n+t cross section unchanged (max rel $r)"; fi
+    else
+      bad "Brune vs formal: an extrapolation is missing"
+    fi
+  else
+    bad "Brune standalone 4H comparison: an extrapolation is missing"; tail -5 "$WORK/aloneB/run.log"
+  fi
+else
+  bad "iso.azr (Brune) wrote no isospin.out"; tail -5 "$logB"
+fi
+run softB "$M/iso_soft.azr" 3 "--use-brune"
+n=0; for f in "$WORK/isoB/output/"*.extrap; do same_file "$f" "$WORK/softB/output/$(basename "$f")" || n=$((n + 1)); done
+if [ "$n" = 0 ] && [ -n "$(ls "$WORK/softB/output/"*.extrap 2>/dev/null)" ]; then ok "Brune: soft tie at its start == hard tie (every extrapolation identical)"
+else bad "Brune: soft tie at its start differs from the hard tie in $n file(s)"; fi
+if [ -s "$WORK/nt.dat" ]; then
+  # Gradient check on the formal pseudo-data (off the Brune model's minimum), hard and soft ties.
+  mkdir -p "$WORK/gcB/output" "$WORK/gcB/checks"; cp "$WORK"/*.dat "$WORK/gcB/"; cp "$M/iso_free.azr" "$WORK/gcB/t.azr"
+  (cd "$WORK/gcB" && printf '2\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 run_limited 900 "$AZURE2_BIN" --use-brune --use-gradient --no-gui --no-readline t.azr > run.log 2>&1)
+  line="$(grep "components with relative" "$WORK/gcB/run.log" | head -1)"
+  if echo "$line" | grep -q "energy 0/2 gamma 0/3 isospin 0/3; Jacobian path: energy 0/2 gamma 0/3 isospin 0/3"; then
+    ok "Brune gradient check: energies, widths, shifts and mix agree with finite differences on both paths"
+  else
+    bad "Brune gradient check: '$line'"
+  fi
+  mkdir -p "$WORK/gcsB/output" "$WORK/gcsB/checks"; cp "$WORK"/*.dat "$WORK/gcsB/"
+  sed 's/^shift 1 4 2 -0.86 1/shift 1 4 2 -0.8 1/; s/^shift 2 4 3 -0.64 1/shift 2 4 3 -0.6 1/' "$M/iso_soft.azr" > "$WORK/gcsB/t.azr"
+  (cd "$WORK/gcsB" && printf '2\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 run_limited 900 "$AZURE2_BIN" --use-brune --use-gradient --no-gui --no-readline t.azr > run.log 2>&1)
+  line="$(grep "components with relative" "$WORK/gcsB/run.log" | head -1)"
+  if echo "$line" | grep -q "energy 0/4 gamma 0/7 isospin 0/2; Jacobian path: energy 0/4 gamma 0/7 isospin 0/2"; then
+    ok "Brune soft-tie gradient check: 13 free parameters agree with finite differences on both paths"
+  else
+    bad "Brune soft-tie gradient check: '$line'"
+  fi
+fi
+# Recovery fit on Brune pseudo-data (this replaces the data files, so it comes last).  The 4H shift starts at
+# -0.9, not at iso_fit.azr's -0.5: the n+t pseudo-data pass through an interference zero (1e-6 of the peak, near
+# 3.07 MeV c.m.) and, with 0.1 % relative errors, the points beside it give chi2 a second minimum at a shift of
+# -0.8564 (chi2 1.7e5, with and without the analytic gradient), which MIGRAD reaches from above.  That is a
+# property of the pseudo-data, not of the ties.
+run truthB "$M/iso_mix.azr" 3 "--use-brune"
+T="$WORK/truthB/output"
+if [ -s "$T/AZUREOut_aa=2_R=2.extrap" ] && [ -s "$T/AZUREOut_aa=5_R=3.extrap" ]; then
+  mk "$T/AZUREOut_aa=2_R=2.extrap" 2.0 0.05 nt.dat
+  mk "$T/AZUREOut_aa=3_R=4.extrap" 1.2 0.05 ptn.dat
+  mk "$T/AZUREOut_aa=5_R=3.extrap" 0.1 0.02 ddp.dat
+  mk "$T/AZUREOut_aa=5_R=4.extrap" 0.1 0.02 ddn.dat
+  sed 's/^shift 1 4 2 -0.5 1/shift 1 4 2 -0.9 1/' "$M/iso_fit.azr" > "$WORK/iso_fitB.azr"
+  run fitB "$WORK/iso_fitB.azr" 2 "--use-brune --use-gradient"
+  s="$WORK/fitB/output/param.sav"
+  v="$(awk '$1 == "isospin_shift_1_4" || $1 == "isospin_shift_2_4" || $1 == "isospin_mix_1" { printf "%s ", $2 }' "$s" 2>/dev/null)"
+  if awk -v v="$v" 'BEGIN { n = split(v, a, " "); exit !(n == 3 && (a[1]+0.86)^2 < 1e-8 && (a[2]+0.64)^2 < 1e-8 && (a[3]-0.05)^2 < 1e-8) }'; then
+    ok "Brune fit (MIGRAD, analytic gradient) recovers shift(4H) -0.86, shift(4He) -0.64, mix 0.05 from -0.9 / -0.4 / 0 ($v)"
+  else
+    bad "Brune fit gave '$v' (want -0.86 -0.64 0.05)"; tail -5 "$WORK/fitB/run.log"
+  fi
+else
+  bad "Brune truth model produced no extrapolations"; tail -5 "$WORK/truthB/run.log"
 fi
 
 echo "isospin_levels: $nok ok, $nbad failed"
