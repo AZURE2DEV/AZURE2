@@ -271,6 +271,49 @@ session's `ECAmplitudeCache` swapped into `g_ecAmplitudeCache`, the session's `R
 Problem>`) and one `Evaluation`; the swap of globals goes (milestone 2).  The public Python functions return what
 they return now.
 
+### 4.1 What an evaluation of a fit writes today (the inventory for milestone 3, branch 3)
+
+Read from the code of 55a7e2c9 (`WorkingCopy.h`, `HandOver.cpp`, `ShiftFrames.cpp`, `NodeTable.cpp`,
+`UnitExternalCapture.cpp`, `AZURECalc.cpp`, `AZURECalcMCMC.cpp`, `AZUREAPI.h`).  An evaluation of a fit is
+`FillCompoundFromParams` (the `CNuc`), `FillNormsFromParams` and `FillEnergyShiftsFromParams` (the hand-over into the
+working copy), the point pass and the objective into a `Results`.  What each member of `WorkingCopy` is:
+
+| Member of `WorkingCopy` | Problem or evaluation | Written by an evaluation when |
+|---|---|---|
+| `set_` (`DataSet`: segments, terms, target effects, covariance, parameter layout) | problem (shared `const` by the copies) | never |
+| `plan_`, `capacity_`, `iterations_` (an atomic counter read through the master copy), `covFiles_`, `ec*_` (set-up of `intEC.dat`) | problem | never |
+| `segmentStates_` (`SegmentState`: norm, shifts, last shifts, shift-function values, thickness; per term the frame rows at the present shift and the shift tables) | evaluation | every evaluation (norms); shifted segments (the rest) |
+| `effectValues_` (`TargetEffectValues`: U_e, density, temperature, stopping scale, kernel values), `thmCoherentValues_` | evaluation | a fit of these parameters |
+| `units_`, `slots_` (`Unit`, `Site`: the points and the sites of their folds) | **both**: the measurement's values (datum, error, original energy, angle) are problem; lab and c.m. energy and angle after the shift, Legendre rows, penetrabilities, shifts and phases, Coulomb amplitude, channel rows (`RecalcEDependentValues`), screening U_e (`SetScreening`, every evaluation with a screening effect), target thickness and stopping (density, stopping scale), the EC amplitude at the shifted energy (`ec_shifted_`), the slots of a re-placed fold are evaluation | shifted terms, fitted target-effect parameters, re-placed grids |
+| `slotBlock_`, `slotWriter_`, `slotReaders_`, the result layout (`resultsSize_`, `modelSize_`, a unit's record offsets) | problem as laid out at set-up; evaluation when a re-placed grid lays the units out again (`PlaceSubPointGrids`, `LayoutResults`) | re-placed grids |
+| `rowSets_`, `contractedSize_` | evaluation when slots move (rebuilt by the hand-over, `BuildRowSets`) | re-placed grids, shifts |
+| `nodes_` (`NodeState`: the stage table, shared; the slots of the moved tasks and the overflow nodes) | the table is problem; slots and overflow are evaluation | shifts, re-placed grids |
+| `meshAnchors_`, `meshSupports_`, `meshCentres_`, `gridNuc_` (a `CNuc` holding the observed level values the meshes are laid out for) | evaluation (functions of the level parameters and shifts) | a fit of a level that anchors a mesh, shifts |
+
+**Finding.**  Section 4 above says "the `Unit`s are problem except their slots' hand-over values".  That is true of a
+project without energy shifts, fitted target-effect parameters and re-placed grids; for the others the hand-over
+rewrites most of a `Site` (its energies, angles, energy-dependent channel values, Coulomb amplitude, rows, stopping
+and thickness) and may lay the slots out again.  Removing `WorkingCopy::Clone` therefore needs a split of the `Site`
+layer: the measurement and the set-up's values stay in the problem's sites, and the values above become a table of the
+evaluation, indexed by site, written by the hand-over and read by every reader of a site (the observables, the folds,
+the gradient's cotangents, the node checks, the writers) — about 40 accessors of `Site.h` and their readers in
+`ShiftFrames.cpp`, `TargetSetup.cpp`, `NodeTable.cpp`, `EnergyPass.cpp`, `GradEnergyTasks.cpp`, the observables and
+the output.  It is the "hand-over table" of section 4 at the size of the sites, not of the overflow nodes alone, and two
+of its files are in another branch's work tonight (`ShiftFrames.cpp`, `TargetSetup.cpp`).  It is not done in this
+branch (see section 7.5); what this branch does is what does not need it:
+
+1. The pools hold one evaluation per evaluation running at the same time, made when first needed, instead of
+   `max(4, threads)` copies made at the first evaluation.  An evaluation is a pair (a `CNuc` copy, a working copy
+   with its `Results`) taken by one caller at a time.  A fit with the analytic gradient (one evaluation at a time,
+   its parallelism inside the point pass) then holds one, at any thread count; Minuit2's numerical gradient and the
+   MCMC's walkers hold one per thread that evaluates.
+2. `AZUREAPI` reads its nuisance layout once, at construction and at a rebuild; its evaluating methods write the
+   session's `Results` as non-`const` methods (the `mutable` members of milestone 3 go).
+3. Kept, with the reason: `WorkingCopy::Clone`, `WorkingData` and the snapshot copies (`output_*`) of a fit (a
+   snapshot runs `TransformOut` on its `CNuc`, which a pooled one must not see), `AZURE_POOL_CHECK` and
+   `AZURE_TRACE_FCN=fresh` (they compare a pooled copy with a fresh one, which still exist), `Site::ec_shifted_`
+   (a value of the `Site` split).
+
 ## 5. Milestones
 
 Each is a commit series that leaves the tree passing (all projects × 3 bases identical to the reference, unit tests,
