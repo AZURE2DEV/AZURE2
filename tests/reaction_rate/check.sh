@@ -8,7 +8,9 @@
 #                  0.9 % low at T9 = 0.01 (now ln sigma against ln E; audit F1);
 #   (b) n12C       neutron entrance, sigma ~ 1/v: sigma was zero below 1 keV, 49 % low at
 #                  T9 = 0.01 (now from 0.1 eV; audit F2);
-#   (c) n12C_pert  the same through the per-temperature quadrature (useAdaptiveGrid=0);
+#   (c) went with the key useAdaptiveGrid (2026-11-12): the rate has one path, the tabulated one; its
+#       per-temperature quadrature is reached only as the fallback of a grid with fewer than three
+#       points of sigma > 0, which no model here has;
 #   (d) moved      a 22 eV wide 1/2+ level at E_x = 2.0935 MeV in the .azr, evaluated with the
 #                  parameter file of the same model at 2.0985 MeV (expected/moved.par): the grid
 #                  clusters followed the .azr value, the resonance fell between backbone nodes
@@ -21,7 +23,7 @@
 #   (g) p12C_2g    a second capture pair (key 3, to a fictitious bound 3/2- state): the rate with
 #                  exit -1 equals the sum of the rates into pairs 2 and 3 (2e-5, the 6 digits of
 #                  reactionrates.out), and pair 3 carries a real share of it;
-#   (h) p12C_2g_pert  the same through the per-temperature quadrature;
+#   (h) went with (c);
 #   (i) exit -1 with a capture pair as the entrance is refused, with no rate file.
 #
 # The Boltzmann constant moved from 8.6171e-2 to the CODATA 8.617333262e-2 MeV/GK in the
@@ -85,7 +87,6 @@ compare() {
 TOL=1e-3
 rate p12C ""      && compare "(a) p12C, charged entrance"              "$WORK/p12C/output/reactionrates.out"      "$HERE/expected/rates_p12C.dat" $TOL
 rate n12C ""      && compare "(b) n12C, 1/v neutron entrance"          "$WORK/n12C/output/reactionrates.out"      "$HERE/expected/rates_n12C.dat" $TOL
-rate n12C_pert "" && compare "(c) n12C, per-temperature quadrature"    "$WORK/n12C_pert/output/reactionrates.out" "$HERE/expected/rates_n12C.dat" $TOL
 rate moved moved.par && compare "(d) moved, narrow level from the parameter file" "$WORK/moved/output/reactionrates.out" "$HERE/expected/rates_moved_azr.dat" $TOL
 rate moved_azr ""    && compare "(e) moved_azr, the same level in the .azr"      "$WORK/moved_azr/output/reactionrates.out" "$WORK/moved/output/reactionrates.out" 1e-9
 
@@ -108,8 +109,8 @@ if rate p12C "" 2 && rate p12C "" -1; then
     ok "(f) p12C: exit -1 is the total capture over pair 2" || bad "(f) p12C: no total-capture line in the log"
   compare "(f) p12C, total capture = pair 2" "$WORK/p12C.x-1/output/reactionrates.out" "$WORK/p12C.x2/output/reactionrates.out" 1e-12
 fi
-for m in p12C_2g p12C_2g_pert; do
-  case $m in p12C_2g) lab="(g)" ;; *) lab="(h)" ;; esac
+for m in p12C_2g; do
+  lab="(g)"
   if rate $m "" 2 && rate $m "" 3 && rate $m "" -1; then
     sum_check "$lab $m, total capture = pair 2 + pair 3" "$WORK/$m.x-1/output/reactionrates.out" \
       "$WORK/$m.x2/output/reactionrates.out" "$WORK/$m.x3/output/reactionrates.out" 2e-5

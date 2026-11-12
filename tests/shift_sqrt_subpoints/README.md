@@ -22,7 +22,7 @@ Gamma_p 0.975 keV, 3.2e19 at/cm2, four yield points at lab 272-320 keV, no exter
 
 - `sqrt`: one four-point segment with `sqrtshift 0.02 0 0`;  `const`: four one-point segments, each with the
   constant shift 0.02 sqrt(E_k) of its own point -- the same calibration point by point;  `shiftfn`: the same
-  shift as `shiftfn "a0*sqrt(x)"`;  `dense`: `sqrt` on a uniform 2000-point grid (`useAdaptiveGrid=0`);
+  shift as `shiftfn "a0*sqrt(x)"`;
   `noshift`: b = 0;  `narrow_sqrt` / `narrow_const`: `sqrt` / `const` with the resonance's proton width
   100x smaller (9.7 eV).
 
@@ -30,9 +30,17 @@ Gamma_p 0.975 keV, 3.2e19 at/cm2, four yield points at lab 272-320 keV, no exter
 
 - (a) `sqrt` == `const` (1e-9): the sqrt shift is the point-by-point constant calibration;
 - (b) `shiftfn` == `sqrt` (1e-12);
-- (c) `sqrt` == `dense` to 1 % (the adaptive grid resolves the shifted resonance);
+- (c) `sqrt` == `sqrt` under `AZURE_REFINE_QUADRATURE=8` to 9.3e-5, three times the 3.1e-5 measured (2026-11-12);
 - (d) `sqrt` differs from `noshift` (the shift is active);
-- (e) `narrow_sqrt` == `narrow_const` (1e-9): the 10 eV resonance is on the fine grid after the shift.
+- (e) `narrow_sqrt` == `narrow_const` (1e-9): the 10 eV resonance is on the fine grid after the shift;
+- (f) narrow resonances are covered by the mesh: `narrow_sqrt` == itself refined eightfold to 5.4e-4, three times the
+  1.78e-4 measured (2026-11-12; eightfold against 64-fold 3.2e-6).
+
+Until 2026-11-12, (c) compared `sqrt` with `dense`, the same model on a uniform 2000-point sub-point grid
+(`useAdaptiveGrid=0`), as a grid-free check.  The key and its uniform grid were removed: on `narrow_sqrt` that grid
+gave 2.06e-8 for the first yield against the mesh's 2.18022e-6 (refined 2.17983e-6), and 5.09e-7 at 64 times the
+points.  `dense` went with it; the mesh against itself refined is the check now, and (f) guards the narrow
+resonance (with the level anchors taken out of the mesh plan, (c) fails at 0.68 and (f) at 0.98).
 
 dev 81abfd4 (before the fix): (a) 7.9e-4 off (the window stretch, diluted by the resonance's dominance of the
 yield), (e) 2.1 (213 %) off: the fine grid missed the shifted narrow resonance; (b), (c), (d) pass.  Fixed build:
@@ -56,7 +64,6 @@ target, no external capture), the x20 target-integration line, four yield points
             calibration point by point, so the yields must be identical if sub-points move rigidly with
             their data point
   shiftfn : one segment, shiftfn "a0*sqrt(x)" with a0 = b (the same shift through the other code path)
-  dense   : the sqrt model on a uniform 2000-point sub-point grid (useAdaptiveGrid=0), a grid-free check
   noshift : the sqrt model with b = 0 (to show the shift matters)
   narrow_sqrt, narrow_const : sqrt and const with the resonance's proton width 100x smaller (9.7 eV), where
             the fine grid's position matters: the old engine's grid missed the shifted resonance

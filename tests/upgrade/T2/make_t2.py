@@ -177,7 +177,6 @@ none                                                                            
 {extra}</config>
 <potential>
 useHybridPotential=0
-useAdaptiveGrid=1
 potentialType=0
 V0=150
 R=3.6

@@ -124,7 +124,7 @@ const std::string kSection =
     "none\n"
     "file   # pathways\n"
     "none\n"
-    "useAdaptiveGrid=1\n"
+    "includeAllJPi=1\n"
     "priorCovariance = prior.txt   # names\n"
     "format=3\n"
     "</config>\n";
@@ -155,10 +155,12 @@ void Synthetic() {
                                             e.size() == 1 && e[0].insert && e[0].line == 15 && e[0].text == "relativistic=1");
   const std::vector<std::string> added = Apply(lines, e);
   check("the added key reads", ReadConfigSection(added).Find("relativistic")->value == "1");
-  check("a key removed", ConfigEdits(lines, "useAdaptiveGrid", "", ConfigChange::Remove, e, why) && e.size() == 1 &&
+  check("a key removed", ConfigEdits(lines, "includeAllJPi", "", ConfigChange::Remove, e, why) && e.size() == 1 &&
                              e[0].remove && e[0].line == 12);
   // Refusals, each with the reason.
   check("unknown name", !ConfigEdits(lines, "relativstic", "1", ConfigChange::Set, e, why) && why.find("not an entry") != std::string::npos);
+  check("a removed key is no entry", !ConfigEdits(lines, "useAdaptiveGrid", "1", ConfigChange::Set, e, why) &&
+                                         why.find("not an entry") != std::string::npos);
   check("bad bool", !ConfigEdits(lines, "relativistic", "yes", ConfigChange::Set, e, why));
   check("bad check word", !ConfigEdits(lines, "check_data", "print", ConfigChange::Set, e, why));
   check("'#' in a path", !ConfigEdits(lines, "output_dir", "out#1/", ConfigChange::Set, e, why));

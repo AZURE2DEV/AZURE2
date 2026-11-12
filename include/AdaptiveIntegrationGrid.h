@@ -79,14 +79,6 @@ class AdaptiveIntegrationGrid {
   static constexpr double convolutionCoreWidths = 2.0;
 
   /*!
-   * \brief Grid point information
-   */
-  struct GridPoint {
-    double energy;    ///< Energy of the point (CM frame)
-    bool isResonant;  ///< Flag indicating if point is in resonant region
-  };
-
-  /*!
    * \brief Resonance information extracted from CNuc
    */
   struct ResonanceInfo {
@@ -97,12 +89,6 @@ class AdaptiveIntegrationGrid {
   };
 
   AdaptiveIntegrationGrid(const GridConfig &config);
-
-  /*!
-   * \brief Generate the grid for a window from the compound's levels.
-   * \return Energies in descending order (CM frame)
-   */
-  std::vector<double> GenerateGrid(double startEnergy, double endEnergy, CNuc *compound);
 
   /*!
    * \brief Generate the grid for a window from already quantized anchors
@@ -136,10 +122,6 @@ class AdaptiveIntegrationGrid {
    */
   static ResonanceInfo Quantize(const ResonanceInfo &resonance);
 
-  std::vector<GridPoint> GenerateGridWithInfo(double startEnergy, double endEnergy, CNuc *compound);
-
-  int GetExpectedPointCount(double startEnergy, double endEnergy, CNuc *compound);
-
   /*!
    * \brief Get the resonances (CM energy + total width) within an energy range.
    *
@@ -150,8 +132,6 @@ class AdaptiveIntegrationGrid {
   std::vector<ResonanceInfo> GetResonances(double startEnergy, double endEnergy, CNuc *compound) {
     return IdentifyResonances(startEnergy, endEnergy, compound);
   }
-
-  void SetConfig(const GridConfig &config);
 
  private:
   GridConfig config_;  ///< Grid generation configuration

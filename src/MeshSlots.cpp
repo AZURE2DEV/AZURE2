@@ -127,20 +127,6 @@ std::vector<double> MeshSlotEnergies(const azure2::MeshPlan &plan, const Unit::S
   return energies;
 }
 
-/// Gives a folded point the slots at the c.m. energies of `grid` (descending), each with the stopping of its
-/// effect's target at that energy.
-void AddGridSlots(WorkingCopy &data, Unit &point, const TermRef &term, const std::vector<double> &grid,
-                  const TargetEffect &effect, double conversion, const Config &configure) {
-  for (double e : grid) {
-    Site slot(point.GetCMAngle(), e, term.segment, term.term);
-    slot.BelongToRowOf(point);
-    if (effect.IsTargetIntegration())
-      slot.SetStoppingPower(conversion * effect.StoppingAt(e / conversion, configure,
-                                                           data.EffectValues(term.GetTargetEffectNum()).stoppingScale));
-    data.AddSubPoint(point, slot);
-  }
-}
-
 SlotGroupKey MeshGroupKey(const WorkingCopy &data, const Unit &point, const TermRef &term, const Unit::SubGridSpec &spec) {
   auto bits = [](double x) {
     std::uint64_t b;

@@ -186,17 +186,17 @@ class Site {
   const azure2::RowSet *RowSetOf() const { return rowset_ ? &*rowset_ : nullptr; }
   /// The position of the reader's slot `slot` (1-based) in its row set.
   int RowSetIndex(int slot) const { return rowset_at_ + slot - 1; }
-  /// Read the slots with the row set `set` from its position `at` (WorkingCopy::BuildRowSets, Unit::CalcNodeRows).
+  /// Read the slots with the row set `set` from its position `at` (WorkingCopy::BuildRowSets).
   void ReadWithRowSet(SharedTable<azure2::RowSet> set, int at) {
     rowset_ = std::move(set);
     rowset_at_ = at;
   }
   /*!
    * The value of this reader's slot `slot` (1-based), the site `site`: the contraction of the evaluation where the
-   * row set's values are kept (Results::contracted, RowSet.h), else site.ValueFor(*this, slot, r) -- the same number.
+   * reader has a row set (Results::contracted, RowSet.h), else site.ValueFor(*this, slot, r) -- the same number.
    */
   double SlotValue(const Site &site, int slot, const azure2::Results &r) const {
-    if (rowset_ && rowset_->valueOffset >= 0) return r.contracted[rowset_->ValueIndex(rowset_at_ + slot - 1, 0)];
+    if (rowset_) return r.contracted[rowset_->ValueIndex(rowset_at_ + slot - 1, 0)];
     return site.ValueFor(*this, slot, r) / SlotJacobian(slot);
   }
   /// The reader's c.m. angle (deg) at its slot `slot` (1-based; 0: its own): its row set's (RowSet::AngleAt; for data
@@ -209,7 +209,7 @@ class Site {
   double SlotJacobian(int slot) const { return (slot > 0 && rowset_) ? rowset_->JacobianAt(rowset_at_ + slot - 1) : 1.0; }
   /// A_y of this reader's slot `slot` (an analysing power; SlotValue is the cross section that weights it).
   double SlotAnalyzingPower(const Site &site, int slot, const azure2::Results &r) const {
-    if (rowset_ && rowset_->valueOffset >= 0 && rowset_->valuesPerSlot > 1)
+    if (rowset_ && rowset_->valuesPerSlot > 1)
       return r.contracted[rowset_->ValueIndex(rowset_at_ + slot - 1, 1)];
     return site.AnalyzingPowerFor(*this, slot, r);
   }

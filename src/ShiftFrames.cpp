@@ -1,6 +1,5 @@
-// Re-energising the points of a segment after an energy shift: the shifted energies of the points (and of the
-// sub-points of a grid of its own; a folded point on the shared mesh keeps its nodes, ShiftedFold.h), the
-// recalculation of their tables, and the channel tables of the last shift states that a shift returning to an earlier
+// Re-energising the points of a segment after an energy shift: the shifted energies of the points (a folded point
+// keeps the nodes of the shared mesh and its kernel moves, ShiftedFold.h), the recalculation of their tables, and the channel tables of the last shift states that a shift returning to an earlier
 // value reuses.
 #include <functional>
 #include <iostream>
@@ -142,61 +141,15 @@ void Segment::UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, CNuc *
               effect = te;
             }
           }
-          // the point alone: its row follows its angle, its own grid is moved (MoveOwnGridSlots) below
+          // the point alone: its row follows its angle; its slots are nodes of the shared mesh, which stay
           point->OwnSite().CalcLegendreP(&data, configure->maxLOrder, theCNuc, effect);
         }
         const ChannelRowSource rows = ShiftRowSource(state.terms[t], i);
         point->OwnSite().RecalcEDependentValues(&data, theCNuc, *configure, &rows);
-        // On the shared mesh the nodes stay and the kernel moves with the point (ShiftedFold.h): its row set does not
-        // depend on the shift (the c.m. angle of a point given at a lab angle is the row set's at each node, a function
-        // of the node's energy and the lab angle: RowSet.h).  A grid of its own moves with the point: its rows at its
-        // slots' new energies, a set of its own (Site::RowP).
-        if (data.Data().GridSpecOf(*point).mesh < 0) {
-          MoveOwnGridSlots(data, t, *point, theCNuc, *configure, rows);
-          const TargetEffect *te = this->IsTargetEffect() ? data.Data().GetTargetEffect(this->TermTargetEffectNum(t)) : nullptr;
-          const azure2::experiment::FrameRule rule = this->TermFrameRule(t, entrancePair, exitPair);
-          point->CalcNodeRows(data, configure->maxLOrder, theCNuc, (te && te->IsQCoefficients()) ? te : nullptr,
-                              azure2::experiment::AngleIsLab(rule) ? &rule : nullptr);
-        }
+        // The nodes stay and the kernel moves with the point (ShiftedFold.h): its row set does not depend on the shift
+        // (the c.m. angle of a point given at a lab angle is the row set's at each node, a function of the node's
+        // energy and the lab angle: RowSet.h).
       }
     }
-  }
-}
-
-/*!
- * The sub-points of a point with a grid of its own (a uniform grid with useAdaptiveGrid off) move rigidly with it, by the parent's own lab shift converted to
- * the c.m. frame: a shift is a calibration of the measured beam energy, and the depth or resolution grid keeps its
- * width (audit item 11, tests/shift_sqrt_subpoints).  A sub-point keeps its parent's c.m. angle at the shifted energy,
- * without the parent's lab-to-c.m. conversions (tests/shift_subpoint_angle).  A beta-delayed segment's sub-points
- * hold c.m. energies already: only their excitation energy is converted.  A point with a grid of its own is a group of
- * its own, so it writes every one of its slots.
- */
-void Segment::MoveOwnGridSlots(WorkingCopy &data, int t, Unit &point, CNuc *theCNuc, const Config &configure,
-                               const ChannelRowSource &rows) const {
-  const bool floored = this->ShiftIsFloored();
-  PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->TermEntranceKey(t)));
-  PPair *exitPair = theCNuc->GetPairFromKey(this->TermExitKey(t));  // nullptr for total capture (-1)
-  // Not floored where the data reach below threshold (ShiftIsFloored), as for the point.
-  const double shiftCM = CMEnergyFactor(entrancePair, exitPair) * TotalEnergyShift(data.State(*this), point.GetOriginalEnergy());
-  const TargetEffect *te = this->IsTargetEffect() ? data.Data().GetTargetEffect(this->TermTargetEffectNum(t)) : nullptr;
-  const TargetEffect *qEffect = (te && te->IsQCoefficients()) ? te : nullptr;
-  for (int j = 1; j <= point.NumSubPoints(); j++) {
-    if (!data.WritesSlot(point, j)) continue;
-    Site *subPoint = point.GetSubPoint(data, j);
-    if (!subPoint || !(!floored || subPoint->GetOriginalEnergy() > 0)) continue;
-    const double e = floored ? ShiftedEnergy(subPoint->GetOriginalEnergy(), shiftCM) : subPoint->GetOriginalEnergy() + shiftCM;
-    // both slots: CalcLegendreP reads the lab one for the Q coefficients
-    subPoint->SetCMEnergy(e);
-    subPoint->SetLabEnergy(e);
-    if (entrancePair->GetPType() == 20) subPoint->ConvertExcitationEnergy(exitPair);
-    if (this->IsDifferential() && !this->IsCMDifferential()) {
-      subPoint->SetLabAngle(point.GetCMAngle());
-      subPoint->SetCMAngle(point.GetCMAngle());
-    }
-    if (this->IsDifferential() || this->IsCMDifferential()) {
-      subPoint->ClearLegendrePolynomials();
-      subPoint->CalcLegendreP(&data, configure.maxLOrder, theCNuc, qEffect);
-    }
-    subPoint->RecalcEDependentValues(&data, theCNuc, configure, &rows);
   }
 }

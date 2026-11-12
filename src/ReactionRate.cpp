@@ -208,8 +208,8 @@ double gsl_reactionrate_integration(double temperature, CNuc *compound, const Co
 
 // Tabulated path: compute sigma(E) once on a resonance-aware grid, fit a Steffen
 // spline to ln sigma against ln E, and integrate every temperature against it.
-// Selected by Config::useAdaptiveGrid; useAdaptiveGrid=false uses the per-temperature
-// path.  The spline was of sigma itself against E: below the barrier sigma changes by a
+// The rate's one path; the per-temperature quadrature is its fallback when fewer
+// than three grid points have sigma > 0.  The spline was of sigma itself against E: below the barrier sigma changes by a
 // factor 2-3 between the 48-per-decade backbone nodes, and a monotone spline of convex
 // data lies below it, so every non-resonant charged-particle rate came out low (1.15 %
 // for 12C(a,g) at T9 = 0.1, 0.77 % for 12C(p,g) at T9 = 0.01).  In ln-ln a 1/v cross
@@ -353,8 +353,9 @@ double IntegrateSplineRate(gsl_spline *spline, double eMin, double eMax,
   return result;
 }
 
-// Per-temperature path (Config::useAdaptiveGrid=false, or small-grid fallback).
-void RunAdaptiveRateCalculation(const std::vector<double> &temps,
+// Per-temperature quadrature: the fallback of the tabulated path for a grid with
+// fewer than three points of sigma > 0.
+void RunPerTemperatureRateCalculation(const std::vector<double> &temps,
                                 CNuc *compound, const Config &configure,
                                 int entranceKey, int exitKey,
                                 std::vector<RateData> &outRates) {
@@ -514,7 +515,7 @@ void RunTabulatedRateCalculation(const std::vector<double> &temps,
   if (nSpline < 3) {
     os << "\tGrid too small for spline; using per-temperature integration."
        << std::endl;
-    RunAdaptiveRateCalculation(temps, compound, configure, entranceKey, exitKey, outRates);
+    RunPerTemperatureRateCalculation(temps, compound, configure, entranceKey, exitKey, outRates);
     return;
   }
 
@@ -552,7 +553,7 @@ void RunTabulatedRateCalculation(const std::vector<double> &temps,
   gsl_spline_free(spline);
 }
 
-/*! Dispatches to the tabulated or legacy path based on Config::useAdaptiveGrid. */
+/*! The rate at every temperature: the tabulated path (RunTabulatedRateCalculation). */
 void DispatchRateCalculation(const std::vector<double> &temps,
                              CNuc *compound, const Config &configure,
                              int entranceKey, int exitKey,
@@ -570,10 +571,7 @@ void DispatchRateCalculation(const std::vector<double> &temps,
     configure.outStream << "\tIdentical entrance particles: N_A<sigma v> includes (1+delta_12) in sigma and excludes\n"
                         << "\tthe 1/(1+delta_12) of the rate equation r = n^2 <sigma v> / 2 (FCZ 1967, REACLIB convention)."
                         << std::endl;
-  if (configure.useAdaptiveGrid)
-    RunTabulatedRateCalculation(temps, compound, configure, entranceKey, exitKey, outRates);
-  else
-    RunAdaptiveRateCalculation(temps, compound, configure, entranceKey, exitKey, outRates);
+  RunTabulatedRateCalculation(temps, compound, configure, entranceKey, exitKey, outRates);
 }
 
 }  // namespace

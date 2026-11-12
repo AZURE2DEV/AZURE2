@@ -142,6 +142,26 @@ Format3Project ReadFormat3Project(const io::Document &doc, const Format3ReadOpti
                 "<potentials>: convert the original with AZURE2 --convert OLD NEW --to 3";
     p.diagnostics.push_back(d);
   }
+  // useAdaptiveGrid chose a uniform grid of its own for a folded point (0) or the adaptive one (1): the uniform grid
+  // is gone (it lost narrow resonances), so the key would say nothing; a file that still has it is refused, and the
+  // line is deleted (the converter drops it from old files).
+  {
+    std::size_t open = 0;
+    const io::ConfigSection config = io::ReadConfigSection(io::ConfigLinesOf(doc, open));
+    for (const io::ConfigEntry &e : config.entries) {
+      if (e.positional || e.name != "useAdaptiveGrid") continue;
+      Diagnostic d;
+      d.code = codes::kRemovedConfigKey;
+      d.line = (int)(open + e.line) + 1;
+      d.section = "config";
+      d.field = e.name;
+      d.message = "useAdaptiveGrid is no longer a key of <config>: delete the line.  Every folded point is on the "
+                  "shared mesh of its nucleus, which is never coarser than the uniform grid of the same number of "
+                  "points (the uniform grid, useAdaptiveGrid=0, lost narrow resonances and is gone); a value of 1 "
+                  "said what is now the only grid.";
+      p.diagnostics.push_back(d);
+    }
+  }
   int buildChecks = 0;
   for (const ValidatedRecord &r : p.validated.records)
     if (r.quantity)

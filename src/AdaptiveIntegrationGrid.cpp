@@ -103,10 +103,6 @@ AdaptiveIntegrationGrid::AnchorsInReach(double startEnergy, double endEnergy,
   return inReach;
 }
 
-std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, double endEnergy, CNuc *compound) {
-  return GenerateGrid(startEnergy, endEnergy, Anchors(compound));
-}
-
 /*!
  * \brief Generate the sub-point grid of a window [endEnergy, startEnergy].
  *
@@ -234,31 +230,6 @@ std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, do
   uniqueGrid.back() = endEnergy;
   if (debugGrid) fprintf(stderr, "[AZR_DEBUG_GRID]   %zu grid points\n", uniqueGrid.size());
   return uniqueGrid;
-}
-
-std::vector<AdaptiveIntegrationGrid::GridPoint>
-AdaptiveIntegrationGrid::GenerateGridWithInfo(double startEnergy, double endEnergy, CNuc *compound) {
-  std::vector<ResonanceInfo> anchors = Anchors(compound);
-  std::vector<double> energyGrid = GenerateGrid(startEnergy, endEnergy, anchors);
-  std::vector<ResonanceInfo> inReach = AnchorsInReach(startEnergy, endEnergy, anchors);
-  std::vector<GridPoint> gridInfo;
-  for (double energy : energyGrid) {
-    GridPoint point;
-    point.energy = energy;
-    point.isResonant = false;
-    for (const ResonanceInfo &r : inReach)
-      if (std::abs(energy - r.energy) <= Reach(r)) point.isResonant = true;
-    gridInfo.push_back(point);
-  }
-  return gridInfo;
-}
-
-int AdaptiveIntegrationGrid::GetExpectedPointCount(double startEnergy, double endEnergy, CNuc *compound) {
-  return (int)GenerateGrid(startEnergy, endEnergy, compound).size();
-}
-
-void AdaptiveIntegrationGrid::SetConfig(const GridConfig &config) {
-  config_ = config;
 }
 
 /*!

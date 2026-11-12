@@ -716,6 +716,21 @@ int main() {
       if (!one)
         for (const Diagnostic &d : p.diagnostics) std::printf("        got %s: %s\n", d.code.c_str(), d.message.c_str());
     }
+    // the removed <config> key useAdaptiveGrid (the reading path: ProjectReader), with either value
+    for (const char *value : {"0", "1"}) {
+      Format3ReadOptions read;
+      read.build = false;
+      const std::string text = std::string("<config>\ntrue\noutput/\nchecks/\nnone\nnone\nnone\nnone\nnone\nnone\nnone\nnone\n"
+                                           "useAdaptiveGrid=") + value + "\nformat=3\n</config>\n";
+      const Format3Project p = ReadFormat3Text(text, read);
+      const bool one = p.diagnostics.size() == 1 && p.diagnostics[0].code == "E_CONFIG_KEY_REMOVED" &&
+                       p.diagnostics[0].line == 13 && p.diagnostics[0].message.find("delete the line") != std::string::npos;
+      check(std::string("E_CONFIG_KEY_REMOVED alone for useAdaptiveGrid=") + value + ", at its line, saying to delete it", one);
+      if (!one)
+        for (const Diagnostic &d : p.diagnostics) std::printf("        got %s line %d: %s\n", d.code.c_str(), d.line, d.message.c_str());
+      const Format3Project without = ReadFormat3Text(text.substr(0, text.find("useAdaptiveGrid")) + "format=3\n</config>\n", read);
+      check("without the line: no diagnostic", without.diagnostics.empty());
+    }
     // a thm field naming an experiment <thm> lacks (the reading path: ProjectReader)
     {
       Format3ReadOptions read;

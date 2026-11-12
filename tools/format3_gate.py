@@ -36,7 +36,7 @@ CLASSES = [
     {
         "class": "step of a parameter",
         "file": "param.par",
-        "projects": ["13N/13N.azr", "hybrid_potential/hybrid_potential.azr", "shift_sqrt_subpoints/models/dense.azr",
+        "projects": ["13N/13N.azr", "hybrid_potential/hybrid_potential.azr",
                      "shift_sqrt_subpoints/models/narrow_sqrt.azr", "shift_sqrt_subpoints/models/noshift.azr",
                      "shift_sqrt_subpoints/models/shiftfn.azr", "shift_sqrt_subpoints/models/sqrt.azr",
                      "thick_target_resonance/thick_target_resonance.azr"],

@@ -10,7 +10,6 @@ none                                                                            
 none                                                                                                #Coulomb Amplitudes Check
 file                                                                                                    #Reaction Pathway Check
 none                                                                                                #Angular Distributions Check
-useAdaptiveGrid=1
 format=3
 </config>
 <levels>
