@@ -346,9 +346,9 @@ int AZUREAPI::ReportSegments(CNuc *localCompound, WorkingCopy *localData) {
       energies.push_back(data[k].GetCMEnergy());
       conv.push_back(data[k].GetSFactorConversion());
       excitationEnergies.push_back(data[k].GetExcitationEnergy());
-      angularDists.push_back((double)data[k].GetNumModelAngularDists(results()));
-      for (int a = 0; a < data[k].GetNumModelAngularDists(results()); ++a)
-        angularDists.push_back(data[k].GetModelAngularDist(results(), a));
+      const std::vector<double> coefficients = segment->LegendreCoefficients(data[k], results());
+      angularDists.push_back((double)coefficients.size());
+      angularDists.insert(angularDists.end(), coefficients.begin(), coefficients.end());
     }
     calculatedConv_.push_back(conv);
     calculatedSegments_.push_back(cross);

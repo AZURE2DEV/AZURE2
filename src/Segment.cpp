@@ -643,6 +643,19 @@ int Segment::GetSegmentKey() const {
  * Returns the maximum polynomial order if segment is angular distribution.
  */
 
+std::vector<double> Segment::LegendreCoefficients(const Unit &point, const azure2::Results &results) const {
+  using azure2::experiment::LegendreExpansion;
+  const LegendreExpansion e = reaction_.legendre;
+  std::vector<double> c(static_cast<std::size_t>(point.GetNumModelAngularDists(results)));
+  const double base = azure2::experiment::LegendreExpansionNormalised(e) ? 1.0 : point.GetAngDistA0(results);
+  for (std::size_t k = 0; k < c.size(); k++) {
+    c[k] = point.GetModelAngularDist(results, static_cast<int>(k));
+    if (e != LegendreExpansion::AOverA0)
+      c[k] *= base * azure2::experiment::LegendreExpansionFactor(e, static_cast<int>(k)) * reaction_.scale.factor;
+  }
+  return c;
+}
+
 int Segment::GetMaxAngDistOrder() const {
   return maxAngDistOrder_;
 }

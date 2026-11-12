@@ -20,5 +20,10 @@ double sfactor_conversion(const ChannelKinematics &kin, double E_MeV) {
   return E_MeV * std::exp(2.0 * kPi * eta(nonRelativistic, E_MeV));
 }
 
+double modified_sfactor_conversion(const ChannelKinematics &kin, double E_MeV, double g_perMeV) {
+  const double s = sfactor_conversion(kin, E_MeV);
+  return g_perMeV == 0.0 ? s : s * std::exp(g_perMeV * E_MeV);
+}
+
 }  // namespace physics
 }  // namespace azure2

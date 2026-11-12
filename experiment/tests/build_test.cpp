@@ -153,6 +153,72 @@ void UnitCases(const std::string &targets) {
             data(sf).reaction.observable == Observable::CrossSection);
   ExpectOne("E_REACTION_NOT_ALLOWED", BuildText(Data(Set(Set(Set(kDataset, "quantity", "    quantity sfactor"), "unit", "    unit keV*b"),
                                                          "reaction", "    reaction 16O(g,a)12C"))));
+  // the modified S factor: the S factor's factor with g from 'shape' in 1/MeV (1/keV x 1e3), refused without it
+  const std::string msf = Set(Set(kDataset, "quantity", "    quantity modified_sfactor"), "unit", "    unit MeV*b");
+  const BuiltProject ms = BuildText(Data(msf + "    shape 0.46 1/MeV\n"));
+  check("modified_sfactor, shape 0.46 1/MeV: the S-factor factor with g = 0.46 /MeV, values in MeV b",
+        ms.Ok() && data(ms).reaction.scale.sFactor && data(ms).reaction.scale.sFactorShape_perMeV == 0.46 &&
+            data(ms).reaction.scale.factor == 1.0 && data(ms).columns.value == 1.0 &&
+            data(ms).reaction.observable == Observable::CrossSection);
+  const BuiltProject mk = BuildText(Data(msf + "    shape 4.6e-4 1/keV\n"));
+  check("modified_sfactor, shape 4.6e-4 1/keV: g = 0.46 /MeV",
+        mk.Ok() && std::fabs(data(mk).reaction.scale.sFactorShape_perMeV - 0.46) < 1e-15);
+  check("sfactor: g = 0", sf.Ok() && data(sf).reaction.scale.sFactorShape_perMeV == 0.0);
+  ExpectOne("E_FIELD_REQUIRED", BuildText(Data(msf)));
+  ExpectOne("E_UNIT_NOT_ALLOWED", BuildText(Data(msf + "    shape 0.46 MeV\n")));
+  ExpectOne("E_REACTION_NOT_ALLOWED", BuildText(Data(Set(msf, "reaction", "    reaction 16O(g,a)12C") + "    shape 0.46 1/MeV\n")));
+  // Legendre expansions: each one's spec on data (the base A_L / A_0 or A_L in `absolute`) and on an extrapolation
+  {
+    const std::string leg = Set(Set(Set(kDataset, "quantity", "    quantity legendre"), "columns",
+                                    "    columns E_lab[MeV] order value error"), "norm", "    norm 1 fixed");
+    const struct {
+      const char *word, *unit;
+      LegendreExpansion expansion;
+      bool absolute;
+    } forms[] = {{"a_over_a0", "1", LegendreExpansion::AOverA0, false},
+                 {"absolute", "b/sr", LegendreExpansion::Absolute, true},
+                 {"rsl", "1", LegendreExpansion::Rsl, false},
+                 {"2l2", "mb/sr", LegendreExpansion::TwoL2, true},
+                 {"4pi", "b", LegendreExpansion::FourPi, true}};
+    for (const auto &f : forms) {
+      const BuiltProject b = BuildText(Data(Set(leg, "unit", std::string("    unit ") + f.unit) + "    expansion " + f.word + "\n"));
+      check(std::string("legendre expansion ") + f.word + ": data spec (expansion, A_L or A_L/A_0, value factor)",
+            b.Ok() && data(b).reaction.observable == Observable::AngularCoefficients &&
+                data(b).reaction.legendre == f.expansion && data(b).absolute == f.absolute &&
+                data(b).columns.value == (std::string(f.unit) == "mb/sr" ? 1e-3 : 1.0) && data(b).reaction.scale.Identity());
+      const BuiltProject x = BuildText(std::string("<extrapolations>\nextrapolation x1\n    reaction 15N(p,a)12C\n    quantity legendre\n") +
+                                       "    unit " + f.unit + "\n    expansion " + f.word + "\n    orders 0 4\n" +
+                                       "    energies list 0.3 MeV lab\n</extrapolations>\n");
+      check(std::string("legendre expansion ") + f.word + ": extrapolation spec",
+            x.Ok() && x.extrapolations.extrapolations.items[0].spec.reaction.legendre == f.expansion &&
+                x.extrapolations.extrapolations.items[0].spec.reaction.observable == Observable::AngularDistribution &&
+                x.extrapolations.extrapolations.items[0].spec.maxAngDistOrder == 4);
+    }
+  }
+  // a ratio to a reference table: read once, its E_cm energies taken to the lab, mb to b; its refusals
+  {
+    std::ofstream("build_test_ref.dat") << "# E_cm[keV] sigma[mb]\n100 2\n800 4\n1600 8\n";
+    const std::string rr = Set(Set(Set(kDataset, "quantity", "    quantity ratio_to_reference"), "unit", "    unit 1"), "columns",
+                               "    columns E_cm[keV] _ value error") + "    reference build_test_ref.dat unit mb\n";
+    const BuiltProject b = BuildText(Data(rr));
+    const double lab = 16.00793 / 15.0001;  // E_lab / E_cm of pair 1 (masses of Pairs())
+    const ReferenceTable &t = data(b).reaction.reference;
+    check("ratio_to_reference: the table in lab MeV and b, the sigma observable, the tree kind",
+          b.Ok() && t.file == "build_test_ref.dat" && t.energyLab_MeV.size() == 3 &&
+              std::fabs(t.energyLab_MeV[1] - 0.8 * lab) < 1e-15 && t.sigma_b[2] == 8e-3 &&
+              data(b).reaction.observable == Observable::CrossSection);
+    check("ReferenceAt: linear in ln sigma (the geometric mean half way), NaN outside, the end rows",
+          std::fabs(ReferenceAt(t, 0.45 * lab) / std::sqrt(2e-3 * 4e-3) - 1) < 1e-14 && std::isnan(ReferenceAt(t, 0.05 * lab)) &&
+              ReferenceAt(t, t.energyLab_MeV.back()) == 8e-3 && ReferenceAt(t, t.energyLab_MeV.front()) == 2e-3);
+    std::ofstream("build_test_ref.dat") << "100 2\n800 -4\n";
+    ExpectOne("E_REFERENCE_TABLE", BuildText(Data(rr)));
+    std::ofstream("build_test_ref.dat") << "100 2\n80 4\n";
+    ExpectOne("E_REFERENCE_TABLE", BuildText(Data(rr)));
+    std::ofstream("build_test_ref.dat") << "0.1 2\n0.8 4\n";  // MeV, the grid's unit: 1.2 MeV is outside
+    ExpectOne("E_REFERENCE_TABLE",
+              BuildText("<extrapolations>\nextrapolation x1\n    reaction 15N(p,a)12C\n    quantity ratio_to_reference\n"
+                        "    reference build_test_ref.dat\n    unit 1\n    energies list 0.3 1.2 MeV cm\n</extrapolations>\n"));
+  }
   // yields: per particle and per uC on an infinite target and on a layer; a fitted efficiency and no charge state refused
   {
     const std::string inf = targets.substr(0, targets.size() - std::string("</targets>\n").size()) +

@@ -149,6 +149,7 @@ constexpr const char *kStoppingActive = "E_STOPPING_ACTIVE";
 constexpr const char *kStoppingScaleConflict = "E_STOPPING_SCALE_CONFLICT";
 constexpr const char *kStoppingData = "E_STOPPING_DATA";
 constexpr const char *kStoppingRange = "E_STOPPING_RANGE";
+constexpr const char *kReferenceTable = "E_REFERENCE_TABLE";
 // A laboratory-frame differential datum at the kinematic maximum lab angle, refused by the engine's set-up (Frames.h)
 constexpr const char *kLabJacobianAtLimit = "E_LAB_JACOBIAN_AT_LIMIT";
 // Hybrid potentials (`potential` records: BuildPotentials; the old block in a format-3 file: ReadFormat3Project)

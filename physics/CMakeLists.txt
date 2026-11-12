@@ -91,11 +91,12 @@ add_test(NAME physics_system_unit COMMAND physics_system_unit_test)
 # rules, gamma^ext and the formal-basis mask (docs/upgrade/external_capture.md section 5).  The 9j and the observable
 # coupling coefficients against the six-3j sum and m-scheme angular distributions (docs/upgrade/cnuc_split.md section 9).
 # The resonance strength, branching ratio and total width against numbers computed by hand and their derivatives
-# against central differences (docs/upgrade/data_kinds.md section 4.7).
+# against central differences (docs/upgrade/data_kinds.md section 4.7).  The modified S factor's conversion against
+# mpmath (data_kinds.md section 4.1).
 # (Sources named in full: repo_consistency checks that every tests/*_test.cpp is named here.)
 foreach(_src angular_coupling_test.cpp symmetric_eigen_test.cpp level_parameters_unit_test.cpp
              external_capture_unit_test.cpp observable_coupling_test.cpp pathways_unit_test.cpp
-             resonance_quantities_test.cpp)
+             resonance_quantities_test.cpp astrophysical_factor_test.cpp)
   string(REPLACE "_test.cpp" "" _t ${_src})
   add_executable(physics_${_t}_test tests/${_src})
   target_link_libraries(physics_${_t}_test PRIVATE azure2_physics)

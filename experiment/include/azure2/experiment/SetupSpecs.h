@@ -13,6 +13,9 @@
 #include <utility>
 #include <vector>
 
+#include "azure2/experiment/LegendreExpansion.h"
+#include "azure2/experiment/ReferenceTable.h"
+
 namespace azure2 {
 namespace experiment {
 
@@ -38,15 +41,17 @@ enum class CoulombReference { None, Rutherford, Mott };
  * A factor on the model value of a data set or an extrapolation (format 3: the quantity and the unit of the values;
  * the tree kind Scaled of experiment/Prediction.h): the value compared with the data is
  *
- *   factor x [E exp(2 pi eta(E)) if sFactor] x (the observable's tree),
+ *   factor x [E exp(2 pi eta(E) + g E) if sFactor] x (the observable's tree),
  *
  * E the c.m. energy of the entrance pair at the point as the model evaluates it (after an energy shift; MeV) and eta
- * its Sommerfeld parameter (physics/AstrophysicalFactor.h), so that a fitted shift moves the factor.  The identity
+ * its Sommerfeld parameter (physics/AstrophysicalFactor.h), so that a fitted shift moves the factor; g (1/MeV) is 0
+ * for the S factor and the record's 'shape' for the modified S factor of heavy-ion fusion.  The identity
  * (factor 1, no sFactor) is no node at all, and every old line has it.
  */
 struct ValueScale {
   double factor = 1.0;   ///< the constant c: 1e-6 C / (q e) for a yield per uC, 1 / (unit factor) for an extrapolation
   bool sFactor = false;  ///< the astrophysical S factor S = E sigma exp(2 pi eta) of an angle-integrated sigma
+  double sFactorShape_perMeV = 0.0;  ///< g of the modified S factor S* = E sigma exp(2 pi eta + g E) (1/MeV; 0: S)
   std::string text;      ///< what the factor is, in words, for --describe ("" when factor is 1)
   bool Identity() const { return factor == 1.0 && !sFactor; }
 };
@@ -95,6 +100,14 @@ struct ReactionSpec {
   /// each folded by the point's apparatus (quantities ratio_to_rutherford, ratio_to_mott; observable DifferentialLab
   /// or DifferentialCM, elastic).  The value is the same in both frames: it is not converted at load.
   CoulombReference coulombReference = CoulombReference::None;
+  /// Quantity legendre: the normalisation of the coefficients (LegendreExpansion.h).  On data (AngularCoefficients) a
+  /// factor of the point's order on the engine's A_L / A_0 or A_L (the tree kind Scaled); on an extrapolation
+  /// (AngularDistribution) the map of the written coefficients (Segment::LegendreCoefficients).
+  LegendreExpansion legendre = LegendreExpansion::AOverA0;
+  /// Quantity ratio_to_reference: the table the value is divided by (empty otherwise).  The value is the reaction's
+  /// cross section over this one, each folded by the point's apparatus (tree kind ReferenceRatio; the leaf
+  /// LeafPart::Reference); it is the same in both frames and not converted at load.
+  ReferenceTable reference;
   /// A factor on the model value (an S factor, a yield per unit charge, an extrapolation in another unit).
   ValueScale scale;
 };

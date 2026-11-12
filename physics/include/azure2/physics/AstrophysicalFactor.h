@@ -20,6 +20,18 @@ namespace physics {
  */
 double sfactor_conversion(const ChannelKinematics &kin, double E_MeV);
 
+/*!
+ * The modified S factor of heavy-ion fusion (Patterson, Winkler and Zaidins, Astrophys. J. 157 (1969) 367; data_kinds.md
+ * section 4.1):
+ *
+ *   S*(E) = E sigma(E) exp(2 pi eta(E) + g E),
+ *
+ * g (1/MeV) a constant of the pair that the user gives (12C + 12C: g = 0.46 /MeV; in general 0.122 sqrt(mu R^3 /
+ * (Z1 Z2)) /MeV, mu in u, R in fm), so that S* varies slowly where the barrier is thick.  The factor is
+ * sfactor_conversion(kin, E) exp(g E) (MeV), with the same eta; g = 0 gives sfactor_conversion bit for bit.
+ */
+double modified_sfactor_conversion(const ChannelKinematics &kin, double E_MeV, double g_perMeV);
+
 /// S (MeV b) from sigma (b) at E (MeV, c.m.).
 inline double sfactor_from_cross_section(const ChannelKinematics &kin, double E_MeV, double sigma_b) {
   return sigma_b * sfactor_conversion(kin, E_MeV);
