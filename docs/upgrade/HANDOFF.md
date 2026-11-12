@@ -2,6 +2,33 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, follow-ups 2, the director's fixes) — shift columns, A_y entrance, node budget (`feature/upgrade-5-followups-2`)
+
+**Done** (one commit each).
+- *Shift columns inside the planned nodes.*  The local shift columns (gradient, residual Jacobian) moved the points by
+  +-h without a re-plan; with |Delta - c| + h > R the refold threw and the process ended (3e14: R 0.55 eV < h 0.96 eV;
+  1e15, 1e16: a shift within h of its window's edge; a 0.1 eV beam spread too).  `InsideShiftStep` (ShiftedFold.cpp)
+  halves the step until both sides stay inside, else the column takes the path that plans again.  Test
+  `shift_column_inside`.
+- *A_y needs a particle entrance*: refused in `experiment/src/Build.cpp`; the PointTBar gate is an assertion.  Test
+  `tests/ay_particle_entrance`.
+- *Node budget*: PlanMesh refuses a plan beyond `kMeshNodeBudget` = 1e6 nodes (50 x natural_neon's 21,070) before
+  making it, naming the data set, point, kernel width, planned width and step.  Set-up: ERROR, exit 1; inside a fit
+  (Minuit's parallel gradient): std::terminate with the message, exit 134.  Test `tests/mesh_node_budget`.
+
+**Open, design.**  The planned support of a shifted point is filled at the kernel's own step, so the cost grows as prior
+width / kernel width (1e14 layer, kernel 6e-8 MeV: a 10 eV prior 1.3 s, 0.1 keV 10.6 s and 2.4 GB, 3 keV ~3e7 nodes,
+refused now).
+- A floor on the reach (a few eV) and a planned step that grows with the planned width (the kernel's number of points
+  across it): bounded cost; moves the nodes of every shifted point whose planned width exceeds its kernel's, i.e. every
+  varied shift with a prior or without (their outputs at the quadrature level).
+- A reach capped at a multiple of the kernel width, with re-plans as the shift walks: nodes as without a shift; moves the
+  same projects' fit paths (more re-plans, chi^2 steps by the quadrature difference at each).
+- Thin-limit points (kernel below 1 eV) with a varied shift: chi^2(nu) is a staircase (MIGRAD's error 10x too small at
+  1e14); routing them through the unfolded path with the thin-limit factor is not done (cost in the report).
+- At -20 keV with a 10 eV prior, thin_limit's target-averaged sigma at 0.6 MeV is 6.2e-6 off (0.7, 0.8 MeV and the yield
+  3e-7, as expected): the size of linear interpolation over a keV interval, not the planned 2e-9 MeV step; not resolved.
+
 ## 2026-11-12 (agent, follow-ups 2) — thin shifted layers, unknown options, the gradient's gates, runall tags (`feature/upgrade-5-followups-2`)
 
 **Done** (one commit each).
