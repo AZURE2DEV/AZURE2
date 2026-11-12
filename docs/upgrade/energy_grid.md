@@ -200,8 +200,8 @@ the point's `Unit::SubGridSpec`, a hard lower edge at the integration floor or a
 nucleus once (`PlanMesh`, anchors `MeshAnchorsOf`: every level as each entrance pair of the nucleus's folded points
 sees it, quantized in E_x, from the input widths) and gives each point the nodes of its range (`MeshSlotEnergies`, c.m.
 energies descending).  The kernels integrate over the support (`KernelNodes::Low()/High()`), not over the span of the
-nodes, whose two outer nodes of a soft edge lie up to one interval outside it.  Off the mesh, with grids of their own
-as before: shifted segments (branch 8), THM (branch 10), `useAdaptiveGrid` off, and the σ(Ē) fallback nodes and windows
+nodes, whose two outer nodes of a soft edge lie up to one interval outside it.  (Since 2026-11-12 no folded point is
+off the mesh: below, "one grid".)  Off the mesh, with grids of their own as before: shifted segments (branch 8), THM (branch 10), `useAdaptiveGrid` off, and the σ(Ē) fallback nodes and windows
 (milestone 3).
 
 **Status, milestone 3 (`feature/upgrade-5-d3-deletions`, 2026-11-12): the four mechanisms of D3 are deleted.**  The
@@ -395,7 +395,7 @@ slots are a range of it, ranges overlap.  A slot is written by its first reader 
 (`WorkingCopy::WritesSlot`: set-up values, energy pass, record, external capture, stopping scale, shift step), read by
 all (folds, model pass, gradient; a site's cotangent is the sum of its readers' in point order).  Folds keep E1/E2,
 A_y sigma and a_k A_0 in arrays (`FoldValues`), never in a slot's record.  The hand-over re-places a group at once.
-Off the mesh a point is a group of its own.  Sites: natural_neon 373,449 -> 47,649, thick_target_resonance 74,634 ->
+No folded point is off the mesh (§2.2, last status).  Sites: natural_neon 373,449 -> 47,649, thick_target_resonance 74,634 ->
 28,924, stopping_yield/models 179,438 -> 4,221.  `NodeTableCache` is still needed (re-placed blocks adopt other copies' rows).
 
 ### 2.7 Thread-count independence by construction
@@ -1026,6 +1026,20 @@ model's cotangent by the envelope theorem, one HOES adjoint per site (`ThmCotang
 only, per-file quadrature, every file closer to the refined run (HANDOFF, milestone 1).  Open: the deletions of
 milestone 4 (the uniform grid's own path, `ComputeTHMRows`' central differences of the fold) and the proposal for
 `useAdaptiveGrid` off (`ShiftedFold.h`).
+
+**Status, one grid (`feature/upgrade-5-one-grid`, 2026-11-12): the uniform grid of a point's own is removed.**  The PI
+decided that `useAdaptiveGrid` may go, provided narrow resonances are covered by the mesh.  The director's check on
+`tests/shift_sqrt_subpoints/models/narrow_sqrt.azr` (14N(p,γ), a 9.7 eV level in a 3.2e19 at/cm² layer, first yield):
+the mesh gave 2.18022e-6 at the default setting, 2.17984e-6 and 2.17983e-6 refined 8 and 64 times; the uniform grid
+2.06e-8, 6.00e-8 and 5.09e-7.  Every folded point is now a support of the mesh of its nucleus (`SetUpTargetEffects`:
+one function, `layOutTerm`, for the base segment and its components; a point whose pairs give no E_x frame is
+refused); `Segment::MoveOwnGridSlots`, `Unit::CalcNodeRows`, a row set of a reader's own (`RowSet::valueOffset` −1) and
+its readers' branches, the slot group of a point's own grid and `Config::useAdaptiveGrid` are gone.  The key is refused
+in a format-3 file (`E_CONFIG_KEY_REMOVED`) and dropped by the converter (with a note when it was 0); the reaction rate
+always takes the tabulated grid (the per-temperature quadrature is its fallback for a grid with fewer than three points
+of σ > 0).  `tests/shift_sqrt_subpoints` (f) guards the narrow resonance: `narrow_sqrt` against itself refined eightfold
+to 5.4e-4 (measured 1.78e-4; it fails at 0.98 with the level anchors taken out of the mesh plan).  The project
+`shift_sqrt_subpoints/models/dense` (the uniform 2000-point grid) in the tables of §2.8 and §8 no longer exists.
 
 **Branch 4, done (2026-11-11, `feature/upgrade-5-layer-yield`).** The kernel is today's target integration
 (`src/TargetFold.cpp`) not divided by N for an effect with `TargetEffect::IsLayerYield` (an effect of its own per data

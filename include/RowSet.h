@@ -33,9 +33,7 @@ namespace azure2 {
  * The values a reader folds, the set's rows contracted with the slots' records (divided by J for a lab angle), are
  * those of the evaluation: they live in the evaluation's buffer (Results::contracted, from `valueOffset`), written once
  * per evaluation and set by WorkingCopy::ContractRowSets between the energy pass and the folds (Unit::Calculate for a
- * point calculated on its own), and read by every reader (Site::SlotValue).  A set with valueOffset -1 is a reader's
- * own (a point whose slots move with an energy shift, off the shared mesh: Unit::CalcNodeRows); its readers contract
- * on each read.
+ * point calculated on its own), and read by every reader (Site::SlotValue).
  */
 struct RowSet {
   SiteObservable kind = SiteObservable::kValue;
@@ -65,7 +63,8 @@ struct RowSet {
   vector_r jacobian;
   /// The values a reader folds per slot (the kind's, SiteObservableRow::values): 1, or 2 (cross section, A_y).
   int valuesPerSlot = 1;
-  /// Where the contracted values of slot `first` lie in Results::contracted (valuesPerSlot per slot), -1: not cached.
+  /// Where the contracted values of slot `first` lie in Results::contracted (valuesPerSlot per slot; set by
+  /// WorkingCopy::BuildRowSets, -1 before).
   long valueOffset = -1;
 
   /// The position of slot k's angular factors (0 when they are one for all).

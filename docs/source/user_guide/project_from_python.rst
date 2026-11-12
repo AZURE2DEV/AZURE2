@@ -136,7 +136,7 @@ level)``; a channel by its pair key and (l, s).
 ``p.config()`` and ``p.set_config(**entries)``
     The ``<config>`` entries by name as the engine reads them: ``amatrix``,
     ``output_dir``, ``checks_dir``, the eight checks (``check_data``, ...) and
-    the keys (``relativistic``, ``priorCovariance``, ``useAdaptiveGrid``, ...);
+    the keys (``relativistic``, ``priorCovariance``, ``maxOrbitalMomentum``, ...);
     ``None`` removes a key::
 
         p.set_config(output_dir="run2/", relativistic=True)

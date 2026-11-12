@@ -191,7 +191,8 @@ classes), the pathway trees deleted, the parameter vector and the set-up out, `C
 ## Phase 5 — Energy grid, kernels, stopping, THM observable
 
 - [ ] `EnergyGrid` on compound-nucleus energies; one collision-matrix solve per grid energy for all reactions; grid
-      fixed per fit stage, planned from data, windows and level widths.
+      fixed per fit stage, planned from data, windows and level widths.  Every folded point on the shared mesh (done
+      2026-11-12, `feature/upgrade-5-one-grid`: the uniform grid of a point's own and the key `useAdaptiveGrid` removed).
 - [ ] Observables O_n: integrated σ, Legendre coefficients, nuclear amplitudes with f_C(θ) in kernel rows, A_y as a
       separate numerator, phase shifts, β-delayed spectra, optical theorem, identical particles.
 - [ ] Kernel builders: target, resolution, beam profile, UDR, Doppler, energy shifts (interpolation weights), SUM,

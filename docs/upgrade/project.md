@@ -111,7 +111,8 @@ sections; and with each section removed in turn and each single field edited in 
     when it has none.
 - **`useAdaptiveGrid` moves from `<potential>` to `<config>`.** It selects the target-integration and rate grids, not
   the potential (`Config.cpp` says so), and in 44 of the 47 files with a `<potential>` block it is that block's only
-  reason to exist. `<potential>` remains only where a hybrid potential is used (`useHybridPotential=1`).
+  reason to exist. `<potential>` remains only where a hybrid potential is used (`useHybridPotential=1`). (Format 3
+  has no such key: the converter drops it, `project_format3.md` §3.2.)
 - **The reading rules of P2 and P3.** One reading of every file: whole-line tags with any line ending; case-sensitive
   keywords; quoted paths; the engine's level grouping; and messages naming the line where a row or keyword used to be
   skipped silently.

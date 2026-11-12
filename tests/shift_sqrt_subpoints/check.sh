@@ -12,9 +12,14 @@
 #   (a) sqrt (b = 0.02 on one four-point segment) == const (four one-point segments, each with the constant shift
 #       b sqrt(E_k) of its point): the same calibration point by point, identical yields;
 #   (b) shiftfn "a0*sqrt(x)" == sqrt (the other code path);
-#   (c) sqrt == a uniform 2000-point sub-point grid to 1 % (the fine grid sits on the shifted resonance);
+#   (c) sqrt == sqrt with AZURE_REFINE_QUADRATURE=8 (8 times the smooth intervals and the points per width) to 9.3e-5,
+#       three times the 3.1e-5 measured (2026-11-12): the folded yields under the shift are converged on the mesh;
 #   (d) the shift matters: sqrt differs from the unshifted model;
-#   (e) (a) again with the resonance 100x narrower (10 eV), where the old grid missed the shifted resonance.
+#   (e) (a) again with the resonance 100x narrower (10 eV), where the old grid missed the shifted resonance;
+#   (f) narrow resonances are covered by the mesh: narrow_sqrt (a 9.7 eV level in a 3.2e19 at/cm^2 layer) == itself
+#       refined eightfold to 5.4e-4, three times the 1.78e-4 measured (2026-11-12; x8 against x64: 3.2e-6).  The uniform
+#       sub-point grid that useAdaptiveGrid=0 selected was a factor 100 low here and not converged at 64 times the
+#       points; with the level anchors taken out of the mesh plan (MeshAnchorsOf empty) this check fails.
 #
 #   ./tests/shift_sqrt_subpoints/check.sh path/to/AZURE2
 
@@ -34,11 +39,16 @@ ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 le() { awk -v r="$1" -v t="$2" 'BEGIN { exit !(r + 0 <= t + 0) }'; }
 
-run() {  # MODEL
-  local dir="$WORK/$1"
+run() {  # MODEL [REFINE]: the run lands in $WORK/MODEL, or $WORK/MODEL.xREFINE under AZURE_REFINE_QUADRATURE=REFINE
+  local model="$1" refine="${2:-}" dir="$WORK/$1"
+  [ -n "$refine" ] && dir="$WORK/$1.x$refine"
   mkdir -p "$dir/output" "$dir/checks"
-  cp "$HERE/models/$1.azr" "$dir/t.azr" && cp -r "$HERE/models/data" "$dir/"
-  (cd "$dir" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  cp "$HERE/models/$model.azr" "$dir/t.azr" && cp -r "$HERE/models/data" "$dir/"
+  if [ -n "$refine" ]; then
+    (cd "$dir" && printf '1\n\n\n7\n' | AZURE_REFINE_QUADRATURE="$refine" run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  else
+    (cd "$dir" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+  fi
   ls "$dir"/output/AZUREOut_aa=1_* > /dev/null 2>&1 || { bad "$1: no output"; tail -5 "$dir/run.log"; return 1; }
 }
 # yields MODEL -> "E_lab yield" per data point, every segment of the output file in order
@@ -48,8 +58,9 @@ maxrel() {  # FILE1 FILE2
                         END { if (n == 0) print "nan"; else printf "%.3e\n", w }'
 }
 
-for m in sqrt const shiftfn dense noshift narrow_sqrt narrow_const; do run "$m" || continue; done
-for m in sqrt const shiftfn dense noshift narrow_sqrt narrow_const; do yields "$m" > "$WORK/$m.y" 2>/dev/null; done
+for m in sqrt const shiftfn noshift narrow_sqrt narrow_const; do run "$m" || continue; done
+for m in sqrt narrow_sqrt; do run "$m" 8 || continue; done
+for m in sqrt const shiftfn noshift narrow_sqrt narrow_const sqrt.x8 narrow_sqrt.x8; do yields "$m" > "$WORK/$m.y" 2>/dev/null; done
 n="$(grep -c . "$WORK/sqrt.y")"
 [ "$n" -eq 4 ] || bad "expected 4 yield points, got $n"
 [ "$(grep -c . "$WORK/const.y")" -eq 4 ] || bad "const: expected 4 points over 4 segments, got $(grep -c . "$WORK/const.y")"
@@ -58,12 +69,16 @@ r="$(maxrel "$WORK/sqrt.y" "$WORK/const.y")"
 if le "$r" 1e-9; then ok "(a) sqrt shift = the same calibration as constant shifts point by point (max rel $r)"; else bad "(a) sqrt shift vs point-by-point constant shifts (max rel $r)"; fi
 r="$(maxrel "$WORK/shiftfn.y" "$WORK/sqrt.y")"
 if le "$r" 1e-12; then ok "(b) shiftfn a0*sqrt(x) = sqrtshift (max rel $r)"; else bad "(b) shiftfn vs sqrtshift (max rel $r)"; fi
-r="$(maxrel "$WORK/sqrt.y" "$WORK/dense.y")"
-if le "$r" 1e-2; then ok "(c) adaptive grid = uniform 2000-point grid under the shift (max rel $r)"; else bad "(c) adaptive vs uniform 2000-point grid under the shift (max rel $r)"; fi
+r="$(maxrel "$WORK/sqrt.y" "$WORK/sqrt.x8.y")"
+if le "$r" 9.3e-5; then ok "(c) sqrt = sqrt refined eightfold under the shift (max rel $r, tol 9.3e-5)"; else bad "(c) sqrt vs sqrt refined eightfold under the shift (max rel $r, tol 9.3e-5)"; fi
 r="$(maxrel "$WORK/narrow_sqrt.y" "$WORK/narrow_const.y")"
 if le "$r" 1e-9; then ok "(e) 10 eV resonance: sqrt shift = point-by-point constant shifts (max rel $r; the fine grid sits on the shifted resonance)"; else bad "(e) 10 eV resonance: sqrt shift vs point-by-point constant shifts (max rel $r)"; fi
 r="$(maxrel "$WORK/sqrt.y" "$WORK/noshift.y")"
 if le 5e-2 "$r"; then ok "(d) the shift moves the yields (max rel $r against b = 0)"; else bad "(d) the test is vacuous: the shift does nothing (max rel $r)"; fi
+n="$(grep -c . "$WORK/narrow_sqrt.x8.y" 2>/dev/null)"
+r="$(maxrel "$WORK/narrow_sqrt.y" "$WORK/narrow_sqrt.x8.y")"
+if [ "${n:-0}" -eq 4 ] && le "$r" 5.4e-4; then ok "(f) 9.7 eV resonance: narrow_sqrt = itself refined eightfold (max rel $r, tol 5.4e-4)"
+else bad "(f) 9.7 eV resonance: narrow_sqrt vs itself refined eightfold (max rel $r over ${n:-0} points, tol 5.4e-4)"; fi
 
 echo
 if [ "$failures" -eq 0 ]; then echo "shift_sqrt_subpoints: PASS"; else echo "shift_sqrt_subpoints: FAIL ($failures)"; exit 1; fi

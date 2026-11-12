@@ -352,7 +352,7 @@ class WorkingCopy {
   /// Place the sub-points given since the last commit (each point's replace any it had) and lay the units out again
   /// (CompactUnits).  Single-threaded.
   void CommitSubPoints();
-  /// Per work item of a grid re-placement: the new blocks (a point with a grid of its own is a block with one member).
+  /// Per work item of a grid re-placement: the new blocks of its sharing groups.
   /// PlaceSubPointGrids puts a block whose members keep their places in the block they read now, and which has as many
   /// sites, in the place of that block, any other in a new layout of the units.  Single-threaded.
   using SubPointGrids = std::vector<std::vector<azure2::SlotBlock>>;

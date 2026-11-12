@@ -105,6 +105,9 @@ struct OldProject {
   PotentialBlock potential;   ///< as the engine reads it (its warnings included)
   double abundanceSumSigma = 0.0;  ///< <config> abundanceSumSigma= (the engine's global sum width)
   std::string abundanceSumSigmaText;
+  /// <config> useAdaptiveGrid= (format 2 has it there; the last line wins): "" when absent, else its value.  Format 3
+  /// has no such key: 0 chose a uniform sub-point grid of its own, which no longer exists.
+  std::string adaptiveGridText;
 };
 
 /// Reads the old sections of `doc` (format 2).  Returns "" or the reason the old engine refused the file.

@@ -564,17 +564,6 @@ void Unit::CalcLegendreP(WorkingCopy *data, int maxL, CNuc *theCNuc, const Targe
     if (data->WritesSlot(*this, i)) GetSubPoint(*data, i)->CalcLegendreP(data, maxL, theCNuc, targetEffect);
 }
 
-void Unit::CalcNodeRows(const WorkingCopy &data, int maxL, CNuc *theCNuc, const TargetEffect *targetEffect,
-                        const azure2::experiment::FrameRule *labFrame) {
-  rowset_.reset();
-  rowset_at_ = 0;
-  if (!AngleFree() || IsCoefficient() || NumSubPoints() <= 0 || !theCNuc) return;
-  // The point's own row set over its slots, not cached (RowSet.h); WorkingCopy::BuildRowSets shares them.
-  ReadWithRowSet(SharedTable<azure2::RowSet>::Make(RowSetOver(data, SubPointFirst(), NumSubPoints(), maxL, theCNuc,
-                                                                targetEffect, labFrame)),
-                 0);
-}
-
 azure2::RowSet Unit::RowSetOver(const WorkingCopy &data, int first, int count, int maxL, CNuc *theCNuc,
                                 const TargetEffect *targetEffect, const azure2::experiment::FrameRule *labFrame) const {
   azure2::RowSet set;

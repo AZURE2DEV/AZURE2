@@ -42,7 +42,7 @@ class Unit : public Site {
     bool targetIntegration = false;
     double stoppingConversion = 1.0;  ///< c.m./lab factor of the stopping power
     /// On the shared mesh of its nucleus (docs/upgrade/energy_grid.md section 2.2): the mesh (DataSet::Meshes) and
-    /// the support's index in it, -1 for a point with a grid of its own; E_x - E_cm of its pair (MeV).
+    /// the support's index in it, -1 for a point without a fold; E_x - E_cm of its pair (MeV).
     int mesh = -1, meshSupport = -1;
     double frameShift = 0.0;
     /// An energy shift on the shared mesh (include/ShiftedFold.h): whether the data set's shift is active at the
@@ -109,11 +109,6 @@ class Unit : public Site {
   const Site &OwnSite() const { return *this; }
   /// The Site functions of the same names for the point's own site and then for each slot of its fold, in order.
   void CalcLegendreP(WorkingCopy *data, int maxL, CNuc *, const TargetEffect *);
-  /// A row set of the point's own over its slots (RowSet.h, not cached), where it reads angle-free slots; after its
-  /// own rows and whenever its slots move (a grid of its own moved by an energy shift).  WorkingCopy::BuildRowSets
-  /// replaces it by a shared one.  `labFrame`: its term's conversion where its angle is given in the lab, else null.
-  void CalcNodeRows(const WorkingCopy &data, int maxL, CNuc *, const TargetEffect *,
-                    const azure2::experiment::FrameRule *labFrame);
   /// The rows of the point's angular identity over the slots [first, first + count) of `data` (RowSet.h; its own
   /// Legendre rows, or per slot where they depend on the energy, f_C per slot for elastic scattering; with `labFrame`,
   /// the conversion of a lab angle, the c.m. angle and the Jacobian of every slot, NaN at a slot where the lab angle is

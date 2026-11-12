@@ -11,7 +11,6 @@ none                                                                            
 none                                                                                                #Reaction Pathway Check
 none                                                                                                #Angular Distributions Check
 priorCovariance=prior_cov.f3.txt
-useAdaptiveGrid=1
 format=3
 </config>
 <levels>
