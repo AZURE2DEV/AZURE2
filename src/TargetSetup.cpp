@@ -133,9 +133,10 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
   std::vector<std::vector<MovedSupport>> movedSupports(Data().Meshes().size());
 
   // A point with a grid of its own, or (group non-empty) the points of a sharing group on a shared mesh (SlotGroup.h),
-  // by their numbers in the segment, which are re-placed together.
+  // by their units (UnitAt), which are re-placed together -- of every term that reads the group's block.
   struct Item { TermRef seg; int i; double offset; bool shifted; std::vector<int> group; };
   std::vector<Item> work;
+  std::vector<std::pair<int, std::size_t>> blocks;  // (first slot of a block, its work item)
   static std::atomic<bool> ecNoted{false};
   auto collect = [&](const TermRef &seg) {
     bool any = false;
@@ -170,7 +171,6 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
     PPair *exitPair = theCNuc->GetPairFromKey(seg.GetExitKey());  // nullptr for total capture (-1)
     // The c.m./lab factor the shift step uses for sub-points (Segment::UpdatePointEnergyWithShift).
     const double cmFactor = Segment::CMEnergyFactor(entrancePair, exitPair);
-    std::vector<std::pair<int, std::size_t>> blocks;  // (first slot of a block, its work item) of this term
     for (int i = 1; i <= seg.NumPoints(); i++) {
       Unit *point = seg.GetPoint(*this, i);
       if (!Data().GridSpecOf(*point).valid) continue;
@@ -184,7 +184,7 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
           blocks.push_back({block, work.size()});
           work.push_back({seg, i, 0.0, false, {}});
         }
-        work[blocks[at].second].group.push_back(i);
+        work[blocks[at].second].group.push_back(static_cast<int>(point - &this->UnitAt(0)));
         continue;
       }
       if (!replaceGrids || ec) continue;
@@ -306,14 +306,14 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
   // elsewhere the new plan has the same nodes bit for bit, which AZURE_PLAN_CHECK=1 checks.  The group's sites are
   // placed again together, on the union of its points' new ranges (SlotGroup.h).
   auto replaceGroup = [&](const Item &it, size_t q) {
-    Unit *lead = it.seg.GetPoint(*this, it.group.front());
+    Unit *lead = &this->UnitAt(it.group.front());
     const Unit::SubGridSpec &spec = Data().GridSpecOf(*lead);
     const size_t m = (size_t)spec.mesh;
     if (!meshMoved[m]) return;
     bool inRegion = false;
     std::vector<int> supports;
-    for (int i : it.group) {
-      const Unit *point = it.seg.GetPoint(*this, i);
+    for (int u : it.group) {
+      const Unit *point = &this->UnitAt(u);
       const Unit::SubGridSpec &pspec = Data().GridSpecOf(*point);
       const azure2::MeshSupport &support = meshSupports_[m][(size_t)pspec.meshSupport];
       double low = support.low, high = support.high;
@@ -332,7 +332,7 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
     // Whether each point's slots are at the new energies, bit for bit; the group's block as a whole.
     bool same = true;
     for (size_t j = 0; j < it.group.size(); j++) {
-      const Unit *point = it.seg.GetPoint(*this, it.group[j]);
+      const Unit *point = &this->UnitAt(it.group[j]);
       bool mine = point->NumSubPoints() == ranges[j].second;
       for (int k = 0; mine && k < ranges[j].second; k++)
         mine = point->GetSubPoint(*this, k + 1)->GetOriginalEnergy() == grid[ranges[j].first + k];
@@ -362,8 +362,7 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
     block.sites = laySites(lead, it.seg, false, grid, Slots(first, size), reused);
     for (size_t j = 0; j < it.group.size(); j++)
       if (ranges[j].second > 0)
-        block.members.push_back({static_cast<int>(it.seg.GetPoint(*this, it.group[j]) - &this->UnitAt(0)),
-                                 ranges[j].first, ranges[j].second});
+        block.members.push_back({it.group[j], ranges[j].first, ranges[j].second});
     placed[q].push_back(std::move(block));
     reusedSubPoints += reused;
     newSubPoints += (long)grid.size();

@@ -384,9 +384,10 @@ long WorkingCopy::CheckSlotGroups() const {
     const Unit::SubGridSpec &spec = Data().GridSpecOf(p);
     // a group holding Legendre coefficients has neither angle nor order (Site::AngleFree)
     const bool angleFree = p.AngleFree();
-    return std::vector<std::uint64_t>{(std::uint64_t)p.GetSegmentKey(), angleFree ? 0 : bits(p.GetCMAngle()),
+    return std::vector<std::uint64_t>{angleFree ? 0 : bits(p.GetCMAngle()),
                                       (std::uint64_t)(p.IsCoefficient() && !angleFree ? p.GetCoefficientOrder() : -1),
-                                      (std::uint64_t)p.GetTargetEffectNum(), bits(p.GetScreeningUe()),
+                                      (std::uint64_t)Data().GetTargetEffect(p.GetTargetEffectNum())->GetLineNumber(),
+                                      bits(p.GetScreeningUe()),
                                       (std::uint64_t)p.GetScreeningParam(), (std::uint64_t)spec.mesh,
                                       bits(spec.frameShift), bits(spec.stoppingConversion)};
   };
@@ -423,9 +424,9 @@ long WorkingCopy::CheckSlotGroups() const {
         writers++;
         report("slot " + std::to_string(k) + ": its writer, unit " + std::to_string(w) + ", is no earlier reader of it");
       }
-      // the sites of a block: one term and one angle
+      // the sites of a block: one observable and one angle
       const Site &slot = slots_[k], &head = slots_[slotBlock_[k]];
-      if (slot.GetSegmentKey() != head.GetSegmentKey() || bits(slot.GetCMAngle()) != bits(head.GetCMAngle()) ||
+      if (!SameObservable(slot.Settings(), head.Settings()) || bits(slot.GetCMAngle()) != bits(head.GetCMAngle()) ||
           bits(slot.GetLabAngle()) != bits(head.GetLabAngle())) {
         otherGroup++;
         report("slot " + std::to_string(k) + " has another term or angle than its block's first slot");
@@ -433,7 +434,7 @@ long WorkingCopy::CheckSlotGroups() const {
     }
     if (firstReader[b] < 0) {
       firstReader[b] = u;
-    } else if (key(units_[firstReader[b]]) != key(p)) {
+    } else if (key(units_[firstReader[b]]) != key(p) || !SameObservable(units_[firstReader[b]].Settings(), p.Settings())) {
       otherGroup++;
       report("unit " + std::to_string(u) + " reads the block of unit " + std::to_string(firstReader[b]) +
              ", another group");

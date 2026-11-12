@@ -248,6 +248,8 @@ class Site {
   int Row() const { return is_sub_point_ ? -1 : row_; }
   /// Give the point its term's settings (Segment::SetTermSettings, at set-up).
   void UseSettings(const TermSettings *settings) { settings_ = settings; }
+  /// The settings of the site's term (shared by its term's units).
+  const TermSettings &Settings() const { return *settings_; }
   /// Make this point a sub-point of `parent`'s row: it takes the row's Legendre order (an angular-coefficient row)
   /// but none of its data.
   /// Make this site a slot of `point` (Unit::MakeSubPoint): it takes the point's screening.

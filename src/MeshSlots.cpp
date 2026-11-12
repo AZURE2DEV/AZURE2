@@ -146,10 +146,11 @@ SlotGroupKey MeshGroupKey(const WorkingCopy &data, const Unit &point, const Term
     return b;
   };
   SlotGroupKey key;
-  key.segment = term.segment;
-  key.term = term.term;
+  key.settings = &point.Settings();
   key.mesh = spec.mesh;
-  key.targetEffect = point.GetTargetEffectNum();
+  // the target's line, not the segment's copy of it: the copies of one line share its parameters, so their slots'
+  // stopping is the same (DataSet.h, WorkingCopy::SetUpTargetEffects)
+  key.targetEffect = data.Data().GetTargetEffect(point.GetTargetEffectNum())->GetLineNumber();
   // A site holding Legendre coefficients has no angle and no order: its readers' rows apply them (Site::ValueFor).
   const bool angleFree = point.AngleFree();
   key.legendreOrder = (point.IsCoefficient() && !angleFree) ? point.GetCoefficientOrder() : -1;
@@ -158,10 +159,6 @@ SlotGroupKey MeshGroupKey(const WorkingCopy &data, const Unit &point, const Term
   key.frameShift = bits(spec.frameShift);
   key.screeningUe = bits(point.GetScreeningUe());
   key.screeningParam = point.GetScreeningParam();
-  // A lab-frame differential point with an energy shift converts its angle at its shifted energy: the readers of a
-  // block must have one nominal energy, so that they keep one angle at every shift (ShiftedFold.h, question 3).
-  if (spec.shifted && term.segment->IsDifferential() && !term.segment->IsCMDifferential() && !angleFree)
-    key.nominalEnergy = bits(point.GetOriginalEnergy());
   return key;
 }
 

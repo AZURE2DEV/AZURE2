@@ -67,6 +67,13 @@ for p in "sqrt:$TESTS/shift_sqrt_subpoints/models:sqrt.azr:none" "thm:$TESTS/18O
     bad "$name: exit $r0 / $r1, $n files; $(grep -a AZURE_NODE_CHECK "$WORK/$name.1/run.log" | grep -v ' 0 off the tables, 0 on a wrong node; channel rows 0 differ' | head -2)"
   fi
 done
+# Two data sets of one reaction on one mesh share their sites (SlotGroup.h: the key holds the observable and the
+# target's line, not the segment): hybrid_potential's meyer_84 and meyer_114 read one block of 2413 slots.
+if grep -aq 'AZURE_NODE_CHECK: slot groups: 1 blocks, 2413 slots' "$WORK/elastic.1/run.log"; then
+  ok "elastic: two data sets of one reaction share one block"
+else
+  bad "elastic: two data sets of one reaction do not share their block: $(grep -a -m1 'slot groups' "$WORK/elastic.1/run.log")"
+fi
 run T2fit "$TESTS/upgrade/T2" T2.azr 1 "$FIT" --max-calls=30
 r1="$(cat "$WORK/T2fit.1/rc")"
 if [ "$r1" = 0 ] && clean T2fit && [ "$overflow" -gt 0 ]; then

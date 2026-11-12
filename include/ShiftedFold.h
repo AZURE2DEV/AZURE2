@@ -58,9 +58,9 @@ struct Results;
  *      (TranslatedStopping), from the target's stopping and the copy's stopping scale: the point's, not the site's,
  *      which keeps epsilon(E_n) for every unshifted reader.  At Delta_i = 0 it is the site's value bit for bit.
  *    - the c.m. angle of a lab-frame differential point, which the point converts at its own shifted energy
- *      (Segment::ConvertRowToCM).  The sites of its sharing group carry that angle (the Legendre rows and the Coulomb
- *      amplitude, recomputed by the slot's writer when the angle changes; the channel rows stay); the group key holds
- *      the point's nominal lab energy, so that every reader of a block has the same angle at every nu.
+ *      (Segment::ConvertRowToCM).  The sites have no angle (SiteObservable.h): the point's row set carries it (its
+ *      Legendre rows, Coulomb amplitudes and A_y factors, a set of the point's own once the angle has moved:
+ *      Unit::CalcNodeRows, RowSet.h).
  *    - nothing else: the node's energies, channel rows, Q coefficients (a function of the node energy), screening and
  *      external-capture amplitudes are the node's.  The kernel's own nu dependence (its centre E0 = the point's
  *      shifted c.m. energy; a beam-spread formula sigma(E) at the shifted depth energies) is in the kernel's input,
@@ -77,9 +77,8 @@ struct Results;
  *    implementation of each fold); no node is recomputed and no level matrix solved.  Kinds of shift enter through
  *    Delta_i(nu) only.  An analytic dK/dE0 is not within reach of this branch: it would need every kernel's energy
  *    arithmetic (its centre in sigma(E0), the clip limits, the Gaussian, the depth window) on a dual type, the kernels'
- *    folds beyond their centre; open for every kernel.  Exception: a lab-frame differential segment, whose node values
- *    depend on nu through the angle: its column recomputes the observables of its sites at the moved angle (channel
- *    rows kept), as before; open for the branch of observables per node (Legendre coefficients at the nodes).
+ *    folds beyond their centre; open for every kernel.  A lab-frame differential segment is no exception: its node
+ *    values have no angle, the moved angle is its readers' rows'.
  *
  * A support narrower than MeshZeroWidth() (a layer losing less than 1 eV) gets a single node from the planner and
  * the kernels return 0 for it (a defect before the mesh, not of this branch).  A shifted point with a reach has a

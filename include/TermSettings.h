@@ -41,4 +41,17 @@ struct TermSettings {
   const ThmCoherentBackground *thmCoherent = nullptr;
 };
 
+/// Whether the sites of two terms compute the same observable at an energy (the sharing key of the mesh, SlotGroup.h):
+/// every setting the energy pass reads (GenMatrixFunc, the external capture, THM), all but coefficientAbsolute and
+/// maxAngDistOrder, which only the reader applies (Site::ValueFor).
+inline bool SameObservable(const TermSettings &a, const TermSettings &b) {
+  return a.entranceKey == b.entranceKey && a.exitKey == b.exitKey && a.differential == b.differential &&
+         a.phase == b.phase && a.thm == b.thm && a.angularDist == b.angularDist && a.analyzingPower == b.analyzingPower &&
+         a.total == b.total && a.upos == b.upos && a.j == b.j && a.l == b.l && a.phaseS == b.phaseS &&
+         a.secondaryDecayL == b.secondaryDecayL && a.ic == b.ic && a.delta == b.delta &&
+         a.crossSectionComponent == b.crossSectionComponent && a.thmWeight == b.thmWeight &&
+         a.thmLineshape == b.thmLineshape && a.thmWindow == b.thmWindow && a.thmDistortion == b.thmDistortion &&
+         a.thmDw == b.thmDw && a.thmAngle == b.thmAngle && a.thmCoherent == b.thmCoherent;
+}
+
 #endif

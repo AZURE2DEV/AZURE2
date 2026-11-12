@@ -145,14 +145,10 @@ void TranslatedStopping(const Unit &point, const WorkingCopy &data, const Config
 
 bool FoldOnlyShift(const WorkingCopy &data, const Segment &segment) {
   if (!segment.IsTargetEffect()) return false;
-  // A lab-frame differential point's angle moves with the shift: its node values do not where the point's own row
-  // applies them (Site::AngleFree); A_y sites still carry the angle.
-  const bool labDifferential = segment.IsDifferential() && !segment.IsCMDifferential();
+  // A lab-frame differential point's angle moves with the shift, its row with it (RowSet.h): the node values do not.
   for (int t = 0; t < segment.NumTerms(); t++)
     for (const Unit &point : segment.TermPoints(data, t))
-      if (!IsShiftedOnMesh(point, data) || !HasSubPointFold(data, point) ||
-          (labDifferential && !point.AngleFree()))
-        return false;
+      if (!IsShiftedOnMesh(point, data) || !HasSubPointFold(data, point)) return false;
   return true;
 }
 
