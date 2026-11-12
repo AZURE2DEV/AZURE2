@@ -1129,6 +1129,19 @@ Consequence for the code (check 23): parameter names are user names, so every pl
 `src/ParameterLimitsManager.cpp:245, 304`, the labels of `src/AZURE2.cpp:1171-1212`) must read the parameter's kind
 from the parameter vector instead. This is a step before the reader switch.
 
+**[Built (branch `feature/upgrade-4-refusal-switch`, 2026-11-11).** `Config::ReadConfigFile` refuses a text that is
+not a format-3 project before anything of it is read; the message is `io::NotFormat3Message`
+(`io/include/azure2/io/ProjectFormat.h`, the one text: CLI runs, `--validate`, `--describe`, `--print-predictions`,
+the API session, pyazr's `require_format3`), exit 3; the converted name it offers is `<stem>_f3.azr`. Two more cases
+have their own lines: a `format=3` header over an old section ("says format=3 but holds <segmentsData> at line N ...
+convert the original"), and a text without `<config>` ("is not an AZURE2 project", "(the file is empty)").
+`--convert OLD NEW` writes format 3 without `--to` (the format-2 output is gone). Parameter files:
+`AZURE2 --convert-params OLD.sav NEW.sav --project OLD.azr` -- `--project` names the **old** project, whose conversion
+gives the map (`ConvertResult::parameterNames`, the report's "parameters"): a format-3 project does not determine it
+(its records may have been renamed since); `pyazr.convert_params`; `tests/convert_params` (T2's old fit's `param.sav`
+gives the fit's χ² on the format-3 T2). The old reading path is deleted (`format3_tree.md` §5); consistency check 34
+lists a file of the engine that names an old section.**]**
+
 ### 8.5 Converting the test suite and the gate
 
 1. Convert every `.azr` under `tests/` and `examples/` (189 files; the 179 run by `tools/runall.sh` are those with a

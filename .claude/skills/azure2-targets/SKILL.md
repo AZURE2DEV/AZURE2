@@ -1,21 +1,23 @@
 ---
 name: azure2-targets
-description: Model the apparatus between the AZURE2 cross section and the measured yield - target integration (thin, thick, compound, implanted, gas), stopping power and straggling, Gaussian beam spread and TOF resolution, SAMMY UDR, beam-profile kernels, free-gas Doppler, transmission and self-shielded yield, electron screening, fitted density or thickness, integration windows, Q attenuation coefficients. Use for any <targetInt> line or experimental effect. Building the project: azure2-setup; fitting: azure2-fit; stopping-profile inference from excitation curves: target-analysis.
+description: Model the apparatus between the AZURE2 cross section and the measured yield - target integration (thin, thick, compound, implanted, gas), stopping power and straggling, Gaussian beam spread and TOF resolution, SAMMY UDR, beam-profile kernels, free-gas Doppler, transmission and self-shielded yield, electron screening, fitted density or thickness, integration windows, Q attenuation coefficients. Use for any target, beam or detector record or experimental effect. Building the project: azure2-setup; fitting: azure2-fit; stopping-profile inference from excitation curves: target-analysis.
 ---
 
 # Targets, resolution and other experimental effects in AZURE2
 
-An experimental effect is a `<targetInt>` line that folds the calculated c.m. cross section σ(E_c.m.) of the
-segments it names with a kernel: the energy loss in the target, the beam energy spread, the detector or
+An experimental effect is a record of `<targets>` -- a `target` (energy loss, straggling, Doppler, screening,
+sample thickness), a `beam` (energy spread, profile) or a `detector` (resolution, UDR, attenuation) -- that a data
+set or an extrapolation names in its `target`, `beam` or `detector` field; it folds the calculated c.m. cross
+section σ(E_c.m.) of that data set with a kernel: the energy loss in the target, the beam energy spread, the detector or
 time-of-flight resolution, the thermal motion of the target atoms, the sample attenuation, or the screening of the
-nuclear charge. This skill says how to choose and write those lines and how to check them. What each kernel
-computes, with its equations, is in `docs/source/user_guide/experimental_effects.rst`; the keyword syntax is in
-`docs/source/reference/data_formats.rst`; the implementation (sub-point grids, adaptive lattices) is in
+nuclear charge. This skill says how to choose and write those records and how to check them. What each kernel
+computes, with its equations, is in `docs/source/user_guide/experimental_effects.rst`; the fields are in
+`docs/source/reference/format3.rst` (generated from the table; `AZURE2 --describe` shows what a data set got); the implementation (sub-point grids, adaptive lattices) is in
 `docs/source/developer/edata_and_target_effects.rst`.
 
 ## When to use, and when a sibling skill is the owner
 
-- Use this skill to decide which effect a data set needs, to write or audit its `<targetInt>` line, and to fit an
+- Use this skill to decide which effect a data set needs, to write or audit its target, beam or detector, and to fit an
   apparatus parameter (target density, sample thickness, Doppler temperature, screening potential U_e).
 - Project construction, masses, frames of the data file: `azure2-setup`.
 - Running calculations and extrapolations: `azure2-calculate`. Freeing, seeding and staging parameters, energy
@@ -25,20 +27,20 @@ computes, with its equations, is in `docs/source/user_guide/experimental_effects
 
 ## 1. Choosing the kernel
 
-| Measurement | Effect on the `<targetInt>` line | Docs section |
+| Measurement | Record and field | Docs section |
 |---|---|---|
-| Charged beam on a solid target, ΔE comparable with a resonance width Γ | target integration, density N > 0 (thin) | "Target Integration" |
-| Yield per incident particle from a target thicker than the range | target integration, density 0 (thick) | "Target Integration" |
-| Yield per particle or per µC from a layer of finite thickness (a resonance scan) | format 3 only: `quantity yield` on a `target` of `kind layer` | `docs/source/reference/data_formats.rst`, "Yields" |
-| Beam energy spread or detector resolution, Gaussian | Gaussian convolution, σ_b in MeV, lab | "Gaussian Beam Spread" |
-| Neutron TOF with an energy-dependent width | Gaussian with an expression of E_lab and `sigmalab` | "Gaussian Beam Spread" |
-| Neutron TOF with a tabulated response (n_TOF) | `udr "<file>" L burstFWHM channel centred` | "User-defined numerical resolution function" |
-| Broad, skewed γ beam with event-by-event energy (HIγS TPC) | `beamprofile` block | "Beam-profile kernel" |
-| Narrow resonances (Γ of order 100 eV) in a room-temperature sample | `doppler <T>` | "Free-Gas Doppler Broadening" |
-| Neutron transmission T = exp(−nσ) | segment keyword `transmission <n>` | `docs/source/user_guide/segments.rst` |
-| Capture or reaction yield of a thick sample | segment keyword `yield <n>` | `docs/source/user_guide/segments.rst` |
-| Electron screening of a low-energy charged-particle reaction | `screening U_e vary σ_U` | "Electron Screening" |
-| Angular attenuation of a finite detector | Q coefficients | "Attenuation Coefficients" |
+| Charged beam on a solid target, ΔE comparable with a resonance width Γ | `target` of `kind layer` with `areal_density` N and `stopping` | "Target Integration" |
+| Yield per incident particle from a target thicker than the range | `target` of `kind infinite` with `stopping` | "Target Integration" |
+| Yield per particle or per µC from a layer of finite thickness (a resonance scan) | `quantity yield` on a `target` of `kind layer` | `docs/source/reference/data_formats.rst`, "Yields" |
+| Beam energy spread or detector resolution, Gaussian | `beam` field `spread σ_b MeV lab` (or a `detector`'s `energy_resolution`) | "Gaussian Beam Spread" |
+| Neutron TOF with an energy-dependent width | `beam` field `spread formula "<expression in x>" a0=... MeV lab` | "Gaussian Beam Spread" |
+| Neutron TOF with a tabulated response (n_TOF) | `detector` field `udr file F flight_path L m burst B ns channel C ns centred yes` | "User-defined numerical resolution function" |
+| Broad, skewed γ beam with event-by-event energy (HIγS TPC) | `beam` field `profile skewed_gaussian ...` | "Beam-profile kernel" |
+| Narrow resonances (Γ of order 100 eV) in a room-temperature sample | `target` field `doppler free_gas T K fixed` | "Free-Gas Doppler Broadening" |
+| Neutron transmission T = exp(−nσ) | `quantity transmission` on a `target` of `kind sample` (`areal_density n atoms/b`) | `docs/source/user_guide/segments.rst` |
+| Capture or reaction yield of a thick sample | `quantity yield` on a `target` of `kind sample` | `docs/source/user_guide/segments.rst` |
+| Electron screening of a low-energy charged-particle reaction | `target` field `screening U_e eV fit prior U_e σ_U` | "Electron Screening" |
+| Angular attenuation of a finite detector | `detector` field `attenuation Q1 Q2 ...` | "Attenuation Coefficients" |
 
 A thin-target point is the depth average Y(E_0) = (1/N) ∫_{E_0−Δ}^{E_0} σ(E′)/ε(E′) dE′, with N the areal density
 (atoms cm⁻²), ε the stopping cross section and Δ the energy loss defined by ∫ dE′/ε = N (exact range integral, not
@@ -48,7 +50,7 @@ data a resonance scan gives; N (fitted or fixed) sets the width of a narrow reso
 
 **Which kernel the paper describes.**
 - **A foil thickness (μg cm⁻²) or "the energy loss in the target was X keV" means target integration**, with an areal
-  density and the stopping-power formula, not a Gaussian. Add straggling with the straggling flag on the same line.
+  density and the stopping-power formula, not a Gaussian. Add straggling with the target's `straggling` field.
 - **A detector resolution is not a beam spread.** "7.5 keV FWHM for protons scattered to 144°" is the resolution of
   the detected energy (used to separate peaks); it says nothing about the reaction energy. The Gaussian is for the
   accelerator's beam-energy spread, usually quoted separately (≤ 1 keV on an electrostatic machine).
@@ -61,28 +63,29 @@ data a resonance scan gives; N (fitted or fixed) sets the width of a narrow reso
 - **"The loss was held constant" with foils of different thickness means N varied with beam energy.** One density
   with an energy-dependent ε does not reproduce it (7.5 μg cm⁻² gives 2.8 keV at 0.46 MeV and 1.1 keV at 2 MeV).
   Match the quoted loss at the energy that matters (2.0 × 10¹⁷ atoms cm⁻² gives 1.5 keV at the 1/2⁺ resonance) or use
-  per-window `<targetInt>` lines with lab-energy ranges.
+  one target record per energy window, each named by the data sets of its window.
 - **Before calling a target-integration discrepancy physics**, run the independent check in
   `references/target-integration-check.md`.
 
-## 2. Frames and units on a `<targetInt>` line
+## 2. Frames and units on target, beam and detector records
 
-- **Energies on the line are lab, entrance channel, MeV.** σ_b, the `sigmalab` expression (a function of E_lab in
-  MeV), the beam profile, integration windows: all lab. AZURE2 converts to c.m. for every point with that point's
-  own entrance pair, so one line may serve segments of different pairs (natural targets).
-- **σ_b is a standard deviation, not a FWHM** (FWHM = 2.355 σ_b). Write `0.001` for 1 keV.
+- **Every number carries its unit and frame.** A spread or resolution says `lab` or `cm`; σ_b, a `formula` (a
+  function of x = E_lab in MeV with `lab`), the beam profile and `fold_windows` are entrance-channel lab energies.
+  AZURE2 converts to c.m. for every point with that point's own entrance pair, so one record may serve data sets of
+  different pairs (natural targets).
+- **σ_b is a standard deviation, not a FWHM** (FWHM = 2.355 σ_b). Write `spread 1 keV lab` for 1 keV.
 - **The straggling coefficient c_s is a c.m. quantity** (keV^½): σ_strag = c_s √(ΔE_c.m. [keV]) keV. A coefficient
   quoted for the beam in the lab enters as c_lab √(m₂/(m₁+m₂)) (0.85 for α + ¹¹B, 0.96 for p + ¹²C).
-  Straggling switched on with c_s = 0 computes Bohr's width from Z₁, Z₂ and the line's ε. Bohr's value is
+  Straggling switched on with c_s = 0 computes Bohr's width from Z₁, Z₂ and the target's ε. Bohr's value is
   0.3–0.5 keV^½ for light ions in light targets (p + ¹⁴N at 270 keV: 0.31), is the high-velocity limit (too large
   below about 1 MeV/u) and counts only the target nucleus's electrons. For a compound target with ε per molecule or
   per active atom enter c_s = √(f · 4π Z₁² e⁴ Z_entity / ε) yourself, with ε in MeV cm², e² = 1.44 × 10⁻¹³ MeV cm,
   f = m₂/(m₁+m₂). A coefficient of 0.04 keV^½ is 5–10 times below Bohr, i.e. no straggling.
-- **Expressions without `sigmalab` are the legacy convention**: evaluated at E_c.m. and taken as the c.m. width.
-  A lab TOF derivation written that way is off by the mass ratio on both axes. Convert to the lab form,
-  σ_lab(x) = σ_cm(F x)/F with F = m_t/(m_p+m_t), or write new lines with `sigmalab`.
-- **Equation coefficients are bound in ascending order**: the first number is a0, the coefficient of the lowest
-  power. Written in descending order the line applies a different resolution without any message (a 20 % wider σ
+- **A `formula` with `cm` is evaluated at E_c.m. and taken as the c.m. width** (what an old line without `sigmalab`
+  meant; the converter writes it so). A lab TOF derivation written that way is off by the mass ratio on both axes:
+  use `lab`, or σ_lab(x) = σ_cm(F x)/F with F = m_t/(m_p+m_t).
+- **Formula coefficients are named** (`a0=... a1=...`): check that a0 is the coefficient of the lowest power.
+  Swapped, the record applies a different resolution without any message (a 20 % wider σ
   changed a fitted Γ_n from 0.61 to 0.44 keV in one case). Evaluate σ_b at one known energy before fitting.
 
 ## 3. Compound and implanted targets
@@ -108,11 +111,11 @@ N ≈ Δ/ε(E_0) holds only to first order (a few per cent).
 ## 4. Narrow resonances and sub-point grids
 
 - **A resonance narrower than the kernel needs sub-points on it.** The adaptive grid places a fine lattice around
-  each level (`resonanceWidthMultiplier`, default 20 widths). A 200 eV resonance under a 100 eV Gaussian needed
+  each level (the data set's `quadrature ... width_multiplier`, default 20 widths). A 200 eV resonance under a 100 eV Gaussian needed
   1000 sub-points for 10⁻⁴ accuracy (4 × 10⁻⁴ with 400). Check convergence by raising the sub-point count until the
   folded curve stops moving.
-- **Grid cost against accuracy.** The last two optional numbers of a `<targetInt>` line are resonanceWidthMultiplier
-  and pointsPerWidth (defaults 20 and 50). For one narrow level under target integration, measured at its fitted width:
+- **Grid cost against accuracy.** The data set's field `quadrature points N width_multiplier W per_width P` sets
+  the grid (W and P default 20 and 50). For one narrow level under target integration, measured at its fitted width:
   20/50 113 s (reference), 5/50 37 s (+0.005 % in χ²), 5/20 17 s (+0.03 %), 2/10 6 s (−0.65 %, 6 units of χ², more
   than the Δχ² = 1 interval). Screen at 5/20 and fit and report at 20/50; never use a multiplier of 2. Re-measure per
   project. A width floor on a template buys at most about 2.6× in cost; the number of patterns dominates.
@@ -125,28 +128,29 @@ N ≈ Δ/ε(E_0) holds only to first order (a few per cent).
   current build set `AZURE_DUMP_NONFINITE=1` to locate any remaining non-finite point
   (`docs/source/reference/command_line.rst`).
 - builds before 2026-09-11 (expires: 2027-02-01) mis-estimated level widths when building the narrow-resonance
-  lattice, which can invert which Γ the data prefer; redo any fit of a narrow level through a `<targetInt>` kernel
+  lattice, which can invert which Γ the data prefer; redo any fit of a narrow level through a target or beam kernel
   made with them.
 - **A long in-process job keeps the extension it loaded.** Rebuilding `pyazr/_azure2*.so` during a campaign makes
   later evaluations incomparable with earlier ledger values; compare the `.so` time stamp with the job start
   before comparing objectives across a rebuild.
 
-## 5. Integration windows (`"lo-hi,..."`, `"auto"`)
+## 5. Integration windows (`fold_windows lo-hi ... MeV`, `fold_windows auto`)
 
-Windows restrict the full depth integral of a thin-target line to lab-energy ranges. Outside them a point is
+Windows (the data set's field `fold_windows`) restrict the full depth integral of a layer target to lab-energy
+ranges. Outside them a point is
 σ(Ē), with Ē = ∫E dE/ε / ∫dE/ε over [E_0−Δ, E_0]; the error is |σ″| Δ²/24 (12.6 % on a 25 keV target where σ
 changes by a factor e per 16 keV). Therefore:
 
 - **Cover strongly curved regions, not only narrow resonances**: sub-barrier tails and every particle threshold
   of the compound nucleus (omitting the ¹⁶O(6.05 MeV) n₁ threshold cost 15 % in one case).
-- **`"auto"`, `"auto:tol"`, `"auto:tol:margin"`** (defaults 0.01 and 3) place windows from the levels of the
+- **`auto`, `auto:tol`, `auto:tol:margin`** (defaults 0.01 and 3) place windows from the levels of the
   segment's entrance pair: a level with Γ < Δ/√(3 tol) gets [E_R − w, E_R + Δ + w], w = margin · max(Γ, Δ); Δ
   includes twice the beam spread. The run log prints, per segment, the windows and "I of M points integrated".
   Tighter tolerances integrate more points (one 13C+α model: χ² full 400,616; auto 400,881 with 58 % of points;
   auto:0.003 400,656 with 81 %; auto:0.001:5 400,621 with 99 %).
 - **Check a windowed fit against the full integration at its end point** before trusting it: a model can react to
   the σ(Ē) points more than the data do and end worse.
-- Windows are refused on thick targets and together with `doppler`.
+- Windows are refused on infinite (thick) targets and together with `doppler`.
 - builds before 2026-11-06 (expires: 2027-02-01): points outside windows were σ(E_beam), and `"auto"` is not
   understood; rerun any windowed fit made with them.
 
@@ -157,42 +161,38 @@ changes by a factor e per 16 keV). Therefore:
   general EAR2 file: it is made per experiment, so obtain the one the authors' SAMMY fit used. If the data's TOF→E
   conversion fitted the flight path rather than re-centring, use `centred 0` with that L; use `centred 1` only when
   L already includes the mean moderation length. The kernel is evaluated at the point's nominal energy; one channel
-  width per line (split a segment where the binning changes, e.g. 10 → 100 bins per decade at 300 keV). A positive
+  width per detector (split a data set where the binning changes, e.g. 10 → 100 bins per decade at 300 keV). A positive
   delay maps to a higher true energy. Details: `references/udr-and-beam-profile.md`.
-- **`transmission <n>` and `yield <n>`** (n in atoms/barn) model T = exp(−nσ) and Y₀ = (σ/σ_t)(1 − exp(−nσ_t)),
-  applied at every sub-point before the kernel (transforming the broadened σ instead is 5–6 % off at nσ ≈ 1).
-  Put transmission on a `total 1` line and fit T, not a σ_tot inverted from it. σ_t in `yield` is the
-  optical-theorem total of the entrance pair; capture is not in it. Refused: both keywords on one line,
-  non-angle-integrated data, RATIO, charged or non-particle entrance, terms on different sub-point grids; for
-  `yield` also natural segments, the elastic/total line, other entrances or elastic exits, and `--use-rmc`.
-  Multiple-scattering yields Y₁/Y₂ are not built. pyazr: `Segment.transmission`, `Segment.yield_thickness`.
-- builds before 2026-11-04 (expires: 2027-02-01) ignore `transmission`/`yield` without a message and fit plain σ
-  to T or Y data; check the build before trusting such a file.
-- **`doppler <T>`** (T in K) broadens σ first, then applies `transmission`/`yield`, then the resolution (SAMMY's
-  order). Full width Δ_D = √(4 m E kT/M): 63 eV for n + ¹²C at 300 K and 0.46 MeV. It matters for resonances a few
-  hundred eV wide or narrower. A line may carry `doppler` alone:
-  `1 "1,2" 400 0 0 0 0 "" 0 0 0 0 "" 0 doppler 293.6`. Refused: `doppler 0`, a missing T, photon or β entrance.
-  Format 3: the target record's field `doppler free_gas T K` (`pyazr.Project.set`). Builds before 2026-11-05 (expires: 2027-02-01) refuse the whole
-  `<targetInt>` block.
+- **`quantity transmission` and `quantity yield` on a `kind sample` target** (`areal_density n atoms/b`) model
+  T = exp(−nσ) and Y₀ = (σ/σ_t)(1 − exp(−nσ_t)), applied at every sub-point before the kernel (transforming the
+  broadened σ instead is 5–6 % off at nσ ≈ 1). Fit T, not a σ_tot inverted from it. σ_t in a yield is the
+  optical-theorem total of the entrance pair; capture is not in it. Refused: a differential quantity, a ratio, a
+  charged or non-particle entrance, terms on different sub-point grids, a cross section on a sample target
+  (`E_TARGET_KIND`); for a yield also natural samples, other entrances or elastic exits, and `--use-rmc`.
+  Multiple-scattering yields Y₁/Y₂ are not built.
+- **`doppler free_gas T K fixed`** on the target broadens σ first, then applies the transmission or yield, then the
+  resolution (SAMMY's order). Full width Δ_D = √(4 m E kT/M): 63 eV for n + ¹²C at 300 K and 0.46 MeV. It matters
+  for resonances a few hundred eV wide or narrower. A target may carry `doppler` alone. Refused: T ≤ 0, a photon or
+  β entrance.
 
 ## 7. Fitted apparatus parameters
 
-Each is a parameter with a Gaussian prior about the value written on the line; the fitted value lives only in
-`param.sav` (the line keeps its prior centre, `save_fit` does not move it). Parameter index n = place among the
-active `<targetInt>` lines.
+Each is a parameter of the target record, named after it, with a Gaussian prior about the value the field writes;
+the fitted value lives in `param.sav` (`pyazr.azure2.save_fit` writes it back into the field). One target named by
+several data sets is one parameter for all of them (what the old `densitygroup` / `thicknessgroup` did). Edit the
+fields with `pyazr.Project.set`.
 
-| Keyword (old `<targetInt>` / segment line) | Parameter | Range and grids | Format 3 (edit with `pyazr.Project.set`) |
-|---|---|---|---|
-| `doppler T vary σ [Tmax]` | `doppler_<n>` (K) | grids laid out for Tmax (default max(T+3σ, 1.21T); 2T without prior); MIGRAD keeps T in [T/4, Tmax] | target field `doppler free_gas T K fit [prior T σ] [grid_max Tmax]`; parameter `<target>.doppler` |
-| `transmission n vary σ`, `yield n vary σ`, `thicknessgroup <label>` | `segment_<key>_thickness` (atoms/barn) | group members follow the first segment | `areal_density n atoms/b fit [prior n σ]` on a target of kind sample; parameter `<target>.areal_density`, shared by the data sets on the target |
-| `densityfit vary σ [max]`, `densitygroup <label>` | `density_<n>` (atoms cm⁻²; σ absolute or "2.3%") | grids laid out at max (default N₀+3σ, ≥1.1N₀; 1.5N₀ without prior) | target field `areal_density N atoms/cm2 fit [prior N σ]`; parameter `<target>.areal_density` |
-| `screening U_e vary σ_U` | `screening_<n>` (eV) | factor exp(πηU_e/E_c.m.) on σ at every point and sub-point | target field `screening U_e eV fit prior U_e σ`; parameter `<target>.screening` |
+| Field of the target | Parameter | Range and grids |
+|---|---|---|
+| `doppler free_gas T K fit [prior T σ] [grid_max Tmax]` | `<target>.doppler` (K) | grids laid out for Tmax (default max(T+3σ, 1.21T); 2T without prior); MIGRAD keeps T in [T/4, Tmax] |
+| `areal_density n atoms/b fit [prior n σ]` on a `kind sample` target | `<target>.areal_density` (atoms/barn) | shared by the data sets on the target |
+| `areal_density N atoms/cm2 fit [prior N σ] [grid_max Nmax]` on a `kind layer` target | `<target>.areal_density` (atoms cm⁻²; σ absolute or "2.3%") | grids laid out at grid_max (default N₀+3σ, ≥1.1N₀; 1.5N₀ without prior) |
+| `screening U_e eV fit prior U_e σ_U` | `<target>.screening` (eV) | factor exp(πηU_e/E_c.m.) on σ at every point and sub-point |
 
-- **A fit that ends at Tmax or at the density maximum wants a larger maximum**; beyond max the engine computes at
-  max and warns once.
+- **A fit that ends at Tmax or at the density's grid_max wants a larger grid_max**; beyond it the engine computes at
+  grid_max and warns once, naming the parameter.
 - **The fitted density changes only Δ and the straggling with depth**; the yield is still the depth average, not
-  multiplied by N. Refused: no target integration, thick target, `beamprofile`/`udr`, a group without a
-  `densityfit` leader.
+  multiplied by N. Refused: an infinite target, a beam profile or a UDR on the same data set.
 - **Screening acts on cross sections only** (phase shifts, A_y and ratios are untouched; neutral pairs f = 1). The
   adiabatic limit is B(Z₁+Z₂) − B(Z₁) − B(Z₂) from NIST total binding energies (α + ¹³C 934.7 eV,
   p + ¹²C 442.4 eV). Check the energy frame of screening data: EXFOR entry O1282 tags c.m. energies as lab (EN),
@@ -204,21 +204,22 @@ active `<targetInt>` lines.
 - builds before 2026-10-29 (expires: 2027-02-01): the first evaluation of a session at a shift of exactly 0 used the
   `.azr`'s nonzero shift on segments with target-effect sub-points.
 
-## 8. Every effect also folds the extrapolation segments
+## 8. Extrapolations are folded only by the records they name
 
-A `<targetInt>` line applies to `<segmentsTest>` segments with the same keys. For a bare σ or S factor, deactivate
-the line (first field 0) in a copy of the `.azr` before mode 3. To see the folded shape on a fine grid, give a data
-segment a dummy fine-grid data file and run mode 1. (Extrapolation procedure: `azure2-calculate`.)
+An extrapolation record is folded by the `target`, `beam` or `detector` it names, and by nothing else (an old
+file's `<targetInt>` line also folded the extrapolation with the same index: the converter writes that as the
+extrapolation's own field, with a `# CONVERTED:` note). For a bare σ or S factor, remove the field
+(`pyazr.Project.set` with `None`). To see the folded shape on a fine grid, name the target in an extrapolation. (Extrapolation procedure: `azure2-calculate`.)
 
 ## 9. Energy shifts and sub-points
 
-Sub-points move rigidly with their data point: a constant, `sqrtshift` or `shiftfn` shift s(E_0) is a calibration
+Sub-points move rigidly with their data point: a constant, `sqrt` or function shift s(E_0) (the data set's `shift` or its `energy_scale`) is a calibration
 of the measured beam energy, so the integration window keeps its width and the resonance-anchored grid stays on the
 resonance. Sub-points are built at the parent's c.m. angle.
 
 - builds before 2026-10-26 (expires: 2027-02-01): (a) sub-points of lab-frame differential segments with any
   sub-point effect moved to the wrong angle (by the full lab − c.m. difference) whenever the segment's energy shift
-  was active, and the shift derivatives were wrong with it; (b) under `sqrtshift`/`shiftfn` each sub-point moved by
+  was active, and the shift derivatives were wrong with it; (b) under a sqrt or function shift each sub-point moved by
   s(E_sub), stretching the window by 1 + ds/dE. Refit exposed segments.
 
 ## 10. Attenuation (Q) coefficients
@@ -232,7 +233,7 @@ for particle exits, a few per cent off, and changed results even with every Q = 
 
 - **A shared line under-smoothed every segment it names**: builds before 2026-10-01 (expires: 2027-02-01) converted
   a shared σ_b lab → c.m. once per segment named, so a line naming N segments (or a convolved SUM/RATIO) applied
-  σ_b (m_t/(m_p+m_t))^N. With such a build, write one line per segment.
+  σ_b (m_t/(m_p+m_t))^N. With such a build, give each data set its own beam.
 - **A thick target with beam spread or straggling gives zero at its first point**:
   builds before 2026-10-27 (expires: 2027-02-01). On those builds a thin target whose ε went ≤ 0 also silently
   became thick.
@@ -248,8 +249,8 @@ for particle exits, a few per cent off, and changed results even with every Q = 
 ## Pointers
 
 - `docs/source/user_guide/experimental_effects.rst`: every kernel, its equation and its dialog.
-- `docs/source/user_guide/segments.rst`: `transmission`, `yield`, `total 1`.
-- `docs/source/reference/data_formats.rst`: the `<targetInt>` line token by token.
+- `docs/source/reference/format3.rst`: every field of target, beam, detector and data set, with its grammar.
+- `docs/source/user_guide/older_projects.rst`: an old `<targetInt>` line is converted with `AZURE2 --convert`.
 - `docs/source/developer/edata_and_target_effects.rst`: sub-point grids, windows, adaptive lattice.
 - `references/udr-and-beam-profile.md`: the beam-profile and UDR kernels in detail.
 - Tests that show each effect against an independent result: `tests/convolution_window`, `tests/thick_target`,

@@ -37,6 +37,22 @@ struct ParameterFileNames {
  */
 std::vector<Diagnostic> MatchParameterFileNames(const std::string &file, const ParameterFileNames &names);
 
+/// A row of <parameterSettings> stored under a parameter's own name (the one-token form), with its line in the file.
+struct ParameterSettingRow {
+  std::string name;
+  int line = 0;  ///< 1-based, in the project file
+};
+
+/*!
+ * The <parameterSettings> rows that name no parameter of the project (`known`: the run's parameters and those the
+ * project gives other runs, ParameterNamesOf): W_PARAMETER_SETTING_UNKNOWN for each, with its line and name.  Such a
+ * row is ignored; before 2026-11-11 it was ignored without a word (a row naming an old parameter name, as
+ * screening_1 after the conversion to format 3, tested nothing: tests/nuisance_kinds).  A warning, not an error: the
+ * GUI writes a row for every parameter it shows and leaves rows of parameters since removed.
+ */
+std::vector<Diagnostic> UnknownParameterSettings(const std::string &file, const std::vector<ParameterSettingRow> &rows,
+                                                 const std::vector<std::string> &known);
+
 }  // namespace experiment
 }  // namespace azure2
 

@@ -38,7 +38,7 @@ class AdaptiveIntegrationGrid {
    * \brief Configuration parameters for adaptive grid generation
    */
   struct GridConfig {
-    int maxPoints;                    ///< Number of smooth intervals across the window (targetInt field 3)
+    int maxPoints;                    ///< Number of smooth intervals across the window (quadrature points)
     double baseEnergyStep;            ///< Smooth step (MeV); the caller sets window / maxPoints
     double resonanceWidthMultiplier;  ///< Half-extent of the uniform core, in widths
     double pointsPerWidth;            ///< Core points per width; also sets the tail growth
@@ -75,7 +75,7 @@ class AdaptiveIntegrationGrid {
   static constexpr double tailRatio = 2.5;
 
   /// Default core half-extent (widths) of a pure Gaussian convolution (no
-  /// target integration, no beam profile) whose targetInt line leaves it
+  /// target integration, no beam profile) whose data set leaves it
   /// out.  The kernel is smooth on the scale of the sub-point step, so the
   /// core only has to hold the peak: with the geometric tails, 2 widths at 50
   /// points per width fold an isolated resonance to ~3e-4 (tests/17O,

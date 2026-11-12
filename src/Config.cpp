@@ -1,11 +1,10 @@
 #include "Config.h"
 
-#include "azure2/convert/PotentialBlock.h"
 #include "azure2/experiment/ProjectReader.h"
 #include "InputFiles.h"
 #include "azure2/io/ConfigSection.h"
-#include "azure2/io/Convert.h"
 #include "azure2/io/Document.h"
+#include "azure2/io/ProjectFormat.h"
 #include <cstdlib>
 #ifndef NO_STAT
 #include <sys/stat.h>
@@ -104,16 +103,15 @@ bool Config::ResolveMatrixRoute() {
   return true;
 }
 
-std::unique_ptr<std::istream> Config::SectionStream(const std::string &name) const {
+std::unique_ptr<std::istream> Config::SectionStream(const std::string &name, int *openLine) const {
   std::unique_ptr<std::istream> file = InputFiles::Open(configfile, cacheInputFiles);
   if (!file || !*file) return nullptr;
   std::ostringstream bytes;
   bytes << file->rdbuf();
-  azure2::io::Document doc = azure2::io::Document::Parse(bytes.str());
-  // A format-1 file is read as its format-2 conversion (docs/upgrade/project.md section 4); ReadConfigFile notes it.
-  azure2::io::ConvertToFormat2(doc);
+  const azure2::io::Document doc = azure2::io::Document::Parse(bytes.str());
   const azure2::io::Document::Section *s = doc.Find(name);
   if (!s) return nullptr;
+  if (openLine) *openLine = (int)s->open + 1;
   std::string text;
   const std::size_t end =
       (s->close == azure2::io::Document::Section::npos) ? doc.NumLines() : s->close + 1;
@@ -140,15 +138,15 @@ int Config::ReadFormat3Project(const azure2::io::Document &doc) {
   // that would open it (src/ProjectSetup.cpp: an error for a data run, a warning for an extrapolation)
   read.dataFiles = azure2::experiment::DataFiles::NotUsed;
   read.setUpChecks = false;  // the set-up makes them itself (CNuc::ParseExternalCapture), once, with its message
-  auto project = std::make_shared<azure2::experiment::Format3Project>(azure2::experiment::ReadFormat3Project(doc, read));
-  for (const azure2::experiment::Diagnostic &d : project->diagnostics)
+  auto built = std::make_shared<azure2::experiment::Format3Project>(azure2::experiment::ReadFormat3Project(doc, read));
+  for (const azure2::experiment::Diagnostic &d : built->diagnostics)
     if (d.code != azure2::experiment::codes::kDataFileNotRead) outStream << (d.severity == azure2::experiment::Severity::Error ? "ERROR: " : "WARNING: ") << d.ToText() << std::endl;
-  if (!project->Ok() || !project->levelsRead) {
-    if (project->Ok()) outStream << "ERROR: " << configfile << ": the <levels> section is missing or malformed." << std::endl;
+  if (!built->Ok() || !built->levelsRead) {
+    if (built->Ok()) outStream << "ERROR: " << configfile << ": the <levels> section is missing or malformed." << std::endl;
     ReportFormat3Refused();
     return kConfigRefused;
   }
-  format3 = project;
+  project = built;
   return 0;
 }
 
@@ -158,28 +156,30 @@ void Config::ReportFormat3Refused() const {
 }
 
 int Config::ReadConfigFile() {
+  std::string bytes;
+  {
+    std::unique_ptr<std::istream> file = InputFiles::Open(configfile, cacheInputFiles);
+    if (!file || !*file) return kConfigUnreadable;
+    std::ostringstream text;
+    text << file->rdbuf();
+    bytes = text.str();
+  }
+  // A file that is not a format-3 project is refused before anything of it is read (docs/upgrade/project_format3.md
+  // section 8.4): the one message, which names the conversion, is the run's last line.
+  const std::string refusal = azure2::io::NotFormat3Message(bytes, configfile);
+  if (!refusal.empty()) {
+    outStream << "ERROR: " << refusal << std::endl;
+    return kConfigNotFormat3;
+  }
+  // The file's structural problems (an unclosed or repeated section, crossing tags), once per read.
+  const azure2::io::Document doc = azure2::io::Document::Parse(bytes);
+  for (const std::string &problem : doc.Problems()) outStream << "WARNING: " << configfile << ": " << problem << std::endl;
+  project.reset();
+  if (ReadFormat3Project(doc) != 0) return kConfigRefused;
   // The <config> section of the project (io::Document; a tag is a whole trimmed line).
   std::unique_ptr<std::istream> section = SectionStream("config");
   if (!section) return kConfigUnreadable;
-  // The file's structural problems (an unclosed or repeated section, crossing tags), once per read.
-  {
-    std::unique_ptr<std::istream> file = InputFiles::Open(configfile, cacheInputFiles);
-    std::ostringstream bytes;
-    if (file && *file) bytes << file->rdbuf();
-    azure2::io::Document doc = azure2::io::Document::Parse(bytes.str());  // kept alive for the loops
-    for (const std::string &problem : doc.Problems())
-      outStream << "WARNING: " << configfile << ": " << problem << std::endl;
-    format3.reset();
-    if (azure2::io::FormatOf(doc) == 3 && ReadFormat3Project(doc) != 0) return kConfigRefused;
-    if (azure2::io::FormatOf(doc) == 1) {
-      const std::vector<std::string> changes = azure2::io::ConvertToFormat2(doc);
-      std::string list;
-      for (const std::string &c : changes) list += (list.empty() ? "" : "; ") + c;
-      Note("Note: " + configfile + " is in the old format (format 1); it is read as its format-2 conversion (" + list +
-           "). AZURE2 --convert writes the converted file.");
-    }
-  }
-  useAdaptiveGrid = true;  // the default; a <config> key (format 2) or <potential> (format 1, converted) sets it
+  useAdaptiveGrid = true;  // the default; the <config> key useAdaptiveGrid sets it
   // The section's one grammar (io/ConfigSection.h): eleven positional entries, then key=value lines.
   std::vector<std::string> lines;
   for (std::string line; std::getline(*section, line);) lines.push_back(line);
@@ -192,8 +192,13 @@ int Config::ReadConfigFile() {
     paramMask |= USE_AMATRIX;
   else
     paramMask &= ~USE_AMATRIX;
-  outputdir = value("output_dir");
-  checkdir = value("checks_dir");
+  // A directory is a prefix of the file names: written without its trailing '/', it gets one.
+  auto directory = [](std::string path) {
+    if (!path.empty() && path.back() != '/' && path.back() != '\\') path += '/';
+    return path;
+  };
+  outputdir = directory(value("output_dir"));
+  checkdir = directory(value("checks_dir"));
   const struct {
     const char *name;
     unsigned int mask;
@@ -207,8 +212,7 @@ int Config::ReadConfigFile() {
     else if (value(c.name) == "file")
       fileCheckMask |= c.mask;
   }
-  // The optional key=value lines (the last line of a key wins). A reader that does not know a key skips it, so a
-  // project carrying them still opens in older builds.
+  // The optional key=value lines (the last line of a key wins).
   for (const azure2::io::ConfigEntry &e : config.entries) {
     if (e.positional) continue;
     const std::string &key = e.name, &value = e.value;
@@ -224,46 +228,25 @@ int Config::ReadConfigFile() {
       relativisticReferencePair = atoi(value.c_str());
     else if (key == "priorCovariance")
       priorCovariance = value;
-    else if (key == "useAdaptiveGrid")  // format 2 (format 1: in <potential>)
+    else if (key == "useAdaptiveGrid")
       useAdaptiveGrid = (value == "1" || value == "true");
     // "format" is the file format (docs/upgrade/project.md section 4), read by io::FormatOf
   }
   if (!config.closed) return kConfigUnreadable;
-  // A malformed optional block has already been reported: -2, so the caller
-  // does not add a misleading "could not open" on top.
-  if (this->ReadPotentialBlock() != 0) return kConfigBlockMalformed;
+  ReadPotentials();
+  // A malformed <thm> section has already been reported: kConfigBlockMalformed, so the caller does not add a
+  // misleading "could not open" on top.
   return this->ReadThmBlock() != 0 ? kConfigBlockMalformed : 0;
 }
 
 /*!
- * The hybrid potentials of the project, per pair.  A format-3 project states them as `potential` records of
- * <potentials>, which Schema::Build has made into settings (one per pair, no default); the defaults of the table it
- * used are noted.  An older project states them in the <potential> block, read with the old block's one parser
- * (convert/ PotentialBlock.h, which the converter to format 3 uses too) and its warnings written here; without the
- * block no pair has a potential.  useAdaptiveGrid in the block (format 1) is a property of the target-effect
- * integration and stays global.
- *
- * Returns 0 on success (including "no block present") and -1 if the block is present but not closed.
+ * The hybrid potentials of the project, per pair: the `potential` records of <potentials>, which Schema::Build has made
+ * into settings (one per pair, no default); the defaults of the table it used are noted.
  */
-int Config::ReadPotentialBlock() {
-  potentials = azure2::experiment::HybridPotentialSettings();
-  useHybridMethod = false;
-  if (format3) {
-    potentials = format3->built.potentials;
-    for (const std::string &note : format3->built.potentialNotes) Note("Note: " + configfile + ": " + note);
-    useHybridMethod = potentials.AnyEnabled();
-    return 0;
-  }
-  std::unique_ptr<std::istream> section = SectionStream("potential");
-  if (!section) return 0;  // optional block, absent: no hybrid potential (also after a project that had one)
-  const azure2::convert::PotentialBlock block = azure2::convert::ReadPotentialBlock(*section);
-  for (const std::string &warning : block.warnings) outStream << warning << std::endl;
-  if (block.hasAdaptiveGrid) useAdaptiveGrid = block.adaptiveGrid;
-  potentials = block.settings;
-  if (!block.closed) return -1;  // unterminated block
-  // On when any pair has the model; CNuc::Fill gives each pair its potential.
+void Config::ReadPotentials() {
+  potentials = project->built.potentials;
+  for (const std::string &note : project->built.potentialNotes) Note("Note: " + configfile + ": " + note);
   useHybridMethod = potentials.AnyEnabled();
-  return 0;
 }
 
 /*!

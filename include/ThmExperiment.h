@@ -60,7 +60,7 @@ std::string ThmResolveReaction(const ThmNuclide &beam, const ThmNuclide &target,
 /// One experiment[<name>] record, merged over the lines that name it.
 struct ThmExperiment {
   std::string name;
-  /// <segmentsData> line numbers (segment keys, counting inactive lines), ascending.
+  /// The keys of the data sets that name the experiment (DatasetSpec::key), ascending (ReadFormat3ThmSection).
   std::vector<int> segments;
   /// Number of background terms: 0 none, 1 const, 2 linear, 3 quadratic.
   int backgroundTerms = 0;
@@ -183,7 +183,7 @@ struct ThmExperiment {
  * (ThmSettings::parseLine), so that both take exactly the same lines.
  */
 struct ThmOptionLine {
-  enum Kind { VERTEX, KINEMATICS, ENTRANCE_L, COULOMB_INTEGRAL, SPECTATOR_ENERGY, WEIGHT };
+  enum Kind { VERTEX, KINEMATICS, ENTRANCE_L, COULOMB_INTEGRAL, SPECTATOR_ENERGY };
   Kind kind = VERTEX;
   /// vertex (onshell | constant | perlevel; "real" reads as perlevel),
   /// kinematics (lacognata | triple | kf3body | lambda32), entranceL
@@ -193,32 +193,15 @@ struct ThmOptionLine {
   double energy = 0.0;   ///< spectatorEnergy (MeV, >= 0)
   int pairKey = 0;       ///< the key of spectatorEnergy[<pair key>] (unused for spectatorEnergy=)
   bool perPair = false;  ///< spectatorEnergy[<pair key>]= (else spectatorEnergy=)
-  bool test = false;     ///< weightTest[k] (else weight[k])
-  int segment = 0;       ///< the k of weight[k] / weightTest[k] (>= 1)
-  std::string file;      ///< the weight file as written
 };
 /// Parses `key=value` (key and value trimmed) of a global <thm> key; false if
 /// the key is unknown or the value is not one AZURE2 takes.
 bool ParseThmOptionLine(const std::string &key, const std::string &value, ThmOptionLine &out);
 
 /*!
- * The lines of a <thm> block (between the tags) as Config::ReadThmBlock reads
- * them, without the files they name: every line parsed (ParseThmOptionLine,
- * ParseThmExperimentLine), then CheckThmExperiments and, with `global`,
- * CheckThmCoulombConsistency.  "" or what AZURE2 reports, "<thm> ..." (for
- * pyazr, which edits files without the engine and asks it when it is there).
- */
-std::string CheckThmBlockLines(const std::vector<std::string> &lines, bool global);
-/// The same reading, keeping what it read: every global line in `options` (in block order) and the experiments;
-/// "" or the message ("<thm> ...").  CheckThmBlockLines is this plus, with `global`, CheckThmCoulombConsistency.
-std::string ParseThmBlockLines(const std::vector<std::string> &lines, std::vector<ThmOptionLine> &options,
-                               std::vector<ThmExperiment> &experiments);
-
-/*!
  * Parses one `experiment[<name>] key=value ...` line (comment already
  * stripped, trimmed) into `experiments`, merging with an earlier line of the
- * same name.  Returns "" or what is wrong.  Keys: segments (required),
- * background, beam, target, spectator, Ebeam, lineshape (on|off), ps
+ * same name.  Returns "" or what is wrong.  Keys: background, beam, target, spectator, Ebeam, lineshape (on|off), ps
  * (delta | hulthen:pmin-pmax | hulthen:a,b:pmin-pmax | gauss:FWHM:pmin-pmax |
  * table:file), psNodes, distortion (none | coulomb | optical | table:file),
  * opticalAA, opticalSF, spectatorAngle, distortionRef, distortionRatio,
@@ -278,7 +261,7 @@ struct ThmCoherentBackground {
   }
 };
 
-/// Checks the complete set once the block is read: segments given, kinematics
+/// Checks the complete set once the block is read: members given, kinematics
 /// all-or-none, lineshape=on and a ps window only with them, psNodes only with a
 /// window, no segment in two experiments, distortion keys consistent (and
 /// distortionRatio=dw not with a ps window, which would weight the model by the

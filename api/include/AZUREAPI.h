@@ -118,17 +118,17 @@ class AZUREAPI {
    *                      project with an <abundances> block): its Z in field 1
    *                      and A in field 4, the 1-based sample in field 6, the
    *                      prior sigma in field 14
-   *                    7=electron-screening potential U_e (eV) of a <targetInt>
-   *                      line with a screening block: the effect number in
+   *                    7=electron-screening potential U_e (eV) of a target
+   *                      with a screening field: the effect number in
    *                      field 6, the prior centre in field 5, the prior sigma
    *                      in field 14 (0 = none)
-   *                    8=fitted target density (atoms/cm^2) of a <targetInt>
-   *                      line with a densityfit block or of a density group:
+   *                    8=fitted target density (atoms/cm^2) of a target
+   *                      with a fitted areal_density (shared by its data sets):
    *                      as type 7, plus the largest density the sub-point
    *                      grids span in field 8
    *                    9=fitted free-gas Doppler temperature (K) of a
-   *                      <targetInt> line with 'doppler T vary sigma
-   *                      [Tmax]': as type 8, the layout temperature (the
+   *                      target with 'doppler free_gas T K fit ... [grid_max
+   *                      Tmax]': as type 8, the layout temperature (the
    *                      largest the sub-point grids span) in field 8
    *                   10=fitted sample thickness (atoms/barn) of a data
    *                      segment with 'transmission n vary sigma' or

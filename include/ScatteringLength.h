@@ -75,7 +75,7 @@ Value Evaluate(CNuc *compound, const Config &configure, const Channel &ch);
 bool Adjoint(CNuc *compound, const Config &configure, const Channel &ch, complex aBar, GradAccum &accum,
              const vector_matrix_r *shiftDeriv);
 
-/// A measured scattering length in the <scatteringLengths> block.
+/// A measured scattering length: a <modelData> datum of quantity scattering_length (ModelData.cpp).
 struct Constraint {
   bool active = true;
   int pairKey = 0;
@@ -89,16 +89,8 @@ struct Constraint {
   std::vector<double> weights;
 };
 
-/*!
- * Read the optional <scatteringLengths> block of configure.configfile.  Lines:
- *   active pairKey s value sigma [imValue imSigma]
- * '#' starts a comment.  s = -1 selects the coherent combination sum_s g_s a_s with
- * g_s = (2s+1)/((2j1+1)(2j2+1)).  Returns -1 (with a message) on an error, else the number of lines.
- */
-int ReadConstraints(CNuc *compound, const Config &configure, std::vector<Constraint> &constraints);
-
 /// The channel spin(s) and weights of a constraint from its pair key and s (s < 0: the coherent combination), as the
-/// <scatteringLengths> reader and the <modelData> reader (ModelData.cpp) resolve them.  "" or the reason it cannot be.
+/// <modelData> reader (ModelData.cpp) resolves them.  "" or the reason it cannot be.
 std::string ResolveConstraint(CNuc *compound, Constraint &c);
 
 /// Model value of a constraint (fm).
@@ -118,27 +110,9 @@ bool ConstraintGradient(CNuc *compound, const Config &configure, const Constrain
 /// Number of residual rows of one constraint (0, 1 or 2).
 int NumResiduals(const Constraint &c);
 
-/// Residuals of the active constraints: (Re a - value)/sigma and (Im a - imValue)/imSigma for
-/// each nonzero sigma, in constraint order.
-void Residuals(CNuc *compound, const Config &configure, const std::vector<Constraint> &constraints,
-               std::vector<double> &r);
-
-/// chi2 of the active constraints, sum of the squared residuals.
-double Chi2(CNuc *compound, const Config &configure, const std::vector<Constraint> &constraints);
-
-/*!
- * Gradient of Chi2 (residual = -1) or of one residual row (residual = row index) into accum.
- * Returns false where Adjoint does.
- */
-bool Chi2Gradient(CNuc *compound, const Config &configure, const std::vector<Constraint> &constraints,
-                  GradAccum &accum, const vector_matrix_r *shiftDeriv, int residual = -1);
-
-/// Number of residual rows of the active constraints.
-int NumResiduals(const std::vector<Constraint> &constraints);
-
-/// Table of every particle pair's s-wave scattering lengths and the constraints, as written to
-/// scatteringLengths.out and the run log.
-std::string Report(CNuc *compound, const Config &configure, const std::vector<Constraint> &constraints);
+/// Table of every particle pair's s-wave scattering lengths, as written to scatteringLengths.out (measured ones are
+/// <modelData> data: ModelData::Report).
+std::string Report(CNuc *compound, const Config &configure);
 
 }  // namespace ScatteringLength
 

@@ -35,7 +35,7 @@ scripts; a calculation under different flags is a different model.
 
 - Format 3: one `potential` record per particle pair in `<potentials>` (`pair`, required `coulomb_radius`, `central
   woods_saxon|gaussian ...`, optional `matching_radius` 15 fm and `step` 0.0275 fm); no record, no potential.
-  `AZURE2 --convert OLD NEW --to 3` writes the records from an old block (`coulomb_radius 3.5 fm`). Fields and
+  `AZURE2 --convert OLD NEW` writes the records from an old block (`coulomb_radius 3.5 fm`). Fields and
   refusals: `docs/source/reference/format3.rst`.
 - The potential changes the radial solution between a_c and the matching radius, hence P, S, the phases and the EC
   entrance wave, and below threshold the decaying solution (S, ANC conversion, bound-state tail of EC). Behaviour:

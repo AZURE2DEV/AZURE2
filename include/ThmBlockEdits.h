@@ -4,13 +4,13 @@
 #include <string>
 #include <vector>
 
+#include "ThmOptions.h"
 #include "azure2/experiment/SetupSpecs.h"
 
 /*!
  * The writer of the <thm> block beside its reader (ThmExperiment.h): the lines of an edited global option or
  * experiment key, each checked by the reader (ParseThmOptionLine, ParseThmExperimentLine) before it is offered; and
- * the block as the engine reads a format-3 one (Format3ThmLines), with which the whole block is checked
- * (CheckThmBlockLines).  Lines an edit does not touch keep their bytes.  pyazr's Project edits <thm> through these
+ * the section as the engine reads it (ReadFormat3ThmSection).  Lines an edit does not touch keep their bytes.  pyazr's Project edits <thm> through these
  * (api/src/pybind_thm.cpp, docs/upgrade/pyazr_on_records.md "Edits of the nuclear part").
  *
  * `lines` are the lines strictly between <thm> and </thm>; an edit's `line` indexes them (Insert: before that line,
@@ -43,6 +43,7 @@ bool ThmOptionEdits(const std::vector<std::string> &lines, const std::string &ke
 /// A key of experiment[`name`]: Set replaces the key's `key=value` token where it stands or appends it to the
 /// experiment's last line (a new experiment gets a line of its own at the end); Remove drops the token, or with an
 /// empty `key` every line of the experiment.  segments= is refused: in format 3 a data set names its experiment.
+/// `why` does not repeat "experiment[<name>]": the caller names the experiment it edits.
 bool ThmExperimentEdits(const std::vector<std::string> &lines, const std::string &name, const std::string &key,
                         const std::string &value, ThmChange change, std::vector<ThmLineEdit> &edits, std::string &why);
 
@@ -50,20 +51,22 @@ bool ThmExperimentEdits(const std::vector<std::string> &lines, const std::string
 std::vector<std::string> ApplyThmLineEdits(const std::vector<std::string> &lines, const std::vector<ThmLineEdit> &edits);
 
 /*!
- * The <thm> section of a format-3 project (its lines from the <thm> tag to </thm>) in the grammar the reader takes:
- * format 3 names an experiment's data sets and a data set's weight table in its records (project_format3.md section
- * 3.9; Schema::Build, ThmMembershipSpec), so the members are appended to each experiment[<name>] line as
- * segments=<keys> and the weights as weight[<k>]= / weightTest[<k>]= lines before </thm>.  An experiment line that no
- * active data set names (ThmExperimentsWithoutMembers) is left out, as the old engine ignored an experiment with no
- * segment in use.  The section's own segments= and weight[<k>]= are refused when the project is read
- * (E_THM_OLD_LIST), so they never meet the ones written here.
+ * The <thm> section of a format-3 project read into `thm` (Config::ReadThmBlock; pyazr's check of an edit,
+ * check_format3_thm): `section` its lines from the <thm> tag (as Config::SectionStream gives them; empty when the
+ * project has none), the global options and experiment[<name>] lines parsed (ParseThmOptionLine,
+ * ParseThmExperimentLine); the members of each experiment and the weight tables are those of the records
+ * (`members`, ThmMembershipSpec: a data set's fields thm and thm_weight), the tables read relative to `projectFile`
+ * when `readFiles`.  An experiment that no active data set names is left out and listed in `idle`; `warnings` gets
+ * the Coulomb-consistency warnings.  Returns "" or the refusal (printed after "ERROR: ").
  */
-std::vector<std::string> Format3ThmLines(const std::vector<std::string> &section,
-                                         const azure2::experiment::ThmMembershipSpec &thm);
+std::string ReadFormat3ThmSection(const std::vector<std::string> &section,
+                                  const azure2::experiment::ThmMembershipSpec &members, const std::string &projectFile,
+                                  bool readFiles, ThmOptions &thm, std::vector<std::string> &idle,
+                                  std::vector<std::string> &warnings);
 
 /// The experiments no active data set names: those only inactive data sets name (in the order of the records), then
 /// those of the section's experiment[<name>] lines that no data set names.  They are ignored, with a warning
-/// (Config::ReadThmBlock).
+/// (ReadFormat3ThmSection).
 std::vector<std::string> ThmExperimentsWithoutMembers(const std::vector<std::string> &section,
                                                       const azure2::experiment::ThmMembershipSpec &thm);
 

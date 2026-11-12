@@ -220,8 +220,8 @@ with tempfile.TemporaryDirectory() as tmp:
                 v = moved[next(it)] if not m.fixed_params[i] else allrwa[i]
                 fh.write(f"{p.name:>28s} {float(v): .7e} {0.0: .7e}\n")
 
-    binary = None
-    for cand in sorted(glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))):
+    binary = os.environ.get("AZURE2_BIN")  # ctest's: the binary this build made
+    for cand in [] if binary else sorted(glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))):
         if os.path.isfile(cand) and os.access(cand, os.X_OK):
             binary = cand
             break

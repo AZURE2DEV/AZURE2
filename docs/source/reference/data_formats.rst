@@ -586,7 +586,7 @@ quantity, unit and diagnostic is :doc:`format3`) keeps ``<config>``,
 ``<modelData>``.  A record is a header line ``<kind> <name>`` and one
 ``<key> <value>`` line per field; ``#`` starts a comment.  Records refer to one
 another by name, in any order.  An excerpt of T2 (``tests/upgrade/T2``, written
-by ``AZURE2 --convert T2.azr T2_f3.azr --to 3``; the whole file is
+by ``AZURE2 --convert T2.azr T2_f3.azr``; the whole file is
 ``experiment/tests/data/T2_format3.azr``)::
 
    <config>
@@ -685,7 +685,7 @@ shared record's belong to the first active data set of the group
 member keeps a fixed parameter of its own, ``D.value[s03_diff150]``; the
 effects of a target are ``<target>.areal_density``, ``<target>.doppler``,
 ``<target>.screening``, an isotope's abundance ``<target>.isotope.<nuclide>``.
-``AZURE2 --convert ... --to 3`` reports the map from the old names
+``AZURE2 --convert`` reports the map from the old names
 (``segment_2_norm``) to these in its ``--json-report`` (``parameters``) and
 renames the rows of ``<parameterSettings>`` by it.
 

@@ -142,8 +142,8 @@ with tempfile.TemporaryDirectory() as tmp:
             check("a file with no name of the run is refused", "E_PARAMETER_FILE_NO_MATCH" in str(err), str(err)[:300])
 
     print("\n4. the same file through AZURE2 itself")
-    binary = None
-    for cand_bin in sorted(glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))):
+    binary = os.environ.get("AZURE2_BIN")  # ctest's: the binary this build made
+    for cand_bin in [] if binary else sorted(glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))):
         if os.path.isfile(cand_bin) and os.access(cand_bin, os.X_OK):
             binary = cand_bin
             break

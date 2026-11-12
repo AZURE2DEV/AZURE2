@@ -30,6 +30,7 @@ add_library(azure2_convert STATIC
   src/BuildData.cpp
   src/BuildSections.cpp
   src/Convert.cpp
+  src/Format2.cpp
   src/OldProject.cpp
   src/PotentialRecords.cpp)
 add_library(azure2::convert ALIAS azure2_convert)
@@ -58,6 +59,14 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(convert_fixtures_test PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 add_test(NAME convert_fixtures COMMAND convert_fixtures_test ${CMAKE_CURRENT_SOURCE_DIR}/..)
+# The converter's first step, format 1 -> format 2 (ConvertToFormat2; docs/upgrade/project.md section 4), on every
+# project file under tests/ and examples/ (the old ones are the originals in tests/convert/fixtures/).
+add_executable(convert_format2_test tests/format2_test.cpp)
+target_link_libraries(convert_format2_test PRIVATE azure2_convert)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(convert_format2_test PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+add_test(NAME convert_format2 COMMAND convert_format2_test ${CMAKE_CURRENT_SOURCE_DIR}/../tests ${CMAKE_CURRENT_SOURCE_DIR}/../examples)
 # Spec equivalence (project_format3.md step 3b): the specs of every old test project from its old lines equal those of
 # its conversion through the format-3 reading path, member by member.
 add_executable(convert_spec_equivalence_test tests/spec_equivalence_test.cpp)

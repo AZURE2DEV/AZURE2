@@ -245,35 +245,24 @@ std::shared_ptr<const ThmWeightTable> ThmWeightFor(
 }
 
 /*!
- * Checks the <thm> weight[k]= (or weightTest[k]=) keys against the segments
- * just read: k must be a line of the block, a segment in use must be THM, and
- * every one of its points must lie inside the table (folding sub-points may
- * reach beyond it; they get the end value).  A key naming an inactive or
- * unusable line is ignored with a warning.  Returns -1 after an ERROR line.
+ * Checks the THM weight tables of the records (a data set's or extrapolation's thm_weight, ThmOptions) against the
+ * points just read: every point of the data set must lie inside its table (folding sub-points may reach beyond it;
+ * they get the end value).  The reading has refused a weight on a record that is not THM; the weight of a record not
+ * in use is ignored with a warning.  Returns -1 after an ERROR line.
  */
 int CheckThmWeights(const Config &configure,
                     const std::map<int, std::shared_ptr<const ThmWeightTable>> &tables,
-                    const char *keyName, const char *blockName, int numLines, WorkingCopy *data) {
+                    const char *keyName, WorkingCopy *data) {
   for (const auto &entry : tables) {
     const int key = entry.first;
     const ThmWeightTable &table = *entry.second;
-    if (key > numLines) {
-      configure.outStream << "ERROR: <thm> " << keyName << "[" << key << "]: " << blockName << " has only "
-                          << numLines << " line(s)." << std::endl;
-      return -1;
-    }
     const Segment *segment = nullptr;
     for (int s = 1; s <= data->Data().NumSegments(); s++)
       if (data->Data().GetSegment(s)->GetSegmentKey() == key) segment = data->Data().GetSegment(s);
     if (!segment) {
-      configure.outStream << "WARNING: <thm> " << keyName << "[" << key << "]: segment line " << key
-                          << " of " << blockName << " is not in use; the weight is ignored." << std::endl;
+      configure.outStream << "WARNING: <thm> " << keyName << "[" << key << "]: the data set or extrapolation with key "
+                          << key << " is not in use; the weight is ignored." << std::endl;
       continue;
-    }
-    if (!segment->IsTHM()) {
-      configure.outStream << "ERROR: <thm> " << keyName << "[" << key << "]: segment " << key << " of "
-                          << blockName << " is not a THM segment (isDiff < 10)." << std::endl;
-      return -1;
     }
     for (int p = 1; p <= segment->NumPoints(); p++) {
       double energy = segment->GetPoint(*data, p)->GetCMEnergy();
@@ -434,10 +423,9 @@ int WorkingCopy::Fill(const Config &configure, CNuc *theCNuc, const azure2::expe
 
   if (ApplyPriorCentres(configure, specs) != 0) return -1;
 
-  if (CheckThmWeights(configure, configure.thm.weightBySegment, "weight", "<segmentsData>",
-                      numTotalSegments_, this) != 0)
+  if (CheckThmWeights(configure, configure.thm.weightBySegment, "weight", this) != 0)
     return -1;
-  if (BuildThmGroups(configure, theCNuc, numTotalSegments_) != 0) return -1;
+  if (BuildThmGroups(configure, theCNuc) != 0) return -1;
 
   if (Draft().NumSegments() > 0) {
     if (this->SetUpTargetEffects(configure, theCNuc, specs.targetEffects) == -1) return -1;
@@ -582,8 +570,7 @@ int WorkingCopy::MakePoints(const Config &configure, CNuc *theCNuc, const azure2
     return -1;
   }
 
-  if (CheckThmWeights(configure, configure.thm.weightByTestSegment, "weightTest", "<segmentsTest>",
-                      numTotalSegments_, this) != 0)
+  if (CheckThmWeights(configure, configure.thm.weightByTestSegment, "weightTest", this) != 0)
     return -1;
 
   if (Draft().NumSegments() > 0) {
@@ -1239,7 +1226,7 @@ bool WorkingCopy::CheckTransformedSegments(const Config &configure) {
       if ((base->GetTargetBlendWeight() < 1.0 && !thinTarget) || (te && te->GetAutoTolerance() > 0.0)) {
         configure.outStream << "ERROR: " << what << "its target effect blends in at range edges or has an automatic "
                             << "tolerance; the transform needs the full kernel at every point (drop the blend width "
-                            << "and the tolerance of that <targetInt> line)." << std::endl;
+                            << "and the auto_tolerance of its fold_windows)." << std::endl;
         return false;
       }
       for (int t = 1; t < seg.NumTerms(); t++) {

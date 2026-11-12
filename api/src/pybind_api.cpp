@@ -20,15 +20,11 @@
 #include <iostream>
 #include <string>
 
-#include "azure2/convert/ExtrapLine.h"
-#include "azure2/convert/SegLine.h"
-#include "azure2/convert/SpecsFromOldLines.h"
-#include "TargetEffect.h"
 #include <cstdio>
+#include <fstream>
 #include <sstream>
-#include "azure2/io/Convert.h"
+#include "azure2/io/ProjectFormat.h"
 #include "azure2/io/Document.h"
-#include "azure2/io/LevelGrouping.h"
 #include "AZUREAPI.h"
 #include "CNuc.h"
 #include "ParameterKind.h"
@@ -57,6 +53,14 @@ pybind11::tuple SessionPotentialView(const Config &config, int pair);
 pybind11::tuple SessionPotentialRecords(const Config &config);
 
 namespace {
+
+/// The bytes of a project file ("" when it cannot be read), for the refusal of one that is not format 3.
+std::string ReadProjectText(const std::string &path) {
+  std::ifstream in(path, std::ios::binary);
+  std::ostringstream s;
+  s << in.rdbuf();
+  return s.str();
+}
 
 // CoulFunc reads g_config at construction to decide whether the hybrid
 // potential model is on, and construction happens deep inside a calculation.
@@ -198,10 +202,12 @@ class Session {
     int configStatus = config_->ReadConfigFile();
     if (configStatus == Config::kConfigUnreadable) {
       fail("Could not open " + configfile + " or no <config> block found.");
+    } else if (configStatus == Config::kConfigNotFormat3) {
+      fail(azure2::io::NotFormat3Message(ReadProjectText(configfile), configfile));
     } else if (configStatus == Config::kConfigRefused) {
       fail(configfile + " (format 3) is refused (see the ERROR lines above; AZURE2 --validate lists them).");
     } else if (configStatus < 0) {
-      fail("Malformed <potential> or <thm> block in " + configfile + " (see the ERROR above).");
+      fail("Malformed <thm> section in " + configfile + " (see the ERROR above).");
     }
     // R-matrix route + ignore_externals (the default): A-matrix with a warning, as the CLI and the GUI.  Before
     // 2026-11-01 pyazr ran the R-matrix route and silently kept the internal-capture term ignore_externals drops
@@ -916,161 +922,7 @@ PYBIND11_MODULE(_azure2, m) {
   BindSchema(m);  // pybind_schema.cpp: the format-3 table (schema(), as AZURE2 --schema)
   BindConvert(m);  // pybind_convert.cpp: validate_format3_text, convert_format3_text
   BindProject(m);  // pybind_project.cpp: the project file as a lossless document (_azure2.Document)
-  // One <segmentsData> line as the engine reads it (SegLine, project.md section 5), for pyazr's datasets.  Components
-  // are (entrance, exit, angle or None, scaling or None) from SegLine's component list.
-  m.def(
-      "parse_segment_line",
-      [](const std::string &line) {
-        std::istringstream in(line);
-        SegLine sl(in);
-        py::dict d;
-        d["active"] = sl.isActive();
-        d["entrance_key"] = sl.entranceKey();
-        d["exit_key"] = sl.exitKey();
-        d["energy_min"] = sl.minE();
-        d["energy_max"] = sl.maxE();
-        d["angle_min"] = sl.minA();
-        d["angle_max"] = sl.maxA();
-        d["is_diff"] = sl.isDiff();
-        d["phase_J"] = sl.phaseJ();
-        d["phase_L"] = sl.phaseL();
-        d["phase_S"] = sl.phaseS();
-        d["norm"] = sl.dataNorm();
-        d["vary_norm"] = sl.varyNorm();
-        d["norm_error"] = sl.dataNormError();
-        d["energy_shift"] = sl.energyShift();
-        d["energy_shift_error"] = sl.energyShiftError();
-        d["vary_shift"] = sl.varyEnergyShift();
-        d["data_file"] = sl.dataFile();
-        d["has_sqrt_shift"] = sl.hasSqrtShift();
-        d["energy_shift_sqrt"] = sl.energyShiftSqrt();
-        d["energy_shift_sqrt_error"] = sl.energyShiftSqrtError();
-        d["vary_shift_sqrt"] = sl.varyEnergyShiftSqrt();
-        d["natural"] = sl.natural();
-        d["total"] = sl.total();
-        d["transmission"] = sl.transmission();
-        d["yield_thickness"] = sl.yieldThickness();
-        d["thickness_fit"] = sl.thicknessFit();
-        d["thickness_vary"] = sl.thicknessVary();
-        d["thickness_sigma"] = sl.thicknessSigma();
-        d["thickness_group"] = sl.thicknessGroup();
-        d["absolute"] = sl.absolute();
-        d["shift_group"] = sl.shiftGroup();
-        d["shift_fn_group"] = sl.shiftFnGroup();
-        d["norm_group"] = sl.normGroup();
-        d["covariance"] = sl.covarianceFile();
-        d["shift_fn"] = sl.shiftFn();
-        d["shift_fn_values"] = sl.shiftFnValues();
-        d["shift_fn_errors"] = sl.shiftFnErrors();
-        d["shift_fn_vary"] = sl.shiftFnVary();
-        d["is_advanced"] = sl.isAdvanced();
-        d["operation_type"] = sl.operationType();
-        d["is_upos"] = sl.isUPOS();
-        d["parse_error"] = sl.parseError();
-        d["parse_warning"] = sl.parseWarning();
-        py::list components;
-        std::istringstream list(sl.componentsList());
-        std::string item;
-        while (std::getline(list, item, ';')) {
-          int e = 0, x = 0;
-          py::object angle = py::none(), scaling = py::none();
-          std::sscanf(item.c_str(), "Entrance: %d, Exit: %d", &e, &x);
-          const std::size_t a = item.find("Angle: "), sc = item.find("Scaling: ");
-          if (a != std::string::npos) angle = py::float_(std::strtod(item.c_str() + a + 7, nullptr));
-          if (sc != std::string::npos) scaling = py::float_(std::strtod(item.c_str() + sc + 9, nullptr));
-          components.append(py::make_tuple(e, x, angle, scaling));
-        }
-        d["components"] = components;
-        return d;
-      },
-      py::arg("line"), "One <segmentsData> line as AZURE2 reads it (SegLine).");
-  // One <segmentsTest> line as the engine reads it (ExtrapLine) (project.md section 5; no pyazr caller since pyazr 3).
-  m.def(
-      "parse_extrapolation_line",
-      [](const std::string &line) {
-        std::istringstream in(line);
-        ExtrapLine el(in);
-        py::dict d;
-        d["active"] = el.isActive();
-        d["entrance_key"] = el.entranceKey();
-        d["exit_key"] = el.exitKey();
-        d["energy_min"] = el.minE();
-        d["energy_max"] = el.maxE();
-        d["energy_step"] = el.eStep();
-        d["angle_min"] = el.minA();
-        d["angle_max"] = el.maxA();
-        d["angle_step"] = el.aStep();
-        d["is_diff"] = el.isDiff();
-        d["phase_J"] = el.phaseJ();
-        d["phase_L"] = el.phaseL();
-        d["phase_S"] = el.phaseS();
-        d["max_order"] = el.maxAngDistOrder();
-        d["natural"] = el.natural();
-        d["total"] = el.total();
-        d["transmission"] = el.transmission();
-        d["yield_thickness"] = el.yieldThickness();
-        d["is_advanced"] = el.isAdvanced();
-        d["parse_error"] = el.parseError();
-        d["parse_warning"] = el.parseWarning();
-        return d;
-      },
-      py::arg("line"), "One <segmentsTest> line as AZURE2 reads it (ExtrapLine).");
-  // One <targetInt> line as the engine reads it (old-line adaptor + TargetEffect), for pyazr's effect views.
-  m.def(
-      "parse_target_effect_line",
-      [](const std::string &line) {
-        std::ostringstream sink;
-        Config scratch(sink);
-        std::istringstream in(line);
-        bool readFailed = false;
-        TargetEffect te(azure2::convert::TargetEffectSpecFromOldLine(in, readFailed), scratch);
-        py::dict d;
-        d["screening"] = te.HasScreening()
-            ? py::object(py::make_tuple(te.GetScreeningNominal(), te.IsScreeningVaried(), te.GetScreeningSigma()))
-            : py::object(py::none());
-        d["screening_error"] = te.HasScreeningError();
-        d["doppler"] = te.IsDoppler()
-            ? py::object(py::dict(py::arg("temperature") = te.GetDopplerNominal(), py::arg("fit") = te.HasDopplerFit(),
-                                  py::arg("vary") = te.IsDopplerVaried(), py::arg("sigma") = te.GetDopplerSigma(),
-                                  py::arg("tmax") = te.GetDopplerTmax() > 0.0 ? py::object(py::float_(te.GetDopplerTmax()))
-                                                                               : py::object(py::none()),
-                                  py::arg("max") = te.GetDopplerLayoutTemperature()))
-            : py::object(py::none());
-        d["doppler_error"] = te.HasDopplerError();
-        d["density_fit"] = te.HasDensityFit()
-            ? py::object(py::dict(py::arg("density") = te.GetDensityNominal(), py::arg("vary") = te.IsDensityVaried(),
-                                  py::arg("sigma") = te.GetDensitySigma(), py::arg("max") = te.GetLayoutDensity()))
-            : py::object(py::none());
-        d["density"] = te.GetDensity();
-        d["density_group"] = te.GetDensityGroup();
-        d["density_error"] = te.HasDensityFitError() ? te.GetDensityFitErrorText() : std::string();
-        return d;
-      },
-      py::arg("line"), "One <targetInt> line as AZURE2 reads it (TargetEffect): screening, Doppler and density blocks.");
-  // The level of a <levels> line (io::LevelGrouper): the rule of CNuc::Fill (no pyazr caller since pyazr 3).  assign returns
-  // (level, kind, other level, its first level ID); kind: "joined", "new", "same_energy", "new_nearby".
-  {
-    using azure2::io::LevelGrouper;
-    py::class_<LevelGrouper>(m, "LevelGrouper")
-        .def(py::init<>())
-        .def("assign", [](LevelGrouper &g, int group, double energy, int id) {
-          const LevelGrouper::Slot s = g.Assign(group, energy, id);
-          const char *kind = s.kind == LevelGrouper::Kind::Joined ? "joined"
-                             : s.kind == LevelGrouper::Kind::NewLevel ? "new"
-                             : s.kind == LevelGrouper::Kind::SameEnergy ? "same_energy" : "new_nearby";
-          return py::make_tuple(s.level, kind, s.other, s.otherID);
-        }, py::arg("group"), py::arg("energy"), py::arg("id"));
-  }
-  // The project file's format and its conversion (io::ConvertToFormat2; docs/upgrade/project.md section 4), on text.
-  m.def(
-      "convert_project_text",
-      [](const std::string &text) {
-        azure2::io::Document doc = azure2::io::Document::Parse(text);
-        const std::vector<std::string> changes = azure2::io::ConvertToFormat2(doc);
-        return py::make_tuple(py::bytes(doc.Write()), changes, doc.Problems());
-      },
-      py::arg("text"),
-      "The format-2 conversion of a project's text: (converted bytes, the changes, structural problems).");
+  // The project file's format (io::FormatOf), on text.
   m.def(
       "project_format", [](const std::string &text) { return azure2::io::FormatOf(azure2::io::Document::Parse(text)); },
       py::arg("text"), "The format of a project's text: 2 or 3 with format=2 or format=3 in <config>, else 1.");
@@ -1113,8 +965,8 @@ PYBIND11_MODULE(_azure2, m) {
       .def("calculate_external_capture", &Session::calculate_external_capture,
            py::call_guard<py::gil_scoped_release>(),
            "Recompute every external-capture integral from scratch.")
-      .def("set_data", &Session::set_data, "Switch to the <segmentsData> mode.")
-      .def("set_extrap", &Session::set_extrap, "Switch to the <segmentsTest> mode.")
+      .def("set_data", &Session::set_data, "Switch to the data run (the <data> records).")
+      .def("set_extrap", &Session::set_extrap, "Switch to the extrapolation run (the <extrapolations> records).")
       .def("set_radius", &Session::set_radius, py::arg("pair"), py::arg("radius"),
            py::call_guard<py::gil_scoped_release>(),
            "Rebuild the model with one pair's channel radius changed (fm).")

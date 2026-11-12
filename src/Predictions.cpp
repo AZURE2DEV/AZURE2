@@ -27,8 +27,7 @@ int NucleusOf(CNuc &compound, int entranceKey) {
 /// an old project, whose data sets have no names.
 std::vector<std::string> RecordNames(const Config &configure, const std::string &kind) {
   std::vector<std::string> names;
-  if (!configure.format3) return names;
-  for (const experiment::ValidatedRecord &r : configure.format3->validated.records)
+  for (const experiment::ValidatedRecord &r : configure.project->validated.records)
     if (r.kind == kind) names.push_back(r.name);
   return names;
 }

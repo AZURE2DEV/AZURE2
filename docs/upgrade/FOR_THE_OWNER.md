@@ -132,10 +132,23 @@ refused at once with the engine's message. An edit changes only the lines it tou
 
 ## What users notice
 
-- Old `.azr` files still load in the engine today; pyazr (3.0.0.dev0) already refuses them with a message that
-  names the converter. Every project of the test tree is format 3, so the next branch makes the engine refuse an old
-  file in the same words and deletes its old reading path. Decision taken with Jakub: no backward compatibility
-  inside the engine, a converter instead.
+- **Old `.azr` files are refused.** The engine and pyazr read project format 3 only (decision taken with Jakub: no
+  backward compatibility inside the engine, a converter instead). Every command that reads a project -- a run,
+  `--validate`, `--describe`, `--print-predictions`, a pyazr session -- refuses a format-1 or format-2 file before
+  reading anything of it, exit code 3, with one message:
+
+  ```
+  ERROR: T2.azr is a format-1 project (<segmentsData> at line 53). This AZURE2 reads format 3 only.
+         Convert it:  AZURE2 --convert T2.azr T2_f3.azr     (or pyazr.convert_azr("T2.azr", "T2_f3.azr"))
+         The converter keeps T2.azr unchanged and reports every change it makes.
+  ```
+
+  The converter (`AZURE2 --convert OLD NEW`, `--to 3` no longer needed; the format-2 output is gone) is the only
+  reader of an old file; `AZURE2 --convert-params old.sav new.sav --project OLD.azr` (`pyazr.convert_params`)
+  renames a parameter file of the old project to the conversion's names. User guide: "Coming from an older
+  AZURE2" (`docs/source/user_guide/older_projects.rst`).
+- A `<parameterSettings>` row that names no parameter of the project is ignored with a warning
+  (`W_PARAMETER_SETTING_UNKNOWN`, its line and name); it was ignored without a word.
 - pyazr needs the compiled engine module to read a project: there is one reader, the engine's.
 - No Qt GUI on this branch: a local web interface built on the same records and schema replaces it (Phase 9),
   checked against a 201-item parity list taken from the Qt code.

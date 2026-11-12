@@ -7,7 +7,7 @@
 // parameters (screening U_e, Doppler temperature) are shared by the copies.  A target is one set of parameters
 // (section 3.7): its areal density is shared through the engine's density group when several effects use it; a
 // target whose screening or temperature is free must be used through one combination.  The effects are ordered by
-// the first of their records in the file, which is the order of the old <targetInt> lines the converter wrote them from.
+// the first of their records in the file, (for a converted project the order of the old lines).
 #include <algorithm>
 #include <cmath>
 #include <map>

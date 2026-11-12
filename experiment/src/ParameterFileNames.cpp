@@ -53,5 +53,25 @@ std::vector<Diagnostic> MatchParameterFileNames(const std::string &file, const P
   return {d};
 }
 
+std::vector<Diagnostic> UnknownParameterSettings(const std::string &file, const std::vector<ParameterSettingRow> &rows,
+                                                 const std::vector<std::string> &known) {
+  const std::set<std::string> names(known.begin(), known.end());
+  std::vector<Diagnostic> out;
+  for (const ParameterSettingRow &row : rows) {
+    if (names.count(row.name)) continue;
+    Diagnostic d;
+    d.code = codes::kParameterSettingUnknown;
+    d.severity = Severity::Warning;
+    d.file = file;
+    d.line = row.line;
+    d.section = "parameterSettings";
+    d.hasFound = true;
+    d.found = row.name;
+    d.message = "<parameterSettings> names '" + row.name + "', which is no parameter of this project; the row is ignored";
+    out.push_back(d);
+  }
+  return out;
+}
+
 }  // namespace experiment
 }  // namespace azure2

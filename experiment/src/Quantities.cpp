@@ -263,7 +263,7 @@ Quantity Legendre() {
              AnyUnitOf("cross_section", Condition::Is("expansion", {"4pi"}))};
   q.energyRoles = {"E_lab", "E_cm"};
   q.orderRole = true;
-  // The apparatus as for dsigma_domega: the old engine folds coefficient data with a <targetInt> line
+  // The apparatus as for dsigma_domega: the engine folds coefficient data with a target, beam or detector
   // (tests/angular_coefficients, conv.azr), and the converter writes what it folded.
   q.fields = {Requires("expansion"), Requires("orders"), Allows("target"), Allows("beam"), Allows("detector")};
   q.targetKinds = {"layer", "none"};

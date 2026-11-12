@@ -154,6 +154,55 @@ grep -q "Could not open absent.azr.  Check that file exists." "$dir/run.log" && 
   && ok "a missing project file: 'Could not open', exit 255" \
   || bad "a missing project file: exit $rc, $(tail -n 1 "$dir/run.log")"
 
+# A file that is not a format-3 project is refused before anything of it is read (docs/upgrade/project_format3.md
+# section 8.4, io::NotFormat3Message): one message -- the format found, the first old section with its line, the two
+# ways to convert, "the converter keeps ... unchanged" -- as the run's last line, exit 3; --validate, --describe and
+# --print-predictions end with the same message and exit 3.  Cases: the original of tests/upgrade/T2 (format 1, kept
+# for the converter in tests/convert/fixtures), the same with format=2 in <config>, the format-3 13N with an old
+# <segmentsData> section appended, an empty file, a file that is not a project.
+dir="$WORK/old"; mkdir -p "$dir/output" "$dir/checks"
+cp "$HERE/../convert/fixtures/tests/upgrade/T2/T2.azr" "$dir/f1.azr"
+cp -R "$HERE/../upgrade/T2/data" "$HERE/../upgrade/T2/cov_diff.txt" "$HERE/../upgrade/T2/prior_cov.txt" "$dir/"
+edited "$dir/f1.azr" "$dir/f2.azr" awk '$0 == "</config>" { print "format=2" } { print }' || bad "f2: format=2 not added"
+edited "$HERE/../13N/13N.azr" "$dir/f3old.azr" awk '{ print } END { print "<segmentsData>"; print "</segmentsData>" }' \
+  || bad "f3old: the old section not appended"
+: > "$dir/empty.azr"
+printf 'Not a project.\n1 2 3\n' > "$dir/text.azr"
+CONVERT_LINE() { echo "       Convert it:  AZURE2 --convert $1 ${1%.azr}_f3.azr     (or pyazr.convert_azr(\"$1\", \"${1%.azr}_f3.azr\"))"; }
+KEEPS_LINE() { echo "       The converter keeps $1 unchanged and reports every change it makes."; }
+# refused NAME FIRST-LINE [MORE-LINES...]: every command on $dir/NAME ends with these lines and exits 3
+refused() {
+  local name="$1" expect cmd out rc
+  shift
+  expect="$(printf '%s\n' "$@")"
+  for cmd in run --validate --describe --print-predictions; do
+    if [ "$cmd" = run ]; then
+      out="$(cd "$dir" && printf '1\n\n\n7\n' | "$AZURE2_BIN" --no-gui --no-readline "$name" 2>&1)"; rc=$?
+    else
+      out="$(cd "$dir" && "$AZURE2_BIN" "$cmd" "$name" 2>&1)"; rc=$?
+    fi
+    [ "$rc" = 3 ] && [ "$(printf '%s\n' "$out" | tail -n "$#")" = "$expect" ] \
+      && ok "$name, $cmd: refused with the message as the last line(s), exit 3" \
+      || bad "$name, $cmd: exit $rc (want 3), output ends '$(printf '%s\n' "$out" | tail -n 3)'"
+  done
+}
+refused f1.azr "ERROR: f1.azr is a format-1 project (<segmentsData> at line 53). This AZURE2 reads format 3 only." \
+  "$(CONVERT_LINE f1.azr)" "$(KEEPS_LINE f1.azr)"
+refused f2.azr "ERROR: f2.azr is a format-2 project (<segmentsData> at line 54). This AZURE2 reads format 3 only." \
+  "$(CONVERT_LINE f2.azr)" "$(KEEPS_LINE f2.azr)"
+n13="$(wc -l < "$HERE/../13N/13N.azr" | tr -d ' ')"
+refused f3old.azr "ERROR: f3old.azr says format=3 but holds <segmentsData> at line $((n13 + 1)), a section of format 2. This AZURE2 reads format 3 only." \
+  "       Convert the original (format 1 or 2) instead:  AZURE2 --convert ORIGINAL.azr NEW.azr" \
+  "       A format-3 file states its data in <data>, <extrapolations>, <targets> and <modelData> records."
+refused empty.azr "ERROR: empty.azr is not an AZURE2 project: it has no <config> section (the file is empty). This AZURE2 reads format-3 projects."
+refused text.azr "ERROR: text.azr is not an AZURE2 project: it has no <config> section. This AZURE2 reads format-3 projects."
+# the conversion the message names works, and its result runs
+(cd "$dir" && "$AZURE2_BIN" --convert f1.azr f1_f3.azr > convert.log 2>&1); rc=$?
+[ "$rc" = 0 ] && cmp -s "$dir/f1.azr" "$HERE/../convert/fixtures/tests/upgrade/T2/T2.azr" \
+  && (cd "$dir" && "$AZURE2_BIN" --validate f1_f3.azr > validate.log 2>&1) \
+  && ok "AZURE2 --convert f1.azr f1_f3.azr (no --to): format 3, valid; f1.azr unchanged" \
+  || bad "AZURE2 --convert f1.azr f1_f3.azr: exit $rc, $(tail -n 1 "$dir/convert.log")"
+
 echo
 if [ "$failures" -gt 0 ]; then echo "FAIL: $failures check(s)"; exit 1; fi
 echo "all checks passed"

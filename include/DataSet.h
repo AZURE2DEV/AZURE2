@@ -94,9 +94,8 @@ class DataSet {
   int GetEnergyShiftSqrtParamOffset() const { return energyShiftSqrtParamOffset_; }
   int GetEnergyShiftFnParamOffset() const { return energyShiftFnParamOffset_; }
   /*!
-   * Electron screening.  The <targetInt> lines with a `screening` block, in line order, each with one parameter
-   * `screening_<n>` (n = the effect number: its place among the active <targetInt> lines; format 3:
-   * `<target>.screening`), U_e in eV, after the shift-function parameters.  A line listing several segments has one
+   * Electron screening.  The targets with a `screening` field, in record order, each with one parameter
+   * `<target>.screening` (the effect number n: its place among the active target effects), U_e in eV, after the shift-function parameters.  A line listing several segments has one
    * copy of its effect per segment (WorkingCopy::SetUpTargetEffects); the parameter is the line's, shared by every copy.
    */
   int NumScreeningParams() const { return (int)screeningEffects_.size(); }

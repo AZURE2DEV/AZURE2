@@ -1,4 +1,4 @@
-// The format-1 -> format-2 converter (Convert.h; docs/upgrade/project.md section 4), on every .azr under the given
+// The format-1 -> format-2 step of the converter (convert/Convert.h; docs/upgrade/project.md section 4), on every .azr under the given
 // directories and on synthetic documents:
 //  1. the result is format 2, and converting it again changes nothing (the report is empty);
 //  2. apart from the lines it adds to <config> ("useAdaptiveGrid=...", "format=2"), the converted file is the
@@ -14,10 +14,12 @@
 #include <string>
 #include <vector>
 
-#include "azure2/io/Convert.h"
+#include "azure2/convert/Convert.h"
 #include "azure2/io/Document.h"
+#include "azure2/io/ProjectFormat.h"
 
 using namespace azure2::io;
+using azure2::convert::ConvertToFormat2;
 namespace fs = std::filesystem;
 
 namespace {

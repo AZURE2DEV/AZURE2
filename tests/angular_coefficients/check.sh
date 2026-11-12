@@ -13,7 +13,8 @@
 #       (the absolute A_k are folded like cross sections, then the ratio is formed);
 #   (f) the analytic gradient (AZURE_GRAD_CHECK) equals finite differences with normalised, absolute and
 #       folded coefficient segments and free widths;
-#   (g) refused: a free normalization on normalised coefficients, an elastic pair, isDiff 9 in <segmentsTest>.
+#   (g) refused: a free normalization on normalised coefficients (on the record), an elastic pair, isDiff 9 in an old
+#       <segmentsTest> line (by the converter, the old file in tests/convert/fixtures).
 #
 #   ./tests/angular_coefficients/check.sh path/to/AZURE2
 
@@ -94,12 +95,22 @@ else
 fi
 
 # ---- (g) refusals ---------------------------------------------------------------------------------------------------
-run bad_norm 1 "--use-brune"
-if grep -q "ERROR: segment #1 (angular coefficients): normalised coefficients" "$WORK/bad_norm/run.log" && [ ! -s "$WORK/bad_norm/output/chiSquared.out" ]; then ok "(g) a free normalization on normalised coefficients is refused"; else bad "(g) free norm not refused"; fi
+# a free normalization on normalised coefficients: the data set coef_norm of data.azr with "norm 1.0 fit", refused
+# when the project is read (E_MODE_NOT_ALLOWED; the old file's set-up refusal, bad_norm.azr, is gone with the old grammar)
+. "$HERE/../lib/edit_guard.sh"
+edited "$HERE/models/data.azr" "$WORK/bad_norm.azr" \
+  awk '$1 == "dataset" { ds = $2 } ds == "coef_norm" && $1 == "norm" { sub(/fixed/, "fit") } { print }' \
+  || bad "(g) bad_norm: the norm of coef_norm was not freed"
+mkdir -p "$WORK/bad_norm/output" "$WORK/bad_norm/checks"; cp "$WORK/bad_norm.azr" "$WORK/bad_norm/t.azr"
+[ -d "$WORK/datafiles" ] && cp -r "$WORK/datafiles" "$WORK/bad_norm/data"
+(cd "$WORK/bad_norm" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --use-brune --no-gui --no-readline t.azr > run.log 2>&1)
+if grep -q "E_MODE_NOT_ALLOWED: dataset 'coef_norm', field 'norm': fit is not allowed: normalised coefficients carry no normalization" "$WORK/bad_norm/run.log" && [ ! -s "$WORK/bad_norm/output/chiSquared.out" ]; then ok "(g) a free normalization on normalised coefficients is refused"; else bad "(g) free norm not refused"; fi
 run bad_elastic 1 "--use-brune"
 if grep -q "ERROR: segment #1 (angular coefficients): an elastic distribution" "$WORK/bad_elastic/run.log"; then ok "(g) an elastic pair is refused"; else bad "(g) elastic pair not refused"; fi
-run bad_test 3 "--use-brune"
-if grep -q "ERROR: Test segment #1 uses isDiff 9" "$WORK/bad_test/run.log"; then ok "(g) isDiff 9 in <segmentsTest> is refused"; else bad "(g) isDiff 9 test segment not refused"; fi
+# an old <segmentsTest> line of isDiff 9 (format 3 has no such extrapolation): the old file is the converter's fixture,
+# refused by AZURE2 --convert with the old engine's reason
+(cd "$WORK" && "$AZURE2_BIN" --convert "$HERE/../convert/fixtures/tests/angular_coefficients/models/bad_test.azr" bad_test_f3.azr > bad_test.log 2>&1); rc=$?
+if [ "$rc" != 0 ] && grep -q "test segment #1 uses isDiff 9 (angular coefficients, a data-segment type), which the old engine refused" "$WORK/bad_test.log" && [ ! -e "$WORK/bad_test_f3.azr" ]; then ok "(g) isDiff 9 in <segmentsTest> is refused (by the converter)"; else bad "(g) isDiff 9 test segment not refused"; fi
 
 echo
 if [ "$failures" -eq 0 ]; then echo "angular_coefficients: PASS"; else echo "angular_coefficients: FAIL ($failures)"; exit 1; fi

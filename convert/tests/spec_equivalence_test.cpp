@@ -59,7 +59,7 @@
 #include "azure2/convert/ThmLines.h"
 #include "azure2/experiment/ModelDatum.h"
 #include "azure2/experiment/ProjectReader.h"
-#include "azure2/io/Convert.h"
+#include "azure2/io/ProjectFormat.h"
 #include "azure2/io/Document.h"
 #include "azure2/io/LevelRows.h"
 #include "azure2/io/RecordReader.h"
@@ -508,7 +508,7 @@ int main(int argc, char **argv) {
     problems.clear();
     // old lines -> specs (the engine's reading of a format-2 document)
     io::Document doc = io::Document::Parse(text);
-    io::ConvertToFormat2(doc);
+    convert::ConvertToFormat2(doc);
     const bool relativistic = RelativisticFlag(doc);
     DataSpecs oldData;
     ExtrapolationSpecs oldExtrap;

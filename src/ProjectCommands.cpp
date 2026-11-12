@@ -1,5 +1,5 @@
-// The project-file commands of the command line (ProjectCommands.h): --convert (format 2, and format 3 with --to 3,
-// docs/upgrade/project_format3.md section 8), --validate (section 6.2), --describe (section 6.3), --schema
+// The project-file commands of the command line (ProjectCommands.h): --convert (an old project to format 3,
+// docs/upgrade/project_format3.md section 8), --convert-params (a parameter file of an old project, section 8.4), --validate (section 6.2), --describe (section 6.3), --schema
 // (section 6.1) and --print-predictions (docs/upgrade/data_model.md section 3).
 #include "ProjectCommands.h"
 
@@ -15,9 +15,8 @@
 #include "azure2/convert/Convert.h"
 #include "azure2/experiment/Describe.h"
 #include "azure2/experiment/ProjectReader.h"
+#include "azure2/io/ProjectFormat.h"
 #include "azure2/experiment/Schema.h"
-#include "azure2/io/Convert.h"
-#include "azure2/io/Document.h"
 
 namespace {
 
@@ -47,31 +46,7 @@ bool WriteNewFile(const std::string &path, const std::string &bytes) {
 }
 
 /*!
- * --convert OLD NEW: OLD's format-2 conversion (io::ConvertToFormat2; docs/upgrade/project.md section 4) written to
- * NEW, which must not exist; the changes are listed.  A file already in format 2 is copied unchanged.
- */
-int convertProject(const std::string &from, const std::string &to) {
-  std::string bytes;
-  if (!ReadFileBytes(from, bytes)) {
-    std::cout << "ERROR: --convert: cannot read " << from << std::endl;
-    return 1;
-  }
-  if (std::ifstream(to)) {
-    std::cout << "ERROR: --convert: " << to << " exists; it is not overwritten" << std::endl;
-    return 1;
-  }
-  azure2::io::Document doc = azure2::io::Document::Parse(bytes);
-  for (const std::string &problem : doc.Problems()) std::cout << "WARNING: " << from << ": " << problem << std::endl;
-  const std::vector<std::string> changes = azure2::io::ConvertToFormat2(doc);
-  if (!WriteNewFile(to, doc.Write())) return 1;
-  if (changes.empty()) std::cout << from << " is already in format 2; copied to " << to << std::endl;
-  for (const std::string &c : changes) std::cout << "  " << c << std::endl;
-  std::cout << "Wrote " << to << " (format 2)." << std::endl;
-  return 0;
-}
-
-/*!
- * --convert OLD NEW --to 3 [--json-report R] [--answers A] [--exact-grids] [--strict] [--allow-questions]: OLD in
+ * --convert OLD NEW [--to 3] [--json-report R] [--answers A] [--exact-grids] [--strict] [--allow-questions]: OLD in
  * format 3 (convert/, docs/upgrade/project_format3.md section 8) written to NEW, with its side files (<f>.f3), and the
  * report; NEW, the side files and R must not exist.  Exit 0 when written, 1 when not (the report says why).
  */
@@ -135,9 +110,38 @@ int convertProjectTo3(const std::string &from, const std::string &to, const std:
 }
 
 /*!
+ * --convert-params OLD.sav NEW.sav --project OLD.azr: a parameter file written for the old project OLD.azr with the names
+ * of OLD.azr's format-3 conversion (convert::ConvertParameterFile; docs/upgrade/project_format3.md section 8.4), written
+ * to NEW.sav, which must not exist.  Exit 0 when written, 1 when not.
+ */
+int convertParameters(const std::string &from, const std::string &to, const std::string &project) {
+  std::string bytes, projectBytes;
+  if (!ReadFileBytes(from, bytes)) {
+    std::cout << "ERROR: --convert-params: cannot read " << from << std::endl;
+    return 1;
+  }
+  if (!ReadFileBytes(project, projectBytes)) {
+    std::cout << "ERROR: --convert-params: cannot read the project " << project << std::endl;
+    return 1;
+  }
+  const std::size_t slash = project.find_last_of("/\\");
+  const azure2::convert::ParameterFileConversion c =
+      azure2::convert::ConvertParameterFile(bytes, projectBytes, slash == std::string::npos ? "." : project.substr(0, slash));
+  if (!c.refusal.empty()) {
+    std::cout << "ERROR: --convert-params: " << project << ": " << c.refusal << std::endl;
+    return 1;
+  }
+  if (!WriteNewFile(to, c.text)) return 1;
+  for (const auto &r : c.renamed) std::cout << "  " << r.first << " -> " << r.second << std::endl;
+  std::cout << "Wrote " << to << ": " << c.renamed.size() << " name(s) renamed for the format-3 conversion of " << project
+            << "." << std::endl;
+  return 0;
+}
+
+/*!
  * --validate FILE [--json]: the format-3 project FILE checked against the table (docs/upgrade/project_format3.md
  * section 6.2).  Every diagnostic is printed, one per line (file:line: record.field: message) or as one JSON array;
- * exit 0 without errors, 2 with errors, 3 for a format-1 or format-2 file (section 8.4), 1 when FILE cannot be read.
+ * exit 0 without errors, 2 with errors, 3 for a file that is not a format-3 project (section 8.4), 1 when FILE cannot be read.
  */
 /// The target effects of a built project, data sets' and extrapolations'.
 std::vector<azure2::experiment::TargetEffectSpec> TargetEffectSpecs(const azure2::experiment::Format3Project &c) {
@@ -153,7 +157,7 @@ int validateProject(const std::string &file, bool json) {
     std::cout << "ERROR: --validate: cannot read " << file << std::endl;
     return 1;
   }
-  const std::string refusal = azure2::convert::NotFormat3Message(bytes, file);
+  const std::string refusal = azure2::io::NotFormat3Message(bytes, file);
   if (!refusal.empty()) {
     std::cout << "ERROR: " << refusal << std::endl;
     return 3;
@@ -181,8 +185,18 @@ int validateProject(const std::string &file, bool json) {
 }
 
 /// The expression tree of every data set and extrapolation of `file`, one line each; 0, or 1 (with the set-up's
-/// messages) when the project could not be set up.
+/// messages) when the project could not be set up or read, 3 for a file that is not a format-3 project (section 8.4).
 int printPredictions(const std::string &file) {
+  std::string bytes;
+  if (!ReadFileBytes(file, bytes)) {
+    std::cout << "ERROR: --print-predictions: cannot read " << file << std::endl;
+    return 1;
+  }
+  const std::string refusal = azure2::io::NotFormat3Message(bytes, file);
+  if (!refusal.empty()) {
+    std::cout << "ERROR: " << refusal << std::endl;
+    return 3;
+  }
   std::ostringstream messages;
   const std::vector<std::string> lines = azure2::ProjectPredictions(file, messages);
   bool failed = false;
@@ -198,7 +212,7 @@ int printPredictions(const std::string &file) {
  * --describe FILE [--json] [--record NAME]: what the engine makes of the format-3 project FILE (docs/upgrade/
  * project_format3.md section 6.3; experiment/Describe.h): per data set its quantity, observable, reaction with the pair
  * keys, windows, the data file's resolved path, effects and parameters; with --record only the data set, extrapolation,
- * datum or potential NAME.  A project with an error, or no such record: exit 2; a format-1 or format-2 file: exit 3; a
+ * datum or potential NAME.  A project with an error, or no such record: exit 2; a file that is not a format-3 project: exit 3; a
  * file that cannot be read: exit 1.
  */
 int describeProject(const std::string &file, bool json, const std::string &record) {
@@ -207,7 +221,7 @@ int describeProject(const std::string &file, bool json, const std::string &recor
     std::cout << "ERROR: --describe: cannot read " << file << std::endl;
     return 1;
   }
-  const std::string refusal = azure2::convert::NotFormat3Message(bytes, file);
+  const std::string refusal = azure2::io::NotFormat3Message(bytes, file);
   if (!refusal.empty()) {
     std::cout << "ERROR: " << refusal << std::endl;
     return 3;
@@ -250,33 +264,41 @@ bool Exit(int &exitCode, int value) {
 }  // namespace
 
 bool RunProjectCommand(int argc, char **argv, int &exitCode) {
-  // --convert OLD NEW writes OLD's format-2 conversion to NEW and exits (docs/upgrade/project.md section 4)
-  // (--to 3: format 3, docs/upgrade/project_format3.md section 8; temporary until the engine reads format 3)
+  // --convert OLD NEW [--to 3] writes OLD (format 1 or 2) in format 3 to NEW and exits (docs/upgrade/project_format3.md
+  // section 8): with --convert-params, the only commands that read an old file
   for (int i = 1; i < argc; i++)
     if (strcmp(argv[i], "--convert") == 0) {
       if (i + 2 >= argc) {
-        std::cout << "ERROR: --convert needs two files: --convert old.azr new.azr [--to 3 ...]" << std::endl;
+        std::cout << "ERROR: --convert needs two files: --convert old.azr new.azr [options]" << std::endl;
         return Exit(exitCode, 1);
       }
       std::vector<std::string> rest;
-      bool to3 = false;
       for (int k = i + 3; k < argc; k++) {
         if (strcmp(argv[k], "--to") == 0 && k + 1 < argc) {
           if (strcmp(argv[k + 1], "3") != 0) {
-            std::cout << "ERROR: --convert --to " << argv[k + 1] << ": only --to 3 (format 3) is known" << std::endl;
+            std::cout << "ERROR: --convert --to " << argv[k + 1] << ": the converter writes format 3 only" << std::endl;
             return Exit(exitCode, 1);
           }
-          to3 = true;
           k++;
           continue;
         }
         rest.push_back(argv[k]);
       }
-      if (!to3 && !rest.empty()) {
-        std::cout << "ERROR: --convert: " << rest[0] << " needs --to 3" << std::endl;
+      return Exit(exitCode, convertProjectTo3(argv[i + 1], argv[i + 2], rest));
+    }
+
+  // --convert-params OLD.sav NEW.sav --project OLD.azr renames a parameter file of an old project and exits
+  for (int i = 1; i < argc; i++)
+    if (strcmp(argv[i], "--convert-params") == 0) {
+      std::string project;
+      for (int k = 1; k + 1 < argc; k++)
+        if (strcmp(argv[k], "--project") == 0) project = argv[k + 1];
+      if (i + 2 >= argc || project.empty()) {
+        std::cout << "ERROR: --convert-params needs two files and the old project: --convert-params old.sav new.sav "
+                     "--project old.azr" << std::endl;
         return Exit(exitCode, 1);
       }
-      return Exit(exitCode, to3 ? convertProjectTo3(argv[i + 1], argv[i + 2], rest) : convertProject(argv[i + 1], argv[i + 2]));
+      return Exit(exitCode, convertParameters(argv[i + 1], argv[i + 2], project));
     }
 
   // --validate FILE [--json] checks a format-3 project and exits (docs/upgrade/project_format3.md section 6.2)

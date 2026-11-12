@@ -9,7 +9,8 @@
 //  - for a photon exit, a_k = 4 Z1Z2 for the pathway pairs of one spin group: the Legendre coefficient of Seyler and
 //    Weller's Eq. (20) is the unpolarized coefficient of the differential cross section (CalculateCaptureAnalyzingPower
 //    states the relation); every (k, L, m1, m2) with an interference has its capture-A_y term and the converse.
-// Arguments: .azr files or directories (every *.azr below, outside output/), loaded as pathways_from_cnuc_test does
+// Arguments: .azr files or directories (every *.azr below, outside output/ and the converter's fixtures, which the
+// engine refuses), loaded as pathways_from_cnuc_test does
 // (every particle and beta pair an entrance, capture A_y requested for every photon exit), Brune basis.
 #include <algorithm>
 #include <cmath>
@@ -184,7 +185,8 @@ int main(int argc, char **argv) {
     if (fs::is_directory(argv[i])) {
       for (const auto &e : fs::recursive_directory_iterator(argv[i]))
         if (e.is_regular_file() && e.path().extension() == ".azr" &&
-            e.path().string().find("/output/") == std::string::npos)
+            e.path().string().find("/output/") == std::string::npos &&
+            e.path().string().find("/convert/fixtures/") == std::string::npos)  // the converter's old originals
           files.push_back(fs::absolute(e.path()).string());
     } else {
       files.push_back(fs::absolute(argv[i]).string());

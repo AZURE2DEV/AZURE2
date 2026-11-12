@@ -13,6 +13,8 @@ Checked on tests/hybrid_potential (three elastic segments, seconds):
      ``output/``, and the returned path is ``cwd/results``.
   3. With an absolute directory elsewhere: likewise.
   4. The usual ``output/``: unchanged, ``cwd/output``.
+  5. ``set_config(output_dir=<dir>)`` without a trailing "/" and a directory that does not exist: the engine reads
+     it as ``<dir>/`` and write_output_files creates it (the files used to land beside it as ``<dir>chiSquared.out``).
 
 Needs the compiled engine for 2-4; skips them cleanly.
 
@@ -93,6 +95,21 @@ with tempfile.TemporaryDirectory() as tmp:
           os.path.normpath(got) == os.path.normpath(elsewhere), got)
     check("the files are there", "chiSquared.out" in outfiles(elsewhere), outfiles(elsewhere))
     check("and not in output/", outfiles(os.path.join(work, "output")) == [])
+
+    # 5. written without the trailing "/", and not there yet ---------------------
+    print("5. output_dir without a trailing '/', not created")
+    work = os.path.join(tmp, "noslash")
+    fresh_copy(work)
+    fresh = os.path.join(tmp, "fresh")
+    m0 = Project.open(os.path.join(work, AZR))
+    m0.set_config(output_dir=fresh)
+    m0.save()
+    with azure2(os.path.join(work, AZR), cwd=work) as m:
+        got = m.write_output_files()
+    check("the directory is created and the files are in it",
+          os.path.normpath(got) == os.path.normpath(fresh) and "chiSquared.out" in outfiles(fresh), outfiles(fresh))
+    check("no file named after the directory beside it",
+          not [f for f in os.listdir(tmp) if f.startswith("fresh") and f != "fresh"], os.listdir(tmp))
 
     # 4. the usual output/ ----------------------------------------------------
     print("4. output/")
