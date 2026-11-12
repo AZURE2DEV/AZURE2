@@ -263,5 +263,5 @@ long WorkingCopy::CheckNodeTable(CNuc *cnuc, const std::vector<int> &work) {
             << offTables << " off the tables, " << wrongNode << " on a wrong node; channel rows " << rowsDiffer
             << " differ" << std::endl;
   for (const std::string &r : reports) std::cerr << "AZURE_NODE_CHECK:   " << r << std::endl;
-  return offTables + wrongNode + rowsDiffer;
+  return offTables + wrongNode + rowsDiffer + CheckSlotGroups();
 }

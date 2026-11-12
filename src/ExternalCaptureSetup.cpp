@@ -513,11 +513,11 @@ int WorkingCopy::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
                         complex ecAmplitude(0.0, 0.0);
                         in >> ecAmplitude;
                         point->AddECAmplitude(k, ecm, ecAmplitude);
-                        for (Site *subPoint = point->GetSubPoints(*this).begin();
-                             subPoint < point->GetSubPoints(*this).end(); subPoint++) {
+                        // Every slot of the point is in the file; the slot's writer holds it (SlotGroup.h).
+                        for (int j = 1; j <= point->NumSubPoints(); j++) {
                           ecAmplitude = complex(0.0, 0.0);
                           in >> ecAmplitude;
-                          subPoint->AddECAmplitude(k, ecm, ecAmplitude);
+                          if (WritesSlot(*point, j)) point->GetSubPoint(*this, j)->AddECAmplitude(k, ecm, ecAmplitude);
                         }
                       }
                     }
@@ -622,11 +622,10 @@ int WorkingCopy::LeafECAmplitudes(CNuc *theCNuc, const Config &configure, bool u
                       complex ecAmplitude(0.0, 0.0);
                       in >> ecAmplitude;
                       point->AddECAmplitude(k, ecm, ecAmplitude);
-                      for (Site *subPoint = point->GetSubPoints(*this).begin();
-                           subPoint < point->GetSubPoints(*this).end(); subPoint++) {
+                      for (int j = 1; j <= point->NumSubPoints(); j++) {
                         ecAmplitude = complex(0.0, 0.0);
                         in >> ecAmplitude;
-                        subPoint->AddECAmplitude(k, ecm, ecAmplitude);
+                        if (WritesSlot(*point, j)) point->GetSubPoint(*this, j)->AddECAmplitude(k, ecm, ecAmplitude);
                       }
                     }
                   }

@@ -150,6 +150,9 @@ void Segment::UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, CNuc *
 
         // IMPORTANT: Also apply energy shift to all subpoints (used in convolution/target integration)
         for (int j = 1; j <= point->NumSubPoints(); j++) {
+          // A slot another point writes is moved by that point: slots are shared only on the shared mesh, whose
+          // segments have no energy shift (OnSharedMesh), so every reader would move it alike (SlotGroup.h).
+          if (!data.WritesSlot(*point, j)) continue;
           Site *subPoint = point->GetSubPoint(data, j);
           if (subPoint && (thm || subPoint->GetOriginalEnergy() > 0)) {
             double subOriginalEnergy = subPoint->GetOriginalEnergy();

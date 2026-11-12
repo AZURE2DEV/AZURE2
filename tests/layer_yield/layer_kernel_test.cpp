@@ -96,7 +96,7 @@ Fold Run(const Config &configure, const TargetEffect &effect, const std::vector<
     data.UnitAt(unit).MakeSubPoint(sub);
     data.AppendSlot(sub);
   }
-  data.UnitAt(unit).SetSubPointRange(first, (int)nodes.size());
+  data.SetSlotRange(unit, first, (int)nodes.size());
   FoldPoint(data.UnitAt(unit), data, configure, results);
   Fold out;
   out.value = data.UnitAt(unit).GetFitCrossSection(results);

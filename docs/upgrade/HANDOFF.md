@@ -2,6 +2,47 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, Phase 5 branch 7 part 2, shared sites) — the points of a data set share the sites of the mesh (`feature/upgrade-5-shared-sites`)
+
+**Done.**
+- `include/SlotGroup.h`: the sharing group and its key (segment and term, c.m. angle bits, Legendre order of a
+  coefficient row, target effect, stopping factor, frame shift, screening U_e and parameter), one block of sites per
+  group in node order, each point a range of its block (ranges overlap).  Off the mesh a point is a group of its own.
+- `WorkingCopy` (`src/WorkingCopyUnits.cpp`): `slotBlock_`, `slotWriter_`; `WritesSlot(point, i)` (a slot is written by
+  its first reader in data order), `AddSlotGroup`, `LayOutUnits` moves whole blocks, `PlaceSubPointGrids` takes blocks,
+  `SeparateSlotsByAngle` (a leaf point whose converted angles differ from its group's gets its own copies),
+  `SetSlotRange` (tests), `CheckSlotGroups` (run by `AZURE_NODE_CHECK` / `AZURE_PLAN_CHECK` with the node check).
+- Set-up: `AddMeshSlotGroups`, `GroupNodes`, `MeshGroupKey` (`src/MeshSlots.cpp`); in `SetUpTargetEffects` the loop
+  of `AddGridSlots` over the queued mesh points (6 lines) is one call.  Hand-over: `ReplaceSubPointGrids` re-places a
+  group at once on the union of its points' new ranges (`replaceGroup`); the site construction is one lambda for
+  groups and own grids (`laySites`).
+- Writers only on written slots: `Unit` set-up recursions (Legendre, channel rows, keys, Coulomb, EC, Recalc),
+  `PrepareSubPoints`, `CalculationPlan::TaskUnits` (the energy pass), `ForEachResultUnit` (one record per site), the
+  EC read-back of `intEC.dat` (the file keeps every slot of every point), the stopping scale, the shift step.  A slot
+  whose solve throws fails every point that reads it (`EnergyPass.cpp`).
+- Folds and gradient never write a slot's record: E1/E2 components, A_y, normalised coefficients
+  (`src/PointPass.cpp`), the fd weights, A_y and coefficient adjoints and the THM fold weights (`src/AZUREGrad.cpp`)
+  fold arrays with `FoldValues`.  A site's cotangent is the sum of its readers' cotangents: each `UnitCotangent`
+  names its reader's plan task, and a T-matrix group sums them in reader order (`GroupCotangents`); the energy tasks
+  are ranked by reads (`EnergyTask::reads`, `WorkingCopy::SiteReaders`) instead of units.  Both keep the order of the
+  gradient's sums of one slot per point, so gradients and fits stay bit for bit (without them the T2 MIGRAD fit of
+  200 calls moved in the last digits from call 81 on: its analytic gradient summed in another order).
+
+**Audit of `Site`'s members** (depends on: N node energy, S segment and term, A angle, P the point; read at a slot by):
+cm/lab/compound/nominal energy N (all formulas); `settings_`, `segment_key_` S (observables); `cm_angle_` A (Legendre,
+Coulomb; key); `lab_angle_` A, a base slot holds the c.m. angle, a leaf's slot its point's converted lab angle (frames
+of leaves; separated by angle); `legendre_order_` P, coefficient rows (GenMatrixFunc; key); `row_` P, never read on a
+slot (`Row()` is -1); `geofactor_`, `sfactorconv_`, `edep_`, `eDependent*`, `screen_k_` N+S; `screen_ue_`,
+`screen_param_` P's target effect (key); `stoppingPower_` N + effect + factor (fold gather; key); `targetThickness_`,
+`targetLabEnergy_` P, never set on a slot (the fold reads the point's); `legendreP_`, Coulomb amplitudes A+N (+Q
+coefficients of the effect, key); EC amplitudes, `ec_shifted_` N+S (energy task of the writer only); `thm_ps_` THM, off
+the mesh; record (`slot_`, angular/natural counts) the site's, written by the energy pass only.
+
+**Verified how.** Build `work/b-sites`, scripts `work/sites/qset.sh`, `fits.sh`, `measure.sh`: see the branch report.
+
+**Open.** `NodeTableCache.h` kept (re-placed blocks adopt rows other copies computed).  Lab-frame differential data
+remain groups of one point (each point its own c.m. angle) until the angle per node (decision D5).
+
 ## 2026-11-12 (agent, Phase 5 branch 7 part 2, milestone 2) — the engine on the shared mesh (`feature/upgrade-5-shared-mesh`)
 
 **Done.**

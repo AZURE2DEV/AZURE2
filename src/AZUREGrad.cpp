@@ -545,18 +545,18 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
   // 11B+a base grid (CASPAR thick targets, ~2200 sub-points per point) take
   // longer than 30 min.  They remain as the fallback and as a check
   // (AZURE_TE_WEIGHTS_CHECK=N compares the first N points).
+  // The slots' records are read, never written: other points of the group read them too (SlotGroup.h).
   auto fdWeights = [&](std::vector<double> &w) {
     w.assign(nsp, 0.0);
+    std::vector<double> v(sigma);
     for (int i = 1; i <= nsp; i++) {
       double s0 = sigma[i - 1];
       double h = 1.0e-3 * (std::fabs(s0) + 1.0);
-      point->GetSubPoint(data, i)->SetFitCrossSection(results, s0 + h);
-      FoldPoint(*point, data, config, results);
-      double yp = point->GetFitCrossSection(results);
-      point->GetSubPoint(data, i)->SetFitCrossSection(results, s0 - h);
-      FoldPoint(*point, data, config, results);
-      double ym = point->GetFitCrossSection(results);
-      point->GetSubPoint(data, i)->SetFitCrossSection(results, s0);
+      v[i - 1] = s0 + h;
+      double yp = FoldValues(*point, data, config, v);
+      v[i - 1] = s0 - h;
+      double ym = FoldValues(*point, data, config, v);
+      v[i - 1] = s0;
       w[i - 1] = (yp - ym) / (2.0 * h);
     }
   };
@@ -574,8 +574,7 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
         dmax = std::max(dmax, std::fabs(c[i] - cfd[i]));
         yW += c[i] * sigma[i];
       }
-      FoldPoint(*point, data, config, results);
-      const double yI = point->GetFitCrossSection(results);
+      const double yI = FoldValues(*point, data, config, sigma);
 #pragma omp critical
       std::cerr << "[te-weights] entrance " << point->GetEntranceKey() << " exit " << point->GetExitKey() << " E " << point->GetCMEnergy() << " nsp " << nsp
                 << ": max|c - c_fd|/max|c_fd| " << (cmax > 0 ? dmax / cmax : dmax) << ", sum c*s " << yW
@@ -586,13 +585,10 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
   // calls the forward pass makes.
   double den = 0.0, avg = 0.0;
   if (isAy) {
-    FoldPoint(*point, data, config, results);
-    den = point->GetFitCrossSection(results);
-    for (int i = 1; i <= nsp; i++)
-      point->GetSubPoint(data, i)->SetFitCrossSection(results, sigma[i - 1] * point->GetSubPoint(data, i)->GetAnalyzingPower(results));
-    FoldPoint(*point, data, config, results);
-    const double num = point->GetFitCrossSection(results);
-    for (int i = 1; i <= nsp; i++) point->GetSubPoint(data, i)->SetFitCrossSection(results, sigma[i - 1]);
+    den = FoldValues(*point, data, config, sigma);
+    std::vector<double> product(nsp);
+    for (int i = 1; i <= nsp; i++) product[i - 1] = sigma[i - 1] * point->GetSubPoint(data, i)->GetAnalyzingPower(results);
+    const double num = FoldValues(*point, data, config, product);
     // The forward pass returns 0 for D = 0, a constant: no gradient.
     if (!(std::fabs(den) > 0.0)) {
       point->SetFitCrossSection(results, model);
@@ -600,14 +596,13 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
     }
     avg = num / den;
   } else if (isCoefNorm) {
-    for (int i = 1; i <= nsp; i++) point->GetSubPoint(data, i)->SetFitCrossSection(results, point->GetSubPoint(data, i)->GetAngDistA0(results));
-    FoldPoint(*point, data, config, results);
-    den = point->GetFitCrossSection(results);
-    for (int i = 1; i <= nsp; i++)
-      point->GetSubPoint(data, i)->SetFitCrossSection(results, sigma[i - 1] * point->GetSubPoint(data, i)->GetAngDistA0(results));
-    FoldPoint(*point, data, config, results);
-    const double num = point->GetFitCrossSection(results);
-    for (int i = 1; i <= nsp; i++) point->GetSubPoint(data, i)->SetFitCrossSection(results, sigma[i - 1]);
+    std::vector<double> a0(nsp), product(nsp);
+    for (int i = 1; i <= nsp; i++) {
+      a0[i - 1] = point->GetSubPoint(data, i)->GetAngDistA0(results);
+      product[i - 1] = sigma[i - 1] * a0[i - 1];
+    }
+    den = FoldValues(*point, data, config, a0);
+    const double num = FoldValues(*point, data, config, product);
     if (!(std::fabs(den) > 0.0)) {
       point->SetFitCrossSection(results, model);
       return true;
@@ -643,7 +638,7 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
   g_teCombinerNs += std::chrono::duration_cast<std::chrono::nanoseconds>(tc1 - tc0).count();
 
   auto emit = [&](int i, double value, int component, bool ayCrossSection) {
-    if (value != 0.0) out.push_back({data.SlotSite(*point, i), row, value, component, ayCrossSection});
+    if (value != 0.0) out.push_back({data.SlotSite(*point, i), row, value, component, ayCrossSection, point->PlanTask()});
   };
   for (int i = 1; i <= nsp; i++) {
     if (c[i - 1] == 0.0) continue;
@@ -693,18 +688,18 @@ bool azure2::PointCotangents(WorkingCopy &data, const GradPoint &p, CNuc *compou
   ModelCotangents c;
   if (!ModelPointBackward(data, *p.segment, p.pointIdx, compound, config, results, fitBar, c)) return false;
   AddParamCotangents(c, p.segment, p.point, data, p.segNum, compound, params);
-  auto emit = [&](const Site *u, double value, int component) {
-    if (value != 0.0) out.push_back({data.SiteIndex(u), row, value, component, false});
+  auto emit = [&](const Unit *reader, const Site *u, double value, int component) {
+    if (value != 0.0) out.push_back({data.SiteIndex(u), row, value, component, false, reader->PlanTask()});
   };
   if (c.subPoints) {
     for (const ModelCotangents::Leaf &l : c.leaves)
-      for (std::size_t k = 0; k < l.sub.size(); k++) emit(l.point->GetSubPoint(data, (int)k + 1), l.sub[k], l.xsComponent);
+      for (std::size_t k = 0; k < l.sub.size(); k++) emit(l.point, l.point->GetSubPoint(data, (int)k + 1), l.sub[k], l.xsComponent);
     return true;
   }
   for (const ModelCotangents::Leaf &l : c.leaves) {
     if (l.cotangent == 0.0) continue;
     if (!HasSubPointFold(data, *l.point))
-      emit(l.point, l.cotangent, l.xsComponent);
+      emit(l.point, l.point, l.cotangent, l.xsComponent);
     else if (!GradTargetEffectAdjoint(data, l.point, results, l.cotangent, params, l.xsComponent, compound, config, row,
                                       out))
       return false;
@@ -742,19 +737,16 @@ bool ThmPointModelGradient(WorkingCopy &data, Unit *point, azure2::Results &resu
   if (nsp <= 0) return true;
   std::vector<double> sigma(nsp), c(nsp, 0.0);
   for (int i = 1; i <= nsp; i++) sigma[i - 1] = point->GetSubPoint(data, i)->GetFitCrossSection(results);
-  const double model = point->GetFitCrossSection(results);
+  std::vector<double> v(sigma);  // the slots' records are read, never written (SlotGroup.h)
   for (int i = 1; i <= nsp; i++) {
     const double s0 = sigma[i - 1], h = 1.0e-3 * (std::fabs(s0) + 1.0);
-    point->GetSubPoint(data, i)->SetFitCrossSection(results, s0 + h);
-    FoldPoint(*point, data, config, results);
-    const double yp = point->GetFitCrossSection(results);
-    point->GetSubPoint(data, i)->SetFitCrossSection(results, s0 - h);
-    FoldPoint(*point, data, config, results);
-    const double ym = point->GetFitCrossSection(results);
-    point->GetSubPoint(data, i)->SetFitCrossSection(results, s0);
+    v[i - 1] = s0 + h;
+    const double yp = FoldValues(*point, data, config, v);
+    v[i - 1] = s0 - h;
+    const double ym = FoldValues(*point, data, config, v);
+    v[i - 1] = s0;
     c[i - 1] = (yp - ym) / (2.0 * h);
   }
-  point->SetFitCrossSection(results, model);
   const double blend = point->GetTargetBlendWeight();
   for (int i = 1; i <= nsp; i++)
     if (c[i - 1] != 0.0 && !adjoint(point->GetSubPoint(data, i), blend * c[i - 1])) return false;

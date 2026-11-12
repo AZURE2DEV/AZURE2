@@ -12,6 +12,7 @@
 #include "DataSet.h"
 #include "MeshPlanner.h"
 #include "Segment.h"
+#include "SlotGroup.h"
 #include "Unit.h"
 
 class CNuc;
@@ -59,6 +60,19 @@ std::vector<double> MeshSlotEnergies(const MeshPlan &plan, const Unit::SubGridSp
 /// effect's target at that energy.
 void AddGridSlots(WorkingCopy &data, Unit &point, const TermRef &term, const std::vector<double> &grid,
                   const TargetEffect &effect, double conversion, const Config &configure);
+
+/// The key of a folded point's sharing group on mesh `mesh` (SlotGroup.h).
+SlotGroupKey MeshGroupKey(const WorkingCopy &data, const Unit &point, const TermRef &term, const Unit::SubGridSpec &spec);
+
+/// The nodes of a sharing group on a plan: the union of its members' ranges (`supports`: each member's support in
+/// the plan), descending as the slots are, and each member's range in it, (first, count).
+std::vector<std::size_t> GroupNodes(const MeshPlan &plan, const std::vector<int> &supports,
+                                    std::vector<std::pair<int, int>> &ranges);
+
+/// Gives the points queued for mesh `mesh` (`pending`, those of other meshes skipped) their slots on `plan`: one
+/// block per sharing group (SlotGroup.h), each slot with the stopping of its effect's target at its energy.
+void AddMeshSlotGroups(WorkingCopy &data, const MeshPlan &plan, int mesh, const std::vector<MeshPoint> &pending,
+                       const Config &configure);
 
 /// The tail constants of AdaptiveIntegrationGrid, for the planner.
 MeshTailConstants MeshTails();

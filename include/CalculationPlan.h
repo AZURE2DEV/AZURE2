@@ -52,6 +52,7 @@ struct EnergyTask {
   double energy = 0.0;         ///< E_x, MeV (AMatrixFunc::InEnergy), the same bits for every unit
   int node = -1;               ///< the node of the units (WorkingCopy::Slots, NodeTable.h: stage, or overflow above it)
   int numTMatrices = 0;        ///< T-matrix groups: the T-matrices the task builds
+  int reads = 0;               ///< the points that read its units (WorkingCopy::SiteReaders): its size by points
   int begin = 0;               ///< the task's units are [begin, begin + size) of the arrays of its EnergyTaskList
   int size = 0;
 };
@@ -63,7 +64,7 @@ struct EnergyTask {
  * stretch of memory.
  */
 struct EnergyTaskList {
-  std::vector<EnergyTask> tasks;   ///< by decreasing cost (1 + T-matrices + units), ties in energy order
+  std::vector<EnergyTask> tasks;   ///< by decreasing cost (1 + T-matrices + reads), ties in energy order
   std::vector<UnitRef> units;      ///< in the order calculated: by T-matrix group, then in plan order
   std::vector<int> tGroups;        ///< the T-matrix group of each unit (0, 1, ... inside its task; non-decreasing)
   std::vector<int> owners;         ///< the plan task of each unit: its point's
@@ -107,8 +108,8 @@ class CalculationPlan {
    */
   const EnergyTaskList &EnergyTasks(WorkingCopy &data, const Config &configure,
                                     const std::vector<int> &work);
-  /// The units of the plan task `task` (its point, or its sub-points when it carries a sub-point fold), appended to
-  /// `units`.
+  /// The units of the plan task `task` (its point, or the slots its point writes when it carries a sub-point fold:
+  /// WorkingCopy::WritesSlot), appended to `units`.
   void TaskUnits(WorkingCopy &data, int task, std::vector<UnitRef> &units) const;
 
   /// AZURE_PLAN_CHECK=1: the point pass checks each task's writes at run time (slow; a debugging aid).
