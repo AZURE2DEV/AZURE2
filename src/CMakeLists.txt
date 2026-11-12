@@ -17,6 +17,7 @@ TargetSetup.cpp
 TargetStopping.cpp
 StoppingScale.cpp
 ApparatusParameters.cpp
+MeshPlanner.cpp
 ExternalCaptureSetup.cpp
 DataParameters.cpp
 HandOver.cpp
