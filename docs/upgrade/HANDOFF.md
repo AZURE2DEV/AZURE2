@@ -2,6 +2,103 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (director, 22:55) — merged: one grid (the key `useAdaptiveGrid` and the uniform grid of a point's own removed)
+
+**Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed): `feature/upgrade-5-one-grid` (the
+agent's entry below says what was done, by file). The PI allowed the removal on 2026-11-12 on the condition that
+narrow resonances stay covered.
+
+**What it is.** Every folded point takes its nodes from the shared mesh of its nucleus; the second path (a uniform
+grid of the point's own, moved rigidly with an energy shift) is deleted with its readers. `SetUpTargetEffects` lays
+out the base term and the components with one function. The reaction rate has one path, the tabulated grid.
+`<config> useAdaptiveGrid` is refused by the reader with `E_CONFIG_KEY_REMOVED`; the converter drops it from an old
+file and says what changes when it was 0.
+
+**What changes for a user.** Projects with the key at 1 (the default): no number. Projects with the key at 0: folded
+values move to the converged fold. In the tree that is `examples/c12c12_tumino2018`, χ² 111.661 → 117.516.
+
+**Verified by the director** (the branch merged onto the first Phase 6 branch in `rehearsal/trial38`, build
+`work/b-gridm`; references `tab-eval-d1` and the agent's `tab-grid-1`).
+Whole tree × 3 bases (tag `tab-gridm-1`, 827 / 800 / 827 files): against `tab-eval-d1` no number differs; the 17
+differing files per basis are the 8 outputs of the three removed models (`shift_sqrt_subpoints/models/dense`,
+`reaction_rate/models/n12C_pert`, `p12C_2g_pert`) and 9 `run.log` whose `E_DATA_FILE` messages name a line one lower
+(the `useAdaptiveGrid` line is gone from the files); against the agent's `tab-grid-1` every file but one `run.log`
+(the Coulomb-table line of `thm_coherent_background/toy`, from the Phase 6 branch). The eight fits (T2 by three
+routes, 13N by two, layer yield, stopping yield by two): identical file by file to the build of the Phase 6 branch.
+`ctest -LE slow` 217 of 217, the slow tests 10 of 10, `run_tests.sh` 160 of 160, spec equivalence 181 equal, the
+converted-tree gate 628 / 601 / 628 identical, calculations at 1 against 3 threads identical (T1, T2, T3, 13N × 3
+bases). Build: 0 warnings. By hand: `examples/c12c12_tumino2018` χ² on the engine before the branch with the key at 0:
+111.660780 (117.328303 at 8 times the points, 117.515866 at 64 times), with the key at 1: 117.515816932; after the
+branch 117.515816932 (117.515832232 refined eightfold), the bits of the key at 1. `narrow_sqrt`, first point: after the
+branch 2.1802211257e-06 (refined 8 and 64 times 2.1798404627e-06, 2.1798336905e-06), the bits of the old key at 1;
+the old uniform grid 2.06e-08 (5.09e-07 at 64 times the points). A file with the line: exit 1 with
+`E_CONFIG_KEY_REMOVED` and the line number; `--convert` of the old `c12c12_tumino2018`: exit 0, the note printed, the
+key absent. **Against the analytic narrow-resonance yield** (the PI's question; `narrow_sqrt` with a constant stopping
+and no shift, the non-resonant part 1.42e-9 b taken from a run with the level's proton width at zero, refined 64
+times): (λ_r²/2) ω Γ_γ (m+M)/(M ε N) with the arctan edge factor gives 2.160633e-06 b against the engine's
+2.160405e-06 (1.1e-4) for Γ_p = 9.749 eV, and 2.161543e-06 against 2.161505e-06 (2e-5) for Γ_p = Γ_γ = 38.5 meV, where
+the default mesh and the refined one differ by 1.9e-4. See items (4) and (5) below for what the comparison needed.
+
+**Reviewed.** The diff of `TargetSetup.cpp` line by line against the two loops it replaces (same statements, the
+component's pairs and factor as arguments; the error text of a non-positive thickness now names the component in both
+cases); `ShiftFrames.cpp`, `Site.h`, `GradEnergyTasks.cpp`, `WorkingCopyUnits.cpp` (the readers of a row set without
+stored values are gone with the own grid); `ReactionRate.cpp`; the reader's diagnostic and the converter's note. "Never
+coarser than the uniform grid of the same number of points" holds per support: the mesh's smooth step is
+window / ceil(window / uniform step) (`MeshPlanner.h`).
+
+**Open, for the PI.** (1) The per-temperature quadrature of the rate is now reached only when fewer than three grid
+points have σ > 0, and no test reaches it (the two test models that used it selected it with the key): keep it as an
+untested fallback, give it a test, or replace it by a refusal. (2) A folded point whose pairs give no excitation
+energy (a β-delayed entrance without an exit pair) is refused at set-up; no project of the tree has one. (3) A
+format-3 file that still has the line is refused, not silently accepted: deliberate (format freedom), but a user of
+the last weeks' files must delete one line. (4) Found with the narrow-resonance check, not caused by this branch (the
+engine before it gives the same bits): with an energy shift on a folded data set the stopping is evaluated at the
+nominal energies, not the shifted ones. On `narrow_sqrt` (a shift of 10 keV at 272 keV) the yield is 0.90 to 0.97 %
+above the same true beam energy without a shift, equal to ε(E_r)/ε(E_r − shift) to five digits at the four points; in
+general (dlnε/dlnE) × shift/E. A correction changes numbers of shifted, folded data sets with an energy-dependent
+stopping: the PI decides. Not checked: whether `origin/dev` does the same. (5) The same check shows what the engine's
+resonance strength is: ω Γ_γ Γ_p / (sum of the particle widths), because radiative widths do not enter the level
+matrix (`docs/source/theory/conventions.rst`; the loop is the same in the original engine; a warning is printed above
+Γ_γ = 10 % of the particle width). 0.39 % above the textbook ωγ for the test level, a factor 2 for Γ_p = Γ_γ.
+
+## 2026-11-12 (agent, branch `feature/upgrade-5-one-grid`) — one grid: `useAdaptiveGrid` removed, every folded point on the mesh
+
+**Done** (the PI's decision of the evening: the key may go, provided narrow resonances are covered by the mesh).
+- Engine: the uniform grid of a point's own is gone with everything only it used: the own-grid branches of
+  `SetUpTargetEffects` (its two near-copy loops, base segment and components, are one function `layOutTerm` now; a
+  folded point whose pairs give no E_x frame is refused there, it threw in `ReplaceSubPointGrids` before),
+  `AddGridSlots`, `Segment::MoveOwnGridSlots`, `Unit::CalcNodeRows`, the readers' branches for a row set with
+  `valueOffset` −1 (`Site.h`, `WorkingCopyUnits.cpp`, `GradEnergyTasks.cpp`), the key's early return in
+  `ReplaceSubPointGrids`, `Config::useAdaptiveGrid`; dead after it: `AdaptiveIntegrationGrid::GenerateGrid(CNuc*)`,
+  `GenerateGridWithInfo`, `GetExpectedPointCount`, `SetConfig`, `GridPoint`.
+- Rate: always the tabulated grid; the per-temperature quadrature (`RunPerTemperatureRateCalculation`) is only the
+  fallback of a grid with fewer than three points of σ > 0. `tests/reaction_rate` (c) and (h) and their models went.
+- Format: a file with the line is refused (`E_CONFIG_KEY_REMOVED`, "delete the line" and why); `io::ConfigKeys()`
+  no longer lists it; the converter drops it and notes what changes when it was 0. The line removed from every project
+  of the tree, the converter's expected outputs and the generators (the old originals in `tests/convert/fixtures` keep it).
+- Tests: `shift_sqrt_subpoints` without `dense`; (c) `sqrt` against itself refined eightfold (9.3e-5), (f)
+  `narrow_sqrt` against itself refined eightfold (5.4e-4, measured 1.78e-4): fails at 0.98 with the level anchors
+  taken out of the mesh plan.
+- Docs: `ShiftedFold.h`, `energy_grid.md` (status), `project_format3.md` §3.2, `FOR_THE_OWNER.md`, `ROADMAP.md`,
+  `qt_parity.md`, `project.md`, the `azure2-calculate` skill, `project_from_python.rst`.
+
+**Verified** (build `work/b-grid` of the last code commit). Whole tree × 3 bases against `tab-thm5` (tag `tab-grid-1`):
+every output file of a project with the key on identical; run.log of `electron_screening`, `target_density`,
+`mcmc_physical_norm/13N_fast` differ only in the line numbers of their data-file errors (one line fewer); files 835 /
+808 / 835 → 827 / 800 / 827 (the 6 files of `shift_sqrt_subpoints/models/dense` and the run.log of the two deleted
+rate models). `ctest -LE slow` 215/215 (without `pyazr_park_gradient` and `gsl_quiet`, which set 4 threads). 1 against
+3 threads, T1, T2, T3, 13N × 3 bases: outputs identical (run.log: progress bars, Coulomb lookup counts). Eight fits
+identical to `b-thm5`. `tests/reaction_rate`: rates and `cross_section_grid.dat` of p12C, n12C, p12C_2g, moved_azr
+byte-identical to `b-thm5`. `examples/c12c12_tumino2018` (the key at 0): with the key at 1 on `b-thm5` byte-identical
+to this branch; against this branch refined eightfold the old uniform grid was off by up to 57 % in a folded value,
+the mesh by 2.7e-5; χ² 111.661 → 117.516 (refined 117.516). Converted-tree gate with `tab-grid-1` as its reference:
+628 / 601 / 628 files identical, none classified, differing or missing. `tests/run_tests.sh`: 158 of 159 passed; the one
+failure, `cli_help` ("--answers is accepted but --help does not print it"), passed when run again alone, on this build
+and on `b-thm5` (no CLI code is touched); `thm_dw_vertex` was not run (it sets 4 threads, above the budget of 3).
+
+**Open**: the per-temperature quadrature of the rate has no test now (no model reaches its fallback). The refusal of a
+folded point without an E_x frame (a beta-delayed spectrum without an exit pair) is reached by no project.
+
 ## 2026-11-12 (director, 22:13) — merged: Phase 6, first branch (the engine's state surveyed, the per-thread caches and warn-once flags owned by the caller, a check against new state)
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed): `feature/upgrade-6-evaluation` (the

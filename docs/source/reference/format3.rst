@@ -2005,6 +2005,9 @@ Diagnostic codes
    * - ``E_OLD_POTENTIAL_BLOCK``
      - error
      - the old <potential> block in a format-3 project (AZURE2 --convert writes potential records)
+   * - ``E_CONFIG_KEY_REMOVED``
+     - error
+     - a <config> key that format 3 no longer has (useAdaptiveGrid: every fold is on the shared mesh)
    * - ``E_PARAMETER_FILE_NO_MATCH``
      - error
      - a parameter file (param.sav as a run's start) none of whose names is a parameter of the run

@@ -195,7 +195,7 @@ void MergeSharedReads(WorkingCopy &data, const Pass &pass, const std::vector<std
   for (const std::pair<int, UnitRef> &o : order) {
     const UnitCotangent &k = pass.cot[o.first];
     const RowSet *set = (k.rows && data.SiteAt(o.second).AngleFree()) ? k.rows->RowSetOf() : nullptr;
-    if (!set || set->valueOffset < 0) {
+    if (!set) {
       reads.push_back({o.first, o.second, k.value});
       continue;
     }

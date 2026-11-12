@@ -105,16 +105,8 @@ struct Results;
  * Segment::IntegrationFloor: E_x = minIntegrationEnergy of the compound system), a hard edge of the planned support as
  * a thick target's is.  The reach widens the support; the kernel moves on fixed nodes; nothing else is THM's.
  *
- * Not here: a point with a uniform grid of its own (useAdaptiveGrid off), which moves rigidly with its shift
- * (Segment::MoveOwnGridSlots) and reads a row set of its own (Unit::CalcNodeRows), for every kind of data; unfolded
- * shifted points (an exact evaluation energy that moves with nu, section 2.5).  The uniform grid is the last user of
- * the rigid move.  Proposal (not decided here: useAdaptiveGrid is a user-visible key of <config>): its place on the
- * mesh is a setting of the supports, MeshSettings::uniform -- the support's nodes the uniform lattice of `points`
- * intervals from its high edge, no anchors -- planned like any other support, so the point reads fixed nodes and the
- * rigid move, CalcNodeRows and the overflow nodes of moved sub-points go; the alternative is the key's removal with a
- * note of the converter (the adaptive mesh is never coarser than the uniform grid of the same `points`, section 2.4).
- * Keeping the own grid as it is costs MoveOwnGridSlots, Unit::CalcNodeRows and RowSet::valueOffset -1 (a set of a
- * reader's own), the own-grid branch of SetUpTargetEffects, and the overflow placement of moved slots.
+ * Every folded point is on the shared mesh of its nucleus; no point has a grid of its own (TargetSetup.cpp).
+ * Not here: unfolded shifted points, whose exact evaluation energy moves with nu (section 2.5).
  */
 namespace azure2 {
 

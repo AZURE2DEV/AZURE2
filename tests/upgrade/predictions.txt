@@ -533,7 +533,6 @@ extrapolation x5: sigma(1->2)
 extrapolation x6: sigma(1->2)
 extrapolation x7: sigma(1->2)
 == tests/reaction_rate/models/n12C.azr
-== tests/reaction_rate/models/n12C_pert.azr
 == tests/reaction_rate/models/n12C_truth.azr
 extrapolation x1: sigma(1->2)
 extrapolation x2: sigma(1->2)
@@ -546,7 +545,6 @@ extrapolation x8: sigma(1->2)
 extrapolation x9: sigma(1->2)
 == tests/reaction_rate/models/p12C.azr
 == tests/reaction_rate/models/p12C_2g.azr
-== tests/reaction_rate/models/p12C_2g_pert.azr
 == tests/reaction_rate/models/p12C_truth.azr
 extrapolation x1: sigma(1->2)
 extrapolation x2: sigma(1->2)
@@ -665,10 +663,6 @@ data yield_1: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma
 data yield_2: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
 data yield_3: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
 data yield_4: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
-extrapolation x1: sigma(1->3)
-extrapolation x2: sigma(1->3)
-== tests/shift_sqrt_subpoints/models/dense.azr
-data yield_scan: sum(sigma(1->2), J0/J1*sigma(1->3), J0/J2*sigma(1->4), J0/J3*sigma(1->5), J0/J4*sigma(1->6), J0/J5*sigma(1->7), J0/J6*sigma(1->8))
 extrapolation x1: sigma(1->3)
 extrapolation x2: sigma(1->3)
 == tests/shift_sqrt_subpoints/models/narrow_const.azr

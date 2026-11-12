@@ -73,15 +73,9 @@ struct NodeTable : NodeList {
  * parameter vector the copy was handed alone.  Two kinds of node live here:
  *  - nodes re-placed inside a stage: a level's quantized anchor moved and WorkingCopy::ReplaceSubPointGrids laid the
  *    point's sub-point grid out again (the rule kept bit for bit);
- *  - the nodes of points of a segment with an energy shift: a point without a fold moves with the shift
- *    (energy_grid.md section 2.5), and the sub-points of a folded point move rigidly with their point
- *    (Segment::UpdatePointEnergyWithShift).
- *
- * The seam for the shift-kernel branch (energy_grid.md section 8, branch 8): on the shared mesh the sub-points of a
- * shifted folded point stay on the mesh and the kernel moves instead.  That branch deletes the second kind for folded
- * points (the rigid move of sub-points in Segment::UpdatePointEnergyWithShift, the `offset` of re-placed grids in
- * ReplaceSubPointGrids and the reshift list it returns, and the overflow entries they make here); what stays is the
- * node of each unfolded shifted point and the re-placed nodes of section 2.3.
+ *  - the node of a point without a fold in a segment with an energy shift: it moves with the shift (energy_grid.md
+ *    section 2.5, Segment::UpdatePointEnergyWithShift).  A folded point with a shift keeps the nodes of the mesh and
+ *    its kernel moves (ShiftedFold.h): its slots never land here for the shift.
  */
 struct NodeOverflow : NodeList {
   /// A node at `key`: the last one placed when it is at `key` (the slots of a grid come in order), else a new one with

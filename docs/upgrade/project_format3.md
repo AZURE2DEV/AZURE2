@@ -121,7 +121,14 @@ form. A record block inside today's sections keeps one document model and one ta
 | `<targets>` | `target`, `beam`, `detector` | `<targetInt>`, `<abundances>`, `transmission`/`yield` sample thicknesses |
 | `<modelData>` | `datum` | `<scatteringLengths>`; new: ωγ, E_r, Γ, branching, ANC (M10) |
 | `<potentials>` | `potential` | `<potential>` (the hybrid potentials; `spin_orbit_potential.md` §3.3) |
-| `<config>` | `format=3` and the existing keys | `format=2` (`io/src/Convert.cpp:30-38`) |
+| `<config>` | `format=3` and the existing keys, except `useAdaptiveGrid` | `format=2` (`io/src/Convert.cpp:30-38`); `useAdaptiveGrid` (removed 2026-11-12, below) |
+
+`useAdaptiveGrid` is not a key of format 3 (the PI, 2026-11-12). Its value 0 gave a folded point a uniform sub-point
+grid of its own, which lost narrow resonances (a 9.7 eV level in `tests/shift_sqrt_subpoints/models/narrow_sqrt.azr`: a
+factor 100 low, not converged at 64 times the points); every folded point is now on the shared mesh of its nucleus
+(`energy_grid.md` §2), its value 1, and the reaction rate always takes the tabulated grid. A format-3 file that still
+holds the line is refused (`E_CONFIG_KEY_REMOVED`: delete the line); the converter drops it from an old file and, when it
+was 0, says in a note what changes (a folded value moves by the uniform grid's quadrature error, to the converged one).
 
 `<levels>`, `<thm>` (without `segments=`, §3.9), `<parameterSettings>` and `<mcmc>` keep their grammar in this
 note. Names are resolved after the whole file is read, so records may appear in any order and in any of the sections

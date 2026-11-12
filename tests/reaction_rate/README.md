@@ -12,7 +12,7 @@ no target effects):
 | model | what | case |
 |---|---|---|
 | p12C | p + 12C capture: the Gamow tail of the 1/2+ 2.37 MeV level and the others | (a) |
-| n12C | the same levels with a neutron entrance (z1 = 0, m1 = 1.008665, the 13C gamma pair): sigma ~ 1/v from the s-wave 1/2+ level | (b), and (c) with `useAdaptiveGrid=0` |
+| n12C | the same levels with a neutron entrance (z1 = 0, m1 = 1.008665, the 13C gamma pair): sigma ~ 1/v from the s-wave 1/2+ level | (b) |
 | moved | p12C plus a 1/2+ level at E_x = 2.0935 MeV, Γp = 20 eV (s-wave, 4 % of the Wigner limit), Γγ = 2 eV | (d) with `expected/moved.par` |
 | moved_azr | the same level at 2.0985 MeV in the .azr; its `param.par` is `expected/moved.par` | the truth of (d), and (e) |
 
@@ -23,21 +23,25 @@ and checks every temperature to 1e-3:
 |---|---|---|---|
 | (a) | p12C against the truth | 0.84 % low at T9 = 0.01 | 2e-5 |
 | (b) | n12C against the truth | 49.6 % low at T9 = 0.01, 2.8 % at 0.1 | 5e-6 |
-| (c) | n12C through the per-temperature quadrature (`useAdaptiveGrid=0`) | 48.7 % low | 5e-6 |
 | (d) | moved with the parameter file of moved_azr against the truth of moved_azr | 99.6 % low at T9 = 0.1 to 1 | 1e-4 |
 | (e) | moved_azr (no parameter file) equals (d) to 1e-9 | differs by 230x | equal |
+
+**One path (2026-11-12).** The cases (c) and (h) ran n12C and p12C_2g through the per-temperature
+quadrature, which the `<config>` key `useAdaptiveGrid=0` selected; the key was removed, and the rate
+always takes the tabulated path.  The quadrature stays as the fallback for a grid with fewer than
+three points of sigma > 0 (an exit closed almost everywhere below 50 MeV), which no model here
+reaches: that code is no longer exercised by a test.
 
 **Total radiative capture (2026-11-04).** The exit key `-1` ("Total capture (all γ pairs)" in the
 GUI's Run tab) makes the rate integrate the sum of the capture cross sections into every capture pair
 of the entrance pair's compound nucleus. `p12C_2g` (`make_models.py` (deleted; see "How the models were made")) is p12C with a second capture
 pair, key 3, to a fictitious bound 3/2- state of 13N at E_x = 1.0 MeV (every pair-2 gamma line copied
-with 0.6 x the width); `p12C_2g_pert` is the same on the per-temperature path.
+with 0.6 x the width).
 
 | | check | old build (dev c5b6c27) | new |
 |---|---|---|---|
 | (f) | p12C: exit -1 equals exit 2 (one capture pair) | -1 refused at the prompt, no rate | identical |
 | (g) | p12C_2g: exit -1 = rate(2) + rate(3), pair 3 at least 10 % of it | refused | 2.3e-6 (6-digit output), pair 3 27 % |
-| (h) | the same, per-temperature quadrature | refused | 2.3e-6 |
 | (i) | exit -1 with the capture pair as entrance: refused, no rate file | refused for the wrong reason | refused ("is not a particle pair") |
 
 **What it caught (2026-10-25 audit, items F1, F2, F3, F6 of `03_rmatrix_core.md`; fixed
@@ -47,7 +51,7 @@ with 0.6 x the width); `p12C_2g_pert` is the same on the per-temperature path.
   the barrier sigma changes by a factor 2-3 between nodes and a monotone spline of convex data
   lies below it. Now ln sigma against ln E, where a 1/v cross section is a straight line and a
   Gamow tail nearly one.
-- (b), (c) sigma was set to zero below 1 keV on both paths. For a neutron entrance the integrand
+- (b) sigma was set to zero below 1 keV on both paths. For a neutron entrance the integrand
   sqrt(E) exp(-E/kT) has half its weight there at T9 = 0.01. The range now starts at 0.1 eV,
   where an s-wave neutron rate at T9 = 0.01 is complete to 1e-6; a charged entrance underflows to
   sigma = 0 long before.
@@ -88,12 +92,10 @@ or two on the R-matrix part alone.
               others (audit F1: the spline of sigma against E lay 0.77 % low at T9 = 0.01).
   n12C        the same levels with a neutron entrance (z1 = 0, m1 = 1.008665): sigma ~ 1/v
               from the s-wave 1/2+ level (audit F2: sigma = 0 below 1 keV lost 49 % at T9 = 0.01).
-  n12C_pert   n12C with useAdaptiveGrid=0, the per-temperature quadrature path (same floor).
   p12C_2g     p12C with a second capture pair (key 3) to a fictitious bound 3/2- state of 13N at
               E_x = 1.0 MeV: every pair-2 gamma line copied with the final state 3/2- and 0.6 x the
               width (all the multipolarities stay allowed into 3/2-).  The total radiative capture
               rate (exit key -1) must be the sum of the rates into pairs 2 and 3.
-  p12C_2g_pert  the same with useAdaptiveGrid=0 (per-temperature quadrature path).
   moved       p12C plus a narrow 1/2+ level (Gamma_p = 20 eV s-wave, Gamma_gamma = 2 eV, Gamma = 22 eV) at
               E_x = 2.0935 MeV (E_cm = 0.150 MeV).  moved_azr has it at 2.0985 MeV instead
               (+5 keV = 250 widths); its parameter file is used on moved.azr, so the parameters

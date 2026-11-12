@@ -790,6 +790,27 @@ int main(int argc, char **argv) {
     check("--strict with the answer", Convert(o, strict).ok);
   }
 
+  // ---- <config> useAdaptiveGrid: format 3 has no such key (one grid, the shared mesh); 0 gets a note saying what
+  //      changes, 1 is dropped without one
+  {
+    const std::string line = "1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 g1.dat\n";
+    for (const std::string v : {"0", "1"}) {
+      const ConvertResult r = Convert({line, "", "", "", "useAdaptiveGrid=" + v + "\n"});
+      check("useAdaptiveGrid=" + v + ": converted", r.ok);
+      check("useAdaptiveGrid=" + v + ": the line is gone", r.text.find("useAdaptiveGrid") == std::string::npos);
+      const bool noted = HasNote(r, "the uniform sub-point grid it chose no longer exists");
+      check("useAdaptiveGrid=" + v + (v == "0" ? ": the note says what changes" : ": no note"), noted == (v == "0"));
+    }
+    // format 1: the key in <potential> (format 2 moves it to <config>), dropped the same way
+    std::string format1 = Text({line, "", "", "<potential>\nuseHybridPotential=0\nuseAdaptiveGrid=0\n</potential>\n", ""});
+    format1.erase(format1.find("format=2\n"), std::string("format=2\n").size());
+    ConvertOptions opt;
+    opt.projectDir = scratch;
+    const ConvertResult p = ConvertToFormat3(format1, opt);
+    check("useAdaptiveGrid=0 in <potential>: gone, with the note",
+          p.ok && p.text.find("useAdaptiveGrid") == std::string::npos && HasNote(p, "useAdaptiveGrid=0 removed"));
+  }
+
   std::printf("convert_constructs: %d checks, %d failures\n", checks, failures);
   return failures ? 1 : 0;
 }

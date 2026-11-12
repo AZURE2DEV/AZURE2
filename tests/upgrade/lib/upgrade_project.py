@@ -146,7 +146,7 @@ class Project:
     levels: List[Level]
     data: List[DataSegment]
     tests: List[TestSegment] = field(default_factory=list)
-    potential: str = ("useHybridPotential=0\nuseAdaptiveGrid=1\npotentialType=0\nV0=150\nR=3.6\na=0.6\n")
+    potential: str = ("useHybridPotential=0\npotentialType=0\nV0=150\nR=3.6\na=0.6\n")
     config_extra: str = ""
     scattering_lengths: str = ""
     rate: Tuple[int, int] = (1, 2)    # <lastRun> entrance and exit pair of the reaction rate

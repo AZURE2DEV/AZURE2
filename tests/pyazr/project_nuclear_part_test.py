@@ -151,6 +151,7 @@ try:
     refused("an unknown pair", lambda x: x.set_pair(7, radius=5.0), "no pair has the key 7")
     refused("a row the level does not have", lambda x: x.set_channel("1/2- 0", 1, 2, 0.5, width=1.0), "has no row")
     refused("an unknown <config> entry", lambda x: x.set_config(relativstic=True), "not an entry of <config>")
+    refused("the removed key useAdaptiveGrid", lambda x: x.set_config(useAdaptiveGrid=True), "not an entry of <config>")
     refused("a value the engine would not read", lambda x: x.set_config(check_data="print"), "none, screen or file")
     refused("the format", lambda x: x.set_config(format="2"), "not edited")
 
@@ -158,7 +159,7 @@ try:
     q = Project.open(SRC)
     c = q.config()
     check("(e) config() as the engine reads it", c["output_dir"] == "output/" and c["amatrix"] == "true"
-          and c["useAdaptiveGrid"] == "1" and c["format"] == "3", c)
+          and "useAdaptiveGrid" not in c and c["format"] == "3", c)
     old_line = q.text.split("\n")[2]
     q.set_config(output_dir="run2/", relativistic=True)
     new_line = q.text.split("\n")[2]
@@ -167,6 +168,12 @@ try:
     check("(e) a key added", q.config()["relativistic"] == "1")
     q.set_config(relativistic=None)
     check("(e) a key removed", "relativistic" not in q.config())
+    # useAdaptiveGrid is no key of format 3: a file that still carries the line is refused by the engine's validator
+    with open(SRC, "rb") as f:
+        text = f.read().replace(b"</config>", b"useAdaptiveGrid=1\n</config>", 1)
+    old_key = Project(text, SRC)
+    codes = [d.get("code") for d in old_key.validate()]
+    check("(e) useAdaptiveGrid in <config>: E_CONFIG_KEY_REMOVED", codes == ["E_CONFIG_KEY_REMOVED"], codes)
 
     print("(f) save_fit on the format-3 project")
     with pyazr.azure2(model, cwd=os.path.dirname(model)) as a:
