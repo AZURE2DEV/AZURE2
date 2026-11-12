@@ -168,6 +168,18 @@ class ModelDataTerm : public ObjectiveTerm {
   }
 };
 
+// T11: the priors of the gamma_decay records and the wall on a negative remainder (GammaDecayMap.h,
+// gamma_parametrisation.md section 2.6), from the records' values of the last fill.
+class GammaDecayTerm : public ObjectiveTerm {
+ public:
+  bool ModelOnly() const override { return true; }
+  std::string Name() const override { return "gamma decay priors"; }
+  void Add(const ObjectiveContext &c, double &chi2) const override {
+    if (c.compound->GetGammaDecays().Empty()) return;
+    chi2 += c.compound->GetGammaDecays().Penalty(*c.compound);
+  }
+};
+
 // T10: the prior parameter covariance (<config> priorCovariance=), (p - mu)^T C^-1 (p - mu).
 class PriorCovarianceTerm : public ObjectiveTerm {
  public:
@@ -196,6 +208,7 @@ Objective::Objective() {
   terms_.emplace_back(new AbundanceTerm);
   terms_.emplace_back(new ModelDataTerm);
   terms_.emplace_back(new PriorCovarianceTerm);
+  terms_.emplace_back(new GammaDecayTerm);
 }
 
 const Objective &Objective::Engine() {
@@ -229,6 +242,9 @@ void Objective::ModelDataResiduals(const ObjectiveContext &c, vector_r &residual
 
 bool Objective::ModelDataGradient(const ObjectiveContext &c, const ParamIndexMap &pmap,
                                   const vector_matrix_r *shiftDeriv, GradAccum &accum) const {
+  // T11 (gamma_decay priors, the remainder's wall) depends on the parameters alone: its gradient goes straight to their
+  // indices (GradAccum::direct).
+  c.compound->GetGammaDecays().AddPenaltyGradient(*c.compound, accum.direct);
   return ModelData::Gradient(c.compound, c.config, c.compound->GetModelData(), pmap, shiftDeriv, accum);
 }
 
@@ -387,6 +403,9 @@ void AppendModelRows(CNuc *compound, const Config &config, const ParamIndexMap *
       }
     }
   }
+  // gamma_decay priors and the remainder's wall: r and dr/dq (GammaDecaySet::PenaltyRows).
+  for (const GammaDecaySet::PenaltyRow &row : compound->GetGammaDecays().PenaltyRows(*compound))
+    appendRow(row.r, nullptr, &row.d);
   // Abundances: ((sum w) - 1)/s per sample with s > 0; d/dw_k = 1/s on every abundance of the sample.
   if (compound->HasAbundanceBlock()) {
     for (int smp = 1; smp <= compound->NumSamples(); smp++) {

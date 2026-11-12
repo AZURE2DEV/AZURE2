@@ -828,7 +828,7 @@ int AZUREMain::operator()() {
           std::vector<std::string> names;
           for (unsigned int i = 0; i < mp.Params().size(); i++) {
             const ParamKind kind = params.Kind((int)i);
-            if (!mp.Parameter(i).IsFixed() && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma))
+            if (!mp.Parameter(i).IsFixed() && IsLevelSlot(kind))
               names.push_back(mp.GetName(i));
           }
           if ((int)names.size() == bandCov.size()) bandCov.names = names;

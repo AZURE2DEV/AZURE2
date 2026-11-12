@@ -62,6 +62,7 @@ struct LevelInfo {
 /// of its channel in the group's channel list; all 0 for an inactive row (the engine does not read it).
 struct LevelRowSlot {
   int group = 0, level = 0, channel = 0;
+  double value = 0.0;  ///< column 12 as written: a width (eV), an ANC (fm^-1/2) or an amplitude (MeV^1/2)
 };
 
 /// The tables of one <levels> section.
