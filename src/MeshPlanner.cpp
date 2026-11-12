@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <iterator>
 #include <limits>
 #include <map>
@@ -177,9 +178,37 @@ double MeshTailFactor(const MeshSettings &settings, const MeshTailConstants &tai
   return tails.tailRatio / settings.pointsPerWidth * std::sqrt(core / tails.convolutionCoreWidths);
 }
 
+namespace {
+/// The ladders' intervals (a lower bound of the plan's nodes) against kMeshNodeBudget, before any is made.
+void CheckNodeBudget(const Coverage &cover, const std::vector<MeshSupport> &supports) {
+  double count = 0.0;
+  for (const auto &kv : cover.ladderCovered)
+    for (const Stretch &s : kv.second) count += (s.second - s.first) / kv.first;
+  if (!(count > kMeshNodeBudget)) return;
+  size_t worst = 0;
+  double most = 0.0;
+  for (size_t i = 0; i < supports.size(); i++)
+    if (cover.facts[i].ladder > 0.0 && std::fabs(supports[i].high - supports[i].low) / cover.facts[i].ladder > most) {
+      most = std::fabs(supports[i].high - supports[i].low) / cover.facts[i].ladder;
+      worst = i;
+    }
+  const MeshSupport &w = supports[worst];
+  char text[600];
+  std::snprintf(text, sizeof text,
+                "the mesh of a compound nucleus would have more than %.3g nodes (%.3g; budget kMeshNodeBudget, "
+                "MeshPlanner.h).  Most of them are asked for by %s: its kernel is %.3g MeV wide, its planned support "
+                "%.3g MeV (a shift's reach widens it) at a step of %.3g MeV (%.3g nodes).  Give the energy shift a "
+                "narrower prior, or fix it.",
+                kMeshNodeBudget, count, w.label.empty() ? "a data set" : w.label.c_str(), w.kernelWidth,
+                std::fabs(w.high - w.low), cover.facts[worst].ladder, most);
+  throw MeshPlanBudgetError(text);
+}
+}  // namespace
+
 MeshPlan PlanMesh(const std::vector<MeshAnchor> &anchors, const std::vector<MeshSupport> &supports,
                   const MeshTailConstants &tails) {
   const Coverage cover = Cover(supports);
+  CheckNodeBudget(cover, supports);
   std::vector<Lattice> lattices;
   std::vector<Piece> pieces;
   std::vector<double> nodes;

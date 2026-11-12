@@ -31,6 +31,11 @@
  *      numerator), so Gradient() differentiates Chi2Value by central
  *      differences; the 1/2- background level's proton width raised past the
  *      bound and free, the 1/2+ resonance's proton width free.
+ * Variant D reaches another gate of the adjoint that input reaches (AMatrixFunc::PointTBar), without Park's
+ * formalism (the fallback's gradient against central differences of the objective):
+ *   D  variant A's project with --use-rmc (Reich-Moore capture, --no-brune): the adjoint does not cover it, for
+ *      every point.
+ * The gates of PointTBar that no project reaches are assertions there (the reason at each).
  * Checked, at the starting point:
  *   - AccumulateEGammaGradient succeeds for A and B and bails for C;
  *   - Chi2Value(p) = operator()(p), the penalty included (rel. 1e-10);
@@ -172,10 +177,14 @@ struct Model {
   CNuc *compound = nullptr;
   WorkingCopy *data = nullptr;
   AZUREParams params;
-  // `externalCapture`: the project has external capture (as the CLI's checkExternalCapture sets it).
-  Model(const std::string &azr, bool externalCapture) : cfg(std::cout) {
+  // `externalCapture`: the project has external capture (as the CLI's checkExternalCapture sets it); `mask`: the
+  // formalism flags (Park's by default).
+  Model(const std::string &azr, bool externalCapture,
+        unsigned mask = Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM)
+      : cfg(std::cout) {
     cfg.configfile = azr;
-    cfg.paramMask |= (Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM);
+    cfg.paramMask &= ~(Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM);
+    cfg.paramMask |= mask;
     if (externalCapture) cfg.paramMask |= Config::USE_EXTERNAL_CAPTURE;
   }
   ~Model() {
@@ -278,6 +287,48 @@ double Variant(const std::string &label, const std::string &azr, bool expectAdjo
   return wallGrad;
 }
 
+// A variant without Park's formalism whose adjoint bails at a gate of PointTBar: the gradient of every free parameter
+// against central differences of the objective.
+void FallbackVariant(const std::string &label, const std::string &azr, unsigned mask) {
+  std::printf("== %s\n", label.c_str());
+  Model m(azr, false, mask);
+  if (!m.Load()) {
+    check(label + ": project loads", false, azr);
+    return;
+  }
+  ROOT::Minuit2::MnUserParameters &mp = m.params.GetMinuitParams();
+  const int n = (int)mp.Params().size();
+  vector_r p(n);
+  std::vector<bool> fixed(n);
+  std::vector<int> freeIdx;
+  for (int i = 0; i < n; i++) {
+    p[i] = mp.Value(i);
+    fixed[i] = mp.Parameter(i).IsFixed();
+    if (!fixed[i]) freeIdx.push_back(i);
+  }
+  check(label + ": free parameters (" + std::to_string(freeIdx.size()) + ")", !freeIdx.empty());
+  check(label + ": analytic adjoint bails (fallback path)", !AdjointApplies(m, p));
+  azure2::Results results;
+  AZURECalc calc(m.data, results, m.compound, m.cfg);
+  calc.SetErrorDef(1.0);
+  calc.SetFixedMask(fixed);
+  m.data->SetFit(true);
+  const double full = calc(p);
+  check(label + ": objective finite (" + num(full) + ")", std::isfinite(full) && full < 1e99);
+  std::vector<double> g = calc.Gradient(p);
+  for (int idx : freeIdx) {
+    const double h = 1.0e-6 * (std::fabs(p[idx]) + 1.0);
+    vector_r pp = p, pm = p;
+    pp[idx] += h;
+    pm[idx] -= h;
+    const double fd = (calc(pp) - calc(pm)) / (2.0 * h);
+    const double rel = std::fabs(g[idx] - fd) / (std::fabs(fd) + 1.0);
+    check(label + ": d/d" + mp.GetName(idx) + " = differences of the objective (" + num(g[idx]) + " vs " + num(fd) +
+              ")",
+          rel < 1e-5, "rel " + num(rel));
+  }
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -293,6 +344,7 @@ int main(int argc, char **argv) {
   const double gA = Variant("A: analytic gradient", "park_a.azr", true, 1, false);
   const double gB = Variant("B: a convolved analyzing power", "park_b.azr", true, 1, false);
   Variant("C: a folded capture analyzing power (the fallback)", "park_c.azr", false, 4, true);
+  FallbackVariant("D: Reich-Moore capture (--use-rmc)", "park_a.azr", Config::USE_RMC_FORMALISM);
   check("A and B agree on the wall width's derivative (" + num(gA) + " vs " + num(gB) + ")",
         std::fabs(gA - gB) <= 1e-3 * std::fabs(gA));
   std::printf("%s\n", failures ? "FAIL" : "PASS");

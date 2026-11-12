@@ -6,7 +6,9 @@
 # limit, --max-calls=x a warning, --refreeze-covariance=x read as 0, --coulomb-table= an empty file name, and an empty
 # AZURE_REFINE_QUADRATURE no refinement.  Each case below, and that the good values are still accepted (the run then
 # stops only at the missing project file, exit 255).  The same AZURE_REFINE_QUADRATURE in pyazr raises ValueError
-# (when the compiled module can be imported, PYAZR_ENGINE_DIR; else that case is skipped).
+# (when the compiled module can be imported, PYAZR_ENGINE_DIR; else that case is skipped).  An unknown option is the same
+# kind of error (before, "WARNING: Unknown option" and the run went on: a mistyped --use-gradiant fitted without the
+# gradient), on the command line and in AZURE_OPTIONS_FILE; --no-readline is accepted in every build.
 #
 #   ./tests/cli_option_values/check.sh path/to/AZURE2
 
@@ -72,6 +74,12 @@ accepted "--coulomb-table (the default file)" "" --coulomb-table
 # (the default table file in the scratch folder: an engine that took the empty FILE as the default would build there)
 refused "--build-coulomb-table= (no file)" "--build-coulomb-table= needs a FILE" \
   "HOME=$WORK AZURE2_COULOMB_TABLE=$WORK/table.bin" --build-coulomb-table=
+refused "--use-gradiant (unknown)" "Unknown option --use-gradiant\." "" --use-gradiant
+refused "--use-gradient=1 (unknown)" "Unknown option --use-gradient=1\." "" --use-gradient=1
+refused "an unknown option after good ones" "Unknown option --no-such-flag\." "" --use-brune --no-such-flag --use-lm
+accepted "--no-readline --use-gradient --use-brune" "" --use-gradient --use-brune
+printf -- '--use-gradiant\n' > "$WORK/unknown.txt"
+refused "an unknown option in AZURE_OPTIONS_FILE" "Unknown option --use-gradiant\." "AZURE_OPTIONS_FILE=$WORK/unknown.txt"
 printf -- '--max-calls\n' > "$WORK/options.txt"
 refused "--max-calls without a value in AZURE_OPTIONS_FILE" "--max-calls needs a value" "AZURE_OPTIONS_FILE=$WORK/options.txt"
 refused "AZURE_REFINE_QUADRATURE=x" "AZURE_REFINE_QUADRATURE needs a whole number from 1 to 64, not 'x'" "AZURE_REFINE_QUADRATURE=x"

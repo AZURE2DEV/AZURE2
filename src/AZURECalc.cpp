@@ -281,7 +281,10 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, WorkingCopy *ld, azure2::Results &re
     const std::vector<int> &segs = ls.target.segs;
     std::vector<vector_r> rP(segs.size()), rM(segs.size());
     const double x0 = full[ls.f];
-    const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
+    // A step that keeps the points inside their planned nodes (ShiftedFold.h, question 5); none: the full path below
+    const double h = azure2::InsideShiftStep(*ld, segs, x0, 1.0e-6 * (std::fabs(x0) + 1.0),
+                                             [&](double v) { ls.target.Set(ld, v); moveSegments(segs); });
+    if (h == 0.0) { fullShifts.push_back(ls.f); continue; }
     const double d0 = ls.target.Get(ld);
     ls.target.Set(ld, x0 + h);
     moveSegments(segs);
@@ -917,7 +920,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     // segments' points (its own, plus its shift group's followers for a group's
     // constant shift or a shift-function parameter), so finite-difference just
     // their chi^2 on the already-filled clone instead of re-solving the entire
-    // dataset twice.
+    // dataset twice; with a step inside the planned nodes (ShiftedFold.h, question 5), else the whole chi^2.
     if ((kind == ParamKind::EnergyShift || kind == ParamKind::EnergyShiftSqrt || kind == ParamKind::EnergyShiftFn) &&
         localShiftOk && pmap.Desc(idx).segment >= 1) {
       const int s = pmap.Desc(idx).segment;
@@ -929,21 +932,24 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
         inThmGroup = inThmGroup || ld->Data().ThmGroupOf(m) >= 0;
         inCovariance = inCovariance || ld->Data().GetSegment(m)->GetCovarianceGroup() >= 0;
       }
-      if (!inCovariance && target.Local(ld) && !inThmGroup) {
+      const auto move = [&](double v) {
+        target.Set(ld, v);
+        for (int m : target.segs) ld->Data().GetSegment(m)->UpdatePointEnergiesWithShift(*ld, lc, &configure());
+      };
+      if (const double step = !inCovariance && target.Local(ld) && !inThmGroup
+                                  ? azure2::InsideShiftStep(*ld, target.segs, x0, h, move) : 0.0;
+          step > 0.0) {
         auto groupChi = [&](double v) {
-          target.Set(ld, v);
-          // Every segment the parameter moves is moved before any is calculated.
-          for (int m : target.segs) ld->Data().GetSegment(m)->UpdatePointEnergiesWithShift(*ld, lc, &configure());
+          move(v);  // every segment the parameter moves is moved before any is calculated
           double c = 0.0;
           for (int m : target.segs) c += SegmentLocalChi2(ld->Data().GetSegment(m), lc, configure(), ld, results);
           return c;
         };
         const double d0 = target.Get(ld);
-        double chiP = groupChi(x0 + h);
-        double chiM = groupChi(x0 - h);
-        target.Set(ld, d0);  // restore base state on the clone
-        for (int m : target.segs) ld->Data().GetSegment(m)->UpdatePointEnergiesWithShift(*ld, lc, &configure());
-        grad[idx] = (chiP - chiM) / (2.0 * h);
+        double chiP = groupChi(x0 + step);
+        double chiM = groupChi(x0 - step);
+        move(d0);  // restore base state on the clone
+        grad[idx] = (chiP - chiM) / (2.0 * step);
 
         // Optional self-check: compare against the exact full-dataset finite
         // difference for this shift.  Enable with AZURE_SHIFT_GRAD_CHECK=1 to
@@ -951,10 +957,10 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
         // disable it for the actual fit.
         if (std::getenv("AZURE_SHIFT_GRAD_CHECK")) {
           vector_r pp = p;
-          pp[idx] = x0 + h;
+          pp[idx] = x0 + step;
           vector_r pm = p;
-          pm[idx] = x0 - h;
-          double gFull = (Chi2Value(pp) - Chi2Value(pm)) / (2.0 * h);
+          pm[idx] = x0 - step;
+          double gFull = (Chi2Value(pp) - Chi2Value(pm)) / (2.0 * step);
           double denom = std::max(1.0, std::fabs(gFull));
           std::cerr << "[shift-grad-check] seg " << s << " param " << idx
                     << ": local=" << grad[idx] << " full=" << gFull
