@@ -52,12 +52,10 @@ for m in a0 a1 av g0 g1; do run $m; done
 # 1e-4: the shifted segment's sub-point grid is rebuilt at the shifted energies, so chi2 moves by the grid's
 # discretisation (1.5e-5 with 20 sub-points over a 5 sigma window); the bug this guards against is 7e-1.
 same a1 a0 "(a) 1e-7 MeV shift on a convolved lab-frame 16O(p,p) segment leaves chi2 unchanged" 1e-4
-# 1e-5: av has a varied shift, so its segments keep sub-point grids of their own, while the unshifted a0 is integrated
-# on the shared mesh of its compound nucleus (docs/upgrade/energy_grid.md section 2.2; src/MeshSlots.cpp, OnSharedMesh):
-# the two quadratures differ by 3.5e-6 (13484.5627 against 13484.5151; the k = 8 refined value is 13484.5303).  The
-# shift kernel (a shifted fold on the fixed nodes, branch 8 of energy_grid.md section 8) puts av on the mesh as well and
-# restores 1e-6.  The bug this guards against moves chi2 by 7e-1.
-same av a0 "(b) a varied shift of exactly 0 leaves chi2 unchanged" 1e-5
+# 1e-6: av (a varied shift of 0) and a0 (no shift) fold on the same fixed nodes of the shared mesh; av's kernel moves
+# with its shift (include/ShiftedFold.h), at 0 it is a0's.  Measured: 0 (the same chi2 to every printed digit).  The
+# bug this guards against moves chi2 by 7e-1.
+same av a0 "(b) a varied shift of exactly 0 leaves chi2 unchanged" 1e-6
 g1=$(segsum g1 12 14); g0=$(segsum g0 12 14); d=$(reldev "$g1" "$g0")
 if within "$d" 1e-5; then ok "(c) the shift on convolved lab-frame 16O(p,g0) segments leaves their chi2 unchanged: $g1 vs $g0 (rel. $d)"
 else bad "(c) the shift on convolved lab-frame 16O(p,g0) segments changes their chi2: $g1 vs $g0 (rel. $d > 1e-5)"; fi

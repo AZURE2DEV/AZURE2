@@ -330,8 +330,26 @@ without the beam spread. **This is a behaviour change you should know of**: a wi
 not an approximation, and an analysis that relied on it gets the full fold. Speed and memory of the measured projects
 are unchanged.
 
-In work now: a data set with a fitted energy shift is folded on the fixed nodes of the mesh too (the kernel moves,
-the nodes stay), which removes the last private grids and a cache with locks. Merged in the earlier batch: one generic kind of fit parameter for the parameters of
+**Energy shifts on the fixed mesh (merged 2026-11-12).** A folded data set with a fitted energy shift (constant,
+sqrt(E), a shift function, a follower) used to keep nodes of its own that moved with the shift, so every change of the
+shift recomputed the R-matrix at all of them, and a cache with locks existed for those nodes. Now the nodes stay and
+the kernel moves: the mesh is planned for the data set's energies widened by the reach of the shift (three prior
+widths), and a shift inside the reach costs a fold and no solve. In numbers, on the synthetic project T2: the
+level-matrix solves of one gradient 158,929 → 48,526, peak memory 300 → 259 MB, one calculation 0.23 → 0.28 s (the
+reach adds nodes). Only the projects with a folded shifted data set change (T2, its truth file, the five models of
+`shift_sqrt_subpoints`), each toward the old engine with an eightfold refined quadrature. **Three things you should
+know of.** (1) The fitted shifts of T2 move by 0.13 of their errors, onto the refined engine's fit (within 0.01 σ).
+(2) When a fit walks a shift beyond the planned reach, the mesh is planned again and χ² steps by the quadrature
+difference there (measured 1.3e-2 in 10,500); a prior on the shift sets the reach. The old engine had steps of that
+size inside the range a fit visits. (3) A thick- or thin-target fold of a shifted point reads the stopping power at
+the node's energy minus the shift, as the old rigid move did, so that numbers stay; reading it at the true energy is
+a physics choice left for you. Two defects of the first version were found in the review and fixed with tests before
+the merge (a stopping formula called at negative energy; an error stop for shifted data with external capture).
+
+In work now: the engine stores, per mesh energy and reaction, the observables without the angle (integrated cross
+section, Legendre coefficients, elastic amplitudes), and a data point's angle enters only in its own row; twenty
+angles at one energy then share one sum over pathways, two experiments on the same reaction share everything, and a
+lab-frame point is folded with the c.m. angle and Jacobian of each node. Merged in the earlier batch: one generic kind of fit parameter for the parameters of
 apparatus effects (see "How to add a feature now").
 
 **Do the checks still test what they say? (merged 2026-11-11, evening.)** A regression check that edits a project's

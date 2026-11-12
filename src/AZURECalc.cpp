@@ -1,6 +1,7 @@
 #include "AZURECalc.h"
 #include "ModelPass.h"
 #include "Objective.h"
+#include "ShiftedFold.h"
 #include "PriorCovariance.h"
 #include "Profile.h"
 #include <algorithm>
@@ -95,20 +96,17 @@ double FdStep(ParamKind kind, double x0, double scale) {
 std::vector<double> g_jacGradForCheck;
 bool g_deferCheckExit = false;
 
-// chi^2 contribution of a single segment: its data term plus its own
-// energy-shift nuisance penalty, evaluated at the segment's current shift.
-// Mirrors exactly the per-segment math in AZURECalc::Chi2Value (data term +
-// lines guarded by IsVaryEnergyShift), so a finite difference of this over the
-// segment's shift equals a finite difference of the whole chi^2 -- *provided*
-// no other segment's contribution depends on this shift.  That holds when the
-// segment is self-contained: no components, and no point mapping onto segments
-// the shift does not move (see the eligibility guard in Gradient()).  All other segments then produce
-// identical +h/-h contributions that cancel in the central difference.
+// chi^2 contribution of a single segment: its data term plus its own energy-shift nuisance penalty, evaluated at the
+// segment's current shift, as AZURECalc::Chi2Value has it, so a finite difference of this over the segment's shift
+// equals one of the whole chi^2 when no other segment's contribution depends on this shift (a self-contained segment:
+// the eligibility guard in Gradient()).  A folded segment on the fixed nodes is folded again, no node recomputed.
 double SegmentLocalChi2(const Segment *segment, CNuc *lc, const Config &config, WorkingCopy *ld, azure2::Results &results) {
   double chi = 0.0;
   const double norm = ld->State(*segment).norm;
+  const bool refolded = azure2::RefoldShiftedSegments(*ld, {segment}, config, results);
   for (int pid = 0; pid < segment->NumPoints(); pid++) {
-    azure2::EvaluateModelPoint(*ld, *segment, pid, lc, config, results, azure2::LeafValues::Calculate);
+    azure2::EvaluateModelPoint(*ld, *segment, pid, lc, config, results,
+                               refolded ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
     chi += azure2::PointResidual(*ld, *segment, pid, results, norm).Chi2();
   }
   segment->AddShiftPenalty(ld->State(*segment), chi);
@@ -212,13 +210,14 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, WorkingCopy *ld, azure2::Results &re
       out.push_back(azure2::PointResidual(*ld, *seg, pid, results, norm).Pull());
     }
   };
-  // The residuals of the segments `segs` (each into its own vector): one point pass over them (their energy
-  // tasks, then their folds) and each point from the records it wrote; serially (inside a parallel region, or a
-  // failed point) segment by segment, point by point, where index order puts every host first.
+  // The residuals of the segments `segs` (each into its own vector): folded again on the fixed nodes (ShiftedFold.h), or
+  // one point pass over them (their energy tasks, then their folds), and each point from the records it wrote; serially
+  // (inside a parallel region, or a failed point) segment by segment, point by point.
   auto groupResiduals = [&](const std::vector<int> &segs, std::vector<vector_r> &out) {
     std::vector<const Segment *> group;
     for (int s : segs) group.push_back(ld->Data().GetSegment(s));
-    const bool pre = !InParallelRegion() && ld->CalculatePointsInParallel(group, lc, config, results) == 0;
+    const bool pre = azure2::RefoldShiftedSegments(*ld, group, config, results) ||
+                     (!InParallelRegion() && ld->CalculatePointsInParallel(group, lc, config, results) == 0);
     for (size_t m = 0; m < group.size(); m++)
       segmentResiduals(group[m], out[m], pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
   };

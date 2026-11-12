@@ -6,8 +6,9 @@ A fit evaluates on `max(4, threads)` copies of the data (`AZURECalc::InitializeP
 energy-dependent tables of every point and sub-point (copy on write), and a re-placed sub-point grid keeps the
 tables of the nodes that did not move, so a copy costs a fraction of the data instead of a full copy
 (`tests/natural_neon`: about 0.8 GB per copy instead of 7.7 GB; a fit at four threads 7.6 GB at the start and
-9.2 GB after 50 minutes, instead of about 41 GB).  Re-placed nodes are shared between the copies
-(`NodeTableCache`), and the tables are packed into flat arrays.  See the developer guide, *WorkingCopy, Data Points, and Target Effects*, "Memory: shared per-point
+9.2 GB after 50 minutes, instead of about 41 GB).  The tables are packed into flat arrays.  (Re-placed nodes were
+shared between the copies through a cache with locks until 2026-11-12; on the shared mesh only the nodes near a moved
+narrow level are re-placed, each copy computes its own.)  See the developer guide, *WorkingCopy, Data Points, and Target Effects*, "Memory: shared per-point
 tables".
 
 Two races made fits with grid re-placement crash at four threads (`malloc(): unaligned tcache chunk detected`,

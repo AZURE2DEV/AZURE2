@@ -25,9 +25,7 @@
  *    of the table happen before the sole holder's write.
  *
  * As with use_count(), the test is exact only while no other thread copies a handle to the same table; within a
- * parallel step a point takes tables only from a point its own thread has finished (Unit::AdoptEDependentValues).  A
- * Weak reference (NodeTableCache) can create a holder at any moment; a table published through one is never written
- * again (NodeTableCache.h).
+ * parallel step a point takes tables only from a point its own thread has finished (Unit::AdoptEDependentValues).
  */
 template <class T>
 class SharedTable {
@@ -39,22 +37,6 @@ class SharedTable {
   };
 
  public:
-  /// A non-owning reference; lock() gives a holding handle, or an empty one if the table is gone.
-  class Weak {
-   public:
-    Weak() = default;
-    explicit Weak(const SharedTable &t) : w_(t.p_) {}
-    SharedTable lock() const {
-      std::shared_ptr<Box> p = w_.lock();
-      if (p) p->holders.fetch_add(1, std::memory_order_relaxed);
-      return SharedTable(std::move(p));
-    }
-    bool expired() const { return w_.expired(); }
-
-   private:
-    std::weak_ptr<Box> w_;
-  };
-
   SharedTable() = default;
   template <class... A>
   static SharedTable Make(A &&...a) { return SharedTable(std::make_shared<Box>(std::forward<A>(a)...)); }

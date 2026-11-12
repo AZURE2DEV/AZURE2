@@ -7,7 +7,6 @@
 #include "ChannelTable.h"
 #include "Segment.h"
 #include "TargetEffect.h"
-#include "NodeTableCache.h"
 #include "SlotGroup.h"
 #include "NodeTable.h"
 #include "ThmExperiment.h"
@@ -236,6 +235,11 @@ class WorkingCopy {
   void PlaceOverflowNodes(CNuc *cnuc, const std::vector<int> &changedTasks, bool rowsReleased);
   /// Let go of the overflow table's rows before the units are re-energised (they are holders of the units' rows).
   void ReleaseOverflowRows();
+  /// The centre c_i (c.m. MeV) of the support of a folded point on the shared mesh, its grid record `spec`, as the
+  /// copy's slots are placed now: 0 without an energy shift (ShiftedFold.h, question 2).
+  double MeshCentre(const Unit::SubGridSpec &spec) const {
+    return spec.mesh >= 0 && (std::size_t)spec.mesh < meshCentres_.size() ? meshCentres_[(std::size_t)spec.mesh][(std::size_t)spec.meshSupport] : 0.0;
+  }
   /// The calculation plan: which task calculates which point (CalculationPlan.h).  Positions only: a shift or a
   /// re-placed sub-point grid leaves it as it is (the energy tasks it gives are rebuilt from the units).
   const azure2::CalculationPlan &Plan() const { return plan_; }
@@ -553,12 +557,14 @@ class WorkingCopy {
     ~GridNucleus();
   };
   GridNucleus gridNuc_;
-  // The tables of re-placed sub-point nodes, shared by this working copy and its copies, and written by them during
-  // an evaluation: on purpose, each entry under its shard's mutex, never a table in place (NodeTableCache.h).
-  std::shared_ptr<NodeTableCache> nodeCache_ = std::make_shared<NodeTableCache>();
   // Per shared mesh of the data set (DataSet::Meshes): the quantized anchors its points' slots are placed for now.  Set
   // by the set-up; the hand-over (ReplaceSubPointGrids) re-places the slots in the changed region when they move.
   std::vector<std::vector<azure2::MeshAnchor>> meshAnchors_;
+  // Per shared mesh, per support: the supports its slots are placed for now, and the centre c_i (c.m. MeV) of each
+  // (0 for a point without an energy shift).  A shifted point's support moves with its centre when its shift leaves
+  // the reach (ShiftedFold.h, question 2); a function of the parameters alone, like meshAnchors_.
+  std::vector<std::vector<azure2::MeshSupport>> meshSupports_;
+  std::vector<std::vector<double>> meshCentres_;
   /// The stage's channel table (docs/upgrade/channel_table.md): built by CalcEDependentValues and
   /// InitializeLeaves before their point loops, read-only afterwards, replaced, never written.
   std::shared_ptr<const ChannelTable> channelTable_;

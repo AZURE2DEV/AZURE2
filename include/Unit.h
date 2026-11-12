@@ -45,6 +45,14 @@ class Unit : public Site {
     /// the support's index in it, -1 for a point with a grid of its own; E_x - E_cm of its pair (MeV).
     int mesh = -1, meshSupport = -1;
     double frameShift = 0.0;
+    /// An energy shift on the shared mesh (include/ShiftedFold.h): whether the data set's shift is active at the
+    /// set-up; the point's c.m. energy the support [endEnergy, startEnergy] was laid out at; the lowest c.m. energy a
+    /// node may have and whether the support's low edge is hard there; the reach R_i and the c.m. shift at the start
+    /// values Delta_i(nu_0) (MeV).
+    bool shifted = false;
+    double centreEnergy = 0.0, floorEnergy = 0.0;
+    bool lowHard = false;
+    double shiftReach = 0.0, startShift = 0.0;
   };
   /// What the set-up worked out for this point that its evaluations read again (its sub-point grid's layout, its
   /// user-defined resolution kernel): record SetUpIndex of the data set's DataSet::PointSetUps, -1 for none.
