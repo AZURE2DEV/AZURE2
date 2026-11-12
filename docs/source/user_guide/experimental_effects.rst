@@ -332,15 +332,18 @@ be normalized to the same thing the density counts.**
 
    **Energy shifts under target integration.** A segment's energy shift
    (constant, :math:`\sqrt{E}` or shift function, :doc:`segments`) is a
-   calibration of the measured beam energy, so it moves every sub-point
-   rigidly with its data point, by the shift evaluated at the data point's
-   original energy. The target thickness, the beam profile, the stopping
-   powers and the resolution kernels stay those computed for the unshifted
-   energy, and the resonance-anchored fine grid is laid out at the shifted
-   position of each resonance. This is a first-order approximation in
-   :math:`\Delta E\,\mathrm{d}\epsilon/\mathrm{d}E`, accurate while the shift
-   is small compared with the energy over which the stopping power changes.
-   (Until October 2026 each sub-point moved by the shift at its own energy,
+   calibration of the measured beam energy: the folded value of a point
+   measured at :math:`E` with the shift :math:`s` is the folded value of the
+   same point without a shift at the beam energy :math:`E + s`.  The stopping
+   power is taken at the shifted energies, so the target thickness, the back
+   edge of a layer, the reach of an infinitely thick target and the straggling
+   are those of the true beam energy; the beam spread and the resolution
+   kernels are centred on the shifted energy, and the resonance-anchored nodes
+   stay where the levels are.  (Until November 2026 the stopping and the target
+   thickness stayed those of the unshifted energy, an error of
+   :math:`(\mathrm{d}\ln\epsilon/\mathrm{d}\ln E)\, s/E` on a yield on a
+   resonance, 0.9 % for a 10 keV shift at 270 keV.)
+   (Before October 2026 each sub-point moved by the shift at its own energy,
    which for a :math:`\sqrt{E}` shift or a shift function stretched the
    integration window by :math:`1 + \mathrm{d}s/\mathrm{d}E` -- a yield factor
    of order 1 % for :math:`b = 0.02` at 0.3 MeV -- and left the fine grid off a

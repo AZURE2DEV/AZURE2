@@ -1,0 +1,898 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+format=3
+</config>
+<levels>
+1 -1 13.027400 1 1 1 2 0 1 1 1 60 0.5 1 0.5 -1 0.0 1.007825 15.000109 1 7 12.1274 12.1274 0 0 0.0 0 4.85 0 0 0
+1 -1 13.027400 1 1 2 0 2 1 1 1 40 0 1 0 1 0.0 4.002603 12.0 2 6 12.1274 7.16192 0 0 0.0 0 5.43 0 0 0
+
+0.5 1 30.000000 1 1 3 1 0 2 1 1 0 0.5 1 0 1 0.0 1.008665 12.0 0 6 4.94636 4.94636 0 0 0.0 0 0.1 0 0 0
+</levels>
+<data>
+# make_models.py: every data set with a shift, then its twin without a shift at the shifted energies
+energy_scale fn_thin_formula_bohr_none_function
+    function       "a0+a1*x" MeV
+    param          a0 0.001 fixed
+    param          a1 0.002 fixed
+
+energy_scale fn_thin_srim_none_spread_function
+    function       "a0+a1*x" MeV
+    param          a0 0.001 fixed
+    param          a1 0.002 fixed
+
+energy_scale fn_thin_table_none_none_function
+    function       "a0+a1*x" MeV
+    param          a0 0.001 fixed
+    param          a1 0.002 fixed
+
+energy_scale fn_thin_table_bohr_spread_function
+    function       "a0+a1*x" MeV
+    param          a0 0.001 fixed
+    param          a1 0.002 fixed
+
+energy_scale fn_layer_formula_bohr_none_function
+    function       "a0+a1*x" MeV
+    param          a0 0.001 fixed
+    param          a1 0.002 fixed
+
+energy_scale fn_layer_srim_none_spread_function
+    function       "a0+a1*x" MeV
+    param          a0 0.001 fixed
+    param          a1 0.002 fixed
+
+energy_scale fn_layer_table_none_none_function
+    function       "a0+a1*x" MeV
+    param          a0 0.001 fixed
+    param          a1 0.002 fixed
+
+energy_scale fn_layer_table_bohr_spread_function
+    function       "a0+a1*x" MeV
+    param          a0 0.001 fixed
+    param          a1 0.002 fixed
+
+energy_scale fn_thick_formula_bohr_none_function
+    function       "a0+a1*x" MeV
+    param          a0 0.001 fixed
+    param          a1 0.002 fixed
+
+energy_scale fn_thick_srim_none_spread_function
+    function       "a0+a1*x" MeV
+    param          a0 0.001 fixed
+    param          a1 0.002 fixed
+
+energy_scale fn_thick_table_none_none_function
+    function       "a0+a1*x" MeV
+    param          a0 0.001 fixed
+    param          a1 0.002 fixed
+
+energy_scale fn_thick_table_bohr_spread_function
+    function       "a0+a1*x" MeV
+    param          a0 0.001 fixed
+    param          a1 0.002 fixed
+
+dataset thin_formula_none_none_offset
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin_formula_none_none_offset.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          offset 0.0030000000000000001 MeV fit prior 0.0030000000000000001 0.001
+    target         lay_formula_none
+    quadrature     points 40
+dataset thin_formula_none_none_offset_twin
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin_formula_none_none_offset_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay_formula_none
+    quadrature     points 40
+dataset thin_formula_none_spread_sqrt
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin_formula_none_spread_sqrt.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          sqrt 0.0030000000000000001 MeV^1/2 fixed
+    target         lay_formula_none
+    beam           b08
+    quadrature     points 40
+dataset thin_formula_none_spread_sqrt_twin
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin_formula_none_spread_sqrt_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay_formula_none
+    beam           b08
+    quadrature     points 40
+dataset thin_formula_bohr_none_function
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin_formula_bohr_none_function.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          fn_thin_formula_bohr_none_function
+    target         lay_formula_bohr
+    quadrature     points 40
+dataset thin_formula_bohr_none_function_twin
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin_formula_bohr_none_function_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay_formula_bohr
+    quadrature     points 40
+dataset thin_formula_bohr_spread_offset
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin_formula_bohr_spread_offset.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          offset 0.0030000000000000001 MeV fit prior 0.0030000000000000001 0.001
+    target         lay_formula_bohr
+    beam           b08
+    quadrature     points 40
+dataset thin_formula_bohr_spread_offset_twin
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin_formula_bohr_spread_offset_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay_formula_bohr
+    beam           b08
+    quadrature     points 40
+dataset thin_srim_none_none_sqrt
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin_srim_none_none_sqrt.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          sqrt 0.0030000000000000001 MeV^1/2 fixed
+    target         lay_srim_none
+    quadrature     points 40
+dataset thin_srim_none_none_sqrt_twin
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin_srim_none_none_sqrt_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay_srim_none
+    quadrature     points 40
+dataset thin_srim_none_spread_function
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin_srim_none_spread_function.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          fn_thin_srim_none_spread_function
+    target         lay_srim_none
+    beam           b08
+    quadrature     points 40
+dataset thin_srim_none_spread_function_twin
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin_srim_none_spread_function_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay_srim_none
+    beam           b08
+    quadrature     points 40
+dataset thin_srim_bohr_none_offset
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin_srim_bohr_none_offset.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          offset 0.0030000000000000001 MeV fit prior 0.0030000000000000001 0.001
+    target         lay_srim_bohr
+    quadrature     points 40
+dataset thin_srim_bohr_none_offset_twin
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin_srim_bohr_none_offset_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay_srim_bohr
+    quadrature     points 40
+dataset thin_srim_bohr_spread_sqrt
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin_srim_bohr_spread_sqrt.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          sqrt 0.0030000000000000001 MeV^1/2 fixed
+    target         lay_srim_bohr
+    beam           b08
+    quadrature     points 40
+dataset thin_srim_bohr_spread_sqrt_twin
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin_srim_bohr_spread_sqrt_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay_srim_bohr
+    beam           b08
+    quadrature     points 40
+dataset thin_table_none_none_function
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin_table_none_none_function.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          fn_thin_table_none_none_function
+    target         lay_table_none
+    quadrature     points 40
+dataset thin_table_none_none_function_twin
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin_table_none_none_function_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay_table_none
+    quadrature     points 40
+dataset thin_table_none_spread_offset
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin_table_none_spread_offset.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          offset 0.0030000000000000001 MeV fit prior 0.0030000000000000001 0.001
+    target         lay_table_none
+    beam           b08
+    quadrature     points 40
+dataset thin_table_none_spread_offset_twin
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin_table_none_spread_offset_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay_table_none
+    beam           b08
+    quadrature     points 40
+dataset thin_table_bohr_none_sqrt
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin_table_bohr_none_sqrt.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          sqrt 0.0030000000000000001 MeV^1/2 fixed
+    target         lay_table_bohr
+    quadrature     points 40
+dataset thin_table_bohr_none_sqrt_twin
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin_table_bohr_none_sqrt_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay_table_bohr
+    quadrature     points 40
+dataset thin_table_bohr_spread_function
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin_table_bohr_spread_function.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          fn_thin_table_bohr_spread_function
+    target         lay_table_bohr
+    beam           b08
+    quadrature     points 40
+dataset thin_table_bohr_spread_function_twin
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/thin_table_bohr_spread_function_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay_table_bohr
+    beam           b08
+    quadrature     points 40
+dataset layer_formula_none_none_offset
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/layer_formula_none_none_offset.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          offset 0.0030000000000000001 MeV fit prior 0.0030000000000000001 0.001
+    target         lay_formula_none
+    quadrature     points 40
+dataset layer_formula_none_none_offset_twin
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/layer_formula_none_none_offset_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay_formula_none
+    quadrature     points 40
+dataset layer_formula_none_spread_sqrt
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/layer_formula_none_spread_sqrt.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          sqrt 0.0030000000000000001 MeV^1/2 fixed
+    target         lay_formula_none
+    beam           b08
+    quadrature     points 40
+dataset layer_formula_none_spread_sqrt_twin
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/layer_formula_none_spread_sqrt_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay_formula_none
+    beam           b08
+    quadrature     points 40
+dataset layer_formula_bohr_none_function
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/layer_formula_bohr_none_function.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          fn_layer_formula_bohr_none_function
+    target         lay_formula_bohr
+    quadrature     points 40
+dataset layer_formula_bohr_none_function_twin
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/layer_formula_bohr_none_function_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay_formula_bohr
+    quadrature     points 40
+dataset layer_formula_bohr_spread_offset
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/layer_formula_bohr_spread_offset.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          offset 0.0030000000000000001 MeV fit prior 0.0030000000000000001 0.001
+    target         lay_formula_bohr
+    beam           b08
+    quadrature     points 40
+dataset layer_formula_bohr_spread_offset_twin
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/layer_formula_bohr_spread_offset_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay_formula_bohr
+    beam           b08
+    quadrature     points 40
+dataset layer_srim_none_none_sqrt
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/layer_srim_none_none_sqrt.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          sqrt 0.0030000000000000001 MeV^1/2 fixed
+    target         lay_srim_none
+    quadrature     points 40
+dataset layer_srim_none_none_sqrt_twin
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/layer_srim_none_none_sqrt_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay_srim_none
+    quadrature     points 40
+dataset layer_srim_none_spread_function
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/layer_srim_none_spread_function.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          fn_layer_srim_none_spread_function
+    target         lay_srim_none
+    beam           b08
+    quadrature     points 40
+dataset layer_srim_none_spread_function_twin
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/layer_srim_none_spread_function_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay_srim_none
+    beam           b08
+    quadrature     points 40
+dataset layer_srim_bohr_none_offset
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/layer_srim_bohr_none_offset.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          offset 0.0030000000000000001 MeV fit prior 0.0030000000000000001 0.001
+    target         lay_srim_bohr
+    quadrature     points 40
+dataset layer_srim_bohr_none_offset_twin
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/layer_srim_bohr_none_offset_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay_srim_bohr
+    quadrature     points 40
+dataset layer_srim_bohr_spread_sqrt
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/layer_srim_bohr_spread_sqrt.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          sqrt 0.0030000000000000001 MeV^1/2 fixed
+    target         lay_srim_bohr
+    beam           b08
+    quadrature     points 40
+dataset layer_srim_bohr_spread_sqrt_twin
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/layer_srim_bohr_spread_sqrt_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay_srim_bohr
+    beam           b08
+    quadrature     points 40
+dataset layer_table_none_none_function
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/layer_table_none_none_function.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          fn_layer_table_none_none_function
+    target         lay_table_none
+    quadrature     points 40
+dataset layer_table_none_none_function_twin
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/layer_table_none_none_function_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay_table_none
+    quadrature     points 40
+dataset layer_table_none_spread_offset
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/layer_table_none_spread_offset.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          offset 0.0030000000000000001 MeV fit prior 0.0030000000000000001 0.001
+    target         lay_table_none
+    beam           b08
+    quadrature     points 40
+dataset layer_table_none_spread_offset_twin
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/layer_table_none_spread_offset_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay_table_none
+    beam           b08
+    quadrature     points 40
+dataset layer_table_bohr_none_sqrt
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/layer_table_bohr_none_sqrt.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          sqrt 0.0030000000000000001 MeV^1/2 fixed
+    target         lay_table_bohr
+    quadrature     points 40
+dataset layer_table_bohr_none_sqrt_twin
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/layer_table_bohr_none_sqrt_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay_table_bohr
+    quadrature     points 40
+dataset layer_table_bohr_spread_function
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/layer_table_bohr_spread_function.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          fn_layer_table_bohr_spread_function
+    target         lay_table_bohr
+    beam           b08
+    quadrature     points 40
+dataset layer_table_bohr_spread_function_twin
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/layer_table_bohr_spread_function_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay_table_bohr
+    beam           b08
+    quadrature     points 40
+dataset thick_formula_none_none_offset
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick_formula_none_none_offset.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          offset 0.0030000000000000001 MeV fit prior 0.0030000000000000001 0.001
+    target         inf_formula_none
+    quadrature     points 40
+dataset thick_formula_none_none_offset_twin
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick_formula_none_none_offset_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         inf_formula_none
+    quadrature     points 40
+dataset thick_formula_none_spread_sqrt
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick_formula_none_spread_sqrt.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          sqrt 0.0030000000000000001 MeV^1/2 fixed
+    target         inf_formula_none
+    beam           b08
+    quadrature     points 40
+dataset thick_formula_none_spread_sqrt_twin
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick_formula_none_spread_sqrt_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         inf_formula_none
+    beam           b08
+    quadrature     points 40
+dataset thick_formula_bohr_none_function
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick_formula_bohr_none_function.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          fn_thick_formula_bohr_none_function
+    target         inf_formula_bohr
+    quadrature     points 40
+dataset thick_formula_bohr_none_function_twin
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick_formula_bohr_none_function_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         inf_formula_bohr
+    quadrature     points 40
+dataset thick_formula_bohr_spread_offset
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick_formula_bohr_spread_offset.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          offset 0.0030000000000000001 MeV fit prior 0.0030000000000000001 0.001
+    target         inf_formula_bohr
+    beam           b08
+    quadrature     points 40
+dataset thick_formula_bohr_spread_offset_twin
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick_formula_bohr_spread_offset_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         inf_formula_bohr
+    beam           b08
+    quadrature     points 40
+dataset thick_srim_none_none_sqrt
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick_srim_none_none_sqrt.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          sqrt 0.0030000000000000001 MeV^1/2 fixed
+    target         inf_srim_none
+    quadrature     points 40
+dataset thick_srim_none_none_sqrt_twin
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick_srim_none_none_sqrt_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         inf_srim_none
+    quadrature     points 40
+dataset thick_srim_none_spread_function
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick_srim_none_spread_function.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          fn_thick_srim_none_spread_function
+    target         inf_srim_none
+    beam           b08
+    quadrature     points 40
+dataset thick_srim_none_spread_function_twin
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick_srim_none_spread_function_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         inf_srim_none
+    beam           b08
+    quadrature     points 40
+dataset thick_srim_bohr_none_offset
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick_srim_bohr_none_offset.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          offset 0.0030000000000000001 MeV fit prior 0.0030000000000000001 0.001
+    target         inf_srim_bohr
+    quadrature     points 40
+dataset thick_srim_bohr_none_offset_twin
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick_srim_bohr_none_offset_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         inf_srim_bohr
+    quadrature     points 40
+dataset thick_srim_bohr_spread_sqrt
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick_srim_bohr_spread_sqrt.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          sqrt 0.0030000000000000001 MeV^1/2 fixed
+    target         inf_srim_bohr
+    beam           b08
+    quadrature     points 40
+dataset thick_srim_bohr_spread_sqrt_twin
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick_srim_bohr_spread_sqrt_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         inf_srim_bohr
+    beam           b08
+    quadrature     points 40
+dataset thick_table_none_none_function
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick_table_none_none_function.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          fn_thick_table_none_none_function
+    target         inf_table_none
+    quadrature     points 40
+dataset thick_table_none_none_function_twin
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick_table_none_none_function_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         inf_table_none
+    quadrature     points 40
+dataset thick_table_none_spread_offset
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick_table_none_spread_offset.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          offset 0.0030000000000000001 MeV fit prior 0.0030000000000000001 0.001
+    target         inf_table_none
+    beam           b08
+    quadrature     points 40
+dataset thick_table_none_spread_offset_twin
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick_table_none_spread_offset_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         inf_table_none
+    beam           b08
+    quadrature     points 40
+dataset thick_table_bohr_none_sqrt
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick_table_bohr_none_sqrt.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          sqrt 0.0030000000000000001 MeV^1/2 fixed
+    target         inf_table_bohr
+    quadrature     points 40
+dataset thick_table_bohr_none_sqrt_twin
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick_table_bohr_none_sqrt_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         inf_table_bohr
+    quadrature     points 40
+dataset thick_table_bohr_spread_function
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick_table_bohr_spread_function.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          fn_thick_table_bohr_spread_function
+    target         inf_table_bohr
+    beam           b08
+    quadrature     points 40
+dataset thick_table_bohr_spread_function_twin
+    reaction       15N(p,a)12C
+    quantity       yield
+    unit           1/particle
+    file           data/thick_table_bohr_spread_function_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         inf_table_bohr
+    beam           b08
+    quadrature     points 40
+</data>
+<targets>
+target lay_formula_none
+    kind           layer
+    active         15N
+    areal_density  1e18 atoms/cm2 fixed
+    composition    Ti 1 N 1
+    stopping       formula "a0*x^a1" a0=2.4e-20 a1=-1.5 MeV*cm2/atom
+    straggling     none
+
+target lay_formula_bohr
+    kind           layer
+    active         15N
+    areal_density  1e18 atoms/cm2 fixed
+    composition    Ti 1 N 1
+    stopping       formula "a0*x^a1" a0=2.4e-20 a1=-1.5 MeV*cm2/atom
+    straggling     bohr
+
+target lay_srim_none
+    kind           layer
+    active         15N
+    areal_density  1e18 atoms/cm2 fixed
+    composition    Ti 1 N 1
+    stopping       evaluation
+    straggling     none
+
+target lay_srim_bohr
+    kind           layer
+    active         15N
+    areal_density  1e18 atoms/cm2 fixed
+    composition    Ti 1 N 1
+    stopping       evaluation
+    straggling     bohr
+
+target lay_table_none
+    kind           layer
+    active         15N
+    areal_density  1e18 atoms/cm2 fixed
+    composition    Ti 1 N 1
+    stopping       table "data/tin_p.tab" MeV eV/1e15atoms/cm2
+    straggling     none
+
+target lay_table_bohr
+    kind           layer
+    active         15N
+    areal_density  1e18 atoms/cm2 fixed
+    composition    Ti 1 N 1
+    stopping       table "data/tin_p.tab" MeV eV/1e15atoms/cm2
+    straggling     bohr
+
+target inf_formula_none
+    kind           infinite
+    active         15N
+    composition    Ti 1 N 1
+    stopping       formula "a0*x^a1" a0=2.4e-20 a1=-1.5 MeV*cm2/atom
+    straggling     none
+
+target inf_formula_bohr
+    kind           infinite
+    active         15N
+    composition    Ti 1 N 1
+    stopping       formula "a0*x^a1" a0=2.4e-20 a1=-1.5 MeV*cm2/atom
+    straggling     bohr
+
+target inf_srim_none
+    kind           infinite
+    active         15N
+    composition    Ti 1 N 1
+    stopping       evaluation
+    straggling     none
+
+target inf_srim_bohr
+    kind           infinite
+    active         15N
+    composition    Ti 1 N 1
+    stopping       evaluation
+    straggling     bohr
+
+target inf_table_none
+    kind           infinite
+    active         15N
+    composition    Ti 1 N 1
+    stopping       table "data/tin_p.tab" MeV eV/1e15atoms/cm2
+    straggling     none
+
+target inf_table_bohr
+    kind           infinite
+    active         15N
+    composition    Ti 1 N 1
+    stopping       table "data/tin_p.tab" MeV eV/1e15atoms/cm2
+    straggling     bohr
+
+beam b08
+    spread         0.0008 MeV lab
+
+</targets>
