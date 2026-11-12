@@ -12,6 +12,10 @@
 # groups of the slots (include/SlotGroup.h: every range in one block, the writer an earlier reader, one group per
 # block, the slots of a point on a shared mesh at the nodes its plan gives), reported on its own line; shown failing
 # with one point's slot range shifted by one site (injected once: "reads of another group", "off their mesh plan").
+# Each check also checks that every reader of slots without an angle holds its angular row and Coulomb amplitudes at
+# each slot's energy (WorkingCopy::CheckReaderRows; hybrid_potential: folded elastic data); shown failing with
+# the rows of a Q-coefficient particle exit taken at the point's energy instead of the slot's (injected once: the T2
+# fit reports rows that differ).
 #   node_check.sh path/to/AZURE2
 set -u
 export LC_ALL=C OMP_NUM_THREADS=2
@@ -38,12 +42,17 @@ clean() {
   # the sharing groups of the slots (WorkingCopy::CheckSlotGroups), one line per check
   groups="$(grep -ac 'AZURE_NODE_CHECK: slot groups:' "$log")"
   grouped="$(grep -a 'AZURE_NODE_CHECK: slot groups:' "$log" | grep -c ' 0 ranges outside a block, 0 slots with a wrong writer, 0 reads of another group, 0 ranges off their mesh plan')"
-  [ "$lines" -gt 0 ] && [ "$dirty" -eq 0 ] && [ "$groups" -eq "$lines" ] && [ "$grouped" -eq "$groups" ]
+  # the readers' rows and Coulomb amplitudes at their slots (WorkingCopy::CheckReaderRows), one line per check
+  readers="$(grep -a 'AZURE_NODE_CHECK: reader rows:' "$log" | awk '{ n += $4 } END { print n + 0 }')"
+  rowlines="$(grep -ac 'AZURE_NODE_CHECK: reader rows:' "$log")"
+  rowsclean="$(grep -a 'AZURE_NODE_CHECK: reader rows:' "$log" | grep -c ' slots, 0 differ$')"
+  [ "$lines" -gt 0 ] && [ "$dirty" -eq 0 ] && [ "$groups" -eq "$lines" ] && [ "$grouped" -eq "$groups" ] &&
+    [ "$rowlines" -eq "$lines" ] && [ "$rowsclean" -eq "$rowlines" ]
 }
 CALC='1\n\n\n7\n'
 FIT='2\n\n\n\n7\n'
 for p in "sqrt:$TESTS/shift_sqrt_subpoints/models:sqrt.azr:none" "thm:$TESTS/18O_p_a_thm:18O_p_a_thm.azr:0" \
-         "natural_neon:$TESTS/natural_neon:natural_neon.azr:0"; do
+         "natural_neon:$TESTS/natural_neon:natural_neon.azr:0" "elastic:$TESTS/hybrid_potential:hybrid_potential.azr:0"; do
   IFS=: read -r name src azr wantOverflow <<< "$p"
   run "$name" "$src" "$azr" 0 "$CALC"
   run "$name" "$src" "$azr" 1 "$CALC"
@@ -52,7 +61,7 @@ for p in "sqrt:$TESTS/shift_sqrt_subpoints/models:sqrt.azr:none" "thm:$TESTS/18O
   if [ "$r0" = 0 ] && [ "$r1" = 0 ] && [ "$n" -gt 0 ] && clean "$name" && { [ "$wantOverflow" = 0 ] || { [ "$wantOverflow" = none ] && [ "$overflow" -eq 0 ]; } ||
                                            { [ "$wantOverflow" = 1 ] && [ "$overflow" -gt 0 ]; }; } &&
      diff -rq "$WORK/$name.0/output" "$WORK/$name.1/output" > /dev/null; then
-    ok "$name: $lines checks clean ($overflow with the overflow table), its $n output files identical"
+    ok "$name: $lines checks clean ($overflow with the overflow table, $readers reader checks of slots), its $n output files identical"
   else
     bad "$name: exit $r0 / $r1, $n files; $(grep -a AZURE_NODE_CHECK "$WORK/$name.1/run.log" | grep -v ' 0 off the tables, 0 on a wrong node; channel rows 0 differ' | head -2)"
   fi
@@ -60,7 +69,7 @@ done
 run T2fit "$TESTS/upgrade/T2" T2.azr 1 "$FIT" --max-calls=30
 r1="$(cat "$WORK/T2fit.1/rc")"
 if [ "$r1" = 0 ] && clean T2fit && [ "$overflow" -gt 0 ]; then
-  ok "T2 fit (30 calls): $lines checks clean, $overflow with the overflow table"
+  ok "T2 fit (30 calls): $lines checks clean, $overflow with the overflow table, $readers reader checks of slots"
 else
   bad "T2 fit: exit $r1; $(grep -a AZURE_NODE_CHECK "$WORK/T2fit.1/run.log" | grep -v ' 0 off the tables, 0 on a wrong node; channel rows 0 differ' | head -2)"
 fi

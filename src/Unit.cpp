@@ -491,38 +491,6 @@ void Site::SetTargetThickness(double targetThickness) {
   targetThickness_ = targetThickness;
 }
 
-void Site::SetLegendreCoefficients(azure2::Results &results, const vector_r &coefficients) const {
-  if (coefficients.size() > num_ang_slots_)
-    throw std::logic_error("Site::SetLegendreCoefficients: " + std::to_string(coefficients.size()) + " coefficients, " +
-                           std::to_string(num_ang_slots_) + " result slots (segment " + std::to_string(segment_key_) +
-                           ")");
-  double *r = Rec(results) + azure2::Results::AngularOffset();
-  r[0] = (double)coefficients.size();
-  std::copy(coefficients.begin(), coefficients.end(), r + 1);
-}
-
-void Site::ScaleLegendreCoefficients(azure2::Results &results, double f) const {
-  if (!num_ang_slots_) return;
-  double *r = Rec(results) + azure2::Results::AngularOffset();
-  const int n = (int)r[0];
-  for (int l = 1; l <= n; l++) r[l] *= f;
-}
-
-double LegendreSymmetryFactor(const PPair &entrance, bool elastic) {
-  if (!entrance.IsIdentical()) return 1.0;
-  return elastic ? 4.0 : entrance.GetEntranceSymmetryFactor();
-}
-
-bool Site::HoldsLegendreCoefficients() const {
-  const TermSettings &t = *settings_;
-  if (t.phase || t.total || t.analyzingPower || t.thm) return false;
-  return t.angularDist || (t.differential && t.entranceKey != t.exitKey);
-}
-
-int Site::ResultAngularCapacity() const {
-  return HoldsLegendreCoefficients() ? Config::maxLOrder + 1 : 0;
-}
-
 void Unit::CopyAngularDistsToModel(azure2::Results &results) const {
   if (!num_model_ang_) return;
   double *to = results.model.data() + ModelRecord(results) + 1;
@@ -538,27 +506,6 @@ void Unit::CopyAngularDistsToModel(azure2::Results &results) const {
   const int count = std::min<int>(num_model_ang_, Config::maxLOrder + 1);
   to[0] = (double)count;
   for (int k = 0; k < count; k++) to[1 + k] = CoefficientOfOrder(*this, results, k) / GetAngDistA0(results);
-}
-
-double Site::CoefficientOfOrder(const Site &reader, const azure2::Results &results, int k) const {
-  // As far as the reader's distribution is expanded (max_ang_dist_order); B_k / f is a_k A_0.
-  const int n = NumLegendreCoefficients(results);
-  const double bk = (k >= 0 && k < n && k <= reader.GetMaxAngDistOrder()) ? LegendreCoefficients(results)[k] : 0.0;
-  return bk / reader.EntranceSymmetry();
-}
-
-double Site::ValueFor(const Site &reader, int slot, const azure2::Results &results) const {
-  if (!HoldsLegendreCoefficients()) return GetFitCrossSection(results);
-  const int n = NumLegendreCoefficients(results);
-  const double *b = LegendreCoefficients(results);
-  if (reader.IsCoefficient()) {
-    const double ak = CoefficientOfOrder(reader, results, reader.GetCoefficientOrder());
-    return reader.GetCoefficientAbsolute() ? ak : ak / GetAngDistA0(results);
-  }
-  double sum = 0.0;
-  for (int l = 0; l < n; l++)
-    if (b[l] != 0.0) sum += b[l] * reader.RowP(slot, l);
-  return sum;
 }
 
 /*!
@@ -618,8 +565,19 @@ void Unit::CalcLegendreP(WorkingCopy *data, int maxL, CNuc *theCNuc, const Targe
 
 void Unit::CalcNodeRows(const WorkingCopy &data, int maxL, CNuc *theCNuc, const TargetEffect *targetEffect) {
   node_rows_.reset();
-  if (!HoldsLegendreCoefficients() || NumSubPoints() <= 0 || maxL < 0 || !RowDependsOnEnergy(theCNuc, targetEffect))
-    return;
+  node_coulomb_.reset();
+  if (!AngleFree() || NumSubPoints() <= 0 || !theCNuc) return;
+  if (Observable() == SiteObservable::kElastic) {
+    // f_C depends on the energy: the reader's amplitudes at its angle and the energies of its slots (CoulombAt)
+    PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(GetEntranceKey()));
+    vector_c amplitudes(2 * (std::size_t)NumSubPoints());
+    bool spinDependent = false;
+    for (int j = 1; j <= NumSubPoints(); j++)
+      CoulombAmplitudesAt(pair, GetSubPoint(data, j)->GetCMEnergy(), GetCMAngle(), amplitudes[2 * (j - 1)],
+                          amplitudes[2 * (j - 1) + 1], spinDependent);
+    node_coulomb_ = SharedTable<vector_c>::Make(std::move(amplitudes));
+  }
+  if (maxL < 0 || !RowDependsOnEnergy(theCNuc, targetEffect)) return;
   const std::size_t n = (std::size_t)maxL + 1;
   vector_r rows(n * (std::size_t)NumSubPoints());
   for (int j = 1; j <= NumSubPoints(); j++)

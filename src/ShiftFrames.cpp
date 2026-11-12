@@ -152,7 +152,7 @@ void Segment::UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, CNuc *
         if (data.Data().GridSpecOf(*point).mesh >= 0) {
           // On the shared mesh the nodes stay and the kernel moves with the point (ShiftedFold.h): only the c.m. angle
           // of a lab-frame differential point, converted above at its shifted energy, reaches its group's sites.
-          if (this->IsDifferential() && !this->IsCMDifferential() && !point->HoldsLegendreCoefficients())
+          if (this->IsDifferential() && !this->IsCMDifferential() && !point->AngleFree())
             ReangleSlots(data, t, *point, theCNuc, *configure);
         } else {
           MoveOwnGridSlots(data, t, *point, theCNuc, *configure, rows);

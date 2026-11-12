@@ -1015,7 +1015,7 @@ int WorkingCopy::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
         // A slot another point of the group writes takes that point's angles; SeparateSlotsByAngle below gives
         // a point whose converted angles differ slots of its own.
         // Slots holding Legendre coefficients have no angle (Site::ValueFor): nothing to put.
-        if (point->HoldsLegendreCoefficients()) continue;
+        if (point->AngleFree()) continue;
         if (point->NumSubPoints()) angled.push_back(static_cast<int>(point - &UnitAt(0)));
         for (int k = 1; k <= point->NumSubPoints(); k++) {
           if (!WritesSlot(*point, k)) continue;

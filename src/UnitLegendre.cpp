@@ -144,7 +144,7 @@ void Site::CalcLegendreP(WorkingCopy *data, int maxL, CNuc *theCNuc, const Targe
       entrance_symmetry_ = LegendreSymmetryFactor(*theCNuc->GetPair(entrance), GetEntranceKey() == GetExitKey());
   }
   // A slot holding Legendre coefficients has no angle: its readers' rows apply them (ValueFor).
-  if (is_sub_point_ && HoldsLegendreCoefficients()) return;
+  if (is_sub_point_ && AngleFree()) return;
   if (maxL >= 0) {
     std::vector<double> p(maxL + 1);
     this->LegendreRowAt(this->GetCMEnergy(), maxL, theCNuc, targetEffect, p.data());

@@ -18,15 +18,11 @@
 #include "Unit.h"
 
 void Site::MarkFailed(azure2::Results &results, const char *role, const Config &configure, const char *why) {
-  // Every fixed quantity NaN; Legendre coefficients NaN, so that every point reading them is NaN (ValueFor), and an
+  // Every fixed quantity NaN; the observables of the angular part NaN (PoisonObservable), so that every point reading them is NaN (ValueFor), and an
   // angular distribution's model record gets none (CopyAngularDistsToModel).
   const double nan = std::numeric_limits<double>::quiet_NaN();
   std::fill(Rec(results), Rec(results) + azure2::Results::kNumFixed, nan);
-  if (num_ang_slots_) {
-    double *r = Rec(results) + azure2::Results::AngularOffset();
-    r[0] = (double)num_ang_slots_;
-    std::fill(r + 1, r + 1 + num_ang_slots_, nan);
-  }
+  this->PoisonObservable(results);
   static std::atomic<bool> reported(false);
   if (!reported.exchange(true)) {
 #pragma omp critical(azure_failed_point)

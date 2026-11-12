@@ -2,6 +2,62 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, Phase 5 branch 9, milestone 2) — elastic scattering: a site holds the elastic amplitudes, the reader applies f_C and its row; one table of observable kinds (`feature/upgrade-5-observables`)
+
+**Merged first** `feature/upgrade-5-shift-kernel` (e97e06c4: the translated stopping's clamp, the external-capture
+branch of `ReplaceSubPointGrids`); quick set against `tab-trial35` identical as printed but the `sum_lab_frame` noise.
+**One table.**  `include/SiteObservable.h`: `enum class SiteObservable {kValue, kLegendre, kElastic}`, `ObservableOf`
+(the one classification of a term, replacing the predicate `Site::HoldsLegendreCoefficients`) and `kSiteObservables`
+(`src/SiteObservables.cpp`): per kind the slots of the record's angular part and the contraction a reader applies
+(`Site::ValueFor` is one line through the table).  `Site::AngleFree()` (kind != kValue) is what the sharing key, the
+slots' set-up, the leaves, the shift and the gradient ask.  The record functions moved there from `Unit.cpp`.
+A new kind: its row, its branch in `GenMatrixFunc::CalculateBareCrossSection`, its adjoint in `PointTBar` (recipe in
+`CLAUDE.md`, "An observable of a reaction at a mesh energy").
+**What an elastic site holds** (kElastic: differential elastic data; elastic angular distributions stay kLegendre):
+B_L^NN (b/sr, s = 4 for identical pairs, from `LegendreCoefficientsOf`), c_0 = geom/100, c_x = 2 c_0 (-1)^(2j)/(2j+1)
+(identical pairs with spin), and D_l, X_l (complex) = (i geom f_it / (100 sqrt pi)) sum_s [1, (-1)^s] c_{s,l} from the
+Coulomb-nuclear sums `rt_it_` (`GenMatrixFunc::ElasticCoefficientsOf`; layout `elastic_record` in the header; 108
+slots).  dsigma/dOmega = c_0 (|f_d|^2 + |f_x|^2) + c_x Re(f_d f_x*) + sum B_L P_L + Re sum (f_d D_l + f_x X_l) P_l.
+No angle.  **The reader** holds f_C: its own (`Site::CoulombAt(0)`), or per slot `Site::node_coulomb_` beside
+`node_rows_` (`Unit::CalcNodeRows`, at the reader's angle and each slot's energy; recomputed where `node_rows_` is: set-
+up, the hand-over's moved tasks only, an angle moved by a shift); `Site::CoulombAmplitudesAt` is the one formula (also
+`CalcCoulombAmplitude`'s).  A slot without an angle computes no Coulomb amplitude and no Legendre rows.  The Rutherford/
+Mott leaf takes the point's angle at each slot's energy (`CoulombReference.cpp`).  kValue differential sites (A_y,
+THM) contract the same coefficients with their own row on a local record (`Site::ContractRecord`): one formula.
+**Deleted** in `GenMatrixFunc.cpp` (-199/+61 lines with the new writer): the per-site differential sum — the
+per-interference loop with the unreachable `angularCoeff` accumulation (118 lines), the per-site CT/RT/IT and its
+uncached Coulomb branch, `rt_it_built_`.  `Unit.cpp` -56 (moved).  Folders: src +353/-317, include +129/-22 (new files
+included).  **Still keyed by angle**: A_y (and THM, off the mesh).  Their users keep `SlotGroupKey::nominalEnergy`,
+`Segment::ReangleSlots` and the solving shift column (`FoldOnlyShift` false): lab-frame folded A_y with a shift
+(13N's baumann, electron_screening).  `legendreOrder` of the key is now always -1 (coefficient sites are kLegendre).
+**A test that catches a wrong row**: `AZURE_NODE_CHECK` now checks every reader of angle-free slots: its row and
+Coulomb amplitudes at each slot equal `LegendreRowAt`/`CoulombAmplitudesAt` at the slot's energy, bit for bit
+(`WorkingCopy::CheckReaderRows`, a line per check; `tests/upgrade/node_check.sh` adds hybrid_potential, folded elastic).
+Injected once (rows and f_C at the point's energy in `CalcNodeRows`): T2 fit "60 readers, 8132 slots, 8132 differ",
+hybrid_potential "112032 differ", both abort; removed.
+**Ran** (build 0 warnings; `b-obs`): consistency test; `ctest -R "experiment|kernels|grad|upgrade_plan|upgrade_node|
+upgrade_mesh|consistency"` 35/35 (node check as above, AZURE_PLAN_CHECK in upgrade_plan_runtime); quick set + target_
+density, angle_mapping, hybrid_potential, electron_screening, data_covariance, ec_e1m1_phase, beam_profile_kernel x 3
+bases against `tab-trial35`: identical as printed except `sum_lab_frame` (chi^2 4e-17 noise) and `ec_e1m1_phase`
+(the named cancellation: 12 numbers, 8 Park, -1.5e-25 -> -2.1e-25 b/sr at 0/180 deg beside 1.6e-9, as milestone 1);
+`beam_profile_kernel` run.log: 1,089,452 -> 42,068 capture integrals (milestone 1's gain).  AZURE_GRAD_CHECK against
+`b-trial35`, identical chi^2 and agreement: 13N elastic only (meyer 84/114/144, 14 free; fd 5.86e-7, Jacobian 8.9e-16),
+hybrid_potential (folded elastic, 14 free; 7.25e-7, 5.2e-16), T2 (5.23e-6), 13N (6.16e-8), layer_yield/models fit
+(3.98e-9), 13N_capture_ay (7.19e-10).  1 vs 2 threads: T2, 13N, hybrid_potential, ratio_to_rutherford identical.
+**Measured** (1 thread, 3 alternated runs, medians, menu 1, base `b-trial35`; units / evaluation ms / wall s / peak MB):
+T2 23,673 -> 21,085 / 46.4 -> 46.2 / 0.27 -> 0.27 / 136 -> 133; 13N 3,825 = / 19.4 -> 20.3 / 6.92 -> 6.89 / 121 = ;
+natural_neon 50,813 = / 375.8 -> 368.2 / 1.21 -> 1.20 / 340 -> 342; thick_target_resonance 28,924 = / 151.7 -> 151.6 /
+0.56 = / 271 -> 272; ratio_to_rutherford aC_data 56 = / 0.1 -> 0.2 / 0.06 = / 95 -> 93; hybrid_potential 4,886 = /
+21.6 -> 26.0 (+20 %; first round 20.0 -> 26.2) / 1.01 = / 106 -> 112.  The hybrid_potential loss: its 76 readers
+already shared one angle (4,826 slots, 112,032 reads), so a slot held one finished number; now each read contracts
+the record (B_L, D_l with the reader's row and f_C) in the fold and again in the model pass, and the record (108
+slots per site) and the per-slot f_C (3.6 MB) are new.  13N gains nothing: its 38-angle sets are A_y (milestone 3),
+its elastic data are excitation functions at three angles, unfolded.
+**Open.**  A memo of the contraction per (block, reader row) would remove the hybrid_potential loss where readers
+share an angle.  Milestone 3 not started (see the report): capture A_y has the Legendre cut (Seyler-Weller a_k, b_k);
+particle A_y (the amplitude matrix, `Polarization::AmplitudeMatrix`, with f_C) has no per-order form in the code.
+Not run: the whole tree, `run_tests.sh`, the gate, the eight fits, `check.sh --quick`.
+
 ## 2026-11-12 (agent, Phase 5 branch 9, milestone 1) — non-elastic angular data: a site holds Legendre coefficients, the point's row applies the angle (`feature/upgrade-5-observables`)
 
 **What a site holds now.**  A site of a differential term of a reaction whose exit pair is not its entrance pair,

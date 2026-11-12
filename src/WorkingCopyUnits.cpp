@@ -10,7 +10,9 @@
 #include <cstring>
 #include <iostream>
 
+#include "CNuc.h"
 #include "Config.h"
+#include "PPair.h"
 #include "MeshSlots.h"
 #include "Segment.h"
 #include "TargetEffect.h"
@@ -87,10 +89,53 @@ void WorkingCopy::CalcNodeRows(const std::vector<int> &tasks, CNuc *theCNuc, con
   sorted.erase(std::unique(sorted.begin(), sorted.end()), sorted.end());
   for (int t : sorted) {
     Unit *point = plan_.Point(*this, t);
-    if (!point || !point->HoldsLegendreCoefficients() || point->NumSubPoints() <= 0) continue;
+    if (!point || !point->AngleFree() || point->NumSubPoints() <= 0) continue;
     const TargetEffect *te = point->IsTargetEffect() ? Data().GetTargetEffect(point->GetTargetEffectNum()) : nullptr;
     point->CalcNodeRows(*this, configure.maxLOrder, theCNuc, (te && te->IsQCoefficients()) ? te : nullptr);
   }
+}
+
+long WorkingCopy::CheckReaderRows(CNuc *theCNuc) const {
+  long readers = 0, slots = 0, differ = 0;
+  std::vector<std::string> reports;
+  const int maxL = Config::maxLOrder;
+  std::vector<double> row(maxL + 1);
+  for (int u = 0; u < NumUnits(); u++) {
+    const Unit &p = units_[u];
+    if (!p.AngleFree() || p.NumSubPoints() <= 0 || p.IsCoefficient()) continue;
+    const TargetEffect *te = p.IsTargetEffect() ? Data().GetTargetEffect(p.GetTargetEffectNum()) : nullptr;
+    const TargetEffect *qEffect = (te && te->IsQCoefficients()) ? te : nullptr;
+    const bool elastic = p.Observable() == SiteObservable::kElastic;
+    PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(p.GetEntranceKey()));
+    readers++;
+    for (int j = 1; j <= p.NumSubPoints(); j++) {
+      const double e = p.GetSubPoint(*this, j)->GetCMEnergy();
+      slots++;
+      p.LegendreRowAt(e, maxL, theCNuc, qEffect, row.data());
+      bool bad = false;
+      for (int l = 0; l <= maxL && !bad; l++) {
+        const double held = p.RowP(j, l);
+        bad = std::memcmp(&row[l], &held, sizeof held) != 0;
+      }
+      std::string what = bad ? "angular row" : "";
+      if (elastic) {
+        complex d, x, rd, rx;
+        bool spin;
+        Site::CoulombAmplitudesAt(pair, e, p.GetCMAngle(), d, x, spin);
+        p.CoulombAt(j, rd, rx);
+        if (std::memcmp(&d, &rd, sizeof d) != 0 || std::memcmp(&x, &rx, sizeof x) != 0) what += " Coulomb amplitude";
+      }
+      if (what.empty()) continue;
+      differ++;
+      if (reports.size() < 10)
+        reports.push_back("unit " + std::to_string(u) + " (segment " + std::to_string(p.GetSegmentKey()) + ") slot " +
+                          std::to_string(j) + " at " + std::to_string(e) + " MeV:" + what);
+    }
+  }
+  std::cerr << "AZURE_NODE_CHECK: reader rows: " << readers << " readers of slots without an angle, " << slots
+            << " slots, " << differ << " differ" << std::endl;
+  for (const std::string &r : reports) std::cerr << "AZURE_NODE_CHECK:   " << r << std::endl;
+  return differ;
 }
 
 void WorkingCopy::SeparateSlotsByAngle(const std::vector<int> &units) {
@@ -240,8 +285,8 @@ long WorkingCopy::CheckSlotGroups() const {
   // What the points that read one block have in common (SlotGroup.h), compared with the block's first reader.
   auto key = [&](const Unit &p) {
     const Unit::SubGridSpec &spec = Data().GridSpecOf(p);
-    // a group holding Legendre coefficients has neither angle nor order (Site::HoldsLegendreCoefficients)
-    const bool angleFree = p.HoldsLegendreCoefficients();
+    // a group holding Legendre coefficients has neither angle nor order (Site::AngleFree)
+    const bool angleFree = p.AngleFree();
     return std::vector<std::uint64_t>{(std::uint64_t)p.GetSegmentKey(), angleFree ? 0 : bits(p.GetCMAngle()),
                                       (std::uint64_t)(p.IsCoefficient() && !angleFree ? p.GetCoefficientOrder() : -1),
                                       (std::uint64_t)p.GetTargetEffectNum(), bits(p.GetScreeningUe()),

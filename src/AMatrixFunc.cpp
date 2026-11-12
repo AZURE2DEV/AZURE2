@@ -953,9 +953,8 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
     //   RT = (geom I1I2 rtFactor/pi) Re( sum_{kL,inter} weight T1 conj(T2) P_L )
     //   IT = (geom itFactor/sqrt(pi)) Re( i sum_{k,m: en==ex} statSpin coulombAmp conj(T) P_l )  (elastic)
     //   CT = const (no T dependence).
-    // Supports the standard case (entrance==exit pair, or gamma exit) with
-    // external-capture interferences (RR/ER/RE/EE), and the inelastic-particle
-    // UPOS / normal-angular-distribution case.
+    // The standard case (entrance==exit pair, or gamma exit) with external-capture interferences, and the
+    // inelastic-particle UPOS / normal-angular-distribution case.
     PPair *exitPairDiff = compound()->GetPair(exitPairNum);
     // Identical entrance pair: x4 / x2 for elastic, (1+delta_12) otherwise,
     // mirroring GenMatrixFunc::CalculateCrossSection.
@@ -1072,11 +1071,15 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
       integratedBar(-fitBar * point->ValueFor(*angles, rowSlot, results) / sigmaInt, 1.0);
     }
 
+    // f_C of channel spin s, the reader's at its slot (Site::CoulombAt): f_d + (-1)^s f_x (f_x = 0 but with spin exchange)
+    complex fd(0.0, 0.0), fx(0.0, 0.0);
+    if (!coef && aa == exitPairNum) angles->CoulombAt(rowSlot, fd, fx);
+    auto readerCoulomb = [&](double s) { return (((std::lround(2.0 * s) / 2) % 2 == 0) ? 1.0 : -1.0) * fx + fd; };
     if (!coef && aa == exitPairNum && theDecay.has_interferences) {  // elastic Coulomb-nuclear interference
       const complex cI = I * geom * itFactor / (std::sqrt(pi) * 100.0);
       for (int n = 0; n < theDecay.num_diagonal; n++) {
         const azure2::DiagonalPathway &d = P.diagonal[theDecay.first_diagonal + n];
-        const complex B = cI * d.statSpin * point->GetCoulombAmplitude(d.s) * angles->RowP(rowSlot, d.l);
+        const complex B = cI * d.statSpin * readerCoulomb(d.s) * angles->RowP(rowSlot, d.l);
         tBar[d.k - 1][d.m - 1] += fitBar * B;
       }
     } else if (!coef && aa == exitPairNum) {  // elastic Coulomb-nuclear interference
@@ -1088,9 +1091,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
           AChannel *ex = compound()->GetJGroup(mg->group)->GetChannel(mg->chp);
           if (en == ex) {
             int l = en->GetL();
-            // Per channel spin, as in the forward sum: only an identical pair
-            // with spin has a Coulomb amplitude that depends on it.
-            complex B = cI * mg->stat_spin_factor * point->GetCoulombAmplitude(en->GetS()) * angles->RowP(rowSlot, l);
+            complex B = cI * mg->stat_spin_factor * readerCoulomb(en->GetS()) * angles->RowP(rowSlot, l);
             // model += Re(B conj T)  ->  Tbar += fitBar B.
             tBar[k - 1][m - 1] += fitBar * B;
           }

@@ -227,6 +227,11 @@ class WorkingCopy {
   /// point on a shared mesh has at its slot k the node the mesh's plan for the present anchors gives it at k.  Prints
   /// the counts (and up to ten breaches) to stderr; returns the number of breaches.
   long CheckSlotGroups() const;
+  /// Part of CheckNodeTable (src/WorkingCopyUnits.cpp): every reader of slots without an angle (Site::AngleFree) holds,
+  /// at each slot, the angular row and the Coulomb amplitudes of its own angle at the slot's energy (Site::RowP,
+  /// CoulombAt), bit for bit as Site::LegendreRowAt and Site::CoulombAmplitudesAt give them there.  Reported on a line of
+  /// its own; returns the number of slots that differ.
+  long CheckReaderRows(CNuc *cnuc) const;
   /// The slots of every plan task in this copy (NodeTable.h): the stage table's until the hand-over moves a unit off it.
   const azure2::NodeSlots *Slots() const { return nodes_.slots.get(); }
   /// The copy's overflow table (NodeTable.h): the nodes of its units that the stage table does not hold.

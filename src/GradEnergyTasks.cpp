@@ -155,10 +155,10 @@ bool HasCotangents(const Pass &pass, const EnergyTaskList &list, const EnergyTas
 // (the slot has no angle), the unit itself otherwise.
 const Site &RowsOf(WorkingCopy &data, UnitRef u, const UnitCotangent &k) {
   const Site &site = data.SiteAt(u);
-  return (k.rows && site.HoldsLegendreCoefficients()) ? *k.rows : site;
+  return (k.rows && site.AngleFree()) ? *k.rows : site;
 }
 int RowSlotOf(WorkingCopy &data, UnitRef u, const UnitCotangent &k) {
-  return (k.rows && data.SiteAt(u).HoldsLegendreCoefficients()) ? k.rowSlot : 0;
+  return (k.rows && data.SiteAt(u).AngleFree()) ? k.rowSlot : 0;
 }
 
 // The solver of a task on this thread, filled and factored at the task's first unit.

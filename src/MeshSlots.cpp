@@ -151,7 +151,7 @@ SlotGroupKey MeshGroupKey(const WorkingCopy &data, const Unit &point, const Term
   key.mesh = spec.mesh;
   key.targetEffect = point.GetTargetEffectNum();
   // A site holding Legendre coefficients has no angle and no order: its readers' rows apply them (Site::ValueFor).
-  const bool angleFree = point.HoldsLegendreCoefficients();
+  const bool angleFree = point.AngleFree();
   key.legendreOrder = (point.IsCoefficient() && !angleFree) ? point.GetCoefficientOrder() : -1;
   key.angle = angleFree ? 0 : bits(point.GetCMAngle());
   key.conversion = bits(spec.stoppingConversion);

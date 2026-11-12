@@ -586,42 +586,50 @@ void Site::AddExpHardSpherePhase(int jGroupNum, int channelNum, complex expShift
  * Calculates the Coulomb amplitude \f$ C_\alpha \f$ for the data point.
  */
 
+void Site::CoulombAmplitudesAt(PPair *entrancePair, double energy, double angle, complex &direct, complex &exchange,
+                               bool &spinDependent) {
+  int z1 = entrancePair->GetZ(1);
+  int z2 = entrancePair->GetZ(2);
+  double redmass = entrancePair->GetRedMass();
+  double eta = Kinematics::Channel(entrancePair).rel ? Kinematics::Channel(entrancePair).Eta(energy)
+                                                     : sqrt(uconv / 2.) * fstruc * z1 * z2 * sqrt(redmass / energy);
+  double cal = (1.0 / (2.0 * sqrt(pi))) * eta * (1.0 / pow(sin(angle * pi / 360.0), 2.));
+  double cex = 2.0 * eta * log(sin(angle * pi / 360.0));
+  complex calpha(cal * cos(cex), -cal * sin(cex));
+  // Identical-particle Mott amplitude: the exchange term f_C(pi - theta).
+  // Exchanging two identical particles of spin j multiplies a channel-spin
+  // state |s v> by (-1)^(2j-s) and the wave function must pick up
+  // (-1)^(2j), so the exchange term enters channel spin s with (-1)^s --
+  // not with one boson/fermion sign for all s. Only for j = 0 (s = 0 alone)
+  // do the two coincide, and there the symmetrized amplitude is returned and
+  // reproduces the spin-0 Mott cross section. For j != 0 the
+  // direct and exchange terms are kept apart and combined per channel spin
+  // by GetCoulombAmplitude(s).
+  spinDependent = false;
+  exchange = complex(0., 0.);
+  if (entrancePair->IsIdentical()) {
+    double cal_p = (1.0 / (2.0 * sqrt(pi))) * eta * (1.0 / pow(cos(angle * pi / 360.0), 2.));
+    double cex_p = 2.0 * eta * log(cos(angle * pi / 360.0));
+    complex calpha_p(cal_p * cos(cex_p), -cal_p * sin(cex_p));
+    if (entrancePair->HasSpinDependentExchange()) {
+      spinDependent = true;
+      exchange = calpha_p;
+    } else {
+      calpha = calpha + double(entrancePair->GetIdenticalSign()) * calpha_p;
+    }
+  }
+  direct = calpha;
+}
+
 void Site::CalcCoulombAmplitude(WorkingCopy *data, CNuc *theCNuc) {
+  // A slot without an angle has no Coulomb amplitude: its readers hold theirs (Unit::CalcNodeRows).
+  if (is_sub_point_ && AngleFree()) return;
   if (this->GetEntranceKey() == this->GetExitKey()) {
     PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
-    int z1 = entrancePair->GetZ(1);
-    int z2 = entrancePair->GetZ(2);
-    double redmass = entrancePair->GetRedMass();
-    double energy = this->GetCMEnergy();
-    double angle = this->GetCMAngle();
-    double eta = Kinematics::Channel(entrancePair).rel ? Kinematics::Channel(entrancePair).Eta(energy)
-                                                       : sqrt(uconv / 2.) * fstruc * z1 * z2 * sqrt(redmass / energy);
-    double cal = (1.0 / (2.0 * sqrt(pi))) * eta * (1.0 / pow(sin(angle * pi / 360.0), 2.));
-    double cex = 2.0 * eta * log(sin(angle * pi / 360.0));
-    complex calpha(cal * cos(cex), -cal * sin(cex));
-    // Identical-particle Mott amplitude: the exchange term f_C(pi - theta).
-    // Exchanging two identical particles of spin j multiplies a channel-spin
-    // state |s v> by (-1)^(2j-s) and the wave function must pick up
-    // (-1)^(2j), so the exchange term enters channel spin s with (-1)^s --
-    // not with one boson/fermion sign for all s. Only for j = 0 (s = 0 alone)
-    // do the two coincide, and there the symmetrized amplitude is stored as
-    // before and reproduces the spin-0 Mott cross section. For j != 0 the
-    // direct and exchange terms are kept apart and combined per channel spin
-    // by GetCoulombAmplitude(s).
-    spinDependentCoulomb_ = false;
-    if (entrancePair->IsIdentical()) {
-      double cal_p = (1.0 / (2.0 * sqrt(pi))) * eta * (1.0 / pow(cos(angle * pi / 360.0), 2.));
-      double cex_p = 2.0 * eta * log(cos(angle * pi / 360.0));
-      complex calpha_p(cal_p * cos(cex_p), -cal_p * sin(cex_p));
-      if (entrancePair->HasSpinDependentExchange()) {
-        spinDependentCoulomb_ = true;
-        coulombdirect_ = calpha;
-        coulombexchange_ = calpha_p;
-      } else {
-        calpha = calpha + double(entrancePair->GetIdenticalSign()) * calpha_p;
-      }
-    }
-    this->SetCoulombAmplitude(calpha);
+    complex direct, exchange;
+    CoulombAmplitudesAt(entrancePair, this->GetCMEnergy(), this->GetCMAngle(), direct, exchange, spinDependentCoulomb_);
+    if (spinDependentCoulomb_) coulombdirect_ = direct, coulombexchange_ = exchange;
+    this->SetCoulombAmplitude(direct);
   } else {
     spinDependentCoulomb_ = false;
     this->SetCoulombAmplitude(complex(0., 0.));

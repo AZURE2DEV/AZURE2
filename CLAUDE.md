@@ -234,6 +234,14 @@ section (check 34).
    from `pyazr/data/mass_1.mas20` (`pyazr.masses`; the engine's THM nuclei are generated from it and checked by
    `pyazr_thm_nuclide_masses`).
 
+**An observable of a reaction at a mesh energy** (what a site's record holds; `include/SiteObservable.h`).
+1. A kind in `SiteObservable` and its row in `kSiteObservables` (`src/SiteObservables.cpp`: the record's slots and the
+   contraction with a reader's row, `Site::ValueFor`); `ObservableOf` names the terms of that kind.
+2. Its formula at E_n, one branch of `GenMatrixFunc::CalculateBareCrossSection`; its adjoint in
+   `AMatrixFunc::PointTBar` (checked with `AZURE_GRAD_CHECK`).
+3. Anything a reader needs per slot (angular row, Coulomb amplitude) beside `Site::node_rows_` in
+   `Unit::CalcNodeRows`, checked by `WorkingCopy::CheckReaderRows` (`AZURE_NODE_CHECK`).
+
 **A new optical potential term** (`physics/transfer`, `docs/upgrade/transfer.md` §2).
 1. A field in `OpticalPotential` (`physics/include/azure2/physics/transfer/OpticalPotential.h`, with its formula, unit
    and sign in the header's Eq. (2.1)), its `operator==`, its value in `TermsAt` (one member of `PotentialTerms` per
