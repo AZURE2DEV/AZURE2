@@ -765,11 +765,13 @@ int WorkingCopy::Initialize(CNuc *compound, const Config &configure) {
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Initializing Component Segments..." << std::endl;
   if (this->InitializeLeaves(compound, configure) == -1) return -1;
+  // The readers of angle-free slots with one angle share their rows (RowSet.h).
+  this->BuildRowSets(compound, configure);
   // Every point of this stage has its rows now; nothing reads the channel table until the energies change, and the
   // table (about 64 bytes a row) is not kept beside the rows it filled (docs/upgrade/channel_table.md section 2).
   channelTable_.reset();
-  // Where the result record of every point and sub-point lies (Results.h); laid out again when the points change
-  // (BeginEvaluation).
+  // Where the record of every point and sub-point lies (Results.h), sized for the compound's reactions.
+  capacity_ = RecordCapacityOf(*compound);
   this->LayoutResults(nullptr);
   // The stage's node table, from the units as the set-up placed them (NodeTable.h).
   nodes_ = azure2::BuildNodeTable(*this, compound, configure);
@@ -821,6 +823,9 @@ WorkingCopy::WorkingCopy(const WorkingCopy &other)
       ecOutputFile_(other.ecOutputFile_),
       resultsSize_(other.resultsSize_),
       modelSize_(other.modelSize_),
+      capacity_(other.capacity_),
+      rowSets_(other.rowSets_),
+      contractedSize_(other.contractedSize_),
       gridNuc_(other.gridNuc_),
       meshAnchors_(other.meshAnchors_),
       meshSupports_(other.meshSupports_),
@@ -1014,6 +1019,8 @@ int WorkingCopy::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
         // wrong angle (audit 2026-10-25, item 32).
         // A slot another point of the group writes takes that point's angles; SeparateSlotsByAngle below gives
         // a point whose converted angles differ slots of its own.
+        // Slots holding Legendre coefficients have no angle (Site::ValueFor): nothing to put.
+        if (point->AngleFree()) continue;
         if (point->NumSubPoints()) angled.push_back(static_cast<int>(point - &UnitAt(0)));
         for (int k = 1; k <= point->NumSubPoints(); k++) {
           if (!WritesSlot(*point, k)) continue;
@@ -1297,9 +1304,10 @@ void WorkingCopy::ForEachResultUnit(F f) {
   auto segment = [&](const Segment &seg, int t) {
     const int nat = (t == 0 && seg.IsNatural()) ? nNatural : 0;
     for (Unit &point : seg.TermPoints(*this, t)) {
-      f(point, point.ResultAngularCapacity(), nat);
+      f(point, point.ResultAngularCapacity(capacity_), nat);
       for (int i = 1; i <= point.NumSubPoints(); i++)
-        if (WritesSlot(point, i)) f(*point.GetSubPoint(*this, i), point.GetSubPoint(*this, i)->ResultAngularCapacity(), 0);
+        if (WritesSlot(point, i))
+          f(*point.GetSubPoint(*this, i), point.GetSubPoint(*this, i)->ResultAngularCapacity(capacity_), 0);
     }
   };
   for (const Segment &seg : set_->segments_) segment(seg, 0);
@@ -1326,8 +1334,8 @@ void WorkingCopy::LayoutResults(azure2::Results *results) {
   modelSize_ = 0;
   for (const Segment &seg : set_->segments_)
     for (Unit &point : seg.GetPoints(*this)) {
-      point.SetModelRecord(modelSize_, point.ResultAngularCapacity());
-      modelSize_ += azure2::Results::ModelRecordSize(point.ResultAngularCapacity());
+      point.SetModelRecord(modelSize_, point.ModelAngularCapacity());
+      modelSize_ += azure2::Results::ModelRecordSize(point.ModelAngularCapacity());
     }
 }
 

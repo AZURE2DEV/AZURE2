@@ -18,16 +18,17 @@
  * The key of a group (SlotGroupKey), from the audit of Site's members (what a site holds and what it depends on):
  *   - node energy: the c.m., lab, compound and nominal energies, the channel rows (L_o, sqrt(P), phases), the
  *     geometrical and S-factor conversion factors, the screening k, the external-capture amplitudes -- one per node;
- *   - segment and term: the term's settings (observable, pairs), the segment key, the frame shift E_x - E_cm of the
- *     pair, the external-capture pathways -- in the key;
- *   - angle: the c.m. angle (its Legendre rows, the Coulomb amplitude) -- in the key, bit for bit, and for a lab-frame
- *     differential data set with an energy shift the point's nominal lab energy too, since its c.m. angle moves with
- *     the shift (the slot's writer gives the sites the new angle, Segment::UpdatePointEnergyWithShift); the lab angle of a
- *     base segment's slot is the c.m. one (Site's constructor); a leaf's slots take their point's angles converted
- *     with the leaf's pairs after the grouping (WorkingCopy::InitializeLeaves); a point whose converted angles differ
- *     from its group's writer's gets slots of its own then (WorkingCopy::SeparateSlotsByAngle);
- *   - the point: the Legendre order of an angular-coefficient row (read by the observable) -- in the key; the row
- *     (Site::Row is -1 on a slot, nothing reads it there); the target effect (stopping table, screening U_e and its
+ *   - the term: what the energy pass reads of its settings (the observable, the pairs, UPOS L / I_c / delta, the E1/E2
+ *     component, THM; TermSettings.h, SameObservable), the frame shift E_x - E_cm of the pair, the external-capture
+ *     pathways -- in the key; not the segment: two data sets of one reaction on one mesh share their sites;
+ *   - angle: not in the key.  A differential site on a mesh holds its observables without an angle (SiteObservable.h)
+ *     and its readers bring their rows (RowSet.h); a scalar site (sigma, a phase shift, the total cross section) has
+ *     none; THM, keyed by angle, is off the mesh (a group of its own).  A leaf's slots of a kind with an angle (THM)
+ *     take their point's angles converted with the leaf's pairs after the grouping (WorkingCopy::InitializeLeaves); a
+ *     point whose converted angles differ from its group's writer's gets slots of its own then
+ *     (WorkingCopy::SeparateSlotsByAngle);
+ *   - the point: no Legendre order (a coefficient reader picks its order from the site's coefficients, Site::ValueFor);
+ *     the row (Site::Row is -1 on a slot, nothing reads it there); the target effect (stopping table, screening U_e and its
  *     parameter, the Q coefficients of the Legendre rows) and the c.m./lab factor of the stopping -- in the key; the
  *     target thickness and its lab energy are the point's, never set on a slot;
  *   - a result: the record (the cross sections, A_y, A_0, coefficients) is the site's, written once by the energy
@@ -60,21 +61,16 @@ struct SlotBlock {
 
 /// What points must have in common to share their slots (see above), with the mesh of their nucleus.
 struct SlotGroupKey {
-  const void *segment = nullptr;
-  int term = 0;
+  /// The observable the sites compute (SameObservable): two terms of the same reaction share, whatever their segment.
+  const TermSettings *settings = nullptr;
   int mesh = -1;
-  int targetEffect = 0;
-  int legendreOrder = -1;
-  std::uint64_t angle = 0, conversion = 0, frameShift = 0, screeningUe = 0;
+  int targetEffect = 0;  ///< the line of the target (TargetEffect::GetLineNumber), shared by its copies
+  std::uint64_t conversion = 0, frameShift = 0, screeningUe = 0;
   int screeningParam = 0;
-  /// The nominal lab energy of a lab-frame differential point with an energy shift (0 otherwise): its c.m. angle,
-  /// which the sites carry, moves with the shift and is the same at every shift for one nominal energy and lab angle.
-  std::uint64_t nominalEnergy = 0;
   bool operator==(const SlotGroupKey &o) const {
-    return segment == o.segment && term == o.term && mesh == o.mesh && targetEffect == o.targetEffect &&
-           legendreOrder == o.legendreOrder && angle == o.angle &&
-           conversion == o.conversion && frameShift == o.frameShift && screeningUe == o.screeningUe &&
-           screeningParam == o.screeningParam && nominalEnergy == o.nominalEnergy;
+    return SameObservable(*settings, *o.settings) && mesh == o.mesh && targetEffect == o.targetEffect &&
+           conversion == o.conversion &&
+           frameShift == o.frameShift && screeningUe == o.screeningUe && screeningParam == o.screeningParam;
   }
 };
 

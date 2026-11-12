@@ -3,6 +3,7 @@
 // experiment/ (Kernels.h); nothing here depends on which kernel the effect has.
 #include "PointFold.h"
 
+#include <cmath>
 #include <cstddef>
 
 #include "Config.h"
@@ -92,8 +93,21 @@ double FoldValues(const Unit &unit, const WorkingCopy &data, const Config &confi
 void FoldPoint(Unit &unit, const WorkingCopy &data, const Config &configure, azure2::Results &results) {
   const int n = unit.NumSubPoints();
   std::vector<double> values(n > 0 ? n : 0);
-  for (int j = 1; j <= n; j++) values[j - 1] = unit.GetSubPoint(data, j)->GetFitCrossSection(results);
-  unit.SetFitCrossSection(results, FoldValues(unit, data, configure, values, Broadening::kApply));
+  for (int j = 1; j <= n; j++) values[j - 1] = unit.SlotValue(*unit.GetSubPoint(data, j), j, results);
+  // read through a lab-frame row set the fold is a lab value; the point's own Jacobian makes it the c.m. value its
+  // comparison divides by the same Jacobian (RowSet.h)
+  const double fold = FoldValues(unit, data, configure, values, Broadening::kApply);
+  if (std::isnan(fold) && unit.RowSetOf() && unit.RowSetOf()->labFrame) {
+    for (int j = 1; j <= n; j++)
+      if (std::isnan(unit.SlotJacobian(j))) {
+        unit.MarkFailed(results, "a fold at a lab angle", configure,
+                        "the lab angle is beyond the kinematic maximum at an energy its fold reads (an energy shift "
+                        "or the window reaches there); give the point at a c.m. angle, or narrow the window or the "
+                        "shift's prior.");
+        return;
+      }
+  }
+  unit.SetFitCrossSection(results, unit.LabFoldFactor() * fold);
 }
 
 bool FoldWeights(const Unit &unit, const WorkingCopy &data, const Config &configure, std::vector<double> &c,

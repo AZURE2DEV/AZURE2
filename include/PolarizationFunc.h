@@ -62,12 +62,40 @@ struct Amplitude {
  * pathway, which is how the caller signals a channel pair the R-matrix does not
  * connect.
  */
+/*!
+ * Y_l^mu(theta, 0) for l = 0 .. lMax and mu = -muMax .. muMax, at (l, mu) index l (2 muMax + 1) + mu + muMax: the
+ * angular factors of the amplitude matrix, one table per angle (a reader's row, RowSet.h; the matrix's own).
+ */
+void HarmonicTable(double theta, int lMax, int muMax, vector_c &table);
+/// The largest |v - v'| of the amplitudes of a reaction between pairs of these spins.
+int MaxProjection(double j1, double j2, double jp1, double jp2);
+
 class AmplitudeMatrix {
  public:
-  AmplitudeMatrix(CNuc *compound, Site *point, int aa, int ir);
+  /// The matrix of the reaction from pair `aa` to pair `ir` at the c.m. angle `angle` (deg) of a reader.
+  AmplitudeMatrix(CNuc *compound, double angle, int aa, int ir);
+  /// The matrix of the reaction from pair `aa` to pair `ir` without an angle: for AddPathwayCoefficients alone.
+  AmplitudeMatrix(CNuc *compound, int aa, int ir);
+  /// An empty matrix of a reaction between pairs of these spins (j1 the projectile's), filled with SetAmplitude.
+  AmplitudeMatrix(double j1, double j2, double jp1, double jp2);
 
   //! Add the contribution of one pathway: T element for (jNum, ch, chp).
   void AddPathway(int jNum, int chNum, int chpNum, complex tMatrixElement);
+
+  /*!
+   * The same loop as AddPathway without the spherical harmonic: adds i sqrt(2l+1) (s l v 0|J v) (s' l' v' mu|J v) T
+   * x identical to coefficients[a nLp + l'] (a the amplitude's index, l' the exit's orbital momentum, l' < nLp), so
+   * that M_a = sum_l' coefficients[a nLp + l'] Y_l'^mu (a site's record of an analysing power, SiteObservable.h).
+   */
+  void AddPathwayCoefficients(int jNum, int chNum, int chpNum, complex tMatrixElement, complex *coefficients,
+                              int nLp) const;
+  //! The amplitudes in their order (entrance spin and projection, then exit spin and projection).
+  const Amplitude &AmplitudeAt(std::size_t a) const { return amplitudes_[a]; }
+  void SetAmplitude(std::size_t a, complex value) { amplitudes_[a].value = value; }
+  //! The angular factor of amplitude coefficients: Y_l'^mu from the harmonic table `table` of half-width muMax.
+  static complex HarmonicOf(const complex *table, int muMax, int lp, int mu) {
+    return table[(std::size_t)lp * (2 * muMax + 1) + (mu + muMax)];
+  }
 
   /*!
    * Coulomb amplitude term, added once per (s, v) diagonal element. The
@@ -75,7 +103,9 @@ class AmplitudeMatrix {
    * particles with spin the exchange term enters as (-1)^s f_C(pi - theta)
    * (see Unit::GetCoulombAmplitude(double)).
    */
-  void AddCoulomb();
+  /// (A reader's amplitudes at its slot: the point's own, f_d, f_x of Site::CoulombAt.)
+  /// With a reader's Coulomb amplitudes f_d, f_x (Site::CoulombAt): f_C(s) = f_d + (-1)^s f_x.
+  void AddCoulomb(complex direct, complex exchange);
 
   /*!
    * Spin-averaged, spin-summed |M|^2 -- the unpolarized differential cross
@@ -127,10 +157,12 @@ class AmplitudeMatrix {
   //! elastic scattering of identical particles, 1 otherwise.
   double IdenticalFactor(int lp, double sp) const;
 
-  CNuc *compound_;
-  Site *point_;
-  int aa_, ir_;
-  double theta_;
+  CNuc *compound_ = nullptr;
+  int aa_ = 0, ir_ = 0;
+  double theta_ = 0.0;
+  double j1_ = 0.0, j2_ = 0.0;  //!< the entrance pair's spins (projectile, target)
+  int muMax_ = 0;
+  vector_c harmonics_;  //!< HarmonicTable at theta_
   std::vector<double> entranceSpins_, exitSpins_;
   std::vector<Amplitude> amplitudes_;
 };

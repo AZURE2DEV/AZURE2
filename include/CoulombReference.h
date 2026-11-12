@@ -30,12 +30,14 @@ double CoulombReferenceValue(const WorkingCopy &data, Unit *point, experiment::L
                              const Config &configure);
 
 /*!
- * A reference value the R-matrix does not compute, at a point as its observable is: at(point) without a sub-point
- * effect; else at(sub-point) folded by the point's own kernel (FoldValues, the one quadrature).  The Coulomb leaf
+ * A reference value the R-matrix does not compute, at a point as its observable is: at(point, its c.m. angle in deg)
+ * without a sub-point effect; else at(sub-point, the point's c.m. angle there, Site::SlotAngle) folded by the point's
+ * own kernel (FoldValues, the one quadrature) -- for a point given at a lab angle in the lab, as its observable
+ * (Site::SlotJacobian, Unit::LabFoldFactor; RowSet.h), so that a ratio is the ratio of two lab folds.  The Coulomb leaf
  * above and the tabulated reference (ReferenceTableLeaf.h) use it.
  */
 double FoldReferenceAtPoint(const WorkingCopy &data, Unit *point, const Config &configure,
-                            const std::function<double(const Site *)> &at);
+                            const std::function<double(const Site *, double)> &at);
 
 /*!
  * The factor E exp(2 pi eta(E) + g E) (MeV) that takes the cross section of a point to its S factor (g = 0) or its

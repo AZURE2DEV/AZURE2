@@ -3,8 +3,6 @@
 #include "AChannel.h"
 #include "CNuc.h"
 #include "Unit.h"
-#include <cstdio>
-#include <cstdlib>
 #include "GenMatrixFunc.h"
 #include "PolarizationFunc.h"
 #include <assert.h>
@@ -31,6 +29,7 @@ void GenMatrixFunc::CalculateCrossSection(Site *point, azure2::Results &results)
   if (point->IsAnalyzingPower() && !point->IsSubPoint()) return;
   const double f = point->ScreeningFactor();
   if (f == 1.0) return;
+  if (point->AngleFree()) point->ScaleObservable(results, f);
   point->SetFitCrossSection(results, f * point->GetFitCrossSection(results));
   point->SetFitE1CrossSection(results, f * point->GetFitE1CrossSection(results));
   point->SetFitE2CrossSection(results, f * point->GetFitE2CrossSection(results));
@@ -95,6 +94,8 @@ void GenMatrixFunc::CalculateBareCrossSection(Site *point, azure2::Results &resu
     // (1+delta_12) of an identical entrance pair: see the angle-integrated
     // branch below.
     point->SetFitCrossSection(results, real(sum) / 100. * compound()->GetPair(aa)->GetEntranceSymmetryFactor());
+    // This formalism has no angular dependence: a site holding Legendre coefficients holds the value as B_0.
+    if (point->AngleFree()) point->SetIsotropicObservable(results, point->GetFitCrossSection(results));
   } else {
     const int ir = P.ExitOf(exitPairNum);
     if (!ir) throw std::runtime_error(NoPathwayMessage(aa, exitPairNum));
@@ -259,233 +260,39 @@ void GenMatrixFunc::CalculateBareCrossSection(Site *point, azure2::Results &resu
           return;
         }
       }
-      std::vector<double> angularCoeff(std::min(point->GetMaxLOrder() + 1, point->GetMaxAngDistOrder() + 1), 0.);
-      PPair *exitPairDiff = compound()->GetPair(compound()->GetPairNumFromKey(point->GetExitKey()));
-      // The interference sum is a sum of products that do not depend on the
-      // angle, each times a Legendre polynomial.  The products are summed by
-      // order once per T-matrix and reused by every point that shares it.
-      // A particle exit other than the entrance (UPOS or not) keeps only the
-      // k-groups of equal channel spins; UPOS points and angular-distribution
-      // coefficients take the loop below.
-      const bool particleExit = (aa != exitPairNum && exitPairDiff->GetPType() == 0);
-      if (!point->IsAngularDist() && !(particleExit && point->IsUPOS())) {
-        const azure2::FlatInterference *flat = P.interferences.data() + theDecay.first_interference;
-        // An exit without interference lists (a beta entrance) has an empty list here.
-        if (rt_decay_ != &theDecay) {
-          rt_wl_.clear();
-          const std::vector<vector_c> *T = tmatrix_.empty() ? nullptr : &tmatrix_[0];
-          for (const azure2::FlatInterference *fp = flat; fp != flat + theDecay.num_interferences; fp++) {
-            const azure2::FlatInterference &f = *fp;
-            if (particleExit && !f.spEqual) continue;
-            if ((int)rt_wl_.size() <= f.l) rt_wl_.resize(f.l + 1, complex(0.0, 0.0));
-            if (!f.r1) continue;  // unknown type: no contribution, as in the loop below
-            const complex T1 = (f.r1 == 'E') ? ec_tmatrix_[f.k - 1][f.m1 - 1]
-                                             : (T ? (*T)[f.k - 1][f.m1 - 1] : complex(0.0, 0.0));
-            const complex T2 = (f.r2 == 'E') ? ec_tmatrix_[f.k - 1][f.m2 - 1]
-                                             : (T ? (*T)[f.k - 1][f.m2 - 1] : complex(0.0, 0.0));
-            rt_wl_[f.l] += f.z * T1 * conj(T2);
-          }
-          this->BuildCoulombInterference(P, theDecay, aa == exitPairNum);
-          rt_decay_ = &theDecay;
-        }
-        for (size_t l = 0; l < rt_wl_.size(); l++)
-          if (rt_wl_[l] != complex(0.0, 0.0)) sum += rt_wl_[l] * point->GetLegendreP((int)l);
-      } else
-      {
-        for (int inter = 0; inter < theDecay.num_interferences; inter++) {
-          const azure2::FlatInterference &theInterference = P.interferences[theDecay.first_interference + inter];
-          const azure2::SpinGroupRow &theKGroup = P.Group(theDecay, theInterference.k);
-          complex T1(0.0, 0.0), T2(0.0, 0.0);
-          const std::string interferenceType{theInterference.r1, theInterference.r2};
-          if (aa != exitPairNum && exitPairDiff->GetPType() == 0) {
-            // Different entrance and exit pairs with particle exit - may be UPOS
-            double sp1 = theKGroup.sp;
-            double sp2 = theKGroup.sp2;
-            const azure2::InternalRow &theMGroup1 = P.Internal(theKGroup, theInterference.m1);
-            int lp1 = compound()->GetJGroup(theMGroup1.group)->GetChannel(theMGroup1.chp)->GetL();
-            const azure2::InternalRow &theMGroup2 = P.Internal(theKGroup, theInterference.m2);
-            int lp2 = compound()->GetJGroup(theMGroup2.group)->GetChannel(theMGroup2.chp)->GetL();
-            if (sp1 == sp2 && !point->IsUPOS()) {
-              // Normal angular distribution (filter by sp1==sp2)
-              if (interferenceType == "RR") {
-                T1 = this->GetTMatrixElement(theInterference.k, theInterference.m1);
-                T2 = this->GetTMatrixElement(theInterference.k, theInterference.m2);
-              } else if (interferenceType == "ER") {
-                T1 = this->GetECTMatrixElement(theInterference.k, theInterference.m1);
-                T2 = this->GetTMatrixElement(theInterference.k, theInterference.m2);
-              } else if (interferenceType == "RE") {
-                T1 = this->GetTMatrixElement(theInterference.k, theInterference.m1);
-                T2 = this->GetECTMatrixElement(theInterference.k, theInterference.m2);
-              } else if (interferenceType == "EE") {
-                T1 = this->GetECTMatrixElement(theInterference.k, theInterference.m1);
-                T2 = this->GetECTMatrixElement(theInterference.k, theInterference.m2);
-              }
-              int lOrder = theInterference.l;
-              sum += theInterference.z * T1 * conj(T2) *
-                  point->GetLegendreP(lOrder);
-              if ((lOrder < (int)angularCoeff.size()) && point->IsAngularDist()) {
-                double tempCoeff = angularCoeff[lOrder] +
-                    real(theInterference.z * T1 * conj(T2)) * point->GetGeometricalFactor() *
-                        compound()->GetPair(aa)->GetI1I2Factor() / 100. * 4. / angleIntegratedXS;
-                angularCoeff[lOrder] = tempCoeff;
-              }
-            }
-            if (lp1 == lp2 && point->IsUPOS()) {
-              // Unobserved primary, observed secondary: only RR interference
-              if (interferenceType == "RR") {
-                T1 = this->GetTMatrixElement(theInterference.k, theInterference.m1);
-                T2 = this->GetTMatrixElement(theInterference.k, theInterference.m2);
-              }
-              int lOrder = theInterference.l;
-              double finalL = (double)point->GetSecondaryDecayL();
-              double Ic = point->GetIc();
-              // the residual nucleus of the EXIT PAIR: ir is the decay index within the entrance pair's list,
-              // not a pair number (wrong whenever an earlier pair has no decay from the entrance pair:
-              // another compound nucleus, a beta-delayed pair, ...; audit item 10, tests/upos_pair_index)
-              double j2f = compound()->GetPair(exitPairNum)->GetJ(2);
-              double delta = point->GetDelta();
-              double R_L = 0.;
-              if ((int)lOrder % 2 == 0) {
-                R_L = this->GetRk(j2f, finalL, finalL, Ic, lOrder);
-                if (delta != 0.) {
-                  double finalLp = finalL + 1.;
-                  double R_LLp = this->GetRk(j2f, finalL, finalLp, Ic, lOrder);
-                  double R_LpLp = this->GetRk(j2f, finalLp, finalLp, Ic, lOrder);
-                  // Eq. (7) of Brune and deBoer (2020) unconditionally: every R_k is 0 when its coupling is not
-                  // allowed, and the mixed form is well defined.  Up to 2026-10-27 it was applied only when
-                  // R_L'L' != 0, so at an order k where R_L'L' happens to vanish while R_LL does not (3/2 -> 3/2
-                  // M1/E2, k = 2: R_2(2,2) = 0, R_2(1,2) = 0.77) the 2 delta R_LL' term and the 1/(1 + delta^2)
-                  // were dropped for that k (audit 2026-10-25, checklist t3-24).
-                  R_L = (R_L + 2. * delta * R_LLp + delta * delta * R_LpLp) / (1. + delta * delta);
-                }
-              }
-              sum += theInterference.z_upos * T1 * conj(T2) *
-                  pow(2. * lOrder + 1., 0.5) / (4.) * R_L * point->GetLegendreP(lOrder);
-              if ((lOrder < (int)angularCoeff.size()) && point->IsAngularDist()) {
-                double tempCoeff = angularCoeff[lOrder] +
-                    real(theInterference.z_upos * T1 * conj(T2)) * point->GetGeometricalFactor() *
-                        compound()->GetPair(aa)->GetI1I2Factor() / 100. * pow(2. * lOrder + 1., 0.5) * R_L / angleIntegratedXS;
-                angularCoeff[lOrder] = tempCoeff;
-              }
-            }
-          } else {
-            // Standard case: entrance==exit or gamma exit
-            if (interferenceType == "RR") {
-              T1 = this->GetTMatrixElement(theInterference.k, theInterference.m1);
-              T2 = this->GetTMatrixElement(theInterference.k, theInterference.m2);
-            } else if (interferenceType == "ER") {
-              T1 = this->GetECTMatrixElement(theInterference.k, theInterference.m1);
-              T2 = this->GetTMatrixElement(theInterference.k, theInterference.m2);
-            } else if (interferenceType == "RE") {
-              T1 = this->GetTMatrixElement(theInterference.k, theInterference.m1);
-              T2 = this->GetECTMatrixElement(theInterference.k, theInterference.m2);
-            } else if (interferenceType == "EE") {
-              T1 = this->GetECTMatrixElement(theInterference.k, theInterference.m1);
-              T2 = this->GetECTMatrixElement(theInterference.k, theInterference.m2);
-            }
-            int lOrder = theInterference.l;
-            sum += theInterference.z * T1 * conj(T2) *
-                point->GetLegendreP(lOrder);
-            if ((lOrder < (int)angularCoeff.size()) && point->IsAngularDist()) {
-              double tempCoeff = angularCoeff[lOrder] +
-                  real(theInterference.z * T1 * conj(T2)) * point->GetGeometricalFactor() *
-                      compound()->GetPair(aa)->GetI1I2Factor() / 100. * 4. / angleIntegratedXS;
-              angularCoeff[lOrder] = tempCoeff;
-            }
-          }
-        }
+      // The observables of the reaction at this energy (SiteObservable.h).  A site of an angle-free kind holds them
+      // in its record and its readers apply their own rows (Site::ValueFor), a site that is a row of its data (not a
+      // slot) included.
+      const SiteObservable kind = point->Observable();
+      if (kind == SiteObservable::kLegendre) {
+        point->SetLegendreCoefficients(results, this->LegendreCoefficientsOf(point, P, theDecay, aa, exitPairNum));
+        if (point->IsAngularDist()) point->SetAngDistA0(results, angleIntegratedXS / (4.0 * pi));
+        if (!point->IsSubPoint() && (point->IsDifferential() || point->IsCoefficient()))
+          point->SetFitCrossSection(results, point->ValueFor(*point, 0, results));
+        return;
       }
-      if (point->IsAngularDist()) {
-        point->SetAngularDists(results, angularCoeff);
-        // A_0 = sigma_int / 4 pi (b/sr):  dsigma/dOmega_cm = A_0 [1 + sum_k a_k P_k(cos theta)]
-        point->SetAngDistA0(results, angleIntegratedXS / (4.0 * pi));
-        if (point->IsCoefficient()) {
-          // an angular-coefficient data point: its fit value is its own order's coefficient
-          const int kOrd = point->GetCoefficientOrder();
-          const double ak = (kOrd >= 0 && kOrd < (int)angularCoeff.size()) ? angularCoeff[kOrd] : 0.0;
-          point->SetFitCrossSection(results, point->GetCoefficientAbsolute() ? ak * angleIntegratedXS / (4.0 * pi) : ak);
+      if (kind == SiteObservable::kElastic) {
+        point->SetElasticCoefficients(results, this->ElasticCoefficientsOf(point, P, theDecay, aa));
+        if (!point->IsSubPoint()) point->SetFitCrossSection(results, point->ValueFor(*point, 0, results));
+        return;
+      }
+      if (kind == SiteObservable::kAnalyzingPower) {
+        // An analyzing-power segment reports A_y in place of the cross section; a slot keeps the coefficients, and
+        // each reader contracts the cross section that weights its target average and A_y (Site::SlotValue,
+        // SlotAnalyzingPower).
+        point->SetAnalyzingPowerCoefficients(results, this->AnalyzingPowerCoefficientsOf(point, P, theDecay, aa,
+                                                                                           exitPairNum));
+        if (!point->IsSubPoint()) {
+          const double ay = point->AnalyzingPowerFor(*point, 0, results);
+          point->SetAnalyzingPower(results, ay);
+          point->SetFitCrossSection(results, ay);
         }
         return;
       }
-      // Identical-particle symmetrization (elastic, aa==ir):
-      //   |F|^2 = |F_C|^2 + |F_N|^2 + 2 Re[F_C* F_N]
-      // with, in channel spin s, F_X = f_X(theta) + (-1)^s f_X(pi-theta):
-      // exchange multiplies |s v> by (-1)^(2j-s) and the state must pick up
-      // (-1)^(2j), leaving (-1)^s, and Y_l(pi-theta, pi) = (-1)^l Y_l(theta, 0).
-      // The nuclear term therefore carries 1 + (-1)^(l'+s'), which is 2 on
-      // every channel CNuc admits (l+s even; forbidden ones are refused when
-      // the model is read) -- so |F_N|^2 = 4|f_N|^2 and 2 Re[F_C* F_N] =
-      // 4 Re[F_C,s* f_N] for any spin. Only the Coulomb amplitude depends on
-      // s: for j = 0 there is just s = 0 and Unit stores the symmetrized
-      // F_C; for j != 0 it is taken per channel spin, in CT below and in the
-      // interference sum through GetCoulombAmplitude(s). Here we apply the
-      // remaining factors 4 to RT and 2 to IT.
-      //
-      // Identical entrance pair, different exit pair (12C(12C,a)20Ne,
-      // d(d,p)t, d(d,g)4He): only the (1+delta_12) = 2 of the total. The
-      // distribution is already symmetric about 90 deg -- odd Legendre terms
-      // need entrance waves of opposite l parity in the same channel spin, and
-      // l+s even forbids that -- and each event gives one ejectile, so its
-      // 4 pi integral must be the angle-integrated sigma above, x2. (For
-      // elastic the 4 pi integral of the x4 form is twice sigma because it
-      // counts both particles.)  An identical exit pair gets no factor: the
-      // model is per event, so a detector counting either alpha of
-      // 7Li(p,a)a sees twice it.
-      double rtFactor = 1.0;
-      double itFactor = 1.0;
-      if (compound()->GetPair(aa)->IsIdentical()) {
-        if (aa == exitPairNum) {
-          rtFactor = 4.0;
-          itFactor = 2.0;
-        } else {
-          rtFactor = compound()->GetPair(aa)->GetEntranceSymmetryFactor();
-        }
-      }
-      complex RT = sum / pi * point->GetGeometricalFactor() *
-          compound()->GetPair(aa)->GetI1I2Factor() * rtFactor;
-
-      complex CT(0., 0.), IT(0., 0.);
-      if (aa == exitPairNum) {
-        complex coulombAmplitude = point->GetCoulombAmplitude();
-        PPair *elasticPair = compound()->GetPair(aa);
-        if (elasticPair->HasSpinDependentExchange()) {
-          // Identical particles with spin j: the Coulomb term is diagonal in
-          // (s, v) with amplitude f_C(theta) + (-1)^s f_C(pi-theta), so the
-          // spin average is sum_s (2s+1) |F_C,s|^2 / (2j+1)^2. Summed over s
-          // this leaves the Mott interference weighted by (-1)^(2j)/(2j+1).
-          const double j = elasticPair->GetJ(1);
-          double coulombSum = 0.0;
-          for (double chS = 0.0; chS <= 2.0 * j + 1.e-6; chS += 1.0)
-            coulombSum += (2.0 * chS + 1.0) * std::norm(point->GetCoulombAmplitude(chS));
-          CT = complex(coulombSum / ((2.0 * j + 1.0) * (2.0 * j + 1.0)) * point->GetGeometricalFactor(), 0.);
-        } else {
-          CT = coulombAmplitude * conj(coulombAmplitude) * point->GetGeometricalFactor();
-        }
-
-        sum = complex(0., 0.);
-        if (rt_decay_ == &theDecay && rt_it_built_) {
-          // The angle-independent factors, summed per (channel spin, l) once
-          // per T-matrix (BuildCoulombInterference).
-          for (const CoulombTerm &e : rt_it_) sum += point->GetCoulombAmplitude(e.s) * e.c * point->GetLegendreP(e.l);
-        } else
-        for (int k = 1; k <= theDecay.num_groups; k++) {
-          const azure2::SpinGroupRow &g = P.Group(theDecay, k);
-          for (int m = 1; m <= g.num_internal; m++) {
-            const azure2::InternalRow &theMGroup = P.Internal(g, m);
-            AChannel *entranceChannel = compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.ch);
-            AChannel *exitChannel = compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.chp);
-            // The Coulomb amplitude is that of the channel's own spin: it
-            // differs between channel spins only for identical particles with
-            // spin, and is the one stored amplitude otherwise.
-            if (entranceChannel == exitChannel)
-              sum += theMGroup.stat_spin_factor *
-                  point->GetCoulombAmplitude(entranceChannel->GetS()) * conj(this->GetTMatrixElement(k, m)) *
-                  point->GetLegendreP(compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.ch)->GetL());
-          }
-        }
-        IT = complex(0., 1.) / sqrt(pi) * sum * point->GetGeometricalFactor() * itFactor;
-      }
-      point->SetFitCrossSection(results, (real(CT) + real(RT) + real(IT)) / 100.);
+      // Every differential kind has an angle-free kind (ObservableOf); THM is THMMatrixFunc's.
+      throw std::logic_error("GenMatrixFunc::CalculateBareCrossSection: a differential site of kind " +
+                             std::string(kSiteObservables[(int)kind].name) + " (data set " +
+                             std::to_string(point->GetSegmentKey()) + ")");
     } else if (aa == exitPairNum) {
       double segmentJ = point->GetJ();
       int segmentL = point->GetL();
@@ -539,42 +346,124 @@ void GenMatrixFunc::CalculateBareCrossSection(Site *point, azure2::Results &resu
       point->SetFitCrossSection(results, phase);
     }
   }
-
-  // An analyzing-power segment reports A_y in place of the cross section, so
-  // the rest of AZURE2 -- output files, chi-squared, plotting -- needs no
-  // special case.
-  if (point->IsAnalyzingPower()) {
-    double spinSum = 0.0, ay = 0.0;
-    // Two routes, chosen by the exit channel: the channel-spin amplitude matrix
-    // (Seyler 1969) for particle pairs, the Legendre coefficients of Seyler and
-    // Weller (1979) for capture. Both consume the same T-matrix elements.
-    const int exitPType =
-        compound()->GetPair(compound()->GetPairNumFromKey(point->GetExitKey()))->GetPType();
-    const bool ok = (exitPType == 10)
-        ? this->CalculateCaptureAnalyzingPower(point, results, &spinSum, &ay)
-        : this->CalculateAmplitudeMatrix(point, &spinSum, &ay);
-    if (!ok) ay = 0.0;
-    point->SetAnalyzingPower(results, ay);
-    // A sub-point of a target-effect integration must keep the cross section
-    // in place, because A_y is averaged over the target weighted by it. Every
-    // other point reports A_y directly, so nothing downstream needs a special
-    // case.
-    if (!point->IsSubPoint()) point->SetFitCrossSection(results, ay);
-  }
-
-  // Temporary validation hook: compare the Seyler amplitude-matrix route
-  // against the Blatt-Biedenharn one. At fixed energy the ratio must be
-  // constant in angle.
-  if (std::getenv("AZURE2_POL_DEBUG")) {
-    double spinSum = 0.0, ay = 0.0;
-    if (this->CalculateAmplitudeMatrix(point, &spinSum, &ay)) {
-      std::printf("POLDEBUG %.6f %.6f %.10e %.10e %.6f\n",
-                  point->GetCMEnergy(), point->GetCMAngle(),
-                  point->GetFitCrossSection(results), spinSum, ay);
-    }
-  }
 }
 
+void GenMatrixFunc::BuildOrderProducts(const azure2::EntrancePathways &P, const azure2::ExitRow &theDecay,
+                                       bool particleExit, bool elastic) {
+  if (rt_decay_ == &theDecay) return;
+  rt_wl_.clear();
+  // An exit without interference lists (a beta entrance) has an empty list here.
+  const azure2::FlatInterference *flat = P.interferences.data() + theDecay.first_interference;
+  const std::vector<vector_c> *T = tmatrix_.empty() ? nullptr : &tmatrix_[0];
+  for (const azure2::FlatInterference *fp = flat; fp != flat + theDecay.num_interferences; fp++) {
+    const azure2::FlatInterference &f = *fp;
+    if (particleExit && !f.spEqual) continue;
+    if ((int)rt_wl_.size() <= f.l) rt_wl_.resize(f.l + 1, complex(0.0, 0.0));
+    if (!f.r1) continue;  // unknown type: no contribution
+    const complex T1 = (f.r1 == 'E') ? ec_tmatrix_[f.k - 1][f.m1 - 1] : (T ? (*T)[f.k - 1][f.m1 - 1] : complex(0.0, 0.0));
+    const complex T2 = (f.r2 == 'E') ? ec_tmatrix_[f.k - 1][f.m2 - 1] : (T ? (*T)[f.k - 1][f.m2 - 1] : complex(0.0, 0.0));
+    rt_wl_[f.l] += f.z * T1 * conj(T2);
+  }
+  this->BuildCoulombInterference(P, theDecay, elastic);
+  rt_decay_ = &theDecay;
+}
+
+/*!
+ * dsigma/dOmega_c.m. = sum_L B_L P_L(cos theta) of a reaction (Blatt and Biedenharn, Rev. Mod. Phys. 24 (1952) 258,
+ * in the coupling of the pathway table; for elastic scattering the nuclear amplitude's part): B_L = (geom I1I2 s /
+ * (100 pi)) sum Re(Z T1 T2*) over the interferences of order L (b/sr; geom = pi/k^2 in fm^2, 1/100 to b; s the
+ * identical-particle factor, LegendreSymmetryFactor).  A particle exit
+ * keeps the k-groups of equal channel spins; an unobserved primary with an observed secondary (UPOS) weighs the
+ * internal pairs of equal exit l by Z_upos sqrt(2L+1)/4 R_L of the secondary decay (Brune and deBoer, PRC 102, 024628
+ * (2020), Eq. (7); R_L = 0 for odd L).
+ */
+std::vector<double> GenMatrixFunc::LegendreCoefficientsOf(const Site *point, const azure2::EntrancePathways &P,
+                                                          const azure2::ExitRow &theDecay, int aa, int exitPairNum) {
+  const bool particleExit = aa != exitPairNum && compound()->GetPair(exitPairNum)->GetPType() == 0;
+  std::vector<double> c;
+  if (particleExit && point->IsUPOS()) {
+    c.assign(theDecay.num_orders, 0.0);
+    const double finalL = (double)point->GetSecondaryDecayL();
+    const double Ic = point->GetIc();
+    // the residual nucleus of the exit pair (tests/upos_pair_index)
+    const double j2f = compound()->GetPair(exitPairNum)->GetJ(2);
+    const double delta = point->GetDelta();
+    std::vector<double> rL(theDecay.num_orders, 0.0);
+    for (int lOrder = 0; lOrder < theDecay.num_orders; lOrder += 2) {
+      double R_L = this->GetRk(j2f, finalL, finalL, Ic, lOrder);
+      if (delta != 0.) {
+        // Eq. (7) unconditionally: every R_k is 0 where its coupling is not allowed (checklist t3-24).
+        const double finalLp = finalL + 1.;
+        const double R_LLp = this->GetRk(j2f, finalL, finalLp, Ic, lOrder);
+        const double R_LpLp = this->GetRk(j2f, finalLp, finalLp, Ic, lOrder);
+        R_L = (R_L + 2. * delta * R_LLp + delta * delta * R_LpLp) / (1. + delta * delta);
+      }
+      rL[lOrder] = R_L;
+    }
+    for (int inter = 0; inter < theDecay.num_interferences; inter++) {
+      const azure2::FlatInterference &f = P.interferences[theDecay.first_interference + inter];
+      if (f.r1 != 'R' || f.r2 != 'R') continue;  // only internal pathways interfere here
+      const azure2::SpinGroupRow &g = P.Group(theDecay, f.k);
+      const azure2::InternalRow &a = P.Internal(g, f.m1), &b = P.Internal(g, f.m2);
+      if (compound()->GetJGroup(a.group)->GetChannel(a.chp)->GetL() != compound()->GetJGroup(b.group)->GetChannel(b.chp)->GetL())
+        continue;
+      const complex T1 = this->GetTMatrixElement(f.k, f.m1), T2 = this->GetTMatrixElement(f.k, f.m2);
+      c[f.l] += real(f.z_upos * T1 * conj(T2)) * pow(2. * f.l + 1., 0.5) / (4.) * rL[f.l];
+    }
+  } else {
+    this->BuildOrderProducts(P, theDecay, particleExit, aa == exitPairNum);
+    c.resize(rt_wl_.size());
+    for (std::size_t l = 0; l < rt_wl_.size(); l++) c[l] = real(rt_wl_[l]);
+  }
+  const double geom = point->GetGeometricalFactor(), i1i2 = compound()->GetPair(aa)->GetI1I2Factor();
+  const double symmetry = LegendreSymmetryFactor(*compound()->GetPair(aa), aa == exitPairNum);
+  for (double &b : c) b = b / pi * geom * i1i2 * symmetry / 100.;
+  return c;
+}
+
+/*!
+ * The observables of elastic scattering at the site's energy (SiteObservable::kElastic):
+ *   dsigma/dOmega = |F_C|^2 + |F_N|^2 + 2 Re[F_C* F_N]  (geom = pi/k^2 times the spin average),
+ * B_L^NN of |F_N|^2 from LegendreCoefficientsOf, and the interference
+ *   2 Re[F_C* F_N] / 100 = Re sum_l (f_d D_l + f_x X_l) P_l,  D_l = (i geom f_it / (100 sqrt(pi))) sum_{s} c_{s,l},
+ *   X_l = (i geom f_it / (100 sqrt(pi))) sum_s (-1)^s c_{s,l},
+ * c_{s,l} = sum statSpin conj(T) over the diagonal pathways of channel spin s and orbital l (BuildCoulombInterference).
+ * Identical particles: in channel spin s, F_X = f_X(theta) + (-1)^s f_X(pi - theta) (exchange multiplies |s v> by
+ * (-1)^(2j-s), the state must pick up (-1)^(2j), and Y_l(pi - theta, pi) = (-1)^l Y_l(theta, 0)); the nuclear term
+ * carries 1 + (-1)^(l'+s'), 2 on every channel CNuc admits (l + s even), so |F_N|^2 = 4 |f_N|^2 (the factor 4 of
+ * LegendreSymmetryFactor) and 2 Re[F_C* F_N] = 4 Re[F_C,s* f_N] (f_it = 2; 1 otherwise).  Only the Coulomb amplitude
+ * depends on s: for j = 0 there is s = 0 alone and f_d is the symmetrized F_C (f_x = 0, X_l = 0); for j != 0,
+ * F_C,s = f_d + (-1)^s f_x, and the spin average of |F_C,s|^2, sum_s (2s+1) |F_C,s|^2 / (2j+1)^2, is
+ * |f_d|^2 + |f_x|^2 + 2 (-1)^(2j) / (2j+1) Re(f_d f_x*): c_0 = geom / 100, c_x = 2 c_0 (-1)^(2j) / (2j+1).
+ */
+Site::ElasticCoefficients GenMatrixFunc::ElasticCoefficientsOf(const Site *point, const azure2::EntrancePathways &P,
+                                                              const azure2::ExitRow &theDecay, int aa) {
+  Site::ElasticCoefficients e;
+  e.nuclear = this->LegendreCoefficientsOf(point, P, theDecay, aa, aa);  // builds rt_it_ too (BuildOrderProducts)
+  PPair *pair = compound()->GetPair(aa);
+  const double geom = point->GetGeometricalFactor();
+  e.coulomb = geom / 100.;
+  const bool spinDependent = pair->IsIdentical() && pair->HasSpinDependentExchange();
+  if (spinDependent) {
+    const double j = pair->GetJ(1);
+    e.cross = 2.0 * e.coulomb * ((std::lround(2.0 * j) % 2 == 0) ? 1.0 : -1.0) / (2.0 * j + 1.0);
+  }
+  const double itFactor = pair->IsIdentical() ? 2.0 : 1.0;
+  const complex cI = complex(0., 1.) / sqrt(pi) * geom * itFactor / 100.;
+  for (const CoulombTerm &t : rt_it_) {
+    if (t.l > Config::maxLOrder)
+      throw std::runtime_error("elastic scattering of pair " + std::to_string(aa) + ": a channel with l = " +
+                               std::to_string(t.l) + " above the highest Legendre order " +
+                               std::to_string(Config::maxLOrder));
+    if ((int)e.direct.size() <= t.l) e.direct.resize(t.l + 1, complex(0.0, 0.0));
+    e.direct[t.l] += cI * t.c;
+    if (!spinDependent) continue;
+    if ((int)e.exchange.size() <= t.l) e.exchange.resize(t.l + 1, complex(0.0, 0.0));
+    // channel spins of two identical particles are integers (GetCoulombAmplitude(s))
+    e.exchange[t.l] += (((std::lround(2.0 * t.s) / 2) % 2 == 0) ? 1.0 : -1.0) * cI * t.c;
+  }
+  return e;
+}
 
 /*!
  * Creates a new temporary T-Matrix element.
@@ -784,114 +673,65 @@ std::string GenMatrixFunc::CaptureAyNotBuiltMessage(const Site *point) const {
          "this one was not named";
 }
 
-bool GenMatrixFunc::CalculateAmplitudeMatrix(Site *point, double *spinSum,
-                                             double *analyzingPower) {
-  if (spinSum) *spinSum = 0.0;
-  if (analyzingPower) *analyzingPower = 0.0;
-
-  const int aaPair = compound()->GetPairNumFromKey(point->GetEntranceKey());
-  const int irPair = compound()->GetPairNumFromKey(point->GetExitKey());
-  // Particle channels only. A photon exit has no amplitude matrix of this form
-  // and goes through CalculateCaptureAnalyzingPower instead.
-  if (compound()->GetPair(aaPair)->GetPType() != 0 ||
-      compound()->GetPair(irPair)->GetPType() != 0) return false;
-
-  const azure2::EntrancePathways &P = compound()->Pathways().Entrance(aaPair);
-  const int ir = P.ExitOf(irPair);
-  if (!ir) throw std::runtime_error(NoPathwayMessage(aaPair, irPair));
-  const azure2::ExitRow &theDecay = P.exits[ir - 1];
-
-  Polarization::AmplitudeMatrix M(compound(), point, aaPair, irPair);
-
+Site::AnalyzingPowerCoefficients GenMatrixFunc::AnalyzingPowerCoefficientsOf(const Site *point,
+                                                                             const azure2::EntrancePathways &P,
+                                                                             const azure2::ExitRow &theDecay, int aa,
+                                                                             int exitPairNum) {
+  Site::AnalyzingPowerCoefficients a;
+  // the cross section that weights A_y: the differential one, by the route of every other point (no angle here)
+  a.elastic = aa == exitPairNum;
+  if (a.elastic)
+    a.weightElastic = this->ElasticCoefficientsOf(point, P, theDecay, aa);
+  else
+    a.weightLegendre = this->LegendreCoefficientsOf(point, P, theDecay, aa, exitPairNum);
+  PPair *in = compound()->GetPair(aa), *out = compound()->GetPair(exitPairNum);
+  a.capture = true;  // without a particle or capture form (no projectile in), the empty capture form: A_y = 0
+  if (in->GetPType() != 0) return a;
+  if (out->GetPType() == 10) {
+    // Seyler and Weller (1979): the coefficients of P_k and P_k^1, summed over the terms per order
+    if (!theDecay.has_capture_ay) throw std::runtime_error(CaptureAyNotBuiltMessage(point));
+    int orders = 0;
+    for (int i = 0; i < theDecay.num_capture_ay; i++)
+      orders = std::max(orders, P.capture_ay[theDecay.first_capture_ay + i].kOrder + 1);
+    a.denominator.assign(orders, 0.0);
+    a.numerator.assign(orders, 0.0);
+    for (int i = 0; i < theDecay.num_capture_ay; i++) {
+      const azure2::CaptureAyTerm *term = &P.capture_ay[theDecay.first_capture_ay + i];
+      complex T1 = term->isEC1 ? this->GetECTMatrixElement(term->kGroup1, term->path1)
+                               : this->GetTMatrixElement(term->kGroup1, term->path1);
+      complex T2 = term->isEC2 ? this->GetECTMatrixElement(term->kGroup2, term->path2)
+                               : this->GetTMatrixElement(term->kGroup2, term->path2);
+      const complex prod = T1 * conj(T2);
+      if (term->ak != 0.0) a.denominator[term->kOrder] += term->ak * real(prod);
+      if (term->bk != 0.0) a.numerator[term->kOrder] += term->bk * (-imag(prod));  // Re(i T T'*)
+    }
+    return a;
+  }
+  if (out->GetPType() != 0) return a;
+  // Seyler (1969): the amplitude matrix's coefficients per exit orbital momentum
+  a.capture = false;
+  a.spins = {in->GetJ(1), in->GetJ(2), out->GetJ(1), out->GetJ(2)};
+  Polarization::AmplitudeMatrix M(compound(), aa, exitPairNum);
+  a.amplitudes = (int)M.size();
+  a.orders = 1;
   for (int k = 1; k <= theDecay.num_groups; k++) {
     const azure2::SpinGroupRow &g = P.Group(theDecay, k);
-    // A cross-spin UPOS group repeats pathways of the equal-spin groups.
+    if (g.CrossSpin()) continue;  // a cross-spin UPOS group repeats pathways of the equal-spin groups
+    for (int m = 1; m <= g.num_internal; m++) {
+      const azure2::InternalRow &r = P.Internal(g, m);
+      a.orders = std::max(a.orders, compound()->GetJGroup(r.group)->GetChannel(r.chp)->GetL() + 1);
+    }
+  }
+  a.coefficients.assign((std::size_t)a.amplitudes * a.orders, complex(0.0, 0.0));
+  for (int k = 1; k <= theDecay.num_groups; k++) {
+    const azure2::SpinGroupRow &g = P.Group(theDecay, k);
     if (g.CrossSpin()) continue;
     for (int m = 1; m <= g.num_internal; m++) {
       const azure2::InternalRow &r = P.Internal(g, m);
-      M.AddPathway(r.group, r.ch, r.chp, this->GetTMatrixElement(k, m));
+      M.AddPathwayCoefficients(r.group, r.ch, r.chp, this->GetTMatrixElement(k, m), a.coefficients.data(), a.orders);
     }
   }
-
-  // Coulomb only contributes to elastic scattering.
-  if (aaPair == irPair) M.AddCoulomb();
-
-  if (M.size() == 0) return false;
-  if (std::getenv("AZURE2_POL_DEBUG2")) M.DumpSpinHalf();
-  if (std::getenv("AZURE2_POL_DEBUG2"))
-    std::printf("FLIP n=%zu maxflip=%.6e\n", M.size(), M.MaxSpinFlip());
-  if (spinSum) *spinSum = M.UnpolarizedCrossSection();
-  if (analyzingPower) *analyzingPower = M.AnalyzingPowerAy();
-  return true;
-}
-
-bool GenMatrixFunc::CalculateCaptureAnalyzingPower(Site *point, const azure2::Results &results,
-                                                   double *unpolarized,
-                                                   double *analyzingPower) {
-  if (unpolarized) *unpolarized = 0.0;
-  if (analyzingPower) *analyzingPower = 0.0;
-
-  const int aaPair = compound()->GetPairNumFromKey(point->GetEntranceKey());
-  const int irPair = compound()->GetPairNumFromKey(point->GetExitKey());
-  if (compound()->GetPair(aaPair)->GetPType() != 0) return false;   // particle in
-  if (compound()->GetPair(irPair)->GetPType() != 10) return false;  // photon out
-
-  const azure2::EntrancePathways &P = compound()->Pathways().Entrance(aaPair);
-  const int ir = P.ExitOf(irPair);
-  if (!ir) throw std::runtime_error(NoPathwayMessage(aaPair, irPair));
-  const azure2::ExitRow &exit = P.exits[ir - 1];
-  if (!exit.has_capture_ay) throw std::runtime_error(CaptureAyNotBuiltMessage(point));
-
-  const int maxL = point->GetMaxLOrder();
-  const int nTerms = exit.num_capture_ay;
-  if (nTerms == 0) return false;
-
-  // P_k^1 is not among the polynomials the point caches, so it is evaluated
-  // here at the same centre-of-mass angle Unit::CalcLegendreP uses.
-  const double x = cos(point->GetCMAngle() * pi / 180.0);
-  std::vector<double> assocP(maxL + 1, 0.0);
-  for (int k = 1; k <= maxL; k++) assocP[k] = AngCoeff::LegendreP1(k, x);
-
-  double num = 0.0, den = 0.0;
-  for (int i = 0; i < nTerms; i++) {
-    const azure2::CaptureAyTerm *term = &P.capture_ay[exit.first_capture_ay + i];
-    if (term->kOrder > maxL) continue;
-    complex T1 = term->isEC1
-        ? this->GetECTMatrixElement(term->kGroup1, term->path1)
-        : this->GetTMatrixElement(term->kGroup1, term->path1);
-    complex T2 = term->isEC2
-        ? this->GetECTMatrixElement(term->kGroup2, term->path2)
-        : this->GetTMatrixElement(term->kGroup2, term->path2);
-    const complex prod = T1 * conj(T2);
-    if (term->ak != 0.0)
-      den += term->ak * real(prod) * point->GetLegendreP(term->kOrder);
-    if (term->bk != 0.0)
-      num += term->bk * (-imag(prod)) * assocP[term->kOrder];  // Re(i T T'*)
-  }
-
-  // Validation hook. The denominator is Seyler and Weller's sum_k a_k P_k,
-  // which must be AZURE2's own differential capture cross section up to the
-  // energy-dependent, angle-independent factor
-  //     den / sigma(theta) = 400 pi / (geometrical factor * I1I2 factor),
-  // since the pathway table holds the same coefficients as z1z2 = a_k / 4 and
-  // GenMatrixFunc forms sigma = Re(sum)/pi * geom * I1I2 / 100. A ratio that
-  // moves with angle means the pathway enumeration or a coupling order is
-  // wrong. The point still holds the cross section here; the analyzing power
-  // overwrites it only after this returns.
-  if (std::getenv("AZURE2_CAPPOL_DEBUG")) {
-    const double xs = point->GetFitCrossSection(results);
-    const double expect = 400.0 * pi / (point->GetGeometricalFactor() * compound()->GetPair(aaPair)->GetI1I2Factor());
-    std::printf("CAPPOL %10.6f %8.3f  den %14.7e  xs %14.7e  ratio %14.7e"
-                "  expect %14.7e  Ay %12.6e\n",
-                point->GetCMEnergy(), point->GetCMAngle(), den, xs,
-                (xs != 0.0) ? den / xs : 0.0, expect,
-                (den != 0.0) ? num / den : 0.0);
-  }
-
-  if (unpolarized) *unpolarized = den;
-  if (fabs(den) < 1.e-300) return false;
-  if (analyzingPower) *analyzingPower = num / den;
-  return true;
+  return a;
 }
 
 /*!
@@ -903,7 +743,6 @@ bool GenMatrixFunc::CalculateCaptureAnalyzingPower(Site *point, const azure2::Re
 void GenMatrixFunc::BuildCoulombInterference(const azure2::EntrancePathways &P, const azure2::ExitRow &exit,
                                              bool elastic) {
   rt_it_.clear();
-  rt_it_built_ = elastic;
   if (!elastic) return;
   // The pathways with equal entrance and exit channel; an exit without interference lists (a beta entrance) has none
   // and is never elastic.

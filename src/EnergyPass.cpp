@@ -316,8 +316,9 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
   };
   if (azure2::CalculationPlan::RunTimeCheckRequested()) {
     // One step after the other, each checked to write only its own records (the energy tasks: their units'; a fold:
-    // its points'); then every unit's shared solve against its own.
+    // its points'); then every unit's shared solve against its own.  The row sets' values after the last task.
     const int numTasks = (int)tasks.size();
+    if (numTasks == 0) ContractRowSets(results);
     azure2::CalculationPlan::RunChecked(
         results, numTasks + (int)folds.size(),
         [&](int k, std::vector<std::pair<std::size_t, std::size_t>> &ranges) {
@@ -325,7 +326,7 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
             runEnergyTask(k);
             for (int i = 0; i < tasks[k].size; i++)
               azure2::CalculationPlan::AddRecordRange(SiteAt(tasks.units[tasks[k].begin + i]), ranges);
-            if (k == numTasks - 1) collectFailures();
+            if (k == numTasks - 1) collectFailures(), ContractRowSets(results);
           } else {
             // A fold writes its point's record and reads its slots'.
             runFold(k - numTasks);
@@ -343,6 +344,7 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
 #pragma omp parallel for schedule(dynamic, 1)
     for (int k = 0; k < (int)tasks.size(); k++) runEnergyTask(k);
     collectFailures();
+    ContractRowSets(results);
 #pragma omp parallel for schedule(dynamic, 1)
     for (int k = 0; k < (int)folds.size(); k++) runFold(k);
   }

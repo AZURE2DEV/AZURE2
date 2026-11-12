@@ -335,6 +335,10 @@ data xs_90: dsdo_cm(1->1)
 data xs_140: dsdo_cm(1->1)
 data ay_60: ay(1->1)
 data ay_120: ay(1->1)
+== tests/lab_frame_fold/models/lab_fold.azr
+data folded: dsdo_cm(1->2)
+data fine: dsdo_cm(1->2)
+data frozen: dsdo_cm(1->2)
 == tests/layer_yield/models/fit.azr
 data scan: sigma(1->2)
 == tests/layer_yield/models/layer_yield.azr

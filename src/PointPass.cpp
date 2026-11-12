@@ -18,9 +18,11 @@
 #include "Unit.h"
 
 void Site::MarkFailed(azure2::Results &results, const char *role, const Config &configure, const char *why) {
-  // Every fixed quantity NaN and no angular-distribution coefficient.
-  std::fill(Rec(results), Rec(results) + azure2::Results::kNumFixed, std::numeric_limits<double>::quiet_NaN());
-  if (num_ang_slots_) Rec(results)[azure2::Results::AngularOffset()] = 0.0;
+  // Every fixed quantity NaN; the observables of the angular part NaN (PoisonObservable), so that every point reading them is NaN (ValueFor), and an
+  // angular distribution's model record gets none (CopyAngularDistsToModel).
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  std::fill(Rec(results), Rec(results) + azure2::Results::kNumFixed, nan);
+  this->PoisonObservable(results);
   static std::atomic<bool> reported(false);
   if (!reported.exchange(true)) {
 #pragma omp critical(azure_failed_point)
@@ -53,6 +55,7 @@ void Unit::Calculate(WorkingCopy *data, CNuc *theCNuc, const Config &configure, 
     unit = this->GetSubPoint(*data, i);
     azure2::SolveAtOneEnergy(theCNuc, configure, results, &unit, 1);
   }
+  data->ContractRowSetOf(*this, results);
   this->FoldSubPoints(*data, configure, results);
 }
 
@@ -105,34 +108,44 @@ void Unit::IntegrateTargetEffectComponents(const WorkingCopy &data, const Config
  * only one integration scheme to maintain.  The slots' records are read, never
  * written: other points of the group read them too (SlotGroup.h).
  */
-void Unit::FoldSubPoints(const WorkingCopy &data, const Config &configure, azure2::Results &results) {
-  const int n = this->NumSubPoints();
-  if (this->IsCoefficient() && !this->GetCoefficientAbsolute()) {
-    // A normalised Legendre coefficient is a ratio like A_y: the absolute A_k = a_k A_0
-    // and A_0 are each folded with the integrator (linear in the cross section), then
-    // divided -- averaging the ratio itself would be wrong.  An absolute A_k is a
-    // cross-section-like quantity and takes the plain path (its slot holds a_k A_0).
-    std::vector<double> a0(n), product(n);
-    for (int i = 1; i <= n; i++) {
-      a0[i - 1] = this->GetSubPoint(data, i)->GetAngDistA0(results);
-      product[i - 1] = this->GetSubPoint(data, i)->GetFitCrossSection(results) * a0[i - 1];
-    }
-    const double denominator = FoldValues(*this, data, configure, a0);
-    const double numerator = FoldValues(*this, data, configure, product);
-    this->SetFitCrossSection(results, std::fabs(denominator) > 0.0 ? numerator / denominator : 0.0);
-    return;
+bool Unit::FoldsRatio() const {
+  return kSiteObservables[(int)Observable()].values == 2 || (IsCoefficient() && !GetCoefficientAbsolute());
+}
+
+void Unit::RatioPartsAt(const WorkingCopy &data, int slot, const azure2::Results &results, double &weight,
+                        double &element) const {
+  const Site &site = *GetSubPoint(data, slot);
+  if (kSiteObservables[(int)Observable()].values == 2) {
+    weight = SlotValue(site, slot, results);
+    element = SlotAnalyzingPower(site, slot, results);
+  } else {
+    // A normalised Legendre coefficient a_k: the absolute A_k = a_k A_0 and A_0 are folded (an absolute A_k is a
+    // cross-section-like quantity and takes the plain path).
+    weight = site.GetAngDistA0(results);
+    element = site.ValueFor(*this, slot, results);
   }
-  if (!this->IsAnalyzingPower()) {
+}
+
+void Unit::RatioWeightRoute(int &component, bool &ayCrossSection) const {
+  const bool twoValues = kSiteObservables[(int)Observable()].values == 2;
+  component = twoValues ? 0 : -1;
+  ayCrossSection = twoValues;
+}
+
+void Unit::FoldSubPoints(const WorkingCopy &data, const Config &configure, azure2::Results &results) {
+  if (!this->FoldsRatio()) {
     FoldPoint(*this, data, configure, results);
     this->IntegrateTargetEffectComponents(data, configure, results);
     return;
   }
-  std::vector<double> sigma(n), product(n);
+  const int n = this->NumSubPoints();
+  std::vector<double> weight(n), product(n);
   for (int i = 1; i <= n; i++) {
-    sigma[i - 1] = this->GetSubPoint(data, i)->GetFitCrossSection(results);
-    product[i - 1] = sigma[i - 1] * this->GetSubPoint(data, i)->GetAnalyzingPower(results);
+    double element = 0.0;
+    this->RatioPartsAt(data, i, results, weight[i - 1], element);
+    product[i - 1] = weight[i - 1] * element;
   }
-  const double denominator = FoldValues(*this, data, configure, sigma);
+  const double denominator = FoldValues(*this, data, configure, weight);
   const double numerator = FoldValues(*this, data, configure, product);
   this->SetFitCrossSection(results, std::fabs(denominator) > 0.0 ? numerator / denominator : 0.0);
 }

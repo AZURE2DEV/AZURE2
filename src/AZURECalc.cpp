@@ -408,7 +408,7 @@ void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, WorkingCo
       int nBad = 0;
       double firstBadE = 0.0, firstBadS = 0.0;
       for (int j = 1; j <= pt->NumSubPoints(); j++) {
-        const double sv = pt->GetSubPoint(*ld, j)->GetFitCrossSection(results);
+        const double sv = pt->GetSubPoint(*ld, j)->ValueFor(*pt, j, results);
         if (!std::isfinite(sv) || std::fabs(sv) > 1.0e10) {
           if (!nBad) { firstBadE = pt->GetSubPoint(*ld, j)->GetCMEnergy(); firstBadS = sv; }
           nBad++;

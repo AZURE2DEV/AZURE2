@@ -2,6 +2,224 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (director, 16:14) — merged: observables per mesh energy and reaction, the angle in the reader's row, the lab-frame fold per node (D5)
+
+**Merged** into `feature/upgrade-4-data` and `feature/upgrade` (the branch started from the follow-ups' head, so the
+merge's tree is the branch's plus the director's entries; nothing pushed): `feature/upgrade-5-observables` (five
+entries of the agent below, one per milestone, say what a site holds, what the key is and what went, by file).
+
+**What it is, in four lines.**  A site of the mesh holds the observables of a reaction at one energy without an angle
+(the integrated cross section and Legendre coefficients, the elastic amplitudes, the analysing power's coefficients:
+one table of kinds, `include/SiteObservable.h`); a data point brings its angle in a row (`include/RowSet.h`), and
+points of one block with the same angular identity share the row and the contracted value.  Two data sets of one
+reaction on one mesh share their sites (the key has no segment, no angle, no Legendre order).  A point given at a lab
+angle is folded in the lab: θ_c.m.(E_n; θ_lab) and dΩ_lab/dΩ_c.m.(E_n; θ_lab) at every node (decision D5).
+
+**Verified by the director** (build `work/b-obs5` of the branch's last commit, references `tab-small1c` = the merged
+engine before it and `tab-obs4d` = milestone 4; the new reference of the merged engine is `tab-obs5`).
+- Every project on the three bases (835 / 808 / 835 output files, fresh tag `tab-obs5`): identical to milestone 4's run
+  (`tab-obs4d`) to the byte, the run logs included; against the merged engine before the branch the known set only
+  (T2's `covariance.out` 1.5e-5; six observable files, the largest the `ec_e1m1_phase` case below).
+- Eight fits against the merged engine before the branch: T2 ends at χ² 297.6010 (297.5990 before D5) with
+  `--use-lm`, `--use-gradient` and plain MIGRAD, every parameter within 0.004 of its error, in 64 / 44 / 26 s
+  (88 / 65 / 38 s before); the two 13N fits at the same χ² and parameters to 8 digits; `layer_yield` and the two
+  stopping fits identical.
+- Unit tests 211/211, slow tests 10/10, converter equivalence 184/184, the converted-tree gate without a difference
+  (633 / 606 / 633 files), 1 against 3 threads identical (12 runs and the Markdown projects).
+- `run_tests.sh`: 157 of 158 at the branch's last commit; the one failure was `tests/upgrade`'s comparison of T2 with
+  its golden files (1e-5), which D5 moves by 2.56e-5 and the branch had not re-pinned.  Re-pinned by the director
+  (58c8e96c: segments 2 and 3, the two data sets at a lab angle; χ² 99.168 → 99.1682, 414.736 → 414.728 at the start
+  values, 40.3817 → 40.3825 at the truth; nothing else moves); `tests/upgrade/check.sh` passes with it.
+- Speed (one thread, side by side): `beam_profile_kernel` 5 min 27 s → 16 s and 913 → 134 MB, outputs identical.
+
+**Reviewed, with the director's own runs** (`work/director/obs_review_notes.md`, `work/director/grad_obs5/`,
+`work/director/speed_obs5/`, `work/director/labfold/`).
+- *Milestones 1–3 (rounding only)*, whole tree × 3 bases at each: every number within the rounding class but one file,
+  `ec_e1m1_phase/models/s_1` at 0° and 180°, where an interference of 1e-25 b/sr is the difference of terms of 1e-20
+  (0.43 relative on a number 1e-5 of its neighbours; the same bytes at every later milestone).
+- *Milestone 4 (D5), the one physics change.*  Only T2 and its truth file move: at most 2.6e-5 of a model value,
+  1/1900 of the datum's error.  `tests/lab_frame_fold` (7Li(p,n) at 30° lab, a 300 keV window 0.4 MeV above
+  threshold) run by the director with both builds: the new fold agrees with a brute-force integral of the unfolded
+  engine to 2.2e-5 (the quadrature), the fold before D5 was 2.2e-2 off.  **The agent stopped on the brief's stop
+  condition** (six of T2's 60 points moved by more than ten times the brief's estimate); accepted: the brief's estimate
+  lacked the first-order term s²(ln σ)′(ln f)′, and with it the moves are explained (`energy_grid.md` §4.3, T2's
+  table).
+- *After milestone 4*: the ratio fold and its adjoint (A_y, a normalised coefficient) are one branch each, read from
+  the table (`Unit::FoldsRatio`, `RatioPartsAt`, `RatioWeightRoute`); the director's question about a node beyond the
+  kinematic maximum of a lab angle found an abort (an uncaught exception at set-up when the reach margin of a fitted
+  shift held such a node), now a failed point only for a fold that reads the node (`tests/lab_frame_fold` case (d),
+  run by the director: at offset 0 the folded value is the unshifted one bit for bit; the milestone-4 build fails the
+  case).  Milestone 5 deleted the key's angle and Legendre order and the code that served sites with an angle.
+- *Gradient* (`AZURE_GRAD_CHECK`, the director's runs on the last commit, largest relative difference to central
+  differences): T2 2.6e-6, 13N 2.2e-7, the folded analysing power (`beam_spread_ay`, 202 parameters) 1.7e-7, capture
+  A_y 1.2e-9, the lab-angle fold 3.6e-6, `layer_yield` 2.0e-9.  `AZURE_NODE_CHECK` on T2: 60 readers, 2 row sets, both
+  at a lab angle, 0 differences.
+
+**Corrected here.**  `FOR_THE_OWNER.md` said a lab angle beyond the kinematic maximum inside the window "is refused at
+set-up": since the reach fix it is a failed point (NaN, χ² 1e100, a warning that names the cause and the remedy).
+
+**For the PI and the owner** (behaviour a user sees).  (1) D5: a folded point given at a lab angle changes by the
+window's width times the slopes of the cross section and of the angular factor; small for the tree's data (2.6e-5),
+2 % for a wide window near a threshold.  (2) A window or a shift that reaches an energy where the lab angle does not
+exist gives a failed point with the reason, not a refusal of the file.  (3) An analysing power given at a lab angle
+is still refused by the format (its fold adjoint exists and is untested).  (4) Speed: see the verification paragraph
+(`beam_profile_kernel`, the project with the most angles per energy).
+
+**Open** (carried).  THM on the mesh (`feature/upgrade-5-thm-mesh`, started from this tree): the last data kind with
+a grid of its own; its site must become angle-free first (the key has no angle).  The second batch of follow-ups
+(`feature/upgrade-5-followups-2`): a thin layer with a shift, unknown options, the fallback's gates, a crash of
+gradient fits with a free shift without prior on thin layers, a node budget.  Small: a window that reaches beyond the
+kinematic maximum **without** a shift could be refused at set-up again (clearer than a failed point); a double-valued
+lab angle (two c.m. solutions) takes one branch, as before; a ratio of two coefficient leaves needs a grammar field
+(`experiment/` refuses it).
+
+## 2026-11-12 (agent, Phase 5 branch 9, milestone 5) — the ratio fold from the table, a lab angle beyond the kinematic maximum, the deletions (`feature/upgrade-5-observables`)
+
+**Decision on milestone 4** (the director): the D5 moves are accepted; the estimate of `energy_grid.md` 4.3 now has both
+terms, s²(ln σ)′(ln f)′ + ½ s² f″/f, with T2's table.  `FOR_THE_OWNER.md` says it in plain words.
+**Remark 3, done.**  A ratio observable is folded by one branch, (K·(w r))/(K·w), and differentiated by one branch:
+`Unit::FoldsRatio` (a kind with `values = 2` in the table, or a normalised coefficient), `RatioPartsAt` (weight and
+element of a slot), `RatioWeightRoute` (where the weight's cotangent goes).  Same products in the same order: no number
+moves; the folded A_y variant's gradient lines are identical to milestone 4's.
+**A lab angle beyond the kinematic maximum at a node** (the director's question).  With a fitted shift the block holds
+the shift's reach margin; a margin node beyond the kinematic maximum made `Unit::RowSetOver` throw -- uncaught, the run
+aborted (7Li(p,n) at 30° lab, offset prior 0.3 MeV).  Now such a slot holds NaN angle and J; a fold that reads one is a
+failed point (NaN, the engine's warning: "the lab angle is beyond the kinematic maximum at an energy its fold reads (an
+energy shift or the window reaches there); give the point at a c.m. angle, or narrow the window or the shift's
+prior."), a fold that does not is unaffected.  `tests/lab_frame_fold` case (d) (offset 0: finite; -0.32 MeV: NaN with
+the warning; the milestone-4 build aborts).
+**Untested branch.**  The A_y branch of the fold adjoint at a lab angle (the weight's cotangent divided by J_n) is
+unreached: format 3 refuses an analysing power at a lab angle (`E_NOT_BUILT`), so it is untested.
+**Milestone 5, deleted** (nothing else served the sites with an angle): `SlotGroupKey::legendreOrder` and `angle` (a
+differential site on the mesh has no angle, a scalar site has none, THM -- keyed by angle -- is off the mesh and never
+keyed); `GenMatrixFunc::CalculateAmplitudeMatrix` with its `AZURE2_POL_DEBUG` hook, `CalculateCaptureAnalyzingPower`, the
+local-record path of a differential `kValue` site (now a logic_error), `Site::ContractRecord`, `Site::QLabBoost`.  Kept:
+the points' own Legendre rows and Coulomb amplitude (unfolded points), the slots' entrance symmetry, the leaves' angles
+and `SeparateSlotsByAngle` (THM leaves), `Polarization::AmplitudeMatrix` with an angle (the A_y adjoint).  Lines
+(c8f53adf -> here): src +86 -232, include +28 -49, tests +36 -3, docs +40 -18; the deletion commit alone src +8 -152,
+include +12 -44.  `GenMatrixFunc.cpp` 890 -> 756 lines, `UnitLegendre.cpp` 206 -> 202; the ten largest engine files are
+unchanged but `AZUREGrad.cpp` 1253 -> 1234.
+**Checks.**  Whole tree, Brune, against `tab-obs4d` (tag `obs4-tree-m5`): 835 of 835 files identical; quick set, the
+lab-frame projects, `beam_spread_ay`, `lab_frame_fold` x 3 bases identical to `tab-obs4d`; ctest subset 50/50;
+`AZURE_NODE_CHECK` 13N, natural_neon 0 breaches; `scripts/check.sh --quick` on the last commit (see the report).
+**Speed.**  thick_target_resonance again, 5 alternated rounds (load 15-17): evaluation median 300.3 ms (`b-trial35`)
+-> 302.0 ms (+0.6 %); cross sections 97.5 -> 93.9 ms, matrix fill 22.4 -> 23.4, T-matrix ~150 both: the +4 % of
+milestone 4 was noise.
+**Open for THM on the mesh** (branch 10).  THM sites are `kValue` keyed by their angle (they hold σ_HOES at the point's
+angle), off the mesh with a grid of their own that moves with a shift (the last user of `Unit::CalcNodeRows`' own set
+and of the leaves' angle copying).  On the mesh they would need an angle-free record (the HOES amplitudes per node) and
+a reader row for the THM angular window, as A_y has; until then the key has no angle and must not be asked for THM.
+
+## 2026-11-12 (agent, Phase 5 branch 9, milestone 4) — a point given at a lab angle is folded in the lab (D5); stopped before milestone 5 on a stop condition (`feature/upgrade-5-observables`)
+
+**Merged first** `feature/upgrade-5-followups-1` (only this file conflicted: both sides kept, newest first by commit
+time); quick set x 3 identical to `tab-obs3`, `beam_spread_ay` byte-identical to `tab-obs3`'s `target_effect_ranges`,
+`thin_layer_limit` to `tab-small1c`.
+**Review remarks.**  (1) Check 37 of the consistency test: every field of `TermSettings` is compared in
+`SameObservable` or named in `kReaderOnlyTermSettings` beside it (shown failing with a field added and with `ic`
+dropped).  (2) Adjoint solves per gradient (`AZURE_PROFILE=1`, first gradient of a `--use-gradient` fit, 1 thread,
+`b-trial35` -> this branch): back-propagations T2 2,959 =, 13N 5,327 = (scalar route; 48,531 = on the Jacobian route),
+hybrid_potential 2,472 =; `PointTBar` calls on the scalar route hybrid_potential 112,051 -> 4,884.  (3) not done (the
+A_y and normalised-coefficient folds are still named in `Unit::FoldSubPoints` and `GradTargetEffectAdjoint`).
+(4) Done: one rule for per-slot factors (`RowSet::perSlot`: angle, P_L, Y, P^1; f_C and J always per slot).
+**D5** (`energy_grid.md` 4.3, status there).  A reader whose term's angle is given in the lab
+(`experiment::AngleIsLab`) shares a row set with every reader of its lab angle; the set holds theta_cm(E_n; theta_lab)
+and J(E_n; theta_lab) per slot (`experiment::LabAngleAt`: `ConvertRow` at `BeamLabFromCM` of the node -- a slot's
+"lab energy" field holds its c.m. energy, so it is not read), the contracted value is divided by J_n, the fold is
+multiplied by the point's own frame Jacobian (`Unit::LabFoldFactor`).  Reference leaves the same
+(`FoldReferenceAtPoint`); fold adjoint and A_y adjoint follow.  `Unit::CalcNodeRows` (a set of one's own) is left to
+points with a grid of their own whose slots move with a shift.  A node beyond the kinematic maximum is refused.
+**Moved**: whole tree, Brune, against `tab-obs3` (`work/obs4/cls-tree-m4.tsv`): T2 only (7 files), up to 2.56e-5 of a
+model value; quick set + lab-frame projects x 3 bases the same.  Row sets: T2 60 -> 2, hybrid_potential 2 = 2.
+**Brute force** `tests/lab_frame_fold`: per node 2.2e-5 (quadrature), frozen angle 2.2e-2; milestone 3 fails it.
+**Stop condition met** (not decided here): at 6 of T2's 60 points the move exceeds ten times 1/2 Delta^2 |(ln JP)''|
+(at most 508x at a point where (ln f)'' nearly vanishes, 2.9e-8 against 5.8e-11); the formula lacks the term
+sigma^2 (ln sigma)'(ln f)', which with the second-order term reproduces the 150 deg moves to 0.65-1.12.  Every move is
+below 1/1900 of the datum's error.  Milestone 5 not started because of it.
+**Checks**: build 0 warnings; consistency; ctest subset 50/50 (predictions.txt: the new project's 4 lines);
+check.sh of angle_mapping, convolution_unify, data_covariance, ratio_to_rutherford, relativistic,
+shift_subpoint_angle, target_density, lab_frame_fold; AZURE_NODE_CHECK 0 differ (T2, hybrid_potential, lab_fold);
+AZURE_GRAD_CHECK as milestone 3 (T2 5.23e-6, hybrid_potential 7.25e-7), lab_fold with a free level 2.2e-6, 2.95e-2 with
+the adjoint's J factor dropped (injected once); 1 vs 3 threads identical (T2, 13N, hybrid_potential, lab_fold).
+**Measured** (1 thread, 3 alternated runs, medians, menu 1, `b-trial35` -> this branch; units / evaluation ms / wall s
+/ peak MB; the machine was loaded, load average 10-13): T2 23,673 -> 18,313 / 50.9 -> 48.7 / 0.30 -> 0.26 / 136 -> 129;
+13N 3,825 -> 2,972 / 25.8 -> 23.0 / 8.02 -> 7.99 / 121 -> 119; natural_neon 50,813 = / 418.7 -> 419.4 / 1.34 -> 1.39 /
+340 -> 342; thick_target_resonance 28,924 = / 219.6 -> 228.5 (+4.1 %, alone; +5.0 % beside another run; the milestone-3
+binary measured 372 against 247 in a third round: noise of this load) / 0.83 -> 0.84 / 271 -> 272; hybrid_potential
+4,886 -> 2,473 / 26.7 -> 23.7 / 1.18 -> 1.16 / 106 -> 102; beam_profile_kernel 83,764 -> 3,196 / 467 -> 89 / 369 -> 16.8
+/ 891 -> 131; lab_frame_fold 872 = / 1.1 -> 1.2 / 0.14 -> 0.15 / 95 =.
+**Open.**  The director's decision on the estimate; milestone 5 (deletions) and remark 3; an A_y at a lab angle is
+refused by format 3, so D5's A_y path is not reached by any project.
+
+## 2026-11-12 (agent, Phase 5 branch 9, milestone 3) — shared angular rows, A_y without an angle, sites shared across data sets (`feature/upgrade-5-observables`)
+
+**Row sets** (`include/RowSet.h`).  The readers of one block of angle-free slots that see them under one angle (same
+kind, c.m. and lab angle bits, Q-coefficient effect, entrance pair) share one set of rows over the union of their
+slots: P_L (one row, or one per slot where the Q transform depends on the energy), f_C per slot for elastic data,
+Y_l'^mu and P_k^1 at the angle for A_y.  Built once by `WorkingCopy::BuildRowSets` (set-up; the hand-over when slots
+are placed again); a point whose angle moves with a shift gets a set of its own (`Unit::CalcNodeRows`, not cached).
+The values a reader folds are contracted once per evaluation into `Results::contracted` (the caller's buffer), in one
+pass between the energy pass and the folds (`WorkingCopy::ContractRowSets`, one task per set; `Unit::Calculate` for a
+point on its own), and read by every reader (`Site::SlotValue`, `SlotAnalyzingPower`).  The scalar gradient sums the
+cotangents of the reads of one slot through one set before calling the point adjoint once (`MergeSharedReads`).
+`Site::node_rows_` / `node_coulomb_` are gone.  `CheckReaderRows` checks every reader's set (range, rows, f_C, A_y
+factors) bit for bit; injected once (f_C of every slot at the set's first energy): hybrid_potential "112030 differ".
+**Records sized by the reaction**: the angular capacity is a function of the compound's largest Legendre order and
+amplitude count (`RecordCapacityOf`, `WorkingCopy::Capacity`); the elastic record is packed after its counts; scale and
+poison are entries of the table of kinds (no branch per kind left in `ScaleObservable` / `PoisonObservable`).
+**A_y** (`SiteObservable::kAnalyzingPower`, layout `ay_record` in `SiteObservable.h`): the site holds the cross
+section's record (elastic or Legendre, the formula of every other point) and A_y's coefficients -- for a particle exit
+C(a, l') = sum i sqrt(2l+1) cg cg T identical (the AddPathway loop accumulated per exit l',
+`AmplitudeMatrix::AddPathwayCoefficients`), for capture the Seyler-Weller d_k, n_k summed per order.  The contraction
+assembles the amplitude matrix from C and the row's Y and calls the unchanged `AnalyzingPowerAy()`; the adjoint
+builds the matrix at the reader's angle with the reader's f_C at the slot (`AnalyzingPowerBar`, `PathwayAdjoint` with
+Y from a `HarmonicTable`).  One kind with two forms (particle, capture), chosen by the exit pair at the writer: the
+term settings do not know the exit's type.
+**The key** (`SlotGroupKey`): the term settings the energy pass reads (`SameObservable`, TermSettings.h), the mesh, the
+target's line (`TargetEffect::GetLineNumber`: the per-segment copies of one target line share its parameters, hence the
+slots' stopping), the stopping conversion, frame shift, screening; no segment, no nominal energy.  The hand-over
+re-places a shared block once with the readers of every term.  Deleted: `SlotGroupKey::nominalEnergy`,
+`Segment::ReangleSlots`, the lab-frame exception of `FoldOnlyShift` (no shift column recomputes node values now).
+**What else is per (E_n, r) already**: phase shifts and total sigma are scalars of the reaction (kValue; the key's
+settings hold J, l, s); beta-delayed spectra are angle-integrated (kValue); external-capture amplitudes are per site
+energy and reaction.  THM stays kValue keyed by angle, off the mesh (branch 10).  kValue now means a scalar at E_n or THM.
+**Numbers.**  Quick set + 13 neighbours x 3 bases against `tab-trial35`: identical as printed except the known
+`sum_lab_frame` chi^2 noise, `ec_e1m1_phase` (as milestone 2), run.log counts (`beam_profile_kernel` as before; 13N
+external-capture integrals 28,384 -> 21,560: its two capture sets share sites), and `angle_mapping` A_y of 8e-8 at
+low energy, 163 numbers by at most 2.2e-10 relative: A_y there is a 1e-7 difference of O(1) amplitude products, so
+rounding of 1e-16 in the amplitudes moves it by up to ~1e-9 of itself; the sum over pathways now runs before the
+multiplication by Y.  A folded A_y variant of 13N (target on two baumann sets; `work/obs/m3/ayfold`): every output
+file byte-identical to `b-trial35`, 49 readers' rows checked.
+**Sharing.**  hybrid_potential: meyer_84 and meyer_114 read one block of 2413 slots (before 2 blocks, 4826), numbers
+identical; `tests/upgrade/node_check.sh` asserts it (fails with the copy number in the key: "2 blocks, 4826 slots").
+**Measured** (1 thread, 3 alternated runs, medians, menu 1, base `b-trial35`; units / evaluation ms / peak MB):
+hybrid_potential 4,886 -> 2,473 / 23.3 -> 22.6 / 106 -> 101; T2 23,673 -> 18,313 / 58.9 -> 55.0 / 136 -> 129; 13N
+3,825 -> 2,972 / 22.2 -> 21.2 / 121 -> 119; natural_neon 50,813 = / 453 -> 444 / 340 -> 342; thick_target_resonance
+28,924 = / 181.7 -> 180.1 / 271 -> 272; beam_profile_kernel (16 data sets of one reaction now share their sites)
+83,764 -> 3,196 / 355 -> 82 / 891 -> 131, wall 331 -> 16.5 s; 13N_capture_ay 108 = / 0.9 -> 0.7 / 99 =.  1 against 3
+threads: hybrid_potential, T2, 13N, beam_profile_kernel identical (every output file).  (Row sets alone, before the key change: hybrid 21.9 -> 22.7 ms, 106 = MB.)
+The project with the most angles per energy is 13N (38 A_y angles at 1.738 MeV, unfolded; script
+`work/obs/m3/scripts/angles_per_energy.py`); unfolded points gain nothing from row sets.
+**Gradient** (`AZURE_GRAD_CHECK`, same agreement as `b-trial35`): 13N_capture_ay fd 7.2e-10, folded-A_y 13N 6.7e-8,
+hybrid_potential 7.25e-7 (with shared sites), T2 5.23e-6.
+**Extensibility.**  (a) A new observable of a reaction (a tensor analysing power): a kind and its layout
+(`SiteObservable.h`), its table row (slots, contraction, values, scale, poison) and `ObservableOf`
+(`SiteObservables.cpp`), its writer branch (`GenMatrixFunc::CalculateBareCrossSection` + a coefficients function),
+its adjoint branch (`AMatrixFunc::PointTBar`); new angular factors in `RowSet.h` / `Unit::RowSetOver`.  More than one
+row because a ratio observable's fold (`Unit::FoldSubPoints`) and its fold adjoint (`AZUREGrad.cpp`) are written for
+A_y by name, and a term flag needs a field in TermSettings and a quantity in `experiment/`.  (b) A new angular
+dependence (a detector's solid angle): the row builder `Site::LegendreRowAt` (with its effect) and the row identity
+(`RowIdentity`, WorkingCopyUnits.cpp).  (c) A ratio of two coefficient leaves: the engine reads coefficient leaves
+already (`Site::ValueFor`), but `experiment/` refuses it: "quantity 'legendre' with Ratio(...): takes one reaction, not
+a ratio" (E_REACTION_NOT_ALLOWED), and one order column serves both leaves, so B_2(R1)/B_0(R2) cannot be written --
+a grammar change (a new field), outside this branch.
+**Ran**: build 0 warnings; consistency test; `ctest -R "experiment|kernels|grad|upgrade_plan|upgrade_node|upgrade_mesh|
+consistency|results_owner|history|ay|polariz|shift"` 48/48; `AZURE_NODE_CHECK` (node_check, 13N) and
+`AZURE_PLAN_CHECK` (13N: 0 differ); `scripts/check.sh --quick` (JOBS=2) on the last code commit: 210/210.  Not run:
+the whole tree, `run_tests.sh`, the gate, the eight fits.
+**Open.**  Milestones 4 (D5) and 5 not started.  The A_y and coefficient-ratio folds are named per observable
+(see (a)).
+
 ## 2026-11-12 (director, 13:35) — merged: six follow-ups (thin layers, the local shift column, value flags, a rename, two tests)
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (the branch started from the integration head, so the
@@ -86,6 +304,69 @@ the gradient's finite-difference fallback are listed in the report (formal-basis
 `--ignore-externals` projectors, `--use-rmc`, a few observable gates in `AMatrixFunc::PointTBar`); not tested one by one.
 An unknown option is still only a warning.
 
+## 2026-11-12 (agent, Phase 5 branch 9, milestone 2) — elastic scattering: a site holds the elastic amplitudes, the reader applies f_C and its row; one table of observable kinds (`feature/upgrade-5-observables`)
+
+**Merged first** `feature/upgrade-5-shift-kernel` (e97e06c4: the translated stopping's clamp, the external-capture
+branch of `ReplaceSubPointGrids`); quick set against `tab-trial35` identical as printed but the `sum_lab_frame` noise.
+**One table.**  `include/SiteObservable.h`: `enum class SiteObservable {kValue, kLegendre, kElastic}`, `ObservableOf`
+(the one classification of a term, replacing the predicate `Site::HoldsLegendreCoefficients`) and `kSiteObservables`
+(`src/SiteObservables.cpp`): per kind the slots of the record's angular part and the contraction a reader applies
+(`Site::ValueFor` is one line through the table).  `Site::AngleFree()` (kind != kValue) is what the sharing key, the
+slots' set-up, the leaves, the shift and the gradient ask.  The record functions moved there from `Unit.cpp`.
+A new kind: its row, its branch in `GenMatrixFunc::CalculateBareCrossSection`, its adjoint in `PointTBar` (recipe in
+`CLAUDE.md`, "An observable of a reaction at a mesh energy").
+**What an elastic site holds** (kElastic: differential elastic data; elastic angular distributions stay kLegendre):
+B_L^NN (b/sr, s = 4 for identical pairs, from `LegendreCoefficientsOf`), c_0 = geom/100, c_x = 2 c_0 (-1)^(2j)/(2j+1)
+(identical pairs with spin), and D_l, X_l (complex) = (i geom f_it / (100 sqrt pi)) sum_s [1, (-1)^s] c_{s,l} from the
+Coulomb-nuclear sums `rt_it_` (`GenMatrixFunc::ElasticCoefficientsOf`; layout `elastic_record` in the header; 108
+slots).  dsigma/dOmega = c_0 (|f_d|^2 + |f_x|^2) + c_x Re(f_d f_x*) + sum B_L P_L + Re sum (f_d D_l + f_x X_l) P_l.
+No angle.  **The reader** holds f_C: its own (`Site::CoulombAt(0)`), or per slot `Site::node_coulomb_` beside
+`node_rows_` (`Unit::CalcNodeRows`, at the reader's angle and each slot's energy; recomputed where `node_rows_` is: set-
+up, the hand-over's moved tasks only, an angle moved by a shift); `Site::CoulombAmplitudesAt` is the one formula (also
+`CalcCoulombAmplitude`'s).  A slot without an angle computes no Coulomb amplitude and no Legendre rows.  The Rutherford/
+Mott leaf takes the point's angle at each slot's energy (`CoulombReference.cpp`).  kValue differential sites (A_y,
+THM) contract the same coefficients with their own row on a local record (`Site::ContractRecord`): one formula.
+**Deleted** in `GenMatrixFunc.cpp` (-199/+61 lines with the new writer): the per-site differential sum — the
+per-interference loop with the unreachable `angularCoeff` accumulation (118 lines), the per-site CT/RT/IT and its
+uncached Coulomb branch, `rt_it_built_`.  `Unit.cpp` -56 (moved).  Folders: src +353/-317, include +129/-22 (new files
+included).  **Still keyed by angle**: A_y (and THM, off the mesh).  Their users keep `SlotGroupKey::nominalEnergy`,
+`Segment::ReangleSlots` and the solving shift column (`FoldOnlyShift` false): lab-frame folded A_y with a shift
+(13N's baumann, electron_screening).  `legendreOrder` of the key is now always -1 (coefficient sites are kLegendre).
+**A test that catches a wrong row**: `AZURE_NODE_CHECK` now checks every reader of angle-free slots: its row and
+Coulomb amplitudes at each slot equal `LegendreRowAt`/`CoulombAmplitudesAt` at the slot's energy, bit for bit
+(`WorkingCopy::CheckReaderRows`, a line per check; `tests/upgrade/node_check.sh` adds hybrid_potential, folded elastic).
+Injected once (rows and f_C at the point's energy in `CalcNodeRows`): T2 fit "60 readers, 8132 slots, 8132 differ",
+hybrid_potential "112032 differ", both abort; removed.
+**Ran** (build 0 warnings; `b-obs`): consistency test; `ctest -R "experiment|kernels|grad|upgrade_plan|upgrade_node|
+upgrade_mesh|consistency"` 35/35 (node check as above, AZURE_PLAN_CHECK in upgrade_plan_runtime); quick set + target_
+density, angle_mapping, hybrid_potential, electron_screening, data_covariance, ec_e1m1_phase, beam_profile_kernel x 3
+bases against `tab-trial35`: identical as printed except `sum_lab_frame` (chi^2 4e-17 noise) and `ec_e1m1_phase`
+(the named cancellation: 12 numbers, 8 Park, -1.5e-25 -> -2.1e-25 b/sr at 0/180 deg beside 1.6e-9, as milestone 1);
+`beam_profile_kernel` run.log: 1,089,452 -> 42,068 capture integrals (milestone 1's gain).  AZURE_GRAD_CHECK against
+`b-trial35`, identical chi^2 and agreement: 13N elastic only (meyer 84/114/144, 14 free; fd 5.86e-7, Jacobian 8.9e-16),
+hybrid_potential (folded elastic, 14 free; 7.25e-7, 5.2e-16), T2 (5.23e-6), 13N (6.16e-8), layer_yield/models fit
+(3.98e-9), 13N_capture_ay (7.19e-10).  1 vs 2 threads: T2, 13N, hybrid_potential, ratio_to_rutherford identical.
+**Measured** (1 thread, 3 alternated runs, medians, menu 1, base `b-trial35`; units / evaluation ms / wall s / peak MB):
+T2 23,673 -> 21,085 / 46.4 -> 46.2 / 0.27 -> 0.27 / 136 -> 133; 13N 3,825 = / 19.4 -> 20.3 / 6.92 -> 6.89 / 121 = ;
+natural_neon 50,813 = / 375.8 -> 368.2 / 1.21 -> 1.20 / 340 -> 342; thick_target_resonance 28,924 = / 151.7 -> 151.6 /
+0.56 = / 271 -> 272; ratio_to_rutherford aC_data 56 = / 0.1 -> 0.2 / 0.06 = / 95 -> 93; hybrid_potential 4,886 = /
+21.6 -> 26.0 (+20 %; first round 20.0 -> 26.2) / 1.01 = / 106 -> 112.  The hybrid_potential loss: its 76 readers
+already shared one angle (4,826 slots, 112,032 reads), so a slot held one finished number; now each read contracts
+the record (B_L, D_l with the reader's row and f_C) in the fold and again in the model pass, and the record (108
+slots per site) and the per-slot f_C (3.6 MB) are new.  13N gains nothing: its 38-angle sets are A_y (milestone 3),
+its elastic data are excitation functions at three angles, unfolded.
+**Open.**  A memo of the contraction per (block, reader row) would remove the hybrid_potential loss where readers
+share an angle.  Milestone 3 not started (see the report): capture A_y has the Legendre cut (Seyler-Weller a_k, b_k);
+particle A_y (the amplitude matrix, `Polarization::AmplitudeMatrix`, with f_C) has no per-order form in the code.
+`scripts/check.sh --quick` (JOBS=1) on 879f5f68: 210/210 tests pass.  Not run: the whole tree, `run_tests.sh`, the gate,
+the eight fits, 1 vs 3 threads (the budget is 2).
+**Next (milestone 3).**  (1) Key without the segment: `MeshGroupKey` holds `term.segment`; what the writer reads from
+the settings must replace it (reaction pair keys, UPOS secondary L, I_c, delta, the E1/E2 component, THM/phase/total are
+kValue).  (2) Capture A_y: a kind holding B_L and the Seyler-Weller numerator per order (`CaptureAyTerm` ak, bk), reader
+P_L^1 rows.  (3) Particle A_y (`Polarization::AmplitudeMatrix`, Y_lmu at the point's angle, f_C) has no per-order
+form: a P_L^1 expansion would be a second derivation (a stop condition of the brief); it stays kValue and keeps
+`nominalEnergy`, `ReangleSlots` and the solving shift column for its lab-frame shifted segments.
+
 ## 2026-11-12 (director, 10:20) — merged: folded data with an energy shift on the fixed nodes of the shared mesh
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (one merge commit, tree of `rehearsal/trial35`; nothing
@@ -145,6 +426,61 @@ not written.  `pyazr_shift_fn` fails under `AZURE_NODE_CHECK=1` (`residual_jacob
 branch too; not investigated.  `pyazr_shift_fold_ec` checks that χ² is finite and returns; the comparison with the
 exactly planned shift (above) should become one of its checks.  Carried: the silent zero of a layer below 1 eV, the
 near-copy loops of `SetUpTargetEffects`, `park_chi2_fallback`, the name of `tests/target_effect_ranges`.
+
+## 2026-11-12 (agent, Phase 5 branch 9, milestone 1) — non-elastic angular data: a site holds Legendre coefficients, the point's row applies the angle (`feature/upgrade-5-observables`)
+
+**What a site holds now.**  A site of a differential term of a reaction whose exit pair is not its entrance pair,
+or of any angular-distribution / Legendre-coefficient term (`Site::HoldsLegendreCoefficients`), holds in the angular
+part of its record the coefficients B_0 .. B_{K-1} (b/sr) of dsigma/dOmega_c.m. = sum_L B_L P_L(cos theta) at its
+energy (K = the exit's `num_orders`, at most `Config::maxLOrder` + 1 = 21 slots), and for an angular distribution
+A_0 = sigma_int / 4 pi.  No angle.  The cut is where it was in today's sums: `GenMatrixFunc::BuildOrderProducts`
+(the per-order products Z T1 T2* of the pathway table that the differential sum already summed once per T-matrix,
+`rt_wl_`), scaled by geom I1I2 s / (100 pi) in `GenMatrixFunc::LegendreCoefficientsOf`; the UPOS weights
+(Z_upos sqrt(2L+1)/4 R_L) are per order too.  No second formula: the external-capture interferences (ER, RE, EE)
+are in the same per-order list.  s = `LegendreSymmetryFactor` (4 elastic identical, 2 another exit of an identical
+entrance, else 1); a_k A_0 = B_k / s (`Site::CoefficientOfOrder`).
+**The row.**  A point reads a site through `Site::ValueFor(reader, slot, results)`: sum_L B_L RowP(slot, L) for
+differential data, B_k / s (absolute) or B_k / (s A_0) (normalised) for a coefficient datum of order k.  The row is the
+point's own Legendre rows (with its Q coefficients), or, where the detector's lab transform of the Q coefficients
+makes the row depend on the energy (particle exit, not UPOS / A_y / charged elastic: `Site::RowDependsOnEnergy`), the
+point's rows at the energies of its slots (`Unit::CalcNodeRows`, `Site::node_rows_`, computed from
+`Site::LegendreRowAt`, the former body of `CalcLegendreP`).  They are recomputed when the point's angle moves with a
+shift (`ShiftFrames.cpp`) and for the points whose slots were placed again (`HandOver.cpp`,
+`WorkingCopy::CalcNodeRows`).  Readers: the fold (`PointFold.cpp`), the coefficient and A_y folds (`PointPass.cpp`),
+the transform terms (`ModelPass.cpp` `LeafValue`), the model record's a_k (`Unit::CopyAngularDistsToModel`), the
+gradient (`UnitCotangent::rows`, `rowSlot`; `AMatrixFunc::PointTBar(..., rows, rowSlot)` takes the Legendre rows and
+coefficient order from the reader).
+**The key** (`MeshGroupKey`) has angle 0, Legendre order -1 and no nominal energy for these groups; slots get no
+Legendre rows and no order (`BelongToRowOf`); `ReangleSlots` is not called for them and the shift column of a
+lab-frame segment of them refolds on the fixed nodes (`FoldOnlyShift`); leaves of them are not separated by angle.
+`CheckSlotGroups` knows the angle-free key.  Electron screening scales the coefficients (`ScaleLegendreCoefficients`).
+A failed site has NaN coefficients (`MarkFailed`).
+**Deleted / unreachable.**  The record write of normalised a_k (`SetAngularDists`) is gone; the angular-distribution
+part of the old interference loop (`angularCoeff`) is unreachable and goes with milestone 5.  Model records size
+from `ModelAngularCapacity` (unchanged), site records from `ResultAngularCapacity` (the coefficients).
+**Largest difference.**  Quick set (T1, T2, T3, 13N, natural_neon, thick_target_resonance, layer_yield/models,
+angular_coefficients, 13N_capture_ay, ratio_to_rutherford, sum_lab_frame; three bases) against `tab-trial34`: every
+file identical as printed except `sum_lab_frame/models/{sum_data,sum_free}` chiSquared.out / run.log, chi^2 =
+3.99e-17 (data equal to the model, rounding noise) moving by up to 5.0e-6 of itself (2e-22 absolute), the case the
+lab-frame branch listed.  A first version that read the point's row at its own energy instead of the node's moved
+T2 s02/s03 (Q attenuation on 15N(p,a)) by 5.1e-7 relative in 119 numbers: the per-node row above removes it.
+**Ran.**  Build 0 warnings; consistency test; `ctest -R "experiment|kernels|grad|upgrade_plan|upgrade_node|
+upgrade_mesh|consistency"` (all pass, upgrade_plan_runtime and upgrade_node_check run AZURE_PLAN_CHECK=1 and
+AZURE_NODE_CHECK=1); `check.sh` of angular_coefficients, ratio_to_rutherford, sum_lab_frame pass; AZURE_GRAD_CHECK on
+T1, T2, T3, 13N, layer_yield/models/fit, 13N_capture_ay: the same chi^2, fd and Jacobian agreement as the base build.
+Injected once: every coefficient reader reading order 0 -> angular_coefficients fails 5 checks (data, shift, conv,
+gradient); removed.
+**Measured** (1 thread, 3 alternated runs, medians, menu 1, against `b-trial34`): T2 units of the energy pass
+23,673 -> 21,085, evaluation 60.4 -> 57.5 ms, wall 0.36 -> 0.34 s, peak 136 -> 133 MB; 13N, natural_neon,
+thick_target_resonance: units unchanged, wall and peak within 1 %.
+**Not run.**  The whole tree, `run_tests.sh`, the gate, the eight fits, 1-vs-3-thread comparison (1 vs 2 threads,
+the budget: T2, 13N, angular_coefficients menu 1 identical).
+**Stopped here** (context of the session): milestones 2-5 not started.  Still keyed by angle: elastic differential
+data (Coulomb amplitude and Legendre rows on the site), A_y data, phase shifts, total, THM.  Their users keep
+`SlotGroupKey::nominalEnergy`, `Segment::ReangleSlots` and the recomputing shift column (`FoldOnlyShift` false):
+lab-frame differential elastic segments with a shift.  Next: milestone 2 (elastic: B_L^NN with s = 4 for identical
+pairs is already what `LegendreCoefficientsOf` gives for an elastic angular distribution; the Coulomb-nuclear terms
+rt_it_ per (s, l) go in the record, f_C per reader and slot beside `node_rows_`).
 
 ## 2026-11-12 (agent, Phase 5 branch 8) — folded data with an energy shift on the fixed nodes of the shared mesh (`feature/upgrade-5-shift-kernel`)
 

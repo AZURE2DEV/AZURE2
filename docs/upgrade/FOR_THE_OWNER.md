@@ -181,6 +181,17 @@ refused at once with the engine's message. An edit changes only the lines it tou
     reading (`E_THM_OLD_LIST`): in format 3 the data sets name their experiment;
   - a laboratory-frame differential point at the kinematic limit (dΩ_lab/dΩ_c.m. ≤ 10⁻⁶) is refused at set-up
     (`E_LAB_JACOBIAN_AT_LIMIT`); without the refusal such a point gave χ² of 10¹⁷.
+  - a point given at a lab angle with a resolution or a target effect (a target, a beam spread, a detector
+    resolution) is folded at the lab angle (decision D5, 2026-11-12, observables branch): inside the window the c.m.
+    angle and dΩ_lab/dΩ_c.m. follow the energy, where before every energy of the window took the point's own c.m.
+    angle and Jacobian.  The largest move in the test tree is T2's (15N(p,α) at 150° lab, a 2 keV beam spread):
+    2.6 × 10⁻⁵ of a model value, 1/1900 of the datum's error.  The move grows with the window's width times the slope
+    of the cross section across it (and the slope of the angle): for a 300 keV resolution 0.4 MeV above the 7Li(p,n)
+    threshold at 30° lab the old fold was 2.2 % off (`tests/lab_frame_fold`, checked against a brute-force integral of
+    the unfolded cross section).  Elastic scattering moves only by rounding (its c.m. angle at a fixed lab angle does
+    not depend on the energy without relativistic kinematics).  Where the window, or a fitted energy shift, reaches
+    an energy at which the lab angle is beyond the kinematic maximum, the point fails with a warning that names the
+    cause and the remedy (the model is NaN and χ² is 10¹⁰⁰); the file is not refused.
 
 ## Speed
 
@@ -352,10 +363,17 @@ failed point, in work); a command-line flag that takes a value and gets none or 
 line and exit code 2, where it was a warning; the Jacobian's shift column of a summed data set with a shift of its own
 moves every term (it moved the first only). No number of the test tree moved.
 
-In work now: the engine stores, per mesh energy and reaction, the observables without the angle (integrated cross
-section, Legendre coefficients, elastic amplitudes), and a data point's angle enters only in its own row; twenty
-angles at one energy then share one sum over pathways, two experiments on the same reaction share everything, and a
-lab-frame point is folded with the c.m. angle and Jacobian of each node. Merged in the earlier batch: one generic kind of fit parameter for the parameters of
+**Observables without the angle (merged 2026-11-12).** The engine stores, per mesh energy and reaction, the
+observables without the angle (integrated cross section, Legendre coefficients, elastic amplitudes, the analysing
+power's coefficients: one table of kinds), and a data point's angle enters only in its own row. Twenty angles at one
+energy share one sum over pathways, and two experiments on the same reaction share everything up to the row. Numbers
+moved by rounding only, with one named physics change: a point given at a lab angle is folded in the lab (the list
+of behaviour changes above; T2 moves by 2.6 × 10⁻⁵). Measured: the project with the most angles per energy (`beam_profile_kernel`) runs in 16 s instead of 5 min 27 s and in 134 MB instead of 913 MB at one thread, and the T2 fits are about 30 % faster. A new observable is six named places
+(`CLAUDE.md`, the recipe), a new ratio observable needs no fold code.
+
+In work now: Trojan-horse data on the shared mesh (the last kind of data with energy grids of its own), and a second
+batch of small follow-ups (thin layers with an energy shift, unknown command-line options, a limit on the size of a
+mesh). Merged in the earlier batch: one generic kind of fit parameter for the parameters of
 apparatus effects (see "How to add a feature now").
 
 **Do the checks still test what they say? (merged 2026-11-11, evening.)** A regression check that edits a project's

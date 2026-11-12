@@ -14,3 +14,8 @@ re-pinned: calc_start and calc_truth, files AZUREOut_aa=1_R=2.out and chiSquared
   (regen_compare.py --regenerate --only calc_start --only calc_truth): the shifted folded segments 1-4 fold on the
   fixed nodes of the shared mesh (include/ShiftedFold.h), and their widened supports move the mesh of segments 5-6 too;
   per-file quadrature against the refined engine (docs/upgrade/energy_grid.md section 7.1).
+re-pinned: calc_start and calc_truth, files AZUREOut_aa=1_R=2.out and chiSquared.out only, 2026-11-12 with the engine of
+  feature/upgrade-5-observables 37210689 (build work/b-obs5), --no-coulomb-table, OMP_NUM_THREADS=2
+  (regen_compare.py --regenerate --only calc_start --only calc_truth): the two data sets at a lab angle (segments 2 and
+  3, 90 and 150 deg lab) are folded in the lab, with the c.m. angle and the Jacobian of every node (decision D5,
+  docs/upgrade/energy_grid.md section 4.3); their model values move by at most 2.6e-5 relative; nothing else moves.

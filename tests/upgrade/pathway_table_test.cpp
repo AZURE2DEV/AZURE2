@@ -7,8 +7,8 @@
 //    row of the same entrance whose exit pair is the final channel's pair, also by its (exit, k, m) position;
 //  - every interference, interference pathway and diagonal pathway names rows that exist, with the stated kind;
 //  - for a photon exit, a_k = 4 Z1Z2 for the pathway pairs of one spin group: the Legendre coefficient of Seyler and
-//    Weller's Eq. (20) is the unpolarized coefficient of the differential cross section (CalculateCaptureAnalyzingPower
-//    states the relation); every (k, L, m1, m2) with an interference has its capture-A_y term and the converse.
+//    Weller's Eq. (20) is the unpolarized coefficient of the differential cross section (the capture
+//    A_y record of GenMatrixFunc::AnalyzingPowerCoefficientsOf states the relation); every (k, L, m1, m2) with an interference has its capture-A_y term and the converse.
 // Arguments: .azr files or directories (every *.azr below, outside output/ and the converter's fixtures, which the
 // engine refuses), loaded as pathways_from_cnuc_test does
 // (every particle and beta pair an entrance, capture A_y requested for every photon exit), Brune basis.

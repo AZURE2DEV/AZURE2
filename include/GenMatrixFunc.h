@@ -3,11 +3,12 @@
 
 #include "Constants.h"
 #include "Config.h"
+#include "Site.h"
 
 #include <cstring>
 #include <string>
+#include <vector>
 
-class Site;
 class CNuc;
 namespace azure2 {
 struct Results;
@@ -82,35 +83,6 @@ class GenMatrixFunc {
   /// The observable without electron screening.
   void CalculateBareCrossSection(Site *, azure2::Results &results);
 
-  /*!
-   * Spin-summed |M|^2 from the channel-spin amplitude matrix, and the vector
-   * analyzing power, for one point.
-   *
-   * Built from the same T-matrix elements CalculateCrossSection uses, by the
-   * independent route of Seyler Eq. (4) rather than the Blatt-Biedenharn
-   * contraction. Returns false when the point has no pathway, or when the
-   * entrance is not a particle channel.
-   *
-   * The spin sum is returned without AZURE2's geometrical and unit factors, so
-   * it is proportional to the differential cross section rather than equal to
-   * it. That is enough for the check that matters: at fixed energy the ratio to
-   * the existing cross section has to be constant in angle, which is what pins
-   * down the coupling order and the choice of l versus l'.
-   */
-  bool CalculateAmplitudeMatrix(Site *point, double *spinSum, double *analyzingPower);
-  /*!
-   * Vector analyzing power of a capture reaction, from the Legendre
-   * coefficients of R. G. Seyler and H. R. Weller, Phys. Rev. C \b 20 (1979)
-   * 453, Eqs. (20) and (21):
-   * \f$A_y = \sum_k b_k P_k^1(\cos\theta) / \sum_k a_k P_k(\cos\theta)\f$.
-   * The coefficients are the exit's capture-A_y rows of the pathway table,
-   * built at set-up for the reactions the data sets name; the T-matrix
-   * elements are the ones this object has already computed, external capture
-   * included.  Returns false for anything that is not a photon exit channel;
-   * throws when the exit's terms were not requested.
-   */
-  bool CalculateCaptureAnalyzingPower(Site *point, const azure2::Results &results, double *unpolarized,
-                                      double *analyzingPower);
   /// Start a temporary T-matrix element for a \f$J,l,l'\f$ combination.
   void NewTempTMatrix(TempTMatrix);
   /// As NewTempTMatrix, for the E1 component kept separately.
@@ -208,8 +180,22 @@ class GenMatrixFunc {
     complex c;
   };
   std::vector<CoulombTerm> rt_it_;
-  bool rt_it_built_ = false;
   void BuildCoulombInterference(const azure2::EntrancePathways &P, const azure2::ExitRow &exit, bool elastic);
+  /// rt_wl_ (and for elastic scattering rt_it_) for the T-matrix held now, once per T-matrix.
+  void BuildOrderProducts(const azure2::EntrancePathways &P, const azure2::ExitRow &exit, bool particleExit, bool elastic);
+  /// The record of an analysing power at the T-matrix held now (SiteObservable.h, ay_record): the cross section's
+  /// coefficients and A_y's -- the amplitude matrix's per exit orbital momentum (Polarization::AmplitudeMatrix::
+  /// AddPathwayCoefficients) for a particle exit, Seyler and Weller's per order for capture.
+  Site::AnalyzingPowerCoefficients AnalyzingPowerCoefficientsOf(const Site *point, const azure2::EntrancePathways &P,
+                                                                const azure2::ExitRow &theDecay, int aa,
+                                                                int exitPairNum);
+  /// The observables of elastic scattering of `point`'s pair `aa` at its energy (SiteObservable::kElastic).
+  Site::ElasticCoefficients ElasticCoefficientsOf(const Site *point, const azure2::EntrancePathways &P,
+                                                  const azure2::ExitRow &exit, int aa);
+  /// The Legendre coefficients B_L (b/sr) of dsigma/dOmega_c.m. of `point`'s reaction at its energy (for elastic
+  /// scattering the nuclear amplitude's part).
+  std::vector<double> LegendreCoefficientsOf(const Site *point, const azure2::EntrancePathways &P,
+                                             const azure2::ExitRow &exit, int aa, int exitPairNum);
   std::vector<TempTMatrix> temp_t_matrices_;
   std::vector<TempTMatrix> temp_t_matrices_E1_;
   std::vector<TempTMatrix> temp_t_matrices_E2_;

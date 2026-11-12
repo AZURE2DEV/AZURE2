@@ -143,36 +143,24 @@ void Segment::UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, CNuc *
               effect = te;
             }
           }
-          // the point alone: its slots are re-angled (ReangleSlots) or moved (MoveOwnGridSlots) below
+          // the point alone: its row follows its angle, its own grid is moved (MoveOwnGridSlots) below
           point->OwnSite().CalcLegendreP(&data, configure->maxLOrder, theCNuc, effect);
         }
         const ChannelRowSource rows = ShiftRowSource(state.terms[t], i);
         point->OwnSite().RecalcEDependentValues(&data, theCNuc, *configure, &rows);
-        if (data.Data().GridSpecOf(*point).mesh >= 0) {
-          // On the shared mesh the nodes stay and the kernel moves with the point (ShiftedFold.h): only the c.m. angle
-          // of a lab-frame differential point, converted above at its shifted energy, reaches its group's sites.
-          if (this->IsDifferential() && !this->IsCMDifferential()) ReangleSlots(data, t, *point, theCNuc, *configure);
-        } else {
+        // On the shared mesh the nodes stay and the kernel moves with the point (ShiftedFold.h): its row set does not
+        // depend on the shift (the c.m. angle of a point given at a lab angle is the row set's at each node, a function
+        // of the node's energy and the lab angle: RowSet.h).  A grid of its own moves with the point: its rows at its
+        // slots' new energies, a set of its own (Site::RowP).
+        if (data.Data().GridSpecOf(*point).mesh < 0) {
           MoveOwnGridSlots(data, t, *point, theCNuc, *configure, rows);
+          const TargetEffect *te = this->IsTargetEffect() ? data.Data().GetTargetEffect(this->TermTargetEffectNum(t)) : nullptr;
+          const azure2::experiment::FrameRule rule = this->TermFrameRule(t, entrancePair, exitPair);
+          point->CalcNodeRows(data, configure->maxLOrder, theCNuc, (te && te->IsQCoefficients()) ? te : nullptr,
+                              azure2::experiment::AngleIsLab(rule) ? &rule : nullptr);
         }
       }
     }
-  }
-}
-
-void Segment::ReangleSlots(WorkingCopy &data, int t, Unit &point, CNuc *theCNuc, const Config &configure) const {
-  const TargetEffect *te = this->IsTargetEffect() ? data.Data().GetTargetEffect(this->TermTargetEffectNum(t)) : nullptr;
-  const TargetEffect *qEffect = (te && te->IsQCoefficients()) ? te : nullptr;
-  const double angle = point.GetCMAngle();
-  for (int j = 1; j <= point.NumSubPoints(); j++) {
-    if (!data.WritesSlot(point, j)) continue;  // its writer, a point of the same nominal energy, re-angles it
-    Site *slot = point.GetSubPoint(data, j);
-    if (slot->GetCMAngle() == angle && slot->GetLabAngle() == angle) continue;
-    slot->SetLabAngle(angle);
-    slot->SetCMAngle(angle);
-    slot->ClearLegendrePolynomials();
-    slot->CalcLegendreP(&data, configure.maxLOrder, theCNuc, qEffect);
-    slot->CalcCoulombAmplitude(&data, theCNuc);
   }
 }
 

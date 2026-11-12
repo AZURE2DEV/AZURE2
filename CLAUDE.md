@@ -234,6 +234,20 @@ section (check 34).
    from `pyazr/data/mass_1.mas20` (`pyazr.masses`; the engine's THM nuclei are generated from it and checked by
    `pyazr_thm_nuclide_masses`).
 
+**An observable of a reaction at a mesh energy** (what a site's record holds; `include/SiteObservable.h`).
+1. A kind in `SiteObservable` and its row in `kSiteObservables` (`src/SiteObservables.cpp`: the record's slots and the
+   contraction with a reader's row, `Site::ValueFor`); `ObservableOf` names the terms of that kind.
+2. Its formula at E_n, one branch of `GenMatrixFunc::CalculateBareCrossSection`; its adjoint in
+   `AMatrixFunc::PointTBar` (checked with `AZURE_GRAD_CHECK`).
+3. Anything a reader needs per slot (angular row, Coulomb amplitude, A_y factors) in its row set (`include/RowSet.h`,
+   built by `Unit::RowSetOver`; shared by the readers of one angle as the data give it, `WorkingCopy::BuildRowSets`:
+   for a lab angle the c.m. angle and dΩ_lab/dΩ_c.m. of each slot, `experiment::LabAngleAt`, energy_grid.md §4.3),
+   held per slot or once by the set's one rule (`RowSet::perSlot`, read through its accessors), checked by
+   `WorkingCopy::CheckReaderRows` (`AZURE_NODE_CHECK`).  A kind with two values per slot (`values = 2`: the weight w and
+   the element r, as A_y and its cross section) is folded as (K·(w r))/(K·w) with no further code (`Unit::FoldsRatio`,
+   `RatioPartsAt`; the adjoint in `AZUREGrad.cpp`); only where the weight's cotangent goes is named
+   (`Unit::RatioWeightRoute`).
+
 **A new optical potential term** (`physics/transfer`, `docs/upgrade/transfer.md` §2).
 1. A field in `OpticalPotential` (`physics/include/azure2/physics/transfer/OpticalPotential.h`, with its formula, unit
    and sign in the header's Eq. (2.1)), its `operator==`, its value in `TermsAt` (one member of `PotentialTerms` per

@@ -29,19 +29,23 @@ double CoulombReferenceValue(const WorkingCopy &data, Unit *point, experiment::L
   const physics::ChannelKinematics kin = Kinematics::Channel(pair).Physics();
   const int twoS = static_cast<int>(std::lround(2.0 * pair->GetJ(1)));
   const bool mott = part == experiment::LeafPart::Mott;
-  auto at = [&](const Site *p) {
-    return mott ? physics::mott_cross_section(kin, twoS, p->GetCMEnergy(), p->GetCMAngle()).value
-                : physics::rutherford_cross_section(kin, p->GetCMEnergy(), p->GetCMAngle()).value;
+  // at each slot's energy and the point's angle there (an elastic slot has no angle of its own: Site::AngleFree)
+  auto at = [&](const Site *p, double angle) {
+    return mott ? physics::mott_cross_section(kin, twoS, p->GetCMEnergy(), angle).value
+                : physics::rutherford_cross_section(kin, p->GetCMEnergy(), angle).value;
   };
   return FoldReferenceAtPoint(data, point, configure, at);
 }
 
 double FoldReferenceAtPoint(const WorkingCopy &data, Unit *point, const Config &configure,
-                            const std::function<double(const Site *)> &at) {
-  if (!Segment::HasSubPointIntegration(data, point)) return at(point);
+                            const std::function<double(const Site *, double)> &at) {
+  if (!Segment::HasSubPointIntegration(data, point)) return at(point, point->GetCMAngle());
+  // as the point's observable is folded (PointFold.cpp): at each slot the point's angle there, divided by the slot's
+  // Jacobian and the fold multiplied by the point's own where the point's angle is given in the lab (RowSet.h)
   std::vector<double> sub(static_cast<std::size_t>(point->NumSubPoints()));
-  for (int j = 1; j <= point->NumSubPoints(); j++) sub[j - 1] = at(point->GetSubPoint(data, j));
-  return FoldValues(*point, data, configure, sub);
+  for (int j = 1; j <= point->NumSubPoints(); j++)
+    sub[j - 1] = at(point->GetSubPoint(data, j), point->SlotAngle(j)) / point->SlotJacobian(j);
+  return point->LabFoldFactor() * FoldValues(*point, data, configure, sub);
 }
 
 double SFactorConversionValue(const Site *point, CNuc *compound, double shape_perMeV) {

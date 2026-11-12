@@ -897,6 +897,47 @@ for rel in sorted(f"src/{n}" for n in os.listdir(os.path.join(ROOT, "src")) if n
 if not NARROW_LEAF.search("if (azure2::experiment::IsCoulombReference(part))") or NARROW_LEAF.search("IsReferenceLeaf(p)"):
     problems.append("check 35: the pattern no longer matches the form it guards; update this check")
 
+# 37. The sharing key of the mesh compares the term settings field by field (SameObservable, include/TermSettings.h):
+#     a field added to TermSettings and forgotten there makes two different observables share their sites silently.
+#     Every field is either compared in SameObservable (a.f == b.f) or named in kReaderOnlyTermSettings beside it,
+#     never both, and both lists name fields that exist.
+def term_settings_problems(text):
+    """The problems of check 37 in the text of TermSettings.h (a function, so that the check can be shown to bite)."""
+    found = []
+    text = re.sub(r"//[^\n]*|/\*.*?\*/", "", text, flags=re.S)
+    struct = re.search(r"\bstruct\s+TermSettings\s*\{(.*?)\n\};", text, re.S)
+    compare = re.search(r"\bbool\s+SameObservable\s*\([^)]*\)\s*\{(.*?)\n\}", text, re.S)
+    listed = re.search(r"\bkReaderOnlyTermSettings\[\]\s*=\s*\{([^}]*)\}", text)
+    if not (struct and compare and listed):
+        return ["check 37: TermSettings, SameObservable or kReaderOnlyTermSettings is no longer found in "
+                "include/TermSettings.h; update this check"]
+    fields = []
+    for statement in struct.group(1).split(";"):
+        statement = re.sub(r"=[^,]*", "", statement.strip())  # initialisers (none holds a comma)
+        for declarator in statement.split(","):
+            name = re.search(r"(\w+)\s*$", declarator.strip())
+            if name:
+                fields.append(name.group(1))
+    compared = set(re.findall(r"\ba\.(\w+)\s*==\s*b\.\1\b", compare.group(1)))
+    reader_only = set(re.findall(r'"(\w+)"', listed.group(1)))
+    for f in fields:
+        if f not in compared and f not in reader_only:
+            found.append(f"include/TermSettings.h: the field {f} of TermSettings is neither compared in SameObservable "
+                         "nor named in kReaderOnlyTermSettings (check 37): does the energy pass read it?")
+        if f in compared and f in reader_only:
+            found.append(f"include/TermSettings.h: the field {f} is both compared in SameObservable and named "
+                         "reader-only (check 37)")
+    for f in sorted((compared | reader_only) - set(fields)):
+        found.append(f"include/TermSettings.h: {f} is compared or named reader-only but is no field of TermSettings "
+                     "(check 37)")
+    return found
+
+
+problems += term_settings_problems(read("include/TermSettings.h"))
+_probe = read("include/TermSettings.h").replace("int maxAngDistOrder = 0;", "int maxAngDistOrder = 0;\n  int probe = 0;")
+if not any(" probe " in p for p in term_settings_problems(_probe)):
+    problems.append("check 37: a field added to TermSettings is not caught; update this check")
+
 if problems:
     for p in problems:
         print("FAIL", p)
@@ -904,4 +945,5 @@ if problems:
     sys.exit(1)
 print(f"repository consistent: {len(flags)} CLI flags, test registration, check.sh modes, pyazr version and exports, "
       f"format-3 reference page, {len(declared)} diagnostic codes, file sizes, one model pass and residual, one calculation plan, "
-      f"no machine paths, no old data class names, no old section in the engine, reference leaves by one predicate")
+      f"no machine paths, no old data class names, no old section in the engine, reference leaves by one predicate, "
+      f"the sharing key's term settings")
