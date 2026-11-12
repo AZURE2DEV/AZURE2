@@ -1,3 +1,4 @@
+#include "RunScratch.h"
 #include "Config.h"
 
 #include "azure2/experiment/ProjectReader.h"
@@ -19,7 +20,7 @@
  */
 
 Config::Config(std::ostream &stream) :
-  outStream(stream) {
+  outStream(stream), scratch(std::make_shared<azure2::RunScratch>()) {
   Reset();
 }
 
@@ -56,6 +57,12 @@ void Config::Reset() {
   relativistic = false;      // Off unless the <config> block says so: non-relativistic kinematics as before
   relativisticReferencePair = 0;
   priorCovariance.clear();   // no prior parameter covariance unless the <config> block names a file
+}
+
+bool Config::FirstTimeIn(const std::shared_ptr<NoteLog> &log, const std::string &key) {
+  if (!log) return true;
+  std::lock_guard<std::mutex> lock(log->mutex);
+  return log->printed.insert(key).second;
 }
 
 void Config::Note(const std::string &line) const {

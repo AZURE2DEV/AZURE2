@@ -3,6 +3,9 @@
 
 #include "ChannelFunc.h"
 #include "Constants.h"
+#include "azure2/physics/HybridPotential.h"
+
+#include <optional>
 
 class ALevel;
 class CNuc;
@@ -10,6 +13,29 @@ class Config;
 class Segment;
 class JGroup;
 class PPair;
+
+/*!
+ * The last kSize values of S_c at level energies, keyed by every input of S_c -- charges, reduced mass, channel
+ * radius, the hybrid-potential state of the pair, l, 2J, the resonance energy and the Coulomb routine -- not by the
+ * PPair address (a later compound nucleus can get the same address back, and a pair's radius can change in place:
+ * keyed by the address, a session at 6.1 fm read S_c of an earlier 4.1 fm session, 18O(p,a)).  Within one evaluation
+ * every THM point asks for the same few (pair, l, energy).  Owned by the run (RunScratch.h: one per thread), whose
+ * Coulomb-table setting is fixed.
+ */
+struct ThmShiftMemo {
+  struct Entry {
+    int z1, z2;
+    double redmass, radius;
+    std::optional<azure2::physics::HybridPotential> potential;
+    int l, two_j;
+    double e;
+    bool gsl;
+    double s;
+  };
+  static constexpr int kSize = 32;
+  Entry entries[kSize];
+  int filled = 0, next = 0;
+};
 
 /*!
  * The boundary value B of the THM entrance vertex, for one entrance channel
@@ -75,10 +101,9 @@ class ThmVertexBoundary {
   /// L_c(E) = S_c(E) + i P_c(E) at c.m. energy E above the pair's threshold.
   complex OnShellAt(double e) const;
 
-  /*! S_c of `pair` at a compound-system level energy (MeV), through a small
-      per-thread memo keyed by every input of S_c (charges, reduced mass,
-      radius, hybrid-potential state, l, energy, Coulomb routine). */
-  static double ShiftAtLevelEnergy(PPair *pair, int l, int two_j, double levelEnergy, bool useGSL);
+  /*! S_c of `pair` at a compound-system level energy (MeV); with a memo (the run's per-thread scratch), through it. */
+  static double ShiftAtLevelEnergy(PPair *pair, int l, int two_j, double levelEnergy, bool useGSL,
+                                   ThmShiftMemo *memo = nullptr);
 
  private:
   Rule rule_;

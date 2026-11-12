@@ -90,9 +90,8 @@ inline double H11(double t) { return (t - 1) * t * t; }
 std::atomic<long> CoulombTable::hits_{0}, CoulombTable::misses_{0};
 
 namespace {
-// The tables Shared() has loaded and the files it could not read, for the whole process;
-// ForgetMissing() clears the second and moves the generation on, so the per-thread cache
-// in Shared() looks again.
+// The tables Shared() has loaded (immutable once loaded) and the files it could not read, for the whole process;
+// ForgetMissing() clears the second, so Shared() looks again.
 std::mutex &SharedMutex() {
   static std::mutex m;
   return m;
@@ -105,7 +104,6 @@ std::set<std::string> &SharedFailed() {
   static std::set<std::string> f;
   return f;
 }
-std::atomic<int> g_sharedGeneration{0};
 }  // namespace
 
 namespace {
@@ -130,15 +128,6 @@ std::string CoulombTable::DefaultPath() {
 }
 
 const CoulombTable *CoulombTable::Shared(const std::string &path) {
-  // CoulFunc objects are built per channel and point, so the common case -- the
-  // same path as last time on this thread -- must not take the lock.
-  thread_local std::string lastPath;
-  thread_local const CoulombTable *last = nullptr;
-  thread_local bool lastSet = false;
-  thread_local int lastGeneration = -1;
-  const int generation = g_sharedGeneration.load(std::memory_order_acquire);
-  if (lastSet && path == lastPath && generation == lastGeneration) return last;
-
   std::lock_guard<std::mutex> lock(SharedMutex());
   auto &tables = SharedTables();
   auto &failed = SharedFailed();
@@ -176,17 +165,12 @@ const CoulombTable *CoulombTable::Shared(const std::string &path) {
       }
     }
   }
-  lastPath = path;
-  last = result;
-  lastSet = true;
-  lastGeneration = generation;
   return result;
 }
 
 void CoulombTable::ForgetMissing() {
   std::lock_guard<std::mutex> lock(SharedMutex());
   SharedFailed().clear();
-  g_sharedGeneration.fetch_add(1, std::memory_order_release);
 }
 
 double CoulombTable::LogGamow(double eta) {

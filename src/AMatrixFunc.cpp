@@ -13,7 +13,6 @@
 #include "AChannel.h"
 #include "PPair.h"
 #include <assert.h>
-#include <atomic>
 #include <iomanip>
 #include <cstdlib>
 #include <string>
@@ -191,7 +190,7 @@ void AMatrixFunc::FillMatrices(Site *point) {
     route_[j - 1] = kRouteLevel;
     if (channelSpace) {
       if (!formal_[j - 1] || formal_jgroup_[j - 1] != jGroup) {
-        formal_[j - 1] = ChannelSpace::Cached(jGroup);
+        formal_[j - 1] = ChannelSpace::Cached(ChannelMemo(), jGroup);
         formal_jgroup_[j - 1] = jGroup;
       }
       ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
@@ -358,8 +357,7 @@ void AMatrixFunc::InvertMatrices() {
         // The group then contributes nothing at this energy.  A level without
         // widths no longer gets here (FillLevelMatrix); say so once if
         // anything else does.
-        static std::atomic<bool> warned(false);
-        if (!warned.exchange(true)) {
+        if (configure().FirstTime("singular level matrix")) {
           JGroup *jg = compound()->GetJGroup(j);
           std::cerr << "Warning: singular level matrix of J-group " << jg->GetJ() << (jg->GetPi() < 0 ? "-" : "+")
                     << " at E_x = " << std::setprecision(10) << lastInEnergy_
@@ -1534,7 +1532,7 @@ void AMatrixFunc::LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c
         if (r != c) la.inv[(size_t)r * n + c] = 1.0 / (la.E[r] - la.E[c]);
     levelArraysPtr = &la;
   } else {
-    levelArraysPtr = &ChannelSpace::CurrentLevelArrays(jg);
+    levelArraysPtr = &ChannelSpace::CurrentLevelArrays(ChannelMemo(), jg);
   }
   const ChannelSpace::LevelArrays &levelArrays = *levelArraysPtr;
   const std::vector<double> &E = levelArrays.E, &G = levelArrays.G, &S = levelArrays.S, &inv = levelArrays.inv;
@@ -1889,7 +1887,7 @@ void AMatrixFunc::BilinearAdjoint(Site *energyPoint, int jNum, const std::vector
     }
     accum.formalUsed = true;
     const std::vector<complex> &lam = this->KernelLambda(energyPoint, jNum);
-    const std::vector<double> &G = ChannelSpace::CurrentLevelArrays(jg).G;
+    const std::vector<double> &G = ChannelSpace::CurrentLevelArrays(ChannelMemo(), jg).G;
     vector_c ga(nch), gb(nch);
     for (const BilinearTerm &t : terms) {
       const vector_c &uEn = this->GetRawChannelSolve(jNum, t.ch);
@@ -2465,7 +2463,7 @@ void AMatrixFunc::ResolveFormalCotangents(GradAccum &accum, const vector_matrix_
         if (g != 0.0) any = true;
     }
     if (!any) continue;
-    formal_[j - 1] = ChannelSpace::Cached(jg);
+    formal_[j - 1] = ChannelSpace::Cached(ChannelMemo(), jg);
     formal_jgroup_[j - 1] = jg;
     ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
     ChannelSpace::Update(jg, active_levels_[j - 1], configure(), f);
@@ -2693,9 +2691,9 @@ bool AMatrixFunc::LevelAdjoint(Site *energyPoint, int j, const std::vector<Bilin
                        : (brune && ch->GetRadType() == 'P');
   }
   const ChannelSpace::LevelDerivatives &ld = ChannelSpace::CurrentLevelDerivatives(
-      jg, park ? 2 : brune ? 1 : 0, particle, mask.e[j - 1], mask.g[j - 1],
+      ChannelMemo(), jg, park ? 2 : brune ? 1 : 0, particle, mask.e[j - 1], mask.g[j - 1],
       (brune && shiftDeriv) ? &(*shiftDeriv)[j - 1] : nullptr);
-  const ChannelSpace::LevelArrays &arrays = ChannelSpace::CurrentLevelArrays(jg);
+  const ChannelSpace::LevelArrays &arrays = ChannelSpace::CurrentLevelArrays(ChannelMemo(), jg);
   const std::vector<complex> &lam = this->KernelLambda(energyPoint, j);
   const double E = this->InEnergy(energyPoint);
   // The channels the terms involve, their solves u_c = A g_c and g_d . u_c.

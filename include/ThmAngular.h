@@ -42,20 +42,32 @@ struct ThmPartialWave {
 };
 
 /*!
- * The Legendre coefficients b_L (L = 0 .. size-1) of the spin-summed angular
- * distribution of the amplitudes x (one per wave), as above.  The geometric
- * coefficients depend only on the waves; a per-thread cache keeps them while
- * the list of waves does not change (every point of a model has the same).
+ * The geometric coefficients of the spin-summed angular distribution of a list of waves: b_L = sum over the terms
+ * (i, j, L) of c Re(x_i x_j^*).  They depend only on the waves; the caller builds them once for every amplitude
+ * vector of the same waves (every node of a point's window).
  */
-void ThmLegendreCoefficients(const std::vector<ThmPartialWave> &waves, const std::vector<complex> &x,
-                             std::vector<double> &b);
+struct ThmAngularCoupling {
+  struct Term {
+    int i, j, L;
+    double c;  ///< includes the 2 of i != j
+  };
+  std::vector<Term> terms;
+  int maxL = 0;
+};
+ThmAngularCoupling ThmAngularCouplingOf(const std::vector<ThmPartialWave> &waves);
+
+/*!
+ * The Legendre coefficients b_L (L = 0 .. maxL) of the spin-summed angular distribution of the amplitudes x (one
+ * per wave of `coupling`), as above.
+ */
+void ThmLegendreCoefficients(const ThmAngularCoupling &coupling, const std::vector<complex> &x, std::vector<double> &b);
 
 /*!
  * Adjoint of sum_L w[L] b_L(x) (b_L as ThmLegendreCoefficients): xBar[i] =
  * d/dRe x_i + i d/dIm x_i of that real form, which is bilinear in x.
  */
-void ThmLegendreAdjoint(const std::vector<ThmPartialWave> &waves, const std::vector<complex> &x,
-                        const std::vector<double> &w, std::vector<complex> &xBar);
+void ThmLegendreAdjoint(const ThmAngularCoupling &coupling, const std::vector<complex> &x, const std::vector<double> &w,
+                        std::vector<complex> &xBar);
 
 /*!
  * The angular window of a THM experiment: theta (degrees) is the c.m. angle

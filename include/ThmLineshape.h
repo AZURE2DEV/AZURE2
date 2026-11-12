@@ -69,8 +69,6 @@ struct ThmLineshape {
     double q = 0.0;
   };
   std::vector<Exit> exits;
-  /// Set once an energy with E_sF <= 0 has been reported.
-  mutable std::atomic<bool> warned{false};
 
   /// E_sF(E) = E_aA - B_xs - E (MeV).
   double EsF(double energy) const { return eAA - bind - energy; }

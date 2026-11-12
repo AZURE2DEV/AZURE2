@@ -23,8 +23,6 @@ struct ThmWeightTable {
   std::string name, path;
   /// Strictly increasing E_cm (MeV) of the THM entrance pair, w(E) and ln w(E).
   std::vector<double> e, w, lnw;
-  /// Set once the first evaluation outside [e.front(), e.back()] has been reported.
-  mutable std::atomic<bool> warned{false};
   /// Reads the file; returns an empty string on success, else the reason.
   std::string Read(const std::string &file);
   /// w(E); *outside (if given) is set when E lies beyond the table.

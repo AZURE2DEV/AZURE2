@@ -14,22 +14,10 @@ double Zbar(int l1, double J1, int l2, double J2, double s, int L) {
   return azure2::physics::z_bar(l1, (int)std::lround(2.0 * J1), l2, (int)std::lround(2.0 * J2), (int)std::lround(2.0 * s), L);
 }
 
-struct Term {
-  int i, j, L;
-  double c;  // includes the 2 of i != j
-};
+}  // namespace
 
-struct Table {
-  std::vector<ThmPartialWave> key;
-  std::vector<Term> terms;
-  int maxL = 0;
-  bool built = false;
-};
-
-void Build(const std::vector<ThmPartialWave> &waves, Table &t) {
-  t.key = waves;
-  t.terms.clear();
-  t.maxL = 0;
+ThmAngularCoupling ThmAngularCouplingOf(const std::vector<ThmPartialWave> &waves) {
+  ThmAngularCoupling t;
   const int n = (int)waves.size();
   for (int i = 0; i < n; i++)
     for (int j = i; j < n; j++) {
@@ -43,31 +31,24 @@ void Build(const std::vector<ThmPartialWave> &waves, Table &t) {
         double c = sign / 4.0 * Zbar(a.l, a.J, b.l, b.J, a.s, L) * Zbar(a.lp, a.J, b.lp, b.J, a.sp, L);
         if (i != j) c *= 2.0;
         if (std::fabs(c) < 1.0e-14) continue;
-        t.terms.push_back(Term{i, j, L, c});
+        t.terms.push_back(ThmAngularCoupling::Term{i, j, L, c});
         t.maxL = std::max(t.maxL, L);
       }
     }
-  t.built = true;
+  return t;
 }
 
-}  // namespace
-
-void ThmLegendreCoefficients(const std::vector<ThmPartialWave> &waves, const std::vector<complex> &x,
-                             std::vector<double> &b) {
-  thread_local Table table;
-  if (!table.built || !(table.key == waves)) Build(waves, table);
-  b.assign(table.maxL + 1, 0.0);
-  for (const Term &t : table.terms) b[t.L] += t.c * std::real(x[t.i] * std::conj(x[t.j]));
+void ThmLegendreCoefficients(const ThmAngularCoupling &coupling, const std::vector<complex> &x, std::vector<double> &b) {
+  b.assign(coupling.maxL + 1, 0.0);
+  for (const ThmAngularCoupling::Term &t : coupling.terms) b[t.L] += t.c * std::real(x[t.i] * std::conj(x[t.j]));
 }
 
-void ThmLegendreAdjoint(const std::vector<ThmPartialWave> &waves, const std::vector<complex> &x,
-                        const std::vector<double> &w, std::vector<complex> &xBar) {
-  thread_local Table table;
-  if (!table.built || !(table.key == waves)) Build(waves, table);
+void ThmLegendreAdjoint(const ThmAngularCoupling &coupling, const std::vector<complex> &x, const std::vector<double> &w,
+                        std::vector<complex> &xBar) {
   xBar.assign(x.size(), complex(0.0, 0.0));
   // d Re(x_i x_j^*) / d Re x_i + i d/d Im x_i = x_j, and symmetrically for x_j
   // (i == j gives 2 x_i, as |x_i|^2 requires).
-  for (const Term &t : table.terms) {
+  for (const ThmAngularCoupling::Term &t : coupling.terms) {
     if (t.L >= (int)w.size()) continue;
     const double c = w[t.L] * t.c;
     if (c == 0.0) continue;

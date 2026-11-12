@@ -590,7 +590,7 @@ int WorkingCopy::BuildThmGroups(const Config &configure, CNuc *theCNuc) {
             cb->combos.push_back(combo);
             const std::string stem = ThmCoherentParamStem(x.name, t.J, t.parity, t.exitKey, ci->GetS(), ci->GetL(),
                                                           co->GetS(), co->GetL());
-            static const char *parts[4] = {"re0", "im0", "re1", "im1"};
+            static const char *const parts[4] = {"re0", "im0", "re1", "im1"};
             for (int k = 0; k < 2 * t.form; k++) {
               ThmCoherentParam par;
               par.name = stem + parts[k];

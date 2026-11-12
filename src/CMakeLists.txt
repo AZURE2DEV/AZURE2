@@ -22,6 +22,8 @@ MeshSlots.cpp
 ExternalCaptureSetup.cpp
 DataParameters.cpp
 HandOver.cpp
+TaskScratch.cpp
+RunScratch.cpp
 WorkingCopyUnits.cpp NodeTable.cpp DataSet.cpp
 PointPass.cpp
 PointFold.cpp

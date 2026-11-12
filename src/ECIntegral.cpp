@@ -11,60 +11,58 @@
 #include <map>
 #include <vector>
 
+#include "RunScratch.h"
+
 extern double DoubleFactorial(int);
 
-namespace {
-/*!
- * Per-x memo of the two expensive quantities shared by the FW and GW
- * integrands: the Coulomb functions and the scaled bound-state Whittaker.
- *
- * FWIntegrand and GWIntegrand are identical apart from a final coul.F vs coul.G,
- * and GSL evaluates them at bit-identical abscissae (same Gauss-Kronrod nodes,
- * same variable transform).  So the first integrand to reach a given x computes
- * coul + whit once and stores them; the second reads them back.  Nothing about
- * the integration or the arithmetic changes -- the result is byte-identical to
- * two independent passes -- only the ~2x redundant special-function work is
- * removed.  The map is thread-local and cleared at the start of each FW/GW
- * Integrate().
+/*
+ * The FW and GW integrands share their two expensive quantities at each radius, the Coulomb functions and the scaled
+ * bound-state Whittaker (Params::fgMemo).  They are identical apart from a final F vs G, and GSL evaluates them at
+ * bit-identical abscissae (same Gauss-Kronrod nodes, same variable transform), so the first integrand to reach an x
+ * computes both and stores them, the second reads them back: the result is byte-identical to two independent passes.
+ * The memo belongs to the integral's parameters and is cleared at the start of each FW/GW Integrate().
  */
-struct FGMemoEntry {
-  double F;
-  double G;
-  double whit;
-};
-thread_local std::map<double, FGMemoEntry> g_fgMemo;
-}  // namespace
 
-void ECIntegral::ClearFGMemo() { g_fgMemo.clear(); }
+ECIntegral::ECIntegral(PPair *pPair, const Config &configure) : scratch_(configure.scratch->ForThisThread().ec) {
+  params_.coulFunc = std::make_unique<CoulFunc>(pPair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+  // The terms of one l_i and energy share their radii (not in the reaction-rate mode, whose energies never recur).
+  if (!(configure.paramMask & Config::CALCULATE_REACTION_RATE)) params_.coulFunc->SetRadialMemo(&scratch_.radial);
+  params_.whitFunc = std::make_unique<WhitFunc>(pPair);
+  params_.whitFunc->SetScaledMemo(&scratch_.whittaker);
+  params_.useLongWavelengthApprox = !!(configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX);
+  params_.useChargeFunction = false;  // set per term in CalculateDirect
+  pair_ = pPair;
+  configure_ = &configure;
+}
 
 /*!
  * Computes (or reuses) the shared FW/GW quantities at x: the Coulomb functions
  * and the scaled bound-state Whittaker.  File-scope helper; ECIntegral::Params
  * is public so it can be named here.
  */
-static FGMemoEntry fgEvaluate(double x, ECIntegral::Params *params) {
-  auto it = g_fgMemo.find(x);
-  if (it != g_fgMemo.end()) return it->second;
+static ECIntegral::Params::FG fgEvaluate(double x, ECIntegral::Params *params) {
+  auto it = params->fgMemo.find(x);
+  if (it != params->fgMemo.end()) return it->second;
   struct CoulWaves coul = params->coulFunc->operator()(params->liValue, params->twoJi, x, params->pairEnergy);
   double sOut;
   double mOut = params->whitFunc->ScaledMemo(params->lfValue, params->twoJf, x, params->bindingEnergy, sOut);
   double exponent = sOut - params->log10RefOut;
   double whit = (exponent < -280.0) ? 0.0 : mOut * pow(10.0, exponent);
-  FGMemoEntry e = {coul.F, coul.G, whit};
-  g_fgMemo[x] = e;
+  ECIntegral::Params::FG e = {coul.F, coul.G, whit};
+  params->fgMemo[x] = e;
   return e;
 }
 
 double ECIntegral::FWIntegrand(double x, void *p) {
   Params *params = (Params *)p;
-  FGMemoEntry e = fgEvaluate(x, params);
+  ECIntegral::Params::FG e = fgEvaluate(x, params);
   double returnValue = e.F * e.whit * pow(x, params->multLValue);
   return params->useChargeFunction ? params->effectiveCharge->operator()(x) * returnValue : returnValue;
 }
 
 double ECIntegral::GWIntegrand(double x, void *p) {
   Params *params = (Params *)p;
-  FGMemoEntry e = fgEvaluate(x, params);
+  ECIntegral::Params::FG e = fgEvaluate(x, params);
   double returnValue = e.G * e.whit * pow(x, params->multLValue);
   return params->useChargeFunction ? params->effectiveCharge->operator()(x) * returnValue : returnValue;
 }
@@ -99,24 +97,8 @@ double ECIntegral::WWIntegrand(double x, void *p) {
 }
 
 namespace {
-/*!
- * Per-thread GSL integration workspace, reused across calls.  Allocating and
- * freeing a 1000-element workspace on every external-capture integral showed
- * up as ~8% of total runtime in a reaction-rate profile, and the workspace
- * carries no state between calls.
- */
-struct ECWorkspace {
-  gsl_integration_workspace *w;
-  ECWorkspace() :
-    w(gsl_integration_workspace_alloc(1000)) {}
-  ~ECWorkspace() {
-    if (w) gsl_integration_workspace_free(w);
-  }
-};
-gsl_integration_workspace *ec_workspace() {
-  static thread_local ECWorkspace holder;
-  return holder.w;
-}
+// The GSL workspace of the integrals is the run's per-thread scratch (ECScratch::workspace): allocating and freeing
+// a 1000-element workspace on every external-capture integral showed up as ~8% of a reaction-rate profile.
 
 /* ------------------------------------------------------------------------
  * Fixed radial grid + cached final-state Whittaker, used ONLY for the reaction
@@ -139,42 +121,16 @@ gsl_integration_workspace *ec_workspace() {
  * which decays like exp(-b r) with b set to the Whittaker decay rate, so the
  * un-weighted part is smooth and the rule converges quickly.
  * ------------------------------------------------------------------------ */
-struct RateGridKey {
-  int z1, z2;
-  double redmass;
-  int lf;
-  int twoJf;                       ///< the final channel's 2J key (PPair::SpinOrbitTwoJ)
-  std::vector<double> potential;  ///< physics::PotentialKey of the pair's potential (the final state is W~ of it)
-  double bindingEnergy;
-  double chanrad;
-  bool operator<(const RateGridKey &o) const {
-    if (z1 != o.z1) return z1 < o.z1;
-    if (z2 != o.z2) return z2 < o.z2;
-    if (redmass != o.redmass) return redmass < o.redmass;
-    if (lf != o.lf) return lf < o.lf;
-    if (twoJf != o.twoJf) return twoJf < o.twoJf;
-    if (potential != o.potential) return potential < o.potential;
-    if (bindingEnergy != o.bindingEnergy) return bindingEnergy < o.bindingEnergy;
-    return chanrad < o.chanrad;
-  }
-};
-struct RateGridEntry {
-  std::vector<double> x;        // radial nodes
-  std::vector<double> W;        // effective weights (Laguerre weight * e^{+b(x-a)})
-  std::vector<double> whitOut;  // scaled final Whittaker at each node (ref subtracted)
-  double refOut;                // log10 reference decades of the final Whittaker
-  bool ok;
-};
 const int kRateRadialPoints = 150;
 
-const RateGridEntry &getRateGrid(WhitFunc *wf, const std::vector<double> &potential, int lf, int twoJf,
+const ECRateGridEntry &getRateGrid(std::map<ECRateGridKey, ECRateGridEntry> &cache, WhitFunc *wf,
+                                   const std::vector<double> &potential, int lf, int twoJf,
                                  double bindingEnergy, double chanrad) {
-  static thread_local std::map<RateGridKey, RateGridEntry> cache;
-  RateGridKey key{wf->z1(), wf->z2(), wf->redmass(), lf, twoJf, potential, bindingEnergy, chanrad};
+  ECRateGridKey key{wf->z1(), wf->z2(), wf->redmass(), lf, twoJf, potential, bindingEnergy, chanrad};
   auto it = cache.find(key);
   if (it != cache.end()) return it->second;
 
-  RateGridEntry e;
+  ECRateGridEntry e;
   e.ok = false;
   e.refOut = 0.0;
   double b = sqrt(2.0 * uconv * wf->redmass() * bindingEnergy) / hbarc;  // Whittaker decay rate
@@ -208,7 +164,7 @@ const RateGridEntry &getRateGrid(WhitFunc *wf, const std::vector<double> &potent
 }  // namespace
 
 void ECIntegral::Integrate(double chanrad) {
-  gsl_integration_workspace *w = ec_workspace();
+  gsl_integration_workspace *w = scratch_.workspace;
 
   if (params_.pairEnergy < 0.0) {
     gsl_function WW;
@@ -225,7 +181,7 @@ void ECIntegral::Integrate(double chanrad) {
     // energy-independent final Whittaker.  Everything else keeps the adaptive
     // qagiu, which is the trusted path for fits and extrapolations.
     bool rateMode = configure_ && (configure_->paramMask & Config::CALCULATE_REACTION_RATE);
-    const RateGridEntry *grid = rateMode ? &getRateGrid(params_.whitFunc.get(), azure2::physics::PotentialKey(pair()->GetHybridPotential()),
+    const ECRateGridEntry *grid = rateMode ? &getRateGrid(scratch_.rateGrids, params_.whitFunc.get(), azure2::physics::PotentialKey(pair()->GetHybridPotential()),
                                                          params_.lfValue, params_.twoJf, params_.bindingEnergy, chanrad)
                                          : nullptr;
     if (grid && grid->ok) {
@@ -249,9 +205,9 @@ void ECIntegral::Integrate(double chanrad) {
       GW.function = &GWIntegrand;
       GW.params = &params_;
       double fwintresult, fwinterror, gwintresult, gwinterror;
-      // FW and GW share their expensive per-x evaluations through g_fgMemo;
+      // FW and GW share their expensive per-x evaluations through Params::fgMemo;
       // clear it so this call cannot see stale entries from a previous one.
-      ClearFGMemo();
+      params_.fgMemo.clear();
       status_ |= gsl_integration_qagiu(&FW, chanrad, 0.0, epsrel_, 1000, w, &fwintresult, &fwinterror);
       status_ |= gsl_integration_qagiu(&GW, chanrad, 0.0, epsrel_, 1000, w, &gwintresult, &gwinterror);
       FW_ = fwintresult;

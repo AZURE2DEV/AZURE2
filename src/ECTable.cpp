@@ -1,3 +1,4 @@
+#include "RunScratch.h"
 #include "ECTable.h"
 #include "ChannelTable.h"
 #include "ECIntegral.h"
@@ -140,7 +141,7 @@ complex ECTable::Integral(PPair *finalPair, const Config &configure,
   const double outEnergy = (inEnergy - finalPair->GetSepE()) - finalPair->GetExE();
   CoulFunc coul(finalPair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
   // sqrt(P) at a_c: one more radius of the (l_i, E) block of the integrals (not in the rate mode: energies never recur)
-  if (!RateMode(configure)) coul.SetRadialScratch(true);
+  if (!RateMode(configure)) coul.SetRadialMemo(&configure.scratch->ForThisThread().ec.radial);
   complex reduction;
   // sqrt(P) or exp(-i phi) at a_c from the point's channel table where it holds the open channel (same function).
   // the entrance channel's 2J key: its waves depend on J_i when the pair has a spin-orbit term

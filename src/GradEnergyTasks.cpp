@@ -211,9 +211,8 @@ void MergeSharedReads(WorkingCopy &data, const Pass &pass, const std::vector<std
 }
 
 // The solver of a task on this thread, filled and factored at the task's first unit.
-AMatrixFunc &SolveTask(CNuc *compound, const Config &config, Site *first) {
-  static thread_local AMatrixFunc amf(compound, config);
-  amf.Reset(compound, config);
+AMatrixFunc &SolveTask(CNuc *compound, const Config &config, Results &results, Site *first) {
+  AMatrixFunc &amf = results.scratch.ForThisThread().GradientSolver(compound, config);
   AZUREProfile::Timer timer(AZUREProfile::kGradForward);
   amf.ClearMatrices();
   amf.FillMatrices(first);
@@ -272,9 +271,9 @@ bool ForEachGroup(AMatrixFunc &amf, WorkingCopy &data, const Pass &pass, const E
 
 // The THM sites of one task (kHoes) into `acc`: per site the cotangents of all its readers summed (in their order), and
 // the HOES adjoint taken once per site on a level-space fill at the task's energy (THMMatrixFunc::THMPointAdjoint).
-bool HoesTask(CNuc *compound, const Config &config, WorkingCopy &data, const Pass &pass, const EnergyTaskList &list,
-              const EnergyTask &task, const ThmAdjointContext &context, GradAccum &acc) {
-  static thread_local THMMatrixFunc thm(compound, config);
+bool HoesTask(CNuc *compound, const Config &config, WorkingCopy &data, Results &results, const Pass &pass,
+              const EnergyTaskList &list, const EnergyTask &task, const ThmAdjointContext &context, GradAccum &acc) {
+  THMMatrixFunc &thm = results.scratch.ForThisThread().GradientThmSolver(compound, config);
   bool filled = false;
   for (int i = task.begin; i < task.begin + task.size; i++) {
     const UnitRef u = list.units[i];
@@ -303,13 +302,13 @@ bool ScalarTask(CNuc *compound, const Config &config, WorkingCopy &data, Results
                 const EnergyTaskList &list, const EnergyTask &task, const vector_matrix_r *shiftDeriv,
                 const ThmAdjointContext *hoes, GradAccum &acc) {
   if (!HasCotangents(pass, list, task)) return true;
-  if (hoes && !HoesTask(compound, config, data, pass, list, task, *hoes, acc)) return false;
+  if (hoes && !HoesTask(compound, config, data, results, pass, list, task, *hoes, acc)) return false;
   if (FirstTMatrixReader(data, pass, list, task) < 0) return true;
   // filled with the task's first unit that reads a T-matrix, as the point pass (SolveAtOneEnergy)
   int firstReader = task.begin;
   while (!ReadsTMatrix(data, list.units[firstReader])) firstReader++;
   Site *first = &data.SiteAt(list.units[firstReader]);
-  AMatrixFunc &amf = SolveTask(compound, config, first);
+  AMatrixFunc &amf = SolveTask(compound, config, results, first);
   std::vector<std::vector<BilinearTerm>> merged(compound->NumJGroups()), terms;
   TMatrixCotangent bar;
   const bool dense = DenseAdjointRequested();
@@ -352,7 +351,7 @@ bool RowTask(CNuc *compound, const Config &config, WorkingCopy &data, Results &r
   rowsOf.clear();
   if (!HasCotangents(pass, list, task)) return true;
   Site *first = &data.SiteAt(list.units[task.begin]);
-  AMatrixFunc &amf = SolveTask(compound, config, first);
+  AMatrixFunc &amf = SolveTask(compound, config, results, first);
   const bool dense = DenseAdjointRequested();
   std::vector<std::vector<std::vector<BilinearTerm>>> rowTerms;
   std::vector<TMatrixCotangent> sums;

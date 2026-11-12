@@ -11,6 +11,7 @@
 #include "ThmOptions.h"
 
 namespace azure2 {
+class RunScratch;
 namespace experiment {
 struct Format3Project;
 }
@@ -206,6 +207,20 @@ class Config {
   /// Prints one informational line ("Note: ...") to outStream, unless noteLog is set and has already seen
   /// exactly this text.  Warnings and errors are not routed through here: they print every time.
   void Note(const std::string &line) const;
+  /// The warnings printed once per run (a fit evaluates thousands of times; the first case is enough), one key per
+  /// message.  Owned by the run, so that a second run in the same process -- a pyazr session, the web UI's server
+  /// -- prints them again (they were process-wide flags before 2026-11-12).  Copies of a Config share it.  Not
+  /// touched by Reset().
+  std::shared_ptr<NoteLog> printedOnce = std::make_shared<NoteLog>();
+  /// True the first time this run asks with `key` (thread-safe): print the warning then, and not again.
+  bool FirstTime(const std::string &key) const { return FirstTimeIn(printedOnce, key); }
+  /// The same for a holder of the run's log that has no Config at hand (set-up records keep the pointer); a null
+  /// log answers true every time.
+  static bool FirstTimeIn(const std::shared_ptr<NoteLog> &log, const std::string &key);
+  /// The run's per-thread scratch (RunScratch.h): what the external-capture integrals and the THM vertex boundary keep
+  /// between calls, keyed by everything it depends on.  Owned by the run, never process-wide; copies of a Config share
+  /// it.  Made by the constructor, not touched by Reset().
+  std::shared_ptr<azure2::RunScratch> scratch;
   /// Read input files (the .azr, data, covariance and target-effect files) through InputFiles, which keeps
   /// their contents in memory and reads a file again only when it changes on disk.  Set by AZUREAPI: a
   /// rebuild there (SetRadius, a potential change, a mode switch) used to re-read every file, which on

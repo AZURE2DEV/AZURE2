@@ -80,7 +80,6 @@ class ThmDwVertex {
   std::vector<double> Gd, qd, pd, thd;
   std::vector<char> valid;  ///< grid energies where the window is reachable
   double buildSeconds = 0.0;
-  mutable std::atomic<bool> warned{false};
 
   /// The vertex at one energy (interpolated): per node its weight and per l
   /// index the two components M^(k)(B) = a[k] (B - 1) - d[k].

@@ -136,38 +136,6 @@ void CoulFunc::setLast(int lLast, int twoJLast, double rLast, double eLast, Coul
   coulLast_.dG = coulLast.dG;
 }
 
-namespace {
-
-/// The radial scratch of SetRadialScratch: per thread, the waves of each (pair, l, energy) block keyed by the exact
-/// radius.  Everything operator() depends on besides (l, radius, energy) is in the block's identity, so a stored value
-/// is the value operator() computes.  At most kRadialScratchSize radii are held; the scratch is emptied when full.
-struct RadialBlockKey {
-  int z1, z2, l, two_j;
-  double redmass, mtot, energy;
-  std::optional<azure2::physics::HybridPotential> potential;
-  bool gsl;
-  bool operator==(const RadialBlockKey &o) const {
-    return z1 == o.z1 && z2 == o.z2 && l == o.l && two_j == o.two_j && redmass == o.redmass && mtot == o.mtot && energy == o.energy &&
-           potential == o.potential && gsl == o.gsl;
-  }
-};
-struct RadialBlockHash {
-  std::size_t operator()(const RadialBlockKey &k) const {
-    std::size_t h = std::hash<double>()(k.energy);
-    for (std::size_t v : {std::hash<int>()(k.z1), std::hash<int>()(k.z2), std::hash<int>()(k.l), std::hash<int>()(k.two_j),
-                          std::hash<double>()(k.redmass), std::hash<double>()(k.mtot),
-                          std::hash<double>()(k.potential ? k.potential->central_depth_MeV : -1.0),
-                          std::hash<bool>()(k.gsl)})
-      h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
-    return h;
-  }
-};
-using RadialBlock = std::unordered_map<double, CoulWaves>;
-constexpr std::size_t kRadialScratchSize = 1 << 20;
-thread_local std::unordered_map<RadialBlockKey, RadialBlock, RadialBlockHash> t_radialBlocks;
-thread_local std::size_t t_radialSize = 0;
-
-}  // namespace
 
 /*!
  * The parenthesis operator is defined to make the class instance callable as a function.  The orbital
@@ -189,14 +157,14 @@ CoulWaves CoulFunc::operator()(int l, int two_j, double radius, double energy) {
     return result;
   }
 
-  RadialBlock *block = nullptr;
-  if (radialScratch_) {
-    if (t_radialSize >= kRadialScratchSize) {
-      t_radialBlocks.clear();
-      t_radialSize = 0;
+  std::unordered_map<double, CoulWaves> *block = nullptr;
+  if (radialMemo_) {
+    if (radialMemo_->size >= CoulRadialMemo::kMaxRadii) {
+      radialMemo_->blocks.clear();
+      radialMemo_->size = 0;
     }
-    block = &t_radialBlocks[RadialBlockKey{z1_, z2_, l, two_j, redmass_, kin_.rel ? kin_.m1 + kin_.m2 : 0.0, energy, potential_,
-                                           useGSLFunctions_}];
+    block = &radialMemo_->blocks[CoulRadialMemo::Key{z1_, z2_, l, two_j, redmass_, kin_.rel ? kin_.m1 + kin_.m2 : 0.0,
+                                                     energy, potential_, useGSLFunctions_}];
     auto w = block->find(radius);
     if (w != block->end()) {
       setLast(l, two_j, radius, energy, w->second);
@@ -216,7 +184,7 @@ CoulWaves CoulFunc::operator()(int l, int two_j, double radius, double energy) {
   result = newResult;
   if (block) {
     block->emplace(radius, newResult);
-    t_radialSize++;
+    radialMemo_->size++;
   }
 
   return result;
