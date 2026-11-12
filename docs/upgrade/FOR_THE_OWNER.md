@@ -317,9 +317,21 @@ quadrature error they had; unfolded numbers do not move at all. What was measure
   to be the closer one before the expectation was regenerated. One check runs with a wider tolerance (1e-5 instead of
   1e-6) until a data set with a fitted energy shift is on the mesh too (the next branch).
 
-In work now: four mechanisms that existed only to make a point's private grid affordable are being deleted (the
-automatic tolerance, the fold windows, the edge blending, the σ(Ē) fallback): fewer fields in the input format and
-fewer cases in the engine. Merged in the earlier batch: one generic kind of fit parameter for the parameters of
+**Four mechanisms deleted (merged 2026-11-12).** The automatic tolerance, the fold windows, the edge blending and
+the σ(Ē) fallback existed only to make a point's private grid affordable. On the shared mesh a node costs the same
+whoever uses it, so they are gone: a folded data set names its effect and, optionally, the mesh's settings, and every
+point of it is folded with the whole kernel. In numbers: 44 engine, format and converter files, 874 lines removed
+against 161 added; the set-up of target effects 968 → 762 lines; `fold_windows` is no longer a field of the format (a
+file that writes it is refused with a message that names the field and says to remove it; an old file converts with a
+note that names the line). Every project of the test tree keeps its bytes except the one that used a window
+(`target_effect_ranges`: χ² 3838.66 → 3760.95, one A_y point by 1.5 of its error): its new numbers are, bit for bit,
+what the old engine gives with the window widened to all energies, so the move is the points the window had left
+without the beam spread. **This is a behaviour change you should know of**: a window was a restriction of the physics,
+not an approximation, and an analysis that relied on it gets the full fold. Speed and memory of the measured projects
+are unchanged.
+
+In work now: a data set with a fitted energy shift is folded on the fixed nodes of the mesh too (the kernel moves,
+the nodes stay), which removes the last private grids and a cache with locks. Merged in the earlier batch: one generic kind of fit parameter for the parameters of
 apparatus effects (see "How to add a feature now").
 
 **Do the checks still test what they say? (merged 2026-11-11, evening.)** A regression check that edits a project's
@@ -412,8 +424,9 @@ small Python package on the same `experiment/` and stopping libraries, exporting
 project. AZURE2 itself stays an R-matrix code. Not before Phase 5 (it needs the stopping module).
 
 **`dev` and the upgrade.** `dev` has 18 commits since the upgrade branched. Most are documentation; the
-target-effect windows, the UDR kernels and test fixes port as they are; three changes (the heavy-ion Coulomb
-fallback, the coincident-level limits, pyazr NUTS sampling) are redone in the new structure; two are obsolete (the
+UDR kernels and test fixes port as they are; three changes (the heavy-ion Coulomb
+fallback, the coincident-level limits, pyazr NUTS sampling) are redone in the new structure; four are obsolete, among
+them the two on automatic target-effect windows, which the upgrade deletes (the
 assessment is in `HANDOFF.md`). Until the merge, new physics is best written on the upgrade branch, following the
 recipes.
 
