@@ -22,10 +22,6 @@
 #include "azure2/convert/SpecsFromOldLines.h"
 #include "Config.h"
 
-// Each consumer of the engine defines this itself (src/AZURE2.cpp for the
-// CLI, api/src/pybind_api.cpp for the Python API).
-Config *g_config = nullptr;
-
 static int failures = 0;
 
 static void check(const char *what, double got, double want, double tol) {

@@ -36,8 +36,6 @@
 #include "ThmDistortion.h"
 #include "ThmExperiment.h"
 
-Config *g_config = nullptr;
-
 namespace {
 
 bool verbose = false;

@@ -494,7 +494,7 @@ void RunTabulatedRateCalculation(const std::vector<double> &temps,
       os << "\tWarning: could not write " << gridFile << std::endl;
     }
     if (configure.useECTable && ECTable::Lookups() + ECTable::DirectCalls() > 0)
-      os << "\t" << ECTable::Report() << std::endl;
+      os << "\t" << ECTable::Report(configure) << std::endl;
   }
 
   // ln sigma against ln E over the points with sigma > 0.  The rest (an underflowed

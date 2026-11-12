@@ -7,7 +7,6 @@ api/include/AZUREAPI.h	nuisanceParams_	mutable	pending (milestone 3, an evaluati
 api/include/AZUREAPI.h	nuisanceRead_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): the session's nuisance layout read lazily and its Results, written by const evaluations
 api/include/AZUREAPI.h	nuisance_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): the session's nuisance layout read lazily and its Results, written by const evaluations
 api/include/AZUREAPI.h	results_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): the session's nuisance layout read lazily and its Results, written by const evaluations
-api/src/pybind_api.cpp	g_config	namespace	pending (milestone 2, no process-wide pointers): the run's Config for readers that do not get it from their caller
 include/AMatrixFunc.h	cached_max_channels_	mutable	pending (evaluation.md milestone 1, scratch of the energy task): buffers of a solver object (the energy task's scratch) written by const methods
 include/AMatrixFunc.h	cached_max_levels_	mutable	pending (evaluation.md milestone 1, scratch of the energy task): buffers of a solver object (the energy task's scratch) written by const methods
 include/AMatrixFunc.h	levelDecoupled_	mutable	pending (evaluation.md milestone 1, scratch of the energy task): buffers of a solver object (the energy task's scratch) written by const methods
@@ -49,7 +48,6 @@ include/AZURECalcMCMC.h	usePriors_	mutable	pending (milestone 4, CNuc split; the
 include/AZURECalcMCMC.h	useRWA_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/CoulombTable.h	hits_	static	pending (milestone 5, the diagnostics record): lookup counters printed at exit
 include/CoulombTable.h	misses_	static	pending (milestone 5, the diagnostics record): lookup counters printed at exit
-include/ECAmplitudeCache.h	cache_mutex_	mutable	pending (milestone 2, no process-wide pointers): lock of the session's EC amplitude cache
 include/GSLException.h	h	static	table: GSL's error handler is process-wide by GSL's design: the saved handler, a nesting count and their lock
 include/GSLException.h	m	static	table: GSL's error handler is process-wide by GSL's design: the saved handler, a nesting count and their lock
 include/GSLException.h	n	static	table: GSL's error handler is process-wide by GSL's design: the saved handler, a nesting count and their lock
@@ -60,7 +58,6 @@ include/Site.h	ec_shifted_	mutable	pending (milestone 3, an evaluation writes on
 include/ThmVertexBoundary.h	channelFunc_	mutable	pending (evaluation.md milestone 1, scratch of the energy task): a ChannelFunc whose calls are non-const (its last-value cache)
 src/ALevel.cpp	counter	static	table: the stamp generator: names level states uniquely in the process (the keys of ChannelSpace::Memo), holds no value of a calculation
 src/AMatrixFunc.cpp	worst	static	pending (milestone 5, the diagnostics record): call counter, worst value or saved gradient of a diagnostic print (AZURE_GRAD_CHECK, AZURE_GRAD_TIMING, AZURE_DUMP_NONFINITE, AZURE_CHANNEL_VERIFY)
-src/AZURE2.cpp	g_config	namespace	pending (milestone 2, no process-wide pointers): the run's Config for readers that do not get it from their caller
 src/AZURE2.cpp	g_last_printed_step	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
 src/AZURE2.cpp	g_start_time	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
 src/AZURECalc.cpp	evals	static	pending (milestone 5, the diagnostics record): call counter, worst value or saved gradient of a diagnostic print (AZURE_GRAD_CHECK, AZURE_GRAD_TIMING, AZURE_DUMP_NONFINITE, AZURE_CHANNEL_VERIFY)
@@ -95,21 +92,16 @@ src/AZURECalcMCMC.cpp	g_using_rwa_parameters	namespace	pending (milestone 4, CNu
 src/AZUREGrad.cpp	calls	static	pending (milestone 5, the diagnostics record): call counter, worst value or saved gradient of a diagnostic print (AZURE_GRAD_CHECK, AZURE_GRAD_TIMING, AZURE_DUMP_NONFINITE, AZURE_CHANNEL_VERIFY)
 src/AZUREGrad.cpp	g_teCombinerNs	namespace	pending (milestone 5, the diagnostics record): call counter, worst value or saved gradient of a diagnostic print (AZURE_GRAD_CHECK, AZURE_GRAD_TIMING, AZURE_DUMP_NONFINITE, AZURE_CHANNEL_VERIFY)
 src/AZUREGrad.cpp	nChecked	static	pending (milestone 5, the diagnostics record): call counter, worst value or saved gradient of a diagnostic print (AZURE_GRAD_CHECK, AZURE_GRAD_TIMING, AZURE_DUMP_NONFINITE, AZURE_CHANNEL_VERIFY)
-src/CNuc.cpp	g_shiftDerivMemo	namespace	pending (milestone 2, no process-wide pointers): exact-key memo of dS/dE at level energies (Park), shared by the pooled copies
-src/CNuc.cpp	g_shiftDerivMutex	namespace	pending (milestone 2, no process-wide pointers): exact-key memo of dS/dE at level energies (Park), shared by the pooled copies
 src/CoulombTable.cpp	f	static	table: the Coulomb tables loaded from files (immutable once loaded), the files that could not be read, their lock
 src/CoulombTable.cpp	m	static	table: the Coulomb tables loaded from files (immutable once loaded), the files that could not be read, their lock
 src/CoulombTable.cpp	report	static	pending (milestone 5, the diagnostics record): prints the table's lookup counts at exit
 src/CoulombTable.cpp	t	static	table: the Coulomb tables loaded from files (immutable once loaded), the files that could not be read, their lock
-src/ECAmplitudeCache.cpp	g_ecAmplitudeCache	namespace	pending (milestone 2, no process-wide pointers): the session's EC amplitude cache, swapped in per call by the binding
 src/ECTable.cpp	g_checkMutex	namespace	pending (milestone 5, the diagnostics record): EC table counters and AZURE2_EC_TABLE_CHECK statistics
 src/ECTable.cpp	g_direct	namespace	pending (milestone 5, the diagnostics record): EC table counters and AZURE2_EC_TABLE_CHECK statistics
 src/ECTable.cpp	g_lookups	namespace	pending (milestone 5, the diagnostics record): EC table counters and AZURE2_EC_TABLE_CHECK statistics
 src/ECTable.cpp	g_maxDeviation	namespace	pending (milestone 5, the diagnostics record): EC table counters and AZURE2_EC_TABLE_CHECK statistics
 src/ECTable.cpp	g_nodes	namespace	pending (milestone 5, the diagnostics record): EC table counters and AZURE2_EC_TABLE_CHECK statistics
 src/ECTable.cpp	g_nodesReport	namespace	pending (milestone 5, the diagnostics record): EC table counters and AZURE2_EC_TABLE_CHECK statistics
-src/ECTable.cpp	g_terms	namespace	pending (milestone 2, no process-wide pointers): the EC integral table filled on first use (pure function of the key); a table built at set-up later
-src/ECTable.cpp	g_termsMutex	namespace	pending (milestone 2, no process-wide pointers): the EC integral table filled on first use (pure function of the key); a table built at set-up later
 src/InputFiles.cpp	g_bytes	namespace	pending (milestone 2, no process-wide pointers): the bytes of input files read by pyazr sessions, keyed by path and stamp; the session's file store later
 src/InputFiles.cpp	g_files	namespace	pending (milestone 2, no process-wide pointers): the bytes of input files read by pyazr sessions, keyed by path and stamp; the session's file store later
 src/InputFiles.cpp	g_mutex	namespace	pending (milestone 2, no process-wide pointers): the bytes of input files read by pyazr sessions, keyed by path and stamp; the session's file store later
@@ -119,4 +111,3 @@ src/Profile.cpp	g_count	namespace	pending (milestone 5, the diagnostics record):
 src/Profile.cpp	g_depth	namespace	pending (milestone 5, the diagnostics record): AZURE_PROFILE accounting
 src/Profile.cpp	g_ns	namespace	pending (milestone 5, the diagnostics record): AZURE_PROFILE accounting
 src/TargetSetup.cpp	calls	static	pending (milestone 5, the diagnostics record): call counter, worst value or saved gradient of a diagnostic print (AZURE_GRAD_CHECK, AZURE_GRAD_TIMING, AZURE_DUMP_NONFINITE, AZURE_CHANNEL_VERIFY)
-src/coulomb_table_main.cpp	g_config	namespace	pending (milestone 2, no process-wide pointers): the run's Config for readers that do not get it from their caller

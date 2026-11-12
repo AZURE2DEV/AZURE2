@@ -19,8 +19,6 @@
 #include "PPair.h"
 #include "PathwayTable.h"
 
-Config *g_config = nullptr;  // defined by the executable; the library reads it
-
 namespace {
 int failures = 0;
 void check(const std::string &name, bool ok, const std::string &detail = "") {
@@ -42,7 +40,6 @@ int main(int argc, char **argv) {
   Config cfg(sink);
   cfg.configfile = file.filename().string();
   cfg.paramMask |= Config::USE_EXTERNAL_CAPTURE;
-  g_config = &cfg;
   CNuc compound;
   if (cfg.ReadConfigFile() < 0) {
     check("reads the configuration", false, sink.str());
@@ -51,7 +48,7 @@ int main(int argc, char **argv) {
   cfg.fileCheckMask = 0;
   cfg.screenCheckMask = 0;
   cfg.ResolveMatrixRoute();
-  InitializeECAmplitudeCache();
+  InitializeECAmplitudeCache(cfg);
   if (compound.Fill(cfg) == -1) {
     check("reads the levels", false, sink.str().substr(0, 400));
     return 1;

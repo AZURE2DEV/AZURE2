@@ -25,8 +25,6 @@
 #include "Config.h"
 #include "PPair.h"
 
-Config *g_config = nullptr;  // defined by the executable; the library reads it
-
 namespace {
 
 int failures = 0;
@@ -51,7 +49,6 @@ void CheckProject(const std::string &azr) {
   std::ostringstream sink;
   Config cfg(sink);
   cfg.configfile = azr;
-  g_config = &cfg;
   CNuc compound;
   if (cfg.ReadConfigFile() < 0 || compound.Fill(cfg) == -1) {
     check(azr + ": load", false);

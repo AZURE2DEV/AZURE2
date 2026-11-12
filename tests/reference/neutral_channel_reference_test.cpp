@@ -24,8 +24,6 @@
 #include "Config.h"
 #include "ShftFunc.h"
 
-Config *g_config = nullptr;  // defined by the executable; the library reads it
-
 static int failures = 0;
 
 static void check(bool ok, const char *what, int l, double rho, double a, double b) {

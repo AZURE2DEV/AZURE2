@@ -36,8 +36,6 @@
 #include <omp.h>
 #endif
 
-Config *g_config = nullptr;  // the engine library expects the executable to define it
-
 namespace {
 
 int Usage() {

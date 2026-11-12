@@ -394,7 +394,7 @@ bool Site::RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nrCM
 double Site::CalculateCrossSectionConversionFactor(PPair *entrancePair, PPair *exitPair) {
   double conversionFactor;
   double relAngle;
-  if (Kinematics::Relativistic() && this->RelativisticLabToCM(entrancePair, exitPair, this->GetCMAngle(), relAngle, conversionFactor)) {
+  if (entrancePair->FunctionSettings().relativistic && this->RelativisticLabToCM(entrancePair, exitPair, this->GetCMAngle(), relAngle, conversionFactor)) {
     return conversionFactor;
   }
   return azure2::experiment::ParticleJacobian(PartitionOf(entrancePair), PartitionOf(exitPair), this->GetLabEnergy(),

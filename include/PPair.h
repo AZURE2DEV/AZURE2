@@ -2,6 +2,7 @@
 #define PPAIR_H
 
 #include <optional>
+#include <string>
 
 #include "azure2/physics/HybridPotential.h"
 
@@ -10,6 +11,21 @@ namespace io {
 class LevelRow;
 }
 }  // namespace azure2
+
+/*!
+ * What the run's Config says about how a pair's functions are computed: the same for every pair of a run, given when
+ * the pair is built (CNuc::Fill).  The readers deep in the channel functions (Kinematics::Channel, CoulFunc, ShftFunc,
+ * WhitFunc) take it from their pair, never from a process-wide pointer, so two runs in one process (two pyazr sessions,
+ * the web UI's server) with different settings never read each other's.
+ */
+struct PairFunctionSettings {
+  /// Relativistic kinematics ("relativistic=1" in the <config> block, Config::relativistic; Kinematics.h).
+  bool relativistic = false;
+  /// The universal Coulomb table where it covers the pair (Config::useCoulombTable; --no-coulomb-table turns it off).
+  bool useCoulombTable = false;
+  /// The table's file (Config::coulombTablePath, "" = the default file), loaded on first use (CoulombTable::Shared).
+  std::string coulombTablePath;
+};
 
 /// An AZURE Particle Pair
 
@@ -21,8 +37,8 @@ class LevelRow;
 
 class PPair {
  public:
-  /// Build from a line of the nuclear input file.
-  explicit PPair(const azure2::io::LevelRow &);
+  /// Build from a line of the nuclear input file, with the run's settings of its functions.
+  PPair(const azure2::io::LevelRow &, const PairFunctionSettings &);
   /// Is this the entrance pair the calculation is driven from?
   bool IsEntrance() const;
   /// Charge number of particle 1 or 2.
@@ -122,6 +138,8 @@ class PPair {
   /// kNoSpinOrbit, else j(j+1) - l(l+1) - i(i+1) with i the spin of the particle the term acts on.
   double SpinOrbitFactor(int l, int two_j) const;
   void SetEntrance();
+  /// The run's settings of this pair's functions (relativistic kinematics, the Coulomb table).
+  const PairFunctionSettings &FunctionSettings() const { return function_settings_; }
 
  private:
   bool entrance_;
@@ -146,6 +164,7 @@ class PPair {
   double red_mass_;
   double i1i2factor_;
   std::optional<azure2::physics::HybridPotential> hybrid_potential_;
+  PairFunctionSettings function_settings_;
 };
 
 #endif

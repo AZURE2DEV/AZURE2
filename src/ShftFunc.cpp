@@ -163,9 +163,10 @@ double ShftFunc::EnergySecondDerivative(int l, int two_j, double energy) {
                                             binding < 4.0 * h, azure2::physics::Side::Below);
 }
 
-const CoulombTable *ShftFunc::SharedTable(bool neutral) {
-  if (neutral || !g_config || !g_config->useCoulombTable) return nullptr;
-  return CoulombTable::Shared(g_config->coulombTablePath);
+const CoulombTable *ShftFunc::SharedTable(const PPair *pair, bool neutral) {
+  const PairFunctionSettings &settings = pair->FunctionSettings();
+  if (neutral || !settings.useCoulombTable) return nullptr;
+  return CoulombTable::Shared(settings.coulombTablePath);
 }
 
 bool ShftFunc::UseURatio() {

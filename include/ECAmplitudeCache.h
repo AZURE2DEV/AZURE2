@@ -7,8 +7,9 @@
 #include "Constants.h"
 
 /*!
- * Simple shared cache for EC amplitudes and their energies across all units
- * This allows interpolation between different energy points when energy shifts are active
+ * The external-capture amplitudes of a run at the energies of each segment's points, for interpolation at a shifted
+ * energy with --no-ec-table (Site::GetECAmplitudeWithShift).  One per run, held by its scratch (azure2::RunScratch::ecAmplitudes):
+ * its keys (k-group, EC m-group, entrance, exit, segment key) name positions in one model, so two runs never share one.
  */
 class ECAmplitudeCache {
  public:
@@ -41,7 +42,7 @@ class ECAmplitudeCache {
 
  private:
   std::map<AmplitudeKey, AmplitudeData> cache_;
-  mutable std::mutex cache_mutex_;  // Protect cache from concurrent access
+  std::mutex cache_mutex_;  // the run's threads add and read under it
 
  public:
   /*!
@@ -54,22 +55,12 @@ class ECAmplitudeCache {
    * Returns complex(0,0) if no data available for the key
    * Simple interpolation only - no calculation
    */
-  complex GetInterpolatedAmplitude(const AmplitudeKey &key, double energy) const;
-
-  /*!
-   * Check if we have data for a specific key
-   */
-  bool HasData(const AmplitudeKey &key) const;
+  complex GetInterpolatedAmplitude(const AmplitudeKey &key, double energy);
 
   /*!
    * Clear all cached data
    */
   void Clear();
-
-  /*!
-   * Get cache statistics
-   */
-  void PrintStats() const;
 
  private:
   /*!
@@ -78,17 +69,16 @@ class ECAmplitudeCache {
   complex Interpolate(double energy, double e1, double e2, complex amp1, complex amp2) const;
 };
 
-// Global shared cache instance
-extern ECAmplitudeCache *g_ecAmplitudeCache;
+class Config;
 
-/*!
- * Initialize global cache instance
- */
-void InitializeECAmplitudeCache();
+/// Starts the run's cache afresh (azure2::RunScratch::ecAmplitudes): every amplitude of an earlier set-up of the run
+/// is gone.  Set-up only (not while an evaluation runs).
+void InitializeECAmplitudeCache(const Config &configure);
 
-/*!
- * Cleanup global cache instance
- */
-void CleanupECAmplitudeCache();
+/// Releases the run's cache: Site::GetECAmplitudeWithShift then returns the point's own amplitudes.
+void CleanupECAmplitudeCache(const Config &configure);
+
+/// The run's cache, null when the run has none.
+ECAmplitudeCache *RunECAmplitudes(const Config &configure);
 
 #endif  // ECAMPLITUDECACHE_H

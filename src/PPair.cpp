@@ -9,7 +9,7 @@
  * A particle pair object is created from and entry in the nuclear input file.
  */
 
-PPair::PPair(const azure2::io::LevelRow &nucLine) {
+PPair::PPair(const azure2::io::LevelRow &nucLine, const PairFunctionSettings &settings) : function_settings_(settings) {
   pair_z_[0] = nucLine.z1();
   pair_z_[1] = nucLine.z2();
   pair_m_[0] = nucLine.m1();

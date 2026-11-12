@@ -372,6 +372,13 @@ add_test(NAME pyazr_session_isolation
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/session_isolation_test.py)
 set_tests_properties(pyazr_session_isolation PROPERTIES PROCESSORS 3 SKIP_RETURN_CODE 77)
+# Two sessions evaluating at the same time on two Python threads (and two Coulomb table files in one process); the
+# second table is made with the table tool of this build.
+add_test(NAME pyazr_concurrent_sessions
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/concurrent_sessions_test.py)
+set_tests_properties(pyazr_concurrent_sessions PROPERTIES PROCESSORS 2 SKIP_RETURN_CODE 77
+                     ENVIRONMENT "AZURE2_COULOMB_TABLE_TOOL=$<TARGET_FILE:azure2-coulomb-table>")
 
 # Tests that take minutes rather than seconds (measured 2026-10-10 on a CRC
 # login node at their thread counts: park_gradient 41 min, shared_state 22,

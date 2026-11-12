@@ -39,9 +39,6 @@
 #include "Config.h"
 #include "ThmAngular.h"
 
-// Each consumer of the engine defines this itself (see thm_coulomb_term_test).
-Config *g_config = nullptr;
-
 namespace {
 
 bool verbose = false;

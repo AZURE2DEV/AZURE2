@@ -28,8 +28,6 @@
 #include "Unit.h"
 #include "Segment.h"
 
-Config *g_config = nullptr;  // defined by the executable; the library reads it
-
 namespace {
 
 int failures = 0, setUp = 0, notSetUp = 0;
@@ -134,7 +132,6 @@ void RunProject(const std::string &path) {
   std::ostringstream sink;
   Config cfg(sink);
   cfg.configfile = file;
-  g_config = &cfg;
   CNuc compound;
   WorkingCopy data;
   AZUREParams params;

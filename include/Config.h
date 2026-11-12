@@ -269,7 +269,4 @@ class Config {
 #endif
 };
 
-// Global Config instance pointer for use across the codebase
-extern Config *g_config;
-
 #endif

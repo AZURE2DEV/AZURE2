@@ -8,6 +8,7 @@
 #include <map>
 #include <tuple>
 #include "CNuc.h"
+#include "RunScratch.h"
 #include "azure2/physics/Constants.h"
 #include <mutex>
 #include <exception>
@@ -208,6 +209,11 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
                            "Coulomb functions (a <potential> block)." << std::endl;
     return -1;
   }
+  // Every pair of the run computes its functions with the run's settings (PPair.h).
+  PairFunctionSettings pairSettings;
+  pairSettings.relativistic = configure.relativistic;
+  pairSettings.useCoulombTable = configure.useCoulombTable;
+  pairSettings.coulombTablePath = configure.coulombTablePath;
   int PairNum, LevelNum, ChannelNum, JGroupNum;
   int maxLValue = 0;
   std::map<std::pair<int, int>, std::vector<int> > channelsListed;  // (group, level) -> group channel numbers, in line order
@@ -252,11 +258,11 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
       // A pair is a property of the system, not of the level that happens to mention it: with every
       // J^pi scattering through its hard sphere, a pair whose levels are all switched off still has
       // channels, so it is kept.
-      PPair NewPair(Line);
+      PPair NewPair(Line, pairSettings);
       if (!this->IsPair(NewPair)) this->AddPair(NewPair);
     }
     if (Line.isActive() == 1) {
-      PPair NewPair(Line);
+      PPair NewPair(Line, pairSettings);
       PairNum = this->IsPair(NewPair);
       if (!PairNum) {
         this->AddPair(NewPair);
@@ -1192,42 +1198,6 @@ vector_r CNuc::GetTransformParams(const Config &) {
   return params;
 }
 
-namespace {
-
-/*!
- * Park's numerical shift-function derivatives by their exact arguments (the
- * pair's parameters, l and the level energy, compared bit for bit, and the
- * settings that change the shift function at those arguments: GSL or own
- * Coulomb functions, a nuclear potential, the Coulomb table, relativistic
- * kinematics -- pyazr sessions with different settings share one process), shared by
- * all compound nuclei of the process: the working copies of a fit (evaluation,
- * gradient, residual Jacobian) need the same values at the same parameters.
- * An entry is what the computation returns, so a hit changes nothing.
- * Cleared by CNuc::InvalidateShiftFunctions (a new nuclear potential) and
- * when it grows past kShiftDerivMemoMax.
- */
-struct ShiftDerivKey {
-  int z1, z2, l, two_j;  ///< two_j: PPair::SpinOrbitTwoJ
-  bool gsl;
-  std::vector<double> hybrid;  ///< azure2::physics::PotentialKey of the pair's potential
-  bool table, relativistic;
-  double redmass, mass, radius, threshold, energy;
-  bool operator<(const ShiftDerivKey &o) const {
-    return std::tie(z1, z2, l, two_j, gsl, hybrid, table, relativistic, redmass, mass, radius, threshold, energy) <
-        std::tie(o.z1, o.z2, o.l, o.two_j, o.gsl, o.hybrid, o.table, o.relativistic, o.redmass, o.mass, o.radius, o.threshold,
-                 o.energy);
-  }
-};
-struct ShiftDerivValue {
-  bool has1 = false, has2 = false;
-  double d1 = 0.0, d2 = 0.0;
-};
-std::mutex g_shiftDerivMutex;
-std::map<ShiftDerivKey, ShiftDerivValue> g_shiftDerivMemo;
-const std::size_t kShiftDerivMemoMax = 1 << 16;
-
-}  // namespace
-
 /*!
  * This function is called for each iteration to calculate the shift
  * functions at new level energies when the Brune parametrization is used.
@@ -1241,7 +1211,7 @@ const std::size_t kShiftDerivMemoMax = 1 << 16;
  * every call (physics/coulomb, no memo), so the values do not depend on the
  * number of threads.  Channels of a level that differ only in
  * the channel spin share one derivative, and the working copies of a fit share
- * them through an exact-argument memo (g_shiftDerivMemo).
+ * them through the run's exact-argument memo (RunScratch::shiftDerivatives).
  */
 
 void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
@@ -1314,6 +1284,7 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
   // carried out of the parallel region and rethrown.
   const bool gslCoulomb = !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC);
   const int numDerivatives = (int)derivatives.size();
+  azure2::ShiftDerivativeMemo &memo = configure.scratch->shiftDerivatives;
   std::exception_ptr error;
 #ifdef _OPENMP
 #pragma omp parallel for schedule(dynamic, 1) if (numDerivatives > 1 && !omp_in_parallel())
@@ -1325,14 +1296,14 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
       const double threshold = d.pair->GetSepE() + d.pair->GetExE();
       const double resonanceEnergy = d.energy - threshold;
       CoulFunc theCoulombFunction(d.pair, gslCoulomb);
-      const ShiftDerivKey key{d.pair->GetZ(1), d.pair->GetZ(2), d.l, d.two_j, gslCoulomb, azure2::physics::PotentialKey(theCoulombFunction.HybridPotential()),
-                              theCoulombFunction.UsesTable(), Kinematics::Relativistic(), d.pair->GetRedMass(),
+      const azure2::ShiftDerivativeMemo::Key key{d.pair->GetZ(1), d.pair->GetZ(2), d.l, d.two_j, gslCoulomb, azure2::physics::PotentialKey(theCoulombFunction.HybridPotential()),
+                              theCoulombFunction.UsesTable(), d.pair->FunctionSettings().relativistic, d.pair->GetRedMass(),
                               d.pair->GetM(1) + d.pair->GetM(2), d.pair->GetChRad(), threshold, d.energy};
       bool need1 = d.first, need2 = d.second;
       {
-        std::lock_guard<std::mutex> lock(g_shiftDerivMutex);
-        auto it = g_shiftDerivMemo.find(key);
-        if (it != g_shiftDerivMemo.end()) {
+        std::lock_guard<std::mutex> lock(memo.mutex);
+        auto it = memo.values.find(key);
+        if (it != memo.values.end()) {
           if (need1 && it->second.has1) {
             d.d1 = it->second.d1;
             need1 = false;
@@ -1358,9 +1329,9 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
           d.d2 = theCoulombFunction.PEShift_d2E(d.l, d.two_j, d.pair->GetChRad(), resonanceEnergy);
         }
       }
-      std::lock_guard<std::mutex> lock(g_shiftDerivMutex);
-      if (g_shiftDerivMemo.size() >= kShiftDerivMemoMax) g_shiftDerivMemo.clear();
-      ShiftDerivValue &v = g_shiftDerivMemo[key];
+      std::lock_guard<std::mutex> lock(memo.mutex);
+      if (memo.values.size() >= azure2::ShiftDerivativeMemo::kMax) memo.values.clear();
+      azure2::ShiftDerivativeMemo::Value &v = memo.values[key];
       if (need1) {
         v.has1 = true;
         v.d1 = d.d1;
@@ -1470,13 +1441,14 @@ bool CNuc::ConvertAmplitudeBasis(ROOT::Minuit2::MnUserParameters &p, int from, i
 }
 
 /*!
- * Forgets the cached shift functions of every level.
+ * Forgets the cached shift functions of every level and the run's shift-derivative memo.
  */
 
-void CNuc::InvalidateShiftFunctions() {
+void CNuc::InvalidateShiftFunctions(const Config &configure) {
   {
-    std::lock_guard<std::mutex> lock(g_shiftDerivMutex);
-    g_shiftDerivMemo.clear();
+    azure2::ShiftDerivativeMemo &memo = configure.scratch->shiftDerivatives;
+    std::lock_guard<std::mutex> lock(memo.mutex);
+    memo.values.clear();
   }
   for (int j = 1; j <= this->NumJGroups(); j++)
     for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++)
