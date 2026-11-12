@@ -26,6 +26,7 @@
 #include <cstring>
 #include <iostream>
 #include <cmath>
+#include <stdexcept>
 #include <algorithm>
 #include <string>
 #include <unordered_map>
@@ -509,12 +510,15 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
   // an a_k cotangent fitBar c_i A0_i / D (PointTBar's coefficient form) and an A_0 cotangent fitBar c_i (a_i - <a_k>) / D
   // (PointTBar with xsComponent -1).  An absolute A_k is linear in the sub-point values and takes the plain route.
   const bool isCoefNorm = point->IsCoefficient() && !point->GetCoefficientAbsolute();
-  if (isCoefNorm && xsComponent != 0) return false;
+  // An E1 or E2 part exists for sigma, sfactor and modified_sfactor only (the field multipole,
+  // experiment/src/Quantities.cpp): never for coefficients or an analyzing power.
+  if ((isCoefNorm || isAy) && xsComponent != 0)
+    throw std::logic_error("GradTargetEffectAdjoint: an E1 or E2 part of a coefficient or an analyzing power "
+                           "(an invariant of the set-up is broken)");
   if (isAy) {
     // Supported: particle-exit A_y, full observable (every point's sub-points are units of the point pass, with their
     // own records).  Capture A_y keeps its refusal: the attenuation folded into P_k has no counterpart for the P_k^1
     // of the numerator.
-    if (xsComponent != 0) return false;
     const int exitPairNum = compound->GetPairNumFromKey(point->GetExitKey());
     if (compound->GetPair(exitPairNum)->GetPType() != 0) return false;
   }

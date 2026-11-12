@@ -84,8 +84,9 @@ add_test(NAME thm_spectator_angles COMMAND thm_spectator_angles_test)
 # fallback of the gradient (taken for a folded capture analyzing power,
 # tests/13N_capture_ay with a beam spread) and the analytic gradient (p+p,
 # plain and with a convolved analyzing power) agree with differences of the
-# objective beyond the wall.  Copies of tests/identical_pp_res's and
-# tests/13N_capture_ay's data, adapted by the test itself.
+# objective beyond the wall; and the first project without Park under --use-rmc, whose adjoint bails at a gate of
+# AMatrixFunc::PointTBar.  Copies of tests/identical_pp_res's and tests/13N_capture_ay's data, adapted by the test
+# itself.
 add_executable(park_chi2_fallback_test park_chi2_fallback_test.cpp)
 target_link_libraries(park_chi2_fallback_test PRIVATE AZURE2Core)
 set(_park_chi2_dir ${CMAKE_CURRENT_BINARY_DIR}/park_chi2_fallback)
