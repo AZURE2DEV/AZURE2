@@ -338,6 +338,19 @@ the step that removes it (107 rows; 10 more are permanent: constant tables and l
 must not do: add a `static` or `thread_local` variable that keeps a value, a global pointer, or a `mutable` member; a
 consistency check refuses them.
 
+## Radiative widths as a total width and branchings (branch `feature/upgrade-8-gamma-branchings`)
+
+A level that decays by several γ rays can now be written as its total radiative width, its branchings to the final
+states and the mixing ratios, instead of one partial width per final state and multipolarity: a record
+`gamma_decay` in a section `<gammaDecays>` of the project file, which a fit varies and reads directly, with measured
+branchings as priors. The engine is not changed: before every calculation the record's numbers are turned into the
+partial widths and then into the amplitudes the engine has always used, by the engine's own conversion; a project
+written with the record and the same project with the partial widths give the same numbers. The mixing ratio is
+Krane and Steffen's (ENSDF's); its sign was fixed by comparing the engine's γ angular distributions with their
+formula. The total radiative width stays out of the resonance's total width, as the radiative widths always have;
+the user guide says what that means for a resonance-strength datum (a difference of Γ_γ/Γ_particle). Not covered: the
+formal basis (`--no-brune`) and a level whose final state has external capture; both are refused with a message.
+
 ## What is in work and what comes next
 
 Merged in the night of 2026-11-12, each after the whole verification: the

@@ -548,7 +548,9 @@ step of a fit from the **observed** energy and widths of the level (those
   :math:`\omega = (2J+1)(1+\delta_{aA})/((2j_a+1)(2j_A+1))`, with
   :math:`\Gamma_a`, :math:`\Gamma_b` the observed widths summed over the
   channels of the entrance and exit pairs and :math:`\Gamma` over all
-  channels (eV, meV, ueV, keV);
+  channels (eV, meV, ueV, keV).  :math:`\Gamma` includes the radiative widths, which the level matrix leaves out,
+  so a calculated yield of the same level has the strength :math:`\omega\Gamma_a\Gamma_b/\sum\Gamma_\text{particle}`,
+  larger by :math:`1+\Gamma_\gamma/\sum\Gamma_\text{particle}` (:doc:`../user_guide/gamma_decay`);
 * ``resonance_energy``: :math:`E_x` of the level, or :math:`E_\mathrm{c.m.} = E_x - S - E^*`
   and :math:`E_\mathrm{lab}` of the pair (``relativistic=1`` honoured);
 * ``total_width``, ``partial_width`` (``pair``), ``branching_ratio``

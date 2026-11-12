@@ -2,6 +2,26 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, branch `feature/upgrade-8-gamma-branchings`) — implementation: the `gamma_decay` record
+
+**Done.** A level's radiative widths can be written as Γ_γ, branchings b_f (n − 1 of them and a named remainder) and
+mixing ratios δ_f (Krane-Steffen) in a record `gamma_decay` of `<gammaDecays>`: `experiment/` (`GammaDecay.h/.cpp`,
+the kind in `Schema.cpp`, five codes), the engine's map in `include/GammaDecayMap.h`, `src/GammaDecayMap.cpp` (set-up
+widths, parameters of kind 13 `radiative` at the photon slots, `ToEngine` in `FillCompoundFromParams` through
+`amplitudes_from_observed`, the gradient's pull-back in `GradAccum::Scatter`, objective term T11 for the priors and the
+remainder's wall, the block of `parameters.out`), pyazr's `Parameter.decay_*`; docs (`format3.rst` generated,
+`user_guide/gamma_decay.rst`, `output_files.rst`, `parameter_kinds.md`, `objective.md`, `FOR_THE_OWNER.md`,
+`ROADMAP.md`, the recipe in `CLAUDE.md`); tests `tests/gamma_decay/check.sh`, `tests/pyazr/gamma_decay_test.py`, cases
+in `experiment/tests/diagnostics_test.cpp`, `parameter_kinds_test.py`.
+
+**Verified how.** Per commit: build without warnings, repo_consistency, the experiment and pyazr tests concerned, T1,
+T2, T3, 13N, 13N_capture_ay, thick_target_resonance, model_data x 3 bases identical to `tab-gridm-1`. The new checks
+pass and each was shown to fail with one injected error (listed in `tests/gamma_decay/README.md`). The end-of-branch
+verification is the next entry's (or the report's) business.
+
+**Open.** The formal basis and external capture on a record channel are refused (decisions 2 and 3 of the note);
+Sphinx was not built here (no sphinx in the environment).
+
 ## 2026-11-12 (agent, branch `feature/upgrade-8-gamma-branchings`) — design note: total radiative width, branchings, mixing ratios
 
 **Done.** `docs/upgrade/gamma_parametrisation.md`: what exists (photon widths in `<levels>`, their amplitudes in the

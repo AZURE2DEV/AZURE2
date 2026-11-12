@@ -37,6 +37,7 @@ A. M. Lane and R. G. Thomas, *Reviews of Modern Physics* **30**, 257 (1958).
    user_guide/configure_menu
    user_guide/particle_pairs
    user_guide/levels_channels
+   user_guide/gamma_decay
    user_guide/segments
    user_guide/experimental_effects
    user_guide/fitting

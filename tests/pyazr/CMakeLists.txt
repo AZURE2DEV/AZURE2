@@ -741,6 +741,15 @@ add_test(NAME pyazr_parameter_kinds
                  ${CMAKE_CURRENT_SOURCE_DIR}/parameter_kinds_test.py)
 set_tests_properties(pyazr_parameter_kinds PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# A level's radiative decay as Gamma_gamma, branchings and mixing ratios (the gamma_decay record,
+# docs/upgrade/gamma_parametrisation.md; tests/gamma_decay/models): the record built in Python, Gauss-Newton fits in
+# both parametrisations (the same minimum, the branchings' errors equal the propagated ones) and an agent's
+# read-change-refit.  Needs scipy (skipped without it).
+add_test(NAME pyazr_gamma_decay
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/gamma_decay_test.py)
+set_tests_properties(pyazr_gamma_decay PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" SKIP_RETURN_CODE 77)
+
 # The light particle's excitation energy, column 32 of a <levels> line (2026-11-05): Project keeps the column
 # (Project.set_pair(light_excitation=) writes it, a row without it gets it only for a value other than 0), Pair carries light_excitation (and still reads an
 # older engine's 19-field record), and the excitation moved between the partners gives the same cross sections
