@@ -33,8 +33,6 @@ the brief).  Analytic ∂K/∂E_0 per kernel; the lab-frame differential column 
 rigid move (branch 10).  Not run: the whole tree × 3 bases, `run_tests.sh`, the gate, the eight fits, other thread
 counts.
 
-## 2026-11-12 (director, 07:15) — merged: the engine on the shared mesh, the shared sites, the expectations the mesh moves
-
 ## 2026-11-12 (director, 08:10) — merged: fold windows, edge blending, the automatic tolerance and the σ(Ē) fallback are deleted
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (one merge commit, tree of `rehearsal/trial33`; nothing
