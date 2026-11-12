@@ -137,8 +137,18 @@ class Unit : public Site {
   /// The point's slots, a range of the slots of its working copy (WorkingCopy::SlotAt); set by the working copy.
   int SubPointFirst() const { return sub_first_; }
   void SetSubPointRange(int first, int count) { sub_first_ = first, sub_count_ = count; }
-  /// The fold of this point from its slots' values already in `results` (FoldPoint, include/PointFold.h; an analyzing
-  /// power and a normalised Legendre coefficient are the ratio of two folds).
+  /// Whether the point's fold is a ratio of two folds with the same kernel, (K.(w r))/(K.w): a kind with two values per
+  /// slot (SiteObservableRow::values, A_y over its cross section) or a normalised Legendre coefficient (a_k over A_0).
+  bool FoldsRatio() const;
+  /// The weight w and the ratio's element r of the point's slot `slot` (1-based) for FoldsRatio: the slot's values
+  /// (SlotValue, SlotAnalyzingPower; for a coefficient A_0 and a_k).
+  void RatioPartsAt(const WorkingCopy &data, int slot, const azure2::Results &results, double &weight,
+                    double &element) const;
+  /// Where the cotangent of the weight w goes (PointTBar's xsComponent, ayCrossSection): the cross section of an A_y
+  /// slot (0, true), A_0 of a coefficient (-1, false); the element's goes to the observable (0, false).
+  void RatioWeightRoute(int &component, bool &ayCrossSection) const;
+  /// The fold of this point from its slots' values already in `results` (FoldPoint, include/PointFold.h; a ratio,
+  /// FoldsRatio, is the ratio of two folds).
   void FoldSubPoints(const WorkingCopy &data, const Config &, azure2::Results &results);
   /// Integrate the E1 and E2 components of the cross section over the same
   /// sub-points as the total, for a segment compared against one component.

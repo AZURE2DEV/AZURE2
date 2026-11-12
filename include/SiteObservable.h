@@ -111,7 +111,8 @@ struct SiteObservableRow {
   /// second into `second` (not null then); null for kValue, whose value is the record's sigma.  (A reader of one
   /// Legendre coefficient reads it without a row: Site::ValueFor.)
   double (*contract)(const double *r, const AngularRow &row, double *second);
-  /// The values per slot a reader folds: 1, or 2 (the cross section and A_y).
+  /// The values per slot a reader folds: 1, or 2 -- a ratio: value 0 the weight w (the cross section), value 1 the
+  /// ratio's element r (A_y), folded as (K.(w r))/(K.w) (Unit::FoldsRatio, RatioPartsAt; its adjoint in AZUREGrad.cpp).
   int values;
   /// Multiply every observable of the angular part `r` (r[0] its count) by f (electron screening).
   void (*scale)(double *r, double f);
