@@ -14,9 +14,11 @@
 #   DIR        the folder, relative to SRC_TESTS
 #
 # Output: CMP/<basis>/TAG/.res-<DIR with "/" as "__">/<file>.azr/{output,checks,run.log} for each .azr of DIR, where
-# <basis> is brune, no-brune or use-park.  The work copy CMP/<basis>/TAG/job-<...> is removed at the end.
+# <basis> is brune, no-brune or use-park; an earlier result of the same file under the tag is removed first, so the
+# folder holds this run's files only.  The work copy CMP/<basis>/TAG/job-<...> is removed at the end.
 # Environment: AZURE2_COULOMB_TABLE, the Coulomb table file (required).
-# Exit 2 on a usage error or without the table, 1 when DIR is not found in the copy.
+# Exit 2 on a usage error or without the table, 1 when DIR is not found in the copy or a result could not be moved
+# (printed; the other files of DIR are still run).
 
 [ $# -eq 6 ] || { echo "usage: run_one.sh SRC_TESTS CMP TAG ENGINE MODE DIR" >&2; exit 2; }
 # The reference outputs were made with the universal Coulomb table: without it (unset, or the default file of another
@@ -30,12 +32,18 @@ J=$WORK/$M/$TAG/job-$FLAT
 rm -rf $J; mkdir -p $J; cp -r $SRC/$TOP $J/
 cd $J/$DIR || exit 1
 R=$WORK/$M/$TAG/.res-$FLAT
+status=0
 for azr in *.azr; do
   [ -f "$azr" ] || continue
   rm -rf output checks; mkdir -p output checks
   # menu 1, then the prompts of the run answered with their defaults, then 7 (exit); MODE unquoted: "" is no flag
   printf '1\n\n\n7\n' | OMP_NUM_THREADS=1 timeout 900 $BIN --no-gui --no-readline $MODE $azr 2>&1 | head -c 2000000 > run.log
-  mkdir -p $R/$azr
-  mv output checks run.log $R/$azr/ 2>/dev/null
+  # the results of a file are replaced as a whole: a folder left by an earlier use of the tag would make mv refuse
+  # output/ and checks/ and keep the old files beside the new run.log
+  if ! { rm -rf "$R/$azr" && mkdir -p "$R/$azr" && mv output checks run.log "$R/$azr/"; }; then
+    echo "run_one.sh: the results of $DIR/$azr ($M) could not be moved to $R/$azr" >&2
+    status=1
+  fi
 done
 rm -rf $J
+exit $status
