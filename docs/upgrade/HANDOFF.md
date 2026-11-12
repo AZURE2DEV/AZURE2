@@ -28,6 +28,21 @@ fitted shifts move 0.131 and 0.114 of their errors (more than 0.1: a stop condit
 the engine before refined eightfold (sqrt shift: base 1.8638e-3, new 1.9533e-3, refined 1.9538e-3; offset 2.1977e-3,
 2.2275e-3, 2.2300e-3).
 
+**After the director's review (same day).**  Both stop conditions decided by the director: T2's `covariance.out` is a
+named row of the classifier (factor 1.2; reason in `energy_grid.md` §7.1), and the 0.13 σ move of the fit is the
+quadrature's improvement (the new fit agrees with the refined engine's within 0.010 σ).  The 118 against 204-456
+calls of the T2 gradient fit are not a slower convergence: with one normalisation's start value changed (1.002, 0.997,
+1.01, 0.99) both engines end either after 117-118 calls (EDM about 1e-4) or after 452-456 (EDM about 7e-8), and at
+0.99 the base takes 454 and this engine 118; the fit sits on the edge of Minuit's check after HESSE.
+Fixed: (A) the translated stopping of a thick target with a positive shift was evaluated below the floor (E_n − Δ < 0
+at the outer node of s04_thick: 4790 "unsupported imaginary number" warnings in a T2 gradient fit, 2275 in the LM fit,
+17 in one calculation of s04 at sqrt shift 0.002); its argument is held at the nominal support's lower edge, 0
+warnings, every output file of both T2 fits byte-identical to before the fix (`pyazr_shift_fold_floor`, fails before
+the fix).  (B) a folded segment with external capture whose shift left the reach threw mid-fit; its blocks are now
+re-placed and take their amplitudes from the tables (`pyazr_shift_fold_ec`: 13N skowronski_fels with a beam spread and
+a free shift without prior, +0.2 MeV = 3.4 reaches: χ² 4874462.5, base 4874562.0, base refined eightfold 4874427.9;
+back at the file value to 1e-12).
+
 **Open.**  T2 `covariance.out` and the 0.13 σ fit move are for the director (both explained, both stop conditions of
 the brief).  Analytic ∂K/∂E_0 per kernel; the lab-frame differential column still solves (branch 9); THM keeps the
 rigid move (branch 10).  Not run: the whole tree × 3 bases, `run_tests.sh`, the gate, the eight fits, other thread

@@ -128,7 +128,8 @@ struct ShiftedNodes {
 ShiftedNodes ShiftedFoldNodes(const Unit &point, const WorkingCopy &data);
 
 /// The stopping the target kernel reads at slots [first, first + count) of a shifted point: the target's stopping at
-/// each node's energy minus the point's c.m. shift (question 3), c.m. MeV cm^2 per active nucleus.
+/// each node's energy minus the point's c.m. shift (question 3), held at the nominal support's lower edge for an outer
+/// node below it, c.m. MeV cm^2 per active nucleus.
 void TranslatedStopping(const Unit &point, const WorkingCopy &data, const Config &configure, const ShiftedNodes &nodes,
                         std::vector<double> &stopping);
 

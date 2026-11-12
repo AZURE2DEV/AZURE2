@@ -269,6 +269,21 @@ add_test(NAME pyazr_shift_fold_smooth
                  ${CMAKE_CURRENT_SOURCE_DIR}/shift_fold_smooth_test.py)
 set_tests_properties(pyazr_shift_fold_smooth PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
+# A thick target with a positive energy shift on the fixed nodes: the translated stopping is never evaluated below the
+# nominal support (no "unsupported imaginary number" from a power-law stopping), and the yields equal those of the
+# same shift planned for exactly (include/ShiftedFold.h).
+add_test(NAME pyazr_shift_fold_floor
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shift_fold_floor_test.py)
+set_tests_properties(pyazr_shift_fold_floor PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
+# A folded capture data set with external capture follows its shift beyond the reach: the re-planned sites take their
+# capture amplitudes from the tables, no refusal mid-fit.
+add_test(NAME pyazr_shift_fold_ec
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shift_fold_ec_test.py)
+set_tests_properties(pyazr_shift_fold_ec PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
 # The first evaluation of a session uses the shift it is given: a first request of 0 against a nonzero shift on the
 # line returned the chi2 of the line's shift when the segment had sub-points (17O+a Kunz profile, 2026-10-29).
 add_test(NAME pyazr_shift_first_call
