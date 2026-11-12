@@ -28,10 +28,17 @@ Checks (`check.sh path/to/AZURE2`):
 
 - (a) a calculation gives byte-identical output files at 1 and 4 threads;
 - (b) MIGRAD with the analytic gradient, capped at 5 calls, completes at 1 and 4 threads, re-placing grids, with
-  the recorded chi-squared (`expected/chi2_fit`; thm: 109.250542525, dev: 109.134 -- thm's adaptive
-  sub-point grid, MERGE_NOTES.md section A, row 02ae97b);
+  the recorded chi-squared (`expected/chi2_fit`: 109.263831704 since the shared mesh, 2026-11-12; before it
+  thm's 109.250542525, dev: 109.134 -- thm's adaptive sub-point grid, MERGE_NOTES.md section A, row 02ae97b);
 - (c) its output files are byte-identical at 1 and 4 threads;
 - (d) the peak RSS of the 4-thread fit is at most 3.0 times that of the calculation (Linux): 2.5 measured,
   4.7 with a full copy of the data per pooled copy.
 
 About a minute at most.
+
+2026-11-12, the shared mesh (`docs/upgrade/energy_grid.md` §2.2, §7.1): the folded segments of the cut-down project are
+integrated on one mesh per compound nucleus.  At the parameters where the capped fit of the engine before it stopped
+(its `param.sav`), the calculation gives 109.250994445 (engine before), 109.252912382 (shared mesh) and 109.25962319
+(engine before, every grid refined eightfold): the mesh is the closer one, segment by segment as well.  The capped fit
+then ends elsewhere after its five calls: 109.263831704 (shared mesh, 1 and 4 threads), 109.250542525 (before),
+109.219622427 (refined eightfold); five calls are not a minimum, so the end point follows the path, not the rule.

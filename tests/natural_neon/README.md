@@ -55,7 +55,12 @@ converts every point with its own pair (170ab0c, merged into thm with dev
 2d97b1f) and folds with 5-sigma kernels (7d24c88), the difference is gone:
 the pin is 3342.51 since the merge of dev 3264896d (segment 6 245.029; dev
 3342.46, segment 6 245.09; the rest is thm's sub-point grid, segments 4-6 by
-up to 4e-4).
+up to 4e-4).  On the shared mesh (one mesh per compound nucleus,
+`docs/upgrade/energy_grid.md` §2.2, §7.1; 2026-11-12) the pin is 3342.7
+(segments 3-7: 433.278, 295.312, 27.944, 245.04, 946.33); today's engine
+refined eightfold gives 3342.82 (433.273, 295.287, 27.9469, 245.094, 946.427),
+so every folded segment moved towards it.  The table above keeps the values
+before the mesh.
 
 The Almeida resolution is not tabulated; σ = 1 keV stands for the 1 % FWHM
 assumed in the fit. Sikkema is folded with 25 keV FWHM.
