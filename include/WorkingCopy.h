@@ -215,10 +215,20 @@ class WorkingCopy {
   /// The calculation plan of the data set, one task per point, built and checked (CalculationPlan.h).
   void BuildPlan();
   /// The node table of the stage (NodeTable.h), built at the end of Initialize and shared by the copies; null before.
-  const azure2::NodeTable *Nodes() const { return nodeTable_.get(); }
+  const azure2::NodeTable *Nodes() const { return nodes_.table.get(); }
   /// AZURE_NODE_CHECK=1 (the point pass, before its tasks): the node table and slots against the units of the plan
   /// tasks `work`, bit for bit; prints the counts to stderr and returns the number that differ (src/NodeTable.cpp).
   long CheckNodeTable(CNuc *cnuc, const std::vector<int> &work);
+  /// The slots of every plan task in this copy (NodeTable.h): the stage table's until the hand-over moves a unit off it.
+  const azure2::NodeSlots *Slots() const { return nodes_.slots.get(); }
+  /// The copy's overflow table (NodeTable.h): the nodes of its units that the stage table does not hold.
+  const azure2::NodeOverflow &Overflow() const { return nodes_.overflow; }
+  /// The end of the hand-over (src/NodeTable.cpp): the slots of the plan tasks `changedTasks` (their units moved: a
+  /// re-placed grid, an energy shift) and of every task already on the overflow table looked up again, the overflow
+  /// table placed again from nothing for them.  With nothing changed and the rows not released, nothing is done.
+  void PlaceOverflowNodes(CNuc *cnuc, const std::vector<int> &changedTasks, bool rowsReleased);
+  /// Let go of the overflow table's rows before the units are re-energised (they are holders of the units' rows).
+  void ReleaseOverflowRows();
   /// The calculation plan: which task calculates which point (CalculationPlan.h).  Positions only: a shift or a
   /// re-placed sub-point grid leaves it as it is (the energy tasks it gives are rebuilt from the units).
   const azure2::CalculationPlan &Plan() const { return plan_; }
@@ -325,10 +335,10 @@ class WorkingCopy {
   /// rebuild the sub-points of every point whose grid changed.  Sub-points of a
   /// segment in \p shiftActive are left for the energy-shift step to energise and
   /// their segments are appended to \p reshift; the others are energised here.
-  /// Returns the number of points whose grid changed.  Called by
+  /// Returns the number of points whose grid changed, and appends their plan tasks to \p replacedTasks.  Called by
   /// FillEnergyShiftsFromParams.
   int ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const std::vector<TermRef> &shiftActive,
-                           std::vector<TermRef> &reshift);
+                           std::vector<TermRef> &reshift, std::vector<int> &replacedTasks);
   /// Drop the last segment.
   void DeleteLastSegment();
   WorkingCopy *Clone() const;
@@ -398,8 +408,7 @@ class WorkingCopy {
                                 azure2::Results &results);
   /// The energy tasks of the point pass over \p segments (the ones CalculatePointsInParallel runs): the analytic
   /// gradient back-propagates through the same tasks (src/GradEnergyTasks.cpp).
-  const azure2::EnergyTaskList &EnergyTasksOf(const std::vector<const Segment *> &segments, CNuc *theCNuc,
-                                              const Config &configure);
+  const azure2::EnergyTaskList &EnergyTasksOf(const std::vector<const Segment *> &segments, const Config &configure);
 
  private:
   void LayOutUnits(std::vector<std::vector<Unit> *> *fresh);  // CompactUnits, PlaceSubPointGrids
@@ -488,7 +497,7 @@ class WorkingCopy {
   /// The stage's channel table (docs/upgrade/channel_table.md): built by CalcEDependentValues and
   /// InitializeLeaves before their point loops, read-only afterwards, replaced, never written.
   std::shared_ptr<const ChannelTable> channelTable_;
-  std::shared_ptr<const azure2::NodeTable> nodeTable_;  // Nodes(): the stage's, immutable, shared by the copies
+  azure2::NodeState nodes_;  // Nodes(), Slots(), Overflow(): built at the end of Initialize, placed by the hand-over
   std::shared_ptr<const ChannelTable> BuildChannelTable(CNuc *, const Config &, const std::vector<Unit *> &points);
 };
 

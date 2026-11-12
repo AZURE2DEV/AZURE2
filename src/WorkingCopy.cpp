@@ -772,7 +772,7 @@ int WorkingCopy::Initialize(CNuc *compound, const Config &configure) {
   // (BeginEvaluation).
   this->LayoutResults(nullptr);
   // The stage's node table, from the units as the set-up placed them (NodeTable.h).
-  nodeTable_ = azure2::BuildNodeTable(*this, compound, configure);
+  nodes_ = azure2::BuildNodeTable(*this, compound, configure);
   this->Freeze();
 
   return 0;
@@ -818,7 +818,7 @@ WorkingCopy::WorkingCopy(const WorkingCopy &other)
       modelSize_(other.modelSize_),
       gridNuc_(other.gridNuc_),
       nodeCache_(other.nodeCache_),
-      channelTable_(other.channelTable_) {}
+      channelTable_(other.channelTable_), nodes_(other.nodes_) {}
 
 DataSet &WorkingCopy::Draft() {
   if (!draft_) throw std::logic_error("WorkingCopy::Draft: the data set is frozen after the set-up (ReviseDataSet changes it)");
