@@ -16,7 +16,11 @@
 #       the brute force by more than 1e-2 (measured 2.2e-2), so (a) separates the two; the build before D5 folded at the
 #       frozen angle and fails (a) by 2.2e-2;
 #   (c) frozen.dat's c.m. angle is the folded point's own (1e-8 deg), and the window does change the angle and J (the
-#       case bites).
+#       case bites);
+#   (d) a fitted energy offset with a wide prior (0.3 MeV) gives the fold a reach margin that holds nodes where 30 deg
+#       lab is beyond the kinematic maximum (E_c.m. below 1.678 MeV): at offset 0 the run completes and the point is
+#       finite (the margin's nodes are not read; the milestone-4 build aborted at set-up), at -0.32 MeV the window
+#       reads them and the point is NaN with the failed-point warning that names the cause.
 #
 #   ./tests/lab_frame_fold/check.sh path/to/AZURE2
 
@@ -37,6 +41,28 @@ mkdir -p "$WORK/output" "$WORK/checks"
 (cd "$WORK" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline lab_fold.azr > run.log 2>&1)
 OUT="$WORK/output/AZUREOut_aa=1_R=2.out"
 [ -s "$OUT" ] || { echo "  FAIL  no output"; tail -5 "$WORK/run.log"; echo "lab_frame_fold: FAIL"; exit 1; }
+
+. "$HERE/../lib/edit_guard.sh"
+REACH_FAILS=0
+reach() {  # NAME OFFSET: the folded data set with a fitted offset (prior 0.3 MeV) at OFFSET MeV; prints its row 1
+  edited "$WORK/lab_fold.azr" "$WORK/$1.azr" sed \
+    "s/^    detector       det_wide\$/    detector       det_wide\n    shift          offset $2 MeV fit prior 0 0.3/" ||
+    { echo "  FAIL  (d) the variant $1 was not made"; REACH_FAILS=$((REACH_FAILS + 1)); return; }
+  mkdir -p "$WORK/$1/output" "$WORK/$1/checks"; cp -r "$WORK/data" "$WORK/$1/"; cp "$WORK/$1.azr" "$WORK/$1/t.azr"
+  (cd "$WORK/$1" && printf '1\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
+}
+reach reach0 0
+reach reach32 -0.32
+row0="$(head -1 "$WORK/reach0/output/AZUREOut_aa=1_R=2.out" 2>/dev/null | awk '{print $4}')"
+row32="$(head -1 "$WORK/reach32/output/AZUREOut_aa=1_R=2.out" 2>/dev/null | awk '{print $4}')"
+if [ -n "$row0" ] && [ "$row0" != nan ] && ! grep -q 'calculation failed' "$WORK/reach0/run.log"; then
+  echo "  ok    (d) a margin beyond the kinematic maximum, not read: the point is $row0"
+else echo "  FAIL  (d) offset 0: '$row0' (run.log: $(grep -m1 -i 'terminate\|what()\|failed' "$WORK/reach0/run.log"))"
+  REACH_FAILS=$((REACH_FAILS + 1)); fi
+if [ "$row32" = nan ] && grep -q 'beyond the kinematic maximum at an energy its fold reads' "$WORK/reach32/run.log"; then
+  echo "  ok    (d) the window reads it at -0.32 MeV: NaN with the warning"
+else echo "  FAIL  (d) offset -0.32 MeV: '$row32', no failed-point warning naming the kinematic maximum"
+  REACH_FAILS=$((REACH_FAILS + 1)); fi
 
 python3 - "$OUT" <<'PY'
 import sys
@@ -79,5 +105,6 @@ check("(c) the window moves the angle and J", dj > 0.1 and dth > 2.0, f"J by {dj
 sys.exit(1 if fails else 0)
 PY
 status=$?
+[ $REACH_FAILS -eq 0 ] || status=1
 [ $status -eq 0 ] && echo "lab_frame_fold: PASS" || echo "lab_frame_fold: FAIL"
 exit $status

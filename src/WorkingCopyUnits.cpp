@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <iostream>
 
 #include "AngCoeff.h"
@@ -226,7 +227,8 @@ long WorkingCopy::CheckReaderRows(CNuc *theCNuc) const {
       std::string what;
       if (lab) {
         azure2::experiment::AngleLimit lim;
-        azure2::experiment::LabAngleAt(*lab, slot.GetCMEnergy(), p.GetLabAngle(), angle, jacobian, lim);
+        if (!azure2::experiment::LabAngleAt(*lab, slot.GetCMEnergy(), p.GetLabAngle(), angle, jacobian, lim))
+          angle = jacobian = std::numeric_limits<double>::quiet_NaN();
       }
       const double heldAngle = p.SlotAngle(j), heldJacobian = p.SlotJacobian(j);
       if (!same(&angle, &heldAngle, sizeof angle) || !same(&jacobian, &heldJacobian, sizeof jacobian))

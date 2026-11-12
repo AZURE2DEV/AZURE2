@@ -20,3 +20,9 @@ lab, a few hundred keV above the threshold (1.881 MeV), where theta_cm runs from
 no second formula of the cross section): 2.2e-5 apart (the fold's quadrature: 3.6e-4 at 50 points, 1.4e-6 at 800),
 while the frozen angle is 2.2e-2 off.  The build before D5 (milestone 3 of the observables branch) gives 2.2e-2 and
 fails.  The data values are 1 with error 0.1 (only the model is compared).
+
+Case (d): `folded` with a fitted energy offset of prior width 0.3 MeV (a variant made in the check).  The fold's planned
+nodes then reach below E_c.m. = 1.678 MeV, where 30 deg lab is beyond the kinematic maximum: such a node holds NaN in
+the row set and is harmless while no fold reads it (offset 0: the point is finite; the build of milestone 4 aborted
+at set-up), and a fold that reads it (offset -0.32 MeV) is a failed point, NaN with the engine's warning that names the
+kinematic maximum and says what to do.

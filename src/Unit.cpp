@@ -588,25 +588,18 @@ azure2::RowSet Unit::RowSetOver(const WorkingCopy &data, int first, int count, i
   if (!set.labFrame) {
     set.angles.assign(1, GetCMAngle());
   } else {
-    // a lab angle: theta_cm(E_n; theta_lab) and J(E_n; theta_lab) at each slot's lab energy (energy_grid.md 4.3)
+    // a lab angle: theta_cm(E_n; theta_lab) and J(E_n; theta_lab) at each slot's energy (energy_grid.md 4.3); NaN at
+    // a slot where the lab angle is beyond the kinematic maximum (a margin node of a shift's reach, say): a fold that
+    // reads it is a failed point (FoldPoint), one that does not is unaffected
     set.frame = *labFrame;
     set.thetaLab = GetLabAngle();
     set.angles.resize((std::size_t)count);
     set.jacobian.resize((std::size_t)count);
     for (int k = 0; k < count; k++) {
-      const Site &slot = data.SlotAt(first + k);
       azure2::experiment::AngleLimit lim;
-      if (!azure2::experiment::LabAngleAt(set.frame, slot.GetCMEnergy(), set.thetaLab, set.angles[k], set.jacobian[k],
-                                          lim)) {
-        std::ostringstream why;
-        why << "segment #" << GetSegmentKey() << ": the lab angle " << set.thetaLab << " deg of the point at E_lab = "
-            << GetLabEnergy() << " MeV is beyond the kinematic maximum at the fold node E_cm = " << slot.GetCMEnergy()
-            << " MeV of its fold (" << (lim.why.empty() ? "dOmega_lab/dOmega_cm " + std::to_string(set.jacobian[k])
-                                                         : lim.why)
-            << "): a point given at a lab angle is folded with the c.m. angle and Jacobian of every node "
-               "(docs/upgrade/energy_grid.md section 4.3); narrow its target, resolution or beam spread";
-        throw std::runtime_error(why.str());
-      }
+      if (!azure2::experiment::LabAngleAt(set.frame, data.SlotAt(first + k).GetCMEnergy(), set.thetaLab,
+                                          set.angles[k], set.jacobian[k], lim))
+        set.angles[k] = set.jacobian[k] = std::numeric_limits<double>::quiet_NaN();
     }
   }
   if (!set.perSlot) {

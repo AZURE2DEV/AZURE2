@@ -116,8 +116,8 @@ class Unit : public Site {
                     const azure2::experiment::FrameRule *labFrame);
   /// The rows of the point's angular identity over the slots [first, first + count) of `data` (RowSet.h; its own
   /// Legendre rows, or per slot where they depend on the energy, f_C per slot for elastic scattering; with `labFrame`,
-  /// the conversion of a lab angle, the c.m. angle and the Jacobian of every slot).  Throws where the lab angle is
-  /// beyond the kinematic maximum at a slot.
+  /// the conversion of a lab angle, the c.m. angle and the Jacobian of every slot, NaN at a slot where the lab angle is
+  /// beyond the kinematic maximum: a fold that reads it is a failed point, FoldPoint).
   azure2::RowSet RowSetOver(const WorkingCopy &data, int first, int count, int maxL, CNuc *, const TargetEffect *,
                             const azure2::experiment::FrameRule *labFrame) const;
   /// The factor of a fold read through a lab-frame row set (RowSet.h): the point's own dOmega_lab/dOmega_cm as its
