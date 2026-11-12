@@ -30,7 +30,7 @@ double CoulombReferenceValue(const WorkingCopy &data, Unit *point, experiment::L
   const physics::ChannelKinematics kin = Kinematics::Channel(pair).Physics();
   const int twoS = static_cast<int>(std::lround(2.0 * pair->GetJ(1)));
   const bool mott = part == experiment::LeafPart::Mott;
-  auto at = [&](const Unit *p) {
+  auto at = [&](const Site *p) {
     return mott ? physics::mott_cross_section(kin, twoS, p->GetCMEnergy(), p->GetCMAngle()).value
                 : physics::rutherford_cross_section(kin, p->GetCMEnergy(), p->GetCMAngle()).value;
   };
@@ -38,7 +38,7 @@ double CoulombReferenceValue(const WorkingCopy &data, Unit *point, experiment::L
 }
 
 double FoldReferenceAtPoint(const WorkingCopy &data, Unit *point, const Config &configure,
-                            const std::function<double(const Unit *)> &at) {
+                            const std::function<double(const Site *)> &at) {
   if (!Segment::HasSubPointIntegration(data, point)) return at(point);
   std::vector<double> sub(static_cast<std::size_t>(point->NumSubPoints()));
   for (int j = 1; j <= point->NumSubPoints(); j++) sub[j - 1] = at(point->GetSubPoint(data, j));
@@ -52,7 +52,7 @@ double FoldReferenceAtPoint(const WorkingCopy &data, Unit *point, const Config &
   return folded;
 }
 
-double SFactorConversionValue(const Unit *point, CNuc *compound, double shape_perMeV) {
+double SFactorConversionValue(const Site *point, CNuc *compound, double shape_perMeV) {
   PPair *pair = compound->GetPair(compound->GetPairNumFromKey(point->GetEntranceKey()));
   return physics::modified_sfactor_conversion(Kinematics::Channel(pair).Physics(), point->GetCMEnergy(), shape_perMeV);
 }

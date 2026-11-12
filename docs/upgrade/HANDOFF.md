@@ -2,6 +2,161 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (director, 03:00) — merged: the refusal switch, both readers strides, the extension drill, the mesh planner; the yardstick of the shared mesh
+
+**Merged tonight, each with the tree of a rehearsal that passed the whole verification** (all projects × 3 bases,
+`ctest -LE slow`, slow ctest, `tests/run_tests.sh`, spec equivalence, the converted-tree gate, 1 against 3 threads,
+eight fits against the build before): the refusal switch; the readers' first stride (every slot on a node table,
+energy tasks grouped by node); the extension drill; the mesh planner; the readers' last stride (the sub-point units
+are gone).  Numbers of the last rehearsal (`rehearsal/trial30`, logs `work/director/v4_trial30.*`, `fits30.log`): all
+projects 823 / 796 / 823 files identical to the drill rehearsal; ctest 206/206, slow 10/10; run_tests 157 passed, 0
+failed; spec equivalence 184 of 184 converted equal; gate 483 (456 formal) identical, 38 classified, 0 differ, 0
+missing; eight fits identical.  The new reference of the whole-tree comparison is `tab-trial30`.
+
+**Review of the readers' last stride** (agent's entry below).  The design is what the brief asked for in one cut
+instead of two: `Site` (what depends on a point at one energy) and `Unit` (a data point: a `Site` plus row, fold,
+task, record), the nodes of a folded point as `Site`s in one vector of the working copy.  The +3 % on the T2 MIGRAD
+fit accepted with the first stride is gone (agent: 36.2 s against 36.4 s before the node tables, 1 thread, 6
+alternated runs; my side-by-side fits: 37 s against 38 s for the build before).  One merge conflict was mine to
+resolve: the drill's `SFactorConversionValue(…, shape_perMeV)` and reference-table leaf were written on `Unit`, the
+readers' on `Site`; both are on `Site` now (`include/CoulombReference.h`, `src/CoulombReference.cpp`,
+`src/ReferenceTableLeaf.cpp`).  Not done by the agent and still open: `include/NodeTableCache.h` with its mutexes
+(needed while re-placed nodes share rows across copies; it goes with the shared mesh), the names that still say
+sub-point.
+
+**Review of the extension drill** (agent's entry below).  No defect found in the three features; each `check.sh`
+fails with its injected error and passes.  What I add to the agent's open list: (1) the definitions of `rsl`, `2l2`,
+`4pi` follow `docs/upgrade/data_kinds.md`; the LEXFOR page could not be fetched tonight, so they are **not checked
+against the source**; (2) a fold or a shift that leaves the reference table gives a not-a-number point instead of a
+refusal at set-up (the shared mesh knows the supports at set-up and can refuse); (3) exp(gE) is written twice
+(`SFactorConversionValue` and `SigmaAndS::Conversion` in `src/DataOutputFiles.cpp`); (4) pyazr's `calculate_sfactor`
+and the API's `conv` know only the plain S factor.  The cost table and the verdict are in `FOR_THE_OWNER.md` ("How to
+add a feature now").
+
+**Review of the mesh planner** (agent's entry below; header, implementation and `energy_grid.md` §2.8 read).
+Accepted.  Director's decisions for the engine step, written into its brief (`work/briefs/BA_mesh_engine.md`): a hard
+edge at a physical floor (a threshold, E = 0) is an exact node, flagged per edge of a support; anchors are quantized
+in E_x; the power-of-two ladder from E_x = 0 stays (its cost is 1.15–1.80 × the smooth nodes, and smooth nodes are
+the cheap ones); the width of `MeshChangedRegion` stays; the local variable `finest` of `PlanMesh` is the coarsest
+step of the other lattice on the piece and is to be renamed.  One thing the measurement shows and a reader should
+know: point by point the mesh interval can be longer than today's own interval on 1.7–3 % of a support's length
+(where today's grid is finer than its own declared step); property 1 is stated against the declared step.
+
+**The yardstick of the shared mesh (M0 of `work/briefs/AX_shared_mesh.md`), measured by the director on the
+unchanged engine.**  `tab-fine4` = every project with `AZURE_REFINE_QUADRATURE=4` (build of the drill rehearsal);
+largest relative distance of today's default quadrature to it, Brune basis, per project (`work/cls-tab-fine4.tsv`):
+
+| project | largest relative distance k = 1 → k = 4 |
+|---|---|
+| hybrid_potential (a data set with `quadrature points 10`) | 4.4e-2 (a uniform offset) |
+| ratio_to_reference, folded | 1.1e-2 (χ² 3.9e-2) |
+| T2 | 5.1e-3 (χ² 1.1e-2) |
+| T2_true | 4.6e-3 |
+| stopping_yield, fit | 3.9e-3 |
+| thick_target_resonance | 3.1e-3 (χ² 2.4e-2) |
+| layer_yield, fit | 2.0e-3 |
+| shift_sqrt, no shift | 1.2e-3 |
+| layer_yield | 8e-4 |
+| natural_neon | 7.4e-4 |
+| 18O_p_a_thm | 4e-4 |
+| target_effect_ranges | 3.5e-4 |
+| stopping_yield | 2.4e-4 |
+| rectangular_resolution, fit | 1.3e-4 |
+| 13N | 1.3e-4 |
+| 17O | 1e-4 |
+| 7Li_p_a | 6.7e-5 |
+
+These are the quadrature errors a user has **today** with the default settings; the shared mesh is accepted where it
+is at least as close to the fine reference.  `tab-fine8` (k = 8) is being run to see which projects still move
+between 4 and 8; the column is added to `energy_grid.md` §7 with the shared-mesh merge.  The acceptance rule the
+shared-mesh agent was given beside the strict per-number rule of `tools/classify_quadrature.py` — per file, the
+largest relative distance to the fine reference not above 1.2 × today's largest for that file, and no unfolded
+number moved — is a director's decision **to be shown to the PI**.
+
+**In work.**  The engine on the shared mesh (`feature/upgrade-5-shared-mesh`, M2 of the brief): one placing function
+from the planner, quadrature on the mesh nodes, the hand-over by decision D1.  After it: the deletions of D3
+(automatic tolerance, fold windows, edge blending, the σ(Ē) fallback; the readers' entry below lists the places),
+then classification, measurement and documents.
+
+**Small things still open** (none blocks): check 34's five pending files still name `<targetInt>` /
+`<segmentsData>` in comments and in error texts (`include/ParameterKind.h`, `src/TargetSetup.cpp`,
+`src/DataParameters.cpp`, `include/Unit.h`, `experiment/src/Schema.cpp`; the error texts are user-visible, so they
+change with a check of the expectations, after the shared mesh has stopped editing `TargetSetup.cpp`); the "calls"
+line of `fitStatus.out` varies by a few between threaded runs (Minuit2's own counter; Minuit2 is not patched): to be
+said in the statement on fit reproducibility; `natural_target/models/bad_level` does not set up in `node_count`.
+
+## 2026-11-12 (agent, Phase 5 branch 7 part 3) — the sub-point units are gone: a slot of a folded point is a `Site` (`feature/upgrade-5-grid-readers2`)
+
+**Done.**
+- `include/Site.h`: one calculation site, what depends on a point at one energy (c.m./lab/compound energies, angle and
+  Legendre rows, channel rows, Coulomb amplitude, screening, stopping, EC amplitudes, its result record).  The formulas
+  (channel rows, Legendre rows, Coulomb amplitude, external capture) are `Site` functions writing that site only; the
+  `Unit` functions of the same names run them for the point and then each slot (the recursion that lived inside each
+  formula; `OwnSite()` for the point alone).  `Unit` (a data point) is a `Site` plus row, fold, plan task, model
+  record, fold settings.  `GenMatrixFunc`, `AMatrixFunc` (`PointTBar` too), `RMatrixFunc`, `THMMatrixFunc`, the
+  amplitude matrix, `SolveAtOneEnergy`, the Coulomb reference's callback (`at(const Site *)`) read a `Site`.
+- The slots are `Site`s in one vector of the working copy (`WorkingCopy::SlotAt`, `Slots`; a point's range
+  `SubPointFirst`/`NumSubPoints`), laid out with the points (`LayOutUnits`).  One site index for plan tasks, energy
+  tasks, node slots and cotangents: `SiteAt(s)`, the points then the slots at `NumUnits() + k` (`SlotSite`,
+  `SiteIndex`): the same numbers as the old one unit vector, so no task, node or record moved.  `SubPointAccess.h`
+  deleted; `UnitIndex` deleted.
+- Overflow table placed without its hash map (a slot shares the node placed just before at the same key, else a new
+  node; the energy tasks group by key).  `AZURE_NODE_CHECK` stays as the invariant check (every slot on a node of a
+  table, stage nodes in key order, the node's key equal to the site's key with E_x computed from its c.m. energy bit
+  for bit, rows the site's) and now also runs under `AZURE_PLAN_CHECK`.
+
+**Verified** (build `work/b-readers2`, scripts `work/readers2/qset.sh`, `bq.sh`, `speed.sh`; at every commit): build
+0 warnings; consistency test; `ctest -R "upgrade_plan|upgrade_history|upgrade_node|kernels|grad|consistency"` 22/22;
+`check.sh` of 13N, component_mapping, layer_yield, stopping_yield, rectangular_resolution, fit_modes all pass; T1, T2,
+T3, 13N, natural_neon, shift_sqrt_subpoints/models, 18O_p_a_thm, thick_target_resonance, layer_yield/models (Brune)
+159 files identical to `tab-trial26` (run.log without `%` lines); T2 and 13N `--use-gradient` (30 calls, 1 thread)
+identical to `b-trial27`.  `node_check.sh` shown failing with a slot on the previous overflow node (sqrt: 47165 on a
+wrong node; T2 fit: 6175), then clean.  Not run: the whole tree x 3 bases, full ctest, `run_tests.sh`, the gate.
+Speed, 1 thread, 6 alternated runs each, medians (machine shared, load about 9; logs `work/readers2/logs/speed1.txt`,
+`speed2.txt`): T2 MIGRAD 200 calls, final head 36.24 s against `b-trial25` 36.38 s (-0.4 %) and `b-trial27` 36.59 s
+(-1.0 %); after the slot commit (overflow still hashed) 35.80 / 35.91 / 36.55 s.  natural_neon calculation 6.05 s
+against 6.23 / 6.21 s.  Peak RSS: natural_neon calculation 1,424,604 kB against 1,460,656 kB (`b-trial27`, -2.5 %);
+T2 fit 326 MB against 345 MB.
+
+**Open.** `NodeTableCache.h` (re-placed slots share rows across copies through it; it goes when the shared mesh stops
+nodes from moving with the levels) and the slots' copy-on-write rows are not deleted.  The names still say
+"sub-point" (`GetSubPoint`, `NumSubPoints`, `AddSubPoint`, ...): a rename to "slot" is mechanical.  For the shared
+mesh: slots are placed in four places (`WorkingCopy::SetUpTargetEffects`, two branches, `src/TargetSetup.cpp` around
+the two `GenerateGrid` calls; `AddTargetFallbackNodes`, same file, the sigma(E_bar) fallback; `WorkingCopy::
+ReplaceSubPointGrids`, same file) and weighted in one (`FoldWeights` / `FoldValues` / `FoldPoint`, `src/PointFold.cpp`,
+through the kernels).  D3 lines deletable with a shared mesh: the automatic tolerance and the bare probe
+(`Unit::FoldSubPoints`, `src/PointPass.cpp`), the edge blend (`TargetBlendWeight`: `TargetSetup.cpp`, `PointPass.cpp`,
+`CoulombReference.cpp`, `AZUREGrad.cpp`), the sigma(E_bar) fallback (`AddTargetFallbackNodes`, `TargetFallbackScope`,
+`Unit::FoldThinTarget`), the fold windows of the set-up (`SetUpTargetEffects`).  A shifted folded point still moves
+its slots rigidly (`Segment::UpdatePointEnergyWithShift`) onto the overflow table until the shift-kernel branch.
+
+## 2026-11-12 (agent, Phase 5 branch 7 part 2, first milestone) — the planner of the shared mesh, alone (`feature/upgrade-5-mesh-planner`)
+
+**Done.** `include/MeshPlanner.h`, `src/MeshPlanner.cpp`: `PlanMesh(anchors, supports, tails)`, a pure function (no
+engine object) that plans one mesh per compound nucleus from quantized anchors in E_x, one support per folded point with
+its data set's settings, and the tail constants; `MeshChangedRegion` gives the stretches whose nodes can move when
+anchors change (for the hand-over of decision D1). Rules (header comment, `energy_grid.md` §2.8): smooth nodes n·L on a
+nested power-of-two ladder from E_x = 0 (L = today's smooth step quantized down); core and tail nodes by today's formulas
+from each anchor; an interval of a lattice kept unless one other lattice, active over all of it, is finer over all of it
+(than half its length between a ladder and an anchor's lattice, as today's grid keeps both in that band). Not wired into
+the engine; no engine file changed.
+Tools: `tests/upgrade/node_count --plan [--detail]` (the planner on every folded project's supports and anchors as the
+set-up has them), `tests/upgrade/mesh_fold_check [--with-edges]` (a Breit–Wigner folded on today's grids and on the
+mesh against a converged reference).
+
+**Verified** (build `work/b-mesh`, logs `work/mesh/`): build 0 warnings; `upgrade_mesh_planner` 700,675 checks, 0
+failures (never coarser than today's step against `AdaptiveIntegrationGrid` on named and 200 random cases, today's
+lattice nodes kept bit for bit, shared, order-independent, local), shown failing with the ladder one notch too coarse;
+`ctest -R "upgrade_plan|upgrade_node|consistency|mesh"` passed; T1, T2, 13N in three bases: every output file identical
+to `tab-trial27` (run.log differs only in the progress bars). Measured: no folded project's mesh above 1.04 × today's
+distinct energies (T2 0.54, `natural_neon` 0.37); the fold error on the mesh not larger than today's in 34 of 36 cases,
+the two others (+0.3 %, +1 % of an error of 3 × 10⁻⁵) from clipping the edge intervals (equal with the edges as nodes).
+
+**Open.** The support's edges as nodes where a support ends at a physical floor (thick target at 1 keV, THM below
+threshold); anchors quantized in E_x instead of each pair's c.m. (numbers move by the quantization); the ladder's cost
+(1.15–1.80 × the smooth nodes); `MeshChangedRegion` is wide when a nucleus has a coarse smooth step. Milestone 2 (the
+engine on the mesh) waits for the node-storage branch.
+
 ## 2026-11-12 (agent, extension drill, `feature/upgrade-5-extension-drill`) — three new kinds of data by the recipes, and what each cost
 
 Done (one commit per lane, then the recipe corrections):

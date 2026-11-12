@@ -52,7 +52,7 @@ static void AddTargetFallbackNodes(WorkingCopy &data, Unit *point, TargetEffect 
     nodes = {e - point->GetTargetFallbackDepth()};
   }
   for (double sub : nodes) {
-    Unit subPoint(point->GetCMAngle(), sub, segment.segment, segment.term);
+    Site subPoint(point->GetCMAngle(), sub, segment.segment, segment.term);
     subPoint.BelongToRowOf(*point);
     subPoint.SetStoppingPower(cmConversion * te->StoppingAt(sub / cmConversion, configure,
                                                             data.EffectValues(point->GetTargetEffectNum()).stoppingScale));
@@ -321,7 +321,7 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
     gc.pointsPerWidth = spec.pointsPerWidth;
     gc.resonanceOffset = it.offset;
     std::vector<double> grid = AdaptiveIntegrationGrid(gc).GenerateGrid(spec.startEnergy, spec.endEnergy, g);
-    const UnitRange<Unit> subs = point->GetSubPoints(*this);
+    const UnitRange<Site> subs = point->GetSubPoints(*this);
     // The grid kept is the one placed now, bit for bit.  A grid kept within a tolerance would depend on the
     // parameter vectors the working copy evaluated before, which Minuit's parallel gradient hands out by thread:
     // the objective at one p, and so a fit, would depend on the thread count (docs/upgrade/fit_threads.md).
@@ -341,18 +341,18 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
       const Unit::SubGridSpec &tspec = Data().GridSpecOf(*target);
       const TargetEffect *effect = Data().GetTargetEffect(seg.GetTargetEffectNum());
       const TargetEffect *qEffect = effect->IsQCoefficients() ? effect : nullptr;
-      const UnitRange<Unit> tsubs = target->GetSubPoints(*this);
+      const UnitRange<Site> tsubs = target->GetSubPoints(*this);
       std::vector<Unit::EDependentShare> old;
       if (!shifted) {
         old.reserve(tsubs.size());
-        for (const Unit &sp : tsubs) old.push_back(sp.ShareEDependentValues());
+        for (const Site &sp : tsubs) old.push_back(sp.ShareEDependentValues());
         std::sort(old.begin(), old.end(),
                   [](const Unit::EDependentShare &x, const Unit::EDependentShare &y) { return x.energy < y.energy; });
       }
-      std::vector<Unit> fresh;
+      std::vector<Site> fresh;
       for (size_t k = 0; k < grid.size(); k++) {
         const double e = grid[k];
-        Unit sub(target->GetCMAngle(), e, seg.segment, seg.term);
+        Site sub(target->GetCMAngle(), e, seg.segment, seg.term);
         sub.BelongToRowOf(*target);
         if (tspec.targetIntegration)
           sub.SetStoppingPower(tspec.stoppingConversion *
@@ -372,7 +372,7 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
           sub.CalcLegendreP(this, configure.maxLOrder, theCNuc, qEffect);
           // A shifted segment's sub-points are moved and energised by the shift step.
           if (!shifted) {
-            sub.CalcEDependentValues(this, theCNuc, configure, true);
+            sub.CalcEDependentValues(this, theCNuc, configure);
             sub.CalcCoulombAmplitude(this, theCNuc);
           }
         }
@@ -647,7 +647,7 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
 
           for (size_t i = 0; i < energyGrid.size(); i++) {
             double subEnergy = energyGrid[i];
-            Unit subPoint(point->GetCMAngle(), subEnergy, &*segment, 0);
+            Site subPoint(point->GetCMAngle(), subEnergy, &*segment, 0);
             subPoint.BelongToRowOf(*point);
             if (targetEffect->IsTargetIntegration()) {
               double stoppingPower = cmConversion * targetEffect->StoppingAt(subEnergy / cmConversion, configure,
@@ -786,7 +786,7 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
 
               for (size_t i = 0; i < energyGrid.size(); i++) {
                 double subEnergy = energyGrid[i];
-                Unit subPoint(point->GetCMAngle(), subEnergy, &*segment, t);
+                Site subPoint(point->GetCMAngle(), subEnergy, &*segment, t);
                 subPoint.BelongToRowOf(*point);
                 if (targetEffect->IsTargetIntegration()) {
                   double stoppingPower = compConversion * targetEffect->StoppingAt(subEnergy / compConversion, configure,

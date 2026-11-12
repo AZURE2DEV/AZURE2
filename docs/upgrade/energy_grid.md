@@ -275,6 +275,14 @@ the external-capture amplitudes and `intEC.dat`, THM `thm_ps_`; not deleted: sub
 which is not E_x minus a constant to the last bit; the stopping, which a fitted stopping scale moves per copy; angle
 rows, Coulomb amplitude, screening, EC amplitudes) is listed in `HANDOFF.md`.
 
+**Status, branch 7 part 3 (`feature/upgrade-5-grid-readers2`, 2026-11-12).** The sub-point units are gone: a slot of a
+folded point is a `Site` (`include/Site.h`: what depends on the point at one energy), held in one vector of the working
+copy (`WorkingCopy::SlotAt`, each point's a range); a data point (`Unit`) is a site with its row, fold, plan task and
+model record. The observables, the energy pass, the folds, the gradient's cotangents and the external capture read
+sites by one index (`WorkingCopy::SiteAt`: points, then slots). `SubPointAccess.h` is deleted. Not deleted:
+`NodeTableCache.h` (re-placed slots share their rows across copies through it until the shared mesh stops nodes from
+moving with the levels) and the slots' copy-on-write rows (the node rows are holders of them).
+
 ### 2.7 Thread-count independence by construction
 
 - The mesh and the node table are built single-threaded (or by a parallel loop that writes one node per index) from
@@ -285,6 +293,170 @@ rows, Coulomb amplitude, screening, EC amplitudes) is listed in `HANDOFF.md`.
   data order. No sum depends on which thread did a block or in which order blocks finished.
 - Nothing is cached across evaluations beyond the stage table and the copy's own overflow table, both functions of
   (θ, ν) alone.
+
+### 2.8 The planner of the shared mesh (branch 7 part 2, first milestone; 2026-11-12, `feature/upgrade-5-mesh-planner`)
+
+`include/MeshPlanner.h`, `src/MeshPlanner.cpp`: `PlanMesh(anchors, supports, tails)`, a function of values (no engine
+object): quantized anchors in E_x, one support [a_i, b_i] in E_x per folded point with its data set's settings (smooth
+step, points per width p, core widths m), the tail constants of `AdaptiveIntegrationGrid`; out the nodes (ascending,
+distinct) and per support the range of nodes its quadrature uses (the outer nodes of the two edge intervals: the edges
+add no node). Not wired into the engine. The header's comment states the rules; in short:
+
+- **Smooth nodes**: today's smooth step S = window / ceil(window / step) quantized down to a power of two,
+  L = 2^floor(log2 S) MeV; the nodes are n·L (exact in floating point, a lattice of the nucleus with origin E_x = 0).
+  The ladders are nested, so supports of different steps share nodes and every change of step is on a node of both.
+- **Core nodes**: E_r ± k·Γ/p, k ≤ ceil(m p − 10⁻⁹) (today's nodes, bit for bit, when m p is an integer).
+- **Tail nodes**: today's recurrence o_{k+1} = o_k + max(Γ/p, t o_k) from the core's edge, a function of the anchor and
+  (p, m) alone, run while the step is below twice the class's largest ladder step.
+- **Overlaps**: each lattice is a list of intervals; an interval is kept (both ends become nodes) unless one other
+  lattice, active over all of it, is finer over all of it — finer than its length between two anchors' lattices or two
+  ladders, finer than half its length between a ladder and an anchor's lattice. The half reproduces today's band where
+  a point's grid keeps its smooth nodes beside a tail; without it the mesh never exceeded today's step either, but had
+  up to 32 % fewer nodes than a point's own grid in 170 supports of `natural_neon`.
+
+Why the step is never coarser than today's: at any E of a support, the lattice F that is finest there has its interval
+around E kept (anything dominating it would be finer than F at E), and that interval is no longer than F's step at E,
+which is ≤ today's step D(E) of every support covering E (L ≤ S, the same lattices). `MeshChangedRegion(before, after,
+supports, tails)` returns the stretches outside which two anchor lists give the same nodes bit for bit: each changed
+anchor's reach plus twice the largest ladder step.
+
+**Tests** (`tests/upgrade/mesh_planner_test.cpp`, ctest `upgrade_mesh_planner`, 700,675 checks): against
+`AdaptiveIntegrationGrid::GenerateGrid` on an isolated narrow level, two overlapping levels of different widths, a level
+at a support's edge, a level outside in reach, no level, a 2-width convolution core, a zero-width support, and 200
+random cases (seed fixed; one or mixed classes of settings): every mesh interval inside a support is no longer than
+today's step D anywhere on it (D transcribed from `GenerateGrid`, and checked against its real grids: no real interval
+exceeds 2.5 D); with one class of settings every node of today's lattices finer than the mesh's smooth step is a mesh
+node, bit for bit; the range of a support is the tightest enclosing one. Shared: two overlapping data sets with the same
+settings read the same nodes in the overlap; 7 identical supports plan the nodes and range of one. Order: 40 random
+cases × 3 shuffles of supports, data-set numbers and anchors give the same bits; two disjoint groups planned together
+and apart give the same nodes. Local: 100 random anchor changes (moved by quarter widths, two notches wider, moved
+3 keV and narrower): the nodes outside `MeshChangedRegion` are the same bits. Shown failing with the smooth step one
+notch too coarse on the ladder (122,979 failures).
+
+Point by point the mesh interval can still be longer than the point's own interval today (on 1.7–3 % of a support's
+length in the named cases): where today's grid interleaves its smooth lattice with a tail, its intervals are shorter
+than its own step, at phases a shared lattice cannot reproduce. The bound of §2.4 is not affected (it is in terms of the
+step), and the fold check below measures the error itself.
+
+**Node counts** (`tests/upgrade/node_count --plan`, every project of the tree that sets up and has a fold; supports from
+the set-up's sub-points, settings from `Unit::SubGridSpec`, anchors of the first folded point's entrance pair moved to
+E_x and quantized there, taken before the widths are transformed, as the set-up saw them). Columns: units of the pass;
+distinct E_x today; §1.2's estimate; planned mesh (planned nodes plus the exact energies of unfolded points); planned /
+today; over-coverage (planned nodes with no node of today's grids, of any point, within the mesh's own spacing there);
+nodes outside every support (outer nodes of edge intervals); cost of the ladder alone (∫ max 1/L over ∫ max 1/S on the
+union of the supports); supports in which the mesh has fewer nodes than the point's own grid (inside plus the two outer
+nodes); the smallest such ratio.
+
+| project | units | distinct E_x today | estimate (§1.2) | planned | planned / today | over-coverage | outside | ladder cost | supports with fewer nodes | smallest ratio |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `13N` | 46121 | 2727 | 2786 | 2696 | 0.99 | 2 | 2 | 1.27 | 0 | 1.00 |
+| `17O` | 19560 | 2021 | 1905 | 2000 | 0.99 | 95 | 2 | 1.35 | 0 | 1.00 |
+| `18O_p_a_thm` | 14688 | 703 | 714 | 657 | 0.93 | 164 | 3 | 1.74 | 0 | 1.61 |
+| `6Li_d` | 3162 | 3162 | 1182 | 1221 | 0.39 | 0 | 2 | 1.15 | 0 | 1.16 |
+| `7Li_p_a` | 6807 | 4761 | 3415 | 3577 | 0.75 | 738 | 3 | 1.34 | 0 | 1.03 |
+| `beam_profile_kernel` | 82264 | 3086 | 3161 | 3199 | 1.04 | 190 | 7 | 1.61 | 0 | 1.00 |
+| `hybrid_potential` | 111976 | 2471 | 2650 | 2472 | 1.00 | 2 | 2 | 1.62 | 0 | 1.00 |
+| `layer_yield/models/fit` | 60367 | 3133 | 2175 | 2112 | 0.67 | 7 | 2 | 1.47 | 0 | 1.00 |
+| `layer_yield` | 87634 | 4137 | 2762 | 2851 | 0.69 | 9 | 4 | 1.61 | 0 | 1.00 |
+| `natural_neon` | 292742 | 56696 | 25313 | 21070 | 0.37 | 699 | 17 | 1.47 | 8 | 0.99 |
+| `rectangular_resolution/models/fit` | 29144 | 3189 | 2280 | 2207 | 0.69 | 4 | 2 | 1.35 | 5 | 1.00 |
+| `shift_sqrt_subpoints/models/const` | 36841 | 2089 | 2125 | 2059 | 0.99 | 25 | 4 | 1.23 | 0 | 1.00 |
+| `shift_sqrt_subpoints/models/dense` | 56028 | 8004 | 2961 | 4576 | 0.57 | 0 | 2 | 1.57 | 0 | 1.56 |
+| `shift_sqrt_subpoints/models/narrow_const` | 44212 | 2158 | 2192 | 2127 | 0.99 | 27 | 4 | 1.23 | 0 | 1.00 |
+| `shift_sqrt_subpoints/models/narrow_sqrt` | 44212 | 2158 | 2192 | 2127 | 0.99 | 27 | 4 | 1.23 | 0 | 1.00 |
+| `shift_sqrt_subpoints/models/noshift` | 36841 | 2089 | 2125 | 2059 | 0.99 | 25 | 4 | 1.23 | 0 | 1.00 |
+| `shift_sqrt_subpoints/models/shiftfn` | 36841 | 2089 | 2125 | 2059 | 0.99 | 25 | 4 | 1.23 | 0 | 1.00 |
+| `shift_sqrt_subpoints/models/sqrt` | 36841 | 2089 | 2125 | 2059 | 0.99 | 25 | 4 | 1.23 | 0 | 1.00 |
+| `stopping_yield/models/fit` | 176270 | 5014 | 2331 | 2130 | 0.42 | 3 | 2 | 1.34 | 0 | 1.01 |
+| `stopping_yield` | 199089 | 7295 | 2552 | 2175 | 0.30 | 3 | 2 | 1.60 | 0 | 1.01 |
+| `target_effect_ranges` | 5686 | 2164 | 1191 | 541 | 0.25 | 117 | 4 | 1.34 | 0 | 1.15 |
+| `thick_target_resonance` | 48237 | 2148 | 2197 | 2068 | 0.96 | 19 | 4 | 1.23 | 0 | 1.01 |
+| `units_scales/models/yield_story` | 37372 | 1782 | 1830 | 1751 | 0.98 | 2 | 2 | 1.57 | 0 | 1.00 |
+| `upgrade/T2/T2` | 24319 | 5442 | 2782 | 2917 | 0.54 | 513 | 3 | 1.80 | 0 | 1.36 |
+| `upgrade/T2/T2_true` | 23281 | 5359 | 2792 | 2905 | 0.54 | 495 | 3 | 1.79 | 0 | 1.36 |
+
+No project's mesh exceeds 1.2 × today's distinct energies (largest 1.04, `beam_profile_kernel`: its grids already
+coincide on the anchored lattice, and the ladder adds 1.61 × the smooth nodes there). The ladder costs 1.15–1.80 × the
+smooth nodes; the mesh still saves where data sets overlap (T2 0.54, `natural_neon` 0.37, the stopping and layer
+projects 0.30–0.69, `target_effect_ranges` 0.25, whose fallback and window points have uniform grids today). The
+supports with fewer nodes (`natural_neon` 8, `rectangular_resolution` 5) have ratio ≥ 0.99: one node, the accounting of
+today's edge nodes against the mesh's outer nodes. The shift projects are planned at their unshifted anchors (the
+set-up's grids of a shifted data set are offset by its shift, `GridConfig::resonanceOffset`): shifted folded points
+keep their own nodes until branch 8. The over-coverage of 7Li_p_a (738), `natural_neon` (699) and T2 (513) is the
+ladder's finer smooth step where the windows of today's points were coarser.
+
+**The fold check** (`tests/upgrade/mesh_fold_check`, no engine): a Breit–Wigner (one level; or two, the second 3 widths
+above, twice as wide, amplitude 0.7 e^{2i}) folded with a Gaussian (σ = 10 keV, support ±5σ, 100 sub-points, p = 50,
+m = 2) and with a rectangle [E0 − σ, E0] (50 sub-points, m = 20), 13 points E0 = E_r + k max(Γ, σ)/2, by the rule of
+§2.4 on (a) each point's grid today and (b) the mesh planned for the 13 points together; reference: the same rule on
+the union of both, every interval cut in 64. Largest relative error over the points; nodes distinct over the points.
+
+| kernel | levels | Γ/σ | error today | error mesh | nodes today | nodes mesh |
+|---|---|---|---|---|---|---|
+| Gaussian | one | 0.01 | 2.04e-04 | 1.90e-04 | 610 | 562 |
+| Gaussian | one | 0.03 | 2.61e-04 | 2.29e-04 | 564 | 516 |
+| Gaussian | one | 0.1 | 3.87e-04 | 3.35e-04 | 518 | 472 |
+| Gaussian | one | 0.3 | 4.99e-04 | 3.75e-04 | 472 | 426 |
+| Gaussian | one | 1 | 3.50e-04 | 2.67e-04 | 392 | 362 |
+| Gaussian | one | 3 | 8.43e-05 | 8.08e-05 | 690 | 490 |
+| Gaussian | one | 10 | 5.62e-05 | 5.36e-05 | 874 | 719 |
+| Gaussian | one | 30 | 7.25e-06 | 6.91e-06 | 1313 | 1355 |
+| Gaussian | one | 100 | 6.65e-07 | 6.34e-07 | 1313 | 1365 |
+| Gaussian | two | 0.01 | 9.30e-05 | 7.57e-05 | 715 | 749 |
+| Gaussian | two | 0.03 | 1.35e-04 | 1.11e-04 | 674 | 660 |
+| Gaussian | two | 0.1 | 2.45e-04 | 2.31e-04 | 624 | 582 |
+| Gaussian | two | 0.3 | 3.47e-04 | 2.55e-04 | 566 | 533 |
+| Gaussian | two | 1 | 3.85e-04 | 2.78e-04 | 482 | 496 |
+| Gaussian | two | 3 | 1.04e-04 | 8.84e-05 | 895 | 803 |
+| Gaussian | two | 10 | 5.13e-05 | 4.89e-05 | 1308 | 1333 |
+| Gaussian | two | 30 | 6.63e-06 | 6.33e-06 | 1313 | 1356 |
+| Gaussian | two | 100 | 6.09e-07 | 5.81e-07 | 1313 | 1365 |
+| rectangle | one | 0.01 | 3.85e-04 | 1.43e-04 | 2402 | 2543 |
+| rectangle | one | 0.03 | 1.62e-04 | 6.21e-05 | 2336 | 2471 |
+| rectangle | one | 0.1 | 3.51e-05 | 1.31e-05 | 2172 | 2253 |
+| rectangle | one | 0.3 | 3.05e-05 | 3.06e-05 | 1174 | 1160 |
+| rectangle | one | 1 | 5.62e-05 | 3.20e-05 | 816 | 956 |
+| rectangle | one | 3 | 1.61e-05 | 6.00e-06 | 663 | 1091 |
+| rectangle | one | 10 | 2.50e-06 | 9.31e-07 | 663 | 1089 |
+| rectangle | one | 30 | 2.94e-07 | 1.10e-07 | 663 | 1089 |
+| rectangle | one | 100 | 2.66e-08 | 9.93e-09 | 663 | 1079 |
+| rectangle | two | 0.01 | 4.26e-04 | 1.58e-04 | 3344 | 3489 |
+| rectangle | two | 0.03 | 6.42e-05 | 3.16e-05 | 3235 | 3350 |
+| rectangle | two | 0.1 | 2.97e-05 | 2.64e-05 | 2714 | 2717 |
+| rectangle | two | 0.3 | 3.21e-05 | 3.24e-05 | 1174 | 1160 |
+| rectangle | two | 1 | 4.22e-05 | 2.40e-05 | 1356 | 1774 |
+| rectangle | two | 3 | 1.37e-05 | 5.08e-06 | 663 | 1090 |
+| rectangle | two | 10 | 2.16e-06 | 8.05e-07 | 663 | 1089 |
+| rectangle | two | 30 | 2.65e-07 | 9.86e-08 | 663 | 1089 |
+| rectangle | two | 100 | 2.43e-08 | 9.05e-09 | 663 | 1079 |
+
+The mesh's error is not larger than today's in 34 of 36 cases. The two others (rectangle, Γ/σ = 0.3, one and two
+levels: 3.06 against 3.05 × 10⁻⁵ and 3.24 against 3.21 × 10⁻⁵) come from the edges: there the core lattice covers the
+whole window, so both grids have the same interior nodes, and today evaluates σ at the support's edges while the mesh
+interpolates the clipped edge intervals from the outer nodes; with the edges added to the mesh (`mesh_fold_check
+--with-edges`) the errors are equal to the last digit.
+
+**What the engine will hand the planner** (milestone 2): the supports from `WorkingCopy::SetUpTargetEffects`
+(`src/TargetSetup.cpp`: `azure2::experiment::EffectSupport` of the effect's kernels, c.m. of the entrance pair, moved to
+E_x as `AMatrixFunc::InEnergy` moves a unit's energy, THM by its kinematics); the settings from the target effect
+(`NumSubPoints`, `GetResonanceWidthMultiplier`, `GetPointsPerWidth`, times `refineQuadrature`; recorded today per point
+in `Unit::SubGridSpec`, `MakeSubGridSpec`); the anchors per nucleus from `AdaptiveIntegrationGrid::Anchors` with the frame
+shift −(S + E_x) of a pair of that nucleus, at set-up from the input widths and in the hand-over from the observed
+parameters of the current values (as `WorkingCopy::ReplaceSubPointGrids` builds them); the tail constants. The hand-over
+needs from locality: `MeshChangedRegion` of the anchors before and after, the nodes inside it re-placed into the
+overflow table, the kernel rows of the points whose support meets it rebuilt.
+
+**Open, for the director or the PI.**
+- The support's edges add no node: the edge interval is interpolated from a node outside the support. For a support that
+  ends at a physical floor (a thick target at 1 keV, THM data below the entrance threshold) the outer node lies beyond
+  the floor; milestone 2 needs either the edge as an exact node there or a rule for that node. It also moves the error of
+  edge intervals by about 1 % of itself (above).
+- Anchors are quantized in E_x, not in each entrance pair's c.m. frame as today: one lattice per nucleus. Numbers move by
+  the quantization (class "quadrature" of §7.1).
+- The ladder of powers of two costs up to 1.8 × the smooth nodes. A finer ladder (two nested families, 2^k and 3·2^k)
+  would halve that, at the price of transitions between families; not needed while the mesh stays ≤ 1.04 × today.
+- `MeshChangedRegion` widens by twice the largest ladder step of the nucleus; with a thick target whose smooth step is
+  tens of keV the region re-placed after an anchor change is that much wider than the anchor's own reach.
 
 ## 3. Observables on the grid and the kernels
 

@@ -631,7 +631,7 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
       dT = (dN - avg * dD) / den;
     } else {
       for (int i = 1; i <= nsp; i++) {
-        Unit *sp = point->GetSubPoint(data, i);
+        Site *sp = point->GetSubPoint(data, i);
         vals[i - 1] = (xsComponent == 1) ? sp->GetFitE1CrossSection(results)
                       : (xsComponent == 2) ? sp->GetFitE2CrossSection(results) : sigma[i - 1];
       }
@@ -643,11 +643,11 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
   g_teCombinerNs += std::chrono::duration_cast<std::chrono::nanoseconds>(tc1 - tc0).count();
 
   auto emit = [&](int i, double value, int component, bool ayCrossSection) {
-    if (value != 0.0) out.push_back({point->SubPointFirst() + i - 1, row, value, component, ayCrossSection});
+    if (value != 0.0) out.push_back({data.SlotSite(*point, i), row, value, component, ayCrossSection});
   };
   for (int i = 1; i <= nsp; i++) {
     if (c[i - 1] == 0.0) continue;
-    Unit *sp = point->GetSubPoint(data, i);
+    Site *sp = point->GetSubPoint(data, i);
     if (!isAy && !isCoefNorm) {
       emit(i, fitBar * c[i - 1], xsComponent, false);
     } else if (isCoefNorm) {
@@ -693,8 +693,8 @@ bool azure2::PointCotangents(WorkingCopy &data, const GradPoint &p, CNuc *compou
   ModelCotangents c;
   if (!ModelPointBackward(data, *p.segment, p.pointIdx, compound, config, results, fitBar, c)) return false;
   AddParamCotangents(c, p.segment, p.point, data, p.segNum, compound, params);
-  auto emit = [&](const Unit *u, double value, int component) {
-    if (value != 0.0) out.push_back({data.UnitIndex(u), row, value, component, false});
+  auto emit = [&](const Site *u, double value, int component) {
+    if (value != 0.0) out.push_back({data.SiteIndex(u), row, value, component, false});
   };
   if (c.subPoints) {
     for (const ModelCotangents::Leaf &l : c.leaves)
@@ -729,7 +729,7 @@ bool ThmPointModelGradient(WorkingCopy &data, Unit *point, azure2::Results &resu
   static thread_local THMMatrixFunc reusable(compound, config);
   reusable.Reset(compound, config);
   THMMatrixFunc &f = reusable;
-  auto adjoint = [&](Unit *pt, double weight) -> bool {
+  auto adjoint = [&](Site *pt, double weight) -> bool {
     f.ClearMatrices();
     f.FillMatrices(pt);
     f.InvertMatrices();

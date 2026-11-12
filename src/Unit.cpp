@@ -55,7 +55,9 @@
  */
 
 Unit::Unit(const azure2::experiment::MeasurementRows &rows, int row, const Segment *parent, int term)
-    : settings_(parent->TermSettingsOf(term).get()), row_(row) {
+{
+  settings_ = parent->TermSettingsOf(term).get();
+  row_ = row;
   cm_angle_ = rows.angle[row];
   lab_angle_ = rows.angle[row];
   nominal_energy_ = rows.energy[row];
@@ -76,7 +78,7 @@ Unit::Unit(const azure2::experiment::MeasurementRows &rows, int row, const Segme
  * A point that is no row (a sub-point of a target effect), with the settings of term `term` of the segment.
  */
 
-Unit::Unit(double angle, double energy, const Segment *parent, int term)
+Site::Site(double angle, double energy, const Segment *parent, int term)
     : settings_(parent->TermSettingsOf(term).get()) {
   lab_angle_ = angle;
   cm_angle_ = angle;
@@ -87,8 +89,11 @@ Unit::Unit(double angle, double energy, const Segment *parent, int term)
   segment_key_ = parent->TermKey(term);
   geofactor_ = 0.;
   sfactorconv_ = 0.;
-  targetEffectNum_ = 0;
   stoppingPower_ = 0.0;
+}
+
+Unit::Unit(double angle, double energy, const Segment *parent, int term) : Site(angle, energy, parent, term) {
+  targetEffectNum_ = 0;
 }
 
 /*!
@@ -127,7 +132,7 @@ Unit::Unit(double angle, double energy, int entranceKey,
  * Returns true if the point is differential cross section, otherwise returns false.
  */
 
-bool Unit::IsDifferential() const {
+bool Site::IsDifferential() const {
   return settings_->differential;
 }
 
@@ -135,23 +140,15 @@ bool Unit::IsDifferential() const {
  * Returns true if the point is phase shift, otherwise returns false.
  */
 
-bool Unit::IsPhase() const {
+bool Site::IsPhase() const {
   return settings_->phase;
-}
-
-/*!
- * Returns true if the point belongs to a THM (modified R-matrix) segment.
- */
-
-bool Unit::IsTHM() const {
-  return settings_->thm;
 }
 
 /*!
  * Returns true if the point is angular distribution, otherwise returns false.
  */
 
-bool Unit::IsAngularDist() const {
+bool Site::IsAngularDist() const {
   return settings_->angularDist;
 }
 
@@ -170,7 +167,7 @@ bool Unit::IsTargetEffect() const {
  * Returns true if this is an Unobserved Primary, Observed Secondary (UPOS) point.
  */
 
-bool Unit::IsUPOS() const {
+bool Site::IsUPOS() const {
   return settings_->upos;
 }
 
@@ -178,7 +175,7 @@ bool Unit::IsUPOS() const {
  * Returns the secondary decay angular momentum for a UPOS point.
  */
 
-int Unit::GetSecondaryDecayL() const {
+int Site::GetSecondaryDecayL() const {
   return settings_->secondaryDecayL;
 }
 
@@ -186,7 +183,7 @@ int Unit::GetSecondaryDecayL() const {
  * Returns the final state spin for a UPOS point.
  */
 
-double Unit::GetIc() const {
+double Site::GetIc() const {
   return settings_->ic;
 }
 
@@ -194,7 +191,7 @@ double Unit::GetIc() const {
  * Returns the multipole mixing ratio for a UPOS point.
  */
 
-double Unit::GetDelta() const {
+double Site::GetDelta() const {
   return settings_->delta;
 }
 
@@ -204,7 +201,7 @@ double Unit::GetDelta() const {
  * of AZURE.
  */
 
-int Unit::GetEntranceKey() const {
+int Site::GetEntranceKey() const {
   return settings_->entranceKey;
 }
 
@@ -214,7 +211,7 @@ int Unit::GetEntranceKey() const {
  * of AZURE.
  */
 
-int Unit::GetExitKey() const {
+int Site::GetExitKey() const {
   return settings_->exitKey;
 }
 
@@ -223,7 +220,7 @@ int Unit::GetExitKey() const {
  * phase shift.
  */
 
-int Unit::GetL() const {
+int Site::GetL() const {
   return settings_->l;
 }
 
@@ -239,7 +236,7 @@ int Unit::GetTargetEffectNum() const {
  * Returns the maximum polynomial order of the point is angular distribution.
  */
 
-int Unit::GetMaxAngDistOrder() const {
+int Site::GetMaxAngDistOrder() const {
   return settings_->maxAngDistOrder;
 }
 
@@ -247,7 +244,7 @@ int Unit::GetMaxAngDistOrder() const {
  * Returns the angle of the data point in the laboratory frame.
  */
 
-double Unit::GetLabAngle() const {
+double Site::GetLabAngle() const {
   return lab_angle_;
 }
 
@@ -255,7 +252,7 @@ double Unit::GetLabAngle() const {
  * Returns the angle of the data point in the center of mass frame.
  */
 
-double Unit::GetCMAngle() const {
+double Site::GetCMAngle() const {
   return cm_angle_;
 }
 
@@ -263,7 +260,7 @@ double Unit::GetCMAngle() const {
  * Returns the energy of the point in the laboratory frame.
  */
 
-double Unit::GetLabEnergy() const {
+double Site::GetLabEnergy() const {
   return lab_energy_;
 }
 
@@ -271,7 +268,7 @@ double Unit::GetLabEnergy() const {
  * Returns the energy of the point in the center of mass frame.
  */
 
-double Unit::GetCMEnergy() const {
+double Site::GetCMEnergy() const {
   return cm_energy_;
 }
 
@@ -279,11 +276,11 @@ double Unit::GetCMEnergy() const {
  * Returns the energy of the point in compound excitation energy.
  */
 
-double Unit::GetExcitationEnergy() const {
+double Site::GetExcitationEnergy() const {
   return excitation_energy_;
 }
 
-double Unit::GetOriginalEnergy() const {
+double Site::GetOriginalEnergy() const {
   return nominal_energy_;
 }
 
@@ -291,15 +288,15 @@ double Unit::GetOriginalEnergy() const {
  * An angular-coefficient row or a sub-point of one (the angle column is the Legendre order k): its order and whether
  * the value is A_k.
  */
-bool Unit::IsCoefficient() const {
+bool Site::IsCoefficient() const {
   return legendre_order_ >= 0;
 }
 
-int Unit::GetCoefficientOrder() const {
+int Site::GetCoefficientOrder() const {
   return legendre_order_;
 }
 
-bool Unit::GetCoefficientAbsolute() const {
+bool Site::GetCoefficientAbsolute() const {
   return IsCoefficient() && settings_->coefficientAbsolute;
 }
 
@@ -308,7 +305,7 @@ bool Unit::GetCoefficientAbsolute() const {
  * point is phase shift.
  */
 
-double Unit::GetJ() const {
+double Site::GetJ() const {
   return settings_->j;
 }
 
@@ -316,7 +313,7 @@ double Unit::GetJ() const {
  * For target integration to fit yield curves, the stopping power (or, rather, stopping cross section) is calculated and stored for each sub-point.  This function returns the precalculated value.
  */
 
-double Unit::GetStoppingPower() const {
+double Site::GetStoppingPower() const {
   return stoppingPower_;
 }
 
@@ -324,7 +321,7 @@ double Unit::GetStoppingPower() const {
  * Returns the energy loss of the beam in the target for the current Unit object.
  */
 
-double Unit::GetTargetThickness() const {
+double Site::GetTargetThickness() const {
   return targetThickness_;
 }
 
@@ -334,7 +331,7 @@ double Unit::GetTargetThickness() const {
  */
 
 void Unit::Initialize(WorkingCopy *data, CNuc *compound, const Config &configure) {
-  this->CalcEDependentValues(data, compound, configure, true);
+  this->CalcEDependentValues(data, compound, configure);
   if (this->IsDifferential()) {
     // Get TargetEffect with Q-coefficients if applicable
     const TargetEffect *effect = NULL;
@@ -368,7 +365,7 @@ void Unit::SetFrame(const azure2::experiment::FrameRow &row) {
 /*!
  * Calculates the excitation energy from the c.m. energy: E_x = E_cm + S + E* of the pair.
  */
-void Unit::ConvertExcitationEnergy(PPair *pPair) {
+void Site::ConvertExcitationEnergy(PPair *pPair) {
   excitation_energy_ = azure2::experiment::ExcitationEnergy(cm_energy_, PartitionOf(pPair));
 }
 
@@ -378,7 +375,7 @@ void Unit::ConvertExcitationEnergy(PPair *pPair) {
  * (azure2::experiment::RelativisticLabToCM).  Where the lab angle is reached from two c.m. angles the root nearest
  * \p nrCMAngle is taken.  Returns false if the angle is not reached.
  */
-bool Unit::RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nrCMAngle, double &cmAngle,
+bool Site::RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nrCMAngle, double &cmAngle,
                                  double &factor) const {
   azure2::experiment::AngleLimit lim;
   const bool ok = azure2::experiment::RelativisticLabToCM(PartitionOf(entrancePair), PartitionOf(exitPair),
@@ -392,7 +389,7 @@ bool Unit::RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nrCM
  * Segment::RatioTermFrameFactor).  Relativistic=1: the relativistic map's factor where it reaches the lab angle,
  * otherwise -- unlike the frame of the data, which keeps the load-time factor -- the non-relativistic one.
  */
-double Unit::CalculateCrossSectionConversionFactor(PPair *entrancePair, PPair *exitPair) {
+double Site::CalculateCrossSectionConversionFactor(PPair *entrancePair, PPair *exitPair) {
   double conversionFactor;
   double relAngle;
   if (Kinematics::Relativistic() && this->RelativisticLabToCM(entrancePair, exitPair, this->GetCMAngle(), relAngle, conversionFactor)) {
@@ -405,7 +402,7 @@ double Unit::CalculateCrossSectionConversionFactor(PPair *entrancePair, PPair *e
 /*!
  * The lab-to-c.m. conversion factor for gamma rays (the RATIO path of azure2::EvaluateModelPoint).
  */
-double Unit::CalculateCrossSectionGammaConversionFactor(PPair *entrancePair) {
+double Site::CalculateCrossSectionGammaConversionFactor(PPair *entrancePair) {
   return azure2::experiment::PhotonJacobian(PartitionOf(entrancePair), this->GetLabEnergy(), this->GetLabAngle());
 }
 
@@ -413,7 +410,7 @@ double Unit::CalculateCrossSectionGammaConversionFactor(PPair *entrancePair) {
  * Sets the lab energy to the given value;
  */
 
-void Unit::SetLabEnergy(double energy) {
+void Site::SetLabEnergy(double energy) {
   lab_energy_ = energy;
 }
 
@@ -421,7 +418,7 @@ void Unit::SetLabEnergy(double energy) {
  * Sets the CM energy to the given value;
  */
 
-void Unit::SetCMEnergy(double energy) {
+void Site::SetCMEnergy(double energy) {
   cm_energy_ = energy;
 }
 
@@ -429,7 +426,7 @@ void Unit::SetCMEnergy(double energy) {
  * Sets the lab angle to the given value;
  */
 
-void Unit::SetLabAngle(double angle) {
+void Site::SetLabAngle(double angle) {
   lab_angle_ = angle;
 }
 
@@ -437,7 +434,7 @@ void Unit::SetLabAngle(double angle) {
  * Sets the CM angle to the given value;
  */
 
-void Unit::SetCMAngle(double angle) {
+void Site::SetCMAngle(double angle) {
   cm_angle_ = angle;
 }
 
@@ -466,11 +463,15 @@ void Unit::SetTargetEffectNum(int targetEffectNum) {
 
 
 
-void Unit::MakeSubPoint(Unit &subPoint) const {
+void Unit::MakeSubPoint(Site &subPoint) const {
   // A sub-point shares its term's settings (the observable, A_y or total included) with its parent.
-  subPoint.is_sub_point_ = true;
-  subPoint.screen_ue_ = this->screen_ue_;
-  subPoint.screen_param_ = this->screen_param_;
+  subPoint.TakeSlotSettingsOf(*this);
+}
+
+void Site::TakeSlotSettingsOf(const Site &point) {
+  is_sub_point_ = true;
+  screen_ue_ = point.screen_ue_;
+  screen_param_ = point.screen_param_;
 }
 
 /*!
@@ -478,7 +479,7 @@ void Unit::MakeSubPoint(Unit &subPoint) const {
  * Unit object.  Used only for sub-point involoved in target effect integration.
  */
 
-void Unit::SetStoppingPower(double stoppingPower) {
+void Site::SetStoppingPower(double stoppingPower) {
   stoppingPower_ = stoppingPower;
 }
 
@@ -486,7 +487,7 @@ void Unit::SetStoppingPower(double stoppingPower) {
  * This functions sets the energy loss of the beam in the target for the current Unit object.
  */
 
-void Unit::SetTargetThickness(double targetThickness) {
+void Site::SetTargetThickness(double targetThickness) {
   targetThickness_ = targetThickness;
 }
 
@@ -494,7 +495,7 @@ void Unit::SetTargetThickness(double targetThickness) {
  * Sets the angular distribution coefficients.
  */
 
-void Unit::SetAngularDists(azure2::Results &results, vector_r dists) {
+void Site::SetAngularDists(azure2::Results &results, vector_r dists) {
   if (dists.size() > num_ang_slots_)
     throw std::logic_error("Unit::SetAngularDists: " + std::to_string(dists.size()) + " coefficients, " +
                            std::to_string(num_ang_slots_) + " result slots (segment " + std::to_string(segment_key_) +
@@ -510,14 +511,14 @@ void Unit::SetAngularDists(azure2::Results &results, vector_r dists) {
  * of NaN, so the read shows (AZURE_POISON_RESULTS).
  */
 
-std::vector<double> Unit::GetNaturalTerms(const azure2::Results &results) const {
+std::vector<double> Site::GetNaturalTerms(const azure2::Results &results) const {
   if (!num_natural_slots_) return {};
   const double *r = Rec(results) + azure2::Results::NaturalOffset(num_ang_slots_);
   const int n = std::isnan(r[0]) ? (int)num_natural_slots_ : (int)r[0];
   return std::vector<double>(r + 1, r + 1 + n);
 }
 
-void Unit::SetNaturalTerms(azure2::Results &results, const std::vector<double> &terms) {
+void Site::SetNaturalTerms(azure2::Results &results, const std::vector<double> &terms) {
   if (terms.size() > num_natural_slots_)
     throw std::logic_error("Unit::SetNaturalTerms: " + std::to_string(terms.size()) + " terms, " +
                            std::to_string(num_natural_slots_) + " result slots (segment " +
@@ -527,13 +528,13 @@ void Unit::SetNaturalTerms(azure2::Results &results, const std::vector<double> &
   std::copy(terms.begin(), terms.end(), r + 1);
 }
 
-void Unit::SetResultRecord(std::size_t slot, int nAng, int nNat) {
+void Site::SetResultRecord(std::size_t slot, int nAng, int nNat) {
   slot_ = slot;
   num_ang_slots_ = (std::uint16_t)nAng;
   num_natural_slots_ = (std::uint16_t)nNat;
 }
 
-void Unit::UsePrivateRecord(azure2::Results &scratch, const azure2::Results &values) {
+void Site::UsePrivateRecord(azure2::Results &scratch, const azure2::Results &values) {
   const int nAng = this->ResultAngularCapacity();
   const int nNat = num_natural_slots_;
   std::vector<double> next(azure2::Results::RecordSize(nAng, nNat), 0.0);
@@ -544,7 +545,7 @@ void Unit::UsePrivateRecord(azure2::Results &scratch, const azure2::Results &val
   this->SetResultRecord(0, nAng, nNat);
 }
 
-void Unit::UsePrivateRecord(azure2::Results &scratch) {
+void Site::UsePrivateRecord(azure2::Results &scratch) {
   const int nAng = this->ResultAngularCapacity();
   const int nNat = num_natural_slots_;
   scratch.slot.assign(azure2::Results::RecordSize(nAng, nNat), 0.0);
@@ -553,7 +554,7 @@ void Unit::UsePrivateRecord(azure2::Results &scratch) {
   this->SetResultRecord(0, nAng, nNat);
 }
 
-void Unit::NoResultRecord(const azure2::Results &r) const {
+void Site::NoResultRecord(const azure2::Results &r) const {
   throw std::logic_error(
       "Unit: a result was read or written on a point without a record in the buffer it was given (segment " +
       std::to_string(segment_key_) + ", E_lab " + std::to_string(lab_energy_) + " MeV, offset " +
@@ -561,4 +562,44 @@ void Unit::NoResultRecord(const azure2::Results &r) const {
       std::to_string(r.slot.size()) +
       " slots): the data set's layout (WorkingCopy::LayoutResults), its WorkingCopy::BeginEvaluation with this buffer, or the "
       "caller's UsePrivateRecord is missing");
+}
+
+void Unit::CalcLegendreP(WorkingCopy *data, int maxL, CNuc *theCNuc, const TargetEffect *targetEffect) {
+  Site::CalcLegendreP(data, maxL, theCNuc, targetEffect);
+  for (int i = 1; i <= NumSubPoints(); i++) GetSubPoint(*data, i)->CalcLegendreP(data, maxL, theCNuc, targetEffect);
+}
+
+void Unit::CalcEDependentValues(WorkingCopy *data, CNuc *theCNuc, const Config &configure, const ChannelRowSource *rows) {
+  Site::CalcEDependentValues(data, theCNuc, configure, rows);
+  for (int i = 1; i <= NumSubPoints(); i++) GetSubPoint(*data, i)->CalcEDependentValues(data, theCNuc, configure, rows);
+}
+
+void Unit::ChannelKeys(WorkingCopy *data, CNuc *theCNuc, std::vector<ChannelTable::Key> &keys) {
+  Site::ChannelKeys(data, theCNuc, keys);
+  for (int i = 1; i <= NumSubPoints(); i++) GetSubPoint(*data, i)->ChannelKeys(data, theCNuc, keys);
+}
+
+void Unit::CalcCoulombAmplitude(WorkingCopy *data, CNuc *theCNuc) {
+  Site::CalcCoulombAmplitude(data, theCNuc);
+  for (int i = 1; i <= NumSubPoints(); i++) GetSubPoint(*data, i)->CalcCoulombAmplitude(data, theCNuc);
+}
+
+void Unit::CalculateECAmplitudes(WorkingCopy *data, CNuc *theCNuc, const Config &configure, const ChannelTable *table) {
+  Site::CalculateECAmplitudes(data, theCNuc, configure, table);
+  for (int i = 1; i <= NumSubPoints(); i++)
+    GetSubPoint(*data, i)->CalculateECAmplitudes(data, theCNuc, configure, table);
+}
+
+// The slots are emptied before any is refilled: a slot keeps the storage of its rows (Site::ClearEDependentRows).
+// An energy shift moves each slot and recomputes it on its own (Segment::UpdatePointEnergyWithShift), so it calls
+// this on the point's own site only.
+void Unit::RecalcEDependentValues(WorkingCopy *data, CNuc *theCNuc, const Config &configure, const ChannelRowSource *rows) {
+  if (EDependentCurrent()) return;
+  for (int i = 1; i <= NumSubPoints(); i++) GetSubPoint(*data, i)->ClearEDependentRows();
+  Site::RecalcEDependentValues(data, theCNuc, configure, rows);
+  for (int i = 1; i <= NumSubPoints(); i++) {
+    Site &slot = *GetSubPoint(*data, i);
+    slot.CalcEDependentValues(data, theCNuc, configure, rows);
+    slot.CalcCoulombAmplitude(data, theCNuc);
+  }
 }

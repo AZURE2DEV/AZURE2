@@ -227,19 +227,63 @@ build and the unit tests; `scripts/check.sh` adds the regression projects. An AI
 reads `CLAUDE.md` first, so it is given the recipes and is stopped by the checks. **Ask of a new feature: does
 `scripts/check.sh` pass, and which test would fail if the feature were wrong?**
 
+### Measured: what three new kinds of data cost (the extension drill, 2026-11-12)
+
+The claim "easy to extend" was put to a test. An AI assistant that had never seen the engine was given only
+`CLAUDE.md` and asked to add three kinds of data that did not exist, of rising difficulty, and to log every place
+where the recipe was enough, silent or wrong. The three features are merged; each has a test project with an
+independent answer (`truth.py`) and was shown failing with an injected error.
+
+| What was added | `experiment/` (the table of data kinds) | `physics/` | engine (`src/`, `include/`) | API | Python | time | recipe steps: enough / silent / wrong |
+|---|---|---|---|---|---|---|---|
+| A scale of a computed observable: the modified S factor S* = σ E exp(2πη + gE) of heavy-ion fusion (`quantity modified_sfactor`, `shape <g> 1/MeV`) | 8 files, +49 −11 | 3 files, +20 −2 | 5 files, +27 −16 | +15 | 0 | 19 min | 2 / 4 / 1 |
+| A form the table declared and the engine refused: the Legendre expansions `rsl`, `2l2`, `4pi`, and `absolute` for extrapolations | 8 files, +133 −12 | 0 | 4 files, +22 −4 | +3 −3 | 0 | 18 min | 1 / 4 / 0 |
+| A value the R-matrix does not compute: a cross section relative to a tabulated standard (`quantity ratio_to_reference`, `reference <file> unit <u>`) | 12 files, +221 −4 | 0 | 7 files, +68 −7 (40 of them one new leaf file) | 0 | 0 | 17 min | 1 / 3 / 1 |
+
+(Hand-written lines; tests, generated schema and docs apart. Python needed no line in any lane: a new quantity is
+written and read through the generic record interface.)
+
+What this says, without rounding up:
+
+- **Another normalisation of something already computed is a table row.** No engine file.
+- **Another scale of an observable is about 50 lines and two or three engine files.** Not zero: the factor is applied
+  in the model pass and written in the output columns, and the S-factor conversion is still written in two places
+  (`src/CoulombReference.cpp` and the column writer of `src/DataOutputFiles.cpp`).
+- **Another value from outside the R-matrix is about 150 lines**, and it is the dearest lane for reasons of design,
+  not of the recipe: the leaf's value is chosen by a hand-written conditional in `src/ModelPass.cpp`; its data travel
+  in `ReactionSpec`; a folded point's nodes can be reached only through the point object; a refusal that depends on
+  how far a fold reaches cannot yet be made at set-up (a fold or shift that leaves the reference table gives a
+  not-a-number point, documented, instead of a refusal); and every output column sits in one file. The node table
+  (merged the same night) removes the third; the shared energy mesh, whose supports are known at set-up, makes the fourth
+  possible; the first is a table waiting to be written.
+- **The recipes were silent more often than they were enough** (11 silent, 2 wrong, 4 enough over the three lanes).
+  Every silent or wrong step is now a sentence of the recipe or a check of the consistency test (check 35 is one).
+  The checks that stopped real mistakes during the drill: `experiment_quantities`, `convert_spec_equivalence`,
+  `experiment_prediction`, `experiment_build`.
+
+Open from the drill: the three non-default Legendre definitions follow `docs/upgrade/data_kinds.md` and were not
+checked against the LEXFOR text itself; differential data relative to a reference are not built; pyazr's
+`calculate_sfactor` knows only the plain S factor.
+
 ## What is in work and what comes next
 
-In work now (2026-11-11, late night): the engine refusing old files, with its old reading path deleted (the close of
-Phase 4); the sub-points of a folded data point becoming entries of one node table per compound nucleus. Of the
-second, the first half is merged: the old point mapping is deleted (every output identical; the energy tasks share
-the solves it used to share), and a node table of the compound energies is built beside the sub-points and checked
-against them on the whole tree, with the tools the next step needs (a refined quadrature, its classifier, node
-counts per project). The branch after it (merged 2026-11-12) puts every unit of the calculation on a node of a table:
-nodes that move during a fit (a re-placed grid, an energy shift) go into a small table of the working copy, rebuilt
-whenever they move; the energy tasks are now grouped by node. The other readers (the folds, the gradient, the result
-records, external capture) still use the sub-point objects; moving them and deleting those objects is still to do,
-before the shared energy mesh. Merged in the earlier batch: one generic kind of fit parameter for
-the parameters of apparatus effects (see "How to add a feature now").
+In work now (2026-11-12, night): the shared energy mesh. Merged tonight, each after the whole verification: the
+engine refusing old files, with its old reading path deleted (the close of Phase 4 except the rest of `CNuc`); the
+nodes of a folded data point as entries of a node table (the old point mapping and the sub-point objects are
+deleted: a data point is a `Unit`, each of its nodes a `Site`, every output identical, the fit as fast as before
+and natural_neon's peak memory 2.5 % lower); the extension drill (previous section); and the planner of the shared
+mesh as a pure function with its tests (`include/MeshPlanner.h`): one mesh per compound nucleus, planned from the
+kernels' supports, the levels and each data set's numerical settings, so that two data sets folded over the same
+resonance share their level-matrix solves. On the projects of the tree the planned mesh has at most 1.04 times
+today's distinct energies and far fewer where data sets overlap (T2 0.54, natural_neon 0.37). The engine is being
+moved onto it now. **This is the first step of the upgrade that changes numbers on purpose**: folded yields move by
+about the quadrature error they have today, which was measured first by refining today's quadrature four times
+(largest relative distance of today's default to the refined run: 5e-3 on T2, 3e-3 on the thick-target project,
+1e-4 on 13N, 4e-2 on one data set that asks for only 10 quadrature points). A changed number is accepted only if it
+is at least as close to the refined reference as today's. After the mesh, four mechanisms that exist only to make a
+point's private grid affordable are deleted (the automatic tolerance, the fold windows, the edge blending, the
+σ(Ē) fallback). Merged in the earlier batch: one generic kind of fit parameter for the parameters of apparatus
+effects (see "How to add a feature now").
 
 **Do the checks still test what they say? (merged 2026-11-11, evening.)** A regression check that edits a project's
 text can go on passing after the conversion to format 3 because its pattern no longer matches anything and it

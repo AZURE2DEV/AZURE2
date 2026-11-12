@@ -83,7 +83,7 @@ Unit *TermPoint(WorkingCopy &data, const Segment &segment, int term, int pointIn
   return segment.GetTermPoint(data, term, pointIndex + 1);
 }
 
-double LeafValue(const Unit *p, LeafPart part, const azure2::Results &results) {
+double LeafValue(const Site *p, LeafPart part, const azure2::Results &results) {
   switch (part) {
     case LeafPart::E1: return p->GetFitE1CrossSection(results);
     case LeafPart::E2: return p->GetFitE2CrossSection(results);

@@ -26,7 +26,7 @@ std::uint64_t Bits(double x) {
   return b;
 }
 
-int NucleusOf(CNuc *cnuc, const Unit &u) { return cnuc->GetPair(cnuc->GetPairNumFromKey(u.GetEntranceKey()))->GetNucleus(); }
+int NucleusOf(CNuc *cnuc, const Site &u) { return cnuc->GetPair(cnuc->GetPairNumFromKey(u.GetEntranceKey()))->GetNucleus(); }
 
 template <class V>
 bool SameBits(const V &a, const V &b) {
@@ -59,7 +59,7 @@ std::size_t TableBytes(const EDependentTables &t) {
   return n;
 }
 
-NodeKey KeyOf(CNuc *cnuc, Unit &u) {
+NodeKey KeyOf(CNuc *cnuc, Site &u) {
   return NodeKey(NucleusOf(cnuc, u), u.IsTHM() ? 1 : 0, Bits(AMatrixFunc::InEnergy(cnuc, &u)));
 }
 
@@ -107,16 +107,10 @@ std::size_t NodeTable::Bytes() const {
          (slots.begin.capacity() + slots.node.capacity()) * sizeof(int) + slots.overflow.capacity();
 }
 
-std::size_t NodeOverflow::KeyHash::operator()(const NodeKey &k) const {
-  const std::uint64_t h = std::get<2>(k) * 0x9E3779B97F4A7C15ULL ^
-                          ((std::uint64_t)(unsigned)std::get<0>(k) << 1 | (std::uint64_t)std::get<1>(k));
-  return (std::size_t)(h ^ (h >> 29));
-}
-
 int NodeOverflow::Place(const NodeKey &key, double ex, const SharedTable<EDependentTables> &nodeRows) {
-  const auto it = index.emplace(key, Size());
-  if (it.second) Append(key, ex, nodeRows);
-  return it.first->second;
+  if (Size() > 0 && Key(Size() - 1) == key) return Size() - 1;
+  Append(key, ex, nodeRows);
+  return Size() - 1;
 }
 
 NodeState BuildNodeTable(WorkingCopy &data, CNuc *cnuc, const Config &) {
@@ -128,7 +122,7 @@ NodeState BuildNodeTable(WorkingCopy &data, CNuc *cnuc, const Config &) {
   for (int t = 0; t < plan.NumTasks(); t++) {
     units.clear();
     plan.TaskUnits(data, t, units);
-    for (UnitRef r : units) all.push_back({KeyOf(cnuc, data.UnitAt(r)), r});
+    for (UnitRef r : units) all.push_back({KeyOf(cnuc, data.SiteAt(r)), r});
     table->slots.begin.push_back((int)all.size());
   }
   std::vector<int> order(all.size());
@@ -140,7 +134,7 @@ NodeState BuildNodeTable(WorkingCopy &data, CNuc *cnuc, const Config &) {
   for (std::size_t k = 0; k < order.size(); k++) {
     const auto &u = all[order[k]];
     if (k == 0 || u.first != all[order[k - 1]].first) {
-      Unit &unit = data.UnitAt(u.second);
+      Site &unit = data.SiteAt(u.second);
       table->Append(u.first, AMatrixFunc::InEnergy(cnuc, &unit), unit.ChannelRowsShared());
     }
     table->slots.node[order[k]] = table->Size() - 1;
@@ -153,8 +147,11 @@ NodeState BuildNodeTable(WorkingCopy &data, CNuc *cnuc, const Config &) {
 
 bool NodeCheckRequested() {
   static const bool on = [] {
-    const char *v = std::getenv("AZURE_NODE_CHECK");
-    return v && *v && std::strcmp(v, "0") != 0;
+    auto set = [](const char *name) {
+      const char *v = std::getenv(name);
+      return v && *v && std::strcmp(v, "0") != 0;
+    };
+    return set("AZURE_NODE_CHECK") || set("AZURE_PLAN_CHECK");
   }();
   return on;
 }
@@ -182,9 +179,9 @@ void WorkingCopy::PlaceOverflowNodes(CNuc *cnuc, const std::vector<int> &changed
       refs.clear();
       plan_.TaskUnits(*this, t, refs);
       // the units of a task share their point's entrance pair, and so its compound nucleus
-      const int nucleus = refs.empty() ? 0 : azure2::NucleusOf(cnuc, units_[refs[0]]);
+      const int nucleus = refs.empty() ? 0 : azure2::NucleusOf(cnuc, SiteAt(refs[0]));
       for (azure2::UnitRef r : refs) {
-        Unit &u = units_[r];
+        Site &u = SiteAt(r);
         const double ex = AMatrixFunc::InEnergy(cnuc, &u);
         const azure2::NodeKey key(nucleus, u.IsTHM() ? 1 : 0, azure2::Bits(ex));
         int n = stage->Find(key);
@@ -215,6 +212,11 @@ long WorkingCopy::CheckNodeTable(CNuc *cnuc, const std::vector<int> &work) {
   auto report = [&reports](const std::string &r) {
     if (reports.size() < 10) reports.push_back(r);
   };
+  for (int n = 1; n < stage->Size(); n++)
+    if (!(stage->Key(n - 1) < stage->Key(n))) {
+      wrongNode++;
+      report("stage nodes " + std::to_string(n - 1) + " and " + std::to_string(n) + " are not in key order");
+    }
   std::vector<azure2::UnitRef> refs;
   for (int t : work) {
     refs.clear();
@@ -227,7 +229,7 @@ long WorkingCopy::CheckNodeTable(CNuc *cnuc, const std::vector<int> &work) {
       continue;
     }
     for (int k = 0; k < e - b; k++) {
-      Unit &u = units_[refs[k]];
+      Site &u = SiteAt(refs[k]);
       units++;
       const int n = slots.node[b + k];
       const bool inStage = n >= 0 && n < stage->Size();
@@ -248,7 +250,7 @@ long WorkingCopy::CheckNodeTable(CNuc *cnuc, const std::vector<int> &work) {
       }
       (inStage ? onStage : onOverflow)++;
       const EDependentTables *mine = u.ChannelRows();
-      if (!mine || !list.rows[at] || !azure2::SameTables(*mine, *list.rows[at])) {
+      if (!mine || !list.rows[at] || (mine != &*list.rows[at] && !azure2::SameTables(*mine, *list.rows[at]))) {
         rowsDiffer++;
         report("channel rows of unit " + std::to_string(refs[k]) + " (segment key " + std::to_string(u.GetSegmentKey()) +
                ") differ from node " + std::to_string(n));
