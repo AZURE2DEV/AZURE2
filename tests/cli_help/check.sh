@@ -6,10 +6,10 @@
 # two lists kept by hand; they had drifted: --help printed
 # "--no-long-wavelenth" (the parser takes --no-long-wavelength) and left out
 # --covariance-band, --scale-covariance and --use-api.  Checked here, on the
-# binary as built (flags behind a build option, --no-readline and
-# --use-nlopt, count only where they are compiled in):
+# binary as built (a flag behind a build option, --use-nlopt, counts only
+# where it is compiled in):
 #
-#   1. every flag the help prints is accepted (no "Unknown option" warning);
+#   1. every flag the help prints is accepted (no "Unknown option" error);
 #   2. every flag literal of src/AZURE2.cpp and src/ProjectCommands.cpp (the --convert, --validate and --schema
 #      commands) is either accepted and printed,
 #      or neither (compiled out);
@@ -58,7 +58,7 @@ if [ -z "$printed" ] || [ -z "$literals" ] || [ -z "$documented" ]; then
   echo "  FAIL"; exit 1
 fi
 
-# accepted FLAG: the binary takes FLAG without the parser's warning.  A
+# accepted FLAG: the binary takes FLAG without the parser's error.  A
 # missing project file ends the run right after the options are parsed.
 accepted() {
   local out

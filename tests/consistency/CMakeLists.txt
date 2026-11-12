@@ -32,3 +32,8 @@ add_test(NAME tools_classify
 add_test(NAME tools_classify_quadrature
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/classify_quadrature_test.py)
+
+# tools/runall.sh and tools/run_one.sh (the whole-tree runs): a tag is never mixed with the results of an earlier run.
+add_test(NAME tools_runall
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/runall_test.py)

@@ -89,7 +89,7 @@ Available Options
      - Accepted and ignored: this build has no graphical setup utility. Builds
        with the Qt setup utility need it to run in text mode.
    * - ``--no-readline``
-     - Disable readline support for command-line input.
+     - Disable readline support for command-line input (accepted, with no effect, in a build without readline).
    * - ``--use-brune``
      - Use the Brune parameterization (equivalent to the GUI's
        "Use Brune formalism" option).  This is the default.
@@ -323,7 +323,9 @@ Available Options
 
 Options can also be read from a file, one per line, named by the environment
 variable ``AZURE_OPTIONS_FILE``; they are applied after those on the command
-line.  An unknown option prints a warning and is otherwise ignored.  A flag that
+line.  An unknown option (a mistyped ``--use-gradiant``) stops the run before
+anything is read: ``ERROR: Unknown option --use-gradiant.``, the usage line, exit
+status 2.  A flag that
 takes a value (``--max-calls=N``, ``--refreeze-covariance=N``,
 ``--coulomb-table=FILE``, ``--build-coulomb-table=FILE``) given without its
 value -- ``--max-calls`` alone, or ``--max-calls 50`` with a space -- or with a

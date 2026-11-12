@@ -2,6 +2,8 @@
 #define AZURE2_MESHPLANNER_H
 
 #include <cstddef>
+#include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -91,6 +93,20 @@ struct MeshSupport {
   /// support.  A soft edge adds no node: the quadrature clips the interval containing it.
   bool lowHard = false, highHard = false;
   int dataSet = 0;  ///< index of the data set, for the caller (the plan does not depend on it)
+  std::string label;        ///< "data set NAME, point I (E_lab MeV)", for a message (the plan does not depend on it)
+  double kernelWidth = 0.0; ///< MeV, the width of the point's own kernel support (unshifted), for a message
+};
+
+/// The most nodes the plan of one compound nucleus may have (MeshPlanBudgetError beyond).  The largest plan of the
+/// tree's projects is natural_neon's 21,070 nodes (docs/upgrade/energy_grid.md, the table of section 2.8); a node of
+/// the point pass takes a few kB (a 1e14 atoms/cm^2 layer with a 3 keV shift prior asked for about 1e7 nodes and took
+/// 28 GB before it was stopped), so 1e6 nodes is about 50 times the largest and a few GB.
+constexpr double kMeshNodeBudget = 1.0e6;
+
+/// A plan that would exceed kMeshNodeBudget, refused before its nodes are made (what() names the support that asks for
+/// the most nodes and what to do).
+struct MeshPlanBudgetError : std::runtime_error {
+  using std::runtime_error::runtime_error;
 };
 
 /// The constants of the geometric tails (AdaptiveIntegrationGrid::tailRatio, convolutionCoreWidths).
@@ -121,7 +137,8 @@ double MeshLadderStep(const MeshSupport &support);
 /// The tail growth t of a class of settings (step per distance from the anchor).
 double MeshTailFactor(const MeshSettings &settings, const MeshTailConstants &tails);
 
-/// Plans the mesh of one compound nucleus.  Anchors with no positive particle width are ignored.
+/// Plans the mesh of one compound nucleus.  Anchors with no positive particle width are ignored.  Throws
+/// MeshPlanBudgetError when the supports' ladders alone ask for more than kMeshNodeBudget nodes.
 MeshPlan PlanMesh(const std::vector<MeshAnchor> &anchors, const std::vector<MeshSupport> &supports,
                   const MeshTailConstants &tails);
 

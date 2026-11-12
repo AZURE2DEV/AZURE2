@@ -26,6 +26,7 @@
 #include <cstring>
 #include <iostream>
 #include <cmath>
+#include <stdexcept>
 #include <algorithm>
 #include <string>
 #include <unordered_map>
@@ -507,7 +508,11 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
   // an element cotangent fitBar c_i w_i / D (PointTBar on the observable) and a weight cotangent
   // fitBar c_i (r_i - <r>) / D on the weight's route (Unit::RatioWeightRoute).  Anything else is linear in the slots.
   const bool ratio = point->FoldsRatio();
-  if (ratio && xsComponent != 0) return false;
+  // An E1 or E2 part exists for sigma, sfactor and modified_sfactor only (the field multipole,
+  // experiment/src/Quantities.cpp): never for a ratio (a coefficient, an analyzing power).
+  if (ratio && xsComponent != 0)
+    throw std::logic_error("GradTargetEffectAdjoint: an E1 or E2 part of a coefficient or an analyzing power "
+                           "(an invariant of the set-up is broken)");
   if (point->IsAnalyzingPower()) {
     // Supported: particle-exit A_y, full observable (every point's sub-points are units of the point pass, with their
     // own records).  Capture A_y keeps its refusal: the attenuation folded into P_k has no counterpart for the P_k^1

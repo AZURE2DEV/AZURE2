@@ -87,6 +87,198 @@ failure; every file closer to the refined run than before (largest relative dist
 `thm_beam_profile`, `thm_coherent_background`, `thm_coulomb_consistency`, `thm_energy_shift`, `thm_experiment`,
 `thm_lineshape`, `thm_narrow_fold`, `thm_options` (with the new pin), `thm_park`, `thm_rwa_grid`,
 `thm_spectator_window`, `thm_threshold_grid` pass.
+## 2026-11-12 (director, 17:01) — merged: the second batch of follow-ups (thin layers with a shift, unknown options, the gradient's gates, a node budget, the runner)
+
+**Merged** into `feature/upgrade-4-data` and `feature/upgrade` (the source of `rehearsal/trial36` = the observables
+head with the batch; nothing pushed): `feature/upgrade-5-followups-2` (the agent's two entries below say what was
+done, by file).
+
+**What a user sees.**
+- A layer thinner than 1 eV with an energy shift on its data set is calculated (the thin limit at the shifted
+  energy); it was a failed point.
+- A gradient or least-squares fit with a free energy shift on a thin layer no longer ends the process: the shift
+  columns keep their difference step inside the planned nodes (`InsideShiftStep`, `src/ShiftedFold.cpp`).
+- An unknown command-line option is an error (exit 2 with the usage line); `--use-nlopt` in a build without NLopt is
+  one of them.  `--no-readline` exists in every build.
+- An analysing power on a β-delayed or photon entrance is refused when the file is read (it was calculated as 0, and
+  its gradient was wrong by 1e-3).
+- A mesh that would need more than 1e6 nodes (`kMeshNodeBudget`, `include/MeshPlanner.h`) is refused with a message
+  that names the data set, the point, the kernel's width, the planned width and what to do; before, such a project
+  ran out of memory.
+- `tools/runall.sh` refuses a tag that exists (it mixed the results of two runs silently) and ends with exit 1 when a
+  project failed.
+
+**Verified by the director** (build `work/b-trial36` of the rehearsal, reference `tab-obs5`).
+- Every project on the three bases (835 / 808 / 835 output files, fresh tag `tab-trial36`): identical to the merged
+  engine (`tab-obs5`) to the byte.  Eight fits against it: identical end points, χ² and times (T2 297.6010).
+- Unit tests 213/213 (two new: `shift_column_inside`, `tools_runall`), slow tests 10/10, `run_tests.sh` 160/160 (two
+  new: `ay_particle_entrance`, `mesh_node_budget`; the T2 golden comparison passes with the re-pin of the observables
+  merge), converter equivalence 184/184, the converted-tree gate without a difference, 1 against 3 threads identical.
+- The director's own cases (`work/director/batch2_checks.sh`): a 1e14 layer without a shift, with a fixed shift of 0
+  and of 20 keV, and 1e16 with 20 keV all run; a free shift without a prior under `--use-lm` at 3e14, 1e15, 1e16 and
+  under `--use-gradient` at 3e14, 1e15 ends with exit 0, where the same 3e14 fit on the build before the batch ends in
+  `std::terminate` ("the upper edge of the moved support ... is outside the point's planned nodes"); on the test's
+  flat χ² the gradient fit at 1e16 walks the shift away and is stopped by the node budget with the message (exit 1);
+  an unknown option and `--use-nlopt` exit 2 with the usage line; the runner refuses an existing tag (exit 2, nothing
+  touched).
+
+**Reviewed; conflicts with the observables branch resolved by the director.**  `AMatrixFunc::PointTBar`: the batch's
+assertions on the observables branch's row (the coefficient flag and the Legendre row are the reader's).
+`GradTargetEffectAdjoint`: the batch's `logic_error` for a multipole part of a ratio, on the one `ratio` flag
+(`Unit::FoldsRatio`).  Fixed beside it: the `AZURE_SHIFT_GRAD_CHECK` self-check divided by the nominal step, not by
+the step it took.  Notes and runs: `work/director/batch2_review_notes.md`, `work/director/batch2_checks.out`.
+
+**Decided.**  Not done in this batch and left for one later small branch, "the shift on thin kernels":
+- the planned support of a shifted point is filled at the kernel's own step, so the cost grows as prior width over
+  kernel width (the agent's two proposals are in its entry below: a floor on the reach with a step that grows, or a
+  capped reach with re-plans);
+- a thin-limit point (kernel below 1 eV) with a varied shift: χ²(ν) is a staircase, MIGRAD's error of the shift is
+  too small there; the remedy is the unfolded path with the thin-limit factor;
+- 6.2e-6 at one energy of `thin_layer_limit`'s target-averaged σ under a −20 keV shift, unexplained;
+- the node-budget error inside a fit is thrown in Minuit2's parallel gradient and ends the process by
+  `std::terminate` (the message is printed, exit 134); a clean end needs an abort flag through the minimizer (Minuit2
+  is not patched).
+
+**Open** (carried).  THM on the mesh (`feature/upgrade-5-thm-mesh`).  Small: `MeshSupport` carries a label string for
+the budget's message (it could be made from the data set's index when the message is written); a window beyond the
+kinematic maximum without a shift could be refused at set-up; the two near-copy loops of `SetUpTargetEffects`.
+
+## 2026-11-12 (agent, follow-ups 2, the director's fixes) — shift columns, A_y entrance, node budget (`feature/upgrade-5-followups-2`)
+
+**Done** (one commit each).
+- *Shift columns inside the planned nodes.*  The local shift columns (gradient, residual Jacobian) moved the points by
+  +-h without a re-plan; with |Delta - c| + h > R the refold threw and the process ended (3e14: R 0.55 eV < h 0.96 eV;
+  1e15, 1e16: a shift within h of its window's edge; a 0.1 eV beam spread too).  `InsideShiftStep` (ShiftedFold.cpp)
+  halves the step until both sides stay inside, else the column takes the path that plans again.  Test
+  `shift_column_inside`.
+- *A_y needs a particle entrance*: refused in `experiment/src/Build.cpp`; the PointTBar gate is an assertion.  Test
+  `tests/ay_particle_entrance`.
+- *Node budget*: PlanMesh refuses a plan beyond `kMeshNodeBudget` = 1e6 nodes (50 x natural_neon's 21,070) before
+  making it, naming the data set, point, kernel width, planned width and step.  Set-up: ERROR, exit 1; inside a fit
+  (Minuit's parallel gradient): std::terminate with the message, exit 134.  Test `tests/mesh_node_budget`.
+
+**Open, design.**  The planned support of a shifted point is filled at the kernel's own step, so the cost grows as prior
+width / kernel width (1e14 layer, kernel 6e-8 MeV: a 10 eV prior 1.3 s, 0.1 keV 10.6 s and 2.4 GB, 3 keV ~3e7 nodes,
+refused now).
+- A floor on the reach (a few eV) and a planned step that grows with the planned width (the kernel's number of points
+  across it): bounded cost; moves the nodes of every shifted point whose planned width exceeds its kernel's, i.e. every
+  varied shift with a prior or without (their outputs at the quadrature level).
+- A reach capped at a multiple of the kernel width, with re-plans as the shift walks: nodes as without a shift; moves the
+  same projects' fit paths (more re-plans, chi^2 steps by the quadrature difference at each).
+- Thin-limit points (kernel below 1 eV) with a varied shift: chi^2(nu) is a staircase (MIGRAD's error 10x too small at
+  1e14); routing them through the unfolded path with the thin-limit factor is not done (cost in the report).
+- At -20 keV with a 10 eV prior, thin_limit's target-averaged sigma at 0.6 MeV is 6.2e-6 off (0.7, 0.8 MeV and the yield
+  3e-7, as expected): the size of linear interpolation over a keV interval, not the planned 2e-9 MeV step; not resolved.
+
+## 2026-11-12 (agent, follow-ups 2) — thin shifted layers, unknown options, the gradient's gates, runall tags (`feature/upgrade-5-followups-2`)
+
+**Done** (one commit each).
+- *A layer below 1 eV on a data set with an energy shift.*  The point was NaN ("the lower edge of the moved support ...
+  is outside the point's planned nodes"): its planned support is still below `MeshZeroWidth()` (fixed shift: no reach;
+  varied without a prior: reach 3 support widths), the planner gives one node (its upper edge), and `ShiftedFoldNodes`
+  compared the moved support's edges with it to 1e-9 MeV.  For one node it now checks that the moved support lies
+  within `MeshZeroWidth()` below the node and the thin limit folds it (`src/ShiftedFold.cpp`; header paragraph on
+  single nodes).  `tests/thin_layer_limit/check.sh` gained a shift scan at 1e14 and the 1e14–1e16 scan with +20 keV
+  fixed and varied, against the bare data set at the shifted energies; fails on the base.
+- *An unknown command-line option is an error* (exit 2, the usage line), also in `AZURE_OPTIONS_FILE`; `--no-readline`
+  is accepted in every build.  `tests/cli_option_values`.
+- *The gradient's gates.*  In `AMatrixFunc::PointTBar` the gates no input reaches are assertions (`std::logic_error`
+  naming the broken invariant; the reason at each), one deleted; `GradTargetEffectAdjoint`'s E1/E2 gates likewise.
+  `park_chi2_fallback` variant D: `--use-rmc` (the fallback against central differences).
+- *`tools/runall.sh` / `run_one.sh`.*  A file's results are replaced as a whole; a failed move is an error (run_one
+  exit 1, runall "FAILED", exit 1); an existing tag is refused unless `REPLACE_TAG=1`.  `tests/consistency/runall_test.py`.
+
+**Verified** (scratch `work/small2/`): builds 0 warnings; consistency test; `cli_option_values`, `cli_help`,
+`cli_route_exit`, `thin_layer_limit`, `park_chi2_fallback`, `tools_runall`; T1–T3, 13N, 13N_capture_ay,
+thick_target_resonance, layer_yield/models, shift_sqrt_subpoints/models, shift_subpoint_angle(+/models),
+thin_layer_limit/models in three bases byte-identical to `tab-small1`; each new test shown failing on the base or with
+an injection; `scripts/check.sh --quick` (JOBS=1) at the end.
+
+**Not run**: the whole tree × 3, `run_tests.sh`, the converted-tree gate, the fits of the tree.
+
+**Open** (details in the report).
+- A varied shift on a thin layer: the analytic gradient's shift column (`--use-gradient`, `--use-lm`, `--use-gsl-lm`)
+  ends the process (`std::logic_error` from `ShiftedFoldNodes` inside the parallel refold) when the reach is below the
+  difference step (~1 eV): seen at 3e14, 1e15 and 1e16 atoms/cm² on the base too.  MIGRAD's numerical gradient works.
+- A prior of keV on such a layer: the planned support keeps the layer grid's smooth step (millions of nodes, 28 GB).
+- A varied shift without a prior on a single node: chi^2(nu) is a staircase of sigma' x 2R; MIGRAD's error of the
+  shift comes out 10x too small at 1e14.
+- An analyzing-power data set on a beta-delayed reaction is accepted and calculated as 0; its analytic gradient is
+  wrong by ~1e-3 (PointTBar treats the point as the beta-delayed spectrum).
+- Gates of PointTBar not settled (kept as refusals): beta-delayed with an E1/E2 part, the A_y sub-point gate
+  (`ayCrossSection`), the capture-A_y term gates, a vanishing denominator, an empty amplitude matrix, an A_y exit that
+  is neither particle nor photon.
+
+## 2026-11-12 (director, 16:14) — merged: observables per mesh energy and reaction, the angle in the reader's row, the lab-frame fold per node (D5)
+
+**Merged** into `feature/upgrade-4-data` and `feature/upgrade` (the branch started from the follow-ups' head, so the
+merge's tree is the branch's plus the director's entries; nothing pushed): `feature/upgrade-5-observables` (five
+entries of the agent below, one per milestone, say what a site holds, what the key is and what went, by file).
+
+**What it is, in four lines.**  A site of the mesh holds the observables of a reaction at one energy without an angle
+(the integrated cross section and Legendre coefficients, the elastic amplitudes, the analysing power's coefficients:
+one table of kinds, `include/SiteObservable.h`); a data point brings its angle in a row (`include/RowSet.h`), and
+points of one block with the same angular identity share the row and the contracted value.  Two data sets of one
+reaction on one mesh share their sites (the key has no segment, no angle, no Legendre order).  A point given at a lab
+angle is folded in the lab: θ_c.m.(E_n; θ_lab) and dΩ_lab/dΩ_c.m.(E_n; θ_lab) at every node (decision D5).
+
+**Verified by the director** (build `work/b-obs5` of the branch's last commit, references `tab-small1c` = the merged
+engine before it and `tab-obs4d` = milestone 4; the new reference of the merged engine is `tab-obs5`).
+- Every project on the three bases (835 / 808 / 835 output files, fresh tag `tab-obs5`): identical to milestone 4's run
+  (`tab-obs4d`) to the byte, the run logs included; against the merged engine before the branch the known set only
+  (T2's `covariance.out` 1.5e-5; six observable files, the largest the `ec_e1m1_phase` case below).
+- Eight fits against the merged engine before the branch: T2 ends at χ² 297.6010 (297.5990 before D5) with
+  `--use-lm`, `--use-gradient` and plain MIGRAD, every parameter within 0.004 of its error, in 64 / 44 / 26 s
+  (88 / 65 / 38 s before); the two 13N fits at the same χ² and parameters to 8 digits; `layer_yield` and the two
+  stopping fits identical.
+- Unit tests 211/211, slow tests 10/10, converter equivalence 184/184, the converted-tree gate without a difference
+  (633 / 606 / 633 files), 1 against 3 threads identical (12 runs and the Markdown projects).
+- `run_tests.sh`: 157 of 158 at the branch's last commit; the one failure was `tests/upgrade`'s comparison of T2 with
+  its golden files (1e-5), which D5 moves by 2.56e-5 and the branch had not re-pinned.  Re-pinned by the director
+  (58c8e96c: segments 2 and 3, the two data sets at a lab angle; χ² 99.168 → 99.1682, 414.736 → 414.728 at the start
+  values, 40.3817 → 40.3825 at the truth; nothing else moves); `tests/upgrade/check.sh` passes with it.
+- Speed (one thread, side by side): `beam_profile_kernel` 5 min 27 s → 16 s and 913 → 134 MB, outputs identical.
+
+**Reviewed, with the director's own runs** (`work/director/obs_review_notes.md`, `work/director/grad_obs5/`,
+`work/director/speed_obs5/`, `work/director/labfold/`).
+- *Milestones 1–3 (rounding only)*, whole tree × 3 bases at each: every number within the rounding class but one file,
+  `ec_e1m1_phase/models/s_1` at 0° and 180°, where an interference of 1e-25 b/sr is the difference of terms of 1e-20
+  (0.43 relative on a number 1e-5 of its neighbours; the same bytes at every later milestone).
+- *Milestone 4 (D5), the one physics change.*  Only T2 and its truth file move: at most 2.6e-5 of a model value,
+  1/1900 of the datum's error.  `tests/lab_frame_fold` (7Li(p,n) at 30° lab, a 300 keV window 0.4 MeV above
+  threshold) run by the director with both builds: the new fold agrees with a brute-force integral of the unfolded
+  engine to 2.2e-5 (the quadrature), the fold before D5 was 2.2e-2 off.  **The agent stopped on the brief's stop
+  condition** (six of T2's 60 points moved by more than ten times the brief's estimate); accepted: the brief's estimate
+  lacked the first-order term s²(ln σ)′(ln f)′, and with it the moves are explained (`energy_grid.md` §4.3, T2's
+  table).
+- *After milestone 4*: the ratio fold and its adjoint (A_y, a normalised coefficient) are one branch each, read from
+  the table (`Unit::FoldsRatio`, `RatioPartsAt`, `RatioWeightRoute`); the director's question about a node beyond the
+  kinematic maximum of a lab angle found an abort (an uncaught exception at set-up when the reach margin of a fitted
+  shift held such a node), now a failed point only for a fold that reads the node (`tests/lab_frame_fold` case (d),
+  run by the director: at offset 0 the folded value is the unshifted one bit for bit; the milestone-4 build fails the
+  case).  Milestone 5 deleted the key's angle and Legendre order and the code that served sites with an angle.
+- *Gradient* (`AZURE_GRAD_CHECK`, the director's runs on the last commit, largest relative difference to central
+  differences): T2 2.6e-6, 13N 2.2e-7, the folded analysing power (`beam_spread_ay`, 202 parameters) 1.7e-7, capture
+  A_y 1.2e-9, the lab-angle fold 3.6e-6, `layer_yield` 2.0e-9.  `AZURE_NODE_CHECK` on T2: 60 readers, 2 row sets, both
+  at a lab angle, 0 differences.
+
+**Corrected here.**  `FOR_THE_OWNER.md` said a lab angle beyond the kinematic maximum inside the window "is refused at
+set-up": since the reach fix it is a failed point (NaN, χ² 1e100, a warning that names the cause and the remedy).
+
+**For the PI and the owner** (behaviour a user sees).  (1) D5: a folded point given at a lab angle changes by the
+window's width times the slopes of the cross section and of the angular factor; small for the tree's data (2.6e-5),
+2 % for a wide window near a threshold.  (2) A window or a shift that reaches an energy where the lab angle does not
+exist gives a failed point with the reason, not a refusal of the file.  (3) An analysing power given at a lab angle
+is still refused by the format (its fold adjoint exists and is untested).  (4) Speed: see the verification paragraph
+(`beam_profile_kernel`, the project with the most angles per energy).
+
+**Open** (carried).  THM on the mesh (`feature/upgrade-5-thm-mesh`, started from this tree): the last data kind with
+a grid of its own; its site must become angle-free first (the key has no angle).  The second batch of follow-ups
+(`feature/upgrade-5-followups-2`): a thin layer with a shift, unknown options, the fallback's gates, a crash of
+gradient fits with a free shift without prior on thin layers, a node budget.  Small: a window that reaches beyond the
+kinematic maximum **without** a shift could be refused at set-up again (clearer than a failed point); a double-valued
+lab angle (two c.m. solutions) takes one branch, as before; a ratio of two coefficient leaves needs a grammar field
+(`experiment/` refuses it).
 
 ## 2026-11-12 (agent, Phase 5 branch 9, milestone 5) — the ratio fold from the table, a lab angle beyond the kinematic maximum, the deletions (`feature/upgrade-5-observables`)
 
@@ -234,6 +426,51 @@ consistency|results_owner|history|ay|polariz|shift"` 48/48; `AZURE_NODE_CHECK` (
 the whole tree, `run_tests.sh`, the gate, the eight fits.
 **Open.**  Milestones 4 (D5) and 5 not started.  The A_y and coefficient-ratio folds are named per observable
 (see (a)).
+
+## 2026-11-12 (director, 13:35) — merged: six follow-ups (thin layers, the local shift column, value flags, a rename, two tests)
+
+**Merged** into `feature/upgrade-4-data` and `feature/upgrade` (the branch started from the integration head, so the
+merge's tree is the branch's plus this entry; nothing pushed): `feature/upgrade-5-followups-1` (the agent's entry
+below says what each item does, by file).
+
+**Verified by the director** (build `work/b-small`, reference `tab-trial35` = the shift kernel as merged; the new
+reference of the merged engine is `tab-small1c`).
+Every project on three bases under a fresh tag (`tab-small1c`; see the note on the runner below): 817 / 795 / 817 of
+835 / 803 / 835 files identical to `tab-trial35`, and every other entry belongs to the renamed project (only in the
+reference under its old name, only in the new run under its new one; its outputs equal the old folder's, `diff -rq`,
+three bases) or to the new project `thin_layer_limit`.  Eight fits (T2 LM, gradient, MIGRAD; 13N gradient, LM;
+`layer_yield` gradient; stopping-scale gradient, LM) end at the χ² of `b-trial35` to all printed digits.  Unit tests
+211/211, slow tests 10/10, `run_tests.sh` 157/157, converter equivalence 184/184, the converted-tree gate 628 / 601 /
+628 identical with none missing, 1 against 3 threads identical on T1, T2, T3, 13N in three bases.
+**A defect of the runner met on the way**: `tools/run_one.sh` does not replace an existing output folder of a tag
+(`mv` onto a non-empty directory fails and the error is discarded), so the first whole-tree run, under a tag that
+had been used at 10:31 for seven folders, compared old files for those and reported them identical; the gate's five
+"missing" files exposed it.  Everything above is from the fresh tag.  The fix is in the second batch of follow-ups.
+
+**Reviewed, with the director's own runs** (`work/director/small1_review_notes.md`, `work/director/thin_shift/`).
+- *A layer below 1 eV on a data set with an energy shift is still a failed point.*  `thin_limit.azr` at 1e14
+  atoms/cm² with `shift offset 0.02 MeV fixed`, `offset 0.02 MeV fit` or `offset 0 MeV fit` on its data set: a warning
+  ("shifted fold: the lower edge of the moved support … is outside the point's planned nodes [E, E]") and NaN in the
+  output; with `offset 0 MeV fixed` it gives the unshifted bytes, and at 1e16 with a shift it works.  The engine before
+  this branch refuses the file altogether (the false "beam does not leave the layer"), so nothing got worse, but the
+  item is complete only for unshifted data.  In work: `feature/upgrade-5-followups-2`.
+- *The old local shift column moved only the first term of a data set.*  In the Jacobian path (Levenberg–Marquardt)
+  the shift column of a segment moved the points of term 0 only; `MoveSegmentsToShift` moves every term, as the
+  hand-over does.  A summed data set (several reactions) with a shift of its own had a wrong shift column for its other
+  terms before.  No project of the tree has that combination, so no number moved and the old error is not measured.
+- *Two slips of the agent, both reported by itself and without consequence*: about six threads for three minutes
+  (budget four); a flag test run against the base build nearly wrote `~/.azure2/coulomb_table.bin` (stopped by its
+  60 s guard; the file's date is unchanged, 2026-10-26; the test now redirects `HOME`).
+
+**For the PI and the owner** (behaviour a user sees): a value flag without its value (`--max-calls`, an empty
+`--coulomb-table=`, a bad `AZURE_REFINE_QUADRATURE`) is an error with the usage line and exit code 2, where it was a
+warning or was ignored; a yield on a layer thinner than 1 eV is σ(E)·N, where the file was refused; the project
+`tests/target_effect_ranges` is `tests/beam_spread_ay`.
+
+**Open** (carried).  The second batch of follow-ups (`feature/upgrade-5-followups-2`): the thin layer with a shift, an
+unknown option as an error, the finite-difference fallback's gates one by one.  The observables branch
+(`feature/upgrade-5-observables`): milestones 1–3 checked by the director on the whole tree (`tab-obs2`, `tab-obs3`),
+milestone 4 (the lab-frame fold per node) and 5 (deletions) in work.
 
 ## 2026-11-12 (agent, follow-ups) — six small items after the shared mesh and the shift kernel (`feature/upgrade-5-followups-1`)
 

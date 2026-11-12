@@ -84,8 +84,9 @@ add_test(NAME thm_spectator_angles COMMAND thm_spectator_angles_test)
 # fallback of the gradient (taken for a folded capture analyzing power,
 # tests/13N_capture_ay with a beam spread) and the analytic gradient (p+p,
 # plain and with a convolved analyzing power) agree with differences of the
-# objective beyond the wall.  Copies of tests/identical_pp_res's and
-# tests/13N_capture_ay's data, adapted by the test itself.
+# objective beyond the wall; and the first project without Park under --use-rmc, whose adjoint bails at a gate of
+# AMatrixFunc::PointTBar.  Copies of tests/identical_pp_res's and tests/13N_capture_ay's data, adapted by the test
+# itself.
 add_executable(park_chi2_fallback_test park_chi2_fallback_test.cpp)
 target_link_libraries(park_chi2_fallback_test PRIVATE AZURE2Core)
 set(_park_chi2_dir ${CMAKE_CURRENT_BINARY_DIR}/park_chi2_fallback)
@@ -97,6 +98,19 @@ add_test(NAME park_chi2_fallback
                  ${CMAKE_SOURCE_DIR}/tests/13N_capture_ay/13N_capture_ay.azr
          WORKING_DIRECTORY ${_park_chi2_dir})
 set_tests_properties(park_chi2_fallback PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 300)
+
+# A shift column's difference step stays inside the planned nodes (ShiftedFold.h, question 5): a varied shift without
+# a prior on a thin layer (tests/thin_layer_limit's model at three densities), its gradient and residual Jacobian near
+# the edge of the reach against central differences.  Before, the process ended (std::logic_error in the refold).
+add_executable(shift_column_inside_test shift_column_inside_test.cpp)
+target_link_libraries(shift_column_inside_test PRIVATE AZURE2Core)
+set(_shift_column_dir ${CMAKE_CURRENT_BINARY_DIR}/shift_column_inside)
+file(MAKE_DIRECTORY ${_shift_column_dir}/output ${_shift_column_dir}/checks)
+file(COPY ${CMAKE_SOURCE_DIR}/tests/thin_layer_limit/models/data DESTINATION ${_shift_column_dir})
+add_test(NAME shift_column_inside
+         COMMAND shift_column_inside_test ${CMAKE_SOURCE_DIR}/tests/thin_layer_limit/models/thin_limit.azr
+         WORKING_DIRECTORY ${_shift_column_dir})
+set_tests_properties(shift_column_inside PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 300)
 
 # User-defined numerical resolution function: kernel moments against closed
 # forms (unit integral, centring, burst/channel widths in quadrature, energy

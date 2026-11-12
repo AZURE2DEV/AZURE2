@@ -223,6 +223,7 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
       const std::size_t k = (std::size_t)moved.spec->meshSupport;
       meshSupports_[m][k] = azure2::PlannedShiftSupport(azure2::NominalMeshSupport(*moved.spec, meshes[m].supports[k].dataSet),
                                                         *moved.spec, moved.centre);
+      meshSupports_[m][k].label = meshes[m].supports[k].label;
       meshCentres_[m][k] = moved.centre;
       supportsMoved++;
     }
