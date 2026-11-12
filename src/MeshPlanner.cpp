@@ -209,7 +209,9 @@ MeshPlan PlanMesh(const std::vector<MeshAnchor> &anchors, const std::vector<Mesh
       const ClassKey &key = kv.first;
       const MeshSettings settings{key.first, key.second};
       if (!(settings.pointsPerWidth > 0.0)) continue;
-      const double longest = cover.classLongest.at(key);
+      // An anchor's interval gives way to a ladder only where the ladder is finer than half of it, so the lattice runs
+      // up to twice the class's largest smooth step (today's tails run up to the window's smooth step S < 2 L).
+      const double longest = 2.0 * cover.classLongest.at(key);
       Lattice x;
       x.center = a.energy;
       x.pitch = a.particleWidth / settings.pointsPerWidth;
@@ -262,11 +264,15 @@ MeshPlan PlanMesh(const std::vector<MeshAnchor> &anchors, const std::vector<Mesh
     const Lattice &own = lattices[p.lattice];
     if (!(p.hi > p.lo) || !Meets(*own.covered, p.lo, p.hi)) continue;
     bool dominated = false;
+    // Between a ladder and an anchor's lattice the finer one must be finer than half of the other's interval: today's
+    // grid keeps its smooth nodes where no lattice is finer than half the smooth step, and a tail up to the smooth
+    // step, so in that band it has both (AdaptiveIntegrationGrid::GenerateGrid); the mesh keeps both there too.
     auto check = [&](int y) {
       if (dominated || y == p.lattice) return;
       const Lattice &other = lattices[y];
+      const double threshold = (own.ladder != other.ladder ? 0.5 : 1.0) * p.length * margin;
       const double finest = std::max(other.StepAt(p.lo), other.StepAt(p.hi));  // the step is quasi-convex in E
-      if (!(finest < p.length * margin)) return;
+      if (!(finest < threshold)) return;
       if (Meets(*other.gaps, p.lo, p.hi)) return;
       dominated = true;
     };
@@ -319,10 +325,10 @@ std::vector<std::pair<double, double>> MeshChangedRegion(const std::vector<MeshA
       const MeshSettings settings{kv.first.first, kv.first.second};
       if (!(settings.pointsPerWidth > 0.0)) continue;
       const double pitch = r.particleWidth / settings.pointsPerWidth;
-      if (!(pitch < kv.second)) continue;
+      if (!(pitch < 2.0 * kv.second)) continue;
       const Offsets o = AnchorOffsets(pitch, settings.coreWidths, settings.pointsPerWidth,
-                                      MeshTailFactor(settings, tails), kv.second);
-      const double reach = o.offset.back() + cover.longest;
+                                      MeshTailFactor(settings, tails), 2.0 * kv.second);
+      const double reach = o.offset.back() + 2.0 * cover.longest;
       region.emplace_back(r.energy - reach, r.energy + reach);
     }
   }
