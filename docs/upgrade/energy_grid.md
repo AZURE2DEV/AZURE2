@@ -193,6 +193,17 @@ the same nodes, and the mesh is a function of the quantized anchors, the support
 kernel is evaluated on the mesh nodes inside its support; the support's edges are handled by clipping the interval
 that contains them (as `GridQuadrature` clips [lo, hi] today), so they add no node.
 
+**Status, branch 7 part 2 milestone 2 (`feature/upgrade-5-shared-mesh`, 2026-11-12): wired.** `WorkingCopy::
+SetUpTargetEffects` queues every folded point of an unshifted, non-THM segment with an adaptive grid as a support of
+its nucleus's mesh (`src/MeshSlots.cpp`: `QueueMeshPoint`, support [a, b] in E_x = E_cm + S + E_x,pair, settings from
+the point's `Unit::SubGridSpec`, a hard lower edge at the integration floor or a thick target's 1 keV), then plans each
+nucleus once (`PlanMesh`, anchors `MeshAnchorsOf`: every level as each entrance pair of the nucleus's folded points
+sees it, quantized in E_x, from the input widths) and gives each point the nodes of its range (`MeshSlotEnergies`, c.m.
+energies descending).  The kernels integrate over the support (`KernelNodes::Low()/High()`), not over the span of the
+nodes, whose two outer nodes of a soft edge lie up to one interval outside it.  Off the mesh, with grids of their own
+as before: shifted segments (branch 8), THM (branch 10), `useAdaptiveGrid` off, and the σ(Ē) fallback nodes and windows
+(milestone 3).
+
 ### 2.3 Fixed per stage, and what happens when a narrow level moves
 
 Today every evaluation re-places the grids (`ReplaceSubPointGrids`) from the quantized anchors; the grid a copy
@@ -210,6 +221,13 @@ Between stages the whole mesh is re-planned.
 The alternative — a mesh fixed through the stage, wide enough to cover each narrow level's motion — removes the
 re-placement but makes a level that moves further than planned lose resolution silently, or forces a re-plan that is
 a discontinuity of χ² inside MIGRAD. It is the PI's choice (D1); I recommend keeping today's rule.
+
+**Status (milestone 2).** The hand-over (`WorkingCopy::ReplaceSubPointGrids`) takes the anchors of the observed
+parameters of the current values; where they differ bit for bit from the copy's (`WorkingCopy::meshAnchors_`), it plans
+the nucleus's mesh again and re-places the slots of the points whose support or present slots meet
+`MeshChangedRegion(before, after)`, through the same overflow path as before; the others keep theirs (with
+`AZURE_PLAN_CHECK=1` it checks that they would get the same bits, else it throws).  The plan itself is a whole
+`PlanMesh` of the nucleus (0.6 ms on T2).
 
 ### 2.4 Quadrature rule and error bound
 
@@ -282,6 +300,11 @@ model record. The observables, the energy pass, the folds, the gradient's cotang
 sites by one index (`WorkingCopy::SiteAt`: points, then slots). `SubPointAccess.h` is deleted. Not deleted:
 `NodeTableCache.h` (re-placed slots share their rows across copies through it until the shared mesh stops nodes from
 moving with the levels) and the slots' copy-on-write rows (the node rows are holders of them).
+
+**Status (milestone 2).** `NodeTableCache` is kept: the shifted folded points still have grids of their own that the
+hand-over re-places from the shifted anchors at every move of a shift, and mesh slots re-placed after an anchor change
+are the same nodes in every copy at the same parameters; the cache lets a copy adopt the rows another copy computed for
+them (on T2 most re-placed slots take another copy's rows).  It goes with branch 8, when no node moves with a shift.
 
 ### 2.7 Thread-count independence by construction
 
@@ -737,6 +760,15 @@ Every changed number found by `tools/cls.sh` is put in one class; anything else 
 | **rounding** | lab-frame comparison; gradient per energy | per-point pull to 8 ulp; output numbers ≤ 10⁻¹⁴ relative; fits: χ² at the reference `param.sav` ≤ 10⁻¹² relative |
 | **quadrature** | the shared mesh; the shifted fold on fixed nodes; the range integration of the module | for each folded point, \|m_new − m_fine\| ≤ max(\|m_ref − m_fine\|, 10⁻¹⁰ \|m_ref\|), where m_fine is today's engine with every sub-point grid refined twofold (points per width ×2, base step ÷2, tail ratio ÷2): the new value must be at least as close to the converged value as today's |
 | **physics** | a decision of §9 that changes a model (lab-frame fold per node, deleted windows / automatic tolerance) | listed per project with its size and the decision |
+
+**The per-file rule for the shared mesh (decision of the director, 2026-11-12, to be shown to the PI).** The rule
+above compares number by number; a mesh whose nodes lie elsewhere than today's, with an error of the same size, fails
+it for about half the numbers by chance.  For the shared mesh a file is **quadrature** when its structure is the
+reference's, no number that the refinement leaves unchanged has moved, and its largest relative distance to the fine
+reference over its folded numbers, max |m_new − m_fine| / |m_fine| (m_ref ≠ m_fine), is not larger than **1.2 ×** the
+same maximum of today's engine.  A file above 1.2 × is a failure to explain; the factor is not widened.
+`tools/classify_quadrature.py` prints both classes per file (the per-file one decides the summary and the exit status;
+the strict per-number count is printed beside it as information).
 
 ### 7.2 What the director runs (minutes)
 

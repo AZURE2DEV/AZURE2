@@ -404,7 +404,9 @@ that triggers it alone [check 24].
 parameters; the engine applies whatever the table holds.
 1. One file `experiment/src/Kernel<Name>.cpp` (`KernelGaussian.cpp` is the pattern): the fold as a template on V
    (`double` gives the value, `LinearForm` the exact weights the gradient reads: the same arithmetic), its support (the
-   c.m. interval the point's nodes must span; the set-up lays the grid over it) and `Kernel <Name>Kernel()` filling its
+   c.m. interval the point's nodes must span; the set-up gives the point the shared mesh's nodes over it, whose two
+   outer nodes lie up to one interval beyond it: the fold integrates over `nodes.Low()` .. `nodes.High()`, never over
+   the end nodes' span) and `Kernel <Name>Kernel()` filling its
    row member by member. Its own parameters are `KernelParameter` rows (name, dimension, engine unit, fittable) whose
    values arrive in `KernelParameters::values`; with `tableForm = true` and the keyword `detector.energy_resolution
    <form>` the format-3 form is generated from those rows (`Schema.cpp`) and read by `BuildEffects.cpp`: no parser

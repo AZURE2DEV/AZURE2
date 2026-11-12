@@ -13,6 +13,7 @@ token, progress lines of run.log dropped).  A file is
                    |m_new - m_fine| <= max(|m_ref - m_fine|, 1e-10 |m_ref|)
                (the new value is at least as close to the converged value as the reference's), and no number that the
                refinement leaves unchanged (m_ref == m_fine: not folded) has moved;
+               this is the strict, per-number rule;
   failure      otherwise: a structural difference, a file missing in a run, a number further from the converged value
                than the reference's, or a number of an unfolded output that moved.
 
@@ -22,10 +23,18 @@ amplitude per sub-point (their layout follows the grids) and a signature: they a
 A number the refinement leaves unchanged may move by RELATIVE_FLOOR of itself (the last printed digit of a folded
 value that does not depend on the grid, as a constant cross section).
 
+The per-file rule (the director's decision of 2026-11-12, docs/upgrade/energy_grid.md section 7.1, for a mesh whose
+nodes are elsewhere than the reference's): a file is "quadrature" when its structure is the reference's, no number the
+refinement leaves unchanged has moved, and its largest relative distance to the refined run over the folded numbers
+(m_ref != m_fine), max |m_new - m_fine| / |m_fine|, is not larger than FILE_FACTOR (1.2) times the same maximum of the
+reference.  Both classes are printed; the per-file class decides the summary and the exit status, the strict one is
+information.
+
 Output (standard output, tab-separated): one line per file that is not identical -- basis, file, class, the counts of
 numbers that moved (quadrature-conform, unfolded-moved, further-than-reference), the largest |m_new - m_fine| /
-|m_ref - m_fine| of the conform ones, and the first offending number -- then per basis
-"## <basis>: N files, I identical, Q quadrature, F failure (L logs not identical)".
+|m_ref - m_fine| of the conform ones, the first offending number, the per-file class and the largest relative distances
+to the refined run of the new and the reference values -- then per basis
+"## <basis>: N files, I identical, Q quadrature, F failure (L logs not identical); strict rule: ...".
 Exit 2 on a usage error, 1 when any non-log file fails, else 0.
 """
 import os
@@ -36,6 +45,7 @@ import classify  # noqa: E402  (tools/classify.py, beside this file)
 
 BASES = ["brune", "no-brune", "use-park"]
 RELATIVE_FLOOR = 1e-10
+FILE_FACTOR = 1.2
 
 
 def number(token):
@@ -45,16 +55,18 @@ def number(token):
 def classify_file(ref, fine, new):
     """-> (class, conform, unfolded_moved, further, worst_ratio, first_offence)"""
     if ref is None or new is None:
-        return "failure", 0, 0, 0, 0.0, "unreadable or missing"
+        return "failure", 0, 0, 0, 0.0, "unreadable or missing", "failure", [0.0, 0.0]
     if ref == new:
-        return "identical", 0, 0, 0, 0.0, ""
+        return "identical", 0, 0, 0, 0.0, "", "identical", [0.0, 0.0]
     if len(ref) != len(new) or any(len(a) != len(b) for a, b in zip(ref, new)):
-        return "failure", 0, 0, 0, 0.0, "lines or tokens differ in number"
+        return "failure", 0, 0, 0, 0.0, "lines or tokens differ in number", "failure", [0.0, 0.0]
     if fine is None or len(fine) != len(ref) or any(len(a) != len(b) for a, b in zip(ref, fine)):
-        return "failure", 0, 0, 0, 0.0, "the refined run's file differs in structure"
+        return "failure", 0, 0, 0, 0.0, "the refined run's file differs in structure", "failure", [0.0, 0.0]
     conform = unfolded = further = 0
     worst = 0.0
     first = ""
+    text_moved = False
+    dist = [0.0, 0.0]  # largest |m_new - m_fine| / |m_fine| and |m_ref - m_fine| / |m_fine| over the folded numbers
     for i, (lr, lf, ln) in enumerate(zip(ref, fine, new)):
         if lr == ln:
             continue
@@ -66,8 +78,14 @@ def classify_file(ref, fine, new):
                 if r == n and r is not None:
                     continue  # the same value printed otherwise
                 further += 1
+                text_moved = True
                 first = first or f"line {i + 1} token {j + 1}: text {tr!r} -> {tn!r}"
                 continue
+            if r != f:
+                scale = abs(f) if f != 0 else max(abs(r), abs(n))
+                if scale > 0:
+                    dist[0] = max(dist[0], abs(n - f) / scale)
+                    dist[1] = max(dist[1], abs(r - f) / scale)
             if r == n:
                 continue
             if r == f:
@@ -83,9 +101,10 @@ def classify_file(ref, fine, new):
             else:
                 further += 1
                 first = first or f"line {i + 1} token {j + 1}: ref {tr}, fine {tf}, new {tn}"
+    per_file = "failure" if (unfolded or text_moved or dist[0] > FILE_FACTOR * dist[1]) else "quadrature"
     if unfolded or further:
-        return "failure", conform, unfolded, further, worst, first
-    return ("quadrature" if conform else "identical"), conform, 0, 0, worst, ""
+        return "failure", conform, unfolded, further, worst, first, per_file, dist
+    return ("quadrature" if conform else "identical"), conform, 0, 0, worst, "", per_file, dist
 
 
 def main(argv):
@@ -100,6 +119,7 @@ def main(argv):
         new_files = classify.collect(os.path.join(cmp_root, basis, new_tag))
         fine_root = os.path.join(cmp_root, basis, fine_tag)
         counts = {"identical": 0, "quadrature": 0, "failure": 0}
+        strict = {"identical": 0, "quadrature": 0, "failure": 0}
         logs = 0
         caches = 0
         for rel in sorted(set(ref_files) | set(new_files)):
@@ -111,19 +131,22 @@ def main(argv):
             new = classify.tokens(new_files[rel], is_log) if rel in new_files else None
             fine_path = os.path.join(fine_root, rel)
             fine = classify.tokens(fine_path, is_log) if os.path.exists(fine_path) else None
-            cls, conform, unfolded, further, worst, first = classify_file(ref, fine, new)
+            cls, conform, unfolded, further, worst, first, per_file, dist = classify_file(ref, fine, new)
             if is_log:
                 if cls != "identical":
                     logs += 1
                     print(f"{basis}\t{rel}\t{cls} (log)\t{conform}\t{unfolded}\t{further}\t{worst:.3g}\t{first}")
                 continue
-            counts[cls] += 1
+            counts[per_file] += 1
+            strict[cls] += 1
             if cls != "identical":
-                print(f"{basis}\t{rel}\t{cls}\t{conform}\t{unfolded}\t{further}\t{worst:.3g}\t{first}")
-            failed = failed or cls == "failure"
+                print(f"{basis}\t{rel}\t{cls}\t{conform}\t{unfolded}\t{further}\t{worst:.3g}\t{first}\t"
+                      f"file: {per_file}\tnew {dist[0]:.3g} ref {dist[1]:.3g}")
+            failed = failed or per_file == "failure"
         n = sum(counts.values())
         print(f"## {basis}: {n} files, {counts['identical']} identical, {counts['quadrature']} quadrature, "
-              f"{counts['failure']} failure ({logs} logs not identical, {caches} caches not compared)")
+              f"{counts['failure']} failure ({logs} logs not identical, {caches} caches not compared); strict rule: "
+              f"{strict['identical']} identical, {strict['quadrature']} quadrature, {strict['failure']} failure")
     return 1 if failed else 0
 
 

@@ -2,6 +2,34 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, Phase 5 branch 7 part 2, milestone 2) — the engine on the shared mesh (`feature/upgrade-5-shared-mesh`)
+
+**Done.**
+- One placing function per nucleus: `WorkingCopy::SetUpTargetEffects` queues every folded point of an unshifted, non-THM
+  segment with an adaptive grid (`src/MeshSlots.cpp`, `QueueMeshPoint`: support in E_x, settings, a hard lower edge at
+  a floor), plans each nucleus once (`PlanMesh`, anchors `MeshAnchorsOf` from the input widths, quantized in E_x, every
+  entrance pair of the nucleus's folded points) and gives each point the nodes of its range (`MeshSlotEnergies`).  Both
+  `GenerateGrid` branches of the set-up go through it; `AddGridSlots` is the one loop that makes slots.
+- The quadrature is `GridQuadrature` on the mesh nodes, clipped at the support: `KernelNodes::supportLow/High`
+  (`Low()`, `High()`), set by `PointFold.cpp` for a mesh point; the Gaussian, target and beam-profile kernels read the
+  support from there instead of the end nodes.
+- Planner: `MeshSupport::lowHard/highHard` (a hard edge is a node and the range ends at it; test `HardEdges`, shown
+  failing with the floor node removed: 4 failures); `finest` renamed `otherCoarsest`.
+- Hand-over: `ReplaceSubPointGrids` re-plans a nucleus when its quantized anchors change (`WorkingCopy::meshAnchors_`)
+  and re-places only the points meeting `MeshChangedRegion`; `AZURE_PLAN_CHECK=1` throws if a point outside would move.
+- `tools/classify_quadrature.py`: the per-file rule (1.2 x today's largest relative distance to the fine reference),
+  printed beside the strict per-number rule; `energy_grid.md` section 7.1 holds the rule as the director's decision.
+
+**Verified how.** Quick set (`work/mesh2/qset.sh`) and the folded projects of the tree, Brune basis, against
+`tab-trial30` / `tab-fine4`; fits against b-trial30; gradient checks; 1-thread measurements (see the branch report).
+
+**Open.** Unfolded numbers moved in 6Li_d, 7Li_p_a, target_effect_ranges, ratio_to_reference fit_ratio/fit_sigma
+(param.par, parameters.out, scatteringLengths.out at 1e-7): the moved values equal the base engine's without the
+Coulomb table; mechanism not found.  hybrid_potential exceeds the per-file factor (1.22 x).  A point's slots are all
+mesh nodes in its range: units of the pass grow 30-55 % (T2, natural_neon, thick_target_resonance) while distinct
+energies fall; calculation time up to +43 %.  `beam_profile_kernel` has no fine reference (its tab-fine4 run stopped at
+900 s).  NodeTableCache kept (shifted own grids).  Expectations of folded projects not regenerated.
+
 ## 2026-11-12 (agent, Phase 5 branch 7 part 3) — the sub-point units are gone: a slot of a folded point is a `Site` (`feature/upgrade-5-grid-readers2`)
 
 **Done.**

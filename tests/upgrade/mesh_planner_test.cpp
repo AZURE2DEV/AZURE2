@@ -426,6 +426,33 @@ void Ladder() {
 
 }  // namespace
 
+// A hard edge (a physical floor) is a node, bit for bit, and its support's range ends at it even where another
+// support reaches beyond the floor; a soft edge adds no node.  A level next to the floor keeps its lattice above it.
+void HardEdges() {
+  const double p = 50.0, m = 20.0;
+  const double floor = 0.0013, top = 0.35;
+  for (int withLevel = 0; withLevel < 2; withLevel++) {
+    std::vector<MeshAnchor> anchors;
+    if (withLevel) anchors.push_back(Anchor(0.0015, 2.0e-5, 1001));
+    MeshSupport thick = Support(floor, top, 100, p, m, 0);
+    thick.lowHard = true;
+    MeshSupport below = Support(0.0002, 0.05, 100, p, m, 1);  // a soft support reaching beyond the floor
+    MeshSupport ceiling = Support(0.2, 0.30000000000000004, 100, p, m, 2);
+    ceiling.highHard = true;
+    const std::string label = withLevel ? "hard edges, level at the floor" : "hard edges";
+    const MeshPlan plan = azure2::PlanMesh(anchors, {thick, below, ceiling}, Tails());
+    const std::vector<double> &x = plan.nodes;
+    Expect(std::find(x.begin(), x.end(), floor) != x.end(), label + ": the floor is a node");
+    Expect(x[plan.ranges[0].first] == floor, label + ": the range starts at the floor");
+    Expect(x[plan.ranges[0].last] >= top, label + ": the soft top encloses the support");
+    Expect(std::find(x.begin(), x.end(), top) == x.end() || std::fmod(top, MeshLadderStep(thick)) == 0.0,
+           label + ": a soft edge adds no node");
+    Expect(x[plan.ranges[2].last] == ceiling.high, label + ": the range ends at a hard top");
+    Expect(x[plan.ranges[1].first] < floor, label + ": the soft support still reaches below the floor");
+    CheckNeverCoarser(plan, 0, thick, anchors, 0.0, label);
+  }
+}
+
 int main() {
   std::printf("mesh planner: named cases\n");
   NamedCases();
@@ -434,6 +461,7 @@ int main() {
   Permutations();
   Locality();
   Ladder();
+  HardEdges();
   std::printf("mesh planner: %d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }

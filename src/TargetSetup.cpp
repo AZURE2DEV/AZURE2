@@ -11,6 +11,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 #ifdef _OPENMP
@@ -18,6 +19,8 @@
 #endif
 
 #include "AdaptiveIntegrationGrid.h"
+#include "CalculationPlan.h"
+#include "MeshSlots.h"
 #include "CNuc.h"
 #include "Config.h"
 #include "TargetLayer.h"
@@ -28,6 +31,17 @@
  * Reads the target effects input file and creates the TargetEffect objects
  * to be applied to the data.
  */
+
+using azure2::AddGridSlots;
+using azure2::EdgeAtFloor;
+using azure2::MeetsStretches;
+using azure2::MeshAnchorsOf;
+using azure2::MeshPoint;
+using azure2::MeshSlotEnergies;
+using azure2::MeshTails;
+using azure2::OnSharedMesh;
+using azure2::QueueMeshPoint;
+using azure2::SameAnchors;
 
 namespace {
 /*!
@@ -303,6 +317,24 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
   g->FillCompoundFromParamsPhysical(g->GetTransformParams(configure));
   const auto t1 = std::chrono::steady_clock::now();
 
+  // The shared meshes: the anchors of the current parameters; where they differ from the copy's, the new plan and the
+  // region where its nodes differ from the present one's.
+  const std::vector<DataSet::NucleusMesh> &meshes = Data().Meshes();
+  std::vector<std::vector<azure2::MeshAnchor>> newAnchors(meshes.size());
+  std::vector<azure2::MeshPlan> newPlans(meshes.size());
+  std::vector<std::vector<std::pair<double, double>>> regions(meshes.size());
+  std::vector<char> meshMoved(meshes.size(), 0);
+  for (size_t m = 0; m < meshes.size(); m++) {
+    newAnchors[m] = MeshAnchorsOf(g, meshes[m], true);
+    if (SameAnchors(newAnchors[m], meshAnchors_[m])) continue;
+    meshMoved[m] = 1;
+    newPlans[m] = azure2::PlanMesh(newAnchors[m], meshes[m].supports, MeshTails());
+    regions[m] = azure2::MeshChangedRegion(meshAnchors_[m], newAnchors[m], meshes[m].supports, MeshTails());
+  }
+  const bool planCheck = azure2::CalculationPlan::RunTimeCheckRequested();
+  std::atomic<long> outsideRegionMoved{0};
+  const auto t2 = std::chrono::steady_clock::now();
+
   std::atomic<int> changed{0};
   std::atomic<long> newSubPoints{0}, reusedSubPoints{0}, sharedSubPoints{0};
   // For AZURE_GRID_TIMING: per work item, -1 = a different number of nodes, else the
@@ -320,8 +352,32 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
     gc.resonanceWidthMultiplier = spec.resonanceWidthMultiplier;
     gc.pointsPerWidth = spec.pointsPerWidth;
     gc.resonanceOffset = it.offset;
-    std::vector<double> grid = AdaptiveIntegrationGrid(gc).GenerateGrid(spec.startEnergy, spec.endEnergy, g);
     const UnitRange<Site> subs = point->GetSubPoints(*this);
+    std::vector<double> grid;
+    if (spec.mesh >= 0) {
+      // A point on the shared mesh: its slots move only if its nucleus's anchors changed and its support (or its
+      // present slots) meets the region where the nodes move (MeshChangedRegion); elsewhere the new plan has the
+      // same nodes bit for bit, which AZURE_PLAN_CHECK=1 checks.
+      const size_t m = (size_t)spec.mesh;
+      if (!meshMoved[m]) return;
+      const azure2::MeshSupport &support = meshes[m].supports[spec.meshSupport];
+      double low = support.low, high = support.high;
+      if (subs.size() > 0) {
+        low = std::min(low, subs[subs.size() - 1].GetOriginalEnergy() + spec.frameShift);
+        high = std::max(high, subs[0].GetOriginalEnergy() + spec.frameShift);
+      }
+      const bool inRegion = MeetsStretches(regions[m], low, high);
+      if (!inRegion && !planCheck) return;
+      grid = MeshSlotEnergies(newPlans[m], spec);
+      if (!inRegion) {
+        bool same = ((size_t)subs.size() == grid.size());
+        for (size_t k = 0; same && k < grid.size(); k++) same = subs[k].GetOriginalEnergy() == grid[k];
+        if (!same) outsideRegionMoved++;
+        return;
+      }
+    } else {
+      grid = AdaptiveIntegrationGrid(gc).GenerateGrid(spec.startEnergy, spec.endEnergy, g);
+    }
     // The grid kept is the one placed now, bit for bit.  A grid kept within a tolerance would depend on the
     // parameter vectors the working copy evaluated before, which Minuit's parallel gradient hands out by thread:
     // the objective at one p, and so a fit, would depend on the thread count (docs/upgrade/fit_threads.md).
@@ -407,6 +463,11 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
   if (changed > 0)
     for (const Item &it : work)
       if (it.shifted && std::find(reshift.begin(), reshift.end(), it.seg) == reshift.end()) reshift.push_back(it.seg);
+  for (size_t m = 0; m < meshes.size(); m++)
+    if (meshMoved[m]) meshAnchors_[m] = std::move(newAnchors[m]);
+  if (outsideRegionMoved > 0)
+    throw std::logic_error("AZURE_PLAN_CHECK: " + std::to_string(outsideRegionMoved.load()) +
+                           " points on the shared mesh outside the changed region would get other nodes");
 
   if (std::getenv("AZURE_GRID_TIMING")) {
     static std::atomic<int> calls{0};
@@ -423,8 +484,10 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
                 << newSubPoints.load() << " sub-points; " << resized << " with a new node count, largest node move "
                 << maxMove * 1.0e6 << " eV otherwise; " << reusedSubPoints.load()
                 << " sub-points kept their tables, " << sharedSubPoints.load()
-                << " took another copy's); observed parameters " << ms(t0, t1) << " ms, grids "
-                << ms(t1, std::chrono::steady_clock::now()) << " ms" << std::endl;
+                << " took another copy's); observed parameters " << ms(t0, t1) << " ms, mesh plans "
+                << ms(t1, t2) << " ms (" << std::count(meshMoved.begin(), meshMoved.end(), 1) << " of "
+                << meshes.size() << " moved), grids " << ms(t2, std::chrono::steady_clock::now()) << " ms"
+                << std::endl;
     }
   }
   return changed.load();
@@ -505,6 +568,8 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
   }
   // a stopping from the library (evaluation, table): its data and its value at every beam energy, before any is used
   if (!this->CheckTargetStoppings(configure)) return -1;
+  Draft().meshes_.clear();
+  std::vector<MeshPoint> meshPending;  // the folded points whose slots the shared mesh gives, in set-up order
   for (SegmentIterator segment = Draft().GetSegments().begin(); segment < Draft().GetSegments().end(); segment++) {
     PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(segment->GetEntranceKey()));
     PPair *exitPair = compound->GetPairFromKey(segment->GetExitKey());  // nullptr for total capture (-1)
@@ -636,26 +701,21 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
             gridConfig.baseEnergyStep = (startEnergy - endEnergy) / numPoints;
             gridConfig.resonanceWidthMultiplier = targetEffect->GetResonanceWidthMultiplier();
             gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth() * configure.refineQuadrature;
+            Unit::SubGridSpec &spec = Draft().SetUpFor(*point).grid;
+            spec = MakeSubGridSpec(gridConfig, startEnergy, endEnergy, targetEffect, cmConversion);
+            if (OnSharedMesh(*segment, entrancePair, exitPair)) {
+              meshPending.push_back(QueueMeshPoint(Draft().meshes_, *point, {&*segment, 0}, spec, entrancePair, exitPair,
+                                                   EdgeAtFloor(*targetEffect, endEnergy, minSubEnergy)));
+              continue;  // its slots are the mesh's nodes, placed below
+            }
             AdaptiveIntegrationGrid gridGenerator(gridConfig);
             energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
-            Draft().SetUpFor(*point).grid = MakeSubGridSpec(gridConfig, startEnergy, endEnergy, targetEffect, cmConversion);
           } else {
             double step = (startEnergy - endEnergy) / numPoints;
             for (int i = 0; i <= numPoints; i++)
               energyGrid.push_back(startEnergy - i * step);
           }
-
-          for (size_t i = 0; i < energyGrid.size(); i++) {
-            double subEnergy = energyGrid[i];
-            Site subPoint(point->GetCMAngle(), subEnergy, &*segment, 0);
-            subPoint.BelongToRowOf(*point);
-            if (targetEffect->IsTargetIntegration()) {
-              double stoppingPower = cmConversion * targetEffect->StoppingAt(subEnergy / cmConversion, configure,
-                                                                             EffectValues(segment->GetTargetEffectNum()).stoppingScale);
-              subPoint.SetStoppingPower(stoppingPower);
-            }
-            this->AddSubPoint(*point, subPoint);
-          }
+          AddGridSlots(*this, *point, {&*segment, 0}, energyGrid, *targetEffect, cmConversion, configure);
         }
       }
     }
@@ -774,31 +834,41 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
                 gridConfig.baseEnergyStep = (startEnergy - endEnergy) / numPoints;
                 gridConfig.resonanceWidthMultiplier = targetEffect->GetResonanceWidthMultiplier();
                 gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth() * configure.refineQuadrature;
+                Unit::SubGridSpec &spec = Draft().SetUpFor(*point).grid;
+                spec = MakeSubGridSpec(gridConfig, startEnergy, endEnergy, targetEffect, compConversion);
+                if (OnSharedMesh(*segment, compEntrance, compExit)) {
+                  meshPending.push_back(QueueMeshPoint(Draft().meshes_, *point, component, spec, compEntrance, compExit,
+                                                       EdgeAtFloor(*targetEffect, endEnergy, minSubEnergy)));
+                  continue;  // its slots are the mesh's nodes, placed below
+                }
                 AdaptiveIntegrationGrid gridGenerator(gridConfig);
                 energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
-                Draft().SetUpFor(*point).grid =
-                    MakeSubGridSpec(gridConfig, startEnergy, endEnergy, targetEffect, compConversion);
               } else {
                 double step = (startEnergy - endEnergy) / numPoints;
                 for (int i = 0; i <= numPoints; i++)
                   energyGrid.push_back(startEnergy - i * step);
               }
-
-              for (size_t i = 0; i < energyGrid.size(); i++) {
-                double subEnergy = energyGrid[i];
-                Site subPoint(point->GetCMAngle(), subEnergy, &*segment, t);
-                subPoint.BelongToRowOf(*point);
-                if (targetEffect->IsTargetIntegration()) {
-                  double stoppingPower = compConversion * targetEffect->StoppingAt(subEnergy / compConversion, configure,
-                                                                                   EffectValues(component.GetTargetEffectNum()).stoppingScale);
-                  subPoint.SetStoppingPower(stoppingPower);
-                }
-                this->AddSubPoint(*point, subPoint);
-              }
+              AddGridSlots(*this, *point, component, energyGrid, *targetEffect, compConversion, configure);
             }
           }
         }
       }
+    }
+  }
+  // The shared mesh of each compound nucleus: one plan from its supports and the anchors of the input levels, and
+  // every point queued above takes the mesh's nodes of its range as its slots.
+  meshAnchors_.assign(Draft().meshes_.size(), {});
+  for (size_t m = 0; m < Draft().meshes_.size(); m++) {
+    DataSet::NucleusMesh &mesh = Draft().meshes_[m];
+    mesh.anchors = MeshAnchorsOf(compound, mesh,
+                                 (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->IsTransformedIn());
+    meshAnchors_[m] = mesh.anchors;
+    const azure2::MeshPlan plan = azure2::PlanMesh(mesh.anchors, mesh.supports, MeshTails());
+    for (const MeshPoint &q : meshPending) {
+      if (q.mesh != (int)m) continue;
+      const Unit::SubGridSpec &spec = Draft().GridSpecOf(*q.point);
+      const TargetEffect &effect = *Draft().GetTargetEffect(q.term.GetTargetEffectNum());
+      AddGridSlots(*this, *q.point, q.term, MeshSlotEnergies(plan, spec), effect, spec.stoppingConversion, configure);
     }
   }
   this->CommitSubPoints();  // the sub-points given above take their places in the units

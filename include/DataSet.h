@@ -9,6 +9,7 @@
 #include "ApparatusParameters.h"
 #include "CalculationPlan.h"
 #include "DataCovariance.h"
+#include "MeshPlanner.h"
 #include "Segment.h"
 #include "TargetEffect.h"
 #include "ThmGroup.h"
@@ -70,6 +71,17 @@ class DataSet {
     static const Unit::SubGridSpec none;
     return p.SetUpIndex() >= 0 ? pointSetUps_[p.SetUpIndex()].grid : none;
   }
+  /// The shared energy mesh of one compound nucleus (docs/upgrade/energy_grid.md sections 2.2, 2.8): the supports of
+  /// its folded points in E_x (MeV) with their settings, in set-up order (Unit::SubGridSpec::meshSupport), the
+  /// entrance pairs whose view of the levels anchors it (pair key, E_x - E_cm in MeV), and the quantized anchors the
+  /// set-up planned with (from the input widths).
+  struct NucleusMesh {
+    int nucleus = 0;
+    std::vector<std::pair<int, double>> anchorFrames;
+    std::vector<azure2::MeshSupport> supports;
+    std::vector<azure2::MeshAnchor> anchors;
+  };
+  const std::vector<NucleusMesh> &Meshes() const { return meshes_; }
   /// The set-up: the record of point `p`, made on first use.
   PointSetUp &SetUpFor(Unit &p) {
     if (p.SetUpIndex() < 0) {
@@ -191,6 +203,7 @@ class DataSet {
   std::vector<TargetEffect> targetEffects_;
   std::vector<LeafRef> leafRefs_;
   std::vector<PointSetUp> pointSetUps_;  // SetUpOf
+  std::vector<NucleusMesh> meshes_;      // Meshes
   /// The key of the next leaf (WorkingCopy::AddLeaf): -1000, -1001, ... in creation order, one counter per data set, so a
   /// leaf's key depends on its project alone and no two leaves share one (data_model.md section 1.3, H10).
   int nextComponentKey_ = -1000;
