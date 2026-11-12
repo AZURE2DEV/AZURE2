@@ -209,7 +209,8 @@ void WorkingCopy::ReleaseOverflowRows() {
   for (auto &r : nodes_.overflow.rows) r = SharedTable<EDependentTables>();
 }
 
-void WorkingCopy::MoveSegmentsToShift(const std::vector<const Segment *> &segments, CNuc *cnuc, const Config &configure) {
+void WorkingCopy::MoveSegmentsToShift(const std::vector<const Segment *> &segments, CNuc *cnuc,
+                                      const Config &configure) {
   ReleaseOverflowRows();
 #ifdef _OPENMP
   const bool serial = omp_in_parallel();

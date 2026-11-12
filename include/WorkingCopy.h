@@ -237,8 +237,8 @@ class WorkingCopy {
   void ReleaseOverflowRows();
   /// The points of `segments` re-energised at the shift their state holds now (Segment::UpdatePointEnergyWithShift),
   /// and their slots looked up again, as the hand-over does for the segments it moves (src/NodeTable.cpp): the point
-  /// pass groups units by their slots' nodes, and a slot left on the node its unit moved away from would put the unit in
-  /// the energy task of its old energy.  Each segment's points in parallel, none inside a parallel region.
+  /// pass groups units by their slots' nodes, and a slot left on the node its unit moved away from would put the unit
+  /// in the energy task of its old energy.  Each segment's points in parallel, none inside a parallel region.
   void MoveSegmentsToShift(const std::vector<const Segment *> &segments, CNuc *cnuc, const Config &configure);
   /// The centre c_i (c.m. MeV) of the support of a folded point on the shared mesh, its grid record `spec`, as the
   /// copy's slots are placed now: 0 without an energy shift (ShiftedFold.h, question 2).

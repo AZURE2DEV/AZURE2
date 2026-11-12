@@ -96,7 +96,8 @@ V Compose(const EffectKernels &k, Broadening broadening, const KernelParameters 
   if (!k.resolution && (!k.broadening || broadening == Broadening::kAlreadyApplied)) return V(0.0);
   // a single node: the support is narrower than MeshZeroWidth(), the cross section constant across it
   if (nodes.n == 1) return ThinLimit(k, broadening, p, point, nodes) * values[0];
-  if (!k.broadening || broadening == Broadening::kAlreadyApplied) return FoldOf<V>(*k.resolution, p, point, nodes, values);
+  if (!k.broadening || broadening == Broadening::kAlreadyApplied)
+    return FoldOf<V>(*k.resolution, p, point, nodes, values);
   const int n = nodes.n;
   if (n < 2) return V(0.0);
   if (!k.resolution) {

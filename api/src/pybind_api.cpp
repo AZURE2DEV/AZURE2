@@ -192,7 +192,8 @@ class Session {
   Session(const std::string &configfile, const RuntimeOptions &opt) :
     config_(nullptr),
     api_(nullptr) {
-    const int refine = azure2::RefineQuadratureFromEnvironment();  // a bad value raises (ValueError), before any allocation
+    // AZURE_REFINE_QUADRATURE: a bad value raises (ValueError), before any allocation
+    const int refine = azure2::RefineQuadratureFromEnvironment();
     config_ = new Config(std::cout);
     config_->refineQuadrature = refine;
     config_->configfile = configfile;
