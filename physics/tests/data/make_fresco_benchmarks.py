@@ -297,6 +297,53 @@ for _st, _b in HE3_STATES.items():
             body=HE3_BODY.format(coupling="kind=5 p1=%s p2=0.0" % HE3_D0, **_sos, **_b),
             reference=dict(hcm=0.025, rmatch=30.0), refined=dict(hcm=0.0125, rmatch=35.0), drop=("S",))
 
+# 12C(14N,d)24Mg at E_lab = 30 MeV (transfer.md section 21): 12C transfer, 14N = 12C + d (l = 0, one node: 2n + l = 2
+# oscillator quanta of relative motion, B = 10.272 MeV) and 24Mg = 12C + 12C (2n + l = 12: l = 0 with six nodes,
+# B = 13.933 MeV, or the 2+ at 1.3687 MeV, l = 2 with five nodes); the 14N + 12C and d + 24Mg potentials of the
+# engine's tests/reference/thm_distortion_test.cpp ("optical"), absolute radii (type=0 p1 = 1, p2 = 0).  No
+# symmetrisation of the two 12C (FRESCO does not unless asked).  Finite range only.
+N14_BODY = """\
+ &PARTITION namep='14N' massp=14.0 zp=7 nex=1 namet='12C' masst=12.0 zt=6 qval=0.0 /
+ &STATES jp=1.0 ptyp=1 ep=0.0 cpot=1 jt=0.0 ptyt=1 et=0.0 /
+ &PARTITION namep='d' massp=2.0 zp=1 nex=1 namet='24Mg' masst=24.0 zt=12 qval=3.661 /
+ &STATES jp=1.0 ptyp=1 ep=0.0 cpot=2 jt={JF} ptyt=1 et={EX} /
+ &partition /
+ &pot kp=1 type=0 p(1:3)= 1.0 0.0 5.5 /
+ &pot kp=1 type=1 p(1:6)= 50.0 5.5 0.6 20.0 5.6 0.6 /
+ &pot kp=2 type=0 p(1:3)= 1.0 0.0 3.8 /
+ &pot kp=2 type=1 p(1:6)= 90.0 3.4 0.75 0.0 3.8 0.65 /
+ &pot kp=2 type=2 p(1:6)= 0.0 3.8 0.65 10.0 3.8 0.65 /
+ &pot kp=3 type=0 p(1:3)= 12.0 0.0 1.25 /
+ &pot kp=3 type=1 p(1:3)= 100.0 1.25 0.65 /
+ &pot kp=4 type=0 p(1:3)= 12.0 12.0 0.9 /
+ &pot kp=4 type=1 p(1:3)= 200.0 0.9 0.7 /
+ &pot /
+ &overlap kn1=1 ic1=1 ic2=2 in=1 kind=0 nn=2 l=0 sn=0.0 j=0.0 kbpot=3 be=10.2720 isc=1 ipc=1 /
+ &overlap kn1=2 ic1=1 ic2=2 in=2 kind=0 nn={NN} l={L} sn=0.0 j={L}.0 kbpot=4 be={BE} isc=1 ipc=1 /
+ &overlap /
+ &coupling icto=2 icfrom=1 {coupling} /
+ &cfp in=1 ib=1 ia=1 kn=1 a=1.0 /
+ &cfp in=-2 ib=1 ia=1 kn=2 a=1.0 /
+ &coupling /
+"""
+N14_STATES = {"gs": dict(JF=0.0, EX="0.0", NN=7, L=0, BE=13.933),
+              "2p": dict(JF=2.0, EX="1.3687", NN=6, L=2, BE=12.5643)}
+# FRESCO asks for rnl > 13 fm here; its ERWIN loses 14 digits at L = 27-41 unless the integration starts near the
+# Coulomb turning point (cutr < 0, cutl = 0): a cut proportional to L (cutl) either keeps the loss or removes
+# physics; 8 fm inside the turning point is not enough at hcm = 0.0125 (the 2+ moves by 1 %), 12 fm is
+# (transfer.md section 21).
+N14_REF = dict(hcm=0.025, rmatch=30.0, rintp=0.05, hnl=0.025, rnl=16.0, centre=0.0, nnu=96, cutl=0.0, cutr=-12.0)
+N14_FINE = dict(hcm=0.0125, rmatch=30.0, rintp=0.025, hnl=0.0125, rnl=16.0, centre=0.0, nnu=96, cutl=0.0, cutr=-12.0)
+for _st, _b in N14_STATES.items():
+    CASES["n14d_%s_finite_range" % _st] = dict(
+        title="12C(14N,d)24Mg(%s) at E_lab = 30 MeV, finite range, post, no remnant, unsymmetrised" % _st,
+        elab=30.0, jtmax=40, iter=1, iblock=1, thmin=0.0, body=N14_BODY.format(coupling=FR_DN, **_b),
+        reference=N14_REF, refined=N14_FINE,
+        also=[dict(N14_REF, rmatch=35.0, rnl=20.0, nnu=120), dict(N14_REF, cutr=-16.0), dict(N14_REF, rnl=10.0),
+              dict(N14_REF, cutl=-4.8, cutr=None), dict(N14_REF, cutl=-6.4, cutr=None),
+              dict(N14_REF, hcm=0.05, hnl=0.05, rintp=0.1), dict(N14_FINE, cutr=-8.0)],
+        drop=("S",))
+
 # 15N(d,n)[p + 15N] to continuum bins of p + 15N (E_lab = 10 MeV): the projectile overlap of DN_BODY, the bin of
 # l, j in the real Woods-Saxon (+ Coulomb) potential kp=5 (no spin-orbit), E_x = 12.1274 MeV + E (the p + 15N
 # threshold), the bin weight ISC.  The three bins (transfer.md section 15): non-resonant (l = 1), over a narrow
@@ -420,6 +467,7 @@ def table_for(settings):
 def job_text(case, settings):
     s = dict(settings)
     cutl = s.pop("cutl", None)
+    cutr = s.pop("cutr", None)
     nk = s.pop("nk", None)
     rsp = s.pop("rsp", None)
     nonlocal_keys = ("rintp", "hnl", "rnl", "centre", "nnu")
@@ -427,6 +475,8 @@ def job_text(case, settings):
     extra = case.get("extra", "")
     if cutl is not None:
         extra = re.sub(r"cutl=\S+", "", extra) + " cutl=%s" % cutl
+    if cutr is not None:
+        extra += " cutr=%s" % cutr
     if rsp is not None:
         nonlocal_part = ("rsp=%s " % rsp) + nonlocal_part
     body = case["body"].replace("{NK}", str(nk)) if nk is not None else case["body"]
@@ -501,8 +551,8 @@ def extract(out, forts):
         lines.append("reaction %s" % mm.group(1))
     for ln in out.splitlines():
         if " VR " in ln and re.match(r"^\s+\d+:", ln):
-            # the columns can run together ("264.2-16.0940"): numbers by pattern, not by blanks
-            t = re.findall(r"-?[0-9]+\.?[0-9]*(?:[Ee][-+]?[0-9]+)?", ln.split(" VR ")[1])
+            # the columns can run together ("264.2-16.0940") or overflow ("*******"): by pattern, not by blanks
+            t = re.findall(r"\*+|-?[0-9]+\.?[0-9]*(?:[Ee][-+]?[0-9]+)?", ln.split(" VR ")[1])
             lines.append("bound %s %s %s %s %s" % (ln.split(":")[0].strip(), t[0], t[5], t[6], t[8]))
     for mm in re.finditer(r"ANC in ch\s+(\d+) is\s+([-0-9.E+]+)", out):
         lines.append("anc_printed %s %s" % (mm.group(1), mm.group(2)))

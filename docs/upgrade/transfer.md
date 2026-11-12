@@ -261,8 +261,8 @@ data and not tested.
 - Not implemented: global optical potentials, relativistic
   kinematics, target spin in the distortion (spin-spin), tensor forces, l > 40, complex (optical or coupled-channel)
   bins. Part 2 added the continuum, the prior form and the remnants (§14–§17); their limits are in §18. Part 3 added
-  spin-orbit in the distorted waves of a transfer and the projectile's iT11 (§19); its validation is §22. The ³He Trojan horse is §20; the ¹⁴N
-  Trojan horse is not yet benchmarked. The prior form and the remnant terms (§17) with spin-orbit waves go through
+  spin-orbit in the distorted waves of a transfer and the projectile's iT11 (§19); its validation is §22. The ³He Trojan horse is §20, the ¹⁴N one
+  §21 (finite range only, unsymmetrised). The prior form and the remnant terms (§17) with spin-orbit waves go through
   the same sums (the interaction terms are scalar), but are not compared with FRESCO.
 
 ## 11. The continuum part
@@ -638,6 +638,61 @@ Asked 1 %: reached everywhere. Numerical findings:
   resolved; the test allows 3e-5 for this one ANC; it moves σ by < 5e-5.
 - iT11 of ³He: the reflection test of §22 and FRESCO agree on the sign and normalisation for spin ½ (iT11 = A_y/√2).
 
+## 21. The ¹⁴N Trojan horse: ¹²C(¹⁴N,d)²⁴Mg
+
+Transfer of ¹²C from ¹⁴N = ¹²C + d to ¹²C at E_lab = 30 MeV (E_cm = 13.846 MeV), to bound ¹²C + ¹²C states of ²⁴Mg,
+finite range, post form, no remnant. Inputs:
+
+| | |
+|---|---|
+| ¹⁴N = ¹²C + d | l = 0, one node, B = 10.272 MeV; WS r0 = 1.25 (×12^1/3), a = 0.65, R_C likewise (depth 58.3306 MeV); D0 = 183.59 MeV fm^3/2, ANC −40.8129 fm^-1/2 |
+| ²⁴Mg = ¹²C + ¹²C | 0⁺ g.s.: l = 0, six nodes, B = 13.933 MeV; 2⁺ at 1.3687 MeV: l = 2, five nodes, B = 12.5643 MeV; WS r0 = 0.9 (A_1^1/3 + A_2^1/3) = 4.12 fm, a = 0.7 (depths 121.676 and 119.224 MeV) |
+| ¹⁴N + ¹²C, d + ²⁴Mg | the potentials of the engine's `tests/reference/thm_distortion_test.cpp` (case `optical`): V = 50 MeV, R = 5.5, a = 0.6; W = 20 MeV, R = 5.6, a = 0.6; R_C = 5.5 fm — V = 90 MeV, R = 3.4, a = 0.75; W_D = 10 MeV, R = 3.8, a = 0.65; R_C = 3.8 fm; no spin-orbit |
+| Q | 3.661 MeV (g.s.), 2.2923 MeV (2⁺); masses 14, 12, 2, 24 u; amplitudes 1 |
+
+**Node numbers** (oscillator rule 2n + l = Q_rel, the quanta of relative motion): ²⁴Mg in the sd shell has
+4·0 + 12·1 + 8·2 = 28 quanta, each ¹²C 8 (p shell), so Q_rel = 12: n = 6 for l = 0, n = 5 for l = 2. ¹⁴N:
+10 − 8 − 0 = 2, n = 1 for l = 0.
+
+**Zero range is meaningless here.** It replaces V_{C d}(ρ) u_a(ρ) by D0 δ(ρ), i.e. assumes the vertex range is short
+against the scale on which the distorted waves and the ²⁴Mg overlap change; with a ¹²C + d vertex of rms radius 2.8 fm,
+a recoil factor α = ½ and k_i = 2.07 fm⁻¹ it is not. Ours (the zero-range code accepts l_a = 0) gives ZR/FR = 55, 33,
+5.3, 13, 32, 1.2, 211 at 0, 15, 30, 45, 60, 75, 90° (g.s.) and 26, 26, 19, 7.7, 12, 24, 13 (2⁺): no shape, no scale.
+Not benchmarked.
+
+**Identical bosons.** The transferred ¹²C and the target ¹²C are identical; neither code symmetrises here. With the
+²⁴Mg overlap even in l (P₁₂ φ_F = φ_F for l = 0, 2) and the entrance state symmetrised,
+Ψ_i = 2^{−1/2}(1 + P₁₂) φ_a(r_{d C₁}) χ_i, the exchange term with the P₁₂-symmetric interaction equals the direct one
+after relabelling the carbons, so T = √2 T_direct (σ × 2) for amplitudes defined for distinguishable carbons; the
+symmetrised entrance channel further contains the elastic d transfer ¹²C(¹⁴N,¹²C)¹⁴N, which changes the distortion
+(mainly backward). Neither is implemented; the benchmark compares the unsymmetrised amplitude.
+
+**Results** (test `transfer_n14_fresco`, FRESCO data `n14d_<gs|2p>_finite_range`): 0–90° where σ > 1 % of its maximum:
+g.s. 8.3e-4 (75°), 2⁺ 3.3e-4 (80°). Asked 1 %: reached.
+
+**Convergence of ours** (worst change from 0 to 90°, g.s.; 2⁺ in brackets): grid h, h_K 0.05, 0.1 → 0.025, 0.05 fm:
+2.5e-4 (5e-5); ρ_max 10 → 14 fm: 1.6e-4; 48 → 96 x nodes: 1.7e-6; r_max 25 → 28 fm: 5e-8; l ≤ 34 against l ≤ 39:
+< 1e-8 (the limit of `AngularCoupling.h` is l ≤ 39 for spin 1, and the result does not need more). Cost at one thread
+(distorted waves and finite-range kernel, 37 angles): 0.87 s (g.s.), 2.8 s (2⁺).
+
+**Convergence of FRESCO.** It asks for rnl > 13 fm (rnl = 10 is 5.4 % off at 0–90°, 2.9 % for the 2⁺); with rnl = 16 fm, nnu = 96:
+
+| FRESCO run (g.s.) | change against the reference |
+|---|---|
+| reference: hcm 0.025, rintp 0.05, hnl 0.025, rmatch 30, jtmax 40, cutl 0, cutr −12 | — |
+| refined: hcm, rintp, hnl halved | 1.0e-3 (g.s., at 70°, where FRESCO prints 0.000996: its six decimals); 3.1e-4 (2⁺) |
+| rmatch 35, rnl 20, nnu 120 | 5e-5 (1.4e-5) |
+| cutr −16 | 0 (2.2e-4) |
+| hcm 0.05 | 5.2e-3 (1.9e-3) |
+| cutl −4.8 or −6.4 instead of cutr (cut ∝ L) | 0.8 %, 3.0 % (2.3 %, 2.2 %) |
+| hcm 0.0125 with cutr −8 | 1.0e-3 (1.9 %) |
+
+FRESCO's ERWIN loses 14 digits at L = 27–41 when the integration starts too far inside the Coulomb barrier (η = 4.5
+for ¹⁴N + ¹²C): with cutl = −3.2 the 0° cross section is off by ×2.1; a cut ∝ L (cutl) that removes
+the loss also removes physics (above), while a cut 12 fm inside the point-Coulomb turning point (cutr = −12) removes
+the loss and agrees with ours (at hcm = 0.0125 fm 8 fm inside is not enough: the 2⁺ moves by 1.9 %). jtmax = 40, 50,
+60 agree with a cut. FRESCO's cost: 4.5 s (reference) and 24 s (refined) per run at one thread.
+
 ## 22. Validation of part 3
 
 Tests: `transfer_spin_orbit` (and `transfer_fresco`, `transfer_continuum*` unchanged in their printed lines: their
@@ -659,3 +714,12 @@ FRESCO's convergence for `dn_finite_range_so` (data in its `reference.txt`): ref
 (0.4778 against 0.4626 mb/sr); with cutl = −3.2 (hcm 0.025) or −6.4 (hcm 0.0125) it gives 0.46314 and 0.46364 mb/sr
 at 0°, 0.1–0.2 % above its uncut runs and ours, while ours moves by 1.2e-5 between (h, h_K) = (0.05, 0.1) and
 (0.025, 0.05) fm and by 3.5e-6 with ρ_max 12 fm, 64 x nodes, r_max 28 fm. The cut runs are data, not compared.
+
+The Trojan-horse cases of §20 and §21, asked 1 % from 0 to 90° above 1 % of the peak (details and FRESCO's convergence
+there):
+
+| Case | Reached (worst) | FRESCO ref − refined |
+|---|---|---|
+| ¹⁸O(³He,d)¹⁹F, g.s. and 5/2⁺, FR, with and without spin-orbit | ≤ 8.9e-4; iT11 ≤ 4.3e-4 | ≤ 1.8e-3 |
+| same, ZR | ≤ 9.2e-5; iT11 ≤ 2.2e-5 | ≤ 1.4e-5 |
+| ¹²C(¹⁴N,d)²⁴Mg, g.s. and 2⁺, FR | 8.3e-4, 3.3e-4 | 1.0e-3 (its print digits), 3.1e-4 |

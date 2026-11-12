@@ -2,6 +2,19 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, branch `feature/upgrade-7-transfer-3`) — physics/transfer, third part, item 3: the ¹⁴N Trojan horse
+
+**Done** (`transfer.md` §21, §22): ¹²C(¹⁴N,d)²⁴Mg at E_lab = 30 MeV to the 0⁺ g.s. (l = 0, six nodes) and the 2⁺
+(l = 2, five nodes) ¹²C + ¹²C states, finite range, unsymmetrised; FRESCO data `n14d_*` (generator: `N14_*`, a
+`cutr` setting; the bound-state listing parser takes FRESCO's `*******`); new test `physics_transfer_n14_fresco`.
+Zero range shown meaningless by numbers (ZR/FR 1.2–211); what symmetrising the two ¹²C would add is in the note.
+
+**Verified**: ours against FRESCO 8.3e-4 (g.s.), 3.3e-4 (2⁺); ours converged to 2.5e-4 (0.9 and 2.8 s at one thread).
+FRESCO converges only with rnl ≥ 13 fm and its integration started 12 fm inside the Coulomb turning point (cutr);
+with cuts ∝ L it is 1–3 % off, without them ERWIN loses 14 digits (table in §21). The ¹²C + ¹²C ANC: FRESCO's u/W
+still rises at 12 fm; the test allows 1e-4 there. Injected error: the Jacobian (1 − αβ)² instead of ³ (both cases
+fail by 14 %).
+
 ## 2026-11-12 (agent, branch `feature/upgrade-7-transfer-3`) — physics/transfer, third part, item 2: the ³He Trojan horse
 
 **Done** (`transfer.md` §20, §22): ¹⁸O(³He,d)¹⁹F at E_lab = 25 MeV to the ½⁺ ground state and the 5/2⁺ state, finite
