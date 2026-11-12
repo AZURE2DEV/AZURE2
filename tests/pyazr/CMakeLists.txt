@@ -304,6 +304,13 @@ add_test(NAME pyazr_shift_fn
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/shift_fn_test.py)
 set_tests_properties(pyazr_shift_fn PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+# The same with the node tables checked at every hand-over and point pass (AZURE_NODE_CHECK=1): the Jacobian's local
+# shift column moves the points of its segments and must look their slots up again (FillShiftColumns), as the
+# hand-over does; with the slots left on the old nodes residual_jacobian raised "48 differ".
+add_test(NAME pyazr_shift_fn_node_check
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shift_fn_test.py)
+set_tests_properties(pyazr_shift_fn_node_check PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE_NODE_CHECK=1")
 
 # Normalization groups (normgroup): read, written, and (with the engine) the
 # follower's norm fixed, the penalty once and the shared column differenced.

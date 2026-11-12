@@ -1,4 +1,6 @@
-# target_effect_ranges — a beam spread folded into analyzing-power data
+# beam_spread_ay — a beam spread folded into analyzing-power data
+
+Named `target_effect_ranges` until 2026-11-12 (when it tested the fold windows, since deleted).
 
 The 7Li_p_ay analyzing-power model with a 30 keV (lab) Gaussian beam spread on both Deineko data sets, which name one
 beam record (`beam_targetInt1`, as the old `<targetInt>` line "1,2" did).  Each A_y point is the ratio of two folds,

@@ -12,7 +12,8 @@
 #      valid 0, and param.sav still written;
 #   2. no option: "MIGRAD converged", status converged, valid 1, call_limit none, EDM below its goal;
 #   3. the same with --use-gradient (the other MIGRAD call);
-#   4. a malformed --max-calls is refused with a warning and the fit runs without a limit.
+#   4. a malformed --max-calls is refused with an error (exit 2) and no fit is run (before November 2026: a warning,
+#      and the fit ran without a limit).
 #
 #   ./tests/fit_call_limit/check.sh path/to/AZURE2
 
@@ -70,13 +71,13 @@ for mode in numeric gradient; do
   fi
 done
 
-# ---- 4. a malformed value is refused ----------------------------------------
+# ---- 4. a malformed value is refused: an error, exit 2, no fit (tests/cli_option_values: every case) ---------
 fit malformed --max-calls=lots
-grep -q "WARNING: --max-calls needs a whole number" "$WORK/malformed/run.log" \
-  && ok "--max-calls=lots: refused with a warning" || bad "--max-calls=lots: no warning"
-[ "$(field malformed status)" = converged ] && [ "$(field malformed call_limit)" = none ] \
-  && ok "--max-calls=lots: the fit ran without a limit" \
-  || bad "--max-calls=lots: status '$(field malformed status)' limit '$(field malformed call_limit)'"
+rc=$?
+grep -q "^ERROR: --max-calls needs a whole number" "$WORK/malformed/run.log" && [ "$rc" = 2 ] \
+  && ok "--max-calls=lots: refused with an error, exit 2" || bad "--max-calls=lots: exit $rc, no error"
+[ ! -e "$WORK/malformed/output/fitStatus.out" ] && ok "--max-calls=lots: no fit was run" \
+  || bad "--max-calls=lots: a fit ran (status '$(field malformed status)')"
 
 echo
 if [ "$failures" -gt 0 ]; then echo "FAIL: $failures check(s)"; exit 1; fi

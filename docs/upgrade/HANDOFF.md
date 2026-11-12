@@ -71,6 +71,45 @@ the whole tree, `run_tests.sh`, the gate, the eight fits.
 **Open.**  Milestones 4 (D5) and 5 not started.  The A_y and coefficient-ratio folds are named per observable
 (see (a)).
 
+## 2026-11-12 (agent, follow-ups) — six small items after the shared mesh and the shift kernel (`feature/upgrade-5-followups-1`)
+
+**Done** (one commit each, on 7ba01de7).
+- *A target layer thinner than 1 eV.*  A support narrower than `MeshZeroWidth()` is one node, and every kernel returned
+  0 for one node (a yield on such a layer was even refused at set-up as a layer "the beam does not leave").  The fold
+  of one node is now the thin limit, in one place (`Compose` in `experiment/src/Kernels.cpp`): the node's value times
+  each kernel's `Kernel::thinLimit` (1 for the averages; for the target kernel 1 / 1e-24 N / 1e-24 T/ε for a thin
+  target / a layer yield / a thick target; none for the beam profile, whose support is at least 1 keV: one node would
+  be NaN).  `src/TargetLayer.cpp` accepts one node.  Tests: `layer_kernel` case 6; `tests/thin_layer_limit/check.sh`
+  (33 areal densities 1e13–1e17: Y/(1e-24 N) and the averaged σ follow σ(E0) within T|σ'|/σ, equal it to 1e-9 with one
+  node, continuous across 1 eV).  New project in the tree: `tests/thin_layer_limit/models/thin_limit.azr`.
+- *`pyazr_shift_fn` under `AZURE_NODE_CHECK=1`.*  A defect of the Jacobian's local shift column (`FillShiftColumns`,
+  `src/AZURECalc.cpp`): it moved the points of its segments without looking their slots up again, so the point pass
+  grouped a moved unit with the energy it had left.  Numbers were right only because the units sharing a node moved
+  together.  `WorkingCopy::MoveSegmentsToShift` (`src/NodeTable.cpp`) does what the hand-over does.  Test
+  `pyazr_shift_fn_node_check`.  Jacobians bit-identical to the base build.
+- *`pyazr_shift_fold_ec`* compares the χ² of a shift moved from 0 to ±0.2, 0.05, 0.02 MeV with the same shift written
+  in the file, fixed and free (1e-12).
+- *Value-taking flags.*  `--max-calls` without `=N`, a bad `--max-calls=`, `--refreeze-covariance=`, an empty
+  `--coulomb-table=` or `--build-coulomb-table=`, and an empty or bad `AZURE_REFINE_QUADRATURE` are errors with the
+  usage line, exit 2 (`include/CommandLineValues.h`; pyazr raises ValueError for the variable instead of ending the
+  process).  Consistency check 36.  Test `tests/cli_option_values/check.sh`; `tests/fit_call_limit` case 4 changed
+  (it pinned the old warning).
+- *Rename.*  `tests/target_effect_ranges` is `tests/beam_spread_ay` (whole-tree folder
+  `.res-target_effect_ranges/target_effect_ranges.azr` → `.res-beam_spread_ay/beam_spread_ay.azr`).
+- *`park_chi2_fallback`* has a third variant that takes the finite-difference fallback of the gradient: a folded
+  capture analyzing power (13N_capture_ay with a beam spread), which the adjoint refuses.
+
+**Verified** (scratch `work/small/`): every commit builds with 0 warnings; consistency test; the unit tests of each
+item; T1, T2, T3, 13N and each item's projects in three bases byte-identical to `tab-trial35`; each new test shown
+failing (base build or an injection).  `scripts/check.sh --quick` (JOBS=1) at the end: consistency, build, `ctest -LE slow` 211/211 passed (2185 s).
+
+**Not run**: the whole tree × 3, `run_tests.sh`, the converted-tree gate, the fits (the director's).
+
+**Open.**  `tests/upgrade/predictions.txt` gained the new project's entry and the renamed path.  The other routes of
+the gradient's finite-difference fallback are listed in the report (formal-basis external-capture blocks and
+`--ignore-externals` projectors, `--use-rmc`, a few observable gates in `AMatrixFunc::PointTBar`); not tested one by one.
+An unknown option is still only a warning.
+
 ## 2026-11-12 (agent, Phase 5 branch 9, milestone 2) — elastic scattering: a site holds the elastic amplitudes, the reader applies f_C and its row; one table of observable kinds (`feature/upgrade-5-observables`)
 
 **Merged first** `feature/upgrade-5-shift-kernel` (e97e06c4: the translated stopping's clamp, the external-capture
@@ -133,6 +172,66 @@ kValue).  (2) Capture A_y: a kind holding B_L and the Seyler-Weller numerator pe
 P_L^1 rows.  (3) Particle A_y (`Polarization::AmplitudeMatrix`, Y_lmu at the point's angle, f_C) has no per-order
 form: a P_L^1 expansion would be a second derivation (a stop condition of the brief); it stays kValue and keeps
 `nominalEnergy`, `ReangleSlots` and the solving shift column for its lab-frame shifted segments.
+
+## 2026-11-12 (director, 10:20) — merged: folded data with an energy shift on the fixed nodes of the shared mesh
+
+**Merged** into `feature/upgrade-4-data` and `feature/upgrade` (one merge commit, tree of `rehearsal/trial35`; nothing
+pushed): `feature/upgrade-5-shift-kernel` (the agent's entry below says what it does, by file).  Every folded point is
+now on the shared mesh except THM and the uniform own grids; `NodeTableCache.h` and its locks are gone.
+
+**Verified by the director** (build `work/b-trial35`, reference `tab-trial33` = the D3 deletions as merged).
+All projects × 3 bases: 802 / 775 / 802 of 823 / 796 / 823 files identical; the others are T2, T2_true and the five
+models of `shift_sqrt_subpoints`; classifier per basis 13 quadrature, 1 named (T2 `covariance.out`), 0 failure
+(`work/director/clsq_trial35.txt`).  ctest 210/210 and slow 10/10; `run_tests.sh` 155 passed, 0 failed; spec
+equivalence 184 of 184 converted equal; converted-tree gate 623 / 596 / 623 identical; 1 against 3 threads identical.
+Eight fits at 1 thread: 13N (two routes), the layer yield and the stopping yield (two routes) byte-identical to the
+engine before; T2 ends at χ² 297.598987 (LM), 297.598987 (gradient), 297.599950 (MIGRAD, 200 calls), byte-identical
+before and after the review fixes, with no "unsupported imaginary number" line in the logs (14,711 / 9,046 / 4,790
+before).  The review fixes alone move the five `shift_sqrt_subpoints` models by at most 4.5e-6 (one χ²) and 8e-9
+(yields); everything else of the tree is byte-identical before and after them.
+
+**Reviewed, with the director's own measurements** (`work/director/shift_review/`).
+- *The fit of T2 moves by 0.13 of an error* (sqrt shift of the thick target +0.131 σ, offset of the thin target
+  +0.11 σ; the brief's stop was 0.1).  At equal stopping the new fit agrees with the fit of the old engine refined
+  eightfold within 0.010 σ, the old engine within 0.131 σ: the move is toward the converged quadrature.  Accepted.
+- *T2's `covariance.out`* (the correlated χ² of the two lab-frame segments) fails the per-file rule: 2.63e-4 from the
+  refined value against 2.28e-4 before.  Per point both segments are 3–4 times closer than before (largest 2.9e-4 /
+  3.0e-4 → 7.5e-5 / 1.2e-4); the total is dominated by one point (E 1.1228 MeV, pull +15), and the old total was
+  nearer only because other points' errors cancelled part of it.  A named row of the classifier (factor 1.2).
+- *The T2 gradient fit took 456 calls where it took 118.*  Not a slower convergence: the gradient agrees with central
+  differences at moved shifts and at the minimum, χ² is smooth along the three shift parameters, and with the start
+  value of one normalisation changed (1.002, 0.997, 1.01, 0.99) both engines end either after 117–118 calls (EDM
+  about 1e-4) or after 452–456 (EDM about 7e-8); at 0.99 the old engine takes 454 and this one 118.  The fit sits on
+  the edge of Minuit's validity check after HESSE.  **For the PI and the owner**: the call count of this fit is not a
+  measure of the engine.
+- *A step at a re-plan*: when a shift leaves the reach its nodes were planned for, the mesh is planned again and χ²
+  steps by the quadrature difference: 1.3e-2 in a χ² of 10,500 at +9.0e-3 MeV on T2's offset with prior 0.003 (three
+  prior widths).  None inside the reach.  The old engine had steps of the same size inside the range a fit visits
+  (1.7e-2 at 1.16e-3 MeV on the same parameter).
+- *Two defects found in the review, fixed by the agent before the merge, each with a test that fails before the fix*
+  (repeated by the director on the builds before and after): the stopping formula was called at a negative energy at
+  the floor node of a thick target with a shift above 1 keV (thousands of "unsupported imaginary number" lines in a
+  T2 fit; the argument is now held at the support's lower edge; T2's outputs do not move); a folded data set with
+  external capture whose shift left the reach stopped the fit with an error (its nodes are now re-placed and take their
+  capture amplitudes from the tables).  For the second the director compared, on 13N `skowronski_fels` with a beam
+  spread, the χ² at a shift moved from 0 to +0.2, −0.2, +0.05, +0.02 MeV with the same shift written in the file
+  (fixed and free): equal to all printed digits in the four cases (`work/director/shift_review/ec_far.out`).
+
+**What it costs and gives** (the agent's measurements, T2, one thread): level-matrix solves of one gradient 158,929 →
+48,526; peak memory 300 → 259 MB; one calculation 0.23 → 0.28 s (the reach adds nodes).  Engine lines: `src/` +408
+−165, `include/` +193 −144 (the engine grew: the fold of a shifted point is a named file, `ShiftedFold.h/.cpp`, 312
+lines, against the deleted cache of 111).
+
+**Open** (in the order they will be met).  The lab-frame differential data with a shift still carry the point's angle
+in the site (`SlotGroupKey::nominalEnergy`, `Segment::ReangleSlots`, a shift column that solves): branch 9 removes
+them.  THM and uniform own grids keep the rigid move (`Segment::MoveOwnGridSlots`): branch 10.  The target kernel of a
+shifted point reads the stopping at the node's energy minus the shift (the old rigid move's physics, kept so that
+numbers stay): whether the stopping should be read at the true node energy is a physics question for the owner.  The
+shift columns of the gradient are central differences of the fold on fixed nodes; an analytic ∂K/∂E_0 per kernel is
+not written.  `pyazr_shift_fn` fails under `AZURE_NODE_CHECK=1` (`residual_jacobian` raises) on the engine before this
+branch too; not investigated.  `pyazr_shift_fold_ec` checks that χ² is finite and returns; the comparison with the
+exactly planned shift (above) should become one of its checks.  Carried: the silent zero of a layer below 1 eV, the
+near-copy loops of `SetUpTargetEffects`, `park_chi2_fallback`, the name of `tests/target_effect_ranges`.
 
 ## 2026-11-12 (agent, Phase 5 branch 9, milestone 1) — non-elastic angular data: a site holds Legendre coefficients, the point's row applies the angle (`feature/upgrade-5-observables`)
 

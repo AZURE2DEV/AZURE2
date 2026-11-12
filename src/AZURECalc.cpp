@@ -269,17 +269,12 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, WorkingCopy *ld, azure2::Results &re
     }
     fullShifts.push_back(f);
   }
-  // Segments in sequence, each one's points in parallel: re-energising a
-  // point (UpdatePointEnergyWithShift) and evaluating it touch only that
-  // point.  (Parallel over segments instead left the largest segment running
-  // alone at the end.)
-  auto updateSegment = [&](const Segment *seg) {
-    if (!InParallelRegion()) {
-#pragma omp parallel for schedule(dynamic, 1)
-      for (int pid = 0; pid < seg->NumPoints(); pid++) seg->UpdatePointEnergyWithShift(*ld, 0, pid, lc, &config);
-    } else {
-      seg->UpdatePointEnergiesWithShift(*ld, lc, &config);
-    }
+  // The points of `segs` at the shift set now, with their slots on the nodes they are at, as the hand-over leaves them
+  // (WorkingCopy::MoveSegmentsToShift).
+  auto moveSegments = [&](const std::vector<int> &segs) {
+    std::vector<const Segment *> group;
+    for (int s : segs) group.push_back(ld->Data().GetSegment(s));
+    ld->MoveSegmentsToShift(group, lc, config);
   };
   for (const LocalShift &ls : localCols) {
     AZUREProfile::Timer profileColumn(AZUREProfile::kShiftLocal);
@@ -289,13 +284,13 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, WorkingCopy *ld, azure2::Results &re
     const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
     const double d0 = ls.target.Get(ld);
     ls.target.Set(ld, x0 + h);
-    for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->Data().GetSegment(segs[m]));
+    moveSegments(segs);
     groupResiduals(segs, rP);
     ls.target.Set(ld, x0 - h);
-    for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->Data().GetSegment(segs[m]));
+    moveSegments(segs);
     groupResiduals(segs, rM);
     ls.target.Set(ld, d0);
-    for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->Data().GetSegment(segs[m]));
+    moveSegments(segs);
     for (size_t m = 0; m < segs.size(); m++) {
       const int sNum = segs[m];
       const size_t r0 = (size_t)rowStart[sNum], nSegRows = (size_t)(rowStart[sNum + 1] - rowStart[sNum]);

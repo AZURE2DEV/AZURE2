@@ -59,6 +59,7 @@ Kernel TriangularKernel() {
   k.fold = FoldTriangular<double>;
   k.weights = FoldTriangular<LinearForm>;
   k.derivative = TriangularDerivative;
+  k.thinLimit = AverageThinLimit;
   k.support = TriangularSupport;
   k.doc = "a triangular energy resolution: the cross section weighted by 1 - |E - E0|/(w/2) over [E0 - w/2, E0 + w/2]";
   return k;

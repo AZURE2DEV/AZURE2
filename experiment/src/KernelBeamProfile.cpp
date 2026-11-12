@@ -141,6 +141,7 @@ Kernel BeamProfileKernel() {
   k.fold = FoldBeamProfile<double>;
   k.weights = FoldBeamProfile<LinearForm>;
   k.support = BeamProfileGridSupport;
+  // no thinLimit: the support is at least 1 keV wide (BeamProfileGridSupport), never a single node
   k.doc = "an absolute beam energy profile (skewed Gaussians), the detector's Gaussian resolution inside the point's "
           "energy window, and optionally the detailed-balance weight of a photodissociation measurement";
   return k;

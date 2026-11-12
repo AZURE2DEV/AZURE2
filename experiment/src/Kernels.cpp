@@ -1,5 +1,6 @@
 // The table of apparatus kernels (Kernels.h) and the fold of an effect: its broadening, then its resolution kernel.
 // A new kernel is one function in a file of its own (KernelGaussian.cpp is the pattern) and one line below.
+#include <limits>
 #include <vector>
 
 #include "azure2/experiment/Kernels.h"
@@ -43,7 +44,23 @@ const Kernel *KernelOfForm(const std::string &record, const std::string &field, 
   return nullptr;
 }
 
+double AverageThinLimit(const KernelParameters &, const KernelPoint &, const KernelNodes &) { return 1.0; }
+
 namespace {
+
+/// The weight of a single node (Kernel::thinLimit): the product over the effect's kernels that apply, NaN when one of
+/// them has no thin limit.
+double ThinLimit(const EffectKernels &k, Broadening broadening, const KernelParameters &p, const KernelPoint &point,
+                 const KernelNodes &nodes) {
+  double w = 1.0;
+  const bool broadens = k.broadening && broadening == Broadening::kApply;
+  for (const Kernel *kernel : {broadens ? k.broadening : nullptr, k.resolution}) {
+    if (!kernel) continue;
+    if (!kernel->thinLimit) return std::numeric_limits<double>::quiet_NaN();
+    w *= kernel->thinLimit(p, point, nodes);
+  }
+  return w;
+}
 
 template <class V>
 V FoldOf(const Kernel &k, const KernelParameters &p, const KernelPoint &point, const KernelNodes &nodes, const V *values);
@@ -76,10 +93,11 @@ void BroadenOf(const Kernel &k, const KernelParameters &p, const KernelPoint &po
 template <class V, class Broaden>
 V Compose(const EffectKernels &k, Broadening broadening, const KernelParameters &p, const KernelPoint &point,
           const KernelNodes &nodes, const V *values, Broaden broaden) {
-  if (!k.broadening || broadening == Broadening::kAlreadyApplied) {
-    if (!k.resolution) return V(0.0);
+  if (!k.resolution && (!k.broadening || broadening == Broadening::kAlreadyApplied)) return V(0.0);
+  // a single node: the support is narrower than MeshZeroWidth(), the cross section constant across it
+  if (nodes.n == 1) return ThinLimit(k, broadening, p, point, nodes) * values[0];
+  if (!k.broadening || broadening == Broadening::kAlreadyApplied)
     return FoldOf<V>(*k.resolution, p, point, nodes, values);
-  }
   const int n = nodes.n;
   if (n < 2) return V(0.0);
   if (!k.resolution) {
@@ -110,8 +128,9 @@ LinearForm FoldForm(const EffectKernels &k, Broadening broadening, const KernelP
 
 double FoldTemperatureDerivative(const EffectKernels &k, Broadening broadening, const KernelParameters &p,
                                  const KernelPoint &point, const KernelNodes &nodes, const double *values) {
-  // The resolution kernel after the broadening is linear in its node values: apply it to d(broadened)/dT.
-  if (!k.broadening || broadening == Broadening::kAlreadyApplied) return 0.0;
+  // The resolution kernel after the broadening is linear in its node values: apply it to d(broadened)/dT.  The thin
+  // limit of a single node does not depend on T.
+  if (!k.broadening || broadening == Broadening::kAlreadyApplied || nodes.n < 2) return 0.0;
   return Compose<double>(k, broadening, p, point, nodes, values, [&](const double *e, int m, double *out) {
     k.broadening->broadenDT(p, point, nodes, values, e, m, out);
   });
@@ -122,7 +141,12 @@ void BroadeningWeights(const EffectKernels &k, const KernelParameters &p, const 
                        std::vector<std::pair<int, double>> *dwdT) {
   w.clear();
   if (dwdT) dwdT->clear();
-  if (k.broadening) k.broadening->broadeningWeights(p, point, nodes, e, w, dwdT);
+  if (!k.broadening) return;
+  if (nodes.n == 1) {
+    w.emplace_back(1, ThinLimit(EffectKernels{k.broadening, nullptr}, Broadening::kApply, p, point, nodes));
+    return;
+  }
+  k.broadening->broadeningWeights(p, point, nodes, e, w, dwdT);
 }
 
 void EffectSupport(const EffectKernels &k, const KernelParameters &p, const SupportPoint &s, double &high, double &low) {

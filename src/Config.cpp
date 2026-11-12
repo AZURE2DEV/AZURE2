@@ -18,24 +18,6 @@
  * stream reference for output.
  */
 
-namespace {
-
-// AZURE_REFINE_QUADRATURE=k (Config::refineQuadrature): a whole number from 1 to 64, else the run stops -- a
-// diagnostic that silently did not refine would pass a gate it never ran.
-int RefineQuadratureFromEnvironment() {
-  const char *v = std::getenv("AZURE_REFINE_QUADRATURE");
-  if (!v || !*v) return 1;
-  char *end = nullptr;
-  const long k = std::strtol(v, &end, 10);
-  if (*end != '\0' || k < 1 || k > 64) {
-    std::cerr << "ERROR: AZURE_REFINE_QUADRATURE needs a whole number from 1 to 64, not '" << v << "'" << std::endl;
-    std::exit(2);
-  }
-  return static_cast<int>(k);
-}
-
-}  // namespace
-
 Config::Config(std::ostream &stream) :
   outStream(stream) {
   Reset();
@@ -63,7 +45,7 @@ void Config::Reset() {
   thm = ThmOptions();
   useCoulombTable = true;   // the universal Coulomb table where it covers a channel (--no-coulomb-table)
   replaceSubPointGrids = true;  // re-place the adaptive sub-point grids (--no-grid-replacement)
-  refineQuadrature = RefineQuadratureFromEnvironment();  // AZURE_REFINE_QUADRATURE=k refines the sub-point grids k-fold
+  refineQuadrature = 1;     // AZURE_REFINE_QUADRATURE=k, read where the flags are (CommandLineValues.h)
   coulombTablePath.clear();
   useECTable = true;            // external-capture energy tables (--no-ec-table)
   ecConvectionCurrent = true;   // convection current in exact-form EC (--no-ec-convection-current)
