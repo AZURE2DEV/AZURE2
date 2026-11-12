@@ -2,6 +2,24 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, Phase 6 branch 1, part 2) — no thread_local, caller-owned scratch, check 38 (`feature/upgrade-6-evaluation`)
+
+**Done** (`evaluation.md` section 7.3 by file).  Every `thread_local` is gone: the energy tasks' solvers and the
+channel-space values are `TaskScratch` in the caller's `Results`; the external-capture integrals' radial values,
+Whittaker values, workspace and rate grids and the THM vertex boundary's S_c are the run's per-thread scratch
+(`RunScratch`, `Config::scratch`); the THM level-width, Coulomb-term and angular-coupling memos and the per-thread
+Coulomb-table lookup are deleted (measured: they bought nothing).  Warnings printed once per process print once per
+run (`Config::FirstTime`).  Check 38 refuses new state outside `tests/consistency/allowed_state.tsv` (117 rows: 10
+tables, 107 pending with their milestone).  `tests/pyazr/session_isolation_test.py` (A B A in one process, 1 and 3
+threads) passes on the base and here with the same digests, fails with an injected process-wide memo.
+**Verified** (build of 41896d9f, `work/eval/bin/AZURE2-b1`): every project × 3 bases against `tab-thm5`
+(`tab-eval-b1`): 0 output files differ; one `run.log` differs (thm_coherent_background/toy: the line "Coulomb
+table: … loaded" is no longer printed, because the deleted THM memos loaded the table only to put its address in
+their keys; the project's numbers do not read the table).  `ctest -LE slow` 217/217.  1 against 3 threads (T1, T2,
+T3, 13N × 3 bases) identical.  The eight fits identical to the base file by file.  Instructions within 2 % (largest
++1.7 % on 18O's calculation).  `tests/run_tests.sh` 160 passed, 0 failed.  The converted-tree gate (`geval-b1`): 633 / 606 / 633 files identical, 0 differ.
+**Open.** The pending rows (milestones 1–5 of `evaluation.md`); part 3 of the brief (the pools) not started.
+
 ## 2026-11-12 (director, 19:05) — merged: physics/transfer, second part (transfer to the x + A continuum, FRESCO bins, prior form and remnants)
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed): `feature/upgrade-7-transfer-2` (the

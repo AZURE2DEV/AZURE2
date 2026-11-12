@@ -322,7 +322,20 @@ Each is a commit series that leaves the tree passing (all projects × 3 bases id
 
 ### 7.1 State counts
 
-At the start (`state_scan.py` on 88d55f17): thread_local 26, static 40, namespace 42, mutable 53.
+`state_scan.py` (as committed) on the start 88d55f17 and on this branch; the allow-list after:
+
+| Kind | before | after | on the allow-list as `table:` | as `pending` |
+|---|---|---|---|---|
+| thread_local | 26 | 0 | 0 | 0 |
+| static (block or class) | 40 | 26 | 10 | 16 |
+| namespace scope | 44 | 42 | 0 | 42 |
+| mutable member | 53 | 49 | 0 | 49 |
+| total | 163 | 117 | 10 | 107 |
+
+(The first count in the introduction, 42 namespace-scope variables, was made before the scanner caught `T a(0),
+b(0)`; 44 is the committed scanner's.)  Pending rows by milestone: 1 (solver buffers written by `const` methods) 10,
+2 (global pointers, process-wide memos) 13, 3 (pooled working copies, the API's lazy state) 11, 4 (`CNuc` pools, the
+fitter's and the sampler's state, MCMC globals) 44, 5 (diagnostic counters) 29.
 
 ### 7.2 Two calculations in one process (`tests/pyazr/session_isolation_test.py`)
 
@@ -336,4 +349,38 @@ safe in one thread of one session at a time, not by construction.
 
 ### 7.3 Done in this branch
 
-(Filled as parts B and C land.)
+**Part 2 (no hidden state), first milestone, partly.**  Every `thread_local` is gone; the warn-once statics print
+once per run; the mutable pointers to literals are `const`; the rest is on the allow-list with its milestone.
+- Energy-task scratch: `include/TaskScratch.h`, `src/TaskScratch.cpp` (`TaskScratch`: the point pass's and the
+  gradient's `AMatrixFunc` and `THMMatrixFunc`, the task's unit list, `ChannelSpace::Memo`; `TaskScratchSet` in
+  `Results::scratch`, one slot per OpenMP thread, empty on copy).  `ChannelSpace::Memo` (`include/ChannelSpace.h`)
+  replaces the three per-thread maps; an `AMatrixFunc` uses its own unless given the task's
+  (`ShareChannelMemo`).  `ThmPointModelGradient` takes a solver owned by its parallel region.
+- The run's per-thread scratch: `include/RunScratch.h`, `src/RunScratch.cpp` (`RunScratch`, `ThreadScratch`: an
+  `ECScratch` — GSL workspace, `CoulRadialMemo`, `WhitScaledMemo`, rate grids — and a `ThmShiftMemo`), held by
+  `Config::scratch`.  `CoulFunc::SetRadialMemo`, `WhitFunc::SetScaledMemo` take the caller's tables; the FW/GW memo
+  is a member of the integral's parameters.
+- Deleted: the THM level-width memo, the THM Coulomb-term memo, the per-thread table of the THM angular coupling
+  (`ThmAngularCouplingOf`, built by the caller), the per-thread Coulomb-table lookup and its generation counter.
+- Notices: `Config::printedOnce`, `Config::FirstTime(key)`, `Config::FirstTimeIn(log, key)` (set-up records keep the
+  log); 12 flags (CNuc external capture, hand-over ×2, apparatus, target set-up, model pass, point pass, singular
+  level matrix, gradient debug, four THM option objects).
+- Check 38 (`tests/consistency/repo_consistency_test.py`, `state_scan.py`, `allowed_state.tsv`); shown failing on a
+  planted namespace variable, static, `thread_local` and `mutable` member (the check plants them itself) and on an
+  injected process-wide EC amplitude memo in `src/UnitExternalCapture.cpp` (two findings).
+- The session test (`tests/pyazr/session_isolation_test.py`, ctest `pyazr_session_isolation`): passes on the base
+  and on this branch with the same digests; with the injected memo it fails (A R A and R A R, 1 and 3 threads).
+
+**Speed after part 2** (one thread; the same build as the full checks).  User-space instructions, one run each
+(load independent): T2 calculation +0.9 %, 18O_p_a_thm +1.7 %, 13N +0.06 %, natural_neon +0.3 %; T2
+`--use-gradient` fit 3.25865e11 → 3.26007e11 (+0.04 %), 13N fit 1.874908e11 → 1.875266e11 (+0.02 %).  Wall time,
+medians of three, base / branch, runs interleaved at load 12–16 on 24 cores (another group's builds and tests):
+T2 0.47 / 0.60 s, 13N 10.11 / 8.87 s, natural_neon 2.00 / 2.20 s, 18O 0.16 / 0.14 s, T2 fit 44.0 / 43.2 s, 13N fit
+21.0 / 21.0 s; the spread of the three runs of one engine (up to 50 % for T2's calculation) is larger than any
+difference, so the wall times neither show nor exclude a 2 % change; the instruction counts are within it.
+Peak memory: calculations within 0.1 MB; T2 fit 189.4 → 192.9 MB (+3.6 MB), 13N fit 140.6 → 140.6 MB.  Inferred
+cause of the T2 increase: the solvers are now one set per `Results` (per pooled copy, five in a fit) instead of one
+per thread; it goes with the pools (milestone 3).
+
+Not done in this branch: the 107 pending rows (milestones 1–5); the `g_config` and `g_ecAmplitudeCache` pointers;
+the diagnostics record; part 3 (section 5, milestone 3).
