@@ -72,7 +72,7 @@ class Site {
   /// Phase shift?
   bool IsPhase() const;
   /// THM (modified R-matrix, half-off-shell) point?
-  bool IsTHM() const;
+  bool IsTHM() const { return settings_->thm; }
   /// Weight table multiplying the THM model cross section (<thm> weight[k]=),
   /// or null.  Owned by the parent Segment.
   const ThmWeightTable *GetThmWeight() const { return settings_->thmWeight; }

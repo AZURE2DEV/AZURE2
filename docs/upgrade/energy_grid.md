@@ -275,6 +275,14 @@ the external-capture amplitudes and `intEC.dat`, THM `thm_ps_`; not deleted: sub
 which is not E_x minus a constant to the last bit; the stopping, which a fitted stopping scale moves per copy; angle
 rows, Coulomb amplitude, screening, EC amplitudes) is listed in `HANDOFF.md`.
 
+**Status, branch 7 part 3 (`feature/upgrade-5-grid-readers2`, 2026-11-12).** The sub-point units are gone: a slot of a
+folded point is a `Site` (`include/Site.h`: what depends on the point at one energy), held in one vector of the working
+copy (`WorkingCopy::SlotAt`, each point's a range); a data point (`Unit`) is a site with its row, fold, plan task and
+model record. The observables, the energy pass, the folds, the gradient's cotangents and the external capture read
+sites by one index (`WorkingCopy::SiteAt`: points, then slots). `SubPointAccess.h` is deleted. Not deleted:
+`NodeTableCache.h` (re-placed slots share their rows across copies through it until the shared mesh stops nodes from
+moving with the levels) and the slots' copy-on-write rows (the node rows are holders of them).
+
 ### 2.7 Thread-count independence by construction
 
 - The mesh and the node table are built single-threaded (or by a parallel loop that writes one node per index) from

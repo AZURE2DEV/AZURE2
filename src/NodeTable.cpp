@@ -107,16 +107,10 @@ std::size_t NodeTable::Bytes() const {
          (slots.begin.capacity() + slots.node.capacity()) * sizeof(int) + slots.overflow.capacity();
 }
 
-std::size_t NodeOverflow::KeyHash::operator()(const NodeKey &k) const {
-  const std::uint64_t h = std::get<2>(k) * 0x9E3779B97F4A7C15ULL ^
-                          ((std::uint64_t)(unsigned)std::get<0>(k) << 1 | (std::uint64_t)std::get<1>(k));
-  return (std::size_t)(h ^ (h >> 29));
-}
-
 int NodeOverflow::Place(const NodeKey &key, double ex, const SharedTable<EDependentTables> &nodeRows) {
-  const auto it = index.emplace(key, Size());
-  if (it.second) Append(key, ex, nodeRows);
-  return it.first->second;
+  if (Size() > 0 && Key(Size() - 1) == key) return Size() - 1;
+  Append(key, ex, nodeRows);
+  return Size() - 1;
 }
 
 NodeState BuildNodeTable(WorkingCopy &data, CNuc *cnuc, const Config &) {
@@ -153,8 +147,11 @@ NodeState BuildNodeTable(WorkingCopy &data, CNuc *cnuc, const Config &) {
 
 bool NodeCheckRequested() {
   static const bool on = [] {
-    const char *v = std::getenv("AZURE_NODE_CHECK");
-    return v && *v && std::strcmp(v, "0") != 0;
+    auto set = [](const char *name) {
+      const char *v = std::getenv(name);
+      return v && *v && std::strcmp(v, "0") != 0;
+    };
+    return set("AZURE_NODE_CHECK") || set("AZURE_PLAN_CHECK");
   }();
   return on;
 }
@@ -215,6 +212,11 @@ long WorkingCopy::CheckNodeTable(CNuc *cnuc, const std::vector<int> &work) {
   auto report = [&reports](const std::string &r) {
     if (reports.size() < 10) reports.push_back(r);
   };
+  for (int n = 1; n < stage->Size(); n++)
+    if (!(stage->Key(n - 1) < stage->Key(n))) {
+      wrongNode++;
+      report("stage nodes " + std::to_string(n - 1) + " and " + std::to_string(n) + " are not in key order");
+    }
   std::vector<azure2::UnitRef> refs;
   for (int t : work) {
     refs.clear();
@@ -248,7 +250,7 @@ long WorkingCopy::CheckNodeTable(CNuc *cnuc, const std::vector<int> &work) {
       }
       (inStage ? onStage : onOverflow)++;
       const EDependentTables *mine = u.ChannelRows();
-      if (!mine || !list.rows[at] || !azure2::SameTables(*mine, *list.rows[at])) {
+      if (!mine || !list.rows[at] || (mine != &*list.rows[at] && !azure2::SameTables(*mine, *list.rows[at]))) {
         rowsDiffer++;
         report("channel rows of unit " + std::to_string(refs[k]) + " (segment key " + std::to_string(u.GetSegmentKey()) +
                ") differ from node " + std::to_string(n));

@@ -145,14 +145,6 @@ bool Site::IsPhase() const {
 }
 
 /*!
- * Returns true if the point belongs to a THM (modified R-matrix) segment.
- */
-
-bool Site::IsTHM() const {
-  return settings_->thm;
-}
-
-/*!
  * Returns true if the point is angular distribution, otherwise returns false.
  */
 
