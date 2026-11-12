@@ -17,8 +17,8 @@ template <class V>
 V FoldGaussian(const KernelParameters &p, const KernelPoint &point, const KernelNodes &nodes, const V *values) {
   const int numPoints = nodes.n;
   if (numPoints < 2) return V(0.0);
-  const double eHigh = nodes.Energy(1);
-  const double eLow = nodes.Energy(numPoints);
+  const double eHigh = nodes.High();
+  const double eLow = nodes.Low();
   const double centroid = point.energy;
   const double s = p.sigma(centroid, point.cmFactor);
   if (!(s > 0.)) return InterpolateNodes<V>(nodes, values, centroid);

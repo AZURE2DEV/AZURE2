@@ -77,7 +77,7 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
 
 | Path | What | Notes |
 |---|---|---|
-| `src/`, `include/` | C++ engine | `AZURE2.cpp` (main, CLI flags) → `AZUREMain` → `CNuc` (levels, channels) + `DataSet` (the data as set up, immutable: segments, measurements, target effects, covariance; `include/DataSet.h`) held by each `WorkingCopy` (what an evaluation changes: norms, shifts, frames, the data points, `Unit`, and the slots of their target-effect folds, each a `Site` (`include/Site.h`: energies, angle rows, channel rows, Coulomb amplitude, screening, stopping, EC amplitudes; the observables read a `Site`); `include/WorkingCopy.h`) → `AZURECalc` (χ²), `AZUREGrad` (gradients), `AZURECalcMCMC` |
+| `src/`, `include/` | C++ engine | `AZURE2.cpp` (main, CLI flags) → `AZUREMain` → `CNuc` (levels, channels) + `DataSet` (the data as set up, immutable: segments, measurements, target effects, covariance; `include/DataSet.h`) held by each `WorkingCopy` (what an evaluation changes: norms, shifts, frames, the data points, `Unit`, and the slots of their target-effect folds, each a `Site` (`include/Site.h`: energies, angle rows, channel rows, Coulomb amplitude, screening, stopping, EC amplitudes; the observables read a `Site`), shared by the points of a sharing group on the shared mesh (`include/SlotGroup.h`: a slot is written by its first reader, `WorkingCopy::WritesSlot`, read by all; never write a fold's intermediate values into a slot); `include/WorkingCopy.h`) → `AZURECalc` (χ²), `AZUREGrad` (gradients), `AZURECalcMCMC` |
 | `api/` | `AZUREAPI` + pybind11 module `_azure2` | Builds `pyazr/_azure2*.so` in place |
 | `io/` | The `.azr` document and its format conversion | Standalone (no engine headers); the engine and pyazr read the file through it |
 | `stopping/` | Stopping and straggling: materials, SRIM-2013's electronic and nuclear stopping (ported from LunaSRIM; SRIM's data files in `stopping/data/srim/`, cite SRIM), energy loss, range, TRIM/Bohr straggling with Tschalär propagation, with uncertainty and provenance | Uses `physics/` only; the engine calls it through `TargetStopping` (`stopping evaluation`, `stopping table`), pyazr through `pyazr.stopping`; `docs/upgrade/stopping.md` |
@@ -404,7 +404,9 @@ that triggers it alone [check 24].
 parameters; the engine applies whatever the table holds.
 1. One file `experiment/src/Kernel<Name>.cpp` (`KernelGaussian.cpp` is the pattern): the fold as a template on V
    (`double` gives the value, `LinearForm` the exact weights the gradient reads: the same arithmetic), its support (the
-   c.m. interval the point's nodes must span; the set-up lays the grid over it) and `Kernel <Name>Kernel()` filling its
+   c.m. interval the point's nodes must span; the set-up gives the point the shared mesh's nodes over it, whose two
+   outer nodes lie up to one interval beyond it: the fold integrates over `nodes.Low()` .. `nodes.High()`, never over
+   the end nodes' span) and `Kernel <Name>Kernel()` filling its
    row member by member. Its own parameters are `KernelParameter` rows (name, dimension, engine unit, fittable) whose
    values arrive in `KernelParameters::values`; with `tableForm = true` and the keyword `detector.energy_resolution
    <form>` the format-3 form is generated from those rows (`Schema.cpp`) and read by `BuildEffects.cpp`: no parser
@@ -456,6 +458,7 @@ Reference commits: `git show --stat 062b1bfe` (segment keyword `shiftfngroup`), 
 `docs/upgrade/ARCHITECTURE.md` section 10). Run every project of a `tests/` tree with each engine, then compare:
 ```bash
 export SRC_TESTS=$PWD/tests WORK=<scratch> JOBS=<runs at once, one thread each; default 1>
+export AZURE2_COULOMB_TABLE=<the table file the reference used>  # required: without it every charged channel moves
 tools/runall.sh <absolute path of the reference engine> tab-ref   # once per reference
 tools/runall.sh <absolute path of the new engine> tab-new         # a fresh tag for every run
 tools/cls.sh tab-ref tab-new; grep '^## ' $WORK/cls-tab-new.tsv   # "## <basis>: N files, N identical" when nothing moved

@@ -37,6 +37,10 @@ struct UnitCotangent {
   double value;
   int xsComponent;
   bool ayCrossSection;
+  /// The plan task of the point that reads the unit (the point itself, or the folded point whose slot it is): a slot
+  /// shared by several points (SlotGroup.h) has a cotangent per reader, and a T-matrix group sums its cotangents in
+  /// the order of their readers' plan tasks -- the order the sum had with one slot per point.
+  int reader;
 };
 
 /// One data point of a gradient pass, `row` its index among the pass's points.

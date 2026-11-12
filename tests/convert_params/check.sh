@@ -8,9 +8,12 @@
 # is the committed conversion, tests/upgrade/T2/T2.azr.
 #   (a) --convert-params writes the file with every old data-set name renamed (the converter's map; the level
 #       parameters energy_<k>, width_<k>_<c> keep theirs) and refuses to overwrite;
-#   (b) the format-3 project calculated (menu 1) from the renamed file gives the fit's chi-squared, that of
-#       golden/T2/fit/chiSquared.out (the same exact Coulomb functions, --no-coulomb-table), within 1e-5 relative (the
-#       tolerance of golden/T2's calculations; the file prints 6 digits);
+#   (b) the format-3 project calculated (menu 1) from the renamed file gives the chi-squared recorded for the old
+#       fit's parameters, expected/chi2_renamed (the same exact Coulomb functions, --no-coulomb-table), within 1e-5
+#       relative (the tolerance of golden/T2's calculations; the file prints 6 digits).  The engine that read old files
+#       gave the fit's own value there, 294.173 (golden/T2/fit/chiSquared.out); the shared mesh integrates the folded
+#       segments 5-8 on other nodes (docs/upgrade/energy_grid.md section 7.1) and gives 294.164 at the same parameters
+#       (today's engine refined eightfold: 293.649), so the recorded value is the calculation's, not the fit's;
 #   (c) the old file itself, read by the format-3 project, applies only the level parameters: the run warns with
 #       W_PARAMETER_FILE_NAMES and its chi-squared is not the fit's (the renaming is what makes (b) hold);
 #   (d) a format-3 project as the map's source is refused, with the reason, exit 1.
@@ -62,12 +65,13 @@ total() { awk '{ for (i = 1; i < NF; i++) if ($i == "Total-Chi-Squared:") print 
 calc renamed new.sav
 calc unrenamed old.sav
 fit="$(total "$HERE/../upgrade/golden/T2/fit/chiSquared.out")"
+want="$(cat "$HERE/expected/chi2_renamed")"
 got="$(total "$WORK/renamed/chiSquared.out")"
 old="$(total "$WORK/unrenamed/chiSquared.out")"
-python3 -c "import sys; a, b = float('$got'), float('$fit'); sys.exit(0 if abs(a - b) <= 1e-5 * b else 1)" 2>/dev/null \
+python3 -c "import sys; a, b = float('$got'), float('$want'); sys.exit(0 if abs(a - b) <= 1e-5 * b else 1)" 2>/dev/null \
   && ! grep -q "W_PARAMETER_FILE_NAMES\|E_PARAMETER_FILE_NO_MATCH" "$WORK/renamed.log" \
-  && ok "(b) the format-3 project from the renamed file: chi2 $got, the old fit's $fit, no warning about names" \
-  || bad "(b) chi2 '$got' against the old fit's '$fit' ($(grep -m1 'PARAMETER_FILE' "$WORK/renamed.log"))"
+  && ok "(b) the format-3 project from the renamed file: chi2 $got, recorded at the old fit's parameters $want, no warning about names" \
+  || bad "(b) chi2 '$got' against the recorded '$want' at the old fit's parameters ($(grep -m1 'PARAMETER_FILE' "$WORK/renamed.log"))"
 grep -q "W_PARAMETER_FILE_NAMES" "$WORK/unrenamed.log" \
   && python3 -c "import sys; a, b = float('$old'), float('$fit'); sys.exit(0 if abs(a - b) > 1e-3 * b else 1)" 2>/dev/null \
   && ok "(c) the old file unrenamed: W_PARAMETER_FILE_NAMES, chi2 $old (not the fit's)" \

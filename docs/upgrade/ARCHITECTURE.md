@@ -92,8 +92,11 @@ the units stands the stage's node table (`include/NodeTable.h`: one node per nuc
 rows, built at the end of the set-up, shared by every copy) with, per plan task, one slot per unit naming its node;
 nodes the hand-over moves off the stage table (re-placed grids, shifted points) live in the working copy's own overflow
 table (`NodeOverflow`, placed by `WorkingCopy::PlaceOverflowNodes`).  The energy tasks are grouped by the slots' nodes;
-the sub-point units still carry the rest of the calculation, and `AZURE_NODE_CHECK=1` shows at every hand-over and
-point pass that every unit is at the node its slot names.
+the slots of the folded points (`Site`s) carry the rest of the calculation, and `AZURE_NODE_CHECK=1` shows at every
+hand-over and point pass that every unit is at the node its slot names.  Folded points on the shared mesh share their
+slots (`include/SlotGroup.h`): one site per node and sharing group, each point a range of its group's block, the slot
+written by its first reader (`WorkingCopy::WritesSlot`: a plan task's units are its point's written slots) and read by
+all; `AZURE_NODE_CHECK` checks the groups too (`WorkingCopy::CheckSlotGroups`).
 
 ## 3. Module contents (physical objects; physics stages are functions, not classes)
 

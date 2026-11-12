@@ -41,6 +41,10 @@ class Unit : public Site {
     double baseEnergyStep = 0.0, resonanceWidthMultiplier = 0.0, pointsPerWidth = 0.0;
     bool targetIntegration = false;
     double stoppingConversion = 1.0;  ///< c.m./lab factor of the stopping power
+    /// On the shared mesh of its nucleus (docs/upgrade/energy_grid.md section 2.2): the mesh (DataSet::Meshes) and
+    /// the support's index in it, -1 for a point with a grid of its own; E_x - E_cm of its pair (MeV).
+    int mesh = -1, meshSupport = -1;
+    double frameShift = 0.0;
   };
   /// What the set-up worked out for this point that its evaluations read again (its sub-point grid's layout, its
   /// user-defined resolution kernel): record SetUpIndex of the data set's DataSet::PointSetUps, -1 for none.

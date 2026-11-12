@@ -86,7 +86,11 @@ std::string CheckEnergyTasks(WorkingCopy &data, CNuc &compound, const Config &cf
     if (task.begin != (int)seen) return where + " does not follow the task before it in the arrays";
     const azure2::UnitRef *taskUnits = list.units.data() + task.begin;
     const int *taskOwners = list.owners.data() + task.begin, *taskGroups = list.tGroups.data() + task.begin;
-    const double cost = 1.0 + task.numTMatrices + task.size;
+    // the cost by reads: a slot shared by several points counts once per point that reads it (CalculationPlan.h)
+    int reads = 0;
+    for (int i = 0; i < task.size; i++) reads += data.SiteReaders(list.units[task.begin + i]);
+    if (reads != task.reads) return where + " has " + std::to_string(task.reads) + " reads, its units " + std::to_string(reads);
+    const double cost = 1.0 + task.numTMatrices + task.reads;
     if (cost > lastCost) return where + " is out of the order of cost";
     lastCost = cost;
     int pairs = 0;

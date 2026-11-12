@@ -19,9 +19,18 @@ non-relativistic file; the table key carries the switch as a field.
 `check.sh path/to/AZURE2`, on `tests/13N` cut down to its gas-target capture segment:
 
 - (a) the relativistic chi2 differs from the non-relativistic one by more than 1e-4 (teeth);
-- (b) the relativistic run given the non-relativistic `intEC.dat` warns that the file was computed
-  for different inputs, recomputes, and equals the fresh relativistic chi2;
-- (c) the non-relativistic run given its own file reuses it without a warning.
+- (b) the relativistic run given the non-relativistic `intEC.dat` refuses it (either refusal: the
+  count of amplitudes or the signature), recomputes, and equals the fresh relativistic chi2;
+- (c) the non-relativistic run given its own file reuses it without a warning;
+- (d) the same stale file cut to the count the relativistic run needs, with its non-relativistic
+  signature: only the signature can refuse it, and does; the chi2 is the fresh one.
+
+On the shared mesh (`docs/upgrade/energy_grid.md` §2.2, 2026-11-12) the number of nodes a folded point
+gets depends on its support, and the relativistic energies move the supports: the stale file of (b)
+holds 71240 amplitudes where the relativistic run needs 71232, so the count refuses it before the
+signature is read. (d) keeps the signature's own path under test. Shown failing: with the fresh
+relativistic signature beside the cut file, (d) reads it silently and gives chi2 697.463 instead of
+810.243.
 
 `tests/pyazr/ec_relativistic_test.py` (ctest `pyazr_ec_relativistic`): in one process, the
 relativistic objective evaluated after the non-relativistic one equals that of a fresh process to

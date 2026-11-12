@@ -26,3 +26,9 @@ add_test(NAME check_skills
 add_test(NAME tools_classify
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/classify_test.py)
+
+# tools/classify_quadrature.py (the gate of the shared mesh, docs/upgrade/energy_grid.md section 7.1): the per-file
+# rule, largest and rms distance to the fine reference, and the fine reference taken per file from a list of tags.
+add_test(NAME tools_classify_quadrature
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/classify_quadrature_test.py)

@@ -67,6 +67,7 @@ void WorkingCopy::FollowStoppingScales(const std::vector<char> &changed, const C
       if (point->GetTargetEffectNum() != n) continue;
       const double f = point->GetCMFactor();
       for (int j = 1; j <= point->NumSubPoints(); j++) {
+        if (!WritesSlot(*point, j)) continue;  // a slot its group's first reader writes (SlotGroup.h)
         Site *sub = point->GetSubPoint(*this, j);
         sub->SetStoppingPower(f * te->StoppingAt(sub->GetCMEnergy() / f, configure, s));
       }

@@ -4,6 +4,7 @@
 #ifndef AZURE2_EXPERIMENT_KERNELS_H
 #define AZURE2_EXPERIMENT_KERNELS_H
 
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -24,8 +25,16 @@ struct KernelNodes {
   int n = 0;
   const double *energy = nullptr;
   const double *stopping = nullptr;  ///< null for a kernel that does not use the target
+  /// The support the kernel integrates over, c.m. MeV: [supportLow, supportHigh] when the nodes are a shared mesh,
+  /// whose two outer nodes lie beyond it and serve only to interpolate (docs/upgrade/energy_grid.md section 2.4);
+  /// NaN when the nodes are the point's own grid, which spans its support exactly.
+  double supportLow = std::numeric_limits<double>::quiet_NaN();
+  double supportHigh = std::numeric_limits<double>::quiet_NaN();
   double Energy(int j) const { return energy[j - 1]; }
   double Stopping(int j) const { return stopping[j - 1]; }
+  /// The upper and lower end of the support: the given one, or the span of the nodes.
+  double High() const { return supportHigh == supportHigh ? supportHigh : Energy(1); }
+  double Low() const { return supportLow == supportLow ? supportLow : Energy(n); }
 };
 
 /// What a kernel reads of its point (energies c.m. MeV unless stated).

@@ -297,9 +297,22 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
     }
   };
   auto collectFailures = [&]() {
+    std::vector<char> solveFailed(plan_.NumTasks(), 0);
+    bool any = false;
     for (const auto &list : taskFailures)
-      for (const auto &f : list)
+      for (const auto &f : list) {
         if (failure[f.first].empty()) failure[f.first] = f.second;
+        solveFailed[f.first] = 1, any = true;
+      }
+    // A slot whose solve failed fails every point that reads it, not only the one that writes it (SlotGroup.h).
+    if (any)
+      for (int t : folds) {
+        const Unit &point = *plan_.Point(*this, t);
+        for (int i = 1; i <= point.NumSubPoints() && failure[t].empty(); i++) {
+          const int writer = UnitAt(SlotWriter(point.SubPointFirst() + i - 1)).PlanTask();
+          if (solveFailed[writer]) failure[t] = failure[writer];
+        }
+      }
   };
   if (azure2::CalculationPlan::RunTimeCheckRequested()) {
     // One step after the other, each checked to write only its own records (the energy tasks: their units'; a fold:
@@ -314,7 +327,7 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
               azure2::CalculationPlan::AddRecordRange(SiteAt(tasks.units[tasks[k].begin + i]), ranges);
             if (k == numTasks - 1) collectFailures();
           } else {
-            // A fold writes its point's record; it swaps values into its sub-points' slots and restores them.
+            // A fold writes its point's record and reads its slots'.
             runFold(k - numTasks);
             azure2::CalculationPlan::AddRecordRange(*plan_.Point(*this, folds[k - numTasks]), ranges);
           }

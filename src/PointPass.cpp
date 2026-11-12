@@ -60,6 +60,7 @@ void Unit::Calculate(WorkingCopy *data, CNuc *theCNuc, const Config &configure, 
 
 void Unit::PrepareSubPoints(WorkingCopy *data, CNuc *theCNuc, const Config &configure) {
   for (int i = 1; i <= this->NumSubPoints(); i++) {
+    if (!data->WritesSlot(*this, i)) continue;  // a slot of the point's group that another point writes
     Site *subPoint = this->GetSubPoint(*data, i);
     // Recalculate energy-dependent values for sub-points too if using external capture
     if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
@@ -177,29 +178,20 @@ void Unit::FoldThinTarget(WorkingCopy &data, azure2::Results &results, const Con
  * capture cross section (isDiff 5/6) reads that component off the parent
  * point, which a sub-point integration never filled: only the total was
  * integrated.  The kernel is linear in the sub-point values, so each
- * component is integrated with the same combiner by swapping it into the
- * sub-points' cross-section slot, exactly as the analyzing power is handled.
+ * component is integrated with the same combiner (FoldValues), exactly as the
+ * analyzing power is handled.
  */
 void Unit::IntegrateTargetEffectComponents(const WorkingCopy &data, const Config &configure, azure2::Results &results) {
   if (settings_->crossSectionComponent == 0) return;
   const int n = this->NumSubPoints();
   if (n <= 0) return;
-  std::vector<double> sigma(n);
-  for (int i = 1; i <= n; i++) sigma[i - 1] = this->GetSubPoint(data, i)->GetFitCrossSection(results);
-  const double total = this->GetFitCrossSection(results);
-
-  for (int i = 1; i <= n; i++)
-    this->GetSubPoint(data, i)->SetFitCrossSection(results, this->GetSubPoint(data, i)->GetFitE1CrossSection(results));
-  FoldPoint(*this, data, configure, results);
-  this->SetFitE1CrossSection(results, this->GetFitCrossSection(results));
-
-  for (int i = 1; i <= n; i++)
-    this->GetSubPoint(data, i)->SetFitCrossSection(results, this->GetSubPoint(data, i)->GetFitE2CrossSection(results));
-  FoldPoint(*this, data, configure, results);
-  this->SetFitE2CrossSection(results, this->GetFitCrossSection(results));
-
-  for (int i = 1; i <= n; i++) this->GetSubPoint(data, i)->SetFitCrossSection(results, sigma[i - 1]);
-  this->SetFitCrossSection(results, total);
+  std::vector<double> e1(n), e2(n);
+  for (int i = 1; i <= n; i++) {
+    e1[i - 1] = this->GetSubPoint(data, i)->GetFitE1CrossSection(results);
+    e2[i - 1] = this->GetSubPoint(data, i)->GetFitE2CrossSection(results);
+  }
+  this->SetFitE1CrossSection(results, FoldValues(*this, data, configure, e1));
+  this->SetFitE2CrossSection(results, FoldValues(*this, data, configure, e2));
 }
 
 /*!
@@ -216,27 +208,23 @@ void Unit::IntegrateTargetEffectComponents(const WorkingCopy &data, const Config
  * which is what a measurement actually returns. Both integrals are done with
  * the existing yield integrator -- once on sigma, once on the product -- so the
  * quadrature, straggling and energy-loss treatment stay identical and there is
- * only one integration scheme to maintain.
+ * only one integration scheme to maintain.  The slots' records are read, never
+ * written: other points of the group read them too (SlotGroup.h).
  */
 void Unit::IntegrateTargetEffectForObservable(const WorkingCopy &data, const Config &configure, azure2::Results &results) {
+  const int n = this->NumSubPoints();
   if (this->IsCoefficient() && !this->GetCoefficientAbsolute()) {
     // A normalised Legendre coefficient is a ratio like A_y: the absolute A_k = a_k A_0
     // and A_0 are each folded with the integrator (linear in the cross section), then
     // divided -- averaging the ratio itself would be wrong.  An absolute A_k is a
     // cross-section-like quantity and takes the plain path (its slot holds a_k A_0).
-    const int n = this->NumSubPoints();
-    std::vector<double> ak(n), a0(n);
+    std::vector<double> a0(n), product(n);
     for (int i = 1; i <= n; i++) {
-      ak[i - 1] = this->GetSubPoint(data, i)->GetFitCrossSection(results);
       a0[i - 1] = this->GetSubPoint(data, i)->GetAngDistA0(results);
+      product[i - 1] = this->GetSubPoint(data, i)->GetFitCrossSection(results) * a0[i - 1];
     }
-    for (int i = 1; i <= n; i++) this->GetSubPoint(data, i)->SetFitCrossSection(results, a0[i - 1]);
-    FoldPoint(*this, data, configure, results);
-    const double denominator = this->GetFitCrossSection(results);
-    for (int i = 1; i <= n; i++) this->GetSubPoint(data, i)->SetFitCrossSection(results, ak[i - 1] * a0[i - 1]);
-    FoldPoint(*this, data, configure, results);
-    const double numerator = this->GetFitCrossSection(results);
-    for (int i = 1; i <= n; i++) this->GetSubPoint(data, i)->SetFitCrossSection(results, ak[i - 1]);
+    const double denominator = FoldValues(*this, data, configure, a0);
+    const double numerator = FoldValues(*this, data, configure, product);
     this->SetFitCrossSection(results, std::fabs(denominator) > 0.0 ? numerator / denominator : 0.0);
     return;
   }
@@ -245,20 +233,12 @@ void Unit::IntegrateTargetEffectForObservable(const WorkingCopy &data, const Con
     this->IntegrateTargetEffectComponents(data, configure, results);
     return;
   }
-
-  const int n = this->NumSubPoints();
-  std::vector<double> sigma(n);
-  for (int i = 1; i <= n; i++) sigma[i - 1] = this->GetSubPoint(data, i)->GetFitCrossSection(results);
-
-  FoldPoint(*this, data, configure, results);
-  const double denominator = this->GetFitCrossSection(results);
-
-  for (int i = 1; i <= n; i++)
-    this->GetSubPoint(data, i)->SetFitCrossSection(results, sigma[i - 1] * this->GetSubPoint(data, i)->GetAnalyzingPower(results));
-  FoldPoint(*this, data, configure, results);
-  const double numerator = this->GetFitCrossSection(results);
-
-  for (int i = 1; i <= n; i++) this->GetSubPoint(data, i)->SetFitCrossSection(results, sigma[i - 1]);
-
+  std::vector<double> sigma(n), product(n);
+  for (int i = 1; i <= n; i++) {
+    sigma[i - 1] = this->GetSubPoint(data, i)->GetFitCrossSection(results);
+    product[i - 1] = sigma[i - 1] * this->GetSubPoint(data, i)->GetAnalyzingPower(results);
+  }
+  const double denominator = FoldValues(*this, data, configure, sigma);
+  const double numerator = FoldValues(*this, data, configure, product);
   this->SetFitCrossSection(results, std::fabs(denominator) > 0.0 ? numerator / denominator : 0.0);
 }

@@ -10,10 +10,14 @@
 #
 # Model: tests/13N cut down to its gas-target capture segment, as in tests/ec_integrals_signature.
 #   (a) the relativistic run differs from the non-relativistic one (teeth, > 1e-4 relative);
-#   (b) the relativistic run given the NON-relativistic intEC.dat warns that the file was computed for different inputs,
-#       recomputes, and equals the fresh relativistic chi2 (1e-6);
+#   (b) the relativistic run given the NON-relativistic intEC.dat refuses it, recomputes, and equals the fresh
+#       relativistic chi2 (1e-6).  Either refusal counts: the count of amplitudes (the relativistic energies move the
+#       points' supports, and on the shared mesh of docs/upgrade/energy_grid.md a support decides how many mesh nodes
+#       a point gets, so the file holds a different number of amplitudes) or the signature;
 #   (c) the non-relativistic run given its own file reuses it without a warning and equals its fresh chi2 (1e-4: the
-#       amplitudes went through the text file and back, 1e-5 here).
+#       amplitudes went through the text file and back, 1e-5 here);
+#   (d) the same stale file cut to the number of amplitudes the relativistic run needs, with its own (non-relativistic)
+#       signature: the count agrees, so only the signature can refuse it; it must, and the chi2 is the fresh one.
 # dev b80b857: (b) already held, because the signature hashes the c.m. energy of every sub-point and the switch moves
 # those energies; the field added to the signature is belt and braces for a grid whose energies coincide.  The
 # regression the old build DOES fail is the in-process node table, tests/pyazr/ec_relativistic_test.py.
@@ -55,6 +59,7 @@ run() {
 chi2() { awk '{ sub(/\r$/, "") } /^Total-Chi-Squared:/ { print $2 }' "$WORK/$1/output/chiSquared.out" 2> /dev/null; }
 rel() { awk -v a="$1" -v b="$2" 'BEGIN { d = (a - b) / b; if (d < 0) d = -d; printf "%.3e", d }'; }
 SIGWARN="was computed for a different integration grid or different inputs"
+COUNTWARN="external capture amplitudes but this calculation needs"
 
 make_variant plain 0
 make_variant relfresh 1
@@ -72,13 +77,24 @@ cp "$WORK/plain/output/intEC.dat" "$WORK/plain/output/intEC.dat.sig" "$WORK/rels
 run relstale "intEC.dat"
 C="$(chi2 relstale)"
 d="$(rel "$C" "$B")"
-if grep -q "$SIGWARN" "$WORK/relstale/run.log" && awk -v d="$d" 'BEGIN { exit !(d <= 1e-6) }'; then ok "(b) the relativistic run refuses the non-relativistic intEC.dat (warned, recomputed) and gives the fresh relativistic chi2 ($C, $d)"; else bad "(b) the relativistic run given the non-relativistic intEC.dat gives $C vs fresh $B ($d); warning present: $(grep -c "$SIGWARN" "$WORK/relstale/run.log")"; fi
+refusals() { grep -c -e "$SIGWARN" -e "$COUNTWARN" "$WORK/$1/run.log"; }
+if [ "$(refusals relstale)" -gt 0 ] && awk -v d="$d" 'BEGIN { exit !(d <= 1e-6) }'; then ok "(b) the relativistic run refuses the non-relativistic intEC.dat (warned: $(grep -o -m1 -e "$SIGWARN" -e "$COUNTWARN" "$WORK/relstale/run.log"); recomputed) and gives the fresh relativistic chi2 ($C, $d)"; else bad "(b) the relativistic run given the non-relativistic intEC.dat gives $C vs fresh $B ($d); refusals printed: $(refusals relstale)"; fi
 
 cp "$WORK/plain/output/intEC.dat" "$WORK/plain/output/intEC.dat.sig" "$WORK/plainreuse/"
 run plainreuse "intEC.dat"
 D="$(chi2 plainreuse)"
 d="$(rel "$D" "$A")"
 if ! grep -q "$SIGWARN" "$WORK/plainreuse/run.log" && awk -v d="$d" 'BEGIN { exit !(d <= 1e-4) }'; then ok "(c) the non-relativistic run reuses its own file without a warning ($D)"; else bad "(c) the non-relativistic run with its own file: $D vs $A ($d); warning present: $(grep -c "$SIGWARN" "$WORK/plainreuse/run.log")"; fi
+
+# (d): the stale file with the count of the fresh relativistic one (its first amplitudes), the non-relativistic signature
+make_variant relsamecount 1
+n="$(grep -c . "$WORK/relfresh/output/intEC.dat")"
+head -n "$n" "$WORK/plain/output/intEC.dat" > "$WORK/relsamecount/intEC.dat"
+cp "$WORK/plain/output/intEC.dat.sig" "$WORK/relsamecount/"
+run relsamecount "intEC.dat"
+E="$(chi2 relsamecount)"
+d="$(rel "$E" "$B")"
+if grep -q "$SIGWARN" "$WORK/relsamecount/run.log" && ! grep -q "$COUNTWARN" "$WORK/relsamecount/run.log" && awk -v d="$d" 'BEGIN { exit !(d <= 1e-6) }'; then ok "(d) a stale file with the right count ($n amplitudes) is refused by its signature alone and recomputed ($E, $d)"; else bad "(d) the stale file with the right count ($n): $E vs fresh $B ($d); signature warning: $(grep -c "$SIGWARN" "$WORK/relsamecount/run.log"), count warning: $(grep -c "$COUNTWARN" "$WORK/relsamecount/run.log")"; fi
 
 if [ "$failures" -ne 0 ]; then echo "$failures check(s) FAILED"; exit 1; fi
 echo "all checks passed"

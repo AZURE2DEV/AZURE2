@@ -100,8 +100,8 @@ V FoldTarget(const KernelParameters &p, const KernelPoint &point, const KernelNo
   if (thinTarget && (point.fallbackOnly || point.fallbackNow)) return TargetFallback<V>(point, nodes, values);
   const int numPoints = nodes.n;
   if (numPoints < 2) return V(0.0);
-  const double eHigh = nodes.Energy(1);
-  const double eLow = nodes.Energy(numPoints);
+  const double eHigh = nodes.High();
+  const double eLow = nodes.Low();
   const double centroid = point.energy;
   const double range = kConvolutionRange;
   auto one = [](double) { return 1.0; };
@@ -132,7 +132,7 @@ V FoldTarget(const KernelParameters &p, const KernelPoint &point, const KernelNo
     }
   }
   auto arealTo = [&](double e) {
-    if (arealCum.empty() || e >= eHigh) return 0.0;
+    if (arealCum.empty() || e >= nodes.Energy(1)) return 0.0;
     for (int j = 1; j < numPoints; j++) {
       double Ea = nodes.Energy(j), Eb = nodes.Energy(j + 1);
       if (e <= Ea && e >= Eb) {
