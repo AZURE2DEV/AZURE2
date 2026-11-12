@@ -243,8 +243,10 @@ section (check 34).
    built by `Unit::RowSetOver`; shared by the readers of one angle as the data give it, `WorkingCopy::BuildRowSets`:
    for a lab angle the c.m. angle and dΩ_lab/dΩ_c.m. of each slot, `experiment::LabAngleAt`, energy_grid.md §4.3),
    held per slot or once by the set's one rule (`RowSet::perSlot`, read through its accessors), checked by
-   `WorkingCopy::CheckReaderRows` (`AZURE_NODE_CHECK`).  A kind with two values per slot (A_y and its weight) folds
-   them in `Unit::FoldSubPoints` and its fold adjoint in `AZUREGrad.cpp`.
+   `WorkingCopy::CheckReaderRows` (`AZURE_NODE_CHECK`).  A kind with two values per slot (`values = 2`: the weight w and
+   the element r, as A_y and its cross section) is folded as (K·(w r))/(K·w) with no further code (`Unit::FoldsRatio`,
+   `RatioPartsAt`; the adjoint in `AZUREGrad.cpp`); only where the weight's cotangent goes is named
+   (`Unit::RatioWeightRoute`).
 
 **A new optical potential term** (`physics/transfer`, `docs/upgrade/transfer.md` §2).
 1. A field in `OpticalPotential` (`physics/include/azure2/physics/transfer/OpticalPotential.h`, with its formula, unit

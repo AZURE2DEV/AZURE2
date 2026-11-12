@@ -2,6 +2,43 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, Phase 5 branch 9, milestone 5) — the ratio fold from the table, a lab angle beyond the kinematic maximum, the deletions (`feature/upgrade-5-observables`)
+
+**Decision on milestone 4** (the director): the D5 moves are accepted; the estimate of `energy_grid.md` 4.3 now has both
+terms, s²(ln σ)′(ln f)′ + ½ s² f″/f, with T2's table.  `FOR_THE_OWNER.md` says it in plain words.
+**Remark 3, done.**  A ratio observable is folded by one branch, (K·(w r))/(K·w), and differentiated by one branch:
+`Unit::FoldsRatio` (a kind with `values = 2` in the table, or a normalised coefficient), `RatioPartsAt` (weight and
+element of a slot), `RatioWeightRoute` (where the weight's cotangent goes).  Same products in the same order: no number
+moves; the folded A_y variant's gradient lines are identical to milestone 4's.
+**A lab angle beyond the kinematic maximum at a node** (the director's question).  With a fitted shift the block holds
+the shift's reach margin; a margin node beyond the kinematic maximum made `Unit::RowSetOver` throw -- uncaught, the run
+aborted (7Li(p,n) at 30° lab, offset prior 0.3 MeV).  Now such a slot holds NaN angle and J; a fold that reads one is a
+failed point (NaN, the engine's warning: "the lab angle is beyond the kinematic maximum at an energy its fold reads (an
+energy shift or the window reaches there); give the point at a c.m. angle, or narrow the window or the shift's
+prior."), a fold that does not is unaffected.  `tests/lab_frame_fold` case (d) (offset 0: finite; -0.32 MeV: NaN with
+the warning; the milestone-4 build aborts).
+**Untested branch.**  The A_y branch of the fold adjoint at a lab angle (the weight's cotangent divided by J_n) is
+unreached: format 3 refuses an analysing power at a lab angle (`E_NOT_BUILT`), so it is untested.
+**Milestone 5, deleted** (nothing else served the sites with an angle): `SlotGroupKey::legendreOrder` and `angle` (a
+differential site on the mesh has no angle, a scalar site has none, THM -- keyed by angle -- is off the mesh and never
+keyed); `GenMatrixFunc::CalculateAmplitudeMatrix` with its `AZURE2_POL_DEBUG` hook, `CalculateCaptureAnalyzingPower`, the
+local-record path of a differential `kValue` site (now a logic_error), `Site::ContractRecord`, `Site::QLabBoost`.  Kept:
+the points' own Legendre rows and Coulomb amplitude (unfolded points), the slots' entrance symmetry, the leaves' angles
+and `SeparateSlotsByAngle` (THM leaves), `Polarization::AmplitudeMatrix` with an angle (the A_y adjoint).  Lines
+(c8f53adf -> here): src +86 -232, include +28 -49, tests +36 -3, docs +40 -18; the deletion commit alone src +8 -152,
+include +12 -44.  `GenMatrixFunc.cpp` 890 -> 756 lines, `UnitLegendre.cpp` 206 -> 202; the ten largest engine files are
+unchanged but `AZUREGrad.cpp` 1253 -> 1234.
+**Checks.**  Whole tree, Brune, against `tab-obs4d` (tag `obs4-tree-m5`): 835 of 835 files identical; quick set, the
+lab-frame projects, `beam_spread_ay`, `lab_frame_fold` x 3 bases identical to `tab-obs4d`; ctest subset 50/50;
+`AZURE_NODE_CHECK` 13N, natural_neon 0 breaches; `scripts/check.sh --quick` on the last commit (see the report).
+**Speed.**  thick_target_resonance again, 5 alternated rounds (load 15-17): evaluation median 300.3 ms (`b-trial35`)
+-> 302.0 ms (+0.6 %); cross sections 97.5 -> 93.9 ms, matrix fill 22.4 -> 23.4, T-matrix ~150 both: the +4 % of
+milestone 4 was noise.
+**Open for THM on the mesh** (branch 10).  THM sites are `kValue` keyed by their angle (they hold σ_HOES at the point's
+angle), off the mesh with a grid of their own that moves with a shift (the last user of `Unit::CalcNodeRows`' own set
+and of the leaves' angle copying).  On the mesh they would need an angle-free record (the HOES amplitudes per node) and
+a reader row for the THM angular window, as A_y has; until then the key has no angle and must not be asked for THM.
+
 ## 2026-11-12 (agent, Phase 5 branch 9, milestone 4) — a point given at a lab angle is folded in the lab (D5); stopped before milestone 5 on a stop condition (`feature/upgrade-5-observables`)
 
 **Merged first** `feature/upgrade-5-followups-1` (only this file conflicted: both sides kept, newest first by commit

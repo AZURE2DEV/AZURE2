@@ -1005,14 +1005,15 @@ equal to today's, k = 8 one digit away): with k = 4 alone it counted as an unfol
 | 9 | `observables` | O_n = Legendre coefficients, elastic amplitudes, A_y numerators per (E_n, reaction); angle rows in the kernels; amplitude filters on dσ/dΩ (M8); lab-frame per-node fold if D5 | `src/GenMatrixFunc.cpp`, `src/UnitLegendre.cpp`, `src/PolarizationFunc.cpp`, `experiment/src/Kernel*.cpp` | per-unit angular sums, per-unit Legendre and Coulomb tables | rounding for the reordered angular sums; physics for D5 | ~1,200, 16–24 h | after 7 and after the pathway branch; with 8 |
 | 10 | THM on the grid | σ_HOES at E_n, the THM kernel (`THM.md` §1–2) | `src/THMMatrixFunc.cpp`, `src/Thm*.cpp` | THM sub-point folds, THM-only mapping | quadrature | per `THM.md` | after 7 and 9 |
 
-**Branch 9 (`feature/upgrade-5-observables`), milestones 1–4 done (2026-11-12); milestone 5 (deletions) not started.**
+**Branch 9 (`feature/upgrade-5-observables`), done (2026-11-12, milestones 1–5).**
 A site holds the observables of its reaction at E_n without an angle (`include/SiteObservable.h`: Legendre
 coefficients, the elastic amplitudes, A_y's coefficients); the readers bring the angle in shared row sets
-(`include/RowSet.h`), and the sharing key holds the reaction, not the data set.  D5 is in (section 4.3): a point given
-at a lab angle is folded with θ_c.m.(E_n; θ_lab) and J(E_n; θ_lab) per node; in the tree only T2 moves (≤ 2.6 × 10⁻⁵).
-Left for milestone 5: the per-unit angular sums that only the per-angle sites used (`UnitLegendre.cpp`,
-`PolarizationFunc.cpp`, `GenMatrixFunc.cpp`), `CalculateCaptureAnalyzingPower`, the local-record path of differential
-kValue sites, `legendreOrder` and `angle` of the key (THM's).
+(`include/RowSet.h`), and the sharing key holds the reaction, not the data set, and no angle or Legendre order.  D5 is
+in (section 4.3): a point given at a lab angle is folded with θ_c.m.(E_n; θ_lab) and J(E_n; θ_lab) per node; in the
+tree only T2 moves (≤ 2.6 × 10⁻⁵).  A ratio observable (A_y, a normalised coefficient) is folded by one branch read
+from the table.  Deleted: the per-site differential sums, the key's angle and order, `CalculateAmplitudeMatrix`,
+`CalculateCaptureAnalyzingPower`, the local-record path of differential scalar sites.  THM stays keyed by angle, off
+the mesh (branch 10).
 
 **Branch 4, done (2026-11-11, `feature/upgrade-5-layer-yield`).** The kernel is today's target integration
 (`src/TargetFold.cpp`) not divided by N for an effect with `TargetEffect::IsLayerYield` (an effect of its own per data
