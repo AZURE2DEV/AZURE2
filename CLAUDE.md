@@ -474,7 +474,7 @@ Reference commits: `git show --stat 062b1bfe` (segment keyword `shiftfngroup`), 
 export SRC_TESTS=$PWD/tests WORK=<scratch> JOBS=<runs at once, one thread each; default 1>
 export AZURE2_COULOMB_TABLE=<the table file the reference used>  # required: without it every charged channel moves
 tools/runall.sh <absolute path of the reference engine> tab-ref   # once per reference
-tools/runall.sh <absolute path of the new engine> tab-new         # a fresh tag for every run
+tools/runall.sh <absolute path of the new engine> tab-new         # a fresh tag for every run (REPLACE_TAG=1 to reuse one)
 tools/cls.sh tab-ref tab-new; grep '^## ' $WORK/cls-tab-new.tsv   # "## <basis>: N files, N identical" when nothing moved
 ```
 Menu 1, three bases (Brune, `--no-brune`, `--use-park`); the outputs land in `$WORK/cmp/<basis>/<tag>/.res-<folder>/

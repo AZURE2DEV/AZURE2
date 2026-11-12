@@ -644,10 +644,12 @@ void AMatrixFunc::AddAInvMatrixElement(int jGroupNum, int lambdaNum, int muNum, 
  * interference sum + elastic Coulomb interference).
  */
 
+/// A gate of PointTBar no project reaches (why in the message): a broken invariant, never a fallback point.
+[[noreturn]] static void UnreachableGate(const char *w) { throw std::logic_error(std::string("PointTBar: ") + w); }
 /*!
  * Cross section -> T: the T-matrix cotangents of one point's observable
  * (AMatrixFunc.h).  Reads the T-matrix held by this object and the
- * angle-dependent quantities of `point`.
+ * angle-dependent quantities of `point`.  False: the finite-difference fallback (park_chi2_fallback_test.cpp).
  */
 bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double fitBar, TMatrixCotangent &bar,
                             int xsComponent, bool ayCrossSection, const Site &rows, int rowSlot) {
@@ -657,13 +659,13 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
 
   // --- Common gating. ---
   if (configure().paramMask & Config::USE_RMC_FORMALISM) return false;
-  if (point->IsAngularDist() && !angles->IsCoefficient()) return false;  // angular-dist test points
+  if (point->IsAngularDist() && !angles->IsCoefficient()) UnreachableGate("an extrapolation's computed coefficients");
   // xsComponent < 0 asks for A_0 = sigma_int / 4 pi of an angular-distribution point: the angle-integrated
   // cotangent scaled by 1 / 4 pi (GradTargetEffectAdjoint, normalised coefficients under a target effect).
   const bool a0Mode = (xsComponent < 0);
   if (a0Mode) xsComponent = 0;
-  // E1/E2 component selection only applies to the angle-integrated capture XS.
-  if (xsComponent != 0 && (point->IsDifferential() || point->IsPhase())) return false;
+  if (xsComponent != 0 && (point->IsDifferential() || point->IsPhase()))  // field multipole: Quantities.cpp
+    UnreachableGate("an E1/E2 part exists for sigma, sfactor and modified_sfactor only, not differential or phase");
 
   int aa = compound()->GetPairNumFromKey(point->GetEntranceKey());
   int exitPairNum = compound()->GetPairNumFromKey(point->GetExitKey());
@@ -673,22 +675,20 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
   const bool isBetaDelayed = (compound()->GetPair(aa)->GetPType() == 20);
   if (isBetaDelayed && xsComponent != 0) return false;
 
-  // Active-level compaction unsupported here: require every level of every
-  // in-R-matrix JGroup to itself be in the R matrix (so original idx == active;
-  // ClearMatrices records it).
-  if (!all_levels_active_) return false;
+  // Active-level compaction unsupported here (original idx == active; ClearMatrices records it).
+  if (!all_levels_active_) UnreachableGate("a level outside the R matrix: every level read from <levels> is in it");
 
-  // The exit of the point's exit pair (CalculateTMatrix has refused a point without one).
+  // The exit of the point's exit pair (CalculateTMatrix, called for the point's group first, throws without one).
   const azure2::EntrancePathways &P = compound()->Pathways().Entrance(aa);
   const int ir = P.ExitOf(exitPairNum);
-  if (!ir) return false;
+  if (!ir) UnreachableGate("no exit for the point's pair, after CalculateTMatrix of its group");
   const azure2::ExitRow &theDecay = P.exits[ir - 1];
 
   const double geom = point->GetGeometricalFactor();
   const double i1i2 = compound()->GetPair(aa)->GetI1I2Factor();
   const bool isDiff = point->IsDifferential();
   const bool isPhase = point->IsPhase();
-  if (isPhase && aa != exitPairNum) return false;  // phase output is for elastic only
+  if (isPhase && aa != exitPairNum) UnreachableGate("an inelastic phase shift (validator and Build refuse it)");
   // The cross section carried by an analyzing-power point is the differential
   // one at the point's angle (GenMatrixFunc computes it before A_y and a
   // target-effect sub-point keeps it); anything else is not supported.
@@ -799,7 +799,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
     //        model = (geom i1i2 / 100) sum (2J+1) 2 Re T(k,m) over the diagonal pathways,
     //      so d(model)/dRe T = (geom i1i2 / 100) 2 (2J+1), d(model)/dIm T = 0, and the cotangent (dL/dRe + i dL/dIm)
     //      is real. ----
-    if (xsComponent != 0 || isDiff) return false;
+    if (xsComponent != 0 || isDiff) UnreachableGate("sigma_total is angle-integrated and takes no multipole");
     for (int k = 1; k <= nK; k++) {
       if (P.Group(theDecay, k).CrossSpin()) continue;
       for (int m = 1; m <= P.Group(theDecay, k).num_internal; m++) {
@@ -825,7 +825,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
     //      applies, so the whole derivative is a contraction against those same
     //      coefficients. The Coulomb amplitude carries no parameter dependence
     //      and drops out. ----
-    if (compound()->GetPair(aa)->GetPType() != 0) return false;
+    if (compound()->GetPair(aa)->GetPType() != 0) UnreachableGate("an A_y needs a particle entrance (Build refuses)");
 
     if (compound()->GetPair(exitPairNum)->GetPType() == 10) {
       // ---- Capture analyzing power (Seyler and Weller, Phys. Rev. C 20
@@ -977,7 +977,8 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
     const bool coef = angles->IsCoefficient();
     const int kOrd = coef ? angles->GetCoefficientOrder() : -1;
     const double sigmaInt = coef ? 4.0 * pi * point->GetAngDistA0(results) : 0.0;
-    if (coef && (point->IsUPOS() || !(sigmaInt > 0.0))) return false;
+    if (coef && point->IsUPOS()) UnreachableGate("UPOS coefficients: quantity legendre takes no secondary_gamma");
+    if (coef && !(sigmaInt > 0.0)) return false;  // a vanishing integrated cross section (parameter values)
     const double dfac = coef ? (angles->GetCoefficientAbsolute() ? 1.0 / rtFactor : 4.0 * pi / (rtFactor * sigmaInt)) : 0.0;
     auto pl = [&](int l) -> double { return coef ? ((l == kOrd) ? dfac : 0.0) : angles->RowP(rowSlot, l); };
 
@@ -1026,8 +1027,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
       double legP = pl(lOrder);
       const azure2::SpinGroupRow &kg = P.Group(theDecay, K);
       {
-        if (!((itf.r1 == 'R' || itf.r1 == 'E') && (itf.r2 == 'R' || itf.r2 == 'E'))) return false;
-        const std::string type{itf.r1, itf.r2};  // "RR","ER","RE","EE"
+        const std::string type{itf.r1, itf.r2};  // "RR","ER","RE","EE": BuildPathwayTable writes 'R' or 'E' only
         char rad1 = type[0], rad2 = type[1];  // 'R' internal, 'E' external
         int m1 = itf.m1, m2 = itf.m2;
 

@@ -1,6 +1,7 @@
 #ifndef AZURE2_SHIFTEDFOLD_H
 #define AZURE2_SHIFTEDFOLD_H
 
+#include <functional>
 #include <vector>
 
 #include "MeshPlanner.h"
@@ -75,16 +76,27 @@ struct Results;
  * 5. The gradient.  The column of a shift parameter of a folded segment is the central difference of the fold on
  *    the fixed nodes (RefoldShiftedSegments): at nu +- h the points move (their centre, support, translated stopping),
  *    and each point is folded again from the node values already computed at nu with the same fold (FoldValues: one
- *    implementation of each fold); no node is recomputed and no level matrix solved.  Kinds of shift enter through
+ *    implementation of each fold); no node is recomputed and no level matrix solved.  The column does not plan again,
+ *    so its step keeps every moved support inside the planned nodes (InsideShiftStep: the step halved; failing that,
+ *    the caller's path that plans for each side): a reach below the step, or a shift near the edge of its window, made
+ *    ShiftedFoldNodes throw inside the parallel refold before.  Kinds of shift enter through
  *    Delta_i(nu) only.  An analytic dK/dE0 is not within reach of this branch: it would need every kernel's energy
  *    arithmetic (its centre in sigma(E0), the clip limits, the Gaussian, the depth window) on a dual type, the kernels'
  *    folds beyond their centre; open for every kernel.  A segment given at a lab angle is no exception: its node
  *    values and its row sets do not depend on the shift, only its points' own Jacobians.
  *
- * A support narrower than MeshZeroWidth() (a layer losing less than 1 eV) gets a single node from the planner, and
- * the fold of a single node is the kernels' thin limit (Kernel::thinLimit).  A shifted point with a reach has a
- * planned support of width 2 R_i, hence more nodes, and its fold reads at least two of them; a fixed shift of such a
- * point keeps the single node and the thin limit.
+ * A support narrower than MeshZeroWidth() (a layer losing less than 1 eV) gets a single node from the planner, its
+ * upper edge, and the fold of a single node is the kernels' thin limit (Kernel::thinLimit).  The same holds for a
+ * shifted point whose planned support [a_i + c_i - R_i, b_i + c_i + R_i] is narrower than MeshZeroWidth(): a fixed
+ * shift (R_i = 0, the node at the moved support's upper edge b_i + Delta_i: the unshifted thin limit at the shifted
+ * energy), or a varied shift without a prior on a layer below about 1/7 eV (R_i = 3 (b_i - a_i)).  Its fold is the thin
+ * limit at the node b_i + c_i + R_i whatever nu: the moved support lies inside the planned one, so the node is at most
+ * the planned support's width (below 1 eV) above the moved support, and the fold is off by at most sigma' x 1 eV
+ * (ShiftedFoldNodes refuses a moved support that reaches farther than MeshZeroWidth() below the node).  Within one
+ * reach the fold does not change with nu; at a re-plan (nearly every step of a fit, the reach being a fraction of an
+ * eV) it steps by sigma' x 2 R_i, so chi^2(nu) is a staircase of that size, which a numerical second derivative of
+ * MIGRAD sees (tests/thin_layer_limit; the follow-ups' report has the numbers).  A shifted point with a wider planned
+ * support has more nodes, and its fold reads at least two of them.
  *
  * Not here: THM (off the mesh, its sub-points still move rigidly: Segment::MoveOwnGridSlots, branch 10); a point
  * with a uniform grid of its own (useAdaptiveGrid off), which moves rigidly as well; unfolded shifted points (an exact
@@ -126,6 +138,16 @@ struct ShiftedNodes {
 /// For a point on the shared mesh whose data set has an energy shift (Unit::SubGridSpec::shifted); throws if the moved
 /// support leaves the point's planned nodes (a planning defect: question 2 keeps it inside).
 ShiftedNodes ShiftedFoldNodes(const Unit &point, const WorkingCopy &data);
+
+/// Whether the moved support of every point of `segments` on the shared mesh with an energy shift lies inside its
+/// planned nodes, the condition of ShiftedFoldNodes (question 5: a shift column moves the points without a re-plan).
+bool ShiftedSupportsInside(const WorkingCopy &data, const std::vector<const Segment *> &segments);
+/// The step of a central difference of a shift parameter at x0 that keeps the points of the data sets
+/// `segmentNumbers` (1-based) inside their planned nodes on both sides (question 5): h, halved until move(x0 +- step)
+/// does; 0 when 40 halvings do not (the caller then takes a path that plans again).  move(v) sets the parameter to v
+/// and moves the points; it is left at x0.
+double InsideShiftStep(const WorkingCopy &data, const std::vector<int> &segmentNumbers, double x0, double h,
+                       const std::function<void(double)> &move);
 
 /// The stopping the target kernel reads at slots [first, first + count) of a shifted point: the target's stopping at
 /// each node's energy minus the point's c.m. shift (question 3), held at the nominal support's lower edge for an outer

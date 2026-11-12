@@ -355,6 +355,15 @@ bool ReadObservable(Context &c, const ValidatedRecord &r, const std::string &ang
   }
   if (q == "analyzing_power") {
     spec.observable = O::AnalyzingPower;
+    // The engine's analysing power is that of a polarised spin-1/2 projectile on a target; a beta decay or a photon
+    // entrance has none (the label rule "spin" lets a beta through: its letter is no d, a or g).
+    const PairInfo *entrance = c.Pair(spec.entranceKey);
+    if (entrance && entrance->kind != 0) {
+      c.Error(codes::kReactionNotAllowed, r, "reaction",
+              "an analyzing power needs a particle entrance (a polarized beam on a target); entrance pair " +
+                  std::to_string(spec.entranceKey) + " is " + (entrance->kind == 20 ? "a beta decay" : "a photon pair"));
+      return false;
+    }
     if (angleFrame != "cm") {
       c.Error(codes::kNotBuilt, r, "", "an analyzing power at a lab angle: this engine computes it at c.m. angles");
       return false;

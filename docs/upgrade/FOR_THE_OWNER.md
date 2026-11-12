@@ -368,12 +368,23 @@ observables without the angle (integrated cross section, Legendre coefficients, 
 power's coefficients: one table of kinds), and a data point's angle enters only in its own row. Twenty angles at one
 energy share one sum over pathways, and two experiments on the same reaction share everything up to the row. Numbers
 moved by rounding only, with one named physics change: a point given at a lab angle is folded in the lab (the list
-of behaviour changes above; T2 moves by 2.6 × 10⁻⁵). Measured: the project with the most angles per energy (`beam_profile_kernel`) runs in 16 s instead of 5 min 27 s and in 134 MB instead of 913 MB at one thread, and the T2 fits are about 30 % faster. A new observable is six named places
-(`CLAUDE.md`, the recipe), a new ratio observable needs no fold code.
+of behaviour changes above; T2 moves by 2.6 × 10⁻⁵). Measured: the project with the most angles per energy
+(`beam_profile_kernel`) runs in 16 s instead of 5 min 27 s and in 134 MB instead of 913 MB at one thread, and the T2
+fits are about 30 % faster. A new observable is six named places (`CLAUDE.md`, the recipe), a new ratio observable
+needs no fold code.
 
-In work now: Trojan-horse data on the shared mesh (the last kind of data with energy grids of its own), and a second
-batch of small follow-ups (thin layers with an energy shift, unknown command-line options, a limit on the size of a
-mesh). Merged in the earlier batch: one generic kind of fit parameter for the parameters of
+**A second batch of small corrections (merged 2026-11-12).** Behaviour you may meet: a target layer thinner than 1 eV
+is calculated with an energy shift on its data too; a fit with the analytic gradient or least squares and a free
+energy shift on a thin layer no longer ends the program; an unknown command-line option is an error (exit code 2),
+`--use-nlopt` in a build without NLopt included; an analysing power on a β-delayed or photon entrance is refused
+when the file is read (it was calculated as zero); a project whose energy mesh would need more than a million nodes
+(a wide prior on the energy shift of a very thin layer) is refused with a message that names the data set and what to
+change, where it ran out of memory before. No number of the test tree moved. Known and left for a later branch: on
+layers below 1 eV the fitted error of an energy shift is too small (χ² is a staircase in the shift there), and the
+cost of a shifted data set grows with the width of the shift's prior over the width of the layer.
+
+In work now: Trojan-horse data on the shared mesh (the last kind of data with energy grids of its own). Merged in the
+earlier batch: one generic kind of fit parameter for the parameters of
 apparatus effects (see "How to add a feature now").
 
 **Do the checks still test what they say? (merged 2026-11-11, evening.)** A regression check that edits a project's

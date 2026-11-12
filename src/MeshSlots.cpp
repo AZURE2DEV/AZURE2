@@ -61,7 +61,11 @@ MeshPoint QueueMeshPoint(std::vector<DataSet::NucleusMesh> &meshes, Unit &point,
   if (std::find(mesh.anchorFrames.begin(), mesh.anchorFrames.end(), frameKey) == mesh.anchorFrames.end())
     mesh.anchorFrames.push_back(frameKey);
   spec.lowHard = lowHard;
-  const azure2::MeshSupport nominal = NominalMeshSupport(spec, term.GetSegmentKey());
+  azure2::MeshSupport nominal = NominalMeshSupport(spec, term.GetSegmentKey());
+  // for a message: the data set's name (its parameters are "<name>.shift...") and the point's nominal lab energy
+  const std::string shiftName = term.segment->GetParameterNames().energyShift;
+  nominal.label = "data set '" + shiftName.substr(0, shiftName.find(".shift")) + "', the point at E_lab " +
+                  std::to_string(point.GetOriginalEnergy()) + " MeV";
   spec.mesh = (int)m;
   spec.meshSupport = (int)mesh.supports.size();
   mesh.supports.push_back(spec.shifted ? PlannedShiftSupport(nominal, spec, spec.startShift) : nominal);
@@ -77,6 +81,7 @@ azure2::MeshSupport NominalMeshSupport(const Unit::SubGridSpec &spec, int dataSe
   support.settings.coreWidths = spec.resonanceWidthMultiplier;
   support.lowHard = spec.lowHard;
   support.dataSet = dataSet;
+  support.kernelWidth = spec.startEnergy - spec.endEnergy;
   return support;
 }
 
