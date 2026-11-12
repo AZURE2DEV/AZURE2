@@ -2,6 +2,47 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, Phase 5 branch 9, milestone 4) — a point given at a lab angle is folded in the lab (D5); stopped before milestone 5 on a stop condition (`feature/upgrade-5-observables`)
+
+**Merged first** `feature/upgrade-5-followups-1` (only this file conflicted: both sides kept, newest first by commit
+time); quick set x 3 identical to `tab-obs3`, `beam_spread_ay` byte-identical to `tab-obs3`'s `target_effect_ranges`,
+`thin_layer_limit` to `tab-small1c`.
+**Review remarks.**  (1) Check 37 of the consistency test: every field of `TermSettings` is compared in
+`SameObservable` or named in `kReaderOnlyTermSettings` beside it (shown failing with a field added and with `ic`
+dropped).  (2) Adjoint solves per gradient (`AZURE_PROFILE=1`, first gradient of a `--use-gradient` fit, 1 thread,
+`b-trial35` -> this branch): back-propagations T2 2,959 =, 13N 5,327 = (scalar route; 48,531 = on the Jacobian route),
+hybrid_potential 2,472 =; `PointTBar` calls on the scalar route hybrid_potential 112,051 -> 4,884.  (3) not done (the
+A_y and normalised-coefficient folds are still named in `Unit::FoldSubPoints` and `GradTargetEffectAdjoint`).
+(4) Done: one rule for per-slot factors (`RowSet::perSlot`: angle, P_L, Y, P^1; f_C and J always per slot).
+**D5** (`energy_grid.md` 4.3, status there).  A reader whose term's angle is given in the lab
+(`experiment::AngleIsLab`) shares a row set with every reader of its lab angle; the set holds theta_cm(E_n; theta_lab)
+and J(E_n; theta_lab) per slot (`experiment::LabAngleAt`: `ConvertRow` at `BeamLabFromCM` of the node -- a slot's
+"lab energy" field holds its c.m. energy, so it is not read), the contracted value is divided by J_n, the fold is
+multiplied by the point's own frame Jacobian (`Unit::LabFoldFactor`).  Reference leaves the same
+(`FoldReferenceAtPoint`); fold adjoint and A_y adjoint follow.  `Unit::CalcNodeRows` (a set of one's own) is left to
+points with a grid of their own whose slots move with a shift.  A node beyond the kinematic maximum is refused.
+**Moved**: whole tree, Brune, against `tab-obs3` (`work/obs4/cls-tree-m4.tsv`): T2 only (7 files), up to 2.56e-5 of a
+model value; quick set + lab-frame projects x 3 bases the same.  Row sets: T2 60 -> 2, hybrid_potential 2 = 2.
+**Brute force** `tests/lab_frame_fold`: per node 2.2e-5 (quadrature), frozen angle 2.2e-2; milestone 3 fails it.
+**Stop condition met** (not decided here): at 6 of T2's 60 points the move exceeds ten times 1/2 Delta^2 |(ln JP)''|
+(at most 508x at a point where (ln f)'' nearly vanishes, 2.9e-8 against 5.8e-11); the formula lacks the term
+sigma^2 (ln sigma)'(ln f)', which with the second-order term reproduces the 150 deg moves to 0.65-1.12.  Every move is
+below 1/1900 of the datum's error.  Milestone 5 not started because of it.
+**Checks**: build 0 warnings; consistency; ctest subset 50/50 (predictions.txt: the new project's 4 lines);
+check.sh of angle_mapping, convolution_unify, data_covariance, ratio_to_rutherford, relativistic,
+shift_subpoint_angle, target_density, lab_frame_fold; AZURE_NODE_CHECK 0 differ (T2, hybrid_potential, lab_fold);
+AZURE_GRAD_CHECK as milestone 3 (T2 5.23e-6, hybrid_potential 7.25e-7), lab_fold with a free level 2.2e-6, 2.95e-2 with
+the adjoint's J factor dropped (injected once); 1 vs 3 threads identical (T2, 13N, hybrid_potential, lab_fold).
+**Measured** (1 thread, 3 alternated runs, medians, menu 1, `b-trial35` -> this branch; units / evaluation ms / wall s
+/ peak MB; the machine was loaded, load average 10-13): T2 23,673 -> 18,313 / 50.9 -> 48.7 / 0.30 -> 0.26 / 136 -> 129;
+13N 3,825 -> 2,972 / 25.8 -> 23.0 / 8.02 -> 7.99 / 121 -> 119; natural_neon 50,813 = / 418.7 -> 419.4 / 1.34 -> 1.39 /
+340 -> 342; thick_target_resonance 28,924 = / 219.6 -> 228.5 (+4.1 %, alone; +5.0 % beside another run; the milestone-3
+binary measured 372 against 247 in a third round: noise of this load) / 0.83 -> 0.84 / 271 -> 272; hybrid_potential
+4,886 -> 2,473 / 26.7 -> 23.7 / 1.18 -> 1.16 / 106 -> 102; beam_profile_kernel 83,764 -> 3,196 / 467 -> 89 / 369 -> 16.8
+/ 891 -> 131; lab_frame_fold 872 = / 1.1 -> 1.2 / 0.14 -> 0.15 / 95 =.
+**Open.**  The director's decision on the estimate; milestone 5 (deletions) and remark 3; an A_y at a lab angle is
+refused by format 3, so D5's A_y path is not reached by any project.
+
 ## 2026-11-12 (agent, Phase 5 branch 9, milestone 3) — shared angular rows, A_y without an angle, sites shared across data sets (`feature/upgrade-5-observables`)
 
 **Row sets** (`include/RowSet.h`).  The readers of one block of angle-free slots that see them under one angle (same

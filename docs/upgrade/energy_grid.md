@@ -726,6 +726,31 @@ kernel row can carry them per node: m_i^lab = Σ_n w_in Σ_L B_L(E_n) P_L(cos θ
 This moves numbers by an amount of order ½ (Δ_window)² |d² ln(J P)/dE²| (inferred, small for keV windows; measured
 when implemented).
 
+**Status (2026-11-12, observables branch, milestone 4): done, measured.**  A point whose data are given at a lab angle
+(`experiment::AngleIsLab`: lab-frame differential data with a particle or photon exit) reads its slots through a row
+set keyed by the lab angle (`include/RowSet.h`, `WorkingCopy::BuildRowSets`); the set holds θ_c.m.(E_n; θ_lab) and
+J(E_n; θ_lab) per slot from `experiment::LabAngleAt` (the one conversion, `ConvertRow`, at the beam's lab energy of the
+node), the contracted value of slot n is O_n(θ_c.m.,n)/J_n, and the point's model is J_i Σ_n w_n O_n/J_n
+(`Unit::LabFoldFactor`), which its comparison divides by J_i.  A ratio's reference leaves (Rutherford, Mott, a table)
+are folded the same way.  A shift no longer moves the angle of a folded point; readers of one lab angle at all energies
+share one set (T2: 60 sets → 2).
+- **Brute force** (`tests/lab_frame_fold`): 7Li(p,n) at 30° lab, a 300 keV rectangular resolution at 2.3 MeV, against
+  Simpson on 301 unfolded points: 2.2 × 10⁻⁵ (the fold's quadrature, second order: 3.6 × 10⁻⁴, 2.2 × 10⁻⁵,
+  1.4 × 10⁻⁶ at 50, 200, 800 points); with the angle frozen at the nominal energy 2.2 × 10⁻².
+- **What moves** (whole tree, Brune, against `tab-obs3`; quick set and the lab-frame projects in three bases): T2 only
+  (s02 at 90°, s03 at 150° lab, 2 keV beam spread, Δ = 5σ = 9.4 keV c.m.): model values by at most 2.56 × 10⁻⁵
+  (150°, E_c.m. 0.234 MeV; the datum's error there 4.9 × 10⁻²), χ² by 1.9 × 10⁻⁵.  Elastic data (hybrid_potential,
+  angle_mapping, target_density) move by rounding only: their θ_c.m.(θ_lab) and J do not depend on the energy without
+  relativistic kinematics.
+- **The estimate above is incomplete.**  For a kernel of second moment σ² around E_i the move is
+  σ² [(ln σ)′ (ln f)′ + ½ f″/f] with f(E) = W_{E_i}(θ_c.m.(E))/J(E): the first term, the slope of the cross section
+  across the window times the slope of the angular factor, is missing from ½Δ²|(ln f)″|.  At 150° the full expression
+  reproduces the 30 moves to 0.65–1.12; ½Δ²|(ln f)″| is exceeded more than tenfold at 6 of T2's 60 points, where the
+  first term dominates (stop condition of the brief, for the director).  At 90° near the 0.9 MeV resonance (moves
+  ≤ 2.7 × 10⁻⁶) the moment expansion fails (the resonance is not smooth on the window).  Script and table:
+  `work/obs4/scripts/d5_estimate.py`.
+- An analysing power is given at c.m. angles only (format 3 refuses a lab angle), so D5's A_y path is not reached.
+
 ### 4.4 The gate
 
 Stated as: "every per-point pull of a calculation agrees with the reference to 8 ulp (relative 2 × 10⁻¹⁵); every
@@ -959,6 +984,15 @@ equal to today's, k = 8 one digit away): with k = 4 alone it counted as an unfol
 | 8 | `shift-kernel` | folded shifted data: the kernel moves on fixed nodes, ∂K/∂ν analytic; unfolded: exact node, ∂m/∂ν from dO/dE | `src/ShiftFrames.cpp`, `src/HandOver.cpp`, `src/AZURECalc.cpp` (`FillShiftColumns` for folded segments goes) | the rigid move of sub-points, shift tables of sub-points | quadrature; χ² smooth in shifts | ~400, 6–8 h | after 7; with 9 |
 | 9 | `observables` | O_n = Legendre coefficients, elastic amplitudes, A_y numerators per (E_n, reaction); angle rows in the kernels; amplitude filters on dσ/dΩ (M8); lab-frame per-node fold if D5 | `src/GenMatrixFunc.cpp`, `src/UnitLegendre.cpp`, `src/PolarizationFunc.cpp`, `experiment/src/Kernel*.cpp` | per-unit angular sums, per-unit Legendre and Coulomb tables | rounding for the reordered angular sums; physics for D5 | ~1,200, 16–24 h | after 7 and after the pathway branch; with 8 |
 | 10 | THM on the grid | σ_HOES at E_n, the THM kernel (`THM.md` §1–2) | `src/THMMatrixFunc.cpp`, `src/Thm*.cpp` | THM sub-point folds, THM-only mapping | quadrature | per `THM.md` | after 7 and 9 |
+
+**Branch 9 (`feature/upgrade-5-observables`), milestones 1–4 done (2026-11-12); milestone 5 (deletions) not started.**
+A site holds the observables of its reaction at E_n without an angle (`include/SiteObservable.h`: Legendre
+coefficients, the elastic amplitudes, A_y's coefficients); the readers bring the angle in shared row sets
+(`include/RowSet.h`), and the sharing key holds the reaction, not the data set.  D5 is in (section 4.3): a point given
+at a lab angle is folded with θ_c.m.(E_n; θ_lab) and J(E_n; θ_lab) per node; in the tree only T2 moves (≤ 2.6 × 10⁻⁵).
+Left for milestone 5: the per-unit angular sums that only the per-angle sites used (`UnitLegendre.cpp`,
+`PolarizationFunc.cpp`, `GenMatrixFunc.cpp`), `CalculateCaptureAnalyzingPower`, the local-record path of differential
+kValue sites, `legendreOrder` and `angle` of the key (THM's).
 
 **Branch 4, done (2026-11-11, `feature/upgrade-5-layer-yield`).** The kernel is today's target integration
 (`src/TargetFold.cpp`) not divided by N for an effect with `TargetEffect::IsLayerYield` (an effect of its own per data
