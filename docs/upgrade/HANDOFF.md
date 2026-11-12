@@ -2,6 +2,33 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, Phase 5 branch 7 part 2, first milestone) — the planner of the shared mesh, alone (`feature/upgrade-5-mesh-planner`)
+
+**Done.** `include/MeshPlanner.h`, `src/MeshPlanner.cpp`: `PlanMesh(anchors, supports, tails)`, a pure function (no
+engine object) that plans one mesh per compound nucleus from quantized anchors in E_x, one support per folded point with
+its data set's settings, and the tail constants; `MeshChangedRegion` gives the stretches whose nodes can move when
+anchors change (for the hand-over of decision D1). Rules (header comment, `energy_grid.md` §2.8): smooth nodes n·L on a
+nested power-of-two ladder from E_x = 0 (L = today's smooth step quantized down); core and tail nodes by today's formulas
+from each anchor; an interval of a lattice kept unless one other lattice, active over all of it, is finer over all of it
+(than half its length between a ladder and an anchor's lattice, as today's grid keeps both in that band). Not wired into
+the engine; no engine file changed.
+Tools: `tests/upgrade/node_count --plan [--detail]` (the planner on every folded project's supports and anchors as the
+set-up has them), `tests/upgrade/mesh_fold_check [--with-edges]` (a Breit–Wigner folded on today's grids and on the
+mesh against a converged reference).
+
+**Verified** (build `work/b-mesh`, logs `work/mesh/`): build 0 warnings; `upgrade_mesh_planner` 700,675 checks, 0
+failures (never coarser than today's step against `AdaptiveIntegrationGrid` on named and 200 random cases, today's
+lattice nodes kept bit for bit, shared, order-independent, local), shown failing with the ladder one notch too coarse;
+`ctest -R "upgrade_plan|upgrade_node|consistency|mesh"` passed; T1, T2, 13N in three bases: every output file identical
+to `tab-trial27` (run.log differs only in the progress bars). Measured: no folded project's mesh above 1.04 × today's
+distinct energies (T2 0.54, `natural_neon` 0.37); the fold error on the mesh not larger than today's in 34 of 36 cases,
+the two others (+0.3 %, +1 % of an error of 3 × 10⁻⁵) from clipping the edge intervals (equal with the edges as nodes).
+
+**Open.** The support's edges as nodes where a support ends at a physical floor (thick target at 1 keV, THM below
+threshold); anchors quantized in E_x instead of each pair's c.m. (numbers move by the quantization); the ladder's cost
+(1.15–1.80 × the smooth nodes); `MeshChangedRegion` is wide when a nucleus has a coarse smooth step. Milestone 2 (the
+engine on the mesh) waits for the node-storage branch.
+
 ## 2026-11-12 (agent, Phase 5 branch 7 part 2, stopped early) — every slot on a node table; energy tasks by node (`feature/upgrade-5-grid-readers`)
 
 **Done.**

@@ -39,6 +39,10 @@ add_test(NAME physics_coulomb_gsl_crosscheck COMMAND coulomb_gsl_crosscheck_test
 add_executable(mesh_planner_test mesh_planner_test.cpp)
 target_link_libraries(mesh_planner_test PRIVATE AZURE2Core)
 add_test(NAME upgrade_mesh_planner COMMAND mesh_planner_test)
+# A measuring tool (mesh_fold_check.cpp): a Breit-Wigner folded on today's grids and on the planned mesh against a
+# converged reference; no test runs it.
+add_executable(mesh_fold_check mesh_fold_check.cpp)
+target_link_libraries(mesh_fold_check PRIVATE AZURE2Core)
 
 # The per-stage channel table (docs/upgrade/channel_table.md): rows depend on their exact key only, not on the order,
 # the duplicates or the thread count; a previous table is reused only for the same system.
