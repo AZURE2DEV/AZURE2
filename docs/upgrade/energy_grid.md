@@ -742,13 +742,33 @@ share one set (T2: 60 sets → 2).
   (150°, E_c.m. 0.234 MeV; the datum's error there 4.9 × 10⁻²), χ² by 1.9 × 10⁻⁵.  Elastic data (hybrid_potential,
   angle_mapping, target_density) move by rounding only: their θ_c.m.(θ_lab) and J do not depend on the energy without
   relativistic kinematics.
-- **The estimate above is incomplete.**  For a kernel of second moment σ² around E_i the move is
-  σ² [(ln σ)′ (ln f)′ + ½ f″/f] with f(E) = W_{E_i}(θ_c.m.(E))/J(E): the first term, the slope of the cross section
-  across the window times the slope of the angular factor, is missing from ½Δ²|(ln f)″|.  At 150° the full expression
-  reproduces the 30 moves to 0.65–1.12; ½Δ²|(ln f)″| is exceeded more than tenfold at 6 of T2's 60 points, where the
-  first term dominates (stop condition of the brief, for the director).  At 90° near the 0.9 MeV resonance (moves
-  ≤ 2.7 × 10⁻⁶) the moment expansion fails (the resonance is not smooth on the window).  Script and table:
-  `work/obs4/scripts/d5_estimate.py`.
+- **The estimate, with both terms** (the director, 2026-11-12, replacing the one-term form above).  For a symmetric
+  kernel of variance s² about E_i and f(E) = W_{E_i}(θ_c.m.(E))/J(E) (W the c.m. angular distribution at the point's
+  energy), the relative move of the fold is
+  `s² (ln σ)′ (ln f)′ + ½ s² f″/f`: the product of the slopes of the cross section and of the angular factor across
+  the window, and the curvature of the angular factor.  The first term is the larger wherever σ changes across the
+  window; ½Δ²|(ln f)″| alone was exceeded tenfold at 6 of T2's 60 points.  T2 (2 keV beam spread, s = 1.9 keV c.m.,
+  Δ = 5s), the points that moved by more than 10⁻⁶ or past ten times the curvature term (all 60 rows and the script:
+  `work/obs4/d5_estimate_T2.txt`, `work/obs4/scripts/d5_estimate.py`):
+
+  | θ_lab | E_c.m. (MeV) | move | datum's error | ½Δ²\|(ln f)″\| | s²\|(ln σ)′(ln f)′\| | both terms, signed |
+  |---|---|---|---|---|---|---|
+  | 150° | 0.2343 | −2.56 × 10⁻⁵ | 4.9 × 10⁻² | 1.2 × 10⁻⁵ | 2.6 × 10⁻⁵ | −2.55 × 10⁻⁵ |
+  | 150° | 0.2698 | −2.41 × 10⁻⁵ | 4.7 × 10⁻² | 1.0 × 10⁻⁵ | 2.4 × 10⁻⁵ | −2.40 × 10⁻⁵ |
+  | 150° | 0.3053 | −1.66 × 10⁻⁵ | 5.0 × 10⁻² | 8.2 × 10⁻⁶ | 1.7 × 10⁻⁵ | −1.67 × 10⁻⁵ |
+  | 150° | 0.3409 | 4.49 × 10⁻⁶ | 5.1 × 10⁻² | 6.9 × 10⁻⁶ | 4.1 × 10⁻⁶ | 4.37 × 10⁻⁶ |
+  | 150° | 0.9807 | 2.75 × 10⁻⁶ | 4.3 × 10⁻² | 8.6 × 10⁻⁷ | 3.2 × 10⁻⁶ | 3.20 × 10⁻⁶ |
+  | 150° | 1.1228 | −9.30 × 10⁻⁶ | 4.5 × 10⁻² | 8.1 × 10⁻⁷ | 1.2 × 10⁻⁵ | −1.23 × 10⁻⁵ |
+  | 150° | 1.1584 | 3.48 × 10⁻⁶ | 4.3 × 10⁻² | 6.3 × 10⁻⁷ | 3.7 × 10⁻⁶ | 3.73 × 10⁻⁶ |
+  | 90° | 0.2343 | −5.2 × 10⁻⁷ | 5.2 × 10⁻² | 4.4 × 10⁻⁸ | 5.6 × 10⁻⁷ | −5.5 × 10⁻⁷ |
+  | 90° | 0.9096 | 2.7 × 10⁻⁶ | 3.8 × 10⁻² | 9.0 × 10⁻⁷ | 7.8 × 10⁻⁶ | −7.8 × 10⁻⁶ |
+  | 90° | 0.9451 | −2.6 × 10⁻⁶ | 3.9 × 10⁻² | 2.7 × 10⁻⁷ | 4.8 × 10⁻⁶ | 4.8 × 10⁻⁶ |
+  | 90° | 1.1228 | 3.3 × 10⁻⁷ | 4.4 × 10⁻² | 4.0 × 10⁻⁹ | 6.0 × 10⁻⁹ | −5.8 × 10⁻⁹ |
+
+  At 150° both terms together give all 30 moves to 0.65–1.12 of their size.  The expansion fails where the cross
+  section is not smooth on the window: at 90° near the 0.9 MeV resonance (0.80–1.12 MeV) the signed prediction has the
+  wrong sign or a factor 2–50 off, for moves of at most 2.7 × 10⁻⁶ there.  Every move is below 1/1900 of the datum's
+  error.  The brute-force test above is the direct check of the fold.
 - An analysing power is given at c.m. angles only (format 3 refuses a lab angle), so D5's A_y path is not reached.
 
 ### 4.4 The gate

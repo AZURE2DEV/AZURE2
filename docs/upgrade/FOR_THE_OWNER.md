@@ -181,16 +181,16 @@ refused at once with the engine's message. An edit changes only the lines it tou
     reading (`E_THM_OLD_LIST`): in format 3 the data sets name their experiment;
   - a laboratory-frame differential point at the kinematic limit (dΩ_lab/dΩ_c.m. ≤ 10⁻⁶) is refused at set-up
     (`E_LAB_JACOBIAN_AT_LIMIT`); without the refusal such a point gave χ² of 10¹⁷.
-  - a point given at a lab angle and folded over energy (a target, a beam spread, a resolution) is folded in the
-    lab (decision D5, 2026-11-12, observables branch): at every energy of the fold its c.m. angle and dΩ_lab/dΩ_c.m.
-    are those of its lab angle at that energy, where before every energy took the point's own.  How much a number
-    moves depends on how fast the angle, the Jacobian and the cross section change across the window: in the test
-    tree only T2 moves (15N(p,α) at 90° and 150° lab with a 2 keV beam spread), by at most 2.6 × 10⁻⁵ of a model
-    value against data errors of 4–5 %; for a 300 keV resolution 0.4 MeV above the 7Li(p,n) threshold at 30° lab
-    the old fold was 2.2 % off (`tests/lab_frame_fold`, checked against a brute-force integral of the unfolded
-    cross section).  Elastic scattering moves only by rounding (its c.m. angle at a fixed lab angle does not depend
-    on the energy without relativistic kinematics).  A lab angle beyond the kinematic maximum at a node of a fold is
-    refused at set-up with the reason.
+  - a point given at a lab angle with a resolution or a target effect (a target, a beam spread, a detector
+    resolution) is folded at the lab angle (decision D5, 2026-11-12, observables branch): inside the window the c.m.
+    angle and dΩ_lab/dΩ_c.m. follow the energy, where before every energy of the window took the point's own c.m.
+    angle and Jacobian.  The largest move in the test tree is T2's (15N(p,α) at 150° lab, a 2 keV beam spread):
+    2.6 × 10⁻⁵ of a model value, 1/1900 of the datum's error.  The move grows with the window's width times the slope
+    of the cross section across it (and the slope of the angle): for a 300 keV resolution 0.4 MeV above the 7Li(p,n)
+    threshold at 30° lab the old fold was 2.2 % off (`tests/lab_frame_fold`, checked against a brute-force integral of
+    the unfolded cross section).  Elastic scattering moves only by rounding (its c.m. angle at a fixed lab angle does
+    not depend on the energy without relativistic kinematics).  A lab angle beyond the kinematic maximum at an energy
+    of the window is refused at set-up with the reason.
 
 ## Speed
 
