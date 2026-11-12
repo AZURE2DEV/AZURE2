@@ -101,9 +101,6 @@ Value types
    * - ``grid``
      - ``range <lo> <hi> <unit> lab|cm step <s> | range <lo> <hi> <unit> lab|cm points <n> [log] | list <v> ... <unit> lab|cm | file <path> <unit> lab|cm | adaptive <lo> <hi> <unit> lab|cm tolerance <t> max_points <n> start_step <s>``
      - an energy or angle grid; range: E_k = lo + k step (F10)
-   * - ``windows``
-     - ``<lo>-<hi> ... <unit> | auto[:<tolerance>[:<margin>]]``
-     - lab-energy windows of a fold
    * - ``structured``
      - --
      - a structured value: a leading keyword chooses the alternative, then its parts
@@ -192,10 +189,6 @@ Data set, in ``<data>``.  Measured values of one quantity in one data file (sect
      - ``points <integer >= 1> [width_multiplier <number > 0>] [per_width <number > 0>]``
      - only when the record is folded (a target layer or infinite target, a Doppler-broadening target, a beam, or a detector resolution); required
      - sub-point grid of the fold
-   * - ``fold_windows``
-     - ``<lo>-<hi> ... <energy unit> | auto[:<tolerance>[:<margin>]] [blend <number> <energy unit>] [auto_tolerance <number > 0>]``
-     - only when the record is folded (a target layer or infinite target, a Doppler-broadening target, a beam, or a detector resolution); optional
-     - lab-energy windows of the fold
    * - ``J``
      - ``<J>``
      - by quantity
@@ -256,6 +249,8 @@ Data set, in ``<data>``.  Measured values of one quantity in one data file (sect
      - ``<text>``
      - optional
      - the DOI of the publication
+
+Deleted from format 3 (``E_FIELD_DELETED``): ``fold_windows`` (remove it; the shared mesh folds every point of the data set, and energy windows, the blend at their edges and the automatic tolerance no longer exist).
 
 normalization
 ~~~~~~~~~~~~~
@@ -372,10 +367,6 @@ Extrapolation, in ``<extrapolations>``.  Model values on a grid, without data (s
      - ``points <integer >= 1> [width_multiplier <number > 0>] [per_width <number > 0>]``
      - only when the record is folded (a target layer or infinite target, a Doppler-broadening target, a beam, or a detector resolution); required
      - sub-point grid of the fold
-   * - ``fold_windows``
-     - ``<lo>-<hi> ... <energy unit> | auto[:<tolerance>[:<margin>]] [blend <number> <energy unit>] [auto_tolerance <number > 0>]``
-     - only when the record is folded (a target layer or infinite target, a Doppler-broadening target, a beam, or a detector resolution); optional
-     - lab-energy windows of the fold
    * - ``J``
      - ``<J>``
      - by quantity
@@ -426,6 +417,8 @@ Extrapolation, in ``<extrapolations>``.  Model values on a grid, without data (s
      - the weight table of <thm> weight[k]
 
 Refused here: ``file`` (an extrapolation has no data file (F20)); ``columns`` (an extrapolation has no data file (F20)); ``norm`` (an extrapolation has no normalization (F20)); ``shift`` (an extrapolation has no energy shift (F20)); ``covariance`` (an extrapolation has no data (F20)); ``energy_window`` (the grid is the extrapolation's energy range (F20)); ``angle_window`` (the grid is the extrapolation's angle range (F20)).
+
+Deleted from format 3 (``E_FIELD_DELETED``): ``fold_windows`` (remove it; the shared mesh folds every point of the data set, and energy windows, the blend at their edges and the automatic tolerance no longer exist).
 
 target
 ~~~~~~
@@ -1169,8 +1162,6 @@ Yield (``dataset``, ``extrapolation``).  Reactions (or detected counts) per inci
      - target kind none or sample: a yield needs a target with a thickness (layer) or a thick (infinite) target (``E_TARGET_KIND``)
    * - refused (validate)
      - per-charge unit without charge_state: the number of beam particles per uC depends on the charge state q (``E_FIELD_REQUIRED``)
-   * - refused (build)
-     - fold_windows on a layer: outside a window the integration is a cross section at one energy, not a yield (``E_FIELD_NOT_APPLICABLE``)
    * - refused (setup)
      - a stopping not positive and finite in the layer: give a stopping defined at every energy the beam has in the layer (``E_LAYER_STOPPING``)
    * - refused (setup)
@@ -1804,6 +1795,9 @@ Diagnostic codes
    * - ``E_FIELD_NOT_APPLICABLE``
      - error
      - a field that does not apply to the record's kind, quantity or other fields
+   * - ``E_FIELD_DELETED``
+     - error
+     - a field an earlier format 3 had and this one does not (fix: remove it, as the message says)
    * - ``E_VALUE_MISSING``
      - error
      - a key without a value
@@ -1873,9 +1867,6 @@ Diagnostic codes
    * - ``E_PAIR_SYNTAX``
      - error
      - a particle pair that is not <particle>+<nucleus>[<E_x>]
-   * - ``E_WINDOW_SYNTAX``
-     - error
-     - fold windows that are not <lo>-<hi> ... <unit> or auto[:tol[:margin]]
    * - ``E_REACTION_SYNTAX``
      - error
      - a reaction expression that does not follow section 3.5

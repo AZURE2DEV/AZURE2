@@ -256,7 +256,6 @@ void UnitCases(const std::string &targets) {
         for (const Diagnostic &d : l.diagnostics) std::printf("        got %s: %s\n", d.code.c_str(), d.message.c_str());
       ExpectOne("E_FOLD_CONFLICT", BuildText(Data(y + "    target t1\n    charge_state 2\n" +
                                                   Rename(kDataset + "    target t1\n    quadrature points 20\n", "s1")) + inf));
-      ExpectOne("E_FIELD_NOT_APPLICABLE", BuildText(Data(y + "    target t1\n    charge_state 2\n    fold_windows 0.2-0.4 MeV\n") + inf));
     }
     ExpectOne("E_NOT_BUILT", BuildText(Data(Set(y, "unit", "    unit counts/uC") + "    target t9\n    charge_state 1\n"
                                                                                       "    efficiency 0.5 fit prior 0.5 3%\n") + inf));
@@ -602,9 +601,6 @@ int main() {
                                        "    doppler free_gas 300 K fixed\n</targets>\n"));
     ExpectOne("E_NOT_BUILT", BuildText(Data(rth + "    beam b3\n    detector d3\n    quadrature points 20\n") +
                                        "<targets>\n" + beam + "detector d3\n    attenuation 1 0.99 0.98\n</targets>\n"));
-    ExpectOne("E_NOT_BUILT", BuildText(Data(rth + "    beam b3\n    quadrature points 20\n"
-                                                  "    fold_windows 3-4 MeV auto_tolerance 1e-3\n") +
-                                       "<targets>\n" + beam + "</targets>\n"));
   }
 
   // hybrid potentials (`potential` records, BuildPotentials): the settings member by member, units converted, the

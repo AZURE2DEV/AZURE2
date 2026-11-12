@@ -31,21 +31,9 @@ std::string Number(double x) {
 // incident particle, 1e-24 int_{E_out}^{E_0} <sigma>/epsilon dE, on an infinite target (E_out = 1 keV, eq. 3) or on a
 // layer (int_{E_out}^{E_0} dE/epsilon = N; the target effect's layerYield, BuildEffects.cpp); per unit charge the model
 // is that times the particles per unit charge, 1e-6 C / (q e) for 1/uC; counts are reactions times the efficiency.
-// On a layer, energy windows are refused: outside them the integration falls back to a cross section at one energy.
 bool YieldScale(Context &c, const ValidatedRecord &r, const Unit &unit, ReactionSpec &spec) {
-  bool ok = true;
-  const Value *t = r.Get("target");
-  const ValidatedRecord *target = t ? c.Record(t->word, "target") : nullptr;
-  const Value *kind = target ? target->Get("kind") : nullptr;
-  if (kind && kind->word == "layer" && r.Has("fold_windows")) {
-    c.Error(codes::kFieldNotApplicable, r, "fold_windows",
-            "fold_windows on a yield on target " + target->name + " (kind layer): outside a window the engine takes the "
-            "cross section at the depth-averaged energy, which is not a yield; drop fold_windows (the whole layer is "
-            "integrated at every point)");
-    ok = false;
-  }
   const std::string dimension = unit.dimension;
-  if (dimension != "per_charge" && dimension != "counts_per_charge") return ok;  // per particle, per sr, arbitrary
+  if (dimension != "per_charge" && dimension != "counts_per_charge") return true;  // per particle, per sr, arbitrary
   const Value *q = r.Get("charge_state");
   if (!q) return false;  // the validator refused it (E_FIELD_REQUIRED)
   const int chargeState = static_cast<int>(q->integer);
@@ -65,7 +53,7 @@ bool YieldScale(Context &c, const ValidatedRecord &r, const Unit &unit, Reaction
     spec.scale.factor *= n.value.value;
     spec.scale.text += " x efficiency " + n.value.text;
   }
-  return ok;
+  return true;
 }
 
 }  // namespace

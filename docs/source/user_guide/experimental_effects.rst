@@ -347,121 +347,28 @@ be normalized to the same thing the density counts.**
    narrow resonance deep in the target by :math:`s' \times` depth; a constant
    shift was never affected.)
 
-Restricting an Effect to Energy Ranges
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Every Point of a Folded Data Set Is Folded
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-By default an experimental effect covers every point of the segments it lists.
-Three optional controls in the *Add/Edit Experimental Effect* dialog refine
-this without splitting the data into artificial segments:
+An experimental effect covers every point of the data sets that name it.  The
+folded points of a compound nucleus read one shared energy mesh (a node costs
+the same whoever uses it), so there is nothing to save by leaving points
+unfolded, and the fold is never replaced by an approximation: no energy windows,
+no blend at window edges, no automatic tolerance and no single "effective energy"
+for a thin target.  What a data set sets for its fold is the effect itself
+(``target``, ``beam``, ``detector``) and, optionally, the numerical settings of
+the mesh (``quadrature``).  A thin target whose energy loss is smaller than one
+interval of the mesh is folded like any other: the depth integral of the
+linearly interpolated cross section over the target, which for such a target is
+the interpolated cross section at its depth-averaged energy.
 
-- **Apply in Energy Ranges** -- a comma-separated list of laboratory-energy
-  windows, for example ``0.42-0.61,1.20-1.35`` (MeV).  Points outside every
-  window are computed as ordinary points at their own energy -- except under a
-  thin-target integration, see below; leave the field empty to cover the
-  whole segment.
-- **Blend Width** -- the width (MeV) of a smooth transition at each window
-  edge.  With a hard edge (``0``) the modelled curve can show a small step
-  where the convolution switches off; a positive width ramps continuously
-  between the convolved and the unconvolved curve.
-- **Auto Tolerance** -- a relative tolerance that makes the decision
-  automatic: at each point the code estimates how much the effect would change
-  the observable and skips the integration where the change is below the
-  tolerance.  Any discontinuity this introduces is bounded by the tolerance,
-  and smooth regions stop paying for integration they do not need.  It can be
-  combined with explicit ranges or used on its own.
-
-**Target integration: the effective energy outside the windows.**  The data
-of a target integration carry the *beam* energy :math:`E_0`, and the cross section
-there is not the target average: it is off by the centroid shift, about half the
-energy loss.  So under a thin-target integration a point outside every window is
-evaluated at the depth-averaged energy of its own target,
-
-.. math::
-
-   \bar E = \frac{\int_{E_0-\Delta}^{E_0} E\,dE/\epsilon(E)}{\int_{E_0-\Delta}^{E_0} dE/\epsilon(E)},
-
-one cross-section evaluation instead of the whole sub-point grid.
-:math:`\sigma(\bar E)` equals the target average exactly for a cross section that is
-linear across the target; the rest is about
-:math:`|\sigma''(\bar E)|\,\Delta^2/24` (relative to :math:`\sigma`: the
-:math:`(\Delta/\lambda)^2/24` of a cross section that changes by a factor *e* every
-:math:`\lambda`), and the beam spread and straggling are ignored there (they shift
-nothing to first order).  Put the windows where that is not small: around narrow
-resonances, and wherever the target is thick compared with the scale on which the
-cross section bends (low energies under a Coulomb barrier).  Window edges blend
-with :math:`\sigma(\bar E)`, and the automatic tolerance falls back to it, deciding
-from the curvature alone.  :math:`\bar E` follows a fitted density
-(``densityfit``), and the analytic gradient covers windows and blends.  Refused:
-windows on a thick target (density 0, no single equivalent energy), and windows
-or a tolerance on a line with ``doppler``.  Before November 2026 such a point was
-computed at :math:`E_0`: on the 13C+α ND 2021 data (16 lines, windows around the
-narrow levels) that made the windowed model worse than none, χ² 421,432 against
-400,616 integrated everywhere; with :math:`\bar E` it is 401,435.
-
-**Automatic windows from the level scheme.**  The windows token ``"auto"``
-lets AZURE2 place the windows itself, segment by segment from the segment's own
-entrance pair (the components of a composite segment from theirs):
-
-- around every resonance narrow enough for :math:`\sigma(\bar E)` to miss its
-  peak by more than a tolerance.  For a resonance of total width
-  :math:`\Gamma` under a target of thickness :math:`\Delta` (the energy loss
-  plus twice the beam spread) that error is :math:`\Delta^2/(3\Gamma^2)`, so
-  a level is narrow when :math:`\Gamma < \Delta/\sqrt{3\,\mathrm{tol}}`;
-- around every particle threshold of the same compound nucleus: a target that
-  straddles a threshold sees the cusp of the channel opening, which no single
-  energy reproduces (15 % at the 16O(6.05 MeV) n\ :sub:`1` threshold in the
-  13C+α data).
-
-A point at :math:`E_0` samples :math:`[E_0-\Delta, E_0]`; its window reaches
-*margin* × max(:math:`\Gamma`, :math:`\Delta`) beyond the points whose target
-holds the resonance or threshold, i.e. :math:`[E_R - w, E_R + \Delta + w]`.
-``"auto:<tol>"`` and ``"auto:<tol>:<margin>"`` set the two numbers (defaults
-0.01 and 3); explicit ranges in the same token are added (``"auto,1.20-1.35"``),
-and the blend width that follows the token applies to every edge.  A Note per
-segment lists the levels, thresholds, windows and the number of points
-integrated.  The widths are the observed total widths the sub-point grids are
-laid out with, from the parameters the session starts from; the windows stay
-fixed for the session, so a fit that moves a narrow level by more than *w*
-leaves it outside, and a new session from the fitted file places them again.
-Only a thin-target integration takes ``"auto"`` (a thick target or a line
-without a target integration is refused).  On the 13C+α ND 2021 data:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 30 20 25 25
-
-   * - windows
-     - χ²
-     - points integrated
-     - largest point shift
-   * - none (full integration)
-     - 400,616
-     - 100 %
-     - —
-   * - by hand (30 October)
-     - 401,435
-     - 48 %
-     - —
-   * - ``"auto"``
-     - 400,881
-     - 58 %
-     - 0.42 σ
-   * - ``"auto:0.003"``
-     - 400,656
-     - 81 %
-     - 0.20 σ
-   * - ``"auto:0.001:5"``
-     - 400,621
-     - 99 %
-     - 0.03 σ
-
-An engine from before November 2026 reads no range from ``"auto"`` and
-integrates every point: the right answer, at the full cost.
-
-In the ``.azr`` file these appear as optional tokens at the end of the
-``targetInt`` line, for example ``"1.95-2.55" 0.12 0.002``; files that do not
-use them are written exactly as before, and remain readable by older versions
-of AZURE2.
+An old project whose ``<targetInt>`` line restricts an effect to energy ranges,
+blends it at their edges or applies it with an automatic tolerance converts with
+a note that names the line and what was dropped; the converted data set is folded
+everywhere, and its numbers move by at most the error the dropped option allowed
+(outside the windows of a Gaussian beam spread, by the spread's whole effect).
+A format-3 file that still writes ``fold_windows`` is refused with
+``E_FIELD_DELETED``: remove the field.
 
 Beam-profile kernel (photodissociation in a broad γ beam)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -429,7 +429,7 @@ struct THMRows {
  * adjoint, THMMatrixFunc::THMPointAdjoint, one sweep per point -- or from
  * central differences (h = 1e-6 (|x| + 1)) with AZURE2_THM_FD=1, or for a
  * configuration the adjoint does not cover (a THM segment with components, a
- * target effect with an automatic tolerance, RMC); norm and energy-shift columns are
+ * folded analyzing power, RMC); norm and energy-shift columns are
  * left zero (a caller differences shifts on the whole residual vector).  The
  * residual of a point of a profiled segment is r_i = (s m_i - d_i)/e_i with
  * s = 1/n* = S_md/S_mm, a function of the parameters; its derivative is taken

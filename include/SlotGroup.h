@@ -37,7 +37,7 @@
  * energy pass (CalculationPlan::TaskUnits gives a plan task the slots its point writes), the result layout (one record
  * per site).  Every point of the group reads it: the fold, the model pass, the gradient (a site's cotangent is the sum
  * of its readers', summed in their plan order: UnitCotangent::reader).  A point off the shared mesh (a
- * shifted segment, THM, a grid of its own, the sigma(E_bar) fallback) is a group of its own.
+ * segment with an energy shift, THM, a uniform grid with useAdaptiveGrid off) is a group of its own.
  */
 namespace azure2 {
 

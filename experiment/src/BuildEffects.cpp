@@ -2,7 +2,7 @@
 // as the engine's TargetEffectSpecs, the sample thicknesses of transmission and neutron-yield data, and the abundances
 // of the targets' isotopes.
 //
-// The engine sets up one effect per distinct combination of target, beam, detector, quadrature and fold windows; every
+// The engine sets up one effect per distinct combination of target, beam, detector and quadrature; every
 // data set (and extrapolation) naming that combination gets a copy of it (WorkingCopy::SetUpTargetEffects), and the effect's
 // parameters (screening U_e, Doppler temperature) are shared by the copies.  A target is one set of parameters
 // (section 3.7): its areal density is shared through the engine's density group when several effects use it; a
@@ -31,11 +31,6 @@ std::string Text(const Value *v) {
     for (const ValuePart &p : v->parts) s += " " + p.name + "=" + Text(&p.value);
     return s;
   }
-  if (v->type == ValueType::Windows) {
-    std::string s = v->windows.automatic ? "auto" : "";
-    for (const auto &w : v->windows.windows) s += " " + w.lo.text + "-" + w.hi.text;
-    return s + ":" + v->windows.tolerance.text + ":" + v->windows.margin.text + (v->windows.unit ? v->windows.unit->token : "");
-  }
   if (v->type == ValueType::Integer || v->type == ValueType::Number) return v->number.text;
   if (v->type == ValueType::NumberWithUnit) return v->number.text + (v->unit ? v->unit->token : "");
   return v->word + (v->epoch.empty() ? "" : "@" + v->epoch);
@@ -43,7 +38,7 @@ std::string Text(const Value *v) {
 
 struct Combination {
   const ValidatedRecord *target = nullptr, *beam = nullptr, *detector = nullptr;
-  const Value *quadrature = nullptr, *windows = nullptr;
+  const Value *quadrature = nullptr;
   bool layerYield = false;  ///< a yield on a layer: per incident particle, not the target-averaged cross section
   bool decay = false;  ///< its data sets are beta-delayed spectra (no beam: the energy is the particle's in the decay)
   const PairInfo *projectile = nullptr;  ///< the entrance pair whose light particle crosses the target (a scaled stopping)
@@ -310,42 +305,24 @@ void DetectorInto(Context &c, const ValidatedRecord &d, bool decay, TargetEffect
   }
 }
 
-void QuadratureInto(const Value *q, const Value *w, TargetEffectSpec &e) {
-  if (q) {
-    if (const Value *v = q->Get("points")) e.numIntegrationPoints = (int)v->integer;
-    // given or not (left out, the engine's default: 20, and a pure Gaussian convolution's smaller core)
-    if (const Value *v = q->Get("width_multiplier")) {
-      e.hasResonanceWidthMultiplier = true;
-      e.resonanceWidthMultiplier = v->number.value;
-    }
-    if (const Value *v = q->Get("per_width")) {
-      e.hasPointsPerWidth = true;
-      e.pointsPerWidth = v->number.value;
-    }
+void QuadratureInto(const Value *q, TargetEffectSpec &e) {
+  if (!q) return;
+  if (const Value *v = q->Get("points")) e.numIntegrationPoints = (int)v->integer;
+  // given or not (left out, the engine's default: 20, and a pure Gaussian convolution's smaller core)
+  if (const Value *v = q->Get("width_multiplier")) {
+    e.hasResonanceWidthMultiplier = true;
+    e.resonanceWidthMultiplier = v->number.value;
   }
-  if (w) {
-    e.hasRanges = true;
-    const Value *win = w->Get("windows");
-    if (win) {
-      const FoldWindows &f = win->windows;
-      e.autoWindows = f.automatic;
-      e.hasAutoWindowTolerance = f.hasTolerance;
-      e.autoWindowTolerance = f.tolerance.value;
-      e.hasAutoWindowMargin = f.hasMargin;
-      e.autoWindowMargin = f.margin.value;
-      for (const auto &x : f.windows) e.ranges.push_back({Context::InBase(x.lo, f.unit), Context::InBase(x.hi, f.unit)});
-    }
-    if (const Value *v = w->Get("blend")) e.transitionWidth = Context::InBase(v->number, v->unit);
-    if (const Value *v = w->Get("auto_tolerance")) e.autoTolerance = v->number.value;
+  if (const Value *v = q->Get("per_width")) {
+    e.hasPointsPerWidth = true;
+    e.pointsPerWidth = v->number.value;
   }
 }
 
 /*!
  * The folds a ratio to the Rutherford or Mott cross section cannot take (data_kinds.md section 4.3): the engine folds
  * the Coulomb cross section with the numerator's kernel on the numerator's sub-points (src/CoulombReference.cpp), which
- * covers the energy kernels (beam spread, target layer, beam profile, UDR) and the edge blend.  Not covered:
- *  - an automatic tolerance, which picks the folded or the bare value of each observable from its own sub-point
- *    values, so numerator and denominator could take different choices;
+ * covers the energy kernels (beam spread, target layer, beam profile, UDR).  Not covered:
  *  - free-gas Doppler broadening, whose fitted temperature has an analytic derivative through the numerator only;
  *  - electron screening, a factor on the nuclear cross section, not part of a ratio to Coulomb scattering;
  *  - detector attenuation coefficients, which attenuate the Legendre terms of the nuclear amplitude and leave the
@@ -365,10 +342,6 @@ void CoulombRatioFolds(Context &c, const ValidatedRecord &r, const Combination &
     c.Error(codes::kNotBuilt, r, "detector",
             what + "with attenuation coefficients: they attenuate the Legendre terms of the nuclear amplitude only, and the "
                    "Coulomb cross section has no finite Legendre series");
-  if (x.windows && x.windows->Get("auto_tolerance"))
-    c.Error(codes::kNotBuilt, r, "fold_windows",
-            what + "with an automatic tolerance: it chooses the folded or the bare value of each observable from that "
-                   "observable's sub-points, which numerator and denominator could choose differently");
 }
 
 // A target whose stopping depends on the projectile through the engine: an evaluation, a table, or any stopping with a
@@ -476,7 +449,6 @@ SpecList<TargetEffectSpec> Effects(Context &c, const std::vector<Member> &member
     x.detector = d ? c.Record(d->word, "detector") : nullptr;
     if (!x.target && !x.beam && !x.detector) continue;
     x.quadrature = r.Get("quadrature");
-    x.windows = r.Get("fold_windows");
     x.decay = r.quantity && r.quantity->name == "beta_delayed_spectrum";
     CoulombRatioFolds(c, r, x);
     // A yield on a layer folds the same sub-points to another quantity (reactions per incident particle): an effect of
@@ -486,7 +458,7 @@ SpecList<TargetEffectSpec> Effects(Context &c, const std::vector<Member> &member
     // A stopping that depends on the projectile (an evaluation, a table, a scale): one projectile per effect.
     if (ScaledStopping(x.target) && !(x.projectile = StoppingProjectile(c, m))) continue;
     x.signature = (x.target ? x.target->name : "") + "|" + (x.beam ? x.beam->name : "") + "|" +
-                  (x.detector ? x.detector->name : "") + "|" + Text(x.quadrature) + "|" + Text(x.windows) +
+                  (x.detector ? x.detector->name : "") + "|" + Text(x.quadrature) +
                   (x.layerYield ? "|yield" : "") + (x.decay ? "|decay" : "") +
                   (x.projectile ? "|" + std::to_string(x.projectile->lightZ) + "," + std::to_string(x.projectile->lightA) : "");
     x.position = 1 << 30;
@@ -524,14 +496,14 @@ SpecList<TargetEffectSpec> Effects(Context &c, const std::vector<Member> &member
         if ((x.target->Has("screening") || FreeNuisance(x.target, "doppler")) && !reported.count(x.target) &&
             reported.insert(x.target).second)
           c.Error(codes::kFoldConflict, *x.target, "",
-                  "its data sets differ in beam, detector, quadrature or fold windows, and its screening or temperature is a "
+                  "its data sets differ in beam, detector or quadrature, and its screening or temperature is a "
                   "parameter: this engine shares such a parameter only among data sets folded alike");
         if (e.densityFit) e.densityGroup = x.target->name;
       }
     }
     if (x.beam) BeamInto(c, *x.beam, e);
     if (x.detector) DetectorInto(c, *x.detector, x.decay, e);
-    QuadratureInto(x.quadrature, x.windows, e);
+    QuadratureInto(x.quadrature, e);
     out.items.push_back(item);
   }
   SharedScales(c, combos, out);

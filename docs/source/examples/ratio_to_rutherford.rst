@@ -142,10 +142,8 @@ What is refused
   Doppler-broadened target, electron screening, a detector's attenuation
   coefficients (they attenuate the Legendre terms of the nuclear amplitude;
   :math:`d\sigma_R/d\Omega \propto \theta^{-4}` has no finite Legendre
-  series), and the automatic tolerance of ``fold_windows`` (it chooses the
-  folded or the bare value of each observable from that observable's
-  sub-points).  A beam spread, a target layer, a beam profile and fold windows
-  with a blend are folded: the Rutherford cross section is evaluated at the
+  series).  A beam spread, a target layer and a beam profile are folded: the
+  Rutherford cross section is evaluated at the
   point's own sub-points and integrated by the point's own kernel.
 
 From EXFOR

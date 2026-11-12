@@ -29,11 +29,6 @@ TargetEffect::TargetEffect(const azure2::experiment::TargetEffectSpec &line, con
     pointsPerWidth_ = defaults.pointsPerWidth;
   }
 
-  // By default the effect applies to every point of its segments, with hard
-  // edges and no automatic per-point decision.
-  transitionWidth_ = 0.0;
-  autoTolerance_ = 0.0;
-
   // An inactive spec (the old reader's line that ended after the parameter count) keeps every default.
   {
     const int numIntegrationPoints = line.numIntegrationPoints;
@@ -59,15 +54,6 @@ TargetEffect::TargetEffect(const azure2::experiment::TargetEffectSpec &line, con
       explicitResonanceWidthMultiplier_ = true;
     }
     if (line.hasPointsPerWidth) pointsPerWidth_ = line.pointsPerWidth;
-
-    if (line.hasRanges) {
-      if (line.autoWindows) autoWindows_ = true;
-      if (line.hasAutoWindowTolerance) autoWindowTolerance_ = line.autoWindowTolerance;
-      if (line.hasAutoWindowMargin) autoWindowMargin_ = line.autoWindowMargin;
-      ranges_ = line.ranges;
-      if (line.transitionWidth > 0.) transitionWidth_ = line.transitionWidth;
-      if (line.autoTolerance > 0.) autoTolerance_ = line.autoTolerance;
-    }
 
     for (const azure2::experiment::TargetEffectSpec::ProfileComponent &p : line.beamProfileComponents) {
       BeamProfileComponent c;
@@ -671,28 +657,6 @@ double TargetEffect::TargetThickness(double energy, const Config &configure, dou
   return delta;
 }
 
-double TargetEffect::MeanEnergyLoss(double energy, const Config &configure, double density, double scale) const {
-  if (isThickTarget_) return 0.0;
-  const double delta = this->TargetThickness(energy, configure, density, scale);
-  if (!(delta > 0.0) || !(delta <= energy)) return 0.0;
-  auto invEps = [&](double e) {
-    const double eps = this->StoppingAt(e, configure, scale);
-    return (eps > 0.0) ? 1.0 / eps : 0.0;
-  };
-  // Simpson on 32 panels: int (E - e)/epsilon de / int 1/epsilon de over [E - Delta, E]
-  const int n = 32;
-  const double h = delta / n;
-  double num = 0.0, den = 0.0;
-  for (int k = 0; k <= n; k++) {
-    const double w = (k == 0 || k == n) ? 1.0 : ((k % 2) ? 4.0 : 2.0);
-    const double depth = k * h;
-    const double ie = invEps(energy - depth);
-    num += w * depth * ie;
-    den += w * ie;
-  }
-  return (den > 0.0) ? num / den : 0.5 * delta;
-}
-
 /*!
  * Makes this line a member of a density group whose first line is \p leader: its density, prior and layout
  * density become the leader's (the group has one parameter, held by the leader).
@@ -813,65 +777,4 @@ double TargetEffect::GetResonanceWidthMultiplier() const {
 
 double TargetEffect::GetPointsPerWidth() const {
   return pointsPerWidth_;
-}
-
-/*!
- * Returns the optional lab-energy windows the effect is restricted to.
- * An empty vector means the effect covers its segments completely.
- */
-
-const std::vector<std::pair<double, double> > &TargetEffect::GetRanges() const {
-  return ranges_;
-}
-
-/*!
- * Returns the width (MeV, lab energy) of the smooth blend applied at each
- * range edge.  Zero means the effect switches on and off abruptly.
- */
-
-double TargetEffect::GetTransitionWidth() const {
-  return transitionWidth_;
-}
-
-/*!
- * Returns the relative tolerance of the automatic per-point application.
- * Zero disables the automatic decision: the effect is always integrated.
- */
-
-double TargetEffect::GetAutoTolerance() const {
-  return autoTolerance_;
-}
-
-/*!
- * Blend weight in [0,1] at the given lab energy.  With no ranges declared the
- * weight is always one.  With ranges and a zero transition width the weight is
- * a hard 1 inside any window and 0 outside; a positive transition width turns
- * each edge into a smoothstep ramp centred on the edge, so the modelled
- * observable passes continuously between the convolved and the bare curve.
- */
-
-double TargetEffect::BlendWeight(double labEnergy) const {
-  if (ranges_.empty()) return 1.0;
-  return BlendWeight(labEnergy, ranges_);
-}
-
-double TargetEffect::BlendWeight(double labEnergy, const std::vector<std::pair<double, double> > &windows) const {
-  if (windows.empty()) return autoWindows_ ? 0.0 : 1.0;
-  double weight = 0.0;
-  for (std::vector<std::pair<double, double> >::const_iterator r = windows.begin(); r != windows.end(); r++) {
-    double w;
-    if (transitionWidth_ <= 0.) {
-      w = (labEnergy >= r->first && labEnergy <= r->second) ? 1.0 : 0.0;
-    } else {
-      double up = (labEnergy - (r->first - 0.5 * transitionWidth_)) / transitionWidth_;
-      double down = ((r->second + 0.5 * transitionWidth_) - labEnergy) / transitionWidth_;
-      up = std::min(1.0, std::max(0.0, up));
-      down = std::min(1.0, std::max(0.0, down));
-      up = up * up * (3.0 - 2.0 * up);
-      down = down * down * (3.0 - 2.0 * down);
-      w = up * down;
-    }
-    if (w > weight) weight = w;
-  }
-  return weight;
 }

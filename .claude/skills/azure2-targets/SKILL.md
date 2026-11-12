@@ -1,6 +1,6 @@
 ---
 name: azure2-targets
-description: Model the apparatus between the AZURE2 cross section and the measured yield - target integration (thin, thick, compound, implanted, gas), stopping power and straggling, Gaussian beam spread and TOF resolution, SAMMY UDR, beam-profile kernels, free-gas Doppler, transmission and self-shielded yield, electron screening, fitted density or thickness, integration windows, Q attenuation coefficients. Use for any target, beam or detector record or experimental effect. Building the project: azure2-setup; fitting: azure2-fit; stopping-profile inference from excitation curves: target-analysis.
+description: Model the apparatus between the AZURE2 cross section and the measured yield - target integration (thin, thick, compound, implanted, gas), stopping power and straggling, Gaussian beam spread and TOF resolution, SAMMY UDR, beam-profile kernels, free-gas Doppler, transmission and self-shielded yield, electron screening, fitted density or thickness, Q attenuation coefficients. Use for any target, beam or detector record or experimental effect. Building the project: azure2-setup; fitting: azure2-fit; stopping-profile inference from excitation curves: target-analysis.
 ---
 
 # Targets, resolution and other experimental effects in AZURE2
@@ -70,7 +70,7 @@ data a resonance scan gives; N (fitted or fixed) sets the width of a narrow reso
 ## 2. Frames and units on target, beam and detector records
 
 - **Every number carries its unit and frame.** A spread or resolution says `lab` or `cm`; σ_b, a `formula` (a
-  function of x = E_lab in MeV with `lab`), the beam profile and `fold_windows` are entrance-channel lab energies.
+  function of x = E_lab in MeV with `lab`) and the beam profile are entrance-channel lab energies.
   AZURE2 converts to c.m. for every point with that point's own entrance pair, so one record may serve data sets of
   different pairs (natural targets).
 - **σ_b is a standard deviation, not a FWHM** (FWHM = 2.355 σ_b). Write `spread 1 keV lab` for 1 keV.
@@ -134,25 +134,14 @@ N ≈ Δ/ε(E_0) holds only to first order (a few per cent).
   later evaluations incomparable with earlier ledger values; compare the `.so` time stamp with the job start
   before comparing objectives across a rebuild.
 
-## 5. Integration windows (`fold_windows lo-hi ... MeV`, `fold_windows auto`)
+## 5. Every point of a folded data set is folded
 
-Windows (the data set's field `fold_windows`) restrict the full depth integral of a layer target to lab-energy
-ranges. Outside them a point is
-σ(Ē), with Ē = ∫E dE/ε / ∫dE/ε over [E_0−Δ, E_0]; the error is |σ″| Δ²/24 (12.6 % on a 25 keV target where σ
-changes by a factor e per 16 keV). Therefore:
-
-- **Cover strongly curved regions, not only narrow resonances**: sub-barrier tails and every particle threshold
-  of the compound nucleus (omitting the ¹⁶O(6.05 MeV) n₁ threshold cost 15 % in one case).
-- **`auto`, `auto:tol`, `auto:tol:margin`** (defaults 0.01 and 3) place windows from the levels of the
-  segment's entrance pair: a level with Γ < Δ/√(3 tol) gets [E_R − w, E_R + Δ + w], w = margin · max(Γ, Δ); Δ
-  includes twice the beam spread. The run log prints, per segment, the windows and "I of M points integrated".
-  Tighter tolerances integrate more points (one 13C+α model: χ² full 400,616; auto 400,881 with 58 % of points;
-  auto:0.003 400,656 with 81 %; auto:0.001:5 400,621 with 99 %).
-- **Check a windowed fit against the full integration at its end point** before trusting it: a model can react to
-  the σ(Ē) points more than the data do and end worse.
-- Windows are refused on infinite (thick) targets and together with `doppler`.
-- builds before 2026-11-06 (expires: 2027-02-01): points outside windows were σ(E_beam), and `"auto"` is not
-  understood; rerun any windowed fit made with them.
+There are no integration windows, edge blends, automatic tolerance or σ(Ē) stand-in any more: every point of a data
+set that names a target, beam or detector is folded with the whole kernel on the shared mesh of its compound nucleus.
+A format-3 file that writes `fold_windows` is refused (`E_FIELD_DELETED`: remove the field); an old `<targetInt>` line
+with ranges, a blend or a tolerance converts with a note naming what was dropped. A windowed fit made with an older
+build differs from today's model by at most what its windows left out (outside the windows of a beam spread, the whole
+spread): refit it. The cost of a point is set by the mesh's settings (`quadrature`), not by which points are folded.
 
 ## 6. Neutron TOF: UDR, transmission, yield, Doppler
 
@@ -256,5 +245,5 @@ for particle exits, a few per cent off, and changed results even with every Q = 
 - Tests that show each effect against an independent result: `tests/convolution_window`, `tests/thick_target`,
   `tests/straggling_bohr`, `tests/target_thickness_exact`, `tests/shared_effect_pairs`, `tests/transmission_yield`,
   `tests/doppler_fgm`, `tests/electron_screening`, `tests/screening_6li`, `tests/target_density`,
-  `tests/target_window_fallback`, `tests/target_auto_windows`, `tests/beam_profile_kernel`,
+  `tests/beam_profile_kernel`,
   `tests/q_attenuation`, `tests/shift_subpoint_angle`, `tests/shift_sqrt_subpoints`, `tests/target_effect_shared`.

@@ -15,14 +15,18 @@
  * Model: tests/identical_pp_res with the 0+ level's width raised to 51 MeV,
  * past the bound (J = -0.54, penalty 2.9e5, as tests/park_formalism section 4);
  * free: that width and the 2- level's first width (J > 0).  Two variants:
- *   A  as is -- the analytic adjoint applies;
- *   B  a 0.1 keV Gaussian convolution on the analyzing-power segment with an
- *      automatic-application tolerance, which the adjoint does not handle
- *      (it bails; a convolved A_y alone no longer makes it), and
- *      Gradient() is finite differences of Chi2Value throughout.
+ *   A  as is;
+ *   B  a 0.1 keV Gaussian convolution on the analyzing-power segment (a fold
+ *      of a ratio: the adjoint goes through the fold's weights).
+ * The analytic adjoint applies to both (a convolved A_y made it bail until
+ * dev's target-integrated A_y adjoint, 2e726db; the automatic-application
+ * tolerance that made B bail after that is deleted: the shared mesh folds
+ * every point).  Gradient() falls back to finite differences of Chi2Value only
+ * for what the adjoint does not cover, and no construct of a p+p project is left
+ * that it does not cover: Chi2Value = operator() below is what the fallback
+ * needs.
  * Checked, at the starting point:
- *   - AccumulateEGammaGradient succeeds for A and bails for B (the fallback is
- *     really taken);
+ *   - AccumulateEGammaGradient succeeds for A and B;
  *   - Chi2Value(p) = operator()(p), the penalty included (rel. 1e-10);
  *   - Gradient(p) = central differences of operator() (rel. 1e-5), A and B;
  *   - A and B agree on the wall width's derivative (rel. 1e-3: the two
@@ -101,14 +105,8 @@ bool writeProject(const std::string &source, const std::string &target, bool con
       }
     }
     out << line << "\n";
-    // The automatic-application tolerance (auto_tolerance 1e-12 over one
-    // window of every energy: the fold is always applied) is what makes the
-    // adjoint bail; a convolved A_y did until dev's target-integrated A_y
-    // adjoint (2e726db).  The records are those the converter writes for the
-    // old <targetInt> line 1 "4" 10 1 0.0001 ... 1e-12.
-    if (line == "dataset ay_60" && convolve)
-      out << "    beam           spread_ay_60\n    quadrature     points 10\n"
-             "    fold_windows   0-1e+06 MeV auto_tolerance 1e-12\n";
+    // The records the converter writes for the old <targetInt> line 1 "4" 10 1 0.0001 ...
+    if (line == "dataset ay_60" && convolve) out << "    beam           spread_ay_60\n    quadrature     points 10\n";
     if (line == "<targets>" && convolve) out << "beam spread_ay_60\n    spread         0.0001 MeV lab\n\n";
   }
   return wallDone;
@@ -232,7 +230,7 @@ int main(int argc, char **argv) {
     return 2;
   }
   const double gA = Variant("A: analytic gradient", "park_a.azr", true);
-  const double gB = Variant("B: finite-difference fallback", "park_b.azr", false);
+  const double gB = Variant("B: a convolved analyzing power", "park_b.azr", true);
   check("A and B agree on the wall width's derivative (" + num(gA) + " vs " + num(gB) + ")",
         std::fabs(gA - gB) <= 1e-3 * std::fabs(gA));
   std::printf("%s\n", failures ? "FAIL" : "PASS");

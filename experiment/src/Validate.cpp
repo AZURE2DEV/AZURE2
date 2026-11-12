@@ -157,11 +157,17 @@ void Validator::Parse(const std::string &section, const io::Record &rec) {
     const FieldDef *def = w.def->Find(f.key);
     Diagnostic base = Base(w, f.key, f.line, f.col);
     if (!def) {
-      std::string refused;
+      std::string refused, deleted;
       for (const auto &r : w.def->refused)
         if (r.first == f.key) refused = r.second;
+      for (const auto &r : w.def->deleted)
+        if (r.first == f.key) deleted = r.second;
       base.hasFound = true;
       base.found = f.key;
+      if (!deleted.empty()) {
+        Emit(base, codes::kFieldDeleted, Where(w, f.key) + ": '" + f.key + "' is no longer a field of format 3; " + deleted);
+        continue;
+      }
       if (!refused.empty()) {
         Emit(base, codes::kFieldNotApplicable, Where(w, f.key) + ": " + refused);
         continue;

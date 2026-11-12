@@ -247,10 +247,10 @@ effects follows this order:
    ``CalculationPlan::EnergyTasks``).
 
 2. **Integrate** -- after the energy pass, ``Unit::FoldSubPoints()`` runs on
-   the parent point: the bare probe, the
-   automatic tolerance and blending, then ``FoldPoint()`` (``src/PointFold.cpp``)
-   on the sub-point cross sections, yielding the effective yield that accounts for
-   target and beam effects.
+   the parent point: ``FoldPoint()`` (``src/PointFold.cpp``) on the sub-point
+   cross sections (and the ratio of two folds for an analyzing power or a
+   normalised Legendre coefficient), yielding the effective yield that accounts
+   for target and beam effects.
 
 Integration Methods
 -------------------
@@ -484,58 +484,18 @@ formula. Unlike ``tests/beam_profile_kernel``, which pins a chi-squared this
 code produced, it can tell you the answer is right rather than merely
 unchanged. It needs no model and runs in milliseconds.
 
-Energy ranges, blending and the automatic decision
---------------------------------------------------
+Every point is folded
+---------------------
 
-``TargetEffect`` optionally carries lab-energy windows, a blend width and a
-relative tolerance (three trailing tokens of the ``targetInt`` line).  During
-``WorkingCopy`` fill, a point whose blend weight is zero never receives the effect
-number, so the rest of the machinery treats it as an ordinary point.  A
-parent point with a fractional weight, or a positive tolerance, first
-computes its bare value from a probe copy of itself that pretends not to
-carry the effect; edge blending mixes the integrated and bare values with a
-smoothstep weight, and the automatic decision probes the first, central and
-last sub-point to estimate the size of the effect (curvature across the
-window, plus the centroid shift under target integration), using the bare
-value outright when the estimate is below the tolerance.
-
-A **thin-target integration** is different (2026-11-05): its data carry the beam
-energy, so neither a plain point nor the bare probe is the right stand-in --
-both give :math:`\sigma(E_0)`, off by the centroid shift.  Its fallback is
-:math:`\sigma(\bar E)` at the depth-averaged energy
-:math:`\bar E = \int E\,dE/\epsilon \big/ \int dE/\epsilon` over the target
-(``TargetEffect::MeanEnergyLoss`` gives :math:`D = E_0 - \bar E`, stored on every
-thin-target point and updated with a fitted density).  A point outside every
-window keeps the effect number, is marked by ``SetTargetFallbackOnly(true)`` and has one
-sub-point at :math:`\bar E` (three, at :math:`\bar E` of 0.01 :math:`N_0`,
-:math:`N_0` and the layout density, under ``densityfit``); edge blending happens
-inside the target kernel against its sigma(E_bar) fallback (``KernelTarget.cpp``; linear in the
-sub-point values, so ``FoldWeights`` and the analytic gradient carry it);
-and ``Unit::FoldThinTarget`` makes the automatic decision from the end
-sub-points and the two around :math:`\bar E`, comparing the chord with
-:math:`\sigma(\bar E)` (curvature only), and lets the point off through a
-``TargetFallbackScope``.  Windows on a thick target, and windows or a tolerance
-on a line with ``doppler``, are refused (``CheckTargetWindows``).  The total
-capture composite never applies the automatic decision.  Test:
-``tests/target_window_fallback``.
-
-With ``"auto"`` in the windows token (``TargetEffect::IsAutoWindows``,
-2026-11-06) the windows are placed per segment in ``ReadTargetEffectsFile``,
-before any grid is laid out: ``TargetWindowsFor`` takes the resonances the grid
-generator would see for that segment's entrance pair
-(``AdaptiveIntegrationGrid::GetResonances``, observed energies and total widths
-from the starting parameters) and the particle thresholds of the same compound
-nucleus, keeps a resonance when :math:`\Gamma < \Delta/\sqrt{3\,\mathrm{tol}}`
-(the peak error of :math:`\sigma(\bar E)` for a Lorentzian), and gives each kept
-resonance or threshold the lab window
-:math:`[E_R - w, E_R + \Delta + w]`, :math:`w = \mathrm{margin}\times\max(\Gamma, \Delta)`,
-with :math:`\Delta` the target thickness at the layout density plus twice the
-beam spread, evaluated at the resonance energy clamped into the segment's data
-range (the stopping power is a fit over the data's energies).  The windows are
-merged with the line's own ranges and passed to the two-argument
-``TargetEffect::BlendWeight``; everything downstream is the fallback machinery
-above.  The decision is made once per session and the windows do not follow a
-level that a fit moves.  Test: ``tests/target_auto_windows``.
+A target effect applies to every point of the data sets that name it, with the
+whole kernel: there are no energy windows, edge blends, automatic tolerance or
+sigma(E_bar) stand-in (they existed to spare a point its own sub-point grid; on
+the shared mesh a node costs the same whoever reads it).  A thin target thinner
+than one mesh interval is an ordinary folded point: the target kernel integrates
+the linear interpolant of its two enclosing nodes over the support, i.e. the
+interpolated cross section at the depth-averaged energy.  The converter drops the
+old options of a ``<targetInt>`` line with a note; a format-3 ``fold_windows``
+field is refused (``E_FIELD_DELETED``).
 
 The target kernel with a beam spread accepts either
 convolution flavour: a fixed beam sigma, or the energy-dependent convolution
@@ -559,7 +519,7 @@ sub-point target effect, at every sub-point, and the transformed values are
 swapped into the base point's sub-point slots for one more pass of
 ``FoldValues`` (the broadening already applied).  ``WorkingCopy::CheckTransformedSegments`` refuses
 what that cannot express: terms on different sub-point grids (a sample of
-several compound nuclei), and a blended or automatically skipped effect.  Every
+several compound nuclei).  Every
 evaluation path assembles a segment through ``azure2::EvaluateModelPoint``;
 pyazr's branch tests ``Segment::NeedsAssembly`` (components, sample weights or
 a transform), and the MCMC output snapshot assembles those segments too.  The

@@ -1211,9 +1211,8 @@ bool WorkingCopy::FinishTransformedSegment(CNuc *theCNuc, Segment *seg, int key,
 /*!
  * After the target effects are read: a transmission or yield segment whose points carry a sub-point effect sums its
  * terms at every sub-point before the transform, so every term must sit on the base point's sub-point grid.  Terms of
- * one entrance pair do (their grids are laid out alike); the terms of a sample with several compound nuclei do not,
- * and an effect blended in at range edges or skipped by an automatic tolerance is not one kernel on transformed
- * values.  Refused here rather than computed wrongly.
+ * one entrance pair do (their grids are laid out alike); the terms of a sample with several compound nuclei do not.
+ * Refused here rather than computed wrongly.
  */
 bool WorkingCopy::CheckTransformedSegments(const Config &configure) {
   for (const Segment &seg : Draft().GetSegments()) {
@@ -1230,16 +1229,6 @@ bool WorkingCopy::CheckTransformedSegments(const Config &configure) {
             return false;
           }
         continue;
-      }
-      TargetEffect *te = Draft().GetTargetEffect(base->GetTargetEffectNum());
-      // A thin-target integration blends with sigma(E_bar) inside its kernel (Unit::TargetFallbackImpl), which is
-      // still one linear kernel on the transformed values; other kernels blend with a plain point outside it.
-      const bool thinTarget = te && te->IsTargetIntegration() && !te->IsThickTarget();
-      if ((base->GetTargetBlendWeight() < 1.0 && !thinTarget) || (te && te->GetAutoTolerance() > 0.0)) {
-        configure.outStream << "ERROR: " << what << "its target effect blends in at range edges or has an automatic "
-                            << "tolerance; the transform needs the full kernel at every point (drop the blend width "
-                            << "and the auto_tolerance of its fold_windows)." << std::endl;
-        return false;
       }
       for (int t = 1; t < seg.NumTerms(); t++) {
         Unit *cp = p <= (int)seg.TermPoints(*this, t).size() ? seg.GetTermPoint(*this, t, p) : nullptr;

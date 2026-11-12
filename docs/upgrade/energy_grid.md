@@ -204,6 +204,22 @@ nodes, whose two outer nodes of a soft edge lie up to one interval outside it.  
 as before: shifted segments (branch 8), THM (branch 10), `useAdaptiveGrid` off, and the σ(Ē) fallback nodes and windows
 (milestone 3).
 
+**Status, milestone 3 (`feature/upgrade-5-d3-deletions`, 2026-11-12): the four mechanisms of D3 are deleted.**  The
+automatic tolerance, the fold windows (explicit and `auto`), the edge blend and the σ(Ē) fallback are gone from the
+engine (`TargetSetup.cpp`, `PointPass.cpp`, `Unit.h`, `TargetEffect.*`, the hand-over, the stopping scale, the Coulomb
+reference, the gradient), the target kernel (`KernelTarget.cpp`), format 3 (`fold_windows` is refused with
+`E_FIELD_DELETED`), the converter (an old line's ranges, blend and tolerance are dropped with a note) and the docs.
+Every point of a folded data set is folded with the whole kernel.  What is left off the mesh, each with a grid of its
+own and a sharing group of its own (`SlotGroup.h`): a segment with an energy shift (its sub-points move rigidly with the
+shift until branch 8 folds it on fixed nodes), THM (its kinematics on the mesh are branch 10), and every folded point
+under `useAdaptiveGrid` off (a uniform grid of `points` intervals, the old option).  A thin target narrower than one
+mesh interval is an ordinary folded point: the rule of §2.4 clipped at its support integrates the linear interpolant of
+the two enclosing nodes over [E0 − Δ, E0], i.e. the interpolated σ at the depth-averaged energy (exactly so for 1/ε
+constant across the target) — the linear-interpolation case of the deleted fallback, with the nodes of the mesh, whose
+interval near a level of width Γ is at most Γ/p.  Moved: `tests/target_effect_ranges` (the project of the tree that
+used them), χ² 3838.66 → 3760.95, the beam spread now folded outside its old window (largest A_y change 0.046, 1.5 data
+σ); its numbers equal the engine before the deletion run without the windows, bit for bit.
+
 ### 2.3 Fixed per stage, and what happens when a narrow level moves
 
 Today every evaluation re-places the grids (`ReplaceSubPointGrids`) from the quantized anchors; the grid a copy
@@ -548,7 +564,8 @@ cross section per active nucleus (lab MeV cm²).
 
 **Status (branch 6, `feature/upgrade-5-kernels`).** The kernels of the first five rows are rows of one table,
 `Kernels()` in `experiment/src/Kernels.cpp` (`experiment/include/azure2/experiment/Kernels.h`): `target`
-(`KernelTarget.cpp`: thin, thick, layer yield, with beam spread and straggling, the σ(Ē) fallback and the edge blend),
+(`KernelTarget.cpp`: thin, thick, layer yield, with beam spread and straggling; the σ(Ē) fallback and the edge blend
+it had are deleted, decision D3),
 `gaussian`, `beam_profile`, `udr` (one file each) and the broadening `doppler` (`KernelDoppler.cpp`), each a fold
 template on V = double (value) and V = `LinearForm` (the gradient's weights) and a support function (the interval the
 set-up lays the grid over). `src/TargetFold.cpp` is deleted; the engine's fold is `FoldPoint` (`src/PointFold.cpp`):
