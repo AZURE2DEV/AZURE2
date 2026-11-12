@@ -2,6 +2,7 @@
 #define AZURE2_SITE_H
 #include "CalculationPlan.h"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <vector>
@@ -20,6 +21,7 @@
 #include "TermSettings.h"
 #include "UnitRange.h"
 #include "SiteObservable.h"
+#include "RowSet.h"
 
 class Segment;
 class WorkingCopy;
@@ -159,11 +161,17 @@ class Site {
    * the value the record holds (the reader's angle is the site's).
    */
   double ValueFor(const Site &reader, int slot, const azure2::Results &r) const;
+  /// A_y of this site as `reader` sees it (kAnalyzingPower: the second value of the contraction), else the record's.
+  double AnalyzingPowerFor(const Site &reader, int slot, const azure2::Results &r) const;
+  /// The values of this site at slot k (0-based) of the row set `set` (RowSet.h) into values[0 .. set.valuesPerSlot):
+  /// the set's row contracted with the record, as ValueFor (and AnalyzingPowerFor) give them to each reader of the set.
+  void ValuesWith(const azure2::RowSet &set, int k, const azure2::Results &r, double *values) const;
   /// The same contraction on a record `record` (laid out as a site's of kind `kind`) that is not in a result buffer.
-  static double ContractRecord(SiteObservable kind, const double *record, const Site &reader, int slot);
+  static double ContractRecord(SiteObservable kind, const double *record, const Site &reader, int slot,
+                               double *second = nullptr);
   /// The reader's Coulomb amplitudes at its slot `slot` (0: its own energy): f_d, the (symmetrized) f_C(theta), or
   /// the direct one for identical particles with spin, and f_x = f_C(pi - theta) there, else 0 (a reader of elastic
-  /// slots holds them per slot: CalcNodeRows).
+  /// slots reads them from its row set: RowSet.h).
   void CoulombAt(int slot, complex &direct, complex &exchange) const;
   /// f_C at c.m. energy `energy` (MeV) and c.m. angle `angle` (deg) of `pair` scattering elastically: `direct`
   /// (symmetrized for an identical pair without spin-dependent exchange) and `exchange` (0 unless spin-dependent).
@@ -171,11 +179,34 @@ class Site {
                                   bool &spinDependent);
   /// The reader's angular row at its slot `slot` (1-based; 0: its own energy): P_L(cos theta) with the Q coefficients
   /// of its effect, at the slot's energy where the detector's lab transform makes it depend on the energy
-  /// (RowDependsOnEnergy; the rows of its slots, CalcNodeRows), else at the point's.
+  /// (RowDependsOnEnergy; from its row set, RowSet.h), else at the point's.
   double RowP(int slot, int l) const { return Row(slot)[l]; }
   /// The whole row at slot `slot` (RowP(slot, l) = Row(slot)[l]).
   const double *Row(int slot) const {
-    return (slot > 0 && node_rows_) ? node_rows_->data() + (std::size_t)(slot - 1) * legendreP_->size() : legendreP_->data();
+    return (slot > 0 && rowset_) ? rowset_->Row(rowset_at_ + slot - 1) : legendreP_->data();
+  }
+  /// The row set the reader's slots are read with (RowSet.h), null where it reads no angle-free slots.
+  const azure2::RowSet *RowSetOf() const { return rowset_ ? &*rowset_ : nullptr; }
+  /// The position of the reader's slot `slot` (1-based) in its row set.
+  int RowSetIndex(int slot) const { return rowset_at_ + slot - 1; }
+  /// Read the slots with the row set `set` from its position `at` (WorkingCopy::BuildRowSets, Unit::CalcNodeRows).
+  void ReadWithRowSet(SharedTable<azure2::RowSet> set, int at) {
+    rowset_ = std::move(set);
+    rowset_at_ = at;
+  }
+  /*!
+   * The value of this reader's slot `slot` (1-based), the site `site`: the contraction of the evaluation where the
+   * row set's values are kept (Results::contracted, RowSet.h), else site.ValueFor(*this, slot, r) -- the same number.
+   */
+  double SlotValue(const Site &site, int slot, const azure2::Results &r) const {
+    if (rowset_ && rowset_->valueOffset >= 0) return r.contracted[rowset_->ValueIndex(rowset_at_ + slot - 1, 0)];
+    return site.ValueFor(*this, slot, r);
+  }
+  /// A_y of this reader's slot `slot` (an analysing power; SlotValue is the cross section that weights it).
+  double SlotAnalyzingPower(const Site &site, int slot, const azure2::Results &r) const {
+    if (rowset_ && rowset_->valueOffset >= 0 && rowset_->valuesPerSlot > 1)
+      return r.contracted[rowset_->ValueIndex(rowset_at_ + slot - 1, 1)];
+    return site.AnalyzingPowerFor(*this, slot, r);
   }
   /// Whether the point's angular row depends on the energy: Q coefficients on a particle-to-particle reaction that is
   /// not charged elastic scattering, UPOS or A_y (the detector averages the lab distribution: CalcLegendreP).
@@ -322,9 +353,10 @@ class Site {
   /// no buffer: the values are in the caller's.
   static constexpr std::size_t kNoRecord = static_cast<std::size_t>(-1);
   std::size_t ResultSlot() const { return slot_; }
-  /// Slots for Legendre coefficients a site's record needs: Config::maxLOrder + 1 for a site holding them
-  /// (AngleFree), else 0.
-  int ResultAngularCapacity() const;
+  /// Slots of the angular part a site's record needs where the reactions' Legendre orders are at most `orders`
+  /// and the amplitudes of an analysing power are at most `capacity` (WorkingCopy::Capacity): its kind's
+  /// (SiteObservable.h), 0 for kValue.
+  int ResultAngularCapacity(const RecordCapacity &capacity) const;
   /// Slots for the coefficients a_k of an angular-distribution or coefficient point in its model record:
   /// max_ang_dist_order + 1, else 0.
   int ModelAngularCapacity() const {
@@ -440,6 +472,21 @@ class Site {
     vector_c exchange;    ///< X_l (b/sr), empty without spin-dependent exchange
   };
   void SetElasticCoefficients(azure2::Results &r, const ElasticCoefficients &e) const;
+  /// The coefficients of an analysing power (SiteObservable.h, ay_record), written by
+  /// GenMatrixFunc::AnalyzingPowerCoefficientsOf.
+  struct AnalyzingPowerCoefficients {
+    bool elastic = false;  ///< the cross section's coefficients are weightElastic's, else weightLegendre's
+    ElasticCoefficients weightElastic;
+    vector_r weightLegendre;
+    bool capture = true;
+    std::array<double, 4> spins{};  ///< particle: j1, j2 (entrance; j1 the projectile's), j1', j2'
+    int amplitudes = 0, orders = 0;
+    vector_c coefficients;          ///< particle: C(a, l') at a orders + l'
+    vector_r denominator, numerator;  ///< capture: d_k, n_k
+  };
+  void SetAnalyzingPowerCoefficients(azure2::Results &r, const AnalyzingPowerCoefficients &a) const;
+  /// A value without an angular dependence (B_0 alone) in the record of an angle-free site, laid out as its kind's.
+  void SetIsotropicObservable(azure2::Results &r, double value) const;
   /// Write coefficients into the angular part `angular` of a record (its count first) laid out as kLegendre's or
   /// kElastic's (SiteObservable.h); the sizes are the caller's to check.
   static void WriteLegendre(double *angular, const vector_r &coefficients);
@@ -480,10 +527,9 @@ class Site {
   // sub-points held ~7 GB of these rows); every writer goes through MutableEDep() / MutableLegendre(), which give
   // the point its own copy first if the tables are shared (copy-on-write).
   SharedTable<vector_r> legendreP_;
-  /// A reader's rows at the energies of its slots (RowP), slot by slot, where they depend on the energy; else null.
-  SharedTable<vector_r> node_rows_;
-  /// A reader of elastic slots: its Coulomb amplitudes f_d, f_x at the energies of its slots (CoulombAt), else null.
-  SharedTable<vector_c> node_coulomb_;
+  /// A reader of angle-free slots: the rows it reads them with (RowSet.h) and the position of its first slot there.
+  SharedTable<azure2::RowSet> rowset_;
+  int rowset_at_ = 0;
   SharedTable<EDependentTables> edep_;
   /// This point's own, writable tables (copied first if shared with another point).
   EDependentTables &MutableEDep();

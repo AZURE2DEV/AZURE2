@@ -212,6 +212,12 @@ class GenMatrixFunc {
   void BuildCoulombInterference(const azure2::EntrancePathways &P, const azure2::ExitRow &exit, bool elastic);
   /// rt_wl_ (and for elastic scattering rt_it_) for the T-matrix held now, once per T-matrix.
   void BuildOrderProducts(const azure2::EntrancePathways &P, const azure2::ExitRow &exit, bool particleExit, bool elastic);
+  /// The record of an analysing power at the T-matrix held now (SiteObservable.h, ay_record): the cross section's
+  /// coefficients and A_y's -- the amplitude matrix's per exit orbital momentum (Polarization::AmplitudeMatrix::
+  /// AddPathwayCoefficients) for a particle exit, Seyler and Weller's per order for capture.
+  Site::AnalyzingPowerCoefficients AnalyzingPowerCoefficientsOf(const Site *point, const azure2::EntrancePathways &P,
+                                                                const azure2::ExitRow &theDecay, int aa,
+                                                                int exitPairNum);
   /// The observables of elastic scattering of `point`'s pair `aa` at its energy (SiteObservable::kElastic).
   Site::ElasticCoefficients ElasticCoefficientsOf(const Site *point, const azure2::EntrancePathways &P,
                                                   const azure2::ExitRow &exit, int aa);

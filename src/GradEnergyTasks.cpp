@@ -4,7 +4,9 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <map>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "CNuc.h"
@@ -161,6 +163,38 @@ int RowSlotOf(WorkingCopy &data, UnitRef u, const UnitCotangent &k) {
   return (k.rows && data.SiteAt(u).AngleFree()) ? k.rowSlot : 0;
 }
 
+// The cotangents of one T-matrix group with the reads of one slot through one row set merged (RowSet.h): the readers
+// of a row set see the slot under the same row, so the slot's adjoint (AMatrixFunc::PointTBar, linear in the
+// cotangent) is called once with their cotangents summed, in their order.  Other cotangents stay one each.
+struct SharedRead {
+  int cotangent;  // the first cotangent of the read (its reader's row, components)
+  UnitRef unit;
+  double value;
+};
+
+void MergeSharedReads(WorkingCopy &data, const Pass &pass, const std::vector<std::pair<int, UnitRef>> &order,
+                      std::vector<SharedRead> &reads) {
+  reads.clear();
+  // (unit, row set, position in it, component, A_y cross section) -> its entry in `reads`
+  std::map<std::tuple<UnitRef, const RowSet *, int, int, bool>, std::size_t> at;
+  for (const std::pair<int, UnitRef> &o : order) {
+    const UnitCotangent &k = pass.cot[o.first];
+    const RowSet *set = (k.rows && data.SiteAt(o.second).AngleFree()) ? k.rows->RowSetOf() : nullptr;
+    if (!set || set->valueOffset < 0) {
+      reads.push_back({o.first, o.second, k.value});
+      continue;
+    }
+    const auto key = std::make_tuple(o.second, set, k.rows->RowSetIndex(k.rowSlot), k.xsComponent, k.ayCrossSection);
+    const auto found = at.find(key);
+    if (found == at.end()) {
+      at.emplace(key, reads.size());
+      reads.push_back({o.first, o.second, k.value});
+    } else {
+      reads[found->second].value += k.value;
+    }
+  }
+}
+
 // The solver of a task on this thread, filled and factored at the task's first unit.
 AMatrixFunc &SolveTask(CNuc *compound, const Config &config, Site *first) {
   static thread_local AMatrixFunc amf(compound, config);
@@ -230,12 +264,14 @@ bool ScalarTask(CNuc *compound, const Config &config, WorkingCopy &data, Results
   TMatrixCotangent bar;
   const bool dense = DenseAdjointRequested();
   std::vector<std::pair<int, UnitRef>> order;
+  std::vector<SharedRead> reads;
   auto group = [&](int begin, int end, Site *provider) {
     TMatrixCotangent sum;
     GroupCotangents(pass, list, task, begin, end, order);
-    for (const std::pair<int, UnitRef> &o : order) {
-      const UnitCotangent &k = pass.cot[o.first];
-      if (!amf.PointTBar(&data.SiteAt(o.second), results, k.value, bar, k.xsComponent, k.ayCrossSection, RowsOf(data, o.second, k), RowSlotOf(data, o.second, k))) return false;
+    MergeSharedReads(data, pass, order, reads);
+    for (const SharedRead &r : reads) {
+      const UnitCotangent &k = pass.cot[r.cotangent];
+      if (!amf.PointTBar(&data.SiteAt(r.unit), results, r.value, bar, k.xsComponent, k.ayCrossSection, RowsOf(data, r.unit, k), RowSlotOf(data, r.unit, k))) return false;
       AddCotangent(sum, bar);
     }
     if (dense || !amf.CollectBilinearTerms(provider, sum, terms)) {

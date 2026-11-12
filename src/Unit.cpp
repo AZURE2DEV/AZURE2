@@ -3,6 +3,7 @@
 #include "ALevel.h"
 #include "JGroup.h"
 #include "PPair.h"
+#include "PolarizationFunc.h"
 #include <memory>
 #include "Profile.h"
 #include "AngCoeff.h"
@@ -538,7 +539,7 @@ void Site::SetResultRecord(std::size_t slot, int nAng, int nNat) {
 }
 
 void Site::UsePrivateRecord(azure2::Results &scratch) {
-  const int nAng = this->ResultAngularCapacity();
+  const int nAng = this->ResultAngularCapacity(RecordCapacity{Config::maxLOrder + 1, 0});
   const int nNat = num_natural_slots_;
   scratch.slot.assign(azure2::Results::RecordSize(nAng, nNat), 0.0);
   // the caller's buffer of a new evaluation (a reaction-rate point): NaN under AZURE_POISON_RESULTS, as every other
@@ -560,29 +561,57 @@ void Unit::CalcLegendreP(WorkingCopy *data, int maxL, CNuc *theCNuc, const Targe
   Site::CalcLegendreP(data, maxL, theCNuc, targetEffect);
   for (int i = 1; i <= NumSubPoints(); i++)
     if (data->WritesSlot(*this, i)) GetSubPoint(*data, i)->CalcLegendreP(data, maxL, theCNuc, targetEffect);
-  this->CalcNodeRows(*data, maxL, theCNuc, targetEffect);
 }
 
 void Unit::CalcNodeRows(const WorkingCopy &data, int maxL, CNuc *theCNuc, const TargetEffect *targetEffect) {
-  node_rows_.reset();
-  node_coulomb_.reset();
-  if (!AngleFree() || NumSubPoints() <= 0 || !theCNuc) return;
-  if (Observable() == SiteObservable::kElastic) {
-    // f_C depends on the energy: the reader's amplitudes at its angle and the energies of its slots (CoulombAt)
-    PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(GetEntranceKey()));
-    vector_c amplitudes(2 * (std::size_t)NumSubPoints());
-    bool spinDependent = false;
-    for (int j = 1; j <= NumSubPoints(); j++)
-      CoulombAmplitudesAt(pair, GetSubPoint(data, j)->GetCMEnergy(), GetCMAngle(), amplitudes[2 * (j - 1)],
-                          amplitudes[2 * (j - 1) + 1], spinDependent);
-    node_coulomb_ = SharedTable<vector_c>::Make(std::move(amplitudes));
+  rowset_.reset();
+  rowset_at_ = 0;
+  if (!AngleFree() || IsCoefficient() || NumSubPoints() <= 0 || !theCNuc) return;
+  // The point's own row set over its slots, not cached (RowSet.h); WorkingCopy::BuildRowSets shares them.
+  ReadWithRowSet(SharedTable<azure2::RowSet>::Make(RowSetOver(data, SubPointFirst(), NumSubPoints(), maxL, theCNuc,
+                                                                targetEffect)),
+                 0);
+}
+
+azure2::RowSet Unit::RowSetOver(const WorkingCopy &data, int first, int count, int maxL, CNuc *theCNuc,
+                                const TargetEffect *targetEffect) const {
+  azure2::RowSet set;
+  set.kind = Observable();
+  set.first = first;
+  set.count = count;
+  set.valuesPerSlot = kSiteObservables[(int)set.kind].values;
+  if (set.kind == SiteObservable::kAnalyzingPower) {
+    // the factors of A_y at the readers' angle: Y_l'^mu (particle exits) and P_k^1 (capture)
+    const double theta = GetCMAngle() * pi / 180.0;
+    PPair *in = theCNuc->GetPair(theCNuc->GetPairNumFromKey(GetEntranceKey()));
+    PPair *out = theCNuc->GetPair(theCNuc->GetPairNumFromKey(GetExitKey()));
+    set.muMax = Polarization::MaxProjection(in->GetJ(1), in->GetJ(2), out->GetJ(1), out->GetJ(2));
+    Polarization::HarmonicTable(theta, Config::maxLOrder, set.muMax, set.harmonics);
+    set.p1.assign(legendreP_->size(), 0.0);
+    for (std::size_t k = 1; k < set.p1.size(); k++) set.p1[k] = AngCoeff::LegendreP1((int)k, std::cos(theta));
   }
-  if (maxL < 0 || !RowDependsOnEnergy(theCNuc, targetEffect)) return;
-  const std::size_t n = (std::size_t)maxL + 1;
-  vector_r rows(n * (std::size_t)NumSubPoints());
-  for (int j = 1; j <= NumSubPoints(); j++)
-    LegendreRowAt(GetSubPoint(data, j)->GetCMEnergy(), maxL, theCNuc, targetEffect, rows.data() + (j - 1) * n);
-  node_rows_ = SharedTable<vector_r>::Make(std::move(rows));
+  if (set.kind == SiteObservable::kElastic ||
+      (set.kind == SiteObservable::kAnalyzingPower && GetEntranceKey() == GetExitKey())) {
+    // f_C depends on the energy: the reader's amplitudes at its angle and the energies of the slots
+    PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(GetEntranceKey()));
+    set.coulomb.resize(2 * (std::size_t)count);
+    bool spinDependent = false;
+    for (int k = 0; k < count; k++)
+      CoulombAmplitudesAt(pair, data.SlotAt(first + k).GetCMEnergy(), GetCMAngle(), set.coulomb[2 * (std::size_t)k],
+                          set.coulomb[2 * (std::size_t)k + 1], spinDependent);
+  }
+  set.rowPerSlot = maxL >= 0 && RowDependsOnEnergy(theCNuc, targetEffect);
+  if (!set.rowPerSlot) {
+    set.rowLength = legendreP_->size();
+    set.rows = *legendreP_;
+    return set;
+  }
+  set.rowLength = (std::size_t)maxL + 1;
+  set.rows.resize(set.rowLength * (std::size_t)count);
+  for (int k = 0; k < count; k++)
+    LegendreRowAt(data.SlotAt(first + k).GetCMEnergy(), maxL, theCNuc, targetEffect,
+                  set.rows.data() + (std::size_t)k * set.rowLength);
+  return set;
 }
 
 void Unit::CalcEDependentValues(WorkingCopy *data, CNuc *theCNuc, const Config &configure, const ChannelRowSource *rows) {

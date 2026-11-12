@@ -97,7 +97,7 @@ void GenMatrixFunc::CalculateBareCrossSection(Site *point, azure2::Results &resu
     // branch below.
     point->SetFitCrossSection(results, real(sum) / 100. * compound()->GetPair(aa)->GetEntranceSymmetryFactor());
     // This formalism has no angular dependence: a site holding Legendre coefficients holds the value as B_0.
-    if (point->AngleFree()) point->SetLegendreCoefficients(results, {point->GetFitCrossSection(results)});
+    if (point->AngleFree()) point->SetIsotropicObservable(results, point->GetFitCrossSection(results));
   } else {
     const int ir = P.ExitOf(exitPairNum);
     if (!ir) throw std::runtime_error(NoPathwayMessage(aa, exitPairNum));
@@ -278,7 +278,20 @@ void GenMatrixFunc::CalculateBareCrossSection(Site *point, azure2::Results &resu
         if (!point->IsSubPoint()) point->SetFitCrossSection(results, point->ValueFor(*point, 0, results));
         return;
       }
-      std::vector<double> record(azure2::Results::RecordSize(elastic_record::kSlots, 0), 0.0);
+      if (kind == SiteObservable::kAnalyzingPower) {
+        // An analyzing-power segment reports A_y in place of the cross section; a slot keeps the coefficients, and
+        // each reader contracts the cross section that weights its target average and A_y (Site::SlotValue,
+        // SlotAnalyzingPower).
+        point->SetAnalyzingPowerCoefficients(results, this->AnalyzingPowerCoefficientsOf(point, P, theDecay, aa,
+                                                                                           exitPairNum));
+        if (!point->IsSubPoint()) {
+          const double ay = point->AnalyzingPowerFor(*point, 0, results);
+          point->SetAnalyzingPower(results, ay);
+          point->SetFitCrossSection(results, ay);
+        }
+        return;
+      }
+      std::vector<double> record(azure2::Results::RecordSize(elastic_record::Slots(Config::maxLOrder + 1), 0), 0.0);
       double *angular = record.data() + azure2::Results::AngularOffset();
       if (aa == exitPairNum) {
         Site::WriteElastic(angular, this->ElasticCoefficientsOf(point, P, theDecay, aa));
@@ -339,28 +352,6 @@ void GenMatrixFunc::CalculateBareCrossSection(Site *point, azure2::Results &resu
       }
       point->SetFitCrossSection(results, phase);
     }
-  }
-
-  // An analyzing-power segment reports A_y in place of the cross section, so
-  // the rest of AZURE2 -- output files, chi-squared, plotting -- needs no
-  // special case.
-  if (point->IsAnalyzingPower()) {
-    double spinSum = 0.0, ay = 0.0;
-    // Two routes, chosen by the exit channel: the channel-spin amplitude matrix
-    // (Seyler 1969) for particle pairs, the Legendre coefficients of Seyler and
-    // Weller (1979) for capture. Both consume the same T-matrix elements.
-    const int exitPType =
-        compound()->GetPair(compound()->GetPairNumFromKey(point->GetExitKey()))->GetPType();
-    const bool ok = (exitPType == 10)
-        ? this->CalculateCaptureAnalyzingPower(point, results, &spinSum, &ay)
-        : this->CalculateAmplitudeMatrix(point, &spinSum, &ay);
-    if (!ok) ay = 0.0;
-    point->SetAnalyzingPower(results, ay);
-    // A sub-point of a target-effect integration must keep the cross section
-    // in place, because A_y is averaged over the target weighted by it. Every
-    // other point reports A_y directly, so nothing downstream needs a special
-    // case.
-    if (!point->IsSubPoint()) point->SetFitCrossSection(results, ay);
   }
 
   // Temporary validation hook: compare the Seyler amplitude-matrix route
@@ -480,7 +471,7 @@ Site::ElasticCoefficients GenMatrixFunc::ElasticCoefficientsOf(const Site *point
   const double itFactor = pair->IsIdentical() ? 2.0 : 1.0;
   const complex cI = complex(0., 1.) / sqrt(pi) * geom * itFactor / 100.;
   for (const CoulombTerm &t : rt_it_) {
-    if (t.l >= elastic_record::kOrders)
+    if (t.l > Config::maxLOrder)
       throw std::runtime_error("elastic scattering of pair " + std::to_string(aa) + ": a channel with l = " +
                                std::to_string(t.l) + " above the highest Legendre order " +
                                std::to_string(Config::maxLOrder));
@@ -719,7 +710,7 @@ bool GenMatrixFunc::CalculateAmplitudeMatrix(Site *point, double *spinSum,
   if (!ir) throw std::runtime_error(NoPathwayMessage(aaPair, irPair));
   const azure2::ExitRow &theDecay = P.exits[ir - 1];
 
-  Polarization::AmplitudeMatrix M(compound(), point, aaPair, irPair);
+  Polarization::AmplitudeMatrix M(compound(), point->GetCMAngle(), aaPair, irPair);
 
   for (int k = 1; k <= theDecay.num_groups; k++) {
     const azure2::SpinGroupRow &g = P.Group(theDecay, k);
@@ -732,7 +723,11 @@ bool GenMatrixFunc::CalculateAmplitudeMatrix(Site *point, double *spinSum,
   }
 
   // Coulomb only contributes to elastic scattering.
-  if (aaPair == irPair) M.AddCoulomb();
+  if (aaPair == irPair) {
+    complex fd, fx;
+    point->CoulombAt(0, fd, fx);
+    M.AddCoulomb(fd, fx);
+  }
 
   if (M.size() == 0) return false;
   if (std::getenv("AZURE2_POL_DEBUG2")) M.DumpSpinHalf();
@@ -741,6 +736,67 @@ bool GenMatrixFunc::CalculateAmplitudeMatrix(Site *point, double *spinSum,
   if (spinSum) *spinSum = M.UnpolarizedCrossSection();
   if (analyzingPower) *analyzingPower = M.AnalyzingPowerAy();
   return true;
+}
+
+Site::AnalyzingPowerCoefficients GenMatrixFunc::AnalyzingPowerCoefficientsOf(const Site *point,
+                                                                             const azure2::EntrancePathways &P,
+                                                                             const azure2::ExitRow &theDecay, int aa,
+                                                                             int exitPairNum) {
+  Site::AnalyzingPowerCoefficients a;
+  // the cross section that weights A_y: the differential one, by the route of every other point (no angle here)
+  a.elastic = aa == exitPairNum;
+  if (a.elastic)
+    a.weightElastic = this->ElasticCoefficientsOf(point, P, theDecay, aa);
+  else
+    a.weightLegendre = this->LegendreCoefficientsOf(point, P, theDecay, aa, exitPairNum);
+  PPair *in = compound()->GetPair(aa), *out = compound()->GetPair(exitPairNum);
+  a.capture = true;  // without a particle or capture form (no projectile in), the empty capture form: A_y = 0
+  if (in->GetPType() != 0) return a;
+  if (out->GetPType() == 10) {
+    // Seyler and Weller (1979): the coefficients of P_k and P_k^1, summed over the terms per order
+    if (!theDecay.has_capture_ay) throw std::runtime_error(CaptureAyNotBuiltMessage(point));
+    int orders = 0;
+    for (int i = 0; i < theDecay.num_capture_ay; i++)
+      orders = std::max(orders, P.capture_ay[theDecay.first_capture_ay + i].kOrder + 1);
+    a.denominator.assign(orders, 0.0);
+    a.numerator.assign(orders, 0.0);
+    for (int i = 0; i < theDecay.num_capture_ay; i++) {
+      const azure2::CaptureAyTerm *term = &P.capture_ay[theDecay.first_capture_ay + i];
+      complex T1 = term->isEC1 ? this->GetECTMatrixElement(term->kGroup1, term->path1)
+                               : this->GetTMatrixElement(term->kGroup1, term->path1);
+      complex T2 = term->isEC2 ? this->GetECTMatrixElement(term->kGroup2, term->path2)
+                               : this->GetTMatrixElement(term->kGroup2, term->path2);
+      const complex prod = T1 * conj(T2);
+      if (term->ak != 0.0) a.denominator[term->kOrder] += term->ak * real(prod);
+      if (term->bk != 0.0) a.numerator[term->kOrder] += term->bk * (-imag(prod));  // Re(i T T'*)
+    }
+    return a;
+  }
+  if (out->GetPType() != 0) return a;
+  // Seyler (1969): the amplitude matrix's coefficients per exit orbital momentum
+  a.capture = false;
+  a.spins = {in->GetJ(1), in->GetJ(2), out->GetJ(1), out->GetJ(2)};
+  Polarization::AmplitudeMatrix M(compound(), aa, exitPairNum);
+  a.amplitudes = (int)M.size();
+  a.orders = 1;
+  for (int k = 1; k <= theDecay.num_groups; k++) {
+    const azure2::SpinGroupRow &g = P.Group(theDecay, k);
+    if (g.CrossSpin()) continue;  // a cross-spin UPOS group repeats pathways of the equal-spin groups
+    for (int m = 1; m <= g.num_internal; m++) {
+      const azure2::InternalRow &r = P.Internal(g, m);
+      a.orders = std::max(a.orders, compound()->GetJGroup(r.group)->GetChannel(r.chp)->GetL() + 1);
+    }
+  }
+  a.coefficients.assign((std::size_t)a.amplitudes * a.orders, complex(0.0, 0.0));
+  for (int k = 1; k <= theDecay.num_groups; k++) {
+    const azure2::SpinGroupRow &g = P.Group(theDecay, k);
+    if (g.CrossSpin()) continue;
+    for (int m = 1; m <= g.num_internal; m++) {
+      const azure2::InternalRow &r = P.Internal(g, m);
+      M.AddPathwayCoefficients(r.group, r.ch, r.chp, this->GetTMatrixElement(k, m), a.coefficients.data(), a.orders);
+    }
+  }
+  return a;
 }
 
 bool GenMatrixFunc::CalculateCaptureAnalyzingPower(Site *point, const azure2::Results &results,

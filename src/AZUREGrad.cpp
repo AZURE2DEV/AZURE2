@@ -520,7 +520,7 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
   }
 
   std::vector<double> sigma(nsp);
-  for (int i = 1; i <= nsp; i++) sigma[i - 1] = point->GetSubPoint(data, i)->ValueFor(*point, i, results);
+  for (int i = 1; i <= nsp; i++) sigma[i - 1] = point->SlotValue(*point->GetSubPoint(data, i), i, results);
   double model = point->GetFitCrossSection(results);
 
   const auto tc0 = std::chrono::steady_clock::now();
@@ -573,7 +573,7 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
   if (isAy) {
     den = FoldValues(*point, data, config, sigma);
     std::vector<double> product(nsp);
-    for (int i = 1; i <= nsp; i++) product[i - 1] = sigma[i - 1] * point->GetSubPoint(data, i)->GetAnalyzingPower(results);
+    for (int i = 1; i <= nsp; i++) product[i - 1] = sigma[i - 1] * point->SlotAnalyzingPower(*point->GetSubPoint(data, i), i, results);
     const double num = FoldValues(*point, data, config, product);
     // The forward pass returns 0 for D = 0, a constant: no gradient.
     if (!(std::fabs(den) > 0.0)) {
@@ -606,7 +606,7 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
       for (int i = 1; i <= nsp; i++)
         weight[i - 1] = isAy ? sigma[i - 1] : point->GetSubPoint(data, i)->GetAngDistA0(results);
       for (int i = 1; i <= nsp; i++)
-        vals[i - 1] = weight[i - 1] * (isAy ? point->GetSubPoint(data, i)->GetAnalyzingPower(results) : sigma[i - 1]);
+        vals[i - 1] = weight[i - 1] * (isAy ? point->SlotAnalyzingPower(*point->GetSubPoint(data, i), i, results) : sigma[i - 1]);
       const double dN = FoldTemperatureDerivative(*point, data, config, vals);
       const double dD = FoldTemperatureDerivative(*point, data, config, weight);
       dT = (dN - avg * dD) / den;
@@ -637,7 +637,7 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
       emit(i, fitBar * c[i - 1] * (sigma[i - 1] - avg) / den, -1, false);
     } else {
       emit(i, fitBar * c[i - 1] * sigma[i - 1] / den, 0, false);
-      emit(i, fitBar * c[i - 1] * (sp->GetAnalyzingPower(results) - avg) / den, 0, true);
+      emit(i, fitBar * c[i - 1] * (point->SlotAnalyzingPower(*sp, i, results) - avg) / den, 0, true);
     }
   }
   return true;

@@ -839,8 +839,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
       //        dA_y/dT2* = [ +i bk P_k^1 T1 - A_y ak P_k T1 ] / (2 D),
       //      and the cotangent convention of this function supplies the 2. ----
       const int maxL = angles->GetMaxLOrder();
-      // The forward pass has refused a point whose terms were not requested (CalculateCaptureAnalyzingPower).
-      if (!theDecay.has_capture_ay) return false;
+      if (!theDecay.has_capture_ay) return false;  // terms not requested: the forward pass refused the point
       const int nTerms = theDecay.num_capture_ay;
       if (nTerms == 0) return false;
 
@@ -885,7 +884,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
     } else if (compound()->GetPair(exitPairNum)->GetPType() != 0) {
       return false;
     } else {
-      Polarization::AmplitudeMatrix M(compound(), point, aa, exitPairNum);
+      Polarization::AmplitudeMatrix M(compound(), angles->GetCMAngle(), aa, exitPairNum);  // the reader's angle
       for (int k = 1; k <= nK; k++) {
         if (P.Group(theDecay, k).CrossSpin()) continue;  // as the forward sum
         for (int m = 1; m <= P.Group(theDecay, k).num_internal; m++) {
@@ -894,7 +893,8 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
                        this->GetTMatrixElement(k, m));
         }
       }
-      if (aa == exitPairNum) M.AddCoulomb();
+      complex fdAy(0.0, 0.0), fxAy(0.0, 0.0);  // the reader's Coulomb amplitudes at the slot's energy
+      if (aa == exitPairNum) angles->CoulombAt(rowSlot, fdAy, fxAy), M.AddCoulomb(fdAy, fxAy);
       if (M.size() == 0) return false;
 
       const std::vector<complex> bar = M.AnalyzingPowerBar();

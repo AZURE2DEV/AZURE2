@@ -109,9 +109,12 @@ class Unit : public Site {
   const Site &OwnSite() const { return *this; }
   /// The Site functions of the same names for the point's own site and then for each slot of its fold, in order.
   void CalcLegendreP(WorkingCopy *data, int maxL, CNuc *, const TargetEffect *);
-  /// The point's rows at the energies of its slots, where its row depends on the energy (Site::RowP); after its own
-  /// rows and whenever its slots or its angle change.
+  /// A row set of the point's own over its slots (RowSet.h, not cached), where it reads angle-free slots; after its
+  /// own rows and whenever its slots or its angle change.  WorkingCopy::BuildRowSets replaces it by a shared one.
   void CalcNodeRows(const WorkingCopy &data, int maxL, CNuc *, const TargetEffect *);
+  /// The rows of the point's angular identity over the slots [first, first + count) of `data` (RowSet.h; its own
+  /// Legendre rows, or per slot where they depend on the energy, and f_C per slot for elastic scattering).
+  azure2::RowSet RowSetOver(const WorkingCopy &data, int first, int count, int maxL, CNuc *, const TargetEffect *) const;
   void CalcEDependentValues(WorkingCopy *data, CNuc *, const Config &, const ChannelRowSource *rows = nullptr);
   void ChannelKeys(WorkingCopy *data, CNuc *, std::vector<ChannelTable::Key> &);
   void CalcCoulombAmplitude(WorkingCopy *data, CNuc *);

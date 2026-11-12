@@ -52,7 +52,8 @@ clean() {
 CALC='1\n\n\n7\n'
 FIT='2\n\n\n\n7\n'
 for p in "sqrt:$TESTS/shift_sqrt_subpoints/models:sqrt.azr:none" "thm:$TESTS/18O_p_a_thm:18O_p_a_thm.azr:0" \
-         "natural_neon:$TESTS/natural_neon:natural_neon.azr:0" "elastic:$TESTS/hybrid_potential:hybrid_potential.azr:0"; do
+         "natural_neon:$TESTS/natural_neon:natural_neon.azr:0" "elastic:$TESTS/hybrid_potential:hybrid_potential.azr:0" \
+         "ay:$TESTS/13N:13N.azr:0"; do
   IFS=: read -r name src azr wantOverflow <<< "$p"
   run "$name" "$src" "$azr" 0 "$CALC"
   run "$name" "$src" "$azr" 1 "$CALC"

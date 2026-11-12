@@ -4,10 +4,13 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <stdexcept>
+#include <string>
 
 #include "AChannel.h"
 #include "AngCoeff.h"
 #include "CNuc.h"
+#include "Config.h"
 #include "Unit.h"
 #include "JGroup.h"
 #include "PPair.h"
@@ -42,23 +45,40 @@ inline double ParticleCG(double j1, double j2, double s, double m1, double m2, d
 
 // ---------------------------------------------------------------------------
 
-AmplitudeMatrix::AmplitudeMatrix(CNuc *compound, Site *point, int aa, int ir) :
-  compound_(compound),
-  point_(point),
-  aa_(aa),
-  ir_(ir),
-  theta_(point->GetCMAngle() * pi / 180.0) {
-  // Channel spins available in the entrance and exit pairs: |j1-j2| .. j1+j2.
-  PPair *entrance = compound_->GetPair(aa_);
-  PPair *exit = compound_->GetPair(ir_);
-  for (double s = std::fabs(entrance->GetJ(1) - entrance->GetJ(2));
-       s <= entrance->GetJ(1) + entrance->GetJ(2) + 1.e-6; s += 1.0)
-    entranceSpins_.push_back(s);
-  for (double s = std::fabs(exit->GetJ(1) - exit->GetJ(2));
-       s <= exit->GetJ(1) + exit->GetJ(2) + 1.e-6; s += 1.0)
-    exitSpins_.push_back(s);
+void HarmonicTable(double theta, int lMax, int muMax, vector_c &table) {
+  table.assign((std::size_t)(lMax + 1) * (2 * muMax + 1), complex(0.0, 0.0));
+  for (int lp = 0; lp <= lMax; lp++)
+    for (int mu = -std::min(lp, muMax); mu <= std::min(lp, muMax); mu++)
+      table[(std::size_t)lp * (2 * muMax + 1) + (mu + muMax)] = AngCoeff::SphericalHarmonic(lp, mu, theta);
+}
 
-  // One amplitude per (s, v, s', v'); v and v' run over their projections.
+int MaxProjection(double j1, double j2, double jp1, double jp2) {
+  return (int)std::lround(j1 + j2 + jp1 + jp2);
+}
+
+AmplitudeMatrix::AmplitudeMatrix(CNuc *compound, double angle, int aa, int ir)
+    : AmplitudeMatrix(compound->GetPair(aa)->GetJ(1), compound->GetPair(aa)->GetJ(2), compound->GetPair(ir)->GetJ(1),
+                      compound->GetPair(ir)->GetJ(2)) {
+  compound_ = compound;
+  aa_ = aa;
+  ir_ = ir;
+  theta_ = angle * pi / 180.0;
+  HarmonicTable(theta_, Config::maxLOrder, muMax_, harmonics_);
+}
+
+AmplitudeMatrix::AmplitudeMatrix(CNuc *compound, int aa, int ir)
+    : AmplitudeMatrix(compound->GetPair(aa)->GetJ(1), compound->GetPair(aa)->GetJ(2), compound->GetPair(ir)->GetJ(1),
+                      compound->GetPair(ir)->GetJ(2)) {
+  compound_ = compound;
+  aa_ = aa;
+  ir_ = ir;
+}
+
+AmplitudeMatrix::AmplitudeMatrix(double j1, double j2, double jp1, double jp2) : j1_(j1), j2_(j2) {
+  muMax_ = MaxProjection(j1, j2, jp1, jp2);
+  for (double s = std::fabs(j1 - j2); s <= j1 + j2 + 1.e-6; s += 1.0) entranceSpins_.push_back(s);
+  for (double s = std::fabs(jp1 - jp2); s <= jp1 + jp2 + 1.e-6; s += 1.0) exitSpins_.push_back(s);
+
   for (std::size_t i = 0; i < entranceSpins_.size(); i++) {
     const double s = entranceSpins_[i];
     for (double v = -s; v <= s + 1.e-6; v += 1.0) {
@@ -121,9 +141,42 @@ void AmplitudeMatrix::AddPathway(int jNum, int chNum, int chpNum,
       const double cg2 = AngCoeff::ClebGord(sp, (double)lp, jValue, vp, mu, v);
       if (std::fabs(cg2) < 1.e-12) continue;
 
-      const complex y = AngCoeff::SphericalHarmonic(lp, (int)std::lround(mu), theta_);
+      const complex y = HarmonicOf(harmonics_.data(), muMax_, lp, (int)std::lround(mu));
       At(s, v, sp, vp) += complex(0.0, 1.0) * std::sqrt(2.0 * l + 1.0) *
           cg1 * cg2 * tMatrixElement * y * identical;
+    }
+  }
+}
+
+void AmplitudeMatrix::AddPathwayCoefficients(int jNum, int chNum, int chpNum, complex tMatrixElement,
+                                             complex *coefficients, int nLp) const {
+  JGroup *jgroup = compound_->GetJGroup(jNum);
+  AChannel *entrance = jgroup->GetChannel(chNum);
+  AChannel *exitCh = jgroup->GetChannel(chpNum);
+
+  const double jValue = jgroup->GetJ();
+  const int l = entrance->GetL();
+  const int lp = exitCh->GetL();
+  const double s = entrance->GetS();
+  const double sp = exitCh->GetS();
+  if (lp >= nLp) throw std::logic_error("AmplitudeMatrix::AddPathwayCoefficients: l' = " + std::to_string(lp) +
+                                        " beyond the record's " + std::to_string(nLp) + " orders");
+
+  const double identical = IdenticalFactor(lp, sp);
+  if (identical == 0.0) return;
+
+  for (double v = -s; v <= s + 1.e-6; v += 1.0) {
+    const double cg1 = AngCoeff::ClebGord(s, (double)l, jValue, v, 0.0, v);
+    if (std::fabs(cg1) < 1.e-12) continue;
+    for (double vp = -sp; vp <= sp + 1.e-6; vp += 1.0) {
+      const double mu = v - vp;  // outgoing orbital projection
+      if (std::fabs(mu) > lp + 1.e-6) continue;
+      const double cg2 = AngCoeff::ClebGord(sp, (double)lp, jValue, vp, mu, v);
+      if (std::fabs(cg2) < 1.e-12) continue;
+      const int a = IndexOf(s, v, sp, vp);
+      if (a < 0) continue;
+      coefficients[(std::size_t)a * nLp + lp] +=
+          complex(0.0, 1.0) * std::sqrt(2.0 * l + 1.0) * cg1 * cg2 * tMatrixElement * identical;
     }
   }
 }
@@ -142,13 +195,12 @@ double AmplitudeMatrix::IdenticalFactor(int lp, double sp) const {
   return (parity == 0) ? 2.0 : 0.0;
 }
 
-void AmplitudeMatrix::AddCoulomb() {
-  // Coulomb scattering is diagonal in channel spin and its projection, and
-  // only exists when entrance and exit pairs are the same.
+void AmplitudeMatrix::AddCoulomb(complex direct, complex exchange) {
   if (aa_ != ir_) return;
   for (std::size_t i = 0; i < entranceSpins_.size(); i++) {
     const double s = entranceSpins_[i];
-    const complex coulombAmplitude = point_->GetCoulombAmplitude(s);
+    // f_C(s) = f_d + (-1)^s f_x (f_x = 0 but for identical particles with spin, whose channel spins are integers)
+    const complex coulombAmplitude = (((std::lround(2.0 * s) / 2) % 2 == 0) ? 1.0 : -1.0) * exchange + direct;
     for (double v = -s; v <= s + 1.e-6; v += 1.0)
       At(s, v, s, v) += -coulombAmplitude;
   }
@@ -181,9 +233,8 @@ int AmplitudeMatrix::IndexOf(double s, double v, double sp, double vp) const {
 std::vector<complex> AmplitudeMatrix::AnalyzingPowerBar() const {
   std::vector<complex> bar(amplitudes_.size(), complex(0.0, 0.0));
 
-  PPair *entrance = compound_->GetPair(aa_);
-  const double j1 = entrance->GetJ(1);
-  const double j2 = entrance->GetJ(2);
+  const double j1 = j1_;
+  const double j2 = j2_;
   if (std::fabs(j1 - 0.5) > 1.e-6) return bar;
 
   // N and D are needed in full before any slot can be differentiated, so the
@@ -281,7 +332,7 @@ complex AmplitudeMatrix::PathwayAdjoint(int jNum, int chNum, int chpNum,
       if (std::fabs(cg2) < 1.e-12) continue;
       const int idx = IndexOf(s, v, sp, vp);
       if (idx < 0) continue;
-      const complex y = AngCoeff::SphericalHarmonic(lp, (int)std::lround(mu), theta_);
+      const complex y = HarmonicOf(harmonics_.data(), muMax_, lp, (int)std::lround(mu));
       const complex coeff = complex(0.0, 1.0) * std::sqrt(2.0 * l + 1.0) *
           cg1 * cg2 * y * identical;
       tbar += std::conj(coeff) * bar[idx];
@@ -340,9 +391,8 @@ double AmplitudeMatrix::AnalyzingPowerAy() const {
   // section adds channel spins incoherently and is blind to it -- so it is
   // recorded here rather than left implicit.  ParticleCG supplies the
   // coefficients, and can reverse the order for a convention-invariance test.
-  PPair *entrance = compound_->GetPair(aa_);
-  const double j1 = entrance->GetJ(1);  // particle 1, the light one
-  const double j2 = entrance->GetJ(2);  // particle 2, the heavy one
+  const double j1 = j1_;  // particle 1, the light one
+  const double j2 = j2_;  // particle 2, the heavy one
   // The vector analyzing power is a spin-1/2 beam observable.
   if (std::fabs(j1 - 0.5) > 1.e-6) return 0.0;
 

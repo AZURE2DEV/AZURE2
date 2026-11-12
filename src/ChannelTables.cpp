@@ -622,7 +622,7 @@ void Site::CoulombAmplitudesAt(PPair *entrancePair, double energy, double angle,
 }
 
 void Site::CalcCoulombAmplitude(WorkingCopy *data, CNuc *theCNuc) {
-  // A slot without an angle has no Coulomb amplitude: its readers hold theirs (Unit::CalcNodeRows).
+  // A slot without an angle has no Coulomb amplitude: its readers hold theirs (RowSet.h).
   if (is_sub_point_ && AngleFree()) return;
   if (this->GetEntranceKey() == this->GetExitKey()) {
     PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));

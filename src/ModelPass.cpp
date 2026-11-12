@@ -91,7 +91,7 @@ double LeafValue(const Site *p, const Site *reader, int slot, LeafPart part, con
     case LeafPart::E2: return p->GetFitE2CrossSection(results);
     case LeafPart::Value: break;
   }
-  return p == reader ? p->GetFitCrossSection(results) : p->ValueFor(*reader, slot, results);
+  return p == reader ? p->GetFitCrossSection(results) : reader->SlotValue(*p, slot, results);
 }
 
 /// What a term is called in a message when its calculation fails.

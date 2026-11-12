@@ -50,6 +50,10 @@ struct Results {
 
   std::vector<double> slot;
 
+  /// The values the readers of angle-free slots fold: per row set (RowSet.h) and slot, its row contracted with the
+  /// slot's record (WorkingCopy::ContractRowSets, Site::SlotValue); laid out by WorkingCopy::BuildRowSets.
+  std::vector<double> contracted;
+
   /*!
    * What the data set predicts, apart from the leaf values above (docs/upgrade/data_model.md section 2.1, step S4):
    * one record per point of a data or test segment -- not of a leaf or a sub-point --, laid out with the
@@ -97,7 +101,7 @@ struct Results {
   /// then shows as NaN.
   void Poison() {
     const double nan = std::numeric_limits<double>::quiet_NaN();
-    for (std::vector<double> *v : {&slot, &model, &objective.norm, &objective.segmentChi2, &objective.covarianceSeed})
+    for (std::vector<double> *v : {&slot, &contracted, &model, &objective.norm, &objective.segmentChi2, &objective.covarianceSeed})
       std::fill(v->begin(), v->end(), nan);
   }
 

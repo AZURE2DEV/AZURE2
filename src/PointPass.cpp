@@ -55,6 +55,7 @@ void Unit::Calculate(WorkingCopy *data, CNuc *theCNuc, const Config &configure, 
     unit = this->GetSubPoint(*data, i);
     azure2::SolveAtOneEnergy(theCNuc, configure, results, &unit, 1);
   }
+  data->ContractRowSetOf(*this, results);
   this->FoldSubPoints(*data, configure, results);
 }
 
@@ -131,8 +132,8 @@ void Unit::FoldSubPoints(const WorkingCopy &data, const Config &configure, azure
   }
   std::vector<double> sigma(n), product(n);
   for (int i = 1; i <= n; i++) {
-    sigma[i - 1] = this->GetSubPoint(data, i)->ValueFor(*this, i, results);
-    product[i - 1] = sigma[i - 1] * this->GetSubPoint(data, i)->GetAnalyzingPower(results);
+    sigma[i - 1] = this->SlotValue(*this->GetSubPoint(data, i), i, results);
+    product[i - 1] = sigma[i - 1] * this->SlotAnalyzingPower(*this->GetSubPoint(data, i), i, results);
   }
   const double denominator = FoldValues(*this, data, configure, sigma);
   const double numerator = FoldValues(*this, data, configure, product);

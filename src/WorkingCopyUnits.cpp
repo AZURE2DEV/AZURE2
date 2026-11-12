@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <map>
+#include <tuple>
 // The points and slots of a working copy (WorkingCopy::UnitAt, SlotAt; docs/upgrade/data_structure.md section 1.4):
 // slots given to points during the set-up or a grid re-placement, and the layout of the two vectors.
 #include <stdexcept>
@@ -10,9 +12,11 @@
 #include <cstring>
 #include <iostream>
 
+#include "AngCoeff.h"
 #include "CNuc.h"
 #include "Config.h"
 #include "PPair.h"
+#include "PolarizationFunc.h"
 #include "MeshSlots.h"
 #include "Segment.h"
 #include "TargetEffect.h"
@@ -83,15 +87,79 @@ void WorkingCopy::PlaceSubPointGrids(SubPointGrids &grids) {
 
 void WorkingCopy::CompactUnits() { LayOutUnits(nullptr); }
 
-void WorkingCopy::CalcNodeRows(const std::vector<int> &tasks, CNuc *theCNuc, const Config &configure) {
-  std::vector<int> sorted(tasks);
-  std::sort(sorted.begin(), sorted.end());
-  sorted.erase(std::unique(sorted.begin(), sorted.end()), sorted.end());
-  for (int t : sorted) {
-    Unit *point = plan_.Point(*this, t);
-    if (!point || !point->AngleFree() || point->NumSubPoints() <= 0) continue;
-    const TargetEffect *te = point->IsTargetEffect() ? Data().GetTargetEffect(point->GetTargetEffectNum()) : nullptr;
-    point->CalcNodeRows(*this, configure.maxLOrder, theCNuc, (te && te->IsQCoefficients()) ? te : nullptr);
+namespace {
+
+/// What readers of one block must have in common to share a row set (WorkingCopy::BuildRowSets).
+struct RowIdentity {
+  int block, kind, pair;
+  std::uint64_t cmAngle, labAngle;
+  const TargetEffect *qEffect;
+  bool operator<(const RowIdentity &o) const {
+    return std::tie(block, kind, pair, cmAngle, labAngle, qEffect) <
+           std::tie(o.block, o.kind, o.pair, o.cmAngle, o.labAngle, o.qEffect);
+  }
+};
+
+std::uint64_t Bits(double x) {
+  std::uint64_t b;
+  std::memcpy(&b, &x, sizeof b);
+  return b;
+}
+
+}  // namespace
+
+void WorkingCopy::BuildRowSets(CNuc *theCNuc, const Config &configure) {
+  rowSets_.clear();
+  contractedSize_ = 0;
+  if (!theCNuc) return;
+  std::map<RowIdentity, std::vector<int>> readers;  // in unit order
+  std::map<RowIdentity, const TargetEffect *> effects;
+  for (int u = 0; u < NumUnits(); u++) {
+    Unit &p = units_[u];
+    if (!p.AngleFree() || p.IsCoefficient() || p.NumSubPoints() <= 0) continue;
+    const TargetEffect *te = p.IsTargetEffect() ? Data().GetTargetEffect(p.GetTargetEffectNum()) : nullptr;
+    const TargetEffect *qEffect = (te && te->IsQCoefficients()) ? te : nullptr;
+    const RowIdentity id{SlotBlockOf(p.SubPointFirst()), (int)p.Observable(), p.GetEntranceKey(),
+                         Bits(p.GetCMAngle()), Bits(p.GetLabAngle()), qEffect};
+    readers[id].push_back(u);
+  }
+  for (const auto &group : readers) {
+    int first = units_[group.second.front()].SubPointFirst(), end = first;
+    for (int u : group.second) {
+      first = std::min(first, units_[u].SubPointFirst());
+      end = std::max(end, units_[u].SubPointFirst() + units_[u].NumSubPoints());
+    }
+    azure2::RowSet set = units_[group.second.front()].RowSetOver(*this, first, end - first, configure.maxLOrder,
+                                                                   theCNuc, group.first.qEffect);
+    set.valueOffset = (long)contractedSize_;
+    contractedSize_ += (std::size_t)(end - first) * (std::size_t)set.valuesPerSlot;
+    rowSets_.push_back(SharedTable<azure2::RowSet>::Make(std::move(set)));
+    for (int u : group.second) units_[u].ReadWithRowSet(rowSets_.back(), units_[u].SubPointFirst() - first);
+  }
+}
+
+void WorkingCopy::ContractRowSets(azure2::Results &results) const {
+  if (results.contracted.size() < contractedSize_)
+    throw std::logic_error("WorkingCopy::ContractRowSets: a buffer of " + std::to_string(results.contracted.size()) +
+                           " contracted values for " + std::to_string(contractedSize_) + " (BeginEvaluation is missing)");
+#pragma omp parallel for schedule(dynamic, 1)
+  for (int s = 0; s < (int)rowSets_.size(); s++) {
+    const azure2::RowSet &set = *rowSets_[s];
+    for (int k = 0; k < set.count; k++)
+      slots_[set.first + k].ValuesWith(set, k, results, results.contracted.data() + set.ValueIndex(k, 0));
+  }
+}
+
+void WorkingCopy::ContractRowSetOf(const Unit &point, azure2::Results &results) const {
+  const azure2::RowSet *set = point.RowSetOf();
+  if (!set || set->valueOffset < 0) return;
+  if (results.contracted.size() < set->ValueIndex(set->count, 0))
+    throw std::logic_error("WorkingCopy::ContractRowSetOf: a buffer of " + std::to_string(results.contracted.size()) +
+                           " contracted values, the point's row set ends at " +
+                           std::to_string(set->ValueIndex(set->count, 0)) + " (BeginEvaluation is missing)");
+  for (int j = 1; j <= point.NumSubPoints(); j++) {
+    const int k = point.RowSetIndex(j);
+    slots_[set->first + k].ValuesWith(*set, k, results, results.contracted.data() + set->ValueIndex(k, 0));
   }
 }
 
@@ -105,9 +173,38 @@ long WorkingCopy::CheckReaderRows(CNuc *theCNuc) const {
     if (!p.AngleFree() || p.NumSubPoints() <= 0 || p.IsCoefficient()) continue;
     const TargetEffect *te = p.IsTargetEffect() ? Data().GetTargetEffect(p.GetTargetEffectNum()) : nullptr;
     const TargetEffect *qEffect = (te && te->IsQCoefficients()) ? te : nullptr;
-    const bool elastic = p.Observable() == SiteObservable::kElastic;
+    const bool ay = p.Observable() == SiteObservable::kAnalyzingPower;
+    const bool elastic = p.Observable() == SiteObservable::kElastic || (ay && p.GetEntranceKey() == p.GetExitKey());
     PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(p.GetEntranceKey()));
     readers++;
+    const azure2::RowSet *set = p.RowSetOf();
+    if (set && ay) {
+      // the A_y factors at the reader's angle: Y_l'^mu and P_k^1, bit for bit
+      const double theta = p.GetCMAngle() * pi / 180.0;
+      vector_c y;
+      Polarization::HarmonicTable(theta, Config::maxLOrder, set->muMax, y);
+      bool same = y.size() == set->harmonics.size() &&
+                  std::memcmp(y.data(), set->harmonics.data(), y.size() * sizeof(complex)) == 0;
+      for (std::size_t k = 1; k < set->p1.size() && same; k++) {
+        const double p1 = AngCoeff::LegendreP1((int)k, std::cos(theta));
+        same = std::memcmp(&p1, &set->p1[k], sizeof p1) == 0;
+      }
+      if (!same) {
+        differ += p.NumSubPoints();
+        if (reports.size() < 10)
+          reports.push_back("unit " + std::to_string(u) + " (segment " + std::to_string(p.GetSegmentKey()) +
+                            "): the A_y factors of its row set are not those of its angle");
+        continue;
+      }
+    }
+    if (!set || p.RowSetIndex(1) < 0 || p.RowSetIndex(p.NumSubPoints()) >= set->count ||
+        set->first + p.RowSetIndex(1) != p.SubPointFirst()) {
+      differ += p.NumSubPoints();
+      if (reports.size() < 10)
+        reports.push_back("unit " + std::to_string(u) + " (segment " + std::to_string(p.GetSegmentKey()) +
+                          "): its slots are not in its row set");
+      continue;
+    }
     for (int j = 1; j <= p.NumSubPoints(); j++) {
       const double e = p.GetSubPoint(*this, j)->GetCMEnergy();
       slots++;
@@ -132,8 +229,8 @@ long WorkingCopy::CheckReaderRows(CNuc *theCNuc) const {
                           std::to_string(j) + " at " + std::to_string(e) + " MeV:" + what);
     }
   }
-  std::cerr << "AZURE_NODE_CHECK: reader rows: " << readers << " readers of slots without an angle, " << slots
-            << " slots, " << differ << " differ" << std::endl;
+  std::cerr << "AZURE_NODE_CHECK: reader rows: " << readers << " readers of slots without an angle (" << rowSets_.size()
+            << " row sets), " << slots << " slots, " << differ << " differ" << std::endl;
   for (const std::string &r : reports) std::cerr << "AZURE_NODE_CHECK:   " << r << std::endl;
   return differ;
 }
