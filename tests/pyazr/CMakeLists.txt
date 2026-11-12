@@ -377,7 +377,7 @@ set_tests_properties(pyazr_session_isolation PROPERTIES PROCESSORS 3 SKIP_RETURN
 add_test(NAME pyazr_concurrent_sessions
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/concurrent_sessions_test.py)
-set_tests_properties(pyazr_concurrent_sessions PROPERTIES PROCESSORS 2 SKIP_RETURN_CODE 77
+set_tests_properties(pyazr_concurrent_sessions PROPERTIES PROCESSORS 2 SKIP_RETURN_CODE 77 LABELS slow
                      ENVIRONMENT "AZURE2_COULOMB_TABLE_TOOL=$<TARGET_FILE:azure2-coulomb-table>")
 
 # Tests that take minutes rather than seconds (measured 2026-10-10 on a CRC

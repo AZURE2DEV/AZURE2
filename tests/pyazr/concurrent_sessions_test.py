@@ -191,7 +191,11 @@ def main():
         for mode, group in cases:
             if not second_table and "T" in group:
                 continue
-            got = run(tmp, mode, group, second_table)
+            try:
+                got = run(tmp, mode, group, second_table)
+            except RuntimeError as err:  # a session that could not be built or evaluated (a crash of the worker)
+                failures.append(f"{mode} {'-'.join(group)}: {str(err).splitlines()[0]} ({str(err).splitlines()[-1]})")
+                continue
             bad = [(k, label, digest) for k, (label, digest) in enumerate(got) if digest != fresh[label]]
             print(f"  {mode:4s} {'-'.join(group):6s} {len(got)} evaluations, {len(bad)} differ from a fresh process")
             for k, label, digest in bad[:5]:

@@ -60,11 +60,11 @@ allow-list with its reason).  "Done" in the last column means the change is in t
 
 | Symbol (file) | Holds | Written / read | Safety | Order | Becomes |
 |---|---|---|---|---|---|
-| `g_config` (`src/AZURE2.cpp`, `api/src/pybind_api.cpp`, `src/coulomb_table_main.cpp`) | a pointer to the run's `Config` (the binding swaps it per call) | read by `CoulFunc`, `ShftFunc`, `Kinematics.h` (relativistic switch), `UnitExternalCapture` | none: two sessions on two threads would race | yes in principle: a session's call reads the other's config if two calls run at once (read); not seen in one thread (A-B-A run) | the readers take the `Config` (or the one field) from their caller; deleted (milestone 2) |
-| `g_ecAmplitudeCache` (`src/ECAmplitudeCache.cpp`) | the EC amplitudes on the reaction-rate/extrapolation grid | the binding swaps it per session; `UnitExternalCapture` reads | none across threads | yes if two sessions run at once (read) | a member of the session's problem, passed down (milestone 2) |
-| `g_shiftDerivMemo`, `g_shiftDerivMutex` (`src/CNuc.cpp`) | dS/dE and d²S/dE² at level energies (Park), keyed by every input | `CNuc::CalcShiftFunctions` | mutex | no: exact key (read) | scratch of the evaluation (`CNuc`'s parameter part) or deleted after measurement (milestone 2) |
-| `g_terms`, `g_termsMutex`, `g_nodes`, `g_lookups`, `g_direct`, `g_nodesReport`, `g_checkMutex`, `g_maxDeviation` (`src/ECTable.cpp`) | the EC-integral table: nodes per term, filled on first use (`shared_future`), counters | EC amplitudes on the table | mutex + futures | no: a node's value is a pure function of its key (read) | a table built at set-up for the terms the plan names (milestone 3); counters → diagnostics |
-| `g_files`, `g_bytes`, `g_stats`, `g_mutex` (`src/InputFiles.cpp`) | the bytes of data files read with `cacheInputFiles` (pyazr), keyed by path and stamp | data readers | mutex | no: re-read when the stamp moves (read) | allowed while the pyazr session re-reads files; the session's file store later (milestone 2) |
+| `g_config` (`src/AZURE2.cpp`, `api/src/pybind_api.cpp`, `src/coulomb_table_main.cpp`) | a pointer to the run's `Config` (the binding swaps it per call) | read by `CoulFunc`, `ShftFunc`, `Kinematics.h` (relativistic switch), `UnitExternalCapture` | none: two sessions on two threads would race | yes in principle: a session's call reads the other's config if two calls run at once (read); not seen in one thread (A-B-A run) | deleted (done, branch 2): a pair carries the run's settings of its functions (`PPair::FunctionSettings`, given to its constructor by `CNuc::Fill`); `Kinematics::Channel`, `CoulFunc`, `ShftFunc` and the frame rules read them from the pair; `Kinematics::Relativistic` deleted |
+| `g_ecAmplitudeCache` (`src/ECAmplitudeCache.cpp`) | the EC amplitudes on the reaction-rate/extrapolation grid | the binding swaps it per session; `UnitExternalCapture` reads | none across threads | yes if two sessions run at once (read) | the run's (done, branch 2): `RunScratch::ecAmplitudes`, read through `RunECAmplitudes(configure)`; the binding's swap deleted |
+| `g_shiftDerivMemo`, `g_shiftDerivMutex` (`src/CNuc.cpp`) | dS/dE and d²S/dE² at level energies (Park), keyed by every input | `CNuc::CalcShiftFunctions` | mutex | no: exact key (read) | the run's (done, branch 2): `RunScratch::shiftDerivatives` |
+| `g_terms`, `g_termsMutex`, `g_nodes`, `g_lookups`, `g_direct`, `g_nodesReport`, `g_checkMutex`, `g_maxDeviation` (`src/ECTable.cpp`) | the EC-integral table: nodes per term, filled on first use (`shared_future`), counters | EC amplitudes on the table | mutex + futures | no: a node's value is a pure function of its key (read) | the term table is the run's (done, branch 2): `ECTermStore` in `RunScratch::ecTerms` (filled on first use behind its lock: the terms are not known before the first evaluation); counters → diagnostics (milestone 5) |
+| `g_files`, `g_bytes`, `g_stats`, `g_mutex` (`src/InputFiles.cpp`) | the bytes of data files read with `cacheInputFiles` (pyazr), keyed by path and stamp | data readers | mutex | no: re-read when the stamp moves (read) | not moved in branch 2: a session-owned store would make `cache_stats()` (documented "for the whole process") count one session; left for a decision (section 6) |
 | `g_sharedGeneration` (`src/CoulombTable.cpp`) | moves when a missing table file is forgotten | `Shared` | atomic | no | deleted with the per-thread lookup |
 | `SharedTables()::t`, `SharedFailed()::f`, `SharedMutex()::m` (`src/CoulombTable.cpp`) | the Coulomb tables loaded from files | `Shared` | mutex | no: immutable after load (read) | allowed (an immutable table read from a file) |
 | `CoulombTable::hits_`, `misses_` (`include/CoulombTable.h`), `report` (`Shared`) | lookup counters printed at exit | every table lookup | atomic | no (diagnostic) | diagnostics, allowed until section 2 is done |
@@ -95,12 +95,12 @@ allow-list with its reason).  "Done" in the last column means the change is in t
 | `output_compound_`, `output_data_`, `output_results_`, `output_mutex_` (`include/AZURECalc.h`) | a clone kept for the iteration snapshots of a fit | deleted with the pools (the snapshot is an evaluation into its own `Results`) |
 | `fixedMask_`, `g2CacheP_`, `g2Cache_`, `lastGradP_`, `lastGrad_`, `lastGradMutex_` (`include/AZURECalc.h`) | the free mask; Minuit's G2 computed with the last gradient at its parameters; the last gradient for a dump | the fitter's state (owned by the minimiser adapter, non-`const` methods): milestone 4 |
 | `all_physical_`, `physical_`, `rwa_`, `all_rwa_`, `all_indexes`, `fixed_`, `paramNames_`, `paramKinds_`, `parametersInitialized_`, `priorMeans_`, `priorStds_`, `usePriors_`, `freeKinds_`, `priorCov_`, `useRWA_` (`include/AZURECalcMCMC.h`) | the sampler's parameter layout, filled lazily in `const` methods | built at construction (milestone 4) |
-| `levelGammas_`, `levelEnergies_`, `levelDecoupled_`, `shiftFunctions_`, `cached_max_levels_`, `cached_max_channels_` (`include/AMatrixFunc.h`) | buffers of the level-matrix fill | scratch: the object is the energy task's (non-`mutable` once the fill is non-`const`) — milestone 1 |
-| `inverse_valid_`, `inverse_`, `work_` (`include/LevelMatrixSolver.h`) | the explicit inverse formed on first request from the LU factors | scratch of the solver object (an energy task's): milestone 1 |
+| `levelGammas_`, `levelEnergies_`, `levelDecoupled_`, `shiftFunctions_`, `cached_max_levels_`, `cached_max_channels_` (`include/AMatrixFunc.h`) | buffers of the level-matrix fill | done (branch 2): plain members, written by the non-`const` fill |
+| `inverse_valid_`, `inverse_`, `work_` (`include/LevelMatrixSolver.h`) | the explicit inverse formed on first request from the LU factors | done (branch 2): `Inverse`, `Bilinear` non-`const` (and `AMatrixFunc::GetAMatrix`, whose `const_cast` went) |
 | `ec_shifted_` (`include/Site.h`) | per site, the EC amplitude at the last shifted energy | a field of the hand-over's table (EC unit amplitudes per mesh energy, roadmap Phase 6 box 1) |
-| `channelFunc_` (`include/ThmVertexBoundary.h`) | a `ChannelFunc` whose calls are non-`const` (its last-value cache) | scratch once `ChannelFunc` has no last-value cache (milestone 1) |
+| `channelFunc_` (`include/ThmVertexBoundary.h`) | a `ChannelFunc` whose calls are non-`const` (its last-value cache) | done (branch 2): `OnShellAt` non-`const` |
 | `warned` (`ThmDistortion.h`, `ThmDwVertex.h`, `ThmLineshape.h`, `ThmOptions.h`) | warn-once flags of option objects | notices |
-| `cache_mutex_` (`include/ECAmplitudeCache.h`) | guards the session's amplitude cache | with `g_ecAmplitudeCache` (milestone 2) |
+| `cache_mutex_` (`include/ECAmplitudeCache.h`) | guards the session's amplitude cache | done (branch 2): a plain member, the reader non-`const` |
 | `nuisanceParams_`, `nuisance_`, `nuisanceRead_`, `results_` (`api/include/AZUREAPI.h`) | the session's nuisance layout read lazily; the session's `Results` written by `const` evaluations | the session owns its `Results` and passes them (non-`const` evaluation methods): milestone 3 |
 
 ### 1.5 Constant tables (stay; the allow-list's permanent rows)
@@ -384,3 +384,29 @@ per thread; it goes with the pools (milestone 3).
 
 Not done in this branch: the 107 pending rows (milestones 1–5); the `g_config` and `g_ecAmplitudeCache` pointers;
 the diagnostics record; part 3 (section 5, milestone 3).
+
+### 7.4 Done in the second branch (`feature/upgrade-6-evaluation-2`)
+
+**Milestone 2, except the input-file bytes.**  `g_config` is deleted with its three definitions and 30 test copies: a
+pair carries the run's settings of its functions (`PPair::FunctionSettings`: relativistic kinematics, the use and the
+file of the Coulomb table), passed to its constructor by `CNuc::Fill`, and every former reader takes them from its pair
+(`Kinematics::Channel`, `CoulFunc`, `ShftFunc`, the frame rule of `Segment.cpp`, `Site::QLabBoostAt`,
+`Site::CalculateCrossSectionConversionFactor`, the extrapolation seeds, the channel table's signature, the
+shift-derivative key).  The table is loaded on first use as before.  The binding's `ConfigScope` (the swap of
+`g_config` and `g_ecAmplitudeCache` around every call) is deleted.  The run's scratch (`RunScratch`) holds, besides
+its per-thread part, the external-capture term table (`ECTermStore`), Park's shift-derivative memo
+(`ShiftDerivativeMemo`) and the `--no-ec-table` amplitude store (`ECAmplitudeCache`).  Within one run the Coulomb
+table is fixed, so the keys that hold only whether a table is used are complete (said in `ECTable.h` and
+`RunScratch.h`).  Not moved: `InputFiles` (the byte store is keyed by absolute path and file stamp, behind a lock;
+moving it per session changes what `cache_stats()` counts with two sessions in a process).
+
+**Milestone 1 completed.**  No `mutable` in `AMatrixFunc.h`, `LevelMatrixSolver.h`, `ThmVertexBoundary.h`; the methods
+that write the buffers are non-`const`; the `const_cast` of `AMatrixFunc::GetAMatrix` is gone.
+
+**Two sessions at the same time** (`tests/pyazr/concurrent_sessions_test.py`, ctest `pyazr_concurrent_sessions`,
+label slow, about 11 min at 2 threads).  The evaluations release the GIL (`py::call_guard<py::gil_scoped_release>` or
+an inner `gil_scoped_release` block in `api/src/pybind_api.cpp`); the `Session` constructor (the set-up) keeps it, so
+one session's set-up runs beside the other's evaluation, and two evaluations run side by side.  Found while writing it:
+the engine resolves a project's relative paths against the process's working directory, which pyazr sets per call
+(`_in_dir`); two sessions with different directories on two threads race on it (the test uses absolute paths).
+
