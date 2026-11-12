@@ -162,6 +162,20 @@ AMatrixFunc &SolveTask(CNuc *compound, const Config &config, Site *first) {
   return amf;
 }
 
+// The cotangents of the units [begin, end) of `task` (a T-matrix group), by their readers' plan tasks (stable: each
+// reader's in unit and point order) -- the order of the sum with one slot per point (UnitCotangent::reader).
+void GroupCotangents(const Pass &pass, const EnergyTaskList &list, const EnergyTask &task, int begin, int end,
+                     std::vector<std::pair<int, UnitRef>> &order) {
+  order.clear();
+  for (int i = begin; i < end; i++) {
+    const UnitRef u = list.units[task.begin + i];
+    for (int c = pass.cotFirst[u]; c < pass.cotFirst[u + 1]; c++) order.push_back({c, u});
+  }
+  std::stable_sort(order.begin(), order.end(), [&pass](const std::pair<int, UnitRef> &a, const std::pair<int, UnitRef> &b) {
+    return pass.cot[a.first].reader < pass.cot[b.first].reader;
+  });
+}
+
 // Calls group(begin, end) for each T-matrix group of `task` with cotangents, its T-matrix built first (from its first
 // unit, the group's provider; directly for the first built, through RecalculateTMatrix after, as the point pass).
 template <class Group>
@@ -205,15 +219,14 @@ bool ScalarTask(CNuc *compound, const Config &config, WorkingCopy &data, Results
   std::vector<std::vector<BilinearTerm>> merged(compound->NumJGroups()), terms;
   TMatrixCotangent bar;
   const bool dense = DenseAdjointRequested();
+  std::vector<std::pair<int, UnitRef>> order;
   auto group = [&](int begin, int end, Site *provider) {
     TMatrixCotangent sum;
-    for (int i = begin; i < end; i++) {
-      const UnitRef u = list.units[task.begin + i];
-      for (int c = pass.cotFirst[u]; c < pass.cotFirst[u + 1]; c++) {
-        const UnitCotangent &k = pass.cot[c];
-        if (!amf.PointTBar(&data.SiteAt(u), results, k.value, bar, k.xsComponent, k.ayCrossSection)) return false;
-        AddCotangent(sum, bar);
-      }
+    GroupCotangents(pass, list, task, begin, end, order);
+    for (const std::pair<int, UnitRef> &o : order) {
+      const UnitCotangent &k = pass.cot[o.first];
+      if (!amf.PointTBar(&data.SiteAt(o.second), results, k.value, bar, k.xsComponent, k.ayCrossSection)) return false;
+      AddCotangent(sum, bar);
     }
     if (dense || !amf.CollectBilinearTerms(provider, sum, terms)) {
       amf.TBarAdjoint(provider, sum, acc, shiftDeriv);
@@ -263,21 +276,20 @@ bool RowTask(CNuc *compound, const Config &config, WorkingCopy &data, Results &r
     }
     return slotOfRow[row];
   };
+  std::vector<std::pair<int, UnitRef>> order;
   auto group = [&](int begin, int end, Site *provider) {
     groupSlots.clear();
-    for (int i = begin; i < end; i++) {
-      const UnitRef u = list.units[task.begin + i];
-      for (int c = pass.cotFirst[u]; c < pass.cotFirst[u + 1]; c++) {
-        const UnitCotangent &k = pass.cot[c];
-        const int slot = slotOf(k.row);
-        if (sums.size() < rowsOf.size()) sums.resize(rowsOf.size());
-        if (std::find(groupSlots.begin(), groupSlots.end(), slot) == groupSlots.end()) {
-          groupSlots.push_back(slot);
-          sums[slot] = TMatrixCotangent();
-        }
-        if (!amf.PointTBar(&data.SiteAt(u), results, k.value, bar, k.xsComponent, k.ayCrossSection)) return false;
-        AddCotangent(sums[slot], bar);
+    GroupCotangents(pass, list, task, begin, end, order);
+    for (const std::pair<int, UnitRef> &o : order) {
+      const UnitCotangent &k = pass.cot[o.first];
+      const int slot = slotOf(k.row);
+      if (sums.size() < rowsOf.size()) sums.resize(rowsOf.size());
+      if (std::find(groupSlots.begin(), groupSlots.end(), slot) == groupSlots.end()) {
+        groupSlots.push_back(slot);
+        sums[slot] = TMatrixCotangent();
       }
+      if (!amf.PointTBar(&data.SiteAt(o.second), results, k.value, bar, k.xsComponent, k.ayCrossSection)) return false;
+      AddCotangent(sums[slot], bar);
     }
     for (int slot : groupSlots) {
       if (dense || !amf.CollectBilinearTerms(provider, sums[slot], terms)) {

@@ -8,6 +8,7 @@
 #include "Segment.h"
 #include "TargetEffect.h"
 #include "NodeTableCache.h"
+#include "SlotGroup.h"
 #include "NodeTable.h"
 #include "ThmExperiment.h"
 #include "ThmGroup.h"
@@ -220,6 +221,11 @@ class WorkingCopy {
   /// AZURE_NODE_CHECK=1 (the point pass, before its tasks): the node table and slots against the units of the plan
   /// tasks `work`, bit for bit; prints the counts to stderr and returns the number that differ (src/NodeTable.cpp).
   long CheckNodeTable(CNuc *cnuc, const std::vector<int> &work);
+  /// Part of CheckNodeTable (src/WorkingCopyUnits.cpp): the sharing groups of the slots (SlotGroup.h).  Every point's
+  /// range lies in one block, every slot's writer reads it, every point that reads a block has its group's key, and a
+  /// point on a shared mesh has at its slot k the node the mesh's plan for the present anchors gives it at k.  Prints
+  /// the counts (and up to ten breaches) to stderr; returns the number of breaches.
+  long CheckSlotGroups() const;
   /// The slots of every plan task in this copy (NodeTable.h): the stage table's until the hand-over moves a unit off it.
   const azure2::NodeSlots *Slots() const { return nodes_.slots.get(); }
   /// The copy's overflow table (NodeTable.h): the nodes of its units that the stage table does not hold.
@@ -247,8 +253,9 @@ class WorkingCopy {
   UnitRange<const Unit> Units(int first, int count) const {
     return UnitRange<const Unit>(units_.data() + first, count);
   }
-  /// The slots of the folded points (the sites of their target-effect integrals), each point's a range of one vector
-  /// in the order of the points (Unit::SubPointFirst).
+  /// The slots of the folded points (the sites of their target-effect integrals), in blocks (SlotGroup.h): one block per
+  /// sharing group, in the order of the points; a point's slots are a range of its group's block (Unit::SubPointFirst),
+  /// and the ranges of the points of one group overlap.
   Site &SlotAt(int k) { return slots_[k]; }
   const Site &SlotAt(int k) const { return slots_[k]; }
   int NumSlots() const { return (int)slots_.size(); }
@@ -267,6 +274,25 @@ class WorkingCopy {
   }
   /// The site index of slot i (1-based) of `point`.
   int SlotSite(const Unit &point, int i) const { return NumUnits() + point.SubPointFirst() + i - 1; }
+  /// The unit of the point that writes slot k (SlotGroup.h: the first point, in the order of the data, whose range holds
+  /// it), -1 for a slot no point reads.
+  int SlotWriter(int k) const { return slotWriter_[k]; }
+  /// Whether `point` (a unit of this working copy) writes its slot i (1-based): the set-up's values, the energy pass,
+  /// the record.  Every point reads all its slots.
+  bool WritesSlot(const Unit &point, int i) const {
+    return slotWriter_[point.SubPointFirst() + i - 1] == static_cast<int>(&point - units_.data());
+  }
+  /// The number of points that read site s (a point: 1; a slot: the points whose ranges hold it).
+  int SiteReaders(int s) const { return s < NumUnits() ? 1 : slotReaders_[s - NumUnits()]; }
+  /// The first slot of the block (sharing group) slot k belongs to.
+  int SlotBlockOf(int k) const { return slotBlock_[k]; }
+  /// Each of `units` (leaf points whose slots took their angles after the conversion of their rows with the leaf's
+  /// pairs, InitializeLeaves) whose angles (lab, c.m.) are not those of the slots it reads gets copies of them at its
+  /// own angles, a block of its own (SlotGroup.h).  Before the slots' tables are computed.  Single-threaded.
+  void SeparateSlotsByAngle(const std::vector<int> &units);
+  /// Give unit `unit` the slots [first, first + count) (a test that builds a fold by hand, after AppendSlot): it writes
+  /// those no point wrote yet.
+  void SetSlotRange(int unit, int first, int count);
   /// Append a unit (a point of a term, at set-up); returns its index.
   int AppendUnit(Unit unit) {
     units_.push_back(std::move(unit));
@@ -275,17 +301,24 @@ class WorkingCopy {
   /// Append a slot (a test that builds a fold by hand; the set-up gives slots with AddSubPoint); returns its index.
   int AppendSlot(Site slot) {
     slots_.push_back(std::move(slot));
+    slotBlock_.push_back(NumSlots() - 1);
+    slotWriter_.push_back(-1);
+    slotReaders_.push_back(0);
     return NumSlots() - 1;
   }
   /// Give `point` (a unit of this data set) the sub-point `sub` after those already given; held until
   /// CommitSubPoints, so that no unit moves while the set-up holds pointers to points.
   void AddSubPoint(Unit &point, Site sub);
+  /// Give the points of a sharing group (SlotGroup.h) their slots, the block's sites; held until CommitSubPoints like
+  /// AddSubPoint's.  The members' units are those of this working copy now.
+  void AddSlotGroup(azure2::SlotBlock block);
   /// Place the sub-points given since the last commit (each point's replace any it had) and lay the units out again
   /// (CompactUnits).  Single-threaded.
   void CommitSubPoints();
-  /// Per work item of a grid re-placement: (a point's unit, its new sub-points).  PlaceSubPointGrids puts a grid with
-  /// as many nodes as the old one in its place, any other in a new layout of the units.  Single-threaded.
-  using SubPointGrids = std::vector<std::vector<std::pair<int, std::vector<Site>>>>;
+  /// Per work item of a grid re-placement: the new blocks (a point with a grid of its own is a block with one member).
+  /// PlaceSubPointGrids puts a block whose members keep their places in the block they read now, and which has as many
+  /// sites, in the place of that block, any other in a new layout of the units.  Single-threaded.
+  using SubPointGrids = std::vector<std::vector<azure2::SlotBlock>>;
   void PlaceSubPointGrids(SubPointGrids &grids);
   /// Lay the units out again (see Units), dropping every unit no term and no point refers to.
   void CompactUnits();
@@ -435,7 +468,7 @@ class WorkingCopy {
   const azure2::EnergyTaskList &EnergyTasksOf(const std::vector<const Segment *> &segments, const Config &configure);
 
  private:
-  void LayOutUnits(std::vector<std::vector<Site> *> *fresh);  // CompactUnits, PlaceSubPointGrids
+  void LayOutUnits(std::vector<azure2::SlotBlock> *fresh);  // CompactUnits, CommitSubPoints, PlaceSubPointGrids
   /// The plan tasks of the points of \p segments and their leaves, in data order (src/EnergyPass.cpp).
   std::vector<int> PassWork(const std::vector<const Segment *> &segments) const;
   /// The data set (shared, immutable) and, during the set-up only, the same object writable (Draft).
@@ -446,7 +479,11 @@ class WorkingCopy {
   std::vector<double> thmCoherentValues_;       // ThmCoherentValue: one per coherent-background parameter
   std::vector<Unit> units_;  // Unit
   std::vector<Site> slots_;  // SlotAt
-  std::vector<std::vector<Site>> pendingSubPoints_;  // AddSubPoint: per point's unit, until the commit
+  std::vector<int> slotBlock_;   // SlotBlockOf: per slot, the first slot of its block
+  std::vector<int> slotWriter_;  // SlotWriter: per slot, the unit of the point that writes it
+  std::vector<int> slotReaders_;  // SiteReaders: per slot, the number of points that read it
+  std::vector<azure2::SlotBlock> pendingBlocks_;  // AddSubPoint, AddSlotGroup: until the commit
+  std::vector<int> pendingOwnBlock_;              // AddSubPoint: per unit, its block in pendingBlocks_ (-1: none)
   azure2::CalculationPlan plan_;  // built by BuildPlan; positions only, so a copy copies it as it is
   std::map<std::string, std::shared_ptr<DataCovariance::File>> covFiles_;  // only while filling
   bool covarianceError_ = false;              // a covariance file could not be read (CovarianceFileFor)
@@ -488,13 +525,13 @@ class WorkingCopy {
   /// segments (Results.h, LayoutResults; the data set holds the layout, never the values), and its model values
   /// (Results::model).
   std::size_t resultsSize_ = 0, modelSize_ = 0;
-  /// One record per point and sub-point, in the order of the segments' points then the leaves', each point before its
-  /// sub-points: each gets its offset (Unit::SetResultRecord); and one model record per point of segments_
+  /// One record per point and slot, in the order of the segments' points then the leaves', each point before the slots
+  /// it writes (WritesSlot): each gets its offset (Unit::SetResultRecord); and one model record per point of segments_
   /// (Unit::SetModelRecord).  With `results`, the buffer of the layout the points
   /// had, a point's record keeps the values it held there; a point new to the layout starts at 0, as a newly
   /// constructed point did.
   void LayoutResults(azure2::Results *results);
-  /// Calls f(point, angular slots, natural slots) for every point and sub-point in layout order.
+  /// Calls f(point, angular slots, natural slots) for every point and slot in layout order, a slot after its writer.
   template <class F>
   void ForEachResultUnit(F f);
   void FillEnergyShiftsFromParamsImpl(const vector_r &, CNuc *theCNuc, const Config *configure);

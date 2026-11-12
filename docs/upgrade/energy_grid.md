@@ -306,6 +306,17 @@ hand-over re-places from the shifted anchors at every move of a shift, and mesh 
 are the same nodes in every copy at the same parameters; the cache lets a copy adopt the rows another copy computed for
 them (on T2 most re-placed slots take another copy's rows).  It goes with branch 8, when no node moves with a shift.
 
+**Status, shared sites (`feature/upgrade-5-shared-sites`, 2026-11-12).** The folded points of a data set that need the
+cross section at one mesh node with everything else equal share one `Site` there (`include/SlotGroup.h`: the key --
+segment and term, c.m. angle bits, Legendre order of a coefficient row, target effect, stopping factor, frame shift,
+screening -- and the audit behind it).  A group's sites are one block of `WorkingCopy::SlotAt` in node order; a point's
+slots are a range of it, ranges overlap.  A slot is written by its first reader in data order
+(`WorkingCopy::WritesSlot`: set-up values, energy pass, record, external capture, stopping scale, shift step), read by
+all (folds, model pass, gradient; a site's cotangent is the sum of its readers' in point order).  Folds keep E1/E2,
+A_y sigma and a_k A_0 in arrays (`FoldValues`), never in a slot's record.  The hand-over re-places a group at once.
+Off the mesh a point is a group of its own.  Sites: natural_neon 373,449 -> 47,649, thick_target_resonance 74,634 ->
+28,924, stopping_yield/models 179,438 -> 4,221.  `NodeTableCache` is still needed (re-placed blocks adopt other copies' rows).
+
 ### 2.7 Thread-count independence by construction
 
 - The mesh and the node table are built single-threaded (or by a parallel loop that writes one node per index) from

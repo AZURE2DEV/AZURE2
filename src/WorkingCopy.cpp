@@ -803,7 +803,11 @@ WorkingCopy::WorkingCopy(const WorkingCopy &other)
       thmCoherentValues_(other.thmCoherentValues_),
       units_(other.units_),
       slots_(other.slots_),
-      pendingSubPoints_(other.pendingSubPoints_),
+      slotBlock_(other.slotBlock_),
+      slotWriter_(other.slotWriter_),
+      slotReaders_(other.slotReaders_),
+      pendingBlocks_(other.pendingBlocks_),
+      pendingOwnBlock_(other.pendingOwnBlock_),
       plan_(other.plan_),
       covFiles_(other.covFiles_),
       covarianceError_(other.covarianceError_),
@@ -974,6 +978,7 @@ int WorkingCopy::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
   }
 
   // The frame of each leaf with its own pairs
+  std::vector<int> angled;  // the points whose slots take their converted angles
   for (const std::pair<int, int> &leaf : Draft().leafRefs_) {
     int entranceKey = Draft().segments_[leaf.first].TermEntranceKey(leaf.second);
     int exitKey = Draft().segments_[leaf.first].TermExitKey(leaf.second);
@@ -1006,7 +1011,11 @@ int WorkingCopy::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
         // converted angle (CalcLegendreP below recurses into them).  Until 2026-10-27 a component with a
         // different exit pair, or a fixed-angle RATIO denominator (raw lab angle), was integrated at the
         // wrong angle (audit 2026-10-25, item 32).
+        // A slot another point of the group writes takes that point's angles; SeparateSlotsByAngle below gives
+        // a point whose converted angles differ slots of its own.
+        if (point->NumSubPoints()) angled.push_back(static_cast<int>(point - &UnitAt(0)));
         for (int k = 1; k <= point->NumSubPoints(); k++) {
+          if (!WritesSlot(*point, k)) continue;
           point->GetSubPoint(*this, k)->SetLabAngle(point->GetLabAngle());
           point->GetSubPoint(*this, k)->SetCMAngle(point->GetCMAngle());
         }
@@ -1014,6 +1023,7 @@ int WorkingCopy::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
     }
     if (entrancePair && exitPair) Draft().segments_[leaf.first].KeepLoadFrame(*this, leaf.second);
   }
+  this->SeparateSlotsByAngle(angled);
 
   // CalcEDependentValues for the leaves, in parallel as for the data segments
   // (WorkingCopy::CalcEDependentValues).  Each point writes only itself and its sub-points.  Serial, this
@@ -1298,7 +1308,8 @@ void WorkingCopy::ForEachResultUnit(F f) {
     const int nat = (t == 0 && seg.IsNatural()) ? nNatural : 0;
     for (Unit &point : seg.TermPoints(*this, t)) {
       f(point, point.ResultAngularCapacity(), nat);
-      for (Site &sub : point.GetSubPoints(*this)) f(sub, sub.ResultAngularCapacity(), 0);
+      for (int i = 1; i <= point.NumSubPoints(); i++)
+        if (WritesSlot(point, i)) f(*point.GetSubPoint(*this, i), point.GetSubPoint(*this, i)->ResultAngularCapacity(), 0);
     }
   };
   for (const Segment &seg : set_->segments_) segment(seg, 0);

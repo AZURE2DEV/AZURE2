@@ -7,7 +7,10 @@
 # and natural_neon (folded points of several compound nuclei), each with and without the check: each run exits 0,
 # every check line reports 0 units off the tables, 0 on a wrong node and 0 rows that differ, the shifted runs use the
 # overflow table, and the calculations' output files are byte for byte the same.  Shown failing with a slot of a
-# re-placed grid pointing at the next node (injected once: "on a wrong node").
+# re-placed grid pointing at the next node (injected once: "on a wrong node").  Each check also checks the sharing
+# groups of the slots (include/SlotGroup.h: every range in one block, the writer an earlier reader, one group per
+# block, the slots of a point on a shared mesh at the nodes its plan gives), reported on its own line; shown failing
+# with one point's slot range shifted by one site (injected once: "reads of another group", "off their mesh plan").
 #   node_check.sh path/to/AZURE2
 set -u
 export LC_ALL=C OMP_NUM_THREADS=2
@@ -31,7 +34,10 @@ clean() {
   lines="$(grep -ac 'AZURE_NODE_CHECK: [0-9]' "$log")"
   dirty="$(grep -a 'AZURE_NODE_CHECK: [0-9]' "$log" | grep -vc ' 0 off the tables, 0 on a wrong node; channel rows 0 differ')"
   overflow="$(grep -a 'AZURE_NODE_CHECK: [0-9]' "$log" | grep -vc ' 0 on the overflow table')"
-  [ "$lines" -gt 0 ] && [ "$dirty" -eq 0 ]
+  # the sharing groups of the slots (WorkingCopy::CheckSlotGroups), one line per check
+  groups="$(grep -ac 'AZURE_NODE_CHECK: slot groups:' "$log")"
+  grouped="$(grep -a 'AZURE_NODE_CHECK: slot groups:' "$log" | grep -c ' 0 ranges outside a block, 0 slots with a wrong writer, 0 reads of another group, 0 ranges off their mesh plan')"
+  [ "$lines" -gt 0 ] && [ "$dirty" -eq 0 ] && [ "$groups" -eq "$lines" ] && [ "$grouped" -eq "$groups" ]
 }
 CALC='1\n\n\n7\n'
 FIT='2\n\n\n\n7\n'

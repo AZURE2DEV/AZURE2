@@ -2,6 +2,74 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, Phase 5 branch 7 part 2, shared sites) — the points of a data set share the sites of the mesh (`feature/upgrade-5-shared-sites`)
+
+**Done.**
+- `include/SlotGroup.h`: the sharing group and its key (segment and term, c.m. angle bits, Legendre order of a
+  coefficient row, target effect, stopping factor, frame shift, screening U_e and parameter), one block of sites per
+  group in node order, each point a range of its block (ranges overlap).  Off the mesh a point is a group of its own.
+- `WorkingCopy` (`src/WorkingCopyUnits.cpp`): `slotBlock_`, `slotWriter_`; `WritesSlot(point, i)` (a slot is written by
+  its first reader in data order), `AddSlotGroup`, `LayOutUnits` moves whole blocks, `PlaceSubPointGrids` takes blocks,
+  `SeparateSlotsByAngle` (a leaf point whose converted angles differ from its group's gets its own copies),
+  `SetSlotRange` (tests), `CheckSlotGroups` (run by `AZURE_NODE_CHECK` / `AZURE_PLAN_CHECK` with the node check).
+- Set-up: `AddMeshSlotGroups`, `GroupNodes`, `MeshGroupKey` (`src/MeshSlots.cpp`); in `SetUpTargetEffects` the loop
+  of `AddGridSlots` over the queued mesh points (6 lines) is one call.  Hand-over: `ReplaceSubPointGrids` re-places a
+  group at once on the union of its points' new ranges (`replaceGroup`); the site construction is one lambda for
+  groups and own grids (`laySites`).
+- Writers only on written slots: `Unit` set-up recursions (Legendre, channel rows, keys, Coulomb, EC, Recalc),
+  `PrepareSubPoints`, `CalculationPlan::TaskUnits` (the energy pass), `ForEachResultUnit` (one record per site), the
+  EC read-back of `intEC.dat` (the file keeps every slot of every point), the stopping scale, the shift step.  A slot
+  whose solve throws fails every point that reads it (`EnergyPass.cpp`).
+- Folds and gradient never write a slot's record: E1/E2 components, A_y, normalised coefficients
+  (`src/PointPass.cpp`), the fd weights, A_y and coefficient adjoints and the THM fold weights (`src/AZUREGrad.cpp`)
+  fold arrays with `FoldValues`.  A site's cotangent is the sum of its readers' cotangents: each `UnitCotangent`
+  names its reader's plan task, and a T-matrix group sums them in reader order (`GroupCotangents`); the energy tasks
+  are ranked by reads (`EnergyTask::reads`, `WorkingCopy::SiteReaders`) instead of units.  Both keep the order of the
+  gradient's sums of one slot per point, so gradients and fits stay bit for bit (without them the T2 MIGRAD fit of
+  200 calls moved in the last digits from call 81 on: its analytic gradient summed in another order).
+
+**Audit of `Site`'s members** (depends on: N node energy, S segment and term, A angle, P the point; read at a slot by):
+cm/lab/compound/nominal energy N (all formulas); `settings_`, `segment_key_` S (observables); `cm_angle_` A (Legendre,
+Coulomb; key); `lab_angle_` A, a base slot holds the c.m. angle, a leaf's slot its point's converted lab angle (frames
+of leaves; separated by angle); `legendre_order_` P, coefficient rows (GenMatrixFunc; key); `row_` P, never read on a
+slot (`Row()` is -1); `geofactor_`, `sfactorconv_`, `edep_`, `eDependent*`, `screen_k_` N+S; `screen_ue_`,
+`screen_param_` P's target effect (key); `stoppingPower_` N + effect + factor (fold gather; key); `targetThickness_`,
+`targetLabEnergy_` P, never set on a slot (the fold reads the point's); `legendreP_`, Coulomb amplitudes A+N (+Q
+coefficients of the effect, key); EC amplitudes, `ec_shifted_` N+S (energy task of the writer only); `thm_ps_` THM, off
+the mesh; record (`slot_`, angular/natural counts) the site's, written by the energy pass only.
+
+**Verified how** (build `work/b-sites`, scripts in `work/sites/`).  Build 0 warnings; consistency test; `ctest -R
+"upgrade_plan|upgrade_history|upgrade_node|upgrade_mesh|kernels|grad|consistency"` 23/23; `check.sh` of 13N,
+component_mapping, layer_yield, stopping_yield, rectangular_resolution, fit_modes, ratio_to_reference pass; T1, T2, T3,
+13N, natural_neon, thick_target_resonance, layer_yield/models, stopping_yield/models, rectangular_resolution/models,
+shift_sqrt_subpoints/models, 18O_p_a_thm, hybrid_potential, beam_profile_kernel (Brune): 193 files byte-identical to
+`tab-mesh2` (run.log without timing lines).  Fits against `AZURE2.mesh2`, 1 thread, every output file identical: T2 and
+13N `--use-gradient` (30 calls), T2 `--use-lm` (30), T2 MIGRAD and T2 `--use-gradient` (200 calls).  At 3 threads the
+200-call fits give the same files as at 1 thread except the call count of `fitStatus.out` (116-118, the base varies
+the same way: 117-118).  `upgrade_node_check` extended; the slot-group check shown failing with one point's range
+shifted by one site (natural_neon: 17 slots with a wrong writer, 1 range off its mesh plan), then clean.
+`upgrade_plan` ranks by reads (shown failing with the old cost by units).  `check.sh --quick` (206 tests) passed on
+the work before the gradient order and again on commit 2ad5adfb (206 tests, 0 failed).
+
+**Measured** (1 thread, 3 alternated runs, medians; `logs/meas-final.log`; base `AZURE2.mesh2`):
+
+| project | slots (sites) base -> here | units of the pass | E-dependent values | evaluation | cross sections | wall | peak |
+|---|---|---|---|---|---|---|---|
+| thick_target_resonance | 74,634 -> 28,924 | 74,634 -> 28,924 | 558 -> 212 ms | 253 -> 133 ms | 163 -> 58 ms | 1.14 -> 0.52 s | 548 -> 272 MB |
+| natural_neon | 373,449 -> 47,649 | 373,449 -> 50,813 | 2,179 -> 329 ms | 1,237 -> 353 ms | 913 -> 105 ms | 6.02 -> 1.15 s | 1.68 GB -> 340 MB |
+| T2 | 32,032 -> 21,451 | 32,103 -> 21,522 | 56 -> 39 ms | 79 -> 64 ms | 10 -> 5 ms | 0.28 -> 0.23 s | 150 -> 134 MB |
+| 13N | | 46,164 -> 3,825 | 120 -> 10 ms | 108 -> 18 ms | 58 -> 6 ms | 7.06 -> 6.60 s | 225 -> 122 MB |
+| stopping_yield/models | | 202,888 -> 6,455 | 135 -> 4 ms | 122 -> 7 ms | 68 -> 1 ms | 0.61 -> 0.11 s | 338 -> 105 MB |
+| layer_yield/models | | 91,877 -> 14,134 | 60 -> 10 ms | 52 -> 8 ms | 26 -> 2 ms | 0.28 -> 0.10 s | 205 -> 113 MB |
+| 18O_p_a_thm (off the mesh) | | 14,688 -> 14,688 | 13 -> 13 ms | 13 -> 13 ms | | 0.10 -> 0.10 s | 116 -> 116 MB |
+| T1, T3 (unfolded) | | unchanged | unchanged | unchanged | | 2.63 / 0.15 s both | +0.2 MB |
+
+T2 fits of 200 calls: MIGRAD 31.5 -> 29.9 s (-5 %), `--use-gradient` 32.0 -> 29.9 s (-6 %).  Not shared: T2's lab-frame
+differential data (a c.m. angle per point), shifted segments and THM (grids of their own).
+
+**Open.** `NodeTableCache.h` kept (re-placed blocks adopt rows other copies computed).  Lab-frame differential data
+remain groups of one point (each point its own c.m. angle) until the angle per node (decision D5).
+
 ## 2026-11-12 (agent, Phase 5 branch 7 part 2, after milestone 2) — the stops of the shared mesh resolved, a sharper rule
 
 **The moved unfolded numbers were the comparison, not the engine.** Mechanism, by experiment:

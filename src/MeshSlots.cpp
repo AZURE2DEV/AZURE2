@@ -2,6 +2,9 @@
 #include "MeshSlots.h"
 
 #include <algorithm>
+#include <cstdint>
+#include <cstring>
+#include <functional>
 #include <tuple>
 
 #include "AdaptiveIntegrationGrid.h"
@@ -129,6 +132,86 @@ void AddGridSlots(WorkingCopy &data, Unit &point, const TermRef &term, const std
       slot.SetStoppingPower(conversion * effect.StoppingAt(e / conversion, configure,
                                                            data.EffectValues(term.GetTargetEffectNum()).stoppingScale));
     data.AddSubPoint(point, slot);
+  }
+}
+
+SlotGroupKey MeshGroupKey(const WorkingCopy &data, const Unit &point, const TermRef &term, const Unit::SubGridSpec &spec) {
+  auto bits = [](double x) {
+    std::uint64_t b;
+    std::memcpy(&b, &x, sizeof b);
+    return b;
+  };
+  SlotGroupKey key;
+  key.segment = term.segment;
+  key.term = term.term;
+  key.mesh = spec.mesh;
+  key.targetEffect = point.GetTargetEffectNum();
+  key.legendreOrder = point.IsCoefficient() ? point.GetCoefficientOrder() : -1;
+  key.angle = bits(point.GetCMAngle());
+  key.conversion = bits(spec.stoppingConversion);
+  key.frameShift = bits(spec.frameShift);
+  key.screeningUe = bits(point.GetScreeningUe());
+  key.screeningParam = point.GetScreeningParam();
+  return key;
+}
+
+std::vector<std::size_t> GroupNodes(const MeshPlan &plan, const std::vector<int> &supports,
+                                    std::vector<std::pair<int, int>> &ranges) {
+  std::vector<std::size_t> nodes;
+  for (int s : supports) {
+    const MeshNodeRange r = plan.ranges[(std::size_t)s];
+    for (std::size_t k = r.first; k <= r.last && k < plan.nodes.size(); k++) nodes.push_back(k);
+  }
+  std::sort(nodes.begin(), nodes.end(), std::greater<std::size_t>());
+  nodes.erase(std::unique(nodes.begin(), nodes.end()), nodes.end());
+  ranges.clear();
+  for (int s : supports) {
+    const MeshNodeRange r = plan.ranges[(std::size_t)s];
+    const int count = r.last >= r.first ? (int)(r.last - r.first + 1) : 0;
+    const auto at = std::lower_bound(nodes.begin(), nodes.end(), r.last, std::greater<std::size_t>());
+    ranges.push_back({count ? (int)(at - nodes.begin()) : 0, count});
+  }
+  return nodes;
+}
+
+void AddMeshSlotGroups(WorkingCopy &data, const MeshPlan &plan, int mesh, const std::vector<MeshPoint> &pending,
+                       const Config &configure) {
+  // The groups in the order of their first points, each with its points in the order queued.
+  std::vector<SlotGroupKey> keys;
+  std::vector<std::vector<const MeshPoint *>> groups;
+  for (const MeshPoint &q : pending) {
+    if (q.mesh != mesh) continue;
+    const SlotGroupKey key = MeshGroupKey(data, *q.point, q.term, data.Data().GridSpecOf(*q.point));
+    std::size_t g = 0;
+    while (g < keys.size() && !(keys[g] == key)) g++;
+    if (g == keys.size()) keys.push_back(key), groups.emplace_back();
+    groups[g].push_back(&q);
+  }
+  for (const auto &group : groups) {
+    const MeshPoint &lead = *group.front();
+    const Unit::SubGridSpec &spec = data.Data().GridSpecOf(*lead.point);
+    const TargetEffect &effect = *data.Data().GetTargetEffect(lead.term.GetTargetEffectNum());
+    std::vector<int> supports;
+    for (const MeshPoint *q : group) supports.push_back(data.Data().GridSpecOf(*q->point).meshSupport);
+    std::vector<std::pair<int, int>> ranges;
+    const std::vector<std::size_t> nodes = GroupNodes(plan, supports, ranges);
+    SlotBlock block;
+    block.sites.reserve(nodes.size());
+    for (std::size_t k : nodes) {
+      const double e = plan.nodes[k] - spec.frameShift;
+      Site slot(lead.point->GetCMAngle(), e, lead.term.segment, lead.term.term);
+      slot.BelongToRowOf(*lead.point);
+      if (effect.IsTargetIntegration())
+        slot.SetStoppingPower(spec.stoppingConversion *
+                              effect.StoppingAt(e / spec.stoppingConversion, configure,
+                                                data.EffectValues(lead.term.GetTargetEffectNum()).stoppingScale));
+      lead.point->MakeSubPoint(slot);
+      block.sites.push_back(std::move(slot));
+    }
+    for (std::size_t i = 0; i < group.size(); i++)
+      if (ranges[i].second > 0)
+        block.members.push_back({static_cast<int>(group[i]->point - &data.UnitAt(0)), ranges[i].first, ranges[i].second});
+    if (!block.members.empty()) data.AddSlotGroup(std::move(block));
   }
 }
 
