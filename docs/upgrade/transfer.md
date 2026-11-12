@@ -28,7 +28,8 @@ Satchler's *Direct Nuclear Reactions* or of Thompson, Comput. Phys. Rep. 7 (1988
 | `.../Continuum.h`, `src/transfer/Continuum.cpp` | Eqs. (14.1)–(14.3): scattering states, bins, FRESCO's bin listing |
 | `.../Overlap.h`, `src/transfer/Overlap.cpp` | the overlap kinds (bound state, bin, scattering state): one table, one radial form for the kernel |
 | `.../Interaction.h`, `src/transfer/Interaction.cpp` | Eq. (17.1): the interaction as a sum of terms (post, prior, remnants), one table |
-| `.../Transfer.h`, `src/transfer/Transfer.cpp`, `src/transfer/TransferKernel.{h,cpp}` | Eqs. (5.1)–(6.7); the kernel (6.4) with any interaction of (17.1) |
+| `.../Transfer.h`, `src/transfer/Transfer.cpp`, `src/transfer/TransferKernel.{h,cpp}` | Eqs. (5.1)–(6.7); the kernel (6.4) with any interaction of (17.1), per pair of partial waves (l, j) |
+| `.../TransferAmplitudes.h`, `src/transfer/TransferAmplitudes.cpp` | Eqs. (19.5)–(19.8): the angular and spin sums, with or without spin-orbit, cross section and iT11 |
 | `.../ThmVertex.h`, `src/transfer/ThmVertex.cpp` | Eqs. (8.1)–(8.3) |
 | `physics/tests/transfer_*_test.cpp`, `transfer_fresco_common.h`, `physics/tests/data/fresco/`, `physics/tests/data/make_fresco_benchmarks.py` | §9, §18 |
 
@@ -257,10 +258,12 @@ data and not tested.
   (l ≤ 12, ρ_tp < ρ < ρ_tp + 34) found one such point at η = 0.1 (l = 0, ρ = 7.5943) and one at η = 0.493; none at
   η = 0, 1.55, 3. The physics_coulomb test does not hit them. The engine uses COULSM by default; any user of COULCC
   beyond the turning point is exposed. Not fixed here.
-- Not implemented: spin-orbit in the distorted waves of a transfer (refused), global optical potentials, relativistic
+- Not implemented: global optical potentials, relativistic
   kinematics, target spin in the distortion (spin-spin), tensor forces, l > 40, complex (optical or coupled-channel)
-  bins, the ³He and ¹⁴N benchmarks. Part 2 added the continuum, the prior form and the remnants (§14–§17); their
-  limits are in §18.
+  bins. Part 2 added the continuum, the prior form and the remnants (§14–§17); their limits are in §18. Part 3 added
+  spin-orbit in the distorted waves of a transfer and the projectile's iT11 (§19); its validation is §22. The ³He
+  and ¹⁴N Trojan horses are not yet benchmarked. The prior form and the remnant terms (§17) with spin-orbit waves go through
+  the same sums (the interaction terms are scalar), but are not compared with FRESCO.
 
 ## 11. The continuum part
 
@@ -501,3 +504,113 @@ FRESCO's convergence asked was 0.2 %: its step refinement (hcm 0.025 → 0.0125)
 from NK 1600 to 3200 at the non-resonant minimum, the same in ours with the same rule: ours − FRESCO 1.1e-3 at NK
 3200). Simpson's rule (also in the library) converges as 1/NK⁴; it is used for the narrow bins of §15.
 
+
+## 19. Spin-orbit in the distorted waves of a transfer
+
+The distorted waves of §4 with a spin-orbit term depend on (l, j). The projectile a has spin J_a (the composite of
+the projectile overlap) and the ejectile s spin J_s (its core); the target's spin stays a spectator, as in §4. The
+transfer amplitude then mixes the projections of J_a and J_s between the asymptotic states and the vertex.
+
+**Entrance wave.** The incident wave e^{ik·r}|J_a m⟩, k = k_i ẑ, expanded in partial waves (§4), with Y_{l m_l}(r̂)|J_a m⟩
+coupled to |(l J_a) j⟩, each component multiplied by its u_lj and decoupled again:
+
+```
+χ⁽⁺⁾_{m'm}(r) = (4π/(k r)) Σ_lj i^l e^{iσ_l} √((2l+1)/4π) u_lj(r) ⟨l 0 J_a m|j m⟩⟨l m−m' J_a m'|j m⟩ Y_{l,m−m'}(r̂),   (19.1)
+```
+
+the amplitude of spin state m' at r when m comes in (Y*_{l m_l}(ẑ) = √((2l+1)/4π) δ_{m_l 0}).
+
+**Exit wave.** The bra ⟨χ⁽⁻⁾_{k_f μ}|r μ'⟩ = [χ⁽⁻⁾_{μ'μ}(k_f, r)]*. χ⁽⁻⁾ has the expansion of (19.1) with k̂_f, i^l e^{−iσ_l}
+and the incoming-wave radial function, whose complex conjugate solves the equation with U (§4: "U, not U*"), so it is
+u_lj:
+
+```
+χ̃_{μμ'}(r) = (4π/(k_f r)) Σ_lj Σ_{n n'} i^{−l} e^{iσ_l} u_lj(r) Y_{l n}(k̂_f) ⟨l n J_s μ|j N⟩⟨l n' J_s μ'|j N⟩ Y*_{l n'}(r̂),   (19.2)
+```
+
+N = n + μ = n' + μ'. Without spin-orbit the sums over j of (19.1), (19.2) are δ_{m m'}δ_{m_l 0} and δ_{μμ'}δ_{nn'} by the
+orthogonality of the Clebsch–Gordan coefficients (Σ_j ⟨l a s b|j c⟩⟨l a' s b'|j c⟩ = δ_aa'δ_bb'), and §4's waves return.
+
+**Angular reduction.** The vertex of (6.2) is (−1)^{m_F} Σ_LM ⟨l_F −m_F l_a m_a|L M⟩ G_LM with G_LM a rank-L tensor of the
+pair (r̂_i, r̂_f). By rotational invariance (Wigner–Eckart for the coupled product Y_{l_i m_i} G_LM, projected on Y_{l_f n'}),
+
+```
+∫∫ dΩ_i dΩ_f Y*_{l_f n'}(r̂_f) Y_{l_i m_i}(r̂_i) G_LM = ⟨l_i m_i L M|l_f n'⟩ R^L_{l_f l_i},                                (19.3)
+```
+
+R independent of the projections. At m_i = 0 this is the quantity of (6.3)–(6.4); with
+⟨l_f M l_i 0|L M⟩ = (−1)^{l_i} √((2L+1)/(2l_f+1)) ⟨l_i 0 L M|l_f M⟩ (symmetries of the coefficients; the reduction test
+below checks it to 7 × 10⁻¹⁶),
+
+```
+R^L_{(l_f j_f)(l_i j_i)} = (−1)^{l_i} √((2L+1)/(2l_f+1)) I^L_{(l_f j_f)(l_i j_i)},                                         (19.4)
+```
+
+with I^L the kernel integral (6.4) of the radial waves u_{l_f j_f}, u_{l_i j_i}: computed once per pair of waves (the
+kernel's angular part h^L_{l_f M} depends on l_f only and is shared by the j's).
+
+**Amplitude.** With m_i = m − m', M = m_a − m_F, n' = m_i + M:
+
+```
+Q_{m_F m_a}(m', m; μ', μ; θ) = P (−1)^{m_F} Σ_{L, (l_f j_f), (l_i j_i)} ⟨l_F −m_F l_a m_a|L M⟩ i^{l_i−l_f} e^{i(σ_{l_i}+σ_{l_f})} √((2l_i+1)/4π) R^L
+     × ⟨l_i 0 J_a m|j_i m⟩⟨l_i m_i J_a m'|j_i m⟩ ⟨l_i m_i L M|l_f n'⟩ Σ_n ⟨l_f n J_s μ|j_f N⟩⟨l_f n' J_s μ'|j_f N⟩ Y_{l_f n}(θ, 0),      (19.5)
+T(μ, M_F; m, M_A) = A_a A_F Σ_{m' μ' σ} ⟨l_a m_a s_x σ|j_a μ_a⟩⟨j_a μ_a J_s μ'|J_a m'⟩⟨l_F m_F s_x σ|j_F μ_F⟩⟨j_F μ_F J_A M_A|J_F M_F⟩
+     × Q_{m_F m_a}(m', m; μ', μ),   μ_a = m' − μ', μ_F = M_F − M_A,                                                         (19.6)
+```
+
+P = (4π)²/(k_i k_f (1 − αβ)³); dσ/dΩ is (6.6) with Σ|T|² over all four projections. Without spin-orbit the j sums of
+(19.5) reduce it to
+
+```
+Q = δ_{m m'} δ_{μ μ'} O_{m_F m_a}(θ)   (Eq. (6.3)),   and (19.6) to (6.5).                                                  (19.7)
+```
+
+One function (`TransferAmplitudes.cpp`) does (19.5)–(19.6) for every case: a wave set without spin-orbit enters with all
+j of (l, J) on its one radial wave, so the identity (19.7) is computed, not assumed. The θ-independent part of (19.5)
+(everything but Y_{l_f n}) is formed once per reaction. Zero range is the same table with l_a = 0, L = l_F and
+I = D0 g_{l_f l_i} R_{l_f l_i} (1 − αβ)³ (g, R of (6.7)), so finite and zero range share (19.5)–(19.6).
+
+**Analysing power.** With T(μ, M_F; m, M_A) for every projection the projectile's polarisation observables need no
+further integral. In the Madison frame (ŷ along k_i × k_f: our k_f at (θ, 0) gives +ŷ for θ > 0), with spin tensors
+normalised to Tr τ_kq τ_kq† = 2J_a + 1, τ_11 = −√(3/(2s(s+1))) (S_x + i S_y), s = J_a, and
+T_kq = Tr(T τ_kq T†)/Tr(T T†) (traces over the final projections, the matrix in the initial m):
+
+```
+iT11 = √(3/(2s(s+1))) Tr(T S_y T†)/Tr(T T†)   (Tr(T S_x T†) = 0 by the reflection symmetry below),                      (19.8)
+```
+
+which is (√3/2)·A_y for a deuteron and A_y/√2 for spin ½. **Reflection in the reaction plane** (parity times a rotation
+by π about ŷ leaves k_i, k_f in the xz plane unchanged; |J M⟩ → (−1)^{J−M}|J −M⟩ times the intrinsic parities, whose
+product is (−1)^{l_a+l_F}):
+
+```
+T(−μ, −M_F; −m, −M_A) = (−1)^{l_a + l_F} (−1)^{(J_s−μ)+(J_F−M_F)+(J_a−m)+(J_A−M_A)} T(μ, M_F; m, M_A),                      (19.9)
+```
+
+a property of the result the code never uses, so a test of its phases.
+
+**Cost.** Per pair of waves the kernel accumulates one more product (3 × 2 per l pair for d and n); ¹⁵N(d,n) with
+spin-orbit in both channels, distorted waves, finite and zero range at 37 angles: 1.0 s at one thread (scratch driver
+`work/dwba3/drivers/dnso.cpp`).
+
+## 22. Validation of part 3
+
+Tests: `transfer_spin_orbit` (and `transfer_fresco`, `transfer_continuum*` unchanged in their printed lines: their
+outputs before and after part 3 were compared line by line; the cross sections of part 1's four cases agree with
+the previous code to 8 × 10⁻¹⁵). Each test was run once with an injected error and failed (HANDOFF entry of
+2026-11-12, part 3).
+
+| Test | Compared with | Asked | Reached (worst, where) |
+|---|---|---|---|
+| Reduction (19.7): waves flagged with a spin-orbit term of 10⁻³⁰⁰ MeV against waves without | each other, FR and ZR, σ and iT11 | 1e-12 | 6.7e-16 (σ), 1.9e-16 (iT11) |
+| Reflection (19.9), spin-orbit in both channels, θ = 10, 35, 80° | T itself; Tr(T S_x T†) = 0 | 1e-10 | 2.0e-16 of max \|T\|; 4.1e-17 |
+| FRESCO ¹⁵N(d,n)¹⁶O, spin-orbit in d + ¹⁵N and n + ¹⁶O, finite range | dσ/dΩ, 0–90°, > 1 % of peak | 1 % | 2.0e-4 (75°); FRESCO ref − refined 1.0e-4 |
+| same | iT11 of the deuteron | 1e-3 abs. | 1.0e-4 (at 0°: ours at 0.001°, FRESCO at 0°; elsewhere ≤ 8e-5); FRESCO 4e-5 |
+| FRESCO ¹⁵N(d,n)¹⁶O, spin-orbit, zero range | dσ/dΩ; iT11 | 1 %; 1e-3 | 6.2e-6 (0°); 7.8e-5 (0°) |
+
+FRESCO's convergence for `dn_finite_range_so` (data in its `reference.txt`): reference hcm 0.025, rintp 0.05, hnl
+0.025, rnl 10, rmatch 30; refined hcm 0.02 (1.0e-4); rmatch 35, rnl 12, nnu 96 (≤ 4e-5 at 0, 30, 90°). At hcm =
+0.0125 without a radial cut FRESCO's ERWIN loses 14 digits at L ≥ 28 and its 0° cross section moves by 3 %
+(0.4778 against 0.4626 mb/sr); with cutl = −3.2 (hcm 0.025) or −6.4 (hcm 0.0125) it gives 0.46314 and 0.46364 mb/sr
+at 0°, 0.1–0.2 % above its uncut runs and ours, while ours moves by 1.2e-5 between (h, h_K) = (0.05, 0.1) and
+(0.025, 0.05) fm and by 3.5e-6 with ρ_max 12 fm, 64 x nodes, r_max 28 fm. The cut runs are data, not compared.

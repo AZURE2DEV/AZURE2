@@ -2,6 +2,26 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, branch `feature/upgrade-7-transfer-3`) — physics/transfer, third part, item 1: spin-orbit in the distorted waves of a transfer
+
+**Done** (leaf library, nothing of the engine touched; `transfer.md` §19, §22):
+- The transfer amplitude with (l, j)-dependent distorted waves in both channels (projectile spin J_a, ejectile spin
+  J_s; target spin a spectator): the kernel integrals (6.4) per pair of waves (`TransferKernel.cpp`), the angular and
+  spin sums in one function for all cases (`TransferAmplitudes.{h,cpp}`, new): without spin-orbit the j sums are the
+  identity (19.7) and part 1's numbers return (8e-15). Zero range goes through the same sums.
+- The projectile's vector analysing power iT11 (Madison) from the same amplitudes: `FiniteRangeObservables`,
+  `ZeroRangeObservables` (`Transfer.h`).
+- FRESCO data `dn_finite_range_so`, `dn_zero_range_so` (generator: `pol` lines, `drop` of unread lines); the shared
+  FRESCO checks moved into `transfer_fresco_common.h`; new test `physics_transfer_spin_orbit`.
+
+**Verified** (build `work/b-dwba3`, 0 warnings): `ctest -R physics` 32/32; the printed lines of the seven earlier
+transfer tests identical before/after; new test: reduction 6.7e-16, reflection 2e-16, FRESCO FR 2.0e-4, ZR 6.2e-6,
+iT11 ≤ 1.0e-4. Injected errors, each failed: j sum without spin-orbit missing j = l + s (reduction), Y_{l,|n|} for
+negative n (reflection and iT11), the kernel taking the first j wave of l_i (FRESCO FR), the sign of m_i in the
+entrance coupling (FRESCO FR and ZR).
+
+**Open**: items 2 (³He), 3 (¹⁴N), 3b (⁶Li bins against Frescox), 4.
+
 ## 2026-11-12 (director, 19:05) — merged: physics/transfer, second part (transfer to the x + A continuum, FRESCO bins, prior form and remnants)
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed): `feature/upgrade-7-transfer-2` (the

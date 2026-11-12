@@ -16,7 +16,8 @@ finec = 197.32705 / (197.3269804/137.035999084).  FRESCO echoes both in its outp
 Masses are mass numbers (u), so that m_a = m_s + m_x and m_F = m_A + m_x hold exactly and the Jacobi coordinates of
 both codes are the same; the binding energies and Q values are inputs.
 
-Lines of reference.txt (whitespace-separated; '#' starts a comment):
+Lines of reference.txt (whitespace-separated; '#' starts a comment; a case's "drop" leaves out kinds its test does
+not read):
   run <name> <settings>                 the FRESCO settings of the following lines (reference or refined)
   constants <2u/hbar^2> <e^2>          as FRESCO prints them
   kin <projectile> <E_cm> <k> <eta>     per partition of the incoming energy (MeV, fm^-1)
@@ -25,6 +26,7 @@ Lines of reference.txt (whitespace-separated; '#' starts a comment):
   S <l> <2j> <2J> <Re> <Im>             elastic S-matrix elements (fort.7)
   ratio <theta> <sigma/sigma_R>         elastic, c.m. (deg)
   xs <theta> <mb/sr>                    the transfer cross section, c.m. (deg)
+  pol <theta> <iT11>                    the projectile's vector analysing power of the transfer (kqmax=1, Madison)
   reaction <mb>                         FRESCO's cumulative reaction cross section
   bound <kn> <scale> <rms> <D0> <ANC>   FRESCO's bound-state listing: depth scale factor (VR), rms radius (fm),
                                         D0 (MeV fm^3/2), ANC (fm^-1/2, at R = rmatch - h)
@@ -214,6 +216,31 @@ CASES.update({
               dict(hcm=0.05, rmatch=30.0, rintp=0.1, hnl=0.05, rnl=12.0, centre=-0.6, nnu=72)]),
 })
 
+
+# 15N(d,n)16O(g.s.) of DN_BODY with a spin-orbit term in both distortions (transfer.md section 19): d + 15N that of
+# d15N_elastic, n + 16O a Woods-Saxon derivative of its own; the deuteron's vector analysing power iT11 (kqmax=1, the
+# Madison frame: FRESCO's koords=0) is read with the cross section.
+DN_SO_BODY = DN_BODY.replace(
+    " &pot kp=2 type=0", " &pot kp=1 type=3 p(1:3)= 6.0 1.07 0.66 /\n &pot kp=2 type=0", 1).replace(
+    " &pot kp=3 type=0", " &pot kp=2 type=3 p(1:3)= 5.5 1.2 0.65 /\n &pot kp=3 type=0", 1)
+CASES.update({
+    "dn_finite_range_so": dict(
+        title="15N(d,n)16O(g.s.) at E_lab = 10 MeV, spin-orbit in d + 15N and n + 16O, finite range, post, no remnant",
+        elab=10.0, jtmax=30, iter=1, iblock=1, thmin=0.0, extra="kqmax=1 pp=0", body=DN_SO_BODY.format(coupling=FR_DN),
+        reference=dict(hcm=0.025, rmatch=30.0, rintp=0.05, hnl=0.025, rnl=10.0, centre=0.0, nnu=72),
+        refined=dict(hcm=0.02, rmatch=30.0, rintp=0.04, hnl=0.02, rnl=10.0, centre=0.0, nnu=72),
+        # larger radii; the radial cut-off cutl (at hcm = 0.0125 without it ERWIN loses 14 digits at high L and the
+        # 0 deg cross section moves by 3 %: FRESCO's numerics, transfer.md section 20)
+        also=[dict(hcm=0.025, rmatch=35.0, rintp=0.05, hnl=0.025, rnl=12.0, centre=0.0, nnu=96),
+              dict(hcm=0.025, rmatch=30.0, rintp=0.05, hnl=0.025, rnl=10.0, centre=0.0, nnu=72, cutl=-3.2),
+              dict(hcm=0.0125, rmatch=30.0, rintp=0.025, hnl=0.0125, rnl=10.0, centre=0.0, nnu=72, cutl=-6.4)],
+        drop=("S",)),
+    "dn_zero_range_so": dict(
+        title="15N(d,n)16O(g.s.) at E_lab = 10 MeV, spin-orbit in d + 15N and n + 16O, zero range D0 = -130.31 MeV "
+              "fm^3/2, recoil (inh=2)", elab=10.0, jtmax=30, iter=1, iblock=1, thmin=0.0, extra="inh=2 kqmax=1 pp=0",
+        body=DN_SO_BODY.format(coupling="kind=5 p1=-130.31 p2=0.0"),
+        reference=dict(hcm=0.025, rmatch=30.0), refined=dict(hcm=0.0125, rmatch=35.0), drop=("S",)),
+})
 
 # 15N(d,n)[p + 15N] to continuum bins of p + 15N (E_lab = 10 MeV): the projectile overlap of DN_BODY, the bin of
 # l, j in the real Woods-Saxon (+ Coulomb) potential kp=5 (no spin-orbit), E_x = 12.1274 MeV + E (the p + 15N
@@ -412,6 +439,8 @@ def extract(out, forts):
         if b == 1:
             for mm in re.finditer(r"([0-9.]+) deg\.: X-S =\s*([0-9.E+-]+) mb/sr", body):
                 lines.append("xs %s %s" % (mm.group(1), mm.group(2)))
+            for mm in re.finditer(r"([0-9.]+) deg\.: X-S =\s*[0-9.E+-]+ mb/sr,\s*& pols =\s*\S+\s+([-0-9.]+)", body):
+                lines.append("pol %s %s" % (mm.group(1), mm.group(2)))
     mm = re.search(r"CUMULATIVE REACTION cross section\s*=\s*([0-9.]+)", out)
     if mm:
         lines.append("reaction %s" % mm.group(1))
@@ -473,7 +502,7 @@ def main():
                     with open(os.path.join(d, "fort4.dat"), "w") as f:
                         f.write(table_for(settings))
             lines.append("run %s %s" % (tag, " ".join("%s=%s" % kv for kv in settings.items())))
-            lines += extract(out, forts)
+            lines += [l for l in extract(out, forts) if l.split()[0] not in case.get("drop", ())]
         with open(os.path.join(d, "reference.txt"), "w") as f:
             f.write("\n".join(lines) + "\n")
         print(name, len(lines), "lines")
