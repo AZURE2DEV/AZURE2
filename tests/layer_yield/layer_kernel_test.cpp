@@ -85,15 +85,18 @@ Fold Run(const Config &configure, const TargetEffect &effect, const std::vector<
   point.SetTargetKinematics(f, 1, 7);
   point.SetTargetThickness(thickness);
   const int unit = data.AppendUnit(point);
+  const int first = data.NumSlots();
   for (size_t i = 0; i < nodes.size(); i++) {
-    Unit sub(0.0, nodes[i], 1, 2, false, false, false, 0.0, 0, 0);
+    Site sub = data.UnitAt(unit).OwnSite();  // the point's settings, at the node
+    sub.SetCMEnergy(nodes[i]);
+    sub.SetLabEnergy(nodes[i]);
     sub.SetResultRecord(rec * (i + 1), 0, 0);
     sub.SetFitCrossSection(results, sigma(nodes[i]));
     sub.SetStoppingPower(f * effect.StoppingAt(nodes[i] / f, configure, 1.0));
     data.UnitAt(unit).MakeSubPoint(sub);
-    data.AppendUnit(sub);
+    data.AppendSlot(sub);
   }
-  data.UnitAt(unit).SetSubPointRange(unit + 1, (int)nodes.size());
+  data.UnitAt(unit).SetSubPointRange(first, (int)nodes.size());
   FoldPoint(data.UnitAt(unit), data, configure, results);
   Fold out;
   out.value = data.UnitAt(unit).GetFitCrossSection(results);

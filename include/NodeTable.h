@@ -6,7 +6,6 @@
 #include <memory>
 #include <string>
 #include <tuple>
-#include <unordered_map>
 #include <vector>
 
 #include "SharedTable.h"
@@ -85,16 +84,12 @@ struct NodeTable : NodeList {
  * node of each unfolded shifted point and the re-placed nodes of section 2.3.
  */
 struct NodeOverflow : NodeList {
-  struct KeyHash {
-    std::size_t operator()(const NodeKey &k) const;
-  };
-  std::unordered_map<NodeKey, int, KeyHash> index;
-  /// The node at `key`, appended with `nodeRows` if it is not held yet.
+  /// A node at `key`: the last one placed when it is at `key` (the slots of a grid come in order), else a new one with
+  /// `nodeRows`.  An exact duplicate further back is a node of its own; the energy tasks group sites by key, not by
+  /// node, so it costs a row holder and no solve.  No look-up structure: the table is placed again at every hand-over
+  /// that moves a site, and its vectors keep their capacity.
   int Place(const NodeKey &key, double ex, const SharedTable<EDependentTables> &nodeRows);
-  void Clear() {
-    NodeList::Clear();
-    index.clear();
-  }
+  void Clear() { NodeList::Clear(); }
 };
 
 /// What a working copy holds of the nodes: the stage table (shared by every copy), its slots (the stage table's, or the
@@ -109,7 +104,10 @@ struct NodeState {
 /// with its slots, an empty overflow table.
 NodeState BuildNodeTable(WorkingCopy &data, CNuc *cnuc, const Config &configure);
 
-/// AZURE_NODE_CHECK=1: the node tables and slots of `data` against its units, bit for bit (WorkingCopy::CheckNodeTable).
+/// AZURE_NODE_CHECK=1 or AZURE_PLAN_CHECK=1: the node tables and slots of `data` against its units, bit for bit
+/// (WorkingCopy::CheckNodeTable: every slot names a node of a table, the stage nodes are in key order, a slot's node
+/// has the key -- nucleus, route, bits of E_x computed from the site's c.m. energy -- of its site, and its channel
+/// rows are the site's).  At every hand-over and every point pass.
 bool NodeCheckRequested();
 
 }  // namespace azure2

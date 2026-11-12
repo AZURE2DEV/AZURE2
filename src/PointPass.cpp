@@ -19,7 +19,7 @@
 #include "Unit.h"
 #include "TargetEffect.h"
 
-void Unit::MarkFailed(azure2::Results &results, const char *role, const Config &configure, const char *why) {
+void Site::MarkFailed(azure2::Results &results, const char *role, const Config &configure, const char *why) {
   // Every fixed quantity NaN and no angular-distribution coefficient.
   std::fill(Rec(results), Rec(results) + azure2::Results::kNumFixed, std::numeric_limits<double>::quiet_NaN());
   if (num_ang_slots_) Rec(results)[azure2::Results::AngularOffset()] = 0.0;
@@ -32,7 +32,7 @@ void Unit::MarkFailed(azure2::Results &results, const char *role, const Config &
   }
 }
 
-bool Unit::InjectedFailure() const {
+bool Site::InjectedFailure() const {
   // Test hook (tests/pyazr/failed_point_test.py): AZURE_TEST_FAIL_E=<lab energy, MeV> makes the calculation of a
   // data or test point at that energy fail, AZURE_TEST_FAIL_EXIT=<pair key> only for that exit pair, so the
   // handling of a failed point (azure2::EvaluateModelPoint, WorkingCopy::CalculatePointsInParallel) can be exercised.
@@ -44,7 +44,7 @@ bool Unit::InjectedFailure() const {
 
 void Unit::Calculate(WorkingCopy *data, CNuc *theCNuc, const Config &configure, azure2::Results &results) {
   if (this->InjectedFailure()) throw std::runtime_error("injected failure (AZURE_TEST_FAIL_E).");
-  Unit *unit = this;
+  Site *unit = this;
   if (!this->IsTargetEffect() || !azure2::HasSubPointFold(*data, *this)) {
     azure2::SolveAtOneEnergy(theCNuc, configure, results, &unit, 1);
     return;
@@ -60,7 +60,7 @@ void Unit::Calculate(WorkingCopy *data, CNuc *theCNuc, const Config &configure, 
 
 void Unit::PrepareSubPoints(WorkingCopy *data, CNuc *theCNuc, const Config &configure) {
   for (int i = 1; i <= this->NumSubPoints(); i++) {
-    Unit *subPoint = this->GetSubPoint(*data, i);
+    Site *subPoint = this->GetSubPoint(*data, i);
     // Recalculate energy-dependent values for sub-points too if using external capture
     if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
       subPoint->RecalcEDependentValues(data, theCNuc, configure);

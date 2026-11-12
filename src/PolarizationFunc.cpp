@@ -42,7 +42,7 @@ inline double ParticleCG(double j1, double j2, double s, double m1, double m2, d
 
 // ---------------------------------------------------------------------------
 
-AmplitudeMatrix::AmplitudeMatrix(CNuc *compound, Unit *point, int aa, int ir) :
+AmplitudeMatrix::AmplitudeMatrix(CNuc *compound, Site *point, int aa, int ir) :
   compound_(compound),
   point_(point),
   aa_(aa),

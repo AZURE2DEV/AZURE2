@@ -64,7 +64,7 @@ std::string CheckEnergyTasks(WorkingCopy &data, CNuc &compound, const Config &cf
   for (int t = 0; t < plan.NumTasks(); t++) work[t] = t;
   const azure2::EnergyTaskList &list = plan.EnergyTasks(data, cfg, work);
   const std::vector<azure2::EnergyTask> &tasks = list.tasks;
-  std::vector<int> owner(data.NumUnits(), -2);  // the plan task of each unit of the pass (-2: no unit of it)
+  std::vector<int> owner(data.NumSites(), -2);  // the plan task of each unit of the pass (-2: no unit of it)
   long expected = 0;
   for (int t = 0; t < plan.NumTasks(); t++) {
     std::vector<azure2::UnitRef> units;
@@ -92,10 +92,10 @@ std::string CheckEnergyTasks(WorkingCopy &data, CNuc &compound, const Config &cf
     int pairs = 0;
     for (int i = 0; i < task.size; i++) {
       const azure2::UnitRef r = taskUnits[i];
-      if (r < 0 || r >= data.NumUnits() || owner[r] < 0) return where + " names a unit of no plan task (or twice)";
+      if (r < 0 || r >= data.NumSites() || owner[r] < 0) return where + " names a unit of no plan task (or twice)";
       if (owner[r] != taskOwners[i]) return where + ": unit " + std::to_string(r) + " has another owner";
       owner[r] = -1;
-      Unit &u = data.UnitAt(r);
+      Site &u = data.SiteAt(r);
       const double e = AMatrixFunc::InEnergy(&compound, &u);
       if (std::memcmp(&e, &task.energy, sizeof e) != 0) return where + ": a unit at another E_x";
       if (compound.GetPair(compound.GetPairNumFromKey(u.GetEntranceKey()))->GetNucleus() != task.nucleus)
@@ -103,7 +103,7 @@ std::string CheckEnergyTasks(WorkingCopy &data, CNuc &compound, const Config &cf
       if ((u.IsTHM() ? 'T' : 'A') != task.route && task.route != 'R') return where + ": a unit of another route";
       const std::tuple<int, int, long long> b{u.GetEntranceKey(), u.GetExitKey(), azure2::ECAmplitudeSource(u, cfg)};
       if (i > 0) {
-        Unit &p = data.UnitAt(taskUnits[i - 1]);
+        Site &p = data.SiteAt(taskUnits[i - 1]);
         const std::tuple<int, int, long long> a{p.GetEntranceKey(), p.GetExitKey(), azure2::ECAmplitudeSource(p, cfg)};
         if (b < a) return where + ": units not ordered by T-matrix group";
         if ((b != a) != (taskGroups[i] != taskGroups[i - 1])) return where + ": T-matrix groups wrong";

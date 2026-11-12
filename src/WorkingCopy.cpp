@@ -802,6 +802,7 @@ WorkingCopy::WorkingCopy(const WorkingCopy &other)
       effectValues_(other.effectValues_),
       thmCoherentValues_(other.thmCoherentValues_),
       units_(other.units_),
+      slots_(other.slots_),
       pendingSubPoints_(other.pendingSubPoints_),
       plan_(other.plan_),
       covFiles_(other.covFiles_),
@@ -899,7 +900,7 @@ int WorkingCopy::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
       if (configure.stopFlag || localStop) continue;
       Unit *point = segment->GetPoint(*this, i);
       try {
-        point->CalcEDependentValues(this, theCNuc, configure, true, table);
+        point->CalcEDependentValues(this, theCNuc, configure, table);
       } catch (GSLException e) {
 #pragma omp critical
         {
@@ -1040,7 +1041,7 @@ int WorkingCopy::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
       if (configure.stopFlag || localStop) continue;
       Unit *point = Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
       try {
-        point->CalcEDependentValues(this, theCNuc, configure, true, componentTable);
+        point->CalcEDependentValues(this, theCNuc, configure, componentTable);
       } catch (GSLException e) {
 #pragma omp critical
         {
@@ -1296,7 +1297,7 @@ void WorkingCopy::ForEachResultUnit(F f) {
     const int nat = (t == 0 && seg.IsNatural()) ? nNatural : 0;
     for (Unit &point : seg.TermPoints(*this, t)) {
       f(point, point.ResultAngularCapacity(), nat);
-      for (Unit &sub : point.GetSubPoints(*this)) f(sub, sub.ResultAngularCapacity(), 0);
+      for (Site &sub : point.GetSubPoints(*this)) f(sub, sub.ResultAngularCapacity(), 0);
     }
   };
   for (const Segment &seg : set_->segments_) segment(seg, 0);
@@ -1305,14 +1306,14 @@ void WorkingCopy::ForEachResultUnit(F f) {
 
 void WorkingCopy::LayoutResults(azure2::Results *results) {
   size_t total = 0;
-  ForEachResultUnit([&](Unit &, int nAng, int nNat) { total += azure2::Results::RecordSize(nAng, nNat); });
+  ForEachResultUnit([&](Site &, int nAng, int nNat) { total += azure2::Results::RecordSize(nAng, nNat); });
   std::vector<double> next(results ? total : 0, 0.0);
   size_t offset = 0;
-  ForEachResultUnit([&](Unit &point, int nAng, int nNat) {
+  ForEachResultUnit([&](Site &point, int nAng, int nNat) {
     if (results) {
       const size_t from = point.ResultSlot();
       const int fromAng = point.ResultAngularSlots(), fromNat = point.ResultNaturalSlots();
-      if (from != Unit::kNoRecord && from + azure2::Results::RecordSize(fromAng, fromNat) <= results->slot.size())
+      if (from != Site::kNoRecord && from + azure2::Results::RecordSize(fromAng, fromNat) <= results->slot.size())
         azure2::CopyRecord(results->slot.data() + from, fromAng, fromNat, next.data() + offset, nAng, nNat);
     }
     point.SetResultRecord(offset, nAng, nNat);
@@ -1331,7 +1332,7 @@ void WorkingCopy::LayoutResults(azure2::Results *results) {
 void WorkingCopy::BeginEvaluation(azure2::Results &results) {
   size_t offset = 0;
   bool laidOut = true;
-  ForEachResultUnit([&](Unit &point, int nAng, int nNat) {
+  ForEachResultUnit([&](Site &point, int nAng, int nNat) {
     if (!laidOut) return;
     laidOut = point.ResultSlot() == offset && point.ResultAngularSlots() == nAng && point.ResultNaturalSlots() == nNat;
     offset += azure2::Results::RecordSize(nAng, nNat);

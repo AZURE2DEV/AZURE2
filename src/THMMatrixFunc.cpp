@@ -32,7 +32,7 @@ typedef std::map<Bucket, std::pair<int, complex>> BucketUnitVertices;
 
 /// The kinematic factor of the model, fixed by how the HOES data were divided
 /// out of the triple cross section (Config::ThmOptions::kinematics).
-double ThmFluxFactor(const Config &configure, const PPair *entrancePair, const Unit *point, double kf,
+double ThmFluxFactor(const Config &configure, const PPair *entrancePair, const Site *point, double kf,
                      double muf) {
   double fluxFactor = 1.0;
   switch (configure.thm.kinematics) {
@@ -70,7 +70,7 @@ double ThmFluxFactor(const Config &configure, const PPair *entrancePair, const U
  * on-shell L_c(E) = S_c(E) + i P_c(E) recovered from L_o = L_c - B_c.  With
  * coherentJ the vertex without a width of every bucket goes to unitVertex.
  */
-void ThmEntranceVertices(const Config &configure, CNuc *compound, Unit *point, JGroup *jg, int j, int aa,
+void ThmEntranceVertices(const Config &configure, CNuc *compound, Site *point, JGroup *jg, int j, int aa,
                          int pass, int node, const ThmDwVertex *dw, const ThmDwVertex::At &dwAt, bool coherentJ,
                          BucketVertices &vbys, BucketUnitVertices &unitVertex) {
   const int numLevels = jg->NumLevels();
@@ -165,7 +165,7 @@ complex ThmExitAmplitude(const AMatrixFunc &func, JGroup *jg, int j, int ch, con
  * experiment (distortion=...; ThmDistortion.h).  Both apply to every point and
  * folding sub-point.
  */
-void ThmApplyWeights(const Config &configure, const Unit *point, double &sigma) {
+void ThmApplyWeights(const Config &configure, const Site *point, double &sigma) {
   if (const ThmWeightTable *weight = point->GetThmWeight()) {
     bool outside = false;
     sigma *= (*weight)(point->GetCMEnergy(), &outside);
@@ -203,7 +203,7 @@ THMMatrixFunc::THMMatrixFunc(CNuc *compound, const Config &configure) :
  * level matrix A (shared interior). Uses the entrance transfer form factors
  * M_l and exit penetrabilities stored on the point by CalcEDependentValues.
  */
-void THMMatrixFunc::CalculateTHMCrossSection(Unit *point, azure2::Results &results) {
+void THMMatrixFunc::CalculateTHMCrossSection(Site *point, azure2::Results &results) {
   int aa = compound()->GetPairNumFromKey(point->GetEntranceKey());
   int exitPairNum = compound()->GetPairNumFromKey(point->GetExitKey());
   PPair *entrancePair = compound()->GetPair(aa);
@@ -486,7 +486,7 @@ ThmAdjointContext BuildThmAdjointContext(CNuc *compound, const Config &configure
  * and the vertex pieces j_l, rho j_l', the Coulomb term and the DW a_k, d_k
  * depend on the energy only.
  */
-bool THMMatrixFunc::THMPointAdjoint(Unit *point, double fitBar, GradAccum &accum, const ThmAdjointContext &ctx,
+bool THMMatrixFunc::THMPointAdjoint(Site *point, double fitBar, GradAccum &accum, const ThmAdjointContext &ctx,
                                     std::vector<double> *coherentBar, double *sigmaOut) {
   if (configure().paramMask & Config::USE_RMC_FORMALISM) return false;
   int aa = compound()->GetPairNumFromKey(point->GetEntranceKey());

@@ -185,17 +185,21 @@ double engineFold(const Config &configure, WorkingCopy &data, int effectNum, Sig
   // lab and c.m. energies equal makes that amount exactly `shift`.
   point.SetLabEnergy(e0 + shift);
   point.SetCMEnergy(e0 + shift);
-  // the point and its sub-points as units of the data set: the sub-points a range after the point
+  // the point as a unit of the data set, its sub-points a range of its slots
   const int unit = data.AppendUnit(point);
+  const int first = data.NumSlots();
   for (int i = 0; i < nSub; i++) {
     double e = hi - (hi - lo) * i / (nSub - 1);   // engine convention: high to low
-    Unit sub(0.0, e, 1, 2, false, false, false, 0.0, 0, 0);
+    Site sub = data.UnitAt(unit).OwnSite();  // the point's settings, at the node
+    sub.SetCMEnergy(e);
+    sub.SetLabEnergy(e);
+    sub.SetStoppingPower(0.0);
     sub.SetResultRecord(rec * (i + 1), 0, 0);
     sub.SetFitCrossSection(results, sigma(e));
     data.UnitAt(unit).MakeSubPoint(sub);
-    data.AppendUnit(sub);
+    data.AppendSlot(sub);
   }
-  data.UnitAt(unit).SetSubPointRange(unit + 1, nSub);
+  data.UnitAt(unit).SetSubPointRange(first, nSub);
   FoldPoint(data.UnitAt(unit), data, configure, results);
   return data.UnitAt(unit).GetFitCrossSection(results);
 }
