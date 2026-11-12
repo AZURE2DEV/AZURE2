@@ -11,7 +11,7 @@ chi2 in `output/chiSquared.out`:
 | `vertex=perlevel`, `vertex=real` | 2181.45 (identical to each other; the default before 2026-09-25) |
 | `entranceL=coherent` | 3196.77 |
 | `entranceL=coherent` + `vertex=perlevel` | 2741.85 (AZURE2 before Sep 2026, whose pin was 2740.48; the difference is the two dS/dE fixes, b6cc41b and the step fix) |
-| `kinematics=lacognata` / `triple` / `kf3body` / `lambda32` | 2138.48 (identical to none) / 2381.01 / 2625.33 / 5499.08 |
+| `kinematics=lacognata` / `triple` / `kf3body` / `lambda32` | 2138.48 (identical to none) / 2381.01 / 2625.33 / 5561.64 (rests on the quadrature at the threshold, where 1/k_i is 1/sqrt(1e-6 MeV): check.sh) |
 | `vertex=onshell` | 2070.75 (independent of the half-off-shell vertex choice) |
 | `coulombIntegral=1` | 2112.45 |
 | `spectatorEnergy=0` | identical to none |

@@ -271,16 +271,13 @@ void WorkingCopy::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNu
     j++;
   }
 
-  // The sub-point grids, for the levels and shifts just set.  Sub-points of
-  // shifted segments are moved and energised by the step below.
+  // The shared meshes, for the levels and shifts just set.
   // The plan tasks whose units move (re-placed grids, shifted points): their slots are looked up again at the end.
   std::vector<int> movedTasks;
   if (theCNuc && configure) {
-    std::vector<TermRef> reshift;
-    this->ReplaceSubPointGrids(theCNuc, *configure, shiftActiveSegments, reshift, movedTasks);
+    this->ReplaceSubPointGrids(theCNuc, *configure, shiftActiveSegments, movedTasks);
     // Slots placed again: the row sets of their readers at the new energies (RowSet.h).
     if (!movedTasks.empty()) this->BuildRowSets(theCNuc, *configure);
-    for (const TermRef &t : reshift) queueTerm(t);
   }
 
   const bool reenergise = !toUpdate.empty();

@@ -30,11 +30,8 @@ const PPair *FramePair(const PPair *entrance, const PPair *exit) {
   return entrance->GetPType() == 20 ? exit : entrance;
 }
 
-/// Whether a segment's folded points take their slots from the shared mesh: every segment but THM (its kinematics on
-/// the mesh are branch 10).  A segment with an energy shift is folded there with the kernel moving on the fixed nodes
-/// (ShiftedFold.h).
-bool OnSharedMesh(const Segment &segment, const PPair *entrance, const PPair *exit) {
-  if (segment.IsTHM()) return false;
+/// Whether a segment's folded points take their slots from the shared mesh (MeshSlots.h).
+bool OnSharedMesh(const Segment &, const PPair *entrance, const PPair *exit) {
   return FramePair(entrance, exit) != nullptr;
 }
 
@@ -152,8 +149,7 @@ SlotGroupKey MeshGroupKey(const WorkingCopy &data, const Unit &point, const Term
   // stopping is the same (DataSet.h, WorkingCopy::SetUpTargetEffects)
   key.targetEffect = data.Data().GetTargetEffect(point.GetTargetEffectNum())->GetLineNumber();
   // No angle and no Legendre order: a differential site holds its observables without an angle (its readers' rows
-  // apply it, Site::ValueFor), a scalar site (sigma, a phase shift, the total cross section) has none.  THM, whose
-  // sites are keyed by angle, is off the mesh: a group of its own.
+  // apply it, Site::ValueFor), a scalar site (sigma, a phase shift, the total cross section, sigma_HOES) has none.
   key.conversion = bits(spec.stoppingConversion);
   key.frameShift = bits(spec.frameShift);
   key.screeningUe = bits(point.GetScreeningUe());

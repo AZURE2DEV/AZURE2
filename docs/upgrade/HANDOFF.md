@@ -2,6 +2,38 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, Phase 5 branch 10, milestone 1) — THM data on the shared mesh (`feature/upgrade-5-thm-mesh`)
+
+**Design** (the six questions, answered in the headers that own them, commit 485badd7): `SiteObservable.h` (what a THM
+site holds: sigma_HOES at E_n is a function of the node, the reaction and the THM experiment only -- nothing reads the
+data point's angle or row, the spectator angles are the experiment's), `TermSettings.h` (the key), `MeshSlots.h`
+(support, floor, nodes), `THMMatrixFunc.h` (the kernel is the table's; the level matrix shared per node), `ShiftedFold.h`
+(shifts; the uniform grid's proposal), `AZUREGrad.h` (the gradient).
+**Done.**  A THM point is a folded point of the shared mesh of its compound nucleus (`OnSharedMesh` asks no THM
+question): its support is the kernel's (Gaussian or beam profile, 5 sigma) clipped at the data kind's floor,
+`Segment::IntegrationFloor` (E_x = 1 keV of the compound system for half-off-shell data, so E_cm of a node may be
+negative), a hard edge of the planned support there; a THM shift is the shift kernel's case (`ShiftedFold.h`), not
+floored (`Segment::ShiftIsFloored`, the one question the shift step asks).  Deleted: the own-grid re-placement of
+`ReplaceSubPointGrids` (its `replace` path, the reshift list it returned to the hand-over, the `shifted` branch of its
+site layout) and `AdaptiveIntegrationGrid::GridConfig::resonanceOffset` (their only user was THM); a folded point off the
+mesh with `useAdaptiveGrid` on is now a `logic_error`.  `Segment::MoveOwnGridSlots` and `Unit::CalcNodeRows` are left to
+the uniform grid (`useAdaptiveGrid` off) alone; `CalcNodeRows` never served THM (a scalar kind has no row set).  Lines:
+src +56 -121, include +21 -23, tests +5 -2.
+**Moves** (`work/thm/quick.sh`, tags `thm-m1a` against `tab-obs5`, three bases): T1, T3, 13N, natural_neon,
+`thm_coherent_background/toy` (unfolded THM) identical; the THM projects 17O, `18O_p_a_thm`, 6Li_d, 7Li_p_a, T2, T2_true
+moved.  T2's direct segments move too (thin target 697.326 -> 697.517, thick 286.444 -> 286.473): the THM supports join
+the mesh of 16O and the planner's nodes change where they overlap.  Classified (`tools/classify_quadrature.py`, base
+`tab-obs5`, the base engine refined eightfold `thm-fine8`, made here): Brune 16 quadrature, no-brune 12, Park 15, 0
+failure; every file closer to the refined run than before (largest relative distance new / before: T2 `AZUREOut` 4.9e-4
+/ 1.2e-3, `thm_experiments.out` 1.5e-4 / 9.5e-4; 18O 2.7e-4 / 4.2e-4; 17O 1.04e-4 / 1.06e-4; 6Li_d 1.4e-5 / 1.9e-5;
+7Li_p_a 3.9e-5 / 7.1e-5).  One pin regenerated: `tests/thm_options` kinematics=lambda32, chi^2 5604.98 -> 5561.64
+(refined 8x 5510.14, 16x 5506.51; the THM curve's largest distance to the 8x run 0.158 -> 0.082): its 1/k_i reaches
+1/sqrt(1e-6 MeV) at the threshold inside the folds.
+**Ran**: build 0 warnings; consistency test; the quick set above; the check.sh of `18O_p_a_thm`, `thm_band`,
+`thm_beam_profile`, `thm_coherent_background`, `thm_coulomb_consistency`, `thm_energy_shift`, `thm_experiment`,
+`thm_lineshape`, `thm_narrow_fold`, `thm_options` (with the new pin), `thm_park`, `thm_rwa_grid`,
+`thm_spectator_window`, `thm_threshold_grid` pass.
+
 ## 2026-11-12 (agent, Phase 5 branch 9, milestone 5) — the ratio fold from the table, a lab angle beyond the kinematic maximum, the deletions (`feature/upgrade-5-observables`)
 
 **Decision on milestone 4** (the director): the D5 moves are accepted; the estimate of `energy_grid.md` 4.3 now has both

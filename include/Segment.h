@@ -54,6 +54,15 @@ class Segment {
   bool IsPhase() const;
   /// Returns true if this is a THM (modified R-matrix, half-off-shell) segment.
   bool IsTHM() const;
+  /*!
+   * The lowest c.m. energy (MeV) of the pair `entrance` that a fold of this data set reaches: the integration floor
+   * TargetEffect::minIntegrationEnergy, or for half-off-shell data, which reach below the entrance threshold, the
+   * compound system's E_x = minIntegrationEnergy (THM.md section 1): minIntegrationEnergy - (S + E_x of the pair).
+   */
+  double IntegrationFloor(const PPair *entrance) const;
+  /// Whether an energy shift of this data set keeps its energies positive (Segment::UpdatePointEnergyWithShift): every
+  /// data set but half-off-shell data, whose energies lie below the entrance threshold as well and all move.
+  bool ShiftIsFloored() const { return !IsTHM(); }
   /// True when the normalization is profiled (eliminated analytically) rather
   /// than fitted: a THM segment carries an arbitrary overall scale (Typel &
   /// Baur 2003), so a free THM norm is set to its closed-form optimum each
