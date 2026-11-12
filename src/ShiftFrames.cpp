@@ -109,6 +109,7 @@ void Segment::UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, CNuc *
     Unit *point = &TermPoints(data, t)[i];
     if (point && (thm || point->GetOriginalEnergy() > 0)) {
       double originalEnergy = point->GetOriginalEnergy();
+      const double angleBefore = point->GetCMAngle();
       double shiftedEnergy = thm ? originalEnergy + TotalEnergyShift(state, originalEnergy)
                                  : ShiftedEnergy(originalEnergy, TotalEnergyShift(state, originalEnergy));
 
@@ -151,9 +152,15 @@ void Segment::UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, CNuc *
         if (data.Data().GridSpecOf(*point).mesh >= 0) {
           // On the shared mesh the nodes stay and the kernel moves with the point (ShiftedFold.h): only the c.m. angle
           // of a lab-frame differential point, converted above at its shifted energy, reaches its group's sites.
-          if (this->IsDifferential() && !this->IsCMDifferential()) ReangleSlots(data, t, *point, theCNuc, *configure);
+          if (this->IsDifferential() && !this->IsCMDifferential() && !point->HoldsLegendreCoefficients())
+            ReangleSlots(data, t, *point, theCNuc, *configure);
         } else {
           MoveOwnGridSlots(data, t, *point, theCNuc, *configure, rows);
+        }
+        // The point's rows at its slots' energies, for its moved angle or slots (Site::RowP).
+        if (point->GetCMAngle() != angleBefore || data.Data().GridSpecOf(*point).mesh < 0) {
+          const TargetEffect *te = this->IsTargetEffect() ? data.Data().GetTargetEffect(this->TermTargetEffectNum(t)) : nullptr;
+          point->CalcNodeRows(data, configure->maxLOrder, theCNuc, (te && te->IsQCoefficients()) ? te : nullptr);
         }
       }
     }

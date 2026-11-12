@@ -6,6 +6,7 @@
 
 #include <cstring>
 #include <string>
+#include <vector>
 
 class Site;
 class CNuc;
@@ -210,6 +211,11 @@ class GenMatrixFunc {
   std::vector<CoulombTerm> rt_it_;
   bool rt_it_built_ = false;
   void BuildCoulombInterference(const azure2::EntrancePathways &P, const azure2::ExitRow &exit, bool elastic);
+  /// rt_wl_ (and for elastic scattering rt_it_) for the T-matrix held now, once per T-matrix.
+  void BuildOrderProducts(const azure2::EntrancePathways &P, const azure2::ExitRow &exit, bool particleExit, bool elastic);
+  /// The Legendre coefficients B_L (b/sr) of dsigma/dOmega_c.m. of `point`'s reaction (not elastic) at its energy.
+  std::vector<double> LegendreCoefficientsOf(const Site *point, const azure2::EntrancePathways &P,
+                                             const azure2::ExitRow &exit, int aa, int exitPairNum);
   std::vector<TempTMatrix> temp_t_matrices_;
   std::vector<TempTMatrix> temp_t_matrices_E1_;
   std::vector<TempTMatrix> temp_t_matrices_E2_;

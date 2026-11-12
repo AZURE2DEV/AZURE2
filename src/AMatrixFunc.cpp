@@ -650,14 +650,14 @@ void AMatrixFunc::AddAInvMatrixElement(int jGroupNum, int lambdaNum, int muNum, 
  * angle-dependent quantities of `point`.
  */
 bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double fitBar, TMatrixCotangent &bar,
-                            int xsComponent,
-                            bool ayCrossSection) {
+                            int xsComponent, bool ayCrossSection, const Site &rows, int rowSlot) {
   AZUREProfile::Timer profileTimer(AZUREProfile::kGradTBar);
   const complex I(0.0, 1.0);
+  const Site *angles = &rows;  // the angular row (Legendre rows, coefficient order) is the reader's; the rest the site's
 
   // --- Common gating. ---
   if (configure().paramMask & Config::USE_RMC_FORMALISM) return false;
-  if (point->IsAngularDist() && !point->IsCoefficient()) return false;  // angular-dist test points
+  if (point->IsAngularDist() && !angles->IsCoefficient()) return false;  // angular-dist test points
   // xsComponent < 0 asks for A_0 = sigma_int / 4 pi of an angular-distribution point: the angle-integrated
   // cotangent scaled by 1 / 4 pi (GradTargetEffectAdjoint, normalised coefficients under a target effect).
   const bool a0Mode = (xsComponent < 0);
@@ -699,9 +699,9 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
   // screened value this point holds from its forward calculation.  A phase shift and an A_y value are
   // not screened (an A_y sub-point's cross section is: ayCrossSection).
   bar.screen.clear();
-  if (point->GetScreeningParam() > 0 && point->GetScreeningK() != 0.0 && !isPhase && !point->IsCoefficient() &&
+  if (point->GetScreeningParam() > 0 && point->GetScreeningK() != 0.0 && !isPhase && !angles->IsCoefficient() &&
       !(point->IsAnalyzingPower() && !ayCrossSection)) {
-    double y = point->GetFitCrossSection(results);
+    double y = point->ValueFor(*angles, rowSlot, results);
     if (xsComponent == 1) y = point->GetFitE1CrossSection(results);
     else if (xsComponent == 2) y = point->GetFitE2CrossSection(results);
     bar.screen.push_back({point->GetScreeningParam(), fitBar * 1.0e-6 * point->GetScreeningK() * y});
@@ -838,13 +838,13 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
       //        dA_y/dT1* = [ -i bk P_k^1 T2 - A_y ak P_k T2 ] / (2 D),
       //        dA_y/dT2* = [ +i bk P_k^1 T1 - A_y ak P_k T1 ] / (2 D),
       //      and the cotangent convention of this function supplies the 2. ----
-      const int maxL = point->GetMaxLOrder();
+      const int maxL = angles->GetMaxLOrder();
       // The forward pass has refused a point whose terms were not requested (CalculateCaptureAnalyzingPower).
       if (!theDecay.has_capture_ay) return false;
       const int nTerms = theDecay.num_capture_ay;
       if (nTerms == 0) return false;
 
-      const double xCos = cos(point->GetCMAngle() * pi / 180.0);
+      const double xCos = cos(angles->GetCMAngle() * pi / 180.0);
       std::vector<double> assocP(maxL + 1, 0.0);
       for (int k = 1; k <= maxL; k++) assocP[k] = AngCoeff::LegendreP1(k, xCos);
 
@@ -857,7 +857,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
         const azure2::CaptureAyTerm *t = &P.capture_ay[theDecay.first_capture_ay + i];
         if (t->kOrder > maxL) continue;
         complex prod = element(t->kGroup1, t->path1, t->isEC1) * conj(element(t->kGroup2, t->path2, t->isEC2));
-        if (t->ak != 0.0) den += t->ak * real(prod) * point->GetLegendreP(t->kOrder);
+        if (t->ak != 0.0) den += t->ak * real(prod) * angles->RowP(rowSlot, t->kOrder);
         if (t->bk != 0.0) num += t->bk * (-imag(prod)) * assocP[t->kOrder];
       }
       if (fabs(den) < 1.e-300) return false;
@@ -869,7 +869,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
         if (t->kOrder > maxL) continue;
         const complex T1 = element(t->kGroup1, t->path1, t->isEC1);
         const complex T2 = element(t->kGroup2, t->path2, t->isEC2);
-        const double pk = point->GetLegendreP(t->kOrder);
+        const double pk = angles->RowP(rowSlot, t->kOrder);
         const double pk1 = assocP[t->kOrder];
         const complex d1 = (-I2 * t->bk * pk1 * T2 - ay * t->ak * pk * T2) / den;
         const complex d2 = (I2 * t->bk * pk1 * T1 - ay * t->ak * pk * T1) / den;
@@ -943,7 +943,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
       for (const PM &pm : matches)
         tBar[pm.k - 1][pm.m - 1] += conj(-pm.invExpCP2) * Ubar;
     }
-  } else if (!isDiff && (!point->IsCoefficient() || a0Mode)) {
+  } else if (!isDiff && (!angles->IsCoefficient() || a0Mode)) {
     // The reported angle-integrated cross section carries (1+delta_12) of an identical entrance pair
     // (GenMatrixFunc); the A_0 of an angular-coefficient point is the unscaled integral.
     integratedBar(a0Mode ? fitBar / (4.0 * pi) : fitBar,
@@ -975,12 +975,12 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
     // 4 pi / (rtFactor sigma_int) (normalised) or 1 / rtFactor (absolute).  So the differential machinery below
     // with a Kronecker delta in place of P_l(cos theta) gives the N_k part; the normalised one then adds the
     // sigma_int cotangent -fitBar a_k / sigma_int (integratedBar).  No Coulomb terms: elastic pairs are refused.
-    const bool coef = point->IsCoefficient();
-    const int kOrd = coef ? point->GetCoefficientOrder() : -1;
+    const bool coef = angles->IsCoefficient();
+    const int kOrd = coef ? angles->GetCoefficientOrder() : -1;
     const double sigmaInt = coef ? 4.0 * pi * point->GetAngDistA0(results) : 0.0;
     if (coef && (point->IsUPOS() || !(sigmaInt > 0.0))) return false;
-    const double dfac = coef ? (point->GetCoefficientAbsolute() ? 1.0 / rtFactor : 4.0 * pi / (rtFactor * sigmaInt)) : 0.0;
-    auto pl = [&](int l) -> double { return coef ? ((l == kOrd) ? dfac : 0.0) : point->GetLegendreP(l); };
+    const double dfac = coef ? (angles->GetCoefficientAbsolute() ? 1.0 / rtFactor : 4.0 * pi / (rtFactor * sigmaInt)) : 0.0;
+    auto pl = [&](int l) -> double { return coef ? ((l == kOrd) ? dfac : 0.0) : angles->RowP(rowSlot, l); };
 
     // Fetch a T value (internal 'R' or external-capture 'E') and route a
     // cotangent contribution to the right accumulator.
@@ -1011,7 +1011,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
       const size_t numPaths = theDecay.num_interference_pathways;
       const int nl = theDecay.num_orders;
       tbar_legendre_.assign(nl, 0.0);
-      const int nP = std::min(nl, point->GetMaxLOrder() + 1);
+      const int nP = std::min(nl, angles->GetMaxLOrder() + 1);
       for (int l = 0; l < nP; l++) tbar_legendre_[l] = pl(l);
       for (size_t p = 0; p < numPaths; p++) {
         const complex *q = &tbar_q_[p * nl];
@@ -1067,16 +1067,16 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
       }
     }
 
-    if (coef && !point->GetCoefficientAbsolute()) {
+    if (coef && !angles->GetCoefficientAbsolute()) {
       // a_k = N_k / sigma_int: the sigma_int cotangent through the angle-integrated form
-      integratedBar(-fitBar * point->GetFitCrossSection(results) / sigmaInt, 1.0);
+      integratedBar(-fitBar * point->ValueFor(*angles, rowSlot, results) / sigmaInt, 1.0);
     }
 
     if (!coef && aa == exitPairNum && theDecay.has_interferences) {  // elastic Coulomb-nuclear interference
       const complex cI = I * geom * itFactor / (std::sqrt(pi) * 100.0);
       for (int n = 0; n < theDecay.num_diagonal; n++) {
         const azure2::DiagonalPathway &d = P.diagonal[theDecay.first_diagonal + n];
-        const complex B = cI * d.statSpin * point->GetCoulombAmplitude(d.s) * point->GetLegendreP(d.l);
+        const complex B = cI * d.statSpin * point->GetCoulombAmplitude(d.s) * angles->RowP(rowSlot, d.l);
         tBar[d.k - 1][d.m - 1] += fitBar * B;
       }
     } else if (!coef && aa == exitPairNum) {  // elastic Coulomb-nuclear interference
@@ -1090,7 +1090,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
             int l = en->GetL();
             // Per channel spin, as in the forward sum: only an identical pair
             // with spin has a Coulomb amplitude that depends on it.
-            complex B = cI * mg->stat_spin_factor * point->GetCoulombAmplitude(en->GetS()) * point->GetLegendreP(l);
+            complex B = cI * mg->stat_spin_factor * point->GetCoulombAmplitude(en->GetS()) * angles->RowP(rowSlot, l);
             // model += Re(B conj T)  ->  Tbar += fitBar B.
             tBar[k - 1][m - 1] += fitBar * B;
           }

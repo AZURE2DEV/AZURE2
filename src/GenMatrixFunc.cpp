@@ -31,6 +31,7 @@ void GenMatrixFunc::CalculateCrossSection(Site *point, azure2::Results &results)
   if (point->IsAnalyzingPower() && !point->IsSubPoint()) return;
   const double f = point->ScreeningFactor();
   if (f == 1.0) return;
+  if (point->HoldsLegendreCoefficients()) point->ScaleLegendreCoefficients(results, f);
   point->SetFitCrossSection(results, f * point->GetFitCrossSection(results));
   point->SetFitE1CrossSection(results, f * point->GetFitE1CrossSection(results));
   point->SetFitE2CrossSection(results, f * point->GetFitE2CrossSection(results));
@@ -95,6 +96,8 @@ void GenMatrixFunc::CalculateBareCrossSection(Site *point, azure2::Results &resu
     // (1+delta_12) of an identical entrance pair: see the angle-integrated
     // branch below.
     point->SetFitCrossSection(results, real(sum) / 100. * compound()->GetPair(aa)->GetEntranceSymmetryFactor());
+    // This formalism has no angular dependence: a site holding Legendre coefficients holds the value as B_0.
+    if (point->HoldsLegendreCoefficients()) point->SetLegendreCoefficients(results, {point->GetFitCrossSection(results)});
   } else {
     const int ir = P.ExitOf(exitPairNum);
     if (!ir) throw std::runtime_error(NoPathwayMessage(aa, exitPairNum));
@@ -259,6 +262,16 @@ void GenMatrixFunc::CalculateBareCrossSection(Site *point, azure2::Results &resu
           return;
         }
       }
+      if (point->HoldsLegendreCoefficients()) {
+        // The Legendre observable of the reaction at this energy (Site::HoldsLegendreCoefficients): B_L, and A_0 for
+        // an angular distribution.  A site that is a row of its data (not a slot) reads its own value through its
+        // angular row; a slot's readers do (Site::ValueFor).
+        point->SetLegendreCoefficients(results, this->LegendreCoefficientsOf(point, P, theDecay, aa, exitPairNum));
+        if (point->IsAngularDist()) point->SetAngDistA0(results, angleIntegratedXS / (4.0 * pi));
+        if (!point->IsSubPoint() && (point->IsDifferential() || point->IsCoefficient()))
+          point->SetFitCrossSection(results, point->ValueFor(*point, 0, results));
+        return;
+      }
       std::vector<double> angularCoeff(std::min(point->GetMaxLOrder() + 1, point->GetMaxAngDistOrder() + 1), 0.);
       PPair *exitPairDiff = compound()->GetPair(compound()->GetPairNumFromKey(point->GetExitKey()));
       // The interference sum is a sum of products that do not depend on the
@@ -269,25 +282,7 @@ void GenMatrixFunc::CalculateBareCrossSection(Site *point, azure2::Results &resu
       // coefficients take the loop below.
       const bool particleExit = (aa != exitPairNum && exitPairDiff->GetPType() == 0);
       if (!point->IsAngularDist() && !(particleExit && point->IsUPOS())) {
-        const azure2::FlatInterference *flat = P.interferences.data() + theDecay.first_interference;
-        // An exit without interference lists (a beta entrance) has an empty list here.
-        if (rt_decay_ != &theDecay) {
-          rt_wl_.clear();
-          const std::vector<vector_c> *T = tmatrix_.empty() ? nullptr : &tmatrix_[0];
-          for (const azure2::FlatInterference *fp = flat; fp != flat + theDecay.num_interferences; fp++) {
-            const azure2::FlatInterference &f = *fp;
-            if (particleExit && !f.spEqual) continue;
-            if ((int)rt_wl_.size() <= f.l) rt_wl_.resize(f.l + 1, complex(0.0, 0.0));
-            if (!f.r1) continue;  // unknown type: no contribution, as in the loop below
-            const complex T1 = (f.r1 == 'E') ? ec_tmatrix_[f.k - 1][f.m1 - 1]
-                                             : (T ? (*T)[f.k - 1][f.m1 - 1] : complex(0.0, 0.0));
-            const complex T2 = (f.r2 == 'E') ? ec_tmatrix_[f.k - 1][f.m2 - 1]
-                                             : (T ? (*T)[f.k - 1][f.m2 - 1] : complex(0.0, 0.0));
-            rt_wl_[f.l] += f.z * T1 * conj(T2);
-          }
-          this->BuildCoulombInterference(P, theDecay, aa == exitPairNum);
-          rt_decay_ = &theDecay;
-        }
+        this->BuildOrderProducts(P, theDecay, particleExit, aa == exitPairNum);
         for (size_t l = 0; l < rt_wl_.size(); l++)
           if (rt_wl_[l] != complex(0.0, 0.0)) sum += rt_wl_[l] * point->GetLegendreP((int)l);
       } else
@@ -394,18 +389,6 @@ void GenMatrixFunc::CalculateBareCrossSection(Site *point, azure2::Results &resu
             }
           }
         }
-      }
-      if (point->IsAngularDist()) {
-        point->SetAngularDists(results, angularCoeff);
-        // A_0 = sigma_int / 4 pi (b/sr):  dsigma/dOmega_cm = A_0 [1 + sum_k a_k P_k(cos theta)]
-        point->SetAngDistA0(results, angleIntegratedXS / (4.0 * pi));
-        if (point->IsCoefficient()) {
-          // an angular-coefficient data point: its fit value is its own order's coefficient
-          const int kOrd = point->GetCoefficientOrder();
-          const double ak = (kOrd >= 0 && kOrd < (int)angularCoeff.size()) ? angularCoeff[kOrd] : 0.0;
-          point->SetFitCrossSection(results, point->GetCoefficientAbsolute() ? ak * angleIntegratedXS / (4.0 * pi) : ak);
-        }
-        return;
       }
       // Identical-particle symmetrization (elastic, aa==ir):
       //   |F|^2 = |F_C|^2 + |F_N|^2 + 2 Re[F_C* F_N]
@@ -575,6 +558,79 @@ void GenMatrixFunc::CalculateBareCrossSection(Site *point, azure2::Results &resu
   }
 }
 
+
+void GenMatrixFunc::BuildOrderProducts(const azure2::EntrancePathways &P, const azure2::ExitRow &theDecay,
+                                       bool particleExit, bool elastic) {
+  if (rt_decay_ == &theDecay) return;
+  rt_wl_.clear();
+  // An exit without interference lists (a beta entrance) has an empty list here.
+  const azure2::FlatInterference *flat = P.interferences.data() + theDecay.first_interference;
+  const std::vector<vector_c> *T = tmatrix_.empty() ? nullptr : &tmatrix_[0];
+  for (const azure2::FlatInterference *fp = flat; fp != flat + theDecay.num_interferences; fp++) {
+    const azure2::FlatInterference &f = *fp;
+    if (particleExit && !f.spEqual) continue;
+    if ((int)rt_wl_.size() <= f.l) rt_wl_.resize(f.l + 1, complex(0.0, 0.0));
+    if (!f.r1) continue;  // unknown type: no contribution
+    const complex T1 = (f.r1 == 'E') ? ec_tmatrix_[f.k - 1][f.m1 - 1] : (T ? (*T)[f.k - 1][f.m1 - 1] : complex(0.0, 0.0));
+    const complex T2 = (f.r2 == 'E') ? ec_tmatrix_[f.k - 1][f.m2 - 1] : (T ? (*T)[f.k - 1][f.m2 - 1] : complex(0.0, 0.0));
+    rt_wl_[f.l] += f.z * T1 * conj(T2);
+  }
+  this->BuildCoulombInterference(P, theDecay, elastic);
+  rt_decay_ = &theDecay;
+}
+
+/*!
+ * dsigma/dOmega_c.m. = sum_L B_L P_L(cos theta) of a reaction (Blatt and Biedenharn, Rev. Mod. Phys. 24 (1952) 258,
+ * in the coupling of the pathway table; for elastic scattering the nuclear amplitude's part): B_L = (geom I1I2 s /
+ * (100 pi)) sum Re(Z T1 T2*) over the interferences of order L (b/sr; geom = pi/k^2 in fm^2, 1/100 to b; s the
+ * identical-particle factor, LegendreSymmetryFactor).  A particle exit
+ * keeps the k-groups of equal channel spins; an unobserved primary with an observed secondary (UPOS) weighs the
+ * internal pairs of equal exit l by Z_upos sqrt(2L+1)/4 R_L of the secondary decay (Brune and deBoer, PRC 102, 024628
+ * (2020), Eq. (7); R_L = 0 for odd L).
+ */
+std::vector<double> GenMatrixFunc::LegendreCoefficientsOf(const Site *point, const azure2::EntrancePathways &P,
+                                                          const azure2::ExitRow &theDecay, int aa, int exitPairNum) {
+  const bool particleExit = aa != exitPairNum && compound()->GetPair(exitPairNum)->GetPType() == 0;
+  std::vector<double> c;
+  if (particleExit && point->IsUPOS()) {
+    c.assign(theDecay.num_orders, 0.0);
+    const double finalL = (double)point->GetSecondaryDecayL();
+    const double Ic = point->GetIc();
+    // the residual nucleus of the exit pair (tests/upos_pair_index)
+    const double j2f = compound()->GetPair(exitPairNum)->GetJ(2);
+    const double delta = point->GetDelta();
+    std::vector<double> rL(theDecay.num_orders, 0.0);
+    for (int lOrder = 0; lOrder < theDecay.num_orders; lOrder += 2) {
+      double R_L = this->GetRk(j2f, finalL, finalL, Ic, lOrder);
+      if (delta != 0.) {
+        // Eq. (7) unconditionally: every R_k is 0 where its coupling is not allowed (checklist t3-24).
+        const double finalLp = finalL + 1.;
+        const double R_LLp = this->GetRk(j2f, finalL, finalLp, Ic, lOrder);
+        const double R_LpLp = this->GetRk(j2f, finalLp, finalLp, Ic, lOrder);
+        R_L = (R_L + 2. * delta * R_LLp + delta * delta * R_LpLp) / (1. + delta * delta);
+      }
+      rL[lOrder] = R_L;
+    }
+    for (int inter = 0; inter < theDecay.num_interferences; inter++) {
+      const azure2::FlatInterference &f = P.interferences[theDecay.first_interference + inter];
+      if (f.r1 != 'R' || f.r2 != 'R') continue;  // only internal pathways interfere here
+      const azure2::SpinGroupRow &g = P.Group(theDecay, f.k);
+      const azure2::InternalRow &a = P.Internal(g, f.m1), &b = P.Internal(g, f.m2);
+      if (compound()->GetJGroup(a.group)->GetChannel(a.chp)->GetL() != compound()->GetJGroup(b.group)->GetChannel(b.chp)->GetL())
+        continue;
+      const complex T1 = this->GetTMatrixElement(f.k, f.m1), T2 = this->GetTMatrixElement(f.k, f.m2);
+      c[f.l] += real(f.z_upos * T1 * conj(T2)) * pow(2. * f.l + 1., 0.5) / (4.) * rL[f.l];
+    }
+  } else {
+    this->BuildOrderProducts(P, theDecay, particleExit, aa == exitPairNum);
+    c.resize(rt_wl_.size());
+    for (std::size_t l = 0; l < rt_wl_.size(); l++) c[l] = real(rt_wl_[l]);
+  }
+  const double geom = point->GetGeometricalFactor(), i1i2 = compound()->GetPair(aa)->GetI1I2Factor();
+  const double symmetry = LegendreSymmetryFactor(*compound()->GetPair(aa), aa == exitPairNum);
+  for (double &b : c) b = b / pi * geom * i1i2 * symmetry / 100.;
+  return c;
+}
 
 /*!
  * Creates a new temporary T-Matrix element.

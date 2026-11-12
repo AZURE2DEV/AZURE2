@@ -18,9 +18,15 @@
 #include "Unit.h"
 
 void Site::MarkFailed(azure2::Results &results, const char *role, const Config &configure, const char *why) {
-  // Every fixed quantity NaN and no angular-distribution coefficient.
-  std::fill(Rec(results), Rec(results) + azure2::Results::kNumFixed, std::numeric_limits<double>::quiet_NaN());
-  if (num_ang_slots_) Rec(results)[azure2::Results::AngularOffset()] = 0.0;
+  // Every fixed quantity NaN; Legendre coefficients NaN, so that every point reading them is NaN (ValueFor), and an
+  // angular distribution's model record gets none (CopyAngularDistsToModel).
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  std::fill(Rec(results), Rec(results) + azure2::Results::kNumFixed, nan);
+  if (num_ang_slots_) {
+    double *r = Rec(results) + azure2::Results::AngularOffset();
+    r[0] = (double)num_ang_slots_;
+    std::fill(r + 1, r + 1 + num_ang_slots_, nan);
+  }
   static std::atomic<bool> reported(false);
   if (!reported.exchange(true)) {
 #pragma omp critical(azure_failed_point)
@@ -115,7 +121,7 @@ void Unit::FoldSubPoints(const WorkingCopy &data, const Config &configure, azure
     std::vector<double> a0(n), product(n);
     for (int i = 1; i <= n; i++) {
       a0[i - 1] = this->GetSubPoint(data, i)->GetAngDistA0(results);
-      product[i - 1] = this->GetSubPoint(data, i)->GetFitCrossSection(results) * a0[i - 1];
+      product[i - 1] = this->GetSubPoint(data, i)->ValueFor(*this, i, results) * a0[i - 1];
     }
     const double denominator = FoldValues(*this, data, configure, a0);
     const double numerator = FoldValues(*this, data, configure, product);
@@ -129,7 +135,7 @@ void Unit::FoldSubPoints(const WorkingCopy &data, const Config &configure, azure
   }
   std::vector<double> sigma(n), product(n);
   for (int i = 1; i <= n; i++) {
-    sigma[i - 1] = this->GetSubPoint(data, i)->GetFitCrossSection(results);
+    sigma[i - 1] = this->GetSubPoint(data, i)->ValueFor(*this, i, results);
     product[i - 1] = sigma[i - 1] * this->GetSubPoint(data, i)->GetAnalyzingPower(results);
   }
   const double denominator = FoldValues(*this, data, configure, sigma);

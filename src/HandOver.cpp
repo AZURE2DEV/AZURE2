@@ -278,6 +278,8 @@ void WorkingCopy::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNu
   if (theCNuc && configure) {
     std::vector<TermRef> reshift;
     this->ReplaceSubPointGrids(theCNuc, *configure, shiftActiveSegments, reshift, movedTasks);
+    // Slots placed again: the rows of their readers at the new energies (Site::RowP).
+    this->CalcNodeRows(movedTasks, theCNuc, *configure);
     for (const TermRef &t : reshift) queueTerm(t);
   }
 

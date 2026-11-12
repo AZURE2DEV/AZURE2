@@ -1,3 +1,4 @@
+#include <algorithm>
 // The points and slots of a working copy (WorkingCopy::UnitAt, SlotAt; docs/upgrade/data_structure.md section 1.4):
 // slots given to points during the set-up or a grid re-placement, and the layout of the two vectors.
 #include <stdexcept>
@@ -9,7 +10,10 @@
 #include <cstring>
 #include <iostream>
 
+#include "Config.h"
 #include "MeshSlots.h"
+#include "Segment.h"
+#include "TargetEffect.h"
 #include "WorkingCopy.h"
 
 void WorkingCopy::AddSubPoint(Unit &point, Site sub) {
@@ -76,6 +80,18 @@ void WorkingCopy::PlaceSubPointGrids(SubPointGrids &grids) {
 }
 
 void WorkingCopy::CompactUnits() { LayOutUnits(nullptr); }
+
+void WorkingCopy::CalcNodeRows(const std::vector<int> &tasks, CNuc *theCNuc, const Config &configure) {
+  std::vector<int> sorted(tasks);
+  std::sort(sorted.begin(), sorted.end());
+  sorted.erase(std::unique(sorted.begin(), sorted.end()), sorted.end());
+  for (int t : sorted) {
+    Unit *point = plan_.Point(*this, t);
+    if (!point || !point->HoldsLegendreCoefficients() || point->NumSubPoints() <= 0) continue;
+    const TargetEffect *te = point->IsTargetEffect() ? Data().GetTargetEffect(point->GetTargetEffectNum()) : nullptr;
+    point->CalcNodeRows(*this, configure.maxLOrder, theCNuc, (te && te->IsQCoefficients()) ? te : nullptr);
+  }
+}
 
 void WorkingCopy::SeparateSlotsByAngle(const std::vector<int> &units) {
   auto same = [](double a, double b) { return std::memcmp(&a, &b, sizeof a) == 0; };
@@ -224,8 +240,10 @@ long WorkingCopy::CheckSlotGroups() const {
   // What the points that read one block have in common (SlotGroup.h), compared with the block's first reader.
   auto key = [&](const Unit &p) {
     const Unit::SubGridSpec &spec = Data().GridSpecOf(p);
-    return std::vector<std::uint64_t>{(std::uint64_t)p.GetSegmentKey(), bits(p.GetCMAngle()),
-                                      (std::uint64_t)(p.IsCoefficient() ? p.GetCoefficientOrder() : -1),
+    // a group holding Legendre coefficients has neither angle nor order (Site::HoldsLegendreCoefficients)
+    const bool angleFree = p.HoldsLegendreCoefficients();
+    return std::vector<std::uint64_t>{(std::uint64_t)p.GetSegmentKey(), angleFree ? 0 : bits(p.GetCMAngle()),
+                                      (std::uint64_t)(p.IsCoefficient() && !angleFree ? p.GetCoefficientOrder() : -1),
                                       (std::uint64_t)p.GetTargetEffectNum(), bits(p.GetScreeningUe()),
                                       (std::uint64_t)p.GetScreeningParam(), (std::uint64_t)spec.mesh,
                                       bits(spec.frameShift), bits(spec.stoppingConversion)};

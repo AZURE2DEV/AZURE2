@@ -1014,6 +1014,8 @@ int WorkingCopy::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
         // wrong angle (audit 2026-10-25, item 32).
         // A slot another point of the group writes takes that point's angles; SeparateSlotsByAngle below gives
         // a point whose converted angles differ slots of its own.
+        // Slots holding Legendre coefficients have no angle (Site::ValueFor): nothing to put.
+        if (point->HoldsLegendreCoefficients()) continue;
         if (point->NumSubPoints()) angled.push_back(static_cast<int>(point - &UnitAt(0)));
         for (int k = 1; k <= point->NumSubPoints(); k++) {
           if (!WritesSlot(*point, k)) continue;
@@ -1326,8 +1328,8 @@ void WorkingCopy::LayoutResults(azure2::Results *results) {
   modelSize_ = 0;
   for (const Segment &seg : set_->segments_)
     for (Unit &point : seg.GetPoints(*this)) {
-      point.SetModelRecord(modelSize_, point.ResultAngularCapacity());
-      modelSize_ += azure2::Results::ModelRecordSize(point.ResultAngularCapacity());
+      point.SetModelRecord(modelSize_, point.ModelAngularCapacity());
+      modelSize_ += azure2::Results::ModelRecordSize(point.ModelAngularCapacity());
     }
 }
 

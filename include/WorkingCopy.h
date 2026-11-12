@@ -165,6 +165,8 @@ class WorkingCopy {
   void PrintData(const Config &);
   /// Unit::CalcLegendreP for every point.
   void CalcLegendreP(int, CNuc *);
+  /// Unit::CalcNodeRows for the points of the plan tasks `tasks` (after their slots were placed again).
+  void CalcNodeRows(const std::vector<int> &tasks, CNuc *, const Config &);
   void PrintLegendreP(const Config &);
   /// Unit::CalcEDependentValues for every point -- penetrabilities, shifts and Coulomb phases at each energy.
   int CalcEDependentValues(CNuc *, const Config &);

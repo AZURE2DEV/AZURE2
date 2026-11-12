@@ -87,12 +87,10 @@ class Unit : public Site {
     return std::isnan(n) ? (int)num_model_ang_ : (int)n;
   }
   double GetModelAngularDist(const azure2::Results &r, int k) const { return r.model[ModelRecord(r) + 2 + k]; }
-  /// Copy the leaf record's angular-distribution count and coefficients into the model record (EvaluateModelPoint).
-  void CopyAngularDistsToModel(azure2::Results &r) const {
-    if (!num_model_ang_) return;
-    const double *from = Rec(r) + azure2::Results::AngularOffset();
-    std::copy(from, from + 1 + std::min<int>(num_model_ang_, num_ang_slots_), r.model.begin() + ModelRecord(r) + 1);
-  }
+  /// The coefficients a_k = B_k / (f A_0) of the point's angular distribution, k = 0 .. max_ang_dist_order, from the
+  /// Legendre coefficients its record holds, into the model record (EvaluateModelPoint).  A record without them (a
+  /// failed point) gives none.
+  void CopyAngularDistsToModel(azure2::Results &r) const;
   /// Calculate the point (its sub-points and its fold) for the current parameters, outside the energy pass
   /// (WorkingCopy::CalculatePointsInParallel), writing the values into `results`, the buffer of the evaluation laid out
   /// by `data`, the data set that holds the point (its target effects give the fold).  One solve at the point's energy,
@@ -111,6 +109,9 @@ class Unit : public Site {
   const Site &OwnSite() const { return *this; }
   /// The Site functions of the same names for the point's own site and then for each slot of its fold, in order.
   void CalcLegendreP(WorkingCopy *data, int maxL, CNuc *, const TargetEffect *);
+  /// The point's rows at the energies of its slots, where its row depends on the energy (Site::RowP); after its own
+  /// rows and whenever its slots or its angle change.
+  void CalcNodeRows(const WorkingCopy &data, int maxL, CNuc *, const TargetEffect *);
   void CalcEDependentValues(WorkingCopy *data, CNuc *, const Config &, const ChannelRowSource *rows = nullptr);
   void ChannelKeys(WorkingCopy *data, CNuc *, std::vector<ChannelTable::Key> &);
   void CalcCoulombAmplitude(WorkingCopy *data, CNuc *);

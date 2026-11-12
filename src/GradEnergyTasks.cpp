@@ -151,6 +151,16 @@ bool HasCotangents(const Pass &pass, const EnergyTaskList &list, const EnergyTas
   return false;
 }
 
+// The point whose row reads unit u's observable for cotangent k: the reader of a slot holding Legendre coefficients
+// (the slot has no angle), the unit itself otherwise.
+const Site &RowsOf(WorkingCopy &data, UnitRef u, const UnitCotangent &k) {
+  const Site &site = data.SiteAt(u);
+  return (k.rows && site.HoldsLegendreCoefficients()) ? *k.rows : site;
+}
+int RowSlotOf(WorkingCopy &data, UnitRef u, const UnitCotangent &k) {
+  return (k.rows && data.SiteAt(u).HoldsLegendreCoefficients()) ? k.rowSlot : 0;
+}
+
 // The solver of a task on this thread, filled and factored at the task's first unit.
 AMatrixFunc &SolveTask(CNuc *compound, const Config &config, Site *first) {
   static thread_local AMatrixFunc amf(compound, config);
@@ -225,7 +235,7 @@ bool ScalarTask(CNuc *compound, const Config &config, WorkingCopy &data, Results
     GroupCotangents(pass, list, task, begin, end, order);
     for (const std::pair<int, UnitRef> &o : order) {
       const UnitCotangent &k = pass.cot[o.first];
-      if (!amf.PointTBar(&data.SiteAt(o.second), results, k.value, bar, k.xsComponent, k.ayCrossSection)) return false;
+      if (!amf.PointTBar(&data.SiteAt(o.second), results, k.value, bar, k.xsComponent, k.ayCrossSection, RowsOf(data, o.second, k), RowSlotOf(data, o.second, k))) return false;
       AddCotangent(sum, bar);
     }
     if (dense || !amf.CollectBilinearTerms(provider, sum, terms)) {
@@ -288,7 +298,7 @@ bool RowTask(CNuc *compound, const Config &config, WorkingCopy &data, Results &r
         groupSlots.push_back(slot);
         sums[slot] = TMatrixCotangent();
       }
-      if (!amf.PointTBar(&data.SiteAt(o.second), results, k.value, bar, k.xsComponent, k.ayCrossSection)) return false;
+      if (!amf.PointTBar(&data.SiteAt(o.second), results, k.value, bar, k.xsComponent, k.ayCrossSection, RowsOf(data, o.second, k), RowSlotOf(data, o.second, k))) return false;
       AddCotangent(sums[slot], bar);
     }
     for (int slot : groupSlots) {

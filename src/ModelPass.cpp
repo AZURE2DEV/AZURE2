@@ -83,13 +83,15 @@ Unit *TermPoint(WorkingCopy &data, const Segment &segment, int term, int pointIn
   return segment.GetTermPoint(data, term, pointIndex + 1);
 }
 
-double LeafValue(const Site *p, LeafPart part, const azure2::Results &results) {
+/// The value of site `p` for the leaf's point `reader` (the point itself, or the point whose slot number `slot` `p` is:
+/// Site::ValueFor).
+double LeafValue(const Site *p, const Site *reader, int slot, LeafPart part, const azure2::Results &results) {
   switch (part) {
     case LeafPart::E1: return p->GetFitE1CrossSection(results);
     case LeafPart::E2: return p->GetFitE2CrossSection(results);
     case LeafPart::Value: break;
   }
-  return p->GetFitCrossSection(results);
+  return p == reader ? p->GetFitCrossSection(results) : p->ValueFor(*reader, slot, results);
 }
 
 /// What a term is called in a message when its calculation fails.
@@ -190,7 +192,7 @@ struct PointInputs {
                          ? azure2::ReferenceTableValue(data, point[k], segment.GetReaction().reference, configure)
                      : azure2::experiment::IsCoulombReference(part)
                          ? azure2::CoulombReferenceValue(data, point[k], part, cnuc, configure)
-                         : LeafValue(point[k], part, results);
+                         : LeafValue(point[k], point[k], 0, part, results);
       leafArray[k] = {&leafValue[k], 1};
     }
     for (std::size_t f = 0; f < nf; f++) {
@@ -227,7 +229,7 @@ struct PointInputs {
     for (std::size_t k = 0; k < nl; k++) {
       subOffsets.push_back(subValues.size());
       for (int j = 1; j <= point[k]->NumSubPoints(); j++)
-        subValues.push_back(LeafValue(point[k]->GetSubPoint(data, j), p.leaves[k].part, results));
+        subValues.push_back(LeafValue(point[k]->GetSubPoint(data, j), point[k], j, p.leaves[k].part, results));
       subOffsets.push_back(subValues.size());
     }
     for (std::size_t k = 0; k < nl; k++) subArray.push_back({subValues.data(), &subOffsets[2 * k]});

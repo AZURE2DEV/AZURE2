@@ -92,7 +92,7 @@ double FoldValues(const Unit &unit, const WorkingCopy &data, const Config &confi
 void FoldPoint(Unit &unit, const WorkingCopy &data, const Config &configure, azure2::Results &results) {
   const int n = unit.NumSubPoints();
   std::vector<double> values(n > 0 ? n : 0);
-  for (int j = 1; j <= n; j++) values[j - 1] = unit.GetSubPoint(data, j)->GetFitCrossSection(results);
+  for (int j = 1; j <= n; j++) values[j - 1] = unit.GetSubPoint(data, j)->ValueFor(unit, j, results);
   unit.SetFitCrossSection(results, FoldValues(unit, data, configure, values, Broadening::kApply));
 }
 

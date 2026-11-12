@@ -520,7 +520,7 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
   }
 
   std::vector<double> sigma(nsp);
-  for (int i = 1; i <= nsp; i++) sigma[i - 1] = point->GetSubPoint(data, i)->GetFitCrossSection(results);
+  for (int i = 1; i <= nsp; i++) sigma[i - 1] = point->GetSubPoint(data, i)->ValueFor(*point, i, results);
   double model = point->GetFitCrossSection(results);
 
   const auto tc0 = std::chrono::steady_clock::now();
@@ -624,7 +624,8 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
   g_teCombinerNs += std::chrono::duration_cast<std::chrono::nanoseconds>(tc1 - tc0).count();
 
   auto emit = [&](int i, double value, int component, bool ayCrossSection) {
-    if (value != 0.0) out.push_back({data.SlotSite(*point, i), row, value, component, ayCrossSection, point->PlanTask()});
+    if (value != 0.0)
+      out.push_back({data.SlotSite(*point, i), row, value, component, ayCrossSection, point->PlanTask(), point, i});
   };
   for (int i = 1; i <= nsp; i++) {
     if (c[i - 1] == 0.0) continue;
@@ -674,18 +675,18 @@ bool azure2::PointCotangents(WorkingCopy &data, const GradPoint &p, CNuc *compou
   ModelCotangents c;
   if (!ModelPointBackward(data, *p.segment, p.pointIdx, compound, config, results, fitBar, c)) return false;
   AddParamCotangents(c, p.segment, p.point, data, p.segNum, compound, params);
-  auto emit = [&](const Unit *reader, const Site *u, double value, int component) {
-    if (value != 0.0) out.push_back({data.SiteIndex(u), row, value, component, false, reader->PlanTask()});
+  auto emit = [&](const Unit *reader, const Site *u, int slot, double value, int component) {
+    if (value != 0.0) out.push_back({data.SiteIndex(u), row, value, component, false, reader->PlanTask(), reader, slot});
   };
   if (c.subPoints) {
     for (const ModelCotangents::Leaf &l : c.leaves)
-      for (std::size_t k = 0; k < l.sub.size(); k++) emit(l.point, l.point->GetSubPoint(data, (int)k + 1), l.sub[k], l.xsComponent);
+      for (std::size_t k = 0; k < l.sub.size(); k++) emit(l.point, l.point->GetSubPoint(data, (int)k + 1), (int)k + 1, l.sub[k], l.xsComponent);
     return true;
   }
   for (const ModelCotangents::Leaf &l : c.leaves) {
     if (l.cotangent == 0.0) continue;
     if (!HasSubPointFold(data, *l.point))
-      emit(l.point, l.point, l.cotangent, l.xsComponent);
+      emit(l.point, l.point, 0, l.cotangent, l.xsComponent);
     else if (!GradTargetEffectAdjoint(data, l.point, results, l.cotangent, params, l.xsComponent, compound, config, row,
                                       out))
       return false;

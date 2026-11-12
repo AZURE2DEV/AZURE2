@@ -52,6 +52,11 @@ struct ThmSpectatorWindow;
  * with its row, its fold and its records; the slots of a folded point are sites held by its working copy
  * (WorkingCopy::SubSites), one per node of its integral, in energy order.
  */
+/// The identical-particle factor of dsigma/dOmega in the Legendre coefficients B_L of a reaction from `entrance`: 4 for
+/// elastic scattering of identical particles (|f(theta) + f(pi - theta)|^2 of the nuclear amplitude), (1 + delta_12)
+/// = 2 for another exit of an identical entrance pair, 1 otherwise (GenMatrixFunc::CalculateBareCrossSection).
+double LegendreSymmetryFactor(const PPair &entrance, bool elastic);
+
 class Site {
  public:
   /// A slot at a given c.m. energy and angle that is no row of a measurement (a sample of a target-effect integral),
@@ -141,6 +146,48 @@ class Site {
   void SetAngDistA0(azure2::Results &r, double a0) const { Rec(r)[azure2::Results::kA0] = a0; };
   /// Angular momentum of the secondary decay. UPOS points only.
   int GetSecondaryDecayL() const;
+  /*!
+   * Whether the site holds the Legendre observable of its reaction (docs/upgrade/energy_grid.md section 3.2): an
+   * angular-distribution or coefficient term, or a differential term of a reaction whose exit pair is not its entrance
+   * pair, without an analysing power, phase shift, total or THM (for elastic scattering, the coefficients of the
+   * nuclear amplitude alone, which only an angular distribution reads).  Its record holds then, in the angular part, the coefficients B_L (b/sr)
+   * of dsigma/dOmega_c.m. = sum_L B_L P_L(cos theta) at the site's energy, L = 0 .. K-1, and for an angular
+   * distribution A_0 = sigma_int / 4 pi; no angle.  A point reads them through its own row (ValueFor).
+   */
+  bool HoldsLegendreCoefficients() const;
+  /*!
+   * The observable of this site as `reader` sees it: for a site holding Legendre coefficients, the reader's angular
+   * row applied to them (sum_L B_L P_L(cos theta) with the reader's P_L, Q coefficients included; for an
+   * angular-coefficient reader its order's coefficient, a_k = B_k / (f A_0) or A_k = B_k / f, f the reader's
+   * EntranceSymmetry); otherwise the value the record holds (the reader's angle is the site's).
+   */
+  double ValueFor(const Site &reader, int slot, const azure2::Results &r) const;
+  /// The reader's angular row at its slot `slot` (1-based; 0: its own energy): P_L(cos theta) with the Q coefficients
+  /// of its effect, at the slot's energy where the detector's lab transform makes it depend on the energy
+  /// (RowDependsOnEnergy; the rows of its slots, CalcNodeRows), else at the point's.
+  double RowP(int slot, int l) const {
+    return (slot > 0 && node_rows_) ? (*node_rows_)[(std::size_t)(slot - 1) * legendreP_->size() + l] : (*legendreP_)[l];
+  }
+  /// Whether the point's angular row depends on the energy: Q coefficients on a particle-to-particle reaction that is
+  /// not charged elastic scattering, UPOS or A_y (the detector averages the lab distribution: CalcLegendreP).
+  bool RowDependsOnEnergy(CNuc *, const TargetEffect *) const;
+  /// The row P_L Q-transformed at c.m. energy `cmEnergy` (MeV) and the point's c.m. angle, L = 0 .. maxL, into p.
+  void LegendreRowAt(double cmEnergy, int maxL, CNuc *, const TargetEffect *, double *p) const;
+  /// The number K of Legendre coefficients the record holds (HoldsLegendreCoefficients) and the first of them.
+  int NumLegendreCoefficients(const azure2::Results &r) const {
+    return num_ang_slots_ ? (int)Rec(r)[azure2::Results::AngularOffset()] : 0;
+  }
+  const double *LegendreCoefficients(const azure2::Results &r) const {
+    return Rec(r) + azure2::Results::AngularOffset() + 1;
+  }
+  /// a_k A_0 = B_k / f of order k as `reader`'s angular distribution has it (0 beyond its max_ang_dist_order or the
+  /// coefficients held).
+  double CoefficientOfOrder(const Site &reader, const azure2::Results &r, int k) const;
+  /// Multiply the Legendre coefficients the record holds by `f` (electron screening).
+  void ScaleLegendreCoefficients(azure2::Results &r, double f) const;
+  /// The identical-particle factor of the point's B_L (LegendreSymmetryFactor), by which they exceed the a_k A_0 of
+  /// an angular distribution (sigma_int without it); set with the point's Legendre rows (CalcLegendreP).
+  double EntranceSymmetry() const { return entrance_symmetry_; }
   /// Angle in the lab frame.
   double GetLabAngle() const;
   /// Angle in the centre-of-mass frame.
@@ -164,7 +211,8 @@ class Site {
   /// Make this site a slot of `point` (Unit::MakeSubPoint): it takes the point's screening.
   void TakeSlotSettingsOf(const Site &point);
   void BelongToRowOf(const Site &parent) {
-    legendre_order_ = parent.legendre_order_;
+    // a slot holding Legendre coefficients serves every order: the reader's row picks its own (ValueFor)
+    legendre_order_ = parent.HoldsLegendreCoefficients() ? -1 : parent.legendre_order_;
     row_ = parent.row_;
     is_sub_point_ = true;
   }
@@ -239,6 +287,8 @@ class Site {
   double CalculateCrossSectionConversionFactor(PPair *, PPair *);
   /// Lab motion (g, boost gamma) of the detected exit particle for the attenuation coefficients; false: Q as entered.
   bool QLabBoost(PPair *entrancePair, PPair *exitPair, double &g, double &gb) const;
+  /// The same at c.m. energy `cmEnergy` (MeV).
+  bool QLabBoostAt(double cmEnergy, PPair *entrancePair, PPair *exitPair, double &g, double &gb) const;
   /// dOmega_lab/dOmega_cm of a photon at the point (the RATIO frame factors).
   double CalculateCrossSectionGammaConversionFactor(PPair *);
   /// Append the next Legendre polynomial; they are stored in order L = 0, 1, 2, ...
@@ -261,9 +311,12 @@ class Site {
   /// no buffer: the values are in the caller's.
   static constexpr std::size_t kNoRecord = static_cast<std::size_t>(-1);
   std::size_t ResultSlot() const { return slot_; }
-  /// Slots for angular-distribution coefficients a unit needs: max_ang_dist_order + 1 for an angular-distribution
-  /// or coefficient point (GenMatrixFunc writes min(maxLOrder, max_ang_dist_order) + 1 of them), else 0.
-  int ResultAngularCapacity() const {
+  /// Slots for Legendre coefficients a site's record needs: Config::maxLOrder + 1 for a site holding them
+  /// (HoldsLegendreCoefficients), else 0.
+  int ResultAngularCapacity() const;
+  /// Slots for the coefficients a_k of an angular-distribution or coefficient point in its model record:
+  /// max_ang_dist_order + 1, else 0.
+  int ModelAngularCapacity() const {
     return (settings_->angularDist && settings_->maxAngDistOrder >= 0) ? settings_->maxAngDistOrder + 1 : 0;
   }
   int ResultAngularSlots() const { return num_ang_slots_; }
@@ -365,7 +418,8 @@ class Site {
   bool InjectedFailure() const;
   void SetStoppingPower(double);
   void SetTargetThickness(double);
-  void SetAngularDists(azure2::Results &r, vector_r dists);
+  /// Record the Legendre coefficients B_0 .. B_{K-1} (b/sr) of the site (HoldsLegendreCoefficients).
+  void SetLegendreCoefficients(azure2::Results &r, const vector_r &coefficients) const;
  protected:
   bool is_sub_point_ = false;
   int segment_key_;
@@ -383,6 +437,7 @@ class Site {
   double excitation_energy_;
   double geofactor_;
   double sfactorconv_;
+  double entrance_symmetry_ = 1.0;
   double screen_k_ = 0.0;
   double screen_ue_ = 0.0;
   int screen_param_ = 0;
@@ -401,6 +456,8 @@ class Site {
   // sub-points held ~7 GB of these rows); every writer goes through MutableEDep() / MutableLegendre(), which give
   // the point its own copy first if the tables are shared (copy-on-write).
   SharedTable<vector_r> legendreP_;
+  /// A reader's rows at the energies of its slots (RowP), slot by slot, where they depend on the energy; else null.
+  SharedTable<vector_r> node_rows_;
   SharedTable<EDependentTables> edep_;
   /// This point's own, writable tables (copied first if shared with another point).
   EDependentTables &MutableEDep();

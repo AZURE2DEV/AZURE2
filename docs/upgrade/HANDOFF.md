@@ -2,6 +2,54 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, Phase 5 branch 9, milestone 1) — non-elastic angular data: a site holds Legendre coefficients, the point's row applies the angle (`feature/upgrade-5-observables`)
+
+**What a site holds now.**  A site of a differential term of a reaction whose exit pair is not its entrance pair,
+or of any angular-distribution / Legendre-coefficient term (`Site::HoldsLegendreCoefficients`), holds in the angular
+part of its record the coefficients B_0 .. B_{K-1} (b/sr) of dsigma/dOmega_c.m. = sum_L B_L P_L(cos theta) at its
+energy (K = the exit's `num_orders`, at most `Config::maxLOrder` + 1 = 21 slots), and for an angular distribution
+A_0 = sigma_int / 4 pi.  No angle.  The cut is where it was in today's sums: `GenMatrixFunc::BuildOrderProducts`
+(the per-order products Z T1 T2* of the pathway table that the differential sum already summed once per T-matrix,
+`rt_wl_`), scaled by geom I1I2 s / (100 pi) in `GenMatrixFunc::LegendreCoefficientsOf`; the UPOS weights
+(Z_upos sqrt(2L+1)/4 R_L) are per order too.  No second formula: the external-capture interferences (ER, RE, EE)
+are in the same per-order list.  s = `LegendreSymmetryFactor` (4 elastic identical, 2 another exit of an identical
+entrance, else 1); a_k A_0 = B_k / s (`Site::CoefficientOfOrder`).
+**The row.**  A point reads a site through `Site::ValueFor(reader, slot, results)`: sum_L B_L RowP(slot, L) for
+differential data, B_k / s (absolute) or B_k / (s A_0) (normalised) for a coefficient datum of order k.  The row is the
+point's own Legendre rows (with its Q coefficients), or, where the detector's lab transform of the Q coefficients
+makes the row depend on the energy (particle exit, not UPOS / A_y / charged elastic: `Site::RowDependsOnEnergy`), the
+point's rows at the energies of its slots (`Unit::CalcNodeRows`, `Site::node_rows_`, computed from
+`Site::LegendreRowAt`, the former body of `CalcLegendreP`).  They are recomputed when the point's angle moves with a
+shift (`ShiftFrames.cpp`) and for the points whose slots were placed again (`HandOver.cpp`,
+`WorkingCopy::CalcNodeRows`).  Readers: the fold (`PointFold.cpp`), the coefficient and A_y folds (`PointPass.cpp`),
+the transform terms (`ModelPass.cpp` `LeafValue`), the model record's a_k (`Unit::CopyAngularDistsToModel`), the
+gradient (`UnitCotangent::rows`, `rowSlot`; `AMatrixFunc::PointTBar(..., rows, rowSlot)` takes the Legendre rows and
+coefficient order from the reader).
+**The key** (`MeshGroupKey`) has angle 0, Legendre order -1 and no nominal energy for these groups; slots get no
+Legendre rows and no order (`BelongToRowOf`); `ReangleSlots` is not called for them and the shift column of a
+lab-frame segment of them refolds on the fixed nodes (`FoldOnlyShift`); leaves of them are not separated by angle.
+`CheckSlotGroups` knows the angle-free key.  Electron screening scales the coefficients (`ScaleLegendreCoefficients`).
+A failed site has NaN coefficients (`MarkFailed`).
+**Deleted / unreachable.**  The record write of normalised a_k (`SetAngularDists`) is gone; the angular-distribution
+part of the old interference loop (`angularCoeff`) is unreachable and goes with milestone 5.  Model records size
+from `ModelAngularCapacity` (unchanged), site records from `ResultAngularCapacity` (the coefficients).
+**Largest difference.**  Quick set (T1, T2, T3, 13N, natural_neon, thick_target_resonance, layer_yield/models,
+angular_coefficients, 13N_capture_ay, ratio_to_rutherford, sum_lab_frame; three bases) against `tab-trial34`: every
+file identical as printed except `sum_lab_frame/models/{sum_data,sum_free}` chiSquared.out / run.log, chi^2 =
+3.99e-17 (data equal to the model, rounding noise) moving by up to 5.0e-6 of itself (2e-22 absolute), the case the
+lab-frame branch listed.  A first version that read the point's row at its own energy instead of the node's moved
+T2 s02/s03 (Q attenuation on 15N(p,a)) by 5.1e-7 relative in 119 numbers: the per-node row above removes it.
+**Ran.**  Build 0 warnings; consistency test; `ctest -R "experiment|kernels|grad|upgrade_plan|upgrade_node|
+upgrade_mesh|consistency"` (all pass, upgrade_plan_runtime and upgrade_node_check run AZURE_PLAN_CHECK=1 and
+AZURE_NODE_CHECK=1); `check.sh` of angular_coefficients, ratio_to_rutherford, sum_lab_frame pass; AZURE_GRAD_CHECK on
+T1, T2, T3, 13N, layer_yield/models/fit, 13N_capture_ay: the same chi^2, fd and Jacobian agreement as the base build.
+Injected once: every coefficient reader reading order 0 -> angular_coefficients fails 5 checks (data, shift, conv,
+gradient); removed.
+**Measured** (1 thread, 3 alternated runs, medians, menu 1, against `b-trial34`): T2 units of the energy pass
+23,673 -> 21,085, evaluation 60.4 -> 57.5 ms, wall 0.36 -> 0.34 s, peak 136 -> 133 MB; 13N, natural_neon,
+thick_target_resonance: units unchanged, wall and peak within 1 %.
+**Not run.**  The whole tree, `run_tests.sh`, the gate, the eight fits, 1-vs-3-thread comparison.
+
 ## 2026-11-12 (agent, Phase 5 branch 8) — folded data with an energy shift on the fixed nodes of the shared mesh (`feature/upgrade-5-shift-kernel`)
 
 **Done.**  A folded point of a data set with an energy shift folds on the shared mesh like every other folded point:

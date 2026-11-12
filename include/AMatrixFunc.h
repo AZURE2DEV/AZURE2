@@ -173,10 +173,13 @@ class AMatrixFunc : public GenMatrixFunc {
    * observables; `xsComponent` selects the cross-section component (0 full, 1 E1, 2 E2, -1 the angle-integrated
    * A_0 of an angular distribution), `ayCrossSection` the differential cross section an A_y point carries
    * instead of A_y.  Returns false, with `bar` unusable, where the configuration is outside the analytic path
-   * (RMC, active-level compaction, angular-distribution test points): finite differences then.
+   * (RMC, active-level compaction, angular-distribution test points): finite differences then.  `rows`: the point
+   * whose angular row reads the observable of `point` where `point` is a slot holding Legendre coefficients (its
+   * Legendre rows, coefficient order: Site::ValueFor) and `rowSlot` the slot's number in its range (Site::RowP);
+   * `point` itself and 0 otherwise.
    */
   bool PointTBar(Site *point, const azure2::Results &results, double fitBar, TMatrixCotangent &bar,
-                 int xsComponent = 0, bool ayCrossSection = false);
+                 int xsComponent, bool ayCrossSection, const Site &rows, int rowSlot);
   /*!
    * Reverse mode, second half: back-propagates T-matrix cotangents to the
    * level energies and reduced widths, at the energy of `energyPoint` (whose
