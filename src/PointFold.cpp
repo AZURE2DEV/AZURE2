@@ -62,6 +62,12 @@ struct PointKernelInput {
     nodes.n = n > 0 ? n : 0;
     nodes.energy = energy.data();
     nodes.stopping = target ? stopping.data() : nullptr;
+    // On the shared mesh the outer nodes lie beyond the support: the kernel integrates over the support alone.
+    const Unit::SubGridSpec &grid = data.Data().GridSpecOf(unit);
+    if (grid.mesh >= 0) {
+      nodes.supportLow = grid.endEnergy;
+      nodes.supportHigh = grid.startEnergy;
+    }
   }
 };
 

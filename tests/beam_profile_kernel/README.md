@@ -46,3 +46,5 @@ Y = Int G W D sigma / Int G W; before, it was also in the denominator, which can
 its normalisation at the point energy.  The new value was checked point by point against
 the corrected numpy kernel (Smith 2021 beams, no window: <= 0.05 %) and by
 `tests/reference/beam_profile_reference_test` (26/26).
+
+Re-pinned 2026-11-12: the shared mesh (one energy mesh per compound nucleus, `docs/upgrade/energy_grid.md` §2.2, §7.1). Segments 7.0552 / 33.3841 -> 7.05514 / 33.3842, total 40.4393 unchanged at its printed digits; the yields are closer to today's engine refined fourfold than before (largest relative distance 4.7e-5 against 8.5e-5).

@@ -193,6 +193,17 @@ the same nodes, and the mesh is a function of the quantized anchors, the support
 kernel is evaluated on the mesh nodes inside its support; the support's edges are handled by clipping the interval
 that contains them (as `GridQuadrature` clips [lo, hi] today), so they add no node.
 
+**Status, branch 7 part 2 milestone 2 (`feature/upgrade-5-shared-mesh`, 2026-11-12): wired.** `WorkingCopy::
+SetUpTargetEffects` queues every folded point of an unshifted, non-THM segment with an adaptive grid as a support of
+its nucleus's mesh (`src/MeshSlots.cpp`: `QueueMeshPoint`, support [a, b] in E_x = E_cm + S + E_x,pair, settings from
+the point's `Unit::SubGridSpec`, a hard lower edge at the integration floor or a thick target's 1 keV), then plans each
+nucleus once (`PlanMesh`, anchors `MeshAnchorsOf`: every level as each entrance pair of the nucleus's folded points
+sees it, quantized in E_x, from the input widths) and gives each point the nodes of its range (`MeshSlotEnergies`, c.m.
+energies descending).  The kernels integrate over the support (`KernelNodes::Low()/High()`), not over the span of the
+nodes, whose two outer nodes of a soft edge lie up to one interval outside it.  Off the mesh, with grids of their own
+as before: shifted segments (branch 8), THM (branch 10), `useAdaptiveGrid` off, and the σ(Ē) fallback nodes and windows
+(milestone 3).
+
 ### 2.3 Fixed per stage, and what happens when a narrow level moves
 
 Today every evaluation re-places the grids (`ReplaceSubPointGrids`) from the quantized anchors; the grid a copy
@@ -210,6 +221,13 @@ Between stages the whole mesh is re-planned.
 The alternative — a mesh fixed through the stage, wide enough to cover each narrow level's motion — removes the
 re-placement but makes a level that moves further than planned lose resolution silently, or forces a re-plan that is
 a discontinuity of χ² inside MIGRAD. It is the PI's choice (D1); I recommend keeping today's rule.
+
+**Status (milestone 2).** The hand-over (`WorkingCopy::ReplaceSubPointGrids`) takes the anchors of the observed
+parameters of the current values; where they differ bit for bit from the copy's (`WorkingCopy::meshAnchors_`), it plans
+the nucleus's mesh again and re-places the slots of the points whose support or present slots meet
+`MeshChangedRegion(before, after)`, through the same overflow path as before; the others keep theirs (with
+`AZURE_PLAN_CHECK=1` it checks that they would get the same bits, else it throws).  The plan itself is a whole
+`PlanMesh` of the nucleus (0.6 ms on T2).
 
 ### 2.4 Quadrature rule and error bound
 
@@ -282,6 +300,22 @@ model record. The observables, the energy pass, the folds, the gradient's cotang
 sites by one index (`WorkingCopy::SiteAt`: points, then slots). `SubPointAccess.h` is deleted. Not deleted:
 `NodeTableCache.h` (re-placed slots share their rows across copies through it until the shared mesh stops nodes from
 moving with the levels) and the slots' copy-on-write rows (the node rows are holders of them).
+
+**Status (milestone 2).** `NodeTableCache` is kept: the shifted folded points still have grids of their own that the
+hand-over re-places from the shifted anchors at every move of a shift, and mesh slots re-placed after an anchor change
+are the same nodes in every copy at the same parameters; the cache lets a copy adopt the rows another copy computed for
+them (on T2 most re-placed slots take another copy's rows).  It goes with branch 8, when no node moves with a shift.
+
+**Status, shared sites (`feature/upgrade-5-shared-sites`, 2026-11-12).** The folded points of a data set that need the
+cross section at one mesh node with everything else equal share one `Site` there (`include/SlotGroup.h`: the key --
+segment and term, c.m. angle bits, Legendre order of a coefficient row, target effect, stopping factor, frame shift,
+screening -- and the audit behind it).  A group's sites are one block of `WorkingCopy::SlotAt` in node order; a point's
+slots are a range of it, ranges overlap.  A slot is written by its first reader in data order
+(`WorkingCopy::WritesSlot`: set-up values, energy pass, record, external capture, stopping scale, shift step), read by
+all (folds, model pass, gradient; a site's cotangent is the sum of its readers' in point order).  Folds keep E1/E2,
+A_y sigma and a_k A_0 in arrays (`FoldValues`), never in a slot's record.  The hand-over re-places a group at once.
+Off the mesh a point is a group of its own.  Sites: natural_neon 373,449 -> 47,649, thick_target_resonance 74,634 ->
+28,924, stopping_yield/models 179,438 -> 4,221.  `NodeTableCache` is still needed (re-placed blocks adopt other copies' rows).
 
 ### 2.7 Thread-count independence by construction
 
@@ -737,6 +771,83 @@ Every changed number found by `tools/cls.sh` is put in one class; anything else 
 | **rounding** | lab-frame comparison; gradient per energy | per-point pull to 8 ulp; output numbers ≤ 10⁻¹⁴ relative; fits: χ² at the reference `param.sav` ≤ 10⁻¹² relative |
 | **quadrature** | the shared mesh; the shifted fold on fixed nodes; the range integration of the module | for each folded point, \|m_new − m_fine\| ≤ max(\|m_ref − m_fine\|, 10⁻¹⁰ \|m_ref\|), where m_fine is today's engine with every sub-point grid refined twofold (points per width ×2, base step ÷2, tail ratio ÷2): the new value must be at least as close to the converged value as today's |
 | **physics** | a decision of §9 that changes a model (lab-frame fold per node, deleted windows / automatic tolerance) | listed per project with its size and the decision |
+
+**The per-file rule for the shared mesh (decision of the director, 2026-11-12, to be shown to the PI).** The rule
+above compares number by number; a mesh whose nodes lie elsewhere than today's, with an error of the same size, fails
+it for about half the numbers by chance.  For the shared mesh a file is **quadrature** when its structure is the
+reference's, no number that the refinement leaves unchanged has moved, and its largest relative distance to the fine
+reference over its folded numbers, max |m_new − m_fine| / |m_fine| (m_ref ≠ m_fine), is not larger than **1.2 ×** the
+same maximum of today's engine, **and** the root mean square of the same relative distances over all the file's folded
+numbers, sqrt(mean (m_new − m_fine)² / m_fine²), is **not larger than 1.03 × today's**.  The 3 % is the resolution
+of the comparison, not a tolerance for the engine: the k = 8 reference is itself 1/64 of today's distance from the
+converged value, so the ratio of two distances to it is known to about 2/64.  Both are taken over every folded number
+of the file, also those the new engine left in place.  Two further clauses, each a line of the tool: a file whose
+largest new distance is at most **10⁻⁷** passes (both engines are converged there; 10⁻⁷ is the size by which the
+Coulomb table moves a charged-channel number), and a project in the tool's table `NAMED` passes with its own factor
+and is printed and counted as **named**, never as quadrature — one row today, `hybrid_potential` (factor 1.25), for
+the reason in the table below.  Measured with a mesh that drops every other
+node in the lower half of each point's range (13 folded projects of the quick set, Brune, against `tab-fine8` /
+`tab-fine4`): the maximum alone fails 7 projects, the rms adds `13N`, `beam_profile_kernel`, `ratio_to_reference`
+`folded` and `T2` (`T2_true` χ²); `thick_target_resonance` and `T2`'s own outputs pass both (the mesh there is finer
+than today's grid by more than the dropped nodes cost).  With "no factor" on the rms (the first form of the rule) the engine
+without the error failed in `13N` (rms 1.002 × and χ² 1.006 × today's: inside the resolution, hence the 3 %),
+`layer_yield` `aa=3` (a fold exact to 3 × 10⁻⁸: 1.18 × and 1.44 ×, hence the 10⁻⁷ clause) and `hybrid_potential`
+(1.21 ×).  A file above a bound is a failure to explain; the factors are not widened without a measured reason
+written here.
+
+`hybrid_potential`, the named project (measured by the agent, two rows re-run by the director; relative distance of
+its 76 folded values to today's engine at k = 64, the largest and the rms agree to 0.3 %, the error has one sign):
+
+| k | today's engine | shared mesh | mesh / today |
+|---|---|---|---|
+| 1 | 5.14 × 10⁻² | 6.17 × 10⁻² | 1.20 |
+| 2 | 2.00 × 10⁻² | 1.71 × 10⁻² | 0.85 |
+| 4 | 5.14 × 10⁻³ | 5.13 × 10⁻³ | 1.00 |
+| 8 | 1.35 × 10⁻³ | 1.35 × 10⁻³ | 1.00 |
+| 16 | 3.43 × 10⁻⁴ | 3.52 × 10⁻⁴ | 1.03 |
+
+Both engines converge at second order to the same value; at the project's own settings both are 5–6 % from it (the
+step is set by the resonance tails, 0.05 |E − E_r|; `points` has no effect: 10, 20, 40, 80 give the same bits), which
+is before the asymptotic regime.  The finding for the owner is the 5 %, not the factor 1.2.  `tools/classify_quadrature.py` prints both classes per
+file (the per-file one decides the summary and the exit status; the strict per-number count is printed beside it as
+information) with the largest and rms distances of both engines.
+
+**Measured on the merged engine** (director, 2026-11-12; whole tree, Brune basis, the shared mesh with shared sites
+against the engine before the mesh; per project the largest value over its output files of the largest and of the rms
+relative distance to the fine reference; `work/director/clsq_trial31.txt`).  Summary of the classifier: 577 files, 542
+identical, 33 quadrature, 2 named, 0 failures (no-brune 550 / 517 / 31 / 2 / 0; use-park 577 / 542 / 33 / 2 / 0).
+
+| project | largest, before | largest, mesh | rms, before | rms, mesh |
+|---|---|---|---|---|
+| `hybrid_potential` (named) | 5 × 10⁻² | 6 × 10⁻² | 5 × 10⁻² | 6 × 10⁻² |
+| `ratio_to_reference`, folded | 1.1 × 10⁻² | 3.6 × 10⁻³ | 2.8 × 10⁻³ | 9.1 × 10⁻⁴ |
+| T2 | 5.4 × 10⁻³ | 5.4 × 10⁻³ | 5.6 × 10⁻⁴ | 5.5 × 10⁻⁴ |
+| `T2_true` | 4.8 × 10⁻³ | 4.8 × 10⁻³ | 5.3 × 10⁻⁴ | 5.2 × 10⁻⁴ |
+| `stopping_yield`, fit | 4.2 × 10⁻³ | 2.0 × 10⁻³ | 8.2 × 10⁻⁴ | 3.8 × 10⁻⁴ |
+| `thick_target_resonance` | 3.2 × 10⁻³ | 4.2 × 10⁻⁴ | 1.2 × 10⁻³ | 2.0 × 10⁻⁴ |
+| `layer_yield`, fit | 2.1 × 10⁻³ | 9.9 × 10⁻⁴ | 9.6 × 10⁻⁴ | 4.4 × 10⁻⁴ |
+| `shift_sqrt_subpoints`, unshifted | 1.3 × 10⁻³ | 6.7 × 10⁻⁴ | 6.2 × 10⁻⁴ | 3.4 × 10⁻⁴ |
+| `layer_yield` | 8.5 × 10⁻⁴ | 4.9 × 10⁻⁴ | 2.0 × 10⁻⁴ | 8.3 × 10⁻⁵ |
+| `natural_neon` | 7.8 × 10⁻⁴ | 2.9 × 10⁻⁴ | 1.1 × 10⁻⁴ | 5.1 × 10⁻⁵ |
+| `target_effect_ranges` | 3.7 × 10⁻⁴ | 3.1 × 10⁻⁴ | 1.1 × 10⁻⁴ | 9.2 × 10⁻⁵ |
+| `stopping_yield` | 2.6 × 10⁻⁴ | 1.1 × 10⁻⁴ | 1.1 × 10⁻⁴ | 5.6 × 10⁻⁵ |
+| `rectangular_resolution`, fit | 1.4 × 10⁻⁴ | 5.3 × 10⁻⁵ | 5.4 × 10⁻⁵ | 2.6 × 10⁻⁵ |
+| 13N | 1.4 × 10⁻⁴ | 1.4 × 10⁻⁴ | 3.5 × 10⁻⁵ | 3.5 × 10⁻⁵ |
+| `beam_profile_kernel` | 8.5 × 10⁻⁵ | 4.7 × 10⁻⁵ | 3.5 × 10⁻⁵ | 2.1 × 10⁻⁵ |
+
+The mesh is closer to the fine reference than the engine before it, or equal, in every project but the named one.
+Where it gains most, two data sets or two segments fold over the same resonance and the mesh takes the finer of
+their settings for both.  Fits (eight, 1 thread): the fitted parameters move by at most 0.14 of their fitted error
+(`stopping_yield`, areal density, 7 × 10⁻⁵ relative) and, checked on that fit, towards the fit of the engine before
+the mesh refined eightfold.
+
+**The fine reference** is today's engine with k-fold refined grids (`AZURE_REFINE_QUADRATURE=k`): `tab-fine8` (k = 8)
+wherever it has the file, `tab-fine4` (k = 4) otherwise (`beam_profile_kernel`, whose k = 8 run is too slow); the
+classifier takes them as one argument, finest first (`tab-fine8,tab-fine4`), and prints the tag each file used.  The
+error is of second order in k (measured by the director: today's default is about 64 times further from the converged
+value than k = 8, k = 4 about 16 times), so k = 8 bounds the distance of today's engine to about 1.6 % of itself. A
+number that k = 4 leaves unchanged to its last printed digit can still be folded (`natural_neon` `aa=2` line 723: k = 4
+equal to today's, k = 8 one digit away): with k = 4 alone it counted as an unfolded number that moved.
 
 ### 7.2 What the director runs (minutes)
 

@@ -271,8 +271,9 @@ MeshPlan PlanMesh(const std::vector<MeshAnchor> &anchors, const std::vector<Mesh
       if (dominated || y == p.lattice) return;
       const Lattice &other = lattices[y];
       const double threshold = (own.ladder != other.ladder ? 0.5 : 1.0) * p.length * margin;
-      const double finest = std::max(other.StepAt(p.lo), other.StepAt(p.hi));  // the step is quasi-convex in E
-      if (!(finest < threshold)) return;
+      // the other lattice's coarsest step on the piece (its step is quasi-convex in E, so at an end)
+      const double otherCoarsest = std::max(other.StepAt(p.lo), other.StepAt(p.hi));
+      if (!(otherCoarsest < threshold)) return;
       if (Meets(*other.gaps, p.lo, p.hi)) return;
       dominated = true;
     };
@@ -285,8 +286,16 @@ MeshPlan PlanMesh(const std::vector<MeshAnchor> &anchors, const std::vector<Mesh
   }
 
   // Supports narrower than MeshZeroWidth: their exact high edge.
-  for (size_t i = 0; i < supports.size(); i++)
-    if (cover.facts[i].exact) nodes.push_back(std::max(supports[i].low, supports[i].high));
+  for (size_t i = 0; i < supports.size(); i++) {
+    const double low = std::min(supports[i].low, supports[i].high), high = std::max(supports[i].low, supports[i].high);
+    if (cover.facts[i].exact) {
+      nodes.push_back(high);
+      continue;
+    }
+    // A hard edge is a node; the range below then starts (ends) at it (the last node <= low is low itself).
+    if (supports[i].lowHard) nodes.push_back(low);
+    if (supports[i].highHard) nodes.push_back(high);
+  }
 
   std::sort(nodes.begin(), nodes.end());
   nodes.erase(std::unique(nodes.begin(), nodes.end()), nodes.end());

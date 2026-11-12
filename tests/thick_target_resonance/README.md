@@ -61,3 +61,18 @@ formula whose value falls towards lower energy in this range, so the first-order
 reason only: 30.8444 -> 30.9094 (segment 1 15.2792 -> 15.3329, segment 2 15.5652 -> 15.5765). The merged
 build with the first-order loss restored gives 30.8444 and every output file of the thm build byte for byte,
 so the whole move is that fix (dev's own pin, 30.7201, is on dev's grid; see MERGE_NOTES.md).
+
+2026-11-12 (`feature/upgrade-5-shared-mesh`, `docs/upgrade/energy_grid.md` §2.2 and §7.1): the folded points of one
+compound nucleus are integrated on one shared mesh whose local step is the smallest step of every data set covering
+that energy. The two segments read the same points, so they now get the same nodes and the same yields: the width
+multiplier 5 of segment 1 no longer coarsens its own grid, because segment 2's multiplier 20 covers the same range.
+Re-pinned 30.9094 (15.3329 / 15.5765) -> 31.3524 (15.6762 / 15.6762). Against today's engine with every grid refined
+eightfold (`AZURE_REFINE_QUADRATURE=8`: 15.7233 / 15.7275, total 31.4508) the new chi2 is 0.3 % away, the old one
+1.7 % (segment 1 2.5 %); the yields are within 4.2e-4 of the refined ones (old: 3.2e-3, at 253.8 keV):
+
+| E_cm     | shared mesh (both) | refined x8, seg 1 / seg 2 | before, seg 1 / seg 2   |
+|----------|--------------------|---------------------------|-------------------------|
+| 253.7846 | 3.8433e-08         | 3.8419e-08 / 3.8417e-08   | 3.8543e-08 / 3.8465e-08 |
+| 263.0573 | 2.0393e-06         | 2.0393e-06 / 2.0393e-06   | 2.0395e-06 / 2.0393e-06 |
+| 264.8950 | 2.0773e-06         | 2.0773e-06 / 2.0773e-06   | 2.0774e-06 / 2.0773e-06 |
+| 298.3287 | 2.1503e-06         | 2.1502e-06 / 2.1502e-06   | 2.1506e-06 / 2.1504e-06 |

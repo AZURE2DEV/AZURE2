@@ -2,6 +2,271 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (director, 07:15) — merged: the engine on the shared mesh, the shared sites, the expectations the mesh moves
+
+**Merged** into `feature/upgrade-4-data` and `feature/upgrade` (one merge commit, tree of `rehearsal/trial32`; nothing
+pushed): `feature/upgrade-5-shared-mesh` (the engine places a folded point's nodes from one plan per compound nucleus;
+the per-file rule of the classifier; the regenerated expectations) and `feature/upgrade-5-shared-sites` (the folded
+points of a sharing group read one `Site` per mesh node).  **This is the first merge of the upgrade that changes
+numbers on purpose.**
+
+**Verified by the director** (build `work/b-trial31`; whole-tree tag `tab-trial31`, **the reference for the next
+branches**):
+- all projects x 3 bases against the mesh engine alone (`tab-mesh2`): every output identical (823 / 796 / 823 files;
+  the one difference per basis is `13N`'s `run.log`: 28384 external-capture integrals instead of 367096) — the shared
+  sites change no number;
+- against the engine before the mesh (`tab-trial30`) with the refined references (`tab-fine8,tab-fine4`): Brune 577
+  files, 542 identical, 33 quadrature, 2 named, 0 failures; no-brune 550 / 517 / 31 / 2 / 0; use-park 577 / 542 / 33
+  / 2 / 0 (`work/director/clsq_trial31.txt`; per-project table now in `energy_grid.md` §7.1);
+- `ctest -LE slow` 207 / 207, `ctest -L slow` 10 / 10; `tests/run_tests.sh` with the regenerated expectations:
+  157 passed, 0 failed (with the old expectations: the six failures the expectations agent was given, no other); spec equivalence
+  184 of 184 converted equal; the converted-tree gate against the engine's own whole-tree run 623 / 596 / 623
+  identical, 0 classified, 0 differ, 0 missing (**the gate's reference is now the tag of the engine under test**,
+  `work/director/full_verify5.sh WT TAG RUNTAG [THR] [GREF]`: the converted tree must reproduce the originals with
+  the same engine; the comparison with the engine before is the classifier's); 1 against 3 threads identical.
+
+**Review of the shared sites** (director, the whole of `include/SlotGroup.h` and the diffs of `MeshSlots`,
+`CalculationPlan`, `EnergyPass`, `PointPass`, `Unit`, `WorkingCopyUnits`, `AZUREGrad`, `GradEnergyTasks`): no defect
+found.  The key of a sharing group holds everything a site's value depends on besides its energy; a site is written
+by its first reader in data order and by nobody else; a failed site fails every reader; the gradient sums a shared
+site's cotangents in the readers' plan order, so the sum does not depend on the thread count.
+
+**Fits** (eight fits, 1 thread, `work/director/fits_t31_mesh2`, `fits_t31_t30`): byte-identical to the mesh engine
+alone.  Against the engine before the mesh the fitted parameters move, in units of their fitted error: T2 0.01, 13N
+0.000, `layer_yield` 0.03, `stopping_yield` 0.14 (gradient route; 0.06 by the least-squares route's error; areal
+density 9.00435e17 -> 9.00498e17, 7e-5 relative).  Direction checked on that fit with the engine before the mesh
+refined eightfold, started near the minimum: areal densities 6.00387e17 / 9.00435e17 (before), 6.00426e17 / 9.00498e17
+(mesh), 6.00449e17 / 9.00533e17 (refined); stopping scale 1.0292742, 1.0292093, 1.0291722; chi2 72.04, 71.67, 71.41
+— all three parameters move towards the refined fit.  **Side finding**: the same refined fit from the test's far
+start ended invalid (chi2 154618 after 67 calls, "MIGRAD did NOT converge"); a far start's path depends on the
+quadrature, the minimum does not beyond the numbers above.  Not a matter of the mesh; for the fit-reproducibility
+statement to the owner.
+
+**Speed and memory**, one calculation, 1 thread, best of three (`work/director/speed_trial31.out`):
+
+| project | before the mesh | mesh alone | mesh with shared sites |
+|---|---|---|---|
+| `natural_neon` | 6.21 s, 1390 MB | 7.01 s, 1716 MB | 1.32 s, 340 MB |
+| `thick_target_resonance` | 0.91 s, 388 MB | 1.30 s, 548 MB | 0.59 s, 272 MB |
+| T2 | 0.26 s, 138 MB | 0.31 s, 150 MB | 0.26 s, 134 MB |
+| 13N | 8.31 s, 225 MB | 8.32 s, 225 MB | 7.73 s, 122 MB |
+| `stopping_yield` | 0.68 s, 333 MB | 0.66 s, 338 MB | 0.11 s, 105 MB |
+| `layer_yield` | 0.30 s, 200 MB | 0.30 s, 205 MB | 0.10 s, 113 MB |
+| `hybrid_potential` | 1.73 s, 338 MB | 1.73 s, 339 MB | 1.07 s, 106 MB |
+
+Fits, mesh alone -> with shared sites: `stopping_yield` gradient 43 s -> 8 s, least squares 42 s -> 10 s; 13N
+gradient 27 s -> 18 s; T2 gradient 36 s -> 34 s.  The mesh alone is slower than the engine before it (every point
+of a data set held its own copy of the mesh's nodes in its range); the shared sites are what makes the mesh pay.
+
+**Decisions of the director on what the expectations agent left.**
+- `13N/expected` (814.349 pinned; engine before 814.351, now 814.346): left, within the check's tolerance; the pin
+  already differed from the engine in other segments.
+- `target_effect_ranges/expected`: regenerated by the branch that deletes the fold windows (it changes that project).
+- `golden/T2/fit` (chi2 294.173, the fit of the engine before the mesh): left; `convert_params` needs its `param.sav`
+  in the old names and now compares with `expected/chi2_renamed`.  To regenerate when that check has an input of its
+  own.
+- Historical records that quote old numbers (`tests/upgrade/bench/T2.tsv`, `format3_tree.md`, `MERGE_NOTES.md`) stay
+  as records.
+
+**Open.**
+- **For the PI to confirm: the acceptance rule** of a changed folded number (`energy_grid.md` §7.1: per file, the
+  largest distance to the refined reference at most 1.2 x the old engine's and the rms at most 1.03 x; converged
+  files below 1e-7 pass; `hybrid_potential` named with 1.25).  It is the director's, not the PI's, until confirmed.
+- `hybrid_potential` at its own settings is 5–6 % from its converged value in both engines: a finding about the
+  project's settings for the owner.
+- `shift_subpoint_angle` (b): tolerance 1e-5 (measured 3.5e-6) until the shift kernel puts a shifted segment on the
+  mesh (branch 8), then 1e-6 again.
+- A shared site's cotangent is one `PointTBar` call per reader (summing per site first changes the floating-point
+  order: a rounding-class change, to do with the gradient's next branch); the serial `Unit::Calculate` path still
+  solves all of a point's slots; `NodeTableCache` stays until shifted points are on fixed nodes.
+- In work: the deletion of the four mechanisms of decision D3 (`feature/upgrade-5-d3-deletions`).
+
+## 2026-11-12 (agent, Phase 5 branch 7 part 2) — the stored expectations the shared mesh moves
+
+**Done** (tests and docs only; no engine file changed).  For each of the six checks that `tests/run_tests.sh` failed on
+024221f7, the new number was shown to be the mesh's and the closer one to today's engine refined eightfold
+(`AZURE_REFINE_QUADRATURE=8`, `work/b-trial30`), then the expectation was regenerated by the project's own means:
+- `thick_target_resonance/expected/chiSquared.out`: 30.9094 (15.3329 / 15.5765) -> 31.3524 (15.6762 / 15.6762); refined
+  31.4508 (15.7233 / 15.7275).  Both segments read the same points and now share the mesh (step = the finer of the two
+  multipliers), hence one value.  README re-pin paragraph with the yields.
+- `convert_params`: (b) compares with `expected/chi2_renamed` (294.164, this engine at the old fit's parameters) instead
+  of the old fit's 294.173 (`golden/T2/fit`, not regenerated: its `param.sav` in the old names is the check's input);
+  refined 293.649; segments 5-8 (the folded ones) each closer to the refined value.
+- `ec_relativistic_signature`: (b) accepts either refusal (count or signature): on the mesh the stale file holds 71240
+  amplitudes where 71232 are needed, so the count refuses it first.  New (d): the stale file cut to 71232 with its own
+  signature, refused by the signature alone (shown failing: with a matching signature it is read and chi2 is 697.463
+  instead of 810.243).
+- `shared_point_tables/expected/chi2_fit`: 109.250542525 -> 109.263831704.  At the old capped fit's `param.sav`:
+  109.250994 (before), 109.252912 (mesh), 109.259623 (refined); the capped fit (5 calls) of the refined engine ends at
+  109.219622, so the fitted value follows the path, not the rule.
+- `shift_subpoint_angle` (b): tolerance 1e-6 -> 1e-5, measured 3.5e-6 (a0 13484.5150511 on the mesh, av 13484.5627097
+  on its own grids, refined a0 13484.5302622).
+- `upgrade/golden/T2`: `calc_start` and `calc_truth`, files `AZUREOut_aa=1_R=2.out` and `chiSquared.out` regenerated
+  (`regen_compare.py --regenerate --only calc_start --only calc_truth`), ENGINE note appended; `normalizations.out` of
+  `calc_start` kept (the regenerated one adds the format-3 follower row, no number moves).  Per-file rule passes
+  (rms 5.49e-4 vs 5.57e-4, 5.17e-4 vs 5.27e-4); strict per-number rule does not on 2-4 numbers per file, e.g.
+  `T2_true` segment 5 chi2 27.0364 vs refined 27.0713 (before 27.0864).
+
+- Also re-pinned (test expectations whose pin was today's engine's bits, passing within 1e-3 but moved by the mesh):
+  `natural_neon` 3342.51 -> 3342.7 (refined 3342.82), `hybrid_potential` 2.46614e6 -> 2.46411e6 (the named project of
+  §7.1), `beam_profile_kernel` segments 7.0552 / 33.3841 -> 7.05514 / 33.3842; READMEs carry a re-pin line.
+
+**Verified** (build `work/b-mesh3` of 024221f7, scratch `work/meshx`, 2 CPUs): `tests/run_tests.sh` 157 passed, 0
+failed (before the three extra re-pins, which copy that run's own outputs); `repo_consistency_test.py`; `ctest -R
+"upgrade|consistency"`; `pyazr_ec_relativistic`; the variants of convert_params, shared_point_tables, a0 and T2
+(no Coulomb table) classified with `tools/classify_quadrature.py` against old / k = 8 runs: all files per-file
+quadrature.  Not run: the whole tree in three bases (the director's `tab-mesh2`), `ctest -LE slow`.
+
+**Open.**
+- Branch 8 (shift kernel): restore 1e-6 in `shift_subpoint_angle` (b) once shifted segments are on the mesh.
+- `golden/T2/fit` is from the engine before the mesh (its chi2 294.173 is no longer this engine's at its parameters);
+  regenerating it rewrites `param.sav` in format-3 names, which `convert_params` cannot use as its old-name input.
+- Not regenerated, within their tolerance: `13N/expected` (814.349 pinned; before 814.351, mesh 814.346; the pin already
+  differs from today's engine in other segments) and `target_effect_ranges/expected` (3838.66 pinned; before 3837.11,
+  mesh 3837.13).  Historical records quoting old numbers left as they are: `tests/upgrade/bench/T2.tsv` (10899.8),
+  `docs/upgrade/format3_tree.md` l.108 (10899.8), `MERGE_NOTES.md` (109.250542525, 30.9094).
+
+## 2026-11-12 (agent, Phase 5 branch 7 part 2, shared sites) — the points of a data set share the sites of the mesh (`feature/upgrade-5-shared-sites`)
+
+**Done.**
+- `include/SlotGroup.h`: the sharing group and its key (segment and term, c.m. angle bits, Legendre order of a
+  coefficient row, target effect, stopping factor, frame shift, screening U_e and parameter), one block of sites per
+  group in node order, each point a range of its block (ranges overlap).  Off the mesh a point is a group of its own.
+- `WorkingCopy` (`src/WorkingCopyUnits.cpp`): `slotBlock_`, `slotWriter_`; `WritesSlot(point, i)` (a slot is written by
+  its first reader in data order), `AddSlotGroup`, `LayOutUnits` moves whole blocks, `PlaceSubPointGrids` takes blocks,
+  `SeparateSlotsByAngle` (a leaf point whose converted angles differ from its group's gets its own copies),
+  `SetSlotRange` (tests), `CheckSlotGroups` (run by `AZURE_NODE_CHECK` / `AZURE_PLAN_CHECK` with the node check).
+- Set-up: `AddMeshSlotGroups`, `GroupNodes`, `MeshGroupKey` (`src/MeshSlots.cpp`); in `SetUpTargetEffects` the loop
+  of `AddGridSlots` over the queued mesh points (6 lines) is one call.  Hand-over: `ReplaceSubPointGrids` re-places a
+  group at once on the union of its points' new ranges (`replaceGroup`); the site construction is one lambda for
+  groups and own grids (`laySites`).
+- Writers only on written slots: `Unit` set-up recursions (Legendre, channel rows, keys, Coulomb, EC, Recalc),
+  `PrepareSubPoints`, `CalculationPlan::TaskUnits` (the energy pass), `ForEachResultUnit` (one record per site), the
+  EC read-back of `intEC.dat` (the file keeps every slot of every point), the stopping scale, the shift step.  A slot
+  whose solve throws fails every point that reads it (`EnergyPass.cpp`).
+- Folds and gradient never write a slot's record: E1/E2 components, A_y, normalised coefficients
+  (`src/PointPass.cpp`), the fd weights, A_y and coefficient adjoints and the THM fold weights (`src/AZUREGrad.cpp`)
+  fold arrays with `FoldValues`.  A site's cotangent is the sum of its readers' cotangents: each `UnitCotangent`
+  names its reader's plan task, and a T-matrix group sums them in reader order (`GroupCotangents`); the energy tasks
+  are ranked by reads (`EnergyTask::reads`, `WorkingCopy::SiteReaders`) instead of units.  Both keep the order of the
+  gradient's sums of one slot per point, so gradients and fits stay bit for bit (without them the T2 MIGRAD fit of
+  200 calls moved in the last digits from call 81 on: its analytic gradient summed in another order).
+
+**Audit of `Site`'s members** (depends on: N node energy, S segment and term, A angle, P the point; read at a slot by):
+cm/lab/compound/nominal energy N (all formulas); `settings_`, `segment_key_` S (observables); `cm_angle_` A (Legendre,
+Coulomb; key); `lab_angle_` A, a base slot holds the c.m. angle, a leaf's slot its point's converted lab angle (frames
+of leaves; separated by angle); `legendre_order_` P, coefficient rows (GenMatrixFunc; key); `row_` P, never read on a
+slot (`Row()` is -1); `geofactor_`, `sfactorconv_`, `edep_`, `eDependent*`, `screen_k_` N+S; `screen_ue_`,
+`screen_param_` P's target effect (key); `stoppingPower_` N + effect + factor (fold gather; key); `targetThickness_`,
+`targetLabEnergy_` P, never set on a slot (the fold reads the point's); `legendreP_`, Coulomb amplitudes A+N (+Q
+coefficients of the effect, key); EC amplitudes, `ec_shifted_` N+S (energy task of the writer only); `thm_ps_` THM, off
+the mesh; record (`slot_`, angular/natural counts) the site's, written by the energy pass only.
+
+**Verified how** (build `work/b-sites`, scripts in `work/sites/`).  Build 0 warnings; consistency test; `ctest -R
+"upgrade_plan|upgrade_history|upgrade_node|upgrade_mesh|kernels|grad|consistency"` 23/23; `check.sh` of 13N,
+component_mapping, layer_yield, stopping_yield, rectangular_resolution, fit_modes, ratio_to_reference pass; T1, T2, T3,
+13N, natural_neon, thick_target_resonance, layer_yield/models, stopping_yield/models, rectangular_resolution/models,
+shift_sqrt_subpoints/models, 18O_p_a_thm, hybrid_potential, beam_profile_kernel (Brune): 193 files byte-identical to
+`tab-mesh2` (run.log without timing lines).  Fits against `AZURE2.mesh2`, 1 thread, every output file identical: T2 and
+13N `--use-gradient` (30 calls), T2 `--use-lm` (30), T2 MIGRAD and T2 `--use-gradient` (200 calls).  At 3 threads the
+200-call fits give the same files as at 1 thread except the call count of `fitStatus.out` (116-118, the base varies
+the same way: 117-118).  `upgrade_node_check` extended; the slot-group check shown failing with one point's range
+shifted by one site (natural_neon: 17 slots with a wrong writer, 1 range off its mesh plan), then clean.
+`upgrade_plan` ranks by reads (shown failing with the old cost by units).  `check.sh --quick` (206 tests) passed on
+the work before the gradient order and again on commit 2ad5adfb (206 tests, 0 failed).
+
+**Measured** (1 thread, 3 alternated runs, medians; `logs/meas-final.log`; base `AZURE2.mesh2`):
+
+| project | slots (sites) base -> here | units of the pass | E-dependent values | evaluation | cross sections | wall | peak |
+|---|---|---|---|---|---|---|---|
+| thick_target_resonance | 74,634 -> 28,924 | 74,634 -> 28,924 | 558 -> 212 ms | 253 -> 133 ms | 163 -> 58 ms | 1.14 -> 0.52 s | 548 -> 272 MB |
+| natural_neon | 373,449 -> 47,649 | 373,449 -> 50,813 | 2,179 -> 329 ms | 1,237 -> 353 ms | 913 -> 105 ms | 6.02 -> 1.15 s | 1.68 GB -> 340 MB |
+| T2 | 32,032 -> 21,451 | 32,103 -> 21,522 | 56 -> 39 ms | 79 -> 64 ms | 10 -> 5 ms | 0.28 -> 0.23 s | 150 -> 134 MB |
+| 13N | | 46,164 -> 3,825 | 120 -> 10 ms | 108 -> 18 ms | 58 -> 6 ms | 7.06 -> 6.60 s | 225 -> 122 MB |
+| stopping_yield/models | | 202,888 -> 6,455 | 135 -> 4 ms | 122 -> 7 ms | 68 -> 1 ms | 0.61 -> 0.11 s | 338 -> 105 MB |
+| layer_yield/models | | 91,877 -> 14,134 | 60 -> 10 ms | 52 -> 8 ms | 26 -> 2 ms | 0.28 -> 0.10 s | 205 -> 113 MB |
+| 18O_p_a_thm (off the mesh) | | 14,688 -> 14,688 | 13 -> 13 ms | 13 -> 13 ms | | 0.10 -> 0.10 s | 116 -> 116 MB |
+| T1, T3 (unfolded) | | unchanged | unchanged | unchanged | | 2.63 / 0.15 s both | +0.2 MB |
+
+T2 fits of 200 calls: MIGRAD 31.5 -> 29.9 s (-5 %), `--use-gradient` 32.0 -> 29.9 s (-6 %).  Not shared: T2's lab-frame
+differential data (a c.m. angle per point), shifted segments and THM (grids of their own).
+
+**Open.** `NodeTableCache.h` kept (re-placed blocks adopt rows other copies computed).  Lab-frame differential data
+remain groups of one point (each point its own c.m. angle) until the angle per node (decision D5).
+
+## 2026-11-12 (agent, Phase 5 branch 7 part 2, after milestone 2) — the stops of the shared mesh resolved, a sharper rule
+
+**The moved unfolded numbers were the comparison, not the engine.** Mechanism, by experiment:
+1. d82f3518 run with the Coulomb table gives `param.par`, `parameters.out`, `scatteringLengths.out` of `7Li_p_a`,
+   `6Li_d`, `target_effect_ranges` and `ratio_to_reference` `fit_ratio`/`fit_sigma` byte-identical to `tab-trial30`
+   (also the director's `tab-mesh2`).
+2. The moved files of the earlier quick run (tag `q1`, written at 02:41, its `run.log`s 70 s later by another run) are
+   bit for bit the outputs of the same engine with `AZURE2_COULOMB_TABLE` unset: the engine then opens
+   `~/.azure2/coulomb_table.bin`, refuses it (format 1) and uses the exact Coulomb functions (charged channels move at
+   1e-7).
+3. The 53 "unfolded" fallback numbers of `target_effect_ranges` `aa=5` and the 24 of `ratio_to_reference` come from the
+   same no-table run.
+4. `natural_neon` `aa=2` line 723 is a folded number that k = 4 leaves at today's value to the last digit; against
+   `tab-fine8` it is folded and conform.
+5. Guard: `tools/run_one.sh` and `tools/runall.sh` refuse to run without `AZURE2_COULOMB_TABLE` naming a file (CLAUDE.md
+   recipe says so).
+
+**`hybrid_potential`.** `quadrature points` has no effect on either engine (10, 20, 40, 80 give the same bits): every
+interval is set by the resonance tails (step 0.05 |E − E_r| at `per_width 50`), never by the smooth step, so the node
+phase of the smooth lattice is not the cause.  In k (`AZURE_REFINE_QUADRATURE`, both engines, distance to today's engine
+at k = 64, rms over the 76 folded values): today 5.14e-2, 2.00e-2, 5.14e-3, 1.35e-3, 3.43e-4 at k = 1, 2, 4, 8, 16; mesh
+6.17e-2, 1.71e-2, 5.13e-3, 1.35e-3, 3.52e-4.  Both converge at second order to the same value; the mesh is 1.20 x
+further at k = 1, 0.85 x at k = 2, equal from k = 4. The error is one sign and nearly one size at every point (rms =
+max): a part of the integral common to all thick-target points.
+
+**Rule.** `tools/classify_quadrature.py`: per file also rms of the relative distances <= today's (no factor), both
+measures over every folded number of the file; the fine reference per file from a list (`tab-fine8,tab-fine4`), the tag
+printed.  Test `tests/consistency/classify_quadrature_test.py` (ctest `tools_classify_quadrature`).  `energy_grid.md`
+section 7.1.
+
+**Verified** (build `work/b-mesh3`, scripts `work/mesh3/`): build 0 warnings; consistency test; quick set plus the five
+projects, `hybrid_potential`, `17O` (`qset.sh m3-q1`): 138 unfolded files byte-identical to `tab-trial30`, 197 files:
+163 identical, 29 quadrature, 5 failure (13N twice, `layer_yield` `aa=3`, `hybrid_potential` twice).  Injected error
+(every other node dropped in the lower half of each range, `work/mesh3/inj/AZURE2`): 23 failures; the rms catches 13N,
+`beam_profile_kernel`, `ratio_to_reference`, `T2_true` that the maximum passes; `T2.azr` and `thick_target_resonance`
+pass both.  1 against 2 threads on T2 and 7Li_p_a identical.  Not run: the whole tree (the director's `tab-mesh2`), 3
+threads (budget 2).
+
+**Open.** The rms rule without a factor fails 13N by 0.2 % (rms) and 0.6 % (chi2), `layer_yield` `aa=3` (a fold exact to
+3e-8: 1.18 x, 1.44 x) and `hybrid_potential` (1.21 x): a decision of the director.  `layer_yield` `aa=3` (a layer, 1/E
+stopping, a nearly constant sigma): today's 10 intervals fit the point's energy loss exactly with both ends as nodes; the
+mesh's nodes are the nucleus's ladder (step <= today's) with the two edge intervals clipped at the support, whose
+interpolation error does not cancel as a full trapezoid's does (from the construction, not measured apart).  No engine
+file changed on this step.
+
+## 2026-11-12 (agent, Phase 5 branch 7 part 2, milestone 2) — the engine on the shared mesh (`feature/upgrade-5-shared-mesh`)
+
+**Done.**
+- One placing function per nucleus: `WorkingCopy::SetUpTargetEffects` queues every folded point of an unshifted, non-THM
+  segment with an adaptive grid (`src/MeshSlots.cpp`, `QueueMeshPoint`: support in E_x, settings, a hard lower edge at
+  a floor), plans each nucleus once (`PlanMesh`, anchors `MeshAnchorsOf` from the input widths, quantized in E_x, every
+  entrance pair of the nucleus's folded points) and gives each point the nodes of its range (`MeshSlotEnergies`).  Both
+  `GenerateGrid` branches of the set-up go through it; `AddGridSlots` is the one loop that makes slots.
+- The quadrature is `GridQuadrature` on the mesh nodes, clipped at the support: `KernelNodes::supportLow/High`
+  (`Low()`, `High()`), set by `PointFold.cpp` for a mesh point; the Gaussian, target and beam-profile kernels read the
+  support from there instead of the end nodes.
+- Planner: `MeshSupport::lowHard/highHard` (a hard edge is a node and the range ends at it; test `HardEdges`, shown
+  failing with the floor node removed: 4 failures); `finest` renamed `otherCoarsest`.
+- Hand-over: `ReplaceSubPointGrids` re-plans a nucleus when its quantized anchors change (`WorkingCopy::meshAnchors_`)
+  and re-places only the points meeting `MeshChangedRegion`; `AZURE_PLAN_CHECK=1` throws if a point outside would move.
+- `tools/classify_quadrature.py`: the per-file rule (1.2 x today's largest relative distance to the fine reference),
+  printed beside the strict per-number rule; `energy_grid.md` section 7.1 holds the rule as the director's decision.
+
+**Verified how.** Quick set (`work/mesh2/qset.sh`) and the folded projects of the tree, Brune basis, against
+`tab-trial30` / `tab-fine4`; fits against b-trial30; gradient checks; 1-thread measurements (see the branch report).
+
+**Open.** Unfolded numbers moved in 6Li_d, 7Li_p_a, target_effect_ranges, ratio_to_reference fit_ratio/fit_sigma
+(param.par, parameters.out, scatteringLengths.out at 1e-7): the moved values equal the base engine's without the
+Coulomb table; mechanism not found.  hybrid_potential exceeds the per-file factor (1.22 x).  A point's slots are all
+mesh nodes in its range: units of the pass grow 30-55 % (T2, natural_neon, thick_target_resonance) while distinct
+energies fall; calculation time up to +43 %.  `beam_profile_kernel` has no fine reference (its tab-fine4 run stopped at
+900 s).  NodeTableCache kept (shifted own grids).  Expectations of folded projects not regenerated.
+
 ## 2026-11-12 (director, 03:00) — merged: the refusal switch, both readers strides, the extension drill, the mesh planner; the yardstick of the shared mesh
 
 **Merged tonight, each with the tree of a rehearsal that passed the whole verification** (all projects × 3 bases,

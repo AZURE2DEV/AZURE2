@@ -125,7 +125,8 @@ void CalculationPlan::TaskUnits(WorkingCopy &data, int task, std::vector<UnitRef
     units.push_back(point);
     return;
   }
-  for (int i = 1; i <= p.NumSubPoints(); i++) units.push_back(data.SlotSite(p, i));
+  for (int i = 1; i <= p.NumSubPoints(); i++)
+    if (data.WritesSlot(p, i)) units.push_back(data.SlotSite(p, i));  // the slots its point writes (SlotGroup.h)
 }
 
 long long ECAmplitudeSource(const Site &unit, const Config &configure) {
@@ -270,12 +271,16 @@ const EnergyTaskList &CalculationPlan::EnergyTasks(WorkingCopy &data, const Conf
     }
     group[k] = task.numTMatrices - 1;
     task.size++;
+    task.reads += data.SiteReaders(units[o.ordinal]);
   }
-  // Largest first (one fill and factorisation, one T-matrix per group, one observable per unit); ties in energy order.
+  // Largest first (one fill and factorisation, one T-matrix per group, one observable per point that reads a unit:
+  // the folds and the gradient's cotangents count by points; a shared slot is one unit but several reads); ties in
+  // energy order.  The gradient sums its tasks in this order (GradEnergyTasks.h), so it is the order the tasks had
+  // with one slot per point.
   std::vector<int> rank(list.tasks.size());
   for (std::size_t t = 0; t < rank.size(); t++) rank[t] = (int)t;
   std::stable_sort(rank.begin(), rank.end(), [&list](int a, int b) {
-    return 1 + list.tasks[a].numTMatrices + list.tasks[a].size > 1 + list.tasks[b].numTMatrices + list.tasks[b].size;
+    return 1 + list.tasks[a].numTMatrices + list.tasks[a].reads > 1 + list.tasks[b].numTMatrices + list.tasks[b].reads;
   });
   std::vector<EnergyTask> sorted(rank.size());
   list.units.resize(n), list.tGroups.resize(n), list.owners.resize(n);

@@ -199,7 +199,7 @@ double engineFold(const Config &configure, WorkingCopy &data, int effectNum, Sig
     data.UnitAt(unit).MakeSubPoint(sub);
     data.AppendSlot(sub);
   }
-  data.UnitAt(unit).SetSubPointRange(first, nSub);
+  data.SetSlotRange(unit, first, nSub);
   FoldPoint(data.UnitAt(unit), data, configure, results);
   return data.UnitAt(unit).GetFitCrossSection(results);
 }
