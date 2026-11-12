@@ -99,6 +99,27 @@ and on `b-thm5` (no CLI code is touched); `thm_dw_vertex` was not run (it sets 4
 **Open**: the per-temperature quadrature of the rate has no test now (no model reaches its fallback). The refusal of a
 folded point without an E_x frame (a beta-delayed spectrum without an exit pair) is reached by no project.
 
+## 2026-11-12 (agent, Phase 6 branch 2) — no process-wide pointers or memos; the solvers' buffers non-const (`feature/upgrade-6-evaluation-2`)
+
+**Done** (`evaluation.md` section 7.4).  `g_config` is deleted: each particle pair is built with the run's settings of
+its functions (`PPair::FunctionSettings`: relativistic kinematics, use and file of the Coulomb table), and every
+former reader takes them from its pair.  The binding's `ConfigScope` swap is deleted.  The EC term table, Park's
+shift-derivative memo and the `--no-ec-table` amplitude store are members of the run's scratch (`RunScratch`).  No
+`mutable` in `AMatrixFunc.h`, `LevelMatrixSolver.h`, `ThmVertexBoundary.h` (the writers are non-`const`; the
+`const_cast` of `GetAMatrix` is gone).  New test `tests/pyazr/concurrent_sessions_test.py` (ctest
+`pyazr_concurrent_sessions`, label slow, ~11 min): fails on the base (20/40 and 36/40 evaluations differ, one pair
+crashes at set-up; the two-table sequences give other bytes), passes here.  Merged `feature/upgrade-4-data` (3c6d0e9b).
+Allow-list 107 -> 88 pending rows.  One expected line changed: `tests/upgrade/predictions.txt` for li7pn_edge_rel
+(`--print-predictions` read "non-relativistic" through the null g_config; now refuses the point as the calculation does).
+**Verified** (build `work/b-eval2` of the merged head): whole tree x 3 bases against `tab-gridm-1` (tag `tab-eval2-a`):
+827 / 800 / 827 identical, run.log included; T1, T2, T3, 13N x 3 bases at 1 and 3 threads identical;
+`ctest -LE slow` 219 of 220 before the predictions line was regenerated (the one failure was that line; it passes
+after); `tests/run_tests.sh` 160 passed, 0 failed; the eight fits identical file by file to `work/b-head3`; the
+converted-tree gate (`geval2-a`) 628 / 601 / 628 identical; user-space instructions against `b-head3` at 1 thread:
+T2 +0.03 %, 13N -0.0002 %, natural_neon +0.10 %, 18O_p_a_thm +0.001 %, T2 fit +0.06 %, 13N fit +0.03 %.
+**Not done**: the input-file bytes (a decision: `cache_stats()` counts the process); part 3 (the pooled working copies),
+part 4 (diagnostics record).
+
 ## 2026-11-12 (director, 22:13) — merged: Phase 6, first branch (the engine's state surveyed, the per-thread caches and warn-once flags owned by the caller, a check against new state)
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed): `feature/upgrade-6-evaluation` (the

@@ -266,11 +266,16 @@ immutable tables built before the first evaluation; every other state is owned b
 the code keeps something between calls, it is one of three owned kinds:
 - the energy task's scratch, `azure2::TaskScratch` (`include/TaskScratch.h`), one per thread in the caller's
   `Results::scratch`: the level-matrix solvers with their buffers and the channel-space route's per-J-group values;
-- the run's per-thread scratch, `azure2::RunScratch` (`include/RunScratch.h`), held by the run's `Config`
-  (`Config::scratch`): the external-capture integrals' radial values and workspace, the THM vertex boundary's S_c;
+- the run's scratch, `azure2::RunScratch` (`include/RunScratch.h`), held by the run's `Config` (`Config::scratch`):
+  per thread the external-capture integrals' radial values and workspace and the THM vertex boundary's S_c; shared by
+  the run's threads behind their locks the external-capture term table (`ECTermStore`), Park's shift-derivative memo
+  and the `--no-ec-table` amplitude store;
 - the run's once-only warnings, `Config::printedOnce` (`Config::FirstTime(key)`), so a second run in the same process
   prints them again.
 Each memo in them is keyed by everything its value depends on, so a hit returns what the computation gives.  The
+settings a channel function reads deep inside a header (relativistic kinematics, the Coulomb table) are given to each
+particle pair when the run builds it (`PPair::FunctionSettings`); no process-wide pointer to a `Config` exists.  Two
+sessions may evaluate at the same time on two threads (`tests/pyazr/concurrent_sessions_test.py`).  The
 check (`tests/consistency/repo_consistency_test.py` check 38, scanner `tests/consistency/state_scan.py`) refuses any
 `thread_local`, non-`const` static or namespace-scope variable and `mutable` member of the engine's sources that is
 not a row of `tests/consistency/allowed_state.tsv` (file, symbol, kind, reason); a row whose symbol is gone fails too.

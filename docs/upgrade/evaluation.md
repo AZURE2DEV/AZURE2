@@ -410,3 +410,11 @@ one session's set-up runs beside the other's evaluation, and two evaluations run
 the engine resolves a project's relative paths against the process's working directory, which pyazr sets per call
 (`_in_dir`); two sessions with different directories on two threads race on it (the test uses absolute paths).
 
+Verification of the branch head (build `work/b-eval2`, merged with `feature/upgrade-4-data`): whole tree x 3 bases
+identical to `tab-gridm-1` (827 / 800 / 827, run.log included); the converted-tree gate 628 / 601 / 628; the eight fits
+identical to `work/b-head3`; T1, T2, T3, 13N at 1 and 3 threads identical; `tests/run_tests.sh` 160 / 0.  User-space
+instructions at 1 thread against `b-head3`: T2 1.42771e9 -> 1.42820e9 (+0.03 %), 13N 7.45089e10 -> 7.45087e10,
+natural_neon 9.8539e9 -> 9.8642e9 (+0.10 %), 18O_p_a_thm 6.25213e7 -> 6.25218e7, T2 `--use-gradient` fit 3.25702e11
+-> 3.25903e11 (+0.06 %), 13N fit 1.875305e11 -> 1.875930e11 (+0.03 %).  Allow-list: 107 pending rows -> 88 (milestone
+1: 10 -> 0, milestone 2: 13 -> 4, the input-file bytes; 3: 11; 4: 44; 5: 29).
+
