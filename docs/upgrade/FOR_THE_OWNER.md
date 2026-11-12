@@ -308,7 +308,7 @@ quadrature error they had; unfolded numbers do not move at all. What was measure
   moved and are as close to the refined reference as before or closer (thick-target project 3.2e-3 → 4.2e-4,
   `natural_neon` 7.8e-4 → 2.9e-4, the stopping-yield fit 4.2e-3 → 2.0e-3; T2 and 13N unchanged in size), 2 belong to
   `hybrid_potential` (6 % against 5 %), none failed. The table per project is in `docs/upgrade/energy_grid.md` §7.1.
-  **The acceptance rule is ours and should be confirmed by you**: a file passes when its largest distance to the
+  **The acceptance rule is ours (confirmed by Jakub on 2026-11-12) and should be confirmed by you**: a file passes when its largest distance to the
   refined reference is at most 1.2 times the old engine's and its root-mean-square distance at most 1.03 times
   (the 3 % is the resolution of the comparison).
 - *What it does to fits.* Eight test fits: fitted parameters move by at most 0.14 of their fitted error (an areal

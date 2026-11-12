@@ -45,8 +45,8 @@ this tree): shifted folded segments on the fixed nodes, `shift_subpoint_angle` (
 and the rigid move deleted.  The two loops of `SetUpTargetEffects` are near copies (merge them when the placement of
 slots is next touched).  `park_chi2_fallback` no longer exercises the finite-difference fallback of the gradient: a
 construct the adjoint does not cover is needed for that test, or the fallback goes.  `tests/target_effect_ranges` has a
-historical name (it is now "a beam spread folded into A_y").  The acceptance rule of changed folded numbers still waits
-for the PI's confirmation.
+historical name (it is now "a beam spread folded into A_y").  The acceptance rule of changed folded numbers (`energy_grid.md` §7.1)
+was **confirmed by the PI on 2026-11-12**; the owner has still to see it (`FOR_THE_OWNER.md`).
 
 ## 2026-11-12 (director, 07:03) — merged: the engine on the shared mesh, the shared sites, the expectations the mesh moves
 
