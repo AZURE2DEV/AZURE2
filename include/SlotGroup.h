@@ -22,11 +22,10 @@
  *     component, THM; TermSettings.h, SameObservable), the frame shift E_x - E_cm of the pair, the external-capture
  *     pathways -- in the key; not the segment: two data sets of one reaction on one mesh share their sites;
  *   - angle: not in the key.  A differential site on a mesh holds its observables without an angle (SiteObservable.h)
- *     and its readers bring their rows (RowSet.h); a scalar site (sigma, a phase shift, the total cross section) has
- *     none; THM, keyed by angle, is off the mesh (a group of its own).  A leaf's slots of a kind with an angle (THM)
- *     take their point's angles converted with the leaf's pairs after the grouping (WorkingCopy::InitializeLeaves); a
- *     point whose converted angles differ from its group's writer's gets slots of its own then
- *     (WorkingCopy::SeparateSlotsByAngle);
+ *     and its readers bring their rows (RowSet.h); a scalar site (sigma, a phase shift, the total cross section, a
+ *     THM site's sigma_HOES) has none.  A leaf's slots of a scalar kind take their point's angles converted with the
+ *     leaf's pairs after the grouping (WorkingCopy::InitializeLeaves); a point whose converted angles differ from its
+ *     group's writer's gets slots of its own then (WorkingCopy::SeparateSlotsByAngle);
  *   - the point: no Legendre order (a coefficient reader picks its order from the site's coefficients, Site::ValueFor);
  *     the row (Site::Row is -1 on a slot, nothing reads it there); the target effect (stopping table, screening U_e and its
  *     parameter, the Q coefficients of the Legendre rows) and the c.m./lab factor of the stopping -- in the key; the
@@ -39,8 +38,8 @@
  * set-up's values (Legendre rows, channel rows, Coulomb and external-capture amplitudes, screening, stopping), the
  * energy pass (CalculationPlan::TaskUnits gives a plan task the slots its point writes), the result layout (one record
  * per site).  Every point of the group reads it: the fold, the model pass, the gradient (a site's cotangent is the sum
- * of its readers', summed in their plan order: UnitCotangent::reader).  A point off the shared mesh (THM, a uniform
- * grid with useAdaptiveGrid off) is a group of its own.  A point with an energy shift reads its planned range (fixed
+ * of its readers', summed in their plan order: UnitCotangent::reader).  A point off the shared mesh (a uniform grid
+ * with useAdaptiveGrid off) is a group of its own.  A point with an energy shift reads its planned range (fixed
  * for the stage), so who writes a slot does not depend on the shift (ShiftedFold.h, question 4).
  */
 namespace azure2 {

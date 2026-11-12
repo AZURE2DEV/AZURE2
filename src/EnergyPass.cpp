@@ -34,12 +34,12 @@ namespace azure2 {
 
 namespace {
 
-// Whether unit k starts a T-matrix group: by `tGroups`, or, if null, by a change of (entrance, exit) pair.
-bool StartsTMatrix(Site *const *units, int k, const int *tGroups) {
-  if (k == 0) return true;
-  if (tGroups) return tGroups[k] != tGroups[k - 1];
-  return units[k]->GetEntranceKey() != units[k - 1]->GetEntranceKey() ||
-         units[k]->GetExitKey() != units[k - 1]->GetExitKey();
+// Whether unit k starts another T-matrix group than unit `before`, the last one that read the T-matrix: by
+// `tGroups`, or, if null, by a change of (entrance, exit) pair.
+bool StartsTMatrix(Site *const *units, int before, int k, const int *tGroups) {
+  if (tGroups) return tGroups[k] != tGroups[before];
+  return units[k]->GetEntranceKey() != units[before]->GetEntranceKey() ||
+         units[k]->GetExitKey() != units[before]->GetExitKey();
 }
 
 }  // namespace
@@ -48,66 +48,66 @@ void SolveAtOneEnergy(CNuc *cnuc, const Config &configure, Results &results, Sit
                       const int *tGroups, int *progress) {
   if (progress) *progress = 0;
   if (n <= 0) return;
-  if (units[0]->IsTHM()) {
-    // THM (modified R-matrix) units: the shared interior (the level matrix) and the half-off-shell cross section of
-    // each.  The object is reused across the energies of this thread: its per-J-group buffers are sized once (Reset
-    // repoints it at this compound and configuration first, so nothing of an earlier session is read).
-    static thread_local THMMatrixFunc thm(cnuc, configure);
-    thm.Reset(cnuc, configure);
-    thm.ClearMatrices();
-    thm.FillMatrices(units[0]);
-    thm.InvertMatrices();
-    for (int k = 0; k < n; k++) {
-      if (progress) *progress = k;
-      thm.CalculateTHMCrossSection(units[k], results);
-    }
-    return;
+  // The readers of the T-matrix (every kind but kHoes) and of the level matrix's elements (kHoes, the HOES formula).
+  int first = -1, firstHoes = -1;
+  for (int k = 0; k < n; k++) {
+    int &at = units[k]->Observable() == SiteObservable::kHoes ? firstHoes : first;
+    if (at < 0) at = k;
   }
-  // The A-matrix object is reused in the same way; the R-matrix route builds its own.
+  // The objects are reused across the energies of this thread: their per-J-group buffers are sized once (Reset repoints
+  // them at this compound and configuration first, so nothing of an earlier session is read); the R-matrix route
+  // builds its own.
   static thread_local AMatrixFunc amatrix(cnuc, configure);
   std::unique_ptr<RMatrixFunc> rmatrix;
-  GenMatrixFunc *func;
-  if (configure.paramMask & Config::USE_AMATRIX) {
-    amatrix.Reset(cnuc, configure);
-    func = &amatrix;
-  } else {
-    rmatrix.reset(new RMatrixFunc(cnuc, configure));
-    func = rmatrix.get();
+  GenMatrixFunc *func = nullptr;
+  if (first >= 0) {
+    if (configure.paramMask & Config::USE_AMATRIX) {
+      amatrix.Reset(cnuc, configure);
+      func = &amatrix;
+    } else {
+      rmatrix.reset(new RMatrixFunc(cnuc, configure));
+      func = rmatrix.get();
+    }
+    if (progress) *progress = first;
+    func->ClearMatrices();
+    func->FillMatrices(units[first]);
+    func->InvertMatrices();
   }
-  func->ClearMatrices();
-  func->FillMatrices(units[0]);
-  func->InvertMatrices();
+  // sigma_HOES reads the level matrix's elements in level space: the fill above where it took no channel route (the
+  // same matrices bit for bit), else a level-space fill of its own (THMMatrixFunc.h).
+  const AMatrixFunc *levels = nullptr;
+  if (firstHoes >= 0) {
+    if (func == &amatrix && amatrix.LevelSpaceThroughout()) {
+      levels = &amatrix;
+    } else {
+      static thread_local THMMatrixFunc thm(cnuc, configure);
+      thm.Reset(cnuc, configure);
+      if (progress) *progress = firstHoes;
+      thm.ClearMatrices();
+      thm.FillMatrices(units[firstHoes]);
+      thm.InvertMatrices();
+      levels = &thm;
+    }
+  }
   // The first T-matrix after a fill is built directly, every later one through RecalculateTMatrix (which drops the
   // elements held).
+  int last = -1;  // the last unit that read the T-matrix
   for (int k = 0; k < n; k++) {
     if (progress) *progress = k;
-    if (k == 0)
+    if (units[k]->Observable() == SiteObservable::kHoes) {
+      HoesCrossSection(*levels, units[k], results);
+      continue;
+    }
+    if (last < 0)
       func->CalculateTMatrix(units[k]);
-    else if (StartsTMatrix(units, k, tGroups))
+    else if (StartsTMatrix(units, last, k, tGroups))
       func->RecalculateTMatrix(units[k]);
+    last = k;
     func->CalculateCrossSection(units[k], results);
   }
 }
 
 namespace {
-
-// What differs between the shared solve `a` and a unit's own solve `b` at one energy: the route and the bilinear forms
-// g_c^T A g_c' of every J-group of the nucleus (the only way the level matrix enters a T-matrix or a THM amplitude).
-std::string CompareLevelMatrices(CNuc *cnuc, int nucleus, AMatrixFunc &a, AMatrixFunc &b) {
-  for (int j = 1; j <= cnuc->NumJGroups(); j++) {
-    JGroup *jg = cnuc->GetJGroup(j);
-    if (!jg->IsInRMatrix() || jg->GetNucleus() != nucleus) continue;
-    if (a.IsChannelRoute(j) != b.IsChannelRoute(j)) return "route of J-group " + std::to_string(j);
-    for (int c = 1; c <= jg->NumChannels(); c++)
-      for (int cp = 1; cp <= jg->NumChannels(); cp++) {
-        const complex x = a.GetUBilinear(j, c, cp), y = b.GetUBilinear(j, c, cp);
-        if (std::memcmp(&x, &y, sizeof x) != 0)
-          return "level matrix of J-group " + std::to_string(j) + " (g^T A g at channels " + std::to_string(c) + ", " +
-                 std::to_string(cp) + ")";
-      }
-  }
-  return std::string();
-}
 
 std::string Describe(const Site &u, const EnergyTask &task) {
   std::ostringstream s;
@@ -123,77 +123,80 @@ std::string Describe(const Site &u, const EnergyTask &task) {
 long CheckEnergyTasks(WorkingCopy &data, CNuc *cnuc, const Config &configure, const Results &results,
                       const EnergyTaskList &tasks) {
   Results scratch = results;  // the check writes here, never into the evaluation's values
-  std::unique_ptr<AMatrixFunc> sharedA, ownA;
-  if (configure.paramMask & Config::USE_AMATRIX) {
-    sharedA.reset(new AMatrixFunc(cnuc, configure));
-    ownA.reset(new AMatrixFunc(cnuc, configure));
-  }
-  std::unique_ptr<THMMatrixFunc> sharedT(new THMMatrixFunc(cnuc, configure)), ownT(new THMMatrixFunc(cnuc, configure));
+  std::unique_ptr<AMatrixFunc> ownA;
+  if (configure.paramMask & Config::USE_AMATRIX) ownA.reset(new AMatrixFunc(cnuc, configure));
+  std::unique_ptr<THMMatrixFunc> ownT(new THMMatrixFunc(cnuc, configure));
   long units = 0, shared = 0, differ = 0;
+  long hoesTasks = 0, mixedTasks = 0, oneFill = 0;  // tasks with THM sites, with other readers too, solved by one fill
   std::vector<std::string> reports;
-  std::vector<double> own;
+  std::vector<Site *> sites;
+  std::vector<std::vector<double>> sharedRecords;
   for (const EnergyTask &task : tasks.tasks) {
     const int n = task.size;
     const UnitRef *taskUnits = tasks.units.data() + task.begin;
-    const int *taskGroups = tasks.tGroups.data() + task.begin;
     units += n;
     if (n > 1) shared += n;
-    const bool thm = task.route == 'T';
-    std::unique_ptr<RMatrixFunc> sharedR, ownR;
-    GenMatrixFunc *s, *o;
-    if (thm)
-      s = sharedT.get(), o = ownT.get();
-    else if (task.route == 'A')
-      s = sharedA.get(), o = ownA.get();
-    else {
-      sharedR.reset(new RMatrixFunc(cnuc, configure)), ownR.reset(new RMatrixFunc(cnuc, configure));
-      s = sharedR.get(), o = ownR.get();
+    // The task as the pass solves it (SolveAtOneEnergy), the records kept; then each unit's own solve.
+    sites.resize((std::size_t)n);
+    for (int k = 0; k < n; k++) sites[(std::size_t)k] = &data.SiteAt(taskUnits[k]);
+    SolveAtOneEnergy(cnuc, configure, scratch, sites.data(), n, tasks.tGroups.data() + task.begin, nullptr);
+    int hoes = 0, direct = -1;
+    for (int k = 0; k < n; k++)
+      if (sites[(std::size_t)k]->Observable() == SiteObservable::kHoes)
+        hoes++;
+      else if (direct < 0)
+        direct = k;
+    if (hoes > 0) hoesTasks++;
+    if (hoes > 0 && direct >= 0) {
+      mixedTasks++;
+      if (ownA) {
+        ownA->ClearMatrices();
+        ownA->FillMatrices(sites[(std::size_t)direct]);
+        if (ownA->LevelSpaceThroughout()) oneFill++;
+      }
     }
-    Site *first = &data.SiteAt(taskUnits[0]);
-    s->ClearMatrices();
-    s->FillMatrices(first);
-    s->InvertMatrices();
+    sharedRecords.assign((std::size_t)n, {});
     for (int k = 0; k < n; k++) {
-      Site *u = &data.SiteAt(taskUnits[k]);
+      const Site *u = sites[(std::size_t)k];
+      if (u->ResultSlot() == Unit::kNoRecord) continue;
+      const std::size_t slot = u->ResultSlot(), size = Results::RecordSize(u->ResultAngularSlots(), 0);
+      sharedRecords[(std::size_t)k].assign(scratch.slot.begin() + slot, scratch.slot.begin() + slot + size);
+    }
+    for (int k = 0; k < n; k++) {
+      Site *u = sites[(std::size_t)k];
       std::string why;
       if (AMatrixFunc::InEnergy(cnuc, u) != task.energy) why = "E_x is not the task's";
-      // The unit's own solve.
+      // The unit's own solve: the HOES formula in level space, every other kind through its own T-matrix.
+      std::unique_ptr<RMatrixFunc> ownR;
+      GenMatrixFunc *o = ownA.get();
+      if (u->Observable() == SiteObservable::kHoes)
+        o = ownT.get();
+      else if (!o)
+        ownR.reset(new RMatrixFunc(cnuc, configure)), o = ownR.get();
       o->ClearMatrices();
       o->FillMatrices(u);
       o->InvertMatrices();
-      if (why.empty() && task.route != 'R')
-        why = CompareLevelMatrices(cnuc, task.nucleus, *static_cast<AMatrixFunc *>(s), *static_cast<AMatrixFunc *>(o));
-      if (!thm) {
+      if (o == ownT.get()) {
+        HoesCrossSection(*ownT, u, scratch);
+      } else {
         o->CalculateTMatrix(u);
-        if (k == 0)
-          s->CalculateTMatrix(u);
-        else if (taskGroups[k] != taskGroups[k - 1])
-          s->RecalculateTMatrix(u);
-        if (why.empty() && !s->SameTMatrix(*o)) why = "T-matrix";
-      }
-      // The unit's record from its own solve, then from the shared one.
-      const std::size_t slot = u->ResultSlot();
-      const std::size_t size = Results::RecordSize(u->ResultAngularSlots(), 0);
-      if (thm)
-        static_cast<THMMatrixFunc *>(o)->CalculateTHMCrossSection(u, scratch);
-      else
         o->CalculateCrossSection(u, scratch);
-      if (slot != Unit::kNoRecord) own.assign(scratch.slot.begin() + slot, scratch.slot.begin() + slot + size);
-      if (thm)
-        static_cast<THMMatrixFunc *>(s)->CalculateTHMCrossSection(u, scratch);
-      else
-        s->CalculateCrossSection(u, scratch);
-      if (why.empty() && slot != Unit::kNoRecord &&
-          std::memcmp(own.data(), scratch.slot.data() + slot, size * sizeof(double)) != 0)
+      }
+      const std::vector<double> &mine = sharedRecords[(std::size_t)k];
+      if (why.empty() && u->ResultSlot() != Unit::kNoRecord &&
+          std::memcmp(mine.data(), scratch.slot.data() + u->ResultSlot(), mine.size() * sizeof(double)) != 0)
         why = "record";
       if (why.empty()) continue;
       differ++;
       if (reports.size() < 10) reports.push_back(why + " differs at unit " + std::to_string(taskUnits[k]) + " (" +
-                                                 Describe(*u, task) + ") from unit " + std::to_string(taskUnits[0]));
+                                                 Describe(*u, task) + ") from its own solve");
     }
   }
   std::cerr << "AZURE_PLAN_CHECK: " << units << " units in " << tasks.size() << " energy tasks (" << shared
             << " units at a shared energy) against their own solves: " << differ << " differ" << std::endl;
+  if (hoesTasks > 0)
+    std::cerr << "AZURE_PLAN_CHECK: THM sites in " << hoesTasks << " energy tasks, " << mixedTasks
+              << " of them with other readers, " << oneFill << " of those solved by one fill" << std::endl;
   for (const std::string &r : reports) std::cerr << "AZURE_PLAN_CHECK:   " << r << std::endl;
   return differ;
 }

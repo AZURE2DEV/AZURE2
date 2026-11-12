@@ -194,13 +194,14 @@ const double *Angular(const double *rec) { return rec + azure2::Results::Angular
 
 }  // namespace
 
-const SiteObservableRow kSiteObservables[4] = {
-    {SiteObservable::kValue, "value at the site's angle", nullptr, nullptr, 1, nullptr, nullptr},
+const SiteObservableRow kSiteObservables[5] = {
+    {SiteObservable::kValue, "scalar value", nullptr, nullptr, 1, nullptr, nullptr},
     {SiteObservable::kLegendre, "Legendre coefficients B_L", LegendreSlots, ContractLegendre, 1, ScaleLegendre,
      PoisonLegendre},
     {SiteObservable::kElastic, "elastic amplitudes", ElasticSlots, ContractElastic, 1, ScaleElastic, PoisonAll},
     {SiteObservable::kAnalyzingPower, "analysing power and its cross section", AnalyzingPowerSlots,
      ContractAnalyzingPower, 2, ScaleAnalyzingPower, PoisonAll},
+    {SiteObservable::kHoes, "half-off-shell cross section", nullptr, nullptr, 1, nullptr, nullptr},
 };
 
 RecordCapacity RecordCapacityOf(const CNuc &compound) {
@@ -221,7 +222,8 @@ RecordCapacity RecordCapacityOf(const CNuc &compound) {
 }
 
 SiteObservable ObservableOf(const TermSettings &t) {
-  if (t.phase || t.total || t.thm) return SiteObservable::kValue;
+  if (t.thm) return SiteObservable::kHoes;
+  if (t.phase || t.total) return SiteObservable::kValue;
   if (t.analyzingPower) return SiteObservable::kAnalyzingPower;
   if (t.angularDist || (t.differential && t.entranceKey != t.exitKey)) return SiteObservable::kLegendre;
   if (t.differential) return SiteObservable::kElastic;

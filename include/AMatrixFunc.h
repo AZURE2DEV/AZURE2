@@ -90,6 +90,13 @@ class AMatrixFunc : public GenMatrixFunc {
   bool IsChannelRoute(int jGroupNum) const {
     return jGroupNum >= 1 && jGroupNum <= (int)route_.size() && route_[jGroupNum - 1] == kRouteChannel;
   };
+  /// True if no J-group of the last fill took the channel route: the level matrices are then those of a fill with
+  /// SetLevelSpaceOnly, bit for bit (the same FillLevelMatrix and factorisation), and every element can be read.
+  bool LevelSpaceThroughout() const {
+    for (char r : route_)
+      if (r == kRouteChannel) return false;
+    return true;
+  };
   /*!
    * Turns the formal-parameter cotangents a gradient pass accumulated in
    * `accum` (GradAccum::fe/fg, see FormalBilinearAdjoint) into cotangents of the

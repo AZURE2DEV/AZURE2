@@ -2,6 +2,184 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (director, 18:27) — merged: Trojan-horse data on the shared mesh, their gradient through the energy tasks, the shift column of a profiled THM data set
+
+**Merged** into `feature/upgrade-4-data` and `feature/upgrade` (the branch held the data head, so the merge's tree is
+the branch's plus the director's entries; nothing pushed): `feature/upgrade-5-thm-mesh` (four entries of the agent
+below say what was done, by file).
+
+**What it is, in four lines.**  σ_HOES is a kind of the observables' table (`SiteObservable::kHoes`: a scalar without
+an angle), so a THM point is folded like any other datum: its supports are planned on the mesh of its compound
+nucleus, a site is computed once per mesh energy and experiment settings and shared by every reader, and where direct
+data read the same energy the level matrix is solved once for both.  The gradient of THM data goes through the energy
+tasks (the model cotangent of a profiled scale by the envelope theorem, the HOES adjoint once per site).  No data kind
+has an energy grid of its own any more, except a point under `useAdaptiveGrid` off.
+
+**A defect of the merged engine, found by the director and fixed here.**  The analytic gradient's column of a fitted
+energy shift on a THM data set with a profiled norm could hold only the prior's derivative (the local difference
+compared the models at the start norm 1 with data that need n* of about 3e4).  A project with THM data takes the
+analytic gradient in every MIGRAD fit ("THM segments present: enabling the analytic gradient"), so plain MIGRAD was
+affected as `--use-gradient` was.  The director's runs on 18O(p,α) THM with a prior on the shift
+(`work/director/thmshift/`, `work/director/thmshift5/`), merged engine against this branch:
+- the gradient check with the level fixed: analytic −1973.6 against −1459.3 by differences; now −1241.977222 against
+  −1241.977216;
+- the fit with the level fixed and the shift free: both end at −6.698 keV and converge, in 31 calls before and 16 now;
+- the fit with the level energy and the shift free: before, MIGRAD ended **invalid** (EDM 0.16 against a goal of
+  2e-4, 47 calls; the warning is printed) with an error of the level energy of 1.8 keV; now it converges (EDM 1e-7,
+  36 calls), error 0.73 keV; the end points agree (shift −5.650 keV, E 8.61657 MeV).
+`tests/thm_fit` checks the column with and without a prior (run by the director: fails on the merged engine, passes
+here).
+
+**Verified by the director** (build `work/b-thm5` of the branch's last commit, reference `tab-trial36` = the merged
+engine before it; the new reference of the merged engine is `tab-thm5`).
+Every project on three bases against the merged engine (`tab-trial36`): only T2, T2_true, 18O_p_a_thm, 6Li_d, 7Li_p_a and 17O differ. Against the director's refined references (quadrature ×8 and ×16, consistent): 0 failures by the accepted per-file rule. Eight fits: the five without THM data identical, the three T2 fits at χ² 297.601 → 297.568 with the largest parameter move 0.006 σ and equal statuses. Unit tests 213/213, slow tests 10/10, converter equivalence 184/184, the converted-tree gate without a difference, 1 against 3 threads identical. `run_tests.sh`: 159 of 160 on the agent's head; the one failure was the recorded χ² of `tests/convert_params` (T2 at the old fit's parameters), which the agent had not re-run: merged engine 293.705, this branch 293.675, both refined eightfold 293.647; re-pinned by the director (293.703 → 293.675), the check passes. Gradient checks: T2 worst 2.6e-6, 18O 4.9e-7; `tests/thm_fit/check.sh` fails on the merged engine and passes here. Notes and runs: `work/director/thm_review_notes.md`, `work/director/thm5/`, `work/director/thmshift5/`.
+
+**Reviewed, with the director's own runs** (`work/director/thm_review_notes.md`, `work/director/thm5/`).
+- *Numbers.*  Whole tree × 3 bases: only the six projects with a THM fold move (17O, 18O(p,α) THM, 6Li+d, 7Li(p,α),
+  T2 and its truth file).  Against the merged engine refined 8-fold and 16-fold (the director's runs, tags `dir-fine8`,
+  `dir-fine16`) every changed file is closer to the refined numbers than before, in the largest and in the rms
+  distance (the accepted per-file rule, 0 failures): T2 1.2e-3 → 4.9e-4, T2's THM table 9.5e-4 → 1.5e-4, 18O 4.2e-4 →
+  2.7e-4, 7Li(p,α) 7.1e-5 → 3.9e-5, 6Li+d 1.9e-5 → 1.4e-5, 17O 1.06e-4 → 1.04e-4.
+- *T2's direct data move too*: the thin and thick target segments 1 and 4 share the mesh of 16O with the THM
+  supports, which adds nodes to their folds (χ² 697.326 → 697.517, refined 697.74; 286.444 → 286.473, refined 286.59;
+  THM segments 92.0754 → 92.148, refined 92.163; 121.489 → 121.586, refined 121.606; the profiled norm 1.96991e-3 →
+  1.96953e-3).  The T2 expectation was re-pinned by the agent for these files; its `normalizations.out` now holds the
+  follower's row (segment 3) that the comparison used to add.
+- *Gradient* (`AZURE_GRAD_CHECK`, the director's runs): T2 2.6e-6 (19 components, the same as before), 18O with the
+  level free 4.9e-7.  `AZURE_NODE_CHECK` on T2: 0 differences.  Gradient time at one thread, 18O: 291 → 23 ms, one χ²
+  31 → 3.4 ms; T2 unchanged within 5 %.
+- *One stored number changed*: `tests/thm_options`, `kinematics=lambda32`, 5604.98 → 5561.64 (the agent's refined
+  runs: 5510 and 5507): 1/k_i at the entrance threshold inside a fold, the χ² rests on the quadrature there.
+- No new static, thread-local or mutable state; +636 −320 lines in `src` and `include`.
+
+**For the PI and the owner** (behaviour a user sees).  (1) Folded THM numbers move by the quadrature error they had
+(table above); direct data that share a compound nucleus with THM data can move in the 4th digit of a folded value
+too.  (2) A MIGRAD fit with a free energy shift on a THM data set with a profiled norm could use a wrong gradient
+component until this merge (seen as an invalid minimum and a wrong error).  (3) THM fits are faster (18O: the gradient 13 times at one thread).
+
+**Decision asked of the PI** (not taken here): the `<config>` key `useAdaptiveGrid`.  Off, a folded point keeps a
+uniform grid of its own, the last path beside the mesh (`ShiftedFold.h` holds the agent's proposal); the same key
+selects the reaction-rate grid (`ReactionRate.cpp`).  Either a mesh setting for a uniform lattice (the key stays), or
+the key goes for target integration with a note in the converter.  Until decided the path stays.
+
+**Open** (carried).  Not deleted by this branch, for one later small branch after a check on the tree: the leaves'
+angle copying and `SeparateSlotsByAngle` (no reader of the angle was found), the central-difference fold weights and
+the per-(point, slot) adjoint of `ComputeTHMRows` (it stays for rows: band, least squares, the API, and for
+components, a coherent background, RMC).  Still by differences: THM norm columns, shift columns, the coherent
+background.  "The shift on thin kernels" (the entry of 17:01).  Phase 7 part 2 (`feature/upgrade-7-transfer-2`, the
+transfer to the continuum against FRESCO) is in work in `physics/` only.
+
+## 2026-11-12 (agent, Phase 5 branch 10, after the merge of follow-ups 2) — the shift column of a profiled THM data set (`feature/upgrade-5-thm-mesh`)
+
+**Merged** `feature/upgrade-4-data` (f952c444): HANDOFF kept both sides; THM supports pass through `QueueMeshPoint`
+(label, kernel width for the node budget), THM shift columns take `InsideShiftStep`.
+**Cause** (the director's finding): the local central difference of a shift column (`SegmentLocalChi2`) compared the
+shifted models of a profiled THM data set with its data at the segment's start norm (`State().norm`, 1), not at its
+profile n* (about 3e4 here), so the models were negligible against the data and the column was the prior's derivative
+alone -- in the base engine and on this branch alike.
+**Fix.**  `SegmentLocalChi2` moved to `ShiftedFold.cpp` (out of the size-ratcheted `AZURECalc.cpp`) with the norm as an
+argument; `HeldNorms` gives each moved segment its own norm, or for a profiled one its profile n* at the present shift
+(`Segment::ProfileNormChiSquared`, the objective's function), held fixed across the difference (envelope theorem).  An
+experiment's segments stay outside the local path (whole chi^2 differences, as before).  `ThmModelCotangents` takes the
+profiled scale of a data set without an experiment from `ProfileNormChiSquared` too (the second copy of S_md/S_mm is
+gone).
+**Checks.**  `AZURE_GRAD_CHECK`, folded 18O with the 8.6126 level free and a fitted shift: with a prior, shift column
+-1494.8 against central differences 4269.1 before (rel 0.9998), 4269.13 = 4269.13 after (rel 1.3e-9); without a prior
+-1.45 against 4388.2 before, rel 1.3e-11 after.  `tests/thm_fit` checks both (shown failing on the merge commit's
+build).  The least-squares path: a project with THM data has no analytic Jacobian, so `--use-lm` falls back to MIGRAD
+with whole-chi^2 differences (as the T2 golden notes say), which profile: its shift column was right before and after.
+Fit of the director's case (level fixed at 8.6126, shift fit with prior 0.002 +- 0.003, 3 threads): `--use-gradient`,
+`--use-lm`, plain MIGRAD all end at x = -6.6982 keV +- 0.49 keV, chi^2 1507.02 (to 1e-10 in x); the scan of chi^2 at
+fixed shifts plus the prior (-8.0 ... -6.0 keV: 1522.43, 1518.09, 1515.80, 1515.59, 1517.44) has its parabola's minimum
+at -6.70 keV.
+**Ran**: build 0 warnings; consistency; quick set x 3 identical to milestone 1 (the merge's build and the fix's);
+`tests/mesh_node_budget`, `thin_layer_limit`, `ay_particle_entrance`, `tests/upgrade/check.sh`, `tests/thm_fit` pass.
+
+## 2026-11-12 (agent, Phase 5 branch 10, milestones 3 and 4) — the THM gradient through the energy tasks; the documents (`feature/upgrade-5-thm-mesh`)
+
+**Gradient.**  The scalar pass (`EnergyTaskGradient`, CLI `AZURECalc::Gradient`) takes THM data when
+`ThmThroughEnergyTasks` holds (no components, no coherent-background parameter, not RMC, no AZURE2_THM_FD): a THM
+point's model cotangent is 2 r s f/e from its profile (`ThmModelCotangents`, `include/ThmCotangents.h`: at a profiled
+norm and background d chi^2/d s = 0, the envelope theorem), its fold's weights take it to its sites as for any datum,
+and `HoesTask` (`GradEnergyTasks.cpp`) sums the cotangents of all readers of a kHoes site and takes the HOES adjoint
+once per site on one level-space fill per task.  T-matrix groups and fills skip kHoes units (`ReadsTMatrix`).
+`ComputeTHMRows` stays for rows (band, LM, API) and for what the predicate refuses; its fold weights are still central
+differences, one adjoint per (point, slot).  Still finite-difference: THM norm columns (a fitted or prior norm, through
+the THM-only chi^2), shift columns, the coherent background (the old path), AZURE2_THM_FD=1.
+**Checks** (`AZURE_GRAD_CHECK=exit`, `--use-gradient`, base `b-obs5` against this branch, worst relative disagreement):
+T2 2.62e-6 = 2.62e-6 (19 components, 0 above 1e-2 in both); folded 18O variants with the 8.6026 level free (thm_fit's
+edit, fold kept) plain 4.9e-7 =, experiment 4.8e-7 =, lineshape 2.9e-7 =, ps window 3.7e-6 =, DW vertex 3.6e-8 =.
+Gradient time (`[grad-timing]`, 3 threads) 18O 88 -> 8.7 ms, T2 372 -> 316 ms.  1 against 3 threads: T2 and 18O-ps
+gradients identical to the last digit.  A fitted THM shift (18O plain, offset fit prior 0.002 0.003): the shift column
+disagrees with central differences in the base build and here alike (-1496 vs 4229; rel 0.9998) -- a defect of the
+shift column of a profiled THM segment, not of this branch (listed in the report, not fixed).  New test:
+`tests/thm_fit` (folded experiment, ps window: rel < 1e-5); shown failing with the profiled scale left out of the
+cotangent (rel 0.9987, 0.989).
+**Ran**: build 0 warnings; consistency; ctest subset 58/58; quick set x 3 identical to milestone 1; `tests/thm_fit`.
+**Documents** (milestone 4): `energy_grid.md` section 8 (row 10 and its status paragraph), `THM.md` section 5,
+`FOR_THE_OWNER.md` (a paragraph), the recipe "An observable of a reaction at a mesh energy" in `CLAUDE.md` (a kind that
+reads the level matrix's elements).  Not deleted (see the report): the leaves' angle copying and
+`SeparateSlotsByAngle` (they act on every scalar kind's leaves; no reader of the angle found, deletion not verified on
+the tree), the uniform grid's own path (a user-visible key; proposal in `ShiftedFold.h`).
+
+## 2026-11-12 (agent, Phase 5 branch 10, milestone 2) — sigma_HOES a kind of the table; one solve per node for THM and direct readers (`feature/upgrade-5-thm-mesh`)
+
+**Done.**  `SiteObservable::kHoes` (`SiteObservable.h`, its row in `kSiteObservables`): the half-off-shell cross
+section, a scalar without an angle (the record's sigma, read as it is; no row, no contraction).  `Site::AngleFree()` is
+now "the kind's readers bring a row" (`ReadThroughRow`, the row's `contract`), so kValue and kHoes are both scalars.
+The HOES formula is a function of a filled level matrix (`HoesCrossSection(const AMatrixFunc &, Site *, Results &)`,
+`THMMatrixFunc::CalculateTHMCrossSection` calls it).  The plan has no THM route: an energy task is (nucleus, route of
+the configuration, E_x bits), whatever its kinds; `SolveAtOneEnergy` fills with the first unit that reads a T-matrix
+and gives each kHoes unit `HoesCrossSection` on that fill when no J-group took the channel route
+(`AMatrixFunc::LevelSpaceThroughout`), else on a level-space fill of the task's THM units; the T-matrix groups skip
+the THM units.  `CheckEnergyTasks` (`AZURE_PLAN_CHECK`) compares every unit's record from the task's shared solve with
+its own solve, of its own kind, and prints the THM tasks and how many share one fill.  `NodeKey`'s THM flag stays: it
+keeps the rows a THM site holds beside the channel rows (j_l, rho j_l', the Coulomb term, the window's table) on a node
+of their own; the solve is the task's.  The sharing key compares a data set's THM weight table by value
+(`SameThmWeight`; check 37 reads `SameX(a.f, b.f)` as a comparison); the experiment's attachments by identity (one
+object per experiment).
+**Numbers.**  Quick set x 3 bases against milestone 1 (`thm-m1a`): 360 of 360 files identical, run.log included.
+**Solves.**  T2: 4,227 energy tasks -> 3,055; 1,172 of its 1,192 THM nodes are solved with the direct readers at
+the node, every one by one fill (all J-groups of 16O take the level route at those nodes).  `18O_p_a_thm` (THM only):
+656 tasks, unchanged (on milestone 1 its 14,688 units of the base became 656 slots of one block).
+**Tests.**  `upgrade_plan_runtime` asserts T2's shared fills; injected once a THM task reading a level matrix it did not
+fill: 18O "656 differ", abort.  `upgrade_node_check`: T2's s11/s12 weighted by two tables with equal rows keep 9
+blocks, with other rows 10; with the tables compared by pointer (injected once) 10 and 10.  `upgrade_plan`'s route
+check: a task is on the configuration's route.
+**Ran**: build 0 warnings; consistency; ctest subset (58; `upgrade_plan` failed on the old route rule, fixed, then the
+four plan/node/consistency tests again: pass); AZURE_PLAN_CHECK and AZURE_NODE_CHECK on T2 and 18O_p_a_thm: 0 differ.
+
+## 2026-11-12 (agent, Phase 5 branch 10, milestone 1) — THM data on the shared mesh (`feature/upgrade-5-thm-mesh`)
+
+**Design** (the six questions, answered in the headers that own them, commit 485badd7): `SiteObservable.h` (what a THM
+site holds: sigma_HOES at E_n is a function of the node, the reaction and the THM experiment only -- nothing reads the
+data point's angle or row, the spectator angles are the experiment's), `TermSettings.h` (the key), `MeshSlots.h`
+(support, floor, nodes), `THMMatrixFunc.h` (the kernel is the table's; the level matrix shared per node), `ShiftedFold.h`
+(shifts; the uniform grid's proposal), `AZUREGrad.h` (the gradient).
+**Done.**  A THM point is a folded point of the shared mesh of its compound nucleus (`OnSharedMesh` asks no THM
+question): its support is the kernel's (Gaussian or beam profile, 5 sigma) clipped at the data kind's floor,
+`Segment::IntegrationFloor` (E_x = 1 keV of the compound system for half-off-shell data, so E_cm of a node may be
+negative), a hard edge of the planned support there; a THM shift is the shift kernel's case (`ShiftedFold.h`), not
+floored (`Segment::ShiftIsFloored`, the one question the shift step asks).  Deleted: the own-grid re-placement of
+`ReplaceSubPointGrids` (its `replace` path, the reshift list it returned to the hand-over, the `shifted` branch of its
+site layout) and `AdaptiveIntegrationGrid::GridConfig::resonanceOffset` (their only user was THM); a folded point off the
+mesh with `useAdaptiveGrid` on is now a `logic_error`.  `Segment::MoveOwnGridSlots` and `Unit::CalcNodeRows` are left to
+the uniform grid (`useAdaptiveGrid` off) alone; `CalcNodeRows` never served THM (a scalar kind has no row set).  Lines:
+src +56 -121, include +21 -23, tests +5 -2.
+**Moves** (`work/thm/quick.sh`, tags `thm-m1a` against `tab-obs5`, three bases): T1, T3, 13N, natural_neon,
+`thm_coherent_background/toy` (unfolded THM) identical; the THM projects 17O, `18O_p_a_thm`, 6Li_d, 7Li_p_a, T2, T2_true
+moved.  T2's direct segments move too (thin target 697.326 -> 697.517, thick 286.444 -> 286.473): the THM supports join
+the mesh of 16O and the planner's nodes change where they overlap.  Classified (`tools/classify_quadrature.py`, base
+`tab-obs5`, the base engine refined eightfold `thm-fine8`, made here): Brune 16 quadrature, no-brune 12, Park 15, 0
+failure; every file closer to the refined run than before (largest relative distance new / before: T2 `AZUREOut` 4.9e-4
+/ 1.2e-3, `thm_experiments.out` 1.5e-4 / 9.5e-4; 18O 2.7e-4 / 4.2e-4; 17O 1.04e-4 / 1.06e-4; 6Li_d 1.4e-5 / 1.9e-5;
+7Li_p_a 3.9e-5 / 7.1e-5).  One pin regenerated: `tests/thm_options` kinematics=lambda32, chi^2 5604.98 -> 5561.64
+(refined 8x 5510.14, 16x 5506.51; the THM curve's largest distance to the 8x run 0.158 -> 0.082): its 1/k_i reaches
+1/sqrt(1e-6 MeV) at the threshold inside the folds.
+**Ran**: build 0 warnings; consistency test; the quick set above; the check.sh of `18O_p_a_thm`, `thm_band`,
+`thm_beam_profile`, `thm_coherent_background`, `thm_coulomb_consistency`, `thm_energy_shift`, `thm_experiment`,
+`thm_lineshape`, `thm_narrow_fold`, `thm_options` (with the new pin), `thm_park`, `thm_rwa_grid`,
+`thm_spectator_window`, `thm_threshold_grid` pass.
 ## 2026-11-12 (director, 17:01) — merged: the second batch of follow-ups (thin layers with a shift, unknown options, the gradient's gates, a node budget, the runner)
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (the source of `rehearsal/trial36` = the observables

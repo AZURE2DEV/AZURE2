@@ -15,7 +15,9 @@
 # Each check also checks that every reader of slots without an angle holds its angular row and Coulomb amplitudes at
 # each slot's energy (WorkingCopy::CheckReaderRows; hybrid_potential: folded elastic data); shown failing with
 # the rows of a Q-coefficient particle exit taken at the point's energy instead of the slot's (injected once: the T2
-# fit reports rows that differ).
+# fit reports rows that differ).  THM data sets of one experiment with weight tables of equal rows share their
+# blocks, and with other rows do not (shown failing with the tables compared by pointer: "blocks 9 (T2), 10 (equal
+# tables), 10 (other rows)").
 #   node_check.sh path/to/AZURE2
 set -u
 export LC_ALL=C OMP_NUM_THREADS=2
@@ -73,6 +75,27 @@ if grep -aq 'AZURE_NODE_CHECK: slot groups: 1 blocks, 2413 slots' "$WORK/elastic
   ok "elastic: two data sets of one reaction share one block"
 else
   bad "elastic: two data sets of one reaction do not share their block: $(grep -a -m1 'slot groups' "$WORK/elastic.1/run.log")"
+fi
+# The THM data sets of one experiment share their sites (TermSettings.h, SameObservable: the experiment's attachments
+# by identity, a data set's weight table by value): T2's s11 and s12 (experiment LC09, one beam line) weighted by two
+# tables with equal rows keep T2's blocks; with other rows the second reads a block of its own.
+. "$TESTS/lib/thm_records.sh"
+for v in same other; do
+  mkdir -p "$WORK/w$v" && cp -r "$TESTS/upgrade/T2/." "$WORK/w$v/"
+  printf '0 2\n1 3\n' > "$WORK/w$v/wa.dat"
+  if [ $v = same ]; then printf '0 2\n1 3\n' > "$WORK/w$v/wb.dat"; else printf '0 2\n1 4\n' > "$WORK/w$v/wb.dat"; fi
+  thm_weight "$WORK/w$v/T2.azr" s11_thm_hoes_a wa.dat && thm_weight "$WORK/w$v/T2.azr" s12_thm_hoes_b wb.dat ||
+    bad "weights: the data sets are not in T2"
+  run "w$v" "$WORK/w$v" T2.azr 1 "$CALC"
+done
+b0="$(grep -a -m1 'AZURE_NODE_CHECK: slot groups:' "$WORK/T2.1/run.log" 2>/dev/null | awk '{print $4}')"
+[ -n "$b0" ] || { run T2 "$TESTS/upgrade/T2" T2.azr 1 "$CALC"; b0="$(grep -a -m1 'AZURE_NODE_CHECK: slot groups:' "$WORK/T2.1/run.log" | awk '{print $4}')"; }
+bs="$(grep -a -m1 'AZURE_NODE_CHECK: slot groups:' "$WORK/wsame.1/run.log" | awk '{print $4}')"
+bo="$(grep -a -m1 'AZURE_NODE_CHECK: slot groups:' "$WORK/wother.1/run.log" | awk '{print $4}')"
+if [ -n "$b0" ] && [ "$bs" = "$b0" ] && [ "$bo" = "$((b0 + 1))" ] && clean wsame && clean wother; then
+  ok "THM weights: equal tables share the blocks ($bs = $b0), other rows take one more ($bo)"
+else
+  bad "THM weights: blocks $b0 (T2), $bs (equal tables), $bo (other rows)"
 fi
 run T2fit "$TESTS/upgrade/T2" T2.azr 1 "$FIT" --max-calls=30
 r1="$(cat "$WORK/T2fit.1/rc")"

@@ -425,15 +425,12 @@ class WorkingCopy {
     results.objective.thmProfiles.resize(Data().NumThmGroups());
     results.objective.covarianceSeed.resize(Data().HasCovariance() ? modelSize_ : 0, 0.0);
   }
-  /// Lay the adaptive sub-point grids out again for the levels theCNuc holds now
-  /// (its fit values, as observed parameters) and the segments' energy shifts, and
-  /// rebuild the sub-points of every point whose grid changed.  Sub-points of a
-  /// segment in \p shiftActive are left for the energy-shift step to energise and
-  /// their segments are appended to \p reshift; the others are energised here.
-  /// Returns the number of points whose grid changed, and appends their plan tasks to \p replacedTasks.  Called by
-  /// FillEnergyShiftsFromParams.
+  /// Lay the shared meshes out again for the levels theCNuc holds now (its fit values, as observed parameters) and the
+  /// supports of the points of the segments in \p shiftActive at their present shifts (ShiftedFold.h), and place again
+  /// the slots of every sharing group whose nodes changed.  Returns the number of points whose slots changed, and
+  /// appends their plan tasks to \p replacedTasks.  Called by FillEnergyShiftsFromParams.
   int ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const std::vector<TermRef> &shiftActive,
-                           std::vector<TermRef> &reshift, std::vector<int> &replacedTasks);
+                           std::vector<int> &replacedTasks);
   /// Drop the last segment.
   void DeleteLastSegment();
   WorkingCopy *Clone() const;

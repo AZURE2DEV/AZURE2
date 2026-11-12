@@ -764,7 +764,7 @@ bool AccumulateEGammaGradient(CNuc *compound, WorkingCopy *data, azure2::Results
                               const ParamIndexMap &pmap,
                               const vector_matrix_r *shiftDeriv,
                               const FitBarFn &fitBarFn,
-                              GradAccum &accum) {
+                              GradAccum &accum, const ThmAdjointContext *hoes) {
   // THM (HOES) segments are computed by THMMatrixFunc, not the T-matrix
   // observable this adjoint differentiates; they are left out here. Their
   // contribution to the gradient is added in AZURECalc::Gradient by the HOES
@@ -772,7 +772,7 @@ bool AccumulateEGammaGradient(CNuc *compound, WorkingCopy *data, azure2::Results
   // mixed THM+direct datasets keep the analytic speed-up on the direct part.
   if (FormalPartsOutsideAdjoint(compound, pmap)) return false;
   int bailSeg = 0;
-  if (!azure2::EnergyTaskGradient(compound, data, results, config, shiftDeriv, fitBarFn, accum, bailSeg)) {
+  if (!azure2::EnergyTaskGradient(compound, data, results, config, shiftDeriv, fitBarFn, accum, bailSeg, hoes)) {
     if (std::getenv("AZURE_GRAD_DEBUG")) {
       static std::atomic<bool> told{false};
       if (!told.exchange(true)) {

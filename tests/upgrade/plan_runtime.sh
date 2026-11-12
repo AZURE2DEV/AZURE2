@@ -3,14 +3,15 @@
 # the point pass runs its energy tasks and folds one after the other and checks that each writes only its own slots
 # and that no slot is written by two of them (a breach stops the run); then every unit is solved alone and compared
 # bit for bit with the solve it shares at its compound energy (azure2::CheckEnergyTasks; a difference stops the run).
-# Mode-1 calculations of T1, T2 (with a SUM and a RATIO), T3, 13N, natural_neon (sample sums), 18O_p_a_thm (THM),
+# Mode-1 calculations of T1, T2 (with a SUM and a RATIO, and THM sites sharing nodes with direct data), T3, 13N, natural_neon (sample sums), 18O_p_a_thm (THM),
 # thick_target_resonance (seven capture exits under a thick target), beam_spread_ay (a beam spread
 # on analyzing powers), electron_screening's grad.azr (see below) and tests/transmission_yield's conv (a transmission and
 # a yield under a Gaussian spread), with and
 # without the check: each run exits 0, the checked run reports "0 differ", and every output file is byte for byte the
 # same.  Shown failing with a task that also calculated the next task's host (injected once: "writes slot ...,
 # outside its records"), with a T-matrix kept across exit pairs (injected once: "T-matrix differs"), and on the
-# screening model by T-matrix groups without the amplitude source (about 1,600 units differ).
+# screening model by T-matrix groups without the amplitude source (about 1,600 units differ), and with a THM task
+# reading a level matrix it did not fill (injected once: 18O_p_a_thm "656 differ").
 #   plan_runtime.sh path/to/AZURE2
 set -u
 export LC_ALL=C OMP_NUM_THREADS=2
@@ -53,5 +54,13 @@ for p in "T1:$TESTS/upgrade/T1:T1.azr" "T2:$TESTS/upgrade/T2:T2.azr" "T3:$TESTS/
     bad "$name: exit $r0 / $r1 (unchecked / checked), $n files; $(grep -a AZURE_PLAN_CHECK "$WORK/$name.1/run.log" | head -1)"
   fi
 done
+# T2's THM sites lie on the mesh of 16O with its direct data: the nodes they share are solved once for both kinds
+# (SolveAtOneEnergy), which the check above compared with each unit's own solve.
+thm="$(grep -a "AZURE_PLAN_CHECK: THM sites" "$WORK/T2.1/run.log" | tail -1)"
+if [[ "$thm" =~ ([0-9]+)\ of\ those\ solved\ by\ one\ fill ]] && [ "${BASH_REMATCH[1]}" -gt 0 ]; then
+  ok "T2: ${thm#AZURE_PLAN_CHECK: }"
+else
+  bad "T2: no THM site shares a fill with direct readers ($thm)"
+fi
 [ $fail -eq 0 ] && echo "plan_runtime: PASS" || echo "plan_runtime: FAIL"
 exit $fail

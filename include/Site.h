@@ -151,10 +151,9 @@ class Site {
   int GetSecondaryDecayL() const;
   /// The kind of observable the site's record holds (SiteObservable.h), from its term.
   SiteObservable Observable() const;
-  /// Whether the record holds observables without an angle (every kind but kValue): B_L, for elastic scattering
-  /// with the Coulomb terms; its readers apply their own angular rows (ValueFor), and the sharing key of the mesh has
-  /// no angle for it.
-  bool AngleFree() const { return Observable() != SiteObservable::kValue; }
+  /// Whether the record holds observables that its readers contract with their own angular rows (ValueFor): B_L, for
+  /// elastic scattering with the Coulomb terms, A_y (ReadThroughRow).  A scalar kind (kValue, kHoes) is read as it is.
+  bool AngleFree() const { return ReadThroughRow(Observable()); }
   /*!
    * The observable of this site as `reader` sees it at the reader's slot `slot` (1-based; 0: the reader is the site):
    * the reader's angular row contracted with the record (the row of the site's kind in kSiteObservables); for kValue

@@ -99,5 +99,11 @@ distorted waves, K(E), the THM kernel rows, and σ_HOES next to the on-shell σ 
 - In the upgrade, THM is rebuilt in the new structure: σ_HOES as an observable (Phase 5), the THM kernel and the
   double-ratio prior (Phase 5), `physics/transfer` DWBA (Phase 7, can start in parallel because it is a leaf module).
   The `.azr` `<thm>` block stays readable; its options map onto the new objects; legacy options are marked.
+- On the shared mesh (Phase 5 branch 10, 2026-11-12): σ_HOES at E_n is a kind of site observable (`kHoes`,
+  `include/SiteObservable.h`), THM points are folded on the mesh of their compound nucleus with the kernels' table, the
+  level matrix of a node is solved once for THM and direct readers, and the scalar gradient takes THM data through the
+  energy tasks (`include/ThmCotangents.h`).  A new vertex model: its vertex at E_n (`ChannelTables.cpp`, the site's
+  vertex pieces) and its branch in `ThmEntranceVertices` (`THMMatrixFunc.cpp`) with the adjoint's; nothing of the
+  mesh, the slots, the passes or the gradient changes.
 - THM tests: the THM part of T2 (synthetic ²H(¹⁵N,α¹²C)n HOES and OES data from known parameters), the Green
   identity, the plane-wave limit and the FRESCO benchmarks.

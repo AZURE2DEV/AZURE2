@@ -19,3 +19,11 @@ re-pinned: calc_start and calc_truth, files AZUREOut_aa=1_R=2.out and chiSquared
   (regen_compare.py --regenerate --only calc_start --only calc_truth): the two data sets at a lab angle (segments 2 and
   3, 90 and 150 deg lab) are folded in the lab, with the c.m. angle and the Jacobian of every node (decision D5,
   docs/upgrade/energy_grid.md section 4.3); their model values move by at most 2.6e-5 relative; nothing else moves.
+re-pinned: calc_start and calc_truth, files AZUREOut_aa=1_R=2.out, chiSquared.out, normalizations.out and
+  thm_experiments.out, 2026-11-12 with the engine of feature/upgrade-5-thm-mesh bfcd0aed (build work/b-thm),
+  --no-coulomb-table, OMP_NUM_THREADS=2 (regen_compare.py --regenerate --only calc_start --only calc_truth): the THM data
+  sets (segments 11-13) are folded on the shared mesh of 16O, and their supports move the mesh of the thin and thick
+  target segments 1 and 4 too; the profiled THM norm follows its model.  Per-file quadrature against the base engine
+  refined eightfold (docs/upgrade/energy_grid.md section 7.1).  chi2 calc_start: seg 1 697.326 -> 697.517, 4 286.444 ->
+  286.473, 11 92.0754 -> 92.148, 12 121.489 -> 121.586, norm 0.00196991 -> 0.00196953; calc_truth: seg 1 39.6105 ->
+  39.5894, 4 25.0769 -> 25.0744, 11 23.2836 -> 23.2908, 12 36.1786 -> 36.1683, norm 0.00204256 -> 0.00204223.
