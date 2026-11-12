@@ -394,7 +394,7 @@ bool EnergyTaskGradient(CNuc *compound, WorkingCopy *data, Results &results, con
     fitBar[k] = fitBarFn(p.segment, p.segNum, p.pointIdx, pass.models[k]);
   }
   if (!Cotangents(compound, *data, results, config, fitBar, pass, bailSeg)) return false;
-  const EnergyTaskList &list = data->EnergyTasksOf(pass.segments, compound, config);
+  const EnergyTaskList &list = data->EnergyTasksOf(pass.segments, config);
   const int chunks = std::max(1, std::min(kChunks, list.size()));
   std::vector<GradAccum> chunkAcc(chunks);
   std::vector<int> failedTask(chunks, -1);
@@ -442,7 +442,7 @@ bool EnergyTaskRows(CNuc *compound, WorkingCopy *data, Results &results, const C
   std::vector<double> fitBar(n);
   for (int k = 0; k < n; k++) fitBar[k] = rowFitBar(pass.points[k], pass.models[k]);
   if (!Cotangents(compound, *data, results, config, fitBar, pass, bailSeg)) return false;
-  const EnergyTaskList &list = data->EnergyTasksOf(pass.segments, compound, config);
+  const EnergyTaskList &list = data->EnergyTasksOf(pass.segments, config);
   numTasks = list.size();
   const int nCols = pmap.NumPacked();
   rows.assign((size_t)n * nCols, 0.0);

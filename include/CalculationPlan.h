@@ -49,6 +49,7 @@ struct EnergyTask {
   int nucleus = 0;             ///< compound nucleus of the units (PPair::GetNucleus of their entrance pairs, 1-based)
   char route = 'A';            ///< 'A' A-matrix, 'T' THM (THMMatrixFunc), 'R' R-matrix (RMatrixFunc)
   double energy = 0.0;         ///< E_x, MeV (AMatrixFunc::InEnergy), the same bits for every unit
+  int node = -1;               ///< the node of the units (WorkingCopy::Slots, NodeTable.h: stage, or overflow above it)
   int numTMatrices = 0;        ///< T-matrix groups: the T-matrices the task builds
   int begin = 0;               ///< the task's units are [begin, begin + size) of the arrays of its EnergyTaskList
   int size = 0;
@@ -95,14 +96,15 @@ class CalculationPlan {
 
   /*!
    * The energy tasks of the plan tasks `work` (indices of tasks, in the order given): the units of each task's point --
-   * the point itself, or its sub-points when it carries a sub-point fold -- grouped by (nucleus, route, E_x bits), and
+   * the point itself, or its sub-points when it carries a sub-point fold -- grouped by their nodes (the slots of the
+   * working copy, WorkingCopy::Slots: nucleus, route and E_x bits from the node tables, NodeTable.h), and
    * inside a task into T-matrix groups by (entrance, exit, ECAmplitudeSource of the unit), each in plan order.  Kept
    * between passes and rebuilt only when the work, a unit, a unit's E_x or an amplitude source has changed (the
    * energies move with shifts and re-placed sub-point grids, a copy drops the set-up's amplitudes; the check walks the
    * units, it does not sort).  Ordered by decreasing cost (1 + T-matrices + units), so the largest tasks start first on
    * a dynamic schedule.
    */
-  const EnergyTaskList &EnergyTasks(WorkingCopy &data, CNuc *cnuc, const Config &configure,
+  const EnergyTaskList &EnergyTasks(WorkingCopy &data, const Config &configure,
                                     const std::vector<int> &work);
   /// The units of the plan task `task` (its point, or its sub-points when it carries a sub-point fold), appended to
   /// `units`.

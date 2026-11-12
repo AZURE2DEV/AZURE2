@@ -255,7 +255,7 @@ bool SegmentNeedsEC(const TermRef &segment, CNuc *theCNuc, const Config &configu
  * parameters alone (docs/upgrade/fit_threads.md).
  */
 int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const std::vector<TermRef> &shiftActive,
-                                std::vector<TermRef> &reshift) {
+                                std::vector<TermRef> &reshift, std::vector<int> &replacedTasks) {
   if (!configure.replaceSubPointGrids || !configure.useAdaptiveGrid || !theCNuc) return 0;
   const auto t0 = std::chrono::steady_clock::now();
 
@@ -399,7 +399,11 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
 #pragma omp parallel for schedule(dynamic, 4)
     for (int q = 0; q < (int)work.size(); q++) replace(work[q], (size_t)q);
   }
-  if (changed > 0) this->PlaceSubPointGrids(placed);
+  if (changed > 0) {
+    for (const auto &item : placed)
+      for (const auto &grid : item) replacedTasks.push_back(this->UnitAt(grid.first).PlanTask());
+    this->PlaceSubPointGrids(placed);
+  }
   if (changed > 0)
     for (const Item &it : work)
       if (it.shifted && std::find(reshift.begin(), reshift.end(), it.seg) == reshift.end()) reshift.push_back(it.seg);

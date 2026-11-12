@@ -185,6 +185,10 @@ set_tests_properties(upgrade_plan PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIM
 # natural_neon, a THM project, a transmission and a yield, thick_target_resonance and target_effect_ranges.
 add_test(NAME upgrade_plan_runtime COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/plan_runtime.sh $<TARGET_FILE:AZURE2>)
 set_tests_properties(upgrade_plan_runtime PROPERTIES TIMEOUT 1800)
+# The node tables at run time (AZURE_NODE_CHECK=1): every unit of every plan task at the node its slot names, on the
+# stage table or the working copy's overflow table (re-placed grids, shifted points).
+add_test(NAME upgrade_node_check COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/node_check.sh $<TARGET_FILE:AZURE2>)
+set_tests_properties(upgrade_node_check PROPERTIES TIMEOUT 1800)
 
 # A fit does not depend on the number of threads: pooled working copies give a fresh copy's bits, and fits at 1 and
 # 4 threads evaluate the same vectors to the same values (tests/fit_threads/check.sh, docs/upgrade/fit_threads.md).
