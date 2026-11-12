@@ -33,6 +33,8 @@ constexpr double kWallWidth = 1e-3;
 /// Step of the central difference of the photon amplitudes in the level energy (MeV), Eq. 2.5.
 constexpr double kEnergyStep = 1e-4;
 constexpr double kEVPerMeV = 1e6;
+/// A branching below this is reported at its bound 0.
+constexpr double kAtBound = 1e-6;
 
 void Print(const Config &configure, const ex::Diagnostic &d) {
   configure.outStream << (d.severity == ex::Severity::Warning ? "WARNING: " : "ERROR: ") << "<gammaDecays> line " << d.line
@@ -487,17 +489,13 @@ std::string GammaDecaySet::Report(const CNuc &compound) const {
     out << "  Gamma_gamma = " << Fmt(q[0]) << " eV" << std::endl;
     for (std::size_t f = 0; f < s.finals.size(); f++) {
       const ex::GammaFinalState &final = s.finals[f];
+      // The branching the widths have (the remainder 1 - sum of the others; with a sum above 1, as scaled).
       double b = 0.0, delta = 0.0;
-      for (std::size_t i = 0; i < L.slots.size(); i++) {
-        if (L.slots[i].final != (int)f) continue;
-        if (L.slots[i].part == GammaDecayLevel::Part::Branching) b = q[i];
-        if (L.slots[i].part == GammaDecayLevel::Part::Mixing) delta = q[i];
-      }
-      if ((int)f == s.remainder) {
-        b = 1.0;
-        for (std::size_t i = 0; i < L.slots.size(); i++)
-          if (L.slots[i].part == GammaDecayLevel::Part::Branching) b -= q[i];
-      }
+      for (std::size_t i = 0; i < L.slots.size(); i++)
+        if (L.slots[i].final == (int)f && L.slots[i].part == GammaDecayLevel::Part::Mixing) delta = q[i];
+      for (std::size_t k = 0; k < L.photonChannels.size(); k++)
+        for (const int ch : final.channels)
+          if (L.photonChannels[k] == ch && q[0] > 0.0) b += std::fabs(widths[k]) / q[0];
       out << "  " << final.label << ": b = " << Fmt(b) << ((int)f == s.remainder ? " (remainder)" : "");
       if (final.L.size() == 2) out << ", delta = " << Fmt(delta);
       out << "; Gamma =";
@@ -505,8 +503,9 @@ std::string GammaDecaySet::Report(const CNuc &compound) const {
         for (std::size_t k = 0; k < L.photonChannels.size(); k++)
           if (L.photonChannels[k] == final.channels[c]) out << " " << Fmt(widths[k]) << " eV (L = " << final.L[c] << ")";
       out << std::endl;
-      if (b <= 1e-9 && (final.role == ex::GammaFinalState::Role::Listed || (int)f == s.remainder))
-        out << "  note: the branching to " << final.label << " is at its bound 0" << std::endl;
+      // MINUIT reaches a limit through its sine transformation, to about 1e-7 here (gamma_parametrisation.md 2.6).
+      if (b < kAtBound && (final.role == ex::GammaFinalState::Role::Listed || (int)f == s.remainder))
+        out << "  note: the branching to " << final.label << " is at its bound 0 (b < " << kAtBound << ")" << std::endl;
     }
     if (s.remainder >= 0 && excess > 0.0)
       out << "  note: the explicit branchings sum to " << Fmt(1.0 + excess)
