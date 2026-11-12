@@ -132,10 +132,14 @@ void TranslatedStopping(const Unit &point, const WorkingCopy &data, const Config
   const Unit::SubGridSpec &spec = data.Data().GridSpecOf(point);
   const TargetEffect &effect = *data.Data().GetTargetEffect(point.GetTargetEffectNum());
   const double f = spec.stoppingConversion, scale = data.EffectValues(point.GetTargetEffectNum()).stoppingScale;
+  // The translated energy is held at the nominal support's lower edge: an outer node below the moved support (at a
+  // thick target's floor, E_n - Delta can be below 0, outside the stopping's domain) only shapes the interpolant of the
+  // edge interval, and the kernel never reaches below the edge.
   for (int k = 0; k < nodes.count; k++) {
     const Site &slot = *point.GetSubPoint(data, nodes.first + k + 1);
-    stopping[(size_t)k] = nodes.delta == 0.0 ? slot.GetStoppingPower()
-                                             : f * effect.StoppingAt((slot.GetCMEnergy() - nodes.delta) / f, configure, scale);
+    stopping[(size_t)k] =
+        nodes.delta == 0.0 ? slot.GetStoppingPower()
+                           : f * effect.StoppingAt(std::max(slot.GetCMEnergy() - nodes.delta, spec.endEnergy) / f, configure, scale);
   }
 }
 

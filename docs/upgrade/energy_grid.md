@@ -293,12 +293,16 @@ translated rigidly, K_i(E; ν) = K_i(E − Δ_i; 0), which is the engine's fold 
    (§2.3); deterministic at any thread count, counted in `run.log`; χ² steps by the quadrature difference there.
 3. *The sites a point reads.*  Its slots are its planned range (fixed for the stage); the fold reads the tightest
    sub-range enclosing the moved support [a_i + Δ_i, b_i + Δ_i] (at least two nodes), the kernel clips there; the block
-   is not rewritten.  What depends on ν besides the kernel's centre: the stopping the target kernel reads, ε(E_n − Δ_i)
+   is not rewritten.  What depends on ν besides the kernel's centre: the stopping the target kernel reads, ε(max(E_n − Δ_i, a_i))
    (the fold before kept each sub-point's stopping at its unshifted energy: the depth profile and T are the point's as
    measured), computed in the gather from the target's stopping — the point's, not the site's; and the c.m. angle of a
    lab-frame differential point (converted at its shifted energy), which its group's sites carry: their Legendre rows
    and Coulomb amplitude are recomputed by the slot's writer when it changes (the channel rows stay), and the group key
    holds the point's nominal lab energy so that every reader of a block has the same angle at every ν.
+   (The argument is held at the nominal support's lower edge a_i: an outer node below the moved support only shapes
+   the edge interval's interpolant, and at a thick target's floor E_n − Δ_i < 0 is outside the stopping's domain.)
+   A segment with external capture whose shift leaves the reach is re-placed like any other: its new sites take their
+   capture amplitudes from the tables at their energies (`Site::GetECAmplitudeWithShift`).
 4. *Writers.*  Ranges, blocks, writers, plan tasks and the energy pass's task list are those of the planned ranges, fixed
    for the stage; every site of a block is computed (the margin is the cost).
 5. *Gradient.*  A shift column of a folded segment is the central difference of the fold on the fixed nodes: at ν ± h
@@ -308,7 +312,8 @@ translated rigidly, K_i(E; ν) = K_i(E − Δ_i; 0), which is the engine's fold 
    observables at the moved angle (open for the observables per node, branch 9).
 
 **Measured (branch 8, build `work/b-shift`, 1 thread unless stated).**
-- *Moves* (classifier, three bases, against the engine before refined eightfold): every output file of T2, T2_true and
+- *Moves* (classifier, three bases, against the engine before refined eightfold; T2's `covariance.out` is a named row
+  since the director's review): every output file of T2, T2_true and
   `shift_sqrt_subpoints` (const, sqrt, shiftfn, narrow_const, narrow_sqrt) is per-file quadrature and closer to the
   refined value than before (T2 `AZUREOut`: largest 1.1e-3 against 5.4e-3, rms 1.7e-4 against 5.5e-4; T2 χ² of the
   thin-target segment 692.29 → 697.33, refined 697.67; thick target 283.21 → 286.44, refined 286.53), **except T2's
@@ -317,6 +322,10 @@ translated rigidly, K_i(E; ν) = K_i(E − Δ_i; 0), which is the engine's fold 
   same with every shift fixed (reach 0): a matter of the mesh's nodes for those segments, not of the reach.
 - *Cost of the reach in nodes*: T2 3919 energy tasks (distinct nodes solved; before 5157; with every reach 0: 3767) and
   23602 slots (18172 with reach 0); `shift_sqrt_subpoints/sqrt` (fixed shift) 2057 tasks against 6738 before.
+- *Step at a re-plan* (the director, `work/director/shift_review/steps.py`, 500-600 values of each of T2's three shift
+  parameters): one step, at the re-plan boundary of the offset with prior 0.003 (at +9.0e-3 MeV), 1.3e-2 in a χ² of
+  10,500; none inside the reach.  The engine before had steps of the same size elsewhere (1.7e-2 at 1.16e-3 MeV on the
+  same parameter, 1e-3 on the sqrt shift at three places).
 - *Smoothness* (`pyazr_shift_fold_smooth`): 21 shifts across 0.2 keV lab of a thin layer whose back edge lies in a
   20 eV core lattice: second differences −0.79 … −0.69, third differences 0.002 … 0.009; without the clip at the moved
   support, third differences ±700.
@@ -853,8 +862,11 @@ converged value, so the ratio of two distances to it is known to about 2/64.  Bo
 of the file, also those the new engine left in place.  Two further clauses, each a line of the tool: a file whose
 largest new distance is at most **10⁻⁷** passes (both engines are converged there; 10⁻⁷ is the size by which the
 Coulomb table moves a charged-channel number), and a project in the tool's table `NAMED` passes with its own factor
-and is printed and counted as **named**, never as quadrature — one row today, `hybrid_potential` (factor 1.25), for
-the reason in the table below.  Measured with a mesh that drops every other
+and is printed and counted as **named**, never as quadrature — two rows today: `hybrid_potential` (factor 1.25), for
+the reason in the table below, and T2's `covariance.out` (factor 1.2, decision of the director, 2026-11-12): the
+correlated χ² of the two lab-frame segments is dominated by one point (E 1.1228 MeV, pull +15) whose error shrank; the
+old total was nearer the reference only because other points' errors cancelled part of it, and those shrank too (per
+point the two segments are 3-4 times closer than before: largest 2.9e-4 / 3.0e-4 → 7.5e-5 / 1.2e-4).  Measured with a mesh that drops every other
 node in the lower half of each point's range (13 folded projects of the quick set, Brune, against `tab-fine8` /
 `tab-fine4`): the maximum alone fails 7 projects, the rms adds `13N`, `beam_profile_kernel`, `ratio_to_reference`
 `folded` and `T2` (`T2_true` χ²); `thick_target_resonance` and `T2`'s own outputs pass both (the mesh there is finer

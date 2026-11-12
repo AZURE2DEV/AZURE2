@@ -156,11 +156,11 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
       movedSupports[(size_t)spec.mesh].push_back({&spec, centre});
       supportMoved = true;
     }
-    if (SegmentNeedsEC(seg, theCNuc, configure)) {
-      if (supportMoved)
-        throw std::runtime_error("segment " + std::to_string(seg.GetSegmentKey()) + ": its energy shift moved its folded "
-                                 "points beyond the nodes their external-capture amplitudes were computed for (they "
-                                 "are computed once); give the shift a prior or a smaller range");
+    // External capture: grids are not re-placed for a moved level (the set-up's integrals are kept), but the blocks of
+    // a shifted point whose support moved are: their new sites take their capture amplitudes at their energies from the
+    // tables, as a shifted site always has (Site::GetECAmplitudeWithShift).
+    const bool ec = SegmentNeedsEC(seg, theCNuc, configure);
+    if (ec && !supportMoved) {
       if (!ecNoted.exchange(true))
         configure.outStream << "Note: the sub-point grids of segments with external capture are not re-placed "
                                "(their capture integrals are computed once)." << std::endl;
@@ -187,7 +187,7 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
         work[blocks[at].second].group.push_back(i);
         continue;
       }
-      if (!replaceGrids) continue;
+      if (!replaceGrids || ec) continue;
       // A grid of its own (THM): the parent's shift, which is what moves every sub-point (Segment::MoveOwnGridSlots)
       const double offset = shifted ? cmFactor * seg.segment->TotalEnergyShift(State(*seg.segment), point->GetOriginalEnergy()) : 0.0;
       work.push_back({seg, i, offset, shifted, {}});

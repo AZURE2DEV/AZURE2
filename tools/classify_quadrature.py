@@ -61,6 +61,10 @@ NAMED = {
     ".res-hybrid_potential/": (1.25, "5 % from the converged value with its own settings in both engines; the mesh is"
                                " 1.20 x further at k = 1, 0.85 x at k = 2, equal from k = 4 (second order, same limit):"
                                " docs/upgrade/energy_grid.md section 7.1"),
+    ".res-upgrade__T2/T2.azr/output/covariance.out": (1.2, "the correlated chi2 of two lab-frame segments, dominated by one"
+                                                      " point (pull +15) whose error shrank; the old total was nearer only by"
+                                                      " cancellation of other points' errors, which shrank too (each point 3-4 x"
+                                                      " closer): docs/upgrade/energy_grid.md section 7.1"),
 }
 
 
