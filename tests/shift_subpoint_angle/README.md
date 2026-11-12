@@ -26,7 +26,7 @@ every model a 0.1 keV Gaussian convolution (20 sub-points) on all segments:
 | | check | tolerance |
 |---|---|---|
 | (a) | a1 equals a0 | 1e-4 (the shifted grid is rebuilt, so the discretisation moves chi2 by ~1e-5; the bug is 7e-1) |
-| (b) | av equals a0 | 1e-5 (av, with a varied shift, keeps grids of its own; a0 is on the shared mesh: 3.5e-6 apart until the shift kernel of branch 8 puts shifted segments on the mesh and restores 1e-6) |
+| (b) | av equals a0 | 1e-6 (both fold on the fixed nodes of the shared mesh, av's kernel moving with its shift; measured 0) |
 | (c) | g1 equals g0 on the three capture segments (gamma branch of the same code) | 1e-5 |
 | (d) | a0 against `expected/a0_chi2` (the unshifted value, which the fix does not change) | 1e-3 |
 

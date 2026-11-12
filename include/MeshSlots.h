@@ -34,18 +34,22 @@ struct MeshPoint {
 /// pair of a beta-delayed spectrum (entrance of type 20), the entrance pair otherwise.
 const PPair *FramePair(const PPair *entrance, const PPair *exit);
 
-/// Whether a segment's folded points take their slots from the shared mesh.  Not a segment with an energy shift (its
-/// slots move rigidly with the shift until the shifted fold puts it on fixed nodes, branch 8), not THM (its kinematics
-/// on the mesh are branch 10).
+/// Whether a segment's folded points take their slots from the shared mesh: every segment but THM (its kinematics on
+/// the mesh are branch 10).  A segment with an energy shift is folded there with the kernel moving on the fixed nodes
+/// (ShiftedFold.h).
 bool OnSharedMesh(const Segment &segment, const PPair *entrance, const PPair *exit);
 
 /// Whether a support's lower edge lies at a physical floor (a thick target's 1 keV, the integration floor or a
 /// threshold): a hard edge of the mesh (MeshSupport::lowHard).
 bool EdgeAtFloor(const TargetEffect &effect, double low, double floor);
 
-/// Records a folded point's support (E_x) in the mesh of its nucleus and the mesh's place in its grid record.
+/// Records a folded point's support (E_x) in the mesh of its nucleus and the mesh's place in its grid record; the
+/// support of a point with an energy shift (spec.shifted) is the planned one at its start centre (ShiftedFold.h).
 MeshPoint QueueMeshPoint(std::vector<DataSet::NucleusMesh> &meshes, Unit &point, const TermRef &term,
                          Unit::SubGridSpec &spec, const PPair *entrance, const PPair *exit, bool lowHard);
+
+/// The support of a folded point (E_x) as its kernels give it at the nominal point, from its grid record.
+MeshSupport NominalMeshSupport(const Unit::SubGridSpec &spec, int dataSet);
 
 /// The quantized anchors of a nucleus's mesh, in E_x: the levels as each entrance pair of its folded points sees them
 /// (AdaptiveIntegrationGrid::Anchors in that pair's frame), merged and sorted.  `inputWidthsArePhysical` as the grid

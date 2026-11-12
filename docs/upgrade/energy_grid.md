@@ -278,6 +278,52 @@ multiplier 5 and 20; the yields differ by 2.0 × 10⁻³ (relative) at 253.8 keV
 - The **interpolated mode** of `ARCHITECTURE.md` §1 (observables on a fixed mesh, an unfolded shifted point as
   interpolation weights) stays opt-in, with its check against the exact mode.
 
+**Design of the shifted fold on the fixed nodes (branch 8 `shift-kernel`, 2026-11-12; the full text is the comment of
+`include/ShiftedFold.h`, which owns it).**  Δ_i(ν) = E_cm,i(ν) − E_cm,i(0) is the c.m. shift of point i; the kernel is
+translated rigidly, K_i(E; ν) = K_i(E − Δ_i; 0), which is the engine's fold before in exact arithmetic.
+
+1. *The planner's support.*  The unshifted support [a_i, b_i] moved by a centre c_i and widened by a reach R_i on each
+   side (never below the integration floor, a hard edge there).  R_i = 3 Σ_k |Δ_i(ν_0 + σ_k e_k) − Δ_i(ν_0)| over the
+   varied shift parameters k (a follower: its leader's; a shift-function group: the owner's), σ_k the prior width; a
+   varied parameter without a prior adds b_i − a_i; R_i = 0 when nothing of the point's shift varies (a fixed shift
+   moves the support once, no node added).  From what the project already says (the priors), no new field.
+2. *Leaving the reach.*  c_i = Δ_i(ν_0) + 2R_i round((Δ_i(ν) − Δ_i(ν_0))/(2R_i)) (R_i = 0: c_i = Δ_i(ν)), a function of ν
+   alone, so the moved support stays inside the planned one.  A change of some c_i re-plans the nucleus in the
+   hand-over with the copy's supports and re-places the groups whose nodes changed, the path of a moved narrow level
+   (§2.3); deterministic at any thread count, counted in `run.log`; χ² steps by the quadrature difference there.
+3. *The sites a point reads.*  Its slots are its planned range (fixed for the stage); the fold reads the tightest
+   sub-range enclosing the moved support [a_i + Δ_i, b_i + Δ_i] (at least two nodes), the kernel clips there; the block
+   is not rewritten.  What depends on ν besides the kernel's centre: the stopping the target kernel reads, ε(E_n − Δ_i)
+   (the fold before kept each sub-point's stopping at its unshifted energy: the depth profile and T are the point's as
+   measured), computed in the gather from the target's stopping — the point's, not the site's; and the c.m. angle of a
+   lab-frame differential point (converted at its shifted energy), which its group's sites carry: their Legendre rows
+   and Coulomb amplitude are recomputed by the slot's writer when it changes (the channel rows stay), and the group key
+   holds the point's nominal lab energy so that every reader of a block has the same angle at every ν.
+4. *Writers.*  Ranges, blocks, writers, plan tasks and the energy pass's task list are those of the planned ranges, fixed
+   for the stage; every site of a block is computed (the margin is the cost).
+5. *Gradient.*  A shift column of a folded segment is the central difference of the fold on the fixed nodes: at ν ± h
+   the points move and are folded again from the node values of ν (the same `FoldValues`), no node recomputed, no level
+   matrix solved; shift kinds enter through Δ_i only.  The analytic ∂K/∂E_0 is open for every kernel (it needs the
+   kernels' energy arithmetic on a dual type).  A lab-frame differential segment's column still recomputes its sites'
+   observables at the moved angle (open for the observables per node, branch 9).
+
+**Measured (branch 8, build `work/b-shift`, 1 thread unless stated).**
+- *Moves* (classifier, three bases, against the engine before refined eightfold): every output file of T2, T2_true and
+  `shift_sqrt_subpoints` (const, sqrt, shiftfn, narrow_const, narrow_sqrt) is per-file quadrature and closer to the
+  refined value than before (T2 `AZUREOut`: largest 1.1e-3 against 5.4e-3, rms 1.7e-4 against 5.5e-4; T2 χ² of the
+  thin-target segment 692.29 → 697.33, refined 697.67; thick target 283.21 → 286.44, refined 286.53), **except T2's
+  `covariance.out`**: the correlated χ² of the two lab-frame segments, 513.884 → 513.904 against refined 513.771
+  (2.6e-4 against 2.2e-4, 1.15 × the old distance; each of the two segments' own χ² is closer than before).  It is the
+  same with every shift fixed (reach 0): a matter of the mesh's nodes for those segments, not of the reach.
+- *Cost of the reach in nodes*: T2 3919 energy tasks (distinct nodes solved; before 5157; with every reach 0: 3767) and
+  23602 slots (18172 with reach 0); `shift_sqrt_subpoints/sqrt` (fixed shift) 2057 tasks against 6738 before.
+- *Smoothness* (`pyazr_shift_fold_smooth`): 21 shifts across 0.2 keV lab of a thin layer whose back edge lies in a
+  20 eV core lattice: second differences −0.79 … −0.69, third differences 0.002 … 0.009; without the clip at the moved
+  support, third differences ±700.
+- *Gradient* (one gradient, `AZURE_PROFILE`): T2 158,929 → 48,526 level-matrix solves, 49,828 → 640 channel-function
+  sets; `shift_sqrt_subpoints/sqrt` with a varied sqrt shift 26,952 → 8,276 solves (the remainder is the adjoint's
+  forward pass), 141,582 → 84 channel-function sets, 2.5 s → 0.6 s.
+
 ### 2.6 What replaces the node-table cache
 
 The node table of a stage — per node its channel-table rows, per (point, node) its angle rows (Legendre polynomials,
@@ -321,6 +367,12 @@ moving with the levels) and the slots' copy-on-write rows (the node rows are hol
 hand-over re-places from the shifted anchors at every move of a shift, and mesh slots re-placed after an anchor change
 are the same nodes in every copy at the same parameters; the cache lets a copy adopt the rows another copy computed for
 them (on T2 most re-placed slots take another copy's rows).  It goes with branch 8, when no node moves with a shift.
+
+**Status, branch 8 (`feature/upgrade-5-shift-kernel`, 2026-11-12): deleted.**  `NodeTableCache.h`, its mutexes and
+`SharedTable::Weak` are gone; a copy that re-places a block after an anchor change computes the rows of its new nodes
+itself (only the nodes near a moved narrow level move on the shared mesh).  `NodeOverflow` and `PlaceOverflowNodes`
+stay: their users are the re-placed blocks of a moved narrow level and THM's sub-points, which still move with a
+shift (`Segment::MoveOwnGridSlots`, branch 10).
 
 **Status, shared sites (`feature/upgrade-5-shared-sites`, 2026-11-12).** The folded points of a data set that need the
 cross section at one mesh node with everything else equal share one `Site` there (`include/SlotGroup.h`: the key --

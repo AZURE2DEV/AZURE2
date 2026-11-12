@@ -2,6 +2,39 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, Phase 5 branch 8) — folded data with an energy shift on the fixed nodes of the shared mesh (`feature/upgrade-5-shift-kernel`)
+
+**Done.**  A folded point of a data set with an energy shift folds on the shared mesh like every other folded point:
+the nodes stay, the kernel moves (design: the comment of `include/ShiftedFold.h`, summary in `energy_grid.md` §2.5).
+The planner gets the support moved by a centre and widened by a reach (3 prior widths of the shift parameters; 0 for a
+fixed shift); a shift leaving the reach re-plans the nucleus in the hand-over (a function of the shift alone, a Note in
+`run.log`).  The fold reads the sub-range of the point's planned slots enclosing the moved support, clips there, and
+gives a target kernel ε(E_n − Δ) (the old rigid move's physics).  Lab-frame differential groups take the point's moved
+c.m. angle (Legendre rows, Coulomb amplitude).  Shift columns of the gradient and residual Jacobian fold again on the
+fixed nodes (no solve) where no site depends on the shift.  Deleted: `NodeTableCache.h`, `SharedTable::Weak`, the
+shift conditions of `OnSharedMesh`, the rigid move of mesh slots (kept for THM and uniform grids:
+`Segment::MoveOwnGridSlots`).  Fixed on the way: `Unit::CalcLegendreP` on a shifted point appended to its slots' rows
+at every move.
+
+**Verified** (scripts `work/shift/`): build 0 warnings; consistency test; ctest of experiment, kernels, grad, upgrade,
+consistency, shift, shared_point, parallel_points, jacobian (39/39); `upgrade_node_check` (adapted: the shifted
+calculation uses no overflow node); T1, T3, 13N, natural_neon, thick_target_resonance, layer_yield/models byte-identical
+to `tab-trial33` in three bases; T2 and shift_sqrt_subpoints classified (`energy_grid.md` §2.5: all per-file quadrature
+but T2 `covariance.out`); `check.sh` of convert_params, energy_shift_sqrt, shift_fn, shift_groups, shift_sqrt_subpoints,
+shift_subpoint_angle ((b) back to 1e-6, measured 0), target_density, tests/upgrade (golden re-pinned) pass;
+`AZURE_GRAD_CHECK=exit` on T2 and on shift_sqrt_subpoints sqrt and shiftfn with the shift varied: shift components
+agree with the whole-χ² difference to 1e-12 or better.  Fits (T2, 200 calls, 1 thread, 3 alternated runs): the
+fitted shifts move 0.131 and 0.114 of their errors (more than 0.1: a stop condition of the brief), to the minimum of
+the engine before refined eightfold (sqrt shift: base 1.8638e-3, new 1.9533e-3, refined 1.9538e-3; offset 2.1977e-3,
+2.2275e-3, 2.2300e-3).
+
+**Open.**  T2 `covariance.out` and the 0.13 σ fit move are for the director (both explained, both stop conditions of
+the brief).  Analytic ∂K/∂E_0 per kernel; the lab-frame differential column still solves (branch 9); THM keeps the
+rigid move (branch 10).  Not run: the whole tree × 3 bases, `run_tests.sh`, the gate, the eight fits, other thread
+counts.
+
+## 2026-11-12 (director, 07:15) — merged: the engine on the shared mesh, the shared sites, the expectations the mesh moves
+
 ## 2026-11-12 (director, 08:10) — merged: fold windows, edge blending, the automatic tolerance and the σ(Ē) fallback are deleted
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (one merge commit, tree of `rehearsal/trial33`; nothing
