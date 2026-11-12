@@ -27,7 +27,6 @@ const char *ValueTypeName(ValueType t) {
     case ValueType::Reaction: return "reaction_expr";
     case ValueType::Columns: return "columns";
     case ValueType::Grid: return "grid";
-    case ValueType::Windows: return "windows";
     case ValueType::Form: return "structured";
   }
   return "?";

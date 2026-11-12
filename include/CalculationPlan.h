@@ -27,7 +27,7 @@ namespace azure2 {
  * What a task writes: the fixed quantities and the angular-distribution coefficients of the record (Results.h) of its
  * point and of every sub-point of it; nothing else.  The natural-term slots of a record belong to the model pass
  * (ModelPass.h).  What a task reads: the set-up (tables, grids, kernels) and the slots it wrote itself (a fold reads its
- * sub-points; an automatic tolerance its probes).  Built at set-up (WorkingCopy::BuildPlan) and checked when built:
+ * sub-points).  Built at set-up (WorkingCopy::BuildPlan) and checked when built:
  * every point of the data set is calculated by exactly one task (Check).  Under AZURE_PLAN_CHECK=1 the point pass also
  * checks at run time that each step writes only its own slots and no slot is written twice
  * (WorkingCopy::CalculatePointsInParallel).

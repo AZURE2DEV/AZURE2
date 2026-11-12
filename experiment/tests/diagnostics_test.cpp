@@ -158,6 +158,15 @@ int main() {
           d.size() == 1 && d[0].code == std::string("E_REACTION_NOT_ALLOWED"));
   }
 
+  {
+    // a deleted field: refused, never read; the message names the field and says what to do
+    const std::vector<Diagnostic> d = Diagnose(kTargets + Data(Folded(kDataset) + "    fold_windows auto\n"));
+    check("fold_windows (deleted): one E_FIELD_DELETED that names the field and says to remove it",
+          d.size() == 1 && d[0].code == std::string("E_FIELD_DELETED") && d[0].message.find("'fold_windows'") != std::string::npos &&
+              d[0].message.find("remove it") != std::string::npos);
+    if (!d.empty()) std::printf("        %s\n", d[0].ToText().c_str());
+  }
+
   const std::vector<Case> cases = {
       // The reader
       {"E_UNTERMINATED_QUOTE", Data(Set(kDataset, "file", "    file \"f.dat"))},
@@ -174,6 +183,7 @@ int main() {
       {"E_FIELD_TWICE", Data(kDataset + "    unit b\n")},
       {"E_FIELD_REQUIRED", Data(Set(kDataset, "file", ""))},
       {"E_FIELD_NOT_APPLICABLE", Data(kDataset + "    charge_state 1\n")},
+      {"E_FIELD_DELETED", kTargets + Data(Folded(kDataset) + "    fold_windows 0.2-0.4 MeV blend 2 keV\n")},
       {"E_VALUE_MISSING", Data(kDataset + "    covariance\n")},
       {"E_PLACEHOLDER", Data(kDataset + "    covariance ?\n")},
       // Values
@@ -203,7 +213,6 @@ int main() {
       {"E_UNKNOWN_ELEMENT", Set(kTargets, "active", "    active 13Xx")},
       {"E_PAIR_SYNTAX", Model("datum a1\n    quantity scattering_length\n    pair n20Ne\n    s coherent\n"
                               "    value 4.6 fm\n    error 0.1 fm\n")},
-      {"E_WINDOW_SYNTAX", kTargets + Data(Folded(kDataset) + "    fold_windows wide MeV\n")},
       // Reactions
       {"E_REACTION_SYNTAX", Data(Set(kDataset, "reaction", "    reaction 15N(p,a"))},
       {"E_REACTION_ORDINAL", Data(Set(kDataset, "reaction", "    reaction 15N(p,a1)12C"))},

@@ -173,8 +173,6 @@ int main(int argc, char **argv) {
     check("section 3.5: scaled term", r && r->Get("reaction")->reaction.Tree() == "Sum(20Ne(n,n)20Ne, Scale(0.5, 20Ne(n,a)17O))");
     r = e.result.Find("epoch_run2");
     check("section 3.7: target@epoch", r && r->Get("target")->word == "C13B" && r->Get("target")->epoch == "run2");
-    check("fold windows", r && r->Get("fold_windows")->Get("windows")->windows.windows.size() == 2 &&
-                              r->Get("fold_windows")->Get("windows")->windows.windows[1].hi.text == "0.6");
     r = e.result.Find("S_points");
     check("grid range points log", r && r->Get("energies")->grid.hasPoints && r->Get("energies")->grid.points == 200 &&
                                        r->Get("energies")->grid.log && r->Get("energies")->grid.frame == "cm");

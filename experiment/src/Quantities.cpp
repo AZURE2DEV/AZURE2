@@ -385,8 +385,6 @@ Quantity Yield() {
                                     "a yield needs a target with a thickness (layer) or a thick (infinite) target"),
                 RefusedAtValidation("E_FIELD_REQUIRED", "per-charge unit without charge_state",
                                     "the number of beam particles per uC depends on the charge state q"),
-                RefusedAtBuild("E_FIELD_NOT_APPLICABLE", "fold_windows on a layer",
-                               "outside a window the integration is a cross section at one energy, not a yield"),
                 RefusedAtSetUp("E_LAYER_STOPPING", "a stopping not positive and finite in the layer",
                                "give a stopping defined at every energy the beam has in the layer"),
                 RefusedAtSetUp("E_LAYER_EXIT_BELOW_MODEL", "the beam stops in the layer",

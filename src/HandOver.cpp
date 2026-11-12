@@ -112,10 +112,6 @@ void WorkingCopy::FillDensitiesFromParams(const vector_r &p, const Config &confi
       if (point->GetTargetEffectNum() != n || !(point->GetTargetThickness() > 0.0)) continue;
       const double scale = EffectValues(n).stoppingScale;
       point->SetTargetThickness(point->GetCMFactor() * te->TargetThickness(point->GetTargetLabEnergy(), configure, density, scale));
-      // E_bar of the sigma(E_bar) fallback moves with the density too (Unit::SetTargetFallbackOnly)
-      if (!te->IsThickTarget())
-        point->SetTargetFallbackDepth(point->GetCMFactor() *
-                                      te->MeanEnergyLoss(point->GetTargetLabEnergy(), configure, density, scale));
     }
   };
   for (const Segment &seg : set_->segments_) update({&seg, 0});

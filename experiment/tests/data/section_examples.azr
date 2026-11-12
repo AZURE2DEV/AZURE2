@@ -97,7 +97,6 @@ dataset epoch_run2                              # section 3.7, epochs
     beam           B1
     detector       D90
     quadrature     points 30 width_multiplier 20 per_width 50
-    fold_windows   0.2-0.4 0.5-0.6 MeV blend 2 keV auto_tolerance 1e-3
 dataset legendre_a                              # section 7.2, legendre
     reaction       12C(a,a)12C
     quantity       legendre

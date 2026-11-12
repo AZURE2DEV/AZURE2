@@ -1,13 +1,12 @@
-// The calculation of one point outside the energy pass (Unit::Calculate), the folds of a point's sub-points after
-// they are calculated (Unit::FoldSubPoints: the probes, the automatic tolerance, the thin-target fallback, the
-// observable-wise integrations), and the marking of a point whose calculation failed.
+// The calculation of one point outside the energy pass (Unit::Calculate), the fold of a point's sub-points after
+// they are calculated (Unit::FoldSubPoints, observable by observable), and the marking of a point whose calculation
+// failed.
 #include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
-#include <memory>
 #include <stdexcept>
 #include <vector>
 
@@ -17,7 +16,6 @@
 #include "PointFold.h"
 #include "WorkingCopy.h"
 #include "Unit.h"
-#include "TargetEffect.h"
 
 void Site::MarkFailed(azure2::Results &results, const char *role, const Config &configure, const char *why) {
   // Every fixed quantity NaN and no angular-distribution coefficient.
@@ -55,7 +53,7 @@ void Unit::Calculate(WorkingCopy *data, CNuc *theCNuc, const Config &configure, 
     unit = this->GetSubPoint(*data, i);
     azure2::SolveAtOneEnergy(theCNuc, configure, results, &unit, 1);
   }
-  this->FoldSubPoints(data, theCNuc, configure, results);
+  this->FoldSubPoints(*data, configure, results);
 }
 
 void Unit::PrepareSubPoints(WorkingCopy *data, CNuc *theCNuc, const Config &configure) {
@@ -67,110 +65,6 @@ void Unit::PrepareSubPoints(WorkingCopy *data, CNuc *theCNuc, const Config &conf
       subPoint->RecalcEDependentValues(data, theCNuc, configure);
     }
   }
-}
-
-void Unit::FoldSubPoints(WorkingCopy *data, CNuc *theCNuc, const Config &configure, azure2::Results &results) {
-  const TargetEffect *effect = data->Data().GetTargetEffect(this->GetTargetEffectNum());
-  if (effect->IsTargetIntegration() && !effect->IsThickTarget()) {
-    this->FoldThinTarget(*data, results, configure, effect);
-    return;
-  }
-  const double blend = this->GetTargetBlendWeight();
-  const double autoTol = effect->GetAutoTolerance();
-
-  // The bare value of the observable at the central energy is needed both
-  // for edge blending and for the automatic per-point decision.  It is
-  // obtained from a probe copy that pretends not to carry the effect, so the
-  // ordinary single-point machinery stays the single source of truth.
-  double bareValue = 0.0, bareE1 = 0.0, bareE2 = 0.0;
-  bool haveBare = false;
-  if (blend < 1.0 || autoTol > 0.) {
-    Unit probe(*this);
-    azure2::Results probeResults;  // the probe's own record: it must not write the point's
-    probe.UsePrivateRecord(probeResults, results);
-    probe.SetTargetEffectNum(0);
-    probe.DetachFromPlan();
-    probe.SetSubPointRange(0, 0);
-    probe.Calculate(data, theCNuc, configure, probeResults);
-    bareValue = probe.GetFitCrossSection(probeResults);
-    bareE1 = probe.GetFitE1CrossSection(probeResults), bareE2 = probe.GetFitE2CrossSection(probeResults);
-    haveBare = true;
-  }
-
-  // Automatic application: from the first, central and last sub-point,
-  // estimate the size of the effect from the curvature across the window
-  // (plus the centroid shift when the target thickness is integrated).  If
-  // the effect would change the observable by less than the tolerance, the
-  // bare value is used, so any discontinuity this introduces is bounded by
-  // the tolerance itself.  (The sub-points are all calculated in the energy
-  // pass; the decision reads three of them.)
-  if (autoTol > 0. && haveBare && this->NumSubPoints() >= 3) {
-    int iFirst = 1;
-    int iLast = this->NumSubPoints();
-    int iMid = 1;
-    double dBest = 1e100;
-    for (int i = 1; i <= this->NumSubPoints(); i++) {
-      double d = std::fabs(this->GetSubPoint(*data, i)->GetCMEnergy() - this->GetCMEnergy());
-      if (d < dBest) { dBest = d; iMid = i; }
-    }
-    const double sFirst = this->GetSubPoint(*data, iFirst)->GetFitCrossSection(results);
-    const double sMid = this->GetSubPoint(*data, iMid)->GetFitCrossSection(results);
-    const double sLast = this->GetSubPoint(*data, iLast)->GetFitCrossSection(results);
-    double estimate = std::fabs(0.5 * (sFirst + sLast) - sMid);
-    if (effect->IsTargetIntegration()) estimate += 0.5 * std::fabs(sLast - sFirst);
-    if (!(estimate > autoTol * std::max(std::fabs(sMid), 1e-300))) {  // (a NaN estimate takes the bare value)
-      // the bare point's sigma and its E1 and E2 parts (what an E1 / E2 line reads)
-      this->SetFitCrossSection(results, bareValue);
-      this->SetFitE1CrossSection(results, bareE1), this->SetFitE2CrossSection(results, bareE2);
-      return;
-    }
-  }
-
-  this->IntegrateTargetEffectForObservable(*data, configure, results);
-  if (blend < 1.0 && haveBare)
-    this->SetFitCrossSection(results, blend * this->GetFitCrossSection(results) + (1.0 - blend) * bareValue);
-}
-
-/*!
- * The fold of a thin-target integration, with its sigma(E_bar) fallback.  Unlike the other kernels it falls back to
- * sigma at the depth-averaged energy E_bar = E - D (SetTargetFallbackOnly), never to a plain point at the data energy:
- * the data of a target integration carry the beam energy, and sigma(E_bar) is off by the centroid shift ~Delta/2
- * (13C+a ND2021r with windows around the narrow levels: chi2 420,221 against 402,111 integrated everywhere,
- * 2026-11-05).
- *  - outside every window: the one to three fallback sub-points, then the kernel (which returns sigma(E_bar));
- *  - at a window edge: the full grid, blended with sigma(E_bar) inside the kernel;
- *  - automatic tolerance: from the first and last sub-points and the two around E_bar, if the chord between the end
- *    nodes stays within the tolerance of sigma(E_bar) (a curvature bound, about three times the error of
- *    sigma(E_bar) for a box), sigma(E_bar) is used.
- */
-void Unit::FoldThinTarget(WorkingCopy &data, azure2::Results &results, const Config &configure,
-                          const TargetEffect *effect) {
-  const int n = this->NumSubPoints();
-  const double autoTol = effect->GetAutoTolerance();
-  if (autoTol > 0. && !target_fallback_only_ && n >= 4) {
-    const double eBar = this->GetCMEnergy() - target_fallback_depth_;
-    int jb = 1;  // the sub-points jb, jb + 1 bracket E_bar (descending energies)
-    for (int j = 1; j < n; j++)
-      if (this->GetSubPoint(data, j + 1)->GetCMEnergy() <= eBar) { jb = j; break; }
-    if (eBar <= this->GetSubPoint(data, n)->GetCMEnergy()) jb = n - 1;
-    const double eF = this->GetSubPoint(data, 1)->GetCMEnergy(), eL = this->GetSubPoint(data, n)->GetCMEnergy();
-    const double ea = this->GetSubPoint(data, jb)->GetCMEnergy(), eb = this->GetSubPoint(data, jb + 1)->GetCMEnergy();
-    const double tChord = (eF > eL) ? (eF - eBar) / (eF - eL) : 0.0;
-    const double tBar = (ea > eb) ? std::min(std::max((ea - eBar) / (ea - eb), 0.0), 1.0) : 0.0;
-    const double sF = this->GetSubPoint(data, 1)->GetFitCrossSection(results);
-    const double sL = this->GetSubPoint(data, n)->GetFitCrossSection(results);
-    const double sBar = (1.0 - tBar) * this->GetSubPoint(data, jb)->GetFitCrossSection(results) +
-                        tBar * this->GetSubPoint(data, jb + 1)->GetFitCrossSection(results);
-    const double chord = (1.0 - tChord) * sF + tChord * sL;
-    if (!(std::fabs(chord - sBar) > autoTol * std::max(std::fabs(sBar), 1e-300))) {
-      // sigma(E_bar) from the two bracketing sub-points, through the one integrator (A_y, coefficients and
-      // capture components keep their own combinations)
-      Unit::TargetFallbackScope self(this);
-      this->IntegrateTargetEffectForObservable(data, configure, results);
-      return;
-    }
-  }
-  this->IntegrateTargetEffectForObservable(data, configure, results);
 }
 
 /*!
@@ -211,7 +105,7 @@ void Unit::IntegrateTargetEffectComponents(const WorkingCopy &data, const Config
  * only one integration scheme to maintain.  The slots' records are read, never
  * written: other points of the group read them too (SlotGroup.h).
  */
-void Unit::IntegrateTargetEffectForObservable(const WorkingCopy &data, const Config &configure, azure2::Results &results) {
+void Unit::FoldSubPoints(const WorkingCopy &data, const Config &configure, azure2::Results &results) {
   const int n = this->NumSubPoints();
   if (this->IsCoefficient() && !this->GetCoefficientAbsolute()) {
     // A normalised Legendre coefficient is a ratio like A_y: the absolute A_k = a_k A_0

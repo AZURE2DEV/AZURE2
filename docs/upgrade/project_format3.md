@@ -171,7 +171,6 @@ dataset <name>
     beam           <beam name>                               optional
     detector       <detector name>                           optional
     quadrature     points <n> width_multiplier <w> per_width <p>        points required with a fold; w, p default 20, 50 (logged)
-    fold_windows   <lo>-<hi> ... <unit> | auto[:tol[:margin]]  blend <w> <unit>  auto_tolerance <t>   optional
     active         yes|no                                    optional, default yes
     source, exfor, doi                                       optional text, never read by the physics
     + quantity-specific fields: J l s (phase_shift), expansion (legendre), multipole (sigma, sfactor),
@@ -304,7 +303,7 @@ causes it:
 | finite-solid-angle attenuation Q_k | `isQCoefficients n Q…` | `detector` | `attenuation` |
 | time-of-flight resolution (SAMMY UDR) | `udr` | `detector` | `udr` |
 | sub-point grid: points, resonance width multiplier, points per width | positional | `dataset` / `extrapolation` | `quadrature` |
-| lab-energy windows, auto windows, blend width, auto tolerance | quoted range token and two numbers | `dataset` / `extrapolation` | `fold_windows` |
+| lab-energy windows, auto windows, blend width, auto tolerance | quoted range token and two numbers | none: deleted (decision D3, `energy_grid.md` §9; the shared mesh folds every point); a format-3 `fold_windows` is refused with `E_FIELD_DELETED` | — |
 
 A target referenced by several data sets is one set of parameters (one N, one U_e, one T): that is today's per-line
 sharing (`TargetEffect.h:57-63`, "a screening parameter belongs to the line, shared by its copies") and today's
@@ -782,7 +781,7 @@ at once in a form it can act on, and to check what a record means before computi
      "charge_state": {"type": "integer", "min": 1, "applies_when": {"unit_dimension": "per_charge"}, "required_when": "applies"},
      "...": {}}}},
  "quantities": {"ratio_to_rutherford": {"title": "...", "units": {"1": 1.0}, "columns": {"energy": ["E_lab", "E_cm"], "angle": ["theta_lab", "theta_cm"]},
-     "requires": [], "allows": ["target", "beam", "detector", "quadrature", "fold_windows"], "reaction": "elastic, charged, non-identical",
+     "requires": [], "allows": ["target", "beam", "detector", "quadrature"], "reaction": "elastic, charged, non-identical",
      "tree": "Ratio(Fold[dsdo_cm(r)], Fold[rutherford(r)])", "exfor": [",DA,,RTH", "PAR,DA,,RTH"],
      "refusals": [{"code": "RTH_IDENTICAL", "message": "..."}]}},
  "units": {"mb": {"dimension": "cross_section", "factor": 1e-3, "engine_unit": "b"}},
@@ -1005,7 +1004,7 @@ never writes them. It never overwrites its input or a file it did not create; si
 | `total 1` | `sigma_total` | 2 |
 | `transmission n [v σ]`, `yield n [v σ]`, `thicknessgroup` | `transmission` / `neutron_yield` + target `kind sample`, `areal_density n atoms/b …`; a group → one target | |
 | `<segmentsTest>` line k | `extrapolation x<k>`, grid `range lo hi MeV lab step s` (§8.5) | 232 lines |
-| `<targetInt>` line | one `target` (if it integrates, screens, or Dopplers), one `beam` (if it convolves or has a profile), one `detector` (Q, UDR, TPC σ); `quadrature`, `fold_windows` on each listed data set **and on the extrapolation with the same index**, which the old engine also folded (`EData.cpp:958`) — written explicitly, with a note | 140 lines, 35 inactive (dropped with a note), 64 multi-segment |
+| `<targetInt>` line | one `target` (if it integrates, screens, or Dopplers), one `beam` (if it convolves or has a profile), one `detector` (Q, UDR, TPC σ); `quadrature` on each listed data set **and on the extrapolation with the same index**, which the old engine also folded (`EData.cpp:958`) — written explicitly, with a note | 140 lines, 35 inactive (dropped with a note), 64 multi-segment |
 | a listed index that is not a segment | dropped with a note (the old engine skipped it, `EData.cpp:1502`) | |
 | density 0 with integration | `kind infinite` | 21 |
 | `densityfit v σ [max]`, `densitygroup L` | `areal_density … fit prior … grid_max …`; a group → one target with the leader's density; a member's own density → note (ignored by the old engine; `tests/target_density/fit_group.azr` has 1e18 and an unused 2e18) | members that differ in stopping or straggling → ask |
@@ -1016,7 +1015,7 @@ never writes them. It never overwrites its input or a file it did not create; si
 | `udr "f" L burst channel centred` | `detector udr file … flight_path L m burst … ns channel … ns centred yes|no` | |
 | `screening Ue v σ` (`1 "6,7" 200 1 0.002 … screening 1000 1 200`, `tests/electron_screening`) | `target … screening 1000 eV fit prior 1000 200` | 13 |
 | `doppler T [v σ Tmax]` | `target … doppler free_gas T K …` | 2 |
-| ranges, auto windows, blend, tolerance | `fold_windows` | |
+| ranges, auto windows, blend, tolerance | dropped, with a note per line that names what was dropped and what moves (decision D3: the shared mesh folds every point) | `tests/target_effect_ranges` |
 | `<abundances>` `Z A w v σ` per compound nucleus | `isotope <target nucleus> w …`, the target nucleus = the heavy particle of the entrance pairs whose compound nucleus is (Z, A) among the data sets using the sample; several different target nuclei for one compound nucleus → ask; `sum σ` and `abundanceSumSigma=` → `isotope_sum prior 1 σ` | `natural_neon`: 21Ne → 20Ne 0.9048, 23Ne → 22Ne 0.0925, 22Ne → 21Ne 0.0027 |
 | `<scatteringLengths>` `a pair s Re σ [Im σ]` | `datum` `scattering_length` | 4 files |
 | `<thm>` `segments=`, `weight[k]` | data-set field `thm <exp>`; `thm_weight` on the extrapolation | 10 files |

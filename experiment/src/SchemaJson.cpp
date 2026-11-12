@@ -58,7 +58,6 @@ const char *TypeDoc(ValueType t) {
                                      "<c>*<reaction>, terms at a fixed angle '@ <angle> <unit> lab|cm'";
     case ValueType::Columns: return "the role of each column of the data file, energy and angle roles with their unit";
     case ValueType::Grid: return "an energy or angle grid; range: E_k = lo + k step (F10)";
-    case ValueType::Windows: return "lab-energy windows of a fold";
     case ValueType::Form: return "a structured value: a leading keyword chooses the alternative, then its parts";
   }
   return "";
@@ -241,7 +240,7 @@ std::string Schema::ToJson() {
   for (int t = 0; t <= static_cast<int>(ValueType::Form); t++) {
     ValueSpec s(static_cast<ValueType>(t));
     const bool dimensioned = s.type == ValueType::Unit || s.type == ValueType::NumberWithUnit || s.type == ValueType::Range ||
-                             s.type == ValueType::Nuisance || s.type == ValueType::Grid || s.type == ValueType::Windows;
+                             s.type == ValueType::Nuisance || s.type == ValueType::Grid;
     if (dimensioned) s.dimension = "*";  // any dimension: the field says which
     j.Key(ValueTypeName(s.type)).BeginObject();
     if (s.type != ValueType::Form) j.Key("grammar").String(Grammar(s));
@@ -267,6 +266,11 @@ std::string Schema::ToJson() {
     if (!k.refused.empty()) {
       j.Key("refused").BeginObject();
       for (const auto &r : k.refused) j.Key(r.first).String(r.second);
+      j.EndObject();
+    }
+    if (!k.deleted.empty()) {
+      j.Key("deleted").BeginObject();
+      for (const auto &r : k.deleted) j.Key(r.first).String(r.second);
       j.EndObject();
     }
     j.EndObject();

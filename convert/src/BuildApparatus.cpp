@@ -8,9 +8,6 @@ namespace azure2 {
 namespace convert {
 
 namespace {
-// MeV: the upper edge of the one window that stands for "every point" (above every lab energy a project holds).
-constexpr double kEveryEnergyMeV = 1.0e6;
-
 // The reason the old engine refused the fit form of a doppler block (TargetEffect's set-up: vary 0 or 1, sigma >= 0 K,
 // Tmax above T), or "".
 std::string DopplerFitRefusal(const TargetIntLine &l) {
@@ -227,31 +224,35 @@ void Builder::BuildApparatus() {
       if (l.hasResonanceWidthMultiplier) q += " width_multiplier " + NumberText(l.resonanceWidthMultiplier, e.text);
       if (l.hasPointsPerWidth) q += " per_width " + NumberText(l.pointsPerWidth, e.text);
       a.quadrature = Words(q);
-      if (l.hasRangesToken && (l.autoWindows || !l.ranges.empty() || l.autoTolerance > 0)) {
-        Count(Construct::kWindows);
+    }
+    // Energy windows, the blend at their edges and the automatic tolerance are no part of format 3 (the shared mesh
+    // folds every point): dropped, with a note that says what was dropped and what moves.  (A blend without windows
+    // did nothing in the old engine.)
+    const bool windows = l.autoWindows || !l.ranges.empty();
+    if (l.hasRangesToken && (windows || l.autoTolerance > 0)) {
+      Count(Construct::kWindows);
+      std::vector<std::string> dropped, moves;
+      if (l.autoWindows) dropped.push_back("the automatic windows \"" + l.rangesToken + "\"");
+      if (!l.ranges.empty()) {
         std::string w;
-        if (!l.autoWindows && l.ranges.empty()) {
-          // An automatic tolerance with no windows (an empty ranges token) applies to every point; format 3 states the
-          // tolerance inside fold_windows, so the line becomes one window over every lab energy.
-          w = "0-" + ShortestText(kEveryEnergyMeV) + " MeV";
-          Note(Construct::kWindows, "", "<targetInt> line " + std::to_string(e.index) + ": an automatic tolerance without windows; format 3 writes one window over every energy (0-" +
-                                            ShortestText(kEveryEnergyMeV) + " MeV) with that tolerance");
-        } else if (l.autoWindows) {
-          w = "auto";
-          if (l.hasAutoWindowTolerance) w += ":" + ShortestText(l.autoWindowTolerance);
-          if (l.hasAutoWindowMargin) w += ":" + ShortestText(l.autoWindowMargin);
-          if (!l.ranges.empty())
-            Note(Construct::kWindows, "", "<targetInt> line " + std::to_string(e.index) + ": automatic windows and explicit ranges; format 3 writes 'auto' (the ranges are dropped)");
-        } else {
-          for (const auto &r : l.ranges) w += (w.empty() ? "" : " ") + ShortestText(r.first) + "-" + ShortestText(r.second);
-          w += " MeV";
-        }
-        if (l.transitionWidth > 0) w += " blend " + ShortestText(l.transitionWidth) + " MeV";
-        if (l.autoTolerance > 0) w += " auto_tolerance " + ShortestText(l.autoTolerance);
-        a.foldWindows = Words(w);
+        for (const auto &r : l.ranges) w += (w.empty() ? "" : ", ") + ShortestText(r.first) + "-" + ShortestText(r.second);
+        dropped.push_back("the lab-energy windows " + w + " MeV");
       }
-    } else if (l.hasRangesToken && (l.autoWindows || !l.ranges.empty())) {
-      Note(Construct::kWindows, "", "<targetInt> line " + std::to_string(e.index) + ": energy windows on an effect that folds nothing: dropped");
+      if (windows && l.transitionWidth > 0) dropped.push_back("the blend of " + ShortestText(l.transitionWidth) + " MeV at their edges");
+      if (l.autoTolerance > 0) dropped.push_back("the automatic tolerance " + ShortestText(l.autoTolerance));
+      if (windows)
+        moves.push_back("outside the windows by the whole fold (a thin target: by the error of the cross section at "
+                        "the depth-averaged energy it took there)");
+      if (l.autoTolerance > 0) moves.push_back("at a point the tolerance left unfolded by at most " + ShortestText(l.autoTolerance) + " relative");
+      auto list = [](const std::vector<std::string> &v) {
+        std::string t;
+        for (std::size_t i = 0; i < v.size(); i++) t += (i == 0 ? "" : i + 1 == v.size() ? " and " : ", ") + v[i];
+        return t;
+      };
+      Note(Construct::kWindows, "",
+           "<targetInt> line " + std::to_string(e.index) + ": " + list(dropped) + " dropped" +
+               (a.folded ? " (format 3 folds every point of a data set); the numbers of its data sets move " + list(moves)
+                         : " (the line folds nothing)"));
     }
     if (!a.hasTarget && !a.hasBeam && !a.hasDetector) {
       Note(Construct::kEffectLine, "", "<targetInt> line " + std::to_string(e.index) + " applies no effect: dropped");

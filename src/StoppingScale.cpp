@@ -55,7 +55,7 @@ ApparatusRow StoppingScaleRow() {
 }
 
 // Where s x epsilon enters: the stopping of every sub-point (read by the target kernel and the layer's E_out), and the
-// thickness and the sigma(E_bar) depth of every point, each recomputed from its energy as the set-up made it.
+// thickness of every point, each recomputed from its energy as the set-up made it.
 void WorkingCopy::FollowStoppingScales(const std::vector<char> &changed, const Config &configure) {
   auto update = [&](const TermRef &seg) {
     if (!seg.segment->IsTargetEffect()) return;
@@ -73,7 +73,6 @@ void WorkingCopy::FollowStoppingScales(const std::vector<char> &changed, const C
       }
       if (!(point->GetTargetThickness() > 0.0) || te->IsThickTarget()) continue;
       point->SetTargetThickness(f * te->TargetThickness(point->GetTargetLabEnergy(), configure, density, s));
-      point->SetTargetFallbackDepth(f * te->MeanEnergyLoss(point->GetTargetLabEnergy(), configure, density, s));
     }
   };
   for (const Segment &seg : set_->segments_) update({&seg, 0});

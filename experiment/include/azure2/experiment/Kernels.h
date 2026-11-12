@@ -46,13 +46,6 @@ struct KernelPoint {
   int z1 = 0, z2 = 0;           ///< beam and target charges of the entrance pair (Bohr straggling)
   double targetThickness = 0.0;  ///< energy loss across the target at the working copy's density (target kernels)
   double density = 0.0;          ///< the working copy's areal density, atoms/cm^2 (target kernels)
-  /// Thin target outside or at the edge of its windows (decided by the engine's set-up and automatic tolerance):
-  /// the weight of the integration against sigma(E_bar), E_bar = E0 - fallbackDepth, and whether only sigma(E_bar)
-  /// is taken (fallbackOnly: the point's nodes are the fallback nodes; fallbackNow: the full grid, read at E_bar).
-  double blendWeight = 1.0;
-  bool fallbackOnly = false;
-  bool fallbackNow = false;
-  double fallbackDepth = 0.0;
   double binLow = 0.0, binHigh = 0.0;  ///< the point's reconstructed-energy window (beam profile); NaN without one
   double photoQ = 0.0;           ///< Q_gamma of the inverse photodissociation (MeV, beam profile with detailed balance)
   double photoMass = 0.0;        ///< compound-nucleus mass (MeV), 0 = no detailed-balance weight

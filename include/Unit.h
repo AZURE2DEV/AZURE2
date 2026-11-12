@@ -62,34 +62,6 @@ class Unit : public Site {
   int NumSubPoints() const { return sub_count_; }
   /// 1-based position of the TargetEffect in the parent WorkingCopy.
   int GetTargetEffectNum() const;
-  /// Weight in [0,1] with which the target effect applies to this point;
-  /// 1 everywhere unless the effect declares energy ranges.
-  double GetTargetBlendWeight() const { return target_blend_weight_; };
-  void SetTargetBlendWeight(double w) { target_blend_weight_ = w; };
-  /// Thin-target integration restricted to energy windows (2026-11-05): outside the windows (blend weight 0) the
-  /// point is evaluated at the single depth-averaged energy E_bar = E - D of its own target instead of being a
-  /// plain point at its data (beam) energy, which was off by the centroid shift ~Delta/2.  Such a point carries
-  /// one sub-point at E_bar (fixed density) or three spanning the range of E_bar a fitted density can reach,
-  /// and SetTargetFallbackOnly(true) marks it.  D (c.m. MeV, TargetEffect::MeanEnergyLoss) is set on every thin-target
-  /// point: edge blending and the automatic decision fall back to sigma(E_bar) as well.
-  void SetTargetFallbackOnly(bool f) { target_fallback_only_ = f; }
-  bool IsTargetFallbackOnly() const { return target_fallback_only_; }
-  /// Inside a TargetFallbackScope.
-  bool IsTargetFallbackNow() const { return target_fallback_now_; }
-  double GetTargetFallbackDepth() const { return target_fallback_depth_; }
-  void SetTargetFallbackDepth(double d) { target_fallback_depth_ = d; }
-  /// While alive, the target integration of the point returns sigma(E_bar) from its sub-points (an automatic
-  /// tolerance decided the integration is not needed at this point).
-  class TargetFallbackScope {
-   public:
-    explicit TargetFallbackScope(Unit *p) : p_(p), prev_(p->target_fallback_now_) { p_->target_fallback_now_ = true; }
-    ~TargetFallbackScope() { p_->target_fallback_now_ = prev_; }
-    TargetFallbackScope(const TargetFallbackScope &) = delete;
-    TargetFallbackScope &operator=(const TargetFallbackScope &) = delete;
-   private:
-    Unit *p_;
-    bool prev_;
-  };
   /// Where the point's model record lies in Results::model (WorkingCopy::LayoutResults; kNoRecord for a component point, a
   /// sub-point or a point outside a data set), and how many angular-distribution coefficients it holds.  The model
   /// value is what the data set predicts at the point (ModelPass.h); the leaf values above are what the point itself
@@ -121,17 +93,10 @@ class Unit : public Site {
   void Calculate(WorkingCopy *data, CNuc *, const Config &configure, azure2::Results &results);
   /// Before its sub-points are calculated: with external capture, their energy-dependent values at their energies.
   void PrepareSubPoints(WorkingCopy *data, CNuc *, const Config &configure);
-  /// The fold of this point from its sub-points' values already in `results`: the bare probe, the automatic tolerance
-  /// and edge blending, the thin-target fallback, the integrations.
-  void FoldSubPoints(WorkingCopy *data, CNuc *, const Config &configure, azure2::Results &results);
-  /// The fold of a thin-target integration, with its sigma(E_bar) fallback (see the .cpp).
-  void FoldThinTarget(WorkingCopy &data, azure2::Results &results, const Config &configure, const TargetEffect *effect);
   /// The task of the data set's calculation plan that calculates this point (CalculationPlan.h; -1: none, as for a
-  /// sub-point, a probe copy or a point outside a data set).  Set when the plan is built (WorkingCopy::BuildPlan).
+  /// sub-point or a point outside a data set).  Set when the plan is built (WorkingCopy::BuildPlan).
   int PlanTask() const { return plan_task_; }
   void SetPlanTask(int task) { plan_task_ = task; }
-  /// Take a copy of the point out of the plan: it calculates itself alone (a probe).
-  void DetachFromPlan() { plan_task_ = -1; }
   void SetTargetEffectNum(int);
   /// The point's own site (its energy, angle and tables), without its slots.
   Site &OwnSite() { return *this; }
@@ -151,8 +116,9 @@ class Unit : public Site {
   /// The point's slots, a range of the slots of its working copy (WorkingCopy::SlotAt); set by the working copy.
   int SubPointFirst() const { return sub_first_; }
   void SetSubPointRange(int first, int count) { sub_first_ = first, sub_count_ = count; }
-  /// The point's fold of its observable slots (FoldPoint, include/PointFold.h, on each slot the data set compares).
-  void IntegrateTargetEffectForObservable(const WorkingCopy &data, const Config &, azure2::Results &results);
+  /// The fold of this point from its slots' values already in `results` (FoldPoint, include/PointFold.h; an analyzing
+  /// power and a normalised Legendre coefficient are the ratio of two folds).
+  void FoldSubPoints(const WorkingCopy &data, const Config &, azure2::Results &results);
   /// Integrate the E1 and E2 components of the cross section over the same
   /// sub-points as the total, for a segment compared against one component.
   void IntegrateTargetEffectComponents(const WorkingCopy &data, const Config &, azure2::Results &results);
@@ -185,10 +151,6 @@ class Unit : public Site {
   int bohr_z2_ = 0;          ///< target charge of the entrance pair
   int set_up_ = -1;  ///< SetUpIndex
   int targetEffectNum_;
-  double target_blend_weight_ = 1.0;
-  bool target_fallback_only_ = false;   ///< see SetTargetFallbackOnly
-  bool target_fallback_now_ = false;    ///< see TargetFallbackScope
-  double target_fallback_depth_ = 0.0;  ///< D = E - E_bar, c.m. MeV (see SetTargetFallbackOnly)
   std::shared_ptr<const TermSettings> own_settings_;
   // Beam-profile effect: per-point energy window (c.m.; NaN when the data file has no such columns) and the
   // inverse reaction kinematics for the detailed-balance weight.

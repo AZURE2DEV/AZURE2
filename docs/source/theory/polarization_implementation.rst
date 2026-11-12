@@ -225,7 +225,7 @@ Fixing the flag exposed the physics point of Eq. :eq:`aytarget`: the existing
 integrator computes a yield, and running it on :math:`A_y` as though
 :math:`A_y` were a cross section is meaningless.
 
-``Unit::IntegrateTargetEffectForObservable`` (``src/Unit.cpp:1498``) runs the
+``Unit::FoldSubPoints`` (``src/PointPass.cpp``) runs the
 existing yield integrator twice — once on :math:`\sigma`, once on the product
 :math:`\sigma A_y` — and divides:
 
