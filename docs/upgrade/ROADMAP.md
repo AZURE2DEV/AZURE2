@@ -233,7 +233,12 @@ Gate: thread-count independence by construction; memory one problem regardless o
 - [x] Validation, continuum: FRESCO bins for ¹⁵N(d,n) (non-resonant, narrow and wide resonance, finite range: ≤ 0.5 %),
       committed; post = prior with remnants (10⁻³). Not reached: zero range and ⁶Li bins, prior form and remnant
       against FRESCO (FRESCO's own numerics, `transfer.md` §15, §17).
-- [ ] Validation: ³He and ¹⁴N Trojan horses (¹⁸O(³He,d)¹⁹F, ¹²C(¹⁴N,d)²⁴Mg).
+- [x] Spin-orbit in the distorted waves of a transfer, the projectile's iT11 (`transfer.md` §19; branch
+  `feature/upgrade-7-transfer-3`): ¹⁵N(d,n) with spin-orbit in both channels against FRESCO 2e-4 (iT11 1e-4).
+- [x] Validation: ³He and ¹⁴N Trojan horses to bound states (¹⁸O(³He,d)¹⁹F, g.s. and 5/2⁺, FR and ZR, with and without
+  spin-orbit: ≤ 8.9e-4; ¹²C(¹⁴N,d)²⁴Mg, 0⁺ and 2⁺, FR: ≤ 8.3e-4; `transfer.md` §20–§21).
+- [ ] Validation: the ⁶Li bins (FRESCO 3.5 and Frescox 7.4 alike lose accuracy there, `transfer.md` §23); the ³He and
+  ¹⁴N Trojan horses to the continuum.
 Gate: benchmarks committed with their FRESCO inputs and outputs.
 
 ## Phase 8 — pyazr 3.0

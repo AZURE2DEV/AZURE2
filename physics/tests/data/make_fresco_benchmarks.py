@@ -6,7 +6,7 @@ fort4.dat when the job reads a table on FRESCO's input file 4) and reference.txt
 from FRESCO's output of the reference run and of a refined run (smaller step, larger radii), so that FRESCO's own
 convergence is part of the data.  The test never runs FRESCO.
 
-    python3 make_fresco_benchmarks.py --fresco <path to the fresco 3.5 binary> [--out <dir>]
+    python3 make_fresco_benchmarks.py --fresco <path to the fresco 3.5 binary> [--frescox <frescox 7.4>] [--out <dir>]
 
 Constants.  FRESCO fixes hbar c = 197.32705 MeV fm and u = 931.49432 MeV in its source; its namelist takes the unit
 mass (in u) and 1/alpha.  Every job sets unitmass and finec so that FRESCO's 2u/hbar^2 and e^2 are those of
@@ -445,6 +445,18 @@ CASES["li6d_bin_wide_fr"] = dict(
           dict(hcm=0.025, rmatch=30.0, rsp=12.0, rintp=0.05, hnl=0.025, rnl=14.0, centre=-0.1, nnu=72, cutl=-3.2,
                nk=400)])
 
+# The same bin with Frescox 7.4 (LLNL's line of the FRESCO family, the same lineage: not an independent code), to see
+# whether its numerics settle what FRESCO 3.5 leaves open (transfer.md section 23): part 2's reference and refined
+# runs, the cut at the Coulomb turning point (cutr) instead of cutl, and RSP = 20 and 30 fm.  Data, not compared.
+_LI_X = dict(hcm=0.025, rmatch=30.0, rsp=12.0, rintp=0.05, hnl=0.025, rnl=14.0, centre=-0.1, nnu=72, cutl=-6.4, nk=400)
+CASES["li6d_bin_wide_frx"] = dict(CASES["li6d_bin_wide_fr"], code="frescox",
+    title=CASES["li6d_bin_wide_fr"]["title"] + " (Frescox 7.4)",
+    reference=_LI_X, refined=dict(_LI_X, hcm=0.0125, rintp=0.025, hnl=0.0125, cutl=-12.8),
+    also=[dict(_LI_X, cutl=0.0, cutr=-12.0), dict(_LI_X, cutl=0.0, cutr=-12.0, hcm=0.0125, rintp=0.025, hnl=0.0125),
+          dict(_LI_X, cutl=0.0, cutr=-12.0, rsp=20.0), dict(_LI_X, cutl=0.0, cutr=-12.0, rsp=30.0),
+          dict(_LI_X, cutl=0.0, cutr=-12.0, rsp=20.0, rmatch=50.0)],
+    drop=("S", "pot", "ratio"))
+
 
 def coulomb_table(z1z2, rc, step, points):
     """-V_C of a uniformly charged sphere (MeV) on r = 0, step, ...: FRESCO's SHAPE=7 input, scaled by P1 = -1."""
@@ -587,20 +599,27 @@ def extract(out, forts):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--fresco", required=True, help="the fresco binary (version 3.5)")
+    ap.add_argument("--frescox", help="the frescox binary (7.4), for the cases marked code='frescox'")
     ap.add_argument("--out", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "fresco"))
     ap.add_argument("--case", action="append", help="only these cases")
     args = ap.parse_args()
     for name, case in CASES.items():
         if args.case and name not in args.case:
             continue
+        binary = args.frescox if case.get("code") == "frescox" else args.fresco
+        if not binary:
+            print(name, "skipped: needs --frescox")
+            continue
         d = os.path.join(args.out, name)
         os.makedirs(d, exist_ok=True)
         runs = [("reference", case["reference"]), ("refined", case["refined"])]
         runs += [("variant%d" % (i + 1), s) for i, s in enumerate(case.get("also", []))]
-        lines = ["# %s" % case["title"], "# FRESCO 3.5 (github.com/I-Thompson/fresco c571c9e), %s, by %s" %
-                 (datetime.date.today().isoformat(), os.path.basename(__file__))]
+        code = ("Frescox 7.4 (github.com/LLNL/Frescox eca88f3)" if case.get("code") == "frescox" else
+                "FRESCO 3.5 (github.com/I-Thompson/fresco c571c9e)")
+        lines = ["# %s" % case["title"], "# %s, %s, by %s" %
+                 (code, datetime.date.today().isoformat(), os.path.basename(__file__))]
         for tag, settings in runs:
-            text, out, forts = run_fresco(args.fresco, case, settings)
+            text, out, forts = run_fresco(binary, case, settings)
             if tag == "reference":
                 with open(os.path.join(d, "job.nin"), "w") as f:
                     f.write(text)

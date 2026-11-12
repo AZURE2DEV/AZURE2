@@ -2,6 +2,19 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, branch `feature/upgrade-7-transfer-3`) — physics/transfer, third part, item 3b: the ⁶Li bins against Frescox
+
+**Done** (`transfer.md` §23): Frescox 7.4 cloned from github.com/LLNL/Frescox (eca88f3) to `opt/frescox-src`, built
+with the system gfortran 11.5 (3 jobs; the conda environment has no Fortran compiler), binary `opt/frescox/bin/frescox`,
+README beside it; five distribution test jobs equal its gfortran reference outputs. Generator: `--frescox` and
+cases marked `code="frescox"`; data `li6d_bin_wide_frx` (not compared by a test).
+
+**Found**: Frescox reproduces FRESCO 3.5 to 5e-4 on part 2's ⁶Li bin and shares its ERWIN accuracy loss (L = 26–35);
+at RSP 20–30 fm it does not converge (results change by factors with rmatch), so it cannot settle the RSP question.
+At RSP 12 fm neither code is converged to 0.2 % (Frescox 0.3–0.6 % in its step; ours first order in h because the
+bin is cut where it is not small); ours extrapolated is 0.004–0.4 % from Frescox's refined run at 0–60° and 1.2 % at
+90°. Asked 1 %: not shown. Not done: a narrow ⁶Li bin with Frescox.
+
 ## 2026-11-12 (agent, branch `feature/upgrade-7-transfer-3`) — physics/transfer, third part, item 3: the ¹⁴N Trojan horse
 
 **Done** (`transfer.md` §21, §22): ¹²C(¹⁴N,d)²⁴Mg at E_lab = 30 MeV to the 0⁺ g.s. (l = 0, six nodes) and the 2⁺

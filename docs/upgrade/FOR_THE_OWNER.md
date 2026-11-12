@@ -44,7 +44,9 @@ Phase 7 has begun as a separate library that the engine does not use yet: optica
 distorted waves and the DWBA transfer to a bound state, which agree with FRESCO to better than 0.2 %
 (`docs/upgrade/transfer.md`). It now also computes the transfer into the unbound x + A system (FRESCO's continuum
 bins, within 0.5 % of FRESCO for the deuteron), and shows that inside the channel radius this amplitude is the
-level's vertex times the resonance's energy dependence, which is what the THM fit assumes.
+level's vertex times the resonance's energy dependence, which is what the THM fit assumes. The distorted waves of a
+transfer may now carry the spin-orbit term of published optical potentials (it also gives the beam's analysing
+power), and the two other Trojan horses of THM experiments, ³He and ¹⁴N, agree with FRESCO to better than 0.1 %.
 
 **How every step is checked.** Each merge is verified as a whole: the 183 project files of the test suite run in
 three bases (Brune, formal, Park) and every output file is compared byte for byte with the previous head (726 + 699

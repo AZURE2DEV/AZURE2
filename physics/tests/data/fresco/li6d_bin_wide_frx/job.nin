@@ -1,0 +1,33 @@
+12C(6Li,d)[a+12C bin, l=2, E=3.11, ER=0.4, ISC=4, RSP=12] at E_lab = 20 MeV, finite range, post (nuclear part of V_alpha-d) (Frescox 7.4)
+NAMELIST
+ &FRESCO hcm=0.025 rmatch=30.0 rsp=12.0 rintp=0.05 hnl=0.025 rnl=14.0 centre=-0.1 nnu=72
+     jtmin=0.0 jtmax=40 absend=-1 epc=0.00001 cutl=-6.4
+     thmin=0.0 thmax=180.0 thinc=5.0
+     iter=1 iblock=1 chans=1 smats=2 xstabl=1 treneg=1
+     unitmass=1.0000004718 finec=137.03604742
+     elab(1)=20.0 /
+ &PARTITION namep='6Li' massp=6.0 zp=3 nex=1 namet='12C' masst=12.0 zt=6 qval=0.0 /
+ &STATES jp=1.0 ptyp=1 ep=0.0 cpot=1 jt=0.0 ptyt=1 et=0.0 /
+ &PARTITION namep='d' massp=2.0 zp=1 nex=1 namet='16O' masst=16.0 zt=8 qval=5.6883 /
+ &STATES jp=1.0 ptyp=1 ep=0.0 cpot=2 jt=2.0 ptyt=1 et=10.2720 /
+ &partition /
+ &pot kp=1 type=0 p(1:3)= 12.0 6.0 0.73 /
+ &pot kp=1 type=1 p(1:6)= 120.0 0.80 0.85 35.0 0.95 0.85 /
+ &pot kp=2 type=0 p(1:3)= 16.0 0.0 1.3 /
+ &pot kp=2 type=1 p(1:6)= 88.0 1.17 0.75 1.0 1.32 0.65 /
+ &pot kp=2 type=2 p(1:6)= 0.0 1.32 0.65 12.0 1.32 0.65 /
+ &pot kp=3 type=0 p(1:3)= 1.0 0.0 1.9 /
+ &pot kp=3 type=1 p(1:3)= 70.0 1.9 0.65 /
+ &pot kp=4 type=0 p(1:3)= 12.0 4.0 0.9 /
+ &pot kp=4 type=1 p(1:3)= 90.0 0.9 0.65 /
+ &pot kp=5 type=0 p(1:3)= 1.0 0.0 1.9 /
+ &pot kp=5 type=1 p(1:3)= 77.796542 1.9 0.65 /
+ &pot kp=5 type=1 shape=7 p(1:3)= -1.0 0.0 1.0 /
+ &pot /
+ &overlap kn1=1 ic1=1 ic2=2 in=1 kind=0 nn=2 l=0 sn=0.0 j=0.0 kbpot=3 krpot=5 be=1.4743 isc=1 ipc=1 /
+ &overlap kn1=2 ic1=1 ic2=2 in=2 kind=0 nn=1 l=2 sn=0.0 j=2.0 kbpot=4 be=-3.11 isc=4 nk=400 er=-0.4 ipc=3 /
+ &overlap /
+ &coupling icto=2 icfrom=1 kind=7 ip1=0 ip2=0 ip3=0 /
+ &cfp in=1 ib=1 ia=1 kn=1 a=1.0 /
+ &cfp in=-2 ib=1 ia=1 kn=2 a=1.0 /
+ &coupling /

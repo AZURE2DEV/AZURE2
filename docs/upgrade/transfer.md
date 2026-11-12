@@ -287,6 +287,21 @@ What the engine's THM observable (Phase 5, σ_HOES on the shared energy mesh) wi
 `ThmDistortion` becomes a caller of `ZeroRangeOrbitalIntegral` (no physics of its own), `ThmDwVertex` of
 `EntranceVertex` with the distorted w; their tables stay owned by the stage. Not done here.
 
+With spin-orbit distortions (§19; published d and ³He potentials have them):
+
+- the distortions: the same `SolveDistortedWaves(OpticalPotential, ScatteringRequest)` with the potential's
+  `real_spin_orbit` set and `ScatteringRequest::two_s` = 2J_a (a + A) and 2J_s (s + F), the spins of the projectile
+  overlap (`Overlap::two_J_composite`, `two_J_core`; the library refuses a mismatch);
+- `TransferObservables FiniteRangeObservables(const TransferReaction &, const DistortedWaves &entrance, const
+  DistortedWaves &exit, const TransferGrid &, const std::vector<double> &theta_deg)` and
+  `ZeroRangeObservables(reaction, double d0_MeV_fm32, entrance, exit, theta_deg)`: dσ/dΩ (or d²σ/dΩ dE with a
+  `ScatteringState` residual) and iT11 per angle;
+- `ZeroRangeOrbitalIntegral` (the engine's M(E)) is spinless and refuses waves with spin-orbit: a THM weight with
+  spin-orbit distortions is a matrix in the projections, so the wiring branch would make the internal
+  `AmplitudesAt` (`TransferAmplitudes.h`: T(μ, M_F; m, M_A) at θ) public as one more function of `Transfer.h`,
+  `AmplitudeTable TransferAmplitudes(const TransferReaction &, entrance, exit, const TransferGrid &, double theta_deg)`,
+  and sum |T|² over the projections the experiment does not observe.
+
 ## 13. The engine's THM weight with this library
 
 The engine's zero-range prior-form weight M(E) of `src/ThmDistortion.cpp` is Eq. (6.7) with c_i = β, c_f = 1, l = 0
@@ -723,3 +738,38 @@ there):
 | ¹⁸O(³He,d)¹⁹F, g.s. and 5/2⁺, FR, with and without spin-orbit | ≤ 8.9e-4; iT11 ≤ 4.3e-4 | ≤ 1.8e-3 |
 | same, ZR | ≤ 9.2e-5; iT11 ≤ 2.2e-5 | ≤ 1.4e-5 |
 | ¹²C(¹⁴N,d)²⁴Mg, g.s. and 2⁺, FR | 8.3e-4, 3.3e-4 | 1.0e-3 (its print digits), 3.1e-4 |
+
+## 23. The ⁶Li bins against Frescox
+
+Part 2 left ¹²C(⁶Li,d) to an α + ¹²C bin (`li6d_bin_wide_fr`: l = 2, E = 3.11 MeV, ER = 0.4 MeV, ISC = 4, V = 90 MeV,
+the bin cut at RSP = 12 fm, NK = 400) open: FRESCO 3.5 loses accuracy there. Frescox 7.4 (LLNL's line of the FRESCO
+family, `opt/frescox/README.md`) is the same lineage as FRESCO 3.5, so it is not an independent derivation: what it can
+settle is whether the remaining 1.1–1.6 % is FRESCO 3.5's numerics or ours, i.e. whether it converges in cutl and at
+RSP = 20–30 fm where FRESCO 3.5 does not. Data: `li6d_bin_wide_frx` (generated with `--frescox`), not compared by a
+test. dσ/dΩ in mb/sr at 0, 30, 60, 90°:
+
+| Run | 0° | 30° | 60° | 90° | ERWIN warnings |
+|---|---|---|---|---|---|
+| FRESCO 3.5, part 2's reference (hcm 0.025, cutl −6.4) | 5.27001 | 0.85972 | 0.10123 | 0.09293 | 43 |
+| Frescox, same input | 5.26860 | 0.85988 | 0.10118 | 0.09298 | 43 |
+| Frescox, hcm 0.0125 (rintp, hnl halved, cutl −12.8) | 5.28861 | 0.86257 | 0.10053 | 0.09328 | |
+| Frescox, cutl 0, cutr −12 (hcm 0.025; 0.0125) | 5.26623; 5.28193 | 0.86003; 0.86306 | 0.10139; 0.10059 | 0.09301; 0.09354 | 24; 13 |
+| Frescox, RSP 20 fm (cutr −12) | 0.14685 | 0.40797 | 0.24235 | 0.06777 | 37 |
+| Frescox, RSP 30 fm (cutr −12) | 9.64291 | 0.54894 | 0.11456 | 0.06433 | 17 |
+| Frescox, RSP 20 fm, rmatch 50 fm | 296.98 | 43.81 | 92.61 | 177.74 | 14 |
+| ours, RSP 12, (h, h_K) = (0.05, 0.1), (0.025, 0.05), (0.0125, 0.025) fm | 5.29567, 5.28651, 5.27819 | 0.86791, 0.86602, 0.86430 | 0.09909, 0.09938, 0.09972 | 0.09232, 0.09383, 0.09411 | |
+| ours, RSP 20, (0.05, 0.1), (0.025, 0.05) | 0.11235, 0.11666 | 0.41322, 0.41559 | 0.24801, 0.25465 | 0.06743, 0.06469 | |
+
+(ERWIN warnings counted in the reference runs; the last column empty where not counted.) What it shows:
+
+- Frescox reproduces FRESCO 3.5 to 5 × 10⁻⁴ at the same input and shares its ERWIN accuracy loss (14 digits at
+  L = 26–35); a cut at the Coulomb turning point (cutr, which settled ¹⁴N, §21) reduces the warnings but does not
+  remove them. At RSP = 20 and 30 fm it does not converge (its results change by factors with rmatch). So the
+  RSP 20–30 question cannot be settled with Frescox: it is the FRESCO family's numerics.
+- At RSP = 12 fm Frescox moves by 0.3–0.6 % with its step (above the 0.2 % asked). Ours moves linearly in h (the
+  bin is cut at RSP where it is not small: a step of the integrand, first-order error), 0.3 % at 0° and 1.6 % at
+  90° between the first two steps; extrapolated to h → 0 (Richardson, O(h)): 5.2699, 0.8626, 0.1001, 0.0944, which
+  is 0.36 %, 0.004 %, 0.42 %, 1.2 % from Frescox's refined run (hcm 0.0125, cutl −12.8). Neither code is converged to 0.2 % on this object; the
+  remaining ≈ 1 % at 90° is not attributed. Asked 1 %: not shown.
+- Not done: a narrow-resonance ⁶Li bin with Frescox (the same ERWIN loss would apply), and a bin whose envelope has a
+  node at RSP (as for the deuteron bins of §15), which would remove the first-order step error of both codes.
