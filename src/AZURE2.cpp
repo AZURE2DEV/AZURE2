@@ -106,9 +106,7 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--help:" << std::setw(0) << "Print this list and exit." << std::endl
             << std::setw(25) << std::left << "\t--no-gui:" << std::setw(0) << "Accepted and ignored, so that older scripts keep working;" << std::endl
             << std::setw(25) << std::left << "\t" << std::setw(0) << "this build has no graphical setup utility." << std::endl
-#ifndef NO_READLINE
-            << std::setw(25) << std::left << "\t--no-readline:" << std::setw(0) << "Do not use readline package." << std::endl
-#endif
+            << std::setw(25) << std::left << "\t--no-readline:" << std::setw(0) << "Do not use the readline package (no effect in a build without it)." << std::endl
             << std::setw(25) << std::left << "\t--no-transform:" << std::setw(0) << "Do not perform initial parameter transformations." << std::endl
             << std::setw(25) << std::left << "\t--no-long-wavelength:" << std::setw(0) << "Do not use long wavelength approximation for EL capture." << std::endl
             << std::setw(25) << std::left << "\t--use-brune:" << std::setw(0) << "Use the alternative level matrix of C.R. Brune (the default)." << std::endl
@@ -198,7 +196,8 @@ int buildCoulombTable(const std::string &path) {
 /*!
  * This function parses the command line options given, and sets the appropriate variables in the Config
  * structure.  It also reads and parses the configuration file if the appropriate environment
- * variable is set.
+ * variable is set.  An unknown option, or a value-taking flag without a value that parses, throws
+ * std::invalid_argument naming it (include/CommandLineValues.h).
  */
 
 bool parseOptions(int argc, char *argv[], Config &configure) {
@@ -237,14 +236,10 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
   }
   configure.refineQuadrature = azure2::RefineQuadratureFromEnvironment();
   for (std::vector<std::string>::iterator it = options.begin(); it < options.end(); it++) {
-#ifndef NO_READLINE
-    if (*it == "--no-readline")
+    if (*it == "--no-readline")  // accepted in every build (scripts pass it); without readline it changes nothing
       useReadline = false;
     else if (*it == "--no-transform")
       configure.paramMask &= ~Config::TRANSFORM_PARAMETERS;
-#else
-    if (*it == "--no-transform") configure.paramMask &= ~Config::TRANSFORM_PARAMETERS;
-#endif
     else if (*it == "--no-long-wavelength")
       configure.paramMask &= ~Config::USE_LONGWAVELENGTH_APPROX;
     else if (*it == "--use-brune")
@@ -304,8 +299,8 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
       configure.paramMask |= Config::SCALE_COVARIANCE_BY_CHI2;
     else if (*it == "--no-gui")
       continue;
-    else
-      configure.outStream << "WARNING: Unknown option " << *it << '.' << std::endl;
+    else  // a mistyped flag must not run another calculation: exit 2 with the usage line (main, OptionError)
+      throw std::invalid_argument("Unknown option " + *it + ".");
   }
   return useReadline;
 }
@@ -1503,7 +1498,8 @@ int main(int argc, char *argv[]) {
   // Create new configuration structure, and parse the command line parameters
   Config configure(std::cout);
   g_config = &configure;  // Set global Config pointer for use across codebase
-  // A value-taking flag without its value or with one that does not parse, or a bad AZURE_REFINE_QUADRATURE: exit 2
+  // An unknown option, a value-taking flag without its value or with one that does not parse, or a bad
+  // AZURE_REFINE_QUADRATURE: exit 2
   bool useReadline = false;
   try {
     useReadline = parseOptions(argc, argv, configure);
