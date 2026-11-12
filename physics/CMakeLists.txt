@@ -56,6 +56,7 @@ add_library(azure2_physics_transfer STATIC
   src/transfer/Overlap.cpp
   src/transfer/Interaction.cpp
   src/transfer/TransferKernel.cpp
+  src/transfer/TransferAmplitudes.cpp
   src/transfer/Transfer.cpp
   src/transfer/ThmVertex.cpp)
 add_library(azure2::physics_transfer ALIAS azure2_physics_transfer)
@@ -71,7 +72,8 @@ endif()
 # make_fresco_benchmarks.py; the test never runs FRESCO).
 foreach(_src transfer_bound_state_test.cpp transfer_distorted_waves_test.cpp transfer_thm_vertex_test.cpp
              transfer_fresco_test.cpp transfer_continuum_test.cpp transfer_continuum_transfer_test.cpp
-             transfer_continuum_fresco_test.cpp)
+             transfer_continuum_fresco_test.cpp transfer_spin_orbit_test.cpp
+             transfer_he3_fresco_test.cpp transfer_n14_fresco_test.cpp)
   string(REPLACE "_test.cpp" "" _t ${_src})
   add_executable(physics_${_t}_test tests/${_src})
   target_link_libraries(physics_${_t}_test PRIVATE azure2_physics_transfer)

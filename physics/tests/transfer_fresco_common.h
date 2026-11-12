@@ -3,6 +3,8 @@
 #ifndef AZURE2_PHYSICS_TESTS_TRANSFER_FRESCO_COMMON_H
 #define AZURE2_PHYSICS_TESTS_TRANSFER_FRESCO_COMMON_H
 
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <fstream>
 #include <map>
@@ -180,6 +182,121 @@ inline void CheckKinematics(const std::string &name, const std::vector<Line> &ru
           buf);
   }
   Check(found, name + ": no kinematics line for " + projectile);
+}
+
+// ---------------------------------------------------------------- 1, 2. constants, kinematics, potentials
+inline void CheckConstants(const std::string &name, const std::vector<Line> &run) {
+  for (const Line &l : Select(run, "constants")) {
+    const double two_u = 2.0 * kAtomicMassUnit_MeV / (kHbarC_MeV_fm * kHbarC_MeV_fm), e2 = kFineStructure * kHbarC_MeV_fm;
+    Check(std::fabs(D(l[1]) - two_u) < 6e-8 && std::fabs(D(l[2]) - e2) < 6e-6, name + ": FRESCO's 2u/hbar^2, e^2");
+  }
+}
+
+inline void CheckPotentials(const std::string &name, const std::vector<Line> &run, const std::map<int, OpticalPotential> &kp) {
+  int compared = 0;
+  double worst = 0.0;
+  for (const Line &l : Select(run, "pot")) {
+    const int k = std::stoi(l[1]), type = std::stoi(l[2]);
+    const double r = D(l[3]);
+    const std::complex<double> fresco(D(l[4]), D(l[5]));
+    if (!kp.count(k) || type > 3) continue;
+    const PotentialTerms t = TermsAt(kp.at(k), 1, r);
+    const std::complex<double> ours = type == 0   ? std::complex<double>(t.coulomb_MeV)
+                                      : type == 1 ? t.volume_MeV
+                                      : type == 2 ? t.surface_MeV
+                                                  : t.spin_orbit_form_MeV;
+    worst = std::max(worst, std::abs(ours - fresco) / std::max(std::abs(fresco), 1e-6));
+    ++compared;
+  }
+  char buf[160];
+  std::snprintf(buf, sizeof buf, "%s: %d potential values against FRESCO's listing, worst %.2e", name.c_str(),
+                compared, worst);
+  Check(compared > 0 && worst < 1e-6, buf);
+}
+
+// ---------------------------------------------------------------- 3. bound states
+inline void CheckBound(const std::string &name, const std::vector<Line> &run, int kn, const OpticalPotential &well,
+                const BoundState &s, bool d0_listed, double anc_tolerance = 2e-5) {
+  for (const Line &l : Select(run, "bound")) {
+    if (std::stoi(l[1]) != kn) continue;
+    const double depth = D(l[2]) * well.real_volume.depth_MeV;
+    double anc_plateau = 0.0;
+    for (const Line &a : Select(run, "ancratio"))
+      if (std::stoi(a[1]) == kn && D(a[2]) == 12.0) anc_plateau = D(a[3]);
+    char buf[300];
+    std::snprintf(buf, sizeof buf,
+                  "%s, bound state %d: depth %.5f (FRESCO %.5f), rms %.4f (%s), D0 %.2f (%s), ANC %.6f (plateau %.6f)",
+                  name.c_str(), kn, s.depth_MeV, depth, s.rms_radius_fm, l[3].c_str(),
+                  s.l == 0 ? ZeroRangeConstant(s) : 0.0, l[4].c_str(), s.anc_fm_half, anc_plateau);
+    bool ok = std::fabs(s.depth_MeV - depth) < 0.51e-4 * well.real_volume.depth_MeV &&
+              std::fabs(s.rms_radius_fm - D(l[3])) < 0.51e-3 &&
+              std::fabs(s.anc_fm_half - anc_plateau) < anc_tolerance * std::fabs(anc_plateau);
+    if (s.l == 0 && d0_listed) ok = ok && std::fabs(ZeroRangeConstant(s) - D(l[4])) < 0.051;
+    Check(ok, buf);
+    std::printf("%s\n", buf);
+    return;
+  }
+  Check(false, name + ": no bound-state line " + std::to_string(kn));
+}
+
+// ---------------------------------------------------------------- 5. transfer
+inline void CheckTransfer(const std::string &name, const std::vector<double> &ours, double tolerance) {
+  const auto runs = ReadCase(name);
+  if (runs.empty()) return;
+  const std::vector<Line> ref = Select(runs.at("reference"), "xs"), fine = Select(runs.at("refined"), "xs");
+  double peak = 0.0;
+  for (const Line &l : ref)
+    if (D(l[1]) <= 90.0) peak = std::max(peak, D(l[2]));
+  double worst = 0.0, worst_fresco = 0.0, at = 0.0;
+  int compared = 0;
+  for (std::size_t i = 0; i < ref.size() && i < ours.size(); ++i) {
+    const double th = D(ref[i][1]), fresco = D(ref[i][2]);
+    if (th > 90.0 || fresco < 0.01 * peak) continue;
+    ++compared;
+    const double d = std::fabs(ours[i] / fresco - 1.0);
+    if (d > worst) worst = d, at = th;
+    worst_fresco = std::max(worst_fresco, std::fabs(D(fine[i][2]) / fresco - 1.0));
+  }
+  char buf[200];
+  std::snprintf(buf, sizeof buf,
+                "%s: %d angles in 0-90 deg above 1%% of the peak, worst %.2e at %.0f deg (FRESCO reference - "
+                "refined: %.2e)",
+                name.c_str(), compared, worst, at, worst_fresco);
+  Check(compared > 5 && worst < tolerance && worst_fresco < 2e-3, buf);
+  std::printf("%s\n", buf);
+}
+
+/// The projectile's iT11 against FRESCO's (its "pols" column, 5 decimals) at the angles CheckTransfer compares,
+/// absolute; and FRESCO's reference against its refined run.
+inline void CheckAnalysingPower(const std::string &name, const std::vector<double> &ours, double tolerance) {
+  const auto runs = ReadCase(name);
+  if (runs.empty()) return;
+  const std::vector<Line> xs = Select(runs.at("reference"), "xs"), ref = Select(runs.at("reference"), "pol"),
+                          fine = Select(runs.at("refined"), "pol");
+  double peak = 0.0;
+  for (const Line &l : xs)
+    if (D(l[1]) <= 90.0) peak = std::max(peak, D(l[2]));
+  double worst = 0.0, worst_fresco = 0.0, at = 0.0;
+  int compared = 0;
+  for (std::size_t i = 0; i < ref.size() && i < ours.size() && i < xs.size(); ++i) {
+    const double th = D(ref[i][1]);
+    if (th > 90.0 || D(xs[i][2]) < 0.01 * peak) continue;
+    ++compared;
+    const double d = std::fabs(ours[i] - D(ref[i][2]));
+    if (d > worst) worst = d, at = th;
+    if (i < fine.size()) worst_fresco = std::max(worst_fresco, std::fabs(D(fine[i][2]) - D(ref[i][2])));
+  }
+  char buf[200];
+  std::snprintf(buf, sizeof buf, "%s: iT11 at %d angles, worst |d| %.1e at %.0f deg (FRESCO reference - refined: %.1e)",
+                name.c_str(), compared, worst, at, worst_fresco);
+  Check(compared > 5 && worst < tolerance && worst_fresco < tolerance, buf);
+  std::printf("%s\n", buf);
+}
+
+inline std::vector<double> Angles() {
+  std::vector<double> th;
+  for (int i = 0; i <= 36; ++i) th.push_back(i == 0 ? 1e-3 : 5.0 * i);
+  return th;
 }
 
 }  // namespace fresco_reference

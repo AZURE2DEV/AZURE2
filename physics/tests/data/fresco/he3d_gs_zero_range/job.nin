@@ -1,0 +1,31 @@
+18O(3He,d)19F(gs) at E_lab = 25 MeV, no spin-orbit in the distortions, zero range D0 = -152.53 MeV fm^3/2, recoil (inh=2)
+NAMELIST
+ &FRESCO hcm=0.025 rmatch=30.0 
+     jtmin=0.0 jtmax=36 absend=-1 inh=2 kqmax=1 pp=0
+     thmin=0.0 thmax=180.0 thinc=5.0
+     iter=1 iblock=1 chans=1 smats=2 xstabl=1 treneg=1
+     unitmass=1.0000004718 finec=137.03604742
+     elab(1)=25.0 /
+ &PARTITION namep='3He' massp=3.0 zp=2 nex=1 namet='18O' masst=18.0 zt=8 qval=0.0 /
+ &STATES jp=0.5 ptyp=1 ep=0.0 cpot=1 jt=0.0 ptyt=1 et=0.0 /
+ &PARTITION namep='d' massp=2.0 zp=1 nex=1 namet='19F' masst=19.0 zt=9 qval=2.5002 /
+ &STATES jp=1.0 ptyp=1 ep=0.0 cpot=2 jt=0.5 ptyt=1 et=0.0 /
+ &partition /
+ &pot kp=1 type=0 p(1:3)= 18.0 0.0 1.3 /
+ &pot kp=1 type=1 p(1:6)= 155.0 1.2 0.72 10.0 1.4 0.88 /
+ &pot kp=2 type=0 p(1:3)= 19.0 0.0 1.3 /
+ &pot kp=2 type=1 p(1:6)= 88.0 1.17 0.75 2.0 1.32 0.65 /
+ &pot kp=2 type=2 p(1:6)= 0.0 1.32 0.65 12.0 1.32 0.65 /
+ &pot kp=3 type=0 p(1:3)= 1.0 0.0 1.5 /
+ &pot kp=3 type=1 p(1:3)= 60.0 1.5 0.5 /
+ &pot kp=4 type=0 p(1:3)= 18.0 0.0 1.25 /
+ &pot kp=4 type=1 p(1:3)= 50.0 1.25 0.65 /
+ &pot kp=4 type=3 p(1:3)= 6.0 1.25 0.65 /
+ &pot /
+ &overlap kn1=1 ic1=1 ic2=2 in=1 kind=0 nn=1 l=0 sn=0.5 j=0.5 kbpot=3 be=5.4935 isc=1 ipc=1 /
+ &overlap kn1=2 ic1=1 ic2=2 in=2 kind=0 nn=2 l=0 sn=0.5 j=0.5 kbpot=4 be=7.9937 isc=1 ipc=1 /
+ &overlap /
+ &coupling icto=2 icfrom=1 kind=5 p1=-152.53 p2=0.0 /
+ &cfp in=1 ib=1 ia=1 kn=1 a=1.0 /
+ &cfp in=-2 ib=1 ia=1 kn=2 a=1.0 /
+ &coupling /

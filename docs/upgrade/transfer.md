@@ -28,7 +28,8 @@ Satchler's *Direct Nuclear Reactions* or of Thompson, Comput. Phys. Rep. 7 (1988
 | `.../Continuum.h`, `src/transfer/Continuum.cpp` | Eqs. (14.1)–(14.3): scattering states, bins, FRESCO's bin listing |
 | `.../Overlap.h`, `src/transfer/Overlap.cpp` | the overlap kinds (bound state, bin, scattering state): one table, one radial form for the kernel |
 | `.../Interaction.h`, `src/transfer/Interaction.cpp` | Eq. (17.1): the interaction as a sum of terms (post, prior, remnants), one table |
-| `.../Transfer.h`, `src/transfer/Transfer.cpp`, `src/transfer/TransferKernel.{h,cpp}` | Eqs. (5.1)–(6.7); the kernel (6.4) with any interaction of (17.1) |
+| `.../Transfer.h`, `src/transfer/Transfer.cpp`, `src/transfer/TransferKernel.{h,cpp}` | Eqs. (5.1)–(6.7); the kernel (6.4) with any interaction of (17.1), per pair of partial waves (l, j) |
+| `.../TransferAmplitudes.h`, `src/transfer/TransferAmplitudes.cpp` | Eqs. (19.5)–(19.8): the angular and spin sums, with or without spin-orbit, cross section and iT11 |
 | `.../ThmVertex.h`, `src/transfer/ThmVertex.cpp` | Eqs. (8.1)–(8.3) |
 | `physics/tests/transfer_*_test.cpp`, `transfer_fresco_common.h`, `physics/tests/data/fresco/`, `physics/tests/data/make_fresco_benchmarks.py` | §9, §18 |
 
@@ -257,10 +258,12 @@ data and not tested.
   (l ≤ 12, ρ_tp < ρ < ρ_tp + 34) found one such point at η = 0.1 (l = 0, ρ = 7.5943) and one at η = 0.493; none at
   η = 0, 1.55, 3. The physics_coulomb test does not hit them. The engine uses COULSM by default; any user of COULCC
   beyond the turning point is exposed. Not fixed here.
-- Not implemented: spin-orbit in the distorted waves of a transfer (refused), global optical potentials, relativistic
+- Not implemented: global optical potentials, relativistic
   kinematics, target spin in the distortion (spin-spin), tensor forces, l > 40, complex (optical or coupled-channel)
-  bins, the ³He and ¹⁴N benchmarks. Part 2 added the continuum, the prior form and the remnants (§14–§17); their
-  limits are in §18.
+  bins. Part 2 added the continuum, the prior form and the remnants (§14–§17); their limits are in §18. Part 3 added
+  spin-orbit in the distorted waves of a transfer and the projectile's iT11 (§19); its validation is §22. The ³He Trojan horse is §20, the ¹⁴N one
+  §21 (finite range only, unsymmetrised). The prior form and the remnant terms (§17) with spin-orbit waves go through
+  the same sums (the interaction terms are scalar), but are not compared with FRESCO.
 
 ## 11. The continuum part
 
@@ -283,6 +286,21 @@ What the engine's THM observable (Phase 5, σ_HOES on the shared energy mesh) wi
 
 `ThmDistortion` becomes a caller of `ZeroRangeOrbitalIntegral` (no physics of its own), `ThmDwVertex` of
 `EntranceVertex` with the distorted w; their tables stay owned by the stage. Not done here.
+
+With spin-orbit distortions (§19; published d and ³He potentials have them):
+
+- the distortions: the same `SolveDistortedWaves(OpticalPotential, ScatteringRequest)` with the potential's
+  `real_spin_orbit` set and `ScatteringRequest::two_s` = 2J_a (a + A) and 2J_s (s + F), the spins of the projectile
+  overlap (`Overlap::two_J_composite`, `two_J_core`; the library refuses a mismatch);
+- `TransferObservables FiniteRangeObservables(const TransferReaction &, const DistortedWaves &entrance, const
+  DistortedWaves &exit, const TransferGrid &, const std::vector<double> &theta_deg)` and
+  `ZeroRangeObservables(reaction, double d0_MeV_fm32, entrance, exit, theta_deg)`: dσ/dΩ (or d²σ/dΩ dE with a
+  `ScatteringState` residual) and iT11 per angle;
+- `ZeroRangeOrbitalIntegral` (the engine's M(E)) is spinless and refuses waves with spin-orbit: a THM weight with
+  spin-orbit distortions is a matrix in the projections, so the wiring branch would make the internal
+  `AmplitudesAt` (`TransferAmplitudes.h`: T(μ, M_F; m, M_A) at θ) public as one more function of `Transfer.h`,
+  `AmplitudeTable TransferAmplitudes(const TransferReaction &, entrance, exit, const TransferGrid &, double theta_deg)`,
+  and sum |T|² over the projections the experiment does not observe.
 
 ## 13. The engine's THM weight with this library
 
@@ -501,3 +519,257 @@ FRESCO's convergence asked was 0.2 %: its step refinement (hcm 0.025 → 0.0125)
 from NK 1600 to 3200 at the non-resonant minimum, the same in ours with the same rule: ours − FRESCO 1.1e-3 at NK
 3200). Simpson's rule (also in the library) converges as 1/NK⁴; it is used for the narrow bins of §15.
 
+
+## 19. Spin-orbit in the distorted waves of a transfer
+
+The distorted waves of §4 with a spin-orbit term depend on (l, j). The projectile a has spin J_a (the composite of
+the projectile overlap) and the ejectile s spin J_s (its core); the target's spin stays a spectator, as in §4. The
+transfer amplitude then mixes the projections of J_a and J_s between the asymptotic states and the vertex.
+
+**Entrance wave.** The incident wave e^{ik·r}|J_a m⟩, k = k_i ẑ, expanded in partial waves (§4), with Y_{l m_l}(r̂)|J_a m⟩
+coupled to |(l J_a) j⟩, each component multiplied by its u_lj and decoupled again:
+
+```
+χ⁽⁺⁾_{m'm}(r) = (4π/(k r)) Σ_lj i^l e^{iσ_l} √((2l+1)/4π) u_lj(r) ⟨l 0 J_a m|j m⟩⟨l m−m' J_a m'|j m⟩ Y_{l,m−m'}(r̂),   (19.1)
+```
+
+the amplitude of spin state m' at r when m comes in (Y*_{l m_l}(ẑ) = √((2l+1)/4π) δ_{m_l 0}).
+
+**Exit wave.** The bra ⟨χ⁽⁻⁾_{k_f μ}|r μ'⟩ = [χ⁽⁻⁾_{μ'μ}(k_f, r)]*. χ⁽⁻⁾ has the expansion of (19.1) with k̂_f, i^l e^{−iσ_l}
+and the incoming-wave radial function, whose complex conjugate solves the equation with U (§4: "U, not U*"), so it is
+u_lj:
+
+```
+χ̃_{μμ'}(r) = (4π/(k_f r)) Σ_lj Σ_{n n'} i^{−l} e^{iσ_l} u_lj(r) Y_{l n}(k̂_f) ⟨l n J_s μ|j N⟩⟨l n' J_s μ'|j N⟩ Y*_{l n'}(r̂),   (19.2)
+```
+
+N = n + μ = n' + μ'. Without spin-orbit the sums over j of (19.1), (19.2) are δ_{m m'}δ_{m_l 0} and δ_{μμ'}δ_{nn'} by the
+orthogonality of the Clebsch–Gordan coefficients (Σ_j ⟨l a s b|j c⟩⟨l a' s b'|j c⟩ = δ_aa'δ_bb'), and §4's waves return.
+
+**Angular reduction.** The vertex of (6.2) is (−1)^{m_F} Σ_LM ⟨l_F −m_F l_a m_a|L M⟩ G_LM with G_LM a rank-L tensor of the
+pair (r̂_i, r̂_f). By rotational invariance (Wigner–Eckart for the coupled product Y_{l_i m_i} G_LM, projected on Y_{l_f n'}),
+
+```
+∫∫ dΩ_i dΩ_f Y*_{l_f n'}(r̂_f) Y_{l_i m_i}(r̂_i) G_LM = ⟨l_i m_i L M|l_f n'⟩ R^L_{l_f l_i},                                (19.3)
+```
+
+R independent of the projections. At m_i = 0 this is the quantity of (6.3)–(6.4); with
+⟨l_f M l_i 0|L M⟩ = (−1)^{l_i} √((2L+1)/(2l_f+1)) ⟨l_i 0 L M|l_f M⟩ (symmetries of the coefficients; the reduction test
+below checks it to 7 × 10⁻¹⁶),
+
+```
+R^L_{(l_f j_f)(l_i j_i)} = (−1)^{l_i} √((2L+1)/(2l_f+1)) I^L_{(l_f j_f)(l_i j_i)},                                         (19.4)
+```
+
+with I^L the kernel integral (6.4) of the radial waves u_{l_f j_f}, u_{l_i j_i}: computed once per pair of waves (the
+kernel's angular part h^L_{l_f M} depends on l_f only and is shared by the j's).
+
+**Amplitude.** With m_i = m − m', M = m_a − m_F, n' = m_i + M:
+
+```
+Q_{m_F m_a}(m', m; μ', μ; θ) = P (−1)^{m_F} Σ_{L, (l_f j_f), (l_i j_i)} ⟨l_F −m_F l_a m_a|L M⟩ i^{l_i−l_f} e^{i(σ_{l_i}+σ_{l_f})} √((2l_i+1)/4π) R^L
+     × ⟨l_i 0 J_a m|j_i m⟩⟨l_i m_i J_a m'|j_i m⟩ ⟨l_i m_i L M|l_f n'⟩ Σ_n ⟨l_f n J_s μ|j_f N⟩⟨l_f n' J_s μ'|j_f N⟩ Y_{l_f n}(θ, 0),      (19.5)
+T(μ, M_F; m, M_A) = A_a A_F Σ_{m' μ' σ} ⟨l_a m_a s_x σ|j_a μ_a⟩⟨j_a μ_a J_s μ'|J_a m'⟩⟨l_F m_F s_x σ|j_F μ_F⟩⟨j_F μ_F J_A M_A|J_F M_F⟩
+     × Q_{m_F m_a}(m', m; μ', μ),   μ_a = m' − μ', μ_F = M_F − M_A,                                                         (19.6)
+```
+
+P = (4π)²/(k_i k_f (1 − αβ)³); dσ/dΩ is (6.6) with Σ|T|² over all four projections. Without spin-orbit the j sums of
+(19.5) reduce it to
+
+```
+Q = δ_{m m'} δ_{μ μ'} O_{m_F m_a}(θ)   (Eq. (6.3)),   and (19.6) to (6.5).                                                  (19.7)
+```
+
+One function (`TransferAmplitudes.cpp`) does (19.5)–(19.6) for every case: a wave set without spin-orbit enters with all
+j of (l, J) on its one radial wave, so the identity (19.7) is computed, not assumed. The θ-independent part of (19.5)
+(everything but Y_{l_f n}) is formed once per reaction. Zero range is the same table with l_a = 0, L = l_F and
+I = D0 g_{l_f l_i} R_{l_f l_i} (1 − αβ)³ (g, R of (6.7)), so finite and zero range share (19.5)–(19.6).
+
+**Analysing power.** With T(μ, M_F; m, M_A) for every projection the projectile's polarisation observables need no
+further integral. In the Madison frame (ŷ along k_i × k_f: our k_f at (θ, 0) gives +ŷ for θ > 0), with spin tensors
+normalised to Tr τ_kq τ_kq† = 2J_a + 1, τ_11 = −√(3/(2s(s+1))) (S_x + i S_y), s = J_a, and
+T_kq = Tr(T τ_kq T†)/Tr(T T†) (traces over the final projections, the matrix in the initial m):
+
+```
+iT11 = √(3/(2s(s+1))) Tr(T S_y T†)/Tr(T T†)   (Tr(T S_x T†) = 0 by the reflection symmetry below),                      (19.8)
+```
+
+which is (√3/2)·A_y for a deuteron and A_y/√2 for spin ½. **Reflection in the reaction plane** (parity times a rotation
+by π about ŷ leaves k_i, k_f in the xz plane unchanged; |J M⟩ → (−1)^{J−M}|J −M⟩ times the intrinsic parities, whose
+product is (−1)^{l_a+l_F}):
+
+```
+T(−μ, −M_F; −m, −M_A) = (−1)^{l_a + l_F} (−1)^{(J_s−μ)+(J_F−M_F)+(J_a−m)+(J_A−M_A)} T(μ, M_F; m, M_A),                      (19.9)
+```
+
+a property of the result the code never uses, so a test of its phases.
+
+**Cost.** Per pair of waves the kernel accumulates one more product (3 × 2 per l pair for d and n); ¹⁵N(d,n) with
+spin-orbit in both channels, distorted waves, finite and zero range at 37 angles: 1.0 s at one thread (scratch driver
+`work/dwba3/drivers/dnso.cpp`).
+
+## 20. The ³He Trojan horse: ¹⁸O(³He,d)¹⁹F
+
+Proton transfer from ³He = d + p to ¹⁸O at E_lab = 25 MeV (E_cm = 21.43 MeV; a typical ³He energy of THM runs with the
+proton as participant). Inputs (the benchmark's, not claims about the nuclei):
+
+| | |
+|---|---|
+| ³He = d + p | l = 0, j = ½, no node, B = 5.4935 MeV; Woods–Saxon R = 1.5 fm, a = 0.5 fm (depth searched: 57.5764 MeV), Coulomb sphere R_C = 1.5 fm; D0 = −152.53 MeV fm^3/2 (ours −152.5335, FRESCO −152.5), ANC 1.631716 fm^-1/2 |
+| ¹⁹F = ¹⁸O + p | g.s. ½⁺ 2s½ (one node, B = 7.9937 MeV) and 5/2⁺ 1d5/2 at 0.1972 MeV (no node, B = 7.7965 MeV); WS r0 = 1.25, a = 0.65, spin-orbit 6.0 MeV (r0 1.25, a 0.65), R_C = 1.25 A^1/3 fm |
+| ³He + ¹⁸O | V = 155 MeV (1.2, 0.72), W = 10 MeV (1.4, 0.88), spin-orbit 2.5 MeV (1.2, 0.72) when on, R_C = 1.3 A^1/3 fm |
+| d + ¹⁹F | V = 88 MeV (1.17, 0.75), W = 2 MeV (1.32, 0.65), W_D = 12 MeV (1.32, 0.65), spin-orbit 6.0 MeV (1.07, 0.66) when on |
+| Q | 2.5002 MeV (g.s.), 2.3030 MeV (5/2⁺); masses 3, 18, 2, 19 u; spectroscopic amplitudes 1 |
+
+Radii r0 A_t^{1/3} unless stated; spin-orbit strengths in the convention of (2.1) (FRESCO's TYPE=3). The ³He spin ½ is
+the entrance waves' spin, the deuteron's 1 that of the exit: the case exercises (19.5) with J_a = ½, J_s = 1, the
+reverse of ¹⁵N(d,n). Results (FRESCO data `he3d_<gs|d52>_<finite|zero>_range[_so]`, test `transfer_he3_fresco`), the
+worst relative difference from 0 to 90° where σ > 1 % of its maximum; the iT11 of ³He in absolute units:
+
+| Case | finite range σ; iT11 | zero range σ; iT11 | FRESCO ref − refined (FR σ) |
+|---|---|---|---|
+| g.s., no spin-orbit | 3.5e-4 (40°); 1.0e-5 | 9.2e-5; 1e-16 (both ≈ 0) | 1.8e-3 |
+| g.s., spin-orbit | 3.4e-4 (40°); 7.5e-5 | 6.4e-5; 2.2e-5 | 1.5e-3 |
+| 5/2⁺, no spin-orbit | 8.9e-4 (80°); 2.2e-4 | 5.1e-5; 1.2e-5 | 7.9e-4 |
+| 5/2⁺, spin-orbit | 7.2e-4 (50°); 4.3e-4 | 2.7e-5; 2.0e-5 | 6.8e-4 |
+
+Asked 1 %: reached everywhere. Numerical findings:
+
+- **The vertex range.** V_pd u_³He keeps the p + d Coulomb tail e²/ρ × u (κ = 0.417 fm⁻¹): our result moves by 1.2e-3
+  at 0° and 2.1e-3 at 20° between ρ_max = 10 and 16 fm and by < 2e-4 beyond (16, 20 fm); the test uses 16 fm. At
+  h = 0.025, h_K = 0.05 fm, ρ_max 18 fm, 64 x nodes, r_max 28 fm, l ≤ 39 ours moves by ≤ 2.1e-4. 0.5–2.0 s per
+  case at one thread.
+- **FRESCO's partial waves.** FRESCO's ERWIN loses 14 digits at L ≥ 35 without a radial cut, and one such wave
+  spoils the transfer: at hcm = 0.02 fm the g.s. cross section came out ×16 (2745 against 174 mb/sr at 0°), and with
+  jtmax = 45 instead of 36 by 3–7 %. With cutl = −3.2 (R_min = 0.08 L fm) jtmax = 36, 40, 45, 55 agree to 3e-6; all
+  finite-range runs use cutl and jtmax = 36. cutl = −1.6 is not enough for the 5/2⁺ (its cross sections ×20 with
+  and without spin-orbit).
+- **FRESCO's convergence**: its refined run (hcm 0.0125, rintp 0.025, hnl 0.0125, cutl −6.4) moves the finite-range
+  cross sections by up to 1.8e-3 (g.s., at 10–20°), above the 0.2 % asked; its larger radii (rmatch 35, rnl 12, nnu
+  96) by ≤ 2.4e-4; cutl −1.6 against −3.2 by 0.9–1.4e-3 (g.s.). Ours is converged to 2e-4 and lies 0.04–0.09 % from FRESCO's
+  reference, 0.13–0.22 % from its refined run. The remaining 0.1–0.2 % is FRESCO's step and cut dependence.
+- **The p + d ANC**: ours 1.631716 fm^-1/2 at h = 0.05, 0.025, 0.0125 fm (depth 57.57637–57.57639 MeV); FRESCO's
+  u/W plateau 1.63168 at 8, 10, 12 fm and at both its steps: 2.2e-5 apart (part 1's p + ¹⁵N agreed to 4e-7). Not
+  resolved; the test allows 3e-5 for this one ANC; it moves σ by < 5e-5.
+- iT11 of ³He: the reflection test of §22 and FRESCO agree on the sign and normalisation for spin ½ (iT11 = A_y/√2).
+
+## 21. The ¹⁴N Trojan horse: ¹²C(¹⁴N,d)²⁴Mg
+
+Transfer of ¹²C from ¹⁴N = ¹²C + d to ¹²C at E_lab = 30 MeV (E_cm = 13.846 MeV), to bound ¹²C + ¹²C states of ²⁴Mg,
+finite range, post form, no remnant. Inputs:
+
+| | |
+|---|---|
+| ¹⁴N = ¹²C + d | l = 0, one node, B = 10.272 MeV; WS r0 = 1.25 (×12^1/3), a = 0.65, R_C likewise (depth 58.3306 MeV); D0 = 183.59 MeV fm^3/2, ANC −40.8129 fm^-1/2 |
+| ²⁴Mg = ¹²C + ¹²C | 0⁺ g.s.: l = 0, six nodes, B = 13.933 MeV; 2⁺ at 1.3687 MeV: l = 2, five nodes, B = 12.5643 MeV; WS r0 = 0.9 (A_1^1/3 + A_2^1/3) = 4.12 fm, a = 0.7 (depths 121.676 and 119.224 MeV) |
+| ¹⁴N + ¹²C, d + ²⁴Mg | the potentials of the engine's `tests/reference/thm_distortion_test.cpp` (case `optical`): V = 50 MeV, R = 5.5, a = 0.6; W = 20 MeV, R = 5.6, a = 0.6; R_C = 5.5 fm — V = 90 MeV, R = 3.4, a = 0.75; W_D = 10 MeV, R = 3.8, a = 0.65; R_C = 3.8 fm; no spin-orbit |
+| Q | 3.661 MeV (g.s.), 2.2923 MeV (2⁺); masses 14, 12, 2, 24 u; amplitudes 1 |
+
+**Node numbers** (oscillator rule 2n + l = Q_rel, the quanta of relative motion): ²⁴Mg in the sd shell has
+4·0 + 12·1 + 8·2 = 28 quanta, each ¹²C 8 (p shell), so Q_rel = 12: n = 6 for l = 0, n = 5 for l = 2. ¹⁴N:
+10 − 8 − 0 = 2, n = 1 for l = 0.
+
+**Zero range is meaningless here.** It replaces V_{C d}(ρ) u_a(ρ) by D0 δ(ρ), i.e. assumes the vertex range is short
+against the scale on which the distorted waves and the ²⁴Mg overlap change; with a ¹²C + d vertex of rms radius 2.8 fm,
+a recoil factor α = ½ and k_i = 2.07 fm⁻¹ it is not. Ours (the zero-range code accepts l_a = 0) gives ZR/FR = 55, 33,
+5.3, 13, 32, 1.2, 211 at 0, 15, 30, 45, 60, 75, 90° (g.s.) and 26, 26, 19, 7.7, 12, 24, 13 (2⁺): no shape, no scale.
+Not benchmarked.
+
+**Identical bosons.** The transferred ¹²C and the target ¹²C are identical; neither code symmetrises here. With the
+²⁴Mg overlap even in l (P₁₂ φ_F = φ_F for l = 0, 2) and the entrance state symmetrised,
+Ψ_i = 2^{−1/2}(1 + P₁₂) φ_a(r_{d C₁}) χ_i, the exchange term with the P₁₂-symmetric interaction equals the direct one
+after relabelling the carbons, so T = √2 T_direct (σ × 2) for amplitudes defined for distinguishable carbons; the
+symmetrised entrance channel further contains the elastic d transfer ¹²C(¹⁴N,¹²C)¹⁴N, which changes the distortion
+(mainly backward). Neither is implemented; the benchmark compares the unsymmetrised amplitude.
+
+**Results** (test `transfer_n14_fresco`, FRESCO data `n14d_<gs|2p>_finite_range`): 0–90° where σ > 1 % of its maximum:
+g.s. 8.3e-4 (75°), 2⁺ 3.3e-4 (80°). Asked 1 %: reached.
+
+**Convergence of ours** (worst change from 0 to 90°, g.s.; 2⁺ in brackets): grid h, h_K 0.05, 0.1 → 0.025, 0.05 fm:
+2.5e-4 (5e-5); ρ_max 10 → 14 fm: 1.6e-4; 48 → 96 x nodes: 1.7e-6; r_max 25 → 28 fm: 5e-8; l ≤ 34 against l ≤ 39:
+< 1e-8 (the limit of `AngularCoupling.h` is l ≤ 39 for spin 1, and the result does not need more). Cost at one thread
+(distorted waves and finite-range kernel, 37 angles): 0.87 s (g.s.), 2.8 s (2⁺).
+
+**Convergence of FRESCO.** It asks for rnl > 13 fm (rnl = 10 is 5.4 % off at 0–90°, 2.9 % for the 2⁺); with rnl = 16 fm, nnu = 96:
+
+| FRESCO run (g.s.) | change against the reference |
+|---|---|
+| reference: hcm 0.025, rintp 0.05, hnl 0.025, rmatch 30, jtmax 40, cutl 0, cutr −12 | — |
+| refined: hcm, rintp, hnl halved | 1.0e-3 (g.s., at 70°, where FRESCO prints 0.000996: its six decimals); 3.1e-4 (2⁺) |
+| rmatch 35, rnl 20, nnu 120 | 5e-5 (1.4e-5) |
+| cutr −16 | 0 (2.2e-4) |
+| hcm 0.05 | 5.2e-3 (1.9e-3) |
+| cutl −4.8 or −6.4 instead of cutr (cut ∝ L) | 0.8 %, 3.0 % (2.3 %, 2.2 %) |
+| hcm 0.0125 with cutr −8 | 1.0e-3 (1.9 %) |
+
+FRESCO's ERWIN loses 14 digits at L = 27–41 when the integration starts too far inside the Coulomb barrier (η = 4.5
+for ¹⁴N + ¹²C): with cutl = −3.2 the 0° cross section is off by ×2.1; a cut ∝ L (cutl) that removes
+the loss also removes physics (above), while a cut 12 fm inside the point-Coulomb turning point (cutr = −12) removes
+the loss and agrees with ours (at hcm = 0.0125 fm 8 fm inside is not enough: the 2⁺ moves by 1.9 %). jtmax = 40, 50,
+60 agree with a cut. FRESCO's cost: 4.5 s (reference) and 24 s (refined) per run at one thread.
+
+## 22. Validation of part 3
+
+Tests: `transfer_spin_orbit` (and `transfer_fresco`, `transfer_continuum*` unchanged in their printed lines: their
+outputs before and after part 3 were compared line by line; the cross sections of part 1's four cases agree with
+the previous code to 8 × 10⁻¹⁵). Each test was run once with an injected error and failed (HANDOFF entry of
+2026-11-12, part 3).
+
+| Test | Compared with | Asked | Reached (worst, where) |
+|---|---|---|---|
+| Reduction (19.7): waves flagged with a spin-orbit term of 10⁻³⁰⁰ MeV against waves without | each other, FR and ZR, σ and iT11 | 1e-12 | 6.7e-16 (σ), 1.9e-16 (iT11) |
+| Reflection (19.9), spin-orbit in both channels, θ = 10, 35, 80° | T itself; Tr(T S_x T†) = 0 | 1e-10 | 2.0e-16 of max \|T\|; 4.1e-17 |
+| FRESCO ¹⁵N(d,n)¹⁶O, spin-orbit in d + ¹⁵N and n + ¹⁶O, finite range | dσ/dΩ, 0–90°, > 1 % of peak | 1 % | 2.0e-4 (75°); FRESCO ref − refined 1.0e-4 |
+| same | iT11 of the deuteron | 1e-3 abs. | 1.0e-4 (at 0°: ours at 0.001°, FRESCO at 0°; elsewhere ≤ 8e-5); FRESCO 4e-5 |
+| FRESCO ¹⁵N(d,n)¹⁶O, spin-orbit, zero range | dσ/dΩ; iT11 | 1 %; 1e-3 | 6.2e-6 (0°); 7.8e-5 (0°) |
+
+FRESCO's convergence for `dn_finite_range_so` (data in its `reference.txt`): reference hcm 0.025, rintp 0.05, hnl
+0.025, rnl 10, rmatch 30; refined hcm 0.02 (1.0e-4); rmatch 35, rnl 12, nnu 96 (≤ 4e-5 at 0, 30, 90°). At hcm =
+0.0125 without a radial cut FRESCO's ERWIN loses 14 digits at L ≥ 28 and its 0° cross section moves by 3 %
+(0.4778 against 0.4626 mb/sr); with cutl = −3.2 (hcm 0.025) or −6.4 (hcm 0.0125) it gives 0.46314 and 0.46364 mb/sr
+at 0°, 0.1–0.2 % above its uncut runs and ours, while ours moves by 1.2e-5 between (h, h_K) = (0.05, 0.1) and
+(0.025, 0.05) fm and by 3.5e-6 with ρ_max 12 fm, 64 x nodes, r_max 28 fm. The cut runs are data, not compared.
+
+The Trojan-horse cases of §20 and §21, asked 1 % from 0 to 90° above 1 % of the peak (details and FRESCO's convergence
+there):
+
+| Case | Reached (worst) | FRESCO ref − refined |
+|---|---|---|
+| ¹⁸O(³He,d)¹⁹F, g.s. and 5/2⁺, FR, with and without spin-orbit | ≤ 8.9e-4; iT11 ≤ 4.3e-4 | ≤ 1.8e-3 |
+| same, ZR | ≤ 9.2e-5; iT11 ≤ 2.2e-5 | ≤ 1.4e-5 |
+| ¹²C(¹⁴N,d)²⁴Mg, g.s. and 2⁺, FR | 8.3e-4, 3.3e-4 | 1.0e-3 (its print digits), 3.1e-4 |
+
+## 23. The ⁶Li bins against Frescox
+
+Part 2 left ¹²C(⁶Li,d) to an α + ¹²C bin (`li6d_bin_wide_fr`: l = 2, E = 3.11 MeV, ER = 0.4 MeV, ISC = 4, V = 90 MeV,
+the bin cut at RSP = 12 fm, NK = 400) open: FRESCO 3.5 loses accuracy there. Frescox 7.4 (LLNL's line of the FRESCO
+family, `opt/frescox/README.md`) is the same lineage as FRESCO 3.5, so it is not an independent derivation: what it can
+settle is whether the remaining 1.1–1.6 % is FRESCO 3.5's numerics or ours, i.e. whether it converges in cutl and at
+RSP = 20–30 fm where FRESCO 3.5 does not. Data: `li6d_bin_wide_frx` (generated with `--frescox`), not compared by a
+test. dσ/dΩ in mb/sr at 0, 30, 60, 90°:
+
+| Run | 0° | 30° | 60° | 90° | ERWIN warnings |
+|---|---|---|---|---|---|
+| FRESCO 3.5, part 2's reference (hcm 0.025, cutl −6.4) | 5.27001 | 0.85972 | 0.10123 | 0.09293 | 43 |
+| Frescox, same input | 5.26860 | 0.85988 | 0.10118 | 0.09298 | 43 |
+| Frescox, hcm 0.0125 (rintp, hnl halved, cutl −12.8) | 5.28861 | 0.86257 | 0.10053 | 0.09328 | |
+| Frescox, cutl 0, cutr −12 (hcm 0.025; 0.0125) | 5.26623; 5.28193 | 0.86003; 0.86306 | 0.10139; 0.10059 | 0.09301; 0.09354 | 24; 13 |
+| Frescox, RSP 20 fm (cutr −12) | 0.14685 | 0.40797 | 0.24235 | 0.06777 | 37 |
+| Frescox, RSP 30 fm (cutr −12) | 9.64291 | 0.54894 | 0.11456 | 0.06433 | 17 |
+| Frescox, RSP 20 fm, rmatch 50 fm | 296.98 | 43.81 | 92.61 | 177.74 | 14 |
+| ours, RSP 12, (h, h_K) = (0.05, 0.1), (0.025, 0.05), (0.0125, 0.025) fm | 5.29567, 5.28651, 5.27819 | 0.86791, 0.86602, 0.86430 | 0.09909, 0.09938, 0.09972 | 0.09232, 0.09383, 0.09411 | |
+| ours, RSP 20, (0.05, 0.1), (0.025, 0.05) | 0.11235, 0.11666 | 0.41322, 0.41559 | 0.24801, 0.25465 | 0.06743, 0.06469 | |
+
+(ERWIN warnings counted in the reference runs; the last column empty where not counted.) What it shows:
+
+- Frescox reproduces FRESCO 3.5 to 5 × 10⁻⁴ at the same input and shares its ERWIN accuracy loss (14 digits at
+  L = 26–35); a cut at the Coulomb turning point (cutr, which settled ¹⁴N, §21) reduces the warnings but does not
+  remove them. At RSP = 20 and 30 fm it does not converge (its results change by factors with rmatch). So the
+  RSP 20–30 question cannot be settled with Frescox: it is the FRESCO family's numerics.
+- At RSP = 12 fm Frescox moves by 0.3–0.6 % with its step (above the 0.2 % asked). Ours moves linearly in h (the
+  bin is cut at RSP where it is not small: a step of the integrand, first-order error), 0.3 % at 0° and 1.6 % at
+  90° between the first two steps; extrapolated to h → 0 (Richardson, O(h)): 5.2699, 0.8626, 0.1001, 0.0944, which
+  is 0.36 %, 0.004 %, 0.42 %, 1.2 % from Frescox's refined run (hcm 0.0125, cutl −12.8). Neither code is converged to 0.2 % on this object; the
+  remaining ≈ 1 % at 90° is not attributed. Asked 1 %: not shown.
+- Not done: a narrow-resonance ⁶Li bin with Frescox (the same ERWIN loss would apply), and a bin whose envelope has a
+  node at RSP (as for the deuteron bins of §15), which would remove the first-order step error of both codes.

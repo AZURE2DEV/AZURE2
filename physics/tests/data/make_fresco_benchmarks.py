@@ -6,7 +6,7 @@ fort4.dat when the job reads a table on FRESCO's input file 4) and reference.txt
 from FRESCO's output of the reference run and of a refined run (smaller step, larger radii), so that FRESCO's own
 convergence is part of the data.  The test never runs FRESCO.
 
-    python3 make_fresco_benchmarks.py --fresco <path to the fresco 3.5 binary> [--out <dir>]
+    python3 make_fresco_benchmarks.py --fresco <path to the fresco 3.5 binary> [--frescox <frescox 7.4>] [--out <dir>]
 
 Constants.  FRESCO fixes hbar c = 197.32705 MeV fm and u = 931.49432 MeV in its source; its namelist takes the unit
 mass (in u) and 1/alpha.  Every job sets unitmass and finec so that FRESCO's 2u/hbar^2 and e^2 are those of
@@ -16,7 +16,8 @@ finec = 197.32705 / (197.3269804/137.035999084).  FRESCO echoes both in its outp
 Masses are mass numbers (u), so that m_a = m_s + m_x and m_F = m_A + m_x hold exactly and the Jacobi coordinates of
 both codes are the same; the binding energies and Q values are inputs.
 
-Lines of reference.txt (whitespace-separated; '#' starts a comment):
+Lines of reference.txt (whitespace-separated; '#' starts a comment; a case's "drop" leaves out kinds its test does
+not read):
   run <name> <settings>                 the FRESCO settings of the following lines (reference or refined)
   constants <2u/hbar^2> <e^2>          as FRESCO prints them
   kin <projectile> <E_cm> <k> <eta>     per partition of the incoming energy (MeV, fm^-1)
@@ -25,6 +26,7 @@ Lines of reference.txt (whitespace-separated; '#' starts a comment):
   S <l> <2j> <2J> <Re> <Im>             elastic S-matrix elements (fort.7)
   ratio <theta> <sigma/sigma_R>         elastic, c.m. (deg)
   xs <theta> <mb/sr>                    the transfer cross section, c.m. (deg)
+  pol <theta> <iT11>                    the projectile's vector analysing power of the transfer (kqmax=1, Madison)
   reaction <mb>                         FRESCO's cumulative reaction cross section
   bound <kn> <scale> <rms> <D0> <ANC>   FRESCO's bound-state listing: depth scale factor (VR), rms radius (fm),
                                         D0 (MeV fm^3/2), ANC (fm^-1/2, at R = rmatch - h)
@@ -215,6 +217,133 @@ CASES.update({
 })
 
 
+# 15N(d,n)16O(g.s.) of DN_BODY with a spin-orbit term in both distortions (transfer.md section 19): d + 15N that of
+# d15N_elastic, n + 16O a Woods-Saxon derivative of its own; the deuteron's vector analysing power iT11 (kqmax=1, the
+# Madison frame: FRESCO's koords=0) is read with the cross section.
+DN_SO_BODY = DN_BODY.replace(
+    " &pot kp=2 type=0", " &pot kp=1 type=3 p(1:3)= 6.0 1.07 0.66 /\n &pot kp=2 type=0", 1).replace(
+    " &pot kp=3 type=0", " &pot kp=2 type=3 p(1:3)= 5.5 1.2 0.65 /\n &pot kp=3 type=0", 1)
+CASES.update({
+    "dn_finite_range_so": dict(
+        title="15N(d,n)16O(g.s.) at E_lab = 10 MeV, spin-orbit in d + 15N and n + 16O, finite range, post, no remnant",
+        elab=10.0, jtmax=30, iter=1, iblock=1, thmin=0.0, extra="kqmax=1 pp=0", body=DN_SO_BODY.format(coupling=FR_DN),
+        reference=dict(hcm=0.025, rmatch=30.0, rintp=0.05, hnl=0.025, rnl=10.0, centre=0.0, nnu=72),
+        refined=dict(hcm=0.02, rmatch=30.0, rintp=0.04, hnl=0.02, rnl=10.0, centre=0.0, nnu=72),
+        # larger radii; the radial cut-off cutl (at hcm = 0.0125 without it ERWIN loses 14 digits at high L and the
+        # 0 deg cross section moves by 3 %: FRESCO's numerics, transfer.md section 20)
+        also=[dict(hcm=0.025, rmatch=35.0, rintp=0.05, hnl=0.025, rnl=12.0, centre=0.0, nnu=96),
+              dict(hcm=0.025, rmatch=30.0, rintp=0.05, hnl=0.025, rnl=10.0, centre=0.0, nnu=72, cutl=-3.2),
+              dict(hcm=0.0125, rmatch=30.0, rintp=0.025, hnl=0.0125, rnl=10.0, centre=0.0, nnu=72, cutl=-6.4)],
+        drop=("S",)),
+    "dn_zero_range_so": dict(
+        title="15N(d,n)16O(g.s.) at E_lab = 10 MeV, spin-orbit in d + 15N and n + 16O, zero range D0 = -130.31 MeV "
+              "fm^3/2, recoil (inh=2)", elab=10.0, jtmax=30, iter=1, iblock=1, thmin=0.0, extra="inh=2 kqmax=1 pp=0",
+        body=DN_SO_BODY.format(coupling="kind=5 p1=-130.31 p2=0.0"),
+        reference=dict(hcm=0.025, rmatch=30.0), refined=dict(hcm=0.0125, rmatch=35.0), drop=("S",)),
+})
+
+# 18O(3He,d)19F at E_lab = 25 MeV (transfer.md section 20): proton transfer, 3He = d + p (l = 0, a Woods-Saxon well
+# of R = 1.5 fm, a = 0.5 fm at the p + d separation energy 5.4935 MeV, no node), 19F = 18O + p in the ground state
+# 1/2+ (2s1/2, one node, S_p = 7.9937 MeV) or the 5/2+ state at 0.1972 MeV (1d5/2, no node, B = 7.7965 MeV); the
+# 3He + 18O and d + 19F optical potentials with or without their spin-orbit terms ({so1}, {so2}).
+HE3_BODY = """\
+ &PARTITION namep='3He' massp=3.0 zp=2 nex=1 namet='18O' masst=18.0 zt=8 qval=0.0 /
+ &STATES jp=0.5 ptyp=1 ep=0.0 cpot=1 jt=0.0 ptyt=1 et=0.0 /
+ &PARTITION namep='d' massp=2.0 zp=1 nex=1 namet='19F' masst=19.0 zt=9 qval=2.5002 /
+ &STATES jp=1.0 ptyp=1 ep=0.0 cpot=2 jt={JF} ptyt=1 et={EX} /
+ &partition /
+ &pot kp=1 type=0 p(1:3)= 18.0 0.0 1.3 /
+ &pot kp=1 type=1 p(1:6)= 155.0 1.2 0.72 10.0 1.4 0.88 /
+{so1} &pot kp=2 type=0 p(1:3)= 19.0 0.0 1.3 /
+ &pot kp=2 type=1 p(1:6)= 88.0 1.17 0.75 2.0 1.32 0.65 /
+ &pot kp=2 type=2 p(1:6)= 0.0 1.32 0.65 12.0 1.32 0.65 /
+{so2} &pot kp=3 type=0 p(1:3)= 1.0 0.0 1.5 /
+ &pot kp=3 type=1 p(1:3)= 60.0 1.5 0.5 /
+ &pot kp=4 type=0 p(1:3)= 18.0 0.0 1.25 /
+ &pot kp=4 type=1 p(1:3)= 50.0 1.25 0.65 /
+ &pot kp=4 type=3 p(1:3)= 6.0 1.25 0.65 /
+ &pot /
+ &overlap kn1=1 ic1=1 ic2=2 in=1 kind=0 nn=1 l=0 sn=0.5 j=0.5 kbpot=3 be=5.4935 isc=1 ipc=1 /
+ &overlap kn1=2 ic1=1 ic2=2 in=2 kind=0 nn={NN} l={L} sn=0.5 j={J} kbpot=4 be={BE} isc=1 ipc=1 /
+ &overlap /
+ &coupling icto=2 icfrom=1 {coupling} /
+ &cfp in=1 ib=1 ia=1 kn=1 a=1.0 /
+ &cfp in=-2 ib=1 ia=1 kn=2 a=1.0 /
+ &coupling /
+"""
+HE3_SO1 = " &pot kp=1 type=3 p(1:3)= 2.5 1.2 0.72 /\n"
+HE3_SO2 = " &pot kp=2 type=3 p(1:3)= 6.0 1.07 0.66 /\n"
+HE3_STATES = {"gs": dict(JF=0.5, EX="0.0", NN=2, L=0, J=0.5, BE=7.9937),
+              "d52": dict(JF=2.5, EX="0.1972", NN=1, L=2, J=2.5, BE=7.7965)}
+# D0 of the 3He vertex (MeV fm^3/2): physics/transfer's ZeroRangeConstant of the kp=3 state (h = 0.05 fm) is
+# -152.5335; FRESCO lists -152.5.
+HE3_D0 = "-152.53"
+# FRESCO's ERWIN loses 14 digits at L >= 35 here unless the radial cut cutl is set, and one such partial wave
+# spoils the transfer by factors (transfer.md section 20): every finite-range run has cutl (R_min = 0.08 L fm).
+HE3_FR_REF = dict(hcm=0.025, rmatch=30.0, rintp=0.05, hnl=0.025, rnl=10.0, centre=0.0, nnu=72, cutl=-3.2)
+HE3_FR_FINE = dict(hcm=0.0125, rmatch=30.0, rintp=0.025, hnl=0.0125, rnl=10.0, centre=0.0, nnu=72, cutl=-6.4)
+for _st, _b in HE3_STATES.items():
+    for _so in ("", "_so"):
+        _sos = dict(so1=HE3_SO1 if _so else "", so2=HE3_SO2 if _so else "")
+        _what = "spin-orbit in 3He + 18O and d + 19F" if _so else "no spin-orbit in the distortions"
+        CASES["he3d_%s_finite_range%s" % (_st, _so)] = dict(
+            title="18O(3He,d)19F(%s) at E_lab = 25 MeV, %s, finite range, post, no remnant" % (_st, _what),
+            elab=25.0, jtmax=36, iter=1, iblock=1, thmin=0.0, extra="kqmax=1 pp=0",
+            body=HE3_BODY.format(coupling=FR_DN, **_sos, **_b), reference=HE3_FR_REF, refined=HE3_FR_FINE,
+            also=[dict(HE3_FR_REF, rmatch=35.0, rnl=12.0, nnu=96), dict(HE3_FR_REF, cutl=-1.6)], drop=("S",))
+        CASES["he3d_%s_zero_range%s" % (_st, _so)] = dict(
+            title="18O(3He,d)19F(%s) at E_lab = 25 MeV, %s, zero range D0 = %s MeV fm^3/2, recoil (inh=2)" %
+                  (_st, _what, HE3_D0), elab=25.0, jtmax=36, iter=1, iblock=1, thmin=0.0, extra="inh=2 kqmax=1 pp=0",
+            body=HE3_BODY.format(coupling="kind=5 p1=%s p2=0.0" % HE3_D0, **_sos, **_b),
+            reference=dict(hcm=0.025, rmatch=30.0), refined=dict(hcm=0.0125, rmatch=35.0), drop=("S",))
+
+# 12C(14N,d)24Mg at E_lab = 30 MeV (transfer.md section 21): 12C transfer, 14N = 12C + d (l = 0, one node: 2n + l = 2
+# oscillator quanta of relative motion, B = 10.272 MeV) and 24Mg = 12C + 12C (2n + l = 12: l = 0 with six nodes,
+# B = 13.933 MeV, or the 2+ at 1.3687 MeV, l = 2 with five nodes); the 14N + 12C and d + 24Mg potentials of the
+# engine's tests/reference/thm_distortion_test.cpp ("optical"), absolute radii (type=0 p1 = 1, p2 = 0).  No
+# symmetrisation of the two 12C (FRESCO does not unless asked).  Finite range only.
+N14_BODY = """\
+ &PARTITION namep='14N' massp=14.0 zp=7 nex=1 namet='12C' masst=12.0 zt=6 qval=0.0 /
+ &STATES jp=1.0 ptyp=1 ep=0.0 cpot=1 jt=0.0 ptyt=1 et=0.0 /
+ &PARTITION namep='d' massp=2.0 zp=1 nex=1 namet='24Mg' masst=24.0 zt=12 qval=3.661 /
+ &STATES jp=1.0 ptyp=1 ep=0.0 cpot=2 jt={JF} ptyt=1 et={EX} /
+ &partition /
+ &pot kp=1 type=0 p(1:3)= 1.0 0.0 5.5 /
+ &pot kp=1 type=1 p(1:6)= 50.0 5.5 0.6 20.0 5.6 0.6 /
+ &pot kp=2 type=0 p(1:3)= 1.0 0.0 3.8 /
+ &pot kp=2 type=1 p(1:6)= 90.0 3.4 0.75 0.0 3.8 0.65 /
+ &pot kp=2 type=2 p(1:6)= 0.0 3.8 0.65 10.0 3.8 0.65 /
+ &pot kp=3 type=0 p(1:3)= 12.0 0.0 1.25 /
+ &pot kp=3 type=1 p(1:3)= 100.0 1.25 0.65 /
+ &pot kp=4 type=0 p(1:3)= 12.0 12.0 0.9 /
+ &pot kp=4 type=1 p(1:3)= 200.0 0.9 0.7 /
+ &pot /
+ &overlap kn1=1 ic1=1 ic2=2 in=1 kind=0 nn=2 l=0 sn=0.0 j=0.0 kbpot=3 be=10.2720 isc=1 ipc=1 /
+ &overlap kn1=2 ic1=1 ic2=2 in=2 kind=0 nn={NN} l={L} sn=0.0 j={L}.0 kbpot=4 be={BE} isc=1 ipc=1 /
+ &overlap /
+ &coupling icto=2 icfrom=1 {coupling} /
+ &cfp in=1 ib=1 ia=1 kn=1 a=1.0 /
+ &cfp in=-2 ib=1 ia=1 kn=2 a=1.0 /
+ &coupling /
+"""
+N14_STATES = {"gs": dict(JF=0.0, EX="0.0", NN=7, L=0, BE=13.933),
+              "2p": dict(JF=2.0, EX="1.3687", NN=6, L=2, BE=12.5643)}
+# FRESCO asks for rnl > 13 fm here; its ERWIN loses 14 digits at L = 27-41 unless the integration starts near the
+# Coulomb turning point (cutr < 0, cutl = 0): a cut proportional to L (cutl) either keeps the loss or removes
+# physics; 8 fm inside the turning point is not enough at hcm = 0.0125 (the 2+ moves by 1 %), 12 fm is
+# (transfer.md section 21).
+N14_REF = dict(hcm=0.025, rmatch=30.0, rintp=0.05, hnl=0.025, rnl=16.0, centre=0.0, nnu=96, cutl=0.0, cutr=-12.0)
+N14_FINE = dict(hcm=0.0125, rmatch=30.0, rintp=0.025, hnl=0.0125, rnl=16.0, centre=0.0, nnu=96, cutl=0.0, cutr=-12.0)
+for _st, _b in N14_STATES.items():
+    CASES["n14d_%s_finite_range" % _st] = dict(
+        title="12C(14N,d)24Mg(%s) at E_lab = 30 MeV, finite range, post, no remnant, unsymmetrised" % _st,
+        elab=30.0, jtmax=40, iter=1, iblock=1, thmin=0.0, body=N14_BODY.format(coupling=FR_DN, **_b),
+        reference=N14_REF, refined=N14_FINE,
+        also=[dict(N14_REF, rmatch=35.0, rnl=20.0, nnu=120), dict(N14_REF, cutr=-16.0), dict(N14_REF, rnl=10.0),
+              dict(N14_REF, cutl=-4.8, cutr=None), dict(N14_REF, cutl=-6.4, cutr=None),
+              dict(N14_REF, hcm=0.05, hnl=0.05, rintp=0.1), dict(N14_FINE, cutr=-8.0)],
+        drop=("S",))
+
 # 15N(d,n)[p + 15N] to continuum bins of p + 15N (E_lab = 10 MeV): the projectile overlap of DN_BODY, the bin of
 # l, j in the real Woods-Saxon (+ Coulomb) potential kp=5 (no spin-orbit), E_x = 12.1274 MeV + E (the p + 15N
 # threshold), the bin weight ISC.  The three bins (transfer.md section 15): non-resonant (l = 1), over a narrow
@@ -316,6 +445,18 @@ CASES["li6d_bin_wide_fr"] = dict(
           dict(hcm=0.025, rmatch=30.0, rsp=12.0, rintp=0.05, hnl=0.025, rnl=14.0, centre=-0.1, nnu=72, cutl=-3.2,
                nk=400)])
 
+# The same bin with Frescox 7.4 (LLNL's line of the FRESCO family, the same lineage: not an independent code), to see
+# whether its numerics settle what FRESCO 3.5 leaves open (transfer.md section 23): part 2's reference and refined
+# runs, the cut at the Coulomb turning point (cutr) instead of cutl, and RSP = 20 and 30 fm.  Data, not compared.
+_LI_X = dict(hcm=0.025, rmatch=30.0, rsp=12.0, rintp=0.05, hnl=0.025, rnl=14.0, centre=-0.1, nnu=72, cutl=-6.4, nk=400)
+CASES["li6d_bin_wide_frx"] = dict(CASES["li6d_bin_wide_fr"], code="frescox",
+    title=CASES["li6d_bin_wide_fr"]["title"] + " (Frescox 7.4)",
+    reference=_LI_X, refined=dict(_LI_X, hcm=0.0125, rintp=0.025, hnl=0.0125, cutl=-12.8),
+    also=[dict(_LI_X, cutl=0.0, cutr=-12.0), dict(_LI_X, cutl=0.0, cutr=-12.0, hcm=0.0125, rintp=0.025, hnl=0.0125),
+          dict(_LI_X, cutl=0.0, cutr=-12.0, rsp=20.0), dict(_LI_X, cutl=0.0, cutr=-12.0, rsp=30.0),
+          dict(_LI_X, cutl=0.0, cutr=-12.0, rsp=20.0, rmatch=50.0)],
+    drop=("S", "pot", "ratio"))
+
 
 def coulomb_table(z1z2, rc, step, points):
     """-V_C of a uniformly charged sphere (MeV) on r = 0, step, ...: FRESCO's SHAPE=7 input, scaled by P1 = -1."""
@@ -338,6 +479,7 @@ def table_for(settings):
 def job_text(case, settings):
     s = dict(settings)
     cutl = s.pop("cutl", None)
+    cutr = s.pop("cutr", None)
     nk = s.pop("nk", None)
     rsp = s.pop("rsp", None)
     nonlocal_keys = ("rintp", "hnl", "rnl", "centre", "nnu")
@@ -345,6 +487,8 @@ def job_text(case, settings):
     extra = case.get("extra", "")
     if cutl is not None:
         extra = re.sub(r"cutl=\S+", "", extra) + " cutl=%s" % cutl
+    if cutr is not None:
+        extra += " cutr=%s" % cutr
     if rsp is not None:
         nonlocal_part = ("rsp=%s " % rsp) + nonlocal_part
     body = case["body"].replace("{NK}", str(nk)) if nk is not None else case["body"]
@@ -412,13 +556,16 @@ def extract(out, forts):
         if b == 1:
             for mm in re.finditer(r"([0-9.]+) deg\.: X-S =\s*([0-9.E+-]+) mb/sr", body):
                 lines.append("xs %s %s" % (mm.group(1), mm.group(2)))
+            for mm in re.finditer(r"([0-9.]+) deg\.: X-S =\s*[0-9.E+-]+ mb/sr,\s*& pols =\s*\S+\s+([-0-9.]+)", body):
+                lines.append("pol %s %s" % (mm.group(1), mm.group(2)))
     mm = re.search(r"CUMULATIVE REACTION cross section\s*=\s*([0-9.]+)", out)
     if mm:
         lines.append("reaction %s" % mm.group(1))
     for ln in out.splitlines():
         if " VR " in ln and re.match(r"^\s+\d+:", ln):
-            t = ln.split(" VR ")[1].split()
-            lines.append("bound %s %s %s %s %s" % (ln.split(":")[0].strip(), t[0].rstrip(";"), t[5], t[6], t[8]))
+            # the columns can run together ("264.2-16.0940") or overflow ("*******"): by pattern, not by blanks
+            t = re.findall(r"\*+|-?[0-9]+\.?[0-9]*(?:[Ee][-+]?[0-9]+)?", ln.split(" VR ")[1])
+            lines.append("bound %s %s %s %s %s" % (ln.split(":")[0].strip(), t[0], t[5], t[6], t[8]))
     for mm in re.finditer(r"ANC in ch\s+(\d+) is\s+([-0-9.E+]+)", out):
         lines.append("anc_printed %s %s" % (mm.group(1), mm.group(2)))
     mm = re.search(r"Bin from\s+([0-9.]+) MeV to\s+([0-9.]+) MeV \(cm\) in\s*(\d+) steps", out)
@@ -452,20 +599,27 @@ def extract(out, forts):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--fresco", required=True, help="the fresco binary (version 3.5)")
+    ap.add_argument("--frescox", help="the frescox binary (7.4), for the cases marked code='frescox'")
     ap.add_argument("--out", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "fresco"))
     ap.add_argument("--case", action="append", help="only these cases")
     args = ap.parse_args()
     for name, case in CASES.items():
         if args.case and name not in args.case:
             continue
+        binary = args.frescox if case.get("code") == "frescox" else args.fresco
+        if not binary:
+            print(name, "skipped: needs --frescox")
+            continue
         d = os.path.join(args.out, name)
         os.makedirs(d, exist_ok=True)
         runs = [("reference", case["reference"]), ("refined", case["refined"])]
         runs += [("variant%d" % (i + 1), s) for i, s in enumerate(case.get("also", []))]
-        lines = ["# %s" % case["title"], "# FRESCO 3.5 (github.com/I-Thompson/fresco c571c9e), %s, by %s" %
-                 (datetime.date.today().isoformat(), os.path.basename(__file__))]
+        code = ("Frescox 7.4 (github.com/LLNL/Frescox eca88f3)" if case.get("code") == "frescox" else
+                "FRESCO 3.5 (github.com/I-Thompson/fresco c571c9e)")
+        lines = ["# %s" % case["title"], "# %s, %s, by %s" %
+                 (code, datetime.date.today().isoformat(), os.path.basename(__file__))]
         for tag, settings in runs:
-            text, out, forts = run_fresco(args.fresco, case, settings)
+            text, out, forts = run_fresco(binary, case, settings)
             if tag == "reference":
                 with open(os.path.join(d, "job.nin"), "w") as f:
                     f.write(text)
@@ -473,7 +627,7 @@ def main():
                     with open(os.path.join(d, "fort4.dat"), "w") as f:
                         f.write(table_for(settings))
             lines.append("run %s %s" % (tag, " ".join("%s=%s" % kv for kv in settings.items())))
-            lines += extract(out, forts)
+            lines += [l for l in extract(out, forts) if l.split()[0] not in case.get("drop", ())]
         with open(os.path.join(d, "reference.txt"), "w") as f:
             f.write("\n".join(lines) + "\n")
         print(name, len(lines), "lines")

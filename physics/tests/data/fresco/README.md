@@ -31,3 +31,12 @@ cases, further variants; the format is in the docstring of the script).
 | `dn_prior`, `dn_prior_remnant`, `dn_post_remnant` | 15N(d,n)16O(g.s.) in the prior form, and with the full complex remnant (core-core n + 15N, kp 5): FRESCO does not converge in rnl (20, 26, 32 fm); data for `transfer.md` §17, not compared |
 
 Generated 2026-11-12 (part 2), same command; FRESCO's bin listing is printed with `ipc=3` and read as the `bin*` lines.
+
+Generated 2026-11-12 (part 3), same command; the `pol` lines are FRESCO's iT11 of the projectile (kqmax=1, Madison):
+
+| Case | What |
+|---|---|
+| `dn_finite_range_so`, `dn_zero_range_so` | 15N(d,n)16O(g.s.) of `dn_*` with spin-orbit terms in d + 15N and n + 16O (`transfer_spin_orbit_test`) |
+| `he3d_<gs|d52>_<finite|zero>_range[_so]` | 18O(3He,d)19F at E_lab = 25 MeV to the 1/2+ ground state (2s1/2) or the 5/2+ state at 0.197 MeV (1d5/2), finite range (post, no remnant, cutl = -3.2) and zero range (D0 = -152.53 MeV fm^3/2, inh=2), with or without spin-orbit in both distortions (`transfer_he3_fresco_test`) |
+| `n14d_<gs|2p>_finite_range` | 12C(14N,d)24Mg at E_lab = 30 MeV to the 0+ ground state (12C + 12C, l = 0, six nodes) or the 2+ at 1.369 MeV (l = 2, five nodes), finite range, post, unsymmetrised; FRESCO with cutl = 0, cutr = -12, rnl = 16 (`transfer_n14_fresco_test`) |
+| `li6d_bin_wide_frx` | `li6d_bin_wide_fr` run with Frescox 7.4 (`--frescox`; `opt/frescox/README.md`): part 2's settings, the cut at the Coulomb turning point, RSP = 20 and 30 fm; data for `transfer.md` section 23, not compared |
