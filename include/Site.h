@@ -167,9 +167,6 @@ class Site {
   /// the set's row contracted with the record, as ValueFor (and AnalyzingPowerFor) give them to each reader of the set,
   /// the first divided by the slot's Jacobian (RowSet::JacobianAt: 1 but for data given at a lab angle).
   void ValuesWith(const azure2::RowSet &set, int k, const azure2::Results &r, double *values) const;
-  /// The same contraction on a record `record` (laid out as a site's of kind `kind`) that is not in a result buffer.
-  static double ContractRecord(SiteObservable kind, const double *record, const Site &reader, int slot,
-                               double *second = nullptr);
   /// The reader's Coulomb amplitudes at its slot `slot` (0: its own energy): f_d, the (symmetrized) f_C(theta), or
   /// the direct one for identical particles with spin, and f_x = f_C(pi - theta) there, else 0 (a reader of elastic
   /// slots reads them from its row set: RowSet.h).
@@ -340,9 +337,8 @@ class Site {
   bool RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nrCMAngle, double &cmAngle, double &factor) const;
   /// dOmega_lab/dOmega_cm of a particle at the point, not stored (the RATIO frame factors).
   double CalculateCrossSectionConversionFactor(PPair *, PPair *);
-  /// Lab motion (g, boost gamma) of the detected exit particle for the attenuation coefficients; false: Q as entered.
-  bool QLabBoost(PPair *entrancePair, PPair *exitPair, double &g, double &gb) const;
-  /// The same at c.m. energy `cmEnergy` (MeV).
+  /// Lab motion (g, boost gamma) of the detected exit particle for the attenuation coefficients at c.m. energy
+  /// `cmEnergy` (MeV); false: Q as entered.
   bool QLabBoostAt(double cmEnergy, PPair *entrancePair, PPair *exitPair, double &g, double &gb) const;
   /// dOmega_lab/dOmega_cm of a photon at the point (the RATIO frame factors).
   double CalculateCrossSectionGammaConversionFactor(PPair *);

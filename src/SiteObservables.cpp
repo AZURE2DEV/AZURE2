@@ -255,11 +255,6 @@ double Site::AnalyzingPowerFor(const Site &reader, int slot, const azure2::Resul
   return ay;
 }
 
-double Site::ContractRecord(SiteObservable kind, const double *record, const Site &reader, int slot, double *second) {
-  if (kind == SiteObservable::kLegendre && reader.IsCoefficient()) return CoefficientValue(record, reader);
-  return kSiteObservables[(int)kind].contract(Angular(record), RowOf(reader, slot), second);
-}
-
 void Site::ValuesWith(const azure2::RowSet &set, int k, const azure2::Results &results, double *values) const {
   const SiteObservableRow &row = kSiteObservables[(int)set.kind];
   values[0] = row.contract(Angular(Rec(results)), set.RowAt(k), row.values > 1 ? values + 1 : nullptr) /

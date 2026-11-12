@@ -151,10 +151,9 @@ SlotGroupKey MeshGroupKey(const WorkingCopy &data, const Unit &point, const Term
   // the target's line, not the segment's copy of it: the copies of one line share its parameters, so their slots'
   // stopping is the same (DataSet.h, WorkingCopy::SetUpTargetEffects)
   key.targetEffect = data.Data().GetTargetEffect(point.GetTargetEffectNum())->GetLineNumber();
-  // A site holding Legendre coefficients has no angle and no order: its readers' rows apply them (Site::ValueFor).
-  const bool angleFree = point.AngleFree();
-  key.legendreOrder = (point.IsCoefficient() && !angleFree) ? point.GetCoefficientOrder() : -1;
-  key.angle = angleFree ? 0 : bits(point.GetCMAngle());
+  // No angle and no Legendre order: a differential site holds its observables without an angle (its readers' rows
+  // apply it, Site::ValueFor), a scalar site (sigma, a phase shift, the total cross section) has none.  THM, whose
+  // sites are keyed by angle, is off the mesh: a group of its own.
   key.conversion = bits(spec.stoppingConversion);
   key.frameShift = bits(spec.frameShift);
   key.screeningUe = bits(point.GetScreeningUe());

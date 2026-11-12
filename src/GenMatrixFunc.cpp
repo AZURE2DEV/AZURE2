@@ -3,8 +3,6 @@
 #include "AChannel.h"
 #include "CNuc.h"
 #include "Unit.h"
-#include <cstdio>
-#include <cstdlib>
 #include "GenMatrixFunc.h"
 #include "PolarizationFunc.h"
 #include <assert.h>
@@ -264,7 +262,7 @@ void GenMatrixFunc::CalculateBareCrossSection(Site *point, azure2::Results &resu
       }
       // The observables of the reaction at this energy (SiteObservable.h).  A site of an angle-free kind holds them
       // in its record and its readers apply their own rows (Site::ValueFor), a site that is a row of its data (not a
-      // slot) included; a site of kValue (A_y, THM) contracts them here with its own row and Coulomb amplitude.
+      // slot) included.
       const SiteObservable kind = point->Observable();
       if (kind == SiteObservable::kLegendre) {
         point->SetLegendreCoefficients(results, this->LegendreCoefficientsOf(point, P, theDecay, aa, exitPairNum));
@@ -291,15 +289,10 @@ void GenMatrixFunc::CalculateBareCrossSection(Site *point, azure2::Results &resu
         }
         return;
       }
-      std::vector<double> record(azure2::Results::RecordSize(elastic_record::Slots(Config::maxLOrder + 1), 0), 0.0);
-      double *angular = record.data() + azure2::Results::AngularOffset();
-      if (aa == exitPairNum) {
-        Site::WriteElastic(angular, this->ElasticCoefficientsOf(point, P, theDecay, aa));
-        point->SetFitCrossSection(results, Site::ContractRecord(SiteObservable::kElastic, record.data(), *point, 0));
-      } else {
-        Site::WriteLegendre(angular, this->LegendreCoefficientsOf(point, P, theDecay, aa, exitPairNum));
-        point->SetFitCrossSection(results, Site::ContractRecord(SiteObservable::kLegendre, record.data(), *point, 0));
-      }
+      // Every differential kind has an angle-free kind (ObservableOf); THM is THMMatrixFunc's.
+      throw std::logic_error("GenMatrixFunc::CalculateBareCrossSection: a differential site of kind " +
+                             std::string(kSiteObservables[(int)kind].name) + " (data set " +
+                             std::to_string(point->GetSegmentKey()) + ")");
     } else if (aa == exitPairNum) {
       double segmentJ = point->GetJ();
       int segmentL = point->GetL();
@@ -353,20 +346,7 @@ void GenMatrixFunc::CalculateBareCrossSection(Site *point, azure2::Results &resu
       point->SetFitCrossSection(results, phase);
     }
   }
-
-  // Temporary validation hook: compare the Seyler amplitude-matrix route
-  // against the Blatt-Biedenharn one. At fixed energy the ratio must be
-  // constant in angle.
-  if (std::getenv("AZURE2_POL_DEBUG")) {
-    double spinSum = 0.0, ay = 0.0;
-    if (this->CalculateAmplitudeMatrix(point, &spinSum, &ay)) {
-      std::printf("POLDEBUG %.6f %.6f %.10e %.10e %.6f\n",
-                  point->GetCMEnergy(), point->GetCMAngle(),
-                  point->GetFitCrossSection(results), spinSum, ay);
-    }
-  }
 }
-
 
 void GenMatrixFunc::BuildOrderProducts(const azure2::EntrancePathways &P, const azure2::ExitRow &theDecay,
                                        bool particleExit, bool elastic) {
@@ -693,51 +673,6 @@ std::string GenMatrixFunc::CaptureAyNotBuiltMessage(const Site *point) const {
          "this one was not named";
 }
 
-bool GenMatrixFunc::CalculateAmplitudeMatrix(Site *point, double *spinSum,
-                                             double *analyzingPower) {
-  if (spinSum) *spinSum = 0.0;
-  if (analyzingPower) *analyzingPower = 0.0;
-
-  const int aaPair = compound()->GetPairNumFromKey(point->GetEntranceKey());
-  const int irPair = compound()->GetPairNumFromKey(point->GetExitKey());
-  // Particle channels only. A photon exit has no amplitude matrix of this form
-  // and goes through CalculateCaptureAnalyzingPower instead.
-  if (compound()->GetPair(aaPair)->GetPType() != 0 ||
-      compound()->GetPair(irPair)->GetPType() != 0) return false;
-
-  const azure2::EntrancePathways &P = compound()->Pathways().Entrance(aaPair);
-  const int ir = P.ExitOf(irPair);
-  if (!ir) throw std::runtime_error(NoPathwayMessage(aaPair, irPair));
-  const azure2::ExitRow &theDecay = P.exits[ir - 1];
-
-  Polarization::AmplitudeMatrix M(compound(), point->GetCMAngle(), aaPair, irPair);
-
-  for (int k = 1; k <= theDecay.num_groups; k++) {
-    const azure2::SpinGroupRow &g = P.Group(theDecay, k);
-    // A cross-spin UPOS group repeats pathways of the equal-spin groups.
-    if (g.CrossSpin()) continue;
-    for (int m = 1; m <= g.num_internal; m++) {
-      const azure2::InternalRow &r = P.Internal(g, m);
-      M.AddPathway(r.group, r.ch, r.chp, this->GetTMatrixElement(k, m));
-    }
-  }
-
-  // Coulomb only contributes to elastic scattering.
-  if (aaPair == irPair) {
-    complex fd, fx;
-    point->CoulombAt(0, fd, fx);
-    M.AddCoulomb(fd, fx);
-  }
-
-  if (M.size() == 0) return false;
-  if (std::getenv("AZURE2_POL_DEBUG2")) M.DumpSpinHalf();
-  if (std::getenv("AZURE2_POL_DEBUG2"))
-    std::printf("FLIP n=%zu maxflip=%.6e\n", M.size(), M.MaxSpinFlip());
-  if (spinSum) *spinSum = M.UnpolarizedCrossSection();
-  if (analyzingPower) *analyzingPower = M.AnalyzingPowerAy();
-  return true;
-}
-
 Site::AnalyzingPowerCoefficients GenMatrixFunc::AnalyzingPowerCoefficientsOf(const Site *point,
                                                                              const azure2::EntrancePathways &P,
                                                                              const azure2::ExitRow &theDecay, int aa,
@@ -797,75 +732,6 @@ Site::AnalyzingPowerCoefficients GenMatrixFunc::AnalyzingPowerCoefficientsOf(con
     }
   }
   return a;
-}
-
-bool GenMatrixFunc::CalculateCaptureAnalyzingPower(Site *point, const azure2::Results &results,
-                                                   double *unpolarized,
-                                                   double *analyzingPower) {
-  if (unpolarized) *unpolarized = 0.0;
-  if (analyzingPower) *analyzingPower = 0.0;
-
-  const int aaPair = compound()->GetPairNumFromKey(point->GetEntranceKey());
-  const int irPair = compound()->GetPairNumFromKey(point->GetExitKey());
-  if (compound()->GetPair(aaPair)->GetPType() != 0) return false;   // particle in
-  if (compound()->GetPair(irPair)->GetPType() != 10) return false;  // photon out
-
-  const azure2::EntrancePathways &P = compound()->Pathways().Entrance(aaPair);
-  const int ir = P.ExitOf(irPair);
-  if (!ir) throw std::runtime_error(NoPathwayMessage(aaPair, irPair));
-  const azure2::ExitRow &exit = P.exits[ir - 1];
-  if (!exit.has_capture_ay) throw std::runtime_error(CaptureAyNotBuiltMessage(point));
-
-  const int maxL = point->GetMaxLOrder();
-  const int nTerms = exit.num_capture_ay;
-  if (nTerms == 0) return false;
-
-  // P_k^1 is not among the polynomials the point caches, so it is evaluated
-  // here at the same centre-of-mass angle Unit::CalcLegendreP uses.
-  const double x = cos(point->GetCMAngle() * pi / 180.0);
-  std::vector<double> assocP(maxL + 1, 0.0);
-  for (int k = 1; k <= maxL; k++) assocP[k] = AngCoeff::LegendreP1(k, x);
-
-  double num = 0.0, den = 0.0;
-  for (int i = 0; i < nTerms; i++) {
-    const azure2::CaptureAyTerm *term = &P.capture_ay[exit.first_capture_ay + i];
-    if (term->kOrder > maxL) continue;
-    complex T1 = term->isEC1
-        ? this->GetECTMatrixElement(term->kGroup1, term->path1)
-        : this->GetTMatrixElement(term->kGroup1, term->path1);
-    complex T2 = term->isEC2
-        ? this->GetECTMatrixElement(term->kGroup2, term->path2)
-        : this->GetTMatrixElement(term->kGroup2, term->path2);
-    const complex prod = T1 * conj(T2);
-    if (term->ak != 0.0)
-      den += term->ak * real(prod) * point->GetLegendreP(term->kOrder);
-    if (term->bk != 0.0)
-      num += term->bk * (-imag(prod)) * assocP[term->kOrder];  // Re(i T T'*)
-  }
-
-  // Validation hook. The denominator is Seyler and Weller's sum_k a_k P_k,
-  // which must be AZURE2's own differential capture cross section up to the
-  // energy-dependent, angle-independent factor
-  //     den / sigma(theta) = 400 pi / (geometrical factor * I1I2 factor),
-  // since the pathway table holds the same coefficients as z1z2 = a_k / 4 and
-  // GenMatrixFunc forms sigma = Re(sum)/pi * geom * I1I2 / 100. A ratio that
-  // moves with angle means the pathway enumeration or a coupling order is
-  // wrong. The point still holds the cross section here; the analyzing power
-  // overwrites it only after this returns.
-  if (std::getenv("AZURE2_CAPPOL_DEBUG")) {
-    const double xs = point->GetFitCrossSection(results);
-    const double expect = 400.0 * pi / (point->GetGeometricalFactor() * compound()->GetPair(aaPair)->GetI1I2Factor());
-    std::printf("CAPPOL %10.6f %8.3f  den %14.7e  xs %14.7e  ratio %14.7e"
-                "  expect %14.7e  Ay %12.6e\n",
-                point->GetCMEnergy(), point->GetCMAngle(), den, xs,
-                (xs != 0.0) ? den / xs : 0.0, expect,
-                (den != 0.0) ? num / den : 0.0);
-  }
-
-  if (unpolarized) *unpolarized = den;
-  if (fabs(den) < 1.e-300) return false;
-  if (analyzingPower) *analyzingPower = num / den;
-  return true;
 }
 
 /*!

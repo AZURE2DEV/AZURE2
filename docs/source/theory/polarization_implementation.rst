@@ -462,7 +462,9 @@ A photon exit has no amplitude matrix of the form of Seyler's Eq. (4), so the
 capture analyzing power is built the other way round: from the Legendre
 coefficients of Seyler and Weller [SeylerWeller1979]_, Eqs. (20) and (21), in
 the channel-spin representation. ``CNuc::CalcCaptureAnalyzingPower`` builds the
-coefficient table, ``GenMatrixFunc::CalculateCaptureAnalyzingPower`` evaluates
+coefficient table; ``GenMatrixFunc::AnalyzingPowerCoefficientsOf`` sums the
+numerator and denominator coefficients per order at each energy, and the
+reader's angular row (``P_k`` and ``P_k^1`` at its angle) evaluates
 
 .. math::
 

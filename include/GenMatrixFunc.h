@@ -83,35 +83,6 @@ class GenMatrixFunc {
   /// The observable without electron screening.
   void CalculateBareCrossSection(Site *, azure2::Results &results);
 
-  /*!
-   * Spin-summed |M|^2 from the channel-spin amplitude matrix, and the vector
-   * analyzing power, for one point.
-   *
-   * Built from the same T-matrix elements CalculateCrossSection uses, by the
-   * independent route of Seyler Eq. (4) rather than the Blatt-Biedenharn
-   * contraction. Returns false when the point has no pathway, or when the
-   * entrance is not a particle channel.
-   *
-   * The spin sum is returned without AZURE2's geometrical and unit factors, so
-   * it is proportional to the differential cross section rather than equal to
-   * it. That is enough for the check that matters: at fixed energy the ratio to
-   * the existing cross section has to be constant in angle, which is what pins
-   * down the coupling order and the choice of l versus l'.
-   */
-  bool CalculateAmplitudeMatrix(Site *point, double *spinSum, double *analyzingPower);
-  /*!
-   * Vector analyzing power of a capture reaction, from the Legendre
-   * coefficients of R. G. Seyler and H. R. Weller, Phys. Rev. C \b 20 (1979)
-   * 453, Eqs. (20) and (21):
-   * \f$A_y = \sum_k b_k P_k^1(\cos\theta) / \sum_k a_k P_k(\cos\theta)\f$.
-   * The coefficients are the exit's capture-A_y rows of the pathway table,
-   * built at set-up for the reactions the data sets name; the T-matrix
-   * elements are the ones this object has already computed, external capture
-   * included.  Returns false for anything that is not a photon exit channel;
-   * throws when the exit's terms were not requested.
-   */
-  bool CalculateCaptureAnalyzingPower(Site *point, const azure2::Results &results, double *unpolarized,
-                                      double *analyzingPower);
   /// Start a temporary T-matrix element for a \f$J,l,l'\f$ combination.
   void NewTempTMatrix(TempTMatrix);
   /// As NewTempTMatrix, for the E1 component kept separately.

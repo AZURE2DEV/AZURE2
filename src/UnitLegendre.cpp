@@ -96,10 +96,6 @@ __attribute__((noinline)) void LegendreSeries(int n, double x, double *p) {
  * g^2 = m1 m3 E / (m2 m4 (E + Q)) (E the c.m. energy; the same g as ConvertLabAngle's a13/a24); relativistic=1:
  * the c.m. boost gamma and beta / beta_3* of RelativisticLabToCM.  Returns false where the transform is not used.
  */
-bool Site::QLabBoost(PPair *entrancePair, PPair *exitPair, double &g, double &gb) const {
-  return QLabBoostAt(this->GetCMEnergy(), entrancePair, exitPair, g, gb);
-}
-
 bool Site::QLabBoostAt(double ti, PPair *entrancePair, PPair *exitPair, double &g, double &gb) const {
   const double tf = ti + entrancePair->GetSepE() + entrancePair->GetExE() - exitPair->GetSepE() - exitPair->GetExE();
   if (ti <= 0.0 || tf <= 0.0) return false;

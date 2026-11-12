@@ -21,12 +21,14 @@
  *   - the term: what the energy pass reads of its settings (the observable, the pairs, UPOS L / I_c / delta, the E1/E2
  *     component, THM; TermSettings.h, SameObservable), the frame shift E_x - E_cm of the pair, the external-capture
  *     pathways -- in the key; not the segment: two data sets of one reaction on one mesh share their sites;
- *   - angle: none for the kinds without an angle (SiteObservable.h: every differential kind on a mesh), whose readers
- *     bring their rows (RowSet.h); else the c.m. angle, bit for bit; a leaf's slots take their point's angles
- *     converted with the leaf's pairs after the grouping (WorkingCopy::InitializeLeaves); a point whose converted
- *     angles differ from its group's writer's gets slots of its own then (WorkingCopy::SeparateSlotsByAngle);
- *   - the point: the Legendre order of an angular-coefficient row (read by the observable) -- in the key; the row
- *     (Site::Row is -1 on a slot, nothing reads it there); the target effect (stopping table, screening U_e and its
+ *   - angle: not in the key.  A differential site on a mesh holds its observables without an angle (SiteObservable.h)
+ *     and its readers bring their rows (RowSet.h); a scalar site (sigma, a phase shift, the total cross section) has
+ *     none; THM, keyed by angle, is off the mesh (a group of its own).  A leaf's slots of a kind with an angle (THM)
+ *     take their point's angles converted with the leaf's pairs after the grouping (WorkingCopy::InitializeLeaves); a
+ *     point whose converted angles differ from its group's writer's gets slots of its own then
+ *     (WorkingCopy::SeparateSlotsByAngle);
+ *   - the point: no Legendre order (a coefficient reader picks its order from the site's coefficients, Site::ValueFor);
+ *     the row (Site::Row is -1 on a slot, nothing reads it there); the target effect (stopping table, screening U_e and its
  *     parameter, the Q coefficients of the Legendre rows) and the c.m./lab factor of the stopping -- in the key; the
  *     target thickness and its lab energy are the point's, never set on a slot;
  *   - a result: the record (the cross sections, A_y, A_0, coefficients) is the site's, written once by the energy
@@ -63,12 +65,11 @@ struct SlotGroupKey {
   const TermSettings *settings = nullptr;
   int mesh = -1;
   int targetEffect = 0;  ///< the line of the target (TargetEffect::GetLineNumber), shared by its copies
-  int legendreOrder = -1;
-  std::uint64_t angle = 0, conversion = 0, frameShift = 0, screeningUe = 0;
+  std::uint64_t conversion = 0, frameShift = 0, screeningUe = 0;
   int screeningParam = 0;
   bool operator==(const SlotGroupKey &o) const {
     return SameObservable(*settings, *o.settings) && mesh == o.mesh && targetEffect == o.targetEffect &&
-           legendreOrder == o.legendreOrder && angle == o.angle && conversion == o.conversion &&
+           conversion == o.conversion &&
            frameShift == o.frameShift && screeningUe == o.screeningUe && screeningParam == o.screeningParam;
   }
 };
