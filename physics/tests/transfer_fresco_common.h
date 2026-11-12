@@ -216,7 +216,7 @@ inline void CheckPotentials(const std::string &name, const std::vector<Line> &ru
 
 // ---------------------------------------------------------------- 3. bound states
 inline void CheckBound(const std::string &name, const std::vector<Line> &run, int kn, const OpticalPotential &well,
-                const BoundState &s, bool d0_listed) {
+                const BoundState &s, bool d0_listed, double anc_tolerance = 2e-5) {
   for (const Line &l : Select(run, "bound")) {
     if (std::stoi(l[1]) != kn) continue;
     const double depth = D(l[2]) * well.real_volume.depth_MeV;
@@ -230,7 +230,7 @@ inline void CheckBound(const std::string &name, const std::vector<Line> &run, in
                   s.l == 0 ? ZeroRangeConstant(s) : 0.0, l[4].c_str(), s.anc_fm_half, anc_plateau);
     bool ok = std::fabs(s.depth_MeV - depth) < 0.51e-4 * well.real_volume.depth_MeV &&
               std::fabs(s.rms_radius_fm - D(l[3])) < 0.51e-3 &&
-              std::fabs(s.anc_fm_half - anc_plateau) < 2e-5 * std::fabs(anc_plateau);
+              std::fabs(s.anc_fm_half - anc_plateau) < anc_tolerance * std::fabs(anc_plateau);
     if (s.l == 0 && d0_listed) ok = ok && std::fabs(ZeroRangeConstant(s) - D(l[4])) < 0.051;
     Check(ok, buf);
     std::printf("%s\n", buf);

@@ -261,8 +261,8 @@ data and not tested.
 - Not implemented: global optical potentials, relativistic
   kinematics, target spin in the distortion (spin-spin), tensor forces, l > 40, complex (optical or coupled-channel)
   bins. Part 2 added the continuum, the prior form and the remnants (§14–§17); their limits are in §18. Part 3 added
-  spin-orbit in the distorted waves of a transfer and the projectile's iT11 (§19); its validation is §22. The ³He
-  and ¹⁴N Trojan horses are not yet benchmarked. The prior form and the remnant terms (§17) with spin-orbit waves go through
+  spin-orbit in the distorted waves of a transfer and the projectile's iT11 (§19); its validation is §22. The ³He Trojan horse is §20; the ¹⁴N
+  Trojan horse is not yet benchmarked. The prior form and the remnant terms (§17) with spin-orbit waves go through
   the same sums (the interaction terms are scalar), but are not compared with FRESCO.
 
 ## 11. The continuum part
@@ -592,6 +592,51 @@ a property of the result the code never uses, so a test of its phases.
 **Cost.** Per pair of waves the kernel accumulates one more product (3 × 2 per l pair for d and n); ¹⁵N(d,n) with
 spin-orbit in both channels, distorted waves, finite and zero range at 37 angles: 1.0 s at one thread (scratch driver
 `work/dwba3/drivers/dnso.cpp`).
+
+## 20. The ³He Trojan horse: ¹⁸O(³He,d)¹⁹F
+
+Proton transfer from ³He = d + p to ¹⁸O at E_lab = 25 MeV (E_cm = 21.43 MeV; a typical ³He energy of THM runs with the
+proton as participant). Inputs (the benchmark's, not claims about the nuclei):
+
+| | |
+|---|---|
+| ³He = d + p | l = 0, j = ½, no node, B = 5.4935 MeV; Woods–Saxon R = 1.5 fm, a = 0.5 fm (depth searched: 57.5764 MeV), Coulomb sphere R_C = 1.5 fm; D0 = −152.53 MeV fm^3/2 (ours −152.5335, FRESCO −152.5), ANC 1.631716 fm^-1/2 |
+| ¹⁹F = ¹⁸O + p | g.s. ½⁺ 2s½ (one node, B = 7.9937 MeV) and 5/2⁺ 1d5/2 at 0.1972 MeV (no node, B = 7.7965 MeV); WS r0 = 1.25, a = 0.65, spin-orbit 6.0 MeV (r0 1.25, a 0.65), R_C = 1.25 A^1/3 fm |
+| ³He + ¹⁸O | V = 155 MeV (1.2, 0.72), W = 10 MeV (1.4, 0.88), spin-orbit 2.5 MeV (1.2, 0.72) when on, R_C = 1.3 A^1/3 fm |
+| d + ¹⁹F | V = 88 MeV (1.17, 0.75), W = 2 MeV (1.32, 0.65), W_D = 12 MeV (1.32, 0.65), spin-orbit 6.0 MeV (1.07, 0.66) when on |
+| Q | 2.5002 MeV (g.s.), 2.3030 MeV (5/2⁺); masses 3, 18, 2, 19 u; spectroscopic amplitudes 1 |
+
+Radii r0 A_t^{1/3} unless stated; spin-orbit strengths in the convention of (2.1) (FRESCO's TYPE=3). The ³He spin ½ is
+the entrance waves' spin, the deuteron's 1 that of the exit: the case exercises (19.5) with J_a = ½, J_s = 1, the
+reverse of ¹⁵N(d,n). Results (FRESCO data `he3d_<gs|d52>_<finite|zero>_range[_so]`, test `transfer_he3_fresco`), the
+worst relative difference from 0 to 90° where σ > 1 % of its maximum; the iT11 of ³He in absolute units:
+
+| Case | finite range σ; iT11 | zero range σ; iT11 | FRESCO ref − refined (FR σ) |
+|---|---|---|---|
+| g.s., no spin-orbit | 3.5e-4 (40°); 1.0e-5 | 9.2e-5; 1e-16 (both ≈ 0) | 1.8e-3 |
+| g.s., spin-orbit | 3.4e-4 (40°); 7.5e-5 | 6.4e-5; 2.2e-5 | 1.5e-3 |
+| 5/2⁺, no spin-orbit | 8.9e-4 (80°); 2.2e-4 | 5.1e-5; 1.2e-5 | 7.9e-4 |
+| 5/2⁺, spin-orbit | 7.2e-4 (50°); 4.3e-4 | 2.7e-5; 2.0e-5 | 6.8e-4 |
+
+Asked 1 %: reached everywhere. Numerical findings:
+
+- **The vertex range.** V_pd u_³He keeps the p + d Coulomb tail e²/ρ × u (κ = 0.417 fm⁻¹): our result moves by 1.2e-3
+  at 0° and 2.1e-3 at 20° between ρ_max = 10 and 16 fm and by < 2e-4 beyond (16, 20 fm); the test uses 16 fm. At
+  h = 0.025, h_K = 0.05 fm, ρ_max 18 fm, 64 x nodes, r_max 28 fm, l ≤ 39 ours moves by ≤ 2.1e-4. 0.5–2.0 s per
+  case at one thread.
+- **FRESCO's partial waves.** FRESCO's ERWIN loses 14 digits at L ≥ 35 without a radial cut, and one such wave
+  spoils the transfer: at hcm = 0.02 fm the g.s. cross section came out ×16 (2745 against 174 mb/sr at 0°), and with
+  jtmax = 45 instead of 36 by 3–7 %. With cutl = −3.2 (R_min = 0.08 L fm) jtmax = 36, 40, 45, 55 agree to 3e-6; all
+  finite-range runs use cutl and jtmax = 36. cutl = −1.6 is not enough for the 5/2⁺ (its cross sections ×20 with
+  and without spin-orbit).
+- **FRESCO's convergence**: its refined run (hcm 0.0125, rintp 0.025, hnl 0.0125, cutl −6.4) moves the finite-range
+  cross sections by up to 1.8e-3 (g.s., at 10–20°), above the 0.2 % asked; its larger radii (rmatch 35, rnl 12, nnu
+  96) by ≤ 2.4e-4; cutl −1.6 against −3.2 by 0.9–1.4e-3 (g.s.). Ours is converged to 2e-4 and lies 0.04–0.09 % from FRESCO's
+  reference, 0.13–0.22 % from its refined run. The remaining 0.1–0.2 % is FRESCO's step and cut dependence.
+- **The p + d ANC**: ours 1.631716 fm^-1/2 at h = 0.05, 0.025, 0.0125 fm (depth 57.57637–57.57639 MeV); FRESCO's
+  u/W plateau 1.63168 at 8, 10, 12 fm and at both its steps: 2.2e-5 apart (part 1's p + ¹⁵N agreed to 4e-7). Not
+  resolved; the test allows 3e-5 for this one ANC; it moves σ by < 5e-5.
+- iT11 of ³He: the reflection test of §22 and FRESCO agree on the sign and normalisation for spin ½ (iT11 = A_y/√2).
 
 ## 22. Validation of part 3
 

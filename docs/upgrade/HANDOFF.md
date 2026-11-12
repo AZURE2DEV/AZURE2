@@ -2,6 +2,19 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, branch `feature/upgrade-7-transfer-3`) — physics/transfer, third part, item 2: the ³He Trojan horse
+
+**Done** (`transfer.md` §20, §22): ¹⁸O(³He,d)¹⁹F at E_lab = 25 MeV to the ½⁺ ground state and the 5/2⁺ state, finite
+and zero range, with and without spin-orbit in both distortions: eight FRESCO cases `he3d_*` (generator: `HE3_*`;
+FRESCO needs cutl here, ERWIN at L ≥ 35 otherwise spoils its transfer), new test `physics_transfer_he3_fresco`. The
+generator reads FRESCO's bound-state listing by number pattern (columns can run together); part 1's regenerated
+`dn_finite_range` and `li6d_finite_range` data are identical.
+
+**Verified**: the new test passes: ours against FRESCO ≤ 8.9e-4 (FR), ≤ 9.2e-5 (ZR), iT11 ≤ 4.3e-4. FRESCO's own
+refinement moves its FR results by up to 1.8e-3 (asked 0.2 %: not reached by FRESCO; ours converged to 2e-4). The
+p + d ANC differs from FRESCO's by 2.2e-5 (unresolved; the test allows 3e-5 for it). Injected error: the sign of the
+S_− term of S_y (iT11 of ³He fails in three cases).
+
 ## 2026-11-12 (agent, branch `feature/upgrade-7-transfer-3`) — physics/transfer, third part, item 1: spin-orbit in the distorted waves of a transfer
 
 **Done** (leaf library, nothing of the engine touched; `transfer.md` §19, §22):

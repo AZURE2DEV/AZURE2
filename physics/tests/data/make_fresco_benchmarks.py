@@ -242,6 +242,61 @@ CASES.update({
         reference=dict(hcm=0.025, rmatch=30.0), refined=dict(hcm=0.0125, rmatch=35.0), drop=("S",)),
 })
 
+# 18O(3He,d)19F at E_lab = 25 MeV (transfer.md section 20): proton transfer, 3He = d + p (l = 0, a Woods-Saxon well
+# of R = 1.5 fm, a = 0.5 fm at the p + d separation energy 5.4935 MeV, no node), 19F = 18O + p in the ground state
+# 1/2+ (2s1/2, one node, S_p = 7.9937 MeV) or the 5/2+ state at 0.1972 MeV (1d5/2, no node, B = 7.7965 MeV); the
+# 3He + 18O and d + 19F optical potentials with or without their spin-orbit terms ({so1}, {so2}).
+HE3_BODY = """\
+ &PARTITION namep='3He' massp=3.0 zp=2 nex=1 namet='18O' masst=18.0 zt=8 qval=0.0 /
+ &STATES jp=0.5 ptyp=1 ep=0.0 cpot=1 jt=0.0 ptyt=1 et=0.0 /
+ &PARTITION namep='d' massp=2.0 zp=1 nex=1 namet='19F' masst=19.0 zt=9 qval=2.5002 /
+ &STATES jp=1.0 ptyp=1 ep=0.0 cpot=2 jt={JF} ptyt=1 et={EX} /
+ &partition /
+ &pot kp=1 type=0 p(1:3)= 18.0 0.0 1.3 /
+ &pot kp=1 type=1 p(1:6)= 155.0 1.2 0.72 10.0 1.4 0.88 /
+{so1} &pot kp=2 type=0 p(1:3)= 19.0 0.0 1.3 /
+ &pot kp=2 type=1 p(1:6)= 88.0 1.17 0.75 2.0 1.32 0.65 /
+ &pot kp=2 type=2 p(1:6)= 0.0 1.32 0.65 12.0 1.32 0.65 /
+{so2} &pot kp=3 type=0 p(1:3)= 1.0 0.0 1.5 /
+ &pot kp=3 type=1 p(1:3)= 60.0 1.5 0.5 /
+ &pot kp=4 type=0 p(1:3)= 18.0 0.0 1.25 /
+ &pot kp=4 type=1 p(1:3)= 50.0 1.25 0.65 /
+ &pot kp=4 type=3 p(1:3)= 6.0 1.25 0.65 /
+ &pot /
+ &overlap kn1=1 ic1=1 ic2=2 in=1 kind=0 nn=1 l=0 sn=0.5 j=0.5 kbpot=3 be=5.4935 isc=1 ipc=1 /
+ &overlap kn1=2 ic1=1 ic2=2 in=2 kind=0 nn={NN} l={L} sn=0.5 j={J} kbpot=4 be={BE} isc=1 ipc=1 /
+ &overlap /
+ &coupling icto=2 icfrom=1 {coupling} /
+ &cfp in=1 ib=1 ia=1 kn=1 a=1.0 /
+ &cfp in=-2 ib=1 ia=1 kn=2 a=1.0 /
+ &coupling /
+"""
+HE3_SO1 = " &pot kp=1 type=3 p(1:3)= 2.5 1.2 0.72 /\n"
+HE3_SO2 = " &pot kp=2 type=3 p(1:3)= 6.0 1.07 0.66 /\n"
+HE3_STATES = {"gs": dict(JF=0.5, EX="0.0", NN=2, L=0, J=0.5, BE=7.9937),
+              "d52": dict(JF=2.5, EX="0.1972", NN=1, L=2, J=2.5, BE=7.7965)}
+# D0 of the 3He vertex (MeV fm^3/2): physics/transfer's ZeroRangeConstant of the kp=3 state (h = 0.05 fm) is
+# -152.5335; FRESCO lists -152.5.
+HE3_D0 = "-152.53"
+# FRESCO's ERWIN loses 14 digits at L >= 35 here unless the radial cut cutl is set, and one such partial wave
+# spoils the transfer by factors (transfer.md section 20): every finite-range run has cutl (R_min = 0.08 L fm).
+HE3_FR_REF = dict(hcm=0.025, rmatch=30.0, rintp=0.05, hnl=0.025, rnl=10.0, centre=0.0, nnu=72, cutl=-3.2)
+HE3_FR_FINE = dict(hcm=0.0125, rmatch=30.0, rintp=0.025, hnl=0.0125, rnl=10.0, centre=0.0, nnu=72, cutl=-6.4)
+for _st, _b in HE3_STATES.items():
+    for _so in ("", "_so"):
+        _sos = dict(so1=HE3_SO1 if _so else "", so2=HE3_SO2 if _so else "")
+        _what = "spin-orbit in 3He + 18O and d + 19F" if _so else "no spin-orbit in the distortions"
+        CASES["he3d_%s_finite_range%s" % (_st, _so)] = dict(
+            title="18O(3He,d)19F(%s) at E_lab = 25 MeV, %s, finite range, post, no remnant" % (_st, _what),
+            elab=25.0, jtmax=36, iter=1, iblock=1, thmin=0.0, extra="kqmax=1 pp=0",
+            body=HE3_BODY.format(coupling=FR_DN, **_sos, **_b), reference=HE3_FR_REF, refined=HE3_FR_FINE,
+            also=[dict(HE3_FR_REF, rmatch=35.0, rnl=12.0, nnu=96), dict(HE3_FR_REF, cutl=-1.6)], drop=("S",))
+        CASES["he3d_%s_zero_range%s" % (_st, _so)] = dict(
+            title="18O(3He,d)19F(%s) at E_lab = 25 MeV, %s, zero range D0 = %s MeV fm^3/2, recoil (inh=2)" %
+                  (_st, _what, HE3_D0), elab=25.0, jtmax=36, iter=1, iblock=1, thmin=0.0, extra="inh=2 kqmax=1 pp=0",
+            body=HE3_BODY.format(coupling="kind=5 p1=%s p2=0.0" % HE3_D0, **_sos, **_b),
+            reference=dict(hcm=0.025, rmatch=30.0), refined=dict(hcm=0.0125, rmatch=35.0), drop=("S",))
+
 # 15N(d,n)[p + 15N] to continuum bins of p + 15N (E_lab = 10 MeV): the projectile overlap of DN_BODY, the bin of
 # l, j in the real Woods-Saxon (+ Coulomb) potential kp=5 (no spin-orbit), E_x = 12.1274 MeV + E (the p + 15N
 # threshold), the bin weight ISC.  The three bins (transfer.md section 15): non-resonant (l = 1), over a narrow
@@ -446,8 +501,9 @@ def extract(out, forts):
         lines.append("reaction %s" % mm.group(1))
     for ln in out.splitlines():
         if " VR " in ln and re.match(r"^\s+\d+:", ln):
-            t = ln.split(" VR ")[1].split()
-            lines.append("bound %s %s %s %s %s" % (ln.split(":")[0].strip(), t[0].rstrip(";"), t[5], t[6], t[8]))
+            # the columns can run together ("264.2-16.0940"): numbers by pattern, not by blanks
+            t = re.findall(r"-?[0-9]+\.?[0-9]*(?:[Ee][-+]?[0-9]+)?", ln.split(" VR ")[1])
+            lines.append("bound %s %s %s %s %s" % (ln.split(":")[0].strip(), t[0], t[5], t[6], t[8]))
     for mm in re.finditer(r"ANC in ch\s+(\d+) is\s+([-0-9.E+]+)", out):
         lines.append("anc_printed %s %s" % (mm.group(1), mm.group(2)))
     mm = re.search(r"Bin from\s+([0-9.]+) MeV to\s+([0-9.]+) MeV \(cm\) in\s*(\d+) steps", out)
