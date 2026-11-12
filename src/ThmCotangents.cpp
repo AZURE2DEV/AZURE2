@@ -68,13 +68,9 @@ void ThmModelCotangents(WorkingCopy &data, Results &results, const std::vector<G
     if (group >= 0) {
       scale = results.objective.thmProfiles[(std::size_t)group].s;
     } else if (segment.IsProfiledNorm()) {
-      double smm = 0.0, smd = 0.0;
-      for (std::size_t i = 0; i < m.size(); i++) {
-        if (e[i] == 0.0) continue;
-        smm += m[i] * m[i] / (e[i] * e[i]);
-        smd += m[i] * d[i] / (e[i] * e[i]);
-      }
-      scale = (smd > 0.0 && smm > 0.0) ? smd / smm : 1.0;
+      double norm = 1.0;  // the objective's profile of the models set above (Segment::ProfileNormChiSquared)
+      segment.ProfileNormChiSquared(data, results, norm);
+      scale = norm != 0.0 ? 1.0 / norm : 0.0;
     } else {
       const double norm = data.State(segment).norm;
       scale = norm != 0.0 ? 1.0 / norm : 0.0;

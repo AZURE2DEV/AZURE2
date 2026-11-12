@@ -2,6 +2,32 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, Phase 5 branch 10, after the merge of follow-ups 2) — the shift column of a profiled THM data set (`feature/upgrade-5-thm-mesh`)
+
+**Merged** `feature/upgrade-4-data` (f952c444): HANDOFF kept both sides; THM supports pass through `QueueMeshPoint`
+(label, kernel width for the node budget), THM shift columns take `InsideShiftStep`.
+**Cause** (the director's finding): the local central difference of a shift column (`SegmentLocalChi2`) compared the
+shifted models of a profiled THM data set with its data at the segment's start norm (`State().norm`, 1), not at its
+profile n* (about 3e4 here), so the models were negligible against the data and the column was the prior's derivative
+alone -- in the base engine and on this branch alike.
+**Fix.**  `SegmentLocalChi2` moved to `ShiftedFold.cpp` (out of the size-ratcheted `AZURECalc.cpp`) with the norm as an
+argument; `HeldNorms` gives each moved segment its own norm, or for a profiled one its profile n* at the present shift
+(`Segment::ProfileNormChiSquared`, the objective's function), held fixed across the difference (envelope theorem).  An
+experiment's segments stay outside the local path (whole chi^2 differences, as before).  `ThmModelCotangents` takes the
+profiled scale of a data set without an experiment from `ProfileNormChiSquared` too (the second copy of S_md/S_mm is
+gone).
+**Checks.**  `AZURE_GRAD_CHECK`, folded 18O with the 8.6126 level free and a fitted shift: with a prior, shift column
+-1494.8 against central differences 4269.1 before (rel 0.9998), 4269.13 = 4269.13 after (rel 1.3e-9); without a prior
+-1.45 against 4388.2 before, rel 1.3e-11 after.  `tests/thm_fit` checks both (shown failing on the merge commit's
+build).  The least-squares path: a project with THM data has no analytic Jacobian, so `--use-lm` falls back to MIGRAD
+with whole-chi^2 differences (as the T2 golden notes say), which profile: its shift column was right before and after.
+Fit of the director's case (level fixed at 8.6126, shift fit with prior 0.002 +- 0.003, 3 threads): `--use-gradient`,
+`--use-lm`, plain MIGRAD all end at x = -6.6982 keV +- 0.49 keV, chi^2 1507.02 (to 1e-10 in x); the scan of chi^2 at
+fixed shifts plus the prior (-8.0 ... -6.0 keV: 1522.43, 1518.09, 1515.80, 1515.59, 1517.44) has its parabola's minimum
+at -6.70 keV.
+**Ran**: build 0 warnings; consistency; quick set x 3 identical to milestone 1 (the merge's build and the fix's);
+`tests/mesh_node_budget`, `thin_layer_limit`, `ay_particle_entrance`, `tests/upgrade/check.sh`, `tests/thm_fit` pass.
+
 ## 2026-11-12 (agent, Phase 5 branch 10, milestones 3 and 4) — the THM gradient through the energy tasks; the documents (`feature/upgrade-5-thm-mesh`)
 
 **Gradient.**  The scalar pass (`EnergyTaskGradient`, CLI `AZURECalc::Gradient`) takes THM data when

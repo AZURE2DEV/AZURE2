@@ -30,6 +30,7 @@ trap 'rm -rf "$WORK"' EXIT
 . "$HERE/../lib/guard.sh"
 . "$HERE/../lib/check_common.sh"
 . "$HERE/../lib/thm_records.sh"
+. "$HERE/../lib/edit_guard.sh"
 RUN="$(guard_command "${TEST_TIMEOUT:-600}")"
 KIN="beam=18O target=3He spectator=d Ebeam=115"
 fail=0
@@ -83,25 +84,43 @@ done
 # The analytic gradient of folded THM data (ThmCotangents.h: the profiled model's cotangents, the HOES adjoint once per
 # site of the shared mesh) against central differences of chi^2 (AZURE_GRAD_CHECK), the fold kept, with and without a
 # spectator-momentum window.  Shown failing with the profiled scale left out of the cotangents (injected once: rel 0.998).
-for v in experiment ps; do
+# The same with a fitted energy shift of the THM data set (its profiled norm), with a prior and without: the shift's
+# column (a local central difference on the fixed nodes of the mesh, the profiled norm held at n*) agrees too.  Shown
+# failing on the engine before the fix, which compared the shifted models with the data at the start norm, not at n*:
+# the column was the prior's derivative alone (rel 0.9998).
+for v in experiment ps shift shiftfree; do
   case $v in
-    experiment) block="experiment[A]" ;;
+    experiment|shift|shiftfree) block="experiment[A]" ;;
     ps) block="experiment[A] $KIN ps=hulthen:0-40 psNodes=8" ;;
+  esac
+  case $v in
+    shift) shiftline="    shift          offset 0.002 MeV fit prior 0.002 0.003" ;;
+    shiftfree) shiftline="    shift          offset 0.002 MeV fit" ;;
+    *) shiftline="" ;;
   esac
   d="$WORK/grad_$v"
   mkdir -p "$d/output" "$d/checks"
   cp -r "$SRC/data" "$d/"
   awk '$3 == "8.602600" { $3 = "8.612600"; $4 = 0 } { print }' "$SRC/18O_p_a_thm.azr" > "$d/run.azr"
-  thm_set "$d/run.azr" "$block" lc723_thm_points lc723_band_mid
+  # the shift on a data set of its own (not an experiment's: those are profiled together, and not taken locally)
+  if [ -n "$shiftline" ]; then
+    edited "$d/run.azr" "$d/run.azr" awk -v l="$shiftline" '{ print } $1 == "dataset" && $2 == "lc723_thm_points" { print l }' ||
+      bad "$v: the shift line was not added"
+  else
+    thm_set "$d/run.azr" "$block" lc723_thm_points lc723_band_mid
+  fi
   (cd "$d" && printf '2\nn\n\n\n' | AZURE_GRAD_CHECK=exit $RUN "$AZURE2_BIN" --use-gradient --no-gui --no-readline \
      run.azr > log 2>&1)
-  line="$(grep -a '\[grad-check\] idx 0 energy' "$d/log")"
-  rel="$(printf '%s\n' "$line" | awk '{ print $NF }')"
-  if grep -aq 'analytic block used' "$d/log" && [ -n "$rel" ] && awk -v r="$rel" 'BEGIN { exit !(r < 1e-5) }'; then
-    ok "folded $v: the analytic gradient in the level energy agrees with central differences (rel $rel)"
-  else
-    bad "folded $v: $line"
-  fi
+  for c in "idx 0 energy" "shift J-1"; do
+    [ "$c" = "shift J-1" ] && [ -z "$shiftline" ] && continue
+    line="$(grep -a "\[grad-check\] .*$c" "$d/log")"
+    rel="$(printf '%s\n' "$line" | awk '{ print $NF }')"
+    if grep -aq 'analytic block used' "$d/log" && [ -n "$rel" ] && awk -v r="$rel" 'BEGIN { exit !(r < 1e-5) }'; then
+      ok "folded $v: the analytic gradient (${c% *}) agrees with central differences (rel $rel)"
+    else
+      bad "folded $v: $line"
+    fi
+  done
 done
 
 echo

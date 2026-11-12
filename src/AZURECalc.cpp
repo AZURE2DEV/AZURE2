@@ -102,19 +102,6 @@ bool g_deferCheckExit = false;
 // segment's current shift, as AZURECalc::Chi2Value has it, so a finite difference of this over the segment's shift
 // equals one of the whole chi^2 when no other segment's contribution depends on this shift (a self-contained segment:
 // the eligibility guard in Gradient()).  A folded segment on the fixed nodes is folded again, no node recomputed.
-double SegmentLocalChi2(const Segment *segment, CNuc *lc, const Config &config, WorkingCopy *ld, azure2::Results &results) {
-  double chi = 0.0;
-  const double norm = ld->State(*segment).norm;
-  const bool refolded = azure2::RefoldShiftedSegments(*ld, {segment}, config, results);
-  for (int pid = 0; pid < segment->NumPoints(); pid++) {
-    azure2::EvaluateModelPoint(*ld, *segment, pid, lc, config, results,
-                               refolded ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
-    chi += azure2::PointResidual(*ld, *segment, pid, results, norm).Chi2();
-  }
-  segment->AddShiftPenalty(ld->State(*segment), chi);
-  return chi;
-}
-
 // A parameter whose prior is its own (normalization, energy shift, abundance, screening, density, Doppler,
 // thickness): the limits manager's nuisance flag adds nothing to it (CalculateNuisanceChiSquared skips it).  By
 // kind (ParamKindRow::ownPrior), not by name.
@@ -940,13 +927,15 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
       if (const double step = !inCovariance && target.Local(ld) && !inThmGroup
                                   ? azure2::InsideShiftStep(*ld, target.segs, x0, h, move) : 0.0;
           step > 0.0) {
+        const double d0 = target.Get(ld);
+        const std::vector<double> held = azure2::HeldNorms(*ld, target.segs, lc, configure(), results);
         auto groupChi = [&](double v) {
           move(v);  // every segment the parameter moves is moved before any is calculated
           double c = 0.0;
-          for (int m : target.segs) c += SegmentLocalChi2(ld->Data().GetSegment(m), lc, configure(), ld, results);
+          for (std::size_t k = 0; k < target.segs.size(); k++)
+            c += azure2::SegmentLocalChi2(*ld->Data().GetSegment(target.segs[k]), lc, configure(), *ld, results, held[k]);
           return c;
         };
-        const double d0 = target.Get(ld);
         double chiP = groupChi(x0 + step);
         double chiM = groupChi(x0 - step);
         move(d0);  // restore base state on the clone
