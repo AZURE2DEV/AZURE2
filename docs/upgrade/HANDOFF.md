@@ -2,6 +2,17 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-12 (agent, Phase 6 branch 1, part 1) — the state of the engine surveyed (`feature/upgrade-6-evaluation`)
+
+**Done.** `docs/upgrade/evaluation.md`: the state table (every `thread_local`, mutable static, namespace-scope
+variable, `mutable` member and member cache of `src/`, `include/`, `api/`, `physics/`, `experiment/`, `stopping/`,
+`convert/`, `io/`, with what it becomes), the 44 environment switches with a proposal each, the cost of an evaluation
+today (time and memory at 1 and 3 threads, the shares of a fit), the target, five milestones, decisions for the
+director.  Measured: pool copying is 0.02 % of a fit's time, its cost is memory (a natural_neon fit holds 812 MB
+against 343 MB for the calculation: about five copies of 95 MB, `max(4, threads)` plus the snapshot pair).  The
+A-B-A test on the base engine found no leak.
+**Open.** Parts 2 (no hidden state) and 3 of the brief follow on this branch.
+
 ## 2026-11-12 (director, 18:27) — merged: Trojan-horse data on the shared mesh, their gradient through the energy tasks, the shift column of a profiled THM data set
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (the branch held the data head, so the merge's tree is
