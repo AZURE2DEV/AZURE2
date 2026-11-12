@@ -143,8 +143,8 @@ class Unit : public Site {
   void RecalcEDependentValues(WorkingCopy *data, CNuc *, const Config &, const ChannelRowSource *rows = nullptr);
   /// Make `sub` a sub-point of this point (WorkingCopy::AddSubPoint places it): it shares the term's settings and the
   /// point's screening.
-  void MakeSubPoint(Unit &sub) const;
-  /// The point's sub-points, a range of the units of `data` (WorkingCopy::Units); set by the data set.
+  void MakeSubPoint(Site &sub) const;
+  /// The point's slots, a range of the slots of its working copy (WorkingCopy::SlotAt); set by the working copy.
   int SubPointFirst() const { return sub_first_; }
   void SetSubPointRange(int first, int count) { sub_first_ = first, sub_count_ = count; }
   /// The point's fold of its observable slots (FoldPoint, include/PointFold.h, on each slot the data set compares).
@@ -170,10 +170,11 @@ class Unit : public Site {
   void SetPhotoKinematics(double qGamma, double compoundMassMeV) { photo_qgamma_ = qGamma; photo_mcn_ = compoundMassMeV; };
   double GetPhotoQ() const { return photo_qgamma_; }
   double GetPhotoCompoundMass() const { return photo_mcn_; }
-  /// Sub-point i (1-based) in the units of `data`, the data set that holds the point; null beyond the last.
-  Unit *GetSubPoint(WorkingCopy &data, int i);
-  const Unit *GetSubPoint(const WorkingCopy &data, int i) const;
-  UnitRange<Unit> GetSubPoints(WorkingCopy &data);
+  /// Slot i (1-based) of the point in `data`, the working copy that holds it (WorkingCopy::SlotAt); null beyond the
+  /// last.
+  Site *GetSubPoint(WorkingCopy &data, int i);
+  const Site *GetSubPoint(const WorkingCopy &data, int i) const;
+  UnitRange<Site> GetSubPoints(WorkingCopy &data);
  private:
   double cm_factor_ = 1.0;   ///< c.m./lab energy factor of the point's entrance pair (SetTargetKinematics)
   int bohr_z1_ = 0;          ///< beam charge of the entrance pair, for Bohr straggling
@@ -192,7 +193,7 @@ class Unit : public Site {
   double photo_qgamma_ = 0.0;
   double photo_mcn_ = 0.0;
   int plan_task_ = -1;  // see PlanTask
-  int sub_first_ = 0, sub_count_ = 0;  ///< the sub-points: units [first, first + count) of the data set
+  int sub_first_ = 0, sub_count_ = 0;  ///< the slots: [first, first + count) of WorkingCopy::SlotAt
   std::uint16_t num_model_ang_ = 0;  // see SetModelRecord
   // Where the model record lies (see SetModelRecord).
   std::size_t model_slot_ = kNoRecord;

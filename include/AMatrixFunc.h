@@ -175,7 +175,7 @@ class AMatrixFunc : public GenMatrixFunc {
    * instead of A_y.  Returns false, with `bar` unusable, where the configuration is outside the analytic path
    * (RMC, active-level compaction, angular-distribution test points): finite differences then.
    */
-  bool PointTBar(Unit *point, const azure2::Results &results, double fitBar, TMatrixCotangent &bar,
+  bool PointTBar(Site *point, const azure2::Results &results, double fitBar, TMatrixCotangent &bar,
                  int xsComponent = 0, bool ayCrossSection = false);
   /*!
    * Reverse mode, second half: back-propagates T-matrix cotangents to the

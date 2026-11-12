@@ -150,7 +150,7 @@ void Segment::UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, CNuc *
 
         // IMPORTANT: Also apply energy shift to all subpoints (used in convolution/target integration)
         for (int j = 1; j <= point->NumSubPoints(); j++) {
-          Unit *subPoint = point->GetSubPoint(data, j);
+          Site *subPoint = point->GetSubPoint(data, j);
           if (subPoint && (thm || subPoint->GetOriginalEnergy() > 0)) {
             double subOriginalEnergy = subPoint->GetOriginalEnergy();
             // Sub-points hold c.m. energies and are the depth / resolution samples

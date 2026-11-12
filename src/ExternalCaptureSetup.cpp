@@ -506,14 +506,14 @@ int WorkingCopy::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
                     for (int ecm = 1; ecm <= P.Group(exit, k).num_external; ecm++) {
                       if (!usePrevious) {
                         if (out.is_open()) out << point->GetECAmplitude(k, ecm) << std::endl;
-                        for (UnitIterator subPoint = point->GetSubPoints(*this).begin();
+                        for (Site *subPoint = point->GetSubPoints(*this).begin();
                              subPoint < point->GetSubPoints(*this).end(); subPoint++)
                           if (out.is_open()) out << subPoint->GetECAmplitude(k, ecm) << std::endl;
                       } else {
                         complex ecAmplitude(0.0, 0.0);
                         in >> ecAmplitude;
                         point->AddECAmplitude(k, ecm, ecAmplitude);
-                        for (UnitIterator subPoint = point->GetSubPoints(*this).begin();
+                        for (Site *subPoint = point->GetSubPoints(*this).begin();
                              subPoint < point->GetSubPoints(*this).end(); subPoint++) {
                           ecAmplitude = complex(0.0, 0.0);
                           in >> ecAmplitude;
@@ -615,14 +615,14 @@ int WorkingCopy::LeafECAmplitudes(CNuc *theCNuc, const Config &configure, bool u
                   for (int ecm = 1; ecm <= P.Group(exit, k).num_external; ecm++) {
                     if (!usePrevious) {
                       if (out.is_open()) out << point->GetECAmplitude(k, ecm) << std::endl;
-                      for (UnitIterator subPoint = point->GetSubPoints(*this).begin();
+                      for (Site *subPoint = point->GetSubPoints(*this).begin();
                            subPoint < point->GetSubPoints(*this).end(); subPoint++)
                         if (out.is_open()) out << subPoint->GetECAmplitude(k, ecm) << std::endl;
                     } else {
                       complex ecAmplitude(0.0, 0.0);
                       in >> ecAmplitude;
                       point->AddECAmplitude(k, ecm, ecAmplitude);
-                      for (UnitIterator subPoint = point->GetSubPoints(*this).begin();
+                      for (Site *subPoint = point->GetSubPoints(*this).begin();
                            subPoint < point->GetSubPoints(*this).end(); subPoint++) {
                         ecAmplitude = complex(0.0, 0.0);
                         in >> ecAmplitude;

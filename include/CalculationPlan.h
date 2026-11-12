@@ -80,7 +80,7 @@ struct EnergyTaskList {
  * Unit::SameECAmplitudesAs), so the T-matrix built from the first is the one each would build itself
  * (AZURE_PLAN_CHECK).
  */
-long long ECAmplitudeSource(const Unit &unit, const Config &configure);
+long long ECAmplitudeSource(const Site &unit, const Config &configure);
 
 class CalculationPlan {
  public:
@@ -122,7 +122,7 @@ class CalculationPlan {
                          const std::function<void(int, std::vector<std::pair<std::size_t, std::size_t>> &)> &run,
                          const std::function<std::string(int)> &name);
   /// The slots of `u`'s own record apart from the natural terms (the model pass's), appended to `ranges`.
-  static void AddRecordRange(const Unit &u, std::vector<std::pair<std::size_t, std::size_t>> &ranges);
+  static void AddRecordRange(const Site &u, std::vector<std::pair<std::size_t, std::size_t>> &ranges);
 
  private:
   std::vector<PointRef> points_;  // the point of each task

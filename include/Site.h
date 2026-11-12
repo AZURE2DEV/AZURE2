@@ -161,6 +161,8 @@ class Site {
   void UseSettings(const TermSettings *settings) { settings_ = settings; }
   /// Make this point a sub-point of `parent`'s row: it takes the row's Legendre order (an angular-coefficient row)
   /// but none of its data.
+  /// Make this site a slot of `point` (Unit::MakeSubPoint): it takes the point's screening.
+  void TakeSlotSettingsOf(const Site &point);
   void BelongToRowOf(const Site &parent) {
     legendre_order_ = parent.legendre_order_;
     row_ = parent.row_;

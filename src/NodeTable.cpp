@@ -26,7 +26,7 @@ std::uint64_t Bits(double x) {
   return b;
 }
 
-int NucleusOf(CNuc *cnuc, const Unit &u) { return cnuc->GetPair(cnuc->GetPairNumFromKey(u.GetEntranceKey()))->GetNucleus(); }
+int NucleusOf(CNuc *cnuc, const Site &u) { return cnuc->GetPair(cnuc->GetPairNumFromKey(u.GetEntranceKey()))->GetNucleus(); }
 
 template <class V>
 bool SameBits(const V &a, const V &b) {
@@ -59,7 +59,7 @@ std::size_t TableBytes(const EDependentTables &t) {
   return n;
 }
 
-NodeKey KeyOf(CNuc *cnuc, Unit &u) {
+NodeKey KeyOf(CNuc *cnuc, Site &u) {
   return NodeKey(NucleusOf(cnuc, u), u.IsTHM() ? 1 : 0, Bits(AMatrixFunc::InEnergy(cnuc, &u)));
 }
 
@@ -128,7 +128,7 @@ NodeState BuildNodeTable(WorkingCopy &data, CNuc *cnuc, const Config &) {
   for (int t = 0; t < plan.NumTasks(); t++) {
     units.clear();
     plan.TaskUnits(data, t, units);
-    for (UnitRef r : units) all.push_back({KeyOf(cnuc, data.UnitAt(r)), r});
+    for (UnitRef r : units) all.push_back({KeyOf(cnuc, data.SiteAt(r)), r});
     table->slots.begin.push_back((int)all.size());
   }
   std::vector<int> order(all.size());
@@ -140,7 +140,7 @@ NodeState BuildNodeTable(WorkingCopy &data, CNuc *cnuc, const Config &) {
   for (std::size_t k = 0; k < order.size(); k++) {
     const auto &u = all[order[k]];
     if (k == 0 || u.first != all[order[k - 1]].first) {
-      Unit &unit = data.UnitAt(u.second);
+      Site &unit = data.SiteAt(u.second);
       table->Append(u.first, AMatrixFunc::InEnergy(cnuc, &unit), unit.ChannelRowsShared());
     }
     table->slots.node[order[k]] = table->Size() - 1;
@@ -182,9 +182,9 @@ void WorkingCopy::PlaceOverflowNodes(CNuc *cnuc, const std::vector<int> &changed
       refs.clear();
       plan_.TaskUnits(*this, t, refs);
       // the units of a task share their point's entrance pair, and so its compound nucleus
-      const int nucleus = refs.empty() ? 0 : azure2::NucleusOf(cnuc, units_[refs[0]]);
+      const int nucleus = refs.empty() ? 0 : azure2::NucleusOf(cnuc, SiteAt(refs[0]));
       for (azure2::UnitRef r : refs) {
-        Unit &u = units_[r];
+        Site &u = SiteAt(r);
         const double ex = AMatrixFunc::InEnergy(cnuc, &u);
         const azure2::NodeKey key(nucleus, u.IsTHM() ? 1 : 0, azure2::Bits(ex));
         int n = stage->Find(key);
@@ -227,7 +227,7 @@ long WorkingCopy::CheckNodeTable(CNuc *cnuc, const std::vector<int> &work) {
       continue;
     }
     for (int k = 0; k < e - b; k++) {
-      Unit &u = units_[refs[k]];
+      Site &u = SiteAt(refs[k]);
       units++;
       const int n = slots.node[b + k];
       const bool inStage = n >= 0 && n < stage->Size();

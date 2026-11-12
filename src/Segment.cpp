@@ -770,7 +770,7 @@ void Segment::SetTermSettings(WorkingCopy &data, int t, std::shared_ptr<const Te
   u.settings = std::move(settings);
   for (Unit &point : TermPoints(data, t)) {
     point.UseSettings(u.settings.get());
-    for (Unit &sub : point.GetSubPoints(data)) sub.UseSettings(u.settings.get());
+    for (Site &sub : point.GetSubPoints(data)) sub.UseSettings(u.settings.get());
   }
 }
 

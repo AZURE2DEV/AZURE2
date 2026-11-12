@@ -94,7 +94,7 @@ void RunProject(const std::string &path) {
     return (void)std::printf("%s\tset-up stops (%s)\n", path.c_str(), e.what());
   }
   const azure2::CalculationPlan &plan = data.Plan();
-  auto nucleusOf = [&](const Unit &u) { return compound.GetPair(compound.GetPairNumFromKey(u.GetEntranceKey()))->GetNucleus(); };
+  auto nucleusOf = [&](const Site &u) { return compound.GetPair(compound.GetPairNumFromKey(u.GetEntranceKey()))->GetNucleus(); };
   std::set<std::pair<int, std::uint64_t>> today, unfolded;
   std::map<int, std::vector<std::tuple<double, double, double>>> intervals;  // by nucleus
   long units = 0, folded = 0, edges = 0;
@@ -103,7 +103,7 @@ void RunProject(const std::string &path) {
     std::vector<azure2::UnitRef> refs;
     plan.TaskUnits(data, t, refs);
     for (azure2::UnitRef r : refs) {
-      Unit &u = data.UnitAt(r);
+      Site &u = data.SiteAt(r);
       today.insert({nucleusOf(u), Bits(AMatrixFunc::InEnergy(&compound, &u))});
     }
     units += (long)refs.size();
@@ -114,7 +114,7 @@ void RunProject(const std::string &path) {
     folded++;
     edges += 2;
     std::vector<double> ex;
-    for (azure2::UnitRef r : refs) ex.push_back(AMatrixFunc::InEnergy(&compound, &data.UnitAt(r)));
+    for (azure2::UnitRef r : refs) ex.push_back(AMatrixFunc::InEnergy(&compound, &data.SiteAt(r)));
     std::sort(ex.begin(), ex.end());
     for (size_t k = 0; k + 1 < ex.size(); k++)
       if (ex[k + 1] > ex[k]) intervals[nucleusOf(p)].emplace_back(ex[k], ex[k + 1], 1.0 / (ex[k + 1] - ex[k]));

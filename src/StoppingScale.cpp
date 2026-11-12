@@ -67,7 +67,7 @@ void WorkingCopy::FollowStoppingScales(const std::vector<char> &changed, const C
       if (point->GetTargetEffectNum() != n) continue;
       const double f = point->GetCMFactor();
       for (int j = 1; j <= point->NumSubPoints(); j++) {
-        Unit *sub = point->GetSubPoint(*this, j);
+        Site *sub = point->GetSubPoint(*this, j);
         sub->SetStoppingPower(f * te->StoppingAt(sub->GetCMEnergy() / f, configure, s));
       }
       if (!(point->GetTargetThickness() > 0.0) || te->IsThickTarget()) continue;
@@ -118,7 +118,7 @@ bool WorkingCopy::CheckSubPointStoppings(const Config &configure) {
         if (!point.IsTargetEffect()) continue;
         const double f = point.GetCMFactor();
         for (int j = 1; j <= point.NumSubPoints(); j++) {
-          const Unit *sub = point.GetSubPoint(*this, j);
+          const Site *sub = point.GetSubPoint(*this, j);
           if (std::isfinite(sub->GetStoppingPower())) continue;
           bool dataMissing = false;
           const double eLab = sub->GetCMEnergy() / f;

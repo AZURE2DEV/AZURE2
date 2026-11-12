@@ -31,8 +31,8 @@ namespace {
 std::string Where(WorkingCopy &data, PointRef r) {
   std::ostringstream s;
   s << "unit " << r;
-  if (r >= 0 && r < data.NumUnits())
-    s << " (key " << data.UnitAt(r).GetSegmentKey() << ", E_lab " << data.UnitAt(r).GetLabEnergy() << " MeV)";
+  if (r >= 0 && r < data.NumSites())
+    s << " (key " << data.SiteAt(r).GetSegmentKey() << ", E_lab " << data.SiteAt(r).GetLabEnergy() << " MeV)";
   return s.str();
 }
 
@@ -48,7 +48,7 @@ void CalculationPlan::Build(WorkingCopy &data) {
   if (!why.empty()) throw std::logic_error("WorkingCopy: the calculation plan does not give every point one writer: " + why);
 }
 
-void CalculationPlan::AddRecordRange(const Unit &u, std::vector<std::pair<std::size_t, std::size_t>> &ranges) {
+void CalculationPlan::AddRecordRange(const Site &u, std::vector<std::pair<std::size_t, std::size_t>> &ranges) {
   if (u.ResultSlot() == Unit::kNoRecord) return;
   ranges.push_back({u.ResultSlot(), u.ResultSlot() + Results::RecordSize(u.ResultAngularSlots(), 0)});
 }
@@ -125,10 +125,10 @@ void CalculationPlan::TaskUnits(WorkingCopy &data, int task, std::vector<UnitRef
     units.push_back(point);
     return;
   }
-  for (int i = 0; i < p.NumSubPoints(); i++) units.push_back(p.SubPointFirst() + i);
+  for (int i = 1; i <= p.NumSubPoints(); i++) units.push_back(data.SlotSite(p, i));
 }
 
-long long ECAmplitudeSource(const Unit &unit, const Config &configure) {
+long long ECAmplitudeSource(const Site &unit, const Config &configure) {
   if (!(configure.paramMask & Config::USE_EXTERNAL_CAPTURE)) return 0;
   if (configure.useECTable) {
     const std::uint64_t held = unit.ECAmplitudesHeldAt(unit.GetCMEnergy());
@@ -204,7 +204,7 @@ const EnergyTaskList &CalculationPlan::EnergyTasks(WorkingCopy &data, const Conf
 #pragma omp parallel for schedule(static) if (n > 4096)
   for (int k = 0; k < n; k++) {
     keys[k] = nodeList(nodes[k]).energy[at(nodes[k])];
-    sources[k] = ECAmplitudeSource(data.UnitAt(units[k]), configure);
+    sources[k] = ECAmplitudeSource(data.SiteAt(units[k]), configure);
   }
   const bool same = work == energy_work_ && units == energy_units_ && sources == energy_sources_ &&
                     keys.size() == energy_keys_.size() &&
@@ -224,7 +224,7 @@ const EnergyTaskList &CalculationPlan::EnergyTasks(WorkingCopy &data, const Conf
   std::vector<Key> order(n);
 #pragma omp parallel for schedule(static) if (n > 4096)
   for (int k = 0; k < n; k++) {
-    const Unit &u = data.UnitAt(units[k]);
+    const Site &u = data.SiteAt(units[k]);
     const NodeList &list = nodeList(nodes[k]);
     const int i = at(nodes[k]);
     order[k] = {list.nucleus[i], RouteOf(list.thm[i] != 0, configure), keys[k], Bits(keys[k]), u.GetEntranceKey(),
@@ -263,8 +263,8 @@ const EnergyTaskList &CalculationPlan::EnergyTasks(WorkingCopy &data, const Conf
       head = k;
     } else if (o.source < 0) {
       // Amplitudes held: the hash agrees with the group's first unit; so must the amplitudes, bit for bit.
-      const Unit &self = data.UnitAt(units[o.ordinal]);
-      if (!self.SameECAmplitudesAs(data.UnitAt(units[order[head].ordinal])))
+      const Site &self = data.SiteAt(units[o.ordinal]);
+      if (!self.SameECAmplitudesAs(data.SiteAt(units[order[head].ordinal])))
         throw std::logic_error("CalculationPlan: two sets of external-capture amplitudes with one hash at E_x " +
                                std::to_string(o.energy) + " MeV");
     }

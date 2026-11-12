@@ -60,7 +60,7 @@ void Unit::Calculate(WorkingCopy *data, CNuc *theCNuc, const Config &configure, 
 
 void Unit::PrepareSubPoints(WorkingCopy *data, CNuc *theCNuc, const Config &configure) {
   for (int i = 1; i <= this->NumSubPoints(); i++) {
-    Unit *subPoint = this->GetSubPoint(*data, i);
+    Site *subPoint = this->GetSubPoint(*data, i);
     // Recalculate energy-dependent values for sub-points too if using external capture
     if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
       subPoint->RecalcEDependentValues(data, theCNuc, configure);

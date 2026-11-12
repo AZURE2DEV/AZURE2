@@ -471,11 +471,15 @@ void Unit::SetTargetEffectNum(int targetEffectNum) {
 
 
 
-void Unit::MakeSubPoint(Unit &subPoint) const {
+void Unit::MakeSubPoint(Site &subPoint) const {
   // A sub-point shares its term's settings (the observable, A_y or total included) with its parent.
-  subPoint.is_sub_point_ = true;
-  subPoint.screen_ue_ = this->screen_ue_;
-  subPoint.screen_param_ = this->screen_param_;
+  subPoint.TakeSlotSettingsOf(*this);
+}
+
+void Site::TakeSlotSettingsOf(const Site &point) {
+  is_sub_point_ = true;
+  screen_ue_ = point.screen_ue_;
+  screen_param_ = point.screen_param_;
 }
 
 /*!
@@ -570,28 +574,28 @@ void Site::NoResultRecord(const azure2::Results &r) const {
 
 void Unit::CalcLegendreP(WorkingCopy *data, int maxL, CNuc *theCNuc, const TargetEffect *targetEffect) {
   Site::CalcLegendreP(data, maxL, theCNuc, targetEffect);
-  for (int i = 1; i <= NumSubPoints(); i++) GetSubPoint(*data, i)->OwnSite().CalcLegendreP(data, maxL, theCNuc, targetEffect);
+  for (int i = 1; i <= NumSubPoints(); i++) GetSubPoint(*data, i)->CalcLegendreP(data, maxL, theCNuc, targetEffect);
 }
 
 void Unit::CalcEDependentValues(WorkingCopy *data, CNuc *theCNuc, const Config &configure, const ChannelRowSource *rows) {
   Site::CalcEDependentValues(data, theCNuc, configure, rows);
-  for (int i = 1; i <= NumSubPoints(); i++) GetSubPoint(*data, i)->OwnSite().CalcEDependentValues(data, theCNuc, configure, rows);
+  for (int i = 1; i <= NumSubPoints(); i++) GetSubPoint(*data, i)->CalcEDependentValues(data, theCNuc, configure, rows);
 }
 
 void Unit::ChannelKeys(WorkingCopy *data, CNuc *theCNuc, std::vector<ChannelTable::Key> &keys) {
   Site::ChannelKeys(data, theCNuc, keys);
-  for (int i = 1; i <= NumSubPoints(); i++) GetSubPoint(*data, i)->OwnSite().ChannelKeys(data, theCNuc, keys);
+  for (int i = 1; i <= NumSubPoints(); i++) GetSubPoint(*data, i)->ChannelKeys(data, theCNuc, keys);
 }
 
 void Unit::CalcCoulombAmplitude(WorkingCopy *data, CNuc *theCNuc) {
   Site::CalcCoulombAmplitude(data, theCNuc);
-  for (int i = 1; i <= NumSubPoints(); i++) GetSubPoint(*data, i)->OwnSite().CalcCoulombAmplitude(data, theCNuc);
+  for (int i = 1; i <= NumSubPoints(); i++) GetSubPoint(*data, i)->CalcCoulombAmplitude(data, theCNuc);
 }
 
 void Unit::CalculateECAmplitudes(WorkingCopy *data, CNuc *theCNuc, const Config &configure, const ChannelTable *table) {
   Site::CalculateECAmplitudes(data, theCNuc, configure, table);
   for (int i = 1; i <= NumSubPoints(); i++)
-    GetSubPoint(*data, i)->OwnSite().CalculateECAmplitudes(data, theCNuc, configure, table);
+    GetSubPoint(*data, i)->CalculateECAmplitudes(data, theCNuc, configure, table);
 }
 
 // The slots are emptied before any is refilled: a slot keeps the storage of its rows (Site::ClearEDependentRows).
@@ -599,10 +603,10 @@ void Unit::CalculateECAmplitudes(WorkingCopy *data, CNuc *theCNuc, const Config 
 // this on the point's own site only.
 void Unit::RecalcEDependentValues(WorkingCopy *data, CNuc *theCNuc, const Config &configure, const ChannelRowSource *rows) {
   if (EDependentCurrent()) return;
-  for (int i = 1; i <= NumSubPoints(); i++) GetSubPoint(*data, i)->OwnSite().ClearEDependentRows();
+  for (int i = 1; i <= NumSubPoints(); i++) GetSubPoint(*data, i)->ClearEDependentRows();
   Site::RecalcEDependentValues(data, theCNuc, configure, rows);
   for (int i = 1; i <= NumSubPoints(); i++) {
-    Site &slot = GetSubPoint(*data, i)->OwnSite();
+    Site &slot = *GetSubPoint(*data, i);
     slot.CalcEDependentValues(data, theCNuc, configure, rows);
     slot.CalcCoulombAmplitude(data, theCNuc);
   }

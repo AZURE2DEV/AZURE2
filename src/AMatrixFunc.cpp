@@ -649,7 +649,7 @@ void AMatrixFunc::AddAInvMatrixElement(int jGroupNum, int lambdaNum, int muNum, 
  * (AMatrixFunc.h).  Reads the T-matrix held by this object and the
  * angle-dependent quantities of `point`.
  */
-bool AMatrixFunc::PointTBar(Unit *point, const azure2::Results &results, double fitBar, TMatrixCotangent &bar,
+bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double fitBar, TMatrixCotangent &bar,
                             int xsComponent,
                             bool ayCrossSection) {
   AZUREProfile::Timer profileTimer(AZUREProfile::kGradTBar);
@@ -825,7 +825,6 @@ bool AMatrixFunc::PointTBar(Unit *point, const azure2::Results &results, double 
     //      applies, so the whole derivative is a contraction against those same
     //      coefficients. The Coulomb amplitude carries no parameter dependence
     //      and drops out. ----
-    if (point->NumSubPoints() > 0) return false;  // see the note below
     if (compound()->GetPair(aa)->GetPType() != 0) return false;
 
     if (compound()->GetPair(exitPairNum)->GetPType() == 10) {
