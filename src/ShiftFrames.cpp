@@ -1,6 +1,7 @@
-// Re-energising the points of a segment after an energy shift: the shifted energies of the points and their
-// sub-points, the recalculation of their tables, and the channel tables of the last shift states that a shift
-// returning to an earlier value reuses.
+// Re-energising the points of a segment after an energy shift: the shifted energies of the points (and of the
+// sub-points of a grid of its own; a folded point on the shared mesh keeps its nodes, ShiftedFold.h), the
+// recalculation of their tables, and the channel tables of the last shift states that a shift returning to an earlier
+// value reuses.
 #include <functional>
 #include <iostream>
 #include <utility>
@@ -142,89 +143,74 @@ void Segment::UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, CNuc *
               effect = te;
             }
           }
-          point->CalcLegendreP(&data, configure->maxLOrder, theCNuc, effect);
+          // the point alone: its slots are re-angled (ReangleSlots) or moved (MoveOwnGridSlots) below
+          point->OwnSite().CalcLegendreP(&data, configure->maxLOrder, theCNuc, effect);
         }
-        // The sub-points are moved and recalculated below, one by one.
         const ChannelRowSource rows = ShiftRowSource(state.terms[t], i);
         point->OwnSite().RecalcEDependentValues(&data, theCNuc, *configure, &rows);
-
-        // IMPORTANT: Also apply energy shift to all subpoints (used in convolution/target integration)
-        for (int j = 1; j <= point->NumSubPoints(); j++) {
-          // A slot another point writes is moved by that point: slots are shared only on the shared mesh, whose
-          // segments have no energy shift (OnSharedMesh), so every reader would move it alike (SlotGroup.h).
-          if (!data.WritesSlot(*point, j)) continue;
-          Site *subPoint = point->GetSubPoint(data, j);
-          if (subPoint && (thm || subPoint->GetOriginalEnergy() > 0)) {
-            double subOriginalEnergy = subPoint->GetOriginalEnergy();
-            // Sub-points hold c.m. energies and are the depth / resolution samples
-            // of their parent point: they move RIGIDLY with it, by the parent's
-            // own lab shift converted to the c.m. frame.  A shift is a calibration
-            // of the measured beam energy; the target thickness, the beam profile
-            // and the depth grid are physical and keep their width.  Before
-            // 2026-10-26 each sub-point was moved by the shift at its own energy,
-            // which for a sqrt(E) shift or a shift function stretched the window by
-            // (1 + ds/dE) -- a yield factor the fit could trade against b -- and put
-            // the resonance-anchored lattice (WorkingCopy::ReplaceSubPointGrids, which
-            // offsets by the parent's shift) off a narrow resonance by s' x depth
-            // (audit item 11, tests/shift_sqrt_subpoints).  A constant shift was
-            // never affected.
-            // A beta-delayed segment (entrance ptype 20) carries the light decay
-            // particle's lab energy; c.m. = lab*(M1+M2)/M2 of the EXIT pair
-            // (Unit::ConvertDecayEnergy), not the entrance-pair ratio.
-            const double cmFactor = CMEnergyFactor(entrancePair, exitPair);
-            // A THM segment's shift is not floored (its energies may lie below threshold), as for the point.
-            double energyShiftCM = cmFactor * TotalEnergyShift(state, originalEnergy);
-            double subShiftedEnergy = thm ? subOriginalEnergy + energyShiftCM
-                                          : ShiftedEnergy(subOriginalEnergy, energyShiftCM);
-
-            // Set the shifted energy for subpoint
-            // Must set both CM and Lab energy since CalcLegendreP uses GetLabEnergy() for Q-coefficients
-            subPoint->SetCMEnergy(subShiftedEnergy);
-            subPoint->SetLabEnergy(subShiftedEnergy);
-
-            // Recalculate energy dependent values for subpoint
-            if (entrancePair->GetPType() == 20) {
-              // The c.m. energy was set above. ConvertDecayEnergy would read the lab
-              // slot (now holding the c.m. value) and multiply by (M1+M2)/M2 again,
-              // pushing every convolution sub-point of a beta-delayed spectrum up by
-              // 4/3 and corrupting the folded yield; only the excitation energy needs updating.
-              subPoint->ConvertExcitationEnergy(exitPair);
-            } else if (this->IsCMDifferential()) {
-              // subPoint->ConvertLabEnergy(entrancePair);
-            } else if (!this->IsCMDifferential()) {
-              // subPoint->ConvertLabEnergy(entrancePair);
-            }
-
-            // A sub-point is built at its parent's c.m. angle (WorkingCopy::SetUpTargetEffects, Unit(angle, energy,
-            // parent) puts that angle in both slots) and carries no data of its own, so the lab-to-c.m. angle and
-            // cross-section conversions of the parent (above) must not be applied to it.  Before 2026-10-26 they
-            // were, which took the parent's c.m. angle for a lab angle and moved every sub-point by the full
-            // lab-c.m. difference (2-5 deg for p + light nuclei, 18 deg for alpha + 12C): a lab-frame differential
-            // segment with target/resolution integration and any active shift (nonzero, varied, shiftgroup,
-            // sqrtshift, shiftfn) fitted at the wrong angles, and its shift derivatives were wrong with it
-            // (16O(p,p) with a 0.1 keV convolution: chi2 13,484 -> 23,097 at a 1e-7 MeV shift).  The parent's
-            // c.m. angle at the shifted energy is the right value; tests/shift_subpoint_angle.
-            if (this->IsDifferential() && !this->IsCMDifferential()) {
-              subPoint->SetLabAngle(point->GetCMAngle());
-              subPoint->SetCMAngle(point->GetCMAngle());
-            }
-
-            if (this->IsDifferential() || this->IsCMDifferential()) {
-              subPoint->ClearLegendrePolynomials();
-              // Get TargetEffect with Q-coefficients if applicable
-              const TargetEffect *subEffect = NULL;
-              if (this->IsTargetEffect()) {
-                const TargetEffect *te = data.Data().GetTargetEffect(this->TermTargetEffectNum(t));
-                if (te && te->IsQCoefficients()) {
-                  subEffect = te;
-                }
-              }
-              subPoint->CalcLegendreP(&data, configure->maxLOrder, theCNuc, subEffect);
-            }
-            subPoint->RecalcEDependentValues(&data, theCNuc, *configure, &rows);
-          }
+        if (data.Data().GridSpecOf(*point).mesh >= 0) {
+          // On the shared mesh the nodes stay and the kernel moves with the point (ShiftedFold.h): only the c.m. angle
+          // of a lab-frame differential point, converted above at its shifted energy, reaches its group's sites.
+          if (this->IsDifferential() && !this->IsCMDifferential()) ReangleSlots(data, t, *point, theCNuc, *configure);
+        } else {
+          MoveOwnGridSlots(data, t, *point, theCNuc, *configure, rows);
         }
       }
     }
+  }
+}
+
+void Segment::ReangleSlots(WorkingCopy &data, int t, Unit &point, CNuc *theCNuc, const Config &configure) const {
+  const TargetEffect *te = this->IsTargetEffect() ? data.Data().GetTargetEffect(this->TermTargetEffectNum(t)) : nullptr;
+  const TargetEffect *qEffect = (te && te->IsQCoefficients()) ? te : nullptr;
+  const double angle = point.GetCMAngle();
+  for (int j = 1; j <= point.NumSubPoints(); j++) {
+    if (!data.WritesSlot(point, j)) continue;  // its writer, a point of the same nominal energy, re-angles it
+    Site *slot = point.GetSubPoint(data, j);
+    if (slot->GetCMAngle() == angle && slot->GetLabAngle() == angle) continue;
+    slot->SetLabAngle(angle);
+    slot->SetCMAngle(angle);
+    slot->ClearLegendrePolynomials();
+    slot->CalcLegendreP(&data, configure.maxLOrder, theCNuc, qEffect);
+    slot->CalcCoulombAmplitude(&data, theCNuc);
+  }
+}
+
+/*!
+ * The sub-points of a point with a grid of its own (a THM segment, which is off the shared mesh until its kinematics
+ * are there; a uniform grid with useAdaptiveGrid off) move rigidly with it, by the parent's own lab shift converted to
+ * the c.m. frame: a shift is a calibration of the measured beam energy, and the depth or resolution grid keeps its
+ * width (audit item 11, tests/shift_sqrt_subpoints).  A sub-point keeps its parent's c.m. angle at the shifted energy,
+ * without the parent's lab-to-c.m. conversions (tests/shift_subpoint_angle).  A beta-delayed segment's sub-points
+ * hold c.m. energies already: only their excitation energy is converted.  A point with a grid of its own is a group of
+ * its own, so it writes every one of its slots.
+ */
+void Segment::MoveOwnGridSlots(WorkingCopy &data, int t, Unit &point, CNuc *theCNuc, const Config &configure,
+                               const ChannelRowSource &rows) const {
+  const bool thm = this->IsTHM();
+  PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->TermEntranceKey(t)));
+  PPair *exitPair = theCNuc->GetPairFromKey(this->TermExitKey(t));  // nullptr for total capture (-1)
+  // A THM segment's shift is not floored (its energies may lie below threshold), as for the point.
+  const double shiftCM = CMEnergyFactor(entrancePair, exitPair) * TotalEnergyShift(data.State(*this), point.GetOriginalEnergy());
+  const TargetEffect *te = this->IsTargetEffect() ? data.Data().GetTargetEffect(this->TermTargetEffectNum(t)) : nullptr;
+  const TargetEffect *qEffect = (te && te->IsQCoefficients()) ? te : nullptr;
+  for (int j = 1; j <= point.NumSubPoints(); j++) {
+    if (!data.WritesSlot(point, j)) continue;
+    Site *subPoint = point.GetSubPoint(data, j);
+    if (!subPoint || !(thm || subPoint->GetOriginalEnergy() > 0)) continue;
+    const double e = thm ? subPoint->GetOriginalEnergy() + shiftCM : ShiftedEnergy(subPoint->GetOriginalEnergy(), shiftCM);
+    // both slots: CalcLegendreP reads the lab one for the Q coefficients
+    subPoint->SetCMEnergy(e);
+    subPoint->SetLabEnergy(e);
+    if (entrancePair->GetPType() == 20) subPoint->ConvertExcitationEnergy(exitPair);
+    if (this->IsDifferential() && !this->IsCMDifferential()) {
+      subPoint->SetLabAngle(point.GetCMAngle());
+      subPoint->SetCMAngle(point.GetCMAngle());
+    }
+    if (this->IsDifferential() || this->IsCMDifferential()) {
+      subPoint->ClearLegendrePolynomials();
+      subPoint->CalcLegendreP(&data, configure.maxLOrder, theCNuc, qEffect);
+    }
+    subPoint->RecalcEDependentValues(&data, theCNuc, configure, &rows);
   }
 }

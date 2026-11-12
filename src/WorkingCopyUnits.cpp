@@ -231,11 +231,11 @@ long WorkingCopy::CheckSlotGroups() const {
                                       bits(spec.frameShift), bits(spec.stoppingConversion)};
   };
   std::vector<int> firstReader(slots_.size(), -1);  // per block (its first slot): its first reader
-  // The plans of the shared meshes for the present anchors.
+  // The plans of the shared meshes for the present anchors and supports.
   const std::vector<DataSet::NucleusMesh> &meshes = Data().Meshes();
   std::vector<azure2::MeshPlan> plans(meshes.size());
   for (std::size_t m = 0; m < meshes.size() && m < meshAnchors_.size(); m++)
-    plans[m] = azure2::PlanMesh(meshAnchors_[m], meshes[m].supports, azure2::MeshTails());
+    plans[m] = azure2::PlanMesh(meshAnchors_[m], meshSupports_[m], azure2::MeshTails());
   for (int u = 0; u < NumUnits(); u++) {
     const Unit &p = units_[u];
     const int f = p.SubPointFirst(), c = p.NumSubPoints();

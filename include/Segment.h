@@ -376,9 +376,15 @@ class Segment {
   /// Re-apply the current energy shift of the segment's state in `data` to every point of every term, undoing the
   /// previous one.
   void UpdatePointEnergiesWithShift(WorkingCopy &data, CNuc *theCNuc, const Config *configure) const;
-  /// The same for point i (0-based) of term t and its sub-points: the unit of parallel re-energising (it writes that
-  /// point and its sub-points only).
+  /// The same for point i (0-based) of term t: the unit of parallel re-energising (it writes that point and the slots
+  /// it writes only).  A folded point on the shared mesh moves alone: its nodes stay (ShiftedFold.h).
   void UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, CNuc *theCNuc, const Config *configure) const;
+  /// The slots point `point` of term t writes, at its c.m. angle (a lab-frame differential point on the shared mesh,
+  /// whose angle moves with the shift: ShiftedFold.h); the channel rows stay.
+  void ReangleSlots(WorkingCopy &data, int t, Unit &point, CNuc *theCNuc, const Config &configure) const;
+  /// The sub-points of a point with a grid of its own (THM, a uniform grid), moved rigidly with its shift.
+  void MoveOwnGridSlots(WorkingCopy &data, int t, Unit &point, CNuc *theCNuc, const Config &configure,
+                        const ChannelRowSource &rows) const;
   /// Change the exit pair key.
   void SetExitKey(WorkingCopy &data, int);
   /// Change the entrance pair key, for this segment and every point in it.

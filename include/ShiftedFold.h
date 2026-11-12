@@ -72,7 +72,7 @@ struct Results;
  *    evaluation: the margin's nodes are the price (the director's proposal).
  *
  * 5. The gradient.  The column of a shift parameter of a folded segment is the central difference of the fold on
- *    the fixed nodes (RefoldShiftedSegment): at nu +- h the points move (their centre, support, translated stopping),
+ *    the fixed nodes (RefoldShiftedSegments): at nu +- h the points move (their centre, support, translated stopping),
  *    and each point is folded again from the node values already computed at nu with the same fold (FoldValues: one
  *    implementation of each fold); no node is recomputed and no level matrix solved.  Kinds of shift enter through
  *    Delta_i(nu) only.  An analytic dK/dE0 is not within reach of this branch: it would need every kernel's energy
@@ -91,6 +91,13 @@ struct Results;
  * evaluation energy that moves with nu, section 2.5).
  */
 namespace azure2 {
+
+/// Whether a data set's energy shift is active at the set-up (a varied, non-zero, group, sqrt or function shift).
+bool HasEnergyShift(const Segment &segment);
+
+/// Whether a folded point is on the shared mesh with an energy shift: its data set's shift was active at the set-up,
+/// or its support has moved since (a shift set later).  Its fold then reads ShiftedFoldNodes.
+bool IsShiftedOnMesh(const Unit &point, const WorkingCopy &data);
 
 /// The c.m. shift Delta_i (MeV) of a point of `segment` at nominal lab energy `labEnergy` in the shift state `state`:
 /// cmFactor x TotalEnergyShift (the conversion of Segment::CMEnergyFactor).
@@ -125,12 +132,15 @@ ShiftedNodes ShiftedFoldNodes(const Unit &point, const WorkingCopy &data);
 void TranslatedStopping(const Unit &point, const WorkingCopy &data, const Config &configure, const ShiftedNodes &nodes,
                         std::vector<double> &stopping);
 
-/// Whether the node values of `segment`'s folded points do not depend on its shift (question 5): not a lab-frame
-/// differential segment.  Then RefoldShiftedSegment gives the model at a moved shift without a solve.
+/// Whether the node values of `segment`'s folded points do not depend on its shift (question 5): every point of every
+/// term folded on the shared mesh, and not a lab-frame differential segment.
 bool FoldOnlyShift(const WorkingCopy &data, const Segment &segment);
-/// Every folded point of every term of `segment` folded again from the node values in `results` (after its points
-/// were moved to a new shift); FoldOnlyShift must hold.
-void RefoldShiftedSegment(WorkingCopy &data, const Segment &segment, const Config &configure, Results &results);
+/// The central difference of a shift on the fixed nodes (question 5): if FoldOnlyShift holds for every one of
+/// `segments` (their points moved to a new shift), each of their folded points is folded again from the node values in
+/// `results`, and true is returned (their model values are then read with LeafValues::Ready); false, with nothing
+/// done, otherwise (the caller calculates them).
+bool RefoldShiftedSegments(WorkingCopy &data, const std::vector<const Segment *> &segments, const Config &configure,
+                           Results &results);
 
 }  // namespace azure2
 
