@@ -296,6 +296,19 @@ int main() {
     if (refused) tested.insert("E_PARAMETER_FILE_NO_MATCH");
   }
   {
+    // <parameterSettings> rows against the project's parameter names (ParameterFileNames.h).
+    const std::vector<std::string> known = {"energy_1", "d1.norm", "x1.shift.offset"};
+    check("<parameterSettings> rows that name parameters: no diagnostic",
+          UnknownParameterSettings("p.azr", {{"d1.norm", 40}, {"x1.shift.offset", 41}}, known).empty());
+    const std::vector<Diagnostic> u = UnknownParameterSettings("p.azr", {{"d1.norm", 40}, {"screening_1", 41}}, known);
+    const bool warn = u.size() == 1 && u[0].code == "W_PARAMETER_SETTING_UNKNOWN" && u[0].severity == Severity::Warning &&
+                      u[0].line == 41 && u[0].found == "screening_1" &&
+                      u[0].ToText() == "p.azr:41: warning W_PARAMETER_SETTING_UNKNOWN: <parameterSettings> names "
+                                       "'screening_1', which is no parameter of this project; the row is ignored";
+    check("W_PARAMETER_SETTING_UNKNOWN: the row's line and name", warn);
+    if (warn) tested.insert("W_PARAMETER_SETTING_UNKNOWN");
+  }
+  {
     // The model data against <levels> (BuildModelData): T2's pairs and the 3- levels as plain tables
     // (tests/upgrade/T2/README.md section 1); each case changes one thing of a valid datum or of the tables.
     auto pair = [](int key, int lightZ, int lightA, int heavyZ, int heavyA, double heavyE, double threshold, int twoJ1,

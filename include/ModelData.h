@@ -22,12 +22,9 @@ struct GradAccum;
  * objective (Objective.cpp, ModelDataTerm), which every path -- the fit, the gradient, the least-squares rows, the API,
  * the MCMC, the writer -- reaches through Objective::Engine().
  *
- * The rows, in this order:
- *  - the measured scattering lengths of the <scatteringLengths> section, line by line (the section and its grammar
- *    unchanged, include/ScatteringLength.h): Re then Im of each line, each when its sigma is > 0;
- *  - the `datum` records of the <modelData> section (format-3 records, io::ReadRecords and Schema::Validate, resolved
- *    against <levels> by experiment::BuildModelData), in file order: one row each, two for a scattering length with
- *    an imaginary part.
+ * The rows: the `datum` records of the <modelData> section (format-3 records, io::ReadRecords and
+ * Schema::Validate, resolved against <levels> by experiment::BuildModelData), in file order: one row each, two for a
+ * scattering length with an imaginary part.
  * A scattering length is evaluated by ScatteringLength (exact gradient through the level-matrix adjoint).  A level
  * quantity (resonance strength, energy, widths, branching ratio, ANC) is evaluated from the observed energies and
  * widths of the current fit values (CNuc::ObservedOfFitValues, the quantities parameters.out reports), never the
@@ -40,23 +37,17 @@ struct ModelDataRow {
   /// True: a measured scattering length, `constraint`; false: a level quantity of `datum`.
   bool isScatteringLength = true;
   ScatteringLength::Constraint constraint;
-  /// The datum as read (a <scatteringLengths> line has its line number and quantity only).
+  /// The datum as read.
   azure2::experiment::ModelDatum datum;
-  /// From the <modelData> section (reported in modelData.out), not from <scatteringLengths>.
-  bool inSection = false;
 };
 
 struct ModelDataSet {
-  /// The <scatteringLengths> lines as read, for scatteringLengths.out (ScatteringLength::Report).
-  std::vector<ScatteringLength::Constraint> scatteringLengthLines;
   /// The data that give residual rows, in row order.
   std::vector<ModelDataRow> rows;
   /// The project has a <modelData> section (modelData.out and its total are written only then).
   bool hasSection = false;
   /// Number of residual rows.
   int NumResiduals() const;
-  /// Number of residual rows of the <modelData> section's data.
-  int NumSectionResiduals() const;
 };
 
 namespace ModelData {
@@ -70,14 +61,12 @@ std::shared_ptr<const ModelDataSet> Read(CNuc &compound, const Config &configure
 /// The residual rows at the compound's current fit values, appended to r in row order.
 void Residuals(CNuc *compound, const Config &configure, const ModelDataSet &set, vector_r &r);
 
-/// The chi-squared of the rows, sum r_k^2 in row order (0 without rows); `sectionPart` and `linesPart`, when given,
-/// receive the parts of the <modelData> rows and of the <scatteringLengths> lines, each summed in row order.
-double Chi2(CNuc *compound, const Config &configure, const ModelDataSet &set, double *sectionPart = nullptr,
-            double *linesPart = nullptr);
+/// The chi-squared of the rows, sum r_k^2 in row order (0 without rows).
+double Chi2(CNuc *compound, const Config &configure, const ModelDataSet &set);
 
 /*!
  * d chi2 / d(E, gamma) of the level parameters into accum: the scattering lengths exactly, through the level-matrix
- * adjoint at each threshold (ScatteringLength::Chi2Gradient); the level quantities by central differences over the
+ * adjoint at each threshold (ScatteringLength::ConstraintGradient); the level quantities by central differences over the
  * parameters of their J^pi groups (all groups with external capture, whose amplitudes depend on the final states),
  * those with a packed column in pmap.  False where the adjoint does not support the configuration (the caller then
  * differentiates numerically).

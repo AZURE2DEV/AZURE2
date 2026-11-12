@@ -400,7 +400,7 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, WorkingCopy *data,
     }
   }
 
-  // --- Electron-screening potentials: one per <targetInt> line with a screening block (WorkingCopy::FillMnParams). ---
+  // --- Electron-screening potentials: one per target with a screening field (WorkingCopy::FillMnParams). ---
   if (data) {
     for (int k = 1; k <= data->Data().NumScreeningParams(); k++) {
       map.screeningIndex_[k] = i;

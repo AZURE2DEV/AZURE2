@@ -78,11 +78,8 @@ struct ThmOptions {
     std::map<int, double>::const_iterator it = spectatorEnergyByPair.find(pairKey);
     return it == spectatorEnergyByPair.end() ? spectatorEnergy : it->second;
   }
-  /// Energy-dependent weight of the THM model cross section, per segment:
-  /// key `weight[<k>]=<file>` for the k-th line of <segmentsData> (counting
-  /// inactive lines, the numbering of segment_<k>_norm and the output
-  /// files), `weightTest[<k>]=<file>` for the k-th line of <segmentsTest>.
-  /// A relative path is taken from the directory of the .azr file.
+  /// Energy-dependent weight of the THM model cross section, per data set (by DatasetSpec::key) and per extrapolation
+  /// (ExtrapolationSpec::key): the record's field thm_weight <file>, a relative path from the directory of the .azr.
   std::map<int, std::shared_ptr<const ThmWeightTable>> weightBySegment, weightByTestSegment;
   /// THM experiments, `experiment[<name>] key=value ...` (ThmExperiment.h):
   /// segments sharing one profiled norm and an optional background.  Empty

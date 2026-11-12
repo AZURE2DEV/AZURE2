@@ -123,7 +123,7 @@ ThmDistortion::Kinematics F19() {
 
 ThmExperiment Optical(const std::string &aa, const std::string &sf, std::string *why) {
   std::vector<ThmExperiment> xs;
-  *why = ParseThmExperimentLine("experiment[X] segments=1 beam=19F target=d spectator=n Ebeam=55 "
+  *why = ParseThmExperimentLine("experiment[X] beam=19F target=d spectator=n Ebeam=55 "
                                 "distortion=optical opticalAA=" + aa + " opticalSF=" + sf,
                                 xs);
   return xs.empty() ? ThmExperiment() : xs.front();
@@ -274,11 +274,11 @@ int main(int argc, char **argv) {
     Expect("ancai06 for d + 19F at 5.8 MeV accepted, no warning", why.empty() && d4.warnings.empty(), why);
     // Parser.
     std::vector<ThmExperiment> xs;
-    why = ParseThmExperimentLine("experiment[X] segments=1 distortion=optical opticalSF=kd04", xs);
+    why = ParseThmExperimentLine("experiment[X] distortion=optical opticalSF=kd04", xs);
     Expect("unknown name refused", why.find("kd03") != std::string::npos, why);
-    why = ParseThmExperimentLine("experiment[X] segments=1 distortion=optical opticalSF=kd03:extra", xs);
+    why = ParseThmExperimentLine("experiment[X] distortion=optical opticalSF=kd03:extra", xs);
     Expect("unknown option refused", !why.empty(), why);
-    why = ParseThmExperimentLine("experiment[X] segments=1 distortion=optical opticalSF=1,2,3", xs);
+    why = ParseThmExperimentLine("experiment[X] distortion=optical opticalSF=1,2,3", xs);
     Expect("ten-number message kept", why.find("expected plane, coulomb or ten numbers") != std::string::npos, why);
   }
 

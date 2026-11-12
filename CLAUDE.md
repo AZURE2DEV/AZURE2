@@ -154,10 +154,16 @@ how each was checked:
   would contain, bump its signature or version (e.g. `WorkingCopy::ECSignature`) so
   old files are recomputed, not silently reused. Add a stale-file case to the
   test.
-- **Old inputs keep working.** `.azr` files, `param.sav`/`param.par`/`param.fit`
-  and data files from earlier versions must still load. A new keyword is
-  optional and its default reproduces the old result. A format change gets a
-  reader for the old form, a message, and a test with an old-format fixture.
+- **Old inputs are converted, not read.** The engine reads project format 3
+  only and refuses anything else with one message (`io::NotFormat3Message`,
+  exit 3); an older `.azr` goes through the converter (`AZURE2 --convert`,
+  `convert/`), a `param.sav`/`param.par` of an old project through
+  `AZURE2 --convert-params`, and the converter keeps the old meaning or refuses
+  with the old engine's reason. Data files of earlier versions must still load.
+  A new field is optional and its default reproduces the old result; a change
+  to format 3 that changes an existing project's meaning bumps
+  `Schema::kVersion` and gets the converter's support and a test with an old
+  fixture (`tests/convert/fixtures/`).
 - **No silent fallbacks.** If an input is invalid, or a requested method cannot
   be used, AZURE2 says so (and stops if the result would be wrong). It never
   continues with a guess. An unparseable line once spun forever at 100 % CPU,
@@ -187,32 +193,28 @@ how each was checked:
 
 ## Recipes: where a new feature goes
 
-The engine reads the `.azr` once, through `io/` (`io::Document`, `Config::SectionStream`), and pyazr reads it
+The engine reads the `.azr` (format 3 only) once, through `io/` (`io::Document`, `Config::SectionStream`) and
+`experiment/`'s table (`Config::project`: the records validated and built into specs), and pyazr reads it
 through the same code in the binding; the χ² is assembled in one place, `src/Objective.cpp`. Each recipe below is
 the whole list of places to touch; `tests/consistency/repo_consistency_test.py` fails when the rule in brackets is
 bypassed. Run it first (under a second), then the build and the tests of "Definition of done".
 
-**A segment or extrapolation keyword** (as `shiftfngroup`, `normgroup`).
-1. Old formats only (format 3 states it as a record field: the next recipe and `experiment/`'s table). Parse it in
-   `include/SegLine.h` or `ExtrapLine.h` (the one tokenizer, which the converter reads).
-2. Use it in the owning class: a setting in `Segment` (part of the immutable `DataSet`, written only by the set-up through
-   `WorkingCopy::Draft`), a value an evaluation changes in `SegmentState`; refuse invalid combinations at start-up with a
-   message.
-3. The converter writes it as the record field that means the same (`convert/`); pyazr reads format 3 only and needs
-   nothing.
-4. Docs: `reference/data_formats.rst` and the user-guide page; a `tests/<name>/` project or a pyazr test.
+**A data-set or extrapolation keyword**: a field of the record, recipe "A format-3 field" below (and, when an old
+segment keyword means the same, its conversion in `convert/`, `convert_constructs`). No engine code reads an old
+section (check 34).
 
-**A `<config>` key or a new `.azr` section.**
+**A `<config>` key or a new `.azr` section** (a section of records: the recipe "A format-3 field" and its kind in
+`Schema.cpp`; the one place is the table).
 1. Read it in its owner from `Config::SectionStream("<name>")` [check 12: the project file is opened only in
    `src/Config.cpp`]. A section's grammar belongs to one parser; pyazr calls it through `api/src/` (as
-   `pybind_thm.cpp` does for `<thm>`), never a Python copy.
-2. Its absence must reproduce the old result. If an old file needs rewriting to mean the same thing, extend
-   `io::ConvertToFormat2` (`io/src/Convert.cpp`) and `io/tests/convert_test.cpp`; `AZURE2 --convert` and
+   `pybind_nuclear_part.cpp` does for `<config>` and `<thm>`), never a Python copy.
+2. Its absence must reproduce the old result. If an old file states the same thing another way, the converter
+   writes it (`convert/`, a case in `convert/tests/constructs_test.cpp`); `AZURE2 --convert` and
    `pyazr.convert_azr` then cover it.
 3. pyazr: `pyazr.Project` edits it through a binding of the engine's grammar (`api/src/`; Python hands over
    names and numbers, the engine makes the line); an unedited project writes the file back byte for byte
    (`tests/pyazr/project_test.py`, `azr_layout_test.py`).
-4. Docs: `reference/data_formats.rst`.
+4. Docs: `reference/data_formats.rst` (records: `reference/format3.rst`, generated).
 
 **A term of the objective** (a prior, a penalty, a constraint).
 1. One `ObjectiveTerm` subclass in `src/Objective.cpp`, in the term list (`docs/upgrade/objective.md` §4); its

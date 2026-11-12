@@ -2,10 +2,11 @@
 #
 # The engine runs a format-3 project (docs/upgrade/project_format3.md step 3b, G3): Config::ReadConfigFile reads it
 # through records -> Validate -> <levels> tables -> Schema::Build, and the set-up consumes the specs.
-#   1. T2's old original (tests/convert/fixtures/tests/upgrade/T2), converted with --exact-grids, gives the old file's
-#      outputs byte for byte, param.par after the converter's parameter-name map (calculation, menu 1, Brune basis);
-#      the conversion is the committed tests/upgrade/T2/T2.azr;
-#   2. T2_true with the <modelData> section below, in both formats: equal chiSquared.out and modelData.out;
+#   1. T2's old original (tests/convert/fixtures/tests/upgrade/T2), converted with --exact-grids, is the committed
+#      tests/upgrade/T2/T2.azr byte for byte, and runs (the old file itself is refused since the refusal switch: the
+#      equality of its outputs with the old engine's is the converted-tree gate's and tests/upgrade/golden's);
+#   2. the original of T2_true with the <modelData> section below, converted: chiSquared.out and modelData.out equal
+#      to those of the committed T2_true.azr with the same section;
 #   3. a data set named with 60 characters: its parameter names whole in param.par (no fixed-size name buffer);
 #   4. --describe of the converted T2: the pair keys, the resolved data file, the parameters, the rows read and kept
 #      (counted again here from the files and windows); --json parses;
@@ -52,51 +53,24 @@ convert() {
   (cd "$WORK/$1" && "$AZURE2_BIN" --convert m.azr m3.azr --to 3 --exact-grids --json-report report.json > convert.log 2>&1)
 }
 
-# ---- 1. T2 in both formats
-setup old "$T2OLD/T2.azr"
-run old 1
+# ---- 1. T2: the committed file is the conversion of its original, and it runs
+# (The old file itself is refused since the refusal switch: that the conversion gives the old file's outputs is the
+# converted-tree gate's, tools/format3_gate.sh against the old engine's tab-trial8, and tests/upgrade/golden's.)
 setup new "$T2OLD/T2.azr"
 if convert new; then
   cmp -s "$WORK/new/m3.azr" "$T2/T2.azr" && ok "the committed T2.azr is the conversion of its original, byte for byte" ||
     bad "the committed T2.azr differs from the conversion of its original"
   mv "$WORK/new/m3.azr" "$WORK/new/m.azr"
   run new 1
-  grep -q '^ERROR' "$WORK/new/run.log" && bad "T2 format 3: the engine refused it: $(grep -m1 '^ERROR' "$WORK/new/run.log")"
-  same=1
-  [ -s "$WORK/old/output/param.par" ] || bad "T2 (old file): no output ($(grep -m1 '^ERROR' "$WORK/old/run.log"))"
-  for f in $(cd "$WORK/old/output" && ls); do
-    [ "$f" = param.par ] || [ "$f" = normalizations.out ] && continue
-    cmp -s "$WORK/old/output/$f" "$WORK/new/output/$f" || { same=0; bad "T2 format 3: output/$f differs"; }
-  done
-  [ "$same" = 1 ] && ok "T2 format 3: every output file but param.par and normalizations.out byte for byte the old file's"
-  # param.par: the old names mapped by the converter's report.  One recorded difference (project_format3.md 8.1, the
-  # director's decision on G2 item 4): a member of a varied shared normalization has a fixed parameter of its own,
-  # <record>.value[<data set>], also where its old line did not vary its norm (T2's s03, whose own '1 0 0' the
-  # converter drops with a note); that data set is then listed in normalizations.out too, and a follower's fixed
-  # parameters take their start and step from the record, not from its own old line.  Nothing else may differ.
-  if python3 - "$WORK/old/output" "$WORK/new/output" "$WORK/new/report.json" <<'PY'
-import json, sys
-old, new, report = sys.argv[1:4]
-names = json.load(open(report))["parameters"]
-a = [l.split() for l in open(old + "/param.par")]
-b = [l.split() for l in open(new + "/param.par")]
-a = [[names.get(t[0], t[0])] + t[1:] for t in a]
-extra = [t for t in b if t and "[" in t[0] and t[0] not in [x[0] for x in a if x]]
-followers = {t[0][t[0].index("[") + 1:-1] for t in extra}
-b = [t for t in b if t not in extra]
-same_rows = [x == y or (x and y and x[0] == y[0] and "[" in x[0]) for x, y in zip(a, b)]
-na, nb = open(old + "/normalizations.out").read().splitlines(), open(new + "/normalizations.out").read().splitlines()
-nb = [l for l in nb if not any(f"data/{f}." in l for f in followers if l not in na)]
-print("    followers with a parameter of their own:", sorted(followers))
-sys.exit(0 if len(a) == len(b) and all(same_rows) and na == nb and followers == {"s03_diff150"} else 1)
-PY
-  then ok "T2 format 3: param.par and normalizations.out equal after the name map, but for the follower s03's row"
-  else bad "T2 format 3: param.par or normalizations.out differ after the name map"; fi
+  if grep -q '^ERROR' "$WORK/new/run.log" || [ ! -s "$WORK/new/output/param.par" ]; then
+    bad "T2 format 3: the engine refused it: $(grep -m1 '^ERROR' "$WORK/new/run.log")"
+  else ok "T2 format 3: the conversion runs"; fi
 else
   bad "T2: the conversion failed: $(head -3 "$WORK/new/convert.log")"
 fi
 
-# ---- 2. model data in both formats
+# ---- 2. model data: the original of T2_true with a <modelData> section, converted, gives the outputs of the committed
+# conversion with the same section appended (the converter carries <modelData> through unchanged)
 MD='<modelData>
 datum wg
     quantity resonance_strength
@@ -115,17 +89,21 @@ datum gamma5
 setup mdold "$T2OLD/T2_true.azr"
 printf '%s\n' "$MD" >> "$WORK/mdold/m.azr"
 setup mdnew "$WORK/mdold/m.azr"
-run mdold 1
+setup mdtree "$T2/T2_true.azr"
+printf '%s\n' "$MD" >> "$WORK/mdtree/m.azr"
+run mdtree 1
 if convert mdnew; then
   mv "$WORK/mdnew/m3.azr" "$WORK/mdnew/m.azr"
   run mdnew 1
   for f in chiSquared.out modelData.out; do
-    if [ -s "$WORK/mdold/output/$f" ] && cmp -s "$WORK/mdold/output/$f" "$WORK/mdnew/output/$f"; then
-      ok "model data: $f equal in both formats"
+    if [ -s "$WORK/mdtree/output/$f" ] && cmp -s "$WORK/mdtree/output/$f" "$WORK/mdnew/output/$f"; then
+      ok "model data: $f of the conversion equal to the committed project's"
     else
       bad "model data: $f differs (or is missing)"
     fi
   done
+  grep -q 'Total-Model-Data-Chi-Squared' "$WORK/mdnew/output/chiSquared.out" && ok "model data: its chi2 is in chiSquared.out" ||
+    bad "model data: no Total-Model-Data-Chi-Squared"
 else
   bad "model data: the conversion failed: $(head -3 "$WORK/mdnew/convert.log")"
 fi

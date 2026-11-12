@@ -121,12 +121,6 @@ data p12c_90s: dsdo_cm(1->1)
 == tests/angular_coefficients/models/bad_elastic.azr
 data: set-up failed
 exit 1
-== tests/angular_coefficients/models/bad_norm.azr
-data: set-up failed
-exit 1
-== tests/angular_coefficients/models/bad_test.azr
-extrapolation: set-up failed
-exit 1
 == tests/angular_coefficients/models/conv.azr
 data: set-up failed
 exit 1

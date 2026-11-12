@@ -157,8 +157,7 @@ std::vector<double> Seeds(CNuc *compound, int entranceKey, double lo, double hi,
 }  // namespace
 
 bool HasAdaptiveGrids(const Config &configure) {
-  if (!configure.format3) return false;
-  for (const auto &item : configure.format3->built.extrapolations.extrapolations.items)
+  for (const auto &item : configure.project->built.extrapolations.extrapolations.items)
     if (item.spec.active && item.spec.adaptive.on) return true;
   return false;
 }
@@ -173,7 +172,7 @@ bool SessionRefusesAdaptiveGrids(const Config &configure) {
 }
 
 std::unique_ptr<WorkingCopy> MakeRefinedExtrapolations(const Config &configure, CNuc *compound, const vector_r &params) {
-  ExtrapolationSpecs specs = Quiet(configure.format3->built.extrapolations);
+  ExtrapolationSpecs specs = Quiet(configure.project->built.extrapolations);
   ScratchDirectory scratch;
   if (!scratch.Ok()) {
     configure.outStream << "ERROR: adaptive grids: no scratch directory for the external-capture integrals of the "

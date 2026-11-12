@@ -12,7 +12,6 @@
 #include <string>
 #include <vector>
 
-#include "azure2/io/Convert.h"
 #include "azure2/io/Document.h"
 #include "azure2/io/LevelRows.h"
 
@@ -190,7 +189,6 @@ bool SameRow(const OldNucLine &o, const LevelRow &n) {
 /// The <levels> section as Config::SectionStream gives it (trimmed tags), or "" without one.
 std::string SectionText(const std::string &bytes) {
   azure2::io::Document doc = azure2::io::Document::Parse(bytes);
-  azure2::io::ConvertToFormat2(doc);
   const azure2::io::Document::Section *s = doc.Find("levels");
   if (!s) return "";
   std::string text;

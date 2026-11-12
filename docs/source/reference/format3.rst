@@ -4,7 +4,7 @@
 Project format 3: the table
 ===========================
 
-Schema version ``3.0``.  A format-3 project describes each data set, target, beam, detector, shared normalization, energy scale, extrapolation and model datum as one record: a header line ``<kind> <name>`` followed by one ``<key> <value>`` line per field, inside the section that holds the kind.  ``#`` starts a comment; a token with blanks is quoted; indentation is not significant.  Every closed choice below is a row of one table compiled into the engine; ``AZURE2 --schema`` prints it as JSON and ``pyazr.schema()`` returns it as a dict.  ``AZURE2 --validate FILE`` (``pyazr.validate(path)``) checks a project against it and reports every problem; ``AZURE2 --convert OLD NEW --to 3`` (``pyazr.convert_azr(old, new, to=3)``) writes an older project in this format.  The design is ``docs/upgrade/project_format3.md``.
+Schema version ``3.0``.  A format-3 project describes each data set, target, beam, detector, shared normalization, energy scale, extrapolation and model datum as one record: a header line ``<kind> <name>`` followed by one ``<key> <value>`` line per field, inside the section that holds the kind.  ``#`` starts a comment; a token with blanks is quoted; indentation is not significant.  Every closed choice below is a row of one table compiled into the engine; ``AZURE2 --schema`` prints it as JSON and ``pyazr.schema()`` returns it as a dict.  ``AZURE2 --validate FILE`` (``pyazr.validate(path)``) checks a project against it and reports every problem; ``AZURE2 --convert OLD NEW`` (``pyazr.convert_azr(old, new)``) writes an older project in this format (:doc:`../user_guide/older_projects`).  The design is ``docs/upgrade/project_format3.md``.
 
 Names are ``[A-Za-z][A-Za-z0-9_-]*`` and unique across the project; a field names another record by its name.  Within a section, record kinds and field keys are disjoint, so a line is a header or a field by its first word.
 
@@ -1925,6 +1925,9 @@ Diagnostic codes
    * - ``W_PARAMETER_FILE_NAMES``
      - warning
      - a parameter file with names the project has no parameter for, or without names of parameters it has
+   * - ``W_PARAMETER_SETTING_UNKNOWN``
+     - warning
+     - a <parameterSettings> row that names no parameter of the project (ignored)
    * - ``E_SO_TWO_SPINS``
      - error
      - a spin-orbit term on a pair whose two particles both have spin (the coupled treatment is not implemented)

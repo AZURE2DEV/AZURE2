@@ -238,7 +238,8 @@ class NuclearPart:
         """Set ``<config>`` entries by name (see :meth:`config`; the keys and their kinds:
         ``pyazr._azure2.config_keys()``): a value is the word or path the engine reads (``output_dir="out/"``,
         ``check_data="screen"``, ``amatrix="true"``), a number, or a bool (``amatrix`` true / false, a key of kind
-        bool 1 / 0); ``None`` removes a key.  The directories are not created."""
+        bool 1 / 0); ``None`` removes a key.  A directory is read with a trailing "/" whether or not it is written
+        with one; :meth:`pyazr.azure2.write_output_files` creates the output directory when it does not exist."""
         engine = _engine_module()
 
         def edit(doc):

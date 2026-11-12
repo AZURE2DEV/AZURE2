@@ -101,7 +101,7 @@ The ``.azr`` file is read by:
   file as the engine's lossless document (``io::Document``) and edits it with
   the engine's record, ``<levels>``, ``<config>`` and ``<thm>`` grammars
   (bindings in ``api/src``); it holds no grammar of its own.  An old file is
-  refused with the conversion command (``AZURE2 --convert OLD NEW --to 3``).
+  refused with the conversion command (``AZURE2 --convert OLD NEW``).
 
 pyazr must write the file back unchanged, including sections it does not edit;
 ``tests/pyazr/project_test`` checks the round trip. (The Qt setup utility of the

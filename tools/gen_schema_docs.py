@@ -83,8 +83,8 @@ def generate(schema):
         "``#`` starts a comment; a token with blanks is quoted; indentation is not significant.  Every closed choice "
         "below is a row of one table compiled into the engine; ``AZURE2 --schema`` prints it as JSON and "
         "``pyazr.schema()`` returns it as a dict.  ``AZURE2 --validate FILE`` (``pyazr.validate(path)``) checks a "
-        "project against it and reports every problem; ``AZURE2 --convert OLD NEW --to 3`` "
-        "(``pyazr.convert_azr(old, new, to=3)``) writes an older project in this format.  The design is "
+        "project against it and reports every problem; ``AZURE2 --convert OLD NEW`` "
+        "(``pyazr.convert_azr(old, new)``) writes an older project in this format (:doc:`../user_guide/older_projects`).  The design is "
         "``docs/upgrade/project_format3.md``.",
         "",
         "Names are ``[A-Za-z][A-Za-z0-9_-]*`` and unique across the project; a field names another record by its name.  "

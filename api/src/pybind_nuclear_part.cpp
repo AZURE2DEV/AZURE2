@@ -405,17 +405,14 @@ void BindNuclearPart(py::module_ &m) {
         const io::Document::Section *s = doc.Find("thm");
         if (!p.Ok()) return std::string();  // the project's own errors say what is wrong
         if (!s) return p.built.thm.experiments.empty() ? std::string() : "the project has no <thm> section, which its THM data name";  // nothing to check, or the project's own errors say what is wrong
-        const std::string members = CheckFormat3ThmMembers(doc.Body(*s), p.built.thm);
-        if (!members.empty()) return members;
         std::vector<std::string> section{"<thm>"};
         for (const std::string &l : doc.Body(*s)) section.push_back(l);
         section.push_back("</thm>");
-        std::vector<std::string> lines = Format3ThmLines(section, p.built.thm);
-        lines.erase(lines.begin());
-        lines.pop_back();
-        return CheckThmBlockLines(lines, true);
+        ThmOptions thm;
+        std::vector<std::string> idle, warnings;
+        return ReadFormat3ThmSection(section, p.built.thm, "", false, thm, idle, warnings);
       },
       py::arg("text"),
-      "The <thm> section of a format-3 project text as the engine reads it (members and weights from the records, "
-      "Format3ThmLines; files not read): \"\" or the engine's message.");
+      "The <thm> section of a format-3 project text as the engine reads it (ReadFormat3ThmSection: members and "
+      "weights from the records; files not read): \"\" or the engine's message.");
 }

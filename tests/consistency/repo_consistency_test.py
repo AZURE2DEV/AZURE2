@@ -154,9 +154,11 @@ cli_doc = read("docs/source/reference/command_line.rst")
 flags = set(re.findall(r'"(--[a-z0-9-]+)=?"', parser))
 # Handled in main() before parseOptions, so accepted although parseOptions
 # never sees them.
-handled_in_main = {"--help", "--build-coulomb-table", "--convert", "--schema", "--validate", "--describe",
-                   "--print-predictions",
-                   # options of --convert ... --to 3 and of --validate, read in main() with their command
+handled_in_main = {"--help", "--build-coulomb-table", "--convert", "--convert-params", "--schema", "--validate",
+                   "--describe", "--print-predictions",
+                   # option of --convert-params
+                   "--project",
+                   # options of --convert and of --validate, read in main() with their command
                    "--to", "--json-report", "--answers", "--exact-grids", "--strict", "--allow-questions", "--json",
                    # option of --describe
                    "--record"}
@@ -843,6 +845,33 @@ if not IN_PLACE.search("sed -i.bak 's/a/b/' t.azr") or not IN_PLACE.search("perl
         IN_PLACE.search("sed 's/a/b/' t.azr > u.azr"):
     problems.append("check 33: the in-place pattern no longer matches the forms it guards; update this check")
 
+# 34. The engine reads format 3 only (docs/upgrade/project_format3.md section 8.4): what knows the old sections and the
+#     old formats is the converter (convert/), and the one refusal of an old file names them (io/src/
+#     ProjectFormat.cpp).  A file of the engine (src/, include/, api/, io/, experiment/) that names <segmentsData>,
+#     <targetInt>, format 2 or "old format" is listed: a new reader of an old section would be a second grammar.
+#     OLD_WORDS_PENDING: files of the two branches that work in parallel (node layout, fit-parameter plumbing) whose
+#     comments still name them; they leave this list when those branches are merged and the words are gone.
+OLD_WORDS = re.compile(r"segmentsData|targetInt\b|format[ -]2\b|old format", re.I)
+OLD_WORDS_ALLOWED = {"io/src/ProjectFormat.cpp"}
+OLD_WORDS_PENDING = {"include/Unit.h", "include/ParameterKind.h", "src/TargetSetup.cpp", "src/DataParameters.cpp",
+                     "experiment/src/Schema.cpp"}
+for top in ("src", "include", "api", "io", "experiment"):
+    for dirpath, _, files in os.walk(os.path.join(ROOT, top)):
+        if "/tests" in dirpath[len(ROOT):]:
+            continue
+        for f in files:
+            if not f.endswith((".cpp", ".h")):
+                continue
+            rel = os.path.relpath(os.path.join(dirpath, f), ROOT)
+            if rel in OLD_WORDS_ALLOWED or rel in OLD_WORDS_PENDING:
+                continue
+            for number, line in enumerate(read(rel).splitlines(), 1):
+                if OLD_WORDS.search(line):
+                    problems.append(f"{rel}:{number}: names an old section or format ({OLD_WORDS.search(line).group(0)}); "
+                                    "the engine reads format 3 only, the old grammar is the converter's (check 34)")
+if not OLD_WORDS.search("<segmentsData> line 3") or OLD_WORDS.search("bool targetIntegration = false;"):
+    problems.append("check 34: the old-word pattern no longer matches the forms it guards; update this check")
+
 if problems:
     for p in problems:
         print("FAIL", p)
@@ -850,4 +879,4 @@ if problems:
     sys.exit(1)
 print(f"repository consistent: {len(flags)} CLI flags, test registration, check.sh modes, pyazr version and exports, "
       f"format-3 reference page, {len(declared)} diagnostic codes, file sizes, one model pass and residual, one calculation plan, "
-      f"no machine paths, no old data class names")
+      f"no machine paths, no old data class names, no old section in the engine")

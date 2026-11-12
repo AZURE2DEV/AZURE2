@@ -3827,6 +3827,10 @@
    "severity": "warning",
    "meaning": "a parameter file with names the project has no parameter for, or without names of parameters it has"
   },
+  "W_PARAMETER_SETTING_UNKNOWN": {
+   "severity": "warning",
+   "meaning": "a <parameterSettings> row that names no parameter of the project (ignored)"
+  },
   "E_SO_TWO_SPINS": {
    "severity": "error",
    "meaning": "a spin-orbit term on a pair whose two particles both have spin (the coupled treatment is not implemented)"

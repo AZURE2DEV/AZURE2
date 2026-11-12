@@ -7,7 +7,7 @@
 # milliseconds wherever the engine builds.
 
 add_executable(beam_profile_reference_test beam_profile_reference_test.cpp)
-target_link_libraries(beam_profile_reference_test PRIVATE AZURE2Core)
+target_link_libraries(beam_profile_reference_test PRIVATE AZURE2Core azure2_convert_specs)
 
 add_test(NAME beam_profile_reference COMMAND beam_profile_reference_test)
 
@@ -101,17 +101,17 @@ set_tests_properties(park_chi2_fallback PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=
 # A <targetInt> line that ends inside its first nine fields: every TargetEffect member has its initialised value
 # (step 3a; before, they were left indeterminate), and a complete line still sets them.
 add_executable(target_effect_line_test target_effect_line_test.cpp)
-target_link_libraries(target_effect_line_test PRIVATE AZURE2Core)
+target_link_libraries(target_effect_line_test PRIVATE AZURE2Core azure2_convert_specs)
 add_test(NAME target_effect_line COMMAND target_effect_line_test)
 
 # The old-line adaptor (convert/'s SpecsFromOldLines.h) and Segment's spec constructors: the isDiff table, components,
 # the reading refusals, prior centres, abundances, <targetInt> data-set lists.
 add_executable(old_line_specs_test old_line_specs_test.cpp)
-target_link_libraries(old_line_specs_test PRIVATE AZURE2Core)
+target_link_libraries(old_line_specs_test PRIVATE AZURE2Core azure2_convert_specs)
 add_test(NAME old_line_specs COMMAND old_line_specs_test)
 
 add_executable(udr_reference_test udr_reference_test.cpp)
-target_link_libraries(udr_reference_test PRIVATE AZURE2Core)
+target_link_libraries(udr_reference_test PRIVATE AZURE2Core azure2_convert_specs)
 add_test(NAME udr_reference COMMAND udr_reference_test)
 
 # Equation::Evaluate (compiled postfix program) against Equation::EvaluateTokens,

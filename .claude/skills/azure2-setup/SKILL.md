@@ -1,6 +1,6 @@
 ---
 name: azure2-setup
-description: Build or audit an AZURE2 .azr project before any fit - compound nucleus and thresholds, particle and photon pairs with AME masses and separation energies, levels and channels from ENSDF, channel radii, EXFOR data converted into segments (pyazr.nds), what each segment measures (totals, natural targets), frames and units, and the first checks. Use for a new reaction, a new data set, reading or writing level or segment lines, or EXFOR/ENSDF lookups. Running a model is azure2-calculate; fitting azure2-fit; target effects azure2-targets; THM projects azure2-thm.
+description: Build or audit an AZURE2 .azr project before any fit - compound nucleus and thresholds, particle and photon pairs with AME masses and separation energies, levels and channels from ENSDF, channel radii, EXFOR data converted into segments (pyazr.nds), what each segment measures (totals, natural targets), frames and units, and the first checks. Use for a new reaction, a new data set, reading or writing level lines or data-set records, or EXFOR/ENSDF lookups. Running a model is azure2-calculate; fitting azure2-fit; target effects azure2-targets; THM projects azure2-thm.
 ---
 
 # Setting up an AZURE2 project
@@ -15,8 +15,9 @@ must follow, and the checks that show it is what was intended.
 ## When to use, and when not
 
 - Use it for a new compound nucleus or reaction, for adding a data set, for fetching data or level schemes from
-  EXFOR and ENSDF, for reading or hand-writing `<levels>` and `<segmentsData>` lines, and for auditing an inherited
-  project before trusting it.
+  EXFOR and ENSDF, for reading or hand-writing `<levels>` lines and `dataset` records, and for auditing an inherited
+  project before trusting it (an old `.azr` is refused: convert it with `AZURE2 --convert OLD NEW`, then audit the
+  conversion and its report; `docs/source/user_guide/older_projects.rst`).
 - Running calculations, extrapolations, rates and decompositions: azure2-calculate. Fitting, editing levels of a
   fitted model, norms and shifts: azure2-fit. Whether a result can be trusted: azure2-check. Covariance files for
   data: azure2-uncertainty. Target thickness, resolution and Doppler: azure2-targets. THM data: azure2-thm.
@@ -134,8 +135,9 @@ must follow, and the checks that show it is what was intended.
 ### Segments and data
 
 - Read every segment's tail before modelling it (references/azr-segments.md §2).
-- `<targetInt>` and parameter-file entries are matched to segments by key; test and data keys are separate counters
-  (references/azr-segments.md §4).
+- A data set names its target, beam and detector records; parameter-file entries are matched by name
+  (`<data set>.norm`, `<target>.areal_density`); a parameter file of the old project is renamed with
+  `AZURE2 --convert-params` (references/azr-segments.md §4 for old files).
 - A total is summed over every channel it measures; same-file lines are not summed; prefer `total 1` for neutron
   totals (references/data-definition.md §1–2).
 - Natural targets are one SUM segment with `sample`, built with `merge_projects` (references/data-definition.md §3).
