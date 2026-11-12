@@ -383,7 +383,6 @@ dataset deineko_130
     norm           1 fixed
     beam           beam_targetInt1
     quadrature     points 50
-    fold_windows   1.95-2.55 MeV blend 0.12 MeV auto_tolerance 0.002
 
 # <segmentsData> line 2
 dataset deineko_160
@@ -397,7 +396,6 @@ dataset deineko_160
     norm           1 fixed
     beam           beam_targetInt1
     quadrature     points 50
-    fold_windows   1.95-2.55 MeV blend 0.12 MeV auto_tolerance 0.002
 </data>
 <extrapolations>
 # <segmentsTest> line 1
@@ -419,7 +417,6 @@ extrapolation x2
     # CONVERTED: the <targetInt> line that lists line 2 also folded this extrapolation (the same index, EData::MakePoints); written explicitly
     beam           beam_targetInt1
     quadrature     points 50
-    fold_windows   1.95-2.55 MeV blend 0.12 MeV auto_tolerance 0.002
 
 # <segmentsTest> line 3
 extrapolation x3

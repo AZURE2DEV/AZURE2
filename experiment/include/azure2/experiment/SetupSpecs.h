@@ -282,15 +282,6 @@ struct TargetEffectSpec {
   double resonanceWidthMultiplier = 0.0;
   bool hasPointsPerWidth = false;
   double pointsPerWidth = 0.0;
-  bool hasRanges = false;                       ///< the lab-energy windows are given ("" = unrestricted)
-  std::vector<std::pair<double, double>> ranges;  ///< lab energy windows (MeV)
-  bool autoWindows = false;
-  bool hasAutoWindowTolerance = false;
-  double autoWindowTolerance = 0.0;
-  bool hasAutoWindowMargin = false;
-  double autoWindowMargin = 0.0;
-  double transitionWidth = 0.0;  ///< MeV, 0 when absent
-  double autoTolerance = 0.0;    ///< 0 when absent
   struct ProfileComponent {
     double xi = 0, omega = 0, alpha = 0, weight = 0;
   };

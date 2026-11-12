@@ -3165,9 +3165,8 @@ The kinematic factor, the exit penetrability, the weights :math:`w(E)` and
 :math:`R(E)`, and the vertex pieces (plane-wave :math:`j_l`, the Coulomb
 term, the DW :math:`a_k, d_k`) depend on the energy only; a folded point is
 linear in its sub-point cross sections (weights from the combiner, as for a
-target effect, and the edge blend). Not covered, so differenced as before:
-a THM segment with components, a target effect with an automatic tolerance,
-RMC. ``AZURE2_THM_FD=1`` selects the central differences for every THM
+target effect). Not covered, so differenced as before:
+a THM segment with components, RMC. ``AZURE2_THM_FD=1`` selects the central differences for every THM
 column (step :math:`10^{-6}(|x|+1)`), for testing; their truncation error
 reaches :math:`10^{-4}` relative on the energy of a narrow level (the
 adjoint agrees with a Richardson-extrapolated difference to

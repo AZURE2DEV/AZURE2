@@ -1,6 +1,5 @@
 // The target kernel (Kernels.h): the integration of a point's node values over the depth of its target (thin, thick,
-// layer yield), with the beam spread and the straggling as a Gaussian average at each depth, and the sigma(E_bar)
-// fallback of a thin target outside the windows of an energy-restricted integration.
+// layer yield), with the beam spread and the straggling as a Gaussian average at each depth.
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -45,42 +44,6 @@ double BohrStragglingSigma(const KernelParameters &p, double arealDensity, doubl
 
 namespace {
 
-/// sigma at E_bar = E0 - D from the node values: the single node, a quadratic through three fallback nodes, or a
-/// linear interpolation on a full grid (the end node outside it).
-template <class V>
-V TargetFallback(const KernelPoint &point, const KernelNodes &nodes, const V *values) {
-  const int n = nodes.n;
-  if (n <= 0) return V(0.0);
-  if (n == 1) return values[0];
-  const double e = point.energy - point.fallbackDepth;
-  if (point.fallbackOnly && n == 3) {
-    // three fallback nodes spanning the E_bar a fitted density can reach: the quadratic through them
-    double x[3];
-    for (int k = 0; k < 3; k++) x[k] = nodes.Energy(k + 1);
-    const double lo = std::min(x[0], x[2]), hi = std::max(x[0], x[2]);
-    const double ec = std::min(std::max(e, lo), hi);
-    V v = 0.0;
-    for (int k = 0; k < 3; k++) {
-      double l = 1.0;
-      for (int m = 0; m < 3; m++)
-        if (m != k) l *= (ec - x[m]) / (x[k] - x[m]);
-      v += l * values[k];
-    }
-    return v;
-  }
-  // a full grid (descending energies): linear between the two nodes around E_bar, the end node outside it
-  if (e >= nodes.Energy(1)) return values[0];
-  if (e <= nodes.Energy(n)) return values[n - 1];
-  for (int j = 1; j < n; j++) {
-    const double Ea = nodes.Energy(j), Eb = nodes.Energy(j + 1);
-    if (e <= Ea && e >= Eb) {
-      const double frac = (Ea > Eb) ? (Ea - e) / (Ea - Eb) : 0.0;
-      return (1.0 - frac) * values[j - 1] + frac * values[j];
-    }
-  }
-  return values[n - 1];
-}
-
 /*!
  * Target integration:  Y(E0) = (1/N) int_{E0-T}^{E0} <sigma>(E_d) / epsilon(E_d) dE_d  over the depth, where
  * <sigma>(E_d) is sigma itself, or its Gaussian average about E_d of width sqrt(sigma_b(E_d)^2 +
@@ -91,13 +54,12 @@ V TargetFallback(const KernelPoint &point, const KernelNodes &nodes, const V *va
  *   Y(E0) = 1e-24 int_{E_out}^{E0} <sigma>(E_d) / epsilon(E_d) dE_d   reactions per incident particle (sigma in b,
  * epsilon in MeV cm^2 per active nucleus), with E_out = 1 keV for the thick target and, for the layer, the energy at
  * which the integral of 1/epsilon on the same nodes reaches the working copy's N (LayerExit.h).
+ * A thin target inside one interval of the nodes is no special case: the quadrature integrates the linear interpolant
+ * of sigma (and of 1/epsilon) between the two enclosing nodes over [E0 - T, E0], i.e. it gives the interpolated sigma at
+ * the depth-averaged energy int E dE/epsilon / int dE/epsilon (exactly so for 1/epsilon constant across the target).
  */
 template <class V>
 V FoldTarget(const KernelParameters &p, const KernelPoint &point, const KernelNodes &nodes, const V *values) {
-  // A thin-target point outside the windows of an energy-restricted integration, or one the automatic tolerance let
-  // off: sigma at the depth-averaged energy E_bar.
-  const bool thinTarget = !p.thickTarget;
-  if (thinTarget && (point.fallbackOnly || point.fallbackNow)) return TargetFallback<V>(point, nodes, values);
   const int numPoints = nodes.n;
   if (numPoints < 2) return V(0.0);
   const double eHigh = nodes.High();
@@ -198,12 +160,7 @@ V FoldTarget(const KernelParameters &p, const KernelPoint &point, const KernelNo
   }
   // a thick target (density 0) and a layer yield are the yield per incident particle, 1e-24 int sigma/epsilon dE;
   // a thin target's quantity is the target-averaged cross section, that divided by 1e-24 N
-  V yield = (p.thickTarget || p.layerYield) ? outer : outer / (point.density * 1.0e-24);
-  // The smooth edge of a window: blend with sigma(E_bar), not with sigma at the beam energy.  Done here, in the
-  // linear kernel, so the gradient's weights carry it too.
-  if (thinTarget && point.blendWeight < 1.0)
-    yield = point.blendWeight * yield + (1.0 - point.blendWeight) * TargetFallback<V>(point, nodes, values);
-  return yield;
+  return (p.thickTarget || p.layerYield) ? outer : outer / (point.density * 1.0e-24);
 }
 
 /*!

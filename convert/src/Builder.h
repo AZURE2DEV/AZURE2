@@ -177,7 +177,7 @@ struct Apparatus {
   const OldEffectLine *line = nullptr;
   bool hasTarget = false, hasBeam = false, hasDetector = false;
   io::Record target, beam, detector;
-  std::vector<io::Token> quadrature, foldWindows;
+  std::vector<io::Token> quadrature;
   bool folded = false;
   bool profileWindows = false;  ///< a beam profile: data columns 5-6 are the reconstructed-energy windows
   std::vector<int> dataKeys, testKeys;

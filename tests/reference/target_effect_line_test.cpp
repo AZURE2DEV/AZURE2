@@ -45,7 +45,6 @@ int main() {
     check(w + "no sub-points", e.NumSubPoints() == 0);
     check(w + "no straggling", !e.IsStraggling() && e.GetStragglingCoefficient() == 0.0);
     check(w + "grid defaults", e.GetResonanceWidthMultiplier() > 0.0 && e.GetPointsPerWidth() > 0.0);
-    check(w + "no windows", e.GetTransitionWidth() == 0.0 && e.GetAutoTolerance() == 0.0);
   }
   const TargetEffect full = Read(configure, "1 \"1\" 20 1 0.001 1 5e17 \"a0\" 1 1e-20 0 0 0 \"\" 0 1 0.6 10 20");
   check("complete line: active, convolution, integration", full.IsActive() && full.IsConvolution() && full.IsTargetIntegration());

@@ -37,7 +37,6 @@ enum class ValueType {
   Reaction,        ///< a reaction expression (section 3.5)
   Columns,         ///< the column roles of a data file (section 3.4.1)
   Grid,            ///< an energy or angle grid of an extrapolation (section 3.8)
-  Windows,         ///< lab-energy windows of a fold: <lo>-<hi> ... <unit> | auto[:tol[:margin]]
   Form,            ///< a keyword-led structure of the above (stopping, udr, quadrature, ...): Alternative + parts
 };
 
@@ -168,17 +167,6 @@ struct Grid {
   Number startStep;
 };
 
-struct FoldWindows {
-  bool automatic = false;
-  bool hasTolerance = false, hasMargin = false;
-  Number tolerance, margin;  ///< auto:<tolerance>:<margin>
-  struct Window {
-    Number lo, hi;
-  };
-  std::vector<Window> windows;
-  const Unit *unit = nullptr;
-};
-
 struct ValuePart;
 
 /// A parsed value: `type` says which members hold it.
@@ -202,7 +190,6 @@ struct Value {
   ReactionExpr reaction;
   Columns columns;
   Grid grid;
-  FoldWindows windows;
   std::vector<ValuePart> parts;  ///< Form: positional parts by their name, keyword parts by their keyword
 
   /// A part of a Form by name, or nullptr when it was not given.

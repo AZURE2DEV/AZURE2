@@ -176,7 +176,7 @@ std::vector<FieldDef> Concat(std::vector<std::vector<FieldDef>> lists) {
 
 // ---------------------------------------------------------------- structured values (sections 3.3-3.10)
 struct Forms {
-  FormSpec shift, quadrature, foldWindows, secondaryGamma, orders, function, param, epoch, stopping, straggling,
+  FormSpec shift, quadrature, secondaryGamma, orders, function, param, epoch, stopping, straggling,
       isotope, isotopeSum, doppler, spread, profile, resolution, udr, channelSpin, central, spinOrbit;
   FormSpec reference;
 };
@@ -190,10 +190,6 @@ Forms MakeForms() {
                             OptionalKw("width_multiplier", PositiveNum(), "resonance-width multiplier of the adaptive grid (left out: 20, a pure Gaussian convolution a smaller core)", "20"),
                             OptionalKw("per_width", PositiveNum(), "points per resonance width", "50")},
                            "")}};
-  f.foldWindows = {{Unkeyed({Pos("windows", Spec(ValueType::Windows, "energy"), "lab-energy windows, or auto[:tolerance[:margin]]"),
-                             OptionalKw("blend", WithUnit("energy"), "blend width at a window edge"),
-                             OptionalKw("auto_tolerance", PositiveNum(), "tolerance of the automatic windows")},
-                            "")}};
   f.secondaryGamma = {{Unkeyed({Kw("L", IntAtLeast(1), "multipolarity"), Kw("Ic", Spec(ValueType::Spin), "spin of the intermediate state"),
                                 Kw("delta", Num(), "mixing ratio")},
                                "unobserved primary, observed secondary photon (UPOS)")}};
@@ -284,14 +280,19 @@ std::vector<FieldDef> PairKeyFields() {
                        "the <levels> pair key of the exit pair, only where the reaction label names two pairs")};
 }
 
+/// Fields of the apparatus that format 3 had and no longer has, with what to do (RecordKind::deleted).
+std::vector<std::pair<std::string, std::string>> DeletedApparatusFields() {
+  return {{"fold_windows", "remove it; the shared mesh folds every point of the data set, and energy windows, the "
+                           "blend at their edges and the automatic tolerance no longer exist"}};
+}
+
 std::vector<FieldDef> ApparatusFields() {
   const Forms &f = StructuredValues();
   const Condition fold = Condition::Of(Condition::Fold);
   return {ByQ("target", "Target", RefWithEpoch({"target"}), "the target record (and epoch) the beam passed through"),
           ByQ("beam", "Beam", Ref({"beam"}), "the beam record: energy spread or profile"),
           ByQ("detector", "Detector", Ref({"detector"}), "the detector record: Q_k, resolution, UDR"),
-          RequiredWhen("quadrature", "Quadrature", Structured(f.quadrature), fold, "sub-point grid of the fold"),
-          OptionalWhen("fold_windows", "Fold windows", Structured(f.foldWindows), fold, "lab-energy windows of the fold")};
+          RequiredWhen("quadrature", "Quadrature", Structured(f.quadrature), fold, "sub-point grid of the fold")};
 }
 
 std::vector<FieldDef> QuantityFields() {
@@ -346,6 +347,7 @@ RecordKind DatasetKind() {
                       Opt("covariance", "Covariance file", Spec(ValueType::Path), "data_formats.rst, covariance files"),
                       Defaulted(Opt("active", "Active", Words({"yes", "no"}), "an inactive data set is not used"), "yes")},
                      ApparatusFields(), QuantityFields(), TextFields()});
+  k.deleted = DeletedApparatusFields();
   return k;
 }
 
@@ -391,6 +393,7 @@ RecordKind ExtrapolationKind() {
                       Defaulted(Opt("active", "Active", Words({"yes", "no"}), "an inactive extrapolation is not computed"), "yes"),
                       ByQ("orders", "Legendre orders", Structured(f.orders), "the Legendre orders computed")},
                      ApparatusFields(), QuantityFields()});
+  k.deleted = DeletedApparatusFields();
   k.refused = {{"file", "an extrapolation has no data file (F20)"},
                {"columns", "an extrapolation has no data file (F20)"},
                {"norm", "an extrapolation has no normalization (F20)"},
@@ -557,7 +560,6 @@ std::string Grammar(const ValueSpec &spec) {
       return "range <lo> <hi>" + unit + " lab|cm step <s> | range <lo> <hi>" + unit + " lab|cm points <n> [log] | list <v> ..." +
              unit + " lab|cm | file <path>" + unit + " lab|cm | adaptive <lo> <hi>" + unit +
              " lab|cm tolerance <t> max_points <n> start_step <s>" + (spec.none ? " | none" : "");
-    case ValueType::Windows: return "<lo>-<hi> ..." + unit + " | auto[:<tolerance>[:<margin>]]";
     case ValueType::Form: {
       std::vector<std::string> alts;
       for (const Alternative &a : spec.form->alternatives) {

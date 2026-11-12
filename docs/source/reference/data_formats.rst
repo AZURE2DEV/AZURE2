@@ -696,9 +696,8 @@ it with the data set's beam spread, target layer or beam profile on the same
 sub-points as the cross section: the model is the ratio of the two folds.  A
 fitted energy shift moves both.  Refused: ``ratio_to_rutherford`` for
 identical particles and ``ratio_to_mott`` for different ones, a neutral pair,
-an inelastic group, and a Doppler-broadened target, electron screening,
-detector attenuation coefficients and ``fold_windows ... auto_tolerance`` on
-such a data set (``E_NOT_BUILT``).  The worked example is
+an inelastic group, and a Doppler-broadened target, electron screening and
+detector attenuation coefficients on such a data set (``E_NOT_BUILT``).  The worked example is
 :doc:`../examples/ratio_to_rutherford`.
 
 Parameter names follow the records: a data set's own are
@@ -814,9 +813,7 @@ target-averaged cross section, the yield divided by :math:`10^{-24}N`.  An
 as well (a fitted efficiency is refused: it cannot be told apart from the
 normalization; give its uncertainty as the norm's prior); ``arbitrary`` needs a
 free norm without prior.  A per-charge unit without ``charge_state`` is
-``E_FIELD_REQUIRED``.  On a layer, ``fold_windows`` are refused
-(``E_FIELD_NOT_APPLICABLE``: outside a window the integration is a cross section at
-one energy, not a yield); the set-up refuses a stopping that is not positive and
+``E_FIELD_REQUIRED``.  The set-up refuses a stopping that is not positive and
 finite at an energy the layer's integration reaches (``E_LAYER_STOPPING``) and a
 layer the beam does not leave above the lowest energy the model is evaluated at, 1
 keV c.m. (``E_LAYER_EXIT_BELOW_MODEL``: use ``kind infinite``).  The worked example is ``tests/units_scales``

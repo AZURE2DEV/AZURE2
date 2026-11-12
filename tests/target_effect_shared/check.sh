@@ -36,11 +36,9 @@ failures=0
 ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
-# make_variant NAME SPLIT: the project with the fold windows of both data sets removed (the whole data set is folded,
-# so the comparison does not depend on the automatic decision); SPLIT=1 gives deineko_160 a beam record of its own,
-# beam_split, a copy of the shared beam_targetInt1 (the same spread), so that each data set has its own record.
-# Every edit must change the file (tests/lib/edit_guard.sh).
-NOWINDOWS='$1 == "fold_windows" { next } { print }'
+# make_variant NAME SPLIT: the project as it is; SPLIT=1 gives deineko_160 a beam record of its own, beam_split, a copy
+# of the shared beam_targetInt1 (the same spread), so that each data set has its own record.  Every edit must change
+# the file (tests/lib/edit_guard.sh).
 SPLIT='$1 == "dataset" { ds = $2 } /^<\/data>/ { ds = "" }
   ds == "deineko_160" && $1 == "beam" { $0 = "    beam           beam_split" }
   /^<\/targets>/ { print ""; print "beam beam_split"; print "    spread         0.030 MeV lab" }
@@ -49,7 +47,7 @@ make_variant() {
   local dir="$WORK/$1"
   mkdir -p "$dir/output" "$dir/checks"
   cp -R "$SRC/data" "$dir/data"
-  edited "$SRC/target_effect_ranges.azr" "$dir/t.azr" awk "$NOWINDOWS" || bad "$1: the fold windows were not removed"
+  cp "$SRC/target_effect_ranges.azr" "$dir/t.azr"
   [ "$2" = 1 ] || return 0
   edited "$dir/t.azr" "$dir/t.azr" awk "$SPLIT" || bad "$1: the beam record was not split"
   [ "$(grep -c '^beam beam_' "$dir/t.azr")" -eq 2 ] && [ "$(grep -c '^    beam           beam_split$' "$dir/t.azr")" -eq 1 ] \

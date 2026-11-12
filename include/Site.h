@@ -270,10 +270,8 @@ class Site {
   int ResultNaturalSlots() const { return num_natural_slots_; }
   /// Place the point's record at offset `slot`, with nAng angular and nNat natural slots.
   void SetResultRecord(std::size_t slot, int nAng, int nNat);
-  /// Give the point (a probe copy, a point outside any data set) the only record of `scratch`, at offset 0, holding
-  /// the values of its record in `values` (a probe copy reads its original's record); without `values`, zeros (NaN
-  /// under AZURE_POISON_RESULTS=1: the record of a new evaluation, as WorkingCopy::BeginEvaluation gives).
-  void UsePrivateRecord(azure2::Results &scratch, const azure2::Results &values);
+  /// Give the point (a point outside any data set) the only record of `scratch`, at offset 0, holding zeros (NaN under
+  /// AZURE_POISON_RESULTS=1: the record of a new evaluation, as WorkingCopy::BeginEvaluation gives).
   void UsePrivateRecord(azure2::Results &scratch);
   /// A calculation that threw: NaN cross sections (total, E1, E2) on this point, and a warning naming the segment, the
   /// role of the point, its energy and the error, the first time in a run.  Used by azure2::EvaluateModelPoint and

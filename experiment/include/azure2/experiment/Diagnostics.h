@@ -76,6 +76,7 @@ constexpr const char *kUnknownField = "E_UNKNOWN_FIELD";
 constexpr const char *kFieldTwice = "E_FIELD_TWICE";
 constexpr const char *kFieldRequired = "E_FIELD_REQUIRED";
 constexpr const char *kFieldNotApplicable = "E_FIELD_NOT_APPLICABLE";
+constexpr const char *kFieldDeleted = "E_FIELD_DELETED";
 constexpr const char *kValueMissing = "E_VALUE_MISSING";
 constexpr const char *kPlaceholder = "E_PLACEHOLDER";
 // Values
@@ -100,7 +101,6 @@ constexpr const char *kSpinSyntax = "E_SPIN_SYNTAX";
 constexpr const char *kNucleusSyntax = "E_NUCLEUS_SYNTAX";
 constexpr const char *kUnknownElement = "E_UNKNOWN_ELEMENT";
 constexpr const char *kPairSyntax = "E_PAIR_SYNTAX";
-constexpr const char *kWindowSyntax = "E_WINDOW_SYNTAX";
 // Reactions
 constexpr const char *kReactionSyntax = "E_REACTION_SYNTAX";
 constexpr const char *kReactionOrdinal = "E_REACTION_ORDINAL";

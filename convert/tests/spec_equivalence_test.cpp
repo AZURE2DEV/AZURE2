@@ -17,7 +17,9 @@
 // - A target effect: per active key, the effect the engine applies to it (a later <targetInt> line takes over a key),
 //   its members with their defaults made explicit (straggling coefficient 0 = Bohr, width multiplier 20, points per
 //   width 50); and as partitions: the keys sharing one effect, and the keys sharing one fitted density.  Old lines
-//   that apply no effect to an active key are not effects.
+//   that apply no effect to an active key are not effects.  An old line's energy windows, edge blend and automatic
+//   tolerance are no member of either spec (format 3 folds every point): they are the one part of a line the two
+//   sides do not share, and the conversion must say so, a note per active line that has them ("dropped").
 // - Abundances: per sample (old name mapped to the target the data sets name) and compound nucleus.
 // - THM: the experiment of each active key, and the weight files.
 // - Parameter names (B, the director's decision on G2 item 4): the converter's map (ConvertResult::parameterNames)
@@ -56,6 +58,7 @@
 #include "azure2/convert/PotentialBlock.h"
 #include "azure2/convert/SpecsFromOldLines.h"
 #include "azure2/convert/ScatteringLengthLine.h"
+#include "azure2/convert/TargetIntLine.h"
 #include "azure2/convert/ThmLines.h"
 #include "azure2/experiment/ModelDatum.h"
 #include "azure2/experiment/ProjectReader.h"
@@ -341,18 +344,6 @@ void CompareEffect(const std::string &w, const TargetEffectSpec &x, const Target
     Bits(w + " width multiplier", x.hasResonanceWidthMultiplier ? x.resonanceWidthMultiplier : 20.0,
          y.hasResonanceWidthMultiplier ? y.resonanceWidthMultiplier : 20.0);
     Bits(w + " points per width", x.hasPointsPerWidth ? x.pointsPerWidth : 50.0, y.hasPointsPerWidth ? y.pointsPerWidth : 50.0);
-    const bool ra = x.hasRanges && (x.autoWindows || !x.ranges.empty()), rb = y.hasRanges && (y.autoWindows || !y.ranges.empty());
-    Eq(w + " windows", ra, rb);
-    if (ra) {
-      Eq(w + " auto windows", x.autoWindows, y.autoWindows);
-      if (!x.autoWindows) Eq(w + " ranges", x.ranges, y.ranges);
-      Eq(w + " auto tolerance given", x.hasAutoWindowTolerance, y.hasAutoWindowTolerance);
-      Bits(w + " auto tolerance", x.autoWindowTolerance, y.autoWindowTolerance);
-      Eq(w + " auto margin given", x.hasAutoWindowMargin, y.hasAutoWindowMargin);
-      Bits(w + " auto margin", x.autoWindowMargin, y.autoWindowMargin);
-      Bits(w + " blend", x.transitionWidth, y.transitionWidth);
-      Bits(w + " tolerance", x.autoTolerance, y.autoTolerance);
-    }
   }
   Eq(w + " profile", x.beamProfile, y.beamProfile);
   if (x.beamProfile) {
@@ -588,6 +579,19 @@ int main(int argc, char **argv) {
         if (x.active) activeExtrap.insert(x.key);
       CompareEffects("data effect", oldData.targetEffects, b.data.targetEffects, activeData);
       CompareEffects("extrapolation effect", oldExtrap.targetEffects, b.extrapolations.targetEffects, activeExtrap);
+      // the dropped windows, blend and tolerance: a note for each active old line that has them, none for another
+      int windowed = 0, windowNotes = 0;
+      for (const auto &item : oldData.targetEffects.items) {
+        std::istringstream line(item.spec.source);
+        convert::TargetIntLine l;
+        convert::ReadTargetIntLine(line, l);
+        if (l.isActive == 1 && l.hasRangesToken && (l.autoWindows || !l.ranges.empty() || l.autoTolerance > 0)) windowed++;
+      }
+      for (const convert::ConvertNote &n : r.notes)
+        if (n.text.find(" dropped") != std::string::npos &&
+            (n.text.find("windows") != std::string::npos || n.text.find("automatic tolerance") != std::string::npos))
+          windowNotes++;
+      Eq(std::string("old lines with windows or a tolerance against notes of their dropping"), windowed, windowNotes);
       // abundances: per (sample, compound nucleus); the old sample name maps to the format-3 one of its data sets
       std::map<std::string, std::string> sampleName;
       for (std::size_t i = 0; i < std::min(da.size(), db.size()); i++)

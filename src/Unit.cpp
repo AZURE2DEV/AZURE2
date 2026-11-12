@@ -534,17 +534,6 @@ void Site::SetResultRecord(std::size_t slot, int nAng, int nNat) {
   num_natural_slots_ = (std::uint16_t)nNat;
 }
 
-void Site::UsePrivateRecord(azure2::Results &scratch, const azure2::Results &values) {
-  const int nAng = this->ResultAngularCapacity();
-  const int nNat = num_natural_slots_;
-  std::vector<double> next(azure2::Results::RecordSize(nAng, nNat), 0.0);
-  // the values of the record the copy was made from: what the copy read before (a copy of a point copied its
-  // result members)
-  azure2::CopyRecord(Rec(values), num_ang_slots_, num_natural_slots_, next.data(), nAng, nNat);
-  scratch.slot.swap(next);
-  this->SetResultRecord(0, nAng, nNat);
-}
-
 void Site::UsePrivateRecord(azure2::Results &scratch) {
   const int nAng = this->ResultAngularCapacity();
   const int nNat = num_natural_slots_;

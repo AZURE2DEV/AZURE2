@@ -4,8 +4,8 @@
 # and that no slot is written by two of them (a breach stops the run); then every unit is solved alone and compared
 # bit for bit with the solve it shares at its compound energy (azure2::CheckEnergyTasks; a difference stops the run).
 # Mode-1 calculations of T1, T2 (with a SUM and a RATIO), T3, 13N, natural_neon (sample sums), 18O_p_a_thm (THM),
-# thick_target_resonance (seven capture exits under a thick target), target_effect_ranges (automatic tolerance,
-# windows, probes), electron_screening's grad.azr (see below) and tests/transmission_yield's conv (a transmission and
+# thick_target_resonance (seven capture exits under a thick target), target_effect_ranges (a beam spread
+# on analyzing powers), electron_screening's grad.azr (see below) and tests/transmission_yield's conv (a transmission and
 # a yield under a Gaussian spread), with and
 # without the check: each run exits 0, the checked run reports "0 differ", and every output file is byte for byte the
 # same.  Shown failing with a task that also calculated the next task's host (injected once: "writes slot ...,

@@ -19,8 +19,7 @@ namespace azure2 {
  * angle, with the engine's eta and k of the point's entrance pair (Kinematics::Channel: its masses, its charges, the
  * run's kinematics) and, for Mott, the pair's particle spin.  Under a sub-point effect (Unit::IsTargetEffect with a
  * sub-point kernel) the reference is folded as the point's observable is: evaluated at the point's own sub-points and
- * integrated by the point's own kernel (Unit::IntegrateSubPointValues, the one quadrature), with the edge blend
- * w fold + (1 - w) bare of Unit::Calculate where that applies, so the model is the ratio of the two folds,
+ * integrated by the point's own kernel (FoldValues, the one quadrature), so the model is the ratio of the two folds,
  * <dsigma/dOmega> / <sigma_C>, not the fold of the ratio.
  *
  * It reads the point's present energy and angle: an energy shift that re-energised the point (Segment::
@@ -32,9 +31,8 @@ double CoulombReferenceValue(const WorkingCopy &data, Unit *point, experiment::L
 
 /*!
  * A reference value the R-matrix does not compute, at a point as its observable is: at(point) without a sub-point
- * effect; else at(sub-point) folded by the point's own kernel (FoldValues, the one quadrature) with the edge blend
- * w fold + (1 - w) at(point) of Unit::Calculate where that applies.  The Coulomb leaf above and the tabulated
- * reference (ReferenceTableLeaf.h) use it.
+ * effect; else at(sub-point) folded by the point's own kernel (FoldValues, the one quadrature).  The Coulomb leaf
+ * above and the tabulated reference (ReferenceTableLeaf.h) use it.
  */
 double FoldReferenceAtPoint(const WorkingCopy &data, Unit *point, const Config &configure,
                             const std::function<double(const Site *)> &at);
