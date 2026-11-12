@@ -1851,7 +1851,7 @@ vector_r AZUREAPI::GetECIntegrals(const vector_r &request) const {
           block.push_back(g->GetRadType() == 'E' ? 1.0 : 0.0);
 
           ECIntegral theECIntegral(finalPair, finalChannel->GetRadius(), configure());
-          double levelEnergy = ecLevel->GetE();
+          double levelEnergy = ecLevel->GetECEnergy();
           for (int i = 0; i < nE; ++i) {
             double inEnergy = energies[i] + entrancePair->GetSepE() + entrancePair->GetExE();
             complex v(0., 0.);

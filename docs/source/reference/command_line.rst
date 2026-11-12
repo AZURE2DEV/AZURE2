@@ -89,7 +89,18 @@ Available Options
        conditions) instead of Brune's or Park's.  The input parameters are
        transformed to formal ones; a project whose observed widths have no
        standard equivalent is refused with the J^pi groups concerned (see
-       :doc:`troubleshooting`).
+       :doc:`troubleshooting`).  External capture needs the final state's
+       observed energy and on-resonance reduced width amplitude (the ANC);
+       for a final state that is not the first level of its J^pi group
+       these are recomputed from the group's formal parameters at every
+       step, so the capture cross section does not depend on the order of
+       the level lines.  The radial integrals stay at the bound-state
+       energy of the input file: when a fit moves the group's pole away
+       from it by more than 1 keV the run says so at its end, and the fit
+       is restarted from its output.  The analytic gradient is not
+       available for such a project (finite differences are used).  With
+       ``--no-transform`` there are no observed values to go by and the
+       run warns that the formal values are used.
    * - ``--use-park``
      - Use Park's level-dependent boundary conditions (Phys. Rev. C 104,
        064612) in place of Brune's alternative level matrix.  The fit

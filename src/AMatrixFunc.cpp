@@ -563,8 +563,10 @@ void AMatrixFunc::CalculateTMatrix(EPoint *point) {
       for (int m = 1; m <= theDecay->GetKGroup(k)->NumECMGroups(); m++) {
         ECMGroup *theECMGroup = theDecay->GetKGroup(k)->GetECMGroup(m);
         ALevel *finalLevel = compound()->GetJGroup(theECMGroup->GetJGroupNum())->GetLevel(theECMGroup->GetLevelNum());
-        double ecNormParam = finalLevel->GetFitGamma(theECMGroup->GetFinalChannel()) *
-            finalLevel->GetSqrtNFFactor() * finalLevel->GetECConversionFactor(theECMGroup->GetFinalChannel());
+        // the final state's on-resonance amplitude and its N_f (the fitted ones, except for a final state
+        // marked in the formal parametrization: ALevel::HasECFinalState)
+        double ecNormParam = finalLevel->GetECFitGamma(theECMGroup->GetFinalChannel()) *
+            finalLevel->GetECSqrtNFFactor() * finalLevel->GetECConversionFactor(theECMGroup->GetFinalChannel());
         // Use energy-shift aware EC amplitude calculation if energy shifts are active
         complex ecAmplitude;
         if (configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {

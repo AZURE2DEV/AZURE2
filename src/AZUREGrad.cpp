@@ -1419,6 +1419,12 @@ bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
   const std::vector<GradItem> items = BuildGradItems(data);
   bool bail = false;
   int bailSeg = 0;
+  // Formal parametrization with a marked external-capture final state: its amplitude is a function of its
+  // group's formal parameters (CNuc::UpdateFormalECFinalStates) that the adjoint does not differentiate.
+  if (compound->HasFormalECFinalStates() && !items.empty()) {
+    bail = true;
+    bailSeg = items[0].members[0].segNum;
+  }
 #pragma omp parallel shared(bail, bailSeg)
   {
     AMatrixFunc amf(compound, config);
@@ -1538,6 +1544,11 @@ bool ForEachRow(CNuc *compound, EData *data, const Config &config, const vector_
     if (it.grouped && it.members.size() > 1) numGroups++;
   bool bail = false;
   bailSeg = 0;
+  // as in AccumulateEGammaGradient: no derivative of a marked external-capture final state's amplitude
+  if (compound->HasFormalECFinalStates() && !items.empty()) {
+    bail = true;
+    bailSeg = items[0].members[0].segNum;
+  }
 #pragma omp parallel shared(bail, bailSeg)
   {
     GradAccum accum, scratch;  // per-thread, reused across its rows

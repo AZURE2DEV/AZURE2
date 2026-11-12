@@ -236,6 +236,12 @@ class CNuc {
   void FillCompoundFromParams(const vector_r &);
   /// As above, for a vector already in physical rather than formal parameters.
   void FillCompoundFromParamsPhysical(const vector_r &);
+  /// Formal parametrization with external capture: does any final state take its external-capture amplitude
+  /// from UpdateFormalECFinalStates (a final state that is not the first level of its group)?  The analytic
+  /// gradient has no derivative of that amplitude and hands such a model to finite differences.
+  bool HasFormalECFinalStates() const { return formalECFinalStates_; }
+  /// Warn when a marked final state's pole has moved from the energy its integrals were calculated at.
+  void WarnFormalECFinalStates(const Config &);
   void PrintCompoundFromParams();
   /// Warn once if any level has a radiative width not small against its
   /// particle width, where the R-matrix treatment of capture breaks down.
@@ -277,6 +283,10 @@ class CNuc {
   std::vector<ScatteringLength::Constraint> scatLenConstraints_;
   int maxLValue_;
   bool transformedIn_ = false;
+  /// On-resonance amplitudes of the marked external-capture final states (see ALevel::HasECFinalState), from
+  /// the fitted formal parameters; called by FillCompoundFromParams.
+  void UpdateFormalECFinalStates();
+  bool formalECFinalStates_ = false;
 };
 
 extern double DoubleFactorial(int);

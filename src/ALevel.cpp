@@ -317,6 +317,44 @@ void ALevel::SetSqrtNFFactor(double term) {
 }
 
 /*!
+ * Marks the level as an external-capture final state whose observed quantities differ from its formal ones
+ * (see HasECFinalState), and keeps what does not change during a calculation: the observed energy, the
+ * observed amplitudes of the input, and \f$S_c(E_f)-B_c\f$ for every channel.  The on-resonance amplitudes
+ * start at the observed ones.
+ */
+
+void ALevel::SetECFinalState(double energy, const vector_r &refGammas, const vector_r &deltas) {
+  ec_final_ = true;
+  ec_energy_ = energy;
+  ec_ref_gammas_ = refGammas;
+  ec_deltas_ = deltas;
+  ec_gammas_ = refGammas;
+  ec_sqrt_nf_ = sqrt_nf_factor_;
+  ec_pole_offset_ = 0.0;
+}
+
+/*!
+ * Sets the on-resonance amplitudes of a marked level, the \f$N_f^{1/2}\f$ made from them, and the distance
+ * of the pole from the kept observed energy.
+ */
+
+void ALevel::SetECFinalGammas(const vector_r &gammas, double sqrtNF, double poleOffset) {
+  ec_gammas_ = gammas;
+  ec_sqrt_nf_ = sqrtNF;
+  ec_pole_offset_ = poleOffset;
+}
+
+void ALevel::ClearECFinalState() {
+  ec_final_ = false;
+  ec_energy_ = 0.0;
+  ec_sqrt_nf_ = 1.0;
+  ec_pole_offset_ = 0.0;
+  ec_ref_gammas_.clear();
+  ec_deltas_.clear();
+  ec_gammas_.clear();
+}
+
+/*!
  * This function adds a conversion factor from reduced width amplitude to ANC.
  */
 

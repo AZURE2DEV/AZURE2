@@ -516,6 +516,32 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   energy order and every Brune run (the archive norm, `--use-brune`) are
   unchanged. Suspect any old non-Brune fit whose param.par has
   `energy_N` values out of step with the file's levels.
+- **`--no-brune` external capture used the FORMAL amplitude and energy of
+  the final state** (fixed on branch `fix/formal-ec-final-state`,
+  2026-11-12, `tests/formal_ec_final_state`): the external-capture terms
+  need the final state's observed energy and its on-resonance (Brune)
+  amplitude, which is what the ANC is. In the formal parametrization the
+  working values are those only for the level the boundary conditions come
+  from, the FIRST level of its J^pi group. A bound final state listed after
+  another level of the same J^pi (a background pole first) got the formal
+  values instead: the 12C(p,g0) toy model changed by up to a factor 9.7
+  when two level lines were swapped, while `--use-brune` and the elastic
+  scattering did not move, and nothing warned. Now such a final state is
+  marked at load, its on-resonance amplitude and N_f are recomputed from
+  the group's formal parameters at every parameter update, and the EC
+  integrals use its input energy. Consequences to know: (1) the sign of
+  the ANC in the `.azr` sets the sign of the EC term for a marked state;
+  (2) a formal fit with that ANC or a same-J^pi level free moves the
+  group's pole off the input energy (formal energy fixed is not observed
+  energy fixed): beyond 1 keV the run ends with "external-capture final
+  state in the formal parametrization: the pole of its J-group is now ...
+  keV from the bound-state energy", restart from the output; (3)
+  `--use-gradient` falls back to finite differences for the whole model
+  ("analytic block BAILED", "Analytic G2 unavailable"); (4)
+  `--no-transform` gets a warning, not a correction. Final states first in
+  their group, and every Brune run, are unchanged. Suspect any old
+  `--no-brune` capture fit whose final state is not first in its J^pi
+  group.
 - **MIGRAD nuisance priors on level parameters hit the wrong parameter**
   (fixed 2026-10-27, audit item 14, `tests/nuisance_level_index`): a
   `<parameterSettings>` entry with nuisance 1 on a level energy or width

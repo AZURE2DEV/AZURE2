@@ -1226,6 +1226,31 @@ void CNuc::Initialize(const Config &configure) {
       configure.outStream << "Performing Input Parameter Transformation..." << std::endl;
     // No standard R-matrix may correspond to the input (TransformIn): stop, as for any other GSL failure here.
     if (!this->TransformIn(configure)) throw GSLException(this->TransformError());
+  } else if ((configure.paramMask & Config::USE_EXTERNAL_CAPTURE) &&
+             !(configure.paramMask & (Config::USE_BRUNE_FORMALISM | Config::USE_RMC_FORMALISM))) {
+    // Without the input transformation the file holds formal parameters, and nothing here knows a final
+    // state's observed energy or on-resonance amplitude (TransformIn keeps them, UpdateFormalECFinalStates
+    // uses them).  The external-capture terms then use the formal values, which is right only for the
+    // first level of a J-group.  Say so once.
+    bool warned = false;
+    for (int j = 1; j <= this->NumJGroups() && !warned; j++) {
+      JGroup *theJGroup = this->GetJGroup(j);
+      if (!theJGroup->IsInRMatrix()) continue;
+      for (int la = 1; la <= theJGroup->NumLevels(); la++) {
+        ALevel *theLevel = theJGroup->GetLevel(la);
+        if (!theLevel->IsInRMatrix() || !theLevel->IsECLevel()) continue;
+        if (la == 1 && !theJGroup->BoundaryMinusL()) continue;
+        configure.outStream << "**WARNING: external capture in the formal parametrization without the input "
+                            << "parameter transformation:" << std::endl
+                            << "    " << AZURELabel::Level(theJGroup, theLevel, j, la) << std::endl
+                            << "  is a capture final state but not the level the boundary conditions were "
+                            << "taken from.  Its formal energy and" << std::endl
+                            << "  reduced width amplitude are used as the bound state's; the external-capture "
+                            << "terms are only approximate." << std::endl;
+        warned = true;
+        break;
+      }
+    }
   }
 
   // Sort reaction pathways
@@ -1585,6 +1610,50 @@ bool CNuc::TransformIn(const Config &configure) {
           theLevel->SetSqrtNFFactor(1.0 / sqrt(nFSum));
         }
       }
+    }
+  }
+  // External-capture final states in the formal parametrization.  The external-capture terms need a final
+  // state's observed energy and on-resonance (Brune) amplitude.  The loop below replaces both by formal
+  // values, which are the same only for the level the boundary conditions were taken from (the first of its
+  // group, CalcBoundaryConditions).  Every other final state is marked here, while its values are still the
+  // observed ones: its energy, its amplitudes (the reference for the sign) and S_c(E_f) - B_c are kept on
+  // the level, and UpdateFormalECFinalStates recomputes the on-resonance amplitudes from the group's formal
+  // parameters at every FillCompoundFromParams.  Before 2026-11-12 the formal amplitude and energy of such a
+  // level were used as they were: a capture cross section that depended on the order of the <levels> lines
+  // (tests/formal_ec_final_state).
+  formalECFinalStates_ = false;
+  const bool formalEC = (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) &&
+      !(configure.paramMask & (Config::USE_BRUNE_FORMALISM | Config::USE_RMC_FORMALISM));
+  for (int j = 1; j <= this->NumJGroups(); j++) {
+    JGroup *theJGroup = this->GetJGroup(j);
+    for (int la = 1; la <= theJGroup->NumLevels(); la++) {
+      ALevel *theLevel = theJGroup->GetLevel(la);
+      theLevel->ClearECFinalState();
+      if (!formalEC || !theJGroup->IsInRMatrix() || !theLevel->IsInRMatrix() || !theLevel->IsECLevel()) continue;
+      if (la == 1 && !theJGroup->BoundaryMinusL()) continue;
+      vector_r refGammas;
+      vector_r deltas;
+      for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
+        AChannel *theChannel = theJGroup->GetChannel(ch);
+        PPair *thePair = this->GetPair(theChannel->GetPairNum());
+        refGammas.push_back(theLevel->GetGamma(ch));
+        if (theChannel->GetRadType() != 'P') {
+          deltas.push_back(0.0);
+          continue;
+        }
+        const double localEnergy = theLevel->GetE() - thePair->GetExE() - thePair->GetSepE();
+        double shift;
+        if (localEnergy > 0.0) {
+          CoulFunc theCoulombFunction(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+          shift = theCoulombFunction.PEShift(theChannel->GetL(), theChannel->GetRadius(), localEnergy);
+        } else {
+          ShftFunc theShiftFunction(thePair, theChannel->GetRadius());
+          shift = theShiftFunction(theChannel->GetL(), theLevel->GetE());
+        }
+        deltas.push_back(shift - theChannel->GetBoundaryCondition());
+      }
+      theLevel->SetECFinalState(theLevel->GetE(), refGammas, deltas);
+      formalECFinalStates_ = true;
     }
   }
   for (int j = 1; j <= this->NumJGroups(); j++) {
@@ -2710,6 +2779,114 @@ void CNuc::FillCompoundFromParams(const vector_r &pIn) {
   if (hasAbundanceBlock_)
     for (unsigned int s = 0; s < samples_.size(); s++)
       for (unsigned int k = 0; k < nuclei_.size(); k++) samples_[s].entries[k].abundance = p[i++];
+  if (formalECFinalStates_) this->UpdateFormalECFinalStates();
+}
+
+/*!
+ * Formal parametrization: the on-resonance (Brune) reduced width amplitudes of the external-capture final
+ * states that TransformIn marked, from the current formal parameters of their group.
+ *
+ * With the level's observed energy \f$E_f\f$ held at its input value, the amplitudes are
+ * \f$\tilde\gamma_{fc}=\sum_\lambda a_\lambda\gamma_{\lambda c}\f$, where \f$a\f$ is the unit eigenvector of
+ * \f$\mathcal{E}_{\lambda\mu}=E_\lambda\delta_{\lambda\mu}-\sum_c\gamma_{\lambda c}\gamma_{\mu c}
+ * [S_c(E_f)-B_c]\f$ whose eigenvalue is nearest \f$E_f\f$ (Brune 2002, the inverse transformation, at a fixed
+ * energy).  At the input parameters that eigenvalue is \f$E_f\f$ and the amplitudes are the input ones.  When
+ * a fit moves the group's formal parameters the pole moves off \f$E_f\f$; the distance is kept
+ * (ALevel::GetECPoleOffset) and TransformOut warns when it is large, because the external-capture integrals
+ * stay at \f$E_f\f$.  The sign of the eigenvector is the one that keeps the particle amplitudes along the
+ * input ones, so the sign of the ANC in the input sets the sign of the external-capture term, as in the
+ * Brune parametrization.
+ */
+
+void CNuc::UpdateFormalECFinalStates() {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  for (int j = 1; j <= this->NumJGroups(); j++) {
+    JGroup *theJGroup = this->GetJGroup(j);
+    std::vector<ALevel *> levels;
+    bool any = false;
+    for (int la = 1; la <= theJGroup->NumLevels(); la++) {
+      ALevel *theLevel = theJGroup->GetLevel(la);
+      if (theLevel->IsInRMatrix()) levels.push_back(theLevel);
+      if (theLevel->HasECFinalState()) any = true;
+    }
+    if (!any) continue;
+    const int n = (int)levels.size();
+    const int nch = theJGroup->NumChannels();
+    for (int f = 0; f < n; f++) {
+      ALevel *theFinal = levels[f];
+      if (!theFinal->HasECFinalState()) continue;
+      matrix_r m(n, vector_r(n, 0.0));
+      for (int mu = 0; mu < n; mu++) {
+        for (int nu = 0; nu < n; nu++) {
+          double sum = (mu == nu) ? levels[mu]->GetFitE() : 0.0;
+          for (int ch = 1; ch <= nch; ch++) {
+            if (theJGroup->GetChannel(ch)->GetRadType() != 'P') continue;
+            sum -= theFinal->GetECShiftDifference(ch) * levels[mu]->GetFitGamma(ch) * levels[nu]->GetFitGamma(ch);
+          }
+          m[mu][nu] = sum;
+        }
+      }
+      vector_r gammas(nch, nan);
+      double sqrtNF = nan;
+      double offset = nan;
+      EigenFunc eigenFunc(m);
+      if (eigenFunc.ok()) {
+        int k = 0;
+        for (int i = 1; i < n; i++)
+          if (fabs(eigenFunc.eigenvalues()[i] - theFinal->GetECEnergy()) <
+              fabs(eigenFunc.eigenvalues()[k] - theFinal->GetECEnergy())) k = i;
+        double dot = 0.0;
+        for (int ch = 1; ch <= nch; ch++) {
+          double sum = 0.0;
+          for (int mu = 0; mu < n; mu++) sum += eigenFunc.eigenvectors()[mu][k] * levels[mu]->GetFitGamma(ch);
+          gammas[ch - 1] = sum;
+          if (theJGroup->GetChannel(ch)->GetRadType() == 'P') dot += sum * theFinal->GetECReferenceGamma(ch);
+        }
+        if (dot < 0.0)
+          for (int ch = 1; ch <= nch; ch++) gammas[ch - 1] = -gammas[ch - 1];
+        double nFSum = 1.0;
+        for (int ch = 1; ch <= nch && ch <= theFinal->NumNFIntegrals(); ch++)
+          nFSum += 2.0 * theJGroup->GetChannel(ch)->GetRadius() *
+              this->GetPair(theJGroup->GetChannel(ch)->GetPairNum())->GetRedMass() * uconv / pow(hbarc, 2.0) *
+              pow(gammas[ch - 1], 2.0) * theFinal->GetNFIntegral(ch);
+        sqrtNF = 1.0 / sqrt(nFSum);
+        offset = eigenFunc.eigenvalues()[k] - theFinal->GetECEnergy();
+      }
+      theFinal->SetECFinalGammas(gammas, sqrtNF, offset);
+    }
+  }
+}
+
+/*!
+ * Says, once per marked level, when the pole of its J-group has moved away from the observed energy the
+ * external-capture integrals were calculated at (formal parametrization only; nothing is marked otherwise).
+ * The energy of a level is a FORMAL fit parameter there: with the level's energy fixed and the other
+ * parameters of its group free, the observed bound-state energy still moves.  Called after the final
+ * parameter transformation.
+ */
+
+void CNuc::WarnFormalECFinalStates(const Config &configure) {
+  if (!formalECFinalStates_) return;
+  const double tolerance = 1.e-3;  // MeV
+  for (int j = 1; j <= this->NumJGroups(); j++) {
+    JGroup *theJGroup = this->GetJGroup(j);
+    for (int la = 1; la <= theJGroup->NumLevels(); la++) {
+      ALevel *theLevel = theJGroup->GetLevel(la);
+      if (!theLevel->HasECFinalState()) continue;
+      const double offset = theLevel->GetECPoleOffset();
+      if (fabs(offset) <= tolerance) continue;  // false for a NaN: a failed eigenvalue problem is reported too
+      configure.outStream << "**WARNING: external-capture final state in the formal parametrization:" << std::endl
+                          << "    " << AZURELabel::Level(theJGroup, theLevel, j, la) << std::endl;
+      if (offset != offset)
+        configure.outStream << "  its on-resonance amplitudes could not be calculated (eigenvalue problem "
+                            << "failed); its capture cross sections are NaN." << std::endl;
+      else
+        configure.outStream << "  the pole of its J-group is now " << offset * 1.e3 << " keV from the bound-state "
+                            << "energy " << theLevel->GetECEnergy() << " MeV the" << std::endl
+                            << "  external-capture integrals use.  Restart from the output parameters to "
+                            << "recalculate them at the new energy." << std::endl;
+    }
+  }
 }
 
 /*!
@@ -3741,11 +3918,14 @@ complex CNuc::CalcExternalWidth(JGroup *theJGroup, ALevel *theLevel,
       if (((theChannel->GetRadType() == 'E' && multL == 1) && (theFinalLevel->GetECMultMask() & isE1)) ||
           ((theChannel->GetRadType() == 'M' && multL == 1) && (theFinalLevel->GetECMultMask() & isM1)) ||
           ((theChannel->GetRadType() == 'E' && multL == 2) && (theFinalLevel->GetECMultMask() & isE2))) {  // allow only m1,e1,e2
+        // isInitial (TransformIn): the final state's OBSERVED energy, amplitude and N_f.  TransformIn's
+        // second loop has already replaced them by formal values when the final state's group comes before
+        // this one, so a marked final state (ALevel::HasECFinalState) gives the values kept before that loop.
         double theFinalLevelEnergy;
         if (!isInitial)
           theFinalLevelEnergy = theFinalLevel->GetTransformE();
         else
-          theFinalLevelEnergy = theFinalLevel->GetE();
+          theFinalLevelEnergy = theFinalLevel->GetECEnergy();
         for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
           double theInitialChannelGamma;
           if (!isInitial)
@@ -3759,7 +3939,8 @@ complex CNuc::CalcExternalWidth(JGroup *theJGroup, ALevel *theLevel,
               if (!isInitial)
                 theFinalChannelGamma = theFinalLevel->GetTransformGamma(chp);
               else
-                theFinalChannelGamma = theFinalLevel->GetGamma(chp);
+                theFinalChannelGamma = theFinalLevel->HasECFinalState() ? theFinalLevel->GetECReferenceGamma(chp)
+                                                                        : theFinalLevel->GetGamma(chp);
               AChannel *finalChannel = theFinalJGroup->GetChannel(chp);
               if (finalChannel->GetRadType() == 'P') {
                 if (finalChannel->GetPairNum() == initialChannel->GetPairNum()) {
@@ -3781,8 +3962,10 @@ complex CNuc::CalcExternalWidth(JGroup *theJGroup, ALevel *theLevel,
                                                       theLevelEnergy, theFinalLevelEnergy,
                                                       true);
 
-                    double ecNormParam = theFinalChannelGamma *
-                        theFinalLevel->GetSqrtNFFactor() * theFinalLevel->GetECConversionFactor(chp);
+                    const double sqrtNF = (isInitial && theFinalLevel->HasECFinalState())
+                                              ? theFinalLevel->GetECSqrtNFFactor()
+                                              : theFinalLevel->GetSqrtNFFactor();
+                    double ecNormParam = theFinalChannelGamma * sqrtNF * theFinalLevel->GetECConversionFactor(chp);
                     externalWidth -= ecNormParam * theInitialChannelGamma * integrals;
                   }
                 }

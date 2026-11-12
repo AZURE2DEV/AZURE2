@@ -875,6 +875,7 @@ int AZUREMain::operator()() {
                           << std::endl;
     return -1;
   }
+  compound()->WarnFormalECFinalStates(configure());
   compound()->PrintTransformParams(configure());
 
   // Cleanup shared EC amplitude cache

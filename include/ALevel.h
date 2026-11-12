@@ -85,6 +85,37 @@ class ALevel {
   /// External part of the reduced width amplitude for a channel.
   complex GetExternalGamma(int) const;
 
+  // -- external-capture final state in the formal parametrization -------------
+  /*!
+   * The external-capture terms need the final state's OBSERVED quantities: its energy, and the on-resonance
+   * (Brune) reduced width amplitude that the ANC is made of.  In the Brune and Brune-Park parametrizations
+   * the working values are those.  In the formal parametrization (--no-brune) they are only for the level
+   * the boundary conditions were taken from, the first of its \f$J^\pi\f$ group; for any other level the
+   * formal energy and amplitude differ from the observed ones.  CNuc::TransformIn marks such a final state
+   * here and keeps its observed energy; CNuc::FillCompoundFromParams then recomputes its on-resonance
+   * amplitudes from the group's formal parameters at every update (CNuc::UpdateFormalECFinalStates).
+   */
+  bool HasECFinalState() const { return ec_final_; }
+  /// Final-state energy for the external-capture integrals: the observed energy when marked, else GetE.
+  double GetECEnergy() const { return ec_final_ ? ec_energy_ : level_e_; }
+  /// Final-state reduced width amplitude for the external-capture terms: the on-resonance amplitude when
+  /// marked, else GetFitGamma.
+  double GetECFitGamma(int ch) const { return ec_final_ ? ec_gammas_[ch - 1] : fitgammas_[ch - 1]; }
+  /// \f$N_f^{1/2}\f$ belonging to GetECFitGamma: from the on-resonance amplitudes when marked, else
+  /// GetSqrtNFFactor.
+  double GetECSqrtNFFactor() const { return ec_final_ ? ec_sqrt_nf_ : sqrt_nf_factor_; }
+  /// The observed (input) amplitude of a marked level, for the transformation of the initial states.
+  double GetECReferenceGamma(int ch) const { return ec_ref_gammas_[ch - 1]; }
+  /// \f$S_c(E_f)-B_c\f$ of a marked level for a channel (0 for a channel without a shift function).
+  double GetECShiftDifference(int ch) const { return ec_deltas_[ch - 1]; }
+  /// Distance of the group's pole from the kept observed energy at the last update (MeV); 0 when not marked.
+  double GetECPoleOffset() const { return ec_final_ ? ec_pole_offset_ : 0.0; }
+  /// Mark the level: observed energy, observed amplitudes and \f$S_c(E_f)-B_c\f$ per channel.
+  void SetECFinalState(double energy, const vector_r &refGammas, const vector_r &deltas);
+  /// The on-resonance amplitudes, their \f$N_f^{1/2}\f$ and the pole offset of a marked level.
+  void SetECFinalGammas(const vector_r &gammas, double sqrtNF, double poleOffset);
+  void ClearECFinalState();
+
   /// Shift function for a channel, evaluated at the resonance energy.
   double GetShiftFunction(int) const;
   /// Park (2021) Eq. (28): the squared norm of the basis state,
@@ -181,6 +212,13 @@ class ALevel {
   vector_r shift_derivs_;
   vector_r shift_derivs2_;
   vector_c external_gammas_;
+  bool ec_final_ = false;
+  double ec_energy_ = 0.0;
+  double ec_sqrt_nf_ = 1.0;
+  double ec_pole_offset_ = 0.0;
+  vector_r ec_ref_gammas_;
+  vector_r ec_deltas_;
+  vector_r ec_gammas_;
 };
 
 #endif
