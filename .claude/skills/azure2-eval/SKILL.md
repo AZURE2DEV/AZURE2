@@ -82,13 +82,15 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   parameters `isospin_shift_<Z>_<A>`, `isospin_mix_<k>` follow the abundances.
   Park/RMC are refused; MCMC and pyazr take RWA parameters only (the
   physical-to-formal transform would mix stale derived members into free ones).
-  BRUNE RUNS (branch feature/isospin-brune-tie, 2026-11-12; builds without it
-  refuse `--use-brune`): the same ties then act on the Brune amplitudes and the
+  BRUNE RUNS (dev e3d67399, 2026-11-12, `tests/isospin_levels` section (i);
+  older builds refuse `--use-brune`): the same ties then act on the Brune amplitudes and the
   OBSERVED energies, with no B = -l. This is not Hale's formulation: the
   amplitude tie is the same statement only for a level alone in its J^pi group,
   and one shift per nucleus fits observed energies worse than formal ones (the
   Thomas-Ehrman shift depends on the level), so give Brune energies a wide
-  `soft` sigma_E or fix them at the measured values.
+  `soft` sigma_E or fix them at the measured values. A far background pole in
+  a tied J^pi group can be a flat direction in a Brune run (amplitude and error
+  run away while MIGRAD still reports a valid minimum): bound it.
   `soft <ID> <sigma_E> <sigma_gamma>` relaxes one level's tie into a penalty
   (derived slots free; MIGRAD/MCMC only, LM/GSL refused).
   Read the start-up factor table and `isospin.out` before trusting a model;
