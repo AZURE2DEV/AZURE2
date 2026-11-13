@@ -43,7 +43,7 @@ def log_prob(theta):
     lp = np.sum([pr.logpdf(t) for pr, t in zip(priors, theta)])
     if not np.isfinite(lp):
         return -np.inf
-    chi2 = np.sum(azr.calculate_chi2_rwa(theta))
+    chi2 = azr.evaluate(theta).chi2
     return -0.5 * (chi2 + offset) + lp
 
 

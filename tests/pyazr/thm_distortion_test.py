@@ -14,12 +14,12 @@ Checked on tests/18O_p_a_thm with a made-up charged spectator,
      distorted a + A wave, a ps window with distortionRatio=dw) refused as
      AZURE2 refuses them; global optical potentials (names, :extrapolate;
      the projectile and the mass range refused when a session is made).
-  2. The engine against the CLI: calculate_chi2_rwa (rel 1e-9) and the output
+  2. The engine against the CLI: evaluate().chi2 (rel 1e-9) and the output
      files written by write_output_files (thm_experiments.out included).
   3. thm_distortion: |M|^2 and M_PW at E = 0.6 MeV against the mpmath values
      of tests/reference/thm_distortion_reference.py (case he3_qf); R_model (the
      interpolated weight) against R on a grid (1e-6); R(E_ref) = 1.
-  4. No folding: calculate_rwa(on)/calculate_rwa(off) equals R_model at the data
+  4. No folding: evaluate().data[i].model(on)/evaluate().data[i].model(off) equals R_model at the data
      energies (1e-12); a table (distortion=table:<file>) multiplies by its w(E);
      an experiment without distortion, an unknown one and an energy that
      leaves the spectator no energy raise.  3b: global potentials run and
@@ -228,8 +228,8 @@ with tempfile.TemporaryDirectory() as tmp:
     print("2. the engine against the CLI")
     with Session(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
         x = np.asarray(s.params_rwa, float)
-        chi2 = float(np.sum(s.calculate_chi2_rwa(x)))
-        check(f"calculate_chi2_rwa == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
+        chi2 = s.evaluate(x).chi2
+        check(f"evaluate().chi2 == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
               f"{chi2} vs {cli_chi2}")
         s.write_output_files(x)
     from_py = output_files(py_dir)
@@ -301,7 +301,7 @@ with tempfile.TemporaryDirectory() as tmp:
         d = project("nf_" + name, blk, fold=False)
         with Session(os.path.join(d, "run.azr"), cwd=d) as s:
             x = np.asarray(s.params_rwa, float)
-            model[name] = np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)])
+            model[name] = np.concatenate([np.asarray(v) for v in [d.model for d in s.evaluate(x).data]])
             ecm = np.concatenate([np.asarray(v) for v in s.energies])
             if name == "off":
                 try:
@@ -312,7 +312,7 @@ with tempfile.TemporaryDirectory() as tmp:
             else:
                 model[name + "_R"] = s.thm_distortion("A", ecm)["R_model"]
     worst = float(np.max(np.abs(model["on"] / model["off"] / model["on_R"] - 1)))
-    check(f"coulomb: calculate_rwa(on)/calculate_rwa(off) == R_model at {ecm.size} points "
+    check(f"coulomb: evaluate().data[i].model(on)/evaluate().data[i].model(off) == R_model at {ecm.size} points "
           f"({model['on_R'].min():.4f}-{model['on_R'].max():.4f}, worst {worst:.1e})", worst < 1e-12)
     w = 2.0 * np.exp((ecm - 0.4) / 0.6 * np.log(0.25))
     worst = float(np.max(np.abs(model["tab"] / model["off"] / w - 1)))

@@ -81,8 +81,9 @@ class Session(
 
     Parameters: :attr:`params_rwa` (the free vector, start values, engine order), :attr:`parameters` (what each entry
     is), :attr:`pairs`, :meth:`physical_levels`.  Data: :attr:`datasets`, :attr:`energies`, :attr:`cross`.  At a
-    free vector: :meth:`objective`, :meth:`objective_and_grad`, :meth:`calculate_chi2_rwa`, :meth:`segment_chi2`,
-    :meth:`calculate_rwa`, :meth:`penalties`.  Files: :meth:`write_output_files`, :meth:`save_fit`.
+    free vector x: :meth:`evaluate` (every number at x: model values, chi-squared, the objective's terms) and
+    :meth:`objective` (the fit's objective as one callable: value, gradient, rows, Jacobian, log-probability).
+    Files: :meth:`write_output_files`, :meth:`save_fit`.
     :meth:`describe` (plain data), :meth:`close` (or a ``with`` block).  Errors: :mod:`pyazr.errors`.
     """
 
@@ -197,8 +198,8 @@ class Session(
     # -- lifecycle ------------------------------------------------------------
 
     @property
-    def sess(self):
-        """The underlying engine, or :class:`pyazr.SessionClosed` (a ``RuntimeError``) once it has been released."""
+    def _engine(self):
+        """The binding's _azure2.Session, private: no lock, no promise of stability (used under the session's lock)."""
         if self._sess is None:
             raise session_checks.session_closed(self.file, sys._getframe(1).f_code.co_name)
         return self._sess
@@ -242,7 +243,7 @@ class Session(
     @engine_call
     def configure(self):
         """Re-read the parameter, pair and dataset metadata from the engine, after anything that rebuilt the model."""
-        s = self.sess
+        s = self._engine
         self.nsegments = int(s.update_data())
         rng = range(self.nsegments)
         self.energies = [s.data_energies(i) for i in rng]
@@ -273,12 +274,8 @@ class Session(
         engine's count) or ``"extrapolations"`` (:class:`~pyazr.described.DescribedExtrapolations`).
 
         Parsed once and kept until the file changes on disk (modification time,
-        size or inode) or :meth:`configure` runs.  Before 2026-11-03 every
-        ``calculate_rwa`` call re-read and re-parsed the whole ``.azr`` once per
-        segment (the E1/E2 component check of the time), and
-        every :meth:`penalties`/:meth:`objective` call once more: 83 ms per call
-        instead of 8 ms on the 3H+d model from /groups (NFS), and the reason
-        forked workers there were slow.
+        size or inode) or :meth:`configure` runs: an evaluation reads it, and a parse
+        of the whole file per call costs 83 ms against 8 ms on a model on NFS.
 
         The objects are shared: internal read-only use only.  The public
         properties (:attr:`datasets`, :attr:`active_datasets`,
@@ -413,7 +410,7 @@ class Session(
             raise ParameterError(f"set_channel_radius: the channel radius of pair {pair} must be a positive length "
                                  f"in fm, got {radius}; Session.pairs.by_number({pair}).channel_radius is the "
                                  f"current one.")
-        if not self.sess.set_radius(pair, float(radius)):
+        if not self._engine.set_radius(pair, float(radius)):
             raise RuntimeError(
                 f"AZURE2 could not rebuild with pair {pair} at "
                 f"{radius} fm; the session is no longer usable.")
@@ -426,7 +423,7 @@ class Session(
         return got
 
     def _build_pairs(self):
-        return PairSet(Pair(r) for r in self.sess.pair_records())
+        return PairSet(Pair(r) for r in self._engine.pair_records())
 
     @property
     @engine_call
@@ -462,7 +459,7 @@ class Session(
         For each extrapolation record, the reaction channel, the energy / angle grid, and the observable
         type.  These describe the segments AZURE2 reports in extrapolation mode
         (:meth:`extrap_mode`), in the same order, so segment ``i`` of this set
-        corresponds to index ``i`` of ``calculate``/``calculate_energies``.
+        corresponds to ``evaluate(x).data[i]`` there.
         A copy of the session's parse of the file (see :meth:`_parsed`).
         """
         return copy.deepcopy(self._parsed("extrapolations"))
@@ -470,7 +467,7 @@ class Session(
     def _build_parameters(self):
         """The table of the engine's parameter records (built once per layout; :meth:`configure` and a mode switch
         drop it)."""
-        rows = [Parameter(r) for r in self.sess.parameter_records()]
+        rows = [Parameter(r) for r in self._engine.parameter_records()]
         return ParameterSet(rows, x0=[p.start for p in rows if not p.fixed], basis=self.basis)
 
     # -- physical levels (turn a resonance on/off) ----------------------------
@@ -534,8 +531,8 @@ class Session(
 
         The level's reduced widths are set to zero, decoupling it from every
         channel; all other parameters are untouched.  ``params`` is a free
-        (``params_rwa``-order) vector.  Use with :meth:`calculate_rwa` /
-        :meth:`residual_jacobian` to see the model *without* that resonance.
+        (``params_rwa``-order) vector.  Use with :meth:`evaluate` /
+        :meth:`objective` to see the model *without* that resonance.
         """
         import numpy as _np
         out = _np.array(params, dtype=float)
@@ -565,12 +562,12 @@ class Session(
     @engine_call
     def norm_indices(self):
         """Free-vector positions of the normalization parameters."""
-        return self.sess.normalization_indices()
+        return self._engine.normalization_indices()
 
     @engine_call
     def shift_indices(self):
         """Free-vector positions of the energy-shift parameters."""
-        return self.sess.energy_shift_indices()
+        return self._engine.energy_shift_indices()
 
     @engine_call
     def energy_indices(self):
@@ -604,7 +601,7 @@ class Session(
         AZURE2 does on read; a file with no name in common with the model is
         refused rather than applied to nothing.
 
-        This only *reads*.  The free-vector calls (``calculate_chi2_rwa(x)``,
+        This only *reads*.  The free-vector calls (``evaluate(x)``,
         ``update_segments_rwa(x)``, ``transform_rwa(x)``, ...) take every FIXED
         parameter from the session, i.e. from the ``.azr``, so passing just the
         free slice of this vector drops the file's fixed level parameters --
@@ -612,7 +609,7 @@ class Session(
         as the CLI does, use :meth:`load_sav`.
         """
         vals = self.read_sav(path)
-        full = np.asarray(self.sess.params_all_rwa(), float).copy()
+        full = np.asarray(self._engine.params_all_rwa(), float).copy()
         hit = 0
         for p in self.parameters:
             if p.name in vals and 0 <= p.index < full.size:
@@ -639,7 +636,7 @@ class Session(
         energies and widths included.  The free-vector calls of this class
         take the fixed values from the session instead, so
         ``x = full_rwa_from_sav(p)[~fixed]`` followed by
-        ``calculate_chi2_rwa(x)`` evaluates the ``.azr``'s fixed parameters,
+        ``evaluate(x)`` evaluates the ``.azr``'s fixed parameters,
         not the file's.  When they differ the two are different models:
         11B+alpha (10-12-26) had 10 fixed widths off by up to 1.6 %, and pyazr
         gave chi2 9925.03 against the CLI's 9868.04 at the same file, with no
@@ -677,7 +674,7 @@ class Session(
         # The engine's LIVE bookkeeping, matched by name as the CLI does: the
         # cached `parameters` describe the mode the session was first built
         # in, and extrapolation mode has a shorter vector.
-        s = self.sess
+        s = self._engine
         fixed = np.asarray(s.params_fixed(), bool)
         full = np.asarray(s.params_all_rwa(), float).copy()
         vals = self.read_sav(path)
@@ -711,7 +708,7 @@ class Session(
         else:
             # Modules built before set_params_all_rwa: the same effect, at the
             # cost of one forward pass.
-            self.sess.update_segments_all_rwa(full)
+            self._engine.update_segments_all_rwa(full)
         self.fixed_params = [bool(f) for f in fixed]
         self.params_rwa = [float(v) for v in full[~fixed]]
         self.params = s.params_values()
@@ -726,7 +723,7 @@ class Session(
         extrapolation's in a data run) are neither applied nor unknown."""
         import json
         import warnings
-        s = self.sess
+        s = self._engine
         of_run = [s.params_names(i) for i in range(len(records))]
         optional = [of_run[i] for i, r in enumerate(records) if segment_field[r["kind"]] and fixed[i]]
         with open(self.file, "rb") as f:
@@ -843,7 +840,7 @@ class Session(
           sign lost passed. See :meth:`_snapshot_mismatch` for why photon
           channels are judged on physical values only.  With
           ``norms="fitted"`` (data mode) the reopened file's data chi-squared
-          and its prior terms (:meth:`penalties`) must also equal the fit's
+          and its objective (:meth:`evaluate`: ``chi2``, ``objective``) must also equal the fit's
           (rel. 1e-6; 1e-4 in the standard parametrization, whose transform is
           inverted iteratively on reading).
 
@@ -888,8 +885,8 @@ class Session(
         # What the check compares with, from this session before it may close.
         chi_want = pen_want = None
         if verify and norms == "fitted" and self.mode == "data":
-            chi_want = self.calculate_chi2_rwa(x)[0]
-            pen_want = self.penalties(x)
+            ev = self.evaluate(x)
+            chi_want, pen_want = ev.chi2, ev.objective
         check_options = {k: v for k, v in self.options.items() if k != "data_mode"}
         check_options["data_mode"] = self.mode == "data"
         if close_session:
@@ -911,14 +908,14 @@ class Session(
                 copy.set_config(output_dir=tmpdir.rstrip("/") + "/")
                 copy.save(probe)
                 with Session(probe, cwd=self.cwd, **check_options) as check:
-                    back_full = np.asarray(check.sess.params_all_rwa(), float)
+                    back_full = np.asarray(check._engine.params_all_rwa(), float)
                     got = np.asarray(check.transform_all_rwa(back_full, include_fixed=True), float)
                     back = {p.name: float(back_full[i])
                             for i, p in enumerate(check.parameters)}
                     chi_got = None
                     if chi_want is not None:
-                        chi_got = check.calculate_chi2_rwa(check.params_rwa)[0]
-                        pen_got = check.penalties(check.params_rwa)
+                        ev = check.evaluate(check.params_rwa)
+                        chi_got, pen_got = ev.chi2, ev.objective
             except Exception as err:
                 self._discard(path, sav)
                 raise RuntimeError(
@@ -947,11 +944,9 @@ class Session(
                 if not np.isclose(chi_got, chi_want, rtol=rtol, atol=1e-9):
                     self._discard(path, sav)
                     raise session_checks.snapshot_mismatch("chi2", chi_got, chi_want, rtol)
-                got_p = sum(float(np.sum(v)) for v in pen_got.values())
-                want_p = sum(float(np.sum(v)) for v in pen_want.values())
-                if not np.isclose(got_p, want_p, rtol=rtol, atol=1e-9):
+                if not np.isclose(pen_got, pen_want, rtol=rtol, atol=1e-9):
                     self._discard(path, sav)
-                    raise session_checks.snapshot_mismatch("priors", got_p, want_p, rtol)
+                    raise session_checks.snapshot_mismatch("objective", pen_got, pen_want, rtol)
         return path, sav
 
     @staticmethod
@@ -1032,7 +1027,7 @@ class Session(
     @engine_call
     def transform_rwa(self, params):
         """Map a reduced-width-amplitude vector to physical parameters: level energies in MeV, partial widths in eV, ANCs in fm^-1/2."""
-        return self.sess.transform_rwa(params)
+        return self._engine.transform_rwa(params)
 
     @engine_call
     def transform_all_rwa(self, params, include_fixed=False, free_only=None):
@@ -1051,11 +1046,11 @@ class Session(
         """
         if free_only is not None:
             include_fixed = not free_only
-        return self.sess.transform_all_rwa(params, include_fixed=bool(include_fixed))
+        return self._engine.transform_all_rwa(params, include_fixed=bool(include_fixed))
 
     def _all_rwa(self, x):
         """The full RWA vector with the free vector ``x`` in its free slots."""
-        allx = np.asarray(self.sess.params_all_rwa(), float).copy()
+        allx = np.asarray(self._engine.params_all_rwa(), float).copy()
         free = [i for i in range(allx.size) if not self.fixed_params[i]]
         x = np.asarray(x, float).ravel()
         for k, i in enumerate(free[:x.size]):
@@ -1204,67 +1199,7 @@ class Session(
             table.append(row)
         return table
 
-    # -- chi-squared ----------------------------------------------------------
-
-    @engine_call
-    def calculate_chi2_rwa(self, params):
-        """Data chi-squared plus the model terms at a free RWA vector, as a one-element list.
-
-        The data chi-squared (data covariances included) plus the model's
-        terms (``AZUREAPI::FilledModelPenalties``: Park's wall, abundance
-        priors and their sum, measured scattering lengths; 0 in most
-        projects; :meth:`segment_chi2` sums the data part alone).  Excludes
-        the norm and shift penalties and the prior covariance of
-        :meth:`objective`.  A THM segment with a free norm is treated as the CLI
-        treats it: its arbitrary scale is profiled out (n* = S_mm/S_md, chi2 =
-        S_dd - S_md^2/S_mm, no penalty) and is not an entry of ``params`` --
-        see :meth:`segment_norms` for the n* it lands on.
-        """
-        return [float(self.sess.calculate_chi2_rwa(params))]
-
-    @engine_call
-    def calculate_chi2(self, params):
-        """As calculate_chi2_rwa, taking the physical parameter vector instead.
-
-        The vector is ``transform_rwa`` of the free level block followed by the
-        free normalizations, shifts and screening potentials, which are the
-        same in both bases.  Before 2026-10-26 the normalization entries were
-        ignored (the segments kept the norms of the previous call) and the
-        Park, abundance and scattering-length terms were left out.
-        """
-        return [float(self.sess.calculate_chi2_physical(params))]
-
-    @engine_call
-    def segment_norms(self, params=None):
-        """The normalization each segment carries at ``params``.
-
-        One entry per segment, in ``segment_chi2`` order.  For most segments
-        this is the free-vector value (or the fixed one from the file); for a
-        THM segment with a free norm it is the profiled optimum ``n*`` -- which
-        is not a fit parameter, so this is the only way to see it.  The
-        segments of a THM experiment (``<thm>`` ``experiment[...]``) all carry
-        its shared ``n*`` (see :meth:`thm_background`).  Runs a chi-squared
-        evaluation.
-        """
-        x = np.asarray(self.params_rwa if params is None else params, float)
-        self.sess.calculate_chi2_rwa(x)
-        return np.asarray(self.sess.current_norms(), float)
-
-    @engine_call
-    def residuals(self, params=None):
-        """Standardized residuals ``(fit_i - data_i*n)/(err_i*n)``, from a
-        forward pass alone.  ``data_i`` and ``err_i`` are in the data set's own
-        frame and unit, as its file gives them (the model is brought to that
-        frame: a lab-frame data set is compared in the lab frame, not c.m.).
-
-        The residual vector of :meth:`residual_jacobian` (same rows, in segment
-        order) without its Jacobian, so it is as cheap as one chi-squared and
-        never refuses a model.  ``sum(r**2)`` is the data part of
-        ``calculate_chi2_rwa`` (equal to it without model terms, see there):
-        THM segments with a free norm use their profiled ``n*``.
-        """
-        x = np.asarray(self.params_rwa if params is None else params, float)
-        return np.asarray(self.sess.calculate_residuals_rwa(x.ravel()), float)
+    # -- output files and norms -----------------------------------------------
 
     @engine_call
     def write_output_files(self, params=None):
@@ -1291,66 +1226,22 @@ class Session(
             # a bare forward pass leaves it at zero and the file comes out
             # full of zeros.  This populates both that and the point cross
             # sections AZUREOut_* is written from.
-            self.sess.calculate_chi2_rwa(x)
+            self._engine.calculate_chi2_rwa(x)
         else:
             # No data to compare against; chiSquared.out is meaningless in
             # extrapolation mode, and the forward pass is all AZUREOut_*
             # needs.
-            self.sess.update_segments_rwa(x)
-        if not self.sess.write_output_files():
+            self._engine.update_segments_rwa(x)
+        if not self._engine.write_output_files():
             raise RuntimeError("AZURE2 has no data object to write from.")
         session_checks.warn_engine_notices(self._sess, stacklevel=3)
         return self.output_dir
-
-    # -- chi-squared, per segment and per dataset -----------------------------
-
-    @engine_call
-    def segment_chi2(self, params=None):
-        """Chi-squared per data segment, in ``<segmentsData>`` order.
-
-        ``calculate_chi2_rwa`` returns only the total, but the standardized
-        residuals carry the split: they come back in segment order, so summing
-        their squares between the segment boundaries recovers each one.  The
-        sum of this is the data part of ``calculate_chi2_rwa``: equal to it
-        when the model terms are 0 (no free target abundance, Park wall or
-        measured scattering length; :meth:`penalties`), THM segments with a
-        free norm at their profiled optimum, as in the CLI's chiSquared.out.
-
-        Segments with a data covariance (``covariance <file>``) carry whitened
-        residuals w = W r (W^T W = M^-1, a mixture of the group's rows), so
-        their split is that of the whitened rows.  It differs from the
-        engine's ``chiSquared.out`` split, sum r_i (M^-1 r)_i; both add up to
-        the group's chi-squared.
-        """
-        x = np.asarray(self.params_rwa if params is None else params, float)
-        r = self.residuals(x)
-        edges = np.cumsum([0] + [len(self.energies[i]) for i in range(self.nsegments)])
-        return np.array([float(np.sum(r[edges[i]:edges[i + 1]] ** 2))
-                         for i in range(self.nsegments)])
-
-    @engine_call
-    def dataset_chi2(self, params=None):
-        """Chi-squared per *dataset*, which is how a fit is usually judged.
-
-        An experiment often owns several segments -- one per angle, or one per
-        final state -- so the per-segment split is finer than the question
-        being asked.  Returns ``{name: (chi2, points, segments)}`` keyed by the
-        data file's name (a format-3 project: the data set's record name, one
-        segment each), in first-appearance order.
-        """
-        seg = self.segment_chi2(params)
-        out = {}
-        for i, d in enumerate(self._parsed("active")):
-            name = d.name
-            chi2, n, k = out.get(name, (0.0, 0, 0))
-            out[name] = (chi2 + float(seg[i]), n + len(self.energies[i]), k + 1)
-        return out
 
     @property
     @engine_call
     def active_datasets(self):
         """The data segments the engine evaluates, in the order its results
-        come back: ``m.energies[i]``, ``m.cross[i]``, ``segment_chi2(x)[i]``
+        come back: ``m.energies[i]``, ``m.cross[i]``, ``evaluate(x).data[i]``
         all belong to ``active_datasets[i]``.
 
         :attr:`datasets` lists every ``<segmentsData>`` line, inactive ones
@@ -1361,108 +1252,27 @@ class Session(
         """
         return copy.deepcopy(self._parsed("active"))
 
-    # -- AZURE2's own objective -----------------------------------------------
-
-    @engine_call
-    def penalties(self, params=None):
-        """The prior terms AZURE2 adds to chi-squared, per segment.
-
-        All of them come from the engine's objective (Phase 2,
-        docs/upgrade/objective.md; before pyazr 2.11 this method recomputed
-        most of them in Python): a fixed parameter pays no prior, a profiled
-        THM norm has none, and the prior covariance replaces the own priors of
-        the parameters it lists.  The key ``"nuisance"`` holds the
-        ``<parameterSettings>`` nuisance priors (``useAsNuisance``).
-
-        ``AZURECalc::operator()`` does not minimize the data chi-squared alone.
-        For every segment it also adds
-
-            ((norm - nominal) / (nominal/100 * norm_error))^2
-
-        (once per ``normgroup``, on its first member) and, for a segment whose
-        energy shift is free (once per ``shiftgroup``, on its first member),
-
-            (shift / shift_error)^2
-
-        and the same again for a free sqrt(E) shift coefficient (the b of
-        E' = E + shift + b*sqrt(E), key ``"shift_sqrt"``) and, summed per
-        segment, for each free parameter aj of a shift function declared on the
-        segment (``shiftfn``, key ``"shift_fn"``).  Every shift term is
-        penalised from zero; the value in the .azr is only the starting value
-        (since 2026-10-25, :attr:`SHIFT_PENALTY_FROM_ZERO`; before, the penalty
-        was measured from that value).
-
-        Minimize the bare chi-squared instead and the normalizations drift to
-        absorb every discrepancy -- a "better" number AZURE2 would never have
-        found, worth -480 on the 7Be model.  Roll your own Minuit or
-        least-squares fit against :meth:`objective`, not
-        :meth:`calculate_chi2_rwa`.
-
-        ``nominal`` is the segment's ``nominal_norm``: the norm field of its
-        ``<segmentsData>`` line, or its explicit ``prior_centre`` row in
-        ``<parameterSettings>`` when it has one (the field is then only the
-        start value).  A fixed norm pays no penalty (it is a constant; since
-        2026-11-09, as in the engine).  The constant shift's centre is
-        ``nominal_shift``: 0, or its explicit ``prior_centre`` row.
-        Note the denominator uses the *nominal* normalization, and that
-        ``norm_error`` is a percentage.  A THM segment with a free norm has no
-        norm penalty: its scale is profiled out, not a parameter.  Returns
-        ``{"norm": array, "shift": array, "shift_sqrt": array, "shift_fn": array}``,
-        one entry per segment, and the single numbers ``"park"`` and
-        ``"abundance"`` (isotopic-abundance priors and sum-to-one terms; both
-        already inside the engine's chi-squared), and ``"screening"``: the
-        electron-screening priors ((U_e - nominal)/sigma)^2 of the <targetInt>
-        lines with a ``screening`` block, which :meth:`objective` adds like the
-        normalization terms, and ``"density"``: the priors ((N - N0)/sigma)^2 of
-        the fitted target densities (``densityfit`` lines and ``densitygroup``
-        groups), added the same way, and ``"doppler"``: the priors
-        ((T - T0)/sigma)^2 of the fitted free-gas Doppler temperatures
-        (``doppler T vary sigma [Tmax]`` lines), added the same way, and
-        ``"thickness"``: the priors ((n - n0)/sigma)^2 of the fitted sample
-        thicknesses (``transmission n vary sigma`` / ``yield n vary sigma``
-        segments; none for a ``thicknessgroup`` follower), added the same way,
-        and ``"prior_covariance"``: the multivariate Gaussian prior
-        (p - mu)^T C^-1 (p - mu) of the ``priorCovariance=<file>`` config key
-        (0 without it; fixed listed parameters marginalized, see
-        :mod:`pyazr.priors`), computed by the engine from its whitened
-        residuals (:meth:`prior_covariance_residuals`) and added the same way.
-        """
-        x = np.asarray(self.params_rwa if params is None else params, float)
-        # Every term from the engine's objective (docs/upgrade/objective.md, Phase 2): pyazr computes none itself.
-        t = self.sess.objective_terms_rwa(x)
-        value = dict(zip(t["names"], np.asarray(t["values"], float)))
-        n = self.nsegments
-        seg = lambda key: np.asarray(t[key], float)[1:n + 1]  # index 0 unused (segments are 1-based)
-        return {"norm": seg("norm"), "shift": seg("shift"), "shift_sqrt": seg("shift_sqrt"),
-                "shift_fn": seg("shift_fn"),
-                "park": float(value.get("Park J > 0", 0.0)), "abundance": float(value.get("abundances", 0.0)),
-                "scattering_length": float(value.get("model data", 0.0)),
-                "screening": float(value.get("screening priors", 0.0)),
-                "density": float(value.get("density priors", 0.0)),
-                "doppler": float(value.get("Doppler priors", 0.0)),
-                "thickness": float(value.get("thickness priors", 0.0)),
-                "nuisance": float(value.get("nuisance priors", 0.0)),
-                "prior_covariance": float(value.get("prior covariance", 0.0))}
+    # -- the objective, the evaluation and what the engine adds to them ------
 
     @engine_call
     def prior_covariance_residuals(self, params=None):
         """Whitened residuals r = L^-1 (p - mu) of the prior parameter covariance (``priorCovariance=<file>`` in
         ``<config>``, C = L L^T), one per prior parameter in :attr:`prior_covariance_names` order; empty without
-        the key (or in extrapolation mode).  ``sum(r**2)`` is ``penalties()["prior_covariance"]``, and
-        :meth:`residual_jacobian` appends these rows (Jacobian L^-1 on the prior's columns) last."""
+        the key (or in extrapolation mode).  ``sum(r**2)`` is ``evaluate(x).terms["prior covariance"]``, and
+        ``objective().residuals(x)`` holds these rows (Jacobian L^-1 on the prior's columns)."""
         x = np.asarray(self.params_rwa if params is None else params, float).ravel()
-        if not hasattr(self.sess, "prior_covariance_residuals"):    # an engine older than 2026-11-05
+        if not hasattr(self._engine, "prior_covariance_residuals"):    # an engine older than 2026-11-05
             return np.zeros(0)
-        return np.asarray(self.sess.prior_covariance_residuals(x), float)
+        return np.asarray(self._engine.prior_covariance_residuals(x), float)
 
     @property
     @engine_call
     def prior_covariance_names(self):
         """The prior parameter covariance's parameter names, in its row order, after the engine marginalized the
         listed parameters that are fixed in this model; empty without the ``priorCovariance`` key."""
-        if not hasattr(self.sess, "prior_covariance_names"):
+        if not hasattr(self._engine, "prior_covariance_names"):
             return []
-        return list(self.sess.prior_covariance_names())
+        return list(self._engine.prior_covariance_names())
 
     @property
     @engine_call
@@ -1496,18 +1306,10 @@ class Session(
         for a neutral pair; the same in every parametrization.  Call it on each
         sample of an MCMC chain for the posterior of a0.  The measured ones of
         the ``scattering_length`` data of ``<modelData>`` are already part of
-        :meth:`calculate_chi2_rwa` (see :meth:`penalties`)."""
+        the objective (``evaluate(x).terms["model data"]``)."""
         x = np.asarray(self.params_rwa if params is None else params, float)
-        flat = np.asarray(self.sess.scattering_lengths_rwa(x), float).reshape(-1, 6)
+        flat = np.asarray(self._engine.scattering_lengths_rwa(x), float).reshape(-1, 6)
         return [ScatteringLength(int(r[0]), float(r[1]), int(r[2]), complex(r[3], r[4]), bool(r[5])) for r in flat]
-
-    @engine_call
-    def scattering_length_chi2(self, params=None):
-        """chi-squared of the measured scattering lengths at a free RWA vector: the term the engine adds inside
-        :meth:`calculate_chi2_rwa`: the ``scattering_length`` data of ``<modelData>``, their rows of the engine's
-        model-data term (:func:`pyazr.model_data.model_data`)."""
-        from .model_data import model_data
-        return float(sum(d.chi2 for d in model_data(self, params) if d.quantity == "scattering_length"))
 
     @engine_call
     def park_norms(self, params=None):
@@ -1519,10 +1321,10 @@ class Session(
         ``gamma_Park = gamma_Brune * sqrt(J)``.  Every real Brune parameter set
         has 0 < J <= 1; a Park parameter set with J <= 0 has no R-matrix
         counterpart (its widths exceed what the channel radii allow) and the
-        engine penalizes it -- see :meth:`penalties`.  All ones in Brune mode.
+        engine penalizes it (``evaluate(x).terms["Park J > 0"]``).  All ones in Brune mode.
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
-        return np.asarray(self.sess.park_norms(x), float)
+        return np.asarray(self._engine.park_norms(x), float)
 
     @engine_call
     def refreeze_covariance(self):
@@ -1534,150 +1336,32 @@ class Session(
         iterative scheme is fit, ``refreeze_covariance()``, evaluate at the best fit,
         fit again.  Returns the number of covariance groups with relvector terms.
         """
-        return int(self.sess.refreeze_covariance())
+        return int(self._engine.refreeze_covariance())
 
     @engine_call
-    def objective(self, params=None):
-        """What AZURE2's own fit minimizes: chi-squared plus every prior and constraint.
-
-        This is the number to hand a minimizer: the engine's objective
-        (docs/upgrade/objective.md), the same terms and the same order as the
-        CLI's fit -- data chi-squared (THM norms profiled), data covariance,
-        nuisance priors, Park's wall, screening, density, Doppler and thickness
-        priors, abundances, scattering lengths and the prior covariance, which
-        replaces the own priors of its parameters.  :meth:`penalties` gives the
-        terms separately; ``chiSquared.out`` reports them as ``Total-...``.
-        """
-        x = np.asarray(self.params_rwa if params is None else params, float)
-        return float(self.sess.calculate_objective_rwa(x))
-
-    @engine_call
-    def fit_objective(self):
+    def objective(self):
         """The fit's objective as one object for any minimiser or sampler (:class:`pyazr.objective.Objective`):
-        ``f(x)``, ``f.grad``, ``f.residuals``, ``f.jacobian``, ``f.log_prob``, ``f.x0``, ``f.names``, ``f.bounds``."""
+        ``f(x)`` (the data chi-squared plus every prior and constraint), ``f.value_and_grad``, ``f.grad``,
+        ``f.residuals``, ``f.jacobian``, ``f.residuals_and_jacobian``, ``f.log_prob``, ``f.x0``, ``f.names``,
+        ``f.bounds``."""
         from .objective import Objective
         return Objective(self)
 
     @engine_call
     def evaluate(self, x=None):
         """Every number of the session at the free vector ``x`` (default ``params_rwa``) from one engine evaluation:
-        a :class:`pyazr.evaluate.Evaluation` (objective, terms, data chi-squared, each data set's arrays)."""
+        a :class:`pyazr.evaluate.Evaluation` (the model of every point, ``data[i].model``, ``.energies``, ``.extra``;
+        in data mode also the objective, its terms, the data chi-squared and each data set's).  In extrapolation mode
+        the data sets are the extrapolations and every chi-squared field is ``None``."""
         from .evaluate import evaluate
         return evaluate(self, x)
-
-    @engine_call
-    def objective_and_grad(self, params):
-        """Value and gradient of :meth:`objective` at the free RWA parameters.
-
-        The data part as :meth:`chi2_and_grad` (analytic energies, widths and
-        normalizations; finite-differenced energy shifts), plus the analytic
-        gradients of the priors.  Returns ``(objective, grad)``.
-        """
-        resp = np.asarray(self.sess.calculate_objective_grad_rwa(np.asarray(params, float).ravel()), dtype=float)
-        return float(resp[0]), np.asarray(resp[1:], dtype=float)
-
-    @engine_call
-    def chi2_and_grad(self, params):
-        """Value and analytic gradient of the (data) chi-squared.
-
-        Parameters
-        ----------
-        params : the non-fixed RWA parameters (energies, reduced widths,
-            normalizations), in the same order as ``self.params_rwa``.
-
-        Returns
-        -------
-        (float, numpy.ndarray)
-            ``(chi2, grad)`` with one gradient entry per input parameter.
-            Energies / reduced widths / normalizations are analytic; energy
-            shifts are finite-differenced.  THM (HOES) points are outside the
-            adjoint: their contribution, with the norm profiled, is
-            ``2 J^T r`` over the THM rows of :meth:`residual_jacobian` (model
-            Jacobian from the HOES adjoint, as the CLI's own THM gradient).  (For a Gaussian log-likelihood use
-            ``lnL = -0.5*(chi2 + const)`` and ``grad_lnL = -0.5*grad``.)
-        """
-        resp = np.asarray(
-            self.sess.calculate_chi2_grad_rwa(np.asarray(params, float).ravel()),
-            dtype=float)
-        return float(resp[0]), np.asarray(resp[1:], dtype=float)
-
-    @engine_call
-    def residual_jacobian(self, params, skip=None):
-        """Standardized residuals and their Jacobian.
-
-        ``r_i = (fit_i - data_i*n)/(err_i*n)`` so ``sum(r_i**2) == chi2``, with
-        ``data_i`` and ``err_i`` in the data set's own frame and unit, as its
-        file gives them (the model is brought to that frame, as in
-        :meth:`residuals`).
-
-        Returns ``(r, J)`` with ``r`` shape ``(n_res,)`` and ``J`` shape
-        ``(n_res, n_params)``; columns match the non-fixed RWA parameters (the
-        input ordering).
-
-        Level-energy, reduced-width and normalization columns come from the
-        reverse-mode adjoint, so that block costs ~2 forward evaluations
-        regardless of the parameter count -- for Gauss-Newton /
-        Levenberg-Marquardt.
-
-        Energy-shift columns are finite-differenced, at two extra residual
-        evaluations each.  A shift translates the energy axis of a whole
-        segment, so the derivative wanted is d(model)/dE, and AZURE2 applies a
-        shift by rebuilding every energy-dependent quantity of the affected
-        points; there is no cheap analytic route through the forward code.  A
-        model with many free shifts is dominated by those columns.
-
-        (Before pyazr 2.7 these columns came back as zero, which a
-        least-squares driver accepts silently by never moving those
-        parameters.)
-
-        THM (HOES) segments: the model Jacobian ``J_m`` of a THM point comes
-        from the reverse-mode adjoint of the HOES observable (level energies,
-        reduced widths, THM coherent backgrounds; one sweep per point).  Set
-        ``AZURE2_THM_FD=1`` in the environment for the former central
-        differences (step ``1e-6 (|x| + 1)``, two THM forward passes per
-        column), e.g. to check one against the other.  With a free norm
-        the scale is profiled: ``r_i = (s m_i - d_i)/e_i`` with
-        ``s = 1/n* = S_md/S_mm`` a function of the parameters, and its
-        dependence is added analytically,
-        ``dr_i/dp = (s J_mi + m_i ds/dp)/e_i``,
-        ``ds/dp = (sum d_k J_mk/e_k^2 - 2 s sum m_k J_mk/e_k^2)/S_mm``.
-        The segments of a THM experiment share the scale and a background,
-        profiled together by linear least squares; ``J`` then carries the
-        exact derivative through that profile (Golub-Pereyra; see
-        docs/source/theory/thm_implementation.rst, "THM experiments").
-        With a prior parameter covariance (``priorCovariance=<file>`` in ``<config>``) its whitened rows
-        r = L^-1 (p - mu) come last, with the constant Jacobian L^-1 on the prior's columns: ``sum(r**2)`` is then
-        ``calculate_chi2_rwa(params) + penalties(params)["prior_covariance"]`` (the other penalties, normalizations
-        and the like, are not rows).
-
-        ``skip``: free-column indices (into ``params``) the caller holds fixed.
-        Their finite differences are not computed and the columns come back
-        zero; every other column is unchanged.  A fit that varies only some of
-        the free parameters saves two residual evaluations per skipped shift,
-        shift-function or density column (2026-10-30; rmfit's polish passes the
-        columns its bounds fix).
-        """
-        x = np.asarray(params, float).ravel()
-        if skip is None or len(skip) == 0:
-            resp = self.sess.calculate_residual_jacobian_rwa(x)
-        else:
-            resp = self.sess.calculate_residual_jacobian_rwa(x, skip=[int(c) for c in skip])
-        resp = np.asarray(resp, dtype=float)
-        if resp.size == 1 and resp[0] == -1.0:
-            raise RuntimeError("residual_jacobian: an analytically-unsupported "
-                               "segment/config is present.")
-        n_res = int(round(resp[0]))
-        n_cols = int(round(resp[1]))
-        r = resp[2:2 + n_res]
-        J = resp[2 + n_res:].reshape(n_res, n_cols)
-        return r, J
 
     @engine_call
     def model_gradients(self, params):
         """Analytic ``d(observable)/d(parameter)`` for every calculated point.
 
         Returns a list with one ``(npoints, ncols)`` array per calculated
-        segment, in the order and point ordering of :meth:`calculate_rwa`.  The
+        segment, in the order and point ordering of ``evaluate(x).data``.  The
         columns are the free **R-matrix** parameters -- level energies and
         reduced-width amplitudes, in ``params_rwa`` order -- and the THM
         coherent background (``cbkg``) when there is one, which is exactly
@@ -1692,13 +1376,13 @@ class Session(
         :func:`pyazr.bands.uncertainty_bands`.
 
         THM (HOES) points have their own adjoint (see
-        :meth:`residual_jacobian`).
+        ``objective().jacobian``).
 
         Raises ``RuntimeError`` if the model contains a segment outside the
         supported analytic path.
         """
         resp = np.asarray(
-            self.sess.calculate_model_gradients_rwa(
+            self._engine.calculate_model_gradients_rwa(
                 np.asarray(params, float).ravel()), dtype=float)
         if resp.size == 1 and resp[0] == -1.0:
             raise RuntimeError("model_gradients: an analytically-unsupported "
@@ -1754,7 +1438,7 @@ class Session(
         pair, L = session_checks.channel_request(self.pairs, pair, L)
         e = np.asarray(energies, float).ravel()
         req = np.concatenate([[pair, L, -1 if J is None else round(2 * J), radius, e.size], e])
-        resp = np.asarray(self.sess.coulomb_functions(req), dtype=float)
+        resp = np.asarray(self._engine.coulomb_functions(req), dtype=float)
         n = int(round(resp[0]))
         block = resp[1:].reshape(n, 7)
         keys = ("F", "dF", "G", "dG", "P", "S", "delta_hs")
@@ -1778,7 +1462,7 @@ class Session(
         """
         e = np.asarray(energies, float).ravel()
         req = np.concatenate([[pair, e.size], e])
-        resp = np.asarray(self.sess.ec_integrals(req), dtype=float)
+        resp = np.asarray(self._engine.ec_integrals(req), dtype=float)
         npath = int(round(resp[0]))
         nE = int(round(resp[1]))
         stride = 6 + 2 * nE
@@ -1819,7 +1503,7 @@ class Session(
         (or :meth:`pyazr.Project.set_config` ``output_dir=`` a fresh directory) is the
         equivalent and usually simpler.
         """
-        if not self.sess.calculate_external_capture():
+        if not self._engine.calculate_external_capture():
             raise RuntimeError(
                 "AZURE2 could not recompute the external-capture integrals; "
                 "check that output/ exists and is writable.")
@@ -1843,7 +1527,7 @@ class Session(
         its data files once and again only when a file changes on disk, so a
         rebuild normally reads nothing.
         """
-        resp = np.asarray(self.sess.cache_stats(), dtype=float)
+        resp = np.asarray(self._engine.cache_stats(), dtype=float)
         q, h = float(resp[0]), float(resp[1])
         out = {
             "queries": int(q),
@@ -1859,148 +1543,6 @@ class Session(
                        input_files_held=int(resp[8]))
         return out
 
-    # -- calculations ---------------------------------------------------------
-
-    def _geometry_rwa(self, params):
-        """The free RWA vector a geometry query (energies, angles) runs at.
-
-        Point energies and angles do not depend on the R-matrix parameters,
-        only on the energy shifts (and nothing on the norms): so the R-matrix
-        block is the session's own amplitudes, and the rest -- norms, shifts,
-        THM coherent-background terms, identical in the physical and the RWA
-        vector -- is taken from ``params``.  Running the RWA path means no
-        observed-to-formal transformation, which is what used to print
-        "Denominator less than zero while transforming" when a caller handed
-        these methods ``params_rwa``: an amplitude read as a width (or a
-        sub-threshold ANC) that no reduced width reproduces.  The CLI never
-        transforms an RWA vector, so it never printed it.
-        """
-        rwa = np.array(self.params_rwa, float).ravel()
-        if params is None:
-            return rwa
-        p = np.asarray(params, float).ravel()
-        if p.size != rwa.size:
-            raise ParameterError(f"expected the free parameter vector ({rwa.size} values), got {p.size}; "
-                                 f"Session.params_rwa is such a vector, Session.parameters.free names its entries.")
-        n = self.n_rmatrix
-        rwa[n:] = p[n:]
-        return rwa
-
-    @engine_call
-    def calculate_excitation_energy(self, params=None):
-        """Compound-nucleus excitation energy per segment -- the one axis every entrance pair shares.
-
-        ``params`` may be the physical or the RWA free vector (or None): only
-        its energy shifts matter (see :meth:`calculate_energies`).
-        """
-        s = self.sess
-        nsegments = int(s.update_segments_rwa(self._geometry_rwa(params)))
-        return [s.calculated_excitation_energies(i) for i in range(nsegments)]
-
-    @engine_call
-    def calculate_angles(self, params=None):
-        """Per-segment angles of the calculated points, one array per segment.
-
-        The companion to :meth:`calculate_energies`: for a differential segment
-        the returned angles are AZURE2's own (center-of-mass) values, which
-        differ from the lab angles declared in the ``.azr`` file.  ``params``
-        as for :meth:`calculate_energies`.
-        """
-        s = self.sess
-        nsegments = int(s.update_segments_rwa(self._geometry_rwa(params)))
-        return [s.calculated_angles(i) for i in range(nsegments)]
-
-    @staticmethod
-    def _unpack_angular_dists(flat):
-        """Split the self-describing angular-distribution frame into per-point rows.
-
-        The frame format is a count followed by that many Legendre coefficients,
-        repeated once per point, so segments whose points carry different orders
-        survive the round trip.
-        """
-        import numpy as _np
-        rows, i, n = [], 0, len(flat)
-        while i < n:
-            count = int(round(float(flat[i]))); i += 1
-            if count < 0 or i + count > n:      # malformed frame; stop rather than guess
-                break
-            rows.append(_np.asarray(flat[i:i + count], dtype=float))
-            i += count
-        return rows
-
-    @engine_call
-    def calculate_analyzing_power(self, params):
-        """Vector analyzing power A_y per segment, for analyzing-power segments.
-
-        A_y is returned in the slot a cross section would occupy, because
-        AZURE2 treats it as another observable rather than a separate quantity:
-        declare a segment with ``observable="analyzing-power"`` and it comes
-        back from :meth:`calculate` like any other. This is a named alias for
-        that, so the intent is visible at the call site.
-
-        Segments that are not analyzing-power segments return their cross
-        section as usual, so check what you asked for.
-
-        Defined for a spin-1/2 projectile on a spin-0 target, in the Madison
-        convention with y along k_in x k_out. Bounded by one in magnitude, zero
-        in the pure-Coulomb limit, and zero at 0 and 180 degrees.
-        """
-        return self.calculate(params)
-
-    @engine_call
-    def calculate_analyzing_power_rwa(self, params):
-        """:meth:`calculate_analyzing_power` from reduced-width amplitudes."""
-        return self.calculate_rwa(params)
-
-    @engine_call
-    def calculate_angular_dists(self, params):
-        r"""Legendre coefficients of the angular distribution, per segment.
-
-        Returns one entry per segment; each is a list with one array of
-        coefficients per calculated point. Points that do not belong to an
-        angular-distribution segment give an empty array, so the outer shape
-        always matches :meth:`calculate_energies`.
-
-        AZURE2 computes these only for segments declared as angular
-        distributions -- ``observable="angular-distribution"`` with an ``order``
-        in ``<segmentsTest>``. Everything else returns empty arrays. Use
-        :meth:`angular_dist_at` to obtain them at one chosen energy.
-
-        The coefficients are the :math:`a_k` of
-
-        .. math:: W(\theta) = \sum_k a_k P_k(\cos\theta)
-
-        normalised as AZURE2 writes them into ``AZUREOut_*`` files.
-        """
-        s = self.sess
-        nsegments = int(s.update_segments(params))
-        return [self._unpack_angular_dists(s.calculated_angular_dists(i))
-                for i in range(nsegments)]
-
-    @engine_call
-    def calculate_angular_dists_rwa(self, params):
-        """:meth:`calculate_angular_dists` from reduced-width amplitudes."""
-        s = self.sess
-        nsegments = int(s.update_segments_rwa(params))
-        return [self._unpack_angular_dists(s.calculated_angular_dists(i))
-                for i in range(nsegments)]
-
-    def _segment_values(self, i):
-        """The calculated values of result segment ``i``: the engine's model
-        value of every point, the value its chi-squared and residuals are built
-        from -- the E1 or E2 component for an ``angle-integrated-E1`` / ``-E2``
-        data segment, the combination of a SUM, RATIO, sample or transform
-        segment, the observable otherwise."""
-        return self.sess.calculated_segments(i)
-
-    @engine_call
-    def calculate(self, params):
-        """Calculated observable per segment, from a physical parameter vector.
-        Cross sections are centre-of-mass, in b or b/sr; an E1/E2 component
-        segment gets its component (see :meth:`_segment_values`)."""
-        nsegments = int(self.sess.update_segments(params))
-        return [self._segment_values(i) for i in range(nsegments)]
-
     def _mode_free_vector(self, params):
         """A free RWA vector for the engine's current layout.
 
@@ -2015,73 +1557,21 @@ class Session(
         cur = np.asarray(self.params_rwa, float).ravel()
         if self.mode != "extrap" or x.size <= cur.size:
             return params
-        head = sum(1 for r in self.sess.parameter_records()
+        head = sum(1 for r in self._engine.parameter_records()
                    if not r["fixed"] and r["kind"] in ("energy", "width", "abundance"))
         y = cur.copy()
         y[:head] = x[:head]
         return y
-
-    @engine_call
-    def calculate_rwa(self, params):
-        """As calculate, from a free RWA vector. This is the usual entry point."""
-        nsegments = int(self.sess.update_segments_rwa(self._mode_free_vector(params)))
-        return [self._segment_values(i) for i in range(nsegments)]
-
-    @engine_call
-    def calculate_all_rwa(self, params):
-        """As calculate_rwa, taking every parameter rather than the free ones."""
-        nsegments = int(self.sess.update_segments_all_rwa(params))
-        return [self._segment_values(i) for i in range(nsegments)]
-
-    @engine_call
-    def calculate_energies(self, params=None):
-        """Centre-of-mass energies of the calculated points, per segment.
-
-        The energies do not depend on the R-matrix parameters, only on the
-        segments' energy shifts, so ``params`` may be the physical vector (as
-        :meth:`calculate` takes), the RWA vector (:attr:`params_rwa`) or None
-        (the session's own): its norm/shift tail is used, its R-matrix block
-        is not.  The evaluation runs on the session's amplitudes without the
-        observed-to-formal transformation -- before October 2026 it took the
-        physical path, and ``params_rwa`` passed here was read as widths and
-        ANCs (a sub-threshold ANC channel then printed "Denominator less than
-        zero while transforming", which the CLI never does).
-        """
-        s = self.sess
-        nsegments = int(s.update_segments_rwa(self._geometry_rwa(params)))
-        return [s.calculated_energies(i) for i in range(nsegments)]
-
-    @engine_call
-    def calculate_sfactor(self, params):
-        """Astrophysical S-factor per segment (MeV b), from a physical parameter vector."""
-        s = self.sess
-        nsegments = int(s.update_segments(params))
-        segments = [s.calculated_segments(i) for i in range(nsegments)]
-        conv = [s.calculated_conv(i) for i in range(nsegments)]
-        for i in range(nsegments):
-            segments[i] = segments[i] * conv[i]
-        return segments
-
-    @engine_call
-    def calculate_sfactor_rwa(self, params):
-        """As calculate_sfactor, from a free RWA vector."""
-        s = self.sess
-        nsegments = int(s.update_segments_rwa(params))
-        segments = [s.calculated_segments(i) for i in range(nsegments)]
-        conv = [s.calculated_conv(i) for i in range(nsegments)]
-        for i in range(nsegments):
-            segments[i] = segments[i] * conv[i]
-        return segments
 
     # -- modes ----------------------------------------------------------------
 
     def _set_mode(self, extrap):
         """Switch the engine to data or extrapolation mode and re-initialize."""
         if extrap:
-            self.sess.set_extrap()
+            self._engine.set_extrap()
         else:
-            self.sess.set_data()
-        self.sess.initialize()
+            self._engine.set_data()
+        self._engine.initialize()
         self.mode = "extrap" if extrap else "data"
         self._sync_layout()
         session_checks.warn_engine_notices(self._sess, stacklevel=3)
@@ -2102,7 +1592,7 @@ class Session(
         both modes, so a vector the caller set (``update_rwa_params_from_sav``)
         is kept; the norm/shift tail is the engine's for the new segment set.
         """
-        s = self.sess
+        s = self._engine
         fixed = list(s.params_fixed())
         if fixed == list(self.fixed_params):
             return

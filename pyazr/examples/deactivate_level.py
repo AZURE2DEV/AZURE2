@@ -41,9 +41,9 @@ target = next(k for k in azr.physical_levels() if k.energy)   # e.g. the first l
 off = azr.without_level(best, level=target)       # this level OFF
 only = azr.only_level(best, level=target)         # ONLY this level (+ background)
 
-xs_full = azr.calculate_rwa(best)                 # one cross section per segment
-xs_off = azr.calculate_rwa(off)
-xs_only = azr.calculate_rwa(only)
+xs_full = [d.model for d in azr.evaluate(best).data]                 # one cross section per segment
+xs_off = [d.model for d in azr.evaluate(off).data]
+xs_only = [d.model for d in azr.evaluate(only).data]
 
 s = 0                                             # inspect the first segment
 print(f"\nsegment {s}, first energy point:")

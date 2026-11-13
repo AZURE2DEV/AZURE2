@@ -7,7 +7,7 @@ J = 1 - sum_c gamma^2 dS_c/dE, so three things have to hold and are pinned here:
 
   * the cross sections and chi-squared equal the default (Brune) run's, from the
     same .azr, to rounding;
-  * `chi2_and_grad` and `residual_jacobian` agree with central finite
+  * `objective().value_and_grad` and `objective().residuals_and_jacobian` agree with central finite
     differences of `objective` / the residuals -- the adjoint differentiates
     Park's level matrix, including the width- and energy-dependent overlap J and
     the J-dependent bound-state normalization of external capture.  The
@@ -106,17 +106,17 @@ with tempfile.TemporaryDirectory() as tmp:
         #     agreement calibrates what the same check can resolve for Park.
         with Session(azr_b, use_brune=True) as mb:
             xb = np.asarray(mb.params_rwa, float)
-            xs_b = np.concatenate([np.asarray(s, float).ravel() for s in mb.calculate_rwa(xb)])
-            chi_b = mb.objective(xb)
+            xs_b = np.concatenate([np.asarray(s, float).ravel() for s in [d.model for d in mb.evaluate(xb).data]])
+            chi_b = mb.objective()(xb)
             hb = 1e-4 * (np.abs(xb) + 1.0)
-            _, gb = mb.chi2_and_grad(xb)
-            gfd_b = fd_gradient(lambda z: float(np.sum(mb.calculate_chi2_rwa(z))), xb, hb)
+            _, gb = mb.objective().value_and_grad(xb)
+            gfd_b = fd_gradient(mb.objective(), xb, hb)
             ref = rel(gb, gfd_b)
             print(f"  (Brune mode: analytic gradient vs finite differences, rel {ref:.1e})")
         with Session(azr, use_park=True) as m:
             x = np.asarray(m.params_rwa, float)
-            xs_p = np.concatenate([np.asarray(s, float).ravel() for s in m.calculate_rwa(x)])
-            chi_p = m.objective(x)
+            xs_p = np.concatenate([np.asarray(s, float).ravel() for s in [d.model for d in m.evaluate(x).data]])
+            chi_p = m.objective()(x)
             check(f"{name}: Park cross sections = Brune's", rel(xs_p, xs_b) < 1e-9,
                   f"max rel diff {rel(xs_p, xs_b):.2e}")
             check(f"{name}: Park objective = Brune's", abs(chi_p - chi_b) <= 1e-7 * abs(chi_b),
@@ -126,26 +126,26 @@ with tempfile.TemporaryDirectory() as tmp:
             J = np.asarray(m.park_norms(x), float)
             check(f"{name}: every level has 0 < J <= 1", bool(np.all((J > 0) & (J <= 1 + 1e-12))),
                   f"J = {J}")
-            pen = m.penalties(x)["park"]
+            pen = m.evaluate(x).terms["Park J > 0"]
             check(f"{name}: penalty is zero at the file's parameters", float(pen) == 0.0, f"{pen}")
 
             # --- analytic gradient of the objective vs central differences.
             # Steps scaled to the parameter: energies in MeV, amplitudes MeV^1/2.
             h = 1e-4 * (np.abs(x) + 1.0)
-            val, grad = m.chi2_and_grad(x)
-            check(f"{name}: chi2_and_grad value = calculate_chi2", abs(val - np.sum(m.calculate_chi2_rwa(x))) < 1e-6 * val)
-            gfd = fd_gradient(lambda z: float(np.sum(m.calculate_chi2_rwa(z))), x, h)
+            val, grad = m.objective().value_and_grad(x)
+            check(f"{name}: value_and_grad value = the objective", abs(val - m.objective()(x)) < 1e-6 * val)
+            gfd = fd_gradient(m.objective(), x, h)
             d = rel(grad, gfd)
             check(f"{name}: analytic gradient = finite differences (rel {d:.1e})", d < max(1e-4, 3.0 * ref),
                   "\n      analytic " + np.array2string(grad, precision=3) +
                   "\n      numeric  " + np.array2string(gfd, precision=3))
 
             # --- residual Jacobian vs central differences.
-            r, Jac = m.residual_jacobian(x)
+            r, Jac = m.objective().residuals_and_jacobian(x)
             Jac = np.asarray(Jac, float)
             # three-point differences: a tenth of the gradient's step keeps the
             # truncation error below the tolerance on 13N's sharp 1/2+ resonance
-            Jfd = fd_jacobian(lambda z: np.asarray(m.residual_jacobian(z)[0], float), x, 0.1 * h)
+            Jfd = fd_jacobian(lambda z: np.asarray(m.objective().residuals_and_jacobian(z)[0], float), x, 0.1 * h)
             d = rel(Jac, Jfd)
             check(f"{name}: residual Jacobian = finite differences (rel {d:.1e})", d < max(1e-4, 3.0 * ref))
             check(f"{name}: sum(r^2) = chi2", abs(np.sum(np.asarray(r) ** 2) - val) < 1e-6 * val)
@@ -163,17 +163,18 @@ with tempfile.TemporaryDirectory() as tmp:
                 if np.any(Jw < 0):
                     break
             check(f"{name}: a level can be driven to J < 0 (scale {scale:g}, min J {Jw.min():.3f})", bool(np.any(Jw < 0)))
-            penw = float(m.penalties(xw)["park"])
+            penw = float(m.evaluate(xw).terms["Park J > 0"])
             expect = float(np.sum((Jw[Jw < 0] / 1.0e-3) ** 2))
             check(f"{name}: penalty = sum (J/1e-3)^2 over J<0", abs(penw - expect) < 1e-6 * expect, f"{penw} vs {expect}")
-            # The engine's chi2 carries the wall; the per-segment values do not.
-            chi_wall = float(np.sum(m.calculate_chi2_rwa(xw)))
-            chi_data = float(np.sum(m.segment_chi2(xw)))
-            check(f"{name}: engine chi2 at J<0 = data chi2 + penalty",
+            # The objective carries the wall; the data and the other terms do not.
+            ev_w = m.evaluate(xw)
+            chi_wall = m.objective()(xw)
+            chi_data = sum(v for k, v in ev_w.terms.items() if k != "Park J > 0")
+            check(f"{name}: objective at J<0 = the other terms + penalty",
                   abs((chi_wall - chi_data) - penw) < 1e-6 * penw, f"{chi_wall - chi_data} vs {penw}")
-            valw, gradw = m.chi2_and_grad(xw)
+            valw, gradw = m.objective().value_and_grad(xw)
             hw = 1e-5 * (np.abs(xw) + 1.0)
-            gfdw = fd_gradient(lambda z: float(np.sum(m.calculate_chi2_rwa(z))), xw, hw)
+            gfdw = fd_gradient(m.objective(), xw, hw)
             d = rel(gradw, gfdw)
             # At J = -1.3 the penalty gradient is 2J/1e-6 times dJ/dE, so the noise
             # of S' and S'' in dJ/dE is amplified a thousandfold: 1 % is what a

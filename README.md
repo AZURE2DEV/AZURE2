@@ -264,24 +264,27 @@ The published site follows the default branch; build these pages locally with
 ## Python interface (`pyazr`)
 
 `pyazr` embeds the AZURE2 engine in-process: the R-matrix code is compiled into
-a pybind11 extension module (`_azure2`), and an `azure2()` object is a real
+a pybind11 extension module (`_azure2`), and a `Session` object is a real
 `AZUREAPI` session living in the interpreter. No subprocesses, no sockets, no
 port bookkeeping — which also makes it easy to plug AZURE2 into external
 samplers such as [`emcee`](https://emcee.readthedocs.io/)
 or [`brick`](https://github.com/odell/brick).
 
 ```python
-from pyazr import azure2
+from pyazr import Session
 
 # Build the in-process engine bound to a configuration file.
-azr = azure2("config.azr")
+azr = Session("config.azr")
 
 # Experimental data, grouped by segment.
 energies = azr.energies
 cross    = azr.cross
 
-# Evaluate the model for a set of (free) parameters.
-fit = azr.calculate(azr.params)
+# Evaluate the model at the free vector (the fit vector): every number from one evaluation.
+ev = azr.evaluate(azr.params_rwa)
+fit = [d.model for d in ev.data]       # the model of each data set
+print(ev.chi2, ev.terms)               # the data chi-squared and each term of the objective
+f = azr.objective()                    # the objective for a minimiser: f(x), f.value_and_grad(x), f.residuals(x)
 
 # Inspect the fit parameters with full physics metadata.
 print(azr.parameters.table())          # readable overview

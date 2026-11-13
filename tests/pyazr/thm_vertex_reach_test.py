@@ -82,7 +82,7 @@ with tempfile.TemporaryDirectory() as tmp:
     set_experiment(m, "A", [1, 2], background="none", ps="hulthen:0-40", psNodes=8, **KIN)
     m.save(os.path.join(work, "win.azr"))
     with Session(os.path.join(work, "win.azr"), cwd=work) as s:
-        data_e = np.sort(np.concatenate([np.asarray(e, float) for e in s.calculate_energies()]))
+        data_e = np.sort(np.concatenate([np.asarray(e, float) for e in [d.energies for d in s.evaluate().data]]))
         E = [0.55, 0.7, 0.9, 3.0, 5.0]
         r, w = vertex(s, E)
         reached = np.asarray(r["reached"], bool)

@@ -20,7 +20,7 @@ section the sub-points of the others sample.
    [E_cm - F eps N, E_cm] (F = m2/(m1+m2)), 3e-4 relative (adaptive sub-point grid against a 0.25 keV trapezoid)
 3. a fitted density at 1.1 N0 = the plain target at 1.1 N0, 3e-4
 4. the shared target: g_a and g_b identical, and equal meyer_84 at the same N (3e-4)
-5. penalties()["density"] = sum ((N - N0)/sigma)^2 and objective() includes it
+5. evaluate().terms["density priors"] = sum ((N - N0)/sigma)^2 and objective() includes it
 6. the residual-Jacobian column of d1.areal_density = central differences of the residuals, 1e-3
 7. an energy shift on meyer_84 moves the window with the point: equal to the bare average below the shifted energy
 8. beyond its maximum a density is computed at the maximum (warned once), the penalty with it
@@ -138,13 +138,13 @@ try:
     # result segments are the active data sets in order: meyer_84 (3), fine (17), plain (18), g_a (19), g_b (20);
     # F = m2/(m1+m2) of p + 12C from the session's own conversion, E_cm / E_lab of the fine grid
     seg = {key: i for i, key in enumerate((3, 17, 18, 19, 20))}
-    en = a.calculate_energies(a.params)
+    en = [d.energies for d in a.evaluate().data]
     e_fine = np.asarray(en[seg[17]], float)
     lab = np.arange(0.28, 0.92 + 1e-9, 0.00025)
     F = float(np.median(e_fine / lab))
 
     def values(x):
-        v = a.calculate_rwa(x)
+        v = [d.model for d in a.evaluate(x).data]
         return {key: np.asarray(v[i], float) for key, i in seg.items()}
 
     v0 = values(x0)
@@ -177,27 +177,27 @@ try:
     rel = np.max(np.abs(v[19] / v[3] - 1))
     check(f"the shared target at 0.95 N0 = key 3 at 0.95 N0 (worst {rel:.1e})", rel < 3e-4, rel)
 
-    print("\n5. penalties")
+    print("\n5. the density priors")
     x = x0.copy()
     x[k1] = 1.08 * N0
     x[k3] = 0.97 * N0
     want = ((0.08 * N0) / 5e16) ** 2 + ((0.03 * N0) / 1e16) ** 2
-    pen = a.penalties(x)["density"]
-    check(f"penalties()['density'] = {pen:.6f} (want {want:.6f})", abs(pen - want) < 1e-9 * want, pen)
-    obj = a.objective(x)
-    chi = float(np.sum(a.calculate_chi2_rwa(x)))
+    pen = a.evaluate(x).terms["density priors"]
+    check(f"terms['density priors'] = {pen:.6f} (want {want:.6f})", abs(pen - want) < 1e-9 * want, pen)
+    obj = a.objective()(x)
+    chi = a.evaluate(x).chi2
     check("objective() = chi2 + the density penalty", abs(obj - chi - want) < 1e-6 * obj, (obj, chi, want))
 
     print("\n6. the residual-Jacobian column")
     x = x0.copy()
     x[k1] = 1.03 * N0
-    r, J = a.residual_jacobian(x)
+    r, J = a.objective().residuals_and_jacobian(x)
     h = 1e-4 * N0
     xp, xm = x.copy(), x.copy()
     xp[k1] += h
     xm[k1] -= h
-    rp, _ = a.residual_jacobian(xp)
-    rm, _ = a.residual_jacobian(xm)
+    rp, _ = a.objective().residuals_and_jacobian(xp)
+    rm, _ = a.objective().residuals_and_jacobian(xm)
     fd = (rp - rm) / (2 * h)
     col = J[:, k1]
     scale = np.max(np.abs(fd))
@@ -208,8 +208,8 @@ try:
     print("\n7. an energy shift moves the window with the point")
     b = session(work, shift=0.005)
     xb = np.array(b.params_rwa, float)
-    enb = b.calculate_energies(b.params)
-    vb = b.calculate_rwa(xb)
+    enb = [d.energies for d in b.evaluate().data]
+    vb = [d.model for d in b.evaluate(xb).data]
     e_shift = np.asarray(enb[0], float)
     rel = np.max(np.abs(np.asarray(vb[0]) / np.array([bare_average(e_fine, s_fine, e - F * EPS * N0, e)
                                                        for e in e_shift]) - 1))
@@ -226,7 +226,7 @@ try:
     rel = np.max(np.abs(v_hi / v_max - 1))
     check(f"1.3 N0 is computed at the maximum 1.15 N0 ({rel:.1e})", rel < 1e-12, rel)
     x[k1] = 1.3 * N0
-    check("and penalised there", abs(a.penalties(x)["density"] - (0.15 * N0 / 5e16) ** 2) < 1e-9)
+    check("and penalised there", abs(a.evaluate(x).terms["density priors"] - (0.15 * N0 / 5e16) ** 2) < 1e-9)
 
     print("\n9. refused")
     for label, kind in (("a fitted density on a target of kind none", "none"),

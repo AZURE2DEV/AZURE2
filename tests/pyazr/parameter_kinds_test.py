@@ -108,7 +108,7 @@ def _values(record, field):
 def check_project(label, path, cwd, want_kinds):
     project = Project.open(path)
     with Session(path, cwd=cwd) as s:
-        sess = s.sess
+        sess = s._engine
         records = sess.parameter_records()
         n = len(records)
         names = [sess.params_names(i) for i in range(n)]

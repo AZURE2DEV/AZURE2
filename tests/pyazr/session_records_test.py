@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """pyazr on a format-3 project without the old file class (brief: validation follow-ups):
 
-  1. a calculation session on a format-3 project (T2's conversion): datasets, active_datasets and dataset_chi2 come
+  1. a calculation session on a format-3 project (T2's conversion): datasets, active_datasets and evaluate().data come
      from the engine's description of the built project: the data sets' record names in file order, one per segment
      the engine evaluates, rows kept as --describe counts them; the chi^2 per data set adds up to the session's chi^2
      and equals that of the tree's T2 (tests/upgrade/T2, converted with exact grids; the same data); extrapolations of a format-3 project likewise;
@@ -64,8 +64,8 @@ def session(work):
     names = [n for n, r in Project.open(f3).records().items() if r.record_kind == "dataset"]
     with Session(f3) as m:
         ds, active = m.datasets, m.active_datasets
-        chi = m.dataset_chi2()
-        total = m.calculate_chi2_rwa(m.params_rwa)[0]
+        chi = {d.name: (d.chi2, d.n) for d in m.evaluate().data}
+        total = m.evaluate(m.params_rwa).chi2
         described = pyazr.describe(f3, as_json=True)["datasets"] if os.getcwd() == os.path.dirname(f3) else None
         check("datasets: the engine's description, the record names in file order",
               type(ds).__name__ == "DescribedDatasets" and [d.name for d in ds] == names, [d.name for d in ds])
@@ -73,15 +73,15 @@ def session(work):
               (len(active), m.nsegments))
         check("rows kept: the energies the engine evaluates",
               all(d.rows_kept == len(m.energies[i]) for i, d in enumerate(active)))
-        check("dataset_chi2: keyed by record name, adding up to the session's chi^2",
+        check("evaluate().data: named by record name, adding up to the session's chi^2",
               list(chi) == [d.name for d in active] and abs(sum(v[0] for v in chi.values()) - total) <= 1e-9 * total,
               (sum(v[0] for v in chi.values()), total))
         del described
     tree = shutil.copytree(T2, os.path.join(work, "T2tree"))
     os.makedirs(os.path.join(tree, "output"), exist_ok=True)
     with Session(os.path.join(tree, "T2.azr"), cwd=tree) as m:
-        old = m.dataset_chi2()
-    check("dataset_chi2 equals the tree's T2's per data set",
+        old = {d.name: (d.chi2, d.n) for d in m.evaluate().data}
+    check("data[i].chi2 equals the tree's T2's per data set",
           set(old) == set(chi) and all(abs(old[k][0] - chi[k][0]) <= 1e-9 * max(1.0, old[k][0]) and old[k][1] == chi[k][1]
                                        for k in old), [(k, old[k], chi.get(k)) for k in old][:3])
     d = os.path.join(work, "rth")

@@ -12,13 +12,13 @@ six R-matrix parameters freed:
      round trip through a written file; everything AZURE2 refuses raises and
      leaves the project unchanged; other options live beside an experiment; an
      untouched project with an experiment is written back byte for byte.
-  2. The engine, linear background: calculate_chi2_rwa == the CLI (rel 1e-9),
+  2. The engine, linear background: evaluate().chi2 == the CLI (rel 1e-9),
      write_output_files reproduces the CLI's files (thm_experiments.out
-     included), segment_norms is the shared n*, thm_background agrees with
+     included), data[i].norm is the shared n*, thm_background agrees with
      thm_experiments.out, residuals add up to chi2.
   3. Derivatives through the profile of norm and background:
-     residual_jacobian against central differences of the residuals,
-     chi2_and_grad against 2 J^T r and against differences of chi2.
+     objective().residuals_and_jacobian against central differences of the residuals,
+     objective().value_and_grad against 2 J^T r and against differences of chi2.
   4. A one-data-set experiment without background gives residuals identical
      to no experiment (bit for bit); a session refuses a bad theta window.
 
@@ -209,15 +209,15 @@ with tempfile.TemporaryDirectory() as tmp:
     with Session(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
         x = np.asarray(s.params_rwa, float)
         check("six free parameters", x.size == 6, x.size)
-        chi2 = float(np.sum(s.calculate_chi2_rwa(x)))
-        check(f"calculate_chi2_rwa == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
+        chi2 = s.evaluate(x).chi2
+        check(f"evaluate().chi2 == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
               f"{chi2} vs {cli_chi2}")
-        r = s.residuals(x)
+        r = s.objective().residuals(x)
         check("sum r^2 == chi2", rel(float(np.sum(r ** 2)), chi2) < 1e-12)
-        check("segment_chi2 sums to chi2", rel(float(s.segment_chi2(x).sum()), chi2) < 1e-12)
+        check("evaluate().data[i].chi2 sums to chi2", rel(float(np.array([d.chi2 for d in s.evaluate(x).data]).sum()), chi2) < 1e-12)
         bg = s.thm_background("A", x)
-        norms = s.segment_norms(x)
-        check("segment_norms: both segments carry the shared n*",
+        norms = np.array([d.norm for d in s.evaluate(x).data])
+        check("data[i].norm: both segments carry the shared n*",
               norms[0] == norms[1] == bg["norm"], f"{norms} vs {bg['norm']}")
         check("thm_background == thm_experiments.out (10 digits)",
               rel(bg["norm"], file_val["norm"]) < 1e-9 and rel(bg["b"][0], file_val["b0"]) < 1e-9
@@ -230,8 +230,8 @@ with tempfile.TemporaryDirectory() as tmp:
             check("unknown experiment raises KeyError", False)
         except KeyError:
             check("unknown experiment raises KeyError", True)
-        # The model as the output shows it: calculate_rwa + b(E).
-        mod = np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)])
+        # The model as the output shows it: evaluate().data[i].model + b(E).
+        mod = np.concatenate([np.asarray(v) for v in [d.model for d in s.evaluate(x).data]])
         ecm = np.concatenate([np.asarray(v) for v in s.energies])
         d = np.concatenate([np.asarray(v) for v in s.cross])
         e = np.concatenate([np.asarray(v) for v in s.cross_err])
@@ -249,19 +249,19 @@ with tempfile.TemporaryDirectory() as tmp:
     print("3. derivatives through the profile (norm + linear background)")
     with Session(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
         x = np.asarray(s.params_rwa, float)
-        chi2 = float(np.sum(s.calculate_chi2_rwa(x)))
-        r, J = s.residual_jacobian(x)
-        check("residual_jacobian: residuals == residuals()", np.max(np.abs(r - s.residuals(x))) == 0.0)
+        chi2 = s.evaluate(x).chi2
+        r, J = s.objective().residuals_and_jacobian(x)
+        check("objective().residuals_and_jacobian: residuals == residuals()", np.max(np.abs(r - s.objective().residuals(x))) == 0.0)
         for c in range(x.size):
             h = 1e-5 * (abs(x[c]) + 1.0)
             xp = x.copy(); xp[c] += h
             xm = x.copy(); xm[c] -= h
-            fd = (s.residuals(xp) - s.residuals(xm)) / (2 * h)
+            fd = (s.objective().residuals(xp) - s.objective().residuals(xm)) / (2 * h)
             err = np.linalg.norm(J[:, c] - fd) / max(np.linalg.norm(fd), 1e-300)
             check(f"J[:, {c}] ({s.parameters.free[c].name}) vs central differences "
                   f"(rel {err:.1e})", err < 1e-4)
-        c2, g = s.chi2_and_grad(x)
-        check("chi2_and_grad value == chi2", rel(c2, chi2) < 1e-9, f"{c2} vs {chi2}")
+        c2, g = s.objective().value_and_grad(x)
+        check("value_and_grad value == the objective", rel(c2, s.objective()(x)) < 1e-9, f"{c2} vs {chi2}")
         gj = 2.0 * J.T @ r
         check("gradient == 2 J^T r", np.allclose(g, gj, rtol=1e-8, atol=1e-10 * np.max(np.abs(gj))),
               f"max diff {np.max(np.abs(g - gj))}")
@@ -269,8 +269,8 @@ with tempfile.TemporaryDirectory() as tmp:
             h = 1e-5 * (abs(x[c]) + 1.0)
             xp = x.copy(); xp[c] += h
             xm = x.copy(); xm[c] -= h
-            fd = (s.calculate_chi2_rwa(xp)[0] - s.calculate_chi2_rwa(xm)[0]) / (2 * h)
-            check(f"d chi2/d x[{c}] vs central differences (rel {rel(g[c], fd):.1e})",
+            fd = (s.objective()(xp) - s.objective()(xm)) / (2 * h)
+            check(f"d f/d x[{c}] vs central differences (rel {rel(g[c], fd):.1e})",
                   rel(g[c], fd) < 1e-4 or abs(g[c] - fd) < 1e-6 * np.max(np.abs(g)), f"{g[c]} vs {fd}")
 
     print("4. one-data-set experiments == no experiment; a session refuses a bad theta window")
@@ -278,9 +278,9 @@ with tempfile.TemporaryDirectory() as tmp:
     one_dir = project("one", [("A", [1], dict(background="none")), ("B", [2], dict(background="none"))])
     with Session(os.path.join(plain_dir, "run.azr"), cwd=plain_dir) as s:
         x = np.asarray(s.params_rwa, float)
-        r0, J0 = s.residual_jacobian(x)
+        r0, J0 = s.objective().residuals_and_jacobian(x)
     with Session(os.path.join(one_dir, "run.azr"), cwd=one_dir) as s:
-        r1, J1 = s.residual_jacobian(x)
+        r1, J1 = s.objective().residuals_and_jacobian(x)
         check("the experiments are reported",
               sorted(s.thm_experiments(x)) == ["A", "B"])
     check("residuals bit for bit", np.array_equal(r0, r1))

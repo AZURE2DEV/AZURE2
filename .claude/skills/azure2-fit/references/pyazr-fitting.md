@@ -6,7 +6,7 @@ and the traps that make a Python fit stop or go wrong without an error. Behaviou
 `docs/source/user_guide/pyazr.rst` and `docs/source/user_guide/chi_squared.rst`. Running observables and the two
 parameter conventions (`*_rwa` against plain calls) are in `azure2-calculate`.
 
-Why no built-in minimizer: `residual_jacobian` returns the whole Jacobian for about two forward evaluations
+Why no built-in minimizer: `m.objective().residuals_and_jacobian` returns the whole Jacobian for about two forward evaluations
 (reverse-mode adjoint), which beats Minuit's numerical gradients on this problem; binding `MnMigrad`/`MnMinos` would
 mean mirroring the engine's objective, parameter limits and Wigner bounds inside the API, two fits that could disagree.
 The CLI (modes 2 and 4) remains the reference implementation.
@@ -31,53 +31,41 @@ Name pitfalls (`energy_<N>` against `param.sav`, the engine pair number, the int
 ## χ², residuals and the objective
 
 ```python
-chi2   = np.sum(m.calculate_chi2_rwa(x))    # total DATA chi-squared
-val, g = m.chi2_and_grad(x)                 # analytic gradient (energies, widths, norms)
-r, J   = m.residual_jacobian(x)             # r_i standardized: sum(r**2) == chi2
-
-m.segment_chi2(x)      # one entry per active <segmentsData> segment; sums to chi2
-m.dataset_chi2(x)      # {name: (chi2, points, segments)}, per experiment
-m.penalties(x)         # {"norm": array, "shift": array}, per segment
-m.objective(x)         # chi2 + penalties: what the engine's own fit minimizes
+ev = m.evaluate(x)          # one evaluation: every number at x
+ev.chi2                     # total DATA chi-squared (Total-Chi-Squared of chiSquared.out)
+ev.objective                # what the engine's own fit minimizes: data chi2 + every prior and constraint
+ev.terms                    # {name: value}: each term of the objective, by the engine's names
+ev.data[i].chi2             # per data set (its row of chiSquared.out); .n, .norm, .norm_chi2, .shift_chi2
+f = m.objective()           # the objective as one callable for a minimizer or sampler
+val, g = f.value_and_grad(x)            # analytic gradient (energies, widths, norms)
+r, J = f.residuals_and_jacobian(x)      # its least-squares rows: sum(r**2) == f(x)
+r[ev.data[i].rows]                      # the rows of data set i (one per point)
 ```
 
-- **Fit against `m.objective`, not `calculate_chi2_rwa`.** The latter is the data χ² only. The engine also adds, per
-  segment, ((n − n₀)/(n₀ · normErr/100))² and, for a free energy shift, (ΔE/σ_ΔE)²
-  (`references/normalizations-and-shifts.md`). Minimizing the bare χ² lets the normalizations absorb every
-  discrepancy, a lower number the engine would never reach (−480 on one model).
-- `m.objective(x)` equals `Total-Chi-Squared` + `Total-Norm-Chi-Squared` of `chiSquared.out`;
-  `tests/pyazr/objective_test.py` checks it against the engine.
-- `residual_jacobian` raises for an analytically unsupported segment. Energy-shift, √E-shift, shift-function and
-  density columns are forward differences: a self-contained segment's shift costs two evaluations of that segment's
-  points; any other (composite, mapped, density) two full forward passes. `residual_jacobian(x, skip=[cols])` leaves
-  the listed free columns undifferenced and zero, for a fit that holds them. `AZURE_PROFILE=1` reports
+- **Fit against `m.objective()`, not `ev.chi2`.** The latter is the data χ² only. The engine also adds, per
+  data set, ((n − n₀)/(n₀ · normErr/100))² and, for a free energy shift, (ΔE/σ_ΔE)²
+  (`references/normalizations-and-shifts.md`), and every other prior. Minimizing the bare χ² lets the normalizations
+  absorb every discrepancy, a lower number the engine would never reach (−480 on one model).
+- `f(x)` equals the sum of the `Total-*` terms of `chiSquared.out`; `tests/pyazr/objective_test.py` checks it against
+  the engine.
+- The rows of `f.residuals(x)` are the data rows (whitened where a data covariance joins points), the model data, the
+  prior covariance, Park's wall, the gamma_decay priors, the abundance sums and one row per prior of a parameter: an LM
+  or TRF fit on them sees the priors with their Jacobian.  The data part of the gradient alone is
+  `2 * J[:n].T @ r[:n]` with `n = ev.data[-1].rows.stop`.
+- `f.residuals_and_jacobian` raises for an analytically unsupported segment. Energy-shift, √E-shift, shift-function
+  and density columns are forward differences: a self-contained segment's shift costs two evaluations of that
+  segment's points; any other (composite, mapped, density) two full forward passes. `f.jacobian(x, skip=[cols])`
+  leaves the listed free columns undifferenced and zero, for a fit that holds them. `AZURE_PROFILE=1` reports
   "shift cols (segment)" and "shift cols (full)".
 - **Use `m.active_datasets`** (one entry per engine segment, in result order) to label per-segment results; `m.datasets`
   also lists inactive segments. Use `m.datasets.by_key(p.segment_key)` rather than `datasets[key - 1]`: a segment key
   counts inactive segments too.
-- **Threads.** Every evaluation (`calculate_chi2_rwa`, `calculate_chi2`, `calculate_rwa`, `calculate`,
-  `calculate_all_rwa`) spreads its points over `OMP_NUM_THREADS` threads; results equal the serial path to a few ulp
-  (`AZURE_SERIAL_CHI2=1` restores it). With several worker processes (rmfit shards, emcee pools) keep processes ×
-  threads within the slots requested: a worker inherits the job's `OMP_NUM_THREADS`.
-- **The physical-parameter objective.** `calculate_chi2(x)` takes the physical vector (`transform_rwa` of the free
-  level block, then the free norms, shifts and screening). builds before 2026-10-26 (expires: 2027-02-01) did not
-  apply its norm entries (segments kept the norms of the previous call, so the value depended on the call history)
-  and left out the Park, abundance and scattering-length terms; MCMC mode 6 with "Use Reduced Width Amplitudes: no"
-  (the CLI and GUI default) then sampled the norms from their priors alone. Rerun a physical-mode chain with a free
-  normalization from such a build. RWA-mode chains, `calculate_chi2_rwa`, `objective()` and Minuit fits were not
-  affected.
-
-For a least-squares fit that needs the penalties as residual rows (so LM sees their Jacobian), append them with their
-constant derivatives:
-
-```python
-pen = [(p.free_index, d.norm, d.norm / 100.0 * d.norm_error)
-       for p in m.parameters.norms
-       for d in [m.datasets.by_key(p.segment_key)] if d.norm_error > 0]
-Jpen = np.zeros((len(pen), nfree))
-for k, (fi, _, s) in enumerate(pen): Jpen[k, fi] = 1.0 / s
-resid = np.concatenate([r, [(z[fi] - n0) / s for fi, n0, s in pen]])
-```
+- **Threads.** Every evaluation (`evaluate`, the objective, its gradient and rows) spreads its points over
+  `OMP_NUM_THREADS` threads; results equal the serial path to a few ulp (`AZURE_SERIAL_CHI2=1` restores it). With
+  several worker processes (rmfit shards, emcee pools) keep processes × threads within the slots requested: a worker
+  inherits the job's `OMP_NUM_THREADS`.
+- **Only the fit vector is an input.** pyazr's calls take the free vector `x` of the basis the session fits in; a
+  physical vector is no input (`transform_rwa` turns `x` into physical values for a report).
 
 ## Free-vector helpers
 
@@ -103,13 +91,15 @@ from scipy.optimize import least_squares
 fit = np.array([p.free_index for p in m.parameters.widths
                 if not p.fixed and p.radiation_type in ("E", "M")], int)
 
+f = m.objective()
+
 def resid(z):
     v = np.array(best, float); v[fit] = z
-    return m.residual_jacobian(v)[0]
+    return f.residuals(v)          # every row: data, priors and constraints
 
 def jac(z):
     v = np.array(best, float); v[fit] = z
-    return np.asarray(m.residual_jacobian(v)[1])[:, fit]
+    return f.jacobian(v)[:, fit]
 
 sol = least_squares(resid, best[fit], jac=jac, method="lm",
                     xtol=1e-14, ftol=1e-14, max_nfev=2000)
@@ -124,7 +114,7 @@ x = np.array(best, float); x[fit] = sol.x
   `Parameter.wigner_limit` is γ²_W = 3ħ²/(2μa²) in MeV, the Teichmann–Wigner unit; `teichmann_wigner()` returns it
   unchanged and `lane_thomas_wigner()` gives the ħ²/(μa²) unit. builds before 2026-10-27 (expires: 2027-02-01):
   `teichmann_wigner()` multiplied by 1.5 twice, giving θ² too small by 1.5.
-- For asymmetric (MINOS-style) errors, point `iminuit` at `m.objective` and `m.chi2_and_grad`: `minos()` then runs
+- For asymmetric (MINOS-style) errors, point `iminuit` at `f = m.objective()` and `f.grad`: `minos()` then runs
   against the same objective the CLI uses (`azure2-uncertainty`).
 - Save the result with `m.save_fit("fitted.azr", x)` (`references/editing-levels.md`).
 - MCMC: `pyazr/examples/fit_emcee.py` and `fit_zeus.py` show the pattern: one in-process engine per pool worker
@@ -133,7 +123,7 @@ x = np.array(best, float); x[fit] = sol.x
 
 ## Traps that stop a Python fit silently
 
-**A zero Jacobian column freezes `least_squares`.** `residual_jacobian` returns an identically zero column for any
+**A zero Jacobian column freezes `least_squares`.** `f.jacobian` returns an identically zero column for any
 parameter no active data set sees: a γ width in a model with no capture data, a channel of a level nothing populates.
 With `x_scale="jac"` that column's scale is zero, and TRF reports convergence after one function evaluation while the
 gradient elsewhere is still in the hundreds. On one model this froze every normalization at exactly 1.0 and left
@@ -144,7 +134,7 @@ J = fitter.jacobian(x0)[:, cols]
 cols = cols[np.max(np.abs(J), axis=0) > 0]      # before least_squares
 ```
 
-A norm penalty of exactly 0.0 alongside free normalizations is the tell: `m.penalties(x)["norm"].sum()`.
+A norm penalty of exactly 0.0 alongside free normalizations is the tell: `sum(d.norm_chi2 for d in m.evaluate(x).data)`.
 
 **An amplitude that is exactly zero never moves.** χ² depends on a reduced-width amplitude γ through γ² near zero, so
 its derivative there vanishes and no gradient method moves it; "free" in the `.azr` means nothing at 0. The common case
@@ -155,7 +145,7 @@ all 14 n₁ entries of the levels between E_x = 9.36 MeV and the n₁ threshold 
 right at threshold). To test them, seed in units of the Wigner amplitude (about 0.05 γ_W), never as a physical width;
 touch only channels that are zero, and judge against a control with the same budget.
 
-**`residual_jacobian` raises, and the exception aborts the fit.** A trust-region step can put a reduced width where the
+**`f.jacobian` raises, and the exception aborts the fit.** A trust-region step can put a reduced width where the
 Coulomb functions overflow (`RuntimeError: z is not finite in log_Gamma`) or where the level matrix is singular. Catch
 it and return a large residual with a zero Jacobian; the optimizer then shrinks its region, as it would after a finite
 but large χ².

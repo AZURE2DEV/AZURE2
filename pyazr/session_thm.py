@@ -1,6 +1,6 @@
 """The Trojan-horse experiments of one session (the ``<thm>`` ``experiment[...]`` lines): their profiled norms and
 backgrounds, line shapes, vertex functions and distortion factors as the engine evaluates them.  Mixed into
-:class:`pyazr.Session` (``class Session(..., SessionTHM)``); uses its ``sess``, ``mode`` and ``params_rwa``."""
+:class:`pyazr.Session` (``class Session(..., SessionTHM)``); uses its ``_engine``, ``mode`` and ``params_rwa``."""
 
 import numpy as np
 
@@ -24,9 +24,9 @@ class SessionTHM:
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         if self.mode == "data":
-            self.sess.calculate_chi2_rwa(x)
+            self._engine.calculate_chi2_rwa(x)
         out = {}
-        for r in self.sess.thm_experiments():
+        for r in self._engine.thm_experiments():
             q = 1 + _THM_BACKGROUND_TERMS[r["background"]]
             cov = np.asarray(r["covariance"], float).reshape(4, 4)[:q, :q]
             value = np.asarray(r["value"], float)
@@ -53,7 +53,7 @@ class SessionTHM:
         """Shared norm and background of one THM experiment at ``params``.
 
         The segments of ``experiment[<name>]`` share one profiled norm ``n*``
-        (it multiplies the data, as ``segment_norms``) and a background
+        (it multiplies the data, as ``evaluate(x).data[i].norm``) and a background
         ``b(E) = b0 + b1 E + b2 E^2`` added to the folded HOES model (model
         units, E the c.m. energy of the THM entrance pair, MeV); both are
         eliminated by closed-form weighted linear least squares at every
@@ -69,7 +69,7 @@ class SessionTHM:
         ``status``      "profiled", or what a degenerate profile fell back to
 
         The model at a point, as the output files show it next to the data
-        scaled by n*, is ``calculate_rwa`` plus ``b(E)``.  Runs a chi-squared
+        scaled by n*, is ``evaluate(x).data[i].model`` plus ``b(E)``.  Runs a chi-squared
         evaluation.  KeyError for an unknown experiment.
         """
         reports = self.thm_experiments(params)
@@ -115,8 +115,8 @@ class SessionTHM:
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         if self.mode == "data":
-            self.sess.calculate_chi2_rwa(x)
-        r = self.sess.thm_lineshape(str(experiment), np.asarray(energies, float).ravel())
+            self._engine.calculate_chi2_rwa(x)
+        r = self._engine.thm_lineshape(str(experiment), np.asarray(energies, float).ravel())
         return r
 
     @engine_call
@@ -194,8 +194,8 @@ class SessionTHM:
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         if self.mode == "data":
-            self.sess.calculate_chi2_rwa(x)
-        r = self.sess.thm_vertex(str(experiment), np.asarray(energies, float).ravel())
+            self._engine.calculate_chi2_rwa(x)
+        r = self._engine.thm_vertex(str(experiment), np.asarray(energies, float).ravel())
         reached = np.asarray(r.get("reached", []), bool)
         if reached.size and not reached.all():
             far = np.asarray(r["E"], float)[~reached]
@@ -254,4 +254,4 @@ class SessionTHM:
         Raises the engine error if the experiment is unknown, has no
         distortion, or an energy leaves the spectator no energy.
         """
-        return self.sess.thm_distortion(str(experiment), np.asarray(energies, float).ravel())
+        return self._engine.thm_distortion(str(experiment), np.asarray(energies, float).ravel())

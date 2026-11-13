@@ -341,11 +341,11 @@ try:
               len(rm) > 0 and all(k in slots for k in labels),
               [k for k in labels if k not in slots])
         check("labels are unique", len(labels) == len(rm))
-        x0chi = float(np.sum(s.calculate_chi2_rwa(x0)))
+        x0chi = s.evaluate(x0).chi2
     out, written, skipped = ma.write_averaged_azr(run, os.path.join(work, "re.azr"), labels)
     check("all written", not skipped and len(written) == len(labels))
     with Session(out, cwd=work) as s2:
-        chi = float(np.sum(s2.calculate_chi2_rwa(np.asarray(s2.params_rwa, float))))
+        chi = s2.evaluate(np.asarray(s2.params_rwa, float)).chi2
     check("the session's own values give back its chi2", close(chi, x0chi, 1e-6),
           f"{chi} vs {x0chi}")
 finally:

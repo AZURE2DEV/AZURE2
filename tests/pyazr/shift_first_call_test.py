@@ -73,7 +73,7 @@ def run(label, sqrt):
         for v in (0.0, 0.0, x0[k], 0.0):
             x = x0.copy()
             x[k] = v
-            chi.append(a.calculate_chi2_rwa(x)[0])
+            chi.append(a.evaluate(x).chi2)
         print("    chi2 at 0, 0, file, 0: " + ", ".join(f"{c:.6f}" for c in chi))
         zero = chi[3]
         check("first call at 0 = a later call at 0", abs(chi[0] - zero) <= 1e-12 * abs(zero), (chi[0], zero))

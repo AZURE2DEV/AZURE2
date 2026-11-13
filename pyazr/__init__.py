@@ -4,11 +4,11 @@ The engine runs in this interpreter (the compiled module ``pyazr._azure2``); a p
 (an old one: :func:`convert_azr`).  The objects of today's API:
 
 - :class:`Session` -- a calculation session: one project set up by the engine; parameters (``params_rwa``,
-  ``parameters``), data, the objective and its gradient, model values, output files, ``describe()``.
+  ``parameters``), data, ``objective()``, ``evaluate(x)``, output files, ``describe()``.
 - :class:`Project` -- the project file as records: read, edit (``add_<kind>``, ``set``), ``validate()``,
   ``describe()``, ``save()``; ``Project.session()`` opens a :class:`Session` on it.
-- :class:`Objective` (``Session.fit_objective()``) -- the fit's objective as one callable for any minimiser or sampler
-  (``f(x)``, ``grad``, ``residuals``, ``jacobian``, ``log_prob``, ``x0``, ``names``, ``bounds``); recipes for
+- :class:`Objective` (``Session.objective()``) -- the fit's objective as one callable for any minimiser or sampler
+  (``f(x)``, ``value_and_grad``, ``residuals``, ``jacobian``, ``log_prob``, ``x0``, ``names``, ``bounds``); recipes for
   scipy, iminuit and emcee in ``pyazr/examples/fit_*.py``.
 - :class:`Evaluation` (``Session.evaluate(x)``) -- every number at one x from one engine evaluation: ``objective``,
   ``chi2``, ``terms`` (by the engine's names), ``data[i]`` (model, residuals, chi2, energies, angles, ``extra``).
@@ -29,14 +29,14 @@ A session (run from the repository's root; ``tests/upgrade/T1`` is a test projec
     s = pyazr.Session("tests/upgrade/T1/T1.azr")    # read and set up the project
     x = s.params_rwa                                # the free parameters at their start values
     print(s.parameters.free.table())                # what each entry of x is
-    chi2 = s.objective(x)                           # data chi-squared plus every prior
-    terms = s.penalties(x)                          # the priors, term by term
+    f = s.objective()                               # the fit's objective: f(x), f.value_and_grad(x), ...
     w = s.parameters.free.widths                    # the free reduced-width amplitudes
     x2 = w.put(x, w.take(x) * 1.1)                  # a copy of x with them 10 % larger
-    print(chi2, s.objective(x2))
+    print(f(x), f(x2))                              # data chi-squared plus every prior, at both
     print(s.describe()["datasets"][0]["quantity"])  # what the session holds
     ev = s.evaluate(x)                              # every number at x: ev.objective, ev.chi2, ev.terms, ev.data
     print(ev.table())                               # the terms by name, one line per data set
+    print(ev.data[0].model[:3])                     # the model values of the first data set
     s.close()
 """
 import os as _os

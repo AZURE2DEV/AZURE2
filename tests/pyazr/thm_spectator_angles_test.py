@@ -12,12 +12,12 @@ horse is the target):
      round trip and canonical line; the combinations AZURE2 refuses are
      refused the same way (by the edit, or when a session is made).
   2. The engine against the CLI, R(E) and the DW vertex with a window:
-     calculate_chi2_rwa (rel 1e-9) and the output files of write_output_files.
+     evaluate().chi2 (rel 1e-9) and the output files of write_output_files.
   3. thm_distortion with a window: R == (M2/M2_PW)(E) / (M2/M2_PW)(E_ref) and
      R_model == R (1e-6, the grid); theta_cm is the mean of the window.
   4. thm_vertex with a DW window: the directions (angle_theta_cm, angle_q,
      angle_weights; weights sum to 1, angles inside the window) and, without
-     folding, calculate_rwa(dw window)/calculate_rwa(pw) == M2(dw window)/M2(pw)
+     folding, evaluate().data[i].model(dw window)/evaluate().data[i].model(pw) == M2(dw window)/M2(pw)
      (1e-8): the reported vertex is the one the model uses.
 
 Needs the compiled engine and an AZURE2 binary for 2-4; skips them cleanly.
@@ -156,8 +156,8 @@ with tempfile.TemporaryDirectory() as tmp:
         cli_chi2 = float(hit[-1])
         with Session(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
             x = np.asarray(s.params_rwa, float)
-            chi2 = float(np.sum(s.calculate_chi2_rwa(x)))
-            check(f"{tag}: calculate_chi2_rwa == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
+            chi2 = s.evaluate(x).chi2
+            check(f"{tag}: evaluate().chi2 == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
                   f"{chi2} vs {cli_chi2}")
             s.write_output_files(x)
         from_py = output_files(py_dir)
@@ -192,7 +192,7 @@ with tempfile.TemporaryDirectory() as tmp:
         dd = project(f"nf_{name}", blk, fold=False)
         with Session(os.path.join(dd, "run.azr"), cwd=dd) as s:
             x = np.asarray(s.params_rwa, float)
-            model[name] = np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)])
+            model[name] = np.concatenate([np.asarray(v) for v in [d.model for d in s.evaluate(x).data]])
             ecm = np.concatenate([np.asarray(v) for v in s.energies])
             r = s.thm_vertex("A", ecm, params=x)
             vert[name] = r["channels"][0]["levels"][0]["M2"]
@@ -208,7 +208,7 @@ with tempfile.TemporaryDirectory() as tmp:
                 check("one averaged vertex node", all(len(w) == 1 for w in r["dw_weights"]))
     worst = float(np.max(np.abs(model["dw"] / model["pw"] / (vert["dw"] / vert["pw"]) - 1)))
     ratio = vert["dw"] / vert["pw"]
-    check(f"calculate_rwa(dw window)/calculate_rwa(pw) == M2(dw window)/M2(pw) at {ecm.size} points "
+    check(f"evaluate().data[i].model(dw window)/evaluate().data[i].model(pw) == M2(dw window)/M2(pw) at {ecm.size} points "
           f"({ratio.min():.3f}-{ratio.max():.3f}, worst {worst:.1e})", worst < 1e-8)
 
 print()

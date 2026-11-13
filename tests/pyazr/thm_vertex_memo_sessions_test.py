@@ -62,12 +62,12 @@ except Exception as err:                                       # engine not buil
 
 CHI2 = ("import sys, numpy as np; sys.path.insert(0, %r); from pyazr import Session\n"
         "with Session(sys.argv[1], cwd=sys.argv[2]) as m:\n"
-        "    print('CHI2=' + repr(float(np.sum(np.asarray(m.residuals(np.asarray(m.params_rwa, float))) ** 2))))\n") % ROOT
+        "    print('CHI2=' + repr(float(np.sum(np.asarray(m.objective().residuals(np.asarray(m.params_rwa, float))) ** 2))))\n") % ROOT
 
 
 def chi2(m):
     import numpy as np
-    return float(np.sum(np.asarray(m.residuals(np.asarray(m.params_rwa, float))) ** 2))
+    return float(np.sum(np.asarray(m.objective().residuals(np.asarray(m.params_rwa, float))) ** 2))
 
 
 with tempfile.TemporaryDirectory() as tmp:

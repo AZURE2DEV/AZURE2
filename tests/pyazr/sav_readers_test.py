@@ -58,7 +58,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     with Session(azr) as m:
         names = [p.name for p in m.parameters]
-        allrwa = np.asarray(m.sess.params_all_rwa(), float)
+        allrwa = np.asarray(m._engine.params_all_rwa(), float)
         fixed = np.asarray(m.fixed_params, float).round().astype(bool)
         widths = [p for p in m.parameters if p.kind == "width" and not p.fixed]
         target = widths[0]

@@ -101,7 +101,7 @@ Rules:
 - Jacobian-cost balancing (`RMFIT_JAC_BALANCE`, on by default) times each shard once, fits time = R(α + βk) with k the
   shard's differenced shift columns, repacks greedily and caches the plan in `<workdir>/jac_balance.json` (a one-time
   start-up of a few minutes per new shards directory). Results are identical to 1e-15.
-- Held shift columns are skipped in the Jacobian (`cols=`, pyazr `residual_jacobian(skip=)`).
+- Held shift columns are skipped in the Jacobian (`cols=`, pyazr `objective().jacobian(x, skip=)`).
   Engine builds before 2026-10-30 (expires: 2027-02-01) re-evaluate the whole shard for every differenced shift column; a self-contained
   segment's shift now re-evaluates only its own rows, forward only. A running campaign keeps the library it loaded:
   restart it, or run on a newer frozen build, to get this.

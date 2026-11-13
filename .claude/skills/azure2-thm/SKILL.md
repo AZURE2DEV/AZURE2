@@ -224,7 +224,7 @@ that its strength will be model-dependent.
 ### Stage 4. Fit
 
 AZURE2 computes χ², residuals and Jacobians. pyazr does not fit: the fit loop is
-yours (scipy `least_squares` on `residuals()` / `residual_jacobian()`), or the CLI
+yours (scipy `least_squares` on `m.objective().residuals` / `.jacobian`), or the CLI
 minimizers. THM Jacobian rows are central differences (the adjoint does not cover
 HOES), with the profiled scale included exactly.
 

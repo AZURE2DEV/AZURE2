@@ -33,12 +33,12 @@ showing a result to a person. This version of AZURE2 has no graphical front end
     a partial cross section's own opening is steep but genuine. The same failure in data points is an azure2-check
     matter.
 - **Draw the data as AZURE2 compares them**: multiplied by the fitted norm n and at the fitted energy shift. A fixed
-  non-unity norm lives only in the `.azr`, a fitted one only in the `.sav`; pyazr's `m.segment_norms(x)` returns the
+  non-unity norm lives only in the `.azr`, a fitted one only in the `.sav`; pyazr's `m.evaluate(x).data[i].norm` is the
   norm each segment carries at `x`.
 - **State the frame and unit on every axis**: E_c.m. or E_lab (MeV or keV), E_x for plots across entrance channels
   (the only common axis), θ_c.m. or θ_lab (deg), σ (b), dσ/dΩ_c.m. (b/sr), S (keV b or MeV b), N_A⟨σv⟩
   (cm³ mol⁻¹ s⁻¹).
-- **Take S from AZURE2** (`calculate_sfactor_rwa`, `m.sfactor`, the S columns); never re-derive the Sommerfeld factor.
+- **Take S from AZURE2** (`d.model * d.extra["sfactor_conversion"]` of `m.evaluate(x).data`, `m.sfactor`, the S columns); never re-derive the Sommerfeld factor.
 - **Bare or folded, say which.** A test-segment curve is folded by any active `<targetInt>` line listing its key; a
   bare curve needs those lines inactive (azure2-calculate, Extrapolation).
 - **Evaluate at the fit's parameters** (`m.load_sav("output/param.sav")` or `pyazr.best_fit_params`), not at the
@@ -50,8 +50,8 @@ Code for each figure type is in `references/recipes.md`:
 
 | Figure | pyazr calls |
 |---|---|
-| excitation function with pulls | `calculate_rwa`, `calculate_energies`, `m.cross`, `m.cross_err`, `segment_norms` |
-| angular distribution | `calculate_angles` per segment; `pyazr.angular_distribution` for Legendre coefficients |
+| excitation function with pulls | `m.evaluate(x).data[i]` (`model`, `energies`, `norm`, `residuals`), `m.cross`, `m.cross_err` |
+| angular distribution | `m.evaluate(x).data[i].angles`; `pyazr.angular_distribution` for Legendre coefficients |
 | S factor with band and decomposition | `extrapolation_bands(..., quantity="sfactor")`, `m.sfactor`, `without_level`/`only_level` |
 | rate ratio | `reactionrates.out` or `pyazr/examples/reaction_rate.py`, divided by a reference rate on the same T9 grid |
 

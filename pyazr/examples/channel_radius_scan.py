@@ -64,7 +64,7 @@ def main() -> int:
             with Session(str(path), cwd=str(here)) as m:
                 x = np.asarray(m.params_rwa, float)
                 n = int(sum(len(m.energies[i]) for i in range(m.nsegments)))
-                chi2 = float(np.sum(m.calculate_chi2_rwa(x)))
+                chi2 = m.evaluate(x).chi2
         except Exception as err:
             print(f"{a:9.2f}   failed: {err}")
             Path(path).unlink()

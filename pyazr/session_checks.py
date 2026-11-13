@@ -35,13 +35,14 @@ def missing_parameter_file(path, call):
 
 
 def snapshot_mismatch(what, got, want, rtol):
-    """save_fit's refusal of a snapshot whose ``what`` ("chi2" or "priors") differs from the fit's."""
-    cause = ("calculate_chi2_rwa includes the model terms (abundance priors, Park's wall, measured scattering "
-             "lengths): a free target abundance whose prior the engine centres on its start value gives such a "
-             "difference (docs/upgrade/pyazr3.md section 1.6).  " if what == "chi2" else "")
+    """save_fit's refusal of a snapshot whose ``what`` ("chi2", the data chi-squared, or "objective") differs from
+    the fit's."""
+    cause = ("the objective holds the model terms (abundance priors, Park's wall, measured scattering lengths): a "
+             "free target abundance whose prior the engine centres on its start value gives such a difference "
+             "(docs/upgrade/pyazr3.md section 1.6).  " if what == "objective" else "")
     return AZURE2Error(f"save_fit: the snapshot run on its own gives {what} = {got:.10g}, the fit {want:.10g} "
-                       f"(allowed: relative {rtol:g}); it has been removed.  {cause}Session.penalties(x) shows the "
-                       f"terms; save_fit(..., verify=False) writes the files without this check.")
+                       f"(allowed: relative {rtol:g}); it has been removed.  {cause}Session.evaluate(x).terms shows "
+                       f"the terms; save_fit(..., verify=False) writes the files without this check.")
 
 
 def channel_request(pairs, pair, L):

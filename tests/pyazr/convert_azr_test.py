@@ -92,7 +92,7 @@ for project, azr, hybrid in CASES:
         a = Session(os.path.join(d, azr), cwd=d)
         b = Session(f3, cwd=d)
         x = np.asarray(a.params_rwa, float)
-        ca, cb = float(np.sum(a.calculate_chi2_rwa(x))), float(np.sum(b.calculate_chi2_rwa(x)))
+        ca, cb = a.evaluate(x).chi2, b.evaluate(x).chi2
         check(f"{project}: the conversion's chi2 = the tree's project's ({ca:.10g})",
               abs(ca - cb) <= 1e-12 * max(1.0, abs(ca)), f"{ca} vs {cb}")
 

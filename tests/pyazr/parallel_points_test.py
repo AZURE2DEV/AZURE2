@@ -2,7 +2,8 @@
 """The API calculates the points of an evaluation in one parallel pass, with the serial path's results.
 
 Up to 2026-10-30 the CLI's chi-squared calculated every point in one OpenMP pass (AZURECalc::PrecalculatePoints)
-but the API calls behind pyazr (calculate_chi2_rwa, calculate_chi2, calculate_rwa, calculate, calculate_all_rwa)
+but the API calls behind pyazr (the binding's calculate_chi2_rwa, calculate_chi2_physical, update_segments_rwa,
+update_segments, update_segments_all_rwa)
 walked the points one at a time on one thread: a 17O+a evaluation ran at ~1.1 cpu/wall with OMP_NUM_THREADS=4
 (2,490 s on 2,719 points; R-matrix/AZURE2_code_audit/10-25-26/readme).  They now share the CLI's pass
 (WorkingCopy::CalculatePointsInParallel); after any point failure they repeat the calculation point by point, so a failed
@@ -37,7 +38,23 @@ ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
 
 MODELS = [("13N", "13N.azr"), ("natural_neon", "natural_neon.azr")]
-CALLS = ["calculate_chi2_rwa", "calculate_chi2", "calculate_rwa", "calculate", "calculate_all_rwa"]
+# The engine's entry points, called through the binding (Session._engine): the chi-squared of the fit vector and of
+# the physical vector, the forward pass of the fit vector, of the physical vector and of every parameter; and
+# pyazr's evaluation (Session.evaluate).
+CALLS = ["calculate_chi2_rwa", "calculate_chi2_physical", "update_segments_rwa", "update_segments",
+         "update_segments_all_rwa", "evaluate"]
+
+
+def call_engine(a, call, arg):
+    """The result arrays of one entry point at arg."""
+    e = a._engine
+    if call.startswith("calculate_chi2"):
+        return [[getattr(e, call)(arg)]]
+    if call == "evaluate":
+        ev = a.evaluate(arg)
+        return [[ev.chi2]] + [d.model for d in ev.data]
+    n = int(getattr(e, call)(arg))
+    return [e.calculated_segments(i) for i in range(n)]
 
 
 def worker(model_dir, azr, out):
@@ -48,15 +65,15 @@ def worker(model_dir, azr, out):
     res = {}
     x0 = np.array(a.params_rwa, float)
     p0 = np.array(a.params, float)
-    full0 = np.array(a.sess.params_all_rwa(), float)
+    full0 = np.array(a._engine.params_all_rwa(), float)
     for tag, s in [("x0", 1.0), ("moved", 1.03)]:
         x, p, full = x0 * s, p0 * s, full0 * s
         for call in CALLS:
             sys.stderr.write(f"@@ {tag} {call}\n")
             sys.stderr.flush()
-            arg = {"calculate_chi2_rwa": x, "calculate_rwa": x, "calculate_chi2": p, "calculate": p,
-                   "calculate_all_rwa": full}[call]
-            r = getattr(a, call)(arg)
+            arg = {"calculate_chi2_rwa": x, "update_segments_rwa": x, "calculate_chi2_physical": p,
+                   "update_segments": p, "update_segments_all_rwa": full, "evaluate": x}[call]
+            r = call_engine(a, call, arg)
             res[f"{tag} {call}"] = [np.asarray(c, float).ravel().tolist() for c in r]
     json.dump(res, open(out, "w"))
 

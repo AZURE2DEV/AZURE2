@@ -100,8 +100,8 @@ def main() -> int:
             from pyazr.bands import best_fit_params
             x = np.asarray(best_fit_params(azr, str(args.params)), float)
         azr.extrap_mode()
-        e = np.asarray(azr.calculate_energies(x)[0], float)
-        sig = np.asarray(azr.calculate_rwa(x)[0], float)
+        e = np.asarray(azr.evaluate(x).data[0].energies, float)
+        sig = np.asarray(azr.evaluate(x).data[0].model, float)
 
     o = np.argsort(e)
     e, sig = e[o], sig[o]

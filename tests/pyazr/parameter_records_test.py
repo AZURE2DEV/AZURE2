@@ -216,7 +216,7 @@ def check_project(label, path, cwd, write_back=False):
                 check(f"{label}: put refuses a fixed row", "fixed" in str(err) and fixed.name in str(err), err)
         pairs = s.pairs
         ppairs = {q.key: q for q in project.pairs()}
-        ok = [q.number for q in pairs] == list(range(1, len(pairs) + 1)) and len(pairs) == len(s.sess.pair_records())
+        ok = [q.number for q in pairs] == list(range(1, len(pairs) + 1)) and len(pairs) == len(s._engine.pair_records())
         for q in pairs:
             r = ppairs[q.key]
             ok &= (abs(q.M1 - r.light_mass) < 1e-9 and abs(q.M2 - r.heavy_mass) < 1e-9

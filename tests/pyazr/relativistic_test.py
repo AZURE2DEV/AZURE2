@@ -63,8 +63,8 @@ def main():
             shutil.copy(os.path.join(models, name + ".azr"), os.path.join(d, "t.azr"))
             # the model has extrapolation segments only, so the session starts in extrapolation mode
             with pyazr.Session(os.path.join(d, "t.azr"), cwd=d, data_mode=False, use_brune=False) as s:
-                sig = np.asarray(s.calculate(s.params)[0], float)
-                T = np.asarray(s.calculate_energies(s.params)[0], float)
+                grid = s.evaluate().data[0]
+                sig, T = grid.model, grid.energies
             k = np.sqrt(k2(T, rel))
             ref = 4 * np.pi * np.sin(3.0 * k) ** 2 / k ** 2 / 100.0
             r = float(np.max(np.abs(sig - ref) / ref))

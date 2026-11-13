@@ -67,9 +67,9 @@ try:
     for v in shifts:
         x = x0.copy()
         x[k] = v
-        chi.append(a.segment_chi2(x)[0])
+        chi.append(np.array([d.chi2 for d in a.evaluate(x).data])[0])
     x = x0.copy()
-    again = a.segment_chi2(x)[0]
+    again = np.array([d.chi2 for d in a.evaluate(x).data])[0]
     chi = np.array(chi)
     print("    chi2(shift): " + ", ".join(f"{c:.9g}" for c in chi))
     print("    d2: " + ", ".join(f"{c:.4g}" for c in np.diff(chi, 2)))
@@ -79,8 +79,8 @@ try:
     # (c) beyond the reach: the mesh is planned again for the moved support, and planned back on return
     far = x0.copy()
     far[k] = x0[k] + 0.005
-    c_far = a.segment_chi2(far)[0]
-    back = a.segment_chi2(x0.copy())[0]
+    c_far = np.array([d.chi2 for d in a.evaluate(far).data])[0]
+    back = np.array([d.chi2 for d in a.evaluate(x0.copy()).data])[0]
     check("(c) 5 keV beyond the reach and back: the file value's chi2 again (the plan is a function of the shift)",
           abs(back - chi[10]) <= 1e-13 * abs(chi[10]) and np.isfinite(c_far), (back, chi[10], c_far))
     d2 = np.diff(chi, 2)

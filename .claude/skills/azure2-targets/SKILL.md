@@ -167,7 +167,7 @@ spread): refit it. The cost of a point is set by the mesh's settings (`quadratur
 ## 7. Fitted apparatus parameters
 
 Each is a parameter of the target record, named after it, with a Gaussian prior about the value the field writes;
-the fitted value lives in `param.sav` (`pyazr.azure2.save_fit` writes it back into the field). One target named by
+the fitted value lives in `param.sav` (`pyazr.Session.save_fit` writes it back into the field). One target named by
 several data sets is one parameter for all of them (what the old `densitygroup` / `thicknessgroup` did). Edit the
 fields with `pyazr.Project.set`.
 
@@ -232,7 +232,7 @@ for particle exits, a few per cent off, and changed results even with every Q = 
 - **A slow evaluation dominated by Whittaker functions** (`gstack` shows `RecalcEDependentValues → theWhitFunc`):
   builds before 2026-09-13 (expires: 2027-02-01) recomputed sub-point Coulomb functions every evaluation when
   external capture was on. To find such costs on any build, switch data groups off in copies of the model and time
-  `calculate_chi2_rwa`, then sample stacks.
+  `m.evaluate(x)`, then sample stacks.
 - **The Qt GUI wrote beam-profile numbers with 12 significant digits, pyazr writes 17**: harmless, but visible in a diff.
 
 ## Pointers

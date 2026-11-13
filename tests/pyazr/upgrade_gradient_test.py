@@ -2,9 +2,9 @@
 """Identity check (ARCHITECTURE.md section 10): the analytic gradient of chi^2 equals finite differences.
 
 For the free parameters x of T1 and T3 (the engine's reduced-width vector in the Brune basis: level energies E_x in
-MeV, reduced width amplitudes and ANC-derived amplitudes in MeV^1/2, beta amplitudes), the gradient of the data chi^2
-from Session.chi2_and_grad (reverse-mode adjoint of the engine) must equal the Richardson-extrapolated central
-difference of Session.calculate_chi2_rwa,
+MeV, reduced width amplitudes and ANC-derived amplitudes in MeV^1/2, beta amplitudes), the gradient of the objective
+from Session.objective().value_and_grad (reverse-mode adjoint of the engine) must equal the Richardson-extrapolated
+central difference of the objective,
 
     D(h) = [chi^2(x + h e_i) - chi^2(x - h e_i)] / (2 h),   d chi^2 / d x_i ~ [4 D(h/2) - D(h)] / 3,
     h = 1e-6 max(|x_i|, 1e-2),
@@ -56,15 +56,15 @@ def gradient_check(project, azr_name):
         up.project_copy(project, work)
         with Session(os.path.join(work, azr_name + ".azr")) as m:
             x = np.asarray(m.params_rwa, float)
-            chi2, grad = m.chi2_and_grad(x)
-            chi2_ref = float(np.sum(m.calculate_chi2_rwa(x)))
+            chi2, grad = m.objective().value_and_grad(x)
+            chi2_ref = m.objective()(x)
             fd = np.empty_like(x)
 
             def central(i, h):
                 xp, xm = x.copy(), x.copy()
                 xp[i] += h
                 xm[i] -= h
-                return (np.sum(m.calculate_chi2_rwa(xp)) - np.sum(m.calculate_chi2_rwa(xm))) / (2 * h)
+                return (m.objective()(xp) - m.objective()(xm)) / (2 * h)
 
             for i in range(x.size):
                 h = 1e-6 * max(abs(x[i]), 1e-2)
@@ -72,7 +72,7 @@ def gradient_check(project, azr_name):
     finally:
         shutil.rmtree(work, ignore_errors=True)
     label = f"{project} at {'the truth' if azr_name == project else 'the start model'}"
-    check(f"{label}: chi2 from chi2_and_grad = calculate_chi2_rwa", abs(chi2 / chi2_ref - 1) < 1e-10,
+    check(f"{label}: value_and_grad value = the objective", abs(chi2 / chi2_ref - 1) < 1e-10,
           f"{chi2:.6f} vs {chi2_ref:.6f}")
     scale = np.max(np.abs(fd))
     worst = np.max(np.abs(grad - fd)) / scale

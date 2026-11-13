@@ -25,14 +25,14 @@ background poles, grids, thread count). The theory of the χ² is in `docs/sourc
 Run the items in order. Each says what it detects.
 
 1. **The number reproduces.** `cat output/chiSquared.out`: a finite total χ² and the expected number of points N per
-   segment. From pyazr, `np.sum(m.calculate_chi2_rwa(m.params_rwa))` (data term only) or `m.objective(x)` (data plus
+   segment. From pyazr, `m.evaluate(x).chi2` (data term only) or `m.objective()(x)` (data plus
    penalties) must reproduce the model's recorded total; record that total whenever the `.azr` changes. A jump
    concentrated in a few data sets means one of: a stale `output/intEC.extrap`; a `param.sav` whose segment-keyed
    norm or shift names no longer match an edited `<segmentsData>` (renumbering: `azure2-fit`); or ill-conditioning
    in a background level that a `save_fit` round trip's own numerical noise exposes. After a fit, confirm that
    `param.sav` was rewritten and read `parameters.out`.
-2. **Per-data-set χ² and pulls.** `m.dataset_chi2(x)` (or `pyazr/examples/per_dataset_chi2.py`) and the pulls
-   (data − fit)/σ from `m.residuals(x)`. A total that is acceptable can hide one set at χ²/N = 10. Report the per-set
+2. **Per-data-set χ² and pulls.** `m.evaluate(x).data[i].chi2` (or `pyazr/examples/per_dataset_chi2.py`) and the pulls
+   (data − fit)/σ from `m.evaluate(x).data[i].residuals`. A total that is acceptable can hide one set at χ²/N = 10. Report the per-set
    table with every result.
 3. **Residual structure.** Pulls that keep one sign over a run of adjacent energies or angles are a model defect,
    not noise. Rank such runs and treat them with `azure2-resonance-search` before adding any structure by hand.
@@ -84,7 +84,7 @@ one that grows into a failed fit, and then investigate which parameter moved, no
   segment, verify with a mode-1 run. List the other points within 5 keV of a threshold and watch them in the next fit.
 - **Run a plain calculate before submitting a fit** after a structural edit combined with a reparametrization (a
   remapped `param.sav`, a fresh `save_fit` snapshot): CLI mode 1 with the new parameter file, or
-  `m.objective(m.params_rwa)`, in a throwaway output directory. Compare with the old total corrected for exactly what
+  `m.objective()(m.params_rwa)`, in a throwaway output directory. Compare with the old total corrected for exactly what
   changed (the removed segment's χ² and N from the old `chiSquared.out`). It costs seconds and catches a corrupted
   start before a multi-day job runs on it.
 - **A start far above the baseline is wrong even when the cause is known.** If the calculate check is orders of

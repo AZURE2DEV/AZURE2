@@ -5,7 +5,7 @@
      refuses an expansion on another quantity; the records give the expansion back.
   2. With the compiled engine (skipped without it): a model whose coefficient data are the model's own
      Legendre coefficients (from the ``legendre`` extrapolation of the same model) evaluates to chi2 ~ 0, and
-     calculate_rwa returns the coefficients in the data slots.
+     evaluate().data[i].model returns the coefficients in the data slots.
 
 Run from anywhere:  python3 tests/pyazr/angular_coefficients_test.py
 """
@@ -81,7 +81,7 @@ def main():
         os.makedirs(os.path.join(work, "ext", "checks"), exist_ok=True)
         shutil.copy(src, os.path.join(work, "ext", "m.azr"))
         with Session(os.path.join(work, "ext", "m.azr"), cwd=os.path.join(work, "ext"), data_mode=False) as m:
-            coef = m.calculate_angular_dists_rwa(m.params_rwa)[0]   # test segment 1: one array per energy
+            coef = m.evaluate(m.params_rwa).data[0].extra["legendre"]   # extrapolation 1: one array per energy
         n_e = len(coef)
         check("the legendre extrapolation gives coefficient arrays", n_e == 11 and all(len(c) >= 5 for c in coef), (n_e, [len(c) for c in coef][:3]))
         # data at lab 6.0-6.3 (grid 5.9 + 0.05 i, i = 2..5): rows E_lab, k, a_k, err
@@ -96,12 +96,12 @@ def main():
         os.makedirs(os.path.join(work, "checks"), exist_ok=True)
         dm.save()
         with Session(azr, cwd=work) as m:
-            chi2 = float(m.calculate_chi2_rwa(m.params_rwa)[0])
-            vals = np.asarray(m.calculate_rwa(m.params_rwa)[0], float)
+            chi2 = m.evaluate(m.params_rwa).chi2
+            vals = np.asarray(m.evaluate(m.params_rwa).data[0].model, float)
             data = np.asarray(m.cross[0], float)
             ks = np.asarray(m.angles[0], float)
         check("the coefficient data segment evaluates to chi2 ~ 0", chi2 < 1e-8, chi2)
-        check("calculate_rwa returns the coefficients (k in the angle slot)",
+        check("evaluate().data[i].model returns the coefficients (k in the angle slot)",
               np.allclose(vals, data, rtol=1e-8, atol=0) and sorted(set(ks.astype(int))) == [2, 4], (vals[:3], data[:3], ks[:3]))
     finally:
         shutil.rmtree(work, ignore_errors=True)

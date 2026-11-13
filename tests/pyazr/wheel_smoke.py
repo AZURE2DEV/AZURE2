@@ -7,7 +7,7 @@
 REPOSITORY is the source checkout, read for the test projects only (tests/upgrade/T1-T3); pyazr must come from
 somewhere else (the check fails if it is imported from REPOSITORY).  Checks: pyazr.describe() (the engine module
 next to the package, the SRIM citation, the mass table); the objective of T1, T2, T3 at the start parameters
-(fit_objective()(x0)) against the values stored below, to 1e-9 relative (the platforms differ in the last digits);
+(objective()(x0)) against the values stored below, to 1e-9 relative (the platforms differ in the last digits);
 the stopping of protons in carbon; the web page's files found; ``python -m pyazr --help``; the program AZURE2 on T1
 (on the PATH, or AZURE2_BIN) against the stored total chi-squared of chiSquared.out (6 digits, as printed).  Writes
 only to a scratch folder in the working directory; exits 0 when every check passes.
@@ -19,7 +19,7 @@ import subprocess
 import sys
 import tempfile
 
-#: fit_objective()(x0) of the test projects (the engine's exact Coulomb routines, no table), Linux x86-64.
+#: objective()(x0) of the test projects (the engine's exact Coulomb routines, no table), Linux x86-64.
 OBJECTIVE_AT_START = {
     "T1": 482.27523957308824,
     "T2": 10910.13380363804,
@@ -38,11 +38,11 @@ def check(name, ok, detail=""):
 
 
 def objective_at_start(path):
-    """fit_objective()(x0) of a session on the project at ``path``, with the exact Coulomb routines."""
+    """objective()(x0) of a session on the project at ``path``, with the exact Coulomb routines."""
     import pyazr
     session = pyazr.Project.open(path).session(use_coulomb_table=False)
     try:
-        f = session.fit_objective()
+        f = session.objective()
         return float(f(f.x0))
     finally:
         session.close()

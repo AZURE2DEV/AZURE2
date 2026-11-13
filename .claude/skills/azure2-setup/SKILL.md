@@ -79,7 +79,7 @@ must follow, and the checks that show it is what was intended.
 - **Input is lab frame, forward kinematics (light particle = projectile). Every output file and API result is c.m.**
   Never compare across the two without converting.
 - **`add_extrapolation(e_min, e_max, e_step)` takes lab energies by default** (`frame="lab"`; `frame="cm"`
-  multiplies by (m_beam + m_target)/m_target), while `calculate_energies` returns c.m. energies. Comparing a returned
+  multiplies by (m_beam + m_target)/m_target), while `evaluate(x).data[i].energies` are c.m. energies. Comparing a returned
   c.m. column with the lab e_max looks like an extrapolation that stops early at e_max·m_target/(m_beam + m_target);
   there is no ceiling, only a frame mismatch.
 - **Run from the directory that holds the `.azr`.** The file stores `output/`, `checks/` and data paths relative to
