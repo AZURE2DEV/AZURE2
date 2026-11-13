@@ -53,6 +53,18 @@ class Context {
   static double InBase(const Number &n, const Unit *unit) { return ToBase(n.value, unit); }
 };
 
+/// The centre of a nuisance's prior as the specs carry it (PriorCentre, docs/upgrade/parameter_kinds.md section 4):
+/// written when the nuisance has a prior; `centre` is its value in the engine's unit of the kind, `what` names the
+/// field in messages.
+inline PriorCentre PriorCentreOf(const Nuisance &n, double centre, const std::string &what) {
+  PriorCentre c;
+  if (!n.hasPrior) return c;
+  c.written = true;
+  c.value = centre;
+  c.source = what + " prior " + n.priorCentre.text;
+  return c;
+}
+
 /// The pair key `labelField` names by its label (light, heavy, state; `text` as written, `what` for the messages:
 /// "the entrance of 15N(p,g)16O", "the pair p+12C"), with the pair-key field `keyField` where the label names several
 /// pairs (section 3.5, D2/D3): accepted only there and required there; "" where the record cannot carry a key.

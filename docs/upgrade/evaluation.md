@@ -124,8 +124,13 @@ reported by the scanner (they are `const`), nothing to do.  The Coulomb table lo
 
 ## 2. The environment switches
 
-44 names are read with `getenv` (plus `HOME`/`USERPROFILE` for the default Coulomb-table path).  Each is an input that
-no file and no `--describe` shows.  "Changes": **numbers** (an output number moves), **route** (another algorithm,
+The survey as it was made at the start of Phase 6 (2026-11-12).  Since the fourth branch (section 8) the list is the
+table of `support/src/Environment.cpp` (39 engine switches; the survey's 44 counted `HOME`, `USERPROFILE`, the two
+variables of the converter's test programs and the stopping test's own reading), checked against the manual's list in
+`docs/source/reference/command_line.rst` (check 40); the "Proposal" column below was the survey's, the decisions of
+section 6 are the PI's and none is taken: every switch kept its name and its effect.  At the survey: 44 names were read
+with `getenv` (plus `HOME`/`USERPROFILE` for the default Coulomb-table path), each an input that no file and no
+`--describe` showed.  "Changes": **numbers** (an output number moves), **route** (another algorithm,
 numbers equal to rounding or to a stated tolerance), **diag** (prints or checks only; may exit), **test** (injects a
 failure for a test), **speed**.  "Used by": tests (count of files under `tests/`), the director's scripts, nobody.
 
@@ -340,7 +345,8 @@ Each is a commit series that leaves the tree passing (all projects × 3 bases id
    sampler's and the fitter's state become non-`const` objects of the minimiser adapter; the MCMC globals become a run
    object.  Gate: memory of a fit at 1, 3 and 12 threads equal within the `Results` size per thread.
 5. **The diagnostics record** (section 2): one `Diagnostics` struct read once; the counters of section 1.3 become
-   its members (or go); `--describe` lists the set switches.  Can run in parallel with 2–4.
+   its members (or go); `--describe` lists the set switches.  Can run in parallel with 2–4.  Done in the fourth
+   branch (sections 7.6 and 8): one table and one reader in `support/`, `Config::environment`, `RunDiagnostics`.
 
 ## 6. Decisions for the director
 
@@ -515,4 +521,120 @@ pass over the 88 MB table, 1.2e8 user-space instructions (T1 2.9467e10 -> 2.9589
 
 **Input-file bytes**: the four rows are permanent (`table:`), with the reason of section 1.2.
 
-**Diagnostics record (milestone 5)**: not started.
+**Diagnostics record (milestone 5)**: not started (done in the fourth branch, section 7.6).
+
+### 7.6 Done in the fourth branch (`feature/upgrade-6-evaluation-4`)
+
+**Milestone 5: the environment record and the run's diagnostics** (design: section 8).
+- One table, one reader: `support/` (library `azure2_support`, uses nothing; the stopping library and the engine link
+  it), 39 switches: 14 *numbers*, 1 *cost*, 22 *prints*, 2 *test*.  `ProcessEnvironment()` reads them once; check 39
+  refuses `getenv` anywhere else in the engine, its libraries and the binding (test programs under `tests/` aside);
+  check 40 keeps the table and the manual's list (`command_line.rst`, "Environment switches", all 39 documented) the
+  same, kinds included.
+- Through the run's `Config` (`Config::environment`, from the record by `Reset`): `AZURE2_COULOMB_TABLE` (the default
+  table file; to the pairs through `PairFunctionSettings`), `AZURE2_SRIM_DATA_DIR` (given by `TargetStopping` to the new
+  `Stopping`/`StoppingProvenance` overloads that take SRIM's data; the library's own default `SrimTables()` reads the
+  record), `AZURE2_EC_TABLE_NODES`, `AZURE_BOUND_SHIFT_NUMERICAL`, `AZURE_NO_NEUTRAL_CLOSED_FORM`, `AZURE_SHIFT_DE_1EV`
+  (pair settings), `AZURE_LEVEL_SPACE`, `AZURE2_THM_FD`, `AZURE_GRAD_ADJOINT`, `AZURE_GRAD_DENSE`,
+  `AZURE_TE_WEIGHTS_FD`, `AZURE_SERIAL_CHI2`.  `AZURE_OPTIONS_FILE` and `AZURE_REFINE_QUADRATURE` are read from the
+  record where the options are read (the CLI's `parseOptions`, the binding's session).  Through the record:
+  `AZURE2_SWAP_COUPLING_ORDER` (the A_y amplitude matrix of a stored record has no run object), the 22 printing
+  switches and the two test hooks.
+- Findings (switches read at every call, or set inside a process): section 8.3.  The engine's own `setenv`
+  (`AZURE_POOL_CHECK` -> `AZURE_SERIAL_CHI2`, `AZURE_GRAD_CHECK` -> `AZURE_GRAD_ADJOINT`) is gone: a `Config` copy
+  (`AZURECalc::Chi2OnWith`) and a gradient route (`AZURECalc::GradientBy`).  `tests/pyazr/thm_adjoint_test.py` runs its
+  difference half in a child process started with `AZURE2_THM_FD=1`.
+- Counters: `RunDiagnostics` (`Config::diagnostics`, shared by copies of the `Config`): the profile account
+  (`AZUREProfile::Account`; every `Timer`, `Count`, `ScopedReport` takes the run's, `Config::profile`, null without
+  `AZURE_PROFILE`), the Coulomb table's lookups (`CoulombTableUse`, given to the lookups by the pairs' settings;
+  printed by `RunDiagnostics::Finish` when the run ends -- the CLI's `Config` at the end of `main`, or `ExitRun` before
+  an early `std::exit` -- where the process's exit printed it before), and the call counters and worst values of the
+  gradient, grid, pool and channel checks.  The external-capture table's counters are members of the run's term store
+  (`ECTermStore`).  The gradient kept for `AZURE_GRAD_CHECK` and its deferred exit are an argument (the route).
+- Allow-list: 29 rows of milestone 5 removed (and the two globals of the gradient check); the scanner now also
+  reports a `std::once_flag` member (kind `once`): `CoulombTable::ContentIdentity`'s is a permanent row.  Pending
+  53 (milestone 3: 11, milestone 4: 42), permanent 15.
+- `--describe` (text form) ends with the switches that are set ("Environment switches set:", one line
+  `NAME=value (kind)` each); `pyazr.describe` returns the description without it.  `--validate`, `--describe`,
+  `pyazr.validate`, `pyazr.describe` read data files relative to the project file's directory
+  (`azure2::experiment::ProjectDirectoryOf`, also the run's rule in `Config::ReadConfigFile`).
+- Speed (user-space instructions, one run at 1 thread, base `work/b-gecm` / this branch): T1 2.95891e10 / 2.95854e10,
+  T2 1.43138e9 / 1.42572e9 (-0.4 %), 13N 7.46322e10 / 7.46164e10, natural_neon 9.8673e9 / 9.8505e9, T2
+  `--use-gradient` fit 1.737368e11 / 1.736046e11, 13N fit 1.885643e11 / 1.885169e11: none slower.
+- Not done (another agent's file this night, `api/src/AZUREAPI.cpp`): the unused `intEC_cache` file name and the
+  lazily read nuisance layout (`mutable` members) of the session.
+
+## 8. The environment record and the run's diagnostics (milestone 5): design
+
+Status: design (2026-11-13, branch `feature/upgrade-6-evaluation-4`, from 7f85e0f7), written before the code; done as
+designed, with the choices recorded in section 7.6.
+
+### 8.1 One table, one reader
+
+- **The table** (`support/include/azure2/support/Environment.h`, `support/src/Environment.cpp`, library
+  `azure2_support`, which depends on nothing and which the stopping library and the engine link): one row per switch
+  with its name, type (flag, text, number, integer), default, kind, one line of what it does and the page that
+  documents it.  Kinds: **numbers** (an output number can move: other physics, another route equal to rounding, or
+  another input), **cost** (the same bits, another time), **prints** (prints, dumps or checks; may exit), **test**
+  (injects a failure for a test).  The table is a `constexpr` array, so it cannot change.
+- **The reader**: `azure2::support::ReadEnvironment(lookup)` is the only call of `getenv` in the engine, the libraries
+  and the binding; `ProcessEnvironment()` returns the record read once, on its first call, and never written after (a
+  `const` object with a dynamic initialiser, like the constant tables: the environment is the process's by nature).
+  The first call is the CLI's `main` before anything else, and in pyazr the first `Config` a session builds.  The
+  record also keeps the home directory (`HOME`, else `USERPROFILE`) for the default Coulomb-table path.  The record
+  keeps each value as text with whether it was set at all, and each reader applies the test it applied before (set at
+  all; set, non-empty and not "0"; a number by `atof`/`atoi`), so every switch keeps its effect.
+- **A consistency check** (number 39) refuses `getenv` in `src/`, `include/`, `api/`, `physics/`, `experiment/`,
+  `stopping/`, `io/`, `convert/`, `support/` outside `support/src/Environment.cpp` (test programs under `*/tests/`
+  are not the engine), and every row's name must appear in `docs/source/reference/command_line.rst` (number 40;
+  the table there is checked against the code's table both ways).
+
+### 8.2 Config or record, per switch
+
+The switches that can move a number and that code holding a `Config` reads are copied into the run's `Config` when the
+`Config` is made (`Config::Reset`, from the record), and the code reads the `Config`: making one of them a command-line
+option or a pyazr option later is one assignment in `parseOptions` or in the binding's `RuntimeOptions`.  The others
+(prints and checks, the test hooks, the cost switch with no run object at hand) read the record where they are used.
+
+| Switch | Kind | Read through |
+|---|---|---|
+| `AZURE2_COULOMB_TABLE` | numbers | `Config::environment.coulombTableDefault`, to the pairs' settings |
+| `AZURE2_SRIM_DATA_DIR` | numbers | `Config::environment.srimDataDirectory`, given by `TargetStopping` |
+| `AZURE_OPTIONS_FILE`, `AZURE_REFINE_QUADRATURE` | numbers | the record, where the options are read |
+| `AZURE2_EC_TABLE_NODES` | numbers | `Config::environment.ecTableNodes` |
+| `AZURE2_SWAP_COUPLING_ORDER` | numbers | the record (`PolarizationFunc`: no run object there) |
+| the three shift-function routes | numbers | `Config::environment`, to `PairFunctionSettings` |
+| `AZURE_LEVEL_SPACE` and the four gradient routes | numbers | `Config::environment` |
+| `AZURE_SERIAL_CHI2` | cost | `Config::environment.serialPointPass` (the pool check: a `Config` copy) |
+| the 22 printing and checking switches, the two test hooks | prints, test | the record, where used |
+
+The library's own default (`stopping::SrimTables()`, for callers without a run) reads the record.
+
+### 8.3 Switches read more than once or set inside a process (findings)
+
+Read at every call today: `AZURE_SERIAL_CHI2`, the gradient switches of `AZURECalc.cpp`/`AZUREGrad.cpp`,
+`AZURE_GRID_TIMING`, `AZURE_PROFILE` in `WorkingCopy.cpp`, `AZURE2_COULOMB_TABLE` (each `CoulombTable::Shared("")`),
+`AZURE_REFINE_QUADRATURE` (each pyazr session).  Set inside a process: (a) the engine itself, `AZURE_POOL_CHECK` sets
+`AZURE_SERIAL_CHI2` around its reference and `AZURE_GRAD_CHECK` sets `AZURE_GRAD_ADJOINT` around the second gradient:
+both become explicit (a `Config` copy for the first, the gradient's route as an argument for the second), and the
+`setenv` helpers go; (b) `tests/pyazr/thm_adjoint_test.py` sets `AZURE2_THM_FD` between two calls of one session: the
+test runs its difference half in a child process started with the variable; (c) `tests/upgrade/results_owner_test.cpp`
+sets `AZURE_POISON_RESULTS` before its first `Config`, which stays valid.  No public pyazr function changes.
+
+### 8.4 The counters: owned by the run
+
+`Config::diagnostics` (`include/RunDiagnostics.h`: a `RunDiagnostics` held through a `shared_ptr`, made by the
+`Config`'s constructor and shared by its copies, as `scratch` is) holds what the diagnostics count: the profile
+accounting (`AZUREProfile::Account`: stage times, counters, the nesting depth of reports), the Coulomb table's lookup
+counts (given to the pairs' functions through `PairFunctionSettings`, printed when the run's `RunDiagnostics` ends, as
+the process's exit printed them before: the CLI's run ends with the process), and the call counters and worst values
+of the gradient, grid and channel checks.  The external-capture table's counters go into the run's term store
+(`ECTermStore`, already in `RunScratch`), beside the terms they count.  The analytic gradient kept for
+`AZURE_GRAD_CHECK` and the deferred exit are arguments of the second gradient call, not state.  The locks of the dump
+file, the trace and the progress line stay (locks of process-wide streams, permanent rows).
+
+### 8.5 `--describe` and the manual
+
+`--describe` ends with the switches that are set (name, value, kind), from the table and the record; `pyazr.describe`
+returns the project's description as before (its text stays the CLI's up to that block).  The manual's list
+(`command_line.rst`, a section "Environment switches") is checked against the table (check 40).

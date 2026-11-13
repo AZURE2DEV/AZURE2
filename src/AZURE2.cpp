@@ -14,11 +14,13 @@
 #include "AZUREMain.h"
 #include "MeshPlanner.h"
 #include "Profile.h"
+#include "azure2/support/Environment.h"
 #include "ProjectCommands.h"
 #include "ProjectSetup.h"
 #include "CaptureAyRequests.h"
 #include "CommandLineValues.h"
 #include "Config.h"
+#include "RunDiagnostics.h"
 #include "azure2/io/LevelRows.h"
 #include "GSLException.h"
 #include "ECAmplitudeCache.h"
@@ -213,9 +215,10 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
     else
       configure.configfile = arg;
   }
-  char *optionsFile = getenv("AZURE_OPTIONS_FILE");
-  if (optionsFile) {
-    std::ifstream in(optionsFile);
+  // AZURE_OPTIONS_FILE: more options from a file (the process's environment record, read once at start)
+  const azure2::support::Environment &environment = azure2::support::ProcessEnvironment();
+  if (environment.Set(azure2::support::Switch::kOptionsFile)) {
+    std::ifstream in(environment.Text(azure2::support::Switch::kOptionsFile));
     if (in) {
       while (!in.eof()) {
         std::string newOption;
@@ -320,7 +323,7 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
                       << "ERROR: the input ended (end of file) at the prompt \"" << prompt
                       << "\", which needs an answer.  AZURE2 stops." << std::endl;
   configure.outStream.flush();
-  std::exit(1);
+  ExitRun(configure, 1);
 }
 
 /*!
@@ -426,7 +429,7 @@ static bool askYesNo(Config &configure, const std::string &prompt) {
                         << "it first, e.g. printf '3\\nn\\nparam.sav\\n\\n7\\n' | AZURE2 --no-readline project.azr"
                         << std::endl
                         << "(--covariance-band answers it yes without a prompt).  Nothing was calculated." << std::endl;
-    std::exit(EXIT_FAILURE);
+    ExitRun(configure, EXIT_FAILURE);
   }
 }
 
@@ -474,12 +477,12 @@ void processCommand(int command, Config &configure) {
     configure.paramMask |= Config::PERFORM_MCMC;
   } else if (command == 7) {
     exitMessage(configure);
-    exit(0);
+    ExitRun(configure, 0);
   }
 #else
   } else if (command == 6) {
     exitMessage(configure);
-    exit(0);
+    ExitRun(configure, 0);
   }
 #endif
 }
@@ -1126,7 +1129,7 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
     }
 
     const int initialized = data->Initialize(compound, configure);  // AZURE_PROFILE: the set-up's stages on their own
-    AZUREProfile::Report(std::cerr, "set-up");
+    AZUREProfile::Report(configure.profile, std::cerr, "set-up");
     if (initialized == -1) {
       configure.outStream << "Calculation was aborted." << std::endl;
       delete compound;
@@ -1450,6 +1453,8 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
  */
 
 int main(int argc, char *argv[]) {
+  // The process's environment switches, read once, before anything else (azure2/support/Environment.h).
+  azure2::support::ProcessEnvironment();
   // Check for --help option first.  If set, print help and exit.
   for (int i = 1; i < argc; i++)
     if (strcmp(argv[i], "--help") == 0) {
@@ -1564,19 +1569,19 @@ int main(int argc, char *argv[]) {
 #ifdef USE_MCMC
     // For MCMC, we still need to check for external capture but use segments from config file
     if (configure.paramMask & Config::PERFORM_MCMC) {
-      if (!readSegmentFile(configure, segPairs)) exit(1);
-      if (!checkExternalCapture(configure, segPairs)) exit(1);
+      if (!readSegmentFile(configure, segPairs)) ExitRun(configure, 1);
+      if (!checkExternalCapture(configure, segPairs)) ExitRun(configure, 1);
       getExternalCaptureFile(useReadline, configure);
     } else {
 #endif
       if (!(configure.paramMask & Config::CALCULATE_REACTION_RATE)) {
-        if (!readSegmentFile(configure, segPairs)) exit(1);
+        if (!readSegmentFile(configure, segPairs)) ExitRun(configure, 1);
       } else
         getRateParams(configure, segPairs, useReadline);
 
       // Check if the entrance,exit pairs are in the external capture file
       //  If so, external capture will be needed
-      if (!checkExternalCapture(configure, segPairs)) exit(1);
+      if (!checkExternalCapture(configure, segPairs)) ExitRun(configure, 1);
 
       // Read the external capture file name to be used, if any
       getExternalCaptureFile(useReadline, configure);

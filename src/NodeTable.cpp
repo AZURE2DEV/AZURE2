@@ -1,5 +1,6 @@
 // The node table of a fit stage and its check (include/NodeTable.h; docs/upgrade/energy_grid.md section 2.6).
 #include "NodeTable.h"
+#include "azure2/support/Environment.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -152,14 +153,8 @@ NodeState BuildNodeTable(WorkingCopy &data, CNuc *cnuc, const Config &) {
 }
 
 bool NodeCheckRequested() {
-  static const bool on = [] {
-    auto set = [](const char *name) {
-      const char *v = std::getenv(name);
-      return v && *v && std::strcmp(v, "0") != 0;
-    };
-    return set("AZURE_NODE_CHECK") || set("AZURE_PLAN_CHECK");
-  }();
-  return on;
+  const azure2::support::Environment &environment = azure2::support::ProcessEnvironment();
+  return environment.On(azure2::support::Switch::kNodeCheck) || environment.On(azure2::support::Switch::kPlanCheck);
 }
 
 }  // namespace azure2

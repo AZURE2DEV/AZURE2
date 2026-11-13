@@ -34,22 +34,22 @@
 int WorkingCopy::ApplyPriorCentres(const Config &configure, const azure2::experiment::DataSpecs &specs) {
   for (const auto &item : specs.datasets.items) {
     const azure2::experiment::DatasetSpec &d = item.spec;
-    if (!d.hasNormCentre && !d.hasShiftCentre) continue;
+    if (!d.normCentre.written && !d.shiftCentre.written) continue;
     Segment *segment = nullptr;
     for (int s = 1; s <= Draft().NumSegments(); s++)
       if (Draft().GetSegment(s)->GetSegmentKey() == d.key) segment = Draft().GetSegment(s);
-    if (d.hasNormCentre) {
+    if (d.normCentre.written) {
       if (segment)
-        segment->SetNominalNorm(d.normCentre);
+        segment->SetNominalNorm(d.normCentre.value);
       else
-        configure.outStream << "WARNING: <parameterSettings> row \"" << d.normCentreSource
+        configure.outStream << "WARNING: <parameterSettings> row \"" << d.normCentre.source
                             << "\" names no active data segment; ignored." << std::endl;
     }
-    if (d.hasShiftCentre) {
+    if (d.shiftCentre.written) {
       if (segment)
-        segment->SetNominalEnergyShift(d.shiftCentre);
+        segment->SetNominalEnergyShift(d.shiftCentre.value);
       else
-        configure.outStream << "WARNING: <parameterSettings> row \"" << d.shiftCentreSource
+        configure.outStream << "WARNING: <parameterSettings> row \"" << d.shiftCentre.source
                             << "\" names no active data segment; ignored." << std::endl;
     }
   }

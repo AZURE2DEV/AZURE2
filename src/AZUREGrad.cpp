@@ -1,4 +1,6 @@
 #include "AZUREGrad.h"
+#include "RunDiagnostics.h"
+#include "azure2/support/Environment.h"
 #include "GradEnergyTasks.h"
 #include "ModelPass.h"
 #include "Profile.h"
@@ -103,7 +105,7 @@ void AddParkPenaltyGradient(CNuc *compound, const Config &configure, GradAccum &
 /*!
  * Gradient of the abundance penalty (CNuc::AbundancePenalty): the prior
  * ((w - w0)/sigma)^2 of every nucleus with a sigma, and the sum-to-one term
- * ((sum w) - 1)^2 / s^2, which couples every abundance through the sum.
+ * ((sum w) - c)^2 / s^2 (c its centre, 1 unless written), which couples every abundance through the sum.
  */
 void AddAbundancePenaltyGradient(CNuc *compound, const Config &configure, GradAccum &accum) {
   if (!compound->HasAbundanceBlock()) return;
@@ -111,7 +113,8 @@ void AddAbundancePenaltyGradient(CNuc *compound, const Config &configure, GradAc
     int sample, nucleus;
     compound->AbundanceOf(k, sample, nucleus);
     const double s = compound->SampleSumSigma(sample, configure.abundanceSumSigma);
-    double g = (s > 0.0) ? 2.0 * (compound->AbundanceSum(sample) - 1.0) / (s * s) : 0.0;
+    const double centre = compound->GetSample(sample)->sumCentre;
+    double g = (s > 0.0) ? 2.0 * (compound->AbundanceSum(sample) - centre) / (s * s) : 0.0;
     const SampleAbundance &e = compound->GetSample(sample)->entries[nucleus - 1];
     if (e.sigma > 0.0 && !e.priorReplaced) g += 2.0 * (e.abundance - e.nominal) / (e.sigma * e.sigma);
     accum.AddAbundance(k, g);
@@ -506,7 +509,6 @@ namespace {
 // so each sub-point contributes an A_y cotangent fitBar c_i s_i / D and a
 // differential-cross-section cotangent fitBar c_i (A_i - <A>) / D.
 // AZURE_GRAD_TIMING: thread-summed time in the target-effect combiner weights.
-std::atomic<long long> g_teCombinerNs{0};
 
 bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &results, double fitBar, GradAccum &accum,
                              int xsComponent, CNuc *compound, const Config &config, int row,
@@ -560,11 +562,10 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
     }
   };
   std::vector<double> c;
-  if (std::getenv("AZURE_TE_WEIGHTS_FD") || !FoldWeights(*point, data, config, c)) {
+  if (config.environment.foldWeightsByDifferences || !FoldWeights(*point, data, config, c)) {
     fdWeights(c);
-  } else if (const char *wc = std::getenv("AZURE_TE_WEIGHTS_CHECK")) {
-    static std::atomic<int> nChecked{0};
-    if (nChecked++ < std::atoi(wc)) {
+  } else if (azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kFoldWeightsCheck)) {
+    if (config.diagnostics->foldWeightChecks++ < azure2::support::ProcessEnvironment().Integer(azure2::support::Switch::kFoldWeightsCheck, 0)) {
       std::vector<double> cfd;
       fdWeights(cfd);
       double cmax = 0.0, dmax = 0.0, yW = 0.0;
@@ -620,7 +621,7 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
     accum.AddDoppler(dk, fitBar * dT);
   }
   const auto tc1 = std::chrono::steady_clock::now();
-  g_teCombinerNs += std::chrono::duration_cast<std::chrono::nanoseconds>(tc1 - tc0).count();
+  config.diagnostics->foldWeightNs += std::chrono::duration_cast<std::chrono::nanoseconds>(tc1 - tc0).count();
 
   auto emit = [&](int i, double value, int component, bool ayCrossSection) {
     if (value != 0.0)
@@ -738,7 +739,7 @@ bool ThmPointModelGradient(WorkingCopy &data, Unit *point, azure2::Results &resu
 }
 
 void ReportBail(WorkingCopy &data, const char *what, const Segment *segment, int i) {
-  if (!std::getenv("AZURE_GRAD_DEBUG") || !segment) return;
+  if (!azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kGradDebug) || !segment) return;
   Unit *pt = segment->GetPoint(data, 1);
   std::cerr << "[grad] " << what << " adjoint bailed on segment " << i << " (key " << segment->GetSegmentKey()
             << ", entrance " << segment->GetEntranceKey() << ", exit " << segment->GetExitKey()
@@ -763,10 +764,7 @@ bool FormalPartsOutsideAdjoint(CNuc *compound, const ParamIndexMap &pmap) {
 
 /// AZURE2_THM_FD=1 (any value but empty or 0): THM rows by central
 /// differences, the path before the HOES adjoint (kept for testing).
-bool ThmFiniteDifferencesRequested() {
-  const char *e = std::getenv("AZURE2_THM_FD");
-  return e && *e && std::strcmp(e, "0") != 0;
-}
+bool ThmFiniteDifferencesRequested(const Config &config) { return config.environment.thmByDifferences; }
 
 
 bool AccumulateEGammaGradient(CNuc *compound, WorkingCopy *data, azure2::Results &results, const Config &config,
@@ -782,7 +780,7 @@ bool AccumulateEGammaGradient(CNuc *compound, WorkingCopy *data, azure2::Results
   if (FormalPartsOutsideAdjoint(compound, pmap)) return false;
   int bailSeg = 0;
   if (!azure2::EnergyTaskGradient(compound, data, results, config, shiftDeriv, fitBarFn, accum, bailSeg, hoes)) {
-    if (std::getenv("AZURE_GRAD_DEBUG")) {
+    if (azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kGradDebug)) {
       if (config.FirstTime("AZURE_GRAD_DEBUG energy-task gradient declined")) {
         bool inactiveLevel = false;
         for (int j = 1; j <= compound->NumJGroups(); j++) {
@@ -891,8 +889,8 @@ bool ComputeResidualJacobian(CNuc *compound, WorkingCopy *data, azure2::Results 
     return false;
   }
 
-  const bool timing = std::getenv("AZURE_GRAD_TIMING") != nullptr;
-  const long long comb0 = g_teCombinerNs.load();
+  const bool timing = azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kGradTiming);
+  const long long comb0 = config.diagnostics->foldWeightNs.load();
   const auto ts0 = std::chrono::steady_clock::now();
 
   // r = (model/J - data*n)/(err*n) (DataResidual); d r/d model = 1/(err*n*J) yields d r/d(E,gamma) directly.
@@ -926,13 +924,12 @@ bool ComputeResidualJacobian(CNuc *compound, WorkingCopy *data, azure2::Results 
   }
 
   if (timing) {
-    static std::atomic<int> calls{0};
-    const int c = ++calls;
+    const int c = ++config.diagnostics->jacobianRowTimings;
     if (c <= 3 || c % 50 == 0)
       std::cerr << "[grad-timing] Jacobian rows " << c << ": " << totalRows << " rows, " << numTasks
                 << " energy tasks, "
                 << std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - ts0).count()
-                << " ms; target-effect combiner weights " << (g_teCombinerNs.load() - comb0) / 1.0e6
+                << " ms; target-effect combiner weights " << (config.diagnostics->foldWeightNs.load() - comb0) / 1.0e6
                 << " ms (thread-summed)" << std::endl;
   }
 
@@ -1057,7 +1054,7 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, WorkingCopy *ld, azure2::Results &
   // (cbackground=), which only THM points see -- by the HOES adjoint: one
   // reverse sweep per point (ThmPointModelGradient).  A configuration it does
   // not cover, or AZURE2_THM_FD=1, takes the central differences below.
-  bool analytic = !ThmFiniteDifferencesRequested();
+  bool analytic = !ThmFiniteDifferencesRequested(config);
   for (size_t t = 0; t < rows.size() && analytic; t++)
     if (ld->Data().GetSegment(rows[t].segment)->HasComponents()) analytic = false;
   if (analytic) {
@@ -1114,7 +1111,7 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, WorkingCopy *ld, azure2::Results &
     if (bail) {
       analytic = false;
       for (size_t t = 0; t < rows.size(); t++) std::fill(rows[t].Jm.begin(), rows[t].Jm.end(), 0.0);
-      if (std::getenv("AZURE_GRAD_DEBUG"))
+      if (azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kGradDebug))
         std::cerr << "[grad] THM adjoint: a point outside its path (a target effect with an automatic "
                      "tolerance, RMC, ...) -> central differences for the THM rows" << std::endl;
     }

@@ -1,5 +1,6 @@
 // The calculation plan (CalculationPlan.h; docs/upgrade/data_model.md step S5).
 #include "CalculationPlan.h"
+#include "azure2/support/Environment.h"
 
 #include <algorithm>
 #include <climits>
@@ -210,7 +211,7 @@ const EnergyTaskList &CalculationPlan::EnergyTasks(WorkingCopy &data, const Conf
                     keys.size() == energy_keys_.size() &&
                     (keys.empty() || std::memcmp(keys.data(), energy_keys_.data(), keys.size() * sizeof(double)) == 0);
   if (same) return energy_tasks_;
-  AZUREProfile::Count(AZUREProfile::kEnergyTaskBuilds);
+  AZUREProfile::Count(configure.profile, AZUREProfile::kEnergyTaskBuilds);
 
   struct Key {
     int nucleus;
@@ -302,12 +303,6 @@ const EnergyTaskList &CalculationPlan::EnergyTasks(WorkingCopy &data, const Conf
   return energy_tasks_;
 }
 
-bool CalculationPlan::RunTimeCheckRequested() {
-  static const bool on = [] {
-    const char *v = std::getenv("AZURE_PLAN_CHECK");
-    return v && *v && std::strcmp(v, "0") != 0;
-  }();
-  return on;
-}
+bool CalculationPlan::RunTimeCheckRequested() { return azure2::support::ProcessEnvironment().On(azure2::support::Switch::kPlanCheck); }
 
 }  // namespace azure2

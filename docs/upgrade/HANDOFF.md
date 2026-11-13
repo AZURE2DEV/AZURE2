@@ -2,6 +2,145 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (director, 14:20) — merged: diagnostics record, prior centres, the web UI's server and page
+
+**Merged** into the data branch after one verification of the four branches together (with pyazr's errors, merged
+earlier): `feature/upgrade-6-evaluation-4` (the diagnostics record of an evaluation; the environment switches read
+once per process by one reader, listed in one table and in the manual; `--describe` prints the switches that are
+set), `feature/upgrade-4-prior-centre` (the centre of every nuisance prior honoured: areal density, Doppler
+temperature, stopping scale, screening, thickness, abundance, apparatus; `save_fit` writes the fitted target values
+back; a rebuild of the model drops the nuisance manager of the old model), `feature/upgrade-9-webui-server`
+(`pyazr/ui`: server, state with history and revision, workers, jobs, the route table) and
+`feature/upgrade-9-webui-page` (the page: header, tabs Project, Nucleus, Data, generated forms, preview plot;
+plotly.js 4.1.2 vendored under MIT; no engine change).
+
+**Verified** on the four engine branches together (`work/b-trial50`, logs `work/director/vt50/`): all projects in
+three bases identical to the reference (887 / 851 / 887 files), 1 against 3 threads identical; the eight fits
+identical to the base build; the switch spot check; `tests/gamma_decay/check.sh` at 3 threads;
+`tests/nuisance_prior_centre/check.sh` without and with pyazr; `ctest -LE slow` 232 of 232; the slow tests 11 of 11;
+`tests/run_tests.sh` 166 passed, 0 failed; the specification equivalence 181 equal, 0 differ; the converted-tree
+gate 679 / 643 / 679 identical. The page (Python and static files only) on the merged tree: the consistency test
+and its seven tests (api, jobs, server, routes, static, node, the headless-Chrome smoke test) pass.
+
+**Reviewed by the director.** The prior-centre branch in full (no objection); the page's server edits: the file
+route stays inside the root (resolved path, tested), the Content-Security-Policy allows inline styles and `data:` /
+`blob:` images for plotly and nothing else beyond the server itself, no server text is inserted as HTML.
+
+**Open.**
+- A fit continued from its written-back values is computed on other grids than the fit (density, temperature,
+  stopping scale and kernel parameter are laid out from the start value): branch `feature/upgrade-4-layout-centre`.
+- The page's corrections (bounds of the file preview, cut text in the session-options table, the layout of repeated
+  groups, the web UI's tests registered below the block that must stay last in `tests/pyazr/CMakeLists.txt`) go
+  with the Results tab.
+- The stopping scale's default width is relative to the start, not the centre.
+- Nobody has used the page in a real browser by hand.
+
+**Reference** for the next branches: outputs `tab-t50-1`, base build `work/b-trial50` (outside the repository).
+
+## 2026-11-13 (agent, branch `feature/upgrade-9-webui-page`) — the web UI's page: Project, Nucleus, Data
+
+**Done.** `pyazr/ui/static/`: the header (project, unsaved, revision, Undo, Redo, Save, the engine's χ², status
+line), the tabs Project, Nucleus and Data, placeholders for Fit, Results, Physics, THM; forms generated from
+`pyazr.schema()` (one widget per value type in `forms.js`, layout hints in `layout.js` only); the engine's description
+beside each record; a preview plot of data and model with plotly.js 4.1.2 vendored (MIT, hash checked), a table
+without it, CSV export. Server edits: static rows and handler, the token-to-cookie redirect, a CSP header,
+`GET /api/files/{path}`. Twenty Qt items marked dropped in `qt_parity.md` (the PI, 2026-11-13). Docs: `web_ui.md`
+11.2 and findings 13–16, user guide "The web interface", `pyazr/CLAUDE.md`, `FOR_THE_OWNER.md`, `ROADMAP.md`.
+
+**How.** `ctest -R pyazr_ui` (7 tests, node on PATH: all pass); the smoke test on T1, T2, `tests/gamma_decay/
+models/record.azr`, `examples/li7_tumino2006` (THM) and `tests/reaction_rate/models/moved_azr_truth.azr` (no data
+sets: the page shows the engine's refusal), screenshots in both themes and sizes; a walk through the meeting's list
+against a server (χ² after a width edit equal to a direct pyazr session's bit for bit; Undo restores it exactly).
+No C++ changed; build 0 warnings.
+
+**Open.** Nobody has used the page in a real browser by hand. Session options read-only until they are `<config>`
+keys. No event stream (polling). Pairs add/remove, channel units, Legendre orders, a `<config>` schema wait for
+pyazr (findings 10, 13–15). The static files are not yet package data of the wheel (step 6).
+
+## 2026-11-13 (agent, branch `feature/upgrade-9-webui-server`) — the web UI server on pyazr's errors and description
+
+**Done.** Merged `feature/upgrade-8-pyazr3-errors` into the server branch and adapted `pyazr/ui`: the status of an
+exception is the first row of one ordered table naming its class or any base (`pyazr/ui/errors.py`; every class of
+`pyazr.errors` maps to 404, 409 or 422 by it), and a worker sends the names of the class and its bases; the
+engine's notices (`EngineWarning`) of a request in the session worker come back in the answer's `warnings`;
+`/api/kinds` and `/api/physics` are served by `pyazr.kinds()`; `/api/describe` carries `pyazr.describe()` and the
+session options (the engine's table with the value in use); the adapter's parameter rows are `azure2.describe()`'s;
+a request whose `Origin` is not the server's own is refused, and a Host `[::1]` is parsed. `web_ui.md` 11.1 and 12
+say what the errors branch delivered and what is still missing.
+
+**How.** Build `work/b-uiserver` at two jobs (0 warnings); the four UI test files at one thread (api 18, jobs 5,
+server 2, consistency 8: all pass); `errors_test.py` and `describe_test.py` of the merged branch (all ok); each new
+rule shown failing with an injected error (`tests/pyazr/ui/README.md`); `ctest -R pyazr_ui`.
+
+**Open.** The three parts of a message are one text, not attributes: `allowed` and `fix` of the JSON body stay empty
+outside the engine's diagnostics. A job's notices go to its log, not to the client.
+
+## 2026-11-13 (director, 13:50) — merged: pyazr's errors, engine notices and self-description (first step of pyazr 3.0)
+
+**Merged** `feature/upgrade-8-pyazr3-errors` (entry below). Verified by the director on a rehearsal of this merge
+(`work/b-trial46`): all projects × 3 bases identical to the reference (887 / 851 / 887), the converted-tree gate
+identical (679 / 643 / 679), T1/T2/T3/13N at 1 against 3 threads identical, `ctest -LE slow` 226/226, slow 11/11,
+`tests/run_tests.sh` 165 passed and 0 failed, spec equivalence without a difference.
+
+**Behaviour a user of pyazr meets.** A parameter vector with NaN or infinity raises `ParameterVectorError` (it was
+computed before); `coulomb_functions` outside its domain raises `DomainError`; `pyazr.__version__` is `3.0.0.dev1`.
+
+**Next on pyazr.** Parameter records in place of the two numeric layouts (second step), the physics table (fourth),
+the command line (seventh); the briefs are written. `pyazr/azure2.py` is one line below its size limit: the
+rename step splits it.
+
+## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-errors`) — pyazr: errors, engine notices, self-description
+
+**Done** (additions only: no public name renamed or removed, no engine number changed).
+- `pyazr/errors.py`: `Error` and its classes, each also the builtin the call raised before (`FormatError` moved here
+  from `project.py`; `ParameterError`, `ParameterKeyError`, `ParameterIndexError`, `ParameterVectorError`;
+  `AZURE2Error` = `EngineError` = `_azure2.AZURE2Error`, one class that keeps the name `AZURE2Error`;
+  `DomainError`, `DomainZeroDivision`, `SessionClosed`, `MissingFile`; `EngineWarning`).  The binding raises the
+  Python classes and refuses a NaN or infinity in a parameter vector, naming the parameter
+  (`api/src/pybind_api.cpp`, `BindErrors`, `expect_finite`).  `pyazr/session_checks.py`: the session's checks.
+- Engine notices: the session's `Config::outStream` passes through `api/src/pybind_notices.cpp`; four notices (EC
+  amplitude file written / appended, normalization and shift files) become `EngineWarning`s with file and consequence.
+- `pyazr.describe()` (no path), `pyazr.kinds()`, `azure2.describe()` (`pyazr/described.py`);
+  `api/src/pybind_describe.cpp`; `_azure2.physics_functions`; package docstring with a tested session; stale
+  docstrings corrected; user guide sections "Asking the package about itself" and "Errors"; `pyazr/CLAUDE.md`.
+- Tests `tests/pyazr/errors_test.py` (27 wrong calls), `tests/pyazr/describe_test.py`.
+
+**Verified** (build `work/b-pyerr`, 2 threads).  Build: 0 warnings.  `repo_consistency_test.py`: consistent.
+`JOBS=1 scripts/check.sh --quick`: 225 of 225 tests without the slow label passed (111 pyazr among them).  The slow
+pyazr tests: 9 of 9 at two threads, then `parallel_points` and `upgrade_thread_independence` alone: passed.
+`tests/run_tests.sh`: 165 passed, 0 failed.  T1, T2, T3 and 13N in the three bases (program, menu 1, one thread)
+against `tab-gecm-1`: every file identical (tag `tab-pyerr-1`).  Injected errors (Python: the old KeyError, a
+RuntimeError for a closed session, no L check, no missing-file check, a message without its call; C++: no NaN
+check, an option without a row) each made `errors_test` or `describe_test` fail.  The whole tree is not compared.
+
+**Open.** (1) A new session option still needs a row in four places of the binding and Python and the program's
+parser (`src/AZURE2.cpp` has no option table). (2) `AZURE2 --describe` names parameter kinds with words of its own
+("energy shift" for `shift`, `experiment/src/Describe.cpp`). (3) A session with `use_rmc=True` keeps `use_brune`
+(the program drops it). (4) `kinds()["data"]` has no extra outputs; `azure2.describe()` no parameter bounds.
+
+## 2026-11-13 (agent, branch `feature/upgrade-9-webui-server`) — the web UI's server and process model (no page)
+
+**Done.** `pyazr/ui/` (new subpackage, not imported by `import pyazr`): `server.py` (the app factory, `Server`,
+`main`; `python -m pyazr.ui project.azr`), `routes.py` (the route table, 70 rows: 53 served, 9 answering 501 with the
+missing pyazr call, 8 with the later step), `state.py` (the text, history, revisions, working file and crash copy,
+the root, the session's text), `workers.py` (session and job workers as processes, the budget, death with the
+server), `jobs.py` (the job table: scipy and iminuit fits as rows, progress, stop, kill, checkpoints), `errors.py`,
+`engine.py` (the adapter, the only file naming `azure2`). Tests `tests/pyazr/ui/` (29, registered in
+`tests/pyazr/CMakeLists.txt`); `web_ui.md` section 11.1 (what was built, the measured numbers, eleven departures);
+the user guide page `web_ui_api.rst`; `pyproject.toml` extra `web` and the package `pyazr.ui`. No existing pyazr
+file, test or engine file changed; no number of the engine.
+
+**How.** The four test files at one thread on the base build's binding (all pass; each rule's test shown failing with
+an injected error, `tests/pyazr/ui/README.md`); evaluate equals a direct session bit for bit and the program's
+`chiSquared.out` row for row on T1 and T2; a real server process over HTTP, killed during a fit: its workers end in
+0.05 s; measured opening T2 and 13N, evaluation overhead, memory, stop times (`web_ui.md` 11.1).
+
+**Open.** (1) The engine resolves `priorCovariance` against the directory of the file it reads, not the session's
+base directory: the UI's session files must lie beside the project (departure 1). (2) The χ² per data set has the
+six digits of `chiSquared.out` until pyazr gives the program's split (finding 5). (3) The event stream, the file
+browser, a job queue and budgets of two or more threads (written, not run). (4) The decisions of `web_ui.md` section
+13 stay the PI's; each choice made here is in one named place (section 11.1).
+
 ## 2026-11-13 (director, 11:40) — merged: the DW vertex on the transfer library; the `gamma_decay` record in the observed-parameter paths
 
 Two branches, rehearsed together (`rehearsal/trial45`), read by the director (no objection) and verified once on the
@@ -70,6 +209,29 @@ copies the file and the licence into `pyazr/ui/static/vendor/` and records versi
 goes through one module of the page, so that the library is named in one place. Decisions 5 (drop 20 parity items)
 and 7 (session options as `<config>` keys) of that section are still open; the others are built on the note's
 recommendations, each in one named place.
+
+## 2026-11-13 (agent, branch `feature/upgrade-4-prior-centre`) — the centre of every nuisance prior is the number written
+
+**Done.** One rule for every nuisance kind with a prior (`parameter_kinds.md` section 4): the penalty is
+((p − centre)/width)² with the centre written, the start is the value written, a percentage width is per cent of the
+centre; grids and limits stay laid out from the start. Before (calculations, value ≠ centre, base build): norm and
+constant shift used the centre; sqrt shift, shift function, abundance, `isotope_sum`, screening, Doppler and thickness
+dropped it; areal density, stopping scale and a kernel's parameter refused it. One carrier `PriorCentre`
+(`SetupSpecs.h`, the norm/shift centre made general), `build::PriorCentreOf`; the engine objects keep the centre beside
+the width; `ForEachDiagonalPrior` hands it to gradient, least-squares rows and MCMC; the API reports it
+(`prior_nominal`, now also abundance and apparatus). Write-back: areal density, Doppler, screening and thickness had no
+`ParameterSource` (save_fit kept their old values); now they have one, with `engineUnit`. API: a rebuild or mode
+switch kept the nuisance priors' manager of the old model (freed objects, old radius): `AZUREAPI::ReplaceModel`.
+Tests: `tests/nuisance_prior_centre/check.sh`, `save_fit_format3_test.py` (abundance and density moved),
+`tests/pyazr/rebuild_nuisance_test.py`; all fail on the base build.
+
+**Verified.** Build 0 warnings; all projects × 3 bases identical to `tab-gecm-1` (887/851/887, tag `tab-prior-1`);
+converted-tree gate 679/643/679 identical; the eight fits identical to `b-gecm`; T1/T2/T3/13N 1 vs 3 threads identical;
+`ctest -LE slow` 223/223, slow 9/9 and the two four-thread tests (capped at 3) 2/2; `tests/run_tests.sh` 165 passed,
+1 failed (rectangular_resolution expected the lifted refusal; check updated, passes).
+
+**Open.** Grids/limits of a fitted density, temperature, stopping scale or kernel parameter follow the start value: a
+fit continued from a written project without `grid_max` lays them out anew (the Doppler pieces too).
 
 ## 2026-11-13 (director, 09:20) — merged: the design note of the web UI (documents only)
 
@@ -149,6 +311,42 @@ prior (no `Total-Abundance-Chi-Squared`, program and pyazr alike; note section 1
 own snapshot after a fit with a free abundance. (2) `calculate_chi2_rwa` includes the abundance prior although its
 docstring says data only. (3) `parallel_points_test` and `upgrade_thread_independence_test` run the engine at four
 threads whatever the caller's budget. (4) The PI's decisions of the note's section 5 before step 5 of its plan.
+
+## 2026-11-13 (agent, branch `feature/upgrade-6-evaluation-4`) — the environment record and the run's diagnostics
+
+**Done.** Milestone 5 of `evaluation.md` (design section 8, record section 7.6).
+- One table of the 39 environment switches (`support/include/azure2/support/Environment.h`,
+  `support/src/Environment.cpp`, library `azure2_support`): name, type, value when unset, kind (numbers 14, cost 1,
+  prints 22, test 2), what it does, its page; one reader, `ProcessEnvironment()`, read once.  No other `getenv` in the
+  engine, its libraries or the binding (check 39); the manual's list (`command_line.rst`, "Environment switches") is
+  the table's (check 40).
+- The switches that can move a number are copied into the run's `Config` (`Config::environment`, by `Reset`) and read
+  there or from the pair's settings; SRIM's directory reaches the stopping library through `TargetStopping`.  The
+  printing switches and the test hooks read the record.  The engine no longer sets variables inside the process
+  (pool check: a `Config` copy; gradient check: `AZURECalc::GradientBy`).  `thm_adjoint_test.py` runs its
+  `AZURE2_THM_FD` half in a child process.
+- The counters are the run's: `include/RunDiagnostics.h` (`Config::diagnostics`): profile account (`Config::profile`),
+  Coulomb table lookups (printed when the run ends; `ExitRun` before an early exit), the call counters of the checks;
+  the EC table's counters in `ECTermStore`.  29 allow-list rows removed; the scanner reports `std::once_flag` members
+  (kind `once`), the Coulomb table's content identity is a permanent row.  Pending 53, permanent 15.
+- `--describe` ends with the switches that are set.  `--validate`, `--describe`, `pyazr.validate`, `pyazr.describe`
+  read data files relative to the project file's directory (`experiment::ProjectDirectoryOf`); the validate test
+  converts T2 beside its data.  `pyazr.rst` says what two sessions may do at once and what is still shared.  The
+  recipe "Add a diagnostic switch" is in `CLAUDE.md`.
+- Merged `feature/upgrade-4-data` at 441a0907 (no conflict).
+
+**Verified** (build `work/b-eval4`, 0 warnings; base `work/b-gecm`, reference `tab-gecm-1`): all projects x 3 bases
+identical (tag `tab-ev4-full2`: 887 / 851 / 887); the eight fits identical to the base build; T1, T2, T3, 13N at 3
+threads identical to the 1-thread reference; the converted-tree gate (tag `gev4-1`); every switch set, base against
+branch, the same outputs and the same log but for times and progress bars (`work/eval4/switch_results.tsv`);
+user-space instructions not higher on T1, T2, 13N, natural_neon calculations and T2, 13N gradient fits; `ctest -LE
+slow` 224 of 224; the slow tests 11 of 11 (`pyazr_concurrent_sessions` included; `pyazr_session_isolation` is in the
+first set); `tests/run_tests.sh` 165 passed after two tests that compare the whole `--describe` text, or ran it on a
+project away from its data, were fixed (`ratio_to_rutherford`, `units_scales`).
+
+**Open.** `api/src/AZUREAPI.cpp` (another agent's file tonight): the unused `intEC_cache` file name and the lazily
+read nuisance layout (`mutable`) stay.  The PI's decisions of `evaluation.md` section 6 (options for the *numbers*
+switches, removal of the unused ones) are not taken.
 
 ## 2026-11-13 (director, 07:32) — merged: the `gamma_decay` record on a level whose transitions have external capture
 

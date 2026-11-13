@@ -123,8 +123,8 @@ class Objective {
 // that needs a penalty's derivatives rather than its value: d/dx = 2 (x - nominal)
 // / sigma^2, curvature 2 / sigma^2.  Exactly the terms Segment::AddShiftPenalty
 // adds, so the gradient, G2 and the least-squares priors stay consistent with
-// chi^2.  The nominal is 0 for every shift term since 2026-10-25 (the file's value
-// is only the start).
+// chi^2.  The nominal is each term's prior centre, 0 unless written (the file's
+// value is only the start; docs/upgrade/parameter_kinds.md section 4).
 template <class F>
 inline void ForEachShiftPenalty(WorkingCopy *data, const ParamIndexMap &pmap, F f) {
   for (int s = 1; s <= data->Data().NumSegments(); s++) {
@@ -136,12 +136,12 @@ inline void ForEachShiftPenalty(WorkingCopy *data, const ParamIndexMap &pmap, F 
       f(idx, seg->GetNominalEnergyShift(), seg->GetEnergyShiftError());  // 0 unless a prior_centre row
     if (seg->IsVaryEnergyShiftSqrt() && seg->GetEnergyShiftSqrtError() != 0.0 && !seg->IsShiftSqrtPriorReplaced() &&
         (idx = pmap.EnergyShiftSqrtIndex(s)) >= 0)
-      f(idx, 0.0, seg->GetEnergyShiftSqrtError());
+      f(idx, seg->GetEnergyShiftSqrtCentre(), seg->GetEnergyShiftSqrtError());
     if (seg->OwnsShiftFn() && seg->HasShiftFn())
       for (int j = 0; j < seg->NumShiftFnParams(); j++)
         if (seg->IsVaryShiftFn(j) && seg->GetShiftFnErrors()[j] != 0.0 && !seg->IsShiftFnPriorReplaced(j) &&
             (idx = pmap.EnergyShiftFnIndex(s, j)) >= 0)
-          f(idx, 0.0, seg->GetShiftFnErrors()[j]);
+          f(idx, seg->GetShiftFnCentres()[j], seg->GetShiftFnErrors()[j]);
   }
 }
 
@@ -165,7 +165,7 @@ inline void ForEachDensityPrior(WorkingCopy *data, const ParamIndexMap &pmap, F 
     const TargetEffect *te = data->Data().GetDensityTargetEffect(k);
     if (te->GetDensitySigma() <= 0.0 || !te->IsDensityVaried() || te->IsDensityPriorReplaced()) continue;
     const int idx = pmap.DensityIndex(k);
-    if (idx >= 0) f(idx, te->GetDensityNominal(), te->GetDensitySigma());
+    if (idx >= 0) f(idx, te->GetDensityCentre(), te->GetDensitySigma());
   }
 }
 
@@ -177,7 +177,7 @@ inline void ForEachDopplerPrior(WorkingCopy *data, const ParamIndexMap &pmap, F 
     const TargetEffect *te = data->Data().GetDopplerTargetEffect(k);
     if (te->GetDopplerSigma() <= 0.0 || !te->IsDopplerVaried() || te->IsDopplerPriorReplaced()) continue;
     const int idx = pmap.DopplerIndex(k);
-    if (idx >= 0) f(idx, te->GetDopplerNominal(), te->GetDopplerSigma());
+    if (idx >= 0) f(idx, te->GetDopplerCentre(), te->GetDopplerSigma());
   }
 }
 
@@ -190,7 +190,7 @@ inline void ForEachThicknessPrior(WorkingCopy *data, const ParamIndexMap &pmap, 
     const Segment *seg = data->Data().GetSegment(data->Data().GetThicknessSegment(k));
     if (seg->GetThicknessSigma() <= 0.0 || !seg->IsThicknessVaried() || seg->IsThicknessPriorReplaced()) continue;
     const int idx = pmap.ThicknessIndex(k);
-    if (idx >= 0) f(idx, seg->GetNominalThickness(), seg->GetThicknessSigma());
+    if (idx >= 0) f(idx, seg->GetThicknessCentre(), seg->GetThicknessSigma());
   }
 }
 
@@ -202,7 +202,7 @@ inline void ForEachApparatusPrior(WorkingCopy *data, const ParamIndexMap &pmap, 
     const ApparatusParam &a = data->Data().GetApparatusParam(k);
     if (a.declaration.sigma <= 0.0 || !a.declaration.vary || a.priorReplaced) continue;
     const int idx = pmap.ApparatusIndex(k);
-    if (idx >= 0) f(idx, a.declaration.nominal, a.declaration.sigma);
+    if (idx >= 0) f(idx, a.declaration.centre, a.declaration.sigma);
   }
 }
 

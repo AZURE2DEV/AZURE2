@@ -42,7 +42,9 @@ bool ParameterValueEdit(const ValidationResult &validated, const ParameterSource
   }
   const Nuisance &n = v->nuisance;
   // the inverse of the reader's ToBase (Units.h): the engine's value in the unit the nuisance is written in
-  const double written = n.unit ? Rescale(engineValue, 1.0 / n.unit->factor) : engineValue;
+  const double written = !n.unit                     ? engineValue
+                         : source.engineUnit.empty() ? Rescale(engineValue, 1.0 / n.unit->factor)
+                                                     : engineValue / ToUnit(1.0, n.unit, source.engineUnit);
   if (!std::isfinite(written)) {
     why = "the value is not finite";
     return false;

@@ -233,13 +233,13 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
 #else
   return -1;
 #endif
-  if (std::getenv("AZURE_SERIAL_CHI2")) return -1;
+  if (configure.environment.serialPointPass) return -1;  // AZURE_SERIAL_CHI2
   const std::vector<int> work = PassWork(segments);
   if (azure2::NodeCheckRequested()) {
     const long differ = CheckNodeTable(theCNuc, work);
     if (differ) throw std::logic_error("AZURE_NODE_CHECK: " + std::to_string(differ) + " differ (listed above)");
   }
-  AZUREProfile::Timer profileTimer(AZUREProfile::kPoints);
+  AZUREProfile::Timer profileTimer(configure.profile, AZUREProfile::kPoints);
   // A plan task whose calculation threw: the reason (empty: none).  Its point gets NaN (Unit::MarkFailed) after the
   // pass, and its folds do not run.
   std::vector<std::string> failure(plan_.NumTasks());
@@ -260,15 +260,15 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
   }
   // The energy pass: one task per compound energy, each writing only its units' records.  A unit whose calculation
   // throws fails its plan task; the units after it are calculated with a new solve.
-  AZUREProfile::Timer setupTimer(AZUREProfile::kEnergyTaskSetup);
+  AZUREProfile::Timer setupTimer(configure.profile, AZUREProfile::kEnergyTaskSetup);
   const azure2::EnergyTaskList &tasks = plan_.EnergyTasks(*this, configure, work);
   setupTimer.Stop();
-  AZUREProfile::CountMany(AZUREProfile::kEnergyTasks, (long long)tasks.size());
+  AZUREProfile::CountMany(configure.profile, AZUREProfile::kEnergyTasks, (long long)tasks.size());
   std::vector<std::vector<std::pair<int, std::string>>> taskFailures(tasks.size());
   auto runEnergyTask = [&](int k) {
     const azure2::EnergyTask &task = tasks[k];
     const int n = task.size;
-    AZUREProfile::CountMany(AZUREProfile::kEnergyUnits, n);
+    AZUREProfile::CountMany(configure.profile, AZUREProfile::kEnergyUnits, n);
     std::vector<Site *> &units = results.scratch.ForThisThread().units;
     units.resize(n);
     for (int i = 0; i < n; i++) units[i] = &SiteAt(tasks.units[task.begin + i]);

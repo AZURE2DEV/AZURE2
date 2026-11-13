@@ -16,6 +16,7 @@ parameter (``Session.parameter_records``), never from its name.
 
 from dataclasses import dataclass, fields
 from typing import Optional
+from .errors import ParameterError, ParameterKeyError, close_names, listed
 
 
 def parameter_kinds():
@@ -202,14 +203,15 @@ class Parameter:
 
         if int(round(type_code)) == 6:
             # an isotopic abundance: Z rides in the jgroup field, A in the level
-            # field, the 1-based sample in the channel field and the prior sigma
-            # in the Wigner-limit field (AZUREAPI.h); the sample's name in the
-            # record (owner)
+            # field, the 1-based sample in the channel field, the prior centre in
+            # the level-energy field and the prior sigma in the Wigner-limit field
+            # (AZUREAPI.h); the sample's name in the record (owner)
             return cls(
                 index=index, name=name, kind=kind,
                 fixed=bool(round(fixed)), value=float(value), free_index=free_index,
                 nucleus_Z=int(round(jgroup)), nucleus_A=int(round(level)),
-                prior_sigma=float(wigner_limit), sample=owner.get("sample_name"),
+                prior_nominal=float(level_energy), prior_sigma=float(wigner_limit),
+                sample=owner.get("sample_name"),
                 sample_index=int(round(channel)) if channel >= 1 else None,
             )
 
@@ -279,6 +281,8 @@ class Parameter:
             parity=_opt(parity, integer=True, sentinel=0.0),
             level=_opt(level, integer=True),
             level_energy=_opt(level_energy, sentinel=0.0) if type_code in (0, 1, 13) else None,
+            # an apparatus parameter: the prior centre in the level-energy field (its sigma in the Wigner-limit one)
+            prior_nominal=float(level_energy) if code == 12 else None,
             channel=_opt(channel, integer=True),
             L=_opt(L, integer=True),
             S=_opt(S),
@@ -544,7 +548,8 @@ class PairSet(list):
         for p in self:
             if p.number == number:
                 return p
-        raise KeyError(number)
+        raise ParameterKeyError(f"no pair {number!r} (the pair numbers: {[p.number for p in self]}); "
+                                f"azure2.pairs lists the pairs.")
 
     def __repr__(self):
         return f"PairSet({len(self)} pairs)"
@@ -596,9 +601,10 @@ class ParameterSet(list):
         elif values.size == idx.size:
             out[idx] = values
         else:
-            raise ValueError(
+            raise ParameterError(
                 f"put() got {values.size} value(s) for {idx.size} free "
-                f"parameter(s) in this set.")
+                f"parameter(s) in this set; give one number for all, or one per free parameter in "
+                f"this set's order (set.free lists them).")
         return out
 
     # -- filtered views -------------------------------------------------------
@@ -641,26 +647,27 @@ class ParameterSet(list):
 
     @property
     def screenings(self):
-        """The electron-screening potentials U_e (eV), one per <targetInt> line with a ``screening``
-        block (none otherwise)."""
+        """The electron-screening potentials U_e (eV), one per ``target`` record whose ``screening`` is ``fit``
+        (none otherwise)."""
         return ParameterSet(p for p in self if p.kind == "screening")
 
     @property
     def densities(self):
-        """The fitted target densities (atoms/cm^2), one per <targetInt> line with a ``densityfit`` block or
-        per ``densitygroup`` (none otherwise)."""
+        """The fitted areal densities of the active nucleus (atoms/cm^2), one per ``target`` record whose
+        ``areal_density`` is ``fit`` (a target shared by several data sets has one; none otherwise)."""
         return ParameterSet(p for p in self if p.kind == "density")
 
     @property
     def dopplers(self):
-        """The fitted free-gas Doppler temperatures (K), one per <targetInt> line with ``doppler T vary sigma``
-        (none otherwise)."""
+        """The fitted free-gas Doppler temperatures (K), one per ``target`` record whose ``doppler free_gas``
+        value is ``fit`` (none otherwise)."""
         return ParameterSet(p for p in self if p.kind == "doppler")
 
     @property
     def thicknesses(self):
-        """The fitted sample thicknesses (atoms/barn), one per data segment whose ``transmission`` / ``yield``
-        block has the fit form ``n vary sigma`` (none otherwise); a ``thicknessgroup`` follower's is fixed."""
+        """The fitted sample thicknesses (atoms/barn), one per ``target`` record of ``kind sample`` (of a
+        ``transmission`` or ``neutron_yield`` data set) whose ``areal_density ... atoms/b`` is ``fit`` (none
+        otherwise); data sets that share the target share the parameter."""
         return ParameterSet(p for p in self if p.kind == "thickness")
 
     @property
@@ -668,8 +675,8 @@ class ParameterSet(list):
         """The sqrt(E) energy-shift coefficients, one per segment.
 
         Segment energies are shifted as E' = E + a + b*sqrt(E/MeV); these are
-        the b's (MeV^1/2), fixed at 0 unless the segment line carries a
-        ``sqrtshift`` block.
+        the b's (MeV^1/2), fixed at 0 unless the data set's ``shift`` (or its
+        ``energy_scale`` record) has a ``sqrt`` term.
         """
         return ParameterSet(p for p in self if p.kind == "shift_sqrt")
 
@@ -696,11 +703,16 @@ class ParameterSet(list):
     # -- lookups --------------------------------------------------------------
 
     def by_name(self, name):
-        """The parameter with this name."""
+        """The parameter with this name (:attr:`Parameter.name`).
+
+        Raises :class:`pyazr.ParameterKeyError` (a ``KeyError``) naming the close names when none has it."""
         for p in self:
             if p.name == name:
                 return p
-        raise KeyError(name)
+        names = [p.name for p in self]
+        raise ParameterKeyError(f"no parameter named {name!r} among the {len(names)} of this set"
+                                f"{close_names(name, names)}; the names are Parameter.name, e.g. "
+                                f"{listed(names, 6)}; print(parameters.table()) lists them all.")
 
     def by_physical_level(self):
         """Group the R-matrix parameters (energy + widths) into physical levels.

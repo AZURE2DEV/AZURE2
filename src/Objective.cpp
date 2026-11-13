@@ -436,7 +436,7 @@ void AppendModelRows(CNuc *compound, const Config &config, const ParamIndexMap *
   // gamma_decay priors and the remainder's wall: r and dr/dq (GammaDecaySet::PenaltyRows).
   for (const GammaDecaySet::PenaltyRow &row : compound->GetGammaDecays().PenaltyRows(*compound))
     appendRow(row.r, nullptr, &row.d);
-  // Abundances: ((sum w) - 1)/s per sample with s > 0; d/dw_k = 1/s on every abundance of the sample.
+  // Abundances: ((sum w) - c)/s per sample (c the sum's centre, 1 unless written) with s > 0; d/dw_k = 1/s on every abundance of the sample.
   if (compound->HasAbundanceBlock()) {
     for (int smp = 1; smp <= compound->NumSamples(); smp++) {
       const double s = compound->SampleSumSigma(smp, config.abundanceSumSigma);
@@ -448,7 +448,7 @@ void AppendModelRows(CNuc *compound, const Config &config, const ParamIndexMap *
           compound->AbundanceOf(k, sample, nucleus);
           if (sample == smp) direct.push_back({pmap->AbundanceIndex(k), 1.0 / s});
         }
-      appendRow((compound->AbundanceSum(smp) - 1.0) / s, nullptr, &direct);
+      appendRow((compound->AbundanceSum(smp) - compound->GetSample(smp)->sumCentre) / s, nullptr, &direct);
     }
   }
 }
