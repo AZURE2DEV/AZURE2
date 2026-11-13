@@ -33,8 +33,7 @@ class AZURECalcMCMC {
    */
   AZURECalcMCMC(WorkingCopy *data, CNuc *compound, const Config &configure) :
     configure_(configure),
-    parametersInitialized_(false),
-    pools_initialized_(false) {
+    parametersInitialized_(false) {
     data_ = data;
     compound_ = compound;
   };
@@ -195,10 +194,7 @@ class AZURECalcMCMC {
    */
   vector_r ReconstructFullParameters(const std::vector<double> &varyingParams) const;
 
-  /*!
-   * Object pool management methods
-   */
-  void InitializePools() const;
+  /// The copies an evaluation runs on (AZURECalc::GetPooledCNuc): an idle one or a new clone, returned after use.
   CNuc *GetPooledCNuc() const;
   WorkingData *GetPooledData() const;
   void ReturnPooledCNuc(CNuc *obj) const;
@@ -238,11 +234,10 @@ class AZURECalcMCMC {
   /// physical-parameter run (the prior is in the param.sav space, the RWA one).
   bool SetUpPriorCovariance(bool useRWA) const;
 
-  // Object pools for memory reuse
+  // The idle copies of GetPooledCNuc / GetPooledData
   mutable std::stack<std::unique_ptr<CNuc>> cnuc_pool_;
   mutable std::stack<std::unique_ptr<WorkingData>> edata_pool_;  // each copy with the buffer it writes
   mutable std::mutex pool_mutex_;
-  mutable bool pools_initialized_;
 };
 
 #endif

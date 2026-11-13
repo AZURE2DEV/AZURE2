@@ -92,6 +92,7 @@ TargetEffect::TargetEffect(const azure2::experiment::TargetEffectSpec &line, con
     const std::string &dopplerMaxToken = line.dopplerMaxText;
     const bool dopplerFitRead = line.dopplerFit;
     udrFile_ = line.udrFile;
+    udrOpenPath_ = configure.OpenPath(line.udrFile);
     udrFlightPath_ = line.udrFlightPath;
     udrBurstFwhm_ = line.udrBurstFwhm;
     udrChannelWidth_ = line.udrChannelWidth;
@@ -336,7 +337,7 @@ bool TargetEffect::LoadUdrTable(double eMinLab, double eMaxLab, std::ostream &lo
   if (udrTable_ && udrTable_->file == udrFile_ && !udrTable_->energy.empty() &&
       udrTable_->loadedMin <= keepMin && udrTable_->loadedMax >= keepMax)
     return true;
-  std::unique_ptr<std::istream> inStream = InputFiles::Open(udrFile_, cached);
+  std::unique_ptr<std::istream> inStream = InputFiles::Open(udrOpenPath_, cached);
   std::istream &in = *inStream;
   if (!in) {
     log << "ERROR: cannot open the user-defined resolution file " << udrFile_ << std::endl;

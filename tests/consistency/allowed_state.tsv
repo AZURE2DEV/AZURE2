@@ -20,7 +20,6 @@ include/AZURECalc.h	output_data_	mutable	pending (milestone 3, an evaluation wri
 include/AZURECalc.h	output_mutex_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): pooled working copies and the snapshot copies of a fit
 include/AZURECalc.h	output_results_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): pooled working copies and the snapshot copies of a fit
 include/AZURECalc.h	pool_mutex_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the pooled CNuc copies of a fit and their lock
-include/AZURECalc.h	pools_initialized_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the pooled CNuc copies of a fit and their lock
 include/AZURECalcMCMC.h	all_indexes	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/AZURECalcMCMC.h	all_physical_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/AZURECalcMCMC.h	all_rwa_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
@@ -33,7 +32,6 @@ include/AZURECalcMCMC.h	paramNames_	mutable	pending (milestone 4, CNuc split; th
 include/AZURECalcMCMC.h	parametersInitialized_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/AZURECalcMCMC.h	physical_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/AZURECalcMCMC.h	pool_mutex_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
-include/AZURECalcMCMC.h	pools_initialized_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/AZURECalcMCMC.h	priorCov_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/AZURECalcMCMC.h	priorMeans_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/AZURECalcMCMC.h	priorStds_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
@@ -92,10 +90,10 @@ src/ECTable.cpp	g_lookups	namespace	pending (milestone 5, the diagnostics record
 src/ECTable.cpp	g_maxDeviation	namespace	pending (milestone 5, the diagnostics record): EC table counters and AZURE2_EC_TABLE_CHECK statistics
 src/ECTable.cpp	g_nodes	namespace	pending (milestone 5, the diagnostics record): EC table counters and AZURE2_EC_TABLE_CHECK statistics
 src/ECTable.cpp	g_nodesReport	namespace	pending (milestone 5, the diagnostics record): EC table counters and AZURE2_EC_TABLE_CHECK statistics
-src/InputFiles.cpp	g_bytes	namespace	pending (milestone 2, no process-wide pointers): the bytes of input files read by pyazr sessions, keyed by path and stamp; the session's file store later
-src/InputFiles.cpp	g_files	namespace	pending (milestone 2, no process-wide pointers): the bytes of input files read by pyazr sessions, keyed by path and stamp; the session's file store later
-src/InputFiles.cpp	g_mutex	namespace	pending (milestone 2, no process-wide pointers): the bytes of input files read by pyazr sessions, keyed by path and stamp; the session's file store later
-src/InputFiles.cpp	g_stats	namespace	pending (milestone 2, no process-wide pointers): the bytes of input files read by pyazr sessions, keyed by path and stamp; the session's file store later
+src/InputFiles.cpp	g_bytes	namespace	table: the bytes of input files read with cacheInputFiles, keyed by absolute path and file stamp (size, modification time), immutable once read, behind a lock; a changed file has a new stamp and is read again; cache_stats() counts the process (the director, 2026-11-12)
+src/InputFiles.cpp	g_files	namespace	table: the bytes of input files read with cacheInputFiles, keyed by absolute path and file stamp (size, modification time), immutable once read, behind a lock; a changed file has a new stamp and is read again; cache_stats() counts the process (the director, 2026-11-12)
+src/InputFiles.cpp	g_mutex	namespace	table: the bytes of input files read with cacheInputFiles, keyed by absolute path and file stamp (size, modification time), immutable once read, behind a lock; a changed file has a new stamp and is read again; cache_stats() counts the process (the director, 2026-11-12)
+src/InputFiles.cpp	g_stats	namespace	table: the bytes of input files read with cacheInputFiles, keyed by absolute path and file stamp (size, modification time), immutable once read, behind a lock; a changed file has a new stamp and is read again; cache_stats() counts the process (the director, 2026-11-12)
 src/Profile.cpp	g_calls	namespace	pending (milestone 5, the diagnostics record): AZURE_PROFILE accounting
 src/Profile.cpp	g_count	namespace	pending (milestone 5, the diagnostics record): AZURE_PROFILE accounting
 src/Profile.cpp	g_depth	namespace	pending (milestone 5, the diagnostics record): AZURE_PROFILE accounting

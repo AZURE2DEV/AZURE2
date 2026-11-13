@@ -15,6 +15,7 @@
 
 #include "CNuc.h"
 #include "Config.h"
+#include "CoulombTable.h"
 #include "ECTable.h"
 #include "ExternalCaptureExit.h"
 #include "WorkingCopy.h"
@@ -242,6 +243,12 @@ std::string WorkingCopy::ECSignature(CNuc *theCNuc, const Config &configure) {
   // Added only when on, so every non-relativistic file keeps its signature and is not recomputed; a relativistic
   // run no longer reads back a file written without the switch (2026-10-27, checklist t3-25).
   if (configure.relativistic) hash.Add("relativistic");
+  // The Coulomb waves of the integrals come from the Coulomb table when one is used and can be read (CoulFunc), else
+  // from the exact functions.  The table is named by what it holds (CoulombTable::ContentIdentity: header and a hash
+  // of its values), not by its file, so a copy of the same table elsewhere reuses this file, and a table with other
+  // values, or none, does not (tests/ec_table_signature).
+  const CoulombTable *table = configure.useCoulombTable ? CoulombTable::Shared(configure.coulombTablePath) : nullptr;
+  hash.Add(table ? ("coulomb table " + table->ContentIdentity()).c_str() : "exact Coulomb functions");
 
   std::set<int> pairs;
   hash.Add("data segments");
@@ -359,7 +366,7 @@ int WorkingCopy::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
   bool usePrevious = (configure.paramMask & Config::USE_PREVIOUS_INTEGRALS) != 0;
   if (usePrevious) {
     long long expected = CountECAmplitudes(theCNuc, configure);
-    std::ifstream check(configure.integralsfile.c_str());
+    std::ifstream check(configure.OpenPath(configure.integralsfile).c_str());
     if (!check) {
       configure.outStream << "Could not open external capture file '"
                           << configure.integralsfile
@@ -383,7 +390,7 @@ int WorkingCopy::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
   }
   if (usePrevious) {
     std::string sigFile = ECSignaturePath(configure.integralsfile);
-    std::ifstream sigIn(sigFile.c_str());
+    std::ifstream sigIn(configure.OpenPath(sigFile).c_str());
     std::string recorded, line;
     while (sigIn && std::getline(sigIn, line)) {
       std::istringstream fields(line);
@@ -419,15 +426,15 @@ int WorkingCopy::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
   ECTable::ResetCounters();
 
   if (usePrevious)
-    in.open(configure.integralsfile.c_str());
+    in.open(configure.OpenPath(configure.integralsfile).c_str());
   else {
     // The signature is written only once the file is complete, after the
     // leaves are appended (InitializeLeaves).  Remove
     // the old one first, so that a run interrupted part way leaves a file
     // with no signature -- which is recomputed -- rather than one whose old
     // signature still vouches for it.
-    std::remove(ECSignaturePath(outputfile).c_str());
-    out.open(outputfile.c_str());
+    std::remove(configure.OpenPath(ECSignaturePath(outputfile)).c_str());
+    out.open(configure.OpenPath(outputfile).c_str());
     if (!out) configure.outStream << "Could not write to EC Amplitude File." << std::endl;
     // Every digit (17 significant): the default 6 left a run that reads the file back ~1e-6 off the run that
     // wrote it (tests/13N chi2 by 0.62, 2026-10-30).

@@ -31,7 +31,7 @@ void WorkingCopy::PrintData(const Config &configure) {
   std::filebuf fbuffer;
   if (configure.fileCheckMask & Config::CHECK_DATA) {
     std::string outfile = configure.checkdir + "data.chk";
-    fbuffer.open(outfile.c_str(), std::ios::out);
+    fbuffer.open(configure.OpenPath(outfile).c_str(), std::ios::out);
     sbuffer = &fbuffer;
   } else if (configure.screenCheckMask & Config::CHECK_DATA)
     sbuffer = configure.outStream.rdbuf();
@@ -117,7 +117,7 @@ void WorkingCopy::PrintLegendreP(const Config &configure) {
   std::filebuf fbuffer;
   if (configure.fileCheckMask & Config::CHECK_LEGENDRE) {
     std::string outfile = configure.checkdir + "legendre.chk";
-    fbuffer.open(outfile.c_str(), std::ios::out);
+    fbuffer.open(configure.OpenPath(outfile).c_str(), std::ios::out);
     sbuffer = &fbuffer;
   } else if (configure.screenCheckMask & Config::CHECK_LEGENDRE)
     sbuffer = configure.outStream.rdbuf();
@@ -162,7 +162,7 @@ void WorkingCopy::PrintEDependentValues(const Config &configure, CNuc *theCNuc) 
   std::filebuf fbuffer;
   if (configure.fileCheckMask & Config::CHECK_ENERGY_DEP) {
     std::string outfile = configure.checkdir + "lomatrixandpene.chk";
-    fbuffer.open(outfile.c_str(), std::ios::out);
+    fbuffer.open(configure.OpenPath(outfile).c_str(), std::ios::out);
     sbuffer = &fbuffer;
   } else if (configure.screenCheckMask & Config::CHECK_ENERGY_DEP)
     sbuffer = configure.outStream.rdbuf();
@@ -226,7 +226,7 @@ void WorkingCopy::PrintCoulombAmplitude(const Config &configure, CNuc *theCNuc) 
   std::filebuf fbuffer;
   if (configure.fileCheckMask & Config::CHECK_COUL_AMPLITUDES) {
     std::string outfile = configure.checkdir + "coulombamplitudes.chk";
-    fbuffer.open(outfile.c_str(), std::ios::out);
+    fbuffer.open(configure.OpenPath(outfile).c_str(), std::ios::out);
     sbuffer = &fbuffer;
   } else if (configure.screenCheckMask & Config::CHECK_COUL_AMPLITUDES)
     sbuffer = configure.outStream.rdbuf();

@@ -1,5 +1,6 @@
 #include "InputFiles.h"
 #include "DataCovariance.h"
+#include "azure2/experiment/ProjectPaths.h"
 
 #include <algorithm>
 #include <cmath>
@@ -13,8 +14,9 @@
 
 namespace DataCovariance {
 
-std::shared_ptr<File> Read(const std::string &path, std::string &err, bool cached) {
+std::shared_ptr<File> Read(const std::string &path, const std::string &baseDirectory, std::string &err, bool cached) {
   azure2::experiment::CovarianceFileAccess access;
+  access.resolve = [&baseDirectory](const std::string &file) { return azure2::experiment::PathToOpen(baseDirectory, file); };
   access.open = [cached](const std::string &file) { return InputFiles::Open(file, cached); };
   return azure2::experiment::ReadCovarianceFile(path, access, err);
 }

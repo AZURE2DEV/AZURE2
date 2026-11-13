@@ -414,6 +414,58 @@ bool CoulombTable::LookupBound(int l, double etaB, double rhoB, double &S) const
   return std::isfinite(S);
 }
 
+namespace {
+// 64-bit hash of a stream of 8-byte words: MurmurHash3's 64-bit mixing step per word and its finaliser (Appleby,
+// public domain), so that a change of any bit of any word moves every bit of the result.
+class WordHash {
+ public:
+  void Add(std::uint64_t word) {
+    word *= 0x87c37b91114253d5ULL;
+    word = (word << 31) | (word >> 33);
+    word *= 0x4cf5ad432745937fULL;
+    h_ ^= word;
+    h_ = (h_ << 27) | (h_ >> 37);
+    h_ = h_ * 5 + 0x52dce729;
+    ++count_;
+  }
+  std::uint64_t Final() const {
+    std::uint64_t h = h_ ^ count_;
+    h ^= h >> 33;
+    h *= 0xff51afd7ed558ccdULL;
+    h ^= h >> 33;
+    h *= 0xc4ceb9fe1a85ec53ULL;
+    h ^= h >> 33;
+    return h;
+  }
+
+ private:
+  std::uint64_t h_ = 0x9e3779b97f4a7c15ULL;
+  std::uint64_t count_ = 0;
+};
+}  // namespace
+
+const std::string &CoulombTable::ContentIdentity() const {
+  std::call_once(identity_->once, [this] {
+    WordHash hash;
+    for (const Sheet &s : sheets_) {
+      hash.Add(s.f.size());
+      for (double v : s.f) {
+        std::uint64_t word;
+        std::memcpy(&word, &v, sizeof word);
+        hash.Add(word);
+      }
+    }
+    char hex[32];
+    std::snprintf(hex, sizeof hex, "%016llx", static_cast<unsigned long long>(hash.Final()));
+    char head[256];
+    std::snprintf(head, sizeof head, "format %d order %d lmax %d eta %.17g %.17g %d rho %.17g %.17g %d etarho %.17g ",
+                  static_cast<int>(kFormat), order_, lMax_, eta_.x0, eta_.dx, eta_.n, rho_.x0, rho_.dx, rho_.n,
+                  etaRhoMax_);
+    identity_->text = std::string(head) + "generator '" + generator_ + "' values " + hex;
+  });
+  return identity_->text;
+}
+
 bool CoulombTable::Save(const std::string &path) const {
   std::ofstream out(path, std::ios::binary);
   if (!out) return false;

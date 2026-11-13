@@ -21,7 +21,6 @@
 #include <sstream>
 #include <string>
 #include <map>
-#include <thread>
 #include <algorithm>
 #include <cstdlib>
 #include <cstdio>
@@ -56,12 +55,7 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
   WorkingData *working = nullptr;
 
   try {
-    // Initialize pools on first use
-    if (!pools_initialized_) {
-      InitializePools();
-    }
-
-    // Get objects from pool
+    // An evaluation of its own (made when no idle one is left: one per walker evaluated at the same time).
     localCompound = GetPooledCNuc();
     working = GetPooledData();
     localData = working->data.get();
@@ -121,12 +115,7 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
   AZUREParams params;
 
   try {
-    // Initialize pools on first use
-    if (!pools_initialized_) {
-      InitializePools();
-    }
-
-    // Get objects from pool
+    // An evaluation of its own (made when no idle one is left: one per walker evaluated at the same time).
     localCompound = GetPooledCNuc();
     working = GetPooledData();
     localData = working->data.get();
@@ -874,7 +863,7 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
             // Write param.mcmc snapshot: all RWA parameters (including fixed), analogous to param.sav
             if (!rwaFullParams.empty() && rwaFullParams.size() == g_param_names.size()) {
               std::string paramMCMCFile = g_mcmc_for_callbacks->configure().outputdir + "param.mcmc";
-              std::ofstream paramOut(paramMCMCFile);
+              std::ofstream paramOut(g_mcmc_for_callbacks->configure().OpenPath(paramMCMCFile));
               if (paramOut) {
                 paramOut.precision(7);
                 // Tagged like param.sav (the amplitudes are this run's basis);
@@ -929,7 +918,6 @@ std::vector<std::string> AZURECalcMCMC::ParkNonPositiveLevels(const std::vector<
   std::vector<std::string> labels;
   filled = false;
   if (!parametersInitialized_) return labels;
-  if (!pools_initialized_) InitializePools();
   CNuc *lc = GetPooledCNuc();
   try {
     if (useRWA) {
@@ -998,7 +986,7 @@ bool AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
     int startStep = 0;
 
     // Check if samples file exists for resuming
-    std::ifstream existingFile(samplesFile);
+    std::ifstream existingFile(configure().OpenPath(samplesFile));
     if (existingFile.good()) {
       configure().outStream << "Found existing samples file: " << samplesFile << "\n";
       configure().outStream << "Counting existing samples for resume capability...\n";
@@ -1029,13 +1017,13 @@ bool AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
 
         resuming = true;
         configure().outStream << "Resuming from step " << startStep << "\n";
-        csvFile.open(samplesFile, std::ios::app);
+        csvFile.open(configure().OpenPath(samplesFile), std::ios::app);
       }
     }
 
     if (!resuming) {
       // Create new CSV file with enhanced header
-      csvFile.open(samplesFile, std::ios::out);
+      csvFile.open(configure().OpenPath(samplesFile), std::ios::out);
       csvFile << "step,walker,logprob,loglikelihood,logprior";
       for (int i = 0; i < ndim; i++) {
         csvFile << ",param" << i;
@@ -1086,7 +1074,7 @@ bool AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
     // Resuming continues the ensemble where it stopped, when that state is
     // available and matches this model; otherwise fall back to a fresh ball.
     const std::string walkerStateFile = configure().outputdir + "walkers.mcmc";
-    if (resuming && load_walker_state(walkerStateFile, nwalkers, ndim, initial_positions)) {
+    if (resuming && load_walker_state(configure().OpenPath(walkerStateFile), nwalkers, ndim, initial_positions)) {
       configure().outStream << "Resumed walker positions from " << walkerStateFile << "\n";
     } else {
       if (resuming) {
@@ -1168,7 +1156,7 @@ bool AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
             << "at its start with acceptance 0.  MCMC not started.\n";
         report(msg.str());
         csvFile.close();
-        if (!resuming) std::remove(samplesFile.c_str());  // only its header was written
+        if (!resuming) std::remove(configure().OpenPath(samplesFile).c_str());  // only its header was written
         return false;
       }
     }
@@ -1238,7 +1226,7 @@ bool AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
       for (size_t k = 0; k < finalWalkers.size(); k++) {
         finalPositions.push_back(finalWalkers[k].getPos());
       }
-      if (!save_walker_state(walkerStateFile, finalPositions)) {
+      if (!save_walker_state(configure().OpenPath(walkerStateFile), finalPositions)) {
         configure().outStream << "Warning: could not write walker state to "
                               << walkerStateFile << "; a later resume will restart "
                               << "the walkers instead of continuing them.\n";
@@ -1312,7 +1300,7 @@ bool AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
 void AZURECalcMCMC::LoadExistingSamples(const std::string &filename, std::vector<std::vector<double>> &samples) const {
   samples.clear();
 
-  std::ifstream file(filename);
+  std::ifstream file(configure().OpenPath(filename));
   if (!file.good()) {
     configure().outStream << "Warning: Could not open samples file for loading: " << filename << "\n";
     return;
@@ -1355,29 +1343,6 @@ void AZURECalcMCMC::LoadExistingSamples(const std::string &filename, std::vector
   }
 
   configure().outStream << "Loaded " << samples.size() << " existing samples from " << filename << "\n";
-}
-
-/*!
- * Initialize object pools with pre-allocated CNuc and WorkingCopy objects
- */
-void AZURECalcMCMC::InitializePools() const {
-  std::lock_guard<std::mutex> lock(pool_mutex_);
-  if (pools_initialized_) return;
-
-  // Calculate pool size based on available hardware threads
-  const int pool_size = std::max(4, static_cast<int>(std::thread::hardware_concurrency() * 2));
-
-  // Pre-allocate CNuc objects by cloning once
-  for (int i = 0; i < pool_size; ++i) {
-    cnuc_pool_.push(std::unique_ptr<CNuc>(compound_->Clone()));
-  }
-
-  // Pre-allocate WorkingCopy objects by cloning once
-  for (int i = 0; i < pool_size; ++i) {
-    edata_pool_.push(std::unique_ptr<WorkingData>(new WorkingData{std::unique_ptr<WorkingCopy>(data_->Clone()), {}}));
-  }
-
-  pools_initialized_ = true;
 }
 
 /*!

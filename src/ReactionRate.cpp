@@ -468,7 +468,7 @@ void RunTabulatedRateCalculation(const std::vector<double> &temps,
     double z1 = entrancePair->GetZ(1);
     double z2 = entrancePair->GetZ(2);
     std::string gridFile = configure.outputdir + "cross_section_grid.dat";
-    std::ofstream gout(gridFile.c_str());
+    std::ofstream gout(configure.OpenPath(gridFile).c_str());
     if (gout) {
       gout << std::setw(26) << "E_cm[MeV]"
            << std::setw(26) << "CrossSection"
@@ -610,7 +610,7 @@ void ReactionRate::CalculateRates() {
  */
 
 void ReactionRate::CalculateFileRates() {
-  std::ifstream inFile(configure().rateParams.temperatureFile.c_str());
+  std::ifstream inFile(configure().OpenPath(configure().rateParams.temperatureFile).c_str());
   if (!inFile) {
     configure().outStream << "Couldn't open temperature file." << std::endl;
     return;
@@ -636,7 +636,7 @@ void ReactionRate::CalculateFileRates() {
 void ReactionRate::WriteRates() {
   std::string outputfile = configure().outputdir + "reactionrates.out";
   std::ofstream out;
-  out.open(outputfile.c_str());
+  out.open(configure().OpenPath(outputfile).c_str());
   if (out) {
     out << std::setw(20) << "T9" << std::setw(20) << "Rate" << std::endl;
     for (int i = 0; i < rates_.size(); i++) {

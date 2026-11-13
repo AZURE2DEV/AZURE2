@@ -538,7 +538,7 @@ void getParameterFile(bool useReadline, Config &configure) {
     if (!getInputLine(useReadline, "External Parameter File (leave blank for new file): ", inFile)) return;
     if (!inFile.empty()) {
       std::ifstream in;
-      in.open(inFile.c_str());
+      in.open(configure.OpenPath(inFile).c_str());  // a name typed at a prompt is relative to the project, as its paths
       if (in) {
         validInfile = true;
         configure.paramMask |= Config::USE_PREVIOUS_PARAMETERS;
@@ -599,7 +599,7 @@ void getTemperatureFile(bool useReadline, Config &configure) {
       inputEnded(configure, "Temperature File Name");
     if (!inFile.empty()) {
       std::ifstream in;
-      in.open(inFile.c_str());
+      in.open(configure.OpenPath(inFile).c_str());  // a name typed at a prompt is relative to the project, as its paths
       if (in) {
         validInfile = true;
         configure.rateParams.temperatureFile = inFile;
@@ -921,7 +921,7 @@ void getExternalCaptureFile(bool useReadline, Config &configure) {
       if (!getInputLine(useReadline, "External Capture Amplitude File (leave blank for new file): ", inFile)) return;
       if (!inFile.empty()) {
         std::ifstream in;
-        in.open(inFile.c_str());
+        in.open(configure.OpenPath(inFile).c_str());
         if (in) {
           validInfile = true;
           configure.paramMask |= Config::USE_PREVIOUS_INTEGRALS;
@@ -1373,10 +1373,10 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
     // Handle overwriting existing samples.mcmc file if requested
     if (mcmcParams.overwriteSamples) {
       std::string samplesFile = configure.outputdir + "samples.mcmc";
-      std::ifstream checkFile(samplesFile.c_str());
+      std::ifstream checkFile(configure.OpenPath(samplesFile).c_str());
       if (checkFile.good()) {
         checkFile.close();
-        if (std::remove(samplesFile.c_str()) == 0) {
+        if (std::remove(configure.OpenPath(samplesFile).c_str()) == 0) {
           configure.outStream << "Removed existing samples.mcmc file." << std::endl;
         } else {
           configure.outStream << "Warning: Could not remove existing samples.mcmc file." << std::endl;

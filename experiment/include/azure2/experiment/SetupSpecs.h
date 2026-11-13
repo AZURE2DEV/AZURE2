@@ -185,7 +185,7 @@ struct ExtrapolationSpec {
   std::vector<double> angles;    ///< angles of the grid (deg; lab, or c.m. for the c.m. observables), in order; the
                                  ///< energies are repeated at each angle
   int maxAngDistOrder = 0;       ///< AngularDistribution: highest Legendre order
-  std::string gridFile;          ///< a `file` energy grid: the path as opened ("" for the other grids)
+  std::string gridFile;          ///< a `file` energy grid: the path as written ("" for the other grids)
   /// An adaptive energy grid (project_format3.md section 3.8): `energies` holds its start grid, the uniform grid of
   /// start_step over [minE, maxE] (lab), which the extrapolation run refines at the run's parameters
   /// (src/AdaptiveExtrapolation.cpp with experiment/AdaptiveGrid.h).

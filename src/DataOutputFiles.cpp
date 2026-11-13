@@ -47,7 +47,7 @@ static void WriteNaturalDecomposition(WorkingCopy &data, const Config &configure
                                       int kinflag, const std::vector<std::string> &nucleusLabels, const Segment *segment) {
   std::string name = configure.outputdir + "AZUREOut_sample_seg=" + std::to_string(segment->GetSegmentKey()) +
                      (isExtrap ? ".extrap" : ".out");
-  std::ofstream out(name.c_str());
+  std::ofstream out(configure.OpenPath(name).c_str());
   if (!out) return;
   out << "# Segment " << segment->GetSegmentKey() << ": abundance-weighted sum over compound nuclei (sample "
       << segment->GetNaturalToken() << ")" << std::endl;
@@ -93,7 +93,7 @@ static void WriteBandLine(std::ostream &o, double energy, double excitation,
 void WorkingCopy::WriteOutputFiles(const Config &configure, azure2::Results &results, bool isFit, const BandData *band) {
   // use kinflag.dat to control output option
   std::ifstream kinoption;
-  kinoption.open("kinflag.dat");
+  kinoption.open(configure.OpenPath("kinflag.dat"));
   int kinflag = 0;  // 0 cm output, 1 lab output
   if (kinoption) {
     kinoption >> kinflag;
@@ -121,7 +121,10 @@ void WorkingCopy::WriteOutputFiles(const Config &configure, azure2::Results &res
 
 void WorkingCopy::WriteSegmentFiles(const Config &configure, const azure2::Results &results, int kinflag,
                               const BandData *band) {
-  AZUREOutput output(configure.outputdir);
+  // The files are opened under the output directory as resolved (Config::OpenPath), a prefix ending in '/'.
+  std::string outputPrefix = configure.OpenPath(configure.outputdir);
+  if (!outputPrefix.empty() && outputPrefix.back() != '/') outputPrefix += '/';
+  AZUREOutput output(outputPrefix);
   if (!(configure.paramMask & Config::CALCULATE_WITH_DATA)) output.SetExtrap();
 
   // When a covariance is available, write a sibling ".band" file per output file,
@@ -137,7 +140,7 @@ void WorkingCopy::WriteSegmentFiles(const Config &configure, const azure2::Resul
     name += output.IsExtrap() ? ".extrap.band" : ".out.band";
     std::ofstream &f = bandFiles[name];
     if (!f.is_open()) {
-      f.open(name.c_str());
+      f.open(configure.OpenPath(name).c_str());
       f.precision(10);
     }
     return f.is_open() ? &f : nullptr;
@@ -301,7 +304,7 @@ void WorkingCopy::WriteSegmentFiles(const Config &configure, const azure2::Resul
 void WorkingCopy::WriteChiSquaredFile(const Config &configure, const azure2::Results &results) {
   std::ofstream chiOut;
   std::string chiOutFile = configure.outputdir + "chiSquared.out";
-  chiOut.open(chiOutFile.c_str());
+  chiOut.open(configure.OpenPath(chiOutFile).c_str());
   chiOut << "Segment#," << " Chi-Squared, " << " N, " << " Norm, " << " Norm-Chi-Squared " << std::endl;
 
   double totalChiSquared = 0.;
@@ -417,7 +420,7 @@ void WorkingCopy::WriteNormalizationsFile(const Config &configure, const azure2:
     if (segment->IsVaryNorm()) isVaryNorm = true;
   if (isVaryNorm) {
     std::string outputfile = configure.outputdir + "normalizations.out";
-    std::ofstream out(outputfile.c_str());
+    std::ofstream out(configure.OpenPath(outputfile).c_str());
     if (out) {
       out.precision(4);
       out << std::scientific;
@@ -465,7 +468,7 @@ void WorkingCopy::WriteShiftsFile(const Config &configure, const azure2::Results
   // Write energy shifts file
   if (isVaryEnergyShift) {
     std::string outputfile = configure.outputdir + "shifts.out";
-    std::ofstream out(outputfile.c_str());
+    std::ofstream out(configure.OpenPath(outputfile).c_str());
     if (out) {
       out.precision(4);
       out << std::scientific;

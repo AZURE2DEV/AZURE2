@@ -31,8 +31,9 @@ class TargetStopping {
   TargetStopping(const azure2::experiment::StoppingSpec &, const std::string &formula, const std::vector<double> &parameters,
                  const Config &);
   /// The library part alone (evaluation, table), for --validate and --describe, which have no Config: a formula spec
-  /// gives a stopping that is not to be evaluated (only Provenance and Check are meaningful).
-  explicit TargetStopping(const azure2::experiment::StoppingSpec &);
+  /// gives a stopping that is not to be evaluated (only Provenance and Check are meaningful).  A table file is
+  /// relative to \p projectDirectory (azure2::experiment::PathToOpen).
+  TargetStopping(const azure2::experiment::StoppingSpec &, const std::string &projectDirectory);
   Source GetSource() const { return source_; }
   bool IsLibrary() const { return source_ != Source::Formula; }
   /// epsilon_active at lab energy \p eLab (MeV), lab MeV cm^2.  Outside the library's range (or without SRIM's data) a
@@ -64,18 +65,20 @@ class TargetStopping {
   azure2::stopping::Projectile projectile_;
   double activeFraction_ = 1.0;
   std::string error_;
-  void SetUpLibrary(const azure2::experiment::StoppingSpec &);
+  void SetUpLibrary(const azure2::experiment::StoppingSpec &, const std::string &projectDirectory);
 };
 
 /*!
  * --validate and --describe (ProjectCommands.cpp): for every target effect of a built project whose stopping comes from
  * the library, its source (Provenance, with SRIM's citation) as text, and a diagnostic (StoppingChecks.h) when the
- * library cannot give it at all (SRIM's data files missing, a table unreadable).  \p effects are the built specs.
+ * library cannot give it at all (SRIM's data files missing, a table unreadable).  \p effects are the built specs, their
+ * table files relative to \p projectDirectory.
  */
 struct StoppingReport {
   std::string text;
   std::vector<azure2::experiment::Diagnostic> refusals;
 };
-StoppingReport ReportTargetStoppings(const std::vector<azure2::experiment::TargetEffectSpec> &effects);
+StoppingReport ReportTargetStoppings(const std::vector<azure2::experiment::TargetEffectSpec> &effects,
+                                     const std::string &projectDirectory);
 
 #endif

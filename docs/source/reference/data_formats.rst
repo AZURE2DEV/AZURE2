@@ -103,7 +103,7 @@ comments and free-form numbers (any whitespace, line breaks anywhere)::
      ...
 
 - The ``file`` lines come first. Each names a data file (path relative to the
-  directory AZURE2 runs in, as on the segment line) and its number of data
+  project file's directory, as on the segment line) and its number of data
   rows, counted as AZURE2 reads them: lines that are neither blank nor
   comments. The rows of the matrix are these data rows, file after file; a
   count that does not match the file is an error. ``size N`` may follow as

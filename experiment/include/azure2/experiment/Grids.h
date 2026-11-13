@@ -40,7 +40,7 @@ struct GridValues {
   bool ok = false;
   std::vector<double> values;  ///< MeV (lab) or deg, in order
   double lo = 0.0, hi = 0.0;   ///< the grid's bounds, as the segment reports them (range: lo and hi as written)
-  std::string file;            ///< a file grid: the path as opened
+  std::string file;            ///< a file grid: the path as written (opened relative to GridSettings::projectDir)
   const char *code = nullptr;  ///< when not ok: the diagnostic code (Diagnostics.h)
   std::string error;           ///< when not ok: why
 };

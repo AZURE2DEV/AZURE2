@@ -43,17 +43,17 @@ int main() {
   const azure2::stopping::Projectile p = azure2::stopping::Ion(1, 1.007825, "1H");
   for (double e : {0.1, 0.5, 2.0}) {
     // Ta2O5, 18O active: per formula unit 2 eps_Ta + 5 eps_O, five O atoms
-    const TargetStopping ta2o5(Spec("Ta2O5", {{73, 2.0}, {8, 5.0}}, 8));
+    const TargetStopping ta2o5(Spec("Ta2O5", {{73, 2.0}, {8, 5.0}}, 8), "");
     const double hand = 1e-21 * (2.0 * ElementInSolid(73, p, e) + 5.0 * ElementInSolid(8, p, e)) / 5.0;
     Check("Ta2O5, 18O active, E = " + std::to_string(e) + " MeV", ta2o5.LibraryPerActiveNucleus(e), hand, 1e-14);
     // TiN, 14N active: per formula unit eps_Ti + eps_N, one N atom
-    const TargetStopping tin(Spec("TiN", {{22, 1.0}, {7, 1.0}}, 7));
+    const TargetStopping tin(Spec("TiN", {{22, 1.0}, {7, 1.0}}, 7), "");
     const double handTiN = 1e-21 * (ElementInSolid(22, p, e) + ElementInSolid(7, p, e)) / 1.0;
     Check("TiN, 14N active, E = " + std::to_string(e) + " MeV", tin.LibraryPerActiveNucleus(e), handTiN, 1e-14);
   }
   // the value the command-line tool prints for p (1.007825 u) in TiN at 0.5 MeV: 12.00133921 eV/(1e15 atoms/cm^2) per
   // atom of TiN, i.e. 2 x 12.00133921e-21 MeV cm^2 per N atom
-  const TargetStopping tin(Spec("TiN", {{22, 1.0}, {7, 1.0}}, 7));
+  const TargetStopping tin(Spec("TiN", {{22, 1.0}, {7, 1.0}}, 7), "");
   Check("TiN at 0.5 MeV against azure2-stopping's 12.00133921 per atom", tin.LibraryPerActiveNucleus(0.5),
         2.0 * 12.00133921e-21, 1e-9);
   if (failures) {
