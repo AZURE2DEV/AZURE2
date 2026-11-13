@@ -84,3 +84,25 @@ public names are a contract.
 `tests/pyazr/CMakeLists.txt`, with `OMP_NUM_THREADS=2` and `LABELS slow` if it
 takes more than a minute. Without the engine module, a test prints `skip:` and
 exits 0. Read the output and confirm it says `ok`, not `skip`.
+
+## The web UI's server (`pyazr/ui`)
+
+A subpackage `import pyazr` does not load (it needs fastapi and uvicorn: the extra `web`). Design and status:
+`docs/upgrade/web_ui.md` (section 11.1 is what is built). An agent that works beside the user on the user's live
+project starts or reuses the server and asks it what it serves:
+
+```bash
+python -m pyazr.ui project.azr --port 28400 --token "$TOKEN"   # prints http://127.0.0.1:28400/?token=...
+curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:28400/api/describe   # every route, its call, status
+```
+
+The URL of a running server is in `.<name>.ui/url` beside the project (mode 0600). Every edit carries the revision
+it was made on (`"rev"`); refusals are JSON with `error`, `message` and the engine's `diagnostics`. An agent that
+does not need the user's live state uses pyazr directly.
+
+- `engine.py` is the only file that names today's class `azure2`; when pyazr 3.0's `Session` lands, only it
+  changes. Every public method of `azure2` is either called there or listed in `AZURE2_NOT_SERVED` with a reason.
+- A route is one row of `routes.ROUTES`; a job kind one row of `jobs.JOBS`. No file of `pyazr/ui` names a data,
+  record or parameter kind of the engine (`tests/pyazr/ui/routes_consistency_test.py` checks all of this).
+- The server never builds a session (a build holds the GIL); workers are separate processes and die with it.
+- Tests: `tests/pyazr/ui/*_test.py` (pytest files run as scripts, `ctest -R pyazr_ui`).
