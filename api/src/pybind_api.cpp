@@ -841,16 +841,6 @@ void BindErrors(py::module_ &m) {
   });
 }
 
-std::vector<std::string> ModuleNamesInOrder(py::module_ &m) {
-  std::vector<std::string> out;
-  for (auto item : py::reinterpret_borrow<py::dict>(m.attr("__dict__"))) out.push_back(py::str(item.first));
-  return out;
-}
-std::set<std::string> ModuleNames(py::module_ &m) {
-  const std::vector<std::string> names = ModuleNamesInOrder(m);
-  return std::set<std::string>(names.begin(), names.end());
-}
-
 }  // namespace
 
 PYBIND11_MODULE(_azure2, m) {
@@ -863,15 +853,7 @@ PYBIND11_MODULE(_azure2, m) {
   gsl_set_error_handler(&GSLException::GSLErrorHandler);
 
   BindErrors(m);
-  {
-    // The names BindPhysics adds are the table of bound physics functions (pyazr.kinds()["physics"]).
-    const std::set<std::string> before = ModuleNames(m);
-    BindPhysics(m);
-    py::list physics;
-    for (const std::string &name : ModuleNamesInOrder(m))
-      if (!before.count(name)) physics.append(name);
-    m.attr("physics_functions") = py::tuple(physics);
-  }
+  BindPhysics(m);  // pybind_physics.cpp: the table of physics functions (physics_functions(), physics_evaluate)
   BindThm(m);  // pybind_thm.cpp: the engine's reading of a <thm> block
 
   m.def(

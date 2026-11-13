@@ -2,6 +2,77 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-physics`) — pyazr: the physics table and `pyazr.physics`
+
+**Done** (no engine number changed; the Python formulas untouched).
+- `api/src/pybind_physics.cpp`: one table of physics functions, 24 rows (name, arguments with unit, kind and domain,
+  returns with units, doc, library function, plot axis, adapter); one template evaluates a row element-wise on
+  arrays with a status per element (0; k > 0 argument k outside its domain; -2 the arguments together; -1 not
+  converged); `_azure2.physics_functions()` (the rows, strict JSON) and `_azure2.physics_evaluate`.  The seven
+  functions bound one by one before (`sfactor_conversion`, `modified_sfactor_conversion`, `statistical_factor`,
+  `resonance_strength`, `branching_ratio`, `rutherford_cross_section`, `mott_cross_section`; `whittaker` is the
+  row `whittaker_wave`) are rows now, with the THM plane-wave vertex `thm_vertex_function`; their callers
+  (`nds.sfactor_to_cross_section`, four tests) follow.
+- `physics/Widths.h` (`wigner_limit`, `single_particle_width`, `photon_penetrability`) with `physics_widths`; the
+  engine's `AChannel::SetWignerLimit` and the photon branch of the level parameters call the first and the last.
+- `pyazr/physics.py`: one function per row, built at import (signature, numpydoc docstring with units and domains,
+  broadcasting, scalars stay scalars, `DomainError` naming argument, value, element and domain; `errors="mask"`
+  for NaN and the status array; `status_text`, `functions`, `table()`).  `pyazr.kinds()["physics"]` = the rows,
+  `kinds()["stopping"]` the stopping functions (they were mixed into "physics").
+- `pyazr/session_physics.py`: `channel_functions(pair, e_cm, l, radius, J)` mixed into the session class (two
+  edited lines of `azure2.py`); `coulomb_functions` stays as the old name.  The rename step should move the method
+  into `session.py` (or keep the mixin as a base of `Session`) and drop `coulomb_functions`.
+- `tools/gen_physics_docs.py` writes `docs/source/user_guide/physics_functions.rst` from the rows (the test checks
+  it is current); consistency check 41: every row is named by a `row_test` (shown to fail without one).
+- Test `pyazr_physics_table`: every row against mpmath, the engine's own use on 13N (P, S, phi bit for bit with the
+  session's exact Coulomb routine, `Parameter.wigner_limit` bit for bit) and the Python formula it replaces.
+
+**Measured first: the functions of `pyazr3.md` 2.7, before this branch.**
+
+| function | library function | bound before | domain | outside it before |
+|---|---|---|---|---|
+| sommerfeld_eta, wave_number | `ChannelFunctions.h` `eta`, `rho` | no | E > 0 | inf at 0, NaN below |
+| lab/cm energies | `experiment/Frames.h` `BeamToCM`, `BeamLabFromCM` | no | E >= 0 | a number of the formula |
+| lab_to_cm angle, J | `Frames.h` `ElasticLabToCM`, `ReactionLabToCM` | no | forward branch | false + reason |
+| coulomb_waves | `coulomb/Coulomb.h` `coulomb` | through a session, at the radius | l 0-10000, rho > 0 | status, NaN |
+| coulomb_phase | `Coulomb.h` `coulomb_phase` | no | l >= 0 | NaN |
+| whittaker_wave | `coulomb/Whittaker.h` `whittaker_scaled` | `_azure2.whittaker` | eta_b >= 0, rho > 0 | status, NaN |
+| P, S, phi, dS/dE | `ChannelFunctions.h` `penetrability`, `shift`, ... | session only | E > 0 | session: zeros |
+| wigner_limit | `AChannel::SetWignerLimit` (engine member) | per channel | mu, a > 0 | 0 |
+| single_particle_width | none (Python: `wigner_widths` probe) | no | E > 0 | -- |
+| weisskopf_width | none | no | -- | -- |
+| resonance, Coulomb, S factor (7) | `ResonanceQuantities.h`, ... | one by one | E > 0 | inf, NaN |
+| THM vertex W_l(p) | `transfer/ThmVertex.h` `PlaneWaveSurfaceVertex` | no | p, a > 0 | NaN |
+| bound_state, distorted_wave, momentum distr. | `transfer/BoundState.h`, `DistortedWaves.h` | no | potentials | -- |
+| global optical sets | `transfer/GlobalOptical.h` | `thm_global_opticals` (list) | -- | -- |
+
+The 17 Python formulas and their rows: `pyazr3.md` section 1.3 (the largest difference per formula).
+
+**Added after review.** The web UI's two physics routes served (`pyazr/ui/physics.py`, one server method, one adapter
+method, two rows of `routes.py`): `POST /api/physics/{fn}` in the server's process (no session; the C++ loop releases
+the GIL), `POST /api/session/channel_functions` in the session worker; both at most 20000 elements per request
+(`physics.MAX_ELEMENTS`). `GET /api/physics` is `kinds()["physics"]`. A refusal of the server raised in a worker
+(`Refused`) is now 422 (`errors.STATUS`). `coulomb_functions` is listed in `engine.AZURE2_NOT_SERVED` as the older name.
+Test `pyazr_ui_physics_routes` (registered above the block that must stay last).
+Verified on the merge with d1b193db (no C++ changed after 94eb4828): build 0 warnings; the consistency test; ctest -R
+pyazr_ui -j1 8 of 8; ctest -LE slow 237 of 238, the failure pyazr_ui_smoke on T2 with the two known "Failed to fetch"
+requests of the Data tab, passing on three reruns of it alone; T1, T2, T3, 13N x 3 bases identical to tab-t50-1; the
+routes-consistency test shown to fail with a missing row naming an existing call.
+
+**Verified** (after merging the data branch at 3298f372): build 0 warnings; all projects × 3 bases identical to
+`tab-t50-1` (887 / 851 / 887, tag `tab-physics-2`); the eight fits identical to `trial50`; `ctest -LE slow` 236 of
+237 (the failure: `pyazr_ui_routes_consistency`, below); slow 11 of 11; `tests/run_tests.sh` 166 passed, 0 failed.
+- `pyazr_ui_routes_consistency` failed by its own design once the calls existed; it passes since the two routes are
+  served (below).
+
+**Open.**
+- Not bound: `level_matrix` (the engine hands out no R or U matrix without new code in `AZUREAPI`), the transfer
+  functions that take potentials and return functions of r (bound states, distorted waves, momentum distributions),
+  the Weisskopf width (no engine function: new physics, a decision for the director), the reaction rate and the
+  covariance band (session quantities).
+- Found, not changed (library accuracy, `pyazr3.md` 1.6): S good to about 3e-9 absolute; the engine's dS/dE 9.5e-6
+  relative at p + 12C, l = 0, 3.42 MeV, against the 1e-8 `ChannelFunctions.h` states.
+
 ## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-records`) — pyazr: parameters and pairs as the engine's records
 
 **Done** (no engine number changed; the binding and pyazr only, and one comment of `include/ParameterKind.h`).
