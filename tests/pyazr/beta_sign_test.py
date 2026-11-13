@@ -51,7 +51,7 @@ except Exception as err:                                  # engine not built
 
 COMMON = dict(ignore_externals=True, use_long_wavelength=False)
 MODES = (("brune", dict(use_brune=True)),
-         ("park", dict(use_brune=False, use_park=True)),
+         ("park", dict(use_park=True)),  # Park implies Brune on
          ("standard", dict(use_brune=False)))
 
 for label, opts in MODES:

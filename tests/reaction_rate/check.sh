@@ -9,10 +9,11 @@
 #   (b) n12C       neutron entrance, sigma ~ 1/v: sigma was zero below 1 keV, 49 % low at
 #                  T9 = 0.01 (now from 0.1 eV; audit F2);
 #   (c) p12C_closed the per-temperature quadrature, the fallback of a grid with fewer than three points of
-#                  sigma > 0: p12C with an exit pair 3, p + 12C in a (fictitious) state at 48 MeV, which opens
-#                  at E_cm = 48 MeV, between the grid's last two nodes (47.66 and 50 MeV), so the grid has one
-#                  point of sigma > 0; the rate into pair 3 at T9 = 2 to 10 (temperatures_closed.dat) equals the
-#                  integral of the dense extrapolation (closed_truth.py) to 1e-5, and the run says it fell back;
+#                  sigma > 0: made from p12C by closed_model.py, p12C with an exit pair 3, p + 12C in a
+#                  (fictitious) state at 48 MeV, which opens at E_cm = 48 MeV, between the grid's last
+#                  two nodes (47.66 and 50 MeV), so the grid has one point of sigma > 0; the rate into
+#                  pair 3 at T9 = 2 to 10 (temperatures_closed.dat) equals the integral of the dense
+#                  extrapolation (closed_model.py --truth) to 1e-5, and the run says it fell back;
 #   (d) moved      a 22 eV wide 1/2+ level at E_x = 2.0935 MeV in the .azr, evaluated with the
 #                  parameter file of the same model at 2.0985 MeV (expected/moved.par): the grid
 #                  clusters followed the .azr value, the resonance fell between backbone nodes
@@ -56,7 +57,8 @@ rate() {
   local model="$1" par="$2" exit_key="${3:-2}" entrance_key="${4:-1}" d="$WORK/$1"
   [ -n "${3:-}" ] && d="$WORK/$1.x$exit_key"
   mkdir -p "$d/output" "$d/checks"
-  cp "$HERE/models/$model.azr" "$d/t.azr"
+  if [ "$model" = p12C_closed ]; then python3 "$HERE/closed_model.py" "$HERE/models/p12C.azr" > "$d/t.azr"
+  else cp "$HERE/models/$model.azr" "$d/t.azr"; fi
   cp "$HERE/${TEMPERATURES:-temperatures.dat}" "$d/temperatures.dat"
   [ -n "$par" ] && cp "$HERE/expected/$par" "$d/"
   (cd "$d" && printf '5\n%s\n%s\n%s\nyes\ntemperatures.dat\n' "$par" "$entrance_key" "$exit_key" |

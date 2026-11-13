@@ -129,7 +129,7 @@ with tempfile.TemporaryDirectory() as tmp:
         tag = "table" if table else "exact"
         print(f"\nCoulomb table {'on' if table else 'off'}")
         work = stage(tmp, tag)
-        M = azure2(os.path.join(work, "park_dsde.azr"), cwd=work, use_brune=False, use_park=True,
+        M = azure2(os.path.join(work, "park_dsde.azr"), cwd=work, use_park=True,  # Park implies Brune on
                    use_coulomb_table=table)
         P = M.parameters
         levels = [(p.jgroup, p.level, p.J, p.parity, p.value) for p in P if p.kind == "energy"]  # park_norms order

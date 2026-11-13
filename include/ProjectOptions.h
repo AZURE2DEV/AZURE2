@@ -51,7 +51,8 @@ bool ApplyProjectOptions(Config &config, const azure2::io::ConfigSection &sectio
 bool OptionsOfRun(const std::string &projectText, const std::vector<std::string> &args, Config &config);
 /// A description of the project (experiment::DescribeText or DescribeJson) with the options of `config` after it: the
 /// JSON member "options" (OptionsJson), in the text the lines "options of the calculation (value, source):" and
-/// OptionsText, for every project.  AZURE2 --describe and pyazr.describe give the same text.
+/// OptionsText, for every project (an empty text, which describes nothing, stays empty).  AZURE2 --describe and
+/// pyazr.describe give the same text.
 std::string WithOptions(const std::string &described, bool json, const Config &config);
 
 /// "  use_brune = 1 (default)" per option, one line each, in the table's order.

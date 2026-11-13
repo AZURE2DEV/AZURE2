@@ -49,7 +49,7 @@ try:
         os.makedirs(os.path.join(d, "output")); os.makedirs(os.path.join(d, "checks"))
         shutil.copytree(os.path.join(SRC, "data"), os.path.join(d, "data"))
         shutil.copy(os.path.join(SRC, "13N.azr"), os.path.join(d, "13N.azr"))
-        kw = dict(use_park=True, use_brune=False) if mode == "park" else {}
+        kw = dict(use_park=True) if mode == "park" else {}  # Park implies Brune on
         M = azure2(os.path.join(d, "13N.azr"), cwd=d, **kw)
         x0 = np.asarray(M.params_rwa, float).copy()
         kinds = {p.free_index: p.kind for p in M.parameters if p.free_index is not None and not p.fixed}

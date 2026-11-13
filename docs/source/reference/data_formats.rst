@@ -875,7 +875,8 @@ stated accuracy for the projectile class (H 4.0 %, He 3.9 %, Li 4.8 %, heavier
 stopping comes from, with the citation.  Refusals: ``E_STOPPING_ACTIVE`` (the active
 element not in the composition), ``E_STOPPING_PROJECTILE`` (a neutral projectile),
 ``E_STOPPING_SCALE_CONFLICT``, ``E_STOPPING_DATA`` (the build has no SRIM data files
-and ``AZURE2_SRIM_DATA_DIR`` names none; a table that cannot be read),
+and neither ``--srim-data-dir=DIR`` nor ``AZURE2_SRIM_DATA_DIR`` names a directory
+with them; a table that cannot be read),
 ``E_STOPPING_RANGE`` (an energy outside a table).  The test is
 ``tests/stopping_yield`` (README: the numbers against LunaSRIM).
 
