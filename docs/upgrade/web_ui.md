@@ -665,26 +665,95 @@ extrapolations on dense grids (`/api/evaluate/grid`); the reaction rate against 
 ### 6.6 Physics
 
 One generated form and one plot per row of the physics table (`pyazr3.md` 2.7), plus the per-session functions.
-Routes: `/api/physics*`, `/api/session/channel_functions`, `/level_matrix`, `/api/stopping/*`, `/api/data/{name}/grid`
+Routes: `/api/physics*`, `/api/session/channel_functions`, `/level_matrix`, `/api/stopping*`, `/api/data/{name}/grid`
 and `/kernel`.
 
 ```
 ┌ Physics ──────────────────────────────────────────────────────────────────────────────────────────┐
-│ function [coulomb_waves ▾]   search [        ]                                                     │
-│   kinematics · Coulomb · channel functions · widths · resonance quantities · transfer/THM ·       │
-│   stopping · this project: channel functions, level matrix, data-set grid and kernel              │
-│ ─ coulomb_waves(l, eta, rho, method) ─ "F, G, F′, G′ on ρ, by every method of pycoulomb" ───────  │
-│ l    [0] … [3]  (integer ≥ 0)                                                                      │
-│ eta  [0.5]                       (≥ 0)                                                             │
-│ rho  range [0.01] – [20] points [400] [log]   ← the plotted axis                                   │
-│ method [all ▾]                                                                                     │
-│ ┌ F_l, G_l against ρ, one line per l and method ───────────────────────────────────────────────┐   │
-│ └──────────────────────────────────────────────────────────────────────────────────────────────┘   │
-│ status: 400 of 400 elements ok                         [Export (CSV)] [SVG] [Copy as Python]       │
+│ search [        ]          │ coulomb_waves(l, eta, rho, method)                                     │
+│ kinematics                 │ F, G, F′, G′ and σ_l at (l, η, ρ), by every method of pycoulomb        │
+│   sommerfeld_eta …         │ plot against [rho ▾]                                                   │
+│ Coulomb functions          │ rho   from [0.01] to [20]   points [400] (≤ 5000 for 4 lines) [log ▾]  │
+│ ▸ coulomb_waves            │ l     [0 1 2 3]   (several values: one line each)                      │
+│ channel functions …        │ eta   [0.5]                                                            │
+│ stopping …                 │ method [coulsm ▾]                                    [Plot] [Defaults] │
+│ this project               │ ┌ F, Fp, G, Gp against rho, one line per l ──────────────────────────┐ │
+│   channel_functions        │ └────────────────────────────────────────────────────────────────────┘ │
+│                            │ 1580 of 1600 elements computed; rho outside its domain (finite > 0): 20│
+│                            │ fields [x] F [x] Fp [x] G [x] Gp [ ] sigma   [log x] [log y]            │
+│                            │ [Export (CSV)] [SVG] [PNG] [Copy as Python]                            │
+│                            │ import numpy as np … pyazr.physics.coulomb_waves(l=…, rho=np.geomspace…)│
 └────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-"Copy as Python" gives the pyazr call that makes the same arrays: the page teaches the API.
+**The list.** The rows of `GET /api/physics` (the binding's physics table), of the stopping table (`GET
+/api/stopping`, the second part of this step) and of the session's functions (`GET /api/session/functions`), grouped
+by the row's `group` in the table's order, the session's under "this project"; a search box filters by name,
+summary and group. A row of any table appears in the list and gets its form with no line of JavaScript.
+
+**What the rows must say** (the smallest addition to the table, made in `api/src/pybind_physics.cpp`, binding code
+only, read by `kinds()` unchanged): per row a `group` (the comment lines of the table become a field); per argument
+an `example` (a typical value: the form's start value where the argument has no `default`) and, for an argument a
+plot may run over, a `sweep` (`lower`, `upper`, `spacing` linear or log: the range of a first plot). The row's `axis`
+has a sweep; every argument without a default has an example or is the axis (`physics_table_test.py` checks both).
+A list of defaults in JavaScript was the alternative and is not taken: the row would not be complete for an agent.
+
+**How a row becomes a form.** A form of the existing generator (`forms.js` `describeForm`, drawn by `formview.js`):
+the tab writes the row as a record kind of a schema of its own, one field per argument, with these value types (one
+table, `ARGUMENT_KINDS` in `physicsform.js`, maps an argument kind to its field):
+
+- the axis (the row's `axis`; the selector offers every argument with a `sweep`): a `range` field (from, to, the
+  unit shown), `points` (an `integer`; the bound shown is the route's 20000 elements divided by the number of
+  lines) and `spacing` (`enum` linear / log, the sweep's by default); an integer axis takes every whole number from
+  `from` to `to` and has no points;
+- a real argument: a `number_list` (one value, or several separated by blanks: one line each);
+- an integer: an `integer` box (also several values: `0 1 2 3` gives four lines);
+- a choice (`method`): an `enum` of its choices and "all" (one line per choice);
+- a flag: an `enum` of 0, 1 and "both";
+- a pair of the project (the session's functions): an `enum` of the project's pairs (`GET /api/project/pairs`).
+
+Start values: the argument's `default`, else its `example`; the axis from its `sweep` with 200 points. Every row
+plots without typing. Several values of several arguments give the product of their lines (at most 24); each list
+is a broadcast dimension of its own, in the order of the row, the axis the last.
+
+**The request and the answer.** `POST /api/physics/{fn}` with `{"arguments": {...}}`: a list argument as a nested list
+of the shape that broadcasts (`l: [[0], [1], [2], [3]]`), a choice list by names, the axis as `{"from", "to",
+"points", "spacing"}`, which the server turns into the array with numpy (`linspace`, `geomspace`, `arange` for an
+integer axis): the page makes no number. The answer adds `arguments` (each argument as used, the axis expanded) and
+`python`, the text of the call that makes the same arrays.
+
+**The plot.** One plot per unit of the returned fields shown (checkboxes, all shown at first); one trace per field
+and line, named by the line's values (`F, l = 2`); an element whose status is not 0 is a gap (null in the trace,
+never a zero) and is counted under the plot. The status line: "N of M elements computed", then for each status that
+occurs its words (`status_words` of the answer) and its count. Log x and log y on request (log x at first where the
+spacing is log; what a log axis drops is counted). Axis titles: the argument and field names with the row's units.
+
+**Export.** CSV of exactly the arrays returned: one line per element, the arguments at that element (a choice by its
+name), every returned field to 17 significant digits ("nan" where not computed) and the status; units in the header.
+SVG and PNG of the figure through plotly's export (as the other tabs).
+
+**Copy as Python.** The answer's `python` (made by the server from the request, `pyazr/ui/physics.py`): `import numpy
+as np`, `import pyazr`, the axis as `np.linspace` / `np.geomspace` / `np.arange` of the numbers sent, a list as
+`np.array([...]).reshape(-1, 1, ...)`, and `result, status = pyazr.physics.<fn>(..., errors="mask")`; shown under the
+plot and copied by the button. The test runs the text and compares the arrays with the route's bit for bit.
+
+**The session's functions.** `channel_functions` (pair, l, radius, J, `e_cm` the axis) is a row of the same shape in
+`pyazr/ui/physics.py` (`SESSION_ROWS`: the session's methods have no table in the binding; a finding), served by
+`POST /api/session/channel_functions` in the session worker. When the project does not build, the form is drawn and
+the plot area shows the engine's refusal (what / allowed / fix) with "the functions above need no project"; the
+free functions keep working. Its Python text opens a session on the project file.
+
+**Stopping (the second part).** The stopping library's functions become rows of the same shape (arguments with unit,
+kind, domain, example and sweep; returns with units; `group` "stopping"; and the `citation` of SRIM, which the PI
+requires beside every use of the SRIM data), made by the binding with the same row types as the physics table
+(shared, not copied) and read as `kinds()["stopping"]`; a text argument (the material's formula, its phase) is a new
+argument kind, one value per call. `POST /api/stopping/{fn}` is the same generic handler as the physics route, on the
+stopping rows. Every stopping plot carries the citation under it, and the CSV and the Python text carry it too.
+
+**State (section 5).** The tab holds no model state. The form's texts per function, the axis, the fields shown and
+the log choices are page state, kept in the module while the page lives and lost on reload, as the Results tab keeps
+its view; hash parameters set them, so a view can be linked: `#/physics/coulomb_waves?axis=rho&from=-2&to=20&v.l=0 1`
+(`v.<argument>` an argument's text; `axis`, `from`, `to`, `points`, `spacing`, `fields`, `logx`, `logy`, `plot=table`).
 
 ### 6.7 THM (shown when the project has THM content)
 
