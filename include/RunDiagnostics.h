@@ -20,9 +20,11 @@ namespace azure2 {
  */
 struct RunDiagnostics {
   RunDiagnostics() = default;
-  /// Prints the Coulomb table's use (when it was used) on standard error: the run ends.  The CLI's run ends with its
-  /// process, where this line was printed before.
+  /// Finish(), unless it was called: the run ends.  The CLI's run ends with its process, where this line was printed
+  /// before.
   ~RunDiagnostics();
+  /// Prints the Coulomb table's use (when it was used) on standard error, once.
+  void Finish();
   RunDiagnostics(const RunDiagnostics &) = delete;
   RunDiagnostics &operator=(const RunDiagnostics &) = delete;
 
@@ -50,8 +52,16 @@ struct RunDiagnostics {
   /// AZURE_CHANNEL_VERIFY: the largest relative difference reported so far.
   std::mutex channelVerifyMutex;
   double channelVerifyWorst = 0.0;
+
+ private:
+  std::atomic<bool> finished_{false};
 };
 
 }  // namespace azure2
+
+class Config;
+/// Ends the process with `status` as the run ends (RunDiagnostics::Finish first): what a run that stops early calls
+/// instead of std::exit, so that its last lines are those of a run that ends.
+[[noreturn]] void ExitRun(const Config &configure, int status);
 
 #endif

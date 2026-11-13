@@ -1,5 +1,6 @@
 #include "Equation.h"
 #include "Config.h"
+#include "RunDiagnostics.h"
 #include <iostream>
 #include <cmath>
 #include <cstdlib>
@@ -28,7 +29,7 @@ Equation::Equation(std::string equation, int numParams, const Config &configure)
     Parse(configure);
   } else {
     configure.outStream << "Error: empty equation." << std::endl;
-    std::exit(-1);
+    ExitRun(configure, -1);
   }
 }
 
@@ -46,7 +47,7 @@ Equation::Equation(std::string equation, std::vector<double> parameters, const C
     Parse(configure);
   } else {
     configure.outStream << "Error: empty equation." << std::endl;
-    std::exit(-1);
+    ExitRun(configure, -1);
   }
 }
 
@@ -63,7 +64,7 @@ Equation::Equation(std::string equation, double parameters[], size_t arraySize, 
     Parse(configure);
   } else {
     configure.outStream << "Error: empty equation." << std::endl;
-    std::exit(-1);
+    ExitRun(configure, -1);
   }
 }
 
@@ -83,7 +84,7 @@ void Equation::Initialize(std::string equation, int numParams, const Config &con
     Parse(configure);
   } else {
     configure.outStream << "Error: empty equation." << std::endl;
-    std::exit(-1);
+    ExitRun(configure, -1);
   }
 }
 
@@ -199,7 +200,7 @@ void Equation::Parse(const Config &configure) {
     }
   } catch (SyntaxError e) {
     configure.outStream << e.what() << std::endl;
-    std::exit(-1);
+    ExitRun(configure, -1);
   }
   Compile();
 }
@@ -376,7 +377,7 @@ Equation::TokenPair Equation::GetToken(unsigned int &position, const Config &con
     return TokenPair(tempType, tempString);
   } catch (SyntaxError e) {
     configure.outStream << e.what() << std::endl;
-    std::exit(-1);
+    ExitRun(configure, -1);
   }
 }
 

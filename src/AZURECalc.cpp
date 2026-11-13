@@ -674,7 +674,7 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
       std::cerr << "[grad-check] Jacobian-path vs adjoint gradient over " << nFree << " free parameters: worst relative difference " << worst << " at idx "
                 << worstIdx << (worstIdx >= 0 ? " (" + std::to_string(grad[worstIdx]) + " vs " + std::to_string(ga[worstIdx]) + ")" : "")
                 << std::endl;
-      if (environment.Text(azure2::support::Switch::kGradCheck) == "exit") std::exit(0);
+      if (environment.Text(azure2::support::Switch::kGradCheck) == "exit") ExitRun(configure(), 0);
     }
     {
       std::lock_guard<std::mutex> lk(lastGradMutex_);
@@ -1068,7 +1068,7 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
         std::cerr << std::endl;
       }
       std::cerr.precision(prec);
-      if (gc == "exit" && !route.jacobianPathGradient) std::exit(0);  // else the caller exits after it
+      if (gc == "exit" && !route.jacobianPathGradient) ExitRun(configure(), 0);  // else the caller exits after it
     }
   }
 
