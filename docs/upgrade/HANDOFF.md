@@ -2,6 +2,26 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-9-webui-page`) — the web UI's page: Project, Nucleus, Data
+
+**Done.** `pyazr/ui/static/`: the header (project, unsaved, revision, Undo, Redo, Save, the engine's χ², status
+line), the tabs Project, Nucleus and Data, placeholders for Fit, Results, Physics, THM; forms generated from
+`pyazr.schema()` (one widget per value type in `forms.js`, layout hints in `layout.js` only); the engine's description
+beside each record; a preview plot of data and model with plotly.js 4.1.2 vendored (MIT, hash checked), a table
+without it, CSV export. Server edits: static rows and handler, the token-to-cookie redirect, a CSP header,
+`GET /api/files/{path}`. Twenty Qt items marked dropped in `qt_parity.md` (the PI, 2026-11-13). Docs: `web_ui.md`
+11.2 and findings 13–16, user guide "The web interface", `pyazr/CLAUDE.md`, `FOR_THE_OWNER.md`, `ROADMAP.md`.
+
+**How.** `ctest -R pyazr_ui` (7 tests, node on PATH: all pass); the smoke test on T1, T2, `tests/gamma_decay/
+models/record.azr`, `examples/li7_tumino2006` (THM) and `tests/reaction_rate/models/moved_azr_truth.azr` (no data
+sets: the page shows the engine's refusal), screenshots in both themes and sizes; a walk through the meeting's list
+against a server (χ² after a width edit equal to a direct pyazr session's bit for bit; Undo restores it exactly).
+No C++ changed; build 0 warnings.
+
+**Open.** Nobody has used the page in a real browser by hand. Session options read-only until they are `<config>`
+keys. No event stream (polling). Pairs add/remove, channel units, Legendre orders, a `<config>` schema wait for
+pyazr (findings 10, 13–15). The static files are not yet package data of the wheel (step 6).
+
 ## 2026-11-13 (agent, branch `feature/upgrade-9-webui-server`) — the web UI server on pyazr's errors and description
 
 **Done.** Merged `feature/upgrade-8-pyazr3-errors` into the server branch and adapted `pyazr/ui`: the status of an

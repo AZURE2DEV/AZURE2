@@ -639,6 +639,20 @@ them the two on automatic target-effect windows, which the upgrade deletes (the
 assessment is in `HANDOFF.md`). Until the merge, new physics is best written on the upgrade branch, following the
 recipes.
 
+## The web interface: the page (2026-11-13)
+
+`python -m pyazr.ui project.azr` prints a URL; the browser shows the project. The page has a header (project, unsaved
+mark, revision, Undo, Redo, Save, the engine's total χ²) and the tabs Project (file, the validator's problems with
+links, `<config>`, the session's options read-only, history, text, engine), Nucleus (pairs, levels and channels: a
+width typed in changes the χ², Undo takes it back; γ-decay and potential records) and Data (every section of the file,
+the χ² per data set, one form per record generated from the engine's schema with the engine's description beside it,
+the first rows of the data file, a preview plot of data and model). Fit, Results, Physics and THM are placeholders
+naming the step that brings them. Nothing is hand-written per record kind except which fields share a line; a new
+value type of the schema needs one widget. plotly.js 4.1.2 (the cartesian bundle, MIT licence) is vendored under
+`pyazr/ui/static/vendor/`: the page loads nothing from the network, and without plotly the plots are tables. It was
+checked with node's test runner and a headless Chrome on this machine; no person has used it in a real browser yet.
+User guide: "The web interface".
+
 ## For the maintainers to decide
 
 - **Fits and the number of threads.** Calculations are identical at any thread count. Since the gradient branch

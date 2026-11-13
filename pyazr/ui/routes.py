@@ -15,6 +15,8 @@ handlers runs it:
 - ``missing``: a call pyazr does not have yet (501 naming it, web_ui.md section 12);
 - ``later``: a route of a later step of web_ui.md section 11 (501 naming the step and today's call).
 
+The page's files are not API rows: :data:`STATIC_ROUTES` lists them, served by one generic static handler.
+
 An argument spec is ``name`` or ``name:int`` / ``name:float`` (converted); positional ``args`` are looked up in the
 path, the query, then the body; ``kwargs`` in the body (or query) and passed only when given; ``spread`` names the
 body key whose object is passed as keyword arguments (a record's fields); ``fixed`` adds constant keywords.
@@ -23,6 +25,7 @@ The consistency test (tests/pyazr/ui/routes_consistency_test.py) holds this tabl
 import dataclasses
 import json
 import math
+import os
 import warnings
 from dataclasses import dataclass, field
 
@@ -173,6 +176,9 @@ ROUTES = (
     Route("GET", "/api/sources/exfor", L, "step 2 (Data tab); today pyazr.search_exfor", "EXFOR search."),
     Route("GET", "/api/sources/ensdf/{nuclide}", L, "step 2 (Nucleus tab); today pyazr.fetch_levels", "ENSDF levels."),
     Route("GET", "/api/files", L, "step 2 (the file browser); no pyazr call", "Files inside the root."),
+    Route("GET", "/api/files/{path:path}", V, "server.Server.file_head",
+          "The first rows (query: rows, default 20) of a text file inside the root, as written.", args=("path",),
+          kwargs=("rows:int",)),
     Route("GET", "/api/events", L, "step 2 (the page); no pyazr call",
           "Server-sent events: revisions, job progress, build state."),
     # -- jobs
@@ -192,6 +198,38 @@ ROUTES = (
           "Write the job's best point into the project text (one history entry).", args=("job_id",),
           kwargs=("rev",), serves=("engine.Engine.snapshot",)),
 )
+
+# The page's static files (docs/upgrade/web_ui.md section 7), served by the generic static handler from
+# pyazr/ui/static: (path, the file under static/ or None for the path's own, doc).  Kept apart from ROUTES, which holds
+# the API (every row of ROUTES is a pyazr call or a server method; these are files).
+STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+STATIC_ROUTES = (
+    ("/", "index.html", "The page; a request with ?token= is answered by a redirect to / that sets the cookie."),
+    ("/static/{path:path}", None, "The page's modules, style sheet and the vendored plotly.js."),
+)
+STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
+                ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".txt": "text/plain; charset=utf-8"}
+
+# The Content-Security-Policy of every response.  Scripts only from the server ('self': the page's modules and the
+# vendored plotly.js; no inline script, no eval); styles from the server and inline, because plotly.js sets style
+# attributes and adds <style> elements while it draws; images also as data: and blob: URLs (plotly's PNG and SVG
+# export); requests only to the server itself; no frames, forms, objects or base URL.
+CONTENT_SECURITY_POLICY = ("default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+                           "img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; base-uri 'none'; "
+                           "form-action 'none'; frame-ancestors 'none'; object-src 'none'")
+
+
+def static_file(path):
+    """(the absolute file, its media type) of ``path`` under :data:`STATIC_DIR`; NotFound outside it or absent."""
+    from .errors import NotFound
+    full = os.path.realpath(os.path.join(STATIC_DIR, path))
+    if not full.startswith(os.path.realpath(STATIC_DIR) + os.sep) or not os.path.isfile(full):
+        raise NotFound(f"no static file {path!r}")
+    media = STATIC_TYPES.get(os.path.splitext(full)[1])
+    if media is None:
+        raise NotFound(f"{path!r}: not a file type the page serves ({', '.join(STATIC_TYPES)})")
+    return full, media
+
 
 # Public calls of pyazr.Project the table does not serve, with the reason (the consistency test needs every public
 # name of Project in a row or here).
@@ -333,6 +371,29 @@ def install(app, server):
         app.add_api_route(r.path, endpoint_of(r), methods=[r.method], summary=r.doc.split(".")[0],
                           description=f"{r.doc}\n\nCall: `{r.call}` ({r.handler}).",
                           name=f"{r.method} {r.path}", operation_id=f"{r.method.lower()}_{_slug(r.path)}")
+    for path, fixed, doc in STATIC_ROUTES:
+        app.add_api_route(path, static_endpoint_of(fixed), methods=["GET"], summary=doc.split(";")[0],
+                          include_in_schema=False, name=f"static {path}")
+
+
+def static_endpoint_of(fixed):
+    """The generic static handler: the file ``fixed`` (or the request's ``path``) of :data:`STATIC_DIR`, revalidated
+    on every load (the page and the server change together); ``?token=`` on the page is answered by a redirect to the
+    same path without it (the server's guard sets the cookie on that answer, and the token leaves the address bar)."""
+    from fastapi import Request
+    from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+
+    async def endpoint(request: Request):
+        if fixed is not None and "token" in request.query_params:
+            return RedirectResponse(request.url.path, status_code=303)
+        try:
+            full, media = static_file(fixed or request.path_params["path"])
+        except Exception as e:  # noqa: BLE001  -- a refusal is JSON, as for the API
+            status, payload = to_http(e)
+            return JSONResponse(plain(payload), status_code=status)
+        return FileResponse(full, media_type=media, headers={"Cache-Control": "no-cache"})
+
+    return endpoint
 
 
 def _slug(path):
