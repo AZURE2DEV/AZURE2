@@ -80,9 +80,9 @@ ls -la output/AZUREOut_*.out | head            # timestamps from just now
 
 ### Things that make the picture wrong without a warning
 
-- **The project's own CLI flags.** The CLI does not read Runtime Options saved with a project. Take `--use-brune`,
-  `--ignore-externals`, `--no-long-wavelength` and the rest from the project's job script; a calculate under other
-  flags draws different physics.
+- **The project's own options.** A project may state them as `<config>` keys (`use_brune=0`, ...); otherwise take
+  `--use-brune`, `--ignore-externals`, `--no-long-wavelength` and the rest from the project's job script
+  (`AZURE2 --describe` shows each option and its source); a calculate under other options draws different physics.
 - **The right parameter file.** A blank parameter file uses `<levels>` with the nominal `dataNorm`/`energyShift`
   fields of `<segmentsData>` (not n = 1); `output/param.sav` uses the fitted values, including norms and shifts. The
   two can differ by a large factor in χ² (127,588 against 96,811 on one model). Blank is right only to verify what

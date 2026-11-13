@@ -284,6 +284,16 @@ lines, which a reader that does not know a key skips:
    run with data uses it (an extrapolation or a rate ignores the key). Engines
    older than 2026-11-05 ignore the key silently.
 
+``use_brune=0|1`` and the ten other options of the calculation
+   ``use_park``, ``transform``, ``ignore_externals``, ``use_long_wavelength``,
+   ``ec_convection_current``, ``use_rmc``, ``use_gsl_coul``,
+   ``use_coulomb_table``, ``use_ec_table``, ``replace_grids``, under the names
+   of pyazr's keywords: a
+   flag on the command line or a keyword of a session wins over the key, the
+   key over the default; absent: the default, as before
+   (:ref:`options-as-config-keys`, with the flags, the defaults and the pairs
+   that are refused).
+
 The ``<levels>`` block has one line per channel of a level, 31
 whitespace-separated columns (read by ``azure2::io::LevelRow``, ``io/include/azure2/io/LevelRows.h``), and
 optionally one, two or three more:

@@ -17,11 +17,11 @@ Files, all inside the project's directory (``<name>`` the project file's name wi
 - the UI's directory ``.<name>.ui/``: ``engine/`` (the output directory of the UI's sessions), ``jobs/`` (job
   checkpoints and logs), ``snapshots/``, ``logs/``, ``url``.
 
-**Session options** (Brune, Park, transform, the Coulomb table) are not in the project file today; they are the
-session's keyword arguments, listed by the engine's table (``pyazr.kinds()["options"]``: keyword, type, default,
-the program's flag, doc).  Provisional, until they become ``<config>`` keys (web_ui.md decision 7): the server uses
-the engine's defaults; :data:`SESSION_OPTIONS` (empty) holds the values it would set instead, the one place to change
-that, and :func:`session_options` is the table with the value in use.
+**Session options** (Brune, Park, transform, the Coulomb table, ...): the options of the calculation are keys of the
+project's ``<config>`` (``docs/upgrade/project_format3.md`` section 3.12), so the text is the whole state: the
+server opens its sessions without keywords, and :func:`session_options` is the engine's table of options
+(``pyazr.kinds()["options"]``) with the value in use and its ``source``.  Setting one is the config route's edit
+(``Project.set_config``: one history entry, a new session).
 """
 import difflib
 import os
@@ -32,15 +32,23 @@ from collections import Counter
 
 from .errors import Conflict, NotFound, OutsideRoot, RevisionRequired, StaleRevision
 
-# Provisional home of the session options (web_ui.md section 5 and decision 7): the values the server sets instead of
-# the engine's defaults, by keyword of the session (none).  Not editable through the API in this step.
-SESSION_OPTIONS = {}
-
-
-def session_options():
-    """The engine's table of session options (``pyazr.kinds()["options"]``) with ``value``: the one in use."""
+def session_options(project=None, session=None):
+    """The engine's table of session options (``pyazr.kinds()["options"]``), each row with ``value`` (the one in use)
+    and ``source``: from ``session`` (``azure2.describe()``: its ``options`` and ``option_sources``) when given, else
+    from ``project``'s ``<config>`` (``"project"`` for a key it states, ``"default"`` otherwise).  An option that is
+    not project state (``data_mode``, ``coulomb_table``, ``cwd``) has its default and source ``"default"``."""
     import pyazr
-    return {k: dict(row, value=SESSION_OPTIONS.get(k, row["default"])) for k, row in pyazr.kinds()["options"].items()}
+    config = project.config() if project is not None and session is None else {}
+    out = {}
+    for keyword, row in pyazr.kinds()["options"].items():
+        value, source = row["default"], "default"
+        if session is not None and keyword in session.get("option_sources", {}):
+            value, source = session["options"][keyword], session["option_sources"][keyword]
+        elif row["key"] and row["key"] in config:
+            value, source = config[row["key"]] in ("1", "true"), "project"
+        out[keyword] = dict(row, value=value, source=source)
+    return out
+
 
 _ENCODING = ("utf-8", "surrogateescape")
 

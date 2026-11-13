@@ -332,7 +332,33 @@ def test_tables_of_the_engine(t1):
     d = t1.get("/api/describe").json()
     assert d["package"]["pyazr"] == pyazr.__version__ and d["package"]["coulomb_table"]
     assert set(d["session_options"]) == set(kinds["options"])
-    assert all(o["value"] == o["default"] for o in d["session_options"].values())
+    assert all(o["value"] == o["default"] and o["source"] == "default" for o in d["session_options"].values())
+
+
+def test_session_options_are_config_keys(t1):
+    """An option of the calculation is a <config> key (project_format3.md section 3.12): set through the config route
+    (one history entry, a new session), reported with source "project" by /api/describe and /api/session, and the
+    session computes what a direct session with the keyword computes; a contradiction is refused, the text unchanged."""
+    r0 = rev(t1)
+    r = t1.patch("/api/project/config", json={"entries": {"use_brune": "0"}, "rev": r0})
+    assert r.status_code == 200, r.text
+    assert rev(t1) != r0
+    d = t1.get("/api/describe").json()["session_options"]
+    assert d["use_brune"]["value"] is False and d["use_brune"]["source"] == "project"
+    assert d["transform"]["source"] == "default"
+    session = t1.get("/api/session").json()
+    assert session["session_options"]["use_brune"]["source"] == "project"
+    assert session["options"]["use_brune"] is False
+    e = t1.post("/api/evaluate").json()
+    import pyazr
+    with pyazr.azure2(t1.path, use_brune=False) as s:
+        assert e["objective"] == s.objective()
+    r1 = rev(t1)
+    r = t1.patch("/api/project/config", json={"entries": {"use_park": "1"}, "rev": r1})
+    assert r.status_code == 422 and "E_CONFIG_OPTIONS_CONTRADICT" in r.text, r.text
+    assert rev(t1) == r1
+    r = t1.patch("/api/project/config", json={"entries": {"use_brune": None}, "rev": r1})  # back to T1 for the others
+    assert r.status_code == 200 and t1.get("/api/describe").json()["session_options"]["use_brune"]["source"] == "default"
 
 
 def test_evaluation_carries_the_engines_notices(tmp_path):

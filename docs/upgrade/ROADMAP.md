@@ -287,6 +287,9 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
 - [x] The Results tab: the Results payload against the program's output files, plots with residuals, χ² table,
       model data, angular distributions, output files (2026-11-13). Dense model grid, lab energy, Legendre orders,
       rate and bands wait for pyazr (`web_ui.md` section 12).
+- [x] The options of the calculation are `<config>` keys (decision 7; `project_format3.md` §3.12): flag or keyword >
+      key > default, sources in `--describe` and `azure2.describe()`, contradictions refused, one table; the server's
+      provisional `SESSION_OPTIONS` gone (2026-11-13).
 - [ ] Physics tab plots every exposed physics function (`ARCHITECTURE.md` §8, `THM.md` §4).
 - [ ] pytest on `/api` with T1–T3; browser smoke tests; every item of the Qt parity checklist
       (`docs/upgrade/qt_parity.md`) ticked or dropped with a written reason.

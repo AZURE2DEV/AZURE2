@@ -1,6 +1,7 @@
 // The reading path of a format-3 project (ProjectReader.h): records -> Validate -> pairs of <levels> -> Build.
 #include "azure2/experiment/ProjectReader.h"
 
+#include <map>
 #include <set>
 #include <sstream>
 
@@ -103,6 +104,60 @@ void CheckThmExperimentNames(const io::Document &doc, const ValidationResult &va
   }
 }
 
+// "use_brune=1 (this file)" or "(the default)": an option's value and where it came from, for a message.
+std::string OptionWords(const char *name, bool on, bool written) {
+  return std::string(name) + "=" + (on ? "1" : "0") + (written ? " (this file)" : " (the default)");
+}
+
+// The options of the calculation written in <config> (project_format3.md section 3.12): every value one the engine
+// reads (E_CONFIG_OPTION_VALUE), and no two that cannot hold together, an option the file does not state taken at its
+// default (E_CONFIG_OPTIONS_CONTRADICT).  A file without option keys gets no diagnostic here.
+void CheckConfigOptions(const io::Document &doc, std::vector<Diagnostic> &out) {
+  std::size_t open = 0;
+  const io::ConfigSection config = io::ReadConfigSection(io::ConfigLinesOf(doc, open));
+  struct Written {
+    bool on;
+    int line;
+  };
+  std::map<std::string, Written> written;  // the line that wins of each option the file states
+  for (const io::ConfigEntry &e : config.entries) {
+    if (e.positional || !io::ConfigOptionNamed(e.name)) continue;
+    const int line = (int)(open + e.line) + 1;
+    bool on = false;
+    if (io::ConfigOptionValue(e.value, on)) {
+      written[e.name] = {on, line};
+      continue;
+    }
+    Diagnostic d;
+    d.code = codes::kConfigOptionValue;
+    d.line = line;
+    d.section = "config";
+    d.field = e.name;
+    d.hasFound = true;
+    d.found = e.value;
+    d.allowed = {"0", "1", "true", "false"};
+    d.message = e.name + "=" + e.value + ": an option of the calculation is 0, 1, true or false";
+    out.push_back(d);
+  }
+  auto value = [&written](const char *name) {
+    const auto w = written.find(name);
+    return w != written.end() ? w->second.on : io::ConfigOptionNamed(name)->defaultOn;
+  };
+  for (const io::ConfigOptionContradiction &c : io::ConfigOptionContradictions()) {
+    const auto a = written.find(c.a), b = written.find(c.b);
+    const bool aWritten = a != written.end(), bWritten = b != written.end();
+    if ((!aWritten && !bWritten) || value(c.a) != c.aValue || value(c.b) != c.bValue) continue;
+    Diagnostic d;
+    d.code = codes::kConfigOptionsContradict;
+    d.line = aWritten ? a->second.line : b->second.line;
+    d.section = "config";
+    d.field = aWritten ? c.a : c.b;
+    d.message = OptionWords(c.a, c.aValue, aWritten) + " with " + OptionWords(c.b, c.bValue, bWritten) +
+                " cannot hold together: " + c.why;
+    out.push_back(d);
+  }
+}
+
 }  // namespace
 
 std::vector<io::LevelRow> LevelRowsOf(const io::Document &doc, bool &ok) {
@@ -162,6 +217,7 @@ Format3Project ReadFormat3Project(const io::Document &doc, const Format3ReadOpti
       p.diagnostics.push_back(d);
     }
   }
+  CheckConfigOptions(doc, p.diagnostics);
   int buildChecks = 0;
   for (const ValidatedRecord &r : p.validated.records)
     if (r.quantity)

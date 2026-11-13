@@ -12,7 +12,9 @@ public names are a contract.
   options (type, default, CLI flag, doc), bound physics functions, error classes.  Read from the engine's tables
   (`described.py`); never add a hand-typed list of kinds in Python.
 - `azure2(...).describe()`: pairs, levels, data sets, parameters (their records: name, kind, unit, x, free, bounds,
-  owner fields), options in effect.
+  owner fields), options in effect and their sources.  The options of the calculation are `<config>` keys too
+  (`session_options.py`: a keyword given wins over the key, the key over the default; the signature's defaults are
+  unchanged, a keyword left out is not given).
 - `azure2(...).parameters` (a `Parameters`, `parameters.py`): the table of the fit parameters, one row per
   parameter, built once per session and layout from the engine's records (`Session.parameter_records()`; the pairs
   from `Session.pair_records()`).  The field names, units and kinds are one table of the binding

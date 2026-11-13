@@ -82,9 +82,15 @@ Session options
 ``azure2(file, cwd=None, data_mode=True, use_brune=True,
 ignore_externals=True, transform=True, use_long_wavelength=True,
 use_gsl_coul=False, use_rmc=False, use_park=False, ...)`` takes the runtime
-options of the CLI (:doc:`../reference/command_line`) as keywords; as on the
-CLI they are not read from the ``.azr``.  ``pyazr.kinds()["options"]`` lists
-them all with type, default, flag and meaning. ``use_park=True`` is ``--use-park``:
+options of the CLI (:doc:`../reference/command_line`) as keywords.  All but
+``cwd``, ``data_mode`` and ``coulomb_table`` are also keys of the project's
+``<config>`` under the same name (:ref:`options-as-config-keys`): a keyword
+given wins over the key, the key over the default the signature shows, and a
+keyword left out is not given.  ``session.options`` holds the values in
+effect, ``session.option_sources`` where each came from (``"default"``,
+``"project"``, ``"keyword"``); ``Project.set_config(use_brune=False)`` writes
+``use_brune=0``.  ``pyazr.kinds()["options"]`` lists them all with type,
+default, ``<config>`` key, flag and meaning. ``use_park=True`` is ``--use-park``:
 ``params_rwa`` then holds Park's amplitudes, ``park_norms()`` gives every
 level's overlap :math:`J`, and ``basis`` is 0, 1 or 2 (standard, Brune, Park:
 the ``#parametrization`` tag of ``param.sav``). With ``transform=False``

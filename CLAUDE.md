@@ -287,6 +287,21 @@ The objective gets no new term: T9, `ModelDataTerm`, evaluates every row of `<mo
 
 **A CLI flag.** `parseOptions`, `printHelp` and `docs/source/reference/command_line.rst` [check 1].
 
+**An option of the calculation** (a switch a project's result depends on: a formalism, an approximation, a numerical
+method; `docs/upgrade/project_format3.md` §3.12). It is a `<config>` key, a flag and a pyazr keyword under one name.
+1. One `Option(name, flag, negation, default, effect, doc)` row of `io::ConfigKeys()` (`io/src/ConfigSection.cpp`);
+   the program's parser and `--help` (`ApplyOptionFlag`, `printOptionFlags`), `--describe`, `set_config`,
+   `pyazr.kinds()["options"]` and the web UI read it there [check 1; `io_config_section`]. A flag that sets another
+   option too, or a pair that cannot hold together, is a row of `ConfigOptionImplications()` /
+   `ConfigOptionContradictions()`.
+2. Its place in `Config` (a bit of `paramMask` or a bool member): one row of `OptionStorages()` in
+   `src/ProjectOptions.cpp` [`upgrade_project_options`: a row without one, or a default unlike `Config::Reset`, fails].
+3. Its keyword in `pyazr.azure2.__init__`'s signature and docstring (with the row's default) [`pyazr_describe`].
+4. Its case, both values, in `tests/config_options/check.sh` (key = flag) and `tests/pyazr/config_options_test.py`
+   (key = keyword); its line in the table of `docs/source/reference/command_line.rst`.
+An option that is not project state (a file or directory of this machine, the menu's mode) is a field of
+`RuntimeOptions` with its row and reason in `NotProjectOptionRows()` (`api/src/pybind_describe.cpp`).
+
 **A new regression check** (`tests/<name>/check.sh`; `tests/CLAUDE.md` for the house pattern). A variant of a
 project is made on its format-3 records, and every edit must be shown to bite: an edit that matches nothing leaves
 the variant equal to the base, and the check then compares a run with itself and passes without testing anything.

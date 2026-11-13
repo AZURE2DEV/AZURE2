@@ -481,8 +481,9 @@ live session uses pyazr directly; the API is for working beside the user, on wha
 - **Derived state**: the session (rebuilt when the text differs from the text it was built from), the evaluation
   (recomputed when the session or `x` changes), the working vector `x` (reset to `x0` on a rebuild, except the values
   of parameters of the same name, which the server carries over).
-- **Session options** (Brune, Park, transform, Coulomb table, ...) are not in the project file today: they are
-  program flags and session arguments. For "the project is the state" they need a home (decision 7).
+- **Session options** (Brune, Park, transform, Coulomb table, ...) are keys of `<config>` (decision 7, built
+  2026-11-13: `project_format3.md` §3.12): setting one is a project edit through the config route (a history entry,
+  a new session); the server opens its sessions without keywords, so the project's key or the default decides.
 
 **Which edits rebuild, and what that costs** (2.1, 2.2):
 
@@ -783,7 +784,8 @@ What must know of a new thing under this design:
   exists).
 - **A kind of plot**: one function in `plots.js`, one row of the plot table, one smoke-test step.
 - **A kind of job**: one row of `jobs.py` (its pyazr call, settings, progress fields) and its test.
-- **A session option**: none. The Project tab's options come from `kinds()["options"]`.
+- **A session option**: none. The Project tab's options come from `kinds()["options"]`; an option of the calculation
+  is a `<config>` key, edited with the other entries.
 
 ## 11. The order of work
 
@@ -878,9 +880,11 @@ killed with SIGKILL during a fit end within 0.05 s (`PR_SET_PDEATHSIG`).
    sends the names of the class and its bases. `what` is the whole message; `allowed` and `fix` come from the first
    error diagnostic of a FormatError and are empty otherwise: pyazr's messages hold the three parts as one text, not
    as attributes (finding 9 stands).
-9. *Session options*: the engine's table (`pyazr.kinds()["options"]`: keyword, type, default, flag, doc) with the
-   value in use, in `GET /api/describe` and `GET /api/session`; the server uses the defaults. `SESSION_OPTIONS` in
-   `state.py` is the provisional place of other values (decision 7 not taken); not editable through the API.
+9. *Session options*: the engine's table (`pyazr.kinds()["options"]`: keyword, key, type, default, flag, effect,
+   doc) with the value in use and its `source` ("default", "project"), in `GET /api/describe` (from the project's
+   `<config>`) and `GET /api/session` (from the session). Since decision 7 the options of the calculation are
+   `<config>` keys: edited with `PATCH /api/project/config` like any entry (a contradiction is refused with the
+   engine's code); the provisional `SESSION_OPTIONS` is gone.
 10. *Workers* are `python -m pyazr.ui.workers` processes speaking JSON lines (not `multiprocessing`: no resource
     tracker process, a thread count per worker through its environment); every worker is started from one
     long-lived thread, since `PR_SET_PDEATHSIG` follows the thread that started the process.
@@ -1184,6 +1188,8 @@ Each with the options, the recommendation and what changing it later costs.
 7. **Where session options live.** (a) keys of `<config>` (formalism, transform, Coulomb table use), so the project
    is the whole state and the program reads them too; (b) a side file of the UI; (c) the page only. *(a)*; it is an
    engine change (new keys) and a choice of defaults for flags. Later: medium (projects written meanwhile lack them).
+   **Taken by the PI on 2026-11-13: (a).** Built the same day (`project_format3.md` §3.12): eleven keys under the
+   pyazr keywords; flag or keyword > key > default; the defaults unchanged.
 8. **A token.** (a) always, Jupyter-like; (b) none on loopback. *(a)*, for shared machines (section 8). Later: dear
    to add once agents use the API without one.
 9. **The default compute budget.** (a) 1 thread: one computation at a time, evaluations refused during a job;

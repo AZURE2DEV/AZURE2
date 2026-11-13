@@ -19,7 +19,7 @@ import time
 from .errors import Conflict, NotFound, Refused
 from .jobs import JobTable, job_table
 from .routes import CONTENT_SECURITY_POLICY
-from .state import SESSION_OPTIONS, State, session_options
+from .state import State, session_options
 from .workers import Budget, SessionWorker, Spawner
 
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
@@ -220,7 +220,7 @@ class Server:
         with open(path, "wb") as f:
             f.write(session_text.encode("utf-8", "surrogateescape"))
         t0 = time.perf_counter()
-        description = self.worker.call("open", file=path, cwd=self.state.directory, **SESSION_OPTIONS)
+        description = self.worker.call("open", file=path, cwd=self.state.directory)
         self.build_s = time.perf_counter() - t0
         if notices is not None:
             notices += self.worker.warnings
@@ -259,7 +259,8 @@ class Server:
             rev = self._ensure_built()
             return {"rev": rev, "pid": self.worker.pid(), "build_s": self.build_s, "options": self.session["options"],
                     "n_free": self.session["n_free"], "datasets": self.session["datasets"],
-                    "parameters": self.session["parameters"], "session_options": session_options()}
+                    "parameters": self.session["parameters"],
+                    "session_options": session_options(session=self.session)}
 
     def parameters(self):
         rows = self.session_describe()["parameters"]
@@ -360,7 +361,11 @@ class Server:
         from .routes import describe_routes
         return {"server": "pyazr.ui", "package": pyazr.describe(), "python": sys.version.split()[0],
                 "budget": self.budget.describe(), "project": self.state.describe(), "jobs": job_table(),
-                "session_options": session_options(), "routes": describe_routes()}
+                "session_options": self._project_options(), "routes": describe_routes()}
+
+    def _project_options(self):
+        with self.state.lock:
+            return session_options(project=self.state.project)
 
     def processes(self):
         """PIDs and memory (kB, from /proc: resident and its peak) of the server and its workers."""

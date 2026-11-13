@@ -29,7 +29,7 @@ except ImportError as err:                            # pragma: no cover
     ) from err
 
 from .errors import ParameterError, ParameterKeyError, close_names, listed
-from . import session_checks, session_physics
+from . import session_checks, session_options, session_physics
 from .parameters import Pair, PairSet, Parameter, ParameterSet, read_parameter_file
 from .project import require_format3
 from .potentials import _HybridPotentials
@@ -88,6 +88,7 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
     #: .azr value (2026-10-25).  rmfit reads this to match the engine it runs.
     SHIFT_PENALTY_FROM_ZERO = True
 
+    @session_options.records_given
     def __init__(self, file, cwd=None, data_mode=True, use_brune=True,
                  ignore_externals=True, transform=True,
                  use_long_wavelength=True, use_gsl_coul=False, use_rmc=False,
@@ -111,6 +112,11 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
             R-matrix formalism options, matching the CLI's ``--use-brune``,
             ``--ignore-externals``, ``--no-transform`` and ``--no-long-wavelength``
             (the ``use_*`` options are ON by default, ``transform`` too).
+            Every option below except ``cwd``, ``data_mode`` and ``coulomb_table`` is also a ``<config>`` key of the
+            project under its name (``use_brune=0``; ``Project.set_config(use_brune=False)``): a keyword given here
+            wins over the key, the key over the default shown; a keyword left out is not given.
+            :attr:`options` holds the values in effect, :attr:`option_sources` where each came from
+            (``"default"``, ``"project"``, ``"keyword"``).
         use_gsl_coul : use GSL's Coulomb functions instead of AZURE2's own.
         use_coulomb_table : take P, S and the hard-sphere phase of charged
             channels from the universal Coulomb table (the default; CLI
@@ -165,23 +171,13 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         if not os.path.isdir(self.cwd):
             raise session_checks.missing_directory(self.cwd, self.file)
 
-        # Kept so a session can be reproduced elsewhere -- a worker process
-        # rebuilding this same model needs the formalism options, not just the
-        # file (see pyazr.bands.sensitivities with nprocs > 1).
-        self.options = dict(
-            data_mode=bool(data_mode), use_brune=bool(use_brune),
-            ignore_externals=bool(ignore_externals), transform=bool(transform),
-            use_long_wavelength=bool(use_long_wavelength),
-            use_gsl_coul=bool(use_gsl_coul), use_rmc=bool(use_rmc),
-            use_park=bool(use_park), use_coulomb_table=bool(use_coulomb_table),
-            coulomb_table=str(coulomb_table or ""), replace_grids=bool(replace_grids),
-            use_ec_table=bool(use_ec_table), ec_convection_current=bool(ec_convection_current))
-
-        opts = _azure2.RuntimeOptions()
-        for name, value in self.options.items():
-            setattr(opts, name, value)
-        opts.base_directory = self.cwd  # the model's relative paths: this directory, not the process's
+        # The keywords this call named win over the project's <config> keys, which win over the defaults (the engine's
+        # rule); self.options holds the values in effect, so that a worker process can rebuild this same model
+        # (pyazr.bands.sensitivities with nprocs > 1), and self.option_sources where each came from.
+        given = {k: v for k, v in locals().items() if k in self._given_options}
+        opts = session_options.runtime_options(_azure2, given, data_mode, coulomb_table, self.cwd)
         self._sess = _azure2.Session(self.file, opts)
+        self.options, self.option_sources = session_options.in_use(self._sess, data_mode, coulomb_table)
 
         self.mode = "data" if data_mode else "extrap"
         self.configure()
@@ -214,8 +210,9 @@ class azure2(_HybridPotentials, session_physics.SessionPhysics):
         self._sess = None
 
     def describe(self):
-        """What this session holds, as plain data: project, options, Coulomb table, pairs, levels, data sets,
-        extrapolations, parameters (their records: name, kind, unit, x, free, bounds, owner fields).
+        """What this session holds, as plain data: project, options and option_sources (where each came from),
+        Coulomb table, pairs, levels, data sets, extrapolations, parameters (their records: name, kind, unit, x,
+        free, bounds, owner fields).
         The keys: :func:`pyazr.described.describe_session`."""
         from .described import describe_session
         return describe_session(self)

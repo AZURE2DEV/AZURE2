@@ -22,6 +22,7 @@
 #include "Config.h"
 #include "RunDiagnostics.h"
 #include "azure2/io/LevelRows.h"
+#include "azure2/io/ConfigSection.h"
 #include "GSLException.h"
 #include "ECAmplitudeCache.h"
 #include "CoulombTable.h"
@@ -93,6 +94,26 @@ void exitMessage(const Config &configure) {
 }
 
 /*!
+ * The help lines of the options of the calculation, from their rows of io::ConfigKeys() (the flags the parser takes from
+ * the same rows, ApplyOptionFlag): each flag says the option, the value it gives and what it implies.
+ */
+static void printOptionFlags() {
+  for (const azure2::io::ConfigKey &k : azure2::io::ConfigKeys()) {
+    if (!k.option) continue;
+    for (const bool on : {true, false}) {
+      const char *flag = on ? k.flag : k.negation;
+      if (!*flag) continue;
+      std::string text = std::string(k.name) + "=" + (on ? "1" : "0") + " for this run" +
+                         (on == k.defaultOn ? " (the default)" : "") + ", over the project's <config> key";
+      for (const azure2::io::ConfigOptionImplication &i : azure2::io::ConfigOptionImplications())
+        if (k.name == std::string(i.name) && on == i.value) text += std::string(" and ") + i.implied + "=" + (i.impliedValue ? "1" : "0");
+      if (on) text += std::string(": ") + k.doc;
+      std::cout << std::setw(25) << std::left << ("\t" + std::string(flag) + ":") << std::setw(0) << text << "." << std::endl;
+    }
+  }
+}
+
+/*!
  * This function prints the response to the --help command which consists of
  * available runtime options.
  */
@@ -107,21 +128,9 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--no-gui:" << std::setw(0) << "Accepted and ignored, so that older scripts keep working;" << std::endl
             << std::setw(25) << std::left << "\t" << std::setw(0) << "this build has no graphical setup utility." << std::endl
             << std::setw(25) << std::left << "\t--no-readline:" << std::setw(0) << "Do not use the readline package (no effect in a build without it)." << std::endl
-            << std::setw(25) << std::left << "\t--no-transform:" << std::setw(0) << "Do not perform initial parameter transformations." << std::endl
-            << std::setw(25) << std::left << "\t--no-long-wavelength:" << std::setw(0) << "Do not use long wavelength approximation for EL capture." << std::endl
-            << std::setw(25) << std::left << "\t--use-brune:" << std::setw(0) << "Use the alternative level matrix of C.R. Brune (the default)." << std::endl
-            << std::setw(25) << std::left << "\t--no-brune:" << std::setw(0) << "Use the standard Lane-Thomas parametrization (constant boundary conditions) instead." << std::endl
-            << std::setw(25) << std::left << "\t--use-park:" << std::setw(0) << "Fit the observed reduced width amplitudes (T.-S. Park, PRC 104, 064612); implies --use-brune." << std::endl
-            << std::setw(25) << std::left << "\t--ignore-externals:" << std::setw(0) << "Ignore the external capture of a photon channel whose input width is exactly zero (the default)." << std::endl
-            << std::setw(25) << std::left << "\t--no-ignore-externals:" << std::setw(0) << "Keep it; needed for the R-matrix route (<config> first line false)." << std::endl
-            << std::setw(25) << std::left << "\t--use-rmc:" << std::setw(0) << "Use Reich-Moore approximation for capture (neutron capture only)." << std::endl
-            << std::setw(25) << std::left << "\t--gsl-coul:" << std::setw(0) << "Use GSL Coulomb functions (faster, but less accurate)." << std::endl
-            << std::setw(25) << std::left << "\t--coulomb-table[=FILE]:" << std::setw(0) << "Charged channels from the universal Coulomb table (the default; FILE: $AZURE2_COULOMB_TABLE or ~/.azure2/coulomb_table.bin)." << std::endl
-            << std::setw(25) << std::left << "\t--no-coulomb-table:" << std::setw(0) << "Exact Coulomb functions everywhere." << std::endl
-            << std::setw(25) << std::left << "\t--ec-table:" << std::setw(0) << "External capture from per-term energy tables (the default; undoes an earlier --no-ec-table)." << std::endl
-            << std::setw(25) << std::left << "\t--no-ec-table:" << std::setw(0) << "External capture integrals at every energy (no energy tables); shifted amplitudes interpolated." << std::endl
-            << std::setw(25) << std::left << "\t--ec-convection-current:" << std::setw(0) << "The exact-form convection current (the default; undoes an earlier --no-ec-convection-current)." << std::endl
-            << std::setw(25) << std::left << "\t--no-ec-convection-current:" << std::setw(0) << "With --no-long-wavelength: external capture with the charge (extended Siegert) part of the E_L operator only, without its convection-current part." << std::endl
+            << std::setw(25) << std::left << "\t--coulomb-table=FILE:" << std::setw(0) << "With --coulomb-table: the table file (default $AZURE2_COULOMB_TABLE or ~/.azure2/coulomb_table.bin)." << std::endl;
+  printOptionFlags();
+  std::cout
             << std::setw(25) << std::left << "\t--convert:" << std::setw(0) << "--convert OLD NEW [--json-report R] [--answers A] [--exact-grids] [--strict] [--allow-questions]: write the old project OLD (format 1 or 2)" << std::endl
             << std::setw(25) << std::left << "\t" << std::setw(0) << "in format 3 to NEW with its side files <f>.f3<ext>, and exit (OLD kept, nothing overwritten; this AZURE2 reads format 3 only). R the JSON report" << std::endl
             << std::setw(25) << std::left << "\t" << std::setw(0) << "(notes, questions, parameter names old -> new), A the answers {\"<record>.<field>\": value}, --exact-grids the grids the old engine" << std::endl
@@ -133,8 +142,6 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--print-predictions:" << std::setw(0) << "--print-predictions FILE: print the expression tree of every data set and extrapolation of FILE, one line each, and exit." << std::endl
             << std::setw(25) << std::left << "\t--schema:" << std::setw(0) << "Print the table of project format 3 (record kinds, fields, quantities, units, diagnostic codes) as JSON and exit." << std::endl
             << std::setw(25) << std::left << "\t--build-coulomb-table[=FILE]:" << std::setw(0) << "Build the Coulomb table (about 5 min on 4 threads, 88 MB; FILE as for --coulomb-table) and exit." << std::endl
-            << std::setw(25) << std::left << "\t--grid-replacement:" << std::setw(0) << "Re-place the adaptive sub-point grids as levels and shifts move (the default)." << std::endl
-            << std::setw(25) << std::left << "\t--no-grid-replacement:" << std::setw(0) << "Keep the adaptive sub-point grids placed from the input file's levels (default: re-place them as levels and shifts move)." << std::endl
 #ifdef USE_NLOPT
             << std::setw(25) << std::left << "\t--use-nlopt:" << std::setw(0) << "Use NLopt minimizer (BOBYQA) instead of Minuit2." << std::endl
 #endif
@@ -147,6 +154,7 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--scale-covariance:" << std::setw(0) << "With --covariance-band after a fit: inflate the covariance by the reduced chi-squared when it exceeds 1 (Birge ratio)." << std::endl
             << std::setw(25) << std::left << "\t--use-api:" << std::setw(0) << "Removed (the socket API is gone): exits with a pointer to pyazr." << std::endl;
 }
+
 
 /*!
  * --build-coulomb-table[=FILE]: build the universal Coulomb table with the default
@@ -239,43 +247,12 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
   for (std::vector<std::string>::iterator it = options.begin(); it < options.end(); it++) {
     if (*it == "--no-readline")  // accepted in every build (scripts pass it); without readline it changes nothing
       useReadline = false;
-    else if (*it == "--no-transform")
-      configure.paramMask &= ~Config::TRANSFORM_PARAMETERS;
-    else if (*it == "--no-long-wavelength")
-      configure.paramMask &= ~Config::USE_LONGWAVELENGTH_APPROX;
-    else if (*it == "--use-brune")
-      configure.paramMask |= Config::USE_BRUNE_FORMALISM;
-    else if (*it == "--use-park")
-      configure.paramMask |= (Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM);
-    else if (*it == "--no-brune")
-      configure.paramMask &= ~(Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM);
-    else if (*it == "--gsl-coul")
-      configure.paramMask |= Config::USE_GSL_COULOMB_FUNC;
-    else if (*it == "--coulomb-table")
-      configure.useCoulombTable = true;
-    else if (it->compare(0, 16, "--coulomb-table=") == 0) {
-      configure.useCoulombTable = true;
+    else if (ApplyOptionFlag(configure, *it))  // an option of the calculation: its row of io::ConfigKeys()
+      continue;
+    else if (it->compare(0, 16, "--coulomb-table=") == 0) {  // the option and the table file of this machine
+      GiveOption(configure, "use_coulomb_table", true, OptionSource::kCommandLine);
       configure.coulombTablePath = azure2::OptionText(*it, "--coulomb-table=");
-    } else if (*it == "--no-coulomb-table")
-      configure.useCoulombTable = false;
-    else if (*it == "--ec-table")
-      configure.useECTable = true;
-    else if (*it == "--no-ec-table")
-      configure.useECTable = false;
-    else if (*it == "--ec-convection-current")
-      configure.ecConvectionCurrent = true;
-    else if (*it == "--no-ec-convection-current")
-      configure.ecConvectionCurrent = false;
-    else if (*it == "--grid-replacement")
-      configure.replaceSubPointGrids = true;
-    else if (*it == "--no-grid-replacement")
-      configure.replaceSubPointGrids = false;
-    else if (*it == "--ignore-externals")
-      configure.paramMask |= Config::IGNORE_ZERO_WIDTHS;
-    else if (*it == "--no-ignore-externals")
-      configure.paramMask &= ~Config::IGNORE_ZERO_WIDTHS;
-    else if (*it == "--use-rmc")
-      configure.paramMask |= Config::USE_RMC_FORMALISM;
+    }
     else if (*it == "--use-api")
       configure.paramMask |= Config::USE_API;
 #ifdef USE_NLOPT
