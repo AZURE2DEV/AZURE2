@@ -6,7 +6,9 @@ apps is `OMP_NUM_THREADS` of the environment (ctest gives 1); no test sets it. `
 program whose `chiSquared.out` the API's numbers are compared with.
 
 - `api_test.py`: the API through FastAPI's test client on copies of T1 and T2.
-- `jobs_test.py`: recipe fits as jobs on T1: to the end, stop, kill, resume, budget, accept, iminuit.
+- `jobs_test.py`: recipe fits as jobs on T1: to the end, stop, kill, resume, budget, accept, iminuit; the settings
+  table with types; Accept writing what pyazr's `save_fit` writes, bit for bit, and Undo; a stopped job's best point
+  accepted; the trace, the log tail, the long poll (`?wait=`), the parameter table during a job; iminuit's MINOS.
 - `server_test.py`: a real server process on a free port above 20000 over HTTP; killed and stopped, its workers
   checked gone by PID; the user guide's session (`docs/source/user_guide/web_ui_api.rst`) run against it.
 - `routes_consistency_test.py`: the route table, the app, the OpenAPI document, pyazr and the adapter agree.
@@ -15,7 +17,8 @@ program whose `chiSquared.out` the API's numbers are compared with.
   value type of the schema, no engine kind named in the page's modules, lines of at most 120 columns (the vendored
   directory excepted: minified third-party code), the file-head route inside the root.
 - `node_test.py`: runs `js/*.test.mjs` with node's own test runner (`node --test`; node from PATH or `NODE`; skipped
-  without it) on the page's modules `forms.js`, `tables.js`, `api.js`, `plots.js`, with the engine's schema.
+  without it) on the page's modules `forms.js`, `tables.js`, `api.js`, `plots.js`, `fitting.js` and the setting
+  widgets of `tabs/fitjob.js`, with the engine's schema and the server's job table.
 - `results_test.py`: the Results payload (`GET /api/evaluation`) against the program's own files: every data set's
   points, model, normalized datum and error and S factor against `AZUREOut_*` (menu 1) and every extrapolation
   against `AZUREOut_*.extrap` (menu 3) to eleven digits on T1 and T2; the χ² table against `chiSquared.out`; the
@@ -23,7 +26,8 @@ program whose `chiSquared.out` the API's numbers are compared with.
   files written into the project's output directory (`POST`/`GET /api/outputs`).
 - `smoke_test.py` (label `browser`): a real server on T1 and T2, headless Chrome runs the page's `#selftest?edit=1`
   (every tab, a level, a data set's form and plot by plotly.js and as a table, a kind without layout hints, a new
-  record's form, a width typed in and undone with the button) and takes a screenshot per tab
+  record's form, a width typed in and undone with the button; in the Fit tab a fit run, followed, stopped, accepted
+  and undone with the buttons) and takes a screenshot per tab
   (`AZURE2_UI_SCREENSHOTS`, `AZURE2_UI_SHOTS=all`, `AZURE2_UI_SMOKE_PROJECTS`; see its docstring).
 - `uitest.py`: shared helpers.
 
@@ -94,6 +98,26 @@ file restored from git after each):
 - a script error in a tab is caught: `tabs/project.js` dereferences null; the Undo button takes the edit back: it
   sends redo; each fails `smoke_test.py` on T1 and T2.
 
+Added with the Fit tab (each shown failing on 2026-11-13 with `work/uifit/inject.py`, outside the repository; the
+file restored from git after each):
+
+- a request's setting is converted by its type: `merged_settings` keeps the value as sent; fails
+  `jobs_test.py::test_settings_listed_with_types_and_converted`.
+- Accept writes the job's best point as pyazr's `save_fit` does: `job_accept` applies the working x instead; fails
+  `jobs_test.py::test_accept_writes_what_pyazr_writes_back_and_undo_restores`.
+- a stopped job keeps its best point: the stop drops it; fails
+  `jobs_test.py::test_stopped_job_leaves_its_best_point_which_is_accepted`.
+- the trace is thinned past `TRACE_POINTS`; a GET with `wait` answers at a state change; the parameter table is
+  readable while a job holds the budget; a job's record has no `rev` (only `text_rev`): each in turn broken (no
+  thinning; the wait ignores the state; the budget refuses the parameter table; the field named `rev`); each fails
+  `jobs_test.py::test_trace_log_wait_and_parameters_during_a_job`.
+- MINOS's intervals are in the result: the key renamed; fails `jobs_test.py::test_minos_after_an_iminuit_fit`.
+- Stop is not offered while a job is stopping; a widget exists for every setting type; the trace's y axis is
+  logarithmic; the job's columns appear only with a job: each broken in turn; each fails `node_test.py`
+  (`js/fitting.test.mjs`).
+- the Stop button of the job panel is found and pressed: its `data-action` removed; fails `smoke_test.py` on T1 and
+  T2.
+
 Added with the Results tab (each shown failing once, the file restored from git after each):
 
 - the first rows of a file are bounded (1 to 200 rows, refused outside with the range; a line read to 4096 bytes and
@@ -110,8 +134,8 @@ The smoke test's "Failed to fetch" (2026-11-13): requests of the page cancelled 
 (`Network.loadingFailed`, net::ERR_ABORTED, canceled; absent from Chrome's network log and from the server's request
 log, which saw every other request answered), on T2 in 1 of 10 runs of this branch and 4 of 10 of the page's merge
 commit, in real time as with the virtual-time budget. Not caused by the page's navigation (hash or history API: none
-of about 2200 fetches in flight cancelled in a direct test), duplicate requests, keep-alive or the server. Caused by Chrome's work
-in each run's fresh profile: 0 of 25 runs with `--disable-extensions`, 0 of 25 with `--disable-component-update
---disable-background-networking`, 6 of 25 with Safe Browsing off. The test's Chrome now runs with those three flags
-(`QUIET_PROFILE` of `smoke_test.py`); a test artefact (a browser in use has loaded its extensions before the page
-opens), not hidden by a retry. Scripts: `work/uiresults/diag/` (outside the repository).
+of about 2200 fetches in flight cancelled in a direct test), duplicate requests, keep-alive or the server. Caused by
+Chrome's work in each run's fresh profile: 0 of 25 runs with `--disable-extensions`, 0 of 25 with
+`--disable-component-update --disable-background-networking`, 6 of 25 with Safe Browsing off. The test's Chrome now
+runs with those three flags (`QUIET_PROFILE` of `smoke_test.py`); a test artefact (a browser in use has loaded its
+extensions before the page opens), not hidden by a retry. Scripts: `work/uiresults/diag/` (outside the repository).

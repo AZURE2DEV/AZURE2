@@ -188,8 +188,8 @@ ROUTES = (
           "The first rows (query: rows, 1 to 200, default 20) of a text file inside the root, as written; a line is "
           "read to 4096 bytes (cut lines listed in cut).", args=("path",),
           kwargs=("rows:int",)),
-    Route("GET", "/api/events", L, "step 2 (the page); no pyazr call",
-          "Server-sent events: revisions, job progress, build state."),
+    Route("GET", "/api/events", L, "a later step; the page polls the revision and long-polls a job "
+          "(GET /api/jobs/{job_id}?wait=)", "Server-sent events: revisions, job progress, build state."),
     # -- jobs
     Route("GET", "/api/jobs/kinds", V, "server.Server.job_kinds",
           "The job table: kind, method, settings, the package or pyazr call each needs."),
@@ -197,8 +197,10 @@ ROUTES = (
     Route("POST", "/api/jobs", V, "server.Server.job_start",
           "Start a job: kind, method, settings, x0 (omitted: the working x; \"text\"; {\"job\": id}; {name: value}).",
           args=("kind", "method"), kwargs=("settings", "x0", "rev")),
-    Route("GET", "/api/jobs/{job_id}", V, "server.Server.job_get", "A job: state, progress, best x, result.",
-          args=("job_id",)),
+    Route("GET", "/api/jobs/{job_id}", V, "server.Server.job_get",
+          "A job: state, progress, best x, result, its trace (objective against call) and the last lines of its log; "
+          "with wait (s, at most 10), once its state changes or after that long.", args=("job_id",),
+          kwargs=("wait:float",)),
     Route("POST", "/api/jobs/{job_id}/stop", V, "server.Server.job_stop",
           "Cooperative stop: ends before the next objective call with the best point.", args=("job_id",)),
     Route("POST", "/api/jobs/{job_id}/kill", V, "server.Server.job_kill", "Kill the job's worker.",

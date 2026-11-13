@@ -4,9 +4,10 @@
 // units.  The axes, titles and units come from the engine's tables (the quantity row of pyazr.schema(), the
 // dimensions' engine units); the page converts nothing: the numbers drawn are the server's.
 //
-// Rows: a data set against energy or angle (the Data tab's preview); the Results tab's series against a chosen x
-// with residuals under the plot; an angular distribution at one energy.  A plot unlike these adds a row here (and a
-// step of the self-test).  No DOM in the table itself (tests/pyazr/ui/js/plots.test.mjs, results.test.mjs).
+// Rows: a data set against energy or angle (the Data tab's preview); a job's objective against call; the
+// Results tab's series against a chosen x with residuals under the plot; an angular distribution at one energy.
+// A plot unlike these adds a row here (and a step of the self-test).  No DOM in the table itself
+// (tests/pyazr/ui/js/plots.test.mjs, results.test.mjs).
 
 /** Okabe and Ito's colour-blind-safe palette; after eight series the markers change as well (MARKERS). */
 export const PALETTE = ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9", "#F0E442", "#7F7F7F"];
@@ -77,6 +78,21 @@ function datasetPlot(data, { schema }) {
     traces,
     note: q.columns?.order ? "one trace per order needs the order of each point, which the data route does not send"
       : "",
+  };
+}
+
+/** A job's objective against its call number (the server's trace: [call, objective, best so far]), log y. */
+function jobTracePlot(rec) {
+  const t = rec.trace;
+  return {
+    title: `job ${rec.id}: ${rec.kind} ${rec.method}`,
+    x: { title: "call", unit: "", integer: true, dtick: t.length && t[t.length - 1][0] <= 10 ? 1 : null },
+    y: { title: "objective (χ² + priors)", unit: "", log: true },
+    traces: [
+      { role: "line", name: "objective at each call", x: t.map((p) => p[0]), y: t.map((p) => p[1]), color: PALETTE[0] },
+      { role: "line", name: "best objective so far", x: t.map((p) => p[0]), y: t.map((p) => p[2]), color: PALETTE[1] },
+    ],
+    note: t.length && t[t.length - 1][0] > t.length ? "past 500 points the trace keeps every second call" : "",
   };
 }
 
@@ -205,6 +221,9 @@ export const PLOTS = [
     doc: "a data set against energy or angle: data with errors and the model at the working x",
     applies: (d) => d && Array.isArray(d.value) && (Array.isArray(d.e_cm) || Array.isArray(d.angle_cm)),
     build: datasetPlot },
+  { name: "objective_against_call",
+    doc: "a job's objective (χ² + priors) at each call and the best so far, against the call number, log y",
+    applies: (d) => d && Array.isArray(d.trace) && typeof d.kind === "string", build: jobTracePlot },
   { name: "results_against_x",
     doc: "the Results tab: the chosen data sets (data with errors, the model at the points), extrapolations (the "
       + "model on their grids), residuals under the plot on the same x axis, level markers; one plot per y unit",
@@ -286,7 +305,8 @@ export function plotlyFigure(plot, theme = {}) {
   const axis = (a) => ({ title: { text: head(a.title, a.unit), font: { size: 11 } },
     color: fg, gridcolor: grid, zeroline: false,
     ticks: "outside", mirror: true, showline: true, linecolor: fg, exponentformat: "power",
-    type: a.log ? "log" : "linear", automargin: true });
+    type: a.log ? "log" : "linear", automargin: true, ...(a.log ? { nticks: 6 } : {}),
+    ...(a.integer ? { tickformat: "d", rangemode: "tozero", ...(a.dtick ? { dtick: a.dtick } : {}) } : {}) });
   const many = plot.traces.length > 4;
   const layout = { title: { text: plot.title, font: { size: 13 }, x: 0, xref: "paper", xanchor: "left" },
     paper_bgcolor: bg, plot_bgcolor: bg,

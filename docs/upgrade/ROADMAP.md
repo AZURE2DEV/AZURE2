@@ -273,8 +273,11 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       and stop; tabs Project, Nucleus, Data, Fit, Results, Physics, THM (opt-in).
 - [x] The server (`pyazr/ui`: route table, state and history, workers, jobs; 2026-11-13).
 - [x] The page: header, tabs Project, Nucleus, Data with generated forms, the engine's descriptions and a preview plot;
-      plotly.js 4.1.2 vendored; node tests and a headless-Chrome smoke test (2026-11-13). Fit, Physics, THM tabs to
+      plotly.js 4.1.2 vendored; node tests and a headless-Chrome smoke test (2026-11-13). Physics, THM tabs to
       come.
+- [x] The Fit tab, first part: the parameter table, the job form from the job table (settings with types),
+      recipe fits and iminuit's MINOS as jobs with progress, Stop, Kill, Accept and Undo (2026-11-13). The engine's
+      fitters, the sampler and bands wait for pyazr (`fit_with_engine`, `Objective`).
 - [x] The Results tab: the Results payload against the program's output files, plots with residuals, χ² table,
       model data, angular distributions, output files (2026-11-13). Dense model grid, lab energy, Legendre orders,
       rate and bands wait for pyazr (`web_ui.md` section 12).

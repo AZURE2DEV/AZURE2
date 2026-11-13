@@ -1,8 +1,8 @@
 """The browser smoke test of the page (docs/upgrade/web_ui.md section 9), with the headless Chrome of the machine: a
 real server (``python -m pyazr.ui``) on copies of T1 and T2, the page's self-test (``#selftest``: every tab, a level,
 a data set's form and its plot drawn by plotly.js and as a table, a record kind without layout hints, a new record's
-form, a width typed into its box and taken back with the Undo button) read from the document Chrome dumps, and one
-screenshot per tab.  Fails on any script error, console error or
+form, a width typed into its box and taken back with the Undo button; in the Fit tab a recipe fit started with Run, its
+progress seen, Stop, Accept into project and Undo) read from the document Chrome dumps, and one screenshot per tab.  Fails on any script error, console error or
 failed request the self-test recorded.
 
 Environment:
@@ -126,7 +126,7 @@ def test_selftest_and_screenshots(name, tmp_path):
     server = Served(azr, tmp_path / "server.log")
     try:
         t0 = time.monotonic()
-        dom = chrome(tmp_path, f"{server.url}#selftest?edit=1", "--window-size=1400,900",
+        dom = chrome(tmp_path, f"{server.url}#selftest?edit=1&fit=1", "--window-size=1400,900",
                      "--virtual-time-budget=120000", "--dump-dom")
         result = selftest_result(dom)
         print(f"{label}: self-test in {time.monotonic() - t0:.1f} s (Chrome included); "
@@ -147,6 +147,15 @@ def test_selftest_and_screenshots(name, tmp_path):
             assert edit["edited"] and edit["undone"], edit
             assert edit["chi2_after"] != edit["chi2_before"] and edit["chi2_back"] == edit["chi2_before"], edit
             assert edit["rev_after"] == edit["rev_before"] + 1 and edit["rev_back"] == edit["rev_after"] + 1, edit
+        fit = result["fit"]  # Run, progress, Stop (or the end), Accept, Undo: the header's chi2 moves and returns
+        if "skipped" not in fit:
+            assert fit["progress_seen"] and fit["plot"] and fit["ended"] and fit["accepted"] and fit["undone"], fit
+            assert fit["state"] in ("stopped", "converged", "ended"), fit
+            assert fit["chi2_header_after"] == fit["chi2_written"] and fit["chi2_back"] == fit["chi2_before"], fit
+            assert fit["rev_accepted"] == fit["rev_before"] + 1 and fit["rev_back"] == fit["rev_accepted"] + 1, fit
+            print(f"{label}: fit {fit['method']} {fit['state']} after {fit['calls_seen']} calls seen; chi2 "
+                  f"{fit['chi2_before']} -> fit {fit['chi2_fit']}, as written {fit['chi2_written']} -> undo "
+                  f"{fit['chi2_back']}")
         take_screenshots(server, tmp_path, label, shots, result)
     finally:
         server.stop()

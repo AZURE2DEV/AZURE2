@@ -10,7 +10,15 @@
      first objective is the checkpoint's best);
   3. a request over the compute budget is refused (409) with the running job's id and its stop route;
   4. the iminuit recipe (MIGRAD and HESSE) as a row of the same table (skipped without iminuit);
-  5. a job of the table that waits for pyazr answers 501 naming the call.
+  5. a job of the table that waits for pyazr answers 501 naming the call;
+  6. the job table lists every setting with its type, default and doc; a request's value is converted by its type
+     or refused with what the type allows;
+  7. accepting a fit writes into the project text exactly what pyazr's own write-back (``save_fit``) writes for the
+     best point, and Undo gives the text back byte for byte; a stopped job's best point is accepted the same way;
+  8. a job's trace (objective against call, thinned past TRACE_POINTS) and log tail; a GET with ``wait`` answers when
+     the state changes; the parameter table and x stay readable while the job holds the budget;
+  9. iminuit's MINOS as a job from an iminuit fit's best point: asymmetric intervals, covariance and correlation by
+     name.
 
 The stop and kill times are printed (measured on the product).
 Run: python3 tests/pyazr/ui/jobs_test.py
@@ -152,6 +160,7 @@ def test_iminuit_recipe(t1):
     job = start(t1, method="iminuit_migrad")
     done = wait_job(t1, job["id"])
     assert done["state"] == "converged" and done["result"]["errors"], done
+    assert done["result"]["message"] == "MIGRAD: valid minimum; HESSE: still valid", done["result"]
     from pyazr.ui.jobs import fit_iminuit_migrad
     tracker, status = direct(t1, fit_iminuit_migrad, done["settings"])
     assert done["best"]["objective"] == tracker.best and status[0] == "converged"
@@ -163,6 +172,126 @@ def test_missing_job_kinds_answer_501(t1):
         if row["missing"]:
             r = t1.post("/api/jobs", json={"kind": row["kind"], "method": row["method"]})
             assert r.status_code == 501 and r.json()["missing"] == row["missing"]
+
+
+def test_settings_listed_with_types_and_converted(t1):
+    from pyazr.ui.jobs import SETTING_TYPES
+    for row in t1.get("/api/jobs/kinds").json():
+        for setting in row["settings"]:
+            assert set(setting) == {"name", "type", "default", "doc", "allowed"}, setting
+            assert setting["type"] in SETTING_TYPES and setting["doc"], setting
+    r = t1.post("/api/jobs", json={"kind": "fit", "method": "scipy_lbfgsb", "settings": {"max_iterations": "1.5"}})
+    assert r.status_code == 422 and "integer" in r.json()["allowed"], r.text
+    r = t1.post("/api/jobs", json={"kind": "fit", "method": "scipy_lbfgsb", "settings": {"max_calls": 3}})
+    assert r.status_code == 422 and r.json()["allowed"] == ["max_iterations"], r.text
+    job = start(t1, settings={"max_iterations": "2"})
+    done = wait_job(t1, job["id"])
+    assert done["settings"]["max_iterations"] == 2 and done["state"] in ("converged", "ended"), done
+
+
+def written_back(client, best_x):
+    """What pyazr's own write-back gives for ``best_x`` ({name: value}): save_fit on a session of the user's file."""
+    import pyazr
+    path = client.path
+    s = pyazr.azure2(path, cwd=os.path.dirname(path))
+    names = [p.name for p in s.parameters if p.free_index is not None and not p.fixed]
+    out = os.path.join(os.path.dirname(path), "written_back.azr")
+    s.save_fit(out, np.array([best_x[n] for n in names]), param_sav=False)
+    s.close()
+    with open(out, "rb") as f:
+        text = f.read().decode("utf-8", "surrogateescape")
+    os.remove(out)
+    return text
+
+
+def accept_and_compare(client, job_id):
+    before = client.get("/api/project/text").text
+    best = client.get(f"/api/jobs/{job_id}").json()["best"]["x"]
+    r = client.post(f"/api/jobs/{job_id}/accept", json={"rev": rev(client)})
+    assert r.status_code == 200, r.text
+    assert client.get("/api/project/text").text == written_back(client, best)
+    accepted = client.get(f"/api/jobs/{job_id}").json()["accepted"]
+    assert accepted["rev"] == r.json()["rev"] == rev(client)
+    best_objective = client.get(f"/api/jobs/{job_id}").json()["best"]["objective"]
+    assert accepted["at_best"]["objective"] == pytest.approx(best_objective, rel=1e-9)
+    client.post("/api/project/undo", json={"rev": rev(client)})
+    assert client.get("/api/project/text").text == before
+
+
+def test_accept_writes_what_pyazr_writes_back_and_undo_restores(t1):
+    job = start(t1, method="iminuit_migrad")
+    done = wait_job(t1, job["id"])
+    assert done["state"] == "converged", done
+    accept_and_compare(t1, job["id"])
+
+
+def test_stopped_job_leaves_its_best_point_which_is_accepted(t1):
+    job = start(t1, settings=LONG)
+    assert _running(t1, job["id"], 3)
+    t1.post(f"/api/jobs/{job['id']}/stop")
+    stopped = wait_job(t1, job["id"])
+    assert stopped["state"] == "stopped" and stopped["best"]["objective"] <= stopped["result"]["start_objective"]
+    assert set(stopped["best"]["x"]) == set(stopped["result"]["start_x"])
+    accept_and_compare(t1, job["id"])
+
+
+def test_trace_log_wait_and_parameters_during_a_job(t1):
+    from pyazr.ui.jobs import TRACE_POINTS, Job
+    assert t1.get("/api/parameters").status_code == 200  # the session of the current text is built
+    job = start(t1, settings=LONG)
+    try:
+        assert _running(t1, job["id"], 5)
+        rows = t1.get("/api/parameters")
+        assert rows.status_code == 200 and any(r["free"] for r in rows.json()), rows.text
+        assert t1.get("/api/x").status_code == 200
+        if THREADS == 1:
+            assert t1.post("/api/evaluate").status_code == 409
+        record = t1.get(f"/api/jobs/{job['id']}").json()
+        # an answer's "rev" is the project's current revision (the page re-reads on a new one); a job names the
+        # revision of the text it runs on otherwise
+        assert "rev" not in record and record["text_rev"] == rev(t1), record.keys()
+        calls = [p[0] for p in record["trace"]]
+        assert calls == sorted(calls) and len(calls) >= 5, record["trace"][:10]
+        assert all(p[2] <= p[1] for p in record["trace"])  # best so far <= the call's objective
+        assert isinstance(record["log"], list)
+        t0 = time.perf_counter()
+        t1.post(f"/api/jobs/{job['id']}/stop")
+        waited = t1.get(f"/api/jobs/{job['id']}", params={"wait": 8}).json()
+        assert waited["state"] != "running" and time.perf_counter() - t0 < 6, waited["state"]
+    finally:
+        wait_job(t1, job["id"])
+    t0 = time.perf_counter()
+    t1.get(f"/api/jobs/{job['id']}", params={"wait": 8})  # an ended job answers at once
+    assert time.perf_counter() - t0 < 1
+    lister = t1.get("/api/jobs").json()
+    assert all("trace" not in j and "best" not in j for j in lister)
+    j = Job({"id": "x"})  # the thinning of a long trace keeps the first call and the shape of the whole run
+    with j.lock:
+        for c in range(1, 5 * TRACE_POINTS):
+            j.add_to_trace(c, 1000.0 / c, 1000.0 / c)
+    kept = [p[0] for p in j.record["trace"]]
+    assert len(kept) <= TRACE_POINTS and kept[-1] > 4 * TRACE_POINTS and kept == sorted(kept), kept[-5:]
+
+
+@pytest.mark.skipif(importlib.util.find_spec("iminuit") is None, reason="iminuit is not installed")
+def test_minos_after_an_iminuit_fit(t1):
+    kinds = {(r["kind"], r["method"]): r for r in t1.get("/api/jobs/kinds").json()}
+    assert kinds[("minos", "iminuit")]["follows"] == ["fit", "iminuit_migrad"]
+    fit = wait_job(t1, start(t1, method="iminuit_migrad")["id"])
+    names = list(fit["best"]["x"])[:2]
+    job = start(t1, kind="minos", method="iminuit", x0={"job": fit["id"]}, settings={"parameters": " ".join(names)})
+    done = wait_job(t1, job["id"])
+    assert done["state"] == "converged", done
+    result = done["result"]
+    assert sorted(result["minos"]) == sorted(names)
+    for n in names:
+        assert result["minos"][n]["lower"] < 0 < result["minos"][n]["upper"], result["minos"][n]
+    cov, cor = result["covariance"], result["correlation"]
+    assert cov["names"] == cor["names"] == list(result["errors"])
+    k = len(cov["names"])
+    assert all(abs(cor["matrix"][i][i] - 1) < 1e-12 for i in range(k))
+    assert all(abs(cov["matrix"][i][i] ** 0.5 - result["errors"][cov["names"][i]]) < 1e-9 * max(1, cov["matrix"][i][i])
+               for i in range(k))
 
 
 if __name__ == "__main__":

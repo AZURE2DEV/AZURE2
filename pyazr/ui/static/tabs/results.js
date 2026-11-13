@@ -95,8 +95,8 @@ export async function render(ctx, el) {
 function headPanel(e) {
   const totals = Object.entries(e.totals || {}).map(([k, v]) => `${k} ${v}`).join(" · ");
   return h("section.panel.results-head", {},
-    h("div", {}, h("strong", {}, "At: the working x"), h("span.hint", {}, " (the vector of the last edit or Undo; "
-      + "a fit job's best point and the start values x0 are chosen here once the Fit tab runs jobs)")),
+    h("div", {}, h("strong", {}, "At: the working x"), h("span.hint", {}, " (as the Fit tab's table shows it; a "
+      + "job's best point is seen here once accepted into the project; a choice of point here is not built yet)")),
     h("div.mono", { title: "the Total- line of the program's chiSquared.out at this x" }, totals),
     h("div.hint", {}, `objective (what a fit minimises: data, normalizations, shifts and every prior) ${e.objective}`));
 }

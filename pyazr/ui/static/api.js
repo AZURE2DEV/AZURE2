@@ -86,8 +86,9 @@ export function createApi({ fetchFn = globalThis.fetch?.bind(globalThis), base =
     }
   }
 
-  // quiet: a refusal the page expects and shows itself (not listed among the failures the self-test reports)
-  async function request(method, path, body, { text = false, quiet = false } = {}) {
+  // quiet: a refusal the page expects and shows itself (not listed among the failures the self-test reports);
+  // background: a request that follows something (a job's long poll) and does not light the header's busy mark
+  async function request(method, path, body, { text = false, quiet = false, background = false } = {}) {
     const init = { method, credentials: "same-origin", headers: { Accept: text ? "text/plain" : "application/json" } };
     let payload = body;
     if (isEdit(method, path)) {
@@ -98,8 +99,8 @@ export function createApi({ fetchFn = globalThis.fetch?.bind(globalThis), base =
       init.headers["Content-Type"] = "application/json";
       init.body = JSON.stringify(payload);
     }
-    inFlight += 1;
-    if (onActivity) onActivity(inFlight);
+    const counted = !background;
+    if (counted) { inFlight += 1; if (onActivity) onActivity(inFlight); }
     let response;
     try {
       response = await fetchFn(base + path, init);
@@ -107,8 +108,7 @@ export function createApi({ fetchFn = globalThis.fetch?.bind(globalThis), base =
       log.push({ method, path, status: 0, what: String(e) });
       throw new ApiError(0, { error: "Network error", message: `${method} ${path}: ${e}` }, { method, path });
     } finally {
-      inFlight -= 1;
-      if (onActivity) onActivity(inFlight);
+      if (counted) { inFlight -= 1; if (onActivity) onActivity(inFlight); }
     }
     const raw = await response.text();
     let data = raw;

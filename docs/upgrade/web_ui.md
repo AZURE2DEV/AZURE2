@@ -795,7 +795,7 @@ adapter, `pyazr/ui/engine.py` (about 250 lines), the only file that changes when
    **Done 2026-11-13** with plotly.js vendored and a preview plot, smoke tests in headless Chrome (section 11.2).
 3. **Results.** `plots.js`, `tabs/results.js`, the Results payload, grids, CSV/SVG/PNG export. About 900 lines; tests
    of the payload against the program's output files. **Today**, with plotly vendored (decision 11); `Evaluation`
-   (pyazr step 3) replaces the adapter's calls. **Done 2026-11-13** (section 11.3).
+   (pyazr step 3) replaces the adapter's calls. **Done 2026-11-13** (section 11.4).
 4. **Fit.** `tabs/fit.js`, job kinds: recipe fits and MINOS (iminuit), the emcee sampler, bands; then the engine's
    fitters once pyazr has `fit_with_engine` with progress and stop (decision 8 and finding 2). About 1000 lines.
    Recipes need `Objective` (pyazr step 3; today `objective_and_grad` serves); engine fits need pyazr's call.
@@ -882,8 +882,8 @@ killed with SIGKILL during a fit end within 0.05 s (`PR_SET_PDEATHSIG`).
 12. *Origin*: a request with an `Origin` header other than the server's own (scheme, host and port) is refused (403):
     every port of localhost is one site for the browser, so the cookie alone would let a page of another local server
     send edits. A Host header `[::1]` with or without a port is a loopback name.
-13. *Not built*: the event stream (polling serves the tests), the file browser, the interrupted job's evaluation
-    beside "accept" (accept works on it).
+13. *Not built*: the event stream (polling serves the tests; the Fit tab long-polls a job, 11.3), the file browser, the
+    interrupted job's evaluation beside "accept" (accept works on it).
 
 ### 11.2 Step 2 as built (2026-11-13)
 
@@ -947,7 +947,72 @@ energy or angle (axis rule from the quantity row's `angle_axis`, units from the 
 row of `PLOTS` in `plots.js` and its node test; a new tab: a module `tabs/<name>.js` with `render()` and a row of
 `TABS` in `app.js` (the self-test visits it; add it to `VIEWS` of `smoke_test.py` for a screenshot).
 
-### 11.3 Step 3 as built (2026-11-13)
+### 11.3 Step 4, first part, as built (2026-11-13): the Fit tab
+
+`tabs/fit.js` (the tab, the parameter table, following a job), `tabs/fitjob.js` (the job form, the job's panel and
+result, the jobs list, the widget table of setting types), `fitting.js` (no document: rows, choices, the progress
+and result views), `selftestfit.js` (the self-test's walk through the tab); a row of `PLOTS` (the objective against
+the call, log y). Server: `jobs.py` (settings as typed rows, iminuit's MINOS as a job kind, covariance and
+correlation, the trace, the log tail, the long poll), `server.py` (the parameter table and x readable while a job holds
+the budget; the accepted revision kept in the job's record). Tests: `jobs_test.py` (5 new), `js/fitting.test.mjs`
+(8), the smoke test's walk through the tab.
+
+**What a user can do.** Choose a job from the server's job table (the kinds and methods as the server lists them;
+the rows that wait for pyazr greyed with the call they wait for), set its settings (drawn from their types and
+defaults), its start point (the working x, the text's values, a job's best point) and Run; follow it (calls, the
+objective at the last call and the best, time, the session build, the objective against the call on a log scale, the
+last lines of its log), Stop it between calls or Kill it; read the result in the recipe's own words, the objective
+at the start and at the best point, the χ² and N at the best point (evaluated on the job's revision); **Accept into
+project** (one history entry; Undo takes it back), after which the χ² of the project as written stands beside the
+fit's with the known causes of a difference; start iminuit's MINOS from an iminuit fit. The table of every parameter:
+filters by kind (the kinds present, in the order and with the docs of `pyazr.kinds()`), free only, text; the working
+x of a free parameter edited in place (the header's χ² follows); **Reset x**; the job's best point, HESSE errors,
+MINOS intervals and, on demand, its start point. The covariance and correlation as tables and CSV.
+
+**Measured** (`work/uifit/walk.py` on T2, a server process over HTTP at one thread): a job's GET 2.5 ms (2.1 kB with its
+trace); a stop request answered by the waiting GET 0.88 s later (the objective call in flight, with its gradient, about
+2 s on T2); an iminuit fit from the stopped point to its end 416 calls in 779 s, objective 7087.924 → 298.917; χ² at the
+best point 295.0675134652589, of the project as written after Accept 295.06757397066707 (T2 fits a target density:
+likely the open point above; on T1, which does not, the two differ by 3 × 10⁻¹⁵), Undo back to 10905.2313020616 exactly.
+
+**Where it departs from this note:**
+
+1. *No event stream.* A running job is followed by a long poll: `GET /api/jobs/{id}?wait=s` answers when the job's
+   state changes or after s seconds (at most 10); the page keeps one such request in flight with s = 1, so it shows
+   the progress once a second and a Stop, a kill or the end at once. Server-sent events were not built: they need a
+   streaming handler beside the generic JSON handlers of the route table, the test client and agents with curl read a
+   long poll as any other answer, and headless Chrome's virtual time (the smoke test) is paused while a request is in
+   flight, which a never-ending stream would make endless. The revision is still polled every 3 s.
+2. *The job's trace* (call, objective, best so far; at most 500 points, thinned by two past that) and the last eight
+   lines of its log are in the job's record; `GET /api/jobs` leaves them out.
+3. *A job's record names the revision of its text `text_rev`*: an answer's `rev` is the project's current revision,
+   which the page re-reads on (a job's older `rev` made it re-read without end).
+4. *Settings are typed rows* (`Setting`: name, type, default, doc; types `integer`, `boolean`, `names` in
+   `SETTING_TYPES` with their conversion); a request's value is converted or refused (422) with what the type allows.
+5. *MINOS*: iminuit's, as the job kind `minos/iminuit` from a fit's best point (MIGRAD there, HESSE, MINOS on the
+   parameters named); `follows` in a row makes the page offer it beside the result of the row it follows. The
+   engine's MINOS stays a row that waits for `fit_with_engine`.
+6. *Errors and covariance* come from iminuit's HESSE only: scipy's L-BFGS-B gives an approximate inverse Hessian,
+   not shown.
+7. *A fixed parameter* is not edited from the table: its row does not name the record or level that holds it
+   (finding 17); the page links to the record where the parameter's name begins with a record's name.
+8. *The "physical value"* is the session's at the text's start values; its unit is not sent (finding 18). The prior
+   column shows the parameter row's own prior (density, Doppler temperature, abundance, ...); normalizations and
+   shifts carry their priors in their records only (finding 19).
+9. *The objective* (χ² plus every prior term) is what the recipes minimise and what the progress shows; the data χ²
+   and N at the best point come from an evaluation there.
+10. *Threads*: one per job (the budget's); the form shows it, it is not a setting.
+11. *Screenshots of a running job* need Chrome's real-time `--timeout`, not its virtual-time budget (the long poll is
+    always in flight).
+
+**Extensibility as built.** A new parameter kind: nothing (the kind filter, its doc and the units come from
+`/api/parameters` and `/api/kinds`). A new fit recipe: a function and a `JobRow` in `jobs.py` (and its test); the
+form, the table of jobs and the result follow from the row. A new job kind: the same; its result shows the keys the
+page knows (`errors`, `covariance`, `correlation`, `minos`), other keys need a line in `fitting.js`'s `resultView`. A
+new option of a job: a `Setting` of its row; a new type of option: a row of `SETTING_TYPES` (`jobs.py`) and of
+`SETTING_WIDGETS` (`tabs/fitjob.js`).
+
+### 11.4 Step 3 as built (2026-11-13)
 
 The Results tab (`pyazr/ui/static/tabs/results.js`), its plot rows in `plots.js` (`results_against_x`,
 `angular_distribution`, with `X_CHOICES` and `Y_CHOICES`), the Results payload in the adapter
@@ -975,13 +1040,14 @@ and the page names the covariance file. Load (a fresh server, the session's buil
 
 1. *The model line of a data set* joins the engine's values at the data points; a resonance narrower than their
    spacing is not drawn, and the page says so. Extrapolations are drawn on their grids, an `adaptive` grid refined
-   by the engine. A dense grid between data points waits for `Session.evaluate` (finding 17).
-2. *x*: c.m. energy, excitation energy, c.m. angle. The lab energy is absent (finding 18). *y*: as measured (the
+   by the engine. A dense grid between data points waits for `Session.evaluate` (finding 21).
+2. *x*: c.m. energy, excitation energy, c.m. angle. The lab energy is absent (finding 22). *y*: as measured (the
    datum times the norm, which the model is compared with) or the S factor; "cross section" of a data set measured
-   as an S factor is absent (finding 19).
+   as an S factor is absent (finding 23).
 3. *One plot per series* by default; **together** draws one plot per y unit. Every trace is in the legend.
 4. *Level markers* on the excitation-energy axis only (the project text's levels: E_x needs no conversion).
-5. *"At"* is the working x; the job / x0 selector comes with the Fit tab (a sentence in its place, no control).
+5. *"At"* is the working x; the job / x0 selector of the Fit tab is not on this tab yet (a sentence in its place,
+   no control).
 6. *More than 5000 points*: drawn as they are (SVG, no decimation), and the plot says so; no project of `tests/`
    comes near (13N: 593 points).
 7. *Routes*: `POST /api/outputs` (was a later step) writes the program's output files at the working x into the
@@ -1052,13 +1118,25 @@ Found while building the page (step 2):
     "the engine describes the records that compute something"); the page shows that sentence where a description
     would be.
 
+Found while building the Fit tab:
+
+17. **The owner of each parameter as a record name or level label and field** (or `Project.set_parameter(name,
+    value)`), so the table edits a fixed value as a project edit; the parameter rows carry the engine's owner
+    numbers (J group, level index, segment key) only.
+18. **The unit of each parameter's physical value** (`physical_value` of a width is in eV, fm^-1/2 or MeV^1/2 by the
+    channel's convention; the row's `unit` is that of x).
+19. **The prior of every nuisance in its parameter row** (normalizations, energy shifts, shift-function terms have
+    `prior_nominal` and `prior_sigma` only in their records).
+20. **Progress, stop and the result's covariance of the engine's fitters** (finding 2 again): the Fit tab's rows for
+    the engine's MIGRAD, LM and MINOS wait for `fit_with_engine`; the sampler and bands for `Objective`.
+
 Found while building the Results tab (step 3):
 
-17. **The model on given energies and angles** (`Session.evaluate` on a grid, `POST /api/evaluate/grid`), or a data
+21. **The model on given energies and angles** (`Session.evaluate` on a grid, `POST /api/evaluate/grid`), or a data
     set's sub-point grid (`DataSet.grid`), so the model line passes between the data points.
-18. **The lab energy (and lab angle) of each point** in the data arrays: the program writes them (`kinflag.dat`),
+22. **The lab energy (and lab angle) of each point** in the data arrays: the program writes them (`kinflag.dat`),
     pyazr gives c.m. values only.
-19. **The program's σ and S columns** (`SigmaAndS` of `DataOutputFiles.cpp`: a data set of the S factor, the
+23. **The program's σ and S columns** (`SigmaAndS` of `DataOutputFiles.cpp`: a data set of the S factor, the
     modified S factor's shape) and the normalized datum as arrays of the evaluation: the adapter forms datum × norm
     and × conversion itself for cross sections only, as the program does.
 

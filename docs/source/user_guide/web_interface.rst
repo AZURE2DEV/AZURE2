@@ -63,6 +63,26 @@ model at the working parameters, against energy or angle; **Export data (CSV)** 
 units.  **+ new**, **Duplicate**, **Rename** and **Delete** add, copy, rename (with every reference) and remove
 records; each is one entry of the history.
 
+**Fit.**  On the left the job form, drawn from the server's job table: the kind (fit, MINOS), the method (iminuit's
+MIGRAD with HESSE, scipy's L-BFGS-B; the engine's fitters, the sampler, bands and the rate are listed greyed with the
+pyazr call they wait for), the method's settings with their defaults, the start point (the working parameters, the
+values of the project text, or the best point of a job) and **Run**.  A job runs in its own process on the text of
+the current revision with one thread of the server's budget; while it runs, evaluations wait (the header shows
+χ² —).  On the right the job: its calls, the objective (χ² + priors) at the last call and the best so far, the
+time, a plot of the objective against the call (log scale), the last lines of its log, **Stop** (it ends before its
+next objective call and keeps its best point) and **Kill** (at once; the best point reported so far is kept).  A
+reload finds a running job again.  When it has ended: the recipe's own words (converged or not), the objective at
+the start and at the best point, the χ² and N at the best point, **Accept into project** (the best point written
+into the project text as one history entry; Undo takes it back; the χ² of the project as written then stands beside
+the fit's, and a difference is said, not hidden), and after an iminuit fit **minos (iminuit)…**, which fills the
+form for a MINOS job from that fit.  Below, the table of every parameter: name, kind (its description on hover),
+free or fixed, the unit of x, the working x (a free parameter's value is edited here: Enter sets it, the header's χ²
+follows; **Reset x** goes back to the text's values), the physical value, bounds, prior, and for the job shown its
+best point, errors and MINOS intervals; **compare with start** adds the job's start point.  Filter by kind (the
+kinds the engine lists), by "free only" or by text (``/``).  A fixed value is a value of the project text: it is
+edited in its record (a link where the parameter's name begins with a record's) or level.  After a fit with HESSE,
+the covariance and the correlation as tables and CSV.
+
 **Results.**  Everything at the working parameters (the vector of the last edit or Undo), from one answer of the
 server (``GET /api/evaluation``).  Tick the data sets and extrapolations to show (grouped as on the Data tab, with
 **all** and **none**); choose x (c.m. energy, excitation energy, c.m. angle; **log x**) and y (as measured, or the
@@ -81,11 +101,12 @@ the figure as SVG or PNG.  The view is also a link: ``#/results?x=e_x&y=s_factor
 Not there yet
 -------------
 
-The tabs **Fit**, **Physics** and **THM** say which step brings them.  Until then a fit runs through
-the API (``POST /api/jobs``) or pyazr, and the ``<thm>`` section is edited through the API.  Adding or removing a
-particle pair, generating channels from a J^π, the session's options as editable keys, the file browser, EXFOR and
-ENSDF imports, the Wigner limits and physical widths of the channels, the lab energy as an x axis, the model on a dense grid
-between data points, the reaction rate and uncertainty bands, and
-live updates pushed by the server (the page asks every three seconds whether another client changed the project)
-come later.  The page was checked in a headless Chrome; plotly.js 4.1.2 (MIT licence) is part of the package, so
-the page loads nothing from the network, and without it the plots appear as tables of their numbers.
+The tabs **Physics** and **THM** say which step brings them; the ``<thm>`` section is edited through the API. In the
+Fit tab the engine's own fitters (MIGRAD, LM, their MINOS), the emcee sampler and bands wait for pyazr calls, and a
+fixed parameter is not edited from the table. Adding or removing a particle pair, generating channels from a J^π,
+the session's options as editable keys, the file browser, EXFOR and ENSDF imports, the Wigner limits and physical
+widths of the channels, the lab energy as an x axis, the model on a dense grid between data points, the reaction
+rate and uncertainty bands, and live updates pushed by the server (the page asks every three seconds whether another
+client changed the project) come later. The page was checked in a headless Chrome; plotly.js 4.1.2 (MIT licence) is
+part of the package, so the page loads nothing from the network, and without it the plots appear as tables of their
+numbers.

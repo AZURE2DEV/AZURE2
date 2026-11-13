@@ -240,9 +240,17 @@ class Server:
                               "value of x", fix="PATCH the record or level that holds it")
             raise NotFound(f"no free parameter {', '.join(unknown)}", known=self.free_names)
 
+    def _require_session_unless_built(self):
+        """Refuse over the budget only when the worker must build: a session of the current text already built is
+        read without computing (the parameter table and x stay readable while a job holds the budget)."""
+        with self.state.lock:
+            current = self.worker.built_from == self.state.project.text and self.worker.pid() is not None
+        if not current:
+            self.budget.require_session()
+
     def session_describe(self):
         with self.worker.lock:
-            self.budget.require_session()
+            self._require_session_unless_built()
             rev = self._ensure_built()
             return {"rev": rev, "pid": self.worker.pid(), "build_s": self.build_s, "options": self.session["options"],
                     "n_free": self.session["n_free"], "datasets": self.session["datasets"],
@@ -256,14 +264,14 @@ class Server:
 
     def get_x(self):
         with self.worker.lock:
-            self.budget.require_session()
+            self._require_session_unless_built()
             rev = self._ensure_built()
             return {"rev": rev, "x": dict(self.x), "x0": dict(self.x0)}
 
     def patch_x(self, values=None, reset=False):
         """Set entries of the working x ({name: value}, fit basis); ``reset``: back to the text's x0 first."""
         with self.worker.lock:
-            self.budget.require_session()
+            self._require_session_unless_built()
             rev = self._ensure_built()
             values = values or {}
             self._check_names(values)
@@ -293,7 +301,8 @@ class Server:
         return job_table()
 
     def jobs_list(self):
-        return [{k: v for k, v in j.view().items() if k != "best"} for j in self.jobs.jobs.values()]
+        bulky = ("best", "trace", "log")  # GET /api/jobs/{id} serves them
+        return [{k: v for k, v in j.view().items() if k not in bulky} for j in self.jobs.jobs.values()]
 
     def job_start(self, kind, method, settings=None, x0=None, rev=None):
         """Start a job on the current text from ``x0``: omitted, the working x; ``"text"``, the text's x0;
@@ -313,8 +322,10 @@ class Server:
             return self.jobs.start(kind, method, settings, x0, rev, self.state.session_text(text),
                                    self.state.directory, self.state.session_file)
 
-    def job_get(self, job_id):
-        return self.jobs.get(job_id).view()
+    def job_get(self, job_id, wait=None):
+        """A job's record, its trace and the last lines of its log; with ``wait`` (s), once its state changes or
+        after that long (a long poll: the page follows a running job with one request in flight)."""
+        return (self.jobs.wait(job_id, wait) if wait else self.jobs.get(job_id)).view()
 
     def job_stop(self, job_id):
         return self.jobs.stop(job_id)
@@ -323,8 +334,19 @@ class Server:
         return self.jobs.kill(job_id)
 
     def job_accept(self, job_id, rev=None):
-        """Write the job's best point into the project text (one history entry)."""
-        return self.apply(rev, self.jobs.best_x(job_id), what=f"accept job {job_id}")
+        """Write the job's best point into the project text (one history entry); the job's record keeps the revision
+        that made and the chi-squared, objective and N at the best point on the job's own text (``accepted``), so a
+        client compares them with the project as written, also after a reload."""
+        job = self.jobs.get(job_id)
+        best = self.jobs.best_x(job_id)
+        at_best = None
+        if job.record.get("text_rev") == self.state.rev:  # the fit's own numbers, on the text it ran on
+            e = self.session_request("evaluate", x=best)
+            at_best = {"chi2": e["chi2"], "objective": e["objective"], "n": e["totals"].get("Total-N")}
+        answer = self.apply(rev, best, what=f"accept job {job_id}")
+        with job.lock:
+            job.record["accepted"] = {"rev": answer["rev"], "time": time.time(), "at_best": at_best}
+        return answer
 
     # -- the server itself ------------------------------------------------------------------------------------------
 

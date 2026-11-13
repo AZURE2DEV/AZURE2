@@ -653,6 +653,12 @@ value type of the schema needs one widget. plotly.js 4.1.2 (the cartesian bundle
 checked with node's test runner and a headless Chrome on this machine; no person has used it in a real browser yet.
 User guide: "The web interface".
 
+The Fit tab (2026-11-13, second step of the page) runs the recipe fits (iminuit's MIGRAD with HESSE, scipy's
+L-BFGS-B) and iminuit's MINOS as jobs from a form drawn from the server's job table, follows a running job (calls,
+objective, its plot against the call, Stop, Kill), writes an accepted fit into the project as one Undo-able edit and
+shows the χ² of the project as written beside the fit's; the table of every parameter edits the working x of the free
+ones. The engine's own fitters and the sampler are listed with the pyazr call they wait for.
+
 The Results tab (2026-11-13): for every data set and extrapolation, the data times the normalization in use, the
 model and the engine's residuals under it, against c.m. energy, excitation energy or angle, as measured or as S
 factor; the χ² table equal to the program's `chiSquared.out`, model data, angular distributions at one energy, and
