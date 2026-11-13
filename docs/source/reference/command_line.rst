@@ -18,9 +18,10 @@ The paths a project names -- its output and checks directories, data,
 reference, grid, covariance and table files -- and the file names typed at the
 menu's prompts (a parameter file, an integrals file, a temperature file) are
 relative to the directory of ``input_file.azr``, wherever AZURE2 is started;
-messages print them as the project writes them.  (``--validate`` and
-``--describe`` read data files relative to the working directory, as
-``pyazr.validate`` and ``pyazr.describe`` do.)
+messages print them as the project writes them.  ``--validate`` and
+``--describe`` read the data files by the same rule (relative to the project
+file's directory), as ``pyazr.validate`` and ``pyazr.describe`` do; before
+November 2026 these four read them relative to the working directory.
 Builds with the Qt setup utility need ``--no-gui`` for text mode; here it is
 accepted and has no effect, so scripts written for those builds run
 unchanged.
@@ -225,6 +226,8 @@ Available Options
        described (exit 2 when the project has no such record).  A data set without an
        ``energy_window`` reads "window E_lab all energies (no energy_window)".
        ``pyazr.describe(path, as_json=False)`` returns the same; ``Project.describe(name)`` one record.
+       The text form ends with the environment switches that are set, one line each
+       (``NAME=value (kind)``, see `Environment switches`_); ``pyazr.describe`` leaves them out.
    * - ``--schema``
      - Print the table of project format 3 as one JSON document and exit: the
        record kinds and their fields with value types and conditions, the
@@ -625,7 +628,8 @@ switches that are set, their values and kinds.
      - nodes per decade of the external-capture tables, over ``ecTableNodesPerDecade``
    * - ``AZURE2_SWAP_COUPLING_ORDER``
      - numbers
-     - couples the two particle spins of a channel spin the other way round (a convention test, :doc:`../theory/conventions`)
+     - couples the two particle spins of a channel spin the other way round
+       (a convention test, :doc:`../theory/conventions`)
    * - ``AZURE_BOUND_SHIFT_NUMERICAL``
      - numbers
      - the bound-state shift function from the numerical Whittaker derivative, not the U ratio

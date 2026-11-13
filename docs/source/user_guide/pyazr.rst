@@ -72,7 +72,9 @@ data — rather than waiting for the garbage collector; without it, call
    **The** ``.azr`` **stores its** ``output/``, ``checks/`` **and data paths
    relative to itself**, which is what ``cwd=`` handles; it defaults to the
    ``.azr``'s own directory, so paths you pass ``pyazr`` are resolved from
-   wherever *you* are.
+   wherever *you* are.  ``pyazr.validate(path)`` and ``pyazr.describe(path)``
+   read a project's data files by the same rule, relative to the ``.azr``'s
+   directory (before November 2026: relative to the working directory).
 
 Session options
 ---------------

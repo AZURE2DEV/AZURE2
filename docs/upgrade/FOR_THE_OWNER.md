@@ -364,9 +364,10 @@ option is one line; `AZURE2 --describe` ends with the switches that are set.  Th
 process (pyazr's `os.environ`) is no longer seen: set it before the process, or the first session, starts.  To add a
 switch: the recipe "Add a diagnostic switch" in `CLAUDE.md`.  What is not done: the fitter's and the sampler's own
 members, the MCMC's progress globals.  Every one is a row of
-`tests/consistency/allowed_state.tsv` with the step that removes it (82 rows; 14 more are permanent: constant
-tables, locks of output streams, and the bytes of input files, kept per process under a key of path, size and
-modification time, which `cache_stats()` counts: say if you want them per session).  What you
+`tests/consistency/allowed_state.tsv` with the step that removes it (53 rows; 15 more are permanent: constant
+tables, the Coulomb table's content identity, locks of output streams, and the bytes of input files, kept per
+process under a key of path, size and modification time, which `cache_stats()` counts: say if you want them per
+session).  What you
 must not do: add a `static` or `thread_local` variable that keeps a value, a global pointer, or a `mutable` member; a
 consistency check refuses them.
 

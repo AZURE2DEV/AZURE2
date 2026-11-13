@@ -61,7 +61,7 @@ def predictions(path):
     Returns the lines ``AZURE2 --print-predictions path`` prints: ``"data <label>: <tree>"`` for each data set, then
     ``"extrapolation <label>: <tree>"``, the label the record's name in a format-3 project and the number (1, 2, ...)
     in an old one (docs/source/reference/command_line.rst gives the tree's text form).  The
-    project is set up as a calculation would set it up, its data files read relative to the working directory.  A
+    project is set up as a calculation would set it up, its data files read relative to the project file. A
     set-up that fails raises ``ValueError`` with the engine's messages.  Needs the compiled engine module.
     """
     from .described import _engine as _engine_module
@@ -76,7 +76,8 @@ def describe(path, as_json=False, record=None):
 
     For every data set and extrapolation: the quantity, the observable computed, the reaction tree with the ``<levels>``
     pair keys each term resolved to, the windows, the data file as the engine opens it (the resolved path: relative to
-    the project file's directory, as a run reads it), the rows of the data file read and kept inside the windows with the lab-energy range of the
+    the project file's directory, as a run reads it), the rows of the data file read and kept inside the windows with
+    the lab-energy range of the
     kept rows (JSON: ``rows_read``, ``rows_kept``, ``kept_E_lab_MeV``, ``rows_error``), the target, beam and detector
     effects linked to it and its fit parameters with their names and kinds; then the model data (docs/upgrade/project_format3.md section 6.3).  Returns the text, or with
     ``as_json`` a dict (``datasets``, ``extrapolations``, ``model_data``).  A project with an error raises
@@ -88,8 +89,8 @@ def describe(path, as_json=False, record=None):
     from .described import _engine as _engine_module
     with open(path, "rb") as f:
         text = f.read()
-    refusal, diagnostics, description = _engine_module().describe_format3_text(text, str(path), bool(as_json), _project_dir(path),
-                                                                                record or "")
+    refusal, diagnostics, description = _engine_module().describe_format3_text(text, str(path), bool(as_json),
+                                                                                _project_dir(path), record or "")
     if refusal:
         raise ValueError(refusal)
     if not description:
