@@ -116,7 +116,19 @@ the specs, the one the norms and energy shifts had (`DatasetSpec::normCentre`, `
 fills it from the nuisance (`Build.cpp`, `BuildEffects.cpp`), the engine object of the kind keeps it beside its width
 and uses it in its penalty, and the one enumeration of diagonal priors (`ForEachDiagonalPrior`, `Objective.h`)
 hands it to the gradient, the least-squares rows and the MCMC priors. The API listing reports it
-(`Parameter.prior_nominal`).
+(`Parameter.prior_nominal`, now also for an abundance and an apparatus parameter).
+
+**Writing back.** The program writes fitted values only to `param.sav` (no prior); reading it back keeps the
+project's centres. pyazr's `save_fit` and `Project` write a fitted value into its record through the build's
+`ParameterSource` (`experiment::ParameterValueEdit`), which changes the value token only, so the centre and width stay
+as written. Every kind with a prior has a source now (the areal density, the Doppler temperature, the screening
+potential and the sample thickness had none, so their fitted values were not written back); a source names the
+engine's unit where it is not the base unit (`engineUnit`: eV for screening, atoms/b for a thickness).
+
+**A new nuisance kind with a prior** needs: its width and `PriorCentre` in its spec, filled by `PriorCentreOf` where
+the build reads the nuisance; the centre kept beside the width by its engine object and used in its penalty; one
+line in `ForEachDiagonalPrior` (`Objective.h`, from which the gradient, the least-squares rows and the MCMC take it);
+a `ParameterSource` for its write-back; its field in the API listing.
 
 Before (measured by calculations, value ≠ centre against value = centre, at 441a0907): the norm and the constant shift
 used the centre; the sqrt(E) shift, the shift function's parameters, the abundance, `isotope_sum`, screening, Doppler
