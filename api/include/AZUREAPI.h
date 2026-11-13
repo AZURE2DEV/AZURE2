@@ -7,6 +7,7 @@
 #include "AZUREGrad.h"
 #include "Objective.h"
 #include "ParameterLimitsManager.h"
+#include "PosteriorSupport.h"
 #include <memory>
 #include <map>
 #include <vector>
@@ -105,10 +106,10 @@ class AZUREAPI {
   /// params_names(): the kind and the owner fields of ParameterRecord.  The binding's parameter_records().
   const std::vector<ParameterRecord> &GetParameterRecords() const { return records_; }
 
-  /// The limits each parameter is created with (AZUREParams, in the order of params_names()): (lower, upper) in the
-  /// parameter's unit, -inf / +inf where it has none.  The limits a <parameterSettings> block adds in a fit of the
-  /// program (ParameterLimitsManager) are not among them: a session does not apply that block.
-  const std::vector<std::pair<double, double>> &GetParameterBounds() const { return bounds_; }
+  /// The fit's limits of each parameter (in the order of params_names()): (lower, upper) in the parameter's unit,
+  /// -inf / +inf where it has none.  The limits the parameter is created with, then those of a <parameterSettings>
+  /// block, as the program's fit and its sampler have them (ReadFitSettings; PosteriorSupport).
+  std::pair<double, double> GetParameterBounds(int index) const;
 
   /*!
    * Returns a reference to the Config structure.
@@ -346,11 +347,11 @@ class AZUREAPI {
    * (CalculateResidualJacobianRWA's [-1]).
    */
   bool ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r *jacobianOut) const;
-  /// Whether a free value lies outside the limits of a parameter whose kind's row has samplerSupport
-  /// (ParameterKind.h; the ensemble sampler's -infinity, docs/upgrade/objective.md section 6).
+  /// Whether a free value lies outside the fit's limits of its parameter, of any kind (PosteriorSupport, the
+  /// ensemble sampler's rule: -infinity there, docs/upgrade/objective.md section 6).
   bool OutsideSamplerSupport(const vector_r &params) const;
   /// ln P = -1/2 x the objective (no constant), -infinity outside the ensemble sampler's support: outside the
-  /// limits of a kind with samplerSupport, or where a term excludes the point (Park's J < 0).
+  /// fit's limits of a parameter, or where a term excludes the point (Park's J < 0).
   double LogProbabilityRWA(const vector_r &params) const;
 
   /*!
@@ -469,6 +470,10 @@ class AZUREAPI {
   double NuisanceChi2(const vector_r &full) const;
   void AddNuisanceGradient(const vector_r &full, vector_r &gradFull) const;
   bool NuisancePriorOf(int f, double &nominal, double &sigma) const;
+  /// The fit's settings, read once per model: <parameterSettings> applied to a scratch parameter set (not to the
+  /// session's parameters), from which come the nuisance priors, the fit's limits (GetParameterBounds) and the
+  /// support of the posterior (OutsideSamplerSupport).
+  void ReadFitSettings() const;
   mutable std::unique_ptr<AZUREParams> nuisanceParams_;
   mutable std::unique_ptr<ParameterLimitsManager> nuisance_;
   mutable bool nuisanceRead_ = false;
@@ -534,7 +539,6 @@ class AZUREAPI {
   std::vector<bool> fixed_;
   std::vector<std::string> names_;
   std::vector<ParameterRecord> records_;  ///< what each parameter is (AZUREParams::Records), in the order of names_
-  std::vector<std::pair<double, double>> bounds_;  ///< each parameter's limits as created, in the order of names_
   vector_r all_, all_rwa_, values_, values_rwa_, norms_, normsErrors_;
 
   // Data

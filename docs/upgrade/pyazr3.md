@@ -888,6 +888,12 @@ user sees which bounds are walls.  The limits of the other kinds are not turned 
 who wants walls at every bound writes one line:
 `lp = lambda x: f.log_prob(x) if all(lo <= v <= hi for v, (lo, hi) in zip(x, f.bounds)) else -numpy.inf`.
 
+*Since the PI's decision of 2026-11-13 (the sampler respects the limits of every kind):* the column and the record
+field `sampler_support` are gone.  The engine has one function for the rule, `PosteriorSupport` (the fit's limits of
+every free parameter: those it is created with, then those of `<parameterSettings>`); the program's sampler and
+`Objective.log_prob` both ask it, and `bounds` of a parameter record and of the objective are those same limits
+(`AZUREAPI::ReadFitSettings`).  The one-line wrapper above is no longer needed.
+
 **Arrays** (section 2.4): every array of an `Evaluation` and every array an `Objective` returns is a copy the caller
 owns.  The set-up arrays of a data set (energies, angles, data values and errors) are copies too in this step, marked
 so in their docstrings; they become read-only views in step 6.

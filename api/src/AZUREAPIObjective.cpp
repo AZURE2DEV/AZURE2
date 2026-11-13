@@ -6,6 +6,7 @@
 #include <limits>
 
 #include "AZUREGrad.h"
+#include "AZUREParams.h"
 #include "CNuc.h"
 #include "Config.h"
 #include "Objective.h"
@@ -91,13 +92,8 @@ bool AZUREAPI::ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r
 }
 
 bool AZUREAPI::OutsideSamplerSupport(const vector_r &params) const {
-  for (int i = 0, k = 0; i < (int)fixed_.size() && k < (int)params.size(); i++) {
-    if (fixed_[i]) continue;
-    const double x = params[k++];
-    if (!KindRow(records_[i].kind).samplerSupport) continue;
-    if (!(x >= bounds_[i].first && x <= bounds_[i].second)) return true;
-  }
-  return false;
+  ReadFitSettings();
+  return !PosteriorSupport::OfParameters(*nuisanceParams_).Contains(FullOf(params, all_rwa_, fixed_));
 }
 
 double AZUREAPI::LogProbabilityRWA(const vector_r &params) const {

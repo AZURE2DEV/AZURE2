@@ -39,12 +39,11 @@ class Objective:
       ``(p - centre)/sigma`` per prior of a nuisance parameter.  The first rows are ``Session.residuals(x)`` and the
       rows of ``Session.residual_jacobian(x)``, bit for bit.
     - ``f.log_prob(x)``: ``-0.5 * f(x)`` (no constant), ``-inf`` where the engine's ensemble sampler puts zero
-      probability: outside the bounds of a parameter whose record has ``sampler_support`` (today a ``gamma_decay``
-      record's numbers) and where Park's overlap J of a level is negative.  For walls at every bound:
-      ``lp = lambda x: f.log_prob(x) if all(lo <= v <= hi for v, (lo, hi) in zip(x, f.bounds)) else -numpy.inf``.
-    - ``x0`` (a copy of the start), ``names``, ``bounds`` (``(lower, upper)``, ``-inf``/``inf`` where the engine
-      sets none: the limits a parameter is created with), ``sampler_support`` (one flag per entry), ``errordef``
-      (1: a chi-squared; for iminuit).
+      probability: outside ``bounds``, the fit's limits of a free parameter of any kind, and where Park's overlap J
+      of a level is negative.
+    - ``x0`` (a copy of the start), ``names``, ``bounds`` (``(lower, upper)``, ``-inf``/``inf`` where the fit has
+      none: the limits a parameter is created with, then those of a ``<parameterSettings>`` block, as the
+      program's fit and sampler have them), ``errordef`` (1: a chi-squared; for iminuit).
 
     Arrays returned are copies the caller owns.  The object holds its session and these copies, no cache.  Calls from
     several threads on one session are safe: they take the session's lock and run one after the other.  A session
@@ -60,11 +59,10 @@ class Objective:
         "residuals(x)": "the objective as least-squares rows, sum(r**2) == f(x)",
         "jacobian(x)": "the rows' Jacobian, shape (rows, free parameters)",
         "residuals_and_jacobian(x)": "(rows, Jacobian) from one engine call",
-        "log_prob(x)": "-0.5 f(x), -inf outside the engine's sampler's support",
+        "log_prob(x)": "-0.5 f(x), -inf outside the engine's sampler's support (outside bounds, Park's J < 0)",
         "x0": "a copy of the start of the free vector",
         "names": "the free parameters' names",
-        "bounds": "(lower, upper) per free parameter, -inf / inf where none",
-        "sampler_support": "per free parameter: its bounds are walls of log_prob",
+        "bounds": "(lower, upper) per free parameter, the fit's limits, -inf / inf where none; walls of log_prob",
         "errordef": "1 (a chi-squared)",
     }
 
@@ -76,7 +74,6 @@ class Objective:
         self._x0 = np.array(session.params_rwa, float).ravel()
         self.names = list(free.names)
         self.bounds = [(float(lo), float(hi)) for lo, hi in free.bounds]
-        self.sampler_support = [bool(p.sampler_support) for p in free]
 
     @property
     def x0(self):
@@ -130,9 +127,9 @@ class Objective:
             return float(self._engine().log_prob_rwa(self._vector(x)))
 
     def describe(self):
-        """Plain data: the free parameters (name, bounds, start, sampler_support), errordef, the terms' names."""
-        rows = [{"name": n, "bounds": list(b), "start": float(v), "sampler_support": s}
-                for n, b, v, s in zip(self.names, self.bounds, self._x0, self.sampler_support)]
+        """Plain data: the free parameters (name, bounds, start), errordef, the terms' names."""
+        rows = [{"name": n, "bounds": list(b), "start": float(v)}
+                for n, b, v in zip(self.names, self.bounds, self._x0)]
         return {"parameters": rows, "errordef": self.errordef, "terms": list(self._engine().objective_term_names())}
 
     def __repr__(self):

@@ -89,6 +89,8 @@ AZURECalc	ParamIndexMap	makes	inference		BuildParamIndexMap(CNuc *, WorkingCopy 
 AZURECalc	GradAccum	makes	inference		AZURECalc::GradientBy: GradAccum accum
 AZURECalcMCMC	WorkingData	owns	inference		AZURECalcMCMC::edata_pool_ (std::stack<std::unique_ptr<WorkingData>>)
 AZURECalcMCMC	CNuc	owns	inference		AZURECalcMCMC::cnuc_pool_ (std::stack<std::unique_ptr<CNuc>>)
+AZURECalcMCMC	PosteriorSupport	owns	inference		AZURECalcMCMC::support_ (PosteriorSupport)
+PosteriorSupport	ParameterLimitsManager	makes	inference		PosteriorSupport::OfFit: ParameterLimitsManager settings(&configure, compound, data, &params)
 nu::Mcmc	nu::Ensemble	owns	inference		Mcmc::sample (Ensemble)
 nu::Ensemble	nu::Walker	owns	inference		Ensemble::walkers (std::vector<Walker>)
 AZUREMain	Config	reads	frontends	const	AZUREMain::configure_ (const Config &)
