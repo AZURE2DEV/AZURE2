@@ -94,7 +94,10 @@ nu::Ensemble	nu::Walker	owns	inference		Ensemble::walkers (std::vector<Walker>)
 AZUREMain	Config	reads	frontends	const	AZUREMain::configure_ (const Config &)
 AZUREMain	CNuc	owns	frontends		AZUREMain::compound_ (new CNuc in the constructor)
 AZUREMain	WorkingCopy	owns	frontends		AZUREMain::data_ (new WorkingCopy in the constructor)
-AZUREMain	AZURECalc	makes	frontends		AZUREMain::operator(): AZURECalc theFunc(...)
+AZUREMain	ProgramRun	makes	frontends		AZUREMain::operator(): ProgramRun run(...)
+ProgramRun	AZURECalc	owns	frontends		ProgramRun::objective (std::unique_ptr<AZURECalc>, SetUpObjective)
+ProgramProgress	AZURECalc	reads	frontends	nonconst	ProgramProgress::objective_ (AZURECalc &): its observer for the run
+AZUREAPI	AZURECalc	makes	frontends		AZUREAPI::FitWithEngine: AZURECalc objective(...)
 AZUREAPI	Config	reads	frontends	nonconst	AZUREAPI::configure_ (Config &)
 AZUREAPI	CNuc	owns	frontends		AZUREAPI::compound_ (new CNuc in AZUREAPI::ReplaceModel, called by Initialize)
 AZUREAPI	WorkingCopy	owns	frontends		AZUREAPI::data_ (new WorkingCopy in AZUREAPI::ReplaceModel, called by Initialize)
@@ -112,6 +115,14 @@ Server	JobTable	owns	frontends		Server.jobs = JobTable(...)
 Engine	azure2	owns	frontends		Engine.s = pyazr.azure2(file, cwd=cwd)
 WorkingCopy	azure2::Results	reads	evaluation	nonconst	WorkingCopy::CalculatePointsInParallel(..., Results &), WorkingCopy::BeginEvaluation(Results &): the caller's buffer
 AZURECalc	Objective	reads	inference	const	Objective::Engine() (const Objective &) in AZURECalc::operator() and AZURECalc::Chi2OnWith
-AZURECalc	AZUREParams	reads	inference	nonconst	AZURECalc::RunLevenbergMarquardt(AZUREParams &, ...), AZURECalc::RunGSLNonlinear(AZUREParams &, ...)
+FitterRow	AZUREParams	reads	inference	nonconst	FitFunction(AZURECalc &, AZUREParams &, const FitControl &): start in, end point out
+FitterRow	AZURECalc	reads	inference	nonconst	FitFunction(AZURECalc &objective, ...)
+FitterRow	FitControl	reads	inference	const	FitFunction(..., const FitControl &control)
+FitterRow	FitResult	makes	inference		FitFunction returns FitResult
+FitEvaluations	AZURECalc	reads	inference	nonconst	FitEvaluations::objective_ (AZURECalc &): Observe(&observer_) while it lives
+FitEvaluations	EvaluationObserver	owns	inference		FitEvaluations::observer_
+FitEvaluations	FitControl	reads	inference	const	FitEvaluations::control_ (const FitControl &)
+FitEvaluations	FitProgress	makes	inference		FitEvaluations::Evaluated: FitProgress record
+AZURECalc	EvaluationObserver	reads	inference	const	AZURECalc::observer_ (const EvaluationObserver *)
 AZURECalcMCMC	nu::Mcmc	makes	inference		AZURECalcMCMC::RunMCMCSampling: nu::Mcmc mcmc_sampler(nwalkers, ndim, initial_positions)
 AZURECalcMCMC	Objective	reads	inference	const	Objective::Engine().SamplerChi2(context) in AZURECalcMCMC (src/AZURECalcMCMC.cpp)

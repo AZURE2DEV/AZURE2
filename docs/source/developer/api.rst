@@ -22,6 +22,10 @@ same functions as the program: the point pass
 (``WorkingCopy::CalculatePointsInParallel``), the model pass and
 ``Objective::Engine()``. A session can rebuild its model with another channel
 radius (``AZUREAPI::SetRadius``) or another nuclear potential.
+``AZUREAPI::FitWithEngine`` (``api/src/AZUREAPIFit.cpp``) runs a row of the
+fitter table on the session with the program's functions
+(``azure2.fit_with_engine``; the binding ``api/src/pybind_fit.cpp`` releases
+the GIL and adds ``StopRequest`` and ``fitters()``).
 
 The module ``_azure2``
 ----------------------

@@ -2,7 +2,7 @@ digraph inference {
   graph [rankdir=LR, fontname="Helvetica", fontsize=16, labelloc=t, label="Inference: objective, parameters, fitters, sampler", nodesep=0.18, ranksep=0.3, newrank=true];
   node [fontname="Helvetica", fontsize=14, margin="0.08,0.04"];
   edge [fontname="Helvetica", fontsize=12];
-  n_AZURECalc [label=<<b>AZURECalc</b><br/><font point-size="12">Minuit&#x27;s function:<br/>chi^2, gradient, least<br/>squares</font>>, shape=box, style="filled", fillcolor="white"];
+  n_AZURECalc [label=<<b>AZURECalc</b><br/><font point-size="12">the objective: chi^2,<br/>gradient, residual<br/>rows</font>>, shape=box, style="filled", fillcolor="white"];
   n_WorkingData [label=<<b>WorkingData</b><br/><font point-size="12">a pooled working copy<br/>with its buffer</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
   n_CNuc [label=<<b>CNuc</b><br/><font point-size="12">the level parameters<br/>at the vector</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
   n_WorkingCopy [label=<<b>WorkingCopy</b><br/><font point-size="12">points, norms and<br/>shifts of one<br/>evaluation</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
@@ -17,6 +17,12 @@ digraph inference {
   n_ParamIndexMap [label=<<b>ParamIndexMap</b><br/><font point-size="12">where each parameter<br/>sits, for the gradient</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
   n_GradAccum [label=<<b>GradAccum</b><br/><font point-size="12">the gradient in<br/>physics coordinates</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
   n_ParameterLimitsManager [label=<<b>ParameterLimitsManager</b><br/><font point-size="12">nuisance limits and<br/>priors</font>>, shape=box, style="filled", fillcolor="white"];
+  n_FitterRow [label=<<b>FitterRow</b><br/><font point-size="12">a fitter: name,<br/>switch, needs, its<br/>function</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_FitControl [label=<<b>FitControl</b><br/><font point-size="12">what a fit is given:<br/>call limit, sink,<br/>stop, log</font>>, shape=box, style="filled", fillcolor="white"];
+  n_FitResult [label=<<b>FitResult</b><br/><font point-size="12">how a fit ended:<br/>point, status,<br/>covariance, MINOS</font>>, shape=box, style="filled", fillcolor="white"];
+  n_FitProgress [label=<<b>FitProgress</b><br/><font point-size="12">one step of a fit,<br/>handed to the sink</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_EvaluationObserver [label=<<b>EvaluationObserver</b><br/><font point-size="12">what the objective<br/>reports, the stop it<br/>obeys</font>>, shape=box, style="filled", fillcolor="white"];
+  n_FitEvaluations [label=<<b>FitEvaluations</b><br/><font point-size="12">the evaluations of a<br/>running fit: count,<br/>best point</font>>, shape=box, style="filled", fillcolor="white"];
   n_AZURECalcMCMC [label=<<b>AZURECalcMCMC</b><br/><font point-size="12">the log-probability of<br/>the sampler</font>>, shape=box, style="filled", fillcolor="white"];
   n_nu__Mcmc [label=<<b>nu::Mcmc</b><br/><font point-size="12">the sampler&#x27;s run</font>>, shape=box, style="filled", fillcolor="white"];
   n_nu__Ensemble [label=<<b>nu::Ensemble</b><br/><font point-size="12">the walkers of the<br/>sampler</font>>, shape=box, style="filled", fillcolor="white"];
@@ -42,7 +48,15 @@ digraph inference {
   n_nu__Mcmc -> n_nu__Ensemble [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_nu__Ensemble -> n_nu__Walker [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_AZURECalc -> n_Objective [style=dashed, arrowhead=vee];
-  n_AZURECalc -> n_AZUREParams [style=dashed, arrowhead=vee, label=" nc"];
+  n_FitterRow -> n_AZUREParams [style=dashed, arrowhead=vee, label=" nc"];
+  n_FitterRow -> n_AZURECalc [style=dashed, arrowhead=vee, label=" nc"];
+  n_FitterRow -> n_FitControl [style=dashed, arrowhead=vee];
+  n_FitterRow -> n_FitResult [style=dotted, penwidth=1.6, arrowhead=empty];
+  n_FitEvaluations -> n_AZURECalc [style=dashed, arrowhead=vee, label=" nc"];
+  n_FitEvaluations -> n_EvaluationObserver [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_FitEvaluations -> n_FitControl [style=dashed, arrowhead=vee];
+  n_FitEvaluations -> n_FitProgress [style=dotted, penwidth=1.6, arrowhead=empty];
+  n_AZURECalc -> n_EvaluationObserver [style=dashed, arrowhead=vee];
   n_AZURECalcMCMC -> n_nu__Mcmc [style=dotted, penwidth=1.6, arrowhead=empty];
   n_AZURECalcMCMC -> n_Objective [style=dashed, arrowhead=vee];
   legend [shape=plaintext, fontsize=11, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="3" COLOR="#888888"><TR><TD COLSPAN="2"><B>Legend</B></TD></TR><TR><TD COLSPAN="2"><TABLE BORDER="1" CELLBORDER="1" CELLSPACING="2" CELLPADDING="2"><TR><TD>immutable after the set-up</TD></TR></TABLE></TD></TR><TR><TD COLSPAN="2"><TABLE BORDER="1" CELLBORDER="0" CELLPADDING="3" STYLE="rounded" BGCOLOR="#d9d9d9"><TR><TD>written by every evaluation</TD></TR></TABLE></TD></TR><TR><TD COLSPAN="2"><TABLE BORDER="1" CELLBORDER="0" CELLPADDING="3" ><TR><TD>a run or session object</TD></TR></TABLE></TD></TR><TR><TD ALIGN="LEFT"><B>owns</B></TD><TD ALIGN="LEFT">solid line, diamond at the owner</TD></TR><TR><TD ALIGN="LEFT"><B>reads</B></TD><TD ALIGN="LEFT">dashed line; label nc: not const</TD></TR><TR><TD ALIGN="LEFT"><B>makes</B></TD><TD ALIGN="LEFT">dotted line, open head</TD></TR></TABLE>>];

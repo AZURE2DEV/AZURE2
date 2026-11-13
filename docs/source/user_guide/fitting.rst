@@ -214,6 +214,50 @@ Clear Limits
    constraining fits, especially for initial explorations of parameter space.
    Limits can then be adjusted manually as needed.
 
+The Engine's Fitters
+--------------------
+
+The program and a pyazr session run the same fitters, from one table of the engine (``src/Fitters.cpp``;
+``pyazr.kinds()["fitters"]``). The program takes the first row whose switch is given (the order below), MIGRAD
+without one; a session names the row, ``azure2.fit_with_engine(method=...)`` (:doc:`pyazr`).
+
+.. list-table::
+   :header-rows: 1
+   :widths: 14 14 72
+
+   * - Method
+     - Switch
+     - What it does
+   * - ``nlopt``
+     - ``--use-nlopt``
+     - NLopt's derivative-free Subplex (SBPLX) within the parameters' limits (unbounded: :math:`\pm10^{10}`); relative
+       tolerances :math:`10^{-8}` in the objective and the parameters; ``--max-calls`` applies. No covariance, no
+       MINOS. Only in builds configured with ``-DUSE_NLOPT=ON``.
+   * - ``gsl-lm``
+     - ``--use-gsl-lm``
+     - GSL's geodesic-accelerated trust-region least squares on the residual rows and their analytic Jacobian (priors
+       as rows, limits by projection); at most 200 iterations, tolerances :math:`10^{-9}`. Covariance
+       :math:`(J^TJ + \text{priors})^{-1}`. Without an analytic Jacobian for the project: MIGRAD instead.
+   * - ``lm``
+     - ``--use-lm``
+     - Levenberg-Marquardt on the same rows: at most 200 iterations, ending when the largest gradient component is
+       below :math:`10^{-8}` or a step lowers the objective by less than :math:`10^{-9}` of it. Covariance
+       :math:`(J^TJ + \text{priors})^{-1}`; MIGRAD instead without an analytic Jacobian.
+   * - ``migrad-gradient``
+     - ``--use-gradient``
+     - Minuit2's MIGRAD with the analytic gradient of the objective and a Gauss-Newton second-derivative seed. HESSE
+       covariance (the program runs HESSE with ``--covariance-band``), MINOS. The program also takes it for a project
+       with THM data.
+   * - ``migrad``
+     - (none)
+     - Minuit2's MIGRAD with its own numerical gradient: the default. HESSE covariance, MINOS.
+
+After a MIGRAD fit of a project whose data covariance has ``relvector`` terms, the model of those terms is re-frozen at
+the fitted point and MIGRAD rerun up to ``--refreeze-covariance`` times. The program prints a progress line every
+10 evaluations (``Iteration: N Chi-Squared: X``; LM and GSL-LM one per iteration) and writes the intermediate files
+every 100 evaluations (every 10 iterations for LM and GSL-LM); a session receives the same steps as records
+(``progress=``) and writes nothing.
+
 How a Fit Ends
 --------------
 
