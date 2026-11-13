@@ -2,6 +2,113 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (director, 04:03) — merged: a level's radiative decay as total width, branchings and mixing ratios (record `gamma_decay`)
+
+**Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed):
+`feature/upgrade-8-gamma-branchings` (the agent's four entries below say what was done, by file). Asked for by the PI
+on 2026-11-12 ("I would also add a possibility of fitting branchings directly"). No output number of an existing
+project changes; three projects are added (`tests/gamma_decay/models`).
+
+**New reference tag of the whole tree: `tab-gammam-1`** (the director's run of the merged tree, build
+`work/b-gammam`); against `tab-truem-1` no file of an existing project differs.
+
+**Verified by the director** (own build of the branch merged onto the head, 0 warnings).
+Whole tree at three bases against `tab-truem-1`: 860 / 833 / 860 files identical, no file of an existing project
+differs; the 27 / 18 / 27 added files are the three projects of `tests/gamma_decay/models`. The eight fits (T2 with
+Levenberg-Marquardt, gradient, MIGRAD; 13N gradient and Levenberg-Marquardt; the layer and the two stopping fits)
+identical file by file to the base build `work/b-truem`, `fitStatus.out` included. `tests/gamma_decay/check.sh` three
+times at 3 threads: all checks passed each time. `ctest -LE slow` 221/221; the slow tests 11/11; `tests/run_tests.sh`
+162 passed, 0 failed; the specification equivalence 181 equal; the converted-tree gate against `tab-truem-1` 656 / 629
+/ 656 identical, none differs; calculations at 1 against 3 threads identical (12 of 12, and the model-data projects).
+
+**Reviewed by reading**: the map `src/GammaDecayMap.cpp` (partial widths, photon amplitudes, the pull-back of the
+gradient, the penalty rows), its call sites in the fill of the compound nucleus and in the gradient's scatter, the
+call counter. Two findings went back to the agent and are fixed in the branch: (1) the gradient in a mixing ratio was
+exactly zero at δ = 0 (the pull-back divided by the L + 1 width), so a Levenberg-Marquardt fit started there did not
+move: now the derivative is taken in amplitude form, test (g) of `tests/gamma_decay/check.sh`; (2) the MIGRAD call
+count in `fitStatus.out` differed by one between 1 and 3 threads, because Minuit2's counter is a plain integer
+incremented from its own OpenMP gradient loop: Minuit2 is not patched (the PI's decision), AZURE2 counts the calls
+of its objective itself, test (f).
+
+**Decided by the director** (the note's five items, each as the agent recommended): the record's and keys' names
+stay; the formal basis (`--no-brune`) stays refused with a message until someone needs it; external capture on a
+record's channel stays refused in this branch and is lifted with the next work on the capture term; the remainder's
+wall (width 1e-3 on a sum of branchings above 1) stays; Rose-Brink's sign convention for δ is not offered unless the
+owner asks (the record is Krane-Steffen's, as ENSDF).
+
+**Kept by the PI's decision (2026-11-12), not to be raised again**: the radiative widths stay out of a level's total
+width; a `resonance_strength` datum uses the width including the photons, a difference of Γ_γ/ΣΓ_particle, which the
+user guide states.
+
+**Not run by anyone**: the Sphinx build of the new user-guide page (no sphinx in the environment); MINOS and the MCMC
+with a branching at its boundary; `--max-calls` still acts on Minuit2's counter (approximate by a few calls under
+threads). The volume and page of the Krane-Steffen-Wheeler reference in the note were not checked against the
+paper.
+
+## 2026-11-13 (agent, branch `feature/upgrade-8-gamma-branchings`) — the gradient in a mixing ratio at δ = 0
+
+**Done.** `GammaDecaySet::PullBack` took ∂p/∂δ as p/(2Γ)·∂Γ/∂δ, which is 0/0 for the L+1 channel at δ = 0 and was
+skipped: the gradient in δ was exactly 0 there (AZURE_GRAD_CHECK on an angular distribution: analytic 0, finite
+difference −1.29e6), so an LM fit started at δ = 0 did not move. Now ∂p_L/∂δ = −p_L δ/(1+δ²) and ∂p_L+1/∂δ =
+K/(1+δ²)^{3/2}, K = 2^½ p_L+1 from the map at δ = 1. Test `tests/gamma_decay/check.sh` (g) on
+`models/sign_ad.azr` (the sign case's dσ/dΩ as data): the gradient at δ = 0 and 0.3 (2e-11, 4e-11) and MIGRAD and LM
+fits from 0 ending at +0.5; on the old code the gradient check at 0 and the LM fit failed (MIGRAD with the gradient
+still reached 0.5 through Minuit's own line search). Note §2.5/2.6 and the user guide say δ = 0 is regular and that
+angle-integrated data alone leave the sign of δ open.
+
+## 2026-11-13 (agent, branch `feature/upgrade-8-gamma-branchings`) — MIGRAD's call count is AZURE2's own
+
+**Done.** `fitStatus.out` and the MIGRAD log lines report the calls counted by the objective (`AZURECalc::CountCallsInto`,
+a `std::atomic<long>` owned by the fit run in `AZUREMain`, reset before each MIGRAD), not Minuit2's `NFcn()`, whose
+`MnFcn::fNumCall` is a plain int incremented from the threads of Minuit2's OpenMP numerical gradient (lost increments:
+65 or 66 for the gamma_decay record fit at 3 threads, 62 or 63 for its partial-width twin, also with the base build).
+`external/` is not touched; `--max-calls` still acts on Minuit2's counter (approximate by a few calls under threads).
+`tests/gamma_decay/check.sh` (f): the record's fit at 1 and 3 threads, every output file identical.
+
+**Verified how.** At 1 thread the count equals `NFcn()` (record 66, twin 63 = `b-head3`); ten 3-thread runs each: 66
+and 63 every time; check (f) failed on its first run with `NFcn()` put back; the eight fits of `fits_vs_base2.sh`, the
+tree x 3 bases against `tab-gridm-1` (827/800/827 identical), `ctest -LE slow` 221/221, consistency.
+
+## 2026-11-12 (agent, branch `feature/upgrade-8-gamma-branchings`) — implementation: the `gamma_decay` record
+
+**Done.** A level's radiative widths can be written as Γ_γ, branchings b_f (n − 1 of them and a named remainder) and
+mixing ratios δ_f (Krane-Steffen) in a record `gamma_decay` of `<gammaDecays>`: `experiment/` (`GammaDecay.h/.cpp`,
+the kind in `Schema.cpp`, five codes), the engine's map in `include/GammaDecayMap.h`, `src/GammaDecayMap.cpp` (set-up
+widths, parameters of kind 13 `radiative` at the photon slots, `ToEngine` in `FillCompoundFromParams` through
+`amplitudes_from_observed`, the gradient's pull-back in `GradAccum::Scatter`, objective term T11 for the priors and the
+remainder's wall, the block of `parameters.out`), pyazr's `Parameter.decay_*`; docs (`format3.rst` generated,
+`user_guide/gamma_decay.rst`, `output_files.rst`, `parameter_kinds.md`, `objective.md`, `FOR_THE_OWNER.md`,
+`ROADMAP.md`, the recipe in `CLAUDE.md`); tests `tests/gamma_decay/check.sh`, `tests/pyazr/gamma_decay_test.py`, cases
+in `experiment/tests/diagnostics_test.cpp`, `parameter_kinds_test.py`.
+
+**Verified how.** Per commit: build without warnings, repo_consistency, the experiment and pyazr tests concerned, T1,
+T2, T3, 13N, 13N_capture_ay, thick_target_resonance, model_data x 3 bases identical to `tab-gridm-1`. The new checks
+pass and each was shown to fail with one injected error (listed in `tests/gamma_decay/README.md`). End of branch
+(2026-11-13, b-gamma, 3 threads): build 0 warnings; all projects x 3 bases against `tab-gridm-1` (tag
+`tab-gammab-final`): 827 / 800 / 827 of the reference identical, the other files are the three new projects
+(only-new); `ctest -LE slow` 221/221; `tests/run_tests.sh` 161 passed, 0 failed; the converted-tree gate (`ggammab1`)
+628 / 601 / 628 identical; the eight fits of `fits_vs_base2.sh` identical to `b-head3`; the record's fit at 1 and 3
+threads: every output identical but `fitStatus.out`'s MIGRAD call count (66 against 65; with partial widths 66 and 66),
+cause not found.
+
+**Open.** The formal basis and external capture on a record channel are refused (decisions 2 and 3 of the note);
+Sphinx was not built here (no sphinx in the environment).
+
+## 2026-11-12 (agent, branch `feature/upgrade-8-gamma-branchings`) — design note: total radiative width, branchings, mixing ratios
+
+**Done.** `docs/upgrade/gamma_parametrisation.md`: what exists (photon widths in `<levels>`, their amplitudes in the
+three bases, external capture, priors, what the datum kinds use for the total width), the parametrisation Γ_γ, b_f,
+δ_f and its map to the engine's amplitudes (`amplitudes_from_observed`, the engine's own conversion, at every fill),
+the Jacobian, the constraint (n − 1 branchings and a named remainder, so the vector keeps one parameter per photon
+channel), the record `gamma_decay` of a new section `<gammaDecays>`, and the decisions for the director.
+
+**Verified how.** The sign of δ by the engine's angular distributions (base engine `b-head3`): seven cases (M1/E2 and
+E1/M2, J = 3/2 and 5/2, J up and down, both parities), the engine against Krane-Steffen-Wheeler to 2e-7 in a2/a0 and
+a4/a0; widths of equal sign are δ_KSW < 0 in all seven (note section 2.3; scripts in `work/gammab/sign/`).
+
+**Open.** The implementation (Part B of the brief); item 4 (b) of the brief dropped by the PI (2026-11-12): the
+radiative widths stay out of the total width.
+
 ## 2026-11-13 (director, 03:20) — merged: an energy shift is the true beam energy (stopping, thickness and window of a shifted point at E + s)
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed):

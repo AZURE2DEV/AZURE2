@@ -357,6 +357,7 @@ void WriteParametersOut(const CNuc &compound, const Config &configure) {
         out << std::endl;
       }
     }
+    out << compound.GetGammaDecays().Report(compound);
   } else
     configure.outStream << "Could not save parameters.out file." << std::endl;
   if (configure.relativistic) WriteRelativisticOut(compound, configure);

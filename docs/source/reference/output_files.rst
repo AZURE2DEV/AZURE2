@@ -124,6 +124,15 @@ vector:
        written as a nuisance (``detector D`` with ``energy_resolution rectangular width 14 keV fit``:
        ``D.energy_resolution.width``, one for every data set naming ``D``).  Its prior adds
        ``Total-Stopping-Scale-Chi-Squared`` or ``Total-Kernel-Parameter-Chi-Squared`` to ``chiSquared.out``.
+   * - ``radiative``
+     - ``<record>.total_width``, ``<record>.branching.<final state>``, ``<record>.mixing.<final state>``
+     - eV (total width), 1 (branching, mixing ratio)
+     - a number of a level's ``gamma_decay`` record (:doc:`../user_guide/gamma_decay`): the total radiative width
+       :math:`\Gamma_\gamma`, the branching :math:`b_f` to a final state, or its mixing ratio :math:`\delta_f`
+       (Krane-Steffen), at the position of one of the level's photon amplitudes (one number per photon channel);
+       the level's photon amplitudes are computed from them at every evaluation.  ``parameters.out`` ends with a
+       block ``RADIATIVE DECAYS`` that gives every :math:`b_f` (the remainder too), :math:`\delta_f` and the
+       partial widths they imply.
 
 param.fit
 ^^^^^^^^^

@@ -37,8 +37,15 @@ enum class ParamKind {
   Doppler = 9,          ///< fitted free-gas Doppler temperature of a <targetInt> line
   Thickness = 10,       ///< fitted sample thickness of a transmission / yield segment
   ThmCoherent = 11,     ///< Re or Im of a THM coherent-background coefficient (cbackground=)
-  Apparatus = 12        ///< a number of an apparatus record (ApparatusParameters.h: a stopping scale, a kernel's width)
+  Apparatus = 12,       ///< a number of an apparatus record (ApparatusParameters.h: a stopping scale, a kernel's width)
+  RadiativeDecay = 13   ///< Gamma_gamma, a branching or a mixing ratio of a gamma_decay record, in a photon channel's slot
 };
+
+/// A parameter in a level's slot of the vector: its energy, a channel's amplitude, or a number of a gamma_decay record
+/// that the map of GammaDecayMap.h turns into a photon amplitude.  The R-matrix gradient covers them all.
+inline bool IsLevelSlot(ParamKind kind) {
+  return kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::RadiativeDecay;
+}
 
 /// One row per kind: what a maintainer and the API need to know about it.
 struct ParamKindRow {
@@ -89,6 +96,11 @@ inline const std::vector<ParamKindRow> &ParamKindTable() {
       {ParamKind::Apparatus, "apparatus", "the row's (apparatusUnit)", "effect, apparatus, owner", true, false, true,
        "a number of an apparatus record a fit may vary, one per sharing key (docs/upgrade/apparatus_parameters.md): "
        "the stopping scale of a (material, projectile), a table kernel's parameter (format 3: written as a nuisance)"},
+      {ParamKind::RadiativeDecay, "radiative", "eV (total_width), 1 (branching, mixing)",
+       "jGroup, level, channel, levelNumber, decayRecord, decayPart, finalState", true, false, true,
+       "a number of a level's gamma_decay record (docs/upgrade/gamma_parametrisation.md): the total radiative width, the "
+       "branching to a final state, or its mixing ratio (Krane-Steffen), at the position of one of the level's photon "
+       "amplitudes"},
   };
   return table;
 }
@@ -133,6 +145,10 @@ struct ParameterRecord {
   int exitChannel = -1;       ///< exit channel within the J group (ThmCoherent)
   int thmTerm = -1;           ///< 0 Re c0, 1 Im c0, 2 Re c1, 3 Im c1 (ThmCoherent)
 
+  std::string decayRecord;  ///< the gamma_decay record (RadiativeDecay)
+  std::string decayPart;    ///< total_width, branching or mixing (RadiativeDecay)
+  std::string finalState;   ///< the final state's photon pair as the record writes it (branching, mixing)
+
   const ParamKindRow &Row() const { return KindRow(kind); }
 
   static ParameterRecord LevelEnergy(int jGroup, int level, int levelNumber) {
@@ -147,6 +163,16 @@ struct ParameterRecord {
     ParameterRecord r = LevelEnergy(jGroup, level, levelNumber);
     r.kind = ParamKind::Gamma;
     r.channel = channel;
+    return r;
+  }
+  /// A number of a gamma_decay record in the slot of channel `channel` of (jGroup, level).
+  static ParameterRecord Radiative(int jGroup, int level, int channel, int levelNumber, const std::string &record,
+                                   const std::string &part, const std::string &finalState) {
+    ParameterRecord r = Width(jGroup, level, channel, levelNumber);
+    r.kind = ParamKind::RadiativeDecay;
+    r.decayRecord = record;
+    r.decayPart = part;
+    r.finalState = finalState;
     return r;
   }
   /// A parameter of data segment `segment` (Norm, EnergyShift, EnergyShiftSqrt, Thickness).

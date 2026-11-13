@@ -443,7 +443,7 @@ void AZURECalcMCMC::BuildAutoPriors(bool useRWA) const {
       limits.ApplyAllParameterSettings(scratch);
       for (size_t i = 0; i < nfree; ++i) {
         const ParamKind kind = freeKinds_[i];
-        if (kind != ParamKind::LevelEnergy && kind != ParamKind::Gamma && kind != ParamKind::ThmCoherent) continue;
+        if (!IsLevelSlot(kind) && kind != ParamKind::ThmCoherent) continue;
         double nominal, sigma;
         const bool has = useRWA ? limits.NuisancePrior(freeAllIndex[i], nominal, sigma)
                                 : limits.NuisancePriorPhysical(freeAllIndex[i], nominal, sigma);
@@ -520,7 +520,7 @@ bool AZURECalcMCMC::SetUpPriorCovariance(bool useRWA) const {
       const std::string &name = priorCov_->Names()[a];
       const int f = priorCov_->FullIndex()[a];
       const bool level = f >= 0 && f < (int)paramKinds_.size() &&
-                         (paramKinds_[f] == ParamKind::LevelEnergy || paramKinds_[f] == ParamKind::Gamma);
+                         IsLevelSlot(paramKinds_[f]);
       if (level) {
         configure().outStream << "**ERROR: priorCovariance: " << name << " is a level parameter and its prior is on "
                               << "the reduced-width (RWA) parameters of param.sav; sample with RWA parameters."

@@ -348,6 +348,19 @@ and locks of output streams).  What you
 must not do: add a `static` or `thread_local` variable that keeps a value, a global pointer, or a `mutable` member; a
 consistency check refuses them.
 
+## Radiative widths as a total width and branchings (merged 2026-11-13)
+
+A level that decays by several γ rays can now be written as its total radiative width, its branchings to the final
+states and the mixing ratios, instead of one partial width per final state and multipolarity: a record
+`gamma_decay` in a section `<gammaDecays>` of the project file, which a fit varies and reads directly, with measured
+branchings as priors. The engine is not changed: before every calculation the record's numbers are turned into the
+partial widths and then into the amplitudes the engine has always used, by the engine's own conversion; a project
+written with the record and the same project with the partial widths give the same numbers. The mixing ratio is
+Krane and Steffen's (ENSDF's); its sign was fixed by comparing the engine's γ angular distributions with their
+formula. The total radiative width stays out of the resonance's total width, as the radiative widths always have;
+the user guide says what that means for a resonance-strength datum (a difference of Γ_γ/Γ_particle). Not covered: the
+formal basis (`--no-brune`) and a level whose final state has external capture; both are refused with a message.
+
 ## What is in work and what comes next
 
 Merged in the night of 2026-11-12, each after the whole verification: the
@@ -466,11 +479,13 @@ cost of a shifted data set grows with the width of the shift's prior over the wi
 
 In work now: the third step of "no hidden state" (a fit's copies of the working data made only when one is needed,
 relative paths resolved without the process's working directory, the diagnostic switches read once into one
-record; no number may change); the total radiative width, the gamma branchings and the mixing ratios of a level
-as fit parameters. Merged on 2026-11-13: the stopping of a data set with an energy shift is taken at the shifted beam
-energy (numbers of such data sets on a target change, by the logarithmic slope of the stopping times shift over
-energy). Merged in the earlier batch: one generic kind of fit parameter for the parameters of
-apparatus effects (see "How to add a feature now").
+record; no number may change); the Trojan-horse distortions and distorted-wave vertex computed by the transfer
+library instead of the engine's own solver, with the global optical potentials as one table (numbers of projects with
+a distortion may move in the seventh digit). Merged on 2026-11-13: the stopping of a data set with an energy shift is
+taken at the shifted beam energy (numbers of such data sets on a target change, by the logarithmic slope of the
+stopping times shift over energy); the total radiative width, the gamma branchings and the mixing ratios of a level
+as fit parameters (previous section). Merged in the earlier batch: one generic kind of fit parameter for the
+parameters of apparatus effects (see "How to add a feature now").
 
 **Do the checks still test what they say? (merged 2026-11-11, evening.)** A regression check that edits a project's
 text can go on passing after the conversion to format 3 because its pattern no longer matches anything and it
@@ -578,8 +593,11 @@ recipes.
   "Iteration" lines in the log, and the intermediate snapshot `param.fit`. The cause is in the vendored Minuit2: its
   numerical-gradient loop calls the objective from several threads and its call counter is not atomic, so a fit
   limited by `--max-calls` could in principle stop one iteration apart. Two atomic increments remove it (shown on a
-  scratch build, `fit_threads.md`); the patch touches `external/` and is not applied (the PI's decision); the engine
-  could count the calls itself instead.
+  scratch build, `fit_threads.md`); the patch touches `external/` and is not applied (the PI's decision).
+  Minuit2's call counter is not thread-safe under its own OpenMP gradient loop; not patched; AZURE2 counts itself
+  (2026-11-13, branch `feature/upgrade-8-gamma-branchings`): `fitStatus.out` and the log give the objective's own
+  atomic count of MIGRAD's calls, equal to Minuit2's at 1 thread and the same at any thread count; `--max-calls`
+  still acts on Minuit2's counter, so under threads that limit is approximate by a few calls.
 - **Two constants.** The electron mass in the β-decay Fermi function (CODATA 2002) and the proton mass of the M1
   capture integral (older than CODATA 2018) are kept at their values so that no result moves; they are named
   constants in `include/Constants.h` (`electronMassOfFermiFunction`, `protonMassOfM1Capture`) and can be changed in

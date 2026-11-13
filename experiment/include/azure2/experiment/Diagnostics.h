@@ -124,6 +124,12 @@ constexpr const char *kLevelJpi = "E_LEVEL_JPI";
 constexpr const char *kUnknownPair = "E_UNKNOWN_PAIR";
 constexpr const char *kAmbiguousPair = "E_AMBIGUOUS_PAIR";
 constexpr const char *kNotAChannel = "E_NOT_A_CHANNEL";
+// A level's radiative decay against <levels> (GammaDecay.h, BuildGammaDecays)
+constexpr const char *kGammaMixture = "E_GAMMA_MIXTURE";
+constexpr const char *kBranchingSum = "E_BRANCHING_SUM";
+constexpr const char *kBranchingRemainder = "E_BRANCHING_REMAINDER";
+constexpr const char *kMixingOneMultipole = "E_MIXING_ONE_MULTIPOLE";
+constexpr const char *kGammaRecord = "E_GAMMA_RECORD";
 // Build checks (Schema::Build: they need <levels> or the data files)
 constexpr const char *kPairKey = "E_PAIR_KEY";
 constexpr const char *kDataFile = "E_DATA_FILE";

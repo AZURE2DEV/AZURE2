@@ -122,6 +122,7 @@ void AddAbundancePenaltyGradient(CNuc *compound, const Config &configure, GradAc
  * Allocates and zeroes the physics-coordinate gradient accumulators.
  */
 void GradAccum::Init(CNuc *compound) {
+  source = compound;
   const int nJ = compound->NumJGroups();
   e.assign(nJ, {});
   gamma.assign(nJ, {});
@@ -148,6 +149,7 @@ void GradAccum::Init(CNuc *compound) {
  * Resets all accumulators to zero without reallocating.
  */
 void GradAccum::Zero() {
+  direct.clear();
   for (auto &row : e) std::fill(row.begin(), row.end(), 0.0);
   for (auto &lev : gamma)
     for (auto &row : lev) std::fill(row.begin(), row.end(), 0.0);
@@ -173,6 +175,7 @@ void GradAccum::Zero() {
  * Adds another (same-dimension) accumulator into this one, term by term.
  */
 void GradAccum::Add(const GradAccum &o) {
+  direct.insert(direct.end(), o.direct.begin(), o.direct.end());
   for (int j = 0; j < (int)e.size(); j++) {
     for (int la = 0; la < (int)e[j].size(); la++) {
       e[j][la] += o.e[j][la];
@@ -214,16 +217,23 @@ void GradAccum::Add(const GradAccum &o) {
  * Scatters the physics-coordinate gradients into the flat parameter vector.
  */
 void GradAccum::Scatter(const ParamIndexMap &map, vector_r &gradFull) const {
+  // The photon amplitudes of a gamma_decay level are functions of the record's numbers, which hold their slots: their
+  // cotangents go through the map's Jacobian (GammaDecayMap.h), not to the slot.
+  const GammaDecaySet *decays = (source && !source->GetGammaDecays().Empty()) ? &source->GetGammaDecays() : nullptr;
   for (int j = 0; j < (int)e.size(); j++) {
     for (int la = 0; la < (int)e[j].size(); la++) {
       int ei = map.EIndexFlat(j + 1, la + 1);
       if (ei >= 0 && ei < (int)gradFull.size()) gradFull[ei] += e[j][la];
       for (int ch = 0; ch < (int)gamma[j][la].size(); ch++) {
+        if (decays && decays->OwnsSlot(j + 1, la + 1, ch + 1)) continue;
         int gi = map.GammaIndexFlat(j + 1, la + 1, ch + 1);
         if (gi >= 0 && gi < (int)gradFull.size()) gradFull[gi] += gamma[j][la][ch];
       }
     }
   }
+  if (decays) decays->PullBack(*source, *this, map, gradFull);
+  for (const auto &d : direct)
+    if (d.first >= 0 && d.first < (int)gradFull.size()) gradFull[d.first] += d.second;
   for (int k = 0; k < (int)abundance.size(); k++) {
     int ai = map.AbundanceIndex(k + 1);
     if (ai >= 0 && ai < (int)gradFull.size()) gradFull[ai] += abundance[k];
@@ -331,7 +341,8 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, WorkingCopy *data,
       for (int ch = 1; ch <= jGroup->NumChannels(); ch++) {
         map.gammaFlat_[j - 1][la - 1][ch - 1] = i;
         map.gammaIndex_[{j, la, ch}] = i;
-        map.desc_.push_back(ParamDesc{ParamKind::Gamma, j, la, ch, -1, false});
+        const bool radiative = compound->GetGammaDecays().OwnsSlot(j, la, ch);
+        map.desc_.push_back(ParamDesc{radiative ? ParamKind::RadiativeDecay : ParamKind::Gamma, j, la, ch, -1, false});
         i++;
       }
     }
@@ -817,6 +828,15 @@ AMatrixFunc::FreeMask BuildFreeMask(CNuc *compound, const ParamIndexMap &pmap) {
     for (int la = 1; la <= nl; la++) {
       mask.e[j - 1][la - 1] = isFree(pmap.EIndexFlat(j, la));
       for (int ch = 1; ch <= nch; ch++) mask.g[j - 1][la - 1][ch - 1] = isFree(pmap.GammaIndexFlat(j, la, ch));
+      // A gamma_decay level: its photon amplitudes move with any free number of the level (the record's, its energy,
+      // its particle amplitudes), so their cotangents are needed for the pull-back (GammaDecayMap.h).
+      const GammaDecaySet &decays = compound->GetGammaDecays();
+      const int record = decays.RecordOf(j, la);
+      if (record < 0) continue;
+      bool anyFree = mask.e[j - 1][la - 1];
+      for (int ch = 1; ch <= nch; ch++) anyFree = anyFree || mask.g[j - 1][la - 1][ch - 1];
+      if (anyFree)
+        for (const int ch : decays.Levels()[record].photonChannels) mask.g[j - 1][la - 1][ch - 1] = 1;
     }
   }
   return mask;
@@ -1083,7 +1103,7 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, WorkingCopy *ld, azure2::Results &
         for (int c = 0; c < nCols; c++) {
           const int f = pmap.PackedToFull(c);
           const ParamDesc &desc = pmap.Desc(f);
-          if (desc.kind == ParamKind::LevelEnergy || desc.kind == ParamKind::Gamma)
+          if (IsLevelSlot(desc.kind))
             row[c] = fullRow[f];
           else if (desc.kind == ParamKind::ThmCoherent && desc.channel >= 1 && desc.channel <= nCoherent)
             row[c] = coherentBar[desc.channel - 1];
@@ -1119,7 +1139,7 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, WorkingCopy *ld, azure2::Results &
           rows[t].Jm[i * nCols + c] = (mp[t][i] - mm[t][i]) / (2.0 * h);
       continue;
     }
-    if (kind != ParamKind::LevelEnergy && kind != ParamKind::Gamma) continue;
+    if (!IsLevelSlot(kind)) continue;
     const double x0 = full[f];
     const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
     vector_r pp = full;

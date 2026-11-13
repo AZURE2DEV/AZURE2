@@ -417,6 +417,7 @@ void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, WorkingCo
 double AZURECalc::operator()(const vector_r &p) const {
   AZUREProfile::ScopedReport profileReport("evaluation");
   AZUREProfile::Timer profileTimer(AZUREProfile::kEvaluation);
+  if (callCounter_) callCounter_->fetch_add(1, std::memory_order_relaxed);  // CountCallsInto
   // One atomic read-and-increment: this evaluation's number, distinct across the threads of a parallel gradient.
   const int thisIteration = data()->Iterate();
   bool isFit = data()->IsFit();
@@ -840,7 +841,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
       for (int col = 0; col < nCols; col++) {
         const int f = tmap.PackedToFull(col);
         const ParamKind kind = tmap.Desc(f).kind;
-        if (kind != ParamKind::LevelEnergy && kind != ParamKind::Gamma && kind != ParamKind::ThmCoherent) continue;
+        if (!IsLevelSlot(kind) && kind != ParamKind::ThmCoherent) continue;
         double g = 0.0;
         for (size_t i = 0; i < tr.r.size(); i++) g += tr.r[i] * tr.J[i * nCols + col];
         if (f < (int)grad.size()) grad[f] += 2.0 * g;
@@ -869,8 +870,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     // segment carries none).
     if (eg && (kind == ParamKind::Screening || kind == ParamKind::Doppler || kind == ParamKind::Thickness))
       continue;  // analytic (dev: Doppler weights, the transmission / yield transform)
-    if (eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm ||
-               kind == ParamKind::ThmCoherent)) {
+    if (eg && (IsLevelSlot(kind) || kind == ParamKind::Norm || kind == ParamKind::ThmCoherent)) {
       if (!haveTHM) continue;  // fully analytic
       if (thmAnalytic && kind != ParamKind::Norm) continue;  // THM part added above
       if (kind == ParamKind::Norm) {
@@ -976,7 +976,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
       for (int idx = 0; idx < (int)p.size() && idx < pmap.NumFull(); idx++) {
         if (idx < nMn && fixedMask[idx]) continue;
         ParamKind kind = pmap.Desc(idx).kind;
-        if (!(eg && !haveTHM && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm)) &&
+        if (!(eg && !haveTHM && (IsLevelSlot(kind) || kind == ParamKind::Norm)) &&
             !(eg && (kind == ParamKind::Screening || kind == ParamKind::Doppler || kind == ParamKind::Thickness))) nfd++;
       }
       std::cerr << "[grad-timing] call " << c << ": setup+adjoint " << ms(tg0, tg1) << " ms (analytic " << (eg ? "ok" : "BAILED")
@@ -992,7 +992,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   if (const char *gc = std::getenv("AZURE_GRAD_CHECK")) {
     if (!gradChecked.exchange(true)) {
       static const char *const kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt", "shift_fn", "abundance", "screening",
-                                       "density", "doppler", "thickness", "cbkg", "apparatus"};
+                                       "density", "doppler", "thickness", "cbkg", "apparatus", "radiative"};
       struct Row { double score, g, fd; int idx; ParamDesc d; double gj, scoreJ; };
       std::vector<Row> rows;
       constexpr int kNumKinds = sizeof(kindName) / sizeof(kindName[0]);  // one per ParamKind
@@ -1449,8 +1449,8 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
     if (it != prior.end()) {
       pen_nom[a] = it->second.first;
       pen_inv2[a] = 1.0 / (it->second.second * it->second.second);
-    } else if (limitsManager_ && (f >= pmap.NumFull() || pmap.Desc(f).kind == ParamKind::LevelEnergy ||
-                                  pmap.Desc(f).kind == ParamKind::Gamma || pmap.Desc(f).kind == ParamKind::ThmCoherent)) {
+    } else if (limitsManager_ && (f >= pmap.NumFull() || IsLevelSlot(pmap.Desc(f).kind) ||
+                                  pmap.Desc(f).kind == ParamKind::ThmCoherent)) {
       // Nuisance priors (levels and THM coherent background only).  Looked up by the full-vector index f, not by
       // a: a counts the parameters free in this Jacobian, the limits manager's non-fixed index counts those free
       // when it was applied plus every fixed segment parameter, and the two need not agree.

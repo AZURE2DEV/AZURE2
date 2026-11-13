@@ -8,6 +8,7 @@
 #include "WorkingData.h"
 #include <vector>
 #include <memory>
+#include <atomic>
 #include <mutex>
 #include <stack>
 
@@ -56,6 +57,12 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * returns the total chi-squared value.
    */
   virtual double operator()(const vector_r &) const override;
+  /*!
+   * Count every evaluation of operator() in `counter` (owned by the caller, which outlives the counting; nullptr
+   * stops it).  The fit reports MIGRAD's calls from it: Minuit2's own MnFcn::fNumCall is a plain int that its
+   * OpenMP numerical gradient increments from several threads at once, so under threads it can come out a few low.
+   */
+  void CountCallsInto(std::atomic<long> *counter) { callCounter_ = counter; }
 
   /*!
    * Analytic gradient of the total chi-squared with respect to the (external)
@@ -232,6 +239,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   void WriteParameters(AZUREParams &params, const Config &configure) const;
 
  private:
+  std::atomic<long> *callCounter_ = nullptr;  ///< CountCallsInto: not owned
   /*!
    * Shared setup for the least-squares solvers.  Runs one ResidualJacobian at
    * `full` (returned in `r`/`J`/`p2f`) to fix the packed column order, and fills

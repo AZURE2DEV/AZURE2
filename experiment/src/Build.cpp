@@ -935,6 +935,9 @@ BuiltProject Schema::Build(const ValidationResult &validated, const LevelTables 
   ModelDataBuild modelData = BuildModelData(validated, levels.levels, levels.pairs);
   out.modelData = std::move(modelData.data);
   out.diagnostics.insert(out.diagnostics.end(), modelData.diagnostics.begin(), modelData.diagnostics.end());
+  GammaDecayBuild gammaDecays = BuildGammaDecays(validated, levels);
+  out.gammaDecays = std::move(gammaDecays.specs);
+  out.diagnostics.insert(out.diagnostics.end(), gammaDecays.diagnostics.begin(), gammaDecays.diagnostics.end());
   std::stable_sort(out.diagnostics.begin(), out.diagnostics.end(),
                    [](const Diagnostic &a, const Diagnostic &b) { return a.line < b.line; });
   if (!out.Ok()) {

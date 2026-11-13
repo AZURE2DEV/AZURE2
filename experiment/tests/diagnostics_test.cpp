@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "azure2/experiment/GammaDecay.h"
 #include "azure2/experiment/LayerChecks.h"
 #include "azure2/experiment/ModelDatum.h"
 #include "azure2/experiment/ParameterFileNames.h"
@@ -385,6 +386,62 @@ int main() {
         check(std::string(c.code) + ": a line and a message naming what is wrong", d[0].line > 0 && !d[0].message.empty());
         tested.insert(c.code);
       }
+    }
+  }
+  {
+    // A level's radiative decay against <levels> (BuildGammaDecays): a 1/2+ level of 15O with a proton channel and
+    // photon channels to the ground state (E1), to 6.7931 MeV (M1 and E2) and to 5.183 MeV (M1); each case changes one
+    // thing of a valid record or of the tables.
+    auto pair = [](int key, int kind, int lightZ, int lightA, int heavyZ, int heavyA, double heavyE) {
+      PairInfo p;
+      p.key = key;
+      p.kind = kind;
+      p.lightZ = lightZ;
+      p.lightA = lightA;
+      p.heavyZ = heavyZ;
+      p.heavyA = heavyA;
+      p.heavyExcitation = heavyE;
+      return p;
+    };
+    LevelTables tables;
+    tables.pairs = {pair(1, 0, 1, 1, 7, 14, 0.0), pair(2, 10, 0, 0, 8, 15, 0.0), pair(3, 10, 0, 0, 8, 15, 6.7931),
+                    pair(4, 10, 0, 0, 8, 15, 5.183)};
+    tables.levels.resize(1);
+    tables.levels[0] = {{5}, 1, 1, 7.5567, 1e-3, 1, 1, {{1, 0, 1}, {2, 1, 1}, {3, 1, 3}, {3, 2, 3}, {4, 1, 1}}};
+    for (int c = 1; c <= 5; c++) tables.rowSlots.push_back({1, 1, c, c == 1 ? 975.0 : 0.0});
+    LevelTables mixture = tables;
+    mixture.rowSlots[4].value = 0.0065;
+    const std::string kDecay =
+        "gamma_decay d5\n    level 5\n    J 1/2+\n    total_width 0.0385 eV fit\n    branching g+15O[6.7931] 0.3 fit\n"
+        "    branching g+15O 0.1 fixed\n    remainder g+15O[5.183] prior 0.6 0.05\n    mixing g+15O[6.7931] 0.1 fit\n";
+    auto build = [&](const std::string &records, const LevelTables &t) {
+      const std::string text = "<gammaDecays>\n" + records + "</gammaDecays>\n";
+      const std::vector<Diagnostic> v = Diagnose(text);
+      if (!v.empty()) return v;
+      const Document doc = Document::Parse(text);
+      const azure2::io::RecordReadResult r = azure2::io::ReadRecords(doc, doc.Sections()[0], Schema::KindsOfSection("gammaDecays"));
+      return BuildGammaDecays(Schema::Validate({{"gammaDecays", r.set.records}}), t).diagnostics;
+    };
+    check("gamma_decay: the valid record builds with no diagnostic", build(kDecay, tables).empty());
+    struct DecayCase {
+      const char *code;
+      std::string records;
+      const LevelTables *tables;
+    };
+    const std::vector<DecayCase> decayCases = {
+        {"E_GAMMA_MIXTURE", kDecay, &mixture},
+        {"E_BRANCHING_SUM", Set(kDecay, "remainder", ""), &tables},
+        {"E_BRANCHING_REMAINDER", Set(kDecay, "branching", "    branching g+15O[6.7931] 0.95 fit"), &tables},
+        {"E_MIXING_ONE_MULTIPOLE", Set(kDecay, "mixing", "    mixing g+15O[5.183] 0.1 fit"), &tables},
+        {"E_GAMMA_RECORD", Set(kDecay, "remainder", "    remainder g+15O[6.7931]"), &tables},
+    };
+    for (const DecayCase &c : decayCases) {
+      const std::vector<Diagnostic> d = build(c.records, *c.tables);
+      const bool one = d.size() == 1 && d[0].code == c.code;
+      check(std::string(c.code) + " (gamma_decay): exactly this one diagnostic", one);
+      if (!one)
+        for (const Diagnostic &x : d) std::printf("        got %s\n", x.ToText().c_str());
+      if (one) tested.insert(c.code);
     }
   }
   // the set-up's refusals of a yield on a layer (LayerChecks.h): the engine evaluates the stopping on its grid and
