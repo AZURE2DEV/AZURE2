@@ -77,13 +77,13 @@ p.save()
   (`data_formats.rst`, "S factor"). `sfactor_to_cross_section(S, E_cm_kev, z1, z2, m1_u, m2_u)` converts by hand.
 - Angles are written unchanged; choose `observable` to match their frame:
 
-| EXFOR gives | observable= | AZURE2 code |
+| EXFOR gives | observable= | the data set |
 |---|---|---|
-| capture, `EN-CM` | `"total-capture"` (exit is a γ pair) | 3 |
-| `EN-CM`, no angle | `"angle-integrated"` | 0 |
-| `ANG-CM` | `"differential-cm"` | 4 |
-| lab `ANG` | `"differential"` | 1 |
-| `POL`/`NO-DIM` | `"analyzing-power"` (angle c.m.) | 7 |
+| capture, `EN-CM` | `"total-capture"` (exit is a γ pair) | `quantity sigma`, reaction summed over the capture pairs |
+| `EN-CM`, no angle | `"angle-integrated"` | `quantity sigma` |
+| `ANG-CM` | `"differential-cm"` | `quantity dsigma_domega`, column `theta_cm[deg]` |
+| lab `ANG` | `"differential"` | `quantity dsigma_domega`, column `theta_lab[deg]` |
+| `POL`/`NO-DIM` | `"analyzing-power"` (angle c.m.) | `quantity analyzing_power`, column `theta_cm[deg]` |
 
   Without `observable` it guesses from the reaction code (capture → total-capture, `POL` → analyzing-power, `ANG-CM`
   → differential-cm, lab `ANG` → differential). A c.m.-angle set given as `differential` is converted a second time.
@@ -99,9 +99,6 @@ p.save()
   norm=...)` writes the ratios unconverted (`theta_lab`/`theta_cm` from the heading) and returns the `dataset`
   record; without `ERR-SYS` it needs `norm=`. `to_azr` refuses a ratio (it no longer multiplies by σ_R).
   Test: `tests/pyazr/nds_rutherford_test.py`; physics and engine: `tests/ratio_to_rutherford`.
-- builds before 2026-10-27 (expires: 2027-02-01): `to_azr` and the GUI EXFOR dialog multiplied a `,,RTH` ratio by
-  the c.m. Rutherford cross section at the **lab** angle (1.13× off for p+¹⁶O, 1.8–2.2× for α+¹²C) and called every
-  angle column c.m. Regenerate data files made from a lab-angle `,,RTH` set with such a build.
 - **The light/heavy assignment.** AZURE2 converts lab to c.m. with E_c.m. = E_lab·m₂/(m₁ + m₂), m₁ the light member
   (`src/Unit.cpp`), and its angle transform asin(m₁/m₂ sin θ) needs m₁ < m₂. EXFOR names target and projectile as
   the experiment ran: ³He(α,γ)⁷Be is `2-HE-3(A,G)4-BE-7`, target ³He. Letting `to_azr` infer the masses there writes
@@ -120,8 +117,8 @@ p.save()
   E_c.m. = 93 keV for ³He+α.
 - **Cross-check every converted data set against an independent one.** A capture measurement compiled twice, as
   `SIG` and as `SIG,,SFC`, should agree after conversion (0.3 % for the LUNA ³He(α,γ)⁷Be pair).
-- Editing data segments makes the cached EC integrals stale: delete `output/intEC.dat` and `output/intEC.extrap`
-  before running the edited model (azure2-calculate).
+- After adding data sets, open a new session: the capture-integral caches are checked against the points when a
+  session starts (azure2-calculate, "Caches").
 
 ## 5. Level schemes, γ rays, ground states
 
