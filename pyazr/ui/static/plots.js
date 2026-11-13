@@ -4,8 +4,9 @@
 // units.  The axes, titles and units come from the engine's tables (the quantity row of pyazr.schema(), the
 // dimensions' engine units); the page converts nothing: the numbers drawn are the server's.
 //
-// One row today: a data set against energy or angle.  A plot unlike "value against energy or angle" adds a row here
-// (and a step of the smoke test).  No DOM in the table itself (tests/pyazr/ui/js/plots.test.mjs).
+// Rows: a data set against energy or angle (the Data tab's preview); the Results tab's series against a chosen x
+// with residuals under the plot; an angular distribution at one energy.  A plot unlike these adds a row here (and a
+// step of the self-test).  No DOM in the table itself (tests/pyazr/ui/js/plots.test.mjs, results.test.mjs).
 
 /** Okabe and Ito's colour-blind-safe palette; after eight series the markers change as well (MARKERS). */
 export const PALETTE = ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9", "#F0E442", "#7F7F7F"];

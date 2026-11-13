@@ -653,6 +653,12 @@ value type of the schema needs one widget. plotly.js 4.1.2 (the cartesian bundle
 checked with node's test runner and a headless Chrome on this machine; no person has used it in a real browser yet.
 User guide: "The web interface".
 
+The Results tab (2026-11-13): for every data set and extrapolation, the data times the normalization in use, the
+model and the engine's residuals under it, against c.m. energy, excitation energy or angle, as measured or as S
+factor; the χ² table equal to the program's `chiSquared.out`, model data, angular distributions at one energy, and
+the program's output files written on request. The numbers equal the program's `AZUREOut_*` files (tested on T1,
+T2); the model of a data set is drawn at its points, a dense grid waits for pyazr.
+
 ## For the maintainers to decide
 
 - **Fits and the number of threads.** Calculations are identical at any thread count. Since the gradient branch

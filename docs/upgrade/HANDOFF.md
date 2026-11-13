@@ -2,6 +2,25 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-9-webui-results`) — the web UI's Results tab
+
+**Done.** The director's corrections to the page (bounded file preview, wrapping tables, repeated groups as small
+tables with number boxes as wide as their text, the full χ² in the status line, paths broken at `/`, the UI tests
+registered above the last block of `tests/pyazr/CMakeLists.txt`). The Results tab: the payload
+`GET /api/evaluation` (the program's χ² split, every data set's and extrapolation's arrays, residuals, S factor,
+model data), `POST`/`GET /api/outputs`, `tabs/results.js`, plot rows in `plots.js` (residual axis, level markers,
+log axes, CSV with 17 digits, SVG/PNG). `web_ui.md` 11.3 and findings 17–19; user guide; `pyazr/CLAUDE.md`.
+
+**How.** `ctest -R pyazr_ui` equivalents run as scripts at one thread (api, jobs, server, routes, static, node,
+results, smoke: all ok; the smoke test failed once with two "Failed to fetch" requests and passed on the rerun);
+`results_test.py` compares the payload with the program's `AZUREOut_*`, `.extrap` and `chiSquared.out` on T1 and
+T2; each new check shown failing with an injected error (`tests/pyazr/ui/README.md`); screenshots in both themes
+and sizes looked at (`work/uiresults/shots/`). No C++ changed.
+
+**Open.** The model of a data set is drawn at its points only; lab energy, Legendre orders, the program's σ of an
+S-factor data set, rate and bands wait for pyazr (findings 6, 14, 17–19). Nobody has used the page in a real browser
+by hand.
+
 ## 2026-11-13 (director, 14:20) — merged: diagnostics record, prior centres, the web UI's server and page
 
 **Merged** into the data branch after one verification of the four branches together (with pyazr's errors, merged

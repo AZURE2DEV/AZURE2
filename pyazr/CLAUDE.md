@@ -121,8 +121,14 @@ server answers, sends every edit with its revision and re-reads; it never comput
   controls and back into text; `static_test.py` and `js/forms.test.mjs` fail until it exists.
 - **A tab**: a module `tabs/<name>.js` exporting `render(ctx, element, args)` and one row of `TABS` in `app.js`
   (replacing its `later` text); it appears in the self-test by itself; add its route to `VIEWS` of `smoke_test.py`.
-- **A plot row**: one row of `PLOTS` in `plots.js` (`applies`, `build` → axes with quantity and unit, traces) and its
-  case in `js/plots.test.mjs`.
+- **A plot row**: one row of `PLOTS` in `plots.js` (`applies`, `build` → axes with quantity and unit, traces with a
+  role: `data` with errors, `model` (dash for a grid), `residual` on the axis under the plot, `levels`) and its case
+  in `js/plots.test.mjs` or `js/results.test.mjs`; the figure, the CSV (17 significant digits) and the table without
+  plotly follow from the description.  A new x or y choice of the Results tab is one row of `X_CHOICES` or
+  `Y_CHOICES` (an array of the payload; a converted y needs its arrays from the server, `engine.py`).
+- **The Results payload** is `Engine.evaluation` (`GET /api/evaluation`): every number is the engine's or pyazr's;
+  the only products formed are datum × norm and × S-factor conversion, as the program forms them for `AZUREOut_*`
+  (`tests/pyazr/ui/results_test.py` compares them with the program's files).
 - No module but `layout.js` names a record kind, quantity or parameter kind (`static_test.py` checks it); the
   sections the Nucleus tab shows are `NUCLEUS_SECTIONS` in `tabs/records.js`, every other section is a group of Data.
 - Tests: `ctest -R pyazr_ui` (with `node` on PATH or `NODE=...` for `pyazr_ui_node`). The smoke test:

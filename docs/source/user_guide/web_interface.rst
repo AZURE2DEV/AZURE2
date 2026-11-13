@@ -63,13 +63,29 @@ model at the working parameters, against energy or angle; **Export data (CSV)** 
 units.  **+ new**, **Duplicate**, **Rename** and **Delete** add, copy, rename (with every reference) and remove
 records; each is one entry of the history.
 
+**Results.**  Everything at the working parameters (the vector of the last edit or Undo), from one answer of the
+server (``GET /api/evaluation``).  Tick the data sets and extrapolations to show (grouped as on the Data tab, with
+**all** and **none**); choose x (c.m. energy, excitation energy, c.m. angle; **log x**) and y (as measured, or the
+S factor where the data set is a cross section with a charged entrance; **log y**).  Each series gets a plot of its
+own (**together** draws them in one plot per unit), with the data times the normalization in use and their errors,
+the model, and under it, on the same x axis, the engine's residuals (m − n·d)/(n·σ), whose squares are the χ² of the
+fit.  The model of a data set is drawn at its points (a resonance narrower than their spacing is not drawn); an
+extrapolation is drawn on its grid, so an extrapolation with an ``adaptive`` grid over a data set's range shows the
+model between its points.  **levels** marks the levels of the project on the excitation-energy axis.  Below:
+angular distributions at a chosen energy, the χ² of every data set as the program's ``chiSquared.out`` splits it
+(with the sum of the squares of the residuals drawn), the model data against their values, and **Write the
+program's output files**, which writes ``AZUREOut_*``, ``chiSquared.out`` and the rest into the project's output
+directory and lists them with their first rows.  Each plot exports its numbers as CSV (17 significant digits) and
+the figure as SVG or PNG.  The view is also a link: ``#/results?x=e_x&y=s_factor&logy=1&levels=1&show=a,b``.
+
 Not there yet
 -------------
 
-The tabs **Fit**, **Results**, **Physics** and **THM** say which step brings them.  Until then a fit runs through
+The tabs **Fit**, **Physics** and **THM** say which step brings them.  Until then a fit runs through
 the API (``POST /api/jobs``) or pyazr, and the ``<thm>`` section is edited through the API.  Adding or removing a
 particle pair, generating channels from a J^π, the session's options as editable keys, the file browser, EXFOR and
-ENSDF imports, the Wigner limits and physical widths of the channels, plots of whole fits and extrapolations, and
+ENSDF imports, the Wigner limits and physical widths of the channels, the lab energy as an x axis, the model on a dense grid
+between data points, the reaction rate and uncertainty bands, and
 live updates pushed by the server (the page asks every three seconds whether another client changed the project)
 come later.  The page was checked in a headless Chrome; plotly.js 4.1.2 (MIT licence) is part of the package, so
 the page loads nothing from the network, and without it the plots appear as tables of their numbers.
