@@ -172,7 +172,6 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r &physicalParams) {
   fixed_.clear();
   paramNames_.clear();
   paramKinds_.clear();
-  fitLimits_.clear();
 
   AZUREParams params;
   compound()->FillMnParams(params, &configure());
@@ -181,11 +180,8 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r &physicalParams) {
     params.ReadUserParameters(configure());
     params.ReconcileBasis(compound(), configure());
   }
-  // The fit's limits, as AZUREMain sets them before a fit: the kinds' own (FillMnParams) and <parameterSettings>.
-  {
-    ParameterLimitsManager limits(&configure(), compound(), data(), &params);
-    if (limits.ReadParameterSettings()) limits.ApplyAllParameterSettings(params);
-  }
+  // The support: the fit's limits, as AZUREMain sets them before a fit (the kinds' own and <parameterSettings>).
+  support_ = PosteriorSupport::OfFit(configure(), compound(), data(), params);
 
   compound()->FillCompoundFromParams(params.GetMinuitParams().Params());
   compound()->CalcShiftFunctions(configure());
@@ -196,13 +192,9 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r &physicalParams) {
     fixed_.push_back(params.GetMinuitParams().Parameter(i).IsFixed());
     paramNames_.push_back(params.GetMinuitParams().GetName(i));
     paramKinds_.push_back(params.Kind(i));
-    // If not fixed, add to rwa, and its limits to the support (objective.md section 6: every kind's).
+    // If not fixed, add to rwa
     const ROOT::Minuit2::MinuitParameter &par = params.GetMinuitParams().Parameter(i);
-    if (!par.IsFixed()) {
-      rwa_.push_back(par.Value());
-      fitLimits_.push_back({i, par.HasLowerLimit() ? par.LowerLimit() : -std::numeric_limits<double>::infinity(),
-                            par.HasUpperLimit() ? par.UpperLimit() : std::numeric_limits<double>::infinity()});
-    }
+    if (!par.IsFixed()) rwa_.push_back(par.Value());
   }
 
   all_physical_ = compound()->GetTransformParams(configure());

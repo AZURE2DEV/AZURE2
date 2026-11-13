@@ -4,6 +4,7 @@
 #include "numcmc/mcmc.h"
 #include "Constants.h"
 #include "ParameterKind.h"
+#include "PosteriorSupport.h"
 #include "WorkingData.h"
 #include <atomic>
 #include <functional>
@@ -228,8 +229,8 @@ class AZURECalcMCMC {
   /// The log-likelihood of a filled compound and working copy at the fit's vector p (both returned to the pools).
   double LogLikelihoodOfFilled(CNuc *compound, WorkingData *working, const vector_r &p) const;
   /// The support of the posterior in the parameters (docs/upgrade/objective.md section 6): every varying component of
-  /// the fit's vector `fitVector` (all parameters, the fit's order) inside the limits the fit gives it (MINUIT's, with
-  /// those of <parameterSettings>).  The one test of every kind's limits, in both sampling bases.
+  /// the fit's vector `fitVector` (all parameters, the fit's order) inside the limits the fit gives it
+  /// (PosteriorSupport::Contains, the rule).  Called in both sampling bases.
   bool InsideFitLimits(const vector_r &fitVector) const;
   /// The fit's vector at an observed-basis point: the amplitudes and energies of `transformed` (a compound filled
   /// from the observed vector and transformed in), the data parameters from the tail of `observedFull` (`copy`: the
@@ -264,13 +265,9 @@ class AZURECalcMCMC {
   mutable std::vector<std::string> paramNames_;
   mutable std::vector<ParamKind> paramKinds_;
   bool parametersInitialized_;
-  // The fit's limits of each varying parameter (full index, lower, upper; +-infinity where it has none): the support
-  // of the posterior (InsideFitLimits), set by UpdateParameterVectors.
-  struct FitLimit {
-    int index;
-    double lower, upper;
-  };
-  std::vector<FitLimit> fitLimits_;
+  // The fit's limits of each varying parameter: the support of the posterior (InsideFitLimits), set by
+  // UpdateParameterVectors.
+  PosteriorSupport support_;
 
   ProgressCallback progressCallback_;
   IterationCallback iterationCallback_;

@@ -312,7 +312,9 @@ would add a limit the fit does not have): refuse such a row, or cut it at the la
 set in `FillMnParams`, then those of `<parameterSettings>` (`ParameterLimitsManager::ApplyAllParameterSettings`, as
 `AZUREMain` before a fit and after a parameter file). The sampler, in either basis, forms the fit vector it evaluates
 the objective at; a point whose fit vector has a free component outside that component's limits has ln P = −∞ and is
-not evaluated. One function tests it (`AZURECalcMCMC::InsideFitLimits`), called where each basis has its fit vector:
+not evaluated. One engine function holds the rule, `PosteriorSupport` (`include/PosteriorSupport.h`: `OfFit` collects
+the limits after applying `<parameterSettings>`, `Contains` tests a fit vector), for the sampler and any other
+log-probability of the objective (the API's); the sampler calls it where each basis has its fit vector:
 - fit basis: the sampled vector is the fit vector; the limit acts on the sampled coordinate, as in MINUIT;
 - observed basis: the sampler moves widths, energies and the record's numbers, converts (`TransformIn`) and tests the
   amplitudes and energies so obtained. No limit is set on the width: a `<parameterSettings>` width limit is converted

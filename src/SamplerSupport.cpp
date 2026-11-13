@@ -1,5 +1,5 @@
-// The support of the sampler's posterior (docs/upgrade/objective.md section 6, "The support"): the fit's limits of every
-// parameter kind, tested on the fit's vector in both sampling bases, and the walkers' start drawn inside them.
+// The sampler's side of the support of the posterior (docs/upgrade/objective.md section 6, "The support";
+// PosteriorSupport.h, the rule): the fit's vector in both sampling bases, and the walkers' start drawn inside it.
 #include <limits>
 #include <random>
 #include <vector>
@@ -11,11 +11,7 @@
 #include "WorkingCopy.h"
 #include "WorkingData.h"
 
-bool AZURECalcMCMC::InsideFitLimits(const vector_r &fitVector) const {
-  for (const FitLimit &l : fitLimits_)
-    if (l.index >= (int)fitVector.size() || !(fitVector[l.index] >= l.lower && fitVector[l.index] <= l.upper)) return false;
-  return true;
-}
+bool AZURECalcMCMC::InsideFitLimits(const vector_r &fitVector) const { return support_.Contains(fitVector); }
 
 vector_r AZURECalcMCMC::FitVectorOfObserved(CNuc *transformed, WorkingCopy *copy, const vector_r &observedFull) const {
   AZUREParams params;
