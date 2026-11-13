@@ -682,6 +682,103 @@ resolution entered as a lab beam spread (the converter cannot tell, §8.3); that
 that `natN` is a target of ¹⁵N atoms, not a sample of ¹⁶O compound nuclei. T2 has no UDR and no screening; their
 conversion is shown in §8.1 with lines from `tests/electron_screening` and `tests/beam_profile_kernel`.
 
+### 3.12 The options of a calculation as `<config>` keys (decision 7 of `web_ui.md` §13, 2026-11-13)
+
+What a calculation gives depended on the project file **and** on the program's flags or a pyazr session's keyword
+arguments. The PI decided that these options are keys of `<config>`, so that the project file is the whole state and
+the program, pyazr and the web UI read the same thing.
+
+**Measured** (2026-11-13, `src/AZURE2.cpp` `parseOptions`, `Config::Reset`, `api/src/pybind_api.cpp` `RuntimeOptions`
+and `apply_options`, `pyazr/azure2.py` `azure2.__init__`). Every field of `RuntimeOptions` and every flag that changes
+what is computed or how:
+
+| option (key = pyazr keyword) | program flag on / off | default: program / session | kind |
+|---|---|---|---|
+| `use_brune` | `--use-brune` / `--no-brune` (clears Park too) | on / on | convention: Brune's level matrix |
+| `use_park` | `--use-park` (also sets Brune) / none | off / off | convention: the observed amplitudes are the fit's |
+| `transform` | none / `--no-transform` | on / on | convention: the input parameters transformed at start |
+| `ignore_externals` | `--ignore-externals` / `--no-ignore-externals` | on / on | physics: EC of a zero width dropped |
+| `use_long_wavelength` | none / `--no-long-wavelength` | on / on | physics: the long-wavelength approximation for EL |
+| `ec_convection_current` | `--ec-convection-current` / `--no-ec-...` | on / on | physics (exact EL only) |
+| `use_rmc` | `--use-rmc` / none | off / off | physics: Reich-Moore capture (neutron capture) |
+| `use_gsl_coul` | `--gsl-coul` / none | off / off | numerics: GSL's Coulomb functions |
+| `use_coulomb_table` | `--coulomb-table` / `--no-coulomb-table` | on / on | numerics, cost: the Coulomb table |
+| `use_ec_table` | `--ec-table` / `--no-ec-table` | on / on | numerics, cost: EC from energy tables |
+| `replace_grids` | `--grid-replacement` / `--no-grid-replacement` | on / on | numerics: grids re-laid as levels move |
+| `data_mode` | the menu (1 or 3) | data / data | not project state: what a run evaluates |
+| `coulomb_table` (path) | `--coulomb-table=FILE` | `$AZURE2_COULOMB_TABLE` / same | not project state: a file here |
+| `cwd` (`base_directory`) | the project's directory | the same | not project state: a directory here |
+
+Left out as not a property of a project: the fit's and the job's choices (`--use-gradient`, `--use-lm`,
+`--use-gsl-lm`, `--use-nlopt`, `--max-calls`, `--refreeze-covariance`), output choices (`--covariance-band`,
+`--scale-covariance`), the program's own (`--help`, `--no-gui`, `--no-readline`, `--use-api`), the commands
+(`--convert`, `--validate`, `--describe`, `--schema`, `--build-coulomb-table`, ...), thread counts, and the
+environment switches (their own table, `azure2/support/Environment.h`; whether a number-changing switch should also
+become an option is a question the PI has open).
+
+The eleven defaults are the same in the program and in a session. What differs is how they combine:
+
+1. `use_rmc` with Brune on: the program drops Brune and Park with a warning ("--use-brune is incompatible with
+   --use-rmc"); a session keeps both. A project or a call with Reich-Moore capture and no explicit `--no-brune`
+   therefore computes two different things in the two front ends.
+2. Order: the program applies its flags in the order given (`--use-park --no-brune`: both off; `--no-brune
+   --use-park`: both on); a session applies its keywords in a fixed order in which Park wins (`use_brune=False,
+   use_park=True`: both on).
+
+Recommendation for the PI (not done here, it would move the numbers of a call): refuse Reich-Moore capture with Brune
+on in both front ends, with the message to add `--no-brune` / `use_brune=False` (no silent drop, no silent keep);
+and refuse `--use-park` with `--no-brune` given on one command line instead of letting the order decide. Only
+`tests/thm_lineshape/check.sh` passes `--use-rmc`.
+
+**Names.** One spelling for each option, chosen once: the pyazr keyword, which cannot be renamed. The same word is the
+`<config>` key, the row of `pyazr.kinds()["options"]` (its `key`) and the line of `--describe`. The positional entries
+of `<config>` are snake_case already (`output_dir`, `check_data`); the older keys (`includeAllJPi`, `relativistic`)
+keep their camelCase.
+
+**Values.** `0 | 1 | true | false`, as every bool key. Another value is refused by the reader
+(`E_CONFIG_OPTION_VALUE`, `--validate`, the run, pyazr's `Project`), and by `Project.set_config` before it is written.
+
+**Precedence.** For each option, in this order: a flag given on the command line or a keyword given to a session; else
+the project's key; else the default. Nothing else. "Given" is told from "default" by the caller: the program marks an
+option when one of its flags is on the command line (`parseOptions`); a session marks the keywords the call names
+(`pyazr.azure2`'s signature and defaults are unchanged: a keyword left out is not given, one written out is, even with
+the default's value). The source of every option (`default`, `project`, `command line`, `keyword`) is kept beside its
+value (`Config::optionSources`) and printed by `--describe` and returned by `azure2.describe()["option_sources"]`.
+
+**Implications.** A flag or keyword keeps its present meaning: `--use-park` / `use_park=True` also gives `use_brune`
+on, `--no-brune` / `use_brune=False` also gives `use_park` off, applied in the order the flags are written (the
+program) or in the table's order (a session). The implied option counts as given. A project's key implies nothing.
+
+**Contradictions** (`E_CONFIG_OPTIONS_CONTRADICT`, naming both keys): `use_park=1` with `use_brune=0`; `use_rmc=1`
+with `use_brune=1`; `ec_convection_current=0` with `use_long_wavelength=1` (the convection current exists only in the
+exact form). A pair of values is refused when at least one of the two came from the project: `--validate` and the
+reader take the file's keys and the defaults (so `use_rmc=1` alone is refused: Brune is on by default; write
+`use_brune=0` too); the run and a session check again after the flags and keywords are applied (a flag cannot pair
+with a key into a contradiction). Where neither came from the project, the program and a session behave as today
+(mismatch 1 above).
+
+**A project without the keys computes exactly what it computes today**, in the program and in pyazr, the mismatches
+included: no key is read, no contradiction is checked, the flags and keywords set what they set.
+
+**One table.** The options are rows of `io::ConfigKeys()` (`io/src/ConfigSection.cpp`), with their flags, default
+and kind; the implications and contradictions are two small tables beside it. The binding's option table
+(`pyazr.kinds()["options"]`) is derived: the option rows of `ConfigKeys()`, then the three that are not project
+state (`data_mode`, `coulomb_table`, `cwd`), each with its reason. The program's flags are parsed from the rows; the
+engine's storage of each option in `Config` (a bit of `paramMask` or a member) is one row of `src/ProjectOptions.cpp`.
+A unit test fails when a row has no storage, when a default of the row differs from `Config::Reset`, or when a field
+of `RuntimeOptions` is neither a row nor on the list of options that are not project state.
+
+**Writers.** `Project.new`, the converter and `save_fit` write no option key; a user or the web UI sets one with
+`Project.set_config(use_brune=False)` (written `use_brune=0`), `None` removes it.
+
+**Web UI.** The provisional `SESSION_OPTIONS` of the server goes. The options shown are the project's (`<config>` key
+or default) with their source; setting one is the config route's edit (one history entry, a new session).
+
+**Tests.** Per key, both values: the program with the key against the program with the flag, output files identical
+(`tests/config_options/check.sh`, T1); a session with the key against one with the keyword (`tests/pyazr/
+config_options_test.py`); flag over key over default; a bad value and each contradiction refused with its code;
+`set_config` round trip; the table's unit test (`tests/upgrade/project_options_test.cpp`); the whole tree identical.
+
 ## 4. The same records in Python
 
 ### 4.1 Calls
