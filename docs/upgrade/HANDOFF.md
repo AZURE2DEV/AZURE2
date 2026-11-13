@@ -54,6 +54,10 @@ the GIL), `POST /api/session/channel_functions` in the session worker; both at m
 (`physics.MAX_ELEMENTS`). `GET /api/physics` is `kinds()["physics"]`. A refusal of the server raised in a worker
 (`Refused`) is now 422 (`errors.STATUS`). `coulomb_functions` is listed in `engine.AZURE2_NOT_SERVED` as the older name.
 Test `pyazr_ui_physics_routes` (registered above the block that must stay last).
+Verified on the merge with d1b193db (no C++ changed after 94eb4828): build 0 warnings; the consistency test; ctest -R
+pyazr_ui -j1 8 of 8; ctest -LE slow 237 of 238, the failure pyazr_ui_smoke on T2 with the two known "Failed to fetch"
+requests of the Data tab, passing on three reruns of it alone; T1, T2, T3, 13N x 3 bases identical to tab-t50-1; the
+routes-consistency test shown to fail with a missing row naming an existing call.
 
 **Verified** (after merging the data branch at 3298f372): build 0 warnings; all projects × 3 bases identical to
 `tab-t50-1` (887 / 851 / 887, tag `tab-physics-2`); the eight fits identical to `trial50`; `ctest -LE slow` 236 of
