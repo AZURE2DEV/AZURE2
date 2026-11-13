@@ -91,7 +91,10 @@ How the engine uses it
 The engine's compound-nucleus classes are the set-up view a ``System`` is
 built from: ``BuildSystemFromCNuc`` (``include/CNucSystem.h``) makes a
 ``CNucSystem``, the ``System`` with the map from its 0-based indices to the
-engine's pairs, groups, levels and channels. ``CNuc::TransformIn``,
+engine's pairs, groups, levels and channels. ``CNuc::Fill`` builds it once,
+when the structure is complete (``CNuc::SystemStructure``: the R-matrix
+blocks; ``CNuc::SystemAllGroups``: every group, for the reports), and every
+reader takes that one; the structure does not change afterwards. ``CNuc::TransformIn``,
 ``CNuc::CalcBoundaryConditions`` and ``CNuc::TransformOut`` call the
 conversions of ``LevelParameters.h`` on it; ``CNuc::BuildPathways`` builds
 the ``PathwayTable`` from it. The channel functions reach the engine through

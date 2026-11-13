@@ -176,9 +176,15 @@ is said at each step. The objects named are drawn in :doc:`classes`.
      ``PlanMesh``, ``include/MeshPlanner.h``, and the slots of the folded
      points), then the calculation plan (``WorkingCopy::BuildPlan``). The
      data set is written through ``WorkingCopy::Draft`` while it is set up.
+   * The entrance pairs of the run, from the specs of its active data sets or
+     extrapolations (``RequestDataEntrances``,
+     ``RequestExtrapolationEntrances``, ``src/ProjectSetup.cpp``) or the
+     rate's entrance pair, requested with ``CNuc::RequestEntrance``, and the
+     capture analyzing-power terms (``RequestCaptureAyTerms``).
    * ``CNuc::Initialize``: channels, boundary conditions, the
      transformation of the input parameters to the engine's basis
-     (``CNuc::TransformIn``) and the pathway table (``CNuc::BuildPathways``).
+     (``CNuc::TransformIn``) and the pathway table (``CNuc::BuildPathways``,
+     for the requested entrance pairs).
    * ``CNuc::FillMnParams`` and ``WorkingCopy::FillMnParams`` lay the fit
      parameters out in ``AZUREParams``, each with its ``ParameterRecord``.
    * ``WorkingCopy::Initialize``: the energy-dependent values of every
