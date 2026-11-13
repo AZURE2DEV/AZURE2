@@ -102,8 +102,17 @@ does not need the user's live state uses pyazr directly.
 
 - `engine.py` is the only file that names today's class `azure2`; when pyazr 3.0's `Session` lands, only it
   changes. Every public method of `azure2` is either called there or listed in `AZURE2_NOT_SERVED` with a reason.
-- A route is one row of `routes.ROUTES`; a job kind one row of `jobs.JOBS`. No file of `pyazr/ui` names a data,
-  record or parameter kind of the engine (`tests/pyazr/ui/routes_consistency_test.py` checks all of this).
+- A route is one row of `routes.ROUTES`; a job kind one row of `jobs.JOBS`.
+- **A job kind or a recipe** (a new fitter, MINOS of another library, a sampler): a function `(tracker, x0, settings,
+  names) -> (status, message, extra)` in `jobs.py` that calls `tracker.value` / `tracker.grad` (or `tracker(x)` for
+  both: the stop request and the progress come with it) and one `JobRow` of `JOBS` naming it, the package it imports
+  (`needs`) and its `Setting` rows (name, type, default, doc); `follows=(kind, method)` makes the Fit tab offer it
+  beside that job's result. `extra` may carry `errors` {name: value}, `covariance` and `correlation` ({names, matrix})
+  and `minos` {name: {lower, upper, valid}}: the Fit tab shows these keys. A row the engine cannot run yet names the
+  pyazr call it waits for in `missing`. A new setting type is a row of `SETTING_TYPES` and a widget of
+  `SETTING_WIDGETS` in `static/tabs/fitjob.js` (the node test fails until it exists). Test it in
+  `tests/pyazr/ui/jobs_test.py` on T1 at one thread (a fit ends within 20 s there). No file of `pyazr/ui` names a
+  data, record or parameter kind of the engine (`tests/pyazr/ui/routes_consistency_test.py` checks all of this).
 - The server never builds a session (a build holds the GIL); workers are separate processes and die with it.
 - Tests: `tests/pyazr/ui/*_test.py` (pytest files run as scripts, `ctest -R pyazr_ui`).
 

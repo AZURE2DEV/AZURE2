@@ -275,6 +275,9 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
 - [x] The page: header, tabs Project, Nucleus, Data with generated forms, the engine's descriptions and a preview plot;
       plotly.js 4.1.2 vendored; node tests and a headless-Chrome smoke test (2026-11-13). Fit, Results, Physics, THM
       tabs to come.
+- [x] The Fit tab, first part: the parameter table, the job form from the job table (settings with types),
+      recipe fits and iminuit's MINOS as jobs with progress, Stop, Kill, Accept and Undo (2026-11-13). The engine's
+      fitters, the sampler and bands wait for pyazr (`fit_with_engine`, `Objective`).
 - [ ] Physics tab plots every exposed physics function (`ARCHITECTURE.md` §8, `THM.md` §4).
 - [ ] pytest on `/api` with T1–T3; browser smoke tests; every item of the Qt parity checklist
       (`docs/upgrade/qt_parity.md`) ticked or dropped with a written reason.

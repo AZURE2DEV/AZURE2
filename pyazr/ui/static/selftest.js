@@ -5,6 +5,7 @@
 // "#selftest?theme=dark" runs it in the dark theme; "#selftest?edit=1" also edits a width and undoes it.
 
 import { LAYOUT } from "./layout.js";
+import { fitCheck } from "./selftestfit.js";
 import { NUCLEUS_SECTIONS } from "./tabs/records.js";
 
 export function selftest(ctx, tabs, draw) {
@@ -17,6 +18,7 @@ export function selftest(ctx, tabs, draw) {
   const join = (route) => (route.includes("?") ? `${route}&${extra.slice(1)}` : `${route}${extra}`);
   const steps = [];
   const edit = {};
+  let fit = {};
 
   async function run() {
     while (!ctx.project || !ctx.schema) await new Promise((r) => setTimeout(r, 20));
@@ -36,7 +38,7 @@ export function selftest(ctx, tabs, draw) {
     // a record of a kind the layout hints do not name: its form is the schema's alone
     const other = records.find((r) => !nucleusKinds.includes(r.kind) && !LAYOUT[r.kind]);
     if (other) routes.push(`#/data/${encodeURIComponent(other.name)}`);
-    routes.push("#/data/+new", ...tabs.filter((t) => t.later).map((t) => `#/${t.id}`));
+    routes.push("#/data/+new", "#/fit", ...tabs.filter((t) => t.later).map((t) => `#/${t.id}`));
     for (const route of routes) {
       const s = performance.now();
       location.hash = join(route);
@@ -49,6 +51,7 @@ export function selftest(ctx, tabs, draw) {
         errorBoxes: [...document.querySelectorAll(".error-box")].map((b) => b.textContent.slice(0, 300)) });
     }
     if (/[?&]edit=1/.test(extra)) await editAndUndo(levels);
+    if (/[?&]fit=1/.test(extra)) fit = await fitCheck(ctx, draw, join);
     return Math.round(performance.now() - t0);
   }
 
@@ -86,7 +89,7 @@ export function selftest(ctx, tabs, draw) {
     const out = document.createElement("pre");
     out.id = "selftest-result";
     out.textContent = JSON.stringify({ done: true, ms, plotly: typeof globalThis.Plotly === "object",
-      errors, failed: ctx.api.failures, steps, edit, chi2: ctx.evaluation?.chi2 ?? null,
+      errors, failed: ctx.api.failures, steps, edit, fit, chi2: ctx.evaluation?.chi2 ?? null,
       evaluation_refused: ctx.evalError?.what ?? null }, null, 1);
     out.dataset.done = "1";
     out.style.display = "none";

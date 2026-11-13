@@ -4,7 +4,7 @@
 // units.  The axes, titles and units come from the engine's tables (the quantity row of pyazr.schema(), the
 // dimensions' engine units); the page converts nothing: the numbers drawn are the server's.
 //
-// One row today: a data set against energy or angle.  A plot unlike "value against energy or angle" adds a row here
+// Rows: a data set against energy or angle; a job's objective against call.  A plot unlike these adds a row here
 // (and a step of the smoke test).  No DOM in the table itself (tests/pyazr/ui/js/plots.test.mjs).
 
 /** Okabe and Ito's colour-blind-safe palette; after eight series the markers change as well (MARKERS). */
@@ -79,12 +79,30 @@ function datasetPlot(data, { schema }) {
   };
 }
 
+/** A job's objective against its call number (the server's trace: [call, objective, best so far]), log y. */
+function jobTracePlot(rec) {
+  const t = rec.trace;
+  return {
+    title: `job ${rec.id}: ${rec.kind} ${rec.method}`,
+    x: { title: "call", unit: "", integer: true, dtick: t.length && t[t.length - 1][0] <= 10 ? 1 : null },
+    y: { title: "objective (χ² + priors)", unit: "", log: true },
+    traces: [
+      { role: "line", name: "objective at each call", x: t.map((p) => p[0]), y: t.map((p) => p[1]), color: PALETTE[0] },
+      { role: "line", name: "best objective so far", x: t.map((p) => p[0]), y: t.map((p) => p[2]), color: PALETTE[1] },
+    ],
+    note: t.length && t[t.length - 1][0] > t.length ? "past 500 points the trace keeps every second call" : "",
+  };
+}
+
 /** The plot table: (name, what it draws, when it applies, the builder). */
 export const PLOTS = [
   { name: "against_energy_or_angle",
     doc: "a data set against energy or angle: data with errors and the model at the working x",
     applies: (d) => d && Array.isArray(d.value) && (Array.isArray(d.e_cm) || Array.isArray(d.angle_cm)),
     build: datasetPlot },
+  { name: "objective_against_call",
+    doc: "a job's objective (χ² + priors) at each call and the best so far, against the call number, log y",
+    applies: (d) => d && Array.isArray(d.trace) && typeof d.kind === "string", build: jobTracePlot },
 ];
 
 /** The plot description of an answer: the first row of PLOTS that applies, or null. */
@@ -132,7 +150,9 @@ export function plotlyFigure(plot, theme = {}) {
     marker: { color: t.color || fg, symbol: t.marker, size: 6 },
   } : { type: "scatter", mode: "lines", name: t.name, x: t.x, y: t.y, line: { color: t.color || fg, width: 2 } }));
   const axis = (a) => ({ title: { text: head(a.title, a.unit) }, color: fg, gridcolor: grid, zeroline: false,
-    ticks: "outside", mirror: true, showline: true, linecolor: fg, exponentformat: "power" });
+    ticks: "outside", mirror: true, showline: true, linecolor: fg, exponentformat: "power",
+    type: a.log ? "log" : "linear", ...(a.log ? { nticks: 6 } : {}),
+    ...(a.integer ? { tickformat: "d", rangemode: "tozero", ...(a.dtick ? { dtick: a.dtick } : {}) } : {}) });
   return {
     data,
     layout: { title: { text: plot.title, font: { size: 13 }, x: 0, xref: "paper", xanchor: "left" },
