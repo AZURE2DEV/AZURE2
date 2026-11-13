@@ -2,6 +2,15 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (director, 09:00) — the PI's decisions on pyazr 3.0; packages installed
+
+The PI accepted the director's list of the eleven decisions of `pyazr3.md` section 5: the note's recommendations,
+except 6 (SRIM data compiled into the wheel with the citation notice, on his word that the data are free to use
+when SRIM is cited; the owner is to be told). Recorded at the head of that section; the roadmap's and the
+architecture's shim sentences struck (decision 9). With the PI's yes, installed into the `azure2-up` environment by
+conda (`--freeze-installed`, nothing present changed): fastapi 0.162.5, uvicorn 0.54.0, httpx 0.28.1, iminuit
+2.33.0, emcee 3.1.6. Not asked for and not present: plotly.js (to be vendored for the web UI), scikit-build-core.
+
 ## 2026-11-13 (director, 08:20) — merged: the design note of pyazr 3.0 (documents only); a defect of prior centres
 
 `docs/upgrade/pyazr3.md` is a proposal: its section 5 lists the decisions that are the PI's, none is taken. Its
