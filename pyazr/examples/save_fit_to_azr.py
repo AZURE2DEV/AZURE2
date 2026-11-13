@@ -1,6 +1,6 @@
 """Save a fit back into a .azr you can reopen in the GUI.
 
-``azure2.save_fit`` does the whole thing: it converts the fit to the physical
+``Session.save_fit`` does the whole thing: it converts the fit to the physical
 values a ``<levels>`` line holds, writes the fitted normalizations and energy
 shifts into their ``<segmentsData>`` lines and keeps their priors where the
 fit had them (explicit ``prior_centre`` rows; ``norms="nominal"`` leaves the
@@ -51,7 +51,7 @@ import numpy as np                                            # noqa: E402
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))))
 
-from pyazr import azure2, Project                             # noqa: E402
+from pyazr import Session, Project                             # noqa: E402
 
 
 def load_params(model, path):
@@ -112,9 +112,9 @@ def main():
     # same radii, same channels -- or the parameter metadata will not line up.
     src = mdl.save(os.path.join(here, "_radii.azr")) if args.radius else os.path.abspath(args.azr)
 
-    with azure2(src, cwd=here) as m:
+    with Session(src, cwd=here) as m:
         x = load_params(m, args.params)
-        chi2 = float(np.sum(m.calculate_chi2_rwa(x)))
+        chi2 = m.evaluate(x).chi2
         print(f"loaded {len(x)} free parameters, chi2(data) = {chi2:.4f}")
 
         # >>> the point of the example <<<
@@ -128,7 +128,7 @@ def main():
     # The .azr alone leaves the normalizations at their file defaults, so a
     # calculate run on it sits above the fit by whatever they were absorbing.
     # Feed the companion .sav back to reproduce the fitted chi-squared.
-    with azure2(out, cwd=here) as m2:
+    with Session(out, cwd=here) as m2:
         free = sorted((p for p in m2.parameters if not p.fixed),
                       key=lambda p: p.free_index)
         vals = {}
@@ -138,7 +138,7 @@ def main():
                 vals[f[0]] = float(f[1])
         xv = np.array([vals[p.name] for p in free], float)
         print(f"chi2(data) from the written file = "
-              f"{float(np.sum(m2.calculate_chi2_rwa(xv))):.4f}")
+              f"{m2.evaluate(xv).chi2:.4f}")
 
 
 if __name__ == "__main__":

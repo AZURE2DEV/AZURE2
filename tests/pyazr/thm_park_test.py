@@ -25,15 +25,15 @@ For each variant:
      gamma_Brune = gamma_Park / sqrt(J) with park_norms (rel 1e-12), and
      transform_rwa (what save_fit writes) gives the same physical values, the
      amplitude inputs as Brune's amplitudes;
-  2. residual_jacobian (Park) agrees with central differences of the
+  2. objective().residuals_and_jacobian (Park) agrees with central differences of the
      residuals (rel 1e-4 of the largest entry);
   3. the chain rule: the Park Jacobian equals the Brune session's Jacobian
      times d x_Brune / d x_Park (rel 1e-5) -- the derivative with respect to a
      Park amplitude includes the J factor;
-  4. chi2_and_grad (Park) equals 2 J^T r and central differences of chi2.
+  4. objective().value_and_grad (Park) equals 2 J^T r and central differences of chi2.
 
 Then the J > 0 wall on a THM project: a level's amplitudes scaled until
-J < 0 raise calculate_chi2_rwa above the data chi2 by sum (J/1e-3)^2, which
+J < 0 raise evaluate().chi2 above the data chi2 by sum (J/1e-3)^2, which
 park_norms and penalties report, and the gradient there matches differences
 of the chi2 (1e-2: see park_gradient_test.py).
 
@@ -72,7 +72,7 @@ try:
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     sys.stdout.reconfigure(line_buffering=True)
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -135,16 +135,17 @@ def to_brune(m, levels, x):
 
 
 def residual_fd(m, x, h):
-    J = np.zeros((m.residual_jacobian(x)[0].size, x.size))
+    J = np.zeros((m.objective().residuals_and_jacobian(x)[0].size, x.size))
     for i in range(x.size):
         xp = x.copy(); xp[i] += h[i]
         xm = x.copy(); xm[i] -= h[i]
-        J[:, i] = (m.residual_jacobian(xp)[0] - m.residual_jacobian(xm)[0]) / (2.0 * h[i])
+        J[:, i] = (m.objective().residuals_and_jacobian(xp)[0] - m.objective().residuals_and_jacobian(xm)[0]) / (2.0 * h[i])
     return J
 
 
 def chi2(m, x):
-    return float(np.sum(m.calculate_chi2_rwa(x)))
+    """The objective at x (the data chi2 plus every prior and Park's wall)."""
+    return m.objective()(x)
 
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -152,7 +153,7 @@ with tempfile.TemporaryDirectory() as tmp:
         print(f"\n{label}")
         azr_b = stage(tmp, f"v{k}.brune", block)
         azr_p = stage(tmp, f"v{k}.park", block)
-        with azure2(azr_b, use_brune=True) as mb, azure2(azr_p, use_park=True) as mp:
+        with Session(azr_b, use_brune=True) as mb, Session(azr_p, use_park=True) as mp:
             xb = np.asarray(mb.params_rwa, float)
             xp = np.asarray(mp.params_rwa, float)
             levels = level_of(mp)
@@ -165,7 +166,9 @@ with tempfile.TemporaryDirectory() as tmp:
             # 1. the same model from the same file
             cb, cp = chi2(mb, xb), chi2(mp, xp)
             check(f"chi2 Park {cp:.10g} = Brune {cb:.10g} (rel 1e-9)", abs(cp - cb) <= 1e-9 * cb)
-            rb, rp = mb.residual_jacobian(xb)[0], mp.residual_jacobian(xp)[0]
+            # the data rows (Park's objective has a row of its wall per level after them, Brune's none)
+            nd = mb.evaluate(xb).data[-1].rows.stop
+            rb, rp = mb.objective().residuals(xb)[:nd], mp.objective().residuals(xp)[:nd]
             check(f"residuals agree (rel {rel(rp, rb):.1e})", rel(rp, rb) < 1e-9)
             J = mp.park_norms(xp)
             check(f"0 < J < 1 for both levels (J = {np.array2string(J, precision=4)})",
@@ -181,13 +184,13 @@ with tempfile.TemporaryDirectory() as tmp:
 
             # 2. the Park Jacobian against differences of its own residuals
             h = 1e-5 * (np.abs(xp) + 1.0)
-            r, Jp = mp.residual_jacobian(xp)
+            r, Jp = mp.objective().residuals_and_jacobian(xp)
             Jfd = residual_fd(mp, xp, h)
             d = rel(Jp, Jfd)
-            check(f"residual_jacobian (Park) = central differences (rel {d:.1e})", d < 1e-4)
+            check(f"objective().residuals_and_jacobian (Park) = central differences (rel {d:.1e})", d < 1e-4)
 
             # 3. the chain rule through J: dr/dx_Park = dr/dx_Brune . dx_Brune/dx_Park
-            _, Jb = mb.residual_jacobian(xb)
+            _, Jb = mb.objective().residuals_and_jacobian(xb)
             T = np.zeros((xp.size, xp.size))
             for i in range(xp.size):
                 a = xp.copy(); a[i] += h[i]
@@ -196,19 +199,19 @@ with tempfile.TemporaryDirectory() as tmp:
             off = T - np.diag(np.diag(T))
             check("x_Brune depends on the level's other amplitudes and energy (J chain)",
                   float(np.max(np.abs(off))) > 1e-3)
-            d = rel(Jp, Jb @ T)
+            d = rel(Jp[:nd], Jb[:nd] @ T)
             check(f"Park Jacobian = Brune Jacobian x dx_Brune/dx_Park (rel {d:.1e})", d < 1e-5)
 
             # 4. the gradient
-            val, g = mp.chi2_and_grad(xp)
-            check("chi2_and_grad value = chi2", abs(val - cp) <= 1e-9 * cp)
+            val, g = mp.objective().value_and_grad(xp)
+            check("value_and_grad value = the objective", abs(val - cp) <= 1e-9 * cp)
             d = rel(g, 2.0 * Jp.T @ r)
-            check(f"chi2_and_grad = 2 J^T r (rel {d:.1e})", d < 1e-6)
+            check(f"the gradient = 2 J^T r (rel {d:.1e})", d < 1e-6)
             gfd = np.array([(chi2(mp, xp + h[i] * np.eye(xp.size)[i]) -
                              chi2(mp, xp - h[i] * np.eye(xp.size)[i])) / (2.0 * h[i])
                             for i in range(xp.size)])
             d = rel(g, gfd)
-            check(f"chi2_and_grad = central differences of chi2 (rel {d:.1e})", d < 1e-4)
+            check(f"the gradient = central differences of the objective (rel {d:.1e})", d < 1e-4)
 
             if k != 0:
                 continue
@@ -222,13 +225,14 @@ with tempfile.TemporaryDirectory() as tmp:
                     break
             check(f"level 2 driven to J < 0 (scale {scale:g}, J = {np.array2string(Jw, precision=3)})",
                   bool(np.any(Jw < 0)))
-            pen = float(mp.penalties(xw)["park"])
+            pen = float(mp.evaluate(xw).terms["Park J > 0"])
             want = float(np.sum((Jw[Jw < 0] / 1e-3) ** 2))
-            check(f"penalties()['park'] = sum (J/1e-3)^2 = {want:.6g}", abs(pen - want) <= 1e-9 * want)
-            data = float(np.sum(mp.segment_chi2(xw)))
-            check("calculate_chi2_rwa = data chi2 + penalty", abs(chi2(mp, xw) - data - pen) <= 1e-6 * pen,
+            check(f"terms['Park J > 0'] = sum (J/1e-3)^2 = {want:.6g}", abs(pen - want) <= 1e-9 * want)
+            ev_w = mp.evaluate(xw)
+            data = sum(v for name, v in ev_w.terms.items() if name != "Park J > 0")
+            check("the objective = the other terms + penalty", abs(chi2(mp, xw) - data - pen) <= 1e-6 * pen,
                   f"{chi2(mp, xw)} vs {data} + {pen}")
-            _, gw = mp.chi2_and_grad(xw)
+            _, gw = mp.objective().value_and_grad(xw)
             hw = 1e-6 * (np.abs(xw) + 1.0)
             gfdw = np.array([(chi2(mp, xw + hw[i] * np.eye(xw.size)[i]) -
                               chi2(mp, xw - hw[i] * np.eye(xw.size)[i])) / (2.0 * hw[i])

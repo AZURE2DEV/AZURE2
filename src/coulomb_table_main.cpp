@@ -4,9 +4,9 @@
 // options, validation and info.
 //
 //   azure2-coulomb-table build FILE [--lmax 10] [--eta 1e-3 100] [--rho 1e-3 100]
-//                              [--per-decade 100] [--eta-rho-max 150] [--threads N]
+//                              [--per-decade 100] [--eta-rho-max 150] [--threads=N]
 //   azure2-coulomb-table validate FILE [--n 200000] [--seed 1] [--order 4|6|8] [--eta-rho-max X]
-//                                 [--limit 1e-7] [--threads N]
+//                                 [--limit 1e-7] [--threads=N]
 //                                 (--eta-rho-max: test only that part of the domain;
 //                                  --limit: the interpolation error that passes)
 //   azure2-coulomb-table info FILE
@@ -22,12 +22,14 @@
 #include <cstring>
 #include <filesystem>
 #include <random>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
 #include <gsl/gsl_errno.h>
 #include <gsl/gsl_sf_coulomb.h>
 
+#include "CommandLineValues.h"
 #include "Config.h"
 #include "CoulombTable.h"
 #include "ShftFunc.h"
@@ -41,8 +43,8 @@ namespace {
 int Usage() {
   std::fprintf(stderr,
                "FILE defaults to $AZURE2_COULOMB_TABLE, else ~/.azure2/coulomb_table.bin\n"
-               "usage: azure2-coulomb-table build [FILE] [--lmax L] [--eta LO HI] [--rho LO HI] [--per-decade N] [--eta-rho-max X] [--threads N]\n"
-               "       azure2-coulomb-table validate [FILE] [--n N] [--seed S] [--order 4|6|8] [--eta-rho-max X] [--limit E] [--threads N]\n"
+               "usage: azure2-coulomb-table build [FILE] [--lmax L] [--eta LO HI] [--rho LO HI] [--per-decade N] [--eta-rho-max X] [--threads=N]\n"
+               "       azure2-coulomb-table validate [FILE] [--n N] [--seed S] [--order 4|6|8] [--eta-rho-max X] [--limit E] [--threads=N]\n"
                "       azure2-coulomb-table info [FILE]\n");
   return 2;
 }
@@ -285,7 +287,16 @@ int main(int argc, char **argv) {
     else if (o == "--limit") { need(1); limit = std::atof(argv[++a]); }
     else if (o == "--order") { need(1); order = std::atoi(argv[++a]); }
     else if (o == "--per-decade") { need(1); spec.perDecade = std::atof(argv[++a]); }
-    else if (o == "--threads") { need(1); threads = std::atoi(argv[++a]); }
+    else if (o == "--threads" || o.compare(0, 10, "--threads=") == 0) {  // --threads=N as the program's, or --threads N
+      if (o == "--threads") need(1);
+      try {
+        threads = int(azure2::OptionWholeNumber(o == "--threads" ? "--threads=" + std::string(argv[++a]) : o,
+                                                "--threads=", 1, azure2::kMaxThreads));
+      } catch (const std::invalid_argument &e) {
+        std::fprintf(stderr, "ERROR: %s\n", e.what());
+        return 2;
+      }
+    }
     else if (o == "--n") { need(1); n = std::atol(argv[++a]); }
     else if (o == "--seed") { need(1); seed = unsigned(std::atol(argv[++a])); }
     else return Usage();

@@ -31,12 +31,11 @@ LAB = [5.9, 6.1, 6.3]
 
 
 def engine(workdir):
-    from pyazr import azure2
-    with azure2(os.path.join(workdir, "m.azr"), cwd=workdir, data_mode=False) as m:
-        coef = m.calculate_angular_dists(m.params)
-        values = m.calculate(m.params)
-        angles = m.calculate_angles(m.params)
-    return {e: np.array(coef[i]) for i, e in enumerate(EXPANSIONS)}, np.asarray(values[5]), np.asarray(angles[5])
+    from pyazr import Session
+    with Session(os.path.join(workdir, "m.azr"), cwd=workdir, data_mode=False) as m:
+        grids = m.evaluate().data
+    return ({e: np.array(grids[i].extra["legendre"]) for i, e in enumerate(EXPANSIONS)}, grids[5].model,
+            grids[5].angles)
 
 
 def projection(dsdo, angles, kmax):

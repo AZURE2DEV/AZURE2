@@ -11,7 +11,8 @@
 #
 #   1. every flag the help prints is accepted (no "Unknown option" error);
 #   2. every flag literal of src/AZURE2.cpp and src/ProjectCommands.cpp (the --convert, --validate and --schema
-#      commands) is either accepted and printed,
+#      commands), of the option table and of the switch table (support/src/Environment.cpp) is either accepted and
+#      printed,
 #      or neither (compiled out);
 #   3. the flag table of docs/source/reference/command_line.rst names every
 #      printed flag, and no flag the source does not have.
@@ -34,6 +35,7 @@ export OMP_NUM_THREADS=1
 SRC="$HERE/../../src/AZURE2.cpp"
 SRC_COMMANDS="$HERE/../../src/ProjectCommands.cpp"
 SRC_OPTIONS="$HERE/../../io/src/ConfigSection.cpp"  # the flags of the options of the calculation (their table)
+SRC_SWITCHES="$HERE/../../support/src/Environment.cpp"  # the options of the switches that move numbers (their table)
 DOC="$HERE/../../docs/source/reference/command_line.rst"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/cli_help.XXXXXX")"
@@ -48,30 +50,35 @@ fi
 # The flags as printed: "<tab>--flag:" at the start of a line.
 (cd "$WORK" && $RUN "$AZURE2_BIN" --help < /dev/null 2>&1 | head -c 100000 | tr -d '\r' > help.txt)
 # A flag that takes a value prints as "--flag[=FILE]:".
-printed="$(sed -n 's/^[[:space:]]*\(--[a-z][a-z-]*\)\(\[=[A-Z]*\]\)\{0,1\}:.*/\1/p' "$WORK/help.txt" | sort -u)"
+printed="$(sed -n 's/^[[:space:]]*\(--[a-z][a-z0-9-]*\)\(\[=[A-Z]*\]\)\{0,1\}:.*/\1/p' "$WORK/help.txt" | sort -u)"
 # The flags of the source: every "--flag" string literal of src/AZURE2.cpp, src/ProjectCommands.cpp and the option table.
-literals="$(cat "$SRC" "$SRC_COMMANDS" "$SRC_OPTIONS" | tr -d '\r' | grep -o '"--[a-z][a-z-]*"' | tr -d '"' | sort -u)"
+literals="$(cat "$SRC" "$SRC_COMMANDS" "$SRC_OPTIONS" "$SRC_SWITCHES" | tr -d '\r' | grep -o '"--[a-z][a-z0-9-]*"' | tr -d '"' | sort -u)"
 # The flags of the documentation's table: "* - ``--flag``" rows.
-documented="$(tr -d '\r' < "$DOC" | sed -n 's/^ *\* - ``\(--[a-z][a-z-]*\)\(\[=[A-Z]*\]\)\{0,1\}``.*/\1/p' | sort -u)"
+# and the switch options without a value: the "Option" column of the list "Environment switches".
+documented="$( (tr -d '\r' < "$DOC" | sed -n 's/^ *\* - ``\(--[a-z][a-z-]*\)\(\[=[A-Z]*\]\)\{0,1\}``.*/\1/p';
+  tr -d '\r' < "$DOC" | sed -n '/^Environment switches$/,$s/^     - ``\(--[a-z][a-z0-9-]*\)``$/\1/p') | sort -u)"
 
 if [ -z "$printed" ] || [ -z "$literals" ] || [ -z "$documented" ]; then
   bad "could not read the flags (help: $(echo $printed | wc -w), source: $(echo $literals | wc -w), docs: $(echo $documented | wc -w))"
   echo "  FAIL"; exit 1
 fi
 
+# The lists are searched from here-strings, never through a pipe: under pipefail a quiet grep that leaves at its
+# first match can end the writer with SIGPIPE, and the search then counts as failed (seen as random failures of
+# this test on a loaded machine).
 # accepted FLAG: the binary takes FLAG without the parser's error.  A
 # missing project file ends the run right after the options are parsed.
 accepted() {
   local out
   [ "$1" = --help ] && { grep -q "^Syntax: AZURE2" "$WORK/help.txt"; return; }
   out="$(cd "$WORK" && $RUN "$AZURE2_BIN" --no-gui "$1" no_such_project.azr < /dev/null 2>&1 | head -c 100000 | tr -d '\r')"
-  ! printf '%s\n' "$out" | grep -qF "Unknown option $1."
+  ! grep -qF "Unknown option $1." <<< "$out"
 }
 
 for f in $(printf '%s\n%s\n' "$printed" "$literals" | sort -u); do
   in_help=no; in_src=no
-  printf '%s\n' "$printed" | grep -qxF -- "$f" && in_help=yes
-  printf '%s\n' "$literals" | grep -qxF -- "$f" && in_src=yes
+  grep -qxF -- "$f" <<< "$printed" && in_help=yes
+  grep -qxF -- "$f" <<< "$literals" && in_src=yes
   if accepted "$f"; then acc=yes; else acc=no; fi
   if [ "$in_help" = yes ] && [ "$acc" = no ]; then
     bad "$f is printed by --help but the parser refuses it"
@@ -88,10 +95,10 @@ done
 
 # The documentation's table: every printed flag, and nothing the source lacks.
 for f in $printed; do
-  printf '%s\n' "$documented" | grep -qxF -- "$f" || bad "$f is printed but not in the table of command_line.rst"
+  grep -qxF -- "$f" <<< "$documented" || bad "$f is printed but not in the table of command_line.rst"
 done
 for f in $documented; do
-  printf '%s\n' "$literals" | grep -qxF -- "$f" || bad "command_line.rst documents $f, which src/AZURE2.cpp does not have"
+  grep -qxF -- "$f" <<< "$literals" || bad "command_line.rst documents $f, which src/AZURE2.cpp does not have"
 done
 [ "$fail" -eq 0 ] && ok "command_line.rst documents the $(echo $printed | wc -w) printed flags and no other"
 

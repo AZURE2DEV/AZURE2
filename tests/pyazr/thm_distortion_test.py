@@ -14,12 +14,12 @@ Checked on tests/18O_p_a_thm with a made-up charged spectator,
      distorted a + A wave, a ps window with distortionRatio=dw) refused as
      AZURE2 refuses them; global optical potentials (names, :extrapolate;
      the projectile and the mass range refused when a session is made).
-  2. The engine against the CLI: calculate_chi2_rwa (rel 1e-9) and the output
+  2. The engine against the CLI: evaluate().chi2 (rel 1e-9) and the output
      files written by write_output_files (thm_experiments.out included).
   3. thm_distortion: |M|^2 and M_PW at E = 0.6 MeV against the mpmath values
      of tests/reference/thm_distortion_reference.py (case he3_qf); R_model (the
      interpolated weight) against R on a grid (1e-6); R(E_ref) = 1.
-  4. No folding: calculate_rwa(on)/calculate_rwa(off) equals R_model at the data
+  4. No folding: evaluate().data[i].model(on)/evaluate().data[i].model(off) equals R_model at the data
      energies (1e-12); a table (distortion=table:<file>) multiplies by its w(E);
      an experiment without distortion, an unknown one and an energy that
      leaves the spectator no energy raise.  3b: global potentials run and
@@ -185,7 +185,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # -- the engine -----------------------------------------------------------
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
     binary = os.environ.get("AZURE2_BIN")
     if not binary:
         cands = [c for c in glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))
@@ -226,10 +226,10 @@ with tempfile.TemporaryDirectory() as tmp:
     cli_chi2 = float(hit[-1])
 
     print("2. the engine against the CLI")
-    with azure2(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
+    with Session(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
         x = np.asarray(s.params_rwa, float)
-        chi2 = float(np.sum(s.calculate_chi2_rwa(x)))
-        check(f"calculate_chi2_rwa == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
+        chi2 = s.evaluate(x).chi2
+        check(f"evaluate().chi2 == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
               f"{chi2} vs {cli_chi2}")
         s.write_output_files(x)
     from_py = output_files(py_dir)
@@ -241,7 +241,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     print("3. thm_distortion")
     qf_dir = project("qf", f"experiment[A] {KIN} distortion=coulomb")
-    with azure2(os.path.join(qf_dir, "run.azr"), cwd=qf_dir) as s:
+    with Session(os.path.join(qf_dir, "run.azr"), cwd=qf_dir) as s:
         r = s.thm_distortion("A", [REF_HE3_QF[0]])
         check(f"kind coulomb, theta_cm 180 (Trojan horse = target, qf): {r['kind']}, {r['theta_cm']}",
               r["kind"] == "coulomb" and abs(r["theta_cm"][0] - 180) < 1e-12 and r["x"][0] == 1.0)
@@ -268,7 +268,7 @@ with tempfile.TemporaryDirectory() as tmp:
     print("3b. thm_distortion with global potentials (liang09 for 3He + 18O, ancai06 for d + 19F)")
     gd = project("global", f"experiment[A] {KIN} distortion=optical "
                  "opticalAA=liang09 opticalSF=ancai06")
-    with azure2(os.path.join(gd, "run.azr"), cwd=gd) as s:
+    with Session(os.path.join(gd, "run.azr"), cwd=gd) as s:
         r = s.thm_distortion("A", [0.45, 0.6, 0.75])
         check(f"runs, R(E_ref) scale: {r['kind']}, R = {np.round(r['R'], 4)}",
               r["kind"] == "optical" and np.all(np.isfinite(r["R"])) and np.all(r["R"] > 0))
@@ -278,7 +278,7 @@ with tempfile.TemporaryDirectory() as tmp:
     bad = project("global_bad", f"experiment[A] {KIN} distortion=optical "
                   "opticalSF=daehnick80")
     try:
-        with azure2(os.path.join(bad, "run.azr"), cwd=bad) as s:
+        with Session(os.path.join(bad, "run.azr"), cwd=bad) as s:
             s.thm_distortion("A", [0.6])
         check("the session refuses daehnick80 for d + 19F", False, "no error")
     except Exception as err:
@@ -299,9 +299,9 @@ with tempfile.TemporaryDirectory() as tmp:
     model = {}
     for name, blk in runs.items():
         d = project("nf_" + name, blk, fold=False)
-        with azure2(os.path.join(d, "run.azr"), cwd=d) as s:
+        with Session(os.path.join(d, "run.azr"), cwd=d) as s:
             x = np.asarray(s.params_rwa, float)
-            model[name] = np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)])
+            model[name] = np.concatenate([np.asarray(v) for v in [d.model for d in s.evaluate(x).data]])
             ecm = np.concatenate([np.asarray(v) for v in s.energies])
             if name == "off":
                 try:
@@ -312,7 +312,7 @@ with tempfile.TemporaryDirectory() as tmp:
             else:
                 model[name + "_R"] = s.thm_distortion("A", ecm)["R_model"]
     worst = float(np.max(np.abs(model["on"] / model["off"] / model["on_R"] - 1)))
-    check(f"coulomb: calculate_rwa(on)/calculate_rwa(off) == R_model at {ecm.size} points "
+    check(f"coulomb: evaluate().data[i].model(on)/evaluate().data[i].model(off) == R_model at {ecm.size} points "
           f"({model['on_R'].min():.4f}-{model['on_R'].max():.4f}, worst {worst:.1e})", worst < 1e-12)
     w = 2.0 * np.exp((ecm - 0.4) / 0.6 * np.log(0.25))
     worst = float(np.max(np.abs(model["tab"] / model["off"] / w - 1)))

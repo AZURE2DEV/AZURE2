@@ -1,7 +1,7 @@
 """The options of a session (``docs/upgrade/project_format3.md`` section 3.12).
 
 The options of the calculation (``use_brune``, ``transform``, ``use_coulomb_table``, ...) are keys of the project's
-``<config>`` under the same names.  A keyword given to :class:`pyazr.azure2` wins over the key, the key over the
+``<config>`` under the same names.  A keyword given to :class:`pyazr.Session` wins over the key, the key over the
 default; a keyword left out is not given, even though the signature shows its default.  The engine applies that rule
 when the session reads the project (``src/ProjectOptions.cpp``); this module tells it which keywords a call gave and
 reads back the values in effect with their source (``"default"``, ``"project"``, ``"keyword"``).
@@ -9,12 +9,12 @@ reads back the values in effect with their source (``"default"``, ``"project"``,
 import functools
 import inspect
 
-#: The keywords of :class:`pyazr.azure2` that are not options of the calculation (not project state).
+#: The keywords of :class:`pyazr.Session` that are not options of the calculation (not project state).
 NOT_OPTIONS = ("self", "file", "cwd", "data_mode", "coulomb_table")
 
 
 def records_given(init):
-    """Wrap ``azure2.__init__`` so that it knows which keywords the call named: ``self._given_options`` (a set).  The
+    """Wrap ``Session.__init__`` so that it knows which keywords the call named: ``self._given_options`` (a set).  The
     signature is unchanged (``inspect.signature`` follows the wrapper to it)."""
     signature = inspect.signature(init)
 
@@ -38,7 +38,7 @@ def runtime_options(engine, given, data_mode, coulomb_table, cwd):
 
 def in_use(sess, data_mode, coulomb_table):
     """The options in effect, as ``(values, sources)``: ``values`` {keyword: value} with ``data_mode`` and
-    ``coulomb_table`` (what :attr:`pyazr.azure2.options` holds: passed back as keywords they rebuild the same
+    ``coulomb_table`` (what :attr:`pyazr.Session.options` holds: passed back as keywords they rebuild the same
     session), ``sources`` {keyword: "default" | "project" | "keyword"} of the options of the calculation."""
     values = {"data_mode": bool(data_mode)}
     sources = {}

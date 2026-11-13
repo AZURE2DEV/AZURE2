@@ -44,14 +44,14 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
 except Exception as err:                                  # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
 
 COMMON = dict(ignore_externals=True, use_long_wavelength=False)
 MODES = (("brune", dict(use_brune=True)),
-         ("park", dict(use_brune=False, use_park=True)),
+         ("park", dict(use_park=True)),  # Park implies Brune on
          ("standard", dict(use_brune=False)))
 
 for label, opts in MODES:
@@ -59,7 +59,7 @@ for label, opts in MODES:
     snap = os.path.join(PROJECT, f"_beta_sign_{label}.azr")
     sav = os.path.splitext(snap)[0] + ".sav"
     try:
-        with azure2(AZR, cwd=PROJECT, **COMMON, **opts) as m:
+        with Session(AZR, cwd=PROJECT, **COMMON, **opts) as m:
             x = np.asarray(m.params_rwa, float)
             ph = np.asarray(m.transform_rwa(x), float)
             beta = [p for p in m.parameters
@@ -81,17 +81,17 @@ for label, opts in MODES:
             if label == "brune":
                 check("Brune: the transform is the identity on them",
                       all(abs(ph[i] - x[i]) < 1e-12 for i in idx))
-            chi2 = float(m.calculate_chi2_rwa(x)[0])
+            chi2 = m.evaluate(x).chi2
             flipped = x.copy()
             neg = [i for i in idx if x[i] < 0][0]
             flipped[neg] = -flipped[neg]
-            chi2_flipped = float(m.calculate_chi2_rwa(flipped)[0])
+            chi2_flipped = m.evaluate(flipped).chi2
             check("the sign matters to the data",
                   chi2_flipped > chi2 + 1.0, f"{chi2:.4g} vs {chi2_flipped:.4g}")
             m.save_fit(snap, x=x, param_sav=True, verify=True)
-        with azure2(snap, cwd=PROJECT, **COMMON, **opts) as back:
+        with Session(snap, cwd=PROJECT, **COMMON, **opts) as back:
             xb = np.asarray(back.params_rwa, float)
-            chi2_back = float(back.calculate_chi2_rwa(xb)[0])
+            chi2_back = back.evaluate(xb).chi2
         # Brune and Park read the file's amplitudes back exactly; the standard
         # parametrization inverts its transform iteratively (energies to
         # 1e-6 MeV), which leaves ~1e-6 in the amplitudes and ~1e-5 in the
@@ -130,7 +130,7 @@ try:
     line = "1 -1 9.5822148 0 1 1 0 2 2 1 0 374277.9827112448"
     assert line in text
     open(variant, "w").write(text.replace(line, line.replace(" 1 0 374277", " 1 1 374277")))
-    with azure2(variant, cwd=PROJECT, **COMMON, use_brune=True) as m:
+    with Session(variant, cwd=PROJECT, **COMMON, use_brune=True) as m:
         x = np.asarray(m.params_rwa, float).copy()
         fixed_alpha = [p for p in m.parameters
                        if p.fixed and p.kind == "width" and p.radiation_type == "P"
@@ -141,13 +141,13 @@ try:
                  and abs((p.level_energy or 0) - 9.5822148) < 1e-6]
         check("its energy is free", len(e_idx) == 1)
         x[e_idx[0]] += 0.020                      # +20 keV
-        chi2 = float(m.calculate_chi2_rwa(x)[0])
-        all_before = np.asarray(m.sess.params_all_rwa(), float).copy()
+        chi2 = m.evaluate(x).chi2
+        all_before = np.asarray(m._engine.params_all_rwa(), float).copy()
         m.save_fit(snap, x=x, param_sav=False, verify=True)
-    with azure2(snap, cwd=PROJECT, **COMMON, use_brune=True) as back:
+    with Session(snap, cwd=PROJECT, **COMMON, use_brune=True) as back:
         xb = np.asarray(back.params_rwa, float)
-        chi2_back = float(back.calculate_chi2_rwa(xb)[0])
-        all_after = np.asarray(back.sess.params_all_rwa(), float)
+        chi2_back = back.evaluate(xb).chi2
+        all_after = np.asarray(back._engine.params_all_rwa(), float)
         fixed_i = [i for i, p in enumerate(back.parameters) if p.fixed and p.kind == "width"]
     check("the fixed amplitude re-reads unchanged",
           np.allclose(all_after[fixed_i], all_before[fixed_i], rtol=1e-6),

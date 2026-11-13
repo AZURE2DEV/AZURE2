@@ -2,7 +2,7 @@
 """Two sessions evaluating at the same time on two Python threads do not see each other (no hidden state).
 
 The engine calls of a session release the GIL (``py::call_guard<py::gil_scoped_release>`` on the evaluations:
-calculate_rwa, segment_chi2, chi2_and_grad and the rest; the set-up in the Session constructor keeps it), so two
+evaluate().data[i].model, evaluate().data[i].chi2, objective().value_and_grad and the rest; the set-up in the Session constructor keeps it), so two
 Python threads drive two sessions truly at once: one thread's set-up runs beside the other's evaluation, and two
 evaluations run side by side.  Every value a calculation keeps between calls must therefore belong to the session
 (its Config: the run's scratch, the external-capture amplitudes, the notices), never to the process.
@@ -23,7 +23,7 @@ own directory wrote into the other's).  Pairs run at once on two threads, 20 tim
 their session and evaluate it, a barrier starting them together): A with B, N with M, A with T, R with S.  In one more
 process the sessions run one after another: A T A, T A T (two table files in one process).  Every evaluation must give
 the bytes of the same session alone in a fresh process.  What is compared: the cross sections of every data point
-(calculate_rwa), the chi-squared per segment and the objective with its analytic gradient (chi2_and_grad), as raw
+(evaluate().data[i].model), the chi-squared per segment and the objective with its analytic gradient (objective().value_and_grad), as raw
 IEEE bytes, and for R and S the output files written.
 
 Before the sessions owned their state, the binding swapped a process-wide Config pointer and amplitude cache per call
@@ -112,13 +112,13 @@ def options(label, second_table):
 
 def evaluate(azr, opts, write=False):
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
     files = []
-    with azure2(azr, **opts) as s:
+    with Session(azr, **opts) as s:
         x = np.asarray(s.params_rwa, float)
-        parts = [np.concatenate([np.asarray(v, float).ravel() for v in s.calculate_rwa(x)]),
-                 np.asarray(s.segment_chi2(x), float)]
-        chi2, grad = s.chi2_and_grad(x)
+        parts = [np.concatenate([np.asarray(v, float).ravel() for v in [d.model for d in s.evaluate(x).data]]),
+                 np.asarray(np.array([d.chi2 for d in s.evaluate(x).data]), float)]
+        chi2, grad = s.objective().value_and_grad(x)
         parts += [np.asarray([chi2], float), np.asarray(grad, float).ravel()]
         if write:
             out = s.output_dir
@@ -185,7 +185,7 @@ def main():
     try:
         sys.path.insert(0, ROOT)
         import numpy  # noqa: F401
-        from pyazr import azure2  # noqa: F401
+        from pyazr import Session  # noqa: F401
     except Exception as err:
         print(f"skip: engine not available ({type(err).__name__}: {err})")
         return 77

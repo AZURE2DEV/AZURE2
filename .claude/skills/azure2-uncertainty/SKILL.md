@@ -47,7 +47,7 @@ The full recipe for own and literature data, the checks and the traps: `referenc
   (Birge ratio; never deflates). MINOS writes asymmetric errors to `param.errors`. Details:
   `docs/source/reference/output_files.rst`, `docs/source/reference/command_line.rst`.
 - **pyazr.** `pyazr.bands.load_covariance(path)` reads it. With your own least-squares fit, C_p = (JᵀJ)⁻¹ from
-  `m.residual_jacobian(x)` (whitened residuals; priors and penalties included when you fit `m.objective`).
+  `m.objective().jacobian(x)` (whitened data rows, then the rows of the priors and penalties).
 - **Validity.** C_p is the linear (Gaussian) approximation at p̂. It fails for parameters near a bound, for saturated
   background poles (`azure2-check`), and for widths whose sign or branch is not determined. Then profile or sample.
 
@@ -61,8 +61,8 @@ not. Use the profile when the χ² surface is visibly non-parabolic or the inter
 
 ## 4. Sampling on the objective
 
-- Sample exp(−χ²/2) with χ² = `m.objective(x)` (data, normalization and shift penalties, priors), not
-  `calculate_chi2_rwa` (data only). Worked samplers: `pyazr/examples/fit_emcee.py`, `fit_zeus.py`; the built-in
+- Sample exp(−χ²/2) with χ² = `m.objective()(x)` (data, normalization and shift penalties, priors; `m.objective().log_prob`), not
+  `m.evaluate(x).chi2` (data only). Worked samplers: `pyazr/examples/fit_emcee.py`, `fit_zeus.py`; the built-in
   sampler: `docs/source/user_guide/mcmc.rst`. One engine per worker process; keep workers × `OMP_NUM_THREADS` at most
   the cores you hold.
 - Discard burn-in and check the integrated autocorrelation time (a chain shorter than about 50 autocorrelation times
@@ -83,8 +83,8 @@ not. Use the profile when the χ² surface is visibly non-parabolic or the inter
 Linear propagation: σ_y² = gᵀ C_p g, with g_j = ∂y/∂p_j the sensitivity of each point.
 
 ```python
-from pyazr import azure2, uncertainty_bands, extrapolation_bands, sensitivities
-m = azure2("model.azr")
+from pyazr import Session, uncertainty_bands, extrapolation_bands, sensitivities
+m = Session("model.azr")
 bands = uncertainty_bands(m, keys=[3, 7])        # {segment key: Band}; params default to output/param.sav
 lo, hi = bands[3].interval(1.0)                   # also .relative
 ext = extrapolation_bands("model.azr", keys=[1])  # trimmed private model: cost scales with what you ask for
@@ -108,7 +108,7 @@ ext = extrapolation_bands("model.azr", keys=[1])  # trimmed private model: cost 
 workflow: fit A with `--covariance-band`; `pyazr.prior_from_fit("output/param.sav", "output/covariance.dat",
 "prior.dat")`; fit B with `priorCovariance=prior.dat`. The file's optional `#parametrization` tag must match the run;
 fixed parameters are marginalized; a malformed file is an error. A per-parameter prior on the same parameter is
-added in a fit and replaced in MCMC (a note is printed). `m.objective()` includes the term, `calculate_chi2_rwa()`
+added in a fit and replaced in MCMC (a note is printed). `m.objective()` includes the term, `m.evaluate(x).chi2`
 does not. Builds that predate the keyword ignore it without a message: check the log for the prior's note.
 Reference: `docs/source/user_guide/chi_squared.rst`, "Prior parameter covariance".
 

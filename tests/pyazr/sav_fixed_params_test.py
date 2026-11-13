@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""A parameter file's FIXED level parameters reach the engine (azure2.load_sav).
+"""A parameter file's FIXED level parameters reach the engine (Session.load_sav).
 
 AZURE2's external parameter file sets every parameter it names, fixed level
 energies and widths included (AZUREParams::ReadUserParameters).  pyazr's
 free-vector calls take the fixed values from the session, i.e. from the .azr,
-so `x = full_rwa_from_sav(p)[~fixed]; calculate_chi2_rwa(x)` evaluated a
+so `x = full_rwa_from_sav(p)[~fixed]; evaluate().chi2` evaluated a
 different model from the CLI whenever the file's fixed values differed from
 the .azr's -- silently.  11B+alpha, 10-12-26: 10 fixed widths off by up to
 1.6 %, chi2 9925.03 from pyazr against 9868.04 from the CLI at the same file.
@@ -48,7 +48,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2, Project
+    from pyazr import Session, Project
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -76,12 +76,12 @@ with tempfile.TemporaryDirectory() as tmp:
     azr = model.save(os.path.join(work, "fixed_width.azr"))
     sav = os.path.join(work, "fixed.sav")
 
-    with azure2(azr, cwd=work) as m:
+    with Session(azr, cwd=work) as m:
         names = [p.name for p in m.parameters]
         fixed = np.asarray(m.fixed_params, bool)
-        full0 = np.asarray(m.sess.params_all_rwa(), float)
+        full0 = np.asarray(m._engine.params_all_rwa(), float)
         x0 = np.asarray(m.params_rwa, float)
-        chi2_azr = m.calculate_chi2_rwa(x0)[0]
+        chi2_azr = m.evaluate(x0).chi2
 
         cand = [i for i, p in enumerate(m.parameters)
                 if p.kind == "width" and fixed[i] and full0[i] != 0.0]
@@ -96,7 +96,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
         print("1. the free vector alone cannot carry a fixed value")
         x_old = m.full_rwa_from_sav(sav)[~fixed]
-        chi2_old = m.calculate_chi2_rwa(x_old)[0]
+        chi2_old = m.evaluate(x_old).chi2
         # (the file holds 7 digits, so the free values move by rounding only)
         check("free-vector-only route = the .azr's model",
               np.isclose(chi2_old, chi2_azr, rtol=1e-6), f"{chi2_old} vs {chi2_azr}")
@@ -105,11 +105,11 @@ with tempfile.TemporaryDirectory() as tmp:
         x = m.load_sav(sav)
         check("returns the free vector", np.array_equal(x, x_old))
         check("params_rwa set to it", np.array_equal(np.asarray(m.params_rwa), x))
-        live = np.asarray(m.sess.params_all_rwa(), float)
+        live = np.asarray(m._engine.params_all_rwa(), float)
         want = m.read_sav(sav)[names[k]]
         check("engine holds the file's fixed value", live[k] == want,
               f"{live[k]} vs {want}")
-        chi2_new = m.calculate_chi2_rwa(x)[0]
+        chi2_new = m.evaluate(x).chi2
         check("the chi2 moves with it", not np.isclose(chi2_new, chi2_old, rtol=1e-6),
               f"{chi2_new} vs {chi2_old}")
         print(f"        chi2: .azr fixed values {chi2_old:.6f}, file's {chi2_new:.6f}")

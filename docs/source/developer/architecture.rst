@@ -99,7 +99,7 @@ the link lines (``target_link_libraries`` in each ``CMakeLists.txt``).
 
 ``pyazr/``, ``pyazr/ui/``
    The Python package: ``Project`` (``project.py``, ``nuclear_part.py``) edits
-   the engine's document; ``azure2`` (``azure2.py``) is a session; bands,
+   the engine's document; ``Session`` (``session.py``) is a session; bands,
    transformations, library readers and the command line ``python -m pyazr``
    (``cli.py``). ``pyazr/ui`` is the web UI: a server (``server.py``, the
    route table ``routes.py``), session workers (``workers.py``, ``engine.py``),
@@ -112,6 +112,19 @@ the link lines (``target_link_libraries`` in each ``CMakeLists.txt``).
 The tools ``azure2-coulomb-table`` (``src/coulomb_table_main.cpp``) and
 ``azure2-stopping`` (``stopping/tools/azure2_stopping.cpp``) are small
 programs on the same libraries.
+
+How the package is built. A developer's build is the CMake build of the
+repository: it writes ``_azure2`` into ``pyazr/`` (or ``PYAZR_OUTPUT_DIR``)
+and every test imports pyazr from the checkout. A user's ``pip install .`` (or
+``pip wheel .``) goes through ``pyproject.toml``: scikit-build-core runs the
+same CMake files with the option set of a wheel (``BUILD_TESTING`` and
+``USE_READLINE`` off, the vendored sampler on; targets ``_azure2`` and ``AZURE2``),
+installs the module into the package and the program into the wheel's scripts
+(the install rules of component ``python``, keyed on ``SKBUILD``), and copies
+the package directory as it is, less ``wheel.exclude``. The package finds its
+data files next to its own modules; ``pyazr/datafiles.py`` lists them. The
+workflow ``.github/workflows/wheels.yml`` builds and tests wheels for Linux
+and macOS with cibuildwheel and publishes nothing.
 
 A run, step by step
 -------------------
@@ -139,15 +152,16 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    (``RunProjectCommand``), parses the flags into ``Config``
    (``parseOptions``), calls ``Config::ReadConfigFile`` and
    ``Config::ResolveMatrixRoute``, and shows the menu. *pyazr*:
-   ``pyazr.azure2(...)`` builds ``_azure2.Session``
+   ``pyazr.Session(...)`` builds ``_azure2.Session``
    (``api/src/pybind_api.cpp``), which makes a ``Config``, applies the
    keywords of the call (``RuntimeOptions``, ``apply_options``) and calls the
    same two functions. ``pyazr.Project`` reads the file with the same
    ``_azure2.Document`` and edits it with the engine's grammars; it does not
    evaluate anything.
 
-2. **Set-up.** ``AZUREMain::operator()`` (``src/AZUREMain.cpp``) for the
-   program, ``AZUREAPI::Initialize`` (``api/src/AZUREAPI.cpp``) for a
+2. **Set-up.** ``SetUpRun`` and ``SetUpObjective`` (``src/RunSetUp.cpp``,
+   the first stages ``AZUREMain::operator()`` calls; ``include/ProgramRun.h``)
+   for the program, ``AZUREAPI::Initialize`` (``api/src/AZUREAPI.cpp``) for a
    session, make the same calls in the same order:
 
    * ``CNuc::Fill`` (``src/CNuc.cpp``): the pairs (``PPair``) and the
@@ -213,39 +227,62 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    (``src/AZURECalc.cpp``), Minuit2's function; during a fit each evaluation
    takes a pooled copy of ``CNuc`` and of the working copy with its own
    ``Results`` (``AZURECalc::GetPooledCNuc``, ``GetPooledData``). *pyazr*:
-   ``azure2.objective`` calls ``AZUREAPI::CalculateObjectiveRWA``, which runs
-   the same hand-over, point pass, model pass and ``Objective::Engine()`` on
-   the session's own objects. ``azure2.fit_objective()`` gives that function
-   as an object for a fitter or sampler (``pyazr.Objective``), and
-   ``azure2.evaluate(x)`` one evaluation with its terms and every data set's
+   ``Session.objective()`` is ``AZUREAPI::CalculateObjectiveRWA`` as an object for a fitter or sampler
+   (``pyazr.Objective``), which runs the same hand-over, point pass, model pass and ``Objective::Engine()`` on
+   the session's own objects, and
+   ``Session.evaluate(x)`` one evaluation with its terms and every data set's
    arrays (``pyazr.Evaluation``, ``AZUREAPI::EvaluateObjectiveRWA``).
 
-7. **Fit or sampler.** *Program*: ``AZUREMain::operator()`` runs Minuit2's
-   ``MnMigrad`` (with the analytic gradient ``AZURECalc::Gradient``, the
-   reverse-mode adjoint of ``src/AZUREGrad.cpp`` and
-   ``src/GradEnergyTasks.cpp``) or Levenberg-Marquardt
-   (``AZURECalc::RunLevenbergMarquardt``); the sampler is ``runMCMC``
-   (``src/AZURE2.cpp``), which sets up its own ``CNuc`` and ``WorkingCopy``
-   and runs ``AZURECalcMCMC::RunMCMCSampling`` on ``nu::Mcmc``. *pyazr*: the
-   fit is Python's (SciPy or iminuit on ``azure2.objective_and_grad``;
-   the web UI runs them as jobs, ``pyazr/ui/jobs.py``), with the same
-   gradient through ``AZUREAPI``.
+7. **Fit or sampler.** The fitters are one table, ``Fitters()``
+   (``src/Fitters.cpp``, ``include/Fitters.h``): a row per fitter with its
+   name, the program's switch, what it needs (gradient, residual rows,
+   bounds), whether it yields a covariance or allows MINOS, and its
+   function, ``FitResult run(AZURECalc &, AZUREParams &, const FitControl &)``:
+   ``FitMigrad`` and ``FitMigradGradient`` (``src/FitMigrad.cpp``: Minuit2's
+   ``MnMigrad``, the second with the analytic gradient
+   ``AZURECalc::Gradient``, the reverse-mode adjoint of ``src/AZUREGrad.cpp``
+   and ``src/GradEnergyTasks.cpp``, and the rerun with a re-frozen relvector
+   data covariance), ``FitLevenbergMarquardt`` (``src/FitLeastSquares.cpp``)
+   and ``FitGslTrustRegion`` (``src/FitGslTrustRegion.cpp``) on the residual
+   rows, ``FitNLopt`` (``src/FitNLopt.cpp``). ``FitControl``
+   (``include/FitControl.h``) carries the call limit, the progress sink, the
+   checkpoint, the caller's stop request and the log stream; ``FitResult`` the
+   end point, the objective, the status, EDM, calls, the covariance and the
+   MINOS intervals. While a fitter runs, ``FitEvaluations``
+   (``src/FitEvaluations.cpp``) is the objective's ``EvaluationObserver``:
+   it counts the evaluations, keeps the best point and hands each as a
+   ``FitProgress`` record to the sink; the stop request makes every later
+   evaluation return 0 at once. HESSE and MINOS are ``RunHesse`` and
+   ``RunMinos`` on a ``FitResult`` (``src/FitErrors.cpp``). *Program*:
+   ``RunFitStage`` (``src/ProgramFit.cpp``) takes the row of the switches
+   (``FitterOfConfig``), prints the progress lines and writes the
+   intermediate files through ``ProgramProgress``, then HESSE for the band,
+   MINOS, ``fitStatus.out``, ``covariance_matrix.out`` and ``param.sav``.
+   The sampler is ``runMCMC`` (``src/AZURE2.cpp``), which sets up its own
+   ``CNuc`` and ``WorkingCopy`` and runs ``AZURECalcMCMC::RunMCMCSampling`` on
+   ``nu::Mcmc``. *pyazr*: ``Session.fit_with_engine`` runs a row on the
+   session (``AZUREAPI::FitWithEngine``, ``api/src/AZUREAPIFit.cpp``; the
+   binding releases the GIL), or the fit is Python's (SciPy or iminuit on
+   ``Session.objective().value_and_grad``; the web UI runs them as jobs,
+   ``pyazr/ui/jobs.py``), with the same gradient through ``AZUREAPI``.
 
-8. **Output.** ``WorkingCopy::WriteOutputFiles``
+8. **Output.** *Program*: ``FinalEvaluation`` and ``WriteRunOutputs``
+   (``src/RunOutputs.cpp``: the band, then the files below), the reaction rate
+   and the transformation out (``src/AZUREMain.cpp``).
+   ``WorkingCopy::WriteOutputFiles``
    (``src/DataOutputFiles.cpp``: ``AZUREOut_*``, ``chiSquared.out``,
    normalizations, shifts), ``WriteParametersOut``
    (``src/CNucReport.cpp``), ``CNuc::TransformOut`` (the observed and Brune
    parameters) and ``ReactionRate``. A session writes the same files on
-   request (``azure2.write_output_files``).
+   request (``Session.write_output_files``).
 
 .. note:: **Planned.**
    ``CNuc`` will be split into an immutable ``CompoundSystem`` built once at
    set-up and shared by every evaluation, the levels' input values
    (``LevelInputs``) and a per-evaluation ``LevelState``; an evaluation then
    reads ``(const CompoundSystem &, const LevelState &)`` where it reads
-   ``CNuc *`` today. In ``pyazr`` the class ``azure2`` will become
-   ``pyazr.Session``, with ``Objective`` and ``Evaluation`` objects in place
-   of its ``calculate_*`` methods.
+   ``CNuc *`` today. In ``pyazr`` the ``Objective`` and ``Evaluation``
+   objects take the place of the session's ``calculate_*`` methods.
 
 Caches and their signatures
 ---------------------------

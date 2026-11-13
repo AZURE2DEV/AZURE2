@@ -107,7 +107,7 @@ Style
 * C++: ``.clang-format`` (two-space indent, no automatic line wrapping).
   Comments explain *why*, citing the equation or paper. New features go in
   their own class and file. ``external/`` is upstream code and is not edited.
-* Python: Python 3.8 or newer, with numpy, scipy and mpmath as the only core
+* Python: Python 3.10 or newer, with numpy, scipy and mpmath as the only core
   dependencies. Every public name in ``pyazr.__all__`` has a docstring giving
   units and frames. Removing or renaming a public name requires a deprecation
   period.

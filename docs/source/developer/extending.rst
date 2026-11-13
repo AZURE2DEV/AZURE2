@@ -160,7 +160,7 @@ and a ``pyazr`` keyword under one name.
 2. Its place in ``Config``: a row of ``OptionStorages()``
    (``src/ProjectOptions.cpp``; ``upgrade_project_options`` fails for a row
    without one or a default unlike ``Config::Reset``).
-3. Its keyword in ``pyazr.azure2``'s signature and docstring
+3. Its keyword in ``pyazr.Session``'s signature and docstring
    (``pyazr_describe``).
 4. Both values in ``tests/config_options/check.sh`` and
    ``tests/pyazr/config_options_test.py``; its line in
@@ -174,6 +174,41 @@ A command-line flag that is not an option of the calculation:
 ``parseOptions`` and ``printHelp`` (``src/AZURE2.cpp``) and
 ``reference/command_line.rst`` (check 1).
 
+A fitter
+--------
+
+A minimiser the program and a pyazr session can both run:
+
+1. Its function, ``FitResult FitX(AZURECalc &, AZUREParams &, const
+   FitControl &)``, in a file of its own (``src/FitX.cpp``, in
+   ``AZURE2_CORE_SOURCES``): it starts from the values, limits and fixed flags
+   of the ``AZUREParams``, leaves its end point there, writes its lines to
+   ``control.log``, hands its steps to ``control.progress`` (an evaluation
+   fitter puts a ``FitEvaluations`` in place while it runs, which also keeps
+   the best point and puts the stop request in force; an iteration fitter
+   sends a ``FitProgress`` per iteration and checks ``control.stop`` itself)
+   and fills ``FitResult`` (status, calls, covariance where it has one; a
+   stopped fit returns the best point seen with status ``stopped``).
+2. Its row in ``Fitters()`` (``src/Fitters.cpp``): name, the program's switch,
+   the ``Config::paramMask`` bit the switch sets, gradient / residual rows /
+   bounds / covariance / MINOS, progress label, one line of doc. Its place in
+   the table is its precedence in the program.
+3. The switch in the program's parser (``src/AZURE2.cpp``) and its row in
+   ``reference/command_line.rst``; its row in the table "The Engine's
+   Fitters" of ``user_guide/fitting.rst`` (check 46 fails for a row missing
+   from either, and for a minimizer bit of the parser that is no row).
+4. Its case in ``tests/pyazr/fit_with_engine_test.py``: ``fit_with_engine``
+   ends where the program ends, with the program's covariance.
+   ``pyazr.kinds()["fitters"]`` and ``fit_with_engine(method=)`` read the
+   table and need no edit.
+
+A quantity of the progress record is a field of ``FitProgress``
+(``include/FitControl.h``), set where the record is made (``FitEvaluations``
+for evaluations, the fitter for its iterations) and copied into the
+dictionary of ``FitWithEngineDict`` (``api/src/pybind_fit.cpp``); the
+program's printer (``ProgramProgress::Print``) is unchanged unless it is to
+print it.
+
 An environment switch
 ---------------------
 
@@ -183,9 +218,13 @@ selects another route):
 1. A value of ``azure2::support::Switch``
    (``support/include/azure2/support/Environment.h``) and its row, in the
    same order, in the table of ``support/src/Environment.cpp`` (name, type,
-   value when unset, kind, what it does, its page).
-2. Its row in "Environment switches" of ``reference/command_line.rst``
-   (check 40 keeps the two the same).
+   value when unset, kind, what it does, its page). A switch that can move
+   a number also names its option of the program in the row (``--name`` for
+   a flag, ``--name=VALUE`` with its range for a value): the parser, ``--help``
+   and ``--describe`` take the option from the row (check 43 fails for a
+   row of that kind without one).
+2. Its row in "Environment switches" of ``reference/command_line.rst``,
+   with the option (checks 40 and 43 keep the page and the table the same).
 3. Its reader: ``azure2::support::ProcessEnvironment()`` where it is used;
    a switch that can move a number is a field of
    ``Config::EnvironmentSettings``, filled in ``SettingsOf``
@@ -235,6 +274,24 @@ A command of ``python -m pyazr``
    ``cli.write_reference_page()`` (check 42 fails for a row without a case, a
    case without a row, an unknown argument type or a stale page).
 
+A run-time data file of pyazr
+-----------------------------
+
+1. The file under ``pyazr/`` (the wheel carries the package directory as it
+   is), read by its module from next to itself (``__file__``), never through
+   an environment variable.
+2. Its row of ``DATA_FILES`` in ``pyazr/datafiles.py`` (path, what it is, who
+   reads it); a file the wheel must not carry is a row of ``NOT_SHIPPED``
+   instead, with the same pattern in ``wheel.exclude`` of ``pyproject.toml``.
+
+Check 48 fails for a tracked non-Python file under ``pyazr/`` in neither list,
+a row naming no file, or ``wheel.exclude`` differing from ``NOT_SHIPPED``;
+``pyazr_wheel`` (slow) fails when the built wheel lacks a listed file or holds
+an unlisted one. A new C++ source of the binding is one name in the
+``pybind11_add_module(_azure2 ...)`` list of ``api/src/CMakeLists.txt``
+(nothing for the wheel). A new optional dependency is one entry of
+``[project.optional-dependencies]`` in ``pyproject.toml``.
+
 A route and a tab of the web UI
 -------------------------------
 
@@ -244,7 +301,7 @@ arguments); there is no handler written per route.
 ``tests/pyazr/ui/routes_consistency_test.py`` fails for a row whose callable
 does not exist, and for a public method of ``pyazr.Project`` or of the
 session that is neither served nor listed in ``PROJECT_NOT_SERVED``
-(``routes.py``) or ``AZURE2_NOT_SERVED`` (``pyazr/ui/engine.py``). A **job
+(``routes.py``) or ``SESSION_NOT_SERVED`` (``pyazr/ui/engine.py``). A **job
 kind** (a fitter, a sampler) is a function and one row of ``JOBS`` in
 ``pyazr/ui/jobs.py`` (``tests/pyazr/ui/jobs_test.py``).
 

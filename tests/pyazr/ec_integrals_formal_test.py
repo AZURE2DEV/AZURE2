@@ -3,7 +3,7 @@
 
 The engine evaluates the external-capture radial integrals at the final state's capture energy (ALevel::GetECEnergy):
 its input (Brune) energy in every basis, since the formal parameters change the level energies of a block of several
-levels (docs/upgrade/cnuc_split.md section 8).  ``azure2.ec_integrals`` must use the same energy.  Model: tests/13N
+levels (docs/upgrade/cnuc_split.md section 8).  ``Session.ec_integrals`` must use the same energy.  Model: tests/13N
 with a background 1/2- level at E_x = -3 MeV (proton ANC 2 fm^-1/2, no photon width) below the final state (the 1/2-
 ground state), so that the boundary condition is set at that level and the final state's formal energy is not its
 input energy.  Builds before 2026-11-10 evaluated the integrals of the formal basis at the
@@ -27,7 +27,7 @@ SRC = os.path.join(ROOT, "tests", "13N")
 
 
 def integrals(work, use_brune):
-    from pyazr import Project, azure2
+    from pyazr import Project, Session
     d = os.path.join(work, "brune" if use_brune else "formal")
     shutil.copytree(SRC, d, ignore=shutil.ignore_patterns("output", "checks"))
     os.makedirs(os.path.join(d, "output"), exist_ok=True)
@@ -37,7 +37,7 @@ def integrals(work, use_brune):
                 channels=[{"pair": 1, "l": 1, "s": 0.5, "width": 2.0, "fixed": True},
                           {"pair": 2, "l": 1, "s": 0.5, "width": 0.0, "fixed": True}])
     path = m.save(os.path.join(d, "model.azr"))
-    s = azure2(path, use_brune=use_brune)
+    s = Session(path, use_brune=use_brune)
     return s.ec_integrals(1, [0.2, 0.5, 1.0, 2.0])
 
 

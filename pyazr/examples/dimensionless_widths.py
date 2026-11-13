@@ -35,7 +35,7 @@ import numpy as np                                            # noqa: E402
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))))
 
-from pyazr import azure2                                      # noqa: E402
+from pyazr import Session                                      # noqa: E402
 
 
 def load_params(model, path):
@@ -79,10 +79,10 @@ def main():
     args = ap.parse_args()
 
     here = os.path.dirname(os.path.abspath(args.azr)) or "."
-    with azure2(os.path.abspath(args.azr), cwd=here) as m:
+    with Session(os.path.abspath(args.azr), cwd=here) as m:
         x = load_params(m, args.params) if args.params else np.asarray(m.params_rwa, float)
         print(f"compound A = {m.mass_number}, "
-              f"chi2 = {np.sum(m.calculate_chi2_rwa(x)):.2f}\n")
+              f"chi2 = {m.evaluate(x).chi2:.2f}\n")
 
         widths = m.dimensionless_widths(x)
 

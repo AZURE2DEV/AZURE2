@@ -26,7 +26,7 @@ import inspect
 
 import numpy as np
 
-from .azure2 import _azure2
+from . import _azure2
 from .errors import DomainError, EngineError
 
 STATUS = {0: "computed", -1: "not converged", -2: "the arguments together are outside the domain"}

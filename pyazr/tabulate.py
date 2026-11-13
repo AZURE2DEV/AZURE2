@@ -42,7 +42,7 @@ import tempfile
 
 import numpy as np
 
-from .azure2 import azure2
+from .session import Session
 from .project import Project
 
 __all__ = ["tabulate", "TabulatedCrossSection"]
@@ -149,12 +149,11 @@ def tabulate(azr_file, pairs, e_min, e_max, rel_tol=5e-3, frame="cm",
                           file=os.path.basename(fn), columns="E_lab[MeV] _ value error", norm="1 fixed")
         m.save(run)
         out = {}
-        with azure2(run, cwd=work, **session_opts) as a:
+        with Session(run, cwd=work, **session_opts) as a:
             v = np.asarray(a.params_rwa, float) if x is None else np.asarray(x, float)
-            c = a.calculate_rwa(v)
-            e = a.calculate_energies(v)
+            data = a.evaluate(v).data
             for i, p in enumerate(keys):
-                out[p] = (np.asarray(e[i], float), np.asarray(c[i], float))
+                out[p] = (data[i].energies, data[i].model)
         return out
 
     # round 0: uniform seed

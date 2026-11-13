@@ -11,16 +11,16 @@ import os, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
 import numpy as np
-from pyazr import azure2
+from pyazr import Session
 
 azr = os.path.join(HERE, "16N.azr")
 energies = [round(0.6 + 0.05 * i, 3) for i in range(49)]
 with open(os.path.join(HERE, "data", "bda.dat"), "w") as f:
     for e in energies:
         f.write(f"{e:.3f}\t0\t1.0\t0.05\n")
-with azure2(azr, cwd=HERE, use_brune=True, ignore_externals=True,
+with Session(azr, cwd=HERE, use_brune=True, ignore_externals=True,
             use_long_wavelength=False) as m:
-    y = np.asarray(m.calculate_rwa(m.params_rwa)[0], float)
+    y = np.asarray(m.evaluate(m.params_rwa).data[0].model, float)
 assert y.size == len(energies), (y.size, len(energies))
 noise = np.random.default_rng(16).normal(0.0, 0.05, y.size)
 with open(os.path.join(HERE, "data", "bda.dat"), "w") as f:

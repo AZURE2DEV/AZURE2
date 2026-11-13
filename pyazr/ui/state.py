@@ -34,7 +34,7 @@ from .errors import Conflict, NotFound, OutsideRoot, RevisionRequired, StaleRevi
 
 def session_options(project=None, session=None):
     """The engine's table of session options (``pyazr.kinds()["options"]``), each row with ``value`` (the one in use)
-    and ``source``: from ``session`` (``azure2.describe()``: its ``options`` and ``option_sources``) when given, else
+    and ``source``: from ``session`` (``Session.describe()``: its ``options`` and ``option_sources``) when given, else
     from ``project``'s ``<config>`` (``"project"`` for a key it states, ``"default"`` otherwise).  An option that is
     not project state (``data_mode``, ``coulomb_table``, ``cwd``) has its default and source ``"default"``."""
     import pyazr

@@ -8,7 +8,7 @@ grid names its frame (`energies range lo hi MeV cm|lab step s`); `cm` is taken t
 
 On tests/17O (entrance pair 1, n + 17O; its extrapolation removed), in extrapolation mode:
 
-  1. `cm`, 0.1-0.5 MeV in 0.1 steps: calculate_energies reports those c.m. energies (1e-9);
+  1. `cm`, 0.1-0.5 MeV in 0.1 steps: evaluate().data[i].energies reports those c.m. energies (1e-9);
   2. `lab`, same numbers: c.m. = lab M2/(M1 + M2);
   3. a grid without a frame, or with an unknown one (`CM`), is refused (FormatError, a ValueError).
 
@@ -36,7 +36,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2, Project
+    from pyazr import Session, Project
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -71,8 +71,8 @@ with tempfile.TemporaryDirectory() as tmp:
         except ValueError:
             check(f"3. a grid with frame {frame!r} is refused", True)
 
-    with azure2(path, data_mode=False) as m:
-        e = [np.asarray(v, float) for v in m.calculate_energies(np.asarray(m.params, float))]
+    with Session(path, data_mode=False) as m:
+        e = [np.asarray(v, float) for v in [d.energies for d in m.evaluate().data]]
     print(f"  pair 1: M1 = {m1}, M2 = {m2}; c.m. energies per segment:")
     for k, v in enumerate(e, 1):
         print(f"    segment {k}: {np.array2string(v, precision=6)}")

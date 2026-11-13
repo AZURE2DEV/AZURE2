@@ -110,7 +110,7 @@ def test_session_channel_functions_are_the_sessions(t1):
     e = [0.5, -0.2, 1.0, 2.0]
     r = t1.post("/api/session/channel_functions", json={"pair": 1, "e_cm": e, "l": 1})
     assert r.status_code == 200, r.text
-    s = pyazr.azure2(os.path.join(os.path.dirname(t1.path), os.path.basename(t1.path)))
+    s = pyazr.Session(os.path.join(os.path.dirname(t1.path), os.path.basename(t1.path)))
     try:
         direct = s.channel_functions(1, np.asarray(e), 1)
     finally:

@@ -198,7 +198,7 @@ refuse() {  # refuse NAME MESSAGE-FRAGMENT BLOCK [EDITS [FLAGS]]
 refuse no_kinematics "lineshape=on needs the kinematics" "experiment[A] lineshape=on"
 refuse bad_value "expected on or off" "experiment[A] $KIN lineshape=1"
 refuse no_energy "the spectator has no energy left" "experiment[A] beam=18O target=3He spectator=d Ebeam=40 lineshape=on"
-refuse formal "needs the Brune parameterization" "experiment[A] $KIN lineshape=on" "" "--use-rmc"
+refuse formal "needs the Brune parameterization" "experiment[A] $KIN lineshape=on" "" "--use-rmc --no-brune"
 
 echo
 if [ "$fail" -eq 0 ]; then echo "PASS: THM Coulomb line shape"; else echo "FAIL"; exit 1; fi

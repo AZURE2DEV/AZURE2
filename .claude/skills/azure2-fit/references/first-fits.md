@@ -47,7 +47,7 @@ python3 -m rmfit.cli <dir> init --base <dir>/<base>.azr [--sav <base>.sav] --nsh
     --search '{"top_k": 6, "pairs_per_group": 4, "stage1_nfev": 30, "stage2_nfev": 60, "union_nfev": 100}'
 ```
 
-- `--flags` is passed to `pyazr.azure2()`, so the basis is chosen there: `"use_brune": true` (Brune), `"use_park": true`
+- `--flags` is passed to `pyazr.Session()`, so the basis is chosen there: `"use_brune": true` (Brune), `"use_park": true`
   (Park: the fit vector holds observed reduced-width amplitudes, Γ = 2Pγ²; `azure2-exchange`), `"use_brune": false`
   (standard Lane–Thomas). One basis per campaign: the ledger's vectors, `.npz` snapshots and `.sav` companions are all
   in it.

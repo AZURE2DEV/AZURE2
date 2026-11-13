@@ -219,7 +219,6 @@ bool AZUREAPI::UpdateParameters() {
   all_rwa_.clear();
   names_.clear();
   records_.clear();
-  bounds_.clear();
   fixed_.clear();
   values_.clear();
   values_rwa_.clear();
@@ -240,9 +239,6 @@ bool AZUREAPI::UpdateParameters() {
     //}
     all_rwa_.push_back(params.GetMinuitParams().Parameter(i).Value());
     fixed_.push_back(params.GetMinuitParams().Parameter(i).IsFixed());
-    const ROOT::Minuit2::MinuitParameter &limits = params.GetMinuitParams().Parameter(i);
-    bounds_.emplace_back(limits.HasLowerLimit() ? limits.LowerLimit() : -std::numeric_limits<double>::infinity(),
-                         limits.HasUpperLimit() ? limits.UpperLimit() : std::numeric_limits<double>::infinity());
     if (!fixed_.back()) {
       values_rwa_.push_back(params.GetMinuitParams().Parameter(i).Value());
     }
@@ -1122,17 +1118,27 @@ vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r &params) const {
   return out;
 }
 
+void AZUREAPI::ReadFitSettings() const {
+  if (nuisanceRead_) return;
+  nuisanceRead_ = true;
+  // A scratch parameter set: the limits manager applies the settings to it, not to the session's parameters.
+  nuisanceParams_.reset(new AZUREParams);
+  compound()->FillMnParams(*nuisanceParams_, &configure());
+  data()->FillMnParams(*nuisanceParams_);
+  nuisance_.reset(new ParameterLimitsManager(&configure(), compound(), data(), nuisanceParams_.get()));
+  if (nuisance_->ReadParameterSettings()) nuisance_->ApplyAllParameterSettings(*nuisanceParams_);
+}
+
+std::pair<double, double> AZUREAPI::GetParameterBounds(int index) const {
+  ReadFitSettings();
+  const ROOT::Minuit2::MinuitParameter &limits =
+      static_cast<const AZUREParams &>(*nuisanceParams_).GetMinuitParams().Parameter(index);
+  return {limits.HasLowerLimit() ? limits.LowerLimit() : -std::numeric_limits<double>::infinity(),
+          limits.HasUpperLimit() ? limits.UpperLimit() : std::numeric_limits<double>::infinity()};
+}
+
 bool AZUREAPI::NuisancePriorOf(int f, double &nominal, double &sigma) const {
-  if (!nuisanceRead_) {
-    nuisanceRead_ = true;
-    // A scratch parameter set: the limits manager applies the settings to it, not to the session's parameters.
-    nuisanceParams_.reset(new AZUREParams);
-    compound()->FillMnParams(*nuisanceParams_, &configure());
-    data()->FillMnParams(*nuisanceParams_);
-    nuisance_.reset(new ParameterLimitsManager(&configure(), compound(), data(), nuisanceParams_.get()));
-    if (nuisance_->ReadParameterSettings())
-      nuisance_->ApplyAllParameterSettings(*nuisanceParams_);
-  }
+  ReadFitSettings();
   if (!nuisance_) return false;
   // A parameter of the prior covariance has no diagonal prior of its own (objective.md D3).
   if (const PriorCovariance *pc = data()->Data().GetPriorCovariance()) {

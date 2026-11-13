@@ -41,7 +41,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
     from pyazr.bands import best_fit_params
 except Exception as err:
     print(f"skip: engine not available ({type(err).__name__}: {err})")
@@ -56,9 +56,9 @@ with tempfile.TemporaryDirectory() as tmp:
     azr = os.path.join(work, "identical_pp_res.azr")
     sav = os.path.join(work, "output", "param.sav")
 
-    with azure2(azr) as m:
+    with Session(azr) as m:
         names = [p.name for p in m.parameters]
-        allrwa = np.asarray(m.sess.params_all_rwa(), float)
+        allrwa = np.asarray(m._engine.params_all_rwa(), float)
         fixed = np.asarray(m.fixed_params, float).round().astype(bool)
         widths = [p for p in m.parameters if p.kind == "width" and not p.fixed]
         target = widths[0]

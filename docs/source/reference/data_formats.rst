@@ -187,7 +187,7 @@ engine computes :math:`A_L/A_0` or :math:`A_L` and multiplies by the factor of
 :math:`L` the table implies, so a fold, an energy shift and the gradient act
 on all five alike.  An extrapolation writes :math:`L = 0 \ldots K` of its
 ``orders 0 K`` in its expansion (the ``.acoeff`` file and pyazr's
-``calculate_angular_dists``).  ``tests/legendre_expansions`` checks every
+``evaluate(x).data[i].extra["legendre"]``).  ``tests/legendre_expansions`` checks every
 order against a Gauss--Legendre projection of the engine's own
 :math:`d\sigma/d\Omega`.
 
@@ -875,7 +875,8 @@ stated accuracy for the projectile class (H 4.0 %, He 3.9 %, Li 4.8 %, heavier
 stopping comes from, with the citation.  Refusals: ``E_STOPPING_ACTIVE`` (the active
 element not in the composition), ``E_STOPPING_PROJECTILE`` (a neutral projectile),
 ``E_STOPPING_SCALE_CONFLICT``, ``E_STOPPING_DATA`` (the build has no SRIM data files
-and ``AZURE2_SRIM_DATA_DIR`` names none; a table that cannot be read),
+and neither ``--srim-data-dir=DIR`` nor ``AZURE2_SRIM_DATA_DIR`` names a directory
+with them; a table that cannot be read),
 ``E_STOPPING_RANGE`` (an energy outside a table).  The test is
 ``tests/stopping_yield`` (README: the numbers against LunaSRIM).
 
@@ -965,6 +966,6 @@ are converted to MeV (deg).  The same forms describe an angle grid
    A single level of width 1 eV at 300 keV (``tests/extrapolation_grids``)
    needs fewer than 400 points for its peak and its integral to 10⁻³; a uniform
    grid of the same count misses the peak by more than half.  pyazr sessions
-   (``pyazr.azure2``) evaluate at many parameter vectors and refuse an adaptive
+   (``pyazr.Session``) evaluate at many parameter vectors and refuse an adaptive
    grid; ``pyazr.refine_grid`` runs the same refinement on any Python function,
    and ``pyazr.extrapolation_grid`` gives the energies of the other forms.

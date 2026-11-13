@@ -1,21 +1,26 @@
 #!/usr/bin/env python3
-"""pyazr.Objective (azure2.fit_objective()) against today's methods, the engine's sampler and itself.
+"""pyazr.Objective (Session.objective()) against the engine's calls, the engine's sampler and itself.
 
 (a) On T1, T2, T3 (tests/upgrade), 13N_fast (tests/mcmc_physical_norm), a project of each nuisance kind with a prior
     (screening: tests/electron_screening/grad.azr; stopping scale: tests/stopping_yield fit.azr; a kernel's width:
     tests/rectangular_resolution fit.azr) and the 15O gamma_decay record with priors (tests/gamma_decay
     record.azr, the variant of tests/reference/sampler_objective_test.cpp), at the start and at a displaced point:
-    f(x) and f.value_and_grad(x) equal azure2.objective(x) and objective_and_grad(x) bit for bit; the first rows of
-    f.residuals(x) are azure2.residuals(x) bit for bit, and the first rows and columns of f.residuals_and_jacobian(x)
-    those of residual_jacobian(x); the sum of the squares of the rows is f(x) (1e-10), from the forward rows and from
+    f(x) and f.value_and_grad(x) equal the binding's calculate_objective_rwa(x) and calculate_objective_grad_rwa(x)
+    bit for bit (the engine's calls, through Session._engine: a test of the binding); the first rows of f.residuals(x)
+    are the binding's calculate_residuals_rwa(x) bit for bit, and the first rows and columns of
+    f.residuals_and_jacobian(x) those of its calculate_residual_jacobian_rwa(x); the sum of the squares of the rows is
+    f(x) (1e-10), from the forward rows and from
     the Jacobian's rows; f.log_prob(x) = -0.5 f(x); x0, names and bounds are the free rows of the records.
 (b) The gradient against a central difference of f, on T1 and 13N_fast (analytic there), and the Jacobian against a
     central difference of the rows on T1.
 (c) log_prob is -inf at the three excluded points of the record (a branching below 0 and above 1, Gamma_gamma below
-    0: the kinds with sampler_support) and where Park's J < 0 (T2 under Park, widths scaled up); a T2 norm far
-    outside its bounds stays finite (its kind's limits are not walls); and it equals the engine's sampler's ln P
+    0), where Park's J < 0 (T2 under Park, widths scaled up) and at a T2 norm below its lower limit (the fit's
+    limits of every kind are walls: PosteriorSupport); and it equals the engine's sampler's ln P
     minus its constant (Session.sampler_log_probability) on the record with priors and on T2.
 (d) Two threads calling one Objective at once get what each gets alone, bit for bit.
+(e) jacobian(x, skip=...) on T2 (two shift columns): those columns zero in the data rows, the rest and the rows
+    unchanged (the prior rows' analytic derivatives too), and the
+    binding's calculate_residual_jacobian_rwa(x, skip) bit for bit on its rows.
 
 Run: python3 tests/pyazr/objective_object_test.py
 """
@@ -43,7 +48,7 @@ try:
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
     import pyazr
-    from pyazr import azure2
+    from pyazr import Session
     pyazr.kinds()
 except Exception as err:  # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
@@ -83,34 +88,42 @@ def displaced(x):
     return np.array([v * (1.0 + 0.02 * (1 if k % 2 else -1)) for k, v in enumerate(x)])
 
 
-def against_today(label, s):
-    f = s.fit_objective()
+def engine_rows_and_jacobian(s, x):
+    """The binding's residual rows and Jacobian (data, model data, prior covariance), or None where it refuses."""
+    resp = np.asarray(s._engine.calculate_residual_jacobian_rwa(np.asarray(x, float)), float)
+    if resp.size == 1 and resp[0] == -1.0:
+        return None, None
+    n, cols = int(round(resp[0])), int(round(resp[1]))
+    return resp[2:2 + n], resp[2 + n:].reshape(n, cols)
+
+
+def against_engine(label, s):
+    f = s.objective()
     free = s.parameters.free
     check(f"{label}: x0, names, bounds are the free records'", same(f.x0, s.params_rwa) and f.names == free.names
           and f.bounds == [tuple(b) for b in free.bounds], f"{f.names[:3]} {free.names[:3]}")
     for name, x in (("start", f.x0), ("displaced", displaced(f.x0))):
         v = f(x)
-        check(f"{label} {name}: f(x) = objective(x) bit for bit ({v:.10g})", v == s.objective(x), s.objective(x))
+        v0 = float(s._engine.calculate_objective_rwa(x))
+        check(f"{label} {name}: f(x) = the engine's objective bit for bit ({v:.10g})", v == v0, v0)
         val, g = f.value_and_grad(x)
-        val0, g0 = s.objective_and_grad(x)
-        check(f"{label} {name}: value_and_grad = objective_and_grad bit for bit", val == val0 and same(g, g0))
+        resp = np.asarray(s._engine.calculate_objective_grad_rwa(x), float)
+        val0, g0 = float(resp[0]), resp[1:]
+        check(f"{label} {name}: value_and_grad = the engine's bit for bit", val == val0 and same(g, g0))
         rows = f.residuals(x)
-        old = s.residuals(x)
-        check(f"{label} {name}: the first {len(old)} rows are residuals(x) bit for bit, {len(rows)} rows",
+        old = np.asarray(s._engine.calculate_residuals_rwa(x), float)
+        check(f"{label} {name}: the first {len(old)} rows are the engine's residuals bit for bit, {len(rows)} rows",
               same(rows[:len(old)], old) and len(rows) >= len(old))
         rel = abs(float(np.sum(rows ** 2)) - v) / max(1.0, abs(v))
         check(f"{label} {name}: sum of the rows' squares = f(x) ({rel:.1e})", rel <= 1e-10, f"{np.sum(rows ** 2)} {v}")
         check(f"{label} {name}: log_prob = -f/2", f.log_prob(x) == -0.5 * v, f"{f.log_prob(x)} {-0.5 * v}")
-        try:
-            r_old, J_old = s.residual_jacobian(x)
-        except RuntimeError:
-            r_old = None
+        r_old, J_old = engine_rows_and_jacobian(s, x)
         if r_old is None:
-            check(f"{label} {name}: no analytic Jacobian today, none here either", _refused(f, x))
+            check(f"{label} {name}: no analytic Jacobian in the engine, none here either", _refused(f, x))
             continue
         r, J = f.residuals_and_jacobian(x)
         n = len(r_old)
-        check(f"{label} {name}: the Jacobian's first {n} rows are residual_jacobian(x)'s bit for bit",
+        check(f"{label} {name}: the Jacobian's first {n} rows are the engine's bit for bit",
               same(r[:n], r_old) and same(J[:n], J_old) and J.shape == (len(rows), len(x)))
         rel = abs(float(np.sum(r ** 2)) - v) / max(1.0, abs(v))
         check(f"{label} {name}: the Jacobian's rows' squares add up to f(x) ({rel:.1e})", rel <= 1e-10)
@@ -158,55 +171,74 @@ def central_jacobian(label, f, x, rel_tol):
 with tempfile.TemporaryDirectory() as tmp:
     def session(name, src, project, edits=(), **options):
         path = copy_dir(src, os.path.join(tmp, name), project, edits)
-        return azure2(path, **options)
+        return Session(path, **options)
 
-    print("(a) the object against today's methods")
+    print("(a) the object against the engine's calls")
     upgrade = os.path.join(TESTS, "upgrade")
     with session("T1", os.path.join(upgrade, "T1"), "T1.azr") as s:
-        f = against_today("T1", s)
+        f = against_engine("T1", s)
         central_gradient("T1", f, displaced(f.x0), 1e-5)
         central_jacobian("T1", f, displaced(f.x0), 1e-5)
     with session("T2", os.path.join(upgrade, "T2"), "T2.azr") as s:
-        f = against_today("T2", s)
-        # (c) a norm's bounds are not walls of the posterior (the kind has no sampler_support)
+        f = against_engine("T2", s)
+        # skip: the columns held fixed are not finite-differenced (zero); the others and the rows are unchanged, and
+        # the first rows and columns are the binding's calculate_residual_jacobian_rwa(x, skip) bit for bit
+        x = displaced(f.x0)
+        skip = [i for i, p in enumerate(s.parameters.free) if "shift" in p.kind][:2]
+        r_all, J_all = f.residuals_and_jacobian(x)
+        r_s, J_s = f.residuals_and_jacobian(x, skip=skip)
+        nd = s.evaluate(x).data[-1].rows.stop  # skip concerns the finite differences of the data rows
+        resp = np.asarray(s._engine.calculate_residual_jacobian_rwa(x, skip=skip), float)
+        n = int(round(resp[0]))
+        J_e = resp[2 + n:].reshape(n, -1)
+        keep = [c for c in range(len(x)) if c not in skip]
+        check(f"T2: skip={skip} (shift columns): zero in the data rows, every other entry and the rows unchanged",
+              len(skip) == 2 and not np.any(J_s[:nd, skip]) and np.any(J_all[:nd, skip]) and same(r_s, r_all)
+              and same(J_s[nd:], J_all[nd:])
+              and same(J_s[:, keep], J_all[:, keep]))
+        check("T2: skip: the first rows are the binding's with the same skip, bit for bit",
+              same(r_s[:n], resp[2:2 + n]) and same(J_s[:n], J_e) and same(f.jacobian(x, skip=skip), J_s))
+        # (c) the fit's limits of every kind are walls of the posterior: a norm below its lower limit
         x = f.x0
         k = next(i for i, p in enumerate(s.parameters.free) if p.kind == "norm")
-        x[k] = 1e3
-        check("T2: a norm outside any bound keeps a finite log_prob (no sampler_support for norms)",
-              np.isfinite(f.log_prob(x)) and not any(f.sampler_support))
+        lower = f.bounds[k][0]
+        x[k] = lower - 1e-3
+        check(f"T2: a norm below its lower limit ({lower:g}) has log_prob -inf, at the limit a finite one",
+              np.isfinite(lower) and f.log_prob(x) == -np.inf and np.isfinite(f.log_prob(f.x0)), f.log_prob(x))
         for name, x in (("start", f.x0), ("displaced", displaced(f.x0))):
-            lp, constant = s.sess.sampler_log_probability(f.x0, x)
+            lp, constant = s._engine.sampler_log_probability(f.x0, x)
             got = f.log_prob(x)
             check(f"T2 {name}: log_prob = the engine sampler's ln P - its constant ({got:.10g}, C {constant:.6g})",
                   abs(got - (lp - constant)) <= 1e-10 * max(1.0, abs(got)), f"{lp - constant}")
     with session("T3", os.path.join(upgrade, "T3"), "T3.azr") as s:
-        against_today("T3", s)
+        against_engine("T3", s)
     fast = os.path.join(tmp, "fast_src")
     os.makedirs(fast)
     os.symlink(os.path.join(TESTS, "13N", "data"), os.path.join(fast, "data"))
     shutil.copy(os.path.join(TESTS, "mcmc_physical_norm", "13N_fast.azr"), fast)
     with session("13N_fast", fast, "13N_fast.azr") as s:
-        f = against_today("13N_fast", s)
+        f = against_engine("13N_fast", s)
         central_gradient("13N_fast", f, displaced(f.x0), 1e-5)
     scr = os.path.join(tmp, "scr_src")
     os.makedirs(scr)
     os.symlink(os.path.join(TESTS, "13N", "data"), os.path.join(scr, "data"))
     shutil.copy(os.path.join(TESTS, "electron_screening", "grad.azr"), scr)
     with session("screening", scr, "grad.azr") as s:
-        against_today("screening (13N data)", s)
+        against_engine("screening (13N data)", s)
     with session("stopping", os.path.join(TESTS, "stopping_yield", "models"), "fit.azr",
                  [("scale 1 fit prior 1 4%", "scale 1 fit prior 1.04 4%")]) as s:
-        against_today("stopping scale", s)
+        against_engine("stopping scale", s)
     with session("kernel", os.path.join(TESTS, "rectangular_resolution", "models"), "fit.azr",
                  [("rectangular width 14 keV fit\n", "rectangular width 14 keV fit prior 16 2\n")]) as s:
-        against_today("kernel width", s)
+        against_engine("kernel width", s)
 
     print("(c) log_prob at the excluded points")
     record_dir = os.path.join(TESTS, "gamma_decay", "models")
     with session("record", record_dir, "record.azr", RECORD_PRIORS) as s:
-        f = against_today("gamma_decay record with priors", s)
-        check("record: the five free numbers' bounds are walls (sampler_support)", f.sampler_support == [True] * 5,
-              f.sampler_support)
+        f = against_engine("gamma_decay record with priors", s)
+        check("record: the five free numbers have a lower bound 0 and the four fractions an upper bound 1, the walls "
+              "of log_prob", all(lo == 0.0 for lo, hi in f.bounds[:5]) and all(hi == 1.0 for lo, hi in f.bounds[1:5]),
+              f.bounds[:5])
         for k, value in ((1, -0.01), (2, 1.01), (0, -1e-4)):
             x = f.x0
             x[k] = value
@@ -214,12 +246,12 @@ with tempfile.TemporaryDirectory() as tmp:
             check(f"record: entry {k} = {value} (outside its limits): log_prob = -inf", lp == -np.inf, lp)
             check(f"record: entry {k} = {value}: the evaluation says excluded", s.evaluate(x).excluded)
         for name, x in (("start", f.x0), ("displaced", displaced(f.x0))):
-            lp, constant = s.sess.sampler_log_probability(f.x0, x)
+            lp, constant = s._engine.sampler_log_probability(f.x0, x)
             got = f.log_prob(x)
             check(f"record {name}: log_prob = the engine sampler's ln P - its constant ({got:.10g})",
                   abs(got - (lp - constant)) <= 1e-10 * max(1.0, abs(got)), f"{lp} {constant}")
     with session("T2park", os.path.join(upgrade, "T2"), "T2.azr", use_park=True) as s:
-        f = s.fit_objective()
+        f = s.objective()
         widths = [i for i, p in enumerate(s.parameters.free) if p.kind == "width"]
         x = f.x0
         for scale in (3.0, 10.0, 30.0, 100.0):
@@ -235,7 +267,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     print("(d) two threads on one Objective")
     with session("T1threads", os.path.join(upgrade, "T1"), "T1.azr") as s:
-        f = s.fit_objective()
+        f = s.objective()
         points = [f.x0, displaced(f.x0)]
         alone = [(f(x), f.grad(x)) for x in points]
         got = {}

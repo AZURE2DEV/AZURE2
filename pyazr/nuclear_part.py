@@ -224,7 +224,7 @@ class NuclearPart:
 
     def _write_level_values(self, values):
         """Write fitted level values ``[(kind "energy" | "width", group, level, pair key, l, 2s, value)]`` into the
-        rows they come from (``_azure2.level_value_edits``; pyazr.azure2.save_fit).  Returns the values written
+        rows they come from (``_azure2.level_value_edits``; pyazr.Session.save_fit).  Returns the values written
         nowhere: ``[(index into values, why)]``."""
         replacements, unplaced = _engine_call("level values", _engine_module().level_value_edits, self._doc, values)
         _replace(self._doc, replacements)
@@ -244,7 +244,7 @@ class NuclearPart:
         ``pyazr._azure2.config_keys()``): a value is the word or path the engine reads (``output_dir="out/"``,
         ``check_data="screen"``, ``amatrix="true"``), a number, or a bool (``amatrix`` true / false, a key of kind
         bool 1 / 0); ``None`` removes a key.  A directory is read with a trailing "/" whether or not it is written
-        with one; :meth:`pyazr.azure2.write_output_files` creates the output directory when it does not exist."""
+        with one; :meth:`pyazr.Session.write_output_files` creates the output directory when it does not exist."""
         engine = _engine_module()
 
         def edit(doc):

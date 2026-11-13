@@ -62,7 +62,7 @@ THMMatrixFunc	include/THMMatrixFunc.h	the HOES cross section of THM sites	evalua
 RMatrixFunc	include/RMatrixFunc.h	the channel-matrix route (a GenMatrixFunc)	evaluation	class	evaluation
 LevelMatrixSolver	include/LevelMatrixSolver.h	factorizes one J group's level matrix	evaluation	class	evaluation
 CNuc	include/CNuc.h	the level parameters at the vector	evaluation	class	evaluation
-AZURECalc	include/AZURECalc.h	Minuit's function: chi^2, gradient, least squares	inference	class	run
+AZURECalc	include/AZURECalc.h	the objective: chi^2, gradient, residual rows	inference	class	run
 WorkingData	include/WorkingData.h	a pooled working copy with its buffer	inference	class	evaluation
 CNuc	include/CNuc.h	the level parameters at the vector	inference	class	evaluation
 WorkingCopy	include/WorkingCopy.h	points, norms and shifts of one evaluation	inference	class	evaluation
@@ -77,19 +77,30 @@ ParamKindRow	include/ParameterKind.h	a row of the parameter-kind table	inference
 ParamIndexMap	include/AZUREGrad.h	where each parameter sits, for the gradient	inference	class	evaluation
 GradAccum	include/AZUREGrad.h	the gradient in physics coordinates	inference	class	evaluation
 ParameterLimitsManager	include/ParameterLimitsManager.h	nuisance limits and priors	inference	class	run
+FitterRow	include/Fitters.h	a fitter: name, switch, needs, its function	inference	class	immutable
+FitControl	include/FitControl.h	what a fit is given: call limit, sink, stop, log	inference	class	run
+FitResult	include/FitControl.h	how a fit ended: point, status, covariance, MINOS	inference	class	run
+FitProgress	include/FitControl.h	one step of a fit, handed to the sink	inference	class	evaluation
+EvaluationObserver	include/FitControl.h	what the objective reports, the stop it obeys	inference	class	run
+FitEvaluations	include/FitEvaluations.h	the evaluations of a running fit: count, best point	inference	class	run
 AZURECalcMCMC	include/AZURECalcMCMC.h	the log-probability of the sampler	inference	class	run
+PosteriorSupport	include/PosteriorSupport.h	the fit's limits as the posterior's support	inference	class	run
 nu::Mcmc	numcmc/include/numcmc/mcmc.h	the sampler's run	inference	class	run
 nu::Ensemble	numcmc/include/numcmc/ensemble.h	the walkers of the sampler	inference	class	run
 nu::Walker	numcmc/include/numcmc/walker.h	one walker: position and log-probability	inference	class	run
-AZUREMain	include/AZUREMain.h	the program's run: set-up, fit, output	frontends	class	run
+AZUREMain	include/AZUREMain.h	the program's run: its stages in order	frontends	class	run
 Config	include/Config.h	the run: options, paths, the project read	frontends	class	run
 CNuc	include/CNuc.h	compound nuclei and level parameters	frontends	class	evaluation
 WorkingCopy	include/WorkingCopy.h	the data of one evaluation	frontends	class	evaluation
 AZURECalc	include/AZURECalc.h	Minuit's function: chi^2, gradient	frontends	class	run
+ProgramRun	include/ProgramRun.h	one program run: what a stage hands to the next	frontends	class	run
+ProgramProgress	include/ProgramRun.h	the program's progress lines and intermediate files	frontends	class	run
 AZUREAPI	api/include/AZUREAPI.h	the engine as a session	frontends	class	run
-Session	api/src/pybind_api.cpp	_azure2.Session: a Config and an AZUREAPI	frontends	class	run
+_azure2::Session	api/src/pybind_api.cpp	the binding's session: a Config and an AZUREAPI	frontends	class	run
 RuntimeOptions	api/src/pybind_api.cpp	what a session is given beyond the project	frontends	class	run
-azure2	pyazr/azure2.py	pyazr's session object	frontends	class	run
+pyazr::Session	pyazr/session.py	pyazr's session: one project set up by the engine	frontends	class	run
+pyazr::Objective	pyazr/objective.py	the fit's objective as a callable	frontends	class	run
+pyazr::Evaluation	pyazr/evaluate.py	the numbers at one x (copies)	frontends	class	run
 ParameterSet	pyazr/parameters.py	the fit parameters as a table	frontends	class	run
 Project	pyazr/project.py	the project, edited with the engine's grammars	frontends	class	run
 Record	pyazr/project.py	one record of the project	frontends	class	run

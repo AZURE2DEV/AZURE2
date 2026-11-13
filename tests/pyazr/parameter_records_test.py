@@ -50,7 +50,7 @@ def check(name, ok, detail=""):
 try:
     import numpy as np
     import pyazr
-    from pyazr import _azure2, azure2, Project
+    from pyazr import _azure2, Session, Project
     import thm_records
     from pyazr.described import describe_project
     from pyazr.snapshot import write_values
@@ -146,7 +146,7 @@ def check_project(label, path, cwd, write_back=False):
     print(label)
     par, outdir = run_program(path, cwd)
     project = Project.open(path)
-    with azure2(path, cwd=cwd) as s:
+    with Session(path, cwd=cwd) as s:
         P = s.parameters
         n = len(P)
         check(f"{label}: one row per parameter of param.par ({n})", n == len(par), (n, len(par)))
@@ -203,7 +203,7 @@ def check_project(label, path, cwd, write_back=False):
             check(f"{label}: write_values edits the project in memory, the file untouched",
                   open(path).read() == before and edited.text != before)
             edited.save(os.path.join(cwd, "written.azr"))
-            with azure2(os.path.join(cwd, "written.azr"), cwd=cwd) as back:
+            with Session(os.path.join(cwd, "written.azr"), cwd=cwd) as back:
                 check(f"{label}: the project written with x1 starts at x1 (rel 1e-6)",
                       np.allclose(back.parameters.x0, x1, rtol=1e-6, atol=1e-12),
                       (back.parameters.x0[target.free_index], x1[target.free_index]))
@@ -216,7 +216,7 @@ def check_project(label, path, cwd, write_back=False):
                 check(f"{label}: put refuses a fixed row", "fixed" in str(err) and fixed.name in str(err), err)
         pairs = s.pairs
         ppairs = {q.key: q for q in project.pairs()}
-        ok = [q.number for q in pairs] == list(range(1, len(pairs) + 1)) and len(pairs) == len(s.sess.pair_records())
+        ok = [q.number for q in pairs] == list(range(1, len(pairs) + 1)) and len(pairs) == len(s._engine.pair_records())
         for q in pairs:
             r = ppairs[q.key]
             ok &= (abs(q.M1 - r.light_mass) < 1e-9 and abs(q.M2 - r.heavy_mass) < 1e-9

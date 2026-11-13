@@ -48,7 +48,7 @@ try:
     import numpy as np
     import mpmath
     import pyazr
-    from pyazr import azure2, _azure2
+    from pyazr import Session, _azure2
 except Exception as err:
     print(f"skip: the engine or mpmath is not importable ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -103,10 +103,10 @@ def write_project(work, name, text, files):
 
 def terms_of(d):
     """(model values, chi^2 terms) at the project's start parameters."""
-    with azure2(os.path.join(d, "m.azr"), cwd=d) as m:
+    with Session(os.path.join(d, "m.azr"), cwd=d) as m:
         x = np.asarray(m.params_rwa, float)
-        model = np.concatenate([np.asarray(v, float) for v in m.calculate_rwa(x)])
-        return model, np.asarray(m.calculate_chi2_rwa(x), float)
+        model = np.concatenate([np.asarray(v, float) for v in [d.model for d in m.evaluate(x).data]])
+        return model, np.asarray([m.evaluate(x).chi2], float)
 
 
 def same_bits(a, b):
@@ -217,16 +217,16 @@ with tempfile.TemporaryDirectory() as work:
     in_sg = write_project(work, "sg", project_text(dataset("s.dat", "sfactor", "keV*b").replace(
         "    norm           1 fixed\n", "    norm           1 fit prior 1 5%\n    shift          offset 2 keV fit\n")),
         {"s.dat": rows_s})
-    with azure2(os.path.join(in_sg, "m.azr"), cwd=in_sg) as m:
+    with Session(os.path.join(in_sg, "m.azr"), cwd=in_sg) as m:
         x = np.asarray(m.params_rwa, float)
-        c, g = m.chi2_and_grad(x)
+        c, g = m.objective().value_and_grad(x)
         worst = 0.0
         for i in range(len(x)):
             h = 1e-6 * max(abs(x[i]), 1e-3)
             xp, xm = x.copy(), x.copy()
             xp[i] += h
             xm[i] -= h
-            fd = (float(np.sum(m.calculate_chi2_rwa(xp))) - float(np.sum(m.calculate_chi2_rwa(xm)))) / (2 * h)
+            fd = (m.objective()(xp) - m.objective()(xm)) / (2 * h)
             worst = max(worst, abs(g[i] - fd) / max(np.max(np.abs(g)), 1e-300))
         check(f"gradient: {len(x)} free parameters (with norm and shift), analytic = central differences to 1e-6 of the "
               f"largest", len(x) >= 3 and worst <= 1e-6, f"worst {worst:.2e}, chi2 {c!r}")

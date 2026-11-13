@@ -163,6 +163,9 @@ class Config {
   /// Where the value of each option of the calculation came from (include/ProjectOptions.h): an option absent here has
   /// its default.  Set by the program's flags (parseOptions), a session's keywords and ReadConfigFile's keys.
   std::map<std::string, OptionSource> optionSources;
+  /// The options a flag or keyword named itself (not one it implied): an implication does not over-rule them, so that
+  /// --use-park with --no-brune, in either order, meets as a contradiction instead of letting the order decide.
+  std::set<std::string> optionsStated;
   /// The contradictions of options ApplyProjectOptions refused (their diagnostics, one line each); empty otherwise.
   std::string refusedOptions;
   /// Take P, S and the hard-sphere phase of charged channels from the universal Coulomb

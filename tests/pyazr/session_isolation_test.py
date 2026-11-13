@@ -9,9 +9,9 @@ potential) as a third project.  In one process the sessions run in the orders
 A B A and B A B (and A C A, and A R A with R project A at another channel radius), each at 1 and at 3 OpenMP threads; every
 evaluation of a project must give the same bytes every time it runs and the
 same bytes as that project alone in a fresh process at the same thread count.
-What is compared: the cross sections of every data point (calculate_rwa), the
+What is compared: the cross sections of every data point (evaluate().data[i].model), the
 chi-squared per segment, and the objective with its analytic gradient
-(chi2_and_grad), as raw IEEE bytes.  The same numbers at 1 and at 3 threads are
+(objective().value_and_grad), as raw IEEE bytes.  The same numbers at 1 and at 3 threads are
 checked too (results do not depend on the thread count).
 
 A leak shows as an evaluation of A after B differing from A's first one: some
@@ -66,15 +66,15 @@ def worker(tmp, sequence):
     """Run the sessions of `sequence` one after another in this process; print one digest per evaluation."""
     sys.path.insert(0, ROOT)
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
 
     out = []
     for label in sequence:
-        with azure2(stage(tmp, PROJECTS[label] + ("-r" if label in RADIUS else ""))) as s:
+        with Session(stage(tmp, PROJECTS[label] + ("-r" if label in RADIUS else ""))) as s:
             x = np.asarray(s.params_rwa, float)
-            parts = [np.concatenate([np.asarray(v, float).ravel() for v in s.calculate_rwa(x)]),
-                     np.asarray(s.segment_chi2(x), float)]
-            chi2, grad = s.chi2_and_grad(x)
+            parts = [np.concatenate([np.asarray(v, float).ravel() for v in [d.model for d in s.evaluate(x).data]]),
+                     np.asarray(np.array([d.chi2 for d in s.evaluate(x).data]), float)]
+            chi2, grad = s.objective().value_and_grad(x)
             parts += [np.asarray([chi2], float), np.asarray(grad, float).ravel()]
             h = hashlib.sha256()
             for p in parts:
@@ -101,7 +101,7 @@ def main():
         sys.path.insert(0, ROOT)
         import numpy  # noqa: F401
         import pyazr  # noqa: F401
-        from pyazr import azure2  # noqa: F401
+        from pyazr import Session  # noqa: F401
     except Exception as err:
         print(f"skip: engine not available ({type(err).__name__}: {err})")
         return 77

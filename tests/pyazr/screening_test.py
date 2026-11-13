@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Electron screening through pyazr: the ``screening`` field of a format-3 target record (Project: read, set,
-added, refused), the ``<target>.screening`` parameter record, its prior in penalties() / objective(),
-and the U_e entries of chi2_and_grad and residual_jacobian against central finite differences.
+added, refused), the ``<target>.screening`` parameter record, its prior in evaluate().terms / objective(),
+and the U_e entries of objective().value_and_grad and objective().residuals_and_jacobian against central finite differences.
 Model: tests/electron_screening/grad.azr (12C(p,g), LUNA segments, U_e free with a 200 eV prior).
 
 The engine part needs the compiled module and skips cleanly without it.
@@ -73,7 +73,7 @@ try:
     try:
         os.environ.setdefault("OMP_NUM_THREADS", "2")
         import numpy as np
-        from pyazr import azure2
+        from pyazr import Session
         from pyazr import _azure2  # noqa: F401  the compiled engine
     except Exception as err:  # engine not built
         print(f"skip engine part: {type(err).__name__}: {err}")
@@ -85,7 +85,7 @@ try:
         os.makedirs(os.path.join(work, "checks"))
         shutil.copy(os.path.join(SRC, "grad.azr"), work)
         os.symlink(DATA, os.path.join(work, "data"))
-        session = azure2(os.path.join(work, "grad.azr"))
+        session = Session(os.path.join(work, "grad.azr"))
 
     if session is not None:
         scr = list(session.parameters.screenings)
@@ -98,33 +98,33 @@ try:
         x = np.asarray(session.params_rwa, float).copy()
         k = p.free_index
         x[k] = 1100.0
-        pen = session.penalties(x)["screening"]
-        check("penalties()['screening'] = ((1100 - 1000)/200)^2", close(pen, 0.25, 1e-12), pen)
-        others = session.penalties(x)
-        rest = (float(np.sum(others["norm"])) + float(np.sum(others["shift"])) +
-                float(np.sum(others["shift_sqrt"])) + float(np.sum(others["shift_fn"])))
-        obj = session.objective(x)
-        data = float(np.sum(session.calculate_chi2_rwa(x)))
+        pen = session.evaluate(x).terms["screening priors"]
+        check("terms['screening priors'] = ((1100 - 1000)/200)^2", close(pen, 0.25, 1e-12), pen)
+        others = session.evaluate(x).data
+        rest = (float(np.sum([d.norm_chi2 for d in others])) + float(np.sum([d.shift_constant_chi2 for d in others])) +
+                float(np.sum([d.shift_sqrt_chi2 for d in others])) + float(np.sum([d.shift_function_chi2 for d in others])))
+        obj = session.objective()(x)
+        data = session.evaluate(x).chi2
         check("objective = data chi2 + norm/shift terms + screening prior", close(obj, data + rest + 0.25, 1e-12),
               (obj, data, rest))
         x0 = np.asarray(session.params_rwa, float)
-        check("U_e moves the data chi2", abs(data - float(np.sum(session.calculate_chi2_rwa(x0)))) > 1e-6)
+        check("U_e moves the data chi2", abs(data - session.evaluate(x0).chi2) > 1e-6)
 
-        value, grad = session.chi2_and_grad(x)
+        value, grad = session.objective().value_and_grad(x)
         h = 1e-3 * max(1.0, abs(x[k]))
         e = np.zeros_like(x)
         e[k] = h
-        fd = (float(np.sum(session.calculate_chi2_rwa(x + e))) - float(np.sum(session.calculate_chi2_rwa(x - e)))) / (2 * h)
-        check(f"chi2_and_grad: d chi2/d U_e = finite difference ({grad[k]:.6g} vs {fd:.6g})",
+        fd = (session.objective()(x + e) - session.objective()(x - e)) / (2 * h)
+        check(f"objective gradient: d f/d U_e = finite difference ({grad[k]:.6g} vs {fd:.6g})",
               abs(grad[k] - fd) <= 1e-6 * max(1.0, abs(fd)), (grad[k], fd))
 
-        r, J = session.residual_jacobian(x)
+        r, J = session.objective().residuals_and_jacobian(x)
         r, J = np.asarray(r, float), np.asarray(J, float)
-        rp = np.asarray(session.residual_jacobian(x + e)[0], float)
-        rm = np.asarray(session.residual_jacobian(x - e)[0], float)
+        rp = np.asarray(session.objective().residuals_and_jacobian(x + e)[0], float)
+        rm = np.asarray(session.objective().residuals_and_jacobian(x - e)[0], float)
         col = (rp - rm) / (2 * h)
         worst = float(np.max(np.abs(J[:, k] - col) / np.maximum(1e-12, np.max(np.abs(col)))))
-        check(f"residual_jacobian: U_e column = finite differences ({worst:.1e})", worst < 1e-6)
+        check(f"objective().residuals_and_jacobian: U_e column = finite differences ({worst:.1e})", worst < 1e-6)
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 

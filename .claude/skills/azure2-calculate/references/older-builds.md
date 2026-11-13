@@ -67,6 +67,6 @@ Sphinx docs (`docs/source/getting_started/whats_new.rst` and the pages named bel
 
 - builds before 2026-10-07 (expires: 2027-02-01): two sessions in one process shared the EC amplitude cache (wrong
   capture σ, up to 28 %, in the first session once a second existed). `angle-integrated-E1`/`-E2` segments returned the
-  total from `calculate_rwa`.
+  total as their model value.
 - builds before 2026-10-08 (expires: 2027-02-01): free-vector entry points accepted a short vector silently.
 - builds before 2026-11-03 (expires: 2027-02-01): the `.azr` was re-parsed on every call.

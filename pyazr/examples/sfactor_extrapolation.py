@@ -12,7 +12,7 @@ and switching the session into extrapolation mode.
 
 Two things to keep straight, both of which silently give a wrong answer:
 
-  * `add_extrapolation` takes LAB energies, while `calculate_energies` returns
+  * `add_extrapolation` takes LAB energies, while `evaluate(x).data[i].energies` is
     c.m.  Divide the c.m. range by m_target / (m_beam + m_target).
   * `output/intEC.extrap` caches external-capture integrals for the grid it was
     built on and is reused without checking.  A changed grid means a stale
@@ -34,7 +34,7 @@ os.environ.setdefault("OMP_NUM_THREADS", "4")
 
 import numpy as np
 
-from pyazr import Project, azure2
+from pyazr import Project, Session
 
 
 def entrance_pair(mdl: Project, pair: int):
@@ -82,7 +82,7 @@ def main() -> int:
         stale.unlink()
         print(f"removed stale {stale}")
 
-    with azure2(str(out)) as azr:
+    with Session(str(out)) as azr:
         x = np.asarray(azr.params_rwa, float)
         if args.params:
             # param.sav has one line per parameter, fixed ones included, while
@@ -94,8 +94,9 @@ def main() -> int:
             x = np.asarray(best_fit_params(azr, str(args.params)), float)
 
         azr.extrap_mode()
-        e = np.asarray(azr.calculate_energies(x)[0], float)
-        s = np.asarray(azr.calculate_sfactor_rwa(x)[0], float)
+        grid = azr.evaluate(x).data[0]          # the first extrapolation
+        e = grid.energies
+        s = grid.model * grid.extra["sfactor_conversion"]   # MeV b
 
     o = np.argsort(e)
     e, s = e[o], s[o]

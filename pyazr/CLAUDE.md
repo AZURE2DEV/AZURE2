@@ -11,11 +11,11 @@ public names are a contract.
 - `pyazr.kinds()`: record kinds and fields, data kinds (units, frames), parameter kinds (unit, owner fields), session
   options (type, default, CLI flag, doc), bound physics functions, error classes.  Read from the engine's tables
   (`described.py`); never add a hand-typed list of kinds in Python.
-- `azure2(...).describe()`: pairs, levels, data sets, parameters (their records: name, kind, unit, x, free, bounds,
+- `Session(...).describe()`: pairs, levels, data sets, parameters (their records: name, kind, unit, x, free, bounds,
   owner fields), options in effect and their sources.  The options of the calculation are `<config>` keys too
   (`session_options.py`: a keyword given wins over the key, the key over the default; the signature's defaults are
   unchanged, a keyword left out is not given).
-- `azure2(...).parameters` (a `Parameters`, `parameters.py`): the table of the fit parameters, one row per
+- `Session(...).parameters` (a `Parameters`, `parameters.py`): the table of the fit parameters, one row per
   parameter, built once per session and layout from the engine's records (`Session.parameter_records()`; the pairs
   from `Session.pair_records()`).  The field names, units and kinds are one table of the binding
   (`api/src/pybind_records.cpp`, `pyazr.kinds()["parameter_fields"]`, `["pair_fields"]`): never type a field name, a
@@ -27,12 +27,12 @@ public names are a contract.
   `EngineWarning`.  A new error derives from the class above and from the builtin the call raised before; its
   message says what was wrong, what is allowed and which call shows or fixes it (`tests/pyazr/errors_test.py`
   holds the table of wrong calls).
-  The argument checks of the session's calls live in `session_checks.py`, not in `azure2.py`.
+  The argument checks of the session's calls live in `session_checks.py`, not in `session.py`.
 - An engine notice becomes a warning when its line is a row of `api/src/pybind_notices.cpp` (the session's
   `Config::outStream` passes through that buffer); every other line still goes to standard output.
 - `pyazr.physics.<name>`: the engine's physics functions on arrays (`help()` gives arguments, units, domains);
   `pyazr.kinds()["physics"]` the same rows as data; `errors="mask"` gives NaN and a status per element instead of
-  `DomainError`.  The per-session ones (the session's Coulomb table or potential) are `azure2(...).channel_functions`.
+  `DomainError`.  The per-session ones (the session's Coulomb table or potential) are `Session(...).channel_functions`.
 
 ## Recipe: add a physics function
 
@@ -50,14 +50,15 @@ Nothing in Python: `pyazr/physics.py` builds the function, its signature and doc
 
 ## Recipe: use the objective and the evaluation
 
-- A fit or a sampler: `f = s.fit_objective()` (`objective.py`): `f(x)`, `f.grad`, `f.value_and_grad`,
-  `f.residuals`/`f.jacobian` (the objective as rows, `sum(r**2) == f(x)`), `f.log_prob` (the engine's sampler's
+- A fit or a sampler: `f = s.objective()` (`objective.py`): `f(x)`, `f.grad`, `f.value_and_grad`,
+  `f.residuals`/`f.jacobian(x, skip=None)` (the objective as rows, `sum(r**2) == f(x)`), `f.log_prob` (the engine's sampler's
   rule: -f/2, -inf outside its support), `f.x0`, `f.names`, `f.bounds`, `f.errordef`.  Recipes:
   `examples/fit_scipy.py`, `fit_iminuit.py`, `fit_emcee.py` (tested by `tests/pyazr/fit_recipes_test.py`).
 - The numbers at one x: `ev = s.evaluate(x)` (`evaluate.py`), one engine evaluation: `ev.objective`, `ev.chi2`
   (`Total-Chi-Squared`), `ev.terms` (by the engine's term names), `ev.data[i]` (model, residuals, chi2 as the row of
-  `chiSquared.out`, extra columns), `ev.table()`.  Never rebuild a number of `chiSquared.out` or `AZUREOut_*` from
-  today's `calculate_*` methods.
+  `chiSquared.out`, `rows` its rows of `f.residuals(x)`, extra columns), `ev.table()`; in extrapolation mode the
+  extrapolations, with every chi-squared field `None`.  These two are the only ways to evaluate: a number of
+  `chiSquared.out` or `AZUREOut_*` is read from them, never rebuilt.
 - **A new term of the objective**: a class in `src/Objective.cpp` (its `Name()`), nothing in `pyazr/`; it appears in
   `Evaluation.terms`; if it is a sum of squares, its rows go into `AZUREAPI::ObjectiveRowsRWA`
   (`api/src/AZUREAPIObjective.cpp`; `objective_object_test.py` checks `sum(r**2) == f(x)`).
@@ -66,11 +67,16 @@ Nothing in Python: `pyazr/physics.py` builds the function, its signature and doc
   `pyazr.kinds()["data_outputs"]`.
 - **A new field of `Evaluation`**: an entry of the dict `EvaluationDict` builds (`pybind_evaluation.cpp`), the
   attribute in `evaluate.py` and its line in the class's `FIELDS` (`kinds()["objects"]`).
-- Calls of both objects take the session's lock (`objective.session_lock`); today's methods do not.
+- Calls of both objects take the session's lock (`pyazr.locking.session_lock`), as every method of the session that
+  enters the engine does.
+- `Session._engine` is the binding's session object (`_azure2.Session`): private, no lock, no promise of stability.
+  A module of `pyazr/` reads it only inside an `engine_call` method or a `with session_lock(s):` block
+  (`tests/pyazr/session_lock_test.py` checks every module by its syntax tree); a test may use it only to test the
+  binding itself.
 
 ## How it is built
 
-- `azure2.py` drives the engine **in-process** through the pybind11 module
+- `session.py` drives the engine **in-process** through the pybind11 module
   `_azure2` (`api/src/pybind_api.cpp` → `api/src/AZUREAPI.cpp`). It runs no
   subprocess and opens no socket. Rebuilding with CMake (`-DUSE_API=ON` and
   pybind11 found) writes `pyazr/_azure2*.so` here. That file is git-ignored;
@@ -95,6 +101,20 @@ Nothing in Python: `pyazr/physics.py` builds the function, its signature and doc
 - `nds.py` (EXFOR/ENSDF client) is the only EXFOR reader on this branch (the
   Qt GUI's `gui/src/ExforData.cpp` exists on `dev` only).
 
+## The wheel (`pyproject.toml`)
+
+- `pip install .` / `pip wheel .` build with scikit-build-core: the same CMake files with `BUILD_TESTING` and
+  `USE_READLINE` off (`USE_MCMC` on: the binding needs the sampler), targets `_azure2` and `AZURE2`, the install rules of component `python` (module into the
+  package, program into the scripts), the package directory copied as it is less `wheel.exclude`.  The in-tree build
+  (`work/build.sh`, `PYAZR_OUTPUT_DIR`, `PYAZR_ENGINE_DIR`) is what every test uses; the wheel is tested by
+  `pyazr_wheel` (slow: builds, unpacks, never installs) and `tests/pyazr/wheel_smoke.py` (the workflow's test).
+- **A run-time data file**: put it under `pyazr/`, read it from next to its module (`__file__`), and add its row to
+  `DATA_FILES` in `datafiles.py` (or to `NOT_SHIPPED` and `wheel.exclude` if the wheel must not carry it); check 48
+  and `pyazr_wheel` fail otherwise.  Never an environment variable for a file of the package.
+- The Coulomb table: `coulomb_table.py` (`where`, `fetch`, `build`; `pyazr coulomb-table ...`).  `TABLE_URL` and
+  `TABLE_SHA256` are set together by the owner when he publishes the file; never download anything in a test (the
+  test serves a small table from `http.server` on 127.0.0.1).
+
 ## Rules
 
 - **Public API = `__all__` in `__init__.py`.** Adding a name is a minor version
@@ -108,7 +128,7 @@ Nothing in Python: `pyazr/physics.py` builds the function, its signature and doc
   Return NumPy arrays, not lists, for numeric columns.
 - Every public function has a docstring that says what it computes, its
   units, and what it raises. Match the style of the module you are editing;
-  numpydoc sections (Parameters / Returns) are used in `azure2.py` and
+  numpydoc sections (Parameters / Returns) are used in `session.py` and
   `bands.py`. A new public name also gets an entry in
   `docs/source/user_guide/pyazr.rst`. More than half of `__all__` is not
   documented there yet, so document what you touch.
@@ -166,8 +186,8 @@ The URL of a running server is in `.<name>.ui/url` beside the project (mode 0600
 it was made on (`"rev"`); refusals are JSON with `error`, `message` and the engine's `diagnostics`. An agent that
 does not need the user's live state uses pyazr directly.
 
-- `engine.py` is the only file that names today's class `azure2`; when pyazr 3.0's `Session` lands, only it
-  changes. Every public method of `azure2` is either called there or listed in `AZURE2_NOT_SERVED` with a reason.
+- `engine.py` is the only file that names the class `Session`. Every public method of `Session` is either called
+  there or listed in `SESSION_NOT_SERVED` with a reason.
 - A route is one row of `routes.ROUTES`; a job kind one row of `jobs.JOBS`.
 - **A job kind or a recipe** (a new fitter, MINOS of another library, a sampler): a function `(tracker, x0, settings,
   names) -> (status, message, extra)` in `jobs.py` that calls `tracker.value` / `tracker.grad` (or `tracker(x)` for

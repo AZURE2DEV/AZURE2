@@ -18,7 +18,7 @@ this list to stay complete. Owner skill of each task in the last column.
 | fitting and UQ | `fit_emcee.py`, `fit_zeus.py` | ensemble MCMC on the objective | azure2-uncertainty |
 | | `per_dataset_chi2.py` | χ² per data set (several segments) | azure2-check |
 | | `sensitivities.py`, `uncertainty_band.py` | d(observable)/d(parameter); covariance bands | azure2-uncertainty |
-| snapshots | `save_fit_to_azr.py` | `azure2.save_fit`: a fit baked into a `.azr` + `.sav` | azure2-fit |
+| snapshots | `save_fit_to_azr.py` | `Session.save_fit`: a fit baked into a `.azr` + `.sav` | azure2-fit |
 | model internals | `coulomb_functions.py` | F, G, P and the hard-sphere phase | this skill |
 | | `ec_integrals.py` | external-capture radial integrals and their cache | this skill |
 | | `channel_radius_scan.py` | χ² against the channel radius | azure2-check |

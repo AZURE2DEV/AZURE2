@@ -42,7 +42,7 @@ def check(name, ok, detail=""):
 
 try:
     import numpy as np                         # noqa: E402
-    from pyazr import azure2, Project          # noqa: E402
+    from pyazr import Session, Project          # noqa: E402
 except Exception as err:                       # same skip as the other pyazr tests
     print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -65,7 +65,7 @@ def session(shift):
             p.set(name, active="no")
     p.add_beam("beam_fels", spread="0.002 MeV lab")
     p.set("skowronski_fels", shift=shift, beam="beam_fels", quadrature="points 20")
-    return azure2(p.save(os.path.join(folder, "ec.azr")), cwd=folder)
+    return Session(p.save(os.path.join(folder, "ec.azr")), cwd=folder)
 
 
 def shift_index(a):
@@ -78,11 +78,11 @@ try:
     with session("offset 0 MeV fit") as a:
         x0 = np.array(a.params_rwa, float)
         k = shift_index(a)
-        c0 = a.segment_chi2(x0.copy())[0]
+        c0 = np.array([d.chi2 for d in a.evaluate(x0.copy()).data])[0]
         x = x0.copy()
         x[k] = x0[k] + FAR
-        cfar = a.segment_chi2(x)[0]
-        cback = a.segment_chi2(x0.copy())[0]
+        cfar = np.array([d.chi2 for d in a.evaluate(x).data])[0]
+        cback = np.array([d.chi2 for d in a.evaluate(x0.copy()).data])[0]
     print(f"    chi2 at the file value {c0:.12g}, at +{FAR} MeV {cfar:.12g}, back {cback:.12g}")
     check("finite chi2 beyond the reach", math.isfinite(cfar), cfar)
     check("the shift moves chi2", abs(cfar - c0) > 1e-6 * abs(c0), (c0, cfar))
@@ -92,11 +92,11 @@ try:
         with session("offset 0 MeV fit") as a:
             x = np.array(a.params_rwa, float)
             x[shift_index(a)] += far
-            moved = a.segment_chi2(x)[0]
+            moved = np.array([d.chi2 for d in a.evaluate(x).data])[0]
         with session(f"offset {far} MeV fixed") as a:
-            fixed = a.segment_chi2(np.array(a.params_rwa, float))[0]
+            fixed = np.array([d.chi2 for d in a.evaluate(np.array(a.params_rwa, float)).data])[0]
         with session(f"offset {far} MeV fit") as a:
-            free = a.segment_chi2(np.array(a.params_rwa, float))[0]
+            free = np.array([d.chi2 for d in a.evaluate(np.array(a.params_rwa, float)).data])[0]
         print(f"    shift {far:+.2f} MeV: moved from 0 {moved:.12g}, fixed in the file {fixed:.12g}, free in the file "
               f"{free:.12g}")
         check(f"shift {far:+.2f} MeV: moved from 0 = written in the file, fixed and free (1e-12)",

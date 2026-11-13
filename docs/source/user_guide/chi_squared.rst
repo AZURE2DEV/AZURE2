@@ -443,10 +443,8 @@ width implied by the penalties above. The resulting log-posterior therefore
 matches the fit objective term for term, and a posterior mode coincides with a
 χ² minimum. See :doc:`mcmc`.
 
-The same distinction applies to :doc:`pyazr`: ``calculate_chi2_rwa`` and
-``residual_jacobian`` return the **data** χ² only (``residual_jacobian`` plus the
-rows of a prior parameter covariance, when the project has one). A least-squares fit driven
-from Python that minimises those residuals alone will let the normalizations
-drift to absorb every discrepancy, reaching a "better" χ² that AZURE2 itself
-would never find. Append the penalty rows explicitly — the recipe is in the
-pyazr chapter.
+The same distinction applies to :doc:`pyazr`: ``Session.evaluate(x).chi2`` is the **data** χ² only, and
+``Session.objective()`` the objective with every prior (its rows: the data rows, then one row per prior and
+constraint, so that :math:`\sum r^2` is the objective). A least-squares fit driven from Python that minimises the
+data rows alone will let the normalizations drift to absorb every discrepancy, reaching a "better" χ² that AZURE2
+itself would never find: minimise the objective, or all of its rows.

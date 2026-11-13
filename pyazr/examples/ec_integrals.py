@@ -40,7 +40,7 @@ try:
 except ImportError:
     sys.exit("this example needs matplotlib: pip install 'pyazr[examples]'")
 
-from pyazr import azure2
+from pyazr import Session
 
 
 def label(p) -> str:
@@ -64,7 +64,7 @@ def main() -> int:
 
     energies = np.linspace(args.emin, args.emax, args.npoints)
 
-    with azure2(str(args.azr)) as azr:
+    with Session(str(args.azr)) as azr:
 
         t0 = time.perf_counter()
         paths = azr.ec_integrals(args.pair, energies)

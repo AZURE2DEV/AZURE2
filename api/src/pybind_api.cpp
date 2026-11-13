@@ -67,9 +67,14 @@ py::list PairRecordDicts(const AZUREAPI &api);
 // pybind_evaluation.cpp: one evaluation read as the writer reads it, the objective's rows and log-probability
 py::list PointOutputFields();
 py::dict EvaluationDict(const AZUREAPI &api, const vector_r &free);
-py::dict ObjectiveRowsDict(const AZUREAPI &api, const vector_r &free, bool withJacobian);
+py::dict ObjectiveRowsDict(const AZUREAPI &api, const vector_r &free, bool withJacobian,
+                           const std::vector<int> &skip);
 double LogProbability(const AZUREAPI &api, const vector_r &free);
 py::tuple SamplerLogProbability(AZUREAPI &api, const vector_r &x0, const vector_r &x);
+// pybind_fit.cpp: the engine's fitters on the session (fit_with_engine), StopRequest, fitters()
+py::dict FitWithEngineDict(AZUREAPI &api, const std::string &method, bool minos, const std::vector<double> &x0,
+                           unsigned int maxCalls, const py::object &progress, const py::object &stop);
+void BindFit(py::module_ &m);
 std::vector<std::string> OwnerFieldsOf(ParamKind kind);
 // pybind_potentials.cpp: a session's hybrid potentials
 azure2::experiment::HybridPotentialSetting SessionPotentialSetting(const std::string &type, bool enabled, double V0, double R, double a, double r0,
@@ -162,7 +167,7 @@ class Session {
     } else if (configStatus == Config::kConfigNotFormat3) {
       fail(azure2::io::NotFormat3Message(ReadProjectText(configfile), configfile));
     } else if (configStatus == Config::kConfigRefused && !config_->refusedOptions.empty()) {
-      fail(config_->refusedOptions + configfile + ": the options of this call contradict the project's <config> keys.");
+      fail(config_->refusedOptions + configfile + ": the options of this call contradict each other or the project's <config> keys.");
     } else if (configStatus == Config::kConfigRefused) {
       fail(configfile + " (format 3) is refused (see the ERROR lines above; AZURE2 --validate lists them).");
     } else if (configStatus < 0) {
@@ -349,13 +354,13 @@ class Session {
     if (v.size() != nall)
       throw ParameterVectorError(std::string(what) + ": expected every parameter (" + std::to_string(nall) +
                                  " values, fixed ones included), got " + std::to_string(v.size()) + ".  " +
-                                 "azure2.sess.params_all_rwa() is such a vector.");
+                                 "Session._engine.params_all_rwa() is such a vector.");
     std::vector<int> slot(nall);
     for (size_t k = 0; k < nall; ++k) slot[k] = (int)k;
     expect_finite(v, slot, what, "parameter vector");
   }
   static constexpr const char *kVectorHint =
-      "azure2.params_rwa is such a vector (the start values); azure2.parameters.free names its entries in order.";
+      "Session.params_rwa is such a vector (the start values); Session.parameters.free names its entries in order.";
   // The first entry that is not finite, by its index and the parameter's name.
   void expect_finite(const vector_r &v, const std::vector<int> &slot, const char *what, const char *vector) const {
     size_t bad = 0, count = 0;
@@ -502,12 +507,21 @@ class Session {
     expect_free(v, "evaluation_rwa");
     return EvaluationDict(*api_, v);
   }
-  py::dict objective_rows_rwa(const py::array_t<double, py::array::forcecast> &p, bool jacobian) {
+  py::dict objective_rows_rwa(const py::array_t<double, py::array::forcecast> &p, bool jacobian,
+                              const std::vector<int> &skip) {
     vector_r v = to_vector(p);
     expect_free(v, "objective_rows_rwa");
-    return ObjectiveRowsDict(*api_, v, jacobian);
+    for (int c : skip)
+      if (c < 0 || c >= (int)v.size())
+        throw AZURE2Error("objective_rows_rwa: skip column " + std::to_string(c) + " is outside the " +
+                          std::to_string(v.size()) + " free parameters.");
+    return ObjectiveRowsDict(*api_, v, jacobian, skip);
   }
   std::vector<std::string> objective_term_names() const { return api_->ObjectiveTermNames(); }
+  py::dict fit_with_engine(const std::string &method, bool minos, const std::vector<double> &x0, unsigned int maxCalls,
+                           const py::object &progress, const py::object &stop) {
+    return FitWithEngineDict(*api_, method, minos, x0, maxCalls, progress, stop);
+  }
   double log_prob_rwa(const py::array_t<double, py::array::forcecast> &p) {
     vector_r v = to_vector(p);
     expect_free(v, "log_prob_rwa");
@@ -865,6 +879,7 @@ PYBIND11_MODULE(_azure2, m) {
   BindErrors(m);
   BindPhysics(m);  // pybind_physics.cpp: the table of physics functions (physics_functions(), physics_evaluate)
   BindThm(m);  // pybind_thm.cpp: the engine's reading of a <thm> block
+  BindFit(m);  // pybind_fit.cpp: the engine's fitters (fitters(), StopRequest)
 
   m.def(
       "parameter_kinds",
@@ -1027,7 +1042,12 @@ PYBIND11_MODULE(_azure2, m) {
            "One evaluation at the free vector: the objective, its terms, the data chi^2 and every data set's arrays, "
            "read as the output writer reads them (pyazr.evaluate.Evaluation).")
       .def("objective_rows_rwa", &Session::objective_rows_rwa, py::arg("params"), py::arg("jacobian"),
-           "The objective as least-squares rows (sum r^2 = the objective) and, with jacobian, their Jacobian.")
+           py::arg("skip") = std::vector<int>(),
+           "The objective as least-squares rows (sum r^2 = the objective) and, with jacobian, their Jacobian; the "
+           "free columns listed in skip are not finite-differenced (left zero).")
+      .def("fit_with_engine", &Session::fit_with_engine, py::arg("method"), py::arg("minos"), py::arg("x0"),
+           py::arg("max_calls"), py::arg("progress"), py::arg("stop"),
+           "The program's fit on the session (pyazr/session_fit.py): a row of fitters(), without the GIL.")
       .def("objective_term_names", &Session::objective_term_names,
            "The names of the objective's terms (ObjectiveTerm::Name), in the engine's order.")
       .def("log_prob_rwa", &Session::log_prob_rwa, py::arg("params"),

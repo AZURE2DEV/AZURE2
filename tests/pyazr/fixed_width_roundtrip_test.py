@@ -45,7 +45,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -82,7 +82,7 @@ with tempfile.TemporaryDirectory() as tmp:
     with open(azr, "w") as fh:
         fh.write("\n".join(out))
 
-    with azure2(azr) as m:
+    with Session(azr) as m:
         ps = m.parameters
         free = [p.name for p in ps if not p.fixed]
         names = [p.name for p in ps]
@@ -92,23 +92,23 @@ with tempfile.TemporaryDirectory() as tmp:
               ps[k].fixed and "width_2_1" in free, [(p.name, p.fixed) for p in ps[4:8]])
         x = np.asarray(m.params_rwa, float).copy()
         x[free.index("width_2_1")] *= 1.5
-        chi2 = float(np.sum(m.calculate_chi2_rwa(x)))
+        chi2 = m.evaluate(x).chi2
         allx = m._all_rwa(x)
         phys_all = np.asarray(m.transform_all_rwa(allx, include_fixed=True), float)
         phys_free = np.asarray(m.transform_all_rwa(allx), float)
         read_in = float(np.asarray(m.transform_all_rwa(
-            np.asarray(m.sess.params_all_rwa(), float), include_fixed=True))[k])
+            np.asarray(m._engine.params_all_rwa(), float), include_fixed=True))[k])
         check("3. transform_all_rwa returns the free R-matrix parameters by default",
               phys_free.size == m.n_rmatrix, (phys_free.size, m.n_rmatrix))
         print(f"  {fixed_name}: {read_in:.6g} eV as read, {phys_all[k]:.6g} eV "
               f"with width_2_1 x 1.5 (fixed amplitude {allx[k]:.6g})")
         saved, _ = m.save_fit(os.path.join(work, "saved.azr"), x)
 
-    with azure2(saved) as s:
-        chi2_back = float(np.sum(s.calculate_chi2_rwa(np.asarray(s.params_rwa, float))))
-        amp_back = float(np.asarray(s.sess.params_all_rwa(), float)[k])
+    with Session(saved) as s:
+        chi2_back = s.evaluate(np.asarray(s.params_rwa, float)).chi2
+        amp_back = float(np.asarray(s._engine.params_all_rwa(), float)[k])
         written = float(np.asarray(s.transform_all_rwa(
-            np.asarray(s.sess.params_all_rwa(), float), include_fixed=True))[k])
+            np.asarray(s._engine.params_all_rwa(), float), include_fixed=True))[k])
     print(f"  chi2 {chi2:.10g} before save_fit, {chi2_back:.10g} reloaded")
     check("1. the snapshot reloads with the fit's chi2 (rel 1e-9)",
           rel(chi2_back, chi2) < 1e-9, f"{chi2_back} vs {chi2}")

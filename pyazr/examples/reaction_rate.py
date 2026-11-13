@@ -35,7 +35,7 @@ os.environ.setdefault("OMP_NUM_THREADS", "4")
 
 import numpy as np
 
-from pyazr import Project, azure2
+from pyazr import Project, Session
 
 NA = 6.02214076e23            # 1/mol
 KB = 8.617333262e-2           # MeV / GK
@@ -89,7 +89,7 @@ def main() -> int:
     if stale.exists():
         stale.unlink()
 
-    with azure2(str(out)) as azr:
+    with Session(str(out)) as azr:
         x = np.asarray(azr.params_rwa, float)
         if args.params:
             # param.sav has one line per parameter, fixed ones included, while
@@ -100,8 +100,8 @@ def main() -> int:
             from pyazr.bands import best_fit_params
             x = np.asarray(best_fit_params(azr, str(args.params)), float)
         azr.extrap_mode()
-        e = np.asarray(azr.calculate_energies(x)[0], float)
-        sig = np.asarray(azr.calculate_rwa(x)[0], float)
+        e = np.asarray(azr.evaluate(x).data[0].energies, float)
+        sig = np.asarray(azr.evaluate(x).data[0].model, float)
 
     o = np.argsort(e)
     e, sig = e[o], sig[o]

@@ -318,7 +318,7 @@ try:
         import numpy as np
         sys.path.insert(0, ROOT)
         os.environ.setdefault("OMP_NUM_THREADS", "1")
-        from pyazr import azure2
+        from pyazr import Session
     except Exception as err:                                   # engine not built
         print(f"skip the engine part: engine not available ({type(err).__name__}: {err})")
         sys.exit(1 if failures else 77)
@@ -330,7 +330,7 @@ try:
         for c in lv2.channels:
             free.set_channel(lv2, c.pair, c.l, c.s, fixed=False)
     run = free.save(os.path.join(work, "run.azr"))
-    with azure2(run, cwd=work) as s:
+    with Session(run, cwd=work) as s:
         x0 = np.asarray(s.params_rwa, float)
         phys = np.asarray(s.transform_rwa(x0), float)
         rm = [p for p in s.parameters if not p.fixed and p.free_index is not None
@@ -341,11 +341,11 @@ try:
               len(rm) > 0 and all(k in slots for k in labels),
               [k for k in labels if k not in slots])
         check("labels are unique", len(labels) == len(rm))
-        x0chi = float(np.sum(s.calculate_chi2_rwa(x0)))
+        x0chi = s.evaluate(x0).chi2
     out, written, skipped = ma.write_averaged_azr(run, os.path.join(work, "re.azr"), labels)
     check("all written", not skipped and len(written) == len(labels))
-    with azure2(out, cwd=work) as s2:
-        chi = float(np.sum(s2.calculate_chi2_rwa(np.asarray(s2.params_rwa, float))))
+    with Session(out, cwd=work) as s2:
+        chi = s2.evaluate(np.asarray(s2.params_rwa, float)).chi2
     check("the session's own values give back its chi2", close(chi, x0chi, 1e-6),
           f"{chi} vs {x0chi}")
 finally:

@@ -127,9 +127,15 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--help:" << std::setw(0) << "Print this list and exit." << std::endl
             << std::setw(25) << std::left << "\t--no-gui:" << std::setw(0) << "Accepted and ignored, so that older scripts keep working;" << std::endl
             << std::setw(25) << std::left << "\t" << std::setw(0) << "this build has no graphical setup utility." << std::endl
-            << std::setw(25) << std::left << "\t--no-readline:" << std::setw(0) << "Do not use the readline package (no effect in a build without it)." << std::endl
-            << std::setw(25) << std::left << "\t--coulomb-table=FILE:" << std::setw(0) << "With --coulomb-table: the table file (default $AZURE2_COULOMB_TABLE or ~/.azure2/coulomb_table.bin)." << std::endl;
+            << std::setw(25) << std::left << "\t--no-readline:" << std::setw(0) << "Do not use the readline package (no effect in a build without it)." << std::endl;
   printOptionFlags();
+  std::cout << std::setw(25) << std::left << "\t--threads=N:" << std::setw(0)
+            << "The OpenMP threads of the run (N >= 1), over OMP_NUM_THREADS; printed by the run and by --describe."
+            << std::endl
+            << "The switches that can move a number (each also its environment variable; the command line wins over "
+               "the options file, the file over the variable):"
+            << std::endl
+            << azure2::support::SwitchOptionsHelp();
   std::cout
             << std::setw(25) << std::left << "\t--convert:" << std::setw(0) << "--convert OLD NEW [--json-report R] [--answers A] [--exact-grids] [--strict] [--allow-questions]: write the old project OLD (format 1 or 2)" << std::endl
             << std::setw(25) << std::left << "\t" << std::setw(0) << "in format 3 to NEW with its side files <f>.f3<ext>, and exit (OLD kept, nothing overwritten; this AZURE2 reads format 3 only). R the JSON report" << std::endl
@@ -223,26 +229,12 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
     else
       configure.configfile = arg;
   }
-  // AZURE_OPTIONS_FILE: more options from a file (the process's environment record, read once at start)
+  // The options file (--options-file=FILE, else AZURE_OPTIONS_FILE): its lines, read once with the record
   const azure2::support::Environment &environment = azure2::support::ProcessEnvironment();
-  if (environment.Set(azure2::support::Switch::kOptionsFile)) {
-    std::ifstream in(environment.Text(azure2::support::Switch::kOptionsFile));
-    if (in) {
-      while (!in.eof()) {
-        std::string newOption;
-        getline(in, newOption);
-        if (!in.eof()) {
-          std::string trimmedOption = "";
-          for (std::string::iterator it = newOption.begin(); it < newOption.end(); it++)
-            if (*it != ' ' && *it != '\t' && *it != '\n')
-              trimmedOption += *it;
-          if (!trimmedOption.empty() && trimmedOption.substr(0, 2) == "--") options.push_back(trimmedOption);
-        }
-      }
-      in.close();
-    } else
-      configure.outStream << "AZURE_OPTIONS_FILE variable set, but file not readable." << std::endl;
-  }
+  if (environment.OptionsFileUnreadable())
+    configure.outStream << "The options file " << environment.Text(azure2::support::Switch::kOptionsFile)
+                        << " is named but not readable." << std::endl;
+  options.insert(options.end(), environment.OptionsFileLines().begin(), environment.OptionsFileLines().end());
   configure.refineQuadrature = azure2::RefineQuadratureFromEnvironment();
   for (std::vector<std::string>::iterator it = options.begin(); it < options.end(); it++) {
     if (*it == "--no-readline")  // accepted in every build (scripts pass it); without readline it changes nothing
@@ -253,6 +245,10 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
       GiveOption(configure, "use_coulomb_table", true, OptionSource::kCommandLine);
       configure.coulombTablePath = azure2::OptionText(*it, "--coulomb-table=");
     }
+    else if (std::string value; azure2::support::ParseSwitchOption(*it, value))  // in the record (StartProcessEnvironment)
+      continue;
+    else if (azure2::OptionIs(*it, "--threads="))  // set by main before anything ran (ApplyThreadsOption)
+      continue;
     else if (*it == "--use-api")
       configure.paramMask |= Config::USE_API;
 #ifdef USE_NLOPT
@@ -1430,20 +1426,30 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
  */
 
 int main(int argc, char *argv[]) {
-  // The process's environment switches, read once, before anything else (azure2/support/Environment.h).
-  azure2::support::ProcessEnvironment();
   // Check for --help option first.  If set, print help and exit.
   for (int i = 1; i < argc; i++)
     if (strcmp(argv[i], "--help") == 0) {
       printHelp();
       return 0;
     }
+  // The process's environment switches with the command line's switch options, made once, before anything reads them
+  // (azure2/support/Environment.h); then the threads (--threads=N) before any parallel region.  A switch option without
+  // its value, a checked switch with a bad value, or a bad --threads: exit 2.
+  const std::vector<std::string> arguments(argv + 1, argv + argc);
+  azure2::ThreadsInForce threads;
+  try {
+    const azure2::support::Environment &environment = azure2::support::StartProcessEnvironment(arguments);
+    azure2::support::CheckSwitchValues(environment);
+    threads = azure2::ApplyThreadsOption(arguments, environment);
+  } catch (const std::invalid_argument &e) {
+    return azure2::OptionError(e.what());
+  }
 
   // Set GSL Error Handler
   gsl_set_error_handler(&GSLException::GSLErrorHandler);
 
   // The project-file commands (src/ProjectCommands.cpp: --convert, --validate, --schema, ...), each exits
-  if (int projectCommandExit = 0; RunProjectCommand(argc, argv, projectCommandExit)) return projectCommandExit;
+  if (int projectCommandExit = 0; RunProjectCommand(argc, argv, threads, projectCommandExit)) return projectCommandExit;
 
   // --build-coulomb-table[=FILE] builds the table and exits
   for (int i = 1; i < argc; i++) {
@@ -1511,11 +1517,6 @@ int main(int argc, char *argv[]) {
                           << std::endl;
     }
   }
-  if ((configure.paramMask & Config::USE_RMC_FORMALISM) && (configure.paramMask & Config::USE_BRUNE_FORMALISM)) {
-    configure.outStream << "WARNING: --use-brune is incompatible with --use-rmc. Ignoring --use-brune." << std::endl;
-    configure.paramMask &= ~Config::USE_BRUNE_FORMALISM;
-    configure.paramMask &= ~Config::USE_PARK_FORMALISM;
-  }
   // Before 2026-11-01 Brune OR ignore-externals forced the A-matrix ("--ignore-externals and --use-brune options
   // require A-Matrix"), and as ignore-externals is on by default with no flag to clear it the CLI could never use
   // the R-matrix route.  Brune has been implemented on the R-matrix route (RMatrixFunc; equal to the A-matrix route
@@ -1529,6 +1530,7 @@ int main(int argc, char *argv[]) {
   {
     // Print welcome message
     welcomeMessage(configure);
+    configure.outStream << "Threads: " << threads.count << " (" << threads.source << ")" << std::endl;
 
     // Read and process command, setting appropriate configuration flags
     processCommand(commandShell(configure), configure);

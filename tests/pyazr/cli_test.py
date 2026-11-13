@@ -108,7 +108,11 @@ def case_describe():
     check("describe T2: the data sets", result and len(result["datasets"]) > 0, result)
     if BIN:
         pcode, out = program("--describe", T2, "--json")
-        check("describe T2 --json equals AZURE2 --describe T2 --json", pcode == 0 and json.loads(out) == result)
+        # the program's document also has the settings of its run and machine (threads, switches), which a pyazr
+        # description does not have (docs/upgrade/pyazr3.md section 4, item 9)
+        described = {k: v for k, v in json.loads(out).items() if k not in ("threads", "switches")} if pcode == 0 else None
+        check("describe T2 --json equals AZURE2 --describe T2 --json (without the run's threads and switches)",
+              described == result)
     code, doc, _ = run("describe", T2, "--record", "s01_int_thin", "--json")
     result = ok_doc("describe --record", code, doc, "describe")
     check("describe --record: that data set only",
@@ -225,10 +229,51 @@ def case_coulomb_check():
         print("  skip  coulomb-table check of a real table: AZURE2_COULOMB_TABLE is not set to a file")
 
 
-def _not_available(words):
-    code, doc, _ = run(*words, "--json")
-    check(f"{' '.join(words)}: exit 2, not available, three parts",
-          code == 2 and doc["error"]["class"] == "NotAvailable" and three_parts(doc), doc)
+def case_coulomb_where():
+    table = os.path.join(TMP, "where", "table.bin")
+    code, doc, _ = run("coulomb-table", "where", table, "--json")
+    result = ok_doc("coulomb-table where FILE", code, doc, "coulomb-table where")
+    check("coulomb-table where: the path, no file there, the source", result and result["path"] == table
+          and result["exists"] is False and result["source"] == "argument", result)
+
+
+def _small_table():
+    """coulomb-table build of a small table (l = 0, 5 nodes per decade) into TMP, once; its path or None."""
+    built = os.path.join(TMP, "built", "table.bin")
+    if not os.path.isfile(built):
+        code, doc, _ = run("coulomb-table", "build", built, "--threads", "1", "--l-max", "0", "--per-decade", "5",
+                           "--json")
+        result = ok_doc("coulomb-table build FILE (small)", code, doc, "coulomb-table build")
+        check("coulomb-table build: the file is there", result and result["exists"] and os.path.isfile(built),
+              result)
+    return built if os.path.isfile(built) else None
+
+
+def case_coulomb_build():
+    built = _small_table()
+    if built:
+        code, doc, _ = run("coulomb-table", "check", built, "--json")
+        result = ok_doc("coulomb-table check of the table built", code, doc, "coulomb-table check")
+        check("coulomb-table check: the built table loads", result and result["loaded"] and result["identity"],
+              result)
+
+
+def case_coulomb_fetch():
+    """fetch the small table from a file:// URL with its SHA-256; without a URL and hash, fetch refuses (exit 2,
+    build named).  The download's checks against a corrupted copy and over HTTP: tests/pyazr/coulomb_table_test.py."""
+    built = _small_table()
+    if built:
+        from pyazr import coulomb_table
+        digest = coulomb_table.file_sha256(built)
+        fetched = os.path.join(TMP, "fetched", "table.bin")
+        code, doc, _ = run("coulomb-table", "fetch", fetched, "--url", "file://" + built, "--sha256", digest,
+                           "--json")
+        result = ok_doc("coulomb-table fetch FILE --url file://... --sha256", code, doc, "coulomb-table fetch")
+        check("coulomb-table fetch: fetched, the same bytes", result and result["fetched"]
+              and coulomb_table.file_sha256(fetched) == digest, result)
+    code, doc, _ = run("coulomb-table", "fetch", os.path.join(TMP, "none.bin"), "--json")
+    check("coulomb-table fetch with no published table: exit 2, three parts, build named",
+          code == 2 and three_parts(doc) and "build" in doc["error"]["fix"] + doc["error"]["what"], doc)
 
 
 def case_ui():
@@ -315,8 +360,9 @@ JSON_CASES = {
     "kinds": case_kinds,
     "stopping": case_stopping,
     "coulomb-table check": case_coulomb_check,
-    "coulomb-table build": lambda: _not_available(["coulomb-table", "build"]),
-    "coulomb-table fetch": lambda: _not_available(["coulomb-table", "fetch"]),
+    "coulomb-table where": case_coulomb_where,
+    "coulomb-table fetch": case_coulomb_fetch,
+    "coulomb-table build": case_coulomb_build,
     "ui": case_ui,
     "import exfor": case_import_exfor,
     "import ensdf": case_import_ensdf,

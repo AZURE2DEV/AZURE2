@@ -411,6 +411,23 @@ objective, every term from the same table, and rejects a point outside the recor
 `tests/reference/sampler_objective_test.cpp`). The sampler's run (its file, step, best walker, callbacks and stop
 request) now belongs to the sampler object and the call that runs it, so two samplers in one process share nothing.
 
+## The sampler stays inside the fit's limits (2026-11-13)
+
+The ensemble sampler (MCMC) applied the limits of a `gamma_decay` record's numbers only. Every other limit a fit has
+it ignored: a normalization, an abundance, a screening potential or a sample thickness could go negative, a fitted
+areal density, Doppler temperature or stopping scale could leave the range its grids are laid out for (where the
+calculation then used the edge of the range while the prior read the value outside), and the limits written in
+`<parameterSettings>` were never read by the sampler at all. Now the posterior is zero wherever any free parameter is
+outside the limits a fit gives it, one rule for every kind (`PosteriorSupport`, `objective.md` section 6). Sampling
+observed widths, the limits act on the amplitudes they convert to, so a width limit written in eV holds at the start's
+level energy and moves with the conversion when the energy moves. A chain that never reached a limit is unchanged bit
+for bit: the nine chains of the sampler's earlier measurement (the record, 13N, `energy_shift_sqrt`, T2; 8 walkers ×
+100 steps, both bases) are identical. A chain that reached a limit changes, as intended: `screening_6li` with its three
+screening potentials started at 0.5 eV under priors centred at −300 eV gave before medians of +131, −217 and −205 eV
+(1382 of 2400 values below zero, mean ln P −1311.0 over steps 50–99), now 0.86, 0.60 and 0.24 eV (none below zero,
+mean ln P −1481.4; the posterior's mass at the edge). Posteriors of real projects change where a chain pressed against
+a limit: worth rerunning those whose samples had a negative norm, abundance or screening potential.
+
 ## The centre of a prior is the number written (2026-11-13)
 
 A fitted number of a format-3 project is written `<value> fit prior <centre> <width>`. For norms and the constant
@@ -458,22 +475,54 @@ Nothing else. A project without the keys computes exactly what it computed (the 
 identical); every flag and keyword stays and means what it meant (`--use-park` still gives Brune too, `--no-brune`
 still clears Park). `AZURE2 --describe` prints each option with its value and where it came from; a session's
 `option_sources` says the same. Refused, by `--validate`, the run and `Project.set_config`: a value other than 0, 1,
-true, false (`E_CONFIG_OPTION_VALUE`), and a pair that cannot hold together when one of the two is a key of the file
+true, false (`E_CONFIG_OPTION_VALUE`), and a pair that cannot hold together
 (`E_CONFIG_OPTIONS_CONTRADICT`, naming both): Park without Brune, Reich-Moore capture with Brune, no convection current
 with the long-wavelength approximation. The converter, `Project.new` and `save_fit` write no key they did not find;
 the web page sets them as any `<config>` entry. Not keys: the fit's settings, the menu's mode, threads, files and
 directories of the machine, and the environment switches.
 
-**Where the program and a session disagree** (not changed: it would move the numbers of a call). The defaults are the
-same; two rules of combination are not. (1) `--use-rmc` drops Brune and Park with a warning, `use_rmc=True` in a
-session keeps them. (2) The program applies `--use-park` and `--no-brune` in the order given, a session lets Park
-win. Recommendation: refuse Reich-Moore with Brune on in both (as a project's keys already are), and refuse
-`--use-park --no-brune` on one command line.
+**Two combinations are now refused** (the PI, 2026-11-13; James should see this): Reich-Moore capture with Brune on
+(`--use-rmc` alone, `use_rmc=True` alone: add `--no-brune` / `use_brune=False`; the program used to drop Brune with a
+warning, a session kept it) and Park with Brune off on one call (`--use-park --no-brune` in either order,
+`use_park=True, use_brune=False`; the order used to decide). One rule in every front end: a contradicting pair is
+refused whatever the source of its two values, with what, what is allowed and the fix. `--describe` now prints the
+options block for every project.
 
 **One table, one row.** The options are rows of the `<config>` key table (`io/src/ConfigSection.cpp`: name, flags,
 default, what it changes); the program's parser and help, `--describe`, pyazr's `kinds()` and the web page read them
 there. A new option is that row, its place in the engine's configuration (`src/ProjectOptions.cpp`), and its keyword
 in pyazr's constructor; tests fail when one of the three is missing.
+
+**The switches that move numbers are options of the program.** Each of the fourteen environment switches that
+can change an output number (the Coulomb table file, the SRIM data directory, the options file, the quadrature
+refinement, the external-capture table density, the coupling-order test, the older routes of the shift function, the
+level-space solve and the gradient routes) is also an option of the program, from the same row of the table:
+`--coulomb-table=FILE`, `--srim-data-dir=DIR`, `--options-file=FILE`, `--refine-quadrature=K`, `--ec-table-nodes=N`,
+`--swap-coupling-order`, `--bound-shift-numerical`, `--no-neutral-closed-form`, `--shift-derivative-1ev`,
+`--level-space`, `--thm-by-differences`, `--gradient-adjoint`, `--gradient-dense`, `--fold-weights-by-differences`.
+`AZURE2 --help` lists them; `AZURE2 --describe` prints, for every project, the value in force of each and where it
+came from (option, options file, environment, default). The variables still work with the same effect; the option on
+the command line wins over the options file, the file over the variable. A new switch that moves numbers is its row
+(with the option), its reader, and its line in the manual; a check fails when the option or the line is missing.
+`--threads=N` states the threads of a run (over `OMP_NUM_THREADS`, which still works); the run prints the count and
+where it came from after its banner. Waiting for your word, unchanged: the ten switches no test uses
+(`AZURE2_SWAP_COUPLING_ORDER`, `AZURE_BOUND_SHIFT_NUMERICAL`, `AZURE_NO_NEUTRAL_CLOSED_FORM`, `AZURE_SHIFT_DE_1EV`,
+`AZURE2_EC_TABLE_NODES`, `AZURE_GRAD_DENSE`, `AZURE_TE_WEIGHTS_FD`, `AZR_DEBUG_GRID`, `AZURE_GRAD_DEBUG`,
+`AZURE_CHANNEL_DEBUG`): kept, and the seven of them that move numbers now have options.
+
+## The fit is a function (2026-11-13)
+
+The program's fit was 870 lines inside one function that also read the data and wrote every file. It is now a table
+of fitters (`src/Fitters.cpp`: MIGRAD with Minuit's numerical gradient or the analytic one, Levenberg-Marquardt, the
+GSL trust region, NLopt), one function per fitter with one signature, HESSE and MINOS as functions on the result, and
+the program's run as named stages (set-up, fit, final evaluation, outputs, rate). Every output file and every printed
+line of the program is as before (compared byte for byte on the eight reference fits, T2 with every fitter, MINOS and
+the band, and all projects). pyazr runs the same functions: `s.fit_with_engine("lm")` gives the program's end point,
+covariance and MINOS intervals without a subprocess, with a progress callback and a stop button another thread can
+press (the fit then returns the best point it saw). A new fitter is its function, its row and a test case; check 46
+fails when its switch or its line in the manual is missing. One thing to know: for a project with THM data the
+program silently takes the analytic-gradient MIGRAD; `fit_with_engine` does what it is told, so the program's plain
+run on such a project corresponds to `method="migrad-gradient"`.
 
 ## What is in work and what comes next
 
@@ -733,6 +782,27 @@ reason counted in the status line; the CSV is the arrays as returned, and "Copy 
 that makes them (tested by running it: bit for bit). The stopping library's functions (stopping power, range,
 energy after a layer, areal density between two energies, straggling) are rows of the same kind, with SRIM's
 citation under every plot, in the CSV and in the Python text, their values those of `pyazr.stopping` bit for bit.
+
+## pyazr as one command: `pip install .`
+
+`pip install .` in a checkout now builds the engine (scikit-build-core runs the CMake files) and installs pyazr with
+its module `_azure2`, the commands `pyazr` and `AZURE2`, the mass table and the web page; `pip wheel .` writes the
+wheel. Before, pip installed a package without its engine. The wheel's program has no readline (its menus read
+plain lines). The workflow `.github/workflows/wheels.yml` builds and tests wheels for Linux (x86-64, arm64) and macOS
+(arm64, x86-64) with cibuildwheel, by hand or on a pull request that changes the packaging, and keeps them as the
+run's artifacts: it publishes nothing. What the owner must do to publish:
+
+- **The Coulomb table** (85 MB, not in the wheel): attach the file to a release, then set `TABLE_URL` and
+  `TABLE_SHA256` in `pyazr/coulomb_table.py` (one commit); `pyazr coulomb-table fetch` then downloads it and checks
+  the hash. Until then `fetch` says that none is published and names `pyazr coulomb-table build` (5 minutes, offline).
+- **Run the workflow** once (Actions, "wheels", "Run workflow") and look at its four jobs: it has never run (it cannot
+  run here). Publishing to PyPI is a step to add when you decide to (trusted publishing needs no secret).
+- **Windows** has no wheel: cibuildwheel compiles with MSVC, AZURE2 is built with MinGW. Either a MinGW-built wheel (a
+  step of its own and delvewheel) or a port of the engine to MSVC; your choice.
+- **SRIM**: the SRIM-2013 data files are compiled into the module (the PI's decision: free to use when SRIM is cited).
+  The wheel carries their notice among its licence files, and `pyazr.describe()` and `pyazr stopping` print the
+  citation. Whether that suffices for redistribution on PyPI is yours to confirm with the terms in
+  `stopping/data/srim/README.md`.
 
 ## For the maintainers to decide
 

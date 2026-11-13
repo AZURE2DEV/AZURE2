@@ -1,14 +1,16 @@
-"""The hybrid nuclear potentials of a session, per particle pair (the methods of :class:`pyazr.azure2` that read and
+"""The hybrid nuclear potentials of a session, per particle pair (the methods of :class:`pyazr.Session` that read and
 set them, and write them as format-3 records; ``docs/source/user_guide/pyazr.rst``, "The hybrid nuclear potential, per
 particle pair")."""
 
 from .parameters import NuclearPotential
+from .locking import engine_call
 
 
 class _HybridPotentials:
-    """Mixed into :class:`pyazr.azure2`: uses its ``sess``, ``pairs`` and ``configure``."""
+    """Mixed into :class:`pyazr.Session`: uses its ``_engine``, ``pairs`` and ``configure``."""
 
 
+    @engine_call
     def nuclear_potential(self, pair=0):
         """The hybrid model's setting for one particle pair.
 
@@ -22,7 +24,7 @@ class _HybridPotentials:
         it did when the potential was a single global object.
         """
         pair = self._check_potential_pair(pair)
-        enabled, type_, V0, R, a, r0, own, rc, so, rm, step = self.sess.get_potential(pair)
+        enabled, type_, V0, R, a, r0, own, rc, so, rm, step = self._engine.get_potential(pair)
         spin_orbit = None
         if len(so):
             spin_orbit = {"depth": float(so[0]), "radius": float(so[1]), "diffuseness": float(so[2]),
@@ -32,6 +34,7 @@ class _HybridPotentials:
                                 r0=float(r0), own=bool(own), coulomb_radius=float(rc),
                                 spin_orbit=spin_orbit, matching_radius=float(rm), step=float(step))
 
+    @engine_call
     def nuclear_potentials(self):
         """Every pair's resolved setting, plus the default under key ``0``."""
         out = {0: self.nuclear_potential(0)}
@@ -39,6 +42,7 @@ class _HybridPotentials:
             out[p.number] = self.nuclear_potential(p.number)
         return out
 
+    @engine_call
     def set_nuclear_potential(self, pair=0, type=None, enabled=True,
                               V0=None, R=None, a=None, r0=None,
                               coulomb_radius=None, spin_orbit=None, matching_radius=None,
@@ -126,13 +130,14 @@ class _HybridPotentials:
         so_list = [] if not so else [float(so["depth"]), float(so["radius"]), float(so["diffuseness"]),
                                      1.0 if so["on"] == "heavy" else 0.0]
         try:
-            self.sess.set_potential(pair, type_, bool(enabled), V0, R, a, r0, rc, rm, step_fm, so_list)
+            self._engine.set_potential(pair, type_, bool(enabled), V0, R, a, r0, rc, rm, step_fm, so_list)
         except Exception as e:  # the engine's refusals (SpinOrbitChecks.h) and parameter checks
             raise ValueError(str(e)) from None
         if reinitialize:
             self._rebuild_after_potential_change()
         return self.nuclear_potential(pair)
 
+    @engine_call
     def clear_nuclear_potential(self, pair=0, reinitialize=True):
         """Drop a pair's own setting so it follows the default again.
 
@@ -140,7 +145,7 @@ class _HybridPotentials:
         how one gets back to a model with no hybrid potential at all.
         """
         pair = self._check_potential_pair(pair)
-        self.sess.clear_potential(pair)
+        self._engine.clear_potential(pair)
         if reinitialize:
             self._rebuild_after_potential_change()
         return self.nuclear_potential(pair)
@@ -154,7 +159,7 @@ class _HybridPotentials:
         disk belong to the Coulomb functions the old potential produced.
         ``rebuild()`` recomputes them, the way a channel-radius change does.
         """
-        if not self.sess.rebuild():
+        if not self._engine.rebuild():
             raise RuntimeError(
                 "AZURE2 could not rebuild with the new nuclear potential; "
                 "the session is no longer usable.")
@@ -170,6 +175,7 @@ class _HybridPotentials:
             raise ValueError(f"pair must be >= 0, got {pair}.")
         return pair
 
+    @engine_call
     def potential_records(self):
         """The session's potentials as the ``potential`` records of format 3: ``(changed, lines, notes)``.
 
@@ -179,7 +185,7 @@ class _HybridPotentials:
         that write no record.  Raises ValueError for a project that is not in format 3.
         """
         try:
-            changed, lines, notes = self.sess.potential_records()
+            changed, lines, notes = self._engine.potential_records()
         except Exception as e:  # the engine refuses a session whose project has no format-3 records
             raise ValueError(str(e)) from None
         return bool(changed), list(lines), list(notes)

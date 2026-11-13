@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
-"""Per-dataset chi-squared, which the API does not report directly.
+"""Per-data-set chi-squared, and which data set is fighting the fit.
 
-`calculate_chi2_rwa` gives one number per *segment*, but a fit is usually judged
-per *experiment*, and an experiment often owns several segments -- one per angle,
-or one per final state.  The residuals carry the information: they come back in
-segment order, so slicing them by segment length and summing the squares gives
-the per-segment chi-squared, which can then be grouped by data file.
-
-The same slicing is how you find which experiment is fighting the fit.
+``Session.evaluate(x)`` runs one evaluation; each of its ``data[i]`` carries the data set's chi-squared (``chi2``,
+the row of the program's ``chiSquared.out``), its number of points and its normalization prior (``norm_chi2``).
+Where a data covariance joins several data sets only the group's sum has a meaning: ``chi2`` splits it as
+``chiSquared.out`` does, and the sum of the squares of the data set's rows of the objective
+(``objective().residuals(x)[d.rows]``, whitened rows) splits it otherwise; both add up to the group's chi-squared.
 
 Usage:
     python3 per_dataset_chi2.py <file.azr> [--params output/param.sav]
@@ -18,14 +16,13 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from collections import defaultdict
 from pathlib import Path
 
 os.environ.setdefault("OMP_NUM_THREADS", "4")
 
 import numpy as np
 
-from pyazr import azure2
+from pyazr import Session
 
 
 def main() -> int:
@@ -36,7 +33,7 @@ def main() -> int:
                     help="a param.sav to load instead of the .azr values")
     args = ap.parse_args()
 
-    with azure2(str(args.azr)) as azr:
+    with Session(str(args.azr)) as azr:
         x = np.asarray(azr.params_rwa, float)
         if args.params:
             # param.sav has one line per parameter, fixed ones included, while
@@ -47,32 +44,16 @@ def main() -> int:
             from pyazr.bands import best_fit_params
             x = np.asarray(best_fit_params(azr, str(args.params)), float)
 
-        r, _ = azr.residual_jacobian(x)
-        r = np.asarray(r, float)
-
-        lengths = [len(azr.energies[i]) for i in range(azr.nsegments)]
-        edges = np.cumsum([0] + lengths)
-        per_segment = np.array([np.sum(r[edges[i]:edges[i + 1]] ** 2)
-                                for i in range(azr.nsegments)])
-
-        by_file = defaultdict(lambda: [0.0, 0])
-        rows = []
-        for i in range(azr.nsegments):
-            d = azr.datasets[i]
-            rows.append((d.name, lengths[i], per_segment[i]))
-            by_file[d.name][0] += per_segment[i]
-            by_file[d.name][1] += lengths[i]
-
-        total, n = per_segment.sum(), sum(lengths)
+        ev = azr.evaluate(x)
+        rows = azr.objective().residuals(x)
+        total, n = ev.chi2, sum(d.n for d in ev.data)
         print(f"{args.azr.name}: chi2 = {total:.1f} over {n} points "
               f"(chi2/N = {total / n:.2f})\n")
-        print(f"{'segment':>7}  {'dataset':28s} {'N':>6} {'chi2':>12} {'chi2/N':>9}")
-        for i, (name, ln, c) in enumerate(rows, 1):
-            print(f"{i:7d}  {name:28s} {ln:6d} {c:12.1f} {c/max(ln,1):9.2f}")
-
-        print(f"\ngrouped by dataset, worst first:")
-        for name, (c, ln) in sorted(by_file.items(), key=lambda kv: -kv[1][0] / max(kv[1][1], 1)):
-            print(f"   {name:28s} {ln:6d} {c:12.1f} {c/max(ln,1):9.2f}")
+        print(f"{'data set':28s} {'N':>6} {'chi2':>12} {'chi2/N':>9} {'rows^2':>12} {'norm prior':>10}")
+        for d in sorted(ev.data, key=lambda d: -d.chi2 / max(d.n, 1)):   # worst first
+            whitened = float(np.sum(rows[d.rows] ** 2))
+            print(f"{d.name:28s} {d.n:6d} {d.chi2:12.1f} {d.chi2 / max(d.n, 1):9.2f} {whitened:12.1f} "
+                  f"{d.norm_chi2:10.3g}")
     return 0
 
 

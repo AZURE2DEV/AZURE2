@@ -152,8 +152,9 @@ void CheckConfigOptions(const io::Document &doc, std::vector<Diagnostic> &out) {
     d.line = aWritten ? a->second.line : b->second.line;
     d.section = "config";
     d.field = aWritten ? c.a : c.b;
-    d.message = OptionWords(c.a, c.aValue, aWritten) + " with " + OptionWords(c.b, c.bValue, bWritten) +
-                " cannot hold together: " + c.why;
+    d.message = io::ConfigOptionContradictionText(c, OptionWords(c.a, c.aValue, aWritten),
+                                                  OptionWords(c.b, c.bValue, bWritten), io::OptionSpelling::kKey,
+                                                  aWritten, bWritten);
     out.push_back(d);
   }
 }

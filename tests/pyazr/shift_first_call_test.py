@@ -35,7 +35,7 @@ def check(name, ok, detail=""):
 
 try:
     import numpy as np                         # noqa: E402
-    from pyazr import azure2, Project          # noqa: E402
+    from pyazr import Session, Project          # noqa: E402
 except Exception as err:                       # same skip as the other pyazr tests
     print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -62,7 +62,7 @@ def run(label, sqrt):
         shutil.copytree(os.path.join(ROOT, "tests", "13N", "data"), os.path.join(work, "data"))
         os.makedirs(os.path.join(work, "output"))
         os.makedirs(os.path.join(work, "checks"))
-        a = azure2(make_model(work, sqrt), cwd=work)
+        a = Session(make_model(work, sqrt), cwd=work)
         x0 = np.array(a.params_rwa, float)
         names = [p.name for p in a.parameters if not p.fixed]
         kind = "shift_sqrt" if sqrt else "shift"
@@ -73,7 +73,7 @@ def run(label, sqrt):
         for v in (0.0, 0.0, x0[k], 0.0):
             x = x0.copy()
             x[k] = v
-            chi.append(a.calculate_chi2_rwa(x)[0])
+            chi.append(a.evaluate(x).chi2)
         print("    chi2 at 0, 0, file, 0: " + ", ".join(f"{c:.6f}" for c in chi))
         zero = chi[3]
         check("first call at 0 = a later call at 0", abs(chi[0] - zero) <= 1e-12 * abs(zero), (chi[0], zero))

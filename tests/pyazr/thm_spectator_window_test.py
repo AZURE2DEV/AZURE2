@@ -14,7 +14,7 @@ has a deuteron Trojan horse (x = p, s = n):
   1. Project: an experiment with ps=... psNodes=... round trip; the
      refusals AZURE2 makes (no kinematics, bad values, psNodes alone; a window
      together with spectatorEnergy for the same pair, when a session is made).
-  2. The engine against the CLI with a Hulthen window: calculate_chi2_rwa
+  2. The engine against the CLI with a Hulthen window: evaluate().chi2
      (rel 1e-9) and the output files written by write_output_files.
   3. thm_vertex: at every energy the Gauss-Legendre nodes in cos(theta_cm) on
      the part of the sphere with q in [0, 40] MeV/c, the Hulthen weights
@@ -173,7 +173,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # -- the engine -----------------------------------------------------------
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
     binary = os.environ.get("AZURE2_BIN")
     if not binary:
         cands = [c for c in glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))
@@ -212,10 +212,10 @@ with tempfile.TemporaryDirectory() as tmp:
     cli_chi2 = float(hit[-1])
 
     print("2. the engine against the CLI")
-    with azure2(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
+    with Session(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
         x = np.asarray(s.params_rwa, float)
-        chi2 = float(np.sum(s.calculate_chi2_rwa(x)))
-        check(f"calculate_chi2_rwa == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
+        chi2 = s.evaluate(x).chi2
+        check(f"evaluate().chi2 == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
               f"{chi2} vs {cli_chi2}")
         s.write_output_files(x)
 
@@ -286,25 +286,25 @@ with tempfile.TemporaryDirectory() as tmp:
 
     print("4. one direction: ps=hulthen:30-30 == spectatorEnergy = 30^2/2mu_sx")
     one_dir = project("one", f"experiment[A] {KIN} ps=hulthen:30-30")
-    with azure2(os.path.join(one_dir, "run.azr"), cwd=one_dir) as s:
+    with Session(os.path.join(one_dir, "run.azr"), cwd=one_dir) as s:
         x = np.asarray(s.params_rwa, float)
-        m_one = np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)])
+        m_one = np.concatenate([np.asarray(v) for v in [d.model for d in s.evaluate(x).data]])
         r = s.thm_vertex("A", [0.6], x)
     d = project("se30", f"spectatorEnergy={30.0 * 30.0 / (2 * MU_SX)!r}\n"
                         f"experiment[A] {KIN}")
-    with azure2(os.path.join(d, "run.azr"), cwd=d) as s:
-        m_se = np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)])
+    with Session(os.path.join(d, "run.azr"), cwd=d) as s:
+        m_se = np.concatenate([np.asarray(v) for v in [d.model for d in s.evaluate(x).data]])
     worst = float(np.max(np.abs(m_one / m_se - 1)))
     check(f"one node at q = 30 MeV/c, weight 1 ({r['p_s'][0]})",
           len(r["p_s"][0]) == 1 and abs(r["p_s"][0][0] - 30.0) < 1e-9 and r["weights"][0][0] == 1.0)
     check(f"model == spectatorEnergy session at {m_one.size} points (worst {worst:.1e})", worst < 1e-9)
     nokey_dir = project("nokey", f"experiment[A] {KIN}")
     delta_dir = project("delta", f"experiment[A] {KIN} ps=delta")
-    with azure2(os.path.join(nokey_dir, "run.azr"), cwd=nokey_dir) as s:
-        r_nokey = s.residuals(x)
-    with azure2(os.path.join(delta_dir, "run.azr"), cwd=delta_dir) as s:
+    with Session(os.path.join(nokey_dir, "run.azr"), cwd=nokey_dir) as s:
+        r_nokey = s.objective().residuals(x)
+    with Session(os.path.join(delta_dir, "run.azr"), cwd=delta_dir) as s:
         check("ps=delta: residuals bit for bit those without the key",
-              np.array_equal(s.residuals(x), r_nokey))
+              np.array_equal(s.objective().residuals(x), r_nokey))
         r = s.thm_vertex("A", [0.6, 0.8], x)
         lv = r["channels"][0]["levels"][0]
         check("delta: one node at p_s = 0, M2 == M2_qf",

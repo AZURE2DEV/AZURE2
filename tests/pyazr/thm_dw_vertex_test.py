@@ -13,12 +13,12 @@ level factor that does not depend on the vertex):
      line; the combinations AZURE2 refuses are refused the same way (by the
      edit, or when a session is made), also set_thm(coulombIntegral /
      entranceL / spectatorEnergy) against a dw experiment.
-  2. The engine against the CLI: calculate_chi2_rwa (rel 1e-9) and the output
+  2. The engine against the CLI: evaluate().chi2 (rel 1e-9) and the output
      files of write_output_files (thm_experiments.out included).
   3. thm_vertex: model "dw"; plane waves in both channels: M2_qf == M2_pw
      (1e-8, the plane-wave vertex at p = |k_aA - alpha k_sF|) and M2 == M2_qf
      without a window; dw_p_delta from the kinematics.
-  4. No folding: calculate_rwa(dw)/calculate_rwa(pw) == M2(dw)/M2(pw) of
+  4. No folding: evaluate().data[i].model(dw)/evaluate().data[i].model(pw) == M2(dw)/M2(pw) of
      thm_vertex at the data energies, for point Coulomb and for a ps
      window (the nodes on its reachable part); 1e-8, the energies of
      s.energies being those of the points to about 1e-10.
@@ -130,7 +130,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # -- the engine -----------------------------------------------------------
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
     binary = os.environ.get("AZURE2_BIN")
     if not binary:
         cands = [c for c in glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))
@@ -171,10 +171,10 @@ with tempfile.TemporaryDirectory() as tmp:
     cli_chi2 = float(hit[-1])
 
     print("2. the engine against the CLI")
-    with azure2(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
+    with Session(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
         x = np.asarray(s.params_rwa, float)
-        chi2 = float(np.sum(s.calculate_chi2_rwa(x)))
-        check(f"calculate_chi2_rwa == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
+        chi2 = s.evaluate(x).chi2
+        check(f"evaluate().chi2 == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
               f"{chi2} vs {cli_chi2}")
         s.write_output_files(x)
     from_py = output_files(py_dir)
@@ -188,7 +188,7 @@ with tempfile.TemporaryDirectory() as tmp:
     pl_dir = project("plane", f"experiment[A] {KIN} distortion=optical opticalAA=plane "
                               "opticalSF=plane vertexModel=dw")
     grid = np.linspace(0.45, 0.95, 26) + 0.003
-    with azure2(os.path.join(pl_dir, "run.azr"), cwd=pl_dir) as s:
+    with Session(os.path.join(pl_dir, "run.azr"), cwd=pl_dir) as s:
         r = s.thm_vertex("A", grid)
         check(f"model {r['model']}", r["model"] == "dw")
         lv = r["channels"][0]["levels"][0]
@@ -216,14 +216,14 @@ with tempfile.TemporaryDirectory() as tmp:
         for name, blk in (("pw", f"experiment[A] {KIN}"),
                           ("dw", f"experiment[A] {KIN} {extra} vertexModel=dw")):
             d = project(f"nf_{tag}_{name}", blk, fold=False)
-            with azure2(os.path.join(d, "run.azr"), cwd=d) as s:
+            with Session(os.path.join(d, "run.azr"), cwd=d) as s:
                 x = np.asarray(s.params_rwa, float)
-                model[name] = np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)])
+                model[name] = np.concatenate([np.asarray(v) for v in [d.model for d in s.evaluate(x).data]])
                 ecm = np.concatenate([np.asarray(v) for v in s.energies])
                 vert[name] = s.thm_vertex("A", ecm, params=x)["channels"][0]["levels"][0]["M2"]
         worst = float(np.max(np.abs(model["dw"] / model["pw"] / (vert["dw"] / vert["pw"]) - 1)))
         ratio = vert["dw"] / vert["pw"]
-        check(f"{tag}: calculate_rwa(dw)/calculate_rwa(pw) == M2(dw)/M2(pw) at {ecm.size} points "
+        check(f"{tag}: evaluate().data[i].model(dw)/evaluate().data[i].model(pw) == M2(dw)/M2(pw) at {ecm.size} points "
               f"({ratio.min():.3f}-{ratio.max():.3f}, worst {worst:.1e})", worst < 1e-8)
 
 print()

@@ -4,6 +4,9 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
+#include <stdexcept>
+#include <vector>
 #include <map>
 #include <set>
 #include <string>
@@ -58,11 +61,97 @@ int main() {
   check("the set switches in the table's order",
         e.SetSwitches() == std::vector<Switch>{Switch::kEcTableNodes, Switch::kLevelSpace, Switch::kGradCheck,
                                                Switch::kGradCheckStep, Switch::kProfile, Switch::kDumpNonFinite});
-  check("the text of the set switches for --describe",
-        SetSwitchesText(e).rfind("Environment switches set:\n  AZURE2_EC_TABLE_NODES=80 (numbers)\n", 0) == 0);
+  check("the text of the set switches for --describe: the other kinds (numbers have their own block)",
+        SetSwitchesText(e).rfind("Environment switches set:\n  AZURE_LEVEL_SPACE", 0) == std::string::npos &&
+            SetSwitchesText(e).rfind("Environment switches set:\n  AZURE_GRAD_CHECK=exit (prints)\n", 0) == 0);
+  check("the block of the switches that move numbers: every one, value and source",
+        NumberSwitchesText(e).find("  --ec-table-nodes=N (AZURE2_EC_TABLE_NODES) = 80 (environment)\n") !=
+                std::string::npos &&
+            NumberSwitchesText(e).find("  --refine-quadrature=K (AZURE_REFINE_QUADRATURE) = 1 (default)\n") !=
+                std::string::npos);
   const Environment none = Environment::Read([](const char *) -> const char * { return nullptr; });
   check("nothing set: no switch, home '.', no text", none.SetSwitches().empty() && none.Home() == "." &&
                                                          SetSwitchesText(none).empty());
+
+  // The options of the switches that move numbers (docs/upgrade/evaluation.md section 9): every row of kind numbers
+  // has one, no other row; the parser takes a flag whole and a value row with its value; a value row without one is an
+  // error; an argument that is no switch option is not one.
+  bool numbersHaveOptions = true;
+  for (const SwitchRow &row : SwitchTable())
+    numbersHaveOptions = numbersHaveOptions && ((row.kind == SwitchKind::kNumbers) == (*row.option != '\0'));
+  check("an option for each switch of kind numbers, none for the others", numbersHaveOptions);
+  std::string value;
+  const SwitchRow *row = ParseSwitchOption("--level-space", value);
+  check("--level-space: the flag, value 1", row && row->id == Switch::kLevelSpace && value == "1");
+  row = ParseSwitchOption("--refine-quadrature=4", value);
+  check("--refine-quadrature=4: the value 4", row && row->id == Switch::kRefineQuadrature && value == "4");
+  check("--level-spacex, --use-brune, --ec-table: no switch option",
+        !ParseSwitchOption("--level-spacex", value) && !ParseSwitchOption("--use-brune", value) &&
+            !ParseSwitchOption("--ec-table", value));
+  check("--srim-data-dir and --coulomb-table bare: no switch option (an unknown option, a flag of another row)",
+        !ParseSwitchOption("--srim-data-dir", value) && !ParseSwitchOption("--coulomb-table", value));
+  for (const char *bare : {"--srim-data-dir=", "--coulomb-table="}) {
+    bool refused = false;
+    try {
+      ParseSwitchOption(bare, value);
+    } catch (const std::invalid_argument &) {
+      refused = true;
+    }
+    check(std::string(bare) + ": refused, a value is needed", refused);
+  }
+  // Precedence: the command line over the options file over the variable over the default.
+  const std::string optionsFile = "environment_test_options.txt";
+  {
+    std::ofstream f(optionsFile);
+    f << "--refine-quadrature=3\n  --level-space\n--ec-table-nodes = 70\n--no-brune\nnot an option\n";
+  }
+  const std::map<std::string, std::string> variables = {
+      {"AZURE_REFINE_QUADRATURE", "2"}, {"AZURE2_EC_TABLE_NODES", "60"}, {"AZURE_GRAD_DENSE", "1"},
+      {"AZURE_OPTIONS_FILE", optionsFile}, {"OMP_NUM_THREADS", "3"}};
+  auto lookup = [&](const char *name) -> const char * {
+    auto it = variables.find(name);
+    return it == variables.end() ? nullptr : it->second.c_str();
+  };
+  const Environment layered = Environment::Read(lookup, {"--refine-quadrature=5", "project.azr", "--use-brune"});
+  check("the option over the file and the variable",
+        layered.Text(Switch::kRefineQuadrature) == "5" && layered.Source(Switch::kRefineQuadrature) == SwitchSource::kOption);
+  check("the file over the variable (its spaces removed)", layered.Text(Switch::kEcTableNodes) == "70" &&
+                                                              layered.Source(Switch::kEcTableNodes) ==
+                                                                  SwitchSource::kOptionsFile &&
+                                                              layered.On(Switch::kLevelSpace));
+  check("the variable over the default",
+        layered.On(Switch::kGradDense) && layered.Source(Switch::kGradDense) == SwitchSource::kEnvironment &&
+            layered.Source(Switch::kGradAdjoint) == SwitchSource::kDefault && !layered.Set(Switch::kGradAdjoint));
+  check("the file's lines starting with --, in order, for the program's other options",
+        layered.OptionsFileLines() == std::vector<std::string>{"--refine-quadrature=3", "--level-space",
+                                                               "--ec-table-nodes=70", "--no-brune"});
+  check("OMP_NUM_THREADS kept", layered.OmpNumThreads() == "3");
+  const Environment byOption = Environment::Read(lookup, {"--options-file=no_such_file.txt"});
+  check("--options-file= over AZURE_OPTIONS_FILE: the named file (unreadable here, said)",
+        byOption.OptionsFileUnreadable() && byOption.Source(Switch::kOptionsFile) == SwitchSource::kOption &&
+            byOption.Text(Switch::kRefineQuadrature) == "2");
+  // The checked value: the same range and refusal whatever gave it, named after its source.
+  auto refusal = [&](const std::vector<std::string> &arguments, const char *variable) {
+    const Environment r = Environment::Read(
+        [&](const char *name) -> const char * {
+          return std::string(name) == "AZURE_REFINE_QUADRATURE" ? variable : nullptr;
+        },
+        arguments);
+    try {
+      CheckSwitchValues(r);
+    } catch (const std::invalid_argument &x) {
+      return std::string(x.what());
+    }
+    return std::string();
+  };
+  check("AZURE_REFINE_QUADRATURE=65 refused under its name",
+        refusal({}, "65") == "AZURE_REFINE_QUADRATURE needs a whole number from 1 to 64, not '65'");
+  check("--refine-quadrature=65 refused alike, under the option's name",
+        refusal({"--refine-quadrature=65"}, nullptr) == "--refine-quadrature needs a whole number from 1 to 64, not '65'");
+  check("--refine-quadrature=x and 0 refused", !refusal({"--refine-quadrature=x"}, nullptr).empty() &&
+                                                   !refusal({"--refine-quadrature=0"}, nullptr).empty());
+  check("64 and an unset one accepted", refusal({"--refine-quadrature=64"}, nullptr).empty() && refusal({}, nullptr).empty());
+  std::remove(optionsFile.c_str());
 
   // The process's record: read once, so a variable set afterwards changes nothing.
   const Environment &p = ProcessEnvironment();

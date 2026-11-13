@@ -308,9 +308,24 @@ def _coulomb_status(result, v):
     if result.get("loaded"):
         return None
     return CallError(1, f"the Coulomb table {result.get('path')} cannot be read (the engine uses its exact routines)",
-                     "a table built by the engine (AZURE2 --build-coulomb-table[=FILE]); FILE, else "
+                     "a table fetched or built by pyazr (or AZURE2 --build-coulomb-table[=FILE]); FILE, else "
                      "$AZURE2_COULOMB_TABLE, else ~/.azure2/coulomb_table.bin",
-                     f"AZURE2 --build-coulomb-table={result.get('path')}", "CoulombTableMissing")
+                     f"{PROG} coulomb-table build {result.get('path')}", "CoulombTableMissing")
+
+
+def _run_coulomb_where(v, ctx):
+    from . import coulomb_table
+    return coulomb_table.where(v.file or "")
+
+
+def _run_coulomb_fetch(v, ctx):
+    from . import coulomb_table
+    return coulomb_table.fetch(v.file or "", url=v.url, sha256=v.sha256, overwrite=v.overwrite)
+
+
+def _run_coulomb_build(v, ctx):
+    from . import coulomb_table
+    return coulomb_table.build(v.file or "", threads=v.threads, l_max=v.l_max, per_decade=v.per_decade)
 
 
 def _run_ui(v, ctx):
@@ -397,17 +412,23 @@ COMMANDS = (
     Command("coulomb-table check", (_COULOMB_FILE,), "pyazr.described.coulomb_table",
             "Load the Coulomb table as a session does and give its path and content identity (exit 1: not readable).",
             run=_run_coulomb_check, status=_coulomb_status),
-    Command("coulomb-table build", (_COULOMB_FILE,), "",
-            "Build the Coulomb table (not in pyazr yet: the program builds it).",
-            missing=("pyazr has no function that builds the Coulomb table (the engine's CoulombTable::BuildFile is "
-                     "not bound)", "the program builds it: AZURE2 --build-coulomb-table[=FILE] (about 5 min on 4 "
-                     "threads, 88 MB)", "AZURE2 --build-coulomb-table=FILE; then python -m pyazr coulomb-table check "
-                     "FILE")),
-    Command("coulomb-table fetch", (_COULOMB_FILE,), "",
-            "Download the Coulomb table (not possible yet: no published copy exists).",
-            missing=("no published copy of the Coulomb table exists yet to download",
-                     "a table built here: AZURE2 --build-coulomb-table[=FILE]",
-                     "AZURE2 --build-coulomb-table=FILE; then python -m pyazr coulomb-table check FILE")),
+    Command("coulomb-table where", (_COULOMB_FILE,), "pyazr.coulomb_table.where",
+            "Where the Coulomb table is looked for and whether a file is there (without loading it).",
+            run=_run_coulomb_where),
+    Command("coulomb-table fetch", (_COULOMB_FILE,
+                                    Arg("--url", "text", "a copy to download instead of the published one"),
+                                    Arg("--sha256", "text", "the SHA-256 the copy must have (with --url)"),
+                                    Arg("--overwrite", "flag", "replace an existing file")),
+            "pyazr.coulomb_table.fetch",
+            "Download the published Coulomb table and check its SHA-256 (exit 2 while none is published: build it).",
+            run=_run_coulomb_fetch, fix="python -m pyazr coulomb-table build"),
+    Command("coulomb-table build", (_COULOMB_FILE,
+                                    Arg("--threads", "int", "OpenMP threads of the build (default: the engine's)"),
+                                    Arg("--l-max", "int", "the largest l of the table (default: the program's, 10)"),
+                                    Arg("--per-decade", "number", "nodes per decade of eta and rho (default 100)")),
+            "pyazr.coulomb_table.build",
+            "Build the Coulomb table here from the exact routines (about 5 min on 4 threads, 88 MB).",
+            run=_run_coulomb_build),
     Command("ui", (Arg("FILE", "project", "the project to serve"),
                    Arg("--port", "int", "the TCP port (0: a free one above 20000)", default=0),
                    Arg("--threads", "int", "the compute budget in threads", default=1),

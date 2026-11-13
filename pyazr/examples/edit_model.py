@@ -34,7 +34,7 @@ os.environ.setdefault("OMP_NUM_THREADS", "4")
 
 import numpy as np
 
-from pyazr import Project, azure2
+from pyazr import Project, Session
 
 
 def recalc_ec_caches(outdir: Path):
@@ -102,9 +102,9 @@ def main() -> int:
     model.save(out)
     print(f"\nwrote edited model to {out}")
 
-    with azure2(str(out), cwd=str(here)) as azr:
+    with Session(str(out), cwd=str(here)) as azr:
         x = np.asarray(azr.params_rwa, float)
-        chi2 = float(np.sum(azr.calculate_chi2_rwa(x)))
+        chi2 = azr.evaluate(x).chi2
         npts = sum(len(e) for e in azr.energies)
         print(f"fresh session on the edited file: {azr.nsegments} segments, "
               f"{npts} data points, chi2 = {chi2:.1f}")

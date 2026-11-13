@@ -104,8 +104,8 @@ try:
     os.makedirs(os.path.join(tmp, "output"))
     refused = False
     try:
-        with pyazr.azure2(path, cwd=tmp, data_mode=False) as m:
-            m.calculate(m.params)
+        with pyazr.Session(path, cwd=tmp, data_mode=False) as m:
+            m.evaluate()
     except Exception as e:  # the session's set-up failure
         refused = True
         print(f"        ({type(e).__name__}: {str(e)[:100]})")

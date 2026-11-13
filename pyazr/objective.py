@@ -5,27 +5,17 @@
 engine; this module holds no formula.  Recipes (``pyazr/examples/fit_scipy.py``, ``fit_iminuit.py``,
 ``fit_emcee.py``)::
 
-    f = s.fit_objective()
+    f = s.objective()
     r = scipy.optimize.minimize(f.value_and_grad, f.x0, jac=True, bounds=f.bounds, method="L-BFGS-B")
     r = scipy.optimize.least_squares(f.residuals, f.x0, jac=f.jacobian)
     m = iminuit.Minuit(f, f.x0, grad=f.grad, name=f.names); m.limits = f.bounds; m.migrad(); m.hesse()
     sampler = emcee.EnsembleSampler(nwalkers, len(f.x0), f.log_prob)
 """
-import threading
-
 import numpy as np
 
 from .errors import EngineError
-
-
-def session_lock(session):
-    """The lock every engine call of an :class:`Objective` or :func:`pyazr.evaluate.evaluate` of ``session`` takes:
-    the engine evaluates on the session's one compound nucleus and data, so two calls at once would race; with the
-    lock they run one after the other."""
-    lock = session.__dict__.get("_engine_lock")
-    if lock is None:
-        lock = session.__dict__.setdefault("_engine_lock", threading.RLock())
-    return lock
+from .locking import session_lock
+from . import session_checks
 
 
 def require_data_mode(session, what):
@@ -38,24 +28,28 @@ def require_data_mode(session, what):
 class Objective:
     """The engine's fit objective as a callable: chi-squared of the data plus every prior and constraint.
 
-    Built by ``azure2.fit_objective()``.  Everything is on the free vector x (``x0``, ``names``, ``bounds``, in
+    Built by ``Session.objective()``.  Everything is on the free vector x (``x0``, ``names``, ``bounds``, in
     ``parameters.free`` order), in the basis the session fits in (Brune, Park or formal amplitudes; norms, shifts and
     the other nuisances as they are).
 
-    - ``f(x)``: the objective, ``azure2.objective(x)`` bit for bit; the same terms and order as the program's fit.
+    - ``f(x)``: the objective, ``Session.evaluate(x).objective`` bit for bit; the same terms and order as the
+      program's fit.
     - ``f.grad(x)``, ``f.value_and_grad(x)``: its gradient (analytic, finite differences for energy shifts).
     - ``f.residuals(x)``, ``f.jacobian(x)``, ``f.residuals_and_jacobian(x)``: the objective as least-squares rows,
       ``sum(r**2) == f(x)`` (to rounding): the data rows (whitened where a data covariance joins points), the model
       data, the prior covariance, Park's wall, the ``gamma_decay`` priors, the abundance sums, then one row
-      ``(p - centre)/sigma`` per prior of a nuisance parameter.  The first rows are ``azure2.residuals(x)`` and the
-      rows of ``azure2.residual_jacobian(x)``, bit for bit.
+      ``(p - centre)/sigma`` per prior of a nuisance parameter.  ``Session.evaluate(x).data[i].rows`` are the rows
+      of data set i.  ``jacobian(x, skip=...)`` and ``residuals_and_jacobian(x, skip=...)`` take free-column indices
+      the caller holds fixed: their finite differences (energy shifts, shift functions, densities) are not computed
+      and the columns come back zero in the data rows; every other column, and the analytic derivatives of the rows
+      after the data rows (a prior's 1/sigma), are unchanged.  The data part of the gradient alone is
+      ``2 J[rows].T @ r[rows]`` over the data rows.
     - ``f.log_prob(x)``: ``-0.5 * f(x)`` (no constant), ``-inf`` where the engine's ensemble sampler puts zero
-      probability: outside the bounds of a parameter whose record has ``sampler_support`` (today a ``gamma_decay``
-      record's numbers) and where Park's overlap J of a level is negative.  For walls at every bound:
-      ``lp = lambda x: f.log_prob(x) if all(lo <= v <= hi for v, (lo, hi) in zip(x, f.bounds)) else -numpy.inf``.
-    - ``x0`` (a copy of the start), ``names``, ``bounds`` (``(lower, upper)``, ``-inf``/``inf`` where the engine
-      sets none: the limits a parameter is created with), ``sampler_support`` (one flag per entry), ``errordef``
-      (1: a chi-squared; for iminuit).
+      probability: outside ``bounds``, the fit's limits of a free parameter of any kind, and where Park's overlap J
+      of a level is negative.
+    - ``x0`` (a copy of the start), ``names``, ``bounds`` (``(lower, upper)``, ``-inf``/``inf`` where the fit has
+      none: the limits a parameter is created with, then those of a ``<parameterSettings>`` block, as the
+      program's fit and sampler have them), ``errordef`` (1: a chi-squared; for iminuit).
 
     Arrays returned are copies the caller owns.  The object holds its session and these copies, no cache.  Calls from
     several threads on one session are safe: they take the session's lock and run one after the other.  A session
@@ -63,39 +57,40 @@ class Objective:
     """
 
     errordef = 1.0
-    BUILT_BY = "azure2.fit_objective()"
+    BUILT_BY = "Session.objective()"
     FIELDS = {
         "__call__(x)": "the objective at x: data chi-squared plus every prior and constraint",
         "grad(x)": "its gradient over the free vector",
         "value_and_grad(x)": "(value, gradient) from one engine call",
         "residuals(x)": "the objective as least-squares rows, sum(r**2) == f(x)",
-        "jacobian(x)": "the rows' Jacobian, shape (rows, free parameters)",
-        "residuals_and_jacobian(x)": "(rows, Jacobian) from one engine call",
-        "log_prob(x)": "-0.5 f(x), -inf outside the engine's sampler's support",
+        "jacobian(x, skip=None)": "the rows' Jacobian, shape (rows, free parameters)",
+        "residuals_and_jacobian(x, skip=None)": "(rows, Jacobian) from one engine call",
+        "log_prob(x)": "-0.5 f(x), -inf outside the engine's sampler's support (outside bounds, Park's J < 0)",
         "x0": "a copy of the start of the free vector",
         "names": "the free parameters' names",
-        "bounds": "(lower, upper) per free parameter, -inf / inf where none",
-        "sampler_support": "per free parameter: its bounds are walls of log_prob",
+        "bounds": "(lower, upper) per free parameter, the fit's limits, -inf / inf where none; walls of log_prob",
         "errordef": "1 (a chi-squared)",
     }
 
     def __init__(self, session):
-        require_data_mode(session, "fit_objective()")
+        require_data_mode(session, "objective()")
         free = session.parameters.free
         self._session = session
         self._lock = session_lock(session)
         self._x0 = np.array(session.params_rwa, float).ravel()
         self.names = list(free.names)
         self.bounds = [(float(lo), float(hi)) for lo, hi in free.bounds]
-        self.sampler_support = [bool(p.sampler_support) for p in free]
 
     @property
     def x0(self):
         """A copy of the start of the free vector (the session's ``params_rwa`` when the object was made)."""
         return self._x0.copy()
 
-    def _engine(self):
-        return self._session.sess  # SessionClosed on a closed session
+    def _open(self):
+        """The session, or :class:`pyazr.SessionClosed` naming the session's call that made this object."""
+        if not self._session.is_alive():
+            raise session_checks.session_closed(self._session.file, "objective")
+        return self._session
 
     @staticmethod
     def _vector(x):
@@ -104,12 +99,12 @@ class Objective:
     def __call__(self, x):
         """The objective at x (a float): chi-squared of the data plus every prior and constraint."""
         with self._lock:
-            return float(self._engine().calculate_objective_rwa(self._vector(x)))
+            return float(self._open()._engine.calculate_objective_rwa(self._vector(x)))
 
     def value_and_grad(self, x):
         """``(f(x), gradient)`` from one engine call (for ``scipy.optimize.minimize(..., jac=True)``)."""
         with self._lock:
-            resp = np.asarray(self._engine().calculate_objective_grad_rwa(self._vector(x)), float)
+            resp = np.asarray(self._open()._engine.calculate_objective_grad_rwa(self._vector(x)), float)
         return float(resp[0]), resp[1:].copy()
 
     def grad(self, x):
@@ -119,32 +114,38 @@ class Objective:
     def residuals(self, x):
         """The objective's least-squares rows at x from a forward pass (``sum(r**2) == f(x)``)."""
         with self._lock:
-            out = self._engine().objective_rows_rwa(self._vector(x), False)
+            out = self._open()._engine.objective_rows_rwa(self._vector(x), False)
         return np.asarray(out["rows"], float)
 
-    def residuals_and_jacobian(self, x):
-        """``(rows, J)``: the rows of :meth:`residuals` and their Jacobian, shape (rows, free parameters)."""
+    def residuals_and_jacobian(self, x, skip=None):
+        """``(rows, J)``: the rows of :meth:`residuals` and their Jacobian, shape (rows, free parameters).  ``skip``:
+        free-column indices held fixed; their finite-difference columns are not computed and come back zero in the
+        data rows (the rows after them keep their analytic derivatives)."""
+        skip = [] if skip is None else [int(c) for c in skip]
         with self._lock:
-            out = self._engine().objective_rows_rwa(self._vector(x), True)
+            out = self._open()._engine.objective_rows_rwa(self._vector(x), True, skip)
         if not out["ok"]:
-            raise EngineError("the engine has no analytic Jacobian for a data set of this project (residual_jacobian "
-                              "returned none); use residuals() with a finite-difference Jacobian instead.")
+            raise EngineError("the engine has no analytic Jacobian for a data set of this project; use "
+                              "Objective.residuals(x) with a finite-difference Jacobian instead.")
         return np.asarray(out["rows"], float), np.asarray(out["jacobian"], float)
 
-    def jacobian(self, x):
-        """The Jacobian of :meth:`residuals` at x, shape (rows, free parameters) (``least_squares(jac=...)``)."""
-        return self.residuals_and_jacobian(x)[1]
+    def jacobian(self, x, skip=None):
+        """The Jacobian of :meth:`residuals` at x, shape (rows, free parameters) (``least_squares(jac=...)``);
+        ``skip`` as in :meth:`residuals_and_jacobian`."""
+        return self.residuals_and_jacobian(x, skip)[1]
 
     def log_prob(self, x):
         """ln P = -0.5 * f(x), or ``-inf`` outside the engine's sampler's support (see the class docstring)."""
         with self._lock:
-            return float(self._engine().log_prob_rwa(self._vector(x)))
+            return float(self._open()._engine.log_prob_rwa(self._vector(x)))
 
     def describe(self):
-        """Plain data: the free parameters (name, bounds, start, sampler_support), errordef, the terms' names."""
-        rows = [{"name": n, "bounds": list(b), "start": float(v), "sampler_support": s}
-                for n, b, v, s in zip(self.names, self.bounds, self._x0, self.sampler_support)]
-        return {"parameters": rows, "errordef": self.errordef, "terms": list(self._engine().objective_term_names())}
+        """Plain data: the free parameters (name, bounds, start), errordef, the terms' names."""
+        rows = [{"name": n, "bounds": list(b), "start": float(v)}
+                for n, b, v in zip(self.names, self.bounds, self._x0)]
+        with self._lock:
+            terms = list(self._open()._engine.objective_term_names())
+        return {"parameters": rows, "errordef": self.errordef, "terms": terms}
 
     def __repr__(self):
         return f"Objective({len(self._x0)} free parameters of {self._session.file!r})"

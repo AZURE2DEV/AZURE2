@@ -8,7 +8,7 @@ energy shifts from the sampled vector but never called `FillNormsFromParams`: th
 its starting norms while the sampler moved the norm parameters under their priors.  The norm
 posterior was the prior, the R-matrix posterior was taken at frozen norms, and the periodic
 `param.mcmc` snapshot recorded the starting norm (its tail came from `FillMnParams` on a fresh
-clone).  `AZUREAPI::CalculateChi2Physical` (pyazr `calculate_chi2`) had the same omission
+clone).  `AZUREAPI::CalculateChi2Physical` (the binding's `calculate_chi2_physical`) had the same omission
 (`tests/pyazr/physical_norm_test.py`).
 
 ## Model

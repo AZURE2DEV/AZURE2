@@ -2,10 +2,8 @@
 
 ``log_prob(x) = -0.5 * objective(x)``: the data chi-squared and every prior and constraint of the project, the
 same terms the program's fit minimises and the program's own sampler takes (docs/upgrade/objective.md section 6),
-without its normalisation constant; ``-inf`` where the program's sampler puts zero probability (outside the bounds
-of a parameter whose record has ``sampler_support``, a ``gamma_decay`` record's numbers; Park's J < 0).  Flat in x
-elsewhere.  For walls at every bound, wrap it:
-``lambda x: f.log_prob(x) if all(lo <= v <= hi for v, (lo, hi) in zip(x, f.bounds)) else -numpy.inf``.
+without its normalisation constant; ``-inf`` where the program's sampler puts zero probability (outside
+``f.bounds``, the fit's limits of a parameter of any kind; Park's J < 0).  Flat in x elsewhere.
 
 A session cannot be pickled and is not shared between processes: with a pool, every worker opens its own session
 (``_open`` as the pool's initializer) and the walkers' points travel as arrays.  One thread per worker
@@ -27,7 +25,7 @@ def _open(path, threads):
     """A pool worker's initializer: its own session and Objective."""
     global _objective
     os.environ["OMP_NUM_THREADS"] = str(threads)
-    _objective = pyazr.azure2(path).fit_objective()
+    _objective = pyazr.Session(path).objective()
 
 
 def log_prob(x):
@@ -55,7 +53,7 @@ def sample(path, nwalkers=None, nsteps=100, spread=1e-3, seed=1, processes=0, th
     Returns the emcee sampler (``get_chain()``, ``get_log_prob()``) and the parameters' names."""
     import emcee
     global _objective
-    _objective = pyazr.azure2(path).fit_objective()
+    _objective = pyazr.Session(path).objective()
     f = _objective
     ndim = len(f.x0)
     nwalkers = nwalkers or 2 * ndim + 2

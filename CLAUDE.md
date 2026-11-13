@@ -285,6 +285,18 @@ The objective gets no new term: T9, `ModelDataTerm`, evaluates every row of `<mo
 4. A function `test_<quantity>` in `tests/model_data/check.sh` against a value by hand [check 27: every datum
    quantity of the table has its `ModelQuantities()` row and a test named after it]; `reference/data_formats.rst`.
 
+**A fitter** (a minimiser the program and a pyazr session both run; `docs/upgrade/fit.md`).
+1. Its function `FitResult FitX(AZURECalc &, AZUREParams &, const FitControl &)` in `src/FitX.cpp`: start, limits and
+   fixed flags from the `AZUREParams`, its end point left there; lines to `control.log`; steps to `control.progress`
+   (an evaluation fitter keeps a `FitEvaluations` alive while it runs: count, best point, the stop request in force;
+   an iteration fitter sends a `FitProgress` per iteration and checks `control.stop`); a stopped fit returns the best
+   point seen with status `stopped`.
+2. Its row in `Fitters()` (`src/Fitters.cpp`; the row's place is its precedence in the program); the switch in
+   `src/AZURE2.cpp`, `reference/command_line.rst` and the table "The Engine's Fitters" of
+   `docs/source/user_guide/fitting.rst` [check 46].
+3. Its case in `tests/pyazr/fit_with_engine_test.py` (the session's fit ends where the program's ends).
+   `fit_with_engine(method=)` and `pyazr.kinds()["fitters"]` read the table.
+
 **A CLI flag.** `parseOptions`, `printHelp` and `docs/source/reference/command_line.rst` [check 1].
 
 **An option of the calculation** (a switch a project's result depends on: a formalism, an approximation, a numerical
@@ -296,7 +308,7 @@ method; `docs/upgrade/project_format3.md` §3.12). It is a `<config>` key, a fla
    `ConfigOptionContradictions()`.
 2. Its place in `Config` (a bit of `paramMask` or a bool member): one row of `OptionStorages()` in
    `src/ProjectOptions.cpp` [`upgrade_project_options`: a row without one, or a default unlike `Config::Reset`, fails].
-3. Its keyword in `pyazr.azure2.__init__`'s signature and docstring (with the row's default) [`pyazr_describe`].
+3. Its keyword in `pyazr.Session.__init__`'s signature and docstring (with the row's default) [`pyazr_describe`].
 4. Its case, both values, in `tests/config_options/check.sh` (key = flag) and `tests/pyazr/config_options_test.py`
    (key = keyword); its line in the table of `docs/source/reference/command_line.rst`.
 An option that is not project state (a file or directory of this machine, the menu's mode) is a field of
@@ -534,19 +546,23 @@ outside `tests/consistency/allowed_state.tsv`, and a row is never added for new 
 **Add a diagnostic switch** (an environment variable that prints, checks or selects another route).  Four places:
 (1) a value of `azure2::support::Switch` in `support/include/azure2/support/Environment.h` and its row in the table
 of `support/src/Environment.cpp` (same order; name, type, value when unset, kind -- numbers, cost, prints, test --,
-what it does, its page); (2) its row in the list "Environment switches" of `docs/source/reference/command_line.rst`
-(check 40 keeps the two the same); (3) its reader: a switch that prints or checks reads the record where it is used,
+what it does, its page, and for a switch of kind *numbers* its option of the program, `--name` for a flag or
+`--name=VALUE`, with the range of a whole number its reader checks; check 43 refuses a numbers row without an option
+and an option on another kind); (2) its row in the list "Environment switches" of
+`docs/source/reference/command_line.rst`, with the option in the column Option (checks 40 and 43 keep the two the
+same); (3) its reader: a switch that prints or checks reads the record where it is used,
 `azure2::support::ProcessEnvironment().Set(Switch::kX)` / `.On(...)` / `.Text(...)` / `.Number(...)` (a hot path
 keeps the value in a `static const` local); a switch of kind *numbers* is a field of `Config::EnvironmentSettings`
 filled in `SettingsOf` (`src/Config.cpp`) and read from the run's `Config` (deep code without a `Config`: from the
 pair's `PairFunctionSettings`, set in `CNuc::Fill`); (4) a counter it prints is a member of `azure2::RunDiagnostics`
-(`include/RunDiagnostics.h`), reached through `configure.diagnostics`, never a `static`.  Never `getenv` (check 39
-refuses it outside `support/src/Environment.cpp`); never `setenv` to change a switch inside a process (pass the
-choice as an argument or on a copy of the `Config`).  Its test sets the variable before the process starts (a
-ctest `ENVIRONMENT`, `env=` of a subprocess): the environment is read once.  Making a *numbers* switch a
-command-line option is one assignment in `parseOptions` after the `Config` is made (and `--help`, the manual), a
-pyazr option one field of `RuntimeOptions` and one line of `apply_options` (`api/src/pybind_api.cpp`) -- both are
-the PI's decisions.
+(`include/RunDiagnostics.h`), reached through `configure.diagnostics`, never a `static`.  The option needs nothing
+else: the program's parser, `--help` and `--describe` read it from the row, and the record holds the option's value
+as it holds the variable's (`StartProcessEnvironment`, made by `main` first; the command line over the options file
+over the variable).  Never `getenv` (check 39 refuses it outside `support/src/Environment.cpp`); never `setenv` to
+change a switch inside a process (pass the choice as an argument or on a copy of the `Config`).  Its test sets the
+variable before the process starts (a ctest `ENVIRONMENT`, `env=` of a subprocess) or passes the option: the record
+is made once.  A pyazr option for a *numbers* switch would be one field of `RuntimeOptions` and one line of
+`apply_options` (`api/src/pybind_api.cpp`; `pyazr3.md` section 4, item 9).
 
 **Comparing the outputs of two engines** (a change that must not move any number; the full text is
 `docs/upgrade/ARCHITECTURE.md` section 10). Run every project of a `tests/` tree with each engine, then compare:

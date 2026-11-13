@@ -157,7 +157,7 @@ try:
         import numpy                                             # noqa: F401
         import scipy.optimize                                    # noqa: F401
         sys.path.insert(0, ROOT)
-        from pyazr import azure2
+        from pyazr import Session
     except Exception as err:
         print(f"skip the run: engine or scipy not available ({type(err).__name__}: {err})")
         sys.exit(1 if failures else 77)
@@ -180,8 +180,8 @@ try:
     for v in variants:
         fit = os.path.join(out, "work", v["label"] + "_fit.azr")
         import numpy as np
-        with azure2(fit, cwd=os.path.join(out, "work")) as s:
-            chi = float(np.sum(s.calculate_chi2_rwa(np.asarray(s.params_rwa, float))))
+        with Session(fit, cwd=os.path.join(out, "work")) as s:
+            chi = s.evaluate(np.asarray(s.params_rwa, float)).chi2
         check(f"{v['label']}: chi2 is that of its snapshot", close(chi, v["chi2"], 1e-5),
               f"{chi} vs {v['chi2']}")
         check(f"{v['label']}: chi2 went down", v["chi2"] <= v["fit"]["start_chi2"])
@@ -210,7 +210,7 @@ try:
     check("it carries the means", all(
         close(slots[k], a["mean"], 1e-6) for k, a in avg["parameters"].items()),
         {k: (slots.get(k), a["mean"]) for k, a in avg["parameters"].items()})
-    with azure2(aazr, cwd=os.path.join(out, "averaged")) as s:
+    with Session(aazr, cwd=os.path.join(out, "averaged")) as s:
         check("it opens in the engine", len(s.params_rwa) == 4)
     summ = open(os.path.join(out, "summary.txt")).read()
     check("summary lists the skipped variants", "r5.1_dw" in summ and "weight" in summ)
@@ -226,10 +226,10 @@ try:
                    Ebeam=54, lineshape=True, distortion="coulomb")
     hazr = os.path.join(proj, "hand.azr")
     hand.save(hazr)
-    with azure2(hazr, cwd=proj) as s:
-        want = float(np.sum(s.calculate_chi2_rwa(np.asarray(s.params_rwa, float)))) + 9.0
-    with azure2(kazr, cwd=proj) as s:
-        plain = float(np.sum(s.calculate_chi2_rwa(np.asarray(s.params_rwa, float))))
+    with Session(hazr, cwd=proj) as s:
+        want = s.evaluate(np.asarray(s.params_rwa, float)).chi2 + 9.0
+    with Session(kazr, cwd=proj) as s:
+        plain = s.evaluate(np.asarray(s.params_rwa, float)).chi2
     got = []
     for extra in ([], ["--in-process"]):
         o3 = os.path.join(tmp, "out3" + "".join(extra))

@@ -6,6 +6,7 @@
 #include <limits>
 
 #include "AZUREGrad.h"
+#include "AZUREParams.h"
 #include "CNuc.h"
 #include "Config.h"
 #include "Objective.h"
@@ -42,13 +43,14 @@ AZUREAPI::ObjectiveBreakdown AZUREAPI::EvaluateObjectiveRWA(const vector_r &para
   return out;
 }
 
-bool AZUREAPI::ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r *jacobianOut) const {
+bool AZUREAPI::ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r *jacobianOut,
+                                const std::vector<int> &skipColumns) const {
   const vector_r full = FullOf(params, all_rwa_, fixed_);
   vector_r residuals, jacobian;
   int nCols = (int)params.size();
   if (jacobianOut) {
     // The rows and Jacobian of the residual path, as they are: data, model data, prior covariance.
-    const vector_r packed = CalculateResidualJacobianRWA(params);
+    const vector_r packed = CalculateResidualJacobianRWA(params, skipColumns);
     if (packed.size() < 2) return false;
     const size_t nRes = (size_t)packed[0];
     nCols = (int)packed[1];
@@ -91,13 +93,8 @@ bool AZUREAPI::ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r
 }
 
 bool AZUREAPI::OutsideSamplerSupport(const vector_r &params) const {
-  for (int i = 0, k = 0; i < (int)fixed_.size() && k < (int)params.size(); i++) {
-    if (fixed_[i]) continue;
-    const double x = params[k++];
-    if (!KindRow(records_[i].kind).samplerSupport) continue;
-    if (!(x >= bounds_[i].first && x <= bounds_[i].second)) return true;
-  }
-  return false;
+  ReadFitSettings();
+  return !PosteriorSupport::OfParameters(*nuisanceParams_).Contains(FullOf(params, all_rwa_, fixed_));
 }
 
 double AZUREAPI::LogProbabilityRWA(const vector_r &params) const {

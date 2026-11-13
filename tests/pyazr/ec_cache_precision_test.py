@@ -27,18 +27,18 @@ sys.path.insert(0, ROOT)
 
 def worker(model_dir, out):
     import numpy as np
-    from pyazr import azure2
-    a = azure2(os.path.join(model_dir, "13N.azr"), cwd=model_dir)
+    from pyazr import Session
+    a = Session(os.path.join(model_dir, "13N.azr"), cwd=model_dir)
     x = np.array(a.params_rwa, float)
-    res = {"chi2": [float(np.sum(a.calculate_chi2_rwa(x)))],
-           "segments": [np.asarray(c, float).ravel().tolist() for c in a.calculate_rwa(x)]}
+    res = {"chi2": [a.evaluate(x).chi2],
+           "segments": [np.asarray(c, float).ravel().tolist() for c in [d.model for d in a.evaluate(x).data]]}
     json.dump(res, open(out, "w"))
 
 
 def main():
     try:
         import numpy as np
-        from pyazr import azure2  # noqa: F401
+        from pyazr import Session  # noqa: F401
     except Exception as err:  # same skip as the other pyazr tests
         print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
         return 77

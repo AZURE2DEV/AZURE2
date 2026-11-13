@@ -272,13 +272,13 @@ class Project(NuclearPart):
         return self.path
 
     def session(self, **options):
-        """A calculation of the project as it stands: :class:`pyazr.azure2` on :attr:`path` with ``options`` (its
+        """A calculation of the project as it stands: :class:`pyazr.Session` on :attr:`path` with ``options`` (its
         keyword arguments: ``use_brune``, ``data_mode``, ...).  The engine reads the file, so the project is saved
         first when it has unsaved edits (:attr:`unsaved`); the session's directory is the project's."""
-        from .azure2 import azure2
+        from .session import Session
         if self.unsaved or self._side_files:
             self.save()
-        return azure2(self.path, **options)
+        return Session(self.path, **options)
 
     # -- reading --------------------------------------------------------------------------------------------------
 
@@ -604,7 +604,7 @@ class Project(NuclearPart):
 
         return self._apply(f"<{section}>", edit)
 
-    # -- parameter values (pyazr.azure2.save_fit) -----------------------------------------------------------------
+    # -- parameter values (pyazr.Session.save_fit) -----------------------------------------------------------------
 
     def _write_parameter_values(self, values):
         """Write ``{parameter name: value in the engine's unit}`` into the nuisances the engine says they come from
@@ -705,7 +705,7 @@ def _missing_project_message(path):
 
 def write_parameter_values(path, values):
     """Write ``{parameter name: value in the engine's unit}`` into the format-3 project at ``path``
-    (:meth:`Project._write_parameter_values`; pyazr.azure2.save_fit).  Returns the names written nowhere."""
+    (:meth:`Project._write_parameter_values`; pyazr.Session.save_fit).  Returns the names written nowhere."""
     p = Project.open(path)
     missing = p._write_parameter_values(values)
     p.save()

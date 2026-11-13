@@ -10,11 +10,11 @@ identical exit, 30 keV folding):
   1. Project: an experiment with theta=... round trip and canonical line;
      the refusals AZURE2 makes (malformed or reversed windows, beyond 180
      deg; together with entranceL=coherent when a session is made).
-  2. The engine against the CLI with theta=50-70: calculate_chi2_rwa
+  2. The engine against the CLI with theta=50-70: evaluate().chi2
      (rel 1e-9) and the output files written by write_output_files.
   3. 0-180: 4 pi times the model is the angle-integrated model (rel 1e-12),
      the residuals (profiled norm) agree (1e-9 of their scale), and so does
-     residual_jacobian; theta=all residuals are bit for bit those without it.
+     objective().residuals_and_jacobian; theta=all residuals are bit for bit those without it.
   4. Identical exit: 30-60 and 120-150 give the same model (1e-12).
 
 Needs the compiled engine and an AZURE2 binary for 2-4; skips them cleanly.
@@ -103,7 +103,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # -- the engine -----------------------------------------------------------
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
     binary = os.environ.get("AZURE2_BIN")
     if not binary:
         cands = [c for c in glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))
@@ -130,8 +130,8 @@ with tempfile.TemporaryDirectory() as tmp:
                 if os.path.isfile(f) and not os.path.basename(f).startswith("intEC")}
 
     def model(d, x):
-        with azure2(os.path.join(d, "run.azr"), cwd=d) as s:
-            return np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)])
+        with Session(os.path.join(d, "run.azr"), cwd=d) as s:
+            return np.concatenate([np.asarray(v) for v in [d.model for d in s.evaluate(x).data]])
 
     block = "experiment[A] theta=50-70"
     cli_dir, py_dir = project("cli", block), project("py", block)
@@ -146,10 +146,10 @@ with tempfile.TemporaryDirectory() as tmp:
     cli_chi2 = float(hit[-1])
 
     print("2. the engine against the CLI (theta=50-70)")
-    with azure2(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
+    with Session(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
         x = np.asarray(s.params_rwa, float)
-        chi2 = float(np.sum(s.calculate_chi2_rwa(x)))
-        check(f"calculate_chi2_rwa == CLI (rel 1e-9): {chi2!r}",
+        chi2 = s.evaluate(x).chi2
+        check(f"evaluate().chi2 == CLI (rel 1e-9): {chi2!r}",
               abs(chi2 / cli_chi2 - 1) < 1e-9, f"{chi2} vs {cli_chi2}")
         s.write_output_files(x)
     from_py = output_files(py_dir)
@@ -164,19 +164,19 @@ with tempfile.TemporaryDirectory() as tmp:
     m_nokey, m_full = model(nokey_dir, x), model(full_dir, x)
     worst = float(np.max(np.abs(4 * math.pi * m_full / m_nokey - 1)))
     check(f"4 pi model(0-180) == model (worst rel {worst:.1e}, {m_full.size} points)", worst < 1e-12)
-    with azure2(os.path.join(nokey_dir, "run.azr"), cwd=nokey_dir) as s:
-        r_nokey = s.residuals(x)
-        _, J_nokey = s.residual_jacobian(x)
-    with azure2(os.path.join(all_dir, "run.azr"), cwd=all_dir) as s:
+    with Session(os.path.join(nokey_dir, "run.azr"), cwd=nokey_dir) as s:
+        r_nokey = s.objective().residuals(x)
+        _, J_nokey = s.objective().residuals_and_jacobian(x)
+    with Session(os.path.join(all_dir, "run.azr"), cwd=all_dir) as s:
         check("theta=all: residuals bit for bit those without the key",
-              np.array_equal(s.residuals(x), r_nokey))
-    with azure2(os.path.join(full_dir, "run.azr"), cwd=full_dir) as s:
-        r_full = s.residuals(x)
-        _, J_full = s.residual_jacobian(x)
+              np.array_equal(s.objective().residuals(x), r_nokey))
+    with Session(os.path.join(full_dir, "run.azr"), cwd=full_dir) as s:
+        r_full = s.objective().residuals(x)
+        _, J_full = s.objective().residuals_and_jacobian(x)
     d_r = float(np.max(np.abs(r_full - r_nokey)) / np.max(np.abs(r_nokey)))
     check(f"residuals with the profiled norm agree ({d_r:.1e})", d_r < 1e-9)
     d_J = float(np.max(np.abs(J_full - J_nokey)) / np.max(np.abs(J_nokey)))
-    check(f"residual_jacobian agrees ({d_J:.1e}, {J_full.shape})", d_J < 1e-6)
+    check(f"objective().residuals_and_jacobian agrees ({d_J:.1e}, {J_full.shape})", d_J < 1e-6)
 
     print("4. identical exit: symmetric about 90 deg")
     f_dir = project("fwd", "experiment[A] theta=30-60")

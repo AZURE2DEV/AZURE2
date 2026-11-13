@@ -24,7 +24,7 @@ sys.path.insert(0, ROOT)
 
 try:
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
     from pyazr import Project
     import pyazr._azure2  # noqa: F401
 except Exception as err:
@@ -49,9 +49,9 @@ def evaluate(path, transform, where):
     os.makedirs(os.path.join(where, "output")); os.makedirs(os.path.join(where, "checks"))
     local = os.path.join(where, "m.azr")
     Project.open(path).save(local)
-    with azure2(local, data_mode=False, use_brune=False, ignore_externals=False, transform=transform) as m:
+    with Session(local, data_mode=False, use_brune=False, ignore_externals=False, transform=transform) as m:
         x = np.array(m.params_rwa)
-        return [np.array(seg) for seg in m.calculate_rwa(x)]
+        return [np.array(seg) for seg in [d.model for d in m.evaluate(x).data]]
 
 
 d = tempfile.mkdtemp(prefix="pyazr_hs_transform_")

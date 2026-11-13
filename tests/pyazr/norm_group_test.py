@@ -54,7 +54,7 @@ except FormatError as err:
 
 print("\n2. with the engine: parameters, penalty, chi2 and Jacobian")
 try:
-    from pyazr import azure2
+    from pyazr import Session
     have_engine = True
 except Exception as e:                              # pragma: no cover
     print(f"  skip  engine not built ({e})")
@@ -74,7 +74,7 @@ if have_engine:
             t = l.strip().split(",")
             if len(t) == 5 and t[0].isdigit():
                 expected[int(t[0])] = float(t[1])
-        with azure2(azr, cwd=work) as mdl:
+        with Session(azr, cwd=work) as mdl:
             norms = mdl.parameters.norms
             check("two norm parameters (segments 1, 2): the layout is the ungrouped one",
                   [p.segment_key for p in norms] == [1, 2], [(p.name, p.segment_key) for p in norms])
@@ -82,27 +82,27 @@ if have_engine:
             check("only the leader's is free", [p.segment_key for p in free] == [1], [(p.segment_key, p.fixed) for p in norms])
             idx = free[0].free_index
             x0 = np.asarray(mdl.params_rwa, float)
-            c = np.asarray(mdl.segment_chi2(x0), float)
+            c = np.asarray(np.array([d.chi2 for d in mdl.evaluate(x0).data]), float)
             check("segment chi2 = the CLI's at the shared 1.2 (expected/chiSquared.out)",
                   all(abs(c[k - 1] - expected[k]) < 1e-5 * max(1.0, expected[k]) for k in expected),
                   [(k, c[k - 1], expected[k]) for k in expected])
             x = x0.copy()
             x[idx] = 1.32                                   # 1 sigma above the leader's nominal 1.2
-            pen = mdl.penalties(x)
+            pen = mdl.evaluate(x)
             check("penalty ((n - 1.2)/0.12)^2 = 1, once, on the leader",
-                  abs(float(pen["norm"][0]) - 1.0) < 1e-9 and float(pen["norm"][1]) == 0.0, pen["norm"])
+                  abs(float(np.array([d.norm_chi2 for d in pen.data])[0]) - 1.0) < 1e-9 and float(np.array([d.norm_chi2 for d in pen.data])[1]) == 0.0, np.array([d.norm_chi2 for d in pen.data]))
             check("objective = chi2 + every penalty",
-                  abs(mdl.objective(x) - (float(np.sum(mdl.calculate_chi2_rwa(x))) + sum(
-                      float(np.sum(pen[k])) for k in ("norm", "shift", "shift_sqrt", "shift_fn")))) < 1e-6)
-            c2 = np.asarray(mdl.segment_chi2(x), float)
+                  abs(mdl.objective()(x) - (mdl.evaluate(x).chi2 + sum(
+                      float(np.sum([getattr(d, k) for d in pen.data])) for k in ("norm_chi2", "shift_constant_chi2", "shift_sqrt_chi2", "shift_function_chi2")))) < 1e-6)
+            c2 = np.asarray(np.array([d.chi2 for d in mdl.evaluate(x).data]), float)
             check("moving the leader's norm moves both segments",
                   abs(c2[0] - c[0]) > 1.0 and abs(c2[1] - c[1]) > 1.0, (c, c2))
-            r, J = mdl.residual_jacobian(x0)
+            r, J = mdl.objective().residuals_and_jacobian(x0)
             h = 1e-6
             xp, xm = x0.copy(), x0.copy()
             xp[idx] += h
             xm[idx] -= h
-            fd = (mdl.residual_jacobian(xp)[0] - mdl.residual_jacobian(xm)[0]) / (2 * h)
+            fd = (mdl.objective().residuals_and_jacobian(xp)[0] - mdl.objective().residuals_and_jacobian(xm)[0]) / (2 * h)
             col = J[:, idx]
             n1 = len(r) // 2
             scale = max(float(np.max(np.abs(fd))), 1e-12)

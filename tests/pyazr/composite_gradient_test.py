@@ -5,7 +5,7 @@ A SUM whose leading term is E1-only (isDiff 5) or E2-only (isDiff 6) reads, in t
 its own point and the FULL cross section of each component (src/ModelPass.cpp; before S10, ComposeModelValue:
 `compValue = componentPoint->GetFitCrossSection(results)`).  The analytic gradient must differentiate the same thing.
 On 12C(p,g)13N (tests/13N levels; the 3/2- level decays by E1 and M1/E2, so sigma_E1, sigma_E2 and sigma differ), with
-synthetic data at 0.4-1.7 MeV, the gradient of the objective (pyazr objective_and_grad) is compared with central
+synthetic data at 0.4-1.7 MeV, the gradient of the objective (pyazr objective().value_and_grad) is compared with central
 differences of the objective, for E1 and E2 SUMs (each in a process of its own).  In project format 3 the SUM is a
 data set with reaction "12C(p,g)13N + 12C(p,g)13N" and ``multipole E1`` (or E2), without a target: format 3 does not
 state a thick-target yield of a sum (``quantity yield`` takes one reaction), which the old file's <targetInt> line
@@ -54,16 +54,16 @@ def make_project(work, part):
 def check_one(work):
     """Analytic gradient against central differences; prints and returns the relative error."""
     os.chdir(work)
-    m = pyazr.azure2("p.azr")
+    m = pyazr.Session("p.azr")
     x = np.asarray(m.params_rwa, float)
-    f0, g = m.objective_and_grad(x)
+    f0, g = m.objective().value_and_grad(x)
     fd = np.zeros_like(g)
     for k in range(len(x)):
         h = 1e-6 * max(abs(x[k]), 1e-3)
         xp, xm = x.copy(), x.copy()
         xp[k] += h
         xm[k] -= h
-        fd[k] = (m.objective(xp) - m.objective(xm)) / (2 * h)
+        fd[k] = (m.objective()(xp) - m.objective()(xm)) / (2 * h)
     err = np.max(np.abs(g - fd)) / np.max(np.abs(fd))
     return err, f0, len(x)
 

@@ -7,6 +7,10 @@
 #include "AZUREGrad.h"
 #include "Objective.h"
 #include "ParameterLimitsManager.h"
+#include "PosteriorSupport.h"
+#include "FitControl.h"
+#include <atomic>
+#include <string>
 #include <memory>
 #include <map>
 #include <vector>
@@ -105,10 +109,10 @@ class AZUREAPI {
   /// params_names(): the kind and the owner fields of ParameterRecord.  The binding's parameter_records().
   const std::vector<ParameterRecord> &GetParameterRecords() const { return records_; }
 
-  /// The limits each parameter is created with (AZUREParams, in the order of params_names()): (lower, upper) in the
-  /// parameter's unit, -inf / +inf where it has none.  The limits a <parameterSettings> block adds in a fit of the
-  /// program (ParameterLimitsManager) are not among them: a session does not apply that block.
-  const std::vector<std::pair<double, double>> &GetParameterBounds() const { return bounds_; }
+  /// The fit's limits of each parameter (in the order of params_names()): (lower, upper) in the parameter's unit,
+  /// -inf / +inf where it has none.  The limits the parameter is created with, then those of a <parameterSettings>
+  /// block, as the program's fit and its sampler have them (ReadFitSettings; PosteriorSupport).
+  std::pair<double, double> GetParameterBounds(int index) const;
 
   /*!
    * Returns a reference to the Config structure.
@@ -343,14 +347,16 @@ class AZUREAPI {
    * gamma_decay priors and wall, the abundance sums), one row (p - c)/sigma per diagonal prior (ForEachDiagonalPrior)
    * and one per nuisance prior.  With \p jacobianOut, their Jacobian over the free parameters, row-major; without,
    * the rows from a forward pass only.  False (nothing written) where the analytic Jacobian is not available
-   * (CalculateResidualJacobianRWA's [-1]).
+   * (CalculateResidualJacobianRWA's [-1]).  \p skipColumns is handed to CalculateResidualJacobianRWA as it is (free
+   * columns whose finite differences are not computed and come back zero).
    */
-  bool ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r *jacobianOut) const;
-  /// Whether a free value lies outside the limits of a parameter whose kind's row has samplerSupport
-  /// (ParameterKind.h; the ensemble sampler's -infinity, docs/upgrade/objective.md section 6).
+  bool ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r *jacobianOut,
+                        const std::vector<int> &skipColumns = {}) const;
+  /// Whether a free value lies outside the fit's limits of its parameter, of any kind (PosteriorSupport, the
+  /// ensemble sampler's rule: -infinity there, docs/upgrade/objective.md section 6).
   bool OutsideSamplerSupport(const vector_r &params) const;
   /// ln P = -1/2 x the objective (no constant), -infinity outside the ensemble sampler's support: outside the
-  /// limits of a kind with samplerSupport, or where a term excludes the point (Park's J < 0).
+  /// fit's limits of a parameter, or where a term excludes the point (Park's J < 0).
   double LogProbabilityRWA(const vector_r &params) const;
 
   /*!
@@ -452,6 +458,32 @@ class AZUREAPI {
    */
   vector_r GetECIntegrals(const vector_r &request) const;
 
+  /// What FitWithEngine is asked: a row of the fitter table (Fitters.h) and its controls.
+  struct EngineFitRequest {
+    std::string method;            ///< a row's name (Fitters())
+    bool minos = false;            ///< MINOS after the fit (rows with minos)
+    vector_r x0;                   ///< the free start vector (fit basis); empty: the session's values
+    unsigned int maxCalls = 0;     ///< MIGRAD's and NLopt's call limit; 0: none
+    FitProgressSink progress;      ///< every progress record (thread-safe); may be empty
+    const std::atomic<bool> *stop = nullptr;  ///< the caller's stop request
+  };
+  /// What it gives: the fitter's record, and the objective at the end point from one evaluation (the program's
+  /// "Total Chi-Squared"), the fitter's lines as text.
+  struct EngineFit {
+    FitResult result;
+    double objective = 0.0;
+    std::string log;
+  };
+  /*!
+   * The program's fit on this session's objective (docs/upgrade/fit.md; AZUREAPIFit.cpp): the parameter vector as
+   * the program makes it, at the session's values (x0 for the free ones), with <parameterSettings> applied as the
+   * program applies it; the row's function; HESSE after a MIGRAD row; MINOS when asked; one evaluation at the end
+   * point (the session's buffer then holds its model values).  Writes no file.  The session's parameter values are
+   * not changed; a MIGRAD row on a relvector data covariance re-freezes its model at the fitted point, as the program
+   * does.  Throws std::invalid_argument for an unknown method, MINOS on a row without it, or a wrong x0.
+   */
+  EngineFit FitWithEngine(const EngineFitRequest &request);
+
   /*!
    * Coulomb-function cache counters, aggregated over threads.
    *
@@ -469,6 +501,10 @@ class AZUREAPI {
   double NuisanceChi2(const vector_r &full) const;
   void AddNuisanceGradient(const vector_r &full, vector_r &gradFull) const;
   bool NuisancePriorOf(int f, double &nominal, double &sigma) const;
+  /// The fit's settings, read once per model: <parameterSettings> applied to a scratch parameter set (not to the
+  /// session's parameters), from which come the nuisance priors, the fit's limits (GetParameterBounds) and the
+  /// support of the posterior (OutsideSamplerSupport).
+  void ReadFitSettings() const;
   mutable std::unique_ptr<AZUREParams> nuisanceParams_;
   mutable std::unique_ptr<ParameterLimitsManager> nuisance_;
   mutable bool nuisanceRead_ = false;
@@ -534,7 +570,6 @@ class AZUREAPI {
   std::vector<bool> fixed_;
   std::vector<std::string> names_;
   std::vector<ParameterRecord> records_;  ///< what each parameter is (AZUREParams::Records), in the order of names_
-  std::vector<std::pair<double, double>> bounds_;  ///< each parameter's limits as created, in the order of names_
   vector_r all_, all_rwa_, values_, values_rwa_, norms_, normsErrors_;
 
   // Data

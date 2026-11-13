@@ -46,7 +46,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2, Project
+    from pyazr import Session, Project
 except Exception as err:
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -77,21 +77,21 @@ with tempfile.TemporaryDirectory() as tmp:
              energies="range 0.2 2.5 MeV lab step 0.02")
     proj.save(azr_b)
 
-    A = azure2(azr_a)
+    A = Session(azr_a)
     A.__enter__()
     x = np.asarray(A.params_rwa, float)
 
     def probe(m, z):
         # cross sections and per-segment chi2: cheap, and exactly what the bug moved
-        return flat(m.calculate_rwa(z)), np.asarray(m.segment_chi2(z), float)
+        return flat([d.model for d in m.evaluate(z).data]), np.asarray(np.array([d.chi2 for d in m.evaluate(z).data]), float)
 
     xs0, seg0 = probe(A, x)
     r0 = xs0
     check("data session evaluates (reference cross sections)", xs0.size > 0 and np.all(np.isfinite(xs0)))
 
     # --- an extrapolation session on the same model, used, then closed
-    with azure2(azr_b, data_mode=False) as B:
-        xsB = flat(B.calculate_rwa(np.asarray(B.params_rwa, float)))
+    with Session(azr_b, data_mode=False) as B:
+        xsB = flat([d.model for d in B.evaluate(np.asarray(B.params_rwa, float)).data])
         check("extrapolation session evaluates", xsB.size > 0 and np.all(np.isfinite(xsB)))
         # the data session, while B is open
         r1, seg1 = probe(A, x)
@@ -100,7 +100,7 @@ with tempfile.TemporaryDirectory() as tmp:
               r1.shape == r0.shape and np.allclose(r1, r0, rtol=1e-10, atol=0.0),
               f"per-segment chi2 {seg0} -> {seg1}")
         # and B's own numbers are not disturbed by A's evaluation
-        xsB2 = flat(B.calculate_rwa(np.asarray(B.params_rwa, float)))
+        xsB2 = flat([d.model for d in B.evaluate(np.asarray(B.params_rwa, float)).data])
         check("extrapolation cross sections stable while the data session evaluates",
               np.allclose(xsB2, xsB, rtol=1e-12, atol=0.0))
 
@@ -113,7 +113,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # --- a second DATA session on the same model
     azr_c = stage(tmp, ".data2")
-    with azure2(azr_c) as C:
+    with Session(azr_c) as C:
         xc = np.asarray(C.params_rwa, float)
         rc, _ = probe(C, xc)
         check("second data session reproduces the first's cross sections",
@@ -122,7 +122,7 @@ with tempfile.TemporaryDirectory() as tmp:
         check("first data session unchanged while a second data session is open",
               r3.shape == r0.shape and np.allclose(r3, r0, rtol=1e-10, atol=0.0))
     # one Jacobian pass: the adjoint reads the same per-session cache
-    rj = np.asarray(A.residual_jacobian(x)[0], float)
+    rj = np.asarray(A.objective().residuals_and_jacobian(x)[0], float)
     check("residuals consistent with the per-segment chi2 after all of the above",
           np.isclose(float(np.sum(rj ** 2)), float(np.sum(seg0)), rtol=1e-8))
     A.__exit__(None, None, None)

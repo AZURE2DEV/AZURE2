@@ -33,7 +33,7 @@ AZURE2	AZURE2Core	links	libraries		src/CMakeLists.txt (same line)
 AZURE2	azure2_convert	links	libraries		src/CMakeLists.txt target_link_libraries(AZURE2 azure2_convert)
 _azure2	AZUREAPI	links	libraries		api/src/CMakeLists.txt target_link_libraries(_azure2 PRIVATE AZUREAPI)
 _azure2	azure2_convert	links	libraries		api/src/CMakeLists.txt target_link_libraries(_azure2 PRIVATE azure2_convert)
-pyazr	_azure2	links	libraries		pyazr imports the module _azure2 (pyazr/azure2.py, pyazr/project.py)
+pyazr	_azure2	links	libraries		pyazr imports the module _azure2 (pyazr/session.py, pyazr/project.py)
 pyazr.ui	pyazr	links	libraries		pyazr/ui/engine.py and state.py import pyazr
 Config	azure2::io::Document	makes	setup		Config::ReadConfigFile: io::Document::Parse(bytes)
 Config	azure2::experiment::Format3Project	makes	setup		Config::ReadConfigFile -> Config::ReadFormat3Project; held as Config::project (shared_ptr<const Format3Project>)
@@ -89,29 +89,44 @@ AZURECalc	ParamIndexMap	makes	inference		BuildParamIndexMap(CNuc *, WorkingCopy 
 AZURECalc	GradAccum	makes	inference		AZURECalc::GradientBy: GradAccum accum
 AZURECalcMCMC	WorkingData	owns	inference		AZURECalcMCMC::edata_pool_ (std::stack<std::unique_ptr<WorkingData>>)
 AZURECalcMCMC	CNuc	owns	inference		AZURECalcMCMC::cnuc_pool_ (std::stack<std::unique_ptr<CNuc>>)
+AZURECalcMCMC	PosteriorSupport	owns	inference		AZURECalcMCMC::support_ (PosteriorSupport)
+PosteriorSupport	ParameterLimitsManager	makes	inference		PosteriorSupport::OfFit: ParameterLimitsManager settings(&configure, compound, data, &params)
 nu::Mcmc	nu::Ensemble	owns	inference		Mcmc::sample (Ensemble)
 nu::Ensemble	nu::Walker	owns	inference		Ensemble::walkers (std::vector<Walker>)
 AZUREMain	Config	reads	frontends	const	AZUREMain::configure_ (const Config &)
 AZUREMain	CNuc	owns	frontends		AZUREMain::compound_ (new CNuc in the constructor)
 AZUREMain	WorkingCopy	owns	frontends		AZUREMain::data_ (new WorkingCopy in the constructor)
-AZUREMain	AZURECalc	makes	frontends		AZUREMain::operator(): AZURECalc theFunc(...)
+AZUREMain	ProgramRun	makes	frontends		AZUREMain::operator(): ProgramRun run(...)
+ProgramRun	AZURECalc	owns	frontends		ProgramRun::objective (std::unique_ptr<AZURECalc>, SetUpObjective)
+ProgramProgress	AZURECalc	reads	frontends	nonconst	ProgramProgress::objective_ (AZURECalc &): its observer for the run
+AZUREAPI	AZURECalc	makes	frontends		AZUREAPI::FitWithEngine: AZURECalc objective(...)
 AZUREAPI	Config	reads	frontends	nonconst	AZUREAPI::configure_ (Config &)
 AZUREAPI	CNuc	owns	frontends		AZUREAPI::compound_ (new CNuc in AZUREAPI::ReplaceModel, called by Initialize)
 AZUREAPI	WorkingCopy	owns	frontends		AZUREAPI::data_ (new WorkingCopy in AZUREAPI::ReplaceModel, called by Initialize)
-Session	Config	owns	frontends		Session::config_ (new Config in the constructor, api/src/pybind_api.cpp)
-Session	AZUREAPI	owns	frontends		Session::api_ (new AZUREAPI(*config_))
-Session	RuntimeOptions	reads	frontends	const	Session(const std::string &, const RuntimeOptions &)
-azure2	Session	owns	frontends		azure2._sess = _azure2.Session(self.file, opts)
-azure2	ParameterSet	makes	frontends		azure2.parameters returns ParameterSet(rows, ...)
+_azure2::Session	Config	owns	frontends		Session::config_ (new Config in the constructor, api/src/pybind_api.cpp)
+_azure2::Session	AZUREAPI	owns	frontends		Session::api_ (new AZUREAPI(*config_))
+_azure2::Session	RuntimeOptions	reads	frontends	const	Session(const std::string &, const RuntimeOptions &)
+pyazr::Session	_azure2::Session	owns	frontends		Session._sess = _azure2.Session(self.file, opts)
+pyazr::Session	ParameterSet	makes	frontends		Session.parameters returns ParameterSet(rows, ...)
+pyazr::Objective	pyazr::Session	reads	frontends	nonconst	Objective._session (Session.objective() makes it)
+pyazr::Session	pyazr::Evaluation	makes	frontends		Session.evaluate(x) returns Evaluation(x, raw, ...)
 Project	azure2::io::Document	owns	frontends		Project._doc = _azure2.Document.parse(...)
 Project	Record	makes	frontends		Project.records, Project[name], Project.add: Record(self, name)
 State	Project	owns	frontends		State.project (Project.open(path))
 Server	State	owns	frontends		Server.state
 Server	SessionWorker	owns	frontends		Server.worker = SessionWorker(...)
 Server	JobTable	owns	frontends		Server.jobs = JobTable(...)
-Engine	azure2	owns	frontends		Engine.s = pyazr.azure2(file, cwd=cwd)
+Engine	pyazr::Session	owns	frontends		Engine.s = pyazr.Session(file, cwd=cwd)
 WorkingCopy	azure2::Results	reads	evaluation	nonconst	WorkingCopy::CalculatePointsInParallel(..., Results &), WorkingCopy::BeginEvaluation(Results &): the caller's buffer
 AZURECalc	Objective	reads	inference	const	Objective::Engine() (const Objective &) in AZURECalc::operator() and AZURECalc::Chi2OnWith
-AZURECalc	AZUREParams	reads	inference	nonconst	AZURECalc::RunLevenbergMarquardt(AZUREParams &, ...), AZURECalc::RunGSLNonlinear(AZUREParams &, ...)
+FitterRow	AZUREParams	reads	inference	nonconst	FitFunction(AZURECalc &, AZUREParams &, const FitControl &): start in, end point out
+FitterRow	AZURECalc	reads	inference	nonconst	FitFunction(AZURECalc &objective, ...)
+FitterRow	FitControl	reads	inference	const	FitFunction(..., const FitControl &control)
+FitterRow	FitResult	makes	inference		FitFunction returns FitResult
+FitEvaluations	AZURECalc	reads	inference	nonconst	FitEvaluations::objective_ (AZURECalc &): Observe(&observer_) while it lives
+FitEvaluations	EvaluationObserver	owns	inference		FitEvaluations::observer_
+FitEvaluations	FitControl	reads	inference	const	FitEvaluations::control_ (const FitControl &)
+FitEvaluations	FitProgress	makes	inference		FitEvaluations::Evaluated: FitProgress record
+AZURECalc	EvaluationObserver	reads	inference	const	AZURECalc::observer_ (const EvaluationObserver *)
 AZURECalcMCMC	nu::Mcmc	makes	inference		AZURECalcMCMC::RunMCMCSampling: nu::Mcmc mcmc_sampler(nwalkers, ndim, initial_positions)
 AZURECalcMCMC	Objective	reads	inference	const	Objective::Engine().SamplerChi2(context) in AZURECalcMCMC (src/AZURECalcMCMC.cpp)

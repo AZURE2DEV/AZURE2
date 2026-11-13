@@ -13,6 +13,7 @@ source tree only, runs in well under a second.
 Exits 0 when everything agrees, 1 with one line per problem otherwise.
 """
 
+import glob
 import os
 import re
 import stat
@@ -1025,7 +1026,13 @@ def manual_switches(text):
     part = text.split("Environment switches\n--------------------\n", 1)
     if len(part) < 2:
         return None
-    return re.findall(r"^   \* - ``([A-Z0-9_]+)``\n     - (\w+)$", part[1].split("\nExamples\n", 1)[0], re.M)
+    return [(n, k) for n, _o, k in manual_switch_rows(part[1])]
+
+
+def manual_switch_rows(part):
+    """(variable, option or "none", kind) of each row of the manual's list of switches."""
+    return re.findall(r"^   \* - ``([A-Z0-9_]+)``\n     - (?:``(--[a-z0-9-]+(?:=[A-Z]+)?)``|none)\n     - (\w+)$",
+                      part.split("\nExamples\n", 1)[0], re.M)
 
 
 _table = [(n, k.lower()) for n, k in switch_table(read(ENV_READER))]
@@ -1041,6 +1048,36 @@ else:
     for _n, _k in sorted(set(_manual) - set(_table)):
         problems.append(f"docs/source/reference/command_line.rst: {_n} ({_k}) is listed but is no row of {ENV_READER} "
                         "(check 40)")
+
+# 43. Every switch that can move a number is an option of the program (docs/upgrade/evaluation.md section 9): a row
+#     of kind numbers has its option, no row of another kind has one, the options are unique, and the manual's list
+#     names each row's option (and none that is no row's).
+
+
+def switch_options(text):
+    return re.findall(r'\{Switch::k\w+, "([A-Z0-9_]+)", T::k\w+, "[^"]*", K::k(\w+),\s*"[^"]*",\s*kManual,\s*'
+                      r'"([^"]*)", (-?\d+), (-?\d+)\}', text, re.S)
+
+
+_options = switch_options(read(ENV_READER))
+if len(_options) != len(_table):
+    problems.append(f"{ENV_READER}: {len(_options)} rows with an option column read of {len(_table)} (check 43: the "
+                    "pattern no longer matches the table)")
+for _n, _k, _o, _lo, _hi in _options:
+    if _k == "Numbers" and not _o:
+        problems.append(f"{ENV_READER}: the switch {_n} can move a number and has no option of the program (check 43)")
+    if _k != "Numbers" and _o:
+        problems.append(f"{ENV_READER}: the switch {_n} ({_k.lower()}) has an option; only a switch of kind numbers "
+                        "is one (check 43)")
+_names = [_o.split("=")[0] for _n, _k, _o, _lo, _hi in _options if _o]
+for _dup in sorted({o for o in _names if _names.count(o) > 1}):
+    problems.append(f"{ENV_READER}: the option {_dup} is the option of two switches (check 43)")
+_doc_part = read("docs/source/reference/command_line.rst").split("Environment switches\n--------------------\n", 1)
+_doc_options = {n: o for n, o, k in manual_switch_rows(_doc_part[1])} if len(_doc_part) == 2 else {}
+for _n, _k, _o, _lo, _hi in _options:
+    if _doc_options.get(_n, "") != _o:
+        problems.append(f"docs/source/reference/command_line.rst: the switch {_n} is listed with the option "
+                        f"'{_doc_options.get(_n, '')}', the table's is '{_o}' (check 43)")
 
 # 41. Every physics function has a test (docs/upgrade/pyazr3.md section 2.7): each row of the binding's physics table
 #     (api/src/pybind_physics.cpp, `t.push_back({"<name>", ...`) is named by a test as `row_test("<name>"` in a file
@@ -1136,6 +1173,75 @@ try:
 except (OSError, IndexError, KeyError) as e:
     problems.append(f"check 44: {e}")
 
+# 46. The engine's fitters are one table (src/Fitters.cpp, Fitters(); docs/upgrade/fit.md): every row's switch is an
+#     option the program parses (a string literal outside src/Fitters.cpp, in src/AZURE2.cpp or support/) and a row of
+#     docs/source/reference/command_line.rst; every row's name is in the fitter table of
+#     docs/source/user_guide/fitting.rst; every minimizer bit a switch of src/AZURE2.cpp sets (Config::USE_*_MINIMIZER,
+#     Config::USE_ANALYTIC_GRADIENT) is the configBit of a row, so a fitter cannot be selected outside the table.
+_fitter_rows = []
+try:
+    _fitter_rows = re.findall(r'\{"([\w-]+)", "((?:--[\w-]+)?)", (Config::\w+|0u),', read("src/Fitters.cpp"))
+    if not _fitter_rows:
+        problems.append("src/Fitters.cpp: no row found in Fitters() (check 46)")
+    _parser = read("src/AZURE2.cpp")
+    for _f in glob.glob(os.path.join(ROOT, "support", "**", "*.cpp"), recursive=True):
+        _parser += read(os.path.relpath(_f, ROOT))
+    _cli_page = read("docs/source/reference/command_line.rst")
+    _fit_page = read("docs/source/user_guide/fitting.rst")
+    _fit_table = _fit_page.split("The Engine's Fitters", 1)[1] if "The Engine's Fitters" in _fit_page else ""
+    if not _fit_table:
+        problems.append("docs/source/user_guide/fitting.rst: no section \"The Engine's Fitters\" (check 46)")
+    for _name, _option, _bit in _fitter_rows:
+        if _option and f'"{_option}"' not in _parser:
+            problems.append(f"src/Fitters.cpp: the switch {_option} of the fitter '{_name}' is not parsed by the "
+                            "program (src/AZURE2.cpp, support/) (check 46)")
+        if _option and f"``{_option}``" not in _cli_page:
+            problems.append(f"docs/source/reference/command_line.rst: the switch {_option} of the fitter '{_name}' is "
+                            "not listed (check 46)")
+        if _fit_table and f"``{_name}``" not in _fit_table:
+            problems.append(f"docs/source/user_guide/fitting.rst: the fitter '{_name}' is not in the table of "
+                            "\"The Engine's Fitters\" (check 46)")
+    _row_bits = {_bit for _n, _o, _bit in _fitter_rows}
+    for _bit in sorted(set(re.findall(r"Config::(USE_\w+_MINIMIZER|USE_ANALYTIC_GRADIENT)", read("src/AZURE2.cpp")))):
+        if "Config::" + _bit not in _row_bits:
+            problems.append(f"src/AZURE2.cpp: the switch bit Config::{_bit} selects a fitter that is no row of "
+                            "Fitters() in src/Fitters.cpp (check 46)")
+except (OSError, IndexError) as e:
+    problems.append(f"check 46: {e}")
+
+# 48. The wheel carries every file pyazr reads at run time (docs/upgrade/pyazr3.md section 2.9; pyazr/datafiles.py): every
+#     tracked file under pyazr/ that is not Python is a data file the wheel carries (DATA_FILES) or a file it leaves
+#     out (NOT_SHIPPED, with the reason), never both; every DATA_FILES entry exists; the patterns of NOT_SHIPPED are
+#     the wheel.exclude list of pyproject.toml, in the same order.  tests/pyazr/wheel_test.py compares a built wheel
+#     with the list these make.
+_wheel_data = 0
+try:
+    _spec = importlib.util.spec_from_file_location("pyazr_datafiles", os.path.join(ROOT, "pyazr", "datafiles.py"))
+    _datafiles = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_datafiles)
+    for _rel in tracked_files():
+        if not _rel.startswith("pyazr/") or _rel.endswith(".py"):
+            continue
+        _rel = _rel[len("pyazr/"):]
+        _in, _out = _datafiles.shipped(_rel), _datafiles.excluded(_rel)
+        if _in and _out:
+            problems.append(f"pyazr/{_rel}: both in DATA_FILES and in NOT_SHIPPED of pyazr/datafiles.py (check 48)")
+        elif not (_in or _out):
+            problems.append(f"pyazr/{_rel}: not Python, and neither a data file of the wheel (DATA_FILES) nor left "
+                            "out with a reason (NOT_SHIPPED) in pyazr/datafiles.py (check 48)")
+        _wheel_data += _in
+    for _name, _ in _datafiles.DATA_FILES:
+        _full = _datafiles.path(_name)
+        if not (os.path.isfile(_full) or (_name.endswith("/") and os.path.isdir(_full) and os.listdir(_full))):
+            problems.append(f"pyazr/datafiles.py: DATA_FILES names pyazr/{_name}, which does not exist (check 48)")
+    _exclude = re.search(r"^wheel\.exclude\s*=\s*\[([^\]]*)\]", read("pyproject.toml"), re.M)
+    _patterns = re.findall(r'"([^"]*)"', _exclude.group(1)) if _exclude else None
+    if _patterns != [_p for _p, _ in _datafiles.NOT_SHIPPED]:
+        problems.append("pyproject.toml: wheel.exclude is not the patterns of NOT_SHIPPED in pyazr/datafiles.py "
+                        f"({_patterns} against {[_p for _p, _ in _datafiles.NOT_SHIPPED]}) (check 48)")
+except (OSError, AttributeError, ImportError) as e:
+    problems.append(f"check 48: {e}")
+
 if problems:
     for p in problems:
         print("FAIL", p)
@@ -1145,5 +1251,6 @@ print(f"repository consistent: {len(flags)} CLI flags, test registration, check.
       f"format-3 reference page, {len(declared)} diagnostic codes, file sizes, one model pass and residual, one calculation plan, "
       f"no machine paths, no old data class names, no old section in the engine, reference leaves by one predicate, "
       f"the sharing key's term settings, {len(_allowed)} allowed state rows, one reader of the environment "
-      f"({_getenv_files} files), {len(_table)} environment switches in the manual, {len(_rows)} physics rows tested, "
-      f"{len(_cli.COMMANDS)} pyazr commands, {len(_scheme_rows)} boxes of the class scheme")
+      f"({_getenv_files} files), {len(_table)} environment switches in the manual, {len(_names)} switch options, "
+      f"{len(_rows)} physics rows tested, {len(_cli.COMMANDS)} pyazr commands, {len(_scheme_rows)} boxes of the class scheme, "
+      f"{len(_fitter_rows)} fitters, {_wheel_data} data files of the wheel")

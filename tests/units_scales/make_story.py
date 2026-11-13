@@ -14,7 +14,7 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
 import numpy as np  # noqa: E402
-from pyazr import azure2  # noqa: E402
+from pyazr import Session  # noqa: E402
 
 E_KEV = [800 + 12.5 * k for k in range(33)]
 with tempfile.TemporaryDirectory() as work:
@@ -25,8 +25,8 @@ with tempfile.TemporaryDirectory() as work:
     with open(os.path.join(work, "data", "yield_curve.dat"), "w") as f:
         for e in E_KEV:
             f.write(f"{e:g} 0 1 1\n")
-    with azure2(os.path.join(work, "m.azr"), cwd=work) as m:
-        model = np.concatenate([np.asarray(v, float) for v in m.calculate_rwa(np.asarray(m.params_rwa, float))])
+    with Session(os.path.join(work, "m.azr"), cwd=work) as m:
+        model = np.concatenate([np.asarray(v, float) for v in [d.model for d in m.evaluate(np.asarray(m.params_rwa, float)).data]])
 with open(os.path.join(HERE, "models", "data", "yield_curve.dat"), "w") as f:
     f.write("# E_lab(keV) unused Y(counts/uC) dY: synthetic, the model of yield_story.azr x (1 + 0.04 sin(2.3 i)), "
             "4 % errors (make_story.py)\n")

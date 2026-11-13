@@ -493,7 +493,8 @@ not installed on this machine; the scipy recipe ran here, use case (a)). `bounds
 `ParameterLimitsManager`, the nuisances' `grid_max`); a parameter without one is `(-inf, inf)`. A `Session` is not
 pickled: a pool's initializer opens one per process. The engine's own fitters (MIGRAD with or without the analytic
 gradient, LM, GSL-LM, NLopt; MINOS; the covariance band) stay the reference behind the program; whether pyazr offers
-them as one call is decision 8. The MCMC of `numcmc` stays in the program until Phase 9; pyazr's sampler is emcee.
+them as one call is decision 8 (built: `fit_with_engine`, `fit.md`). The MCMC of `numcmc` stays in the program until
+Phase 9; pyazr's sampler is emcee.
 
 ### 2.7 The physics explorer
 
@@ -532,53 +533,108 @@ Worth having in 3.0 (each a thin call of a pyazr function; `--json` for agents):
 `pyazr import ensdf NUCLIDE`, `pyazr stopping MATERIAL ION ENERGY...`, `pyazr coulomb-table build|fetch|check`. The
 program `azure2` itself is in the wheel. Waiting for the UI (Phase 9): `pyazr ui`, `pyazr libraries update`.
 
-Built (`pyazr/cli.py`, `python -m pyazr` until packaging gives an entry point): one table of commands, `COMMANDS`
-(name, arguments with types, the pyazr function called, help line), from which the parser, every `--help`, `pyazr
-commands --json` and the reference page (`docs/source/user_guide/pyazr_command_line.rst`) are made. `describe [FILE]`
-(`pyazr.describe`; without FILE the package), `validate`, `convert`, `schema [KIND]`, `kinds [TABLE]`, `stopping`,
-`coulomb-table check [FILE]`, `ui FILE`, `import exfor ID` (`fetch_exfor`, the local EXFOR master files with
-`--source local`), `import ensdf NUCLIDE` (`fetch_levels`), `commands`. `--json` gives one document on standard output
-(`command`, `ok`, `exit`, `result`, and `error` with `what`, `allowed`, `fix`); the engine's output goes to standard
-error meanwhile. Exit codes those of the program's project commands: 0, 1 a failed run, 2 a wrong call or a refused
-input, 3 an old project. `describe` and `validate` call the engine functions the program calls
-(`experiment::ReadFormat3Text`, `DescribeJson`/`DescribeText`) and give the same JSON on T2; the program's
-`--validate` and `--describe` also report the stopping of each target (`ReportTargetStoppings` in
-`src/ProjectCommands.cpp`), which the binding does not. Not built, as rows that exit 2 with what to do instead:
-`coulomb-table build` (the engine's `CoulombTable::BuildFile` is not bound; the program builds the table) and
-`coulomb-table fetch` (no published copy). Not here: `pyazr libraries update`; `import exfor --to FILE` (pyazr has
-no single call that writes any EXFOR entry as a data set: `to_dataset` takes ratios to Rutherford or Mott,
-`to_sfactor_dataset` S factors, `to_azr` the old format). A `pyazr evaluate FILE` belongs here once `Evaluation`
-exists (a call and a printer: the numbers at the project's parameters, for an agent without a session).
+Built (`pyazr/cli.py`; `python -m pyazr`, and the console script `pyazr` of the wheel): one table of commands,
+`COMMANDS` (name, arguments with types, the pyazr function called, help line), from which the parser, every
+`--help`, `pyazr commands --json` and the reference page (`docs/source/user_guide/pyazr_command_line.rst`) are made.
+`describe [FILE]` (`pyazr.describe`; without FILE the package), `validate`, `convert`, `schema [KIND]`, `kinds
+[TABLE]`, `stopping`, `coulomb-table check|where|fetch|build [FILE]` (section 2.9), `ui FILE`, `import exfor ID`
+(`fetch_exfor`, the local EXFOR master files with `--source local`), `import ensdf NUCLIDE` (`fetch_levels`),
+`commands`. `--json` gives one document on standard output (`command`, `ok`, `exit`, `result`, and `error` with
+`what`, `allowed`, `fix`); the engine's output goes to standard error meanwhile. Exit codes those of the program's
+project commands: 0, 1 a failed run, 2 a wrong call or a refused input, 3 an old project. `describe` and `validate`
+call the engine functions the program calls (`experiment::ReadFormat3Text`, `DescribeJson`/`DescribeText`) and give
+the same JSON on T2; the program's `--validate` and `--describe` also report the stopping of each target
+(`ReportTargetStoppings` in `src/ProjectCommands.cpp`), which the binding does not. Not here: `pyazr libraries
+update`; `import exfor --to FILE` (pyazr has no single call that writes any EXFOR entry as a data set: `to_dataset`
+takes ratios to Rutherford or Mott, `to_sfactor_dataset` S factors, `to_azr` the old format). A `pyazr evaluate
+FILE` belongs here once `Evaluation` exists (a call and a printer: the numbers at the project's parameters, for an
+agent without a session).
 
 ### 2.9 Packaging
 
-A wheel carries the module `_azure2` (the core linked in), the program `azure2`, the mass table
-(`pyazr/data/mass_1.mas20`, 464 kB) and the SRIM-2013 data (two files, 388 kB, compiled into the library today) under
-decision 6; not the Coulomb table (85 MB, decision 7). GSL is linked statically (GPL, as AZURE2); the OpenMP runtime is
-vendored by the platform's repair tool (auditwheel, delocate, delvewheel); readline is not needed once the menus are
-gone (decision 3).
+A wheel carries the module `_azure2` (the core linked in), the program `AZURE2`, the mass table
+(`pyazr/data/mass_1.mas20`, 464 kB), the web page's files (`pyazr/ui/static/`, with the vendored plotly) and the
+SRIM-2013 data (two files, 388 kB, compiled into the library) under decision 6; not the Coulomb table (85 MB,
+decision 7). GSL and the OpenMP runtime are dynamic libraries of the build machine; the platform's repair tool
+(auditwheel, delocate) copies them into the wheel. readline is left out of the wheel's program (decision 3); the
+sampler `numcmc` (vendored, static, nothing to ship) stays in, because the module's `SamplerLogProbability`
+(`api/src/pybind_evaluation.cpp`) does not compile without it.
 
-What scikit-build-core and cibuildwheel need from the CMake files as they are on this commit:
+**Measured on the start of this step** (commit 5b6f645b).
 
-1. An `install(TARGETS _azure2 LIBRARY DESTINATION pyazr)`: there is none; the module is written into the source
-   tree (`LIBRARY_OUTPUT_DIRECTORY ${PYAZR_OUTPUT_DIR}`, `api/src/CMakeLists.txt`) and shipped as setuptools package
-   data (`pyproject.toml`).
-2. `install(TARGETS AZURE2 ...)` exists (`src/CMakeLists.txt`, `${CMAKE_INSTALL_DIR}`); a wheel installs it into
-   `${SKBUILD_SCRIPTS_DIR}`.
-3. `USE_MCMC` defaults to ON and stops the configuration when `numcmc/` is missing, `USE_READLINE` to ON: a wheel
-   build sets both OFF.
-4. The test directories are added unconditionally (`add_subdirectory(tests/...)` in the top `CMakeLists.txt`):
-   guard them with `BUILD_TESTING`.
-5. `pyproject.toml` builds with setuptools and reads the version from `pyazr/__init__.py`: scikit-build-core's
-   backend with its regex version provider on the same line.
-6. cibuildwheel: GSL before the build (`gsl-devel` in manylinux_2_28, Homebrew on macOS). On Windows the code is
-   built with MinGW (MSYS2, `.github/workflows/build.yml`), while cibuildwheel uses MSVC: either a MinGW wheel (a
-   build step of its own, delvewheel for the runtime DLLs) or an MSVC port of the core; this is the largest unknown
-   of the packaging. The wheel's test command runs T1–T3 on the installed wheel.
+- `pip wheel . --no-deps --no-build-isolation`: setuptools builds `pyazr-3.0.0.dev3-py3-none-any.whl`, 429 kB,
+  53 files: the `.py` files of `pyazr/` and `pyazr/ui/`, `data/mass_1.mas20`, `data/README.md`, `LICENSE`.
+  **No engine** (`_azure2*.so` is shipped only if a CMake build has written it into the source tree; `work/build.sh`
+  writes it elsewhere), **no web page** (`ui/static/` is not package data), no program.
+- Point 1, `install(TARGETS _azure2 ...)`: none; `LIBRARY_OUTPUT_DIRECTORY ${PYAZR_OUTPUT_DIR}`
+  (`api/src/CMakeLists.txt` lines 47-50), default the source's `pyazr/`.
+- Point 2, `install(TARGETS AZURE2 ...)`: `src/CMakeLists.txt` line 191, `DESTINATION ${CMAKE_INSTALL_DIR}`, a
+  variable nothing sets; Minuit2's own rules (`external/minuit2/src/CMakeLists.txt` 217, 223) install its library
+  and headers too.
+- Point 3, `USE_MCMC` and `USE_READLINE`: both ON (top `CMakeLists.txt` 60-61). `USE_READLINE=OFF` **has no
+  effect**: the block that sets `NO_READLINE` and `-DNO_READLINE` (428-433) comes after `add_subdirectory(src)`
+  (413), so the program is compiled with readline and linked to it in every build.
+- Point 4: `add_subdirectory(tests/...)` unconditional (415-421); `physics/`, `stopping/`, `io/`, `experiment/`,
+  `convert/` register their own tests.
+- Point 5: `version = { attr = "pyazr.__version__" }` (setuptools); `__version__ = '3.0.0.dev3'` in
+  `pyazr/__init__.py`.
+- Point 6: no cibuildwheel configuration; `build.yml` builds the program and the module with MinGW on Windows.
 
-Not testable on this machine: the macOS and Windows wheels, and installing any wheel (no installation is allowed
-here). They are tested in a workflow of their own on the three runners of `build.yml`, which builds and tests wheels
-and publishes nothing; the release files are not touched.
+Files pyazr reads at run time that are not `.py`, and how each is found today: the mass table
+(`masses.py`, `__file__` + `data/mass_1.mas20`); the web page (`ui/routes.py`, `__file__` + `static/`); the SRIM
+data (compiled into `_azure2`; `AZURE2_SRIM_DATA_DIR` replaces them); the format-3 schema (compiled: the
+engine's table, `pyazr.schema()`); the Coulomb table (`AZURE2_COULOMB_TABLE`, else `~/.azure2/coulomb_table.bin`,
+in the engine); the engine module itself (the package directory, or `PYAZR_ENGINE_DIR` for a build that writes it
+elsewhere). The examples (`pyazr/examples/`) read the repository's test projects (`tests/`); they are not
+shipped. `cli.py`'s `REFERENCE_PAGE` (the docs page) is written by the consistency workflow only.
+
+**The plan.**
+
+- `pyproject.toml`: backend `scikit_build_core.build`; the version by the regex provider from
+  `pyazr/__init__.py` (one place, as today); `requires-python >= 3.10`, `numpy >= 1.24`, and the two dependencies
+  `import pyazr` needs on this commit (mpmath, scipy: they go when the Python formulas that import them go); the
+  extras as today; the console script `pyazr = pyazr.cli:main` (`main` returns the exit code; the wrapper exits
+  with it). `wheel.packages = ["pyazr"]` copies the package directory as it is (so a data file under `pyazr/` is in
+  the wheel without being named); `wheel.exclude` leaves out what is not run-time (the examples, `CLAUDE.md`, a
+  module an in-tree build left in the source). The licence files: `LICENSE`, the SRIM data's notice
+  (`stopping/data/srim/README.md`), plotly's licence.
+- The CMake option set of a wheel (the `[tool.scikit-build]` table, keyed in CMake on `SKBUILD`): `BUILD_TESTING=OFF`
+  (a new option, default ON, guarding the `tests/` directories), `USE_MCMC=ON` (planned OFF; the module needs the
+  sampler, see above), `USE_READLINE=OFF` (the readline block moved before `add_subdirectory(api)` and `src`, so that
+  the option works; a default build is unchanged), build targets `_azure2` and `AZURE2` only, install component
+  `python` only (so Minuit2's rules install nothing).
+- `install(TARGETS _azure2 LIBRARY DESTINATION pyazr COMPONENT python)` and `install(TARGETS AZURE2 RUNTIME
+  DESTINATION ${SKBUILD_SCRIPTS_DIR} COMPONENT python)` in a wheel build; elsewhere the program's rule is as
+  before. In a wheel build `PYAZR_OUTPUT_DIR` defaults to the build directory, so the build writes nothing into
+  the source; every other build keeps today's default and `work/build.sh`'s `-DPYAZR_OUTPUT_DIR`.
+- Run-time data: found next to the module (`__file__`) as today, so the unpacked or installed package needs no
+  environment variable. `pyazr/datafiles.py` holds the table of the non-Python files under `pyazr/`: shipped (what
+  each is, who reads it) or not shipped (why); the wheel test's expected list and a consistency check (48) are made
+  from it. The SRIM notice: `pyazr.describe()["stopping"]["citation"]` (already), `stopping.CITATION`, the
+  `stopping` command's output, and the licence files of the wheel.
+- The Coulomb table (`pyazr/coulomb_table.py`; the commands `python -m pyazr coulomb-table where|fetch|build|check`,
+  `pyazr coulomb-table ...` once installed): the file is where the engine looks (`$AZURE2_COULOMB_TABLE`, else
+  `~/.azure2/coulomb_table.bin`), so a fetched or built table is used by every later session and by the program
+  with nothing set. `fetch` downloads `TABLE_URL` (one named constant, empty until the owner publishes the file)
+  to `FILE.part`, compares its SHA-256 with `TABLE_SHA256`, renames it over `FILE`, or removes it and refuses;
+  `--url` and `--sha256` name another copy (a mirror, a local file). `build` calls the engine's
+  `CoulombTable::BuildFile` (bound in `pybind_describe.cpp` with the default path), the offline path; the table is
+  not built on first use without being asked (five minutes the user did not ask for). Without a table the engine
+  uses its exact routines, as today. Tested against a small table served as `file://` and from `http.server` on
+  127.0.0.1 (nothing is downloaded here).
+- cibuildwheel: `[tool.cibuildwheel]` (CPython 3.10-3.13, x86-64 and arm64; manylinux_2_28 with `gsl-devel`
+  before the build, macOS with Homebrew's `gsl` and `libomp`) and `.github/workflows/wheels.yml` (by hand and on
+  pull requests that touch the packaging files) that builds, repairs and tests the wheels and uploads them as the
+  run's artifacts only: no PyPI, no release, no secret. The wheel's test command is `tests/pyazr/wheel_smoke.py`:
+  import, `pyazr.describe()`, T1-T3 through a session against χ² stored in the script, the program on T1.
+  **Windows** is left out: cibuildwheel builds with MSVC, the engine is built with MinGW (MSYS2) in `build.yml`;
+  a wheel needs either a MinGW build of the module against the python.org interpreter (its own step, delvewheel for
+  the runtime DLLs) or an MSVC port of the engine (OpenMP 2.0, GSL from vcpkg, no `<unistd.h>`). The owner decides.
+- Tests: `pyazr_wheel` (slow): a wheel built from the worktree into the build directory, the source left clean
+  (`git status`), unpacked and imported by a fresh interpreter with the in-tree package out of reach; describe,
+  T2's χ² equal bit for bit to the in-tree build's, stopping, the web page's files, `--help`, the program on T1,
+  the wheel's file list against the expected one. `pyazr_coulomb_table`: build, `file://` and HTTP fetch, a
+  corrupted copy refused and removed. Consistency check 48.
 
 ## 3. Extensibility of the binding, today and after this design
 
@@ -706,6 +762,27 @@ engine's physics does not. Sizes are estimates from the files of this commit.
    `tests/pyazr/` call `azure2(`; 28 scripts elsewhere in `tests/` import pyazr), the 19 examples and the user guide
    (`pyazr.rst`, 1303 lines). The largest step: about 4000 lines of `pyazr/` and 2500 of `tests/` touched; done
    by one agent in one stride. Needs 2, 3, 4.
+   **Begun** (branch `feature/upgrade-8-pyazr3-session`; the measured table of every name is its HANDOFF entry).
+   Built: `pyazr/session.py` with the class `Session` (no `pyazr.azure2`, no alias; options keyword-only), the THM
+   methods in the mixin `session_thm.py`, the session's lock on every public member that reaches the engine
+   (`pyazr/locking.py`, `tests/pyazr/session_lock_test.py`); tests, examples, the web UI and the pages ported.
+   Differs from the plan: no `threads=` (the engine has no per-session thread count); `azure2.py` is not split into
+   `data.py` and `system.py` yet.
+   One evaluation, as built: the `calculate_*` family, `calculate_chi2*`, `segment_chi2`, `dataset_chi2`,
+   `segment_norms`, `penalties`, `scattering_length_chi2`, `objective(x)`, `objective_and_grad`, `chi2_and_grad`,
+   `residual_jacobian`, `residuals` are gone; `Session.objective()` is the object (`fit_objective` before) and
+   `Session.evaluate(x)` the evaluation.  `EvaluatedData.rows` (a slice of the objective's rows; the binding's
+   `first_row`, `rows`) and `shift_constant_chi2`, `shift_sqrt_chi2`, `shift_function_chi2` (fields of the data
+   set's record in `pybind_evaluation.cpp`) replace the whitened split and the per-part shift priors;
+   `Objective.jacobian(x, skip=)` forwards to `CalculateResidualJacobianRWA` (`AZUREAPI::ObjectiveRowsRWA` and the
+   binding's `objective_rows_rwa` take `skip`).  In extrapolation mode `evaluate` returns the extrapolations from
+   the engine's forward pass (the binding's `update_segments_rwa` and `calculated_*`, as `calculate_rwa` did), with
+   every chi-squared field `None`: the engine's objective evaluation needs the data (it fails with "the working copy
+   has no node table" in extrapolation mode on T2, 13N), so `s.extrapolations` beside `s.data` waits for the mode
+   switch to go.  Differs from 2.3: `chi2_and_grad`'s gradient is that of the data chi-squared plus the model's
+   terms (Park, abundances, model data), which no row range of the objective gives where priors exist; the tests
+   moved to the objective's gradient.  Not yet done: one parameter vector and table, the Python physics, the
+   libraries.
 6. **Read-only views of set-up arrays** (`DataSet.energies`, `values`, `errors`, `grid`, `kernel`): `shared_ptr`
    set-up buffers in the engine's data, capsule-based arrays in the binding. `AZUREAPI.cpp`, `pybind_api.cpp`, the
    data access of `experiment/`. About 400 lines; a view test (read-only, alive after `close()`, unchanged after a
@@ -722,6 +799,25 @@ engine's physics does not. Sizes are estimates from the files of this commit.
    configuration and a workflow of its own building and testing wheels on Linux, macOS, Windows (publishing
    nothing). `pyproject.toml`, three `CMakeLists.txt` (about 60 lines), the workflow (about 120). Needs decisions 5,
    6, 7.
+   **Done** (branch `feature/upgrade-8-pyazr3-packaging`; section 2.9 is the plan). As built, and where it differs:
+   `USE_MCMC` stays ON in the wheel (the module's `SamplerLogProbability` needs the vendored, static sampler);
+   `wheel.exclude` applies to what CMake installs as well, so it cannot drop a stale in-tree module: the wheel's
+   configuration stops while `pyazr/_azure2*` exists; Windows is left out of the workflow. Decision 7 as built:
+   `pyazr coulomb-table fetch` (URL and SHA-256 as two named constants, empty until the owner publishes the file),
+   `build` (the engine's `CoulombTable::BuildFile`, bound as `build_coulomb_table`, with `l_max` and `per_decade` for
+   a small table), `where`; the table is not built on first use without being asked. The wheel on this machine
+   (CPython 3.12, Linux x86-64, not repaired): 8.2 MB, 83 files; the module and the program need libgsl,
+   libgslcblas, libgomp and libstdc++ of the system (auditwheel copies them in the workflow). Tests: `pyazr_wheel`
+   (slow), `pyazr_coulomb_table`, the `coulomb-table` cases of `pyazr_cli`, consistency check 48.
+
+9. **The program's switch options and `--threads` in a session** (open; the program's side is
+   `evaluation.md` section 9). (a) A session keyword per switch of kind numbers that the engine reads through
+   `Config::environment` (one assignment after `Config::Reset`, the names from `SwitchTable()`'s option column);
+   (b) the two read from the process record where no run object exists (`AZURE2_SWAP_COUPLING_ORDER` in
+   `PolarizationFunc`, the stopping library's default SRIM tables) stay process-wide: a session cannot change them
+   and should say so when asked; (c) `pyazr.describe()` and `azure2.describe()` return the switch block of
+   `--describe --json` (value, source); (d) one `threads` keyword with the meaning of `--threads` (today a session
+   takes `OMP_NUM_THREADS`).
 
 Side by side: 1, 2, 4, 7 and 8 touch different files and can run at once (1 and 2 both touch `pybind_api.cpp`, in
 different functions: merge 1 first). 3 needs 2; 5 needs 2, 3, 4; 6 needs 5. The critical path is 2 → 3 → 5 → 6.
@@ -772,7 +868,11 @@ users and stands on the list of things he must see.
 8. **The engine's own fitters from Python.** (a) none: pyazr gives the objective, the program fits; (b) one call,
    `Session.fit_with_engine(method="migrad"|"lm"|"gsl-lm", minos=False)`, giving the program's numbers (MIGRAD's
    covariance, MINOS intervals). *Recommendation: (b)*: not a framework, and the GUI and agents get the reference
-   fit and MINOS without a subprocess. Later: the same cost as now.
+   fit and MINOS without a subprocess. Later: the same cost as now. *Accepted 2026-11-13; as built* (`fit.md`):
+   `azure2.fit_with_engine(method="migrad", minos=False, x0=None, max_calls=None, progress=None, stop=None)`
+   (`pyazr/session_fit.py`), the methods the rows of the engine's fitter table (`migrad`, `migrad-gradient`, `lm`,
+   `gsl-lm`, `nlopt` where built; `pyazr.kinds()["fitters"]`), through the program's own functions; HESSE after
+   MIGRAD; a result record with the program's point, objective, covariance and MINOS intervals.
 9. **The roadmap's "`azure2()` session shim with deprecation warnings for one release"** conflicts with "no backward
    compatibility". (a) strike it; (b) keep a shim for one release. *Recommendation: (a)*; section 2.3 is the
    migration list. Later: none.
@@ -868,6 +968,12 @@ tests (`Session.log_prob_rwa`); the column reaches Python as the parameter recor
 user sees which bounds are walls.  The limits of the other kinds are not turned on (the PI's open decision).  A user
 who wants walls at every bound writes one line:
 `lp = lambda x: f.log_prob(x) if all(lo <= v <= hi for v, (lo, hi) in zip(x, f.bounds)) else -numpy.inf`.
+
+*Since the PI's decision of 2026-11-13 (the sampler respects the limits of every kind):* the column and the record
+field `sampler_support` are gone.  The engine has one function for the rule, `PosteriorSupport` (the fit's limits of
+every free parameter: those it is created with, then those of `<parameterSettings>`); the program's sampler and
+`Objective.log_prob` both ask it, and `bounds` of a parameter record and of the objective are those same limits
+(`AZUREAPI::ReadFitSettings`).  The one-line wrapper above is no longer needed.
 
 **Arrays** (section 2.4): every array of an `Evaluation` and every array an `Objective` returns is a copy the caller
 owns.  The set-up arrays of a data set (energies, angles, data values and errors) are copies too in this step, marked

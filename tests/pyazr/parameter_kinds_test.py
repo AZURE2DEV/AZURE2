@@ -45,7 +45,7 @@ def check(name, ok, detail=""):
 
 try:
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
     from pyazr import _azure2
     from pyazr import Project
     from pyazr.parameters import parameter_kinds
@@ -107,8 +107,8 @@ def _values(record, field):
 
 def check_project(label, path, cwd, want_kinds):
     project = Project.open(path)
-    with azure2(path, cwd=cwd) as s:
-        sess = s.sess
+    with Session(path, cwd=cwd) as s:
+        sess = s._engine
         records = sess.parameter_records()
         n = len(records)
         names = [sess.params_names(i) for i in range(n)]

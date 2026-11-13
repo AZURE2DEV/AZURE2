@@ -19,10 +19,10 @@ zeroing it -- i.e. running the original parameters again.
 
 import numpy as np
 
-from pyazr import azure2, Project
+from pyazr import Session, Project
 
 
-azr = azure2("13N.azr")
+azr = Session("13N.azr")
 best = np.asarray(azr.params_rwa, float)          # the fitted free parameters
 
 # What are the levels?  Each is a LevelKey you can hand to the toggles below.
@@ -41,9 +41,9 @@ target = next(k for k in azr.physical_levels() if k.energy)   # e.g. the first l
 off = azr.without_level(best, level=target)       # this level OFF
 only = azr.only_level(best, level=target)         # ONLY this level (+ background)
 
-xs_full = azr.calculate_rwa(best)                 # one cross section per segment
-xs_off = azr.calculate_rwa(off)
-xs_only = azr.calculate_rwa(only)
+xs_full = [d.model for d in azr.evaluate(best).data]                 # one cross section per segment
+xs_off = [d.model for d in azr.evaluate(off).data]
+xs_only = [d.model for d in azr.evaluate(only).data]
 
 s = 0                                             # inspect the first segment
 print(f"\nsegment {s}, first energy point:")
@@ -63,7 +63,7 @@ model = Project.open("13N.azr")
 model.set_level((target.jpi, target.energy), active=False)
 print(f"\ndeactivated in file: {target.jpi} at {target.energy} MeV")
 path = model.save("13N_no_level.azr")             # original untouched
-azr2 = azure2(path)                               # refit / analyze this reduced model
+azr2 = Session(path)                               # refit / analyze this reduced model
 print(f"wrote {path}: {len(azr2.params)} free parameters "
       f"(was {len(azr.params)})")
 

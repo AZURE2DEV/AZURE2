@@ -53,7 +53,7 @@ try:
     sys.path.insert(0, HERE)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2
+    from pyazr import Session
     import thm_records
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
@@ -127,14 +127,14 @@ with tempfile.TemporaryDirectory() as tmp:
         for e in dense_points():
             f.write(f"{e * 18 / 17:.10f} 0 1 0.1\n")
 
-    with azure2(moved, use_brune=False) as m:
+    with Session(moved, use_brune=False) as m:
         p_moved = np.asarray(m.params_rwa, float)
-    with azure2(orig, use_brune=False) as o:
+    with Session(orig, use_brune=False) as o:
         p_orig = np.asarray(o.params_rwa, float)
-        y = np.asarray(o.calculate_rwa(p_moved)[0], float)
+        y = np.asarray(o.evaluate(p_moved).data[0].model, float)
         e_cm = np.asarray(o.energies[0], float)
-    with azure2(dense, use_brune=False) as d:
-        yd = np.asarray(d.calculate_rwa(p_moved)[0], float)
+    with Session(dense, use_brune=False) as d:
+        yd = np.asarray(d.evaluate(p_moved).data[0].model, float)
         ed = np.asarray(d.energies[0], float)
 
     moved_by = np.max(np.abs(p_moved - p_orig))

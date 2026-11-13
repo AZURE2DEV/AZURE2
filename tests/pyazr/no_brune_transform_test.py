@@ -25,10 +25,10 @@ WORKER = r"""
 import sys
 sys.path.insert(0, sys.argv[1])
 import numpy as np
-from pyazr import azure2
+from pyazr import Session
 try:
-    with azure2(sys.argv[2], cwd=sys.argv[3], use_brune=sys.argv[4] == "1") as a:
-        v = a.calculate_rwa(np.array(a.params_rwa, float))
+    with Session(sys.argv[2], cwd=sys.argv[3], use_brune=sys.argv[4] == "1") as a:
+        v = [d.model for d in a.evaluate(np.array(a.params_rwa, float)).data]
         print("RESULT opened", int(all(np.all(np.isfinite(np.asarray(x, float))) for x in v)))
 except Exception as err:
     print("RESULT", type(err).__name__, str(err).replace(chr(10), " "))
@@ -37,7 +37,7 @@ except Exception as err:
 
 def main():
     try:
-        from pyazr import azure2  # noqa: F401
+        from pyazr import Session  # noqa: F401
     except Exception as err:  # same skip as the other pyazr tests
         print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
         return 77

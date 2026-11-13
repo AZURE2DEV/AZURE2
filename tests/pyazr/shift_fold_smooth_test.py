@@ -41,7 +41,7 @@ def check(name, ok, detail=""):
 
 try:
     import numpy as np                         # noqa: E402
-    from pyazr import azure2, Project          # noqa: E402
+    from pyazr import Session, Project          # noqa: E402
 except Exception as err:                       # same skip as the other pyazr tests
     print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -57,7 +57,7 @@ try:
     before = p["yield_1"]["shift"]
     p.set("yield_1", shift="offset 0.01043168251 MeV fit prior 0 0.0005")
     check("the shift of yield_1 is varied now", p["yield_1"]["shift"] != before, before)
-    a = azure2(p.save(os.path.join(work, "smooth.azr")), cwd=work)
+    a = Session(p.save(os.path.join(work, "smooth.azr")), cwd=work)
     x0 = np.array(a.params_rwa, float)
     free = [q for q in a.parameters if not q.fixed]
     k = [i for i, q in enumerate(free) if q.kind == "shift"][0]
@@ -67,9 +67,9 @@ try:
     for v in shifts:
         x = x0.copy()
         x[k] = v
-        chi.append(a.segment_chi2(x)[0])
+        chi.append(np.array([d.chi2 for d in a.evaluate(x).data])[0])
     x = x0.copy()
-    again = a.segment_chi2(x)[0]
+    again = np.array([d.chi2 for d in a.evaluate(x).data])[0]
     chi = np.array(chi)
     print("    chi2(shift): " + ", ".join(f"{c:.9g}" for c in chi))
     print("    d2: " + ", ".join(f"{c:.4g}" for c in np.diff(chi, 2)))
@@ -79,8 +79,8 @@ try:
     # (c) beyond the reach: the mesh is planned again for the moved support, and planned back on return
     far = x0.copy()
     far[k] = x0[k] + 0.005
-    c_far = a.segment_chi2(far)[0]
-    back = a.segment_chi2(x0.copy())[0]
+    c_far = np.array([d.chi2 for d in a.evaluate(far).data])[0]
+    back = np.array([d.chi2 for d in a.evaluate(x0.copy()).data])[0]
     check("(c) 5 keV beyond the reach and back: the file value's chi2 again (the plan is a function of the shift)",
           abs(back - chi[10]) <= 1e-13 * abs(chi[10]) and np.isfinite(c_far), (back, chi[10], c_far))
     d2 = np.diff(chi, 2)

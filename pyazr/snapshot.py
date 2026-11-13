@@ -1,8 +1,8 @@
 """A fit's values into its project: :func:`write_values` (a :class:`pyazr.Project` edited in memory)
-and the file writer of :meth:`pyazr.azure2.save_fit` (:func:`write_format3`, a copy of the project on disk).
+and the file writer of :meth:`pyazr.Session.save_fit` (:func:`write_format3`, a copy of the project on disk).
 
 The project is edited through :class:`pyazr.Project`, the engine's edits of the level rows, the <thm> lines and the
-records.  ``self`` is the :class:`pyazr.azure2` session the fit comes from.
+records.  ``self`` is the :class:`pyazr.Session` session the fit comes from.
 """
 import numpy as np
 
@@ -12,9 +12,9 @@ from .errors import ParameterError
 
 def write_values(session, project, x=None, norms="fitted"):
     """Write the values of the fit vector ``x`` (default: the start, ``session.params_rwa``) of a
-    :class:`pyazr.azure2` ``session`` into ``project``, a :class:`pyazr.Project` of the session's file
+    :class:`pyazr.Session` ``session`` into ``project``, a :class:`pyazr.Project` of the session's file
     (``Project.open(session.file)``, or an edit of it), in memory: nothing is saved, the caller saves it (or keeps it
-    as one edit of its history).  The values are those :meth:`pyazr.azure2.save_fit` writes: the level parameters as
+    as one edit of its history).  The values are those :meth:`pyazr.Session.save_fit` writes: the level parameters as
     the ``<levels>`` rows state them (energies in MeV, partial widths in eV, ANCs), fixed ones included; the THM
     coherent backgrounds; the session's potentials; with ``norms="fitted"`` every free nuisance into the record it
     comes from (``"nominal"``: the abundances only).  Returns ``project``."""
@@ -24,7 +24,7 @@ def write_values(session, project, x=None, norms="fitted"):
     n = len(session.parameters.free)
     if x.size != n:
         raise ParameterError(f"write_values: x has {x.size} entries; the session has {n} free parameters "
-                             f"(azure2.params_rwa is such a vector, azure2.parameters.free names its entries).")
+                             f"(Session.params_rwa is such a vector, Session.parameters.free names its entries).")
     full = session._all_rwa(x)
     want = np.asarray(session.transform_all_rwa(full, include_fixed=True), float)
     place_values(session, project, x, want, full, norms)

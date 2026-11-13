@@ -1,7 +1,8 @@
 // What pyazr.describe() and pyazr.kinds() read of the build and of the engine's tables (pyazr/described.py): the
-// build options, the Coulomb table a session would use, and the table of session options.
+// build options, the Coulomb table a session would use (and its build), and the table of session options.
 #include <pybind11/pybind11.h>
 
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -107,6 +108,35 @@ void BindDescription(py::module_ &m) {
       "The Coulomb table a session with this coulomb_table option uses: path (\"\" = the default file), loaded "
       "(False: it cannot be read, and the exact routines are used), identity (CoulombTable::ContentIdentity).");
   m.def(
+      "coulomb_table_default_path", []() { return CoulombTable::DefaultPath(); },
+      "The file a session and the program read when no Coulomb table is named: $AZURE2_COULOMB_TABLE, else "
+      "~/.azure2/coulomb_table.bin.");
+  const CoulombTable::BuildSpec defaults;
+  m.def(
+      "build_coulomb_table",
+      [](const std::string &path, int threads, int lMax, double perDecade) {
+        CoulombTable::BuildSpec spec;
+        spec.threads = threads;
+        spec.lMax = lMax;
+        spec.perDecade = perDecade;
+        const std::string file = path.empty() ? CoulombTable::DefaultPath() : path;
+        std::string error;
+        bool built = false;
+        {
+          py::gil_scoped_release release;
+          built = CoulombTable::BuildFile(file, spec, error);
+        }
+        if (!built) throw std::runtime_error("the Coulomb table " + file + " was not built: " + error);
+        CoulombTable::ForgetMissing();  // a session of this process that found no file tries again
+        return file;
+      },
+      py::arg("path") = "", py::kw_only(), py::arg("threads") = 1, py::arg("l_max") = defaults.lMax,
+      py::arg("per_decade") = defaults.perDecade,
+      "Build the Coulomb table from the exact routines and write it to path (\"\" = the default file), as AZURE2 "
+      "--build-coulomb-table does (CoulombTable::BuildFile: written as path.new, then renamed); returns the path. "
+      "threads: OpenMP threads of the build; l_max and per_decade (nodes per decade of eta and rho): the table's "
+      "extent and density (the defaults are the program's table).");
+  m.def(
       "session_options",
       []() {
         py::list out;
@@ -144,7 +174,7 @@ void BindDescription(py::module_ &m) {
         }
         return out;
       },
-      "The session options, one dict each: name (in the engine), keyword (of pyazr.azure2), key (of <config>; \"\" "
+      "The session options, one dict each: name (in the engine), keyword (of pyazr.Session), key (of <config>; \"\" "
       "for an option that is not project state, with its reason), flag and negation (the program's, \"\" where it "
       "has none), type, default, effect (physics, convention, numerics), doc.");
 }

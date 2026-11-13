@@ -8,11 +8,11 @@ the ``<config>`` key through ``Project.config`` / ``set_config(priorCovariance=)
 
 With the engine, on the p+p model of tests/norm_groups (every level parameter free; each data set its own free
 norm, the group D removed):
-``penalties()["prior_covariance"]`` at moved parameters = the hand-computed quadratic form; a diagonal prior on the
-two norms gives the same ``objective()`` as their normError priors (1e-10); the last rows of ``residual_jacobian``
-are L^-1 (p - mu) (their squared sum = the prior term, the whole sum = calculate_chi2_rwa + the prior) and their
+``terms["prior covariance"]`` at moved parameters = the hand-computed quadratic form; a diagonal prior on the
+two norms gives the same ``objective()`` as their normError priors (1e-10); the last rows of ``objective().residuals_and_jacobian``
+are L^-1 (p - mu) (their squared sum = the prior term, the whole sum = evaluate().chi2 + the prior) and their
 columns match central differences of ``prior_covariance_residuals``; a fixed listed parameter is marginalized
-(``prior_covariance_names``); a refused file makes ``azure2()`` raise.
+(``prior_covariance_names``); a refused file makes ``Session()`` raise.
 
 Run from anywhere:  python3 tests/pyazr/prior_covariance_test.py
 """
@@ -124,7 +124,7 @@ try:
 
     print("\n2. with the engine")
     try:
-        from pyazr import azure2
+        from pyazr import Session
         have_engine = True
     except Exception as e:                       # pragma: no cover
         print(f"  skip  engine not built ({e})")
@@ -158,25 +158,25 @@ try:
 
         Cb = np.array([[4e-4, 1.2e-4], [1.2e-4, 9e-4]])
         azr, work = project("corr", S0, f"{N1} width_1_1\n1.02 0.6\n4e-4 1.2e-4\n1.2e-4 9e-4\n")
-        with azure2(azr, cwd=work) as mdl:
+        with Session(azr, cwd=work) as mdl:
             fi = {q.name: q.free_index for q in mdl.parameters if not q.fixed}
             x = np.asarray(mdl.params_rwa, float).copy()
             x[fi[N1]], x[fi["width_1_1"]] = 1.07, 0.63
             d = np.array([1.07 - 1.02, 0.63 - 0.6])
             want = float(d @ np.linalg.solve(Cb, d))
-            pen = mdl.penalties(x)
-            check("penalties()['prior_covariance'] = d^T C^-1 d (1e-12)",
-                  abs(pen["prior_covariance"] - want) <= 1e-12 * want, (pen["prior_covariance"], want))
+            pen = mdl.evaluate(x)
+            check("terms['prior covariance'] = d^T C^-1 d (1e-12)",
+                  abs(pen.terms["prior covariance"] - want) <= 1e-12 * want, (pen.terms["prior covariance"], want))
             check("objective() includes it",
-                  abs(mdl.objective(x) - (float(np.sum(mdl.calculate_chi2_rwa(x))) + want)) <= 1e-10 * mdl.objective(x))
+                  abs(mdl.objective()(x) - (mdl.evaluate(x).chi2 + want)) <= 1e-10 * mdl.objective()(x))
             check("prior_covariance_names", mdl.prior_covariance_names == [N1, "width_1_1"],
                   mdl.prior_covariance_names)
-            r, J = mdl.residual_jacobian(x)
+            r, J = mdl.objective().residuals_and_jacobian(x)
             rp = mdl.prior_covariance_residuals(x)
-            check("residual_jacobian: the last two rows are L^-1 (p - mu)", np.allclose(r[-2:], rp, rtol=0, atol=1e-14),
+            check("objective().residuals_and_jacobian: the last two rows are L^-1 (p - mu)", np.allclose(r[-2:], rp, rtol=0, atol=1e-14),
                   (r[-2:], rp))
-            check("sum r^2 = calculate_chi2_rwa + the prior (1e-10)",
-                  abs(float(r @ r) - (float(np.sum(mdl.calculate_chi2_rwa(x))) + want)) <= 1e-10 * float(r @ r))
+            check("sum r^2 = evaluate().chi2 + the prior (1e-10)",
+                  abs(float(r @ r) - (mdl.evaluate(x).chi2 + want)) <= 1e-10 * float(r @ r))
             worst = 0.0
             for col in range(x.size):
                 h = 1e-6 * max(1.0, abs(x[col]))
@@ -192,39 +192,39 @@ try:
 
         azr, work = project("diag", S0, f"{N1} {N2}\n1 1\n0.01 0\n0 0.0025\n")
         azr2, work2 = project("normerr", SE)
-        with azure2(azr, cwd=work) as a, azure2(azr2, cwd=work2) as b:
+        with Session(azr, cwd=work) as a, Session(azr2, cwd=work2) as b:
             x = np.asarray(a.params_rwa, float).copy()
             fa = {q.name: q.free_index for q in a.parameters if not q.fixed}
             fb = {q.name: q.free_index for q in b.parameters if not q.fixed}
             check("same free-parameter layout", fa == fb)
             x[fa[N1]], x[fa[N2]] = 1.07, 0.96
-            oa, ob = a.objective(x), b.objective(x)
+            oa, ob = a.objective()(x), b.objective()(x)
             check("diagonal prior on the norms: objective() = the normError priors' (1e-10)",
                   abs(oa - ob) <= 1e-10 * ob, (oa, ob))
             check("... prior term 1.13 = the norm penalties",
-                  abs(a.penalties(x)["prior_covariance"] - 1.13) < 1e-12 and
-                  abs(float(np.sum(b.penalties(x)["norm"])) - 1.13) < 1e-12)
-            check("no prior term without the key", b.penalties(x)["prior_covariance"] == 0.0 and
+                  abs(a.evaluate(x).terms["prior covariance"] - 1.13) < 1e-12 and
+                  abs(float(np.sum(np.array([d.norm_chi2 for d in b.evaluate(x).data]))) - 1.13) < 1e-12)
+            check("no prior term without the key", b.evaluate(x).terms["prior covariance"] == 0.0 and
                   b.prior_covariance_residuals(x).size == 0)
 
         # every level fixed: energy_2 is a fixed parameter -> marginalized
         azr, work = project("fixed", S0, f"{N1} energy_2\n1.02 0.81\n4e-4 1.5e-4\n1.5e-4 1e-4\n", fixed_levels=True)
-        with azure2(azr, cwd=work) as mdl:
+        with Session(azr, cwd=work) as mdl:
             fi = {q.name: q.free_index for q in mdl.parameters if not q.fixed}
             x = np.asarray(mdl.params_rwa, float).copy()
             x[fi[N1]] = 1.07
             check("a fixed listed parameter is marginalized", mdl.prior_covariance_names == [N1],
                   mdl.prior_covariance_names)
-            v = mdl.penalties(x)["prior_covariance"]
+            v = mdl.evaluate(x).terms["prior covariance"]
             check("... the term is the marginal (n - mu)^2 / C_nn", abs(v - 0.05 ** 2 / 4e-4) <= 1e-12 * v, v)
 
         azr, work = project("bad", S0, f"{N1} segment_9_norm\n1 1\n0.01 0\n0 0.01\n")
         try:
-            with azure2(azr, cwd=work):
+            with Session(azr, cwd=work):
                 pass
-            check("an unknown name makes azure2() raise", False, "no error")
+            check("an unknown name makes Session() raise", False, "no error")
         except Exception as e:
-            check("an unknown name makes azure2() raise", True)
+            check("an unknown name makes Session() raise", True)
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 

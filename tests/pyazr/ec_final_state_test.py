@@ -4,7 +4,7 @@
 The API always switches external capture on, so it is where the two branches of CNuc::ParseExternalCapture show:
 
   * models/missing_level.azr (tests/ec_final_state_listed): the only data segment exits into the capture pair and
-    its final state is not listed -> the engine prints the ERROR line and Initialize fails, so pyazr.azure2(...)
+    its final state is not listed -> the engine prints the ERROR line and Initialize fails, so pyazr.Session(...)
     raises AZURE2Error.  Older engines ran it with a hidden level (a fixed energy_2 and a FREE width_2_1 in no
     .azr line) that shifted every later energy_N name.
   * models/unused.azr: the same levels, but the only segment is elastic 16O(p,p), so nothing uses the capture
@@ -43,24 +43,24 @@ def stage(model, work):
 def main():
     try:
         import pyazr
-        from pyazr import azure2
+        from pyazr import Session
     except ImportError as e:
         print(f"skipping: {e}")
         return 77
     work = tempfile.mkdtemp(prefix="ec_final_state_")
     try:
         # (1) listed: runs
-        s = azure2(stage("listed", work))
+        s = Session(stage("listed", work))
         names = [p.name for p in s.parameters.energies]
         check("listed final state: session opens", len(names) > 0)
         check("listed final state: four levels in the parameter list", len(names) == 4, f"{names}")
         # (2) missing level, capture segment present: refused
         raised = None
         try:
-            azure2(stage("missing_level", work))
+            Session(stage("missing_level", work))
         except Exception as e:  # pyazr.AZURE2Error
             raised = e
-        check("missing final state used by a segment: pyazr.azure2 raises",
+        check("missing final state used by a segment: pyazr.Session raises",
               raised is not None and type(raised).__name__ == "AZURE2Error", repr(raised))
         # (3) missing level, no segment uses the pair: WARNING, runs, no hidden level
         # the engine writes on the C-level stdout, which redirect_stdout does not see: capture file descriptor 1
@@ -68,7 +68,7 @@ def main():
         saved = os.dup(1); sys.stdout.flush()
         fd = os.open(cap, os.O_WRONLY | os.O_CREAT | os.O_TRUNC); os.dup2(fd, 1); os.close(fd)
         try:
-            s = azure2(stage("unused", work))
+            s = Session(stage("unused", work))
         finally:
             sys.stdout.flush(); os.dup2(saved, 1); os.close(saved)
         out = open(cap).read()

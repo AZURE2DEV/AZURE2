@@ -152,7 +152,7 @@ for v in (0.0, 5.0):
 print("\n4. a snapshot reads back as the fit it was made from")
 os.environ.setdefault("OMP_NUM_THREADS", "2")
 import numpy as np  # noqa: E402
-from pyazr import azure2  # noqa: E402
+from pyazr import Session  # noqa: E402
 project = os.path.join(ROOT, "tests", "hybrid_potential")
 azr = os.path.join(project, "hybrid_potential.azr")
 # Beside the original, not in a temp dir: a .azr resolves its data files
@@ -161,7 +161,7 @@ azr = os.path.join(project, "hybrid_potential.azr")
 out = os.path.join(project, "_snapshot_test.azr")
 sav = os.path.splitext(out)[0] + ".sav"
 try:
-    with azure2(azr, cwd=project) as m:
+    with Session(azr, cwd=project) as m:
         want = np.asarray(m.transform_rwa(m.params_rwa), float)
         written, savfile = m.save_fit(out)
         check("snapshot written", os.path.exists(written))
@@ -175,7 +175,7 @@ try:
               open(savfile).readline().split()[0] == "#parametrization")
         check("numpy.loadtxt sees only the parameters",
               np.loadtxt(savfile, usecols=(1,)).size == len(m.parameters))
-    with azure2(out, cwd=project) as back:
+    with Session(out, cwd=project) as back:
         got = np.asarray(back.transform_rwa(back.params_rwa), float)
     check("every R-matrix value round-trips",
           got.shape == want.shape and np.allclose(got, want, rtol=1e-4),
