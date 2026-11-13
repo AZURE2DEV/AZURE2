@@ -1,8 +1,8 @@
 # Formalism and fitting — the equations behind the picture
 
 The working equations behind a fit, with the source equations they come from. The physical
-picture is in `references/interference.md` and in `azure2-setup`. Notation follows Lane & Thomas (LT) [Rev. Mod. Phys. 30,
-257 (1958)] and is kept by Brune and deBoer. Symbols: `λ,µ` levels; `c = (α,s,l)`
+picture is in `references/interference.md` and in `azure2-setup`. Notation follows Lane & Thomas (LT) [Rev. Mod. Phys.
+30, 257 (1958)] and is kept by Brune and deBoer. Symbols: `λ,µ` levels; `c = (α,s,l)`
 channels; `E` energy; `a_c` channel radius; `B_c` boundary constant.
 
 ## 1. The R-matrix and the collision matrix
