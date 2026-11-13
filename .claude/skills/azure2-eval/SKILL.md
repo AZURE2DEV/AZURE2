@@ -99,8 +99,11 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   `add_isospin_mix`; `parameters.isospin`; `penalties()["isospin"]` is already
   inside `calculate_chi2_rwa`. The GUI keeps the block and the joined IDs on
   save but writes masses to 6 significant digits (all projects).
-  An isospin level cannot sit in a J-group that has a photon or beta channel
-  (the engine stops at load): no capture in a tied model as of dev 9278055c.
+  Photon and beta channels of a tied J-group stay outside the ties (own gamma
+  widths in each nucleus; the start-up log says "not tied"), so capture can sit
+  in a tied model (branch feature/isospin-photon-channels; builds up to dev
+  8b397ddb stop at load with "has a photon or beta channel"). A derived
+  member's bound-state ANC then follows the reference nucleus's amplitude.
 - **Spin observables are data type 10 (`10 <token>`), and type 9 means two
   different things in files of different origin.** On dev since 6e4fa458 (PR #3,
   2026-11-11): analyzing powers of beam or target, spin correlations, spin-1

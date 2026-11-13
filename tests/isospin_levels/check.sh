@@ -33,6 +33,14 @@
 #     observed, not formal, energies); the soft tie starts on the hard tie; the gradient check passes through
 #     the ties; a MIGRAD fit of Brune pseudo-data recovers both shifts and the mix (from -0.9 / -0.4 / 0).
 #
+# (j) Photon channels in a tied J-group (capture in a tied model): they stay outside the ties.  Models are made
+#     here from tests/two_nuclei_ec/models (12C(p,g0)13N and 12C(n,g0)13C with external capture).  A.azr with
+#     every level labelled in a one-nucleus block gives A.azr's capture to 1e-10 in the Brune AND the formal
+#     parametrization (the formal block sets B = -l, so this also checks capture to a final state that is not at
+#     the boundary energy).  M.azr with the ground state and the 1/2+ state tied across 13N and 13C (Brune):
+#     the start-up report lists the photon channels as not tied, the reference nucleus's capture is A.azr's to
+#     1e-10, and the 13C capture differs from the untied M.azr's (its neutron amplitudes are now the proton ones).
+#
 # The models are written by make_models.py (committed).
 
 set -uo pipefail
@@ -415,6 +423,58 @@ if [ -s "$T/AZUREOut_aa=2_R=2.extrap" ] && [ -s "$T/AZUREOut_aa=5_R=3.extrap" ];
   fi
 else
   bad "Brune truth model produced no extrapolations"; tail -5 "$WORK/truthB/run.log"
+fi
+
+# ---- (j) photon channels in a tied J-group ------------------------------------------------------
+EC="$HERE/../two_nuclei_ec/models"
+xsec() { awk 'NF >= 4 { printf "%.12e %.12e\n", $1, $(NF - 1) }' "$1"; }
+awk '{ print } /^<\/levels>/ { print "<isospin>"; print "reference 7 13 1"; for (k = 1; k <= 12; k++) print "level " k " 0.5"; print "</isospin>" }' "$EC/A.azr" > "$WORK/ecA_iso.azr"
+python3 - "$EC/M.azr" "$WORK/ecM_tied.azr" <<'EOF'
+# join the 13C ground state (ID 13) and 1/2+ state (ID 15) to the 13N levels 1 and 3: one ID, consecutive lines
+import sys
+text = open(sys.argv[1]).read()
+head, rest = text.split("<levels>\n", 1)
+body, tail = rest.split("</levels>\n", 1)
+blocks = [b.split("\n") for b in body.strip("\n").split("\n\n")]
+join = {"13": "1", "15": "3"}
+keep, moved = [], {}
+for b in blocks:
+    lid = b[0].split()[8]
+    if lid in join:
+        out = []
+        for ln in b:
+            f = ln.split(); f[8] = join[lid]; out.append(" ".join(f))
+        moved[join[lid]] = out
+    else:
+        keep.append(b)
+for b in keep:
+    if b[0].split()[5] == "1": b.extend(moved.pop(b[0].split()[8], []))
+assert not moved
+iso = "<isospin>\nreference 7 13 1\nshift 6 13 3 -3.04631 0 -3.04631 0\nlevel 1 0.5\nlevel 3 0.5\n</isospin>\n"
+open(sys.argv[2], "w").write(head + "<levels>\n" + "\n\n".join("\n".join(b) for b in keep) + "\n\n</levels>\n" + iso + tail)
+EOF
+for fl in "--use-brune" "--no-brune"; do
+  run "ecA$fl" "$EC/A.azr" "3\nn" "$fl"; run "ecAiso$fl" "$WORK/ecA_iso.azr" "3\nn" "$fl"
+  a="$WORK/ecA$fl/output/AZUREOut_aa=1_R=2.extrap"; b="$WORK/ecAiso$fl/output/AZUREOut_aa=1_R=2.extrap"
+  if [ -s "$a" ] && [ -s "$b" ]; then
+    xsec "$a" > "$WORK/a.xs"; xsec "$b" > "$WORK/b.xs"; r="$(maxrel "$WORK/b.xs" "$WORK/a.xs")"
+    if le "$r" 1e-10; then ok "capture, $fl: every level in a one-nucleus block == no block (max rel $r, $(wc -l < "$WORK/a.xs") points)"; else bad "capture, $fl: one-nucleus block changes 12C(p,g0) (max rel $r)"; fi
+  else
+    bad "capture, $fl: an extrapolation is missing"; grep -i -m3 "error" "$WORK/ecAiso$fl/run.log"
+  fi
+done
+run ecM "$EC/M.azr" "3\nn" "--use-brune"; run ecMtied "$WORK/ecM_tied.azr" "3\nn" "--use-brune"
+a="$WORK/ecA--use-brune/output/AZUREOut_aa=1_R=2.extrap"
+m1="$WORK/ecMtied/output/AZUREOut_aa=1_R=2.extrap"; m2="$WORK/ecMtied/output/AZUREOut_aa=3_R=4.extrap"; u2="$WORK/ecM/output/AZUREOut_aa=3_R=4.extrap"
+if [ -s "$a" ] && [ -s "$m1" ] && [ -s "$m2" ] && [ -s "$u2" ]; then
+  if grep -q "photon/beta channel(s), not tied" "$WORK/ecMtied/run.log"; then ok "tied 13N + 13C capture model: start-up report lists the photon channels as not tied"; else bad "tied capture model: no 'not tied' line in the start-up report"; fi
+  xsec "$a" > "$WORK/a.xs"; xsec "$m1" > "$WORK/m1.xs"; xsec "$m2" > "$WORK/m2.xs"; xsec "$u2" > "$WORK/u2.xs"
+  r="$(maxrel "$WORK/m1.xs" "$WORK/a.xs")"
+  if le "$r" 1e-10; then ok "tied capture model: 12C(p,g0) of the reference nucleus == A.azr (max rel $r)"; else bad "tied capture model: reference-nucleus capture vs A.azr max rel $r"; fi
+  r="$(maxrel "$WORK/m2.xs" "$WORK/u2.xs")"
+  if le "$r" 1e-3; then bad "tied capture model: 12C(n,g0) is the untied curve (max rel $r); the tie did nothing"; else ok "tied capture model: 12C(n,g0) follows the tie (differs from the untied model, max rel $r)"; fi
+else
+  bad "tied capture model: an extrapolation is missing"; grep -i -m3 "error" "$WORK/ecMtied/run.log"
 fi
 
 echo "isospin_levels: $nok ok, $nbad failed"
