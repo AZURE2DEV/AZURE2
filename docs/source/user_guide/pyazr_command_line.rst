@@ -133,17 +133,16 @@ Calls ``pyazr.described.coulomb_table``.
 - ``FILE``: the table file (default: $AZURE2_COULOMB_TABLE, else ~/.azure2/coulomb_table.bin) (a text).
 - ``--json``: one JSON document on standard output.
 
-``coulomb-table build``
+``coulomb-table where``
 -----------------------
 
-Build the Coulomb table (not in pyazr yet: the program builds it).
+Where the Coulomb table is looked for and whether a file is there (without loading it).
 
 .. code-block:: text
 
-   python -m pyazr coulomb-table build [FILE] [--json]
+   python -m pyazr coulomb-table where [FILE] [--json]
 
-Not available yet: pyazr has no function that builds the Coulomb table (the engine's CoulombTable::BuildFile is not
-bound).  Instead: the program builds it: AZURE2 --build-coulomb-table[=FILE] (about 5 min on 4 threads, 88 MB).
+Calls ``pyazr.coulomb_table.where``.
 
 - ``FILE``: the table file (default: $AZURE2_COULOMB_TABLE, else ~/.azure2/coulomb_table.bin) (a text).
 - ``--json``: one JSON document on standard output.
@@ -151,16 +150,35 @@ bound).  Instead: the program builds it: AZURE2 --build-coulomb-table[=FILE] (ab
 ``coulomb-table fetch``
 -----------------------
 
-Download the Coulomb table (not possible yet: no published copy exists).
+Download the published Coulomb table and check its SHA-256 (exit 2 while none is published: build it).
 
 .. code-block:: text
 
-   python -m pyazr coulomb-table fetch [FILE] [--json]
+   python -m pyazr coulomb-table fetch [FILE] [--url TEXT] [--sha256 TEXT] [--overwrite] [--json]
 
-Not available yet: no published copy of the Coulomb table exists yet to download.  Instead: a table built here:
-AZURE2 --build-coulomb-table[=FILE].
+Calls ``pyazr.coulomb_table.fetch``.
 
 - ``FILE``: the table file (default: $AZURE2_COULOMB_TABLE, else ~/.azure2/coulomb_table.bin) (a text).
+- ``--url``: a copy to download instead of the published one (a text).
+- ``--sha256``: the SHA-256 the copy must have (with --url) (a text).
+- ``--overwrite``: replace an existing file (an option without a value).
+- ``--json``: one JSON document on standard output.
+
+``coulomb-table build``
+-----------------------
+
+Build the Coulomb table here from the exact routines (about 5 min on 4 threads, 88 MB).
+
+.. code-block:: text
+
+   python -m pyazr coulomb-table build [FILE] [--threads N] [--l-max N] [--per-decade X] [--json]
+
+Calls ``pyazr.coulomb_table.build``.
+
+- ``FILE``: the table file (default: $AZURE2_COULOMB_TABLE, else ~/.azure2/coulomb_table.bin) (a text).
+- ``--threads``: OpenMP threads of the build (default: the engine's) (a whole number).
+- ``--l-max``: the largest l of the table (default: the program's, 10) (a whole number).
+- ``--per-decade``: nodes per decade of eta and rho (default 100) (a number).
 - ``--json``: one JSON document on standard output.
 
 ``ui``

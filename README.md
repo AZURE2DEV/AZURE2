@@ -111,8 +111,9 @@ bundled in-tree.
 - [Readline](https://tiswww.case.edu/php/chet/readline/rltop.html) — for CLI input (`USE_READLINE`)
 
 **For the Python client (`pyazr`)**
-- Python 3.8+ with [NumPy](https://numpy.org/), [SciPy](https://scipy.org/)
-  and [mpmath](https://mpmath.org/) (`pip install -e .` installs them)
+- Python 3.10+ with [NumPy](https://numpy.org/) 1.24+, [SciPy](https://scipy.org/)
+  and [mpmath](https://mpmath.org/); `pip install .` from the repository's root builds the engine with
+  scikit-build-core and installs pyazr, the commands `pyazr` and `AZURE2`, and these dependencies
 - [pybind11](https://pybind11.readthedocs.io/) ≥ 2.6 (to build the `_azure2`
   module; without it CMake warns and builds no module)
 
@@ -296,9 +297,11 @@ to (`J`, `parity`, `level_energy`) and for widths the channel (`L`, `S`, `pair`,
 `radiation_type`) — plus filtered views (`.free`, `.energies`, `.widths`,
 `.norms`, `.shifts`) and lookups (`.by_level(...)`, `.by_name(...)`).
 
-Build the `_azure2` module with CMake (`USE_API=ON`, the default) — it lands in
-`pyazr/`, so `import pyazr` picks it up from the repository root; a `pip install`
-ships it as package data.
+`pip install .` builds the `_azure2` module and installs it with the package
+(`docs/source/getting_started/installation.rst`; the Coulomb table once with
+`pyazr coulomb-table fetch` or `build`). For development, the CMake build
+(`USE_API=ON`, the default) writes it into `pyazr/`, so `import pyazr` picks it
+up from the repository root.
 
 ### Fetching experimental data (`pyazr.nds`)
 

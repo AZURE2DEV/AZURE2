@@ -60,6 +60,8 @@ endif()
 option(USE_READLINE "Use Readline library for CLI input." ON)
 option(USE_MCMC "Use MCMC Bayesian sampling OFF" ON)
 option(USE_GCOV "Create a GCov-enabled build." OFF)
+# The test directories under tests/ (OFF in a wheel build: pyproject.toml, [tool.scikit-build]).
+option(BUILD_TESTING "Add the test directories under tests/" ON)
 option(CODE_COVERAGE "Enable coverage reporting" OFF)
 
 # ---------------------------------------------------------------- sanitizers
@@ -405,6 +407,15 @@ else()
     message(STATUS "MCMC Bayesian sampling disabled")
 endif()
 
+# readline for the program's menus: decided before the binding and the engine are added, so that both see it (a
+# directory property set after add_subdirectory does not reach that directory).
+if(NOT USE_READLINE)
+    add_definitions(-DNO_READLINE)
+    set(NO_READLINE "TRUE")
+else()
+    set(NO_READLINE "FALSE")
+endif()
+
 # Python module
 if(USE_API)
     add_subdirectory(api)
@@ -413,23 +424,18 @@ endif()
 add_subdirectory(src)
 
 enable_testing()
-add_subdirectory(tests/reference)
-add_subdirectory(tests/pyazr)
-add_subdirectory(tests/consistency)
-add_subdirectory(tests/upgrade)
-add_subdirectory(tests/layer_yield)
-add_subdirectory(tests/stopping_yield)
+if(BUILD_TESTING)
+    add_subdirectory(tests/reference)
+    add_subdirectory(tests/pyazr)
+    add_subdirectory(tests/consistency)
+    add_subdirectory(tests/upgrade)
+    add_subdirectory(tests/layer_yield)
+    add_subdirectory(tests/stopping_yield)
+endif()
 
 # Conditional defines
 if(NOT USE_STAT)
     add_definitions(-DNO_STAT)
-endif()
-
-if(NOT USE_READLINE)
-    add_definitions(-DNO_READLINE)
-    set(NO_READLINE "TRUE")
-else()
-    set(NO_READLINE "FALSE")
 endif()
 
 # Code coverage

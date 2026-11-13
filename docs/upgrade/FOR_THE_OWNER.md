@@ -769,6 +769,27 @@ that makes them (tested by running it: bit for bit). The stopping library's func
 energy after a layer, areal density between two energies, straggling) are rows of the same kind, with SRIM's
 citation under every plot, in the CSV and in the Python text, their values those of `pyazr.stopping` bit for bit.
 
+## pyazr as one command: `pip install .`
+
+`pip install .` in a checkout now builds the engine (scikit-build-core runs the CMake files) and installs pyazr with
+its module `_azure2`, the commands `pyazr` and `AZURE2`, the mass table and the web page; `pip wheel .` writes the
+wheel. Before, pip installed a package without its engine. The wheel's program has no readline (its menus read
+plain lines). The workflow `.github/workflows/wheels.yml` builds and tests wheels for Linux (x86-64, arm64) and macOS
+(arm64, x86-64) with cibuildwheel, by hand or on a pull request that changes the packaging, and keeps them as the
+run's artifacts: it publishes nothing. What the owner must do to publish:
+
+- **The Coulomb table** (85 MB, not in the wheel): attach the file to a release, then set `TABLE_URL` and
+  `TABLE_SHA256` in `pyazr/coulomb_table.py` (one commit); `pyazr coulomb-table fetch` then downloads it and checks
+  the hash. Until then `fetch` says that none is published and names `pyazr coulomb-table build` (5 minutes, offline).
+- **Run the workflow** once (Actions, "wheels", "Run workflow") and look at its four jobs: it has never run (it cannot
+  run here). Publishing to PyPI is a step to add when you decide to (trusted publishing needs no secret).
+- **Windows** has no wheel: cibuildwheel compiles with MSVC, AZURE2 is built with MinGW. Either a MinGW-built wheel (a
+  step of its own and delvewheel) or a port of the engine to MSVC; your choice.
+- **SRIM**: the SRIM-2013 data files are compiled into the module (the PI's decision: free to use when SRIM is cited).
+  The wheel carries their notice among its licence files, and `pyazr.describe()` and `pyazr stopping` print the
+  citation. Whether that suffices for redistribution on PyPI is yours to confirm with the terms in
+  `stopping/data/srim/README.md`.
+
 ## For the maintainers to decide
 
 - **Fits and the number of threads.** Calculations are identical at any thread count. Since the gradient branch

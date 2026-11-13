@@ -1,12 +1,14 @@
 [build-system]
-requires = ["setuptools>=64", "wheel"]
-build-backend = "setuptools.build_meta"
+# scikit-build-core runs CMake: the wheel carries the engine module _azure2 and the program AZURE2, built from this
+# source (docs/upgrade/pyazr3.md section 2.9; docs/source/getting_started/installation.rst).
+requires = ["scikit-build-core>=0.10", "pybind11>=2.12"]
+build-backend = "scikit_build_core.build"
 
 [project]
 name = "pyazr"
 description = "Python interface to the AZURE2 R-matrix code"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 license = { text = "GPL-3.0-or-later" }
 authors = [{ name = "AZURE2 developers" }]
 keywords = ["nuclear physics", "R-matrix", "AZURE2", "nuclear astrophysics"]
@@ -14,22 +16,20 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Physics",
     "Programming Language :: Python :: 3",
-    "Operating System :: POSIX",
+    "Programming Language :: C++",
+    "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS",
 ]
 
-# mpmath is imported at module load by pyazr.transform, and scipy is needed by
-# the width transformation (hyperu, CubicSpline); without both declared, a
-# pip-installed pyazr fails on "import pyazr". The samplers and plotting
-# libraries the examples use stay optional -- see optional-dependencies.
+# What "import pyazr" needs.  mpmath and scipy are imported by Python formulas (pyazr.transform, pyazr.widths)
+# that are being replaced by bound engine functions; both go from this list when the last of those formulas goes.
 dependencies = [
-    "numpy>=1.20",
+    "numpy>=1.24",
     "mpmath>=1.2",
     "scipy>=1.7",
 ]
 
-# The version is read from pyazr/__init__.py so it is stated in exactly one
-# place; bumping it there is enough.
+# The version is read from pyazr/__init__.py (__version__) so it is stated in exactly one place.
 dynamic = ["version"]
 
 [project.urls]
@@ -46,19 +46,55 @@ web = ["fastapi", "uvicorn", "httpx"]
 all = ["matplotlib", "emcee", "multiprocess", "zeus-mcmc"]
 
 [project.scripts]
-# The socket-based API is gone: pyazr talks to the engine in-process through
-# the _azure2 pybind11 module (built by CMake with USE_API=ON), so there is
-# nothing to launch and nothing to reap.
+# The command line (pyazr/cli.py; also python -m pyazr).  The program AZURE2 is installed beside it from the
+# wheel's scripts (src/CMakeLists.txt, the SKBUILD install rule).
+pyazr = "pyazr.cli:main"
 
-[tool.setuptools]
-# pyazr is a plain package in the repository root; AZURE2 itself is C++ and is
-# not installed by pip. The in-process engine is the pybind11 extension module
-# _azure2.<platform>.so, built by CMake into the pyazr/ directory; ship it as
-# package data so a pip install keeps working.
-packages = ["pyazr", "pyazr.ui"]
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+cmake.version = ">=3.16"
+cmake.build-type = "Release"
+# Only what the wheel carries is built: the module and the program (not the tests, not the Coulomb-table tool).
+build.targets = ["_azure2", "AZURE2"]
+# Only the install rules of the component "python" (api/src/CMakeLists.txt, src/CMakeLists.txt): the vendored
+# Minuit2's own install rules put nothing into the wheel.
+install.components = ["python"]
+install.strip = true
+# The package directory as it is: every file under pyazr/ is in the wheel (pyazr/datafiles.py lists the non-Python
+# ones), except what wheel.exclude names (pyazr/datafiles.py, NOT_SHIPPED; consistency check 48 keeps the two
+# equal).  wheel.exclude also applies to what CMake installs, so it cannot name the module: a module an in-tree
+# build left in pyazr/ stops the wheel's configuration instead (api/src/CMakeLists.txt).
+wheel.packages = ["pyazr"]
+wheel.exclude = ["pyazr/CLAUDE.md", "pyazr/examples/**", "**/__pycache__/**"]
+wheel.license-files = ["LICENSE", "stopping/data/srim/README.md", "pyazr/ui/static/vendor/plotly-LICENSE.txt"]
+# The CMake option set of a wheel: no tests, no readline (the program's menus read plain lines).  The sampler numcmc
+# stays on: it is vendored and static (nothing to install or ship), and the module's SamplerLogProbability
+# (api/src/pybind_evaluation.cpp) needs it.
+cmake.define = { BUILD_TESTING = "OFF", USE_MCMC = "ON", USE_READLINE = "OFF", USE_API = "ON" }
 
-[tool.setuptools.package-data]
-pyazr = ["_azure2*.so", "_azure2*.dylib", "_azure2*.pyd", "data/mass_1.mas20", "data/README.md"]
+[tool.scikit-build.metadata.version]
+provider = "scikit_build_core.metadata.regex"
+input = "pyazr/__init__.py"
+regex = '(?m)^__version__ = [\x27"](?P<value>[^\x27"]+)[\x27"]'
 
-[tool.setuptools.dynamic]
-version = { attr = "pyazr.__version__" }
+[tool.cibuildwheel]
+# Linux and macOS (.github/workflows/wheels.yml); Windows is not built (docs/upgrade/pyazr3.md section 2.9).
+build = "cp310-* cp311-* cp312-* cp313-*"
+skip = "*-musllinux_* *_i686"
+build-verbosity = 1
+# Two threads per build: the runners are small.
+environment = { CMAKE_BUILD_PARALLEL_LEVEL = "2" }
+# The installed wheel, outside the source tree: import, describe(), T1-T3 against stored numbers, the program on T1.
+test-command = "python {project}/tests/pyazr/wheel_smoke.py {project}"
+
+[tool.cibuildwheel.linux]
+manylinux-x86_64-image = "manylinux_2_28"
+manylinux-aarch64-image = "manylinux_2_28"
+# GSL's headers and libraries (AlmaLinux 8: gsl-devel is in the powertools repository); auditwheel copies libgsl
+# and libgomp into the wheel.
+before-all = "dnf install -y dnf-plugins-core && dnf config-manager --set-enabled powertools && dnf install -y gsl-devel"
+
+[tool.cibuildwheel.macos]
+# Apple's clang has no OpenMP runtime: Homebrew's libomp (found by the top CMakeLists.txt); delocate copies libgsl
+# and libomp into the wheel.  MACOSX_DEPLOYMENT_TARGET is set per runner by the workflow (that of the bottles).
+before-all = "brew install gsl libomp"
