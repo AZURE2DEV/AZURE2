@@ -21,10 +21,13 @@ The web page's "accept into project" (`pyazr/ui/server.py` `Server.apply` → `e
 through the same `save_fit(path, x, param_sav=False)` (verify on) that `continued.py` tests; its text merge
 (`state.merge_snapshot`) is not covered here. The data branch (3298f372) merged in.
 
-**Verified how** (build `work/b-layout`, 0 warnings): TREE_LINE; `tests/nuisance_prior_centre/check.sh` with and
+**Verified how** (build `work/b-layout`, 0 warnings): on the merged head, all projects x 3 bases against `tab-t50-1`: 887 / 851 / 887
+identical (also against `tab-t45-1` before the merge); `tests/nuisance_prior_centre/check.sh` with and
 without `PYAZR_ENGINE_DIR` (new check (h) = `continued.sh`); ctest `experiment_layout_base`, `pyazr_continued_fit` and
 the neighbours (19/19); injected errors (inclusive lower end; the kernel's layout from the start) fail the new checks;
-the base build fails the Doppler χ², the note, `save_fit` and the four layout checks. FULL_LINE
+the base build fails the Doppler χ², the note, `save_fit` and the four layout checks. The eight fits of `fits_vs_base2.sh` identical to `b-trial50`; the converted-tree gate
+679 / 643 / 679 identical; `ctest -LE slow` 237/237; the slow tests 11/11; `tests/run_tests.sh` 166 passed, 0 failed.
+Not run: 1 against several threads, Sphinx.
 
 **Open.** A parameter without a prior has no centre: a continued fit lays its grid out from the fitted value (1.5 ×);
 whether `save_fit` should write `grid_max` there is the PI's call. `save_fit` writes a stopping scale shared by two
