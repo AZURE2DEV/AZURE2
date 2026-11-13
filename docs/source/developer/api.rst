@@ -63,7 +63,12 @@ The pybind11 module (``api/src/CMakeLists.txt``, target ``_azure2``) links
      - The table of physics functions (``BuildTable()``), each a row with its
        arguments, units, domain and an adapter to ``physics/``.
    * - ``pybind_stopping.cpp``
-     - The submodule ``_azure2.stopping`` (``pyazr.stopping``).
+     - The submodule ``_azure2.stopping`` (``pyazr.stopping``), with the
+       table of stopping functions (``BuildStoppingTable()``), each row
+       with SRIM's citation.
+   * - ``pybind_rows.h``
+     - The row types the two tables share (``ArgSpec``, ``OutSpec``,
+       ``ArgKind``).
    * - ``pybind_potentials.cpp``, ``pybind_model_data.cpp``, ``pybind_thm.cpp``
      - The hybrid potentials of a session, the model data, the THM tables
        and grammars.

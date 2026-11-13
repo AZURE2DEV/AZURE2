@@ -202,13 +202,27 @@ A physics function of the binding
    engine header and no GSL (check 8) and takes its constants from
    ``Constants.h`` (check 10).
 2. One row in ``BuildTable()`` of ``api/src/pybind_physics.cpp``: name,
-   summary, arguments with unit and domain, returns, and an adapter that only
-   converts and calls the library.
+   summary, its group in the list, arguments with unit and domain, returns,
+   and an adapter that only converts and calls the library. Each argument
+   without a default carries an ``example``, and the argument a plot runs
+   over a ``sweep``; ``tests/pyazr/physics_table_test.py`` fails without
+   them, because the web UI's Physics tab draws every row from these values
+   without typing. The row types (``ArgSpec``, ``OutSpec``, ``ArgKind``) are
+   in ``api/src/pybind_rows.h``.
 3. A ``row_test`` in ``tests/pyazr/physics_table_test.py`` against mpmath, a
    published table or the engine's own use (check 41 fails without one).
 4. ``python3 tools/gen_physics_docs.py`` (the user-guide page;
    ``pyazr_physics_table`` fails until it is run). ``pyazr/physics.py`` builds
    the Python function from the row; nothing is written in Python.
+
+A stopping function is one row of ``BuildStoppingTable()`` in
+``api/src/pybind_stopping.cpp``, of the same row types, with its citation;
+``tests/pyazr/ui/physics_tab_test.py`` plots every row of both tables and
+runs the Python text the page offers for it. Neither kind of row needs
+anything in ``pyazr/ui`` or in the page. A new kind of argument is a value
+of ``ArgKind`` with its name in ``KindName`` (``api/src/pybind_rows.h``) and
+one row of ``ARGUMENT_KINDS`` in ``pyazr/ui/static/physicsform.js``
+(``tests/pyazr/ui/js/physics.test.mjs`` fails until it exists).
 
 A command of ``python -m pyazr``
 --------------------------------
