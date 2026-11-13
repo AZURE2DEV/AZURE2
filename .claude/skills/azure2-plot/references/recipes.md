@@ -1,39 +1,36 @@
 # Figure recipes
 
 Each recipe computes what AZURE2 compares and leaves the styling to the prc-figures skill. All quantities are c.m.
-unless stated. `x` is the free rwa vector of the fit (`m.load_sav("output/param.sav")`). Check every curve against the
-fit column of `AZUREOut_*.out` (SKILL.md, "Rules for every figure").
+unless stated. `x` is the fit vector (`s.parameters.read("output/param.sav")`). Check every curve against the model at
+the data points (SKILL.md, "Rules for every figure").
 
 ## Excitation function with pulls (data mode)
 
-The pull of point i is r_i = (c_i − d_i n)/(e_i n): c the calculation, d and e the c.m. data and uncertainty, n the
-segment's norm. Σ r_i² over the segment is its χ² (without a data covariance; with a `covariance <file>` the χ² uses the
+The pull of point i is r_i = (c_i − d_i n)/(e_i n): c the calculation, d and e the c.m. data and uncertainty, n the data
+set's norm. Σ r_i² over the data set is its χ² (without a data covariance; with a `covariance <file>` the χ² uses the
 full matrix and the diagonal pulls are only indicative).
 
 ```python
-import numpy as np
-from pyazr import Session
-
-with Session("project.azr", cwd=HERE) as m:
-    x     = m.load_sav("output/param.sav")
-    ds    = m.evaluate(x).data            # one entry per data set, in the engine's order (m.active_datasets)
-    i = 3
-    c, ecm, n = ds[i].model, ds[i].energies, ds[i].norm   # model (b or b/sr), E_c.m. (MeV, shifted), norm in use
-    d, e = np.asarray(m.cross[i]), np.asarray(m.cross_err[i])
-    pull = (c - d * n) / (e * n)          # ds[i].residuals is this in the data set's own frame
-    # upper panel: errorbar(ecm, d*n, e*n) and the curve; lower panel: pull against ecm
+import numpy as np, pyazr
+with pyazr.Session("project.azr") as s:
+    x = s.parameters.read("output/param.sav")
+    d = next(d for d in s.evaluate(x).data if d.name == "cap_g0")
+    c, ecm, n = d.model, d.energies, d.norm          # model (b or b/sr), E_c.m. (MeV, shifted), the norm in use
+    y, dy = d.values * n, d.errors * n               # the datum and its error as the engine compares them
+    pull = (c - y) / dy                              # equals d.residuals (plot_fit.py checks it)
 ```
 
 - For a smooth curve between data points, evaluate an extrapolation grid on the same pair and angle (azure2-calculate,
-  Extrapolation) with `<targetInt>` matching the data segment's: folded if the data are folded.
-- Several segments of one data set: concatenate after sorting by energy; label by data set, not by segment.
+  Extrapolation) naming the same target, beam or detector as the data set: folded if the data are folded.
+- Several data sets of one experiment: concatenate after sorting by energy; label by experiment.
 - On an E_x axis use `ds[i].excitation_energies` (includes the entrance pair's E*).
 
 ## Angular distribution
 
 - Data and fit at the measured angles: `ds[i].angles` (θ_c.m., deg) with `ds[i].model` and the data as above,
-  for each segment of a fixed energy. The `.azr` holds lab angles; the arrays are c.m.
-- A smooth curve: a `differential-cm` test segment per angle grid point, or Legendre coefficients from
+  for each data set of a fixed energy. A data file may hold lab angles; the arrays are c.m.
+- A smooth curve: an extrapolation with an angle grid (`angles "range 0 180 deg cm step 2"`), or Legendre
+  coefficients from
   `pyazr.angular_distribution(azr_file, energies, entrance, exit, order, params=x)`, which returns
   `(energies_cm, a_k)` with W(θ) = Σ_k a_k P_k(cos θ); pass all energies in one call (it starts an engine per call).
 - Analyzing power: columns hold A_y (dimensionless, signed); draw it on a linear axis.
@@ -42,13 +39,14 @@ with Session("project.azr", cwd=HERE) as m:
 
 ```python
 from pyazr import extrapolation_bands
-bands = extrapolation_bands("project.azr", keys=[k], quantity="sfactor")   # k: 1-based <segmentsTest> number
+bands = extrapolation_bands("project.azr", keys=[k], quantity="sfactor")   # k: 1-based extrapolation number
 b = bands[k]
 lo, hi = b.interval(1.0)                      # 1σ band (MeV b)
 # curve: b.energy (E_c.m., MeV) against b.value; band: fill_between(b.energy, lo, hi)
 ```
 
-- Data S: `m.sfactor[i]`, `m.sfactor_err[i]` (data mode), multiplied by the segment norm as for σ.
+- Data S: `d.values * d.extra["sfactor_conversion"]` (and its error), times the norm as for σ (`plot_fit.py
+  --sfactor`).
 - The band is linear propagation of `output/covariance.dat` at `param.sav`; its meaning and alternatives
   (profile likelihood, samples): azure2-uncertainty.
 - Decomposition curves (one level, its interference, external capture): build them as cross sections
