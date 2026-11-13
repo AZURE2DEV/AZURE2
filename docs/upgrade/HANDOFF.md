@@ -2,6 +2,35 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-cli`) — the pyazr command line
+
+**Done.** `python -m pyazr COMMAND ... [--json]` (`pyazr/cli.py`, `pyazr/__main__.py`; `pyazr3.md` 2.8 and step 7 of
+section 4). One table, `COMMANDS` (name, arguments with types, the pyazr function called, help line), makes the parser,
+every `--help`, `pyazr commands --json` and the reference page `docs/source/user_guide/pyazr_command_line.rst`.
+Commands: describe [FILE], validate, convert, schema [KIND], kinds [TABLE], stopping, coulomb-table check, ui,
+import exfor, import ensdf, commands; coulomb-table build and fetch are rows that exit 2 with what to do instead.
+`--json`: one document on standard output (`command`, `ok`, `exit`, `result`, `error` with `what`, `allowed`, `fix`),
+the engine's output sent to standard error meanwhile. Exit codes those of the program's project commands (0; 1 a
+failed run; 2 a wrong call or a refused input; 3 an old project). Recipe "A command of the command line" in
+`pyazr/CLAUDE.md`. No C++ changed.
+
+**How.** `tests/pyazr/cli_test.py` (ctest `pyazr_cli`, about 15 s at one thread): one case per row with `--json`, the
+JSON read; describe, validate and schema equal to `AZURE2 --describe/--validate --json` and `--schema` on T2 and on a
+project with errors; ten wrong calls in both modes (exit 2 or 3, the three parts, nothing on standard output without
+`--json`); `--help` of every command names every argument. Consistency check 41: a row without a case, a stale page.
+Each shown failing with an injected error (a case removed, validate's status dropped, a print on standard output in
+`--json` mode, a flag's help suppressed, the page changed). Extensibility drill: a command `predictions` was three
+places (a row and its four-line call in `cli.py`, a case in the test, the regenerated page; a scratch commit, not kept).
+
+**Open.** `coulomb-table build` needs the engine's `CoulombTable::BuildFile` bound (and decision 7's "built on first
+use" is not implemented); `fetch` needs a published copy. `pyazr.describe(path, record=NAME)` with an unknown NAME
+says "the project has errors:" with no error (the program says the record does not exist). The program's
+`--validate`/`--describe` report the stopping of each target, the binding's functions do not. `python -m pyazr`
+needs the compiled engine even for `--help` (`pyazr/__init__.py` imports it). `ui --json` catches the URL line
+`pyazr.ui.server.main` prints, for want of a function that returns it. No `import exfor --to FILE` (no single pyazr
+call writes any EXFOR entry as a data set). The program's `--validate FILE` exits 1 for an unreadable file; the
+command line exits 2 for a missing one (a wrong call, as the brief asks).
+
 ## 2026-11-13 (director, 16:16) — merged: the web UI's Fit tab
 
 **Merged** `feature/upgrade-9-webui-fit` (the entry below). No C++ changed (the diff against the data branch in

@@ -462,9 +462,12 @@ def _table(columns, rows):
 
 
 def _text(value):
-    """The generic printer: a text as it is; a dict as 'key: value' lines; a list of dicts as a table."""
+    """The generic printer: a text as it is; a dict as 'key: value' lines; a list of dicts as a table, of texts or
+    numbers one per line."""
     if isinstance(value, str):
         return value.rstrip("\n")
+    if isinstance(value, list) and all(isinstance(r, (str, int, float)) for r in value):
+        return "\n".join(_cell(r) for r in value)
     if isinstance(value, list) and value and all(isinstance(r, dict) for r in value):
         columns = list(value[0])
         return _table(columns, [[_cell(r.get(c)) if not isinstance(r.get(c), (dict, list))
