@@ -445,7 +445,7 @@ The data file carries ``E_lab  theta_cm  A_y  dA_y``. From Python:
 
    from pyazr import Session
    with Session("13N.azr") as azr:
-       ay = azr.calculate_analyzing_power_rwa(azr.params_rwa)
+       ay = azr.evaluate().data[0].model     # A_y of the first data set
 
 Because :math:`A_y` is reported in place of the cross section, everything
 downstream — :math:`\chi^2`, output files, plotting, fitting, MCMC — works

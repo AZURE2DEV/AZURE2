@@ -13,6 +13,7 @@ source tree only, runs in well under a second.
 Exits 0 when everything agrees, 1 with one line per problem otherwise.
 """
 
+import glob
 import os
 import re
 import stat
@@ -1172,6 +1173,75 @@ try:
 except (OSError, IndexError, KeyError) as e:
     problems.append(f"check 44: {e}")
 
+# 46. The engine's fitters are one table (src/Fitters.cpp, Fitters(); docs/upgrade/fit.md): every row's switch is an
+#     option the program parses (a string literal outside src/Fitters.cpp, in src/AZURE2.cpp or support/) and a row of
+#     docs/source/reference/command_line.rst; every row's name is in the fitter table of
+#     docs/source/user_guide/fitting.rst; every minimizer bit a switch of src/AZURE2.cpp sets (Config::USE_*_MINIMIZER,
+#     Config::USE_ANALYTIC_GRADIENT) is the configBit of a row, so a fitter cannot be selected outside the table.
+_fitter_rows = []
+try:
+    _fitter_rows = re.findall(r'\{"([\w-]+)", "((?:--[\w-]+)?)", (Config::\w+|0u),', read("src/Fitters.cpp"))
+    if not _fitter_rows:
+        problems.append("src/Fitters.cpp: no row found in Fitters() (check 46)")
+    _parser = read("src/AZURE2.cpp")
+    for _f in glob.glob(os.path.join(ROOT, "support", "**", "*.cpp"), recursive=True):
+        _parser += read(os.path.relpath(_f, ROOT))
+    _cli_page = read("docs/source/reference/command_line.rst")
+    _fit_page = read("docs/source/user_guide/fitting.rst")
+    _fit_table = _fit_page.split("The Engine's Fitters", 1)[1] if "The Engine's Fitters" in _fit_page else ""
+    if not _fit_table:
+        problems.append("docs/source/user_guide/fitting.rst: no section \"The Engine's Fitters\" (check 46)")
+    for _name, _option, _bit in _fitter_rows:
+        if _option and f'"{_option}"' not in _parser:
+            problems.append(f"src/Fitters.cpp: the switch {_option} of the fitter '{_name}' is not parsed by the "
+                            "program (src/AZURE2.cpp, support/) (check 46)")
+        if _option and f"``{_option}``" not in _cli_page:
+            problems.append(f"docs/source/reference/command_line.rst: the switch {_option} of the fitter '{_name}' is "
+                            "not listed (check 46)")
+        if _fit_table and f"``{_name}``" not in _fit_table:
+            problems.append(f"docs/source/user_guide/fitting.rst: the fitter '{_name}' is not in the table of "
+                            "\"The Engine's Fitters\" (check 46)")
+    _row_bits = {_bit for _n, _o, _bit in _fitter_rows}
+    for _bit in sorted(set(re.findall(r"Config::(USE_\w+_MINIMIZER|USE_ANALYTIC_GRADIENT)", read("src/AZURE2.cpp")))):
+        if "Config::" + _bit not in _row_bits:
+            problems.append(f"src/AZURE2.cpp: the switch bit Config::{_bit} selects a fitter that is no row of "
+                            "Fitters() in src/Fitters.cpp (check 46)")
+except (OSError, IndexError) as e:
+    problems.append(f"check 46: {e}")
+
+# 48. The wheel carries every file pyazr reads at run time (docs/upgrade/pyazr3.md section 2.9; pyazr/datafiles.py): every
+#     tracked file under pyazr/ that is not Python is a data file the wheel carries (DATA_FILES) or a file it leaves
+#     out (NOT_SHIPPED, with the reason), never both; every DATA_FILES entry exists; the patterns of NOT_SHIPPED are
+#     the wheel.exclude list of pyproject.toml, in the same order.  tests/pyazr/wheel_test.py compares a built wheel
+#     with the list these make.
+_wheel_data = 0
+try:
+    _spec = importlib.util.spec_from_file_location("pyazr_datafiles", os.path.join(ROOT, "pyazr", "datafiles.py"))
+    _datafiles = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_datafiles)
+    for _rel in tracked_files():
+        if not _rel.startswith("pyazr/") or _rel.endswith(".py"):
+            continue
+        _rel = _rel[len("pyazr/"):]
+        _in, _out = _datafiles.shipped(_rel), _datafiles.excluded(_rel)
+        if _in and _out:
+            problems.append(f"pyazr/{_rel}: both in DATA_FILES and in NOT_SHIPPED of pyazr/datafiles.py (check 48)")
+        elif not (_in or _out):
+            problems.append(f"pyazr/{_rel}: not Python, and neither a data file of the wheel (DATA_FILES) nor left "
+                            "out with a reason (NOT_SHIPPED) in pyazr/datafiles.py (check 48)")
+        _wheel_data += _in
+    for _name, _ in _datafiles.DATA_FILES:
+        _full = _datafiles.path(_name)
+        if not (os.path.isfile(_full) or (_name.endswith("/") and os.path.isdir(_full) and os.listdir(_full))):
+            problems.append(f"pyazr/datafiles.py: DATA_FILES names pyazr/{_name}, which does not exist (check 48)")
+    _exclude = re.search(r"^wheel\.exclude\s*=\s*\[([^\]]*)\]", read("pyproject.toml"), re.M)
+    _patterns = re.findall(r'"([^"]*)"', _exclude.group(1)) if _exclude else None
+    if _patterns != [_p for _p, _ in _datafiles.NOT_SHIPPED]:
+        problems.append("pyproject.toml: wheel.exclude is not the patterns of NOT_SHIPPED in pyazr/datafiles.py "
+                        f"({_patterns} against {[_p for _p, _ in _datafiles.NOT_SHIPPED]}) (check 48)")
+except (OSError, AttributeError, ImportError) as e:
+    problems.append(f"check 48: {e}")
+
 if problems:
     for p in problems:
         print("FAIL", p)
@@ -1182,4 +1252,5 @@ print(f"repository consistent: {len(flags)} CLI flags, test registration, check.
       f"no machine paths, no old data class names, no old section in the engine, reference leaves by one predicate, "
       f"the sharing key's term settings, {len(_allowed)} allowed state rows, one reader of the environment "
       f"({_getenv_files} files), {len(_table)} environment switches in the manual, {len(_names)} switch options, "
-      f"{len(_rows)} physics rows tested, {len(_cli.COMMANDS)} pyazr commands, {len(_scheme_rows)} boxes of the class scheme")
+      f"{len(_rows)} physics rows tested, {len(_cli.COMMANDS)} pyazr commands, {len(_scheme_rows)} boxes of the class scheme, "
+      f"{len(_fitter_rows)} fitters, {_wheel_data} data files of the wheel")

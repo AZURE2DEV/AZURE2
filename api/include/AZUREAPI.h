@@ -8,6 +8,9 @@
 #include "Objective.h"
 #include "ParameterLimitsManager.h"
 #include "PosteriorSupport.h"
+#include "FitControl.h"
+#include <atomic>
+#include <string>
 #include <memory>
 #include <map>
 #include <vector>
@@ -344,9 +347,11 @@ class AZUREAPI {
    * gamma_decay priors and wall, the abundance sums), one row (p - c)/sigma per diagonal prior (ForEachDiagonalPrior)
    * and one per nuisance prior.  With \p jacobianOut, their Jacobian over the free parameters, row-major; without,
    * the rows from a forward pass only.  False (nothing written) where the analytic Jacobian is not available
-   * (CalculateResidualJacobianRWA's [-1]).
+   * (CalculateResidualJacobianRWA's [-1]).  \p skipColumns is handed to CalculateResidualJacobianRWA as it is (free
+   * columns whose finite differences are not computed and come back zero).
    */
-  bool ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r *jacobianOut) const;
+  bool ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r *jacobianOut,
+                        const std::vector<int> &skipColumns = {}) const;
   /// Whether a free value lies outside the fit's limits of its parameter, of any kind (PosteriorSupport, the
   /// ensemble sampler's rule: -infinity there, docs/upgrade/objective.md section 6).
   bool OutsideSamplerSupport(const vector_r &params) const;
@@ -452,6 +457,32 @@ class AZUREAPI {
    * are cached.  Exposing them makes both facts checkable from a script.
    */
   vector_r GetECIntegrals(const vector_r &request) const;
+
+  /// What FitWithEngine is asked: a row of the fitter table (Fitters.h) and its controls.
+  struct EngineFitRequest {
+    std::string method;            ///< a row's name (Fitters())
+    bool minos = false;            ///< MINOS after the fit (rows with minos)
+    vector_r x0;                   ///< the free start vector (fit basis); empty: the session's values
+    unsigned int maxCalls = 0;     ///< MIGRAD's and NLopt's call limit; 0: none
+    FitProgressSink progress;      ///< every progress record (thread-safe); may be empty
+    const std::atomic<bool> *stop = nullptr;  ///< the caller's stop request
+  };
+  /// What it gives: the fitter's record, and the objective at the end point from one evaluation (the program's
+  /// "Total Chi-Squared"), the fitter's lines as text.
+  struct EngineFit {
+    FitResult result;
+    double objective = 0.0;
+    std::string log;
+  };
+  /*!
+   * The program's fit on this session's objective (docs/upgrade/fit.md; AZUREAPIFit.cpp): the parameter vector as
+   * the program makes it, at the session's values (x0 for the free ones), with <parameterSettings> applied as the
+   * program applies it; the row's function; HESSE after a MIGRAD row; MINOS when asked; one evaluation at the end
+   * point (the session's buffer then holds its model values).  Writes no file.  The session's parameter values are
+   * not changed; a MIGRAD row on a relvector data covariance re-freezes its model at the fitted point, as the program
+   * does.  Throws std::invalid_argument for an unknown method, MINOS on a row without it, or a wrong x0.
+   */
+  EngineFit FitWithEngine(const EngineFitRequest &request);
 
   /*!
    * Coulomb-function cache counters, aggregated over threads.

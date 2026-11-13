@@ -113,6 +113,13 @@ a ``ParamIndexMap`` and accumulates into a ``GradAccum``. ``AZURECalcMCMC``
 is the sampler's log-probability on pools of its own; it drives ``nu::Mcmc``,
 whose ``nu::Ensemble`` owns the walkers.
 
+A fitter is a ``FitterRow`` of ``Fitters()``: its function takes the
+objective, the ``AZUREParams`` (start in, end point out) and a ``FitControl``
+(call limit, progress sink, checkpoint, stop request, log) and makes a
+``FitResult``. While it runs, ``FitEvaluations`` is the objective's
+``EvaluationObserver``: it owns the observer, counts the evaluations, keeps the
+best point and hands a ``FitProgress`` per evaluation to the sink.
+
 Front ends
 ----------
 
@@ -124,7 +131,11 @@ Front ends
 
 The program's ``AZUREMain`` and the binding's ``AZUREAPI`` own the same pair of
 engine objects, ``CNuc`` and ``WorkingCopy``, and set them up with the same
-calls. ``_azure2.Session`` (``api/src/pybind_api.cpp``) owns a ``Config`` and
+calls. The program's run is a ``ProgramRun`` handed from stage to stage; it
+owns the objective (``AZURECalc``), whose progress lines and intermediate
+files ``ProgramProgress`` writes; ``AZUREAPI::FitWithEngine`` makes an
+``AZURECalc`` of its own for a session's fit. ``_azure2.Session``
+(``api/src/pybind_api.cpp``) owns a ``Config`` and
 an ``AZUREAPI``; ``pyazr.Session`` owns one of them and makes the
 ``pyazr.Objective`` (which keeps the session) and the ``pyazr.Evaluation``
 (copies, no session). ``pyazr.Project`` owns

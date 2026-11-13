@@ -7,7 +7,7 @@ AZURE2 expresses an angular distribution as
 and computes the a_k only for segments declared as angular distributions in the
 .azr file. Two ways to get at them:
 
-  * ``Session.calculate_angular_dists`` -- for the grids a model already
+  * ``Session.evaluate(x).data[i].extra["legendre"]`` -- for the grids a model already
     declares. No temporary files, works on a live instance.
 
   * ``pyazr.angular_distribution`` -- for arbitrary energies. It writes a
@@ -59,8 +59,8 @@ def main():
     # segments of its own before you go making new ones.
     with Session(args.azr) as m:
         x = np.asarray(m.params_rwa, float)
-        declared = m.calculate_angular_dists_rwa(x)
-    with_coeffs = sum(1 for seg in declared for row in seg if row.size)
+        declared = m.evaluate(x).data
+    with_coeffs = sum(1 for d in declared for row in d.extra.get("legendre", []) if row.size)
     print(f"{args.azr}: {len(declared)} data segments, "
           f"{with_coeffs} points carrying angular-distribution coefficients")
     if with_coeffs == 0:

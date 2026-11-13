@@ -1225,7 +1225,14 @@ None of these changes the decided objects; each is a call or a field to add:
    computes external-capture integrals (13–15 s), the Coulomb table build. A stop request from another thread ending
    cleanly with the best point (today `Config::stopFlag` makes the objective return 0; not bound), and progress as a
    polled record or callback (the call counter `CountCallsInto` exists, unbound). The build should release the GIL.
+   *Delivered for the fit* (`fit.md`): `Session.fit_with_engine(method, minos, x0, max_calls, progress, stop)` runs
+   without the GIL; `stop` is a `pyazr.session_fit.StopRequest` (or a `threading.Event`) set from any thread, and the
+   fit ends at the best point seen with status `stopped`, the session usable; `progress` is a callback per record.
+   MINOS (inside the call) obeys the same request. Not delivered: progress and stop of the band, of a session build
+   and of the Coulomb table build.
 3. **A record of the engine's progress lines** (`Iteration: N Chi-Squared: X`) as data, not text on standard output.
+   *Delivered*: `FitProgress` (fitter, kind evaluation or iteration, evaluation number, iteration, calls, objective,
+   best, the fitter's measure, x); the program prints its lines from the same records.
 4. **The engine's notes as a per-session log**, not standard output (2.5): `pyazr3.md` 2.5 turns notices into
    `EngineWarning`; the many informational notes (covariance read, groups, THM kinematics, mesh re-planning) need a
    log the session hands to its caller. *Partly delivered (pyazr's errors and self-description)*: the notices a
@@ -1281,6 +1288,13 @@ Found while building the Fit tab:
     `prior_nominal` and `prior_sigma` only in their records).
 20. **Progress, stop and the result's covariance of the engine's fitters** (finding 2 again): the Fit tab's rows for
     the engine's MIGRAD, LM and MINOS wait for `fit_with_engine`; the sampler and bands for `Objective`.
+    *Delivered in pyazr* (`fit.md`): the rows are `pyazr.kinds()["fitters"]`; the result has `x`, `objective`,
+    `status`, `converged`, `edm`, `calls`, `covariance`, `errors`, `minos`. What the server should call (not done
+    here, `pyazr/ui/` is not touched): a job `fit_engine` in `pyazr/ui/jobs.py` that runs
+    `session.fit_with_engine(method, minos=..., x0=x, progress=<post the record to the job's progress>,
+    stop=<the job's threading.Event>)` in the worker, offers the methods of `kinds()["fitters"]` (with `minos`
+    only where the row allows it), and on success hands `r.x` to the history as a new revision and `r.covariance`
+    to the bands; `AZURE2_NOT_SERVED` loses `fit_with_engine` then.
 
 Found while building the Results tab (step 3):
 

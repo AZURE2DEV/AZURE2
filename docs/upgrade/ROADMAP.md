@@ -280,6 +280,9 @@ Design: `pyazr3.md` (the measured state of pyazr, the objects of 3.0, the order 
         `azure2.evaluate(x)`; the objective's rows, `log_prob` with the engine sampler's rule, the table of point
         outputs (`api/src/pybind_evaluation.cpp`).
 - [ ] Wheels via scikit-build-core + cibuildwheel (Linux, macOS, Windows) with the core and the `azure2` CLI.
+      Built: `pyproject.toml` (scikit-build-core), the install rules, `pyazr coulomb-table fetch|build|where`,
+      `.github/workflows/wheels.yml` (Linux, macOS; publishes nothing), tests `pyazr_wheel`, `pyazr_coulomb_table`,
+      check 48 (`pyazr3.md` 2.9). Open: the workflow's first run, Windows, the published Coulomb table.
 - [x] Tested recipes for iminuit, scipy, emcee (`pyazr/examples/fit_*.py`, `tests/pyazr/fit_recipes_test.py`; no
       `azure2()` shim: struck by the PI, `pyazr3.md` section 5, 9).
 - [x] The command line `python -m pyazr` (`pyazr/cli.py`: one table of commands with `--json`; `pyazr3.md` 2.8;
@@ -299,6 +302,10 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
 - [x] The Fit tab, first part: the parameter table, the job form from the job table (settings with types),
       recipe fits and iminuit's MINOS as jobs with progress, Stop, Kill, Accept and Undo (2026-11-13). The engine's
       fitters, the sampler and bands wait for pyazr (`fit_with_engine`, `Objective`).
+- [x] The engine's fit as a function (`fit.md`, 2026-11-13): a table of fitters, one function each with `FitControl`
+      and `FitResult`, HESSE and MINOS on a `FitResult`, progress as records, a stop request owned by the caller;
+      the program's run as named stages; `Session.fit_with_engine` through the same functions, without the GIL.
+      The Fit tab's job for it is still to write (`web_ui.md` section 12, finding 20).
 - [x] The Results tab: the Results payload against the program's output files, plots with residuals, χ² table,
       model data, angular distributions, output files (2026-11-13). Dense model grid, lab energy, Legendre orders,
       rate and bands wait for pyazr (`web_ui.md` section 12).

@@ -4,7 +4,9 @@ ALevel.cpp PathwayTable.cpp CNucPathways.cpp CaptureAyRequests.cpp AngCoeff.cpp
 AMatrixFunc.cpp  DoubleFactorial.cpp EigenFunc.cpp  NFIntegral.cpp
 ECIntegral.cpp ECTable.cpp ECAmplitudeCache.cpp MatrixInv.cpp LevelMatrixSolver.cpp Profile.cpp ChannelSpace.cpp
 PPair.cpp AZURECalc.cpp Objective.cpp
-ReactionRate.cpp AZUREMain.cpp WorkingCopy.cpp DataCovariance.cpp ShftFunc.cpp ScatteringLength.cpp ModelData.cpp CNucObserved.cpp GammaDecayMap.cpp
+ReactionRate.cpp AZUREMain.cpp RunSetUp.cpp ProgramFit.cpp RunOutputs.cpp
+Fitters.cpp FitEvaluations.cpp FitMigrad.cpp FitLeastSquares.cpp FitGslTrustRegion.cpp FitNLopt.cpp FitErrors.cpp
+WorkingCopy.cpp DataCovariance.cpp ShftFunc.cpp ScatteringLength.cpp ModelData.cpp CNucObserved.cpp GammaDecayMap.cpp
 RMatrixFunc.cpp AZUREOutput.cpp    TargetEffect.cpp
 AZUREParams.cpp PosteriorSupport.cpp Unit.cpp SiteObservables.cpp CNuc.cpp Equation.cpp
 JGroup.cpp Config.cpp ProjectOptions.cpp Segment.cpp ModelPass.cpp CoulombReference.cpp ReferenceTableLeaf.cpp Predictions.cpp CalculationPlan.cpp EnergyPass.cpp IntegratedFermiFunc.cpp
@@ -188,4 +190,9 @@ if(CROSS_COMPILE_WINDOWS)
         COMMENT "Windows executable with DLLs built")
 endif()
 
-install(TARGETS AZURE2 DESTINATION ${CMAKE_INSTALL_DIR})
+# A wheel build (scikit-build-core) puts the program into the wheel's scripts, so that pip installs it on the PATH.
+if(SKBUILD)
+    install(TARGETS AZURE2 RUNTIME DESTINATION ${SKBUILD_SCRIPTS_DIR} COMPONENT python)
+else()
+    install(TARGETS AZURE2 DESTINATION ${CMAKE_INSTALL_DIR})
+endif()

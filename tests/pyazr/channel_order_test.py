@@ -149,7 +149,7 @@ with tempfile.TemporaryDirectory() as tmp:
             try:
                 with Session(path, cwd=work, use_brune=brune) as m:
                     x = np.asarray(m.params_rwa, float)
-                    results[(name, brune)] = float(np.sum(m.calculate_chi2_rwa(x)))
+                    results[(name, brune)] = m.evaluate(x).chi2
             except Exception as err:
                 results[(name, brune)] = f"{type(err).__name__}: {err}"
 
@@ -182,7 +182,7 @@ with tempfile.TemporaryDirectory() as tmp:
         back_model.set_config(output_dir=fresh + "/")
         back_model.save(snap)
         with Session(snap, cwd=work) as back:
-            c = float(np.sum(back.calculate_chi2_rwa(np.asarray(back.params_rwa, float))))
+            c = back.evaluate(np.asarray(back.params_rwa, float)).chi2
         a = results[("as written", True)]
         check("save_fit of the short model reads back",
               isinstance(a, float) and abs(c - a) <= 1e-6 * max(abs(a), 1.0), f"{c} vs {a}")

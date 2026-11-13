@@ -9,12 +9,12 @@ tests/18O_p_a_thm with a made-up charged spectator, 18O(3He,a15N)d at 115 MeV:
 
   1. Project: an experiment with lineshape=on round trip; lineshape without
      kinematics and a bad value are refused like AZURE2 refuses them.
-  2. The engine against the CLI: calculate_chi2_rwa (rel 1e-9) and the output
+  2. The engine against the CLI: evaluate().chi2 (rel 1e-9) and the output
      files written by write_output_files (thm_experiments.out included).
   3. thm_lineshape: E_sF, eta_0, zeta and the eta_sb estimate against the
      formulas evaluated here (1e-12), the level widths against parameters.out,
      NC2 against exp[2 zeta arctan(2 (E_l - E)/G_l)].
-  4. One level without folding: calculate_rwa(on) / calculate_rwa(off) equals
+  4. One level without folding: evaluate().data[i].model(on) / evaluate().data[i].model(off) equals
      the NC2 thm_lineshape reports at the data energies (1e-9); lineshape=off
      residuals are bit for bit those without the key; a formal (non-Brune)
      session and an unknown or line-shape-less experiment are refused.
@@ -192,8 +192,8 @@ with tempfile.TemporaryDirectory() as tmp:
     print("2. the engine against the CLI")
     with Session(os.path.join(py_dir, "run.azr"), cwd=py_dir) as s:
         x = np.asarray(s.params_rwa, float)
-        chi2 = float(np.sum(s.calculate_chi2_rwa(x)))
-        check(f"calculate_chi2_rwa == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
+        chi2 = s.evaluate(x).chi2
+        check(f"evaluate().chi2 == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
               f"{chi2} vs {cli_chi2}")
         s.write_output_files(x)
 
@@ -239,14 +239,14 @@ with tempfile.TemporaryDirectory() as tmp:
         check(f"write_output_files: {name} identical to the CLI's", from_py.get(name) == from_cli[name])
     check("thm_experiments.out has the zeta row", "zeta[2]" in from_cli["thm_experiments.out"])
 
-    print("4. one level: calculate_rwa(on)/calculate_rwa(off) = |N_C|^2")
+    print("4. one level: evaluate().data[i].model(on)/evaluate().data[i].model(off) = |N_C|^2")
     on_dir = project("on1", on, one_level=True)
     off_dir = project("off1", KINKEYS, one_level=True)
     offk_dir = project("offk1", dict(KINKEYS, lineshape=False), one_level=True)
     with Session(os.path.join(off_dir, "run.azr"), cwd=off_dir) as s:
         x = np.asarray(s.params_rwa, float)
-        m_off = np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)])
-        r_off = s.residuals(x)
+        m_off = np.concatenate([np.asarray(v) for v in [d.model for d in s.evaluate(x).data]])
+        r_off = s.objective().residuals(x)
         try:
             s.thm_lineshape("A", [0.6], x)
             check("an experiment without the line shape raises", False)
@@ -254,9 +254,9 @@ with tempfile.TemporaryDirectory() as tmp:
             check(f"an experiment without the line shape raises ({err})", "no line shape" in str(err))
     with Session(os.path.join(offk_dir, "run.azr"), cwd=offk_dir) as s:
         check("lineshape=off: residuals bit for bit those without the key",
-              np.array_equal(s.residuals(x), r_off))
+              np.array_equal(s.objective().residuals(x), r_off))
     with Session(os.path.join(on_dir, "run.azr"), cwd=on_dir) as s:
-        m_on = np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)])
+        m_on = np.concatenate([np.asarray(v) for v in [d.model for d in s.evaluate(x).data]])
         ecm = np.concatenate([np.asarray(v) for v in s.energies])
         r = s.thm_lineshape("A", ecm, x)
         nc2 = r["exits"][0]["levels"][0]["NC2"]

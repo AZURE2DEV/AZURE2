@@ -85,6 +85,9 @@ The following options can be passed to CMake as ``-D<OPTION>=ON|OFF``:
    * - ``USE_READLINE``
      - ON
      - Readline for console input.
+   * - ``BUILD_TESTING``
+     - ON
+     - Add the test directories under ``tests/`` (off in a wheel build).
    * - ``USE_STAT``
      - ON
      - Use ``stat()`` for directory checks (off on Windows).
@@ -112,15 +115,68 @@ with ``-DCMAKE_PREFIX_PATH=/path/to/prefix``.
 The Python package
 ------------------
 
-``pyazr`` needs Python 3.8 or later with NumPy, SciPy and mpmath:
+``pyazr`` needs Python 3.10 or later and NumPy 1.24 or later (SciPy and mpmath
+are installed with it). One command builds and installs it with its engine
+from a checkout:
 
 .. code-block:: bash
 
-   pip install -e .          # from the repository root
-   pip install -e ".[all]"   # plus what the examples use (matplotlib, emcee, zeus)
+   pip install .             # from the repository root: compiles the engine (a few minutes)
+   pip install ".[all]"      # plus what the examples use (matplotlib, emcee, zeus)
+   pip install ".[web]"      # plus the web page's server (fastapi, uvicorn)
 
-``import pyazr`` from the repository root loads the ``_azure2`` module that
-CMake built into ``pyazr/``. See :doc:`../user_guide/pyazr`.
+``pyproject.toml`` builds with scikit-build-core, which runs CMake with the
+option set of a wheel (``BUILD_TESTING`` and ``USE_READLINE`` off) and
+builds two targets. The compilers, CMake 3.16 or later, ``pkg-config`` and
+GSL listed above must be installed; pip fetches
+scikit-build-core and pybind11 itself. ``pip wheel . -w dist`` writes the
+wheel instead of installing it. The wheel holds:
+
+- the package ``pyazr`` with its engine module ``_azure2`` (the engine, Minuit2
+  and the SRIM-2013 data compiled in);
+- its data files: the AME2020 mass table and the web page's files (with the
+  vendored plotly);
+- two commands on the ``PATH``: ``pyazr`` (:doc:`../user_guide/pyazr_command_line`;
+  the same as ``python -m pyazr``) and the program ``AZURE2``, built without
+  readline (its menus read plain lines);
+- the licence files: AZURE2's (GPL-3.0), the notice of the SRIM-2013 data
+  files, plotly's.
+
+GSL and the OpenMP runtime stay shared libraries of the machine (a wheel built
+for distribution has them copied in by ``auditwheel`` or ``delocate``). The
+examples of ``pyazr/examples/`` are not installed: they read the repository's
+test projects.
+
+**SRIM.** The stopping powers of ``pyazr.stopping`` and of the engine's
+target effects are SRIM-2013's (J. F. Ziegler, M. D. Ziegler and J. P.
+Biersack, Nucl. Instrum. Methods Phys. Res. B 268 (2010) 1818), whose data
+files are compiled into the module under their authors' terms, not AZURE2's
+licence. A result that uses them cites SRIM; ``pyazr.describe()["stopping"]``
+and ``pyazr stopping`` print the citation.
+
+**The Coulomb table** is not in the wheel (88 MB). Get it once:
+
+.. code-block:: bash
+
+   pyazr coulomb-table where     # where the engine looks, and whether a file is there
+   pyazr coulomb-table fetch     # download the published table, checked by its SHA-256
+   pyazr coulomb-table build     # or build it here, offline (about 5 minutes on 4 threads)
+
+Both write the file the engine reads by default (``$AZURE2_COULOMB_TABLE``,
+else ``~/.azure2/coulomb_table.bin``), so every later session and run of the
+program uses it with nothing set. ``fetch`` refuses and removes a file whose
+SHA-256 is not the published one; until a table is published it says so and
+names ``build``. Without a table the engine computes the Coulomb functions
+with its exact routines (the same results, about four times slower).
+In Python: ``pyazr.coulomb_table`` (``where``, ``fetch``, ``build``).
+
+**Developers** keep the in-tree build of the previous section: ``cmake --build
+build`` writes ``_azure2`` into ``pyazr/`` (or into ``PYAZR_OUTPUT_DIR``, found
+through ``PYAZR_ENGINE_DIR``), and ``import pyazr`` from the repository's root
+loads it; every test uses this module. ``pip install .`` refuses to start
+while such a module lies in ``pyazr/`` (the wheel would carry it): remove it,
+or let the in-tree build write elsewhere with ``-DPYAZR_OUTPUT_DIR``. See
+:doc:`../user_guide/pyazr`.
 
 Tests
 -----

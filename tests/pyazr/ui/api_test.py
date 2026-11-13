@@ -3,7 +3,7 @@
 
   1. evaluate equals a direct session of the same text bit for bit (objective, data chi2, every data set's model);
      the chi-squared per data set equals the command-line program's chiSquared.out on T1 and T2 (T2's s02/s03 are
-     joined by a data covariance: the program's split, not segment_chi2's);
+     joined by a data covariance: the program's split, not evaluate().data[i].chi2's);
   2. an edit is validated by the engine before it enters the history: a refused edit returns the diagnostics and
      leaves the text and the revision as they were; undo and redo restore the text byte for byte and the objective
      exactly;
@@ -62,9 +62,9 @@ def test_evaluate_equals_direct_session(t1):
     e = t1.post("/api/evaluate").json()
     s = direct_session(t1)
     x = np.array(s.params_rwa)
-    assert e["objective"] == s.objective(x)
-    assert e["chi2"] == float(s.sess.calculate_chi2_rwa(x))
-    models = s.calculate_rwa(x)
+    assert e["objective"] == s.objective()(x)
+    assert e["chi2"] == float(s._engine.calculate_chi2_rwa(x))
+    models = [d.model for d in s.evaluate(x).data]
     data = t1.get("/api/evaluation").json()["datasets"]
     assert [d["name"] for d in data] == [d.name for d in s.active_datasets]
     for d, m in zip(data, models):
@@ -352,7 +352,7 @@ def test_session_options_are_config_keys(t1):
     e = t1.post("/api/evaluate").json()
     import pyazr
     with pyazr.Session(t1.path, use_brune=False) as s:
-        assert e["objective"] == s.objective()
+        assert e["objective"] == s.objective()(s.params_rwa)
     r1 = rev(t1)
     r = t1.patch("/api/project/config", json={"entries": {"use_park": "1"}, "rev": r1})
     assert r.status_code == 422 and "E_CONFIG_OPTIONS_CONTRADICT" in r.text, r.text
@@ -400,7 +400,7 @@ def test_x_moves_without_rebuild_and_apply_writes_it(t1):
     s = direct_session(t1)
     names = [p.name for p in s.parameters if p.free_index is not None and not p.fixed]
     xs = np.array([r.json()["x"][n] for n in names])
-    assert e["objective"] == s.objective(xs)
+    assert e["objective"] == s.objective()(xs)
     s.close()
     r0 = rev(t1)
     r = t1.post("/api/project/apply", json={"rev": r0})

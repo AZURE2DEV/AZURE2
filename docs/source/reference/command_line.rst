@@ -206,7 +206,9 @@ Available Options
        exact routines outside it (the default).  ``FILE`` defaults to
        ``$AZURE2_COULOMB_TABLE``, else ``~/.azure2/coulomb_table.bin``; build
        it once with ``--build-coulomb-table`` (about 5 min on four
-       threads, 88 MB).  Without a table file the run says so once and uses
+       threads, 88 MB), or with pyazr's ``pyazr coulomb-table build``, or
+       download the published copy with ``pyazr coulomb-table fetch``
+       (:doc:`../getting_started/installation`).  Without a table file the run says so once and uses
        the exact routines.  The natural-neon example runs about four times faster.
        Pairs with a nuclear potential and neutral pairs are not tabulated
        (see :doc:`../developer/coulomb_table`).
@@ -391,8 +393,9 @@ Available Options
      - Fit with the GSL trust-region least-squares minimizer with geodesic
        acceleration (analytic Jacobian); falls back to MIGRAD.
    * - ``--use-nlopt``
-     - Fit with NLopt's BOBYQA instead of Minuit2.  Only in builds configured
-       with ``-DUSE_NLOPT=ON``.
+     - Fit with NLopt's Subplex (SBPLX) instead of Minuit2.  Only in builds
+       configured with ``-DUSE_NLOPT=ON``.  The fitters and their switches:
+       :doc:`../user_guide/fitting`, "The Engine's Fitters".
    * - ``--covariance-band``
      - Write the cross-section uncertainty band from the parameter covariance.
        Without the flag, calculate and fit runs ask for it interactively; with
@@ -523,7 +526,7 @@ parameter space the minimizer works in:
   ensemble is outside: :doc:`../user_guide/mcmc`), and a run that ends there
   prints a warning naming the level;
 * analytic derivatives (``--use-lm``, the analytic-gradient minimizer, the
-  covariance band, pyazr's ``chi2_and_grad`` / ``residual_jacobian``) are
+  covariance band, the gradient and Jacobian of pyazr's ``Session.objective()``) are
   available in both modes;
 * the Wigner-limit bounds act on the Park amplitudes, i.e. on the observed
   :math:`\theta^2`.

@@ -66,9 +66,9 @@ data sets without corrupting the parameter files. Behaviour reference: `docs/sou
 
 - **The objective is χ² + penalties.** Per segment with `normErr` > 0 (a percentage):
   ((n − n₀)/(n₀ · normErr/100))², measured from the `.azr` nominal n₀. Per free energy shift: (ΔE/σ_ΔE)², measured
-  from zero (also for `sqrtshift` b and each `shiftfn` term). In pyazr this is `m.objective(x)`; it equals
+  from zero (also for `sqrtshift` b and each `shiftfn` term). In pyazr this is `m.objective()(x)`; it equals
   `Total-Chi-Squared` + `Total-Norm-Chi-Squared` of `chiSquared.out`. Minimizing the bare data χ²
-  (`calculate_chi2_rwa`) lets the normalizations absorb every discrepancy.
+  (`m.evaluate(x).chi2`) lets the normalizations absorb every discrepancy.
 - **Normalizations.** Leave a set's norm free with its quoted systematic error as the penalty width. A large,
   angle-dependent normalization is a symptom, not a result (`azure2-check`). With a free, unpenalized norm a fit can
   effectively drop a data set while it still adds leverage: anchor norms that carry an absolute scale.
@@ -113,10 +113,9 @@ ignored).
 printf '2\nn\nparam.sav\n\n7\n' | "$AZURE2_BINARY" --no-gui --no-readline --use-brune --use-gradient model.azr
 ```
 
-**pyazr (your minimizer).** pyazr gives `m.objective`, `m.chi2_and_grad`, and `m.residual_jacobian` (the whole
-Jacobian for about two forward evaluations). A hand-written fit must minimize `m.objective`, carry the penalties as
-residual rows for least squares, respect the Wigner limits as bounds if they matter, drop zero Jacobian columns, and
-catch exceptions from `residual_jacobian` (`references/pyazr-fitting.md`).
+**pyazr (your minimizer).** pyazr gives `f = m.objective()`: `f(x)`, `f.value_and_grad`, and `f.residuals_and_jacobian` (the whole
+Jacobian for about two forward evaluations; the rows carry the priors). A hand-written fit must minimize `f`, respect the Wigner limits as bounds if they matter, drop zero Jacobian columns, and
+catch exceptions from `f.jacobian` (`references/pyazr-fitting.md`).
 
 **Convergence.** Read `output/fitStatus.out` (`status converged|call_limit|invalid`, EDM, calls) or the final
 `MIGRAD converged` / `WARNING: MIGRAD did NOT converge` line. `chiSquared.out` and `param.sav` are written either way.

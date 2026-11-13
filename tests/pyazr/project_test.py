@@ -337,7 +337,7 @@ def sections(tmp):
     p["s01_int_thin"].set(norm="1.05 fixed")
     os.makedirs(os.path.join(t2, "output"), exist_ok=True)
     with p.session() as m:
-        chi2 = float(sum(m.segment_chi2()))
+        chi2 = m.evaluate().chi2
     check("session(): the unsaved edit is saved first", not p.unsaved)
     out, _ = run_cli(t2, "T2.azr")
     cli = float(re.findall(r"Total-Chi-Squared:\s*(\S+)", open(os.path.join(out, "chiSquared.out")).read())[-1])

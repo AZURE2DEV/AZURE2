@@ -178,12 +178,12 @@ try:
     print("(f) save_fit on the format-3 project")
     with pyazr.Session(model, cwd=os.path.dirname(model)) as a:
         x = np.asarray(a.params_rwa, float) * 1.001
-        chi = a.calculate_chi2_rwa(x)[0]
+        chi = a.evaluate(x).chi2
         fixed_levels = {(prm.jgroup, prm.level) for prm in a.parameters if prm.kind == "energy" and prm.fixed}
         snap, _ = a.save_fit(os.path.join(work, "13N", "snap.azr"), x=x, param_sav=False)
     s = Project.open(snap)
     with pyazr.Session(snap, cwd=os.path.dirname(snap)) as b:
-        chi_back = b.calculate_chi2_rwa(b.params_rwa)[0]
+        chi_back = b.evaluate(b.params_rwa).chi2
     check("(f) the saved file gives the fit's chi2", abs(chi_back - chi) <= 1e-6 * abs(chi), (chi, chi_back))
     check("(f) a fixed level stays fixed", all(lv.fixed for lv in s.levels() if (lv.group, lv.level) in fixed_levels)
           and len(fixed_levels) > 0)

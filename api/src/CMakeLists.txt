@@ -1,6 +1,6 @@
 include_directories(../include ${AZURE2_SOURCE_DIR}/include)
 
-set (AZUREAPI_SOURCES AZUREAPI.cpp AZUREAPIChannelFunctions.cpp AZUREAPIModelData.cpp AZUREAPIObjective.cpp)
+set (AZUREAPI_SOURCES AZUREAPI.cpp AZUREAPIChannelFunctions.cpp AZUREAPIFit.cpp AZUREAPIModelData.cpp AZUREAPIObjective.cpp)
 
 set (AZUREAPI_HEADERS ../include/AZUREAPI.h)
 
@@ -32,7 +32,7 @@ if(NOT pybind11_FOUND)
                     "so `pyazr` can drive AZURE2 in-process.")
 else()
     pybind11_add_module(_azure2 pybind_api.cpp pybind_describe.cpp pybind_notices.cpp pybind_convert.cpp pybind_model_data.cpp pybind_nuclear_part.cpp pybind_physics.cpp pybind_stopping.cpp pybind_potentials.cpp pybind_project.cpp pybind_schema.cpp
-                      pybind_records.cpp pybind_thm.cpp pybind_evaluation.cpp)
+                      pybind_records.cpp pybind_thm.cpp pybind_evaluation.cpp pybind_fit.cpp)
     # AZUREAPI carries AZURE2Core, which carries the engine's own dependencies
     # (Minuit2, GSL, BLAS, OpenMP) in the right link order -- see
     # src/CMakeLists.txt.  Repeating them here would only risk contradicting it.
@@ -44,8 +44,26 @@ else()
     # without any path fiddling.
     # PYAZR_OUTPUT_DIR redirects it (a build that must not replace the module
     # a running session has loaded); the default is the package directory.
-    set(PYAZR_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/pyazr" CACHE PATH
+    # A wheel build (scikit-build-core sets SKBUILD) writes nothing into the source: the module is built in the build
+    # directory and installed into the wheel's package directory.
+    if(SKBUILD)
+        set(_pyazr_output_default "${CMAKE_BINARY_DIR}/pyazr-out")
+    else()
+        set(_pyazr_output_default "${CMAKE_SOURCE_DIR}/pyazr")
+    endif()
+    set(PYAZR_OUTPUT_DIR "${_pyazr_output_default}" CACHE PATH
         "Directory the _azure2 Python module is written to")
     set_target_properties(_azure2 PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY ${PYAZR_OUTPUT_DIR})
+    if(SKBUILD)
+        install(TARGETS _azure2 LIBRARY DESTINATION pyazr COMPONENT python)
+        # The wheel copies pyazr/ as it is, so a module an in-tree build wrote there would go into the wheel beside
+        # this one (wheel.exclude cannot drop it without dropping the installed one too).
+        file(GLOB _pyazr_stale_modules "${CMAKE_SOURCE_DIR}/pyazr/_azure2*")
+        if(_pyazr_stale_modules)
+            message(FATAL_ERROR "pyazr/ holds an engine module of an in-tree build (${_pyazr_stale_modules}); a wheel "
+                                "would carry it.  Remove it (the in-tree build can write to -DPYAZR_OUTPUT_DIR "
+                                "instead) and build the wheel again.")
+        endif()
+    endif()
 endif()

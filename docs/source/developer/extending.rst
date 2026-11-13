@@ -174,6 +174,41 @@ A command-line flag that is not an option of the calculation:
 ``parseOptions`` and ``printHelp`` (``src/AZURE2.cpp``) and
 ``reference/command_line.rst`` (check 1).
 
+A fitter
+--------
+
+A minimiser the program and a pyazr session can both run:
+
+1. Its function, ``FitResult FitX(AZURECalc &, AZUREParams &, const
+   FitControl &)``, in a file of its own (``src/FitX.cpp``, in
+   ``AZURE2_CORE_SOURCES``): it starts from the values, limits and fixed flags
+   of the ``AZUREParams``, leaves its end point there, writes its lines to
+   ``control.log``, hands its steps to ``control.progress`` (an evaluation
+   fitter puts a ``FitEvaluations`` in place while it runs, which also keeps
+   the best point and puts the stop request in force; an iteration fitter
+   sends a ``FitProgress`` per iteration and checks ``control.stop`` itself)
+   and fills ``FitResult`` (status, calls, covariance where it has one; a
+   stopped fit returns the best point seen with status ``stopped``).
+2. Its row in ``Fitters()`` (``src/Fitters.cpp``): name, the program's switch,
+   the ``Config::paramMask`` bit the switch sets, gradient / residual rows /
+   bounds / covariance / MINOS, progress label, one line of doc. Its place in
+   the table is its precedence in the program.
+3. The switch in the program's parser (``src/AZURE2.cpp``) and its row in
+   ``reference/command_line.rst``; its row in the table "The Engine's
+   Fitters" of ``user_guide/fitting.rst`` (check 46 fails for a row missing
+   from either, and for a minimizer bit of the parser that is no row).
+4. Its case in ``tests/pyazr/fit_with_engine_test.py``: ``fit_with_engine``
+   ends where the program ends, with the program's covariance.
+   ``pyazr.kinds()["fitters"]`` and ``fit_with_engine(method=)`` read the
+   table and need no edit.
+
+A quantity of the progress record is a field of ``FitProgress``
+(``include/FitControl.h``), set where the record is made (``FitEvaluations``
+for evaluations, the fitter for its iterations) and copied into the
+dictionary of ``FitWithEngineDict`` (``api/src/pybind_fit.cpp``); the
+program's printer (``ProgramProgress::Print``) is unchanged unless it is to
+print it.
+
 An environment switch
 ---------------------
 
@@ -238,6 +273,24 @@ A command of ``python -m pyazr``
 3. The reference page ``user_guide/pyazr_command_line.rst``, regenerated with
    ``cli.write_reference_page()`` (check 42 fails for a row without a case, a
    case without a row, an unknown argument type or a stale page).
+
+A run-time data file of pyazr
+-----------------------------
+
+1. The file under ``pyazr/`` (the wheel carries the package directory as it
+   is), read by its module from next to itself (``__file__``), never through
+   an environment variable.
+2. Its row of ``DATA_FILES`` in ``pyazr/datafiles.py`` (path, what it is, who
+   reads it); a file the wheel must not carry is a row of ``NOT_SHIPPED``
+   instead, with the same pattern in ``wheel.exclude`` of ``pyproject.toml``.
+
+Check 48 fails for a tracked non-Python file under ``pyazr/`` in neither list,
+a row naming no file, or ``wheel.exclude`` differing from ``NOT_SHIPPED``;
+``pyazr_wheel`` (slow) fails when the built wheel lacks a listed file or holds
+an unlisted one. A new C++ source of the binding is one name in the
+``pybind11_add_module(_azure2 ...)`` list of ``api/src/CMakeLists.txt``
+(nothing for the wheel). A new optional dependency is one entry of
+``[project.optional-dependencies]`` in ``pyproject.toml``.
 
 A route and a tab of the web UI
 -------------------------------

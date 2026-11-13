@@ -77,7 +77,7 @@ come at once in one :class:`pyazr.FormatError`, each diagnostic with its
 ``m.active_datasets`` and ``m.extrapolations`` are the engine's description of
 the built project (:class:`pyazr.DescribedDatasets`: record name, quantity,
 reaction with pair keys, windows, data file, rows read and kept, parameters),
-and ``m.dataset_chi2()`` is keyed by the data sets' record names.
+and ``m.evaluate().data[i].name`` are the data sets' record names.
 
 The nuclear part
 ----------------

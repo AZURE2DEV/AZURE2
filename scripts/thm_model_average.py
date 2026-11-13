@@ -283,16 +283,17 @@ def apply_variant(model, s, spec):
 def penalty_rows(np, m, x):
     """AZURE2's norm and shift priors as residual rows and their Jacobian:
     one row per segment and prior kind, r = sqrt(t) with t the engine's term
-    (pyazr.Session.penalties; the engine owns the priors and their centres),
+    (pyazr.Session.evaluate(x).data[i]: norm_chi2, shift_constant_chi2, shift_sqrt_chi2, shift_function_chi2;
+    the engine owns the priors and their centres),
     dr/dx = (dt/dx)/(2r) from central differences of t over the free norm and
     shift parameters (the only ones t depends on).  sum(r^2) is the sum of the
     terms; for a term of one parameter, ((p - c)/sigma)^2, the row is
     |p - c|/sigma, whose J^T r and J^T J are those of the signed row."""
-    kinds = ("norm", "shift", "shift_sqrt", "shift_fn")
+    kinds = ("norm_chi2", "shift_constant_chi2", "shift_sqrt_chi2", "shift_function_chi2")
 
     def terms(xx):
-        p = m.penalties(xx)
-        return np.concatenate([np.asarray(p[k], float) for k in kinds])
+        data = m.evaluate(xx).data
+        return np.concatenate([np.array([getattr(d, k) for d in data], float) for k in kinds])
 
     n = len(x)
     t = terms(x)
@@ -443,14 +444,16 @@ def fit_variant(path, cwd, args, strengths, log):
     phook = load_hook(args.penalty_hook, "penalty") if args.penalty_hook else None
     with Session(path, cwd=cwd) as m:
         x0 = np.asarray(m.params_rwa, float)
-        nres = len(m.residuals(x0))
+        objective = m.objective()
+        data_rows = slice(0, m.evaluate(x0).data[-1].rows.stop)   # the data rows of the objective's rows
+        nres = data_rows.stop
         calc = StrengthCalc(m, strengths, set(args.strength_in or []),
                             set(args.strength_out or [])) if strengths else None
         nev = [0]
 
         def resid(x):
             try:
-                r = np.asarray(m.residuals(x), float)
+                r = objective.residuals(x)[data_rows]
             except Exception as err:           # keep the optimiser alive
                 log(f"    residuals failed: {err}")
                 r = np.full(nres, 1e3)
@@ -460,7 +463,7 @@ def fit_variant(path, cwd, args, strengths, log):
             return np.where(np.isfinite(out), out, 1e3)
 
         def jac(x):
-            r, J = m.residual_jacobian(x)
+            J = objective.jacobian(x)[data_rows]
             _, pj = all_penalties(np, m, x, phook)
             return np.vstack([np.asarray(J, float), pj])
 
@@ -528,7 +531,8 @@ def fit_variant(path, cwd, args, strengths, log):
         thm = {n: dict(norm=float(r["norm"]), b=[float(v) for v in r["b"]],
                        chi2=float(r["chi2"]))
                for n, r in m.thm_experiments(x).items()}
-        seg = [float(c) for c in m.segment_chi2(x)]
+        r_x = objective.residuals(x)
+        seg = [float(np.sum(r_x[d.rows] ** 2)) for d in m.evaluate(x).data]
         npen = int(fun.size - nres)
         # Last: the session closes before the snapshot is reopened to verify
         # it, so that only one engine is in memory.

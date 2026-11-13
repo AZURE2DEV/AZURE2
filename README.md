@@ -111,8 +111,9 @@ bundled in-tree.
 - [Readline](https://tiswww.case.edu/php/chet/readline/rltop.html) — for CLI input (`USE_READLINE`)
 
 **For the Python client (`pyazr`)**
-- Python 3.8+ with [NumPy](https://numpy.org/), [SciPy](https://scipy.org/)
-  and [mpmath](https://mpmath.org/) (`pip install -e .` installs them)
+- Python 3.10+ with [NumPy](https://numpy.org/) 1.24+, [SciPy](https://scipy.org/)
+  and [mpmath](https://mpmath.org/); `pip install .` from the repository's root builds the engine with
+  scikit-build-core and installs pyazr, the commands `pyazr` and `AZURE2`, and these dependencies
 - [pybind11](https://pybind11.readthedocs.io/) ≥ 2.6 (to build the `_azure2`
   module; without it CMake warns and builds no module)
 
@@ -263,24 +264,27 @@ The published site follows the default branch; build these pages locally with
 ## Python interface (`pyazr`)
 
 `pyazr` embeds the AZURE2 engine in-process: the R-matrix code is compiled into
-a pybind11 extension module (`_azure2`), and an `azure2()` object is a real
+a pybind11 extension module (`_azure2`), and a `Session` object is a real
 `AZUREAPI` session living in the interpreter. No subprocesses, no sockets, no
 port bookkeeping — which also makes it easy to plug AZURE2 into external
 samplers such as [`emcee`](https://emcee.readthedocs.io/)
 or [`brick`](https://github.com/odell/brick).
 
 ```python
-from pyazr import azure2
+from pyazr import Session
 
 # Build the in-process engine bound to a configuration file.
-azr = azure2("config.azr")
+azr = Session("config.azr")
 
 # Experimental data, grouped by segment.
 energies = azr.energies
 cross    = azr.cross
 
-# Evaluate the model for a set of (free) parameters.
-fit = azr.calculate(azr.params)
+# Evaluate the model at the free vector (the fit vector): every number from one evaluation.
+ev = azr.evaluate(azr.params_rwa)
+fit = [d.model for d in ev.data]       # the model of each data set
+print(ev.chi2, ev.terms)               # the data chi-squared and each term of the objective
+f = azr.objective()                    # the objective for a minimiser: f(x), f.value_and_grad(x), f.residuals(x)
 
 # Inspect the fit parameters with full physics metadata.
 print(azr.parameters.table())          # readable overview
@@ -296,9 +300,11 @@ to (`J`, `parity`, `level_energy`) and for widths the channel (`L`, `S`, `pair`,
 `radiation_type`) — plus filtered views (`.free`, `.energies`, `.widths`,
 `.norms`, `.shifts`) and lookups (`.by_level(...)`, `.by_name(...)`).
 
-Build the `_azure2` module with CMake (`USE_API=ON`, the default) — it lands in
-`pyazr/`, so `import pyazr` picks it up from the repository root; a `pip install`
-ships it as package data.
+`pip install .` builds the `_azure2` module and installs it with the package
+(`docs/source/getting_started/installation.rst`; the Coulomb table once with
+`pyazr coulomb-table fetch` or `build`). For development, the CMake build
+(`USE_API=ON`, the default) writes it into `pyazr/`, so `import pyazr` picks it
+up from the repository root.
 
 ### Fetching experimental data (`pyazr.nds`)
 

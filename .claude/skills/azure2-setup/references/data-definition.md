@@ -76,7 +76,7 @@ share one level-matrix solution per energy.
   level IDs offset), every record is kept (colliding names renamed), and `isotopes` adds a `target` record with one
   `isotope` field per target nucleus; member 0's `<parameterSettings>` and `<mcmc>` are kept, the others' dropped.
   Edit the isotopes as record fields (`Project.set("natural", isotope=[...], isotope_sum=...)`); read
-  `parameters.abundances` and `penalties()["abundance"]`.
+  `parameters.abundances` and `evaluate(x).terms["abundances"]`.
 - **Cross-check a merge against its members**: each nucleus alone (other nuclei's components removed, abundances
   1/0/0) reproduces its standalone project's χ² to 1e-10 (`tests/natural_target/check.sh`). The real-data reference
   model is `tests/natural_neon` (three nuclei, EXFOR data).

@@ -50,14 +50,15 @@ Nothing in Python: `pyazr/physics.py` builds the function, its signature and doc
 
 ## Recipe: use the objective and the evaluation
 
-- A fit or a sampler: `f = s.fit_objective()` (`objective.py`): `f(x)`, `f.grad`, `f.value_and_grad`,
-  `f.residuals`/`f.jacobian` (the objective as rows, `sum(r**2) == f(x)`), `f.log_prob` (the engine's sampler's
+- A fit or a sampler: `f = s.objective()` (`objective.py`): `f(x)`, `f.grad`, `f.value_and_grad`,
+  `f.residuals`/`f.jacobian(x, skip=None)` (the objective as rows, `sum(r**2) == f(x)`), `f.log_prob` (the engine's sampler's
   rule: -f/2, -inf outside its support), `f.x0`, `f.names`, `f.bounds`, `f.errordef`.  Recipes:
   `examples/fit_scipy.py`, `fit_iminuit.py`, `fit_emcee.py` (tested by `tests/pyazr/fit_recipes_test.py`).
 - The numbers at one x: `ev = s.evaluate(x)` (`evaluate.py`), one engine evaluation: `ev.objective`, `ev.chi2`
   (`Total-Chi-Squared`), `ev.terms` (by the engine's term names), `ev.data[i]` (model, residuals, chi2 as the row of
-  `chiSquared.out`, extra columns), `ev.table()`.  Never rebuild a number of `chiSquared.out` or `AZUREOut_*` from
-  today's `calculate_*` methods.
+  `chiSquared.out`, `rows` its rows of `f.residuals(x)`, extra columns), `ev.table()`; in extrapolation mode the
+  extrapolations, with every chi-squared field `None`.  These two are the only ways to evaluate: a number of
+  `chiSquared.out` or `AZUREOut_*` is read from them, never rebuilt.
 - **A new term of the objective**: a class in `src/Objective.cpp` (its `Name()`), nothing in `pyazr/`; it appears in
   `Evaluation.terms`; if it is a sum of squares, its rows go into `AZUREAPI::ObjectiveRowsRWA`
   (`api/src/AZUREAPIObjective.cpp`; `objective_object_test.py` checks `sum(r**2) == f(x)`).
@@ -66,7 +67,12 @@ Nothing in Python: `pyazr/physics.py` builds the function, its signature and doc
   `pyazr.kinds()["data_outputs"]`.
 - **A new field of `Evaluation`**: an entry of the dict `EvaluationDict` builds (`pybind_evaluation.cpp`), the
   attribute in `evaluate.py` and its line in the class's `FIELDS` (`kinds()["objects"]`).
-- Calls of both objects take the session's lock (`objective.session_lock`); today's methods do not.
+- Calls of both objects take the session's lock (`pyazr.locking.session_lock`), as every method of the session that
+  enters the engine does.
+- `Session._engine` is the binding's session object (`_azure2.Session`): private, no lock, no promise of stability.
+  A module of `pyazr/` reads it only inside an `engine_call` method or a `with session_lock(s):` block
+  (`tests/pyazr/session_lock_test.py` checks every module by its syntax tree); a test may use it only to test the
+  binding itself.
 
 ## How it is built
 
@@ -94,6 +100,20 @@ Nothing in Python: `pyazr/physics.py` builds the function, its signature and doc
   another copy: a missing function is a row of the physics table.
 - `nds.py` (EXFOR/ENSDF client) is the only EXFOR reader on this branch (the
   Qt GUI's `gui/src/ExforData.cpp` exists on `dev` only).
+
+## The wheel (`pyproject.toml`)
+
+- `pip install .` / `pip wheel .` build with scikit-build-core: the same CMake files with `BUILD_TESTING` and
+  `USE_READLINE` off (`USE_MCMC` on: the binding needs the sampler), targets `_azure2` and `AZURE2`, the install rules of component `python` (module into the
+  package, program into the scripts), the package directory copied as it is less `wheel.exclude`.  The in-tree build
+  (`work/build.sh`, `PYAZR_OUTPUT_DIR`, `PYAZR_ENGINE_DIR`) is what every test uses; the wheel is tested by
+  `pyazr_wheel` (slow: builds, unpacks, never installs) and `tests/pyazr/wheel_smoke.py` (the workflow's test).
+- **A run-time data file**: put it under `pyazr/`, read it from next to its module (`__file__`), and add its row to
+  `DATA_FILES` in `datafiles.py` (or to `NOT_SHIPPED` and `wheel.exclude` if the wheel must not carry it); check 48
+  and `pyazr_wheel` fail otherwise.  Never an environment variable for a file of the package.
+- The Coulomb table: `coulomb_table.py` (`where`, `fetch`, `build`; `pyazr coulomb-table ...`).  `TABLE_URL` and
+  `TABLE_SHA256` are set together by the owner when he publishes the file; never download anything in a test (the
+  test serves a small table from `http.server` on 127.0.0.1).
 
 ## Rules
 

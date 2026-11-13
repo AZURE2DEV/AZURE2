@@ -13,12 +13,12 @@ Checked on tests/18O_p_a_thm with its six R-matrix parameters freed:
      the project is unchanged (syntax, an exit pair no data set has, a J^pi
      the model lacks, entranceL=coherent in either order).
   2. The engine: the parameters (kind "cbkg", names, values, fixed flags),
-     calculate_chi2_rwa == the CLI, thm_experiments reports the values; a
+     evaluate().chi2 == the CLI, thm_experiments reports the values; a
      background fixed at zero gives residuals and Jacobian bit for bit those
      of none.
-  3. Derivatives: residual_jacobian against central differences of the
+  3. Derivatives: objective().residuals_and_jacobian against central differences of the
      residuals for all ten free parameters (six R-matrix, four cbkg of a
-     linear term), chi2_and_grad against 2 J^T r and differences of chi2.
+     linear term), objective().value_and_grad against 2 J^T r and differences of chi2.
   4. save_fit writes the fitted values into cbackground= and reads back.
 
 Needs the compiled engine and an AZURE2 binary for 2-4; skips cleanly without.
@@ -207,8 +207,8 @@ with tempfile.TemporaryDirectory() as tmp:
               [str(p) for p in cb])
         x = np.asarray(s.params_rwa, float)
         check("ten free parameters", x.size == 10, x.size)
-        chi2 = float(np.sum(s.calculate_chi2_rwa(x)))
-        check(f"calculate_chi2_rwa == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
+        chi2 = s.evaluate(x).chi2
+        check(f"evaluate().chi2 == CLI (rel 1e-9): {chi2!r}", rel(chi2, cli_chi2) < 1e-9,
               f"{chi2} vs {cli_chi2}")
         rep = s.thm_experiments(x)["E"]
         check("thm_experiments reports the values", rep.get("cbkg") == dict(zip(names, [0.3, -0.2, 0.05, 0.1])),
@@ -219,18 +219,18 @@ with tempfile.TemporaryDirectory() as tmp:
         check("... at the parameters asked for", rep["cbkg"][names[2]] == 0.5, rep["cbkg"])
 
         print("3. derivatives (R-matrix and cbkg columns)")
-        r, J = s.residual_jacobian(x)
-        check("residual_jacobian: residuals == residuals()", np.max(np.abs(r - s.residuals(x))) == 0.0)
+        r, J = s.objective().residuals_and_jacobian(x)
+        check("objective().residuals_and_jacobian: residuals == residuals()", np.max(np.abs(r - s.objective().residuals(x))) == 0.0)
         for c in range(x.size):
             h = 1e-5 * (abs(x[c]) + 1.0)
             xp = x.copy(); xp[c] += h
             xm = x.copy(); xm[c] -= h
-            fd = (s.residuals(xp) - s.residuals(xm)) / (2 * h)
+            fd = (s.objective().residuals(xp) - s.objective().residuals(xm)) / (2 * h)
             err = np.linalg.norm(J[:, c] - fd) / max(np.linalg.norm(fd), 1e-300)
             check(f"J[:, {c}] ({s.parameters.free[c].name}) vs central differences (rel {err:.1e})",
                   err < 1e-4)
-        c2, g = s.chi2_and_grad(x)
-        check("chi2_and_grad value == chi2", rel(c2, chi2) < 1e-9, f"{c2} vs {chi2}")
+        c2, g = s.objective().value_and_grad(x)
+        check("value_and_grad value == the objective", rel(c2, s.objective()(x)) < 1e-9, f"{c2} vs {chi2}")
         gj = 2.0 * J.T @ r
         check("gradient == 2 J^T r", np.allclose(g, gj, rtol=1e-8, atol=1e-10 * np.max(np.abs(gj))),
               f"max diff {np.max(np.abs(g - gj))}")
@@ -238,14 +238,14 @@ with tempfile.TemporaryDirectory() as tmp:
             h = 1e-5 * (abs(x[c]) + 1.0)
             xp = x.copy(); xp[c] += h
             xm = x.copy(); xm[c] -= h
-            fd = (s.calculate_chi2_rwa(xp)[0] - s.calculate_chi2_rwa(xm)[0]) / (2 * h)
-            check(f"d chi2/d x[{c}] vs central differences (rel {rel(g[c], fd):.1e})",
+            fd = (s.objective()(xp) - s.objective()(xm)) / (2 * h)
+            check(f"d f/d x[{c}] vs central differences (rel {rel(g[c], fd):.1e})",
                   rel(g[c], fd) < 1e-4, f"{g[c]} vs {fd}")
 
         print("4. save_fit carries the values in cbackground=")
         xs = x.copy()
         xs[-4:] = [0.31, -0.19, 0.04, 0.12]
-        chi_s = float(s.calculate_chi2_rwa(xs)[0])
+        chi_s = s.evaluate(xs).chi2
         path, sav = s.save_fit(os.path.join(py_dir, "fit.azr"), x=xs, param_sav=False)
     fit = Project.open(path)
     check("the snapshot's cbackground carries the values",
@@ -254,18 +254,18 @@ with tempfile.TemporaryDirectory() as tmp:
     with Session(path, cwd=py_dir) as s:
         y = np.asarray(s.params_rwa, float)
         check("reloaded: same parameter vector", np.allclose(y, xs, rtol=1e-12, atol=0), f"{y} vs {xs}")
-        check("reloaded: same chi2", rel(float(s.calculate_chi2_rwa(y)[0]), chi_s) < 1e-9)
+        check("reloaded: same chi2", rel(s.evaluate(y).chi2, chi_s) < 1e-9)
 
     zero_dir = project("zero", "experiment[E] background=linear "
                                "cbackground=1/2+:2:linear=0f,0f,0f,0f")
     none_dir = project("none", "experiment[E] background=linear")
     with Session(os.path.join(none_dir, "run.azr"), cwd=none_dir) as s:
         x = np.asarray(s.params_rwa, float)
-        r0, J0 = s.residual_jacobian(x)
+        r0, J0 = s.objective().residuals_and_jacobian(x)
     with Session(os.path.join(zero_dir, "run.azr"), cwd=zero_dir) as s:
         check("fixed zero background: no free cbkg parameter",
               len(s.parameters.cbkg) == 4 and all(p.fixed for p in s.parameters.cbkg))
-        r1, J1 = s.residual_jacobian(x)
+        r1, J1 = s.objective().residuals_and_jacobian(x)
     check("fixed zero background: residuals bit for bit", np.array_equal(r0, r1))
     check("fixed zero background: Jacobian bit for bit", np.array_equal(J0, J1))
 

@@ -75,10 +75,10 @@ def main():
             check("reference file has both radii", [p.channel_radius for p in r.pairs][:2] == [R1, R2],
                   f"{[p.channel_radius for p in r.pairs]}")
             x_ref = np.asarray(r.params_rwa, float)
-            chi_ref = float(np.sum(r.calculate_chi2_rwa(x_ref)))
+            chi_ref = r.evaluate(x_ref).chi2
         with Session(base, cwd=work) as f:
             x_file = np.asarray(f.params_rwa, float)
-            chi_file = float(np.sum(f.calculate_chi2_rwa(x_file)))
+            chi_file = f.evaluate(x_file).chi2
         check("the radii matter (reference chi2 differs from the file's)", rel(chi_ref, chi_file) > 1e-3,
               f"{chi_ref} vs {chi_file}")
 
@@ -90,7 +90,7 @@ def main():
                 return [p.channel_radius for p in m.pairs][:2]
 
             def chi():
-                return float(np.sum(m.calculate_chi2_rwa(np.asarray(m.params_rwa, float))))
+                return m.evaluate(np.asarray(m.params_rwa, float)).chi2
 
             def same_vector(ref):
                 x = np.asarray(m.params_rwa, float)

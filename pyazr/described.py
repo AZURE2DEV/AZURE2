@@ -309,6 +309,8 @@ def _build_kinds():
     physics = {row["name"]: row for row in engine.physics_functions()}
     # one entry per row of the binding's stopping table (api/src/pybind_stopping.cpp), with SRIM's citation
     stopping = {row["name"]: row for row in engine.stopping.functions()}
+    # one entry per row of the engine's fitter table (src/Fitters.cpp), in the program's precedence
+    fitters = {row["name"]: {k: v for k, v in row.items() if k != "name"} for row in engine.fitters()}
     error_classes = {}
     for name in errors.__all__:
         cls = getattr(errors, name)
@@ -318,7 +320,7 @@ def _build_kinds():
     error_classes["EngineError"] = {"same_as": "AZURE2Error", "doc": _first_line(errors.AZURE2Error.__doc__)}
     return {"schema_version": schema.get("schema_version", ""), "records": records, "data": data,
             "parameters": parameters, "parameter_fields": parameter_fields, "pair_fields": pair_fields,
-            "options": options, "physics": physics, "stopping": stopping, "units": schema.get("units", {}),
+            "options": options, "physics": physics, "stopping": stopping, "fitters": fitters, "units": schema.get("units", {}),
             "dimensions": schema.get("dimensions", {}), "errors": error_classes, "data_outputs": data_outputs,
             "objects": objects}
 
@@ -354,12 +356,15 @@ def kinds():
       value) and ``sweep`` (``lower``, ``upper``, ``spacing``: the range of a first plot over it);
     - ``stopping``: the rows of the binding's stopping table, by name, in the shape of the physics rows (a ``text``
       argument ``formula`` first) with ``citation``, SRIM's, owed by every use (:func:`pyazr.stopping.evaluate`);
+    - ``fitters``: the engine's fitters by name (``Session.fit_with_engine(method=)``), in the program's precedence:
+      option (the program's switch, "" for the default), gradient, residual_rows, bounds, covariance, minos,
+      progress_label, doc;
     - ``errors``: pyazr's error classes with their bases;
     - ``units``, ``dimensions``: the unit table; ``schema_version``.
 
     Read from the engine's tables at the first call (``AZURE2 --schema``, the parameter-kind table, the binding's
-    option table, the binding's physics table); a new row there appears here without an edit of Python.  Each
-    call returns a fresh copy.
+    option table, the binding's physics table, the fitter table); a new row there appears here without an edit of
+    Python.  Each call returns a fresh copy.
     """
     global _KINDS
     if _KINDS is None:

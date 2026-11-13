@@ -38,7 +38,7 @@ def layout(m, name):
 def evaluate(path, cwd, sav, name):
     with Session(path, cwd=cwd) as m:
         x = m.load_sav(sav)
-        return m.objective(x), {k: v[0] for k, v in m.dataset_chi2(x).items()}, layout(m, name)
+        return m.objective()(x), {d.name: d.chi2 for d in m.evaluate(x).data}, layout(m, name)
 
 
 def rel(a, b):

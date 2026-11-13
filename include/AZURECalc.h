@@ -6,6 +6,7 @@
 #include "Constants.h"
 #include "AZUREParams.h"
 #include "WorkingData.h"
+#include "FitControl.h"
 #include <vector>
 #include <memory>
 #include <atomic>
@@ -63,6 +64,17 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * OpenMP numerical gradient increments from several threads at once, so under threads it can come out a few low.
    */
   void CountCallsInto(std::atomic<long> *counter) { callCounter_ = counter; }
+  /*!
+   * Hand every evaluation to `observer` (owned by the caller, which outlives the observing; nullptr stops it) and
+   * obey its stop request during a fit (FitControl.h).  The program's observer prints the progress lines and writes
+   * the intermediate files (src/ProgramFit.cpp); a fit puts its own in place while it runs (Fitters.h).
+   */
+  void Observe(const EvaluationObserver *observer) { observer_ = observer; }
+  const EvaluationObserver *Observer() const { return observer_; }
+  /// The observer's stop request is set.
+  bool StopRequested() const {
+    return observer_ && observer_->stop && observer_->stop->load(std::memory_order_relaxed);
+  }
 
   /*!
    * Analytic gradient of the total chi-squared with respect to the (external)
@@ -130,13 +142,15 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    *
    * Called periodically during a fit so a long run leaves usable output behind
    * before it finishes, and so a fit that is stopped or crashes is not a total
-   * loss. MIGRAD reaches this through operator(); the analytic-Jacobian
-   * minimizers call it directly, since they evaluate through the
-   * side-effect-free Chi2Value and would otherwise write nothing until the end.
+   * loss. It is the program's FitControl::checkpoint (src/ProgramFit.cpp):
+   * its observer calls it every kOutputInterval evaluations (MIGRAD, NLopt), and
+   * LM and GSL-LM call the checkpoint every kIterationOutputInterval iterations,
+   * since they evaluate through the side-effect-free Chi2Value.  A session's fit
+   * has no checkpoint and writes nothing.
    */
   void WriteIterationOutput(const vector_r &p) const;
 
-  //! Chi-squared evaluations between intermediate writes (MIGRAD, NLopt, LM).
+  //! Evaluations of the run between intermediate writes (MIGRAD, NLopt, the evaluations outside a fit).
   static const int kOutputInterval = 100;
 
   /*! Solver iterations between intermediate writes for the analytic-Jacobian
@@ -177,29 +191,6 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * evaluations of the GSL solver.  Returns false if the evaluation fails.
    */
   bool ResidualsOnly(const vector_r &full, vector_r &residuals) const;
-
-  /*!
-   * Levenberg-Marquardt / Gauss-Newton minimization of the total chi-squared
-   * using the analytic residual Jacobian.  Converges in far fewer iterations
-   * than MIGRAD for least-squares problems.  Updates `params` in place with the
-   * best-fit values and (J^T J)^{-1} parameter errors, respecting parameter
-   * limits.  Returns the final chi-squared, or a negative value if the analytic
-   * Jacobian is unsupported (caller should fall back to MIGRAD).
-   */
-  double RunLevenbergMarquardt(AZUREParams &params, int maxIter = 200,
-                               struct BandCovariance *bandCovOut = nullptr) const;
-
-  /*!
-   * Nonlinear least-squares minimization via GSL's trust-region solver
-   * (gsl_multifit_nlinear, geodesic-accelerated).  Uses the same analytic
-   * residual Jacobian as RunLevenbergMarquardt but factorizes J directly (QR).
-   * Gaussian priors enter as extra residual rows; parameter limits are enforced
-   * by projection.  Updates `params` in place with the best-fit values and
-   * (J^T J + priors)^{-1} errors.  Returns the final chi-squared, or a negative
-   * value if the analytic Jacobian is unsupported (caller falls back to MIGRAD).
-   */
-  double RunGSLNonlinear(AZUREParams &params, int maxIter = 200,
-                         struct BandCovariance *bandCovOut = nullptr) const;
 
   /*!
    * Returns a reference to the Config structure.
@@ -253,33 +244,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
 
  private:
   std::atomic<long> *callCounter_ = nullptr;  ///< CountCallsInto: not owned
-  /*!
-   * Shared setup for the least-squares solvers.  Runs one ResidualJacobian at
-   * `full` (returned in `r`/`J`/`p2f`) to fix the packed column order, and fills
-   * the free-parameter start values `x`, projection limits `lo`/`hi`, and the
-   * Gaussian priors `pen_nom` / `pen_inv2` (zero where a param has no prior).
-   * Returns the number of free parameters, or -1 if the Jacobian is unsupported.
-   */
-  int PrepareFreeParams(const vector_r &full,
-                        const ROOT::Minuit2::MnUserParameters &mp,
-                        vector_r &r, vector_r &J, std::vector<int> &p2f,
-                        vector_r &x, std::vector<double> &lo,
-                        std::vector<double> &hi, std::vector<double> &pen_nom,
-                        std::vector<double> &pen_inv2) const;
-
-  /*!
-   * Shared covariance / error finalization for the least-squares solvers.  At
-   * the best-fit `full`, builds H = J^T J (+ priors), inverts it (ridge fallback
-   * if singular), writes the errors into `mp`, reports poorly-constrained
-   * directions, and, if `bandCovOut` is set, exports the R-matrix sub-block
-   * covariance for the uncertainty band.
-   */
-  void FinalizeLeastSquaresCovariance(const vector_r &full,
-                                      const std::vector<int> &p2f,
-                                      const std::vector<double> &pen_inv2,
-                                      ROOT::Minuit2::MnUserParameters &mp,
-                                      struct BandCovariance *bandCovOut) const;
-
+  const EvaluationObserver *observer_ = nullptr;  ///< Observe: not owned
   const Config &configure_;
   WorkingCopy *data_;
   azure2::Results &results_;  ///< the caller's buffer for the evaluations on data_

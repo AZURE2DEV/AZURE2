@@ -67,7 +67,7 @@ CASES = [("use_brune", True, None, False), ("use_brune", False, None, True),
 def numbers(s):
     """What a session computes at its start: the start vector, the residuals, the objective."""
     x = np.asarray(s.params_rwa, float)
-    return x, np.asarray(s.residuals(x), float), np.asarray([s.objective(x)])
+    return x, np.asarray(s.objective().residuals(x), float), np.asarray([s.objective()(x)])
 
 
 def equal(a, b):

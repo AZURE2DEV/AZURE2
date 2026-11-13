@@ -510,6 +510,20 @@ where it came from after its banner. Waiting for your word, unchanged: the ten s
 `AZURE2_EC_TABLE_NODES`, `AZURE_GRAD_DENSE`, `AZURE_TE_WEIGHTS_FD`, `AZR_DEBUG_GRID`, `AZURE_GRAD_DEBUG`,
 `AZURE_CHANNEL_DEBUG`): kept, and the seven of them that move numbers now have options.
 
+## The fit is a function (2026-11-13)
+
+The program's fit was 870 lines inside one function that also read the data and wrote every file. It is now a table
+of fitters (`src/Fitters.cpp`: MIGRAD with Minuit's numerical gradient or the analytic one, Levenberg-Marquardt, the
+GSL trust region, NLopt), one function per fitter with one signature, HESSE and MINOS as functions on the result, and
+the program's run as named stages (set-up, fit, final evaluation, outputs, rate). Every output file and every printed
+line of the program is as before (compared byte for byte on the eight reference fits, T2 with every fitter, MINOS and
+the band, and all projects). pyazr runs the same functions: `s.fit_with_engine("lm")` gives the program's end point,
+covariance and MINOS intervals without a subprocess, with a progress callback and a stop button another thread can
+press (the fit then returns the best point it saw). A new fitter is its function, its row and a test case; check 46
+fails when its switch or its line in the manual is missing. One thing to know: for a project with THM data the
+program silently takes the analytic-gradient MIGRAD; `fit_with_engine` does what it is told, so the program's plain
+run on such a project corresponds to `method="migrad-gradient"`.
+
 ## What is in work and what comes next
 
 Merged in the night of 2026-11-12, each after the whole verification: the
@@ -768,6 +782,27 @@ reason counted in the status line; the CSV is the arrays as returned, and "Copy 
 that makes them (tested by running it: bit for bit). The stopping library's functions (stopping power, range,
 energy after a layer, areal density between two energies, straggling) are rows of the same kind, with SRIM's
 citation under every plot, in the CSV and in the Python text, their values those of `pyazr.stopping` bit for bit.
+
+## pyazr as one command: `pip install .`
+
+`pip install .` in a checkout now builds the engine (scikit-build-core runs the CMake files) and installs pyazr with
+its module `_azure2`, the commands `pyazr` and `AZURE2`, the mass table and the web page; `pip wheel .` writes the
+wheel. Before, pip installed a package without its engine. The wheel's program has no readline (its menus read
+plain lines). The workflow `.github/workflows/wheels.yml` builds and tests wheels for Linux (x86-64, arm64) and macOS
+(arm64, x86-64) with cibuildwheel, by hand or on a pull request that changes the packaging, and keeps them as the
+run's artifacts: it publishes nothing. What the owner must do to publish:
+
+- **The Coulomb table** (85 MB, not in the wheel): attach the file to a release, then set `TABLE_URL` and
+  `TABLE_SHA256` in `pyazr/coulomb_table.py` (one commit); `pyazr coulomb-table fetch` then downloads it and checks
+  the hash. Until then `fetch` says that none is published and names `pyazr coulomb-table build` (5 minutes, offline).
+- **Run the workflow** once (Actions, "wheels", "Run workflow") and look at its four jobs: it has never run (it cannot
+  run here). Publishing to PyPI is a step to add when you decide to (trusted publishing needs no secret).
+- **Windows** has no wheel: cibuildwheel compiles with MSVC, AZURE2 is built with MinGW. Either a MinGW-built wheel (a
+  step of its own and delvewheel) or a port of the engine to MSVC; your choice.
+- **SRIM**: the SRIM-2013 data files are compiled into the module (the PI's decision: free to use when SRIM is cited).
+  The wheel carries their notice among its licence files, and `pyazr.describe()` and `pyazr stopping` print the
+  citation. Whether that suffices for redistribution on PyPI is yours to confirm with the terms in
+  `stopping/data/srim/README.md`.
 
 ## For the maintainers to decide
 
