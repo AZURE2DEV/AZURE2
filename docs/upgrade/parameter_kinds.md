@@ -140,7 +140,9 @@ the fit that produced it. Measured on the base build (the fit, its `param.sav` r
 
 The Doppler difference shows in `chiSquared.out` (4.85481 → 4.85478) and is above `save_fit`'s own check (1e-6), which
 then refuses its snapshot; the density's and the kernel's χ² reproduce, but their limits move, so a continued fit may
-go where the fit could not.
+go where the fit could not. After the rule (`tests/nuisance_prior_centre/continued.sh`, the stopping scale with its
+densities fixed): every row gives the fit's objective and each data set's χ² exactly (difference 0), the fit's layout
+(1.1e18, 363 K, 1.12, 23 keV) and lower limit, and `save_fit` accepts the Doppler snapshot.
 
 The rule (`azure2/experiment/LayoutBase.h`, `ChooseLayoutBase`, the one function of the four kinds): the base is
 the **centre** when the parameter is fitted, a centre is written, and the start lies in [f·c, H(c)] (`grid_max`
