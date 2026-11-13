@@ -280,6 +280,9 @@ Design: `pyazr3.md` (the measured state of pyazr, the objects of 3.0, the order 
         `azure2.evaluate(x)`; the objective's rows, `log_prob` with the engine sampler's rule, the table of point
         outputs (`api/src/pybind_evaluation.cpp`).
 - [ ] Wheels via scikit-build-core + cibuildwheel (Linux, macOS, Windows) with the core and the `azure2` CLI.
+      Built: `pyproject.toml` (scikit-build-core), the install rules, `pyazr coulomb-table fetch|build|where`,
+      `.github/workflows/wheels.yml` (Linux, macOS; publishes nothing), tests `pyazr_wheel`, `pyazr_coulomb_table`,
+      check 48 (`pyazr3.md` 2.9). Open: the workflow's first run, Windows, the published Coulomb table.
 - [x] Tested recipes for iminuit, scipy, emcee (`pyazr/examples/fit_*.py`, `tests/pyazr/fit_recipes_test.py`; no
       `azure2()` shim: struck by the PI, `pyazr3.md` section 5, 9).
 - [x] The command line `python -m pyazr` (`pyazr/cli.py`: one table of commands with `--json`; `pyazr3.md` 2.8;

@@ -15,19 +15,12 @@ exported files.
 Installation
 ------------
 
-.. code-block:: bash
-
-   pip install -e .          # from the repository root
-   pip install -e ".[all]"   # plus what the examples need
-
-Core dependencies are NumPy, mpmath and SciPy. mpmath is imported when
-``pyazr.transform`` loads, so it is required rather than optional; the samplers
-and plotting libraries the examples use are the extras.
-
-AZURE2 itself is C++ and is not installed by pip. The engine is the pybind11
-module ``_azure2``, built by CMake with ``USE_API=ON`` (the default) into the
-``pyazr/`` package directory; ``import pyazr`` loads it from there (or from the
-pip-installed package data).
+``pip install .`` from the repository's root builds the engine and installs
+``pyazr`` with it, the commands ``pyazr`` and ``AZURE2`` and the data files;
+the Coulomb table is fetched or built once with ``pyazr coulomb-table fetch``
+or ``build``. Python 3.10 or later, NumPy 1.24 or later. What the wheel holds,
+the SRIM citation and the developers' in-tree build:
+:doc:`../getting_started/installation` ("The Python package").
 
 First steps
 -----------

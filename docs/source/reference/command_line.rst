@@ -206,7 +206,9 @@ Available Options
        exact routines outside it (the default).  ``FILE`` defaults to
        ``$AZURE2_COULOMB_TABLE``, else ``~/.azure2/coulomb_table.bin``; build
        it once with ``--build-coulomb-table`` (about 5 min on four
-       threads, 88 MB).  Without a table file the run says so once and uses
+       threads, 88 MB), or with pyazr's ``pyazr coulomb-table build``, or
+       download the published copy with ``pyazr coulomb-table fetch``
+       (:doc:`../getting_started/installation`).  Without a table file the run says so once and uses
        the exact routines.  The natural-neon example runs about four times faster.
        Pairs with a nuclear potential and neutral pairs are not tabulated
        (see :doc:`../developer/coulomb_table`).

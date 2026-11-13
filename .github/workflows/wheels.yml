@@ -1,0 +1,72 @@
+name: wheels
+
+# Builds and tests the pyazr wheels (pyproject.toml: scikit-build-core, [tool.cibuildwheel]) and keeps them as the
+# run's artifacts.  It publishes nothing: no upload to PyPI, no release, no secret.  Started by hand, and on pull
+# requests that change the packaging.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - pyproject.toml
+      - CMakeLists.txt
+      - api/src/CMakeLists.txt
+      - src/CMakeLists.txt
+      - pyazr/datafiles.py
+      - pyazr/coulomb_table.py
+      - tests/pyazr/wheel_smoke.py
+      - .github/workflows/wheels.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  wheels:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      # Windows is not built: cibuildwheel compiles with MSVC and the engine is built with MinGW (build.yml); see
+      # docs/upgrade/pyazr3.md section 2.9.
+      matrix:
+        include:
+          - name: linux-x86_64
+            os: ubuntu-24.04
+          - name: linux-aarch64
+            os: ubuntu-24.04-arm
+          # The deployment target is the macOS of the runner, that of Homebrew's gsl and libomp bottles, which
+          # delocate copies into the wheel.
+          - name: macos-arm64
+            os: macos-14
+            macos_target: '14.0'
+          - name: macos-x86_64
+            os: macos-15-intel
+            macos_target: '15.0'
+    steps:
+      - uses: actions/checkout@v4
+
+      # Builds every CPython of [tool.cibuildwheel] build: GSL before the build (before-all), the wheel with pip
+      # and scikit-build-core, the repair (auditwheel on Linux, delocate on macOS: libgsl and the OpenMP runtime
+      # copied into the wheel), then the test command (tests/pyazr/wheel_smoke.py) on the installed wheel.
+      - name: Build and test the wheels
+        uses: pypa/cibuildwheel@v2.23.3
+        with:
+          output-dir: wheelhouse
+        env:
+          CIBW_ENVIRONMENT_MACOS: CMAKE_BUILD_PARALLEL_LEVEL=2 MACOSX_DEPLOYMENT_TARGET=${{ matrix.macos_target }}
+
+      - name: The wheels' files
+        run: |
+          for w in wheelhouse/*.whl; do
+            echo "== $w ($(wc -c < "$w") bytes)"
+            python3 -m zipfile -l "$w"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.name }}
+          path: wheelhouse/*.whl
+          retention-days: 14
