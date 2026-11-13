@@ -2,6 +2,30 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-9-webui-design`) — the web UI: design and a measured spike (no code)
+
+**Done.** `docs/upgrade/web_ui.md` (new): the 201 Qt parity items by tab and state (115 served by today's pyazr, 17
+designed in `pyazr3.md`, 20 missing from its design, 29 the page alone, 20 dropped with reasons); the process model
+(server with the project text and its history, a session worker, one worker per job, a compute budget); the `/api`
+as a route table over pyazr's objects with errors mapped to statuses; the state rule and the cost of each kind of
+edit; seven tabs with wireframes; the page (vanilla JS, plotly.js vendored: described, not fetched); security
+(loopback, a token); tests; extensibility; six steps of work; twelve findings for pyazr 3.0; eleven decisions for
+the PI. One line in `ROADMAP.md` Phase 9. No code of the repository changed.
+
+**How.** A FastAPI spike on today's pyazr in `work/webui/spike/` (outside the repository), run at one thread on
+copies of T1, T2, 13N with the build `work/b-gecm`: over HTTP on 127.0.0.1 (server PIDs recorded and checked gone)
+and with the test client (5 tests pass). Measured: open, builds cold and warm, the GIL during a build, evaluation
+overhead, JSON sizes, a recipe fit's cooperative stop and kill, the program's MIGRAD under SIGINT, a server killed
+during a fit, two clients, memory. T2's χ² through the API equals the program's (10905.2 + prior 4.9025 =
+10910.1338). `python3 tests/consistency/repo_consistency_test.py` after the commit.
+
+**Open.** (1) The findings of `web_ui.md` section 12 for the pyazr steps (session from the text, progress and stop of
+engine fits, writing x into the text, pairs with channel generation, the reaction rate, ...). (2) The decisions of
+its section 13, among them vendoring plotly.js (a download) and where session options live. (3) The per-data-set χ²
+of `segment_chi2` differs from `chiSquared.out` for data sets joined by a covariance (T2 s02/s03; documented in its
+docstring); the UI is to show the program's. (4) A job worker outlives a killed server today (the spike); the design
+makes workers die with it.
+
 ## 2026-11-13 (director, 09:00) — the PI's decisions on pyazr 3.0; packages installed
 
 The PI accepted the director's list of the eleven decisions of `pyazr3.md` section 5: the note's recommendations,
