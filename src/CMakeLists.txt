@@ -119,6 +119,7 @@ endif (BUILD_LIBRARY)
 # and the binding's schema()) uses physics/ and io/'s Record.h only and is below the engine likewise.
 # azure2_experiment_reader (the reading path of a format-3 project, ProjectReader.h, and the <levels> tables) links io/.
 target_link_libraries(AZURE2Core PUBLIC
+    azure2_support
     azure2_physics
     azure2_physics_transfer
     azure2_stopping
