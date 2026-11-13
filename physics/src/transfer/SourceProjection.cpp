@@ -43,15 +43,20 @@ void AppendGaussLegendre(int n, double lo, double hi, std::vector<double> &x, st
   }
 }
 
-// Value and derivative of the wave table u at the stencil, divided by R: f = u/R, f' = u'/R - u/R^2.
-inline void ReadWave(const SixPointStencil &st, const std::vector<cplx> &u, double R, cplx &f, cplx &df) {
-  cplx v(0.0, 0.0), dv(0.0, 0.0);
+// Value and derivative of the wave table u at the stencil, divided by R: f = u/R, f' = u'/R - u/R^2.  Written per
+// component (the operations of the complex forms, in the same order) so that the loop stays in registers.
+inline void ReadWave(const SixPointStencil &st, const cplx *u, double R, cplx &f, cplx &df) {
+  double vr = 0.0, vi = 0.0, dr = 0.0, di = 0.0;
   for (int i = 0; i < 6; i++) {
-    v += st.value[i] * u[st.first + i];
-    dv += st.derivative[i] * u[st.first + i];
+    const double ur = u[i].real(), ui = u[i].imag();
+    vr += st.value[i] * ur;
+    vi += st.value[i] * ui;
+    dr += st.derivative[i] * ur;
+    di += st.derivative[i] * ui;
   }
-  f = v / R;
-  df = dv / R - v / (R * R);
+  const double R2 = R * R;
+  f = cplx(vr / R, vi / R);
+  df = cplx(dr / R - vr / R2, di / R - vi / R2);
 }
 
 }  // namespace
@@ -173,11 +178,11 @@ void SumSourceBlock(const SourceProjectionPlan &plan, const std::vector<SourceEx
     SphericalHarmonicsWithDerivative(l_top, l_top, ths, yl, dyl);
     SphericalHarmonicsWithDerivative(la_max, l_top, tha - ths, ya, dya);
     const SixPointStencil sta = SixPointLagrange(Ra, plan.setup.entrance_step_fm, plan.entrance_nodes);
-    for (int L = 0; L <= la_max; L++) ReadWave(sta, plan.entrance_waves[L], Ra, fa[L], dfa[L]);
+    for (int L = 0; L <= la_max; L++) ReadWave(sta, plan.entrance_waves[L].data() + sta.first, Ra, fa[L], dfa[L]);
     const SixPointStencil sts = SixPointLagrange(Rs, plan.setup.exit_step_fm, plan.exit_nodes);
     for (int b = 0; b < nb; b++)
       for (int L = 0; L <= ls_max; L++)
-        ReadWave(sts, exits[b].waves[L], Rs, fs[b * (ls_max + 1) + L], dfs[b * (ls_max + 1) + L]);
+        ReadWave(sts, exits[b].waves[L].data() + sts.first, Rs, fs[b * (ls_max + 1) + L], dfs[b * (ls_max + 1) + L]);
     const double dthsdr = -alpha * ss / Rs, dthadr = -sa / Ra;
     for (int t = 0; t < n_triples; t++) {
       const SourceTriple &tr = plan.triples[t];

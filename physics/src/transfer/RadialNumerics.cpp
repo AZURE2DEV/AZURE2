@@ -179,8 +179,11 @@ void SphericalHarmonicsWithDerivative(int l_max, int m_max, double theta, std::v
                                       std::vector<double> &dy) {
   // One order more for the derivative, on a wider row, then the rows narrowed in place.
   const int wide = m_max + 2, stride = m_max + 1;
-  y.assign(static_cast<std::size_t>(l_max + 1) * wide, 0.0);
-  dy.assign(static_cast<std::size_t>(l_max + 1) * stride, 0.0);
+  // Every entry is written below (the zeros where m > l explicitly), so the caller's vectors are not cleared first.
+  y.resize(static_cast<std::size_t>(l_max + 1) * wide);
+  dy.resize(static_cast<std::size_t>(l_max + 1) * stride);
+  for (int l = 0; l <= std::min(l_max, m_max + 1); ++l)
+    for (int m = l + 1; m < wide; ++m) y[l * wide + m] = 0.0;
   LegendreRows(l_max, m_max + 1, std::cos(theta), std::sin(theta), wide, y.data());
   for (int l = 0; l <= l_max; ++l)
     for (int m = 0; m <= std::min(l, m_max); ++m) {
@@ -192,6 +195,8 @@ void SphericalHarmonicsWithDerivative(int l_max, int m_max, double theta, std::v
         down = -std::sqrt(static_cast<double>(l) * (l + 1)) * y[l * wide + 1];
       dy[l * stride + m] = 0.5 * (up - down);
     }
+  for (int l = 0; l < m_max && l <= l_max; ++l)
+    for (int m = l + 1; m <= m_max; ++m) dy[l * stride + m] = 0.0;
   for (int l = 0; l <= l_max; ++l)
     for (int m = 0; m <= m_max; ++m) y[l * stride + m] = y[l * wide + m];
   y.resize(static_cast<std::size_t>(l_max + 1) * stride);
