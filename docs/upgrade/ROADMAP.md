@@ -224,8 +224,9 @@ Gate: outputs within the stated quadrature tolerance, each difference explained;
 Gate: thread-count independence by construction; memory one problem regardless of threads; T2 benchmark recorded.
 
 - [x] A level's radiative decay as Γ_γ, branchings and mixing ratios (`gamma_parametrisation.md`; record
-  `gamma_decay`, parameter kind 13; branch `feature/upgrade-8-gamma-branchings`). Open: the formal basis and external
-  capture on a record channel (refused), a Rose-Brink δ (not offered).
+  `gamma_decay`, parameter kind 13; branch `feature/upgrade-8-gamma-branchings`); with external capture on its
+  channels (note section 2.7; branch `feature/upgrade-8-gamma-external-capture`). Open: the formal basis (refused), a
+  Rose-Brink δ (not offered).
 
 ## Phase 7 — DWBA for THM vertices (leaf module; may start in parallel with Phases 4–6)
 

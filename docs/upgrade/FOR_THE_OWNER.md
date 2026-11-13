@@ -380,8 +380,14 @@ partial widths and then into the amplitudes the engine has always used, by the e
 written with the record and the same project with the partial widths give the same numbers. The mixing ratio is
 Krane and Steffen's (ENSDF's); its sign was fixed by comparing the engine's γ angular distributions with their
 formula. The total radiative width stays out of the resonance's total width, as the radiative widths always have;
-the user guide says what that means for a resonance-strength datum (a difference of Γ_γ/Γ_particle). Not covered: the
-formal basis (`--no-brune`) and a level whose final state has external capture; both are refused with a message.
+the user guide says what that means for a resonance-strength datum (a difference of Γ_γ/Γ_particle). A level whose
+transitions have external capture (¹⁴N(p,γ)¹⁵O into the ground state and 6.79 MeV, ¹²C(p,γ), ¹⁷O(p,γ)) can be written
+so too: the record's widths are the observed ones, external part included, and the engine recomputes the external
+part at every evaluation, so they stay what the record says while a fit moves a proton width, the level energy or an
+ANC. Not covered: the formal basis (`--no-brune`), refused with a message. Known defect, in work: where the
+engine places its integration grid at the resonances (reaction rates, targets) and where it converts limits or
+samples in observed parameters, a record level's branchings and mixing ratios are read as widths in eV; this
+matters for a narrow resonance (total width of an eV or less) written as a record.
 
 ## What is in work and what comes next
 
@@ -499,10 +505,11 @@ change, where it ran out of memory before. No number of the test tree moved. Kno
 layers below 1 eV the fitted error of an energy shift is too small (χ² is a staircase in the shift there), and the
 cost of a shifted data set grows with the width of the shift's prior over the width of the layer.
 
-In work now: the `gamma_decay` record on a level whose transitions have external capture; the diagnostic switches
-read once into one record (the last step of "no hidden state"; no number may change); the distorted-wave vertex's
-quadrature moved into the transfer library. Merged on 2026-11-13: the third step of "no hidden state" (section
-above); the stopping of a data set
+In work now: the diagnostic switches read once into one record (the last step of "no hidden state"; no number may
+change); the distorted-wave vertex's quadrature moved into the transfer library; the `gamma_decay` record in the
+places that handle observed level parameters (the defect named in the section on radiative widths). Merged on
+2026-11-13: the `gamma_decay` record on a level whose transitions have external capture; the third step of "no
+hidden state" (section above); the stopping of a data set
 with an energy shift is taken at the shifted beam energy (numbers of such data sets on a target change, by the
 logarithmic slope of the stopping times shift over energy); the total radiative width, the gamma branchings and the
 mixing ratios of a level as fit parameters (previous section); the Trojan-horse distortion factor and the waves of

@@ -58,54 +58,101 @@ double SqrtNFFactor(CNuc &compound, JGroup *group, const ALevel *level, double n
   return 1.0 / std::sqrt(phys::bound_state_normalization(n0, channels));
 }
 
-complex ExternalReducedWidth(CNuc &compound, JGroup *group, ALevel *level, AChannel *channel, bool initial,
-                             const Config &configure) {
+std::pair<int, int> ExternalCaptureFinalState(CNuc &compound, AChannel *channel) {
   const char type = channel->GetRadType();
-  if (type != 'E' && !(type == 'M' && channel->GetL() == 1)) return complex(0.0, 0.0);
-  JGroup *finalGroup = nullptr;
-  ALevel *finalLevel = nullptr;
-  for (int j = 1; j <= compound.NumJGroups() && !finalLevel; j++)
-    for (int la = 1; la <= compound.GetJGroup(j)->NumLevels() && !finalLevel; la++)
-      if (compound.GetJGroup(j)->GetLevel(la)->IsECLevel() &&
-          channel->GetPairNum() == compound.GetJGroup(j)->GetLevel(la)->GetECPairNum()) {
-        finalGroup = compound.GetJGroup(j);
-        finalLevel = finalGroup->GetLevel(la);
-      }
-  if (!finalLevel) return complex(0.0, 0.0);
+  if (type != 'E' && !(type == 'M' && channel->GetL() == 1)) return {0, 0};
+  for (int j = 1; j <= compound.NumJGroups(); j++)
+    for (int la = 1; la <= compound.GetJGroup(j)->NumLevels(); la++) {
+      const ALevel *f = compound.GetJGroup(j)->GetLevel(la);
+      if (!f->IsECLevel() || channel->GetPairNum() != f->GetECPairNum()) continue;
+      const int L = channel->GetL();
+      const unsigned char mask = f->GetECMultMask();
+      if ((type == 'E' && L == 1 && (mask & isE1)) || (type == 'M' && L == 1 && (mask & isM1)) ||
+          (type == 'E' && L == 2 && (mask & isE2)))
+        return {j, la};
+      return {0, 0};
+    }
+  return {0, 0};
+}
+
+complex ExternalReducedWidthAt(CNuc &compound, JGroup *group, AChannel *channel, std::pair<int, int> finalState,
+                               const ExternalCaptureInputs &values, const Config &configure,
+                               ExternalCaptureSlopes *slopes) {
+  if (slopes) {
+    slopes->level.assign(group->NumChannels(), complex(0.0, 0.0));
+    slopes->finalScale.clear();
+  }
+  if (finalState.first == 0) return complex(0.0, 0.0);
+  const char type = channel->GetRadType();
   const int L = channel->GetL();
-  const unsigned char mask = finalLevel->GetECMultMask();
-  if (!((type == 'E' && L == 1 && (mask & isE1)) || (type == 'M' && L == 1 && (mask & isM1)) ||
-        (type == 'E' && L == 2 && (mask & isE2))))
-    return complex(0.0, 0.0);
-  const double levelEnergy = initial ? level->GetE() : level->GetTransformE();
-  const double finalEnergy = initial ? finalLevel->GetE() : finalLevel->GetTransformE();
+  JGroup *finalGroup = compound.GetJGroup(finalState.first);
+  ALevel *finalLevel = finalGroup->GetLevel(finalState.second);
   std::vector<phys::CaptureChannel> in;
   std::vector<AChannel *> inChannels;
+  std::vector<int> inNumber;
   for (int ch = 1; ch <= group->NumChannels(); ch++) {
     AChannel *c = group->GetChannel(ch);
     if (c->GetRadType() != 'P') continue;
-    in.push_back({c->GetPairNum(), c->GetL(), c->GetS(), initial ? level->GetGamma(ch) : level->GetTransformGamma(ch)});
+    in.push_back({c->GetPairNum(), c->GetL(), c->GetS(), values.levelGamma[ch - 1]});
     inChannels.push_back(c);
+    inNumber.push_back(ch);
   }
   std::vector<phys::FinalChannel> out;
   std::vector<AChannel *> outChannels;
+  std::vector<int> outNumber;
   for (int chp = 1; chp <= finalGroup->NumChannels(); chp++) {
     AChannel *c = finalGroup->GetChannel(chp);
     if (c->GetRadType() != 'P') continue;
-    const double g = initial ? finalLevel->GetGamma(chp) : finalLevel->GetTransformGamma(chp);
     // s_fc = gamma~_fc N_f^(-1/2) K_c (Eq. 2), in the engine's order.
     out.push_back({c->GetPairNum(), c->GetL(), c->GetS(),
-                   g * finalLevel->GetSqrtNFFactor() * finalLevel->GetECConversionFactor(chp)});
+                   values.finalGamma[chp - 1] * values.finalSqrtNF * finalLevel->GetECConversionFactor(chp)});
     outChannels.push_back(c);
+    outNumber.push_back(chp);
   }
+  // The integrals of the pairs that couple, kept for the slopes (Eq. 4 is bilinear in gamma_lambda c and s_fc).
+  std::vector<complex> integrals(in.size() * out.size());
+  std::vector<unsigned char> known(in.size() * out.size(), 0);
   const phys::RadialIntegral integral = [&](std::size_t c, std::size_t cf) {
+    if (known[c * out.size() + cf]) return integrals[c * out.size() + cf];
     ECIntegral theECIntegral(compound.GetPair(outChannels[cf]->GetPairNum()), configure);
-    return theECIntegral(inChannels[c]->GetL(), outChannels[cf]->GetL(), inChannels[c]->GetS(),
-                         outChannels[cf]->GetS(), group->GetJ(), finalGroup->GetJ(), L, type, levelEnergy,
-                         finalEnergy, true);
+    const complex v = theECIntegral(inChannels[c]->GetL(), outChannels[cf]->GetL(), inChannels[c]->GetS(),
+                                    outChannels[cf]->GetS(), group->GetJ(), finalGroup->GetJ(), L, type,
+                                    values.levelEnergy, values.finalEnergy, true);
+    integrals[c * out.size() + cf] = v;
+    known[c * out.size() + cf] = 1;
+    return v;
   };
-  return phys::external_reduced_width(type == 'M' ? phys::Multipole::M : phys::Multipole::E, L, finalGroup->GetJ(),
-                                      in, out, integral);
+  const phys::Multipole X = type == 'M' ? phys::Multipole::M : phys::Multipole::E;
+  const complex value = phys::external_reduced_width(X, L, finalGroup->GetJ(), in, out, integral);
+  if (!slopes) return value;
+  slopes->finalScale.assign(finalGroup->NumChannels(), complex(0.0, 0.0));
+  for (std::size_t c = 0; c < in.size(); c++) {
+    std::vector<phys::CaptureChannel> unit = in;
+    for (std::size_t k = 0; k < unit.size(); k++) unit[k].gamma = k == c ? 1.0 : 0.0;
+    slopes->level[inNumber[c] - 1] = phys::external_reduced_width(X, L, finalGroup->GetJ(), unit, out, integral);
+  }
+  for (std::size_t cf = 0; cf < out.size(); cf++) {
+    std::vector<phys::FinalChannel> unit = out;
+    for (std::size_t k = 0; k < unit.size(); k++) unit[k].scale = k == cf ? 1.0 : 0.0;
+    slopes->finalScale[outNumber[cf] - 1] = phys::external_reduced_width(X, L, finalGroup->GetJ(), in, unit, integral);
+  }
+  return value;
+}
+
+complex ExternalReducedWidth(CNuc &compound, JGroup *group, ALevel *level, AChannel *channel, bool initial,
+                             const Config &configure) {
+  const std::pair<int, int> finalState = ExternalCaptureFinalState(compound, channel);
+  if (finalState.first == 0) return complex(0.0, 0.0);
+  const ALevel *finalLevel = compound.GetJGroup(finalState.first)->GetLevel(finalState.second);
+  ExternalCaptureInputs values;
+  values.levelEnergy = initial ? level->GetE() : level->GetTransformE();
+  values.finalEnergy = initial ? finalLevel->GetE() : finalLevel->GetTransformE();
+  for (int ch = 1; ch <= group->NumChannels(); ch++)
+    values.levelGamma.push_back(initial ? level->GetGamma(ch) : level->GetTransformGamma(ch));
+  for (int ch = 1; ch <= compound.GetJGroup(finalState.first)->NumChannels(); ch++)
+    values.finalGamma.push_back(initial ? finalLevel->GetGamma(ch) : finalLevel->GetTransformGamma(ch));
+  values.finalSqrtNF = finalLevel->GetSqrtNFFactor();
+  return ExternalReducedWidthAt(compound, group, channel, finalState, values, configure);
 }
 
 // ------------------------------------------------------------------ formal basis: Brune quantities per evaluation

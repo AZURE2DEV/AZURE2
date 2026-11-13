@@ -1,6 +1,7 @@
 #ifndef GAMMADECAYMAP_H
 #define GAMMADECAYMAP_H
 
+#include <complex>
 #include <memory>
 #include <string>
 #include <utility>
@@ -27,12 +28,25 @@ class LevelRow;
  * the record's numbers sit in the vector at the positions of the level's photon amplitudes (one number per photon
  * channel), and every fill (CNuc::FillCompoundFromParams) replaces them by the amplitudes of the partial widths
  * they give (Eq. 2.3), converted by the engine's own conversion (physics/ amplitudes_from_observed) with the level's
- * current energy and particle amplitudes.  The engine's physics is not involved: it receives amplitudes as before.
+ * current energy and particle amplitudes; a channel with external capture has its gamma^ext at the current parameters
+ * subtracted as TransformIn does (section 2.7).  The engine's physics is not involved: it receives amplitudes as
+ * before.
  *
- * Set-up state, read-only after CNuc::Fill and shared by the copies of the compound (CNuc::Clone).  The record's
- * values of the last fill are the compound's (CNuc::GammaDecayValues), which the gradient's pull-back and the priors
- * read.
+ * Set-up state, read-only after CNuc::Fill and shared by the copies of the compound (CNuc::Clone).  What a fill
+ * computes is the compound's (CNuc::GammaDecayFillOf), which the gradient's pull-back, the priors and the report read.
  */
+
+/// What a fill leaves in the compound for one record (CNuc::GammaDecayFillOf): its numbers and, per slot (photon
+/// channel), the parts of the engine's amplitude gamma_int = sign(g) (g^2 - (Im gamma^ext)^2)^1/2 - Re gamma^ext.
+struct GammaDecayFill {
+  std::vector<double> q;                         ///< the record's numbers, slot order (Gamma_gamma in eV)
+  std::vector<double> total;                     ///< g_k, the amplitude of the record's observed width (MeV^1/2)
+  std::vector<std::complex<double>> external;    ///< gamma^ext_k (MeV^1/2); 0 without external part
+  std::vector<unsigned char> floor;              ///< 1: g_k^2 < (Im gamma^ext_k)^2, gamma_int = -Re gamma^ext_k
+  /// d gamma^ext_k / d gamma_lambda c per channel of the level's group, and d gamma^ext_k / d gamma~_f d per channel
+  /// of the final state's group (N_f's dependence included); empty without external part.
+  std::vector<std::vector<std::complex<double>>> dLevel, dFinal;
+};
 
 /// One record placed in the compound.
 struct GammaDecayLevel {
@@ -48,6 +62,17 @@ struct GammaDecayLevel {
   int levelNumber = 0;              ///< the level counted over all groups (names of the vector, from 1)
   std::size_t block = 0;            ///< the level's block of the structure System
   std::vector<int> channelOfBlockChannel;  ///< the group channel of each block channel
+  /// The final state of a slot's external part (ExternalCaptureFinalState; group 0: none), the full-vector index of
+  /// its energy and the number of its channels, which follow the energy in the vector.
+  struct External {
+    int group = 0, level = 0, energyIndex = -1, channels = 0;
+  };
+  std::vector<External> external;  ///< per slot
+  bool HasExternal() const {
+    for (const External &e : external)
+      if (e.group) return true;
+    return false;
+  }
 };
 
 class GammaDecaySet {
@@ -56,8 +81,8 @@ class GammaDecaySet {
    * The <gammaDecays> section of the project (as ModelData::Read: records validated by the format-3 table, built
    * against <levels>), placed in the compound, with the partial widths of every record written as the level's input
    * widths (eV) for TransformIn.  Refused with a message (nullptr): the reader's diagnostics, the formal basis or
-   * --no-transform, a record channel with external capture in the run, a photon channel that is a static moment, a
-   * level outside the R-matrix.  An empty set without the section.
+   * --no-transform, a photon channel that is a static moment, a level outside the R-matrix.  An empty set without the
+   * section.  The set keeps `configure` (the run's, which outlives the compound) for the external-capture integrals.
    */
   static std::shared_ptr<const GammaDecaySet> Read(CNuc &compound, const Config &configure,
                                                    const std::vector<azure2::io::LevelRow> &rows);
@@ -72,8 +97,8 @@ class GammaDecaySet {
   /// CNuc::FillMnParams: the record's parameter at photon channel ch of level (j, la), if (j, la, ch) is a record
   /// slot (true), else nothing (false).
   bool AddParameter(AZUREParams &params, int j, int la, int ch, int levelNumber) const;
-  /// CNuc::FillCompoundFromParams: the full vector p with the record slots replaced by the engine's amplitudes; the
-  /// record's values stored in the compound.
+  /// CNuc::FillCompoundFromParams: the full vector p with the record slots replaced by the engine's amplitudes; what
+  /// the fill computed stored in the compound (GammaDecayFill).
   vector_r ToEngine(CNuc &compound, const vector_r &p) const;
   /// CNuc::GetTransformParams: the record's value of the last fill at a record slot, else `otherwise`.
   double ValueOr(const CNuc &compound, int j, int la, int ch, double otherwise) const;
@@ -90,6 +115,10 @@ class GammaDecaySet {
    * the record slots' own cotangents out.
    */
   void PullBack(CNuc &compound, const GradAccum &accum, const ParamIndexMap &map, vector_r &gradFull) const;
+  /// The full-vector indices of everything the photon amplitudes of record r depend on: the level's energy and
+  /// channels (the record's numbers, its particle amplitudes) and the channels of the final states of its external
+  /// parts.  The gradient asks for the photon amplitudes' cotangents when one of them is free.
+  std::vector<int> InputIndices(const ParamIndexMap &map, int r) const;
 
   /// The priors of the records and the remainder's wall as residuals (r, and dr/dq as (full index, value) pairs).
   struct PenaltyRow {
@@ -107,7 +136,16 @@ class GammaDecaySet {
   std::string Report(const CNuc &compound) const;
 
  private:
+  struct Point;
+  /// The map of record level L at energy E (MeV), its numbers q, the level's amplitudes `particle` (per group channel)
+  /// and the final states' energies and amplitudes per slot (Point in GammaDecayMap.cpp); with slopes, the
+  /// derivatives of gamma^ext.
+  Point Map(CNuc &compound, const GammaDecayLevel &L, double E, const std::vector<double> &q,
+            const std::vector<double> &particle, const std::vector<std::pair<double, std::vector<double>>> &finals,
+            bool slopes) const;
+
   bool park_ = false, gslCoulomb_ = false, rmc_ = false;
+  const Config *configure_ = nullptr;  ///< the run's (external-capture integrals: its per-thread scratch)
   std::shared_ptr<const CNucSystem> structure_;  ///< the structure System (CNucSystemContent::Structure)
   std::vector<GammaDecayLevel> levels_;
 };

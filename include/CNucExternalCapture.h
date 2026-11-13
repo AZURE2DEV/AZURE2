@@ -1,6 +1,7 @@
 #ifndef CNUCEXTERNALCAPTURE_H
 #define CNUCEXTERNALCAPTURE_H
 
+#include <utility>
 #include <vector>
 
 #include "Constants.h"
@@ -32,10 +33,43 @@ void FinalStateOfAnotherPair(CNuc &compound, const Config &configure, int otherP
 double SqrtNFFactor(CNuc &compound, JGroup *group, const ALevel *level, double n0, const std::vector<double> &gamma);
 
 /*!
- * gamma^ext (MeV^1/2, complex) of the photon channel `channel` of level `level` in `group` (Eq. 4): the final state is
- * the first external-capture level whose pair is the channel's; the level's energy and amplitudes are its input
- * values (initial) or its transform slots (Brune values of the fit parameters), the final state's likewise, with its
- * stored N_f^(-1/2) and conversion factor K_c.  Zero unless E1, E2 or M1 with the final state's multipolarity flag.
+ * The final state of external capture through the photon channel `channel`: the first external-capture level whose
+ * pair is the channel's, when its multipolarity flag (column 31) covers the channel's E1, M1 or E2; (group, level),
+ * 1-based, or (0, 0) when the channel has no external part.
+ */
+std::pair<int, int> ExternalCaptureFinalState(CNuc &compound, AChannel *channel);
+
+/// The numbers gamma^ext of one photon channel depends on (Eqs. 2 and 4), as values.
+struct ExternalCaptureInputs {
+  double levelEnergy = 0.0;        ///< E_lambda (MeV, E_x)
+  std::vector<double> levelGamma;  ///< the level's amplitudes (MeV^1/2) per channel of its group, gamma[ch - 1]
+  double finalEnergy = 0.0;        ///< E_f (MeV, E_x)
+  std::vector<double> finalGamma;  ///< the final state's amplitudes (MeV^1/2) per channel of its group
+  double finalSqrtNF = 1.0;        ///< N_f^(-1/2) of the final state
+};
+
+/// The partial derivatives of gamma^ext, exact since Eq. (4) is bilinear: d gamma^ext / d gamma_lambda c per channel
+/// of the level's group (0 for a channel that is no particle channel) and d gamma^ext / d s_fc per channel of the
+/// final state's group (MeV^1/2 per unit of s_fc).
+struct ExternalCaptureSlopes {
+  std::vector<complex> level;
+  std::vector<complex> finalScale;
+};
+
+/*!
+ * gamma^ext (MeV^1/2, complex) of the photon channel `channel` of a level of `group` into `finalState`
+ * (ExternalCaptureFinalState) at the values `in` (Eq. 4, with s_fc = gamma~_fc N_f^(-1/2) K_c, Eq. 2): the radial
+ * integrals are ECIntegral's direct ones with the run's per-thread scratch.  With `slopes`, also its derivatives,
+ * from the same integrals.  Zero unless E1, E2 or M1 into a final state.
+ */
+complex ExternalReducedWidthAt(CNuc &compound, JGroup *group, AChannel *channel, std::pair<int, int> finalState,
+                               const ExternalCaptureInputs &in, const Config &configure,
+                               ExternalCaptureSlopes *slopes = nullptr);
+
+/*!
+ * gamma^ext of the photon channel `channel` of level `level` in `group` (ExternalReducedWidthAt): the level's energy
+ * and amplitudes are its input values (initial) or its transform slots (Brune values of the fit parameters), the
+ * final state's likewise, with its stored N_f^(-1/2).
  */
 complex ExternalReducedWidth(CNuc &compound, JGroup *group, ALevel *level, AChannel *channel, bool initial,
                              const Config &configure);

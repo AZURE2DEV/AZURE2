@@ -82,13 +82,15 @@ class CNuc {
   const ModelDataSet &GetModelData() const { return *modelData_; }
   /// The gamma_decay records (GammaDecayMap.h), read by Fill; empty without <gammaDecays>.
   const GammaDecaySet &GetGammaDecays() const { return *gammaDecays_; }
-  /// The values of record r (slot order) at the last FillCompoundFromParams (GammaDecaySet::ToEngine).
-  const std::vector<double> &GammaDecayValues(int r) const { return gammaDecayValues_[r]; }
+  /// What the last FillCompoundFromParams (GammaDecaySet::ToEngine) left for record r: its values (slot order) and
+  /// the parts of its photon amplitudes.
+  const GammaDecayFill &GammaDecayFillOf(int r) const { return gammaDecayFills_[r]; }
+  const std::vector<double> &GammaDecayValues(int r) const { return gammaDecayFills_[r].q; }
   /// Whether a fill has stored the values of record r.
-  bool HasGammaDecayValues(int r) const { return r >= 0 && r < (int)gammaDecayValues_.size(); }
-  void SetGammaDecayValues(int r, const std::vector<double> &q) {
-    if ((int)gammaDecayValues_.size() <= r) gammaDecayValues_.resize(r + 1);
-    gammaDecayValues_[r] = q;
+  bool HasGammaDecayValues(int r) const { return r >= 0 && r < (int)gammaDecayFills_.size(); }
+  void SetGammaDecayFill(int r, GammaDecayFill fill) {
+    if ((int)gammaDecayFills_.size() <= r) gammaDecayFills_.resize(r + 1);
+    gammaDecayFills_[r] = std::move(fill);
   }
   /// Number of samples the <abundances> block defines (0 without the block).
   int NumSamples() const { return (int)samples_.size(); }
@@ -308,7 +310,7 @@ class CNuc {
   /// Setup state, shared by the copies (Clone).
   std::shared_ptr<const ModelDataSet> modelData_ = std::make_shared<ModelDataSet>();
   std::shared_ptr<const GammaDecaySet> gammaDecays_ = std::make_shared<GammaDecaySet>();
-  std::vector<std::vector<double>> gammaDecayValues_;
+  std::vector<GammaDecayFill> gammaDecayFills_;
   bool transformedIn_ = false;
   std::vector<double> thmCoherentValues_;
 };

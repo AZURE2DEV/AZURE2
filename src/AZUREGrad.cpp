@@ -827,11 +827,12 @@ AMatrixFunc::FreeMask BuildFreeMask(CNuc *compound, const ParamIndexMap &pmap) {
       for (int ch = 1; ch <= nch; ch++) mask.g[j - 1][la - 1][ch - 1] = isFree(pmap.GammaIndexFlat(j, la, ch));
       // A gamma_decay level: its photon amplitudes move with any free number of the level (the record's, its energy,
       // its particle amplitudes), so their cotangents are needed for the pull-back (GammaDecayMap.h).
+      // With external capture also with the final states' amplitudes (GammaDecaySet::InputIndices).
       const GammaDecaySet &decays = compound->GetGammaDecays();
       const int record = decays.RecordOf(j, la);
       if (record < 0) continue;
-      bool anyFree = mask.e[j - 1][la - 1];
-      for (int ch = 1; ch <= nch; ch++) anyFree = anyFree || mask.g[j - 1][la - 1][ch - 1];
+      bool anyFree = false;
+      for (const int index : decays.InputIndices(pmap, record)) anyFree = anyFree || isFree(index);
       if (anyFree)
         for (const int ch : decays.Levels()[record].photonChannels) mask.g[j - 1][la - 1][ch - 1] = 1;
     }
