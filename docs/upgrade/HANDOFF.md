@@ -2,6 +2,31 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-7-thm-wiring`) — the THM distortions call physics/transfer; global optical sets one table
+
+**Done.** (1) Design in `transfer.md` §24 (what each THM quantity comes from, what the engine keeps, the DW vertex,
+the named settings). (2) The seven global optical sets are one table of the library (`GlobalOptical.h/.cpp`), test
+`physics_transfer_global_optical` (RIPL-3/FRONT21 values); `src/ThmOptical.{h,cpp}` deleted; recipe "Add a global
+optical set" in `CLAUDE.md`. Tree identical after this part (860/833/860 against `tab-truem-1`). (3) The library gains
+waves one l at a time (`TabulateChannel`, `SolvePartialWave`, matching at the last node or beyond the turning point),
+exact plane waves, r_min on overlaps, the zero-range THM weight with its bound (`ZeroRangeWeight.h`), the a_3 term of
+the Numerov start; test `physics_transfer_zero_range_weight` (closed forms, the two matchings, FRESCO's zero-range
+¹²C(⁶Li,d) through the new sum to 6.3e-5). `ThmDistortion` keeps kinematics, windows, E_ref and the ln R grid and has
+no Numerov, matching or partial-wave sum; `ThmDwVertex` takes its waves from the library. Unit-test quantities move
+≤ 9e-9 (record and refinement table in `transfer.md` §24.5); no golden changed. Speed: the THM checks −80 % / −71 % /
+−7 % instructions (distortion / fit / dw vertex). Merged `feature/upgrade-4-data` at e4fb58f1.
+
+**Not done (stopped by the brief's rule).** The DW vertex itself: `EntranceVertex` is not the engine's surface-only
+vertex for a distorted source, and the library has no function for S_lm(a) (§24.2). Spin-orbit terms of the global
+sets (no primary source at hand; Frescox's `opticals/KDParamCode.f` has Koning–Delaroche's, not built here).
+
+**Verified how** (last commit, merged onto e4fb58f1, build 0 warnings): whole tree against `tab-gammam-1` 887/851/887
+identical; `ctest -LE slow` 223/223, slow 11/11; `tests/run_tests.sh` 162 passed; the eight fits identical to
+`work/b-gammam`; converted-tree gate 679/643/679 identical; 1 against 3 threads identical (T1, T2, T3, 13N,
+18O_p_a_thm and two distortion projects × 3 bases); the THM fits of `tests/thm_fit` same χ², parameters, calls.
+**Open**: the source projection S_lm(a) in the library; matching of optical waves just beyond R + 12a costs ~3e-6
+in |M|² (old and new alike, §24.5).
+
 ## 2026-11-13 (director, 04:03) — merged: a level's radiative decay as total width, branchings and mixing ratios (record `gamma_decay`)
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed):
