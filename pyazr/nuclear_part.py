@@ -89,6 +89,11 @@ class ProjectPair:
     heavy_parity: int
 
 
+def _level_name(level):
+    """A level as a message names it: its label for a :class:`ProjectLevel` (not its repr), else as given."""
+    return level.label if isinstance(level, ProjectLevel) else level
+
+
 def _level_address(level):
     """What the engine takes as a level's name: a label (str), a :class:`ProjectLevel` (its label), (J^pi, E_x) as
     ``("3/2-", 3.5)`` (the label form "3/2- 3.5": the level of that J^pi within 1 keV), or the engine's indices
@@ -151,7 +156,7 @@ class NuclearPart:
     def level(self, level) -> ProjectLevel:
         """The :class:`ProjectLevel` named by ``level`` (a label, (J^pi, E_x), a ProjectLevel, or the engine's (group, level));
         FormatError when it names none or several."""
-        k = _engine_call(f"level {level!r}", _engine_module().find_level, self._doc, _level_address(level))
+        k = _engine_call(f"level {_level_name(level)!r}", _engine_module().find_level, self._doc, _level_address(level))
         return self.levels()[k]
 
     def pairs(self) -> List[ProjectPair]:
@@ -174,14 +179,14 @@ class NuclearPart:
     def set_level(self, level, *, energy=None, fixed=None, active=None):
         """Set a level's E_x (MeV), whether it is fixed in a fit, whether it is active (an inactive level is not
         read by the engine), on every row of the level; ``None`` leaves a property as it is."""
-        return self._edit_levels(f"level {level!r}", _engine_module().set_level_edits, _level_address(level),
+        return self._edit_levels(f"level {_level_name(level)!r}", _engine_module().set_level_edits, _level_address(level),
                                  energy=None if energy is None else float(energy), fixed=fixed, active=active)
 
     def set_channel(self, level, pair, l, s, *, width=None, fixed=None):
         """Set the width column of channel (pair key, l, s) of a level -- in the row's convention: eV for an open
         channel or a photon, the ANC in fm^-1/2 for a closed channel, MeV^1/2 for a reduced-width amplitude row
         (:attr:`ProjectChannel.amplitude`) -- or whether it is fixed in a fit."""
-        return self._edit_levels(f"level {level!r}, channel ({pair}, {l}, {s})", _engine_module().set_channel_edits,
+        return self._edit_levels(f"level {_level_name(level)!r}, channel ({pair}, {l}, {s})", _engine_module().set_channel_edits,
                                  _level_address(level), int(pair), int(l), _two_s(s),
                                  width=None if width is None else float(width), fixed=fixed)
 
@@ -215,7 +220,7 @@ class NuclearPart:
 
     def remove_level(self, level):
         """Remove every row of a level."""
-        return self._edit_levels(f"remove level {level!r}", _engine_module().remove_level_edits, _level_address(level))
+        return self._edit_levels(f"remove level {_level_name(level)!r}", _engine_module().remove_level_edits, _level_address(level))
 
     def _write_level_values(self, values):
         """Write fitted level values ``[(kind "energy" | "width", group, level, pair key, l, 2s, value)]`` into the

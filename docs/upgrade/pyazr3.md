@@ -600,6 +600,27 @@ engine's physics does not. Sizes are estimates from the files of this commit.
    the package docstring, `pyazr.describe()`, `pyazr.kinds()` (adding the options table and `physics_functions()`
    to the binding), `Session.describe()` on today's session. New `errors.py`, `describe.py`; `__init__.py`;
    `pybind_api.cpp` (+60). About 500 lines; tests `errors_test` (the wrong calls of 1.5), `describe_test`.
+   **Done** (branch `feature/upgrade-8-pyazr3-errors`, additions only).  Built: `pyazr/errors.py` (`Error`;
+   `FormatError` moved there from `project.py`, one class; `ParameterError` with `ParameterKeyError`,
+   `ParameterIndexError`, `ParameterVectorError` for the places that raised `KeyError`, `IndexError` or
+   `AZURE2Error` before; `AZURE2Error`, also named `EngineError`, the class `_azure2.AZURE2Error` is, keeping the
+   name `AZURE2Error` that two tests compare; `DomainError`, `SessionClosed`, `MissingFile` (a
+   `FileNotFoundError`), `DomainZeroDivision` (also a `ZeroDivisionError`, where a Python formula divided by zero
+   before), `EngineWarning`); the binding raises the Python classes (`BindErrors`) and checks every
+   free vector for a NaN or an infinity, naming the parameter; `pyazr/session_checks.py` (the argument checks and
+   messages of the session's calls); the engine's notices pass through a line buffer per session
+   (`api/src/pybind_notices.cpp`, the session's `Config::outStream`), whose table of four notices (EC amplitude
+   file written or appended, normalization and shift files) become `EngineWarning`s with the file and the
+   consequence; `pyazr.describe()` without a path, `pyazr.kinds()`, `azure2.describe()` (in `described.py`, which
+   was extended rather than doubled by a `describe.py`: a module `pyazr.describe` would hide the function of that
+   name); `api/src/pybind_describe.cpp` (`build_info`, `coulomb_table_info`, `session_options`) and
+   `_azure2.physics_functions` (the names `BindPhysics` registers); the package docstring with a tested session;
+   the stale docstrings of 1.1 and 1.6 corrected.  Tests `errors_test` (27 wrong calls), `describe_test`.
+   Left: the options table is the binding's (the program's parser and `--help` in `src/AZURE2.cpp` are not a
+   table; a test ties the three together); `kinds()["data"]` has no extra outputs (the engine's quantity table
+   does not declare them); `azure2.describe()` gives no parameter bounds (the binding does not reach the engine's
+   limits); notices printed outside `Config::outStream`, and the engine's `WARNING:` lines (which tests read on
+   standard output), stay on standard output; the physics table is names and pybind signatures (step 4).
 2. **Parameter records instead of numeric layouts.** `parameter_records()` and a `pair_records()` as dicts;
    `Parameter` and `Parameters` built on them; `of_kind`; delete `GetParameterInfo`, `GetPairsInfo`, the two
    `_NFIELDS` and the type codes. `AZUREAPI.h/.cpp` (−200), `pybind_api.cpp`, `parameters.py` (795 → about 400),

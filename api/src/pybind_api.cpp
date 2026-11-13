@@ -20,8 +20,11 @@
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 
+#include <cmath>
 #include <cstring>
 #include <iostream>
+#include <set>
+#include <vector>
 #include <string>
 
 #include <cstdio>
@@ -37,6 +40,7 @@
 #include "GSLException.h"
 #include "ECAmplitudeCache.h"
 #include <gsl/gsl_errno.h>
+#include "pybind_notices.h"
 
 namespace py = pybind11;
 
@@ -45,6 +49,13 @@ class AZURE2Error : public std::runtime_error {
  public:
   explicit AZURE2Error(const std::string &what) :
     std::runtime_error(what) {}
+};
+
+// A free-parameter vector the engine cannot take (wrong length, NaN, infinity): pyazr.ParameterVectorError, which is
+// an AZURE2Error too.
+class ParameterVectorError : public AZURE2Error {
+ public:
+  explicit ParameterVectorError(const std::string &what) : AZURE2Error(what) {}
 };
 
 // pybind_potentials.cpp: a session's hybrid potentials
@@ -157,7 +168,7 @@ class Session {
     api_(nullptr) {
     // AZURE_REFINE_QUADRATURE: a bad value raises (ValueError), before any allocation
     const int refine = azure2::RefineQuadratureFromEnvironment();
-    config_ = new Config(std::cout);
+    config_ = new Config(noticeStream_);  // standard output, but the notices of HeldNotices() (pybind_notices.h)
     config_->refineQuadrature = refine;
     config_->configfile = configfile;
     config_->paramMask |= Config::USE_API;  // silence the "Calculating ..." chatter
@@ -392,20 +403,42 @@ class Session {
   // length.  A short vector therefore read past its end and left the norms and
   // shifts at whatever the engine last held: cross sections and S-factors still
   // right (they use no norm), chi2 garbage, no error (12C+alpha, 2026-10-08).
+  // A NaN or an infinity reached the Coulomb functions and failed there, naming no parameter (or gave a NaN chi2).
   void expect_free(const vector_r &v, const char *what) const {
     std::vector<bool> fixed = api_->params_fixed();
     size_t nfree = 0;
     for (bool f : fixed) if (!f) nfree++;
     if (v.size() != nfree)
-      throw AZURE2Error(std::string(what) + ": expected the free parameter vector (" +
-                        std::to_string(nfree) + " values, params_rwa / params order), got " +
-                        std::to_string(v.size()) + ".");
+      throw ParameterVectorError(std::string(what) + ": expected the free parameter vector (" +
+                                 std::to_string(nfree) + " values, params_rwa / params order), got " +
+                                 std::to_string(v.size()) + ".  " + kVectorHint);
+    std::vector<int> slot;  // free index -> index among all parameters
+    for (size_t k = 0; k < fixed.size(); ++k) if (!fixed[k]) slot.push_back((int)k);
+    expect_finite(v, slot, what, "free parameter vector");
   }
   void expect_all(const vector_r &v, const char *what) const {
     size_t nall = api_->params_fixed().size();
     if (v.size() != nall)
-      throw AZURE2Error(std::string(what) + ": expected every parameter (" + std::to_string(nall) +
-                        " values, fixed ones included), got " + std::to_string(v.size()) + ".");
+      throw ParameterVectorError(std::string(what) + ": expected every parameter (" + std::to_string(nall) +
+                                 " values, fixed ones included), got " + std::to_string(v.size()) + ".  " +
+                                 "azure2.sess.params_all_rwa() is such a vector.");
+    std::vector<int> slot(nall);
+    for (size_t k = 0; k < nall; ++k) slot[k] = (int)k;
+    expect_finite(v, slot, what, "parameter vector");
+  }
+  static constexpr const char *kVectorHint =
+      "azure2.params_rwa is such a vector (the start values); azure2.parameters.free names its entries in order.";
+  // The first entry that is not finite, by its index and the parameter's name.
+  void expect_finite(const vector_r &v, const std::vector<int> &slot, const char *what, const char *vector) const {
+    size_t bad = 0, count = 0;
+    for (size_t i = 0; i < v.size(); ++i)
+      if (!std::isfinite(v[i]) && count++ == 0) bad = i;
+    if (count == 0) return;
+    std::ostringstream text;
+    text << what << ": entry " << bad << " of the " << vector << " (" << api_->params_names(slot[bad]) << ") is "
+         << v[bad] << (count > 1 ? " (" + std::to_string(count) + " entries are not finite)" : std::string())
+         << "; every entry must be a finite number.  " << kVectorHint;
+    throw ParameterVectorError(text.str());
   }
 
   // -- segment updates (return the number of segments) ------------------------
@@ -801,6 +834,37 @@ class Session {
 
   Config *config_;
   AZUREAPI *api_;
+  azure2_binding::NoticeBuffer notices_{std::cout};
+  std::ostream noticeStream_{&notices_};
+
+ public:
+  /// The notices held back since the last call (pybind_notices.h): one dict each with the engine's line ("text"), the
+  /// file it concerns ("file", a path) and the consequence ("consequence").
+  py::list take_notices() {
+    py::list out;
+    for (size_t i : notices_.Take()) {
+      const azure2_binding::HeldNotice &n = azure2_binding::HeldNotices()[i];
+      py::dict d;
+      d["text"] = n.text;
+      d["file"] = NoticeFile(n.file);
+      d["consequence"] = n.consequence;
+      out.append(d);
+    }
+    return out;
+  }
+
+ private:
+  // The path a notice's file key names.
+  std::string NoticeFile(const std::string &key) const {
+    if (config_ == nullptr) return "";
+    if (key == "ec_amplitudes")  // WorkingCopy::CalculateECAmplitudes
+      return config_->OpenPath(config_->outputdir +
+                               ((config_->paramMask & Config::CALCULATE_WITH_DATA) ? "intEC.dat" : "intEC.extrap"));
+    // DataOutputFiles.cpp
+    if (key == "normalizations") return config_->OpenPath(config_->outputdir + "normalizations.out");
+    if (key == "shifts") return config_->OpenPath(config_->outputdir + "shifts.out");
+    return "";
+  }
 };
 
 void BindPhysics(py::module_ &m);  // pybind_physics.cpp: the free functions of physics/
@@ -808,6 +872,43 @@ void BindThm(py::module_ &m);      // pybind_thm.cpp: <thm> blocks as the engine
 void BindSchema(py::module_ &m);   // pybind_schema.cpp: the table of project format 3
 void BindConvert(py::module_ &m);  // pybind_convert.cpp: format-3 validation and the converter old -> format 3
 void BindProject(py::module_ &m);  // pybind_project.cpp: the project file as a document
+void BindDescription(py::module_ &m);  // pybind_describe.cpp: what pyazr.describe() and pyazr.kinds() read
+
+namespace {
+
+// pyazr's error classes (pyazr/errors.py) for the engine's refusals: AZURE2Error is pyazr.AZURE2Error (also named
+// pyazr.EngineError), ParameterVectorError pyazr.ParameterVectorError, so that the class a C++ refusal raises and the
+// class a Python check raises are one.  The module is part of the package pyazr (its __name__ "pyazr._azure2"); the
+// classes are looked up there when one is raised.
+py::object ErrorClass(const char *name) {
+  return py::module_::import("pyazr.errors").attr(name);
+}
+
+void BindErrors(py::module_ &m) {
+  m.attr("AZURE2Error") = ErrorClass("AZURE2Error");
+  m.attr("ParameterVectorError") = ErrorClass("ParameterVectorError");
+  py::register_local_exception_translator([](std::exception_ptr p) {
+    try {
+      if (p) std::rethrow_exception(p);
+    } catch (const ParameterVectorError &e) {
+      PyErr_SetString(ErrorClass("ParameterVectorError").ptr(), e.what());
+    } catch (const AZURE2Error &e) {
+      PyErr_SetString(ErrorClass("AZURE2Error").ptr(), e.what());
+    }
+  });
+}
+
+std::vector<std::string> ModuleNamesInOrder(py::module_ &m) {
+  std::vector<std::string> out;
+  for (auto item : py::reinterpret_borrow<py::dict>(m.attr("__dict__"))) out.push_back(py::str(item.first));
+  return out;
+}
+std::set<std::string> ModuleNames(py::module_ &m) {
+  const std::vector<std::string> names = ModuleNamesInOrder(m);
+  return std::set<std::string>(names.begin(), names.end());
+}
+
+}  // namespace
 
 PYBIND11_MODULE(_azure2, m) {
   m.doc() = "In-process bindings for the AZURE2 R-matrix engine.";
@@ -818,8 +919,16 @@ PYBIND11_MODULE(_azure2, m) {
   // can produce -- would take the whole interpreter down instead of raising.
   gsl_set_error_handler(&GSLException::GSLErrorHandler);
 
-  py::register_exception<AZURE2Error>(m, "AZURE2Error", PyExc_RuntimeError);
-  BindPhysics(m);
+  BindErrors(m);
+  {
+    // The names BindPhysics adds are the table of bound physics functions (pyazr.kinds()["physics"]).
+    const std::set<std::string> before = ModuleNames(m);
+    BindPhysics(m);
+    py::list physics;
+    for (const std::string &name : ModuleNamesInOrder(m))
+      if (!before.count(name)) physics.append(name);
+    m.attr("physics_functions") = py::tuple(physics);
+  }
   BindThm(m);  // pybind_thm.cpp: the engine's reading of a <thm> block
 
   m.def(
@@ -1007,5 +1116,9 @@ PYBIND11_MODULE(_azure2, m) {
            py::arg("params"))
       .def("coulomb_functions", &Session::coulomb_functions, py::arg("request"))
       .def("ec_integrals", &Session::ec_integrals, py::arg("request"))
-      .def("cache_stats", &Session::cache_stats);
+      .def("cache_stats", &Session::cache_stats)
+      .def("take_notices", &Session::take_notices,
+           "The engine's notices held back since the last call (pybind_notices.h), cleared: dicts with text, file, "
+           "consequence.  pyazr warns with them (pyazr.EngineWarning).");
+  BindDescription(m);  // pybind_describe.cpp: build_info, coulomb_table_info, session_options
 }
