@@ -92,7 +92,8 @@ One covariance file per experiment (different experiments uncorrelated), coverin
 
 ## 5. Checks before the fit
 
-- **Positive definite** (Cholesky succeeds); report the smallest and largest eigenvalue.
+- **Positive definite** (Cholesky succeeds); report the smallest and largest eigenvalue (`write_covariance.py
+  --check` does both).
 - **√diag C equals the `_cov.dat` error column** to 1e-6 relative.
 - **Correlation plot** per file, inspected: a detector term shows as a block over that detector's rows.
 - **AZURE2 read test** (mode 1, any model with the needed exit pairs; run it on a compute node, not a login node):
@@ -100,8 +101,9 @@ One covariance file per experiment (different experiments uncorrelated), coverin
   pair, which must be stated), and no warnings.
 - `WARNING: k point(s) of <file> have an error column more than 1 % from sqrt(C_ii)` means the data file and the
   covariance file come from different builds of the tables. Refresh both together, never one.
-- A checker script compares √C_ii (with the relvectors evaluated on the data) with the error column, tests positive
-  definiteness, and confirms the data are unchanged against a backup.
+- `scripts/write_covariance.py --check COV --base DIR` compares √C_ii (with the relvectors evaluated on the data)
+  with the error column, tests positive definiteness of B and C and the row counts; confirm separately that the data
+  are unchanged against a backup.
 
 ## 6. Traps
 
@@ -115,7 +117,7 @@ One covariance file per experiment (different experiments uncorrelated), coverin
   only where the point is above 3σ; elsewhere the fraction the term gives an ideal (e.g. isotropic) value with the
   same detector weights, or shift / max(value, 3σ_stat).
 - **`relvector` terms are scaled by a model.** Outside rmfit the engine freezes that model at the first evaluation
-  (written to `covarianceModel.out`; pyazr `m.refreeze_covariance()` refreezes it). In a campaign it is one fixed
+  (written to `covarianceModel.out`; pyazr `s.refreeze_covariance()` refreezes it). In a campaign it is one fixed
   reference model (`rmfit-campaign`).
 - **Every data file a covariance file names must be present in the fit's `data/`**, not only those the segments use:
   the engine and rmfit match rows by counting each named file's records (`file <path> <rows>`). A missing one stops
