@@ -8,6 +8,8 @@
 #include "WorkingCopy.h"
 #include "azure2/experiment/ProjectReader.h"
 
+#include <sstream>
+
 namespace {
 
 // The data files of the project that could not be read (Config::ReadFormat3Project builds it for a run without data):
@@ -31,13 +33,25 @@ bool ReportUnreadDataFiles(const Config &configure, bool dataRun) {
 
 }  // namespace
 
+int WorkingCopy::SetAbundanceSamples(std::ostream &messages, const Config &configure, const CNuc &compound) {
+  std::vector<std::pair<int, int> > nucleiZA;
+  for (int k = 1; k <= compound.NumNuclei(); k++) nucleiZA.push_back({compound.GetNucleus(k)->Z, compound.GetNucleus(k)->A});
+  const int read = Draft().abundances_.Set(messages, configure.project->built.abundances, nucleiZA);
+  abundances_ = Data().Abundances().StartValues();
+  return read;
+}
+
 int WorkingCopy::Fill(const Config &configure, CNuc *theCNuc) {
+  std::ostringstream silent;  // COMPARISON: CNuc::Fill prints the reader's messages
+  if (SetAbundanceSamples(silent, configure, *theCNuc) == -1) return -1;
   if (ReportUnreadDataFiles(configure, true)) return kFillRefused;
   // Every refusal of the set-up prints its ERROR line before it returns: that line ends the run (WorkingCopy.h).
   return this->Fill(configure, theCNuc, configure.project->built.data) == 0 ? 0 : kFillRefused;
 }
 
 int WorkingCopy::MakePoints(const Config &configure, CNuc *theCNuc) {
+  std::ostringstream silent;  // COMPARISON: CNuc::Fill prints the reader's messages
+  if (SetAbundanceSamples(silent, configure, *theCNuc) == -1) return -1;
   ReportUnreadDataFiles(configure, false);
   return this->MakePoints(configure, theCNuc, configure.project->built.extrapolations) == 0 ? 0 : kFillRefused;
 }

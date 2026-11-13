@@ -61,30 +61,34 @@ struct ThmAdjointContext {
   /// lineshape=on: [j-1][la-1] = {dGamma/dE, dGamma/dgamma_1, ...} of the
   /// level's total width (ThmLevelWidth); empty without a line shape.
   std::vector<std::vector<std::vector<double>>> widthDeriv;
+  /// The present values of the THM coherent backgrounds (WorkingCopy::ThmCoherentValues), in parameter order.
+  const std::vector<double> *coherentValues = nullptr;
 };
 
 /// The context for the compound as filled (CalcShiftFunctions already run
 /// under Brune); `lineshape` asks for the width derivatives.
-ThmAdjointContext BuildThmAdjointContext(CNuc *compound, const Config &configure, const vector_matrix_r *shiftDeriv,
-                                         bool lineshape);
+ThmAdjointContext BuildThmAdjointContext(CNuc *compound, const std::vector<double> &coherentValues,
+                                         const Config &configure, const vector_matrix_r *shiftDeriv, bool lineshape);
 
 /*!
  * sigma_HOES of `point` (a site of kind kHoes, SiteObservable.h) into its record, from the level matrix `levels` holds
  * at the point's energy, filled in level space for every J-group of its nucleus (THMMatrixFunc, or an AMatrixFunc with
- * LevelSpaceThroughout(): the energy pass, CalculationPlan.h).
+ * LevelSpaceThroughout(): the energy pass, CalculationPlan.h).  `coherentValues` are the present values of the THM
+ * coherent backgrounds, in parameter order (WorkingCopy::ThmCoherentValues; empty without cbackground=).
  */
-void HoesCrossSection(AMatrixFunc &levels, Site *point, azure2::Results &results);
+void HoesCrossSection(AMatrixFunc &levels, Site *point, const std::vector<double> &coherentValues,
+                      azure2::Results &results);
 
 class THMMatrixFunc : public AMatrixFunc {
  public:
   THMMatrixFunc(CNuc *compound, const Config &configure);
   /// Computes the HOES cross section for the point and stores it as the fit XS.
-  void CalculateTHMCrossSection(Site *point, azure2::Results &results);
+  void CalculateTHMCrossSection(Site *point, const std::vector<double> &coherentValues, azure2::Results &results);
   /*!
    * Reverse-mode derivative of the HOES cross section of `point` (one point
    * or folding sub-point, before any folding): accumulates fitBar d sigma/dE
    * and d sigma/dgamma into `accum` and, if given, fitBar d sigma/d(coherent
-   * background value k) into (*coherentBar)[k] (CNuc::ThmCoherentValues
+   * background value k) into (*coherentBar)[k] (ctx.coherentValues
    * order).  Assumes ClearMatrices/FillMatrices/InvertMatrices for the point.
    * The cross section itself, recomputed on the way, goes to *sigmaOut (it is
    * the value CalculateTHMCrossSection gives).  Returns false for a

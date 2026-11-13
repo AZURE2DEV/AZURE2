@@ -141,6 +141,13 @@ void WorkingCopy::ApplyScreening() {
   for (const LeafRef &leaf : set_->leafRefs_) apply({&set_->segments_[leaf.first], leaf.second});
 }
 
+void WorkingCopy::FillAbundancesFromVector(const vector_r &p) {
+  const AbundanceSamples &samples = Data().Abundances();
+  const std::size_t offset = (std::size_t)Data().GetAbundanceParamOffset();
+  if (samples.NumParams() == 0 || p.size() < offset + (std::size_t)samples.NumParams()) return;
+  samples.ReadFrom(p, offset, abundances_);
+}
+
 void WorkingCopy::FillScreeningFromParams(const vector_r &p) {
   if (set_->screeningEffects_.empty() || set_->screeningParamOffset_ < 0) return;
   for (int k = 1; k <= Data().NumScreeningParams(); k++) {
@@ -191,6 +198,8 @@ void WorkingCopy::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNu
   // cbackground=): every caller fills the shifts right after the norms, with
   // the compound the model will run on.
   FillThmCoherentFromParams(p, theCNuc);
+  // The isotopic abundances, the block after the levels (none without <abundances>).
+  this->FillAbundancesFromVector(p);
   // Screening first: sub-points rebuilt below (ReplaceSubPointGrids) inherit their parent's U_e.
   this->FillScreeningFromParams(p);
   // Fitted target densities: the thickness of each point of their lines (the grids stay put).

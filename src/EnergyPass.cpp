@@ -44,8 +44,8 @@ bool StartsTMatrix(Site *const *units, int before, int k, const int *tGroups) {
 
 }  // namespace
 
-void SolveAtOneEnergy(CNuc *cnuc, const Config &configure, Results &results, Site *const *units, int n,
-                      const int *tGroups, int *progress) {
+void SolveAtOneEnergy(CNuc *cnuc, const std::vector<double> &thmCoherentValues, const Config &configure,
+                      Results &results, Site *const *units, int n, const int *tGroups, int *progress) {
   if (progress) *progress = 0;
   if (n <= 0) return;
   // The readers of the T-matrix (every kind but kHoes) and of the level matrix's elements (kHoes, the HOES formula).
@@ -95,7 +95,7 @@ void SolveAtOneEnergy(CNuc *cnuc, const Config &configure, Results &results, Sit
   for (int k = 0; k < n; k++) {
     if (progress) *progress = k;
     if (units[k]->Observable() == SiteObservable::kHoes) {
-      HoesCrossSection(*levels, units[k], results);
+      HoesCrossSection(*levels, units[k], thmCoherentValues, results);
       continue;
     }
     if (last < 0)
@@ -139,7 +139,8 @@ long CheckEnergyTasks(WorkingCopy &data, CNuc *cnuc, const Config &configure, co
     // The task as the pass solves it (SolveAtOneEnergy), the records kept; then each unit's own solve.
     sites.resize((std::size_t)n);
     for (int k = 0; k < n; k++) sites[(std::size_t)k] = &data.SiteAt(taskUnits[k]);
-    SolveAtOneEnergy(cnuc, configure, scratch, sites.data(), n, tasks.tGroups.data() + task.begin, nullptr);
+    SolveAtOneEnergy(cnuc, data.ThmCoherentValues(), configure, scratch, sites.data(), n,
+                     tasks.tGroups.data() + task.begin, nullptr);
     int hoes = 0, direct = -1;
     for (int k = 0; k < n; k++)
       if (sites[(std::size_t)k]->Observable() == SiteObservable::kHoes)
@@ -177,7 +178,7 @@ long CheckEnergyTasks(WorkingCopy &data, CNuc *cnuc, const Config &configure, co
       o->FillMatrices(u);
       o->InvertMatrices();
       if (o == ownT.get()) {
-        HoesCrossSection(*ownT, u, scratch);
+        HoesCrossSection(*ownT, u, data.ThmCoherentValues(), scratch);
       } else {
         o->CalculateTMatrix(u);
         o->CalculateCrossSection(u, scratch);
@@ -276,7 +277,7 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
     while (start < n) {
       int progress = 0;
       try {
-        azure2::SolveAtOneEnergy(theCNuc, configure, results, units.data() + start, n - start,
+        azure2::SolveAtOneEnergy(theCNuc, thmCoherentValues_, configure, results, units.data() + start, n - start,
                                  tasks.tGroups.data() + task.begin + start, &progress);
         return;
       } catch (const std::exception &e) {

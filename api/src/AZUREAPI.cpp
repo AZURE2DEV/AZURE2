@@ -287,6 +287,7 @@ bool AZUREAPI::SetParamsAllRWA(const vector_r &p) {
   // Physical values: the R-matrix block through the same transform as
   // UpdateParameters; norms and shifts are the same in both bases.
   compound()->FillCompoundFromParams(all_rwa_);
+  data()->FillAbundancesFromVector(all_rwa_);
   compound()->CalcShiftFunctions(configure());
   compound()->TransformOut(configure());
   all_ = compound()->GetTransformParams(configure());
@@ -371,6 +372,7 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
 
   AZUREParams params;
   localCompound->FillCompoundFromParamsPhysical(params_);
+  localData->FillAbundancesFromVector(params_);
   bool isValid = localCompound->TransformIn(configure());
 
   if (!isValid) {
@@ -461,6 +463,7 @@ vector_r AZUREAPI::TransformRWAParameters(const vector_r &p) const {
   localData = data();
 
   localCompound->FillCompoundFromParams(params);
+  localData->FillAbundancesFromVector(params);
 
   localCompound->TransformOut(configure());
 
@@ -494,6 +497,7 @@ vector_r AZUREAPI::TransformAllRWAParameters(const vector_r &p, bool includeFixe
   localData = data();
 
   localCompound->FillCompoundFromParams(params);
+  localData->FillAbundancesFromVector(params);
 
   localCompound->TransformOut(configure());
 
@@ -525,6 +529,7 @@ vector_r AZUREAPI::TransformAllRWAParametersFull(const vector_r &p) const {
   }
   CNuc *localCompound = compound();
   localCompound->FillCompoundFromParams(params);
+  data()->FillAbundancesFromVector(params);
   localCompound->TransformOut(configure());
   vector_r transformed = compound()->GetTransformParams(configure());
   compound()->Abundances().AppendTo(params, transformed);
@@ -936,6 +941,7 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
 
   AZUREParams params;
   localCompound->FillCompoundFromParamsPhysical(params_);
+  localData->FillAbundancesFromVector(params_);
   bool isValid = localCompound->TransformIn(configure());
 
   // A physical vector the transform rejects (a width beyond what the level
@@ -1043,7 +1049,7 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
   if (ok) ok = Objective::Engine().ModelDataGradient(ObjectiveContext{lc, ld, results(), full, configure()}, pmap, sdp, accum);
   if (ok) {
     if (configure().paramMask & Config::USE_PARK_FORMALISM) AddParkPenaltyGradient(lc, configure(), accum);
-    if (lc->HasAbundanceBlock()) AddAbundancePenaltyGradient(lc, configure(), accum);
+    AddAbundancePenaltyGradient(lc, *ld, configure(), accum);
     // Their values: the model terms of the objective (T6, T7, T9; before 2026-11-09 added here in the order 9, 6, 7).
     chi2 += Objective::Engine().ModelChi2(ObjectiveContext{lc, ld, results(), full, configure()});
     accum.Scatter(pmap, gradFull);

@@ -93,6 +93,16 @@ class WorkingCopy {
   const TargetEffectValues &EffectValues(int n) const { return effectValues_[n - 1]; }
   /// The present value of THM coherent-background parameter k (0-based).
   double ThmCoherentValue(int k) const { return thmCoherentValues_[k]; }
+  /// The present values of every THM coherent-background parameter, in parameter order (the HOES model reads them).
+  const std::vector<double> &ThmCoherentValues() const { return thmCoherentValues_; }
+  /// The present isotopic abundances of the samples (Data().Abundances()), in parameter order.
+  const std::vector<double> &AbundanceValues() const { return abundances_; }
+  /// The present abundance of compound nucleus \p nucleus in sample \p sample, both 1-based (1 without such a sample).
+  double Abundance(int sample, int nucleus) const { return Data().Abundances().Value(abundances_, sample, nucleus); }
+  /// Reads the abundance block of a parameter vector, fit's or observed (AbundanceSamples::ReadFrom), at the layout's
+  /// offset; a vector without the block leaves the values as they are.  Called by FillEnergyShiftsFromParams, and
+  /// after a compound is filled from an observed vector.
+  void FillAbundancesFromVector(const vector_r &p);
   /// Build the segments from the data-set specs (each filled from its data file) and their effects.  Returns -1 on
   /// failure (with the message).
   int Fill(const Config &, CNuc *, const azure2::experiment::DataSpecs &);
@@ -503,6 +513,9 @@ class WorkingCopy {
   const azure2::EnergyTaskList &EnergyTasksOf(const std::vector<const Segment *> &segments, const Config &configure);
 
  private:
+  /// The set-up's first step (Fill, MakePoints): the samples of the project's <abundances> block for the compound
+  /// nuclei of \p compound, and the present abundances at the file's values.  -1 when the reader stopped.
+  int SetAbundanceSamples(std::ostream &messages, const Config &configure, const CNuc &compound);
   void LayOutUnits(std::vector<azure2::SlotBlock> *fresh);  // CompactUnits, CommitSubPoints, PlaceSubPointGrids
   /// The plan tasks of the points of \p segments and their leaves, in data order (src/EnergyPass.cpp).
   std::vector<int> PassWork(const std::vector<const Segment *> &segments) const;
@@ -512,6 +525,7 @@ class WorkingCopy {
   std::vector<SegmentState> segmentStates_;     // State: one per segment of the data set, by Pos
   std::vector<TargetEffectValues> effectValues_;  // EffectValues: one per target effect
   std::vector<double> thmCoherentValues_;       // ThmCoherentValue: one per coherent-background parameter
+  std::vector<double> abundances_;              // AbundanceValues: one per abundance parameter
   std::vector<Unit> units_;  // Unit
   std::vector<Site> slots_;  // SlotAt
   std::vector<int> slotBlock_;   // SlotBlockOf: per slot, the first slot of its block

@@ -4,7 +4,6 @@
 #include <cmath>
 
 #include "AZUREParams.h"
-#include "Config.h"
 #include "Minuit2/MnUserParameters.h"
 
 /*!
@@ -13,7 +12,7 @@
  * ignored.  Without the block no abundance becomes a parameter, so every project written before the block existed
  * keeps its parameter layout, param.par and <parameterSettings> indices.
  */
-int AbundanceSamples::Set(const Config &configure, const azure2::experiment::AbundanceSpecs &specs,
+int AbundanceSamples::Set(std::ostream &messages, const azure2::experiment::AbundanceSpecs &specs,
                           const std::vector<std::pair<int, int> > &nucleiZA) {
   present_ = specs.abundances.present;
   numNuclei_ = (int)nucleiZA.size();
@@ -51,11 +50,11 @@ int AbundanceSamples::Set(const Config &configure, const azure2::experiment::Abu
       found = true;
     }
     if (!found)
-      configure.outStream << "WARNING: <abundances> names Z=" << row.z << " A=" << row.a
+      messages << "WARNING: <abundances> names Z=" << row.z << " A=" << row.a
                           << ", which no pair of the project forms; ignored." << std::endl;
   }
   if (specs.failed) {
-    if (!specs.error.empty()) configure.outStream << specs.error << std::endl;
+    if (!specs.error.empty()) messages << specs.error << std::endl;
     return -1;
   }
   // An empty block still means "abundances are parameters": one unnamed sample at the defaults.

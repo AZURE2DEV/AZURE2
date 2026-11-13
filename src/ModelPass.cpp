@@ -2,6 +2,7 @@
 // is its expression tree (Predictions.h, experiment/Expression.h) evaluated on its terms' leaf values; every node
 // computes in the order the hand-written combination before S10 did, so every model value keeps its bits.  It goes to
 // Results::model, never into a leaf slot.
+#include "AbundanceComparison.h"
 #include "ModelPass.h"
 
 #include <algorithm>
@@ -213,7 +214,9 @@ struct PointInputs {
     }
     for (std::size_t q = 0; q < np; q++) {
       const ParamRef &r = p.params[q];
-      paramValue[q] = (r.kind == ParamRef::Kind::Abundance) ? cnuc->GetAbundance(segment.GetNaturalSample(), r.nucleus)
+      if (r.kind == ParamRef::Kind::Abundance)
+        CompareCopies(cnuc->AbundanceValues(), data.AbundanceValues(), "ABUNDANCE", "the model pass");
+      paramValue[q] = (r.kind == ParamRef::Kind::Abundance) ? data.Abundance(segment.GetNaturalSample(), r.nucleus)
                                                             : segment.GetSampleThickness(data.State(segment));
     }
     paramValue[np] = 0.0;

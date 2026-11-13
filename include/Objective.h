@@ -1,6 +1,7 @@
 #ifndef OBJECTIVE_H
 #define OBJECTIVE_H
 
+#include <cstdlib>
 #include <functional>
 #include <memory>
 #include <string>
@@ -223,15 +224,17 @@ inline void ForEachDiagonalPrior(WorkingCopy *data, CNuc *compound, const ParamI
   ForEachDopplerPrior(data, pmap, f);
   ForEachThicknessPrior(data, pmap, f);
   ForEachApparatusPrior(data, pmap, f);
-  if (compound->HasAbundanceBlock())
-    for (int k = 1; k <= compound->NumAbundanceParams(); k++) {
-      const int idx = pmap.AbundanceIndex(k);
-      if (idx < 0) continue;
-      int sample, nucleus;
-      compound->AbundanceOf(k, sample, nucleus);
-      const SampleAbundance &e = compound->GetSample(sample)->entries[nucleus - 1];
-      if (e.sigma > 0.0 && !e.priorReplaced) f(idx, e.nominal, e.sigma);
-    }
+  const AbundanceSamples &samples = data->Data().Abundances();
+  for (int k = 1; k <= samples.NumParams(); k++) {
+    const int idx = pmap.AbundanceIndex(k);
+    if (idx < 0) continue;
+    int sample, nucleus;
+    samples.Of(k, sample, nucleus);
+    const SampleAbundance &e = samples.Sample(sample).entries[nucleus - 1];
+    const SampleAbundance &old = compound->GetSample(sample)->entries[nucleus - 1];  // COMPARISON
+    if (old.priorReplaced != e.priorReplaced || old.sigma != e.sigma || old.nominal != e.nominal) std::abort();
+    if (e.sigma > 0.0 && !e.priorReplaced) f(idx, e.nominal, e.sigma);
+  }
 }
 
 /*!
@@ -247,8 +250,8 @@ inline void ForEachDiagonalPrior(WorkingCopy *data, CNuc *compound, const ParamI
  * formalism only; the shift functions and their derivatives must be current); the abundance sum-to-one term, one
  * row per sample with a width, ((sum w) - 1)/s.  The number of rows does not depend on the parameters.
  */
-void AppendModelRows(CNuc *compound, const Config &config, const ParamIndexMap *pmap, int nCols, vector_r &residuals,
-                     vector_r *jac);
+void AppendModelRows(CNuc *compound, const WorkingCopy &data, const Config &config, const ParamIndexMap *pmap, int nCols,
+                     vector_r &residuals, vector_r *jac);
 
 class PriorCovariance;
 std::vector<std::string> ReplaceDiagonalPriors(CNuc *compound, WorkingCopy *data, const PriorCovariance &pc);

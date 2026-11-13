@@ -1,3 +1,4 @@
+#include "AbundanceComparison.h"
 #include "THMMatrixFunc.h"
 #include "AZUREGrad.h"
 #include "ChannelFunc.h"
@@ -203,7 +204,8 @@ THMMatrixFunc::THMMatrixFunc(CNuc *compound, const Config &configure) :
  * level matrix A (shared interior). Uses the entrance transfer form factors
  * M_l and exit penetrabilities stored on the point by CalcEDependentValues.
  */
-void HoesCrossSection(AMatrixFunc &levels, Site *point, azure2::Results &results) {
+void HoesCrossSection(AMatrixFunc &levels, Site *point, const std::vector<double> &coherentValues,
+                      azure2::Results &results) {
   CNuc *const compound = levels.compound();
   const Config &configure = levels.configure();
   int aa = compound->GetPairNumFromKey(point->GetEntranceKey());
@@ -273,7 +275,7 @@ void HoesCrossSection(AMatrixFunc &levels, Site *point, azure2::Results &results
   // ThmCoherentBackground): c(E) times the bucket's vertex M_l (no width),
   // added to the resonant amplitude of its combinations before squaring.
   const ThmCoherentBackground *coherent = point->GetThmCoherent();
-  const std::vector<double> &coherentValues = compound->ThmCoherentValues();
+  CompareCopies(compound->ThmCoherentValues(), coherentValues, "THM", "HoesCrossSection");
 
   double sigma = 0.0;
   for (int j = 1; j <= compound->NumJGroups(); j++) {
@@ -391,18 +393,20 @@ void HoesCrossSection(AMatrixFunc &levels, Site *point, azure2::Results &results
   point->SetFitCrossSection(results, sigma);
 }
 
-void THMMatrixFunc::CalculateTHMCrossSection(Site *point, azure2::Results &results) {
-  HoesCrossSection(*this, point, results);
+void THMMatrixFunc::CalculateTHMCrossSection(Site *point, const std::vector<double> &coherentValues,
+                                             azure2::Results &results) {
+  HoesCrossSection(*this, point, coherentValues, results);
 }
 
 // ===========================================================================
 // Reverse-mode (adjoint) derivative of the HOES cross section.
 // ===========================================================================
 
-ThmAdjointContext BuildThmAdjointContext(CNuc *compound, const Config &configure, const vector_matrix_r *shiftDeriv,
-                                         bool lineshape) {
+ThmAdjointContext BuildThmAdjointContext(CNuc *compound, const std::vector<double> &coherentValues,
+                                         const Config &configure, const vector_matrix_r *shiftDeriv, bool lineshape) {
   ThmAdjointContext ctx;
   ctx.shiftDeriv = shiftDeriv;
+  ctx.coherentValues = &coherentValues;
   const bool useGSL = !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC);
   const int nJ = compound->NumJGroups();
   ctx.lowestShiftDeriv.assign(nJ, std::vector<double>());
@@ -533,7 +537,8 @@ bool THMMatrixFunc::THMPointAdjoint(Site *point, double fitBar, GradAccum &accum
   std::vector<ThmPartialWave> waves;
   std::vector<std::vector<complex>> partial(angle ? std::max(numNodes, 1) : 0);
   const ThmCoherentBackground *coherent = point->GetThmCoherent();
-  const std::vector<double> &coherentValues = compound()->ThmCoherentValues();
+  const std::vector<double> &coherentValues = *ctx.coherentValues;
+  CompareCopies(compound()->ThmCoherentValues(), coherentValues, "THM", "THMPointAdjoint");
   const ThmVertexBoundary::Rule rule = ThmVertexBoundary::RuleOf(configure());
 
   // One block per (J group, pass): what the backward sweep needs again.

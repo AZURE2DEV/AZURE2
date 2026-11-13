@@ -118,6 +118,7 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
     // Objects are already cloned, no need for deep copying
 
     localCompound->FillCompoundFromParamsPhysical(params_);
+    localData->FillAbundancesFromVector(params_);
     bool isValid = localCompound->TransformIn(configure());
 
     if (!isValid) {
@@ -783,6 +784,7 @@ void AZURECalcMCMC::AfterStep(const Run &run, int current_step, int total_steps)
           } else {
             // For physical parameters, use the same approach as CalculateLogLikelihoodPhysical
             localCompound->FillCompoundFromParamsPhysical(fullParams);
+            localData->FillAbundancesFromVector(fullParams);
             isValid = localCompound->TransformIn(configure());
 
             if (isValid) {

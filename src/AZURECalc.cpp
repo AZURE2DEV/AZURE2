@@ -756,7 +756,7 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
     eg = false;
   if (eg) {
     AddParkPenaltyGradient(lc, configure(), accum); // Park J > 0 wall
-    AddAbundancePenaltyGradient(lc, configure(), accum);  // abundance priors, sum-to-one
+    AddAbundancePenaltyGradient(lc, *ld, configure(), accum);  // abundance priors, sum-to-one
     accum.Scatter(pmap, grad);                      // energies + reduced widths, abundances, screening
     AddNuisanceGradient(p, grad);                   // nuisance penalty
     ForEachScreeningPrior(ld, pmap, [&](int idx, double nominal, double e) {  // screening priors
@@ -1243,7 +1243,7 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
       pc->AppendRows(full, [&](int f) { return f < pmap.NumFull() ? pmap.FullToPacked(f) : -1; }, nCols, residuals,
                      &jac);
   // Park's J > 0 wall and the abundance sum-to-one term as rows (Objective.h AppendModelRows; objective.md D2, D7).
-  if (ok) AppendModelRows(lc, configure(), &pmap, nCols, residuals, &jac);
+  if (ok) AppendModelRows(lc, *ld, configure(), &pmap, nCols, residuals, &jac);
 
   packedToFull.resize(pmap.NumPacked());
   for (int a = 0; a < pmap.NumPacked(); a++) packedToFull[a] = pmap.PackedToFull(a);
@@ -1284,7 +1284,7 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
   if (const PriorCovariance *pc = ld->Data().GetPriorCovariance())
     pc->AppendRows(full, [](int) { return -1; }, 0, residuals, nullptr);
   // Park and abundance-sum rows, as the last rows of ResidualJacobian.
-  AppendModelRows(lc, configure(), nullptr, 0, residuals, nullptr);
+  AppendModelRows(lc, *ld, configure(), nullptr, 0, residuals, nullptr);
   ReturnPooledCNuc(lc);
   ReturnPooledData(working);
   return true;

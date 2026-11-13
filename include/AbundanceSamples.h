@@ -2,6 +2,7 @@
 #define ABUNDANCESAMPLES_H
 
 #include <cstddef>
+#include <ostream>
 #include <string>
 #include <vector>
 
@@ -9,7 +10,6 @@
 #include "azure2/experiment/SetupSpecs.h"
 
 class AZUREParams;
-class Config;
 
 /// The isotopic abundance of one compound nucleus's target in one sample, as the project states it.
 struct SampleAbundance {
@@ -46,8 +46,8 @@ struct AbundanceSample {
 class AbundanceSamples {
  public:
   /// The samples from their specs, for compound nuclei with these (Z, A) (index nucleus-1); -1 (with the reader's
-  /// message) when the reader stopped.  A row for a (Z, A) no nucleus has is reported and ignored.
-  int Set(const Config &configure, const azure2::experiment::AbundanceSpecs &specs,
+  /// message, on \p messages) when the reader stopped.  A row for a (Z, A) no nucleus has is reported and ignored.
+  int Set(std::ostream &messages, const azure2::experiment::AbundanceSpecs &specs,
           const std::vector<std::pair<int, int> > &nucleiZA);
   /// Did the project carry an <abundances> block?  Only then are the abundances parameters (one per nucleus and
   /// sample, after the level block), so a project without the block keeps its parameter layout.

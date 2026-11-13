@@ -37,7 +37,7 @@ std::unique_ptr<ThmAdjointContext> ThmGradientContext(CNuc *compound, const Work
   }
   if (!any || !ThmThroughEnergyTasks(data, config)) return nullptr;
   return std::unique_ptr<ThmAdjointContext>(
-      new ThmAdjointContext(BuildThmAdjointContext(compound, config, shiftDeriv, lineshape)));
+      new ThmAdjointContext(BuildThmAdjointContext(compound, data.ThmCoherentValues(), config, shiftDeriv, lineshape)));
 }
 
 void ThmModelCotangents(WorkingCopy &data, Results &results, const std::vector<GradPoint> &points,

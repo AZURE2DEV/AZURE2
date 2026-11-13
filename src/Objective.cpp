@@ -16,6 +16,7 @@
 #include "ModelPass.h"
 #include "PriorCovariance.h"
 #include "ModelData.h"
+#include "AbundanceComparison.h"
 
 namespace {
 
@@ -154,11 +155,19 @@ class AbundanceTerm : public ObjectiveTerm {
   // The sampler: the per-nucleus priors are normalised Gaussian log-priors (ForEachDiagonalPrior); the sum-to-one
   // term, which couples them, is here.
   void AddForSampler(const ObjectiveContext &c, double &chi2) const override {
-    if (c.compound->HasAbundanceBlock()) chi2 += c.compound->AbundanceSumPenalty(c.config.abundanceSumSigma);
+    const AbundanceSamples &samples = c.data->Data().Abundances();
+    if (samples.Present()) {
+      CompareCopies(c.compound->AbundanceValues(), c.data->AbundanceValues(), "ABUNDANCE", "the sampler's term");
+      chi2 += samples.SumPenalty(c.data->AbundanceValues(), c.config.abundanceSumSigma);
+    }
   }
   void Add(const ObjectiveContext &c, double &chi2) const override {
-    if (!c.compound->HasAbundanceBlock()) return;
-    const double abundancePenalty = c.compound->AbundancePenalty(c.config.abundanceSumSigma);
+    const AbundanceSamples &samples = c.data->Data().Abundances();
+    if (!samples.Present()) return;
+    CompareCopies(c.compound->AbundanceValues(), c.data->AbundanceValues(), "ABUNDANCE", "the abundance term");
+    const double abundancePenalty = samples.Penalty(c.data->AbundanceValues(), c.config.abundanceSumSigma);
+    if (abundancePenalty != c.compound->AbundancePenalty(c.config.abundanceSumSigma))
+      CompareCopies({0.0}, {1.0}, "ABUNDANCE", "the abundance term's priors");
     chi2 += abundancePenalty;
     c.results.objective.abundance = abundancePenalty;
   }
@@ -373,8 +382,9 @@ std::vector<std::string> ReplaceDiagonalPriors(CNuc *compound, WorkingCopy *data
           break;
         }
         case ParamKind::Abundance: {
-          had = compound->GetSample(d.sample)->entries[d.nucleus - 1].sigma > 0.0;
-          compound->ReplaceAbundancePrior(d.sample, d.nucleus);
+          had = ds.Abundances().Sample(d.sample).entries[d.nucleus - 1].sigma > 0.0;
+          ds.ReplaceAbundancePrior(d.sample, d.nucleus);
+          compound->ReplaceAbundancePrior(d.sample, d.nucleus);  // COMPARISON
           break;
         }
         default:  // levels and THM coherent background: a nuisance prior, skipped by index
@@ -386,8 +396,8 @@ std::vector<std::string> ReplaceDiagonalPriors(CNuc *compound, WorkingCopy *data
   return replaced;
 }
 
-void AppendModelRows(CNuc *compound, const Config &config, const ParamIndexMap *pmap, int nCols, vector_r &residuals,
-                     vector_r *jac) {
+void AppendModelRows(CNuc *compound, const WorkingCopy &data, const Config &config, const ParamIndexMap *pmap, int nCols,
+                     vector_r &residuals, vector_r *jac) {
   auto appendRow = [&](double r, const GradAccum *acc, const std::vector<std::pair<int, double>> *direct) {
     residuals.push_back(r);
     if (!jac || !pmap) return;
@@ -436,18 +446,20 @@ void AppendModelRows(CNuc *compound, const Config &config, const ParamIndexMap *
   for (const GammaDecaySet::PenaltyRow &row : compound->GetGammaDecays().PenaltyRows(*compound))
     appendRow(row.r, nullptr, &row.d);
   // Abundances: ((sum w) - c)/s per sample (c the sum's centre, 1 unless written) with s > 0; d/dw_k = 1/s on every abundance of the sample.
-  if (compound->HasAbundanceBlock()) {
-    for (int smp = 1; smp <= compound->NumSamples(); smp++) {
-      const double s = compound->SampleSumSigma(smp, config.abundanceSumSigma);
+  const AbundanceSamples &samples = data.Data().Abundances();
+  if (samples.Present()) {
+    CompareCopies(compound->AbundanceValues(), data.AbundanceValues(), "ABUNDANCE", "AppendModelRows");
+    for (int smp = 1; smp <= samples.NumSamples(); smp++) {
+      const double s = samples.SumSigma(smp, config.abundanceSumSigma);
       if (!(s > 0.0)) continue;
       std::vector<std::pair<int, double>> direct;
       if (pmap)
-        for (int k = 1; k <= compound->NumAbundanceParams(); k++) {
+        for (int k = 1; k <= samples.NumParams(); k++) {
           int sample, nucleus;
-          compound->AbundanceOf(k, sample, nucleus);
+          samples.Of(k, sample, nucleus);
           if (sample == smp) direct.push_back({pmap->AbundanceIndex(k), 1.0 / s});
         }
-      appendRow((compound->AbundanceSum(smp) - compound->GetSample(smp)->sumCentre) / s, nullptr, &direct);
+      appendRow((samples.Sum(data.AbundanceValues(), smp) - samples.Sample(smp).sumCentre) / s, nullptr, &direct);
     }
   }
 }

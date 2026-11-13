@@ -2,6 +2,7 @@
 // coefficients, sample thicknesses, densities, Doppler temperatures) starts in the parameter vector, their names
 // and start values (FillMnParams), the shift, shift-function, normalization and thickness groups, the density
 // parameters of the target effects, and the prior centres given by a project's specs.
+#include "AbundanceComparison.h"
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -447,8 +448,15 @@ void WorkingCopy::FillMnParams(AZUREParams &params) {
   auto SegmentPosition = [this](SegmentIterator it) { return (int)(it - Data().GetSegments().begin()) + 1; };
   // The layout is the data set's; laid out again by a later call (pyazr) only if it moved (ReviseDataSet).
   struct Layout {
-    int norm, shift, shiftSqrt, shiftFn, screening, density, doppler, thickness, thmCoherent, apparatus;
+    int abundance, norm, shift, shiftSqrt, shiftFn, screening, density, doppler, thickness, thmCoherent, apparatus;
   } layout;
+  // COMPARISON: CNuc::FillMnParams has written the abundance block; it must hold this copy's values.
+  layout.abundance = (int)p.Params().size() - Data().Abundances().NumParams();
+  {
+    std::vector<double> block;
+    for (int k = 0; k < Data().Abundances().NumParams(); k++) block.push_back(p.Params()[layout.abundance + k]);
+    CompareCopies(block, abundances_, "ABUNDANCE", "WorkingCopy::FillMnParams");
+  }
   layout.norm = (int)p.Params().size();
   for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     if (segment->IsVaryNorm() && !segment->IsProfiledNorm()) {
@@ -569,12 +577,13 @@ void WorkingCopy::FillMnParams(AZUREParams &params) {
   layout.apparatus = Data().NumApparatusParams() == 0 ? -1 : (int)p.Params().size();
   AddApparatusParams(*this, params);
   const DataSet &d = Data();
-  if (d.normParamOffset_ != layout.norm || d.energyShiftParamOffset_ != layout.shift ||
+  if (d.abundanceParamOffset_ != layout.abundance || d.normParamOffset_ != layout.norm || d.energyShiftParamOffset_ != layout.shift ||
       d.energyShiftSqrtParamOffset_ != layout.shiftSqrt || d.energyShiftFnParamOffset_ != layout.shiftFn ||
       d.screeningParamOffset_ != layout.screening || d.densityParamOffset_ != layout.density ||
       d.dopplerParamOffset_ != layout.doppler || d.thicknessParamOffset_ != layout.thickness ||
       d.thmCoherentParamOffset_ != layout.thmCoherent || d.apparatusParamOffset_ != layout.apparatus)
     ReviseDataSet([&layout](DataSet &next) {
+      next.abundanceParamOffset_ = layout.abundance;
       next.normParamOffset_ = layout.norm;
       next.energyShiftParamOffset_ = layout.shift;
       next.energyShiftSqrtParamOffset_ = layout.shiftSqrt;

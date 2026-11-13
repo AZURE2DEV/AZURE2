@@ -422,7 +422,7 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
 int CNuc::SetAbundances(const Config &configure, const azure2::experiment::AbundanceSpecs &specs) {
   std::vector<std::pair<int, int> > nucleiZA;
   for (const CompoundNucleus &n : nuclei_) nucleiZA.push_back({n.Z, n.A});
-  const int read = abundances_.Set(configure, specs, nucleiZA);
+  const int read = abundances_.Set(configure.outStream, specs, nucleiZA);
   abundanceValues_ = abundances_.StartValues();
   return read;
 }
