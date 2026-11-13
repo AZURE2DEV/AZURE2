@@ -15,7 +15,9 @@ of the engine (api/src/pybind_records.cpp: _azure2.parameter_record_fields(), pa
      row fixed as written or written as 0, a channel without a row fixed at zero; a data set's nuisance through the
      engine's description of the project; a THM background term through the program's thm_experiments.out);
   3. on the same projects: x0 is params_rwa (a copy), free / of_kind / of_level / by_name select rows, put and take
-     write and read x by row, write and read a parameter file give x back, a fixed row is refused by put;
+     write and read x by row, write and read a parameter file give x back, a fixed row is refused by put; on 13N
+     azure2.write_values puts x into a Project in memory (the file untouched) and the project saved from it starts
+     at x;
   4. the pair records against the project's pairs (Project.pairs(): key, masses, separation energy, excitations,
      channel radius), and the session's pairs in order of their numbers.
 
@@ -139,7 +141,7 @@ def expected_fixed(project, path, P, outdir):
     return want
 
 
-def check_project(label, path, cwd):
+def check_project(label, path, cwd, write_back=False):
     print(label)
     par, outdir = run_program(path, cwd)
     project = Project.open(path)
@@ -194,6 +196,16 @@ def check_project(label, path, cwd):
             P.write(path_sav, x1)
             back = P.read(path_sav)
             check(f"{label}: write then read gives x back", np.allclose(back, x1, rtol=1e-7, atol=0))
+        if target is not None and write_back:
+            before = open(path).read()
+            edited = s.write_values(Project.open(path), x1)
+            check(f"{label}: write_values edits the project in memory, the file untouched",
+                  open(path).read() == before and edited.text != before)
+            edited.save(os.path.join(cwd, "written.azr"))
+            with azure2(os.path.join(cwd, "written.azr"), cwd=cwd) as back:
+                check(f"{label}: the project written with x1 starts at x1 (rel 1e-6)",
+                      np.allclose(back.parameters.x0, x1, rtol=1e-6, atol=1e-12),
+                      (back.parameters.x0[target.free_index], x1[target.free_index]))
         fixed = next((p for p in P if p.fixed), None)
         if fixed is not None:
             try:
@@ -220,7 +232,7 @@ with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as tmp:
     d = copy_project(os.path.join(ROOT, "tests", "upgrade", "T2"), os.path.join(tmp, "T2"))
     seen |= check_project("tests/upgrade/T2", os.path.join(d, "T2.azr"), d)
     d = copy_project(os.path.join(ROOT, "tests", "13N"), os.path.join(tmp, "13N"))
-    seen |= check_project("tests/13N", os.path.join(d, "13N.azr"), d)
+    seen |= check_project("tests/13N", os.path.join(d, "13N.azr"), d, write_back=True)
     for model in ("partial", "record"):
         d = copy_project(os.path.join(ROOT, "tests", "gamma_decay", "models"), os.path.join(tmp, "gd_" + model))
         seen |= check_project(f"tests/gamma_decay/models/{model}.azr", os.path.join(d, model + ".azr"), d)
