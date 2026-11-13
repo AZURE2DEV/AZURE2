@@ -2,6 +2,40 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-8-gamma-external-capture`) — the `gamma_decay` record on a channel with external capture
+
+**Done.** The refusal of a record whose photon channel has external capture in the run is lifted for the Brune and
+Park bases (the formal basis stays refused). Design: `gamma_parametrisation.md` section 2.7 (committed first). The
+record's partial width of such a channel is the observed total, as in `<levels>`; at every fill the map forms the
+total amplitude as before, evaluates γ^ext at the current parameters (the level's energy and particle amplitudes, the
+final state's ANCs and N_f; Park: n0 = J_f) and subtracts it with `physics::subtract_external_capture`, as
+`TransformIn` does. A width below 2P(Im γ^ext)²/n follows `TransformIn` (γ_int = −Re γ^ext, a warning once per run, a
+note in `parameters.out`; no wall). Code: `ExternalCaptureFinalState` and `ExternalReducedWidthAt` (values in, exact
+slopes out) in `src/CNucExternalCapture.cpp`, of which `ExternalReducedWidth` is now a call (bit-identical);
+`src/GammaDecayMap.cpp` (per-slot final states, `Map`, the fill's `GammaDecayFill` in the compound, the pull-back's new
+terms in the level's particle amplitudes and the final states' amplitudes, the factor dγ_int/dg, the energy's central
+difference through the whole map and only when the energy is free, `InputIndices` for the gradient's mask in
+`src/AZUREGrad.cpp`). The radial integrals are the direct ones with the run's per-thread scratch (as `TransformIn` and
+`TransformOut`), not the energy tables.
+
+**Verified how** (build `work/b-gammaec`, 0 warnings). `tests/gamma_decay/check.sh` (h): the ¹⁴N(p,γ)¹⁵O twin with
+capture into the ground state and 6.1763 MeV (E1, g_ext −0.0049 and +0.114 MeV^½) and 6.7931 MeV (M1, g_ext 0):
+every output file identical to the twin in both bases, also after moving Γ_p, E_λ and the ground state's ANC; the
+gradient in all free parameters (three ANCs of final states) at three points, largest relative difference 3.6e-8
+(level energy 2.4e-7 with step 1e-8); gradient MIGRAD and LM from displaced starts: χ² 237.111 as the twin, the LM
+branchings equal the twin's Γ_f/Γ_γ to 1e-6; 1 = 3 threads; the floor case. Six injected errors each fail (README).
+pyazr: `tests/pyazr/gamma_decay_test.py` part 4. Whole tree × 3 bases against `tab-gammam-1` (tag `tab-gec-1`):
+887 / 851 / 887 identical, no project added; the eight fits identical to `b-gammam`; the converted-tree gate
+(`ggec-1`): 679 / 643 / 679 identical; `ctest -LE slow` 221/221; the slow tests 11/11; `tests/run_tests.sh` 162 passed, 0 failed; check.sh three times
+at 3 threads: all checks passed each time; calculations at 1 against 3 threads: 74 files identical (T1, T2, T3, 13N, 13N_capture_ay, thick_target_resonance and the external-capture twin and record). Cost (instructions:u, 1 thread):
+calculation +0.25 %, gradient MIGRAD fit +14 % (89 calls against 85).
+
+**Open.** Not run: Sphinx (no sphinx in the environment), MINOS and MCMC on a record with external capture. Found
+outside the scope (not fixed): `CNuc::GetTransformParams` returns the record's numbers at its slots, and
+`ReactionRate.cpp` (rate grid) and `TargetSetup.cpp` (grid copy) feed it to `FillCompoundFromParamsPhysical` as
+observed widths, so a record level's photon "widths" there are Γ_γ, b_f, δ_f (read for grid placement; not checked
+by a run); note section 2.5 says the energy step is 10⁻⁶ MeV, the code uses 10⁻⁴.
+
 ## 2026-11-13 (director, 04:03) — merged: a level's radiative decay as total width, branchings and mixing ratios (record `gamma_decay`)
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed):
