@@ -1,0 +1,32 @@
+// Width scales of a channel: the Wigner limit, the single-particle width, the photon penetrability (Widths.h).
+#include "azure2/physics/Widths.h"
+
+#include <cmath>
+#include <limits>
+
+#include "azure2/physics/Constants.h"
+
+namespace azure2 {
+namespace physics {
+
+double wigner_limit(double mu_u, double a_fm) {
+  if (!(mu_u > 0.0) || !(a_fm > 0.0)) return std::numeric_limits<double>::quiet_NaN();
+  const double mu_MeV = mu_u * kAtomicMassUnit_MeV;  // MeV/c^2
+  return 1.5 * std::pow(kHbarC_MeV_fm, 2.0) / (mu_MeV * std::pow(a_fm, 2.0));
+}
+
+double single_particle_width(const ChannelKinematics &kin, int l, double a_fm, double E_MeV, coulomb::Method method) {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  if (!(E_MeV > 0.0) || !(a_fm > 0.0) || !(kin.mu_u > 0.0)) return nan;
+  const double r = rho(kin, a_fm, E_MeV);
+  const coulomb::CoulombWaves w = coulomb::coulomb(l, eta(kin, E_MeV), r, method);
+  if (w.status != coulomb::Status::ok) return nan;
+  return 2.0 * penetrability(w, r) * wigner_limit(kin.mu_u, a_fm);
+}
+
+double photon_penetrability(double E_gamma_MeV, int L) {
+  return std::pow(std::fabs(E_gamma_MeV) / kHbarC_MeV_fm, 2.0 * L + 1);
+}
+
+}  // namespace physics
+}  // namespace azure2
