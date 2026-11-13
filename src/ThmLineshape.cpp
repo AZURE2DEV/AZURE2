@@ -63,7 +63,7 @@ double ThmLineshapeFactorSq(double zeta, double x, double Gamma) {
   return std::exp(2.0 * zeta * angle);
 }
 
-double ThmLevelWidth(CNuc *compound, JGroup *jgroup, ALevel *level, const Config &configure) {
+double ThmLevelWidth(CNuc *compound, const JGroup *jgroup, const ALevel *level, const Config &configure) {
   const int numChannels = jgroup->NumChannels();
   const bool useGSL = !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC);
   const bool rmc = !!(configure.paramMask & Config::USE_RMC_FORMALISM);
@@ -75,8 +75,8 @@ double ThmLevelWidth(CNuc *compound, JGroup *jgroup, ALevel *level, const Config
 
   double particle = 0.0, radiative = 0.0, normSum = 0.0;
   for (int ch = 1; ch <= numChannels; ch++) {
-    AChannel *channel = jgroup->GetChannel(ch);
-    PPair *pair = compound->GetPair(channel->GetPairNum());
+    const AChannel *channel = jgroup->GetChannel(ch);
+    const PPair *pair = compound->GetPair(channel->GetPairNum());
     double gamma = level->GetFitGamma(ch);
     if (gamma == 0.0) continue;
     double localEnergy = energy - pair->GetSepE() - pair->GetExE();

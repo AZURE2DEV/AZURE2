@@ -89,7 +89,7 @@ bool SegmentNeedsEC(const TermRef &segment, CNuc *theCNuc, const Config &configu
   const int ir = theCNuc->GetPairNumFromKey(segment.GetExitKey());
   for (int j = 1; j <= theCNuc->NumJGroups(); j++)
     for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++) {
-      ALevel *level = theCNuc->GetJGroup(j)->GetLevel(la);
+      const ALevel *level = theCNuc->GetJGroup(j)->GetLevel(la);
       if (level->IsECLevel() && level->GetECPairNum() == ir) return true;
     }
   return false;
@@ -194,8 +194,8 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
     g = gridNuc_.nuc.get();
     for (int j = 1; j <= theCNuc->NumJGroups(); j++)
       for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++) {
-        ALevel *from = theCNuc->GetJGroup(j)->GetLevel(la);
-        ALevel *to = g->GetJGroup(j)->GetLevel(la);
+        const ALevel *from = theCNuc->GetJGroup(j)->GetLevel(la);
+        ALevel *to = g->MutableLevel(j, la);
         to->SetFitE(from->GetFitE());
         for (int ch = 1; ch <= theCNuc->GetJGroup(j)->NumChannels(); ch++) to->SetFitGamma(ch, from->GetFitGamma(ch));
       }
@@ -481,7 +481,7 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
   // The folded points of one term (the base segment, t = 0, or a component), each with the pairs, the lab<->c.m.
   // factor and the kinematics of the pair the term calculates: their target thickness, the support of their kernels,
   // and their place in the shared mesh of their nucleus, whose nodes are their slots (placed below).
-  auto layOutTerm = [&](const TermRef &term, PPair *entrance, PPair *exit, double conversion) -> int {
+  auto layOutTerm = [&](const TermRef &term, const PPair *entrance, const PPair *exit, double conversion) -> int {
     const Segment &segment = *term.segment;
     TargetEffect *targetEffect = Draft().GetTargetEffect(term.GetTargetEffectNum());
     const std::string what = std::string(term.term ? "a component of " : "") + "segment #" +
@@ -583,8 +583,8 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
     return 0;
   };
   for (SegmentIterator segment = Draft().GetSegments().begin(); segment < Draft().GetSegments().end(); segment++) {
-    PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(segment->GetEntranceKey()));
-    PPair *exitPair = compound->GetPairFromKey(segment->GetExitKey());  // nullptr for total capture (-1)
+    const PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(segment->GetEntranceKey()));
+    const PPair *exitPair = compound->GetPairFromKey(segment->GetExitKey());  // nullptr for total capture (-1)
     if (segment->IsTargetEffect()) {
       const TargetEffect *targetEffect = Draft().GetTargetEffect(segment->GetTargetEffectNum());
       if (targetEffect->IsDoppler() && entrancePair->GetPType() != 0) {
@@ -613,8 +613,8 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
       // The points were copied from the base segment with its c.m.
       // energies; convert them for this pair before the grid is laid out
       // (WorkingCopy::Initialize repeats this, idempotently, from the lab energy).
-      PPair *compEntrance = compound->GetPair(compound->GetPairNumFromKey(component.GetEntranceKey()));
-      PPair *compExit = compound->GetPairFromKey(component.GetExitKey());
+      const PPair *compEntrance = compound->GetPair(compound->GetPairNumFromKey(component.GetEntranceKey()));
+      const PPair *compExit = compound->GetPairFromKey(component.GetExitKey());
       for (int i = 0; i < component.NumPoints(); i++) segment->ConvertRowEnergyToCM(*this, t, i, compEntrance, compExit);
       if (segment->IsTargetEffect() &&
           layOutTerm(component, compEntrance, compExit, Segment::CMEnergyFactor(compEntrance, compExit)) != 0)

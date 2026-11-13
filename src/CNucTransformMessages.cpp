@@ -18,7 +18,7 @@ namespace phys = azure2::physics;
 namespace {
 // AZURELabel takes non-const pointers (include/ParameterLabel.h); it only reads them.
 std::string LevelLabel(const CNuc &compound, int j, int la) {
-  JGroup *group = const_cast<CNuc &>(compound).GetJGroup(j);
+  const JGroup *group = const_cast<CNuc &>(compound).GetJGroup(j);
   return AZURELabel::Level(group, group->GetLevel(la), j, la);
 }
 std::string ChannelLabel(const CNuc &compound, int j, int ch) {
@@ -126,7 +126,7 @@ void WarnObservedOutOfReach(const CNuc &compound, const Config &configure, int j
 
 void WarnExternalExceedsTotal(const CNuc &compound, const Config &configure, int j, int la, int ch) {
   CNuc &c = const_cast<CNuc &>(compound);  // AZURELabel only reads it
-  JGroup *group = c.GetJGroup(j);
+  const JGroup *group = c.GetJGroup(j);
   configure.outStream << "**WARNING: Imaginary portion of the external width is greater "
                       << "than the total width" << std::endl
                       << "    "

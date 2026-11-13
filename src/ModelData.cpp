@@ -55,7 +55,7 @@ std::string SameLevel(CNuc &compound, const ex::ModelDatum &d, const ex::LevelTa
   for (const ex::LevelInfo &l : levels.levels) {
     if (l.group != d.group || l.level != d.level) continue;
     if (d.group < 1 || d.group > compound.NumJGroups()) break;
-    JGroup *group = compound.GetJGroup(d.group);
+    const JGroup *group = compound.GetJGroup(d.group);
     if (d.level < 1 || d.level > group->NumLevels()) break;
     if ((int)std::lround(2.0 * group->GetJ()) == l.twoJ && group->GetPi() == l.parity &&
         group->GetLevel(d.level)->GetE() == l.energy && group->GetLevel(d.level)->IDs() == l.ids)
@@ -68,8 +68,8 @@ std::string SameLevel(CNuc &compound, const ex::ModelDatum &d, const ex::LevelTa
 
 /// The value of one level quantity from the observed slots (CNuc::ObservedOfFitValues), in the engine unit.
 double LevelValue(CNuc *compound, const Config &configure, const ex::ModelDatum &d) {
-  JGroup *group = compound->GetJGroup(d.group);
-  ALevel *level = group->GetLevel(d.level);
+  const JGroup *group = compound->GetJGroup(d.group);
+  const ALevel *level = group->GetLevel(d.level);
   const unsigned char width = (unsigned char)phys::ObservedKind::Width;
   auto keyOf = [&](int ch) { return compound->GetPair(group->GetChannel(ch)->GetPairNum())->GetPairKey(); };
   // Gamma (MeV) to one pair (pairKey > 0) or in all, from the observed W of the channels that are widths.
@@ -159,12 +159,12 @@ std::vector<Column> LevelJacobian(CNuc *compound, const Config &configure, const
   std::vector<double> qp, qm;
   for (int j = 1; j <= compound->NumJGroups(); j++) {
     if (!allGroups && !groups.count(j)) continue;
-    JGroup *group = compound->GetJGroup(j);
+    const JGroup *group = compound->GetJGroup(j);
     for (int la = 1; la <= group->NumLevels(); la++)
       for (int ch = 0; ch <= group->NumChannels(); ch++) {
         const int f = ch == 0 ? pmap.EIndexFlat(j, la) : pmap.GammaIndexFlat(j, la, ch);
         if (f < 0 || f >= pmap.NumFull() || pmap.FullToPacked(f) < 0) continue;
-        ALevel *level = group->GetLevel(la);
+        const ALevel *level = group->GetLevel(la);
         const double v = ch == 0 ? level->GetFitE() : level->GetFitGamma(ch);
         const double h = ch == 0 ? kEnergyStep * std::max(1.0, std::fabs(v)) : kAmplitudeStep * std::max(std::fabs(v), kAmplitudeFloor);
         const double up = v + h, down = v - h;

@@ -437,8 +437,8 @@ int Segment::Fill(CNuc *theCNuc, WorkingCopy *theData, const Config &configure) 
     return -1;
   }
   this->SetMeasurementRows(*theData, rows, provenance, false);
-  PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
-  PPair *exitPair = theCNuc->GetPairFromKey(this->GetExitKey());  // nullptr for total capture (-1)
+  const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
+  const PPair *exitPair = theCNuc->GetPairFromKey(this->GetExitKey());  // nullptr for total capture (-1)
   for (int i = 0; i < this->NumPoints(); i++) {
     // Ratios are dimensionless: no cross-section conversion (decided by the spec: components are not added yet).
     azure2::experiment::AngleLimit lim;
@@ -506,7 +506,7 @@ void Segment::SetPrediction(std::shared_ptr<const azure2::experiment::Prediction
   measurement_ = m;
 }
 
-double Segment::CMEnergyFactor(PPair *entrancePair, PPair *exitPair) {
+double Segment::CMEnergyFactor(const PPair *entrancePair, const PPair *exitPair) {
   return (entrancePair->GetPType() == 20 && exitPair) ? azure2::experiment::DecayCMFactor(PartitionOf(exitPair))
                                                       : azure2::experiment::BeamCMFactor(PartitionOf(entrancePair));
 }
@@ -514,7 +514,7 @@ double Segment::CMEnergyFactor(PPair *entrancePair, PPair *exitPair) {
 namespace {
 
 // How the rows of a term with these pairs are converted (experiment::FrameRule).
-azure2::experiment::FrameRule RuleOf(const Segment &segment, int t, PPair *entrancePair, PPair *exitPair,
+azure2::experiment::FrameRule RuleOf(const Segment &segment, int t, const PPair *entrancePair, const PPair *exitPair,
                                      bool convertValue) {
   using azure2::experiment::ExitKind;
   azure2::experiment::FrameRule r;
@@ -536,7 +536,7 @@ azure2::experiment::FrameRule RuleOf(const Segment &segment, int t, PPair *entra
 
 }  // namespace
 
-bool Segment::ConvertRowToCM(WorkingCopy &data, int t, int i, PPair *entrancePair, PPair *exitPair, bool convertValue,
+bool Segment::ConvertRowToCM(WorkingCopy &data, int t, int i, const PPair *entrancePair, const PPair *exitPair, bool convertValue,
                               BeyondRange beyond, azure2::experiment::AngleLimit &lim) const {
   TermState &u = data.State(*this).terms[t];
   Unit *point = &data.UnitAt(u.first + i);
@@ -554,11 +554,11 @@ bool Segment::ConvertRowToCM(WorkingCopy &data, int t, int i, PPair *entrancePai
   return ok;
 }
 
-azure2::experiment::FrameRule Segment::TermFrameRule(int t, PPair *entrancePair, PPair *exitPair) const {
+azure2::experiment::FrameRule Segment::TermFrameRule(int t, const PPair *entrancePair, const PPair *exitPair) const {
   return RuleOf(*this, t, entrancePair, exitPair, true);
 }
 
-void Segment::ConvertRowEnergyToCM(WorkingCopy &data, int t, int i, PPair *entrancePair, PPair *exitPair) const {
+void Segment::ConvertRowEnergyToCM(WorkingCopy &data, int t, int i, const PPair *entrancePair, const PPair *exitPair) const {
   TermState &u = data.State(*this).terms[t];
   Unit &point = data.UnitAt(u.first + i);
   azure2::experiment::FrameRow &row = u.frame.rows[i];
@@ -921,8 +921,8 @@ double Segment::RatioTermFrameFactor(int t, Unit *point, CNuc *cnuc) const {
   if (!point || !cnuc) return 1.0;
   if (!IsDifferential() || IsCMDifferential() || IsPhase() || IsAngularDist()) return 1.0;
   if (!cnuc->IsPairKey(TermEntranceKey(t)) || !cnuc->IsPairKey(TermExitKey(t))) return 1.0;
-  PPair *entrancePair = cnuc->GetPair(cnuc->GetPairNumFromKey(TermEntranceKey(t)));
-  PPair *exitPair = cnuc->GetPair(cnuc->GetPairNumFromKey(TermExitKey(t)));
+  const PPair *entrancePair = cnuc->GetPair(cnuc->GetPairNumFromKey(TermEntranceKey(t)));
+  const PPair *exitPair = cnuc->GetPair(cnuc->GetPairNumFromKey(TermExitKey(t)));
   if (entrancePair->GetPType() == 20) return 1.0;
   if (exitPair->GetPType() == 10) return point->CalculateCrossSectionGammaConversionFactor(entrancePair);
   if (exitPair->GetPType() != 0) return 1.0;

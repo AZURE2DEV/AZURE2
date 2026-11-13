@@ -154,7 +154,6 @@ int AZUREAPI::Initialize() {
       // configure().outStream << "Reaction rate pairs do not exist in compound nucleus." << std::endl;
       return -1;
     } else {
-      compound()->GetPair(compound()->GetPairNumFromKey(configure().rateParams.entrancePair))->SetEntrance();
       compound()->RequestEntrance(compound()->GetPairNumFromKey(configure().rateParams.entrancePair));
     }
   }
@@ -757,7 +756,7 @@ vector_r AZUREAPI::CalculateScatteringLengthsRWA(const vector_r &rwaParams) cons
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
   vector_r out;
   for (int aa = 1; aa <= localCompound->NumPairs(); aa++) {
-    PPair *pair = localCompound->GetPair(aa);
+    const PPair *pair = localCompound->GetPair(aa);
     if (pair->GetPType() != 0) continue;
     for (const ScatteringLength::Channel &ch : ScatteringLength::Channels(localCompound, pair->GetPairKey())) {
       ScatteringLength::Value v = ScatteringLength::Evaluate(localCompound, configure(), ch);
@@ -906,7 +905,7 @@ vector_r AZUREAPI::ParkNorms(const vector_r &rwaParams) const {
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
   vector_r out;
   for (int j = 1; j <= localCompound->NumJGroups(); j++) {
-    JGroup *jg = localCompound->GetJGroup(j);
+    const JGroup *jg = localCompound->GetJGroup(j);
     if (!jg->IsInRMatrix()) continue;
     for (int la = 1; la <= jg->NumLevels(); la++)
       if (jg->GetLevel(la)->IsInRMatrix()) out.push_back(jg->GetLevel(la)->GetParkNorm());
@@ -1494,7 +1493,7 @@ vector_r AZUREAPI::GetECIntegrals(const vector_r &request) const {
 
   if (!compound_ || !compound_->IsPairKey(pairKey)) return out;
   int aa = compound_->GetPairNumFromKey(pairKey);
-  PPair *entrancePair = compound_->GetPair(aa);
+  const PPair *entrancePair = compound_->GetPair(aa);
   if (!entrancePair || !entrancePair->IsEntrance()) return out;
 
   // One block per pathway: 6 descriptors then 2*nE numbers.
@@ -1502,7 +1501,7 @@ vector_r AZUREAPI::GetECIntegrals(const vector_r &request) const {
 
   for (int j = 1; j <= compound_->NumJGroups(); j++) {
     for (int la = 1; la <= compound_->GetJGroup(j)->NumLevels(); la++) {
-      ALevel *ecLevel = compound_->GetJGroup(j)->GetLevel(la);
+      const ALevel *ecLevel = compound_->GetJGroup(j)->GetLevel(la);
       if (!ecLevel->IsECLevel()) continue;
       int ir = ecLevel->GetECPairNum();
       if (ir < 1 || ir > compound_->NumPairs()) continue;
@@ -1516,9 +1515,9 @@ vector_r AZUREAPI::GetECIntegrals(const vector_r &request) const {
         for (int ecm = 1; ecm <= theKGroup.num_external; ecm++) {
           const azure2::ExternalRow &g = P.External(theKGroup, ecm);
 
-          AChannel *finalChannel =
+          const AChannel *finalChannel =
               compound_->GetJGroup(j)->GetChannel(g.final_channel);
-          PPair *finalPair = compound_->GetPair(finalChannel->GetPairNum());
+          const PPair *finalPair = compound_->GetPair(finalChannel->GetPairNum());
 
           int liValue;
           double siValue;

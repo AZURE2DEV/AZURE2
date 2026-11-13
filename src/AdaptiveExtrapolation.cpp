@@ -131,7 +131,7 @@ std::vector<double> Seeds(CNuc *compound, int entranceKey, double lo, double hi,
   const azure2::experiment::Partition partition = PartitionOf(pair);
   const double threshold = pair->GetSepE() + pair->GetExE();
   for (int j = 1; j <= compound->NumJGroups(); j++) {
-    JGroup *group = compound->GetJGroup(j);
+    const JGroup *group = compound->GetJGroup(j);
     if (group->GetNucleus() != pair->GetNucleus() || !group->IsInRMatrix()) continue;
     for (int la = 1; la <= group->NumLevels(); la++) {
       const ALevel *level = group->GetLevel(la);

@@ -46,11 +46,11 @@ void Print(const Config &configure, const ex::Diagnostic &d) {
                       << " [" << d.code << "]: " << d.message << std::endl;
 }
 
-bool IsPhotonChannel(CNuc &compound, JGroup *group, int ch) {
+bool IsPhotonChannel(CNuc &compound, const JGroup *group, int ch) {
   return compound.GetPair(group->GetChannel(ch)->GetPairNum())->GetPType() == 10;
 }
 
-bool IsParticleChannel(CNuc &compound, JGroup *group, int ch) {
+bool IsParticleChannel(CNuc &compound, const JGroup *group, int ch) {
   return compound.GetPair(group->GetChannel(ch)->GetPairNum())->GetPType() == 0;
 }
 
@@ -122,7 +122,7 @@ std::shared_ptr<const GammaDecaySet> GammaDecaySet::Read(CNuc &compound, const C
   const bool ignoreZero = (configure.paramMask & Config::IGNORE_ZERO_WIDTHS);
   set->configure_ = &configure;
   try {
-    set->structure_ = std::make_shared<const CNucSystem>(BuildSystemFromCNuc(compound, configure, CNucSystemContent::Structure));
+    set->structure_ = compound.SystemStructureHandle();
   } catch (const std::exception &e) {
     configure.outStream << "ERROR: <gammaDecays>: " << e.what() << std::endl;
     return nullptr;
@@ -137,8 +137,8 @@ std::shared_ptr<const GammaDecaySet> GammaDecaySet::Read(CNuc &compound, const C
       return refuse(s, "--no-transform reads the level parameters as amplitudes; the record gives observed widths");
     GammaDecayLevel L;
     L.spec = s;
-    JGroup *group = compound.GetJGroup(s.group);
-    ALevel *level = group->GetLevel(s.level);
+    const JGroup *group = compound.GetJGroup(s.group);
+    const ALevel *level = group->GetLevel(s.level);
     if (!group->IsInRMatrix() || !level->IsInRMatrix()) return refuse(s, "the level is not in the R-matrix");
     for (std::size_t b = 0; b < map.groupOfBlock.size(); b++)
       if (map.groupOfBlock[b] == s.group) L.block = b;
@@ -151,8 +151,8 @@ std::shared_ptr<const GammaDecaySet> GammaDecaySet::Read(CNuc &compound, const C
     L.levelNumber = s.level;
     for (int j = 1; j < s.group; j++) L.levelNumber += compound.GetJGroup(j)->NumLevels();
     for (const int ch : L.photonChannels) {
-      AChannel *c = group->GetChannel(ch);
-      PPair *pair = compound.GetPair(c->GetPairNum());
+      const AChannel *c = group->GetChannel(ch);
+      const PPair *pair = compound.GetPair(c->GetPairNum());
       if (std::fabs(level->GetE() - pair->GetHeavyExE()) < 1.e-3 && group->GetJ() == pair->GetJ(2) && group->GetPi() == pair->GetPi(2))
         return refuse(s, "a photon channel to the level's own state is a static moment, not a decay");
     }
@@ -167,7 +167,8 @@ std::shared_ptr<const GammaDecaySet> GammaDecaySet::Read(CNuc &compound, const C
                            std::to_string(L.photonChannels.size()) + " photon channels (report it)");
     // The partial widths of the record as the level's input widths (eV): TransformIn converts them.
     const std::vector<double> widths = PartialWidths(L, SpecNumbers(L));
-    for (std::size_t k = 0; k < L.photonChannels.size(); k++) level->SetGamma(L.photonChannels[k], widths[k]);
+    for (std::size_t k = 0; k < L.photonChannels.size(); k++)
+      compound.MutableLevel(s.group, s.level)->SetGamma(L.photonChannels[k], widths[k]);
     // The external part of each slot (section 2.7): the final state whose capture covers the channel's multipolarity,
     // none under --ignore-externals for a width given as 0 (TransformIn's rule on the input).
     L.external.assign(L.photonChannels.size(), GammaDecayLevel::External());
@@ -384,13 +385,13 @@ std::vector<double> PhotonAmplitudes(CNuc &compound, const CNucSystem &structure
 /// as CNuc::CalcShiftFunctions forms it (section 2.7).
 double FinalSqrtNF(CNuc &compound, bool park, bool gsl, int j, int la, double E, const std::vector<double> &gamma,
                    std::vector<double> *dN) {
-  JGroup *group = compound.GetJGroup(j);
+  const JGroup *group = compound.GetJGroup(j);
   const ALevel *level = group->GetLevel(la);
   double n0 = 1.0;
   if (dN) dN->assign(group->NumChannels(), 0.0);
   for (int ch = 1; ch <= group->NumChannels(); ch++) {
-    AChannel *channel = group->GetChannel(ch);
-    PPair *pair = compound.GetPair(channel->GetPairNum());
+    const AChannel *channel = group->GetChannel(ch);
+    const PPair *pair = compound.GetPair(channel->GetPairNum());
     if (dN && ch <= level->NumNFIntegrals())
       (*dN)[ch - 1] += 2.0 * gamma[ch - 1] * phys::bound_state_coefficient(pair->GetChRad(), pair->GetRedMass()) *
                        level->GetNFIntegral(ch);
@@ -428,7 +429,7 @@ GammaDecaySet::Point GammaDecaySet::Map(CNuc &compound, const GammaDecayLevel &L
   if (!L.HasExternal()) return point;
   // gamma^ext at the current parameters, subtracted as TransformIn does (physics/ subtract_external_capture) in the
   // level's row of its block.
-  JGroup *group = compound.GetJGroup(L.spec.group);
+  const JGroup *group = compound.GetJGroup(L.spec.group);
   const std::size_t n = L.channelOfBlockChannel.size();
   std::vector<double> row(n, 0.0);
   std::vector<phys::ExternalWidth> ext(n);
@@ -451,7 +452,7 @@ GammaDecaySet::Point GammaDecaySet::Map(CNuc &compound, const GammaDecayLevel &L
     in.finalSqrtNF = FinalSqrtNF(compound, park_, gslCoulomb_, e.group, e.level, in.finalEnergy, in.finalGamma,
                                  slopes ? &dN : nullptr);
     ExternalCaptureSlopes d;
-    AChannel *channel = group->GetChannel(L.photonChannels[s]);
+    const AChannel *channel = group->GetChannel(L.photonChannels[s]);
     fill.external[s] = ExternalReducedWidthAt(compound, group, channel, {e.group, e.level}, in, *configure_,
                                               slopes ? &d : nullptr);
     ext[k].present = true;
@@ -523,8 +524,8 @@ void GammaDecaySet::PullBack(CNuc &compound, const GradAccum &accum, const Param
   for (std::size_t r = 0; r < levels_.size(); r++) {
     const GammaDecayLevel &L = levels_[r];
     const int j = L.spec.group, la = L.spec.level;
-    JGroup *group = compound.GetJGroup(j);
-    ALevel *level = group->GetLevel(la);
+    const JGroup *group = compound.GetJGroup(j);
+    const ALevel *level = group->GetLevel(la);
     if (!compound.HasGammaDecayValues((int)r)) continue;
     const GammaDecayFill &fill = compound.GammaDecayFillOf((int)r);
     const std::vector<double> &q = fill.q;

@@ -32,7 +32,6 @@ PPair::PPair(const azure2::io::LevelRow &nucLine, const PairFunctionSettings &se
   red_mass_ = nucLine.m1() * nucLine.m2() / (nucLine.m1() + nucLine.m2());
   i1i2factor_ = 1.0 / (2. * nucLine.j1() + 1.0) / (2. * nucLine.j2() + 1.0);
   entrance_ = false;
-  ec_entrance_ = false;
   nucleus_ = 0;
 
   // The compound nucleus the pair forms.  A particle pair is light + heavy
@@ -208,15 +207,6 @@ void PPair::SetChRad(double radius) {
 
 double PPair::GetBindingEnergy() const {
   return binding_energy_;
-}
-
-/*!
- * Sets the THM binding energy (MeV) of the transferred particle in the
- * Trojan-Horse nucleus for the particle pair.
- */
-
-void PPair::SetBindingEnergy(double bindingEnergy) {
-  binding_energy_ = bindingEnergy;
 }
 
 /*!

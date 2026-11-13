@@ -37,7 +37,7 @@ bool RateMode(const Config &configure) {
 }
 
 /// Everything the integral depends on besides the energy.
-std::vector<double> TermKey(PPair *pair, const Config &configure, const CoulFunc &coul, int li, int lf,
+std::vector<double> TermKey(const PPair *pair, const Config &configure, const CoulFunc &coul, int li, int lf,
                             double si, double sf, double ji, double jf, int multL, char radType,
                             double levelEnergy, bool isChannelCapture, int nodesPerDecade) {
   std::vector<double> key{(double)pair->GetZ(1), (double)pair->GetZ(2), pair->GetM(1), pair->GetM(2), pair->GetRedMass(),
@@ -66,7 +66,7 @@ std::vector<double> TermKey(PPair *pair, const Config &configure, const CoulFunc
  * carries it, and it turns with energy).  Both are exact and cheap (the
  * Coulomb table answers them at the channel radius).
  */
-bool Reduction(PPair *pair, CoulFunc &coul, int li, int twoJi, double outEnergy, bool isChannelCapture, complex &n) {
+bool Reduction(const PPair *pair, CoulFunc &coul, int li, int twoJi, double outEnergy, bool isChannelCapture, complex &n) {
   if (isChannelCapture)
     n = coul.HardSpherePhase(li, twoJi, pair->GetChRad(), outEnergy);
   else
@@ -79,7 +79,7 @@ bool Reduction(PPair *pair, CoulFunc &coul, int li, int twoJi, double outEnergy,
 /// them would inherit.  Nodes are few, so they are converged instead.
 const double kNodeTolerance = 1e-10;
 
-complex Direct(PPair *pair, const Config &configure, int li, int lf, double si, double sf, double ji,
+complex Direct(const PPair *pair, const Config &configure, int li, int lf, double si, double sf, double ji,
                double jf, int multL, char radType, double inEnergy, double levelEnergy, bool isChannelCapture) {
   ECIntegral integral(pair, configure);
   return integral(li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy, isChannelCapture);
@@ -87,7 +87,7 @@ complex Direct(PPair *pair, const Config &configure, int li, int lf, double si, 
 
 /// The integral converged to kNodeTolerance, or at the direct integrals' own
 /// tolerance where the quadrature cannot reach it (a GSL error or status).
-complex Converged(PPair *pair, const Config &configure, int li, int lf, double si, double sf, double ji,
+complex Converged(const PPair *pair, const Config &configure, int li, int lf, double si, double sf, double ji,
                   double jf, int multL, char radType, double inEnergy, double levelEnergy, bool isChannelCapture) {
   try {
     ECIntegral integral(pair, configure);
@@ -101,7 +101,7 @@ complex Converged(PPair *pair, const Config &configure, int li, int lf, double s
 
 }  // namespace
 
-complex ECTable::Integral(PPair *finalPair, const Config &configure,
+complex ECTable::Integral(const PPair *finalPair, const Config &configure,
                           int li, int lf, double si, double sf, double ji, double jf,
                           int multL, char radType, double inEnergy, double levelEnergy,
                           bool isChannelCapture, const ChannelTable *table, int finalPairNum) {

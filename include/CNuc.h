@@ -3,6 +3,7 @@
 
 #include <string>
 #include <functional>
+#include <exception>
 #include <memory>
 #include <vector>
 #include <map>
@@ -20,6 +21,7 @@ class MnUserParameters;
 }  // namespace ROOT
 class Config;
 class AZUREParams;
+struct CNucSystem;
 namespace azure2 {
 namespace io {
 class LevelRow;
@@ -71,7 +73,6 @@ class CNuc {
   /// before several nuclei could share a file.
   int NumNuclei() const;
   /// Nucleus \p i, 1-based.
-  CompoundNucleus *GetNucleus(int);
   const CompoundNucleus *GetNucleus(int) const;
   /// "Z=10 A=23" style label of nucleus \p i.
   std::string NucleusLabel(int) const;
@@ -93,9 +94,6 @@ class CNuc {
     if ((int)gammaDecayFills_.size() <= r) gammaDecayFills_.resize(r + 1);
     gammaDecayFills_[r] = std::move(fill);
   }
-  /// The input numbers of the records (per record, slot order; Gamma_gamma in eV), which FillMnParams puts into the
-  /// parameter vector as it puts a level's input widths: the file's, or the last FillCompoundFromParamsPhysical's.
-  const std::vector<std::vector<double>> &GammaDecayInputs() const { return gammaDecayInputs_; }
   /// Number of samples the <abundances> block defines (0 without the block).
   int NumSamples() const { return (int)samples_.size(); }
   /// Sample \p s, 1-based.
@@ -126,33 +124,32 @@ class CNuc {
   double AbundanceSumPenalty(double globalSumSigma) const;  // sum-to-one terms only (MCMC: priors come from BuildAutoPriors)
   /// Does a pair with this key exist? Keys are what the input files write; the
   /// PPair vector position may differ, so use GetPairNumFromKey to convert.
-  bool IsPairKey(int);
+  bool IsPairKey(int) const;
   int NumPairs() const;
   int NumJGroups() const;
-  /// 1-based position of the pair, or 0 if absent.
-  int IsPair(PPair);
   /// 1-based position of the \f$J^\pi\f$ group, or 0 if absent.
   int IsJGroup(JGroup);
   /// Convert an input-file pair key to its 1-based position in the PPair vector.
-  int GetPairNumFromKey(int);
-  /// Pair \p i, 1-based.
-  PPair *GetPair(int);
+  int GetPairNumFromKey(int) const;
+  /// Pair \p i, 1-based.  The structure (pairs, J^pi groups, channels) is read-only after Fill and Initialize: only
+  /// CNuc's own set-up writes it (Pair, Group, below).
   const PPair *GetPair(int) const;
   /// The pair with this key, or nullptr when no pair has it (a total-capture exit key -1, a typo): the
   /// GetPair(GetPairNumFromKey(key)) idiom read pairs_[-1] for those (audit 2026-10-25, item 32).
-  PPair *GetPairFromKey(int key);
+  const PPair *GetPairFromKey(int key) const;
   /// Keys of the capture (gamma, pair type 10) pairs of the compound nucleus of the pair with key
   /// \p entranceKey, in pair order: what the exit key -1 (total capture) stands for.  Empty when the
   /// entrance key is unknown or the nucleus has no capture pair.
-  std::vector<int> CapturePairKeys(int entranceKey);
+  std::vector<int> CapturePairKeys(int entranceKey) const;
   /// Why a reaction rate cannot be calculated for these keys ("" when it can).  The exit key -1 is the
   /// total radiative capture: the sum over CapturePairKeys(entranceKey).
-  std::string RatePairsProblem(int entranceKey, int exitKey);
-  /// \f$J^\pi\f$ group \p i, 1-based.
-  JGroup *GetJGroup(int);
+  std::string RatePairsProblem(int entranceKey, int exitKey) const;
+  /// \f$J^\pi\f$ group \p i, 1-based (read-only, as GetPair).
   const JGroup *GetJGroup(int) const;
-  void AddPair(PPair);
-  void AddJGroup(JGroup);
+  /// Level \p la of J-group \p j, both 1-based, for writing the values that move after set-up: the fit values a
+  /// parameter vector sets, the shift functions, the report slots (ALevel.h).  Its set-up data (IDs, flags, the
+  /// external-capture final state) are written by Fill and Initialize only.
+  ALevel *MutableLevel(int j, int la);
 
   // -- building -------------------------------------------------------------
   /// Build the whole object from the nuclear and external-capture input files.
@@ -257,17 +254,23 @@ class CNuc {
   /// widths (GammaDecaySet::WithPartialWidths; gamma_parametrisation.md section 2.8).
   void FillCompoundFromParamsPhysical(const vector_r &);
 
+  /// The physics/ System of the structure (CNucSystem.h, CNucSystemContent::Structure: R-matrix blocks, B_c = 0, no
+  /// level values) and the same with every J-group and level (CNucSystemContent::AllGroups).  Built once, when Fill
+  /// has made the structure, and shared by every copy (Clone); the structure does not change after Fill but for B_c,
+  /// which neither holds.  Throws, as BuildSystemFromCNuc did, when the System cannot represent the structure, and
+  /// std::logic_error before Fill.
+  const CNucSystem &SystemStructure() const;
+  const CNucSystem &SystemAllGroups() const;
+  /// The handle of SystemStructure(), for a set-up object that keeps it (GammaDecaySet, the external-capture set-up).
+  std::shared_ptr<const CNucSystem> SystemStructureHandle() const;
   /// The reaction pathways of the run (PathwayTable.h), built by Initialize and shared by every copy (Clone).
   /// Throws std::logic_error before Initialize.
   const azure2::PathwayTable &Pathways() const;
   /// Ask Initialize to build the capture analyzing-power terms of (entrance pair, exit pair), both 1-based, in the
-  /// pathway table.  Set-up state, like PPair::SetEntrance: it must be called before Initialize.
+  /// pathway table.  Set-up state, like RequestEntrance: it must be called before Initialize.
   void RequestCaptureAy(int entrancePair, int exitPair);
   /// Ask Initialize to build the pathways of entrance pair `pair` (1-based).  Set-up state: before Initialize.
   void RequestEntrance(int pair);
-  /// Comparison of the entrance requests with the flags the data set-up sets (PPair::SetEntrance): aborts with both
-  /// sets printed when they differ.
-  void CompareEntranceRequests(const char *where) const;
 
   /// Deep copy. AZURECalc gives each thread its own, since a calculation
   /// writes the fitted parameters into the object it runs on.
@@ -282,6 +285,13 @@ class CNuc {
   void SetThmCoherentValues(const std::vector<double> &v) { thmCoherentValues_ = v; }
 
  private:
+  /// The set-up's writable views of the structure (Fill, AddHardSphereGroups, ParseExternalCapture, Initialize).
+  PPair *Pair(int);
+  JGroup *Group(int);
+  /// 1-based position of the pair, or 0 if absent.
+  int IsPair(PPair);
+  void AddPair(PPair);
+  void AddJGroup(JGroup);
   struct ECFinalBlocks;
   /// Formal basis with external capture: the blocks whose final states need their Brune amplitude (Initialize).
   void SetUpECFinalBlocks(const Config &);
@@ -294,7 +304,7 @@ class CNuc {
   void SetUpFormalCaptureMasks(const Config &);
   /// Their projectors from the current fit values (FillCompoundFromParams).
   void FormalCaptureMasksFromParams();
-  bool MaskedLevelCoupled(JGroup *, int) const;
+  bool MaskedLevelCoupled(const JGroup *, int) const;
   std::shared_ptr<const CaptureMaskSetup> captureMaskSetup_;
   std::vector<CaptureMask> captureMasks_;
   /// TransformOut, first part: the Brune (Park) E and gamma of the fit parameters in the levels' transform slots
@@ -314,6 +324,10 @@ class CNuc {
   std::shared_ptr<const azure2::PathwayTable> pathways_;
   std::vector<std::pair<int, int> > captureAyRequests_;
   std::vector<int> entranceRequests_;  ///< RequestEntrance, 1-based pair numbers
+  /// Fill's last step: SystemStructure and SystemAllGroups, or the exception their build threw.
+  void BuildSystems(const Config &);
+  std::shared_ptr<const CNucSystem> systemStructure_, systemAllGroups_;
+  std::exception_ptr systemError_;
   std::vector<PPair> pairs_;
   std::vector<JGroup> jgroups_;
   std::vector<CompoundNucleus> nuclei_;
@@ -323,7 +337,10 @@ class CNuc {
   std::shared_ptr<const ModelDataSet> modelData_ = std::make_shared<ModelDataSet>();
   std::shared_ptr<const GammaDecaySet> gammaDecays_ = std::make_shared<GammaDecaySet>();
   std::vector<GammaDecayFill> gammaDecayFills_;
-  std::vector<std::vector<double>> gammaDecayInputs_;  ///< GammaDecayInputs
+  /// The input numbers of the gamma_decay records (per record, slot order; Gamma_gamma in eV), which FillMnParams puts
+  /// into the parameter vector as it puts a level's input widths: the file's, or the last
+  /// FillCompoundFromParamsPhysical's.
+  std::vector<std::vector<double>> gammaDecayInputs_;
   bool transformedIn_ = false;
   std::vector<double> thmCoherentValues_;
 };

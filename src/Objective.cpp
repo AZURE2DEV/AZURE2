@@ -408,10 +408,10 @@ void AppendModelRows(CNuc *compound, const Config &config, const ParamIndexMap *
   if (config.paramMask & Config::USE_PARK_FORMALISM) {
     const double s = CNuc::kParkNormScale;
     for (int j = 1; j <= compound->NumJGroups(); j++) {
-      JGroup *jg = compound->GetJGroup(j);
+      const JGroup *jg = compound->GetJGroup(j);
       if (!jg->IsInRMatrix()) continue;
       for (int la = 1; la <= jg->NumLevels(); la++) {
-        ALevel *level = jg->GetLevel(la);
+        const ALevel *level = jg->GetLevel(la);
         if (!level->IsInRMatrix()) continue;
         const double J = level->GetParkNorm();
         if (!(J < 0.0)) {
@@ -422,7 +422,7 @@ void AppendModelRows(CNuc *compound, const Config &config, const ParamIndexMap *
         acc.Init(compound);
         double dE = 0.0;
         for (int ch = 1; ch <= jg->NumChannels(); ch++) {
-          AChannel *channel = jg->GetChannel(ch);
+          const AChannel *channel = jg->GetChannel(ch);
           if (channel->GetRadType() != 'P' || compound->GetPair(channel->GetPairNum())->GetPType() != 0) continue;
           const double g = level->GetFitGamma(ch);
           acc.AddGamma(j, la, ch, -2.0 * g * level->GetShiftDerivative(ch) / s);

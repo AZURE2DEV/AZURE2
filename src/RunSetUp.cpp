@@ -78,7 +78,6 @@ int SetUpRun(ProgramRun &run) {
       run.configure.outStream << rateProblem << std::endl;
       return -1;
     } else {
-      run.compound->GetPair(run.compound->GetPairNumFromKey(run.configure.rateParams.entrancePair))->SetEntrance();
       run.compound->RequestEntrance(run.compound->GetPairNumFromKey(run.configure.rateParams.entrancePair));
     }
   }

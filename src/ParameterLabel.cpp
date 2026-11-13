@@ -64,7 +64,7 @@ std::string Pair(CNuc *compound, int pairNum) {
     return out.str();
   }
 
-  PPair *pair = compound->GetPair(pairNum);
+  const PPair *pair = compound->GetPair(pairNum);
 
   // PType 10 marks a photon pair; naming its two "particles" is meaningless.
   if (pair->GetPType() == 10) return "gamma";
@@ -73,7 +73,7 @@ std::string Pair(CNuc *compound, int pairNum) {
       Nuclide(pair->GetZ(2), pair->GetM(2));
 }
 
-std::string Level(JGroup *jgroup, ALevel *level, int jgroupIndex, int levelIndex) {
+std::string Level(const JGroup *jgroup, const ALevel *level, int jgroupIndex, int levelIndex) {
   std::ostringstream out;
   if (!jgroup || !level) {
     out << "level " << levelIndex << " of J-group " << jgroupIndex;
@@ -91,7 +91,7 @@ std::string Level(JGroup *jgroup, ALevel *level, int jgroupIndex, int levelIndex
   return out.str();
 }
 
-std::string Channel(CNuc *compound, JGroup *jgroup, int channelIndex) {
+std::string Channel(CNuc *compound, const JGroup *jgroup, int channelIndex) {
   std::ostringstream out;
   out << "channel " << channelIndex;
 
@@ -99,7 +99,7 @@ std::string Channel(CNuc *compound, JGroup *jgroup, int channelIndex) {
     return out.str();
   }
 
-  AChannel *channel = jgroup->GetChannel(channelIndex);
+  const AChannel *channel = jgroup->GetChannel(channelIndex);
   const char radType = channel->GetRadType();
 
   out << ": ";
@@ -115,7 +115,7 @@ std::string Channel(CNuc *compound, JGroup *jgroup, int channelIndex) {
   return out.str();
 }
 
-std::string LevelAndChannel(CNuc *compound, JGroup *jgroup, ALevel *level,
+std::string LevelAndChannel(CNuc *compound, const JGroup *jgroup, const ALevel *level,
                             int jgroupIndex, int levelIndex, int channelIndex) {
   return Level(jgroup, level, jgroupIndex, levelIndex) + ", " +
       Channel(compound, jgroup, channelIndex);
@@ -125,7 +125,7 @@ int NumParameters(CNuc *compound, WorkingCopy *data) {
   int n = 0;
   if (compound) {
     for (int j = 1; j <= compound->NumJGroups(); j++) {
-      JGroup *jgroup = compound->GetJGroup(j);
+      const JGroup *jgroup = compound->GetJGroup(j);
       n += jgroup->NumLevels() * (1 + jgroup->NumChannels());
     }
     n += compound->NumAbundanceParams();
@@ -154,9 +154,9 @@ std::string Parameter(CNuc *compound, WorkingCopy *data, int minuitIndex) {
   int index = 0;
   if (compound) {
     for (int j = 1; j <= compound->NumJGroups(); j++) {
-      JGroup *jgroup = compound->GetJGroup(j);
+      const JGroup *jgroup = compound->GetJGroup(j);
       for (int la = 1; la <= jgroup->NumLevels(); la++) {
-        ALevel *level = jgroup->GetLevel(la);
+        const ALevel *level = jgroup->GetLevel(la);
         if (index == minuitIndex)
           return "level energy: " + Level(jgroup, level, j, la);
         index++;

@@ -15,7 +15,7 @@ class EffectiveCharge {
  public:
   /// pair, gamma energy, multipolarity; with li, lf >= 0 the convection-current (tangential) term of the
   /// relative motion between those orbital momenta is added (see operator()).
-  EffectiveCharge(PPair *, double, int, int li = -1, int lf = -1);
+  EffectiveCharge(const PPair *, double, int, int li = -1, int lf = -1);
   /// Effective charge for the multipolarity, at a given energy.
   double operator()(double);
 

@@ -41,11 +41,11 @@ class ShftFunc;
  */
 class ChannelFunc {
  public:
-  ChannelFunc(PPair *pair, bool useGSLFunctions);
+  ChannelFunc(const PPair *pair, bool useGSLFunctions);
   ~ChannelFunc();
 
   /// e > 0 and a charged pair with Sommerfeld parameter eta above kEtaClosed.
-  static bool IsCoulombThreshold(PPair *pair, double e);
+  static bool IsCoulombThreshold(const PPair *pair, double e);
   /// Closed to double precision: e <= 0, or a Coulomb threshold.  P = 0 there.
   bool IsClosed(double e) const;
 
@@ -72,7 +72,7 @@ class ChannelFunc {
   CoulFunc &coul();
   ShftFunc &shft();
 
-  PPair *pair_;
+  const PPair *pair_;
   bool useGSL_;
   double threshold_;
   double radius_;

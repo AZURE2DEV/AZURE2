@@ -40,14 +40,14 @@ std::string Pair(CNuc *compound, int pairNum);
 
 /*! e.g. "J^pi=3/2+, E=16.9285 MeV (J-group 1, level 1)". */
 /// Level as text, with its \f$J^\pi\f$, energy and position -- the form the warnings use.
-std::string Level(JGroup *jgroup, ALevel *level, int jgroupIndex, int levelIndex);
+std::string Level(const JGroup *jgroup, const ALevel *level, int jgroupIndex, int levelIndex);
 
 /*! e.g. "channel 2: d+t, L=0, S=3/2", or "channel 5: E1 gamma to n+4He". */
 /// Channel as text, with its pair, l and s.
-std::string Channel(CNuc *compound, JGroup *jgroup, int channelIndex);
+std::string Channel(CNuc *compound, const JGroup *jgroup, int channelIndex);
 
 /*! Level and channel together, for a width. */
-std::string LevelAndChannel(CNuc *compound, JGroup *jgroup, ALevel *level,
+std::string LevelAndChannel(CNuc *compound, const JGroup *jgroup, const ALevel *level,
                             int jgroupIndex, int levelIndex, int channelIndex);
 
 /*!

@@ -116,8 +116,8 @@ void Segment::UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, CNuc *
 
       // Recalculate energy dependent values
       if (theCNuc && configure) {
-        PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->TermEntranceKey(t)));
-        PPair *exitPair = theCNuc->GetPairFromKey(this->TermExitKey(t));  // nullptr for total capture (-1)
+        const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->TermEntranceKey(t)));
+        const PPair *exitPair = theCNuc->GetPairFromKey(this->TermExitKey(t));  // nullptr for total capture (-1)
 
         // The same conversion as Segment::Fill (ratios are dimensionless: no cross-section conversion; a leaf's
         // value is always converted)

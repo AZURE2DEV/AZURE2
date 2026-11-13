@@ -64,11 +64,11 @@ void CheckEntrance(CNuc &c, int a, const std::string &tag) {
         const bool group = r.group >= 1 && r.group <= c.NumJGroups();
         Check(group, tag, at + ": J-group");
         if (!group) continue;
-        JGroup *J = c.GetJGroup(r.group);
+        const JGroup *J = c.GetJGroup(r.group);
         const bool channels = r.ch >= 1 && r.ch <= J->NumChannels() && r.chp >= 1 && r.chp <= J->NumChannels();
         Check(channels && J->IsInRMatrix(), tag, at + ": channels of an R-matrix group");
         if (!channels) continue;
-        AChannel *in = J->GetChannel(r.ch), *out = J->GetChannel(r.chp);
+        const AChannel *in = J->GetChannel(r.ch), *out = J->GetChannel(r.chp);
         Check(in->GetPairNum() == a && out->GetPairNum() == x.pair, tag, at + ": channel pairs");
         Check(r.k_in == r.ch - 1 && r.k_out == r.chp - 1, tag, at + ": block channels");
         if (!beta) {
@@ -89,7 +89,7 @@ void CheckEntrance(CNuc &c, int a, const std::string &tag) {
                            r.final_level <= c.GetJGroup(r.final_group)->NumLevels();
         Check(level && c.GetJGroup(r.final_group)->GetLevel(r.final_level)->IsECLevel(), tag, at + ": final level");
         if (!level) continue;
-        JGroup *F = c.GetJGroup(r.final_group);
+        const JGroup *F = c.GetJGroup(r.final_group);
         Check(c.GetJGroup(r.final_group)->GetLevel(r.final_level)->GetECPairNum() == x.pair, tag, at + ": photon pair");
         const bool finalChannel = r.final_channel >= 1 && r.final_channel <= F->NumChannels();
         Check(finalChannel, tag, at + ": final channel");
@@ -110,7 +110,7 @@ void CheckEntrance(CNuc &c, int a, const std::string &tag) {
         Check(position && &P.Internal(P.Group(P.exits[r.cc_exit - 1], r.cc_group), r.cc_pathway) == &cc, tag,
               at + ": position triple and row");
         if (r.photon_channel) {
-          JGroup *B = c.GetJGroup(cc.group);
+          const JGroup *B = c.GetJGroup(cc.group);
           Check(r.photon_channel <= B->NumChannels() && B->GetChannel(r.photon_channel)->GetPairNum() == x.pair &&
                     B->GetChannel(r.photon_channel)->GetRadType() == r.rad_type &&
                     B->GetChannel(r.photon_channel)->GetL() == r.mult,
@@ -212,10 +212,7 @@ int main(int argc, char **argv) {
     InitializeECAmplitudeCache(cfg);
     if (compound.Fill(cfg) == -1) continue;
     for (int a = 1; a <= compound.NumPairs(); a++)
-      if (compound.GetPair(a)->GetPType() != 10) {
-        compound.GetPair(a)->SetEntrance();
-        compound.RequestEntrance(a);
-      }
+      if (compound.GetPair(a)->GetPType() != 10) compound.RequestEntrance(a);
     for (int a = 1; a <= compound.NumPairs(); a++)
       for (int p = 1; p <= compound.NumPairs(); p++)
         if (compound.GetPair(a)->GetPType() != 10 && compound.GetPair(p)->GetPType() == 10) compound.RequestCaptureAy(a, p);

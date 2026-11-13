@@ -107,8 +107,8 @@ RateResonances(CNuc *compound, const Config &configure, int entranceKey) {
     std::unique_ptr<CNuc> g(compound->Clone());
     for (int j = 1; j <= compound->NumJGroups(); j++)
       for (int la = 1; la <= compound->GetJGroup(j)->NumLevels(); la++) {
-        ALevel *from = compound->GetJGroup(j)->GetLevel(la);
-        ALevel *to = g->GetJGroup(j)->GetLevel(la);
+        const ALevel *from = compound->GetJGroup(j)->GetLevel(la);
+        ALevel *to = g->MutableLevel(j, la);
         to->SetFitE(from->GetFitE());
         for (int ch = 1; ch <= compound->GetJGroup(j)->NumChannels(); ch++)
           to->SetFitGamma(ch, from->GetFitGamma(ch));
@@ -566,7 +566,7 @@ void DispatchRateCalculation(const std::vector<double> &temps,
   // pair-counting 1/(1+delta_12), which belongs to the rate equation
   // r = n_1 n_2 <sigma v> / (1+delta_12). Say so, so it is not applied twice
   // or not at all.
-  PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(entranceKey));
+  const PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(entranceKey));
   if (entrancePair->IsIdentical())
     configure.outStream << "\tIdentical entrance particles: N_A<sigma v> includes (1+delta_12) in sigma and excludes\n"
                         << "\tthe 1/(1+delta_12) of the rate equation r = n^2 <sigma v> / 2 (FCZ 1967, REACLIB convention)."

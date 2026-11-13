@@ -358,7 +358,7 @@ double inwardBarrier(int l, double c, double k2, double p, double a, double rc) 
   return acc / y;
 }
 
-complex coulombTermUncached(PPair *pair, int l, double E, double p) {
+complex coulombTermUncached(const PPair *pair, int l, double E, double p) {
   const int zz = pair->GetZ(1) * pair->GetZ(2);
   if (zz == 0 || !(p > 0.0)) return complex(0.0, 0.0);
   const double mu = pair->GetRedMass() * uconv;  // MeV/c^2
@@ -504,7 +504,7 @@ complex coulombTermUncached(PPair *pair, int l, double E, double p) {
 
 }  // namespace
 
-complex ThmCoulombTerm(PPair *pair, int l, double E, double p, bool useGSL) {
+complex ThmCoulombTerm(const PPair *pair, int l, double E, double p, bool useGSL) {
   (void)useGSL;  // O_l is built from its asymptotic expansion, see above
   return coulombTermUncached(pair, l, E, p);
 }

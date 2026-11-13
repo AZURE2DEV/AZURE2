@@ -58,7 +58,6 @@ int main(int argc, char **argv) {
             photon = compound.GetPairNumFromKey(2);
   check("pairs numbered n + 12C 1, p + 12C 2, photon 3", neutron == 1 && proton == 2 && photon == 3,
         std::to_string(neutron) + " " + std::to_string(proton) + " " + std::to_string(photon));
-  compound.GetPair(proton)->SetEntrance();
   compound.RequestEntrance(proton);
   compound.Initialize(cfg);
 
