@@ -25,7 +25,14 @@ rows under "stopping" and draws the citation under every stopping plot, in the C
 `tab-uiphys-1`, 78 files per basis); the consistency test; `physics_table_test.py`; the UI tests as scripts
 (`physics_tab_test` 4, `physics_routes_test` 6, `routes_consistency_test` 8, `static_test` 9, `node_test` 46 node
 tests); the smoke test on T1 and T2 with screenshots (`work/uiphys/shots*`); each new check shown failing once with
-an injected error (14 cases, `tests/pyazr/ui/README.md`).
+an injected error (14 cases, `tests/pyazr/ui/README.md`). Second part: T1, T2, T3, 13N x 3 bases identical to
+`tab-t50-1` (`tab-uiphys-2`); 4 more injected errors. At the end: `ctest -R pyazr_ -LE slow` 125 of 125 (one at a
+time); ten further smoke runs 10 of 10 (`work/uiphys/smoke10/`). Not run: all projects x 3 bases (no C++ outside
+`api/src/pybind_*.cpp` and the new `api/src/pybind_rows.h` changed), the slow tests, `tests/run_tests.sh`, sphinx.
+
+**Open.** The level matrix, the transfer functions on potentials and the reaction rate (no engine call); the THM
+tab; the session's functions described by the binding (finding 24); stopping of the project's own targets (26); the
+stopping provenance per element not shown; `J` of `channel_functions` not offered.
 
 ## 2026-11-13 (agent, branch `feature/upgrade-6-sampler-objective`) — the sampler on the fit's objective, its state
 
