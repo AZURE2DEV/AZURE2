@@ -1,19 +1,19 @@
 ---
 name: azure2-targets
-description: Model the apparatus between the AZURE2 cross section and the measured yield - target integration (thin, thick, compound, implanted, gas), stopping power and straggling, Gaussian beam spread and TOF resolution, SAMMY UDR, beam-profile kernels, free-gas Doppler, transmission and self-shielded yield, electron screening, fitted density or thickness, Q attenuation coefficients. Use for any target, beam or detector record or experimental effect. Building the project: azure2-setup; fitting: azure2-fit; stopping-profile inference from excitation curves: target-analysis.
+description: Model the apparatus between the AZURE2 cross section and the measured yield - target integration (thin, thick, compound, implanted, gas), SRIM stopping (the stopping library) and straggling, Gaussian beam spread and TOF resolution, SAMMY UDR, beam-profile kernels, free-gas Doppler, transmission and self-shielded yield, electron screening, fitted density or thickness, Q attenuation coefficients. Use for any target, beam or detector record or experimental effect. Building the project: azure2-setup; fitting: azure2-fit; stopping-profile inference from excitation curves: target-analysis.
 ---
 
 # Targets, resolution and other experimental effects in AZURE2
 
-An experimental effect is a record of `<targets>` -- a `target` (energy loss, straggling, Doppler, screening,
-sample thickness), a `beam` (energy spread, profile) or a `detector` (resolution, UDR, attenuation) -- that a data
-set or an extrapolation names in its `target`, `beam` or `detector` field; it folds the calculated c.m. cross
-section σ(E_c.m.) of that data set with a kernel: the energy loss in the target, the beam energy spread, the detector or
-time-of-flight resolution, the thermal motion of the target atoms, the sample attenuation, or the screening of the
-nuclear charge. This skill says how to choose and write those records and how to check them. What each kernel
-computes, with its equations, is in `docs/source/user_guide/experimental_effects.rst`; the fields are in
-`docs/source/reference/format3.rst` (generated from the table; `AZURE2 --describe` shows what a data set got); the implementation (sub-point grids, adaptive lattices) is in
-`docs/source/developer/edata_and_target_effects.rst`.
+An experimental effect is a record of `<targets>` -- a `target` (energy loss, straggling, Doppler, screening, sample
+thickness), a `beam` (energy spread, profile) or a `detector` (resolution, UDR, attenuation) -- that a data set or an
+extrapolation names in its `target`, `beam` or `detector` field; it folds the calculated c.m. cross section σ(E_c.m.) of
+that data set with a kernel: the energy loss in the target, the beam energy spread, the detector or time-of-flight
+resolution, the thermal motion of the target atoms, the sample attenuation, or the screening of the nuclear charge. This
+skill says how to choose and write those records and how to check them. What each kernel computes, with its equations,
+is in `docs/source/user_guide/experimental_effects.rst`; the fields are in `docs/source/reference/format3.rst`
+(generated from the table; `AZURE2 --describe` shows what a data set got); the implementation (sub-point grids, adaptive
+lattices) is in `docs/source/developer/edata_and_target_effects.rst`.
 
 ## When to use, and when a sibling skill is the owner
 
@@ -24,6 +24,20 @@ computes, with its equations, is in `docs/source/user_guide/experimental_effects
   shifts and normalizations: `azure2-fit`.
 - Inferring a stopping profile or target composition from the excitation curves themselves: the user-level skill
   `target-analysis`.
+
+## Scripts
+
+| Script | Does |
+|---|---|
+| `scripts/layer.py` | SRIM stopping of a material, the loss of a layer (range integral and first order), straggling, the record |
+| `scripts/target_check.py` | the engine's thin-target fold of a data set against an integral outside it |
+| `scripts/selftest.py` | the loss against a quadrature of 1/ε, a round trip, the record and the fold checked in T1 |
+
+```bash
+python3 .claude/skills/azure2-targets/scripts/layer.py --material TiN --projectile p --energy 0.4 \
+    --areal-density 2e18 --active 15N        # 27.93 keV by the range integral, 2 % above eps(E0) N
+python3 .claude/skills/azure2-targets/scripts/layer.py --material Ta2O5 --projectile p --energy 0.3 --loss-kev 10
+```
 
 ## 1. Choosing the kernel
 
@@ -64,10 +78,33 @@ data a resonance scan gives; N (fitted or fixed) sets the width of a narrow reso
   with an energy-dependent ε does not reproduce it (7.5 μg cm⁻² gives 2.8 keV at 0.46 MeV and 1.1 keV at 2 MeV).
   Match the quoted loss at the energy that matters (2.0 × 10¹⁷ atoms cm⁻² gives 1.5 keV at the 1/2⁺ resonance) or use
   one target record per energy window, each named by the data sets of its window.
-- **Before calling a target-integration discrepancy physics**, run the independent check in
-  `references/target-integration-check.md`.
+- **Before calling a target-integration discrepancy physics**, run `scripts/target_check.py model.azr --dataset NAME`:
+  it recomputes the depth average outside the engine (bare σ on a fine grid, SRIM's ε, the range integral) and
+  compares point by point (agreement 1e-4 through a 33 keV resonance under an 8 keV loss in the self-test).
 
-## 2. Frames and units on target, beam and detector records
+## 2. Stopping powers: SRIM through AZURE2's stopping library
+
+A layer or infinite target needs a `stopping` field (`docs/source/reference/format3.rst`, "target"):
+
+- `stopping evaluation` with `composition Ti 1 N 1` (and `phase gas` for a gaseous compound, `compound_correction`
+  for SRIM's factor C of Bragg's rule): SRIM-2013's stopping, evaluated by the engine per atom of the active
+  nucleus's element (ε of the material over that element's atom fraction). This is the default choice; every
+  result that uses it cites SRIM (`pyazr.stopping.CITATION`, printed by `layer.py`).
+- `stopping table <file> MeV eV/1e15atoms/cm2` (or `MeV*cm2/g`): a measured or published table.
+- `stopping formula "<expression in x>" a0=... <unit>`: a fitted polynomial from a paper; check its range covers
+  every energy the beam has in the layer (a stopping that is not positive there is refused, `E_LAYER_STOPPING`).
+- `... scale 1 fit prior 1 4%` on any of them: a stopping-scale nuisance (parameter kind `apparatus`), the usual way
+  to carry SRIM's uncertainty (`pyazr.stopping.stopping(...)["rel_uncertainty"]` gives SRIM's quoted accuracy for
+  the ion). Two targets of one material and projectile share the scale and must write it alike.
+- `straggling none | bohr | coefficient <c> keV^1/2 cm`; `epoch <name> areal_density ...` for a target whose
+  thickness changed between runs, a data set naming `target T@<epoch>`.
+- A data set that names a target, beam or detector must state its `quadrature points N` (§5).
+- Python without a session: `pyazr.stopping` (`Material`, `stopping`, `energy_loss`, `energy_after`,
+  `areal_density_between`, `range_of`, `straggling`, `provenance`); its units are per atom of the material and
+  atoms/cm² of the material. Inferring a profile from the excitation curves themselves: the user-level
+  target-analysis skill.
+
+## 3. Frames and units on target, beam and detector records
 
 - **Every number carries its unit and frame.** A spread or resolution says `lab` or `cm`; σ_b, a `formula` (a
   function of x = E_lab in MeV with `lab`) and the beam profile are entrance-channel lab energies.
@@ -76,19 +113,19 @@ data a resonance scan gives; N (fitted or fixed) sets the width of a narrow reso
 - **σ_b is a standard deviation, not a FWHM** (FWHM = 2.355 σ_b). Write `spread 1 keV lab` for 1 keV.
 - **The straggling coefficient c_s is a c.m. quantity** (keV^½): σ_strag = c_s √(ΔE_c.m. [keV]) keV. A coefficient
   quoted for the beam in the lab enters as c_lab √(m₂/(m₁+m₂)) (0.85 for α + ¹¹B, 0.96 for p + ¹²C).
-  Straggling switched on with c_s = 0 computes Bohr's width from Z₁, Z₂ and the target's ε. Bohr's value is
+  `straggling bohr` computes Bohr's width from Z₁, Z₂ and the target's ε. Bohr's value is
   0.3–0.5 keV^½ for light ions in light targets (p + ¹⁴N at 270 keV: 0.31), is the high-velocity limit (too large
   below about 1 MeV/u) and counts only the target nucleus's electrons. For a compound target with ε per molecule or
   per active atom enter c_s = √(f · 4π Z₁² e⁴ Z_entity / ε) yourself, with ε in MeV cm², e² = 1.44 × 10⁻¹³ MeV cm,
   f = m₂/(m₁+m₂). A coefficient of 0.04 keV^½ is 5–10 times below Bohr, i.e. no straggling.
-- **A `formula` with `cm` is evaluated at E_c.m. and taken as the c.m. width** (what an old line without `sigmalab`
-  meant; the converter writes it so). A lab TOF derivation written that way is off by the mass ratio on both axes:
+- **A `formula` with `cm` is evaluated at E_c.m. and taken as the c.m. width** (the converter writes an old
+  line's c.m. width so). A lab TOF derivation written that way is off by the mass ratio on both axes:
   use `lab`, or σ_lab(x) = σ_cm(F x)/F with F = m_t/(m_p+m_t).
 - **Formula coefficients are named** (`a0=... a1=...`): check that a0 is the coefficient of the lowest power.
   Swapped, the record applies a different resolution without any message (a 20 % wider σ
   changed a fitted Γ_n from 0.61 to 0.44 keV in one case). Evaluate σ_b at one known energy before fitting.
 
-## 3. Compound and implanted targets
+## 4. Compound and implanted targets
 
 The yield uses ε and N only through Δ = εN and 1/(Nε), so ε and N must count the same entity:
 
@@ -103,52 +140,45 @@ by (x+y)/x. When a paper
 quotes the energy loss in keV, choose ε(E_0) N to reproduce it and skip the stoichiometry; for a 10–20 % target
 N ≈ Δ/ε(E_0) holds only to first order (a few per cent).
 
-- builds before 2026-09-28 (expires: 2027-02-01): the GUI's compound ERYA fetch returned the average-atom ε. An
-  equation written by such a GUI is consistent only with all atoms cm⁻²; scale it by (x+y)/x for the active density.
-- A thin target whose ε evaluates to ≤ 0 at some point is refused with an error naming the segment and energy:
-  fix the stopping-power polynomial's range.
+- A layer whose ε is not positive at an energy of its sub-point grid is refused (`E_LAYER_STOPPING`): fix the
+  formula's range, or use `stopping evaluation`.
 
-## 4. Narrow resonances and sub-point grids
+## 5. Narrow resonances and sub-point grids
 
-- **A resonance narrower than the kernel needs sub-points on it.** The adaptive grid places a fine lattice around
-  each level (the data set's `quadrature ... width_multiplier`, default 20 widths). A 200 eV resonance under a 100 eV Gaussian needed
-  1000 sub-points for 10⁻⁴ accuracy (4 × 10⁻⁴ with 400). Check convergence by raising the sub-point count until the
-  folded curve stops moving.
+- **A resonance narrower than the kernel needs sub-points on it.** The adaptive grid places a fine lattice around each
+  level (the data set's `quadrature ... width_multiplier`, default 20 widths). A 200 eV resonance under a 100 eV
+  Gaussian needed 1000 sub-points for 10⁻⁴ accuracy (4 × 10⁻⁴ with 400). Check convergence by raising the sub-point
+  count until the folded curve stops moving.
 - **Grid cost against accuracy.** The data set's field `quadrature points N width_multiplier W per_width P` sets
   the grid (W and P default 20 and 50). For one narrow level under target integration, measured at its fitted width:
   20/50 113 s (reference), 5/50 37 s (+0.005 % in χ²), 5/20 17 s (+0.03 %), 2/10 6 s (−0.65 %, 6 units of χ², more
   than the Δχ² = 1 interval). Screen at 5/20 and fit and report at 20/50; never use a multiplier of 2. Re-measure per
   project. A width floor on a template buys at most about 2.6× in cost; the number of patterns dominates.
 - **Gaussian kernels reach ±5 σ_b** and are normalised by their own integral; a constant σ survives the fold
-  exactly. builds before 2026-10-26 (expires: 2027-02-01): kernels stopped at ±3 σ_b, so points 2–3 σ_b from a
-  resonance 10³ times above its surroundings came out 2–4 % low; refit such segments on a current build.
+  exactly.
 - **Channel thresholds.** Close to a charged-particle threshold the bare σ used to overflow (values up to 10³⁷ b
   within about 20 eV). A sub-point grid that lands there gives isolated one-point spikes in a folded curve, at
-  energies that move with the sub-point count. builds before 2026-10-11 (expires: 2027-02-01) have this; on a
-  current build set `AZURE_DUMP_NONFINITE=1` to locate any remaining non-finite point
+  energies that move with the sub-point count. Set `AZURE_DUMP_NONFINITE=1` to locate any remaining non-finite point
   (`docs/source/reference/command_line.rst`).
-- builds before 2026-09-11 (expires: 2027-02-01) mis-estimated level widths when building the narrow-resonance
-  lattice, which can invert which Γ the data prefer; redo any fit of a narrow level through a target or beam kernel
-  made with them.
 - **A long in-process job keeps the extension it loaded.** Rebuilding `pyazr/_azure2*.so` during a campaign makes
   later evaluations incomparable with earlier ledger values; compare the `.so` time stamp with the job start
   before comparing objectives across a rebuild.
 
-## 5. Every point of a folded data set is folded
+## 6. Every point of a folded data set is folded
 
 There are no integration windows, edge blends, automatic tolerance or σ(Ē) stand-in any more: every point of a data
 set that names a target, beam or detector is folded with the whole kernel on the shared mesh of its compound nucleus.
-A format-3 file that writes `fold_windows` is refused (`E_FIELD_DELETED`: remove the field); an old `<targetInt>` line
-with ranges, a blend or a tolerance converts with a note naming what was dropped. A windowed fit made with an older
+A file that writes `fold_windows` is refused (`E_FIELD_DELETED`: remove the field); the converter of old projects
+notes what it dropped. A windowed fit made with an older
 build differs from today's model by at most what its windows left out (outside the windows of a beam spread, the whole
 spread): refit it. The cost of a point is set by the mesh's settings (`quadrature`), not by which points are folded.
 
-## 6. Neutron TOF: UDR, transmission, yield, Doppler
+## 7. Neutron TOF: UDR, transmission, yield, Doppler
 
-- **UDR files.** The n_TOF response files already contain the proton burst: use `burstFWHM 0`; the HI (7 ns) and LI
+- **UDR files.** The n_TOF response files already contain the proton burst: use `burst 0 ns`; the HI (7 ns) and LI
   (14 ns) pulse types have separate files; check a new file by the width of its highest-energy blocks. There is no
   general EAR2 file: it is made per experiment, so obtain the one the authors' SAMMY fit used. If the data's TOF→E
-  conversion fitted the flight path rather than re-centring, use `centred 0` with that L; use `centred 1` only when
+  conversion fitted the flight path rather than re-centring, use `centred no` with that L; use `centred yes` only when
   L already includes the mean moderation length. The kernel is evaluated at the point's nominal energy; one channel
   width per detector (split a data set where the binning changes, e.g. 10 → 100 bins per decade at 300 keV). A positive
   delay maps to a higher true energy. Details: `references/udr-and-beam-profile.md`.
@@ -164,7 +194,7 @@ spread): refit it. The cost of a point is set by the mesh's settings (`quadratur
   for resonances a few hundred eV wide or narrower. A target may carry `doppler` alone. Refused: T ≤ 0, a photon or
   β entrance.
 
-## 7. Fitted apparatus parameters
+## 8. Fitted apparatus parameters
 
 Each is a parameter of the target record, named after it, with a Gaussian prior about the value the field writes;
 the fitted value lives in `param.sav` (`pyazr.Session.save_fit` writes it back into the field). One target named by
@@ -188,58 +218,32 @@ fields with `pyazr.Project.set`.
   which, read as lab, puts the metal-target U_e 26–27 % low.
 - rmfit runs these kinds (doppler, thickness, density, screening) under the single-session evaluator only
   (`rmfit-campaign`).
-- builds before 2026-11-05 (expires: 2027-02-01): a build that knows `doppler T` or `transmission n` but not the fit
-  form reads the first number and ignores the rest without a message.
-- builds before 2026-10-29 (expires: 2027-02-01): the first evaluation of a session at a shift of exactly 0 used the
-  `.azr`'s nonzero shift on segments with target-effect sub-points.
 
-## 8. Extrapolations are folded only by the records they name
+## 9. Extrapolations are folded only by the records they name
 
-An extrapolation record is folded by the `target`, `beam` or `detector` it names, and by nothing else (an old
-file's `<targetInt>` line also folded the extrapolation with the same index: the converter writes that as the
-extrapolation's own field, with a `# CONVERTED:` note). For a bare σ or S factor, remove the field
-(`pyazr.Project.set` with `None`). To see the folded shape on a fine grid, name the target in an extrapolation. (Extrapolation procedure: `azure2-calculate`.)
+An extrapolation record is folded by the `target`, `beam` or `detector` it names, and by nothing else (the converter of
+an old project writes an old line's folding as the extrapolation's own field, with a `# CONVERTED:` note). For a bare σ
+or S factor, remove the field (`pyazr.Project.set` with `None`). To see the folded shape on a fine grid, name the target
+in an extrapolation. (Extrapolation procedure: `azure2-calculate`.)
 
-## 9. Energy shifts and sub-points
+## 10. Energy shifts and sub-points
 
-Sub-points move rigidly with their data point: a constant, `sqrt` or function shift s(E_0) (the data set's `shift` or its `energy_scale`) is a calibration
-of the measured beam energy, so the integration window keeps its width and the resonance-anchored grid stays on the
-resonance. Sub-points are built at the parent's c.m. angle.
+Sub-points move rigidly with their data point: a constant, `sqrt` or function shift s(E_0) (the data set's `shift` or
+its `energy_scale`) is a calibration of the measured beam energy, so the integration window keeps its width and the
+resonance-anchored grid stays on the resonance. Sub-points are built at the parent's c.m. angle.
 
-- builds before 2026-10-26 (expires: 2027-02-01): (a) sub-points of lab-frame differential segments with any
-  sub-point effect moved to the wrong angle (by the full lab − c.m. difference) whenever the segment's energy shift
-  was active, and the shift derivatives were wrong with it; (b) under a sqrt or function shift each sub-point moved by
-  s(E_sub), stretching the window by 1 + ds/dE. Refit exposed segments.
 
-## 10. Attenuation (Q) coefficients
+## 11. Attenuation (Q) coefficients
 
 For a particle exit, Q_K multiplies the lab Legendre coefficients and the result is returned to the point's c.m.
 angle; photon, UPOS, A_y and charged-particle elastic data keep Q as entered. When g = v_c.m./v₃* is large, give
-coefficients beyond the highest c.m. order. builds before 2026-10-25 (expires: 2027-02-01) applied Q per c.m. order
-for particle exits, a few per cent off, and changed results even with every Q = 1.
-
-## 11. Pitfalls by symptom
-
-- **A shared line under-smoothed every segment it names**: builds before 2026-10-01 (expires: 2027-02-01) converted
-  a shared σ_b lab → c.m. once per segment named, so a line naming N segments (or a convolved SUM/RATIO) applied
-  σ_b (m_t/(m_p+m_t))^N. With such a build, give each data set its own beam.
-- **A thick target with beam spread or straggling gives zero at its first point**:
-  builds before 2026-10-27 (expires: 2027-02-01). On those builds a thin target whose ε went ≤ 0 also silently
-  became thick.
-- **Yields of thick (> 5 %) targets at low energy differ by 2–8 % between builds**:
-  builds before 2026-10-27 (expires: 2027-02-01) used Δ = ε(E_0)N instead of the range integral; a flat σ came out 2 % low for a 5 % target,
-  8 % for 20 %, more on a resonance tail.
-- **A slow evaluation dominated by Whittaker functions** (`gstack` shows `RecalcEDependentValues → theWhitFunc`):
-  builds before 2026-09-13 (expires: 2027-02-01) recomputed sub-point Coulomb functions every evaluation when
-  external capture was on. To find such costs on any build, switch data groups off in copies of the model and time
-  `m.evaluate(x)`, then sample stacks.
-- **The Qt GUI wrote beam-profile numbers with 12 significant digits, pyazr writes 17**: harmless, but visible in a diff.
+coefficients beyond the highest c.m. order.
 
 ## Pointers
 
 - `docs/source/user_guide/experimental_effects.rst`: every kernel, its equation and its dialog.
 - `docs/source/reference/format3.rst`: every field of target, beam, detector and data set, with its grammar.
-- `docs/source/user_guide/older_projects.rst`: an old `<targetInt>` line is converted with `AZURE2 --convert`.
+- `docs/source/user_guide/older_projects.rst`: converting an old project's target lines with `AZURE2 --convert`.
 - `docs/source/developer/edata_and_target_effects.rst`: sub-point grids, windows, adaptive lattice.
 - `references/udr-and-beam-profile.md`: the beam-profile and UDR kernels in detail.
 - Tests that show each effect against an independent result: `tests/convolution_window`, `tests/thick_target`,

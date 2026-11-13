@@ -92,3 +92,28 @@ Sphinx docs (`docs/source/getting_started/whats_new.rst` and the pages named bel
 - builds before 2026-10-27 (expires: 2027-02-01): `to_azr` and the GUI EXFOR dialog multiplied a `,,RTH` ratio by
   the c.m. Rutherford cross section at the **lab** angle (1.13× off for p+¹⁶O, 1.8–2.2× for α+¹²C) and called every
   angle column c.m. Regenerate data files made from a lab-angle `,,RTH` set with such a build.
+
+## Targets, beams and detectors
+
+- builds before 2026-10-01 (expires: 2027-02-01) converted
+  a shared σ_b lab → c.m. once per segment named, so a line naming N segments (or a convolved SUM/RATIO) applied
+  σ_b (m_t/(m_p+m_t))^N. With such a build, give each data set its own beam. Symptom: A shared line under-smoothed every segment it names
+- builds before 2026-09-28 (expires: 2027-02-01): the GUI's compound ERYA fetch returned the average-atom ε. An
+  equation written by such a GUI is consistent only with all atoms cm⁻²; scale it by (x+y)/x for the active density.
+- builds before 2026-09-11 (expires: 2027-02-01) mis-estimated level widths when building the narrow-resonance
+  lattice, which can invert which Γ the data prefer; redo any fit of a narrow level through a target or beam kernel
+  made with them.
+- builds before 2026-11-05 (expires: 2027-02-01): a build that knows `doppler T` or `transmission n` but not the fit
+  form reads the first number and ignores the rest without a message.
+- builds before 2026-10-29 (expires: 2027-02-01): the first evaluation of a session at a shift of exactly 0 used the
+  `.azr`'s nonzero shift on segments with target-effect sub-points.
+- builds before 2026-10-26 (expires: 2027-02-01): (a) sub-points of lab-frame differential segments with any
+  sub-point effect moved to the wrong angle (by the full lab − c.m. difference) whenever the segment's energy shift
+  was active, and the shift derivatives were wrong with it; (b) under a sqrt or function shift each sub-point moved by
+  s(E_sub), stretching the window by 1 + ds/dE. Refit exposed segments.
+- builds before 2026-10-26 (expires: 2027-02-01): kernels stopped at ±3 σ_b, so points 2–3 σ_b from a
+  resonance 10³ times above its surroundings came out 2–4 % low; refit such segments on a current build.
+- builds before 2026-10-11 (expires: 2027-02-01) have this; on a
+  current build set
+- builds before 2026-10-25 (expires: 2027-02-01) applied Q per c.m. order
+for particle exits, a few per cent off, and changed results even with every Q = 1.
