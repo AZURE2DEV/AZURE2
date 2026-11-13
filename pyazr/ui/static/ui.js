@@ -30,7 +30,8 @@ export function button(label, title, run, cls = "") {
 
 /** A section with a heading. */
 export function section(title, ...children) {
-  return h("section.panel", {}, h("h2", {}, title), ...children);
+  const cls = title.toLowerCase().replace(/[^a-z]+/g, "-").replace(/^-+|-+$/g, "") || "panel";
+  return h(`section.panel.${cls}`, {}, h("h2", {}, title), ...children);
 }
 
 /** The view of a refusal: what was wrong, what is allowed, how to fix it, and the engine's diagnostics. */

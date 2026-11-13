@@ -37,7 +37,7 @@ export async function render(ctx, el, args) {
     rows: pairRows, onSelect: (r) => showPair(r),
   });
   const pairEdit = h("div.inline-form");
-  el.appendChild(section("Pairs", pairTable.element, pairEdit));
+  const pairsBox = section("Pairs", pairTable.element, pairEdit);
 
   function showPair(p) {
     pairEdit.textContent = "";
@@ -69,8 +69,8 @@ export async function render(ctx, el, args) {
     rows: levelRows,
     onSelect: (r) => ctx.navigate(`#/nucleus/level/${encodeURIComponent(r.label)}`),
   });
-  el.appendChild(section("Levels", levelTable.element));
-  if (selectedLevel) el.appendChild(levelPanel(ctx, selectedLevel, pairLabel, msg));
+  const levelsBox = h("div", {}, section("Levels", levelTable.element));
+  if (selectedLevel) levelsBox.appendChild(levelPanel(ctx, selectedLevel, pairLabel, msg));
 
   // -- the records of the sections the Nucleus tab claims (γ decays, potentials)
   const kinds = NUCLEUS_SECTIONS.flatMap((s) => ctx.schema.sections[s] || []);
@@ -82,16 +82,20 @@ export async function render(ctx, el, args) {
       numeric: true }],
     rows: mine, onSelect: (r) => ctx.navigate(recordRoute(ctx.schema, r)),
   });
-  el.appendChild(section("γ decays and potentials", recTable.element,
+  const recordsBox = h("div", {}, section("γ decays and potentials", recTable.element,
     button("+ new", `Add a record of ${kinds.join(", ")}`, () => ctx.navigate("#/nucleus/+new"))));
   if (args[0] === "+new") {
-    el.appendChild(await newRecordPanel(ctx, kinds, records,
+    recordsBox.appendChild(await newRecordPanel(ctx, kinds, records,
       { onAdded: (r) => ctx.navigate(recordRoute(ctx.schema, r)) }));
   }
   const record = args[0] && args[0] !== "level" ? mine.find((r) => r.name === args[0]) : null;
   if (record) {
-    el.appendChild(await recordPanel(ctx, record, records, problems, { onGone: () => ctx.navigate("#/nucleus") }));
+    recordsBox.appendChild(await recordPanel(ctx, record, records, problems,
+      { onGone: () => ctx.navigate("#/nucleus") }));
   }
+  // what was chosen comes first: a record (or a new one) above the levels; the pairs, rarely edited, last
+  const recordFirst = Boolean(record) || args[0] === "+new";
+  el.append(...(recordFirst ? [recordsBox, levelsBox] : [levelsBox, recordsBox]), pairsBox);
 }
 
 /** One level: its energy, fixed and active flags, and its channels with width and fixed flag, each editable. */

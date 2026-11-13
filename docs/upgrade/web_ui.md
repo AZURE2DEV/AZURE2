@@ -792,6 +792,7 @@ adapter, `pyazr/ui/engine.py` (about 250 lines), the only file that changes when
 2. **The page shell, Project, Data, Nucleus.** `index.html`, `app.js`, `api.js`, `forms.js`, `tables.js`,
    `tabs/project.js`, `data.js`, `nucleus.js`, `style.css`. About 2200 lines; the widget consistency check; first
    smoke tests written (run where Playwright exists). **Today** (pair add/remove and channel generation wait).
+   **Done 2026-11-13** with plotly.js vendored and a preview plot, smoke tests in headless Chrome (section 11.2).
 3. **Results.** `plots.js`, `tabs/results.js`, the Results payload, grids, CSV/SVG/PNG export. About 900 lines; tests
    of the payload against the program's output files. **Today**, with plotly vendored (decision 11); `Evaluation`
    (pyazr step 3) replaces the adapter's calls.
@@ -884,6 +885,68 @@ killed with SIGKILL during a fit end within 0.05 s (`PR_SET_PDEATHSIG`).
 13. *Not built*: the event stream (polling serves the tests), the file browser, the interrupted job's evaluation
     beside "accept" (accept works on it).
 
+### 11.2 Step 2 as built (2026-11-13)
+
+`python -m pyazr.ui project.azr` prints the URL; the page is `pyazr/ui/static/` (about 2400 lines in 16 files and
+the vendored plotly.js): `index.html`, `app.js` (header, the tab table, hash routes `#/data/<name>`,
+`#/nucleus/level/<label>`, keys and the `?` overlay, themes), `api.js`, `tables.js`, `forms.js` (the widget table),
+`formview.js` (drawing a form), `layout.js` (layout hints), `plots.js` (the plot table, palette, CSV), `ui.js`,
+`tabs/project.js`, `tabs/nucleus.js`, `tabs/data.js`, `tabs/records.js` (a record's panel, shared by Data and
+Nucleus), `selftest.js`, `style.css`, `vendor/plotly-cartesian-4.1.2.min.js` (1.5 MB, MIT, with its licence).
+Tests: `tests/pyazr/ui/static_test.py`, `node_test.py` (node's own runner on `js/*.test.mjs`), `smoke_test.py`
+(label `browser`; headless Chrome).
+
+**What a user can do.** Project: the file, the validator's problems with links to the record, `<config>` edited as
+text through the config route, the session options read-only (from `/api/describe`), the history with Undo and Redo,
+the text with "replace text", the engine's line. Nucleus: pairs (edited through `set_pair`), levels with their
+channels (energy, fixed, active; a channel's width and fixed flag; each edit one history entry; the status line
+gives the χ² before and after), the `gamma_decay` and `potential` records through the generated forms. Data: every
+section of the schema except those of the Nucleus tab as a group, the program's χ² per data set, one generated form
+per record with the engine's description beside it and the validator's messages under their fields, add,
+duplicate, rename, delete, the first rows of a data file, the preview plot (data with errors and the model at the
+working x against c.m. energy or angle; plotly.js or, without it, a table; CSV export). Fit, Results, Physics and THM
+are tabs that say which step brings them.
+
+**Measured** (a server process over HTTP at one thread, `work/uipage/measure.py` and `walk.py`, outside the
+repository): the requests of the first paint of the Data list (page, modules, plotly.js, describe, schema, project,
+records, validate) 0.21 s on T2 and 0.63 s on the largest project of `tests/` (`reaction_rate/models/
+moved_azr_truth.azr`, 900 kB); the first evaluation (worker start and session build) 0.96 s on T2 after it; a width
+edit with the evaluation that follows 0.43–0.54 s on T2, its undo 0.49 s. The χ² after the width edit on T2
+(7465.8873676603125) equals a direct pyazr session's on the edited text bit for bit, and Undo gives back
+10905.2313020616 exactly. Headless Chrome, its start included, dumps the finished Data list in 2.0 s.
+
+**Where the built page departs from this note**:
+
+1. *Static files* are served by `STATIC_ROUTES` and one generic handler in `routes.py`, apart from `ROUTES` (whose
+   rows are pyazr calls or server methods, and whose tests count them); the page revalidates every file on each load.
+2. *The token*: `/?token=` answers with a redirect to `/` that sets the cookie, so the token leaves the address bar.
+   *Content-Security-Policy* on every answer: scripts from the server only (no inline script, no eval); inline styles
+   are allowed because plotly.js sets style attributes and adds style elements; images also from `data:` and
+   `blob:` (plotly's image export).
+3. *A route added*: `GET /api/files/{path}` (the first rows of a file inside the root, `Server.file_head`); the
+   listing and file browser (`GET /api/files`) stay a later step.
+4. *No event stream*: the page polls `GET /api/project` every 3 s while visible; a newer revision redraws.
+5. *Self-test and smoke test in headless Chrome*, not Playwright: `#selftest` visits every view and writes its result
+   into the document; `#selftest?edit=1` also types a width and presses Undo. Screenshots use Chrome's old headless
+   mode, whose viewport is the window size.
+6. *Forms*: a widget splits a field's text into boxes and joins it again; a text it cannot split is one text box. The
+   engine validates; conditions `field_present` and `field_is` hide fields, the other conditions (`fold`,
+   `single_reaction`, ...) show the field with their text. `<config>` is edited as key and text (the schema has no
+   table of its keys: finding 13).
+7. *Plots*: the model is drawn at the data points (the engine's values there), not on a dense grid (step 3); a data
+   set is drawn against energy, or against angle when its energy is one value; points of a few distinct angles are
+   one trace each. Legendre orders are not separated (finding 14).
+8. *Pairs* are shown with their spins as 2J; the channel width is shown "as written" (finding 15).
+
+**Extensibility as built** (section 10): a new value type: one row of `WIDGETS` in `forms.js` (the static test and
+the node test fail until it exists); a new record kind: nothing (its form is generic; a line in `layout.js` only to
+put fields on one line; `gamma_decay`, `beam`, `normalization` have no hints and get full forms); a new section:
+nothing (a new group of the Data tab), unless the Nucleus tab should show it (`NUCLEUS_SECTIONS` in
+`tabs/records.js`); a new data kind: nothing for the list, the form and the preview plot when it is a value against
+energy or angle (axis rule from the quantity row's `angle_axis`, units from the dimensions); another kind of plot: a
+row of `PLOTS` in `plots.js` and its node test; a new tab: a module `tabs/<name>.js` with `render()` and a row of
+`TABS` in `app.js` (the self-test visits it; add it to `VIEWS` of `smoke_test.py` for a screenshot).
+
 ## 12. What pyazr 3.0's design lacks for the UI (findings)
 
 None of these changes the decided objects; each is a call or a field to add:
@@ -924,6 +987,19 @@ Delivered by pyazr's errors and self-description besides: `pyazr.kinds()` (serve
 session options are the server's options table, its physics rows the list at `/api/physics`), `pyazr.describe()`
 (in `/api/describe`), `azure2.describe()` (the adapter's parameter rows, with units). Still missing for the server:
 findings 1–3, 5–8, 10–12 as written, the three parts as attributes (9), the informational notes as a log (4).
+
+Found while building the page (step 2):
+
+13. **A schema of `<config>`**: its keys with type, allowed values, default and doc (as the record kinds have), so the
+    Project tab can draw a generated form instead of key and text.
+14. **The order of each point** of a Legendre data set in the data arrays (`Evaluation.data[i]`), so the plot draws
+    one trace per order as the quantity row says (`columns.order`).
+15. **The convention of each channel's width** in `Project.levels()` (partial width in eV, ANC in fm^-1/2, amplitude
+    in MeV^1/2), so the Nucleus tab can put the unit beside each width; and the channel's Wigner limit and physical
+    value next to it without a session (today only `/api/parameters` after a build).
+16. **`Project.describe(name)` for every record kind**: it refuses the kinds that compute nothing (`gamma_decay`:
+    "the engine describes the records that compute something"); the page shows that sentence where a description
+    would be.
 
 Smaller, in the parity list: an empty format-3 project (`Project.new` needs a source); the screening potential's
 adiabatic limit from electron binding energies; Gaussian priors on level parameters for the sampler (records carry

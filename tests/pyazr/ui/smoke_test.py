@@ -33,7 +33,8 @@ from uitest import TOKEN, copy_project, gone
 
 CHROME = os.environ.get("CHROME") or next((shutil.which(n) for n in ("google-chrome", "chromium", "chromium-browser")
                                            if shutil.which(n)), None)
-VIEWS = ("project", "nucleus", "nucleus/level/{level}", "data", "data/{dataset}", "fit", "results", "physics", "thm")
+VIEWS = ("project", "nucleus", "nucleus/level/{label}", "nucleus/{record}", "data", "data/{dataset}", "fit", "results",
+         "physics", "thm")
 
 
 def extra_projects():
@@ -121,9 +122,12 @@ def test_selftest_and_screenshots(name, tmp_path):
                      "--virtual-time-budget=120000", "--dump-dom")
         result = selftest_result(dom)
         print(f"{label}: self-test in {time.monotonic() - t0:.1f} s (Chrome included); "
-              f"{len(result['steps'])} views, chi2 {result['chi2']}")
+              f"{len(result['steps'])} views, chi2 {result['chi2']}, "
+              f"evaluation refused: {result['evaluation_refused']}")
         assert result["errors"] == [], result["errors"]
         assert result["failed"] == [], result["failed"]
+        if label in ("T1", "T2"):
+            assert result["chi2"] is not None, result["evaluation_refused"]
         drawn = [s["plot"] for s in result["steps"] if s["plot"]]
         if result["chi2"] is not None:
             assert "plotly" in drawn and "table" in drawn, result["steps"]
@@ -143,9 +147,11 @@ def test_selftest_and_screenshots(name, tmp_path):
 def take_screenshots(server, tmp_path, label, shots, result):
     """One screenshot per view (the routes of VIEWS filled from the self-test's own routes)."""
     routes = [s["route"] for s in result["steps"]]
-    fill = {"level": next((r.split("/", 3)[3] for r in routes if r.startswith("#/nucleus/level/")), None),
+    fill = {"label": next((r.split("/", 3)[3] for r in routes if r.startswith("#/nucleus/level/")), None),
             "dataset": next((r.split("/", 2)[2] for r in routes if r.startswith("#/data/") and "?" not in r
-                             and r != "#/data/+new"), None)}
+                             and r != "#/data/+new"), None),
+            "record": next((r.split("/", 2)[2] for r in routes if r.startswith("#/nucleus/")
+                            and not r.startswith("#/nucleus/level/")), None)}
     sets = [("light", 1400, 900)]
     if os.environ.get("AZURE2_UI_SHOTS") == "all":
         sets = [(t, w, h) for t in ("light", "dark") for (w, h) in ((1400, 900), (1000, 700))]
@@ -155,7 +161,7 @@ def take_screenshots(server, tmp_path, label, shots, result):
             if any(fill[k] is None for k in keys):
                 continue
             route = view.format(**fill)
-            name = re.sub(r"[^A-Za-z0-9]+", "-", view).strip("-")
+            name = re.sub(r"[^A-Za-z0-9]+", "-", view.replace("{", "").replace("}", "")).strip("-")
             path = os.path.join(shots, f"{label}_{theme}_{width}x{height}_{name}.png")
             chrome(tmp_path, f"{server.url}#/{route}?theme={theme}", f"--window-size={width},{height}",
                    "--virtual-time-budget=30000", f"--screenshot={path}", mode="old")

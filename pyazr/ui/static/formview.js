@@ -45,7 +45,7 @@ function controlElement(doc, c, onChange, ctx) {
       el.setAttribute("list", id);
     }
     const chars = String(c.value || c.placeholder || "").length;
-    el.style.width = `${Math.max(c.numeric ? 7 : 9, Math.min(c.wide ? 64 : 16, chars + 3))}ch`;
+    el.style.width = `${Math.max(c.numeric ? 7 : 9, Math.min(c.wide ? 64 : 22, chars + 3))}ch`;
   }
   if (c.disabled) el.disabled = true;
   if (c.title) el.title = c.title;

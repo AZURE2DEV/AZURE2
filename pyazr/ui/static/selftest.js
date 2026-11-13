@@ -57,6 +57,7 @@ export function selftest(ctx, tabs, draw) {
   async function editAndUndo(levels) {
     const level = levels.find((l) => l.channels.some((c) => !c.fixed && c.width !== 0));
     if (!level) { edit.skipped = "no level with a free, non-zero width"; return; }
+    if (!ctx.evaluation) { edit.skipped = "the engine does not evaluate this project"; return; }
     const channel = level.channels.find((c) => !c.fixed && c.width !== 0);
     location.hash = join(`#/nucleus/level/${encodeURIComponent(level.label)}`);
     await new Promise((r) => setTimeout(r, 0));
@@ -85,7 +86,8 @@ export function selftest(ctx, tabs, draw) {
     const out = document.createElement("pre");
     out.id = "selftest-result";
     out.textContent = JSON.stringify({ done: true, ms, plotly: typeof globalThis.Plotly === "object",
-      errors, failed: ctx.api.failures, steps, edit, chi2: ctx.evaluation?.chi2 ?? null }, null, 1);
+      errors, failed: ctx.api.failures, steps, edit, chi2: ctx.evaluation?.chi2 ?? null,
+      evaluation_refused: ctx.evalError?.what ?? null }, null, 1);
     out.dataset.done = "1";
     out.style.display = "none";
     document.body.appendChild(out);

@@ -104,13 +104,15 @@ ctx.refresh = async () => {
 async function evaluate() {
   ctx.chi2Box.textContent = "χ² …";
   try {
-    ctx.evaluation = await ctx.api.post("/api/evaluate", {});
+    // a project the engine cannot evaluate (no data sets, a refused set-up) is shown, not a failure of the page
+    ctx.evaluation = await ctx.api.request("POST", "/api/evaluate", {}, { quiet: true });
     ctx.evalError = null;
     const w = ctx.evaluation.warnings || [];
     if (w.length) ctx.status(`engine: ${w.map((x) => x.message || x).join("; ")}`, "warn");
   } catch (e) {
     ctx.evaluation = null;
     ctx.evalError = e.view || { what: String(e) };
+    ctx.status(`no evaluation: ${ctx.evalError.what}`, "warn");
   }
   drawChi2();
 }
