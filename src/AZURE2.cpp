@@ -972,44 +972,31 @@ void startMessage(const Config &configure) {
 #include <iomanip>
 #include <ctime>
 
-// CLI progress callback - prints progress to stdout
-static int g_last_printed_step = -1;
-static time_t g_start_time = 0;
+// The CLI's progress line of an MCMC run: printed once per step, with an estimate of the time left from the steps
+// done since `start`.
+static void PrintMcmcProgress(time_t start, int current_step, int total_steps, double logprob, double loglikelihood,
+                              double logprior) {
+  // Calculate time estimates
+  time_t current_time = time(NULL);
+  double elapsed_seconds = difftime(current_time, start);
+  double steps_per_second = (elapsed_seconds > 0) ? current_step / elapsed_seconds : 0;
+  double remaining_steps = total_steps - current_step;
+  double estimated_remaining_seconds = (steps_per_second > 0) ? remaining_steps / steps_per_second : 0;
 
-void cli_progress_callback(int current_step, int total_steps, double logprob, double loglikelihood, double logprior) {
-  // Print progress every step (but the iteration callback controls frequency)
-  if (current_step != g_last_printed_step) {
-    g_last_printed_step = current_step;
+  // Format time
+  int hours = (int)(estimated_remaining_seconds / 3600);
+  int minutes = (int)((estimated_remaining_seconds - hours * 3600) / 60);
+  int seconds = (int)(estimated_remaining_seconds - hours * 3600 - minutes * 60);
 
-    // Calculate time estimates
-    time_t current_time = time(NULL);
-    double elapsed_seconds = difftime(current_time, g_start_time);
-    double steps_per_second = (elapsed_seconds > 0) ? current_step / elapsed_seconds : 0;
-    double remaining_steps = total_steps - current_step;
-    double estimated_remaining_seconds = (steps_per_second > 0) ? remaining_steps / steps_per_second : 0;
-
-    // Format time
-    int hours = (int)(estimated_remaining_seconds / 3600);
-    int minutes = (int)((estimated_remaining_seconds - hours * 3600) / 60);
-    int seconds = (int)(estimated_remaining_seconds - hours * 3600 - minutes * 60);
-
-    std::cout << "\rStep " << std::setw(6) << current_step << "/" << total_steps
-              << " (" << std::fixed << std::setprecision(1)
-              << (100.0 * current_step / total_steps) << "%)"
-              << " | logP=" << std::setprecision(2) << logprob
-              << " | logL=" << loglikelihood
-              << " | logPrior=" << logprior
-              << " | ETA: " << std::setfill('0') << std::setw(2) << hours << ":"
-              << std::setw(2) << minutes << ":" << std::setw(2) << seconds
-              << std::setfill(' ') << std::flush;
-  }
-}
-
-void cli_iteration_callback(int current_iteration, int total_iterations) {
-  // This gets called every iteration - we only print every 10 steps to avoid too much output
-  if (current_iteration % 10 == 0 || current_iteration == total_iterations) {
-    // The progress callback will handle the actual printing
-  }
+  std::cout << "\rStep " << std::setw(6) << current_step << "/" << total_steps
+            << " (" << std::fixed << std::setprecision(1)
+            << (100.0 * current_step / total_steps) << "%)"
+            << " | logP=" << std::setprecision(2) << logprob
+            << " | logL=" << loglikelihood
+            << " | logPrior=" << logprior
+            << " | ETA: " << std::setfill('0') << std::setw(2) << hours << ":"
+            << std::setw(2) << minutes << ":" << std::setw(2) << seconds
+            << std::setfill(' ') << std::flush;
 }
 
 // The name the MCMC table prints for a parameter (the GUI's MCMC tab writes the same), from its record.
@@ -1405,21 +1392,23 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
       configure.outStream << std::endl;
     }
 
-    // Register CLI progress callbacks for console output
-    g_start_time = time(NULL);
-    g_last_printed_step = -1;
-    AZURECalcMCMC::SetGUIProgressCallback(cli_progress_callback);
-    AZURECalcMCMC::SetGUIIterationCallback(cli_iteration_callback);
+    // The console's progress line, one per step (the sampler calls the progress callback only when an iteration
+    // callback is set).
+    const time_t mcmcStart = time(NULL);
+    int lastPrintedStep = -1;
+    mcmcCalc.SetIterationCallback([](int, int) {});
+    mcmcCalc.SetProgressCallback([mcmcStart, &lastPrintedStep](int step, int total, double logprob, double loglik,
+                                                               double logprior) {
+      if (step == lastPrintedStep) return;
+      lastPrintedStep = step;
+      PrintMcmcProgress(mcmcStart, step, total, logprob, loglik, logprior);
+    });
 
     // Run MCMC sampling
     std::vector<std::vector<double>> samples;
     const bool sampled = mcmcCalc.RunMCMCSampling(mcmcParams.nwalkers, mcmcParams.nsteps, initialParams,
                                                   samples, mcmcParams.chainSpread, mcmcParams.nthreads,
                                                   mcmcParams.useRWA, mcmcParams.energySpreadKeV);
-
-    // Clear callbacks
-    AZURECalcMCMC::SetGUIProgressCallback(nullptr);
-    AZURECalcMCMC::SetGUIIterationCallback(nullptr);
 
     if (!sampled) {
       if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) CleanupECAmplitudeCache(configure);

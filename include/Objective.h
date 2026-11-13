@@ -42,8 +42,8 @@ struct ObjectiveContext {
   std::vector<double> *segmentChi2 = nullptr;
   /// Only the THM segments' data chi^2 (T1-T4 over THM segments; no other term).
   bool thmOnly = false;
-  /// Add the normalization and energy-shift priors (T3, T4) in the segment loop.  The MCMC takes them as log-priors
-  /// (AZURECalcMCMC::CalculateLogPrior) and evaluates only the data part (Objective::DataChi2).
+  /// Add the normalization and energy-shift priors (T3, T4) in the segment loop.  The sampler takes them as
+  /// normalised log-priors (AZURECalcMCMC::CalculateLogPrior) and evaluates the rest (Objective::SamplerChi2).
   bool segmentPriors = true;
   /// Optional breakdown (index = segment number): the normalization prior and the three energy-shift prior parts
   /// of each segment, as added by the segment loop (pyazr's penalties(), the writer).
@@ -65,6 +65,16 @@ class ObjectiveTerm {
   virtual void Add(const ObjectiveContext &c, double &chi2) const = 0;
   /// A term of the model alone (no data, no parameter vector): T6, T7, T9.
   virtual bool ModelOnly() const { return false; }
+  /*!
+   * The part of the term the ensemble sampler adds to its -2 ln L, at the model the evaluation filled
+   * (docs/upgrade/objective.md section 6).  The default is the whole term, so that a new term reaches the sampler
+   * with no edit of the sampler.  A term whose parameters the sampler gives normalised Gaussian priors from their
+   * enumeration (ForEachDiagonalPrior, the nuisance priors, the prior covariance) adds that part here no more, and
+   * says so; a term that is a support of the posterior (Park) adds nothing and answers ExcludesForSampler.
+   */
+  virtual void AddForSampler(const ObjectiveContext &c, double &chi2) const { Add(c, chi2); }
+  /// True where the sampler's posterior is zero (-infinity in ln P) by this term (Park's J > 0, decision D2).
+  virtual bool ExcludesForSampler(const ObjectiveContext &) const { return false; }
 };
 
 class Objective {
@@ -74,8 +84,12 @@ class Objective {
   static const Objective &Engine();
   /// The chi-squared of c.p (model values already computed).
   double Chi2(const ObjectiveContext &c) const;
-  /// The data part alone, T1 (with the THM profiling) and T2, without the segment priors: the MCMC likelihood.
+  /// The data part alone, T1 (with the THM profiling) and T2, without the segment priors.
   double DataChi2(ObjectiveContext c) const;
+  /// The ensemble sampler's -2 ln L: every term's AddForSampler, in the table's order (segment priors off).
+  double SamplerChi2(ObjectiveContext c) const;
+  /// Whether a term puts c's point outside the sampler's support (ExcludesForSampler).
+  bool ExcludesForSampler(const ObjectiveContext &c) const;
   /// The terms of the model alone (T6 Park, T7 abundances, T9 model data), in the engine's order: what the API adds
   /// to its data chi^2 (AZUREAPI::FilledModelPenalties, the analytic-gradient path, the writer's totals).
   double ModelChi2(const ObjectiveContext &c) const;

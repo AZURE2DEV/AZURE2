@@ -201,3 +201,24 @@ add_test(NAME input_files_cache COMMAND input_files_cache_test)
 add_executable(whittaker_gsl_test whittaker_gsl_test.cpp)
 target_link_libraries(whittaker_gsl_test PRIVATE AZURE2Core)
 add_test(NAME whittaker_gsl COMMAND whittaker_gsl_test ${CMAKE_SOURCE_DIR}/physics/tests/data/whittaker.csv)
+
+# The ensemble sampler samples the fit's objective and owns its state (docs/upgrade/objective.md section 6): on the
+# gamma_decay record project of tests/gamma_decay (with the record's priors), in Brune's and Park's bases and both
+# sampling bases, ln P = -chi^2/2 + C at three points and -infinity outside the record's limits; a short chain stays
+# inside them; the record's priors move ln P by -1/2 x their term; T2's identity with its Gaussian priors' constant;
+# two samplers in two threads write the chains of two runs one after the other.
+if(USE_MCMC)
+  add_executable(sampler_objective_test sampler_objective_test.cpp)
+  target_link_libraries(sampler_objective_test PRIVATE AZURE2Core)
+  set(_sampler_objective_dir ${CMAKE_CURRENT_BINARY_DIR}/sampler_objective)
+  file(MAKE_DIRECTORY ${_sampler_objective_dir}/output ${_sampler_objective_dir}/checks)
+  file(COPY ${CMAKE_SOURCE_DIR}/tests/gamma_decay/models/data DESTINATION ${_sampler_objective_dir})
+  file(COPY ${CMAKE_SOURCE_DIR}/tests/upgrade/T2/data DESTINATION ${_sampler_objective_dir})
+  file(COPY ${CMAKE_SOURCE_DIR}/tests/upgrade/T2/cov_diff.txt ${CMAKE_SOURCE_DIR}/tests/upgrade/T2/prior_cov.f3.txt
+       DESTINATION ${_sampler_objective_dir})
+  add_test(NAME sampler_objective
+           COMMAND sampler_objective_test ${CMAKE_SOURCE_DIR}/tests/gamma_decay/models/record.azr
+                   ${CMAKE_SOURCE_DIR}/tests/upgrade/T2/T2.azr
+           WORKING_DIRECTORY ${_sampler_objective_dir})
+  set_tests_properties(sampler_objective PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 900)
+endif()

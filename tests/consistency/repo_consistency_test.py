@@ -456,11 +456,6 @@ PENALTIES = ("ParkNormPenalty", "AbundancePenalty", "AbundanceSumPenalty", "Scat
 DEFINERS = {"src/Objective.cpp", "src/CNuc.cpp", "src/ScatteringLength.cpp", "src/ModelData.cpp", "src/WorkingCopy.cpp",
             "src/Segment.cpp", "src/TargetEffect.cpp"}
 ALLOWED_PENALTY_USES = {
-    # The MCMC splits the posterior: per-nucleus abundance priors are log-priors (CalculateLogPrior), so the
-    # likelihood carries only the sum-to-one term (and the model data, Objective::ModelDataChi2); Park's wall rejects
-    # the step outright.
-    ("src/AZURECalcMCMC.cpp", "AbundanceSumPenalty"),
-    ("src/AZURECalcMCMC.cpp", "ParkNormPenalty"),
     # The API's data chi^2 in residual form (EvaluateFilledChi2, the analytic gradient): T2 for its rows;
     # pyazr_objective checks it against the CLI's objective.
     ("api/src/AZUREAPI.cpp", "CovarianceChi2Correction"),

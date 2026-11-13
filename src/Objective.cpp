@@ -92,6 +92,8 @@ class DataCovarianceTerm : public ObjectiveTerm {
 class NuisanceTerm : public ObjectiveTerm {
  public:
   std::string Name() const override { return "nuisance priors"; }
+  // The sampler: normalised Gaussian log-priors from the limits manager (AZURECalcMCMC::BuildAutoPriors).
+  void AddForSampler(const ObjectiveContext &, double &) const override {}
   void Add(const ObjectiveContext &c, double &chi2) const override {
     if (!c.nuisance) return;
     const double v = c.nuisance(c.p);
@@ -105,6 +107,11 @@ class ParkTerm : public ObjectiveTerm {
  public:
   bool ModelOnly() const override { return true; }
   std::string Name() const override { return "Park J > 0"; }
+  // The sampler: a support, J < 0 has no R-matrix meaning (decision D2); inside it the wall is 0.
+  void AddForSampler(const ObjectiveContext &, double &) const override {}
+  bool ExcludesForSampler(const ObjectiveContext &c) const override {
+    return (c.config.paramMask & Config::USE_PARK_FORMALISM) && c.compound->ParkNormPenalty() > 0.0;
+  }
   void Add(const ObjectiveContext &c, double &chi2) const override {
     if (!(c.config.paramMask & Config::USE_PARK_FORMALISM)) return;
     const double parkPenalty = c.compound->ParkNormPenalty();
@@ -118,6 +125,8 @@ class TargetPriorTerm : public ObjectiveTerm {
  public:
   enum Kind { Screening, Density, Doppler, Thickness, Apparatus };
   explicit TargetPriorTerm(Kind k) : kind_(k) {}
+  // The sampler: normalised Gaussian log-priors from ForEachDiagonalPrior.
+  void AddForSampler(const ObjectiveContext &, double &) const override {}
   std::string Name() const override {
     static const char *names[] = {"screening priors", "density priors", "Doppler priors", "thickness priors",
                                   "apparatus-parameter priors"};
@@ -142,6 +151,11 @@ class AbundanceTerm : public ObjectiveTerm {
  public:
   bool ModelOnly() const override { return true; }
   std::string Name() const override { return "abundances"; }
+  // The sampler: the per-nucleus priors are normalised Gaussian log-priors (ForEachDiagonalPrior); the sum-to-one
+  // term, which couples them, is here.
+  void AddForSampler(const ObjectiveContext &c, double &chi2) const override {
+    if (c.compound->HasAbundanceBlock()) chi2 += c.compound->AbundanceSumPenalty(c.config.abundanceSumSigma);
+  }
   void Add(const ObjectiveContext &c, double &chi2) const override {
     if (!c.compound->HasAbundanceBlock()) return;
     const double abundancePenalty = c.compound->AbundancePenalty(c.config.abundanceSumSigma);
@@ -184,6 +198,8 @@ class GammaDecayTerm : public ObjectiveTerm {
 class PriorCovarianceTerm : public ObjectiveTerm {
  public:
   std::string Name() const override { return "prior covariance"; }
+  // The sampler: a normalised multivariate Gaussian log-prior (AZURECalcMCMC::CalculateLogPrior).
+  void AddForSampler(const ObjectiveContext &, double &) const override {}
   void Add(const ObjectiveContext &c, double &chi2) const override {
     const PriorCovariance *pc = c.data->Data().GetPriorCovariance();
     if (!pc) return;
@@ -223,6 +239,20 @@ double Objective::DataChi2(ObjectiveContext c) const {
   terms_[0]->Add(c, chi2);  // T1 (T3, T4 off)
   terms_[1]->Add(c, chi2);  // T2
   return chi2;
+}
+
+double Objective::SamplerChi2(ObjectiveContext c) const {
+  c.segmentPriors = false;  // T3, T4: the sampler's normalised log-priors
+  c.thmOnly = false;
+  double chi2 = 0.0;
+  for (const auto &t : terms_) t->AddForSampler(c, chi2);
+  return chi2;
+}
+
+bool Objective::ExcludesForSampler(const ObjectiveContext &c) const {
+  for (const auto &t : terms_)
+    if (t->ExcludesForSampler(c)) return true;
+  return false;
 }
 
 double Objective::ModelChi2(const ObjectiveContext &c) const {
