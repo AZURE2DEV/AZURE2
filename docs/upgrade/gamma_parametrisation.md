@@ -240,6 +240,49 @@ everything they depend on, so the numbers do not depend on the thread count.
 **`--ignore-externals`.** A record channel whose set-up width is 0 has no external part, as `TransformIn` decides on
 the input (external_capture.md section 3).
 
+### 2.8 The vector of observed parameters
+
+Besides the fit's vector (amplitudes, and the record's numbers at the record's slots), the engine has a second form
+of the level parameters, the **observed** one: per level its energy and, per channel, the observed width (eV), ANC
+or moment, as a `<levels>` line holds them. `CNuc::GetTransformParams` returns it after `TransformOut`;
+`CNuc::FillCompoundFromParamsPhysical` takes it back as the levels' input values, after which `TransformIn` and
+`FillMnParams` give the fit's vector. pyazr's physical parameters, the MCMC's observed-parameter sampling, the
+conversion of a user's limit or prior on a width and the copies of the compound that place the integration grids
+use this form.
+
+**The rule.** In both directions the observed vector carries, at a record's slots, the record's numbers (Γ_γ in eV,
+b_f, δ_f), as the fit's vector and `parameters.out` do: they are what a user, pyazr and the sampler see and set.
+One function turns such a vector into the levels' observed widths: `GammaDecaySet::WithPartialWidths` replaces each
+record's numbers by the partial widths of Eq. (2.3) (`PartialWidths`). `FillCompoundFromParamsPhysical` calls it
+and writes the result into the levels, and keeps the record's numbers as the compound's input values of the record
+(`CNuc::GammaDecayInputs`), which `FillMnParams` puts into the fit's vector, as it puts a level's input widths. So
+`FillCompoundFromParamsPhysical` → `TransformIn` → `FillMnParams` gives back the record's numbers it was given, and
+the record's photon widths in the levels are widths, not numbers of another kind. No caller reads or writes a record
+slot itself. Without a record both functions do what they did (the set is empty).
+
+What each place needs, and what it got before (measured on the build of this branch's start, scratch
+`work/gammapp/`):
+
+- `ReactionRate.cpp` (`RateResonances`) and `TargetSetup.cpp` (`ReplaceSubPointGrids`), the copy of the compound that
+  places the rate's breakpoints and the meshes' anchors: the levels' observed widths. Before, a record level's photon
+  widths there were its numbers: 0.870 eV instead of Γ_γ = 0.0385 eV for the ¹⁴N(p,γ) level of the test with
+  Γ_p = 0.01 eV. Harmless in every output: the anchors and the tabulated rate are placed with the particle width;
+  the sum with the photon widths is used only by the RMC formalism (refused for a record) and by the rate's
+  quadrature fallback (a grid with fewer than three points of σ > 0).
+- `ParameterLimitsManager::ConvertPhysicalLimitToReduced`, a limit or nuisance prior on a width (eV): the observed
+  vector with one entry replaced. Harmless before: the amplitude of a particle width does not depend on the photon
+  widths (they are outside n_λ and Park's J; the converted prior was the twin's to the last bit); a record's number
+  is not converted (its kind is not a width), its limit is applied as written.
+- `AZURE2.cpp` (the MCMC's start), `AZURECalcMCMC::UpdateParameterVectors`, `AZUREAPI` (`UpdateParameters`,
+  `SetParamsAllRWA`, `TransformRWAParameters`, `TransformAllRWAParameters`, `TransformAllRWAParametersFull`), what is
+  returned or sampled: the record's numbers, as the rule; unchanged.
+- `AZURECalcMCMC` (`CalculateLogLikelihoodPhysical`, the snapshot of the best walker, `ParkNonPositiveLevels`) and
+  `AZUREAPI` (`UpdateSegments`, `CalculateChi2Physical`), a vector set in observed form: the record's numbers in.
+  **Wrong before**: `FillMnParams` took the record's numbers from the file, so those of the vector were ignored.
+  pyazr's `calculate_chi2` with Γ_γ × 1.2 gave the χ² of the unchanged project (44.79 instead of 3889.3) and
+  `update_segments` cross sections 17 % off; the observed-parameter MCMC on the record's numbers had a constant
+  likelihood. Present since the record was merged (2026-11-13).
+
 ## 3. The file and the API
 
 ### 3.1 The record
