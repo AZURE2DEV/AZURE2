@@ -107,7 +107,7 @@ LevelTables LevelTablesOfRows(const std::vector<io::LevelRow> &rows) {
     LevelInfo &level = levels[g][slot.level - 1];
     if (std::find(level.ids.begin(), level.ids.end(), r.levelID()) == level.ids.end()) level.ids.push_back(r.levelID());
     lines[g][slot.level - 1].widths[c + 1] = {r.gamma(), r.gammaIsRWA() == 1};
-    t.rowSlots.back() = LevelRowSlot{g + 1, slot.level, c + 1};
+    t.rowSlots.back() = LevelRowSlot{g + 1, slot.level, c + 1, r.gamma()};
   }
   for (std::size_t g = 0; g < groups.size(); g++)
     for (std::size_t la = 0; la < levels[g].size(); la++) {

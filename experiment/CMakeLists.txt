@@ -53,6 +53,7 @@ add_library(azure2_experiment STATIC
   src/SpinOrbitChecks.cpp
   src/Json.cpp
   src/ModelDatum.cpp
+  src/GammaDecay.cpp
   src/ParameterFileNames.cpp
   src/Prediction.cpp
   src/LegendreExpansion.cpp

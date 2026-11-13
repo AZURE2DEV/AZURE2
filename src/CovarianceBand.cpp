@@ -25,7 +25,8 @@ std::tuple<int, int, int, int> IdentityKey(const ParamDesc &d) {
   int kind = (int)d.kind;
   switch (d.kind) {
     case ParamKind::LevelEnergy: return std::make_tuple(kind, d.jGroup, d.level, -1);
-    case ParamKind::Gamma: return std::make_tuple(kind, d.jGroup, d.level, d.channel);
+    case ParamKind::Gamma:
+    case ParamKind::RadiativeDecay: return std::make_tuple(kind, d.jGroup, d.level, d.channel);
     case ParamKind::Norm: return std::make_tuple(kind, d.segment, -1, -1);
     case ParamKind::EnergyShift: return std::make_tuple(kind, d.segment, -1, -1);
     case ParamKind::EnergyShiftSqrt: return std::make_tuple(kind, d.segment, -1, -1);
@@ -48,7 +49,7 @@ std::vector<int> BandPackedColumns(const ParamIndexMap &pmap) {
   const int n = pmap.NumPacked();
   for (int a = 0; a < n; a++) {
     ParamKind k = pmap.Desc(pmap.PackedToFull(a)).kind;
-    if (k == ParamKind::LevelEnergy || k == ParamKind::Gamma || k == ParamKind::ThmCoherent) cols.push_back(a);
+    if (IsLevelSlot(k) || k == ParamKind::ThmCoherent) cols.push_back(a);
   }
   return cols;
 }

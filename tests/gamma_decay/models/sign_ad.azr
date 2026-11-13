@@ -1,0 +1,38 @@
+<config>
+true                                                                                                #Perform A-Matrix Calculation
+output/                                                                                             #Full Path to Output Directory
+checks/                                                                                             #Full Path to Checks Directory
+none                                                                                                #Compond Nucleus Check
+none                                                                                                #Boundary Condition Check
+none                                                                                                #Data Check
+none                                                                                                #Lo-Matrix and Penetrability Check
+none                                                                                                #Legendre Polynomial Check
+none                                                                                                #Coulomb Amplitudes Check
+none                                                                                                #Reaction Pathway Check
+none                                                                                                #Angular Distributions Check
+format=3
+</config>
+<levels>
+ 1.5    1       8.2856    1    1    1    1    4    1    1    1               100.0 0.5    1    1    1            0 1.00783 14.0031    1    7        7.297        7.297    0    0          0.0     0     5.5            0            0       0
+ 1.5    1       8.2856    1    1    2    1    2    1    1    1                 1.0 1    1  0.5  1  5.183       0      15    0    8        7.297            0    0    0          0.0    10       0            0            0       0
+ 1.5    1       8.2856    1    1    2    1    4    1    1    1               -0.25 1    1  0.5  1  5.183       0      15    0    8        7.297            0    0    0          0.0    10       0            0            0       0
+</levels>
+<data>
+dataset ad_data
+    reaction       14N(p,g)15O[5.183]
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/sign_ad.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    norm           1 fixed
+</data>
+<extrapolations>
+extrapolation ad
+    reaction       14N(p,g)15O[5.183]
+    quantity       dsigma_domega
+    unit           b/sr
+    energies       list 1.059751 MeV lab
+    angles         range 0 180 deg cm step 10
+</extrapolations>
+<targets>
+</targets>

@@ -297,6 +297,10 @@ class Session {
           d["level_number"] = r.levelNumber;
           if (r.kind == ParamKind::Gamma) d["channel"] = r.channel;
           break;
+        case ParamKind::RadiativeDecay:
+          d["jgroup"] = r.jGroup, d["level"] = r.level, d["level_number"] = r.levelNumber, d["channel"] = r.channel;
+          d["decay_record"] = r.decayRecord, d["decay_part"] = r.decayPart, d["final_state"] = r.finalState;
+          break;
         case ParamKind::Norm:
         case ParamKind::EnergyShift:
         case ParamKind::EnergyShiftSqrt:
