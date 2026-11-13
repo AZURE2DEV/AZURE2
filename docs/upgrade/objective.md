@@ -339,4 +339,11 @@ starts as before. A failed conversion is not redrawn (as before). Walkers resume
 columns `logprior` (the normalised Gaussian priors) and `loglikelihood` (`logprob − logprior`): a point outside is
 never written, its ln P is −∞. Park's J > 0 is a support of its own (D2), not a limit, and keeps its start behaviour.
 
-*Expected change of posteriors:* only for chains that reached a limit (measured in the HANDOFF entry).
+*Measured after* (the same harness on the branch's build, 168 limits on 12 projects × 2 bases): every point 0.1 %
+outside a limit has ln P = −∞; inside, ln P = −½ χ² + C as before, except where the base point itself lies outside
+another limit (13N_fast's start has amplitudes beyond the Wigner limits, so with that flag every point near its start
+is outside: −∞, as MINUIT would start at the limit; the test moves such components inside first) and the formal-basis
+round trip above (unchanged). The clamp differences are gone with the points outside.
+
+*Expected change of posteriors:* only for chains that reached a limit (measured in the HANDOFF entry: the nine chains
+of the sampler's list identical; a `screening_6li` chain pulled below U_e = 0 changes).
