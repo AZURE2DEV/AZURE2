@@ -2,6 +2,29 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (director, 16:49) — merged: the web UI's Results tab
+
+**Merged** `feature/upgrade-9-webui-results` (the entry below; it carries the Fit tab). No C++ changed, so the
+reference tag and the base build stay `tab-t50-1` and `work/b-trial50`.
+
+**Checked by the director** on the branch's last commit with the verified build's engine, one thread: the
+consistency test; the UI tests api, jobs, server, routes_consistency, static, node, results and the browser smoke
+test, all ok; five further smoke runs, no failure.
+
+**The smoke test's failed fetches** (the first open item of the entry of 16:16) are closed as a property of the
+test's Chrome, not of the page: in each run's fresh profile Chrome loads its component extensions a few seconds
+after start and cancels requests of the page that have not left the renderer (the server never saw them; 4 runs
+in 10 on the page before either tab). The test's Chrome now starts without extensions, component updates and
+background requests; no retry, no longer time budget. Not shown: which extension, and that a browser in daily use
+never meets it.
+
+**Open.**
+- Nobody has used the page in a real browser by hand (the export buttons, the output-file buttons, the keyboard).
+- The model line of a data set joins the engine's values at the data points; a dense line needs pyazr's
+  `Session.evaluate` on a grid (finding 21 of `web_ui.md`); the lab energy of each point and the program's σ and S
+  columns are findings 22 and 23.
+- T3's extrapolation at small angles reaches 1e63 on a log axis (the engine's number, not looked into).
+
 ## 2026-11-13 (agent, branch `feature/upgrade-9-webui-results`) — the web UI's Results tab
 
 **Done.** The director's corrections to the page (bounded file preview, wrapping tables, repeated groups as small
