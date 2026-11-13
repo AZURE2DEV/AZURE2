@@ -129,6 +129,16 @@ pre.file-head { margin: 0; max-height: 220px; overflow: auto; background: var(--
 .plot-bar { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
 .plot-fallback .table-wrap { max-height: 320px; overflow: auto; }
 
+/* results tab */
+.series-group { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: center; padding: 2px 0; }
+.group-title { font-weight: 600; min-width: 9em; }
+label.series, label.choice { white-space: nowrap; }
+.swatch { font-size: 14px; line-height: 1; }
+.choices { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center; padding: 6px 0 2px;
+  border-top: 1px dashed var(--grid); margin-top: 4px; }
+ul.terms { margin: 2px 0 6px; padding-left: 18px; font-family: var(--font-mono); font-size: 12px; }
+.output-file { padding: 1px 0; }
+
 /* forms */
 form.record-form { min-width: 0; }
 .form-line { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 3px 0; border-bottom: 1px dashed var(--grid); }

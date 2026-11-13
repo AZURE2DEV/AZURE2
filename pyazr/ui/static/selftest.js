@@ -37,6 +37,7 @@ export function selftest(ctx, tabs, draw) {
     const other = records.find((r) => !nucleusKinds.includes(r.kind) && !LAYOUT[r.kind]);
     if (other) routes.push(`#/data/${encodeURIComponent(other.name)}`);
     routes.push("#/data/+new", ...tabs.filter((t) => t.later).map((t) => `#/${t.id}`));
+    routes.push("#/results", "#/results?plot=table", "#/results?x=e_x&levels=1&logy=1");
     for (const route of routes) {
       const s = performance.now();
       location.hash = join(route);

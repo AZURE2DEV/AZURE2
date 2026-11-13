@@ -11,6 +11,7 @@ import hmac
 import inspect
 import os
 import secrets
+import shutil
 import socket
 import sys
 import time
@@ -108,6 +109,42 @@ class Server:
                 lines.append(raw.decode("utf-8", "replace").rstrip("\r\n"))
             more = bool(f.read(1))
         return {"path": path, "lines": lines, "more": more, "cut": cut}
+
+    def outputs(self, rev=None):
+        """Write the program's output files at the working x and copy them into the project's output directory
+        (``<config>`` output_dir, inside the root): the user asked for them, so this is the one session request that
+        writes into the user's directory.  Returns the directory (relative to the project's) and the files."""
+        if rev is not None:
+            self.state.check_rev(rev)
+        target = self._output_directory()
+        with self.worker.lock:
+            self.budget.require_session()
+            rev = self._ensure_built()
+            written = self.worker.call("outputs", x=self._vector())
+        os.makedirs(target, exist_ok=True)
+        for name in written["files"]:
+            shutil.copy2(os.path.join(written["directory"], name), os.path.join(target, name))
+        return {"rev": rev, "directory": os.path.relpath(target, self.state.directory), "files": written["files"],
+                "listing": self.outputs_list()["files"]}
+
+    def outputs_list(self):
+        """The files of the project's output directory: name, size (bytes), time written (s since the epoch)."""
+        target = self._output_directory()
+        files = []
+        if os.path.isdir(target):
+            for name in sorted(os.listdir(target)):
+                full = os.path.join(target, name)
+                if os.path.isfile(full):
+                    st = os.stat(full)
+                    files.append({"name": name, "size": st.st_size, "mtime": st.st_mtime})
+        return {"directory": os.path.relpath(target, self.state.directory), "files": files}
+
+    def _output_directory(self):
+        """The project's output directory (``<config>`` output_dir, default output/), resolved inside the root."""
+        with self.state.lock:
+            entries = self.state.project.config()
+        value = entries.get("output_dir") if isinstance(entries, dict) else None
+        return self.state.inside_root(str(value or "output/").strip().strip('"'))
 
     def open(self, path):
         """Open another project inside the root (no job may run)."""

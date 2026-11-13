@@ -150,10 +150,14 @@ ROUTES = (
     Route("POST", "/api/evaluate", S, "engine.Engine.evaluate",
           "Objective, its terms, data chi2, and the program's chi2 per data set, at x (entries given over the "
           "working x).", kwargs=("x",)),
-    Route("GET", "/api/evaluation", S, "engine.Engine.evaluation", "Every data set's arrays at the working x."),
+    Route("GET", "/api/evaluation", S, "engine.Engine.evaluation",
+          "The Results payload at the working x: the program's chi-squared split (as /api/evaluate), every data "
+          "set's arrays with its chi-squared row, every extrapolation on its grid, the model data, and the residual's "
+          "definition (residual)."),
     Route("GET", "/api/evaluation/data/{name}", S, "engine.Engine.data",
-          "One data set's arrays at the working x: energies, angles, values, errors, model, residuals.",
-          args=("name",)),
+          "One data set's arrays at the working x: c.m. and excitation energies, c.m. angles (after energy shifts), "
+          "the datum and its error as read and times the norm in use, the model, the engine's standardized "
+          "residuals, the S factor where offered.", args=("name",)),
     Route("POST", "/api/transform", S, "engine.Engine.transform",
           "Physical values of every parameter at x (entries given over the working x).", kwargs=("x",)),
     Route("POST", "/api/evaluate/grid", M, "pyazr.Session.evaluate",
@@ -170,8 +174,12 @@ ROUTES = (
           "The built system: pairs, levels, channels, Wigner limits."),
     Route("POST", "/api/session/channel_functions", L, "step 5 (Physics tab); today the session's coulomb_functions",
           "Channel functions of a pair at energies."),
-    Route("POST", "/api/outputs", L, "step 3 (Results tab); today the session's write_output_files",
-          "Write the program's output files into the project's output directory."),
+    Route("POST", "/api/outputs", V, "server.Server.outputs",
+          "Write the program's output files at the working x (pyazr's write_output_files) and copy them into the "
+          "project's output directory (<config> output_dir): the files written.", kwargs=("rev",),
+          serves=("engine.Engine.outputs",)),
+    Route("GET", "/api/outputs", V, "server.Server.outputs_list",
+          "The files of the project's output directory: name, size (bytes), time written (s since the epoch)."),
     Route("POST", "/api/stopping/{fn}", L, "step 5 (Physics tab); today pyazr.stopping", "Stopping powers."),
     Route("GET", "/api/sources/exfor", L, "step 2 (Data tab); today pyazr.search_exfor", "EXFOR search."),
     Route("GET", "/api/sources/ensdf/{nuclide}", L, "step 2 (Nucleus tab); today pyazr.fetch_levels", "ENSDF levels."),

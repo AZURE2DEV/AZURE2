@@ -17,7 +17,7 @@ sys.path.insert(0, ROOT)
 THREADS = int(os.environ.get("OMP_NUM_THREADS", "1"))
 TOKEN = "test-token-of-the-ui-tests"
 AUTH = {"Authorization": f"Bearer {TOKEN}"}
-PROJECTS = {"T1": os.path.join(ROOT, "tests", "upgrade", "T1"), "T2": os.path.join(ROOT, "tests", "upgrade", "T2")}
+PROJECTS = {name: os.path.join(ROOT, "tests", "upgrade", name) for name in ("T1", "T2", "T3")}
 
 
 def missing_requirements(*packages):
@@ -47,7 +47,7 @@ def run(test_file):
 
 
 def copy_project(name, dest):
-    """A copy of the test project ``name`` (T1, T2) in ``dest``; returns the path of its .azr."""
+    """A copy of the test project ``name`` (T1, T2, T3) in ``dest``; returns the path of its .azr."""
     target = os.path.join(str(dest), name)
     shutil.copytree(PROJECTS[name], target, ignore=shutil.ignore_patterns("output", ".*.ui*", "checks"))
     for directory in ("output", "checks"):  # the program refuses to run without them
