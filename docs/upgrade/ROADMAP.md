@@ -271,8 +271,12 @@ Design: `pyazr3.md` (the measured state of pyazr, the objects of 3.0, the order 
   - [x] The physics table (`pyazr3.md` section 4, step 4): `api/src/pybind_physics.cpp`, 24 rows, `pyazr.physics`
         generated from them, a status per element, `Session.channel_functions`; a test per row (consistency check
         41). Left: the transfer functions on potentials, `level_matrix`, the Weisskopf width (section 4, step 4).
+  - [x] `Objective` and `Evaluation` beside today's methods (`pyazr3.md` section 7): `azure2.fit_objective()`,
+        `azure2.evaluate(x)`; the objective's rows, `log_prob` with the engine sampler's rule, the table of point
+        outputs (`api/src/pybind_evaluation.cpp`).
 - [ ] Wheels via scikit-build-core + cibuildwheel (Linux, macOS, Windows) with the core and the `azure2` CLI.
-- [ ] Tested recipes for iminuit, scipy, emcee (no `azure2()` shim: struck by the PI, `pyazr3.md` section 5, 9).
+- [x] Tested recipes for iminuit, scipy, emcee (`pyazr/examples/fit_*.py`, `tests/pyazr/fit_recipes_test.py`; no
+      `azure2()` shim: struck by the PI, `pyazr3.md` section 5, 9).
 - [x] The command line `python -m pyazr` (`pyazr/cli.py`: one table of commands with `--json`; `pyazr3.md` 2.8;
       2026-11-13). Coulomb table build and download wait for a bound build function and a published copy.
 Gate: ported pyazr tests pass; wheels install and run T1–T3 on three platforms.

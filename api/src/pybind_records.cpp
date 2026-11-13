@@ -159,6 +159,10 @@ const std::vector<ParameterField> &ParameterFields() {
          const std::pair<double, double> &b = v.api->GetParameterBounds()[v.index];
          return py::make_tuple(b.first, b.second);
        }},
+      {"sampler_support", "", kEveryKind, false,
+       "the ensemble sampler's posterior is zero outside bounds (the kind's samplerSupport; objective.md section 6): "
+       "Objective.log_prob is -inf there; the bounds of the other kinds are not walls of the posterior",
+       [](const ParameterView &v) -> py::object { return py::bool_(v.record->Row().samplerSupport); }},
       // -- a level's parameters
       {"jgroup", "", kLevel | Kinds({ParamKind::ThmCoherent}), false, "the J group, from 1",
        [](const ParameterView &v) -> py::object { return py::int_(v.record->jGroup); }},

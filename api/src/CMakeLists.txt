@@ -1,6 +1,6 @@
 include_directories(../include ${AZURE2_SOURCE_DIR}/include)
 
-set (AZUREAPI_SOURCES AZUREAPI.cpp AZUREAPIChannelFunctions.cpp AZUREAPIModelData.cpp)
+set (AZUREAPI_SOURCES AZUREAPI.cpp AZUREAPIChannelFunctions.cpp AZUREAPIModelData.cpp AZUREAPIObjective.cpp)
 
 set (AZUREAPI_HEADERS ../include/AZUREAPI.h)
 
@@ -32,7 +32,7 @@ if(NOT pybind11_FOUND)
                     "so `pyazr` can drive AZURE2 in-process.")
 else()
     pybind11_add_module(_azure2 pybind_api.cpp pybind_describe.cpp pybind_notices.cpp pybind_convert.cpp pybind_model_data.cpp pybind_nuclear_part.cpp pybind_physics.cpp pybind_stopping.cpp pybind_potentials.cpp pybind_project.cpp pybind_schema.cpp
-                      pybind_records.cpp pybind_thm.cpp)
+                      pybind_records.cpp pybind_thm.cpp pybind_evaluation.cpp)
     # AZUREAPI carries AZURE2Core, which carries the engine's own dependencies
     # (Minuit2, GSL, BLAS, OpenMP) in the right link order -- see
     # src/CMakeLists.txt.  Repeating them here would only risk contradicting it.

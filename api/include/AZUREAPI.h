@@ -324,6 +324,35 @@ class AZUREAPI {
   /// The names of the objective's terms, in the order of CalculateObjectiveRWA's `terms`.
   std::vector<std::string> ObjectiveTermNames() const;
 
+  /// What one evaluation of the objective gives (EvaluateObjectiveRWA; AZUREAPIObjective.cpp).
+  struct ObjectiveBreakdown {
+    double total = 0.0;                        ///< the objective, bit for bit as CalculateObjectiveRWA returns it
+    std::vector<double> terms;                 ///< each term, in ObjectiveTermNames() order (summed apart)
+    ObjectiveContext::SegmentPriors segments;  ///< normalization and shift priors per segment (index = segment)
+    bool excluded = false;  ///< outside the ensemble sampler's support (OutsideSamplerSupport or a term's exclusion)
+  };
+  /*!
+   * One evaluation of the objective at the free RWA parameters: the model of every point once, the objective's sum
+   * (as CalculateObjectiveRWA) and its breakdown by term from the same model values.  The results buffer then holds
+   * what the output writer reads (model values, profiled norms, per-segment chi^2), until the next evaluation.
+   */
+  ObjectiveBreakdown EvaluateObjectiveRWA(const vector_r &params) const;
+  /*!
+   * The objective as least-squares rows, sum r^2 = the objective (docs/upgrade/pyazr3.md section 7): the rows of
+   * CalculateResidualJacobianRWA (data, model data, prior covariance), then AppendModelRows (Park's wall, the
+   * gamma_decay priors and wall, the abundance sums), one row (p - c)/sigma per diagonal prior (ForEachDiagonalPrior)
+   * and one per nuisance prior.  With \p jacobianOut, their Jacobian over the free parameters, row-major; without,
+   * the rows from a forward pass only.  False (nothing written) where the analytic Jacobian is not available
+   * (CalculateResidualJacobianRWA's [-1]).
+   */
+  bool ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r *jacobianOut) const;
+  /// Whether a free value lies outside the limits of a parameter whose kind's row has samplerSupport
+  /// (ParameterKind.h; the ensemble sampler's -infinity, docs/upgrade/objective.md section 6).
+  bool OutsideSamplerSupport(const vector_r &params) const;
+  /// ln P = -1/2 x the objective (no constant), -infinity outside the ensemble sampler's support: outside the
+  /// limits of a kind with samplerSupport, or where a term excludes the point (Park's J < 0).
+  double LogProbabilityRWA(const vector_r &params) const;
+
   /*!
    * Standardized residuals r_i = (fit_i - data_i*n)/(cmErr_i*n) (so sum r_i^2 =
    * chi2) and their analytic Jacobian J_{ij} = d r_i / d theta_j, for

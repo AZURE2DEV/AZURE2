@@ -48,6 +48,26 @@ public names are a contract.
 4. `python3 tools/gen_physics_docs.py` (the user-guide page; the test fails until it is run).
 Nothing in Python: `pyazr/physics.py` builds the function, its signature and docstring from the row.
 
+## Recipe: use the objective and the evaluation
+
+- A fit or a sampler: `f = s.fit_objective()` (`objective.py`): `f(x)`, `f.grad`, `f.value_and_grad`,
+  `f.residuals`/`f.jacobian` (the objective as rows, `sum(r**2) == f(x)`), `f.log_prob` (the engine's sampler's
+  rule: -f/2, -inf outside its support), `f.x0`, `f.names`, `f.bounds`, `f.errordef`.  Recipes:
+  `examples/fit_scipy.py`, `fit_iminuit.py`, `fit_emcee.py` (tested by `tests/pyazr/fit_recipes_test.py`).
+- The numbers at one x: `ev = s.evaluate(x)` (`evaluate.py`), one engine evaluation: `ev.objective`, `ev.chi2`
+  (`Total-Chi-Squared`), `ev.terms` (by the engine's term names), `ev.data[i]` (model, residuals, chi2 as the row of
+  `chiSquared.out`, extra columns), `ev.table()`.  Never rebuild a number of `chiSquared.out` or `AZUREOut_*` from
+  today's `calculate_*` methods.
+- **A new term of the objective**: a class in `src/Objective.cpp` (its `Name()`), nothing in `pyazr/`; it appears in
+  `Evaluation.terms`; if it is a sum of squares, its rows go into `AZUREAPI::ObjectiveRowsRWA`
+  (`api/src/AZUREAPIObjective.cpp`; `objective_object_test.py` checks `sum(r**2) == f(x)`).
+- **A new number a point carries** (an extra column of a data kind): one row of `PointOutputs()` in
+  `api/src/pybind_evaluation.cpp` (name, unit, when, doc, the reader); it appears in `Evaluation.data[i].extra` and
+  `pyazr.kinds()["data_outputs"]`.
+- **A new field of `Evaluation`**: an entry of the dict `EvaluationDict` builds (`pybind_evaluation.cpp`), the
+  attribute in `evaluate.py` and its line in the class's `FIELDS` (`kinds()["objects"]`).
+- Calls of both objects take the session's lock (`objective.session_lock`); today's methods do not.
+
 ## How it is built
 
 - `azure2.py` drives the engine **in-process** through the pybind11 module

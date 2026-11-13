@@ -45,6 +45,8 @@ AZURE2_NOT_SERVED = {
         "thm_lineshape thm_vertex thm_distortion prior_covariance_residuals prior_covariance_names "
         "datasets n_rmatrix cache_stats output_dir",
     "the older name of channel_functions (served: POST /api/session/channel_functions)": "coulomb_functions",
+    "the Objective for Python fitters and samplers; the jobs switch to it with the engine fitters (web_ui.md 12)":
+        "fit_objective",
 }
 
 

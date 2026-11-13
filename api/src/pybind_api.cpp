@@ -64,6 +64,12 @@ class ParameterVectorError : public AZURE2Error {
 // pybind_records.cpp: the parameter and pair records with their named fields
 py::list ParameterRecordDicts(const AZUREAPI &api);
 py::list PairRecordDicts(const AZUREAPI &api);
+// pybind_evaluation.cpp: one evaluation read as the writer reads it, the objective's rows and log-probability
+py::list PointOutputFields();
+py::dict EvaluationDict(const AZUREAPI &api, const vector_r &free);
+py::dict ObjectiveRowsDict(const AZUREAPI &api, const vector_r &free, bool withJacobian);
+double LogProbability(const AZUREAPI &api, const vector_r &free);
+py::tuple SamplerLogProbability(AZUREAPI &api, const vector_r &x0, const vector_r &x);
 std::vector<std::string> OwnerFieldsOf(ParamKind kind);
 // pybind_potentials.cpp: a session's hybrid potentials
 azure2::experiment::HybridPotentialSetting SessionPotentialSetting(const std::string &type, bool enabled, double V0, double R, double a, double r0,
@@ -490,6 +496,30 @@ class Session {
     AddModelData(d, *api_, v);  // the <modelData> data, one record each
     return d;
   }
+  // pyazr's Evaluation and Objective (pybind_evaluation.cpp; docs/upgrade/pyazr3.md section 7).
+  py::dict evaluation_rwa(const py::array_t<double, py::array::forcecast> &p) {
+    vector_r v = to_vector(p);
+    expect_free(v, "evaluation_rwa");
+    return EvaluationDict(*api_, v);
+  }
+  py::dict objective_rows_rwa(const py::array_t<double, py::array::forcecast> &p, bool jacobian) {
+    vector_r v = to_vector(p);
+    expect_free(v, "objective_rows_rwa");
+    return ObjectiveRowsDict(*api_, v, jacobian);
+  }
+  std::vector<std::string> objective_term_names() const { return api_->ObjectiveTermNames(); }
+  double log_prob_rwa(const py::array_t<double, py::array::forcecast> &p) {
+    vector_r v = to_vector(p);
+    expect_free(v, "log_prob_rwa");
+    return LogProbability(*api_, v);
+  }
+  py::tuple sampler_log_probability(const py::array_t<double, py::array::forcecast> &x0,
+                                    const py::array_t<double, py::array::forcecast> &p) {
+    vector_r s = to_vector(x0), v = to_vector(p);
+    expect_free(s, "sampler_log_probability");
+    expect_free(v, "sampler_log_probability");
+    return SamplerLogProbability(*api_, s, v);
+  }
   py::array_t<double> calculate_residual_jacobian_rwa(const py::array_t<double, py::array::forcecast> &p,
                                                       const std::vector<int> &skip) {
     vector_r v = to_vector(p), out;
@@ -857,6 +887,9 @@ PYBIND11_MODULE(_azure2, m) {
       "Parameter.kind of pyazr), unit, owner (the record fields that say what it belongs to, "
       "parameter_record_fields()), own_prior, segment_field, vary_from_project, doc.");
   BindRecordFields(m);  // pybind_records.cpp: parameter_record_fields, pair_record_fields
+  m.def("point_output_fields", &PointOutputFields,
+        "The numbers a point carries beside its model value (pybind_evaluation.cpp's table): name, unit ('model': the "
+        "data set's engine unit), when (the data sets it applies to), doc, per_point ('number' or 'list').");
   BindSchema(m);  // pybind_schema.cpp: the format-3 table (schema(), as AZURE2 --schema)
   BindConvert(m);  // pybind_convert.cpp: validate_format3_text, convert_format3_text
   BindProject(m);  // pybind_project.cpp: the project file as a lossless document (_azure2.Document)
@@ -990,6 +1023,17 @@ PYBIND11_MODULE(_azure2, m) {
            "The objective's terms: total, names, values, and per-segment norm/shift priors (index 0 unused).")
       .def("calculate_chi2_grad_rwa", &Session::calculate_chi2_grad_rwa,
            py::arg("params"))
+      .def("evaluation_rwa", &Session::evaluation_rwa, py::arg("params"),
+           "One evaluation at the free vector: the objective, its terms, the data chi^2 and every data set's arrays, "
+           "read as the output writer reads them (pyazr.evaluate.Evaluation).")
+      .def("objective_rows_rwa", &Session::objective_rows_rwa, py::arg("params"), py::arg("jacobian"),
+           "The objective as least-squares rows (sum r^2 = the objective) and, with jacobian, their Jacobian.")
+      .def("objective_term_names", &Session::objective_term_names,
+           "The names of the objective's terms (ObjectiveTerm::Name), in the engine's order.")
+      .def("log_prob_rwa", &Session::log_prob_rwa, py::arg("params"),
+           "-1/2 x the objective, -infinity outside the ensemble sampler's support.")
+      .def("sampler_log_probability", &Session::sampler_log_probability, py::arg("x0"), py::arg("params"),
+           "The engine's ensemble sampler set up at x0 (fit basis): (ln P at params, its constant).  A test's tie.")
       .def("calculate_residual_jacobian_rwa", &Session::calculate_residual_jacobian_rwa,
            py::arg("params"), py::arg("skip") = std::vector<int>(),
            "Residuals and Jacobian; the free columns listed in skip are not finite-differenced (left zero).")
