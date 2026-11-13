@@ -37,7 +37,9 @@ What the server keeps
 - **The engine runs in worker processes.**  Evaluations use a session of the current text, built again when the
   text changes; the free parameters' working values ``x`` (``GET``/``PATCH /api/x``, in the fit basis) move without
   a rebuild.  The χ² per data set is the program's (the rows of its ``chiSquared.out``, six significant digits).
-- **Jobs** (``POST /api/jobs``): recipe fits (scipy L-BFGS-B, iminuit MIGRAD + HESSE) in a process of their own,
+- **Jobs** (``POST /api/jobs``; the table at ``GET /api/jobs/kinds``): the engine's fitters (``"method":
+  "engine_migrad"``, one per row of ``pyazr.kinds()["fitters"]``, through ``Session.fit_with_engine``) and their
+  MINOS, recipe fits (scipy L-BFGS-B, iminuit MIGRAD + HESSE) and iminuit's MINOS, each in a process of their own,
   with progress (``GET /api/jobs/<id>``), a cooperative stop (``/stop``), a kill (``/kill``), a checkpoint of the
   best point, and ``/accept`` to write the best point into the project text.  With a budget of one thread, an
   evaluation asked while a job runs answers 409 with the job's id.

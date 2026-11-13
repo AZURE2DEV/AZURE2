@@ -302,8 +302,15 @@ arguments); there is no handler written per route.
 does not exist, and for a public method of ``pyazr.Project`` or of the
 session that is neither served nor listed in ``PROJECT_NOT_SERVED``
 (``routes.py``) or ``SESSION_NOT_SERVED`` (``pyazr/ui/engine.py``). A **job
-kind** (a fitter, a sampler) is a function and one row of ``JOBS`` in
-``pyazr/ui/jobs.py`` (``tests/pyazr/ui/jobs_test.py``).
+kind** (a recipe, a sampler) is a function ``(tracker, x0, settings, names)``
+and one row of ``JOBS`` in ``pyazr/ui/jobs.py``
+(``tests/pyazr/ui/jobs_test.py``). A fitter of the engine needs nothing in
+the web UI: its job rows (a fit, and a MINOS job after it where the fitter's
+row allows MINOS) are made from the engine's fitter table by
+``engine_rows`` (``tests/pyazr/ui/routes_consistency_test.py``,
+``engine_jobs_test.py``). A new type of a job's setting is a row of
+``SETTING_TYPES`` (``jobs.py``) and of ``SETTING_WIDGETS``
+(``pyazr/ui/static/tabs/fitjob.js``).
 
 A **tab** is a module ``pyazr/ui/static/tabs/<name>.js`` that exports
 ``render(ctx, element, args)`` and one row of ``TABS`` in

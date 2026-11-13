@@ -26,6 +26,10 @@ program whose `chiSquared.out` the API's numbers are compared with.
   against `AZUREOut_*.extrap` (menu 3) to eleven digits on T1 and T2; the χ² table against `chiSquared.out`; the
   residuals' squares against each data set's χ² (and the covariance group's sum on T2); model data on T3; the output
   files written into the project's output directory (`POST`/`GET /api/outputs`).
+- `engine_jobs_test.py`: the engine's fitters as jobs: every fit row of `pyazr.kinds()["fitters"]` on T3 ends at
+  the objective, end point, covariance and errors of `Session.fit_with_engine` called directly from the same start,
+  bit for bit; the engine's MINOS as a job after an engine fit and as the fit's setting; a call limit said in the
+  engine's words; Accept and Undo; on T2 a stop of MIGRAD and of LM answered within one progress record.
 - `physics_routes_test.py`: the physics routes: the rows are `pyazr.kinds()["physics"]`, the values a direct call's,
   NaN with the status outside the domain, the refusals, the bound, the session's channel functions.
 - `physics_tab_test.py`: what the Physics tab asks of the server: every row plots with its examples and its axis's
@@ -175,3 +179,12 @@ Added with the stopping rows (`work/uiphys/inject/inject2.py`, the same way; eve
   as that choice: always the first; each fails `physics_tab_test.py::test_stopping_rows_values_and_citation`.
 - a text argument has its row in `ARGUMENT_KINDS`: the `text` row renamed; fails `node_test.py`.
 - the citation is drawn under a stopping plot: not drawn; fails `smoke_test.py` on T1.
+
+Added with the engine's fitters as jobs (each shown failing on 2026-11-14, the file restored after each):
+
+- the rows of the engine's fitters are its table: every engine row given the `minos` setting; fails
+  `routes_consistency_test.py::test_engine_rows_are_the_engine_fitter_table`.
+- a stop request reaches a running engine fit: the worker's stop reader ignores the stop message; fails
+  `engine_jobs_test.py::test_stop_ends_a_running_engine_fit_within_one_call` (the fit runs to its end).
+- a row's facts are said as words, and progress numbers beyond the common four are shown by name: `factsText` says
+  "yes" for false; `progressView` drops the further numbers; each fails `node_test.py` (`js/fitting.test.mjs`).

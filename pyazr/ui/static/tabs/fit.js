@@ -192,7 +192,7 @@ function matricesSection(job) {
       () => download(`${name}_${job.id}.csv`, matrixCsv(m))));
   };
   const details = h("details.matrices", {}, h("summary", {}, `Covariance and correlation (${r.covariance.names.length}`
-    + ` free parameters, from ${r.errors ? "HESSE" : "the recipe"})`),
+    + ` free parameters, from ${r.errors_from || "the recipe"})`),
   one("correlation", r.correlation, 3, "correlation"), one("covariance", r.covariance, 4, "covariance"));
   return section("Covariance", details);
 }

@@ -263,8 +263,10 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    ``nu::Mcmc``. *pyazr*: ``Session.fit_with_engine`` runs a row on the
    session (``AZUREAPI::FitWithEngine``, ``api/src/AZUREAPIFit.cpp``; the
    binding releases the GIL), or the fit is Python's (SciPy or iminuit on
-   ``Session.objective().value_and_grad``; the web UI runs them as jobs,
-   ``pyazr/ui/jobs.py``), with the same gradient through ``AZUREAPI``.
+   ``Session.objective().value_and_grad``), with the same gradient through
+   ``AZUREAPI``. The web UI runs both as jobs (``pyazr/ui/jobs.py``): a fit
+   job per row of the engine's fitter table, made from
+   ``pyazr.kinds()["fitters"]``, and the recipes.
 
 8. **Output.** *Program*: ``FinalEvaluation`` and ``WriteRunOutputs``
    (``src/RunOutputs.cpp``: the band, then the files below), the reaction rate

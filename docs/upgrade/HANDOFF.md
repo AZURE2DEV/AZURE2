@@ -2,6 +2,31 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-9-webui-fit-engine`) — the web page runs the engine's fitters and MINOS
+
+**Done** (`web_ui.md` section 11.6).
+- The Fit tab's job table has a fit row per row of the engine's fitter table (`pyazr.kinds()["fitters"]`, made by
+  `engine_rows` in `pyazr/ui/jobs.py`; the program's default MIGRAD first and the form's default), with the
+  fitter's doc and facts (switch, covariance, MINOS can follow), settings `max_calls` and, where allowed, `minos`;
+  a MINOS job after each fitter that allows it. The job runs `Session.fit_with_engine` in its worker (the adapter's
+  `fit_with_engine` in `pyazr/ui/engine.py`) with the job's progress (stage, LM's damping, calls counted on through
+  HESSE and MINOS) and stop request (a thread of the worker reads it, so it reaches a running evaluation). The
+  result: the engine's status in its words, errors as `param.sav` has them, covariance and correlation, MINOS
+  intervals; Accept and Undo as for the recipes. `SESSION_NOT_SERVED` no longer lists `fit_with_engine`.
+- The page: facts under the method and in the job table, further progress numbers by name, where errors come from.
+- Tests: `tests/pyazr/ui/engine_jobs_test.py` (new, ctest `pyazr_ui_engine_jobs`, 14 s), the generated rows in
+  `routes_consistency_test.py`, two node tests; each rule's test shown failing (`tests/pyazr/ui/README.md`).
+
+**Verified.** Over HTTP at one thread (`work/uifit2/walk_engine.py`): every engine fitter on T3 and T2 ends at the
+objective of `fit_with_engine` (bit for bit) and of the program (12 digits; T2's plain MIGRAD has no switch);
+a stop on T2 answered in 0.2 s with one record after the request; Accept then the χ² as written within 3e-15
+relative of the job's; Undo restores the start χ² exactly. `routes_consistency`, `jobs`, `engine_jobs`, `node`,
+`static` and the browser smoke test (T1 converged, T2 stopped) pass; the consistency test passes. Not run: ctest
+through a build of this tree, the projects against the reference (no engine file changed).
+
+**Open.** The sampler and the bands (next on this branch). The fitter table has no column saying which fitters honour
+a call limit (`max_calls` is offered on every engine row); the engine gives no validity per MINOS interval.
+
 ## 2026-11-13 (agent, branch `feature/upgrade-6-fit-function`) — the engine's fit as a function
 
 **Done** (design and as built: `docs/upgrade/fit.md`).

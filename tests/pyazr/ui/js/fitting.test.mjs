@@ -122,3 +122,28 @@ test("matrices: rows by name, CSV with the numbers as sent; the job a visit show
   assert.equal(f.jobToShow([...jobs, { id: "run", state: "running", started: 0 }]).id, "run");
   assert.equal(f.jobToShow(jobs, "old").id, "old");
 });
+
+test("the engine's fitters: facts as words, the engine's MINOS offered after its fit, errors said", { skip: !TABLE },
+  () => {
+    const engineFits = TABLE.filter((r) => r.kind === "fit" && r.method.startsWith("engine_"));
+    assert.ok(engineFits.length >= 1 && engineFits.every((r) => r.available), "the engine's rows run");
+    assert.equal(f.jobChoices(TABLE).find((k) => k.kind === "fit").methods[0].method, engineFits[0].method,
+      "the default fit is the engine's");
+    for (const row of engineFits) {
+      const words = f.factsText(row.facts);
+      assert.ok(words.includes(`covariance: ${row.facts.covariance ? "yes" : "no"}`), words);
+      const rec = { id: "e", kind: "fit", method: row.method, state: "converged", best: { objective: 1, x: {} },
+        result: { status: "converged", message: "the engine's: converged", errors: { a: 1 },
+          errors_from: "HESSE after the engine's MIGRAD" } };
+      const v = f.resultView(rec, TABLE);
+      assert.equal(v.errorsFrom, "HESSE after the engine's MIGRAD");
+      assert.deepEqual(v.followers.map((r) => `${r.kind}/${r.method}`),
+        row.facts["MINOS can follow"] ? [`minos/${row.method}`] : []);
+    }
+  });
+
+test("the progress reducer: numbers beyond the four common ones shown by name", () => {
+  const v = f.progressView({ id: "j", state: "running", progress: { calls: 3, objective: 2, best: 1, elapsed: 0.5,
+    stage: "hesse", measure: null } });
+  assert.deepEqual(v.more, [["stage", "hesse"], ["measure", null]]);
+});

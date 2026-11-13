@@ -19,6 +19,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass
+from functools import lru_cache, partial
 
 import numpy as np
 
@@ -35,13 +36,18 @@ class StopRequested(Exception):
 
 
 class Tracker:
-    """Wraps an objective-and-gradient for a recipe: reads the stop request before each call, records the best
-    point, and reports each call (``report(message)``; ``None`` in a direct call)."""
+    """The job's handle for its function: wraps the session's objective-and-gradient for a recipe (reads the stop
+    request before each call, counts it, records the best point and reports it with ``report(message)``; ``None`` in
+    a direct call), and counts the progress of calls the job makes itself (:meth:`count`: the engine's fitters, the
+    sampler).  ``session`` is the job's session adapter (:class:`pyazr.ui.engine.Engine`), for a job that calls the
+    engine other than through the objective."""
 
-    def __init__(self, fg, names, *, report=None, stop_requested=lambda: False):
-        self.fg, self.names, self.report, self.stop_requested = fg, names, report, stop_requested
+    def __init__(self, fg, names, *, report=None, stop=None, session=None):
+        self.fg, self.names, self.report, self.session = fg, names, report, session
+        self.stop = stop if stop is not None else threading.Event()  # set: the job ends with its best point
         self.calls, self.best, self.best_x, self.t0 = 0, np.inf, None, time.perf_counter()
         self.first = None  # the objective at the start point
+        self.after_stop = 0  # progress reports after the stop request was seen (the calls running then)
         self._last = None  # (x bytes, f, g) of the last call, for recipes that ask f and g separately
 
     def __call__(self, x):
@@ -54,18 +60,30 @@ class Tracker:
             raise StopRequested()
         f, g = self.fg(x)
         f = float(f)
-        self.calls += 1
-        if self.first is None:
-            self.first = f
-        improved = f < self.best
-        if improved:
-            self.best, self.best_x = f, x.copy()
         self._last = (key, f, np.asarray(g, float))
-        if self.report is not None:
-            self.report({"event": "call", "calls": self.calls, "objective": f, "best": self.best,
-                         "elapsed": time.perf_counter() - self.t0,
-                         "best_x": dict(zip(self.names, self.best_x.tolist())) if improved else None})
+        self.count(self.calls + 1, f, x)
         return f, self._last[2]
+
+    def count(self, calls, objective, x, **more):
+        """Progress: ``calls`` so far (counting up), the objective at the free vector ``x`` of the last of them, and
+        further numbers by name (``more``: a fitter's stage, a sampler's acceptance; None where there is none),
+        reported with the best point when it improved."""
+        objective = float(objective)
+        if self.stop.is_set():
+            self.after_stop += 1
+        self.calls = int(calls)
+        if self.first is None:
+            self.first = objective
+        improved = objective < self.best
+        if improved:
+            self.best, self.best_x = objective, np.array(x, float)
+        if self.report is not None:
+            self.report({"event": "call", "calls": self.calls, "objective": objective, "best": self.best,
+                         "elapsed": time.perf_counter() - self.t0,
+                         "best_x": dict(zip(self.names, self.best_x.tolist())) if improved else None, **more})
+
+    def stop_requested(self):
+        return self.stop.is_set()
 
     def value(self, x):
         return self(x)[0]
@@ -95,6 +113,7 @@ def fit_iminuit_migrad(tracker, x0, settings, names):
         return "converged", "MIGRAD: valid minimum", extra
     m.hesse()  # a valid minimum can turn invalid here (the EDM recomputed with HESSE's matrix)
     extra.update(_errors_of(m, names), edm=float(m.fmin.edm), valid=bool(m.valid))
+    extra["errors_from"] = "HESSE (iminuit)"
     if m.valid:
         return "converged", "MIGRAD: valid minimum; HESSE: still valid", extra
     return "ended", f"MIGRAD: valid minimum; after HESSE invalid (EDM {m.fmin.edm:.3g})", extra
@@ -109,7 +128,7 @@ def minos_iminuit(tracker, x0, settings, names):
     if not m.valid:
         return "ended", "MIGRAD from the start point: invalid minimum; MINOS not run", extra
     m.hesse()
-    extra.update(_errors_of(m, names))
+    extra.update(_errors_of(m, names), errors_from="HESSE (iminuit)")
     which = settings["parameters"] or list(names)
     m.minos(*which, ncall=settings["max_calls"])
     extra["minos"] = {n: {"lower": float(m.merrors[n].lower), "upper": float(m.merrors[n].upper),
@@ -131,6 +150,55 @@ def _errors_of(m, names):
     return {"errors": dict(zip(names, [float(e) for e in m.errors])),
             "covariance": {"names": list(names), "matrix": np.asarray(m.covariance, float).tolist()},
             "correlation": {"names": list(names), "matrix": np.asarray(m.covariance.correlation(), float).tolist()}}
+
+
+def _covariance_by_name(names, matrix):
+    """The covariance and the correlation ({names, matrix}) of a covariance matrix in the order of ``names``."""
+    c = np.asarray(matrix, float)
+    sd = np.sqrt(np.clip(np.diag(c), 0.0, None))
+    scale = np.where(sd > 0, sd, 1.0)
+    return {"covariance": {"names": list(names), "matrix": c.tolist()},
+            "correlation": {"names": list(names), "matrix": (c / np.outer(scale, scale)).tolist()}}
+
+
+# The job's state after an engine fit, by the engine's status (any other status: "ended", with the status said).
+ENGINE_STATES = {"converged": "converged", "stopped": "stopped"}
+
+
+def fit_engine(tracker, x0, settings, names, *, method, minos=None):
+    """The engine's fitter ``method`` (``Session.fit_with_engine``, the program's fit) from x0: each progress record
+    counted into the tracker (the calls of the fit, then of HESSE and MINOS, counted on), the tracker's stop request
+    passed as the fit's; MINOS when ``minos`` (or the setting ``minos``).  The job's best point is the fitter's end
+    point and its objective the engine's there; the start objective is one evaluation at x0 after the fit (an
+    evaluation before it would change the state the engine's pooled working copies carry into the fit).  The
+    fitter's lines go to the job's log."""
+    from .engine import fit_with_engine, objective_of
+    stage = {"name": None, "offset": 0, "last": 0}
+
+    def progress(record):
+        if record["stage"] != stage["name"]:  # HESSE and MINOS count their calls from 1: the job counts on
+            stage.update(name=record["stage"], offset=stage["offset"] + stage["last"])
+        stage["last"] = record["calls"]
+        measure = record["measure"]
+        tracker.count(stage["offset"] + record["calls"], record["objective"], record["x"], stage=record["stage"],
+                      measure=float(measure) if np.isfinite(measure) else None)
+
+    run_minos = settings.get("minos", False) if minos is None else minos
+    r = fit_with_engine(tracker.session, method, run_minos, x0, settings["max_calls"], progress, tracker.stop)
+    print(r["log"], flush=True)
+    tracker.first = float(objective_of(tracker.session)(x0))
+    tracker.best, tracker.best_x = r["objective"], np.array([r["x"][n] for n in names], float)
+    words = f"the engine's {r['method']}: {r['status']}"
+    if r["fell_back_to_migrad"]:
+        words += " (no analytic Jacobian for a data set: it ran MIGRAD, without HESSE or MINOS)"
+    extra = {"engine_status": r["status"], "valid": r["converged"], "edm": r["edm"], "fit_calls": r["calls"]}
+    if r["covariance"] is not None:
+        extra.update(_covariance_by_name(r["names"], r["covariance"]), errors=r["errors"],
+                     errors_from="HESSE after the engine's MIGRAD" if r["covariance_from_hesse"]
+                     else "the engine's (J^T J + priors)^-1")
+    if r["minos"]:
+        extra["minos"] = {n: {"lower": lo, "upper": hi, "valid": None} for n, (lo, hi) in r["minos"].items()}
+    return ENGINE_STATES.get(r["status"], "ended"), words, extra
 
 
 # -- settings: their types and the conversion of a request's value ------------------------------------------------
@@ -181,9 +249,11 @@ class Setting:
 
 @dataclass(frozen=True)
 class JobRow:
-    """One kind of job: ``kind`` and ``method`` name it; ``run`` the recipe, or ``missing`` the pyazr call it
-    waits for; ``needs`` the package it imports; ``settings`` its :class:`Setting` rows; ``follows`` the
-    (kind, method) of the job whose best point it starts from (the page offers it beside that job's result)."""
+    """One kind of job: ``kind`` and ``method`` name it; ``run`` its function ``(tracker, x0, settings, names) ->
+    (state, message, extra)``, or ``missing`` the pyazr call it waits for; ``needs`` the package it imports;
+    ``settings`` its :class:`Setting` rows; ``follows`` the (kind, method) of the job whose best point it starts from
+    (the page offers it beside that job's result); ``facts`` what the page shows of it beside its doc (name -> value:
+    the program's switch, whether it gives a covariance, whether MINOS can follow)."""
     kind: str
     method: str
     doc: str
@@ -192,30 +262,33 @@ class JobRow:
     settings: tuple = ()
     missing: str = None
     follows: tuple = None
+    facts: tuple = ()  # (name, value) pairs
 
     def defaults(self):
         return {s.name: s.default for s in self.settings}
 
 
+MAX_CALLS_ENGINE = Setting("max_calls", "integer", None, "the most objective calls of the fit (the program's "
+                           "--max-calls; empty: no limit)")
+
+# The rows written here: the recipes on the objective, and the jobs that wait for a pyazr call.  The engine's fitters
+# are rows made from its table (engine_rows); job_rows() is the whole table.
 JOBS = (
     JobRow("fit", "iminuit_migrad", "iminuit's MIGRAD with the gradient, then HESSE (errors, covariance)",
            run=fit_iminuit_migrad, needs="iminuit",
            settings=(Setting("max_calls", "integer", None, "the most objective calls of MIGRAD (empty: iminuit's "
                              "default)"),
-                     Setting("hesse", "boolean", True, "HESSE after a valid minimum: errors and covariance"))),
+                     Setting("hesse", "boolean", True, "HESSE after a valid minimum: errors and covariance")),
+           facts=(("covariance", True), ("MINOS can follow", True))),
     JobRow("fit", "scipy_lbfgsb", "scipy's L-BFGS-B on the objective and its gradient (no errors)",
            run=fit_scipy_lbfgsb, needs="scipy",
-           settings=(Setting("max_iterations", "integer", 1000, "the most iterations of L-BFGS-B"),)),
-    JobRow("fit", "engine_migrad", "the engine's MIGRAD (the program's reference fit)",
-           missing="Session.fit_with_engine(method='migrad') with progress and stop (pyazr3.md decision 8)"),
-    JobRow("fit", "engine_lm", "the engine's Levenberg-Marquardt", missing="Session.fit_with_engine(method='lm')"),
+           settings=(Setting("max_iterations", "integer", 1000, "the most iterations of L-BFGS-B"),),
+           facts=(("covariance", False), ("MINOS can follow", False))),
     JobRow("minos", "iminuit", "iminuit's MINOS intervals from the best point of an iminuit fit",
            run=minos_iminuit, needs="iminuit", follows=("fit", "iminuit_migrad"),
            settings=(Setting("parameters", "names", [], "the parameters MINOS scans (empty: every free one)"),
                      Setting("max_calls", "integer", None, "the most objective calls of each MIGRAD and MINOS scan "
                              "(empty: iminuit's default)"))),
-    JobRow("minos", "engine", "MINOS intervals of the engine's fit",
-           missing="Session.fit_with_engine(minos=True)", follows=("fit", "engine_migrad")),
     JobRow("sample", "emcee", "the emcee sampler on the log-probability", missing="Objective.log_prob (pyazr3.md 2.6)"),
     JobRow("bands", "covariance", "uncertainty bands of a fit",
            missing="pyazr.bands on a Session and an Evaluation (pyazr3.md 2.2)"),
@@ -223,23 +296,57 @@ JOBS = (
 )
 
 
+def engine_rows(fitters):
+    """The job rows of the engine's fitter table (``pyazr.kinds()["fitters"]``: name -> row): a fit job per fitter
+    (the program's default first, then the table's order), and a MINOS job after each fitter whose row says MINOS can
+    follow it.  A new fitter of the engine is a new row here with no line of the UI changed."""
+    order = sorted(fitters, key=lambda name: fitters[name]["option"] != "")
+    fits, minos = [], []
+    for name in order:
+        f = fitters[name]
+        method = f"engine_{name}"
+        settings = (MAX_CALLS_ENGINE,)
+        if f["minos"]:
+            settings += (Setting("minos", "boolean", False, "MINOS after the fit and its HESSE: asymmetric "
+                                 "intervals of every free parameter (Up = the session's chiVariance)"),)
+        facts = (("program switch", f["option"] or "none (the program's default)"), ("covariance", f["covariance"]),
+                 ("MINOS can follow", f["minos"]), ("gradient", f["gradient"]), ("residual rows", f["residual_rows"]))
+        fits.append(JobRow("fit", method, f"the engine's {name}: {f['doc']}", settings=settings, facts=facts,
+                           run=partial(fit_engine, method=name)))
+        if f["minos"]:
+            minos.append(JobRow("minos", method, f"the engine's MINOS after its {name} (the fit from the start point, "
+                                "HESSE, MINOS on every free parameter)", settings=(MAX_CALLS_ENGINE,),
+                                follows=("fit", method), run=partial(fit_engine, method=name, minos=True)))
+    return tuple(fits), tuple(minos)
+
+
+@lru_cache(maxsize=1)
+def job_rows():
+    """The whole job table: the engine's fit rows, the rows of :data:`JOBS`, the engine's MINOS rows."""
+    import pyazr
+    fits, minos = engine_rows(pyazr.kinds()["fitters"])
+    return fits + JOBS + minos
+
+
 def job_row(kind, method):
-    for row in JOBS:
+    rows = job_rows()
+    for row in rows:
         if row.kind == kind and row.method == method:
             return row
-    known = ", ".join(f"{r.kind}/{r.method}" for r in JOBS)
-    raise NotFound(f"no job {kind}/{method} (the job table: {known})", known=[f"{r.kind}/{r.method}" for r in JOBS])
+    known = [f"{r.kind}/{r.method}" for r in rows]
+    raise NotFound(f"no job {kind}/{method} (the job table: {', '.join(known)})", known=known)
 
 
 def job_table():
     """The job table as data (GET /api/jobs/kinds)."""
     out = []
-    for r in JOBS:
+    for r in job_rows():
         available = r.missing is None and _importable(r.needs)
         settings = [{"name": x.name, "type": x.type, "default": x.default, "doc": x.doc,
                      "allowed": SETTING_TYPES[x.type][1]} for x in r.settings]
         out.append({"kind": r.kind, "method": r.method, "doc": r.doc, "settings": settings, "needs": r.needs,
-                    "available": available, "missing": r.missing, "follows": list(r.follows) if r.follows else None})
+                    "available": available, "missing": r.missing, "follows": list(r.follows) if r.follows else None,
+                    "facts": dict(r.facts)})
     return out
 
 
@@ -277,24 +384,44 @@ def write_checkpoint(path, record):
     os.replace(tmp, path)
 
 
+def plain_json(value):
+    """``value`` with every non-finite float as None (JSON has no NaN or infinity; a browser refuses them)."""
+    if isinstance(value, float):
+        return value if np.isfinite(value) else None
+    if isinstance(value, dict):
+        return {k: plain_json(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [plain_json(v) for v in value]
+    return value
+
+
+def listen_for_stop(channel, stop):
+    """Set ``stop`` when the server asks the job to stop, or closes its input (a thread of the job's worker: the
+    request is seen while the engine computes, which releases the GIL)."""
+    def listen():
+        while True:
+            message = channel.receive()
+            if message is None or message.get("op") == "stop":
+                stop.set()
+                return
+
+    threading.Thread(target=listen, name="pyazr-ui-job-stop", daemon=True).start()
+
+
 def run_job(channel):
-    """A job worker: read the job's spec, build the session, run the recipe, report, write the checkpoint."""
-    from .engine import open_objective
+    """A job worker: read the job's spec, build the session, run the row's function, report, write the checkpoint."""
+    from .engine import objective_of, open_for_job
     spec = channel.receive()
     record = {"id": spec["id"], "kind": spec["kind"], "method": spec["method"], "text_rev": spec["rev"],
               "settings": spec["settings"], "state": "building", "progress": None, "best": None, "result": None}
     checkpoint = spec["checkpoint"]
-    stop = {"asked": False}
-
-    def stop_requested():
-        if not stop["asked"] and channel.poll():
-            message = channel.receive()
-            stop["asked"] = message is None or message.get("op") == "stop"
-        return stop["asked"]
+    stop = threading.Event()
+    listen_for_stop(channel, stop)
 
     def report(message):
+        message = plain_json(message)
         channel.send(message)
-        record["progress"] = {k: message[k] for k in ("calls", "objective", "best", "elapsed")}
+        record["progress"] = {k: v for k, v in message.items() if k not in ("event", "best_x")}
         if message["best_x"] is not None:
             record["best"] = {"objective": message["best"], "x": message["best_x"]}
             write_checkpoint(checkpoint, record)
@@ -302,14 +429,14 @@ def run_job(channel):
     try:
         write_checkpoint(checkpoint, record)
         t0 = time.perf_counter()
-        fg, x0, names = open_objective(spec["session_file"], spec["cwd"])
+        session, x0, names = open_for_job(spec["session_file"], spec["cwd"])
         channel.send({"event": "built", "build_s": time.perf_counter() - t0, "names": names})
         if spec.get("x0"):
             x0 = vector_from_names(spec["x0"], names, x0)
         record["state"] = "running"
         write_checkpoint(checkpoint, record)
         row = job_row(spec["kind"], spec["method"])
-        tracker = Tracker(fg, names, report=report, stop_requested=stop_requested)
+        tracker = Tracker(objective_of(session).value_and_grad, names, report=report, stop=stop, session=session)
         try:
             status, message, extra = row.run(tracker, x0, spec["settings"], names)
         except StopRequested:
@@ -320,10 +447,13 @@ def run_job(channel):
                               "start_objective": tracker.first, "start_x": dict(zip(names, np.asarray(x0, float)
                                                                                     .tolist())),
                               "elapsed": time.perf_counter() - tracker.t0, **extra})
+        if stop.is_set():
+            record["result"]["reports_after_stop"] = tracker.after_stop
     except Exception as e:  # noqa: BLE001  -- reported as the job's failure
         classes, text, _ = describe_exception(e)
         cls = classes[0]
         record.update(state="failed", result={"status": "failed", "error": cls, "message": text})
+    record = plain_json(record)
     write_checkpoint(checkpoint, record)
     channel.send({"event": "done", "record": record})
 
@@ -445,7 +575,7 @@ class JobTable:
                         job.record["state"] = "stopping" if job.stop_asked_at else "running"
                         job.record["build_s"] = message["build_s"]
                     elif message["event"] == "call":
-                        job.record["progress"] = {k: message[k] for k in ("calls", "objective", "best", "elapsed")}
+                        job.record["progress"] = {k: v for k, v in message.items() if k not in ("event", "best_x")}
                         job.add_to_trace(message["calls"], message["objective"], message["best"])
                         if message["best_x"] is not None:
                             job.record["best"] = {"objective": message["best"], "x": message["best_x"]}

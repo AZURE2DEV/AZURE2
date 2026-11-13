@@ -41,8 +41,6 @@ SESSION_NOT_SERVED = {
         "thm_lineshape thm_vertex thm_distortion prior_covariance_residuals prior_covariance_names "
         "datasets n_rmatrix cache_stats output_dir",
     "the older name of channel_functions (served: POST /api/session/channel_functions)": "coulomb_functions",
-    "the engine's own fitters: the Fit tab's job for them is a later step (web_ui.md 12, finding 20)":
-        "fit_with_engine",
 }
 
 
@@ -283,12 +281,38 @@ def session_text(path):
     return f"session = pyazr.Session({path!r})  # the saved file; the page evaluates the working text"
 
 
-def open_objective(file, cwd):
-    """For a job: ``(value_and_grad(x) -> (f, g), x0, names of x)`` of a new session of ``file`` (its
-    :class:`pyazr.Objective`)."""
+# -- for a job's worker (pyazr/ui/jobs.py): its own session, the objective, the engine's fitters -----------------
+
+def open_for_job(file, cwd):
+    """For a job: ``(adapter, x0, names of x)`` of a new session of ``file`` (the adapter's ``s`` is the session)."""
     e = Engine()
     e.open(file, cwd)
-    return e.s.objective().value_and_grad, np.asarray(e.s.params_rwa, float), e._free_names()
+    return e, np.asarray(e.s.params_rwa, float), e._free_names()
+
+
+def objective_of(e):
+    """The session's :class:`pyazr.Objective` (``value_and_grad``, ``log_prob``, ``bounds``, ``names``)."""
+    return e.s.objective()
+
+
+def fit_with_engine(e, method, minos, x0, max_calls, progress, stop):
+    """The engine's fitter ``method`` (a row of ``pyazr.kinds()["fitters"]``) on the session from ``x0``
+    (``Session.fit_with_engine``): ``progress`` gets each progress record (a dict), ``stop`` (a threading.Event) ends
+    the fit at its best point.  Plain data: the end point by name, the objective there, the engine's status and
+    words, EDM (None where the fitter has none), calls, errors, covariance and MINOS intervals by name where the
+    fitter gives them (None otherwise), the fitter's log."""
+    r = e.s.fit_with_engine(method, minos=bool(minos), x0=np.asarray(x0, float), max_calls=max_calls,
+                            progress=progress, stop=stop)
+    names = list(r.names)
+    covariance = None if r.covariance is None else np.asarray(r.covariance, float)
+    return {"method": r.method, "x": dict(zip(names, np.asarray(r.x, float).tolist())),
+            "objective": float(r.objective), "status": r.status, "converged": bool(r.converged),
+            "edm": float(r.edm) if np.isfinite(r.edm) else None, "calls": int(r.calls), "names": names,
+            "covariance": None if covariance is None else covariance.tolist(),
+            "errors": None if r.errors is None else dict(zip(names, np.asarray(r.errors, float).tolist())),
+            "minos": {n: [float(lo), float(hi)] for n, (lo, hi) in r.minos.items()},
+            "covariance_from_hesse": bool(r.covariance_from_hesse),
+            "fell_back_to_migrad": bool(r.fell_back_to_migrad), "log": r.log}
 
 
 def _read_chi_squared(path):
