@@ -10,7 +10,7 @@ cluster. Nothing here depends on one machine; replace the scheduler commands wit
   silently, leaving the system Python. The first command of every job imports what the run needs and exits otherwise:
 
   ```csh
-  python3 -c "import sqlite3, sys; sys.path.insert(0, '$AZURE2_ROOT'); import pyazr._azure2" || exit 1
+  python3 -c "import sqlite3, sys; sys.path.insert(0, '$AZURE2_ROOT'); import pyazr; pyazr.describe()" || exit 1
   ```
 
   A login-node dry run proves nothing: login shells inherit another interpreter and other libraries (a compute node's
@@ -28,8 +28,8 @@ cluster. Nothing here depends on one machine; replace the scheduler commands wit
   assert pyazr.__file__.startswith(rmfit.AZURE2_ROOT)
   ```
 
-  Shared binaries change under you: when a result stops reproducing, check the modification time of
-  `pyazr/_azure2*.so` and of the CLI binary first.
+  Shared binaries change under you: when a result stops reproducing, check the modification time of the engine
+  module (`pyazr.describe()["engine"]["module"]`, with its git version) and of the CLI binary first.
 - **`if __name__ == "__main__": main()`** in every script that opens a `SingleSession`, `Sharded` or `Campaign`. The
   engine starts workers with multiprocessing's spawn method, which re-imports the script in each child; module-level
   code runs again there and the parent dies ("An attempt has been made to start a new process before the current
