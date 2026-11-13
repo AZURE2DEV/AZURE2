@@ -1095,6 +1095,47 @@ try:
 except (OSError, ValueError, AttributeError) as e:
     problems.append(f"check 42: {e}")
 
+# 44. The class scheme of the Developer Guide names types that exist (docs/source/developer/classes.rst, drawn from
+#     docs/source/developer/figures/classes.tsv by make_figures.py): every row's type is declared in the file the row
+#     names -- a class or struct by "class X" / "struct X" (X the last component of a qualified name), a CMake target
+#     by add_library / add_executable / pybind11_add_module of X, a package by its file -- so that a renamed or
+#     deleted type fails here until the scheme is updated.  Every arrow of arrows.tsv joins two boxes of its figure.
+_scheme_rows = []
+try:
+    _scheme_lines = [l for l in read("docs/source/developer/figures/classes.tsv").splitlines() if not l.startswith("#")]
+    _scheme_head = _scheme_lines[0].split("\t")
+    _scheme_rows = [dict(zip(_scheme_head, l.split("\t"))) for l in _scheme_lines[1:] if l.strip()]
+    for _r in _scheme_rows:
+        _where = f"docs/source/developer/figures/classes.tsv: {_r['type']} ({_r['figure']})"
+        if not os.path.isfile(os.path.join(ROOT, _r["file"])):
+            problems.append(f"{_where}: {_r['file']} does not exist (check 44)")
+            continue
+        _short = re.escape(_r["type"].split("::")[-1])
+        if _r["kind"] == "class":
+            _decl = re.compile(r"^\s*(?:template\s*<[^>]*>\s*)?(?:class|struct)\s+(?:\w+\s+)?" + _short +
+                               r"\b(?!\s*;)", re.M)
+        elif _r["kind"] == "target":
+            _decl = re.compile(r"(?:add_library|add_executable|pybind11_add_module)\s*\(\s*" + _short + r"\s")
+        elif _r["kind"] == "package":
+            continue
+        else:
+            problems.append(f"{_where}: unknown kind '{_r['kind']}' (check 44)")
+            continue
+        if not _decl.search(read(_r["file"])):
+            problems.append(f"{_where}: no declaration of {_r['type']} in {_r['file']}; update the scheme "
+                            "(classes.tsv, arrows.tsv, make_figures.py) (check 44)")
+    _scheme_boxes = {(_r["figure"], _r["type"]) for _r in _scheme_rows}
+    _arrow_lines = [l for l in read("docs/source/developer/figures/arrows.tsv").splitlines() if not l.startswith("#")]
+    _arrow_head = _arrow_lines[0].split("\t")
+    for _l in _arrow_lines[1:]:
+        _a = dict(zip(_arrow_head, _l.split("\t")))
+        for _end in (_a.get("from", ""), _a.get("to", "")):
+            if (_a.get("figure", ""), _end) not in _scheme_boxes:
+                problems.append(f"docs/source/developer/figures/arrows.tsv: {_a.get('from')} -> {_a.get('to')}: "
+                                f"{_end} is no box of the figure {_a.get('figure')} in classes.tsv (check 44)")
+except (OSError, IndexError, KeyError) as e:
+    problems.append(f"check 44: {e}")
+
 if problems:
     for p in problems:
         print("FAIL", p)
@@ -1105,4 +1146,4 @@ print(f"repository consistent: {len(flags)} CLI flags, test registration, check.
       f"no machine paths, no old data class names, no old section in the engine, reference leaves by one predicate, "
       f"the sharing key's term settings, {len(_allowed)} allowed state rows, one reader of the environment "
       f"({_getenv_files} files), {len(_table)} environment switches in the manual, {len(_rows)} physics rows tested, "
-      f"{len(_cli.COMMANDS)} pyazr commands")
+      f"{len(_cli.COMMANDS)} pyazr commands, {len(_scheme_rows)} boxes of the class scheme")

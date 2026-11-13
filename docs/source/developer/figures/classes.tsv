@@ -1,0 +1,101 @@
+# The boxes of the class scheme (docs/source/developer/classes.rst), one row per box; make_figures.py draws them.
+# Columns, tab-separated: type, file, job, figure, kind, state.
+#   type    the name as the code spells it (a namespace prefix is shown; the check looks for the last component)
+#   file    where it is declared: kind class -> "class X" / "struct X" in that file (repo_consistency check 44);
+#           kind target -> add_library / add_executable / pybind11_add_module of X in that CMakeLists.txt;
+#           kind package -> the file exists
+#   figure  libraries, setup, evaluation, inference, frontends (a type may have one row per figure)
+#   state   immutable (built at set-up, then only read), evaluation (written by every evaluation, owned by the
+#           caller), or run (neither: a run's or a session's object)
+type	file	job	figure	kind	state
+azure2_support	support/CMakeLists.txt	the environment switches and their one reader	libraries	target	run
+azure2_physics	physics/CMakeLists.txt	physics of the R-matrix: channels, Coulomb functions, level-parameter bases	libraries	target	run
+azure2_physics_transfer	physics/CMakeLists.txt	optical potentials, bound states, distorted waves, DWBA, THM vertex	libraries	target	run
+azure2_io	io/CMakeLists.txt	the project document, <config> keys, <levels> rows, record reader	libraries	target	run
+azure2_io_record	io/CMakeLists.txt	the plain record structs of format 3 (header only)	libraries	target	run
+azure2_stopping	stopping/CMakeLists.txt	stopping and straggling (SRIM-2013)	libraries	target	run
+azure2_experiment	experiment/CMakeLists.txt	the format-3 table: quantities, units, kernels, specs, frames	libraries	target	run
+azure2_experiment_reader	experiment/CMakeLists.txt	reads a format-3 project: document to validated specs	libraries	target	run
+azure2_convert_specs	convert/CMakeLists.txt	old lines as set-up specs (the converter's adaptor)	libraries	target	run
+azure2_convert	convert/CMakeLists.txt	the converter of old projects to format 3	libraries	target	run
+numcmc	numcmc/CMakeLists.txt	the affine-invariant ensemble sampler	libraries	target	run
+AZURE2Core	src/CMakeLists.txt	the engine: set-up, evaluation, objective, fits, output	libraries	target	run
+AZUREAPI	api/src/CMakeLists.txt	the engine as a session object	libraries	target	run
+AZURE2	src/CMakeLists.txt	the program (command line and menu)	libraries	target	run
+_azure2	api/src/CMakeLists.txt	the Python module (pybind11)	libraries	target	run
+pyazr	pyazr/__init__.py	the Python package	libraries	package	run
+pyazr.ui	pyazr/ui/__init__.py	the web UI's server and page	libraries	package	run
+azure2::io::Document	io/include/azure2/io/Document.h	the project file as lossless lines and sections	setup	class	immutable
+azure2::io::LevelSection	io/include/azure2/io/LevelRows.h	the <levels> rows as read	setup	class	immutable
+azure2::experiment::Format3Project	experiment/include/azure2/experiment/ProjectReader.h	the project read once: diagnostics, level tables, specs	setup	class	immutable
+azure2::experiment::BuiltProject	experiment/include/azure2/experiment/Build.h	what Schema::Build makes of the records	setup	class	immutable
+azure2::experiment::DatasetSpec	experiment/include/azure2/experiment/SetupSpecs.h	one data set as built: observable, pairs, nuisances	setup	class	immutable
+Config	include/Config.h	the run: options, paths, the project read, scratch	setup	class	run
+CNuc	include/CNuc.h	compound nuclei: pairs, J groups, levels at the vector	setup	class	evaluation
+PPair	include/PPair.h	a particle pair: masses, spins, radius, key	setup	class	immutable
+JGroup	include/JGroup.h	one J^pi group: its channels and levels	setup	class	evaluation
+AChannel	include/AChannel.h	a channel (pair, l, s) with its boundary value	setup	class	immutable
+ALevel	include/ALevel.h	a level: E and gamma at the vector, flags	setup	class	evaluation
+CNucSystem	include/CNucSystem.h	the physics System of a CNuc and its index map	setup	class	immutable
+azure2::physics::System	physics/include/azure2/physics/System.h	partitions, channels and J^pi blocks	setup	class	immutable
+azure2::PathwayTable	include/PathwayTable.h	reaction pathways and interference terms	setup	class	immutable
+DataSet	include/DataSet.h	the data as set up: segments, effects, meshes	setup	class	immutable
+Segment	include/Segment.h	one data set: measurement, settings, terms	setup	class	immutable
+TargetEffect	include/TargetEffect.h	a target, beam or detector effect and its kernels	setup	class	immutable
+WorkingCopy	include/WorkingCopy.h	what an evaluation changes; builds the DataSet	setup	class	evaluation
+WorkingCopy	include/WorkingCopy.h	points, slots, norms and shifts of one evaluation	evaluation	class	evaluation
+DataSet	include/DataSet.h	the data as set up: segments, effects, meshes	evaluation	class	immutable
+TargetEffect	include/TargetEffect.h	a target, beam or detector effect and its kernels	evaluation	class	immutable
+azure2::experiment::Kernel	experiment/include/azure2/experiment/Kernels.h	a row of the kernel table: fold and support	evaluation	class	immutable
+azure2::MeshPlan	include/MeshPlanner.h	the nodes of a nucleus's shared mesh	evaluation	class	immutable
+azure2::NodeTable	include/NodeTable.h	every compound energy the pass solves at, once	evaluation	class	immutable
+azure2::RowSet	include/RowSet.h	angular rows shared by the readers of a block	evaluation	class	immutable
+ChannelTable	include/ChannelTable.h	P, S and Coulomb phases per channel and energy	evaluation	class	immutable
+azure2::CalculationPlan	include/CalculationPlan.h	one task per point; groups units by energy	evaluation	class	evaluation
+azure2::EnergyTaskList	include/CalculationPlan.h	the energy tasks of a pass	evaluation	class	evaluation
+Unit	include/Unit.h	a data point: a Site with its datum and fold	evaluation	class	evaluation
+Site	include/Site.h	energies, angle rows, channel rows, record offset	evaluation	class	evaluation
+azure2::Results	include/Results.h	the evaluation's buffer: records, model, objective	evaluation	class	evaluation
+azure2::TaskScratch	include/TaskScratch.h	one thread's solvers and buffers	evaluation	class	evaluation
+AMatrixFunc	include/AMatrixFunc.h	level matrix, T-matrix, observables (a GenMatrixFunc)	evaluation	class	evaluation
+THMMatrixFunc	include/THMMatrixFunc.h	the HOES cross section of THM sites	evaluation	class	evaluation
+RMatrixFunc	include/RMatrixFunc.h	the channel-matrix route (a GenMatrixFunc)	evaluation	class	evaluation
+LevelMatrixSolver	include/LevelMatrixSolver.h	factorizes one J group's level matrix	evaluation	class	evaluation
+CNuc	include/CNuc.h	the level parameters at the vector	evaluation	class	evaluation
+AZURECalc	include/AZURECalc.h	Minuit's function: chi^2, gradient, least squares	inference	class	run
+WorkingData	include/WorkingData.h	a pooled working copy with its buffer	inference	class	evaluation
+CNuc	include/CNuc.h	the level parameters at the vector	inference	class	evaluation
+WorkingCopy	include/WorkingCopy.h	points, norms and shifts of one evaluation	inference	class	evaluation
+azure2::Results	include/Results.h	the evaluation's buffer: records, model, objective	inference	class	evaluation
+ObjectiveContext	include/Objective.h	what a term reads: copies, buffer, vector	inference	class	evaluation
+Objective	include/Objective.h	the ordered list of chi^2 terms	inference	class	immutable
+ObjectiveTerm	include/Objective.h	one term: data, prior, penalty, model datum	inference	class	immutable
+AZUREParams	include/AZUREParams.h	the parameter vector with a record per entry	inference	class	run
+ROOT::Minuit2::MnUserParameters	external/minuit2/inc/Minuit2/MnUserParameters.h	Minuit's parameter list	inference	class	run
+ParameterRecord	include/ParameterKind.h	what a parameter is: kind and owner	inference	class	immutable
+ParamKindRow	include/ParameterKind.h	a row of the parameter-kind table	inference	class	immutable
+ParamIndexMap	include/AZUREGrad.h	where each parameter sits, for the gradient	inference	class	evaluation
+GradAccum	include/AZUREGrad.h	the gradient in physics coordinates	inference	class	evaluation
+ParameterLimitsManager	include/ParameterLimitsManager.h	nuisance limits and priors	inference	class	run
+AZURECalcMCMC	include/AZURECalcMCMC.h	the log-probability of the sampler	inference	class	run
+nu::Mcmc	numcmc/include/numcmc/mcmc.h	the sampler's run	inference	class	run
+nu::Ensemble	numcmc/include/numcmc/ensemble.h	the walkers of the sampler	inference	class	run
+nu::Walker	numcmc/include/numcmc/walker.h	one walker: position and log-probability	inference	class	run
+AZUREMain	include/AZUREMain.h	the program's run: set-up, fit, output	frontends	class	run
+Config	include/Config.h	the run: options, paths, the project read	frontends	class	run
+CNuc	include/CNuc.h	compound nuclei and level parameters	frontends	class	evaluation
+WorkingCopy	include/WorkingCopy.h	the data of one evaluation	frontends	class	evaluation
+AZURECalc	include/AZURECalc.h	Minuit's function: chi^2, gradient	frontends	class	run
+AZUREAPI	api/include/AZUREAPI.h	the engine as a session	frontends	class	run
+Session	api/src/pybind_api.cpp	_azure2.Session: a Config and an AZUREAPI	frontends	class	run
+RuntimeOptions	api/src/pybind_api.cpp	what a session is given beyond the project	frontends	class	run
+azure2	pyazr/azure2.py	pyazr's session object	frontends	class	run
+ParameterSet	pyazr/parameters.py	the fit parameters as a table	frontends	class	run
+Project	pyazr/project.py	the project, edited with the engine's grammars	frontends	class	run
+Record	pyazr/project.py	one record of the project	frontends	class	run
+azure2::io::Document	io/include/azure2/io/Document.h	_azure2.Document: the lossless project text	frontends	class	run
+Server	pyazr/ui/server.py	the web UI's server: history, jobs, workers	frontends	class	run
+State	pyazr/ui/state.py	the open project and its edit history	frontends	class	run
+SessionWorker	pyazr/ui/workers.py	the process that holds the session	frontends	class	run
+Engine	pyazr/ui/engine.py	session operations for the routes (in the worker)	frontends	class	run
+JobTable	pyazr/ui/jobs.py	fits and samplers run as jobs	frontends	class	run

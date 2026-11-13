@@ -1,0 +1,62 @@
+digraph inference {
+  graph [rankdir=LR, fontname="Helvetica", fontsize=12, labelloc=t, label="Inference: objective, parameters, fitters, sampler", nodesep=0.25, ranksep=0.45, newrank=true];
+  node [fontname="Helvetica", fontsize=11, margin="0.08,0.04"];
+  edge [fontname="Helvetica", fontsize=9];
+  n_AZURECalc [label=<<b>AZURECalc</b><br/><font point-size="9">Minuit&#x27;s function: chi^2,<br/>gradient, least squares</font>>, shape=box, style="filled", fillcolor="white"];
+  n_WorkingData [label=<<b>WorkingData</b><br/><font point-size="9">a pooled working copy with its<br/>buffer</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_CNuc [label=<<b>CNuc</b><br/><font point-size="9">the level parameters at the<br/>vector</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_WorkingCopy [label=<<b>WorkingCopy</b><br/><font point-size="9">points, norms and shifts of one<br/>evaluation</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_azure2__Results [label=<<b>azure2::Results</b><br/><font point-size="9">the evaluation&#x27;s buffer:<br/>records, model, objective</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_ObjectiveContext [label=<<b>ObjectiveContext</b><br/><font point-size="9">what a term reads: copies,<br/>buffer, vector</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_Objective [label=<<b>Objective</b><br/><font point-size="9">the ordered list of chi^2 terms</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_ObjectiveTerm [label=<<b>ObjectiveTerm</b><br/><font point-size="9">one term: data, prior, penalty,<br/>model datum</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_AZUREParams [label=<<b>AZUREParams</b><br/><font point-size="9">the parameter vector with a<br/>record per entry</font>>, shape=box, style="filled", fillcolor="white"];
+  n_ROOT__Minuit2__MnUserParameters [label=<<b>ROOT::Minuit2::MnUserParameters</b><br/><font point-size="9">Minuit&#x27;s parameter list</font>>, shape=box, style="filled", fillcolor="white"];
+  n_ParameterRecord [label=<<b>ParameterRecord</b><br/><font point-size="9">what a parameter is: kind and<br/>owner</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_ParamKindRow [label=<<b>ParamKindRow</b><br/><font point-size="9">a row of the parameter-kind<br/>table</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_ParamIndexMap [label=<<b>ParamIndexMap</b><br/><font point-size="9">where each parameter sits, for<br/>the gradient</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_GradAccum [label=<<b>GradAccum</b><br/><font point-size="9">the gradient in physics<br/>coordinates</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_ParameterLimitsManager [label=<<b>ParameterLimitsManager</b><br/><font point-size="9">nuisance limits and priors</font>>, shape=box, style="filled", fillcolor="white"];
+  n_AZURECalcMCMC [label=<<b>AZURECalcMCMC</b><br/><font point-size="9">the log-probability of the<br/>sampler</font>>, shape=box, style="filled", fillcolor="white"];
+  n_nu__Mcmc [label=<<b>nu::Mcmc</b><br/><font point-size="9">the sampler&#x27;s run</font>>, shape=box, style="filled", fillcolor="white"];
+  n_nu__Ensemble [label=<<b>nu::Ensemble</b><br/><font point-size="9">the walkers of the sampler</font>>, shape=box, style="filled", fillcolor="white"];
+  n_nu__Walker [label=<<b>nu::Walker</b><br/><font point-size="9">one walker: position and log-<br/>probability</font>>, shape=box, style="filled", fillcolor="white"];
+  n_AZURECalc -> n_WorkingData [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_AZURECalc -> n_CNuc [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_WorkingData -> n_WorkingCopy [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_WorkingData -> n_azure2__Results [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_AZURECalc -> n_ObjectiveContext [style=dotted, penwidth=1.6, arrowhead=empty];
+  n_ObjectiveContext -> n_CNuc [style=dashed, arrowhead=vee, label=" nc"];
+  n_ObjectiveContext -> n_WorkingCopy [style=dashed, arrowhead=vee, label=" nc"];
+  n_ObjectiveContext -> n_azure2__Results [style=dashed, arrowhead=vee, label=" nc"];
+  n_Objective -> n_ObjectiveTerm [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_ObjectiveTerm -> n_ObjectiveContext [style=dashed, arrowhead=vee];
+  n_AZURECalc -> n_ParameterLimitsManager [style=dashed, arrowhead=vee, label=" nc"];
+  n_AZUREParams -> n_ROOT__Minuit2__MnUserParameters [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_AZUREParams -> n_ParameterRecord [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_ParameterRecord -> n_ParamKindRow [style=dashed, arrowhead=vee];
+  n_AZURECalc -> n_ParamIndexMap [style=dotted, penwidth=1.6, arrowhead=empty];
+  n_AZURECalc -> n_GradAccum [style=dotted, penwidth=1.6, arrowhead=empty];
+  n_AZURECalcMCMC -> n_WorkingData [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_AZURECalcMCMC -> n_CNuc [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_nu__Mcmc -> n_nu__Ensemble [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_nu__Ensemble -> n_nu__Walker [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_AZURECalc -> n_Objective [style=dashed, arrowhead=vee];
+  n_AZURECalc -> n_AZUREParams [style=dashed, arrowhead=vee, label=" nc"];
+  n_AZURECalcMCMC -> n_nu__Mcmc [style=dotted, penwidth=1.6, arrowhead=empty];
+  n_AZURECalcMCMC -> n_Objective [style=dashed, arrowhead=vee];
+  subgraph cluster_legend {
+    label="Legend"; fontsize=10; style=dashed; color="#888888";
+    node [fontname="Helvetica", fontsize=9, width=0.2, height=0.2];
+    l_imm [label="immutable after set-up", shape=box, peripheries=2, style="filled", fillcolor="white"];
+    l_ev [label="written by every evaluation", shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+    l_run [label="run or session object", shape=box, style="filled", fillcolor="white"];
+    l1 [shape=point, width=0.05]; l2 [shape=point, width=0.05]; l3 [shape=point, width=0.05];
+    l4 [shape=point, width=0.05]; l5 [shape=point, width=0.05]; l6 [shape=point, width=0.05];
+    l1 -> l2 [style=solid, dir=both, arrowtail=diamond, arrowhead=normal, label=" owns", fontsize=9, fontname="Helvetica"];
+    l3 -> l4 [style=dashed, arrowhead=vee, label=" reads (nc: not const)", fontsize=9, fontname="Helvetica"];
+    l5 -> l6 [style=dotted, penwidth=1.6, arrowhead=empty, label=" makes", fontsize=9, fontname="Helvetica"];
+    {rank=same; l_imm; l_ev; l_run;}
+    l_imm -> l1 [style=invis]; l_ev -> l3 [style=invis]; l_run -> l5 [style=invis];
+  }
+}

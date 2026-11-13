@@ -1,0 +1,56 @@
+digraph frontends {
+  graph [rankdir=LR, fontname="Helvetica", fontsize=12, labelloc=t, label="Front ends", nodesep=0.25, ranksep=0.45, newrank=true];
+  node [fontname="Helvetica", fontsize=11, margin="0.08,0.04"];
+  edge [fontname="Helvetica", fontsize=9];
+  n_AZUREMain [label=<<b>AZUREMain</b><br/><font point-size="9">the program&#x27;s run: set-up, fit,<br/>output</font>>, shape=box, style="filled", fillcolor="white"];
+  n_Config [label=<<b>Config</b><br/><font point-size="9">the run: options, paths, the<br/>project read</font>>, shape=box, style="filled", fillcolor="white"];
+  n_CNuc [label=<<b>CNuc</b><br/><font point-size="9">compound nuclei and level<br/>parameters</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_WorkingCopy [label=<<b>WorkingCopy</b><br/><font point-size="9">the data of one evaluation</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_AZURECalc [label=<<b>AZURECalc</b><br/><font point-size="9">Minuit&#x27;s function: chi^2,<br/>gradient</font>>, shape=box, style="filled", fillcolor="white"];
+  n_AZUREAPI [label=<<b>AZUREAPI</b><br/><font point-size="9">the engine as a session</font>>, shape=box, style="filled", fillcolor="white"];
+  n_Session [label=<<b>Session</b><br/><font point-size="9">_azure2.Session: a Config and an<br/>AZUREAPI</font>>, shape=box, style="filled", fillcolor="white"];
+  n_RuntimeOptions [label=<<b>RuntimeOptions</b><br/><font point-size="9">what a session is given beyond<br/>the project</font>>, shape=box, style="filled", fillcolor="white"];
+  n_azure2 [label=<<b>azure2</b><br/><font point-size="9">pyazr&#x27;s session object</font>>, shape=box, style="filled", fillcolor="white"];
+  n_ParameterSet [label=<<b>ParameterSet</b><br/><font point-size="9">the fit parameters as a table</font>>, shape=box, style="filled", fillcolor="white"];
+  n_Project [label=<<b>Project</b><br/><font point-size="9">the project, edited with the<br/>engine&#x27;s grammars</font>>, shape=box, style="filled", fillcolor="white"];
+  n_Record [label=<<b>Record</b><br/><font point-size="9">one record of the project</font>>, shape=box, style="filled", fillcolor="white"];
+  n_azure2__io__Document [label=<<b>azure2::io::Document</b><br/><font point-size="9">_azure2.Document: the lossless<br/>project text</font>>, shape=box, style="filled", fillcolor="white"];
+  n_Server [label=<<b>Server</b><br/><font point-size="9">the web UI&#x27;s server: history,<br/>jobs, workers</font>>, shape=box, style="filled", fillcolor="white"];
+  n_State [label=<<b>State</b><br/><font point-size="9">the open project and its edit<br/>history</font>>, shape=box, style="filled", fillcolor="white"];
+  n_SessionWorker [label=<<b>SessionWorker</b><br/><font point-size="9">the process that holds the<br/>session</font>>, shape=box, style="filled", fillcolor="white"];
+  n_Engine [label=<<b>Engine</b><br/><font point-size="9">session operations for the<br/>routes (in the worker)</font>>, shape=box, style="filled", fillcolor="white"];
+  n_JobTable [label=<<b>JobTable</b><br/><font point-size="9">fits and samplers run as jobs</font>>, shape=box, style="filled", fillcolor="white"];
+  n_AZUREMain -> n_Config [style=dashed, arrowhead=vee];
+  n_AZUREMain -> n_CNuc [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_AZUREMain -> n_WorkingCopy [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_AZUREMain -> n_AZURECalc [style=dotted, penwidth=1.6, arrowhead=empty];
+  n_AZUREAPI -> n_Config [style=dashed, arrowhead=vee, label=" nc"];
+  n_AZUREAPI -> n_CNuc [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_AZUREAPI -> n_WorkingCopy [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_Session -> n_Config [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_Session -> n_AZUREAPI [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_Session -> n_RuntimeOptions [style=dashed, arrowhead=vee];
+  n_azure2 -> n_Session [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_azure2 -> n_ParameterSet [style=dotted, penwidth=1.6, arrowhead=empty];
+  n_Project -> n_azure2__io__Document [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_Project -> n_Record [style=dotted, penwidth=1.6, arrowhead=empty];
+  n_State -> n_Project [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_Server -> n_State [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_Server -> n_SessionWorker [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_Server -> n_JobTable [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_Engine -> n_azure2 [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  subgraph cluster_legend {
+    label="Legend"; fontsize=10; style=dashed; color="#888888";
+    node [fontname="Helvetica", fontsize=9, width=0.2, height=0.2];
+    l_imm [label="immutable after set-up", shape=box, peripheries=2, style="filled", fillcolor="white"];
+    l_ev [label="written by every evaluation", shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+    l_run [label="run or session object", shape=box, style="filled", fillcolor="white"];
+    l1 [shape=point, width=0.05]; l2 [shape=point, width=0.05]; l3 [shape=point, width=0.05];
+    l4 [shape=point, width=0.05]; l5 [shape=point, width=0.05]; l6 [shape=point, width=0.05];
+    l1 -> l2 [style=solid, dir=both, arrowtail=diamond, arrowhead=normal, label=" owns", fontsize=9, fontname="Helvetica"];
+    l3 -> l4 [style=dashed, arrowhead=vee, label=" reads (nc: not const)", fontsize=9, fontname="Helvetica"];
+    l5 -> l6 [style=dotted, penwidth=1.6, arrowhead=empty, label=" makes", fontsize=9, fontname="Helvetica"];
+    {rank=same; l_imm; l_ev; l_run;}
+    l_imm -> l1 [style=invis]; l_ev -> l3 [style=invis]; l_run -> l5 [style=invis];
+  }
+}
