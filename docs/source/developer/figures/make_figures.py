@@ -44,7 +44,7 @@ EDGE_STYLE = {
     "links": 'style=solid, arrowhead=normal',
 }
 FONT = 'fontname="Helvetica"'
-JOB_WIDTH = 32  # characters per line of a box's job
+JOB_WIDTH = 22  # characters per line of a box's job
 # The libraries flow top to bottom (a library above the ones it links); a layer left to right (owner left of owned),
 # which keeps the figures narrow enough for the page.
 RANKDIR = {"libraries": "TB"}
@@ -63,40 +63,38 @@ def node_id(name):
 def node_label(row):
     name = html.escape(row["type"])
     job = "<br/>".join(html.escape(line) for line in textwrap.wrap(row["job"], JOB_WIDTH))
-    return f'<<b>{name}</b><br/><font point-size="9">{job}</font>>'
+    return f'<<b>{name}</b><br/><font point-size="12">{job}</font>>'
 
 
 def legend(figure):
-    """A legend cluster: the arrow kinds and box kinds the figure uses."""
-    lines = ["  subgraph cluster_legend {", '    label="Legend"; fontsize=10; style=dashed; color="#888888";',
-             f"    node [{FONT}, fontsize=9, width=0.2, height=0.2];"]
+    """The legend: one node, a table of the box and arrow kinds (a node, so that it takes no width of the layout)."""
     if figure == "libraries":
-        lines += ['    lA [shape=plaintext, label="A"]; lB [shape=plaintext, label="B"];',
-                  f'    lA -> lB [{EDGE_STYLE["links"]}, label=" A links (or imports) B", fontsize=9, {FONT}];']
-    else:
-        lines += [
-            '    l_imm [label="immutable after set-up", ' + NODE_STYLE["immutable"] + "];",
-            '    l_ev [label="written by every evaluation", ' + NODE_STYLE["evaluation"] + "];",
-            '    l_run [label="run or session object", ' + NODE_STYLE["run"] + "];",
-            '    l1 [shape=point, width=0.05]; l2 [shape=point, width=0.05]; l3 [shape=point, width=0.05];',
-            '    l4 [shape=point, width=0.05]; l5 [shape=point, width=0.05]; l6 [shape=point, width=0.05];',
-            f'    l1 -> l2 [{EDGE_STYLE["owns"]}, label=" owns", fontsize=9, {FONT}];',
-            f'    l3 -> l4 [{EDGE_STYLE["reads"]}, label=" reads (nc: not const)", fontsize=9, {FONT}];',
-            f'    l5 -> l6 [{EDGE_STYLE["makes"]}, label=" makes", fontsize=9, {FONT}];',
-            "    {rank=same; l_imm; l_ev; l_run;}",
-            "    l_imm -> l1 [style=invis]; l_ev -> l3 [style=invis]; l_run -> l5 [style=invis];",
-        ]
-    lines.append("  }")
-    return lines
+        rows = '<TR><TD ALIGN="LEFT">an arrow from A to B: A links B (CMake) or imports it (Python)</TD></TR>'
+        return [f'  legend [shape=plaintext, fontsize=11, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="2" '
+                f'COLOR="#888888"><TR><TD><B>Legend</B></TD></TR>{rows}</TABLE>>];']
+    box = '<TABLE BORDER="1" CELLBORDER="0" CELLPADDING="3" {extra}><TR><TD>{text}</TD></TR></TABLE>'
+    immutable = ('<TABLE BORDER="1" CELLBORDER="1" CELLSPACING="2" CELLPADDING="2"><TR><TD>immutable after the set-up'
+                 '</TD></TR></TABLE>')
+    evaluation = box.format(extra='STYLE="rounded" BGCOLOR="#d9d9d9"', text="written by every evaluation")
+    run = box.format(extra="", text="a run or session object")
+    arrows = [("owns", "solid line, diamond at the owner"),
+              ("reads", "dashed line; label nc: not const"),
+              ("makes", "dotted line, open head")]
+    rows = "".join(f'<TR><TD ALIGN="LEFT"><B>{k}</B></TD><TD ALIGN="LEFT">{t}</TD></TR>' for k, t in arrows)
+    table = ('<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="3" COLOR="#888888">'
+             '<TR><TD COLSPAN="2"><B>Legend</B></TD></TR>'
+             f'<TR><TD COLSPAN="2">{immutable}</TD></TR><TR><TD COLSPAN="2">{evaluation}</TD></TR>'
+             f'<TR><TD COLSPAN="2">{run}</TD></TR>{rows}</TABLE>')
+    return [f"  legend [shape=plaintext, fontsize=11, label=<{table}>];"]
 
 
 def dot_source(figure, boxes, arrows):
     rankdir = RANKDIR.get(figure, "LR")
     lines = [f"digraph {figure} {{",
-             f'  graph [rankdir={rankdir}, {FONT}, fontsize=12, labelloc=t, label="{TITLES.get(figure, figure)}", '
-             'nodesep=0.25, ranksep=0.45, newrank=true];',
-             f"  node [{FONT}, fontsize=11, margin=\"0.08,0.04\"];",
-             f"  edge [{FONT}, fontsize=9];"]
+             f'  graph [rankdir={rankdir}, {FONT}, fontsize=16, labelloc=t, label="{TITLES.get(figure, figure)}", '
+             'nodesep=0.18, ranksep=0.3, newrank=true];',
+             f"  node [{FONT}, fontsize=14, margin=\"0.08,0.04\"];",
+             f"  edge [{FONT}, fontsize=12];"]
     for row in boxes:
         lines.append(f'  {node_id(row["type"])} [label={node_label(row)}, {NODE_STYLE[row["state"]]}];')
     for a in arrows:

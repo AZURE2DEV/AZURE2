@@ -1,24 +1,24 @@
 digraph libraries {
-  graph [rankdir=TB, fontname="Helvetica", fontsize=12, labelloc=t, label="Libraries and their link lines", nodesep=0.25, ranksep=0.45, newrank=true];
-  node [fontname="Helvetica", fontsize=11, margin="0.08,0.04"];
-  edge [fontname="Helvetica", fontsize=9];
-  n_azure2_support [label=<<b>azure2_support</b><br/><font point-size="9">the environment switches and<br/>their one reader</font>>, shape=box, style="filled", fillcolor="white"];
-  n_azure2_physics [label=<<b>azure2_physics</b><br/><font point-size="9">physics of the R-matrix:<br/>channels, Coulomb functions,<br/>level-parameter bases</font>>, shape=box, style="filled", fillcolor="white"];
-  n_azure2_physics_transfer [label=<<b>azure2_physics_transfer</b><br/><font point-size="9">optical potentials, bound<br/>states, distorted waves, DWBA,<br/>THM vertex</font>>, shape=box, style="filled", fillcolor="white"];
-  n_azure2_io [label=<<b>azure2_io</b><br/><font point-size="9">the project document, &lt;config&gt;<br/>keys, &lt;levels&gt; rows, record<br/>reader</font>>, shape=box, style="filled", fillcolor="white"];
-  n_azure2_io_record [label=<<b>azure2_io_record</b><br/><font point-size="9">the plain record structs of<br/>format 3 (header only)</font>>, shape=box, style="filled", fillcolor="white"];
-  n_azure2_stopping [label=<<b>azure2_stopping</b><br/><font point-size="9">stopping and straggling<br/>(SRIM-2013)</font>>, shape=box, style="filled", fillcolor="white"];
-  n_azure2_experiment [label=<<b>azure2_experiment</b><br/><font point-size="9">the format-3 table: quantities,<br/>units, kernels, specs, frames</font>>, shape=box, style="filled", fillcolor="white"];
-  n_azure2_experiment_reader [label=<<b>azure2_experiment_reader</b><br/><font point-size="9">reads a format-3 project:<br/>document to validated specs</font>>, shape=box, style="filled", fillcolor="white"];
-  n_azure2_convert_specs [label=<<b>azure2_convert_specs</b><br/><font point-size="9">old lines as set-up specs (the<br/>converter&#x27;s adaptor)</font>>, shape=box, style="filled", fillcolor="white"];
-  n_azure2_convert [label=<<b>azure2_convert</b><br/><font point-size="9">the converter of old projects to<br/>format 3</font>>, shape=box, style="filled", fillcolor="white"];
-  n_numcmc [label=<<b>numcmc</b><br/><font point-size="9">the affine-invariant ensemble<br/>sampler</font>>, shape=box, style="filled", fillcolor="white"];
-  n_AZURE2Core [label=<<b>AZURE2Core</b><br/><font point-size="9">the engine: set-up, evaluation,<br/>objective, fits, output</font>>, shape=box, style="filled", fillcolor="white"];
-  n_AZUREAPI [label=<<b>AZUREAPI</b><br/><font point-size="9">the engine as a session object</font>>, shape=box, style="filled", fillcolor="white"];
-  n_AZURE2 [label=<<b>AZURE2</b><br/><font point-size="9">the program (command line and<br/>menu)</font>>, shape=box, style="filled", fillcolor="white"];
-  n__azure2 [label=<<b>_azure2</b><br/><font point-size="9">the Python module (pybind11)</font>>, shape=box, style="filled", fillcolor="white"];
-  n_pyazr [label=<<b>pyazr</b><br/><font point-size="9">the Python package</font>>, shape=box, style="filled", fillcolor="white"];
-  n_pyazr_ui [label=<<b>pyazr.ui</b><br/><font point-size="9">the web UI&#x27;s server and page</font>>, shape=box, style="filled", fillcolor="white"];
+  graph [rankdir=TB, fontname="Helvetica", fontsize=16, labelloc=t, label="Libraries and their link lines", nodesep=0.18, ranksep=0.3, newrank=true];
+  node [fontname="Helvetica", fontsize=14, margin="0.08,0.04"];
+  edge [fontname="Helvetica", fontsize=12];
+  n_azure2_support [label=<<b>azure2_support</b><br/><font point-size="12">the environment<br/>switches and their one<br/>reader</font>>, shape=box, style="filled", fillcolor="white"];
+  n_azure2_physics [label=<<b>azure2_physics</b><br/><font point-size="12">physics of the<br/>R-matrix: channels,<br/>Coulomb functions,<br/>level-parameter bases</font>>, shape=box, style="filled", fillcolor="white"];
+  n_azure2_physics_transfer [label=<<b>azure2_physics_transfer</b><br/><font point-size="12">optical potentials,<br/>bound states,<br/>distorted waves, DWBA,<br/>THM vertex</font>>, shape=box, style="filled", fillcolor="white"];
+  n_azure2_io [label=<<b>azure2_io</b><br/><font point-size="12">the project document,<br/>&lt;config&gt; keys,<br/>&lt;levels&gt; rows, record<br/>reader</font>>, shape=box, style="filled", fillcolor="white"];
+  n_azure2_io_record [label=<<b>azure2_io_record</b><br/><font point-size="12">the plain record<br/>structs of format 3<br/>(header only)</font>>, shape=box, style="filled", fillcolor="white"];
+  n_azure2_stopping [label=<<b>azure2_stopping</b><br/><font point-size="12">stopping and<br/>straggling (SRIM-2013)</font>>, shape=box, style="filled", fillcolor="white"];
+  n_azure2_experiment [label=<<b>azure2_experiment</b><br/><font point-size="12">the format-3 table:<br/>quantities, units,<br/>kernels, specs, frames</font>>, shape=box, style="filled", fillcolor="white"];
+  n_azure2_experiment_reader [label=<<b>azure2_experiment_reader</b><br/><font point-size="12">reads a format-3<br/>project: document to<br/>validated specs</font>>, shape=box, style="filled", fillcolor="white"];
+  n_azure2_convert_specs [label=<<b>azure2_convert_specs</b><br/><font point-size="12">old lines as set-up<br/>specs (the converter&#x27;s<br/>adaptor)</font>>, shape=box, style="filled", fillcolor="white"];
+  n_azure2_convert [label=<<b>azure2_convert</b><br/><font point-size="12">the converter of old<br/>projects to format 3</font>>, shape=box, style="filled", fillcolor="white"];
+  n_numcmc [label=<<b>numcmc</b><br/><font point-size="12">the affine-invariant<br/>ensemble sampler</font>>, shape=box, style="filled", fillcolor="white"];
+  n_AZURE2Core [label=<<b>AZURE2Core</b><br/><font point-size="12">the engine: set-up,<br/>evaluation, objective,<br/>fits, output</font>>, shape=box, style="filled", fillcolor="white"];
+  n_AZUREAPI [label=<<b>AZUREAPI</b><br/><font point-size="12">the engine as a<br/>session object</font>>, shape=box, style="filled", fillcolor="white"];
+  n_AZURE2 [label=<<b>AZURE2</b><br/><font point-size="12">the program (command<br/>line and menu)</font>>, shape=box, style="filled", fillcolor="white"];
+  n__azure2 [label=<<b>_azure2</b><br/><font point-size="12">the Python module<br/>(pybind11)</font>>, shape=box, style="filled", fillcolor="white"];
+  n_pyazr [label=<<b>pyazr</b><br/><font point-size="12">the Python package</font>>, shape=box, style="filled", fillcolor="white"];
+  n_pyazr_ui [label=<<b>pyazr.ui</b><br/><font point-size="12">the web UI&#x27;s server<br/>and page</font>>, shape=box, style="filled", fillcolor="white"];
   n_azure2_physics_transfer -> n_azure2_physics [style=solid, arrowhead=normal];
   n_azure2_stopping -> n_azure2_physics [style=solid, arrowhead=normal];
   n_azure2_stopping -> n_azure2_support [style=solid, arrowhead=normal];
@@ -48,10 +48,5 @@ digraph libraries {
   n__azure2 -> n_azure2_convert [style=solid, arrowhead=normal];
   n_pyazr -> n__azure2 [style=solid, arrowhead=normal];
   n_pyazr_ui -> n_pyazr [style=solid, arrowhead=normal];
-  subgraph cluster_legend {
-    label="Legend"; fontsize=10; style=dashed; color="#888888";
-    node [fontname="Helvetica", fontsize=9, width=0.2, height=0.2];
-    lA [shape=plaintext, label="A"]; lB [shape=plaintext, label="B"];
-    lA -> lB [style=solid, arrowhead=normal, label=" A links (or imports) B", fontsize=9, fontname="Helvetica"];
-  }
+  legend [shape=plaintext, fontsize=11, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="2" COLOR="#888888"><TR><TD><B>Legend</B></TD></TR><TR><TD ALIGN="LEFT">an arrow from A to B: A links B (CMake) or imports it (Python)</TD></TR></TABLE>>];
 }

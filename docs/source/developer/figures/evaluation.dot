@@ -1,26 +1,26 @@
 digraph evaluation {
-  graph [rankdir=LR, fontname="Helvetica", fontsize=12, labelloc=t, label="Evaluation", nodesep=0.25, ranksep=0.45, newrank=true];
-  node [fontname="Helvetica", fontsize=11, margin="0.08,0.04"];
-  edge [fontname="Helvetica", fontsize=9];
-  n_WorkingCopy [label=<<b>WorkingCopy</b><br/><font point-size="9">points, slots, norms and shifts<br/>of one evaluation</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
-  n_DataSet [label=<<b>DataSet</b><br/><font point-size="9">the data as set up: segments,<br/>effects, meshes</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
-  n_TargetEffect [label=<<b>TargetEffect</b><br/><font point-size="9">a target, beam or detector<br/>effect and its kernels</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
-  n_azure2__experiment__Kernel [label=<<b>azure2::experiment::Kernel</b><br/><font point-size="9">a row of the kernel table: fold<br/>and support</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
-  n_azure2__MeshPlan [label=<<b>azure2::MeshPlan</b><br/><font point-size="9">the nodes of a nucleus&#x27;s shared<br/>mesh</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
-  n_azure2__NodeTable [label=<<b>azure2::NodeTable</b><br/><font point-size="9">every compound energy the pass<br/>solves at, once</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
-  n_azure2__RowSet [label=<<b>azure2::RowSet</b><br/><font point-size="9">angular rows shared by the<br/>readers of a block</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
-  n_ChannelTable [label=<<b>ChannelTable</b><br/><font point-size="9">P, S and Coulomb phases per<br/>channel and energy</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
-  n_azure2__CalculationPlan [label=<<b>azure2::CalculationPlan</b><br/><font point-size="9">one task per point; groups units<br/>by energy</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
-  n_azure2__EnergyTaskList [label=<<b>azure2::EnergyTaskList</b><br/><font point-size="9">the energy tasks of a pass</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
-  n_Unit [label=<<b>Unit</b><br/><font point-size="9">a data point: a Site with its<br/>datum and fold</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
-  n_Site [label=<<b>Site</b><br/><font point-size="9">energies, angle rows, channel<br/>rows, record offset</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
-  n_azure2__Results [label=<<b>azure2::Results</b><br/><font point-size="9">the evaluation&#x27;s buffer:<br/>records, model, objective</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
-  n_azure2__TaskScratch [label=<<b>azure2::TaskScratch</b><br/><font point-size="9">one thread&#x27;s solvers and buffers</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
-  n_AMatrixFunc [label=<<b>AMatrixFunc</b><br/><font point-size="9">level matrix, T-matrix,<br/>observables (a GenMatrixFunc)</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
-  n_THMMatrixFunc [label=<<b>THMMatrixFunc</b><br/><font point-size="9">the HOES cross section of THM<br/>sites</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
-  n_RMatrixFunc [label=<<b>RMatrixFunc</b><br/><font point-size="9">the channel-matrix route (a<br/>GenMatrixFunc)</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
-  n_LevelMatrixSolver [label=<<b>LevelMatrixSolver</b><br/><font point-size="9">factorizes one J group&#x27;s level<br/>matrix</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
-  n_CNuc [label=<<b>CNuc</b><br/><font point-size="9">the level parameters at the<br/>vector</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  graph [rankdir=LR, fontname="Helvetica", fontsize=16, labelloc=t, label="Evaluation", nodesep=0.18, ranksep=0.3, newrank=true];
+  node [fontname="Helvetica", fontsize=14, margin="0.08,0.04"];
+  edge [fontname="Helvetica", fontsize=12];
+  n_WorkingCopy [label=<<b>WorkingCopy</b><br/><font point-size="12">points, slots, norms<br/>and shifts of one<br/>evaluation</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_DataSet [label=<<b>DataSet</b><br/><font point-size="12">the data as set up:<br/>segments, effects,<br/>meshes</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_TargetEffect [label=<<b>TargetEffect</b><br/><font point-size="12">a target, beam or<br/>detector effect and<br/>its kernels</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_azure2__experiment__Kernel [label=<<b>azure2::experiment::Kernel</b><br/><font point-size="12">a row of the kernel<br/>table: fold and<br/>support</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_azure2__MeshPlan [label=<<b>azure2::MeshPlan</b><br/><font point-size="12">the nodes of a<br/>nucleus&#x27;s shared mesh</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_azure2__NodeTable [label=<<b>azure2::NodeTable</b><br/><font point-size="12">every compound energy<br/>the pass solves at,<br/>once</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_azure2__RowSet [label=<<b>azure2::RowSet</b><br/><font point-size="12">angular rows shared by<br/>the readers of a block</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_ChannelTable [label=<<b>ChannelTable</b><br/><font point-size="12">P, S and Coulomb<br/>phases per channel and<br/>energy</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_azure2__CalculationPlan [label=<<b>azure2::CalculationPlan</b><br/><font point-size="12">one task per point;<br/>groups units by energy</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_azure2__EnergyTaskList [label=<<b>azure2::EnergyTaskList</b><br/><font point-size="12">the energy tasks of a<br/>pass</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_Unit [label=<<b>Unit</b><br/><font point-size="12">a data point: a Site<br/>with its datum and<br/>fold</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_Site [label=<<b>Site</b><br/><font point-size="12">energies, angle rows,<br/>channel rows, record<br/>offset</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_azure2__Results [label=<<b>azure2::Results</b><br/><font point-size="12">the evaluation&#x27;s<br/>buffer: records,<br/>model, objective</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_azure2__TaskScratch [label=<<b>azure2::TaskScratch</b><br/><font point-size="12">one thread&#x27;s solvers<br/>and buffers</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_AMatrixFunc [label=<<b>AMatrixFunc</b><br/><font point-size="12">level matrix,<br/>T-matrix, observables<br/>(a GenMatrixFunc)</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_THMMatrixFunc [label=<<b>THMMatrixFunc</b><br/><font point-size="12">the HOES cross section<br/>of THM sites</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_RMatrixFunc [label=<<b>RMatrixFunc</b><br/><font point-size="12">the channel-matrix<br/>route (a<br/>GenMatrixFunc)</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_LevelMatrixSolver [label=<<b>LevelMatrixSolver</b><br/><font point-size="12">factorizes one J<br/>group&#x27;s level matrix</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_CNuc [label=<<b>CNuc</b><br/><font point-size="12">the level parameters<br/>at the vector</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
   n_WorkingCopy -> n_DataSet [style=dashed, arrowhead=vee];
   n_DataSet -> n_TargetEffect [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_TargetEffect -> n_azure2__experiment__Kernel [style=dashed, arrowhead=vee];
@@ -39,18 +39,5 @@ digraph evaluation {
   n_AMatrixFunc -> n_CNuc [style=dashed, arrowhead=vee, label=" nc"];
   n_RMatrixFunc -> n_CNuc [style=dashed, arrowhead=vee, label=" nc"];
   n_WorkingCopy -> n_azure2__Results [style=dashed, arrowhead=vee, label=" nc"];
-  subgraph cluster_legend {
-    label="Legend"; fontsize=10; style=dashed; color="#888888";
-    node [fontname="Helvetica", fontsize=9, width=0.2, height=0.2];
-    l_imm [label="immutable after set-up", shape=box, peripheries=2, style="filled", fillcolor="white"];
-    l_ev [label="written by every evaluation", shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
-    l_run [label="run or session object", shape=box, style="filled", fillcolor="white"];
-    l1 [shape=point, width=0.05]; l2 [shape=point, width=0.05]; l3 [shape=point, width=0.05];
-    l4 [shape=point, width=0.05]; l5 [shape=point, width=0.05]; l6 [shape=point, width=0.05];
-    l1 -> l2 [style=solid, dir=both, arrowtail=diamond, arrowhead=normal, label=" owns", fontsize=9, fontname="Helvetica"];
-    l3 -> l4 [style=dashed, arrowhead=vee, label=" reads (nc: not const)", fontsize=9, fontname="Helvetica"];
-    l5 -> l6 [style=dotted, penwidth=1.6, arrowhead=empty, label=" makes", fontsize=9, fontname="Helvetica"];
-    {rank=same; l_imm; l_ev; l_run;}
-    l_imm -> l1 [style=invis]; l_ev -> l3 [style=invis]; l_run -> l5 [style=invis];
-  }
+  legend [shape=plaintext, fontsize=11, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="3" COLOR="#888888"><TR><TD COLSPAN="2"><B>Legend</B></TD></TR><TR><TD COLSPAN="2"><TABLE BORDER="1" CELLBORDER="1" CELLSPACING="2" CELLPADDING="2"><TR><TD>immutable after the set-up</TD></TR></TABLE></TD></TR><TR><TD COLSPAN="2"><TABLE BORDER="1" CELLBORDER="0" CELLPADDING="3" STYLE="rounded" BGCOLOR="#d9d9d9"><TR><TD>written by every evaluation</TD></TR></TABLE></TD></TR><TR><TD COLSPAN="2"><TABLE BORDER="1" CELLBORDER="0" CELLPADDING="3" ><TR><TD>a run or session object</TD></TR></TABLE></TD></TR><TR><TD ALIGN="LEFT"><B>owns</B></TD><TD ALIGN="LEFT">solid line, diamond at the owner</TD></TR><TR><TD ALIGN="LEFT"><B>reads</B></TD><TD ALIGN="LEFT">dashed line; label nc: not const</TD></TR><TR><TD ALIGN="LEFT"><B>makes</B></TD><TD ALIGN="LEFT">dotted line, open head</TD></TR></TABLE>>];
 }

@@ -1,25 +1,25 @@
 digraph setup {
-  graph [rankdir=LR, fontname="Helvetica", fontsize=12, labelloc=t, label="Project and set-up", nodesep=0.25, ranksep=0.45, newrank=true];
-  node [fontname="Helvetica", fontsize=11, margin="0.08,0.04"];
-  edge [fontname="Helvetica", fontsize=9];
-  n_azure2__io__Document [label=<<b>azure2::io::Document</b><br/><font point-size="9">the project file as lossless<br/>lines and sections</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
-  n_azure2__io__LevelSection [label=<<b>azure2::io::LevelSection</b><br/><font point-size="9">the &lt;levels&gt; rows as read</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
-  n_azure2__experiment__Format3Project [label=<<b>azure2::experiment::Format3Project</b><br/><font point-size="9">the project read once:<br/>diagnostics, level tables, specs</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
-  n_azure2__experiment__BuiltProject [label=<<b>azure2::experiment::BuiltProject</b><br/><font point-size="9">what Schema::Build makes of the<br/>records</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
-  n_azure2__experiment__DatasetSpec [label=<<b>azure2::experiment::DatasetSpec</b><br/><font point-size="9">one data set as built:<br/>observable, pairs, nuisances</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
-  n_Config [label=<<b>Config</b><br/><font point-size="9">the run: options, paths, the<br/>project read, scratch</font>>, shape=box, style="filled", fillcolor="white"];
-  n_CNuc [label=<<b>CNuc</b><br/><font point-size="9">compound nuclei: pairs, J<br/>groups, levels at the vector</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
-  n_PPair [label=<<b>PPair</b><br/><font point-size="9">a particle pair: masses, spins,<br/>radius, key</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
-  n_JGroup [label=<<b>JGroup</b><br/><font point-size="9">one J^pi group: its channels and<br/>levels</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
-  n_AChannel [label=<<b>AChannel</b><br/><font point-size="9">a channel (pair, l, s) with its<br/>boundary value</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
-  n_ALevel [label=<<b>ALevel</b><br/><font point-size="9">a level: E and gamma at the<br/>vector, flags</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
-  n_CNucSystem [label=<<b>CNucSystem</b><br/><font point-size="9">the physics System of a CNuc and<br/>its index map</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
-  n_azure2__physics__System [label=<<b>azure2::physics::System</b><br/><font point-size="9">partitions, channels and J^pi<br/>blocks</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
-  n_azure2__PathwayTable [label=<<b>azure2::PathwayTable</b><br/><font point-size="9">reaction pathways and<br/>interference terms</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
-  n_DataSet [label=<<b>DataSet</b><br/><font point-size="9">the data as set up: segments,<br/>effects, meshes</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
-  n_Segment [label=<<b>Segment</b><br/><font point-size="9">one data set: measurement,<br/>settings, terms</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
-  n_TargetEffect [label=<<b>TargetEffect</b><br/><font point-size="9">a target, beam or detector<br/>effect and its kernels</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
-  n_WorkingCopy [label=<<b>WorkingCopy</b><br/><font point-size="9">what an evaluation changes;<br/>builds the DataSet</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  graph [rankdir=LR, fontname="Helvetica", fontsize=16, labelloc=t, label="Project and set-up", nodesep=0.18, ranksep=0.3, newrank=true];
+  node [fontname="Helvetica", fontsize=14, margin="0.08,0.04"];
+  edge [fontname="Helvetica", fontsize=12];
+  n_azure2__io__Document [label=<<b>azure2::io::Document</b><br/><font point-size="12">the project file as<br/>lossless lines and<br/>sections</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_azure2__io__LevelSection [label=<<b>azure2::io::LevelSection</b><br/><font point-size="12">the &lt;levels&gt; rows as<br/>read</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_azure2__experiment__Format3Project [label=<<b>azure2::experiment::Format3Project</b><br/><font point-size="12">the project read once:<br/>diagnostics, level<br/>tables, specs</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_azure2__experiment__BuiltProject [label=<<b>azure2::experiment::BuiltProject</b><br/><font point-size="12">what Schema::Build<br/>makes of the records</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_azure2__experiment__DatasetSpec [label=<<b>azure2::experiment::DatasetSpec</b><br/><font point-size="12">one data set as built:<br/>observable, pairs,<br/>nuisances</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_Config [label=<<b>Config</b><br/><font point-size="12">the run: options,<br/>paths, the project<br/>read, scratch</font>>, shape=box, style="filled", fillcolor="white"];
+  n_CNuc [label=<<b>CNuc</b><br/><font point-size="12">compound nuclei:<br/>pairs, J groups,<br/>levels at the vector</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_PPair [label=<<b>PPair</b><br/><font point-size="12">a particle pair:<br/>masses, spins, radius,<br/>key</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_JGroup [label=<<b>JGroup</b><br/><font point-size="12">one J^pi group: its<br/>channels and levels</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_AChannel [label=<<b>AChannel</b><br/><font point-size="12">a channel (pair, l, s)<br/>with its boundary<br/>value</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_ALevel [label=<<b>ALevel</b><br/><font point-size="12">a level: E and gamma<br/>at the vector, flags</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_CNucSystem [label=<<b>CNucSystem</b><br/><font point-size="12">the physics System of<br/>a CNuc and its index<br/>map</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_azure2__physics__System [label=<<b>azure2::physics::System</b><br/><font point-size="12">partitions, channels<br/>and J^pi blocks</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_azure2__PathwayTable [label=<<b>azure2::PathwayTable</b><br/><font point-size="12">reaction pathways and<br/>interference terms</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_DataSet [label=<<b>DataSet</b><br/><font point-size="12">the data as set up:<br/>segments, effects,<br/>meshes</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_Segment [label=<<b>Segment</b><br/><font point-size="12">one data set:<br/>measurement, settings,<br/>terms</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_TargetEffect [label=<<b>TargetEffect</b><br/><font point-size="12">a target, beam or<br/>detector effect and<br/>its kernels</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
+  n_WorkingCopy [label=<<b>WorkingCopy</b><br/><font point-size="12">what an evaluation<br/>changes; builds the<br/>DataSet</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
   n_Config -> n_azure2__io__Document [style=dotted, penwidth=1.6, arrowhead=empty];
   n_Config -> n_azure2__experiment__Format3Project [style=dotted, penwidth=1.6, arrowhead=empty];
   n_azure2__experiment__Format3Project -> n_azure2__io__LevelSection [style=dashed, arrowhead=vee];
@@ -39,18 +39,5 @@ digraph setup {
   n_WorkingCopy -> n_DataSet [style=dashed, arrowhead=vee];
   n_DataSet -> n_Segment [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_DataSet -> n_TargetEffect [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
-  subgraph cluster_legend {
-    label="Legend"; fontsize=10; style=dashed; color="#888888";
-    node [fontname="Helvetica", fontsize=9, width=0.2, height=0.2];
-    l_imm [label="immutable after set-up", shape=box, peripheries=2, style="filled", fillcolor="white"];
-    l_ev [label="written by every evaluation", shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
-    l_run [label="run or session object", shape=box, style="filled", fillcolor="white"];
-    l1 [shape=point, width=0.05]; l2 [shape=point, width=0.05]; l3 [shape=point, width=0.05];
-    l4 [shape=point, width=0.05]; l5 [shape=point, width=0.05]; l6 [shape=point, width=0.05];
-    l1 -> l2 [style=solid, dir=both, arrowtail=diamond, arrowhead=normal, label=" owns", fontsize=9, fontname="Helvetica"];
-    l3 -> l4 [style=dashed, arrowhead=vee, label=" reads (nc: not const)", fontsize=9, fontname="Helvetica"];
-    l5 -> l6 [style=dotted, penwidth=1.6, arrowhead=empty, label=" makes", fontsize=9, fontname="Helvetica"];
-    {rank=same; l_imm; l_ev; l_run;}
-    l_imm -> l1 [style=invis]; l_ev -> l3 [style=invis]; l_run -> l5 [style=invis];
-  }
+  legend [shape=plaintext, fontsize=11, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="3" COLOR="#888888"><TR><TD COLSPAN="2"><B>Legend</B></TD></TR><TR><TD COLSPAN="2"><TABLE BORDER="1" CELLBORDER="1" CELLSPACING="2" CELLPADDING="2"><TR><TD>immutable after the set-up</TD></TR></TABLE></TD></TR><TR><TD COLSPAN="2"><TABLE BORDER="1" CELLBORDER="0" CELLPADDING="3" STYLE="rounded" BGCOLOR="#d9d9d9"><TR><TD>written by every evaluation</TD></TR></TABLE></TD></TR><TR><TD COLSPAN="2"><TABLE BORDER="1" CELLBORDER="0" CELLPADDING="3" ><TR><TD>a run or session object</TD></TR></TABLE></TD></TR><TR><TD ALIGN="LEFT"><B>owns</B></TD><TD ALIGN="LEFT">solid line, diamond at the owner</TD></TR><TR><TD ALIGN="LEFT"><B>reads</B></TD><TD ALIGN="LEFT">dashed line; label nc: not const</TD></TR><TR><TD ALIGN="LEFT"><B>makes</B></TD><TD ALIGN="LEFT">dotted line, open head</TD></TR></TABLE>>];
 }
