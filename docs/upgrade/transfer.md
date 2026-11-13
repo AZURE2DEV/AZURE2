@@ -7,8 +7,7 @@ of two clusters, distorted waves with spin 0, ½ and 1, the transfer A(a, s)F of
 a bound state of F in zero range and in finite range (post form), and the plane-wave limit of the THM entrance
 vertex (part 1, §2–§10); the scattering states and continuum bins of x + A, the transfer to them, the narrow-bin limit,
 the interior part against the level function, and the prior form with the remnants (part 2, §14–§18). Every part is
-compared with a closed form or with FRESCO 3.5 (§9, §18). Nothing of the engine uses the library yet; the wiring is
-§12.
+compared with a closed form or with FRESCO 3.5 (§9, §18). The engine's THM observable calls it (§24).
 
 Units: MeV, fm, mb/sr; c.m. frame of the pair named; masses in u (×931.49410242 MeV, `physics/Constants.h`).
 Kinematics are non-relativistic, as FRESCO's default. The equations below are derived in this note from the
@@ -773,3 +772,101 @@ test. dσ/dΩ in mb/sr at 0, 30, 60, 90°:
   remaining ≈ 1 % at 90° is not attributed. Asked 1 %: not shown.
 - Not done: a narrow-resonance ⁶Li bin with Frescox (the same ERWIN loss would apply), and a bin whose envelope has a
   node at RSP (as for the deuteron bins of §15), which would remove the first-order step error of both codes.
+
+## 24. The engine's THM observable on this library
+
+The THM observable of the engine (`THM.md`, `docs/source/theory/thm_implementation.rst`) had its own distorted waves:
+`src/ThmDistortion.cpp` (complex Numerov, matching to the Coulomb functions, the partial-wave sum of the zero-range
+weight M(E)), `src/ThmDwVertex.cpp` (the distorted-wave surface vertex, a 2D quadrature over the same waves) and
+`src/ThmOptical.cpp` (seven global optical sets as code). This section says what each quantity now comes from.
+
+### 24.1 The distortion factor R(E)
+
+| Quantity of `ThmDistortion` | From |
+|---|---|
+| a channel's potential: the ten numbers V,R,a,W,RW,aW,WD,RD,aD,RC | an `OpticalPotential` with `RadiusConvention::Absolute`, `coulomb_r0_fm` = RC (uniform sphere; 0 a point charge), the pair's charges in `ChannelKinematics` |
+| a global set (`opticalAA=<name>`) | `GlobalOpticalSets()[i].at(Z_p, A_p, Z_t, A_t, E_lab)` (`GlobalOptical.h`, §24.4), at E_aA once and at E_sF(E) per energy |
+| `distortion=coulomb`, `opticalXX=coulomb` | the same with no term (`NoPotential()`): point Coulomb |
+| `opticalXX=plane` | `PlaneWaves(request)`: u_l = F_l(0, kr) = kr j_l(kr) exactly, S = 1 (new) |
+| the waves u_l^aA(βr), u_l^sF(r) | `TabulateChannel(potential, request)` once per channel and energy, then `SolvePartialWave(channel, l, 2j, matching, stored nodes)` per l (new; `SolveDistortedWaves` is the same two calls with its matching at the last node) |
+| φ_sx = W_{−η,½}(2κr)/r or e^{−κr}/r, zero below `rmin` | `AnalyticTail(Whittaker or Yukawa, request, 1, r_min)` → `RadialOverlapOf`; the overlap carries r_min and the radial integrals start at that node (new) |
+| M(E) at one direction or at the nodes of a window | `ZeroRangeWeightSum(overlap, entrance, exit channel, directions, request)` (new): Eq. (6.7) with c_i = β, c_f = 1, l = 0, summed over l with P_l(x) (no Clebsch–Gordan table, so no j ≤ 40 limit; the ³He case needs l = 80), stopped by the bound on the terms left; M = √(4π) O_0 |
+| the a + A side of the sum, once per stage | `PrepareZeroRangeEntrance(overlap, entrance channel, request)` (new): the waves on the overlap's grid and the bound Σ_{l' ≥ l} (2l'+1) ∫ |φ u_l'^aA| |
+| M_PW(q) = 4π ∫ r² j_0(qr) φ dr | `ZeroRangeMomentumAmplitude(overlap, q)` (new) |
+
+What the engine keeps, because it is the THM observable's and not a reaction code's: the three-body kinematics
+(E_aA, E_sF = E_aA − B − E, k_sF, k_aA, the spectator direction and x = cos(k_sF, k_aA), q = |k_sF − βk_aA|, the
+windows of directions and their weights, `AngleNodes`), the reference energy and the ratio ρ = |M|²/|M_PW|² or |M|²,
+the grid of ln R on 10 keV and its cubic interpolation, the choice of the radial step and of the end of the
+integrals (below), the messages. The tables (the a + A side, the grid of ln R) are members of the `ThmDistortion`
+the THM stage builds and owns, as before; the library holds no state (every function returns a value).
+
+What the library lacked, and gains with its own tests: the plane-wave channel; the solution of one partial wave at
+a time on a tabulated potential with the matching beyond its turning point (the engine's sum stops at an l it does
+not know in advance, and a wave matched inside its barrier is normalised wrongly by the rounding of S); the start of
+the radial integrals at r_min; the bound on the partial-wave sum; the sum for l = 0 without the Clebsch–Gordan limit;
+the third term of the series start of the outward Numerov (a_3; the engine had it) and a start that does not underflow
+at l ≈ 150 (r^{l+1} at r = h). The Yukawa tail and the uniform-sphere radius RC were there (`AnalyticTail`,
+`coulomb_r0_fm`).
+
+### 24.2 The distorted-wave vertex
+
+The engine's vertex of entrance channel l is the surface term at r = a of the source
+S(r) = ∫ d³u φ(u) χ⁽⁻⁾*_sF(αr + u) χ⁽⁺⁾_aA(r + βu): V_lm(B) = (B − 1) S_lm(a) − a S′_lm(a), S_lm = ∫ dΩ Y*_lm S,
+normalised by 4π φ̃(q), and its square summed over m is a 2 × 2 Gram matrix in (S_lm(a), a S′_lm(a)) that the
+HOES model contracts with c = (B − 1, −1) for any complex boundary value B. The library's `EntranceVertex(level, w,
+w′(a), ε, B)` (§8) with w(r) = r S_lm(r) has the surface term
+
+```
+(ħ²/2μ) u(a) [B w(a)/a − w′(a)] = (ħ²/2μ) u(a) [(B − 1) S_lm(a) − a S′_lm(a)] = (ħ²/2μ) u(a) V_lm(B),          (24.1)
+```
+
+so the bracket is the same; in the plane-wave limit S = φ̃(q) e^{ip·r}, S_lm = 4π i^l j_l(pr) Y*_lm(p̂) φ̃(q), and
+V_lm/(4π φ̃) = i^l Y*_lm(p̂) M_l(p) with M_l of (8.3) (`PlaneWaveSurfaceVertex`): the normalisation by 4π φ̃(q) and the
+factor i^l are exact. The couplings are in the same order (exit wave first: ⟨L_s M L_a −M|l 0⟩ of the engine's h,
+⟨l_f M l_i 0|L M⟩ of (6.4)). But the mapping onto `EntranceVertex` is not exact:
+
+- `EntranceVertex` returns the volume integral (8.1) and its split (8.2) into surface and interior terms, which holds
+  only for a w that solves the free equation at ε. The distorted source does not (its equation has the distorting
+  potentials; ThmVertex.h: "(8.2) gains the term of the distorting potential", not implemented), so its `volume` and
+  `interior` are not a vertex of the distorted source. The engine uses the surface bracket alone (`vertexModel=dw` is
+  the counterpart of `coulombIntegral=0`: the interior is the R matrix's, the remnant outside a is not computed),
+  for any B, without a level function, which `EntranceVertex` needs.
+- No function of the library yields S_lm(a) and S′_lm(a). `TransferKernel` integrates the source against a residual
+  overlap over r (Eq. (6.4)); the source at fixed r = a is a different reduction (the engine's 2D quadrature in
+  (u, cos θ_u) of h^l_{L_s L_a}(a), §"Numerics" of `src/ThmDwVertex.cpp`).
+
+So the vertex stays with the engine's quadrature on this branch; what moves is its waves (24.1's table: the same
+`TabulateChannel`/`SolvePartialWave` and `PlaneWaves`, at the vertex's own steps and ranges). The next step is a
+public `SurfaceSourceProjection(φ, entrance, exit, α, β, a, l)` in the library returning S_lm(a) and a S′_lm(a)
+(the quadrature moved, with a test against `EntranceVertex`'s surface term in the plane-wave limit); the Gram matrix,
+its factorisation and the energy grid stay with the engine (they serve the HOES model's B).
+
+### 24.3 Grid and accuracy
+
+Named fields of `ZeroRangeWeightRequest` (`ZeroRange.h`), with the values that reproduce the engine's numbers:
+
+| Field | Value | Meaning |
+|---|---|---|
+| `step_fm` | the engine's h: 0.02 fm, or less so that k_local h ≤ 0.1 in both channels (β h for a + A) and h ≤ 0.2/κ; snapped so that r_min is a node | the overlap's grid; the exit waves on it, the entrance waves on β h |
+| `end_fm` | r_min + 50/κ, an even number of steps after r_min | the last node of the radial integrals |
+| `matching_quarter_wavelengths`, `matching_min_fm` | 2, 1 fm | a wave is matched at max(stored range, potential range, turning point) + max(2 × quarter wavelength, 1 fm) and a quarter wavelength (≥ 2 steps) inside |
+| `potential_range` | R + 12 a of the largest term, and RC | beyond it the potential is point Coulomb (terms below e^{−12}) |
+| `entrance_cut` | 1e-17 | entrance waves until (2l+1) ∫ |φ u_l| falls below this times its largest value |
+| `sum_tolerance` | 1e-13 | the sum stops once the bound on the terms left is below this times the smallest |sum| |
+| `extra_partial_waves` | 0 | terms added after the stop (a refinement) |
+| `l_cap`, `max_megabytes` | 400, 512 | refusals |
+
+The effect of refining each by two on the cases of `tests/reference/thm_distortion_test.cpp` and of the waves of
+`thm_dw_vertex_test.cpp` is in §24.5 (recorded after the wiring).
+
+### 24.4 The global optical sets
+
+`GlobalOptical.h`: one table, one row per set (name, projectiles, the light ions as (Z, A), reference, target mass and
+lab-energy range, the function of (Z_p, A_p, Z_t, A_t, E_lab) returning an `OpticalPotential` with R = r0 A_t^{1/3}).
+The seven sets of the engine moved, with their numbers: ancai06, daehnick80, kd03, bg71, liang09, mcfadden66,
+avrigeanu94. Central terms only (the THM weight is spinless); a row gains its spin-orbit term with its primary source
+or an independent code's table in front of the author, and a test. Test:
+`physics/tests/transfer_global_optical_test.cpp` (the values of `tests/reference/thm_optical_reference.py`: RIPL-3 and FRONT21). The engine maps `opticalAA=<name>`
+and `:extrapolate` onto the table (`ThmExperiment.cpp`, `ThmDistortion.cpp`); the ten numbers in its reports are
+`RadiusOf` of the row's radii.
