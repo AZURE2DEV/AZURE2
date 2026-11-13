@@ -93,7 +93,7 @@ RuntimeOptions	api/src/pybind_api.cpp	what a session is given beyond the project
 pyazr::Session	pyazr/session.py	pyazr's session: one project set up by the engine	frontends	class	run
 pyazr::Objective	pyazr/objective.py	the fit's objective as a callable	frontends	class	run
 pyazr::Evaluation	pyazr/evaluate.py	the numbers at one x (copies)	frontends	class	run
-ParameterSet	pyazr/parameters.py	the fit parameters as a table	frontends	class	run
+Parameters	pyazr/parameters.py	the fit parameters as a table	frontends	class	run
 Project	pyazr/project.py	the project, edited with the engine's grammars	frontends	class	run
 Record	pyazr/project.py	one record of the project	frontends	class	run
 azure2::io::Document	io/include/azure2/io/Document.h	_azure2.Document: the lossless project text	frontends	class	run

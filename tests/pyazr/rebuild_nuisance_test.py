@@ -42,17 +42,17 @@ def main():
                                       "<parameterSettings>\nLevel 1 Channel 3 Width (eV) 80000 0 0 5000 0 1 level 0\n")
         open(p, "w").write(text)
         with Session(p, cwd=d) as m:
-            x = np.array(m.params_rwa, float)
+            x = np.array(m.parameters.x0, float)
             m.objective().value_and_grad(x)
             check("the nuisance prior is 1 at the start", abs(m.evaluate(x).terms["nuisance priors"] - 1.0) < 1e-9,
                   m.evaluate(x).terms["nuisance priors"])
             m.set_channel_radius(1, 5.0)
-            x = np.array(m.params_rwa, float)
+            x = np.array(m.parameters.x0, float)
             o_a, g_a = m.objective().value_and_grad(x)
             n_a = m.evaluate(x).terms["nuisance priors"]
         with Session(p, cwd=d) as m:
             m.set_channel_radius(1, 5.0)
-            x = np.array(m.params_rwa, float)
+            x = np.array(m.parameters.x0, float)
             o_b, g_b = m.objective().value_and_grad(x)
             n_b = m.evaluate(x).terms["nuisance priors"]
         check("after the rebuild: the nuisance term of a fresh session", n_a == n_b, (n_a, n_b))

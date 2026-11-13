@@ -15,7 +15,7 @@ Coulomb functions to ~1e-8 (physics_hybrid_potential), and this test asks for 1e
 
 Model: tests/hybrid_potential/hybrid_potential.azr (p + 12C, pair 1) with its <potentials> section
 replaced: once empty (no potential), once one record for p + 12C, a Woods-Saxon of depth 1e-9 MeV.  Compared through
-`Session.coulomb_functions` at l = 0..3, 0.3-4 MeV, at the channel radius and at an off-node radius.
+`Session.channel_functions` at l = 0..3, 0.3-4 MeV, at the channel radius and at an off-node radius.
 
 Needs the compiled engine; skips cleanly without it.
 
@@ -69,8 +69,8 @@ try:
     worst_s = worst_p = 0.0
     for L in (0, 1, 2, 3):
         for radius, label in ((0.0, "channel radius"), (5.4321, "5.4321 fm")):
-            a = plain.coulomb_functions(1, energies, L=L, radius=radius)
-            b = tiny.coulomb_functions(1, energies, L=L, radius=radius)
+            a = plain.channel_functions(1, energies, l=L, radius=radius)
+            b = tiny.channel_functions(1, energies, l=L, radius=radius)
             ds = float(np.max(np.abs(b["S"] - a["S"])))
             dp = float(np.max(np.abs(b["P"] / a["P"] - 1.0)))
             worst_s = max(worst_s, ds)
@@ -79,8 +79,8 @@ try:
                   ds <= 1e-6, f"max |dS| {ds:.2e} > 1e-6")
             check(f"l = {L}, {label}: P agrees to 1e-6 (max rel {dp:.1e})", dp <= 1e-6, f"max rel {dp:.2e}")
     # not vacuous: the hybrid path really ran (its values are not bit-identical to the plain ones)
-    a = plain.coulomb_functions(1, energies, L=0)
-    b = tiny.coulomb_functions(1, energies, L=0)
+    a = plain.channel_functions(1, energies, l=0)
+    b = tiny.channel_functions(1, energies, l=0)
     check("the hybrid path ran (values differ from the plain ones at the 1e-6 level)",
           0.0 < float(np.max(np.abs(b["G"] / a["G"] - 1.0))) < 1e-3)
     print(f"worst: |dS| {worst_s:.2e}, P rel {worst_p:.2e}")

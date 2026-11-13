@@ -7,8 +7,10 @@ binding held back (``_azure2.Session.take_notices``, ``api/src/pybind_notices.cp
 import os
 import warnings
 
-from .errors import (AZURE2Error, DomainError, EngineWarning, MissingFile, ParameterIndexError, SessionClosed,
-                     listed)
+import numpy as np
+
+from .errors import (AZURE2Error, DomainError, EngineWarning, MissingFile, ParameterIndexError, ParameterVectorError,
+                     SessionClosed, listed)
 
 
 def session_closed(project_file, caller):
@@ -27,11 +29,13 @@ def missing_directory(cwd, project_file):
                             f"file's own ({os.path.dirname(project_file)}).")
 
 
-def missing_parameter_file(path, call):
-    """The error of a parameter file (``param.sav``) that a call updates and that does not exist."""
-    return MissingFile(path, f"{call}: {path} does not exist; this call updates the rows of an existing param.sav "
-                             f"(the program's fit writes one).  Session.save_fit(path) writes a project and its .sav "
-                             f"from a free vector without one.")
+def fit_vector(x, n, call):
+    """``x`` as a flat float array, checked to have the ``n`` entries of the session's fit vector."""
+    x = np.asarray(x, float).ravel()
+    if x.size != n:
+        raise ParameterVectorError(f"{call}: x has {x.size} entries; the fit vector has {n} (Session.parameters.x0 is "
+                                   f"one, Session.parameters.free names its entries).")
+    return x
 
 
 def snapshot_mismatch(what, got, want, rtol):
@@ -46,7 +50,7 @@ def snapshot_mismatch(what, got, want, rtol):
 
 
 def channel_request(pairs, pair, L):
-    """``(pair key, L)`` of a request of channel functions (:meth:`pyazr.Session.coulomb_functions`), checked:
+    """``(pair key, L)`` of a request of channel functions (:meth:`pyazr.Session.channel_functions`), checked:
     :class:`~pyazr.ParameterIndexError` for a pair key the model does not have (an ``IndexError`` came from numpy
     before), :class:`~pyazr.DomainError` for a photon pair or an L that is not a whole number >= 0 (zeros came back
     before)."""
@@ -57,12 +61,12 @@ def channel_request(pairs, pair, L):
         key = None
     if key is None or key != pair or key not in known:
         raise ParameterIndexError(
-            f"coulomb_functions: pair {pair!r} is not a pair key of this model; its pairs are "
+            f"channel_functions: pair {pair!r} is not a pair key of this model; its pairs are "
             f"{listed([f'{k} ({q.label})' for k, q in known.items()])}; Session.pairs lists them (Pair.key).")
     if known[key].is_photon:
         particles = [f"{k} ({q.label})" for k, q in known.items() if not q.is_photon]
         raise DomainError(
-            f"coulomb_functions: pair {key} ({known[key].label}) is a photon pair, which has no Coulomb functions "
+            f"channel_functions: pair {key} ({known[key].label}) is a photon pair, which has no Coulomb functions "
             f"(they were returned as zeros before); the particle pairs are {listed(particles)} "
             f"(Session.pairs.particles).")
     try:
@@ -71,8 +75,8 @@ def channel_request(pairs, pair, L):
         whole = False
     if not whole:
         raise DomainError(
-            f"coulomb_functions: L = {L!r} is not an orbital angular momentum; L must be a whole number >= 0 (the "
-            f"result was all zeros before).  The channels of a pair: Session.parameters.widths (Parameter.L).")
+            f"channel_functions: L = {L!r} is not an orbital angular momentum; L must be a whole number >= 0.  The "
+            f"channels of a pair: Session.parameters.of_kind('width') (Parameter.L).")
     return key, int(L)
 
 

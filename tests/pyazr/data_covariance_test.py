@@ -97,7 +97,7 @@ if have_engine:
         for model in ("plain", "diag"):
             azr, d = project(work, model)
             with Session(azr, cwd=d) as mdl:
-                x0 = np.asarray(mdl.params_rwa, float)
+                x0 = np.asarray(mdl.parameters.x0, float)
                 chi[model] = (mdl.evaluate(x0).chi2, np.asarray(np.array([d.chi2 for d in mdl.evaluate(x0).data]), float))
         check("diag(e^2) covariance: chi2 = no covariance",
               abs(chi["diag"][0] - chi["plain"][0]) < 1e-9 * chi["plain"][0], (chi["diag"][0], chi["plain"][0]))
@@ -105,7 +105,7 @@ if have_engine:
 
         azr, d = project(work, "dense")
         with Session(azr, cwd=d) as mdl:
-            x0 = np.asarray(mdl.params_rwa, float)
+            x0 = np.asarray(mdl.parameters.x0, float)
             ev0 = mdl.evaluate(x0)
             c0 = ev0.chi2
             w, J = mdl.objective().residuals_and_jacobian(x0)
@@ -140,7 +140,7 @@ if have_engine:
 
         azr, d = project(work, "rel")
         with Session(azr, cwd=d) as mdl:
-            x0 = np.asarray(mdl.params_rwa, float)
+            x0 = np.asarray(mdl.parameters.x0, float)
             c0 = mdl.evaluate(x0).chi2            # freezes m at x0
             g0 = np.asarray(mdl.objective().value_and_grad(x0)[1], float)
             x1 = x0 - 1e-3 * g0 / max(float(np.max(np.abs(g0))), 1e-30) * np.maximum(np.abs(x0), 1e-2)

@@ -57,16 +57,16 @@ try:
 
     energies = np.array([0.5, 1.0, 2.0, 3.0])
     A = Session(variant("a80", 80.0), cwd=work)
-    before = A.coulomb_functions(1, energies, L=1)["S"].copy()
+    before = A.channel_functions(1, energies, l=1)["S"].copy()
     B = Session(variant("b120", 120.0), cwd=work)
-    b_values = B.coulomb_functions(1, energies, L=1)["S"].copy()
-    after = A.coulomb_functions(1, energies, L=1)["S"].copy()
+    b_values = B.channel_functions(1, energies, l=1)["S"].copy()
+    after = A.channel_functions(1, energies, l=1)["S"].copy()
     check(f"the two potentials give different shift functions (max |dS| {np.max(np.abs(before - b_values)):.2e})",
           np.max(np.abs(before - b_values)) > 1e-4)
     check(f"session A is unchanged by session B (max |dS| {np.max(np.abs(after - before)):.2e})",
           np.max(np.abs(after - before)) < 1e-12, "A computed with B's potential")
     del B
-    again = A.coulomb_functions(1, energies, L=1)["S"].copy()
+    again = A.channel_functions(1, energies, l=1)["S"].copy()
     check("session A is unchanged after B is gone", np.max(np.abs(again - before)) < 1e-12)
     reported = A.nuclear_potential(1)  # pair 1, p + 12C, the pair of the record
     v0 = reported["V0"] if isinstance(reported, dict) else getattr(reported, "V0", None)

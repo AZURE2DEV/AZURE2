@@ -81,7 +81,7 @@ def main():
         os.makedirs(os.path.join(work, "ext", "checks"), exist_ok=True)
         shutil.copy(src, os.path.join(work, "ext", "m.azr"))
         with Session(os.path.join(work, "ext", "m.azr"), cwd=os.path.join(work, "ext"), data_mode=False) as m:
-            coef = m.evaluate(m.params_rwa).data[0].extra["legendre"]   # extrapolation 1: one array per energy
+            coef = m.evaluate(m.parameters.x0).data[0].extra["legendre"]   # extrapolation 1: one array per energy
         n_e = len(coef)
         check("the legendre extrapolation gives coefficient arrays", n_e == 11 and all(len(c) >= 5 for c in coef), (n_e, [len(c) for c in coef][:3]))
         # data at lab 6.0-6.3 (grid 5.9 + 0.05 i, i = 2..5): rows E_lab, k, a_k, err
@@ -96,8 +96,8 @@ def main():
         os.makedirs(os.path.join(work, "checks"), exist_ok=True)
         dm.save()
         with Session(azr, cwd=work) as m:
-            chi2 = m.evaluate(m.params_rwa).chi2
-            vals = np.asarray(m.evaluate(m.params_rwa).data[0].model, float)
+            chi2 = m.evaluate(m.parameters.x0).chi2
+            vals = np.asarray(m.evaluate(m.parameters.x0).data[0].model, float)
             data = np.asarray(m.cross[0], float)
             ks = np.asarray(m.angles[0], float)
         check("the coefficient data segment evaluates to chi2 ~ 0", chi2 < 1e-8, chi2)

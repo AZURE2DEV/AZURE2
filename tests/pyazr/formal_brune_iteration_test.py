@@ -44,7 +44,7 @@ def main():
         os.makedirs(os.path.join(work, "output"))
         os.makedirs(os.path.join(work, "checks"))
         with Session(os.path.join(work, "beam_profile_kernel.azr"), cwd=work, use_brune=False) as a:
-            x = np.array(a.params_rwa, float)
+            x = np.array(a.parameters.x0, float)
             target = [p for p in a.parameters if str(p).find("width_9_2,") >= 0 and not p.fixed]
             check("width_9_2 is a free parameter", len(target) == 1)
             if target:

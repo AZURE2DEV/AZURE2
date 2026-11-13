@@ -100,7 +100,7 @@ def engine_rows_and_jacobian(s, x):
 def against_engine(label, s):
     f = s.objective()
     free = s.parameters.free
-    check(f"{label}: x0, names, bounds are the free records'", same(f.x0, s.params_rwa) and f.names == free.names
+    check(f"{label}: x0, names, bounds are the free records'", same(f.x0, s.parameters.x0) and f.names == free.names
           and f.bounds == [tuple(b) for b in free.bounds], f"{f.names[:3]} {free.names[:3]}")
     for name, x in (("start", f.x0), ("displaced", displaced(f.x0))):
         v = f(x)

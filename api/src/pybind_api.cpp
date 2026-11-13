@@ -339,7 +339,7 @@ class Session {
     for (bool f : fixed) if (!f) nfree++;
     if (v.size() != nfree)
       throw ParameterVectorError(std::string(what) + ": expected the free parameter vector (" +
-                                 std::to_string(nfree) + " values, params_rwa / params order), got " +
+                                 std::to_string(nfree) + " values, in the order of the fit vector), got " +
                                  std::to_string(v.size()) + ".  " + kVectorHint);
     std::vector<int> slot;  // free index -> index among all parameters
     for (size_t k = 0; k < fixed.size(); ++k) if (!fixed[k]) slot.push_back((int)k);
@@ -356,7 +356,7 @@ class Session {
     expect_finite(v, slot, what, "parameter vector");
   }
   static constexpr const char *kVectorHint =
-      "Session.params_rwa is such a vector (the start values); Session.parameters.free names its entries in order.";
+      "Session.parameters.x0 is such a vector (the start values); Session.parameters.free names its entries in order.";
   // The first entry that is not finite, by its index and the parameter's name.
   void expect_finite(const vector_r &v, const std::vector<int> &slot, const char *what, const char *vector) const {
     size_t bad = 0, count = 0;

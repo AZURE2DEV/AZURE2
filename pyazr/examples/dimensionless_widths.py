@@ -80,7 +80,7 @@ def main():
 
     here = os.path.dirname(os.path.abspath(args.azr)) or "."
     with Session(os.path.abspath(args.azr), cwd=here) as m:
-        x = load_params(m, args.params) if args.params else np.asarray(m.params_rwa, float)
+        x = load_params(m, args.params) if args.params else np.asarray(m.parameters.x0, float)
         print(f"compound A = {m.mass_number}, "
               f"chi2 = {m.evaluate(x).chi2:.2f}\n")
 

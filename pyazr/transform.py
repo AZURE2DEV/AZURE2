@@ -118,7 +118,7 @@ def _check_open_channel(function, L, red_mass, radius, energy, energy_name="ener
     TypeError naming the argument when the energy is not one number.  ``red_mass`` and ``radius`` are not checked
     (their domain is the caller's channel)."""
     from .errors import DomainError, DomainZeroDivision
-    hint = ("for a closed channel (E <= 0) the session's Session.coulomb_functions(pair, E, L) gives its shift "
+    hint = ("for a closed channel (E <= 0) the session's Session.channel_functions(pair, E, L) gives its shift "
             "function, pyazr.whittaker its Whittaker function")
     try:
         whole = float(L) == int(L) and int(L) >= 0
@@ -135,7 +135,7 @@ def _check_open_channel(function, L, red_mass, radius, energy, energy_name="ener
             ok = None
         if ok is None:
             raise TypeError(f"{function}: {name} must be one number ({unit}), got {type(value).__name__}; the "
-                            f"function takes scalars (loop over an array, or use Session.coulomb_functions).")
+                            f"function takes scalars (loop over an array, or use Session.channel_functions).")
         if not ok:
             error = DomainZeroDivision if value == 0 else DomainError
             raise error(f"{function}: {name} = {value!r} {unit} is outside the domain; it must be a finite number > 0"

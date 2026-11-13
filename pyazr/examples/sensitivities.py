@@ -76,7 +76,7 @@ def main() -> int:
     args = ap.parse_args()
 
     with Session(str(args.azr)) as azr:
-        x = np.asarray(azr.params_rwa, float)
+        x = np.asarray(azr.parameters.x0, float)
         if args.params:
             x = np.asarray(best_fit_params(azr, str(args.params)), float)
 

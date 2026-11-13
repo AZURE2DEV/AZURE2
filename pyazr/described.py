@@ -370,18 +370,14 @@ def kinds():
 def describe_session(session):
     """What one :class:`pyazr.Session` session holds, as plain data (``Session.describe()``); see there."""
     s = session
-    common = ("name", "kind", "unit", "start", "value", "fixed", "free_index", "bounds")
     parameters = []
-    for p in s.parameters:
-        lo, hi = p.bounds
-        entry = {"name": p.name, "kind": p.kind, "unit": p.unit, "x": p.start, "physical_value": p.value,
-                 "free": not p.fixed, "free_index": p.free_index,
-                 "bounds": [lo if np.isfinite(lo) else None, hi if np.isfinite(hi) else None]}
-        entry.update((k, v) for k, v in p.to_dict().items() if k not in common and v is not None)
+    for p in s.parameters:  # the records, as Session.parameters holds them; an infinite bound is None (JSON)
+        entry = p.to_dict()
+        entry["bounds"] = [b if np.isfinite(b) else None for b in p.bounds]
         parameters.append(entry)
     pairs = [dict(q.to_dict(), label=q.label, photon=bool(q.is_photon)) for q in s.pairs]
-    levels = [{"label": str(k), "jgroup": k.jgroup, "J": k.J, "parity": k.parity, "level": k.level,
-               "energy": k.energy} for k in s.physical_levels()]
+    levels = [{"label": p.level_label, "jgroup": p.jgroup, "J": p.J, "parity": p.parity, "level": p.level,
+               "energy": p.level_energy} for p in s.parameters.of_kind("energy")]
     description = describe_project(s.file, s.cwd)
     from .project import Project
     records = Project.open(s.file).records()
@@ -408,5 +404,5 @@ def describe_session(session):
         "option_sources": dict(s.option_sources),
         "coulomb_table": coulomb_table(s.options.get("use_coulomb_table", True), s.options.get("coulomb_table", "")),
         "pairs": pairs, "levels": levels, "datasets": datasets, "extrapolations": extrapolations,
-        "parameters": parameters, "free_parameters": int(sum(1 for p in parameters if p["free"])),
+        "parameters": parameters, "free_parameters": int(sum(1 for p in parameters if not p["fixed"])),
     }, default=float))

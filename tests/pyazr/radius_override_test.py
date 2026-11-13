@@ -74,10 +74,10 @@ def main():
         with Session(ref_azr, cwd=ref_dir) as r:
             check("reference file has both radii", [p.channel_radius for p in r.pairs][:2] == [R1, R2],
                   f"{[p.channel_radius for p in r.pairs]}")
-            x_ref = np.asarray(r.params_rwa, float)
+            x_ref = np.asarray(r.parameters.x0, float)
             chi_ref = r.evaluate(x_ref).chi2
         with Session(base, cwd=work) as f:
-            x_file = np.asarray(f.params_rwa, float)
+            x_file = np.asarray(f.parameters.x0, float)
             chi_file = f.evaluate(x_file).chi2
         check("the radii matter (reference chi2 differs from the file's)", rel(chi_ref, chi_file) > 1e-3,
               f"{chi_ref} vs {chi_file}")
@@ -90,10 +90,10 @@ def main():
                 return [p.channel_radius for p in m.pairs][:2]
 
             def chi():
-                return m.evaluate(np.asarray(m.params_rwa, float)).chi2
+                return m.evaluate(np.asarray(m.parameters.x0, float)).chi2
 
             def same_vector(ref):
-                x = np.asarray(m.params_rwa, float)
+                x = np.asarray(m.parameters.x0, float)
                 return x.shape == ref.shape and np.allclose(x, ref, rtol=1e-12, atol=0.0)
 
             print("1. two set_channel_radius calls in one session")

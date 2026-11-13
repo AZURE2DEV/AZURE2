@@ -51,7 +51,7 @@ def main():
     try:
         # (1) listed: runs
         s = Session(stage("listed", work))
-        names = [p.name for p in s.parameters.energies]
+        names = [p.name for p in s.parameters.of_kind("energy")]
         check("listed final state: session opens", len(names) > 0)
         check("listed final state: four levels in the parameter list", len(names) == 4, f"{names}")
         # (2) missing level, capture segment present: refused
@@ -75,7 +75,7 @@ def main():
         check("unused capture pair: session opens", s is not None)
         check("unused capture pair: WARNING names the pair and the final state",
               "WARNING: external capture into pair 3 needs its final state" in out, out[-400:])
-        names = [p.name for p in s.parameters.energies]
+        names = [p.name for p in s.parameters.of_kind("energy")]
         check("unused capture pair: exactly the three listed levels, no hidden one", len(names) == 3, f"{names}")
     finally:
         shutil.rmtree(work, ignore_errors=True)

@@ -28,6 +28,8 @@ Unit::IntegrateTargetEffectComponents).  Elsewhere they are the 0 of a new recor
 them only for E1/E2 lines, which are written.
 
     poison_results_test.py [--binary AZURE2] [projects]      (AZURE2_BIN / AZURE2_BINARY, PYAZR_ENGINE_DIR)
+
+This test reads the binding itself (`_azure2.Session`), so it uses the private handle `Session._engine`.
 """
 
 import argparse
@@ -103,7 +105,7 @@ def api_values(project):
     from pyazr.session import Session
     m = Session(os.path.join(HERE, project, PROJECTS[project]))
     s = m._engine
-    n = int(s.update_segments(m.params))
+    n = int(s.update_segments(s.params_values()))
     get = {"sigma": s.calculated_segments, "e1": s.calculated_segments_e1, "e2": s.calculated_segments_e2,
            "energy": s.calculated_energies, "angle": s.calculated_angles, "angular": s.calculated_angular_dists}
     res = []

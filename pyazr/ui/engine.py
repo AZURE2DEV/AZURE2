@@ -24,23 +24,17 @@ from pyazr.locking import session_lock
 # tests/pyazr/ui/routes_consistency_test.py, requires every public method to be called here or listed here).
 SESSION_NOT_SERVED = {
     "the sensitivities of the model values (uncertainty bands, not a route of this step)": "model_gradients",
-    "physical values only through transform (pyazr3.md decision 10)":
-        "transform_physical transform_rwa physical_levels wigner_widths dimensionless_widths park_norms "
-        "scattering_lengths",
-    "parameter-vector files: Parameters.read/write of pyazr 3.0, not a route of this step":
-        "read_sav load_sav full_rwa_from_sav read_sav_basis update_rwa_params_from_sav update_sav_from_rwa_params",
-    "per-kind index views: the parameter table carries kind and free index":
-        "level_free_width_indices without_level only_level norm_indices shift_indices energy_indices",
+    "dimensionless widths and level quantities, not a route of this step":
+        "wigner_widths dimensionless_widths park_norms scattering_lengths",
     "session edits: edits of the Project and a new session (pyazr3.md decision 11)":
-        "set_channel_radius refresh_parameters refresh_pairs configure recalculate_external_capture "
+        "set_channel_radius configure recalculate_external_capture "
         "refreeze_covariance set_nuclear_potential clear_nuclear_potential nuclear_potential nuclear_potentials "
         "potential_records",
     "the server owns sessions: lifecycle": "close is_alive",
     "later steps of web_ui.md section 11 (Nucleus, Physics, THM tabs)":
         "level_scheme nuclei mass_number basis ec_integrals thm_experiments thm_background "
         "thm_lineshape thm_vertex thm_distortion prior_covariance_residuals prior_covariance_names "
-        "datasets n_rmatrix cache_stats output_dir",
-    "the older name of channel_functions (served: POST /api/session/channel_functions)": "coulomb_functions",
+        "datasets cache_stats output_dir",
 }
 
 
@@ -93,7 +87,7 @@ class Engine:
     def _describe(self):
         """The session: its options and where each came from, free-vector length, data sets (in the engine's order) and parameters."""
         s = self.s
-        return {"options": dict(s.options), "option_sources": dict(s.option_sources), "n_free": len(s.params_rwa),
+        return {"options": dict(s.options), "option_sources": dict(s.option_sources), "n_free": len(s.parameters.x0),
                 "datasets": self._datasets(),
                 "parameters": self._parameters()}
 
@@ -104,9 +98,15 @@ class Engine:
         """One row per parameter of the engine (fixed and free), the session's own description (``describe()``): name,
         kind, unit, whether it is free and its index in x, ``x`` (fit basis), ``physical_value``, bounds, owner
         fields; ``x0`` is ``x`` of a free parameter."""
-        rows = self.s.describe()["parameters"]
-        for r in rows:
-            r["x0"] = r["x"] if r["free"] else None
+        common = ("name", "kind", "unit", "start", "value", "fixed", "free_index", "bounds")
+        rows = []
+        for p in self.s.describe()["parameters"]:  # the session's records
+            row = {"name": p["name"], "kind": p["kind"], "unit": p["unit"], "x": p["start"],
+                   "physical_value": p["value"], "free": not p["fixed"], "free_index": p["free_index"],
+                   "bounds": p["bounds"]}
+            row.update((k, v) for k, v in p.items() if k not in common and v is not None)
+            row["x0"] = row["x"] if row["free"] else None
+            rows.append(row)
         return rows
 
     def _free_names(self):
@@ -248,11 +248,10 @@ class Engine:
         return self.names.index(name)
 
     def transform(self, x):
-        """Physical values (MeV, eV, fm^-1/2; norms and shifts as they are) of every parameter at x, by name."""
+        """Physical values (MeV, eV, fm^-1/2; norms and shifts as they are) of every parameter at x, by name
+        (``Session.transform``)."""
         s = self.s
-        full = s._all_rwa(np.asarray(x, float))
-        values = np.asarray(s.transform_all_rwa(full, include_fixed=True), float)
-        return {p.name: float(values[i]) for i, p in enumerate(s.parameters) if i < values.size}
+        return {p.name: float(v) for p, v in zip(s.parameters, s.transform(np.asarray(x, float)))}
 
     def channel_functions(self, pair, e_cm, l=0, radius=0.0, J=None):
         """The session's channel functions of ``pair`` at c.m. energies ``e_cm`` (MeV; a number or a list): F, Fp, G,
@@ -286,7 +285,7 @@ def open_objective(file, cwd):
     :class:`pyazr.Objective`)."""
     e = Engine()
     e.open(file, cwd)
-    return e.s.objective().value_and_grad, np.asarray(e.s.params_rwa, float), e._free_names()
+    return e.s.objective().value_and_grad, e.s.parameters.x0, e._free_names()
 
 
 def _read_chi_squared(path):

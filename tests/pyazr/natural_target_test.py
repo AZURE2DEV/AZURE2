@@ -69,7 +69,7 @@ def copy_model(name, work, dest=None):
 
 def grids(path, cwd):
     with Session(path, cwd=cwd, data_mode=False, use_brune=True) as s:
-        x = np.asarray(s.params_rwa, float)
+        x = np.asarray(s.parameters.x0, float)
         return [np.asarray(v, float) for v in [d.model for d in s.evaluate(x).data]]
 
 
@@ -135,7 +135,7 @@ def run(work):
         ngroups = len({pp.jgroup for pp in s.parameters if pp.jgroup is not None and pp.kind in ("energy", "width")})
         check("twice A's J-groups", ngroups == 6, str(ngroups))
         try:
-            s.save_fit(os.path.join(work, "AA_snapshot.azr"), np.asarray(s.params_rwa, float))
+            s.save_fit(os.path.join(work, "AA_snapshot.azr"), np.asarray(s.parameters.x0, float))
             check("save_fit round trip with same-J^pi nuclei", True)
         except Exception as err:   # noqa: BLE001
             check("save_fit round trip with same-J^pi nuclei", False, str(err)[:300])
@@ -150,11 +150,11 @@ def run(work):
             for e, v in zip(e_lab, y):
                 fh.write(f"{e:.6f} 0 {v:.12e} {0.001 * v:.12e}\n")
     with Session(msd, cwd=work, use_brune=True) as s:
-        ab = s.parameters.abundances
+        ab = s.parameters.of_kind("abundance")
         check("four abundance parameters, target by target",
               [p.name for p in ab] == ["natural.isotope.12C", "natural.isotope.13C", "enr.isotope.12C",
-                                       "enr.isotope.13C"], str([(p.name, p.sample, p.sample_index) for p in ab]))
-        x0 = np.asarray(s.params_rwa, float)
+                                       "enr.isotope.13C"], str([(p.name, p.sample_name, p.sample_index) for p in ab]))
+        x0 = np.asarray(s.parameters.x0, float)
         pen = s.evaluate(x0).terms["abundances"]
         # both targets at 0.5 + 0.5 = 1: no sum penalty, no priors
         check("penalties: two sum-to-one terms at zero", abs(pen) < 1e-12, str(pen))
@@ -183,7 +183,7 @@ def run(work):
         pairs = s.pairs
         check("Pair.nucleus", [p.nucleus for p in pairs] == [(7, 13), (7, 14)], str([p.nucleus for p in pairs]))
         check("Session.nuclei", sorted(s.nuclei) == [(7, 13), (7, 14)] and [p.key for p in s.nuclei[(7, 14)]] == [2])
-        ab_params = s.parameters.abundances
+        ab_params = s.parameters.of_kind("abundance")
         check("two abundance parameters after the level block",
               len(ab_params) == 2 and all(p.kind == "abundance" for p in ab_params)
               and ab_params[0].index == sum(1 for p in s.parameters if p.kind in ("energy", "width")) and ab_params[0].nucleus == (7, 13) and ab_params[1].nucleus == (7, 14),
@@ -191,7 +191,7 @@ def run(work):
         check("prior sigma and values carried", ab_params[1].prior_sigma == 0.05 and ab_params[0].value == 0.6
               and ab_params[1].value == 0.4 and not ab_params[0].fixed and not ab_params[1].fixed, str(ab_params))
         check("Pair.abundance", [p.abundance for p in pairs] == [0.6, 0.4])
-        x = np.asarray(s.params_rwa, float)
+        x = np.asarray(s.parameters.x0, float)
         ia, ib = ab_params[0].free_index, ab_params[1].free_index
         # penalties: at the nominal values the prior is 0 and the sum term 0
         pen = s.evaluate(x)
@@ -244,7 +244,7 @@ def run(work):
         check("the snapshot's isotopes carry the fitted values", got == {"12C": 0.7, "13C": 0.3}, str(got))
         check("param.sav carries the abundances", ab_params[1].name in open(sav).read())
     with Session(snap, cwd=work, use_brune=True) as s2:
-        x2 = np.asarray(s2.params_rwa, float)
+        x2 = np.asarray(s2.parameters.x0, float)
         chi2 = s2.evaluate(x2).chi2
         check("snapshot re-evaluates to the same data chi-squared", abs(chi2 - chif) < 1e-6 * max(1.0, chif),
               f"{chi2} vs {chif}")

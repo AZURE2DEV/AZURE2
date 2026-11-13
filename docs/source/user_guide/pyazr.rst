@@ -29,7 +29,7 @@ First steps
    import numpy as np
 
    with Session("13N.azr") as azr:
-       best = np.asarray(azr.params_rwa, float)   # free parameters
+       best = azr.parameters.x0                  # the fit vector at its start
        chi2 = azr.evaluate(best).chi2              # the data chi-squared
        print(chi2)
 
@@ -81,7 +81,7 @@ program refuses the flags (``AZURE2Error``, ``E_CONFIG_OPTIONS_CONTRADICT``, wit
 ``use_rmc=True`` needs ``use_brune=False``, ``use_park=True`` with ``use_brune=False`` is refused, and
 ``ec_convection_current=False`` needs ``use_long_wavelength=False``.
 ``pyazr.kinds()["options"]`` lists them all with
-type, default, ``<config>`` key, flag and meaning. ``use_park=True`` is ``--use-park``: ``params_rwa`` then holds
+type, default, ``<config>`` key, flag and meaning. ``use_park=True`` is ``--use-park``: the fit vector then holds
 Park's amplitudes, ``park_norms()`` gives every level's overlap :math:`J`, and ``basis`` is 0, 1 or 2 (standard,
 Brune, Park: the ``#parametrization`` tag of ``param.sav``). With ``transform=False`` (``--no-transform``) nothing is
 converted: the numbers of the file are taken as they stand as formal level energies and reduced-width amplitudes, so a
@@ -129,7 +129,7 @@ class                     also a                                    raised for
 ``FormatError``           ``ValueError``                            a project text or record edit the engine refuses
 ``ParameterError``        ``ValueError``                            a parameter vector, name or value that is wrong
 ``ParameterKeyError``     ``ParameterError``, ``KeyError``          an unknown parameter, level, pair, data set
-``ParameterIndexError``   ``ParameterError``, ``IndexError``        an unknown pair key (``coulomb_functions``)
+``ParameterIndexError``   ``ParameterError``, ``IndexError``        an unknown pair key (``channel_functions``)
 ``ParameterVectorError``  ``ParameterError``, ``AZURE2Error``       a free vector of the wrong length, or a NaN
 ``EngineError``           ``RuntimeError``                          a set-up or evaluation the engine refuses;
                                                                     the class ``AZURE2Error``, which keeps its name
@@ -142,7 +142,7 @@ class                     also a                                    raised for
 A message says what was wrong with the value given, what is allowed, and which call shows or fixes it, for example::
 
    pyazr.ParameterVectorError: calculate_objective_rwa: entry 0 of the free parameter vector (width_1_1) is nan;
-   every entry must be a finite number.  Session.params_rwa is such a vector (the start values);
+   every entry must be a finite number.  Session.parameters.x0 is such a vector (the start values);
    Session.parameters.free names its entries in order.
 
 A notice of the engine that a session meets -- an external-capture amplitude file that cannot be written because the
@@ -150,32 +150,28 @@ output directory does not exist, a normalization or shift file that cannot be wr
 naming the file and the consequence (it was a line on standard output before).  Make it an error with
 ``warnings.simplefilter("error", pyazr.EngineWarning)``.
 
-Documented zeros stay zeros: ``coulomb_functions`` below threshold (E <= 0) gives the shift function alone, and an
+Documented zeros stay zeros: ``channel_functions`` below threshold (E <= 0) gives the shift function alone, and an
 energy at which the Coulomb routine fails gives zeros; ``whittaker_wave`` gives ``W`` 0 or inf outside the double
 range (``mantissa`` and ``log10_scale`` keep the value).
 
-Two parameter conventions
--------------------------
+The fit vector and the parameter table
+--------------------------------------
 
-AZURE2 exposes its parameters in two spaces, and mixing them silently produces wrong answers.
-
-**Reduced width amplitudes** (``*_rwa`` methods) are the natural fit space and the only one with analytic derivatives.
-Default to these.
-
-.. code-block:: python
-
-   azr.params_rwa               # the free parameter vector
-   azr.evaluate(x)              # the model of every data set, chi-squared, the objective's terms
-   azr.objective()              # the objective: f(x), f.value_and_grad(x), f.residuals_and_jacobian(x)
-
-**Physical parameters** (level energies in MeV, partial widths in eV) are what ``parameters.out`` reports.
+Every call of a session takes one vector, the **fit vector** ``x``: the engine's free parameters, in its order and in
+its basis (reduced-width amplitudes; Brune, Park or the standard parametrization as the session's options say). Its
+start is ``s.parameters.x0``. Physical values are a transformation of ``x`` that you ask for:
 
 .. code-block:: python
 
-   azr.params                   # physical vector
-   azr.transform_rwa(x)         # rwa -> physical
+   x = s.parameters.x0          # a copy of the start of the fit vector
+   s.evaluate(x)                # the model of every data set, chi-squared, the objective's terms
+   s.objective()                # the objective: f(x), f.value_and_grad(x), f.residuals_and_jacobian(x)
+   phys = s.transform(x)        # the physical value of every parameter (MeV, eV, ANCs), one per row of s.parameters
 
-Both vectors contain only the **free** parameters, in ``.azr`` order.
+``s.transform(x)`` is the engine's transformation (``CNuc::TransformOut``), the one the program uses to write
+``<levels>`` after a fit: a fixed width holds its reduced-width amplitude, so its physical value follows the level's
+other widths. The engine offers no inverse: a new ``x`` is made from ``x0`` (``put``) or from a parameter file
+(``read``).
 
 .. warning::
 
@@ -183,93 +179,92 @@ Both vectors contain only the **free** parameters, in ``.azr`` order.
    width amplitude — it holds the physical value: Γ in eV for an open particle
    channel, an ANC for a closed one, Γ\ :sub:`γ` in eV for a photon channel.
    The two differ by factors of 10² to 10⁷, and a file written with the wrong
-   one loads without complaint and is wrong. Convert with ``transform_rwa``.
+   one loads without complaint and is wrong. Convert with ``s.transform(x)``.
 
-Inspecting a model
-------------------
-
-Every parameter carries what it physically *is*, so you never have to parse a name like ``width_1_2``:
+``s.parameters`` is the table of the fit parameters (a :class:`pyazr.Parameters`), one row per parameter in the
+order of the engine's vector. Each row is the engine's record of the parameter, written where the parameter is
+created, never parsed from its name, which is only a label: ``name``, ``kind``, ``unit``, ``start`` (in the fit
+vector's basis and ``unit``), ``value`` (as the project states it: a partial width in eV, an ANC, an energy in MeV),
+``fixed``, ``free_index`` (its entry of the fit vector), ``bounds``, and the fields of its kind (a level's
+``level_label``, ``J``, ``parity``, ``level_energy``; a channel's ``L``, ``S``, ``pair``, ``pair_key``,
+``radiation_type``, ``wigner_limit``, ``width_is_amplitude``; a data set's ``segment_key``; a nuisance's
+``prior_centre`` and ``prior_sigma``; ...). ``pyazr.kinds()["parameter_fields"]`` lists every field with its unit,
+the kinds it describes and its doc; a field of another kind reads ``None``. ``s.describe()["parameters"]`` is the same
+records as plain data.
 
 .. code-block:: python
 
-   print(azr.level_scheme)          # pairs -> J-groups -> levels -> channels
-   print(azr.parameters.table())    # every parameter with its metadata
-   print(azr.datasets.table())      # per data set: record, file, reaction, E range
-   print(azr.pairs)                 # masses, charges, spins, separation energies
-
-   for w in azr.parameters.widths.free:
+   P = s.parameters
+   x = P.x0
+   w = P.of_level("3/2- 3.5032").of_kind("width")
+   x2 = P.put(x, w.free, 2 * P.take(x, w.free))   # the level's free widths doubled
+   off = P.put(x, w.free, 0.0)                     # the level switched off (its free widths zero)
+   P.write("fit.sav", x2)                          # a parameter file, by name
+   x3 = P.read("fit.sav")                          # and back
+   print(P.free.table())                           # name, kind, unit, start, free, bounds, owner
+   for w in P.of_kind("width").free:
        print(w.name, w.jpi, "L =", w.L, "S =", w.S, "pair", w.pair)
+
+``x0``, ``put``, ``take``, ``read`` and ``write`` work on the fit vector, and a selection (``free``,
+``of_kind(...)``, ``of_level(...)``, a slice) is again a table with the same ``x0``. ``names``, ``kinds``, ``units``,
+``free_mask`` and ``bounds`` are its columns (``bounds`` the limits the engine creates the parameter with,
+``(-inf, inf)`` where it sets none). A level is named by its ``level_label`` (``"3/2- 3.5032"``, as
+``Project.levels()`` gives it) or by ``(jgroup, level)``: AZURE2 restarts the level numbering inside every J group.
+``pyazr.snapshot.write_values(s, project, x)`` writes the values of ``x`` into a :class:`pyazr.Project` of the
+session's file in memory (what ``save_fit`` writes, without saving).
+
+``pyazr.kinds()["parameters"]`` is the engine's table of kinds (key, unit, owner fields, flags), in the order of the
+parameter vector:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 18 82
+
+   * - ``kind``
+     - parameters
+   * - ``energy``
+     - level energies (``energy_*``)
+   * - ``width``
+     - reduced-width amplitudes (``width_*``)
+   * - ``abundance``
+     - isotopic abundances (after the level block; ``sample_name`` names the sample)
+   * - ``norm``
+     - data-set normalizations
+   * - ``shift``, ``shift_sqrt``, ``shift_fn``
+     - data-set energy shifts: the constant term, the :math:`\sqrt{E}` coefficient, the shift-function parameters
+       a0, a1, ... (``fn_term`` = j)
+   * - ``screening``, ``density``, ``doppler``, ``thickness``
+     - electron-screening potentials, fitted target densities, Doppler temperatures, sample thicknesses
+   * - ``cbkg``
+     - THM coherent background (``cbkg_*``): ``thm_experiment``, ``thm_jpi``, ``thm_exit_key``, ``thm_channels`` and
+       ``thm_term`` (0 Re c0, 1 Im c0, 2 Re c1, 3 Im c1) say which coefficient
+   * - ``apparatus``
+     - a number of an apparatus record (a stopping scale, a kernel's parameter)
+   * - ``radiative``
+     - a number of a level's ``gamma_decay`` record (``decay_record``, ``decay_part``, ``final_state``)
+
+A THM segment's free norm is profiled, not a parameter, and has no entry.
+
+The session's set-up, in readable form:
+
+.. code-block:: python
+
+   print(s.level_scheme)          # pairs -> J-groups -> levels -> channels
+   print(s.datasets.table())      # per data set: record, file, reaction, E range
+   print(s.pairs)                 # masses, charges, spins, separation energies
 
 A pair prints as ``Pair(#7 key=8 ...)``: ``#7`` is the engine's internal pair number, which ``Parameter.pair``
 carries, and ``key=8`` the pair key of the ``.azr`` file, which the engine's messages and ``isospin.out`` use. The two
 differ whenever the file numbers its pairs in another order than the engine counts them, so match a parameter to a
-reaction through ``azr.pairs`` rather than by reading the key as the number.
+reaction through ``s.pairs`` rather than by reading the key as the number.
 
 ``Pair.excitation`` is the pair's **total** excitation, light plus heavy particle, so ``Pair.threshold`` =
 ``sep_energy + excitation`` is where its channels open. ``Pair.light_excitation`` is the light particle's share (the
-optional 32nd column of a ``<levels>`` line, November 2026) and ``Pair.heavy_excitation`` the heavy one's;
-``Pair.label`` marks an excited particle (``'2+*(4.439 MeV) + 0+'``). In a :class:`pyazr.Project` the pair's
-``light_excitation`` and ``heavy_excitation`` are fields of :meth:`~pyazr.Project.pairs`; ``set_pair(key,
-light_excitation=E)`` writes the 32nd column on every row of the pair (a row without the column gets it only for a
-value other than 0), ``heavy_excitation=`` the heavy one's (:doc:`../reference/data_formats`).
-
-``azr.parameters`` is the table of the fit parameters (a :class:`pyazr.Parameters`; its class
-``ParameterSet`` adds the views of earlier releases), one row per parameter in the order of the
-engine's vector. Each row is the engine's record of the parameter (``Session.parameter_records()``),
-written where the parameter is created, never parsed from its name, which is only a label:
-``name``, ``kind``, ``unit``, ``start`` (in the fit vector's basis and ``unit``), ``value`` (as the
-project states it: a partial width in eV, an ANC, an energy in MeV), ``fixed``, ``free_index`` (its
-entry of the fit vector), ``bounds``, and the fields of its kind (a level's ``level_label``, ``J``,
-``parity``, ``level_energy``; a channel's ``L``, ``S``, ``pair``, ``pair_key``, ``radiation_type``,
-``wigner_limit``, ``width_is_amplitude``; a data set's ``segment_key``; a nuisance's
-``prior_centre`` and ``prior_sigma``; ...). ``pyazr.kinds()["parameter_fields"]`` lists every field
-with its unit, the kinds it describes and its doc; a field of another kind reads ``None``.
-
-.. code-block:: python
-
-   P = azr.parameters
-   x = P.x0                                   # a copy of the start of the fit vector
-   w = P.of_level("3/2- 3.5032").of_kind("width")
-   x2 = P.put(x, w.free, 2 * P.take(x, w.free))   # the level's free widths doubled
-   P.write("fit.sav", x2)                     # a parameter file, by name
-   x3 = P.read("fit.sav")                     # and back
-   print(P.free.table())                      # name, kind, unit, start, free, bounds, owner
-
-The fit vector is the only vector: ``x0``, ``put``, ``take``, ``read`` and ``write`` work on it, and a
-selection (``free``, ``of_kind(...)``, ``of_level(...)``, a slice) is again a table with the same
-``x0``. ``names``, ``kinds``, ``units``, ``free_mask`` and ``bounds`` are its columns (``bounds`` the
-limits the engine creates the parameter with, ``(-inf, inf)`` where it sets none). The views of
-earlier releases (``.energies``, ``.widths``, ``.norms``, ``.shifts``, ``.sqrt_shifts``,
-``.fn_shifts``, ``.abundances``, ``.screenings``, ``.densities``, ``.dopplers``, ``.thicknesses``,
-``.cbkg``, ``.fixed``, ``.by_level(...)``, ``.by_physical_level()``) are ``of_kind`` and the level
-selections under their old names. ``pyazr.snapshot.write_values(azr, project, x)`` writes the values
-of ``x`` into a :class:`pyazr.Project` of the session's file in memory (what ``save_fit`` writes, without saving).
-
-``pyazr.kinds()["parameters"]`` is the engine's table of kinds (key, unit, owner fields, flags), in
-the order of the parameter vector (the abundances follow the level block):
-
-===============  ===================================================
-``kind``         parameters
-===============  ===================================================
-``energy``       level energies (``energy_*``) ``width``        reduced-width amplitudes (``width_*``) ``norm``
-data-set normalizations ``shift``        data-set energy shifts (the constant term) ``shift_sqrt``   :math:`\sqrt{E}`
-shift coefficients ``shift_fn``     shift-function parameters a0, a1, ... (``fn_term`` = j) ``abundance``    isotopic
-abundances (after the level block;
-                 ``sample_name`` its sample)
-``screening``    electron-screening potentials ``density``      fitted target densities ``doppler``      fitted
-Doppler temperatures ``thickness``    fitted sample thicknesses ``cbkg``         THM coherent background (``cbkg_*``);
-                 ``thm_experiment``, ``thm_jpi``, ``thm_exit_key``,
-                 ``thm_channels`` and ``thm_term`` (0 Re c0, 1 Im
-                 c0, 2 Re c1, 3 Im c1) say which coefficient
-``apparatus``    a number of an apparatus record (a stopping scale, a
-                 kernel's parameter)
-``radiative``    a number of a level's ``gamma_decay`` record
-                 (``decay_record``, ``decay_part``, ``final_state``)
-===============  ===================================================
-
-A THM segment's free norm is profiled, not a parameter, and has no entry. A ``LevelKey`` prints as
-``5/2-#2@6.588MeV``; ``(jgroup, level)`` is its identity, since AZURE2 restarts
-level numbering inside every J-group.
+optional 32nd column of a ``<levels>`` line) and ``Pair.heavy_excitation`` the heavy one's; ``Pair.label`` marks an
+excited particle (``'2+*(4.439 MeV) + 0+'``). In a :class:`pyazr.Project` the pair's ``light_excitation`` and
+``heavy_excitation`` are fields of :meth:`~pyazr.Project.pairs`; ``set_pair(key, light_excitation=E)`` writes the
+32nd column on every row of the pair (a row without the column gets it only for a value other than 0),
+``heavy_excitation=`` the heavy one's (:doc:`../reference/data_formats`).
 
 Chi-squared and derivatives
 ---------------------------
@@ -327,7 +322,8 @@ rmfit's ``polish`` passes the columns its bounds hold.
 
 A fitted target density (``areal_density ... fit [prior ...]`` on a ``target`` record, shared by every data set that
 names the target, :doc:`experimental_effects`) is a parameter ``<target>.areal_density`` of kind ``"density"``
-(``ParameterSet.densities``; :attr:`Parameter.effect` is its target, ``prior_centre`` / ``prior_sigma`` its prior and
+(``parameters.of_kind("density")``; :attr:`Parameter.effect` is its target, ``prior_centre`` / ``prior_sigma`` its
+prior and
 ``layout_max`` the largest density its grids span). Its column is finite-differenced the same way, and
 ``ev.terms["density priors"]`` is its prior, a term of the objective.  The field is read and written as any record
 field: ``project["d1"]["areal_density"]``, ``project.set("d1", areal_density=Nuisance(5e17, "fit", unit="atoms/cm2",
@@ -335,14 +331,15 @@ prior=(5e17, "5%")))``.
 
 A fitted free-gas Doppler temperature (``doppler free_gas T K fit [prior T0 sigma] [grid_max Tmax]`` on a ``target``
 record, :doc:`experimental_effects`) is a parameter ``<target>.doppler`` of kind ``"doppler"``
-(``ParameterSet.dopplers``; :attr:`Parameter.effect` is its target, ``prior_centre`` / ``prior_sigma`` its prior and
+(``parameters.of_kind("doppler")``; :attr:`Parameter.effect` is its target, ``prior_centre`` / ``prior_sigma`` its
+prior and
 ``layout_max`` the layout temperature its grids span). Unlike a density its gradient entry and Jacobian column are
 analytic, through the Doppler weights. ``ev.terms["Doppler priors"]`` is its prior, a term of the objective.  The
 field is edited as any record field (``project.set("D0", doppler="free_gas 300 K fit grid_max 900")``).
 
 A fitted sample thickness (``areal_density n atoms/b fit [prior n sigma]`` on a ``target`` record of kind ``sample``,
 named by ``transmission`` or ``neutron_yield`` data sets, :doc:`segments`) is a parameter ``<target>.areal_density``
-of kind ``"thickness"`` (``ParameterSet.thicknesses``; :attr:`Parameter.segment_key` is the first data set on the
+of kind ``"thickness"`` (``parameters.of_kind("thickness")``; :attr:`Parameter.segment_key` is the first data set on the
 target, ``prior_centre`` / ``prior_sigma`` its prior, ``sample_kind`` ``"transmission"`` or ``"yield"``); data sets
 that name one target share the parameter. Its gradient entry and Jacobian column are analytic. ``ev.terms["thickness
 priors"]`` is its prior, a term of the objective.
@@ -505,7 +502,7 @@ removing both files and raising if they disagree.  A coherent THM background is 
 snapshot's fitted value leaves the prior where the fit had it, and a fit started from the snapshot is pulled to the
 same centres, not to the fitted values; ``save_fit(path, x, norms="nominal")`` keeps the loaded file's values in the
 fields and the fitted ones in the ``.sav`` only (run with it as the parameter file to reproduce the fit;
-:meth:`~pyazr.Session.load_sav` matches its names to the run's as AZURE2 does: names the project lacks warn with
+a session made with ``parameter_file=`` matches its names to the run's as AZURE2 does: names the project lacks warn with
 ``W_PARAMETER_FILE_NAMES``, a file with no name of the run is refused with ``E_PARAMETER_FILE_NO_MATCH``).  See
 :ref:`nominal-norm`.  The check opens a second engine beside the fit's; as the last call of a fit, ``save_fit(path, x,
 close_session=True)`` closes the fit's session first, so that only one is in memory (a 19F THM session is about 220
@@ -527,17 +524,26 @@ MB, 390 MB with the verifying one beside it).  ``path`` is always explicit; noth
 Parameter and output files
 --------------------------
 
-Parameter files (``param.par``, ``param.sav``, ``param.fit``) are read by **name**, as AZURE2 reads them:
-``Session.read_sav(path)`` returns ``{name: value}`` (the ``#parametrization`` line and comments skipped),
-``full_rwa_from_sav(path)`` applies a file to the session's full vector (a name the file lacks keeps the session's
-value; a file with no name in common is refused), ``update_rwa_params_from_sav()`` and
-``update_sav_from_rwa_params(x)`` (writes ``param.sav.new``, rows updated in place, missing free rows appended) do the
-same with the run's own ``param.sav``, and ``pyazr.bands.best_fit_params`` loads a fit for the bands. Do not read
-these files by row position: rows are added as the code grows (the :math:`\sqrt{E}` coefficients, the tag line), and a
-positional read of a file from another layout is silently off by one or more rows.
+Parameter files (``param.par``, ``param.sav``, ``param.fit``) are read by **name**, as AZURE2 reads them. Two ways,
+by what the file is to do:
+
+- ``s.parameters.read(path)``: a fit vector with the file's values of the free parameters (a free parameter the file
+  lacks keeps its start; a file of another basis, or with no name in common, is refused); ``s.parameters.write(path,
+  x)`` writes every parameter (a free one from ``x``, a fixed one its start) with the ``#parametrization`` tag.
+- ``pyazr.Session(file, parameter_file=path)``: the session takes **every** value of the file when it is made, the
+  fixed level energies and widths included, as the program takes its external parameter file; ``s.parameters.x0`` is
+  then the file's free values. Use it to evaluate "the project and this fit" as the program does: a file whose fixed
+  values differ from the project's describes another model (11B+α: ten fixed widths up to 1.6 % apart, χ² 9925.03
+  with the free values alone against the program's 9868.04). Names are matched as the program matches them; in an
+  extrapolation run the data sets' normalizations and shifts are not applied.
+
+``pyazr.bands.best_fit_params(s, path)`` gives the bands the fit vector of a parameter file (the session takes the file
+as ``parameter_file=`` does). Do not read these files by row position: rows are added as the code grows (the
+:math:`\sqrt{E}` coefficients, the tag line), and a positional read of a file from another layout is silently off by
+one or more rows.
 
 ``write_output_files(params=None)`` writes the CLI's output files (``AZUREOut_*``, ``chiSquared.out``, ...) for a
-parameter vector, into ``output_dir``: the output directory of the project's ``<config>``, relative to ``cwd``, as the
+fit vector, into ``output_dir``: the output directory of the project's ``<config>``, relative to ``cwd``, as the
 engine resolves it (not necessarily ``output/``).
 
 ``pyazr.bands`` (``sensitivities``, ``uncertainty_bands``, ``extrapolation_bands``) spans the columns the CLI's
@@ -638,8 +644,9 @@ At a fitted point, without refitting, each number is a component's raw contribut
 
    azr.extrap_mode()
    full = azr.evaluate(best).data[0].model
-   off  = azr.evaluate(azr.without_level(best, jpi="5/2-", energy=6.588)).data[0].model
-   only = azr.evaluate(azr.only_level(best,   jpi="5/2-", energy=6.588)).data[0].model
+   P, lvl = azr.parameters, "5/2- 6.588"          # a level_label of P.of_kind("energy")
+   off  = azr.evaluate(P.put(best, P.of_level(lvl).of_kind("width").free, 0.0)).data[0].model
+   only = azr.evaluate(P.put(best, [w for w in P.of_kind("width").free if w.level_label != lvl], 0.0)).data[0].model
 
 ``full - off`` is everything the level does, resonance plus interference; ``only`` minus the non-resonant background
 is the bare resonance. The difference between them is pure interference, which is block-diagonal in J\ :sup:`π` — only
@@ -846,8 +853,8 @@ integrals integrate.
 
 .. code-block:: python
 
-   c = azr.coulomb_functions(pair=1, energies=E, L=0)   # radius=0 -> channel radius
-   c["F"], c["G"], c["P"], c["S"], c["delta_hs"]
+   c = azr.channel_functions(1, E, l=0)               # radius=0 -> channel radius
+   c["F"], c["G"], c["P"], c["S"], c["delta_hs"], c["open"]
 
    paths = azr.ec_integrals(pair=1, energies=E)         # one entry per EC pathway
    paths[0]["li"], paths[0]["lf"], paths[0]["radiation"], paths[0]["value"]
@@ -937,7 +944,7 @@ and NF integral of external capture. At threshold the zero-energy decaying solut
 :math:`S(E) = 2S(0) - S(-E)`, as for the Coulomb functions; S is then continuous through threshold (to within
 :math:`|dS/dE|\,|E|`, about :math:`10^{-3}` at 1 keV for p + :sup:`12`\ C). Against an independent integration (scipy
 DOP853 with mpmath's Whittaker functions) S agrees to :math:`10^{-7}`, :math:`\ln\tilde W(a)` to :math:`10^{-9}` and
-:math:`\int_a^\infty \tilde W^2\,dr` to :math:`3\cdot10^{-8}` (``physics_hybrid_potential``). ``coulomb_functions``
+:math:`\int_a^\infty \tilde W^2\,dr` to :math:`3\cdot10^{-8}` (``physics_hybrid_potential``). ``channel_functions``
 returns this S at :math:`E \le 0` (channel radius only).
 
 The hybrid nuclear potential, per particle pair
@@ -967,7 +974,7 @@ Two things that will bite:
 
 - **Re-read the parameter vector afterwards.** The potential moves the
   penetrabilities and shift functions, and those are what map physical widths
-  to reduced-width amplitudes --- so ``params_rwa`` is re-derived by the
+  to reduced-width amplitudes --- so ``parameters.x0`` is re-derived by the
   rebuild, and a vector captured beforehand no longer describes the same model.
   Feed the old one back and the chi-squared is quietly wrong. This is the same
   caveat as :meth:`~pyazr.Session.set_channel_radius`, for the same reason.
@@ -1013,9 +1020,9 @@ or in pyazr
                                             "diffuseness": 0.6, "on": "light"})
    azr.nuclear_potential(1).spin_orbit        # the dict, or None
    azr.set_nuclear_potential(1, spin_orbit=False)   # remove it
-   azr.coulomb_functions(1, energies, L=1, J=1.5)   # J required for such a pair
+   azr.channel_functions(1, energies, l=1, J=1.5)   # J required for such a pair
 
-The channel functions of such a pair depend on J: ``coulomb_functions`` needs ``J`` for it (``E_SO_NEEDS_J``) and
+The channel functions of such a pair depend on J: ``channel_functions`` needs ``J`` for it (``E_SO_NEEDS_J``) and
 refuses one for any other pair (``E_SO_NO_TERM``).  A term on a pair whose two particles both have spin
 (``E_SO_TWO_SPINS``), on a spin-0 particle (``E_SO_ZERO_SPIN``) or on the default ``pair=0`` is refused with a
 ``ValueError``.
@@ -1155,7 +1162,7 @@ time; refused variants are skipped with the reason, and ``--dry-run`` lists
 the grid without numpy or the engine. The theory, every option and the
 caveats are in :doc:`../theory/thm_implementation`, "Model averaging".
 
-The transform to physical parameters (``transform_rwa``, ``transform_physical``) works at the level energies, which a
+The transform to physical parameters (``Session.transform``) works at the level energies, which a
 fit or a sampler moves at every call, and evaluates the external part of each radiative width there. It shares Coulomb
 functions within the call but leaves none in the memo afterwards, so a sampler that transforms at every step (physical
 priors, a fixed total gamma width) keeps a constant footprint.
@@ -1164,8 +1171,8 @@ Earlier names
 -------------
 
 pyazr 3.0 has one call for each thing and no aliases of the earlier names: a script written for an earlier release
-changes as this table says.  ``x`` is the fit vector (``s.parameters.x0``, ``s.params_rwa``); a physical vector is
-no input of any call.
+changes as this table says.  ``x`` is the fit vector (``s.parameters.x0``); a physical vector is no input of any
+call.
 
 .. list-table::
    :header-rows: 1
@@ -1185,7 +1192,7 @@ no input of any call.
      - ``s.evaluate(x).data[i].extra["legendre"]``
    * - ``calculate``, ``calculate_all_rwa``, ``calculate_sfactor``, ``calculate_analyzing_power``,
        ``calculate_angular_dists``, ``calculate_chi2`` (a physical or a full vector)
-     - none: the fit vector is the only input (``s.transform_rwa`` gives physical values; the engine offers no
+     - none: the fit vector is the only input (``s.transform(x)`` gives physical values; the engine offers no
        inverse to pyazr)
    * - ``calculate_chi2_rwa(x)[0]``
      - ``ev.chi2`` (the data χ²) plus ``ev.terms["Park J > 0"]``, ``["abundances"]`` and ``["model data"]``, the
@@ -1207,6 +1214,53 @@ no input of any call.
    * - ``chi2_and_grad(x)``
      - ``s.objective().value_and_grad(x)`` (the objective's); the data part alone: ``2 * J[:n].T @ r[:n]`` from
        ``r, J = s.objective().residuals_and_jacobian(x)``, ``n = ev.data[-1].rows.stop``
+   * - ``s.params_rwa``
+     - ``s.parameters.x0`` (a copy; the session holds no settable vector)
+   * - ``s.params`` (the physical free vector), ``s.fixed_params``
+     - ``s.transform(x)[s.parameters.free_mask]``; ``~s.parameters.free_mask``
+   * - ``transform_rwa(x)``
+     - ``s.transform(x)[s.parameters.free_mask]`` (its first entries; ``s.transform(x)`` has one entry per row of
+       ``s.parameters``)
+   * - ``transform_all_rwa(full, include_fixed=True)``, ``transform_all_rwa(full)``
+     - ``s.transform(x)``, ``s.transform(x)[s.parameters.free_mask]`` (``x`` the fit vector, not the full one)
+   * - ``transform_physical(p)``
+     - none: the engine offers no inverse; a fit vector is made with ``Parameters.put`` or ``Parameters.read``
+   * - ``n_rmatrix``
+     - ``len(s.parameters.free.of_kind("energy", "width"))``
+   * - ``ParameterSet`` and its views ``.energies``, ``.widths``, ``.norms``, ``.shifts``, ``.sqrt_shifts``,
+       ``.fn_shifts``, ``.abundances``, ``.screenings``, ``.densities``, ``.dopplers``, ``.thicknesses``, ``.cbkg``
+     - :class:`pyazr.Parameters`; ``P.of_kind("energy")``, ``"width"``, ``"norm"``, ``"shift"``, ``"shift_sqrt"``,
+       ``"shift_fn"``, ``"abundance"``, ``"screening"``, ``"density"``, ``"doppler"``, ``"thickness"``, ``"cbkg"``
+   * - ``P.fixed``, ``P.indices()``, ``P.values()``, ``P.wigner_limits()``
+     - ``[p for p in P if p.fixed]``, ``[p.free_index for p in P.free]``, ``[p.value for p in P]``,
+       ``[p.wigner_limit for p in P]``
+   * - ``put(x, values)``, ``take(x)`` (a selection's own rows)
+     - ``P.put(x, rows, values)``, ``P.take(x, rows)`` with ``rows = sel.free``
+   * - ``LevelKey``, ``physical_levels()``, ``P.by_level(...)``, ``P.by_physical_level()``
+     - the energy rows ``P.of_kind("energy")`` (``level_label``, ``jgroup``, ``level``, ``level_energy``);
+       ``P.of_level(label)`` (or ``(jgroup, level)``)
+   * - ``level_free_width_indices(level)``
+     - ``[p.free_index for p in P.of_level(label).of_kind("width").free]``
+   * - ``without_level(x, level)``, ``only_level(x, level)``
+     - ``P.put(x, P.of_level(label).of_kind("width").free, 0.0)``; ``P.put(x, [w for w in
+       P.of_kind("width").free if w.level_label != label], 0.0)``
+   * - ``norm_indices()``, ``shift_indices()``, ``energy_indices()``
+     - ``[p.free_index for p in P.of_kind("norm").free]`` (``"shift"``, ``"energy"``)
+   * - ``read_sav(path)``, ``read_sav_basis(path)``
+     - ``pyazr.parameters.read_parameter_file(path)``: ``(basis, {name: value})``
+   * - ``load_sav(path)``, ``full_rwa_from_sav(path)``, ``update_rwa_params_from_sav()``
+     - ``pyazr.Session(file, parameter_file=path)`` (every value of the file, fixed ones included) and
+       ``s.parameters.x0``; the free values alone: ``s.parameters.read(path)``
+   * - ``update_sav_from_rwa_params(x)``
+     - ``s.parameters.write(path, x)`` (every parameter, by name, with the basis tag)
+   * - ``refresh_parameters()``, ``refresh_pairs()``
+     - none: the tables are rebuilt when the engine's layout changes
+   * - ``coulomb_functions(pair, E, L=l)`` (keys ``dF``, ``dG``, ``energy``)
+     - ``s.channel_functions(pair, E, l=l)`` (keys ``Fp``, ``Gp``, ``e_cm``; arrays of the shape of ``E``; ``open``)
+   * - the fields ``prior_nominal``, ``input_is_rwa``, ``density_max``, ``doppler_max``, ``sample`` of a parameter
+     - ``prior_centre``, ``width_is_amplitude``, ``layout_max``, ``layout_max``, ``sample_name``
+   * - ``s.describe()["parameters"]`` with ``x``, ``physical_value``, ``free``
+     - the records (as ``s.parameters``): ``start``, ``value``, ``fixed``
    * - ``s.sess`` (the binding's session object)
      - none: ``s._engine`` is private (no lock, no promise of stability); every number has a public call
    * - ``residuals(x)``, ``residual_jacobian(x, skip=...)``
@@ -1243,7 +1297,7 @@ Worked scripts ship in ``pyazr/examples/``:
      - Reduced width amplitudes to physical partial widths.
    * - ``dimensionless_widths.py``
      - θ² and Weisskopf units for a whole fit.
-   * - ``coulomb_functions.py``
+   * - ``channel_functions.py``
      - Coulomb functions, penetrability and hard-sphere phase over an
        energy grid.
    * - ``ec_integrals.py``

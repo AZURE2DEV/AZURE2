@@ -25,6 +25,8 @@ Models: tests/13N (capture, angular distributions, mapped points) and tests/natu
 natural-sample segments).
 
 Run from anywhere:  python3 tests/pyazr/parallel_points_test.py
+
+This test reads the binding itself (`_azure2.Session`), so it uses the private handle `Session._engine`.
 """
 import json
 import os
@@ -63,8 +65,8 @@ def worker(model_dir, azr, out):
     from pyazr import Session
     a = Session(os.path.join(model_dir, azr), cwd=model_dir)
     res = {}
-    x0 = np.array(a.params_rwa, float)
-    p0 = np.array(a.params, float)
+    x0 = np.array(a.parameters.x0, float)
+    p0 = np.array(a._engine.params_values(), float)
     full0 = np.array(a._engine.params_all_rwa(), float)
     for tag, s in [("x0", 1.0), ("moved", 1.03)]:
         x, p, full = x0 * s, p0 * s, full0 * s

@@ -52,8 +52,8 @@ In pyazr
 
    m = pyazr.Session("hybrid_potential.azr")
    m.set_nuclear_potential(1, spin_orbit={"depth": 6.0, "radius": 3.6, "diffuseness": 0.6, "on": "light"})
-   p12 = m.coulomb_functions(1, [0.5, 1.0, 3.0], L=1, J=0.5)
-   p32 = m.coulomb_functions(1, [0.5, 1.0, 3.0], L=1, J=1.5)
+   p12 = m.channel_functions(1, [0.5, 1.0, 3.0], l=1, J=0.5)
+   p32 = m.channel_functions(1, [0.5, 1.0, 3.0], l=1, J=1.5)
 
 At :math:`E_{cm}` = 0.5 MeV and :math:`a_c` = 3.6 fm the shift function is :math:`-0.7518` (:math:`p_{1/2}`) and
 :math:`-0.2428` (:math:`p_{3/2}`), the penetrability 3.583·10\ :sup:`-3` and 4.418·10\ :sup:`-3`.  The elastic

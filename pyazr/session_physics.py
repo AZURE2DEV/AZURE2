@@ -2,14 +2,35 @@
 :class:`pyazr.Session` that need the session's pairs, radii and options, where the free functions of
 :mod:`pyazr.physics` need none.  Mixed into the session class (``class Session(..., SessionPhysics)``)."""
 
+from typing import NamedTuple
+
 import numpy as np
 
 from . import session_checks
 from .locking import engine_call
 
 
+class ScatteringLength(NamedTuple):
+    """The s-wave scattering length of one channel spin of a particle pair
+    (:meth:`Session.scattering_lengths`).  ``a0`` is complex when a lower channel
+    is open at the pair's threshold; ``has_levels`` is False when no level has a
+    width in the channel (``a0`` is then the hard-sphere value)."""
+    pair: int
+    s: float
+    parity: int
+    a0: complex
+    has_levels: bool
+
+    @property
+    def jpi(self):
+        """J^pi of the channel (J = s for l = 0), e.g. ``"1/2+"``."""
+        j = self.s
+        text = f"{int(round(2 * j))}/2" if abs(j - round(j)) > 1e-6 else f"{int(round(j))}"
+        return text + ("+" if self.parity > 0 else "-")
+
+
 class SessionPhysics:
-    """Mixed into :class:`pyazr.Session`: uses its ``_engine`` and ``pairs``."""
+    """Mixed into :class:`pyazr.Session`: uses its ``_engine``, ``pairs``, ``parameters`` and ``transform``."""
 
     @engine_call
     def channel_functions(self, pair, e_cm, l=0, radius=0.0, J=None):
@@ -36,7 +57,6 @@ class SessionPhysics:
 
         Raises :class:`pyazr.ParameterIndexError` for an unknown pair, :class:`pyazr.DomainError` for a photon pair
         or an l that is not a whole number >= 0, ``ValueError`` for a J a spin-orbit pair needs or cannot make.
-        The older name of this call is :meth:`coulomb_functions` (keys ``dF``, ``dG``, flat arrays).
         """
         pair, l = session_checks.channel_request(self.pairs, pair, l)
         energies = np.asarray(e_cm, float)
@@ -48,4 +68,255 @@ class SessionPhysics:
                for i, k in enumerate(("F", "Fp", "G", "Gp", "P", "S", "delta_hs"))}
         out["open"] = (energies > 0) & ((out["F"] != 0) | (out["G"] != 0))
         out["e_cm"] = energies.copy()
+        return out
+
+    # -- dimensionless widths -------------------------------------------------
+
+    @property
+    @engine_call
+    def mass_number(self):
+        """Mass number A of the compound nucleus, from the particle pairs."""
+        for p in self.pairs:
+            if not p.is_photon:
+                return int(round(p.M1 + p.M2))
+        raise ValueError("no particle pair to take the compound mass from.")
+
+    @engine_call
+    def wigner_widths(self, params=None, eps=1e-4):
+        """``{free_index: Gamma_W}`` in eV -- the GUI's Wigner width per channel.
+
+        ``Gamma_W = 2 P_l(E_r) gamma^2_W`` is what the AZURE2 GUI shows next to
+        each particle channel, and ``theta^2 = Gamma_c / Gamma_W``.  It needs
+        the penetrability at the level energy, which the API does not expose, so
+        this asks AZURE2 for it: every reduced-width amplitude is set to a tiny
+        ``eps`` and the model transformed, which makes the level-shift
+        denominator 1 and the J-group level mixing vanish to O(eps^2), leaving
+        ``Gamma_c(eps) = 2 P_c eps^2``.  One extra transform, evaluated with
+        AZURE2's own radii, boundary conditions and Coulomb functions.
+
+        Only *free* channels appear: the transform returns non-fixed parameters
+        only.  Closed (sub-threshold) channels are omitted -- there
+        ``P_l = 0`` and AZURE2 reports an ANC rather than a width.  Level
+        energies are taken from ``params`` (default: the current
+        ``parameters.x0``), so the limits sit at the fitted resonance energies.
+        """
+        x = np.asarray(self.parameters.x0 if params is None else params, float)
+        probe = x.copy()
+        for p in self.parameters.of_kind("width"):
+            if p.fixed or p.free_index is None or p.free_index >= probe.size:
+                continue
+            # photon channels are linear in the amplitude (external capture),
+            # so they must not pollute the probe
+            probe[p.free_index] = 0.0 if p.radiation_type in ("E", "M") else eps
+        probed = self.transform(probe)[self.parameters.free_mask]
+
+        out = {}
+        for p in self.parameters.of_kind("width"):
+            if (p.fixed or p.free_index is None or p.free_index >= probed.size
+                    or p.radiation_type in ("E", "M") or p.wigner_limit is None):
+                continue
+            pair = self.pairs.by_number(p.pair)
+            if not self._channel_open(p, x, pair):
+                continue
+            two_p = abs(float(probed[p.free_index])) / eps ** 2
+            out[p.free_index] = two_p * p.wigner_limit
+        return out
+
+    def _level_energies(self, params=None):
+        """``{(jgroup, level): Ex}`` -- level energies at ``params`` (MeV)."""
+        x = np.asarray(self.parameters.x0 if params is None else params, float)
+        energies = {}
+        for p in self.parameters:
+            if p.kind != "energy":
+                continue
+            key = (p.jgroup, p.level)
+            if not p.fixed and p.free_index is not None and p.free_index < x.size:
+                energies[key] = float(x[p.free_index])
+            else:
+                # Parameter.level_energy carries None for a level at Ex = 0
+                # (the API's sentinel); as an energy that is a real 0.0 MeV.
+                energies[key] = 0.0 if p.level_energy is None else p.level_energy
+        return energies
+
+    def _channel_open(self, param, x, pair, energies=None):
+        """Is ``param``'s channel above threshold at the level's energy?"""
+        energies = energies or self._level_energies(x)
+        ex = energies.get((param.jgroup, param.level), param.level_energy)
+        if ex is None:
+            return False
+        return ex > pair.sep_energy + pair.excitation
+
+    @engine_call
+    def dimensionless_widths(self, params=None, eps=1e-4):
+        """Every channel's width made dimensionless -- a :class:`WidthTable`.
+
+        Particle channels get the Wigner limit and ``theta^2 = Gamma/Gamma_W``
+        (plus ``theta^2_formal = gamma^2/gamma^2_W``); photon channels get the
+        Weisskopf single-particle estimate and the strength in W.u.  ``params``
+        is a fit vector -- pass a fit result to report
+        the fitted widths, or leave it out for the ``.azr``'s own values.
+
+        >>> t = m.dimensionless_widths(best)
+        >>> print(t.photons.nonzero.table())
+        >>> max(c.theta2 for c in t.particles if c.theta2)
+        """
+        from .widths import ChannelWidth, WidthTable, weisskopf_width
+
+        x = np.asarray(self.parameters.x0 if params is None else params, float)
+        phys = self.transform(x)[self.parameters.free_mask]
+        gamma_w = self.wigner_widths(x, eps=eps)
+        energies = self._level_energies(x)
+        A = self.mass_number
+
+        table = WidthTable()
+        for p in self.parameters.of_kind("width"):
+            pair = self.pairs.by_number(p.pair)
+            ex = energies.get((p.jgroup, p.level), p.level_energy)
+            free = p.free_index if (not p.fixed and p.free_index is not None) else None
+            # the rwa of a fixed channel is not exposed by the API; its physical
+            # value does not move with the fit, so report that and leave gamma out
+            g = float(x[free]) if free is not None and free < x.size else None
+            value = (float(phys[free]) if free is not None and free < phys.size
+                     else p.value)
+            photon = p.radiation_type in ("E", "M")
+            row = ChannelWidth(
+                name=p.name, index=p.index, free_index=p.free_index,
+                fixed=p.fixed, jgroup=p.jgroup, level=p.level, jpi=p.jpi,
+                level_energy=ex, pair=p.pair, L=p.L, S=p.S,
+                radiation_type=p.radiation_type or "P",
+                gamma=g, value=value, is_photon=photon,
+                threshold=None if photon else pair.sep_energy + pair.excitation,
+            )
+            if photon:
+                row.is_open = True
+                row.e_gamma = None if ex is None else ex - pair.excitation
+                row.weisskopf = weisskopf_width(p.radiation_type, p.L,
+                                                row.e_gamma, A)
+                if row.weisskopf and value is not None:
+                    row.wu = abs(value) / row.weisskopf
+            else:
+                row.is_open = self._channel_open(p, x, pair, energies)
+                row.wigner_gamma2 = p.wigner_limit
+                if p.wigner_limit and g is not None:
+                    row.theta2_formal = g ** 2 / p.wigner_limit
+                row.wigner_width = gamma_w.get(free)
+                if row.wigner_width and value is not None and row.is_open:
+                    row.theta2 = abs(value) / row.wigner_width
+            table.append(row)
+        return table
+
+    @engine_call
+    def scattering_lengths(self, params=None):
+        """The s-wave scattering lengths of every particle pair at a free RWA
+        vector (default ``parameters.x0``): a list of :class:`ScatteringLength`,
+        one per allowed channel spin (identical pairs: even s only).
+
+        a0 = -a [M/(x^2 K1^2) - 2 I1/(x^2 K1)] with M = gamma^T A gamma at the
+        pair's threshold (Paneru et al., PRC 99, 045807 (2019), Eq. 7), a (1 - M)
+        for a neutral pair; the same in every parametrization.  Call it on each
+        sample of an MCMC chain for the posterior of a0.  The measured ones of
+        the ``scattering_length`` data of ``<modelData>`` are already part of
+        the objective (``evaluate(x).terms["model data"]``)."""
+        x = np.asarray(self.parameters.x0 if params is None else params, float)
+        flat = np.asarray(self._engine.scattering_lengths_rwa(x), float).reshape(-1, 6)
+        return [ScatteringLength(int(r[0]), float(r[1]), int(r[2]), complex(r[3], r[4]), bool(r[5])) for r in flat]
+
+    @engine_call
+    def park_norms(self, params=None):
+        """Park formalism: the overlap J = 1 - sum_c gamma_c^2 dS_c/dE of every
+        R-matrix level, in the order of the energy rows of ``parameters`` (``of_kind("energy")``).
+
+        J is the squared norm of the level's basis state (Park 2021, Eq. 28)
+        and the factor between the two parametrizations,
+        ``gamma_Park = gamma_Brune * sqrt(J)``.  Every real Brune parameter set
+        has 0 < J <= 1; a Park parameter set with J <= 0 has no R-matrix
+        counterpart (its widths exceed what the channel radii allow) and the
+        engine penalizes it (``evaluate(x).terms["Park J > 0"]``).  All ones in Brune mode.
+        """
+        x = np.asarray(self.parameters.x0 if params is None else params, float)
+        return np.asarray(self._engine.park_norms(x), float)
+
+    @engine_call
+    def model_gradients(self, params):
+        """Analytic ``d(observable)/d(parameter)`` for every calculated point.
+
+        Returns a list with one ``(npoints, ncols)`` array per calculated
+        segment, in the order and point ordering of ``evaluate(x).data``.  The
+        columns are the free **R-matrix** parameters -- level energies and
+        reduced-width amplitudes, in the order of the fit vector -- and the THM
+        coherent background (``cbkg``) when there is one, which is exactly
+        what ``output/covariance.dat`` spans; normalizations and energy shifts
+        are omitted because no calculated observable depends on them.
+
+        This is the sensitivity matrix an uncertainty band needs
+        (``sigma^2 = g^T C g``).  Each row comes from one reverse-mode adjoint,
+        so the whole thing costs about two forward evaluations no matter how
+        many parameters the model has -- as against the ``2 * ncols`` forward
+        passes a finite-difference estimate would take.  See
+        :func:`pyazr.bands.uncertainty_bands`.
+
+        THM (HOES) points have their own adjoint (see
+        ``objective().jacobian``).
+
+        Raises ``RuntimeError`` if the model contains a segment outside the
+        supported analytic path.
+        """
+        resp = np.asarray(
+            self._engine.calculate_model_gradients_rwa(
+                np.asarray(params, float).ravel()), dtype=float)
+        if resp.size == 1 and resp[0] == -1.0:
+            raise RuntimeError("model_gradients: an analytically-unsupported "
+                               "segment/config is present.")
+        nseg = int(round(resp[0]))
+        ncols = int(round(resp[1]))
+        counts = [int(round(x)) for x in resp[2:2 + nseg]]
+        flat = resp[2 + nseg:]
+        if flat.size != sum(counts) * ncols:
+            raise RuntimeError(
+                f"model_gradients: got {flat.size} values, expected "
+                f"{sum(counts) * ncols}.")
+        out, start = [], 0
+        for n in counts:
+            out.append(flat[start:start + n * ncols].reshape(n, ncols))
+            start += n * ncols
+        return out
+
+    @engine_call
+    def ec_integrals(self, pair, energies):
+        """External-capture radial integrals on an energy grid.
+
+        Every external-capture pathway the compound nucleus generates from this
+        entrance pair is evaluated at every energy.  Returns a list of dicts,
+        one per pathway, each carrying its quantum numbers (``li``, ``lf``,
+        ``si``, ``sf``, ``multipolarity``, ``radiation``) and the complex
+        integral as ``value``.
+
+        These integrals are the most expensive part of a capture calculation --
+        which is why AZURE2 caches them.  Asking for them twice and watching
+        :meth:`cache_stats` is the direct way to see that.
+        """
+        e = np.asarray(energies, float).ravel()
+        req = np.concatenate([[pair, e.size], e])
+        resp = np.asarray(self._engine.ec_integrals(req), dtype=float)
+        npath = int(round(resp[0]))
+        nE = int(round(resp[1]))
+        stride = 6 + 2 * nE
+        body = resp[2:]
+        if body.size != npath * stride:
+            raise RuntimeError(
+                f"ec_integrals: got {body.size} values, expected {npath * stride}.")
+        out = []
+        for p in range(npath):
+            b = body[p * stride:(p + 1) * stride]
+            vals = b[6:].reshape(nE, 2)
+            out.append({
+                "li": int(round(b[0])),
+                "lf": int(round(b[1])),
+                "si": b[2] / 2.0,
+                "sf": b[3] / 2.0,
+                "multipolarity": int(round(b[4])),
+                "radiation": "E" if b[5] > 0.5 else "M",
+                "energy": e[:nE],
+                "value": vals[:, 0] + 1j * vals[:, 1],
+            })
         return out

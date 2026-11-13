@@ -150,7 +150,7 @@ try:
         print(name)
         path = stage(tmp, name, block)
         m = Session(path, **kw)
-        x = np.asarray(m.params_rwa, float)
+        x = np.asarray(m.parameters.x0, float)
         rA, JA, GA = jacobians(m, x)
         rF, JF, GF = fd_jacobians(path, kw, x, tmp)
         check("residuals identical in both modes", np.array_equal(rA, rF))

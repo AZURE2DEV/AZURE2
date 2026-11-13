@@ -97,7 +97,7 @@ and ``<config>`` keys through the engine's grammars, and saves it; an
 unedited project is written back byte for byte. It does not evaluate.
 
 ``pyazr.Session`` (``pyazr/session.py``) is a session: it owns one
-``_azure2.Session`` and offers the parameters (``ParameterSet``), the data
+``_azure2.Session`` and offers the parameters (``Parameters``), the data
 sets, the objective (``Session.objective()``: a ``pyazr.Objective``, ``pyazr/objective.py``) and the
 numbers at one parameter point (``Session.evaluate(x)``: a ``pyazr.Evaluation``, ``pyazr/evaluate.py``: model
 values, χ², the objective's terms, the data sets' rows of the objective, the extrapolations in extrapolation mode),
@@ -122,6 +122,3 @@ process, where ``Engine`` (``engine.py``) owns a ``pyazr.Session``. Every route
 of its API is one row of ``ROUTES`` (``routes.py``). The page
 (``pyazr/ui/static``) holds no state of the project and computes no physical
 number.
-
-.. note:: **Planned.**
-   ``ParameterSet`` gives way to ``Parameters``; ``engine.py`` is then the only file of the web UI that changes.

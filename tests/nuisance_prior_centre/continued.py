@@ -32,12 +32,12 @@ def check(name, ok, detail=""):
 
 def layout(m, name):
     p = next(q for q in m.parameters if q.name == name)
-    return {"density": p.density_max, "doppler": p.doppler_max}.get(p.kind, p.S)
+    return {"density": p.layout_max, "doppler": p.layout_max}.get(p.kind, p.S)
 
 
 def evaluate(path, cwd, sav, name):
-    with Session(path, cwd=cwd) as m:
-        x = m.load_sav(sav)
+    with Session(path, cwd=cwd, parameter_file=sav) as m:
+        x = m.parameters.x0
         return m.objective()(x), {d.name: d.chi2 for d in m.evaluate(x).data}, layout(m, name)
 
 
@@ -60,8 +60,8 @@ def main(work):
               (fo, wo, fd, wd, fl, wl))
         if case == "scale":
             continue
-        with Session(os.path.join(d, "t.azr"), cwd=d) as m:
-            x = m.load_sav(sav)
+        with Session(os.path.join(d, "t.azr"), cwd=d, parameter_file=sav) as m:
+            x = m.parameters.x0
             try:
                 m.save_fit(os.path.join(d, "snapshot.azr"), x, param_sav=False)
                 check(f"({case}) save_fit(verify=True): the snapshot reads back as the fit", True)

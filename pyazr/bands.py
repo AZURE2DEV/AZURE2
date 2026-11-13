@@ -9,7 +9,7 @@ observable the model can compute follows from linear propagation,
 which is the same expression AZURE2 uses internally to write its ``.band``
 files (SAMMY Eq. IV E4.2).  ``covariance.dat`` spans exactly the **free
 R-matrix parameters** -- level energies and reduced-width amplitudes, in their
-``params_rwa`` order -- because an observable is insensitive to the dataset
+fit-vector order -- because an observable is insensitive to the dataset
 normalizations and energy shifts that make up the rest of the fit vector.
 
 The sensitivities :math:`g` come from AZURE2 itself -- one reverse-mode adjoint
@@ -152,7 +152,7 @@ def live_parameters(model):
     parameters (197 free) in data mode can report 234 (72 free) in
     extrapolation mode.  The free R-matrix block survives, in order, and it is
     that block the covariance describes.  This reads the engine's *current*
-    parameter records (``Session.parameter_records()``), rebuilt on every
+    parameter records (``Session.parameters``), rebuilt on every
     ``initialize()``, so it is right for the mode the session is in now.
 
     Returns the ``kind`` of each free parameter (keys of ``pyazr.kinds()["parameters"]``) and its identity
@@ -166,7 +166,7 @@ def live_parameters(model):
 
 
 def rmatrix_columns(model):
-    """Packed indices of the free R-matrix parameters, in ``params_rwa`` order.
+    """Packed indices of the free R-matrix parameters, in the order of the fit vector.
 
     These are the columns ``covariance.dat`` spans: level energies and reduced
     width amplitudes, and the THM coherent background (``cbackground=``, kind
@@ -182,7 +182,8 @@ def rmatrix_columns(model):
 
 
 def best_fit_params(model, path=None):
-    """The best-fit free parameter vector, read from ``output/param.sav``.
+    """The best-fit fit vector, read from ``output/param.sav`` (or ``path``); the session takes the file's every
+    value, fixed ones included, as ``Session(file, parameter_file=path)`` does when it is made.
 
     A model's ``.azr`` file need not carry the fitted values -- ``param.sav``
     is what a fit writes -- so a band must be evaluated at the parameters the
@@ -201,21 +202,17 @@ def best_fit_params(model, path=None):
             f"{path} not found: the band must be evaluated at the fitted "
             f"parameters the covariance belongs to.  Pass params= explicitly "
             f"to override.")
-    # By NAME (Session.full_rwa_from_sav): a parameter the file does not list
+    # By NAME (pyazr.parameter_file): a parameter the file does not list
     # keeps the session's value, so a file from an older layout (no
     # segment_*_energy_shift_sqrt rows, no #parametrization tag) still fits,
     # and in extrapolation mode the file's segment rows simply find no home.
     #
     # The file's FIXED level parameters are part of the fit too (the CLI's
-    # reader applies them), and the free vector alone cannot carry them, so a
-    # session that has Session.load_sav takes the whole file into the engine
-    # first -- names matched against the live parameter list, either mode.
-    if hasattr(model, "load_sav"):
-        free = np.asarray(model.load_sav(path), float)
-    else:
-        full = model.full_rwa_from_sav(path)
-        fixed = np.asarray(model.fixed_params, float).round().astype(bool)
-        free = full[~fixed]
+    # reader applies them), and the fit vector alone cannot carry them, so the
+    # session takes the whole file, as Session(file, parameter_file=path) would
+    # have when it was made -- names matched against the live parameter list.
+    model._take_parameter_file(path)
+    free = model.parameters.x0
 
     kinds, _ = live_parameters(model)
     if len(kinds) == free.size:
@@ -386,7 +383,7 @@ def sensitivities(model, segments, params=None, quantity="cross", step=1e-4,
     segments : calculated-segment indices (0-based, counting **active**
         segments only -- see :func:`active_indices`).
     params : the free parameter vector to differentiate about; defaults to
-        ``model.params_rwa``.
+        ``model.parameters.x0``.
     quantity : ``'cross'`` or ``'sfactor'``.
     step : relative perturbation, or a per-column array of absolute steps, for
         the finite-difference methods only.  See :func:`step_sizes`.
@@ -417,7 +414,7 @@ def sensitivities(model, segments, params=None, quantity="cross", step=1e-4,
     dict
         ``{segment: array of shape (npoints, len(cols))}``.
     """
-    p0 = np.asarray(model.params_rwa if params is None else params, float)
+    p0 = np.asarray(model.parameters.x0 if params is None else params, float)
 
     if method == "analytic":
         G = model.model_gradients(p0)
@@ -503,7 +500,7 @@ def uncertainty_bands(model, segments=None, keys=None, params=None,
         indices for you (inactive segments are not calculated).
     params : parameters to evaluate at; defaults to ``output/param.sav``, since
         that -- not the ``.azr`` -- is what a fit writes and what the
-        covariance describes.  Pass ``model.params_rwa`` to use the file's own
+        covariance describes.  Pass ``model.parameters.x0`` to use the file's own
         values.
     covariance : path to ``covariance.dat``, or the matrix itself.  Defaults to
         ``output/covariance.dat`` beside the model.

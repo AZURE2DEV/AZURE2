@@ -104,7 +104,7 @@ _azure2::Session	Config	owns	frontends		Session::config_ (new Config in the cons
 _azure2::Session	AZUREAPI	owns	frontends		Session::api_ (new AZUREAPI(*config_))
 _azure2::Session	RuntimeOptions	reads	frontends	const	Session(const std::string &, const RuntimeOptions &)
 pyazr::Session	_azure2::Session	owns	frontends		Session._sess = _azure2.Session(self.file, opts)
-pyazr::Session	ParameterSet	makes	frontends		Session.parameters returns ParameterSet(rows, ...)
+pyazr::Session	Parameters	makes	frontends		Session.parameters returns Parameters(rows, ...)
 pyazr::Objective	pyazr::Session	reads	frontends	nonconst	Objective._session (Session.objective() makes it)
 pyazr::Session	pyazr::Evaluation	makes	frontends		Session.evaluate(x) returns Evaluation(x, raw, ...)
 Project	azure2::io::Document	owns	frontends		Project._doc = _azure2.Document.parse(...)

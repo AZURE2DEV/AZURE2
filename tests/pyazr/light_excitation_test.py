@@ -147,7 +147,7 @@ try:
         for name in ("aC_heavy", "aC_light"):
             with session(name) as s:
                 q = s.pairs[1]
-                res[name] = ([np.asarray(v, float) for v in [d.model for d in s.evaluate(np.asarray(s.params_rwa, float)).data]],
+                res[name] = ([np.asarray(v, float) for v in [d.model for d in s.evaluate(np.asarray(s.parameters.x0, float)).data]],
                              q.light_excitation, q.excitation)
         check("aC_light pair 2: light_excitation = E*, aC_heavy pair 2: 0; both excitation = E*",
               res["aC_light"][1] == E2P and res["aC_heavy"][1] == 0.0 and res["aC_light"][2] == res["aC_heavy"][2] == E2P,

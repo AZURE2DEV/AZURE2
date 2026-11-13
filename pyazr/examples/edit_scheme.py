@@ -14,4 +14,4 @@ for level in model.levels():
     print(level.label, [(c.pair, c.l, c.s, c.width) for c in level.channels])
 
 azr = Session(path)                                 # run the edited scheme
-print(f"\n{len(azr.level_scheme.levels)} levels, {len(azr.params)} free parameters")
+print(f"\n{len(azr.level_scheme.levels)} levels, {len(azr.parameters.x0)} free parameters")

@@ -55,15 +55,15 @@ try:
         shutil.copy(os.path.join(tmp, "grad_fit.azr"), work)
         os.symlink(os.path.join(tmp, "data"), os.path.join(work, "data"))
         with Session(os.path.join(work, "grad_fit.azr"), cwd=work) as s:
-            tp = s.parameters.thicknesses
+            tp = s.parameters.of_kind("thickness")
             print("    " + "; ".join(f"{p.name} (data set {p.segment_key}, prior {p.prior_sigma}, fixed {p.fixed})"
                                       for p in tp))
             free = [p for p in tp if not p.fixed]
             keys = {p.segment_key: p for p in tp}
-            ok = (all(p.prior_nominal == 0.15 for p in tp) and
+            ok = (all(p.prior_centre == 0.15 for p in tp) and
                   [keys[k].prior_sigma for k in (1, 2, 3, 4)] == [0, 0, 0.01, 0.01] and len(free) == 7)
             check("type-10 records: priors on 3, 4; 5 and 6 one parameter (7 free in all)", ok, list(tp))
-            x = np.asarray(s.params_rwa, float)
+            x = np.asarray(s.parameters.x0, float)
             pen0 = s.evaluate(x).terms["thickness priors"]
             xm = x.copy()
             for p in free:

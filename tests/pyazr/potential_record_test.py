@@ -7,7 +7,7 @@ Checks, on the old original of tests/hybrid_potential (tests/convert/fixtures) c
 to=3), pair 1 (p + 12C, Woods-Saxon
 20 / 3.6 / 0.6 MeV, fm, a_c = 3.6 fm):
   (1) the conversion writes one record, coulomb_radius 3.5 fm, and no <potential> block;
-  (2) with `coulomb_radius 5 fm` in the record, P and S from coulomb_functions (l = 0-2, E = 0.5-3 MeV, and S at the
+  (2) with `coulomb_radius 5 fm` in the record, P and S from channel_functions (l = 0-2, E = 0.5-3 MeV, and S at the
       13N ground state, -1.94351 MeV) against an independent DOP853 integration with R_C = 5 fm
       (data/coulomb_radius.csv, data/make_coulomb_radius_reference.py) to 1e-6 (P relative, S absolute); the R_C = 3.5
       fm rows differ from those by more than 1e-4, so the check sees the radius;
@@ -69,11 +69,11 @@ def functions(A):
     """P and S at the scattering energies and S at the bound state, l = 0-2, pair 1."""
     out = {}
     for L in (0, 1, 2):
-        cf = A.coulomb_functions(1, ENERGIES, L=L)
+        cf = A.channel_functions(1, ENERGIES, l=L)
         for i, E in enumerate(ENERGIES):
             out[(L, E, "P")] = float(cf["P"][i])
             out[(L, E, "S")] = float(cf["S"][i])
-        out[(L, BOUND, "S")] = float(A.coulomb_functions(1, [BOUND], L=L)["S"][0])
+        out[(L, BOUND, "S")] = float(A.channel_functions(1, [BOUND], l=L)["S"][0])
     return out
 
 

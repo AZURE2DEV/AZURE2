@@ -68,7 +68,7 @@ def direct(client, recipe, settings):
     s = pyazr.Session(path, cwd=state.directory)
     names = [p.name for p in s.parameters if p.free_index is not None and not p.fixed]
     tracker = Tracker(s.objective().value_and_grad, names)
-    status = recipe(tracker, np.asarray(s.params_rwa, float), settings, names)
+    status = recipe(tracker, np.asarray(s.parameters.x0, float), settings, names)
     s.close()
     os.remove(path)
     return tracker, status

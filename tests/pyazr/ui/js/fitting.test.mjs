@@ -17,7 +17,7 @@ const PARAMS = [
   { name: "energy_1", kind: "k_a", unit: "MeV", x: 12.4258, physical_value: 12.4258, free: true, bounds: null },
   { name: "width_1_1", kind: "k_b", unit: "MeV^1/2", x: null, physical_value: 547.9, free: false, bounds: null },
   { name: "tgt.areal", kind: "k_c", unit: "atoms/cm^2", x: 2e17, physical_value: 2e17, free: true, bounds: [0, null],
-    prior_nominal: 2e17, prior_sigma: 2e16 },
+    prior_centre: 2e17, prior_sigma: 2e16 },
 ];
 
 test("parameter rows: working x for free ones, nothing for fixed ones; job columns only with a job", () => {

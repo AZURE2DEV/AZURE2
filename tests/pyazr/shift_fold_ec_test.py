@@ -76,7 +76,7 @@ def shift_index(a):
 
 try:
     with session("offset 0 MeV fit") as a:
-        x0 = np.array(a.params_rwa, float)
+        x0 = np.array(a.parameters.x0, float)
         k = shift_index(a)
         c0 = np.array([d.chi2 for d in a.evaluate(x0.copy()).data])[0]
         x = x0.copy()
@@ -90,13 +90,13 @@ try:
 
     for far in (0.2, -0.2, 0.05, 0.02):
         with session("offset 0 MeV fit") as a:
-            x = np.array(a.params_rwa, float)
+            x = np.array(a.parameters.x0, float)
             x[shift_index(a)] += far
             moved = np.array([d.chi2 for d in a.evaluate(x).data])[0]
         with session(f"offset {far} MeV fixed") as a:
-            fixed = np.array([d.chi2 for d in a.evaluate(np.array(a.params_rwa, float)).data])[0]
+            fixed = np.array([d.chi2 for d in a.evaluate(np.array(a.parameters.x0, float)).data])[0]
         with session(f"offset {far} MeV fit") as a:
-            free = np.array([d.chi2 for d in a.evaluate(np.array(a.params_rwa, float)).data])[0]
+            free = np.array([d.chi2 for d in a.evaluate(np.array(a.parameters.x0, float)).data])[0]
         print(f"    shift {far:+.2f} MeV: moved from 0 {moved:.12g}, fixed in the file {fixed:.12g}, free in the file "
               f"{free:.12g}")
         check(f"shift {far:+.2f} MeV: moved from 0 = written in the file, fixed and free (1e-12)",

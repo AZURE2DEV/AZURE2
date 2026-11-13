@@ -6,14 +6,14 @@ the channel radius, where the interaction is assumed to be purely Coulomb.  They
 are what the penetrability factors in the level matrix are built from, what sets
 the hard-sphere phase shift, and what the external-capture integrals integrate.
 
-AZURE2 has always computed them; `azr.coulomb_functions` makes them askable.
+AZURE2 has always computed them; `azr.channel_functions` makes them askable.
 The values follow the run's own configuration, so the same call returns the
 accurate Coulomb routine's answer, GSL's (`--gsl-coul`), or the Numerov solution
 through a nuclear potential (the hybrid model) -- which is the point of being
 able to plot them.
 
 Usage:
-    python3 coulomb_functions.py <file.azr> [--pair 1] [--L 0 1 2] [--radius 0]
+    python3 channel_functions.py <file.azr> [--pair 1] [--L 0 1 2] [--radius 0]
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ def main() -> int:
     ap.add_argument("--emin", type=float, default=0.01)
     ap.add_argument("--emax", type=float, default=5.0)
     ap.add_argument("--npoints", type=int, default=400)
-    ap.add_argument("--out", type=Path, default=Path("coulomb_functions.png"))
+    ap.add_argument("--out", type=Path, default=Path("channel_functions.png"))
     args = ap.parse_args()
 
     energies = np.linspace(args.emin, args.emax, args.npoints)
@@ -54,7 +54,7 @@ def main() -> int:
     with Session(str(args.azr)) as azr:
         pair = azr.pairs[args.pair - 1]
         radius = args.radius or pair.channel_radius
-        curves = {L: azr.coulomb_functions(args.pair, energies, L=L,
+        curves = {L: azr.channel_functions(args.pair, energies, l=L,
                                            radius=args.radius)
                   for L in args.L}
         stats = azr.cache_stats()
@@ -62,7 +62,7 @@ def main() -> int:
     fig, axes = plt.subplots(2, 2, figsize=(9, 6), sharex=True)
 
     for L, c in curves.items():
-        e = c["energy"]
+        e = c["e_cm"]
         axes[0, 0].plot(e, c["F"], label=rf"$\ell={L}$")
         # G diverges as E -> 0 (it is the irregular solution), so log scale.
         axes[0, 1].semilogy(e, np.maximum(c["G"], 1e-300), label=rf"$\ell={L}$")

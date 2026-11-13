@@ -56,7 +56,7 @@ def worker(work, density, out):
     import numpy as np
     from pyazr import Session
     a = Session(make_model(work, density == "1"), cwd=work)
-    x = np.array(a.params_rwa, float)
+    x = np.array(a.parameters.x0, float)
     free = [p for p in a.parameters if not p.fixed]
     cols = [i for i, p in enumerate(free) if p.kind in KINDS]
     sys.stderr.write("@@ full\n"); sys.stderr.flush()

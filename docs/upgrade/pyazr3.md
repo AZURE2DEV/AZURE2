@@ -780,7 +780,20 @@ engine's physics does not. Sizes are estimates from the files of this commit.
    has no node table" in extrapolation mode on T2, 13N), so `s.extrapolations` beside `s.data` waits for the mode
    switch to go.  Differs from 2.3: `chi2_and_grad`'s gradient is that of the data chi-squared plus the model's
    terms (Park, abundances, model data), which no row range of the objective gives where priors exist; the tests
-   moved to the objective's gradient.  Not yet done: one parameter vector and table, the Python physics, the
+   moved to the objective's gradient.
+   One parameter vector and one table, as built: `Session.parameters` is a `Parameters` (no `ParameterSet`, no
+   `LevelKey`, no one-argument `put` / `take`, no aliases of old field names); `params_rwa`, `params`,
+   `fixed_params`, `n_rmatrix`, `refresh_*`, `physical_levels`, `without_level`, `only_level`, the `*_indices`
+   methods, `transform_rwa`, `transform_all_rwa`, `transform_physical`, the six `.sav` methods and
+   `coulomb_functions` are gone.  `Session.transform(x)` gives the physical value of every parameter (the engine's
+   `transform_all_rwa` of the full vector, the rows after its block as in `x`; bit for bit the removed calls' numbers on
+   T1, T2, T2 Park, T3, 13N, 15N).  `Session(file, parameter_file=path)` replaces `load_sav` (the session takes every
+   value of the file when it is made; `pyazr/parameter_file.py`); `Parameters.read` / `write` the free-vector files.
+   `describe()["parameters"]` is the records.  `save_fit` moved to `snapshot.py`, the widths, scattering lengths,
+   Park norms, model gradients and EC integrals to `session_physics.py` (`session.py` 1621 -> 721 lines).
+   Differs from 2.3: `transform(x)` returns an array aligned with `parameters`, not records; `wigner_widths` and
+   `dimensionless_widths` stay for the Python-physics step; `bands.best_fit_params` makes the session take the file
+   (a private `_take_parameter_file`), as `load_sav` did.  Not yet done: the Python physics, the
    libraries.
 6. **Read-only views of set-up arrays** (`DataSet.energies`, `values`, `errors`, `grid`, `kernel`): `shared_ptr`
    set-up buffers in the engine's data, capsule-based arrays in the binding. `AZUREAPI.cpp`, `pybind_api.cpp`, the

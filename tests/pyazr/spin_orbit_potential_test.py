@@ -2,7 +2,7 @@
 """The spin-orbit term of a hybrid pair through pyazr (docs/upgrade/spin_orbit_potential.md section 4.2, tests 3, 5
 and 9; the project tests/spin_orbit_potential).
 
-  (1) coulomb_functions(pair, E, L, J) of the format-3 project tests/spin_orbit_potential (p + 12C, Woods-Saxon
+  (1) channel_functions(pair, E, L, J) of the format-3 project tests/spin_orbit_potential (p + 12C, Woods-Saxon
       20 / 3.6 / 0.6 with V_so = 6 MeV on the proton) against the independent DOP853 integration
       physics/tests/data/spin_orbit.csv (make_spin_orbit_reference.py): S, P and delta_hs = -phi for l = 0-2, both j,
       E = 0.5-3 MeV, and S below threshold, to 1e-6 (P relative);
@@ -84,20 +84,20 @@ try:
     worst = 0.0
     for l in (0, 1, 2):
         for two_j in sorted({abs(2 * l - 1), 2 * l + 1}):
-            c = A.coulomb_functions(1, above, L=l, J=two_j / 2)
-            b = A.coulomb_functions(1, below, L=l, J=two_j / 2)
+            c = A.channel_functions(1, above, l=l, J=two_j / 2)
+            b = A.channel_functions(1, below, l=l, J=two_j / 2)
             for i, E in enumerate(above):
                 worst = max(worst, abs(c["S"][i] - ref[("S", l, two_j, E)]), abs(c["P"][i] / ref[("P", l, two_j, E)] - 1),
                             abs(c["delta_hs"][i] + ref[("phi", l, two_j, E)]))
             for i, E in enumerate(below):
                 worst = max(worst, abs(b["S"][i] - ref[("S", l, two_j, E)]))
-    check(f"coulomb_functions with J = the independent integration (S, P, delta_hs; 60 values; worst {worst:.1e})",
+    check(f"channel_functions with J = the independent integration (S, P, delta_hs; 60 values; worst {worst:.1e})",
           worst <= 1e-6, f"{worst:.3e} > 1e-6")
 
     # (2) the API's term = the record's term
     B = Session(os.path.join(work, "hp", "hybrid_potential.azr"), cwd=os.path.join(work, "hp"))
     B.set_nuclear_potential(1, spin_orbit=TERM)
-    same = all(np.array_equal(A.coulomb_functions(1, above, L=1, J=j)[k], B.coulomb_functions(1, above, L=1, J=j)[k])
+    same = all(np.array_equal(A.channel_functions(1, above, l=1, J=j)[k], B.channel_functions(1, above, l=1, J=j)[k])
                for j in (0.5, 1.5) for k in ("S", "P", "delta_hs"))
     check("set_nuclear_potential(spin_orbit=...) = the record's term (bits)", same)
     check("nuclear_potential() reads the term back", B.nuclear_potential(1).spin_orbit == TERM,
@@ -107,11 +107,11 @@ try:
           any(l.split()[:1] == ["spin_orbit"] and "operator 2l.s" in l and "on light" in l for l in lines), repr(lines))
 
     # (3) refusals
-    check("E_SO_NEEDS_J: no J for the spin-orbit pair", refused("E_SO_NEEDS_J", lambda: A.coulomb_functions(1, above, L=1)))
+    check("E_SO_NEEDS_J: no J for the spin-orbit pair", refused("E_SO_NEEDS_J", lambda: A.channel_functions(1, above, l=1)))
     C = Session(os.path.join(work, "hp", "hybrid_potential.azr"), cwd=os.path.join(work, "hp"))
     check("E_SO_NO_TERM: a J for a pair without the term",
-          refused("E_SO_NO_TERM", lambda: C.coulomb_functions(1, above, L=1, J=0.5)))
-    check("a j that l = 1 and spin 1/2 cannot make", refused("TwoLDotI", lambda: A.coulomb_functions(1, above, L=1, J=2.5)))
+          refused("E_SO_NO_TERM", lambda: C.channel_functions(1, above, l=1, J=0.5)))
+    check("a j that l = 1 and spin 1/2 cannot make", refused("TwoLDotI", lambda: A.channel_functions(1, above, l=1, J=2.5)))
     check("E_SO_ZERO_SPIN: the term on 12C",
           refused("E_SO_ZERO_SPIN", lambda: C.set_nuclear_potential(1, spin_orbit=dict(TERM, on="heavy"))))
     check("a term on the default pair 0 is refused",

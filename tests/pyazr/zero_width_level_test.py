@@ -52,7 +52,7 @@ def worker(work, rmatrix, brune, out):
     base = os.path.join(work, f"base_{int(rmatrix)}.azr")
     write_model(base, rmatrix)
     with Session(base, cwd=work, use_brune=brune) as a:
-        x = np.array(a.params_rwa, float)
+        x = np.array(a.parameters.x0, float)
         vb = [np.asarray(v, float).tolist() for v in [d.model for d in a.evaluate(x).data]]
         en = [np.asarray(e, float) for e in a.energies]
         pair = [p for p in a.pairs if p.number == 1][0]
@@ -62,7 +62,7 @@ def worker(work, rmatrix, brune, out):
     zw = os.path.join(work, f"zw_{int(rmatrix)}.azr")
     write_model(zw, rmatrix, e_hit)
     with Session(zw, cwd=work, use_brune=brune) as a:
-        x = np.array(a.params_rwa, float)
+        x = np.array(a.parameters.x0, float)
         vz = [np.asarray(v, float).tolist() for v in [d.model for d in a.evaluate(x).data]]
         r, J = (np.asarray(v, float) for v in a.objective().residuals_and_jacobian(x))
         en2 = [np.asarray(e, float) for e in a.energies]
