@@ -123,7 +123,8 @@ functions), `pybind_project.cpp` 18, `pybind_nuclear_part.cpp` 17, `pybind_physi
   (`RadiusOverrides`, `configure`, `results`). Two of them hand over positional numeric layouts kept "in sync" by
   hand with pyazr: `GetParameterInfo` (16 doubles per parameter, `Parameter._NFIELDS`) and `GetPairsInfo` (21 per
   pair, `Pair._NFIELDS`); a third, `parameter_records()`, already gives each parameter as a record with its kind and
-  owner fields.
+  owner fields.  (Since the second step of section 4 both layouts are deleted: `parameter_records()` and
+  `pair_records()` are the only path, their fields one table of the binding, `api/src/pybind_records.cpp`.)
 
 ### 1.3 Physics computed in Python
 
@@ -626,6 +627,27 @@ engine's physics does not. Sizes are estimates from the files of this commit.
    `_NFIELDS` and the type codes. `AZUREAPI.h/.cpp` (−200), `pybind_api.cpp`, `parameters.py` (795 → about 400),
    the readers of the layout in `azure2.py`, `snapshot.py`, `bands.py`, `modelavg.py`. About 900 lines changed;
    `parameter_kinds_test` and the tests that use `parameters`.
+   **Done** (branch `feature/upgrade-8-pyazr3-records`).  Built: the record table `api/src/pybind_records.cpp` (50
+   parameter fields, 22 pair fields: name, unit, the kinds a field describes, whether the table shows it as the
+   owner, doc, the reader of the engine object), bound as `Session.parameter_records()`, `Session.pair_records()`,
+   `_azure2.parameter_record_fields()`, `pair_record_fields()` and in `pyazr.kinds()["parameter_fields"]`,
+   `["pair_fields"]`; each kind's owner fields in `parameter_kinds()` come from it; the parameters' limits as created
+   (`AZUREAPI::GetParameterBounds`).  `pyazr.Parameters` (`x0`, `names`, `kinds`, `units`, `free_mask`, `bounds`,
+   `free`, `of_kind`, `of_level`, `by_name`, `put`, `take`, `read`, `write`, `table`, `to_records`; a selection is a
+   `Parameters` with the same `x0`), `Parameter` and `Pair` the records themselves (a field of another kind reads
+   `None`), `ParameterSet` = `Parameters` plus the views of earlier releases;
+   `pyazr.snapshot.write_values(session, project, x)` (a `Project` edited in memory, web UI wish 8).
+   Removed: `GetParameterInfo`, `GetPairsInfo`, `kParamInfoFields`,
+   `kPairInfoFields` (301 lines of `AZUREAPI.h/.cpp`), `parameter_info`, `pairs_info`, the two `_NFIELDS`, the
+   numeric type codes (in the records, `parameter_kinds()`, `kinds()`, `bands.py`, `azure2.py`), the fall-backs for
+   engines with 19 or 20 pair fields, `Parameter.from_record`, `Pair.from_record`.  Differs from the plan: `free` is
+   the selection of the free rows (as before; the per-row flag is `free_mask`); `put(x, values)` and `take(x)` of
+   earlier releases are kept beside `put(x, rows, values)` and `take(x, rows)`; five names of earlier releases read
+   their field (`prior_nominal` → `prior_centre`, `input_is_rwa` → `width_is_amplitude`, `density_max` and
+   `doppler_max` → `layout_max`, `Parameter.sample` → `sample_name`); `bounds` are the limits the engine creates a
+   parameter with (a `<parameterSettings>` block's limits act in the program's fit only); the prior of every kind
+   with one (norms and the three shift terms too) is the declared prior, read where the objective reads it;
+   `parameters.py` 804 → 620 lines (it keeps `Pair` and `NuclearPotential`).
 3. **`Objective` and `Evaluation` beside today's methods** (added, nothing removed), and the three fit recipes as
    examples and tests. New `objective.py`, `evaluate.py` (about 600 lines), three examples. About 850 lines; tests:
    the object against `objective_and_grad`, `Evaluation` against `chiSquared.out` on T1–T3, the recipes (scipy runs;

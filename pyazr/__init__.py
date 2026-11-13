@@ -7,7 +7,8 @@ The engine runs in this interpreter (the compiled module ``pyazr._azure2``); a p
   ``parameters``), data, the objective and its gradient, model values, output files, ``describe()``.
 - :class:`Project` -- the project file as records: read, edit (``add_<kind>``, ``set``), ``validate()``,
   ``describe()``, ``save()``; ``Project.session()`` opens an :class:`azure2` on it.
-- :class:`ParameterSet` / :class:`Parameter` -- what each entry of the fit vector is (name, kind, unit, owner).
+- :class:`Parameters` / :class:`Parameter` -- the parameter table: what each entry of the fit vector is (name, kind,
+  unit, start, bounds, owner), from the engine's records (``azure2.parameters``, a :class:`ParameterSet`).
 - :mod:`pyazr.stopping`, :func:`whittaker_wave`, :mod:`pyazr.masses` -- physics functions and data.
 
 Ask the package about itself (plain data, ``json.dumps`` takes it): :func:`describe` (version, build, Coulomb
@@ -43,7 +44,7 @@ from .errors import (Error, FormatError, ParameterError, ParameterKeyError, Para
                      ParameterVectorError, EngineError, AZURE2Error, DomainError, DomainZeroDivision, SessionClosed,
                      MissingFile, EngineWarning)
 from .azure2 import azure2, ScatteringLength
-from .parameters import (Pair, PairSet, Parameter, ParameterSet, LevelKey,
+from .parameters import (Pair, PairSet, Parameter, Parameters, ParameterSet, LevelKey,
                          NuclearPotential)
 from .scheme import LevelScheme, SchemeLevel, SchemeChannel
 from .convert import convert_azr, convert_params
@@ -86,7 +87,7 @@ from .nuclear_part import ProjectLevel, ProjectChannel, ProjectPair
 __all__ = ["azure2", "convert_azr", "convert_params", "ScatteringLength", "whittaker_wave",
            "tabulate", "TabulatedCrossSection",
            "angular_distribution",
-           "Pair", "PairSet", "Parameter", "ParameterSet", "LevelKey",
+           "Pair", "PairSet", "Parameter", "Parameters", "ParameterSet", "LevelKey",
            "NuclearPotential",
            "LevelScheme", "SchemeLevel", "SchemeChannel",
            "masses", "stopping",
@@ -117,4 +118,4 @@ __all__ = ["azure2", "convert_azr", "convert_params", "ScatteringLength", "whitt
            "Error", "ParameterError", "ParameterKeyError", "ParameterIndexError", "ParameterVectorError",
            "EngineError", "AZURE2Error", "DomainError", "DomainZeroDivision", "SessionClosed", "MissingFile",
            "EngineWarning"]
-__version__ = '3.0.0.dev1'
+__version__ = '3.0.0.dev2'

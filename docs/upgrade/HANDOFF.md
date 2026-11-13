@@ -2,6 +2,88 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-records`) — pyazr: parameters and pairs as the engine's records
+
+**Done** (no engine number changed; the binding and pyazr only, and one comment of `include/ParameterKind.h`).
+- `api/src/pybind_records.cpp`: one table of the fields of a parameter record (50 rows: name, unit, the kinds a field
+  describes, whether `Parameters.table()` shows it as the owner, doc, the reader of the engine object) and of a pair
+  record (22 rows).  `Session.parameter_records()`, `Session.pair_records()`, `_azure2.parameter_record_fields()`,
+  `pair_record_fields()`; `parameter_kinds()`'s `owner` from the table, its `code` gone; `pyazr.kinds()` gains
+  `parameter_fields` and `pair_fields`.  `AZUREAPI::GetParameterBounds` (limits as created).
+- Deleted: `AZUREAPI::GetParameterInfo`, `GetPairsInfo`, `kParamInfoFields`, `kPairInfoFields` (301 lines of
+  `AZUREAPI.h/.cpp`), the bindings `parameter_info`, `pairs_info`, the two `_NFIELDS`, the numeric type codes, the
+  fall-backs for engines with 19 or 20 pair fields, `Parameter.from_record`, `Pair.from_record`.
+- `pyazr/parameters.py` (804 → 620 lines): `Parameter` and `Pair` are the records; `Parameters` (the table of the fit
+  vector: `x0`, `names`, `kinds`, `units`, `free_mask`, `bounds`, `free`, `of_kind`, `of_level`, `by_name`, `put`,
+  `take`, `read`, `write`, `table`, `to_records`); `ParameterSet` = `Parameters` and the old views.
+  `pyazr.snapshot.write_values(session, project, x)`: a `Project` edited in memory (`snapshot.py`, web UI wish 8; a
+  function, not a session method: a new public name of the session would need a line in `pyazr/ui/engine.py`).
+- Tests: `tests/pyazr/parameter_records_test.py` (new); the tests of the removed layouts read the records
+  (`parameter_kinds`, `extrap_layout`, `thm_profiled`, `light_excitation`).
+
+**Measured before the change** (start commit da9a3b20).  Readers of the two layouts:
+
+| reader | fields read |
+|---|---|
+| `pyazr/azure2.py:421` `_build_pairs` | all 21 (`Pair.from_record`; the 19- and 20-field fall-backs) |
+| `pyazr/azure2.py:473` `_build_parameters` | all 16 (`Parameter.from_record`, `parameters.py:185`) |
+| `pyazr/azure2.py:2253` `_mode_free_vector`, `:2342` `_sync_layout` | 0 type, 11 fixed |
+| `pyazr/bands.py:168` `live_parameters` | 0, 1, 4, 6 |
+| `tests/pyazr/extrap_layout_test.py:61`, `thm_profiled_test.py:123` | the row count |
+| `tests/pyazr/parameter_kinds_test.py:116` | 0, 6, 13 against the records |
+| `tests/pyazr/light_excitation_test.py:111` | `Pair.from_record` of 19, 20, 21 fields |
+
+`snapshot.py`, `modelavg.py`, `scheme.py`, `described.py` read `Parameter` attributes, not the layout.  No reader
+outside `pyazr/`, `api/`, `tests/` (the skill `azure2-fit` quoted an error message of the layout's reader).
+
+| field of the 16 | meaning | in the records before | record field now |
+|---|---|---|---|
+| 0 type | kind code | `code`, `kind` | `kind` |
+| 1 jgroup (abundance: Z) | J group | yes (`nucleus_Z`) | `jgroup`, `nucleus_Z` |
+| 2 J, 3 parity | the group's J^pi | no | `J`, `parity` |
+| 4 level (abundance: A) | level in its group | yes | `level`, `nucleus_A` |
+| 5 level energy; prior centre | (screening, density, Doppler, thickness) | no | `level_energy`, `prior_centre` |
+| 6 channel; sample; j; effect | (and transmission/yield) | yes but the last | `channel`, `sample_index`, `fn_term`, |
+| | | | `effect`, `sample_kind` |
+| 7 L; thickness leader | | no | `L`, `thickness_leader` |
+| 8 S; layout maximum | | no | `S`, `layout_max` |
+| 9 pair (cbkg: exit pair) | | no | `pair` |
+| 10 radiation type | | no | `radiation_type` |
+| 11 fixed, 12 value | | no | `fixed`, `value` (and `start`, `free_index`, `bounds`) |
+| 13 segment key | | yes | `segment_key` |
+| 14 Wigner limit; prior width | | no | `wigner_limit`, `prior_sigma` |
+| 15 input is an amplitude | | no | `width_is_amplitude` |
+
+The 21 pair fields (number, key, type, entrance, J, parity, Z, M of each particle, separation energy, excitation,
+radius, spin factor, nucleus Z and A, abundance, light excitation, THM binding energy) were in no record; all are
+fields of the pair record now, plus `pair_kind`.  Read by nobody outside `parameters.py` itself: `input_is_rwa`,
+`sample_kind`, `thickness_leader`, the apparatus value of field 5, the pair's `i1i2factor` (repr only).
+
+**Verified** on the merged state (build `work/b-records`, 0 warnings; 2 threads): all projects in three bases
+against `tab-t50-1` (tag `tab-records-2`): 887 / 851 / 887 identical; the converted-tree gate (`grecords2`): 679 /
+643 / 679 identical; the eight fits of `work/director/fits_vs_base2.sh` against `work/b-trial50`: 8 identical;
+`ctest -LE slow`: 235 of 236, then `ui_routes_consistency` (a new public name of the session) and the slow
+`formal_brune_iteration` (it finds a parameter by its repr) after two Python fixes, with the other tests concerned:
+10 of 10; the slow tests 10 of 11 before that fix; `tests/run_tests.sh`: 166 passed, 0 failed;
+`repo_consistency_test.py`: consistent.  Before the merge: the same tree and gate against `tab-t45-1` identical, the
+eight fits against `b-trial46` identical.  Injected errors: a kind without an owner field (C++) and `start` read from
+the physical values (C++) each made `parameter_records_test` fail.  Speed on 13N (before / after): session
+construction 0.59 / 0.62 s (noise), the first `parameters` 1.5 / 0.6 ms, cached accesses 0.1 µs each, `pairs`
+0.2 / 0.03 ms.
+
+**Merged** `feature/upgrade-4-data` at 3298f372 (prior centres, diagnostics record, web UI): `PriorOf` reads the
+centres where the objective reads them (`include/Objective.h`); the conflicts were the deleted `GetParameterInfo` /
+`GetPairsInfo` and `Parameter.from_record` (whose new `prior_nominal` of an abundance and an apparatus number is the
+record's `prior_centre`).  The web UI (`pyazr/ui/engine.py`) reads `describe()["parameters"]` and
+`parameters` (`free_index`, `fixed`, `name`), both from the records now; its text of a fit (`save_fit` to a file,
+read back) is what `pyazr.snapshot.write_values` gives in memory.
+
+**Open.** (1) `bounds` are the limits as created; a `<parameterSettings>` block's limits act only in the
+program's fit.  (3) `_sync_layout` and `_mode_free_vector` count energies and widths as the free R-matrix block, not
+the `radiative` numbers in a level's slot (unchanged behaviour; a project with a gamma_decay record and
+extrapolations may carry a wrong vector over a mode switch).  (4) Web UI wish 11: the pair record carries the THM
+binding energy, the width record `width_is_amplitude`; `Project.set_pair` / `set_channel` still cannot edit them.
+
 ## 2026-11-13 (agent, branch `feature/upgrade-4-layout-centre`) — grids and limits laid out from the prior's centre
 
 **Done.** Measured first (base build `work/b-prior`; fit, `param.sav` read by pyazr, `save_fit`, both sessions at the

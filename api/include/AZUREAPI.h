@@ -101,110 +101,14 @@ class AZUREAPI {
   vector_r GetNormalizationIndices();
   // Get indeces of energy shift parameters
   vector_r GetEnergyShiftIndices();
-  // Number of numeric fields packed per parameter by GetParameterInfo().
-  // Keep this in sync with pyazr/parameters.py (Parameter._NFIELDS).
-  static const int kParamInfoFields = 16;  // field 15: input_is_rwa (thm); shift-function and abundance records reuse the fields (types 5, 6)
-  /*!
-   * Returns structured metadata describing every parameter, in the same order
-   * as params_names() / params_all() / params_fixed().
-   *
-   * The result is a flat vector of kParamInfoFields doubles per parameter; the
-   * fields (and -1 for "not applicable") are:
-   *   0  type          0=energy, 1=width, 2=norm, 3=energy-shift,
-   *                    4=sqrt(E) energy-shift coefficient,
-   *                    5=shift-function parameter aj of a segment's "shiftfn"
-   *                      block: j in field 6, the segment in field 13,
-   *                    6=isotopic abundance of a compound nucleus (only in a
-   *                      project with an <abundances> block): its Z in field 1
-   *                      and A in field 4, the 1-based sample in field 6, the
-   *                      prior centre in field 5, the prior sigma in field 14
-   *                    7=electron-screening potential U_e (eV) of a target
-   *                      with a screening field: the effect number in
-   *                      field 6, the prior centre in field 5, the prior sigma
-   *                      in field 14 (0 = none)
-   *                    8=fitted target density (atoms/cm^2) of a target
-   *                      with a fitted areal_density (shared by its data sets):
-   *                      as type 7, plus the largest density the sub-point
-   *                      grids span in field 8
-   *                    9=fitted free-gas Doppler temperature (K) of a
-   *                      target with 'doppler free_gas T K fit ... [grid_max
-   *                      Tmax]': as type 8, the layout temperature (the
-   *                      largest the sub-point grids span) in field 8
-   *                   10=fitted sample thickness (atoms/barn) of a data
-   *                      segment with 'transmission n vary sigma' or
-   *                      'yield n vary sigma': the segment key in field 13,
-   *                      the prior centre in field 5, sigma in field 14
-   *                      (0 = none, and for a thicknessgroup follower),
-   *                      0 transmission / 1 yield in field 6, the group
-   *                      leader's key in field 7 for a follower (else -1)
-   *                   11=THM coherent background (cbkg; cbackground=; was 9
-   *                      before the merge of dev 3264896d, 8 before the
-   *                      merge of 2d97b1f, 7 before 8673c5c)
-   *   1  jgroup        1-based J-group index (R-matrix params only)
-   *   2  J             total spin of the J-group / level
-   *   3  parity        +1 / -1
-   *   4  level         1-based level index within the J-group
-   *   5  level_energy  level energy (MeV)
-   *   6  channel       1-based channel index (width params only)
-   *   7  L             channel orbital angular momentum
-   *   8  S             channel spin
-   *   9  pair          channel particle-pair number
-   *   10 radtype       ASCII code of the channel radiation type ('P','E','M')
-   *   11 fixed         1 if the parameter is fixed, 0 if free
-   *   12 value         current (physical) parameter value
-   *   13 segment_key   data-segment key (norm / energy-shift params only)
-   *   14 wigner_limit  Wigner limit of the channel reduced width, i.e. the
-   *                    bound on |reduced-width amplitude| (width params only)
-   *   15 input_is_rwa  1 if the width's .azr input value was declared as a
-   *                    reduced width amplitude (MeV^(1/2)) rather than a
-   *                    physical partial width/ANC, 0 otherwise; the parameter
-   *                    transformations pass such widths through unconverted
-   *                    (width params only, -1 otherwise)
-   */
-  vector_r GetParameterInfo() const;
   /// What each parameter is and what it belongs to (its record, written where it was created), in the order of
   /// params_names(): the kind and the owner fields of ParameterRecord.  The binding's parameter_records().
   const std::vector<ParameterRecord> &GetParameterRecords() const { return records_; }
 
-  // Number of numeric fields packed per particle pair by GetPairsInfo().
-  // Keep this in sync with pyazr/parameters.py (Pair._NFIELDS).
-  static const int kPairInfoFields = 21;
-  /*!
-   * Returns structured metadata describing every particle pair, in 1-based
-   * pair-number order (the same number stored in field 9 -- "pair" -- of
-   * GetParameterInfo(), so a width parameter can be matched to its pair).
-   *
-   * The result is a flat vector of kPairInfoFields doubles per pair; the fields
-   * are:
-   *   0  pair          1-based pair number (matches Parameter "pair")
-   *   1  pair_key      user pair key from the .azr file
-   *   2  ptype         particle type (0 = particle channel, otherwise photon)
-   *   3  is_entrance   1 if this is the entrance pair, else 0
-   *   4  J1            intrinsic spin of particle 1
-   *   5  parity1       parity of particle 1 (+1 / -1)
-   *   6  Z1            charge number of particle 1
-   *   7  M1            mass of particle 1 (amu)
-   *   8  J2            intrinsic spin of particle 2
-   *   9  parity2       parity of particle 2 (+1 / -1)
-   *   10 Z2            charge number of particle 2
-   *   11 M2            mass of particle 2 (amu)
-   *   12 sepE          separation energy (MeV)
-   *   13 exE           total excitation energy of the pair, light + heavy
-   *                    particle (MeV): the threshold is sepE + exE
-   *   14 chRad         channel radius (fm)
-   *   15 i1i2factor    1 / ((2 J1 + 1)(2 J2 + 1)); the entrance pair's value is
-   *                    the denominator of the statistical spin factor
-   *                    omega = (2 J + 1) * i1i2factor
-   *   16 nucZ          charge number of the compound nucleus the pair forms
-   *   17 nucA          mass number of that nucleus
-   *   18 abundance     its abundance in the default sample (1 without <abundances>)
-   *   19 lightExE      excitation energy of particle 1 (MeV), the optional 32nd
-   *                    column of the <levels> line; exE - lightExE is particle 2's
-   *   20 bindingE      Trojan Horse binding energy of the pair (MeV); 0 unless
-   *                    the pair is used as a THM entrance channel (field 19
-   *                    before the merge of dev 3264896d)
-   */
-  vector_r GetPairsInfo() const;
+  /// The limits each parameter is created with (AZUREParams, in the order of params_names()): (lower, upper) in the
+  /// parameter's unit, -inf / +inf where it has none.  The limits a <parameterSettings> block adds in a fit of the
+  /// program (ParameterLimitsManager) are not among them: a session does not apply that block.
+  const std::vector<std::pair<double, double>> &GetParameterBounds() const { return bounds_; }
 
   /*!
    * Returns a reference to the Config structure.
@@ -601,6 +505,7 @@ class AZUREAPI {
   std::vector<bool> fixed_;
   std::vector<std::string> names_;
   std::vector<ParameterRecord> records_;  ///< what each parameter is (AZUREParams::Records), in the order of names_
+  std::vector<std::pair<double, double>> bounds_;  ///< each parameter's limits as created, in the order of names_
   vector_r all_, all_rwa_, values_, values_rwa_, norms_, normsErrors_;
 
   // Data

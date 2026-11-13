@@ -1,30 +1,74 @@
-"""Structured description of the AZURE2 fit parameters.
+"""The fit parameters and the particle pairs of a session, as the engine's records.
 
-The AZURE2 API exposes its parameters only as flat, parallel arrays (names,
-values, fixed flags).  This module turns that into a small, self-describing
-object model so callers can ask *what* each parameter actually is -- which
-level (J^pi, energy) an R-matrix parameter belongs to, and for a width which
-channel it is (orbital angular momentum L, channel spin S, particle pair,
-radiation type) -- without having to parse the parameter names by hand.
+A session hands each fit parameter over as a record with named fields (``Session.parameter_records()``) and each
+particle pair likewise (``Session.pair_records()``).  The fields, their units and the kinds of parameter they describe
+are one table of the engine (``api/src/pybind_records.cpp``; ``pyazr.kinds()["parameter_fields"]`` and
+``["pair_fields"]``): this module types no field name of its own but the few names of earlier pyazr releases kept
+until the session is renamed (``_ALIASES``).
 
-The numeric metadata is produced by ``AZUREAPI::GetParameterInfo`` (command
-``GET_PARAMS_INFO``); see ``api/include/AZUREAPI.h`` for the field layout, which
-``Parameter.from_record`` mirrors.  What a parameter is -- its ``kind`` and what
-it belongs to -- comes from the record the engine writes where it creates the
-parameter (``Session.parameter_records``), never from its name.
+- :class:`Parameter`: one record; ``p.name``, ``p.kind``, ``p.unit``, ``p.start``, ``p.fixed``, ``p.free_index``,
+  ``p.bounds`` and the fields of its kind (``p.level_label``, ``p.L``, ``p.segment_key``, ``p.prior_sigma``, ...);
+  a field of another kind reads ``None``.
+- :class:`Parameters`: the table of a session's parameters, one row per parameter in the engine's order.  The fit
+  vector ``x`` is the only vector: ``x0`` (a copy of the start), ``names``, ``kinds``, ``units``, ``free_mask``,
+  ``bounds``; ``of_kind``, ``of_level``, ``by_name``, ``free`` select rows (a selection is again a
+  :class:`Parameters`); ``put``, ``take`` write and read rows of ``x``; ``read``, ``write`` a parameter file;
+  ``table()``, ``to_records()``.
+- :class:`ParameterSet`: :class:`Parameters` with the views of earlier releases (``widths``, ``norms``, ...).
+- :class:`Pair`, :class:`PairSet`: the particle pairs.
 """
 
-from dataclasses import dataclass, fields
+import functools
+import os
+from dataclasses import dataclass
 from typing import Optional
+
+import numpy as np
+
 from .errors import ParameterError, ParameterKeyError, close_names, listed
 
 
-def parameter_kinds():
-    """The kinds of fit parameter as the engine defines them (``ParameterKind.h``): one dict per kind, in the order of
-    their ``type`` codes, with ``code``, ``key`` (:attr:`Parameter.kind`), ``unit``, ``owner`` (the record fields that
-    say what it belongs to), ``own_prior``, ``segment_field``, ``vary_from_project`` and ``doc``."""
+def _engine():
     from . import _azure2
-    return _azure2.parameter_kinds()
+    return _azure2
+
+
+def parameter_kinds():
+    """The kinds of fit parameter as the engine defines them (``ParameterKind.h``): one dict per kind, in their order in
+    the vector, with ``key`` (:attr:`Parameter.kind`), ``unit``, ``owner`` (the record fields that say what it belongs
+    to), ``own_prior``, ``segment_field``, ``vary_from_project`` and ``doc``."""
+    return _engine().parameter_kinds()
+
+
+@functools.lru_cache(maxsize=None)
+def _field_table(which):
+    """The engine's table of record fields, ``"parameter"`` or ``"pair"``, as a tuple of dicts (read once)."""
+    rows = _engine().parameter_record_fields() if which == "parameter" else _engine().pair_record_fields()
+    return tuple(rows)
+
+
+def record_fields():
+    """The fields of the records, as the engine's table states them: ``{"parameter": [...], "pair": [...]}``, one dict
+    per field with ``name``, ``unit`` (``"unit"``: the parameter's own unit), ``doc``; a parameter field also with
+    ``kinds`` (the kinds it describes), ``every_kind`` and ``owner`` (shown as what the parameter belongs to)."""
+    return {which: [dict(r) for r in _field_table(which)] for which in ("parameter", "pair")}
+
+
+@functools.lru_cache(maxsize=None)
+def _field_names(which):
+    return frozenset(r["name"] for r in _field_table(which))
+
+
+@functools.lru_cache(maxsize=None)
+def _owner_fields(kind):
+    """The fields a parameter of ``kind`` shows as its owner, in the table's order."""
+    return tuple(r["name"] for r in _field_table("parameter") if r["owner"] and kind in r["kinds"])
+
+
+#: Names of earlier pyazr releases that are not fields of the record, and the field each reads (until the rename of
+#: the session, docs/upgrade/pyazr3.md section 4).
+_ALIASES = {"prior_nominal": "prior_centre", "input_is_rwa": "width_is_amplitude", "density_max": "layout_max",
+            "doppler_max": "layout_max", "sample": "sample_name"}
 
 
 @dataclass(frozen=True)
@@ -53,292 +97,385 @@ class LevelKey:
         return f"{self.jpi}#{self.level}@{e}MeV"
 
 
-def _opt(value, *, integer=False, sentinel=-1.0):
-    """Return ``None`` for the C++ "not applicable" sentinel, else the value."""
-    if value == sentinel:
-        return None
-    return int(round(value)) if integer else float(value)
+class _Record:
+    """A read-only record of the engine: its fields are attributes; a field of the table that this record does not
+    carry (it describes another kind) reads ``None``."""
+
+    __slots__ = ("_record",)
+    _which = None  # "parameter" or "pair": the engine's table of fields
+
+    def __init__(self, record=(), **fields):
+        """From the engine's record (a dict), and/or its fields as keywords (a record made by hand, as in a test)."""
+        object.__setattr__(self, "_record", dict(record, **fields))
+
+    def __getattr__(self, name):
+        record = object.__getattribute__(self, "_record")
+        if name in record:
+            return record[name]
+        if name in _ALIASES and self._which == "parameter":
+            return record.get(_ALIASES[name])
+        if name in _field_names(self._which):
+            return None
+        raise AttributeError(f"{type(self).__name__} has no field {name!r}{close_names(name, record)}; its fields: "
+                             f"{listed(sorted(record), 60)} (pyazr.kinds()['{self._which}_fields'] describes them).")
+
+    def __setattr__(self, name, value):
+        raise AttributeError(f"{type(self).__name__} is the engine's record and cannot be changed; a value goes into "
+                             f"the fit vector (Parameters.put) or the project (pyazr.Project).")
+
+    def __reduce__(self):
+        return (type(self), (self._record,))
+
+    def __eq__(self, other):
+        return type(other) is type(self) and self._record == other._record
+
+    __hash__ = None
+
+    def __dir__(self):
+        return sorted(set(super().__dir__()) | set(self._record))
+
+    def to_dict(self):
+        """The record as a plain dict (a copy)."""
+        return dict(self._record)
 
 
-@dataclass
-class Parameter:
-    """One AZURE2 fit parameter and everything known about it.
+class Parameter(_Record):
+    """One fit parameter: the engine's record of it (``Session.parameter_records()``).
 
-    Attributes that do not apply to a given parameter kind are ``None`` (e.g. a
-    normalization has no ``L``; an energy has no ``channel``).
+    Every parameter has ``index`` (among all), ``name``, ``kind``, ``ordinal``, ``unit``, ``start`` (in the fit
+    vector's basis and ``unit``), ``value`` (as the project states it), ``fixed``, ``free_index`` (its entry of the fit
+    vector, ``None`` when fixed) and ``bounds``; the fields of its kind say what it belongs to (a level's
+    ``level_label``, a channel's ``L``, ``S``, ``pair``, a data set's ``segment_key``, a nuisance's ``prior_centre``
+    and ``prior_sigma``, ...).  ``pyazr.kinds()["parameter_fields"]`` lists every field with its unit and doc.
     """
 
-    # Number of doubles per record emitted by AZUREAPI::GetParameterInfo.
-    # Must match AZUREAPI::kParamInfoFields.
-    _NFIELDS = 16
-
-    index: int                      # position among *all* parameters
-    name: str                       # raw AZURE2 parameter name
-    kind: str                       # the engine's key of its kind (parameter_kinds()): 'energy' | 'width' | 'norm' | 'shift' | 'shift_sqrt' | 'shift_fn' | 'abundance' | 'screening' | 'density' | 'doppler' | 'thickness' | 'cbkg'
-    fixed: bool                     # held fixed during the fit?
-    value: float                    # current (physical) value
-    free_index: Optional[int]       # position among the non-fixed parameters
-
-    # Level / J-group information (R-matrix parameters).
-    jgroup: Optional[int] = None
-    J: Optional[float] = None
-    parity: Optional[int] = None
-    level: Optional[int] = None
-    level_energy: Optional[float] = None
-
-    # Channel information (width parameters).
-    channel: Optional[int] = None
-    L: Optional[int] = None
-    S: Optional[float] = None
-    pair: Optional[int] = None
-    radiation_type: Optional[str] = None   # 'P' (particle), 'E', 'M', ...
-
-    # Wigner limit of the channel's reduced width (width parameters only):
-    # gamma^2_W = 3 hbar^2 / (2 mu a^2) in MeV (AChannel::SetWignerLimit), the
-    # Teichmann-Wigner single-particle sum-rule limit, which carries the factor
-    # 3/2 relative to the hbar^2/(mu a^2) unit some references use (divide by
-    # 1.5 to get that one; theta^2 against it is 1.5x larger).  It is the limit
-    # on the reduced width *squared* -- AZURE2's Wigner-limit bound on the
-    # reduced-width amplitude is its square root -- not on ``value``, and it
-    # matches neither convention ``value`` can be in: a partial width in eV,
-    # nor a reduced width amplitude in MeV^(1/2).  Form theta^2 with
-    # pyazr.widths rather than dividing ``value`` by this.
-    # ``None`` for non-width parameters.
-    wigner_limit: Optional[float] = None
-
-    # True if this width's .azr input value was declared as a reduced width
-    # amplitude (MeV^(1/2)) and thus AZURE2 should treat it accordingly.
-    # ``None`` for non-width parameters.
-    input_is_rwa: Optional[bool] = None
-
-    # Data-segment information (norm / shift parameters).
-    segment_key: Optional[int] = None
-
-    # Compound nucleus of an isotopic-abundance parameter (projects with an
-    # ``<abundances>`` block): charge and mass number, and the prior width
-    # (0 = no prior) the ``<abundances>`` line carries.
-    nucleus_Z: Optional[int] = None
-    nucleus_A: Optional[int] = None
-    prior_sigma: Optional[float] = None
-    sample: Optional[str] = None        # the sample's name ("" = the unnamed sample)
-    sample_index: Optional[int] = None  # 1-based sample of the <abundances> block
-
-    # Electron-screening potential U_e (eV) of a <targetInt> line with a ``screening`` block: the
-    # effect's number (its place among the active <targetInt> lines) and the prior centre; the prior
-    # width is ``prior_sigma`` (0 = none).
-    effect: Optional[int] = None
-    prior_nominal: Optional[float] = None
-    # Fitted target density (atoms/cm^2) of a <targetInt> line with a ``densityfit`` block, or of a
-    # ``densitygroup`` (``effect`` = its first line): ``prior_nominal`` / ``prior_sigma`` as above, and the largest
-    # density its sub-point grids span (beyond it the engine uses this value and warns).
-    density_max: Optional[float] = None
-    # Fitted free-gas Doppler temperature (K) of a <targetInt> line with ``doppler T vary sigma [Tmax]``:
-    # ``prior_nominal`` (the line's T) / ``prior_sigma`` as above, and the layout temperature, the largest its
-    # sub-point grids and integration windows span (Tmax, else T0 + 3 sigma but at least 1.21 T0, or 2 T0 without
-    # a prior; beyond it, or below T0/4, the engine uses the nearest end and warns).
-    doppler_max: Optional[float] = None
-    # Fitted sample thickness (atoms/barn) of a data segment with ``transmission n vary sigma`` or ``yield n vary
-    # sigma`` (``segment_key``): ``prior_nominal`` (the line's n) / ``prior_sigma`` as above, ``sample_kind``
-    # ("transmission" or "yield") and, for a ``thicknessgroup`` follower (whose parameter is fixed at its leader's
-    # value and carries no prior), the leader's segment key.
-    sample_kind: Optional[str] = None
-    thickness_leader: Optional[int] = None
-
-    # THM coherent background (``kind == 'cbkg'``): the experiment, the combination as ``cbackground=`` writes it
-    # (J^pi text, exit pair key, "s,l,s',l'") and which coefficient: 0 Re c0, 1 Im c0, 2 Re c1, 3 Im c1.
-    thm_experiment: Optional[str] = None
-    thm_jpi: Optional[str] = None
-    thm_exit_key: Optional[int] = None
-    thm_channels: Optional[str] = None
-    thm_term: Optional[int] = None
-    # A number of a level's gamma_decay record (kind "radiative", docs/upgrade/gamma_parametrisation.md): the record's
-    # name, which number ("total_width" in eV, "branching" or "mixing", dimensionless) and the final state's photon
-    # pair as the record writes it (None for the total width).
-    decay_record: Optional[str] = None
-    decay_part: Optional[str] = None
-    final_state: Optional[str] = None
-
-    # 1-based level count over all J groups (energy / width parameters): the numbering of param files and the GUI.
-    level_number: Optional[int] = None
+    __slots__ = ()
+    _which = "parameter"
 
     @property
     def nucleus(self):
         """``(Z, A)`` of an abundance parameter's compound nucleus, else ``None``."""
-        if self.nucleus_Z is None:
-            return None
-        return (self.nucleus_Z, self.nucleus_A)
-
-    @property
-    def fn_term(self) -> Optional[int]:
-        """j of a shift-function parameter aj (``kind == 'shift_fn'``), else ``None``."""
-        return self.channel if self.kind == "shift_fn" else None
+        return None if self.nucleus_Z is None else (self.nucleus_Z, self.nucleus_A)
 
     @property
     def jpi(self) -> Optional[str]:
-        """The level's spin-parity as a string, e.g. ``"2+"`` (or ``None``)."""
+        """The J group's spin-parity as text, e.g. ``"2+"``, ``"0.5-"`` (``None`` for a parameter of no J group)."""
         if self.J is None or self.parity is None:
             return None
         j = int(self.J) if float(self.J).is_integer() else self.J
         return f"{j}{'+' if self.parity > 0 else '-'}"
 
-    @classmethod
-    def from_record(cls, index, name, record, free_index=None, owner=None):
-        """Build a :class:`Parameter` from one numeric record + its name.
-
-        ``record`` is the slice of ``_NFIELDS`` doubles for this parameter as
-        returned by ``GET_PARAMS_INFO``; ``owner`` its dict of
-        ``Session.parameter_records()`` (kind and owner fields, from the record
-        the engine writes where it creates the parameter).  Without ``owner``
-        the kind comes from the type code and the string owner fields (an
-        abundance's sample name, a THM background's combination) are ``None``.
-        """
-        (type_code, jgroup, J, parity, level, level_energy, channel, L, S,
-         pair, radtype, fixed, value, segment_key, wigner_limit,
-         input_is_rwa) = record
-        owner = owner or {}
-        code = int(round(type_code))
-        kind = owner.get("kind") or {k["code"]: k["key"] for k in parameter_kinds()}.get(code, "unknown")
-
-        rad = chr(int(round(radtype))) if radtype != -1 else None
-
-        if int(round(type_code)) == 6:
-            # an isotopic abundance: Z rides in the jgroup field, A in the level
-            # field, the 1-based sample in the channel field, the prior centre in
-            # the level-energy field and the prior sigma in the Wigner-limit field
-            # (AZUREAPI.h); the sample's name in the record (owner)
-            return cls(
-                index=index, name=name, kind=kind,
-                fixed=bool(round(fixed)), value=float(value), free_index=free_index,
-                nucleus_Z=int(round(jgroup)), nucleus_A=int(round(level)),
-                prior_nominal=float(level_energy), prior_sigma=float(wigner_limit),
-                sample=owner.get("sample_name"),
-                sample_index=int(round(channel)) if channel >= 1 else None,
-            )
-
-        if int(round(type_code)) == 11:
-            # a THM coherent background: the numeric fields as below, the combination from the record (owner)
-            return cls(
-                index=index, name=name, kind=kind,
-                fixed=bool(round(fixed)), value=float(value), free_index=free_index,
-                jgroup=_opt(jgroup, integer=True), J=_opt(J), parity=_opt(parity, integer=True, sentinel=0.0),
-                channel=_opt(channel, integer=True), L=_opt(L, integer=True), S=_opt(S),
-                pair=_opt(pair, integer=True),
-                thm_experiment=owner.get("thm_experiment"), thm_jpi=owner.get("thm_jpi"),
-                thm_exit_key=owner.get("thm_exit_key"), thm_channels=owner.get("thm_channels"),
-                thm_term=owner.get("thm_term"),
-            )
-
-        if int(round(type_code)) == 7:
-            # an electron-screening potential (eV): the effect number rides in the channel field, the
-            # prior centre in the level-energy field and its sigma in the Wigner-limit field (AZUREAPI.h)
-            return cls(
-                index=index, name=name, kind=kind,
-                fixed=bool(round(fixed)), value=float(value), free_index=free_index,
-                effect=int(round(channel)), prior_nominal=float(level_energy),
-                prior_sigma=float(wigner_limit),
-            )
-
-        if int(round(type_code)) == 8:
-            # a fitted target density (atoms/cm^2): the effect number in the channel field, the prior centre in
-            # the level-energy field, its sigma in the Wigner-limit field and the grids' largest density in S
-            return cls(
-                index=index, name=name, kind=kind,
-                fixed=bool(round(fixed)), value=float(value), free_index=free_index,
-                effect=int(round(channel)), prior_nominal=float(level_energy),
-                prior_sigma=float(wigner_limit), density_max=float(S),
-            )
-
-        if int(round(type_code)) == 9:
-            # a fitted Doppler temperature (K): as a density, the layout temperature in S
-            return cls(
-                index=index, name=name, kind=kind,
-                fixed=bool(round(fixed)), value=float(value), free_index=free_index,
-                effect=int(round(channel)), prior_nominal=float(level_energy),
-                prior_sigma=float(wigner_limit), doppler_max=float(S),
-            )
-
-        if int(round(type_code)) == 10:
-            # a fitted sample thickness (atoms/barn): the segment key, the line's n in the level-energy field, the
-            # prior sigma in the Wigner-limit field, 0/1 (transmission/yield) in the channel field and a follower's
-            # leader key in L (AZUREAPI.h)
-            return cls(
-                index=index, name=name, kind=kind,
-                fixed=bool(round(fixed)), value=float(value), free_index=free_index,
-                segment_key=int(round(segment_key)), prior_nominal=float(level_energy),
-                prior_sigma=float(wigner_limit), sample_kind="yield" if int(round(channel)) == 1 else "transmission",
-                thickness_leader=int(round(L)) if L >= 1 else None,
-            )
-
-        return cls(
-            index=index,
-            name=name,
-            kind=kind,
-            fixed=bool(round(fixed)),
-            value=float(value),
-            free_index=free_index,
-            jgroup=_opt(jgroup, integer=True),
-            J=_opt(J),
-            parity=_opt(parity, integer=True, sentinel=0.0),
-            level=_opt(level, integer=True),
-            level_energy=_opt(level_energy, sentinel=0.0) if type_code in (0, 1, 13) else None,
-            # an apparatus parameter: the prior centre in the level-energy field (its sigma in the Wigner-limit one)
-            prior_nominal=float(level_energy) if code == 12 else None,
-            channel=_opt(channel, integer=True),
-            L=_opt(L, integer=True),
-            S=_opt(S),
-            pair=_opt(pair, integer=True),
-            radiation_type=rad,
-            wigner_limit=_opt(wigner_limit),
-            input_is_rwa=(bool(round(input_is_rwa))
-                          if input_is_rwa != -1 else None),
-            segment_key=_opt(segment_key, integer=True),
-            level_number=owner.get("level_number"),
-            decay_record=owner.get("decay_record"),
-            decay_part=owner.get("decay_part"),
-            final_state=owner.get("final_state") or None,
-        )
+    def owner_text(self):
+        """What the parameter belongs to, as the parameter table shows it: its kind's owner fields, ``field=value``."""
+        return " ".join(f"{f}={_text(getattr(self, f))}" for f in _owner_fields(self.kind)
+                        if getattr(self, f) is not None)
 
     def __repr__(self):
-        bits = [f"#{self.index}", self.name, self.kind,
-                "fixed" if self.fixed else "free", f"value={self.value:.6g}"]
-        if self.kind in ("energy", "width"):
-            bits.append(f"J^pi={self.jpi}")
-            if self.level_energy is not None:
-                bits.append(f"E={self.level_energy:.4g}MeV")
-        if self.kind == "width":
-            bits.append(f"L={self.L}")
-            bits.append(f"S={self.S}")
-            bits.append(f"pair={self.pair}")
-            bits.append(f"rad={self.radiation_type}")
-            if self.wigner_limit is not None:
-                bits.append(f"wigner={self.wigner_limit:.4g}")
-            if self.input_is_rwa:
-                bits.append("input=RWA")
-        if self.kind in ("norm", "shift", "shift_sqrt", "shift_fn"):
-            bits.append(f"segment={self.segment_key}")
-        if self.kind == "shift_fn":
-            bits.append(f"a{self.fn_term}")
-        if self.kind == "cbkg":
-            bits.append(f"J^pi={self.jpi}")
-            bits.append(f"L={self.L}")
-            bits.append(f"S={self.S}")
-            bits.append(f"exit pair={self.pair}")
-        if self.kind in ("screening", "density", "doppler"):
-            bits.append(f"effect={self.effect}")
-            if self.prior_sigma:
-                bits.append(f"prior={self.prior_nominal:.6g}+-{self.prior_sigma:.6g}")
-        if self.kind == "density":
-            bits.append(f"max={self.density_max:.6g}")
-        if self.kind == "doppler":
-            bits.append(f"max={self.doppler_max:.6g}")
-        if self.kind == "thickness":
-            bits.append(f"segment={self.segment_key}")
-            bits.append(self.sample_kind)
-            if self.prior_sigma:
-                bits.append(f"prior={self.prior_nominal:.6g}+-{self.prior_sigma:.6g}")
-            if self.thickness_leader is not None:
-                bits.append(f"tied to segment {self.thickness_leader}")
-        return "Parameter(" + ", ".join(bits) + ")"
+        return (f"Parameter(#{self.index}, {self.name}, {self.kind}, {'fixed' if self.fixed else 'free'}, "
+                f"start={self.start:.6g} {self.unit}" + (f", {self.owner_text()}" if self.owner_text() else "") + ")")
+
+
+def _text(value):
+    if isinstance(value, float):
+        return f"{value:.6g}"
+    if isinstance(value, (list, tuple)):
+        return ".".join(str(v[1] if isinstance(v, (list, tuple)) else v) for v in value)
+    return str(value)
+
+
+def read_parameter_file(path):
+    """``(basis, {name: value})`` of a ``param.par`` / ``param.sav`` / ``param.fit``: ``basis`` is the
+    ``#parametrization`` tag (0 standard, 1 Brune, 2 Park), ``None`` without one.
+
+    Blank lines and ``#`` comments are skipped.  A parameter file is read by NAME, never by row position: AZURE2
+    matches names (``AZUREParams::ReadUserParameters``), and a positional read of a file of another layout is silently
+    off by one or more rows."""
+    values, basis = {}, None
+    with open(path) as fh:
+        for line in fh:
+            t = line.split()
+            if len(t) >= 2 and t[0] in ("#parametrization", "parametrization"):
+                try:
+                    basis = int(round(float(t[1])))
+                except ValueError:
+                    pass
+                continue
+            if len(t) < 2 or t[0].startswith("#"):
+                continue
+            try:
+                values[t[0]] = float(t[1])
+            except ValueError:
+                continue
+    return basis, values
+
+
+class Parameters(list):
+    """The table of a session's fit parameters: one :class:`Parameter` per row, in the engine's order
+    (``azure2.parameters``; built once per session and layout).
+
+    The fit vector ``x`` (the free parameters, in the order of their ``free_index``, the engine's basis) is the only
+    vector of the interface.  ``x0`` is a copy of its start; every selection carries the same ``x0``, so
+    ``sel.put(sel.x0, ...)`` and ``table.put(table.x0, sel, ...)`` are the same.
+
+    >>> P = s.parameters
+    >>> w = P.of_level(P.of_kind("energy")[0].level_label).of_kind("width")
+    >>> x1 = P.put(P.x0, w, 2 * P.take(P.x0, w))       # a copy of x0 with the level's widths doubled
+    >>> print(P.table())
+    """
+
+    def __init__(self, rows=(), *, x0=None, basis=None):
+        super().__init__(rows)
+        self._x0 = None if x0 is None else np.array(x0, float)
+        self._basis = basis
+
+    def _select(self, rows):
+        return type(self)(rows, x0=self._x0, basis=self._basis)
+
+    def __getitem__(self, i):
+        got = super().__getitem__(i)
+        return self._select(got) if isinstance(i, slice) else got
+
+    # -- the columns ----------------------------------------------------------------------------------------------
+
+    @property
+    def x0(self):
+        """A copy of the start of the fit vector (every free parameter's ``start``, in ``free_index`` order)."""
+        if self._x0 is None:
+            raise ParameterError("this set of parameters was built without its session, so it has no fit vector; "
+                                 "azure2.parameters is the session's table (its x0 is azure2.params_rwa).")
+        return self._x0.copy()
+
+    @property
+    def names(self):
+        """The parameters' names, one per row."""
+        return [p.name for p in self]
+
+    @property
+    def kinds(self):
+        """The parameters' kinds (keys of ``pyazr.kinds()["parameters"]``), one per row."""
+        return [p.kind for p in self]
+
+    @property
+    def units(self):
+        """The units of ``start``, ``bounds`` and the entries of x, one per row."""
+        return [p.unit for p in self]
+
+    @property
+    def free_mask(self):
+        """``True`` for a row the fit varies (an entry of x), as a numpy array."""
+        return np.array([not p.fixed for p in self], bool)
+
+    @property
+    def bounds(self):
+        """``(lower, upper)`` of each row, ``-inf`` / ``inf`` where the engine sets none (for an optimiser:
+        ``P.free.bounds``, in the order of x)."""
+        return [tuple(p.bounds) for p in self]
+
+    # -- selections -------------------------------------------------------------------------------------------------
+
+    @property
+    def free(self):
+        """The rows the fit varies, in the order of x (a :class:`Parameters`)."""
+        return self._select(sorted((p for p in self if not p.fixed), key=lambda p: p.free_index))
+
+    def of_kind(self, *kinds):
+        """The rows of these kinds (keys of ``pyazr.kinds()["parameters"]``: ``"width"``, ``"norm"``, ...)."""
+        known = [k["key"] for k in parameter_kinds()]
+        for kind in kinds:
+            if kind not in known:
+                raise ParameterKeyError(f"no parameter kind {kind!r}{close_names(kind, known)}; the kinds are "
+                                        f"{listed(known, 20)} (pyazr.kinds()['parameters']).")
+        return self._select(p for p in self if p.kind in kinds)
+
+    def of_level(self, level):
+        """The rows of one level (its energy, widths and gamma_decay numbers), named by its label as
+        :attr:`Parameter.level_label` and ``Project.levels()`` give it (``"3/2- 3.5032"``), by a
+        :class:`LevelKey`, by ``(jgroup, level)`` or by one of its parameters."""
+        if isinstance(level, Parameter):
+            key = (level.jgroup, level.level)
+        elif isinstance(level, LevelKey):
+            key = (level.jgroup, level.level)
+        elif isinstance(level, tuple):
+            key = tuple(level)
+        else:
+            key = next(((p.jgroup, p.level) for p in self if p.level_label == level), None)
+        rows = [p for p in self if p.level is not None and (p.jgroup, p.level) == key]
+        if not rows:
+            labels = list(dict.fromkeys(p.level_label for p in self if p.level_label))
+            raise ParameterKeyError(f"no level {level!r} among these parameters{close_names(level, labels)}; the "
+                                    f"levels: {listed(labels, 10)} (Parameter.level_label, Project.levels()).")
+        return self._select(rows)
+
+    def by_name(self, name):
+        """The parameter with this name (:attr:`Parameter.name`).
+
+        Raises :class:`pyazr.ParameterKeyError` (a ``KeyError``) naming the close names when none has it."""
+        for p in self:
+            if p.name == name:
+                return p
+        names = self.names
+        raise ParameterKeyError(f"no parameter named {name!r} among the {len(names)} of this set"
+                                f"{close_names(name, names)}; the names are Parameter.name, e.g. "
+                                f"{listed(names, 6)}; print(parameters.table()) lists them all.")
+
+    # -- the fit vector ---------------------------------------------------------------------------------------------
+
+    def _rows(self, rows):
+        """``rows`` (a Parameter, a name, or a sequence of them) as a list of Parameters, each free."""
+        if isinstance(rows, (Parameter, str)):
+            rows = [rows]
+        out = [self.by_name(r) if isinstance(r, str) else r for r in rows]
+        fixed = [p.name for p in out if p.fixed]
+        if fixed:
+            raise ParameterError(f"{listed(fixed, 6)} {'is' if len(fixed) == 1 else 'are'} fixed, not an entry of the "
+                                 f"fit vector; P.free lists the entries (a fixed value is changed in the project).")
+        return out
+
+    def _vector(self, x):
+        x = np.array(x, float).ravel()
+        if self._x0 is not None and x.size != self._x0.size:
+            raise ParameterError(f"x has {x.size} entries; the fit vector has {self._x0.size} (P.x0 is one, P.free "
+                                 f"names its entries).")
+        return x
+
+    def put(self, x, *rows_values):
+        """A copy of the fit vector ``x`` with rows set: ``put(x, rows, values)``, ``rows`` a :class:`Parameter`, a
+        name or a sequence of them (all free), ``values`` one number for all or one per row.
+
+        ``put(x, values)`` sets this set's own free rows (the form of earlier releases; its fixed rows are left out)."""
+        if len(rows_values) == 1:
+            rows, values = [p for p in self if not p.fixed and p.free_index is not None], rows_values[0]
+        elif len(rows_values) == 2:
+            rows, values = self._rows(rows_values[0]), rows_values[1]
+        else:
+            raise ParameterError("put takes (x, rows, values) or (x, values); see help(pyazr.Parameters.put).")
+        out = self._vector(x)
+        idx = np.array([p.free_index for p in rows], int)
+        values = np.asarray(values, float)
+        if values.ndim == 0:
+            out[idx] = float(values)
+        elif values.size == idx.size:
+            out[idx] = values.ravel()
+        else:
+            raise ParameterError(f"put() got {values.size} value(s) for {idx.size} free parameter(s) in this set; give "
+                                 f"one number for all, or one per free parameter in this set's order (set.free lists "
+                                 f"them).")
+        return out
+
+    def take(self, x, *rows):
+        """The entries of ``x`` of ``rows`` (a :class:`Parameter`, a name or a sequence of them, all free), as an array;
+        ``take(x)`` those of this set's free rows."""
+        chosen = [p for p in self if not p.fixed and p.free_index is not None] if not rows else self._rows(rows[0])
+        x = self._vector(x)
+        return x[np.array([p.free_index for p in chosen], int)] if chosen else np.empty(0)
+
+    def read(self, path):
+        """The fit vector with the values a parameter file (``param.sav``, ``param.par``) gives its free rows, matched
+        by name; a free row the file lacks keeps its start.  The file's fixed values are not applied (the session's
+        ``load_sav`` puts them into the engine).  Refused: a file of another basis, a file with no name of these rows."""
+        basis, values = read_parameter_file(path)
+        if basis is not None and self._basis is not None and basis != self._basis:
+            raise ParameterError(f"{path} holds basis {basis} amplitudes (0 standard, 1 Brune, 2 Park), this session "
+                                 f"basis {self._basis}; open the session in that basis, or convert the file.")
+        x = self.x0
+        hit = 0
+        for p in self:
+            if p.name in values:
+                hit += 1
+                if not p.fixed:
+                    x[p.free_index] = values[p.name]
+        if not hit:
+            raise ParameterError(f"{path}: no parameter name matches these parameters (a file of another project?); "
+                                 f"the names: {listed(self.names, 6)}.")
+        return x
+
+    def write(self, path, x):
+        """Write a parameter file (as ``param.sav``): the basis tag, then every row with its value, a free one from
+        ``x``, a fixed one its start.  The table must hold every parameter of the session."""
+        if [p.index for p in self] != list(range(len(self))):
+            raise ParameterError("write needs the session's whole table (azure2.parameters), not a selection: a "
+                                 "parameter file names every parameter.")
+        x = self._vector(x)
+        with open(os.fspath(path), "w") as fh:
+            # The engine reads the tag and converts a file of the other alternative basis; '#' keeps it a comment for
+            # readers that index rows by position.
+            fh.write(f"{'#parametrization':>28s} {float(self._basis or 0): .7e} {0.0: .7e}\n")
+            for p in self:
+                v = p.start if p.fixed else x[p.free_index]
+                fh.write(f"{p.name:>28s} {float(v): .7e} {0.0: .7e}\n")
+        return os.fspath(path)
+
+    # -- text and records -------------------------------------------------------------------------------------------
+
+    def to_records(self):
+        """Every row as a plain ``dict`` of its record's fields (e.g. for a DataFrame)."""
+        return [p.to_dict() for p in self]
+
+    def table(self):
+        """The rows as aligned text: index, name, kind, unit, start, free ('*'), bounds and what it belongs to."""
+        def bound(v):
+            return "" if not np.isfinite(v) else f"{v:.4g}"
+        rows = [("#", "name", "kind", "unit", "start", "free", "bounds", "owner")]
+        for p in self:
+            lo, hi = p.bounds
+            rows.append((str(p.index), p.name, p.kind, p.unit, f"{p.start:.6g}", "" if p.fixed else "*",
+                         "" if not (np.isfinite(lo) or np.isfinite(hi)) else f"[{bound(lo)}, {bound(hi)}]",
+                         p.owner_text()))
+        widths = [max(len(r[c]) for r in rows) for c in range(len(rows[0]))]
+        return "\n".join("  ".join(cell.ljust(widths[c]) for c, cell in enumerate(r)).rstrip() for r in rows)
+
+    def __repr__(self):
+        return f"{type(self).__name__}({len(self)} parameters, {sum(1 for p in self if not p.fixed)} free)"
+
+
+class ParameterSet(Parameters):
+    """:class:`Parameters` with the views of earlier pyazr releases (kept until the session is renamed): one per kind
+    (``energies``, ``widths``, ``norms``, ...: :meth:`Parameters.of_kind`), ``fixed``, ``indices()``, ``values()``,
+    ``wigner_limits()``, ``by_level()``, ``by_physical_level()``."""
+
+    def indices(self):
+        """Free-vector positions of these parameters, in this set's order (fixed ones dropped)."""
+        return [p.free_index for p in self if not p.fixed and p.free_index is not None]
+
+    fixed = property(lambda self: self._select(p for p in self if p.fixed), doc="The parameters held fixed.")
+    energies = property(lambda self: self.of_kind("energy"), doc="The level-energy parameters.")
+    widths = property(lambda self: self.of_kind("width"), doc="The reduced-width parameters.")
+    norms = property(lambda self: self.of_kind("norm"), doc="The data-normalization parameters.")
+    shifts = property(lambda self: self.of_kind("shift"), doc="The constant energy shifts, one per segment.")
+    sqrt_shifts = property(lambda self: self.of_kind("shift_sqrt"), doc="The sqrt(E) shift coefficients (MeV^1/2).")
+    fn_shifts = property(lambda self: self.of_kind("shift_fn"), doc="The shift-function parameters a_j.")
+    abundances = property(lambda self: self.of_kind("abundance"), doc="The isotopic abundances.")
+    screenings = property(lambda self: self.of_kind("screening"), doc="The electron-screening potentials U_e (eV).")
+    densities = property(lambda self: self.of_kind("density"), doc="The fitted areal densities (atoms/cm^2).")
+    dopplers = property(lambda self: self.of_kind("doppler"), doc="The fitted Doppler temperatures (K).")
+    thicknesses = property(lambda self: self.of_kind("thickness"), doc="The fitted sample thicknesses (atoms/barn).")
+    cbkg = property(lambda self: self.of_kind("cbkg"), doc="The THM coherent-background parameters (cbackground=).")
+
+    def values(self, free_only=False):
+        """The parameter values as the project states them (:attr:`Parameter.value`), as a plain list."""
+        return [p.value for p in (self.free if free_only else self)]
+
+    def wigner_limits(self, free_only=False):
+        """Per-parameter Wigner limits (MeV, of the reduced width), ``None`` for a parameter that is not a width."""
+        return [p.wigner_limit for p in (self.free if free_only else self)]
+
+    def by_physical_level(self):
+        """The energy and width parameters grouped by level: ``{LevelKey: ParameterSet}``, ordered by
+        ``(jgroup, level)``.  A level is one resonance / pole, as opposed to the per-J-group level numbering."""
+        groups = {}
+        for p in self:
+            if p.jgroup is None or p.kind not in ("energy", "width"):
+                continue
+            k = LevelKey(p.jgroup, p.J, p.parity, p.level, p.level_energy)
+            groups.setdefault(k, self._select([])).append(p)
+        return dict(sorted(groups.items(), key=lambda kv: (kv[0].jgroup, kv[0].level or 0)))
+
+    def by_level(self, jgroup=None, parity=None, level=None):
+        """All R-matrix parameters (energy + widths) of a J group, parity or level (any given keyword must match)."""
+        return self._select(p for p in self if p.jgroup is not None
+                            and (jgroup is None or p.jgroup == jgroup) and (parity is None or p.parity == parity)
+                            and (level is None or p.level == level))
+
 
 
 @dataclass
@@ -402,121 +539,52 @@ class NuclearPotential:
                 f"{'' if self.own or self.pair == 0 else ', inherited'})")
 
 
-@dataclass
-class Pair:
-    """One AZURE2 particle pair (a reaction channel's two constituents).
+class Pair(_Record):
+    """One particle pair (a reaction channel's two constituents): the engine's record of it
+    (``Session.pair_records()``; ``pyazr.kinds()["pair_fields"]`` lists the fields with their units).
 
-    Built from the numeric records emitted by ``AZUREAPI::GetPairsInfo``
-    (command ``GET_PAIRS_INFO``); see ``api/include/AZUREAPI.h`` for the field
-    layout, which :meth:`from_record` mirrors.  A width :class:`Parameter`'s
-    ``pair`` attribute is this object's :attr:`number`.
+    ``number`` is the engine's pair number (:attr:`Parameter.pair`), ``key`` the pair's key in ``<levels>``; the two
+    differ when ``<levels>`` does not introduce the pairs in key order.
     """
 
-    # Number of doubles per record emitted by AZUREAPI::GetPairsInfo.
-    # Must match AZUREAPI::kPairInfoFields.
-    # 21 since the merge of dev 3264896d into thm: dev's light_excitation (19)
-    # and thm's binding_energy (20; it was 19).  from_record also accepts dev's
-    # 20 (binding_energy = 0) and an older engine's 19 (both 0); a thm engine
-    # from before the merge sent its binding energy as field 19, which is not
-    # told apart (the module is built with its engine).
-    _NFIELDS = 21
-
-    number: int             # 1-based pair number (matches Parameter.pair)
-    key: int                # user pair key from the .azr file
-    ptype: int              # 0 = particle channel, otherwise photon
-    is_entrance: bool       # the reaction's entrance pair?
-    J1: float               # intrinsic spin of particle 1
-    parity1: int
-    Z1: int
-    M1: float               # mass of particle 1 (amu)
-    J2: float               # intrinsic spin of particle 2
-    parity2: int
-    Z2: int
-    M2: float
-    sep_energy: float       # separation energy (MeV)
-    excitation: float       # total pair excitation energy, light + heavy (MeV):
-                            #   the channel threshold is sep_energy + excitation
-    channel_radius: float   # channel radius (fm)
-    i1i2factor: float       # 1 / ((2 J1 + 1)(2 J2 + 1))
-    nucleus_Z: int = 0      # the compound nucleus the pair forms (Z1+Z2 for a particle
-    nucleus_A: int = 0      #   pair, Z2 for a gamma pair, Z2-Z1 for a beta pair; A = round(M))
-    abundance: float = 1.0  # current isotopic abundance of that nucleus (1 unless <abundances>)
-    light_excitation: float = 0.0  # excitation of particle 1 (MeV), column 32 of the <levels> line
+    __slots__ = ()
+    _which = "pair"
 
     @property
     def heavy_excitation(self) -> float:
-        """Excitation energy of particle 2 (MeV), column 17 (``e2``): the
-        total :attr:`excitation` less :attr:`light_excitation`."""
-        return self.excitation - self.light_excitation
+        """Excitation energy of particle 2 (MeV): :attr:`excitation` less :attr:`light_excitation`."""
+        return self.excitation - (self.light_excitation or 0.0)  # a record made by hand may leave it out
 
     @property
     def threshold(self) -> float:
-        """Excitation energy of the compound nucleus at which this pair's
-        channels open (MeV): ``sep_energy + excitation`` (both particles'
-        excitations included)."""
+        """Excitation energy of the compound nucleus at which the pair's channels open (MeV): ``sep_energy +
+        excitation``."""
         return self.sep_energy + self.excitation
 
     @property
-    def label(self) -> str:
-        """The two particles' J^pi, an excited one marked with its excitation
-        energy: ``'2+*(4.439 MeV) + 2+*(4.439 MeV)'`` for 12C(2+)+12C(2+),
-        ``'0+ + 2+*(4.439 MeV)'`` for a + 12C(2+)."""
-        def part(J, parity, ex):
-            s = f"{J:g}{'+' if parity > 0 else '-'}"
-            return s + (f"*({ex:.4g} MeV)" if ex else "")
-        if self.is_photon:
-            return f"gamma + {part(self.J2, self.parity2, self.heavy_excitation)}"
-        return (f"{part(self.J1, self.parity1, self.light_excitation)} + "
-                f"{part(self.J2, self.parity2, self.heavy_excitation)}")
+    def is_photon(self) -> bool:
+        """True for a pair that is not a particle pair (a photon or a beta-decay pair)."""
+        return self.ptype != 0
 
     @property
     def nucleus(self):
         """``(Z, A)`` of the compound nucleus this pair forms."""
         return (self.nucleus_Z, self.nucleus_A)
-    binding_energy: float = 0.0   # Trojan Horse binding energy (MeV); 0 unless
-                                  # the pair is a THM entrance channel
 
     @property
-    def is_photon(self) -> bool:
-        """True for the capture / radiative (gamma) pair."""
-        return self.ptype != 0
-
-    @classmethod
-    def from_record(cls, record):
-        """Build a :class:`Pair` from one ``GET_PAIRS_INFO`` record."""
-        record = list(record)
-        if len(record) == cls._NFIELDS - 2:     # an engine before light_excitation (and binding_energy)
-            record += [0.0, 0.0]
-        elif len(record) == cls._NFIELDS - 1:   # dev's 20 fields (light_excitation last), no binding energy
-            record.append(0.0)
-        (number, key, ptype, is_entrance, J1, parity1, Z1, M1, J2, parity2,
-         Z2, M2, sepE, exE, chRad, i1i2factor, nucZ, nucA, abundance,
-         lightExE, bindingE) = record
-        return cls(
-            number=int(round(number)),
-            key=int(round(key)),
-            ptype=int(round(ptype)),
-            is_entrance=bool(round(is_entrance)),
-            J1=float(J1), parity1=int(round(parity1)), Z1=int(round(Z1)),
-            M1=float(M1),
-            J2=float(J2), parity2=int(round(parity2)), Z2=int(round(Z2)),
-            M2=float(M2),
-            sep_energy=float(sepE), excitation=float(exE),
-            channel_radius=float(chRad), i1i2factor=float(i1i2factor),
-            nucleus_Z=int(round(nucZ)), nucleus_A=int(round(nucA)),
-            abundance=float(abundance),
-            light_excitation=float(lightExE),
-            binding_energy=float(bindingE),
-        )
+    def label(self) -> str:
+        """The two particles' J^pi, an excited one marked with its excitation energy: ``'0+ + 2+*(4.439 MeV)'``."""
+        def part(J, parity, ex):
+            return f"{J:g}{'+' if parity > 0 else '-'}" + (f"*({ex:.4g} MeV)" if ex else "")
+        if self.is_photon:
+            return f"gamma + {part(self.J2, self.parity2, self.heavy_excitation)}"
+        return (f"{part(self.J1, self.parity1, self.light_excitation)} + "
+                f"{part(self.J2, self.parity2, self.heavy_excitation)}")
 
     def __repr__(self):
-        # the engine's internal number AND the .azr key: engine messages and
-        # isospin.out name pairs by key, Parameter.pair by number, and the two
-        # can differ (2026-10-27, A=4 session)
-        return (f"Pair(#{self.number} key={self.key}"
-                f"{' entrance' if self.is_entrance else ''}"
-                f"{' photon' if self.is_photon else ''}, "
-                f"J1={self.J1:g}, J2={self.J2:g}, "
+        # the engine's number AND the key: engine messages and isospin.out name pairs by key, Parameter.pair by number
+        return (f"Pair(#{self.number} key={self.key}{' entrance' if self.is_entrance else ''}"
+                f"{' photon' if self.is_photon else ''}, J1={self.J1:g}, J2={self.J2:g}, "
                 f"{f'light_excitation={self.light_excitation:g}, ' if self.light_excitation else ''}"
                 f"{f'heavy_excitation={self.heavy_excitation:g}, ' if self.heavy_excitation else ''}"
                 f"i1i2factor={self.i1i2factor:g})")
@@ -528,10 +596,7 @@ class PairSet(list):
     @property
     def entrance(self):
         """The entrance :class:`Pair` (or ``None`` if none is flagged)."""
-        for p in self:
-            if p.is_entrance:
-                return p
-        return None
+        return next((p for p in self if p.is_entrance), None)
 
     @property
     def photons(self):
@@ -553,255 +618,3 @@ class PairSet(list):
 
     def __repr__(self):
         return f"PairSet({len(self)} pairs)"
-
-
-class ParameterSet(list):
-    """An ordered collection of :class:`Parameter` with convenient views.
-
-    Behaves like a ``list`` (indexable, iterable) but adds filtered views and a
-    couple of lookups so callers can pull out exactly the parameters they care
-    about, e.g. ``params.free``, ``params.widths``, ``params.by_level(2, +1)``.
-    """
-
-    # -- the free vector ------------------------------------------------------
-    #
-    # A calculation takes a flat vector of the *free* parameters, and a
-    # Parameter's free_index is its position in it.  Threading that by hand is
-    # the usual source of silent misalignment, so these do it.
-
-    def indices(self):
-        """Free-vector positions of these parameters, in this set's order.
-
-        Fixed parameters have no position and are dropped, so
-        ``len(indices()) <= len(self)``.
-        """
-        return [p.free_index for p in self
-                if not p.fixed and p.free_index is not None]
-
-    def take(self, x):
-        """The entries of the free vector ``x`` belonging to these parameters."""
-        import numpy as _np
-        x = _np.asarray(x, float)
-        return x[_np.asarray(self.indices(), int)] if self.indices() else _np.empty(0)
-
-    def put(self, x, values):
-        """A *copy* of the free vector ``x`` with these parameters set.
-
-        ``values`` is either one number for all of them or one per parameter,
-        in this set's order:
-
-        >>> x = m.parameters.widths.put(m.params_rwa, 0.0)   # zero every width
-        """
-        import numpy as _np
-        out = _np.array(x, float, copy=True)
-        idx = _np.asarray(self.indices(), int)
-        values = _np.asarray(values, float)
-        if values.ndim == 0:
-            out[idx] = float(values)
-        elif values.size == idx.size:
-            out[idx] = values
-        else:
-            raise ParameterError(
-                f"put() got {values.size} value(s) for {idx.size} free "
-                f"parameter(s) in this set; give one number for all, or one per free parameter in "
-                f"this set's order (set.free lists them).")
-        return out
-
-    # -- filtered views -------------------------------------------------------
-
-    @property
-    def free(self):
-        """The parameters the fit varies."""
-        return ParameterSet(p for p in self if not p.fixed)
-
-    @property
-    def fixed(self):
-        """The parameters held fixed."""
-        return ParameterSet(p for p in self if p.fixed)
-
-    @property
-    def energies(self):
-        """The level-energy parameters."""
-        return ParameterSet(p for p in self if p.kind == "energy")
-
-    @property
-    def widths(self):
-        """The reduced-width parameters."""
-        return ParameterSet(p for p in self if p.kind == "width")
-
-    @property
-    def norms(self):
-        """The data-normalization parameters."""
-        return ParameterSet(p for p in self if p.kind == "norm")
-
-    @property
-    def shifts(self):
-        """The (constant) energy-shift parameters, one per segment."""
-        return ParameterSet(p for p in self if p.kind == "shift")
-
-    @property
-    def abundances(self):
-        """The isotopic-abundance parameters, one per compound nucleus of a
-        project with an ``<abundances>`` block (none otherwise)."""
-        return ParameterSet(p for p in self if p.kind == "abundance")
-
-    @property
-    def screenings(self):
-        """The electron-screening potentials U_e (eV), one per ``target`` record whose ``screening`` is ``fit``
-        (none otherwise)."""
-        return ParameterSet(p for p in self if p.kind == "screening")
-
-    @property
-    def densities(self):
-        """The fitted areal densities of the active nucleus (atoms/cm^2), one per ``target`` record whose
-        ``areal_density`` is ``fit`` (a target shared by several data sets has one; none otherwise)."""
-        return ParameterSet(p for p in self if p.kind == "density")
-
-    @property
-    def dopplers(self):
-        """The fitted free-gas Doppler temperatures (K), one per ``target`` record whose ``doppler free_gas``
-        value is ``fit`` (none otherwise)."""
-        return ParameterSet(p for p in self if p.kind == "doppler")
-
-    @property
-    def thicknesses(self):
-        """The fitted sample thicknesses (atoms/barn), one per ``target`` record of ``kind sample`` (of a
-        ``transmission`` or ``neutron_yield`` data set) whose ``areal_density ... atoms/b`` is ``fit`` (none
-        otherwise); data sets that share the target share the parameter."""
-        return ParameterSet(p for p in self if p.kind == "thickness")
-
-    @property
-    def sqrt_shifts(self):
-        """The sqrt(E) energy-shift coefficients, one per segment.
-
-        Segment energies are shifted as E' = E + a + b*sqrt(E/MeV); these are
-        the b's (MeV^1/2), fixed at 0 unless the data set's ``shift`` (or its
-        ``energy_scale`` record) has a ``sqrt`` term.
-        """
-        return ParameterSet(p for p in self if p.kind == "shift_sqrt")
-
-    @property
-    def fn_shifts(self):
-        """The shift-function parameters a0, a1, ... of the segments whose line
-        carries a ``shiftfn`` block (none otherwise).
-
-        Segment energies are shifted as E' = E + a + f(E; a0, a1, ...); for
-        these parameters :attr:`Parameter.fn_term` is j and
-        :attr:`Parameter.segment_key` the segment that declares f (on a shift
-        group, its first segment; f applies to every member).
-        """
-        return ParameterSet(p for p in self if p.kind == "shift_fn")
-
-    @property
-    def cbkg(self):
-        """The THM coherent-background parameters (``cbackground=``): Re and
-        Im of each amplitude, with its J group (``jgroup``, ``J``,
-        ``parity``), entrance channel (``channel``, ``L``, ``S``) and exit
-        pair number (``pair``)."""
-        return ParameterSet(p for p in self if p.kind == "cbkg")
-
-    # -- lookups --------------------------------------------------------------
-
-    def by_name(self, name):
-        """The parameter with this name (:attr:`Parameter.name`).
-
-        Raises :class:`pyazr.ParameterKeyError` (a ``KeyError``) naming the close names when none has it."""
-        for p in self:
-            if p.name == name:
-                return p
-        names = [p.name for p in self]
-        raise ParameterKeyError(f"no parameter named {name!r} among the {len(names)} of this set"
-                                f"{close_names(name, names)}; the names are Parameter.name, e.g. "
-                                f"{listed(names, 6)}; print(parameters.table()) lists them all.")
-
-    def by_physical_level(self):
-        """Group the R-matrix parameters (energy + widths) into physical levels.
-
-        Returns a ``dict`` mapping each :class:`LevelKey` to the
-        :class:`ParameterSet` of that level's parameters, ordered by
-        ``(jgroup, level)``.  A "physical level" is one resonance / pole -- the
-        unit you turn on or off -- as opposed to AZURE2's per-J-group level
-        numbering, in which every J-group restarts at level 1.
-
-        Examples
-        --------
-        >>> for key, ps in azr.parameters.by_physical_level().items():
-        ...     print(key, len(ps.widths), "widths")
-        """
-        groups = {}
-        for p in self:
-            if p.jgroup is None or p.kind not in ("energy", "width"):
-                continue
-            k = LevelKey(p.jgroup, p.J, p.parity, p.level, p.level_energy)
-            groups.setdefault(k, ParameterSet()).append(p)
-        return dict(sorted(groups.items(),
-                           key=lambda kv: (kv[0].jgroup, kv[0].level or 0)))
-
-    def by_level(self, jgroup=None, parity=None, level=None):
-        """All R-matrix parameters (energy + widths) for a level / J-group."""
-        def match(p):
-            """The parameters matching every keyword given, e.g. match(jpi="1-", pair=2)."""
-            if p.jgroup is None:
-                return False
-            if jgroup is not None and p.jgroup != jgroup:
-                return False
-            if parity is not None and p.parity != parity:
-                return False
-            if level is not None and p.level != level:
-                return False
-            return True
-        return ParameterSet(p for p in self if match(p))
-
-    # -- conversions ----------------------------------------------------------
-
-    def values(self, free_only=False):
-        """The parameter values as a plain list."""
-        src = self.free if free_only else self
-        return [p.value for p in src]
-
-    def wigner_limits(self, free_only=False):
-        """Per-parameter Wigner limits, aligned one-to-one with the set.
-
-        Each entry is the Wigner limit of the corresponding width parameter's
-        reduced width (the bound on the reduced-width amplitude), or ``None``
-        for parameters that are not widths.  The list lines up index-for-index
-        with :meth:`values`, so ``zip(params.values(), params.wigner_limits())``
-        pairs every parameter with its limit.
-        """
-        src = self.free if free_only else self
-        return [p.wigner_limit for p in src]
-
-    def to_records(self):
-        """Every parameter as a plain ``dict`` (e.g. for a DataFrame)."""
-        keys = [f.name for f in fields(Parameter) if not f.name.startswith("_")]
-        return [{k: getattr(p, k) for k in keys} for p in self]
-
-    def table(self):
-        """A human-readable, aligned text table of the parameters."""
-        rows = [("idx", "name", "kind", "free", "J^pi", "E(MeV)",
-                 "L", "S", "pair", "rad", "seg", "value", "wigner")]
-        for p in self:
-            rows.append((
-                str(p.index),
-                p.name,
-                p.kind,
-                "" if p.fixed else "*",
-                p.jpi or "",
-                "" if p.level_energy is None else f"{p.level_energy:.4g}",
-                "" if p.L is None else str(p.L),
-                "" if p.S is None else f"{p.S:g}",
-                "" if p.pair is None else str(p.pair),
-                p.radiation_type or "",
-                "" if p.segment_key is None else str(p.segment_key),
-                f"{p.value:.6g}",
-                "" if p.wigner_limit is None else f"{p.wigner_limit:.4g}",
-            ))
-        widths = [max(len(r[c]) for r in rows) for c in range(len(rows[0]))]
-        lines = []
-        for r in rows:
-            lines.append("  ".join(cell.ljust(widths[c])
-                                   for c, cell in enumerate(r)))
-        return "\n".join(lines)
-
-    def __repr__(self):
-        return f"ParameterSet({len(self)} parameters, {len(self.free)} free)"
