@@ -1,12 +1,14 @@
 #include "RunScratch.h"
 #include "Config.h"
 
+#include "azure2/experiment/ProjectPaths.h"
 #include "azure2/experiment/ProjectReader.h"
 #include "InputFiles.h"
 #include "azure2/io/ConfigSection.h"
 #include "azure2/io/Document.h"
 #include "azure2/io/ProjectFormat.h"
 #include <cstdlib>
+#include <filesystem>
 #ifndef NO_STAT
 #include <sys/stat.h>
 #endif
@@ -116,12 +118,13 @@ std::unique_ptr<std::istream> Config::SectionStream(const std::string &name, int
 /*!
  * A format-3 project, read once through the one reading path (docs/upgrade/project_format3.md section 7.3): records ->
  * Validate -> <levels> tables -> Schema::Build.  Every diagnostic is printed (file:line: record.field: message); an
- * error refuses the project.  Data files are read relative to the working directory, as the set-up opens them; one
+ * error refuses the project.  Data files are read relative to baseDirectory, as the set-up opens them; one
  * that cannot be read is reported by the run that needs it (ProjectSetup.cpp), not here.
  */
 int Config::ReadFormat3Project(const azure2::io::Document &doc) {
   azure2::experiment::Format3ReadOptions read;
   read.fileName = configfile;
+  read.projectDir = baseDirectory;
   // Which run follows is chosen later (menu, pyazr call): a data file that cannot be read is reported by the set-up
   // that would open it (src/ProjectSetup.cpp: an error for a data run, a warning for an extrapolation)
   read.dataFiles = azure2::experiment::DataFiles::NotUsed;
@@ -143,7 +146,19 @@ void Config::ReportFormat3Refused() const {
             << " lists the same diagnostics." << std::endl;
 }
 
+std::string Config::OpenPath(const std::string &path) const {
+  return azure2::experiment::PathToOpen(baseDirectory, path);
+}
+
 int Config::ReadConfigFile() {
+  // The project's relative paths are the project file's directory's unless the caller named another (pyazr: the
+  // session's directory).  The file's own name is the caller's (a command-line argument, relative to where the
+  // command was given), so it alone is made absolute against the working directory, once, here.
+  if (baseDirectory.empty()) {
+    std::error_code ec;
+    const std::filesystem::path file = std::filesystem::absolute(configfile, ec);
+    if (!ec) baseDirectory = file.parent_path().lexically_normal().string();
+  }
   std::string bytes;
   {
     std::unique_ptr<std::istream> file = InputFiles::Open(configfile, cacheInputFiles);
@@ -242,11 +257,11 @@ void Config::ReadPotentials() {
 #ifndef NO_STAT
 int Config::CheckForInputFiles() {
   struct stat buffer;
-  if (stat(outputdir.c_str(), &buffer) != 0) {
+  if (outputdir.empty() || stat(OpenPath(outputdir).c_str(), &buffer) != 0) {  // an empty name: refused, as stat("")
     outStream << "Could not find output directory: " << outputdir << ". Check that it exists." << std::endl;
     return -1;
   }
-  if (stat(checkdir.c_str(), &buffer) != 0) {
+  if (checkdir.empty() || stat(OpenPath(checkdir).c_str(), &buffer) != 0) {
     outStream << "Could not find checks directory: " << checkdir << ". Check that it exists." << std::endl;
     return -1;
   }

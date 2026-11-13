@@ -70,7 +70,7 @@ class AZUREParams {
   /// data-segment parameters (ParamKindRow::segmentField: normalizations, energy shifts, thicknesses)
   /// are not applied.  `otherRunNames`: the names the project gives to parameters of another run (a format-3
   /// project's data sets in an extrapolation run and the reverse), neither applied nor unknown.
-  bool ApplyUserParameterFile(const std::string &filename, std::ostream &out, bool segmentEntries = true,
+  bool ApplyUserParameterFile(const std::string &filename, const std::string &pathToOpen, std::ostream &out, bool segmentEntries = true,
                               const std::vector<std::string> &otherRunNames = {});
   ROOT::Minuit2::MnUserParameters params_;
   std::vector<ParameterRecord> records_;  ///< one per entry of params_, in its order

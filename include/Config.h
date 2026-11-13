@@ -105,6 +105,15 @@ class Config {
   std::ostream &outStream;
   /// The runtime configuration file name.
   std::string configfile;
+  /// The directory a project's relative paths are resolved against (absolute): data, reference, grid, covariance and
+  /// table files, the output and checks directories, intEC.dat, parameter, temperature and sample files.  The CLI
+  /// sets it to the project file's directory; pyazr to the session's directory (azure2(cwd=...)).  Empty: the
+  /// process's working directory (a Config that never named one).  Every path a project or a prompt gives is kept as
+  /// written and printed as written; OpenPath gives the file to open.
+  std::string baseDirectory;
+  /// The file to open for `path` as the project wrote it: `path` itself when it is absolute or no base directory is
+  /// set, else baseDirectory/path.  Never printed: messages show `path`.
+  std::string OpenPath(const std::string &path) const;
   /// A control variable to stop AZURE calculation
   bool stopFlag;
   /// A bitmask for the encoding of configuration flags

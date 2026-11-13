@@ -8,6 +8,7 @@
 #include <stdexcept>
 
 #include "Config.h"
+#include "azure2/experiment/ProjectPaths.h"
 #include "azure2/experiment/StoppingChecks.h"
 #include "azure2/physics/Elements.h"
 #include "azure2/stopping/Electronic.h"
@@ -22,14 +23,15 @@ TargetStopping::TargetStopping(const azure2::experiment::StoppingSpec &spec, con
     for (std::size_t i = 0; i < parameters.size(); i++) formula_.SetParameter((unsigned)i, parameters[i], configure);
     return;
   }
-  this->SetUpLibrary(spec);
+  this->SetUpLibrary(spec, configure.baseDirectory);
 }
 
-TargetStopping::TargetStopping(const azure2::experiment::StoppingSpec &spec) : source_(spec.source) {
-  if (source_ != Source::Formula) this->SetUpLibrary(spec);
+TargetStopping::TargetStopping(const azure2::experiment::StoppingSpec &spec, const std::string &projectDirectory)
+    : source_(spec.source) {
+  if (source_ != Source::Formula) this->SetUpLibrary(spec, projectDirectory);
 }
 
-void TargetStopping::SetUpLibrary(const azure2::experiment::StoppingSpec &spec) {
+void TargetStopping::SetUpLibrary(const azure2::experiment::StoppingSpec &spec, const std::string &projectDirectory) {
   std::vector<azure2::stopping::Constituent> constituents;
   double total = 0.0, active = 0.0;
   for (const auto &zn : spec.composition) {
@@ -51,7 +53,7 @@ void TargetStopping::SetUpLibrary(const azure2::experiment::StoppingSpec &spec) 
   projectile_ = azure2::stopping::Ion(spec.projectileZ, spec.projectileMass,
                                       std::to_string(spec.projectileA) + azure2::physics::ElementSymbol(spec.projectileZ));
   if (source_ == Source::Table) {
-    std::ifstream in(spec.tableFile);
+    std::ifstream in(azure2::experiment::PathToOpen(projectDirectory, spec.tableFile));
     if (!in) {
       error_ = "cannot open the stopping table " + spec.tableFile;
       return;
@@ -125,12 +127,13 @@ std::string TargetStopping::Provenance() const {
   return o.str();
 }
 
-StoppingReport ReportTargetStoppings(const std::vector<azure2::experiment::TargetEffectSpec> &effects) {
+StoppingReport ReportTargetStoppings(const std::vector<azure2::experiment::TargetEffectSpec> &effects,
+                                     const std::string &projectDirectory) {
   StoppingReport r;
   std::vector<std::string> seen;
   for (const azure2::experiment::TargetEffectSpec &e : effects) {
     if (!e.targetIntegration || e.stopping.source == TargetStopping::Source::Formula) continue;
-    const TargetStopping stopping(e.stopping);
+    const TargetStopping stopping(e.stopping, projectDirectory);
     const std::string label = e.targetName + " for " + stopping.GetProjectile().label;
     bool known = false;
     for (const std::string &s : seen) known = known || s == label;

@@ -376,6 +376,7 @@ class TargetEffect {
   double dopplerLayout_ = 0.0;       ///< K, the temperature the grids span; 0 = the current temperature
   bool isUdr_ = false;
   std::string udrFile_;
+  std::string udrOpenPath_;  // udrFile_ to open (Config::OpenPath); messages print udrFile_
   double udrFlightPath_ = 0.0;   ///< metres
   double udrBurstFwhm_ = 0.0;    ///< nanoseconds
   double udrChannelWidth_ = 0.0; ///< nanoseconds

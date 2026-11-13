@@ -452,6 +452,12 @@ speed up subsequent calculations, as long as:
   before: the switch changes every channel's eta, rho and flux factor (it was
   missing from the signature before October 2026; a file written with it off is
   no longer read back by a run with it on).
+- The Coulomb table is the same, or is off as before (``--no-coulomb-table``):
+  the integrals take their Coulomb waves from it.  The table is recognised by
+  what it holds (its header and a hash of its values), not by its file name or
+  date, so a copy of the same table elsewhere reuses the file and a rebuilt
+  table with other settings does not (before November 2026 the table was not in
+  the signature at all).
 
 Energies, widths, and ANCs of the R-matrix levels can be changed freely while
 reusing this file; the energy of an external-capture final state cannot, since

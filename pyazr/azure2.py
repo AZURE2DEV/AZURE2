@@ -13,7 +13,6 @@ import os
 import re
 import shutil
 import tempfile
-from contextlib import contextmanager
 
 import numpy as np
 from typing import NamedTuple
@@ -32,17 +31,6 @@ from .parameters import (Pair, PairSet, Parameter,
                          ParameterSet)
 from .project import require_format3
 from .potentials import _HybridPotentials
-
-
-@contextmanager
-def _in_dir(path):
-    """Run the block with the process cwd at ``path``, then put it back."""
-    previous = os.getcwd()
-    os.chdir(path)
-    try:
-        yield
-    finally:
-        os.chdir(previous)
 
 
 _THM_BACKGROUND_TERMS = {"none": 0, "const": 1, "linear": 2, "quadratic": 3}
@@ -84,35 +72,6 @@ class ScatteringLength(NamedTuple):
         return text + ("+" if self.parity > 0 else "-")
 
 
-class _Engine:
-    """A ``_azure2.Session`` whose every call is made from the model's directory.
-
-    AZURE2 names ``output/``, ``checks/`` and its data files relative to the
-    process' working directory, and a process has only one.  Entering that
-    directory per call rather than holding it for the session's lifetime is
-    what lets two sessions in different directories coexist -- and it leaves
-    the caller's own cwd alone, as the subprocess-based API did.
-    """
-
-    def __init__(self, session, cwd):
-        self._session = session
-        self._cwd = cwd
-
-    def __getattr__(self, name):
-        # __getattr__ runs before _session exists (unpickling, a failed
-        # __init__), and forwarding then recurses forever.
-        if name.startswith("_"):
-            raise AttributeError(name)
-        attr = getattr(self._session, name)
-        if not callable(attr):
-            return attr
-
-        def call(*args, **kwargs):
-            with _in_dir(self._cwd):
-                return attr(*args, **kwargs)
-        return call
-
-
 class azure2(_HybridPotentials):
     #: Energy-shift penalties are measured from 0, (dE/sigma)^2, not from the
     #: .azr value (2026-10-25).  rmfit reads this to match the engine it runs.
@@ -128,11 +87,13 @@ class azure2(_HybridPotentials):
         Parameters
         ----------
         file : the ``.azr`` configuration file.
-        cwd : working directory for the run.  A model names its ``output/``,
-            ``checks/`` and data paths *relative to the process cwd*, so this
-            defaults to the ``.azr`` file's own directory -- the convention the
-            file itself is written against.  Each engine call enters it and
-            leaves again, so the caller's cwd is never left changed.
+        cwd : the directory the model's relative paths (``output/``,
+            ``checks/``, data, covariance and table files) are read and written
+            in; defaults to the ``.azr`` file's own directory -- the convention
+            the file itself is written against.  The engine resolves them
+            against it (Config::baseDirectory); the process's working
+            directory is neither read nor changed, so sessions in different
+            directories can run on different threads at once.
         data_mode : evaluate the ``<segmentsData>`` blocks (the startup state);
             ``False`` starts in extrapolation mode (``<segmentsTest>``).
         use_brune, ignore_externals, transform, use_long_wavelength :
@@ -199,10 +160,8 @@ class azure2(_HybridPotentials):
         opts = _azure2.RuntimeOptions()
         for name, value in self.options.items():
             setattr(opts, name, value)
-        # Construction reads the .azr and its data files, so it runs from the
-        # model's directory like every call afterwards.
-        with _in_dir(self.cwd):
-            self._sess = _Engine(_azure2.Session(self.file, opts), self.cwd)
+        opts.base_directory = self.cwd  # the model's relative paths: this directory, not the process's
+        self._sess = _azure2.Session(self.file, opts)
 
         self.mode = "data" if data_mode else "extrap"
         self.configure()
@@ -802,29 +761,28 @@ class azure2(_HybridPotentials):
         free = {p.name: float(best[p.free_index]) for p in self.parameters
                 if not p.fixed and p.free_index is not None and p.free_index < best.size}
         sav = os.path.join(self.output_dir, 'param.sav')
-        with _in_dir(self.cwd):
-            rows, tag, seen = [], None, set()
-            with open(sav) as fh:
-                for line in fh:
-                    t = line.split()
-                    if not t:
-                        continue
-                    if t[0].startswith("#") or t[0] == "parametrization":
-                        tag = t
-                        continue
-                    rows.append(t)
+        rows, tag, seen = [], None, set()
+        with open(sav) as fh:
+            for line in fh:
+                t = line.split()
+                if not t:
+                    continue
+                if t[0].startswith("#") or t[0] == "parametrization":
+                    tag = t
+                    continue
+                rows.append(t)
+        for t in rows:
+            if t[0] in free:
+                t[1] = repr(free[t[0]])
+                seen.add(t[0])
+        for name, value in free.items():
+            if name not in seen:
+                rows.append([name, repr(value), "0.0"])
+        with open(sav + '.new', 'w') as f:
+            if tag is not None:
+                f.write(" ".join(tag) + "\n")
             for t in rows:
-                if t[0] in free:
-                    t[1] = repr(free[t[0]])
-                    seen.add(t[0])
-            for name, value in free.items():
-                if name not in seen:
-                    rows.append([name, repr(value), "0.0"])
-            with open(sav + '.new', 'w') as f:
-                if tag is not None:
-                    f.write(" ".join(tag) + "\n")
-                for t in rows:
-                    f.write(" ".join(t) + "\n")
+                f.write(" ".join(t) + "\n")
 
     def save_fit(self, path, x=None, param_sav=True, verify=True, norms="fitted",
                  close_session=False):
@@ -1571,21 +1529,20 @@ class azure2(_HybridPotentials):
         """
         x = np.asarray(self.params_rwa if params is None else params, float).ravel()
         os.makedirs(self.output_dir, exist_ok=True)
-        with _in_dir(self.cwd):
-            if self.mode == "data":
-                # chiSquared.out reports the per-segment chi-squared *stored on
-                # each segment*, and only the chi-squared evaluation sets it --
-                # a bare forward pass leaves it at zero and the file comes out
-                # full of zeros.  This populates both that and the point cross
-                # sections AZUREOut_* is written from.
-                self.sess.calculate_chi2_rwa(x)
-            else:
-                # No data to compare against; chiSquared.out is meaningless in
-                # extrapolation mode, and the forward pass is all AZUREOut_*
-                # needs.
-                self.sess.update_segments_rwa(x)
-            if not self.sess.write_output_files():
-                raise RuntimeError("AZURE2 has no data object to write from.")
+        if self.mode == "data":
+            # chiSquared.out reports the per-segment chi-squared *stored on
+            # each segment*, and only the chi-squared evaluation sets it --
+            # a bare forward pass leaves it at zero and the file comes out
+            # full of zeros.  This populates both that and the point cross
+            # sections AZUREOut_* is written from.
+            self.sess.calculate_chi2_rwa(x)
+        else:
+            # No data to compare against; chiSquared.out is meaningless in
+            # extrapolation mode, and the forward pass is all AZUREOut_*
+            # needs.
+            self.sess.update_segments_rwa(x)
+        if not self.sess.write_output_files():
+            raise RuntimeError("AZURE2 has no data object to write from.")
         return self.output_dir
 
     # -- chi-squared, per segment and per dataset -----------------------------

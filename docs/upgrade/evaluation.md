@@ -64,7 +64,7 @@ allow-list with its reason).  "Done" in the last column means the change is in t
 | `g_ecAmplitudeCache` (`src/ECAmplitudeCache.cpp`) | the EC amplitudes on the reaction-rate/extrapolation grid | the binding swaps it per session; `UnitExternalCapture` reads | none across threads | yes if two sessions run at once (read) | the run's (done, branch 2): `RunScratch::ecAmplitudes`, read through `RunECAmplitudes(configure)`; the binding's swap deleted |
 | `g_shiftDerivMemo`, `g_shiftDerivMutex` (`src/CNuc.cpp`) | dS/dE and d²S/dE² at level energies (Park), keyed by every input | `CNuc::CalcShiftFunctions` | mutex | no: exact key (read) | the run's (done, branch 2): `RunScratch::shiftDerivatives` |
 | `g_terms`, `g_termsMutex`, `g_nodes`, `g_lookups`, `g_direct`, `g_nodesReport`, `g_checkMutex`, `g_maxDeviation` (`src/ECTable.cpp`) | the EC-integral table: nodes per term, filled on first use (`shared_future`), counters | EC amplitudes on the table | mutex + futures | no: a node's value is a pure function of its key (read) | the term table is the run's (done, branch 2): `ECTermStore` in `RunScratch::ecTerms` (filled on first use behind its lock: the terms are not known before the first evaluation); counters → diagnostics (milestone 5) |
-| `g_files`, `g_bytes`, `g_stats`, `g_mutex` (`src/InputFiles.cpp`) | the bytes of data files read with `cacheInputFiles` (pyazr), keyed by path and stamp | data readers | mutex | no: re-read when the stamp moves (read) | not moved in branch 2: a session-owned store would make `cache_stats()` (documented "for the whole process") count one session; left for a decision (section 6) |
+| `g_files`, `g_bytes`, `g_stats`, `g_mutex` (`src/InputFiles.cpp`) | the bytes of data files read with `cacheInputFiles` (pyazr), keyed by path and stamp | data readers | mutex | no: re-read when the stamp moves (read) | allowed (the director, 2026-11-12; branch 3): the entries are the bytes of a file keyed by absolute path and file stamp (size, modification time), immutable once read, behind a lock; not a hazard, because a file changed between two reads has a new stamp and is read again, and no value of a calculation is stored; `cache_stats()` counts the process |
 | `g_sharedGeneration` (`src/CoulombTable.cpp`) | moves when a missing table file is forgotten | `Shared` | atomic | no | deleted with the per-thread lookup |
 | `SharedTables()::t`, `SharedFailed()::f`, `SharedMutex()::m` (`src/CoulombTable.cpp`) | the Coulomb tables loaded from files | `Shared` | mutex | no: immutable after load (read) | allowed (an immutable table read from a file) |
 | `CoulombTable::hits_`, `misses_` (`include/CoulombTable.h`), `report` (`Shared`) | lookup counters printed at exit | every table lookup | atomic | no (diagnostic) | diagnostics, allowed until section 2 is done |
@@ -271,6 +271,49 @@ session's `ECAmplitudeCache` swapped into `g_ecAmplitudeCache`, the session's `R
 Problem>`) and one `Evaluation`; the swap of globals goes (milestone 2).  The public Python functions return what
 they return now.
 
+### 4.1 What an evaluation of a fit writes today (the inventory for milestone 3, branch 3)
+
+Read from the code of 55a7e2c9 (`WorkingCopy.h`, `HandOver.cpp`, `ShiftFrames.cpp`, `NodeTable.cpp`,
+`UnitExternalCapture.cpp`, `AZURECalc.cpp`, `AZURECalcMCMC.cpp`, `AZUREAPI.h`).  An evaluation of a fit is
+`FillCompoundFromParams` (the `CNuc`), `FillNormsFromParams` and `FillEnergyShiftsFromParams` (the hand-over into the
+working copy), the point pass and the objective into a `Results`.  What each member of `WorkingCopy` is:
+
+| Member of `WorkingCopy` | Problem or evaluation | Written by an evaluation when |
+|---|---|---|
+| `set_` (`DataSet`: segments, terms, target effects, covariance, parameter layout) | problem (shared `const` by the copies) | never |
+| `plan_`, `capacity_`, `iterations_` (an atomic counter read through the master copy), `covFiles_`, `ec*_` (set-up of `intEC.dat`) | problem | never |
+| `segmentStates_` (`SegmentState`: norm, shifts, last shifts, shift-function values, thickness; per term the frame rows at the present shift and the shift tables) | evaluation | every evaluation (norms); shifted segments (the rest) |
+| `effectValues_` (`TargetEffectValues`: U_e, density, temperature, stopping scale, kernel values), `thmCoherentValues_` | evaluation | a fit of these parameters |
+| `units_`, `slots_` (`Unit`, `Site`: the points and the sites of their folds) | **both**: the measurement's values (datum, error, original energy, angle) are problem; lab and c.m. energy and angle after the shift, Legendre rows, penetrabilities, shifts and phases, Coulomb amplitude, channel rows (`RecalcEDependentValues`), screening U_e (`SetScreening`, every evaluation with a screening effect), target thickness and stopping (density, stopping scale), the EC amplitude at the shifted energy (`ec_shifted_`), the slots of a re-placed fold are evaluation | shifted terms, fitted target-effect parameters, re-placed grids |
+| `slotBlock_`, `slotWriter_`, `slotReaders_`, the result layout (`resultsSize_`, `modelSize_`, a unit's record offsets) | problem as laid out at set-up; evaluation when a re-placed grid lays the units out again (`PlaceSubPointGrids`, `LayoutResults`) | re-placed grids |
+| `rowSets_`, `contractedSize_` | evaluation when slots move (rebuilt by the hand-over, `BuildRowSets`) | re-placed grids, shifts |
+| `nodes_` (`NodeState`: the stage table, shared; the slots of the moved tasks and the overflow nodes) | the table is problem; slots and overflow are evaluation | shifts, re-placed grids |
+| `meshAnchors_`, `meshSupports_`, `meshCentres_`, `gridNuc_` (a `CNuc` holding the observed level values the meshes are laid out for) | evaluation (functions of the level parameters and shifts) | a fit of a level that anchors a mesh, shifts |
+
+**Finding.**  Section 4 above says "the `Unit`s are problem except their slots' hand-over values".  That is true of a
+project without energy shifts, fitted target-effect parameters and re-placed grids; for the others the hand-over
+rewrites most of a `Site` (its energies, angles, energy-dependent channel values, Coulomb amplitude, rows, stopping
+and thickness) and may lay the slots out again.  Removing `WorkingCopy::Clone` therefore needs a split of the `Site`
+layer: the measurement and the set-up's values stay in the problem's sites, and the values above become a table of the
+evaluation, indexed by site, written by the hand-over and read by every reader of a site (the observables, the folds,
+the gradient's cotangents, the node checks, the writers) — about 40 accessors of `Site.h` and their readers in
+`ShiftFrames.cpp`, `TargetSetup.cpp`, `NodeTable.cpp`, `EnergyPass.cpp`, `GradEnergyTasks.cpp`, the observables and
+the output.  It is the "hand-over table" of section 4 at the size of the sites, not of the overflow nodes alone, and two
+of its files are in another branch's work tonight (`ShiftFrames.cpp`, `TargetSetup.cpp`).  It is not done in this
+branch (see section 7.5); what this branch does is what does not need it:
+
+1. The pools hold one evaluation per evaluation running at the same time, made when first needed, instead of
+   `max(4, threads)` copies made at the first evaluation.  An evaluation is a pair (a `CNuc` copy, a working copy
+   with its `Results`) taken by one caller at a time.  A fit with the analytic gradient (one evaluation at a time,
+   its parallelism inside the point pass) then holds one, at any thread count; Minuit2's numerical gradient and the
+   MCMC's walkers hold one per thread that evaluates.
+2. (Planned, not done in branch 3: see section 7.5.)  `AZUREAPI` reads its nuisance layout once, at construction
+   and at a rebuild; its evaluating methods write the session's `Results` as non-`const` methods.
+3. Kept, with the reason: `WorkingCopy::Clone`, `WorkingData` and the snapshot copies (`output_*`) of a fit (a
+   snapshot runs `TransformOut` on its `CNuc`, which a pooled one must not see), `AZURE_POOL_CHECK` and
+   `AZURE_TRACE_FCN=fresh` (they compare a pooled copy with a fresh one, which still exist), `Site::ec_shifted_`
+   (a value of the `Site` split).
+
 ## 5. Milestones
 
 Each is a commit series that leaves the tree passing (all projects × 3 bases identical to the reference, unit tests,
@@ -418,3 +461,58 @@ natural_neon 9.8539e9 -> 9.8642e9 (+0.10 %), 18O_p_a_thm 6.25213e7 -> 6.25218e7,
 -> 3.25903e11 (+0.06 %), 13N fit 1.875305e11 -> 1.875930e11 (+0.03 %).  Allow-list: 107 pending rows -> 88 (milestone
 1: 10 -> 0, milestone 2: 13 -> 4, the input-file bytes; 3: 11; 4: 44; 5: 29).
 
+### 7.5 Done in the third branch (`feature/upgrade-6-evaluation-3`)
+
+**Milestone 3, the part that does not need the `Site` split (section 4.1).**  The copies an evaluation of a fit or
+of the MCMC runs on are made when an evaluation finds no idle one, not `max(4, threads)` (fit) or twice the hardware
+threads (MCMC, 48 on the 24-core machine) at the first evaluation; `InitializePools` and `pools_initialized_` are
+deleted.  A fit with the analytic gradient holds the master pair, one evaluation pair and (from the first snapshot)
+the snapshot pair at any thread count.  Kept: `WorkingCopy::Clone`, `WorkingData`, the pools' stacks, the snapshot
+copies, `AZURE_POOL_CHECK`, `Site::ec_shifted_` (section 4.1, item 3); `AZUREAPI`'s `mutable` members (not reached).
+
+**Relative paths (done, branch 3, continued).**  A project's relative paths are resolved against one directory held
+by the run, never against the process's working directory, and pyazr no longer changes the working directory.
+- One rule, one function: `azure2::experiment::PathToOpen(directory, path)` (`experiment/.../ProjectPaths.h`; an
+  absolute path, or no directory, as written; an empty path is the directory itself).  The engine's
+  `Config::OpenPath(path)` applies it with `Config::baseDirectory`, which `Config::ReadConfigFile` sets to the
+  project file's directory (made absolute once, at start, against the working directory: the file name is the
+  caller's) unless the caller named one; pyazr names the session's `cwd` (`RuntimeOptions.base_directory`).
+- Every opening site takes `OpenPath` and every message prints the path as the project writes it: data files
+  (`Segment::Fill`), covariance files and the data files they list (`DataCovariance::Read`, the groups' keys), the
+  user-defined resolution file (`TargetEffect`), a stopping table (`TargetStopping`, the directory passed in), the
+  output and checks files (`DataOutputFiles`, `AZUREOutput`'s prefix, `DataCheckFiles`, `CNucReport`,
+  `AZUREParams`, `AZURECalc`, `AZUREMain`, `ReactionRate`, `ThmReports`, `DataCovarianceGroups`), `intEC.dat` and
+  its signature (`ExternalCaptureSetup`, `WorkingCopy`, `AZUREAPI`), the MCMC files (`AZURECalcMCMC`, the CLI's
+  overwrite), `kinflag.dat`, `nonfinite_dump.txt`, and a file named at a menu prompt (parameter, temperature,
+  integrals file: `AZURE2.cpp`).  The output-directory check refuses an empty name as before.
+- The experiment library's `projectDir` is used for opening only (`BuildContext::ProjectPath`, `Grids.cpp`):
+  messages, `GridValues::file`, `ExtrapolationSpec::gridFile`, `StoppingSpec::tableFile` keep the written name;
+  `--describe` still prints the resolved data file, as before.  The engine passes its `baseDirectory` (so
+  `--print-predictions` and `pyazr.predictions`, which set the project up through `ReadConfigFile` as a run does,
+  read relative to the project file now).
+- pyazr: `_in_dir` and the `_Engine` wrapper are deleted; the `Session` gets the directory; a relative
+  `coulomb_table` is made absolute against it (it was the session's directory's before, through the `chdir`).
+- Unchanged, deliberately: THM tables and the prior covariance were already relative to the project file
+  (`ThmRelativePath`, `PriorCovariance::ResolvePath`); the project file and `--coulomb-table`/`AZURE_OPTIONS_FILE`
+  given on the command line are the caller's, relative to where the command is given; `pyazr.validate` and
+  `pyazr.describe`, with `--validate` and `--describe` (held to the same text by `tests/pyazr/validate_test.py`),
+  keep reading data files relative to the process's working directory: changing them changes what a public pyazr
+  function returns, a decision for the director.
+- Tests: `tests/run_from_elsewhere` (the CLI started from the parent and from an unrelated directory writes the same
+  output and checks files and reads an integrals file named at the prompt as the project's; fails on the base); `tests/pyazr/concurrent_sessions_test.py` pair R S (13N and 18O_p_a_thm
+  with their relative paths, each session also writing its output files, two threads at once).
+
+**Two defects, by a test first.**  (a) The signature of `intEC.dat` held neither whether the Coulomb table is used nor
+which file: it now holds the table's content identity (below) or "exact Coulomb functions"
+(`tests/ec_table_signature`).  Every signature of a run with a table changes, so an existing `intEC.dat` is computed
+again once.  The table is named by what it holds, not by its file (`CoulombTable::ContentIdentity`: format,
+interpolation order, l range, the two axes, eta*rho maximum, generator text and a 64-bit hash of every tabulated
+value, 8 bytes a step; computed on the first request and fixed after it, behind `std::call_once`): a copy of the table
+at another path, or the same table on another machine, reuses the file; a table with other values does not.  Cost: one
+pass over the 88 MB table, 1.2e8 user-space instructions (T1 2.9467e10 -> 2.9589e10, +0.41 %; 13N 7.4509e10 ->
+7.4631e10, +0.16 %), paid only by a run that sets up external-capture integrals (T2: 1.42829e9 -> 1.42839e9).  (b) `--validate` and `--describe` read `relativistic` already (the project reader's `RelativisticFlag`);
+`tests/describe_relativistic` holds it (a THM data set under `relativistic=1` is refused by both).
+
+**Input-file bytes**: the four rows are permanent (`table:`), with the reason of section 1.2.
+
+**Diagnostics record (milestone 5)**: not started.

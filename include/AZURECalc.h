@@ -40,8 +40,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   AZURECalc(WorkingCopy *data, azure2::Results &results, CNuc *compound, const Config &configure,
             ParameterLimitsManager *limitsManager = nullptr) :
     configure_(configure),
-    results_(results),
-    pools_initialized_(false) {
+    results_(results) {
     data_ = data;
     compound_ = compound;
     limitsManager_ = limitsManager;
@@ -225,9 +224,10 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   void AddNuisanceGradient(const vector_r &p, std::vector<double> &grad) const;
 
   /*!
-   * Object pool management methods
+   * The copies an evaluation of a fit runs on: an idle one, or a new clone of compound() and data() when every copy
+   * made so far is taken (made when needed, so a fit holds one per evaluation running at the same time: one with the
+   * analytic gradient, one per thread of Minuit2's parallel numerical gradient).  Returned after the evaluation.
    */
-  void InitializePools() const;
   CNuc *GetPooledCNuc() const;
   WorkingData *GetPooledData() const;
   void ReturnPooledCNuc(CNuc *obj) const;
@@ -275,11 +275,11 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   double theErrorDef;
   mutable std::vector<bool> fixedMask_;  ///< see FixedMask()
 
-  // Object pools for memory reuse - store cloned objects directly
+  // The idle copies of GetPooledCNuc / GetPooledData (no value of an evaluation survives in them that the next one
+  // does not overwrite: tests/upgrade/history_test.cpp, AZURE_TRACE_FCN=fresh).
   mutable std::stack<std::unique_ptr<CNuc>> cnuc_pool_;
   mutable std::stack<std::unique_ptr<WorkingData>> edata_pool_;
   mutable std::mutex pool_mutex_;
-  mutable bool pools_initialized_;
   bool g2Enabled_ = false;
   // Gauss-Newton cache: the residual Jacobian taken in Gradient() also gives G2;
   // Minuit2 asks for G2 at the same point right after the gradient.

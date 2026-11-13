@@ -332,7 +332,7 @@ Open from the drill: the three non-default Legendre definitions follow `docs/upg
 checked against the LEXFOR text itself; differential data relative to a reference are not built; pyazr's
 `calculate_sfactor` knows only the plain S factor.
 
-## No hidden state (two steps, 2026-11-12; not finished)
+## No hidden state (three steps, 2026-11-12 and 13; not finished)
 
 The aim: every number the engine prints depends only on the project, the command line and a short list of
 environment switches (`docs/upgrade/evaluation.md` section 2), not on what ran before in the same process or on how
@@ -347,13 +347,19 @@ with the run's settings of its functions (relativistic or not, which Coulomb tab
 table, Park's shift-derivative memo and the `--no-ec-table` amplitudes belong to the run.  Two sessions may now
 evaluate at the same moment on two Python threads: `tests/pyazr/concurrent_sessions_test.py` (slow, about 11 minutes)
 runs pairs of sessions at once 20 times, and two different Coulomb table files one after another, and each gives the
-bytes of a fresh process; the engine before this step failed it.  One caution for such use: the engine reads a
-project's relative paths against the process's working directory, which pyazr sets per call, so two sessions on two
-threads need projects with absolute paths or one working directory.  What is not done: the bytes of input files kept
-per process (moving them per session changes what `cache_stats()` counts: your decision), the pooled copies of a fit
-and of the MCMC, diagnostic counters, the MCMC's progress globals.  Every one is a row of
-`tests/consistency/allowed_state.tsv` with the step that removes it (88 rows; 10 more are permanent: constant tables
-and locks of output streams).  What you
+bytes of a fresh process; the engine before this step failed it.  A project's relative paths (data, output,
+checks, tables, intEC.dat, files named at a prompt) are now the project file's directory's, or the directory a pyazr
+session names, never the process's working directory, and pyazr no longer changes it: two sessions in two directories
+run side by side, and the command-line program started from anywhere reads and writes the files it would read and
+write started in the project's directory (`tests/run_from_elsewhere`).  This is a change of behaviour of the
+command-line program: before, relative paths were the working directory's.  A fit and the MCMC make a copy of the
+working data only when no idle one exists (one copy less in memory), and the signature of `intEC.dat` names the
+Coulomb table by its content, so a file written with another table is recomputed, not reused.  What is not done: the
+diagnostic switches and counters (44 switches read in many places; they become one record read once), the fitter's
+and the sampler's own members, the MCMC's progress globals.  Every one is a row of
+`tests/consistency/allowed_state.tsv` with the step that removes it (82 rows; 14 more are permanent: constant
+tables, locks of output streams, and the bytes of input files, kept per process under a key of path, size and
+modification time, which `cache_stats()` counts: say if you want them per session).  What you
 must not do: add a `static` or `thread_local` variable that keeps a value, a global pointer, or a `mutable` member; a
 consistency check refuses them.
 
@@ -486,10 +492,10 @@ change, where it ran out of memory before. No number of the test tree moved. Kno
 layers below 1 eV the fitted error of an energy shift is too small (χ² is a staircase in the shift there), and the
 cost of a shifted data set grows with the width of the shift's prior over the width of the layer.
 
-In work now: the third step of "no hidden state" (a fit's copies of the working data made only when one is needed,
-relative paths resolved without the process's working directory, the diagnostic switches read once into one
-record; no number may change); the `gamma_decay` record on a level whose transitions have external capture; the
-distorted-wave vertex's quadrature moved into the transfer library. Merged on 2026-11-13: the stopping of a data set
+In work now: the `gamma_decay` record on a level whose transitions have external capture; the diagnostic switches
+read once into one record (the last step of "no hidden state"; no number may change); the distorted-wave vertex's
+quadrature moved into the transfer library. Merged on 2026-11-13: the third step of "no hidden state" (section
+above); the stopping of a data set
 with an energy shift is taken at the shifted beam energy (numbers of such data sets on a target change, by the
 logarithmic slope of the stopping times shift over energy); the total radiative width, the gamma branchings and the
 mixing ratios of a level as fit parameters (previous section); the Trojan-horse distortion factor and the waves of

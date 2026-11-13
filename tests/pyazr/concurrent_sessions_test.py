@@ -12,13 +12,19 @@ Sessions, each with its own copy of its project directory:
   B   tests/18O_p_a_thm (Trojan-horse data on the shared mesh) with the Coulomb table off;
   N   tests/13N with --no-ec-table (the interpolated external-capture amplitudes, ECAmplitudeCache);
   M   tests/13N with --no-ec-table and the channel radius of its first pair at 5.0 fm (the same model's keys as N);
-  T   tests/13N with a second, coarser Coulomb table file (made here with the table tool; `--coulomb-table`).
-The projects' paths are made absolute (the engine resolves relative ones against the process's working directory,
-which two threads share).  Pairs run at once on two threads, 20 times each (each time both threads build their session and evaluate it, a
-barrier starting them together): A with B, N with M, A with T.  In one more process the sessions run one after
-another: A T A, T A T (two table files in one process).  Every evaluation must give the bytes of the same session
-alone in a fresh process.  What is compared: the cross sections of every data point (calculate_rwa), the
-chi-squared per segment and the objective with its analytic gradient (chi2_and_grad), as raw IEEE bytes.
+  T   tests/13N with a second, coarser Coulomb table file (made here with the table tool; `--coulomb-table`);
+  R   tests/13N as written: its data, output and checks paths relative to the project's directory;
+  S   tests/18O_p_a_thm as written (relative paths), the Coulomb table off.
+The paths of A, B, N, M, T are made absolute; R and S keep the project's relative paths, and their sessions also
+write their output files (write_output_files), whose bytes are part of what is compared: a session resolves its
+relative paths against its own directory (Config::baseDirectory), never against the process's working directory,
+which two threads share (pyazr changed it per call before, and a session writing while the other had entered its
+own directory wrote into the other's).  Pairs run at once on two threads, 20 times each (each time both threads build
+their session and evaluate it, a barrier starting them together): A with B, N with M, A with T, R with S.  In one more
+process the sessions run one after another: A T A, T A T (two table files in one process).  Every evaluation must give
+the bytes of the same session alone in a fresh process.  What is compared: the cross sections of every data point
+(calculate_rwa), the chi-squared per segment and the objective with its analytic gradient (chi2_and_grad), as raw
+IEEE bytes, and for R and S the output files written.
 
 Before the sessions owned their state, the binding swapped a process-wide Config pointer and amplitude cache per call
 (two threads raced on them), and the external-capture term table and Park's shift-derivative memo were keyed by
@@ -49,8 +55,11 @@ CASES = {
     "N": ("13N", {"use_ec_table": False}, None),
     "M": ("13N", {"use_ec_table": False}, (1, 5.0)),
     "T": ("13N", {"coulomb_table": "@SECOND"}, None),
+    "R": ("13N", {}, None),
+    "S": ("18O_p_a_thm", {"use_coulomb_table": False}, None),
 }
-PAIRS = [("A", "B"), ("N", "M"), ("A", "T")]
+RELATIVE = {"R", "S"}  # the project's paths kept relative; the session writes its output files too
+PAIRS = [("A", "B"), ("N", "M"), ("A", "T"), ("R", "S")]
 SEQUENCES = [("A", "T", "A"), ("T", "A", "T")]
 
 
@@ -82,8 +91,9 @@ def stage(tmp, label):
             proj = Project.open(azr)
             proj.set_pair(radius[0], radius=radius[1])
             proj.save(azr)
-        # The engine reads a project's relative paths against the process's working directory, which pyazr sets per
-        # call and two threads share: absolute paths, so that each session reads and writes its own directory.
+        if label in RELATIVE:
+            return azr
+        # Absolute paths for the other cases, as written before relative paths were the session's own.
         with open(azr) as f:
             text = f.read()
         text = re.sub(r"^(output|checks)/", lambda m: os.path.join(work, m.group(1)) + "/", text, flags=re.M)
@@ -100,18 +110,32 @@ def options(label, second_table):
     return opts
 
 
-def evaluate(azr, opts):
+def evaluate(azr, opts, write=False):
     import numpy as np
     from pyazr import azure2
+    files = []
     with azure2(azr, **opts) as s:
         x = np.asarray(s.params_rwa, float)
         parts = [np.concatenate([np.asarray(v, float).ravel() for v in s.calculate_rwa(x)]),
                  np.asarray(s.segment_chi2(x), float)]
         chi2, grad = s.chi2_and_grad(x)
         parts += [np.asarray([chi2], float), np.asarray(grad, float).ravel()]
+        if write:
+            out = s.output_dir
+            for name in os.listdir(out):  # this session's files only: written afresh below
+                if name.startswith("AZUREOut_") or name == "chiSquared.out":
+                    os.remove(os.path.join(out, name))
+            s.write_output_files(x)
+            files = sorted(n for n in os.listdir(out) if n.startswith("AZUREOut_") or n == "chiSquared.out")
+            if not files:
+                raise RuntimeError(f"no output file written in {out}")
     h = hashlib.sha256()
     for p in parts:
         h.update(np.ascontiguousarray(p, dtype="<f8").tobytes())
+    for name in files:
+        h.update(name.encode())
+        with open(os.path.join(out, name), "rb") as f:
+            h.update(f.read())
     return h.hexdigest()[:16]
 
 
@@ -121,7 +145,7 @@ def worker(tmp, mode, labels, second_table):
     out = []
     if mode == "seq":
         for label in labels:
-            out.append([label, evaluate(stage(tmp, label), options(label, second_table))])
+            out.append([label, evaluate(stage(tmp, label), options(label, second_table), label in RELATIVE)])
     else:
         azrs = {label: stage(tmp, label) for label in labels}
         for _ in range(REPEATS):
@@ -131,7 +155,7 @@ def worker(tmp, mode, labels, second_table):
             def run(label):
                 try:
                     barrier.wait()
-                    got[label] = evaluate(azrs[label], options(label, second_table))
+                    got[label] = evaluate(azrs[label], options(label, second_table), label in RELATIVE)
                 except Exception as err:  # reported below, not swallowed
                     errors.append(f"{label}: {type(err).__name__}: {err}")
 

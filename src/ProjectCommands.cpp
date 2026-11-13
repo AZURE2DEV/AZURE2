@@ -167,7 +167,8 @@ int validateProject(const std::string &file, bool json) {
         // data files as the engine opens them: relative to the working directory
   azure2::experiment::Format3Project c = azure2::experiment::ReadFormat3Text(bytes, read);
   // the stopping of each target from the library (energy_grid.md section 6): its source, or why it has none
-  const StoppingReport stopping = ReportTargetStoppings(c.Ok() ? TargetEffectSpecs(c) : std::vector<azure2::experiment::TargetEffectSpec>());
+  const StoppingReport stopping = ReportTargetStoppings(c.Ok() ? TargetEffectSpecs(c) : std::vector<azure2::experiment::TargetEffectSpec>(),
+                                                        read.projectDir);
   for (const azure2::experiment::Diagnostic &d : stopping.refusals) c.diagnostics.push_back(d);
   const std::string note = "note: " + std::to_string(c.buildChecksSkipped) +
                            " check(s) skipped (the build checks need a valid project and its <levels>).";
@@ -249,7 +250,7 @@ int describeProject(const std::string &file, bool json, const std::string &recor
   std::cout << (json ? azure2::experiment::DescribeJson(c, record) : azure2::experiment::DescribeText(c, record)) << std::flush;
   if (json) std::cout << std::endl;
   // the stopping of each target from the library: its source (text form only), or the refusal
-  const StoppingReport stopping = ReportTargetStoppings(TargetEffectSpecs(c));
+  const StoppingReport stopping = ReportTargetStoppings(TargetEffectSpecs(c), read.projectDir);
   for (const azure2::experiment::Diagnostic &d : stopping.refusals) std::cout << d.ToText() << std::endl;
   if (!json && record.empty()) std::cout << stopping.text << std::flush;
   return stopping.refusals.empty() ? 0 : 2;

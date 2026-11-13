@@ -18,11 +18,11 @@
 #include "ModelPass.h"
 
 std::shared_ptr<DataCovariance::File> WorkingCopy::CovarianceFileFor(const std::string &path, const Config &configure) {
-  const std::string key = DataCovariance::CanonicalPath(path);
+  const std::string key = DataCovariance::CanonicalPath(configure.OpenPath(path));
   auto it = covFiles_.find(key);
   if (it != covFiles_.end()) return it->second;
   std::string err;
-  std::shared_ptr<DataCovariance::File> f = DataCovariance::Read(path, err, configure.cacheInputFiles);
+  std::shared_ptr<DataCovariance::File> f = DataCovariance::Read(path, configure.baseDirectory, err, configure.cacheInputFiles);
   if (!f) {
     configure.outStream << "ERROR: Covariance file: " << err << "." << std::endl;
     covarianceError_ = true;
@@ -52,7 +52,7 @@ int WorkingCopy::ResolveCovarianceGroups(const Config &configure) {
   for (int s = 1; s <= Draft().NumSegments(); s++) {
     Segment *seg = Draft().GetSegment(s);
     if (seg->GetCovarianceFile().empty()) continue;
-    const std::string key = DataCovariance::CanonicalPath(seg->GetCovarianceFile());
+    const std::string key = DataCovariance::CanonicalPath(configure.OpenPath(seg->GetCovarianceFile()));
     auto fit = covFiles_.find(key);
     if (fit == covFiles_.end()) return -1;  // Fill reported it
     auto git = groupOf.find(key);
@@ -70,7 +70,7 @@ int WorkingCopy::ResolveCovarianceGroups(const Config &configure) {
     }
     seg->SetCovarianceGroup(g);
     Draft().covGroups_[g]->numSegments++;
-    const std::string canonicalData = DataCovariance::CanonicalPath(seg->GetDataFile());
+    const std::string canonicalData = DataCovariance::CanonicalPath(configure.OpenPath(seg->GetDataFile()));
     for (int pid = 0; pid < seg->NumPoints(); pid++) {
       const int row = fit->second->RowOf(canonicalData, seg->FileRecord(pid));
       if (row < 0) return -1;  // cannot happen: Fill checked the file and the record count
@@ -81,7 +81,7 @@ int WorkingCopy::ResolveCovarianceGroups(const Config &configure) {
     covFiles_.clear();
     return 0;
   }
-  const std::string modelFile = configure.outputdir + "covarianceModel.out";
+  const std::string modelFile = configure.OpenPath(configure.outputdir + "covarianceModel.out");  // opened, never printed
   bool anyRelative = false;
   for (size_t g = 0; g < Draft().covGroups_.size(); g++) {
     DataCovariance::Group &grp = *Draft().covGroups_[g];
@@ -220,7 +220,7 @@ void WorkingCopy::WhitenResidualRows(std::vector<double> &residuals, std::vector
  * would have without their correlations).
  */
 void WorkingCopy::WriteCovarianceSummary(const Config &configure, const azure2::Results &results) {
-  std::ofstream out((configure.outputdir + "covariance.out").c_str());
+  std::ofstream out(configure.OpenPath(configure.outputdir + "covariance.out").c_str());
   if (!out) return;
   out << "# file, fitted rows, rows, segments, chi2 (r^T M^-1 r), sum of r_i^2 (correlations ignored), relvector terms"
       << std::endl;

@@ -2,6 +2,60 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (director, 07:10) — merged: Phase 6, third branch (a fit's copies made when needed; the Coulomb table named by content; relative paths are the project's)
+
+**Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed): `feature/upgrade-6-evaluation-3` (the
+agent's two entries "Phase 6 branch 3" below say what was done, by file). New reference tag `tab-eval3m-1`, base
+build `work/b-eval3m`.
+
+**What it is.** (1) The fitter and the sampler no longer build a pool of working copies up front: a copy is made
+when no idle one exists, so a fit holds one copy of the problem less. (2) The signature of `intEC.dat` names the
+Coulomb table by its content (`CoulombTable::ContentIdentity`: format, order, l_max, the axes, the generator and a
+64-bit hash of every sheet's values) or says "exact Coulomb functions"; an `intEC.dat` written before is recomputed
+once. (3) A project's relative paths are opened against the project file's directory (the command-line program) or
+the directory the pyazr session names, by one function (`azure2::experiment::PathToOpen`, `Config::OpenPath`); pyazr
+no longer changes the process's working directory. The project file itself, `--coulomb-table` and
+`AZURE_OPTIONS_FILE` on the command line stay relative to the working directory.
+
+**What a user sees.** `AZURE2 /some/where/project.azr` started in another directory now reads and writes where the
+project is (before: relative to where it was started, so it failed or wrote elsewhere); `nonfinite_dump.txt` is
+written in the project's directory; the 23 `intEC.dat.sig` files per basis of the tree have a new last line.
+`--validate` and `--describe` (and `pyazr.validate`, `pyazr.describe`) still resolve against the working directory:
+decided by the director that they follow the project's directory too (next branch).
+
+**Verified by the director** (rehearsal merge on the THM merge, build `work/b-eval3m`, reference `tab-gammam-1`).
+Verified by the director on the rehearsal merge (this branch on the head after the THM merge; build with 0 warnings):
+all projects in three bases against the tree of the head before (887 / 851 / 887 files): 864 / 828 / 864 identical;
+the 23 that differ per basis are all `intEC.dat.sig` (the signature now names the Coulomb table by its content), no
+other file differs and none is new; the eight fits identical to the base build's except the `intEC.dat.sig` of the two
+13N fits (same reason, the hash line only); the checks ec_table_signature, run_from_elsewhere, layer_yield,
+extrap_sav_segments and describe_relativistic pass at 3 threads; calculations at 1 against 3 threads identical; ctest
+without the slow label 223 of 223; the slow tests 11 of 11; tests/run_tests.sh 165 passed, 0 failed; spec equivalence
+181 of 181 converted files equal; the converted-tree gate 679 / 643 / 679 files with the same 23 signature files per
+basis as the only differences. Not run: TSan or ASan (not available), the Sphinx pages, the agent's memory figures
+(not measured again).
+
+**The director's own check of the path rule.** Every project folder of the tree (73, Brune basis) run from an empty
+directory elsewhere with the project's absolute path: all 832 output and checks files byte-identical to the run from
+the project's directory, no file left in the foreign directory; 55 `run.log` differ only in the project's name as
+typed and in progress lines.
+
+**Reviewed** by reading: `ProjectPaths.h`, `Config`, `CoulombTable`, `ExternalCaptureSetup.cpp`, `pyazr/azure2.py`,
+`AZURECalc` and `AZURECalcMCMC`, the allow-list, the API's diff, and every remaining raw file open of `src/`,
+`api/src` and `experiment/src` (each goes through `OpenPath` / `PathToOpen` or was project-relative before). Notes:
+(1) the four rows of `InputFiles.cpp` (the bytes of input files, keyed by absolute path, size and modification time)
+were moved by the agent from pending to permanent "table:"; accepted by the director as a content-keyed cache, for
+the owner to see (`cache_stats()` counts it per process); (2) `ContentIdentity` is computed lazily under
+`std::call_once` behind a pointer, which the state scanner does not see: to be listed or made eager in the next
+branch; (3) the memory figures in the agent's entry (a T2 gradient fit 192 to 175 MB at one thread, natural_neon
+802 to 711 MB) are the agent's, measured before the last merges, not repeated by the director.
+
+**Not done** (brief `work/briefs/BW_phase6_diagnostics_record.md`, next branch): the diagnostics record (0 of 44
+switches; the 29 milestone-5 rows of the allow-list), the `mutable` members of `AZUREAPI`, a sentence of
+`docs/source/user_guide/pyazr.rst` that still tells users to drive sessions from one thread, an unused `intEC_cache`
+name in `api/src/AZUREAPI.cpp`. The allow-list now has 82 pending rows (milestone 3: 11, 4: 42, 5: 29) and 14
+permanent ones.
+
 ## 2026-11-13 (director, 06:57) — merged: the THM distortions and the DW vertex's waves from the transfer library; global optical sets one table
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed): `feature/upgrade-7-thm-wiring` (the
@@ -339,6 +393,59 @@ stay out of the level's total width: the engine's resonance strength, omega Gamm
 particle widths, is the convention of AZURE2 and is not to be changed or made optional. Also in work at the PI's
 wish: the total radiative width, the gamma branchings and the mixing ratios of a level as fit parameters
 (`feature/upgrade-8-gamma-branchings`).
+
+## 2026-11-13 (agent, Phase 6 branch 3 continued) — the Coulomb table named by content; relative paths without the working directory; the branch's gates
+
+**Done.**  (1) The `intEC.dat` signature names the Coulomb table by what it holds (`CoulombTable::ContentIdentity`:
+header and a 64-bit hash of every value, computed once per loaded table on first request behind `std::call_once`),
+not by its path and time: a copy elsewhere reuses the file, other values refuse it (`tests/ec_table_signature`).
+Cost 1.2e8 instructions per run that sets up external capture (T1 +0.41 %, 13N +0.16 %), none otherwise.
+(2) A project's relative paths are resolved against `Config::baseDirectory` (the project file's directory, or the
+pyazr session's `cwd`) through one function (`azure2::experiment::PathToOpen`, `Config::OpenPath`) at every opening
+site; messages print the project's own string; pyazr's `_in_dir` and `_Engine` are deleted (`evaluation.md` 7.5;
+`tests/run_from_elsewhere`, `concurrent_sessions_test.py` pair R S).  (3) Merged `feature/upgrade-4-data` at
+2ed0dba9 and e4fb58f1.
+
+**Verified** on the merged head (build `work/b-eval3`, 0 warnings, 3 threads): whole tree x 3 bases against
+`tab-gammam-1` (tag `tab-eval3-j`): 887 / 851 / 887 files, every number and every `run.log` equal, the 23
+`intEC.dat.sig` per basis differ (the new signature); before the merge a second whole run with the table copied
+elsewhere (`tab-eval3-g` against `tab-eval3-f`) gave the same bytes but for the `run.log` line naming the table.
+Converted-tree gate `geval3b` (REF `tab-gammam-1`): 679 / 643 / 679, only the signature files differ.  `ctest -LE
+slow` 221 / 221; `run_tests.sh` 164 / 165 at first (`layer_yield`: its refusal cases ran a project written outside
+its data's directory and relied on the working directory; the fixture now copies the project beside the data:
+165 / 165 by rerunning that test on this build and on `b-gammam`); `concurrent_sessions_test.py` PASS (pairs A B,
+N M, A T, R S, 40 evaluations each; the R S pair with the base's pyazr and engine fails: a session cannot set up);
+1 against 3 threads identical (T1, T2, T3, 13N x 3 bases); the eight fits identical to `b-gammam` file by file
+but 13N's `intEC.dat.sig`.  Instructions against `b-gammam` (1 thread): T2 -0.001 %, T1 +0.41 %, 13N +0.16 %,
+18O_p_a_thm +0.06 %, natural_neon +0.001 %, T2 gradient fit +0.36 %, 13N fit +0.02 %.  Memory against `b-eval2`
+before the merges (`work/eval3/mem_t1.txt`, `mem_t3.txt`).
+
+**Not done.**  The diagnostics record (`evaluation.md` section 2); `AZUREAPI`'s `mutable` members.
+**Open for the director.**  `--validate`, `--describe`, `pyazr.validate`, `pyazr.describe` still read data files
+relative to the process's working directory (held to one text by `tests/pyazr/validate_test.py`): moving them changes
+what public pyazr functions return.
+
+## 2026-11-13 (agent, Phase 6 branch 3, `feature/upgrade-6-evaluation-3`) — copies made when needed; the Coulomb table in the intEC signature
+
+**Done.**  (1) `evaluation.md` 4.1: what an evaluation of a fit writes, member by member.  Finding: for shifted
+terms, fitted target-effect parameters and re-placed grids the hand-over rewrites most of a `Site` (energies, angles,
+channel values, Coulomb amplitude, rows, stopping, thickness, slot layout), so removing `WorkingCopy::Clone` needs a
+split of the `Site` layer, not only of `SegmentState` and the overflow nodes.  (2) The pools of `AZURECalc` and
+`AZURECalcMCMC` start empty and clone a copy only when no idle one is left (was `max(4, threads)` for a fit, twice
+the hardware threads for the MCMC); `InitializePools`, `pools_initialized_` deleted.  (3) The `intEC.dat` signature
+holds the Coulomb table's file (path, size, modification time) or "exact Coulomb functions"
+(`tests/ec_table_signature`, fails on the base).  (4) `tests/describe_relativistic`: `--validate`/`--describe` read
+`relativistic` (already true on the base).  (5) The input-file byte store's four allow-list rows are permanent.
+Allow-list pending rows 88 -> 82 (milestone 2: 4 -> 0; 4: 44 -> 42; 3: 11; 5: 29).
+
+**Verified** (build `work/b-eval3`, 0 warnings, one thread): T1, T2, T3, 13N, natural_neon, 18O_p_a_thm x 3 bases
+against `tab-gridm-1`: 96 / 96 / 96 files, every number equal, only the 3 `intEC.dat.sig` per basis differ (13N, T1,
+T1_start: the new signature); ctest `upgrade_history`, `pyazr_session_isolation`, `repo_consistency` pass.
+
+**Not done** (the thread budget stayed at 1): the whole tree, the eight fits, `AZURE_TRACE_FCN=fresh`, the memory
+table, instruction counts, `ctest -LE slow`, `run_tests.sh`, 1 against 3 threads, the converted-tree gate.  Not
+started: relative paths without the working directory (plan in `evaluation.md` 7.5), the diagnostics record,
+`AZUREAPI`'s `mutable` members.
 
 ## 2026-11-12 (director, 22:55) — merged: one grid (the key `useAdaptiveGrid` and the uniform grid of a point's own removed)
 

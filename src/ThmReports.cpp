@@ -27,7 +27,7 @@
 
 void WorkingCopy::WriteThmExperiments(const Config &configure, const azure2::Results &results) {
   std::string file = configure.outputdir + "thm_experiments.out";
-  std::ofstream out(file.c_str());
+  std::ofstream out(configure.OpenPath(file).c_str());
   if (!out) {
     configure.outStream << "Could not write " << file << "." << std::endl;
     return;

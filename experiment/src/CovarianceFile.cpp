@@ -177,7 +177,7 @@ std::shared_ptr<CovarianceFile> ReadCovarianceFile(const std::string &path, cons
       std::unique_ptr<std::istream> data = open(name);
       const int actual = data && *data ? CountRecords(*data) : -1;
       if (actual < 0) {
-        err = where() + ": cannot open data file " + name + " (paths are relative to the directory AZURE2 runs in)";
+        err = where() + ": cannot open data file " + name + " (paths are relative to the project's directory)";
         return nullptr;
       }
       if (actual != (int)count) {

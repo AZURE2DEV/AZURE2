@@ -8,6 +8,7 @@
 
 #include "azure2/experiment/Diagnostics.h"
 #include "azure2/experiment/Frames.h"
+#include "azure2/experiment/ProjectPaths.h"
 
 namespace azure2 {
 namespace experiment {
@@ -24,9 +25,9 @@ GridValues Fail(const char *code, const std::string &why) {
   return g;
 }
 
-// The numbers of a grid file, one per line ("#" starts a comment).
-bool ReadGridFile(const std::string &path, std::vector<double> &values, std::string &why) {
-  std::ifstream in(path);
+// The numbers of a grid file, one per line ("#" starts a comment): opened at `open`, named `path` in messages.
+bool ReadGridFile(const std::string &open, const std::string &path, std::vector<double> &values, std::string &why) {
+  std::ifstream in(open);
   if (!in) {
     why = "cannot read the grid file " + path;
     return false;
@@ -76,11 +77,10 @@ GridValues ReadGridValues(const Grid &g, const GridSetting &s) {
   if (g.kind == "list") {
     for (const Number &n : g.values) out.values.push_back(value(n.value));
   } else if (g.kind == "file") {
-    const bool absolute = !g.path.empty() && (g.path[0] == '/' || g.path[0] == '\\');
-    out.file = absolute || s.projectDir.empty() ? g.path : s.projectDir + "/" + g.path;
+    out.file = g.path;
     std::vector<double> raw;
     std::string why;
-    if (!ReadGridFile(out.file, raw, why)) return Fail(codes::kDataFile, why);
+    if (!ReadGridFile(PathToOpen(s.projectDir, g.path), g.path, raw, why)) return Fail(codes::kDataFile, why);
     for (double v : raw) out.values.push_back(value(v));
   } else if (g.kind == "range" && g.hasStep) {
     // The expressions of decision F10 in the frame written, then each value converted.
