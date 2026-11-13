@@ -53,6 +53,9 @@ class Unit : public Site {
     double centreEnergy = 0.0, floorEnergy = 0.0;
     bool lowHard = false;
     double shiftReach = 0.0, startShift = 0.0;
+    /// The c.m. energy loss below the point the support spans at the set-up (TargetEffect::SupportThickness at the
+    /// nominal energy; 0 without a target integration), from which an energy shift moves its low edge (ShiftedFold.h).
+    double supportThickness = 0.0;
   };
   /// What the set-up worked out for this point that its evaluations read again (its sub-point grid's layout, its
   /// user-defined resolution kernel): record SetUpIndex of the data set's DataSet::PointSetUps, -1 for none.
@@ -166,6 +169,11 @@ class Unit : public Site {
   void SetPhotoKinematics(double qGamma, double compoundMassMeV) { photo_qgamma_ = qGamma; photo_mcn_ = compoundMassMeV; };
   double GetPhotoQ() const { return photo_qgamma_; }
   double GetPhotoCompoundMass() const { return photo_mcn_; }
+  /// The change (c.m. MeV) of the support's target thickness (TargetEffect::SupportThickness) at the point's shifted
+  /// energy from the set-up's at its nominal one: the low edge of its moved support (ShiftedFold.h, question 3).  Set by
+  /// azure2::MoveTargetToShift; 0 without a shift.
+  double SupportThicknessChange() const { return support_thickness_change_; }
+  void SetSupportThicknessChange(double change) { support_thickness_change_ = change; }
   /// Slot i (1-based) of the point in `data`, the working copy that holds it (WorkingCopy::SlotAt); null beyond the
   /// last.
   Site *GetSubPoint(WorkingCopy &data, int i);
@@ -184,6 +192,7 @@ class Unit : public Site {
   double bin_high_cm_ = std::numeric_limits<double>::quiet_NaN();
   double photo_qgamma_ = 0.0;
   double photo_mcn_ = 0.0;
+  double support_thickness_change_ = 0.0;  ///< see SupportThicknessChange
   double frame_jacobian_ = 1.0;  ///< dOmega_lab/dOmega_cm of the point's frame row (SetFrame; LabFoldFactor)
   int plan_task_ = -1;  // see PlanTask
   int sub_first_ = 0, sub_count_ = 0;  ///< the slots: [first, first + count) of WorkingCopy::SlotAt

@@ -126,7 +126,7 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
   const bool replaceGrids = configure.replaceSubPointGrids;
   const auto t0 = std::chrono::steady_clock::now();
   // Per shared mesh: the supports whose centre moves now, with the grid record of their point.
-  struct MovedSupport { const Unit::SubGridSpec *spec; double centre; };
+  struct MovedSupport { const Unit::SubGridSpec *spec; double centre; const Unit *point; };
   std::vector<std::vector<MovedSupport>> movedSupports(Data().Meshes().size());
 
   // The points of a sharing group on a shared mesh (SlotGroup.h), by their units (UnitAt), which are re-placed
@@ -150,7 +150,7 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
                                    : 0.0;
       const double centre = azure2::ShiftCentre(delta, spec.startShift, spec.shiftReach);
       if (centre == MeshCentre(spec)) continue;
-      movedSupports[(size_t)spec.mesh].push_back({&spec, centre});
+      movedSupports[(size_t)spec.mesh].push_back({&spec, centre, point});
       supportMoved = true;
     }
     // External capture: grids are not re-placed for a moved level (the set-up's integrals are kept), but the blocks of
@@ -218,8 +218,10 @@ int WorkingCopy::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, co
     meshMoved[m] = 1;
     for (const MovedSupport &moved : movedSupports[m]) {
       const std::size_t k = (std::size_t)moved.spec->meshSupport;
-      meshSupports_[m][k] = azure2::PlannedShiftSupport(azure2::NominalMeshSupport(*moved.spec, meshes[m].supports[k].dataSet),
-                                                        *moved.spec, moved.centre);
+      const TargetEffect &effect = *Data().GetTargetEffect(moved.point->GetTargetEffectNum());
+      meshSupports_[m][k] = azure2::PlannedShiftSupport(
+          azure2::NominalMeshSupport(*moved.spec, meshes[m].supports[k].dataSet), *moved.spec, moved.centre,
+          [&](double delta) { return azure2::SupportThicknessChange(*moved.point, *moved.spec, effect, configure, delta); });
       meshSupports_[m][k].label = meshes[m].supports[k].label;
       meshCentres_[m][k] = moved.centre;
       supportsMoved++;
@@ -500,15 +502,11 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
       if (!targetEffect->IsSubPointEffect()) continue;
       double targetThickness = 0.0;
       if (targetEffect->IsTargetIntegration()) {
-        if (targetEffect->IsThickTarget()) {
-          // an infinitely thick target: the point integrates from its energy down to 1 keV
-          targetThickness = std::max(point->GetCMEnergy() - 0.001, 0.0);
-        } else {
-          // the grid spans the target at its layout density (a fitted density's largest expected value), and a
-          // layer yield's grid a margin beyond it (its E_out comes from the grid's own quadrature)
-          targetThickness = conversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure,
-                                                                       targetEffect->GetLayoutDensity(), targetEffect->GetLayoutStoppingScale());
-          if (targetEffect->IsLayerYield()) targetThickness *= TargetEffect::LayerGridMargin();
+        // an infinitely thick target: the point integrates from its energy down to 1 keV; otherwise the grid spans
+        // the target at its layout density (a fitted density's largest expected value), and a layer yield's grid a
+        // margin beyond it (its E_out comes from the grid's own quadrature)
+        targetThickness = targetEffect->SupportThickness(point->GetLabEnergy(), point->GetCMEnergy(), conversion, configure);
+        if (!targetEffect->IsThickTarget()) {
           if (!(targetThickness > 0.0) && targetEffect->IsLayerYield())
             return RefuseLayerAtBeamEnergy(*targetEffect, *point, segment.GetDataFile(), configure);
           if (!(targetThickness > 0.0)) {
@@ -567,6 +565,7 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
       gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth() * configure.refineQuadrature;
       Unit::SubGridSpec &spec = Draft().SetUpFor(*point).grid;
       spec = MakeSubGridSpec(gridConfig, startEnergy, endEnergy, targetEffect, conversion);
+      spec.supportThickness = targetThickness;
       SetShiftLayout(spec, Draft().GetSegments(), segment, State(segment), *point, minSubEnergy);
       // Every folded point is a support of the shared mesh; a pair without an E_x frame has no place on it.
       if (!OnSharedMesh(segment, entrance, exit)) {
@@ -575,8 +574,10 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, CNuc *compound,
                             << " no nodes." << std::endl;
         return -1;
       }
-      meshPending.push_back(QueueMeshPoint(Draft().meshes_, *point, term, spec, entrance, exit,
-                                           EdgeAtFloor(*targetEffect, endEnergy, minSubEnergy)));
+      const Unit &queued = *point;
+      meshPending.push_back(QueueMeshPoint(
+          Draft().meshes_, *point, term, spec, entrance, exit, EdgeAtFloor(*targetEffect, endEnergy, minSubEnergy),
+          [&](double delta) { return azure2::SupportThicknessChange(queued, spec, *targetEffect, configure, delta); }));
     }
     return 0;
   };

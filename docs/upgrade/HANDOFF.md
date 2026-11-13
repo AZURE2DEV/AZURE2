@@ -2,6 +2,103 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (director, 03:20) — merged: an energy shift is the true beam energy (stopping, thickness and window of a shifted point at E + s)
+
+**Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed):
+`feature/upgrade-5-true-energy-stopping` (the agent's entry below says what was done, by file). Decided by the PI on
+2026-11-12 ("I would fix it"). **Numbers change**: every folded data set that has both an energy shift and a target
+integration with an energy-dependent stopping, by (d ln ε/d ln E) × shift/E on a yield on a resonance.
+
+**New reference tag of the whole tree: `tab-truem-1`** (the director's run of the merged tree; `tab-gridm-1` is the
+tree before). Against `tab-gridm-1` only the files of T2 and of `tests/shift_sqrt_subpoints` differ, and the files of
+the new models are added.
+
+**Verified by the director** (own build `work/b-truem` of the branch merged onto the head, 0 warnings).
+Whole tree × 3 bases (tag `tab-truem-1`) against `tab-gridm-1`: 805 / 778 / 805 files identical; the 22 that differ
+per basis are T2's (T2.azr 1.2e-6, T2_true 2.07e-3) and those of five `shift_sqrt_subpoints` models (0.96 %), and
+33 files of the new models are added. T2.azr (zero shifts, fitted: the planned support is wider) against the eightfold
+refined run of the old engine: largest distance 1.000 and rms 0.999 times the old engine's (the acceptance rule).
+The eight fits against the build of the head before: T2's three routes change to χ² 297.860, the five others
+(13N by two routes, layer yield, stopping yield by two) are identical file by file. `ctest -LE slow` 220 of 220, the
+slow tests 11 of 11, `run_tests.sh` 161 of 161 (`shift_true_energy` among them), spec equivalence 181 equal, the
+converted-tree gate 613 / 586 / 613 identical with 15 files per basis that differ, all of T2 and
+`shift_sqrt_subpoints`; calculations at 1 against 3 threads identical (T1, T2, T3, 13N × 3 bases).
+
+**An independent check by the director** (not one of the branch's tests): `tests/upgrade/T2/T2_true.azr` against a
+twin written by hand, the shift lines of data sets 1 (thin TiN target, offset 2 keV) and 4 (thick target,
+0.0015 √E) removed and their data energies moved to E + s. With the engine before the branch the shifted project and
+the twin differ by 2.07e-3 (data set 1, at 0.189 MeV c.m.) and 1.45e-3 (data set 4, at 0.235 MeV); with the branch
+they agree in every printed digit, and the twin's numbers are the same on both engines. The two differences are the
+changes the agent reports for T2_true (2.08e-3 and 1.45e-3).
+
+**Reviewed.** `ShiftedFold.h` (the rule, questions 1, 3, 5), `ShiftedFold.cpp` (`MoveTargetToShift`,
+`SupportThicknessChange`, `PlannedShiftSupport`, `MovedSupport`), `TargetEffect::SupportThickness` and
+`KernelThickness`, the call in `Segment::UpdatePointEnergyWithShift`, `PointFold.cpp`, the set-up's and the re-plan's
+call of the planner, the test's README and `check.sh`. Notes: (1) the thickness is recomputed at the true energy with
+the working density and stopping scale, and the lab energy it was computed at is stored, so a fitted density or scale
+recomputes it at the same energy; (2) the window's growth is 0 bit for bit without a shift, for a constant stopping
+and for a kernel without a target, which is why no other project moves; (3) the bound on the planned support's low
+edge rests on three samples of the thickness change over the reach plus their spread: an argument, not a proof, for a
+stopping that turns inside the reach; a support that falls outside its planned nodes is caught at run time
+(`ShiftedFoldNodes`), not silently wrong.
+
+**Decided by the director.** Left as they are and listed for the owner: the beam-profile kernel reads the nominal
+energy for its reconstructed-energy window and its detailed-balance norm; a user-defined resolution kernel is built at
+the nominal energy; the support of a Gaussian beam spread with an energy-dependent width is 5 σ of the nominal energy
+(a tail effect of about 1e-7). None reads the stopping. Whether the first two should follow the rule depends on what
+the shift means for those data (a beam calibration, or a calibration of the reconstructed energy): the owner's and
+the PI's call.
+
+**T2's fits moved**: χ² 297.568 → 297.860 by the three routes, the fitted shifts by less than 0.1 σ; the gradient
+route needs 117 calls where it needed 454, MIGRAD without a gradient converges in 117 calls where it stopped at the
+call limit of 200 before.
+
+## 2026-11-13 (agent, branch `feature/upgrade-5-true-energy-stopping`) — an energy shift is the true beam energy
+
+**Done.** The PI's rule of 2026-11-12: the fold of a point measured at E with the shift s is the fold of the same point
+without a shift at E + s.  Stated once in `include/ShiftedFold.h` (head of the comment, questions 1, 3, 5) and in
+`energy_grid.md` section 2.5.  Before, the target kernel of a shifted point read eps(E_n - Delta) (`TranslatedStopping`,
+deleted) and the thickness and window of the nominal energy.  Now:
+- `MoveTargetToShift` (ShiftedFold.cpp), called by the shift step (`Segment::UpdatePointEnergyWithShift`), sets the
+  point's target lab energy and thickness at the true energy (`TargetEffect::KernelThickness`) and
+  `Unit::SupportThicknessChange`, dT, the growth of the support's target thickness (`TargetEffect::SupportThickness`, the
+  one formula the set-up also lays the support out with; `SubGridSpec::supportThickness` holds the set-up's value);
+- the moved support is [a + Delta - dT, b + Delta] (`MovedSupport`); the kernel reads each node's own stopping
+  (`PointFold.cpp`);
+- the planner's support of a shifted point is widened below by G, the largest dT over the reach plus the spread of
+  three samples (`PlannedShiftSupport`, `SupportThicknessChange`; the bound is derived in the header).  dT = 0 bit for
+  bit for a constant stopping and for kernels without a target.
+- The gradient's shift column (a central difference of the fold on the fixed nodes) carries the kernel's E_0 dependence,
+  since the move goes through `MoveTargetToShift`.
+
+**Tests.** New `tests/shift_true_energy` (identity of 36 shifted data sets with twins at the shifted energies, one
+mesh 0 / tol 1e-9, two meshes 1.04e-6 / tol 3e-6; gradient of a fitted offset on a 72 keV layer against a central
+difference of chi^2, 3.9e-7 / tol 1e-5).  `tests/shift_sqrt_subpoints` check (g): the analytic plateau on narrow_sqrt
+(2.06e-4 / tol 5e-4; refined x8 8.3e-5) with the new model `narrow_sqrt_nores`.  Injected errors shown failing (README
+of shift_true_energy).  `tests/upgrade/predictions.txt` regenerated for the new projects (additions only).
+
+**Numbers that moved** (all projects x 3 bases against `tab-gridm-1`, tag `truestop-full1`): only T2 (T2.azr 1.2e-6,
+quadrature of the wider planned support; T2_true.azr 0.21 %, chi2 330.425 -> 330.835) and shift_sqrt_subpoints const,
+narrow_const, narrow_sqrt, shiftfn, sqrt (-0.89 to -0.97 %); new files of the new models.  T2 fits: chi2 297.568 ->
+297.860, shifts within 0.1 sigma, fewer evaluations.  Instruction counts within 0.2 % (T2_true -1.4 %).
+
+**Re-baselined** (commit of its own): `tests/upgrade/golden/T2/calc_truth` (AZUREOut R=2, chiSquared) and
+`tests/convert_params/expected/chi2_renamed` 293.675 -> 293.977, both T2 at non-zero shifts.
+
+**Verified by the agent** (build `work/b-truestop`, 0 warnings): all projects x 3 bases against `tab-gridm-1` (tag
+`truestop-full1`, 805 / 778 / 805 identical; the differing files are those of T2 and shift_sqrt_subpoints named above,
+plus the new projects' files); converted-tree gate `gtruestop1` 613 / 586 / 613 identical, 15 per basis differ, all of
+T2 and shift_sqrt_subpoints; `ctest -LE slow` 219/220 on the first commit (`upgrade_predictions`, regenerated in the
+second commit, then passes); `tests/run_tests.sh` 159/161 before the re-baselining (convert_params, upgrade T1-T3's
+calc_truth; both pass after it); 1 against 3 threads identical (T1, T2, T2_true, T3, 13N, narrow_sqrt, shiftfn, the
+identity model; 3 bases); fits (T2 by lm, gradient, migrad 200; 13N, layer and stopping yields: identical);
+`perf stat -e instructions:u` within 0.2 % except T2_true (-1.4 %).
+
+**Open.** The beam profile reads the nominal energy for its window and detailed-balance norm; the Gaussian beam spread
+with an energy-dependent sigma has its support clipped at 5 sigma of the nominal energy; a UDR kernel is built at the
+nominal energy.  None depends on the stopping; each is a candidate for the same rule (the director's call).  A thin
+target whose set-up support was clipped at the 1 keV floor keeps the floor clip (header, question 3).
+
 ## 2026-11-13 (director, 01:50) — merged: Phase 6, second branch (no process-wide pointers or memos; the solvers' buffers non-const)
 
 **Merged** into `feature/upgrade-4-data` and `feature/upgrade` (nothing pushed): `feature/upgrade-6-evaluation-2` (the

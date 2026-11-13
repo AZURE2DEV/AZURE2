@@ -81,9 +81,29 @@ double ShiftCentre(double delta, double startDelta, double reach) {
   return startDelta + 2.0 * reach * std::round((delta - startDelta) / (2.0 * reach));
 }
 
-MeshSupport PlannedShiftSupport(const MeshSupport &nominal, const Unit::SubGridSpec &spec, double centre) {
+double SupportThicknessChange(const Unit &point, const Unit::SubGridSpec &spec, const TargetEffect &effect,
+                              const Config &configure, double delta) {
+  if (!spec.targetIntegration || delta == 0.0) return 0.0;
+  const double f = spec.stoppingConversion;
+  return effect.SupportThickness(point.GetOriginalEnergy() + delta / f, spec.centreEnergy + delta, f, configure) -
+         spec.supportThickness;
+}
+
+MeshSupport PlannedShiftSupport(const MeshSupport &nominal, const Unit::SubGridSpec &spec, double centre,
+                                const std::function<double(double)> &thicknessChange) {
+  // The low edge a_i + Delta - dT(Delta) over the reach |Delta - c_i| <= R_i lies above a_i + c_i - R_i - G (question 1):
+  // G the largest dT of the three samples c_i - R_i, c_i, c_i + R_i plus their spread.
+  const double R = spec.shiftReach;
+  double largest = thicknessChange(centre), smallest = largest;
+  if (R > 0.0)
+    for (double d : {centre - R, centre + R}) {
+      const double t = thicknessChange(d);
+      largest = std::max(largest, t);
+      smallest = std::min(smallest, t);
+    }
+  const double growth = largest + (largest - smallest);
   MeshSupport s = nominal;
-  s.low = nominal.low + centre - spec.shiftReach;
+  s.low = nominal.low + centre - spec.shiftReach - growth;
   s.high = nominal.high + centre + spec.shiftReach;
   const double floor = spec.floorEnergy + spec.frameShift;
   if (s.low <= floor) {
@@ -105,7 +125,7 @@ const char *MovedSupport(const Unit &point, const WorkingCopy &data, ShiftedNode
   const Unit::SubGridSpec &spec = data.Data().GridSpecOf(point);
   r.delta = point.GetCMEnergy() - spec.centreEnergy;
   r.high = spec.startEnergy + r.delta;
-  r.low = std::max(spec.endEnergy + r.delta, spec.floorEnergy);
+  r.low = std::max(spec.endEnergy + r.delta - point.SupportThicknessChange(), spec.floorEnergy);
   const int n = point.NumSubPoints();
   if (n == 0) return nullptr;
   const double top = point.GetSubPoint(data, 1)->GetCMEnergy(), bottom = point.GetSubPoint(data, n)->GetCMEnergy();
@@ -171,21 +191,18 @@ double InsideShiftStep(const WorkingCopy &data, const std::vector<int> &segmentN
   return step;
 }
 
-void TranslatedStopping(const Unit &point, const WorkingCopy &data, const Config &configure, const ShiftedNodes &nodes,
-                        std::vector<double> &stopping) {
-  stopping.resize((size_t)nodes.count);
+void MoveTargetToShift(Unit &point, const WorkingCopy &data, const Config &configure) {
   const Unit::SubGridSpec &spec = data.Data().GridSpecOf(point);
+  if (!spec.valid || !spec.targetIntegration) return;
   const TargetEffect &effect = *data.Data().GetTargetEffect(point.GetTargetEffectNum());
-  const double f = spec.stoppingConversion, scale = data.EffectValues(point.GetTargetEffectNum()).stoppingScale;
-  // The translated energy is held at the nominal support's lower edge: an outer node below the moved support (at a
-  // thick target's floor, E_n - Delta can be below 0, outside the stopping's domain) only shapes the interpolant of the
-  // edge interval, and the kernel never reaches below the edge.
-  for (int k = 0; k < nodes.count; k++) {
-    const Site &slot = *point.GetSubPoint(data, nodes.first + k + 1);
-    stopping[(size_t)k] =
-        nodes.delta == 0.0 ? slot.GetStoppingPower()
-                           : f * effect.StoppingAt(std::max(slot.GetCMEnergy() - nodes.delta, spec.endEnergy) / f, configure, scale);
-  }
+  const TargetEffectValues &values = data.EffectValues(point.GetTargetEffectNum());
+  const double f = spec.stoppingConversion, lab = point.GetLabEnergy(), cm = point.GetCMEnergy();
+  // the lab energy a fitted density or stopping scale recomputes the thickness at (WorkingCopy::FillDensitiesFromParams,
+  // FollowStoppingScales)
+  point.SetTargetLabEnergy(lab);
+  point.SetTargetThickness(effect.KernelThickness(lab, cm, f, configure, values.density, values.stoppingScale));
+  point.SetSupportThicknessChange(
+      cm == spec.centreEnergy ? 0.0 : effect.SupportThickness(lab, cm, f, configure) - spec.supportThickness);
 }
 
 bool FoldOnlyShift(const WorkingCopy &data, const Segment &segment) {

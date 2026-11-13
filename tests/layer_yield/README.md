@@ -130,6 +130,12 @@ derivative is 1e-24 σ_lin(E_out)).
 **(Q) Per unit charge.** `res_q1`, `res_q2`: the same layer in 1/uC with charge states 1 and 2 against (Y3) from `res`,
 and their ratio 2, to the output's 11 digits.
 
+**(S) With an energy shift.** A shift is a calibration of the beam energy: the yield of a layer at the nominal E_0 with
+the shift s is (Y1) at E_0 + s, E_out solving (Y2) from E_0 + s, so the window's width is that of the true energy
+(`include/ShiftedFold.h`, the rule).  No data set here has a shift; the identity of a shifted layer (with each kind of
+stopping, straggling and beam spread) with an unshifted one at the shifted energies, and the gradient of a fitted
+shift on a layer, are `tests/shift_true_energy`.
+
 ## The fit
 
 `models/fit.azr`: a scan of the resonance on a layer of N = 1.2e18 (Δ = 6 keV), 41 energies, data the arctan form

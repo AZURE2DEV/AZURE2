@@ -19,7 +19,12 @@
 #   (f) narrow resonances are covered by the mesh: narrow_sqrt (a 9.7 eV level in a 3.2e19 at/cm^2 layer) == itself
 #       refined eightfold to 5.4e-4, three times the 1.78e-4 measured (2026-11-12; x8 against x64: 3.2e-6).  The uniform
 #       sub-point grid that useAdaptiveGrid=0 selected was a factor 100 low here and not converged at 64 times the
-#       points; with the level anchors taken out of the mesh plan (MeshAnchorsOf empty) this check fails.
+#       points; with the level anchors taken out of the mesh plan (MeshAnchorsOf empty) this check fails;
+#   (g) the analytic plateau: narrow_sqrt (its shift and its formula stopping) minus narrow_sqrt_nores (the level's
+#       proton width 0: the non-resonant part) = (lambda_r^2/2) omega Gamma_gamma (m+M)/(M eps(E_r) N) times the arctan
+#       edge factor, at each point's true energy (plateau.py) to 5e-4, 2.4 times the 2.06e-4 measured (8.3e-5 refined eightfold): the
+#       mesh's quadrature (f) and the R-matrix line shape against the Lorentzian.  With the stopping taken at the
+#       nominal energies (the engine before 2026-11-13) it fails by 0.9 %.
 #
 #   ./tests/shift_sqrt_subpoints/check.sh path/to/AZURE2
 
@@ -58,7 +63,7 @@ maxrel() {  # FILE1 FILE2
                         END { if (n == 0) print "nan"; else printf "%.3e\n", w }'
 }
 
-for m in sqrt const shiftfn noshift narrow_sqrt narrow_const; do run "$m" || continue; done
+for m in sqrt const shiftfn noshift narrow_sqrt narrow_const narrow_sqrt_nores; do run "$m" || continue; done
 for m in sqrt narrow_sqrt; do run "$m" 8 || continue; done
 for m in sqrt const shiftfn noshift narrow_sqrt narrow_const sqrt.x8 narrow_sqrt.x8; do yields "$m" > "$WORK/$m.y" 2>/dev/null; done
 n="$(grep -c . "$WORK/sqrt.y")"
@@ -79,6 +84,10 @@ n="$(grep -c . "$WORK/narrow_sqrt.x8.y" 2>/dev/null)"
 r="$(maxrel "$WORK/narrow_sqrt.y" "$WORK/narrow_sqrt.x8.y")"
 if [ "${n:-0}" -eq 4 ] && le "$r" 5.4e-4; then ok "(f) 9.7 eV resonance: narrow_sqrt = itself refined eightfold (max rel $r, tol 5.4e-4)"
 else bad "(f) 9.7 eV resonance: narrow_sqrt vs itself refined eightfold (max rel $r over ${n:-0} points, tol 5.4e-4)"; fi
+
+if python3 -I "$HERE/plateau.py" "$WORK/narrow_sqrt/output" "$WORK/narrow_sqrt_nores/output" 5e-4 > "$WORK/plateau.txt" 2>&1; then
+  ok "(g) 9.7 eV resonance: narrow_sqrt = the analytic plateau x arctan + the non-resonant part ($(tail -1 "$WORK/plateau.txt"))"
+else bad "(g) the analytic plateau: $(tail -1 "$WORK/plateau.txt")"; cat "$WORK/plateau.txt"; fi
 
 echo
 if [ "$failures" -eq 0 ]; then echo "shift_sqrt_subpoints: PASS"; else echo "shift_sqrt_subpoints: FAIL ($failures)"; exit 1; fi
