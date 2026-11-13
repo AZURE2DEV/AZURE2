@@ -2,6 +2,35 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-errors`) — pyazr: errors, engine notices, self-description
+
+**Done** (additions only: no public name renamed or removed, no engine number changed).
+- `pyazr/errors.py`: `Error` and its classes, each also the builtin the call raised before (`FormatError` moved here
+  from `project.py`; `ParameterError`, `ParameterKeyError`, `ParameterIndexError`, `ParameterVectorError`;
+  `AZURE2Error` = `EngineError` = `_azure2.AZURE2Error`, one class that keeps the name `AZURE2Error`;
+  `DomainError`, `DomainZeroDivision`, `SessionClosed`, `MissingFile`; `EngineWarning`).  The binding raises the
+  Python classes and refuses a NaN or infinity in a parameter vector, naming the parameter
+  (`api/src/pybind_api.cpp`, `BindErrors`, `expect_finite`).  `pyazr/session_checks.py`: the session's checks.
+- Engine notices: the session's `Config::outStream` passes through `api/src/pybind_notices.cpp`; four notices (EC
+  amplitude file written / appended, normalization and shift files) become `EngineWarning`s with file and consequence.
+- `pyazr.describe()` (no path), `pyazr.kinds()`, `azure2.describe()` (`pyazr/described.py`);
+  `api/src/pybind_describe.cpp`; `_azure2.physics_functions`; package docstring with a tested session; stale
+  docstrings corrected; user guide sections "Asking the package about itself" and "Errors"; `pyazr/CLAUDE.md`.
+- Tests `tests/pyazr/errors_test.py` (27 wrong calls), `tests/pyazr/describe_test.py`.
+
+**Verified** (build `work/b-pyerr`, 2 threads).  Build: 0 warnings.  `repo_consistency_test.py`: consistent.
+`JOBS=1 scripts/check.sh --quick`: 225 of 225 tests without the slow label passed (111 pyazr among them).  The slow
+pyazr tests: 9 of 9 at two threads, then `parallel_points` and `upgrade_thread_independence` alone: passed.
+`tests/run_tests.sh`: 165 passed, 0 failed.  T1, T2, T3 and 13N in the three bases (program, menu 1, one thread)
+against `tab-gecm-1`: every file identical (tag `tab-pyerr-1`).  Injected errors (Python: the old KeyError, a
+RuntimeError for a closed session, no L check, no missing-file check, a message without its call; C++: no NaN
+check, an option without a row) each made `errors_test` or `describe_test` fail.  The whole tree is not compared.
+
+**Open.** (1) A new session option still needs a row in four places of the binding and Python and the program's
+parser (`src/AZURE2.cpp` has no option table). (2) `AZURE2 --describe` names parameter kinds with words of its own
+("energy shift" for `shift`, `experiment/src/Describe.cpp`). (3) A session with `use_rmc=True` keeps `use_brune`
+(the program drops it). (4) `kinds()["data"]` has no extra outputs; `azure2.describe()` no parameter bounds.
+
 ## 2026-11-13 (director, 11:40) — merged: the DW vertex on the transfer library; the `gamma_decay` record in the observed-parameter paths
 
 Two branches, rehearsed together (`rehearsal/trial45`), read by the director (no objection) and verified once on the

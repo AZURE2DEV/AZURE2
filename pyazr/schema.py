@@ -64,8 +64,10 @@ def predictions(path):
     return list(lines)
 
 
-def describe(path, as_json=False, record=None):
-    """What the engine made of the format-3 project ``path``, as ``AZURE2 --describe [--json]`` prints it.
+def describe(path=None, as_json=False, record=None):
+    """Without ``path``: the package and its engine as plain data (:func:`pyazr.described.describe_package`: version,
+    engine build, Coulomb table, stopping and mass data, threads).  With ``path``: what the engine made of the format-3
+    project ``path``, as ``AZURE2 --describe [--json]`` prints it.
 
     For every data set and extrapolation: the quantity, the observable computed, the reaction tree with the ``<levels>``
     pair keys each term resolved to, the windows, the data file as the engine opens it (the resolved path: relative to
@@ -79,6 +81,9 @@ def describe(path, as_json=False, record=None):
     """
     import json
     from .described import _engine as _engine_module
+    if path is None:
+        from .described import describe_package
+        return describe_package()
     with open(path, "rb") as f:
         text = f.read()
     refusal, diagnostics, description = _engine_module().describe_format3_text(text, str(path), bool(as_json), "",
