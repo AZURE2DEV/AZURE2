@@ -638,3 +638,105 @@ file, the trace and the progress line stay (locks of process-wide streams, perma
 `--describe` ends with the switches that are set (name, value, kind), from the table and the record; `pyazr.describe`
 returns the project's description as before (its text stays the CLI's up to that block).  The manual's list
 (`command_line.rst`, a section "Environment switches") is checked against the table (check 40).
+
+## 9. The switches that move numbers as options of the program, and `--threads`: design
+
+Status: design (2026-11-13, branch `feature/upgrade-6-switches-options`), written before the code. The PI approved
+(2026-11-13): the switches of kind numbers become command-line options shown by `--help` and `--describe`; one
+`--threads=N`; nothing deleted, renamed or re-defaulted (the variables keep working with the same effect).
+
+### 9.1 The options, one per row
+
+The row of `SwitchTable()` gains the option's name (`SwitchRow::option`). A switch of type flag takes the bare option
+(its value is the text "1", which every reader counts as set and on, as the variable set to 1); the others take
+`--name=VALUE`. Names follow the existing flags (lower case, words joined by `-`, `=` before a value).
+
+| Variable | Option | Project or run | Why |
+|---|---|---|---|
+| `AZURE2_COULOMB_TABLE` | `--coulomb-table=FILE` (exists) | run | a file of this machine (the table, equal to the exact functions to 1e-7) |
+| `AZURE2_SRIM_DATA_DIR` | `--srim-data-dir=DIR` | run | a directory of this machine; the data, not a choice of the project |
+| `AZURE_OPTIONS_FILE` | `--options-file=FILE` | run | a file of more options |
+| `AZURE_REFINE_QUADRATURE` | `--refine-quadrature=K` | run (doubt) | a convergence check of the fold quadrature, K = 1..64 |
+| `AZURE2_EC_TABLE_NODES` | `--ec-table-nodes=N` | run (doubt) | a convergence check of the external-capture tables |
+| `AZURE2_SWAP_COUPLING_ORDER` | `--swap-coupling-order` | run (doubt) | a test of convention invariance, not a convention to keep |
+| `AZURE_BOUND_SHIFT_NUMERICAL` | `--bound-shift-numerical` | run | an older route of the bound-state S |
+| `AZURE_NO_NEUTRAL_CLOSED_FORM` | `--no-neutral-closed-form` | run | an older route of the neutral bound S |
+| `AZURE_SHIFT_DE_1EV` | `--shift-derivative-1ev` | run | the older dS/dE route |
+| `AZURE_LEVEL_SPACE` | `--level-space` | run | a route equal to rounding |
+| `AZURE2_THM_FD` | `--thm-by-differences` | run | a gradient route (moves a fit's path, not a calculation) |
+| `AZURE_GRAD_ADJOINT` | `--gradient-adjoint` | run | a gradient route equal to rounding |
+| `AZURE_GRAD_DENSE` | `--gradient-dense` | run | a gradient route equal to rounding |
+| `AZURE_TE_WEIGHTS_FD` | `--fold-weights-by-differences` | run | a gradient route |
+
+No switch becomes a `<config>` key: each is a file or directory of the machine, a check of a numerical tolerance, an
+older or a diagnostic route. Doubts for the PI: the two convergence checks (a project that needs K = 4 to converge
+could say so in its file) and the coupling-order test (`ARCHITECTURE.md` §5 gives conventions to a record). None of the
+names collides with a flag of another meaning (`--ec-table` / `--no-ec-table` and `--use-gradient` stay what they are;
+the parser matches the whole option, or the text before `=`).
+
+`AZURE_SERIAL_CHI2` (kind cost) stays a variable only: it changes no bit (it is checked by `AZURE_POOL_CHECK` to give
+the same bits), so a user or an agent reading `--describe` to know what can move a number does not need it; it is a
+tool to localise a defect of the parallel pass, like the printing switches. That is right as long as the parallel pass
+is bit-identical to the serial one, which the tree's 1-against-N-threads comparison checks.
+
+### 9.2 One parser, one record
+
+- **The record carries the options.** `ProcessEnvironment()` is already read first thing by the program's `main`
+  (nothing reads it during static initialisation: every reader is a function or a function-level static, all reached
+  after `main` starts). `main` now makes it with `StartProcessEnvironment(arguments)`: the switch options of the
+  command line, then those of the options file, then the variables. Every reader keeps reading the record (or the
+  run's `Config::environment` copied from it), so an option has exactly the effect of its variable, also where no run
+  object is at hand (`PolarizationFunc`'s coupling order, the stopping library's default SRIM tables). The record stays
+  immutable after it is made; a second `StartProcessEnvironment` with options after the record exists is a programming
+  error (thrown, never silently ignored). A pyazr session makes the record from the environment alone, as today.
+- **One parser, generated from the table** (`ParseSwitchOption` in `support/src/Environment.cpp`): an argument is a
+  switch option when it is a row's option (a flag row: the whole argument; a value row: the text before `=`). The
+  program's `parseOptions` skips them (it has no `else if` per switch); an unknown option stays an error.
+- **Value checks in one place**: the row says the range of a whole number that today's reader checks (only
+  `AZURE_REFINE_QUADRATURE`, 1..64); `SwitchWholeNumber(record, id)` checks the value in force, whatever its source,
+  and a bad value exits 2 naming the option or the variable it came from. The rows whose reader does not check today
+  (`AZURE2_EC_TABLE_NODES`: `atoi`, a bad value is 0 = the default) keep that reading: checking it would change what
+  the switch does (not approved). A value row given without a value (`--srim-data-dir=`) is refused (exit 2).
+- **Precedence** (stated and tested): the option on the command line, then the options file, then the environment
+  variable, then the default. No switch has a `<config>` key (9.1). A flag row given twice: the last wins. Where this
+  differs from the flags of section 3.12 (`project_format3.md`): the options file's lines are applied **after** the
+  command line's flags, so for the options of the calculation a flag in the file wins over one on the command line
+  (as before; not changed here); for the switches the command line wins, as the brief asks. Listed for the PI.
+- `--coulomb-table=FILE` is one row, not two mechanisms: it is the option of `AZURE2_COULOMB_TABLE` (the record) and,
+  as before, turns `use_coulomb_table` on and names the run's table.
+
+### 9.3 `--describe`, `--help`, the manual
+
+- `--help` lists the switch options from the table (option, variable, what it does), after the flags of the options.
+- `--describe` (text) ends, after the project's description, its options block (both of which `pyazr.describe`
+  returns as well) and the stopping of its targets, with a block headed `settings of this run and machine (value,
+  source):`: `  threads = N (source)` and one line per switch of kind numbers,
+  `  --refine-quadrature=K (AZURE_REFINE_QUADRATURE) = 4 (option)`, with its value in force (the row's "unset" text
+  when not set) and its source (`option`, `options file`, `environment`, `default`); then the other switches that are
+  set (`Environment switches set:`, kinds cost, prints, test). The tests that compare a committed description cut the
+  text at that header: it depends on the machine. `--json`: the members `threads` and `switches` (`{"AZURE_REFINE_QUADRATURE": {"option":
+  "--refine-quadrature", "value": "4", "source": "option"}, ...}`).
+- The manual's list of switches gains the option column; check 40 (the list against the table) checks it; the flag
+  count check counts the switch options; a row of kind numbers without an option, or an option of another kind, fails
+  the consistency test (check 43).
+
+### 9.4 `--threads=N`
+
+`--threads=N` (N ≥ 1, the checked whole-number parse of `--max-calls`; a bad value exits 2) sets the OpenMP thread
+count of the process (`omp_set_num_threads`) in `main` before any parallel region and before the project commands.
+Without it: today's behaviour (`OMP_NUM_THREADS`, else the runtime's default). With both: the option wins and one line
+says so. The value in force and its source (`--threads`, `OMP_NUM_THREADS`, the runtime's default) are printed by
+`--describe` and by the run after the banner. `OMP_NUM_THREADS` is read through the record (as `HOME`), not by a new
+`getenv`. `--build-coulomb-table` takes `omp_get_max_threads()` and so honours it. The Coulomb-table tool
+(`azure2-coulomb-table`) takes `--threads=N` with the same check and the same meaning (its older `--threads N` form
+stays). The sampler's menu question for its thread count (`mcmcParams.nthreads`, `src/AZURECalcMCMC.cpp`) belongs to
+the sampler: it should take `--threads` as its default and stop asking (listed, not done here).
+
+### 9.5 pyazr (open items for pyazr 3.0)
+
+A session reads the record from the environment, as before. For a later step: (1) a session keyword per switch of
+kind numbers read through `Config::environment` (one assignment after `Config::Reset`, from the same table); (2) the
+two switches read from the process record where no run object exists (the coupling order, the stopping library's
+default tables) stay process-wide: a session cannot change them, and should say so; (3) `pyazr.describe()` should
+return the same switch block (value, source); (4) the threads of a session (`OMP_NUM_THREADS` today) as one keyword
+with the same meaning as `--threads`.

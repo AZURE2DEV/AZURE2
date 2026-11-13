@@ -723,6 +723,15 @@ engine's physics does not. Sizes are estimates from the files of this commit.
    nothing). `pyproject.toml`, three `CMakeLists.txt` (about 60 lines), the workflow (about 120). Needs decisions 5,
    6, 7.
 
+9. **The program's switch options and `--threads` in a session** (open; the program's side is
+   `evaluation.md` section 9). (a) A session keyword per switch of kind numbers that the engine reads through
+   `Config::environment` (one assignment after `Config::Reset`, the names from `SwitchTable()`'s option column);
+   (b) the two read from the process record where no run object exists (`AZURE2_SWAP_COUPLING_ORDER` in
+   `PolarizationFunc`, the stopping library's default SRIM tables) stay process-wide: a session cannot change them
+   and should say so when asked; (c) `pyazr.describe()` and `azure2.describe()` return the switch block of
+   `--describe --json` (value, source); (d) one `threads` keyword with the meaning of `--threads` (today a session
+   takes `OMP_NUM_THREADS`).
+
 Side by side: 1, 2, 4, 7 and 8 touch different files and can run at once (1 and 2 both touch `pybind_api.cpp`, in
 different functions: merge 1 first). 3 needs 2; 5 needs 2, 3, 4; 6 needs 5. The critical path is 2 → 3 → 5 → 6.
 The engine's defect of section 1.6 (the isotope prior) is a branch of its own on the engine, before step 3's test
