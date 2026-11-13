@@ -510,6 +510,20 @@ where it came from after its banner. Waiting for your word, unchanged: the ten s
 `AZURE2_EC_TABLE_NODES`, `AZURE_GRAD_DENSE`, `AZURE_TE_WEIGHTS_FD`, `AZR_DEBUG_GRID`, `AZURE_GRAD_DEBUG`,
 `AZURE_CHANNEL_DEBUG`): kept, and the seven of them that move numbers now have options.
 
+## The fit is a function (2026-11-13)
+
+The program's fit was 870 lines inside one function that also read the data and wrote every file. It is now a table
+of fitters (`src/Fitters.cpp`: MIGRAD with Minuit's numerical gradient or the analytic one, Levenberg-Marquardt, the
+GSL trust region, NLopt), one function per fitter with one signature, HESSE and MINOS as functions on the result, and
+the program's run as named stages (set-up, fit, final evaluation, outputs, rate). Every output file and every printed
+line of the program is as before (compared byte for byte on the eight reference fits, T2 with every fitter, MINOS and
+the band, and all projects). pyazr runs the same functions: `s.fit_with_engine("lm")` gives the program's end point,
+covariance and MINOS intervals without a subprocess, with a progress callback and a stop button another thread can
+press (the fit then returns the best point it saw). A new fitter is its function, its row and a test case; check 46
+fails when its switch or its line in the manual is missing. One thing to know: for a project with THM data the
+program silently takes the analytic-gradient MIGRAD; `fit_with_engine` does what it is told, so the program's plain
+run on such a project corresponds to `method="migrad-gradient"`.
+
 ## What is in work and what comes next
 
 Merged in the night of 2026-11-12, each after the whole verification: the

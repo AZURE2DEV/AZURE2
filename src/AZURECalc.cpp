@@ -394,9 +394,12 @@ double AZURECalc::operator()(const vector_r &p) const {
   AZUREProfile::ScopedReport profileReport(configure().profile, "evaluation");
   AZUREProfile::Timer profileTimer(configure().profile, AZUREProfile::kEvaluation);
   if (callCounter_) callCounter_->fetch_add(1, std::memory_order_relaxed);  // CountCallsInto
+  bool isFit = data()->IsFit();
+  // A stopped fit (FitControl::stop): every later evaluation returns 0 at once, so the minimizer ends within the
+  // sweep it is running; the fit keeps the best point it saw (docs/upgrade/fit.md section 3).
+  if (isFit && StopRequested()) return 0.;
   // One atomic read-and-increment: this evaluation's number, distinct across the threads of a parallel gradient.
   const int thisIteration = data()->Iterate();
-  bool isFit = data()->IsFit();
 
   CNuc *localCompound = NULL;
   WorkingCopy *localData = NULL;
@@ -466,19 +469,9 @@ double AZURECalc::operator()(const vector_r &p) const {
     std::cerr << os.str() << std::endl;
   }
 
-  if (!localData->IsErrorAnalysis() && thisIteration != 0) {
-    {
-      // The stream (its width state and buffer) is shared by every thread that evaluates the objective.
-      static std::mutex progressMutex;
-      std::lock_guard<std::mutex> lk(progressMutex);
-      if (thisIteration % 10 == 0) configure().outStream
-          << "\r\tIteration: " << std::setw(6) << thisIteration
-          << " Chi-Squared: " << chiSquared;
-      configure().outStream.flush();
-    }
-
-    if (thisIteration % kOutputInterval == 0) WriteIterationOutput(p);
-  }
+  // The evaluation as data, to the one who runs this objective (the program prints it and writes its intermediate
+  // files from it; a fit tracks its best point).
+  if (observer_ && observer_->evaluated) observer_->evaluated(thisIteration, chiSquared, p, localData->IsErrorAnalysis());
   if (isFit) {
     // New multithreading with object pools
     ReturnPooledCNuc(localCompound);
@@ -495,10 +488,7 @@ double AZURECalc::operator()(const vector_r &p) const {
   // and far below overflow in the parabola arithmetic.
   if (!std::isfinite(chiSquared) || chiSquared > kChi2Ceiling) chiSquared = kChi2Ceiling;
 
-  if (configure().stopFlag && isFit)
-    return 0.;
-  else
-    return chiSquared;
+  return chiSquared;
 }
 
 void AZURECalc::WriteIterationOutput(const vector_r &p) const {
@@ -634,6 +624,7 @@ double AZURECalc::Chi2Value(const vector_r &p, bool thmOnly) const {
 std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const { return GradientBy(p, GradientRoute()); }
 
 std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const GradientRoute &route) const {
+  if (data()->IsFit() && StopRequested()) return std::vector<double>(p.size(), 0.0);  // a stopped fit: see operator()
   AZUREProfile::ScopedReport profileReport(configure().profile, "gradient");
   AZUREProfile::Timer profileTimer(configure().profile, AZUREProfile::kGradient);
   {
@@ -1119,6 +1110,8 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
 
 std::vector<double> AZURECalc::G2(const std::vector<double> &p) const {
   if (!g2Cache_.empty() && g2CacheP_ == p) return g2Cache_;
+  // A stopped fit: a unit curvature, so that MIGRAD's step from the zero gradient is finite and zero.
+  if (data()->IsFit() && StopRequested()) return std::vector<double>(p.size(), 1.0);
   const auto t0 = std::chrono::steady_clock::now();
   std::vector<double> g2(p.size(), 0.0);
   vector_r r, jac;
@@ -1260,345 +1253,6 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
   return ok;
 }
 
-double AZURECalc::RunLevenbergMarquardt(AZUREParams &params, int maxIter,
-                                        BandCovariance *bandCovOut) const {
-  ROOT::Minuit2::MnUserParameters &mp = params.GetMinuitParams();
-  const int nFull = mp.Params().size();
-  // Free exactly what MIGRAD would: the fixed flags of these parameters
-  // (param.par "fixed", <parameterSettings>), not a fresh mask from the .azr.
-  {
-    std::vector<bool> fixed(nFull);
-    for (int i = 0; i < nFull; i++) fixed[i] = mp.Parameter(i).IsFixed();
-    SetFixedMask(fixed);
-  }
-  vector_r full(nFull);
-  for (int i = 0; i < nFull; i++) full[i] = mp.Value(i);
-
-  // First Jacobian fixes the column <-> parameter mapping; also collects the
-  // free-parameter start values, projection limits, and Gaussian priors.
-  vector_r r, J, x;
-  std::vector<int> p2f;
-  std::vector<double> lo, hi, pen_nom, pen_inv2;
-  const int nFree = PrepareFreeParams(full, mp, r, J, p2f, x, lo, hi, pen_nom, pen_inv2);
-  if (nFree < 0) return -1.0;  // analytic Jacobian unsupported -> caller falls back
-  if (nFree == 0) return Chi2Value(full);
-
-  double cost = Chi2Value(full);
-  double lambda = 1.0e-3;
-
-  std::vector<double> H(nFree * nFree), g(nFree), Hl(nFree * nFree), dx(nFree);
-  std::vector<double> gScale(nFree, 1.0);  // see the convergence test
-  for (int a = 0; a < nFree; a++)
-    if (params.Kind(p2f[a]) == ParamKind::Density) gScale[a] = std::max(std::fabs(x[a]), 1.0);
-
-  for (int iter = 0; iter < maxIter; iter++) {
-    if (iter > 0 && !ResidualJacobian(full, r, J, p2f)) break;
-    // MIGRAD reaches WriteIterationOutput through operator(); this path
-    // evaluates through the side-effect-free Chi2Value and so must drive the
-    // snapshots itself.
-    if (iter > 0 && iter % kIterationOutputInterval == 0) WriteIterationOutput(full);
-    const int nRes = (int)r.size();
-
-    // Gauss-Newton normal equations: H = J^T J (+ penalty diag), g = J^T r (+ penalty grad).
-    std::fill(H.begin(), H.end(), 0.0);
-    std::fill(g.begin(), g.end(), 0.0);
-    for (int i = 0; i < nRes; i++) {
-      const double *Ji = &J[(size_t)i * nFree];
-      double ri = r[i];
-      for (int a = 0; a < nFree; a++) {
-        g[a] += Ji[a] * ri;
-        double Jia = Ji[a];
-        double *Ha = &H[(size_t)a * nFree];
-        for (int b = a; b < nFree; b++) Ha[b] += Jia * Ji[b];
-      }
-    }
-    for (int a = 0; a < nFree; a++) {
-      for (int b = 0; b < a; b++) H[(size_t)a * nFree + b] = H[(size_t)b * nFree + a];  // symmetrize
-      if (pen_inv2[a] != 0.0) {
-        H[(size_t)a * nFree + a] += pen_inv2[a];
-        g[a] += (x[a] - pen_nom[a]) * pen_inv2[a];
-      }
-    }
-
-    // Convergence on the (projected) gradient.  A fitted target density (atoms/cm^2, ~1e17) is judged per
-    // relative change, |g| N: per atom/cm^2 its gradient is ~1e-16 and the absolute test stopped LM before
-    // its first step.  Every other parameter keeps the absolute test.
-    double gmax = 0.0;
-    for (int a = 0; a < nFree; a++) gmax = std::max(gmax, std::fabs(g[a]) * gScale[a]);
-    if (gmax < 1.0e-8) break;
-
-    // Inner loop: damp until a step decreases the cost.
-    bool accepted = false;
-    for (int tries = 0; tries < 40 && !accepted; tries++) {
-      // (H + lambda*diag(H)) dx = -g
-      Hl = H;
-      for (int a = 0; a < nFree; a++) Hl[(size_t)a * nFree + a] += lambda * H[(size_t)a * nFree + a];
-
-      gsl_matrix *A = gsl_matrix_alloc(nFree, nFree);
-      for (int a = 0; a < nFree; a++)
-        for (int b = 0; b < nFree; b++) gsl_matrix_set(A, a, b, Hl[(size_t)a * nFree + b]);
-      gsl_vector *bvec = gsl_vector_alloc(nFree);
-      for (int a = 0; a < nFree; a++) gsl_vector_set(bvec, a, -g[a]);
-      gsl_vector *sol = gsl_vector_alloc(nFree);
-
-      gsl_set_error_handler_off();
-      int status = gsl_linalg_cholesky_decomp1(A);
-      if (status == 0) status = gsl_linalg_cholesky_solve(A, bvec, sol);
-
-      bool solved = (status == 0);
-      if (solved)
-        for (int a = 0; a < nFree; a++) dx[a] = gsl_vector_get(sol, a);
-      gsl_matrix_free(A);
-      gsl_vector_free(bvec);
-      gsl_vector_free(sol);
-
-      if (!solved) {
-        lambda *= 4.0;
-        if (lambda > 1.0e14) {
-          accepted = false;
-          break;
-        }
-        continue;
-      }
-
-      vector_r xnew(nFree), fullNew = full;
-      for (int a = 0; a < nFree; a++) {
-        xnew[a] = std::min(std::max(x[a] + dx[a], lo[a]), hi[a]);  // clamp to limits
-        fullNew[p2f[a]] = xnew[a];
-      }
-      double costNew = Chi2Value(fullNew);
-
-      if (costNew < cost && std::isfinite(costNew)) {
-        double rel = (cost - costNew) / std::max(std::fabs(cost), 1.0);
-        full = fullNew;
-        x = xnew;
-        cost = costNew;
-        lambda = std::max(lambda * 0.3, 1.0e-12);
-        accepted = true;
-        configure().outStream << "\r\tLM iteration: " << std::setw(4) << iter + 1
-                              << "  Chi-Squared: " << cost << "        ";
-        configure().outStream.flush();
-        if (rel < 1.0e-9) iter = maxIter;  // converged
-      } else {
-        lambda *= 4.0;
-        if (lambda > 1.0e14) break;
-      }
-    }
-    if (!accepted) break;
-  }
-  configure().outStream << std::endl;
-
-  // Write best-fit values back, and parameter errors from (J^T J + penalties)^{-1}.
-  for (int i = 0; i < nFull; i++) mp.SetValue(i, full[i]);
-  FinalizeLeastSquaresCovariance(full, p2f, pen_inv2, mp, bandCovOut);
-
-  return cost;
-}
-
-int AZURECalc::PrepareFreeParams(const vector_r &full,
-                                 const ROOT::Minuit2::MnUserParameters &mp,
-                                 vector_r &r, vector_r &J, std::vector<int> &p2f,
-                                 vector_r &x, std::vector<double> &lo,
-                                 std::vector<double> &hi, std::vector<double> &pen_nom,
-                                 std::vector<double> &pen_inv2) const {
-  // First Jacobian fixes the column <-> parameter mapping.
-  if (!ResidualJacobian(full, r, J, p2f)) return -1;  // unsupported -> caller falls back
-  const int nFree = (int)p2f.size();
-
-  // Free-parameter values, limits, and quadratic-penalty (prior) terms.
-  x.assign(nFree, 0.0);
-  lo.assign(nFree, -std::numeric_limits<double>::infinity());
-  hi.assign(nFree, std::numeric_limits<double>::infinity());
-  pen_nom.assign(nFree, 0.0);
-  pen_inv2.assign(nFree, 0.0);
-  // The diagonal priors by full parameter index (p2f holds full indices of the same map; Objective.h).
-  const ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), std::vector<bool>());
-  std::map<int, std::pair<double, double>> prior;  // full index -> (nominal, sigma)
-  ForEachDiagonalPrior(data(), compound(), pmap,
-                       [&](int idx, double nominal, double sig) { prior[idx] = {nominal, sig}; });
-  for (int a = 0; a < nFree; a++) {
-    int f = p2f[a];
-    x[a] = full[f];
-    const auto &par = mp.Parameter(f);
-    if (par.HasLowerLimit()) lo[a] = par.LowerLimit();
-    if (par.HasUpperLimit()) hi[a] = par.UpperLimit();
-    // Gaussian penalties contribute (1/sigma^2) to the diagonal of J^T J and (x-nominal)/sigma^2 to the gradient.
-    auto it = prior.find(f);
-    if (it != prior.end()) {
-      pen_nom[a] = it->second.first;
-      pen_inv2[a] = 1.0 / (it->second.second * it->second.second);
-    } else if (limitsManager_ && (f >= pmap.NumFull() || IsLevelSlot(pmap.Desc(f).kind) ||
-                                  pmap.Desc(f).kind == ParamKind::ThmCoherent)) {
-      // Nuisance priors (levels and THM coherent background only).  Looked up by the full-vector index f, not by
-      // a: a counts the parameters free in this Jacobian, the limits manager's non-fixed index counts those free
-      // when it was applied plus every fixed segment parameter, and the two need not agree.
-      double nom, sig;
-      if (NuisancePriorOf(f, nom, sig)) {
-        pen_nom[a] = nom;
-        pen_inv2[a] = 1.0 / (sig * sig);
-      }
-    }
-  }
-  return nFree;
-}
-
-void AZURECalc::FinalizeLeastSquaresCovariance(const vector_r &full,
-                                               const std::vector<int> &p2f,
-                                               const std::vector<double> &pen_inv2,
-                                               ROOT::Minuit2::MnUserParameters &mp,
-                                               BandCovariance *bandCovOut) const {
-  const int nFree = (int)p2f.size();
-  vector_r r, J;
-  std::vector<int> p2fLocal;
-  if (!ResidualJacobian(full, r, J, p2fLocal)) return;
-
-  std::vector<double> H(nFree * nFree, 0.0);
-  const int nRes = (int)r.size();
-  for (int i = 0; i < nRes; i++) {
-    const double *Ji = &J[(size_t)i * nFree];
-    for (int a = 0; a < nFree; a++) {
-      double *Ha = &H[(size_t)a * nFree];
-      for (int b = a; b < nFree; b++) Ha[b] += Ji[a] * Ji[b];
-    }
-  }
-  // Pure J^T J diagonal = each parameter's data sensitivity (column-norm^2 in
-  // J), captured before priors are folded into H.  Near zero => unconstrained.
-  std::vector<double> jtjDiag(nFree);
-  for (int a = 0; a < nFree; a++) {
-    for (int b = 0; b < a; b++) H[(size_t)a * nFree + b] = H[(size_t)b * nFree + a];
-    jtjDiag[a] = H[(size_t)a * nFree + a];
-    if (pen_inv2[a] != 0.0) H[(size_t)a * nFree + a] += pen_inv2[a];
-  }
-
-  // The Minuit name alone ("width_1_2") does not say which level or channel is
-  // meant, so pair it with the level's J^pi and energy and the channel's pair,
-  // L and S.
-  auto describe = [&](int a) {
-    const int minuitIndex = p2f[a];
-    std::string text = mp.GetName(minuitIndex);
-    const std::string label = AZURELabel::Parameter(compound(), data(), minuitIndex);
-    if (!label.empty()) text += "  =  " + label;
-    return text;
-  };
-
-  // Name the free parameters the data barely constrain (near-zero J column).
-  auto reportInsensitive = [&]() {
-    double mx = 0.0;
-    for (int a = 0; a < nFree; a++) mx = std::max(mx, jtjDiag[a]);
-    int nInsensitive = 0;
-    for (int a = 0; a < nFree; a++) {
-      if (mx <= 0.0 || jtjDiag[a] <= 1.e-10 * mx) {
-        if (!nInsensitive)
-          configure().outStream << "  Data-insensitive parameter(s) -- fix, constrain, or add "
-                                   "a prior to one of these:"
-                                << std::endl;
-        configure().outStream << "    " << describe(a) << std::endl;
-        nInsensitive++;
-      }
-    }
-    if (!nInsensitive)
-      configure().outStream << "No single parameter is insensitive; the flat direction is a "
-                               "degeneracy between two or more correlated parameters."
-                            << std::endl;
-  };
-
-  // Covariance = (J^T J + priors)^{-1}.  If it is singular (unconstrained or
-  // degenerate parameter), retry with a small ridge so the flat direction gets
-  // a large finite variance instead of losing the errors and band; warn.
-  double maxDiag = 0.0;
-  for (int a = 0; a < nFree; a++) maxDiag = std::max(maxDiag, H[(size_t)a * nFree + a]);
-  const double ridges[4] = {0.0, maxDiag * 1.e-9, maxDiag * 1.e-6, maxDiag * 1.e-3};
-  gsl_matrix *A = gsl_matrix_alloc(nFree, nFree);
-  gsl_set_error_handler_off();
-  int used = -1;
-  for (int t = 0; t < 4; t++) {
-    for (int a = 0; a < nFree; a++)
-      for (int b = 0; b < nFree; b++)
-        gsl_matrix_set(A, a, b, H[(size_t)a * nFree + b] + (a == b ? ridges[t] : 0.0));
-    if (gsl_linalg_cholesky_decomp1(A) == 0 && gsl_linalg_cholesky_invert(A) == 0) {
-      used = t;
-      break;
-    }
-  }
-  if (used < 0) {
-    configure().outStream << "Warning: the fit curvature matrix (J^T J) is singular; parameter errors "
-                             "and the uncertainty band are unavailable."
-                          << std::endl;
-    reportInsensitive();
-  } else {
-    if (used > 0) {
-      configure().outStream << "Warning: the fit curvature matrix was near-singular; regularized it "
-                               "with a small ridge to obtain the covariance. Uncertainties along the "
-                               "poorly-constrained direction(s) are large and approximate."
-                            << std::endl;
-      reportInsensitive();
-      // Strongly correlated pairs (|rho| near 1) are the degenerate combinations.
-      struct CorrPair {
-        double c;
-        int a, b;
-      };
-      std::vector<CorrPair> pairs;
-      for (int a = 0; a < nFree; a++) {
-        double va = gsl_matrix_get(A, a, a);
-        if (va <= 0.0) continue;
-        for (int b = a + 1; b < nFree; b++) {
-          double vb = gsl_matrix_get(A, b, b);
-          if (vb <= 0.0) continue;
-          double c = gsl_matrix_get(A, a, b) / std::sqrt(va * vb);
-          if (std::fabs(c) > 0.95) pairs.push_back({c, a, b});
-        }
-      }
-      std::sort(pairs.begin(), pairs.end(),
-                [](const CorrPair &x, const CorrPair &y) { return std::fabs(x.c) > std::fabs(y.c); });
-      for (size_t k = 0; k < pairs.size() && k < 5; k++)
-        configure().outStream << "  Correlated (rho=" << pairs[k].c << "):" << std::endl
-                              << "    " << describe(pairs[k].a) << std::endl
-                              << "    " << describe(pairs[k].b) << std::endl;
-    }
-    for (int a = 0; a < nFree; a++) {
-      double v = gsl_matrix_get(A, a, a);
-      if (v > 0.0) mp.SetError(p2f[a], std::sqrt(v));
-    }
-    // Name free parameters whose error dwarfs their value (they dominate the band).
-    {
-      int n = 0;
-      for (int a = 0; a < nFree; a++) {
-        double v = gsl_matrix_get(A, a, a);
-        if (v <= 0.0) continue;
-        double val = mp.Value(p2f[a]);
-        if (std::sqrt(v) > 10.0 * std::max(std::fabs(val), 1.e-30)) {
-          if (!n)
-            configure().outStream << "Note: weakly-determined parameter(s) (error > 1000% of value) "
-                                     "dominate the uncertainty band. Constrain or fix these to "
-                                     "tighten it:"
-                                  << std::endl;
-          configure().outStream << "    " << describe(a) << std::endl;
-          n++;
-        }
-      }
-    }
-    // Export the full covariance for cross-section bands.  Columns are the
-    // packed free parameters, in the same order as p2f, so we tag them with
-    // their parameter identities via a matching index map.
-    if (bandCovOut) {
-      ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), FixedMask());
-      if (pmap.NumPacked() == nFree) {
-        // Keep only the band columns (R-matrix, THM coherent background): the
-        // band is insensitive to norms and energy shifts, so they are dropped
-        // from the saved covariance.
-        const std::vector<int> rc = BandPackedColumns(pmap);
-        const int m = (int)rc.size();
-        bandCovOut->cols.resize(m);
-        for (int a = 0; a < m; a++) bandCovOut->cols[a] = pmap.Desc(pmap.PackedToFull(rc[a]));
-        bandCovOut->M.assign(m, std::vector<double>(m, 0.0));
-        for (int a = 0; a < m; a++)
-          for (int b = 0; b < m; b++) bandCovOut->M[a][b] = gsl_matrix_get(A, rc[a], rc[b]);
-      }
-    }
-  }
-  gsl_matrix_free(A);
-}
-
 bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
   // Forward-only counterpart of ResidualJacobian (no adjoint): same row order
   // and residual r = (model/J - data*n)/(err*n) as ComputeResidualJacobian.
@@ -1634,190 +1288,6 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
   ReturnPooledCNuc(lc);
   ReturnPooledData(working);
   return true;
-}
-
-namespace {
-
-// State shared with the GSL least-squares callbacks; owned by RunGSLNonlinear.
-struct GSLNlsData {
-  const AZURECalc *self;
-  int nFree;
-  int nData;                    // number of data residual rows
-  const std::vector<int> *p2f;  // packed free param -> full-vector index
-  const std::vector<double> *lo;
-  const std::vector<double> *hi;
-  const std::vector<double> *pen_nom;
-  const std::vector<double> *pen_inv2;
-  const std::vector<int> *penRows;  // free-param indices that carry a prior
-  vector_r baseFull;                // full vector holding the fixed params
-};
-
-// Project x into [lo,hi] and scatter it into the full parameter vector.
-void gslExpandFull(const GSLNlsData *d, const gsl_vector *x, vector_r &full) {
-  full = d->baseFull;
-  for (int a = 0; a < d->nFree; a++) {
-    double v = gsl_vector_get(x, a);
-    v = std::min(std::max(v, (*d->lo)[a]), (*d->hi)[a]);
-    full[(*d->p2f)[a]] = v;
-  }
-}
-
-// Residual vector: data rows plus Gaussian-prior rows sqrt(1/sigma^2)*(x-nom).
-int gslResidualF(const gsl_vector *x, void *params, gsl_vector *f) {
-  const GSLNlsData *d = static_cast<const GSLNlsData *>(params);
-  vector_r full;
-  gslExpandFull(d, x, full);
-  vector_r res;
-  if (!d->self->ResidualsOnly(full, res) || (int)res.size() != d->nData) return GSL_EBADFUNC;
-  for (int i = 0; i < d->nData; i++) gsl_vector_set(f, i, res[i]);
-  for (size_t k = 0; k < d->penRows->size(); k++) {
-    int a = (*d->penRows)[k];
-    double s = std::sqrt((*d->pen_inv2)[a]);
-    gsl_vector_set(f, d->nData + (int)k, s * (full[(*d->p2f)[a]] - (*d->pen_nom)[a]));
-  }
-  return GSL_SUCCESS;
-}
-
-// Residual Jacobian: analytic data-row block plus the constant prior rows.
-int gslResidualDf(const gsl_vector *x, void *params, gsl_matrix *Jm) {
-  const GSLNlsData *d = static_cast<const GSLNlsData *>(params);
-  vector_r full;
-  gslExpandFull(d, x, full);
-  vector_r r, Jflat;
-  std::vector<int> p2f;
-  if (!d->self->ResidualJacobian(full, r, Jflat, p2f)) return GSL_EBADFUNC;
-  if ((int)p2f.size() != d->nFree || (int)r.size() != d->nData) return GSL_EBADFUNC;
-  const int nFree = d->nFree;
-  for (int i = 0; i < d->nData; i++)
-    for (int a = 0; a < nFree; a++)
-      gsl_matrix_set(Jm, i, a, Jflat[(size_t)i * nFree + a]);
-  for (size_t k = 0; k < d->penRows->size(); k++) {
-    int row = d->nData + (int)k;
-    for (int a = 0; a < nFree; a++) gsl_matrix_set(Jm, row, a, 0.0);
-    int a = (*d->penRows)[k];
-    gsl_matrix_set(Jm, row, a, std::sqrt((*d->pen_inv2)[a]));
-  }
-  return GSL_SUCCESS;
-}
-
-// Per-iteration progress line (chi^2 = ||residual||^2, priors included).
-void gslProgress(const size_t iter, void *params,
-                 const gsl_multifit_nlinear_workspace *w) {
-  const GSLNlsData *d = static_cast<const GSLNlsData *>(params);
-  gsl_vector *f = gsl_multifit_nlinear_residual(w);
-  double chi2 = 0.0;
-  gsl_blas_ddot(f, f, &chi2);
-  d->self->configure().outStream << "\r\tGSL-LM iteration: " << std::setw(4) << iter
-                                 << "  Chi-Squared: " << chi2 << "        ";
-  d->self->configure().outStream.flush();
-
-  // Intermediate output, so a long GSL fit also leaves usable files behind
-  // before it converges rather than only at the end.
-  if (iter > 0 && iter % AZURECalc::kIterationOutputInterval == 0) {
-    vector_r full = d->baseFull;
-    const gsl_vector *x = gsl_multifit_nlinear_position(w);
-    for (int a = 0; a < d->nFree; a++) full[(*d->p2f)[a]] = gsl_vector_get(x, a);
-    d->self->WriteIterationOutput(full);
-  }
-}
-
-}  // namespace
-
-double AZURECalc::RunGSLNonlinear(AZUREParams &params, int maxIter,
-                                  BandCovariance *bandCovOut) const {
-  ROOT::Minuit2::MnUserParameters &mp = params.GetMinuitParams();
-  const int nFull = mp.Params().size();
-  // Free exactly what MIGRAD would: the fixed flags of these parameters
-  // (param.par "fixed", <parameterSettings>), not a fresh mask from the .azr.
-  {
-    std::vector<bool> fixed(nFull);
-    for (int i = 0; i < nFull; i++) fixed[i] = mp.Parameter(i).IsFixed();
-    SetFixedMask(fixed);
-  }
-  vector_r full(nFull);
-  for (int i = 0; i < nFull; i++) full[i] = mp.Value(i);
-
-  vector_r r0, J0, x;
-  std::vector<int> p2f;
-  std::vector<double> lo, hi, pen_nom, pen_inv2;
-  const int nFree = PrepareFreeParams(full, mp, r0, J0, p2f, x, lo, hi, pen_nom, pen_inv2);
-  if (nFree < 0) return -1.0;  // analytic Jacobian unsupported -> caller falls back
-  if (nFree == 0) return Chi2Value(full);
-  const int nData = (int)r0.size();
-
-  // Gaussian priors on norms / shifts / nuisance params become extra residual rows.
-  std::vector<int> penRows;
-  for (int a = 0; a < nFree; a++)
-    if (pen_inv2[a] > 0.0) penRows.push_back(a);
-  const int nRes = nData + (int)penRows.size();
-
-  GSLNlsData d;
-  d.self = this;
-  d.nFree = nFree;
-  d.nData = nData;
-  d.p2f = &p2f;
-  d.lo = &lo;
-  d.hi = &hi;
-  d.pen_nom = &pen_nom;
-  d.pen_inv2 = &pen_inv2;
-  d.penRows = &penRows;
-  d.baseFull = full;
-
-  gsl_multifit_nlinear_fdf fdf;
-  fdf.f = gslResidualF;
-  fdf.df = gslResidualDf;
-  fdf.fvv = nullptr;  // second directional derivative via finite differences of f
-  fdf.n = nRes;
-  fdf.p = nFree;
-  fdf.params = &d;
-
-  // Geodesic-accelerated LM in a trust region; the default solver factorizes J
-  // directly (QR) rather than forming J^T J.
-  gsl_multifit_nlinear_parameters gp = gsl_multifit_nlinear_default_parameters();
-  gp.trs = gsl_multifit_nlinear_trs_lmaccel;
-
-  const gsl_multifit_nlinear_type *T = gsl_multifit_nlinear_trust;
-  gsl_multifit_nlinear_workspace *w = gsl_multifit_nlinear_alloc(T, &gp, nRes, nFree);
-  if (!w) return -1.0;
-
-  gsl_vector *x0 = gsl_vector_alloc(nFree);
-  for (int a = 0; a < nFree; a++) gsl_vector_set(x0, a, x[a]);
-
-  gsl_set_error_handler_off();
-  gsl_multifit_nlinear_init(x0, &fdf, w);
-
-  const double xtol = 1.0e-9, gtol = 1.0e-9, ftol = 1.0e-9;
-  int info = 0;
-  int status = gsl_multifit_nlinear_driver(maxIter, xtol, gtol, ftol,
-                                           gslProgress, &d, &info, w);
-  configure().outStream << std::endl;
-
-  std::string reason = "reached the maximum number of iterations";
-  if (status == GSL_SUCCESS)
-    reason = (info == 1) ? "converged (small step)" : "converged (small gradient)";
-  else if (status != GSL_EMAXITER)
-    reason = std::string("stopped: ") + gsl_strerror(status);
-  configure().outStream << "GSL trust-region solver " << reason << " after "
-                        << gsl_multifit_nlinear_niter(w) << " iterations." << std::endl;
-
-  // Read back the (projected) best-fit parameters.
-  gsl_vector *xf = gsl_multifit_nlinear_position(w);
-  for (int a = 0; a < nFree; a++) {
-    double v = gsl_vector_get(xf, a);
-    v = std::min(std::max(v, lo[a]), hi[a]);
-    full[p2f[a]] = v;
-  }
-  for (int i = 0; i < nFull; i++) mp.SetValue(i, full[i]);
-
-  gsl_vector_free(x0);
-  gsl_multifit_nlinear_free(w);
-
-  double cost = Chi2Value(full);
-
-  // Errors and band covariance from (J^T J + priors)^{-1}, as the LM path does.
-  FinalizeLeastSquaresCovariance(full, p2f, pen_inv2, mp, bandCovOut);
-
-  return cost;
 }
 
 bool AZURECalc::CoveredByPriorCovariance(int f) const {

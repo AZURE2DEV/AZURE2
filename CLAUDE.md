@@ -285,6 +285,18 @@ The objective gets no new term: T9, `ModelDataTerm`, evaluates every row of `<mo
 4. A function `test_<quantity>` in `tests/model_data/check.sh` against a value by hand [check 27: every datum
    quantity of the table has its `ModelQuantities()` row and a test named after it]; `reference/data_formats.rst`.
 
+**A fitter** (a minimiser the program and a pyazr session both run; `docs/upgrade/fit.md`).
+1. Its function `FitResult FitX(AZURECalc &, AZUREParams &, const FitControl &)` in `src/FitX.cpp`: start, limits and
+   fixed flags from the `AZUREParams`, its end point left there; lines to `control.log`; steps to `control.progress`
+   (an evaluation fitter keeps a `FitEvaluations` alive while it runs: count, best point, the stop request in force;
+   an iteration fitter sends a `FitProgress` per iteration and checks `control.stop`); a stopped fit returns the best
+   point seen with status `stopped`.
+2. Its row in `Fitters()` (`src/Fitters.cpp`; the row's place is its precedence in the program); the switch in
+   `src/AZURE2.cpp`, `reference/command_line.rst` and the table "The Engine's Fitters" of
+   `docs/source/user_guide/fitting.rst` [check 46].
+3. Its case in `tests/pyazr/fit_with_engine_test.py` (the session's fit ends where the program's ends).
+   `fit_with_engine(method=)` and `pyazr.kinds()["fitters"]` read the table.
+
 **A CLI flag.** `parseOptions`, `printHelp` and `docs/source/reference/command_line.rst` [check 1].
 
 **An option of the calculation** (a switch a project's result depends on: a formalism, an approximation, a numerical

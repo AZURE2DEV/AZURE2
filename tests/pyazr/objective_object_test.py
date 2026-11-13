@@ -236,8 +236,9 @@ with tempfile.TemporaryDirectory() as tmp:
     record_dir = os.path.join(TESTS, "gamma_decay", "models")
     with session("record", record_dir, "record.azr", RECORD_PRIORS) as s:
         f = against_engine("gamma_decay record with priors", s)
-        check("record: the five free numbers have finite bounds, the walls of log_prob",
-              all(np.isfinite(lo) and np.isfinite(hi) for lo, hi in f.bounds[:5]), f.bounds[:5])
+        check("record: the five free numbers have a lower bound 0 and the four fractions an upper bound 1, the walls "
+              "of log_prob", all(lo == 0.0 for lo, hi in f.bounds[:5]) and all(hi == 1.0 for lo, hi in f.bounds[1:5]),
+              f.bounds[:5])
         for k, value in ((1, -0.01), (2, 1.01), (0, -1e-4)):
             x = f.x0
             x[k] = value

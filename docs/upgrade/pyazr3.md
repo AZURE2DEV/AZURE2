@@ -493,7 +493,8 @@ not installed on this machine; the scipy recipe ran here, use case (a)). `bounds
 `ParameterLimitsManager`, the nuisances' `grid_max`); a parameter without one is `(-inf, inf)`. A `Session` is not
 pickled: a pool's initializer opens one per process. The engine's own fitters (MIGRAD with or without the analytic
 gradient, LM, GSL-LM, NLopt; MINOS; the covariance band) stay the reference behind the program; whether pyazr offers
-them as one call is decision 8. The MCMC of `numcmc` stays in the program until Phase 9; pyazr's sampler is emcee.
+them as one call is decision 8 (built: `fit_with_engine`, `fit.md`). The MCMC of `numcmc` stays in the program until
+Phase 9; pyazr's sampler is emcee.
 
 ### 2.7 The physics explorer
 
@@ -867,7 +868,11 @@ users and stands on the list of things he must see.
 8. **The engine's own fitters from Python.** (a) none: pyazr gives the objective, the program fits; (b) one call,
    `Session.fit_with_engine(method="migrad"|"lm"|"gsl-lm", minos=False)`, giving the program's numbers (MIGRAD's
    covariance, MINOS intervals). *Recommendation: (b)*: not a framework, and the GUI and agents get the reference
-   fit and MINOS without a subprocess. Later: the same cost as now.
+   fit and MINOS without a subprocess. Later: the same cost as now. *Accepted 2026-11-13; as built* (`fit.md`):
+   `azure2.fit_with_engine(method="migrad", minos=False, x0=None, max_calls=None, progress=None, stop=None)`
+   (`pyazr/session_fit.py`), the methods the rows of the engine's fitter table (`migrad`, `migrad-gradient`, `lm`,
+   `gsl-lm`, `nlopt` where built; `pyazr.kinds()["fitters"]`), through the program's own functions; HESSE after
+   MIGRAD; a result record with the program's point, objective, covariance and MINOS intervals.
 9. **The roadmap's "`azure2()` session shim with deprecation warnings for one release"** conflicts with "no backward
    compatibility". (a) strike it; (b) keep a shim for one release. *Recommendation: (a)*; section 2.3 is the
    migration list. Later: none.

@@ -41,6 +41,8 @@ SESSION_NOT_SERVED = {
         "thm_lineshape thm_vertex thm_distortion prior_covariance_residuals prior_covariance_names "
         "datasets n_rmatrix cache_stats output_dir",
     "the older name of channel_functions (served: POST /api/session/channel_functions)": "coulomb_functions",
+    "the engine's own fitters: the Fit tab's job for them is a later step (web_ui.md 12, finding 20)":
+        "fit_with_engine",
 }
 
 
