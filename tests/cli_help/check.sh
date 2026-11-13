@@ -63,19 +63,22 @@ if [ -z "$printed" ] || [ -z "$literals" ] || [ -z "$documented" ]; then
   echo "  FAIL"; exit 1
 fi
 
+# The lists are searched from here-strings, never through a pipe: under pipefail a quiet grep that leaves at its
+# first match can end the writer with SIGPIPE, and the search then counts as failed (seen as random failures of
+# this test on a loaded machine).
 # accepted FLAG: the binary takes FLAG without the parser's error.  A
 # missing project file ends the run right after the options are parsed.
 accepted() {
   local out
   [ "$1" = --help ] && { grep -q "^Syntax: AZURE2" "$WORK/help.txt"; return; }
   out="$(cd "$WORK" && $RUN "$AZURE2_BIN" --no-gui "$1" no_such_project.azr < /dev/null 2>&1 | head -c 100000 | tr -d '\r')"
-  ! printf '%s\n' "$out" | grep -qF "Unknown option $1."
+  ! grep -qF "Unknown option $1." <<< "$out"
 }
 
 for f in $(printf '%s\n%s\n' "$printed" "$literals" | sort -u); do
   in_help=no; in_src=no
-  printf '%s\n' "$printed" | grep -qxF -- "$f" && in_help=yes
-  printf '%s\n' "$literals" | grep -qxF -- "$f" && in_src=yes
+  grep -qxF -- "$f" <<< "$printed" && in_help=yes
+  grep -qxF -- "$f" <<< "$literals" && in_src=yes
   if accepted "$f"; then acc=yes; else acc=no; fi
   if [ "$in_help" = yes ] && [ "$acc" = no ]; then
     bad "$f is printed by --help but the parser refuses it"
@@ -92,10 +95,10 @@ done
 
 # The documentation's table: every printed flag, and nothing the source lacks.
 for f in $printed; do
-  printf '%s\n' "$documented" | grep -qxF -- "$f" || bad "$f is printed but not in the table of command_line.rst"
+  grep -qxF -- "$f" <<< "$documented" || bad "$f is printed but not in the table of command_line.rst"
 done
 for f in $documented; do
-  printf '%s\n' "$literals" | grep -qxF -- "$f" || bad "command_line.rst documents $f, which src/AZURE2.cpp does not have"
+  grep -qxF -- "$f" <<< "$literals" || bad "command_line.rst documents $f, which src/AZURE2.cpp does not have"
 done
 [ "$fail" -eq 0 ] && ok "command_line.rst documents the $(echo $printed | wc -w) printed flags and no other"
 
