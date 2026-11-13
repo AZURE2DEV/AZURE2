@@ -500,6 +500,16 @@ after ``</levels>`` (and after ``</abundances>``)::
   would mix stale derived members into the free ones. pyazr lists the shifts
   and mixes as ``parameters.isospin`` (kind ``"isospin"``) and reports their
   priors as ``penalties()["isospin"]`` (already in the engine's chi-squared).
+- Photon and beta channels of a J-group that holds an isospin level stay
+  outside the ties: Hale's relations are between the particle reduced-width
+  amplitudes of isospin partners, and an electromagnetic or weak amplitude is
+  not charge independent. Each nucleus keeps its own gamma widths (and
+  feeding amplitudes), free or fixed as its channel lines say; the start-up
+  log counts them per member as "not tied". Capture to a tied bound state
+  uses that member's own energy and particle amplitude, so in a tied model
+  the asymptotic normalization of a derived member follows the reference
+  nucleus's amplitude. (Until November 2026 the engine refused a tied
+  J-group with a photon or beta channel.)
 - The start-up log prints every factor; ``isospin.out`` lists the fitted
   (formal, or Brune) parameters of every member, and ``parameters.out`` labels the members.
   The GUI keeps the block (its level IDs follow the levels it writes) but has

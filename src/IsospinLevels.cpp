@@ -282,9 +282,14 @@ int IsospinLevels::Resolve(const Config &configure, CNuc &c) {
       if (!brune_) g->SetBoundaryMinusL(true);
       for (int ch = 1; ch <= g->NumChannels(); ch++) {
         AChannel *chan = g->GetChannel(ch);
-        if (chan->GetRadType() != 'P')
-          return fail(idText + ": the J-group in " + c.NucleusLabel(m.nucleus) +
-                      " has a photon or beta channel; isospin levels take particle channels only.");
+        // Photon and beta channels stay outside the ties: Hale's relations are between the particle
+        // reduced-width amplitudes of isospin partners, and an electromagnetic or weak amplitude is not
+        // charge independent.  Their slots keep their own parameters in every member (the group's B = -l
+        // applies to its particle channels; CNuc::CalcBoundaryConditions).
+        if (chan->GetRadType() != 'P') {
+          m.untied++;
+          continue;
+        }
         IsospinWidth w;
         w.channel = ch;
         w.slot = m.energySlot + ch;
@@ -468,6 +473,10 @@ int IsospinLevels::Resolve(const Config &configure, CNuc &c) {
           out << "  = " << Fmt(w.ratio, 6) << " x free amplitude";
         out << std::endl;
       }
+    for (const IsospinMember &m : L.members)
+      if (m.untied > 0)
+        out << "      " << c.NucleusLabel(m.nucleus) << ": " << m.untied
+            << " photon/beta channel(s), not tied (own parameters in each nucleus)" << std::endl;
   }
   // Labelled levels' groups may hold unlabelled levels: say so.
   std::set<int> groups;

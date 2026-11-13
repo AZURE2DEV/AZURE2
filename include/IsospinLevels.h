@@ -99,7 +99,8 @@ struct IsospinMember {
   double t3 = 0.0;
   double threshold = 0.0;  ///< Ex of the nucleus's reference threshold
   int energySlot = -1;
-  std::vector<IsospinWidth> widths;
+  std::vector<IsospinWidth> widths;  ///< particle channels only
+  int untied = 0;                    ///< photon and beta channels of the J-group: outside the ties, free
 };
 
 /// A derived slot of the flat parameter vector as a linear function of free
