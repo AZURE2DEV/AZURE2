@@ -2,6 +2,52 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-9-skills-inference`) — the skills of inference and the evaluation
+
+**Done.** The skills `azure2-fit`, `azure2-uncertainty`, `azure2-resonance-search`, `rmfit-campaign` on pyazr 3.0
+and project format 3, the new `azure2-evaluation`, their tools, a self-test per skill, and the shared machinery:
+
+| Aspect | Owner skill / file | State before | Tool now | Done |
+|---|---|---|---|---|
+| Fit with the Jacobian (rows, bounds, skip, staged, multiple starts) | azure2-fit (SKILL.md §5, references/pyazr-fitting.md) | Objective names right, recipe never run, stale `parameters.widths/norms`, `m.` names | lsq_fit.py | rewritten, run on T3 (four minima found) |
+| The engine's fitters, MINOS, when which | azure2-fit §5 | missing | engine_fit.py | new; T3 numbers for LM / MIGRAD / MIGRAD-gradient |
+| Nuisances, priors, norms and shifts | azure2-fit references/normalizations-and-shifts.md | format-1 (`dataNorm`, `normErr`, `segment_<k>_norm`, `<segmentsData>`) | (prose) | rewritten for format-3 records and save_fit |
+| Parameter files, names, remapping | azure2-fit references/parameters-and-sav.md | `segment_<key>_*` names, `m.`/`extrap_mode` | convert_sav_names.py | format-3 names; old-format renamer tested |
+| Dropping a data set | azure2-fit references/drop-dataset.md | format-1 line edits | (Project.set) | rewritten, recipe run on T3 |
+| Fisher information (spectrum, sloppy directions, per data set, new measurement, vs HESSE/LM) | azure2-uncertainty §2 | missing | fisher.py | new; F^-1 = LM covariance to 6e-15 |
+| Data covariance files, writer, PD check, the two chi2 splits | azure2-uncertainty §1, references/data-covariance.md | prose only | write_covariance.py | new; chi2 = independent numpy to 1e-8; splits shown |
+| Profile likelihood and MINOS | azure2-uncertainty §3 | prose | profile_scan.py | new; agrees with MINOS to 0.2 % |
+| MCMC (emcee) on log_prob with the limits rule | azure2-uncertainty §4, references/sampling.md | partly | sample_emcee.py | new |
+| NUTS on the gradient, whitening at the MAP | none (user-level rmatrix-posterior) | missing | nuts.py (ported), sample_nuts.py | new; recovers the Laplace covariance |
+| Convergence (R-hat, ESS, tau, divergences), open directions and priors | azure2-uncertainty | tau only | mcmc_stats.py | new |
+| Bands from draws and from the covariance | azure2-uncertainty §5 | covariance only | draw_bands.py | new; draws = linear band to 4 % |
+| Prior covariance, systematic axes, model averaging | azure2-uncertainty §6-7 | correct | (pyazr calls) | kept |
+| Level search (locators) | azure2-resonance-search | dump_residuals needed rmfit; J labels wrong for integer spins; no self-test | dump_residuals.py etc. | on pyazr 3.0; fixed; tested |
+| Add / remove / deactivate / move / sign of a level with refit | azure2-fit references/editing-levels.md (prose) | no tool | level_test.py | new |
+| Significance: Delta chi2, AIC, BIC, F test, held-out data | none | missing | level_test.py | new; T3: removed level found at 19.00063 MeV |
+| The evaluation procedure | none | missing | azure2-evaluation | new skill |
+| rmfit campaigns | rmfit-campaign | private `pyazr._azure2` | (rmfit) | public pyazr.describe() |
+
+- `tools/check_skills.py`: rule 10 (no removed pyazr name: the column "earlier name" of the migration table of
+  `docs/source/user_guide/pyazr.rst`, read from the page, as a call or an attribute, outside a version note) and
+  rule 11 (every `scripts/*.py` of a skill is named in its `selftest.py`); unit tests for both
+  (`tests/consistency/check_skills_test.py`); `docs/upgrade/RULES.md` §3 items 9–11 and its table.
+- `tests/skills/CMakeLists.txt` (added from the top-level `CMakeLists.txt`): one ctest `skill_<name>` per
+  `.claude/skills/*/scripts/selftest.py` (no label) and `skill_<name>_slow` per `selftest_slow.py` (label slow), with
+  OMP_NUM_THREADS=1, PYTHONPATH = the checkout, AZURE2_BIN, PYAZR_ENGINE_DIR when the build sets PYAZR_OUTPUT_DIR,
+  skip code 77; AZURE2_COULOMB_TABLE from the caller, as for the pyazr tests. Part A's seven self-tests land in it.
+- `CLAUDE.md` "Skills", `FOR_THE_OWNER.md` (a paragraph on the skills), `ROADMAP.md`, the Developer Guide's
+  contributing page.
+
+**Verified.** The three self-tests with the ctest environment against the build of rehearsal 60: azure2-fit 4.9 s,
+azure2-uncertainty 51 s, azure2-resonance-search 14 s, all PASS; each shown to fail once on an injected error; exit
+77 without the engine. `tools/check_skills.py` and the consistency test pass. The ctest registration was not
+configured (no build of this branch): the director's ctest on the merged tree is its test.
+
+**Open.** The port to the names of the parameter table and the extrapolation option (the list of places is in the
+branch's report); the locator scripts of the resonance search keep lines above 120 columns; NUTS has no
+checkpointing (the PI's `chain.py` has it); the level-sign fold before R-hat is described, not scripted.
+
 ## 2026-11-14 (agent, branch `feature/upgrade-9-skills-model`) — the model and calculation skills on format 3 and pyazr 3.0
 
 **Done.** The seven skills azure2-setup, -calculate, -check, -targets, -thm, -plot, -exchange read against the code and

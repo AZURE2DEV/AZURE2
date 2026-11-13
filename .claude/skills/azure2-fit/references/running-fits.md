@@ -46,8 +46,8 @@ priors behave, and how to run fits of days on a batch cluster. Behaviour referen
   or many free shifts made the fit fall back to finite differences; the finite-difference step for norms was
   1e-6·(|x|+1), wrong by up to 14× for a thick-target norm of 2 × 10⁻⁵.
 - On models with target effects the cost is dominated by re-shifting: every sub-point's Coulomb functions are
-  recomputed when a segment shift changes. Check the points-per-width field (last field of a `<targetInt>` line); one
-  model used 200–300 where 10 was converged (`azure2-targets`).
+  recomputed when a segment shift changes. Check the grid density of the target integration (`azure2-targets`); one
+  model used 200–300 points per width where 10 was converged (`azure2-targets`).
 
 Diagnostics (environment variables; standard error):
 
@@ -84,10 +84,10 @@ ones are a defect to report.
 
 ## Long fits on a batch cluster
 
-- **Memory.** A mode-2 fit holds max(4, `OMP_NUM_THREADS`) + 1 copies of the model and data (CNuc + WorkingCopy), plus one for
-  the `param.fit` snapshots. Each copy is the whole data set including every target-integration and convolution
-  sub-point, so heavy target-effect models are large: 4,600 points with many `<targetInt>` segments took about 3.4 GB
-  per copy, 80–100 GB at 24 threads, steady for days. Measure the peak (`maxvmem` in the scheduler's accounting) and
+- **Memory.** A mode-2 fit holds max(4, `OMP_NUM_THREADS`) + 1 copies of the model and data (CNuc + WorkingCopy), plus
+  one for the `param.fit` snapshots. Each copy is the whole data set including every target-integration and convolution
+  sub-point, so heavy target-effect models are large: 4,600 points with many target-integrated data sets took about 3.4
+  GB per copy, 80–100 GB at 24 threads, steady for days. Measure the peak (`maxvmem` in the scheduler's accounting) and
   reserve it per slot.
 - builds before 2026-10-05 (expires: 2027-02-01) leaked memory in glibc's per-thread arenas (6–17 MB per evaluation
   at 24 threads, until the node killed the fit); if a long fit's memory climbs, check the build date first. Builds of

@@ -635,7 +635,7 @@ Commit generated outputs only under `tests/*/expected/`. Never commit `build*/`,
 
 ## Skills
 
-The rules are `docs/upgrade/RULES.md` §3; `tools/check_skills.py` enforces items 4, 5, 6 and 8 and checks that
+The rules are `docs/upgrade/RULES.md` §3; `tools/check_skills.py` enforces items 4, 5, 6, 8, 10 and 11 and checks that
 every docs link resolves (pre-commit and CI).
 
 - **Three places, three jobs.** `.claude/skills/` teaches how to **use** AZURE2; the Sphinx docs (`docs/source/`)
@@ -655,10 +655,13 @@ every docs link resolves (pre-commit and CI).
   (`$AZURE2_BINARY`, `$AZURE2_SRC`, `$RMFIT_HOME`, `$CAMPAIGN_ROOT`, rmfit's own
   `$AZURE2_ROOT`, `$FERDINAND_HOME`) and say what they hold.
 
-The skill set: `azure2-setup`, `azure2-calculate`, `azure2-fit`, `azure2-check`, `azure2-uncertainty`,
-`azure2-plot`, `azure2-targets`, `azure2-thm`, `azure2-resonance-search`, `azure2-exchange`, plus
-`rmfit-campaign` (the table in `docs/upgrade/RULES.md` §3 says which task each owns). Run
-`python3 tools/check_skills.py` before committing a skill change.
+The skill set: `azure2-evaluation` (the procedure of a whole evaluation, which names the owner of each step),
+`azure2-setup`, `azure2-calculate`, `azure2-fit`, `azure2-check`, `azure2-uncertainty`, `azure2-plot`,
+`azure2-targets`, `azure2-thm`, `azure2-resonance-search`, `azure2-exchange`, plus `rmfit-campaign` (the table in
+`docs/upgrade/RULES.md` §3 says which task each owns). A recipe of more than five lines of Python is a script in the
+skill's `scripts/`, run by its `scripts/selftest.py` on a project of `tests/`; ctest runs every self-test
+(`tests/skills/CMakeLists.txt`, `skill_<name>`). Run `python3 tools/check_skills.py` before committing a skill
+change, and the skill's self-test when a script or pyazr changed.
 
 ## When to stop and ask
 

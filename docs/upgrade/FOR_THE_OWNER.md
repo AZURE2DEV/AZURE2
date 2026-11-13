@@ -161,6 +161,18 @@ iminuit's MIGRAD reaches the program's minimum to 1e-6).  `s.evaluate(x)` gives 
   consistency test fails when one grows or another passes 1,000 lines. New code goes into small files with one job,
   which is also what an AI assistant reads and changes most reliably.
 
+## The skills: how an assistant runs an evaluation
+
+`.claude/skills/` holds one skill per aspect of an AZURE2 evaluation (setting up a project, calculating, fitting,
+checking, uncertainties, figures, targets, THM, the level search, exchange with other codes) and one for the
+evaluation itself (`azure2-evaluation`: the stages from the data audit to the tables, the gate of each, what is
+recorded, when to stop). They teach the workflow and its pitfalls and link the user guide for behaviour. Every recipe
+longer than a few lines is a script with a self-test that runs it on a test project with a known answer: a fit that
+must reach the known minimum, a Fisher matrix that must equal the fitter's covariance, a posterior sampler (NUTS on
+the analytic gradient, ported from Jakub's own skill) that must recover a known covariance, a level removed on
+purpose that the search must find again. ctest runs the self-tests, and the skill checker refuses a pyazr name the
+release removed, so a skill that teaches something that no longer works fails a test instead of misleading.
+
 ## What users notice
 
 - **Old `.azr` files are refused.** The engine and pyazr read project format 3 only (decision taken with Jakub: no

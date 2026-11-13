@@ -47,10 +47,10 @@ python3 -m rmfit.cli <dir> init --base <dir>/<base>.azr [--sav <base>.sav] --nsh
     --search '{"top_k": 6, "pairs_per_group": 4, "stage1_nfev": 30, "stage2_nfev": 60, "union_nfev": 100}'
 ```
 
-- `--flags` is passed to `pyazr.Session()`, so the basis is chosen there: `"use_brune": true` (Brune), `"use_park": true`
-  (Park: the fit vector holds observed reduced-width amplitudes, Γ = 2Pγ²; `azure2-exchange`), `"use_brune": false`
-  (standard Lane–Thomas). One basis per campaign: the ledger's vectors, `.npz` snapshots and `.sav` companions are all
-  in it.
+- `--flags` is passed to `pyazr.Session()`, so the basis is chosen there: `"use_brune": true` (Brune), `"use_park":
+  true` (Park: the fit vector holds observed reduced-width amplitudes, Γ = 2Pγ²; `azure2-exchange`), `"use_brune":
+  false` (standard Lane–Thomas). One basis per campaign: the ledger's vectors, `.npz` snapshots and `.sav` companions
+  are all in it.
 - **Objective options** (`--objective JSON`, stored as campaign.json `objective`; deBoer et al., Rev. Mod. Phys. 89
   (2017) 035007, section on fitting): `{"dataset_weight": "reduced", "dataset_key": "file", "loss": "sivia"}`.
   `dataset_weight: reduced` divides every data set's χ² by its number of points and rescales by N/K so the objective

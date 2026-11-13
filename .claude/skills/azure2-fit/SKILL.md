@@ -1,6 +1,6 @@
 ---
 name: azure2-fit
-description: Fit an AZURE2 R-matrix model to data - choose free and fixed parameters, seed widths, stage fits, set normalization and energy-shift nuisances and priors, run CLI MIGRAD or a pyazr least-squares fit, judge convergence, add/remove/deactivate levels and background poles, reuse or convert param.sav files, drop a data set, snapshot a fit with save_fit. Use for any fit, refit or model edit. Use azure2-check to judge a result, azure2-uncertainty for errors, azure2-calculate for observables, rmfit-campaign for campaigns.
+description: Fit an AZURE2 R-matrix model to data - free and fixed parameters, seeds, staged fits, multiple starts, normalization and energy-shift nuisances and priors, the program's fitters (CLI or Session.fit_with_engine) and least squares on the objective's rows and Jacobian (lsq_fit.py), convergence, level and background-pole edits, parameter files, dropping a data set, save_fit. Use for any fit, refit or model edit. Judging a result: azure2-check; errors: azure2-uncertainty; level search: azure2-resonance-search; campaigns: rmfit-campaign.
 ---
 
 # Fitting an AZURE2 model
@@ -32,13 +32,13 @@ data sets without corrupting the parameter files. Behaviour reference: `docs/sou
 1. **Know which files make the model.** The `.azr` holds the nominal norms and shifts; the parameter file holds the
    fitted values (`references/normalizations-and-shifts.md`). Old-format parameter files (`j=<J>_la=<L>_energy`
    names) load nothing but their `segment_*` lines; convert them first (`references/legacy-params.md`).
-2. **Load parameters by name.** In pyazr, `x = m.load_sav(path)`; never index a parameter file by row
+2. **Load parameters by name.** In pyazr, `s.load_sav(path)`; never index a parameter file by row
    (`references/parameters-and-sav.md`).
-3. **Audit the nominals.** `dataNorm` should be the data's own scale (1.0, or the published factor), not a previous
-   fit's value; a stale `energyShift` becomes the start of a freed shift.
+3. **Audit the priors.** A norm prior's centre should be the data's own scale (1.0, or the published factor), not a
+   previous fit's value; a stale shift value becomes the start of a freed shift.
 4. **Check the start.** A mode-1 calculation from the exact files and flags the fit will use must reproduce the
    expected χ² (and the first χ² the fit prints must equal it). A start far above the baseline is a problem even when
-   it seems explained (`azure2-check`).
+   it seems explained (`azure2-check`). In pyazr: `print(s.evaluate(s.objective().x0).table())`.
 5. **For a new reaction**, build starting parameters level by level before any global fit
    (`references/first-fits.md`): fix the scale with one data set, seed the lowest-l channel of every pair on every
    level, put every channel that opens inside the fit range into the model, polish from low energy up, then add levels.
@@ -46,7 +46,7 @@ data sets without corrupting the parameter files. Behaviour reference: `docs/sou
 ## 2. Free and fixed
 
 - **A width of exactly 0 is fixed, whatever its fix flag says.** `CNuc.cpp` adds every channel with a Minuit step of
-  0.1 × value and fixes it when the value is 0, so a channel written as `0` with `chanFix=0` stays at zero for the whole
+  0.1 × value and fixes it when the value is 0, so a channel written as `0` and not fixed stays at zero for the whole
   fit, and a token seed of 10⁻¹² has a step of 10⁻¹³ and never moves either. Freeing a width is not enough: give it a
   seed of plausible size. The symptom is a free-parameter count that does not change when a channel is freed (freeing
   six E_x = 40 MeV capture background poles left a model at 366 free parameters; seeding them at 0.01 eV made it 372).
@@ -56,19 +56,21 @@ data sets without corrupting the parameter files. Behaviour reference: `docs/sou
   width, and audit closed channels just above the levels (`references/pyazr-fitting.md`, "Traps").
 - **Fixed level parameters are fixed in reduced-width space**: their observed widths and ANCs move when the free widths
   of the same level or its energy move (`references/editing-levels.md`).
-- **A norm that is not varied comes from the `.azr`; a listed energy shift comes from the parameter file, varied or
-  not.** To freeze norms at a fit's values, write them into `dataNorm` and clear `varyNorm`; when a fixed shift changes
-  in the `.azr`, change or delete it in every parameter file the run reads (`references/normalizations-and-shifts.md`).
+- **A norm or shift that is not fitted comes from its record; one listed in a parameter file comes from the file.**
+  To freeze norms at a fit's values, save the fit (`save_fit` writes them into the records) and set them `fixed`;
+  when a fixed shift changes in the project, change or delete it in every parameter file the run reads
+  (`references/normalizations-and-shifts.md`).
 - Background poles: their energies are fixed; for a pole feeding one reaction through one entrance and one exit
   channel, fix one of the two widths (`references/background-poles.md`).
 
 ## 3. The objective, nuisances and priors
 
-- **The objective is χ² + penalties.** Per segment with `normErr` > 0 (a percentage):
-  ((n − n₀)/(n₀ · normErr/100))², measured from the `.azr` nominal n₀. Per free energy shift: (ΔE/σ_ΔE)², measured
-  from zero (also for `sqrtshift` b and each `shiftfn` term). In pyazr this is `m.objective()(x)`; it equals
-  `Total-Chi-Squared` + `Total-Norm-Chi-Squared` of `chiSquared.out`. Minimizing the bare data χ²
-  (`m.evaluate(x).chi2`) lets the normalizations absorb every discrepancy.
+- **The objective is χ² + penalties.** Per data set whose norm has a prior (`norm 1 fit prior 1 5%`):
+  ((n − c)/σ)² with the prior's centre c and width σ. Per free energy shift: (ΔE/σ_ΔE)², measured from its centre
+  (also for the √E term and each shift-function term). In pyazr this is `s.objective()(x)` (equal to
+  `s.evaluate(x).objective`), the sum of the `Total-*` terms of `chiSquared.out`, one entry each in
+  `s.evaluate(x).terms`. Minimizing the bare data χ² (`s.evaluate(x).chi2`) lets the normalizations absorb every
+  discrepancy.
 - **Normalizations.** Leave a set's norm free with its quoted systematic error as the penalty width. A large,
   angle-dependent normalization is a symptom, not a result (`azure2-check`). With a free, unpenalized norm a fit can
   effectively drop a data set while it still adds leverage: anchor norms that carry an absolute scale.
@@ -77,7 +79,8 @@ data sets without corrupting the parameter files. Behaviour reference: `docs/sou
   `shiftgroup`/`shiftfngroup` (`references/normalizations-and-shifts.md`).
 - **Nuisance priors on level parameters** (`<parameterSettings>`, nuisance 1) add ((p − p₀)/σ)² in physical units; on
   builds before 2026-10-27 (expires: 2027-02-01) they hit the wrong parameter (`references/running-fits.md`).
-  `<parameterSettings>` written by the Qt GUI of released builds use the engine's level numbering (`references/parameters-and-sav.md`).
+  `<parameterSettings>` written by the Qt GUI of released builds use the engine's level numbering
+  (`references/parameters-and-sav.md`).
 - **Target and resolution nuisances** (fitted density, thickness, Doppler temperature, screening): `azure2-targets`.
 - **Data covariance** (correlated errors, `covariance <file>`): `azure2-uncertainty`.
 - **Alternative objectives** (per-data-set reduced χ², Sivia's outlier-tolerant loss) are campaign options of rmfit
@@ -113,9 +116,26 @@ ignored).
 printf '2\nn\nparam.sav\n\n7\n' | "$AZURE2_BINARY" --no-gui --no-readline --use-brune --use-gradient model.azr
 ```
 
-**pyazr (your minimizer).** pyazr gives `f = m.objective()`: `f(x)`, `f.value_and_grad`, and `f.residuals_and_jacobian` (the whole
-Jacobian for about two forward evaluations; the rows carry the priors). A hand-written fit must minimize `f`, respect the Wigner limits as bounds if they matter, drop zero Jacobian columns, and
-catch exceptions from `f.jacobian` (`references/pyazr-fitting.md`).
+**The same fitters from Python.** `s.fit_with_engine(method)` runs the program's fitter on a session (methods:
+`pyazr.kinds()["fitters"]`, the table of `docs/source/user_guide/fitting.rst`, "The Engine's Fitters"): `migrad`,
+`migrad-gradient`, `lm`, `gsl-lm`, `nlopt` where built; `minos=True` after a MIGRAD row; HESSE always follows a
+MIGRAD row; it writes no file and leaves the session's values alone. `scripts/engine_fit.py` runs several methods
+from one start and writes their status, objective, errors and MINOS intervals to JSON.
+
+**Least squares on the Jacobian.** `f = s.objective()`; `r, J = f.residuals_and_jacobian(x)` gives the rows
+(sum r² = f(x): whitened data rows, then one row per prior and constraint) and their analytic Jacobian for about
+two forward evaluations. `scripts/lsq_fit.py` is the fit: SciPy's trust-region reflective method with the fit's
+limits (`f.bounds`) as bounds, `--free REGEX` for a staged fit (the held columns go to `skip=`, so no finite
+difference is spent on them), `--starts N --jitter k` for multiple starts (k parabolic errors), the dead-column and
+engine-failure guards of `references/pyazr-fitting.md`, `--save-fit` for the snapshot.
+
+**Which fitter.** On `tests/upgrade/T3/T3_start.azr` (8 free parameters) the objective has at least four minima:
+`lm` and a single least-squares start end at 755.22, `migrad` at 591.83, `migrad-gradient` at 509.348 (129
+calls), and `lsq_fit.py --starts 8 --jitter 3` reaches 509.3479 (its other starts end at 580.33, 591.83, 755.22)
+in about a second. So: least squares (lsq_fit, `lm`, `gsl-lm`) for speed, staging and a covariance
+(JᵀJ + priors)⁻¹ near a minimum; MIGRAD with the gradient as the reference and for MINOS; several starts whenever
+amplitudes interfere. MIGRAD stops slightly above the minimum least squares finds (9e-6 relative here, 9e-4 on
+T2): compare fitters at that level, not bit for bit.
 
 **Convergence.** Read `output/fitStatus.out` (`status converged|call_limit|invalid`, EDM, calls) or the final
 `MIGRAD converged` / `WARNING: MIGRAD did NOT converge` line. `chiSquared.out` and `param.sav` are written either way.
@@ -131,7 +151,9 @@ within the slots requested.
 ## 6. Editing levels and background poles
 
 - **Write a new `.azr` and open a fresh session**; `pyazr.Project` edits `<levels>` and the records through the
-  engine and keeps every other byte (`references/editing-levels.md`).
+  engine and keeps every other byte: `add_level`, `remove_level`, `set_level(label, active=False)`,
+  `set_channel`, `set_pair(key, radius=...)` (`references/editing-levels.md`). The edit-refit-compare loop with
+  its significance tests is `level_test.py` of `azure2-resonance-search`.
 - **All levels of one J^π share one channel set.** `add_level` clones an existing group's channels.
 - **Every structural edit renames parameters.** Removing, deactivating or adding a level renames every later
   `energy_<N>` / `width_<N>_<c>`; a copied `param.sav` puts values on the wrong levels without an error. Bake the fit
@@ -139,23 +161,25 @@ within the slots requested.
   (`references/parameters-and-sav.md`).
 - **Restrict a background pole to the channels that need it**: widths only in the data set's channels, every other
   channel at exactly zero (`references/background-poles.md`).
-- **Frozen probes** (`without_level`, `only_level`) change no parameter vector; a persisted "level off" is
-  `deactivate_level`.
+- **Frozen probes** (`s.without_level(x, ...)`, `s.only_level(x, ...)`: copies of x with widths zeroed) change
+  no parameter vector; a persisted "level off" is `Project.set_level(label, active=False)` and a new session.
 - **Same-J^π levels closer than 1 keV** stay two levels only with different level IDs
   (`references/parameters-and-sav.md`).
 
 ## 7. Data sets in and out
 
-- **Deactivate, never delete** a `<segmentsData>` line: norms, shifts, `<targetInt>` key lists and every output table
-  are keyed by line position. Make the drop reach every `.azr` variant that is run, and verify that the total χ² falls
-  by exactly that segment's χ² (`references/drop-dataset.md`).
-- Adding or removing data segments, or changing the test grids, invalidates `output/intEC.dat` and
+- **Deactivate, never delete** a data set (`Project.set(name, active="no")`): it keeps its name, its parameters and
+  its place. Make the drop reach every project variant that is run, and verify that the objective falls by exactly
+  that set's contribution (`references/drop-dataset.md`).
+- Adding or removing capture data sets, or changing the extrapolations, invalidates `output/intEC.dat` and
   `output/intEC.extrap`: delete them or use a new output directory (`references/editing-levels.md`).
 
 ## 8. After the fit: snapshot and hand-over
 
-- `m.save_fit(path, x)` writes the `.azr` and its `param.sav` and verifies the round trip; it leaves the nominal norms
-  and shifts in `<segmentsData>` (`references/editing-levels.md`).
+- `s.save_fit(path, x)` writes the project and its `.sav` and verifies the round trip; by default
+  (`norms="fitted"`) the fitted norms and shifts go into their data-set records, the priors keeping their centres
+  (`references/editing-levels.md`). Write it in the project's directory: its data paths stay relative, and a copy
+  elsewhere is refused with `E_DATA_FILE`.
 - Check a snapshot with mode 1 and its `.sav` (must reproduce `chiSquared.out` including `Total-Norm-Chi-Squared` to
   about 10⁻⁴), and a bake of `<levels>` with a blank parameter file. Near a destructive-interference minimum, check the
   per-segment χ² of the reopened file, not only the verify.
@@ -170,7 +194,9 @@ within the slots requested.
   current session before comparing (`references/editing-levels.md`).
 - Do not use a pyazr session on a running fit's output directory: it can rewrite the fit's caches
   (`azure2-calculate`).
-- `m.datasets[i]` is not the i-th result entry when inactive segments exist: use `m.active_datasets`.
+- `s.evaluate(x).data[i]` lists the active data sets in the engine's order; find one by name with `.dataset(name)`.
+- Nuisance parameters are named after their records in format 3 (`s01_int_thin.norm`, `G.offset`,
+  `tgt_s05_implanted.areal_density` on T2); `s.objective().names` lists the free ones in vector order.
 - A `Parameter`'s `pair` is the engine's pair number, not the file's pair key.
 - Fitting a derived or extrapolated point together with the data it came from double-counts them (`azure2-check`).
 
@@ -191,8 +217,9 @@ within the slots requested.
   `references/normalizations-and-shifts.md`, `references/pyazr-fitting.md`, `references/running-fits.md`,
   `references/editing-levels.md`, `references/background-poles.md`, `references/interference.md`,
   `references/formalism.md`, `references/drop-dataset.md`.
-- Script: `scripts/convert_sav_names.py` (old-format parameter names).
-- Examples: `pyazr/examples/edit_model.py`, `pyazr/examples/save_fit_to_azr.py`, `pyazr/examples/fit_emcee.py`,
+- Scripts: `scripts/lsq_fit.py`, `scripts/engine_fit.py`, `scripts/convert_sav_names.py` (old-format parameter
+  names); `scripts/selftest.py` runs all three on T3 (5 s at one thread).
+- Examples: `pyazr/examples/edit_model.py`, `pyazr/examples/save_fit_to_azr.py`, `pyazr/examples/fit_scipy.py`,
   `pyazr/examples/per_dataset_chi2.py`, `pyazr/examples/deactivate_level.py`.
 - Docs: `docs/source/user_guide/fitting.rst`, `docs/source/user_guide/chi_squared.rst`,
   `docs/source/user_guide/levels_channels.rst`, `docs/source/user_guide/pyazr.rst`,

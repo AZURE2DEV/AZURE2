@@ -99,8 +99,7 @@ def read_levels(par, azr):
     for line in open(par):
         m = re.match(r"J =\s*(\S+)\s+E_level =\s*(\S+)", line)
         if m:
-            J = m.group(1); jpi = J.replace("0.5", "1/2").replace("1.5", "3/2").replace("2.5", "5/2").replace("3.5", "7/2") \
-                .replace("4.5", "9/2").replace("5.5", "11/2").replace("6.5", "13/2")
+            J = m.group(1); j2 = int(round(2 * float(J[:-1]))); jpi = (f"{j2}/2" if j2 % 2 else f"{j2 // 2}") + J[-1]
             cur = dict(jpi=jpi, e=float(m.group(2)), g=0.0, fixed=False); lev.append(cur); continue
         m = re.search(r"G\s+=\s+(\S+) keV", line)
         if m and cur is not None:

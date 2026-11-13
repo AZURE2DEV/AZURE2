@@ -16,8 +16,10 @@ stat ⊕ 3 % errors and normgroups; the table makes such gaps visible.
 ```bash
 # covariance files and the data files they cover
 for f in *cov*.txt; do echo "$f: $(grep '^file' $f | awk '{printf "%s(%s) ", $2, $3}')"; done
-# active segments of a model WITHOUT a covariance keyword
-awk '/<segmentsData>/{f=1;next}/<\/segmentsData>/{f=0}f && $1=="1" && $0!~/ covariance /' model.azr
+# active data sets of a project and their covariance file ("-": none)
+python3 -c "import pyazr, sys
+for n, r in pyazr.Project.open(sys.argv[1]).records().items():
+    if r.record_kind == 'dataset' and r.get('active', 'yes') != 'no': print(n, r.get('covariance', '-'))" model.azr
 ```
 
 ## 2. What goes into C, and what stays out
@@ -83,7 +85,7 @@ One covariance file per experiment (different experiments uncorrelated), coverin
    fit.
 4. **Linked normalizations.** A set normalized to another set shares that set's `normgroup`; the two are not
    independent scale checks.
-5. **Thick-target yields and activation data** need a `<targetInt>` entry (`azure2-targets`); note the stopping
+5. **Thick-target yields and activation data** need a target and its layers (`azure2-targets`); note the stopping
    powers and the target composition next to the segment line.
 6. **Deliverables per experiment:** `<tag>_cov.dat` (lab frame, 4 columns, error = √C_ii), `<tag>_cov_rel.txt`,
    ready-to-paste segment lines (norm with its prior, normgroup label, energy-shift prior, energy and angle windows,
@@ -92,7 +94,8 @@ One covariance file per experiment (different experiments uncorrelated), coverin
 
 ## 5. Checks before the fit
 
-- **Positive definite** (Cholesky succeeds); report the smallest and largest eigenvalue.
+- **Positive definite** (Cholesky succeeds); report the smallest and largest eigenvalue (`write_covariance.py
+  --check` does both).
 - **√diag C equals the `_cov.dat` error column** to 1e-6 relative.
 - **Correlation plot** per file, inspected: a detector term shows as a block over that detector's rows.
 - **AZURE2 read test** (mode 1, any model with the needed exit pairs; run it on a compute node, not a login node):
@@ -100,8 +103,9 @@ One covariance file per experiment (different experiments uncorrelated), coverin
   pair, which must be stated), and no warnings.
 - `WARNING: k point(s) of <file> have an error column more than 1 % from sqrt(C_ii)` means the data file and the
   covariance file come from different builds of the tables. Refresh both together, never one.
-- A checker script compares √C_ii (with the relvectors evaluated on the data) with the error column, tests positive
-  definiteness, and confirms the data are unchanged against a backup.
+- `scripts/write_covariance.py --check COV --base DIR` compares √C_ii (with the relvectors evaluated on the data)
+  with the error column, tests positive definiteness of B and C and the row counts; confirm separately that the data
+  are unchanged against a backup.
 
 ## 6. Traps
 
@@ -115,7 +119,7 @@ One covariance file per experiment (different experiments uncorrelated), coverin
   only where the point is above 3σ; elsewhere the fraction the term gives an ideal (e.g. isotropic) value with the
   same detector weights, or shift / max(value, 3σ_stat).
 - **`relvector` terms are scaled by a model.** Outside rmfit the engine freezes that model at the first evaluation
-  (written to `covarianceModel.out`; pyazr `m.refreeze_covariance()` refreezes it). In a campaign it is one fixed
+  (written to `covarianceModel.out`; pyazr `s.refreeze_covariance()` refreezes it). In a campaign it is one fixed
   reference model (`rmfit-campaign`).
 - **Every data file a covariance file names must be present in the fit's `data/`**, not only those the segments use:
   the engine and rmfit match rows by counting each named file's records (`file <path> <rows>`). A missing one stops
