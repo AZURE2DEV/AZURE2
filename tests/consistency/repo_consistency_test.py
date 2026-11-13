@@ -1061,6 +1061,40 @@ for _r in _rows:
 for _r in sorted(_row_tests - set(_rows)):
     problems.append(f"tests: row_test(\"{_r}\") names no row of api/src/pybind_physics.cpp (check 41)")
 
+# 42. The pyazr command line is one table (pyazr/cli.py, COMMANDS; docs/upgrade/pyazr3.md section 2.8): every row has
+#     its case in tests/pyazr/cli_test.py (JSON_CASES, keyed by the command's name) and no case is left without a row;
+#     the reference page docs/source/user_guide/pyazr_command_line.rst is what cli.reference_page() makes of the table.
+#     pyazr/cli.py imports nothing of the engine at import time, so it is read here without it.
+try:
+    import ast
+    import importlib.util
+    _spec = importlib.util.spec_from_file_location("pyazr_cli_table", os.path.join(ROOT, "pyazr", "cli.py"))
+    _cli = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_cli)
+    _cmd_rows = [c.name for c in _cli.COMMANDS]
+    _cases = None
+    for _node in ast.walk(ast.parse(read("tests/pyazr/cli_test.py"))):
+        if isinstance(_node, ast.Assign) and any(getattr(t, "id", "") == "JSON_CASES" for t in _node.targets):
+            _cases = [k.value for k in _node.value.keys]
+    if _cases is None:
+        problems.append("tests/pyazr/cli_test.py: no JSON_CASES dict (check 42)")
+    else:
+        for _name in sorted(set(_cmd_rows) - set(_cases)):
+            problems.append(f"pyazr/cli.py: the command '{_name}' has no case in JSON_CASES of tests/pyazr/cli_test.py "
+                            "(check 42)")
+        for _name in sorted(set(_cases) - set(_cmd_rows)):
+            problems.append(f"tests/pyazr/cli_test.py: the case '{_name}' is no row of COMMANDS in pyazr/cli.py "
+                            "(check 42)")
+    for _c in _cli.COMMANDS:
+        for _a in _c.args:
+            if _a.type not in _cli.ARG_TYPES:
+                problems.append(f"pyazr/cli.py: {_c.name} {_a.name}: type '{_a.type}' is not in ARG_TYPES (check 42)")
+    if _cli.reference_page() + "\n" != read("docs/source/user_guide/pyazr_command_line.rst"):
+        problems.append("docs/source/user_guide/pyazr_command_line.rst: not what pyazr.cli.reference_page() makes of "
+                        "the table; regenerate it (pyazr/CLAUDE.md, recipe 'A command of the command line') (check 42)")
+except (OSError, ValueError, AttributeError) as e:
+    problems.append(f"check 42: {e}")
+
 if problems:
     for p in problems:
         print("FAIL", p)
@@ -1070,4 +1104,5 @@ print(f"repository consistent: {len(flags)} CLI flags, test registration, check.
       f"format-3 reference page, {len(declared)} diagnostic codes, file sizes, one model pass and residual, one calculation plan, "
       f"no machine paths, no old data class names, no old section in the engine, reference leaves by one predicate, "
       f"the sharing key's term settings, {len(_allowed)} allowed state rows, one reader of the environment "
-      f"({_getenv_files} files), {len(_table)} environment switches in the manual, {len(_rows)} physics rows tested")
+      f"({_getenv_files} files), {len(_table)} environment switches in the manual, {len(_rows)} physics rows tested, "
+      f"{len(_cli.COMMANDS)} pyazr commands")
