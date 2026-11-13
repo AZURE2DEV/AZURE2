@@ -258,6 +258,9 @@ Gate: benchmarks committed with their FRESCO inputs and outputs.
 Design: `pyazr3.md` (the measured state of pyazr, the objects of 3.0, the order of work, the PI's decisions).
 
 - [ ] Object binding (`ARCHITECTURE.md` §11): modules, numpy views, `physics` explorer functions, `sources`, `cli`.
+  - [x] Errors and self-description (`pyazr.Error` and its classes, `pyazr.describe()`, `pyazr.kinds()`).
+  - [x] Parameters and pairs as the engine's records (`Parameters`, `Parameter`, `Pair`; the record table
+        `api/src/pybind_records.cpp`); the numeric layouts `GetParameterInfo` / `GetPairsInfo` deleted.
 - [ ] Wheels via scikit-build-core + cibuildwheel (Linux, macOS, Windows) with the core and the `azure2` CLI.
 - [ ] Tested recipes for iminuit, scipy, emcee (no `azure2()` shim: struck by the PI, `pyazr3.md` section 5, 9).
 Gate: ported pyazr tests pass; wheels install and run T1–T3 on three platforms.

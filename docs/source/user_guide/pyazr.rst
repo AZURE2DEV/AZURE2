@@ -216,37 +216,65 @@ particle (``'2+*(4.439 MeV) + 0+'``). In a :class:`pyazr.Project` the pair's
 for a value other than 0), ``heavy_excitation=`` the heavy one's
 (:doc:`../reference/data_formats`).
 
-Filtered views (``.free``, ``.energies``, ``.widths``, ``.norms``,
-``.shifts``, ``.sqrt_shifts``, ``.fn_shifts``, ``.abundances``, ``.cbkg``) and lookups (``.by_level(...)``,
-``.by_name(...)``, ``.by_physical_level()``) are all available. A
-parameter's ``kind`` and its owner fields come from the record the engine
-writes where it creates the parameter (``Session.parameter_records()``), never
-from its name, which is only a label; ``pyazr.parameters.parameter_kinds()``
-returns the engine's table of kinds (code, key, unit, owner fields, flags). In
+``azr.parameters`` is the table of the fit parameters (a :class:`pyazr.Parameters`; its class
+``ParameterSet`` adds the views of earlier releases), one row per parameter in the order of the
+engine's vector. Each row is the engine's record of the parameter (``Session.parameter_records()``),
+written where the parameter is created, never parsed from its name, which is only a label:
+``name``, ``kind``, ``unit``, ``start`` (in the fit vector's basis and ``unit``), ``value`` (as the
+project states it: a partial width in eV, an ANC, an energy in MeV), ``fixed``, ``free_index`` (its
+entry of the fit vector), ``bounds``, and the fields of its kind (a level's ``level_label``, ``J``,
+``parity``, ``level_energy``; a channel's ``L``, ``S``, ``pair``, ``pair_key``, ``radiation_type``,
+``wigner_limit``, ``width_is_amplitude``; a data set's ``segment_key``; a nuisance's
+``prior_centre`` and ``prior_sigma``; ...). ``pyazr.kinds()["parameter_fields"]`` lists every field
+with its unit, the kinds it describes and its doc; a field of another kind reads ``None``.
+
+.. code-block:: python
+
+   P = azr.parameters
+   x = P.x0                                   # a copy of the start of the fit vector
+   w = P.of_level("3/2- 3.5032").of_kind("width")
+   x2 = P.put(x, w.free, 2 * P.take(x, w.free))   # the level's free widths doubled
+   P.write("fit.sav", x2)                     # a parameter file, by name
+   x3 = P.read("fit.sav")                     # and back
+   print(P.free.table())                      # name, kind, unit, start, free, bounds, owner
+
+The fit vector is the only vector: ``x0``, ``put``, ``take``, ``read`` and ``write`` work on it, and a
+selection (``free``, ``of_kind(...)``, ``of_level(...)``, a slice) is again a table with the same
+``x0``. ``names``, ``kinds``, ``units``, ``free_mask`` and ``bounds`` are its columns (``bounds`` the
+limits the engine creates the parameter with, ``(-inf, inf)`` where it sets none). The views of
+earlier releases (``.energies``, ``.widths``, ``.norms``, ``.shifts``, ``.sqrt_shifts``,
+``.fn_shifts``, ``.abundances``, ``.screenings``, ``.densities``, ``.dopplers``, ``.thicknesses``,
+``.cbkg``, ``.fixed``, ``.by_level(...)``, ``.by_physical_level()``) are ``of_kind`` and the level
+selections under their old names. ``azr.write_values(project, x)`` writes the values of ``x`` into a
+:class:`pyazr.Project` of the session's file in memory (what ``save_fit`` writes, without saving).
+
+``pyazr.kinds()["parameters"]`` is the engine's table of kinds (key, unit, owner fields, flags), in
 the order of the parameter vector (the abundances follow the level block):
 
-======  ===============  ===================================================
-code    ``kind``         parameters
-======  ===============  ===================================================
-0       ``energy``       level energies (``energy_*``)
-1       ``width``        reduced-width amplitudes (``width_*``)
-2       ``norm``         segment normalizations (``segment_N_norm``)
-3       ``shift``        segment energy shifts (``segment_N_energy_shift``)
-4       ``shift_sqrt``   :math:`\sqrt{E}` shift coefficients
-                         (``segment_N_energy_shift_sqrt``)
-5       ``shift_fn``     shift-function parameters a0, a1, ...
-                         (``segment_N_energy_shift_fnJ``)
-6       ``abundance``    isotopic abundances (``abundance_*``; after the
-                         level block; :attr:`Parameter.sample` its sample)
-7       ``screening``    electron-screening potentials (``screening_<n>``)
-8       ``density``      fitted target densities (``density_<n>``)
-9       ``doppler``      fitted Doppler temperatures (``doppler_<n>``)
-10      ``thickness``    fitted sample thicknesses (``segment_N_thickness``)
-11      ``cbkg``         THM coherent background (``cbkg_*``), last;
-                         ``thm_experiment``, ``thm_jpi``, ``thm_exit_key``,
-                         ``thm_channels`` and ``thm_term`` (0 Re c0, 1 Im
-                         c0, 2 Re c1, 3 Im c1) say which coefficient
-======  ===============  ===================================================
+===============  ===================================================
+``kind``         parameters
+===============  ===================================================
+``energy``       level energies (``energy_*``)
+``width``        reduced-width amplitudes (``width_*``)
+``norm``         data-set normalizations
+``shift``        data-set energy shifts (the constant term)
+``shift_sqrt``   :math:`\sqrt{E}` shift coefficients
+``shift_fn``     shift-function parameters a0, a1, ... (``fn_term`` = j)
+``abundance``    isotopic abundances (after the level block;
+                 ``sample_name`` its sample)
+``screening``    electron-screening potentials
+``density``      fitted target densities
+``doppler``      fitted Doppler temperatures
+``thickness``    fitted sample thicknesses
+``cbkg``         THM coherent background (``cbkg_*``);
+                 ``thm_experiment``, ``thm_jpi``, ``thm_exit_key``,
+                 ``thm_channels`` and ``thm_term`` (0 Re c0, 1 Im
+                 c0, 2 Re c1, 3 Im c1) say which coefficient
+``apparatus``    a number of an apparatus record (a stopping scale, a
+                 kernel's parameter)
+``radiative``    a number of a level's ``gamma_decay`` record
+                 (``decay_record``, ``decay_part``, ``final_state``)
+===============  ===================================================
 
 A THM segment's free norm is profiled, not a parameter, and has no entry. A ``LevelKey`` prints as
 ``5/2-#2@6.588MeV``; ``(jgroup, level)`` is its identity, since AZURE2 restarts
@@ -302,7 +330,7 @@ A fitted target density (``areal_density ... fit [prior ...]`` on a ``target``
 record, shared by every data set that names the target,
 :doc:`experimental_effects`) is a parameter ``<target>.areal_density`` of kind
 ``"density"`` (``ParameterSet.densities``; :attr:`Parameter.effect` is its target,
-``prior_nominal`` / ``prior_sigma`` its prior and ``density_max`` the largest
+``prior_centre`` / ``prior_sigma`` its prior and ``layout_max`` the largest
 density its grids span). Its column is finite-differenced the same way, and
 ``penalties()["density"]`` is its prior, which ``objective()`` adds.  The
 field is read and written as any record field: ``project["d1"]["areal_density"]``,
@@ -313,7 +341,7 @@ A fitted free-gas Doppler temperature (``doppler free_gas T K fit [prior T0
 sigma] [grid_max Tmax]`` on a ``target`` record, :doc:`experimental_effects`) is
 a parameter ``<target>.doppler`` of kind ``"doppler"``
 (``ParameterSet.dopplers``; :attr:`Parameter.effect` is its target,
-``prior_nominal`` / ``prior_sigma`` its prior and ``doppler_max`` the layout
+``prior_centre`` / ``prior_sigma`` its prior and ``layout_max`` the layout
 temperature its grids span). Unlike a density its gradient entry and Jacobian
 column are analytic, through the Doppler weights. ``penalties()["doppler"]`` is
 its prior, which ``objective()`` adds.  The field is edited as any record field
@@ -324,7 +352,7 @@ A fitted sample thickness (``areal_density n atoms/b fit [prior n sigma]`` on a
 ``neutron_yield`` data sets, :doc:`segments`) is a parameter
 ``<target>.areal_density`` of kind ``"thickness"`` (``ParameterSet.thicknesses``;
 :attr:`Parameter.segment_key` is the first data set on the target,
-``prior_nominal`` / ``prior_sigma`` its prior, ``sample_kind`` ``"transmission"``
+``prior_centre`` / ``prior_sigma`` its prior, ``sample_kind`` ``"transmission"``
 or ``"yield"``); data sets that name one target share the parameter. Its
 gradient entry and Jacobian column are analytic. ``penalties()["thickness"]`` is
 its prior, which ``objective()`` adds.

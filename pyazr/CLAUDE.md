@@ -11,7 +11,14 @@ public names are a contract.
 - `pyazr.kinds()`: record kinds and fields, data kinds (units, frames), parameter kinds (unit, owner fields), session
   options (type, default, CLI flag, doc), bound physics functions, error classes.  Read from the engine's tables
   (`described.py`); never add a hand-typed list of kinds in Python.
-- `azure2(...).describe()`: pairs, levels, data sets, parameters (name, kind, unit, value, free), options in effect.
+- `azure2(...).describe()`: pairs, levels, data sets, parameters (their records: name, kind, unit, x, free, bounds,
+  owner fields), options in effect.
+- `azure2(...).parameters` (a `Parameters`, `parameters.py`): the table of the fit parameters, one row per
+  parameter, built once per session and layout from the engine's records (`Session.parameter_records()`; the pairs
+  from `Session.pair_records()`).  The field names, units and kinds are one table of the binding
+  (`api/src/pybind_records.cpp`, `pyazr.kinds()["parameter_fields"]`, `["pair_fields"]`): never type a field name, a
+  column position or a numeric kind code in Python; a new field is a row there.  The fit vector `x` is the only
+  vector (`x0`, `put`, `take`, `read`, `write`); `print(parameters.table())` shows what each row is.
 - Errors (`errors.py`): every deliberate error is a `pyazr.Error`; `FormatError`, `ParameterError` (with
   `ParameterKeyError`, `ParameterIndexError`, `ParameterVectorError`), `EngineError` (= `AZURE2Error`, one class,
   which keeps that name), `DomainError` (`DomainZeroDivision`), `SessionClosed`, `MissingFile`; engine notices are
