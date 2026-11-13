@@ -373,9 +373,8 @@ std::vector<std::string> ReplaceDiagonalPriors(CNuc *compound, WorkingCopy *data
           break;
         }
         case ParamKind::Abundance: {
-          SampleAbundance &e = compound->GetSample(d.sample)->entries[d.nucleus - 1];
-          had = e.sigma > 0.0;
-          e.priorReplaced = true;
+          had = compound->GetSample(d.sample)->entries[d.nucleus - 1].sigma > 0.0;
+          compound->ReplaceAbundancePrior(d.sample, d.nucleus);
           break;
         }
         default:  // levels and THM coherent background: a nuisance prior, skipped by index

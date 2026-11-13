@@ -12,6 +12,7 @@
 #include "PathwayTable.h"
 #include "ModelData.h"
 #include "GammaDecayMap.h"
+#include "AbundanceSamples.h"
 #include "azure2/experiment/SetupSpecs.h"
 
 namespace ROOT {
@@ -43,29 +44,6 @@ struct CompoundNucleus {
   int A = 0;
 };
 
-/// The isotopic abundance of one compound nucleus's target in one sample.
-struct SampleAbundance {
-  double abundance = 1.0;   ///< current value (a fit parameter when vary is set)
-  double nominal = 1.0;     ///< the centre of the prior as written, else the value read (parameter_kinds.md section 4)
-  double sigma = 0.0;       ///< prior width; 0 = no prior
-  bool vary = false;
-  bool priorReplaced = false;  ///< the prior covariance replaces this prior (docs/upgrade/objective.md D3)
-  std::string isotope;  ///< format 3: the isotope as written, which names the parameter ("" = the old name)
-};
-
-/// A sample: one set of isotopic (or stoichiometric) abundances, one entry per
-/// compound nucleus.  The <abundances> block holds one unnamed sample (the
-/// lines without a "<name>:" prefix) and any number of named ones; a segment
-/// chooses its sample with "natural 1" (the unnamed, or the only, sample) or
-/// "natural <name>".  Each sample has its own sum-to-one penalty width: the
-/// block's "<name>: sum <s>" line, else the config's abundanceSumSigma.
-struct AbundanceSample {
-  std::string name;                      ///< "" for the unnamed sample
-  std::vector<SampleAbundance> entries;   ///< index nucleus-1
-  double sumSigma = -1.0;                ///< < 0: use the config's abundanceSumSigma
-  double sumCentre = 1.0;                ///< the centre of the sum-to-one prior: as written, else 1
-};
-
 class CNuc {
  public:
   // -- structure ------------------------------------------------------------
@@ -79,7 +57,7 @@ class CNuc {
   /// Did the project carry an <abundances> block?  Only then are the
   /// abundances Minuit parameters (one per nucleus and sample, after the
   /// level block), so a project without the block keeps its parameter layout.
-  bool HasAbundanceBlock() const { return hasAbundanceBlock_; }
+  bool HasAbundanceBlock() const { return abundances_.Present(); }
   /// The model data (ModelData.h): the rows of the objective's term T9, read by Fill.
   const ModelDataSet &GetModelData() const { return *modelData_; }
   /// The gamma_decay records (GammaDecayMap.h), read by Fill; empty without <gammaDecays>.
@@ -94,34 +72,36 @@ class CNuc {
     if ((int)gammaDecayFills_.size() <= r) gammaDecayFills_.resize(r + 1);
     gammaDecayFills_[r] = std::move(fill);
   }
+  /// The samples of the <abundances> block (AbundanceSamples.h) and the current abundances, in parameter order.
+  const AbundanceSamples &Abundances() const { return abundances_; }
+  const std::vector<double> &AbundanceValues() const { return abundanceValues_; }
   /// Number of samples the <abundances> block defines (0 without the block).
-  int NumSamples() const { return (int)samples_.size(); }
+  int NumSamples() const { return abundances_.NumSamples(); }
   /// Sample \p s, 1-based.
-  AbundanceSample *GetSample(int s) { return &samples_[s - 1]; }
-  const AbundanceSample *GetSample(int s) const { return &samples_[s - 1]; }
+  const AbundanceSample *GetSample(int s) const { return &abundances_.Sample(s); }
+  /// The prior covariance replaces the prior of (sample, nucleus) (ReplaceDiagonalPriors).
+  void ReplaceAbundancePrior(int sample, int nucleus) { abundances_.ReplacePrior(sample, nucleus); }
   /// 1-based index of the sample with this name, 0 if there is none.
-  int FindSample(const std::string &name) const;
+  int FindSample(const std::string &name) const { return abundances_.Find(name); }
   /// The sample "natural 1" means: the unnamed one if present, else the only one; 0 if ambiguous or none.
-  int DefaultSample() const;
+  int DefaultSample() const { return abundances_.Default(); }
   /// Number of abundance parameters FillMnParams emits: samples x nuclei with the block, else 0.
-  int NumAbundanceParams() const { return hasAbundanceBlock_ ? (int)(samples_.size() * nuclei_.size()) : 0; }
+  int NumAbundanceParams() const { return abundances_.NumParams(); }
   /// 1-based ordinal of the abundance parameter of (sample, nucleus), both 1-based: samples are blocks of nuclei.
-  int AbundanceOrdinal(int sample, int nucleus) const { return (sample - 1) * (int)nuclei_.size() + nucleus; }
+  int AbundanceOrdinal(int sample, int nucleus) const { return abundances_.Ordinal(sample, nucleus); }
   /// The (sample, nucleus) of a 1-based abundance ordinal.
-  void AbundanceOf(int ordinal, int &sample, int &nucleus) const;
-  /// Minuit name: "abundance_<Z>_<A>" for the unnamed sample, "abundance_<sample>_<Z>_<A>" otherwise.
-  std::string AbundanceParamName(int sample, int nucleus) const;
+  void AbundanceOf(int ordinal, int &sample, int &nucleus) const { abundances_.Of(ordinal, sample, nucleus); }
   /// Current abundance of nucleus \p nucleus in sample \p sample (1 when there is no block).
-  double GetAbundance(int sample, int nucleus) const;
+  double GetAbundance(int sample, int nucleus) const { return abundances_.Value(abundanceValues_, sample, nucleus); }
   /// Sum of the current abundances of one sample.
-  double AbundanceSum(int sample) const;
+  double AbundanceSum(int sample) const { return abundances_.Sum(abundanceValues_, sample); }
   /// The sum-to-one width of a sample: its own "sum" line, else \p globalSumSigma.
-  double SampleSumSigma(int sample, double globalSumSigma) const;
-  /// The abundance penalty added to chi-squared, summed over samples: every
-  /// entry with a prior contributes ((w - w0)/sigma)^2, and each sample whose
-  /// width s is > 0 contributes ((sum w) - c)^2 / s^2, c its centre (1 unless written).
-  double AbundancePenalty(double globalSumSigma) const;
-  double AbundanceSumPenalty(double globalSumSigma) const;  // sum-to-one terms only (MCMC: priors come from BuildAutoPriors)
+  double SampleSumSigma(int sample, double globalSumSigma) const { return abundances_.SumSigma(sample, globalSumSigma); }
+  /// The abundance penalty added to chi-squared (AbundanceSamples::Penalty) and its sum-to-one terms alone.
+  double AbundancePenalty(double globalSumSigma) const { return abundances_.Penalty(abundanceValues_, globalSumSigma); }
+  double AbundanceSumPenalty(double globalSumSigma) const {
+    return abundances_.SumPenalty(abundanceValues_, globalSumSigma);
+  }
   /// Does a pair with this key exist? Keys are what the input files write; the
   /// PPair vector position may differ, so use GetPairNumFromKey to convert.
   bool IsPairKey(int) const;
@@ -317,8 +297,7 @@ class CNuc {
   int FindOrAddNucleus(int z, int a);
   /// TEMPORARY (step 3d, src/ProjectSetup.cpp): the old <abundances> section through SetAbundances.
   int ReadAbundances(const Config &);
-  /// The abundances of the samples from their spec into samples_; -1 (with the reader's message) when the reader
-  /// stopped.
+  /// The abundances of the samples from their spec; -1 (with the reader's message) when the reader stopped.
   int SetAbundances(const Config &, const azure2::experiment::AbundanceSpecs &);
   /// The pathway table (Initialize) and the capture-A_y requests it is built with.
   std::shared_ptr<const azure2::PathwayTable> pathways_;
@@ -331,8 +310,8 @@ class CNuc {
   std::vector<PPair> pairs_;
   std::vector<JGroup> jgroups_;
   std::vector<CompoundNucleus> nuclei_;
-  std::vector<AbundanceSample> samples_;
-  bool hasAbundanceBlock_ = false;
+  AbundanceSamples abundances_;
+  std::vector<double> abundanceValues_;  ///< the current abundances, in parameter order
   /// Setup state, shared by the copies (Clone).
   std::shared_ptr<const ModelDataSet> modelData_ = std::make_shared<ModelDataSet>();
   std::shared_ptr<const GammaDecaySet> gammaDecays_ = std::make_shared<GammaDecaySet>();

@@ -416,124 +416,15 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
 }
 
 /*!
- * The abundances of the samples (AbundancesSpec): one row per compound nucleus and sample, or a sample's sum-prior
- * width.  A nucleus without a row keeps 1.0, fixed.  A row for a (Z, A) the pairs do not form is reported and
- * ignored.  Without the block no abundance becomes a
- * Minuit parameter, so every project written before the block existed keeps
- * its parameter layout, param.par and <parameterSettings> indices.
+ * The samples of the <abundances> block (AbundanceSamples::Set, for this project's compound nuclei) and the current
+ * abundances at the file's values.
  */
-
 int CNuc::SetAbundances(const Config &configure, const azure2::experiment::AbundanceSpecs &specs) {
-  hasAbundanceBlock_ = specs.abundances.present;
-  samples_.clear();
-  if (!hasAbundanceBlock_) return 0;
-  // A sample is created the first time a row sets one of its values; the unnamed sample is "".
-  auto sampleOf = [&](const std::string &name) -> AbundanceSample & {
-    for (unsigned int s = 0; s < samples_.size(); s++)
-      if (samples_[s].name == name) return samples_[s];
-    AbundanceSample sample;
-    sample.name = name;
-    sample.entries.assign(nuclei_.size(), SampleAbundance());
-    samples_.push_back(sample);
-    return samples_.back();
-  };
-  for (const azure2::experiment::AbundanceRowSpec &row : specs.abundances.rows) {
-    if (row.isSum) {
-      sampleOf(row.sample).sumSigma = row.sumSigma;
-      sampleOf(row.sample).sumCentre = row.sumCentre.Or(1.0);
-      continue;
-    }
-    bool found = false;
-    for (unsigned int i = 0; i < nuclei_.size(); i++) {
-      if (nuclei_[i].Z != row.z || nuclei_[i].A != row.a) continue;
-      SampleAbundance &e = sampleOf(row.sample).entries[i];
-      e.abundance = row.value;
-      e.nominal = row.centre.Or(row.value);  // the prior's centre as written (parameter_kinds.md section 4)
-      e.vary = row.vary;
-      e.sigma = row.sigma;
-      e.isotope = row.isotope;
-      found = true;
-    }
-    if (!found)
-      configure.outStream << "WARNING: <abundances> names Z=" << row.z << " A=" << row.a
-                          << ", which no pair of the project forms; ignored." << std::endl;
-  }
-  if (specs.failed) {
-    if (!specs.error.empty()) configure.outStream << specs.error << std::endl;
-    return -1;
-  }
-  // An empty block still means "abundances are parameters": one unnamed sample at the defaults.
-  if (samples_.empty()) sampleOf("");
-  return 0;
-}
-
-int CNuc::FindSample(const std::string &name) const {
-  for (unsigned int s = 0; s < samples_.size(); s++)
-    if (samples_[s].name == name) return (int)s + 1;
-  return 0;
-}
-
-int CNuc::DefaultSample() const {
-  int unnamed = this->FindSample("");
-  if (unnamed > 0) return unnamed;
-  return samples_.size() == 1 ? 1 : 0;
-}
-
-void CNuc::AbundanceOf(int ordinal, int &sample, int &nucleus) const {
-  const int n = (int)nuclei_.size();
-  sample = (ordinal - 1) / n + 1;
-  nucleus = (ordinal - 1) % n + 1;
-}
-
-std::string CNuc::AbundanceParamName(int sample, int nucleus) const {
-  return azure2::experiment::AbundanceParameterName(samples_[sample - 1].name, samples_[sample - 1].entries[nucleus - 1].isotope,
-                                                    nuclei_[nucleus - 1].Z, nuclei_[nucleus - 1].A);
-}
-
-double CNuc::GetAbundance(int sample, int nucleus) const {
-  if (sample < 1 || sample > (int)samples_.size()) return 1.0;
-  return samples_[sample - 1].entries[nucleus - 1].abundance;
-}
-
-double CNuc::AbundanceSum(int sample) const {
-  double sum = 0.0;
-  for (unsigned int i = 0; i < nuclei_.size(); i++) sum += samples_[sample - 1].entries[i].abundance;
-  return sum;
-}
-
-double CNuc::SampleSumSigma(int sample, double globalSumSigma) const {
-  const double own = samples_[sample - 1].sumSigma;
-  return own >= 0.0 ? own : globalSumSigma;
-}
-
-double CNuc::AbundancePenalty(double globalSumSigma) const {
-  if (!hasAbundanceBlock_) return 0.0;
-  double penalty = 0.0;
-  for (unsigned int s = 0; s < samples_.size(); s++) {
-    for (unsigned int i = 0; i < nuclei_.size(); i++) {
-      const SampleAbundance &e = samples_[s].entries[i];
-      if (e.sigma > 0.0 && !e.priorReplaced) penalty += pow((e.abundance - e.nominal) / e.sigma, 2.0);
-    }
-    const double sig = this->SampleSumSigma((int)s + 1, globalSumSigma);
-    if (sig > 0.0) penalty += pow((this->AbundanceSum((int)s + 1) - samples_[s].sumCentre) / sig, 2.0);
-  }
-  return penalty;
-}
-
-/*!
- * The sum-to-one part of AbundancePenalty alone: ((sum_i w_i) - 1)^2 / s^2 per sample with s > 0.  The MCMC
- * likelihood uses this, because AZURECalcMCMC::BuildAutoPriors already turns each abundance's (w0, sigma) into a
- * Gaussian prior (PARAM_ABUNDANCE); adding the full AbundancePenalty there counted that prior twice and made the
- * posterior width of an abundance 1/sqrt(2) too narrow (found 2026-10-17 by the isospin-levels session).
- */
-double CNuc::AbundanceSumPenalty(double globalSumSigma) const {
-  if (!hasAbundanceBlock_) return 0.0;
-  double penalty = 0.0;
-  for (unsigned int s = 0; s < samples_.size(); s++) {
-    const double sig = this->SampleSumSigma((int)s + 1, globalSumSigma);
-    if (sig > 0.0) penalty += pow((this->AbundanceSum((int)s + 1) - samples_[s].sumCentre) / sig, 2.0);
-  }
-  return penalty;
+  std::vector<std::pair<int, int> > nucleiZA;
+  for (const CompoundNucleus &n : nuclei_) nucleiZA.push_back({n.Z, n.A});
+  const int read = abundances_.Set(configure, specs, nucleiZA);
+  abundanceValues_ = abundances_.StartValues();
+  return read;
 }
 
 /*!
@@ -760,9 +651,7 @@ void CNuc::FillCompoundFromParamsPhysical(const vector_r &observed) {
       level->SetSqrtNFFactor(SqrtNFFactor(*this, this->Group(j), level, 1.0, g));
     }
   }
-  if (hasAbundanceBlock_)
-    for (unsigned int s = 0; s < samples_.size(); s++)
-      for (unsigned int k = 0; k < nuclei_.size(); k++) samples_[s].entries[k].abundance = p[i++];
+  abundances_.ReadFrom(p, (std::size_t)i, abundanceValues_);
 }
 
 namespace phys = azure2::physics;
@@ -986,23 +875,9 @@ void CNuc::FillMnParams(AZUREParams &params, const Config *config) {
       energyIndex++;
     }
   }
-  // Isotopic abundances, one per compound nucleus and sample (sample by
-  // sample), right after the level block (so WorkingCopy::FillMnParams, which
-  // takes its offsets from the vector size, needs no change); only when the
-  // project carries an <abundances> block.  A fixed abundance is still a
-  // parameter, so the layout does not depend on which ones vary.
-  if (hasAbundanceBlock_) {
-    for (unsigned int s = 0; s < samples_.size(); s++) {
-      for (unsigned int k = 0; k < nuclei_.size(); k++) {
-        const SampleAbundance &e = samples_[s].entries[k];
-        std::string name = this->AbundanceParamName((int)s + 1, (int)k + 1);
-        params.Add(name, e.abundance, e.sigma > 0.0 ? e.sigma : 0.1 * e.abundance + 1e-3,
-                   ParameterRecord::Abundance((int)s + 1, samples_[s].name, (int)k + 1, nuclei_[k].Z, nuclei_[k].A));
-        p.SetLowerLimit(name, 0.0);
-        if (!e.vary) p.Fix(name);
-      }
-    }
-  }
+  // Isotopic abundances, right after the level block (AbundanceSamples.h; WorkingCopy::FillMnParams, which takes its
+  // offsets from the vector size, needs no change); only when the project carries an <abundances> block.
+  abundances_.AddParameters(abundanceValues_, params);
 }
 
 /*!
@@ -1027,9 +902,7 @@ void CNuc::FillCompoundFromParams(const vector_r &params) {
       level->SetSqrtNFFactor(SqrtNFFactor(*this, this->Group(j), level, 1.0, g));
     }
   }
-  if (hasAbundanceBlock_)
-    for (unsigned int s = 0; s < samples_.size(); s++)
-      for (unsigned int k = 0; k < nuclei_.size(); k++) samples_[s].entries[k].abundance = p[i++];
+  abundances_.ReadFrom(p, (std::size_t)i, abundanceValues_);
   if (ecFinalBlocks_) this->ECFinalStatesFromFormal();
   if (captureMaskSetup_) this->FormalCaptureMasksFromParams();
 }
@@ -1194,11 +1067,7 @@ vector_r CNuc::GetTransformParams(const Config &) {
       for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) params.push_back(gammaDecays_->ValueOr(*this, j, la, ch, theLevel->GetObservedValue(ch)));
     }
   }
-  // Abundances are the same in both bases; they follow the level block as in FillMnParams.
-  if (hasAbundanceBlock_)
-    for (unsigned int s = 0; s < samples_.size(); s++)
-      for (unsigned int k = 0; k < nuclei_.size(); k++) params.push_back(samples_[s].entries[k].abundance);
-
+  // The level block only: the caller appends the abundance block of the fit's vector (AbundanceSamples::AppendTo).
   return params;
 }
 

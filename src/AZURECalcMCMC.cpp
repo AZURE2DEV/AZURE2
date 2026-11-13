@@ -198,6 +198,7 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r &physicalParams) {
   }
 
   all_physical_ = compound()->GetTransformParams(configure());
+  compound()->Abundances().AppendTo(all_rwa_, all_physical_);
   // Add missing parameters
   for (size_t i = all_physical_.size(); i < all_rwa_.size(); i++) {
     all_physical_.push_back(all_rwa_[i]);

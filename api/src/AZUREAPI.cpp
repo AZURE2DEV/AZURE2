@@ -248,6 +248,7 @@ bool AZUREAPI::UpdateParameters() {
   }
 
   all_ = compound()->GetTransformParams(configure());
+  compound()->Abundances().AppendTo(all_rwa_, all_);
 
   // Norms and shifts are missing from all_ and need to be added using the all_rwa_ values
   for (int i = all_.size(); i < all_rwa_.size(); ++i) {
@@ -289,6 +290,7 @@ bool AZUREAPI::SetParamsAllRWA(const vector_r &p) {
   compound()->CalcShiftFunctions(configure());
   compound()->TransformOut(configure());
   all_ = compound()->GetTransformParams(configure());
+  compound()->Abundances().AppendTo(all_rwa_, all_);
   for (size_t i = all_.size(); i < all_rwa_.size(); ++i) all_.push_back(all_rwa_[i]);
 
   values_.clear();
@@ -463,6 +465,7 @@ vector_r AZUREAPI::TransformRWAParameters(const vector_r &p) const {
   localCompound->TransformOut(configure());
 
   vector_r transformedParams = compound()->GetTransformParams(configure());
+  compound()->Abundances().AppendTo(params, transformedParams);
 
   // Get only non fixed parameters
   vector_r transformed;
@@ -495,6 +498,7 @@ vector_r AZUREAPI::TransformAllRWAParameters(const vector_r &p, bool includeFixe
   localCompound->TransformOut(configure());
 
   vector_r transformedParams = compound()->GetTransformParams(configure());
+  compound()->Abundances().AppendTo(params, transformedParams);
 
   if (includeFixed) return transformedParams;
   // Get only non fixed parameters
@@ -522,7 +526,9 @@ vector_r AZUREAPI::TransformAllRWAParametersFull(const vector_r &p) const {
   CNuc *localCompound = compound();
   localCompound->FillCompoundFromParams(params);
   localCompound->TransformOut(configure());
-  return compound()->GetTransformParams(configure());
+  vector_r transformed = compound()->GetTransformParams(configure());
+  compound()->Abundances().AppendTo(params, transformed);
+  return transformed;
 }
 
 bool AZUREAPI::CalculateExternalCapture() {

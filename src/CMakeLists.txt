@@ -8,7 +8,7 @@ ReactionRate.cpp AZUREMain.cpp RunSetUp.cpp ProgramFit.cpp RunOutputs.cpp
 Fitters.cpp FitEvaluations.cpp FitMigrad.cpp FitLeastSquares.cpp FitGslTrustRegion.cpp FitNLopt.cpp FitErrors.cpp
 WorkingCopy.cpp DataCovariance.cpp ShftFunc.cpp ScatteringLength.cpp ModelData.cpp CNucObserved.cpp GammaDecayMap.cpp
 RMatrixFunc.cpp AZUREOutput.cpp    TargetEffect.cpp
-AZUREParams.cpp PosteriorSupport.cpp Unit.cpp SiteObservables.cpp CNuc.cpp Equation.cpp
+AZUREParams.cpp PosteriorSupport.cpp Unit.cpp SiteObservables.cpp CNuc.cpp AbundanceSamples.cpp Equation.cpp
 JGroup.cpp Config.cpp ProjectOptions.cpp Segment.cpp ModelPass.cpp CoulombReference.cpp ReferenceTableLeaf.cpp Predictions.cpp CalculationPlan.cpp EnergyPass.cpp IntegratedFermiFunc.cpp
 EffectiveCharge.cpp  GSLException.cpp ParameterLimitsManager.cpp
 AdaptiveIntegrationGrid.cpp AdaptiveExtrapolation.cpp AZUREGrad.cpp GradEnergyTasks.cpp ThmFunc.cpp
