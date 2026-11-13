@@ -16,8 +16,10 @@ stat ⊕ 3 % errors and normgroups; the table makes such gaps visible.
 ```bash
 # covariance files and the data files they cover
 for f in *cov*.txt; do echo "$f: $(grep '^file' $f | awk '{printf "%s(%s) ", $2, $3}')"; done
-# active segments of a model WITHOUT a covariance keyword
-awk '/<segmentsData>/{f=1;next}/<\/segmentsData>/{f=0}f && $1=="1" && $0!~/ covariance /' model.azr
+# active data sets of a project and their covariance file ("-": none)
+python3 -c "import pyazr, sys
+for n, r in pyazr.Project.open(sys.argv[1]).records().items():
+    if r.record_kind == 'dataset' and r.get('active', 'yes') != 'no': print(n, r.get('covariance', '-'))" model.azr
 ```
 
 ## 2. What goes into C, and what stays out
@@ -83,7 +85,7 @@ One covariance file per experiment (different experiments uncorrelated), coverin
    fit.
 4. **Linked normalizations.** A set normalized to another set shares that set's `normgroup`; the two are not
    independent scale checks.
-5. **Thick-target yields and activation data** need a `<targetInt>` entry (`azure2-targets`); note the stopping
+5. **Thick-target yields and activation data** need a target and its layers (`azure2-targets`); note the stopping
    powers and the target composition next to the segment line.
 6. **Deliverables per experiment:** `<tag>_cov.dat` (lab frame, 4 columns, error = √C_ii), `<tag>_cov_rel.txt`,
    ready-to-paste segment lines (norm with its prior, normgroup label, energy-shift prior, energy and angle windows,

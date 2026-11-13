@@ -125,8 +125,8 @@ def covariance_checks(np, pyazr, tmp):
     with pyazr.Session(os.path.join(t3, "cov_matrix.azr")) as s:
         ev = s.evaluate(s.objective().x0)
         cm = ev.dataset("p7li_pa").chi2 + ev.dataset("p7li_pn").chi2
-    check(f"write_covariance: the same C as one matrix term gives {cm:.8f}", code == 0 and abs(cm - prog) <= 1e-8 * prog,
-          out[-300:])
+    check(f"write_covariance: the same C as one matrix term gives {cm:.8f}",
+          code == 0 and abs(cm - prog) <= 1e-8 * prog, out[-300:])
 
     bad = -np.eye(len(vals)) * 1e-6 + np.diag(Cm.diagonal()) * 0
     np.savetxt(os.path.join(t3, "bad.txt"), bad)
@@ -172,7 +172,8 @@ def nuts_numpy_checks(np):
     X = out["z"] @ L.T
     ratio = np.diag(np.cov(X.T)) / lam.max() / (np.diag(C) / lam.max())
     check(f"nuts: whitened Gaussian, cond 1e6, variances / target in [{ratio.min():.2f}, {ratio.max():.2f}], "
-          f"{int(out['divergent'].sum())} divergences", np.all(np.abs(ratio - 1) < 0.25) and out["divergent"].sum() == 0)
+          f"{int(out['divergent'].sum())} divergences",
+          np.all(np.abs(ratio - 1) < 0.25) and out["divergent"].sum() == 0)
 
     def wall(z):
         if z[0] > 1.0:

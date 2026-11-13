@@ -89,12 +89,12 @@ same.
   external-capture amplitudes keep their grids; `docs/source/user_guide/experimental_effects.rst`). With replacement a
   fresh load and a running session agree (one model: 25,776.076357 from either file).
   builds before 2026-10-19 (expires: 2027-02-01) placed the grid once from the file's levels, so a fit with narrow
-  levels under `<targetInt>` minimized against the start model's grid; re-evaluate such a fit's end point in a current
-  session before comparing.
+  levels under a target integration minimized against the start model's grid; re-evaluate such a fit's end point in a
+  current session before comparing.
   builds before 2026-10-22 (expires: 2027-02-01) also integrated the tail of a level much narrower than the coarse step
   badly (χ² oscillating with a 10 eV period in E_level, analytic gradient of the wrong sign); there, a wide fine region
   (Width Mult. 200, Pts/Width 5) is the work-around. If χ² oscillates or gradient checks fail in one narrow level's
-  energy under `<targetInt>`, suspect the grid before the physics.
+  energy under a target integration, suspect the grid before the physics.
 - **The verify tolerance (`rtol=1e-4`) can hide fragility.** The rwa ↔ physical conversion for an open channel is
   reproducible between sessions to 10⁻⁷–10⁻⁶ relative. Near a destructive-interference minimum (a broad, high-lying
   background pole feeding a low-energy capture channel) that noise can move a data set's χ² by orders of magnitude: a
