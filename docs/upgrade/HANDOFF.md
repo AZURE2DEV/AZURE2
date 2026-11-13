@@ -2,6 +2,20 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (director, 13:50) — merged: pyazr's errors, engine notices and self-description (first step of pyazr 3.0)
+
+**Merged** `feature/upgrade-8-pyazr3-errors` (entry below). Verified by the director on a rehearsal of this merge
+(`work/b-trial46`): all projects × 3 bases identical to the reference (887 / 851 / 887), the converted-tree gate
+identical (679 / 643 / 679), T1/T2/T3/13N at 1 against 3 threads identical, `ctest -LE slow` 226/226, slow 11/11,
+`tests/run_tests.sh` 165 passed and 0 failed, spec equivalence without a difference.
+
+**Behaviour a user of pyazr meets.** A parameter vector with NaN or infinity raises `ParameterVectorError` (it was
+computed before); `coulomb_functions` outside its domain raises `DomainError`; `pyazr.__version__` is `3.0.0.dev1`.
+
+**Next on pyazr.** Parameter records in place of the two numeric layouts (second step), the physics table (fourth),
+the command line (seventh); the briefs are written. `pyazr/azure2.py` is one line below its size limit: the
+rename step splits it.
+
 ## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-errors`) — pyazr: errors, engine notices, self-description
 
 **Done** (additions only: no public name renamed or removed, no engine number changed).
