@@ -40,7 +40,7 @@ those two files stay under the terms of SRIM's authors (LunaSRIM's README reads 
 so whether the public repository ships them or asks the user to fetch them is for you to say; the library works
 either way (`stopping/data/srim/README.md`).
 
-Phase 7 has begun as a separate library that the engine does not use yet: optical potentials, bound states,
+Phase 7 is a separate library, which the THM distortions of the engine now call (below): optical potentials, bound states,
 distorted waves and the DWBA transfer to a bound state, which agree with FRESCO to better than 0.2 %
 (`docs/upgrade/transfer.md`). It now also computes the transfer into the unbound x + A system (FRESCO's continuum
 bins, within 0.5 % of FRESCO for the deuteron), and shows that inside the channel radius this amplitude is the
@@ -50,6 +50,17 @@ power), and the two other Trojan horses of THM experiments, ³He and ¹⁴N, agr
 transfers to bound states (FRESCO's own step refinement moves its ³He results by up to 0.2 %; the ¹⁴N cases use test
 potentials and do not symmetrise the two ¹²C). Transfers of ⁶Li to continuum bins are not shown to 1 %: a second code,
 Frescox, has the numerics of FRESCO there (`transfer.md` §23).
+
+The engine's THM distortions are now this library's. The distortion factor R(E) (`distortion=coulomb|optical`) no
+longer has a solver of its own: the waves, the Trojan-horse tail, the sum over partial waves and its plane-wave limit
+come from `physics/transfer`, and the distorted-wave vertex (`vertexModel=dw`) takes its waves from there too (its
+own integral over the source stays in the engine for now: the library has no function for that source yet,
+`transfer.md` §24.2). The numbers moved by less than one part in 10⁸ (|M|² at most 2.9 × 10⁻⁹, the vertex tables
+6.7 × 10⁻¹⁰); no project of the test suite uses a distortion, so no output file changed. Refining the old numerics
+shows that they were converged to about 5 × 10⁻⁷ for an optical potential (step and matching radius each 3 × 10⁻⁶,
+partly cancelling), which the new code shares. The seven global optical sets (`opticalAA=ancai06`, ...) are one table
+of the library: adding a set is one row in `physics/src/transfer/GlobalOptical.cpp` and its test points (recipe
+"Add a global optical set" in `CLAUDE.md`); their spin-orbit terms are still left out.
 
 **How every step is checked.** Each merge is verified as a whole: the 183 project files of the test suite run in
 three bases (Brune, formal, Park) and every output file is compared byte for byte with the previous head (726 + 699

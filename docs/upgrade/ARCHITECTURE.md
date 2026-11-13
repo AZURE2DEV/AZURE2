@@ -119,7 +119,10 @@ all; `AZURE_NODE_CHECK` checks the groups too (`WorkingCopy::CheckSlotGroups`).
   and Coulomb–nuclear interference are not a finite Legendre series (f_C(θ) enters through the kernel row); A_y as a
   numerator series folded separately from σ; phase shifts; total cross section (optical theorem); β-delayed spectra;
   THM half-off-shell amplitudes (`THM.md`); identical particles through symmetrised coefficients.
-- `transfer/` (DWBA, for THM vertices): bound states, distorted waves, form factors (`THM.md` §3).
+- `transfer/` (DWBA, for THM vertices; `physics/transfer`, `transfer.md`): bound states, distorted waves, form
+  factors (`THM.md` §3), the zero-range THM weight and the global optical sets (one table, `GlobalOptical.h`). The
+  engine's `src/ThmDistortion.cpp` (R(E)) and `src/ThmDwVertex.cpp` (its waves) call it; `src/ThmOptical.cpp` is
+  gone.
 - `potentials/`: Woods–Saxon, Coulomb, global optical potentials (for DWBA and hybrid channels).
 - `extrapolation`, `rates`: the same chain on a test grid; rates integrate σ on the grid and add the analytic
   narrow-resonance term for resonances narrower than the grid can follow.

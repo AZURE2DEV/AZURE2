@@ -30,6 +30,8 @@ Satchler's *Direct Nuclear Reactions* or of Thompson, Comput. Phys. Rep. 7 (1988
 | `.../Transfer.h`, `src/transfer/Transfer.cpp`, `src/transfer/TransferKernel.{h,cpp}` | Eqs. (5.1)–(6.7); the kernel (6.4) with any interaction of (17.1), per pair of partial waves (l, j) |
 | `.../TransferAmplitudes.h`, `src/transfer/TransferAmplitudes.cpp` | Eqs. (19.5)–(19.8): the angular and spin sums, with or without spin-orbit, cross section and iT11 |
 | `.../ThmVertex.h`, `src/transfer/ThmVertex.cpp` | Eqs. (8.1)–(8.3) |
+| `.../ZeroRangeWeight.h`, `src/transfer/ZeroRangeWeight.cpp` | Eq. (24.2): the engine's zero-range THM weight with its bound |
+| `.../GlobalOptical.h`, `src/transfer/GlobalOptical.cpp` | the global optical sets, one table (§24.4) |
 | `physics/tests/transfer_*_test.cpp`, `transfer_fresco_common.h`, `physics/tests/data/fresco/`, `physics/tests/data/make_fresco_benchmarks.py` | §9, §18 |
 
 ## 2. Optical potential
@@ -257,7 +259,7 @@ data and not tested.
   (l ≤ 12, ρ_tp < ρ < ρ_tp + 34) found one such point at η = 0.1 (l = 0, ρ = 7.5943) and one at η = 0.493; none at
   η = 0, 1.55, 3. The physics_coulomb test does not hit them. The engine uses COULSM by default; any user of COULCC
   beyond the turning point is exposed. Not fixed here.
-- Not implemented: global optical potentials, relativistic
+- Not implemented: spin-orbit terms of the global optical sets (§24.4), relativistic
   kinematics, target spin in the distortion (spin-spin), tensor forces, l > 40, complex (optical or coupled-channel)
   bins. Part 2 added the continuum, the prior form and the remnants (§14–§17); their limits are in §18. Part 3 added
   spin-orbit in the distorted waves of a transfer and the projectile's iT11 (§19); its validation is §22. The ³He Trojan horse is §20, the ¹⁴N one
@@ -269,22 +271,20 @@ data and not tested.
 THM needs the transfer to x + A at E > 0: in (6.2) the bound overlap of F is replaced by the x + A scattering function
 at E or a bin of them, and the vertex of §8 is the interior part of that amplitude. This is part 2, §14–§18.
 
-## 12. Wiring (later branch)
+## 12. Wiring
 
-What the engine's THM observable (Phase 5, σ_HOES on the shared energy mesh) will call, once per fit stage:
+What the engine's THM observable calls (done for the distortion factor and the waves of the distorted-wave vertex;
+§24 is the record, with the calls per quantity):
 
-- the distortions: `SolveDistortedWaves(OpticalPotential, ScatteringRequest)` for a + A and s + F at each mesh energy,
-  the potentials from a global-set table (Koning–Delaroche, An–Cai, GDP08, Avrigeanu: one row each, moved from
-  `ThmOptical`, a test per row; never a second copy of the numbers);
-- the Trojan horse: `SolveBoundState(well, BoundStateRequest)` → `RadialOverlapOf(BoundState)`;
-- per level λ and channel: the level function u_λ (u_E at E_λ inside a, §16) and the vertex
-  `EntranceVertex(LevelFunction, w, w'(a), ε, B)` with w the projection of the DWBA source on the channel; the
-  zero-range prior weight M(E) is `ZeroRangeOrbitalIntegral(RadialOverlap, in, out, β, 1, θ)` (§13);
-- checks and the full DWBA where wanted: `FiniteRangeCrossSection(TransferReaction, in, out, TransferGrid, θ)` with
-  the residual a `ScatteringState` (d²σ/dΩ dE, §15) and `interaction = PriorFormWithRemnant(...)` or the post form.
-
-`ThmDistortion` becomes a caller of `ZeroRangeOrbitalIntegral` (no physics of its own), `ThmDwVertex` of
-`EntranceVertex` with the distorted w; their tables stay owned by the stage. Not done here.
+- the distortions: the per-l solver of `SolveDistortedWaves` (`TabulateChannel`, `SolvePartialWave`, matched beyond
+  each wave's turning point; `PlaneWaves` for a plane-wave channel), the potentials from the global-set table
+  (`GlobalOptical.h`: one row per set, moved from the engine's `ThmOptical`, a test per row);
+- the Trojan horse: `AnalyticTail` (Whittaker or Yukawa, unit ANC, r_min) → `RadialOverlapOf`;
+- the zero-range prior weight M(E): `PrepareZeroRangeEntrance` once and `ZeroRangeWeightSum` per energy, Eq. (6.7)
+  with c_i = β, c_f = 1, l = 0 (§13, §24);
+- not wired: the vertex `EntranceVertex(LevelFunction, w, w'(a), ε, B)` with the distorted w (§24.2 says why the
+  engine's distorted-wave vertex is not that function, and what the library would need), and the full DWBA
+  (`FiniteRangeCrossSection` with a `ScatteringState` residual, d²σ/dΩ dE, §15) as a check of the THM weight.
 
 With spin-orbit distortions (§19; published d and ³He potentials have them):
 
@@ -303,21 +303,23 @@ With spin-orbit distortions (§19; published d and ³He potentials have them):
 
 ## 13. The engine's THM weight with this library
 
-The engine's zero-range prior-form weight M(E) of `src/ThmDistortion.cpp` is Eq. (6.7) with c_i = β, c_f = 1, l = 0
-and the Whittaker tail of unit ANC (`AnalyticTail`), M = √(4π) O_0. For the case `optical` of
-`tests/reference/thm_distortion_test.cpp` (¹²C(¹⁴N,d) at 30 MeV, x = ¹²C, E = 1.0 MeV, QF direction, Woods–Saxon
-potentials in both channels; the masses, energies and potentials of that test, our constants):
+The engine's zero-range prior-form weight M(E) (`src/ThmDistortion.h`) is Eq. (6.7) with c_i = β, c_f = 1, l = 0 and
+the Whittaker tail of unit ANC (`AnalyticTail`), M = √(4π) O_0. Before the wiring the engine had its own Numerov
+solver for it; the library's general `ZeroRangeOrbitalIntegral` (waves matched at the last node, interpolated at βr)
+then gave, for the case `optical` of `tests/reference/thm_distortion_test.cpp` (¹²C(¹⁴N,d) at 30 MeV, x = ¹²C,
+E = 1.0 MeV, QF direction, Woods–Saxon potentials in both channels; our constants):
 
 | | |M|² (fm³ in the engine's units) |
 |---|---|
-| engine (`thm_distortion_test -v`, build of this branch) | 2.705443758408 × 10⁻⁴ |
-| this library, h = 0.01 fm, l ≤ 40 | 2.705443507050 × 10⁻⁴ (−9 × 10⁻⁸) |
-| this library, h = 0.005 fm | 2.705444832817 × 10⁻⁴ (+4.0 × 10⁻⁷) |
+| engine before the wiring (`thm_distortion_test -v`) | 2.705443758408 × 10⁻⁴ |
+| `ZeroRangeOrbitalIntegral`, h = 0.01 fm, l ≤ 40 | 2.705443507050 × 10⁻⁴ (−9 × 10⁻⁸) |
+| the same, h = 0.005 fm | 2.705444832817 × 10⁻⁴ (+4.0 × 10⁻⁷) |
+| `ZeroRangeWeightSum` (the wired engine, §24) | 2.705443758372 × 10⁻⁴ (−1.3 × 10⁻¹¹) |
 | the test's mpmath/scipy reference (older ħc, u) | 2.705453160181 × 10⁻⁴ |
 
-The library covers the same integral; the replacement needs no new physics, only the THM kinematics (k_sF, k_aA and
-their angle) from the engine, which stay with the THM observable of Phase 5. Scratch driver:
-`work/dwba/drivers/engine_m.cpp` (not in the repository).
+The wired engine solves the waves on the engine's grids (βh for a + A, no interpolation), matches each beyond its
+turning point and stops the sum by the same bound, so it reproduces the old numbers to 10⁻⁸ or better (§24.5);
+`ZeroRangeOrbitalIntegral` stays the general (any l_F, any c_i, c_f) form, checked against FRESCO.
 
 ## 14. Scattering states and bins of x + A
 
@@ -844,21 +846,21 @@ its factorisation and the energy grid stay with the engine (they serve the HOES 
 
 ### 24.3 Grid and accuracy
 
-Named fields of `ZeroRangeWeightRequest` (`ZeroRange.h`), with the values that reproduce the engine's numbers:
+Named fields (`ZeroRangeWeightRequest` of `ZeroRangeWeight.h`; the step and the end are members of `ThmDistortion`:
+`maxStep`, `phasePerStep`, `stepKappa`, `tailKappa`), with the values that reproduce the engine's numbers:
 
 | Field | Value | Meaning |
 |---|---|---|
 | `step_fm` | the engine's h: 0.02 fm, or less so that k_local h ≤ 0.1 in both channels (β h for a + A) and h ≤ 0.2/κ; snapped so that r_min is a node | the overlap's grid; the exit waves on it, the entrance waves on β h |
 | `end_fm` | r_min + 50/κ, an even number of steps after r_min | the last node of the radial integrals |
-| `matching_quarter_wavelengths`, `matching_min_fm` | 2, 1 fm | a wave is matched at max(stored range, potential range, turning point) + max(2 × quarter wavelength, 1 fm) and a quarter wavelength (≥ 2 steps) inside |
-| `potential_range` | R + 12 a of the largest term, and RC | beyond it the potential is point Coulomb (terms below e^{−12}) |
+| `matching.quarter_wavelengths`, `matching.min_fm` | 2, 1 fm | a wave is matched at max(stored range, potential range, turning point) + max(2 × quarter wavelength, 1 fm) and a quarter wavelength (≥ 2 steps) inside |
+| (`RadialChannel::potential_range_fm`) | R + 12 a of the largest term, and RC | beyond it the potential is taken as point Coulomb (terms below e^{−12}) |
 | `entrance_cut` | 1e-17 | entrance waves until (2l+1) ∫ |φ u_l| falls below this times its largest value |
 | `sum_tolerance` | 1e-13 | the sum stops once the bound on the terms left is below this times the smallest |sum| |
 | `extra_partial_waves` | 0 | terms added after the stop (a refinement) |
 | `l_cap`, `max_megabytes` | 400, 512 | refusals |
 
-The effect of refining each by two on the cases of `tests/reference/thm_distortion_test.cpp` and of the waves of
-`thm_dw_vertex_test.cpp` is in §24.5 (recorded after the wiring).
+The effect of refining each by two on the cases of `tests/reference/thm_distortion_test.cpp` is in §24.5.
 
 ### 24.4 The global optical sets
 
@@ -870,3 +872,40 @@ or an independent code's table in front of the author, and a test. Test:
 `physics/tests/transfer_global_optical_test.cpp` (the values of `tests/reference/thm_optical_reference.py`: RIPL-3
 and FRONT21). The engine maps `opticalAA=<name>` and `:extrapolate` onto the table (`ThmExperiment.cpp`,
 `ThmDistortion.cpp`); the ten numbers in its reports are `RadiusOf` of the row's radii.
+
+### 24.5 Record: what moved, convergence, speed
+
+Every quantity the THM unit tests print, old engine (base build) against the wired one (`-v` output of each):
+
+| Test | Quantities | largest relative change | rms |
+|---|---|---|---|
+| `thm_distortion_test` (\|M\|², M_PW, R, the weight) | 82 | 2.9 × 10⁻⁹ (M of the ³He plane-wave case: the plane waves are now exact) | 7.4 × 10⁻¹⁰ |
+| `thm_optical_test` (σ/σ_R d + ⁴⁰Ca, \|M\|²) | 14 | 9.1 × 10⁻⁹ (σ/σ_R at 78°) | 3.0 × 10⁻⁹ |
+| `thm_dw_vertex_test` (Gram entries, the vertex) | 644 | 6.7 × 10⁻¹⁰ | 4.1 × 10⁻¹¹ |
+
+All below 10⁻⁷, so they pass the rule for moved numbers without a refined old engine; no golden value was changed.
+No project of the test tree has `distortion=` or `vertexModel=dw`: the tree is identical file for file.
+
+Refinement of the wired engine (`ThmDistortion` with each setting refined, relative change of |M|²):
+
+| Case | E (MeV) | h (fm) | \|M\|² | h/2 | r_end × 2 | matching margin × 2 | l + 20, cut 1e-20 | h/4, r_end × 1.5, margin × 3, l + 20 |
+|---|---|---|---|---|---|---|---|---|
+| c12_qf (Coulomb) | 0.8 | 0.02 | 4.397970364797e-10 | 4.3e-9 | 2.0e-10 | −4.3e-11 | 0 | 4.8e-9 |
+| c12_rmin (r_min 3 fm) | 1.2 | 0.02 | 1.884942444374e-10 | 7.9e-11 | 2.0e-10 | 4.1e-11 | 0 | −2.7e-11 |
+| optical | 1.0 | 0.02 | 2.705443758372e-4 | 3.4e-6 | −3.4e-6 | −3.2e-6 | 0 | 4.3e-7 |
+| he3_qf (Coulomb, l ≤ 78) | 0.6 | 0.02 | 3.425575791651e+2 | −5.3e-9 | 3.2e-10 | 1.8e-11 | 1.4e-14 | −5.7e-9 |
+
+With an optical potential two errors of 3 × 10⁻⁶ cancel to 4 × 10⁻⁷: the step, and the matching just beyond R + 12a
+(r_end moves it for a + A, whose stored range β r_end is short). The old engine had both (the same rule). An
+independent check through pyazr (`thm_distortion`, ¹⁸O(³He,α¹⁵N)d at 115 MeV, E = 0.45, 0.6, 0.75 MeV) against a
+direct call of the library from a scratch driver at h = 0.005 and 0.0025 fm (`work/thmwire/indep/`): Coulomb 5.4–6.0
+× 10⁻⁹, an optical case (V = 150 MeV in a + A) 4.7–5.0 × 10⁻⁷, the converged values agreeing to 2 × 10⁻⁹. No Frescox
+deck computes this prior-form weight; the closest is the zero-range ¹²C(⁶Li,d) case (§9), against which the new sum
+(with c_i = 1, c_f = α) is tested to 6.3 × 10⁻⁵ (`transfer_zero_range_weight`).
+
+Speed (instructions in user space, one thread; the scratch driver `work/thmwire/indep/timing.cpp` built against the
+base and this branch): the set-up of R(E) −10 to −30 % (the ³He case −83 %), an evaluation of M −20 % (Coulomb),
+−50 % (optical), −84 % (³He, l ≤ 78: the potential is tabulated once per energy instead of per l). Whole checks
+(`perf stat` of `tests/<dir>/check.sh` with every child, base → this branch): `thm_distortion` 1.306e12 → 2.588e11
+(−80 %), `thm_fit` 9.870e11 → 2.874e11 (−71 %), `thm_dw_vertex` 3.474e11 → 3.231e11 (−7 %); `18O_p_a_thm` (no
+distortion) +0.004 to +0.009 % in the three bases.

@@ -231,7 +231,10 @@ Gate: thread-count independence by construction; memory one problem regardless o
 - [x] `physics/transfer`, second part (`transfer.md` §14–§18; branch `feature/upgrade-7-transfer-2`): scattering
       states and FRESCO's bins of x + A, the transfer to them (finite and zero range), d²σ/dΩ dE and the narrow-bin
       limit, the interior part against the level function, the prior form and the remnants.
-- [ ] Global optical sets; the wiring into the THM observable (after Phase 5).
+- [x] Global optical sets: one table of the library (`GlobalOptical.h`; branch `feature/upgrade-7-thm-wiring`).
+- [ ] The wiring into the THM observable: the distortion factor R(E) and the waves of the DW vertex call the library
+      (done, `transfer.md` §24); left: the DW vertex's source projection S_lm(a) as a library function and the
+      vertex quadrature moved (§24.2: `EntranceVertex` is not the engine's surface-only vertex).
 - [x] Validation, first part: plane-wave limit to 1e-6; FRESCO benchmarks for the d and ⁶Li Trojan horses to a bound
       state (¹⁵N(d,n)¹⁶O, ¹²C(⁶Li,d)¹⁶O: < 0.2 %), committed with inputs and outputs (`physics/tests/data/fresco`).
 - [x] Validation, continuum: FRESCO bins for ¹⁵N(d,n) (non-resonant, narrow and wide resonance, finite range: ≤ 0.5 %),
