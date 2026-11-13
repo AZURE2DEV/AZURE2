@@ -395,6 +395,26 @@ placement at narrow resonances read the branchings as widths in eV, but only int
 tested (`tests/gamma_decay/check.sh`, `tests/pyazr/gamma_decay_test.py`); fits in the CLI and the MCMC in amplitudes
 were never affected.
 
+## The centre of a prior is the number written (2026-11-13)
+
+A fitted number of a format-3 project is written `<value> fit prior <centre> <width>`. For norms and the constant
+energy shift the program used the centre written; for the other kinds it did not. The abundance of an isotope, the
+`isotope_sum`, the screening potential, the Doppler temperature, a transmission sample's thickness, the sqrt(E) shift
+and the shift function's parameters measured the prior from the start value (or from 0, or from 1 for the sum)
+without a word; the areal density of a target, the stopping scale and a kernel's parameter (the rectangular width)
+refused a centre different from the value. Since format 3 (2026-11-10) this cost the prior to anyone who continued a
+fit from its fitted values written into the project, which is what pyazr's `save_fit` writes: the fitted value with
+the original prior. A fit continued so had no prior on those numbers, and `save_fit`, which checks its own result,
+refused it after any fit with a free abundance or a free areal density. The program's own way of continuing a fit (its
+`param.sav` read back) kept the centre of the project and was not affected. Now the centre written is the centre for
+every kind, one rule (`parameter_kinds.md` section 4): a start away from the centre pays its prior from the first
+evaluation. No project of the tree had a centre different from its value where it mattered, so no number of the tree
+moved. Found with it and mended: `save_fit` did not write a fitted areal density, Doppler temperature, screening
+potential or sample thickness back into the project at all (it kept the old value), which also made it refuse its own
+result. The old AZURE2 (`origin/dev`) has no centre to drop: its `<abundances>` line is `Z A value vary sigma` and the
+prior is centred on the value on the line, so a user who copies fitted abundances into that line moves the prior with
+them; through `param.sav` it was right.
+
 ## What is in work and what comes next
 
 Merged in the night of 2026-11-12, each after the whole verification: the

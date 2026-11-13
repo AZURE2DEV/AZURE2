@@ -111,21 +111,8 @@ int AZUREAPI::Initialize() {
     cacheFile = configure().outputdir + "intEC_cache.extrap";
   }
 
-  // Initialize() is called again on every mode switch, so the previous model
-  // has to go or it is leaked.  (This used to crash: the constructor left
-  // data_/compound_ uninitialized, so the first call deleted a garbage
-  // pointer.  They are null-initialized now.)  Same order as SetRadius.
-  if (compound_ != nullptr) {
-    delete compound_;
-    compound_ = nullptr;
-  }
-  if (data_ != nullptr) {
-    delete data_;
-    data_ = nullptr;
-  }
-
-  data_ = new WorkingCopy();
-  compound_ = new CNuc();
+  // Initialize() is called again on every mode switch: a new model, as RebuildImpl makes.
+  ReplaceModel();
 
   // With the session's radius overrides: Initialize runs again on every mode switch.
   if (compound()->Fill(configure(), radiusOverrides_) == -1) {
@@ -702,12 +689,20 @@ bool AZUREAPI::Rebuild() {
 // Shared body of SetRadius and Rebuild.  Every radius override of the session
 // goes to CNuc::Fill, so a rebuild for one reason (a potential change, another
 // pair's radius) does not undo an earlier SetRadius.
-bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
-  if (compound_ != nullptr) delete compound_;
-  if (data_ != nullptr) delete data_;
+// The one place compound_ and data_ are replaced (Initialize, RebuildImpl): with them goes everything derived from
+// them and built lazily (the nuisance priors' manager and its parameter list), so it is built again for the new model.
+void AZUREAPI::ReplaceModel() {
+  delete compound_;
+  delete data_;
+  data_ = new WorkingCopy();
+  compound_ = new CNuc();
+  nuisance_.reset();
+  nuisanceParams_.reset();
+  nuisanceRead_ = false;
+}
 
-  compound_ = new CNuc;
-  data_ = new WorkingCopy;
+bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
+  ReplaceModel();
 
   if (compound()->Fill(configure(), radii) == -1) return false;
   if (compound()->NumPairs() == 0 || compound()->NumJGroups() == 0) return false;
@@ -1529,7 +1524,7 @@ vector_r AZUREAPI::GetParameterInfo() const {
     nuc->AbundanceOf(k, sample, nucleusIndex);
     const CompoundNucleus *nucleus = nuc->GetNucleus(nucleusIndex);
     const SampleAbundance &e = nuc->GetSample(sample)->entries[nucleusIndex - 1];
-    push(6, nucleus->Z, -1, 0, nucleus->A, 0, sample, -1, -1, -1, -1, -1, e.sigma, -1);
+    push(6, nucleus->Z, -1, 0, nucleus->A, e.nominal, sample, -1, -1, -1, -1, -1, e.sigma, -1);  // 5: prior centre
   }
 
   // Normalization parameters: one per segment with IsVaryNorm(), except a
@@ -1575,7 +1570,7 @@ vector_r AZUREAPI::GetParameterInfo() const {
   // the largest density the sub-point grids span in field 8 (the S field).
   for (int k = 1; k <= data()->Data().NumDensityParams(); ++k) {
     const TargetEffect *te = data()->Data().GetDensityTargetEffect(k);
-    push(8, -1, -1, 0, -1, te->GetDensityNominal(), data()->Data().GetDensityEffect(k), -1, te->GetLayoutDensity(), -1, -1, -1,
+    push(8, -1, -1, 0, -1, te->GetDensityCentre(), data()->Data().GetDensityEffect(k), -1, te->GetLayoutDensity(), -1, -1, -1,
          te->GetDensitySigma(), -1);
   }
 
@@ -1584,7 +1579,7 @@ vector_r AZUREAPI::GetParameterInfo() const {
   // sub-point grids span) in field 8 (the S field).
   for (int k = 1; k <= data()->Data().NumDopplerParams(); ++k) {
     const TargetEffect *te = data()->Data().GetDopplerTargetEffect(k);
-    push(9, -1, -1, 0, -1, te->GetDopplerNominal(), data()->Data().GetDopplerEffect(k), -1, te->GetDopplerLayoutTemperature(),
+    push(9, -1, -1, 0, -1, te->GetDopplerCentre(), data()->Data().GetDopplerEffect(k), -1, te->GetDopplerLayoutTemperature(),
          -1, -1, -1, te->GetDopplerSigma(), -1);
   }
 
@@ -1596,7 +1591,7 @@ vector_r AZUREAPI::GetParameterInfo() const {
     const Segment *seg = data()->Data().GetSegment(data()->Data().GetThicknessSegment(k));
     const bool follower = seg->IsThicknessGroupFollower();
     const double leaderKey = follower ? data()->Data().GetSegments()[seg->GetThicknessLeaderPos()].GetSegmentKey() : -1;
-    push(10, -1, -1, 0, -1, seg->GetNominalThickness(), seg->IsYield() ? 1 : 0, leaderKey, -1, -1, -1,
+    push(10, -1, -1, 0, -1, seg->GetThicknessCentre(), seg->IsYield() ? 1 : 0, leaderKey, -1, -1, -1,
          seg->GetSegmentKey(), follower ? 0.0 : seg->GetThicknessSigma(), -1);
   }
 
@@ -1615,10 +1610,10 @@ vector_r AZUREAPI::GetParameterInfo() const {
     }
   }
 
-  // Apparatus parameters, last (type 12, ApparatusParameters.h): field 6 the first target effect, 5 the start value, 14 the prior sigma (0 = none), 8 the layout value.
+  // Apparatus parameters, last (type 12, ApparatusParameters.h): fields 6 first effect, 5 prior centre, 14 sigma, 8 layout.
   for (int k = 1; k <= data()->Data().NumApparatusParams(); ++k) {
     const ApparatusDeclaration &d = data()->Data().GetApparatusParam(k).declaration;
-    push(12, -1, -1, 0, -1, d.nominal, data()->Data().GetApparatusParam(k).lead, -1, d.layout, -1, -1, -1, d.vary ? d.sigma : 0.0, -1);
+    push(12, -1, -1, 0, -1, d.centre, data()->Data().GetApparatusParam(k).lead, -1, d.layout, -1, -1, -1, d.vary ? d.sigma : 0.0, -1);
   }
   return info;
 }

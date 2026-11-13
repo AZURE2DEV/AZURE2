@@ -891,6 +891,13 @@ add_test(NAME pyazr_describe
                  ${CMAKE_CURRENT_SOURCE_DIR}/describe_test.py)
 set_tests_properties(pyazr_describe PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
+# A rebuild (set_channel_radius) drops the nuisance priors' manager built for the old model (AZUREAPI::ReplaceModel):
+# objective, gradient and nuisance term equal a fresh session's at the same radius.
+add_test(NAME pyazr_rebuild_nuisance
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/rebuild_nuisance_test.py)
+set_tests_properties(pyazr_rebuild_nuisance PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
+
 # A test that cannot run its engine part -- numpy, scipy or the compiled
 # _azure2 module missing (pybind11 absent at configure time builds no module),
 # or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so

@@ -173,9 +173,9 @@ int main() {
     const std::string error = azure2::convert::PriorCentresFromOldRows(&rows, d);
     check("centres read", error.empty() && d.items.size() == 2);
     if (d.items.size() == 2) {
-      check("norm centre on the inactive line 2", d.items[1].spec.hasNormCentre && d.items[1].spec.normCentre == 1.25 &&
-                                                      d.items[1].spec.normCentreSource == "segment_2_norm prior_centre 1.25");
-      check("last shift row wins", d.items[0].spec.hasShiftCentre && d.items[0].spec.shiftCentre == 0.004);
+      check("norm centre on the inactive line 2", d.items[1].spec.normCentre.written && d.items[1].spec.normCentre.value == 1.25 &&
+                                                      d.items[1].spec.normCentre.source == "segment_2_norm prior_centre 1.25");
+      check("last shift row wins", d.items[0].spec.shiftCentre.written && d.items[0].spec.shiftCentre.value == 0.004);
     }
     std::istringstream bad("<parameterSettings>\nsegment_3_norm prior_centre 1.0\n</parameterSettings>\n");
     const std::string refused = azure2::convert::PriorCentresFromOldRows(&bad, d);

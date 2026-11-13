@@ -105,7 +105,7 @@ void AddParkPenaltyGradient(CNuc *compound, const Config &configure, GradAccum &
 /*!
  * Gradient of the abundance penalty (CNuc::AbundancePenalty): the prior
  * ((w - w0)/sigma)^2 of every nucleus with a sigma, and the sum-to-one term
- * ((sum w) - 1)^2 / s^2, which couples every abundance through the sum.
+ * ((sum w) - c)^2 / s^2 (c its centre, 1 unless written), which couples every abundance through the sum.
  */
 void AddAbundancePenaltyGradient(CNuc *compound, const Config &configure, GradAccum &accum) {
   if (!compound->HasAbundanceBlock()) return;
@@ -113,7 +113,8 @@ void AddAbundancePenaltyGradient(CNuc *compound, const Config &configure, GradAc
     int sample, nucleus;
     compound->AbundanceOf(k, sample, nucleus);
     const double s = compound->SampleSumSigma(sample, configure.abundanceSumSigma);
-    double g = (s > 0.0) ? 2.0 * (compound->AbundanceSum(sample) - 1.0) / (s * s) : 0.0;
+    const double centre = compound->GetSample(sample)->sumCentre;
+    double g = (s > 0.0) ? 2.0 * (compound->AbundanceSum(sample) - centre) / (s * s) : 0.0;
     const SampleAbundance &e = compound->GetSample(sample)->entries[nucleus - 1];
     if (e.sigma > 0.0 && !e.priorReplaced) g += 2.0 * (e.abundance - e.nominal) / (e.sigma * e.sigma);
     accum.AddAbundance(k, g);

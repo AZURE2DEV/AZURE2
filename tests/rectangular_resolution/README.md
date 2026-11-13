@@ -23,7 +23,7 @@ average of the bare cross section at w = 20 keV (Python, no engine kernel), time
   χ² of both data sets below 0.1 (each is folded with the fitted width);
 - (e) `width 21 keV fit prior 21 0.05`: the objective minus the data's χ² is ((w − 21 keV)/0.05 keV)², and
   `chiSquared.out` prints it as `Total-Kernel-Parameter-Chi-Squared`;
-- (f) the refusals: a prior centred away from the value, `grid_max` below the value, a width 0, no mode, `profiled`,
+- (f) the refusals: `grid_max` below the value, a width 0, no mode, `profiled`,
   the window beside a target.
 - (g) the triangular resolution (`experiment/src/KernelTriangular.cpp`, the drill of the recipe "A fit parameter of
   an apparatus effect"): `models/fit.azr` with `triangular width 14 keV fit` on noise-free data made in the check as

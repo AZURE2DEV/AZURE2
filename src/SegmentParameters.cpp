@@ -101,6 +101,7 @@ bool Segment::OwnsShiftFn() const { return !shiftFnDeclared_.empty(); }
 std::string Segment::GetDeclaredShiftFn() const { return shiftFnDeclared_; }
 const std::vector<double> &Segment::GetNominalShiftFnValues() const { return shiftFnNominal_; }
 const std::vector<double> &Segment::GetShiftFnErrors() const { return shiftFnError_; }
+const std::vector<double> &Segment::GetShiftFnCentres() const { return shiftFnCentre_; }
 bool Segment::IsVaryShiftFn(int j) const { return j >= 0 && j < (int)shiftFnVary_.size() && shiftFnVary_[j]; }
 bool Segment::HasSqrtShiftBlock() const { return hasSqrtShiftBlock_; }
 bool Segment::HasShiftFn() const { return hasShiftFn_; }
@@ -128,21 +129,22 @@ void Segment::InstallShiftFn(SegmentState &state, const Segment &owner, int owne
   state.lastShiftFnValues.assign(n, std::numeric_limits<double>::quiet_NaN());
 }
 
-// Every energy-shift term is penalised from ZERO (no shift): (dE/sigma)^2, (b/sigma)^2, (a_j/sigma)^2.  The value
-// on the segment line is only the starting value.  Before 2026-10-25 the penalty was measured from that value, so
-// a refit seeded from an earlier fit's shifts carried those shifts as its prior centre (DeBoer: "It should measure
-// the penalty from 0").  The normalization penalty is unchanged (measured from the nominal norm).  On thm an
-// explicit "segment_N_energy_shift prior_centre c" row of <parameterSettings> moves the constant term's centre
-// to c (GetNominalEnergyShift); without one it is 0, as on dev.
+// Every energy-shift term is penalised from the centre of its prior, ((dE - c)/sigma)^2, ((b - c_b)/sigma)^2,
+// ((a_j - c_j)/sigma)^2, with the centre as written and 0 where none is written (an old line; DeBoer: "It should
+// measure the penalty from 0").  The value on the line is only the start (docs/upgrade/parameter_kinds.md section 4).
+// An old line's "segment_N_energy_shift prior_centre c" row of <parameterSettings> moves the constant term's centre
+// to c (GetNominalEnergyShift).
 void Segment::AddShiftPenalty(const SegmentState &state, double &chi) const {
   // A prior the prior covariance replaces is not added (objective.md D3).
   if (varyEnergyShift_ && energyShiftError_ != 0.0 && !shiftPriorReplaced_)
     chi += pow((state.energyShift - energyShiftNominal_) / energyShiftError_, 2.0);  // nominal: 0 or the prior_centre row
-  if (varyEnergyShiftSqrt_ && energyShiftSqrtError_ != 0.0 && !shiftSqrtPriorReplaced_) chi += pow(state.energyShiftSqrt / energyShiftSqrtError_, 2.0);
+  if (varyEnergyShiftSqrt_ && energyShiftSqrtError_ != 0.0 && !shiftSqrtPriorReplaced_)
+    chi += pow((state.energyShiftSqrt - energyShiftSqrtCentre_) / energyShiftSqrtError_, 2.0);
   // The shift function's parameters are penalised once, on the segment that owns them.
   if (OwnsShiftFn() && hasShiftFn_)
     for (int j = 0; j < (int)state.shiftFnValues.size(); j++)
-      if (shiftFnVary_[j] && shiftFnError_[j] != 0.0 && !IsShiftFnPriorReplaced(j)) chi += pow(state.shiftFnValues[j] / shiftFnError_[j], 2.0);
+      if (shiftFnVary_[j] && shiftFnError_[j] != 0.0 && !IsShiftFnPriorReplaced(j))
+        chi += pow((state.shiftFnValues[j] - shiftFnCentre_[j]) / shiftFnError_[j], 2.0);
 }
 
 void Segment::ShiftPenaltyParts(const SegmentState &state, double &constant, double &sqrtTerm, double &function) const {
@@ -150,10 +152,10 @@ void Segment::ShiftPenaltyParts(const SegmentState &state, double &constant, dou
   if (varyEnergyShift_ && energyShiftError_ != 0.0 && !shiftPriorReplaced_)
     constant = pow((state.energyShift - energyShiftNominal_) / energyShiftError_, 2.0);
   if (varyEnergyShiftSqrt_ && energyShiftSqrtError_ != 0.0 && !shiftSqrtPriorReplaced_)
-    sqrtTerm = pow(state.energyShiftSqrt / energyShiftSqrtError_, 2.0);
+    sqrtTerm = pow((state.energyShiftSqrt - energyShiftSqrtCentre_) / energyShiftSqrtError_, 2.0);
   if (OwnsShiftFn() && hasShiftFn_)
     for (int j = 0; j < (int)state.shiftFnValues.size(); j++)
       if (shiftFnVary_[j] && shiftFnError_[j] != 0.0 && !IsShiftFnPriorReplaced(j))
-        function += pow(state.shiftFnValues[j] / shiftFnError_[j], 2.0);
+        function += pow((state.shiftFnValues[j] - shiftFnCentre_[j]) / shiftFnError_[j], 2.0);
 }
 
