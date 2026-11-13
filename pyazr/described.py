@@ -4,7 +4,7 @@
   the stopping and mass data in use, the thread count.
 - :func:`kinds` (``pyazr.kinds()``): the record kinds, data kinds (quantities), parameter kinds, session options,
   bound physics functions and error classes.  Every table is read from the engine's own tables at the first call
-  (the schema of ``AZURE2 --schema``, ``ParamKindTable``, the binding's option table and the names it binds); none is
+  (the schema of ``AZURE2 --schema``, ``ParamKindTable``, the binding's option and physics tables); none is
   written a second time here.
 - :func:`describe_session` (``pyazr.azure2.describe()``): what one session holds.
 - The data sets and extrapolations of a format-3 project as the engine built them (:class:`DescribedDataset`, ...):
@@ -295,16 +295,15 @@ def _build_kinds():
         value = getattr(defaults, row["name"])
         options[row["keyword"]] = {"engine_name": row["name"], "type": type(value).__name__, "default": value,
                                    "flag": row["flag"], "negation": row["negation"], "doc": row["doc"]}
-    physics = {}
-    for name in engine.physics_functions:
-        obj = getattr(engine, name)
-        members = ([(f"{name}.{n}", getattr(obj, n)) for n in dir(obj)
-                    if not n.startswith("_") and callable(getattr(obj, n))] if type(obj).__name__ == "module"
-                   else [(name, obj)])
-        for full, fn in members:
+    # one entry per row of the binding's physics table (api/src/pybind_physics.cpp); pyazr.physics is built from it
+    physics = {row["name"]: row for row in engine.physics_functions()}
+    stopping = {}
+    for name in dir(engine.stopping):
+        fn = getattr(engine.stopping, name)
+        if not name.startswith("_") and callable(fn):
             doc = (getattr(fn, "__doc__", "") or "").strip().splitlines()
-            physics[full] = {"signature": doc[0] if doc else full,
-                             "doc": " ".join(line.strip() for line in doc[1:] if line.strip())}
+            stopping[name] = {"signature": doc[0] if doc else name,
+                              "doc": " ".join(line.strip() for line in doc[1:] if line.strip())}
     error_classes = {}
     for name in errors.__all__:
         cls = getattr(errors, name)
@@ -313,7 +312,8 @@ def _build_kinds():
                                    "doc": _first_line(cls.__doc__)}
     error_classes["EngineError"] = {"same_as": "AZURE2Error", "doc": _first_line(errors.AZURE2Error.__doc__)}
     return {"schema_version": schema.get("schema_version", ""), "records": records, "data": data,
-            "parameters": parameters, "options": options, "physics": physics, "units": schema.get("units", {}),
+            "parameters": parameters, "options": options, "physics": physics, "stopping": stopping,
+            "units": schema.get("units", {}),
             "dimensions": schema.get("dimensions", {}), "errors": error_classes}
 
 
@@ -331,13 +331,16 @@ def kinds():
       ``owner`` (the fields that say what it belongs to), own_prior, segment_field, vary_from_project, doc;
     - ``options``: the session options by their keyword of :class:`pyazr.azure2`: type, default, the program's
       ``flag`` and ``negation``, doc;
-    - ``physics``: the physics functions the compiled module binds (``_azure2.<name>``; ``stopping.<name>`` in
-      ``_azure2.stopping``): signature and doc, as the binding states them;
+    - ``physics``: the rows of the binding's physics table, by name (:mod:`pyazr.physics` has one function per row):
+      summary, doc, library (the C++ function called), axis (the argument a plot puts on its horizontal axis),
+      arguments (name, unit, doc, kind, domain, lower, upper, lower_open, upper_open, choices, default) and returns
+      (name, unit, doc);
+    - ``stopping``: the stopping functions (``_azure2.stopping``, :mod:`pyazr.stopping`): signature and doc;
     - ``errors``: pyazr's error classes with their bases;
     - ``units``, ``dimensions``: the unit table; ``schema_version``.
 
     Read from the engine's tables at the first call (``AZURE2 --schema``, the parameter-kind table, the binding's
-    option table, the names the binding registers); a new row there appears here without an edit of Python.  Each
+    option table, the binding's physics table); a new row there appears here without an edit of Python.  Each
     call returns a fresh copy.
     """
     global _KINDS

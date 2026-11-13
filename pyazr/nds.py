@@ -848,14 +848,14 @@ def sfactor_to_cross_section(S, E_cm_kev, z1, z2, m1_u, m2_u):
 
     ``S`` in b keV, ``E_cm_kev`` in keV (c.m.), ``z1``/``z2`` the charges and ``m1_u``/``m2_u`` the atomic masses (u)
     of the entrance pair, as in the project's ``<levels>``.  The factor is the engine's
-    (``_azure2.sfactor_conversion``, physics/AstrophysicalFactor.h, the one used by ``quantity sfactor``): mass
+    (``pyazr.physics.sfactor_conversion``, physics/AstrophysicalFactor.h, the one used by ``quantity sfactor``): mass
     numbers in place of the masses change sigma by exp(2 pi Delta eta) - 1 (+2.9 % for 3He + alpha at 93 keV, +6.7 %
     for p + 12C at 100 keV).  For a fit, give the data as ``quantity sfactor`` (:meth:`ExforData.to_sfactor_dataset`)
     and let the engine convert the model instead.
     """
-    from . import _azure2
+    from .physics import sfactor_conversion
     E = np.atleast_1d(np.asarray(E_cm_kev, float)) / 1e3
-    conv = _azure2.sfactor_conversion(int(z1), int(z2), float(m1_u), float(m2_u), E)  # MeV
+    conv = sfactor_conversion(int(z1), int(z2), float(m1_u), float(m2_u), E)  # MeV
     out = np.asarray(S, float) / 1e3 / (conv if np.ndim(E_cm_kev) else conv[0])
     return out if np.ndim(out) else float(out)
 

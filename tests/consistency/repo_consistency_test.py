@@ -971,6 +971,25 @@ if sorted(k for _, k, _ in state_scan.scan_text(_planted)) != ["mutable", "names
     problems.append("check 38: a planted namespace variable, static, thread_local or mutable member is not caught; "
                     "update tests/consistency/state_scan.py")
 
+# 39. Every physics function has a test (docs/upgrade/pyazr3.md section 2.7): each row of the binding's physics table
+#     (api/src/pybind_physics.cpp, `t.push_back({"<name>", ...`) is named by a test as `row_test("<name>"` in a file
+#     under tests/; a row without one, or a row_test of a name the table does not have, fails.
+_rows = re.findall(r'^\s*t\.push_back\(\{"(\w+)"', read("api/src/pybind_physics.cpp"), re.M)
+_row_tests = set()
+for _dir, _, _files in os.walk(os.path.join(ROOT, "tests")):
+    for _name in _files:
+        if _name.endswith(".py"):
+            with open(os.path.join(_dir, _name), errors="replace") as _fh:
+                _row_tests |= set(re.findall(r'\brow_test\("(\w+)"', _fh.read()))
+if not _rows:
+    problems.append("api/src/pybind_physics.cpp: no row of the physics table found (check 39: the pattern changed?)")
+for _r in _rows:
+    if _r not in _row_tests:
+        problems.append(f"api/src/pybind_physics.cpp: the physics function {_r} has no test (check 39): add "
+                        f"row_test(\"{_r}\", ...) to tests/pyazr/physics_table_test.py")
+for _r in sorted(_row_tests - set(_rows)):
+    problems.append(f"tests: row_test(\"{_r}\") names no row of api/src/pybind_physics.cpp (check 39)")
+
 if problems:
     for p in problems:
         print("FAIL", p)
@@ -979,4 +998,4 @@ if problems:
 print(f"repository consistent: {len(flags)} CLI flags, test registration, check.sh modes, pyazr version and exports, "
       f"format-3 reference page, {len(declared)} diagnostic codes, file sizes, one model pass and residual, one calculation plan, "
       f"no machine paths, no old data class names, no old section in the engine, reference leaves by one predicate, "
-      f"the sharing key's term settings, {len(_allowed)} allowed state rows")
+      f"the sharing key's term settings, {len(_allowed)} allowed state rows, {len(_rows)} physics rows tested")

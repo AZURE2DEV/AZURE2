@@ -29,7 +29,7 @@ except ImportError as err:                            # pragma: no cover
     ) from err
 
 from .errors import ParameterError, ParameterKeyError, close_names, listed
-from . import session_checks
+from . import session_checks, session_physics
 from .parameters import (Pair, PairSet, Parameter,
                          ParameterSet)
 from .project import require_format3
@@ -75,7 +75,7 @@ class ScatteringLength(NamedTuple):
         return text + ("+" if self.parity > 0 else "-")
 
 
-class azure2(_HybridPotentials):
+class azure2(_HybridPotentials, session_physics.SessionPhysics):
     """One calculation session: a format-3 project set up by the engine in this interpreter (options: see __init__).
 
     Parameters: :attr:`params_rwa` (the free vector, start values, engine order), :attr:`parameters` (what each entry

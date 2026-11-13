@@ -1,69 +1,165 @@
-"""Physics functions of the engine as free functions on arrays (docs/upgrade/ARCHITECTURE.md section 8).
+"""Physics functions of the engine's libraries as free functions on arrays (docs/upgrade/pyazr3.md section 2.7).
 
-Each one calls the C++ function of ``physics/`` through ``_azure2`` element-wise; no session or project is needed.
+One Python function per row of the binding's table (``api/src/pybind_physics.cpp``), built here at import from
+``_azure2.physics_functions()``: its signature, docstring, units and domains are the row's, and each call evaluates
+the row's library function element by element in C++ (no session, no project, no physics in Python).
+
+Calling convention, the same for every function:
+
+- arguments broadcast against each other (numpy rules); scalars in give scalars out, arrays give arrays of the
+  broadcast shape;
+- a function with one returned field returns it (a float or an array); one with several returns a dict of them;
+- ``errors="raise"`` (the default): an element outside the domain raises :class:`pyazr.DomainError` naming the
+  argument, its value, the element and the allowed range; a computation that does not converge raises
+  :class:`pyazr.EngineError`;
+- ``errors="mask"``: nothing is raised; such elements are NaN and the call returns ``(result, status)``, ``status`` an
+  integer array of the broadcast shape: 0 computed, k > 0 argument k (1-based, in the order of the signature) outside
+  its domain, -2 the arguments together outside the domain (each in its own: a lab angle beyond the kinematic
+  maximum, an uncharged pair), -1 not converged.  :func:`status_text` turns codes into words.
+
+``functions`` maps each name to its function; ``table()`` is the rows as plain data (``pyazr.kinds()["physics"]``
+is the same), with the argument a plot puts on its horizontal axis (``axis``) and every returned field's unit.
+A new function is a row of the binding's table and a test naming it (``pyazr/CLAUDE.md``, "Add a physics function").
 """
+import copy
+import inspect
+
 import numpy as np
 
 from .azure2 import _azure2
 from .errors import DomainError, EngineError
 
-__all__ = ["whittaker_wave"]
+STATUS = {0: "computed", -1: "not converged", -2: "the arguments together are outside the domain"}
+_ROWS = {row["name"]: row for row in _azure2.physics_functions()}
 
-def whittaker_wave(l, eta_b, rho):
-    """Whittaker function of a bound channel, W_l(rho) = W_{-eta_b, l+1/2}(2 rho).
 
-    The decaying solution of u'' - [1 + 2 eta_b/rho + l(l+1)/rho^2] u = 0, normalized so that
-    W ~ exp(-rho) (2 rho)^(-eta_b) for large rho (unit ANC), computed without GSL
-    (docs/upgrade/coulomb.md section 1.4; relative error below 1e-12 against mpmath on l = 0-10,
-    eta_b = 0-1000, rho = 1e-4-200).  In dimensionless variables, unlike :func:`pyazr.whittaker`, which takes the
-    pair, radius and binding energy (a Python port of the engine's GSL path).
+def table():
+    """The rows of the physics table as plain data: a dict by name of ``summary``, ``doc``, ``library`` (the C++
+    function called), ``axis``, ``arguments`` (name, unit, doc, kind, domain in words, lower, upper, lower_open,
+    upper_open, choices, default) and ``returns`` (name, unit, doc).  A fresh copy at each call."""
+    return copy.deepcopy(_ROWS)
 
-    Parameters
-    ----------
-    l : orbital angular momentum (integer >= 0).
-    eta_b : bound-state Sommerfeld parameter Z1 Z2 e^2 mu / (hbar^2 kappa), >= 0 (dimensionless).
-    rho : kappa r > 0 (dimensionless).  Arrays broadcast against each other.
 
-    Returns
-    -------
-    dict of arrays of the broadcast shape: ``mantissa`` and ``log10_scale`` (W = mantissa * 10**log10_scale, kept
-    apart because W leaves the double range just below a charged threshold), ``log10_W``, ``W`` (0 or inf where W
-    is outside the double range), ``rho_dlog`` (rho W'/W, primes d/drho: the bound-channel shift function at
-    rho = kappa a).
+def status_text(name, status):
+    """Words for status codes of function ``name`` (an int or an array of them): ``"computed"``, ``"e_cm outside
+    its domain (finite > 0)"``, ``"not converged"``, ...  Returns a str or a list of str."""
+    row = _ROWS[name]
 
-    Outside the double range W is returned as 0 or inf in ``W`` by design (``mantissa`` and ``log10_scale`` keep
-    the value); that is not an error.
+    def one(code):
+        code = int(code)
+        if code > 0:
+            arg = row["arguments"][code - 1]
+            return f"{arg['name']} outside its domain ({arg['domain']})"
+        return STATUS.get(code, f"unknown status {code}")
+    return one(status) if np.ndim(status) == 0 else [one(c) for c in np.ravel(status)]
 
-    Raises
-    ------
-    pyazr.DomainError
-        (a ``ValueError``) if l is not an integer in 0-10000, or an element of eta_b is negative or not finite, or of
-        rho not positive and finite (the first such element is named, with the domain).
-    pyazr.EngineError
-        (a ``RuntimeError``) if the computation fails for an element (not seen on the tested range).
-    """
-    L, E, R = np.broadcast_arrays(np.asarray(l), np.asarray(eta_b, float), np.asarray(rho, float))
-    if not np.all(np.equal(np.mod(L, 1), 0)):
-        i = int(np.flatnonzero(~np.equal(np.mod(L, 1), 0).ravel())[0])
-        raise DomainError(f"whittaker_wave: l must be an integer in 0-10000, got {float(L.ravel()[i])!r} at "
-                          f"element {i} (help(pyazr.whittaker_wave))")
-    shape = L.shape
-    res = _azure2.whittaker(L.astype(np.int32).ravel(), E.ravel(), R.ravel())
-    status = np.asarray(res["status"])
-    for code, kind in ((1, DomainError), (2, EngineError)):
-        bad = np.flatnonzero(status == code)
-        if bad.size:
-            i = bad[0]
-            domain = ("; the domain: l an integer in 0-10000, eta_b finite >= 0, rho finite > 0 "
-                      "(help(pyazr.whittaker_wave); pyazr.kinds()['physics']['whittaker'])" if code == 1 else
-                      "; please report it with these arguments")
-            raise kind(f"whittaker_wave: {'invalid argument' if code == 1 else 'computation failed'} at element {i} "
-                       f"(l = {int(L.ravel()[i])}, eta_b = {float(E.ravel()[i])!r}, rho = {float(R.ravel()[i])!r}); "
-                       f"{bad.size} element(s) in all{domain}")
-    mantissa = np.asarray(res["mantissa"], float).reshape(shape)
-    scale = np.asarray(res["log10_scale"]).reshape(shape)
-    log10_W = np.log10(mantissa) + scale
-    with np.errstate(over="ignore", under="ignore"):
-        W = np.power(10.0, log10_W)
-    return {"mantissa": mantissa, "log10_scale": scale, "log10_W": log10_W, "W": W,
-            "rho_dlog": np.asarray(res["rho_dlog"], float).reshape(shape)}
+
+def _value_text(value, unit):
+    return f"{value!r}" + (f" {unit}" if unit else "")
+
+
+def _raise_for(row, status, columns, shape):
+    """The error of the first element whose status is not 0 (columns: the flat arguments)."""
+    name = row["name"]
+    bad = np.flatnonzero(status != 0)
+    i = int(bad[0])
+    code = int(status[i])
+    where = f"element {i}" + (f" (index {np.unravel_index(i, shape)})" if len(shape) > 1 else "")
+    count = f"{bad.size} of {status.size} element(s) are not computed"
+    fix = f"help(pyazr.physics.{name}) gives the domain; errors='mask' returns NaN with a status per element instead"
+    if code > 0:
+        arg = row["arguments"][code - 1]
+        value = float(columns[code - 1][i])
+        if arg["kind"] == "choice":
+            value = arg["choices"][int(value)] if value == int(value) and 0 <= value < len(arg["choices"]) else value
+        raise DomainError(f"{name}: {arg['name']} = {_value_text(value, arg['unit'])} at {where} is outside the "
+                          f"domain; allowed: {arg['name']} {arg['domain']} ({arg['doc']}); {count}.  {fix}.")
+    given = ", ".join(f"{a['name']} = {_value_text(float(columns[k][i]), a['unit'])}"
+                      for k, a in enumerate(row["arguments"]))
+    if code == -2:
+        raise DomainError(f"{name}: the arguments at {where} ({given}) are outside the domain together, though each "
+                          f"is in its own: {row['doc']}  {count}.  {fix}.")
+    raise EngineError(f"{name}: the computation did not converge at {where} ({given}); {count}.  Please report it "
+                      f"with these arguments; errors='mask' gives the other elements.")
+
+
+def _argument_column(row, k, value):
+    """One argument as a float array: a choice by its name, a flag from a bool."""
+    arg = row["arguments"][k]
+    if arg["kind"] == "choice" and isinstance(value, str):
+        if value not in arg["choices"]:
+            raise DomainError(f"{row['name']}: {arg['name']} = {value!r} is not known; allowed: {arg['name']} "
+                              f"{arg['domain']}.  help(pyazr.physics.{row['name']}).")
+        return np.asarray(float(arg["choices"].index(value)))
+    try:
+        return np.asarray(value, dtype=float)
+    except (TypeError, ValueError):
+        raise TypeError(f"{row['name']}: {arg['name']} must be a number or an array of numbers "
+                        f"({arg['unit'] or 'no unit'}, {arg['domain']}), got {type(value).__name__}") from None
+
+
+def _call(row, values, errors):
+    if errors not in ("raise", "mask"):
+        raise ValueError(f"{row['name']}: errors = {errors!r}; allowed: 'raise' (DomainError, EngineError) or 'mask' "
+                         f"(NaN and a status per element)")
+    arrays = [_argument_column(row, k, v) for k, v in enumerate(values)]
+    scalar = all(a.ndim == 0 for a in arrays)
+    broadcast = np.broadcast_arrays(*arrays)
+    shape = broadcast[0].shape
+    columns = [np.ascontiguousarray(a, dtype=float).ravel() for a in broadcast]
+    out, status = _azure2.physics_evaluate(row["name"], columns)
+    if errors == "raise" and np.any(status != 0):
+        _raise_for(row, status, columns, shape)
+    fields = {}
+    for j, ret in enumerate(row["returns"]):
+        fields[ret["name"]] = float(out[j][0]) if scalar else out[j].reshape(shape)
+    result = fields[row["returns"][0]["name"]] if len(fields) == 1 else fields
+    if errors == "mask":
+        return result, (int(status[0]) if scalar else status.reshape(shape))
+    return result
+
+
+def _docstring(row):
+    lines = [row["summary"], "", row["doc"], "", "Parameters", "----------"]
+    for a in row["arguments"]:
+        unit = f", {a['unit']}" if a["unit"] else ""
+        default = f", default {a['default']!r}" if a["default"] is not None else ""
+        lines.append(f"{a['name']} : {a['kind']}{unit}{default}")
+        lines.append(f"    {a['doc']}; domain: {a['domain']}.")
+    lines.append("errors : 'raise' (default) or 'mask'")
+    lines.append("    'mask': NaN outside the domain, and the call returns (result, status) (help(pyazr.physics)).")
+    lines += ["", "Returns", "-------"]
+    if len(row["returns"]) > 1:
+        lines.append("dict of arrays of the broadcast shape (floats for scalar arguments):")
+    for r in row["returns"]:
+        lines.append(f"{r['name']} : {r['unit'] or 'dimensionless'}")
+        lines.append(f"    {r['doc']}")
+    lines += ["", "Raises", "------",
+              "pyazr.DomainError", "    (a ValueError) an element outside the domain, named with its value.",
+              "pyazr.EngineError", "    (a RuntimeError) a computation that does not converge.",
+              "", f"Library: {row['library']} (element-wise in C++ through _azure2.physics_evaluate)."]
+    return "\n".join(lines)
+
+
+def _make(row):
+    params = [inspect.Parameter(a["name"], inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                                default=inspect.Parameter.empty if a["default"] is None else a["default"])
+              for a in row["arguments"]]
+    params.append(inspect.Parameter("errors", inspect.Parameter.KEYWORD_ONLY, default="raise"))
+    signature = inspect.Signature(params)
+
+    def function(*args, **kwargs):
+        bound = signature.bind(*args, **kwargs)
+        bound.apply_defaults()
+        return _call(row, [bound.arguments[a["name"]] for a in row["arguments"]], bound.arguments["errors"])
+
+    function.__name__ = function.__qualname__ = row["name"]
+    function.__module__ = __name__
+    function.__doc__ = _docstring(row)
+    function.__signature__ = signature
+    return function
+
+
+functions = {name: _make(row) for name, row in _ROWS.items()}
+globals().update(functions)
+__all__ = sorted(functions) + ["functions", "table", "status_text", "STATUS"]

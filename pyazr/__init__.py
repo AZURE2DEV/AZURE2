@@ -49,6 +49,7 @@ from .scheme import LevelScheme, SchemeLevel, SchemeChannel
 from .convert import convert_azr, convert_params
 from . import masses
 from . import stopping
+from . import physics
 from .physics import whittaker_wave
 from .outputs import fitted_norms
 # nds also defines a Level, but transform.Level owns the name here; reach the
@@ -89,7 +90,7 @@ __all__ = ["azure2", "convert_azr", "convert_params", "ScatteringLength", "whitt
            "Pair", "PairSet", "Parameter", "ParameterSet", "LevelKey",
            "NuclearPotential",
            "LevelScheme", "SchemeLevel", "SchemeChannel",
-           "masses", "stopping",
+           "masses", "stopping", "physics",
            "fitted_norms",
            "ExforData", "ExforDataset", "GroundState", "Gamma",
            "Reference", "search_exfor", "fetch_exfor", "fetch_levels",
@@ -117,4 +118,4 @@ __all__ = ["azure2", "convert_azr", "convert_params", "ScatteringLength", "whitt
            "Error", "ParameterError", "ParameterKeyError", "ParameterIndexError", "ParameterVectorError",
            "EngineError", "AZURE2Error", "DomainError", "DomainZeroDivision", "SessionClosed", "MissingFile",
            "EngineWarning"]
-__version__ = '3.0.0.dev1'
+__version__ = '3.0.0.dev2'
