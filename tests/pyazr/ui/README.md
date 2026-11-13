@@ -31,7 +31,9 @@ program whose `chiSquared.out` the API's numbers are compared with.
 - `physics_tab_test.py`: what the Physics tab asks of the server: every row plots with its examples and its axis's
   sweep, every element computed; the answer's Python text executed gives the route's arrays bit for bit (every row,
   a masked axis, several values as lines, a list of choices by name, an integer axis); the axis refused with what /
-  allowed / fix; the session's functions as rows, their answer equal to the session's call, their Python text too.
+  allowed / fix; the session's functions as rows, their answer equal to the session's call, their Python text too;
+  the stopping rows: SRIM's citation in every row, answer and Python text, the values bit for bit those of
+  `pyazr.stopping`'s functions, a layer beyond the range status -2, a refused formula 422.
 - `smoke_test.py` (label `browser`): a real server on T1 and T2, headless Chrome runs the page's `#selftest?edit=1`
   (every tab, a level, a data set's form and plot by plotly.js and as a table, a kind without layout hints, a new
   record's form, a width typed in and undone with the button; in the Fit tab a fit run, followed, stopped, accepted
@@ -166,3 +168,10 @@ repository, the file restored after each; every one failed):
 - the page's status line counts what the answer computed: every element counted; fails `smoke_test.py` on T1.
 - every row of the binding has a group, its axis a sweep, every argument a default or an example (a first plot
   without typing): the radius's example removed and the module rebuilt; fails `tests/pyazr/physics_table_test.py`.
+
+Added with the stopping rows (`work/uiphys/inject/inject2.py`, the same way; every one failed):
+
+- the Python text of a stopping row carries SRIM's citation: left out; a stopping choice by name reaches the library
+  as that choice: always the first; each fails `physics_tab_test.py::test_stopping_rows_values_and_citation`.
+- a text argument has its row in `ARGUMENT_KINDS`: the `text` row renamed; fails `node_test.py`.
+- the citation is drawn under a stopping plot: not drawn; fails `smoke_test.py` on T1.

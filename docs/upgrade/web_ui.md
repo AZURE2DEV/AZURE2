@@ -418,7 +418,10 @@ Route → pyazr call: request → response.
   `/api/physics` (`pyazr/ui/physics.py` `SESSION_ROWS`; finding 24) and a call of one answered as `/api/physics/{fn}`
   answers (status -2 where the channel is closed, the Python text opening a session on the project file).
   **Served** (the Physics tab).
-- `POST /api/stopping/{fn}` → `pyazr.stopping.*`: material, ion, energies → arrays.
+- `GET /api/stopping`, `POST /api/stopping/{fn}` → `kinds()["stopping"]`, `pyazr.stopping.evaluate`: the rows of
+  the binding's stopping table (the shape of the physics rows, a text argument `formula` first, SRIM's `citation`)
+  and a call of one, answered as `/api/physics/{fn}` answers, with the citation. **Served** (the same generic
+  handler, `pyazr/ui/physics.py` `TABLES`).
 - `GET /api/sources/exfor`, `/exfor/{id}`, `/ensdf/{nuclide}`, `/masses/{nuclide}` → `pyazr.sources.*` (network
   for EXFOR and ENSDF).
 - `GET /api/files[/{path}]` → the server's listing inside the root: → names; the first rows of a data file.
@@ -883,8 +886,8 @@ adapter, `pyazr/ui/engine.py` (about 250 lines), the only file that changes when
    fitters once pyazr has `fit_with_engine` with progress and stop (decision 8 and finding 2). About 1000 lines.
    Recipes need `Objective` (pyazr step 3; today `objective_and_grad` serves); engine fits need pyazr's call.
 5. **Physics and THM.** `tabs/physics.js` generated from the physics table (pyazr step 4; before it, stopping only),
-   `tabs/thm.js` (today: `set_thm`, the session's THM calls). About 800 lines. **Physics tab, first part, done
-   2026-11-13** (section 11.5).
+   `tabs/thm.js` (today: `set_thm`, the session's THM calls). About 800 lines. **Physics tab done 2026-11-13**
+   (section 11.5, stopping included); THM to come.
 6. **Close-out.** `pyazr ui` as a command (pyazr step 7), static files and plotly in the wheel (pyazr step 8), the
    parity checklist ticked or dropped item by item, the smoke tests in their workflow, `numcmc` and the menus removed
    (Phase 9). About 400 lines and the checklist.
@@ -916,8 +919,8 @@ get, stop, kill, accept). **501, a pyazr call missing**: adding and removing pai
 `kernel`), the level matrix; jobs: the
 engine's MIGRAD and LM and MINOS (`fit_with_engine`), the sampler (`Objective.log_prob`), bands, the rate
 (`Session.reaction_rate`). **501, a later step** (pyazr has the call): system, channel functions, outputs,
-stopping, EXFOR, ENSDF, files, events.  (Served since: a physics function on arrays, the channel functions, the
-session's functions as rows and their calls.)
+EXFOR, ENSDF, files, events.  (Served since: a physics function on arrays, the channel functions, the
+session's functions as rows and their calls, the stopping rows and their calls.)
 
 **Measured on the product** (a server process over HTTP at one thread, `work/uiserver/measure.py`): opening T2 takes
 1.2–1.5 s to the first answer and 1.2–1.8 s more for the first evaluation (worker start, import, session build
@@ -1185,6 +1188,26 @@ the row exists); a choice whose names come from the project (as the session's `p
 them (`fctx` in `tabs/physics.js`). A new table of functions (the stopping rows): one row of `SOURCES` in
 `tabs/physics.js` and a route that answers rows of this shape.
 
+**Stopping, as built (the second part).** The row types of the physics table (`ArgSpec`, `OutSpec`, the domain
+check, their description as data) moved into `api/src/pybind_rows.h`, shared by `pybind_physics.cpp` and
+`pybind_stopping.cpp`; `ArgKind` gained `text` (one string per call, not broadcast). `pybind_stopping.cpp` has a
+table of five rows (`stopping_power`, `range`, `energy_after`, `areal_density_between`, `energy_straggling`): the
+material (`formula` text, `phase` choice, `compound_correction`) and projectile (`z1`, `mass_u`) arguments first,
+then the row's own; each row carries `group` "stopping", SRIM's `citation` and `implementation`. Each adapter calls
+the library function `pyazr.stopping`'s functions call, with the material and projectile made as they make them, so
+the values are theirs bit for bit (tested). A library refusal of one element (a layer at least the range) is status
+-2; a formula the library refuses is a refusal of the request (422). Python: `pyazr.stopping.table()` and
+`evaluate(name, formula, **arguments)`; `kinds()["stopping"]` is the table (it was a signature and a doc per binding
+function). The page lists the rows under "stopping" (one row of `SOURCES`, one row `text` of `ARGUMENT_KINDS`) and
+shows the citation under every stopping plot, in the CSV's first line and in the Python text. Not done: the
+provenance per element (`pyazr.stopping.provenance`) is not shown; user stopping tables of a project are not
+reachable (the rows evaluate SRIM's stopping only).
+
+*Extensibility of stopping*: a new stopping function is one row of `BuildStoppingTable()` in
+`api/src/pybind_stopping.cpp` (its own arguments with unit, domain, example, and a sweep for its axis; returns with
+units; an adapter calling the library); `physics_tab_test.py` plots every row without typing and runs its Python text,
+the node test draws its form; nothing in pyazr, the server or the page.
+
 ## 12. What pyazr 3.0's design lacks for the UI (findings)
 
 None of these changes the decided objects; each is a call or a field to add:
@@ -1278,6 +1301,9 @@ Found while building the Physics tab (step 5):
 25. **A status per element from the session's functions**: `channel_functions` returns `open` and 0 where the
     channel is closed; the tab turns `open` into status -2. Finding 12's remaining items (the level matrix, the
     transfer functions on potentials, structured stopping rows, the rate) stand; its "page code" is built (11.5).
+
+26. **Stopping with the project's own targets**: the stopping rows take a formula; a target of the project (its
+    layers, a user stopping table, a fitted stopping scale) has no call that evaluates its stopping on arrays.
 
 ## 13. Decisions for the PI
 

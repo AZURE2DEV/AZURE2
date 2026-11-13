@@ -2,8 +2,8 @@ The web UI's API
 ================
 
 The web UI of AZURE2 is a server on your machine that holds one project and answers JSON requests; the page in
-the browser is one client of it, a script or an AI agent is another.  This page describes the server as it stands
-today: the API without the page (the design is ``docs/upgrade/web_ui.md``).
+the browser is one client of it, a script or an AI agent is another.  This page describes the server's API (the page
+itself: :doc:`web_interface`; the design is ``docs/upgrade/web_ui.md``).
 
 Starting the server
 -------------------
@@ -41,8 +41,20 @@ What the server keeps
   with progress (``GET /api/jobs/<id>``), a cooperative stop (``/stop``), a kill (``/kill``), a checkpoint of the
   best point, and ``/accept`` to write the best point into the project text.  With a budget of one thread, an
   evaluation asked while a job runs answers 409 with the job's id.
-- Routes that need a pyazr call that does not exist yet (the engine's own fitters, the reaction rate, the physics
-  table, ...) answer 501 naming that call.
+- **Functions on arrays** (the Physics tab's routes; no project needed): ``GET /api/physics`` and ``GET
+  /api/stopping`` list the rows of the engine's physics and stopping tables (``pyazr.kinds()["physics"]``,
+  ``["stopping"]``: arguments with unit, domain, example and sweep, returned fields with units; every stopping row
+  carries SRIM's citation, owed by every use).  ``POST /api/physics/<fn>`` and ``POST /api/stopping/<fn>`` take
+  ``{"arguments": {name: value}}``: a value is a number, a nested list of numbers (broadcast with numpy's rules), a
+  choice by name or a list of names, a text (a stopping row's ``formula``), or an axis ``{"from", "to", "points",
+  "spacing"}`` (``linear``, ``log``, ``integer``) that the server makes with numpy.  The answer: the returned fields
+  as lists, their units, a status per element with the words of each status (an element outside the domain is
+  ``"nan"``, never a refusal), the arguments as used, ``python`` (the pyazr call that makes the same arrays; run it
+  to check) and, for stopping, ``citation``; at most 20000 elements per request.  ``GET /api/session/functions`` and
+  ``POST /api/session/functions/<fn>`` do the same for the session's own functions (``channel_functions`` of a pair
+  of the project), in the session worker.
+- Routes that need a pyazr call that does not exist yet (the engine's own fitters, the reaction rate, the level
+  matrix, ...) answer 501 naming that call.
 
 A session from Python
 ---------------------

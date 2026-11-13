@@ -190,6 +190,16 @@ class Server:
         return call(fn, arguments)
 
     @staticmethod
+    def stopping():
+        import pyazr
+        return pyazr.kinds()["stopping"]
+
+    @staticmethod
+    def stopping_call(fn, **arguments):
+        from .physics import call  # in the server's process, as the physics functions
+        return call(fn, arguments, table="stopping")
+
+    @staticmethod
     def session_functions():
         from .physics import session_rows
         return session_rows()

@@ -37,6 +37,8 @@ export const ARGUMENT_KINDS = {
   flag: { field: (a) => ({ type: "enum", default: a.default,
     values: [{ value: "0", label: "0 (no)" }, { value: "1", label: "1 (yes)" }, { value: "0 1", label: "both" }] }),
   values: (t) => tokenize(t).map(numberOrText) },
+  text: { field: (a) => ({ type: "text", doc: `${a.doc} (one text)` }),
+    values: (t) => [String(t ?? "").trim()].filter((v) => v !== "") },
   pair: { field: (a, ctx) => ({ type: "enum", values: (ctx.pairs || []).map((p) => ({ value: String(p.key),
     label: `${p.key}: ${p.label}` })) }),
   values: (t) => tokenize(t).map(numberOrText) },

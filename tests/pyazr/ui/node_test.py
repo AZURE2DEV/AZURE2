@@ -2,7 +2,7 @@
 description of forms.js, sorting and filtering of tables.js, the revision and error handling of api.js, the plot
 table of plots.js, the Fit tab's rows, job form and progress views of fitting.js, the Physics tab's rules of
 physicsform.js.  The engine's schema, the server's job table and the function tables (the physics rows, the
-session's rows, the bound of a request) are written to files for them (AZURE2_UI_SCHEMA, AZURE2_UI_JOBS,
+stopping rows, the session's rows, the bound of a request) are written to files for them (AZURE2_UI_SCHEMA, AZURE2_UI_JOBS,
 AZURE2_UI_FUNCTIONS).
 
 Needs ``node`` (version 18 or later: ``node --test``) on PATH or named by the environment variable NODE; without it,
@@ -46,7 +46,8 @@ def main():
         functions = os.path.join(tmp, "functions.json")
         from pyazr.ui.physics import MAX_ELEMENTS, session_rows
         with open(functions, "w") as f:
-            json.dump({"tables": [list(pyazr.kinds()["physics"].values()), list(session_rows().values())],
+            json.dump({"tables": [list(pyazr.kinds()["physics"].values()), list(pyazr.kinds()["stopping"].values()),
+                                  list(session_rows().values())],
                        "max_elements": MAX_ELEMENTS}, f)
         env = dict(os.environ, AZURE2_UI_SCHEMA=schema, AZURE2_UI_JOBS=jobs, AZURE2_UI_FUNCTIONS=functions)
         proc = subprocess.run([node, "--test", *tests], env=env, capture_output=True, text=True, timeout=300)

@@ -7,7 +7,9 @@
      route's status is not 0 (every row; a masked axis; several values as lines; a list of choices by name);
   3. the axis {from, to, points, spacing} is made with numpy and refused with what / allowed / fix when it cannot be;
   4. the session's functions: rows of the same shape, the answer equal to the session's own call bit for bit, its
-     Python text (a session opened on the project file) too; one value per argument but the axis.
+     Python text (a session opened on the project file) too; one value per argument but the axis;
+  5. the stopping rows: SRIM's citation in every row, answer and Python text; the values bit for bit those of
+     pyazr.stopping's own functions; a layer beyond the range is status -2; a refused formula 422.
 
 Run as a script (python3 tests/pyazr/ui/physics_tab_test.py) or by ctest (pyazr_ui_physics_tab).
 """
@@ -167,6 +169,53 @@ def test_session_functions(t1):
         "pair": 1, "l": [[0], [1]], "e_cm": {"from": 0.1, "to": 3, "points": 5, "spacing": "linear"}}})
     assert r.status_code == 422 and "one value" in r.json()["allowed"], r.text
     assert t1.post("/api/session/functions/nothing", json={"arguments": {}}).status_code == 404
+
+
+def test_stopping_rows_values_and_citation(t1):
+    """The stopping rows: kinds()["stopping"], each with SRIM's citation; every row plots without typing; the values
+    bit for bit pyazr.stopping's own functions; the citation in the answer and in its Python text."""
+    import numpy as np
+    import pyazr
+    from pyazr import stopping as st
+    rows = t1.get("/api/stopping").json()
+    assert rows == pyazr.kinds()["stopping"] and set(rows) >= {"stopping_power", "range", "energy_after",
+                                                                "areal_density_between", "energy_straggling"}
+    for name, row in rows.items():
+        assert "SRIM" in row["citation"] and row["group"] == "stopping", name
+        r = t1.post(f"/api/stopping/{name}", json={"arguments": first_request(row)})
+        assert r.status_code == 200, (name, r.text)
+        body = r.json()
+        assert sorted({int(c) for c in np.ravel(body["status"])}) == [0], (name, body["status_words"])
+        assert body["citation"] == row["citation"] and f"# cite: {row['citation']}" in body["python"], name
+        check_answer(body)
+    proton = (1, rows["stopping_power"]["arguments"][4]["example"])
+    e = np.geomspace(0.001, 10, 50)
+    body = t1.post("/api/stopping/stopping_power", json={"arguments": {
+        "formula": "Ta2O5", "z1": proton[0], "mass_u": proton[1],
+        "energy": {"from": 0.001, "to": 10, "points": 50, "spacing": "log"}}}).json()
+    direct = st.stopping(st.Material("Ta2O5"), proton, e)
+    for k in ("electronic", "nuclear", "total", "rel_uncertainty"):
+        assert body["returns"][k] == direct[k].tolist(), k
+    body = t1.post("/api/stopping/range", json={"arguments": {"formula": "TiN", "phase": "solid", "z1": 2,
+                                                              "mass_u": 4.0026, "energy": e.tolist()}}).json()
+    assert body["returns"]["range"] == st.range_of(st.Material("TiN", phase="solid"), (2, 4.0026), e).tolist()
+    n = np.linspace(0, 5e18, 11)
+    body = t1.post("/api/stopping/energy_straggling", json={"arguments": {
+        "formula": "C", "z1": 1, "mass_u": proton[1], "energy_in": 0.4, "areal_density": n.tolist(),
+        "beam_sigma": 0.001, "model": "bohr"}}).json()
+    direct = st.straggling(st.Material("C"), proton, 0.4, n, beam_sigma=0.001, model="bohr")
+    for k in ("energy_out", "straggling", "beam", "total"):
+        assert body["returns"][k] == direct[k].tolist(), k
+    # a layer beyond the range: status -2 with its words, NaN; a formula the library refuses: 422
+    body = t1.post("/api/stopping/energy_after", json={"arguments": {
+        "formula": "Ta2O5", "z1": 1, "mass_u": proton[1], "energy_in": 0.1, "areal_density": [1e17, 1e21]}}).json()
+    assert body["status"] == [0, -2] and body["returns"]["energy_out"][1] == "nan", body
+    assert body["returns"]["energy_out"][0] == float(st.energy_after(st.Material("Ta2O5"), proton, 0.1, 1e17))
+    r = t1.post("/api/stopping/range", json={"arguments": {"formula": "Xx3", "z1": 1, "mass_u": 1.0,
+                                                           "energy": 1.0}})
+    assert r.status_code == 422 and r.json()["what"] and r.json()["fix"], r.text
+    assert t1.post("/api/stopping/range", json={"arguments": {"formula": 3, "z1": 1, "mass_u": 1.0,
+                                                              "energy": 1.0}}).status_code == 422
 
 
 if __name__ == "__main__":

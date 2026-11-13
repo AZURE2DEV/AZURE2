@@ -14,6 +14,13 @@ line counts each status with its words; CSV of the arrays as returned; the answe
 the request) shown, copied, saved. The binding's rows gained `group` and, per argument, `example` and `sweep`
 (binding code only, `api/src/pybind_physics.cpp`; no engine number); the row check in `physics_table_test.py`.
 
+**Done, second part** (stopping). The row types moved into `api/src/pybind_rows.h` (shared by the physics and
+stopping tables; `ArgKind::text` added); `pybind_stopping.cpp` has a table of five rows (`stopping_power`, `range`,
+`energy_after`, `areal_density_between`, `energy_straggling`) with SRIM's citation, `_azure2.stopping.functions()`
+and `evaluate()`; `pyazr.stopping.table()` and `evaluate()`; `kinds()["stopping"]` is that table (it was a signature
+and a doc per binding function); `GET`/`POST /api/stopping` served by the physics route's handler; the page lists the
+rows under "stopping" and draws the citation under every stopping plot, in the CSV and the Python text.
+
 **Verified how** (build `work/b-uiphys`, 0 warnings): T1, T2, T3, 13N x 3 bases identical to `tab-t50-1` (tag
 `tab-uiphys-1`, 78 files per basis); the consistency test; `physics_table_test.py`; the UI tests as scripts
 (`physics_tab_test` 4, `physics_routes_test` 6, `routes_consistency_test` 8, `static_test` 9, `node_test` 46 node

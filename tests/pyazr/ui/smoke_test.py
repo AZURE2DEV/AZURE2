@@ -38,7 +38,7 @@ CHROME = os.environ.get("CHROME") or next((shutil.which(n) for n in ("google-chr
 QUIET_PROFILE = ("--disable-extensions", "--disable-component-update", "--disable-background-networking")
 VIEWS = ("project", "nucleus", "nucleus/level/{label}", "nucleus/{record}", "data", "data/{dataset}", "fit", "results",
          "physics", ("physics-masked", "physics/coulomb_waves?from=-2&to=20&points=111&spacing=linear&v.l=0 1 2 3"
-                     "&fields=F,G"), "thm")
+                     "&fields=F,G"), ("physics-stopping", "physics/stopping_power?logy=1"), "thm")
 
 
 def extra_projects():
@@ -147,11 +147,14 @@ def test_selftest_and_screenshots(name, tmp_path):
         # the Physics tab: every view drew its plot from the route's answer with the status line and the pyazr call;
         # the Coulomb function asked on rho from -2 has elements outside its domain, counted and shown as gaps
         physics = {s["route"]: s["physics"] for s in result["steps"] if s["route"].startswith("#/physics")}
-        assert len(physics) == 4 and all(v and v["computed"] > 0 and v["python"].startswith("import numpy")
+        assert len(physics) == 5 and all(v and v["computed"] > 0 and v["python"].startswith("import numpy")
                                          for v in physics.values()), physics
         masked = next(v for r, v in physics.items() if "from=-2" in r)
         assert masked["elements"] == 444 and masked["computed"] == 4 * 100, masked  # rho = -2, -1.8, ..., 0 not
         assert "rho outside its domain" in masked["text"], masked
+        # a stopping power carries SRIM's citation on the page and in its Python text (the PI's condition)
+        stopping = next(v for r, v in physics.items() if "stopping_power" in r)
+        assert "SRIM" in stopping["citation"] and "# cite: " + stopping["citation"] in stopping["python"], stopping
         edit = result["edit"]  # a width typed in and Enter, then the Undo button: the engine's chi2 moves and returns
         if "skipped" not in edit:
             assert edit["edited"] and edit["undone"], edit

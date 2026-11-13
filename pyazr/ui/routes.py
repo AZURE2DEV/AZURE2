@@ -195,7 +195,14 @@ ROUTES = (
           serves=("engine.Engine.outputs",)),
     Route("GET", "/api/outputs", V, "server.Server.outputs_list",
           "The files of the project's output directory: name, size (bytes), time written (s since the epoch)."),
-    Route("POST", "/api/stopping/{fn}", L, "step 5 (Physics tab); today pyazr.stopping", "Stopping powers."),
+    Route("GET", "/api/stopping", V, "server.Server.stopping",
+          "The stopping functions, one row each (pyazr.kinds()['stopping']): the shape of /api/physics's rows, a text "
+          "argument formula first, and SRIM's citation, owed by every use.", serves=("pyazr.kinds",)),
+    Route("POST", "/api/stopping/{fn}", V, "server.Server.stopping_call",
+          "pyazr.stopping.evaluate(fn, formula, ...) on {\"arguments\": {formula: text, name: number, list or axis}}, "
+          "answered as /api/physics/{fn} answers, with the citation; at most "
+          f"{MAX_ELEMENTS} elements per request; in the server's process.", args=("fn",), spread="arguments",
+          serves=("pyazr.stopping.evaluate",)),
     Route("GET", "/api/sources/exfor", L, "step 2 (Data tab); today pyazr.search_exfor", "EXFOR search."),
     Route("GET", "/api/sources/ensdf/{nuclide}", L, "step 2 (Nucleus tab); today pyazr.fetch_levels", "ENSDF levels."),
     Route("GET", "/api/files", L, "step 2 (the file browser); no pyazr call", "Files inside the root."),

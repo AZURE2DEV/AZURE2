@@ -123,7 +123,7 @@ def prepare(fn, row, arguments):
     for the answer, the Python lines that make the non-scalar ones, the call's keyword texts, broadcast shape)."""
     names = [a["name"] for a in row["arguments"]]
     signature = ", ".join(f"{a['name']} ({a['unit'] or 'no unit'}, {a['domain']})" for a in row["arguments"])
-    fix = (f"GET /api/physics gives the row of {fn}; send {{\"arguments\": {{name: value, list or axis "
+    fix = (f"GET /api/physics (or /api/stopping) gives the row of {fn}; send {{\"arguments\": {{name: value, list or axis "
            f"{{from, to, points, spacing}}}}}}")
     unknown = [k for k in arguments if k not in names]
     missing = [a["name"] for a in row["arguments"] if a["default"] is None and a["name"] not in arguments]
@@ -138,6 +138,13 @@ def prepare(fn, row, arguments):
             used[name] = a["default"]
             continue
         value = arguments[name]
+        if a["kind"] == "text":
+            if not isinstance(value, str):
+                raise Refused(f"{fn}: {name} must be a text ({type(value).__name__} given)", what=f"{name} = {value!r}",
+                              allowed=f"{name}: one text ({a['doc']})", fix=fix)
+            kwargs[name] = used[name] = value
+            texts.append(f"{name}={value!r}")
+            continue
         if isinstance(value, dict):
             array, expr = _axis(fn, name, value, fix)
             kwargs[name], used[name] = array, array.tolist()
@@ -192,28 +199,64 @@ def _plain(v):
     return np.asarray(v).tolist() if np.ndim(v) else float(v)
 
 
-def call(fn, arguments):
-    """``pyazr.physics.<fn>(**arguments, errors="mask")`` as plain data: the returned fields as lists (floats for
-    scalar arguments), their units, the status per element and the words of each status that occurs, the arguments
-    as used and the Python text of the call."""
+def _status_words(row, code):
+    """Words of a status code of a row (pyazr.physics.status_text's rule, for any table's rows)."""
+    if code > 0:
+        numeric = [a for a in row["arguments"] if a["kind"] != "text"]
+        arg = numeric[code - 1]
+        return f"{arg['name']} outside its domain ({arg['domain']})"
     import pyazr
-    rows = pyazr.kinds()["physics"]
+    return pyazr.physics.STATUS.get(code, f"unknown status {code}")
+
+
+def _physics_call(fn, kwargs, texts):
+    import pyazr
+    result, status = pyazr.physics.functions[fn](**kwargs, errors="mask")
+    return result, status, f"result, status = pyazr.physics.{fn}({', '.join(texts)}, errors=\"mask\")"
+
+
+def _stopping_call(fn, kwargs, texts):
+    import pyazr
+    formula = kwargs.pop("formula")
+    try:
+        result, status = pyazr.stopping.evaluate(fn, formula, **kwargs)
+    except ValueError as err:  # a formula the library refuses
+        raise Refused(f"{fn}: {err}", what=f"formula = {formula!r}", allowed=str(err),
+                      fix="a chemical formula: element symbols with counts (Ta2O5, TiN, CH4)") from None
+    words = [f"{fn!r}", *texts]
+    return result, status, f"result, status = pyazr.stopping.evaluate({', '.join(words)})"
+
+
+# The function tables served as /api/<table>/{fn}: the rows (pyazr.kinds()[table]) and the call of a row.
+TABLES = {"physics": _physics_call, "stopping": _stopping_call}
+
+
+def call(fn, arguments, table="physics"):
+    """A row of ``pyazr.kinds()[table]`` (``physics``: ``pyazr.physics.<fn>(..., errors="mask")``; ``stopping``:
+    ``pyazr.stopping.evaluate``) on ``arguments``, as plain data: the returned fields as lists (floats for scalar
+    arguments), their units, the status per element and the words of each status that occurs, the arguments as used,
+    the Python text of the call, and the row's citation where it has one."""
+    import pyazr
+    rows = pyazr.kinds()[table]
     if fn not in rows:
-        raise NotFound(f"no physics function {fn!r}", what=f"the physics function {fn!r}",
-                       allowed=", ".join(rows), fix="GET /api/physics lists the functions", known=list(rows))
+        raise NotFound(f"no {table} function {fn!r}", what=f"the {table} function {fn!r}",
+                       allowed=", ".join(rows), fix=f"GET /api/{table} lists the functions", known=list(rows))
     row = rows[fn]
     kwargs, used, lines, texts, shape = prepare(fn, row, arguments)
-    result, status = pyazr.physics.functions[fn](**kwargs, errors="mask")
+    result, status, line = TABLES[table](fn, kwargs, texts)
     fields = result if isinstance(result, dict) else {row["returns"][0]["name"]: result}
     codes = sorted({int(c) for c in np.ravel(status)})
-    python = "\n".join(["import numpy as np", "import pyazr", "", *lines,
-                        f"result, status = pyazr.physics.{fn}({', '.join(texts)}, errors=\"mask\")", ""])
-    return {"function": fn, "shape": list(shape), "axis": row["axis"],
-            "returns": {k: _plain(v) for k, v in fields.items()},
-            "units": {r["name"]: r["unit"] for r in row["returns"]},
-            "status": np.asarray(status).tolist() if np.ndim(status) else int(status),
-            "status_words": {str(c): pyazr.physics.status_text(fn, c) for c in codes},
-            "arguments": used, "python": python}
+    cite = [f"# cite: {row['citation']}"] if row.get("citation") else []
+    python = "\n".join(["import numpy as np", "import pyazr", "", *lines, line, *cite, ""])
+    answer = {"function": fn, "shape": list(shape), "axis": row["axis"],
+              "returns": {k: _plain(v) for k, v in fields.items()},
+              "units": {r["name"]: r["unit"] for r in row["returns"]},
+              "status": np.asarray(status).tolist() if np.ndim(status) else int(status),
+              "status_words": {str(c): _status_words(row, c) for c in codes},
+              "arguments": used, "python": python}
+    if row.get("citation"):
+        answer["citation"] = row["citation"]
+    return answer
 
 
 def session_rows():

@@ -9,10 +9,12 @@ import { fitCheck } from "./selftestfit.js";
 import { NUCLEUS_SECTIONS } from "./tabs/records.js";
 
 /** The Physics tab's views the self-test visits: the first row as it opens, a Coulomb function with elements
- * outside the domain (rho <= 0) and four lines of l, its table view, and the session's channel functions. */
+ * outside the domain (rho <= 0) and four lines of l, its table view, the session's channel functions, and a
+ * stopping power with SRIM's citation. */
 export const PHYSICS_ROUTES = ["#/physics",
   "#/physics/coulomb_waves?from=-2&to=20&points=111&spacing=linear&v.l=0 1 2 3&fields=F,G",
-  "#/physics/coulomb_waves?plot=table", "#/physics/channel_functions"];
+  "#/physics/coulomb_waves?plot=table", "#/physics/channel_functions",
+  "#/physics/stopping_power?logy=1"];
 
 export function selftest(ctx, tabs, draw) {
   const errors = [];
@@ -58,7 +60,8 @@ export function selftest(ctx, tabs, draw) {
       steps.push({ route, ms: Math.round(performance.now() - s), plot: plot ? plot.dataset.drawn : null,
         forms: document.querySelectorAll("form.record-form").length,
         physics: physics ? { computed: +physics.dataset.computed, elements: +physics.dataset.elements,
-          text: physics.textContent, python: document.querySelector("pre.python")?.textContent || "" } : null,
+          text: physics.textContent, python: document.querySelector("pre.python")?.textContent || "",
+          citation: document.querySelector("p.citation")?.dataset.citation || "" } : null,
         errorBoxes: [...document.querySelectorAll(".error-box")].map((b) => b.textContent.slice(0, 300)) });
     }
     if (/[?&]edit=1/.test(extra)) await editAndUndo(levels);

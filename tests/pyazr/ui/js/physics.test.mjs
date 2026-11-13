@@ -74,6 +74,16 @@ test("a widget-making row of ARGUMENT_KINDS for every kind of argument the table
   for (const k of kinds) assert.ok(p.ARGUMENT_KINDS[k], `argument kind ${k} has no row in ARGUMENT_KINDS`);
 });
 
+test("a text argument (a stopping row's formula) is one value, sent as typed", () => {
+  if (!FUNCTIONS) return;
+  const row = FUNCTIONS.tables.flat().find((r) => r.arguments.some((a) => a.kind === "text"));
+  assert.ok(row && row.citation, "a stopping row with its citation");
+  const text = row.arguments.find((a) => a.kind === "text");
+  const req = p.requestOf(row, row.axis, { ...p.startTexts(row, row.axis), [text.name]: " Ti N " });
+  assert.equal(req.arguments[text.name], "Ti N");
+  assert.equal(req.lines.length, 1);
+});
+
 test("the bound of a request is the server's", () => {
   if (!FUNCTIONS) return;
   assert.equal(p.MAX_ELEMENTS, FUNCTIONS.max_elements);

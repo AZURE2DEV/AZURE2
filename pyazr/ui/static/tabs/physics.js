@@ -17,6 +17,7 @@ import { button, download, drawPlot, h, section } from "../ui.js";
  * row here (a server route answering rows of the physics table's shape). */
 export const SOURCES = [
   { rows: "/api/physics", call: "/api/physics", doc: "the engine's physics table (pyazr.physics)" },
+  { rows: "/api/stopping", call: "/api/stopping", doc: "the stopping library (SRIM-2013; cite SRIM)" },
   { rows: "/api/session/functions", call: "/api/session/functions", session: true,
     doc: "the session's functions (need the project to build)" },
 ];
@@ -151,12 +152,15 @@ function drawAnswer(ctx, out, row, state) {
   });
   out.appendChild(h("div.choices", {}, h("span.k", {}, "fields "), ...fields, flag("log x", "logx"),
     flag("log y", "logy")));
-  const csv = () => answerCsv(row, answer);
+  // the citation a row owes (SRIM's for the stopping rows) goes with every plot, the CSV and the Python text
+  const citation = answer.citation || row.citation || "";
+  const csv = () => answerCsv(row, answer, citation ? [`cite: ${citation}`] : []);
   const file = `${row.name}`;
   for (const plot of physicsPlots(row, answer, request, state)) {
     const area = h("div.plot.physics-plot");
     out.appendChild(area);
     area.dataset.drawn = drawPlot(area, plot, file, { usePlotly: !state.table, csv });
+    if (citation) area.appendChild(h("p.citation", { data: { citation } }, `Cite: ${citation}`));
   }
   if (!unitGroups(row, state.shown).length) out.appendChild(h("p.hint", {}, "No field is shown."));
   const code = h("pre.python.mono", { "aria-label": "the pyazr call" }, answer.python);
