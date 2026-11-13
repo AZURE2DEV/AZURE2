@@ -2,6 +2,7 @@
 #include "TargetEffect.h"
 #include "ApparatusParameters.h"
 #include "AdaptiveIntegrationGrid.h"
+#include "azure2/experiment/LayoutBase.h"
 #include <sstream>
 #include <iostream>
 #include <cctype>
@@ -131,17 +132,21 @@ TargetEffect::TargetEffect(const azure2::experiment::TargetEffectSpec &line, con
         densityFitErrorText_ = "the densityfit sigma \"" + densitySigmaToken + "\" is not a non-negative number or percentage";
       } else {
         hasDensityFit_ = true;
-        densityNominal_ = density_;
         densityCentre_ = line.densityCentre.Or(density_);
         densitySigma_ = percent ? s / 100.0 * densityCentre_ : s;
-        // the grids span the largest density the fit is expected to reach (see HasDensityFit)
-        layoutDensity_ = (densitySigma_ > 0.0) ? std::max(density_ + 3.0 * densitySigma_, 1.1 * density_) : 1.5 * density_;
-        if (densityMaxRead > 0.0) {
-          if (!(densityMaxRead > density_)) {
-            densityFitError_ = true;
-            densityFitErrorText_ = "the densityfit maximum must be above the line's density";
-          }
-          layoutDensity_ = densityMaxRead;
+        // the grids span the largest density the fit is expected to reach (see HasDensityFit), laid out from the
+        // prior's centre or the start (LayoutBase.h)
+        const double gridMax = densityMaxRead > 0.0 ? densityMaxRead : 0.0;
+        const azure2::experiment::LayoutBase base =
+            azure2::experiment::ChooseLayoutBase(azure2::experiment::kDensitySpan, density_, line.densityCentre,
+                                                 densityVary_, densitySigma_, gridMax, targetName_ + ".areal_density",
+                                                 "atoms/cm2");
+        densityLayoutBase_ = base.value;
+        layoutDensity_ = azure2::experiment::kDensitySpan.Highest(densityLayoutBase_, densitySigma_, gridMax);
+        if (!base.note.empty()) configure.Note(base.note);
+        if (densityMaxRead > 0.0 && !(densityMaxRead > density_)) {
+          densityFitError_ = true;
+          densityFitErrorText_ = "the densityfit maximum must be above the line's density";
         }
       }
     }
@@ -165,14 +170,18 @@ TargetEffect::TargetEffect(const azure2::experiment::TargetEffectSpec &line, con
       } else {
         dopplerFit_ = true;
         dopplerVary_ = (vary == 1.0);
-        dopplerNominal_ = dopplerTemperature_;
         dopplerCentre_ = line.dopplerCentre.Or(dopplerTemperature_);
         dopplerSigma_ = sigma;
-        // the grids span the largest temperature the fit is expected to reach (see HasDopplerFit)
-        dopplerLayout_ = (sigma > 0.0) ? std::max(dopplerNominal_ + 3.0 * sigma, 1.21 * dopplerNominal_)
-                                       : 2.0 * dopplerNominal_;
-        if (tmax > 0.0) dopplerLayout_ = tmax;
         dopplerTmax_ = tmax > 0.0 ? tmax : 0.0;
+        // the grids span the largest temperature the fit is expected to reach (see HasDopplerFit), laid out with
+        // the pieces from the prior's centre or the start (LayoutBase.h)
+        const azure2::experiment::LayoutBase base =
+            azure2::experiment::ChooseLayoutBase(azure2::experiment::kDopplerSpan, dopplerTemperature_,
+                                                 line.dopplerCentre, dopplerVary_, sigma, dopplerTmax_,
+                                                 targetName_ + ".doppler", "K");
+        dopplerLayoutBase_ = base.value;
+        dopplerLayout_ = azure2::experiment::kDopplerSpan.Highest(dopplerLayoutBase_, sigma, dopplerTmax_);
+        if (!base.note.empty()) configure.Note(base.note);
       }
     }
     if (dopplerError_) isDoppler_ = false;
@@ -189,6 +198,13 @@ TargetEffect::TargetEffect(const azure2::experiment::TargetEffectSpec &line, con
         stoppingScaleSigma_ = stopping_.StatedRelUncertainty() * st.scale;
         stoppingScaleSigmaDefault_ = true;
       }
+      // the grids and the limits of a fitted scale: from the prior's centre or the start (LayoutBase.h)
+      const azure2::experiment::LayoutBase base =
+          azure2::experiment::ChooseLayoutBase(azure2::experiment::kApparatusSpan, st.scale, st.scaleCentre,
+                                               st.scaleVary && st.hasScale, stoppingScaleSigma_, 0.0,
+                                               "stopping_scale " + st.scaleName, "1");
+      stoppingScaleLayoutBase_ = base.value;
+      if (!base.note.empty()) configure.Note(base.note);
       stoppingScaleKey_ = st.scaleKey;
       stoppingScaleName_ = st.scaleName;
       stoppingScaleMaterial_ = st.scaleMaterial;
@@ -201,7 +217,7 @@ TargetEffect::TargetEffect(const azure2::experiment::TargetEffectSpec &line, con
       }
     }
   }
-  this->SelectKernels(line);
+  this->SelectKernels(line, configure);
 }
 
 /*!
@@ -210,7 +226,7 @@ TargetEffect::TargetEffect(const azure2::experiment::TargetEffectSpec &line, con
  * spread and the straggling as its own parameters; a second resolution kernel beside it, or two of the beam spread,
  * the beam profile and the UDR, would leave one of them unapplied: refused (HasKernelError).
  */
-void TargetEffect::SelectKernels(const azure2::experiment::TargetEffectSpec &line) {
+void TargetEffect::SelectKernels(const azure2::experiment::TargetEffectSpec &line, const Config &configure) {
   using azure2::experiment::KernelNamed;
   if (isDoppler_) kernels_.broadening = KernelNamed("doppler");
   if (!line.kernel.empty()) {
@@ -219,9 +235,20 @@ void TargetEffect::SelectKernels(const azure2::experiment::TargetEffectSpec &lin
     // a fitted parameter's grid spans its layout value (ApparatusParameters.h), the others' their value
     kernelFits_ = line.apparatusParameters;
     kernelLayoutValues_ = kernelValues_;
-    for (const azure2::experiment::ApparatusParameterSpec &a : kernelFits_)
-      if (a.slot >= 0 && a.slot < (int)kernelLayoutValues_.size())
-        kernelLayoutValues_[a.slot] = a.gridMax > 0.0 ? a.gridMax : ApparatusLayout(a.value, a.vary, a.priorWidth);
+    kernelLayoutBases_ = kernelValues_;
+    for (const azure2::experiment::ApparatusParameterSpec &a : kernelFits_) {
+      if (a.slot < 0 || a.slot >= (int)kernelLayoutValues_.size()) continue;
+      // from the prior's centre or the start (LayoutBase.h); a fixed parameter's grid spans its value
+      std::string name;
+      for (const auto &part : a.owner) name += (name.empty() ? "" : ".") + part.second;
+      const azure2::experiment::LayoutBase base = azure2::experiment::ChooseLayoutBase(
+          azure2::experiment::kApparatusSpan, a.value, a.centre, a.vary, a.priorWidth, a.gridMax, name, a.unit);
+      if (!base.note.empty()) configure.Note(base.note);
+      kernelLayoutBases_[a.slot] = base.value;
+      kernelLayoutValues_[a.slot] =
+          (a.vary || a.gridMax > 0.0) ? azure2::experiment::kApparatusSpan.Highest(base.value, a.priorWidth, a.gridMax)
+                                      : a.value;
+    }
     if (!kernels_.resolution) kernelErrorText_ = "no kernel named \"" + line.kernel + "\"";
     if (isTargetIntegration_ || this->IsGaussian() || isUdr_ || isBeamProfile_)
       kernelErrorText_ = "the " + line.kernel + " kernel cannot be combined with a target, a beam spread, a beam profile or a UDR";
@@ -254,7 +281,7 @@ azure2::experiment::KernelParameters TargetEffect::KernelParametersFor(const Con
   p.layoutDensity = this->GetLayoutDensity();
   p.stopping.at = [](const void *effect, const void *config, double eLab, double) {
     const TargetEffect *te = static_cast<const TargetEffect *>(effect);
-    return te->StoppingAt(eLab, *static_cast<const Config *>(config), te->stoppingScaleNominal_);
+    return te->StoppingAt(eLab, *static_cast<const Config *>(config), te->stoppingScaleLayoutBase_);
   };
   p.stopping.owner = this;
   p.stopping.context = &configure;
@@ -263,7 +290,7 @@ azure2::experiment::KernelParameters TargetEffect::KernelParametersFor(const Con
   p.truncation = beamTruncation_;
   p.detailedBalance = beamPhotodissociation_;
   p.flightPath = udrFlightPath_;
-  p.dopplerNominal = this->GetDopplerNominal();
+  p.dopplerLayoutBase = this->GetDopplerLayoutBase();
   p.dopplerLayout = this->GetDopplerLayoutTemperature();
   p.values = kernelValues_.data();
   p.numValues = static_cast<int>(kernelValues_.size());
@@ -643,8 +670,8 @@ double TargetEffect::KernelThickness(double eLab, double eCM, double cmFactor, c
 
 double TargetEffect::GetLayoutStoppingScale() const {
   if (!hasStoppingScale_ || !stoppingScaleVary_) return stoppingScaleNominal_;
-  const double s0 = stoppingScaleNominal_;
-  return ApparatusLayout(s0, true, stoppingScaleSigma_);  // the rule of every fitted apparatus parameter
+  // the rule of every fitted apparatus parameter
+  return azure2::experiment::kApparatusSpan.Highest(stoppingScaleLayoutBase_, stoppingScaleSigma_, 0.0);
 }
 
 double TargetEffect::TargetThickness(double energy, const Config &configure, double density, double scale) const {
@@ -683,7 +710,7 @@ void TargetEffect::JoinDensityGroup(const TargetEffect &leader) {
   hasDensityFit_ = true;
   densityVary_ = leader.densityVary_;
   density_ = leader.density_;
-  densityNominal_ = leader.densityNominal_;
+  densityLayoutBase_ = leader.densityLayoutBase_;
   densityCentre_ = leader.densityCentre_;
   densitySigma_ = leader.densitySigma_;
   layoutDensity_ = leader.layoutDensity_;

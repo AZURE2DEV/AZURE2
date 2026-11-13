@@ -97,8 +97,8 @@ struct KernelParameters {
   // UDR.
   double flightPath = 0.0;  ///< m
   // Free-gas Doppler broadening.
-  double dopplerNominal = 0.0;  ///< K: the temperature the Gauss-Legendre pieces are laid out for
-  double dopplerLayout = 0.0;   ///< K: the temperature the grid and the windows span
+  double dopplerLayoutBase = 0.0;  ///< K: the temperature the Gauss-Legendre pieces are laid out for (LayoutBase.h)
+  double dopplerLayout = 0.0;      ///< K: the temperature the grid and the windows span
   /// The values of a table kernel's own parameters (Kernel::parameters, in that order, in their engine units).
   const double *values = nullptr;
   int numValues = 0;

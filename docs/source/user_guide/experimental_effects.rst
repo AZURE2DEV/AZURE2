@@ -66,8 +66,11 @@ the fit it continues.  Example, an abundance started at 0.0036 under a prior 0.0
        isotope        15N 0.0036 fit prior 0.0037 0.0002
 
 gives ``Total-Abundance-Chi-Squared: 0.25`` in ``chiSquared.out`` before the first step.  The grids and the limits of
-a fitted density, temperature, stopping scale or kernel parameter are laid out from the value (``grid_max`` sets
-them).  (Until 2026-11-13 several kinds took the start as the centre, or refused a centre away from the value; see
+a fitted density, temperature, stopping scale or kernel parameter are laid out from the prior's centre (``grid_max``
+sets the upper end), so a fit continued from its fitted values gives the fit's :math:`\chi^2` and its limits; a start
+outside the range laid out from the centre is laid out from the start, and a line of output says so.  A parameter
+without a prior is laid out from its value, so its continued fit is laid out anew unless ``grid_max`` is written.
+(Until 2026-11-13 several kinds took the start as the centre, or refused a centre away from the value; see
 ``docs/upgrade/parameter_kinds.md`` section 4.)
 
 Managing Experimental Effects

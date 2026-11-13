@@ -2,6 +2,39 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-4-layout-centre`) — grids and limits laid out from the prior's centre
+
+**Done.** Measured first (base build `work/b-prior`; fit, `param.sav` read by pyazr, `save_fit`, both sessions at the
+same vector; `parameter_kinds.md` section 4 has the table): the Doppler temperature's χ² moved by 5.5e-6 (6.0e-6 and
+5.6e-6 per data set, 4.85481 → 4.85478 in `chiSquared.out`, above `save_fit`'s own 1e-6, which refused its snapshot),
+the stopping scale's by 5.8e-7 on one data set; the areal density's and the kernel width's χ² reproduced, but every
+layout and lower limit moved with the start (density 1.1e18 → 1.19e18, 363 → 379.6 K, scale 1.12 → 1.126, width
+23 → 29.0 keV); abundance and thickness (no grid) reproduced exactly. Rule (design committed first, section 4 "The
+layout of a fitted value"): one function, `ChooseLayoutBase` (`experiment/.../LayoutBase.h`), with the three spans as
+rows; the base of the layout, the lower limit and the Doppler pieces is the written centre when the parameter is fitted
+and the start lies in the centre's range (`grid_max` as written), else the start with one `Note:` line. Used in
+`TargetEffect` (density, Doppler, stopping scale, the kernel's parameters: the one place, the declaration reads it);
+`ApparatusLayout` removed; the fields that were the base renamed `layoutBase`. After: the four written projects at the
+fit's vector give the fit's objective and every data set's χ² exactly (difference 0), the same layouts, and
+`save_fit(verify=True)` passes for the Doppler case.
+The web page's "accept into project" (`pyazr/ui/server.py` `Server.apply` → `engine.py` `Engine.snapshot`) writes
+through the same `save_fit(path, x, param_sav=False)` (verify on) that `continued.py` tests; its text merge
+(`state.merge_snapshot`) is not covered here. The data branch (3298f372) merged in.
+
+**Verified how** (build `work/b-layout`, 0 warnings), on the merged head: all projects x 3 bases against
+`tab-t50-1` 887 / 851 / 887 identical (also against `tab-t45-1` before the merge); the eight fits of
+`fits_vs_base2.sh` identical to `b-trial50`; the converted-tree gate 679 / 643 / 679 identical; `ctest -LE slow`
+237/237; the slow tests 11/11; `tests/run_tests.sh` 166 passed, 0 failed; `tests/nuisance_prior_centre/check.sh`
+with and without `PYAZR_ENGINE_DIR` (new check (h) = `continued.sh`). Injected errors (inclusive lower end; the
+kernel's layout from the start) fail the new checks; the base build fails the Doppler χ², the note, `save_fit` and
+the four layout checks. Not run: 1 against several threads, Sphinx.
+
+**Open.** A parameter without a prior has no centre: a continued fit lays its grid out from the fitted value (1.5 ×);
+whether `save_fit` should write `grid_max` there is the PI's call. `save_fit` writes a stopping scale shared by two
+targets on the first only, and the written project is refused (`E_STOPPING_SCALE_CONFLICT`; pyazr write-back, not
+fixed). The Doppler pieces from the start did not change χ² in the test case (piece counts equal), so only the window
+and layout are covered there; the fit limits are not reported by the API, so the lower limits are checked by reading.
+
 ## 2026-11-13 (director, 16:49) — merged: the web UI's Results tab
 
 **Merged** `feature/upgrade-9-webui-results` (the entry below; it carries the Fit tab). No C++ changed, so the
@@ -335,7 +368,8 @@ converted-tree gate 679/643/679 identical; the eight fits identical to `b-gecm`;
 1 failed (rectangular_resolution expected the lifted refusal; check updated, passes).
 
 **Open.** Grids/limits of a fitted density, temperature, stopping scale or kernel parameter follow the start value: a
-fit continued from a written project without `grid_max` lays them out anew (the Doppler pieces too).
+fit continued from a written project without `grid_max` lays them out anew (the Doppler pieces too). (Closed by the
+branch `feature/upgrade-4-layout-centre`, entry above, for every parameter with a prior.)
 
 ## 2026-11-13 (director, 09:20) — merged: the design note of the web UI (documents only)
 

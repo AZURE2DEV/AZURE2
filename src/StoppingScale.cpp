@@ -21,7 +21,7 @@ void DeclareStoppingScale(const TargetEffect &te, std::vector<ApparatusDeclarati
   d.key = te.GetStoppingScaleKey();
   d.owner = {{"quantity", "stopping_scale"}, {"material", te.GetStoppingScaleMaterial()}, {"projectile", te.GetStoppingScaleProjectile()}};
   d.unit = "1";
-  d.nominal = te.GetStoppingScaleNominal();
+  d.layoutBase = te.GetStoppingScaleLayoutBase();
   d.centre = te.GetStoppingScaleCentre();
   d.vary = te.IsStoppingScaleVaried();
   d.sigma = te.GetStoppingScaleSigma();
