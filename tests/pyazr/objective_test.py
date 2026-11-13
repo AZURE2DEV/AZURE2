@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """chi-squared per segment and per dataset, and AZURE2's own objective.
 
-`calculate_chi2_rwa` returns one number, and it is the *data* chi-squared only.
+`evaluate().chi2` returns one number, and it is the *data* chi-squared only.
 Two things follow that used to be left to the caller, with a recipe in the skill
 for each:
 
   * A fit is judged per experiment, not per segment, and an experiment often
-    owns several segments. `segment_chi2` and `dataset_chi2` do the split.
+    owns several segments. `evaluate(x).data[i].chi2` does the split.
 
   * AZURECalc::operator() does not minimize the data chi-squared. It also adds
     ((norm - nominal) / (nominal/100 * norm_error))^2 per segment, and the
@@ -66,38 +66,35 @@ with tempfile.TemporaryDirectory() as tmp:
     print("1. the per-segment split adds up")
     with Session(azr, cwd=work) as m:
         x = np.asarray(m.params_rwa, float)
-        seg = m.segment_chi2(x)
-        total = float(np.sum(m.calculate_chi2_rwa(x)))
+        seg = np.array([d.chi2 for d in m.evaluate(x).data])
+        total = m.evaluate(x).chi2
         check("one entry per segment", len(seg) == m.nsegments,
               f"{len(seg)} for {m.nsegments}")
-        check("sums to calculate_chi2_rwa", np.isclose(seg.sum(), total, rtol=1e-9),
+        check("sums to the data chi2", np.isclose(seg.sum(), total, rtol=1e-9),
               f"{seg.sum()} vs {total}")
 
-        print("\n2. datasets aggregate their segments")
-        byfile = m.dataset_chi2(x)
-        check("no dataset lost", np.isclose(sum(c for c, _, _ in byfile.values()),
-                                            total, rtol=1e-9))
+        print("\n2. the data sets hold the points of the segments")
+        data = m.evaluate(x).data
+        check("no data set lost", np.isclose(sum(d.chi2 for d in data), total, rtol=1e-9))
         check("point counts add up",
-              sum(n for _, n, _ in byfile.values())
-              == sum(len(m.energies[i]) for i in range(m.nsegments)))
-        check("segment counts add up",
-              sum(k for _, _, k in byfile.values()) == m.nsegments)
+              sum(d.n for d in data) == sum(len(m.energies[i]) for i in range(m.nsegments)))
+        check("one data set per segment", len(data) == m.nsegments)
 
         print("\n3. at nominal normalizations the penalty is zero")
-        check("no penalty", m.penalties(x)["norm"].sum() == 0.0)
+        check("no penalty", np.array([d.norm_chi2 for d in m.evaluate(x).data]).sum() == 0.0)
         check("objective equals chi-squared there",
-              np.isclose(m.objective(x), total, rtol=1e-12))
+              np.isclose(m.objective()(x), total, rtol=1e-12))
 
         print("\n4. a moved normalization is penalised as AZURE2 penalises it")
         norm = m.parameters.norms[0]
         moved = x.copy()
         moved[norm.free_index] = 1.10           # nominal 1.0, sys error 5%
-        penalty = float(m.penalties(moved)["norm"].sum())
+        penalty = float(np.array([d.norm_chi2 for d in m.evaluate(moved).data]).sum())
         check("((1.10 - 1.0) / 0.05)^2 = 4", np.isclose(penalty, 4.0, rtol=1e-9),
               str(penalty))
-        chi2_moved = float(np.sum(m.calculate_chi2_rwa(moved)))
+        chi2_moved = m.evaluate(moved).chi2
         check("objective = chi-squared + penalty",
-              np.isclose(m.objective(moved), chi2_moved + penalty, rtol=1e-12))
+              np.isclose(m.objective()(moved), chi2_moved + penalty, rtol=1e-12))
 
         # Hand the same parameters to the engine, and let it report its own.
         allrwa = list(np.asarray(m.sess.params_all_rwa(), float))
@@ -155,9 +152,9 @@ with tempfile.TemporaryDirectory() as tmp:
     sg.save(azr)
     with Session(azr, cwd=work) as m:
         x = np.asarray(m.params_rwa, float)
-        pen = m.penalties(x)["shift"]
-        chi2 = float(np.sum(m.calculate_chi2_rwa(x)))
-        obj = float(m.objective(x))
+        pen = np.array([d.shift_constant_chi2 for d in m.evaluate(x).data])
+        chi2 = m.evaluate(x).chi2
+        obj = float(m.objective()(x))
         check("the group's shift penalty is charged once, on the first member",
               np.allclose(pen, [0.16, 0.0], atol=1e-12), str(pen.tolist()))
         check("objective = chi-squared + 0.16", np.isclose(obj, chi2 + 0.16, rtol=1e-12),

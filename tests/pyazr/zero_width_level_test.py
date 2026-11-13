@@ -53,7 +53,7 @@ def worker(work, rmatrix, brune, out):
     write_model(base, rmatrix)
     with Session(base, cwd=work, use_brune=brune) as a:
         x = np.array(a.params_rwa, float)
-        vb = [np.asarray(v, float).tolist() for v in a.calculate_rwa(x)]
+        vb = [np.asarray(v, float).tolist() for v in [d.model for d in a.evaluate(x).data]]
         en = [np.asarray(e, float) for e in a.energies]
         pair = [p for p in a.pairs if p.number == 1][0]
         el = len(en) - 1                     # the elastic segment
@@ -63,8 +63,8 @@ def worker(work, rmatrix, brune, out):
     write_model(zw, rmatrix, e_hit)
     with Session(zw, cwd=work, use_brune=brune) as a:
         x = np.array(a.params_rwa, float)
-        vz = [np.asarray(v, float).tolist() for v in a.calculate_rwa(x)]
-        r, J = (np.asarray(v, float) for v in a.residual_jacobian(x))
+        vz = [np.asarray(v, float).tolist() for v in [d.model for d in a.evaluate(x).data]]
+        r, J = (np.asarray(v, float) for v in a.objective().residuals_and_jacobian(x))
         en2 = [np.asarray(e, float) for e in a.energies]
         hit = float(en2[el][k] + pair.sep_energy + pair.excitation) == e_hit
     json.dump({"vb": vb, "vz": vz, "hit": hit, "k": k, "e_hit": e_hit,

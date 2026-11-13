@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""calculate_energies and friends run no observed-to-formal transformation.
+"""The energies and angles of an evaluation come with no observed-to-formal transformation.
 
 Point energies and angles do not depend on the R-matrix parameters, but
-calculate_energies / calculate_excitation_energy / calculate_angles took the
-physical path, so a caller handing them ``params_rwa`` (an easy slip: every
+the methods that returned them once took the physical path, so a caller handing them ``params_rwa`` (an easy slip: every
 other call takes it) had each amplitude read as a width or ANC.  With a
 sub-threshold ANC channel that prints "Denominator less than zero while
 transforming ... input 0.118102 fm^(-1/2)" (the 17O cross-check), which the
@@ -14,9 +13,9 @@ mode:
 
   1. control: the physical path fed params_rwa still prints the warning
      (so the check below can see it);
-  2. calculate_energies, calculate_excitation_energy and calculate_angles
-     with params_rwa, with the physical params and with None print nothing
-     and agree exactly.
+  2. evaluate(params_rwa) and evaluate() print nothing, and the energies,
+     excitation energies and angles of their data sets agree exactly (a
+     physical vector is no input of the session's calls).
 
 The engine prints on the process's stdout, so the session runs in a child
 process.  Needs the compiled engine; skips cleanly without it.
@@ -63,10 +62,10 @@ if sys.argv[3] == "control":
     s.sess.update_segments(np.asarray(s.params_rwa, float))
 else:
     same = True
-    for f in (s.calculate_energies, s.calculate_excitation_energy, s.calculate_angles):
-        a, b, c = f(s.params_rwa), f(s.params), f()
-        same &= all(np.array_equal(x, y) and np.array_equal(x, z) for x, y, z in zip(a, b, c))
-        same &= sum(len(x) for x in a) > 0
+    a, c = s.evaluate(s.params_rwa).data, s.evaluate().data
+    for field in ("energies", "excitation_energies", "angles"):
+        same &= all(np.array_equal(getattr(x, field), getattr(z, field)) for x, z in zip(a, c))
+        same &= sum(len(getattr(x, field)) for x in a) > 0
     print("SAME", same)
 '''
 

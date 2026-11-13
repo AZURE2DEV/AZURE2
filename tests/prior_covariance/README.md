@@ -39,5 +39,5 @@ degrees times 0.8 / 0.9 with 1 % errors); every project is built by `check.sh` (
   replaces the norm's normError auto prior (noted); the chain's mean and spread are the prior's; a prior on a
   level parameter is refused in a physical-parameter chain.
 
-`tests/pyazr/prior_covariance_test.py` covers the pyazr side (penalties, objective, residual_jacobian rows,
+`tests/pyazr/prior_covariance_test.py` covers the pyazr side (penalties, objective, objective().residuals_and_jacobian rows,
 prior_from_fit, the `priorCovariance` key through `Project.config` / `set_config`); `tests/gui/runtime_options_test` the GUI's config round trip.

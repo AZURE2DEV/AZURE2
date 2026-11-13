@@ -5,12 +5,12 @@ On tests/upgrade/T2 (normalization and shift priors, density priors, abundances,
 covariance, all non-zero at the test point), tests/norm_groups, tests/shift_fn and tests/scattering_length/be7p_fit
 (a scattering-length constraint):
 
-  1. objective() = the first entry of objective_and_grad() (the same engine call), to 1e-12;
-  2. objective() = the sum of the engine's terms, and the per-segment norm and shift arrays of penalties() sum to
+  1. objective() = the first entry of objective().value_and_grad (the same engine call), to 1e-12;
+  2. objective() = the sum of the engine's terms, and the per-segment norm and shift arrays of evaluate().terms sum to
      what the terms say, to 1e-9 relative;
-  3. objective_and_grad()'s gradient = central finite differences of objective(), to 1e-5 of the largest component
+  3. objective().value_and_grad's gradient = central finite differences of objective(), to 1e-5 of the largest component
      (step 1e-6 (|x| + 1)), at a point moved 2 % off the start so that the priors are not at their centres;
-  4. objective() >= calculate_chi2_rwa() (the priors are sums of squares).
+  4. objective() >= evaluate().chi2 (the priors are sums of squares).
 
 Needs the compiled engine; skips cleanly without it.  Run from anywhere:  python3 tests/pyazr/objective_test.py
 """
@@ -56,24 +56,24 @@ for project, azr in MODELS:
         # moved by 2 % of its value (alternating sign), the norms and shifts included.
         x0 = np.asarray(s.params_rwa, float)
         x = x0 + 0.02 * (np.abs(x0) + 1e-3) * np.where(np.arange(x0.size) % 2 == 0, 1.0, -1.0)
-        f = s.objective(x)
-        f2, g = s.objective_and_grad(x)
+        f = s.objective()(x)
+        f2, g = s.objective().value_and_grad(x)
         tag = f"{project}/{azr}"
-        check(f"{tag}: objective() = objective_and_grad()[0] ({f:.12g})", abs(f - f2) <= 1e-12 * max(1.0, abs(f)),
+        check(f"{tag}: objective() = objective().value_and_grad[0] ({f:.12g})", abs(f - f2) <= 1e-12 * max(1.0, abs(f)),
               f"{f} vs {f2}")
         t = s.sess.objective_terms_rwa(x)
         total = float(np.sum(t["values"]))
         check(f"{tag}: objective = sum of its {len(t['names'])} terms", abs(total - f) <= 1e-9 * max(1.0, abs(f)),
               f"{total} vs {f}")
-        pen = s.penalties(x)
-        segsum = sum(float(np.sum(pen[k])) for k in ("norm", "shift", "shift_sqrt", "shift_fn"))
+        pen = s.evaluate(x)
+        segsum = sum(float(np.sum([getattr(d, k) for d in pen.data])) for k in ("norm_chi2", "shift_constant_chi2", "shift_sqrt_chi2", "shift_function_chi2"))
         check(f"{tag}: per-segment priors finite (sum {segsum:.6g})", np.isfinite(segsum) and segsum >= 0)
         if project in WITH_PRIORS:
             prior_terms = [n for n, v in zip(t["names"], t["values"]) if v > 0 and n != "data, normalizations and energy shifts"]
             check(f"{tag}: the priors are in play ({segsum:.4g} per segment; {', '.join(prior_terms)})",
                   segsum > 0 and len(prior_terms) >= 3)
-        chi2 = float(np.sum(s.calculate_chi2_rwa(x)))
-        check(f"{tag}: objective {f:.8g} >= calculate_chi2_rwa {chi2:.8g}", f >= chi2 - 1e-9 * max(1.0, abs(chi2)))
+        chi2 = s.evaluate(x).chi2
+        check(f"{tag}: objective {f:.8g} >= evaluate().chi2 {chi2:.8g}", f >= chi2 - 1e-9 * max(1.0, abs(chi2)))
         # 3. gradient against central differences of objective() (at most 12 parameters, spread over the vector)
         # every parameter where the priors are in play, else at most 12 spread over the vector
         idx = (np.arange(x.size) if project in WITH_PRIORS
@@ -84,7 +84,7 @@ for project, azr in MODELS:
             xp, xm = x.copy(), x.copy()
             xp[i] += h
             xm[i] -= h
-            fd = (s.objective(xp) - s.objective(xm)) / (2 * h)
+            fd = (s.objective()(xp) - s.objective()(xm)) / (2 * h)
             worst = max(worst, abs(fd - g[i]))
         scale = max(np.max(np.abs(g[idx])), 1e-12)
         check(f"{tag}: gradient = finite differences on {idx.size} parameters ({worst / scale:.2e} of the largest)",

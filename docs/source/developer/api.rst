@@ -98,9 +98,10 @@ unedited project is written back byte for byte. It does not evaluate.
 
 ``pyazr.Session`` (``pyazr/session.py``) is a session: it owns one
 ``_azure2.Session`` and offers the parameters (``ParameterSet``), the data
-sets, the objective (``pyazr.Objective``, ``pyazr/objective.py``) and the
-numbers at one parameter point (``pyazr.Evaluation``, ``pyazr/evaluate.py``),
-residuals, observables and extrapolations, the output files, and the THM
+sets, the objective (``Session.objective()``: a ``pyazr.Objective``, ``pyazr/objective.py``) and the
+numbers at one parameter point (``Session.evaluate(x)``: a ``pyazr.Evaluation``, ``pyazr/evaluate.py``: model
+values, χ², the objective's terms, the data sets' rows of the objective, the extrapolations in extrapolation mode),
+the output files, and the THM
 views (``pyazr/session_thm.py``). Its methods that need the session's pairs
 and options are mixins of one job each (``session_physics.py``,
 ``session_thm.py``, ``potentials.py``), listed one per line in the class
@@ -123,6 +124,4 @@ of its API is one row of ``ROUTES`` (``routes.py``). The page
 number.
 
 .. note:: **Planned.**
-   The session's ``calculate_*`` methods give way to ``Evaluation`` and
-   ``Objective``, and ``ParameterSet`` to ``Parameters``; ``engine.py`` is then
-   the only file of the web UI that changes.
+   ``ParameterSet`` gives way to ``Parameters``; ``engine.py`` is then the only file of the web UI that changes.

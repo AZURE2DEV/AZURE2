@@ -5,14 +5,14 @@ The value a data point is compared with is its segment's model value (Results::m
 angle-integrated-E1 / -E2 segment (isDiff 5 / 6) the E1 or E2 part of the capture cross section.  The binding's
 calculated_segments (update_segments, update_segments_rwa, update_segments_all_rwa) returned the base point's leaf
 cross section -- the total -- for such a segment, while chi^2 used the part; pyazr's calculate* swapped the part in
-on its own side, calculate_sfactor* did not.  Since the plan branch (director's decision, HANDOFF) the engine returns
+on its own side, the S factor of evaluate() did not.  Since the plan branch (director's decision, HANDOFF) the engine returns
 the model value for every segment.
 
 Model: tests/channel_space/channel_space.azr plus E1-only and E2-only copies of its capture data set (`multipole E1`,
 `E2`).  Checks, for each
 of the three entry points: calculated_segments of the E1 (E2) segment equals its calculated_segments_e1 (_e2), bit
-for bit; the plain capture segment's total differs from its E1 part (control); pyazr's calculate_rwa and
-calculate_sfactor_rwa give the part (times the S-factor conversion).  The start-head engine fails the first checks.
+for bit; the plain capture segment's total differs from its E1 part (control); pyazr's evaluate(x).data[i].model
+gives the part, and times extra["sfactor_conversion"] the S factor.  The start-head engine fails the first checks.
 
 Needs the compiled engine; skips cleanly without it.  Run from anywhere:  python3 tests/pyazr/api_model_value_test.py
 """
@@ -85,13 +85,15 @@ def main():
                 tot, e1 = np.asarray(s.calculated_segments(kt)), np.asarray(s.calculated_segments_e1(kt))
                 check(f"{name}: control -- the plain capture segment's total is not its E1 part",
                       not np.array_equal(tot, e1), f"max |total/E1 - 1| = {np.max(np.abs(tot / e1 - 1)):.3g}")
-            v = m.calculate_rwa(x)
-            check("calculate_rwa: the E2-only segment is the E2 part",
+            ev = m.evaluate(x)
+            v = [d.model for d in ev.data]
+            s.update_segments_rwa(x)  # the engine's forward pass at x, read through the binding below
+            check("evaluate: the E2-only segment is the E2 part",
                   np.array_equal(np.asarray(v[k2]), np.asarray(s.calculated_segments_e2(k2))))
-            sf = m.calculate_sfactor_rwa(x)
+            sf = ev.data[k2].model * ev.data[k2].extra["sfactor_conversion"]
             want = np.asarray(s.calculated_segments_e2(k2)) * np.asarray(s.calculated_conv(k2))
-            check("calculate_sfactor_rwa: the E2-only segment is the E2 part times the conversion",
-                  np.array_equal(np.asarray(sf[k2]), want))
+            check("the S factor: the E2-only segment is the E2 part times the conversion",
+                  np.array_equal(sf, want))
     finally:
         shutil.rmtree(work, ignore_errors=True)
     print(f"api_model_value: {'FAIL' if failures else 'all checks passed'} ({failures} failure{'' if failures == 1 else 's'})")

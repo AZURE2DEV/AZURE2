@@ -181,7 +181,7 @@ try:
         fit = os.path.join(out, "work", v["label"] + "_fit.azr")
         import numpy as np
         with Session(fit, cwd=os.path.join(out, "work")) as s:
-            chi = float(np.sum(s.calculate_chi2_rwa(np.asarray(s.params_rwa, float))))
+            chi = s.evaluate(np.asarray(s.params_rwa, float)).chi2
         check(f"{v['label']}: chi2 is that of its snapshot", close(chi, v["chi2"], 1e-5),
               f"{chi} vs {v['chi2']}")
         check(f"{v['label']}: chi2 went down", v["chi2"] <= v["fit"]["start_chi2"])
@@ -227,9 +227,9 @@ try:
     hazr = os.path.join(proj, "hand.azr")
     hand.save(hazr)
     with Session(hazr, cwd=proj) as s:
-        want = float(np.sum(s.calculate_chi2_rwa(np.asarray(s.params_rwa, float)))) + 9.0
+        want = s.evaluate(np.asarray(s.params_rwa, float)).chi2 + 9.0
     with Session(kazr, cwd=proj) as s:
-        plain = float(np.sum(s.calculate_chi2_rwa(np.asarray(s.params_rwa, float))))
+        plain = s.evaluate(np.asarray(s.params_rwa, float)).chi2
     got = []
     for extra in ([], ["--in-process"]):
         o3 = os.path.join(tmp, "out3" + "".join(extra))

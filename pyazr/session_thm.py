@@ -53,7 +53,7 @@ class SessionTHM:
         """Shared norm and background of one THM experiment at ``params``.
 
         The segments of ``experiment[<name>]`` share one profiled norm ``n*``
-        (it multiplies the data, as ``segment_norms``) and a background
+        (it multiplies the data, as ``evaluate(x).data[i].norm``) and a background
         ``b(E) = b0 + b1 E + b2 E^2`` added to the folded HOES model (model
         units, E the c.m. energy of the THM entrance pair, MeV); both are
         eliminated by closed-form weighted linear least squares at every
@@ -69,7 +69,7 @@ class SessionTHM:
         ``status``      "profiled", or what a degenerate profile fell back to
 
         The model at a point, as the output files show it next to the data
-        scaled by n*, is ``calculate_rwa`` plus ``b(E)``.  Runs a chi-squared
+        scaled by n*, is ``evaluate(x).data[i].model`` plus ``b(E)``.  Runs a chi-squared
         evaluation.  KeyError for an unknown experiment.
         """
         reports = self.thm_experiments(params)

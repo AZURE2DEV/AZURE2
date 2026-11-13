@@ -10,7 +10,7 @@ the segment with `observable="analyzing-power"` (code 7 in the raw `.azr`); A_y 
 fitting, plotting and output files need nothing special.
 
 ```python
-ay = m.calculate_analyzing_power_rwa(m.params_rwa)
+ay = m.evaluate().data[0].model      # A_y of an analyzing-power data set
 ```
 
 - **Two routes.** Particle exits use the channel-spin amplitude matrix (Seyler), with the entrance index decomposed
@@ -82,7 +82,7 @@ key means total capture with a WARNING. A type-4 TOTAL_CAPTURE extrapolation equ
 
 ## Excitation energy column
 
-The E_x column of `AZUREOut_*` and pyazr's `calculate_excitation_energy` include the entrance pair's excitation
+The E_x column of `AZUREOut_*` and pyazr's `evaluate(x).data[i].excitation_energies` include the entrance pair's excitation
 energy E* (a segment on an excited-state pair, e.g. n + ⁷Be*). Builds before 2026-10-28 (expires: 2027-02-01)
 omitted E* in the column only; the physics used the full value.
 
@@ -103,9 +103,9 @@ level has a width in that channel spin. Formalism: `docs/source/theory/scatterin
 - Measured values enter as an optional block
   `<scatteringLengths>` / `active pairKey s value sigma [imValue imSigma]` / `</scatteringLengths>`
   (s = −1: the coherent sum Σ_s (2s+1) a_s / ((2j₁+1)(2j₂+1)); neutron tables give the bound b, enter b·A/(A+1)).
-  Each line is a χ² term in every fitter, the MCMC likelihood and `calculate_chi2_rwa`; `chiSquared.out` gains
+  Each line is a χ² term in every fitter, the MCMC likelihood and pyazr's objective; `chiSquared.out` gains
   `Total-Scattering-Length-Chi-Squared`.
-- pyazr: `m.scattering_lengths(x)`, `m.penalties()["scattering_length"]`, `m.scattering_length_chi2(x)`; the
+- pyazr: `m.scattering_lengths(x)`, `m.evaluate(x).terms["model data"]` (with `.model_data` per datum); the
   measured values are `datum` records of quantity `scattering_length` (`Project.add_datum`, `set`, `remove`).
 - Trap when entering published Brune widths γ̃: the `.azr` width is the observed width
   Γ = 2P γ̃² / (1 + Σ γ̃² dS/dE), not 2P γ̃²; dropping the denominator moved a ³He+⁴He a_0 by 0.6 %

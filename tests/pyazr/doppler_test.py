@@ -6,8 +6,8 @@ must include the Doppler step).
 
 The fitted temperature (``doppler free_gas T K fit ...`` on a target, parameter <target>.doppler), on grad_fit
 (targets D0 (data sets 1, 2) and D1 (5, 6) "fit grid_max 900", D2 (3, 4) "fit prior 300 20"): the type-9 parameter
-records, penalties()["doppler"] and objective() at moved temperatures, and the doppler entries of chi2_and_grad and the
-residual_jacobian columns against central finite differences, at the start and at moved temperatures.  (The record
+records, evaluate().terms["Doppler priors"] and the objective at moved temperatures, and the doppler entries of the
+objective's gradient and Jacobian columns against central finite differences, at the start and at moved temperatures.  (The record
 grammar -- the doppler field, its fit form and refusals -- is tests/doppler_fgm/check.sh's.)
 
 Needs the compiled module and skips cleanly without it.
@@ -57,7 +57,7 @@ try:
             shutil.copy(os.path.join(tmp, name + ".azr"), work)
             os.symlink(os.path.join(tmp, "data"), os.path.join(work, "data"))
             with Session(os.path.join(work, name + ".azr"), cwd=work) as s:
-                return [np.asarray(v, float) for v in s.calculate_rwa(np.asarray(s.params_rwa, float))]
+                return [np.asarray(v, float) for v in [d.model for d in s.evaluate(np.asarray(s.params_rwa, float)).data]]
         def session(name):
             work = os.path.join(tmp, "run_" + name)
             os.makedirs(os.path.join(work, "output"))
@@ -84,45 +84,45 @@ try:
                   and abs(by["D2.doppler"].doppler_max - 363.0) < 1e-9)
             check("three type-9 records: D0, D1 (no prior, grids for 900 K), D2 (prior 20 K, grids for 363 K)", ok, dp)
             x = np.asarray(s.params_rwa, float)
-            pen0 = s.penalties(x)["doppler"]
+            pen0 = s.evaluate(x).terms["Doppler priors"]
             xm = x.copy()
             xm[by["D2.doppler"].free_index] = 320.0
             xm[by["D0.doppler"].free_index] = 450.0
             xm[by["D1.doppler"].free_index] = 450.0
-            pen = s.penalties(xm)["doppler"]
-            obj = s.objective(xm) - float(np.sum(s.calculate_chi2_rwa(xm)))
-            check("penalties()['doppler'] = ((320 - 300)/20)^2 = 1 at D2 = 320 (D0, D1 have no prior), 0 at 300",
+            pen = s.evaluate(xm).terms["Doppler priors"]
+            obj = s.objective()(xm) - s.evaluate(xm).chi2
+            check("terms['Doppler priors'] = ((320 - 300)/20)^2 = 1 at D2 = 320 (D0, D1 have no prior), 0 at 300",
                   abs(pen - 1.0) < 1e-12 and pen0 == 0.0, (pen, pen0))
             check("objective() carries it", abs(obj - 1.0) < 1e-9, obj)
-            c_lo = float(np.sum(s.calculate_chi2_rwa(x)))
-            c_mv = float(np.sum(s.calculate_chi2_rwa(xm)))
+            c_lo = s.evaluate(x).chi2
+            c_mv = s.evaluate(xm).chi2
             check("moving the temperatures moves the data chi2", abs(c_mv - c_lo) > 1e-6 * abs(c_lo), (c_lo, c_mv))
-            # chi2_and_grad: the doppler entries against central differences of the data chi2
+            # the objective's gradient: the doppler entries against central differences of the objective
             for name, xx in (("start", x), ("moved", xm)):
-                c, g = s.chi2_and_grad(xx)
+                c, g = s.objective().value_and_grad(xx)
                 g = np.asarray(g, float)
                 for p in dp:
                     h = 1e-3
                     xp, xn = xx.copy(), xx.copy()
                     xp[p.free_index] += h
                     xn[p.free_index] -= h
-                    fd = (float(np.sum(s.calculate_chi2_rwa(xp))) - float(np.sum(s.calculate_chi2_rwa(xn)))) / (2 * h)
+                    fd = (s.objective()(xp) - s.objective()(xn)) / (2 * h)
                     rel = abs(g[p.free_index] - fd) / max(abs(fd), 1e-300)
-                    check(f"chi2_and_grad d chi2/d {p.name} = central difference ({name}, rel 1e-6)", rel < 1e-6,
+                    check(f"objective gradient d f/d {p.name} = central difference ({name}, rel 1e-6)", rel < 1e-6,
                           (g[p.free_index], fd, rel))
-            # residual_jacobian: the doppler columns against central differences of the residuals
-            r0, J = s.residual_jacobian(xm)
+            # objective().residuals_and_jacobian: the doppler columns against central differences of the residuals
+            r0, J = s.objective().residuals_and_jacobian(xm)
             J = np.asarray(J, float)
             for p in dp:
                 h = 1e-3
                 xp, xn = xm.copy(), xm.copy()
                 xp[p.free_index] += h
                 xn[p.free_index] -= h
-                rp, _ = s.residual_jacobian(xp)
-                rn, _ = s.residual_jacobian(xn)
+                rp, _ = s.objective().residuals_and_jacobian(xp)
+                rn, _ = s.objective().residuals_and_jacobian(xn)
                 fd = (np.asarray(rp, float) - np.asarray(rn, float)) / (2 * h)
                 err = float(np.max(np.abs(J[:, p.free_index] - fd)) / np.max(np.abs(fd)))
-                check(f"residual_jacobian column {p.name} = central differences (1e-6 of the largest)", err < 1e-6, err)
+                check(f"objective Jacobian column {p.name} = central differences (1e-6 of the largest)", err < 1e-6, err)
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 

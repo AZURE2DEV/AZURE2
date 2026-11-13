@@ -17,7 +17,7 @@ free norms):
      fit's prior terms, and so does the AZURE2 binary run on it
      (chiSquared.out, rel 1e-6).  Between October 3 and this change the
      prior moved to the fitted norm (Total-Norm-Chi-Squared 0).
-  (A Python list handed to calculate_chi2_rwa, as here, used to crash the
+  (A Python list handed to the engine's chi-squared, as here, used to crash the
   process: the GIL-free binding reference-counted the converted array.)
   3. norms="nominal": the norm fields keep the loaded values (the prior
      centres), the .sav has the fitted norms, and the snapshot alone does not
@@ -117,8 +117,8 @@ if Session is not None:
             for k, i, f in zip(keys, idx, (0.93, 1.07, 1.11)):
                 x[i] = x[i] * f
                 want[k] = x[i]
-            chi_fit = s.calculate_chi2_rwa(x)[0]     # x is a list: this used to segfault
-            chi_old = s.calculate_chi2_rwa(s.params_rwa)[0]
+            chi_fit = s.evaluate(x).chi2     # x is a list: this used to segfault
+            chi_old = s.evaluate(s.params_rwa).chi2
             check("the moved norms change chi2", rel(chi_fit, chi_old) > 1e-3, (chi_fit, chi_old))
 
             # 2. ---------------------------------------------------------------
@@ -130,19 +130,19 @@ if Session is not None:
             prior = norm_fields(fit_azr)[3].split("prior")[1].split()
             check("the prior of schardt (key 3) keeps its loaded centre",
                   prior == ["0.9950877877494786", "15%"], norm_fields(fit_azr)[3])
-            pen_fit = s.penalties(x)
-            pen_fit_norm = float(pen_fit["norm"].sum())
+            pen_fit = s.evaluate(x)
+            pen_fit_norm = float(sum(d.norm_chi2 for d in pen_fit.data))
             check("the fit pays a norm prior", pen_fit_norm > 0.1, pen_fit)
             with Session(fit_azr, cwd=work) as t:
-                chi_alone = t.calculate_chi2_rwa(t.params_rwa)[0]
-                pen = t.penalties(t.params_rwa)
+                chi_alone = t.evaluate(t.params_rwa).chi2
+                pen = t.evaluate(t.params_rwa)
             check("the snapshot alone gives the fit's chi2", rel(chi_alone, chi_fit) < 1e-9,
                   (chi_alone, chi_fit))
             print(f"        chi2 fit {chi_fit:.6f}, snapshot alone {chi_alone:.6f}, "
                   f"at the loaded norms {chi_old:.6f}; norm prior {pen_fit_norm:.6f}")
             check("and the fit's priors (centred where the fit had them)",
-                  rel(float(pen["norm"].sum()), pen_fit_norm) < 1e-9
-                  and float(pen["shift"].sum()) == 0.0, (pen, pen_fit))
+                  rel(float(sum(d.norm_chi2 for d in pen.data)), pen_fit_norm) < 1e-9
+                  and float(sum(d.shift_constant_chi2 for d in pen.data)) == 0.0, (pen, pen_fit))
             if binary:
                 c, n = cli_chi2(work, "fit.azr")
                 check("the binary run on the snapshot gives it too", rel(c, chi_fit) < 1e-6,
@@ -162,7 +162,7 @@ if Session is not None:
             check("the .sav has the fitted norms",
                   all(rel(sav[names[k]], want[k]) < 1e-7 for k in want), sav)
             with Session(nom_azr, cwd=work) as t:
-                chi_nom = t.calculate_chi2_rwa(t.params_rwa)[0]
+                chi_nom = t.evaluate(t.params_rwa).chi2
             check("alone it is not the fit (the trade-off)", rel(chi_nom, chi_fit) > 1e-3,
                   (chi_nom, chi_fit))
             try:
@@ -180,10 +180,10 @@ if Session is not None:
         check("the snapshot is written and verified (same norms as 2)",
               norm_fields(last_azr) == norm_fields(fit_azr))
         with Session(last_azr, cwd=work) as t:
-            chi_last = t.calculate_chi2_rwa(t.params_rwa)[0]
+            chi_last = t.evaluate(t.params_rwa).chi2
         check("alone it gives the fit's chi2", rel(chi_last, chi_fit) < 1e-9, (chi_last, chi_fit))
         try:
-            s.calculate_chi2_rwa(x)
+            s.evaluate(x)
             check("a closed session refuses further work", False, "no error")
         except RuntimeError:
             check("a closed session refuses further work", True)

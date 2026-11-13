@@ -2,6 +2,88 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-session`) — pyazr: one evaluation (`evaluate`, `objective()`)
+
+**Done.**  The session has two ways to evaluate, `Session.evaluate(x)` (an `Evaluation`) and `Session.objective()`
+(an `Objective`, the name `fit_objective` had); every other evaluation method is gone, with no alias:
+`calculate`, `calculate_rwa`, `calculate_all_rwa`, `calculate_sfactor[_rwa]`, `calculate_analyzing_power[_rwa]`,
+`calculate_angular_dists[_rwa]`, `calculate_energies`, `calculate_angles`, `calculate_excitation_energy`,
+`calculate_chi2[_rwa]`, `segment_chi2`, `dataset_chi2`, `segment_norms`, `penalties`, `scattering_length_chi2`,
+`objective(x)`, `objective_and_grad`, `chi2_and_grad`, `residual_jacobian`, `residuals`.  `pyazr/session.py`
+2131 -> 1621 lines (the size register lowered).
+- `Evaluation.data[i]` gained `rows` (a slice: the data set's rows of `Objective.residuals(x)`, from the binding's
+  new fields `first_row` and `rows` of the data set's record) and `shift_constant_chi2`, `shift_sqrt_chi2`,
+  `shift_function_chi2` (the three parts of the shift prior, fields of the same record; `shift_chi2` is their sum);
+  `api/src/pybind_evaluation.cpp` `DataSetDict`.
+- `Objective.jacobian(x, skip=None)` and `residuals_and_jacobian(x, skip=None)`: `AZUREAPI::ObjectiveRowsRWA` takes
+  `skipColumns` and hands it to `CalculateResidualJacobianRWA` (`api/include/AZUREAPI.h`, `api/src/
+  AZUREAPIObjective.cpp`: the signature and one call), the binding's `objective_rows_rwa(params, jacobian, skip=[])`
+  checks the indices (`api/src/pybind_api.cpp`, `pybind_evaluation.cpp` `ObjectiveRowsDict`).  Forwarding only: the
+  skipped columns are zero in the data rows; the rows after them (a prior's row) keep their constant derivative.
+- `evaluate` in extrapolation mode returns the extrapolations (named by the engine's description) from the engine's
+  forward pass (`update_segments_rwa`, `calculated_*`: what `calculate_rwa` read), with `extra`
+  `sfactor_conversion` and `legendre`, and every chi-squared field, `norm`, `values`, `errors`, `residuals`, `rows`
+  `None` (`Evaluation.has_data` False).  The engine's objective evaluation is not used there: it needs the data
+  (below).  The mode switch itself stays for the next slices.
+- Callers ported: `pyazr/ui/engine.py` (one `evaluate` and one `objective().residuals` per payload in place of six
+  evaluations; the page's data chi-squared stays the binding's `calculate_chi2_rwa`, under the session's lock, so
+  that no number of the page changes), `tabulate.py`, `angular.py` (its `use_rwa` argument is gone: a physical
+  vector is no input), `save_fit`'s check (data chi-squared and objective of the snapshot against the fit's),
+  `scripts/thm_model_average.py`, the examples (`per_dataset_chi2.py` rewritten on `data[i].chi2` and the rows),
+  113 files of `tests/` by script (`work/pysess/port_evaluation.py`: one expression per call; `port_prose.py`: the
+  names in docstrings and messages) and by hand where the meaning had to be read; `README.md`, the skills under
+  `.claude/skills/` (the class name `Session` too, as the director asked), the user guide (`pyazr.rst`: the
+  chi-squared section rewritten, a section "Earlier names" with the migration table, history sentences removed, the
+  plain paragraphs reflowed to 118 columns: 1503 -> 1368 lines), `chi_squared.rst`, `mcmc.rst`, `gamma_decay.rst`,
+  `project_from_python.rst`, `data_formats.rst`, `command_line.rst`, `thm_implementation.rst`,
+  `polarization_implementation.rst`, the Developer Guide (`api.rst`, `architecture.rst`, `arrows.tsv`),
+  `pyazr/CLAUDE.md`, `pyazr3.md` step 5.
+
+**Measured** (`work/pysess/measure_s2.py`, `compare_s2.py`: the start commit's pyazr against this one on the same
+build, nine copies of test projects at a displaced point):
+
+| old call | replacement | T1 T2 T2-Park T3 13N 7Li_p_a energy_shift_sqrt gamma_decay record |
+|---|---|---|
+| `segment_chi2(x)` | `sum(r[d.rows]**2)`, `r = objective().residuals(x)` | bit for bit, all (T2 has a covariance) |
+| `calculate_chi2_rwa(x)[0]` | `ev.chi2` + terms `Park J > 0`, `abundances`, `model data` | bit for bit; T2 1.1e-16 |
+| `penalties` norm, shift, shift_sqrt, shift_fn | `data[i].norm_chi2`, `shift_*_chi2` | bit for bit, all |
+| `segment_norms(x)` | `data[i].norm` | bit for bit, all |
+| `calculate_rwa`, `calculate_energies`, `calculated_conv` | `data[i].model`, `.energies`, `.extra` | bit for bit |
+| extrapolations: model, energies, conversion, S | `evaluate(x)` in extrapolation mode | bit for bit (T1, T3, 7Li) |
+| `residual_jacobian(x, skip)` | first rows of `residuals_and_jacobian(x, skip)` | bit for bit (T2: one shift) |
+| `residuals(x)` | first rows of `objective().residuals(x)` | bit for bit, all |
+| `chi2_and_grad(x)` gradient | `2 J[:n].T @ r[:n]` over the data rows | 4e-16..4e-15 rel; T2 6.0e-5, T3 8.2e-3 |
+
+`chi2_and_grad`'s gradient is that of the data chi-squared plus the model's terms (T2: the abundance term; T3: the
+model data): over all rows but the prior covariance it equals T3's to 2.2e-15; on T2 no row range gives it (the
+diagonal priors' rows lie between).  The tests that compared it with differences of `calculate_chi2_rwa` now compare
+the objective's gradient with differences of the objective, at the same tolerances.
+
+**Tests whose assertions changed in more than names** (each to the same tolerance): the gradient tests moved to the
+objective (`formal_capture_mask`, `doppler`, `model_data`, `ratio_to_rutherford`, `park_gradient`, `units_scales`,
+`upgrade_gradient`, `data_covariance`, `scattering_length`, `screening`, `thickness`, `thm_coherent_background`,
+`thm_experiment`, `thm_profiled`, `thm_park`: the value check is against the objective, the differences are of the
+objective; where a check compared the old data-plus-model chi-squared with the data and a term, it compares the
+objective with the sum of its other terms); the row checks take the data rows `[:n]` where the objective adds prior
+rows (`jacobian_skip`: the skipped column is zero in the data rows, plus a new check that the prior rows are those of
+the full call; `natural_target`, `thm_park`, `scattering_length`, `data_covariance`); tests of the engine's physical
+path and of the binding call the binding (`physical_norm`, `gamma_decay` part 5, `parallel_points`,
+`objective_object` against the binding's calls); `geometry_no_transform` (the physical vector is no input: the check
+of energies and angles at `params` is gone), `azr_parse_cache` (the calls counted are `evaluate`, `objective()(x)`,
+`objective().residuals`), `objective_test` (data sets aggregate no segments: one data set per segment),
+`evaluation_test` (new checks: rows, shift parts, extrapolations), `objective_object_test` (new check (e): skip).
+
+**Verified** (build `work/b-pysess`, 0 warnings): the consistency test; `ctest -R pyazr_ -LE slow -j 2` (OMP 1,
+OpenBLAS 1): 130 of 130; T1, T2, T3, 13N x 3 bases with this build's program against the base build: 12 of 12
+identical.  Shown to fail: rows shifted by one, a shift part changed, the extrapolations' model changed by 1e-12
+(`evaluation_test`); `skip` dropped in `Objective` (`jacobian_skip_test`).  Not run: the slow tests, all projects,
+`tests/run_tests.sh`, the converted-tree gate (end of branch).  **Open**: the parameter vector and table, the Python physics, the libraries (slices
+3-5).  Found, outside this work: (1) on T2, 13N, `energy_shift_sqrt` and the gamma_decay record, the engine's forward
+pass in extrapolation mode after a data-mode evaluation raises "CalculationPlan::EnergyTasks: the working copy has no
+node table" (the start commit's `calculate_rwa` the same); (2) the binding's `calculated_conv(i)` (and its
+`calculated_*` siblings) crash the process when called before any forward pass; (3) copies of
+`tests/data_covariance/dense.azr` and `tests/scattering_length/be7p.azr` alone in a directory do not initialize.
+
 ## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-session`) — pyazr: the class `Session`, its lock
 
 **Measured before the renaming** (counts of each name of `pyazr3.md` section 2.3 by word in `pyazr/` without `ui/`

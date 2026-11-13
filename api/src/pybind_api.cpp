@@ -67,7 +67,8 @@ py::list PairRecordDicts(const AZUREAPI &api);
 // pybind_evaluation.cpp: one evaluation read as the writer reads it, the objective's rows and log-probability
 py::list PointOutputFields();
 py::dict EvaluationDict(const AZUREAPI &api, const vector_r &free);
-py::dict ObjectiveRowsDict(const AZUREAPI &api, const vector_r &free, bool withJacobian);
+py::dict ObjectiveRowsDict(const AZUREAPI &api, const vector_r &free, bool withJacobian,
+                           const std::vector<int> &skip);
 double LogProbability(const AZUREAPI &api, const vector_r &free);
 py::tuple SamplerLogProbability(AZUREAPI &api, const vector_r &x0, const vector_r &x);
 std::vector<std::string> OwnerFieldsOf(ParamKind kind);
@@ -502,10 +503,15 @@ class Session {
     expect_free(v, "evaluation_rwa");
     return EvaluationDict(*api_, v);
   }
-  py::dict objective_rows_rwa(const py::array_t<double, py::array::forcecast> &p, bool jacobian) {
+  py::dict objective_rows_rwa(const py::array_t<double, py::array::forcecast> &p, bool jacobian,
+                              const std::vector<int> &skip) {
     vector_r v = to_vector(p);
     expect_free(v, "objective_rows_rwa");
-    return ObjectiveRowsDict(*api_, v, jacobian);
+    for (int c : skip)
+      if (c < 0 || c >= (int)v.size())
+        throw AZURE2Error("objective_rows_rwa: skip column " + std::to_string(c) + " is outside the " +
+                          std::to_string(v.size()) + " free parameters.");
+    return ObjectiveRowsDict(*api_, v, jacobian, skip);
   }
   std::vector<std::string> objective_term_names() const { return api_->ObjectiveTermNames(); }
   double log_prob_rwa(const py::array_t<double, py::array::forcecast> &p) {
@@ -1027,7 +1033,9 @@ PYBIND11_MODULE(_azure2, m) {
            "One evaluation at the free vector: the objective, its terms, the data chi^2 and every data set's arrays, "
            "read as the output writer reads them (pyazr.evaluate.Evaluation).")
       .def("objective_rows_rwa", &Session::objective_rows_rwa, py::arg("params"), py::arg("jacobian"),
-           "The objective as least-squares rows (sum r^2 = the objective) and, with jacobian, their Jacobian.")
+           py::arg("skip") = std::vector<int>(),
+           "The objective as least-squares rows (sum r^2 = the objective) and, with jacobian, their Jacobian; the "
+           "free columns listed in skip are not finite-differenced (left zero).")
       .def("objective_term_names", &Session::objective_term_names,
            "The names of the objective's terms (ObjectiveTerm::Name), in the engine's order.")
       .def("log_prob_rwa", &Session::log_prob_rwa, py::arg("params"),

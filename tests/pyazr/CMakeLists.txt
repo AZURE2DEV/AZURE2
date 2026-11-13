@@ -28,7 +28,7 @@ add_test(NAME pyazr_objective
                  ${CMAKE_CURRENT_SOURCE_DIR}/objective_test.py)
 set_tests_properties(pyazr_objective PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
-# calculate_chi2 (physical parameters) is the same objective as calculate_chi2_rwa:
+# the engine's chi-squared of a physical vector (the binding's calculate_chi2_physical) is that of the fit vector:
 # the normalizations in its vector are applied (they were not before 2026-10-26),
 # the Park / abundance / scattering-length terms are included, a rejected vector is +inf.
 add_test(NAME pyazr_physical_norm
@@ -44,7 +44,7 @@ add_test(NAME pyazr_radius_override
                  ${CMAKE_CURRENT_SOURCE_DIR}/radius_override_test.py)
 set_tests_properties(pyazr_radius_override PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# A session parses its .azr once: calculate_rwa / objective do not re-read the file per segment per
+# A session parses its .azr once: evaluate().data[i].model / objective do not re-read the file per segment per
 # call (before 2026-11-03: 83 ms per call from NFS on the 3H+d model instead of 8 ms).
 add_test(NAME pyazr_azr_parse_cache
          COMMAND ${Python3_EXECUTABLE}
@@ -233,7 +233,7 @@ add_test(NAME pyazr_thm_vertex_reach
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_vertex_reach_test.py)
 set_tests_properties(pyazr_thm_vertex_reach PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
-# calculate_energies & co. run no observed-to-formal transformation, so an
+# evaluate().data[i].energies & co. run no observed-to-formal transformation, so an
 # RWA vector no longer prints "Denominator less than zero".
 add_test(NAME pyazr_geometry_no_transform
          COMMAND ${Python3_EXECUTABLE}
@@ -306,7 +306,7 @@ add_test(NAME pyazr_shift_fn
 set_tests_properties(pyazr_shift_fn PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 # The same with the node tables checked at every hand-over and point pass (AZURE_NODE_CHECK=1): the Jacobian's local
 # shift column moves the points of its segments and must look their slots up again (FillShiftColumns), as the
-# hand-over does; with the slots left on the old nodes residual_jacobian raised "48 differ".
+# hand-over does; with the slots left on the old nodes objective().residuals_and_jacobian raised "48 differ".
 add_test(NAME pyazr_shift_fn_node_check
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/shift_fn_test.py)
@@ -477,7 +477,7 @@ add_test(NAME pyazr_scattering_length
                  ${CMAKE_CURRENT_SOURCE_DIR}/scattering_length_test.py)
 set_tests_properties(pyazr_scattering_length PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# Model data (<modelData>): pyazr.model_data's records against hand values on T2, the term in penalties(), its
+# Model data (<modelData>): pyazr.model_data's records against hand values on T2, the term in evaluate().terms, its
 # gradient against central differences, and the binding's resonance_strength / statistical_factor / branching_ratio.
 add_test(NAME pyazr_model_data
          COMMAND ${Python3_EXECUTABLE}
@@ -553,7 +553,7 @@ set_tests_properties(pyazr_potential_record PROPERTIES ENVIRONMENT "OMP_NUM_THRE
 
 # chiSquared.out written through the API carries the Park, abundance and scattering-length totals
 # (2026-10-27, audit item 30).
-# The fit's objective through pyazr (docs/upgrade/objective.md step 4): objective() = objective_and_grad()[0] = the sum
+# The fit's objective through pyazr (docs/upgrade/objective.md step 4): objective() = objective().value_and_grad[0] = the sum
 # of the engine's terms, the gradient against finite differences, on models with norm, shift-function and
 # scattering-length terms.
 add_test(NAME pyazr_objective_terms
@@ -643,14 +643,14 @@ add_test(NAME pyazr_ec_cache_precision
                  ${CMAKE_CURRENT_SOURCE_DIR}/ec_cache_precision_test.py)
 set_tests_properties(pyazr_ec_cache_precision PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# residual_jacobian(x, skip=cols): held columns are not finite-differenced and come back zero, everything else
+# objective().residuals_and_jacobian(x, skip=cols): held columns are not finite-differenced and come back zero, everything else
 # bit-identical (2026-10-30, rmfit polish passes the columns its bounds fix).
 add_test(NAME pyazr_jacobian_skip
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/jacobian_skip_test.py)
 set_tests_properties(pyazr_jacobian_skip PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# residual_jacobian differences shift and density columns forward only, a self-contained segment's shift on its own
+# objective().residuals_and_jacobian differences shift and density columns forward only, a self-contained segment's shift on its own
 # rows (2026-10-30: each side re-solved the whole Jacobian, adjoints included).
 add_test(NAME pyazr_jacobian_shift_columns
          COMMAND ${Python3_EXECUTABLE}
@@ -741,7 +741,7 @@ add_test(NAME pyazr_doppler
 set_tests_properties(pyazr_doppler PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
 # The fitted sample thickness of transmission / yield data sets (a sample target's fitted areal_density):
-# type-10 records, penalties()["thickness"], chi2_and_grad and residual_jacobian columns
+# type-10 records, terms["thickness priors"], objective().value_and_grad and objective().residuals_and_jacobian columns
 # (tests/transmission_yield models, format 3).
 add_test(NAME pyazr_thickness
          COMMAND ${Python3_EXECUTABLE}
@@ -785,7 +785,7 @@ set_tests_properties(pyazr_light_excitation PROPERTIES ENVIRONMENT "OMP_NUM_THRE
 
 # The prior parameter covariance ("priorCovariance=<file>" in <config>, 2026-11-05): pyazr.priors (write_prior /
 # read_prior, read_covariance_dat, prior_from_fit), Project.config()/set_config(priorCovariance=), and through the engine
-# penalties()["prior_covariance"], objective(), the residual_jacobian rows L^-1 (p - mu) against central differences,
+# terms["prior covariance"], objective(), the objective().residuals_and_jacobian rows L^-1 (p - mu) against central differences,
 # the marginalization of a fixed listed parameter and a refused file (tests/norm_groups model).
 add_test(NAME pyazr_prior_covariance
          COMMAND ${Python3_EXECUTABLE}
@@ -965,7 +965,7 @@ set_tests_properties(pyazr_config_options PROPERTIES ENVIRONMENT "OMP_NUM_THREAD
 add_test(NAME pyazr_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/cli_test.py)
 set_tests_properties(pyazr_cli PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
-# pyazr's Objective (Session.fit_objective()) against today's objective_and_grad, residuals and residual_jacobian bit for
+# pyazr's Objective (objective()) against today's objective().value_and_grad, residuals and objective().residuals_and_jacobian bit for
 # bit on T1-T3, 13N_fast, three nuisance kinds and the gamma_decay record with priors; its rows' squares, gradient and
 # Jacobian; log_prob at the sampler's excluded points and against the engine's sampler; two threads (about 55 s at one
 # thread).

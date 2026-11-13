@@ -343,9 +343,11 @@ class AZUREAPI {
    * gamma_decay priors and wall, the abundance sums), one row (p - c)/sigma per diagonal prior (ForEachDiagonalPrior)
    * and one per nuisance prior.  With \p jacobianOut, their Jacobian over the free parameters, row-major; without,
    * the rows from a forward pass only.  False (nothing written) where the analytic Jacobian is not available
-   * (CalculateResidualJacobianRWA's [-1]).
+   * (CalculateResidualJacobianRWA's [-1]).  \p skipColumns is handed to CalculateResidualJacobianRWA as it is (free
+   * columns whose finite differences are not computed and come back zero).
    */
-  bool ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r *jacobianOut) const;
+  bool ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r *jacobianOut,
+                        const std::vector<int> &skipColumns = {}) const;
   /// Whether a free value lies outside the limits of a parameter whose kind's row has samplerSupport
   /// (ParameterKind.h; the ensemble sampler's -infinity, docs/upgrade/objective.md section 6).
   bool OutsideSamplerSupport(const vector_r &params) const;

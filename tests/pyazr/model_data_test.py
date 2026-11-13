@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Model data through pyazr (<modelData>, src/ModelData.cpp): pyazr.model_data's records on T2's generator
 parameters (tests/upgrade/T2/T2_true.azr) against the hand values of tests/model_data/README.md; the term in
-penalties(); the term's share of chi2_and_grad against central differences; the binding's resonance_strength,
+evaluate().terms; the term's share of objective().value_and_grad against central differences; the binding's resonance_strength,
 statistical_factor and branching_ratio against the hand values.
 
 Needs the compiled module; skips cleanly without it.
@@ -98,7 +98,7 @@ try:
     a0 = {(v.pair, v.jpi): v for v in m.scattering_lengths()}[(1, "1-")].a0.real
     check("scattering length = scattering_lengths()", close(by["a_p15N"].model, a0, 1e-12), (by["a_p15N"].model, a0))
     check("source kept", by["wg_L5"].source == "hand value + 1 sigma", by["wg_L5"].source)
-    term = m.penalties(x)["scattering_length"]  # the whole model-data term
+    term = m.evaluate(x).terms["model data"]  # the whole model-data term
     check("penalties: the term = sum of the records' chi2", close(term, sum(r.chi2 for r in records), 1e-12),
           (term, [r.chi2 for r in records]))
 
@@ -131,15 +131,15 @@ try:
             f.write("\n".join(fit_text) + "\n" + extra)
         fit = Session(fpath)
         xf = np.asarray(fit.params_rwa, float)
-        value, grad = fit.chi2_and_grad(xf)
+        value, grad = fit.objective().value_and_grad(xf)
         h = 1e-6 * np.maximum(1.0, np.abs(xf))
-        obj = lambda v: float(np.sum(fit.calculate_chi2_rwa(v)))
+        obj = fit.objective()
         fd = np.array([(obj(xf + h[i] * e) - obj(xf - h[i] * e)) / (2 * h[i]) for i, e in enumerate(np.eye(xf.size))])
         shares[name] = (grad, fd)
     an = shares["with"][0] - shares["without"][0]
     fd = shares["with"][1] - shares["without"][1]
     worst = float(np.max(np.abs(an - fd) / np.maximum(1.0, np.abs(fd))))
-    check(f"chi2_and_grad: the term's share = central differences ({worst:.2e})", worst < 1e-6, (an, fd))
+    check(f"objective().value_and_grad: the term's share = central differences ({worst:.2e})", worst < 1e-6, (an, fd))
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 

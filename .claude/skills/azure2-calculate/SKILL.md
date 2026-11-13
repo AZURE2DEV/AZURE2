@@ -29,7 +29,7 @@ interference and external-capture parts.
 
 - **CLI** (`$AZURE2_BINARY --no-gui --no-readline project.azr`): one-shot calculate, fit, extrapolate, MINOS, rate or
   MCMC run that writes the standard output files. Use it when the files are the product.
-- **pyazr** (`from pyazr import azure2, Project`; format-3 projects only): the engine compiled into the extension module `pyazr/_azure2`,
+- **pyazr** (`from pyazr import Session, Project`; format-3 projects only): the engine compiled into the extension module `pyazr/_azure2`,
   running in the interpreter. Use it for all evaluation work: χ², scans, decompositions, custom fitters and
   samplers. pyazr does not call the CLI binary; rebuilding `_azure2` is the update. Its version is
   `pyazr.__version__`.
@@ -98,15 +98,16 @@ Runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
 import os
 os.environ.setdefault("OMP_NUM_THREADS", "4")      # before importing numpy
 import numpy as np
-from pyazr import azure2
+from pyazr import Session
 
-with azure2("project.azr", cwd=HERE) as m:          # a session is a context manager: close it
+with Session("project.azr", cwd=HERE) as m:          # a session is a context manager: close it
     x = m.load_sav("output/param.sav")              # free rwa vector of a fit (load by NAME)
-    chi2 = np.sum(m.calculate_chi2_rwa(x))
+    ev = m.evaluate(x)                              # every number at x, from one evaluation
+    chi2 = ev.chi2                                  # the data chi-squared
 ```
 
 - **Pass the same physics options as the project's CLI fits.** pyazr's defaults can differ from an archive's job
-  scripts: `azure2()` defaults to `use_long_wavelength=True`, while many archives run `--no-long-wavelength`. Pass
+  scripts: `Session()` defaults to `use_long_wavelength=True`, while many archives run `--no-long-wavelength`. Pass
   `use_long_wavelength=False`, `use_brune`/`use_park`, `ignore_externals`, … explicitly to match.
 - **One session per process for parallel work.** Several sessions may be open in one process (each is an independent
   engine that enters its own directory per call), but the engine is not thread-safe. Create the session at module
@@ -115,7 +116,7 @@ with azure2("project.azr", cwd=HERE) as m:          # a session is a context man
   session computed wrong capture cross sections (up to 28 %) once a second session on the same model existed;
   multi-session capture results from such a build are suspect (test `tests/pyazr/shared_state_test.py`).
 - **A session parses its `.azr` once** and re-reads it when the file changes on disk or `configure()` runs. In builds
-  before 2026-11-03 (expires: 2027-02-01) every `calculate_rwa` re-parsed the file per segment (3–75 ms per call on
+  before 2026-11-03 (expires: 2027-02-01) every evaluation re-parsed the file per segment (3–75 ms per call on
   NFS); look for this before blaming the worker pool.
 - `m.datasets`, `m.active_datasets` and `m.extrapolations` return copies; editing them changes nothing in the
   session.
@@ -126,23 +127,18 @@ with azure2("project.azr", cwd=HERE) as m:          # a session is a context man
 
 ### Two parameter vectors
 
-- `*_rwa` methods (`calculate_rwa`, `calculate_chi2_rwa`, `calculate_sfactor_rwa`, `chi2_and_grad`,
-  `residual_jacobian`) take the **reduced-width-amplitude** free vector `m.params_rwa`: the fit space and the only one
-  with analytic derivatives. Default to it. Its content depends on the basis (`m.basis`: 1 Brune, 2 Park,
-  0 standard); a vector from one basis is meaningless in another.
-- Plain methods (`calculate`, `calculate_chi2`) take the **physical** free vector `m.params` (E_λ in MeV, partial
-  widths Γ in eV).
+- `m.evaluate(x)` and `m.objective()` take the **reduced-width-amplitude** free vector `m.params_rwa` (the fit
+  vector): the fit space and the only one with analytic derivatives. Its content depends on the basis (`m.basis`:
+  1 Brune, 2 Park, 0 standard); a vector from one basis is meaningless in another.  A physical vector is no input.
+- `m.params` is the **physical** free vector (E_λ in MeV, partial widths Γ in eV), for reports.
 - `m.transform_rwa(x)` maps rwa → physical for the leading R-matrix block only (energies and widths) and returns that
-  block, indexed by `free_index`, whatever the input length. Never feed its result to `calculate`,
-  `calculate_sfactor` or `calculate_chi2`: they take the full physical free vector. Current builds raise
-  `AZURE2Error: ... expected the free parameter vector (N values ...)`; builds before 2026-10-08 (expires: 2027-02-01)
-   accepted a short vector silently, leaving norms and shifts at whatever the engine last held (σ and S
-  right, χ² meaningless, non-monotonic in the scanned parameter).
+  block, indexed by `free_index`, whatever the input length.  A vector of the wrong length raises
+  `ParameterVectorError: ... expected the free parameter vector (N values ...)`.
 - Both vectors hold only free parameters, in `.azr` order: `p.free_index` is the position in the vector, `p.index`
   the position among all parameters (`m.fixed_params`, `param.sav` lines). Parameter names and `.sav` handling:
   azure2-fit.
-- `calculate_rwa` returns, per segment, the quantity χ² is built from: the E1 or E2 component for an
-  `angle-integrated-E1`/`-E2` segment, the total otherwise.
+- `m.evaluate(x).data[i].model` is, per data set, the quantity χ² is built from: the E1 or E2 component for an
+  `angle-integrated-E1`/`-E2` data set, the total otherwise.
 
 ### Data mode and extrapolation mode
 
@@ -156,13 +152,14 @@ re-initialise the session; switch rarely and batch the work.
 ### Observables
 
 ```python
-m.calculate_rwa(x)                  # σ (b) or dσ/dΩ_c.m. (b/sr) per segment
-m.calculate_sfactor_rwa(x)          # S factor (MeV b)
-m.calculate_energies(x)             # E_c.m. (MeV) of the calculated points
-m.calculate_excitation_energy(x)    # E_x of the compound nucleus (MeV)
-m.calculate_angles(x)               # θ_c.m. (deg); differ from the lab angles in the .azr
-m.calculate_analyzing_power_rwa(x)  # A_y, analyzing-power segments
-m.calculate_angular_dists_rwa(x)    # Legendre coefficients, angular-distribution segments
+d = m.evaluate(x).data[i]           # data set i (extrapolation i in extrapolation mode)
+d.model                             # σ (b) or dσ/dΩ_c.m. (b/sr), A_y of an analyzing-power data set
+d.model * d.extra["sfactor_conversion"]   # S factor (MeV b)
+d.energies                          # E_c.m. (MeV) of the calculated points
+d.excitation_energies               # E_x of the compound nucleus (MeV)
+d.angles                            # θ_c.m. (deg); differ from the lab angles in the .azr
+d.extra["legendre"]                 # Legendre coefficients of an angular distribution, one array per point
+d.extra                             # every number a point carries: pyazr.kinds()["data_outputs"]
 m.write_output_files(x)             # AZUREOut_*, chiSquared.out into the existing output directory
 ```
 
@@ -221,11 +218,11 @@ factor at the wrong energy).
 
 | Want | Use |
 |---|---|
-| model S per segment | `m.calculate_sfactor_rwa(x)` (`calculate_sfactor` for a physical vector) |
+| model S per data set | `d.model * d.extra["sfactor_conversion"]` (`d = m.evaluate(x).data[i]`) |
 | data S per point | `m.sfactor[i]`, `m.sfactor_err[i]` |
 | from a finished run | S columns of `AZUREOut_*.out` (fit S, data S, data S error) and of `.extrap` |
 
-`calculate_sfactor_rwa` is σ times a factor that depends only on E, so linear combinations of cross sections you
+The model S is σ times a factor that depends only on E, so linear combinations of cross sections you
 built yourself (a decomposition, an E1/E2 component) convert with `conv = S_full / σ_full` (guard zeros). Units:
 MeV b; ×10³ for keV b. S(0) is read from an extrapolation grid that starts near E_c.m. = 0, with its band from
 azure2-uncertainty (`extrapolation_bands(..., quantity="sfactor")`).
@@ -236,15 +233,16 @@ At the fitted parameters, without refitting, so every term is that component's c
 
 ```python
 m.extrap_mode()
-ex   = m.calculate_excitation_energy(best)
-full = m.calculate_rwa(best)
-off  = m.calculate_rwa(m.without_level(best, jpi="5/2-", energy=6.588))
-only = m.calculate_rwa(m.only_level(best,    jpi="5/2-", energy=6.588))
+model = lambda v: [d.model for d in m.evaluate(v).data]      # one array per extrapolation
+ex   = [d.excitation_energies for d in m.evaluate(best).data]
+full = model(best)
+off  = model(m.without_level(best, jpi="5/2-", energy=6.588))
+only = model(m.only_level(best,    jpi="5/2-", energy=6.588))
 bare_x = best.copy()                                  # every free width zeroed: hard sphere + external capture
 for p in m.parameters.widths:
     if p.free_index is not None:
         bare_x[p.free_index] = 0.0
-bare = m.calculate_rwa(bare_x)
+bare = model(bare_x)
 interference = (full - off) - (only - bare)
 ```
 

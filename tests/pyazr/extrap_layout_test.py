@@ -17,7 +17,7 @@ segments added:
      in extrapolation mode;
   3. the free R-matrix block (names, n_rmatrix) is the same in both modes;
   4. in extrapolation mode a data-mode free vector still works:
-     ``_all_rwa`` and ``calculate_rwa`` give what the engine's own vector gives;
+     ``_all_rwa`` and ``evaluate().data[i].model`` give what the engine's own vector gives;
   5. a free vector set by the caller survives extrap -> data, and chi2 back in
      data mode equals the chi2 before the switch (1e-12);
   6. a session started in extrapolation mode switches to data mode with the
@@ -81,7 +81,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     with Session(path, cwd=work) as m:
         x0 = np.asarray(m.params_rwa, float).copy()
-        chi0 = m.calculate_chi2_rwa(x0)[0]
+        chi0 = m.evaluate(x0).chi2
         n_data = counts(m, table=False)       # leave pyazr's parameter table unbuilt
         # 2 (extrapolation first): the table is first built in extrapolation mode
         m.extrap_mode()
@@ -95,8 +95,8 @@ with tempfile.TemporaryDirectory() as tmp:
             check("engine layouts differ between the modes", n_ext[0] != n_data[0], f"{n_data} {n_ext}")
             check("extrapolation mode: all counts agree", len(set(n_ext)) == 1, str(n_ext))
             names_ext, nrm_ext = rmatrix_names(m), m.n_rmatrix
-            y_own = m.calculate_rwa(m.params_rwa)
-            y_x0 = m.calculate_rwa(x0)
+            y_own = [d.model for d in m.evaluate(m.params_rwa).data]
+            y_x0 = [d.model for d in m.evaluate(x0).data]
             same = all(np.allclose(a, b, rtol=1e-12, atol=0) for a, b in zip(y_own, y_x0))
             check("extrapolation mode: data-mode vector gives the engine's curves", same)
             try:
@@ -119,7 +119,7 @@ with tempfile.TemporaryDirectory() as tmp:
         check("caller's R-matrix value kept through extrap -> data", xb.size == x0.size and abs(xb[0] / (x0[0] * 1.01) - 1) < 1e-14,
               f"{xb[0]} vs {x0[0] * 1.01}")
         check("caller's norm/shift tail kept as the engine's", np.array_equal(xb[m.n_rmatrix:], x0[m.n_rmatrix:]))
-        chi1 = m.calculate_chi2_rwa(x0)[0]
+        chi1 = m.evaluate(x0).chi2
         check("chi2 unchanged after the round trip", abs(chi1 / chi0 - 1) < 1e-12, f"{chi0!r} {chi1!r}")
 
     # 6: a session started in extrapolation mode
@@ -129,7 +129,7 @@ with tempfile.TemporaryDirectory() as tmp:
         m.data_mode()
         n1 = counts(m)
         check("extrapolation start -> data mode: data layout", n1 == n_data, f"{n1} vs {n_data}")
-        chi2 = m.calculate_chi2_rwa(np.asarray(m.params_rwa, float))[0]
+        chi2 = m.evaluate(np.asarray(m.params_rwa, float)).chi2
         check("extrapolation start -> data mode: chi2 of a data session", abs(chi2 / chi0 - 1) < 1e-12, f"{chi0!r} {chi2!r}")
 
 print("FAILED: " + ", ".join(failures) if failures else "all checks passed")

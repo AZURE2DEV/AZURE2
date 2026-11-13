@@ -104,7 +104,7 @@ def main() -> int:
 
     with Session(str(out), cwd=str(here)) as azr:
         x = np.asarray(azr.params_rwa, float)
-        chi2 = float(np.sum(azr.calculate_chi2_rwa(x)))
+        chi2 = azr.evaluate(x).chi2
         npts = sum(len(e) for e in azr.energies)
         print(f"fresh session on the edited file: {azr.nsegments} segments, "
               f"{npts} data points, chi2 = {chi2:.1f}")

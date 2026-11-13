@@ -21,7 +21,7 @@ between them take every branch of the adjoint:
   * a linear coherent background with a fitted background;
   * the Park formalism with the line shape.
 
-For each, the residuals bit for bit, and every residual_jacobian column
+For each, the residuals bit for bit, and every objective().residuals_and_jacobian column
 analytic vs differences, max |diff| / max |column| <= 1e-5; a column beyond
 that (the difference's own truncation error: a coherent-background column, a
 narrow level's energy) against a Richardson-extrapolated difference of the
@@ -113,7 +113,7 @@ def stage(tmp, name, block):
 
 
 def jacobians(m, x):
-    r, J = m.residual_jacobian(x)
+    r, J = m.objective().residuals_and_jacobian(x)
     G = np.vstack(m.model_gradients(x))
     return r, J, G
 
@@ -169,13 +169,13 @@ try:
                 xp, xm = x.copy(), x.copy()
                 xp[c] += h
                 xm[c] -= h
-                return (m.residuals(xp) - m.residuals(xm)) / (2.0 * h)
+                return (m.objective().residuals(xp) - m.objective().residuals(xm)) / (2.0 * h)
             h = 1e-6 * (abs(x[c]) + 1.0)
             d1, d2, d4 = d(h), d(h / 2), d(h / 4)
             R = (16.0 * (4.0 * d4 - d2) / 3.0 - (4.0 * d2 - d1) / 3.0) / 15.0
             worst = max(worst, np.max(np.abs(JA[:, c] - R)) / (np.max(np.abs(R)) + 1e-300))
             rel[c] = 0.0
-        check("residual_jacobian = central differences (every column, 1e-5)",
+        check("objective().residuals_and_jacobian = central differences (every column, 1e-5)",
               rel.max() <= 1e-5, f"max rel {rel.max():.2e} at column {rel.argmax()}")
         check("columns beyond: = Richardson differences (1e-6)", worst <= 1e-6, f"max rel {worst:.2e}")
 finally:

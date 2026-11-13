@@ -38,7 +38,7 @@ files) and `docs/source/user_guide/levels_channels.rst` (how level lines are gro
 ## Loading a parameter file in pyazr
 
 - **Use `x = m.load_sav(path)`**, not a slice of `full_rwa_from_sav`. The CLI's parameter-file reader also sets fixed
-  level energies and widths. pyazr's free-vector calls (`calculate_chi2_rwa(x)`, `update_segments_rwa`,
+  level energies and widths. pyazr's free-vector calls (`evaluate(x)`, `objective()(x)`,
   `transform_rwa`, `save_fit`, ...) take every fixed value from the session, that is from the `.azr`. So
   `x = m.full_rwa_from_sav(sav)[~fixed]` evaluates a different model whenever the `.sav`'s fixed values differ from the
   `.azr`'s (a fit restarted from another fit's `.sav`, or an `.azr` whose fixed widths were never updated). In one case
@@ -61,7 +61,7 @@ files) and `docs/source/user_guide/levels_channels.rst` (how level lines are gro
 - `m.parameters` is the engine's records, one row per parameter (`print(m.parameters.table())`: name, kind, unit,
   start, free, bounds, what it belongs to). A `**WARNING: Denominator less than zero while transforming` printed
   while it is built concerns the transformation of the start values, not the table: cross-check with a plain
-  `calculate_energies` call or the CLI before concluding the parameters are corrupted.
+  `evaluate(x).data[i].energies` or the CLI before concluding the parameters are corrupted.
 - A `LevelKey` prints as `5/2-#2@6.588MeV`; `(jgroup, level)` is its identity (level numbering restarts inside every
   J-group).
 - **A `Parameter`'s `pair` is the engine's pair number**, which counts particle pairs in the order `<levels>` first

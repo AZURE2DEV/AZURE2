@@ -11,11 +11,16 @@
 - T2 at a displaced point (norms and shifts off their centres): the rows and totals of the chiSquared.out the
   session's writer (write_output_files) gives at that point.
 - The objective is Session.objective(x) bit for bit and the sum of the terms; Evaluation.chi2 plus the model terms
-  (Park, abundances, model data) is calculate_chi2_rwa(x); the model data are pyazr.model_data's (T3).
+  (Park, abundances, model data) is the binding's calculate_chi2_rwa(x); the model data are pyazr.model_data's (T3).
+- The data sets' rows of the objective's rows (data[i].rows): consecutive from row 0, one per point, the squares
+  adding up to chi2, and to each data set's chi2 where no covariance joins data sets (T1, T3); the three parts of
+  the shift prior add up to shift_chi2.
+- Extrapolations (T1 in extrapolation mode): the model, energies and S-factor conversion of every grid are the
+  engine's forward pass bit for bit, and every chi-squared field is None.
 - One evaluation per Evaluation: an evaluate(x) takes the time of one objective(x) (13N; the engine's
   Coulomb-function counters, cache_stats, stay at zero when the Coulomb table serves the functions).
 - The self-description: pyazr.kinds() names Objective, Evaluation and EvaluatedData with their fields and the point
-  outputs; help(pyazr) names fit_objective and evaluate.
+  outputs; help(pyazr) names objective and evaluate.
 
 Run: python3 tests/pyazr/evaluation_test.py   (AZURE2_BIN: the program; ctest gives it)
 """
@@ -160,13 +165,13 @@ with tempfile.TemporaryDirectory() as tmp:
         found = blocks(program)
         missing = [d.name for d in ev.data if not any(matches(d, b) for _, b in found)]
         check(f"{name}: every data set's arrays are a block of the program's AZUREOut_* files", not missing, missing)
-        check(f"{name}: objective = Session.objective(x) bit for bit ({ev.objective:.10g})",
-              ev.objective == s.objective(x))
+        check(f"{name}: objective = Session.objective()(x) bit for bit ({ev.objective:.10g})",
+              ev.objective == s.objective()(x))
         total = sum(ev.terms.values())
         check(f"{name}: the terms add up to the objective", abs(total - ev.objective) <= 1e-12 * max(1, ev.objective))
         model_terms = ev.terms["Park J > 0"] + ev.terms["abundances"] + ev.terms["model data"]
-        old = s.calculate_chi2_rwa(x)[0]
-        check(f"{name}: chi2 + the model terms = calculate_chi2_rwa(x) ({old:.10g})",
+        old = float(s.sess.calculate_chi2_rwa(x))  # the binding's data chi-squared with the model terms
+        check(f"{name}: chi2 + the model terms = the binding's calculate_chi2_rwa(x) ({old:.10g})",
               abs(ev.chi2 + model_terms - old) <= 1e-12 * max(1, old))
         if name == "T2":
             # away from the start (norms and shifts off their centres): the writer's chiSquared.out at that x
@@ -184,11 +189,44 @@ with tempfile.TemporaryDirectory() as tmp:
                   and printed(sum(d.shift_chi2 for d in evd.data), totals_d["Total-Shift-Chi-Squared:"]))
             check("T2: data sets have the lab energy, conversion and no Legendre list",
                   all("energy_lab" in d.extra and "sfactor_conversion" in d.extra for d in ev.data))
+        # the data sets' rows of the objective's rows, and the three parts of the shift prior
+        rows = s.objective().residuals(x)
+        spans = [(d.rows.start, d.rows.stop) for d in ev.data]
+        check(f"{name}: the data sets' rows follow one another from row 0, one per point",
+              spans[0][0] == 0 and all(a[1] == b[0] for a, b in zip(spans, spans[1:]))
+              and all(d.rows.stop - d.rows.start == d.n for d in ev.data), spans[:3])
+        whitened = [float(np.sum(rows[d.rows] ** 2)) for d in ev.data]
+        check(f"{name}: the squares of the data rows add up to chi2 (1e-10)",
+              abs(sum(whitened) - ev.chi2) <= 1e-10 * max(1.0, ev.chi2), (sum(whitened), ev.chi2))
+        if name != "T2":  # T2 joins two data sets by a covariance: chi2 splits it as chiSquared.out, the rows otherwise
+            check(f"{name}: per data set, the squares of its rows are its chi2 (1e-10)",
+                  all(abs(w - d.chi2) <= 1e-10 * max(1.0, d.chi2) for w, d in zip(whitened, ev.data)))
+        check(f"{name}: the three parts of the shift prior add up to shift_chi2",
+              all(abs(d.shift_constant_chi2 + d.shift_sqrt_chi2 + d.shift_function_chi2 - d.shift_chi2)
+                  <= 1e-12 * max(1.0, d.shift_chi2) for d in ev.data))
         if name == "T3":
             want = pyazr.model_data(s, x)
             check(f"T3: the model data are pyazr.model_data's ({len(want)})", want and ev.model_data == want)
         check(f"{name}: table() names every data set", all(str(d.name) in ev.table() for d in ev.data))
         s.close()
+
+    print("== the extrapolations (T1 in extrapolation mode)")
+    work = os.path.join(tmp, "T1x")
+    shutil.copytree(os.path.join(TESTS, "upgrade", "T1"), work)
+    os.makedirs(os.path.join(work, "output"), exist_ok=True)
+    with Session(os.path.join(work, "T1.azr"), data_mode=False) as s:
+        x = np.asarray(s.params_rwa, float)
+        ev = s.evaluate(x)
+        n = int(s.sess.update_segments_rwa(x))  # the engine's forward pass, through the binding
+        same = n == len(ev.data) and all(
+            np.array_equal(d.model, s.sess.calculated_segments(i))
+            and np.array_equal(d.energies, s.sess.calculated_energies(i))
+            and np.array_equal(d.extra["sfactor_conversion"], s.sess.calculated_conv(i)) for i, d in enumerate(ev.data))
+        check(f"the {n} grids: model, energies, S-factor conversion are the forward pass's bit for bit", same)
+        check("no chi-squared: chi2, objective, terms, data[i].chi2, .norm, .rows are None or empty",
+              ev.chi2 is None and ev.objective is None and ev.terms == {} and not ev.has_data
+              and all(d.chi2 is None and d.norm is None and d.rows is None and d.residuals is None for d in ev.data))
+        check("the grids carry their names", all(d.name for d in ev.data), [d.name for d in ev.data])
 
     print("== one evaluation per Evaluation (13N)")
     work = os.path.join(tmp, "13N")
@@ -197,12 +235,12 @@ with tempfile.TemporaryDirectory() as tmp:
     shutil.copy(os.path.join(TESTS, "13N", "13N.azr"), work)
     with Session(os.path.join(work, "13N.azr")) as s:
         x = np.asarray(s.params_rwa, float)
-        s.objective(x)
+        s.objective()(x)
         s.evaluate(x)  # both paths warm
 
         t = time.perf_counter()
         for _ in range(3):
-            s.objective(x)
+            s.objective()(x)
         t_obj = (time.perf_counter() - t) / 3
         t = time.perf_counter()
         for _ in range(3):
@@ -219,7 +257,7 @@ with tempfile.TemporaryDirectory() as tmp:
     check("kinds()['data_outputs'] lists the point outputs with units",
           {"energy_lab", "angle_lab", "model_e1", "legendre"} <= set(k["data_outputs"])
           and k["data_outputs"]["energy_lab"]["unit"] == "MeV")
-    check("help(pyazr) names fit_objective and evaluate", "fit_objective()" in pyazr.__doc__
+    check("help(pyazr) names objective and evaluate", "s.objective()" in pyazr.__doc__
           and "evaluate(x)" in pyazr.__doc__)
 
 if failures:

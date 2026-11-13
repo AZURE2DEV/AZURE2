@@ -96,7 +96,7 @@ def main():
             return v <= best * (1 + 1e-6)
 
         with pyazr.Session(copy_dir(t2, os.path.join(tmp, "api"), "T2.azr")) as s:
-            f = s.fit_objective()
+            f = s.objective()
             try:
                 fit_iminuit = importlib.import_module("fit_iminuit")
                 importlib.import_module("iminuit")

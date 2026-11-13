@@ -7,19 +7,19 @@ chi-squared optimum n* = S_mm/S_md and counts S_dd - S_md^2/S_mm, with no norm
 penalty, and the norm is not a Minuit parameter (Segment::IsProfiledNorm).
 pyazr used to evaluate such a model at the norm written in the file (212924
 instead of 2137.83 on tests/7Li_p_a), list the profiled norm in
-its parameter listing (so ``m.parameters`` failed), refuse residual_jacobian, and
-leave the THM points out of chi2_and_grad altogether.
+its parameter listing (so ``m.parameters`` failed), refuse objective().residuals_and_jacobian, and
+leave the THM points out of objective().value_and_grad altogether.
 
 Checked here on tests/7Li_p_a (one THM segment, free norm):
 
-  1. calculate_chi2_rwa equals a fresh CLI run (rel 1e-6), and the CLI still
+  1. evaluate().chi2 equals a fresh CLI run (rel 1e-6), and the CLI still
      lands on the recorded pin; parameters / parameter_records / params_rwa
      agree in count and the THM norm is not among them; residuals and
-     segment_chi2 add up to chi2; segment_norms reports n*;
+     evaluate().data[i].chi2 add up to chi2; data[i].norm reports n*;
      write_output_files reproduces the CLI's chiSquared.out and AZUREOut_*.
   2. On a copy with all but one level fixed (so the THM finite differences
-     are cheap): residual_jacobian against central differences of the
-     residuals (rel 1e-4), chi2_and_grad against 2 J^T r and against
+     are cheap): objective().residuals_and_jacobian against central differences of the
+     residuals (rel 1e-4), objective().value_and_grad against 2 J^T r and against
      differences of chi2, model_gradients against differences of the model.
 
 Needs the compiled engine and an AZURE2 binary; skips cleanly without them.
@@ -115,9 +115,9 @@ with tempfile.TemporaryDirectory() as tmp:
           f"{cli_chi2} vs {PIN}")
     with Session(os.path.join(py_dir, "7Li_p_a.azr"), cwd=py_dir) as m:
         x = np.asarray(m.params_rwa, float)
-        chi2 = float(np.sum(m.calculate_chi2_rwa(x)))
+        chi2 = m.evaluate(x).chi2
         print(f"        pyazr chi2 {chi2!r}")
-        check("calculate_chi2_rwa == CLI (rel 1e-6)", rel(chi2, cli_chi2) < 1e-6,
+        check("evaluate().chi2 == CLI (rel 1e-6)", rel(chi2, cli_chi2) < 1e-6,
               f"{chi2} vs {cli_chi2}")
 
         n_info = len(m.sess.parameter_records())
@@ -136,24 +136,24 @@ with tempfile.TemporaryDirectory() as tmp:
         check("norm_indices is empty (the only norm is profiled)",
               len(m.norm_indices()) == 0, m.norm_indices())
 
-        r = m.residuals(x)
+        r = m.objective().residuals(x)
         check("one residual per point", r.size == sum(len(e) for e in m.energies),
               f"{r.size}")
         check("sum r^2 == chi2", rel(float(np.sum(r ** 2)), chi2) < 1e-9,
               f"{np.sum(r ** 2)} vs {chi2}")
-        seg = m.segment_chi2(x)
-        check("segment_chi2 sums to chi2", rel(float(seg.sum()), chi2) < 1e-9,
+        seg = np.array([d.chi2 for d in m.evaluate(x).data])
+        check("evaluate().data[i].chi2 sums to chi2", rel(float(seg.sum()), chi2) < 1e-9,
               f"{seg.sum()} vs {chi2}")
-        pen = m.penalties(x)
-        check("no norm penalty on a profiled norm", float(pen["norm"].sum()) == 0.0,
-              pen["norm"])
+        pen = m.evaluate(x)
+        check("no norm penalty on a profiled norm", float(np.array([d.norm_chi2 for d in pen.data]).sum()) == 0.0,
+              np.array([d.norm_chi2 for d in pen.data]))
         check("objective == chi2 (no penalties here)",
-              rel(m.objective(x), chi2) < 1e-12, f"{m.objective(x)}")
-        norms = m.segment_norms(x)
-        check("segment_norms gives n* (the CLI's norm, 6 digits)",
+              rel(m.objective()(x), chi2) < 1e-12, f"{m.objective()(x)}")
+        norms = np.array([d.norm for d in m.evaluate(x).data])
+        check("evaluate().data[i].norm gives n* (the CLI's norm, 6 digits)",
               rel(float(norms[0]), cli_norm) < 1e-5, f"{norms[0]} vs {cli_norm}")
         d = np.asarray(m.cross[0]); e = np.asarray(m.cross_err[0])
-        mod = np.asarray(m.calculate_rwa(x)[0])
+        mod = np.asarray(m.evaluate(x).data[0].model)
         nstar = np.sum(mod * mod / e ** 2) / np.sum(mod * d / e ** 2)
         check("n* = S_mm/S_md", rel(float(norms[0]), nstar) < 1e-10,
               f"{norms[0]} vs {nstar}")
@@ -183,12 +183,12 @@ with tempfile.TemporaryDirectory() as tmp:
         print(f"        {x.size} free parameters: "
               + ", ".join(p.name for p in m.parameters.free))
         check("a handful of free parameters", 2 <= x.size <= 12, x.size)
-        chi2 = float(np.sum(m.calculate_chi2_rwa(x)))
+        chi2 = m.evaluate(x).chi2
         check("same chi2 as the full model (same values)", rel(chi2, cli_chi2) < 1e-6,
               f"{chi2}")
 
-        r, J = m.residual_jacobian(x)
-        check("residual_jacobian no longer refuses THM", J.shape == (r.size, x.size),
+        r, J = m.objective().residuals_and_jacobian(x)
+        check("objective().residuals_and_jacobian no longer refuses THM", J.shape == (r.size, x.size),
               J.shape)
         check("its residuals are the profiled ones", rel(float(np.sum(r ** 2)), chi2) < 1e-9,
               f"{np.sum(r ** 2)}")
@@ -200,13 +200,13 @@ with tempfile.TemporaryDirectory() as tmp:
             h = 1e-5 * (abs(x[c]) + 1.0)
             xp = x.copy(); xp[c] += h
             xm = x.copy(); xm[c] -= h
-            fd = (m.residuals(xp) - m.residuals(xm)) / (2 * h)
+            fd = (m.objective().residuals(xp) - m.objective().residuals(xm)) / (2 * h)
             err = np.linalg.norm(J[:, c] - fd) / max(np.linalg.norm(fd), 1e-300)
             check(f"J[:, {c}] ({m.parameters.free[c].name}) vs central differences "
                   f"(rel {err:.1e})", err < 1e-4)
 
-        c2, g = m.chi2_and_grad(x)
-        check("chi2_and_grad value == chi2", rel(c2, chi2) < 1e-9, f"{c2} vs {chi2}")
+        c2, g = m.objective().value_and_grad(x)
+        check("value_and_grad value == the objective", rel(c2, m.objective()(x)) < 1e-9, f"{c2} vs {chi2}")
         gj = 2.0 * J.T @ r
         check("gradient == 2 J^T r", np.allclose(g, gj, rtol=1e-8,
                                                  atol=1e-10 * np.max(np.abs(gj))),
@@ -215,8 +215,8 @@ with tempfile.TemporaryDirectory() as tmp:
             h = 1e-5 * (abs(x[c]) + 1.0)
             xp = x.copy(); xp[c] += h
             xm = x.copy(); xm[c] -= h
-            fd = (m.calculate_chi2_rwa(xp)[0] - m.calculate_chi2_rwa(xm)[0]) / (2 * h)
-            check(f"d chi2/d x[{c}] vs central differences (rel {rel(g[c], fd):.1e})",
+            fd = (m.objective()(xp) - m.objective()(xm)) / (2 * h)
+            check(f"d f/d x[{c}] vs central differences (rel {rel(g[c], fd):.1e})",
                   rel(g[c], fd) < 1e-4, f"{g[c]} vs {fd}")
 
         G = m.model_gradients(x)[0]
@@ -226,7 +226,7 @@ with tempfile.TemporaryDirectory() as tmp:
             h = 1e-5 * (abs(x[c]) + 1.0)
             xp = x.copy(); xp[c] += h
             xm = x.copy(); xm[c] -= h
-            fd = (np.asarray(m.calculate_rwa(xp)[0]) - np.asarray(m.calculate_rwa(xm)[0])) / (2 * h)
+            fd = (np.asarray(m.evaluate(xp).data[0].model) - np.asarray(m.evaluate(xm).data[0].model)) / (2 * h)
             err = np.linalg.norm(G[:, c] - fd) / max(np.linalg.norm(fd), 1e-300)
             check(f"d model/d x[{c}] vs central differences (rel {err:.1e})", err < 1e-4)
 

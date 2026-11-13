@@ -92,7 +92,7 @@ with tempfile.TemporaryDirectory() as tmp:
               ps[k].fixed and "width_2_1" in free, [(p.name, p.fixed) for p in ps[4:8]])
         x = np.asarray(m.params_rwa, float).copy()
         x[free.index("width_2_1")] *= 1.5
-        chi2 = float(np.sum(m.calculate_chi2_rwa(x)))
+        chi2 = m.evaluate(x).chi2
         allx = m._all_rwa(x)
         phys_all = np.asarray(m.transform_all_rwa(allx, include_fixed=True), float)
         phys_free = np.asarray(m.transform_all_rwa(allx), float)
@@ -105,7 +105,7 @@ with tempfile.TemporaryDirectory() as tmp:
         saved, _ = m.save_fit(os.path.join(work, "saved.azr"), x)
 
     with Session(saved) as s:
-        chi2_back = float(np.sum(s.calculate_chi2_rwa(np.asarray(s.params_rwa, float))))
+        chi2_back = s.evaluate(np.asarray(s.params_rwa, float)).chi2
         amp_back = float(np.asarray(s.sess.params_all_rwa(), float)[k])
         written = float(np.asarray(s.transform_all_rwa(
             np.asarray(s.sess.params_all_rwa(), float), include_fixed=True))[k])

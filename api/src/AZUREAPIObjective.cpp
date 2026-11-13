@@ -42,13 +42,14 @@ AZUREAPI::ObjectiveBreakdown AZUREAPI::EvaluateObjectiveRWA(const vector_r &para
   return out;
 }
 
-bool AZUREAPI::ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r *jacobianOut) const {
+bool AZUREAPI::ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r *jacobianOut,
+                                const std::vector<int> &skipColumns) const {
   const vector_r full = FullOf(params, all_rwa_, fixed_);
   vector_r residuals, jacobian;
   int nCols = (int)params.size();
   if (jacobianOut) {
     // The rows and Jacobian of the residual path, as they are: data, model data, prior covariance.
-    const vector_r packed = CalculateResidualJacobianRWA(params);
+    const vector_r packed = CalculateResidualJacobianRWA(params, skipColumns);
     if (packed.size() < 2) return false;
     const size_t nRes = (size_t)packed[0];
     nCols = (int)packed[1];

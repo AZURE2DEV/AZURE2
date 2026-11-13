@@ -15,8 +15,8 @@ Checks:
   3. two targets: four abundance parameters, the sum-to-one prior of each target, save_fit writes each target's
      fitted values;
   4. the runtime side: Pair.nucleus, Session.nuclei, the abundance parameters (kind, nucleus, prior sigma),
-     penalties()["abundance"] against the engine's chi-squared;
-  5. the abundance column of residual_jacobian against central differences;
+     terms["abundances"] against the engine's chi-squared;
+  5. the abundance column of objective().residuals_and_jacobian against central differences;
   6. save_fit of a free abundance: the target's isotope field carries the fitted value, the .sav carries the
      parameter, the snapshot re-evaluates equal.
 
@@ -70,7 +70,7 @@ def copy_model(name, work, dest=None):
 def grids(path, cwd):
     with Session(path, cwd=cwd, data_mode=False, use_brune=True) as s:
         x = np.asarray(s.params_rwa, float)
-        return [np.asarray(v, float) for v in s.calculate_rwa(x)]
+        return [np.asarray(v, float) for v in [d.model for d in s.evaluate(x).data]]
 
 
 def isotopes(project, target):
@@ -155,12 +155,12 @@ def run(work):
               [p.name for p in ab] == ["natural.isotope.12C", "natural.isotope.13C", "enr.isotope.12C",
                                        "enr.isotope.13C"], str([(p.name, p.sample, p.sample_index) for p in ab]))
         x0 = np.asarray(s.params_rwa, float)
-        pen = s.penalties(x0)["abundance"]
+        pen = s.evaluate(x0).terms["abundances"]
         # both targets at 0.5 + 0.5 = 1: no sum penalty, no priors
         check("penalties: two sum-to-one terms at zero", abs(pen) < 1e-12, str(pen))
         x1 = x0.copy()
         x1[ab[2].free_index] = 0.6    # enr sums to 1.1: ((0.1)/0.01)^2 = 100
-        pen1 = s.penalties(x1)["abundance"]
+        pen1 = s.evaluate(x1).terms["abundances"]
         check("penalties: the enr target's own sum width", abs(pen1 - 100.0) < 1e-6, str(pen1))
         azr_path, _ = s.save_fit(os.path.join(work, "M_samples_snapshot.azr"), x1)
         back = Project.open(azr_path)
@@ -194,38 +194,40 @@ def run(work):
         x = np.asarray(s.params_rwa, float)
         ia, ib = ab_params[0].free_index, ab_params[1].free_index
         # penalties: at the nominal values the prior is 0 and the sum term 0
-        pen = s.penalties(x)
-        check("penalty zero at the nominal abundances", pen["abundance"] == 0.0, str(pen["abundance"]))
+        pen = s.evaluate(x)
+        check("penalty zero at the nominal abundances", pen.terms["abundances"] == 0.0, str(pen.terms["abundances"]))
         x1 = x.copy()
         x1[ib] = 0.45
-        pen1 = s.penalties(x1)["abundance"]
+        pen1 = s.evaluate(x1).terms["abundances"]
         want = ((0.45 - 0.4) / 0.05) ** 2 + ((0.6 + 0.45 - 1.0) / 0.01) ** 2
         check("penalty formula", abs(pen1 - want) < 1e-9, f"{pen1} vs {want}")
-        # the engine adds the same penalty inside calculate_chi2_rwa: compare the jump against a
-        # pure-data evaluation obtained from calculate_rwa
-        vals = np.asarray(s.calculate_rwa(x1)[0], float)
+        # the engine's data chi-squared and its abundance term against a pure-data chi-squared formed here from the
+        # model values
+        ev1 = s.evaluate(x1)
+        vals = np.asarray(ev1.data[0].model, float)
         data_chi2 = float(np.sum(((vals - y) / (0.01 * y)) ** 2))
-        chi1 = float(s.calculate_chi2_rwa(x1)[0])
-        check("engine chi2 = data chi2 + abundance penalty", abs(chi1 - (data_chi2 + want)) < 1e-6 * max(1.0, chi1),
+        chi1 = ev1.chi2 + ev1.terms["abundances"]
+        check("engine chi2 + its abundance term = data chi2 + abundance penalty", abs(chi1 - (data_chi2 + want)) < 1e-6 * max(1.0, chi1),
               f"{chi1} vs {data_chi2 + want}")
         check("model at the nominal abundances is 0.6 A + 0.4 B",
-              np.allclose(np.asarray(s.calculate_rwa(x)[0], float), 0.6 * out_a[0] + 0.4 * out_b[0], rtol=1e-10))
+              np.allclose(np.asarray(s.evaluate(x).data[0].model, float), 0.6 * out_a[0] + 0.4 * out_b[0], rtol=1e-10))
 
         # ---- 5. the abundance Jacobian column -----------------------------------
         print("\n5. Jacobian")
-        r, J = s.residual_jacobian(x)
-        J = np.asarray(J, float)
+        n = s.evaluate(x).data[-1].rows.stop   # the data rows; the abundance prior and sum rows follow them
+        r, J = s.objective().residuals_and_jacobian(x)
+        J = np.asarray(J, float)[:n]
         h = 1e-4
         for col, name in ((ia, "12C"), (ib, "13C")):
             xp = x.copy()
             xp[col] += h
             xm = x.copy()
             xm[col] -= h
-            fd = (np.asarray(s.residual_jacobian(xp)[0], float) - np.asarray(s.residual_jacobian(xm)[0], float)) / (2 * h)
+            fd = (s.objective().residuals(xp)[:n] - s.objective().residuals(xm)[:n]) / (2 * h)
             an = J[:, col]
             rel = np.max(np.abs(an - fd)) / max(np.max(np.abs(fd)), 1e-300)
             check(f"abundance column of {name} vs central differences", rel < 1e-5, f"rel {rel:.2e}")
-        # the residual Jacobian must not carry the penalty (a residual row would), only the model's derivative
+        # the data rows carry the model's derivative only (the penalty has rows of its own after them)
         check("abundance column is the nucleus's term over the error",
               np.allclose(J[:, ia], out_a[0] / (0.01 * y), rtol=1e-8),
               f"{np.max(np.abs(J[:, ia] * 0.01 * y / out_a[0] - 1)):.2e}")
@@ -236,14 +238,14 @@ def run(work):
         xf[ia] = 0.7
         xf[ib] = 0.3
         # the data part only: the snapshot's isotope fields move to the fitted values, so its prior is 0
-        chif = float(s.calculate_chi2_rwa(xf)[0]) - s.penalties(xf)["abundance"]
+        chif = s.evaluate(xf).chi2
         snap, sav = s.save_fit(os.path.join(work, "snap.azr"), xf, verify=False)
         got = isotopes(Project.open(snap), "natural")
         check("the snapshot's isotopes carry the fitted values", got == {"12C": 0.7, "13C": 0.3}, str(got))
         check("param.sav carries the abundances", ab_params[1].name in open(sav).read())
     with Session(snap, cwd=work, use_brune=True) as s2:
         x2 = np.asarray(s2.params_rwa, float)
-        chi2 = float(s2.calculate_chi2_rwa(x2)[0]) - s2.penalties(x2)["abundance"]
+        chi2 = s2.evaluate(x2).chi2
         check("snapshot re-evaluates to the same data chi-squared", abs(chi2 - chif) < 1e-6 * max(1.0, chif),
               f"{chi2} vs {chif}")
 

@@ -2,7 +2,7 @@
 """Scattering lengths through pyazr: the constraints as `datum` records of <modelData> (Project: read, added,
 removed),
 Session.scattering_lengths against the reference values of tests/scattering_length, the constraint term
-in calculate_chi2_rwa / penalties(), chi2_and_grad and the residual_jacobian rows against central
+in the objective and evaluate().terms, the objective's gradient and its rows against central
 finite differences.  Model: tests/scattering_length/be7p_fit.azr (7Be+p, every kind of constraint; in format 3
 the constraints are scattering_length data of <modelData>).
 
@@ -98,29 +98,30 @@ try:
 
         fit = Session(os.path.join(work, "be7p_fit.azr"))
         x = np.asarray(fit.params_rwa, float)
-        pen = fit.penalties(x)["scattering_length"]
+        ev = fit.evaluate(x)
+        pen = ev.terms["model data"]
         # CODATA 2018 constants since 2026-11-05 (were 48.3471155 and 275.3872387 with the CODATA 2006 ones)
-        check("penalties()['scattering_length'] = 48.3472 (the CLI's)", close(pen, 48.3471861, 1e-6), pen)
-        total = float(np.sum(fit.calculate_chi2_rwa(x)))
-        check("calculate_chi2_rwa includes it (275.3878)", close(total, 275.3878019, 1e-7), total)
-        check("objective = calculate_chi2_rwa (no norm/shift terms here)", close(fit.objective(x), total, 1e-12))
+        check("terms['model data'] = 48.3472 (the CLI's)", close(pen, 48.3471861, 1e-6), pen)
+        total = ev.chi2 + pen
+        check("the data chi2 plus it = 275.3878", close(total, 275.3878019, 1e-7), total)
+        check("objective = the data chi2 plus the model data (no norm/shift terms here)", close(fit.objective()(x), total, 1e-12))
 
-        value, grad = fit.chi2_and_grad(x)
+        value, grad = fit.objective().value_and_grad(x)
         h = 1e-6 * np.maximum(1.0, np.abs(x))
-        fd = np.array([(float(np.sum(fit.calculate_chi2_rwa(x + h[i] * e))) -
-                        float(np.sum(fit.calculate_chi2_rwa(x - h[i] * e)))) / (2 * h[i])
+        f = fit.objective()
+        fd = np.array([(f(x + h[i] * e) - f(x - h[i] * e)) / (2 * h[i])
                        for i, e in enumerate(np.eye(x.size))])
         worst = float(np.max(np.abs(grad - fd) / np.maximum(1.0, np.abs(fd))))
-        check(f"chi2_and_grad vs finite differences ({worst:.1e})", worst < 1e-5, (grad, fd))
+        check(f"objective gradient vs finite differences ({worst:.1e})", worst < 1e-5, (grad, fd))
 
-        r, J = fit.residual_jacobian(x)
+        r, J = fit.objective().residuals_and_jacobian(x)
         r, J = np.asarray(r, float), np.asarray(J, float)
         n_data = 34
-        check("residual_jacobian: 34 data rows + 5 constraint rows", r.size == n_data + 5, r.size)
+        check("objective rows: 34 data rows + 5 constraint rows", r.size == n_data + 5, r.size)
         check("sum of the constraint rows squared = the penalty", close(float(np.sum(r[n_data:] ** 2)), pen, 1e-8))
 
         def rows(z):
-            return np.asarray(fit.residual_jacobian(z)[0], float)[n_data:]
+            return np.asarray(fit.objective().residuals_and_jacobian(z)[0], float)[n_data:]
         fdJ = np.array([(rows(x + h[i] * e) - rows(x - h[i] * e)) / (2 * h[i]) for i, e in enumerate(np.eye(x.size))]).T
         worstJ = float(np.max(np.abs(J[n_data:] - fdJ) / np.maximum(1.0, np.abs(fdJ))))
         check(f"constraint Jacobian rows vs finite differences ({worstJ:.1e})", worstJ < 1e-5)

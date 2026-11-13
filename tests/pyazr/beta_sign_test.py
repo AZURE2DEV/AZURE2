@@ -81,17 +81,17 @@ for label, opts in MODES:
             if label == "brune":
                 check("Brune: the transform is the identity on them",
                       all(abs(ph[i] - x[i]) < 1e-12 for i in idx))
-            chi2 = float(m.calculate_chi2_rwa(x)[0])
+            chi2 = m.evaluate(x).chi2
             flipped = x.copy()
             neg = [i for i in idx if x[i] < 0][0]
             flipped[neg] = -flipped[neg]
-            chi2_flipped = float(m.calculate_chi2_rwa(flipped)[0])
+            chi2_flipped = m.evaluate(flipped).chi2
             check("the sign matters to the data",
                   chi2_flipped > chi2 + 1.0, f"{chi2:.4g} vs {chi2_flipped:.4g}")
             m.save_fit(snap, x=x, param_sav=True, verify=True)
         with Session(snap, cwd=PROJECT, **COMMON, **opts) as back:
             xb = np.asarray(back.params_rwa, float)
-            chi2_back = float(back.calculate_chi2_rwa(xb)[0])
+            chi2_back = back.evaluate(xb).chi2
         # Brune and Park read the file's amplitudes back exactly; the standard
         # parametrization inverts its transform iteratively (energies to
         # 1e-6 MeV), which leaves ~1e-6 in the amplitudes and ~1e-5 in the
@@ -141,12 +141,12 @@ try:
                  and abs((p.level_energy or 0) - 9.5822148) < 1e-6]
         check("its energy is free", len(e_idx) == 1)
         x[e_idx[0]] += 0.020                      # +20 keV
-        chi2 = float(m.calculate_chi2_rwa(x)[0])
+        chi2 = m.evaluate(x).chi2
         all_before = np.asarray(m.sess.params_all_rwa(), float).copy()
         m.save_fit(snap, x=x, param_sav=False, verify=True)
     with Session(snap, cwd=PROJECT, **COMMON, use_brune=True) as back:
         xb = np.asarray(back.params_rwa, float)
-        chi2_back = float(back.calculate_chi2_rwa(xb)[0])
+        chi2_back = back.evaluate(xb).chi2
         all_after = np.asarray(back.sess.params_all_rwa(), float)
         fixed_i = [i for i, p in enumerate(back.parameters) if p.fixed and p.kind == "width"]
     check("the fixed amplitude re-reads unchanged",

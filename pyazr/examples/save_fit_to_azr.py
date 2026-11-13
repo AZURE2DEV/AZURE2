@@ -114,7 +114,7 @@ def main():
 
     with Session(src, cwd=here) as m:
         x = load_params(m, args.params)
-        chi2 = float(np.sum(m.calculate_chi2_rwa(x)))
+        chi2 = m.evaluate(x).chi2
         print(f"loaded {len(x)} free parameters, chi2(data) = {chi2:.4f}")
 
         # >>> the point of the example <<<
@@ -138,7 +138,7 @@ def main():
                 vals[f[0]] = float(f[1])
         xv = np.array([vals[p.name] for p in free], float)
         print(f"chi2(data) from the written file = "
-              f"{float(np.sum(m2.calculate_chi2_rwa(xv))):.4f}")
+              f"{m2.evaluate(xv).chi2:.4f}")
 
 
 if __name__ == "__main__":

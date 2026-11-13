@@ -54,7 +54,7 @@ def main():
                 for d in (-h, 0.0, h):
                     v = x.copy()
                     v[i] += d
-                    c.append(a.calculate_chi2_rwa(v)[0])
+                    c.append(a.evaluate(v).chi2)
                 first, second = c[2] - c[0], c[2] - 2.0 * c[1] + c[0]
                 check(f"chi2 finite at the start and +-h ({c[0]:.10g}, {c[1]:.10g}, {c[2]:.10g})",
                       all(np.isfinite(c)))

@@ -501,7 +501,7 @@ parameter space the minimizer works in:
   ensemble is outside: :doc:`../user_guide/mcmc`), and a run that ends there
   prints a warning naming the level;
 * analytic derivatives (``--use-lm``, the analytic-gradient minimizer, the
-  covariance band, pyazr's ``chi2_and_grad`` / ``residual_jacobian``) are
+  covariance band, the gradient and Jacobian of pyazr's ``Session.objective()``) are
   available in both modes;
 * the Wigner-limit bounds act on the Park amplitudes, i.e. on the observed
   :math:`\theta^2`.

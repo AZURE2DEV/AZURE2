@@ -4,9 +4,9 @@
 (a) Every public method and property of pyazr.Session (its own and its mixins') that reaches the engine
     (its source names ``self.sess`` or ``self._sess``, or it calls another member that does) is wrapped by
     ``engine_call`` (``takes_lock``); the members that do not reach the engine are listed here by name.
-(b) Two threads on one session of T1 at once -- one calling ``evaluate(x)`` and the old ``calculate_rwa(x)``, the
-    other ``fit_objective()``'s value and gradient and ``segment_chi2(x)`` -- each at its own point, get what each gets
-    alone, bit for bit.  (Without the lock two threads on one engine crash the process or mix their points.)
+(b) Two threads on one session of T1 at once -- one calling ``evaluate(x)`` twice, the other ``objective()``'s
+    value and gradient, rows, and rows with their Jacobian -- each at its own point, get what each gets alone, bit
+    for bit.  (Without the lock two threads on one engine crash the process or mix their points.)
 
 Run: python3 tests/pyazr/session_lock_test.py
 """
@@ -82,17 +82,18 @@ try:
                     ignore=shutil.ignore_patterns("output", "checks"))
     os.makedirs(os.path.join(tmp, "T1", "output"))
     with Session(os.path.join(tmp, "T1", "T1.azr")) as s:
-        f = s.fit_objective()
+        f = s.objective()
         x0 = s.parameters.x0
         points = [x0, x0 * (1 + 1e-3 * np.cos(np.arange(x0.size)))]
 
         def first(x):
             ev = s.evaluate(x)
-            return [ev.objective, ev.chi2] + [d.model for d in ev.data] + list(s.calculate_rwa(x))
+            return [ev.objective, ev.chi2] + [d.model for d in ev.data] + [d.chi2 for d in s.evaluate(x).data]
 
         def second(x):
             v, g = f.value_and_grad(x)
-            return [v, g, s.segment_chi2(x)]
+            r, J = f.residuals_and_jacobian(x)
+            return [v, g, f.residuals(x), r, J]
 
         work = [first, second]
         alone = [work[i](points[i]) for i in range(2)]
@@ -110,7 +111,7 @@ try:
         def same(a, b):
             return len(a) == len(b) and all(np.array_equal(np.asarray(u), np.asarray(v)) for u, v in zip(a, b))
 
-        check("evaluate and calculate_rwa beside objective and segment_chi2 at once: each thread's values alone, "
+        check("evaluate twice beside the objective's value, gradient, rows and Jacobian at once: each thread's values alone, "
               "bit for bit", all(same(r, alone[i]) for i in range(2) for r in got.get(i, [[]])),
               {i: len(got.get(i, [])) for i in range(2)})
 finally:

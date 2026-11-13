@@ -12,7 +12,7 @@ Checks:
       so 1e-20 eV lost its external part like 0 (--no-ignore-externals is no reference here: it also un-masks the
       other levels' zero photon widths);
   (b) the formal basis gives the Brune capture with the default flags (relative 1e-9);
-  (c) the chi2 gradient equals central differences in the formal and Brune bases (1e-5 per component, scaled by
+  (c) the gradient of the objective equals central differences in the formal and Brune bases (1e-5 per component, scaled by
       the larger of its size and 1e-3 of the largest component) -- the formal-basis chi2 gradient once missed the
       dependence of the projector on the parameters (1.7e-3 here; 1.4e-7 with the fallback, 1.1e-7 in Brune;
       external_capture.md section 7).
@@ -60,9 +60,9 @@ def worker(work, width, brune, ignore, grad, out):
     res = {}
     with Session(azr, cwd=work, use_brune=brune == "1", ignore_externals=ignore == "1") as a:
         x = np.array(a.params_rwa, float)
-        res["capture"] = np.asarray(a.calculate_rwa(x)[CAPTURE], float).tolist()
+        res["capture"] = np.asarray(a.evaluate(x).data[CAPTURE].model, float).tolist()
         if grad == "1":
-            c0, g = a.chi2_and_grad(x)
+            c0, g = a.objective().value_and_grad(x)
             g = np.asarray(g, float)
             fd = np.zeros_like(g)
             energy = {p.free_index for p in a.parameters
@@ -75,7 +75,7 @@ def worker(work, width, brune, ignore, grad, out):
                 xp, xm = x.copy(), x.copy()
                 xp[i] += h
                 xm[i] -= h
-                fd[i] = (a.calculate_chi2_rwa(xp)[0] - a.calculate_chi2_rwa(xm)[0]) / (2 * h)
+                fd[i] = (a.objective()(xp) - a.objective()(xm)) / (2 * h)
             # each component against its own size, or 1e-3 of the largest one, whichever is larger
             scale = np.maximum(np.abs(fd), 1e-3 * np.max(np.abs(fd)))
             res["grad_worst"] = float(np.max(np.abs(g - fd) / scale))

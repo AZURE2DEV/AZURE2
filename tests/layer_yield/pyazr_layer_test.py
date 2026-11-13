@@ -6,7 +6,7 @@
      and a bare sigma data set at the back of the layer; the project validates and its session runs;
   2. the yield at full precision equals the arctan form of the Breit-Wigner integral (README.md eq. R3, computed here)
      to 3e-4 of the plateau (the R-matrix line shape; check.py has the same limit from the CLI's output);
-  3. dY/dN, the density column of residual_jacobian (the engine's central differences of the fitted areal density,
+  3. dY/dN, the density column of objective().residuals_and_jacobian (the engine's central differences of the fitted areal density,
      data 0 and errors 1 so that the column is dY/dN), equals 1e-24 sigma(E_out) with sigma the engine's bare cross
      section at E_out (README.md eq. D1): to 1e-4 within 10 widths of the resonance, 3e-3 beyond (the kernel's linear
      interpolation of sigma between its sub-points);
@@ -80,7 +80,7 @@ def main():
         print("1. session")
         s = p.session()
         x = np.asarray(s.params_rwa, float)
-        vals = s.calculate_rwa(x)
+        vals = [d.model for d in s.evaluate(x).data]
         y, back = np.asarray(vals[0], float), np.asarray(vals[1], float)
         ok("1. a session of the project runs (two data sets)", len(vals) == 2 and len(y) == len(E0))
 
@@ -95,7 +95,7 @@ def main():
         dens = [q for q in s.parameters if q.kind == "density" and not q.fixed]
         ok("3. one free areal density (TP.areal_density)", len(dens) == 1 and dens[0].name == "TP.areal_density",
            str([q.name for q in dens]))
-        r, J = s.residual_jacobian(x)
+        r, J = s.objective().residuals_and_jacobian(x)
         col = dens[0].free_index
         # r_i = (m_i - d_i)/e_i with n = 1 and e_i = 1: dY_i/dN = J_i,col
         dydn = J[:len(E0), col]

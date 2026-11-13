@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""residual_jacobian differences its energy-shift and density columns forward only, and a self-contained
+"""objective().residuals_and_jacobian differences its energy-shift and density columns forward only, and a self-contained
 segment's shift on that segment's rows alone.
 
 The adjoint does not cover a shift or a fitted target density, so those columns are central differences.  Up to
@@ -14,7 +14,7 @@ Models (tests/13N, each in a fresh process with AZURE_PROFILE=1):
                                                                                     -> one full, one segment-local
 Checks: (a) the "api jacobian" profile report counts the columns of each kind (a build before the change has no
 such stages and fails here); (b) every differenced column equals the central difference of the residuals that
-residual_jacobian itself returns at x +- h (h as the engine's), to 1e-6 of the column's largest entry; (c) the
+objective().residuals_and_jacobian itself returns at x +- h (h as the engine's), to 1e-6 of the column's largest entry; (c) the
 residuals and every other column are bit-identical to a call that skips the differenced columns, and a repeated
 call gives the same result (the model is left at x).
 
@@ -60,13 +60,13 @@ def worker(work, density, out):
     free = [p for p in a.parameters if not p.fixed]
     cols = [i for i, p in enumerate(free) if p.kind in KINDS]
     sys.stderr.write("@@ full\n"); sys.stderr.flush()
-    r, J = (np.asarray(v, float) for v in a.residual_jacobian(x))
+    r, J = (np.asarray(v, float) for v in a.objective().residuals_and_jacobian(x))
     sys.stderr.write("@@ rest\n"); sys.stderr.flush()
-    r2, J2 = (np.asarray(v, float) for v in a.residual_jacobian(x))
+    r2, J2 = (np.asarray(v, float) for v in a.objective().residuals_and_jacobian(x))
     try:
-        rs, Js = (np.asarray(v, float) for v in a.residual_jacobian(x, skip=cols))
+        rs, Js = (np.asarray(v, float) for v in a.objective().residuals_and_jacobian(x, skip=cols))
         kw = {"skip": cols}
-    except TypeError:                          # a build before residual_jacobian(skip=): reach check (a) anyway
+    except TypeError:                          # a build before objective().residuals_and_jacobian(skip=): reach check (a) anyway
         rs, Js = r2, J2
         kw = {}
     fd = {}
@@ -75,7 +75,7 @@ def worker(work, density, out):
         side = []
         for s in (+1, -1):
             xs = x.copy(); xs[c] += s * h
-            side.append(np.asarray(a.residual_jacobian(xs, **kw)[0], float))
+            side.append(np.asarray(a.objective().residuals_and_jacobian(xs, **kw)[0], float))
         fd[c] = ((side[0] - side[1]) / (2 * h)).tolist()
     json.dump({"kinds": [free[c].kind for c in cols], "cols": cols, "r": r.tolist(), "J": J.tolist(),
                "r2": r2.tolist(), "J2": J2.tolist(), "rs": rs.tolist(), "Js": Js.tolist(),

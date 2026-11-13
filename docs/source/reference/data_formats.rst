@@ -187,7 +187,7 @@ engine computes :math:`A_L/A_0` or :math:`A_L` and multiplies by the factor of
 :math:`L` the table implies, so a fold, an energy shift and the gradient act
 on all five alike.  An extrapolation writes :math:`L = 0 \ldots K` of its
 ``orders 0 K`` in its expansion (the ``.acoeff`` file and pyazr's
-``calculate_angular_dists``).  ``tests/legendre_expansions`` checks every
+``evaluate(x).data[i].extra["legendre"]``).  ``tests/legendre_expansions`` checks every
 order against a Gauss--Legendre projection of the engine's own
 :math:`d\sigma/d\Omega`.
 

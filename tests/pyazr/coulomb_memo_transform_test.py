@@ -60,7 +60,7 @@ try:
             x = x0.copy()
             x[energy] += 1e-3 * rng.standard_normal(energy.sum())
             X.append(x)
-        o_before = M.objective(X[0])
+        o_before = M.objective()(X[0])
         first = np.asarray(M.transform_rwa(X[0]), float)
         e0 = M.cache_stats()["entries"]
         for x in X[1:]:
@@ -72,7 +72,7 @@ try:
         check(f"{mode}: the transform repeats bit for bit", np.array_equal(first, again),
               f"max |d| {np.max(np.abs(first - again)):.3e}")
         check(f"{mode}: the objective is unchanged by the transforms in between",
-              M.objective(X[0]) == o_before, f"{M.objective(X[0])!r} vs {o_before!r}")
+              M.objective()(X[0]) == o_before, f"{M.objective()(X[0])!r} vs {o_before!r}")
         del M
         F = Session(os.path.join(d, "13N.azr"), cwd=d, **kw)
         check(f"{mode}: a fresh session gives the same transform", np.array_equal(np.asarray(F.transform_rwa(X[0]), float), first))
