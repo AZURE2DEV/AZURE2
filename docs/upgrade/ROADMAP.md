@@ -264,6 +264,8 @@ Gate: ported pyazr tests pass; wheels install and run T1–T3 on three platforms
 
 ## Phase 9 — Web UI; retire Qt, ERYA, numcmc
 
+Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, decisions for the PI; a measured spike).
+
 - [ ] `pyazr ui`: FastAPI + uvicorn, static page, plotly.js vendored; `/api` one-to-one with pyazr; jobs with progress
       and stop; tabs Project, Nucleus, Data, Fit, Results, Physics, THM (opt-in).
 - [ ] Physics tab plots every exposed physics function (`ARCHITECTURE.md` §8, `THM.md` §4).
