@@ -58,6 +58,10 @@ class ParameterVectorError : public AZURE2Error {
   explicit ParameterVectorError(const std::string &what) : AZURE2Error(what) {}
 };
 
+// pybind_records.cpp: the parameter and pair records with their named fields
+py::list ParameterRecordDicts(const AZUREAPI &api);
+py::list PairRecordDicts(const AZUREAPI &api);
+std::vector<std::string> OwnerFieldsOf(ParamKind kind);
 // pybind_potentials.cpp: a session's hybrid potentials
 azure2::experiment::HybridPotentialSetting SessionPotentialSetting(const std::string &type, bool enabled, double V0, double R, double a, double r0,
                                                                    double coulombRadius_fm, double matchingRadius_fm, double step_fm, const std::vector<double> &spinOrbit, CNuc *compound, int pair);
@@ -292,72 +296,10 @@ class Session {
 
   // -- parameter metadata ----------------------------------------------------
 
-  py::array_t<double> parameter_info() const { return to_array(api_->GetParameterInfo()); }
-  /// One dict per parameter, in params_names() order: its kind (ParamKindTable key) and what it belongs to, from the
-  /// record written where it was created (ParameterKind.h).  Fields that do not apply are absent.
-  py::list parameter_records() const {
-    py::list out;
-    CNuc *nuc = api_->compound();
-    for (const ParameterRecord &r : api_->GetParameterRecords()) {
-      py::dict d;
-      d["kind"] = r.Row().key;
-      d["code"] = (int)r.kind;
-      d["ordinal"] = r.ordinal;
-      switch (r.kind) {
-        case ParamKind::LevelEnergy:
-        case ParamKind::Gamma:
-          d["jgroup"] = r.jGroup;
-          d["level"] = r.level;
-          d["level_number"] = r.levelNumber;
-          if (r.kind == ParamKind::Gamma) d["channel"] = r.channel;
-          break;
-        case ParamKind::RadiativeDecay:
-          d["jgroup"] = r.jGroup, d["level"] = r.level, d["level_number"] = r.levelNumber, d["channel"] = r.channel;
-          d["decay_record"] = r.decayRecord, d["decay_part"] = r.decayPart, d["final_state"] = r.finalState;
-          break;
-        case ParamKind::Norm:
-        case ParamKind::EnergyShift:
-        case ParamKind::EnergyShiftSqrt:
-        case ParamKind::EnergyShiftFn:
-        case ParamKind::Thickness:
-          d["segment"] = r.segment;
-          d["segment_key"] = r.segmentKey;
-          if (r.kind == ParamKind::EnergyShiftFn) d["fn_term"] = r.fnTerm;
-          break;
-        case ParamKind::Screening:
-        case ParamKind::Density: case ParamKind::Doppler: case ParamKind::Apparatus:
-          d["effect"] = r.effect;
-          if (r.kind == ParamKind::Apparatus) d["apparatus"] = r.apparatus, d["unit"] = r.apparatusUnit, d["owner"] = r.owner;
-          break;
-        case ParamKind::Abundance:
-          d["sample"] = r.sample;
-          d["sample_name"] = r.sampleName;
-          d["nucleus"] = r.nucleus;
-          d["nucleus_Z"] = r.nucleusZ;
-          d["nucleus_A"] = r.nucleusA;
-          break;
-        case ParamKind::ThmCoherent: {
-          d["thm_experiment"] = r.thmExperiment;
-          d["jgroup"] = r.jGroup;
-          d["channel"] = r.channel;
-          d["exit_channel"] = r.exitChannel;
-          d["thm_term"] = r.thmTerm;
-          // The combination as cbackground= writes it: J^pi, exit pair key, (s,l) -> (s',l').
-          JGroup *jg = nuc->GetJGroup(r.jGroup);
-          AChannel *in = jg->GetChannel(r.channel);
-          AChannel *ex = jg->GetChannel(r.exitChannel);
-          d["thm_jpi"] = ThmSpinText(jg->GetJ()) + (jg->GetPi() > 0 ? "+" : "-");
-          d["thm_exit_key"] = nuc->GetPair(ex->GetPairNum())->GetPairKey();
-          d["thm_channels"] = ThmSpinText(in->GetS()) + "," + std::to_string(in->GetL()) + "," +
-                              ThmSpinText(ex->GetS()) + "," + std::to_string(ex->GetL());
-          break;
-        }
-      }
-      out.append(d);
-    }
-    return out;
-  }
-  py::array_t<double> pairs_info() const { return to_array(api_->GetPairsInfo()); }
+  /// One dict per parameter, in params_names() order: its record's named fields (pybind_records.cpp).
+  py::list parameter_records() const { return ParameterRecordDicts(*api_); }
+  /// One dict per particle pair, in pair-number order (pybind_records.cpp).
+  py::list pair_records() const { return PairRecordDicts(*api_); }
   py::array_t<double> normalization_indices() const { return to_array(api_->GetNormalizationIndices()); }
   py::array_t<double> energy_shift_indices() const { return to_array(api_->GetEnergyShiftIndices()); }
 
@@ -873,6 +815,7 @@ void BindSchema(py::module_ &m);   // pybind_schema.cpp: the table of project fo
 void BindConvert(py::module_ &m);  // pybind_convert.cpp: format-3 validation and the converter old -> format 3
 void BindProject(py::module_ &m);  // pybind_project.cpp: the project file as a document
 void BindDescription(py::module_ &m);  // pybind_describe.cpp: what pyazr.describe() and pyazr.kinds() read
+void BindRecordFields(py::module_ &m);  // pybind_records.cpp: the fields of the parameter and pair records
 
 namespace {
 
@@ -937,10 +880,9 @@ PYBIND11_MODULE(_azure2, m) {
         py::list out;
         for (const ParamKindRow &row : ParamKindTable()) {
           py::dict d;
-          d["code"] = (int)row.kind;
           d["key"] = row.key;
           d["unit"] = row.unit;
-          d["owner"] = row.owner;
+          d["owner"] = OwnerFieldsOf(row.kind);
           d["own_prior"] = row.ownPrior;
           d["segment_field"] = row.segmentField;
           d["vary_from_project"] = row.varyFromProject;
@@ -949,8 +891,10 @@ PYBIND11_MODULE(_azure2, m) {
         }
         return out;
       },
-      "The kinds of fit parameter (ParameterKind.h), one dict per kind in the order of their codes: code, key (the "
-      "Parameter.kind of pyazr), unit, owner fields, own_prior, segment_field, vary_from_project, doc.");
+      "The kinds of fit parameter (ParameterKind.h), one dict per kind in their order in the vector: key (the "
+      "Parameter.kind of pyazr), unit, owner (the record fields that say what it belongs to, "
+      "parameter_record_fields()), own_prior, segment_field, vary_from_project, doc.");
+  BindRecordFields(m);  // pybind_records.cpp: parameter_record_fields, pair_record_fields
   BindSchema(m);  // pybind_schema.cpp: the format-3 table (schema(), as AZURE2 --schema)
   BindConvert(m);  // pybind_convert.cpp: validate_format3_text, convert_format3_text
   BindProject(m);  // pybind_project.cpp: the project file as a lossless document (_azure2.Document)
@@ -1022,10 +966,10 @@ PYBIND11_MODULE(_azure2, m) {
            "Refill the data arrays; returns the number of segments.")
       .def("update_norms", &Session::update_norms, "Refill the normalization arrays.")
       .def("update_parameters", &Session::update_parameters, "Refill the parameter bookkeeping.")
-      .def("parameter_info", &Session::parameter_info)
       .def("parameter_records", &Session::parameter_records,
-           "What each parameter is: one dict per parameter (kind, owner fields), in params_names() order.")
-      .def("pairs_info", &Session::pairs_info)
+           "Every parameter as a dict of named fields (parameter_record_fields()), in params_names() order.")
+      .def("pair_records", &Session::pair_records,
+           "Every particle pair as a dict of named fields (pair_record_fields()), in pair-number order.")
       .def("normalization_indices", &Session::normalization_indices)
       .def("energy_shift_indices", &Session::energy_shift_indices)
       .def("params_values", &Session::params_values)

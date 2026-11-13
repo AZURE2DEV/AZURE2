@@ -1,26 +1,54 @@
-"""The file writers of :meth:`pyazr.azure2.save_fit`: a fit's values into a copy of its project.
+"""A fit's values into its project: :func:`write_values` (a :class:`pyazr.Project` edited in memory)
+and the file writer of :meth:`pyazr.azure2.save_fit` (:func:`write_format3`, a copy of the project on disk).
 
-The project (:func:`write_format3`) is edited through :class:`pyazr.Project`, the engine's edits of the level rows,
-the <thm> lines and the records.  ``self`` is the :class:`pyazr.azure2` session the fit comes from.
+The project is edited through :class:`pyazr.Project`, the engine's edits of the level rows, the <thm> lines and the
+records.  ``self`` is the :class:`pyazr.azure2` session the fit comes from.
 """
 import numpy as np
 
 from .described import _engine as _engine_module
+from .errors import ParameterError
 
 
-def write_format3(self, path, x, want, full, norms):
-    """save_fit of a format-3 project: the fitted level values into the <levels> rows they come from (the
-    engine's (group, level) and (pair key, l, 2s) of each parameter, ``_azure2.level_value_edits``), the THM
-    coherent backgrounds into their experiments, the session's potentials as records, and the free nuisances
-    (with ``norms="fitted"``; else the abundances) into the records they come from; then written to ``path``."""
-    from .project import Project
-    project = Project.open(self.file)
+def write_values(session, project, x=None, norms="fitted"):
+    """Write the values of the fit vector ``x`` (default: the start, ``session.params_rwa``) of a
+    :class:`pyazr.azure2` ``session`` into ``project``, a :class:`pyazr.Project` of the session's file
+    (``Project.open(session.file)``, or an edit of it), in memory: nothing is saved, the caller saves it (or keeps it
+    as one edit of its history).  The values are those :meth:`pyazr.azure2.save_fit` writes: the level parameters as
+    the ``<levels>`` rows state them (energies in MeV, partial widths in eV, ANCs), fixed ones included; the THM
+    coherent backgrounds; the session's potentials; with ``norms="fitted"`` every free nuisance into the record it
+    comes from (``"nominal"``: the abundances only).  Returns ``project``."""
+    if norms not in ("fitted", "nominal"):
+        raise ParameterError(f"write_values: norms must be 'fitted' or 'nominal', not {norms!r}.")
+    x = np.asarray(session.params_rwa if x is None else x, float).ravel()
+    n = len(session.parameters.free)
+    if x.size != n:
+        raise ParameterError(f"write_values: x has {x.size} entries; the session has {n} free parameters "
+                             f"(azure2.params_rwa is such a vector, azure2.parameters.free names its entries).")
+    full = session._all_rwa(x)
+    want = np.asarray(session.transform_all_rwa(full, include_fixed=True), float)
+    place_values(session, project, x, want, full, norms)
+    return project
+
+
+def place_values(self, project, x, want, full, norms):
+    """The fitted level values into the <levels> rows they come from (the engine's (group, level) and (pair key, l,
+    2s) of each parameter, ``_azure2.level_value_edits``), the THM coherent backgrounds into their experiments, the
+    session's potentials as records, and the free nuisances (with ``norms="fitted"``; else the abundances) into the
+    records they come from: edits of ``project`` in memory."""
     place_level_values(project, self.parameters, self.pairs, want)
     write_cbkg(self, project, np.asarray(full, float))
     self._write_potential_records(project)
     project._write_parameter_values(
         {p.name: float(want[p.index]) for p in self.parameters.abundances} if norms != "fitted"
         else {p.name: float(x[p.free_index]) for p in self.parameters if p.free_index is not None})
+
+
+def write_format3(self, path, x, want, full, norms):
+    """save_fit of a format-3 project: :func:`place_values` on the session's project, written to ``path``."""
+    from .project import Project
+    project = Project.open(self.file)
+    place_values(self, project, x, want, full, norms)
     project.save(path)
 
 def place_level_values(project, parameters, pairs, want):

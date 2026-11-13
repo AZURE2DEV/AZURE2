@@ -5,8 +5,8 @@
     heavy_excitation (e1, e2); Project.set_pair(light_excitation=) writes the column on every row of the pair
     (appended where a row has none, nothing else of the row changed), 0 on a row without it changes nothing; a new
     level (add_level) takes the light excitation of its pair's rows;
-  * Pair (the GET_PAIRS_INFO record) has light_excitation, heavy_excitation, threshold, label, and still reads
-    a 19-field record of an older engine;
+  * Pair (the engine's pair record, Session.pair_records()) has light_excitation, heavy_excitation, threshold,
+    label;
   * through the engine (skipped without the compiled module): the pair table reports e1 and the total, and the
     excitation moved from the heavy to the light partner of alpha' + 12C(2+) gives the same cross sections
     at the lab-frame data points.
@@ -107,20 +107,22 @@ try:
 
     # --- Pair (no engine) -------------------------------------------------------------------------
     print("2. Pair records")
-    rec = [2, 2, 0, 0, 2.0, 1, 2, 4.0026, 0.0, 1, 6, 12.0, 7.16191, E2P, 5.43, 0.2, 8, 16, 1.0, E2P]  # dev's 20
-    p = Pair.from_record(rec)
-    check("a 20-field record: light_excitation, heavy_excitation, threshold",
+    rec = dict(number=2, key=2, pair_kind="particle", ptype=0, is_entrance=False, J1=2.0, parity1=1, Z1=2,
+               M1=4.0026, J2=0.0, parity2=1, Z2=6, M2=12.0, sep_energy=7.16191, excitation=E2P,
+               light_excitation=E2P, channel_radius=5.43, i1i2factor=0.2, nucleus_Z=8, nucleus_A=16, abundance=1.0,
+               binding_energy=0.0)
+    p = Pair(rec)
+    check("a pair record: light_excitation, heavy_excitation, threshold",
           p.light_excitation == E2P and p.heavy_excitation == 0.0 and abs(p.threshold - (7.16191 + E2P)) < 1e-12,
           (p.light_excitation, p.heavy_excitation, p.threshold))
     check("label marks the excited light particle", p.label == "2+*(4.439 MeV) + 0+", p.label)
     check("repr shows light_excitation", "light_excitation=4.43891" in repr(p), repr(p))
-    old = Pair.from_record(rec[:19])
-    check("a 19-field record (older engine) reads, light_excitation = 0, heavy = total",
-          old.light_excitation == 0.0 and old.heavy_excitation == E2P, (old.light_excitation, old.heavy_excitation))
-    check("Pair._NFIELDS is 21 (thm: binding_energy last)", Pair._NFIELDS == 21)
-    thm_rec = Pair.from_record(rec + [2.2246])
-    check("a 21-field record: light_excitation and binding_energy",
-          thm_rec.light_excitation == E2P and thm_rec.binding_energy == 2.2246)
+    heavy = Pair(dict(rec, light_excitation=0.0))
+    check("excitation on the heavy partner: light_excitation = 0, heavy = total",
+          heavy.light_excitation == 0.0 and heavy.heavy_excitation == E2P,
+          (heavy.light_excitation, heavy.heavy_excitation))
+    thm = Pair(dict(rec, binding_energy=2.2246))
+    check("the THM binding energy", thm.binding_energy == 2.2246 and thm.light_excitation == E2P)
 
     # --- engine ----------------------------------------------------------------------------------
     try:

@@ -134,15 +134,10 @@ def load_covariance(path="output/covariance.dat", ncols=None):
     return C
 
 
-_RMATRIX_KINDS = (0, 1)      # GET_PARAMS_INFO type codes: 0 energy, 1 width
-# What a band spans (the engine's BandPackedColumns): the R-matrix parameters
-# and the THM coherent background (11, cbkg; 9 before the merge of dev
-# 3264896d), which enters the HOES amplitude.  (4 is the sqrt(E) energy-shift
-# coefficient, 5 a shift-function parameter, 6 an isotopic abundance, 7 an
-# electron-screening potential, 8 a fitted target density, 9 a Doppler
-# temperature and 10 a sample thickness: not in the band.)
-_BAND_KINDS = (0, 1, 11)
-_NFIELDS = 16                # doubles per parameter record (kParamInfoFields)
+_RMATRIX_KINDS = ("energy", "width")
+# What a band spans (the engine's BandPackedColumns): the R-matrix parameters and the THM coherent background, which
+# enters the HOES amplitude (the nuisances -- shifts, abundances, target and apparatus parameters -- do not).
+_BAND_KINDS = ("energy", "width", "cbkg")
 
 
 def live_parameters(model):
@@ -154,27 +149,17 @@ def live_parameters(model):
     the fixed R-matrix parameters its grids cannot reach, so a model with 483
     parameters (197 free) in data mode can report 234 (72 free) in
     extrapolation mode.  The free R-matrix block survives, in order, and it is
-    that block the covariance describes.  This queries the engine's *current*
-    parameter bookkeeping (``params_fixed`` / ``parameter_info``), which is
-    rebuilt on every ``initialize()``, so it is right for the mode the session
-    is in now.
+    that block the covariance describes.  This reads the engine's *current*
+    parameter records (``Session.parameter_records()``), rebuilt on every
+    ``initialize()``, so it is right for the mode the session is in now.
 
-    Returns the per-free-parameter ``kind`` codes and their identity tuples
-    ``(kind, jgroup, level, channel)`` -- the same key AZURE2 uses to match
+    Returns the ``kind`` of each free parameter (keys of ``pyazr.kinds()["parameters"]``) and its identity
+    ``(kind, jgroup, level, channel)`` (``None`` where a field does not apply) -- the key AZURE2 uses to match
     covariance columns across runs.
     """
-    s = model.sess
-    fixed = np.asarray(s.params_fixed(), float).round().astype(bool)
-    info = np.asarray(s.parameter_info(), float).reshape(len(fixed), _NFIELDS)
-    kinds, ids = [], []
-    for i in range(len(fixed)):
-        if fixed[i]:
-            continue
-        k = int(round(info[i, 0]))
-        kinds.append(k)
-        ids.append((k, int(round(info[i, 1])), int(round(info[i, 4])),
-                    int(round(info[i, 6]))))
-    return kinds, ids
+    free = [r for r in model.sess.parameter_records() if not r["fixed"]]
+    return ([r["kind"] for r in free],
+            [(r["kind"], r.get("jgroup"), r.get("level"), r.get("channel")) for r in free])
 
 
 def rmatrix_columns(model):

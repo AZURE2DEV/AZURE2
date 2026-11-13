@@ -741,12 +741,21 @@ add_test(NAME pyazr_thickness
 set_tests_properties(pyazr_thickness PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
 # Parameter kinds (include/ParameterKind.h, docs/upgrade/parameter_kinds.md): the engine's table of kinds, and on
-# projects holding every kind each parameter's name rebuilt from its record, the record against parameter_info, and
+# projects holding every kind each parameter's name rebuilt from its record, the records' ordinals and keys, and
 # pyazr's Parameter.kind / sample / thm_* from the records.
 add_test(NAME pyazr_parameter_kinds
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/parameter_kinds_test.py)
 set_tests_properties(pyazr_parameter_kinds PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# The parameter table and the pairs from the engine's records (api/src/pybind_records.cpp, pyazr.Parameters): every
+# kind described by an owner field of the record table; on T2, 13N, the gamma_decay models and a THM project with a
+# coherent background the names and start values against the program's param.par, the fixed flags against the
+# project, x0 / free / of_kind / of_level / put / take / read / write, the pair records against the project's pairs.
+add_test(NAME pyazr_parameter_records
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/parameter_records_test.py)
+set_tests_properties(pyazr_parameter_records PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
 # A level's radiative decay as Gamma_gamma, branchings and mixing ratios (the gamma_decay record,
 # docs/upgrade/gamma_parametrisation.md; tests/gamma_decay/models): the record built in Python, Gauss-Newton fits in
