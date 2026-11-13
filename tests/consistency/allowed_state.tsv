@@ -29,7 +29,6 @@ include/AZURECalcMCMC.h	fixed_	mutable	pending (milestone 4, CNuc split; the fit
 include/AZURECalcMCMC.h	freeKinds_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/AZURECalcMCMC.h	paramKinds_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/AZURECalcMCMC.h	paramNames_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
-include/AZURECalcMCMC.h	parametersInitialized_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/AZURECalcMCMC.h	physical_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/AZURECalcMCMC.h	pool_mutex_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
 include/AZURECalcMCMC.h	priorCov_	mutable	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the sampler's pools and parameter layout, filled lazily in const methods
@@ -43,26 +42,9 @@ include/GSLException.h	m	static	table: GSL's error handler is process-wide by GS
 include/GSLException.h	n	static	table: GSL's error handler is process-wide by GSL's design: the saved handler, a nesting count and their lock
 include/Site.h	ec_shifted_	mutable	pending (milestone 3, an evaluation writes only its Results and scratch): per site, the EC amplitude at the last shifted energy (EC unit amplitudes per mesh energy later)
 src/ALevel.cpp	counter	static	table: the stamp generator: names level states uniquely in the process (the keys of ChannelSpace::Memo), holds no value of a calculation
-src/AZURE2.cpp	g_last_printed_step	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
-src/AZURE2.cpp	g_start_time	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
 src/AZURECalc.cpp	fileMutex	static	table: lock of a process-wide output stream (std::cerr, a dump file, the progress line); holds no value
 src/AZURECalc.cpp	progressMutex	static	table: lock of a process-wide output stream (std::cerr, a dump file, the progress line); holds no value
 src/AZURECalc.cpp	traceMutex	static	table: lock of a process-wide output stream (std::cerr, a dump file, the progress line); holds no value
-src/AZURECalcMCMC.cpp	g_current_step	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
-src/AZURECalcMCMC.cpp	g_last_likelihood	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
-src/AZURECalcMCMC.cpp	g_last_logprob	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
-src/AZURECalcMCMC.cpp	g_last_params	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
-src/AZURECalcMCMC.cpp	g_last_prior	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
-src/AZURECalcMCMC.cpp	g_mcmc_calc	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
-src/AZURECalcMCMC.cpp	g_mcmc_for_callbacks	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
-src/AZURECalcMCMC.cpp	g_nwalkers	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
-src/AZURECalcMCMC.cpp	g_param_names	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
-src/AZURECalcMCMC.cpp	g_sample_count	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
-src/AZURECalcMCMC.cpp	g_sample_file	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
-src/AZURECalcMCMC.cpp	g_samples_written_to_file	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
-src/AZURECalcMCMC.cpp	g_step_offset	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
-src/AZURECalcMCMC.cpp	g_stop_requested	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
-src/AZURECalcMCMC.cpp	g_using_rwa_parameters	namespace	pending (milestone 4, CNuc split; the fitter's and the sampler's state): the running MCMC's sample file, step and progress for numcmc's callbacks (no user pointer)
 src/CoulombTable.cpp	f	static	table: the Coulomb tables loaded from files (immutable once loaded), the files that could not be read, their lock
 src/CoulombTable.cpp	m	static	table: the Coulomb tables loaded from files (immutable once loaded), the files that could not be read, their lock
 src/CoulombTable.cpp	t	static	table: the Coulomb tables loaded from files (immutable once loaded), the files that could not be read, their lock

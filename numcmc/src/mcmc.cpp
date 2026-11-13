@@ -189,40 +189,37 @@ int Mcmc::save_chain(char *file_name, char *header) {
     return 1;
 }
 
-int Mcmc::run(double (*func)(std::vector<double> &), int steps) {
+int Mcmc::run(const LogProbability &func, int steps) {
     return run_impl(func, steps, 1, nullptr, nullptr, nullptr, nullptr);
 }
 
-int Mcmc::run_parallel(double (*func)(std::vector<double>&), int steps,
-                       int threads) {
+int Mcmc::run_parallel(const LogProbability &func, int steps, int threads) {
     return run_impl(func, steps, threads, nullptr, nullptr, nullptr, nullptr);
 }
 
-int Mcmc::run_with_callback(double (*func)(std::vector<double> &), int steps,
-                           void (*progress_callback)(int current_step, int total_steps, double log_prob),
-                           bool (*should_stop_callback)(),
-                           void (*iteration_callback)(int current_step, int total_steps),
-                           SampleCallback sample_callback) {
+int Mcmc::run_with_callback(const LogProbability &func, int steps,
+                            const ProgressCallback &progress_callback,
+                            const StopCallback &should_stop_callback,
+                            const IterationCallback &iteration_callback,
+                            const SampleCallback &sample_callback) {
     return run_impl(func, steps, 1, progress_callback, should_stop_callback,
                     iteration_callback, sample_callback);
 }
 
-int Mcmc::run_parallel_with_callback(double (*func)(std::vector<double> &), int steps,
-                                     int threads,
-                                     void (*progress_callback)(int current_step, int total_steps, double log_prob),
-                                     bool (*should_stop_callback)(),
-                                     void (*iteration_callback)(int current_step, int total_steps),
-                                     SampleCallback sample_callback) {
+int Mcmc::run_parallel_with_callback(const LogProbability &func, int steps, int threads,
+                                     const ProgressCallback &progress_callback,
+                                     const StopCallback &should_stop_callback,
+                                     const IterationCallback &iteration_callback,
+                                     const SampleCallback &sample_callback) {
     return run_impl(func, steps, threads, progress_callback,
                     should_stop_callback, iteration_callback, sample_callback);
 }
 
-int Mcmc::run_impl(double (*func)(std::vector<double> &), int steps,
-                   int threads,
-                   void (*progress_callback)(int, int, double),
-                   bool (*should_stop_callback)(),
-                   void (*iteration_callback)(int, int),
-                   SampleCallback sample_callback) {
+int Mcmc::run_impl(const LogProbability &func, int steps, int threads,
+                   const ProgressCallback &progress_callback,
+                   const StopCallback &should_stop_callback,
+                   const IterationCallback &iteration_callback,
+                   const SampleCallback &sample_callback) {
     this->should_stop = false;
 
     // The stretch move draws the complementary walker from the other half, so
