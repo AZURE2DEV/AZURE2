@@ -2,6 +2,33 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (director, 16:16) — merged: the web UI's Fit tab
+
+**Merged** `feature/upgrade-9-webui-fit` (the entry below). No C++ changed (the diff against the data branch in
+`src include api physics experiment stopping support` is empty), so the reference tag and the base build stay
+`tab-t50-1` and `work/b-trial50`.
+
+**Checked by the director** on the branch's last commit with the verified build's engine, one thread: the
+consistency test; the UI tests api, jobs, server, routes_consistency, static, node and the browser smoke test, all
+ok; the screenshots of the idle, running, finished, MINOS and accepted states looked at.
+
+**Open.**
+- The browser smoke test fails now and then on T2 with two requests of the Data tab that never reach the server
+  ("Failed to fetch"): one run in two for the director on the Results branch, about one in eight for the Fit
+  agent. It is older than both tabs. The Results agent is finding the cause; no retry may hide it.
+- After Accept the page shows its note about the two χ² also when they differ in the last digit only (T1:
+  462.27351124742853 against 462.2735112474378). The note should appear only above rounding (a relative difference
+  of about 1e-12), and Accept should be disabled once the job's point is the project's. With the second part of the
+  Fit tab.
+- T2 from the page: iminuit's MIGRAD needs 1.7 s per call on one thread and HESSE turns its valid minimum invalid
+  (objective 298.9167 after 416 calls). The engine's own MIGRAD is not offered yet (pyazr's `fit_with_engine` with
+  progress and stop); compare the two on T2 when it is.
+- A fitted areal density is laid out from its start value, so T2's χ² as written differs from the fit's by 2e-7
+  relative: `feature/upgrade-4-layout-centre`.
+- `GET /api/parameters`, `GET /api/x` and `PATCH /api/x` now answer while a job holds the thread budget (the header's
+  χ² then waits for the job's end and says so).
+- Nobody has used the page in a real browser by hand.
+
 ## 2026-11-13 (agent, branch `feature/upgrade-9-webui-fit`) — the web UI's Fit tab: parameters and recipe-fit jobs
 
 **Done.** The Fit tab (`pyazr/ui/static/tabs/fit.js`, `tabs/fitjob.js`, `fitting.js`, `selftestfit.js`; a row of
