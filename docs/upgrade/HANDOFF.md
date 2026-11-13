@@ -29,8 +29,10 @@ Update this file at the end of every work session: what changed, what is next, w
 identical (tag `tab-ev4-full2`: 887 / 851 / 887); the eight fits identical to the base build; T1, T2, T3, 13N at 3
 threads identical to the 1-thread reference; the converted-tree gate (tag `gev4-1`); every switch set, base against
 branch, the same outputs and the same log but for times and progress bars (`work/eval4/switch_results.tsv`);
-user-space instructions not higher on T1, T2, 13N, natural_neon calculations and T2, 13N gradient fits.  ctest, the
-slow tests and `tests/run_tests.sh`: see the report of the branch.
+user-space instructions not higher on T1, T2, 13N, natural_neon calculations and T2, 13N gradient fits; `ctest -LE
+slow` 224 of 224; the slow tests 11 of 11 (`pyazr_concurrent_sessions` included; `pyazr_session_isolation` is in the
+first set); `tests/run_tests.sh` 165 passed after two tests that compare the whole `--describe` text, or ran it on a
+project away from its data, were fixed (`ratio_to_rutherford`, `units_scales`).
 
 **Open.** `api/src/AZUREAPI.cpp` (another agent's file tonight): the unused `intEC_cache` file name and the lazily
 read nuisance layout (`mutable`) stay.  The PI's decisions of `evaluation.md` section 6 (options for the *numbers*
