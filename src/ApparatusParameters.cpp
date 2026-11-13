@@ -40,11 +40,11 @@ void DeclareKernelParameters(const TargetEffect &te, std::vector<ApparatusDeclar
     d.key = a.key;
     d.owner = a.owner;
     d.unit = a.unit;
-    d.nominal = a.value;
+    d.layoutBase = te.GetKernelLayoutBase(a.slot);
     d.centre = a.centre.Or(a.value);
     d.vary = a.vary;
     d.sigma = a.priorWidth;
-    d.layout = a.gridMax > 0.0 ? a.gridMax : ApparatusLayout(a.value, a.vary, a.priorWidth);
+    d.layout = te.GetKernelLayoutValue(a.slot);
     out.push_back(d);
   }
 }
@@ -109,7 +109,7 @@ void AddApparatusParams(WorkingCopy &data, AZUREParams &params) {
       p.Fix(name);
       continue;
     }
-    p.SetLimits(name, 0.1 * d.nominal, d.layout);
+    p.SetLimits(name, 0.1 * d.layoutBase, d.layout);
   }
 }
 
@@ -125,7 +125,7 @@ void WorkingCopy::FillApparatusFromParams(const vector_r &p, const Config &confi
     const ApparatusParam &a = Data().GetApparatusParam(k);
     double v = p[idx];
     // The sub-point grids span the layout value (as the layout density): beyond it the fold would run off its nodes.
-    const double vMax = a.declaration.layout, vMin = 0.1 * a.declaration.nominal;
+    const double vMax = a.declaration.layout, vMin = 0.1 * a.declaration.layoutBase;
     if (v > vMax || !(v >= vMin)) {
       if (configure.FirstTime("apparatus parameter range"))
         configure.outStream << "WARNING: " << a.declaration.Name() << " = " << v << " is outside [" << vMin << ", " << vMax

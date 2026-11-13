@@ -687,6 +687,14 @@ add_test(NAME pyazr_whittaker_wave
                  ${CMAKE_CURRENT_SOURCE_DIR}/whittaker_wave_test.py)
 set_tests_properties(pyazr_whittaker_wave PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# pyazr.physics: every row of the binding's physics table (api/src/pybind_physics.cpp) against mpmath, the engine's
+# own use on 13N and the Python formula it replaces (the largest difference per formula is printed); broadcasting,
+# errors="mask", DomainError (docs/upgrade/pyazr3.md section 2.7).  tests/consistency check 41 asks for a row_test per row.
+add_test(NAME pyazr_physics_table
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/physics_table_test.py)
+set_tests_properties(pyazr_physics_table PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # The formal -> Brune iteration inside an evaluation (docs/upgrade/level_parameters.md section 9): chi2 of
 # beam_profile_kernel in the formal basis is smooth in width_9_2 (it jumped 40.44 -> 42.93 when a level missed a 1e-12
 # MeV tolerance by rounding and kept its formal values).  ~3 min.
@@ -741,12 +749,21 @@ add_test(NAME pyazr_thickness
 set_tests_properties(pyazr_thickness PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
 # Parameter kinds (include/ParameterKind.h, docs/upgrade/parameter_kinds.md): the engine's table of kinds, and on
-# projects holding every kind each parameter's name rebuilt from its record, the record against parameter_info, and
+# projects holding every kind each parameter's name rebuilt from its record, the records' ordinals and keys, and
 # pyazr's Parameter.kind / sample / thm_* from the records.
 add_test(NAME pyazr_parameter_kinds
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/parameter_kinds_test.py)
 set_tests_properties(pyazr_parameter_kinds PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# The parameter table and the pairs from the engine's records (api/src/pybind_records.cpp, pyazr.Parameters): every
+# kind described by an owner field of the record table; on T2, 13N, the gamma_decay models and a THM project with a
+# coherent background the names and start values against the program's param.par, the fixed flags against the
+# project, x0 / free / of_kind / of_level / put / take / read / write, the pair records against the project's pairs.
+add_test(NAME pyazr_parameter_records
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/parameter_records_test.py)
+set_tests_properties(pyazr_parameter_records PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
 # A level's radiative decay as Gamma_gamma, branchings and mixing ratios (the gamma_decay record,
 # docs/upgrade/gamma_parametrisation.md; tests/gamma_decay/models): the record built in Python, Gauss-Newton fits in
@@ -916,6 +933,54 @@ endforeach()
 # Its own label: ctest -L browser.
 add_test(NAME pyazr_ui_smoke COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/ui/smoke_test.py)
 set_tests_properties(pyazr_ui_smoke PROPERTIES LABELS browser
+                     ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
+# A fit continued from its written values computes the fit it continues (docs/upgrade/parameter_kinds.md section 4):
+# tests/nuisance_prior_centre/continued.sh, whose part (5) needs the module (save_fit, the layouts the sessions report).
+add_test(NAME pyazr_continued_fit
+         COMMAND bash ${CMAKE_SOURCE_DIR}/tests/nuisance_prior_centre/continued.sh $<TARGET_FILE:AZURE2>)
+set_tests_properties(pyazr_continued_fit PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" PROCESSORS 2)
+
+# The web UI's physics routes (GET /api/physics, POST /api/physics/{fn}, POST /api/session/channel_functions): the
+# numbers of a direct pyazr call bit for bit, the refusals with their three parts, the bound per request.  Registered
+# here, above the block that must stay last, so that it gets PYAZR_ENGINE_DIR and the skip code.
+add_test(NAME pyazr_ui_physics_routes
+         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/ui/physics_routes_test.py)
+set_tests_properties(pyazr_ui_physics_routes PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+# The Physics tab's requests: every row plots without typing, the copied Python text gives the route's arrays.
+add_test(NAME pyazr_ui_physics_tab
+         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/ui/physics_tab_test.py)
+set_tests_properties(pyazr_ui_physics_tab PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
+# The options of the calculation as <config> keys (docs/upgrade/project_format3.md section 3.12): key = keyword for every
+# option and both values on tests/upgrade/T1, keyword > key > default with their sources, the refusals, set_config's
+# round trip, what Project.new and save_fit write, the one table.
+add_test(NAME pyazr_config_options
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/config_options_test.py)
+set_tests_properties(pyazr_config_options PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# The command line python -m pyazr (pyazr/cli.py): every command of the table with --json on T1/T2, describe, validate
+# and schema against the program, wrong calls (exit 2 or 3 with what, allowed, fix), --help, the reference page.
+add_test(NAME pyazr_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/cli_test.py)
+set_tests_properties(pyazr_cli PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
+# pyazr's Objective (azure2.fit_objective()) against today's objective_and_grad, residuals and residual_jacobian bit for
+# bit on T1-T3, 13N_fast, three nuisance kinds and the gamma_decay record with priors; its rows' squares, gradient and
+# Jacobian; log_prob at the sampler's excluded points and against the engine's sampler; two threads (about 55 s at one
+# thread).
+add_test(NAME pyazr_objective_object COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/objective_object_test.py)
+set_tests_properties(pyazr_objective_object PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
+
+# pyazr's Evaluation (azure2.evaluate(x)) against the program's chiSquared.out and AZUREOut_* on T1-T3, one evaluation
+# per Evaluation, and the self-description of the objects.
+add_test(NAME pyazr_evaluation COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/evaluation_test.py)
+set_tests_properties(pyazr_evaluation PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
+# The three fit recipes of pyazr/examples (scipy, iminuit, emcee) on pyazr's Objective: T2 to the program's own MIGRAD
+# minimum, a short emcee chain inside the support, the same with a pool of two worker processes (one thread each).
+add_test(NAME pyazr_fit_recipes COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/fit_recipes_test.py)
+set_tests_properties(pyazr_fit_recipes PROPERTIES LABELS slow PROCESSORS 2
                      ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
 # A test that cannot run its engine part -- numpy, scipy or the compiled

@@ -8,6 +8,7 @@
 #include "Config.h"
 #include "Constants.h"
 #include "WhitFunc.h"
+#include "azure2/physics/Widths.h"
 
 namespace phys = azure2::physics;
 
@@ -54,7 +55,7 @@ phys::ChannelFunctions ChannelFunctionsFromCNuc(CNuc &compound, const CNucSystem
           v.input_scale = 100 * std::sqrt(fstruc * hbarc);
         }
       } else {
-        v.P = rmc ? 1.0 : std::pow(std::fabs(Ec) / hbarc, 2.0 * l + 1);
+        v.P = rmc ? 1.0 : azure2::physics::photon_penetrability(Ec, l);  // physics/Widths.h
       }
     } else {
       v.P = 1.0;

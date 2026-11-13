@@ -33,6 +33,7 @@ RUN="$(guard_command "${TEST_TIMEOUT:-60}")"
 export OMP_NUM_THREADS=1
 SRC="$HERE/../../src/AZURE2.cpp"
 SRC_COMMANDS="$HERE/../../src/ProjectCommands.cpp"
+SRC_OPTIONS="$HERE/../../io/src/ConfigSection.cpp"  # the flags of the options of the calculation (their table)
 DOC="$HERE/../../docs/source/reference/command_line.rst"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/cli_help.XXXXXX")"
@@ -48,8 +49,8 @@ fi
 (cd "$WORK" && $RUN "$AZURE2_BIN" --help < /dev/null 2>&1 | head -c 100000 | tr -d '\r' > help.txt)
 # A flag that takes a value prints as "--flag[=FILE]:".
 printed="$(sed -n 's/^[[:space:]]*\(--[a-z][a-z-]*\)\(\[=[A-Z]*\]\)\{0,1\}:.*/\1/p' "$WORK/help.txt" | sort -u)"
-# The flags of the source: every "--flag" string literal of src/AZURE2.cpp.
-literals="$(cat "$SRC" "$SRC_COMMANDS" | tr -d '\r' | grep -o '"--[a-z][a-z-]*"' | tr -d '"' | sort -u)"
+# The flags of the source: every "--flag" string literal of src/AZURE2.cpp, src/ProjectCommands.cpp and the option table.
+literals="$(cat "$SRC" "$SRC_COMMANDS" "$SRC_OPTIONS" | tr -d '\r' | grep -o '"--[a-z][a-z-]*"' | tr -d '"' | sort -u)"
 # The flags of the documentation's table: "* - ``--flag``" rows.
 documented="$(tr -d '\r' < "$DOC" | sed -n 's/^ *\* - ``\(--[a-z][a-z-]*\)\(\[=[A-Z]*\]\)\{0,1\}``.*/\1/p' | sort -u)"
 

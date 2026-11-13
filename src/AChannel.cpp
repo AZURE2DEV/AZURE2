@@ -1,6 +1,7 @@
 #include "AChannel.h"
 #include "azure2/io/LevelRows.h"
 #include "Constants.h"
+#include "azure2/physics/Widths.h"
 #include <math.h>
 #include <assert.h>
 
@@ -97,15 +98,7 @@ void AChannel::SetBoundaryCondition(double boundaryCondition) {
  * Lane & Thomas (1958) result: gamma_W^2 = 3 * hbar^2 / (2 * reduced_mass * channel_radius^2).
  */
 void AChannel::SetWignerLimit(double reducedMass, double channelRadius) {
-  // Wigner Limit: gamma_W^2 = 3 hbar^2 / (2 mu a^2)
-  //
-  // Constants:
-  // hbarc = 197.3269804 MeV·fm (from Constants.h, CODATA 2018)
-  // uconv = 931.49410242 MeV/c² per u (from Constants.h, CODATA 2018)
-  //
-  // reduced_mass comes in atomic mass units (u), convert to MeV/c² by multiplying by uconv
-  // channel_radius is in fm
-  // Result will be in MeV
+  // Wigner limit gamma_W^2 = 3 hbar^2 / (2 mu a^2) (MeV), reduced mass in u, radius in fm (physics/Widths.h).
   // No limit (0, skipped by CNuc::FillMnParams) for a channel without a radius, and for a photon or beta
   // channel: a photon pair has mu = 0, so the formula gave infinity whenever its radius was nonzero, and
   // FillMnParams then set Minuit limits (-inf, inf), which its sine transform turns into NaN (audit
@@ -115,8 +108,7 @@ void AChannel::SetWignerLimit(double reducedMass, double channelRadius) {
     return;
   }
 
-  double reducedMassMeV = reducedMass * uconv;  // Convert from u to MeV/c²
-  wigner_limit_ = 1.5 * pow(hbarc, 2.0) / (reducedMassMeV * pow(channelRadius, 2.0));
+  wigner_limit_ = azure2::physics::wigner_limit(reducedMass, channelRadius);  // physics/Widths.h
 }
 
 /*!

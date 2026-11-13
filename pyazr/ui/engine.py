@@ -41,9 +41,12 @@ AZURE2_NOT_SERVED = {
     "the objective with its terms in one call (objective_terms_rwa; the same number)": "objective",
     "the server owns sessions: lifecycle": "close is_alive",
     "later steps of web_ui.md section 11 (Nucleus, Physics, THM tabs)":
-        "level_scheme nuclei mass_number basis coulomb_functions ec_integrals thm_experiments thm_background "
+        "level_scheme nuclei mass_number basis ec_integrals thm_experiments thm_background "
         "thm_lineshape thm_vertex thm_distortion prior_covariance_residuals prior_covariance_names "
         "datasets n_rmatrix cache_stats output_dir",
+    "the older name of channel_functions (served: POST /api/session/channel_functions)": "coulomb_functions",
+    "the Objective for Python fitters and samplers; the jobs switch to it with the engine fitters (web_ui.md 12)":
+        "fit_objective",
 }
 
 
@@ -93,9 +96,10 @@ class Engine:
         return self._describe()
 
     def _describe(self):
-        """The session: its options, free-vector length, data sets (in the engine's order) and parameters."""
+        """The session: its options and where each came from, free-vector length, data sets (in the engine's order) and parameters."""
         s = self.s
-        return {"options": dict(s.options), "n_free": len(s.params_rwa), "datasets": self._datasets(),
+        return {"options": dict(s.options), "option_sources": dict(s.option_sources), "n_free": len(s.params_rwa),
+                "datasets": self._datasets(),
                 "parameters": self._parameters()}
 
     def _datasets(self):
@@ -252,6 +256,14 @@ class Engine:
         values = np.asarray(s.transform_all_rwa(full, include_fixed=True), float)
         return {p.name: float(values[i]) for i, p in enumerate(s.parameters) if i < values.size}
 
+    def channel_functions(self, pair, e_cm, l=0, radius=0.0, J=None):
+        """The session's channel functions of ``pair`` at c.m. energies ``e_cm`` (MeV; a number or a list): F, Fp, G,
+        Gp, P, S, delta_hs and open as lists, at most :data:`pyazr.ui.physics.MAX_ELEMENTS` energies."""
+        from .physics import check_size
+        check_size(np.shape(e_cm), "channel_functions", "split the energies over several requests")
+        out = self.s.channel_functions(pair, np.asarray(e_cm, float), l, radius, J)
+        return {k: np.asarray(v).tolist() for k, v in out.items()}
+
     def snapshot(self, path, x):
         """The project's text with the values of x written into it (``save_fit``: level values, the free nuisances
         into their records; the result read back and checked), written to ``path``; returns the text."""
@@ -264,6 +276,11 @@ def _dataset_info(d):
     """What the engine's description says of a data set (pyazr.described.DescribedDataset)."""
     return {"name": d.name, "quantity": d.quantity, "unit": d.unit, "engine_unit": d.engine_unit,
             "observable": d.observable, "entrance": d.entrance_key, "exit": d.exit_key}
+
+
+def session_text(path):
+    """The Python line that opens a session on the project file ``path`` (the Physics tab's Copy as Python)."""
+    return f"session = pyazr.azure2({path!r})  # the saved file; the page evaluates the working text"
 
 
 def open_objective(file, cwd):

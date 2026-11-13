@@ -152,6 +152,13 @@ help_text = function_body(main_cpp, "void printHelp(")
 cli_doc = read("docs/source/reference/command_line.rst")
 
 flags = set(re.findall(r'"(--[a-z0-9-]+)=?"', parser))
+# The flags of the options of the calculation: their rows of io::ConfigKeys() (Option(name, flag, negation, ...)),
+# parsed from the table (ApplyOptionFlag) and printed from it (printOptionFlags).
+option_flags = {f for row in re.findall(r'Option\("[a-z_]+", "(--[a-z0-9-]*)?", "(--[a-z0-9-]*)?"',
+                                        read("io/src/ConfigSection.cpp")) for f in row if f}
+if not option_flags or "printOptionFlags();" not in help_text:
+    problems.append("io/src/ConfigSection.cpp: no option flags found, or printHelp() does not call printOptionFlags()")
+flags |= option_flags
 # Handled in main() before parseOptions, so accepted although parseOptions
 # never sees them.
 handled_in_main = {"--help", "--build-coulomb-table", "--convert", "--convert-params", "--schema", "--validate",
@@ -169,7 +176,7 @@ removed = {"--use-api"}
 for flag in sorted(flags):
     if flag not in cli_doc:
         problems.append(f"{flag}: parsed in src/AZURE2.cpp, missing from docs/source/reference/command_line.rst")
-    if flag not in removed and flag not in help_text:
+    if flag not in removed and flag not in option_flags and flag not in help_text:
         problems.append(f"{flag}: parsed in src/AZURE2.cpp, missing from printHelp()")
 
 for flag in sorted(set(re.findall(r"\\t(--[a-z0-9-]+)", help_text))):
@@ -459,11 +466,6 @@ PENALTIES = ("ParkNormPenalty", "AbundancePenalty", "AbundanceSumPenalty", "Scat
 DEFINERS = {"src/Objective.cpp", "src/CNuc.cpp", "src/ScatteringLength.cpp", "src/ModelData.cpp", "src/WorkingCopy.cpp",
             "src/Segment.cpp", "src/TargetEffect.cpp"}
 ALLOWED_PENALTY_USES = {
-    # The MCMC splits the posterior: per-nucleus abundance priors are log-priors (CalculateLogPrior), so the
-    # likelihood carries only the sum-to-one term (and the model data, Objective::ModelDataChi2); Park's wall rejects
-    # the step outright.
-    ("src/AZURECalcMCMC.cpp", "AbundanceSumPenalty"),
-    ("src/AZURECalcMCMC.cpp", "ParkNormPenalty"),
     # The API's data chi^2 in residual form (EvaluateFilledChi2, the analytic gradient): T2 for its rows;
     # pyazr_objective checks it against the CLI's objective.
     ("api/src/AZUREAPI.cpp", "CovarianceChi2Correction"),
@@ -987,7 +989,7 @@ def getenv_problems(rel, text):
     code = re.sub(r'"(?:\\.|[^"\\\n])*"', '""', code)
     if re.search(r"\b(?:std::)?(?:getenv|secure_getenv|_dupenv_s|GetEnvironmentVariable[AW]?)\s*\(", code):
         found.append(f"{rel}: reads the environment (getenv); read the switch from the record "
-                     "(azure2/support/Environment.h) or the run's Config::environment (check 39)")
+                     "(azure2/support/Environment.h) or the run's Config::environment (check 41)")
     return found
 
 
@@ -1008,7 +1010,7 @@ if not getenv_problems("probe.cpp", 'int f() { return std::getenv("AZURE_X") != 
 if getenv_problems("probe.cpp", '// getenv("AZURE_X") in a comment\nconst char *t = "getenv(";'):
     problems.append("check 39: a getenv in a comment or a string is reported; update this check")
 if "getenv" not in read(ENV_READER):
-    problems.append(f"{ENV_READER}: the one reader of the environment no longer calls getenv (check 39)")
+    problems.append(f"{ENV_READER}: the one reader of the environment no longer calls getenv (check 41)")
 
 # 40. The table of switches and the manual's list are one list (docs/source/reference/command_line.rst, "Environment
 #     switches"): every row of support/src/Environment.cpp's table is a row there with its kind, and every row there is
@@ -1040,6 +1042,100 @@ else:
         problems.append(f"docs/source/reference/command_line.rst: {_n} ({_k}) is listed but is no row of {ENV_READER} "
                         "(check 40)")
 
+# 41. Every physics function has a test (docs/upgrade/pyazr3.md section 2.7): each row of the binding's physics table
+#     (api/src/pybind_physics.cpp, `t.push_back({"<name>", ...`) is named by a test as `row_test("<name>"` in a file
+#     under tests/; a row without one, or a row_test of a name the table does not have, fails.
+_rows = re.findall(r'^\s*t\.push_back\(\{"(\w+)"', read("api/src/pybind_physics.cpp"), re.M)
+_row_tests = set()
+for _dir, _, _files in os.walk(os.path.join(ROOT, "tests")):
+    for _name in _files:
+        if _name.endswith(".py"):
+            with open(os.path.join(_dir, _name), errors="replace") as _fh:
+                _row_tests |= set(re.findall(r'\brow_test\("(\w+)"', _fh.read()))
+if not _rows:
+    problems.append("api/src/pybind_physics.cpp: no row of the physics table found (check 41: the pattern changed?)")
+for _r in _rows:
+    if _r not in _row_tests:
+        problems.append(f"api/src/pybind_physics.cpp: the physics function {_r} has no test (check 41): add "
+                        f"row_test(\"{_r}\", ...) to tests/pyazr/physics_table_test.py")
+for _r in sorted(_row_tests - set(_rows)):
+    problems.append(f"tests: row_test(\"{_r}\") names no row of api/src/pybind_physics.cpp (check 41)")
+
+# 42. The pyazr command line is one table (pyazr/cli.py, COMMANDS; docs/upgrade/pyazr3.md section 2.8): every row has
+#     its case in tests/pyazr/cli_test.py (JSON_CASES, keyed by the command's name) and no case is left without a row;
+#     the reference page docs/source/user_guide/pyazr_command_line.rst is what cli.reference_page() makes of the table.
+#     pyazr/cli.py imports nothing of the engine at import time, so it is read here without it.
+try:
+    import ast
+    import importlib.util
+    _spec = importlib.util.spec_from_file_location("pyazr_cli_table", os.path.join(ROOT, "pyazr", "cli.py"))
+    _cli = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_cli)
+    _cmd_rows = [c.name for c in _cli.COMMANDS]
+    _cases = None
+    for _node in ast.walk(ast.parse(read("tests/pyazr/cli_test.py"))):
+        if isinstance(_node, ast.Assign) and any(getattr(t, "id", "") == "JSON_CASES" for t in _node.targets):
+            _cases = [k.value for k in _node.value.keys]
+    if _cases is None:
+        problems.append("tests/pyazr/cli_test.py: no JSON_CASES dict (check 42)")
+    else:
+        for _name in sorted(set(_cmd_rows) - set(_cases)):
+            problems.append(f"pyazr/cli.py: the command '{_name}' has no case in JSON_CASES of tests/pyazr/cli_test.py "
+                            "(check 42)")
+        for _name in sorted(set(_cases) - set(_cmd_rows)):
+            problems.append(f"tests/pyazr/cli_test.py: the case '{_name}' is no row of COMMANDS in pyazr/cli.py "
+                            "(check 42)")
+    for _c in _cli.COMMANDS:
+        for _a in _c.args:
+            if _a.type not in _cli.ARG_TYPES:
+                problems.append(f"pyazr/cli.py: {_c.name} {_a.name}: type '{_a.type}' is not in ARG_TYPES (check 42)")
+    if _cli.reference_page() + "\n" != read("docs/source/user_guide/pyazr_command_line.rst"):
+        problems.append("docs/source/user_guide/pyazr_command_line.rst: not what pyazr.cli.reference_page() makes of "
+                        "the table; regenerate it (pyazr/CLAUDE.md, recipe 'A command of the command line') (check 42)")
+except (OSError, ValueError, AttributeError) as e:
+    problems.append(f"check 42: {e}")
+
+# 44. The class scheme of the Developer Guide names types that exist (docs/source/developer/classes.rst, drawn from
+#     docs/source/developer/figures/classes.tsv by make_figures.py): every row's type is declared in the file the row
+#     names -- a class or struct by "class X" / "struct X" (X the last component of a qualified name), a CMake target
+#     by add_library / add_executable / pybind11_add_module of X, a package by its file -- so that a renamed or
+#     deleted type fails here until the scheme is updated.  Every arrow of arrows.tsv joins two boxes of its figure.
+_scheme_rows = []
+try:
+    _scheme_lines = [l for l in read("docs/source/developer/figures/classes.tsv").splitlines() if not l.startswith("#")]
+    _scheme_head = _scheme_lines[0].split("\t")
+    _scheme_rows = [dict(zip(_scheme_head, l.split("\t"))) for l in _scheme_lines[1:] if l.strip()]
+    for _r in _scheme_rows:
+        _where = f"docs/source/developer/figures/classes.tsv: {_r['type']} ({_r['figure']})"
+        if not os.path.isfile(os.path.join(ROOT, _r["file"])):
+            problems.append(f"{_where}: {_r['file']} does not exist (check 44)")
+            continue
+        _short = re.escape(_r["type"].split("::")[-1])
+        if _r["kind"] == "class":
+            _decl = re.compile(r"^\s*(?:template\s*<[^>]*>\s*)?(?:class|struct)\s+(?:\w+\s+)?" + _short +
+                               r"\b(?!\s*;)", re.M)
+        elif _r["kind"] == "target":
+            _decl = re.compile(r"(?:add_library|add_executable|pybind11_add_module)\s*\(\s*" + _short + r"\s")
+        elif _r["kind"] == "package":
+            continue
+        else:
+            problems.append(f"{_where}: unknown kind '{_r['kind']}' (check 44)")
+            continue
+        if not _decl.search(read(_r["file"])):
+            problems.append(f"{_where}: no declaration of {_r['type']} in {_r['file']}; update the scheme "
+                            "(classes.tsv, arrows.tsv, make_figures.py) (check 44)")
+    _scheme_boxes = {(_r["figure"], _r["type"]) for _r in _scheme_rows}
+    _arrow_lines = [l for l in read("docs/source/developer/figures/arrows.tsv").splitlines() if not l.startswith("#")]
+    _arrow_head = _arrow_lines[0].split("\t")
+    for _l in _arrow_lines[1:]:
+        _a = dict(zip(_arrow_head, _l.split("\t")))
+        for _end in (_a.get("from", ""), _a.get("to", "")):
+            if (_a.get("figure", ""), _end) not in _scheme_boxes:
+                problems.append(f"docs/source/developer/figures/arrows.tsv: {_a.get('from')} -> {_a.get('to')}: "
+                                f"{_end} is no box of the figure {_a.get('figure')} in classes.tsv (check 44)")
+except (OSError, IndexError, KeyError) as e:
+    problems.append(f"check 44: {e}")
+
 if problems:
     for p in problems:
         print("FAIL", p)
@@ -1049,4 +1145,5 @@ print(f"repository consistent: {len(flags)} CLI flags, test registration, check.
       f"format-3 reference page, {len(declared)} diagnostic codes, file sizes, one model pass and residual, one calculation plan, "
       f"no machine paths, no old data class names, no old section in the engine, reference leaves by one predicate, "
       f"the sharing key's term settings, {len(_allowed)} allowed state rows, one reader of the environment "
-      f"({_getenv_files} files), {len(_table)} environment switches in the manual")
+      f"({_getenv_files} files), {len(_table)} environment switches in the manual, {len(_rows)} physics rows tested, "
+      f"{len(_cli.COMMANDS)} pyazr commands, {len(_scheme_rows)} boxes of the class scheme")

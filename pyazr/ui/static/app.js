@@ -13,6 +13,7 @@ import * as nucleusTab from "./tabs/nucleus.js";
 import * as dataTab from "./tabs/data.js";
 import * as fitTab from "./tabs/fit.js";
 import * as resultsTab from "./tabs/results.js";
+import * as physicsTab from "./tabs/physics.js";
 
 /** The tabs: id (the hash route's first word), title, key, the module that draws it or the step that brings it. */
 export const TABS = [
@@ -21,8 +22,7 @@ export const TABS = [
   { id: "data", title: "Data", module: dataTab },
   { id: "fit", title: "Fit", module: fitTab },
   { id: "results", title: "Results", module: resultsTab },
-  { id: "physics", title: "Physics", later: "the physics step: one generated form and plot per physics function of "
-    + "the engine (Coulomb functions, penetrabilities, stopping, the transfer library)." },
+  { id: "physics", title: "Physics", module: physicsTab },
   { id: "thm", title: "THM", later: "the physics and THM step: THM model options, experiments, channels and "
     + "diagnostics. The <thm> section is edited through the API today (PATCH /api/project/thm)." },
 ];

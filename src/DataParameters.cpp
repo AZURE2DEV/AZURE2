@@ -526,7 +526,7 @@ void WorkingCopy::FillMnParams(AZUREParams &params) {
     const double n = EffectValues(Data().GetDensityLeadCopy(k)).density;
     params.Add(varname, n, (te->GetDensitySigma() > 0.0) ? 0.1 * te->GetDensitySigma() : 0.01 * n,
                ParameterRecord::OfEffect(ParamKind::Density, Data().GetDensityEffect(k)));
-    p.SetLimits(varname, 0.01 * te->GetDensityNominal(), te->GetLayoutDensity());
+    p.SetLimits(varname, 0.01 * te->GetDensityLayoutBase(), te->GetLayoutDensity());
     if (!te->IsDensityVaried()) p.Fix(varname);
   }
 

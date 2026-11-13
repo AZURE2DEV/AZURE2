@@ -480,7 +480,8 @@ int main() {
                                             "E_NOT_BUILT",    "E_THM_RELATIVISTIC", "E_THM_COVARIANCE", "E_FOLD_CONFLICT",
                                             "E_THM_EXPERIMENT_UNKNOWN", "E_THM_OLD_LIST", "E_LAB_JACOBIAN_AT_LIMIT",
                                             "E_POTENTIAL_TWICE", "E_POTENTIAL_PAIR_KIND", "E_POTENTIAL_RELATIVISTIC",
-                                            "E_THM_HYBRID_POTENTIAL", "E_OLD_POTENTIAL_BLOCK", "E_CONFIG_KEY_REMOVED", "E_SO_TWO_SPINS", "E_SO_ZERO_SPIN",
+                                            "E_THM_HYBRID_POTENTIAL", "E_OLD_POTENTIAL_BLOCK", "E_CONFIG_KEY_REMOVED", "E_CONFIG_OPTION_VALUE",
+                                            "E_CONFIG_OPTIONS_CONTRADICT", "E_SO_TWO_SPINS", "E_SO_ZERO_SPIN",
                                             "E_SO_RELATIVISTIC", "E_SO_THM", "E_SO_NEEDS_J", "E_SO_NO_TERM",
                                             "E_STOPPING_PROJECTILE", "E_STOPPING_ACTIVE", "E_STOPPING_SCALE_CONFLICT"};
   for (const DiagnosticCode &c : DiagnosticCodes())

@@ -2,6 +2,453 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (director, 20:40) — merged: ten branches (layout, records, physics, sampler, options, CLI, UI, guide)
+
+**Merged**, in this order (each has its entry below): `feature/upgrade-4-layout-centre`,
+`feature/upgrade-8-pyazr3-records`, `feature/upgrade-8-pyazr3-physics`, `feature/upgrade-6-sampler-objective`,
+`feature/upgrade-4-session-options`, `feature/upgrade-8-pyazr3-cli`, `feature/upgrade-4-cnuc-finish-design`,
+`feature/upgrade-9-webui-physics`, `feature/upgrade-docs-developer-guide`, `feature/upgrade-8-pyazr3-objective`.
+The last three started on a combined trial tree, so their merge commits carry the tree of that trial (the conflicts
+were resolved and tested there). Two commits of the director bring the Developer Guide up to the Physics tab's
+table rows and to `Objective` / `Evaluation` (`developer/extending.rst`, `api.rst`, `architecture.rst`).
+The web server lists `fit_objective` as not served (its jobs switch to it with the engine fitters).
+
+**Checked by the director** on combined trial trees, at two threads:
+- the first five branches, whole verification: all projects × 3 bases identical to `tab-t50-1` (887 / 851 / 887);
+  the eight fits identical to `work/b-trial50`; the prior-centre check with and without pyazr, and failing on the
+  base build as it must; `ctest -LE slow` 245 of 245; the slow tests 11 of 11; `tests/run_tests.sh` 167 passed,
+  0 failed; converted and original projects equal (181); the converted-tree gate 679 / 643 / 679 identical;
+  calculations at 1 against 2 threads identical;
+- the whole batch (this commit's tree): build with 0 warnings; all projects × 3 bases identical to `tab-t50-1`;
+  the pyazr and web UI tests 129 of 129 and the slow ones 12 of 12. The whole verification of this tree is running
+  after the merge; its result is in the next entry of the director.
+- by hand: `Objective` and `Evaluation` on T2 (the value equals `objective(x)` bit for bit, the squared rows sum
+  to it, the gradient equals 2 Jᵀ r to 3e-9, the terms sum to the objective); the five figures of the class
+  scheme and both screenshots of the Physics tab looked at.
+
+The reference tag stays `tab-t50-1` (every output file is identical); the base build of this tree is
+`work/b-trial56`.
+
+**Open.**
+- The sampler's support follows the rule of the sampler branch (limits of the `gamma_decay` numbers only); the
+  PI decided that every kind's limits are respected: a branch is in work; `Objective.log_prob`, the record field
+  `sampler_support` and their tests follow it afterwards.
+- Methods of one pyazr session are not safe from two threads (only `Objective` and `Evaluation` take the session's
+  lock): part of the rename step, in work.
+- The browser smoke test ran out of its time budget once on a loaded machine (passed alone): the budget, not the
+  page.
+- The program's MIGRAD on T2 stops 9e-4 above the minimum scipy reaches on the same objective (MINUIT's tolerance;
+  MINUIT is not patched): for the owner.
+- Stale lines named by the Developer Guide's entry (`CLAUDE.md` on an `inference/` directory, `MeshPlanner.h`,
+  two CMake comments, the `AZUREAPI` class comment, `coulomb_table.rst`, `ec_table.rst`): not yet corrected.
+- The site was not built (Sphinx is not installed here).
+
+## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-objective`) — pyazr: `Objective`, `Evaluation`, three recipes
+
+**Done** (beside today's methods; nothing removed; design and as built: `pyazr3.md` section 7).
+- `azure2.fit_objective()` → `pyazr.Objective`: `f(x)` (= `objective(x)` bit for bit), `grad`, `value_and_grad`,
+  `residuals`/`jacobian` (the objective as rows, `sum(r**2) == f(x)`: today's residual rows, then Park's wall, the
+  `gamma_decay` rows, the abundance sums, the diagonal and nuisance priors; `AZUREAPI::ObjectiveRowsRWA`),
+  `log_prob` (the engine sampler's rule: -f/2, -inf outside the limits of a kind with `samplerSupport` and where Park's
+  J < 0; `AZUREAPI::LogProbabilityRWA`), `x0`, `names`, `bounds`, `sampler_support` (a new record field), `errordef`.
+- `azure2.evaluate(x)` → `pyazr.Evaluation` from one evaluation (`AZUREAPI::EvaluateObjectiveRWA`,
+  `api/src/pybind_evaluation.cpp`): `objective`, `chi2` (`Total-Chi-Squared`), `terms` (the engine's term names),
+  `data[i]` (the row of `chiSquared.out`, norm and shift priors, energies, angles, model, datum, residuals, `extra`
+  from the binding's table of point outputs, `kinds()["data_outputs"]`), `model_data`, `log_prob`, `table()`.
+- Calls of both objects take a per-session lock (without it two threads crash the process: segmentation fault).
+- Examples `fit_scipy.py`, `fit_iminuit.py`, `fit_emcee.py` (rewritten on `log_prob`, a spawned pool, one session per
+  worker).  User guide section "The objective and the evaluation"; `mcmc.rst`; `pyazr/CLAUDE.md` recipe.
+- 293.94 against 297.86 on the fitted T2: the data χ² (`Total-Chi-Squared`, `Evaluation.chi2`) against the
+  objective (the program's printed `Total Chi-Squared`, `Evaluation.objective`); the difference is the priors.
+
+**Verified** (build `work/b-pyobj`, 0 warnings): all projects x 3 bases against `tab-t50-1` 887 / 851 / 887
+identical (tag `tab-pyobj-1`); `ctest -LE slow` 244 of 245 (the failure: `pyazr_ui_routes_consistency`, below); the
+slow tests 12 of 12; the consistency test; the new tests `pyazr_objective_object`, `pyazr_evaluation`,
+`pyazr_fit_recipes`, each shown to fail with an injected error (list in the report).  Not run: `tests/run_tests.sh`
+and the converted-tree gate (no engine code outside the API library changed), Sphinx (not installed).
+
+**Open.**
+- `pyazr_ui_routes_consistency` fails: `fit_objective` is a new public name of the session and `pyazr/ui` (not this
+  branch's) neither calls it nor lists it in `AZURE2_NOT_SERVED`; `web_ui.md` section 12 lists the calls to move to.
+- The program's MIGRAD on T2 stops 9.1e-4 above the minimum scipy's least_squares and L-BFGS-B find (297.8594).
+- Today's session methods are not safe from two threads on one session (they take no lock).
+- Not done: the dense model line (finding 21), the σ and S columns as the writer forms them, read-only views.
+
+## 2026-11-13 (agent, branch `feature/upgrade-docs-developer-guide`) — the Developer Guide (documents only)
+
+**Done.** `docs/source/developer/` rewritten for the code at ad6235e6: `architecture.rst` (the libraries from the
+CMake link lines, a run step by step for the program and for a pyazr session), `classes.rst` (the scheme of the
+classes: five figures, libraries and four layers), `state_and_ownership.rst`, `extending.rst` (each kind of extension
+with its places and the test that fails), `data_model.rst` (replaces `edata_and_target_effects.rst`, which stays as an
+orphan page pointing to it), `level_matrix.rst` (history, timings and source line numbers removed; under 500 lines),
+`physics_core.rst` and `api.rst` (were stubs), `index.rst` in reading order; one paragraph in `whats_new.rst`;
+`contributing.rst`'s keyword section points to `extending.rst`; `theory/conventions.rst` names sections of
+`level_matrix.rst` instead of its line numbers. The scheme is drawn from `docs/source/developer/figures/classes.tsv`
+and `arrows.tsv` by `make_figures.py` (standard library, Graphviz `dot`); the SVGs are committed. Consistency check
+44: every type of `classes.tsv` is declared in the file it names, every arrow joins two boxes of its figure.
+
+**Verified how.** `python3 tests/consistency/repo_consistency_test.py` passes; check 44 shown to fail with a renamed
+row, an arrow left without its box and a class renamed in `include/Segment.h` (restored). A name check (scratch
+script) finds every file path and code name of the pages in the sources but the planned names and include-path
+notation. Every figure rendered with headless Chrome at 800 px and looked at. The site was not built (no Sphinx on
+this machine); the markup was checked by script (underlines, list tables, inline literals, `:doc:` targets, figure
+paths) and by reading.
+
+**Open.** `coulomb_table.rst` and `ec_table.rst` keep dates, status lines and paths of the fit archive. When `CNuc`
+is split or pyazr 3.0 lands, the rows naming `CNuc`, `azure2`, `ParameterSet` in `classes.tsv`/`arrows.tsv` change
+(then `make_figures.py`), and the "Planned" boxes of the pages go.
+
+## 2026-11-13 (agent, branch `feature/upgrade-9-webui-physics`) — the web UI's Physics tab
+
+**Done, first part** (the tab on the physics routes; design in `web_ui.md` section 6.6, as built in 11.5). The tab
+lists the rows of `/api/physics` and the session's functions (`/api/session/functions`, new) grouped by the row's
+`group`, with a search box; each row becomes a form of the existing generator (`physicsform.js`: the table
+`ARGUMENT_KINDS` maps an argument kind to a value type of `forms.js`); the axis is sent as `{from, to, points,
+spacing}` and made by the server with numpy; several values of an argument are a broadcast dimension each (one line
+per combination); the plot has one trace per field and line with gaps (null) where the status is not 0; the status
+line counts each status with its words; CSV of the arrays as returned; the answer's `python` (made by the server from
+the request) shown, copied, saved. The binding's rows gained `group` and, per argument, `example` and `sweep`
+(binding code only, `api/src/pybind_physics.cpp`; no engine number); the row check in `physics_table_test.py`.
+
+**Done, second part** (stopping). The row types moved into `api/src/pybind_rows.h` (shared by the physics and
+stopping tables; `ArgKind::text` added); `pybind_stopping.cpp` has a table of five rows (`stopping_power`, `range`,
+`energy_after`, `areal_density_between`, `energy_straggling`) with SRIM's citation, `_azure2.stopping.functions()`
+and `evaluate()`; `pyazr.stopping.table()` and `evaluate()`; `kinds()["stopping"]` is that table (it was a signature
+and a doc per binding function); `GET`/`POST /api/stopping` served by the physics route's handler; the page lists the
+rows under "stopping" and draws the citation under every stopping plot, in the CSV and the Python text.
+
+**Verified how** (build `work/b-uiphys`, 0 warnings): T1, T2, T3, 13N x 3 bases identical to `tab-t50-1` (tag
+`tab-uiphys-1`, 78 files per basis); the consistency test; `physics_table_test.py`; the UI tests as scripts
+(`physics_tab_test` 4, `physics_routes_test` 6, `routes_consistency_test` 8, `static_test` 9, `node_test` 46 node
+tests); the smoke test on T1 and T2 with screenshots (`work/uiphys/shots*`); each new check shown failing once with
+an injected error (14 cases, `tests/pyazr/ui/README.md`). Second part: T1, T2, T3, 13N x 3 bases identical to
+`tab-t50-1` (`tab-uiphys-2`); 4 more injected errors. At the end: `ctest -R pyazr_ -LE slow` 125 of 125 (one at a
+time); ten further smoke runs 10 of 10 (`work/uiphys/smoke10/`). Not run: all projects x 3 bases (no C++ outside
+`api/src/pybind_*.cpp` and the new `api/src/pybind_rows.h` changed), the slow tests, `tests/run_tests.sh`, sphinx.
+
+**Open.** The level matrix, the transfer functions on potentials and the reaction rate (no engine call); the THM
+tab; the session's functions described by the binding (finding 24); stopping of the project's own targets (26); the
+stopping provenance per element not shown; `J` of `channel_functions` not offered.
+
+## 2026-11-13 (agent, branch `feature/upgrade-4-cnuc-finish-design`) — the end of `CNuc`: design (documents only)
+
+**Done.** `cnuc_split.md` §12: the inventory of `CNuc` measured on the code at 6e8d000b (every member with its writers,
+readers and class; the fit, input and report sets of `ALevel`; `PPair`, `JGroup`, `AChannel`; the 134 files naming the
+class, grouped by what they want), the end state (`CompoundSystem` immutable and shared, holding the `System` built
+once; `LevelInputs` a value; `LevelState` owned by the evaluation; `ObservedLevelTable` returned by a function;
+`LevelParameterLayout` the one walk of the level block), six steps (five bit-identical, one that fixes a defect and
+changes numbers), the defects in the way, the PI's measure before and after, costs, other open work, decisions. One
+pointer line in `ROADMAP.md`. No code, test or build file changed.
+
+**Measured.** The counts by scripts in `work/cnucdesign/` (`defs.py`, `members.py`, `naming.py`, `group.py`); the copy:
+`clone_probe.cpp` linked against `work/b-trial50`'s libraries, one thread: `Clone` copies 7.8 / 12.9 / 131 kB in
+5 / 7.5 / 56 µs (T2 / 13N / `natural_neon`), of which the per-vector part is 0.8 / 1.4 / 22 kB; one calculation of each
+under `gdb` cloned 1 / 0 / 1 times. Nothing else was run (no tree comparison: no code changed).
+
+**Found.** The notes are behind the code in five places (§12.1.5: the decay-position defect, the trees and
+`ExitPairKeysInFile` are done or gone, two photon pairs of one final state are refused, the engine does call eleven
+`level_parameters` functions). A defect by reading, not run: the sub-point-grid copy of `TargetSetup.cpp` keeps the
+final state's N_f^½ of the moment it was made (Brune basis, external capture, fitted final-state amplitude); proposed
+as its own step before the state moves. Dead: `PPair::SetBindingEnergy`, `PPair::ec_entrance_`, `ALevel::NumGammas`,
+`ALevel::SetShiftDerivatives`, `CNuc::GammaDecayInputs()`.
+
+**Open.** The decisions of §12.7 (structure classes kept in design 1 or replaced by the `System` now; names;
+abundances owned by the data; a pool of `LevelState`; the defect's step; the order against the sampler, records and
+physics-table branches).
+
+## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-cli`) — the pyazr command line
+
+**Done.** `python -m pyazr COMMAND ... [--json]` (`pyazr/cli.py`, `pyazr/__main__.py`; `pyazr3.md` 2.8 and step 7 of
+section 4). One table, `COMMANDS` (name, arguments with types, the pyazr function called, help line), makes the parser,
+every `--help`, `pyazr commands --json` and the reference page `docs/source/user_guide/pyazr_command_line.rst`.
+Commands: describe [FILE], validate, convert, schema [KIND], kinds [TABLE], stopping, coulomb-table check, ui,
+import exfor, import ensdf, commands; coulomb-table build and fetch are rows that exit 2 with what to do instead.
+`--json`: one document on standard output (`command`, `ok`, `exit`, `result`, `error` with `what`, `allowed`, `fix`),
+the engine's output sent to standard error meanwhile. Exit codes those of the program's project commands (0; 1 a
+failed run; 2 a wrong call or a refused input; 3 an old project). Recipe "A command of the command line" in
+`pyazr/CLAUDE.md`. No C++ changed.
+
+**How.** `tests/pyazr/cli_test.py` (ctest `pyazr_cli`, about 15 s at one thread): one case per row with `--json`, the
+JSON read; describe, validate and schema equal to `AZURE2 --describe/--validate --json` and `--schema` on T2 and on a
+project with errors; ten wrong calls in both modes (exit 2 or 3, the three parts, nothing on standard output without
+`--json`); `--help` of every command names every argument. Consistency check 42: a row without a case, a stale page.
+Each shown failing with an injected error (a case removed, validate's status dropped, a print on standard output in
+`--json` mode, a flag's help suppressed, the page changed). Extensibility drill: a command `predictions` was three
+places (a row and its four-line call in `cli.py`, a case in the test, the regenerated page; a scratch commit, not kept).
+
+**Open.** `coulomb-table build` needs the engine's `CoulombTable::BuildFile` bound (and decision 7's "built on first
+use" is not implemented); `fetch` needs a published copy. `pyazr.describe(path, record=NAME)` with an unknown NAME
+says "the project has errors:" with no error (the program says the record does not exist). The program's
+`--validate`/`--describe` report the stopping of each target, the binding's functions do not. `python -m pyazr`
+needs the compiled engine even for `--help` (`pyazr/__init__.py` imports it). `ui --json` catches the URL line
+`pyazr.ui.server.main` prints, for want of a function that returns it. No `import exfor --to FILE` (no single pyazr
+call writes any EXFOR entry as a data set). The program's `--validate FILE` exits 1 for an unreadable file; the
+command line exits 2 for a missing one (a wrong call, as the brief asks).
+
+## 2026-11-13 (agent, branch `feature/upgrade-4-session-options`) — the options of the calculation are `<config>` keys
+
+**Measured** (the table of `project_format3.md` §3.12): eleven options of `RuntimeOptions` and the program's flags
+change what a project computes (`use_brune`, `use_park`, `transform` — conventions; `ignore_externals`,
+`use_long_wavelength`, `ec_convection_current`, `use_rmc` — physics; `use_gsl_coul`, `use_coulomb_table`,
+`use_ec_table`, `replace_grids` — numerics); three are not project state (`data_mode`, the Coulomb table file,
+`cwd`); the fit's, output, program and command flags and the environment switches are left out. The defaults of the
+program and a session are the same for all eleven; two rules of combination differ: `--use-rmc` drops Brune and Park
+with a warning where a session keeps them, and the program applies `--use-park`/`--no-brune` in the given order where
+a session lets Park win. Not unified (decision for the PI; recommendation in §3.12).
+
+**Done.** The options are bool keys of `<config>` under the pyazr keyword names; a flag or keyword given wins over the
+key, the key over the default. One table: the option rows of `io::ConfigKeys()` (flags, default, effect) with the
+implications and contradictions beside it; `src/ProjectOptions.cpp` keeps where `Config` stores each and the sources;
+the program's parser and `--help` read the rows; the binding's option table is derived (plus the three non-project
+options with their reasons). `--validate`, the run and `Project.set_config` refuse a bad value
+(`E_CONFIG_OPTION_VALUE`) and a contradiction with a key (`E_CONFIG_OPTIONS_CONTRADICT`, both named with their
+sources). `--describe` (text and JSON) and `azure2.describe()["option_sources"]` say each option's source. pyazr's
+signature is unchanged: a decorator records the keywords a call named (`pyazr/session_options.py`). The web UI's
+`SESSION_OPTIONS` is gone: the options shown are the project's with a `source` field; edited through the config route.
+
+**Verified** (build `work/b-options`, 2 threads, 0 warnings). On the code commit: all projects × 3 bases against
+`tab-t50-1` 887 / 851 / 887 identical (`tab-options-1`); the eight fits identical to `b-trial50`; the converted-tree
+gate 679 / 643 / 679 identical; `ctest -LE slow` 236 of 237 (`pyazr_validate`: the describe texts, fixed in the next
+commit); the slow tests 11 of 11; `tests/run_tests.sh` 165 passed, 2 failed (`ratio_to_rutherford`,
+`units_scales`: their committed `--describe` text, fixed in the last commit by printing the options only when one is
+not at its default). The later commits change only the description text: the failed tests, `pyazr_describe`,
+`pyazr_config_options`, `pyazr_ui_api`, `format3_engine`, `describe_relativistic`, `cli_help` rerun and pass.
+`tests/config_options/check.sh` (key = flag, 22 cases) and `pyazr_config_options` (key = keyword) pass; each new
+check failed once with an injected error.
+
+**Open.** The two combination rules above (PI). `save_fit` on T1 in the formal basis fails its own verification and
+`use_rmc` on T1 fails a session's set-up but not the program's run (both as before; not of this branch).
+
+## 2026-11-13 (agent, branch `feature/upgrade-6-sampler-objective`) — the sampler on the fit's objective, its state
+
+**Measured first** (`docs/upgrade/objective.md` section 6, with the table term by term and line numbers): at the
+branch start, every term of the fit was in the sampler's posterior up to the Gaussian priors' normalisation (the
+difference sampler − (−½ χ²) constant at three points: T2 0.881047, 13N_fast 2.076794, `nuisance_prior` 3.686232,
+0 for the record without priors, 13N, `energy_shift_sqrt`, the THM toy, `identical_pp_res` under Park), in both
+bases, except (1) the `gamma_decay` record's priors and wall (difference 3.06 / 0.90 / 81.1 at the three points of
+the record with priors; 20161.8 with Σb > 1) and (2) the limits of every parameter (never read by the sampler:
+b = −0.1, Γ_γ = −0.01, an abundance of −0.001 all finite).
+
+**Done.** The rule: ln P = −½ × the objective from the same table of terms + C (the Gaussian priors'
+normalisation), −∞ outside the support. Each `ObjectiveTerm` says how the sampler takes it (`AddForSampler`, default
+its whole value, so a new term reaches the sampler with no edit of `AZURECalcMCMC.cpp`; `ExcludesForSampler` for
+Park); `Objective::SamplerChi2` replaces the hand-written sum (bit for bit the same where the posterior did not
+change). The limits: −∞ outside the MINUIT limits of a kind whose row says `samplerSupport` (the record's numbers
+only). The state: the 17 process-wide variables of `AZURECalcMCMC.cpp` are gone: the run's file, steps and best
+walker are a record owned by `RunMCMCSampling`; the callbacks are `std::function` members, the stop request an
+atomic member (`RequestStop`); `g_param_names` was a copy of `paramNames_`; the two write-only counters are dropped.
+numcmc takes `std::function` callbacks (source compatible). The CLI's two progress globals in `AZURE2.cpp` became
+captures of a lambda. 18 rows of `allowed_state.tsv` removed.
+
+**Verified how** (build `work/b-sampler`, 0 warnings): the new ctest `sampler_objective` (identity at three points in
+Brune/Park × both sampling bases, −∞ outside the limits, a chain pulled below 0 stays inside, the record's priors move
+ln P by −½ × their term, T2's identity with its constant, two samplers in two threads = two runs alone), each check
+shown to fail with one injected error (limits off; T11 not taken by the sampler; the run record made static); the MCMC
+check scripts (`mcmc_classification`, `mcmc_park_start`, `mcmc_physical_norm`, `mcmc_snapshot_components`,
+`nuisance_prior`, `prior_covariance`, `thm_park`, `clone_composite`, `cli_eof`) pass; chains of 8 walkers × 100 steps
+before (`b-trial45`, and again `b-trial50` after the merge) and after: identical `samples.mcmc`, `walkers.mcmc`,
+`param.mcmc` for the record without priors (Brune RWA and observed, Park RWA), 13N_fast (both bases),
+`energy_shift_sqrt`, T2; changed for the record with priors (mean ln P over steps 50–99 −25.72 → −29.43, Γ_γ 0.038374 →
+0.038389 eV): the record's priors, as intended. On the merged state (the data branch at 3298f372 merged in; build 0
+warnings): all projects × 3 bases against `tab-t50-1` 887 / 851 / 887 identical; `ctest -LE slow` 236 of 236; the slow
+tests 11 of 11; `tests/run_tests.sh` 166 passed, 0 failed; the converted-tree gate 679 / 643 / 679 identical; T1, T2,
+T3, 13N × 3 bases at 1 against 2 threads identical; `tests/gamma_decay/check.sh` 63 ok; the MCMC check scripts and
+`prior_centre` pass; the eight fits against `b-trial50`: 8 of 8 identical. The scratch measurement re-run on the merged
+engine: sampler − (−½ χ²) equals the documented constant `LogPriorNormalisation()` at every point (0 for the record with
+priors, 0.881047 for T2), −∞ outside the record's limits.
+
+**Open, for the director.** The limits of the other kinds (abundances, thickness, densities, Doppler temperatures,
+apparatus parameters, reduced widths, `<parameterSettings>` limits) are not applied by the sampler; doing it is one
+column of `ParamKindTable()` but changes those posteriors (objective.md section 6). Outside a limit the fit reads a
+clamped density for its prior, the sampler the raw value (0.496 in T2's −½ χ²). The `loglikelihood` column now holds
+the record's priors (it is `logprob − logprior`; documented in the user guide).
+
+## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-physics`) — pyazr: the physics table and `pyazr.physics`
+
+**Done** (no engine number changed; the Python formulas untouched).
+- `api/src/pybind_physics.cpp`: one table of physics functions, 24 rows (name, arguments with unit, kind and domain,
+  returns with units, doc, library function, plot axis, adapter); one template evaluates a row element-wise on
+  arrays with a status per element (0; k > 0 argument k outside its domain; -2 the arguments together; -1 not
+  converged); `_azure2.physics_functions()` (the rows, strict JSON) and `_azure2.physics_evaluate`.  The seven
+  functions bound one by one before (`sfactor_conversion`, `modified_sfactor_conversion`, `statistical_factor`,
+  `resonance_strength`, `branching_ratio`, `rutherford_cross_section`, `mott_cross_section`; `whittaker` is the
+  row `whittaker_wave`) are rows now, with the THM plane-wave vertex `thm_vertex_function`; their callers
+  (`nds.sfactor_to_cross_section`, four tests) follow.
+- `physics/Widths.h` (`wigner_limit`, `single_particle_width`, `photon_penetrability`) with `physics_widths`; the
+  engine's `AChannel::SetWignerLimit` and the photon branch of the level parameters call the first and the last.
+- `pyazr/physics.py`: one function per row, built at import (signature, numpydoc docstring with units and domains,
+  broadcasting, scalars stay scalars, `DomainError` naming argument, value, element and domain; `errors="mask"`
+  for NaN and the status array; `status_text`, `functions`, `table()`).  `pyazr.kinds()["physics"]` = the rows,
+  `kinds()["stopping"]` the stopping functions (they were mixed into "physics").
+- `pyazr/session_physics.py`: `channel_functions(pair, e_cm, l, radius, J)` mixed into the session class (two
+  edited lines of `azure2.py`); `coulomb_functions` stays as the old name.  The rename step should move the method
+  into `session.py` (or keep the mixin as a base of `Session`) and drop `coulomb_functions`.
+- `tools/gen_physics_docs.py` writes `docs/source/user_guide/physics_functions.rst` from the rows (the test checks
+  it is current); consistency check 41: every row is named by a `row_test` (shown to fail without one).
+- Test `pyazr_physics_table`: every row against mpmath, the engine's own use on 13N (P, S, phi bit for bit with the
+  session's exact Coulomb routine, `Parameter.wigner_limit` bit for bit) and the Python formula it replaces.
+
+**Measured first: the functions of `pyazr3.md` 2.7, before this branch.**
+
+| function | library function | bound before | domain | outside it before |
+|---|---|---|---|---|
+| sommerfeld_eta, wave_number | `ChannelFunctions.h` `eta`, `rho` | no | E > 0 | inf at 0, NaN below |
+| lab/cm energies | `experiment/Frames.h` `BeamToCM`, `BeamLabFromCM` | no | E >= 0 | a number of the formula |
+| lab_to_cm angle, J | `Frames.h` `ElasticLabToCM`, `ReactionLabToCM` | no | forward branch | false + reason |
+| coulomb_waves | `coulomb/Coulomb.h` `coulomb` | through a session, at the radius | l 0-10000, rho > 0 | status, NaN |
+| coulomb_phase | `Coulomb.h` `coulomb_phase` | no | l >= 0 | NaN |
+| whittaker_wave | `coulomb/Whittaker.h` `whittaker_scaled` | `_azure2.whittaker` | eta_b >= 0, rho > 0 | status, NaN |
+| P, S, phi, dS/dE | `ChannelFunctions.h` `penetrability`, `shift`, ... | session only | E > 0 | session: zeros |
+| wigner_limit | `AChannel::SetWignerLimit` (engine member) | per channel | mu, a > 0 | 0 |
+| single_particle_width | none (Python: `wigner_widths` probe) | no | E > 0 | -- |
+| weisskopf_width | none | no | -- | -- |
+| resonance, Coulomb, S factor (7) | `ResonanceQuantities.h`, ... | one by one | E > 0 | inf, NaN |
+| THM vertex W_l(p) | `transfer/ThmVertex.h` `PlaneWaveSurfaceVertex` | no | p, a > 0 | NaN |
+| bound_state, distorted_wave, momentum distr. | `transfer/BoundState.h`, `DistortedWaves.h` | no | potentials | -- |
+| global optical sets | `transfer/GlobalOptical.h` | `thm_global_opticals` (list) | -- | -- |
+
+The 17 Python formulas and their rows: `pyazr3.md` section 1.3 (the largest difference per formula).
+
+**Added after review.** The web UI's two physics routes served (`pyazr/ui/physics.py`, one server method, one adapter
+method, two rows of `routes.py`): `POST /api/physics/{fn}` in the server's process (no session; the C++ loop releases
+the GIL), `POST /api/session/channel_functions` in the session worker; both at most 20000 elements per request
+(`physics.MAX_ELEMENTS`). `GET /api/physics` is `kinds()["physics"]`. A refusal of the server raised in a worker
+(`Refused`) is now 422 (`errors.STATUS`). `coulomb_functions` is listed in `engine.AZURE2_NOT_SERVED` as the older name.
+Test `pyazr_ui_physics_routes` (registered above the block that must stay last).
+Verified on the merge with d1b193db (no C++ changed after 94eb4828): build 0 warnings; the consistency test; ctest -R
+pyazr_ui -j1 8 of 8; ctest -LE slow 237 of 238, the failure pyazr_ui_smoke on T2 with the two known "Failed to fetch"
+requests of the Data tab, passing on three reruns of it alone; T1, T2, T3, 13N x 3 bases identical to tab-t50-1; the
+routes-consistency test shown to fail with a missing row naming an existing call.
+
+**Verified** (after merging the data branch at 3298f372): build 0 warnings; all projects × 3 bases identical to
+`tab-t50-1` (887 / 851 / 887, tag `tab-physics-2`); the eight fits identical to `trial50`; `ctest -LE slow` 236 of
+237 (the failure: `pyazr_ui_routes_consistency`, below); slow 11 of 11; `tests/run_tests.sh` 166 passed, 0 failed.
+- `pyazr_ui_routes_consistency` failed by its own design once the calls existed; it passes since the two routes are
+  served (below).
+
+**Open.**
+- Not bound: `level_matrix` (the engine hands out no R or U matrix without new code in `AZUREAPI`), the transfer
+  functions that take potentials and return functions of r (bound states, distorted waves, momentum distributions),
+  the Weisskopf width (no engine function: new physics, a decision for the director), the reaction rate and the
+  covariance band (session quantities).
+- Found, not changed (library accuracy, `pyazr3.md` 1.6): S good to about 3e-9 absolute; the engine's dS/dE 9.5e-6
+  relative at p + 12C, l = 0, 3.42 MeV, against the 1e-8 `ChannelFunctions.h` states.
+
+## 2026-11-13 (agent, branch `feature/upgrade-8-pyazr3-records`) — pyazr: parameters and pairs as the engine's records
+
+**Done** (no engine number changed; the binding and pyazr only, and one comment of `include/ParameterKind.h`).
+- `api/src/pybind_records.cpp`: one table of the fields of a parameter record (50 rows: name, unit, the kinds a field
+  describes, whether `Parameters.table()` shows it as the owner, doc, the reader of the engine object) and of a pair
+  record (22 rows).  `Session.parameter_records()`, `Session.pair_records()`, `_azure2.parameter_record_fields()`,
+  `pair_record_fields()`; `parameter_kinds()`'s `owner` from the table, its `code` gone; `pyazr.kinds()` gains
+  `parameter_fields` and `pair_fields`.  `AZUREAPI::GetParameterBounds` (limits as created).
+- Deleted: `AZUREAPI::GetParameterInfo`, `GetPairsInfo`, `kParamInfoFields`, `kPairInfoFields` (301 lines of
+  `AZUREAPI.h/.cpp`), the bindings `parameter_info`, `pairs_info`, the two `_NFIELDS`, the numeric type codes, the
+  fall-backs for engines with 19 or 20 pair fields, `Parameter.from_record`, `Pair.from_record`.
+- `pyazr/parameters.py` (804 → 620 lines): `Parameter` and `Pair` are the records; `Parameters` (the table of the fit
+  vector: `x0`, `names`, `kinds`, `units`, `free_mask`, `bounds`, `free`, `of_kind`, `of_level`, `by_name`, `put`,
+  `take`, `read`, `write`, `table`, `to_records`); `ParameterSet` = `Parameters` and the old views.
+  `pyazr.snapshot.write_values(session, project, x)`: a `Project` edited in memory (`snapshot.py`, web UI wish 8; a
+  function, not a session method: a new public name of the session would need a line in `pyazr/ui/engine.py`).
+- Tests: `tests/pyazr/parameter_records_test.py` (new); the tests of the removed layouts read the records
+  (`parameter_kinds`, `extrap_layout`, `thm_profiled`, `light_excitation`).
+
+**Measured before the change** (start commit da9a3b20).  Readers of the two layouts:
+
+| reader | fields read |
+|---|---|
+| `pyazr/azure2.py:421` `_build_pairs` | all 21 (`Pair.from_record`; the 19- and 20-field fall-backs) |
+| `pyazr/azure2.py:473` `_build_parameters` | all 16 (`Parameter.from_record`, `parameters.py:185`) |
+| `pyazr/azure2.py:2253` `_mode_free_vector`, `:2342` `_sync_layout` | 0 type, 11 fixed |
+| `pyazr/bands.py:168` `live_parameters` | 0, 1, 4, 6 |
+| `tests/pyazr/extrap_layout_test.py:61`, `thm_profiled_test.py:123` | the row count |
+| `tests/pyazr/parameter_kinds_test.py:116` | 0, 6, 13 against the records |
+| `tests/pyazr/light_excitation_test.py:111` | `Pair.from_record` of 19, 20, 21 fields |
+
+`snapshot.py`, `modelavg.py`, `scheme.py`, `described.py` read `Parameter` attributes, not the layout.  No reader
+outside `pyazr/`, `api/`, `tests/` (the skill `azure2-fit` quoted an error message of the layout's reader).
+
+| field of the 16 | meaning | in the records before | record field now |
+|---|---|---|---|
+| 0 type | kind code | `code`, `kind` | `kind` |
+| 1 jgroup (abundance: Z) | J group | yes (`nucleus_Z`) | `jgroup`, `nucleus_Z` |
+| 2 J, 3 parity | the group's J^pi | no | `J`, `parity` |
+| 4 level (abundance: A) | level in its group | yes | `level`, `nucleus_A` |
+| 5 level energy; prior centre | (screening, density, Doppler, thickness) | no | `level_energy`, `prior_centre` |
+| 6 channel; sample; j; effect | (and transmission/yield) | yes but the last | `channel`, `sample_index`, `fn_term`, |
+| | | | `effect`, `sample_kind` |
+| 7 L; thickness leader | | no | `L`, `thickness_leader` |
+| 8 S; layout maximum | | no | `S`, `layout_max` |
+| 9 pair (cbkg: exit pair) | | no | `pair` |
+| 10 radiation type | | no | `radiation_type` |
+| 11 fixed, 12 value | | no | `fixed`, `value` (and `start`, `free_index`, `bounds`) |
+| 13 segment key | | yes | `segment_key` |
+| 14 Wigner limit; prior width | | no | `wigner_limit`, `prior_sigma` |
+| 15 input is an amplitude | | no | `width_is_amplitude` |
+
+The 21 pair fields (number, key, type, entrance, J, parity, Z, M of each particle, separation energy, excitation,
+radius, spin factor, nucleus Z and A, abundance, light excitation, THM binding energy) were in no record; all are
+fields of the pair record now, plus `pair_kind`.  Read by nobody outside `parameters.py` itself: `input_is_rwa`,
+`sample_kind`, `thickness_leader`, the apparatus value of field 5, the pair's `i1i2factor` (repr only).
+
+**Verified** on the merged state (build `work/b-records`, 0 warnings; 2 threads): all projects in three bases
+against `tab-t50-1` (tag `tab-records-2`): 887 / 851 / 887 identical; the converted-tree gate (`grecords2`): 679 /
+643 / 679 identical; the eight fits of `work/director/fits_vs_base2.sh` against `work/b-trial50`: 8 identical;
+`ctest -LE slow`: 235 of 236, then `ui_routes_consistency` (a new public name of the session) and the slow
+`formal_brune_iteration` (it finds a parameter by its repr) after two Python fixes, with the other tests concerned:
+10 of 10; the slow tests 10 of 11 before that fix; `tests/run_tests.sh`: 166 passed, 0 failed;
+`repo_consistency_test.py`: consistent.  Before the merge: the same tree and gate against `tab-t45-1` identical, the
+eight fits against `b-trial46` identical.  Injected errors: a kind without an owner field (C++) and `start` read from
+the physical values (C++) each made `parameter_records_test` fail.  Speed on 13N (before / after): session
+construction 0.59 / 0.62 s (noise), the first `parameters` 1.5 / 0.6 ms, cached accesses 0.1 µs each, `pairs`
+0.2 / 0.03 ms.
+
+**Merged** `feature/upgrade-4-data` at 3298f372 (prior centres, diagnostics record, web UI): `PriorOf` reads the
+centres where the objective reads them (`include/Objective.h`); the conflicts were the deleted `GetParameterInfo` /
+`GetPairsInfo` and `Parameter.from_record` (whose new `prior_nominal` of an abundance and an apparatus number is the
+record's `prior_centre`).  The web UI (`pyazr/ui/engine.py`) reads `describe()["parameters"]` and
+`parameters` (`free_index`, `fixed`, `name`), both from the records now; its text of a fit (`save_fit` to a file,
+read back) is what `pyazr.snapshot.write_values` gives in memory.
+
+**Open.** (1) `bounds` are the limits as created; a `<parameterSettings>` block's limits act only in the
+program's fit.  (3) `_sync_layout` and `_mode_free_vector` count energies and widths as the free R-matrix block, not
+the `radiative` numbers in a level's slot (unchanged behaviour; a project with a gamma_decay record and
+extrapolations may carry a wrong vector over a mode switch).  (4) Web UI wish 11: the pair record carries the THM
+binding energy, the width record `width_is_amplitude`; `Project.set_pair` / `set_channel` still cannot edit them.
+
+## 2026-11-13 (agent, branch `feature/upgrade-4-layout-centre`) — grids and limits laid out from the prior's centre
+
+**Done.** Measured first (base build `work/b-prior`; fit, `param.sav` read by pyazr, `save_fit`, both sessions at the
+same vector; `parameter_kinds.md` section 4 has the table): the Doppler temperature's χ² moved by 5.5e-6 (6.0e-6 and
+5.6e-6 per data set, 4.85481 → 4.85478 in `chiSquared.out`, above `save_fit`'s own 1e-6, which refused its snapshot),
+the stopping scale's by 5.8e-7 on one data set; the areal density's and the kernel width's χ² reproduced, but every
+layout and lower limit moved with the start (density 1.1e18 → 1.19e18, 363 → 379.6 K, scale 1.12 → 1.126, width
+23 → 29.0 keV); abundance and thickness (no grid) reproduced exactly. Rule (design committed first, section 4 "The
+layout of a fitted value"): one function, `ChooseLayoutBase` (`experiment/.../LayoutBase.h`), with the three spans as
+rows; the base of the layout, the lower limit and the Doppler pieces is the written centre when the parameter is fitted
+and the start lies in the centre's range (`grid_max` as written), else the start with one `Note:` line. Used in
+`TargetEffect` (density, Doppler, stopping scale, the kernel's parameters: the one place, the declaration reads it);
+`ApparatusLayout` removed; the fields that were the base renamed `layoutBase`. After: the four written projects at the
+fit's vector give the fit's objective and every data set's χ² exactly (difference 0), the same layouts, and
+`save_fit(verify=True)` passes for the Doppler case.
+The web page's "accept into project" (`pyazr/ui/server.py` `Server.apply` → `engine.py` `Engine.snapshot`) writes
+through the same `save_fit(path, x, param_sav=False)` (verify on) that `continued.py` tests; its text merge
+(`state.merge_snapshot`) is not covered here. The data branch (3298f372) merged in.
+
+**Verified how** (build `work/b-layout`, 0 warnings), on the merged head: all projects x 3 bases against
+`tab-t50-1` 887 / 851 / 887 identical (also against `tab-t45-1` before the merge); the eight fits of
+`fits_vs_base2.sh` identical to `b-trial50`; the converted-tree gate 679 / 643 / 679 identical; `ctest -LE slow`
+237/237; the slow tests 11/11; `tests/run_tests.sh` 166 passed, 0 failed; `tests/nuisance_prior_centre/check.sh`
+with and without `PYAZR_ENGINE_DIR` (new check (h) = `continued.sh`). Injected errors (inclusive lower end; the
+kernel's layout from the start) fail the new checks; the base build fails the Doppler χ², the note, `save_fit` and
+the four layout checks. Not run: 1 against several threads, Sphinx.
+
+**Open.** A parameter without a prior has no centre: a continued fit lays its grid out from the fitted value (1.5 ×);
+whether `save_fit` should write `grid_max` there is the PI's call. `save_fit` writes a stopping scale shared by two
+targets on the first only, and the written project is refused (`E_STOPPING_SCALE_CONFLICT`; pyazr write-back, not
+fixed). The Doppler pieces from the start did not change χ² in the test case (piece counts equal), so only the window
+and layout are covered there; the fit limits are not reported by the API, so the lower limits are checked by reading.
+
 ## 2026-11-13 (director, 16:49) — merged: the web UI's Results tab
 
 **Merged** `feature/upgrade-9-webui-results` (the entry below; it carries the Fit tab). No C++ changed, so the
@@ -335,7 +782,8 @@ converted-tree gate 679/643/679 identical; the eight fits identical to `b-gecm`;
 1 failed (rectangular_resolution expected the lifted refusal; check updated, passes).
 
 **Open.** Grids/limits of a fitted density, temperature, stopping scale or kernel parameter follow the start value: a
-fit continued from a written project without `grid_max` lays them out anew (the Doppler pieces too).
+fit continued from a written project without `grid_max` lays them out anew (the Doppler pieces too). (Closed by the
+branch `feature/upgrade-4-layout-centre`, entry above, for every parameter with a prior.)
 
 ## 2026-11-13 (director, 09:20) — merged: the design note of the web UI (documents only)
 

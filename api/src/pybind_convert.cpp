@@ -14,6 +14,9 @@
 #include "azure2/experiment/ParameterFileNames.h"
 #include "azure2/experiment/ProjectReader.h"
 #include "azure2/io/ProjectFormat.h"
+#include "Config.h"
+#include "ProjectOptions.h"
+#include <sstream>
 
 namespace py = pybind11;
 
@@ -85,8 +88,14 @@ void BindConvert(py::module_ &m) {
         for (std::size_t i = 0; i < c.diagnostics.size(); i++) diagnostics += (i ? ",\n " : "\n ") + c.diagnostics[i].ToJson();
         diagnostics += c.diagnostics.empty() ? "]" : "\n]";
         if (!c.Ok() || !c.levelsRead) return py::make_tuple(std::string(), diagnostics, std::string());
+        // the options of the calculation as the project states them (no flags), as AZURE2 --describe prints them
+        std::ostringstream sink;
+        Config options(sink);
+        options.configfile = fileName;
+        OptionsOfRun(text, {}, options);
         return py::make_tuple(std::string(), diagnostics,
-                              json ? azure2::experiment::DescribeJson(c, record) : azure2::experiment::DescribeText(c, record));
+                              WithOptions(json ? azure2::experiment::DescribeJson(c, record)
+                                               : azure2::experiment::DescribeText(c, record), json, options));
       },
       py::arg("text"), py::arg("file_name"), py::arg("json"), py::arg("project_dir") = "", py::arg("record") = "",
       "Describe a format-3 project text (AZURE2 --describe [--json]; data files relative to project_dir, '' = the "

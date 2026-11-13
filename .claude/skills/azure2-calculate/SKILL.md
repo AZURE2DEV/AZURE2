@@ -45,8 +45,10 @@ Runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
 
 ## Procedure A: the CLI
 
-1. **Pass the runtime options as flags, every time.** The CLI does not read the Runtime Options saved in the `.azr`.
-   Take the flags from the project's own job scripts, never from memory or defaults. The parametrization is a flag:
+1. **Use the project's options.** A project can state them as `<config>` keys under the pyazr keyword names
+   (`use_brune=0`, `transform=0`, ...): a flag given wins over the key, the key over the default, and
+   `AZURE2 --describe` prints each option with its source. Without keys, pass the flags every time, taken from the
+   project's own job scripts, never from memory or defaults. The parametrization is a flag:
    Brune is the default; `--use-park` selects Park's observed amplitudes; `--no-brune` the Lane–Thomas basis with
    constant boundary conditions; `--use-rmc` the Reich–Moore formalism (switches Brune and Park off; for (n,γ) only).
    Conventions and conversions between bases: azure2-exchange.

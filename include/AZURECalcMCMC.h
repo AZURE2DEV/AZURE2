@@ -5,6 +5,8 @@
 #include "Constants.h"
 #include "ParameterKind.h"
 #include "WorkingData.h"
+#include <atomic>
+#include <functional>
 #include <vector>
 #include <memory>
 #include <mutex>
@@ -23,6 +25,12 @@ class PriorCovariance;
  * parameter set for all available data, and returns a log-probability value.
  * This function class is what the MCMC sampler calls repeatedly during the
  * Bayesian sampling process to explore the parameter space.
+ *
+ * The log-probability is -1/2 x the fit's objective (Objective.h), term by term, plus the normalisation of the
+ * Gaussian priors it takes as log-priors, and -infinity outside the support (docs/upgrade/objective.md section 6).
+ *
+ * A run's state (the sample file, the step, the best walker) belongs to the RunMCMCSampling call; the callbacks and
+ * the stop request belong to this object.  Two samplers in one process share nothing.
  */
 
 class AZURECalcMCMC {
@@ -81,7 +89,20 @@ class AZURECalcMCMC {
    */
   bool RunMCMCSampling(int nwalkers, int nsteps, const std::vector<double> &initialParams,
                        std::vector<std::vector<double>> &samples, double chainSpreadPercent = 1.0, int nthreads = 1, bool useRWA = false,
-                       double energySpreadKeV = 1.0) const;
+                       double energySpreadKeV = 1.0);
+
+  /// What RunMCMCSampling does before its first step: the parameter layout from `initialParams` (the varying
+  /// parameters in the basis `useRWA` says), the automatic priors, the prior covariance.  False when the prior
+  /// covariance is refused (ERROR printed).
+  bool PrepareRun(const std::vector<double> &initialParams, bool useRWA);
+  /// C of ln P = -chi^2/2 + C (objective.md section 6): the normalisation of the Gaussian log-priors this sampler
+  /// applies, -sum ln(sigma sqrt(2 pi)) - 1/2 ln det(2 pi C_prior).  Valid after PrepareRun.
+  double LogPriorNormalisation() const;
+
+  /// The log-posterior at a point of the sampled (varying) parameters, as the sampler evaluates it: the log-prior,
+  /// then, inside the support, the log-likelihood.  RunMCMCSampling (or UpdateParameterVectors and BuildAutoPriors)
+  /// must have set the parameters up.
+  double LogProbability(const std::vector<double> &params, bool useRWA) const;
 
   /*!
    * Set prior information for parameters.
@@ -131,15 +152,16 @@ class AZURECalcMCMC {
    */
   void LoadExistingSamples(const std::string &filename, std::vector<std::vector<double>> &samples) const;
 
-  /*!
-   * Set the progress callback (the CLI's progress line)
-   */
-  static void SetGUIProgressCallback(void (*callback)(int, int, double, double, double));
-
-  /*!
-   * Set the iteration callback (called every iteration; the CLI's progress line)
-   */
-  static void SetGUIIterationCallback(void (*callback)(int, int));
+  /// After every step: (step, steps of this run, best walker's ln P, ln L, ln prior).
+  using ProgressCallback = std::function<void(int, int, double, double, double)>;
+  /// After every step: (absolute step, samples this run will have written).
+  using IterationCallback = std::function<void(int, int)>;
+  /// The callbacks of this sampler's runs (the CLI's progress line); empty for none.
+  void SetProgressCallback(ProgressCallback callback);
+  void SetIterationCallback(IterationCallback callback);
+  /// Ends the running RunMCMCSampling after the step in progress (any thread may call it; a run clears it at its
+  /// start).  The run writes its walkers, as on completion, and returns true.
+  void RequestStop() { stopRequested_ = true; }
 
   /*!
    * Returns a reference to the Config structure.
@@ -172,7 +194,7 @@ class AZURECalcMCMC {
   /*!
    * Update parameter vectors for parameter transformation handling
    */
-  void UpdateParameterVectors(const vector_r &initialParams) const;
+  void UpdateParameterVectors(const vector_r &initialParams);
 
   /*!
    * Park's parametrization: the R-matrix levels whose J = 1 - sum gamma^2
@@ -201,6 +223,14 @@ class AZURECalcMCMC {
   void ReturnPooledData(WorkingData *obj) const;
 
  private:
+  struct Run;  // the state of one RunMCMCSampling call (AZURECalcMCMC.cpp)
+  /// The log-likelihood of a filled compound and working copy at the fit's vector p (both returned to the pools).
+  double LogLikelihoodOfFilled(CNuc *compound, WorkingData *working, const vector_r &p) const;
+  /// One completed step into the run's sample file and best walker; after it, the callbacks and snapshot files.
+  void RecordStep(Run &run, int step, const std::vector<std::vector<double>> &positions,
+                  const std::vector<double> &logps) const;
+  void AfterStep(const Run &run, int step, int totalSteps) const;
+
   const Config &configure_;
   WorkingCopy *data_;
   CNuc *compound_;
@@ -216,7 +246,14 @@ class AZURECalcMCMC {
   // Name and kind (its record's) of every parameter (fixed or not), in the order of fixed_
   mutable std::vector<std::string> paramNames_;
   mutable std::vector<ParamKind> paramKinds_;
-  mutable bool parametersInitialized_;
+  bool parametersInitialized_;
+  // Limits of each varying parameter that bound the posterior (ParamKindRow::samplerSupport), +-infinity otherwise
+  std::vector<double> supportLower_;
+  std::vector<double> supportUpper_;
+
+  ProgressCallback progressCallback_;
+  IterationCallback iterationCallback_;
+  std::atomic<bool> stopRequested_{false};
 
   // Prior information for Bayesian analysis, indexed over varying parameters
   mutable std::vector<double> priorMeans_;

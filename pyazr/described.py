@@ -4,7 +4,7 @@
   the stopping and mass data in use, the thread count.
 - :func:`kinds` (``pyazr.kinds()``): the record kinds, data kinds (quantities), parameter kinds, session options,
   bound physics functions and error classes.  Every table is read from the engine's own tables at the first call
-  (the schema of ``AZURE2 --schema``, ``ParamKindTable``, the binding's option table and the names it binds); none is
+  (the schema of ``AZURE2 --schema``, ``ParamKindTable``, the binding's option and physics tables); none is
   written a second time here.
 - :func:`describe_session` (``pyazr.azure2.describe()``): what one session holds.
 - The data sets and extrapolations of a format-3 project as the engine built them (:class:`DescribedDataset`, ...):
@@ -23,6 +23,8 @@ import os
 import sys
 from dataclasses import dataclass
 from typing import Optional
+
+import numpy as np
 
 from .errors import ParameterKeyError, close_names, listed
 
@@ -282,29 +284,31 @@ def _build_kinds():
                       "units": list(q.get("units", {})), "frames": list(columns.get("energy", [])),
                       "angle_columns": list(columns.get("angle", [])), "angle_axis": columns.get("angle_axis", ""),
                       "target_kinds": list(q.get("target_kinds", [])),
-                      # the engine's quantity table does not declare extra outputs (docs/upgrade/pyazr3.md 2.2)
+                      # the numbers a point carries depend on the data set, not on the quantity alone: they are the
+                      # rows of "data_outputs" (docs/upgrade/pyazr3.md section 7.1)
                       "extra_outputs": None}
-    parameters = {row["key"]: {"code": int(row["code"]), "unit": row["unit"],
-                               "owner": [f.strip() for f in row["owner"].split(",") if f.strip()],
+    # the binding's table of point outputs (api/src/pybind_evaluation.cpp): Evaluation.data[i].extra
+    data_outputs = {row["name"]: {k: v for k, v in row.items() if k != "name"} for row in engine.point_output_fields()}
+    from .evaluate import EvaluatedData, Evaluation
+    from .objective import Objective
+    objects = {cls.__name__: {"doc": _first_line(cls.__doc__), "built_by": cls.BUILT_BY, "fields": dict(cls.FIELDS)}
+               for cls in (Objective, Evaluation, EvaluatedData)}
+    parameters = {row["key"]: {"unit": row["unit"], "owner": list(row["owner"]),
                                "own_prior": bool(row["own_prior"]), "segment_field": bool(row["segment_field"]),
                                "vary_from_project": bool(row["vary_from_project"]), "doc": row["doc"]}
                   for row in engine.parameter_kinds()}
-    defaults = engine.RuntimeOptions()
+    parameter_fields = {f["name"]: {k: (list(v) if isinstance(v, (list, tuple)) else v)
+                                    for k, v in f.items() if k != "name"} for f in engine.parameter_record_fields()}
+    pair_fields = {f["name"]: {"unit": f["unit"], "doc": f["doc"]} for f in engine.pair_record_fields()}
     options = {}
     for row in engine.session_options():
-        value = getattr(defaults, row["name"])
-        options[row["keyword"]] = {"engine_name": row["name"], "type": type(value).__name__, "default": value,
-                                   "flag": row["flag"], "negation": row["negation"], "doc": row["doc"]}
-    physics = {}
-    for name in engine.physics_functions:
-        obj = getattr(engine, name)
-        members = ([(f"{name}.{n}", getattr(obj, n)) for n in dir(obj)
-                    if not n.startswith("_") and callable(getattr(obj, n))] if type(obj).__name__ == "module"
-                   else [(name, obj)])
-        for full, fn in members:
-            doc = (getattr(fn, "__doc__", "") or "").strip().splitlines()
-            physics[full] = {"signature": doc[0] if doc else full,
-                             "doc": " ".join(line.strip() for line in doc[1:] if line.strip())}
+        options[row["keyword"]] = {"engine_name": row["name"], "type": row["type"], "default": row["default"],
+                                   "key": row["key"], "flag": row["flag"], "negation": row["negation"],
+                                   "effect": row["effect"], "reason": row["reason"], "doc": row["doc"]}
+    # one entry per row of the binding's physics table (api/src/pybind_physics.cpp); pyazr.physics is built from it
+    physics = {row["name"]: row for row in engine.physics_functions()}
+    # one entry per row of the binding's stopping table (api/src/pybind_stopping.cpp), with SRIM's citation
+    stopping = {row["name"]: row for row in engine.stopping.functions()}
     error_classes = {}
     for name in errors.__all__:
         cls = getattr(errors, name)
@@ -313,8 +317,10 @@ def _build_kinds():
                                    "doc": _first_line(cls.__doc__)}
     error_classes["EngineError"] = {"same_as": "AZURE2Error", "doc": _first_line(errors.AZURE2Error.__doc__)}
     return {"schema_version": schema.get("schema_version", ""), "records": records, "data": data,
-            "parameters": parameters, "options": options, "physics": physics, "units": schema.get("units", {}),
-            "dimensions": schema.get("dimensions", {}), "errors": error_classes}
+            "parameters": parameters, "parameter_fields": parameter_fields, "pair_fields": pair_fields,
+            "options": options, "physics": physics, "stopping": stopping, "units": schema.get("units", {}),
+            "dimensions": schema.get("dimensions", {}), "errors": error_classes, "data_outputs": data_outputs,
+            "objects": objects}
 
 
 def kinds():
@@ -326,18 +332,33 @@ def kinds():
       grammar, whether required, units or dimension, doc; ``Project.add_<kind>`` takes them);
     - ``data``: the data kinds (quantities of a ``dataset``): title, doc, aliases, record kinds, ``engine_unit``,
       ``units`` accepted, ``frames`` (energy columns), angle columns and axis, target kinds, ``extra_outputs``
-      (None: the engine's table does not declare them);
-    - ``parameters``: the kinds of fit parameter (``Parameter.kind``): code, unit (of the value in the fit vector),
-      ``owner`` (the fields that say what it belongs to), own_prior, segment_field, vary_from_project, doc;
-    - ``options``: the session options by their keyword of :class:`pyazr.azure2`: type, default, the program's
-      ``flag`` and ``negation``, doc;
-    - ``physics``: the physics functions the compiled module binds (``_azure2.<name>``; ``stopping.<name>`` in
-      ``_azure2.stopping``): signature and doc, as the binding states them;
+      (None: they depend on the data set; see ``data_outputs``);
+    - ``data_outputs``: the numbers a point carries beside its model value (``Evaluation.data[i].extra``): unit
+      (``"model"``: the data set's engine unit), when (the data sets it applies to), doc, per_point;
+    - ``objects``: pyazr's objects of a fit and a calculation (``Objective``, ``Evaluation``, ``EvaluatedData``):
+      what builds each and its fields with a line of doc;
+    - ``parameters``: the kinds of fit parameter (``Parameter.kind``), in their order in the vector: unit (of the
+      value in the fit vector), ``owner`` (the record fields that say what it belongs to), own_prior, segment_field,
+      vary_from_project, doc;
+    - ``parameter_fields``, ``pair_fields``: the fields of a parameter's and a pair's record (:class:`pyazr.Parameter`,
+      :class:`pyazr.Pair`): unit (``"unit"``: the parameter's own), doc; a parameter field also the ``kinds`` it
+      describes, ``every_kind`` and ``owner`` (shown in ``Parameters.table()`` as what the parameter belongs to);
+    - ``options``: the session options by their keyword of :class:`pyazr.azure2`: type, default, ``key`` (the
+      ``<config>`` key of an option of the calculation, the same word; "" for one that is not project state, with its
+      ``reason``), the program's ``flag`` and ``negation``, ``effect`` (physics, convention, numerics), doc;
+    - ``physics``: the rows of the binding's physics table, by name (:mod:`pyazr.physics` has one function per row):
+      summary, doc, library (the C++ function called), axis (the argument a plot puts on its horizontal axis),
+      arguments (name, unit, doc, kind, domain, lower, upper, lower_open, upper_open, choices, default) and returns
+      (name, unit, doc);
+    - ``physics`` rows also carry ``group`` (their section of the table) and, per argument, ``example`` (a typical
+      value) and ``sweep`` (``lower``, ``upper``, ``spacing``: the range of a first plot over it);
+    - ``stopping``: the rows of the binding's stopping table, by name, in the shape of the physics rows (a ``text``
+      argument ``formula`` first) with ``citation``, SRIM's, owed by every use (:func:`pyazr.stopping.evaluate`);
     - ``errors``: pyazr's error classes with their bases;
     - ``units``, ``dimensions``: the unit table; ``schema_version``.
 
     Read from the engine's tables at the first call (``AZURE2 --schema``, the parameter-kind table, the binding's
-    option table, the names the binding registers); a new row there appears here without an edit of Python.  Each
+    option table, the binding's physics table); a new row there appears here without an edit of Python.  Each
     call returns a fresh copy.
     """
     global _KINDS
@@ -349,27 +370,16 @@ def kinds():
 def describe_session(session):
     """What one :class:`pyazr.azure2` session holds, as plain data (``azure2.describe()``); see there."""
     s = session
-    units = {k: v["unit"] for k, v in kinds()["parameters"].items()}
-    x_all = [float(v) for v in s.sess.params_all_rwa()]
+    common = ("name", "kind", "unit", "start", "value", "fixed", "free_index", "bounds")
     parameters = []
     for p in s.parameters:
-        entry = {"name": p.name, "kind": p.kind, "unit": units.get(p.kind, ""), "x": x_all[p.index],
-                 "physical_value": float(p.value), "free": not p.fixed, "free_index": p.free_index,
-                 "bounds": None}
-        for field in ("jgroup", "J", "parity", "level", "level_energy", "channel", "L", "S", "pair", "segment_key",
-                      "prior_nominal", "prior_sigma", "wigner_limit"):
-            value = getattr(p, field, None)
-            if value is not None:
-                entry[field] = value.item() if hasattr(value, "item") else value
+        lo, hi = p.bounds
+        entry = {"name": p.name, "kind": p.kind, "unit": p.unit, "x": p.start, "physical_value": p.value,
+                 "free": not p.fixed, "free_index": p.free_index,
+                 "bounds": [lo if np.isfinite(lo) else None, hi if np.isfinite(hi) else None]}
+        entry.update((k, v) for k, v in p.to_dict().items() if k not in common and v is not None)
         parameters.append(entry)
-    pairs = []
-    for q in s.pairs:
-        entry = {"number": q.number, "label": q.label, "photon": bool(q.is_photon)}
-        for field in ("key", "channel_radius", "sep_energy", "excitation", "nucleus_Z", "nucleus_A", "is_entrance"):
-            value = getattr(q, field, None)
-            if value is not None:
-                entry[field] = value.item() if hasattr(value, "item") else value
-        pairs.append(entry)
+    pairs = [dict(q.to_dict(), label=q.label, photon=bool(q.is_photon)) for q in s.pairs]
     levels = [{"label": str(k), "jgroup": k.jgroup, "J": k.J, "parity": k.parity, "level": k.level,
                "energy": k.energy} for k in s.physical_levels()]
     description = describe_project(s.file, s.cwd)
@@ -395,6 +405,7 @@ def describe_session(session):
     options["cwd"] = s.cwd
     return json.loads(json.dumps({
         "project": s.file, "cwd": s.cwd, "output_dir": s.output_dir, "mode": s.mode, "options": options,
+        "option_sources": dict(s.option_sources),
         "coulomb_table": coulomb_table(s.options.get("use_coulomb_table", True), s.options.get("coulomb_table", "")),
         "pairs": pairs, "levels": levels, "datasets": datasets, "extrapolations": extrapolations,
         "parameters": parameters, "free_parameters": int(sum(1 for p in parameters if p["free"])),

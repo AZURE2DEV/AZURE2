@@ -23,6 +23,7 @@
 #include <cmath>
 #include <cstring>
 #include <iostream>
+#include <map>
 #include <set>
 #include <vector>
 #include <string>
@@ -41,6 +42,8 @@
 #include "ECAmplitudeCache.h"
 #include <gsl/gsl_errno.h>
 #include "pybind_notices.h"
+#include "ProjectOptions.h"
+#include "azure2/io/ConfigSection.h"
 
 namespace py = pybind11;
 
@@ -58,6 +61,16 @@ class ParameterVectorError : public AZURE2Error {
   explicit ParameterVectorError(const std::string &what) : AZURE2Error(what) {}
 };
 
+// pybind_records.cpp: the parameter and pair records with their named fields
+py::list ParameterRecordDicts(const AZUREAPI &api);
+py::list PairRecordDicts(const AZUREAPI &api);
+// pybind_evaluation.cpp: one evaluation read as the writer reads it, the objective's rows and log-probability
+py::list PointOutputFields();
+py::dict EvaluationDict(const AZUREAPI &api, const vector_r &free);
+py::dict ObjectiveRowsDict(const AZUREAPI &api, const vector_r &free, bool withJacobian);
+double LogProbability(const AZUREAPI &api, const vector_r &free);
+py::tuple SamplerLogProbability(AZUREAPI &api, const vector_r &x0, const vector_r &x);
+std::vector<std::string> OwnerFieldsOf(ParamKind kind);
 // pybind_potentials.cpp: a session's hybrid potentials
 azure2::experiment::HybridPotentialSetting SessionPotentialSetting(const std::string &type, bool enabled, double V0, double R, double a, double r0,
                                                                    double coulombRadius_fm, double matchingRadius_fm, double step_fm, const std::vector<double> &spinOrbit, CNuc *compound, int pair);
@@ -96,23 +109,15 @@ vector_r to_vector(const py::array_t<double, py::array::forcecast> &a) {
   return v;
 }
 
-// The runtime options the CLI used to carry as command-line flags.  Defaults
-// mirror Config::Reset() plus the CLI's defaults (--no-transform off, etc.).
+// What a session is given besides the project file: the options that are not project state (pybind_describe.cpp
+// says why for each), and the options of the calculation its call named (keyword -> value; the rows of
+// io::ConfigKeys(), docs/upgrade/project_format3.md section 3.12).  An option left out is not given: the project's
+// <config> key, else the default, decides (ApplyProjectOptions, when the session reads the project).
 struct RuntimeOptions {
   bool data_mode = true;            // CALCULATE_WITH_DATA
-  bool use_brune = true;            // USE_BRUNE_FORMALISM
-  bool ignore_externals = true;     // IGNORE_ZERO_WIDTHS
-  bool transform = true;            // TRANSFORM_PARAMETERS
-  bool use_long_wavelength = true;  // USE_LONGWAVELENGTH_APPROX
-  bool use_gsl_coul = false;        // USE_GSL_COULOMB_FUNC
-  bool use_rmc = false;             // USE_RMC_FORMALISM
-  bool use_park = false;            // USE_PARK_FORMALISM (implies Brune)
-  bool use_coulomb_table = true;    // Config::useCoulombTable
-  bool replace_grids = true;        // Config::replaceSubPointGrids
-  bool use_ec_table = true;         // Config::useECTable
-  bool ec_convection_current = true;  // Config::ecConvectionCurrent (exact-form external capture only)
   std::string coulomb_table;        // Config::coulombTablePath ("" = the default file)
   std::string base_directory;       // Config::baseDirectory: the project's relative paths ("" = the project file's directory)
+  std::map<std::string, bool> options;  // the options of the calculation the call gave
 };
 
 void apply_options(Config &config, const RuntimeOptions &opt) {
@@ -120,42 +125,17 @@ void apply_options(Config &config, const RuntimeOptions &opt) {
     config.paramMask |= Config::CALCULATE_WITH_DATA;
   else
     config.paramMask &= ~Config::CALCULATE_WITH_DATA;
-  if (opt.use_brune)
-    config.paramMask |= Config::USE_BRUNE_FORMALISM;
-  else
-    config.paramMask &= ~Config::USE_BRUNE_FORMALISM;
-  if (opt.ignore_externals)
-    config.paramMask |= Config::IGNORE_ZERO_WIDTHS;
-  else
-    config.paramMask &= ~Config::IGNORE_ZERO_WIDTHS;
-  if (opt.transform)
-    config.paramMask |= Config::TRANSFORM_PARAMETERS;
-  else
-    config.paramMask &= ~Config::TRANSFORM_PARAMETERS;
-  if (opt.use_long_wavelength)
-    config.paramMask |= Config::USE_LONGWAVELENGTH_APPROX;
-  else
-    config.paramMask &= ~Config::USE_LONGWAVELENGTH_APPROX;
-  if (opt.use_gsl_coul)
-    config.paramMask |= Config::USE_GSL_COULOMB_FUNC;
-  else
-    config.paramMask &= ~Config::USE_GSL_COULOMB_FUNC;
-  if (opt.use_rmc)
-    config.paramMask |= Config::USE_RMC_FORMALISM;
-  else
-    config.paramMask &= ~Config::USE_RMC_FORMALISM;
-  config.useCoulombTable = opt.use_coulomb_table;
   config.baseDirectory = opt.base_directory;
   // A relative table file is the session's directory's, as it was when pyazr entered that directory per call.
   config.coulombTablePath = opt.coulomb_table.empty() ? opt.coulomb_table : config.OpenPath(opt.coulomb_table);
-  config.replaceSubPointGrids = opt.replace_grids;
-  config.useECTable = opt.use_ec_table;
-  config.ecConvectionCurrent = opt.ec_convection_current;
-  // Park shares Brune's per-level shift functions, so it switches Brune on.
-  if (opt.use_park)
-    config.paramMask |= (Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM);
-  else
-    config.paramMask &= ~Config::USE_PARK_FORMALISM;
+  for (const auto &given : opt.options)
+    if (!azure2::io::ConfigOptionNamed(given.first))
+      throw py::value_error("'" + given.first + "' is not an option of the calculation (pyazr.kinds()[\"options\"])");
+  // In the table's order (use_brune before use_park: use_park=True with use_brune=False gives both on, as before)
+  for (const azure2::io::ConfigKey &k : azure2::io::ConfigKeys()) {
+    const auto given = k.option ? opt.options.find(k.name) : opt.options.end();
+    if (given != opt.options.end()) GiveOption(config, k.name, given->second, OptionSource::kKeyword);
+  }
 }
 
 }  // namespace
@@ -181,6 +161,8 @@ class Session {
       fail("Could not open " + configfile + " or no <config> block found.");
     } else if (configStatus == Config::kConfigNotFormat3) {
       fail(azure2::io::NotFormat3Message(ReadProjectText(configfile), configfile));
+    } else if (configStatus == Config::kConfigRefused && !config_->refusedOptions.empty()) {
+      fail(config_->refusedOptions + configfile + ": the options of this call contradict the project's <config> keys.");
     } else if (configStatus == Config::kConfigRefused) {
       fail(configfile + " (format 3) is refused (see the ERROR lines above; AZURE2 --validate lists them).");
     } else if (configStatus < 0) {
@@ -240,6 +222,14 @@ class Session {
 
   // -- modes / rebuilds ------------------------------------------------------
 
+  // The options of the calculation in effect: {name: (value, source)}, source "default", "project" or "keyword".
+  py::dict option_sources() const {
+    py::dict out;
+    for (const azure2::io::ConfigKey &k : azure2::io::ConfigKeys())
+      if (k.option) out[k.name] = py::make_tuple(OptionIsOn(*config_, k.name), OptionSourceName(OptionSourceOf(*config_, k.name)));
+    return out;
+  }
+
   void set_data() { api_->SetData(); }
   void set_extrap() { api_->SetExtrap(); }
   bool set_radius(int idx, double radius) {
@@ -292,72 +282,10 @@ class Session {
 
   // -- parameter metadata ----------------------------------------------------
 
-  py::array_t<double> parameter_info() const { return to_array(api_->GetParameterInfo()); }
-  /// One dict per parameter, in params_names() order: its kind (ParamKindTable key) and what it belongs to, from the
-  /// record written where it was created (ParameterKind.h).  Fields that do not apply are absent.
-  py::list parameter_records() const {
-    py::list out;
-    CNuc *nuc = api_->compound();
-    for (const ParameterRecord &r : api_->GetParameterRecords()) {
-      py::dict d;
-      d["kind"] = r.Row().key;
-      d["code"] = (int)r.kind;
-      d["ordinal"] = r.ordinal;
-      switch (r.kind) {
-        case ParamKind::LevelEnergy:
-        case ParamKind::Gamma:
-          d["jgroup"] = r.jGroup;
-          d["level"] = r.level;
-          d["level_number"] = r.levelNumber;
-          if (r.kind == ParamKind::Gamma) d["channel"] = r.channel;
-          break;
-        case ParamKind::RadiativeDecay:
-          d["jgroup"] = r.jGroup, d["level"] = r.level, d["level_number"] = r.levelNumber, d["channel"] = r.channel;
-          d["decay_record"] = r.decayRecord, d["decay_part"] = r.decayPart, d["final_state"] = r.finalState;
-          break;
-        case ParamKind::Norm:
-        case ParamKind::EnergyShift:
-        case ParamKind::EnergyShiftSqrt:
-        case ParamKind::EnergyShiftFn:
-        case ParamKind::Thickness:
-          d["segment"] = r.segment;
-          d["segment_key"] = r.segmentKey;
-          if (r.kind == ParamKind::EnergyShiftFn) d["fn_term"] = r.fnTerm;
-          break;
-        case ParamKind::Screening:
-        case ParamKind::Density: case ParamKind::Doppler: case ParamKind::Apparatus:
-          d["effect"] = r.effect;
-          if (r.kind == ParamKind::Apparatus) d["apparatus"] = r.apparatus, d["unit"] = r.apparatusUnit, d["owner"] = r.owner;
-          break;
-        case ParamKind::Abundance:
-          d["sample"] = r.sample;
-          d["sample_name"] = r.sampleName;
-          d["nucleus"] = r.nucleus;
-          d["nucleus_Z"] = r.nucleusZ;
-          d["nucleus_A"] = r.nucleusA;
-          break;
-        case ParamKind::ThmCoherent: {
-          d["thm_experiment"] = r.thmExperiment;
-          d["jgroup"] = r.jGroup;
-          d["channel"] = r.channel;
-          d["exit_channel"] = r.exitChannel;
-          d["thm_term"] = r.thmTerm;
-          // The combination as cbackground= writes it: J^pi, exit pair key, (s,l) -> (s',l').
-          JGroup *jg = nuc->GetJGroup(r.jGroup);
-          AChannel *in = jg->GetChannel(r.channel);
-          AChannel *ex = jg->GetChannel(r.exitChannel);
-          d["thm_jpi"] = ThmSpinText(jg->GetJ()) + (jg->GetPi() > 0 ? "+" : "-");
-          d["thm_exit_key"] = nuc->GetPair(ex->GetPairNum())->GetPairKey();
-          d["thm_channels"] = ThmSpinText(in->GetS()) + "," + std::to_string(in->GetL()) + "," +
-                              ThmSpinText(ex->GetS()) + "," + std::to_string(ex->GetL());
-          break;
-        }
-      }
-      out.append(d);
-    }
-    return out;
-  }
-  py::array_t<double> pairs_info() const { return to_array(api_->GetPairsInfo()); }
+  /// One dict per parameter, in params_names() order: its record's named fields (pybind_records.cpp).
+  py::list parameter_records() const { return ParameterRecordDicts(*api_); }
+  /// One dict per particle pair, in pair-number order (pybind_records.cpp).
+  py::list pair_records() const { return PairRecordDicts(*api_); }
   py::array_t<double> normalization_indices() const { return to_array(api_->GetNormalizationIndices()); }
   py::array_t<double> energy_shift_indices() const { return to_array(api_->GetEnergyShiftIndices()); }
 
@@ -567,6 +495,30 @@ class Session {
     d["shift_fn"] = to_array(seg.shiftFn);
     AddModelData(d, *api_, v);  // the <modelData> data, one record each
     return d;
+  }
+  // pyazr's Evaluation and Objective (pybind_evaluation.cpp; docs/upgrade/pyazr3.md section 7).
+  py::dict evaluation_rwa(const py::array_t<double, py::array::forcecast> &p) {
+    vector_r v = to_vector(p);
+    expect_free(v, "evaluation_rwa");
+    return EvaluationDict(*api_, v);
+  }
+  py::dict objective_rows_rwa(const py::array_t<double, py::array::forcecast> &p, bool jacobian) {
+    vector_r v = to_vector(p);
+    expect_free(v, "objective_rows_rwa");
+    return ObjectiveRowsDict(*api_, v, jacobian);
+  }
+  std::vector<std::string> objective_term_names() const { return api_->ObjectiveTermNames(); }
+  double log_prob_rwa(const py::array_t<double, py::array::forcecast> &p) {
+    vector_r v = to_vector(p);
+    expect_free(v, "log_prob_rwa");
+    return LogProbability(*api_, v);
+  }
+  py::tuple sampler_log_probability(const py::array_t<double, py::array::forcecast> &x0,
+                                    const py::array_t<double, py::array::forcecast> &p) {
+    vector_r s = to_vector(x0), v = to_vector(p);
+    expect_free(s, "sampler_log_probability");
+    expect_free(v, "sampler_log_probability");
+    return SamplerLogProbability(*api_, s, v);
   }
   py::array_t<double> calculate_residual_jacobian_rwa(const py::array_t<double, py::array::forcecast> &p,
                                                       const std::vector<int> &skip) {
@@ -873,6 +825,7 @@ void BindSchema(py::module_ &m);   // pybind_schema.cpp: the table of project fo
 void BindConvert(py::module_ &m);  // pybind_convert.cpp: format-3 validation and the converter old -> format 3
 void BindProject(py::module_ &m);  // pybind_project.cpp: the project file as a document
 void BindDescription(py::module_ &m);  // pybind_describe.cpp: what pyazr.describe() and pyazr.kinds() read
+void BindRecordFields(py::module_ &m);  // pybind_records.cpp: the fields of the parameter and pair records
 
 namespace {
 
@@ -898,16 +851,6 @@ void BindErrors(py::module_ &m) {
   });
 }
 
-std::vector<std::string> ModuleNamesInOrder(py::module_ &m) {
-  std::vector<std::string> out;
-  for (auto item : py::reinterpret_borrow<py::dict>(m.attr("__dict__"))) out.push_back(py::str(item.first));
-  return out;
-}
-std::set<std::string> ModuleNames(py::module_ &m) {
-  const std::vector<std::string> names = ModuleNamesInOrder(m);
-  return std::set<std::string>(names.begin(), names.end());
-}
-
 }  // namespace
 
 PYBIND11_MODULE(_azure2, m) {
@@ -920,15 +863,7 @@ PYBIND11_MODULE(_azure2, m) {
   gsl_set_error_handler(&GSLException::GSLErrorHandler);
 
   BindErrors(m);
-  {
-    // The names BindPhysics adds are the table of bound physics functions (pyazr.kinds()["physics"]).
-    const std::set<std::string> before = ModuleNames(m);
-    BindPhysics(m);
-    py::list physics;
-    for (const std::string &name : ModuleNamesInOrder(m))
-      if (!before.count(name)) physics.append(name);
-    m.attr("physics_functions") = py::tuple(physics);
-  }
+  BindPhysics(m);  // pybind_physics.cpp: the table of physics functions (physics_functions(), physics_evaluate)
   BindThm(m);  // pybind_thm.cpp: the engine's reading of a <thm> block
 
   m.def(
@@ -937,10 +872,9 @@ PYBIND11_MODULE(_azure2, m) {
         py::list out;
         for (const ParamKindRow &row : ParamKindTable()) {
           py::dict d;
-          d["code"] = (int)row.kind;
           d["key"] = row.key;
           d["unit"] = row.unit;
-          d["owner"] = row.owner;
+          d["owner"] = OwnerFieldsOf(row.kind);
           d["own_prior"] = row.ownPrior;
           d["segment_field"] = row.segmentField;
           d["vary_from_project"] = row.varyFromProject;
@@ -949,8 +883,13 @@ PYBIND11_MODULE(_azure2, m) {
         }
         return out;
       },
-      "The kinds of fit parameter (ParameterKind.h), one dict per kind in the order of their codes: code, key (the "
-      "Parameter.kind of pyazr), unit, owner fields, own_prior, segment_field, vary_from_project, doc.");
+      "The kinds of fit parameter (ParameterKind.h), one dict per kind in their order in the vector: key (the "
+      "Parameter.kind of pyazr), unit, owner (the record fields that say what it belongs to, "
+      "parameter_record_fields()), own_prior, segment_field, vary_from_project, doc.");
+  BindRecordFields(m);  // pybind_records.cpp: parameter_record_fields, pair_record_fields
+  m.def("point_output_fields", &PointOutputFields,
+        "The numbers a point carries beside its model value (pybind_evaluation.cpp's table): name, unit ('model': the "
+        "data set's engine unit), when (the data sets it applies to), doc, per_point ('number' or 'list').");
   BindSchema(m);  // pybind_schema.cpp: the format-3 table (schema(), as AZURE2 --schema)
   BindConvert(m);  // pybind_convert.cpp: validate_format3_text, convert_format3_text
   BindProject(m);  // pybind_project.cpp: the project file as a lossless document (_azure2.Document)
@@ -963,19 +902,10 @@ PYBIND11_MODULE(_azure2, m) {
   py::class_<RuntimeOptions>(m, "RuntimeOptions")
       .def(py::init<>())
       .def_readwrite("data_mode", &RuntimeOptions::data_mode)
-      .def_readwrite("use_brune", &RuntimeOptions::use_brune)
-      .def_readwrite("ignore_externals", &RuntimeOptions::ignore_externals)
-      .def_readwrite("transform", &RuntimeOptions::transform)
-      .def_readwrite("use_long_wavelength", &RuntimeOptions::use_long_wavelength)
-      .def_readwrite("use_gsl_coul", &RuntimeOptions::use_gsl_coul)
-      .def_readwrite("use_coulomb_table", &RuntimeOptions::use_coulomb_table)
       .def_readwrite("coulomb_table", &RuntimeOptions::coulomb_table)
       .def_readwrite("base_directory", &RuntimeOptions::base_directory)
-      .def_readwrite("replace_grids", &RuntimeOptions::replace_grids)
-      .def_readwrite("use_ec_table", &RuntimeOptions::use_ec_table)
-      .def_readwrite("ec_convection_current", &RuntimeOptions::ec_convection_current)
-      .def_readwrite("use_rmc", &RuntimeOptions::use_rmc)
-      .def_readwrite("use_park", &RuntimeOptions::use_park);
+      .def_readwrite("options", &RuntimeOptions::options,
+                     "The options of the calculation the call gave, {keyword: bool}; one left out is not given.");
 
   py::class_<Session>(m, "Session")
       .def(py::init<const std::string &, const RuntimeOptions &>(),
@@ -998,6 +928,9 @@ PYBIND11_MODULE(_azure2, m) {
       .def("calculate_external_capture", &Session::calculate_external_capture,
            py::call_guard<py::gil_scoped_release>(),
            "Recompute every external-capture integral from scratch.")
+      .def("option_sources", &Session::option_sources,
+           "The options of the calculation in effect: {name: (value, source)}, source 'default', 'project' (the "
+           "<config> key) or 'keyword' (given to the session).")
       .def("set_data", &Session::set_data, "Switch to the data run (the <data> records).")
       .def("set_extrap", &Session::set_extrap, "Switch to the extrapolation run (the <extrapolations> records).")
       .def("set_radius", &Session::set_radius, py::arg("pair"), py::arg("radius"),
@@ -1022,10 +955,10 @@ PYBIND11_MODULE(_azure2, m) {
            "Refill the data arrays; returns the number of segments.")
       .def("update_norms", &Session::update_norms, "Refill the normalization arrays.")
       .def("update_parameters", &Session::update_parameters, "Refill the parameter bookkeeping.")
-      .def("parameter_info", &Session::parameter_info)
       .def("parameter_records", &Session::parameter_records,
-           "What each parameter is: one dict per parameter (kind, owner fields), in params_names() order.")
-      .def("pairs_info", &Session::pairs_info)
+           "Every parameter as a dict of named fields (parameter_record_fields()), in params_names() order.")
+      .def("pair_records", &Session::pair_records,
+           "Every particle pair as a dict of named fields (pair_record_fields()), in pair-number order.")
       .def("normalization_indices", &Session::normalization_indices)
       .def("energy_shift_indices", &Session::energy_shift_indices)
       .def("params_values", &Session::params_values)
@@ -1090,6 +1023,17 @@ PYBIND11_MODULE(_azure2, m) {
            "The objective's terms: total, names, values, and per-segment norm/shift priors (index 0 unused).")
       .def("calculate_chi2_grad_rwa", &Session::calculate_chi2_grad_rwa,
            py::arg("params"))
+      .def("evaluation_rwa", &Session::evaluation_rwa, py::arg("params"),
+           "One evaluation at the free vector: the objective, its terms, the data chi^2 and every data set's arrays, "
+           "read as the output writer reads them (pyazr.evaluate.Evaluation).")
+      .def("objective_rows_rwa", &Session::objective_rows_rwa, py::arg("params"), py::arg("jacobian"),
+           "The objective as least-squares rows (sum r^2 = the objective) and, with jacobian, their Jacobian.")
+      .def("objective_term_names", &Session::objective_term_names,
+           "The names of the objective's terms (ObjectiveTerm::Name), in the engine's order.")
+      .def("log_prob_rwa", &Session::log_prob_rwa, py::arg("params"),
+           "-1/2 x the objective, -infinity outside the ensemble sampler's support.")
+      .def("sampler_log_probability", &Session::sampler_log_probability, py::arg("x0"), py::arg("params"),
+           "The engine's ensemble sampler set up at x0 (fit basis): (ln P at params, its constant).  A test's tie.")
       .def("calculate_residual_jacobian_rwa", &Session::calculate_residual_jacobian_rwa,
            py::arg("params"), py::arg("skip") = std::vector<int>(),
            "Residuals and Jacobian; the free columns listed in skip are not finite-differenced (left zero).")

@@ -99,3 +99,13 @@ the GUI's diagnostics) starts much faster; results are unchanged.
 *Tests*: a time limit on every engine run (``tests/lib/guard.sh``), shared
 check helpers, the exit-77 skip convention of the ``pyazr`` tests, and CI that
 fails when those tests are skipped (:doc:`../developer/contributing`).
+
+The structure of the code
+-------------------------
+
+The engine is built as libraries with one job each (``physics/``, ``io/``,
+``experiment/``, ``stopping/``, ``support/``, the engine in ``src/``, the
+binding in ``api/``), the data set is immutable after the set-up and every
+evaluation writes into a buffer its caller owns. The :doc:`../developer/index`
+describes this structure: the map of the libraries and of a run, a scheme of
+the classes, who owns what, and the places a new feature touches.

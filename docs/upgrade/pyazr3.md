@@ -123,29 +123,30 @@ functions), `pybind_project.cpp` 18, `pybind_nuclear_part.cpp` 17, `pybind_physi
   (`RadiusOverrides`, `configure`, `results`). Two of them hand over positional numeric layouts kept "in sync" by
   hand with pyazr: `GetParameterInfo` (16 doubles per parameter, `Parameter._NFIELDS`) and `GetPairsInfo` (21 per
   pair, `Pair._NFIELDS`); a third, `parameter_records()`, already gives each parameter as a record with its kind and
-  owner fields.
+  owner fields.  (Since the second step of section 4 both layouts are deleted: `parameter_records()` and
+  `pair_records()` are the only path, their fields one table of the binding, `api/src/pybind_records.cpp`.)
 
 ### 1.3 Physics computed in Python
 
 17 formulas; 2 have a test against the engine; the penetrability is compared here (use case (c)).
 
-| formula (pyazr) | engine or library counterpart | test against it |
+| formula (pyazr) | replaced by (`pyazr.physics`, library) | largest rel. difference (`physics_table_test`) |
 |---|---|---|
-| `transform.sommerfeld_eta`, `coulomb_rho` | `ChannelFunctions.h` (`eta`), `CoulFunc` | none |
-| `transform.coulomb_waves` (mpmath; derivatives numerical) | `physics/coulomb` (`coulomb`) | none |
-| `transform.penetrability` | `ChannelFunctions.h`; `coulomb_functions` (`P`) | none; here 3.8e-10 (13N, l = 0–2) |
-| `transform.shift` | same (`S`) | none |
-| `transform.shift_derivative` (central difference) | the engine's analytic dS/dE | none |
-| `transform.whittaker` (mpmath) | `physics/coulomb/Whittaker.h` (bound as `whittaker_wave`) | none |
-| photon penetrability (E_γ/ħc)^(2L+1) (`transform`) | the engine's photon channel | none |
-| `transform_out`, `partial_widths`, `LevelWidthTransformer` | `TransformOut` (`transform_rwa`) | none |
-| `transform.ancs` | the engine's ANCs (`parameters.out`) | none |
-| `widths.weisskopf_width` | `include/PPair.h` | none |
-| `widths.teichmann_wigner`, `lane_thomas_wigner` | `AChannel::SetWignerLimit` | `wigner_convention_test` |
-| `nds.cm_to_lab` | the engine's kinematics | none |
-| `nds.elastic_lab_to_cm` (angle and Jacobian) | `EPoint` conversions | none |
-| `bands.sensitivities`, `uncertainty_bands` (linear propagation) | `CovarianceBand` | none (no test enters them) |
-| the rate integral of `examples/reaction_rate.py` | `ReactionRate.cpp` (menu 5) | none |
+| `transform.sommerfeld_eta`, `coulomb_rho` | `sommerfeld_eta`, `wave_number` (`ChannelFunctions.h`) | 0; 2.2e-16 |
+| `transform.coulomb_waves` (mpmath) | `coulomb_waves` (`physics/coulomb`) | 5.2e-10 for η > 0 (η = 0: see 1.6) |
+| `transform.penetrability` | `penetrability` (`ChannelFunctions.h`) | 9.7e-10 (four pairs, l = 0–3) |
+| `transform.shift` | `shift` (same) | 2.6e-8 (3e-9 absolute; Python right) |
+| `transform.shift_derivative` (central difference) | `shift_derivative` (same) | 9.5e-6 (Python right, 1.6) |
+| `transform.whittaker` (scipy, mpmath) | `whittaker_wave` (`Whittaker.h`) | 3.6e-10 |
+| photon penetrability (E_γ/ħc)^(2L+1) (`transform`) | `photon_penetrability` (`Widths.h`) | 0 |
+| `transform_out`, `partial_widths`, `LevelWidthTransformer` | the session's `transform_rwa` | not a row |
+| `transform.ancs` | the session's ANCs (`parameters.out`) | not a row |
+| `widths.weisskopf_width` | none: the engine has no Weisskopf estimate | not bound |
+| `widths.teichmann_wigner`, `lane_thomas_wigner` | `wigner_limit` (`Widths.h`, `AChannel`) | 0 |
+| `nds.cm_to_lab` | `cm_to_lab_energy` (`experiment/Frames.h`) | 2.2e-16 |
+| `nds.elastic_lab_to_cm` (angle and Jacobian) | `elastic_lab_to_cm_angle` (`Frames.h`) | 2.5e-16; J 1.6e-14 |
+| `bands.sensitivities`, `uncertainty_bands` | `CovarianceBand` (not bound) | not a row |
+| the rate integral of `examples/reaction_rate.py` | `ReactionRate.cpp` (not bound) | not a row |
 
 `azure2.wigner_widths` obtains the penetrability at the level energy by setting every reduced width to a small value
 and reading the engine's widths back (a workaround for a function the binding did not have).
@@ -276,6 +277,14 @@ Defects found (not fixed here):
 5. The documentation of `use_rmc` contradicts the program's (1.1).
 6. Two tests of `tests/pyazr/` run the engine at four threads whatever the caller's budget:
    `parallel_points_test` (`OMP_NUM_THREADS=4` in its environment) and `upgrade_thread_independence_test`.
+
+Found when the physics table was compared with mpmath (2026-11-13, `tests/pyazr/physics_table_test.py`), all in the
+library, none changed: the engine's shift function S is good to about 3e-9 absolute (2.6e-8 relative at S = -0.06,
+α + 12C, l = 1, 20 MeV, a = 5.5 fm), from the 5e-10 precision of coulsm's F and G; the engine's dS/dE (Richardson's
+difference of S with h = 1e-3 E) carries that noise to 9.5e-6 relative (p + 12C, l = 0, 3.42 MeV, a = 5 fm), against
+the 1e-8 that `ChannelFunctions.h` states; the Python formula (mpmath, a five-point difference with h = 1e-3 MeV) is
+right there to 1e-11.  coulsm and coul return a wrong F for η = 0, l ≥ 2 at small ρ (factor 4 at l = 6, ρ = 0.2),
+as `physics/coulomb/README.md` records; P, S and φ take F only through F/G and are not affected.
 
 ### 1.7 The scripts (in `work/pyazr3/`, outside the repository)
 
@@ -523,6 +532,24 @@ Worth having in 3.0 (each a thin call of a pyazr function; `--json` for agents):
 `pyazr import ensdf NUCLIDE`, `pyazr stopping MATERIAL ION ENERGY...`, `pyazr coulomb-table build|fetch|check`. The
 program `azure2` itself is in the wheel. Waiting for the UI (Phase 9): `pyazr ui`, `pyazr libraries update`.
 
+Built (`pyazr/cli.py`, `python -m pyazr` until packaging gives an entry point): one table of commands, `COMMANDS`
+(name, arguments with types, the pyazr function called, help line), from which the parser, every `--help`, `pyazr
+commands --json` and the reference page (`docs/source/user_guide/pyazr_command_line.rst`) are made. `describe [FILE]`
+(`pyazr.describe`; without FILE the package), `validate`, `convert`, `schema [KIND]`, `kinds [TABLE]`, `stopping`,
+`coulomb-table check [FILE]`, `ui FILE`, `import exfor ID` (`fetch_exfor`, the local EXFOR master files with
+`--source local`), `import ensdf NUCLIDE` (`fetch_levels`), `commands`. `--json` gives one document on standard output
+(`command`, `ok`, `exit`, `result`, and `error` with `what`, `allowed`, `fix`); the engine's output goes to standard
+error meanwhile. Exit codes those of the program's project commands: 0, 1 a failed run, 2 a wrong call or a refused
+input, 3 an old project. `describe` and `validate` call the engine functions the program calls
+(`experiment::ReadFormat3Text`, `DescribeJson`/`DescribeText`) and give the same JSON on T2; the program's
+`--validate` and `--describe` also report the stopping of each target (`ReportTargetStoppings` in
+`src/ProjectCommands.cpp`), which the binding does not. Not built, as rows that exit 2 with what to do instead:
+`coulomb-table build` (the engine's `CoulombTable::BuildFile` is not bound; the program builds the table) and
+`coulomb-table fetch` (no published copy). Not here: `pyazr libraries update`; `import exfor --to FILE` (pyazr has
+no single call that writes any EXFOR entry as a data set: `to_dataset` takes ratios to Rutherford or Mott,
+`to_sfactor_dataset` S factors, `to_azr` the old format). A `pyazr evaluate FILE` belongs here once `Evaluation`
+exists (a call and a printer: the numbers at the project's parameters, for an agent without a session).
+
 ### 2.9 Packaging
 
 A wheel carries the module `_azure2` (the core linked in), the program `azure2`, the mass table
@@ -589,7 +616,10 @@ have no pyazr name. After: one row of the binding's function table and a test (s
 **A new session option.** Today: `RuntimeOptions` in `pybind_api.cpp` (the struct, `apply_options`,
 `def_readwrite`), the constructor's signature, docstring and `self.options` in `azure2.py`, and the program's flag in
 a separate list (`src/AZURE2.cpp`). After: one row of an options table read by the program's parser and by the
-binding (`pyazr.kinds()["options"]`).
+binding (`pyazr.kinds()["options"]`).  Built 2026-11-13 (`project_format3.md` §3.12): an option of the calculation
+is one row of `io::ConfigKeys()` (key = keyword, flags, default, effect: the program's parser and help, `--describe`,
+`kinds()` and the UI read it), one row of its place in `Config` (`src/ProjectOptions.cpp`), and its keyword in the
+constructor's signature and docstring; `RuntimeOptions.options` takes it by name.
 
 ## 4. The order of work
 
@@ -626,14 +656,50 @@ engine's physics does not. Sizes are estimates from the files of this commit.
    `_NFIELDS` and the type codes. `AZUREAPI.h/.cpp` (−200), `pybind_api.cpp`, `parameters.py` (795 → about 400),
    the readers of the layout in `azure2.py`, `snapshot.py`, `bands.py`, `modelavg.py`. About 900 lines changed;
    `parameter_kinds_test` and the tests that use `parameters`.
+   **Done** (branch `feature/upgrade-8-pyazr3-records`).  Built: the record table `api/src/pybind_records.cpp` (50
+   parameter fields, 22 pair fields: name, unit, the kinds a field describes, whether the table shows it as the
+   owner, doc, the reader of the engine object), bound as `Session.parameter_records()`, `Session.pair_records()`,
+   `_azure2.parameter_record_fields()`, `pair_record_fields()` and in `pyazr.kinds()["parameter_fields"]`,
+   `["pair_fields"]`; each kind's owner fields in `parameter_kinds()` come from it; the parameters' limits as created
+   (`AZUREAPI::GetParameterBounds`).  `pyazr.Parameters` (`x0`, `names`, `kinds`, `units`, `free_mask`, `bounds`,
+   `free`, `of_kind`, `of_level`, `by_name`, `put`, `take`, `read`, `write`, `table`, `to_records`; a selection is a
+   `Parameters` with the same `x0`), `Parameter` and `Pair` the records themselves (a field of another kind reads
+   `None`), `ParameterSet` = `Parameters` plus the views of earlier releases;
+   `pyazr.snapshot.write_values(session, project, x)` (a `Project` edited in memory, web UI wish 8).
+   Removed: `GetParameterInfo`, `GetPairsInfo`, `kParamInfoFields`,
+   `kPairInfoFields` (301 lines of `AZUREAPI.h/.cpp`), `parameter_info`, `pairs_info`, the two `_NFIELDS`, the
+   numeric type codes (in the records, `parameter_kinds()`, `kinds()`, `bands.py`, `azure2.py`), the fall-backs for
+   engines with 19 or 20 pair fields, `Parameter.from_record`, `Pair.from_record`.  Differs from the plan: `free` is
+   the selection of the free rows (as before; the per-row flag is `free_mask`); `put(x, values)` and `take(x)` of
+   earlier releases are kept beside `put(x, rows, values)` and `take(x, rows)`; five names of earlier releases read
+   their field (`prior_nominal` → `prior_centre`, `input_is_rwa` → `width_is_amplitude`, `density_max` and
+   `doppler_max` → `layout_max`, `Parameter.sample` → `sample_name`); `bounds` are the limits the engine creates a
+   parameter with (a `<parameterSettings>` block's limits act in the program's fit only); the prior of every kind
+   with one (norms and the three shift terms too) is the declared prior, read where the objective reads it;
+   `parameters.py` 804 → 620 lines (it keeps `Pair` and `NuclearPotential`).
 3. **`Objective` and `Evaluation` beside today's methods** (added, nothing removed), and the three fit recipes as
    examples and tests. New `objective.py`, `evaluate.py` (about 600 lines), three examples. About 850 lines; tests:
    the object against `objective_and_grad`, `Evaluation` against `chiSquared.out` on T1–T3, the recipes (scipy runs;
-   iminuit and emcee skip without the package). Needs 2.
+   iminuit and emcee skip without the package). Needs 2.  Design and as built: section 7.
 4. **The physics table** and `pyazr.physics` generated from it; bind the channel functions, the Coulomb waves and
    phase, kinematics, widths, the transfer functions; `Session.channel_functions` and `level_matrix`.
    `pybind_physics.cpp` (240 → about 700), `physics.py` (generated, about 150). About 900 lines; one test per row
    (about 20) and the consistency check. Needs 1 (for `DomainError`).
+   **Done** (branch `feature/upgrade-8-pyazr3-physics`).  `api/src/pybind_physics.cpp` (about 760 lines): 24 rows
+   (kinematics 6, Coulomb 3, channel functions 4, THM plane-wave vertex 1, widths 3, resonance quantities, Coulomb
+   scattering and S factor 7;
+   the seven bound one by one before moved into the table), one template with a status per element (0; argument k
+   outside its domain; -2 the arguments together; -1 not converged); `_azure2.physics_functions()` returns the rows
+   and `_azure2.physics_evaluate` evaluates one.  `pyazr/physics.py` (170 lines) builds a function per row;
+   `errors="mask"` is the keyword for NaN and a status array.  `kinds()["physics"]` is the rows (with `axis`, the
+   argument a plot puts on its horizontal axis, for the web UI), `kinds()["stopping"]` the stopping functions.
+   `physics/Widths.h` adds `wigner_limit`, `single_particle_width`, `photon_penetrability` (the engine calls the
+   first and the last).  `Session.channel_functions` in `pyazr/session_physics.py` (a mixin; the rename step moves
+   it into `session.py`).  Differs from the plan: `level_matrix` not written (the engine hands out no R or U matrix
+   without new code in `AZUREAPI`: the collision matrices live inside the evaluation), the transfer functions on
+   potentials not bound (they take potentials and return functions of r, not one number per element), no
+   Weisskopf width (no engine function: new physics, a decision); the Python formulas are untouched (the rename
+   step deletes them).
 5. **Rename and remove.** `Session` (`azure2.py` split into `session.py`, `data.py`, `system.py`), one parameter
    basis, the `_rwa`/physical pairs, `calculate_*`, the mode switch, the per-session edits; delete the formulas of
    `transform.py` and `widths.py`, the 20 unused bindings, the old-format words. Port the tests (105 files of
@@ -646,6 +712,12 @@ engine's physics does not. Sizes are estimates from the files of this commit.
    rebuild). Needs 5.
 7. **The `pyazr` command line** (`pyazr/cli.py`, an entry point). About 350 lines; a test running each command once
    with `--json`. Needs 1.
+   **Done** (branch `feature/upgrade-8-pyazr3-cli`; section 2.8 lists what is built).  `pyazr/cli.py` (about 720
+   lines: the table, a call per command, the printer, the parser), `pyazr/__main__.py`; no entry point yet (step 8).
+   Tests: `tests/pyazr/cli_test.py` (ctest `pyazr_cli`: one case per row with `--json`, equality with the program on
+   T2, wrong calls, `--help`), consistency check 42 (a row without a case, a stale reference page).  Differs from the
+   plan: `coulomb-table build` is not available (no bound build function: decision 7's "built on first use" is not
+   implemented either); a missing file exits 2 where the program's `--validate FILE` exits 1 for an unreadable file.
 8. **Packaging**: scikit-build-core `pyproject.toml`, the CMake install rules and options of 2.9, a cibuildwheel
    configuration and a workflow of its own building and testing wheels on Linux, macOS, Windows (publishing
    nothing). `pyproject.toml`, three `CMakeLists.txt` (about 60 lines), the workflow (about 120). Needs decisions 5,
@@ -718,3 +790,156 @@ The Qt GUI and the web UI's design (Phase 9); the Sphinx build of `docs/source`;
 `upgrade_thread_independence` (stopped: four threads); the 28 scripts outside `tests/pyazr/` that import pyazr (only
 counted); the examples (not run, `fit_emcee.py` and `fit_zeus.py` cannot run here); `nds.py` against the network;
 Python 3.8–3.11 and numpy 1.x (not installed); any wheel build; macOS and Windows; the MCMC and MINOS paths.
+
+## 7. The objective and the evaluation (step 3 of section 4)
+
+### 7.1 As designed for step 3
+
+Added beside today's methods; nothing is removed or renamed.  Two entry methods of today's session class:
+`azure2.fit_objective()` (an `Objective`; the name `objective` is today's method `objective(x)`, so the rename step
+gives the object its final name) and `azure2.evaluate(x=None)` (an `Evaluation`; the name is free and is the final
+one).  Both refuse a session in extrapolation mode (there are no data and no objective there).  Everything is on the
+free vector x of the basis the session fits in (decision 10).
+
+**Which engine call gives each field.**  No formula in Python: a number the program writes comes from the code that
+writes it, and the binding reads it where the writer reads it (the results buffer of the evaluation).
+
+- `Objective.x0`, `names`, `bounds`: the parameter records (`start`, `name`, `bounds` of the free rows).
+- `Objective.errordef`: 1 (the objective is a χ²; ln L = −½ χ²).
+- `Objective(x)`: `AZUREAPI::CalculateObjectiveRWA` (`Objective::Engine().Chi2`).
+- `grad(x)`, `value_and_grad(x)`: `CalculateObjectiveGradRWA` (one call gives both).
+- `residuals(x)`, `jacobian(x)`: the rows of `CalculateResidualJacobianRWA` (data, whitened by a data covariance;
+  model data; prior covariance), then the rows the program's least-squares drivers carry: `AppendModelRows` (Park's
+  wall, the `gamma_decay` priors and wall, the abundance sums) and one row (p − c)/σ per diagonal prior
+  (`ForEachDiagonalPrior`) and per nuisance prior, so that Σ r² is the objective.  New: `AZUREAPI::ObjectiveRowsRWA`.
+- `log_prob(x)`: −½ × the objective, −∞ outside the sampler's support (below).  New: `Session.log_prob_rwa`.
+- `Evaluation`, all of it: one model evaluation (new `AZUREAPI::EvaluateObjectiveRWA`: fill, the model of every
+  point, the objective's sum and its breakdown by term from the same model values), then reads of the points and of
+  the results buffer, as the output writer reads them.  New: `Session.evaluation_rwa`.
+  - `objective`: the sum `Objective(x)` returns, bit for bit (the plain sum; the breakdown is summed apart).
+  - `chi2`: Σ of the per-segment χ² the evaluation stores, in segment order: `Total-Chi-Squared` of `chiSquared.out`
+    (a data covariance by its per-segment partition).
+  - `terms`: name → value, one per `ObjectiveTerm` (`ObjectiveTerm::Name`).
+  - `data[i].chi2`, `.norm_chi2`, `.shift_chi2`: the row of `chiSquared.out` (`Results::objective.segmentChi2`), the
+    segment's normalization prior and its three shift-prior parts summed (`ObjectiveContext::SegmentPriors`).
+  - `data[i].energies`, `.angles`, `.excitation_energies`: the points (`GetCMEnergy` after the shift, `GetCMAngle`,
+    `GetExcitationEnergy`).
+  - `data[i].model`: the model value of each point, engine unit, c.m. (`Unit::GetModelValue`, what `AZUREOut_*`
+    prints).
+  - `data[i].values`, `.errors`, `.norm`: the datum and its error as the engine compares them (c.m., engine unit,
+    `Segment::CMValue`, `CMError`) and the norm in use (`WorkingCopy::NormUsed`: a profiled norm at n*).
+  - `data[i].residuals`: (f/J − y n)/(dy n) of each point in the datum's frame (`azure2::PointResidual`), not
+    whitened.
+  - `data[i].extra`: the rows of the binding's table of point outputs that apply to the data set (below).  New: the
+    table.
+  - `model_data`: the `<modelData>` rows (`AZUREAPI::ModelDataRWA`, as `pyazr.model_data`).
+  - `log_prob`, `excluded`: as `Objective.log_prob`; whether a term puts x outside the sampler's support
+    (`Objective::ExcludesForSampler`).
+
+The names and kinds of the data sets of `data[i]` (name, quantity, engine unit) come from the session's description
+of the project (`active_datasets`), in the engine's order; the arrays from the engine.  The data sets are the
+engine's reported segments (the first of each run of equal keys, as `calculate_rwa`); a data set's χ² is the sum of
+the rows of its segments.
+
+**The term names.**  `Evaluation.terms` is a dict whose keys are the names of the engine's table of terms
+(`Objective::Terms()`, `ObjectiveTerm::Name`, bound once through `ObjectiveTermNames`), in its order: a new term of
+`src/Objective.cpp` appears in `Evaluation.terms` with no edit of `pyazr/` (section 7.2 shows it).  The engine's
+first term holds the data, the normalization priors and the energy-shift priors together; the per-data-set split of
+the latter two is `data[i].norm_chi2` and `.shift_chi2`, as `chiSquared.out` splits them.
+
+**The columns of a data set.**  The engine's quantity table (`experiment/Quantities.cpp`) does not see the points
+(it is the `experiment/` layer, without engine headers), and which extra numbers a point carries depends on the data
+set (a capture reaction has its E1 and E2 parts, a sample its per-nucleus terms, an angular distribution its Legendre
+coefficients), not on the quantity alone.  So the declaration is a table of the binding, as the parameter records are
+(`api/src/pybind_evaluation.cpp`): one row per point output, with its name, unit, doc, the condition on the data set
+(a predicate of the segment) and the reader of the point.  `pyazr.kinds()["data_outputs"]` lists the rows;
+`kinds()["data"][q]["extra_outputs"]` stays `None` (the quantity alone does not decide).  No engine change is needed
+for it.  Rows of this step: the lab energy and the lab angle of a point (web UI finding 22), the S-factor conversion,
+the E1 and E2 parts, the Legendre coefficients of an angular distribution, a sample's per-nucleus terms.  The σ and S
+columns of `AZUREOut_*` (finding 23) are formed by the writer (`SigmaAndS` of `DataOutputFiles.cpp`); serving them
+means moving that struct where the writer and the binding both call it (an engine change, outputs identical):
+a later commit if time remains.
+
+**`log_prob`, one rule with the engine's sampler** (`objective.md` section 6): ln P(x) = −½ × the objective, with no
+constant (the sampler's `LogPriorNormalisation` is a constant and is left out), and −∞ where the engine's sampler
+excludes the point: a term says so (`Objective::ExcludesForSampler`: Park's J < 0), or x lies outside the limits of a
+parameter whose kind's row has `samplerSupport` (today the `gamma_decay` record's numbers).  The binding makes both
+tests (`Session.log_prob_rwa`); the column reaches Python as the parameter record's field `sampler_support`, so a
+user sees which bounds are walls.  The limits of the other kinds are not turned on (the PI's open decision).  A user
+who wants walls at every bound writes one line:
+`lp = lambda x: f.log_prob(x) if all(lo <= v <= hi for v, (lo, hi) in zip(x, f.bounds)) else -numpy.inf`.
+
+**Arrays** (section 2.4): every array of an `Evaluation` and every array an `Objective` returns is a copy the caller
+owns.  The set-up arrays of a data set (energies, angles, data values and errors) are copies too in this step, marked
+so in their docstrings; they become read-only views in step 6.
+
+**Threads and state.**  An `Objective` holds its session and copies of x0, names and bounds, nothing else (no cache:
+the engine keeps its own state of the last evaluation, and that is the session's).  An `Evaluation` holds copies and
+no session.  Calls from two threads on one session are safe: every engine call of `Objective` and `Evaluation`
+takes the session's lock (a `threading.RLock` of the session object), so they run one after the other and each
+returns what it would return alone (the engine evaluates on the session's one compound and data, so two calls at once
+would race).  Today's methods do not take the lock; the rename step makes every engine call of `Session` take it.
+Two sessions share nothing and run side by side.  A session is not pickled: a process pool opens one per worker.
+
+**The defect 293.94 against 297.86** (fitted T2, `work/director/fits-t50-1/T2-migrad`): 297.860308551 is the
+program's printed `Total Chi-Squared` at the end of the fit, the objective; `chiSquared.out` writes
+`Total-Chi-Squared: 293.94`, the data χ², and beside it the priors: norm 1.20857, shift 1.15434, abundance 2.1e-7,
+density 0.166164, prior covariance 1.39169; 293.94 + 1.20857 + 1.15434 + 0.166164 + 1.39169 = 297.861.
+`calculate_chi2_rwa` is the data χ² plus the model terms (Park, abundances, model data), 293.94 here.  So no number
+is wrong; `Evaluation.chi2` is the 293.94 (`Total-Chi-Squared`), `Evaluation.objective` the 297.86, and
+`Evaluation.terms` holds the difference by name.
+
+**Tests** (each shown to fail once with an injected error): `tests/pyazr/objective_object_test.py` (the object
+against today's `objective_and_grad`, `residuals`, `residual_jacobian` bit for bit on T1, T2, T3, 13N_fast, the
+nuisance-prior projects and the `gamma_decay` record with priors; Σ r² against the objective; the gradient against
+a central difference; `log_prob` inside and at the excluded points, and against the engine's sampler; two threads),
+`tests/pyazr/evaluation_test.py` (against the program's `chiSquared.out` and `AZUREOut_*` on T1, T2, T3; one
+evaluation per `Evaluation`), `tests/pyazr/fit_recipes_test.py` (the three recipes; iminuit and emcee skip without
+the package).
+
+### 7.2 As built
+
+As designed (7.1), with these differences and numbers.
+
+- Files: `api/src/AZUREAPIObjective.cpp` (`EvaluateObjectiveRWA`, `ObjectiveRowsRWA`, `OutsideSamplerSupport`,
+  `LogProbabilityRWA`), `api/src/pybind_evaluation.cpp` (`Session.evaluation_rwa`, `objective_rows_rwa`,
+  `log_prob_rwa`, `objective_term_names`, `sampler_log_probability`; `_azure2.point_output_fields`), the record field
+  `sampler_support` (`pybind_records.cpp`), `pyazr/objective.py`, `pyazr/evaluate.py`, two entry methods of
+  `azure2` (`fit_objective`, `evaluate`), `kinds()["data_outputs"]` and `kinds()["objects"]`, the examples
+  `fit_scipy.py`, `fit_iminuit.py` and `fit_emcee.py` (rewritten on `log_prob`).  pyazr 3.0.0.dev3.
+- `Session.sampler_log_probability(x0, x)` binds the engine's sampler (`AZURECalcMCMC`, set up as the program sets
+  it up at x0) in about 20 lines, so the test ties `log_prob` to it: equal to the sampler's ln P minus its constant
+  on the `gamma_decay` record with priors and on T2, at the start and at a displaced point (1e-10).
+- Without the session's lock, two threads calling one `Objective` crash the process (segmentation fault, shown
+  with the lock removed); with it, each gets its values alone bit for bit.  Today's methods do not take it.
+- One evaluation per `Evaluation`, measured on 13N: 20.4 ms against 20.0 ms for one `objective(x)` (a second
+  evaluation injected: 42.0 ms).  The engine's Coulomb-function counters (`cache_stats`) stay at zero when the
+  Coulomb table serves the functions, so they cannot count evaluations.
+- The recipes on T2 from its start (one thread): iminuit's MIGRAD 297.86032061 in 113 calls and 19 gradients
+  (HESSE brings the calls to 417), the program's MIGRAD 297.860308551; scipy's least_squares on the rows 297.859396915
+  in 8 evaluations; L-BFGS-B 297.859396915 in 35 evaluations, on x divided by the inverse length of each Jacobian
+  column (on x / |x0| it stood at 521 after 250 evaluations).  The program's MIGRAD stops 9.1e-4 (3.1e-6 relative)
+  above the minimum both scipy recipes agree on to 2e-11; its gradient at the program's point is not small (91 in an
+  energy, 65 in a width).  The test asks iminuit for the program's minimum to 1e-6 and scipy for that or lower.
+- emcee: 8 walkers x 60 steps on the record (three free branchings, one under a prior centred at -0.01) stay in
+  [0, 1]; the same seed gives the same chain, and a pool of two worker processes (spawned, one session each) the
+  same chain as one process.
+
+**Extensibility, before and after this step** (the places that must know):
+
+- A new term of the objective.  Before: `src/Objective.cpp` (the class and its place in the list), the key of
+  `azure2.penalties()` (`pyazr/azure2.py`, a hand-written map of names), the writer's `Total-` field
+  (`src/DataOutputFiles.cpp`), its least-squares rows where the drivers need them (`AppendModelRows`), its gradient.
+  After, for pyazr: `src/Objective.cpp` only; it appears in `Evaluation.terms` and in `Objective(x)`.  Its rows, if it
+  is a sum of squares, are one call in `ObjectiveRowsRWA` (`api/src/AZUREAPIObjective.cpp`; the test of
+  `sum(r**2) == f(x)` fails without them), its gradient in the engine's gradient paths as before.
+- A new data kind with two extra output columns.  Before: the quantity row (`experiment/Quantities.cpp`), arrays in
+  `AZUREAPI::ReportSegments`, two bindings (`calculated_*`), a method per shape in `azure2.py`.  After: the quantity
+  row and two rows of `PointOutputs()` (`api/src/pybind_evaluation.cpp`); nothing in `pyazr/`.
+- A new field of `Evaluation`.  Before: a new session method (`azure2.py`) and its binding.  After: one entry of the
+  dict of `EvaluationDict` (`pybind_evaluation.cpp`), its attribute and its `FIELDS` line in `pyazr/evaluate.py`.
+
+Not shown by a build: a term added to `src/Objective.cpp` reaching `Evaluation.terms` (the names come from
+`ObjectiveTermNames`, the engine's list, read at each evaluation; the evaluation test reads every term by its
+engine name).  Not done (left for later): the dense model line of a data set (finding 21), the σ and S columns
+as the writer forms them (`SigmaAndS`), read-only views.

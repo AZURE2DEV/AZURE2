@@ -11,7 +11,16 @@ public names are a contract.
 - `pyazr.kinds()`: record kinds and fields, data kinds (units, frames), parameter kinds (unit, owner fields), session
   options (type, default, CLI flag, doc), bound physics functions, error classes.  Read from the engine's tables
   (`described.py`); never add a hand-typed list of kinds in Python.
-- `azure2(...).describe()`: pairs, levels, data sets, parameters (name, kind, unit, value, free), options in effect.
+- `azure2(...).describe()`: pairs, levels, data sets, parameters (their records: name, kind, unit, x, free, bounds,
+  owner fields), options in effect and their sources.  The options of the calculation are `<config>` keys too
+  (`session_options.py`: a keyword given wins over the key, the key over the default; the signature's defaults are
+  unchanged, a keyword left out is not given).
+- `azure2(...).parameters` (a `Parameters`, `parameters.py`): the table of the fit parameters, one row per
+  parameter, built once per session and layout from the engine's records (`Session.parameter_records()`; the pairs
+  from `Session.pair_records()`).  The field names, units and kinds are one table of the binding
+  (`api/src/pybind_records.cpp`, `pyazr.kinds()["parameter_fields"]`, `["pair_fields"]`): never type a field name, a
+  column position or a numeric kind code in Python; a new field is a row there.  The fit vector `x` is the only
+  vector (`x0`, `put`, `take`, `read`, `write`); `print(parameters.table())` shows what each row is.
 - Errors (`errors.py`): every deliberate error is a `pyazr.Error`; `FormatError`, `ParameterError` (with
   `ParameterKeyError`, `ParameterIndexError`, `ParameterVectorError`), `EngineError` (= `AZURE2Error`, one class,
   which keeps that name), `DomainError` (`DomainZeroDivision`), `SessionClosed`, `MissingFile`; engine notices are
@@ -21,6 +30,43 @@ public names are a contract.
   The argument checks of the session's calls live in `session_checks.py`, not in `azure2.py`.
 - An engine notice becomes a warning when its line is a row of `api/src/pybind_notices.cpp` (the session's
   `Config::outStream` passes through that buffer); every other line still goes to standard output.
+- `pyazr.physics.<name>`: the engine's physics functions on arrays (`help()` gives arguments, units, domains);
+  `pyazr.kinds()["physics"]` the same rows as data; `errors="mask"` gives NaN and a status per element instead of
+  `DomainError`.  The per-session ones (the session's Coulomb table or potential) are `azure2(...).channel_functions`.
+
+## Recipe: add a physics function
+
+1. The library computes it (`physics/`, `experiment/`, `stopping/`); if it does not, a thin free function there with
+   its unit test (as `physics/include/azure2/physics/Widths.h`).  New physics is a design note first, not a row.
+2. One row in `BuildTable()` of `api/src/pybind_physics.cpp`: name, summary, doc, library function, axis, arguments
+   (`Real`/`Integer`/`Flag`/`Choice` with unit and domain: `.gt`, `.ge`, `.lt`, `.le`, `.otherwise` for a default),
+   returns (name, unit, doc), and an adapter that converts the arguments and calls the library (no formula there);
+   the adapter returns 0, `kJointly` (-2) for arguments outside the domain together, `kFailed` (-1), or the 1-based
+   index of an argument.
+3. A `row_test("<name>", ...)` in `tests/pyazr/physics_table_test.py` against mpmath, a published table or the
+   engine's own use on a project (consistency check 41 fails without one).
+4. `python3 tools/gen_physics_docs.py` (the user-guide page; the test fails until it is run).
+Nothing in Python: `pyazr/physics.py` builds the function, its signature and docstring from the row.
+
+## Recipe: use the objective and the evaluation
+
+- A fit or a sampler: `f = s.fit_objective()` (`objective.py`): `f(x)`, `f.grad`, `f.value_and_grad`,
+  `f.residuals`/`f.jacobian` (the objective as rows, `sum(r**2) == f(x)`), `f.log_prob` (the engine's sampler's
+  rule: -f/2, -inf outside its support), `f.x0`, `f.names`, `f.bounds`, `f.errordef`.  Recipes:
+  `examples/fit_scipy.py`, `fit_iminuit.py`, `fit_emcee.py` (tested by `tests/pyazr/fit_recipes_test.py`).
+- The numbers at one x: `ev = s.evaluate(x)` (`evaluate.py`), one engine evaluation: `ev.objective`, `ev.chi2`
+  (`Total-Chi-Squared`), `ev.terms` (by the engine's term names), `ev.data[i]` (model, residuals, chi2 as the row of
+  `chiSquared.out`, extra columns), `ev.table()`.  Never rebuild a number of `chiSquared.out` or `AZUREOut_*` from
+  today's `calculate_*` methods.
+- **A new term of the objective**: a class in `src/Objective.cpp` (its `Name()`), nothing in `pyazr/`; it appears in
+  `Evaluation.terms`; if it is a sum of squares, its rows go into `AZUREAPI::ObjectiveRowsRWA`
+  (`api/src/AZUREAPIObjective.cpp`; `objective_object_test.py` checks `sum(r**2) == f(x)`).
+- **A new number a point carries** (an extra column of a data kind): one row of `PointOutputs()` in
+  `api/src/pybind_evaluation.cpp` (name, unit, when, doc, the reader); it appears in `Evaluation.data[i].extra` and
+  `pyazr.kinds()["data_outputs"]`.
+- **A new field of `Evaluation`**: an entry of the dict `EvaluationDict` builds (`pybind_evaluation.cpp`), the
+  attribute in `evaluate.py` and its line in the class's `FIELDS` (`kinds()["objects"]`).
+- Calls of both objects take the session's lock (`objective.session_lock`); today's methods do not.
 
 ## How it is built
 
@@ -42,9 +88,10 @@ public names are a contract.
   `AZURE2 --convert OLD NEW`); `convert.py` is the converter's binding
   (`convert_azr`, `convert_params`).
 - `transform.py` is a Python port of the engine's `TransformOut`, and
-  `widths.py` and `bands.py` re-derive engine quantities. Any such duplicate
-  needs a test against the engine (see `tests/pyazr/`). Where possible, call
-  through `_azure2` instead of adding another copy.
+  `widths.py` and `bands.py` re-derive engine quantities. Their formulas are
+  compared with the rows of `pyazr.physics` that replace them
+  (`tests/pyazr/physics_table_test.py`) and go in the rename step. Never add
+  another copy: a missing function is a row of the physics table.
 - `nds.py` (EXFOR/ENSDF client) is the only EXFOR reader on this branch (the
   Qt GUI's `gui/src/ExforData.cpp` exists on `dev` only).
 
@@ -84,6 +131,25 @@ public names are a contract.
 `tests/pyazr/CMakeLists.txt`, with `OMP_NUM_THREADS=2` and `LABELS slow` if it
 takes more than a minute. Without the engine module, a test prints `skip:` and
 exits 0. Read the output and confirm it says `ok`, not `skip`.
+
+## The command line (`python -m pyazr`, `cli.py`)
+
+`python -m pyazr COMMAND ... [--json]` (`__main__.py` calls `cli.main`): describe, validate, convert, schema, kinds,
+stopping, coulomb-table check, import exfor, import ensdf, ui, commands.  With `--json` one document on standard output
+(`{"command", "ok", "exit", "result"}`, and `"error": {"class", "what", "allowed", "fix"}`); exit 0 done, 1 failed,
+2 a wrong call or a refused input, 3 an old project (the program's project commands).  `cli.py` imports nothing of
+the engine at import time (check 42 of the consistency test reads its table without it).
+
+- **A command of the command line**: one `Command` row of `COMMANDS` in `cli.py` (name, `Arg` rows with a type of
+  `ARG_TYPES`, the pyazr function it `calls`, the help line) and its `run` function, which only calls that function
+  (a `text` printer and a `status` when the result can be a failure, as validate's errors); its case in `JSON_CASES`
+  of `tests/pyazr/cli_test.py` (run with `--json` on T1 or T2, the JSON read); then regenerate the reference page:
+  `python3 -c "from pyazr import cli; cli.write_reference_page()"` (from the repository's root, with the engine module)
+  (the consistency test, check 42, fails for a row without a case or a stale page).  A command that would need more
+  than a call and a printer shows a gap of pyazr: add the function to pyazr first, or give the row `missing=(what,
+  allowed, fix)` (it then exits 2 with them).
+- A new argument type is one row of `ARG_TYPES` (description, converter raising `CallError` with its three parts,
+  the value's name in a usage line).
 
 ## The web UI's server (`pyazr/ui`)
 

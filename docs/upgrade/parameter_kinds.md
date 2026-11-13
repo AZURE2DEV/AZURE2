@@ -10,9 +10,10 @@ to — written where it is created and held beside the Minuit parameters in `AZU
 
 ## 1. The kinds
 
-One enumeration, `ParamKind`, and one table, `ParamKindTable()` (`include/ParameterKind.h`). The code is the `type`
-of the API's parameter listing (`AZUREAPI::GetParameterInfo`) and never changes; the key is pyazr's
-`Parameter.kind` (`pyazr.parameters.parameter_kinds()` returns the table through the binding). The vector holds the
+One enumeration, `ParamKind`, and one table, `ParamKindTable()` (`include/ParameterKind.h`). The code is the
+enumeration's value inside the engine (no interface hands it out); the key is pyazr's `Parameter.kind`
+(`pyazr.parameters.parameter_kinds()` returns the table through the binding, with each kind's owner fields from the
+record table of `api/src/pybind_records.cpp`). The vector holds the
 kinds in the order of their codes, except that the abundances (6) follow the level block (0, 1).
 
 | code | kind (key) | unit | owner fields of the record | created in | name (label) |
@@ -77,8 +78,7 @@ read without a parameter vector and stays as it is, listed in check 23: the exam
 pyazr 3.0.)
 
 Still a second walk of the layout (positions, not names; each must follow the creation order):
-`BuildParamIndexMap` (`src/AZUREGrad.cpp`), `AZUREAPI::GetParameterInfo` (which now throws if its kind disagrees with
-the record), `AZURELabel::Parameter` (`src/ParameterLabel.cpp`), `CNuc::GetTransformParams` /
+`BuildParamIndexMap` (`src/AZUREGrad.cpp`), `AZURELabel::Parameter` (`src/ParameterLabel.cpp`), `CNuc::GetTransformParams` /
 `ConvertAmplitudeBasis`. Building them from the records is the next step (the inference/ `ParameterVector` of
 `ARCHITECTURE.md` §3).
 
@@ -89,8 +89,9 @@ the record), `AZURELabel::Parameter` (`src/ParameterLabel.cpp`), `CNuc::GetTrans
    fields are new [check 23: one row per value, in code order].
 2. Create it with `AZUREParams::Add(name, value, step, ParameterRecord::…)` in `CNuc::FillMnParams` or
    `EData::FillMnParams`, its name built there by one function. Nothing else may test the name.
-3. Follow the layout in `BuildParamIndexMap` and in `AZUREAPI::GetParameterInfo` (and its fields in pyazr's
-   `Parameter.from_record`); the owner fields in the binding's `parameter_records()`.
+3. Follow the layout in `BuildParamIndexMap`; the fields that say what it belongs to are rows of the record table
+   `ParameterFields()` (`api/src/pybind_records.cpp`), which pyazr reads with no Python edit
+   (`tests/pyazr/parameter_records_test.py` fails for a kind no owner field describes).
 4. Docs: the table of `docs/source/reference/output_files.rst` and §1 here [check 23]; in
    `tests/pyazr/parameter_kinds_test.py` a project with the kind, whose names are rebuilt from the records.
 
@@ -106,10 +107,64 @@ screening, areal density, Doppler temperature, sample thickness, stopping scale,
 - a prior without a centre (only an old line read by the old-line reader) is centred as before: on the start value,
   on 0 for the three shift terms, on 1 for the sum of a sample's abundances;
 - the sub-point grids and the limits of a fitted density, temperature, stopping scale or kernel parameter are laid out
-  from the start value, as before (with `grid_max` from that); the centre does not move them.
+  from the **centre** where one is written and the start lies inside the range so laid out; otherwise from the start
+  (below, "The layout of a fitted value").
 
 Why it matters: a fit continued from its fitted values (the program's `param.sav` reloaded, or the project `pyazr`'s
 `save_fit` writes: the fitted value with the original prior) must pay the same prior as the fit it continues.
+
+**The layout of a fitted value.** Four kinds lay out a grid from their value: the areal density (the sub-point grids
+span the layout density, the depth integral is cut at the present one), the Doppler temperature (the grids and the
+integration windows span the layout temperature, the Gauss-Legendre pieces are u(b)/4 wide), the stopping scale (the
+grids span the target at the layout scale; a thick target's Bohr straggling support takes the stopping at the base
+scale) and a table kernel's parameter (its grid spans the layout value). Their limits are [f·b, H(b)], b the base:
+
+| kind | lowest f·b | highest H(b) without `grid_max` (σ the prior's width) | no prior |
+|---|---|---|---|
+| areal density | b/100 | max(b + 3σ, 1.1 b) | 1.5 b |
+| Doppler temperature | b/4 (and the pieces) | max(b + 3σ, 1.21 b) | 2 b |
+| stopping scale, kernel parameter | b/10 | max(b + 3σ, 1.1 b) | 1.5 b |
+
+`grid_max` (the Doppler fit form's Tmax) replaces H(b). Until this rule, b was the start value: a project written by
+`save_fit` (the fitted value as the start, the prior unchanged) was computed on other grids and with other limits than
+the fit that produced it. Measured on the base build (the fit, its `param.sav` read by pyazr, written back with
+`save_fit`, both sessions evaluated at the same vector):
+
+| kind (project) | objective, fit vs written (rel.) | per data set (rel.) | layout and limits, fit → written |
+|---|---|---|---|
+| areal density (`tests/target_density/fit_prior.azr`) | 2.1e-14 | meyer_84 1.2e-13 | 1.1e18 → 1.19e18; lower 1e16 → 1.08e16 |
+| Doppler temperature (`doppler_fgm` `fit_prior`) | 5.5e-6 | t 6.0e-6, g 5.6e-6 | 363 → 379.6 K; lower 75 → 78.4 K; pieces for 300 → 313.7 K |
+| stopping scale (`stopping_yield` `fit.azr`, densities with 10 % priors) | 3.4e-8 | scan1 3e-16, scan2 5.8e-7 | scale 1.12 → 1.126, densities 6.5e17 → 6.92e17, 1.3e18 → 1.23e18 |
+| kernel parameter (`rectangular_resolution` `fit.azr`, `prior 14 3`) | 0 | 0, 0 | 23 → 29.0 keV; lower 1.4 → 2.0 keV |
+| abundance (`natural_target` `M_data.azr`) | 0 | 0 | no grid |
+| sample thickness (`transmission_yield` `fitP`) | 0 | 0 | no grid |
+
+The Doppler difference shows in `chiSquared.out` (4.85481 → 4.85478) and is above `save_fit`'s own check (1e-6), which
+then refuses its snapshot; the density's and the kernel's χ² reproduce, but their limits move, so a continued fit may
+go where the fit could not. After the rule (`tests/nuisance_prior_centre/continued.sh`, the stopping scale with its
+densities fixed): every row gives the fit's objective and each data set's χ² exactly (difference 0), the fit's layout
+(1.1e18, 363 K, 1.12, 23 keV) and lower limit, and `save_fit` accepts the Doppler snapshot.
+
+The rule (`azure2/experiment/LayoutBase.h`, `ChooseLayoutBase`, the one function of the four kinds): the base is
+the **centre** when the parameter is fitted, a centre is written, and the start lies in [f·c, H(c)] (`grid_max`
+included as written); otherwise the **start**, and when a written centre was passed over (a start outside its range,
+on purpose) one line of output says so. What it guarantees:
+
+- a fit started at value = centre and the fit continued from its result share the base (the centre), so the same
+  grids, pieces, windows and limits: the written project computes the fit's χ² and its second fit starts at the
+  minimum, as long as the fitted value lies inside the limits, which it does (they are the fit's limits);
+- value = centre, a prior without a written centre, no prior, or a fixed parameter: the base is the start itself (the
+  same double), so every formula computes what it computed before; this is why the whole tree stays identical;
+- the program's `param.sav` read back leaves the project's values (= centres) as the start: unchanged.
+
+What it does not cover: a parameter **without a prior** has no centre to lay out from, so a fit continued from a
+written project lays its grid out from the fitted value (1.5 × the value, not 1.5 × the start). Writing `grid_max`
+(or a prior) into such a project fixes its layout; whether `save_fit` should write one is the PI's decision.
+
+**A new nuisance kind whose value lays out a grid** needs: its `LayoutSpan` (a row of three numbers in
+`LayoutBase.h`, or one of the three there), one `ChooseLayoutBase` call where the engine object reads its spec (the
+centre from its `PriorCentre`), and the base, not the start, in every place that lays out from it (its grid, its
+limits, its hand-over clamp). Before this rule the layout was written per kind (four formulas, the kernel's twice).
 
 **One carrier.** `PriorCentre` (`SetupSpecs.h`: written, value, source; `Or(default)`) is the centre of every kind in
 the specs, the one the norms and energy shifts had (`DatasetSpec::normCentre`, `shiftCentre`) made general. The build

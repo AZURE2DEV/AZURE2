@@ -129,6 +129,17 @@ pyazr spells no field, quantity or unit itself: the calls and their help text ar
 and every edit is checked by the engine's one validator, so a wrong unit or a reference to a missing target is
 refused at once with the engine's message. An edit changes only the lines it touches.
 
+The engine's physics functions (penetrability, shift, Coulomb and Whittaker functions, kinematics, Wigner limit, ...)
+are `pyazr.physics.<name>` on numpy arrays, each a row of one table in the binding (`api/src/pybind_physics.cpp`)
+that states its arguments, units and domain; a new one is a row and a test.
+
+A fit or a sampler in Python starts from `f = s.fit_objective()`: the objective the program's fit minimises as one
+callable, with its gradient, its least-squares rows and Jacobian, its bounds and `log_prob` (the rule of the
+program's own sampler), so scipy, iminuit and emcee each take it in a line (`pyazr/examples/fit_*.py`; on T2
+iminuit's MIGRAD reaches the program's minimum to 1e-6).  `s.evaluate(x)` gives every number of `chiSquared.out` and
+`AZUREOut_*` at x from one evaluation: the objective, the data χ², each term of the objective by its name in
+`src/Objective.cpp`, and each data set's model, residuals and χ².
+
 **Structure.**
 
 - What an evaluation computes lives in a buffer the caller owns, not in the data points; the model's prediction for
@@ -394,6 +405,11 @@ observed parameters (`Use Reduced Width Amplitudes: no`) had a likelihood that d
 placement at narrow resonances read the branchings as widths in eV, but only into a sum no output used. Fixed and
 tested (`tests/gamma_decay/check.sh`, `tests/pyazr/gamma_decay_test.py`); fits in the CLI and the MCMC in amplitudes
 were never affected.
+The ensemble sampler (MCMC, both bases) did not have the record's priors and the remainder's wall, and let a
+branching leave [0, 1] and Γ_γ go negative (samples reached Γ_γ = −6.6×10¹³); it now samples −½ × the fit's
+objective, every term from the same table, and rejects a point outside the record's limits (tested,
+`tests/reference/sampler_objective_test.cpp`). The sampler's run (its file, step, best walker, callbacks and stop
+request) now belongs to the sampler object and the call that runs it, so two samplers in one process share nothing.
 
 ## The centre of a prior is the number written (2026-11-13)
 
@@ -413,7 +429,51 @@ moved. Found with it and mended: `save_fit` did not write a fitted areal density
 potential or sample thickness back into the project at all (it kept the old value), which also made it refuse its own
 result. The old AZURE2 (`origin/dev`) has no centre to drop: its `<abundances>` line is `Z A value vary sigma` and the
 prior is centred on the value on the line, so a user who copies fitted abundances into that line moves the prior with
-them; through `param.sav` it was right.
+them; through `param.sav` it was right. The grids and the limits of a fitted density, Doppler temperature, stopping
+scale or kernel parameter are laid out from the centre too (when the start lies inside the range so laid out), so a
+fit written back with `save_fit` and computed again gives the fit's χ²; before, the Doppler temperature's moved by
+6e-6 and every layout moved with the start.
+
+## The options of a calculation are keys of the project (2026-11-13)
+
+What a project computes used to depend on the file **and** on the flags it was run with (`--no-brune`,
+`--no-transform`, `--no-coulomb-table`, ...) or the keywords of a pyazr session; the file alone did not say in which
+formalism its parameters are. The PI decided that these options are keys of `<config>` (`web_ui.md` decision 7).
+Eleven options, each under the name of its pyazr keyword, value 0 or 1: `use_brune`, `use_park`, `transform`,
+`ignore_externals`, `use_long_wavelength`, `ec_convection_current`, `use_rmc`, `use_gsl_coul`, `use_coulomb_table`,
+`use_ec_table`, `replace_grids`. A project in the standard parametrization says so once:
+
+```
+<config>
+true
+output/
+...
+use_brune=0
+format=3
+</config>
+```
+
+**The rule:** a flag on the command line (or a keyword given to a session) wins over the key, the key over the default.
+Nothing else. A project without the keys computes exactly what it computed (the whole tree, 887 / 851 / 887 files,
+identical); every flag and keyword stays and means what it meant (`--use-park` still gives Brune too, `--no-brune`
+still clears Park). `AZURE2 --describe` prints each option with its value and where it came from; a session's
+`option_sources` says the same. Refused, by `--validate`, the run and `Project.set_config`: a value other than 0, 1,
+true, false (`E_CONFIG_OPTION_VALUE`), and a pair that cannot hold together when one of the two is a key of the file
+(`E_CONFIG_OPTIONS_CONTRADICT`, naming both): Park without Brune, Reich-Moore capture with Brune, no convection current
+with the long-wavelength approximation. The converter, `Project.new` and `save_fit` write no key they did not find;
+the web page sets them as any `<config>` entry. Not keys: the fit's settings, the menu's mode, threads, files and
+directories of the machine, and the environment switches.
+
+**Where the program and a session disagree** (not changed: it would move the numbers of a call). The defaults are the
+same; two rules of combination are not. (1) `--use-rmc` drops Brune and Park with a warning, `use_rmc=True` in a
+session keeps them. (2) The program applies `--use-park` and `--no-brune` in the order given, a session lets Park
+win. Recommendation: refuse Reich-Moore with Brune on in both (as a project's keys already are), and refuse
+`--use-park --no-brune` on one command line.
+
+**One table, one row.** The options are rows of the `<config>` key table (`io/src/ConfigSection.cpp`: name, flags,
+default, what it changes); the program's parser and help, `--describe`, pyazr's `kinds()` and the web page read them
+there. A new option is that row, its place in the engine's configuration (`src/ProjectOptions.cpp`), and its keyword
+in pyazr's constructor; tests fail when one of the three is missing.
 
 ## What is in work and what comes next
 
@@ -664,6 +724,15 @@ model and the engine's residuals under it, against c.m. energy, excitation energ
 factor; the χ² table equal to the program's `chiSquared.out`, model data, angular distributions at one energy, and
 the program's output files written on request. The numbers equal the program's `AZUREOut_*` files (tested on T1,
 T2); the model of a data set is drawn at its points, a dense grid waits for pyazr.
+
+The Physics tab (2026-11-13): every function of the engine's physics table (kinematics, Coulomb and Whittaker
+functions, P, S, the hard-sphere phase, widths, resonance quantities, Coulomb cross sections, S-factor conversions,
+the THM vertex) and the session's channel functions, each with a form generated from its row in the binding (a new
+row appears with no page code) and a first plot without typing; elements outside the domain are gaps with their
+reason counted in the status line; the CSV is the arrays as returned, and "Copy as Python" the `pyazr.physics` call
+that makes them (tested by running it: bit for bit). The stopping library's functions (stopping power, range,
+energy after a layer, areal density between two energies, straggling) are rows of the same kind, with SRIM's
+citation under every plot, in the CSV and in the Python text, their values those of `pyazr.stopping` bit for bit.
 
 ## For the maintainers to decide
 

@@ -20,10 +20,9 @@
  * a rename.
  */
 
-/// Kinds of fit parameter, in their order in the vector.  The values are the
-/// `type` codes of the API's parameter listing (AZUREAPI::GetParameterInfo,
-/// pyazr's Parameter), so they never change; a new kind takes the next value
-/// and a row in ParamKindTable().
+/// Kinds of fit parameter, in their order in the vector.  The values never change; a new kind takes the next value,
+/// a row in ParamKindTable() and the fields that say what it belongs to in the API's record table
+/// (api/src/pybind_records.cpp).
 enum class ParamKind {
   LevelEnergy = 0,      ///< level energy E_lambda of a (J group, level)
   Gamma = 1,            ///< reduced-width amplitude gamma_lambda,c of a (J group, level, channel)
@@ -63,6 +62,10 @@ struct ParamKindRow {
   /// free it (a level parameter and a normalization are freed by a nonzero value and fixed by a zero).
   bool varyFromProject;
   const char *doc;
+  /// The ensemble sampler's posterior is zero outside the parameter's limits (docs/upgrade/objective.md section 6):
+  /// the limits are part of what the number means (a branching outside [0, 1]).  Off for the kinds whose limits the
+  /// sampler does not apply yet (a decision for the director: it would change their posteriors).
+  bool samplerSupport = false;
 };
 
 /// The kinds, in the order of their codes.  A constant table, built once.
@@ -100,7 +103,8 @@ inline const std::vector<ParamKindRow> &ParamKindTable() {
        "jGroup, level, channel, levelNumber, decayRecord, decayPart, finalState", true, false, true,
        "a number of a level's gamma_decay record (docs/upgrade/gamma_parametrisation.md): the total radiative width, the "
        "branching to a final state, or its mixing ratio (Krane-Steffen), at the position of one of the level's photon "
-       "amplitudes"},
+       "amplitudes",
+       /*samplerSupport=*/true},
   };
   return table;
 }

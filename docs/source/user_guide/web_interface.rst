@@ -98,10 +98,24 @@ program's output files**, which writes ``AZUREOut_*``, ``chiSquared.out`` and th
 directory and lists them with their first rows.  Each plot exports its numbers as CSV (17 significant digits) and
 the figure as SVG or PNG.  The view is also a link: ``#/results?x=e_x&y=s_factor&logy=1&levels=1&show=a,b``.
 
+Physics
+-------
+
+The **Physics** tab evaluates the engine's own functions (kinematics, Coulomb functions, channel functions, widths,
+resonance quantities, Coulomb scattering, the THM vertex; the stopping powers, ranges, energy losses and straggling
+of the stopping library; and under "this project" the session's channel functions of a pair) on a range, from the
+same tables as ``pyazr.physics`` and ``pyazr.stopping``.  A stopping plot shows SRIM's citation under it, and its
+CSV and Python text carry it: every use of these stopping powers cites SRIM.  Pick a function, choose the argument to plot against,
+edit the form (several values of an argument, separated by blanks, give one line each) and press **Plot**; every
+function plots at once with typical values.  The status line says how many elements were computed and why the others
+were not (they are gaps in the plot, never zeros); the CSV holds the arrays as returned, one line per element; **Copy
+as Python** gives the ``pyazr.physics`` call that makes the same arrays.  A view is a link:
+``#/physics/coulomb_waves?from=-2&to=20&spacing=linear&v.l=0 1 2 3``.
+
 Not there yet
 -------------
 
-The tabs **Physics** and **THM** say which step brings them; the ``<thm>`` section is edited through the API. In the
+The tab **THM** says which step brings it; the ``<thm>`` section is edited through the API. In the
 Fit tab the engine's own fitters (MIGRAD, LM, their MINOS), the emcee sampler and bands wait for pyazr calls, and a
 fixed parameter is not edited from the table. Adding or removing a particle pair, generating channels from a J^π,
 the session's options as editable keys, the file browser, EXFOR and ENSDF imports, the Wigner limits and physical

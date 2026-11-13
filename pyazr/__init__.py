@@ -7,7 +7,13 @@ The engine runs in this interpreter (the compiled module ``pyazr._azure2``); a p
   ``parameters``), data, the objective and its gradient, model values, output files, ``describe()``.
 - :class:`Project` -- the project file as records: read, edit (``add_<kind>``, ``set``), ``validate()``,
   ``describe()``, ``save()``; ``Project.session()`` opens an :class:`azure2` on it.
-- :class:`ParameterSet` / :class:`Parameter` -- what each entry of the fit vector is (name, kind, unit, owner).
+- :class:`Objective` (``azure2.fit_objective()``) -- the fit's objective as one callable for any minimiser or sampler
+  (``f(x)``, ``grad``, ``residuals``, ``jacobian``, ``log_prob``, ``x0``, ``names``, ``bounds``); recipes for
+  scipy, iminuit and emcee in ``pyazr/examples/fit_*.py``.
+- :class:`Evaluation` (``azure2.evaluate(x)``) -- every number at one x from one engine evaluation: ``objective``,
+  ``chi2``, ``terms`` (by the engine's names), ``data[i]`` (model, residuals, chi2, energies, angles, ``extra``).
+- :class:`Parameters` / :class:`Parameter` -- the parameter table: what each entry of the fit vector is (name, kind,
+  unit, start, bounds, owner), from the engine's records (``azure2.parameters``, a :class:`ParameterSet`).
 - :mod:`pyazr.stopping`, :func:`whittaker_wave`, :mod:`pyazr.masses` -- physics functions and data.
 
 Ask the package about itself (plain data, ``json.dumps`` takes it): :func:`describe` (version, build, Coulomb
@@ -29,6 +35,8 @@ A session (run from the repository's root; ``tests/upgrade/T1`` is a test projec
     x2 = w.put(x, w.take(x) * 1.1)                  # a copy of x with them 10 % larger
     print(chi2, s.objective(x2))
     print(s.describe()["datasets"][0]["quantity"])  # what the session holds
+    ev = s.evaluate(x)                              # every number at x: ev.objective, ev.chi2, ev.terms, ev.data
+    print(ev.table())                               # the terms by name, one line per data set
     s.close()
 """
 import os as _os
@@ -43,12 +51,15 @@ from .errors import (Error, FormatError, ParameterError, ParameterKeyError, Para
                      ParameterVectorError, EngineError, AZURE2Error, DomainError, DomainZeroDivision, SessionClosed,
                      MissingFile, EngineWarning)
 from .azure2 import azure2, ScatteringLength
-from .parameters import (Pair, PairSet, Parameter, ParameterSet, LevelKey,
+from .objective import Objective
+from .evaluate import Evaluation, EvaluatedData
+from .parameters import (Pair, PairSet, Parameter, Parameters, ParameterSet, LevelKey,
                          NuclearPotential)
 from .scheme import LevelScheme, SchemeLevel, SchemeChannel
 from .convert import convert_azr, convert_params
 from . import masses
 from . import stopping
+from . import physics
 from .physics import whittaker_wave
 from .outputs import fitted_norms
 # nds also defines a Level, but transform.Level owns the name here; reach the
@@ -86,10 +97,10 @@ from .nuclear_part import ProjectLevel, ProjectChannel, ProjectPair
 __all__ = ["azure2", "convert_azr", "convert_params", "ScatteringLength", "whittaker_wave",
            "tabulate", "TabulatedCrossSection",
            "angular_distribution",
-           "Pair", "PairSet", "Parameter", "ParameterSet", "LevelKey",
+           "Pair", "PairSet", "Parameter", "Parameters", "ParameterSet", "LevelKey",
            "NuclearPotential",
            "LevelScheme", "SchemeLevel", "SchemeChannel",
-           "masses", "stopping",
+           "masses", "stopping", "physics",
            "fitted_norms",
            "ExforData", "ExforDataset", "GroundState", "Gamma",
            "Reference", "search_exfor", "fetch_exfor", "fetch_levels",
@@ -116,5 +127,5 @@ __all__ = ["azure2", "convert_azr", "convert_params", "ScatteringLength", "whitt
            "kinds",
            "Error", "ParameterError", "ParameterKeyError", "ParameterIndexError", "ParameterVectorError",
            "EngineError", "AZURE2Error", "DomainError", "DomainZeroDivision", "SessionClosed", "MissingFile",
-           "EngineWarning"]
-__version__ = '3.0.0.dev1'
+           "EngineWarning", "Objective", "Evaluation", "EvaluatedData"]
+__version__ = '3.0.0.dev3'

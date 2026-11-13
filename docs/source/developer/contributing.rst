@@ -79,26 +79,11 @@ What a finished change contains
 Adding an ``.azr`` keyword or option
 ------------------------------------
 
-The project file is read by two independent parsers
-(:doc:`architecture`), so a new keyword touches:
-
-#. the engine parser (``SegLine.h``, ``io/`` ``LevelRows.h`` or ``Config.cpp``), the
-   class that implements it, and a start-up error for invalid input;
-#. if it adds parameters or penalties: ``AZURECalc``, ``AZUREGrad``,
-   ``AZUREMain`` (output) and ``api/src/AZUREAPI.cpp``, with the analytic
-   gradient checked against finite differences;
-#. for a command-line flag: ``parseOptions``, ``printHelp`` and
-   :doc:`../reference/command_line`;
-#. pyazr: the binding of the engine's grammar the record or field needs (``api/src``) if
-   ``pyazr.Project`` must edit it, and ``azure2.py`` if it changes
-   :math:`\chi^2`, with a test in ``tests/pyazr`` registered in its
-   ``CMakeLists.txt``;
-#. the documentation: the user-guide page and :doc:`../reference/data_formats`
-   or :doc:`../reference/output_files`;
-#. a regression project or ``check.sh`` in ``tests/``.
-
-Commits ``062b1bfe`` (``shiftfngroup``) and ``3e13fb28`` (``normgroup``) are
-complete examples.
+The project is read once, through ``io/`` and the format-3 table of
+``experiment/`` (:doc:`architecture`); a new key is a row of that table, not
+parser code. :doc:`extending` lists the places for a key or a record kind, an
+option of the calculation, a command-line flag, a parameter kind and an
+objective term, each with the test that fails when one is forgotten.
 
 Rules for test references
 -------------------------

@@ -66,10 +66,12 @@ function controlElement(doc, c, onChange, ctx) {
 
 /**
  * The element of a form.  `form` is describeForm's result; `ctx` the context it was made with;
- * onApply(changed) gets the changed fields ({key: text | [texts] | null}); `actions` are extra buttons
+ * onApply(changed) gets the changed fields ({key: text | [texts] | null}), or with `whole` every field's text
+ * ({key: text}: a form that is not a record's, as the Physics tab's); `actions` are extra buttons
  * ({label, title, run}); `nameInput`: a name box first (a new record).
  */
-export function renderForm(doc, form, ctx, { onApply, actions = [], nameInput = false, applyLabel = "Apply" } = {}) {
+export function renderForm(doc, form, ctx, { onApply, actions = [], nameInput = false, applyLabel = "Apply",
+  whole = false } = {}) {
   const root = doc.createElement("form");
   root.className = "record-form";
   root.setAttribute("aria-label", `${form.title} form`);
@@ -108,7 +110,8 @@ export function renderForm(doc, form, ctx, { onApply, actions = [], nameInput = 
   const apply = button(doc, applyLabel, "Send the changed fields to the engine (Ctrl+Enter)", () => submit());
   apply.classList.add("primary");
   bar.appendChild(apply);
-  bar.appendChild(button(doc, "Revert", "Show the record as the server has it (Esc)", () => revert()));
+  bar.appendChild(button(doc, whole ? "Defaults" : "Revert", whole ? "Back to the start values (Esc)"
+    : "Show the record as the server has it (Esc)", () => revert()));
   for (const a of actions) bar.appendChild(button(doc, a.label, a.title || "", a.run));
   const status = doc.createElement("span");
   status.className = "form-status";
@@ -126,6 +129,12 @@ export function renderForm(doc, form, ctx, { onApply, actions = [], nameInput = 
     return out;
   }
   function submit() {
+    if (whole) {
+      const texts = Object.fromEntries(Object.entries(composed()).map(([k, list]) => [k, list[0] ?? ""]));
+      status.textContent = "";
+      Promise.resolve(onApply && onApply(texts)).catch((e) => { status.textContent = e?.view?.what || String(e); });
+      return;
+    }
     const changed = changedFields(form, composed());
     if (!nameInput && !Object.keys(changed).length) { status.textContent = "nothing changed"; return; }
     status.textContent = "sending…";

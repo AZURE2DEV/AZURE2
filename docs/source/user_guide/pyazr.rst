@@ -82,9 +82,15 @@ Session options
 ``azure2(file, cwd=None, data_mode=True, use_brune=True,
 ignore_externals=True, transform=True, use_long_wavelength=True,
 use_gsl_coul=False, use_rmc=False, use_park=False, ...)`` takes the runtime
-options of the CLI (:doc:`../reference/command_line`) as keywords; as on the
-CLI they are not read from the ``.azr``.  ``pyazr.kinds()["options"]`` lists
-them all with type, default, flag and meaning. ``use_park=True`` is ``--use-park``:
+options of the CLI (:doc:`../reference/command_line`) as keywords.  All but
+``cwd``, ``data_mode`` and ``coulomb_table`` are also keys of the project's
+``<config>`` under the same name (:ref:`options-as-config-keys`): a keyword
+given wins over the key, the key over the default the signature shows, and a
+keyword left out is not given.  ``session.options`` holds the values in
+effect, ``session.option_sources`` where each came from (``"default"``,
+``"project"``, ``"keyword"``); ``Project.set_config(use_brune=False)`` writes
+``use_brune=0``.  ``pyazr.kinds()["options"]`` lists them all with type,
+default, ``<config>`` key, flag and meaning. ``use_park=True`` is ``--use-park``:
 ``params_rwa`` then holds Park's amplitudes, ``park_norms()`` gives every
 level's overlap :math:`J`, and ``basis`` is 0, 1 or 2 (standard, Brune, Park:
 the ``#parametrization`` tag of ``param.sav``). With ``transform=False``
@@ -109,7 +115,8 @@ otherwise look up in the sources:
    k["data"]               # data kinds (quantities): units, engine unit, energy frames, angle columns
    k["parameters"]         # parameter kinds (Parameter.kind): unit, owner fields, doc
    k["options"]            # session options: type, default, the program's flag, doc
-   k["physics"]            # the physics functions the compiled module binds
+   k["physics"]            # the physics functions the compiled module binds (group, examples, sweeps)
+   k["stopping"]           # the stopping functions as rows of the same shape, each with SRIM's citation
    k["errors"]             # the error classes below, with their bases
    s = pyazr.azure2("model.azr")
    s.describe()            # pairs, levels, data sets (kind, points, unit, frame), extrapolations,
@@ -228,37 +235,65 @@ particle (``'2+*(4.439 MeV) + 0+'``). In a :class:`pyazr.Project` the pair's
 for a value other than 0), ``heavy_excitation=`` the heavy one's
 (:doc:`../reference/data_formats`).
 
-Filtered views (``.free``, ``.energies``, ``.widths``, ``.norms``,
-``.shifts``, ``.sqrt_shifts``, ``.fn_shifts``, ``.abundances``, ``.cbkg``) and lookups (``.by_level(...)``,
-``.by_name(...)``, ``.by_physical_level()``) are all available. A
-parameter's ``kind`` and its owner fields come from the record the engine
-writes where it creates the parameter (``Session.parameter_records()``), never
-from its name, which is only a label; ``pyazr.parameters.parameter_kinds()``
-returns the engine's table of kinds (code, key, unit, owner fields, flags). In
+``azr.parameters`` is the table of the fit parameters (a :class:`pyazr.Parameters`; its class
+``ParameterSet`` adds the views of earlier releases), one row per parameter in the order of the
+engine's vector. Each row is the engine's record of the parameter (``Session.parameter_records()``),
+written where the parameter is created, never parsed from its name, which is only a label:
+``name``, ``kind``, ``unit``, ``start`` (in the fit vector's basis and ``unit``), ``value`` (as the
+project states it: a partial width in eV, an ANC, an energy in MeV), ``fixed``, ``free_index`` (its
+entry of the fit vector), ``bounds``, and the fields of its kind (a level's ``level_label``, ``J``,
+``parity``, ``level_energy``; a channel's ``L``, ``S``, ``pair``, ``pair_key``, ``radiation_type``,
+``wigner_limit``, ``width_is_amplitude``; a data set's ``segment_key``; a nuisance's
+``prior_centre`` and ``prior_sigma``; ...). ``pyazr.kinds()["parameter_fields"]`` lists every field
+with its unit, the kinds it describes and its doc; a field of another kind reads ``None``.
+
+.. code-block:: python
+
+   P = azr.parameters
+   x = P.x0                                   # a copy of the start of the fit vector
+   w = P.of_level("3/2- 3.5032").of_kind("width")
+   x2 = P.put(x, w.free, 2 * P.take(x, w.free))   # the level's free widths doubled
+   P.write("fit.sav", x2)                     # a parameter file, by name
+   x3 = P.read("fit.sav")                     # and back
+   print(P.free.table())                      # name, kind, unit, start, free, bounds, owner
+
+The fit vector is the only vector: ``x0``, ``put``, ``take``, ``read`` and ``write`` work on it, and a
+selection (``free``, ``of_kind(...)``, ``of_level(...)``, a slice) is again a table with the same
+``x0``. ``names``, ``kinds``, ``units``, ``free_mask`` and ``bounds`` are its columns (``bounds`` the
+limits the engine creates the parameter with, ``(-inf, inf)`` where it sets none). The views of
+earlier releases (``.energies``, ``.widths``, ``.norms``, ``.shifts``, ``.sqrt_shifts``,
+``.fn_shifts``, ``.abundances``, ``.screenings``, ``.densities``, ``.dopplers``, ``.thicknesses``,
+``.cbkg``, ``.fixed``, ``.by_level(...)``, ``.by_physical_level()``) are ``of_kind`` and the level
+selections under their old names. ``pyazr.snapshot.write_values(azr, project, x)`` writes the values
+of ``x`` into a :class:`pyazr.Project` of the session's file in memory (what ``save_fit`` writes, without saving).
+
+``pyazr.kinds()["parameters"]`` is the engine's table of kinds (key, unit, owner fields, flags), in
 the order of the parameter vector (the abundances follow the level block):
 
-======  ===============  ===================================================
-code    ``kind``         parameters
-======  ===============  ===================================================
-0       ``energy``       level energies (``energy_*``)
-1       ``width``        reduced-width amplitudes (``width_*``)
-2       ``norm``         segment normalizations (``segment_N_norm``)
-3       ``shift``        segment energy shifts (``segment_N_energy_shift``)
-4       ``shift_sqrt``   :math:`\sqrt{E}` shift coefficients
-                         (``segment_N_energy_shift_sqrt``)
-5       ``shift_fn``     shift-function parameters a0, a1, ...
-                         (``segment_N_energy_shift_fnJ``)
-6       ``abundance``    isotopic abundances (``abundance_*``; after the
-                         level block; :attr:`Parameter.sample` its sample)
-7       ``screening``    electron-screening potentials (``screening_<n>``)
-8       ``density``      fitted target densities (``density_<n>``)
-9       ``doppler``      fitted Doppler temperatures (``doppler_<n>``)
-10      ``thickness``    fitted sample thicknesses (``segment_N_thickness``)
-11      ``cbkg``         THM coherent background (``cbkg_*``), last;
-                         ``thm_experiment``, ``thm_jpi``, ``thm_exit_key``,
-                         ``thm_channels`` and ``thm_term`` (0 Re c0, 1 Im
-                         c0, 2 Re c1, 3 Im c1) say which coefficient
-======  ===============  ===================================================
+===============  ===================================================
+``kind``         parameters
+===============  ===================================================
+``energy``       level energies (``energy_*``)
+``width``        reduced-width amplitudes (``width_*``)
+``norm``         data-set normalizations
+``shift``        data-set energy shifts (the constant term)
+``shift_sqrt``   :math:`\sqrt{E}` shift coefficients
+``shift_fn``     shift-function parameters a0, a1, ... (``fn_term`` = j)
+``abundance``    isotopic abundances (after the level block;
+                 ``sample_name`` its sample)
+``screening``    electron-screening potentials
+``density``      fitted target densities
+``doppler``      fitted Doppler temperatures
+``thickness``    fitted sample thicknesses
+``cbkg``         THM coherent background (``cbkg_*``);
+                 ``thm_experiment``, ``thm_jpi``, ``thm_exit_key``,
+                 ``thm_channels`` and ``thm_term`` (0 Re c0, 1 Im
+                 c0, 2 Re c1, 3 Im c1) say which coefficient
+``apparatus``    a number of an apparatus record (a stopping scale, a
+                 kernel's parameter)
+``radiative``    a number of a level's ``gamma_decay`` record
+                 (``decay_record``, ``decay_part``, ``final_state``)
+===============  ===================================================
 
 A THM segment's free norm is profiled, not a parameter, and has no entry. A ``LevelKey`` prints as
 ``5/2-#2@6.588MeV``; ``(jgroup, level)`` is its identity, since AZURE2 restarts
@@ -314,7 +349,7 @@ A fitted target density (``areal_density ... fit [prior ...]`` on a ``target``
 record, shared by every data set that names the target,
 :doc:`experimental_effects`) is a parameter ``<target>.areal_density`` of kind
 ``"density"`` (``ParameterSet.densities``; :attr:`Parameter.effect` is its target,
-``prior_nominal`` / ``prior_sigma`` its prior and ``density_max`` the largest
+``prior_centre`` / ``prior_sigma`` its prior and ``layout_max`` the largest
 density its grids span). Its column is finite-differenced the same way, and
 ``penalties()["density"]`` is its prior, which ``objective()`` adds.  The
 field is read and written as any record field: ``project["d1"]["areal_density"]``,
@@ -325,7 +360,7 @@ A fitted free-gas Doppler temperature (``doppler free_gas T K fit [prior T0
 sigma] [grid_max Tmax]`` on a ``target`` record, :doc:`experimental_effects`) is
 a parameter ``<target>.doppler`` of kind ``"doppler"``
 (``ParameterSet.dopplers``; :attr:`Parameter.effect` is its target,
-``prior_nominal`` / ``prior_sigma`` its prior and ``doppler_max`` the layout
+``prior_centre`` / ``prior_sigma`` its prior and ``layout_max`` the layout
 temperature its grids span). Unlike a density its gradient entry and Jacobian
 column are analytic, through the Doppler weights. ``penalties()["doppler"]`` is
 its prior, which ``objective()`` adds.  The field is edited as any record field
@@ -336,7 +371,7 @@ A fitted sample thickness (``areal_density n atoms/b fit [prior n sigma]`` on a
 ``neutron_yield`` data sets, :doc:`segments`) is a parameter
 ``<target>.areal_density`` of kind ``"thickness"`` (``ParameterSet.thicknesses``;
 :attr:`Parameter.segment_key` is the first data set on the target,
-``prior_nominal`` / ``prior_sigma`` its prior, ``sample_kind`` ``"transmission"``
+``prior_centre`` / ``prior_sigma`` its prior, ``sample_kind`` ``"transmission"``
 or ``"yield"``); data sets that name one target share the parameter. Its
 gradient entry and Jacobian column are analytic. ``penalties()["thickness"]`` is
 its prior, which ``objective()`` adds.
@@ -369,6 +404,56 @@ positive definite), ``read_prior`` and ``read_covariance_dat`` read them back.
    alone and the normalizations will drift to absorb every discrepancy,
    reaching a χ² that AZURE2 would never find. Append the penalty rows — see
    :doc:`chi_squared` and ``pyazr/examples/`` for the recipe.
+
+The objective and the evaluation
+--------------------------------
+
+Two objects hold what a fit and a calculation need, every number from the engine.
+
+``s.fit_objective()`` returns a :class:`pyazr.Objective`: the objective the program's fit minimises (the data χ²
+and every prior and constraint) as one callable on the free vector ``x``, in the basis the session fits in.
+``f(x)`` is ``s.objective(x)`` bit for bit; ``f.grad(x)`` and ``f.value_and_grad(x)`` its gradient;
+``f.residuals(x)`` and ``f.jacobian(x)`` the objective as least-squares rows, ``sum(f.residuals(x)**2) == f(x)``
+(the data rows, then one row per prior and constraint); ``f.log_prob(x)`` is ``-0.5 * f(x)``, ``-inf`` where the
+program's sampler puts zero probability (outside the bounds of a parameter whose record has ``sampler_support``,
+today a ``gamma_decay`` record's numbers, and where Park's overlap J of a level is negative); ``f.x0``, ``f.names``,
+``f.bounds`` and ``f.errordef`` (1) for the minimiser.  Calls from several threads on one session run one after the
+other.
+
+``s.evaluate(x)`` returns a :class:`pyazr.Evaluation` from one engine evaluation: ``objective``; ``chi2``, the data
+χ² (``Total-Chi-Squared`` of ``chiSquared.out``); ``terms``, each term of the engine's objective by its name;
+``data[i]`` per data set with ``model``, ``residuals``, ``chi2`` (its row of ``chiSquared.out``), ``norm``,
+``energies``, ``angles``, ``values``, ``errors`` and ``extra`` (the lab energy and angle, the S-factor conversion,
+the E1 and E2 parts of a capture, Legendre coefficients: ``pyazr.kinds()["data_outputs"]``); ``model_data``;
+``table()``.  ``ev.objective - ev.chi2`` are the priors: on the fitted T2 the objective is 297.86, the data χ² 293.94.
+
+.. code-block:: python
+
+   s = pyazr.azure2("T2.azr")
+   f = s.fit_objective()
+
+   # scipy: the gradient, or the rows and their Jacobian (pyazr/examples/fit_scipy.py)
+   r = scipy.optimize.minimize(f.value_and_grad, f.x0, jac=True, bounds=f.bounds, method="L-BFGS-B")
+   q = scipy.optimize.least_squares(f.residuals, f.x0, jac=f.jacobian, x_scale="jac")
+
+   # iminuit: MIGRAD and HESSE (pyazr/examples/fit_iminuit.py)
+   m = iminuit.Minuit(f, f.x0, grad=f.grad, name=f.names)
+   m.limits = f.bounds
+   m.migrad(); m.hesse()
+
+   # emcee: log_prob; with a pool, one session per worker (pyazr/examples/fit_emcee.py)
+   sampler = emcee.EnsembleSampler(nwalkers, len(f.x0), f.log_prob)
+
+   ev = s.evaluate(np.array(m.values))
+   print(ev.terms)
+   print(ev.table(0))
+
+The parameters of a project differ in scale by many orders (an areal density in atoms/cm² beside a width in
+MeV\ :sup:`1/2`): ``fit_scipy.py`` runs L-BFGS-B on ``x`` divided by ``|x0|``.  The three recipes are tested
+(``tests/pyazr/fit_recipes_test.py``): on T2, iminuit's MIGRAD and both scipy recipes reach the program's own
+MIGRAD minimum (iminuit to 1e-6; the scipy recipes go 3e-6 below it, where the program's
+MIGRAD stops early).  For walls at every bound in a sampler, wrap ``log_prob`` in one line:
+``lambda x: f.log_prob(x) if all(lo <= v <= hi for v, (lo, hi) in zip(x, f.bounds)) else -np.inf``.
 
 Editing the model
 -----------------
@@ -882,6 +967,15 @@ integrate.
    azr.cache_stats()   # input_files_read, input_files_served, input_files_held (and six
                        # Coulomb-memo counters of earlier builds, now always 0)
 
+The engine's physics functions need no session: ``pyazr.physics`` has one function per row of the binding's physics
+table (kinematics, Coulomb functions and phase, penetrability, shift function and its energy derivative, hard-sphere
+phase, Wigner limit, single-particle width, photon penetrability, resonance quantities, Coulomb cross sections, S-factor
+conversions), each on broadcast numpy arrays with its arguments, units and domain in its ``help()``; an element outside
+the domain raises ``pyazr.DomainError``, or with ``errors="mask"`` gives NaN and a status per element.  The page
+:doc:`physics_functions` lists them; ``pyazr.kinds()["physics"]`` gives the same rows as data.  Where the session's
+own setting matters (its Coulomb table, GSL, a nuclear potential), ``azr.channel_functions(pair, e_cm, l)`` gives F,
+G, their derivatives, P, S and the hard-sphere phase shift of one of its pairs.
+
 The bound-channel Whittaker function needs no session: ``pyazr.whittaker_wave(l, eta_b, rho)`` returns
 :math:`W_{-\eta_b,l+1/2}(2\rho)` (unit ANC, :math:`W \sim e^{-\rho}(2\rho)^{-\eta_b}`) on broadcast arrays of the
 dimensionless :math:`l`, :math:`\eta_b = Z_1Z_2e^2\mu/(\hbar^2\kappa)` and :math:`\rho = \kappa r`, as
@@ -912,6 +1006,17 @@ per atom of the material, areal densities atoms/cm\ :sup:`2` of the material, wi
    stopping.straggling(ta2o5, "a", [2.0], [1e18], beam_sigma=[0.001])["total"]
    stopping.range_of(ta2o5, (6, 12.0), [10.0])           # a 12C ion: (Z1, mass in u)
    print(stopping.provenance(ta2o5, "p"))                # SRIM-2013, the citation, the data per element
+
+The same functions are rows of a table (``pyazr.stopping.table()``, also ``pyazr.kinds()["stopping"]``) in the shape
+of the physics rows, each with SRIM's citation; ``stopping.evaluate(name, formula, **arguments)`` evaluates a row on
+broadcast arrays with a status per element (NaN where the status is not 0), bit for bit the functions above:
+
+.. code-block:: python
+
+   result, status = stopping.evaluate("stopping_power", "Ta2O5", z1=1, mass_u=1.00727646688,
+                                      energy=np.geomspace(0.001, 10, 200))
+   result, status = stopping.evaluate("energy_after", "Ta2O5", z1=1, mass_u=1.00727646688, energy_in=0.1,
+                                      areal_density=[1e17, 1e21])   # status [0, -2]: beyond the range
 
 A rebuild of the model (``set_channel_radius``, a nuclear-potential change, a mode switch) reads no input
 file that has not changed on disk (the ``input_files_*`` counters, for the whole process) and does not
@@ -1265,8 +1370,12 @@ Worked scripts ship in ``pyazr/examples/``:
    * - ``sensitivities.py``
      - Which parameters a dataset constrains, as d ln σ / d ln p; and the
        analytic sensitivities checked against finite differences.
+   * - ``fit_scipy.py``
+     - ``scipy.optimize.minimize`` with the gradient and ``least_squares`` with the Jacobian on ``Objective``.
+   * - ``fit_iminuit.py``
+     - MIGRAD and HESSE of iminuit on ``Objective``.
    * - ``fit_emcee.py``
-     - MCMC sampling with ``emcee``, one in-process engine per pool worker.
+     - MCMC sampling with ``emcee`` on ``Objective.log_prob``, one session per pool worker.
    * - ``fit_zeus.py``
      - The same with ``zeus``.
    * - ``angular_distribution.py``
@@ -1302,10 +1411,13 @@ evaluates one χ² per walker:
    # worker module
    azr = azure2("13N.azr")
 
-   def log_prob(theta):
-       return -0.5 * np.sum(azr.calculate_chi2_rwa(theta)) + prior(theta)
+   f = azr.fit_objective()
 
-See ``pyazr/examples/fit_emcee.py`` and ``fit_zeus.py`` for the full recipe.
+   def log_prob(theta):
+       return f.log_prob(theta)
+
+See ``pyazr/examples/fit_emcee.py`` for the full recipe (``fit_zeus.py`` is the older pattern with
+``calculate_chi2_rwa`` and priors of its own).
 
 Inside one session the engine uses threads: every evaluation (``calculate_chi2_rwa``,
 ``calculate_chi2``, ``calculate_rwa``, ``calculate``, ``calculate_all_rwa``) spreads

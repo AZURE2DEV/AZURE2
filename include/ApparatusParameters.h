@@ -23,7 +23,7 @@ struct ApparatusDeclaration {
   /// What it belongs to, in the order of its name (the values joined by '.'): ParameterRecord::owner.
   std::vector<std::pair<std::string, std::string>> owner;
   std::string unit;  ///< the value's unit
-  double nominal = 0.0;   ///< start value (the base of the limits and of the layout)
+  double layoutBase = 0.0;  ///< what the limits and the layout are laid out from: the centre or the start (LayoutBase.h)
   double centre = 0.0;    ///< the prior's centre: as written, else the start (docs/upgrade/parameter_kinds.md section 4)
   bool vary = false;
   double sigma = 0.0;     ///< prior width, the value's unit; 0 = no prior
@@ -65,13 +65,6 @@ struct ApparatusParam {
 /// The rows' own declarations (their files): the stopping scale (StoppingScale.cpp), a table kernel's parameter.
 ApparatusRow StoppingScaleRow();
 ApparatusRow KernelParameterRow();
-
-/// The layout value of a fitted number without grid_max: max(v0 + 3 sigma, 1.1 v0) with a prior, else 1.5 v0 (the
-/// stopping scale's rule, energy_grid.md section 6.2); v0 itself when it is fixed.
-inline double ApparatusLayout(double nominal, bool vary, double sigma) {
-  if (!vary) return nominal;
-  return (sigma > 0.0) ? (nominal + 3.0 * sigma > 1.1 * nominal ? nominal + 3.0 * sigma : 1.1 * nominal) : 1.5 * nominal;
-}
 
 class AZUREParams;
 class DataSet;

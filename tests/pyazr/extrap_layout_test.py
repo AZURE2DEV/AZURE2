@@ -5,15 +5,14 @@ The engine lists one normalization (when varied) and two energy-shift
 parameters per segment of the current segment set, so extrapolation mode
 (the <segmentsTest> grids) has a different parameter count from data mode.
 pyazr cached ``fixed_params`` in data mode only: after ``extrap_mode()`` the
-parameter table raised "parameter_info returned N parameters but params_fixed
-reported M" and ``_all_rwa`` indexed past the cached flags (seen on a 12C+12C
+parameter table raised "N parameter records but M fixed flags" and ``_all_rwa`` indexed past the cached flags (seen on a 12C+12C
 model: 220 against 212 with eight test segments).
 
 On tests/15N_p_a (three data segments with varied norms) with five test
 segments added:
 
   1. the engine's counts differ between the modes (else the test is vacuous);
-  2. in every mode, parameter_info, params_fixed (engine and cached) and
+  2. in every mode, parameter_records, params_fixed (engine and cached) and
      ``parameters`` have the same length, also when the table is first built
      in extrapolation mode;
   3. the free R-matrix block (names, n_rmatrix) is the same in both modes;
@@ -50,7 +49,6 @@ try:
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
     from pyazr import azure2, Project
-    from pyazr.parameters import Parameter
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -58,7 +56,7 @@ except Exception as err:                                   # engine not built
 
 def counts(m, table=True):
     s = m.sess
-    rows = np.asarray(s.parameter_info(), float).reshape(-1, Parameter._NFIELDS).shape[0]
+    rows = len(s.parameter_records())
     return rows, len(s.params_fixed()), len(m.fixed_params), (len(m.parameters) if table else rows)
 
 

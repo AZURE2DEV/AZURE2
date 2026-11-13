@@ -64,13 +64,14 @@ datum a_p15N
 </modelData>
 """
 
-# The binding's physics functions (physics/ResonanceQuantities.h), on arrays.
-w = _azure2.statistical_factor(np.array([6, 4]), np.array([1, 0]), np.array([1, 0]), np.array([False, True]))
+# The physics table's functions (physics/ResonanceQuantities.h), on arrays.
+import pyazr.physics
+w = pyazr.physics.statistical_factor(np.array([6, 4]), np.array([1, 0]), np.array([1, 0]), np.array([False, True]))
 check("statistical_factor: 7/4 (p + 15N, 3-), 10 (12C + 12C, 2+)", list(w) == [1.75, 10.0], w)
-s = _azure2.resonance_strength(np.array([1.75]), np.array([1.702]), np.array([12.92]), np.array([14.622]))
+s = pyazr.physics.resonance_strength(np.array([1.75]), np.array([1.702]), np.array([12.92]), np.array([14.622]))
 check("resonance_strength: 2.6318028 keV", close(s["value"][0], 2.6318028, 5e-8), s)
 check("resonance_strength: d/dGamma = -value/Gamma", close(s["d_gamma"][0], -s["value"][0] / 14.622, 1e-14), s)
-b = _azure2.branching_ratio(np.array([12.92]), np.array([14.622]))
+b = pyazr.physics.branching_ratio(np.array([12.92]), np.array([14.622]))
 check("branching_ratio: 0.88360005", close(b["value"][0], 0.88360005, 1e-8), b)
 
 tmp = tempfile.mkdtemp(prefix="pyazr_model_data_")

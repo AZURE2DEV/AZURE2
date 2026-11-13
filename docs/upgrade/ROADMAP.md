@@ -41,6 +41,9 @@ Tick boxes as work lands; put the commit hash after each tick.
       branch.
 - [x] Rules into `CLAUDE.md` (`RULES.md`), replacing the "date an entry (`dev 0dd28e5`)" skill rule.
 - [x] Skills rewritten into the ten-skill set (`RULES.md` §3) and `tools/check_skills.py` in CI.
+- [x] Developer Guide of the site for the new structure (`docs/source/developer/`: architecture, scheme of the
+      classes from `figures/classes.tsv` and `arrows.tsv`, state and ownership, data model, extending; consistency
+      check 44 keeps the scheme's types declared; 2026-11-13).
 - [x] Merge the race fixes everywhere: `a6bc6b9e` (via origin/thm c6ddb741, merged d20718f8) and the acquire-fence
       fix 3fba1192 (`fix/edep-cow-acquire`, merged 37978592) are both on `feature/upgrade`. Pushing them to `thm` and
       `dev` is the PI's.
@@ -187,6 +190,7 @@ immutable, built at set-up and read by everything outside the data classes; the 
 built at set-up. Remaining: external-capture amplitudes at set-up (with the decay-position defect of the data
 classes), the pathway trees deleted, the parameter vector and the set-up out, `CNuc` deleted. The file-size ratchet
 (`tests/consistency/file_sizes.tsv`): no listed file grows, no other file passes 1,000 lines.
+*Design of the last steps, six branches: `cnuc_split.md` §12 (2026-11-13); it replaces the "Remaining" list above.*
 
 ## Phase 5 — Energy grid, kernels, stopping, THM observable
 
@@ -261,8 +265,20 @@ Gate: benchmarks committed with their FRESCO inputs and outputs.
 Design: `pyazr3.md` (the measured state of pyazr, the objects of 3.0, the order of work, the PI's decisions).
 
 - [ ] Object binding (`ARCHITECTURE.md` §11): modules, numpy views, `physics` explorer functions, `sources`, `cli`.
+  - [x] Errors and self-description (`pyazr.Error` and its classes, `pyazr.describe()`, `pyazr.kinds()`).
+  - [x] Parameters and pairs as the engine's records (`Parameters`, `Parameter`, `Pair`; the record table
+        `api/src/pybind_records.cpp`); the numeric layouts `GetParameterInfo` / `GetPairsInfo` deleted.
+  - [x] The physics table (`pyazr3.md` section 4, step 4): `api/src/pybind_physics.cpp`, 24 rows, `pyazr.physics`
+        generated from them, a status per element, `Session.channel_functions`; a test per row (consistency check
+        41). Left: the transfer functions on potentials, `level_matrix`, the Weisskopf width (section 4, step 4).
+  - [x] `Objective` and `Evaluation` beside today's methods (`pyazr3.md` section 7): `azure2.fit_objective()`,
+        `azure2.evaluate(x)`; the objective's rows, `log_prob` with the engine sampler's rule, the table of point
+        outputs (`api/src/pybind_evaluation.cpp`).
 - [ ] Wheels via scikit-build-core + cibuildwheel (Linux, macOS, Windows) with the core and the `azure2` CLI.
-- [ ] Tested recipes for iminuit, scipy, emcee (no `azure2()` shim: struck by the PI, `pyazr3.md` section 5, 9).
+- [x] Tested recipes for iminuit, scipy, emcee (`pyazr/examples/fit_*.py`, `tests/pyazr/fit_recipes_test.py`; no
+      `azure2()` shim: struck by the PI, `pyazr3.md` section 5, 9).
+- [x] The command line `python -m pyazr` (`pyazr/cli.py`: one table of commands with `--json`; `pyazr3.md` 2.8;
+      2026-11-13). Coulomb table build and download wait for a bound build function and a published copy.
 Gate: ported pyazr tests pass; wheels install and run T1–T3 on three platforms.
 
 ## Phase 9 — Web UI; retire Qt, ERYA, numcmc
@@ -281,7 +297,14 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
 - [x] The Results tab: the Results payload against the program's output files, plots with residuals, χ² table,
       model data, angular distributions, output files (2026-11-13). Dense model grid, lab energy, Legendre orders,
       rate and bands wait for pyazr (`web_ui.md` section 12).
+- [x] The options of the calculation are `<config>` keys (decision 7; `project_format3.md` §3.12): flag or keyword >
+      key > default, sources in `--describe` and `azure2.describe()`, contradictions refused, one table; the server's
+      provisional `SESSION_OPTIONS` gone (2026-11-13).
 - [ ] Physics tab plots every exposed physics function (`ARCHITECTURE.md` §8, `THM.md` §4).
+      First part done (2026-11-13, `web_ui.md` section 11.5): every row of the physics table and the session's
+      channel functions, a form generated from the row, the plot with gaps and the status line, CSV, Copy as Python.
+      The stopping library's functions as rows of the same shape with SRIM's citation on every plot (2026-11-13).
+      The level matrix, the transfer functions on potentials and the rate wait for pyazr.
 - [ ] pytest on `/api` with T1–T3; browser smoke tests; every item of the Qt parity checklist
       (`docs/upgrade/qt_parity.md`) ticked or dropped with a written reason.
 - [x] Qt parity checklist written from the Qt code before its removal (`docs/upgrade/qt_parity.md`, 201 items and 32
