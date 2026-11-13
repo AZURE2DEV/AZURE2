@@ -2,6 +2,19 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-8-gamma-branchings`) — MIGRAD's call count is AZURE2's own
+
+**Done.** `fitStatus.out` and the MIGRAD log lines report the calls counted by the objective (`AZURECalc::CountCallsInto`,
+a `std::atomic<long>` owned by the fit run in `AZUREMain`, reset before each MIGRAD), not Minuit2's `NFcn()`, whose
+`MnFcn::fNumCall` is a plain int incremented from the threads of Minuit2's OpenMP numerical gradient (lost increments:
+65 or 66 for the gamma_decay record fit at 3 threads, 62 or 63 for its partial-width twin, also with the base build).
+`external/` is not touched; `--max-calls` still acts on Minuit2's counter (approximate by a few calls under threads).
+`tests/gamma_decay/check.sh` (f): the record's fit at 1 and 3 threads, every output file identical.
+
+**Verified how.** At 1 thread the count equals `NFcn()` (record 66, twin 63 = `b-head3`); ten 3-thread runs each: 66
+and 63 every time; check (f) failed on its first run with `NFcn()` put back; the eight fits of `fits_vs_base2.sh`, the
+tree x 3 bases against `tab-gridm-1`, `ctest -LE slow`, consistency (results in the report).
+
 ## 2026-11-12 (agent, branch `feature/upgrade-8-gamma-branchings`) — implementation: the `gamma_decay` record
 
 **Done.** A level's radiative widths can be written as Γ_γ, branchings b_f (n − 1 of them and a named remainder) and

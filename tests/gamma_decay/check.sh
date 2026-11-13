@@ -176,6 +176,21 @@ for b in "" --use-park; do
   else bad "${b:---use-brune}: level energy, rel. difference ${wE:-missing} (limit 1e-5)"; fi
 done
 
+echo "-- (f) the record's fit at 1 and at 3 threads: every output file identical, fitStatus.out's call count too"
+# The count is the objective's own (AZURECalc::CountCallsInto): Minuit2's NFcn() loses increments under its OpenMP
+# numerical gradient, which this fit takes, and came out 65 or 66 at 3 threads from run to run.
+for t in 1 3; do
+  project "thr$t" "$WORK/record_d.azr"
+  OMP_NUM_THREADS=$t run "thr$t" 2 --use-gradient
+done
+n=0; d=0
+for f in "$WORK/thr1"/output/*; do
+  n=$((n + 1)); cmp -s "$f" "$WORK/thr3/output/$(basename "$f")" || { d=$((d + 1)); echo "        differs: $(basename "$f")"; }
+done
+if [ "$n" -ge 9 ] && [ "$d" -eq 0 ] && [ -s "$WORK/thr1/output/fitStatus.out" ]; then
+  ok "$n output files identical at 1 and 3 threads ($(awk '/^calls/ { print $2 " calls" }' "$WORK/thr1/output/fitStatus.out"))"
+else bad "$d of $n output files differ between 1 and 3 threads"; fi
+
 echo "-- (e) the boundary"
 # Without the data sets of 6.8594 and 5.183 MeV, priors below 0 on b(6.8594) and on the remainder (5.183 MeV).
 edited "$M/record.azr" "$WORK/record_zero.azr" sed -e 's/^\(    branching    g+15O\[6.8594\] [^ ]* fit\)$/\1 prior -0.01 0.01/' \

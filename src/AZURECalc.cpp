@@ -418,6 +418,7 @@ void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, WorkingCo
 double AZURECalc::operator()(const vector_r &p) const {
   AZUREProfile::ScopedReport profileReport("evaluation");
   AZUREProfile::Timer profileTimer(AZUREProfile::kEvaluation);
+  if (callCounter_) callCounter_->fetch_add(1, std::memory_order_relaxed);  // CountCallsInto
   // One atomic read-and-increment: this evaluation's number, distinct across the threads of a parallel gradient.
   const int thisIteration = data()->Iterate();
   bool isFit = data()->IsFit();

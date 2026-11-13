@@ -566,8 +566,11 @@ recipes.
   "Iteration" lines in the log, and the intermediate snapshot `param.fit`. The cause is in the vendored Minuit2: its
   numerical-gradient loop calls the objective from several threads and its call counter is not atomic, so a fit
   limited by `--max-calls` could in principle stop one iteration apart. Two atomic increments remove it (shown on a
-  scratch build, `fit_threads.md`); the patch touches `external/` and is not applied (the PI's decision); the engine
-  could count the calls itself instead.
+  scratch build, `fit_threads.md`); the patch touches `external/` and is not applied (the PI's decision).
+  Minuit2's call counter is not thread-safe under its own OpenMP gradient loop; not patched; AZURE2 counts itself
+  (2026-11-13, branch `feature/upgrade-8-gamma-branchings`): `fitStatus.out` and the log give the objective's own
+  atomic count of MIGRAD's calls, equal to Minuit2's at 1 thread and the same at any thread count; `--max-calls`
+  still acts on Minuit2's counter, so under threads that limit is approximate by a few calls.
 - **Two constants.** The electron mass in the β-decay Fermi function (CODATA 2002) and the proton mass of the M1
   capture integral (older than CODATA 2018) are kept at their values so that no result moves; they are named
   constants in `include/Constants.h` (`electronMassOfFermiFunction`, `protonMassOfM1Capture`) and can be changed in
