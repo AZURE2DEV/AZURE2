@@ -263,7 +263,7 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
   if (!compound) return resonances;
 
   // Get the entrance pair for separation energy conversion
-  PPair *entrancePair = nullptr;
+  const PPair *entrancePair = nullptr;
   if (config_.entranceKey > 0 && compound->IsPairKey(config_.entranceKey)) {
     int pairNum = compound->GetPairNumFromKey(config_.entranceKey);
     entrancePair = compound->GetPair(pairNum);
@@ -277,12 +277,12 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
   double separationEnergy = entrancePair->GetSepE();
   double excitationEnergy = entrancePair->GetExE();
 
-  auto levelE = [](ALevel *lv) { return lv->GetE(); };
-  auto levelGamma = [](ALevel *lv, int ch) { return lv->GetGamma(ch); };
+  auto levelE = [](const ALevel *lv) { return lv->GetE(); };
+  auto levelGamma = [](const ALevel *lv, int ch) { return lv->GetGamma(ch); };
 
   // Loop through all J-groups
   for (int j = 1; j <= compound->NumJGroups(); j++) {
-    JGroup *jgroup = compound->GetJGroup(j);
+    const JGroup *jgroup = compound->GetJGroup(j);
     if (!jgroup || !jgroup->IsInRMatrix()) continue;
     // Levels of another compound nucleus are not resonances of this entrance pair.
     if (jgroup->GetNucleus() != entrancePair->GetNucleus()) continue;
@@ -291,12 +291,12 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
 
     // Loop through all levels in this J-group
     for (int l = 1; l <= jgroup->NumLevels(); l++) {
-      ALevel *level = jgroup->GetLevel(l);
+      const ALevel *level = jgroup->GetLevel(l);
       if (!level || !level->IsInRMatrix()) continue;
 
       // Get level energy (in compound excitation energy)
       double levelExcitationEnergy = levelE(level);
-      auto levelEnergy = [&](ALevel *) { return levelExcitationEnergy; };
+      auto levelEnergy = [&](const ALevel *) { return levelExcitationEnergy; };
 
       // Check if level has widths (Γ > 0) to be considered a resonance
       bool hasWidth = false;
@@ -350,8 +350,8 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
         double rwaNormSum = 0.0;
         double rwaGammaMeV = 0.0;
         for (int ch = 1; ch <= numChannels; ch++) {
-          AChannel *channel = jgroup->GetChannel(ch);
-          PPair *chPair = compound->GetPair(channel->GetPairNum());
+          const AChannel *channel = jgroup->GetChannel(ch);
+          const PPair *chPair = compound->GetPair(channel->GetPairNum());
           double gamma = std::abs(levelGamma(level, ch));
           if (gamma <= 0.0) continue;
           const bool isRWA = level->GammaIsRWA(ch);
@@ -403,9 +403,9 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
         continue;
       }
       for (int ch = 1; ch <= numChannels; ch++) {
-        AChannel *channel = jgroup->GetChannel(ch);
+        const AChannel *channel = jgroup->GetChannel(ch);
         if (channel->GetRadType() != 'P') continue;  // particle channels
-        PPair *chPair = compound->GetPair(channel->GetPairNum());
+        const PPair *chPair = compound->GetPair(channel->GetPairNum());
         double localEnergy = levelEnergy(level) - chPair->GetExE() - chPair->GetSepE();
         // Closed channels are left out, as above (ChannelFunc: P = 0 also just
         // above a Coulomb threshold).
@@ -435,10 +435,10 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
       // penetrability following CNuc::TransformOut (the same special cases for a
       // ground-state transition and the RMC formalism).
       for (int ch = 1; ch <= numChannels; ch++) {
-        AChannel *channel = jgroup->GetChannel(ch);
+        const AChannel *channel = jgroup->GetChannel(ch);
         char radType = channel->GetRadType();
         if (radType != 'M' && radType != 'E') continue;
-        PPair *chPair = compound->GetPair(channel->GetPairNum());
+        const PPair *chPair = compound->GetPair(channel->GetPairNum());
         double gamma = std::abs(levelGamma(level, ch));
         if (gamma <= 0.0) continue;
         double localEnergy = levelEnergy(level) - chPair->GetExE() - chPair->GetSepE();

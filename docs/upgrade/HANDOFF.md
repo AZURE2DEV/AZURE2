@@ -2,6 +2,47 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-14 (agent, branch `feature/upgrade-5-cnuc-frozen`) — the structure of the compound frozen after set-up
+
+**Measured first** (start commit e9e37a18; the design `cnuc_split.md` §12 counted at 6e8d000b):
+
+| what | design | code at the start | after |
+|---|---|---|---|
+| `SetEntrance` calls in the engine | 6 | 6 (and 2 in tests) | 0 |
+| `BuildSystemFromCNuc` calls in the engine | 12 | 9 (and 5 in tests) | 2, in `CNuc::Fill` |
+| dead members (§12.4 item 5) | 5 | 5 | 0 |
+| `CNuc.cpp` / `CNuc.h` lines | 1,527 / 327 | 1,527 / 327 | 1,526 / 350 |
+
+**Done.** The entrance pairs are an input of the set-up: `RequestDataEntrances` / `RequestExtrapolationEntrances`
+(`src/ProjectSetup.cpp`) request the entrance pair of every term of the active data sets or extrapolations, a rate run
+its entrance pair (`CNuc::RequestEntrance`, before `Initialize`); `CNuc::BuildPathways` flags them. The comparison
+commit 37ac9885 computed both sets and aborted on a difference; the merge of the fit as a function (ae347ae0) came
+next, so the requests of the program's set-up are in `src/RunSetUp.cpp`. The `System` of the structure and of all
+groups is built once at the end of `Fill` (`CNuc::SystemStructure`, `SystemAllGroups`), shared by the copies. The
+structure is read-only outside `CNuc`'s own set-up: `GetPair`, `GetJGroup`, `GetPairFromKey`, `GetNucleus` return
+`const` pointers only; the level values that move after set-up are written through `CNuc::MutableLevel`. Dead
+members deleted; `IsPair`, `AddPair`, `AddJGroup` private. Design and code differ in three places (written in
+`cnuc_split.md`, "Step 1 as built"): nine builds of the `System`, not twelve; the levels are written through
+`GetJGroup`, so a separate door was needed; the run-time abort of the non-`const` accessors could not be a check (every
+reader on a non-`const` pointer calls that overload), the compiler does it.
+
+**Verified how** (build `work/b-cnucend`, 2 threads, 0 warnings): the comparison commit on all projects × 3 bases
+(`tab-cnucend-1`): 887 / 851 / 887 identical, no abort. The last commit of the step: all projects × 3 bases
+(`tab-cnucend-2`) 887 / 851 / 887 identical to `tab-t57-1` (59 `run.log` files differ only in progress-bar lines);
+`ctest -LE slow` (`OMP_NUM_THREADS=1`, `-j2`): 250 of 252; the two failures (`pyazr_session_lock`,
+`pyazr_objective_object`) came with the merge of the fit as a function (ae347ae0) and are fixed by the director's
+e3528379, merged next: both pass then. Unit tests near the change (`physics_system_from_cnuc`,
+`physics_level_parameters_from_cnuc`, `physics_pathway_table`, `upgrade_external_capture_exit`, `channel_table_unit`,
+`upgrade_capture_ay_requests`) pass. Developer Guide: `classes.rst`, `state_and_ownership.rst`, `architecture.rst`,
+`physics_core.rst`, the class scheme (`classes.tsv`, `arrows.tsv`, `setup.svg` regenerated); `grep -rn
+'SetEntrance\|BuildSystemFromCNuc\|GammaDecayInputs\|SetBindingEnergy' docs/source` leaves only the adapter's
+correct mention in `physics_core.rst`.
+
+**Open.** The tree runs menu 1 only: the comparison of the entrance sets covered the extrapolation path through the
+C++ tests that load projects without data, not the rate path nor the binding's sessions (their tests are run on the
+final code, not on the comparison commit). A pair record's `entrance` field (`pybind_records.cpp`) reads the flag,
+which is set at `Initialize` now (during the data set-up before).
+
 ## 2026-11-14 (agent, branch `feature/upgrade-9-skills-inference`) — the skills of inference and the evaluation
 
 **Done.** The skills `azure2-fit`, `azure2-uncertainty`, `azure2-resonance-search`, `rmfit-campaign` on pyazr 3.0

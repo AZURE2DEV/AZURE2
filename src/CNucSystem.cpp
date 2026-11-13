@@ -60,7 +60,7 @@ phys::LevelBasis BasisOf(const Config &configure) {
 
 }  // namespace
 
-CNucSystem BuildSystemFromCNuc(CNuc &compound, const Config &configure, CNucSystemContent content) {
+CNucSystem BuildSystemFromCNuc(const CNuc &compound, const Config &configure, CNucSystemContent content) {
   const bool withParameters = (content == CNucSystemContent::Parameters);
   const bool allGroups = (content == CNucSystemContent::AllGroups);
   // Before TransformIn the level gammas are the file's partial widths (eV) and ANCs, not amplitudes.
@@ -100,14 +100,14 @@ CNucSystem BuildSystemFromCNuc(CNuc &compound, const Config &configure, CNucSyst
   std::vector<phys::Channel> channels;
   std::vector<phys::JpiBlock> blocks;
   for (int j = 1; j <= compound.NumJGroups(); j++) {
-    JGroup *group = compound.GetJGroup(j);
+    const JGroup *group = compound.GetJGroup(j);
     if (!group->IsInRMatrix() && !allGroups) continue;  // a group made only to hold an external-capture final state
     const std::string what = "J-group " + std::to_string(j);
 
     std::vector<int> blockChannels, groupChannels;
     std::vector<double> boundary;
     for (int ch = 1; ch <= group->NumChannels(); ch++) {
-      AChannel *channel = group->GetChannel(ch);
+      const AChannel *channel = group->GetChannel(ch);
       phys::Channel c;
       c.partition = channel->GetPairNum() - 1;
       c.kind = ChannelKindOf(channel->GetRadType());
@@ -130,7 +130,7 @@ CNucSystem BuildSystemFromCNuc(CNuc &compound, const Config &configure, CNucSyst
     std::vector<double> energies, gammas;
     std::vector<int> groupLevels;
     for (int la = 1; la <= group->NumLevels(); la++) {
-      ALevel *level = group->GetLevel(la);
+      const ALevel *level = group->GetLevel(la);
       if (!level->IsInRMatrix() && !allGroups) continue;
       groupLevels.push_back(la);
       if (!withParameters) continue;
@@ -149,4 +149,31 @@ CNucSystem BuildSystemFromCNuc(CNuc &compound, const Config &configure, CNucSyst
   return CNucSystem{phys::System(BasisOf(configure), std::move(nuclei), std::move(partitions), std::move(channels),
                                  std::move(blocks)),
                     std::move(map)};
+}
+
+// The two Systems of a CNuc, built once at the end of CNuc::Fill (CNuc.h).
+void CNuc::BuildSystems(const Config &configure) {
+  try {
+    systemStructure_ = std::make_shared<const CNucSystem>(BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure));
+    systemAllGroups_ = std::make_shared<const CNucSystem>(BuildSystemFromCNuc(*this, configure, CNucSystemContent::AllGroups));
+  } catch (...) {
+    // Kept for the readers, which stop on it where they did when each built its own System.
+    systemStructure_.reset();
+    systemAllGroups_.reset();
+    systemError_ = std::current_exception();
+  }
+}
+
+const CNucSystem &CNuc::SystemStructure() const { return *this->SystemStructureHandle(); }
+
+std::shared_ptr<const CNucSystem> CNuc::SystemStructureHandle() const {
+  if (systemError_) std::rethrow_exception(systemError_);
+  if (!systemStructure_) throw std::logic_error("CNuc::SystemStructure: the compound nucleus has not been filled");
+  return systemStructure_;
+}
+
+const CNucSystem &CNuc::SystemAllGroups() const {
+  if (systemError_) std::rethrow_exception(systemError_);
+  if (!systemAllGroups_) throw std::logic_error("CNuc::SystemAllGroups: the compound nucleus has not been filled");
+  return *systemAllGroups_;
 }

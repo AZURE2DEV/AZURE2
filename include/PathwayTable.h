@@ -166,7 +166,7 @@ class PathwayTable {
  * System map, then for each exit of a non-beta entrance the interferences of the spin groups for L = 0 ...
  * max_l_order (particle_interference, photon_interference, upos_interference, kept when |Z| > 1e-10), the diagonal
  * pathways, and the requested capture-A_y terms (capture_ay_coefficients, kept when |a| or |b| >= 1e-10).
- * `structure` is BuildSystemFromCNuc(..., CNucSystemContent::Structure).
+ * `structure` is CNuc::SystemStructure() (BuildSystemFromCNuc(..., CNucSystemContent::Structure)).
  */
 std::shared_ptr<const PathwayTable> BuildPathwayTable(const CNucSystem &structure,
                                                       const std::vector<PathwayFinalState> &finalStates,

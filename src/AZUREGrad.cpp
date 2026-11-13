@@ -47,16 +47,16 @@ vector_matrix_r BuildShiftDerivTable(CNuc *compound, const Config &configure) {
   const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
   vector_matrix_r tab(compound->NumJGroups());
   for (int j = 1; j <= compound->NumJGroups(); j++) {
-    JGroup *jg = compound->GetJGroup(j);
+    const JGroup *jg = compound->GetJGroup(j);
     tab[j - 1].assign(jg->NumLevels(), std::vector<double>());
     if (!jg->IsInRMatrix()) continue;
     for (int la = 1; la <= jg->NumLevels(); la++) {
       tab[j - 1][la - 1].assign(jg->NumChannels(), 0.0);
-      ALevel *level = jg->GetLevel(la);
+      const ALevel *level = jg->GetLevel(la);
       if (!level->IsInRMatrix()) continue;
       for (int ch = 1; ch <= jg->NumChannels(); ch++) {
-        AChannel *channel = jg->GetChannel(ch);
-        PPair *pair = compound->GetPair(channel->GetPairNum());
+        const AChannel *channel = jg->GetChannel(ch);
+        const PPair *pair = compound->GetPair(channel->GetPairNum());
         // The Brune boundary/shift block applies only to particle 'P' channels.
         if (pair->GetPType() != 0 || channel->GetRadType() != 'P') continue;
         if (park && level->ShiftFunctionsValidAt(level->GetFitE())) {
@@ -83,15 +83,15 @@ void AddParkPenaltyGradient(CNuc *compound, const Config &configure, GradAccum &
   if (!(configure.paramMask & Config::USE_PARK_FORMALISM)) return;
   const double s2 = CNuc::kParkNormScale * CNuc::kParkNormScale;
   for (int j = 1; j <= compound->NumJGroups(); j++) {
-    JGroup *jg = compound->GetJGroup(j);
+    const JGroup *jg = compound->GetJGroup(j);
     if (!jg->IsInRMatrix()) continue;
     for (int la = 1; la <= jg->NumLevels(); la++) {
-      ALevel *level = jg->GetLevel(la);
+      const ALevel *level = jg->GetLevel(la);
       if (!level->IsInRMatrix() || level->GetParkNorm() >= 0.0) continue;
       const double factor = 2.0 * level->GetParkNorm() / s2;
       double dE = 0.0;
       for (int ch = 1; ch <= jg->NumChannels(); ch++) {
-        AChannel *channel = jg->GetChannel(ch);
+        const AChannel *channel = jg->GetChannel(ch);
         if (channel->GetRadType() != 'P' || compound->GetPair(channel->GetPairNum())->GetPType() != 0) continue;
         double g = level->GetFitGamma(ch);
         accum.AddGamma(j, la, ch, factor * (-2.0 * g * level->GetShiftDerivative(ch)));
@@ -130,7 +130,7 @@ void GradAccum::Init(CNuc *compound) {
   e.assign(nJ, {});
   gamma.assign(nJ, {});
   for (int j = 1; j <= nJ; j++) {
-    JGroup *jg = compound->GetJGroup(j);
+    const JGroup *jg = compound->GetJGroup(j);
     const int nLevels = jg->NumLevels();
     const int nCh = jg->NumChannels();
     e[j - 1].assign(nLevels, 0.0);
@@ -331,7 +331,7 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, WorkingCopy *data,
   map.eFlat_.assign(compound->NumJGroups(), {});
   map.gammaFlat_.assign(compound->NumJGroups(), {});
   for (int j = 1; j <= compound->NumJGroups(); j++) {
-    JGroup *jGroup = compound->GetJGroup(j);
+    const JGroup *jGroup = compound->GetJGroup(j);
     map.eFlat_[j - 1].assign(jGroup->NumLevels(), -1);
     map.gammaFlat_[j - 1].assign(jGroup->NumLevels(), std::vector<int>(jGroup->NumChannels(), -1));
     for (int la = 1; la <= jGroup->NumLevels(); la++) {
@@ -784,7 +784,7 @@ bool AccumulateEGammaGradient(CNuc *compound, WorkingCopy *data, azure2::Results
       if (config.FirstTime("AZURE_GRAD_DEBUG energy-task gradient declined")) {
         bool inactiveLevel = false;
         for (int j = 1; j <= compound->NumJGroups(); j++) {
-          JGroup *jg = compound->GetJGroup(j);
+          const JGroup *jg = compound->GetJGroup(j);
           if (!jg->IsInRMatrix()) continue;
           for (int la = 1; la <= jg->NumLevels(); la++)
             if (!jg->GetLevel(la)->IsInRMatrix()) inactiveLevel = true;
@@ -819,7 +819,7 @@ AMatrixFunc::FreeMask BuildFreeMask(CNuc *compound, const ParamIndexMap &pmap) {
   mask.g.assign(nJ, {});
   auto isFree = [&pmap](int full) { return full >= 0 && full < pmap.NumFull() && pmap.FullToPacked(full) >= 0; };
   for (int j = 1; j <= nJ; j++) {
-    JGroup *jg = compound->GetJGroup(j);
+    const JGroup *jg = compound->GetJGroup(j);
     const int nl = jg->NumLevels(), nch = jg->NumChannels();
     mask.e[j - 1].assign(nl, 0);
     mask.g[j - 1].assign(nl, std::vector<char>(nch, 0));

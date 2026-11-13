@@ -64,7 +64,7 @@ const double kAmu = uconv;  // MeV/u
 // What the kinematics of an experiment line give (ThmResolveKinematics).
 struct ThmReaction {
   ThmDistortion::Kinematics dk;  ///< for distortion=coulomb|optical and the DW vertex
-  PPair *pair = nullptr;         ///< the entrance pair x + A
+  const PPair *pair = nullptr;   ///< the entrance pair x + A
   int pairKey = 0;
   double mX = 0.0;               ///< u, the pair nucleus that is x
   double bind = 0.0;             ///< B(x+s) from the masses (MeV)
@@ -87,7 +87,7 @@ bool ThmResolveKinematics(WorkingCopy &data, const Config &configure, CNuc *theC
                           << std::endl;
       return false;
     }
-  PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(pairKey));
+  const PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(pairKey));
   const int Z[2] = {pair->GetZ(1), pair->GetZ(2)};
   const double M[2] = {pair->GetM(1), pair->GetM(2)};
   const ThmNuclide &b = x.beam, &t = x.target, &sp = x.spectator;
@@ -202,7 +202,7 @@ bool ThmBuildLineshape(WorkingCopy &data, const Config &configure, CNuc *theCNuc
     return false;
   }
   const ThmNuclide &b = x.beam, &t = x.target, &sp = x.spectator;
-  PPair *pair = r.pair;
+  const PPair *pair = r.pair;
   std::shared_ptr<ThmLineshape> shape = std::make_shared<ThmLineshape>();
   shape->experiment = x.name;
   shape->spectator = sp.name;
@@ -235,7 +235,7 @@ bool ThmBuildLineshape(WorkingCopy &data, const Config &configure, CNuc *theCNuc
     bool seen = false;
     for (const ThmLineshape::Exit &e : shape->exits) seen = seen || e.pairKey == key;
     if (seen || !theCNuc->IsPairKey(key)) continue;
-    PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(key));
+    const PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(key));
     int light = exitPair->GetM(1) <= exitPair->GetM(2) ? 1 : 2;
     ThmLineshape::Exit e;
     e.pairKey = key;
@@ -257,7 +257,7 @@ bool ThmBuildDwVertex(WorkingCopy &data, const Config &configure, CNuc *theCNuc,
                       WorkingCopy::ThmGroup &group, const std::string &where, const ThmDistortion::Kinematics &dk) {
   int pairKey = data.Data().GetSegment(group.segments[0])->GetEntranceKey();
   int pairNum = theCNuc->GetPairNumFromKey(pairKey);
-  PPair *pair = theCNuc->GetPair(pairNum);
+  const PPair *pair = theCNuc->GetPair(pairNum);
   // coulombIntegral=1 is refused with it by Config::ReadThmBlock
   // (CheckThmCoulombConsistency).
   const std::string refused =
@@ -268,7 +268,7 @@ bool ThmBuildDwVertex(WorkingCopy &data, const Config &configure, CNuc *theCNuc,
   }
   std::vector<int> ls;
   for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
-    JGroup *jg = theCNuc->GetJGroup(j);
+    const JGroup *jg = theCNuc->GetJGroup(j);
     if (!jg->IsInRMatrix()) continue;
     for (int ch = 1; ch <= jg->NumChannels(); ch++)
       if (jg->GetChannel(ch)->GetPairNum() == pairNum) ls.push_back(jg->GetChannel(ch)->GetL());
@@ -556,7 +556,7 @@ int WorkingCopy::BuildThmGroups(const Config &configure, CNuc *theCNuc) {
         const int exitNum = theCNuc->GetPairNumFromKey(t.exitKey);
         int j = 0;
         for (int jj = 1; jj <= theCNuc->NumJGroups(); jj++) {
-          JGroup *jg = theCNuc->GetJGroup(jj);
+          const JGroup *jg = theCNuc->GetJGroup(jj);
           if (jg->IsInRMatrix() && std::fabs(jg->GetJ() - t.J) < 1.0e-6 && jg->GetPi() == t.parity) j = jj;
         }
         if (j == 0) {
@@ -564,14 +564,14 @@ int WorkingCopy::BuildThmGroups(const Config &configure, CNuc *theCNuc) {
                               << " group with a level in the R matrix." << std::endl;
           return -1;
         }
-        JGroup *jg = theCNuc->GetJGroup(j);
+        const JGroup *jg = theCNuc->GetJGroup(j);
         int found = 0;
         for (int in = 1; in <= jg->NumChannels(); in++) {
-          AChannel *ci = jg->GetChannel(in);
+          const AChannel *ci = jg->GetChannel(in);
           if (ci->GetPairNum() != aa) continue;
           if (t.hasChannels && (std::fabs(ci->GetS() - t.s) > 1.0e-6 || ci->GetL() != t.l)) continue;
           for (int out = 1; out <= jg->NumChannels(); out++) {
-            AChannel *co = jg->GetChannel(out);
+            const AChannel *co = jg->GetChannel(out);
             if (co->GetPairNum() != exitNum) continue;
             if (t.hasChannels && (std::fabs(co->GetS() - t.sp) > 1.0e-6 || co->GetL() != t.lp)) continue;
             for (const ThmCoherentBackground::Combo &o : cb->combos)

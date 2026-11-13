@@ -21,12 +21,12 @@ int Twice(double j) { return (int)std::lround(2.0 * j); }
 
 }  // namespace
 
-std::vector<azure2::PathwayFinalState> ECFinalStates(CNuc &c) {
+std::vector<azure2::PathwayFinalState> ECFinalStates(const CNuc &c) {
   std::vector<azure2::PathwayFinalState> out;
   for (int j = 1; j <= c.NumJGroups(); j++) {
-    JGroup *theFinalJGroup = c.GetJGroup(j);
+    const JGroup *theFinalJGroup = c.GetJGroup(j);
     for (int la = 1; la <= theFinalJGroup->NumLevels(); la++) {
-      ALevel *theFinalLevel = theFinalJGroup->GetLevel(la);
+      const ALevel *theFinalLevel = theFinalJGroup->GetLevel(la);
       if (!theFinalLevel->IsECLevel()) continue;
       azure2::PathwayFinalState f;
       f.state.two_J = Twice(theFinalJGroup->GetJ());
@@ -34,7 +34,7 @@ std::vector<azure2::PathwayFinalState> ECFinalStates(CNuc &c) {
       f.state.photon_partition = theFinalLevel->GetECPairNum() - 1;
       f.state.multipoles = theFinalLevel->GetECMultMask();
       for (int chp = 1; chp <= theFinalJGroup->NumChannels(); chp++) {
-        AChannel *finalChannel = theFinalJGroup->GetChannel(chp);
+        const AChannel *finalChannel = theFinalJGroup->GetChannel(chp);
         f.state.channels.push_back(azure2::physics::FinalStateChannel{
             finalChannel->GetPairNum() - 1, c.GetPair(finalChannel->GetPairNum())->GetPType() == 0, finalChannel->GetL(),
             Twice(finalChannel->GetS())});
@@ -60,19 +60,26 @@ void CNuc::RequestCaptureAy(int entrancePair, int exitPair) {
   captureAyRequests_.push_back(request);
 }
 
+void CNuc::RequestEntrance(int pair) {
+  for (int r : entranceRequests_)
+    if (r == pair) return;
+  entranceRequests_.push_back(pair);
+}
+
 /*!
  * Builds the pathway table from the System's structure, the external-capture final states and the configuration:
- * R-matrix capture, the largest Legendre order, the entrance pairs (PPair::IsEntrance, set while the data are read)
+ * R-matrix capture, the largest Legendre order, the entrance pairs (RequestEntrance, flagged on their PPair here)
  * and the capture-A_y requests.  Run by Initialize after the input transformation; nothing writes the table
  * afterwards.
  */
 void CNuc::BuildPathways(const Config &configure) {
+  for (int pair : entranceRequests_) pairs_[pair - 1].SetEntrance();
   azure2::PathwayTableOptions options;
   options.rmatrix_capture = (configure.paramMask & Config::USE_RMC_FORMALISM) != 0;
   options.max_l_order = configure.maxLOrder;
   for (int aa = 1; aa <= this->NumPairs(); aa++)
-    if (this->GetPair(aa)->IsEntrance()) options.entrances.push_back(aa);
+    if (pairs_[aa - 1].IsEntrance()) options.entrances.push_back(aa);
   options.capture_ay = captureAyRequests_;
-  pathways_ = azure2::BuildPathwayTable(BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure),
+  pathways_ = azure2::BuildPathwayTable(this->SystemStructure(),
                                         ECFinalStates(*this), options);
 }

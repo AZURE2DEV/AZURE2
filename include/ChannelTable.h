@@ -42,7 +42,7 @@ class ChannelTable {
 
   /// The one formula of a row: an open channel from CoulFunc, a closed one (ChannelFunc::IsClosed) from
   /// ChannelFunc::Shift with P = 0.  Not for |E_c| <= ScatteringLength::kThresholdTolerance (Unit's own case).
-  static Row Compute(PPair *pair, int l, int two_j, double energy, const Config &configure);
+  static Row Compute(const PPair *pair, int l, int two_j, double energy, const Config &configure);
 
   /// The table of the given keys (any order, duplicates allowed).  Rows of keys held by `previous` are copied from
   /// it when it was built for the same pairs (charges, masses, radii, thresholds, Coulomb route); the others are

@@ -33,7 +33,7 @@ bool JGroup::IsInRMatrix() const {
  * the position of the level in the vector is returned, otherwise the function returns 0.
  */
 
-int JGroup::IsLevel(ALevel level) {
+int JGroup::IsLevel(ALevel level) const {
   bool b = false;
   int c = 0;
   double tol = 1e-3;
@@ -77,7 +77,7 @@ int JGroup::NumChannels() const {
  * the position of the channel in the vector is returned, otherwise the function returns 0.
  */
 
-int JGroup::IsChannel(AChannel channel) {
+int JGroup::IsChannel(AChannel channel) const {
   bool b = false;
   int c = 0;
   while (!b && c < this->NumChannels()) {

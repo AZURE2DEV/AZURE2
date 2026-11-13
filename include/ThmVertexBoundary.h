@@ -80,7 +80,7 @@ class ThmVertexBoundary {
   static Rule RuleOf(const Config &configure);
 
   /// Channel `channel` (1-based) of J group `jgroup`; `pair` is its particle pair.
-  ThmVertexBoundary(const Config &configure, PPair *pair, JGroup *jgroup, int channel);
+  ThmVertexBoundary(const Config &configure, const PPair *pair, const JGroup *jgroup, int channel);
 
   Rule rule() const { return rule_; }
   bool OnShell() const { return rule_ == ON_SHELL; }
@@ -103,7 +103,7 @@ class ThmVertexBoundary {
   complex OnShellAt(double e);
 
   /*! S_c of `pair` at a compound-system level energy (MeV); with a memo (the run's per-thread scratch), through it. */
-  static double ShiftAtLevelEnergy(PPair *pair, int l, int two_j, double levelEnergy, bool useGSL,
+  static double ShiftAtLevelEnergy(const PPair *pair, int l, int two_j, double levelEnergy, bool useGSL,
                                    ThmShiftMemo *memo = nullptr);
 
  private:

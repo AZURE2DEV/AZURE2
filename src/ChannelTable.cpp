@@ -15,7 +15,7 @@
 #include <omp.h>
 #endif
 
-ChannelTable::Row ChannelTable::Compute(PPair *pair, int l, int two_j, double energy, const Config &configure) {
+ChannelTable::Row ChannelTable::Compute(const PPair *pair, int l, int two_j, double energy, const Config &configure) {
   const bool gsl = !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC);
   ChannelFunc channelFunc(pair, gsl);
   if (channelFunc.IsClosed(energy)) {
@@ -45,7 +45,7 @@ namespace {
 std::vector<std::vector<double>> PairSignatures(CNuc *cnuc, const Config &configure) {
   std::vector<std::vector<double>> s;
   for (int p = 1; p <= cnuc->NumPairs(); p++) {
-    PPair *pair = cnuc->GetPair(p);
+    const PPair *pair = cnuc->GetPair(p);
     CoulFunc coulomb(pair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
     s.push_back({(double)pair->GetPType(), (double)pair->GetZ(1), (double)pair->GetZ(2), pair->GetM(1), pair->GetM(2),
                  pair->GetRedMass(), pair->GetChRad(), pair->GetSepE(), pair->GetExE(),

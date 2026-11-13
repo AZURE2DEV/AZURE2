@@ -112,7 +112,7 @@ static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, int en
                                   const azure2::EntrancePathways &P, const azure2::SpinGroupRow &group,
                                   const azure2::ExternalRow &pathway, double levelEnergy, double cmEnergy,
                                   const ChannelTable *table) {
-  PPair *entrancePair = theCNuc->GetPair(entrance);
+  const PPair *entrancePair = theCNuc->GetPair(entrance);
   const int j = pathway.final_group;
   // A closed entrance channel -- at or below threshold, or so close above it
   // that P = 0 in double precision (ChannelFunc) -- captures nothing: the
@@ -143,8 +143,8 @@ static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, int en
 
   double sqrtGammaPene = pow((inEnergy - levelEnergy) / hbarc, pathway.mult + 0.5);
 
-  AChannel *theFinalChannel = theCNuc->GetJGroup(j)->GetChannel(pathway.final_channel);
-  PPair *theFinalPair = theCNuc->GetPair(theFinalChannel->GetPairNum());
+  const AChannel *theFinalChannel = theCNuc->GetJGroup(j)->GetChannel(pathway.final_channel);
+  const PPair *theFinalPair = theCNuc->GetPair(theFinalChannel->GetPairNum());
   int theInitialLValue;
   double theInitialSValue;
   if (pathway.channel_capture) {
@@ -190,7 +190,7 @@ void Site::CalculateECAmplitudes(WorkingCopy *data, CNuc *theCNuc, const Config 
     for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
       for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++) {
         if (theCNuc->GetJGroup(j)->GetLevel(la)->IsECLevel()) {
-          ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
+          const ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
           int ir = theCNuc->GetPairNumFromKey(this->GetExitKey());
           if (ecLevel->GetECPairNum() == ir) {
             const azure2::ExitRow &exit = ExternalCaptureExit(*theCNuc, aa, ir, segment_key_);

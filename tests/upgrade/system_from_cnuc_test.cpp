@@ -187,7 +187,7 @@ void CheckProject(const ExpProject &exp, const std::string &azr, Basis basis) {
   same(tag + ": number of partitions", (int)sys.num_partitions(), cn.NumPairs());
   for (int a = 0; a < (int)sys.num_partitions() && a < cn.NumPairs(); a++) {
     const phys::Partition &p = sys.partition(a);
-    PPair *pair = cn.GetPair(map.pairOfPartition[a]);
+    const PPair *pair = cn.GetPair(map.pairOfPartition[a]);
     same(tag + ": partition -> pair number", map.pairOfPartition[a], a + 1);
     const std::string w = tag + ": pair " + std::to_string(pair->GetPairKey()) + " ";
     same(w + "type", PairType(p.kind), pair->GetPType());
@@ -215,7 +215,7 @@ void CheckProject(const ExpProject &exp, const std::string &azr, Basis basis) {
   for (int bl = 0; bl < (int)sys.num_blocks() && bl < (int)rmGroups.size(); bl++) {
     const phys::JpiBlock &blk = sys.block(bl);
     same(tag + ": block -> J-group", map.groupOfBlock[bl], rmGroups[bl]);
-    JGroup *g = cn.GetJGroup(map.groupOfBlock[bl]);
+    const JGroup *g = cn.GetJGroup(map.groupOfBlock[bl]);
     const std::string w = tag + ": block " + std::to_string(bl) + " ";
     same(w + "2J", (double)blk.two_J(), 2.0 * g->GetJ());
     same(w + "pi", blk.parity(), g->GetPi());
@@ -223,7 +223,7 @@ void CheckProject(const ExpProject &exp, const std::string &azr, Basis basis) {
     same(w + "channels", (int)blk.num_channels(), g->NumChannels());
     for (int k = 0; k < (int)blk.num_channels() && k < g->NumChannels(); k++) {
       same(w + "block channel -> group channel", map.channelOfBlockChannel[bl][k], k + 1);
-      AChannel *ch = g->GetChannel(map.channelOfBlockChannel[bl][k]);
+      const AChannel *ch = g->GetChannel(map.channelOfBlockChannel[bl][k]);
       const phys::Channel &c = sys.channel(blk.channel(k));
       distinct.insert(std::make_tuple(ch->GetPairNum(), ch->GetRadType(), ch->GetL(), ch->GetS()));
       same(w + "channel pair", c.partition + 1, ch->GetPairNum());
@@ -240,7 +240,7 @@ void CheckProject(const ExpProject &exp, const std::string &azr, Basis basis) {
     same(w + "gamma size", blk.gamma().size(), blk.num_levels() * blk.num_channels());
     for (int lam = 0; lam < (int)blk.num_levels() && lam < (int)rmLevels.size(); lam++) {
       same(w + "block level -> group level", map.levelOfBlockLevel[bl][lam], rmLevels[lam]);
-      ALevel *lev = g->GetLevel(rmLevels[lam]);
+      const ALevel *lev = g->GetLevel(rmLevels[lam]);
       same(w + "E", blk.E(lam), lev->GetE());
       for (int k = 0; k < (int)blk.num_channels(); k++) {
         same(w + "gamma", blk.gamma(lam, k), lev->GetGamma(k + 1));

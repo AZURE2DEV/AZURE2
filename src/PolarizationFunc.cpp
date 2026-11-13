@@ -114,9 +114,9 @@ complex AmplitudeMatrix::Get(double s, double v, double sp, double vp) const {
 
 void AmplitudeMatrix::AddPathway(int jNum, int chNum, int chpNum,
                                  complex tMatrixElement) {
-  JGroup *jgroup = compound_->GetJGroup(jNum);
-  AChannel *entrance = jgroup->GetChannel(chNum);
-  AChannel *exitCh = jgroup->GetChannel(chpNum);
+  const JGroup *jgroup = compound_->GetJGroup(jNum);
+  const AChannel *entrance = jgroup->GetChannel(chNum);
+  const AChannel *exitCh = jgroup->GetChannel(chpNum);
 
   const double jValue = jgroup->GetJ();
   const int l = entrance->GetL();
@@ -149,9 +149,9 @@ void AmplitudeMatrix::AddPathway(int jNum, int chNum, int chpNum,
 
 void AmplitudeMatrix::AddPathwayCoefficients(int jNum, int chNum, int chpNum, complex tMatrixElement,
                                              complex *coefficients, int nLp) const {
-  JGroup *jgroup = compound_->GetJGroup(jNum);
-  AChannel *entrance = jgroup->GetChannel(chNum);
-  AChannel *exitCh = jgroup->GetChannel(chpNum);
+  const JGroup *jgroup = compound_->GetJGroup(jNum);
+  const AChannel *entrance = jgroup->GetChannel(chNum);
+  const AChannel *exitCh = jgroup->GetChannel(chpNum);
 
   const double jValue = jgroup->GetJ();
   const int l = entrance->GetL();
@@ -304,9 +304,9 @@ std::vector<complex> AmplitudeMatrix::AnalyzingPowerBar() const {
 
 complex AmplitudeMatrix::PathwayAdjoint(int jNum, int chNum, int chpNum,
                                         const std::vector<complex> &bar) const {
-  JGroup *jgroup = compound_->GetJGroup(jNum);
-  AChannel *entrance = jgroup->GetChannel(chNum);
-  AChannel *exitCh = jgroup->GetChannel(chpNum);
+  const JGroup *jgroup = compound_->GetJGroup(jNum);
+  const AChannel *entrance = jgroup->GetChannel(chNum);
+  const AChannel *exitCh = jgroup->GetChannel(chpNum);
 
   const double jValue = jgroup->GetJ();
   const int l = entrance->GetL();

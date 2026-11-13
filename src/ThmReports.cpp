@@ -210,7 +210,7 @@ bool WorkingCopy::ThmLineshapeTable(const std::string &name, const std::vector<d
   }
   int entranceKey = Data().GetSegment(group->segments[0])->GetEntranceKey();
   int aa = compound->GetPairNumFromKey(entranceKey);
-  PPair *entrance = compound->GetPair(aa);
+  const PPair *entrance = compound->GetPair(aa);
   double threshold = entrance->GetSepE() + entrance->GetExE();
   for (const ThmLineshape::Exit &x : ls.exits) {
     ThmLineshapeReport::Exit ex;
@@ -225,7 +225,7 @@ bool WorkingCopy::ThmLineshapeTable(const std::string &name, const std::vector<d
     }
     int exitNum = compound->GetPairNumFromKey(x.pairKey);
     for (int j = 1; j <= compound->NumJGroups(); j++) {
-      JGroup *jg = compound->GetJGroup(j);
+      const JGroup *jg = compound->GetJGroup(j);
       if (!jg->IsInRMatrix()) continue;
       bool in = false, outCh = false;
       for (int ch = 1; ch <= jg->NumChannels(); ch++) {
@@ -234,7 +234,7 @@ bool WorkingCopy::ThmLineshapeTable(const std::string &name, const std::vector<d
       }
       if (!in || !outCh) continue;
       for (int la = 1; la <= jg->NumLevels(); la++) {
-        ALevel *level = jg->GetLevel(la);
+        const ALevel *level = jg->GetLevel(la);
         if (!level->IsInRMatrix()) continue;
         ThmLineshapeReport::Level lv;
         lv.jgroup = j;
@@ -323,7 +323,7 @@ bool WorkingCopy::ThmVertexTable(const std::string &name, const std::vector<doub
   }
   const bool useGSL = !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC);
   const int aa = compound->GetPairNumFromKey(group->pairKey);
-  PPair *pair = compound->GetPair(aa);
+  const PPair *pair = compound->GetPair(aa);
   if (pair->GetPType() != 0) {
     why = "THM experiment '" + name + "': the entrance pair is not a particle pair";
     return false;
@@ -427,10 +427,10 @@ bool WorkingCopy::ThmVertexTable(const std::string &name, const std::vector<doub
       out.rho.push_back(row);
     }
   for (int j = 1; j <= compound->NumJGroups(); j++) {
-    JGroup *jg = compound->GetJGroup(j);
+    const JGroup *jg = compound->GetJGroup(j);
     if (!jg->IsInRMatrix()) continue;
     for (int ch = 1; ch <= jg->NumChannels(); ch++) {
-      AChannel *c = jg->GetChannel(ch);
+      const AChannel *c = jg->GetChannel(ch);
       if (c->GetPairNum() != aa) continue;
       ThmVertexReport::Channel cr;
       cr.jgroup = j;
@@ -451,7 +451,7 @@ bool WorkingCopy::ThmVertexTable(const std::string &name, const std::vector<doub
         }
       const int li = dw ? dw->LIndex(cr.l) : -1;
       for (int la = 1; la <= jg->NumLevels(); la++) {
-        ALevel *level = jg->GetLevel(la);
+        const ALevel *level = jg->GetLevel(la);
         if (!level->IsInRMatrix()) continue;
         ThmVertexReport::Level lr;
         lr.level = la;

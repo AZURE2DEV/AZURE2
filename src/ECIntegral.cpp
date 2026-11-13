@@ -23,7 +23,7 @@ extern double DoubleFactorial(int);
  * The memo belongs to the integral's parameters and is cleared at the start of each FW/GW Integrate().
  */
 
-ECIntegral::ECIntegral(PPair *pPair, const Config &configure) : scratch_(configure.scratch->ForThisThread().ec) {
+ECIntegral::ECIntegral(const PPair *pPair, const Config &configure) : scratch_(configure.scratch->ForThisThread().ec) {
   params_.coulFunc = std::make_unique<CoulFunc>(pPair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
   // The terms of one l_i and energy share their radii (not in the reaction-rate mode, whose energies never recur).
   if (!(configure.paramMask & Config::CALCULATE_REACTION_RATE)) params_.coulFunc->SetRadialMemo(&scratch_.radial);

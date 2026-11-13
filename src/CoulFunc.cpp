@@ -17,7 +17,7 @@
  * The CoulFunc object is created with reference to a PPair object.
  */
 
-CoulFunc::CoulFunc(PPair *pPair, bool useGSLFunctions) :
+CoulFunc::CoulFunc(const PPair *pPair, bool useGSLFunctions) :
   useGSLFunctions_(useGSLFunctions),
   pair_(pPair),
   potential_(pPair->GetHybridPotential()) {

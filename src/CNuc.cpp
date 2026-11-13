@@ -53,7 +53,7 @@ int Twice(double j) { return (int)std::lround(2.0 * j); }
  * Returns true if a specified pair key exists in the PPair vector, otherwise returns false.
  */
 
-bool CNuc::IsPairKey(int key) {
+bool CNuc::IsPairKey(int key) const {
   bool b = false;
   int c = 0;
   while (!b && c < this->NumPairs()) {
@@ -63,9 +63,9 @@ bool CNuc::IsPairKey(int key) {
   return b;
 }
 
-std::vector<int> CNuc::CapturePairKeys(int entranceKey) {
+std::vector<int> CNuc::CapturePairKeys(int entranceKey) const {
   std::vector<int> keys;
-  PPair *entrance = GetPairFromKey(entranceKey);
+  const PPair *entrance = GetPairFromKey(entranceKey);
   if (!entrance) return keys;
   for (int i = 1; i <= NumPairs(); i++)
     if (GetPair(i)->GetPType() == 10 && GetPair(i)->GetNucleus() == entrance->GetNucleus())
@@ -73,8 +73,8 @@ std::vector<int> CNuc::CapturePairKeys(int entranceKey) {
   return keys;
 }
 
-std::string CNuc::RatePairsProblem(int entranceKey, int exitKey) {
-  PPair *entrance = GetPairFromKey(entranceKey);
+std::string CNuc::RatePairsProblem(int entranceKey, int exitKey) const {
+  const PPair *entrance = GetPairFromKey(entranceKey);
   if (!entrance) return "Reaction rate entrance pair " + std::to_string(entranceKey) + " does not exist in compound nucleus.";
   if (entrance->GetPType() != 0)
     return "Reaction rate entrance pair " + std::to_string(entranceKey) + " is not a particle pair.";
@@ -114,7 +114,7 @@ int CNuc::IsPair(PPair pair) {
   bool b = false;
   int c = 0;
   while (!b && c < this->NumPairs()) {
-    if (pair.GetPairKey() == this->GetPair(c + 1)->GetPairKey()) b = true;
+    if (pair.GetPairKey() == this->Pair(c + 1)->GetPairKey()) b = true;
     c++;
   }
   if (b)
@@ -134,9 +134,9 @@ int CNuc::IsJGroup(JGroup jGroup) {
   while (!b && c < this->NumJGroups()) {
     // A group belongs to one compound nucleus: the same J^pi of another
     // nucleus in the file is a different group, with its own level matrix.
-    if (jGroup.GetJ() == this->GetJGroup(c + 1)->GetJ() &&
-        jGroup.GetPi() == this->GetJGroup(c + 1)->GetPi() &&
-        jGroup.GetNucleus() == this->GetJGroup(c + 1)->GetNucleus()) b = true;
+    if (jGroup.GetJ() == this->Group(c + 1)->GetJ() &&
+        jGroup.GetPi() == this->Group(c + 1)->GetPi() &&
+        jGroup.GetNucleus() == this->Group(c + 1)->GetNucleus()) b = true;
     c++;
   }
   if (b)
@@ -151,10 +151,6 @@ int CNuc::IsJGroup(JGroup jGroup) {
 
 int CNuc::NumNuclei() const {
   return nuclei_.size();
-}
-
-CompoundNucleus *CNuc::GetNucleus(int nucleusNum) {
-  return &nuclei_[nucleusNum - 1];
 }
 
 const CompoundNucleus *CNuc::GetNucleus(int nucleusNum) const {
@@ -184,7 +180,7 @@ int CNuc::FindOrAddNucleus(int z, int a) {
  * If the pair exists, the position in the vector is returned.  Otherwise, the function returns 0.
  */
 
-int CNuc::GetPairNumFromKey(int key) {
+int CNuc::GetPairNumFromKey(int key) const {
   bool b = false;
   int c = 0;
   while (!b && c < this->NumPairs()) {
@@ -278,7 +274,7 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
         std::map<int, int>::iterator it = ecPairs.find(PairNum);
         if (it == ecPairs.end()) ecPairs[PairNum] = Line.ecMultMask();
       }
-      const int nucleusNum = this->GetPair(PairNum)->GetNucleus();
+      const int nucleusNum = this->Pair(PairNum)->GetNucleus();
       std::map<int, int>::iterator lvl = levelNucleus.find(Line.levelID());
       if (lvl == levelNucleus.end()) {
         levelNucleus[Line.levelID()] = nucleusNum;
@@ -291,24 +287,24 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
         return -1;
       }
       JGroup NewJGroup(Line);
-      NewJGroup.SetNucleus(nucleusNum, this->GetPair(PairNum)->GetNucleusZ(), this->GetPair(PairNum)->GetNucleusA());
+      NewJGroup.SetNucleus(nucleusNum, this->Pair(PairNum)->GetNucleusZ(), this->Pair(PairNum)->GetNucleusA());
       JGroupNum = this->IsJGroup(NewJGroup);
       if (!JGroupNum) {
         this->AddJGroup(NewJGroup);
         JGroupNum = this->IsJGroup(NewJGroup);
       }
       AChannel NewChannel(Line, PairNum);
-      ChannelNum = this->GetJGroup(JGroupNum)->IsChannel(NewChannel);
+      ChannelNum = this->Group(JGroupNum)->IsChannel(NewChannel);
       if (!ChannelNum) {
-        this->GetJGroup(JGroupNum)->AddChannel(NewChannel);
-        ChannelNum = this->GetJGroup(JGroupNum)->IsChannel(NewChannel);
-        if (this->GetJGroup(JGroupNum)->GetChannel(ChannelNum)->GetL() > maxLValue &&
-            this->GetJGroup(JGroupNum)->GetChannel(ChannelNum)->GetRadType() == 'P')
-          maxLValue = this->GetJGroup(JGroupNum)->GetChannel(ChannelNum)->GetL();
+        this->Group(JGroupNum)->AddChannel(NewChannel);
+        ChannelNum = this->Group(JGroupNum)->IsChannel(NewChannel);
+        if (this->Group(JGroupNum)->GetChannel(ChannelNum)->GetL() > maxLValue &&
+            this->Group(JGroupNum)->GetChannel(ChannelNum)->GetRadType() == 'P')
+          maxLValue = this->Group(JGroupNum)->GetChannel(ChannelNum)->GetL();
 
         // Calculate and set Wigner Limit for the newly created channel
-        PPair *channelPair = this->GetPair(PairNum);
-        this->GetJGroup(JGroupNum)->GetChannel(ChannelNum)->SetWignerLimit(channelPair->GetRedMass(), channelPair->GetChRad());
+        PPair *channelPair = this->Pair(PairNum);
+        this->Group(JGroupNum)->GetChannel(ChannelNum)->SetWignerLimit(channelPair->GetRedMass(), channelPair->GetChRad());
       }
       // A line belongs to a level of its J-group that carries the same level ID within 1 keV, or failing that
       // to one at the identical energy.  Until 2026-10-24 any level within 1 keV was taken (JGroup::IsLevel),
@@ -317,7 +313,7 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
       // fit lost three parameters.  Lines with other IDs within 1 keV now make their own level, with a warning.
       // The level of the line: io::LevelGrouper, the rule pyazr uses too (docs/upgrade/project.md, P2).
       ALevel NewLevel(Line);
-      JGroup *group = this->GetJGroup(JGroupNum);
+      JGroup *group = this->Group(JGroupNum);
       const azure2::io::LevelGrouper::Slot slot = levelGrouper.Assign(JGroupNum, NewLevel.GetE(), Line.levelID());
       if (slot.level > group->NumLevels()) group->AddLevel(NewLevel);
       LevelNum = slot.level;
@@ -334,7 +330,7 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
                             << std::endl;
       // The width belongs to the GROUP's channel number: levels of one J-group may list their channel
       // lines in a different order, or not list a channel another level of the group carries.
-      this->GetJGroup(JGroupNum)->GetLevel(LevelNum)->SetGammaFromLine(ChannelNum, Line);
+      this->Group(JGroupNum)->GetLevel(LevelNum)->SetGammaFromLine(ChannelNum, Line);
       channelsListed[std::make_pair(JGroupNum, LevelNum)].push_back(ChannelNum);
     }
   }
@@ -348,7 +344,7 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
   // (reported by the A = 4 isospin session).  Widths now go to their group channel number; a channel a level
   // does not list gets a zero, fixed width, with a warning, and a different line order is reported.
   for (const auto &entry : channelsListed) {
-    JGroup *group = this->GetJGroup(entry.first.first);
+    JGroup *group = this->Group(entry.first.first);
     ALevel *level = group->GetLevel(entry.first.second);
     const std::vector<int> &listed = entry.second;
     std::ostringstream what;
@@ -368,7 +364,7 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
       if (seen.count(ch)) continue;
       AChannel *c = group->GetChannel(ch);
       configure.outStream << "WARNING: " << what.str() << " has no line for channel " << ch << " of its J-group (pair "
-                          << this->GetPair(c->GetPairNum())->GetPairKey() << ", l = " << c->GetL() << ", s = " << c->GetS()
+                          << this->Pair(c->GetPairNum())->GetPairKey() << ", l = " << c->GetL() << ", s = " << c->GetS()
                           << "); a zero, fixed width is used." << std::endl;
     }
     level->PadChannels(group->NumChannels());
@@ -383,14 +379,14 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
                           << this->NumPairs() << "." << std::endl;
       return -1;
     }
-    PPair *changedPair = this->GetPair(it->first);
+    PPair *changedPair = this->Pair(it->first);
     changedPair->SetChRad(it->second);
     // The Wigner limits above were computed inside the parse loop, i.e. with
     // the radius as written in the .azr.  Redo them for the overridden pair,
     // or every theta^2 reported after a radius change is against the old limit.
     for (int j = 1; j <= this->NumJGroups(); j++) {
-      for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
-        AChannel *theChannel = this->GetJGroup(j)->GetChannel(ch);
+      for (int ch = 1; ch <= this->Group(j)->NumChannels(); ch++) {
+        AChannel *theChannel = this->Group(j)->GetChannel(ch);
         if (theChannel->GetPairNum() == it->first)
           theChannel->SetWignerLimit(changedPair->GetRedMass(),
                                      changedPair->GetChRad());
@@ -398,7 +394,7 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
     }
   }
 
-  for (int p = 1; p <= this->NumPairs(); p++) this->GetPair(p)->SetHybridPotential(configure.potentials.PotentialFor(this->GetPair(p)->GetPairKey()));  // a value, none: plain Coulomb
+  for (int p = 1; p <= this->NumPairs(); p++) this->Pair(p)->SetHybridPotential(configure.potentials.PotentialFor(this->Pair(p)->GetPairKey()));  // a value, none: plain Coulomb
   if (configure.includeAllJPi)
     this->AddHardSphereGroups(configure, configure.hardSphereMaxL >= 0 ? configure.hardSphereMaxL : maxLValue);
   if (RefuseForbiddenIdenticalChannels(*this, configure) == -1) return -1;
@@ -406,7 +402,8 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
     if (this->ParseExternalCapture(configure, ecPairs, section.rows) == -1) return -1;
 
   if (this->NumNuclei() > 1)
-    for (int j = 1; j <= this->NumJGroups(); j++) this->GetJGroup(j)->SetNucleusLabelled(true);
+    for (int j = 1; j <= this->NumJGroups(); j++) this->Group(j)->SetNucleusLabelled(true);
+  this->BuildSystems(configure);
 
   if (this->ReadAbundances(configure) == -1) return -1;
   if (std::shared_ptr<const ModelDataSet> read = ModelData::Read(*this, configure, section.rows)) modelData_ = read; else return -1;
@@ -558,7 +555,7 @@ double CNuc::AbundanceSumPenalty(double globalSumSigma) const {
 int CNuc::AddHardSphereGroups(const Config &configure, int maxL) {
   int added = 0;
   for (int aa = 1; aa <= this->NumPairs(); aa++) {
-    PPair *pair = this->GetPair(aa);
+    PPair *pair = this->Pair(aa);
     if (pair->GetPType() != 0) continue;
     double s1 = pair->GetJ(1), s2 = pair->GetJ(2);
     int sPi = pair->GetPi(1) * pair->GetPi(2);
@@ -572,9 +569,9 @@ int CNuc::AddHardSphereGroups(const Config &configure, int maxL) {
           newJGroup.SetInRMatrix(true);
           this->AddJGroup(newJGroup);
           int jGroupNum = this->IsJGroup(newJGroup);
-          JGroup *jg = this->GetJGroup(jGroupNum);
+          JGroup *jg = this->Group(jGroupNum);
           for (int ir = 1; ir <= this->NumPairs(); ir++) {
-            PPair *chPair = this->GetPair(ir);
+            PPair *chPair = this->Pair(ir);
             if (chPair->GetPType() != 0) continue;
             if (chPair->GetNucleus() != pair->GetNucleus()) continue;   // one nucleus per group
             double t1 = chPair->GetJ(1), t2 = chPair->GetJ(2);
@@ -613,7 +610,7 @@ int CNuc::AddHardSphereGroups(const Config &configure, int maxL) {
 int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPairs,
                                const std::vector<azure2::io::LevelRow> &rows) {
   std::vector<int> ecKeys;
-  for (const auto &ec : ecPairs) ecKeys.push_back(this->GetPair(ec.first)->GetPairKey());
+  for (const auto &ec : ecPairs) ecKeys.push_back(this->Pair(ec.first)->GetPairKey());
   const azure2::experiment::LevelTables tables = azure2::experiment::LevelTablesOfRows(rows);
   const std::vector<azure2::experiment::FinalStateOfPair> finals = azure2::experiment::ExternalCaptureFinalStates(tables, ecKeys);
   std::set<int> usedExitKeys = ProjectExitPairKeys(configure);  // the exit pairs of the active data sets (their specs)
@@ -621,7 +618,7 @@ int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPa
   if ((configure.paramMask & Config::CALCULATE_REACTION_RATE) && configure.rateParams.exitPair == -1)
     for (int key : CapturePairKeys(configure.rateParams.entrancePair)) usedExitKeys.insert(key);
   for (std::map<int, int>::iterator ec = ecPairs.begin(); ec != ecPairs.end(); ec++) {
-    PPair *exitPair = this->GetPair(ec->first);
+    PPair *exitPair = this->Pair(ec->first);
     if (exitPair->GetPType() != 10) {
       configure.outStream << "Final state is not a capture pair." << std::endl;
       continue;
@@ -661,22 +658,22 @@ int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPa
       FinalStateOfAnotherPair(*this, configure, finalState.sharedWithPairKey, levelNum, ec->first);
       return -1;
     }
-    this->GetJGroup(jGroupNum)->GetLevel(levelNum)->SetECParams(ec->first, ec->second);
-    for (int ch = 1; ch <= this->GetJGroup(jGroupNum)->NumChannels(); ch++) {
-      PPair *theFinalPair = this->GetPair(this->GetJGroup(jGroupNum)->GetChannel(ch)->GetPairNum());
+    this->Group(jGroupNum)->GetLevel(levelNum)->SetECParams(ec->first, ec->second);
+    for (int ch = 1; ch <= this->Group(jGroupNum)->NumChannels(); ch++) {
+      PPair *theFinalPair = this->Pair(this->Group(jGroupNum)->GetChannel(ch)->GetPairNum());
       double nfIntegralValue = 0.;
       double ecConvert = 0.;
       if (theFinalPair->GetPType() == 0) {
         NFIntegral newNFIntegral(theFinalPair);
-        nfIntegralValue = newNFIntegral(this->GetJGroup(jGroupNum)->GetChannel(ch)->GetL(), theFinalPair->SpinOrbitTwoJ(jValue), exitPair->GetHeavyExE());
+        nfIntegralValue = newNFIntegral(this->Group(jGroupNum)->GetChannel(ch)->GetL(), theFinalPair->SpinOrbitTwoJ(jValue), exitPair->GetHeavyExE());
         WhitFunc newWhitFunc(theFinalPair);
-        double whitConv = newWhitFunc(this->GetJGroup(jGroupNum)->GetChannel(ch)->GetL(), theFinalPair->SpinOrbitTwoJ(jValue),
+        double whitConv = newWhitFunc(this->Group(jGroupNum)->GetChannel(ch)->GetL(), theFinalPair->SpinOrbitTwoJ(jValue),
                                       theFinalPair->GetChRad(),
                                       fabs(exitPair->GetHeavyExE() - theFinalPair->GetSepE() - theFinalPair->GetExE()));
         ecConvert = sqrt(2.0 * theFinalPair->GetRedMass() * theFinalPair->GetChRad() * uconv / pow(hbarc, 2.0)) / whitConv;
       }
-      this->GetJGroup(jGroupNum)->GetLevel(levelNum)->AddNFIntegral(nfIntegralValue);
-      this->GetJGroup(jGroupNum)->GetLevel(levelNum)->AddECConversionFactor(ecConvert);
+      this->Group(jGroupNum)->GetLevel(levelNum)->AddNFIntegral(nfIntegralValue);
+      this->Group(jGroupNum)->GetLevel(levelNum)->AddECConversionFactor(ecConvert);
     }
   }
   return 0;
@@ -750,17 +747,17 @@ void CNuc::FillCompoundFromParamsPhysical(const vector_r &observed) {
   if (!gammaDecays_->Empty()) gammaDecayInputs_ = gammaDecays_->NumbersAt(observed);
   int i = 0;
   for (int j = 1; j <= this->NumJGroups(); j++) {
-    for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
-      ALevel *level = this->GetJGroup(j)->GetLevel(la);
+    for (int la = 1; la <= this->Group(j)->NumLevels(); la++) {
+      ALevel *level = this->Group(j)->GetLevel(la);
       level->SetE(p[i]);
       i++;
       std::vector<double> g;
-      for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
+      for (int ch = 1; ch <= this->Group(j)->NumChannels(); ch++) {
         level->SetGamma(ch, p[i]);
         g.push_back(p[i]);
         i++;
       }
-      level->SetSqrtNFFactor(SqrtNFFactor(*this, this->GetJGroup(j), level, 1.0, g));
+      level->SetSqrtNFFactor(SqrtNFFactor(*this, this->Group(j), level, 1.0, g));
     }
   }
   if (hasAbundanceBlock_)
@@ -788,7 +785,7 @@ bool CNuc::TransformIn(const Config &configure) {
   const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
   const bool formal = !(configure.paramMask & Config::USE_BRUNE_FORMALISM);
   try {
-    const CNucSystem structure = BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure);
+    const CNucSystem &structure = this->SystemStructure();
     const phys::System &system = structure.system;
     const CNucSystemMap &map = structure.map;
     const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, map, configure);
@@ -796,7 +793,7 @@ bool CNuc::TransformIn(const Config &configure) {
     // 1. Observed widths, ANCs and amplitudes -> Brune or Park amplitudes (Eqs. 2.1-2.3).
     for (std::size_t b = 0; b < system.num_blocks(); b++) {
       const int j = map.groupOfBlock[b];
-      JGroup *theJGroup = this->GetJGroup(j);
+      JGroup *theJGroup = this->Group(j);
       const std::vector<int> &levels = map.levelOfBlockLevel[b];
       const std::size_t nc = theJGroup->NumChannels();
       const phys::ProjectLevels in = ProjectLevelsFromCNuc(*this, map, b);
@@ -830,7 +827,7 @@ bool CNuc::TransformIn(const Config &configure) {
     // level's external capture reads.
     for (std::size_t b = 0; b < system.num_blocks(); b++) {
       const int j = map.groupOfBlock[b];
-      JGroup *theJGroup = this->GetJGroup(j);
+      JGroup *theJGroup = this->Group(j);
       const std::vector<int> &levels = map.levelOfBlockLevel[b];
       const std::size_t nc = theJGroup->NumChannels();
       std::vector<double> E, gamma;
@@ -851,7 +848,7 @@ bool CNuc::TransformIn(const Config &configure) {
     // 3. Without the Brune parametrization, the formal parameters (Eq. 4.1), group by group.
     for (std::size_t b = 0; b < system.num_blocks() && formal; b++) {
       const int j = map.groupOfBlock[b];
-      JGroup *theJGroup = this->GetJGroup(j);
+      JGroup *theJGroup = this->Group(j);
       const std::vector<int> &levels = map.levelOfBlockLevel[b];
       const std::size_t nc = theJGroup->NumChannels();
       std::vector<double> E, gamma;
@@ -908,10 +905,10 @@ void CNuc::CalcBoundaryConditions(const Config &configure) {
   // collision matrix (physics/ boundary_values, docs/upgrade/level_parameters.md Eq. 3.1; HANDOFF decision 10).
   const bool formal = !(configure.paramMask & Config::USE_BRUNE_FORMALISM);
   try {
-    const CNucSystem structure = BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure);
+    const CNucSystem &structure = this->SystemStructure();
     const azure2::physics::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, structure.map, configure);
     for (std::size_t b = 0; b < structure.system.num_blocks(); b++) {
-      JGroup *theJGroup = this->GetJGroup(structure.map.groupOfBlock[b]);
+      JGroup *theJGroup = this->Group(structure.map.groupOfBlock[b]);
       std::vector<double> energies;
       for (int la : structure.map.levelOfBlockLevel[b]) energies.push_back(theJGroup->GetLevel(la)->GetE());
       const std::vector<double> B = azure2::physics::boundary_values(structure.system, b, energies, cf);
@@ -947,14 +944,14 @@ void CNuc::FillMnParams(AZUREParams &params, const Config *config) {
   std::string varname;
   int energyIndex = 1;
   for (int j = 1; j <= this->NumJGroups(); j++) {
-    for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
-      ALevel *level = this->GetJGroup(j)->GetLevel(la);
+    for (int la = 1; la <= this->Group(j)->NumLevels(); la++) {
+      ALevel *level = this->Group(j)->GetLevel(la);
       varname = "energy_" + std::to_string(energyIndex);
       params.Add(varname, level->GetE(), 0.1 * level->GetE(), ParameterRecord::LevelEnergy(j, la, energyIndex));
       bool isUnbound = false;
       for (int ir = 1; ir <= this->NumPairs(); ir++) {
-        PPair *pair = this->GetPair(ir);
-        if (pair->GetNucleus() != this->GetJGroup(j)->GetNucleus()) continue;   // thresholds of this nucleus only
+        PPair *pair = this->Pair(ir);
+        if (pair->GetNucleus() != this->Group(j)->GetNucleus()) continue;   // thresholds of this nucleus only
         if (pair->GetPType() == 0 &&
             level->GetE() > (pair->GetSepE() + pair->GetExE())) isUnbound = true;
       }
@@ -964,7 +961,7 @@ void CNuc::FillMnParams(AZUREParams &params, const Config *config) {
 
       // Parameter settings will be applied by ParameterLimitsManager during fit
       int widthIndex = 1;
-      for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
+      for (int ch = 1; ch <= this->Group(j)->NumChannels(); ch++) {
         varname = "width_" + std::to_string(energyIndex) + "_" + std::to_string(widthIndex);
         widthIndex++;
         if (gammaDecays_->AddParameter(params, gammaDecayInputs_, j, la, ch, energyIndex)) continue;  // a gamma_decay record's number
@@ -978,7 +975,7 @@ void CNuc::FillMnParams(AZUREParams &params, const Config *config) {
         // squared; the fit parameter is the amplitude (MeV^1/2), so the bound is its square root (gamma^2_W itself
         // would let theta^2 = gamma^2/gamma^2_W run past 1 by a factor gamma^2_W).
         if (config && (config->paramMask & Config::USE_WIGNER_LIMITS)) {
-          AChannel *channel = this->GetJGroup(j)->GetChannel(ch);
+          AChannel *channel = this->Group(j)->GetChannel(ch);
           double wignerLimit = channel->GetWignerLimit();
           if (channel->GetRadType() == 'P' && wignerLimit > 0.0 && std::isfinite(wignerLimit)) {
             double gammaLimit = sqrt(wignerLimit);
@@ -1016,18 +1013,18 @@ void CNuc::FillCompoundFromParams(const vector_r &params) {
   const vector_r &p = gammaDecays_->Empty() ? params : gammaDecays_->ToEngine(*this, params);  // GammaDecayMap.h
   int i = 0;
   for (int j = 1; j <= this->NumJGroups(); j++) {
-    for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
-      ALevel *level = this->GetJGroup(j)->GetLevel(la);
+    for (int la = 1; la <= this->Group(j)->NumLevels(); la++) {
+      ALevel *level = this->Group(j)->GetLevel(la);
       level->SetFitE(p[i]);
       i++;
       std::vector<double> g;
-      for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
+      for (int ch = 1; ch <= this->Group(j)->NumChannels(); ch++) {
         level->SetFitGamma(ch, p[i]);
         level->SetECGamma(ch, p[i]);
         g.push_back(p[i]);
         i++;
       }
-      level->SetSqrtNFFactor(SqrtNFFactor(*this, this->GetJGroup(j), level, 1.0, g));
+      level->SetSqrtNFFactor(SqrtNFFactor(*this, this->Group(j), level, 1.0, g));
     }
   }
   if (hasAbundanceBlock_)
@@ -1059,8 +1056,8 @@ void CNuc::TransformToBrune(const Config &configure, bool report) {
   if (park) {
     this->CalcShiftFunctions(configure);
     for (int j = 1; j <= this->NumJGroups(); j++)
-      for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
-        ALevel *theLevel = this->GetJGroup(j)->GetLevel(la);
+      for (int la = 1; la <= this->Group(j)->NumLevels(); la++) {
+        ALevel *theLevel = this->Group(j)->GetLevel(la);
         if (report && theLevel->IsInRMatrix() && theLevel->GetParkNorm() <= 0.0) WarnParkNormNotPositive(*this, configure, j, la);
       }
   }
@@ -1069,19 +1066,19 @@ void CNuc::TransformToBrune(const Config &configure, bool report) {
     // the fit values.  A level not in the R-matrix keeps its values.
     const phys::FormalToBruneOptions options;  // the engine's 1e-6 MeV and 1000 iterations
     for (int j = 1; j <= this->NumJGroups(); j++)
-      for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
-        ALevel *theLevel = this->GetJGroup(j)->GetLevel(la);
-        if (theLevel->IsInRMatrix() && this->GetJGroup(j)->IsInRMatrix()) continue;
+      for (int la = 1; la <= this->Group(j)->NumLevels(); la++) {
+        ALevel *theLevel = this->Group(j)->GetLevel(la);
+        if (theLevel->IsInRMatrix() && this->Group(j)->IsInRMatrix()) continue;
         theLevel->SetTransformE(theLevel->GetFitE());
         theLevel->SetTransformIterations(0);
-        for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++)
+        for (int ch = 1; ch <= this->Group(j)->NumChannels(); ch++)
           theLevel->SetTransformGamma(ch, theLevel->GetFitGamma(ch));
       }
-    const CNucSystem structure = BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure);
+    const CNucSystem &structure = this->SystemStructure();
     const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, structure.map, configure);
     for (std::size_t b = 0; b < structure.system.num_blocks(); b++) {
       const int j = structure.map.groupOfBlock[b];
-      JGroup *theJGroup = this->GetJGroup(j);
+      JGroup *theJGroup = this->Group(j);
       const std::vector<int> &levels = structure.map.levelOfBlockLevel[b];
       const std::size_t nc = theJGroup->NumChannels();
       std::vector<double> E, gamma, B(nc);
@@ -1104,11 +1101,11 @@ void CNuc::TransformToBrune(const Config &configure, bool report) {
     }
   } else {
     for (int j = 1; j <= this->NumJGroups(); j++)
-      for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
-        this->GetJGroup(j)->GetLevel(la)->SetTransformIterations(0);
-        this->GetJGroup(j)->GetLevel(la)->SetTransformE(this->GetJGroup(j)->GetLevel(la)->GetFitE());
-        for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++)
-          this->GetJGroup(j)->GetLevel(la)->SetTransformGamma(ch, this->GetJGroup(j)->GetLevel(la)->GetFitGamma(ch));
+      for (int la = 1; la <= this->Group(j)->NumLevels(); la++) {
+        this->Group(j)->GetLevel(la)->SetTransformIterations(0);
+        this->Group(j)->GetLevel(la)->SetTransformE(this->Group(j)->GetLevel(la)->GetFitE());
+        for (int ch = 1; ch <= this->Group(j)->NumChannels(); ch++)
+          this->Group(j)->GetLevel(la)->SetTransformGamma(ch, this->Group(j)->GetLevel(la)->GetFitGamma(ch));
       }
   }
 
@@ -1124,10 +1121,10 @@ void CNuc::ObservedWidths(const Config &configure) {
   const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
   const bool external = (configure.paramMask & Config::USE_EXTERNAL_CAPTURE);
   const bool ignoreZero = (configure.paramMask & Config::IGNORE_ZERO_WIDTHS);
-  const CNucSystem all = BuildSystemFromCNuc(*this, configure, CNucSystemContent::AllGroups);
+  const CNucSystem &all = this->SystemAllGroups();
   const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, all.map, configure);
   for (std::size_t b = 0; b < all.system.num_blocks(); b++) {
-    JGroup *theJGroup = this->GetJGroup(all.map.groupOfBlock[b]);
+    JGroup *theJGroup = this->Group(all.map.groupOfBlock[b]);
     const std::vector<int> &levels = all.map.levelOfBlockLevel[b];
     const std::size_t nc = theJGroup->NumChannels();
     std::vector<double> E, gamma;
@@ -1190,7 +1187,7 @@ vector_r CNuc::GetTransformParams(const Config &) {
   // C (fm^-1/2), mu, Q, B and the Brune amplitude of a gammaIsRWA column, signed, as a <levels> line holds them.
   vector_r params;
   for (int j = 1; j <= this->NumJGroups(); j++) {
-    JGroup *theJGroup = this->GetJGroup(j);
+    JGroup *theJGroup = this->Group(j);
     for (int la = 1; la <= theJGroup->NumLevels(); la++) {
       ALevel *theLevel = theJGroup->GetLevel(la);
       params.push_back(theLevel->GetTransformE());
@@ -1241,8 +1238,8 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
   };
   std::vector<Moved> levels;
   for (int j = 1; j <= this->NumJGroups(); j++) {
-    if (this->GetJGroup(j)->IsInRMatrix()) {
-      JGroup *theJGroup = this->GetJGroup(j);
+    if (this->Group(j)->IsInRMatrix()) {
+      JGroup *theJGroup = this->Group(j);
       for (int la = 1; la <= theJGroup->NumLevels(); la++) {
         ALevel *theLevel = theJGroup->GetLevel(la);
         if (theLevel->IsInRMatrix()) {
@@ -1259,7 +1256,7 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
           const int firstOfLevel = (int)derivatives.size();
           for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
             AChannel *theChannel = theJGroup->GetChannel(ch);
-            PPair *thePair = this->GetPair(theChannel->GetPairNum());
+            PPair *thePair = this->Pair(theChannel->GetPairNum());
             if (thePair->GetPType() == 0) {
               if (!recompute && !second) continue;
               int lValue = theChannel->GetL();
@@ -1374,7 +1371,7 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
       double parkNorm = 1.0;
       for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
         AChannel *theChannel = theJGroup->GetChannel(ch);
-        if (theChannel->GetRadType() == 'P' && this->GetPair(theChannel->GetPairNum())->GetPType() == 0)
+        if (theChannel->GetRadType() == 'P' && this->Pair(theChannel->GetPairNum())->GetPType() == 0)
           parkNorm -= pow(theLevel->GetFitGamma(ch), 2.0) * theLevel->GetShiftDerivative(ch);
       }
       theLevel->SetParkNorm(parkNorm);
@@ -1408,18 +1405,18 @@ bool CNuc::ConvertAmplitudeBasis(ROOT::Minuit2::MnUserParameters &p, int from, i
   std::map<std::pair<int, int>, int> energyIndex;
   int i = 0;
   for (int j = 1; j <= this->NumJGroups(); j++)
-    for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
+    for (int la = 1; la <= this->Group(j)->NumLevels(); la++) {
       energyIndex[{j, la}] = i;
-      i += 1 + this->GetJGroup(j)->NumChannels();
+      i += 1 + this->Group(j)->NumChannels();
     }
   // physics/ park_from_brune, brune_from_park on each R-matrix block (level_parameters.md Eq. 2.3); the errors
   // scale with the amplitudes, by J^1/2 or J^-1/2.
-  const CNucSystem structure = BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure);
+  const CNucSystem &structure = this->SystemStructure();
   const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, structure.map, configure);
   for (std::size_t b = 0; b < structure.system.num_blocks(); b++) {
     const int j = structure.map.groupOfBlock[b];
     const std::vector<int> &levels = structure.map.levelOfBlockLevel[b];
-    const int nc = this->GetJGroup(j)->NumChannels();
+    const int nc = this->Group(j)->NumChannels();
     std::vector<double> E, gamma, J;
     for (int la : levels) {
       const int e = energyIndex[{j, la}];
@@ -1458,8 +1455,8 @@ void CNuc::InvalidateShiftFunctions(const Config &configure) {
     memo.values.clear();
   }
   for (int j = 1; j <= this->NumJGroups(); j++)
-    for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++)
-      this->GetJGroup(j)->GetLevel(la)->InvalidateShiftFunctions();
+    for (int la = 1; la <= this->Group(j)->NumLevels(); la++)
+      this->Group(j)->GetLevel(la)->InvalidateShiftFunctions();
 }
 
 /*!
@@ -1473,7 +1470,7 @@ void CNuc::InvalidateShiftFunctions(const Config &configure) {
 double CNuc::ParkNormPenalty() {
   double penalty = 0.0;
   for (int j = 1; j <= this->NumJGroups(); j++) {
-    JGroup *theJGroup = this->GetJGroup(j);
+    JGroup *theJGroup = this->Group(j);
     if (!theJGroup->IsInRMatrix()) continue;
     for (int la = 1; la <= theJGroup->NumLevels(); la++) {
       ALevel *theLevel = theJGroup->GetLevel(la);
@@ -1489,16 +1486,15 @@ double CNuc::ParkNormPenalty() {
  * Returns a pointer to the particle pair specified by a position in the PPair vector.
  */
 
-PPair *CNuc::GetPair(int pairNum) {
-  PPair *b = &pairs_[pairNum - 1];
-  return b;
+PPair *CNuc::Pair(int pairNum) {
+  return &pairs_[pairNum - 1];
 }
 
 const PPair *CNuc::GetPair(int pairNum) const {
   return &pairs_[pairNum - 1];
 }
 
-PPair *CNuc::GetPairFromKey(int key) {
+const PPair *CNuc::GetPairFromKey(int key) const {
   const int num = GetPairNumFromKey(key);
   return num > 0 ? GetPair(num) : nullptr;
 }
@@ -1507,9 +1503,12 @@ PPair *CNuc::GetPairFromKey(int key) {
  * Returns a pointer to the \f$ J^\pi \f$ group specified by a position in the JGroup vector.
  */
 
-JGroup *CNuc::GetJGroup(int jGroupNum) {
-  JGroup *b = &jgroups_[jGroupNum - 1];
-  return b;
+JGroup *CNuc::Group(int jGroupNum) {
+  return &jgroups_[jGroupNum - 1];
+}
+
+ALevel *CNuc::MutableLevel(int j, int la) {
+  return jgroups_[j - 1].GetLevel(la);
 }
 
 const JGroup *CNuc::GetJGroup(int jGroupNum) const {

@@ -7,7 +7,7 @@
 #include <cmath>
 #include "azure2/physics/Derivatives.h"
 
-ChannelFunc::ChannelFunc(PPair *pair, bool useGSLFunctions)
+ChannelFunc::ChannelFunc(const PPair *pair, bool useGSLFunctions)
     : pair_(pair),
       useGSL_(useGSLFunctions),
       threshold_(pair->GetSepE() + pair->GetExE()),
@@ -25,7 +25,7 @@ ShftFunc &ChannelFunc::shft() {
   return *shft_;
 }
 
-bool ChannelFunc::IsCoulombThreshold(PPair *pair, double e) {
+bool ChannelFunc::IsCoulombThreshold(const PPair *pair, double e) {
   const double z1z2 = pair->GetZ(1) * pair->GetZ(2);
   if (!(e > 0.0) || z1z2 == 0.0) return false;
   const double eta = std::sqrt(uconv / 2.) * fstruc * z1z2 * std::sqrt(pair->GetRedMass() / e);

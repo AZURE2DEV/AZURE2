@@ -47,6 +47,7 @@
 #include <vector>
 
 #include "AZURECalc.h"
+#include "ProjectSetup.h"
 #include "AZURECalcMCMC.h"
 #include "AZUREParams.h"
 #include "CNuc.h"
@@ -115,6 +116,7 @@ struct Model {
       return;
     }
     RequestCaptureAyTerms(*compound, *data);
+    RequestDataEntrances(*compound, cfg);
     compound->Initialize(cfg);
     ok = data->Initialize(compound, cfg) != -1;
     compound->FillMnParams(params, &cfg);

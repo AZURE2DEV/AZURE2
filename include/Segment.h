@@ -155,14 +155,14 @@ class Segment {
   /// energy shift (Convert) and of the leaves, written into the term's frame and point.  With convertValue (false for
   /// a ratio: dimensionless) the value and its uncertainty carry dOmega_lab/dOmega_cm.  False where the lab angle is
   /// beyond the kinematic maximum, with the maximum and the reason in `limit`; the caller reports it.
-  bool ConvertRowToCM(WorkingCopy &data, int t, int i, PPair *entrancePair, PPair *exitPair, bool convertValue,
+  bool ConvertRowToCM(WorkingCopy &data, int t, int i, const PPair *entrancePair, const PPair *exitPair, bool convertValue,
                       BeyondRange beyond, azure2::experiment::AngleLimit &limit) const;
   /// How the rows of term t with these pairs are converted (experiment::FrameRule, the rule of ConvertRowToCM; the
   /// value converted).  experiment::AngleIsLab of it: the term's angle is given in the lab.
-  azure2::experiment::FrameRule TermFrameRule(int t, PPair *entrancePair, PPair *exitPair) const;
+  azure2::experiment::FrameRule TermFrameRule(int t, const PPair *entrancePair, const PPair *exitPair) const;
   /// E_c.m., E_x and the c.m. bin edges of row i of term t alone (the leaf grids are laid out before the leaves'
   /// angles are converted).
-  void ConvertRowEnergyToCM(WorkingCopy &data, int t, int i, PPair *entrancePair, PPair *exitPair) const;
+  void ConvertRowEnergyToCM(WorkingCopy &data, int t, int i, const PPair *entrancePair, const PPair *exitPair) const;
   /// The frame of term t as it stands now in `data` becomes the frame an energy shift starts from
   /// (BeyondRange::Convert); set-up.
   void KeepLoadFrame(const WorkingCopy &data, int t);
@@ -205,7 +205,7 @@ class Segment {
   void MakeYieldTotalLeaf(WorkingCopy &data, int t);
   /// E_c.m. / E_lab of the segment's points, non-relativistic: (M1 + M2) / M2 of the decay pair for a beta-delayed
   /// point, M2 / (M1 + M2) of the entrance pair otherwise (the rigid shift of sub-points, the target-effect grids).
-  static double CMEnergyFactor(PPair *entrancePair, PPair *exitPair);
+  static double CMEnergyFactor(const PPair *entrancePair, const PPair *exitPair);
   /// Orbital angular momentum. Phase-shift segments only.
   int GetL() const;
   /// 1-based position of the TargetEffect in the parent WorkingCopy.

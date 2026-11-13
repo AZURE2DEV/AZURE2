@@ -55,7 +55,7 @@ class WhitFunc {
   /*!
    * The WhitFunc object is created with reference to a PPair object.
    */
-  WhitFunc(PPair *pPair) {
+  WhitFunc(const PPair *pPair) {
     z1_ = pPair->GetZ(1);
     z2_ = pPair->GetZ(2);
     redmass_ = (double)pPair->GetRedMass();

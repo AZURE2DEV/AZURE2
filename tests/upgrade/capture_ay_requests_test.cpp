@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "AZUREParams.h"
+#include "ProjectSetup.h"
 #include "CNuc.h"
 #include "CaptureAyRequests.h"
 #include "Config.h"
@@ -69,6 +70,10 @@ Loaded Load(const std::string &file, Requests requests, bool withData) {
                                                                        : l.data->MakePoints(*l.cfg, l.compound.get());
   if (filled != 0) return l;
   CNuc &c = *l.compound;
+  if (l.cfg->paramMask & Config::CALCULATE_WITH_DATA)
+    RequestDataEntrances(c, *l.cfg);
+  else
+    RequestExtrapolationEntrances(c, *l.cfg);
   if (requests == Requests::FromData) RequestCaptureAyTerms(c, *l.data);
   if (requests == Requests::AllForward || requests == Requests::AllReverse) {
     std::vector<std::pair<int, int> > all;

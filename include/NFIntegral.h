@@ -18,7 +18,7 @@ class NFIntegral {
   /*!
    * The NFIntegral object is created with reference to a PPair object. A WhitFunc object is also created.
    */
-  NFIntegral(PPair *pPair) {
+  NFIntegral(const PPair *pPair) {
     params_.whitFunc = std::make_unique<WhitFunc>(pPair);
     chanrad_ = pPair->GetChRad();
     total_sep_e_ = pPair->GetSepE() + pPair->GetExE();

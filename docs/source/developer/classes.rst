@@ -66,9 +66,15 @@ the specs of ``BuiltProject``), which ``Config`` keeps as
 ``<levels>`` rows: pairs (``PPair``) and :math:`J^\pi` groups (``JGroup``),
 each with its channels (``AChannel``) and levels (``ALevel``). The levels
 hold the parameter vector's values, so ``CNuc`` is copied for every
-evaluation that runs at the same time; its pairs and channels do not change
-after the set-up. ``CNucSystem`` is the ``azure2::physics::System`` built
-from a ``CNuc`` when a physics function needs one, and the
+evaluation that runs at the same time; its pairs, groups and channels do not
+change after the set-up, and the compiler holds to it: outside ``CNuc``'s own
+set-up they are reached through ``const`` pointers only (``GetPair``,
+``GetJGroup``), and the level values that move with the parameters through
+``CNuc::MutableLevel``. The entrance pairs are an input of the set-up
+(``CNuc::RequestEntrance``, collected from the specs by
+``RequestDataEntrances`` or ``RequestExtrapolationEntrances``,
+``src/ProjectSetup.cpp``). ``CNucSystem`` is the ``azure2::physics::System``
+of a ``CNuc``, built once by ``CNuc::Fill`` and shared by the copies, and the
 ``PathwayTable`` is built from it once. ``WorkingCopy`` builds the
 ``DataSet`` (segments, target effects) from the ``DatasetSpec`` rows while it
 is set up and then holds it as ``std::shared_ptr<const DataSet>``.

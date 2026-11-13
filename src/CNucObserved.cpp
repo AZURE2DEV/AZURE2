@@ -15,8 +15,8 @@ bool CNuc::ObservedOfFitValues(const Config &configure) {
   // observed, external amplitude, W) are read only by the output and by ObservedWidths itself.
   std::vector<double> sqrtNF;
   for (int j = 1; j <= this->NumJGroups(); j++)
-    for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++)
-      sqrtNF.push_back(this->GetJGroup(j)->GetLevel(la)->GetSqrtNFFactor());
+    for (int la = 1; la <= this->Group(j)->NumLevels(); la++)
+      sqrtNF.push_back(this->Group(j)->GetLevel(la)->GetSqrtNFFactor());
   bool ok = true;
   try {
     this->TransformToBrune(configure, false);
@@ -26,13 +26,13 @@ bool CNuc::ObservedOfFitValues(const Config &configure) {
   }
   std::size_t k = 0;
   for (int j = 1; j <= this->NumJGroups(); j++)
-    for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++)
-      this->GetJGroup(j)->GetLevel(la)->SetSqrtNFFactor(sqrtNF[k++]);
+    for (int la = 1; la <= this->Group(j)->NumLevels(); la++)
+      this->Group(j)->GetLevel(la)->SetSqrtNFFactor(sqrtNF[k++]);
   return ok;
 }
 
 void CNuc::SetFitLevelParameter(int j, int la, int ch, double value) {
-  JGroup *group = this->GetJGroup(j);
+  JGroup *group = this->Group(j);
   ALevel *level = group->GetLevel(la);
   if (ch == 0) {
     level->SetFitE(value);

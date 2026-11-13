@@ -367,7 +367,7 @@ void Unit::SetFrame(const azure2::experiment::FrameRow &row) {
 /*!
  * Calculates the excitation energy from the c.m. energy: E_x = E_cm + S + E* of the pair.
  */
-void Site::ConvertExcitationEnergy(PPair *pPair) {
+void Site::ConvertExcitationEnergy(const PPair *pPair) {
   excitation_energy_ = azure2::experiment::ExcitationEnergy(cm_energy_, PartitionOf(pPair));
 }
 
@@ -377,7 +377,7 @@ void Site::ConvertExcitationEnergy(PPair *pPair) {
  * (azure2::experiment::RelativisticLabToCM).  Where the lab angle is reached from two c.m. angles the root nearest
  * \p nrCMAngle is taken.  Returns false if the angle is not reached.
  */
-bool Site::RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nrCMAngle, double &cmAngle,
+bool Site::RelativisticLabToCM(const PPair *entrancePair, const PPair *exitPair, double nrCMAngle, double &cmAngle,
                                  double &factor) const {
   azure2::experiment::AngleLimit lim;
   const bool ok = azure2::experiment::RelativisticLabToCM(PartitionOf(entrancePair), PartitionOf(exitPair),
@@ -391,7 +391,7 @@ bool Site::RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nrCM
  * Segment::RatioTermFrameFactor).  Relativistic=1: the relativistic map's factor where it reaches the lab angle,
  * otherwise -- unlike the frame of the data, which keeps the load-time factor -- the non-relativistic one.
  */
-double Site::CalculateCrossSectionConversionFactor(PPair *entrancePair, PPair *exitPair) {
+double Site::CalculateCrossSectionConversionFactor(const PPair *entrancePair, const PPair *exitPair) {
   double conversionFactor;
   double relAngle;
   if (entrancePair->FunctionSettings().relativistic && this->RelativisticLabToCM(entrancePair, exitPair, this->GetCMAngle(), relAngle, conversionFactor)) {
@@ -404,7 +404,7 @@ double Site::CalculateCrossSectionConversionFactor(PPair *entrancePair, PPair *e
 /*!
  * The lab-to-c.m. conversion factor for gamma rays (the RATIO path of azure2::EvaluateModelPoint).
  */
-double Site::CalculateCrossSectionGammaConversionFactor(PPair *entrancePair) {
+double Site::CalculateCrossSectionGammaConversionFactor(const PPair *entrancePair) {
   return azure2::experiment::PhotonJacobian(PartitionOf(entrancePair), this->GetLabEnergy(), this->GetLabAngle());
 }
 
@@ -603,8 +603,8 @@ azure2::RowSet Unit::RowSetOver(const WorkingCopy &data, int first, int count, i
   }
   if (set.kind == SiteObservable::kAnalyzingPower) {
     // the factors of A_y at the readers' angle: Y_l'^mu (particle exits) and P_k^1 (capture)
-    PPair *in = theCNuc->GetPair(theCNuc->GetPairNumFromKey(GetEntranceKey()));
-    PPair *out = theCNuc->GetPair(theCNuc->GetPairNumFromKey(GetExitKey()));
+    const PPair *in = theCNuc->GetPair(theCNuc->GetPairNumFromKey(GetEntranceKey()));
+    const PPair *out = theCNuc->GetPair(theCNuc->GetPairNumFromKey(GetExitKey()));
     set.muMax = Polarization::MaxProjection(in->GetJ(1), in->GetJ(2), out->GetJ(1), out->GetJ(2));
     set.p1.assign(set.rowLength * (std::size_t)positions, 0.0);
     vector_c table;
@@ -620,7 +620,7 @@ azure2::RowSet Unit::RowSetOver(const WorkingCopy &data, int first, int count, i
   if (set.kind == SiteObservable::kElastic ||
       (set.kind == SiteObservable::kAnalyzingPower && GetEntranceKey() == GetExitKey())) {
     // f_C depends on the energy: at the readers' angle and the energies of the slots
-    PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(GetEntranceKey()));
+    const PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(GetEntranceKey()));
     set.coulomb.resize(2 * (std::size_t)count);
     bool spinDependent = false;
     for (int k = 0; k < count; k++)

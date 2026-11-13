@@ -300,16 +300,16 @@ void GenMatrixFunc::CalculateBareCrossSection(Site *point, azure2::Results &resu
       // segment must have a single spin for its (J, l), which WorkingCopy::Initialize enforces: summing
       // the U-matrix elements of two channel spins (as happened up to 2026-10-27) is not a phase.
       const double segmentS = point->GetPhaseS();
-      PPair *entrancePair = compound()->GetPair(aa);
+      const PPair *entrancePair = compound()->GetPair(aa);
       this->ClearTempTMatrices();
       for (int k = 1; k <= theDecay.num_groups; k++) {
         const azure2::SpinGroupRow &g = P.Group(theDecay, k);
         for (int m = 1; m <= g.num_internal; m++) {
           const azure2::InternalRow &theMGroup = P.Internal(g, m);
           double jValue = compound()->GetJGroup(theMGroup.group)->GetJ();
-          AChannel *entranceChannel = compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.ch);
+          const AChannel *entranceChannel = compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.ch);
           int lValue = entranceChannel->GetL();
-          AChannel *exitChannel = compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.chp);
+          const AChannel *exitChannel = compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.chp);
           if (jValue == segmentJ && lValue == segmentL && entranceChannel == exitChannel &&
               (segmentS < 0.0 || std::fabs(entranceChannel->GetS() - segmentS) < 1.0e-6)) {
             complex expCoulPhaseSquared = point->GetExpCoulombPhase(theMGroup.group, theMGroup.ch) *
@@ -440,7 +440,7 @@ Site::ElasticCoefficients GenMatrixFunc::ElasticCoefficientsOf(const Site *point
                                                               const azure2::ExitRow &theDecay, int aa) {
   Site::ElasticCoefficients e;
   e.nuclear = this->LegendreCoefficientsOf(point, P, theDecay, aa, aa);  // builds rt_it_ too (BuildOrderProducts)
-  PPair *pair = compound()->GetPair(aa);
+  const PPair *pair = compound()->GetPair(aa);
   const double geom = point->GetGeometricalFactor();
   e.coulomb = geom / 100.;
   const bool spinDependent = pair->IsIdentical() && pair->HasSpinDependentExchange();
@@ -684,7 +684,7 @@ Site::AnalyzingPowerCoefficients GenMatrixFunc::AnalyzingPowerCoefficientsOf(con
     a.weightElastic = this->ElasticCoefficientsOf(point, P, theDecay, aa);
   else
     a.weightLegendre = this->LegendreCoefficientsOf(point, P, theDecay, aa, exitPairNum);
-  PPair *in = compound()->GetPair(aa), *out = compound()->GetPair(exitPairNum);
+  const PPair *in = compound()->GetPair(aa), *out = compound()->GetPair(exitPairNum);
   a.capture = true;  // without a particle or capture form (no projectile in), the empty capture form: A_y = 0
   if (in->GetPType() != 0) return a;
   if (out->GetPType() == 10) {

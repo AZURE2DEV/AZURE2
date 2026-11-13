@@ -94,7 +94,7 @@ static bool CoefficientsAllowed(CNuc *theCNuc, const Segment &segment, int numbe
 static bool AnalyzingPowerAllowed(CNuc *theCNuc, const Segment &segment, int number, bool isTest,
                                   const Config &configure) {
   if (!segment.IsAnalyzingPower()) return true;
-  PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetEntranceKey()));
+  const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetEntranceKey()));
   if (fabs(entrancePair->GetJ(1) - 0.5) < 1.e-6) return true;
   configure.outStream << "ERROR: " << (isTest ? "test segment #" : "segment #") << number
                       << ": an analyzing power needs a spin-1/2 projectile; entrance pair " << segment.GetEntranceKey()
@@ -155,7 +155,7 @@ static bool TotalCaptureCodeOk(const Segment &segment, int key, bool isTest, con
  */
 static bool UPOSAllowed(CNuc *theCNuc, const Segment &segment, int key, bool isTest, const Config &configure) {
   if (!segment.IsUPOS() || !theCNuc->IsPairKey(segment.GetExitKey())) return true;
-  PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetExitKey()));
+  const PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetExitKey()));
   if (exitPair->GetLightExE() == 0.) return true;
   configure.outStream << "ERROR: " << (isTest ? "test segment #" : "segment #") << key << " (UPOS): exit pair "
                       << segment.GetExitKey() << " has an excited light particle (column 32, " << exitPair->GetLightExE()
@@ -177,7 +177,7 @@ static bool TotalAllowed(CNuc *theCNuc, Segment &segment, int key, bool isTest, 
       segment.IsUPOS())
     return refuse("a total cross section is angle-integrated (data type 0).");
   if (!theCNuc->IsPairKey(segment.GetEntranceKey())) return true;  // reported where the pair is checked
-  PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetEntranceKey()));
+  const PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetEntranceKey()));
   if (pair->GetPType() != 0 || pair->GetZ(1) * pair->GetZ(2) != 0)
     return refuse("the optical theorem needs a neutral particle pair (the total cross section of charged particles "
                   "diverges).");
@@ -307,8 +307,7 @@ int WorkingCopy::Fill(const Config &configure, CNuc *theCNuc, const azure2::expe
         Segment NewSegment(segment);
 
         if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
-          PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
-          entrancePair->SetEntrance();
+          const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
           if (!AnalyzingPowerAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!CoefficientsAllowed(theCNuc, NewSegment, numTotalSegments, configure)) return -1;
           if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
@@ -454,7 +453,7 @@ int WorkingCopy::MakePoints(const Config &configure, CNuc *theCNuc, const azure2
       if (segment.active) {
         Segment NewSegment(segment);
         if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
-          PPair *segEntrance = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
+          const PPair *segEntrance = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
           if (!AnalyzingPowerAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
@@ -488,9 +487,8 @@ int WorkingCopy::MakePoints(const Config &configure, CNuc *theCNuc, const azure2
             this->AddSegment(NewSegment);
             Segment *theSegment = Draft().GetSegment(Draft().NumSegments());
 
-            theCNuc->GetPair(theCNuc->GetPairNumFromKey(theSegment->GetEntranceKey()))->SetEntrance();
-            PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(theSegment->GetEntranceKey()));
-            PPair *exitPair = theCNuc->GetPairFromKey(theSegment->GetExitKey());  // nullptr for total capture (-1)
+            const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(theSegment->GetEntranceKey()));
+            const PPair *exitPair = theCNuc->GetPairFromKey(theSegment->GetExitKey());  // nullptr for total capture (-1)
             theSegment->SetGridRows(*this, segment.energies, segment.angles);
             for (int i = 0; i < theSegment->NumPoints(); i++) {
               // A ratio is dimensionless: no cross-section conversion (as Segment::Fill for data segments;
@@ -659,15 +657,15 @@ int WorkingCopy::Initialize(CNuc *compound, const Config &configure) {
     if (!seg->IsPhase()) continue;
     int aa = compound->GetPairNumFromKey(seg->GetEntranceKey());
     if (aa == 0) continue;
-    PPair *pp = compound->GetPair(aa);
+    const PPair *pp = compound->GetPair(aa);
     if (!pp->IsIdentical()) continue;
     int segL = seg->GetL();
     bool allowedFound = false;
     for (int j = 1; j <= compound->NumJGroups() && !allowedFound; j++) {
-      JGroup *jg = compound->GetJGroup(j);
+      const JGroup *jg = compound->GetJGroup(j);
       if (jg->GetJ() != seg->GetJ()) continue;
       for (int ch = 1; ch <= jg->NumChannels() && !allowedFound; ch++) {
-        AChannel *channel = jg->GetChannel(ch);
+        const AChannel *channel = jg->GetChannel(ch);
         if (channel->GetRadType() != 'P') continue;
         if (channel->GetPairNum() != aa) continue;
         if (channel->GetL() == segL) allowedFound = true;
@@ -699,10 +697,10 @@ int WorkingCopy::Initialize(CNuc *compound, const Config &configure) {
     if (aa == 0) continue;
     std::vector<double> spins;
     for (int j = 1; j <= compound->NumJGroups(); j++) {
-      JGroup *jg = compound->GetJGroup(j);
+      const JGroup *jg = compound->GetJGroup(j);
       if (jg->GetJ() != seg->GetJ()) continue;
       for (int ch = 1; ch <= jg->NumChannels(); ch++) {
-        AChannel *channel = jg->GetChannel(ch);
+        const AChannel *channel = jg->GetChannel(ch);
         if (channel->GetRadType() != 'P' || channel->GetPairNum() != aa || channel->GetL() != seg->GetL()) continue;
         bool seen = false;
         for (double v : spins) if (std::fabs(v - channel->GetS()) < 1.0e-6) seen = true;
@@ -953,16 +951,9 @@ int WorkingCopy::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Initializing Component Segments (" << Draft().leafRefs_.size() << " components)..." << std::endl;
 
-  // First, ensure entrance/exit pairs are properly set up in the compound nucleus
+  // First, check the leaves' exit pairs in the compound nucleus (their entrance pairs were requested at set-up)
   for (const std::pair<int, int> &leaf : Draft().leafRefs_) {
-    int entranceKey = Draft().segments_[leaf.first].TermEntranceKey(leaf.second);
     int exitKey = Draft().segments_[leaf.first].TermExitKey(leaf.second);
-
-    // Ensure entrance pair is set as entrance if it exists
-    if (theCNuc->IsPairKey(entranceKey)) {
-      int pairNum = theCNuc->GetPairNumFromKey(entranceKey);
-      theCNuc->GetPair(pairNum)->SetEntrance();
-    }
 
     // Check if exit pair is valid (either -1 for total capture or existing pair)
     bool isValidExit = false;
@@ -990,8 +981,8 @@ int WorkingCopy::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
     int entranceKey = Draft().segments_[leaf.first].TermEntranceKey(leaf.second);
     int exitKey = Draft().segments_[leaf.first].TermExitKey(leaf.second);
 
-    PPair *entrancePair = nullptr;
-    PPair *exitPair = nullptr;
+    const PPair *entrancePair = nullptr;
+    const PPair *exitPair = nullptr;
 
     if (theCNuc->IsPairKey(entranceKey)) {
       entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(entranceKey));
@@ -1150,11 +1141,9 @@ int WorkingCopy::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
 /*!
  * Checks a component's pair keys before the component is created: both must
  * exist and belong to one compound nucleus (a reaction does not change the
- * compound nucleus), and the component's entrance pair is flagged as an
- * entrance HERE, while CNuc::Initialize -- which builds the reaction pathways
- * of every entrance pair -- still lies ahead.  Flagging it only in
- * WorkingCopy::Initialize, as was done, left a pair used by components alone (the
- * second isotope of a natural target) without pathways: GetDecay(0).
+ * compound nucleus).  The component's entrance pair is an entrance of the run
+ * (RequestDataEntrances, RequestExtrapolationEntrances: every term's entrance), so
+ * CNuc::Initialize builds its pathways.
  * Returns false, with the error printed, when the component cannot be made.
  */
 bool WorkingCopy::CheckComponentPairs(CNuc *theCNuc, const Segment &baseSegment, int entranceKey, int exitKey,
@@ -1164,8 +1153,8 @@ bool WorkingCopy::CheckComponentPairs(CNuc *theCNuc, const Segment &baseSegment,
                         << " -> " << exitKey << " names a pair key that is not in the compound nucleus." << std::endl;
     return false;
   }
-  PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(entranceKey));
-  PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(exitKey));
+  const PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(entranceKey));
+  const PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(exitKey));
   if (entrancePair->GetNucleus() != exitPair->GetNucleus()) {
     configure.outStream << "ERROR: segment #" << baseSegment.GetSegmentKey() << ": component " << entranceKey
                         << " -> " << exitKey << " connects two compound nuclei ("
@@ -1173,7 +1162,6 @@ bool WorkingCopy::CheckComponentPairs(CNuc *theCNuc, const Segment &baseSegment,
                         << theCNuc->NucleusLabel(exitPair->GetNucleus()) << ")." << std::endl;
     return false;
   }
-  entrancePair->SetEntrance();
   return true;
 }
 
@@ -1195,7 +1183,7 @@ bool WorkingCopy::FinishTransformedSegment(CNuc *theCNuc, Segment *seg, int key,
       seg->IsCoefficients() || seg->GetCrossSectionComponent() != 0)
     return refuse("the transform acts on an angle-integrated cross section (data type 0, or 3 for total capture).");
   if (seg->IsAdvanced() && seg->GetLegacyOperationType() != 0) return refuse("not on a RATIO.");
-  PPair *entrance = theCNuc->GetPair(theCNuc->GetPairNumFromKey(seg->GetEntranceKey()));
+  const PPair *entrance = theCNuc->GetPair(theCNuc->GetPairNumFromKey(seg->GetEntranceKey()));
   if (entrance->GetPType() != 0 || entrance->GetZ(1) * entrance->GetZ(2) != 0)
     return refuse("a sample transmission or self-shielded yield needs a neutral entrance pair (a neutron beam).");
   if (seg->IsTransmission()) return true;
