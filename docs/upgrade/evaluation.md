@@ -64,7 +64,7 @@ allow-list with its reason).  "Done" in the last column means the change is in t
 | `g_ecAmplitudeCache` (`src/ECAmplitudeCache.cpp`) | the EC amplitudes on the reaction-rate/extrapolation grid | the binding swaps it per session; `UnitExternalCapture` reads | none across threads | yes if two sessions run at once (read) | the run's (done, branch 2): `RunScratch::ecAmplitudes`, read through `RunECAmplitudes(configure)`; the binding's swap deleted |
 | `g_shiftDerivMemo`, `g_shiftDerivMutex` (`src/CNuc.cpp`) | dS/dE and d²S/dE² at level energies (Park), keyed by every input | `CNuc::CalcShiftFunctions` | mutex | no: exact key (read) | the run's (done, branch 2): `RunScratch::shiftDerivatives` |
 | `g_terms`, `g_termsMutex`, `g_nodes`, `g_lookups`, `g_direct`, `g_nodesReport`, `g_checkMutex`, `g_maxDeviation` (`src/ECTable.cpp`) | the EC-integral table: nodes per term, filled on first use (`shared_future`), counters | EC amplitudes on the table | mutex + futures | no: a node's value is a pure function of its key (read) | the term table is the run's (done, branch 2): `ECTermStore` in `RunScratch::ecTerms` (filled on first use behind its lock: the terms are not known before the first evaluation); counters → diagnostics (milestone 5) |
-| `g_files`, `g_bytes`, `g_stats`, `g_mutex` (`src/InputFiles.cpp`) | the bytes of data files read with `cacheInputFiles` (pyazr), keyed by path and stamp | data readers | mutex | no: re-read when the stamp moves (read) | not moved in branch 2: a session-owned store would make `cache_stats()` (documented "for the whole process") count one session; left for a decision (section 6) |
+| `g_files`, `g_bytes`, `g_stats`, `g_mutex` (`src/InputFiles.cpp`) | the bytes of data files read with `cacheInputFiles` (pyazr), keyed by path and stamp | data readers | mutex | no: re-read when the stamp moves (read) | allowed (the director, 2026-11-12; branch 3): the entries are the bytes of a file keyed by absolute path and file stamp (size, modification time), immutable once read, behind a lock; not a hazard, because a file changed between two reads has a new stamp and is read again, and no value of a calculation is stored; `cache_stats()` counts the process |
 | `g_sharedGeneration` (`src/CoulombTable.cpp`) | moves when a missing table file is forgotten | `Shared` | atomic | no | deleted with the per-thread lookup |
 | `SharedTables()::t`, `SharedFailed()::f`, `SharedMutex()::m` (`src/CoulombTable.cpp`) | the Coulomb tables loaded from files | `Shared` | mutex | no: immutable after load (read) | allowed (an immutable table read from a file) |
 | `CoulombTable::hits_`, `misses_` (`include/CoulombTable.h`), `report` (`Shared`) | lookup counters printed at exit | every table lookup | atomic | no (diagnostic) | diagnostics, allowed until section 2 is done |
@@ -307,8 +307,8 @@ branch (see section 7.5); what this branch does is what does not need it:
    with its `Results`) taken by one caller at a time.  A fit with the analytic gradient (one evaluation at a time,
    its parallelism inside the point pass) then holds one, at any thread count; Minuit2's numerical gradient and the
    MCMC's walkers hold one per thread that evaluates.
-2. `AZUREAPI` reads its nuisance layout once, at construction and at a rebuild; its evaluating methods write the
-   session's `Results` as non-`const` methods (the `mutable` members of milestone 3 go).
+2. (Planned, not done in branch 3: see section 7.5.)  `AZUREAPI` reads its nuisance layout once, at construction
+   and at a rebuild; its evaluating methods write the session's `Results` as non-`const` methods.
 3. Kept, with the reason: `WorkingCopy::Clone`, `WorkingData` and the snapshot copies (`output_*`) of a fit (a
    snapshot runs `TransformOut` on its `CNuc`, which a pooled one must not see), `AZURE_POOL_CHECK` and
    `AZURE_TRACE_FCN=fresh` (they compare a pooled copy with a fresh one, which still exist), `Site::ec_shifted_`
@@ -461,3 +461,33 @@ natural_neon 9.8539e9 -> 9.8642e9 (+0.10 %), 18O_p_a_thm 6.25213e7 -> 6.25218e7,
 -> 3.25903e11 (+0.06 %), 13N fit 1.875305e11 -> 1.875930e11 (+0.03 %).  Allow-list: 107 pending rows -> 88 (milestone
 1: 10 -> 0, milestone 2: 13 -> 4, the input-file bytes; 3: 11; 4: 44; 5: 29).
 
+### 7.5 Done in the third branch (`feature/upgrade-6-evaluation-3`)
+
+**Milestone 3, the part that does not need the `Site` split (section 4.1).**  The copies an evaluation of a fit or
+of the MCMC runs on are made when an evaluation finds no idle one, not `max(4, threads)` (fit) or twice the hardware
+threads (MCMC, 48 on the 24-core machine) at the first evaluation; `InitializePools` and `pools_initialized_` are
+deleted.  A fit with the analytic gradient holds the master pair, one evaluation pair and (from the first snapshot)
+the snapshot pair at any thread count.  Kept: `WorkingCopy::Clone`, `WorkingData`, the pools' stacks, the snapshot
+copies, `AZURE_POOL_CHECK`, `Site::ec_shifted_` (section 4.1, item 3); `AZUREAPI`'s `mutable` members (not reached).
+
+**Relative paths.**  Not done: the engine still opens a project's relative paths against the process's working
+directory and pyazr still changes it per call.  What the change needs (inventory of 55a7e2c9): about 80 opening sites
+in `src/`, `api/src/`, `experiment/src/` (data, reference and grid files, covariance files, `intEC.dat` and its
+signature, parameter files, the output and checks directories, rate temperature files, THM tables, MCMC sample files,
+`nonfinite_dump.txt`, `kinflag.dat`) take a path from `Config` or a spec; the experiment library already has a
+`projectDir` (`Format3ReadOptions`, `BuildOptions`, `GridSettings`) that the engine leaves empty, but it joins the
+directory into the path it also prints, so setting it would change messages of `run.log`.  The plan: one
+`Config::baseDirectory` (the CLI: the working directory at start; pyazr: the session's `cwd`, given to the `Session`
+constructor) and one function that turns a project path into the path to open, used at every opening site, while every
+printed path stays the string of the project; the experiment library gets the same split (path to open, path to print).
+The input-file byte store keys by absolute path made with the working directory; it would take the opened path.
+
+**Two defects, by a test first.**  (a) The signature of `intEC.dat` held neither whether the Coulomb table is used nor
+which file: it now holds the table's file (absolute path, size, modification time) or "exact Coulomb functions"
+(`tests/ec_table_signature`).  Every signature of a run with a table changes, so an existing `intEC.dat` is computed
+again once.  (b) `--validate` and `--describe` read `relativistic` already (the project reader's `RelativisticFlag`);
+`tests/describe_relativistic` holds it (a THM data set under `relativistic=1` is refused by both).
+
+**Input-file bytes**: the four rows are permanent (`table:`), with the reason of section 1.2.
+
+**Diagnostics record (milestone 5)**: not started.

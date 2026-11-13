@@ -90,10 +90,10 @@ src/ECTable.cpp	g_lookups	namespace	pending (milestone 5, the diagnostics record
 src/ECTable.cpp	g_maxDeviation	namespace	pending (milestone 5, the diagnostics record): EC table counters and AZURE2_EC_TABLE_CHECK statistics
 src/ECTable.cpp	g_nodes	namespace	pending (milestone 5, the diagnostics record): EC table counters and AZURE2_EC_TABLE_CHECK statistics
 src/ECTable.cpp	g_nodesReport	namespace	pending (milestone 5, the diagnostics record): EC table counters and AZURE2_EC_TABLE_CHECK statistics
-src/InputFiles.cpp	g_bytes	namespace	pending (milestone 2, no process-wide pointers): the bytes of input files read by pyazr sessions, keyed by path and stamp; the session's file store later
-src/InputFiles.cpp	g_files	namespace	pending (milestone 2, no process-wide pointers): the bytes of input files read by pyazr sessions, keyed by path and stamp; the session's file store later
-src/InputFiles.cpp	g_mutex	namespace	pending (milestone 2, no process-wide pointers): the bytes of input files read by pyazr sessions, keyed by path and stamp; the session's file store later
-src/InputFiles.cpp	g_stats	namespace	pending (milestone 2, no process-wide pointers): the bytes of input files read by pyazr sessions, keyed by path and stamp; the session's file store later
+src/InputFiles.cpp	g_bytes	namespace	table: the bytes of input files read with cacheInputFiles, keyed by absolute path and file stamp (size, modification time), immutable once read, behind a lock; a changed file has a new stamp and is read again; cache_stats() counts the process (the director, 2026-11-12)
+src/InputFiles.cpp	g_files	namespace	table: the bytes of input files read with cacheInputFiles, keyed by absolute path and file stamp (size, modification time), immutable once read, behind a lock; a changed file has a new stamp and is read again; cache_stats() counts the process (the director, 2026-11-12)
+src/InputFiles.cpp	g_mutex	namespace	table: the bytes of input files read with cacheInputFiles, keyed by absolute path and file stamp (size, modification time), immutable once read, behind a lock; a changed file has a new stamp and is read again; cache_stats() counts the process (the director, 2026-11-12)
+src/InputFiles.cpp	g_stats	namespace	table: the bytes of input files read with cacheInputFiles, keyed by absolute path and file stamp (size, modification time), immutable once read, behind a lock; a changed file has a new stamp and is read again; cache_stats() counts the process (the director, 2026-11-12)
 src/Profile.cpp	g_calls	namespace	pending (milestone 5, the diagnostics record): AZURE_PROFILE accounting
 src/Profile.cpp	g_count	namespace	pending (milestone 5, the diagnostics record): AZURE_PROFILE accounting
 src/Profile.cpp	g_depth	namespace	pending (milestone 5, the diagnostics record): AZURE_PROFILE accounting
