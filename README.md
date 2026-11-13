@@ -45,6 +45,9 @@ Upstream project: <https://azure.nd.edu/> · Source:
 > vendored under `external/` and compiled as part of the build, and the MCMC
 > sampler in `numcmc/` is built alongside them. None of these need to be
 > downloaded or installed separately, unlike in older versions of AZURE2.
+> The web interface's page ships one third-party file, plotly.js 4.1.2 (the
+> cartesian bundle, MIT licence), at `pyazr/ui/static/vendor/` with its licence
+> beside it (`plotly-LICENSE.txt`); the page loads nothing from the network.
 
 ---
 

@@ -10,6 +10,16 @@ program whose `chiSquared.out` the API's numbers are compared with.
 - `server_test.py`: a real server process on a free port above 20000 over HTTP; killed and stopped, its workers
   checked gone by PID; the user guide's session (`docs/source/user_guide/web_ui_api.rst`) run against it.
 - `routes_consistency_test.py`: the route table, the app, the OpenAPI document, pyazr and the adapter agree.
+- `static_test.py`: the page's files as served: the token exchanged for a cookie by a redirect, the
+  Content-Security-Policy, every file the page loads present and tracked, plotly.js's hash and licence, a widget per
+  value type of the schema, no engine kind named in the page's modules, lines of at most 120 columns (the vendored
+  directory excepted: minified third-party code), the file-head route inside the root.
+- `node_test.py`: runs `js/*.test.mjs` with node's own test runner (`node --test`; node from PATH or `NODE`; skipped
+  without it) on the page's modules `forms.js`, `tables.js`, `api.js`, `plots.js`, with the engine's schema.
+- `smoke_test.py` (label `browser`): a real server on T1 and T2, headless Chrome runs the page's `#selftest?edit=1`
+  (every tab, a level, a data set's form and plot by plotly.js and as a table, a kind without layout hints, a new
+  record's form, a width typed in and undone with the button) and takes a screenshot per tab
+  (`AZURE2_UI_SCREENSHOTS`, `AZURE2_UI_SHOTS=all`, `AZURE2_UI_SMOKE_PROJECTS`; see its docstring).
 - `uitest.py`: shared helpers.
 
 ## Each rule and the error injected to show its test fails

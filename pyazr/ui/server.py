@@ -17,6 +17,7 @@ import time
 
 from .errors import Conflict, NotFound, Refused
 from .jobs import JobTable, job_table
+from .routes import CONTENT_SECURITY_POLICY
 from .state import SESSION_OPTIONS, State, session_options
 from .workers import Budget, SessionWorker, Spawner
 
@@ -75,6 +76,20 @@ class Server:
 
     def restore(self, rev=None):
         return {"rev": self.state.restore(rev)}
+
+    def file_head(self, path, rows=20):
+        """The first ``rows`` lines of a text file inside the root (relative paths from the project's directory), as
+        written: the page shows the head of a data file beside its record."""
+        full = self.state.inside_root(path)
+        if not os.path.isfile(full):
+            raise NotFound(f"no file {path!r} (relative to {self.state.directory})")
+        lines = []
+        with open(full, "rb") as f:
+            for raw in f:
+                if len(lines) == int(rows):
+                    return {"path": path, "lines": lines, "more": True}
+                lines.append(raw.decode("utf-8", "replace").rstrip("\r\n"))
+        return {"path": path, "lines": lines, "more": False}
 
     def open(self, path):
         """Open another project inside the root (no job may run)."""
@@ -329,6 +344,7 @@ def create_app(project, *, threads=1, token, root=None):
         response = await call_next(request)
         if request.query_params.get("token"):
             response.set_cookie(TOKEN_COOKIE, token, httponly=True, samesite="strict")
+        response.headers["Content-Security-Policy"] = CONTENT_SECURITY_POLICY
         return response
 
     install(app, server)
