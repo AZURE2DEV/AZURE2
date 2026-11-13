@@ -41,6 +41,9 @@ Tick boxes as work lands; put the commit hash after each tick.
       branch.
 - [x] Rules into `CLAUDE.md` (`RULES.md`), replacing the "date an entry (`dev 0dd28e5`)" skill rule.
 - [x] Skills rewritten into the ten-skill set (`RULES.md` §3) and `tools/check_skills.py` in CI.
+- [x] Developer Guide of the site for the new structure (`docs/source/developer/`: architecture, scheme of the
+      classes from `figures/classes.tsv` and `arrows.tsv`, state and ownership, data model, extending; consistency
+      check 44 keeps the scheme's types declared; 2026-11-13).
 - [x] Merge the race fixes everywhere: `a6bc6b9e` (via origin/thm c6ddb741, merged d20718f8) and the acquire-fence
       fix 3fba1192 (`fix/edep-cow-acquire`, merged 37978592) are both on `feature/upgrade`. Pushing them to `thm` and
       `dev` is the PI's.

@@ -22,31 +22,36 @@ The matrix calculation is organized through an inheritance hierarchy:
    the analytic gradient.
 
 ``RMatrixFunc`` (channel matrix formalism)
-   Works with the R-matrix, a channel-by-channel matrix: the older route
-   (standard and Brune formalisms; no Park matrices, caching or gradient), used
-   only when the A-matrix is switched off, and not even then with
-   ignore-externals or Park on (``Config::ResolveMatrixRoute``, since
-   2026-11-01: the A-matrix is used with a warning).
+   Works with the R-matrix, a channel-by-channel matrix (standard and Brune
+   formalisms; no Park matrices and no gradient). It is used only when the
+   A-matrix is switched off, and not even then with ignore-externals or Park
+   on: ``Config::ResolveMatrixRoute`` then takes the A-matrix with a warning.
 
-**Key files:**
+``THMMatrixFunc`` (an ``AMatrixFunc``)
+   The THM (HOES) cross section, which reads elements of the level matrix
+   itself (``include/THMMatrixFunc.h``).
 
-- ``include/GenMatrixFunc.h``, ``src/GenMatrixFunc.cpp``
-- ``include/AMatrixFunc.h``, ``src/AMatrixFunc.cpp``
-- ``include/RMatrixFunc.h``, ``src/RMatrixFunc.cpp``
-- ``include/ChannelSpace.h``, ``src/ChannelSpace.cpp``
-- ``include/LevelMatrixSolver.h``, ``src/LevelMatrixSolver.cpp``
+**Key files:** ``src/GenMatrixFunc.cpp``, ``src/AMatrixFunc.cpp``,
+``src/RMatrixFunc.cpp``, ``src/ChannelSpace.cpp``, ``src/LevelMatrixSolver.cpp``
+(headers of the same names in ``include/``), ``src/EnergyPass.cpp``.
 
 Computation Pipeline
 --------------------
 
-For every data point, the following sequence is executed:
+The solver objects belong to the scratch of the thread that runs an energy
+task (``azure2::TaskScratch``, in the evaluation's ``Results``). For every
+energy task of the point pass (:doc:`data_model`), ``SolveAtOneEnergy``
+calls, through the ``GenMatrixFunc`` interface on a ``Site``:
 
 1. **ClearMatrices()** -- allocate and zero the matrices for each :math:`J^\pi` group.
-2. **FillMatrices(Unit*)** -- compute the matrix elements from the R-matrix parameters.
+2. **FillMatrices(Site*)** -- compute the matrix elements from the R-matrix
+   parameters, with the task's first unit that reads a T-matrix.
 3. **InvertMatrices()** -- factor the matrix (level route; the channel route
    is solved in ``FillMatrices``).
-4. **CalculateTMatrix(Unit*)** -- compute the T-matrix (transition matrix) from the inverted matrix.
-5. **CalculateCrossSection(Unit*)** -- compute the cross section from the T-matrix.
+4. **CalculateTMatrix(Site*)** -- compute the T-matrix (transition matrix)
+   from the inverted matrix, once per (entrance, exit) group of the task.
+5. **CalculateCrossSection(Site*, Results&)** -- compute each unit's
+   observable from the T-matrix into its record.
 
 A-Matrix Formalism
 ------------------
@@ -81,7 +86,7 @@ where:
 - :math:`L^0_c = S_c - B_c + iP_c` at the energy of the data point, with
   :math:`S_c` the shift function, :math:`P_c` the penetrability and
   :math:`B_c` the boundary condition of channel :math:`c`
-  (``GetLoElement``, ``Unit.cpp:1496-1500``; Eq. :eq:`conv-ps` of
+  (``Site::GetLoElement``; Eq. :eq:`conv-ps` of
   :doc:`../theory/conventions`). Photon and β-decay channels have
   :math:`L^0_c = 0`.
 - The sum runs over all channels in the :math:`J^\pi` group
@@ -112,8 +117,7 @@ where:
 **RMC formalism** (``USE_RMC_FORMALISM``):
 
 For radiative channels (``radType == 'M'`` or ``'E'``), an imaginary term is
-subtracted from the diagonal elements (``AMatrixFunc.cpp:290-293``, then
-line 320):
+subtracted from the diagonal elements (``AMatrixFunc::FillMatrices``):
 
 .. math::
 
@@ -141,11 +145,8 @@ A level whose widths are all below the cutoff decouples: its row and column of
 :math:`A^{-1}` are zero but for the diagonal :math:`E_\lambda - E`, which
 vanishes at :math:`E = E_\lambda`.  The level contributes nothing at any
 energy, so ``FillLevelMatrix`` puts a unit diagonal there and the matrix stays
-regular.  Until 2026-10-31 the factorization failed instead and the whole
-J-group was left out at that energy (a zero-width level placed on a data
-energy changed :math:`\chi^2`); the R-matrix route (``RMatrixFunc``) divided
-0 by 0 or failed its GSL inversion.  Any other singular matrix still leaves the
-group out at that energy, with a warning printed once.
+regular.  Any other singular matrix leaves the group out at that energy,
+with a warning printed once.
 
 Channel-Space Solution (default)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -210,7 +211,7 @@ and the solves :math:`A g_c` of the gradient come from
 (``ApplyA``, ``ChannelBilinear``, ``GetAMatrix``).
 
 **Route of a J-group.**  At each energy each J-group takes the channel route
-or the level route (fill and LU, as before).  The level route is taken
+or the level route (fill and LU).  The level route is taken
 
 - when the J-group has no fewer coupled channels than levels (no gain);
 - when no formal representation exists (non-finite :math:`K, N`: equal
@@ -248,7 +249,7 @@ or the level route (fill and LU, as before).  The level route is taken
   ``THMMatrixFunc`` is always switched to it: the THM (HOES) amplitude reads
   individual elements of the level matrix over the active levels and its
   adjoint the whole matrix (``LevelMatrixABarAdjoint``), so every THM point is
-  solved in level space, as before the channel-space route existed.
+  solved in level space.
 
 The two routes agree to about :math:`10^{-13}` of the largest bilinear form
 (``AZURE_CHANNEL_VERIFY=1`` compares them, and both with an extended-precision
@@ -292,12 +293,11 @@ the energy derivative of the Coulomb functions has no closed form, the
 ``ChannelFunc::ShiftDerivative``, the :math:`dS/dE` of every other caller,
 with its own branches at and below threshold).  ``CNuc::CalcShiftFunctions``
 takes them after the shift functions, for all levels at once and in parallel;
-the Coulomb functions are computed at every call (``physics/coulomb``, no memo
-since the process-wide one, which matched energies to :math:`10^{-12}` MeV and
-made :math:`S'` depend on the run's history by up to :math:`10^{-11}`, was
-deleted), so that they do not depend on the number of threads;
-channels of a level that differ only in the channel spin share one, and the
-working copies of a fit share them through a memo by exact argument.  It computes
+the Coulomb functions are computed at every call (``physics/coulomb``, no
+memo keyed by the history of the run), so that they do not depend on the
+number of threads; channels of a level that differ only in the channel spin
+share one, and the working copies of a fit share them through a memo by exact
+argument (``ShiftDerivativeMemo``, in the run's scratch).  It computes
 :math:`S''`, which only the gradient needs, only when asked: a chi-squared
 alone (``AZURECalc::operator()``, ``Chi2On``, ``ResidualsOnly``, MCMC) leaves it
 out, and the next gradient fills it in for the levels that moved
@@ -310,12 +310,7 @@ takes Park's gradient from the residual Jacobian as for the other formalisms
 gradient, so the adjoint pass it took besides is saved.  A project with THM
 (HOES) segments keeps the adjoint gradient in every formalism: their rows are
 not in the residual Jacobian (``ComputeResidualJacobian`` refuses them), so
-``GradientFromJacobian`` declines and ``Gradient`` takes the HOES adjoint.  On the 19-segment
-project of :doc:`edata_and_target_effects` in Park mode (one thread) an
-evaluation at new parameters went from 1.55 s to 1.09 s, the residual Jacobian
-from 5.9 s to 2.2 s and 20 MIGRAD calls from 53 s to 26 s (two threads: an
-evaluation 1.31 s to 0.64 s, MIGRAD 36 s to 15 s; level route,
-``AZURE_LEVEL_SPACE=1``, one thread: MIGRAD 83 s to 49 s).
+``GradientFromJacobian`` declines and ``Gradient`` takes the HOES adjoint.
 
 The scattering lengths (:doc:`../theory/scattering_length`) take the same
 routes at each pair's threshold: :math:`M_{cc}` is the channel route's
@@ -367,7 +362,7 @@ Thomas at :math:`\rho = k_c a_c`; the hard-sphere phase *shift* is
      T_{cc'} = -\Omega_c\,\Omega_{c'}\; 2i P_c^{1/2} P_{c'}^{1/2}\,\gamma_c^T A\,\gamma_{c'}
 
 with :math:`\gamma_c` the column of reduced widths of channel :math:`c`. In
-the code (``AMatrixFunc.cpp:536-556``) ``umatrix`` is the bracket without
+the code (``AMatrixFunc::CalculateTMatrix``) ``umatrix`` is the bracket without
 :math:`\delta_{cc'}`, ``uphase`` is :math:`\Omega_c\Omega_{c'}`, and
 ``GetExpCoulombPhase`` and ``GetExpHardSpherePhase`` return
 :math:`e^{i\omega_c}` and :math:`e^{-i\phi_c}`. Photon and β-decay channels
@@ -375,8 +370,9 @@ have :math:`\Omega_c = 1`. With ``--use-rmc`` the capture element is
 :math:`-i \cdot 2i P_c^{1/2} P_{c'}^{1/2}\,\gamma_c^T A\,\gamma_{c'}`, without
 the phases :math:`\Omega`.
 
-Phase factors, penetrabilities, and Coulomb amplitudes are pre-computed and
-cached on the ``Unit`` object.
+Phase factors, penetrabilities and Coulomb amplitudes are computed at set-up
+and held by the ``Site`` (its channel rows, shared with its node of the
+``NodeTable``).
 
 R-Matrix Formalism
 -------------------
@@ -390,7 +386,7 @@ The R-matrix formalism (``RMatrixFunc``) works with the channel matrix instead.
    R_{cc'} = \sum_\lambda \frac{\gamma_{\lambda c}\,\gamma_{\lambda c'}}
    {E_\lambda - E_\text{in}}
 
-in the standard formalism (``RMatrixFunc.cpp:244-258``). With ``--use-rmc``
+in the standard formalism (``RMatrixFunc::FillMatrices``). With ``--use-rmc``
 the denominator is
 :math:`E_\lambda - E_\text{in} - i\sum_\gamma \gamma_{\lambda\gamma}^2`.
 
@@ -401,7 +397,7 @@ the denominator is
    [1 - RL]_{cc'} = \delta_{cc'} - R_{cc'}\,L^0_{c'}
 
 with :math:`L^0_{c'} = S_{c'} - B_{c'} + iP_{c'}` as in the level matrix
-(``RMatrixFunc.cpp:261-265``). In the Brune formalism the R-matrix built
+(``RMatrixFunc::FillMatrices``). In the Brune formalism the R-matrix built
 from the Q-matrix (below) already contains the energy-dependent shift, and
 
 .. math::
@@ -409,7 +405,7 @@ from the Q-matrix (below) already contains the energy-dependent shift, and
    [1 - RL]_{cc'} = \delta_{cc'} - i\,R_{cc'}\,P_{c'}
 
 with :math:`P_{c'} = 0` for channels other than particle channels
-(``RMatrixFunc.cpp:217-224``). This matrix is inverted using the same GSL
+(``RMatrixFunc::FillMatrices``). This matrix is inverted using the same GSL
 LU decomposition, and then
 multiplied by the R-matrix to obtain :math:`[1-RL]^{-1}R`, which enters
 the T-matrix calculation.
@@ -431,13 +427,8 @@ a level, ``FillMatrices`` solves the group in the level form
 (push-through identity; :math:`M` is the matrix whose inverse gives
 :math:`R`, :math:`L` the channels' entries of :math:`[1-RL]`), and
 ``InvertMatrices`` takes these in place of inverting :math:`[1-RL]`.  The
-adaptive sub-point grid of a target effect places a node exactly at a level's
-energy, so this happens in ordinary runs: before 2026-11-01 the standard
-formalism gave NaN there and Brune's an ill-conditioned inverse, which the
-convolution carried into the data points around the resonance; at an exact
-pole Brune's Q-matrix is singular and its inversion threw "GSL LU
-decomposition failed" (an error, or a silent 0 in a SUM segment)
-(``tests/pyazr/rmatrix_pole_test.py``).
+mesh of a target effect places a node exactly at a level's energy, so this
+happens in ordinary runs (``tests/pyazr/rmatrix_pole_test.py``).
 
 Cross Section Calculation
 -------------------------
@@ -465,7 +456,7 @@ by 2 (Eq. :eq:`conv-sigma` of :doc:`../theory/conventions`).
 
 When the entrance and exit channels are the same particle pair, the full
 Coulomb + nuclear + interference cross section is computed
-(``GenMatrixFunc.cpp:439-516``). The code does not store the physical Coulomb
+(``GenMatrixFunc::CalculateBareCrossSection``). The code does not store the physical Coulomb
 amplitude but the dimensionless
 
 .. math::
@@ -473,7 +464,7 @@ amplitude but the dimensionless
    C_\alpha(\theta) = \frac{\eta}{2\sqrt\pi}\,\csc^2\frac\theta2\,
    \exp\Big(-2i\eta\ln\sin\frac\theta2\Big)
 
-(``Unit.cpp:1890-1902``; :math:`\theta` is the c.m. angle, :math:`\eta`
+(``Site::CoulombAmplitudesAt``; :math:`\theta` is the c.m. angle, :math:`\eta`
 the Sommerfeld parameter). The point-Coulomb amplitude relative to
 :math:`e^{2i\sigma_0}` is :math:`f_C = -(\sqrt\pi/k)\,C_\alpha` (fm). With
 :math:`T` as above,
@@ -503,13 +494,6 @@ multiplied by 4 and 2 (same page, "Identical particles").
 Type Definitions
 ----------------
 
-The matrix types used throughout the code are defined in ``Constants.h``:
-
-.. code-block:: cpp
-
-   typedef std::complex<double> complex;
-   typedef std::vector<std::vector<std::complex<double>>> matrix_c;
-   typedef std::vector<std::vector<std::vector<std::complex<double>>>> vector_matrix_c;
-
-- ``matrix_c`` -- a 2D complex matrix (dense storage as nested vectors)
-- ``vector_matrix_c`` -- a collection of matrices, one per :math:`J^\pi` group
+``include/Constants.h`` defines the matrix types: ``complex`` is
+``std::complex<double>``, ``matrix_c`` a dense complex matrix stored as nested
+vectors, ``vector_matrix_c`` one such matrix per :math:`J^\pi` group.
