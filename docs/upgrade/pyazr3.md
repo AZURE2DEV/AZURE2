@@ -598,7 +598,10 @@ have no pyazr name. After: one row of the binding's function table and a test (s
 **A new session option.** Today: `RuntimeOptions` in `pybind_api.cpp` (the struct, `apply_options`,
 `def_readwrite`), the constructor's signature, docstring and `self.options` in `azure2.py`, and the program's flag in
 a separate list (`src/AZURE2.cpp`). After: one row of an options table read by the program's parser and by the
-binding (`pyazr.kinds()["options"]`).
+binding (`pyazr.kinds()["options"]`).  Built 2026-11-13 (`project_format3.md` §3.12): an option of the calculation
+is one row of `io::ConfigKeys()` (key = keyword, flags, default, effect: the program's parser and help, `--describe`,
+`kinds()` and the UI read it), one row of its place in `Config` (`src/ProjectOptions.cpp`), and its keyword in the
+constructor's signature and docstring; `RuntimeOptions.options` takes it by name.
 
 ## 4. The order of work
 

@@ -2,6 +2,40 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-13 (agent, branch `feature/upgrade-4-session-options`) — the options of the calculation are `<config>` keys
+
+**Measured** (the table of `project_format3.md` §3.12): eleven options of `RuntimeOptions` and the program's flags
+change what a project computes (`use_brune`, `use_park`, `transform` — conventions; `ignore_externals`,
+`use_long_wavelength`, `ec_convection_current`, `use_rmc` — physics; `use_gsl_coul`, `use_coulomb_table`,
+`use_ec_table`, `replace_grids` — numerics); three are not project state (`data_mode`, the Coulomb table file,
+`cwd`); the fit's, output, program and command flags and the environment switches are left out. The defaults of the
+program and a session are the same for all eleven; two rules of combination differ: `--use-rmc` drops Brune and Park
+with a warning where a session keeps them, and the program applies `--use-park`/`--no-brune` in the given order where
+a session lets Park win. Not unified (decision for the PI; recommendation in §3.12).
+
+**Done.** The options are bool keys of `<config>` under the pyazr keyword names; a flag or keyword given wins over the
+key, the key over the default. One table: the option rows of `io::ConfigKeys()` (flags, default, effect) with the
+implications and contradictions beside it; `src/ProjectOptions.cpp` keeps where `Config` stores each and the sources;
+the program's parser and `--help` read the rows; the binding's option table is derived (plus the three non-project
+options with their reasons). `--validate`, the run and `Project.set_config` refuse a bad value
+(`E_CONFIG_OPTION_VALUE`) and a contradiction with a key (`E_CONFIG_OPTIONS_CONTRADICT`, both named with their
+sources). `--describe` (text and JSON) and `azure2.describe()["option_sources"]` say each option's source. pyazr's
+signature is unchanged: a decorator records the keywords a call named (`pyazr/session_options.py`). The web UI's
+`SESSION_OPTIONS` is gone: the options shown are the project's with a `source` field; edited through the config route.
+
+**Verified** (build `work/b-options`, 2 threads, 0 warnings). On the code commit: all projects × 3 bases against
+`tab-t50-1` 887 / 851 / 887 identical (`tab-options-1`); the eight fits identical to `b-trial50`; the converted-tree
+gate 679 / 643 / 679 identical; `ctest -LE slow` 236 of 237 (`pyazr_validate`: the describe texts, fixed in the next
+commit); the slow tests 11 of 11; `tests/run_tests.sh` 165 passed, 2 failed (`ratio_to_rutherford`,
+`units_scales`: their committed `--describe` text, fixed in the last commit by printing the options only when one is
+not at its default). The later commits change only the description text: the failed tests, `pyazr_describe`,
+`pyazr_config_options`, `pyazr_ui_api`, `format3_engine`, `describe_relativistic`, `cli_help` rerun and pass.
+`tests/config_options/check.sh` (key = flag, 22 cases) and `pyazr_config_options` (key = keyword) pass; each new
+check failed once with an injected error.
+
+**Open.** The two combination rules above (PI). `save_fit` on T1 in the formal basis fails its own verification and
+`use_rmc` on T1 fails a session's set-up but not the program's run (both as before; not of this branch).
+
 ## 2026-11-13 (agent, branch `feature/upgrade-6-sampler-objective`) — the sampler on the fit's objective, its state
 
 **Measured first** (`docs/upgrade/objective.md` section 6, with the table term by term and line numbers): at the

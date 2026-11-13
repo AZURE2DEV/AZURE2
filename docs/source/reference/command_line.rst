@@ -26,11 +26,67 @@ Builds with the Qt setup utility need ``--no-gui`` for text mode; here it is
 accepted and has no effect, so scripts written for those builds run
 unchanged.
 
-.. important::
+.. _options-as-config-keys:
 
-   The **Runtime Options** that the setup utility of the released versions
-   saves with a project are **not** applied in command-line mode. They must
-   be specified as command-line flags each time.
+Options of the calculation in the project
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The options that change what a project computes -- the formalism, the
+transformation of the input parameters, the Coulomb table, the external
+capture -- are keys of the project's ``<config>`` section, so that the project
+file says everything a calculation depends on.  Each key has the name of the
+pyazr keyword and the value ``0`` or ``1`` (``true``/``false``):
+
+=========================  ============================================================  =======
+key (= pyazr keyword)      flags (on / off)                                              default
+=========================  ============================================================  =======
+``use_brune``              ``--use-brune`` / ``--no-brune``                              1
+``use_park``               ``--use-park``                                                0
+``transform``              ``--no-transform`` (off)                                      1
+``ignore_externals``       ``--ignore-externals`` / ``--no-ignore-externals``            1
+``use_long_wavelength``    ``--no-long-wavelength`` (off)                                1
+``ec_convection_current``  ``--ec-convection-current`` / ``--no-ec-convection-current``  1
+``use_rmc``                ``--use-rmc``                                                 0
+``use_gsl_coul``           ``--gsl-coul``                                                0
+``use_coulomb_table``      ``--coulomb-table`` / ``--no-coulomb-table``                  1
+``use_ec_table``           ``--ec-table`` / ``--no-ec-table``                            1
+``replace_grids``          ``--grid-replacement`` / ``--no-grid-replacement``            1
+=========================  ============================================================  =======
+
+A flag given on the command line (or a keyword given to a pyazr session) wins
+over the key; the key wins over the default.  A project without the keys
+computes what it computed before.  For example, a project in the standard
+(Lane--Thomas) parametrization states it once::
+
+   <config>
+   true
+   output/
+   ...
+   use_brune=0
+   format=3
+   </config>
+
+and ``AZURE2 project.azr`` then runs it without ``--no-brune``;
+``AZURE2 --use-brune project.azr`` runs the same project with Brune's level
+matrix for this run only.  ``--use-park`` also gives ``use_brune`` on, and
+``--no-brune`` also gives ``use_park`` off, as before.  ``AZURE2 --describe``
+prints each option's value and where it came from (``default``, ``project``,
+``command line``) when at least one is not at its default (``--json``:
+always, as the member ``options``).  Refused, by ``--validate`` and by the run, each with its
+code: a value other than 0, 1, true, false (``E_CONFIG_OPTION_VALUE``); and a
+pair that cannot hold together when at least one of the two is a key of the
+project (``E_CONFIG_OPTIONS_CONTRADICT``, naming both): ``use_park=1`` with
+``use_brune=0``, ``use_rmc=1`` with ``use_brune=1`` (Brune is on by default:
+write ``use_brune=0`` too), ``ec_convection_current=0`` with
+``use_long_wavelength=1``.  Without a key the program keeps its old rule for
+``--use-rmc``: it drops Brune with a warning.  pyazr sets a key with
+``Project.set_config(use_brune=False)``; the converter, ``Project.new`` and
+``save_fit`` write no key they did not find.
+
+Not keys (not a property of a project): the fit's and the job's settings
+(``--use-gradient``, ``--use-lm``, ``--max-calls``, ...), the table file of
+``--coulomb-table=FILE``, the menu choice, threads, and the environment
+switches below.
 
 Scripted input
 ^^^^^^^^^^^^^^

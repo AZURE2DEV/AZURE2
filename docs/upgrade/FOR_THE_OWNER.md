@@ -427,6 +427,47 @@ scale or kernel parameter are laid out from the centre too (when the start lies 
 fit written back with `save_fit` and computed again gives the fit's χ²; before, the Doppler temperature's moved by
 6e-6 and every layout moved with the start.
 
+## The options of a calculation are keys of the project (2026-11-13)
+
+What a project computes used to depend on the file **and** on the flags it was run with (`--no-brune`,
+`--no-transform`, `--no-coulomb-table`, ...) or the keywords of a pyazr session; the file alone did not say in which
+formalism its parameters are. The PI decided that these options are keys of `<config>` (`web_ui.md` decision 7).
+Eleven options, each under the name of its pyazr keyword, value 0 or 1: `use_brune`, `use_park`, `transform`,
+`ignore_externals`, `use_long_wavelength`, `ec_convection_current`, `use_rmc`, `use_gsl_coul`, `use_coulomb_table`,
+`use_ec_table`, `replace_grids`. A project in the standard parametrization says so once:
+
+```
+<config>
+true
+output/
+...
+use_brune=0
+format=3
+</config>
+```
+
+**The rule:** a flag on the command line (or a keyword given to a session) wins over the key, the key over the default.
+Nothing else. A project without the keys computes exactly what it computed (the whole tree, 887 / 851 / 887 files,
+identical); every flag and keyword stays and means what it meant (`--use-park` still gives Brune too, `--no-brune`
+still clears Park). `AZURE2 --describe` prints each option with its value and where it came from; a session's
+`option_sources` says the same. Refused, by `--validate`, the run and `Project.set_config`: a value other than 0, 1,
+true, false (`E_CONFIG_OPTION_VALUE`), and a pair that cannot hold together when one of the two is a key of the file
+(`E_CONFIG_OPTIONS_CONTRADICT`, naming both): Park without Brune, Reich-Moore capture with Brune, no convection current
+with the long-wavelength approximation. The converter, `Project.new` and `save_fit` write no key they did not find;
+the web page sets them as any `<config>` entry. Not keys: the fit's settings, the menu's mode, threads, files and
+directories of the machine, and the environment switches.
+
+**Where the program and a session disagree** (not changed: it would move the numbers of a call). The defaults are the
+same; two rules of combination are not. (1) `--use-rmc` drops Brune and Park with a warning, `use_rmc=True` in a
+session keeps them. (2) The program applies `--use-park` and `--no-brune` in the order given, a session lets Park
+win. Recommendation: refuse Reich-Moore with Brune on in both (as a project's keys already are), and refuse
+`--use-park --no-brune` on one command line.
+
+**One table, one row.** The options are rows of the `<config>` key table (`io/src/ConfigSection.cpp`: name, flags,
+default, what it changes); the program's parser and help, `--describe`, pyazr's `kinds()` and the web page read them
+there. A new option is that row, its place in the engine's configuration (`src/ProjectOptions.cpp`), and its keyword
+in pyazr's constructor; tests fail when one of the three is missing.
+
 ## What is in work and what comes next
 
 Merged in the night of 2026-11-12, each after the whole verification: the

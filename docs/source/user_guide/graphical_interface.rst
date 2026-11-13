@@ -25,10 +25,11 @@ How to do what the setup utility did
      - ``AZURE2 project.azr`` and the menu it prints, or the flags of
        :doc:`../reference/command_line`; from Python, :doc:`pyazr`.
    * - Runtime options (Brune, Park, relativistic kinematics, THM, ...)
-     - Command-line flags (:doc:`../reference/command_line`), or the
-       keyword arguments of ``pyazr.azure2`` (``use_brune``, ``use_park``,
-       ...). The setup utility kept them in its own settings, not in the
-       ``.azr`` file.
+     - Keys of ``<config>`` in the ``.azr`` (``use_brune=0``, ...;
+       :ref:`options-as-config-keys`), or for one run the command-line flags
+       (:doc:`../reference/command_line`) and the keyword arguments of
+       ``pyazr.azure2``. The setup utility kept them in its own settings, not
+       in the ``.azr`` file.
    * - Build the Coulomb-function table
      - ``AZURE2 --build-coulomb-table`` (:doc:`configure_menu`, "Coulomb
        functions from a table").

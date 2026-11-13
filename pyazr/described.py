@@ -293,12 +293,11 @@ def _build_kinds():
     parameter_fields = {f["name"]: {k: (list(v) if isinstance(v, (list, tuple)) else v)
                                     for k, v in f.items() if k != "name"} for f in engine.parameter_record_fields()}
     pair_fields = {f["name"]: {"unit": f["unit"], "doc": f["doc"]} for f in engine.pair_record_fields()}
-    defaults = engine.RuntimeOptions()
     options = {}
     for row in engine.session_options():
-        value = getattr(defaults, row["name"])
-        options[row["keyword"]] = {"engine_name": row["name"], "type": type(value).__name__, "default": value,
-                                   "flag": row["flag"], "negation": row["negation"], "doc": row["doc"]}
+        options[row["keyword"]] = {"engine_name": row["name"], "type": row["type"], "default": row["default"],
+                                   "key": row["key"], "flag": row["flag"], "negation": row["negation"],
+                                   "effect": row["effect"], "reason": row["reason"], "doc": row["doc"]}
     # one entry per row of the binding's physics table (api/src/pybind_physics.cpp); pyazr.physics is built from it
     physics = {row["name"]: row for row in engine.physics_functions()}
     stopping = {}
@@ -337,8 +336,9 @@ def kinds():
     - ``parameter_fields``, ``pair_fields``: the fields of a parameter's and a pair's record (:class:`pyazr.Parameter`,
       :class:`pyazr.Pair`): unit (``"unit"``: the parameter's own), doc; a parameter field also the ``kinds`` it
       describes, ``every_kind`` and ``owner`` (shown in ``Parameters.table()`` as what the parameter belongs to);
-    - ``options``: the session options by their keyword of :class:`pyazr.azure2`: type, default, the program's
-      ``flag`` and ``negation``, doc;
+    - ``options``: the session options by their keyword of :class:`pyazr.azure2`: type, default, ``key`` (the
+      ``<config>`` key of an option of the calculation, the same word; "" for one that is not project state, with its
+      ``reason``), the program's ``flag`` and ``negation``, ``effect`` (physics, convention, numerics), doc;
     - ``physics``: the rows of the binding's physics table, by name (:mod:`pyazr.physics` has one function per row):
       summary, doc, library (the C++ function called), axis (the argument a plot puts on its horizontal axis),
       arguments (name, unit, doc, kind, domain, lower, upper, lower_open, upper_open, choices, default) and returns
@@ -395,6 +395,7 @@ def describe_session(session):
     options["cwd"] = s.cwd
     return json.loads(json.dumps({
         "project": s.file, "cwd": s.cwd, "output_dir": s.output_dir, "mode": s.mode, "options": options,
+        "option_sources": dict(s.option_sources),
         "coulomb_table": coulomb_table(s.options.get("use_coulomb_table", True), s.options.get("coulomb_table", "")),
         "pairs": pairs, "levels": levels, "datasets": datasets, "extrapolations": extrapolations,
         "parameters": parameters, "free_parameters": int(sum(1 for p in parameters if p["free"])),

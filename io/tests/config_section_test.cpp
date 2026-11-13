@@ -177,6 +177,39 @@ void Synthetic() {
             e[0].line == 12 && e[1].line == 13 && e[1].text == "relativistic=0");
   // A short section is not closed.
   check("short section not closed", !ReadConfigSection(Lines("<config>\ntrue\nout/\n</config>\n")).closed);
+  // The options of the calculation (project_format3.md section 3.12): bool keys with flags, set and refused as keys.
+  check("an option added before </config>", ConfigEdits(lines, "use_brune", "0", ConfigChange::Set, e, why) && e.size() == 1 &&
+                                                e[0].insert && e[0].text == "use_brune=0");
+  check("an option's bad value refused", !ConfigEdits(lines, "use_park", "yes", ConfigChange::Set, e, why) &&
+                                            why.find("0, 1, true or false") != std::string::npos);
+  check("an option set", ConfigEdits(lines, "transform", "1", ConfigChange::Set, e, why));
+  const std::vector<std::string> withOption = Apply(lines, e);
+  check("an option removed (its line goes)", ConfigEdits(withOption, "transform", "", ConfigChange::Remove, e, why) &&
+                                                 e.size() == 1 && e[0].remove && Apply(withOption, e) == lines);
+  bool on = false;
+  check("option values", ConfigOptionValue("1", on) && on && ConfigOptionValue("false", on) && !on &&
+                             !ConfigOptionValue("yes", on) && !ConfigOptionValue("", on));
+  int options = 0;
+  for (const ConfigKey &k : ConfigKeys()) {
+    if (!k.option) continue;
+    options++;
+    check(std::string(k.name) + ": an option is a bool key with a flag or a negation and an effect",
+          k.kind == ConfigKey::Bool && (*k.flag || *k.negation) && *k.effect && ConfigOptionNamed(k.name) == &k);
+    check(std::string(k.name) + ": no other row of the same name",
+          std::count_if(ConfigKeys().begin(), ConfigKeys().end(), [&](const ConfigKey &x) { return std::string(x.name) == k.name; }) == 1);
+  }
+  check("eleven options", options == 11);
+  check("a key that is not an option", ConfigOptionNamed("relativistic") == nullptr && ConfigOptionNamed("amatrix") == nullptr);
+  bool parkBeforeBrune = false, seenBrune = false;
+  for (const ConfigKey &k : ConfigKeys()) {
+    seenBrune = seenBrune || std::string(k.name) == "use_brune";
+    parkBeforeBrune = parkBeforeBrune || (std::string(k.name) == "use_park" && !seenBrune);
+  }
+  check("use_brune before use_park (a session applies its keywords in this order)", seenBrune && !parkBeforeBrune);
+  for (const ConfigOptionImplication &i : ConfigOptionImplications())
+    check(std::string(i.name) + " -> " + i.implied + ": both options", ConfigOptionNamed(i.name) && ConfigOptionNamed(i.implied));
+  for (const ConfigOptionContradiction &c : ConfigOptionContradictions())
+    check(std::string(c.a) + " / " + c.b + ": both options, a reason", ConfigOptionNamed(c.a) && ConfigOptionNamed(c.b) && *c.why);
 }
 
 }  // namespace

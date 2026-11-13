@@ -94,9 +94,10 @@ class Engine:
         return self._describe()
 
     def _describe(self):
-        """The session: its options, free-vector length, data sets (in the engine's order) and parameters."""
+        """The session: its options and where each came from, free-vector length, data sets (in the engine's order) and parameters."""
         s = self.s
-        return {"options": dict(s.options), "n_free": len(s.params_rwa), "datasets": self._datasets(),
+        return {"options": dict(s.options), "option_sources": dict(s.option_sources), "n_free": len(s.params_rwa),
+                "datasets": self._datasets(),
                 "parameters": self._parameters()}
 
     def _datasets(self):

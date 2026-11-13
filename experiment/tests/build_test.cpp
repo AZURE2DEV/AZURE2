@@ -731,6 +731,43 @@ int main() {
       const Format3Project without = ReadFormat3Text(text.substr(0, text.find("useAdaptiveGrid")) + "format=3\n</config>\n", read);
       check("without the line: no diagnostic", without.diagnostics.empty());
     }
+    // the options of the calculation in <config> (the reading path: ProjectReader; project_format3.md section 3.12): a value
+    // the engine does not read, and each contradiction with its two keys named, an absent key at its default
+    {
+      Format3ReadOptions read;
+      read.build = false;
+      const auto codesOf = [&read](const std::string &keys, int *line = nullptr, std::string *message = nullptr) {
+        const std::string text = "<config>\ntrue\noutput/\nchecks/\nnone\nnone\nnone\nnone\nnone\nnone\nnone\nnone\n" + keys +
+                                 "format=3\n</config>\n";
+        std::vector<std::string> codes;
+        for (const Diagnostic &d : ReadFormat3Text(text, read).diagnostics) {
+          codes.push_back(d.code);
+          if (line) *line = d.line;
+          if (message) *message = d.message;
+        }
+        return codes;
+      };
+      const std::vector<std::string> none, value = {"E_CONFIG_OPTION_VALUE"}, both = {"E_CONFIG_OPTIONS_CONTRADICT"};
+      check("every option at 0 and 1 where it contradicts nothing: no diagnostic",
+            codesOf("use_brune=1\nuse_park=1\ntransform=0\nignore_externals=0\nuse_long_wavelength=0\n"
+                    "ec_convection_current=0\nuse_gsl_coul=true\nuse_coulomb_table=false\nuse_ec_table=0\nreplace_grids=0\n") == none &&
+            codesOf("use_rmc=1\nuse_brune=0\n") == none && codesOf("use_brune=0\n") == none);
+      int line = 0;
+      std::string message;
+      check("E_CONFIG_OPTION_VALUE: use_brune=yes, at its line",
+            codesOf("use_brune=yes\n", &line, &message) == value && line == 13 && message.find("0, 1, true or false") != std::string::npos);
+      check("E_CONFIG_OPTION_VALUE: an empty value", codesOf("transform=\n") == value);
+      check("E_CONFIG_OPTIONS_CONTRADICT: use_park=1 with use_brune=0, both keys named",
+            codesOf("use_park=1\nuse_brune=0\n", &line, &message) == both && line == 13 &&
+                message.find("use_park=1 (this file)") != std::string::npos && message.find("use_brune=0 (this file)") != std::string::npos);
+      check("E_CONFIG_OPTIONS_CONTRADICT: use_rmc=1 alone (use_brune at its default 1)",
+            codesOf("use_rmc=1\n", &line, &message) == both && message.find("use_brune=1 (the default)") != std::string::npos);
+      check("E_CONFIG_OPTIONS_CONTRADICT: use_brune=1 written with use_rmc=1", codesOf("use_brune=1\nuse_rmc=1\n") == both);
+      check("E_CONFIG_OPTIONS_CONTRADICT: ec_convection_current=0 with the long-wavelength approximation at its default",
+            codesOf("ec_convection_current=0\n") == both && codesOf("ec_convection_current=0\nuse_long_wavelength=1\n") == both);
+      check("the last line of a key wins: use_brune=0 then use_brune=1 with use_park=1 is valid",
+            codesOf("use_brune=0\nuse_brune=1\nuse_park=1\n") == none);
+    }
     // a thm field naming an experiment <thm> lacks (the reading path: ProjectReader)
     {
       Format3ReadOptions read;

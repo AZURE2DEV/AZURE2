@@ -45,8 +45,46 @@ struct ConfigKey {
   enum Kind { Bool, Int, Number, Path, Version } kind;
   int minimum;      ///< Int: the smallest value taken
   const char *doc;  ///< what it sets
+  /*!
+   * An option of the calculation (docs/upgrade/project_format3.md section 3.12): a bool key that is also a flag of the
+   * program and a keyword of a pyazr session, under the same name.  A flag or keyword given wins over the key, the key
+   * over `defaultOn`.  `flag` sets it on, `negation` off ("" where the program has none); `effect` says what it
+   * changes: "physics", "convention" or "numerics".
+   */
+  bool option = false;
+  const char *flag = "";
+  const char *negation = "";
+  bool defaultOn = false;
+  const char *effect = "";
 };
+/// The keys, in the order the engine applies them: the options in the order a session applies its keywords (use_brune
+/// before use_park, so that use_park=True with use_brune=False gives Park, as before the keys).
 const std::vector<ConfigKey> &ConfigKeys();
+/// The option named `name`, or nullptr when it is not an option.
+const ConfigKey *ConfigOptionNamed(const std::string &name);
+/// An option key's value: 1 | true is on, 0 | false off; false when the text is neither.
+bool ConfigOptionValue(const std::string &text, bool &on);
+
+/// A flag or keyword that also sets another option (a project's key implies nothing): `name` = `value` gives `implied`
+/// = `impliedValue`.
+struct ConfigOptionImplication {
+  const char *name;
+  bool value;
+  const char *implied;
+  bool impliedValue;
+};
+const std::vector<ConfigOptionImplication> &ConfigOptionImplications();
+
+/// Two option values that cannot hold together (E_CONFIG_OPTIONS_CONTRADICT): `a` = `aValue` with `b` = `bValue`.  Refused
+/// when at least one of the two comes from the project; `why` says why in words.
+struct ConfigOptionContradiction {
+  const char *a;
+  bool aValue;
+  const char *b;
+  bool bValue;
+  const char *why;
+};
+const std::vector<ConfigOptionContradiction> &ConfigOptionContradictions();
 
 /// Reads the section from its lines as Config::SectionStream gives them: the <config> tag line first, then the body,
 /// then the </config> line (absent when the section is not closed).

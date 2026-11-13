@@ -34,6 +34,13 @@ target_link_libraries(coulomb_gsl_crosscheck_test PRIVATE azure2_physics ${GSL_L
 target_include_directories(coulomb_gsl_crosscheck_test PRIVATE ${GSL_INCLUDE_DIRS})
 add_test(NAME physics_coulomb_gsl_crosscheck COMMAND coulomb_gsl_crosscheck_test)
 
+# The options of the calculation (include/ProjectOptions.h, docs/upgrade/project_format3.md section 3.12): every
+# option row of io::ConfigKeys() has its place in Config and Config::Reset's default; flag/keyword > key > default;
+# contradictions with a key refused.
+add_executable(project_options_test project_options_test.cpp)
+target_link_libraries(project_options_test PRIVATE AZURE2Core)
+add_test(NAME upgrade_project_options COMMAND project_options_test)
+
 # The planner of the shared mesh (include/MeshPlanner.h) against today's private grids: never coarser, shared,
 # independent of order, local, deterministic (docs/upgrade/energy_grid.md §2.8).
 add_executable(mesh_planner_test mesh_planner_test.cpp)
