@@ -404,6 +404,23 @@ objective, every term from the same table, and rejects a point outside the recor
 `tests/reference/sampler_objective_test.cpp`). The sampler's run (its file, step, best walker, callbacks and stop
 request) now belongs to the sampler object and the call that runs it, so two samplers in one process share nothing.
 
+## The sampler stays inside the fit's limits (2026-11-13)
+
+The ensemble sampler (MCMC) applied the limits of a `gamma_decay` record's numbers only. Every other limit a fit has
+it ignored: a normalization, an abundance, a screening potential or a sample thickness could go negative, a fitted
+areal density, Doppler temperature or stopping scale could leave the range its grids are laid out for (where the
+calculation then used the edge of the range while the prior read the value outside), and the limits written in
+`<parameterSettings>` were never read by the sampler at all. Now the posterior is zero wherever any free parameter is
+outside the limits a fit gives it, one rule for every kind (`PosteriorSupport`, `objective.md` section 6). Sampling
+observed widths, the limits act on the amplitudes they convert to, so a width limit written in eV holds at the start's
+level energy and moves with the conversion when the energy moves. A chain that never reached a limit is unchanged bit
+for bit: the nine chains of the sampler's earlier measurement (the record, 13N, `energy_shift_sqrt`, T2; 8 walkers ×
+100 steps, both bases) are identical. A chain that reached a limit changes, as intended: `screening_6li` with its three
+screening potentials started at 0.5 eV under priors centred at −300 eV gave before medians of +131, −217 and −205 eV
+(1382 of 2400 values below zero, mean ln P −1311.0 over steps 50–99), now 0.86, 0.60 and 0.24 eV (none below zero,
+mean ln P −1481.4; the posterior's mass at the edge). Posteriors of real projects change where a chain pressed against
+a limit: worth rerunning those whose samples had a negative norm, abundance or screening potential.
+
 ## The centre of a prior is the number written (2026-11-13)
 
 A fitted number of a format-3 project is written `<value> fit prior <centre> <width>`. For norms and the constant

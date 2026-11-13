@@ -44,6 +44,19 @@ tests used to answer:
 - `varyFromProject` — its project line's vary flag decides whether it varies; a parameter file's zero or nonzero
   value does not fix or free it (3, 4, 5, 7, 8, 9, 10).
 
+**Limits.** The table has no column for them: a kind's limits are set where its parameter is created, and
+`<parameterSettings>` may set or replace them for any parameter (`ParameterLimitsManager::ApplyAllParameterSettings`).
+MINUIT keeps the fit inside them, and the ensemble sampler's posterior is zero outside them, in both sampling bases
+(objective.md section 6, "The support"; `PosteriorSupport`). The kinds' own:
+
+| kind | limits | set in |
+|---|---|---|
+| `energy`, `shift`, `shift_sqrt`, `shift_fn`, `cbkg` | none | — |
+| `width` | none; ±√γ²_W under `Config::USE_WIGNER_LIMITS` (no input sets it) | `CNuc::FillMnParams` |
+| `norm`, `abundance`, `screening`, `thickness` | ≥ 0 | `WorkingCopy::FillMnParams`, `CNuc::FillMnParams` |
+| `density`, `doppler`, `apparatus` | [f·b, H(b)], the layout range (section 4) | `WorkingCopy::FillMnParams`, `AddApparatusParams` |
+| `radiative` | Γ_γ ≥ 0, b_f ∈ [0, 1], δ none | `GammaDecaySet::AddParameter` |
+
 ## 2. The sites that recognised a kind by name (before this change), and what they decide now
 
 | site (line numbers before) | what it decided | now |
@@ -89,6 +102,8 @@ Still a second walk of the layout (positions, not names; each must follow the cr
    fields are new [check 23: one row per value, in code order].
 2. Create it with `AZUREParams::Add(name, value, step, ParameterRecord::…)` in `CNuc::FillMnParams` or
    `EData::FillMnParams`, its name built there by one function. Nothing else may test the name.
+   Its limits, if it has any, are a `SetLimits` / `SetLowerLimit` call there: the fit and the sampler both read
+   them (nothing else to edit).
 3. Follow the layout in `BuildParamIndexMap`; the fields that say what it belongs to are rows of the record table
    `ParameterFields()` (`api/src/pybind_records.cpp`), which pyazr reads with no Python edit
    (`tests/pyazr/parameter_records_test.py` fails for a kind no owner field describes).
