@@ -70,3 +70,25 @@ Sphinx docs (`docs/source/getting_started/whats_new.rst` and the pages named bel
   total as their model value.
 - builds before 2026-10-08 (expires: 2027-02-01): free-vector entry points accepted a short vector silently.
 - builds before 2026-11-03 (expires: 2027-02-01): the `.azr` was re-parsed on every call.
+
+## Failed points
+
+- builds before 2026-11-01 (expires: 2027-02-01): a failed point was a silent 0 in the CLI objective and pre-pass, a
+  failed or NaN term of a SUM or natural-target composite was left out of the sum, and a failed RATIO denominator
+  gave 0, so χ² looked normal; on such a build a composite segment with exact zeros or a low SUM is a candidate.
+
+## Levels
+
+- builds before 2026-10-31 (expires: 2027-02-01): a level with all widths 0 sitting exactly on a data energy made
+  the level matrix singular and removed its J^π group at that point (NaN or a GSL exception). Keep such levels off
+  data energies on those builds.
+- builds before 2026-10-26 (expires: 2027-02-01): a missing final state was created silently as a hidden level with
+  free 0.1 MeV^½ amplitudes, and because it existed only when external capture was on, every later `energy_N` /
+  `width_N_c` name shifted by one between runs. A `.sav` from such a run has that hidden slot in its numbering: do
+  not reuse it by name.
+
+## EXFOR conversion
+
+- builds before 2026-10-27 (expires: 2027-02-01): `to_azr` and the GUI EXFOR dialog multiplied a `,,RTH` ratio by
+  the c.m. Rutherford cross section at the **lab** angle (1.13× off for p+¹⁶O, 1.8–2.2× for α+¹²C) and called every
+  angle column c.m. Regenerate data files made from a lab-angle `,,RTH` set with such a build.
