@@ -132,13 +132,24 @@ With q the record's parameters of level λ and p_k = γ_λ,k the amplitudes of i
     ∂p_k/∂q = (p_k / 2Γ_k) ∂Γ_k/∂q   (Γ_γ, b; Γ_k ≠ 0; 0 for Γ_k = 0),      ∂Γ_k/∂q from (2.3), analytic
     ∂p_L/∂δ = −p_L δ/(1+δ²),   ∂p_L+1/∂δ = K/(1+δ²)^{3/2},   K = 2^½ p_L+1 at δ = 1    (regular through δ = 0)
     ∂p_k/∂γ_c = p_k γ_c S'_c / n_λ   (particle channel c of λ, Brune; 0 in Park's basis)
-    ∂p_k/∂E_λ   by a central difference of the map (step 10⁻⁶ MeV)                                          (2.5)
+    ∂p_k/∂E_λ   by a central difference of the map (step h = 10⁻⁴ MeV, kEnergyStep)                       (2.5)
 
 The gradient of χ² in the record's parameters is the chain rule on the engine's existing gradient in the amplitudes,
 g_q = Σ_k g_{p_k} ∂p_k/∂q, and the level's energy and particle amplitudes get g_{p_k} ∂p_k/∂E, ∂p_k/∂γ_c added: the
 amplitudes of a photon channel move when Γ_γ is held and the energy or n_λ changes. The covariance of the record's
 parameters is the one the fit gives (MINUIT's, or the MCMC's); the error of a derived number (the remainder, a partial
 width) is propagated with ∂/∂q of (2.3) to the linearisation.
+
+**The step of the energy's difference.** The map's dependence on E_λ (P^γ ∝ E_γ^{2L+1}, n_λ through S'_c, γ^ext
+through the radial integrals) varies on a scale of 100 keV or more, so the truncation error of h = 10⁻⁴ MeV is of
+order (h/0.1 MeV)² ≈ 10⁻⁶ of the map's share of the energy's gradient, which is itself about 5×10⁻⁴ of that gradient
+in the test's ¹⁵O level; the rounding error, ε/h ≈ 10⁻¹², is far smaller. Measured (`AZURE_GRAD_CHECK`, the record of
+the test with external capture, E_λ and a final state's E_f free, and without capture): the analytic energy gradient
+with h = 10⁻⁴ and with 10⁻⁶ MeV differs by 2.6×10⁻⁹ (E_λ, with capture), 3.7×10⁻¹¹ (E_λ, without) and 8×10⁻¹⁰ (E_f)
+relative; against the check's own central difference at its step 10⁻⁸ both give 2.4×10⁻⁷ (E_λ, with capture),
+1.4×10⁻⁷ (without) and 3×10⁻⁹ (E_f), the error of the check, not of the map. Both steps meet the accuracy the tests
+ask (10⁻⁵ for an energy); the code keeps 10⁻⁴ MeV, which leaves more room for the quadrature noise of the radial
+integrals (an error ε_I of an integral enters as ε_I/h).
 
 ### 2.6 The constraint Σ b_f = 1, and the boundary
 
@@ -213,11 +224,18 @@ map is continuous there; on the floor side the record's numbers have no gradient
 the integrals of the same fill (no further integral). ∂N_f/∂γ̃_fd uses the coefficient A_d of
 `physics::bound_state_coefficient`, as the capture term's gradient does (`AMatrixFunc`). The energy E_λ keeps its
 central difference of the whole map (step 10⁻⁴ MeV), γ^ext included, as in section 2.5: the radial integrals have no
-derivative in the code. E_f has no term: a bound state's energy is never a free parameter (`CNuc::FillMnParams`).
-The fill stores, per record channel, g_k, γ^ext_k and the two slopes; the pull-back reads them (no integral), except
-the energy's difference (two further maps), taken only when E_λ is free. The gradient's mask asks for the photon
-amplitudes' cotangents when any input of the record is free: its numbers, E_λ, γ_λc and the particle amplitudes of
-the final states with an external part (`GammaDecaySet::InputIndices`).
+derivative in the code. The energy E_f of a final state of an external part is a parameter too, and it is free when
+the state lies above a particle threshold of its nucleus (`CNuc::FillMnParams` fixes the energy of a level below
+every threshold only): a final state bound in the capture pair but above a second pair's threshold, as the states of
+¹⁶O above the α threshold for ¹⁵N(p,γ) or ⁷Be's 4.57 MeV state for ⁶Li(p,γ). Then E_f gets its term by the same
+central difference of the whole map in E_f (with E_λ held; one difference per final state, all its slots moved
+together). The fill stores, per record channel, g_k, γ^ext_k and the two slopes; the pull-back reads them (no
+integral), except the energies' differences (two further maps each), taken only for an energy that is free. The
+gradient's mask asks for the photon amplitudes' cotangents when any input of the record is free: its numbers, E_λ,
+γ_λc and the energies and particle amplitudes of the final states with an external part
+(`GammaDecaySet::InputIndices`). Test: `tests/gamma_decay/check.sh` (j), the ¹⁵O record with a second pair whose
+threshold lies below 6.1763 MeV (relative difference of that energy's gradient to the central difference 7×10⁻¹⁰;
+without the term 0.12).
 
 **`parameters.out`.** The record's block gives Γ_γ, b_f, δ_f and the partial widths of (2.3); these are the observed
 widths `TransformOut` prints for the level's channels (`observed_levels` with γ^ext at the same parameters), to the
@@ -239,6 +257,49 @@ everything they depend on, so the numbers do not depend on the thread count.
 
 **`--ignore-externals`.** A record channel whose set-up width is 0 has no external part, as `TransformIn` decides on
 the input (external_capture.md section 3).
+
+### 2.8 The vector of observed parameters
+
+Besides the fit's vector (amplitudes, and the record's numbers at the record's slots), the engine has a second form
+of the level parameters, the **observed** one: per level its energy and, per channel, the observed width (eV), ANC
+or moment, as a `<levels>` line holds them. `CNuc::GetTransformParams` returns it after `TransformOut`;
+`CNuc::FillCompoundFromParamsPhysical` takes it back as the levels' input values, after which `TransformIn` and
+`FillMnParams` give the fit's vector. pyazr's physical parameters, the MCMC's observed-parameter sampling, the
+conversion of a user's limit or prior on a width and the copies of the compound that place the integration grids
+use this form.
+
+**The rule.** In both directions the observed vector carries, at a record's slots, the record's numbers (Γ_γ in eV,
+b_f, δ_f), as the fit's vector and `parameters.out` do: they are what a user, pyazr and the sampler see and set.
+One function turns such a vector into the levels' observed widths: `GammaDecaySet::WithPartialWidths` replaces each
+record's numbers by the partial widths of Eq. (2.3) (`PartialWidths`). `FillCompoundFromParamsPhysical` calls it
+and writes the result into the levels, and keeps the record's numbers as the compound's input values of the record
+(`CNuc::GammaDecayInputs`), which `FillMnParams` puts into the fit's vector, as it puts a level's input widths. So
+`FillCompoundFromParamsPhysical` → `TransformIn` → `FillMnParams` gives back the record's numbers it was given, and
+the record's photon widths in the levels are widths, not numbers of another kind. No caller reads or writes a record
+slot itself. Without a record both functions do what they did (the set is empty).
+
+What each place needs, and what it got before (measured on the build of this branch's start, scratch
+`work/gammapp/`):
+
+- `ReactionRate.cpp` (`RateResonances`) and `TargetSetup.cpp` (`ReplaceSubPointGrids`), the copy of the compound that
+  places the rate's breakpoints and the meshes' anchors: the levels' observed widths. Before, a record level's photon
+  widths there were its numbers: 0.870 eV instead of Γ_γ = 0.0385 eV for the ¹⁴N(p,γ) level of the test with
+  Γ_p = 0.01 eV. Harmless in every output: the anchors and the tabulated rate are placed with the particle width;
+  the sum with the photon widths is used only by the RMC formalism (refused for a record) and by the rate's
+  quadrature fallback (a grid with fewer than three points of σ > 0).
+- `ParameterLimitsManager::ConvertPhysicalLimitToReduced`, a limit or nuisance prior on a width (eV): the observed
+  vector with one entry replaced. Harmless before: the amplitude of a particle width does not depend on the photon
+  widths (they are outside n_λ and Park's J; the converted prior was the twin's to the last bit); a record's number
+  is not converted (its kind is not a width), its limit is applied as written.
+- `AZURE2.cpp` (the MCMC's start), `AZURECalcMCMC::UpdateParameterVectors`, `AZUREAPI` (`UpdateParameters`,
+  `SetParamsAllRWA`, `TransformRWAParameters`, `TransformAllRWAParameters`, `TransformAllRWAParametersFull`), what is
+  returned or sampled: the record's numbers, as the rule; unchanged.
+- `AZURECalcMCMC` (`CalculateLogLikelihoodPhysical`, the snapshot of the best walker, `ParkNonPositiveLevels`) and
+  `AZUREAPI` (`UpdateSegments`, `CalculateChi2Physical`), a vector set in observed form: the record's numbers in.
+  **Wrong before**: `FillMnParams` took the record's numbers from the file, so those of the vector were ignored.
+  pyazr's `calculate_chi2` with Γ_γ × 1.2 gave the χ² of the unchanged project (44.79 instead of 3889.3) and
+  `update_segments` cross sections 17 % off; the observed-parameter MCMC on the record's numbers had a constant
+  likelihood. Present since the record was merged (2026-11-13).
 
 ## 3. The file and the API
 
@@ -329,7 +390,9 @@ the datum computes is not changed here.
   One call each in `CNuc` (fill, parameters, fill from parameters), in the gradient's three scatter sites, and the
   helper `IsLevelSlot(kind)` where the code asked "energy or width" of a parameter. External capture on a record
   channel (section 2.7): `ExternalCaptureFinalState` and `ExternalReducedWidthAt` in `src/CNucExternalCapture.cpp`,
-  the record's inputs for the gradient's mask (`InputIndices`).
+  the record's inputs for the gradient's mask (`InputIndices`). The vector of observed parameters (section 2.8):
+  `GammaDecaySet::WithPartialWidths`, `NumbersAt`, `FileNumbers` and the compound's input numbers
+  (`CNuc::GammaDecayInputs`, set by `Fill` and `FillCompoundFromParamsPhysical`, read by `FillMnParams`).
 - Tests (`tests/gamma_decay/check.sh`): a project with partial widths and the same with the record, built by a script
   of the test from (2.3), calculations identical; pseudo-data from known Γ_γ, b_f fitted in both parametrisations
   (equal χ² minima, the errors of b_f equal the propagated ones), a prior's pull; the gradient against central

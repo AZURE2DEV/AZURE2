@@ -97,6 +97,12 @@ from 0 or fit an angular distribution as well. When the free branchings sum abov
 in the objective brings the sum back. ``parameters.out`` ends with a block that gives :math:`\Gamma_\gamma`, every
 :math:`b_f` (the remainder included), :math:`\delta_f` and the partial widths, with a note for a branching at 0.
 
+Wherever parameters are given or returned in observed form (pyazr's physical vectors: ``params_values``,
+``calculate_chi2``, ``update_segments``, ``transform_rwa``; the MCMC with ``Use Reduced Width Amplitudes: no``; a limit
+or nuisance prior in ``<parameterSettings>``), the record's numbers stand at its parameters' places, not partial
+widths: a value set there is the record's :math:`\Gamma_\gamma` (eV), :math:`b_f` or :math:`\delta_f`. A limit on a
+record's number is applied as written; one on a particle width of the record's level is converted as for any level.
+
 From Python, an agent reads the record, changes one branching and refits:
 
 .. code-block:: python

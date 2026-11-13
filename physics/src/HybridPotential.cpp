@@ -92,16 +92,17 @@ double SpinOrbitRadialTerm(const SpinOrbitTerm &t, double r) {
   return t.depth_MeV * kSpinOrbitLengthSquared_fm2 * df_dr / r;
 }
 
-double RadialPotential(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double r) {
-  const double Rc = p.coulomb_radius_fm;
-  // Coulomb: uniformly charged sphere inside R_C, point charge outside.
-  double Vc;
+double CoulombSphereTerm(int z1, int z2, double Rc, double r) {
+  // Uniformly charged sphere inside R_C, point charge outside.
   if (r < Rc) {
     double x = r / Rc;
-    Vc = z1 * z2 * kCoulombE2_MeV_fm / (2.0 * Rc) * (3.0 - x * x);
-  } else {
-    Vc = z1 * z2 * kCoulombE2_MeV_fm / r;
+    return z1 * z2 * kCoulombE2_MeV_fm / (2.0 * Rc) * (3.0 - x * x);
   }
+  return z1 * z2 * kCoulombE2_MeV_fm / r;
+}
+
+double RadialPotential(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double r) {
+  const double Vc = CoulombSphereTerm(z1, z2, p.coulomb_radius_fm, r);
   double V_nuclear = NuclearTerm(p, r);
   double V_centrifugal = 0.0;
   if (r > 0.0) {

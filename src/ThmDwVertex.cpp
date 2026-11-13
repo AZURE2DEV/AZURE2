@@ -7,174 +7,27 @@
 #include <chrono>
 #include <cmath>
 #include <sstream>
-#include <gsl/gsl_integration.h>
+#include <stdexcept>
+
+#include "azure2/physics/transfer/SourceProjection.h"
 
 /*
  * Numerics (docs/source/theory/thm_implementation.rst, "Distorted-wave
- * entrance vertex").
- *
- * With r = r_xA along z and u = r_sx in the xz plane, R_s = alpha r z^ + u and
- * R_a = r z^ + beta u (polar angles theta_s, theta_a, azimuth 0), the reduced
- * amplitude
- *
- *   h^l_{Ls La}(r) = sqrt(4pi/(2l+1)) 2pi Int u^2 du phi(u) Int dcos(theta_u)
- *                    f_Ls(R_s) f_La(R_a) K^l_{Ls La}(theta_s, theta_a),
- *   K = sum_M <Ls M La -M|l 0> Y_LsM(theta_s, 0) Y_La-M(theta_a, 0),
- *
- * f_L(R) = u_L(kR)/R, does not depend on the directions of k_aA and k_sF.  K is
- * the zero component of the bipolar harmonic {Y_Ls(R_s^) x Y_La(R_a^)}_l;
- * rotating R_s^ onto z leaves only M_s = 0, so
- *
- *   K = sqrt((2Ls+1)/(2l+1)) sum_nu (-1)^nu <Ls 0 La nu|l nu> Y_l nu(theta_s, 0)
- *       Y_La nu(theta_a - theta_s, 0),
- *
- * |nu| <= l: O(l) per (l, Ls, La) instead of O(min(Ls, La)).  The r derivative
- * at fixed u: dR_s/dr = alpha cos theta_s, dtheta_s/dr = -alpha sin theta_s/R_s,
- * dR_a/dr = cos theta_a, dtheta_a/dr = -sin theta_a/R_a.
- *
- * Quadrature: u from rmin to rmin + 26/kappa in 16-point Gauss-Legendre panels
- * of at most 4 radians of (k_sF + beta k_aA) u and 5 fm; cos theta_u on
- * 1.2 Lmax + 20 Gauss-Legendre nodes.  Partial waves L <= k R_max + 14 in each
- * channel (R_max = a + beta u_max, alpha a + u_max).  Only f_Ls depends on the
- * energy: the geometry, K and f_La are evaluated once per point for a batch of
- * energies.  Waves: the library's (physics/transfer SolveStoredWaves: Numerov
- * from the origin, normalized to F + T H^+, matched beyond the turning point;
- * Riccati-Bessel functions for a plane wave), on a uniform grid read by
- * six-point Lagrange interpolation (value and derivative).
+ * entrance vertex"; docs/upgrade/transfer.md section 25).  The projection of
+ * the source at r = a -- the reduced amplitudes per (l, Ls, La) by the 2D
+ * quadrature in (u, cos theta_u), and S_lm(a), S_lm'(a) at a direction -- is
+ * the library's (physics/transfer SourceProjection.h).  Here: the energy
+ * grid and its passes (the exit waves of a pass and the blocks of the sum over
+ * the points run on the threads; the library fixes the order of the sum), the
+ * directions, the normalisation by 4 pi phi~(q), the Gram matrix and its
+ * interpolation.
  */
 
 namespace {
 
-const double kGridStep = 0.02;   // MeV
-const double kTail = 26.0;       // u_max = rmin + kTail/kappa
-const int kGL = 16;              // nodes per u panel
-const double kPanelPhase = 4.0;  // radians per u panel
-const double kPanelMax = 5.0;    // fm
-const int kLMargin = 14;
-const int kLCap = 200;
-const int kBatch = 8;            // energies per pass over the points
-const int kSumBlocks = 64;        // blocks of the sum over the points (fixed order, any thread count)
-const size_t kSumBytes = (size_t)32 << 20;  // at most this for their buffers
-
-inline int Idx(int L, int M) { return L * (L + 1) / 2 + M; }
-
-/*
- * Y_LM(theta, 0) for 0 <= M <= min(L, mMax), L <= lMax (Condon-Shortley phase)
- * and d/dtheta, by the standard stable recurrences; theta may be negative
- * (Y(-theta, 0) = Y(theta, pi)).  Stored at Idx(L, M); entries with M > mMax
- * are left as they are.
- */
-void YTable(int lMax, int mMax, double theta, std::vector<double> &y, std::vector<double> &dy) {
-  const int size = (lMax + 1) * (lMax + 2) / 2;
-  if ((int)y.size() < size) y.assign(size, 0.0);
-  if ((int)dy.size() < size) dy.assign(size, 0.0);
-  const double x = std::cos(theta), s = std::sin(theta);
-  const int top = std::min(mMax + 1, lMax);  // one order more for the derivative
-  double pmm = 1.0 / std::sqrt(4.0 * M_PI);
-  for (int M = 0; M <= top; M++) {
-    if (M > 0) pmm = -std::sqrt((2.0 * M + 1.0) / (2.0 * M)) * s * pmm;
-    y[Idx(M, M)] = pmm;
-    if (M < lMax) {
-      double p0 = pmm, p1 = std::sqrt(2.0 * M + 3.0) * x * pmm;
-      y[Idx(M + 1, M)] = p1;
-      for (int L = M + 2; L <= lMax; L++) {
-        double a = std::sqrt((4.0 * L * L - 1.0) / ((double)L * L - (double)M * M));
-        double b = std::sqrt(((L - 1.0) * (L - 1.0) - (double)M * M) / (4.0 * (L - 1.0) * (L - 1.0) - 1.0));
-        double p2 = a * (x * p1 - b * p0);
-        y[Idx(L, M)] = p2;
-        p0 = p1;
-        p1 = p2;
-      }
-    }
-  }
-  // dY_LM/dtheta = [sqrt((L-M)(L+M+1)) Y_L,M+1 - sqrt((L+M)(L-M+1)) Y_L,M-1]/2, Y_L,-1 = -Y_L,1.
-  for (int L = 0; L <= lMax; L++)
-    for (int M = 0; M <= std::min(L, mMax); M++) {
-      double up = M + 1 <= L ? std::sqrt((double)(L - M) * (L + M + 1)) * y[Idx(L, M + 1)] : 0.0;
-      double down = 0.0;
-      if (M > 0)
-        down = std::sqrt((double)(L + M) * (L - M + 1)) * y[Idx(L, M - 1)];
-      else if (L > 0)
-        down = -std::sqrt((double)L * (L + 1)) * y[Idx(L, 1)];
-      dy[Idx(L, M)] = 0.5 * (up - down);
-    }
-}
-
-// Six-point Lagrange weights (value and d/dx) at x on a uniform grid of step h
-// with n nodes: the first node j (0 <= j <= n - 6).
-struct Lagrange6 {
-  int j = 0;
-  double w[6], dw[6];
-  void Set(double x, double h, int n) {
-    double t = x / h;
-    j = (int)std::floor(t) - 2;
-    if (j < 0) j = 0;
-    if (j > n - 6) j = n - 6;
-    double s = t - j;
-    static const double den[6] = {-120.0, 24.0, -12.0, 12.0, -24.0, 120.0};
-    double d[6];
-    for (int i = 0; i < 6; i++) d[i] = s - i;
-    for (int i = 0; i < 6; i++) {
-      double p = 1.0, dp = 0.0;
-      for (int m = 0; m < 6; m++) {
-        if (m == i) continue;
-        dp = dp * d[m] + p;  // derivative of the running product
-        p *= d[m];
-      }
-      w[i] = p / den[i];
-      dw[i] = dp / den[i] / h;
-    }
-  }
-  void Apply(const complex *u, complex &v, complex &dv) const {
-    v = dv = complex(0.0, 0.0);
-    for (int i = 0; i < 6; i++) {
-      v += w[i] * u[j + i];
-      dv += dw[i] * u[j + i];
-    }
-  }
-};
-
-// u_L(kR) for L = 0..lMax on j step, j < n, and e^{i sigma_L}: the library's
-// waves of the channel at its c.m. energy ecm (matched beyond the turning point;
-// Riccati-Bessel functions for a plane wave).  "" or what is wrong.
-std::string WaveTable(const ThmDistortion &d, const ThmDistortion::Channel &c, double ecm, int lMax, double step,
-                      int n, std::vector<std::vector<complex>> &u, std::vector<complex> &phase) {
-  namespace transfer = azure2::physics::transfer;
-  transfer::DistortedWaves w;
-  try {
-    w = transfer::SolveStoredWaves(d.LibraryChannel(c, ecm), step, n, lMax, d.numerics.matching);
-  } catch (const std::exception &e) {
-    return e.what();
-  }
-  u.assign(lMax + 1, std::vector<complex>());
-  phase.assign(lMax + 1, complex(1.0, 0.0));
-  for (int L = 0; L <= lMax; L++) {
-    u[L] = std::move(w.waves[L].u);
-    phase[L] = std::polar(1.0, w.sigma[L]);
-  }
-  return "";
-}
+const double kGridStep = 0.02;  // MeV
 
 }  // namespace
-
-double ThmCG(int j1, int m1, int j2, int m2, int J, int M) {
-  if (m1 + m2 != M || J < std::abs(j1 - j2) || J > j1 + j2 || std::abs(m1) > j1 || std::abs(m2) > j2 ||
-      std::abs(M) > J)
-    return 0.0;
-  auto lf = [](int n) { return lgammal((long double)n + 1.0L); };
-  long double pre = 0.5L * (logl(2.0L * J + 1.0L) + lf(J + j1 - j2) + lf(J - j1 + j2) + lf(j1 + j2 - J) -
-                            lf(j1 + j2 + J + 1) + lf(J + M) + lf(J - M) + lf(j1 - m1) + lf(j1 + m1) + lf(j2 - m2) +
-                            lf(j2 + m2));
-  long double sum = 0.0L;
-  int kMin = std::max(0, std::max(j2 - J - m1, j1 - J + m2));
-  int kMax = std::min(j1 + j2 - J, std::min(j1 - m1, j2 + m2));
-  for (int k = kMin; k <= kMax; k++) {
-    long double t = expl(pre - lf(k) - lf(j1 + j2 - J - k) - lf(j1 - m1 - k) - lf(j2 + m2 - k) -
-                         lf(J - j2 + m1 + k) - lf(J - j1 - m2 + k));
-    sum += (k % 2) ? -t : t;
-  }
-  return (double)sum;
-}
 
 int ThmDwVertex::LIndex(int l) const {
   for (size_t i = 0; i < lvals.size(); i++)
@@ -226,7 +79,6 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
   if (lvals.empty()) return "the entrance pair has no channel";
   if (!(a > 0.0)) return "the channel radius of the entrance pair is not positive";
   const int nl = (int)lvals.size();
-  const int lTop = lvals.back();
 
   gridLo = eLo;
   gridStep = kGridStep;
@@ -253,9 +105,6 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
   alpha = k.mA / (k.mx + k.mA);
   beta = k.ms / k.ma;
   const double ka = dist.aa.k;
-  const double kappa = dist.kappa;
-  const double rmin = dist.rmin;
-  uMax = rmin + kTail / kappa;
 
   // The acceptance: the accepted spectator directions (spectatorAngles=
   // and/or the |p_s| cut of a ps window; ThmDistortion::AngleNodes).
@@ -270,7 +119,9 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
     nAng = dist.angSlots * dist.angNodes;
   }
 
-  // Partial waves and the u, cos theta_u quadrature.
+  // The source's projection at r = a: the plan once (quadrature, triples, a + A waves), then per pass of
+  // exit energies the s + F waves and the blocks of the sum over the points, each on the threads.
+  namespace transfer = azure2::physics::transfer;
   std::vector<double> ksE(nE), esfE(nE);
   double ksMax = 0.0;
   for (int e = 0; e < nE; e++) {
@@ -278,169 +129,62 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
     ksE[e] = std::sqrt(2.0 * dist.sf.mu * esfE[e]) / hbarc;
     ksMax = std::max(ksMax, ksE[e]);
   }
-  const double rA = a + beta * uMax, rS = alpha * a + uMax;
-  laMax = (int)std::ceil(ka * rA) + kLMargin;
-  lsMax = (int)std::ceil(ksMax * rS) + kLMargin;
-  if (laMax > kLCap || lsMax > kLCap)
-    return "the partial-wave sums would need L up to " + ThmNumberText(std::max(laMax, lsMax)) + " (kappa too small)";
-  std::vector<double> uNode, uWt;
-  {
-    double width = std::min(kPanelMax, kPanelPhase / (ksMax + beta * ka));
-    int panels = std::max(2, (int)std::ceil((uMax - rmin) / width));
-    gsl_integration_glfixed_table *t = gsl_integration_glfixed_table_alloc(kGL);
-    for (int p = 0; p < panels; p++) {
-      double lo = rmin + (uMax - rmin) * p / panels, hi = rmin + (uMax - rmin) * (p + 1) / panels;
-      for (int i = 0; i < kGL; i++) {
-        double xi, wi;
-        gsl_integration_glfixed_point(lo, hi, i, &xi, &wi, t);
-        uNode.push_back(xi);
-        uWt.push_back(wi);
-      }
-    }
-    gsl_integration_glfixed_table_free(t);
-  }
-  cNodes = (int)std::ceil(1.2 * std::max(laMax, lsMax)) + 20;
-  std::vector<double> cNode(cNodes), cWt(cNodes);
-  {
-    gsl_integration_glfixed_table *t = gsl_integration_glfixed_table_alloc(cNodes);
-    for (int i = 0; i < cNodes; i++) gsl_integration_glfixed_point(-1.0, 1.0, i, &cNode[i], &cWt[i], t);
-    gsl_integration_glfixed_table_free(t);
-  }
-  uNodes = (int)uNode.size();
-  std::vector<double> phiU(uNodes);
-  for (int i = 0; i < uNodes; i++) phiU[i] = dist.Phi(uNode[i]);
-
-  // Triples (l, Ls, La): |Ls - La| <= l <= Ls + La, Ls + La + l even; the
-  // coefficients sqrt((2Ls+1)/(2l+1)) (-1)^nu <Ls 0 La nu|l nu> (x2 for nu > 0).
-  struct Triple {
-    int li, l, ls, la;
-    std::vector<double> c;   // nu = 0..min(l, La)
-    std::vector<double> cm;  // <Ls m La 0|l m> sqrt((2La+1)/4pi), m = 0..min(l, Ls)
-  };
-  std::vector<Triple> triples;
-  for (int li = 0; li < nl; li++) {
-    int l = lvals[li];
-    for (int Ls = 0; Ls <= lsMax; Ls++)
-      for (int La = std::abs(Ls - l); La <= std::min(laMax, Ls + l); La++) {
-        if ((Ls + La + l) % 2) continue;
-        Triple t{li, l, Ls, La, {}, {}};
-        double pre = std::sqrt((2.0 * Ls + 1.0) / (2.0 * l + 1.0));
-        for (int nu = 0; nu <= std::min(l, La); nu++)
-          t.c.push_back(pre * (nu % 2 ? -1.0 : 1.0) * (nu ? 2.0 : 1.0) * ThmCG(Ls, 0, La, nu, l, nu));
-        for (int m = 0; m <= std::min(l, Ls); m++)
-          t.cm.push_back(ThmCG(Ls, m, La, 0, l, m) * std::sqrt((2.0 * La + 1.0) / (4.0 * M_PI)));
-        triples.push_back(t);
-      }
-  }
-  const int nT = (int)triples.size();
-
-  // The a + A waves, once.
+  // The steps of the wave tables: 0.02 fm or 0.1 over the local wave number with the potential's depth.
   auto tableStep = [](const ThmDistortion::Channel &c, double e) {
     double kl = std::sqrt(2.0 * c.mu * (std::max(e, 0.0) + ThmDistortion::Depth(c))) / hbarc;
     return std::min(0.02, 0.1 / std::max(kl, 1.0e-6));
   };
-  const double stepA = tableStep(dist.aa, dist.eAA);
-  const int nA = (int)std::ceil(rA / stepA) + 8;
-  std::vector<std::vector<complex>> uA;
-  std::vector<complex> sigA;
-  why = WaveTable(dist, dist.aa, dist.eAA, laMax, stepA, nA, uA, sigA);
-  if (!why.empty()) return "the a + A channel: " + why;
-  const double stepS = tableStep(dist.sf, *std::max_element(esfE.begin(), esfE.end()));
-  const int nS = (int)std::ceil(rS / stepS) + 8;
-
-  // h and dh/dr at r = a: hh[(t nE + e) 2 + {0,1}]; e^{i sigma_Ls} per energy.
-  std::vector<complex> hh((size_t)nT * nE * 2, complex(0.0, 0.0));
-  std::vector<std::vector<complex>> sigS(nE);
-  const int nPts = uNodes * cNodes;
-  for (int e0 = 0; e0 < nE; e0 += kBatch) {
-    const int nb = std::min(kBatch, nE - e0);
-    std::vector<std::vector<std::vector<complex>>> uS(nb);
+  transfer::SourceSetup setup;
+  setup.overlap.phi = [this](double r) { return dist.Phi(r); };
+  setup.overlap.r_min_fm = dist.rmin;
+  setup.overlap.kappa_fm = dist.kappa;
+  setup.entrance = dist.LibraryChannel(dist.aa, dist.eAA);
+  setup.entrance_step_fm = tableStep(dist.aa, dist.eAA);
+  setup.exit_step_fm = tableStep(dist.sf, *std::max_element(esfE.begin(), esfE.end()));
+  setup.exit_k_max_fm = ksMax;
+  setup.alpha = alpha;
+  setup.beta = beta;
+  setup.radius_fm = a;
+  setup.l_values = lvals;
+  transfer::SourceProjectionRequest request;
+  request.matching = dist.numerics.matching;
+  transfer::SourceProjectionPlan plan;
+  try {
+    plan = transfer::PrepareSourceProjection(setup, request);
+  } catch (const std::length_error &e) {
+    return e.what();
+  } catch (const std::exception &e) {
+    return std::string("the a + A channel: ") + e.what();
+  }
+  laMax = plan.l_entrance_max;
+  lsMax = plan.l_exit_max;
+  uMax = plan.u_max_fm;
+  uNodes = (int)plan.u_nodes.size();
+  cNodes = (int)plan.cos_nodes.size();
+  std::vector<transfer::SourceAmplitudes> amplitudes(nE);
+  for (int e0 = 0; e0 < nE; e0 += request.energies_per_pass) {
+    const int nb = std::min(request.energies_per_pass, nE - e0);
+    std::vector<transfer::SourceExitWaves> exits(nb);
     std::vector<std::string> errors(nb);
 #pragma omp parallel for schedule(dynamic)
     for (int b = 0; b < nb; b++) {
       const double e = eLo + (e0 + b) * gridStep;
-      const std::string bad = WaveTable(dist, dist.SfAt(e), dist.EsF(e), lsMax, stepS, nS, uS[b], sigS[e0 + b]);
-      if (!bad.empty()) errors[b] = "the s + F channel at E = " + ThmNumberText(e) + " MeV: " + bad;
+      try {
+        exits[b] = transfer::SolveSourceExit(plan, dist.LibraryChannel(dist.SfAt(e), dist.EsF(e)));
+      } catch (const std::exception &x) {
+        errors[b] = "the s + F channel at E = " + ThmNumberText(e) + " MeV: " + x.what();
+      }
     }
     for (const std::string &err : errors)
       if (!err.empty()) return err;
-    // The sum over the points in a fixed order, whatever the number of
-    // threads and the schedule: up to kSumBlocks blocks of consecutive points
-    // (fewer if their buffers would pass kSumBytes), each summed in point
-    // order into its own buffer, and the buffers added in block order.
-    const size_t blockSize = (size_t)nT * nb * 2;
-    const int nBlocks = (int)std::max<size_t>(
-        1, std::min<size_t>({(size_t)nPts, (size_t)kSumBlocks, kSumBytes / (blockSize * sizeof(complex))}));
+    const int nBlocks = transfer::SourceSumBlocks(plan, nb);
+    const size_t blockSize = transfer::SourceBlockSize(plan, nb);
     std::vector<complex> blockSums((size_t)nBlocks * blockSize, complex(0.0, 0.0));
-#pragma omp parallel
-    {
-      std::vector<double> yl, dyl, ya, dya;
-      std::vector<complex> fa(laMax + 1), dfa(laMax + 1), fs((size_t)nb * (lsMax + 1)), dfs((size_t)nb * (lsMax + 1));
-      Lagrange6 lagA, lagS;
-#pragma omp for schedule(dynamic, 1)
-      for (int blk = 0; blk < nBlocks; blk++) {
-        complex *acc = &blockSums[(size_t)blk * blockSize];
-        const int ipEnd = (int)((long long)nPts * (blk + 1) / nBlocks);
-        for (int ip = (int)((long long)nPts * blk / nBlocks); ip < ipEnd; ip++) {
-          const int iu = ip / cNodes, ic = ip % cNodes;
-          const double u = uNode[iu], ct = cNode[ic], st = std::sqrt(std::max(0.0, 1.0 - ct * ct));
-          const double wgt = 2.0 * M_PI * u * u * phiU[iu] * uWt[iu] * cWt[ic];
-          if (wgt == 0.0) continue;
-          const double xs = u * st, zs = alpha * a + u * ct, xa = beta * u * st, za = a + beta * u * ct;
-          const double Rs = std::hypot(xs, zs), Ra = std::hypot(xa, za);
-          if (!(Rs > 0.0) || !(Ra > 0.0)) continue;
-          const double ths = std::atan2(xs, zs), tha = std::atan2(xa, za);
-          const double cs = zs / Rs, ss = xs / Rs, ca = za / Ra, sa = xa / Ra;
-          YTable(lTop, lTop, ths, yl, dyl);
-          YTable(laMax, lTop, tha - ths, ya, dya);
-          lagA.Set(Ra, stepA, nA);
-          for (int L = 0; L <= laMax; L++) {
-            complex v, dv;
-            lagA.Apply(uA[L].data(), v, dv);
-            fa[L] = v / Ra;
-            dfa[L] = dv / Ra - v / (Ra * Ra);
-          }
-          lagS.Set(Rs, stepS, nS);
-          for (int b = 0; b < nb; b++)
-            for (int L = 0; L <= lsMax; L++) {
-              complex v, dv;
-              lagS.Apply(uS[b][L].data(), v, dv);
-              fs[b * (lsMax + 1) + L] = v / Rs;
-              dfs[b * (lsMax + 1) + L] = dv / Rs - v / (Rs * Rs);
-            }
-          const double dthsdr = -alpha * ss / Rs, dthadr = -sa / Ra;
-          for (int t = 0; t < nT; t++) {
-            const Triple &tr = triples[t];
-            double K = 0.0, Ks = 0.0, Ka = 0.0;  // K and dK/dtheta_s, dK/dtheta_a
-            for (int nu = 0; nu < (int)tr.c.size(); nu++) {
-              const double yln = yl[Idx(tr.l, nu)], dyln = dyl[Idx(tr.l, nu)];
-              const double yan = ya[Idx(tr.la, nu)], dyan = dya[Idx(tr.la, nu)];
-              K += tr.c[nu] * yln * yan;
-              Ka += tr.c[nu] * yln * dyan;
-              Ks += tr.c[nu] * (dyln * yan - yln * dyan);
-            }
-            const complex fA = fa[tr.la], dfA = dfa[tr.la];
-            const complex A1 = wgt * fA * K;
-            const complex A2 = wgt * alpha * cs * fA * K;
-            const complex A3 = wgt * (fA * (Ks * dthsdr + Ka * dthadr) + ca * dfA * K);
-            complex *out = &acc[(size_t)t * nb * 2];
-            for (int b = 0; b < nb; b++) {
-              const complex f = fs[b * (lsMax + 1) + tr.ls], df = dfs[b * (lsMax + 1) + tr.ls];
-              out[2 * b] += A1 * f;
-              out[2 * b + 1] += A2 * df + A3 * f;
-            }
-          }
-        }
-      }
-    }
-    for (int blk = 0; blk < nBlocks; blk++) {
-      const complex *acc = &blockSums[(size_t)blk * blockSize];
-      for (int t = 0; t < nT; t++)
-        for (int b = 0; b < nb; b++) {
-          hh[((size_t)t * nE + e0 + b) * 2] += acc[((size_t)t * nb + b) * 2];
-          hh[((size_t)t * nE + e0 + b) * 2 + 1] += acc[((size_t)t * nb + b) * 2 + 1];
-        }
-    }
+#pragma omp parallel for schedule(dynamic, 1)
+    for (int blk = 0; blk < nBlocks; blk++)
+      transfer::SumSourceBlock(plan, exits, blk, nBlocks, &blockSums[(size_t)blk * blockSize]);
+    std::vector<transfer::SourceAmplitudes> pass = transfer::CombineSourceBlocks(plan, exits, blockSums, nBlocks);
+    for (int b = 0; b < nb; b++) amplitudes[e0 + b] = std::move(pass[b]);
   }
 
   // Per energy and node: s_m, d_m and the Gram matrix.
@@ -455,47 +199,20 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
   pd.assign(nE, 0.0);
   thd.assign(nE, 0.0);
   valid.assign(nE, 1);
-  std::vector<double> ys, dys;
   // The sign of phi~(q) in the spectatorAngle direction, per grid energy.
   std::vector<signed char> phiSign(nE, 0);
   for (int e = 0; e < nE; e++) {
     const double ks = ksE[e];
-    // Reduced amplitudes (4pi)^2/(ks ka) (-i)^Ls i^La e^{i(sigma+sigma)} sqrt(4pi/(2l+1)) h.
-    std::vector<complex> H(nT), dH(nT);
-    for (int t = 0; t < nT; t++) {
-      const Triple &tr = triples[t];
-      complex ph = sigS[e][tr.ls] * sigA[tr.la];
-      int n = ((tr.la - tr.ls) % 4 + 4) % 4;  // i^(La - Ls)
-      static const complex ipow[4] = {complex(1, 0), complex(0, 1), complex(-1, 0), complex(0, -1)};
-      ph *= ipow[n] * (16.0 * M_PI * M_PI / (ks * ka)) * std::sqrt(4.0 * M_PI / (2.0 * tr.l + 1.0));
-      H[t] = ph * hh[((size_t)t * nE + e) * 2];
-      dH[t] = ph * hh[((size_t)t * nE + e) * 2 + 1];
-    }
     // The Gram entries at an angle theta_sa between k_sF and k_aA, for q (fm^-1).
     auto gram = [&](double xsa, double qq, double *g) {
-      double phit = 0.0;
-      for (int i = 0; i < uNodes; i++) {
-        double z = qq * uNode[i];
-        double j0 = z < 1.0e-4 ? 1.0 - z * z / 6.0 : std::sin(z) / z;
-        phit += uWt[i] * uNode[i] * uNode[i] * phiU[i] * j0;
-      }
-      phit *= 4.0 * M_PI;
-      const double th = std::acos(std::max(-1.0, std::min(1.0, xsa)));
-      YTable(lsMax, lTop, th, ys, dys);
+      const double phit = transfer::SourceMomentumAmplitude(plan, qq);
+      const transfer::SourceMultipoles mp = transfer::SourceMultipolesAt(plan, amplitudes[e], xsa);
       for (int li = 0; li < nl; li++) {
         const int l = lvals[li];
         double g11 = 0.0, g22 = 0.0;
         complex g12(0.0, 0.0);
         for (int m = 0; m <= l; m++) {
-          complex sm(0.0, 0.0), dm(0.0, 0.0);
-          for (int t = 0; t < nT; t++) {
-            const Triple &tr = triples[t];
-            if (tr.li != li || m > tr.ls) continue;
-            double c = tr.cm[m] * ys[Idx(tr.ls, m)];
-            if (c == 0.0) continue;
-            sm += c * H[t];
-            dm += c * dH[t];
-          }
+          complex sm = mp.value[li][m], dm = mp.derivative[li][m];
           sm /= 4.0 * M_PI * phit;
           dm *= a / (4.0 * M_PI * phit);
           double mult = m ? 2.0 : 1.0;
@@ -621,7 +338,7 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
   d.precision(6);
   d << "vertexModel=dw: surface term of the prior-form DWBA; a + A: " << dist.ChannelText(0)
     << "; s + F: " << dist.ChannelText(1) << "; bound state " << (dist.yukawa ? "yukawa" : "whittaker")
-    << (rmin > 0.0 ? ", r >= " + ThmNumberText(rmin) + " fm" : "") << "; "
+    << (dist.rmin > 0.0 ? ", r >= " + ThmNumberText(dist.rmin) + " fm" : "") << "; "
     << (angles ? "spectator directions " + dist.AngleText() + " (" + ThmNumberText(dist.angNodes) +
                      " nodes in cos theta_cm" + (dist.angSlots > 1 ? " per branch" : "") +
                      (dist.qCut && !dist.angAll ? ", |p_s| cut by the ps window" : "") +

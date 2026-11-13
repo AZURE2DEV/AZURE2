@@ -95,8 +95,19 @@ class GammaDecaySet {
   bool OwnsSlot(int j, int la, int ch) const;
 
   /// CNuc::FillMnParams: the record's parameter at photon channel ch of level (j, la), if (j, la, ch) is a record
-  /// slot (true), else nothing (false).
-  bool AddParameter(AZUREParams &params, int j, int la, int ch, int levelNumber) const;
+  /// slot (true), else nothing (false); its value from `inputs` (the compound's input numbers, InputNumbers' layout).
+  bool AddParameter(AZUREParams &params, const std::vector<std::vector<double>> &inputs, int j, int la, int ch,
+                    int levelNumber) const;
+  /// The numbers of every record as the file gives them (per record, slot order; Gamma_gamma in eV): the compound's
+  /// input numbers until FillCompoundFromParamsPhysical sets others.
+  std::vector<std::vector<double>> FileNumbers() const;
+  /// The numbers of every record at its slots of a full vector (the fit's or the observed one: the record's slots
+  /// hold the same numbers in both, gamma_parametrisation.md section 2.8).
+  std::vector<std::vector<double>> NumbersAt(const vector_r &p) const;
+  /// The vector of observed parameters (CNuc::GetTransformParams' form) with every record's numbers replaced by the
+  /// partial widths (eV) they give (PartialWidths): the levels' observed widths, which CNuc::
+  /// FillCompoundFromParamsPhysical writes into the levels.  The one place a record slot of that vector is read.
+  vector_r WithPartialWidths(const vector_r &observed) const;
   /// CNuc::FillCompoundFromParams: the full vector p with the record slots replaced by the engine's amplitudes; what
   /// the fill computed stored in the compound (GammaDecayFill).
   vector_r ToEngine(CNuc &compound, const vector_r &p) const;

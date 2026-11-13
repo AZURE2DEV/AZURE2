@@ -354,7 +354,7 @@ tools/cls.sh tab-ref tab-new; grep '^## ' $WORK/cls-tab-new.tsv
   framework (recipes for iminuit, scipy, emcee in the docs); no physics in Python except library parsing and
   presentation (any Python formula tested against the core); commands `pyazr ui | import exfor|ensdf | stopping |
   libraries update`; wheels (scikit-build-core + cibuildwheel) for Linux/macOS/Windows carrying the core and the
-  `azure2` CLI, replacing the Qt installers; today's `azure2()` session kept one release as a warning shim.
+  `azure2` CLI, replacing the Qt installers; no shim for today's `azure2()` class (`pyazr3.md` section 5, decision 9).
 - **Web UI** (replaces Qt): `pyazr ui project.azr`, FastAPI + uvicorn (`pyazr[web]`), one static vanilla-JS page with
   plotly.js vendored for offline use (the stack of Jakub's LunaSRIM web app, without depending on it); thin `/api`
   mapping one-to-one onto pyazr objects; long jobs in worker processes with progress and stop; the project is the state

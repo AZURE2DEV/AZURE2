@@ -1,5 +1,6 @@
 #include "azure2/physics/AngularCoupling.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdlib>
@@ -89,6 +90,25 @@ double clebsch_gordan(int tj1, int tm1, int tj2, int tm2, int tJ, int tM) {
   const int phase = (tj1 - tj2 + tM) / 2;  // j1 - j2 + M is an integer when the 3j is not zero
   const double value = std::sqrt((double)(tJ + 1)) * threej;
   return (phase % 2 == 0) ? value : -value;
+}
+
+double clebsch_gordan_integer(int j1, int m1, int j2, int m2, int J, int M) {
+  if (m1 + m2 != M || J < std::abs(j1 - j2) || J > j1 + j2 || std::abs(m1) > j1 || std::abs(m2) > j2 ||
+      std::abs(M) > J)
+    return 0.0;
+  auto lf = [](int n) { return lgammal((long double)n + 1.0L); };
+  const long double pre = 0.5L * (logl(2.0L * J + 1.0L) + lf(J + j1 - j2) + lf(J - j1 + j2) + lf(j1 + j2 - J) -
+                                  lf(j1 + j2 + J + 1) + lf(J + M) + lf(J - M) + lf(j1 - m1) + lf(j1 + m1) +
+                                  lf(j2 - m2) + lf(j2 + m2));
+  long double sum = 0.0L;
+  const int kMin = std::max(0, std::max(j2 - J - m1, j1 - J + m2));
+  const int kMax = std::min(j1 + j2 - J, std::min(j1 - m1, j2 + m2));
+  for (int k = kMin; k <= kMax; k++) {
+    const long double t = expl(pre - lf(k) - lf(j1 + j2 - J - k) - lf(j1 - m1 - k) - lf(j2 + m2 - k) -
+                               lf(J - j2 + m1 + k) - lf(J - j1 - m2 + k));
+    sum += (k % 2) ? -t : t;
+  }
+  return (double)sum;
 }
 
 double wigner_6j(int tj1, int tj2, int tj3, int tj4, int tj5, int tj6) {

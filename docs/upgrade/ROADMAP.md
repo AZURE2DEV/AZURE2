@@ -240,9 +240,9 @@ Gate: thread-count independence by construction; memory one problem regardless o
       states and FRESCO's bins of x + A, the transfer to them (finite and zero range), d²σ/dΩ dE and the narrow-bin
       limit, the interior part against the level function, the prior form and the remnants.
 - [x] Global optical sets: one table of the library (`GlobalOptical.h`; branch `feature/upgrade-7-thm-wiring`).
-- [ ] The wiring into the THM observable: the distortion factor R(E) and the waves of the DW vertex call the library
-      (done, `transfer.md` §24); left: the DW vertex's source projection S_lm(a) as a library function and the
-      vertex quadrature moved (§24.2: `EntranceVertex` is not the engine's surface-only vertex).
+- [x] The wiring into the THM observable: the distortion factor R(E) and the waves of the DW vertex call the library
+      (`transfer.md` §24); the DW vertex's source projection S_lm(a) is a library function and its quadrature is the
+      library's (`SourceProjection.h`, §25; branch `feature/upgrade-7-thm-dw-vertex`).
 - [x] Validation, first part: plane-wave limit to 1e-6; FRESCO benchmarks for the d and ⁶Li Trojan horses to a bound
       state (¹⁵N(d,n)¹⁶O, ¹²C(⁶Li,d)¹⁶O: < 0.2 %), committed with inputs and outputs (`physics/tests/data/fresco`).
 - [x] Validation, continuum: FRESCO bins for ¹⁵N(d,n) (non-resonant, narrow and wide resonance, finite range: ≤ 0.5 %),
@@ -258,12 +258,16 @@ Gate: benchmarks committed with their FRESCO inputs and outputs.
 
 ## Phase 8 — pyazr 3.0
 
+Design: `pyazr3.md` (the measured state of pyazr, the objects of 3.0, the order of work, the PI's decisions).
+
 - [ ] Object binding (`ARCHITECTURE.md` §11): modules, numpy views, `physics` explorer functions, `sources`, `cli`.
 - [ ] Wheels via scikit-build-core + cibuildwheel (Linux, macOS, Windows) with the core and the `azure2` CLI.
-- [ ] `azure2()` session shim with deprecation warnings for one release; docs recipes for iminuit, scipy, emcee.
+- [ ] Tested recipes for iminuit, scipy, emcee (no `azure2()` shim: struck by the PI, `pyazr3.md` section 5, 9).
 Gate: ported pyazr tests pass; wheels install and run T1–T3 on three platforms.
 
 ## Phase 9 — Web UI; retire Qt, ERYA, numcmc
+
+Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, decisions for the PI; a measured spike).
 
 - [ ] `pyazr ui`: FastAPI + uvicorn, static page, plotly.js vendored; `/api` one-to-one with pyazr; jobs with progress
       and stop; tabs Project, Nucleus, Data, Fit, Results, Physics, THM (opt-in).
