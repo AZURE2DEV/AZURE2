@@ -58,11 +58,10 @@ files) and `docs/source/user_guide/levels_channels.rst` (how level lines are gro
   the `.azr` seed, `param.sav` the fit). Identify a `param.sav` name by (a) `parameters.out`, which lists
   `J = ... E_level = ...` blocks in the same order, or (b) a one-line CLI probe: change that entry in a scratch copy,
   run mode 1, and see which `E_level` or width line changed.
-- **`m.parameters` can throw** `RuntimeError: parameter_info returned N parameters but params_fixed reported M`,
-  preceded by `**WARNING: Denominator less than zero while transforming`. This is a failure of pyazr's parameter
-  introspection table (`_build_parameters`), not of the calculation: on the model where it was seen,
-  `calculate_energies`/`calculate_rwa` and the CLI's extrapolation ran the same levels cleanly. Cross-check with a
-  plain `calculate_energies` call or the CLI before concluding the parameters are corrupted.
+- `m.parameters` is the engine's records, one row per parameter (`print(m.parameters.table())`: name, kind, unit,
+  start, free, bounds, what it belongs to). A `**WARNING: Denominator less than zero while transforming` printed
+  while it is built concerns the transformation of the start values, not the table: cross-check with a plain
+  `calculate_energies` call or the CLI before concluding the parameters are corrupted.
 - A `LevelKey` prints as `5/2-#2@6.588MeV`; `(jgroup, level)` is its identity (level numbering restarts inside every
   J-group).
 - **A `Parameter`'s `pair` is the engine's pair number**, which counts particle pairs in the order `<levels>` first

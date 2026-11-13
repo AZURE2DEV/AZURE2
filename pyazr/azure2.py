@@ -30,8 +30,7 @@ except ImportError as err:                            # pragma: no cover
 
 from .errors import ParameterError, ParameterKeyError, close_names, listed
 from . import session_checks
-from .parameters import (Pair, PairSet, Parameter,
-                         ParameterSet)
+from .parameters import Pair, PairSet, Parameter, ParameterSet, read_parameter_file
 from .project import require_format3
 from .potentials import _HybridPotentials
 
@@ -216,7 +215,7 @@ class azure2(_HybridPotentials):
 
     def describe(self):
         """What this session holds, as plain data: project, options, Coulomb table, pairs, levels, data sets,
-        extrapolations, parameters (name, kind, unit, value, free).
+        extrapolations, parameters (their records: name, kind, unit, x, free, bounds, owner fields).
         The keys: :func:`pyazr.described.describe_session`."""
         from .described import describe_session
         return describe_session(self)
@@ -418,17 +417,7 @@ class azure2(_HybridPotentials):
         return got
 
     def _build_pairs(self):
-        flat = np.asarray(self.sess.pairs_info(), dtype=float)
-        nfields = Pair._NFIELDS
-        # An engine built before 2026-11-05 sends one field less (no
-        # light_excitation); its records still start 1, 2, 3, ...
-        def numbered(n):
-            return (flat.size % n == 0 and
-                    np.array_equal(flat.reshape(-1, n)[:, 0], np.arange(1, flat.size // n + 1)))
-        if not numbered(nfields) and numbered(nfields - 1):
-            nfields -= 1
-        records = flat.reshape(-1, nfields)
-        return PairSet(Pair.from_record(rec) for rec in records)
+        return PairSet(Pair(r) for r in self.sess.pair_records())
 
     @property
     def level_scheme(self):
@@ -467,31 +456,10 @@ class azure2(_HybridPotentials):
         return copy.deepcopy(self._parsed("extrapolations"))
 
     def _build_parameters(self):
-        s = self.sess
-        n = len(self.fixed_params)
-
-        flat = np.asarray(s.parameter_info(), dtype=float)
-        nfields = Parameter._NFIELDS
-        records = flat.reshape(-1, nfields)
-        if records.shape[0] != n:
-            raise RuntimeError(
-                f"parameter_info returned {records.shape[0]} parameters but "
-                f"params_fixed reported {n}."
-            )
-
-        owners = s.parameter_records()
-        params = ParameterSet()
-        free_counter = 0
-        for i in range(n):
-            name = s.params_names(i)
-            fixed = bool(self.fixed_params[i])
-            free_index = None if fixed else free_counter
-            if not fixed:
-                free_counter += 1
-            params.append(
-                Parameter.from_record(i, name, records[i], free_index, owners[i])
-            )
-        return params
+        """The table of the engine's parameter records (built once per layout; :meth:`configure` and a mode switch
+        drop it)."""
+        rows = [Parameter(r) for r in self.sess.parameter_records()]
+        return ParameterSet(rows, x0=[p.start for p in rows if not p.fixed], basis=self.basis)
 
     # -- physical levels (turn a resonance on/off) ----------------------------
 
@@ -591,10 +559,8 @@ class azure2(_HybridPotentials):
 
         Returns the positions of the level-energy parameters within
         ``params_rwa`` (the non-fixed parameter vector), the same convention
-        as :meth:`norm_indices` and :meth:`shift_indices`.  Unlike those --
-        which the C++ side derives by substring-matching parameter names --
-        this uses the structured ``type`` code from ``parameter_info``
-        (``kind == "energy"``), so it never depends on how energies are named.
+        as :meth:`norm_indices` and :meth:`shift_indices`, from the parameters'
+        records (``kind == "energy"``).
         """
         return [p.free_index for p in self.parameters
                 if p.kind == "energy" and not p.fixed]
@@ -606,28 +572,9 @@ class azure2(_HybridPotentials):
 
     @staticmethod
     def read_sav(path):
-        """``{name: value}`` from a ``param.par`` / ``param.sav`` / ``param.fit``.
-
-        Blank lines, ``#`` comments (the ``#parametrization`` tag) and a bare
-        ``parametrization`` row (files written 2026-10-06, before the tag became
-        a comment) are skipped.  Read parameter files by NAME, never by row
-        position: AZURE2 itself matches names (``AZUREParams::
-        ReadUserParameters``), new parameters are appended as the code grows
-        (the ``segment_<key>_energy_shift_sqrt`` rows of 2026-10-05), and a
-        positional read of a file from another layout is silently off by one
-        or more rows (an 8Be+alpha rate came out exactly 2x that way).
-        """
-        vals = {}
-        with open(path) as fh:
-            for line in fh:
-                t = line.split()
-                if len(t) < 2 or t[0].startswith("#") or t[0] == "parametrization":
-                    continue
-                try:
-                    vals[t[0]] = float(t[1])
-                except ValueError:
-                    continue
-        return vals
+        """``{name: value}`` from a ``param.par`` / ``param.sav`` / ``param.fit``, by NAME
+        (:func:`pyazr.parameters.read_parameter_file`)."""
+        return read_parameter_file(path)[1]
 
     def full_rwa_from_sav(self, path):
         """The model's full RWA vector (fixed parameters included, ``p.index``
@@ -660,15 +607,7 @@ class azure2(_HybridPotentials):
     def read_sav_basis(path):
         """The ``#parametrization`` tag of a parameter file (0 standard,
         1 Brune, 2 Park), or None for a file written before the tag existed."""
-        with open(path) as fh:
-            for line in fh:
-                t = line.split()
-                if len(t) >= 2 and t[0] in ("#parametrization", "parametrization"):
-                    try:
-                        return int(round(float(t[1])))
-                    except ValueError:
-                        return None
-        return None
+        return read_parameter_file(path)[0]
 
     def load_sav(self, path):
         """Load a parameter file into the session the way the CLI does, and
@@ -920,19 +859,7 @@ class azure2(_HybridPotentials):
 
         sav = None
         if param_sav:
-            sav = os.path.splitext(path)[0] + ".sav"
-            allrwa = list(np.asarray(self.sess.params_all_rwa(), float))
-            free = iter(range(len(x)))
-            with open(sav, "w") as fh:
-                # AZURE2 tags every parameter file with the amplitudes it holds
-                # (0 standard, 1 Brune, 2 Park) and converts on read when a run
-                # in the other alternative basis loads it.  The '#' keeps
-                # numpy.loadtxt-based readers, which index rows by position,
-                # unaffected.
-                fh.write(f"{'#parametrization':>28s} {float(self.basis): .7e} {0.0: .7e}\n")
-                for i, p in enumerate(self.parameters):
-                    v = x[next(free)] if not self.fixed_params[i] else allrwa[i]
-                    fh.write(f"{p.name:>28s} {float(v): .7e} {0.0: .7e}\n")
+            sav = self.parameters.write(os.path.splitext(path)[0] + ".sav", x)
 
         # What the check compares with, from this session before it may close.
         chi_want = pen_want = None
@@ -2250,10 +2177,8 @@ class azure2(_HybridPotentials):
         cur = np.asarray(self.params_rwa, float).ravel()
         if self.mode != "extrap" or x.size <= cur.size:
             return params
-        info = np.asarray(self.sess.parameter_info(), dtype=float).reshape(-1, Parameter._NFIELDS)
-        kind = np.round(info[:, 0])
-        free = np.round(info[:, 11]) == 0
-        head = int(np.sum(free & ((kind <= 1) | (kind == 6))))
+        head = sum(1 for r in self.sess.parameter_records()
+                   if not r["fixed"] and r["kind"] in ("energy", "width", "abundance"))
         y = cur.copy()
         y[:head] = x[:head]
         return y
@@ -2328,8 +2253,7 @@ class azure2(_HybridPotentials):
         212 on a 12C+12C model with eight test segments).  The cached
         ``fixed_params`` used to keep the data-mode layout, so the parameter
         table (:attr:`parameters`), :meth:`_all_rwa` and :meth:`save_fit` mixed
-        the two: "parameter_info returned 220 parameters but params_fixed
-        reported 212".  Refresh the cached layout from the engine whenever it
+        the two (220 parameter records against 212 fixed flags).  Refresh the cached layout from the engine whenever it
         changed, and carry the free R-matrix block of ``params_rwa`` /
         ``params`` over -- energies and widths come first and are the same in
         both modes, so a vector the caller set (``update_rwa_params_from_sav``)
@@ -2339,8 +2263,7 @@ class azure2(_HybridPotentials):
         fixed = list(s.params_fixed())
         if fixed == list(self.fixed_params):
             return
-        info = np.asarray(s.parameter_info(), dtype=float).reshape(-1, Parameter._NFIELDS)
-        nrm = int(np.sum((np.round(info[:, 0]) <= 1) & (np.round(info[:, 11]) == 0)))
+        nrm = sum(1 for r in s.parameter_records() if not r["fixed"] and r["kind"] in ("energy", "width"))
         rwa = np.asarray(s.params_values_rwa(), float).copy()
         val = np.asarray(s.params_values(), float).copy()
         old_rwa = np.asarray(self.params_rwa, float).ravel()

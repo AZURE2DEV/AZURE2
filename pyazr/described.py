@@ -24,6 +24,8 @@ import sys
 from dataclasses import dataclass
 from typing import Optional
 
+import numpy as np
+
 from .errors import ParameterKeyError, close_names, listed
 
 __all__ = ["DescribedDataset", "DescribedDatasets", "DescribedExtrapolation", "DescribedExtrapolations"]
@@ -284,11 +286,13 @@ def _build_kinds():
                       "target_kinds": list(q.get("target_kinds", [])),
                       # the engine's quantity table does not declare extra outputs (docs/upgrade/pyazr3.md 2.2)
                       "extra_outputs": None}
-    parameters = {row["key"]: {"code": int(row["code"]), "unit": row["unit"],
-                               "owner": [f.strip() for f in row["owner"].split(",") if f.strip()],
+    parameters = {row["key"]: {"unit": row["unit"], "owner": list(row["owner"]),
                                "own_prior": bool(row["own_prior"]), "segment_field": bool(row["segment_field"]),
                                "vary_from_project": bool(row["vary_from_project"]), "doc": row["doc"]}
                   for row in engine.parameter_kinds()}
+    parameter_fields = {f["name"]: {k: (list(v) if isinstance(v, (list, tuple)) else v)
+                                    for k, v in f.items() if k != "name"} for f in engine.parameter_record_fields()}
+    pair_fields = {f["name"]: {"unit": f["unit"], "doc": f["doc"]} for f in engine.pair_record_fields()}
     defaults = engine.RuntimeOptions()
     options = {}
     for row in engine.session_options():
@@ -313,7 +317,8 @@ def _build_kinds():
                                    "doc": _first_line(cls.__doc__)}
     error_classes["EngineError"] = {"same_as": "AZURE2Error", "doc": _first_line(errors.AZURE2Error.__doc__)}
     return {"schema_version": schema.get("schema_version", ""), "records": records, "data": data,
-            "parameters": parameters, "options": options, "physics": physics, "units": schema.get("units", {}),
+            "parameters": parameters, "parameter_fields": parameter_fields, "pair_fields": pair_fields,
+            "options": options, "physics": physics, "units": schema.get("units", {}),
             "dimensions": schema.get("dimensions", {}), "errors": error_classes}
 
 
@@ -327,8 +332,12 @@ def kinds():
     - ``data``: the data kinds (quantities of a ``dataset``): title, doc, aliases, record kinds, ``engine_unit``,
       ``units`` accepted, ``frames`` (energy columns), angle columns and axis, target kinds, ``extra_outputs``
       (None: the engine's table does not declare them);
-    - ``parameters``: the kinds of fit parameter (``Parameter.kind``): code, unit (of the value in the fit vector),
-      ``owner`` (the fields that say what it belongs to), own_prior, segment_field, vary_from_project, doc;
+    - ``parameters``: the kinds of fit parameter (``Parameter.kind``), in their order in the vector: unit (of the
+      value in the fit vector), ``owner`` (the record fields that say what it belongs to), own_prior, segment_field,
+      vary_from_project, doc;
+    - ``parameter_fields``, ``pair_fields``: the fields of a parameter's and a pair's record (:class:`pyazr.Parameter`,
+      :class:`pyazr.Pair`): unit (``"unit"``: the parameter's own), doc; a parameter field also the ``kinds`` it
+      describes, ``every_kind`` and ``owner`` (shown in ``Parameters.table()`` as what the parameter belongs to);
     - ``options``: the session options by their keyword of :class:`pyazr.azure2`: type, default, the program's
       ``flag`` and ``negation``, doc;
     - ``physics``: the physics functions the compiled module binds (``_azure2.<name>``; ``stopping.<name>`` in
@@ -349,27 +358,16 @@ def kinds():
 def describe_session(session):
     """What one :class:`pyazr.azure2` session holds, as plain data (``azure2.describe()``); see there."""
     s = session
-    units = {k: v["unit"] for k, v in kinds()["parameters"].items()}
-    x_all = [float(v) for v in s.sess.params_all_rwa()]
+    common = ("name", "kind", "unit", "start", "value", "fixed", "free_index", "bounds")
     parameters = []
     for p in s.parameters:
-        entry = {"name": p.name, "kind": p.kind, "unit": units.get(p.kind, ""), "x": x_all[p.index],
-                 "physical_value": float(p.value), "free": not p.fixed, "free_index": p.free_index,
-                 "bounds": None}
-        for field in ("jgroup", "J", "parity", "level", "level_energy", "channel", "L", "S", "pair", "segment_key",
-                      "prior_nominal", "prior_sigma", "wigner_limit"):
-            value = getattr(p, field, None)
-            if value is not None:
-                entry[field] = value.item() if hasattr(value, "item") else value
+        lo, hi = p.bounds
+        entry = {"name": p.name, "kind": p.kind, "unit": p.unit, "x": p.start, "physical_value": p.value,
+                 "free": not p.fixed, "free_index": p.free_index,
+                 "bounds": [lo if np.isfinite(lo) else None, hi if np.isfinite(hi) else None]}
+        entry.update((k, v) for k, v in p.to_dict().items() if k not in common and v is not None)
         parameters.append(entry)
-    pairs = []
-    for q in s.pairs:
-        entry = {"number": q.number, "label": q.label, "photon": bool(q.is_photon)}
-        for field in ("key", "channel_radius", "sep_energy", "excitation", "nucleus_Z", "nucleus_A", "is_entrance"):
-            value = getattr(q, field, None)
-            if value is not None:
-                entry[field] = value.item() if hasattr(value, "item") else value
-        pairs.append(entry)
+    pairs = [dict(q.to_dict(), label=q.label, photon=bool(q.is_photon)) for q in s.pairs]
     levels = [{"label": str(k), "jgroup": k.jgroup, "J": k.J, "parity": k.parity, "level": k.level,
                "energy": k.energy} for k in s.physical_levels()]
     description = describe_project(s.file, s.cwd)

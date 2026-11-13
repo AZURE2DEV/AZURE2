@@ -10,9 +10,10 @@ to — written where it is created and held beside the Minuit parameters in `AZU
 
 ## 1. The kinds
 
-One enumeration, `ParamKind`, and one table, `ParamKindTable()` (`include/ParameterKind.h`). The code is the `type`
-of the API's parameter listing (`AZUREAPI::GetParameterInfo`) and never changes; the key is pyazr's
-`Parameter.kind` (`pyazr.parameters.parameter_kinds()` returns the table through the binding). The vector holds the
+One enumeration, `ParamKind`, and one table, `ParamKindTable()` (`include/ParameterKind.h`). The code is the
+enumeration's value inside the engine (no interface hands it out); the key is pyazr's `Parameter.kind`
+(`pyazr.parameters.parameter_kinds()` returns the table through the binding, with each kind's owner fields from the
+record table of `api/src/pybind_records.cpp`). The vector holds the
 kinds in the order of their codes, except that the abundances (6) follow the level block (0, 1).
 
 | code | kind (key) | unit | owner fields of the record | created in | name (label) |
@@ -77,8 +78,7 @@ read without a parameter vector and stays as it is, listed in check 23: the exam
 pyazr 3.0.)
 
 Still a second walk of the layout (positions, not names; each must follow the creation order):
-`BuildParamIndexMap` (`src/AZUREGrad.cpp`), `AZUREAPI::GetParameterInfo` (which now throws if its kind disagrees with
-the record), `AZURELabel::Parameter` (`src/ParameterLabel.cpp`), `CNuc::GetTransformParams` /
+`BuildParamIndexMap` (`src/AZUREGrad.cpp`), `AZURELabel::Parameter` (`src/ParameterLabel.cpp`), `CNuc::GetTransformParams` /
 `ConvertAmplitudeBasis`. Building them from the records is the next step (the inference/ `ParameterVector` of
 `ARCHITECTURE.md` §3).
 
@@ -89,7 +89,8 @@ the record), `AZURELabel::Parameter` (`src/ParameterLabel.cpp`), `CNuc::GetTrans
    fields are new [check 23: one row per value, in code order].
 2. Create it with `AZUREParams::Add(name, value, step, ParameterRecord::…)` in `CNuc::FillMnParams` or
    `EData::FillMnParams`, its name built there by one function. Nothing else may test the name.
-3. Follow the layout in `BuildParamIndexMap` and in `AZUREAPI::GetParameterInfo` (and its fields in pyazr's
-   `Parameter.from_record`); the owner fields in the binding's `parameter_records()`.
+3. Follow the layout in `BuildParamIndexMap`; the fields that say what it belongs to are rows of the record table
+   `ParameterFields()` (`api/src/pybind_records.cpp`), which pyazr reads with no Python edit
+   (`tests/pyazr/parameter_records_test.py` fails for a kind no owner field describes).
 4. Docs: the table of `docs/source/reference/output_files.rst` and §1 here [check 23]; in
    `tests/pyazr/parameter_kinds_test.py` a project with the kind, whose names are rebuilt from the records.

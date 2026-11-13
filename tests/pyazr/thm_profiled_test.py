@@ -7,13 +7,13 @@ chi-squared optimum n* = S_mm/S_md and counts S_dd - S_md^2/S_mm, with no norm
 penalty, and the norm is not a Minuit parameter (Segment::IsProfiledNorm).
 pyazr used to evaluate such a model at the norm written in the file (212924
 instead of 2137.83 on tests/7Li_p_a), list the profiled norm in
-parameter_info() (so ``m.parameters`` failed), refuse residual_jacobian, and
+its parameter listing (so ``m.parameters`` failed), refuse residual_jacobian, and
 leave the THM points out of chi2_and_grad altogether.
 
 Checked here on tests/7Li_p_a (one THM segment, free norm):
 
   1. calculate_chi2_rwa equals a fresh CLI run (rel 1e-6), and the CLI still
-     lands on the recorded pin; parameters / parameter_info / params_rwa
+     lands on the recorded pin; parameters / parameter_records / params_rwa
      agree in count and the THM norm is not among them; residuals and
      segment_chi2 add up to chi2; segment_norms reports n*;
      write_output_files reproduces the CLI's chiSquared.out and AZUREOut_*.
@@ -120,8 +120,8 @@ with tempfile.TemporaryDirectory() as tmp:
         check("calculate_chi2_rwa == CLI (rel 1e-6)", rel(chi2, cli_chi2) < 1e-6,
               f"{chi2} vs {cli_chi2}")
 
-        n_info = np.asarray(m.sess.parameter_info()).size // 16
-        check("parameter_info has one record per parameter",
+        n_info = len(m.sess.parameter_records())
+        check("parameter_records has one record per parameter",
               n_info == len(m.fixed_params), f"{n_info} vs {len(m.fixed_params)}")
         try:
             ps = m.parameters

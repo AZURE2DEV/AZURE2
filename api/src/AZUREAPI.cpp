@@ -232,6 +232,7 @@ bool AZUREAPI::UpdateParameters() {
   all_rwa_.clear();
   names_.clear();
   records_.clear();
+  bounds_.clear();
   fixed_.clear();
   values_.clear();
   values_rwa_.clear();
@@ -252,6 +253,9 @@ bool AZUREAPI::UpdateParameters() {
     //}
     all_rwa_.push_back(params.GetMinuitParams().Parameter(i).Value());
     fixed_.push_back(params.GetMinuitParams().Parameter(i).IsFixed());
+    const ROOT::Minuit2::MinuitParameter &limits = params.GetMinuitParams().Parameter(i);
+    bounds_.emplace_back(limits.HasLowerLimit() ? limits.LowerLimit() : -std::numeric_limits<double>::infinity(),
+                         limits.HasUpperLimit() ? limits.UpperLimit() : std::numeric_limits<double>::infinity());
     if (!fixed_.back()) {
       values_rwa_.push_back(params.GetMinuitParams().Parameter(i).Value());
     }
@@ -1458,207 +1462,6 @@ vector_r AZUREAPI::GetEnergyShiftIndices() {
   return indices;
 }
 
-// Structured metadata for every parameter.  The parameters are walked in the
-// exact order CNuc::FillMnParams (energies + widths) then WorkingCopy::FillMnParams
-// (norms, energy shifts, sqrt(E) shift coefficients, shift-function
-// parameters, then the THM coherent backgrounds) emit them, so the records
-// line up one-to-one with
-// names_ / all_ / fixed_.  See AZUREAPI.h for the field layout.
-vector_r AZUREAPI::GetParameterInfo() const {
-  vector_r info;
-
-  // Running global parameter index; reads the fixed flag and physical value
-  // that UpdateParameters() already cached.
-  int gi = 0;
-  auto push = [&](double type, double jgroup, double J, double parity,
-                  double level, double levelE, double channel, double L,
-                  double S, double pair, double radtype, double segKey,
-                  double wignerLimit, double inputIsRWA) {
-    // The walk below mirrors the creation order; the record, written at creation, says what the parameter is.
-    if (gi < (int)records_.size() && (double)(int)records_[gi].kind != type)
-      throw std::logic_error("GetParameterInfo: parameter " + std::to_string(gi) + " is not of kind " +
-                             std::to_string((int)type) + " in its record");
-    info.push_back(type);
-    info.push_back(jgroup);
-    info.push_back(J);
-    info.push_back(parity);
-    info.push_back(level);
-    info.push_back(levelE);
-    info.push_back(channel);
-    info.push_back(L);
-    info.push_back(S);
-    info.push_back(pair);
-    info.push_back(radtype);
-    info.push_back((gi < (int)fixed_.size() && fixed_[gi]) ? 1.0 : 0.0);
-    info.push_back(gi < (int)all_.size() ? all_[gi] : 0.0);
-    info.push_back(segKey);
-    info.push_back(wignerLimit);
-    info.push_back(inputIsRWA);
-    ++gi;
-  };
-
-  // R-matrix parameters: one energy then one width per channel, per level.
-  CNuc *nuc = compound();
-  for (int j = 1; j <= nuc->NumJGroups(); ++j) {
-    JGroup *jg = nuc->GetJGroup(j);
-    double J = jg->GetJ();
-    double parity = jg->GetPi();
-    for (int la = 1; la <= jg->NumLevels(); ++la) {
-      ALevel *level = jg->GetLevel(la);
-      double levelE = level->GetE();
-      // energy parameter
-      push(0, j, J, parity, la, levelE, -1, -1, -1, -1, -1, -1, -1, -1);
-      // width parameters (one per channel)
-      for (int ch = 1; ch <= jg->NumChannels(); ++ch) {
-        AChannel *chan = jg->GetChannel(ch);
-        push(nuc->GetGammaDecays().OwnsSlot(j, la, ch) ? 13 : 1, j, J, parity, la, levelE, ch, chan->GetL(), chan->GetS(),
-             chan->GetPairNum(), (double)chan->GetRadType(), -1,
-             chan->GetWignerLimit(),
-             level->GammaIsRWA(ch) ? 1.0 : 0.0);
-      }
-    }
-  }
-
-  // Isotopic abundances, one per (sample, compound nucleus), when the project
-  // has an <abundances> block (CNuc::FillMnParams): type 6, the nucleus's Z in
-  // the "jgroup" field and A in the "level" field, the 1-based sample in the
-  // "channel" field, the prior sigma in "wignerLimit".  The sample's name is
-  // in the parameter name (GetParameterNames): abundance[_<sample>]_<Z>_<A>.
-  for (int k = 1; k <= nuc->NumAbundanceParams(); ++k) {
-    int sample, nucleusIndex;
-    nuc->AbundanceOf(k, sample, nucleusIndex);
-    const CompoundNucleus *nucleus = nuc->GetNucleus(nucleusIndex);
-    const SampleAbundance &e = nuc->GetSample(sample)->entries[nucleusIndex - 1];
-    push(6, nucleus->Z, -1, 0, nucleus->A, 0, sample, -1, -1, -1, -1, -1, e.sigma, -1);
-  }
-
-  // Normalization parameters: one per segment with IsVaryNorm(), except a
-  // profiled (free THM) norm, which WorkingCopy::FillMnParams leaves out too.
-  const std::vector<Segment> &segments = data()->Data().GetSegments();
-  for (size_t s = 0; s < segments.size(); ++s) {
-    if (segments[s].IsVaryNorm() && !segments[s].IsProfiledNorm())
-      push(2, -1, -1, 0, -1, 0, -1, -1, -1, -1, -1,
-           segments[s].GetSegmentKey(), -1, -1);
-  }
-
-  // Energy-shift parameters: one per segment (always emitted).
-  for (size_t s = 0; s < segments.size(); ++s) {
-    push(3, -1, -1, 0, -1, 0, -1, -1, -1, -1, -1,
-         segments[s].GetSegmentKey(), -1, -1);
-  }
-
-  // sqrt(E) energy-shift coefficients: one per segment (always emitted).
-  for (size_t s = 0; s < segments.size(); ++s) {
-    push(4, -1, -1, 0, -1, 0, -1, -1, -1, -1, -1,
-         segments[s].GetSegmentKey(), -1, -1);
-  }
-
-  // Shift-function parameters aj of each segment declaring a "shiftfn" block;
-  // j goes in the channel field.
-  for (size_t s = 0; s < segments.size(); ++s) {
-    if (!segments[s].OwnsShiftFn() || !segments[s].HasShiftFn()) continue;
-    for (int j = 0; j < segments[s].NumShiftFnParams(); ++j)
-      push(5, -1, -1, 0, -1, 0, j, -1, -1, -1, -1,
-           segments[s].GetSegmentKey(), -1, -1);
-  }
-
-  // Electron-screening potentials (eV): the effect number in field 6, the prior centre in field 5 and its
-  // sigma in field 14 (0 = no prior).
-  for (int k = 1; k <= data()->Data().NumScreeningParams(); ++k) {
-    const TargetEffect *te = data()->Data().GetScreeningTargetEffect(k);
-    push(7, -1, -1, 0, -1, te->GetScreeningNominal(), data()->Data().GetScreeningEffect(k), -1, -1, -1, -1, -1,
-         te->GetScreeningSigma(), -1);
-  }
-
-  // Fitted target densities (atoms/cm^2), one per densityfit line or density group: type 8, the effect number
-  // (the group's first line) in field 6, the prior centre in field 5, its sigma in field 14 (0 = no prior) and
-  // the largest density the sub-point grids span in field 8 (the S field).
-  for (int k = 1; k <= data()->Data().NumDensityParams(); ++k) {
-    const TargetEffect *te = data()->Data().GetDensityTargetEffect(k);
-    push(8, -1, -1, 0, -1, te->GetDensityNominal(), data()->Data().GetDensityEffect(k), -1, te->GetLayoutDensity(), -1, -1, -1,
-         te->GetDensitySigma(), -1);
-  }
-
-  // Fitted Doppler temperatures (K), one per 'doppler T vary sigma [Tmax]' line: type 9, the effect number in field 6,
-  // the prior centre in field 5, its sigma in field 14 (0 = no prior) and the layout temperature (the largest the
-  // sub-point grids span) in field 8 (the S field).
-  for (int k = 1; k <= data()->Data().NumDopplerParams(); ++k) {
-    const TargetEffect *te = data()->Data().GetDopplerTargetEffect(k);
-    push(9, -1, -1, 0, -1, te->GetDopplerNominal(), data()->Data().GetDopplerEffect(k), -1, te->GetDopplerLayoutTemperature(),
-         -1, -1, -1, te->GetDopplerSigma(), -1);
-  }
-
-  // Fitted sample thicknesses (atoms/barn), one per transmission / yield segment line with the fit form 'n vary
-  // sigma': type 10, the segment key in field 13, the line's n (the prior centre) in field 5, its sigma in field 14
-  // (0 = no prior; 0 for a thickness-group follower), 0 = transmission / 1 = yield in field 6, and for a follower the
-  // key of its group's leader in field 7 (-1 otherwise).
-  for (int k = 1; k <= data()->Data().NumThicknessParams(); ++k) {
-    const Segment *seg = data()->Data().GetSegment(data()->Data().GetThicknessSegment(k));
-    const bool follower = seg->IsThicknessGroupFollower();
-    const double leaderKey = follower ? data()->Data().GetSegments()[seg->GetThicknessLeaderPos()].GetSegmentKey() : -1;
-    push(10, -1, -1, 0, -1, seg->GetNominalThickness(), seg->IsYield() ? 1 : 0, leaderKey, -1, -1, -1,
-         seg->GetSegmentKey(), follower ? 0.0 : seg->GetThicknessSigma(), -1);
-  }
-
-  // THM coherent backgrounds (cbackground=), last (type 11; 9 before the merge of dev 3264896d): Re c0, Im c0 [, Re c1,
-  // Im c1] per combination, with its J group, entrance channel (channel, L,
-  // S) and exit pair number (pair).
-  for (int g = 0; g < data()->Data().NumThmGroups(); ++g) {
-    const ThmCoherentBackground *cb = data()->Data().GetThmGroup(g).coherent.get();
-    if (!cb) continue;
-    for (const ThmCoherentBackground::Combo &c : cb->combos) {
-      JGroup *jg = nuc->GetJGroup(c.jGroup);
-      AChannel *in = jg->GetChannel(c.entrance);
-      for (int k = 0; k < 2 * c.form; ++k)
-        push(11, c.jGroup, jg->GetJ(), jg->GetPi(), -1, 0, c.entrance, in->GetL(), in->GetS(),
-             jg->GetChannel(c.exit)->GetPairNum(), -1, -1, -1, -1);
-    }
-  }
-
-  // Apparatus parameters, last (type 12, ApparatusParameters.h): field 6 the first target effect, 5 the start value, 14 the prior sigma (0 = none), 8 the layout value.
-  for (int k = 1; k <= data()->Data().NumApparatusParams(); ++k) {
-    const ApparatusDeclaration &d = data()->Data().GetApparatusParam(k).declaration;
-    push(12, -1, -1, 0, -1, d.nominal, data()->Data().GetApparatusParam(k).lead, -1, d.layout, -1, -1, -1, d.vary ? d.sigma : 0.0, -1);
-  }
-  return info;
-}
-
-vector_r AZUREAPI::GetPairsInfo() const {
-  vector_r info;
-  CNuc *nuc = compound();
-
-  // One record per pair, in 1-based pair-number order so field "pair" of
-  // GetParameterInfo() indexes directly into this list.
-  for (int p = 1; p <= nuc->NumPairs(); ++p) {
-    PPair *pair = nuc->GetPair(p);
-    info.push_back(p);
-    info.push_back(pair->GetPairKey());
-    info.push_back(pair->GetPType());
-    info.push_back(pair->IsEntrance() ? 1.0 : 0.0);
-    info.push_back(pair->GetJ(1));
-    info.push_back(pair->GetPi(1));
-    info.push_back(pair->GetZ(1));
-    info.push_back(pair->GetM(1));
-    info.push_back(pair->GetJ(2));
-    info.push_back(pair->GetPi(2));
-    info.push_back(pair->GetZ(2));
-    info.push_back(pair->GetM(2));
-    info.push_back(pair->GetSepE());
-    info.push_back(pair->GetExE());
-    info.push_back(pair->GetChRad());
-    info.push_back(pair->GetI1I2Factor());
-    // the compound nucleus the pair forms (PPair's pType rule), its abundance in the default sample
-    info.push_back(pair->GetNucleusZ());
-    info.push_back(pair->GetNucleusA());
-    info.push_back(nuc->GetAbundance(nuc->DefaultSample(), pair->GetNucleus()));
-    // the light particle's share of exE (column 32 of the <levels> line, 2026-11-05)
-    info.push_back(pair->GetLightExE());
-    // field 20: the binding energy of the pair's composite projectile (THM)
-    info.push_back(pair->GetBindingEnergy());
-  }
-
-  return info;
-}
 // ---------------------------------------------------------------------------
 //  Diagnostics: the external region, and the caches that make it affordable
 // ---------------------------------------------------------------------------

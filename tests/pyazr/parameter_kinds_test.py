@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Parameter kinds: what a fit parameter is comes from the record its creation site writes, not from its name.
 
-The engine's table of kinds (include/ParameterKind.h, ``_azure2.parameter_kinds()``) has one row per code 0..11
-with its key, unit and flags.  Each parameter's record (``Session.parameter_records()``) carries its kind and what
+The engine's table of kinds (include/ParameterKind.h, ``_azure2.parameter_kinds()``) has one row per kind, in their
+order in the vector, with its key, unit and flags.  Each parameter's record (``Session.parameter_records()``) carries its kind and what
 it belongs to (level and channel, segment key, target effect, sample, THM combination).  Checked on projects that
 together hold every kind (tests/upgrade/T2: levels, abundance, norms, the three shift kinds, density;
 tests/screening_6li/fit.azr: screening; the grad_fit models of tests/doppler_fgm and tests/transmission_yield:
@@ -13,8 +13,7 @@ project format 3, whose parameter names are made from the records' names, docs/u
      the normalization, energy scale or target that data set names; the sample of an abundance; the THM
      combination) by the naming rules of format 3, is the engine's name -- the record says the same thing the
      name does, for every kind;
-  2. the record's code is the type code of parameter_info, its owner fields agree with parameter_info's numeric
-     ones (segment key, effect), and its ordinal counts the parameters of its kind;
+  2. the record's ordinal counts the parameters of its kind, and a segment or effect parameter carries its key;
   3. pyazr's Parameter.kind is the record's key, an abundance's sample its record's sample name, and a cbkg
      parameter's thm_* fields its combination.
 
@@ -113,7 +112,6 @@ def check_project(label, path, cwd, want_kinds):
         records = sess.parameter_records()
         n = len(records)
         names = [sess.params_names(i) for i in range(n)]
-        info = np.asarray(sess.parameter_info(), float).reshape(n, -1)
         rebuilt = [name_from_record(r, project) for r in records]
         bad = [(names[i], want) for i, want in enumerate(rebuilt)
                if (names[i] not in want if isinstance(want, list) else names[i] != want)]
@@ -123,14 +121,11 @@ def check_project(label, path, cwd, want_kinds):
                 effects.setdefault((r["kind"], r["effect"]), set()).add(names[i])
         bad += [e for e, n in effects.items() if len(n) != 1]
         check(f"{label}: all {n} names rebuilt from their records", not bad, bad[:5])
-        check(f"{label}: record code == parameter_info type code",
-              all(r["code"] == int(round(info[i][0])) for i, r in enumerate(records)))
-        seg = [i for i, r in enumerate(records) if "segment_key" in r]
-        check(f"{label}: segment key == parameter_info's ({len(seg)} segment parameters)",
-              all(int(round(info[i][13])) == records[i]["segment_key"] for i in seg))
-        eff = [i for i, r in enumerate(records) if "effect" in r]
-        check(f"{label}: effect == parameter_info's ({len(eff)} target-effect parameters)",
-              all(int(round(info[i][6])) == records[i]["effect"] for i in eff))
+        seg = [r for r in records if r["kind"] in ("norm", "shift", "shift_sqrt", "shift_fn", "thickness")]
+        check(f"{label}: a segment parameter carries its segment and key ({len(seg)})",
+              all(r["segment"] >= 1 and r["segment_key"] >= 1 for r in seg))
+        eff = [r for r in records if r["kind"] in ("screening", "density", "doppler", "apparatus")]
+        check(f"{label}: a target-effect parameter carries its effect ({len(eff)})", all(r["effect"] >= 1 for r in eff))
         counts, ordinals_ok = {}, True
         for r in records:
             counts[r["kind"]] = counts.get(r["kind"], 0) + 1
@@ -168,7 +163,7 @@ def load_module(name, path):
 # -- the table ----------------------------------------------------------------------------------------------------
 print("the table of kinds")
 kinds = parameter_kinds()
-check("codes 0..13 in order", [k["code"] for k in kinds] == list(range(14)), [k["code"] for k in kinds])
+check("no numeric type codes", all("code" not in k for k in kinds), kinds[0])
 keys = [k["key"] for k in kinds]
 check("keys", keys == ["energy", "width", "norm", "shift", "shift_sqrt", "shift_fn", "abundance", "screening",
                        "density", "doppler", "thickness", "cbkg", "apparatus", "radiative"], keys)
