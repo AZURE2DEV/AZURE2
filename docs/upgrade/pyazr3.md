@@ -532,6 +532,24 @@ Worth having in 3.0 (each a thin call of a pyazr function; `--json` for agents):
 `pyazr import ensdf NUCLIDE`, `pyazr stopping MATERIAL ION ENERGY...`, `pyazr coulomb-table build|fetch|check`. The
 program `azure2` itself is in the wheel. Waiting for the UI (Phase 9): `pyazr ui`, `pyazr libraries update`.
 
+Built (`pyazr/cli.py`, `python -m pyazr` until packaging gives an entry point): one table of commands, `COMMANDS`
+(name, arguments with types, the pyazr function called, help line), from which the parser, every `--help`, `pyazr
+commands --json` and the reference page (`docs/source/user_guide/pyazr_command_line.rst`) are made. `describe [FILE]`
+(`pyazr.describe`; without FILE the package), `validate`, `convert`, `schema [KIND]`, `kinds [TABLE]`, `stopping`,
+`coulomb-table check [FILE]`, `ui FILE`, `import exfor ID` (`fetch_exfor`, the local EXFOR master files with
+`--source local`), `import ensdf NUCLIDE` (`fetch_levels`), `commands`. `--json` gives one document on standard output
+(`command`, `ok`, `exit`, `result`, and `error` with `what`, `allowed`, `fix`); the engine's output goes to standard
+error meanwhile. Exit codes those of the program's project commands: 0, 1 a failed run, 2 a wrong call or a refused
+input, 3 an old project. `describe` and `validate` call the engine functions the program calls
+(`experiment::ReadFormat3Text`, `DescribeJson`/`DescribeText`) and give the same JSON on T2; the program's
+`--validate` and `--describe` also report the stopping of each target (`ReportTargetStoppings` in
+`src/ProjectCommands.cpp`), which the binding does not. Not built, as rows that exit 2 with what to do instead:
+`coulomb-table build` (the engine's `CoulombTable::BuildFile` is not bound; the program builds the table) and
+`coulomb-table fetch` (no published copy). Not here: `pyazr libraries update`; `import exfor --to FILE` (pyazr has
+no single call that writes any EXFOR entry as a data set: `to_dataset` takes ratios to Rutherford or Mott,
+`to_sfactor_dataset` S factors, `to_azr` the old format). A `pyazr evaluate FILE` belongs here once `Evaluation`
+exists (a call and a printer: the numbers at the project's parameters, for an agent without a session).
+
 ### 2.9 Packaging
 
 A wheel carries the module `_azure2` (the core linked in), the program `azure2`, the mass table
@@ -694,6 +712,12 @@ engine's physics does not. Sizes are estimates from the files of this commit.
    rebuild). Needs 5.
 7. **The `pyazr` command line** (`pyazr/cli.py`, an entry point). About 350 lines; a test running each command once
    with `--json`. Needs 1.
+   **Done** (branch `feature/upgrade-8-pyazr3-cli`; section 2.8 lists what is built).  `pyazr/cli.py` (about 720
+   lines: the table, a call per command, the printer, the parser), `pyazr/__main__.py`; no entry point yet (step 8).
+   Tests: `tests/pyazr/cli_test.py` (ctest `pyazr_cli`: one case per row with `--json`, equality with the program on
+   T2, wrong calls, `--help`), consistency check 42 (a row without a case, a stale reference page).  Differs from the
+   plan: `coulomb-table build` is not available (no bound build function: decision 7's "built on first use" is not
+   implemented either); a missing file exits 2 where the program's `--validate FILE` exits 1 for an unreadable file.
 8. **Packaging**: scikit-build-core `pyproject.toml`, the CMake install rules and options of 2.9, a cibuildwheel
    configuration and a workflow of its own building and testing wheels on Linux, macOS, Windows (publishing
    nothing). `pyproject.toml`, three `CMakeLists.txt` (about 60 lines), the workflow (about 120). Needs decisions 5,
