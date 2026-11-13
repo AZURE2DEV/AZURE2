@@ -206,7 +206,8 @@ add_test(NAME whittaker_gsl COMMAND whittaker_gsl_test ${CMAKE_SOURCE_DIR}/physi
 # gamma_decay record project of tests/gamma_decay (with the record's priors), in Brune's and Park's bases and both
 # sampling bases, ln P = -chi^2/2 + C at three points and -infinity outside the record's limits; a short chain stays
 # inside them; the record's priors move ln P by -1/2 x their term; T2's identity with its Gaussian priors' constant;
-# two samplers in two threads write the chains of two runs one after the other.
+# two samplers in two threads write the chains of two runs one after the other; the support is the fit's limits of
+# every kind (ln P = -chi^2/2 + C just inside, -infinity just outside, both bases); a chain started next to a limit.
 if(USE_MCMC)
   add_executable(sampler_objective_test sampler_objective_test.cpp)
   target_link_libraries(sampler_objective_test PRIVATE AZURE2Core)
@@ -214,11 +215,18 @@ if(USE_MCMC)
   file(MAKE_DIRECTORY ${_sampler_objective_dir}/output ${_sampler_objective_dir}/checks)
   file(COPY ${CMAKE_SOURCE_DIR}/tests/gamma_decay/models/data DESTINATION ${_sampler_objective_dir})
   file(COPY ${CMAKE_SOURCE_DIR}/tests/upgrade/T2/data DESTINATION ${_sampler_objective_dir})
+  foreach(_data 13N/data screening_6li/data stopping_yield/models/data rectangular_resolution/models/data)
+    file(COPY ${CMAKE_SOURCE_DIR}/tests/${_data} DESTINATION ${_sampler_objective_dir})
+  endforeach()
   file(COPY ${CMAKE_SOURCE_DIR}/tests/upgrade/T2/cov_diff.txt ${CMAKE_SOURCE_DIR}/tests/upgrade/T2/prior_cov.f3.txt
        DESTINATION ${_sampler_objective_dir})
   add_test(NAME sampler_objective
            COMMAND sampler_objective_test ${CMAKE_SOURCE_DIR}/tests/gamma_decay/models/record.azr
                    ${CMAKE_SOURCE_DIR}/tests/upgrade/T2/T2.azr
+                   ${CMAKE_SOURCE_DIR}/tests/mcmc_physical_norm/13N_fast.azr
+                   ${CMAKE_SOURCE_DIR}/tests/screening_6li/fit.azr
+                   ${CMAKE_SOURCE_DIR}/tests/stopping_yield/models/fit.azr
+                   ${CMAKE_SOURCE_DIR}/tests/rectangular_resolution/models/fit.azr
            WORKING_DIRECTORY ${_sampler_objective_dir})
   set_tests_properties(sampler_objective PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 900)
 endif()
