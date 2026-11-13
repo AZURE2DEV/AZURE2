@@ -640,6 +640,13 @@ of `Evaluation` against `chiSquared.out`.
 Each with the options, the recommendation and what it costs to change later. Nothing a user can set is removed by
 this note; the removals of section 2.3 wait for these answers.
 
+**Taken by the PI on 2026-11-13** ("I accept your recommendations for pyazr", on the director's list): 1 (a), 2 (a),
+3 (a) for the menus and (b) for `numcmc`, 4 all once bound, 5 (a), **6 (a)** (the SRIM data compiled in, with the
+citation notice; the PI's word on the terms: free to use as long as SRIM is cited; the owner is to be told),
+7 (c) with (b) as the offline path, 8 (b), 9 (a), 10 (a), 11 (a). Decision 6 differs from this note's
+recommendation below; the others are the note's. The removal of the readline menus (3) is a change for the owner's
+users and stands on the list of things he must see.
+
 1. **Names of the top-level objects.** (a) `Session`, `Project`, `Parameters`, `Objective`, `Evaluation` (the
    binding's class is already `_azure2.Session`); (b) `Model` for the session; (c) keep `azure2`, a lower-case class
    named after the program, whose `help()` shows a mixin's docstring today. *Recommendation: (a).* Later: a rename

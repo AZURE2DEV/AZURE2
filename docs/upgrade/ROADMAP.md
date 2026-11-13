@@ -259,7 +259,7 @@ Design: `pyazr3.md` (the measured state of pyazr, the objects of 3.0, the order 
 
 - [ ] Object binding (`ARCHITECTURE.md` §11): modules, numpy views, `physics` explorer functions, `sources`, `cli`.
 - [ ] Wheels via scikit-build-core + cibuildwheel (Linux, macOS, Windows) with the core and the `azure2` CLI.
-- [ ] `azure2()` session shim with deprecation warnings for one release; docs recipes for iminuit, scipy, emcee.
+- [ ] Tested recipes for iminuit, scipy, emcee (no `azure2()` shim: struck by the PI, `pyazr3.md` section 5, 9).
 Gate: ported pyazr tests pass; wheels install and run T1–T3 on three platforms.
 
 ## Phase 9 — Web UI; retire Qt, ERYA, numcmc
